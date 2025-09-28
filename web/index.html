@@ -161,14 +161,28 @@
 
 
     <script>
+        // 当前配置对象
+        let currentCharacter = {
+            id: '',
+            title: '',
+            name: '',
+            identity: '',
+            detailed_setting: '',
+            avatar_url: '',
+            model: '',
+            memory_type: '',
+        };
 
+        let currentSession = {
+            id: '',
+            model: '',
+            memory_type: '',
+        }
 
         const sendBtn = document.getElementById('sendButton');
         const stopBtn = document.getElementById('stopButton');
         const messageInput = document.querySelector('.message-input');
         const messagesContainer = document.querySelector('.messages-container');
-        let currentSessionId = "";
-        let currentCharacterId = "";
 
         // 在脚本中添加这个函数
         function formatMessageContent(content) {
@@ -236,12 +250,12 @@
                 avatarIcon = document.createElement('i');
                 avatarIcon.className = 'fas fa-user';
             } else {
-                if (currentConfig.avatar_url == '') {
+                if (currentCharacter.avatar_url == '') {
                     avatarIcon = document.createElement('i');
                     avatarIcon.className = 'fas fa-robot';
                 } else {
                     avatarIcon = document.createElement('img');
-                    avatarIcon.src = currentConfig.avatar_url;
+                    avatarIcon.src = currentCharacter.avatar_url;
                 }
             }
             avatar.appendChild(avatarIcon);
@@ -454,7 +468,7 @@
                     let thinkingContent = '';
                     if (messageId == null && userInput !== null) {
                         userMessageElement = addMessageElement({ "content": userInput, "role": 'user' });
-                        const reponse = await addMessage(currentSessionId, userInput);
+                        const reponse = await addMessage(currentSession.id, userInput);
                         userMessageElement.getMessageElement().dataset.id = reponse['id'];
                         messageId = reponse['id'];
                     }
@@ -467,7 +481,7 @@
                     const deepThinkingBtn = document.getElementById('deep-thinking-btn');
                     const isDeepThinking = deepThinkingBtn && deepThinkingBtn.classList.contains('active');
 
-                    for await (const value of fetchResponse(currentSessionId, messageId, isDeepThinking)) {
+                    for await (const value of fetchResponse(currentSession.id, messageId, isDeepThinking)) {
                         if (!isStreaming)
                             break
                         if ('error' in value && value.error !== null) {
@@ -618,23 +632,10 @@
         const clearChatBtn = document.querySelector('.clear-chat-btn');
 
 
-        // 当前配置对象
-        let currentConfig = {
-            title: '',
-            name: '',
-            identity: '',
-            detailed_setting: '',
-            avatar_url: '',
-            model: '',
-            memory_type: '',
-        };
-
-
         // 初始化函数
         async function asyncInitSessionConfig(sessionId) {
             try {
                 cleanupMessages();
-                currentSessionId = sessionId;
                 const sessionConfig = await fetchSessionConfig(sessionId);
 
                 const character = await fetchCharacter(sessionConfig['character_id']);
@@ -643,32 +644,38 @@
                 nameInput.value = character.name || '';
                 setupInput.value = character.identity || '';
                 styleInput.value = character.detailed_setting || '';
-                modelSelect.value = character.model || '';
-                memoryTypeSelect.value = character.memory_type || '';
+
+                modelSelect.value = sessionConfig.model || '';
+                memoryTypeSelect.value = sessionConfig.memory_type || '';
 
 
                 // 更新当前配置
-                currentConfig = {
+                currentCharacter = {
+                    id: character.id,
                     title: character.title || '',
                     name: character.name || '',
                     identity: character.identity || '',
                     detailed_setting: character.detailed_setting || '',
-                    model: character.model || '',
                     avatar_url: character.avatar_url || '',
-                    memory_type: character.memory_type || '',
                 };
+
+                currentSession = {
+                    id: sessionConfig.id,
+                    model: sessionConfig.model,
+                    memory_type: sessionConfig.memory_type,
+                }
+
+
                 // 加载历史消息
                 const messages = await fetchFullHistory(sessionId);
                 messages.items.forEach(msg => {
-                    console.log(msg);
                     addMessageElement(msg);
                 });
-                modelSelect.value = currentConfig.model;
                 const avatarPreview = document.getElementById('avatar-preview');
                 const avatarPlaceholder = document.getElementById('avatar-placeholder');
 
-                if (currentConfig.avatar_url != '') {
-                    avatarPreview.src = currentConfig.avatar_url;
+                if (currentCharacter.avatar_url != '') {
+                    avatarPreview.src = currentCharacter.avatar_url;
                     avatarPreview.style.display = 'block';
                     avatarPlaceholder.style.display = 'none';
                 } else {
@@ -685,7 +692,6 @@
             try {   // 设置当前会话为活动状态
                 const session = await queryOrCreateSession("test", characterId);
                 if (session) {
-                    currentCharacterId = characterId;
                     console.log('会话创建成功:', session);
                     asyncInitSessionConfig(session.id);
                     // 更新URL参数
@@ -782,20 +788,20 @@
         function setupConfigListeners() {
             // 监听名称输入框
             nameInput.addEventListener('input', (e) => {
-                currentConfig.name = e.target.value;
-                debouncedUpdateCharacter(currentCharacterId, currentConfig);
+                currentCharacter.name = e.target.value;
+                debouncedUpdateCharacter(currentCharacter.id, currentCharacter);
             });
 
             // 监听设定输入框
             setupInput.addEventListener('input', (e) => {
-                currentConfig.identity = e.target.value;
-                debouncedUpdateCharacter(currentCharacterId, currentConfig);
+                currentCharacter.identity = e.target.value;
+                debouncedUpdateCharacter(currentCharacter.id, currentCharacter);
             });
 
             // 监听风格输入框
             styleInput.addEventListener('input', (e) => {
-                currentConfig.detailed_setting = e.target.value;
-                debouncedUpdateCharacter(currentCharacterId, currentConfig);
+                currentCharacter.detailed_setting = e.target.value;
+                debouncedUpdateCharacter(currentCharacter.id, currentCharacter);
             });
 
             clearChatBtn.addEventListener('click', async () => {
@@ -815,7 +821,7 @@
                         //});
                         PopupService.loading('清空中...');
                         // 调用API
-                        const success = await clearSessionMessages(currentSessionId);
+                        const success = await clearSessionMessages(currentSession.id);
 
                         // 关闭加载弹窗
                         Swal.close();
@@ -878,13 +884,13 @@
         document.addEventListener('DOMContentLoaded', async () => {
             // 监听模型选择变化
             modelSelect.addEventListener('change', function () {
-                currentConfig.model = this.value;
-                debouncedUpdateCharacter(currentCharacterId, currentConfig); // 使用防抖保存
+                currentSession.model = this.value;
+                debouncedUpdateSesssion(currentSession.id, currentSession); // 使用防抖保存
             });
 
             memoryTypeSelect.addEventListener('change', function () {
-                currentConfig.memory_type = this.value;
-                debouncedUpdateCharacter(currentCharacterId, currentConfig); // 使用防抖保存
+                currentSession.memory_type = this.value;
+                debouncedUpdateSesssion(currentSession.id, currentSession); // 使用防抖保存
             });
 
             // 在现有初始化代码中添加
@@ -901,9 +907,9 @@
                 modelSelect.appendChild(option);
             });
 
-            modelSelect.value = currentConfig.model;
+            modelSelect.value = currentSession.model;
             // 初始化时设置当前模型
-            // console.log(currentConfig);
+            // console.log(currentCharacter);
         });
 
         // 获取新建角色按钮
@@ -1048,10 +1054,10 @@
                 avatarUpload.value = '';
 
                 // 清除配置中的头像
-                if (currentCharacterId) {
+                if (currentCharacter.id) {
                     // 发送空图像URL以清除头像
-                    const updatedConfig = { ...currentConfig, image: '' };
-                    debouncedUpdateCharacter(currentCharacterId, updatedConfig);
+                    const updatedConfig = { ...currentCharacter, image: '' };
+                    debouncedUpdateCharacter(currentCharacter.id, updatedConfig);
                 }
             });
         }
@@ -1112,7 +1118,7 @@
                     formData.append('avatar', blob, 'avatar.png');
 
                     try {
-                        const response = await fetch('/v1/characters/' + currentCharacterId + '/avatars', {
+                        const response = await fetch('/v1/characters/' + currentCharacter.id + '/avatars', {
                             method: 'POST',
                             body: formData
                         });
@@ -1131,10 +1137,10 @@
                             // removeAvatarBtn.style.display = 'inline-block';
 
                             // 保存到当前配置
-                            if (currentCharacterId) {
-                                currentCharacterId.avatar_url = result.data.url;
-                                // const updatedConfig = { ...currentConfig, image: result.data.url };
-                                // debouncedUpdateCharacter(currentCharacterId, updatedConfig);
+                            if (currentCharacter.id) {
+                                currentCharacter.id.avatar_url = result.data.url;
+                                // const updatedConfig = { ...currentCharacter, image: result.data.url };
+                                // debouncedUpdateCharacter(currentCharacter.id, updatedConfig);
                             }
                         } else {
                             PopupService.error('错误', result.error || '上传失败');

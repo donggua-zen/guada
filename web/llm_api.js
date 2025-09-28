@@ -416,5 +416,32 @@ async function updateCharacter(characterId, config) {
     }
 }
 
+async function updateSession(sessionId, config) {
+    try {
+        const response = await fetch('/v1/sessions/' + sessionId, {
+            method: 'PUT', // 使用PUT方法更新配置
+            headers: {
+                'Content-Type': 'application/json',
+                // 如果需要认证: 'Authorization': 'Bearer YOUR_TOKEN'
+            },
+            body: JSON.stringify({
+                model: config.model,
+                memory_type: config.memory_type
+            })
+        });
+
+        if (!response.ok) {
+            throw new Error(`保存会话设置失败: ${response.status} ${response.statusText}`);
+        }
+
+        console.log('会话设置保存成功');
+        return await response.json();
+
+    } catch (error) {
+        console.error('保存会话设置失败:', error);
+    }
+}
+
 // 创建防抖版本的保存函数 (500ms防抖)
 const debouncedUpdateCharacter = debounce(updateCharacter, 500);
+const debouncedUpdateSesssion = debounce(updateSession, 500);
