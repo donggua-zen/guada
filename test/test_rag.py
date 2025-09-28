@@ -11,7 +11,7 @@ sys.path.append(os.path.dirname(current_directory))
 os.chdir(os.path.dirname(current_directory))
 
 from character_service import get_character_service
-from chunking_messages import chunking_text, preprocess_text
+from chunking import chunking_text, preprocess_text
 from llm_service_factory import llm_service_factory
 from message_service import get_message_service
 from session_service import get_session_service

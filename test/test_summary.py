@@ -11,12 +11,12 @@ current_directory = os.path.dirname(current_script_path)
 sys.path.append(os.path.dirname(current_directory))
 os.chdir(os.path.dirname(current_directory))
 
-from chunking_messages import chunking_service
-from session_service import session_service
+from chunking import chunking_messages
+from session_service import get_session_service
 from llm_service import LLMService
 from llm_service_factory import llm_service_factory
-from message_service import message_service
-from character_service import ai_characters
+from message_service import get_message_service
+from character_service import get_character_service
 
 # openai_base_url = "https://dashscope.aliyuncs.com/compatible-mode/v1/"
 # openai_api_key = "sk-b4ed412869c342b5b50a0f3177af5d5c"
@@ -31,11 +31,11 @@ chat_session_id = "01K5Z6KBE101G48BBM5T12WTPD"
 
 # 获取聊天记录
 
-session = session_service.query_session(session_id=chat_session_id)
+session = get_session_service().query_session(session_id=chat_session_id)
 if not session:
     raise Exception("Session not found")
-character = ai_characters.get_character_by_id(session[0]["character_id"])
-messages = message_service.get_messages(chat_session_id)
+character = get_character_service().get_character_by_id(session[0]["character_id"])
+messages = get_message_service().get_messages(chat_session_id)
 
 summares = []
 
@@ -108,13 +108,11 @@ def generate_summary(messages: list[dict], last_summary: str = None):
     return results.content
 
 
-chunks = chunking_service.chunking(
+chunks = chunking_messages(
     messages=messages,
-    max_chunk_size=2000,
-    short_term_memory_count=10,
-    min_chunk_size=50,
-    min_merge_size=100,
-    max_short_term_chars=4000,
+    max_threshold=2000,
+    safe_threshold=1000,
+    chunk_size=1000,
 )
 last_summary = ""
 print(f"总块数: {len(chunks)}")
