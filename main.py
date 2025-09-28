@@ -4,7 +4,7 @@ import re
 import time
 import traceback
 import uuid
-from werkzeug.utils import secure_filename
+#from werkzeug.utils import secure_filename
 
 from flask import Flask, Response, jsonify, request
 from ai_models import ai_models
@@ -368,9 +368,9 @@ def upload_avatar(character_id):
         # 检查文件类型
         if file and allowed_file(file.filename):
             # 生成安全的文件名
-            filename = secure_filename(file.filename)
+            # filename = secure_filename(file.filename)
             # 生成唯一文件名
-            file_extension = filename.rsplit(".", 1)[1].lower()
+            file_extension = file.filename.rsplit(".", 1)[1].lower()
             unique_filename = f"{character_id}.{file_extension}"
             # 保存文件
             file_path = os.path.join(app.config["UPLOAD_FOLDER"], unique_filename)

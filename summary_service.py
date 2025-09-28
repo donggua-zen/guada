@@ -14,8 +14,8 @@
 import os
 import re
 from typing import NamedTuple, Optional
+from chunking import chunking_messages
 from tinydb import Query, TinyDB
-from chunking_messages import ChunkingMessages
 from llm_service import LLMService, LLMServiceChunk
 from llm_service_factory import llm_service_factory
 
@@ -33,7 +33,6 @@ class _SummaryService:
         llm_service = llm_service_factory.get_service("aliyun")
         self.llm_service = llm_service
         self.db = TinyDB("./data/summaries.json")
-        self.chunking_service = ChunkingMessages()
 
     def should_generate_summary(self, messages: list):
         # 可配置参数
@@ -221,22 +220,11 @@ class _SummaryService:
 
         generated = False
 
-        if len(summary["history"]) >= HISTORY_THRESHOLD:
-            print("生成全局摘要中...")
-            response = self.generate_master_summary(
-                character=character, summary=summary
-            )
-            summary["master_summary"] = response.content
-            summary["history"] = []
-            generated = True
-
-        chunks = self.chunking_service.chunking(
+        chunks = chunking_messages(
             messages=messages,
-            max_chunk_size=2000,
-            short_term_memory_count=10,
-            min_chunk_size=50,
-            min_merge_size=100,
-            max_short_term_chars=4000,
+            max_threshold=2000,
+            safe_threshold=1000,
+            chunk_size=1000,
         )
 
         if len(chunks) > 1:
@@ -254,6 +242,15 @@ class _SummaryService:
                 print(f"新摘要生成成功！当前摘要长度: {len(response.content)}字符")
                 print(f"摘要内容: {response.content}")
                 generated = True
+
+        if len(summary["history"]) >= HISTORY_THRESHOLD:
+            print("生成全局摘要中...")
+            response = self.generate_master_summary(
+                character=character, summary=summary
+            )
+            summary["master_summary"] = response.content
+            summary["history"] = []
+            generated = True
 
         active_messages = chunks[-1] if len(chunks) > 0 else []
 

@@ -47,7 +47,7 @@ class _MessageService:
 
     def update_message(self, message_id, data):
         self.db.update(data, Query().id == message_id)
-
+    
     def delete_message(self, message_id):
         self.db.remove(Query().id == message_id)
 

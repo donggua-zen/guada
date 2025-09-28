@@ -20,7 +20,7 @@
 from abc import ABC, abstractmethod
 from typing import List, Tuple, Optional, Dict, Any
 
-from chunking_messages import chunking_text, preprocess_text
+from chunking import chunking_text, preprocess_text
 from message_service import get_message_service
 from summary_service import get_summary_service
 from vector_memory import get_vector_memory
@@ -113,7 +113,10 @@ class RAGHelper:
             n_results=n_results,
             where=exclusion_condition,
         )
-
+        for result in memory_results:
+            print(
+                f"RAG - 内容: {result['content'][:50]}..., 相似度: {result['score']:.3f}"
+            )
         # 过滤并返回高分数结果
         return [
             result for result in memory_results if result["score"] >= score_threshold
@@ -238,18 +241,7 @@ class SummaryAugmentedSlidingWindowStrategy(MemoryStrategy):
         if user_message is not None:
             active_messages.append(user_message)
 
-        # 获取所有活跃消息的ID
-        active_message_ids = {msg["id"] for msg in active_messages}
-
-        # 使用RAG辅助类的统一查询方法
-        memory_results = self.rag_helper.query_relevant_memories(
-            query_text=active_messages[-1]["content"],
-            session_id=session_id,
-            active_message_ids=active_message_ids,
-            n_results=3,
-            score_threshold=MEMORY_SCORE_THRESHOLD,
-        )
-
+       
         final_messages = []
 
         if summaries:
@@ -261,19 +253,25 @@ class SummaryAugmentedSlidingWindowStrategy(MemoryStrategy):
                     "is_summary": True,  # 添加标记表明这是记忆消息
                 }
             )
+            
+        # 获取所有活跃消息的ID
+        active_message_ids = {msg["id"] for msg in active_messages}
 
+        # 使用RAG辅助类的统一查询方法
+        memory_results = self.rag_helper.query_relevant_memories(
+            query_text=active_messages[-1]["content"],
+            session_id=session_id,
+            active_message_ids=active_message_ids,
+            n_results=3,
+            score_threshold=MEMORY_SCORE_THRESHOLD,
+        )
+        
         if memory_results:
-            for result in memory_results:
-                print(
-                    f"RAG - 内容: {result['content'][:50]}..., 相似度: {result['score']:.3f}"
-                )
-
-            if memory_results:
-                # 使用RAG辅助类的方法创建记忆消息
-                memory_message = self.rag_helper.create_memory_message(
-                    memory_results[0]["metadata"]
-                )
-                final_messages.append(memory_message)
+            # 使用RAG辅助类的方法创建记忆消息
+            memory_message = self.rag_helper.create_memory_message(
+                memory_results[0]["metadata"]
+            )
+            final_messages.append(memory_message)
 
         final_messages.extend(active_messages)
         return final_messages
@@ -318,17 +316,11 @@ class SlidingWindowWithRAGStrategy(MemoryStrategy):
         )
 
         if memory_results:
-            for result in memory_results:
-                print(
-                    f"Memory: {result['content'][:100]}... Score: {result['score']:.4f}"
-                )
-
-            if memory_results:
-                # 使用RAG辅助类的方法创建记忆消息
-                memory_message = self.rag_helper.create_memory_message(
-                    memory_results[0]["metadata"]
-                )
-                messages.insert(0, memory_message)
+            # 使用RAG辅助类的方法创建记忆消息
+            memory_message = self.rag_helper.create_memory_message(
+                memory_results[0]["metadata"]
+            )
+            messages.insert(0, memory_message)
 
         return messages
 
