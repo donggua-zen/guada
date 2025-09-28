@@ -97,6 +97,8 @@ def get_session(session_id):
                 ),
                 404,
             )
+        if "memory_type" not in data or data["memory_type"] == "":
+            data[0]["memory_type"] = "sliding_window"
         return jsonify({"success": True, "data": data[0]})
     except Exception as e:
         return jsonify({"success": False, "error": str(e)}), 500
@@ -175,7 +177,6 @@ def get_characters():
                 "description": char.get("description"),
                 "avatar_url": char.get("avatar_url"),
                 "identity": char.get("identity"),
-                "memory_type": char.get("memory_type", "sliding_window"),
             }
             for char in all_characters
         ]
@@ -194,11 +195,6 @@ def create_characters():
             "description": json_data["description"],
             "avatar_url": json_data["avatar_url"],
             "identity": json_data["identity"],
-            "memory_type": (
-                json_data["memory_type"]
-                if "memory_type" in json_data
-                else "sliding_window"
-            ),
         }
         character_service.add_new_character(character)
         return jsonify({"success": True, "data": character})
