@@ -97,7 +97,7 @@ def get_session(session_id):
                 ),
                 404,
             )
-        if "memory_type" not in data or data["memory_type"] == "":
+        if "memory_type" not in data[0] or data[0]["memory_type"] == "":
             data[0]["memory_type"] = "sliding_window"
         return jsonify({"success": True, "data": data[0]})
     except Exception as e:
