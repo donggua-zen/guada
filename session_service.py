@@ -39,7 +39,11 @@ class _SessionService:
         self.db.insert(data)
         return data
 
-    def update_session(self, session_id, new_data):
+    def update_session(self, session_id, new_data:dict):
+        allowed_keys = ["memory_type", "model"]
+        for key in new_data.keys():
+            if key not in allowed_keys:
+                raise ValueError(f"Invalid key '{key}' in new_data.")
         self.db.update(new_data, Query().id == session_id)
 
     def query_session(self, session_id=None, user_id=None, character_id=None):

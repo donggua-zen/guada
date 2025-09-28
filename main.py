@@ -4,7 +4,8 @@ import re
 import time
 import traceback
 import uuid
-#from werkzeug.utils import secure_filename
+
+# from werkzeug.utils import secure_filename
 
 from flask import Flask, Response, jsonify, request
 from ai_models import ai_models
@@ -97,6 +98,15 @@ def get_session(session_id):
                 404,
             )
         return jsonify({"success": True, "data": data[0]})
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@app.route("/v1/sessions/<session_id>", methods=["PUT"])
+def update_session(session_id):
+    try:
+        session_service.update_session(session_id, request.json)
+        return jsonify({"success": True})
     except Exception as e:
         return jsonify({"success": False, "error": str(e)}), 500
 
