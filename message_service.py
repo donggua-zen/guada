@@ -1,12 +1,16 @@
-import os
+# message_service.py
+import json
+from sqlalchemy.orm import Session
+from models import SessionLocal, Message
 import ulid
-from pathlib import Path
-from tinydb import TinyDB, Query
 
 
 class _MessageService:
     def __init__(self):
-        self.db = TinyDB("./data/messages.json")
+        self.db_session = SessionLocal()
+
+    def __del__(self):
+        self.db_session.close()
 
     def get_messages(
         self,
@@ -14,45 +18,112 @@ class _MessageService:
         start_message_id=None,
         tail_message_id=None,
         last_n_messages=None,
+        order_type="asc",
     ):
-        condition = Query().session_id == session_id
+        query = self.db_session.query(Message).filter(Message.session_id == session_id)
 
         if start_message_id is not None:
-            condition &= Query().id >= start_message_id
+            query = query.filter(Message.id >= start_message_id)
 
         if tail_message_id is not None:
-            condition &= Query().id <= tail_message_id
-
-        messages = self.db.search(condition)
+            query = query.filter(Message.id <= tail_message_id)
 
         if last_n_messages is not None:
-            messages = messages[-last_n_messages:]
+            query.limit(last_n_messages)
+        if order_type == "desc":
+            query = query.order_by(Message.created_at.desc())
+        else:
+            query = query.order_by(Message.created_at.asc())
+        messages = query.all()
 
-        return messages
+        # 转换为字典列表
+        result = [
+            {
+                "id": msg.id,
+                "session_id": msg.session_id,
+                "role": msg.role,
+                "content": msg.content,
+                "parent_id": msg.parent_id,
+                "reasoning_content": msg.reasoning_content,
+                "created_at": msg.created_at.isoformat() if msg.created_at else None,
+            }
+            for msg in messages
+        ]
+
+        return result
 
     def get_message(self, message_id):
-        return self.db.get(Query().id == message_id)
+        message = (
+            self.db_session.query(Message).filter(Message.id == message_id).first()
+        )
+        if message:
+            return {
+                "id": message.id,
+                "session_id": message.session_id,
+                "role": message.role,
+                "content": message.content,
+                "parent_id": message.parent_id,
+                "reasoning_content": message.reasoning_content,
+                "created_at": (
+                    message.created_at.isoformat() if message.created_at else None
+                ),
+            }
+        return None
 
-    def add_message(self, session_id, role, content, reasoning_content=None):
-        message_id = ulid.new().str
-        message = {
-            "id": message_id,
-            "session_id": session_id,
-            "role": role,
-            "content": content,
-            "reasoning_content": reasoning_content,
+    def add_message(
+        self,
+        session_id: str,
+        role: str,
+        content: str,
+        parent_id: str = None,
+        reasoning_content: str = None,
+        metadata: dict = None,
+    ):
+        message = Message(
+            session_id=session_id,
+            role=role,
+            content=content,
+            reasoning_content=reasoning_content,
+            parent_id=parent_id,
+            meta_data=json.dumps(metadata),
+        )
+
+        self.db_session.add(message)
+        self.db_session.commit()
+
+        return {
+            "id": message.id,
+            "session_id": message.session_id,
+            "role": message.role,
+            "parent_id": message.parent_id,
+            "content": message.content,
+            "reasoning_content": message.reasoning_content,
+            "created_at": (
+                message.created_at.isoformat() if message.created_at else None
+            ),
         }
-        self.db.insert(message)
-        return message
 
     def update_message(self, message_id, data):
-        self.db.update(data, Query().id == message_id)
-    
+        message = (
+            self.db_session.query(Message).filter(Message.id == message_id).first()
+        )
+        if message:
+            for key, value in data.items():
+                if hasattr(message, key):
+                    setattr(message, key, value)
+            self.db_session.commit()
+
     def delete_message(self, message_id):
-        self.db.remove(Query().id == message_id)
+        message = (
+            self.db_session.query(Message).filter(Message.id == message_id).first()
+        )
+        if message:
+            self.db_session.delete(message)
+            self.db_session.commit()
 
     def delete_messages_by_session_id(self, session_id):
-        self.db.remove(Query().session_id == session_id)
+        self.db_session.query(Message).filter(Message.session_id == session_id).delete()
+        self.db_session.commit()
 
 
 _message_service = _MessageService()
