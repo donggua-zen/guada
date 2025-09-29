@@ -399,8 +399,6 @@ async function updateCharacter(characterId, config) {
                 name: config.name,
                 identity: config.identity,
                 detailed_setting: config.detailed_setting,
-                model: config.model,
-                memory_type: config.memory_type
             })
         });
 

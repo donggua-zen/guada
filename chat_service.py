@@ -70,7 +70,7 @@ class _ChatService:
         print("------------------------------------------------------------")
         return context_messages
 
-    def completions(self, character, messages):
+    def completions(self, session: dict, character: dict, messages: list[dict]):
         """
         根据输入的角色、摘要和消息生成回复。
 
@@ -84,11 +84,11 @@ class _ChatService:
 
         """
         llm_service = llm_service_factory.get_service(
-            self._get_provider_for_model(character["model"])
+            self._get_provider_for_model(session["model"])
         )
         context_messages = self._construct_context_message(character, messages)
         generatior = llm_service.generate_response(
-            character["model"],
+            session["model"],
             context_messages,
             temperature=0.75,
             stream=True,
@@ -96,7 +96,7 @@ class _ChatService:
         )
         return generatior
 
-    def get_memory_strategy(self, character: dict) -> MemoryStrategy:
+    def get_memory_strategy(self, session: dict) -> MemoryStrategy:
         """
         根据角色配置获取记忆策略实例
 
@@ -112,7 +112,7 @@ class _ChatService:
             SummaryAugmentedSlidingWindowStrategy,
         )
 
-        memory_type = character.get("memory_type", "sliding_window")
+        memory_type = session.get("memory_type", "sliding_window")
         if memory_type == "sliding_window":
             return SlidingWindowStrategy()
         elif memory_type == "summary_augmented_sliding_window":

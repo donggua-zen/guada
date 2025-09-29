@@ -155,9 +155,18 @@ def update_message(message_id):
 @app.route("/v1/sessions/<session_id>/messages", methods=["POST"])
 def add_message(session_id):
     try:
+
+        # 获取会话最后一条消息
+        last_message = message_service.get_messages(
+            session_id=session_id, order_type="desc", last_n_messages=1
+        )
+
         # 添加新消息到完整历史
         message = message_service.add_message(
-            session_id=session_id, role="user", content=request.json["content"]
+            session_id=session_id,
+            role="user",
+            content=request.json["content"],
+            parent_id=last_message[0]["id"] if last_message else None,
         )
 
         return jsonify({"success": True, "data": message})
@@ -262,28 +271,33 @@ def get_character(character_id):
 
 # 流式响应
 def _generate_stream(
-    session_id,
+    session,
     character,
     active_messages,
     strategy: MemoryStrategy = None,
 ):
     generator = None
+
+    finish_reason = None
+    finish_reason_error = None
+    reasoning_content = ""
+    content = ""
+
     try:
         generator = chat_service.completions(
+            session=session,
             character=character,
             messages=active_messages,
         )
-        reasoning_content = ""
-        content = ""
         for chunk in generator:
             response_chunk = {
                 "content": None,
                 "reasoning_content": None,
-                "finish_reason": None,
-                "thinking": None,
             }
             if chunk.finish_reason is not None:
-                response_chunk["finish_reason"] = chunk.finish_reason
+                finish_reason = chunk.finish_reason
+                # response_chunk["finish_reason"] = chunk.finish_reason
+                break
             elif chunk.content is not None:
                 response_chunk["content"] = chunk.content
                 content += chunk.content
@@ -293,24 +307,6 @@ def _generate_stream(
 
             yield f"data: {json.dumps(response_chunk)}\n\n"
 
-        message = message_service.add_message(
-            session_id=session_id,
-            role="assistant",
-            content=content,
-            reasoning_content=reasoning_content,
-        )
-        # 使用策略处理对话后的记忆
-        user_message = active_messages[-1] if active_messages else None
-        if user_message and strategy:
-            print(f"message {user_message}")
-            strategy.post_process_memory(
-                session_id,
-                character,
-                user_message=user_message,
-                assistant_message=message,
-            )
-        yield f"data: {json.dumps({'assistant_message_id':message['id']})}\n\n"
-        yield "data: [DONE]\n\n"
     except GeneratorExit:
         if generator is not None:
             generator.close()
@@ -318,7 +314,32 @@ def _generate_stream(
     except Exception as e:
         print(f"Exception2:{e}\n")
         traceback.print_exc()
-        yield f"data: {json.dumps({'finish_reason':'error','error': str(e)})}\n\n"
+        finish_reason = "error"
+        finish_reason_error = str(e)
+        # yield f"data: {json.dumps({'finish_reason':'error','error': str(e)})}\n\n"
+    finally:
+
+        message = message_service.add_message(
+            session_id=session["id"],
+            role="assistant",
+            content=content,
+            parent_id=active_messages[-1]["id"] if active_messages else None,
+            reasoning_content=reasoning_content,
+            metadata={"finish_reason": finish_reason, "error": finish_reason_error},
+        )
+
+        # 使用策略处理对话后的记忆
+        user_message = active_messages[-1] if active_messages else None
+        if user_message and strategy:
+            strategy.post_process_memory(
+                session["id"],
+                character,
+                user_message=user_message,
+                assistant_message=message,
+            )
+        yield f"data: {json.dumps({'finish_reason':finish_reason,'error':finish_reason_error})}\n\n"
+        yield f"data: {json.dumps({'assistant_message_id':message['id']})}\n\n"
+        yield "data: [DONE]\n\n"
 
 
 @app.route("/v1/sessions/<session_id>/messages/stream", methods=["POST"])
@@ -328,23 +349,21 @@ def chat_completions(session_id):
         message_id = data["message"]["message_id"]
         current_message_id = message_id
 
-        session = session_service.query_session(session_id=session_id)
+        session = session_service.get_session_by_id(session_id=session_id)
 
-        if len(session) == 0:
+        if session is None:
             return jsonify(
                 {"success": False, "error": f"Session with ID {session_id} not found."}
             )
 
-        session = session[0]
-
         character = character_service.get_character_by_id(session["character_id"])
-        strategy = chat_service.get_memory_strategy(character)
+        strategy = chat_service.get_memory_strategy(session)
         active_messages = strategy.process_memory(
             session_id, character, current_message_id
         )
         return Response(
             _generate_stream(
-                session_id,
+                session,
                 character,
                 active_messages,
                 strategy=strategy,

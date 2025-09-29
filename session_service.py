@@ -1,25 +1,19 @@
-from openai import OpenAI, APIError
-import os
-from tinydb import TinyDB, Query
-import ulid
+# session_service.py
+from sqlalchemy.orm import Session
+from models import SessionLocal, Session as SessionModel
 
 
-# 对话管理类
 class _SessionService:
     def __init__(self):
-        self.db = TinyDB("./data/sessions.json")
-        pass
+        self.db_session = SessionLocal()
+
+    def __del__(self):
+        self.db_session.close()
 
     def create_or_resume_session(self, user_id: str, character_id: str):
-        """
-        创建新会话或恢复现有会话
-
-        :param user_id: 用户ID
-        :param character_id: 角色ID
-        :return: 会话对象，如果不存在则创建新的会话并返回，否则返回已存在的会话
-        """
         # 查询用户和角色对应的会话
         session = self.query_session(user_id=user_id, character_id=character_id)
+
         # 如果会话不存在，则创建新的会话；否则返回已存在的会话
         if len(session) == 0:
             return self.add_new_session(user_id, character_id)
@@ -27,47 +21,109 @@ class _SessionService:
             return session[0]
 
     def get_all_sessions(self):
-        return self.db.all()
+        sessions = self.db_session.query(SessionModel).all()
+        return [
+            {
+                "id": session.id,
+                "user_id": session.user_id,
+                "character_id": session.character_id,
+                "memory_type": session.memory_type,
+                "model": session.model,
+                "created_at": (
+                    session.created_at.isoformat() if session.created_at else None
+                ),
+            }
+            for session in sessions
+        ]
 
     def add_new_session(self, user_id, character_id):
-        id = ulid.new().str
-        data = {
-            "id": id,
-            "user_id": user_id,
-            "character_id": character_id,
-        }
-        self.db.insert(data)
-        return data
+        session = SessionModel(user_id=user_id, character_id=character_id)
 
-    def update_session(self, session_id, new_data:dict):
+        self.db_session.add(session)
+        self.db_session.commit()
+
+        return {
+            "id": session.id,
+            "user_id": session.user_id,
+            "character_id": session.character_id,
+            "memory_type": session.memory_type,
+            "model": session.model,
+            "created_at": (
+                session.created_at.isoformat() if session.created_at else None
+            ),
+        }
+
+    def update_session(self, session_id, new_data: dict):
         allowed_keys = ["memory_type", "model"]
         for key in new_data.keys():
             if key not in allowed_keys:
                 raise ValueError(f"Invalid key '{key}' in new_data.")
-        self.db.update(new_data, Query().id == session_id)
+
+        session = (
+            self.db_session.query(SessionModel)
+            .filter(SessionModel.id == session_id)
+            .first()
+        )
+        if session:
+            for key, value in new_data.items():
+                if hasattr(session, key):
+                    setattr(session, key, value)
+            self.db_session.commit()
+
+    def get_session_by_id(self, session_id):
+        session = (
+            self.db_session.query(SessionModel)
+            .filter(SessionModel.id == session_id)
+            .first()
+        )
+        if session:
+            return {
+                "id": session.id,
+                "user_id": session.user_id,
+                "character_id": session.character_id,
+                "memory_type": session.memory_type,
+                "model": session.model,
+                "created_at": (
+                    session.created_at.isoformat() if session.created_at else None
+                ),
+            }
+        else:
+            return None
 
     def query_session(self, session_id=None, user_id=None, character_id=None):
-        sessionQuery = Query()
-        query_conditions = []
+        query = self.db_session.query(SessionModel)
 
         if session_id is not None:
-            query_conditions.append(sessionQuery.id == session_id)
+            query = query.filter(SessionModel.id == session_id)
         if user_id is not None:
-            query_conditions.append(sessionQuery.user_id == user_id)
+            query = query.filter(SessionModel.user_id == user_id)
         if character_id is not None:
-            query_conditions.append(sessionQuery.character_id == character_id)
+            query = query.filter(SessionModel.character_id == character_id)
 
-        if not query_conditions:
-            return []
-
-        combined_query = query_conditions[0]
-        for condition in query_conditions[1:]:
-            combined_query &= condition
-
-        return self.db.search(combined_query)
+        sessions = query.all()
+        return [
+            {
+                "id": session.id,
+                "user_id": session.user_id,
+                "character_id": session.character_id,
+                "memory_type": session.memory_type,
+                "model": session.model,
+                "created_at": (
+                    session.created_at.isoformat() if session.created_at else None
+                ),
+            }
+            for session in sessions
+        ]
 
     def delete_session(self, session_id):
-        self.db.remove(Query().id == session_id)
+        session = (
+            self.db_session.query(SessionModel)
+            .filter(SessionModel.id == session_id)
+            .first()
+        )
+        if session:
+            self.db_session.delete(session)
+            self.db_session.commit()
 
 
 _session_service = _SessionService()
