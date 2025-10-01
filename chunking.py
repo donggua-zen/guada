@@ -3,6 +3,23 @@ from typing import List, Dict, Optional
 import unicodedata
 
 
+def count_effective_length(text: str) -> int:
+    """
+    计算中英文混合文本的有效长度
+    中文按字符计数，英文按单词计数
+    """
+    if not text:
+        return 0
+
+    # 分离中文字符和英文单词
+    chinese_chars = re.findall(r"[\u4e00-\u9fff]", text)
+    english_words = re.findall(r"[a-zA-Z]+", text)
+    other_chars = len(text) - len("".join(chinese_chars)) - len("".join(english_words))
+
+    # 中文按字符计数，英文按单词计数，其他字符按字符计数
+    return len(chinese_chars) + len(english_words) + other_chars
+
+
 def chunking_messages(
     messages: List[Dict],
     max_threshold: int,
@@ -23,7 +40,9 @@ def chunking_messages(
         list: 分块后的消息列表，每个元素是一个消息块
     """
     # 计算总字数
-    total_chars = sum(len(msg.get("content", "")) for msg in messages)
+    total_chars = sum(
+        count_effective_length(msg.get("content", "")) for msg in messages
+    )
 
     # 如果总字数不超过最大阈值，直接返回整个对话
     if total_chars <= max_threshold:
@@ -50,7 +69,7 @@ def chunking_messages(
             break
 
         msg = messages[i]
-        msg_chars = len(msg.get("content", ""))
+        msg_chars = count_effective_length(msg.get("content", ""))
         # 检查是否应该结束当前分块
         if current_chars + msg_chars > chunk_size and current_chars >= min_chunk_size:
             # 优先检查对话完整性：当前消息是否为user，且下一条是它的回答
@@ -62,7 +81,7 @@ def chunking_messages(
             ):
 
                 next_msg = messages[i + 1]
-                next_chars = len(next_msg.get("content", ""))
+                next_chars = count_effective_length(next_msg.get("content", ""))
                 qa_pair_chars = msg_chars + next_chars
 
                 if current_chars + qa_pair_chars <= max_chunk_size:

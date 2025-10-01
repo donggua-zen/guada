@@ -83,6 +83,7 @@ class _CharacterService:
         if character:
             return {
                 "id": character.id,
+                "title": character.title,
                 "name": character.name,
                 "identity": character.identity,
                 "avatar_url": character.avatar_url,

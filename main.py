@@ -70,8 +70,12 @@ def get_sessions():
 @app.route("/v1/sessions", methods=["POST"])
 def create_or_get_sessions():
     try:
+        character = character_service.get_character_by_id(request.json["character_id"])
+
         data = session_service.create_or_resume_session(
-            user_id=request.json["user_id"], character_id=request.json["character_id"]
+            user_id=request.json["user_id"],
+            character_id=request.json["character_id"],
+            name=character["title"],
         )
         if data is None:
             return jsonify(
