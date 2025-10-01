@@ -14,95 +14,178 @@
     <link href="./style.css" rel="stylesheet">
     <script src="./llm_api.js"></script>
     <script src="./popup.js"></script>
+    <style>
+        /* 新增侧边栏样式 */
+        .app-sidebar {
+            width: 60px;
+            background-color: #2c3e50;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 20px 0;
+            height: 100vh;
+        }
+
+        .sidebar-btn {
+            width: 44px;
+            height: 44px;
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-bottom: 15px;
+            cursor: pointer;
+            color: #bdc3c7;
+            font-size: 20px;
+            transition: all 0.2s ease;
+        }
+
+        .sidebar-btn:hover {
+            background-color: #34495e;
+            color: #ecf0f1;
+        }
+
+        .sidebar-btn.active {
+            background-color: #3498db;
+            color: white;
+        }
+
+        /* 页面容器样式 */
+        .page-container {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        .page {
+            display: none;
+            width: 100%;
+            height: 100%;
+        }
+
+        .page.active {
+            display: flex;
+        }
+
+        /* 调整原有布局 */
+        .app-main-container {
+            display: flex;
+            height: 100vh;
+            width: 100vw;
+        }
+    </style>
 </head>
 
 <body>
-    <div class="container">
-        <!-- 左侧会话列表 -->
-        <div class="characters-panel">
-            <div class="characters-header">
-                <span>角色列表</span>
-                <button class="new-character-btn">新建角色</button>
+    <div class="app-main-container">
+        <!-- 左侧侧边栏 -->
+        <div class="app-sidebar">
+            <div class="sidebar-btn active" data-page="chat" title="对话">
+                <i class="fas fa-comment"></i>
             </div>
-            <div class="characters-list">
-
+            <div class="sidebar-btn" data-page="characters" title="角色">
+                <i class="fas fa-user"></i>
+            </div>
+            <div class="sidebar-btn" data-page="settings" title="设置">
+                <i class="fas fa-cog"></i>
             </div>
         </div>
 
-        <!-- 中间聊天区域 -->
-        <div class="chat-panel">
-            <div class="chat-header"><span id="chat-title">加载中...</span><button class="clear-chat-btn" title="清空聊天记录">
-                    <i class="fas fa-trash-alt"></i>
-                </button></div>
-            <div class="messages-container">
-
-            </div>
-            <div class="input-container">
-                <div class="input-wrapper">
-                    <textarea class="message-input" placeholder="输入消息..."></textarea>
-                    <div class="input-actions">
-                        <div class="tools">
-                            <button class="tool-btn" title="上传文件"><i class="fas fa-paperclip"></i></button>
-                            <button class="tool-btn" title="联网搜索"><i class="fas fa-search"></i></button>
-                            <button class="tool-btn" title="添加图片"><i class="fas fa-image"></i></button>
-                            <!-- 添加深度思考按钮 -->
-                            <button class="tool-btn" id="deep-thinking-btn" title="深度思考">
-                                <i class="fas fa-brain"></i>
-                            </button>
+        <!-- 页面容器 -->
+        <div class="page-container">
+            <!-- 对话页面 -->
+            <div id="chat-page" class="page active">
+                <div class="container">
+                    <!-- 左侧会话列表 -->
+                    <div class="characters-panel">
+                        <div class="characters-header">
+                            <span>角色列表</span>
+                            <button class="new-character-btn">新建角色</button>
                         </div>
-                        <div class="send-actions">
-                            <!-- <button class="tool-btn toggle-expand-btn" title="展开/收起" id="toggleExpandBtn">
+                        <div class="characters-list">
+
+                        </div>
+                    </div>
+
+                    <!-- 中间聊天区域 -->
+                    <div class="chat-panel">
+                        <div class="chat-header"><span id="chat-title">加载中...</span><button class="clear-chat-btn"
+                                title="清空聊天记录">
+                                <i class="fas fa-trash-alt"></i>
+                            </button></div>
+                        <div class="messages-container">
+
+                        </div>
+                        <div class="input-container">
+                            <div class="input-wrapper">
+                                <textarea class="message-input" placeholder="输入消息..."></textarea>
+                                <div class="input-actions">
+                                    <div class="tools">
+                                        <button class="tool-btn" title="上传文件"><i class="fas fa-paperclip"></i></button>
+                                        <button class="tool-btn" title="联网搜索"><i class="fas fa-search"></i></button>
+                                        <button class="tool-btn" title="添加图片"><i class="fas fa-image"></i></button>
+                                        <!-- 添加深度思考按钮 -->
+                                        <button class="tool-btn" id="deep-thinking-btn" title="深度思考">
+                                            <i class="fas fa-brain"></i>
+                                        </button>
+                                    </div>
+                                    <div class="send-actions">
+                                        <!-- <button class="tool-btn toggle-expand-btn" title="展开/收起" id="toggleExpandBtn">
                                 <i class="fas fa-expand"></i>
                             </button> -->
-                            <button class="send-btn" title="发送" id="sendButton">
-                                <i class="fas fa-arrow-up"></i>
-                            </button>
-                            <button class="send-btn stop-btn" title="停止生成" id="stopButton" style="display:none;">
-                                <i class="fas fa-stop"></i>
-                            </button>
+                                        <button class="send-btn" title="发送" id="sendButton">
+                                            <i class="fas fa-arrow-up"></i>
+                                        </button>
+                                        <button class="send-btn stop-btn" title="停止生成" id="stopButton"
+                                            style="display:none;">
+                                            <i class="fas fa-stop"></i>
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
                         </div>
                     </div>
-                </div>
-            </div>
-        </div>
 
-        <!-- 右侧设置区域 -->
-        <div class="settings-panel">
-            <div class="settings-header">智能体设置</div>
+                    <!-- 右侧设置区域 -->
+                    <div class="settings-panel">
+                        <div class="settings-header">智能体设置</div>
 
-            <div class="setting-group">
-                <label class="setting-label">头像设置</label>
-                <div class="avatar-upload-container">
-                    <div class="avatar-preview">
-                        <img id="avatar-preview" src="" alt="头像预览" style="display: none;">
-                        <div id="avatar-placeholder" class="avatar-placeholder">
-                            <i class="fas fa-user"></i>
+                        <div class="setting-group">
+                            <label class="setting-label">头像设置</label>
+                            <div class="avatar-upload-container">
+                                <div class="avatar-preview">
+                                    <img id="avatar-preview" src="" alt="头像预览" style="display: none;">
+                                    <div id="avatar-placeholder" class="avatar-placeholder">
+                                        <i class="fas fa-user"></i>
+                                    </div>
+                                </div>
+                                <div class="avatar-upload-actions">
+                                    <input type="file" id="avatar-upload" accept="image/*" style="display: none;">
+                                    <button class="avatar-upload-btn" id="select-avatar-btn">选择图片</button>
+                                    <button class="avatar-upload-btn" id="remove-avatar-btn"
+                                        style="display: none;">移除头像</button>
+                                </div>
+                            </div>
                         </div>
-                    </div>
-                    <div class="avatar-upload-actions">
-                        <input type="file" id="avatar-upload" accept="image/*" style="display: none;">
-                        <button class="avatar-upload-btn" id="select-avatar-btn">选择图片</button>
-                        <button class="avatar-upload-btn" id="remove-avatar-btn" style="display: none;">移除头像</button>
-                    </div>
-                </div>
-            </div>
 
-            <div class="setting-group">
-                <label class="setting-label">模型选择</label>
-                <select class="setting-input" id="model-select">
+                        <div class="setting-group">
+                            <label class="setting-label">模型选择</label>
+                            <select class="setting-input" id="model-select">
 
-                </select>
-            </div>
-            <div class="setting-group">
-                <label class="setting-label">记忆管理</label>
-                <select class="setting-input" id="memory-type-select">
-                    <option value="sliding_window">滑动窗口</option>
-                    <option value="summary_augmented_sliding_window">滑动窗口+摘要</option>
-                    <option value="sliding_window_with_rag">滑动窗口+记忆检索</option>
-                    <option value="memoryless">无记忆</option>
-                </select>
-            </div>
-            <!--
+                            </select>
+                        </div>
+                        <div class="setting-group">
+                            <label class="setting-label">记忆管理</label>
+                            <select class="setting-input" id="memory-type-select">
+                                <option value="sliding_window">滑动窗口</option>
+                                <option value="summary_augmented_sliding_window">滑动窗口+摘要</option>
+                                <option value="sliding_window_with_rag">滑动窗口+记忆检索</option>
+                                <option value="memoryless">无记忆</option>
+                            </select>
+                        </div>
+                        <!--
             <div class="setting-group">
                 <label class="setting-label">最大上下文长度</label>
                 <input type="number" class="setting-input" placeholder="输入最大上下文长度" value="4096">
@@ -140,25 +223,43 @@
                 </div>
             </div>
         -->
-            <div class="setting-group">
-                <label class="setting-label">角色名称</label>
-                <input id="character-name" class="setting-input" placeholder="请设置角色名称" value="">
+                        <div class="setting-group">
+                            <label class="setting-label">角色名称</label>
+                            <input id="character-name" class="setting-input" placeholder="请设置角色名称" value="">
+                        </div>
+                        <div class="setting-group">
+                            <label class="setting-label">系统提示/职业设定</label>
+                            <!-- 将textarea改为input，实现单行输入 -->
+                            <input id="character-setup" class="setting-input-single" placeholder="请输入系统提示/职业设定"
+                                value="你是一个有用的AI助手，请用简洁明了的语言回答用户的问题。">
+                        </div>
+                        <div class="setting-group">
+                            <label class="setting-label">辅助设定</label>
+                            <textarea id="character-style" class="setting-textarea"
+                                placeholder="请输入辅助设定">请用简洁明了的语言回答用户的问题。</textarea>
+                        </div>
+                    </div>
+                </div>
+
             </div>
-            <div class="setting-group">
-                <label class="setting-label">系统提示/职业设定</label>
-                <!-- 将textarea改为input，实现单行输入 -->
-                <input id="character-setup" class="setting-input-single" placeholder="请输入系统提示/职业设定"
-                    value="你是一个有用的AI助手，请用简洁明了的语言回答用户的问题。">
+
+            <!-- 角色页面 -->
+            <div id="characters-page" class="page">
+                <div style="padding: 20px; text-align: center;">
+                    <h2>角色管理页面</h2>
+                    <p>此功能正在开发中...</p>
+                </div>
             </div>
-            <div class="setting-group">
-                <label class="setting-label">辅助设定</label>
-                <textarea id="character-style" class="setting-textarea"
-                    placeholder="请输入辅助设定">请用简洁明了的语言回答用户的问题。</textarea>
+
+            <!-- 设置页面 -->
+            <div id="settings-page" class="page">
+                <div style="padding: 20px; text-align: center;">
+                    <h2>系统设置页面</h2>
+                    <p>此功能正在开发中...</p>
+                </div>
             </div>
         </div>
     </div>
-
-
 
     <script>
         // 当前配置对象
@@ -1016,8 +1117,34 @@
 
             // 初始化头像上传功能
             initAvatarUpload();
+
+            // 初始化侧边栏页面切换功能
+            initSidebarNavigation();
         });
 
+        // 初始化侧边栏导航
+        function initSidebarNavigation() {
+            const sidebarButtons = document.querySelectorAll('.sidebar-btn');
+
+            sidebarButtons.forEach(button => {
+                button.addEventListener('click', function () {
+                    // 移除所有活动状态
+                    sidebarButtons.forEach(btn => btn.classList.remove('active'));
+
+                    // 添加当前按钮活动状态
+                    this.classList.add('active');
+
+                    // 隐藏所有页面
+                    document.querySelectorAll('.page').forEach(page => {
+                        page.classList.remove('active');
+                    });
+
+                    // 显示对应页面
+                    const pageId = this.getAttribute('data-page') + '-page';
+                    document.getElementById(pageId).classList.add('active');
+                });
+            });
+        }
         // 初始化头像上传功能
         function initAvatarUpload() {
             const avatarUpload = document.getElementById('avatar-upload');
