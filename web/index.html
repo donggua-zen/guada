@@ -31,7 +31,7 @@
 
         <!-- 中间聊天区域 -->
         <div class="chat-panel">
-            <div class="chat-header"><span id="chat-title">新建会话</span><button class="clear-chat-btn" title="清空聊天记录">
+            <div class="chat-header"><span id="chat-title">加载中...</span><button class="clear-chat-btn" title="清空聊天记录">
                     <i class="fas fa-trash-alt"></i>
                 </button></div>
             <div class="messages-container">
@@ -647,7 +647,7 @@
 
                 modelSelect.value = sessionConfig.model || '';
                 memoryTypeSelect.value = sessionConfig.memory_type || '';
-
+                document.getElementById('chat-title').textContent = sessionConfig.name || '会话';
 
                 // 更新当前配置
                 currentCharacter = {
@@ -738,8 +738,6 @@
                         });
 
                         this.classList.add('active');
-                        document.getElementById('chat-title').textContent = character.name;
-
                         // 切换会话逻辑
                         switchCharacter(character.id);
                     });
