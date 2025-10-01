@@ -49,6 +49,7 @@ class Session(Base):
     __tablename__ = "session"
 
     id = Column(String, primary_key=True, default=lambda: str(ulid.new()))
+    name = Column(String)
     user_id = Column(String, index=True)
     character_id = Column(String, index=True)
     memory_type = Column(String, nullable=True)

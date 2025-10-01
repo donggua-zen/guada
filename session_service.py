@@ -10,13 +10,13 @@ class _SessionService:
     def __del__(self):
         self.db_session.close()
 
-    def create_or_resume_session(self, user_id: str, character_id: str):
+    def create_or_resume_session(self, user_id: str, character_id: str, name: str):
         # 查询用户和角色对应的会话
         session = self.query_session(user_id=user_id, character_id=character_id)
 
         # 如果会话不存在，则创建新的会话；否则返回已存在的会话
         if len(session) == 0:
-            return self.add_new_session(user_id, character_id)
+            return self.add_new_session(user_id, character_id, name)
         else:
             return session[0]
 
@@ -36,8 +36,8 @@ class _SessionService:
             for session in sessions
         ]
 
-    def add_new_session(self, user_id, character_id):
-        session = SessionModel(user_id=user_id, character_id=character_id)
+    def add_new_session(self, user_id: str, character_id: str, name: str):
+        session = SessionModel(user_id=user_id, character_id=character_id, name=name)
 
         self.db_session.add(session)
         self.db_session.commit()
@@ -54,7 +54,7 @@ class _SessionService:
         }
 
     def update_session(self, session_id, new_data: dict):
-        allowed_keys = ["memory_type", "model"]
+        allowed_keys = ["memory_type", "model", "name"]
         for key in new_data.keys():
             if key not in allowed_keys:
                 raise ValueError(f"Invalid key '{key}' in new_data.")
@@ -104,6 +104,7 @@ class _SessionService:
         return [
             {
                 "id": session.id,
+                "name": session.name,
                 "user_id": session.user_id,
                 "character_id": session.character_id,
                 "memory_type": session.memory_type,
