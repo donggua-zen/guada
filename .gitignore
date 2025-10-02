@@ -1,2 +1,4 @@
 /__pycache__/
 /data/*
+web/ai_chat_web/src/components/ChatPage.vue
+node_modules/

@@ -73,7 +73,7 @@ class _SummaryService:
             prompt += summary["content"]
             prompt += "\n"
         return self.call_llm(
-            character["model"],
+            None,
             [
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": prompt},
@@ -109,7 +109,7 @@ class _SummaryService:
 现在，开始生成摘要：
     """
         return self.call_llm(
-            character["model"],
+            None,
             [
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": prompt},
@@ -132,7 +132,7 @@ class _SummaryService:
                 session_id=session_id,
                 master_summary="",
                 last_message_id="",
-                history="{}",
+                history="[]",
             )
             self.db_session.add(summary)
 
