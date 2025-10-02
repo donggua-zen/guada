@@ -8,6 +8,7 @@ import uuid
 # from werkzeug.utils import secure_filename
 
 from flask import Flask, Response, jsonify, request
+from flask_cors import CORS
 from ai_models import ai_models
 from character_service import get_character_service
 from chat_service import get_chat_service
@@ -39,6 +40,8 @@ print("当前脚本目录:", current_directory)
 print("拼接后的文件路径:", os.path.join(current_directory, "web"))
 
 app = Flask(__name__, static_folder=os.path.join(current_directory, "web"))
+CORS(app, methods=["GET", "POST", "DELETE", "PUT"])
+
 
 # 添加头像上传配置
 UPLOAD_FOLDER = "web/uploads"
@@ -286,8 +289,16 @@ def _generate_stream(
     finish_reason_error = None
     reasoning_content = ""
     content = ""
-
+    message = message_service.add_message(
+        session_id=session["id"],
+        role="assistant",
+        content="",
+        parent_id=active_messages[-1]["id"] if active_messages else None,
+        reasoning_content="",
+        metadata={},
+    )
     try:
+        yield f"data: {json.dumps({'message_id':message['id']})}\n\n"
         generator = chat_service.completions(
             session=session,
             character=character,
@@ -323,13 +334,16 @@ def _generate_stream(
         # yield f"data: {json.dumps({'finish_reason':'error','error': str(e)})}\n\n"
     finally:
 
-        message = message_service.add_message(
-            session_id=session["id"],
-            role="assistant",
-            content=content,
-            parent_id=active_messages[-1]["id"] if active_messages else None,
-            reasoning_content=reasoning_content,
-            metadata={"finish_reason": finish_reason, "error": finish_reason_error},
+        message_service.update_message(
+            message["id"],
+            data={
+                "content": content,
+                "reasoning_content": reasoning_content,
+                "metadata": {
+                    "finish_reason": finish_reason,
+                    "error": finish_reason_error,
+                },
+            },
         )
 
         # 使用策略处理对话后的记忆
@@ -342,7 +356,6 @@ def _generate_stream(
                 assistant_message=message,
             )
         yield f"data: {json.dumps({'finish_reason':finish_reason,'error':finish_reason_error})}\n\n"
-        yield f"data: {json.dumps({'assistant_message_id':message['id']})}\n\n"
         yield "data: [DONE]\n\n"
 
 
