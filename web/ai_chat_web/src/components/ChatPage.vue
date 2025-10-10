@@ -1,7 +1,9 @@
 <template>
   <div class="container">
-    <CharacterList :characters="characters" :active-character="activeCharacter" @select-character="selectCharacter"
-      @create-character="createCharacter" />
+    <sessions-list 
+    :active-session="activeSession" 
+    @select-session="selectSession"
+    @create-session="createSession" />
 
     <div class="chat-panel">
       <!-- 聊天头部 -->
@@ -68,12 +70,11 @@ import { ref, computed, watch, nextTick, onMounted, onBeforeUpdate, reactive } f
 import { apiService } from "../services/llmApi";
 import PopupService from "../services/PopupService";
 
-import CharacterList from "./CharacterList.vue";
+import SessionsList from "./SessionsList.vue";
 import MessageItem from "./MessageItem.vue";
 // import ChatPanel from "./ChatPanel.vue";
 import SettingsPanel from './SettingsPanel.vue'
 
-const characters = ref([]);
 const activeCharacter = ref({
   id: '',
   title: '',
@@ -100,23 +101,23 @@ const messageInput = ref(null);
 const abortController = ref(null);
 const isStreaming = ref(false);
 
-onMounted(async () => {
-  await loadCharacters();
-});
+// onMounted(async () => {
+//   await loadCharacters();
+// });
 
 
-const loadCharacters = async () => {
-  const data = await apiService.fetchCharacters();
-  characters.value = data.items;
-  if (characters.value.length > 0) {
-    selectCharacter(characters.value[0]);
-  }
-};
+// const loadCharacters = async () => {
+//   const data = await apiService.fetchSessions();
+//   sessions.value = data.items;
+//   if (sessions.value.length > 0) {
+//     selectSession(sessions.value[0].id);
+//   }
+// };
 
-const selectCharacter = async (character) => {
-  const session = await apiService.queryOrCreateSession("test", character.id);
+const selectSession = async (sessionId) => {
+  const session = await apiService.fetchSessionConfig(sessionId);
   //const sessionConfig = await apiService.fetchSessionConfig(session.id);
-  character = await apiService.fetchCharacter(session["character_id"]);
+  const character = await apiService.fetchCharacter(session["character_id"]);
   activeCharacter.value = character;
 
   const sessionMessages = await apiService.fetchSessionMessages(session.id);

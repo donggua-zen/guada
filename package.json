@@ -1,0 +1,6 @@
+{
+  "devDependencies": {
+    "@prettier/plugin-pug": "^3.4.2",
+    "prettier": "^3.6.2"
+  }
+}

@@ -97,6 +97,10 @@ class ApiService {
     return data.data;
   }
 
+  async fetchSessions() {
+    const data = await this._request('/sessions');
+    return data.data || [];
+  }
   // 获取会话消息历史
   async fetchSessionMessages(sessionId) {
     const data = await this._request(`/sessions/${sessionId}/messages`);
@@ -165,6 +169,29 @@ class ApiService {
       }
     } finally {
       this.currentAbortController = null;
+    }
+  }
+
+  async uploadAvatar(characterId, avatarFile) {
+    const formData = new FormData();
+    formData.append('avatar', avatarFile);
+
+    try {
+      // 发送POST请求上传头像文件
+      const response = await fetch(`${this.baseURL}/characters/${characterId}/avatars`, {
+        method: 'POST',
+        body: formData,
+      });
+
+      if (!response.ok) {
+        throw new Error(`上传头像失败: ${response.status}`);
+      }
+
+      const json = await response.json();
+      return json.data || [];
+    } catch (error) {
+      console.error('上传错误:', error);
+      throw error;
     }
   }
 

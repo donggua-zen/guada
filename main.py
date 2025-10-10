@@ -67,7 +67,7 @@ def get_all_models():
 
 @app.route("/v1/sessions", methods=["GET"])
 def get_sessions():
-    return jsonify({"success": True, "data": session_service.get_all_sessions()})
+    return jsonify({"success": True, "data": {"items":session_service.get_all_sessions()}})
 
 
 @app.route("/v1/sessions", methods=["POST"])
