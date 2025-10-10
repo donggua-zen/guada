@@ -51,23 +51,8 @@ import { ref, onMounted } from 'vue'
 import { apiService } from '../services/llmApi'
 import PopupService from '../services/PopupService'
 
-const props = defineProps({
-  characters: {
-    type: Array,
-    default: () => []
-  },
-  activeCharacter: {
-    type: Object,
-    default: null
-  }
-})
+const characters = ref([])
 
-const emit = defineEmits(['select-character', 'update-characters'])
-
-// 选择角色
-const selectCharacter = (character) => {
-  emit('select-character', character)
-}
 
 // 创建新角色
 const handleCreateCharacter = async () => {
@@ -93,7 +78,6 @@ const handleCreateCharacter = async () => {
       await loadCharacters()
       
       // 自动选择新创建的角色
-      selectCharacter(newCharacter)
       
       PopupService.toast('角色创建成功', 'success')
     }
@@ -155,7 +139,10 @@ const deleteCharacter = async (character) => {
 const loadCharacters = async () => {
   try {
     const data = await apiService.fetchCharacters()
-    emit('update-characters', data.items || [])
+    characters.value = data.items;
+    // if (data.length > 0) {
+    //   selectCharacter(data[0])
+    // }
   } catch (error) {
     console.error('获取角色列表失败:', error)
   }
@@ -169,8 +156,7 @@ onMounted(() => {
 
 <style scoped>
 .characters-panel {
-  width: 280px;
-  min-width: 280px;
+  width: 100%;
   display: flex;
   flex-direction: column;
   background-color: #ffffff;

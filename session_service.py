@@ -21,10 +21,15 @@ class _SessionService:
             return session[0]
 
     def get_all_sessions(self):
-        sessions = self.db_session.query(SessionModel).all()
+        sessions = (
+            self.db_session.query(SessionModel)
+            .order_by(SessionModel.created_at.desc())
+            .all()
+        )
         return [
             {
                 "id": session.id,
+                "name": session.name,
                 "user_id": session.user_id,
                 "character_id": session.character_id,
                 "memory_type": session.memory_type,

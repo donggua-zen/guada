@@ -8,7 +8,7 @@
 
 <script setup>
 import ChatPage from './ChatPage.vue'
-// import CharactersPage from './CharactersPage.vue'
+import CharactersPage from './CharactersPage.vue'
 // import SettingsPage from './SettingsPage.vue'
 
 defineProps({

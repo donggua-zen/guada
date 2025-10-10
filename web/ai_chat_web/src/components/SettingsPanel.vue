@@ -9,27 +9,17 @@
       <label class="setting-label">头像设置</label>
       <div class="avatar-upload-container">
         <div class="avatar-preview">
-        <img v-if="character && character.avatar_url" class="avatar-image" :src="character.avatar_url" >
-        <div v-else class="avatar-placeholder">
-          <i class="fas fa-user"></i>
-        </div>
+          <img v-if="character && character.avatar_url" class="avatar-image" :src="character.avatar_url">
+          <div v-else class="avatar-placeholder">
+            <i class="fas fa-user"></i>
+          </div>
         </div>
         <div class="avatar-upload-actions">
-          <input
-            type="file"
-            ref="avatarInput"
-            accept="image/*"
-            style="display: none"
-            @change="handleAvatarUpload"
-          />
+          <input type="file" ref="avatarInput" accept="image/*" style="display: none" @change="handleAvatarUpload" />
           <button class="avatar-upload-btn" @click="triggerAvatarUpload">
             选择图片
           </button>
-          <button
-            v-if="character && character.avatar_url"
-            class="avatar-upload-btn remove-btn"
-            @click="removeAvatar"
-          >
+          <button v-if="character && character.avatar_url" class="avatar-upload-btn remove-btn" @click="removeAvatar">
             移除头像
           </button>
         </div>
@@ -60,34 +50,21 @@
     <!-- 角色名称 -->
     <div class="setting-group">
       <label class="setting-label">角色名称</label>
-      <input
-        class="setting-input"
-        v-model="character.name"
-        placeholder="请设置角色名称"
-        @input="updateCharacter"
-      />
+      <input class="setting-input" v-model="character.name" placeholder="请设置角色名称" @input="updateCharacter" />
     </div>
 
     <!-- 系统提示/职业设定 -->
     <div class="setting-group">
       <label class="setting-label">系统提示/职业设定</label>
-      <input
-        class="setting-input-single"
-        v-model="character.identity"
-        placeholder="请输入系统提示/职业设定"
-        @input="updateCharacter"
-      />
+      <input class="setting-input-single" v-model="character.identity" placeholder="请输入系统提示/职业设定"
+        @input="updateCharacter" />
     </div>
 
     <!-- 辅助设定 -->
     <div class="setting-group">
       <label class="setting-label">辅助设定</label>
-      <textarea
-        class="setting-textarea"
-        v-model="character.detailed_setting"
-        placeholder="请输入辅助设定"
-        @input="updateCharacter"
-      ></textarea>
+      <textarea class="setting-textarea" v-model="character.detailed_setting" placeholder="请输入辅助设定"
+        @input="updateCharacter"></textarea>
     </div>
 
     <!-- 高级设置 -->
@@ -96,21 +73,14 @@
         <span>高级设置</span>
         <i class="fas" :class="advancedSettingsIcon"></i>
       </div>
-      
+
       <div v-if="showAdvancedSettings" class="advanced-settings">
         <!-- 温度设置 -->
         <div class="advanced-setting">
           <label class="advanced-setting-label">温度 (Temperature)</label>
           <div class="slider-container">
-            <input 
-              type="range" 
-              min="0" 
-              max="1" 
-              step="0.1" 
-              v-model="session.temperature"
-              class="slider"
-              @change="updateSession"
-            />
+            <input type="range" min="0" max="1" step="0.1" v-model="session.temperature" class="slider"
+              @change="updateSession" />
             <span class="slider-value">{{ session.temperature }}</span>
           </div>
         </div>
@@ -119,15 +89,8 @@
         <div class="advanced-setting">
           <label class="advanced-setting-label">最大长度 (Max Tokens)</label>
           <div class="slider-container">
-            <input 
-              type="range" 
-              min="100" 
-              max="4096" 
-              step="100" 
-              v-model="session.max_tokens"
-              class="slider"
-              @change="updateSession"
-            />
+            <input type="range" min="100" max="4096" step="100" v-model="session.max_tokens" class="slider"
+              @change="updateSession" />
             <span class="slider-value">{{ session.max_tokens }}</span>
           </div>
         </div>
@@ -136,15 +99,8 @@
         <div class="advanced-setting">
           <label class="advanced-setting-label">Top P</label>
           <div class="slider-container">
-            <input 
-              type="range" 
-              min="0" 
-              max="1" 
-              step="0.1" 
-              v-model="session.top_p"
-              class="slider"
-              @change="updateSession"
-            />
+            <input type="range" min="0" max="1" step="0.1" v-model="session.top_p" class="slider"
+              @change="updateSession" />
             <span class="slider-value">{{ session.top_p }}</span>
           </div>
         </div>
@@ -153,15 +109,8 @@
         <div class="advanced-setting">
           <label class="advanced-setting-label">频率惩罚</label>
           <div class="slider-container">
-            <input 
-              type="range" 
-              min="0" 
-              max="2" 
-              step="0.1" 
-              v-model="session.frequency_penalty"
-              class="slider"
-              @change="updateSession"
-            />
+            <input type="range" min="0" max="2" step="0.1" v-model="session.frequency_penalty" class="slider"
+              @change="updateSession" />
             <span class="slider-value">{{ session.frequency_penalty }}</span>
           </div>
         </div>
@@ -175,13 +124,40 @@
       </button>
     </div>
   </div>
+  <!-- 头像裁剪模态框 -->
+  <div v-if="showCropModal" class="modal-overlay">
+    <div class="crop-modal">
+      <div class="modal-header">
+        <h3>裁剪头像</h3>
+        <button class="close-btn" @click="closeCropModal">×</button>
+      </div>
+      <div class="modal-body">
+        <cropper ref="cropper_avatar" :src="cropImageSrc" :stencil-props="{
+          aspectRatio: 1,
+          movable: true,
+          resizable: true
+        }" :resize-image="{
+          adjustStencil: false
+        }" @change="handleCropChange" :output-type="'png'" :output-size="{ width: 500, height: 500 }">
+        </cropper>
+      </div>
+      <div class="modal-footer">
+        <button class="btn-secondary" @click="closeCropModal">取消</button>
+        <button class="btn-primary" @click="cropAvatar">确认裁剪</button>
+      </div>
+    </div>
+  </div>
 </template>
 
 <script setup>
 import { ref, computed, onMounted, watch } from 'vue'
 import { apiService } from '../services/llmApi'
 import PopupService from '../services/PopupService'
-
+// 新增导入
+// import { VueCropper } from 'vue-cropperjs';
+// import 'cropperjs/dist/cropper.css';
+import { Cropper } from 'vue-advanced-cropper'
+import 'vue-advanced-cropper/dist/style.css'
 const props = defineProps({
   character: {
     type: Object,
@@ -215,7 +191,7 @@ const showAdvancedSettings = ref(false)
 const avatarInput = ref(null)
 
 // 计算高级设置图标
-const advancedSettingsIcon = computed(() => 
+const advancedSettingsIcon = computed(() =>
   showAdvancedSettings.value ? 'fa-chevron-up' : 'fa-chevron-down'
 )
 
@@ -238,72 +214,100 @@ const triggerAvatarUpload = () => {
   avatarInput.value.click()
 }
 
+// 新增响应式数据
+const showCropModal = ref(false);
+const cropImageSrc = ref('');
+const cropFile = ref(null);
+const cropper_avatar = ref(null);
 // 处理头像上传
 const handleAvatarUpload = (event) => {
-  const file = event.target.files[0]
+  const file = event.target.files[0];
   if (file) {
-    // 检查文件类型和大小
     if (!file.type.startsWith('image/')) {
-      PopupService.toast('请选择图片文件', 'error')
-      return
+      PopupService.toast('请选择图片文件', 'error');
+      return;
     }
-    
-    if (file.size > 5 * 1024 * 1024) { // 5MB限制
-      PopupService.toast('图片大小不能超过5MB', 'error')
-      return
+
+    if (file.size > 5 * 1024 * 1024) {
+      PopupService.toast('图片大小不能超过5MB', 'error');
+      return;
     }
-    
-    // 创建预览URL
-    const reader = new FileReader()
+
+    const reader = new FileReader();
     reader.onload = (e) => {
-      // 显示裁剪模态框
-      showAvatarCropModal(e.target.result, file)
-    }
-    reader.readAsDataURL(file)
+      console.log('图片加载完成:', e.target.result);
+      cropImageSrc.value = e.target.result;
+      cropFile.value = file;
+      showCropModal.value = true;
+    };
+    reader.readAsDataURL(file);
   }
-}
 
-// 显示头像裁剪模态框
-const showAvatarCropModal = (imageSrc, file) => {
-  // 这里应该实现裁剪功能，但为了简化，我们直接上传
-  uploadAvatar(file)
-}
+  // 清空input，允许重复选择同一文件
+  event.target.value = '';
+};
 
-// 上传头像
+const handleCropChange = ({ coordinates, canvas }) => {
+  console.log(coordinates, canvas)
+};
+
+const cropAvatar = () => {
+  console.log('裁剪头像1');
+  if (!cropper_avatar.value) return;
+  console.log('裁剪头像2');
+  // 获取裁剪后的canvas
+  const { coordinates, canvas } = cropper_avatar.value.getResult();
+
+  // cropper_avatar.value.getCroppedCanvas({
+  //   imageSmoothingEnabled: true,
+  //   imageSmoothingQuality: 'high',
+  //   fillColor: '#fff', // 填充白色背景
+  // })
+  console.log(canvas);
+  canvas.toBlob((blob) => {
+    // 创建新文件对象
+    const croppedFile = new File([blob], cropFile.value.name, {
+      type: cropFile.value.type,
+      lastModified: Date.now(),
+    });
+
+    // 上传裁剪后的图片
+    uploadAvatar(croppedFile);
+
+    // 关闭模态框
+    closeCropModal();
+  }, cropFile.value.type, 0.9); // 90%质量
+};
+
+// 新增关闭模态框函数
+const closeCropModal = () => {
+  showCropModal.value = false;
+  cropImageSrc.value = '';
+  cropFile.value = null;
+};
+
+// 修改uploadAvatar函数，添加加载状态
 const uploadAvatar = async (file) => {
   try {
-    const formData = new FormData()
-    formData.append('avatar', file)
+    PopupService.toast('上传中...', 'info', 2000);
+    // 调用API上传头像
+    const result = await apiService.uploadAvatar(props.character.id, file);
 
-    const response = await fetch(`/v1/characters/${props.character.id}/avatars`, {
-      method: 'POST',
-      body: formData
-    })
+    // 更新本地头像显示
+    const updatedCharacter = {
+      ...props.character,
+      avatar_url: result.avatar_url
+    };
+    emit('update-character', updatedCharacter);
 
-    if (!response.ok) {
-      throw new Error('上传失败')
-    }
+    PopupService.toast('头像上传成功', 'success');
 
-    const result = await response.json()
-
-    if (result.success) {
-      // 更新角色头像
-      const updatedCharacter = {
-        ...props.character,
-        avatar_url: result.data.url
-      }
-      
-      emit('update-character', updatedCharacter)
-      
-      PopupService.toast('头像上传成功', 'success')
-    } else {
-      throw new Error(result.error || '上传失败')
-    }
   } catch (error) {
-    console.error('上传头像失败:', error)
-    PopupService.toast('头像上传失败', 'error')
+    console.error('上传头像失败:', error);
+    PopupService.toast('头像上传失败', 'error');
   }
-}
+};
+
 
 // 移除头像
 const removeAvatar = () => {
@@ -311,7 +315,7 @@ const removeAvatar = () => {
     ...props.character,
     avatar_url: ''
   }
-  
+
   emit('update-character', updatedCharacter)
   PopupService.toast('头像已移除', 'success')
 }
@@ -584,5 +588,109 @@ onMounted(() => {
 
 .save-settings-btn:hover {
   background-color: #3a7bc8;
+}
+</style>
+<style scoped>
+/* 裁剪框模态框样式 */
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.7);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.crop-modal {
+  background-color: white;
+  border-radius: 12px;
+  width: 80%;
+  max-width: 600px;
+  max-height: 80vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px 20px;
+  border-bottom: 1px solid #eee;
+}
+
+.modal-header h3 {
+  margin: 0;
+  font-size: 18px;
+}
+
+.close-btn {
+  background: none;
+  border: none;
+  font-size: 24px;
+  cursor: pointer;
+  color: #999;
+}
+
+.close-btn:hover {
+  color: #333;
+}
+
+.modal-body {
+  padding: 20px;
+  flex: 1;
+  overflow: auto;
+}
+
+.modal-footer {
+  padding: 16px 20px;
+  border-top: 1px solid #eee;
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+}
+
+.btn-primary {
+  padding: 8px 16px;
+  background-color: #4a90e2;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.btn-primary:hover {
+  background-color: #3a7bc8;
+}
+
+.btn-secondary {
+  padding: 8px 16px;
+  background-color: #f5f5f5;
+  color: #333;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.btn-secondary:hover {
+  background-color: #e8e8e8;
+}
+
+/* 确保裁剪器正确显示 */
+.cropper-background {
+  background-color: transparent;
+}
+
+:deep(.cropper-view-box) {
+  border-radius: 50%;
+}
+
+:deep(.cropper-face) {
+  background-color: transparent;
 }
 </style>
