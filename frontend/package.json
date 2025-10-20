@@ -1,0 +1,30 @@
+{
+  "name": "ai_chat_web",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@fortawesome/fontawesome-free": "^7.0.1",
+    "@vuelidate/core": "^2.0.3",
+    "@vuelidate/validators": "^2.0.4",
+    "cropperjs": "^1.6.2",
+    "marked": "^16.3.0",
+    "simplebar-vue": "^2.4.2",
+    "sweetalert2": "^11.23.0",
+    "vue": "^3.5.21",
+    "vue-advanced-cropper": "^2.8.9",
+    "vue-cropper": "^0.6.5",
+    "vue-cropperjs": "^5.0.0",
+    "vue-router": "^4.6.3",
+    "vuex": "^4.1.0"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-vue": "^6.0.1",
+    "vite": "^7.1.7"
+  }
+}
