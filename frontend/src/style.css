@@ -1,0 +1,132 @@
+/* 通用重置和基础样式 */
+
+:root {
+    --primary-color: #615ced;
+    /* 紫色主题色 */
+    --secondary-color: #f0f0f0;
+    /* 灰色背景色 */
+    --bg: #f1f3f7;
+    --page-bg: #e2e6ee;
+    --primary-text-color: #222;
+    --secondary-text-color: #666;
+    --thinking-text-color: #495057;
+    /* 灰色文字颜色 */
+    --primary-color: #3498db;
+    --primary-text-color: #1F2937;
+    --primary-text-light-color: #fff;
+    --bg: #F7F7F7;
+    --page-bg: #fafafa;
+    --assitant-popup-bg: none;
+    --assitant-popup-text-color: #1F2937;
+    /* 聊天对话样式 */
+    --conversation-bg: #efefef;
+    --conversation-text-color: #333;
+    --conversation-border-color: #efefef;
+    --conversation-border-radius: 10px;
+    --conversation-padding: 15px;
+    --conversation-font-size: 16px;
+    --conversation-line-height: 1.5;
+    --conversation-active-bg: #fff;
+    --conversation-active-text-color: #1F2937;
+    --conversation-hover-bg: #ffffff;
+    --conversation-hover-text-color: #1F2937;
+    /*侧边栏*/
+    --sidebar-bg: #0081ff;
+    --sidebar-bg: linear-gradient(135deg, #efefef, #efefef);
+    --sidebar-border-color: #ddd;
+    --sidebar-text-color: #bbb;
+    --sidebar-hover-bg: #fafafa;
+    --sidebar-hover-text-color: #0081ff;
+    --sidebar-active-bg: #efefef;
+    --sidebar-active-text-color: #0081ff;
+}
+
+@font-face {
+    font-family: 'Alibaba PuHuiTi';
+    src: url('/static/fonts/AlibabaPuHuiTi-3-55-Regular.ttf') format('truetype');
+    font-weight: 400;
+    font-style: normal;
+}
+
+/* @font-face {
+    font-family: 'Alibaba PuHuiTi';
+    src: url('/static/fonts/AlibabaPuHuiTi-3-65-Medium.ttf') format('truetype');
+    font-weight: 500;
+    font-style: normal;
+}
+
+@font-face {
+    font-family: 'Alibaba PuHuiTi';
+    src: url('/static/fonts/AlibabaPuHuiTi-3-85-Bold.ttf') format('truetype');
+    font-weight: 700;
+    font-style: normal;
+} */
+
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    color: #222;
+    height: 100vh;
+    overflow: hidden;
+    margin: 0;
+    padding: 0;
+    /* 使用更适合中文显示的字体栈 */
+    /* font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', 'Helvetica Neue', Helvetica, Arial, sans-serif; */
+
+
+    font-family: 'Alibaba PuHuiTi','PingFang SC', system-ui, -apple-system, BlinkMacSystemFont, 'Helvetica Neue', 'Hiragino Sans GB', 'Microsoft YaHei UI', 'Microsoft YaHei', Arial, sans-serif;
+}
+
+/* 布局结构 */
+.container {
+    display: flex;
+    height: 100vh;
+    width: 100%;
+    margin: 0;
+    padding: 0;
+    gap: 0;
+}
+
+/* 页面容器样式 */
+.page-container {
+    flex: 1;
+    /* display: flex;
+            flex-direction: column; */
+    height: 100vh;
+    overflow: hidden;
+    background-color: var(--page-bg);
+}
+
+.page {
+    display: none;
+    width: 100%;
+    height: 100%;
+}
+
+.page.active {
+    display: flex;
+}
+
+/* 调整原有布局 */
+.app-main-container {
+    display: flex;
+    height: 100vh;
+    width: 100vw;
+}
+
+/* 动画效果 */
+@keyframes fadeInUp {
+    from {
+        opacity: 0;
+        transform: translateY(10px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}

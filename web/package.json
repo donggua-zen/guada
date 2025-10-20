@@ -1,7 +1,0 @@
-{
-  "dependencies": {
-    "@fortawesome/fontawesome-free": "^7.0.1",
-    "marked": "^16.3.0",
-    "sweetalert2": "^11.23.0"
-  }
-}
