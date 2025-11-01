@@ -11,11 +11,11 @@ import { createRouter, createWebHistory } from 'vue-router'
 const routes = [
     {
         path: '/',
-        name: 'Home',
         component: () => import('./components/MainLayout.vue'),
         children: [
             {
                 path: '', meta: { requiresLayout: true },
+                name: 'Home',
                 redirect: '/chat'
             },
             {
@@ -30,15 +30,16 @@ const routes = [
                 meta: { requiresLayout: true },
                 component: () => import('./components/CharactersPage.vue')
             },
-
+            {
+                path: '/models',
+                name: 'Models',
+                meta: { requiresLayout: true },
+                component: () => import('./components/ModelsPage.vue')
+            },
         ]
     },
-    {
-        path: '/character/:characterId?',
-        name: 'Character',
-        meta: { requiresLayout: true },
-        component: () => import('./components/CharacterPage.vue')
-    },
+   
+
     // {
     //     path: '/settings',
     //     name: 'Settings',

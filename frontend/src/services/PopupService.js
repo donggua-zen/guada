@@ -1,128 +1,204 @@
 // src/services/popupService.js
-import Swal from 'sweetalert2'
+import { createDiscreteApi } from 'naive-ui'
+import { h, ref } from 'vue' // 导入需要的 Vue API
 
-// 默认弹窗配置
-const defaultSwalConfig = {
-  reverseButtons: true,
-  customClass: {
-    confirmButton: 'swal2-confirm-btn',
-    cancelButton: 'swal2-cancel-btn'
-  }
-}
+// 创建离散API实例
+const { message, dialog, notification, loadingBar } = createDiscreteApi([
+  'message',
+  'dialog',
+  'notification',
+  'loadingBar'
+])
 
-// 弹窗服务对象
+// Naive UI 弹窗服务对象
 const PopupService = {
   // 确认对话框
-  confirm(title, text, confirmText = '确认', cancelText = '取消') {
-    return Swal.fire({
-      ...defaultSwalConfig,
-      title,
-      text,
-      icon: 'warning',
-      showCancelButton: true,
-      confirmButtonColor: '#ff3b30',
-      cancelButtonColor: '#4a90e2',
-      confirmButtonText: confirmText,
-      cancelButtonText: cancelText
+  async confirm(title, content, confirmText = '确认', cancelText = '取消') {
+    return new Promise((resolve) => {
+      dialog.warning({
+        title,
+        content,
+        positiveText: confirmText,
+        negativeText: cancelText,
+        onPositiveClick: () => resolve({ isConfirmed: true, isDenied: false, isDismissed: false }),
+        onNegativeClick: () => resolve({ isConfirmed: false, isDenied: true, isDismissed: false }),
+        onMaskClick: () => resolve({ isConfirmed: false, isDenied: false, isDismissed: true })
+      })
     })
   },
 
   // 成功提示
-  success(title, text, timer = 2000) {
-    return Swal.fire({
-      title,
-      text,
-      icon: 'success',
-      timer,
-      showConfirmButton: false
+  success(title, content, duration = 2000) {
+    message.success(content || title, {
+      duration,
+      keepAliveOnHover: true
     })
   },
 
   // 错误提示
-  error(title, text) {
-    return Swal.fire({
-      title,
-      text,
-      icon: 'error',
-      confirmButtonText: '确定'
+  error(title, content) {
+    message.error(content || title, {
+      duration: 3000,
+      keepAliveOnHover: true
     })
   },
 
   // 编辑消息弹窗
-  editMessage(currentContent) {
-    return Swal.fire({
-      title: '编辑消息',
-      html: `<textarea id="swal-edit-textarea" class="modal-textarea" style="width:100%; min-height:200px; padding:12px; border:1px solid #d0d0d0; border-radius:4px; font-size:15px; resize:vertical;">${currentContent}</textarea>`,
-      showCancelButton: true,
-      confirmButtonText: '保存',
-      cancelButtonText: '取消',
-      reverseButtons: true,
-      focusConfirm: false,
-      preConfirm: () => {
-        return document.getElementById('swal-edit-textarea').value
-      },
-      customClass: {
-        confirmButton: 'swal2-confirm-btn',
-        cancelButton: 'swal2-cancel-btn',
-        container: 'swal2-edit-container'
-      }
+  async editMessage(currentContent) {
+    const contentRef = ref(currentContent)
+
+    return new Promise((resolve) => {
+      dialog.create({
+        title: '编辑消息',
+        content: () => h('div', [
+          h('textarea', {
+            value: contentRef.value,
+            onInput: (e) => { contentRef.value = e.target.value },
+            style: {
+              width: '100%',
+              minHeight: '200px',
+              padding: '12px',
+              border: '1px solid #d0d0d0',
+              borderRadius: '4px',
+              fontSize: '15px',
+              resize: 'vertical'
+            }
+          })
+        ]),
+        positiveText: '保存',
+        negativeText: '取消',
+        onPositiveClick: () => {
+          resolve(contentRef.value)
+          return true
+        },
+        onNegativeClick: () => {
+          resolve(null)
+          return true
+        }
+      })
     })
   },
 
   // 输入框弹窗
-  prompt(title, inputValue = '', inputPlaceholder = '') {
-    return Swal.fire({
-      ...defaultSwalConfig,
-      title,
-      input: 'text',
-      inputValue,
-      inputPlaceholder,
-      showCancelButton: true,
-      confirmButtonText: '保存',
-      cancelButtonText: '取消',
-      preConfirm: (value) => {
-        if (!value) {
-          Swal.showValidationMessage('内容不能为空')
-          return false
+  async prompt(title, inputValue = '', inputPlaceholder = '') {
+    const inputRef = ref(inputValue)
+
+    return new Promise((resolve) => {
+      dialog.create({
+        title,
+        content: () => h('div', [
+          h('input', {
+            value: inputRef.value,
+            placeholder: inputPlaceholder,
+            onInput: (e) => { inputRef.value = e.target.value },
+            style: {
+              width: '100%',
+              padding: '8px 12px',
+              border: '1px solid #d0d0d0',
+              borderRadius: '4px',
+              fontSize: '14px'
+            }
+          })
+        ]),
+        positiveText: '保存',
+        negativeText: '取消',
+        onPositiveClick: () => {
+          if (!inputRef.value.trim()) {
+            message.error('内容不能为空')
+            return false
+          }
+          resolve(inputRef.value)
+          return true
+        },
+        onNegativeClick: () => {
+          resolve(null)
+          return true
         }
-        return value
-      }
+      })
     })
   },
 
   // 加载中提示
   loading(title = '处理中...') {
-    return Swal.fire({
-      title,
-      allowOutsideClick: false,
-      didOpen: () => {
-        Swal.showLoading()
-      }
+    loadingBar.start()
+    // 如果需要显示带文字的加载状态，可以使用 message.loading
+    const hide = message.loading(title, {
+      duration: 0 // 持续显示
     })
+
+    return {
+      close: () => {
+        loadingBar.finish()
+        hide()
+      }
+    }
   },
 
   // Toast提示
-  toast(title, icon = 'success', timer = 1500, position = 'top-end') {
-    return Swal.fire({
-      title,
-      icon,
-      timer,
-      position,
-      toast: true,
-      showConfirmButton: false,
-      showCloseButton: false,
-      background: '#fff',
-      color: '#333',
-      customClass: {
-        container: 'swal2-toast-container',
-        popup: 'swal2-toast-popup'
-      }
+  toast(content, type = 'success', duration = 1500) {
+    const typeMap = {
+      success: message.success,
+      error: message.error,
+      warning: message.warning,
+      info: message.info
+    }
+
+    return typeMap[type](content, {
+      duration,
+      keepAliveOnHover: true
     })
   },
 
-  // 关闭当前弹窗
+  // 自定义弹窗（简化版，推荐使用组件方式）
+  async customDialog(customHtml, title = '编辑消息') {
+    return new Promise((resolve) => {
+      // 创建临时容器
+      const tempDiv = document.createElement('div')
+      tempDiv.innerHTML = customHtml
+
+      dialog.create({
+        title,
+        content: () => h('div', { innerHTML: customHtml }),
+        positiveText: '保存',
+        negativeText: '取消',
+        onPositiveClick: () => {
+          const textarea = tempDiv.querySelector('#swal-edit-textarea')
+          resolve(textarea ? textarea.value : null)
+          return true
+        },
+        onNegativeClick: () => {
+          resolve(null)
+          return true
+        }
+      })
+    })
+  },
+
+  // 信息提示
+  info(title, content, duration = 2000) {
+    message.info(content || title, {
+      duration,
+      keepAliveOnHover: true
+    })
+  },
+
+  // 警告提示
+  warning(title, content, duration = 3000) {
+    message.warning(content || title, {
+      duration,
+      keepAliveOnHover: true
+    })
+  },
+
+  // 关闭所有消息
+  closeAll() {
+    message.destroyAll()
+  },
+
+  // 关闭当前弹窗（兼容方法）
   close() {
-    Swal.close()
+    loadingBar.finish()
+    this.closeAll()
   }
 }
 

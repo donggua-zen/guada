@@ -1,7 +1,8 @@
 <template>
   <div class="message" :class="messageClass">
     <div class="avatar" :class="avatarClass">
-      <i v-if="!isAssistant || !character.avatar_url" :class="avatarIcon"></i>
+      <Avatar v-if="!isAssistant" src="" :round="true"></Avatar>
+      <Avatar v-else :src="avatar" :round="true"></Avatar>
     </div>
 
     <div class="message-content">
@@ -16,16 +17,15 @@
         </div>
 
         <div class="message-text markdown-text" v-html="formattedContent"></div>
-        <div v-if="message.meta_data && message.meta_data.finish_reason == 'error'" class="response-error">
-          <div class="response-error-title">API请求错误</div>
-          <div class="response-error-content">{{ message.meta_data.error }}</div>
-        </div>
+        <n-alert v-if="message.meta_data && message.meta_data.finish_reason == 'error'" title="API请求错误" type="error">
+          {{ message.meta_data.error }}
+        </n-alert>
         <div v-if="message.is_streaming" class="assistant-loading">
           回答中...
         </div>
       </div>
 
-      <div class="message-actions">
+      <div class="message-actions" :style="message.is_streaming ? 'opacity: 0;' : ''">
         <div v-for="action in availableActions" :key="action.name" class="message-action"
           @click="handleAction(action.name)">
           <i :class="action.icon" alt="{{ action.text }}"></i>
@@ -38,10 +38,12 @@
 <script setup>
 import { computed, ref } from "vue";
 import { marked } from "marked";
+import { NAlert } from "naive-ui";
+import Avatar from "./Avatar.vue";
 
 const props = defineProps({
   message: Object,
-  character: Object,
+  avatar: String,
   isLast: {
     type: Boolean,
     default: false
@@ -74,29 +76,6 @@ const expandIcon = computed(() =>
 
 const formattedText = ((text) => {
   return text;
-  // if (!props.isGenerating) {
-  //   return text;
-  // }
-
-  // // 使用 Array.from 正确分割 Unicode 字符（包括 emoji）
-  // const textArray = Array.from(text);
-  // const loadingLen = textArray.length > 5 ? 5 : textArray.length;
-
-  // // 获取前部分文本（除了最后几个字符）
-  // const text_loaded = textArray.slice(0, textArray.length - loadingLen).join('');
-
-  // // 获取需要动画的最后几个字符
-  // const text_animate = textArray.slice(-loadingLen);
-
-  // let result = text_loaded;
-
-  // for (let i = 0; i < text_animate.length; i++) {
-  //   const char = text_animate[i];
-  //   // 为每个字符添加动画延迟，确保 Unicode 字符完整
-  //   result += `<span class='typewriter-char' style="animation-delay: ${i * 0.1}s">${char}</span>`;
-  // }
-
-  // return result;
 })
 
 const formattedContent = computed(() =>
@@ -143,7 +122,7 @@ const startThinking = () => {
 const stopThinking = () => {
   console.log("stopThinking called");
   isThinking.value = false;
-  isExpanded.value = false;
+  // isExpanded.value = false;
   thinkingLabel.value = "已深度思考";
 };
 
@@ -156,8 +135,7 @@ const emit = defineEmits(["delete", "edit", "copy", "regenerate"]);
 .message {
   display: flex;
   gap: 15px;
-  max-width: 100%;
-  width: 800px;
+  width: 100%;
   margin-top: 20px;
   margin-bottom: 25px;
   animation: fadeInUp 0.3s ease;
@@ -171,55 +149,30 @@ const emit = defineEmits(["delete", "edit", "copy", "regenerate"]);
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
-  font-size: 20px;
-  color: white;
   align-self: flex-start;
-  overflow: hidden;
 }
 
-.assistant-avatar img {
-  display: block;
-  width: 100%;
-  height: 100%;
-}
-
-.user-avatar {
-  background-color: var(--primary-color);
-}
-
-.assistant-avatar {
-  background-color: #34c759;
-}
 
 
 /* 新增卡片式设计 */
 .message-card {
-  /* box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05); */
-  /* position: relative; */
-  /* display: inline-block; */
-  max-width: 670px;
-  /* width: fit-content; */
   line-height: 1.5;
   font-size: 16px;
-  letter-spacing: 1.3px;
-  /* min-width: 200px; */
-  /* 设置最小宽度防止卡片过窄 */
-  /* min-height: 60px; */
-  /* 设置最小高度防止卡片过扁 */
+  letter-spacing: 1px;
   transition: all 0.3s ease;
-  /* 添加过渡动画 */
-  /* min-width: 300px; */
 }
 
 /* 用户消息气泡特定样式 */
 .user-message-container .message-card {
   margin-left: auto;
   /* background: linear-gradient(135deg, #4a90e2, #3a7bc8); */
-  background-color: var(--primary-color);
-  color: var(--primary-text-light-color);
+  background-color: var(--user-popup-bg);
+  color: var(--user-popup-text-color);
   padding: 8px 12px;
   border-radius: 12px;
-  /* border: 1px solid #eee; */
+  /* box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05); */
+  /* box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05), 0 1px 1px rgba(0, 0, 0, 0.05); */
+  border: 1px solid #efefef;
   /* width: 100%; */
 }
 
@@ -227,7 +180,7 @@ const emit = defineEmits(["delete", "edit", "copy", "regenerate"]);
 .assistant-message-container .message-card {
   /* background: #ffffff; */
   background: var(--assitant-popup-bg);
-  color: var(--primary-text-color);
+  color: var(--assitant-popup-text-color);
   margin-right: auto;
   width: 100%;
   padding: 0;
@@ -264,12 +217,11 @@ const emit = defineEmits(["delete", "edit", "copy", "regenerate"]);
 
 /* 添加消息操作按钮的默认隐藏和悬停显示样式 */
 .message-content .message-actions {
-  opacity: 0;
-  visibility: hidden;
+  /* opacity: 0; */
+  /* visibility: hidden; */
   transition:
     opacity 0.3s ease,
     visibility 0.3s ease;
-  margin-top: 8px;
 }
 
 .message-content:hover .message-actions {
@@ -284,7 +236,7 @@ const emit = defineEmits(["delete", "edit", "copy", "regenerate"]);
   font-size: 14px;
   width: 100%;
   justify-content: flex-end;
-  margin-top: 15px;
+  margin-top: 12px;
 }
 
 .user-message-container .message-actions {
@@ -312,8 +264,11 @@ const emit = defineEmits(["delete", "edit", "copy", "regenerate"]);
   align-items: center;
   gap: 4px;
   transition: color 0.2s;
-  padding: 4px 8px;
+  padding: 5px 8px;
   border-radius: 4px;
+  background: #efefef;
+  margin-right: 5px;
+  font-size: 14px;
 }
 
 .message-action:hover {
@@ -323,7 +278,7 @@ const emit = defineEmits(["delete", "edit", "copy", "regenerate"]);
 
 .user-message-container .message-action:hover {
   color: #4a90e2;
-  background-color: rgba(255, 255, 255, 0.2);
+  /* background-color: rgba(255, 255, 255, 0.2); */
 }
 
 .ai-meta {
@@ -349,7 +304,7 @@ const emit = defineEmits(["delete", "edit", "copy", "regenerate"]);
 }
 
 .thinking-content {
-  font-size: 14px;
+  font-size: 15px;
   color: var(--thinking-text-color);
   line-height: 1.8;
   /* white-space: pre-wrap; */
@@ -419,38 +374,6 @@ const emit = defineEmits(["delete", "edit", "copy", "regenerate"]);
   display: block;
 }
 
-/* 错误响应样式 */
-.response-error {
-  padding: 15px;
-  border: 1px solid #ff4d4f;
-  background-color: #fff2f0;
-  border-radius: 4px;
-  color: #f5222d;
-  margin: 15px 0;
-  font-family:
-    -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-  box-shadow: 0 2px 5px rgba(255, 77, 79, 0.1);
-  border-radius: 12px;
-}
-
-.response-error-title {
-  font-weight: bold;
-  display: flex;
-  align-items: center;
-  margin-bottom: 8px;
-}
-
-.response-error-title::before {
-  content: "⚠";
-  font-size: 16px;
-  margin-right: 8px;
-}
-
-.response-error-content {
-  font-size: 15px;
-  line-height: 1.5;
-}
-
 /* 加载动画 */
 .assistant-loading {
   color: #999;
@@ -484,36 +407,27 @@ const emit = defineEmits(["delete", "edit", "copy", "regenerate"]);
   margin-top: 1.2em;
   margin-bottom: 0.8em;
   font-weight: 600;
-  line-height: 1.4;
+  line-height: 1.5;
+  font-size: 16px;
   color: inherit;
 }
 
 .markdown-text h1 {
-  font-size: 1.4em;
-  border-bottom: 1px solid #eaecef;
+  font-size: 18px;
   padding-bottom: 0.5em;
 }
 
 .markdown-text h2 {
-  font-size: 1.3em;
-  border-bottom: 1px solid #eaecef;
   padding-bottom: 0.5em;
 }
 
-.markdown-text h3 {
-  font-size: 1.2em;
-}
+.markdown-text h3 {}
 
-.markdown-text h4 {
-  font-size: 1.1em;
-}
+.markdown-text h4 {}
 
-.markdown-text h5 {
-  font-size: 1em;
-}
+.markdown-text h5 {}
 
 .markdown-text h6 {
-  font-size: 0.9em;
   color: #6a737d;
 }
 
@@ -526,20 +440,32 @@ const emit = defineEmits(["delete", "edit", "copy", "regenerate"]);
   text-decoration: underline;
 }
 
-.markdown-text ul,
 .markdown-text ol {
-  padding-left: 2em;
-  margin-bottom: 1em;
+  list-style: decimal;
+  padding-left: 20px;
 }
 
-.markdown-text li {
-  margin-bottom: 0.25em;
+.markdown-text ul {
+  list-style: none;
+  padding-left: 0;
 }
 
-.markdown-text li>ul,
-.markdown-text li>ol {
-  margin-top: 0.25em;
+.markdown-text ul li {
+  position: relative;
+  padding-left: 16px;
 }
+
+.markdown-text ul li::before {
+  content: "";
+  position: absolute;
+  left: 2px;
+  top: 0.7em;
+  width: 5px;
+  height: 5px;
+  background-color: #444;
+  border-radius: 50%;
+}
+
 
 .markdown-text code {
   background-color: #f6f8fa;
@@ -557,6 +483,10 @@ const emit = defineEmits(["delete", "edit", "copy", "regenerate"]);
   margin-top: 1rem;
   margin-bottom: 1em;
   border: 1px solid #dfe2e5;
+  white-space: pre-wrap;
+  /* 或 pre-line */
+  word-wrap: break-word;
+  /* 确保长单词不会溢出容器 */
 }
 
 .markdown-text pre code {

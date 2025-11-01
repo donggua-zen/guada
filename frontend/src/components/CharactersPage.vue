@@ -1,395 +1,220 @@
 <template>
-  <div class="characters-panel">
-    <div class="characters-header">
-      <span>角色列表</span>
-      <button class="new-character-btn" id="newCharacterBtn" @click="createCharacter">
-        <i class="fas fa-plus"></i> 新建角色
-      </button>
+  <div class="flex flex-col h-screen bg-gray-50">
+    <!-- 头部 -->
+    <div class="flex justify-between items-center p-4 bg-white border-b border-gray-200">
+      <span class="text-2xl font-semibold text-gray-800">角色列表</span>
+      <n-button type="primary" @click="createCharacter" class="flex items-center">
+        <template #icon>
+          <n-icon>
+            <PlusOutlined />
+          </n-icon>
+        </template>
+        新建角色
+      </n-button>
     </div>
-    <div class="characters-scroll-container">
-      <div class="characters-grid" id="charactersGrid">
-        <div v-for="character in characters" :key="character.id" class="character-card">
-          <div class="character-avatar">
-            <div class="avatar-img">
-              <img v-if="character.avatar_url" :src="character.avatar_url">
-              <i v-else class="fas fa-user"></i>
 
+    <!-- 角色列表 -->
+    <div class=" flex-1 overflow-y-auto p-6">
+      <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+        <!-- 角色卡片 -->
+        <div v-for="character in characters" :key="character.id"
+          class="bg-white rounded-xl shadow-sm hover:shadow-md transition-all duration-300 hover:-translate-y-1 flex flex-col h-full min-h-[180px]">
+          <div class="flex p-4 flex-1">
+            <!-- 头像区域 -->
+            <div class="flex-shrink-0 mr-4">
+              <div class="w-16 h-16 overflow-hidden">
+                <Avatar :src="character.avatar_url" />
+              </div>
             </div>
-          </div>
-          <div class="character-info">
-            <div class="character-title">{{ character.title }}</div>
-            <div class="character-description">{{ character.description }}</div>
-          </div>
-          <div class="character-actions">
-            <button class="start-chat-btn" @click="startNewChat(character)">
-              <i class="fas fa-comment-dots"></i> 开始对话
-            </button>
-            <div class="card-actions">
-              <button class="character-action-btn" data-action="edit" @click="editCharacter(character)"
-                data-id="${character.id}" title="编辑">
-                <i class="fas fa-edit"></i>
-              </button>
-              <button class="character-action-btn" data-action="delete" @click="deleteCharacter(character)" title="删除">
-                <i class="fas fa-trash"></i>
-              </button>
+
+            <!-- 内容区域 -->
+            <div class="flex-1 min-w-0 flex flex-col">
+              <!-- 标题和描述 -->
+              <div class="flex-1">
+                <h3 class="text-lg font-semibold text-gray-800 truncate mb-2">{{ character.title }}</h3>
+                <div class="h-15 overflow-hidden">
+                  <n-popover trigger="hover" placement="top" :show-arrow="false">
+                    <template #trigger>
+                      <p class="text-sm text-gray-600 line-clamp-3 leading-5 cursor-help">
+                        {{ character.description || '暂无描述' }}
+                      </p>
+                    </template>
+                    <div class="max-w-xs p-2">
+                      <span class="text-sm whitespace-pre-wrap">{{ character.description || '暂无描述' }}</span>
+                    </div>
+                  </n-popover>
+                </div>
+              </div>
+
+              <!-- 操作按钮 -->
+              <div class="flex justify-between items-center mt-4 pt-3 border-t border-gray-100">
+                <n-button type="primary" size="small" @click="startNewChat(character)" class="flex items-center gap-1">
+                  <template #icon>
+                    <n-icon>
+                      <ChatbubbleEllipses />
+                    </n-icon>
+                  </template>
+                  对话
+                </n-button>
+
+                <div class="flex gap-1">
+                  <n-button size="small" quaternary circle @click="editCharacter(character)"
+                    class="text-blue-500 hover:text-blue-600">
+                    <template #icon>
+                      <n-icon>
+                        <EditOutlined />
+                      </n-icon>
+                    </template>
+                  </n-button>
+                  <n-button size="small" quaternary circle @click="deleteCharacter(character)"
+                    class="text-red-500 hover:text-red-600">
+                    <template #icon>
+                      <n-icon>
+                        <DeleteOutlineOutlined />
+                      </n-icon>
+                    </template>
+                  </n-button>
+                </div>
+              </div>
             </div>
           </div>
         </div>
+
+        <!-- 空状态 -->
+        <div v-if="characters.length === 0" class="col-span-full text-center py-12 text-gray-500">
+          <n-icon size="48" class="text-gray-300 mb-3">
+            <People />
+          </n-icon>
+          <p class="text-lg">暂无角色</p>
+          <p class="text-sm mt-1">点击上方按钮创建第一个角色</p>
+        </div>
       </div>
     </div>
+
+    <!-- 角色弹窗 -->
+    <CharacterModal v-model:show="showModal" v-model:characterId="currentCharacterId" @saved="handleSaved" />
   </div>
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
-import { apiService } from '../services/llmApi'
+import { ref, onMounted, reactive } from 'vue'
 import { useRouter } from 'vue-router'
-import PopupService from '../services/PopupService'
+import {
+  NButton,
+  NIcon,
+  useDialog,
+  NPopover
+} from 'naive-ui'
+import {
+  ChatbubbleEllipses,
+  People
+} from '@vicons/ionicons5'
 
+import {
+  PlusOutlined,
+  EditOutlined,
+  DeleteOutlineOutlined,
+} from '@vicons/material'
+
+// 组件
+import Avatar from './Avatar.vue'
+import CharacterModal from './CharacterModal.vue'
+
+// 服务
+import { apiService } from '../services/llmApi'
+
+// 弹窗
+import { usePopup } from '@/composables/usePopup'
+
+const { confirm, toast } = usePopup()
+
+// 响应式数据
 const characters = ref([])
+const showModal = ref(false)
+const currentCharacterId = ref('')
 const router = useRouter()
-
-// 创建新角色
-const handleCreateCharacter = async () => {
-  try {
-    const result = await PopupService.prompt("新建角色", "请输入角色标题", "请输入角色标题")
-
-    if (result.isConfirmed) {
-      const title = result.value || "新建角色"
-
-      // 创建默认角色数据
-      const characterData = {
-        title: title,
-        description: "",
-        name: "",
-        identity: "",
-        detailed_setting: "",
-        avatar_url: ""
-      }
-
-      // 调用API创建角色
-      const newCharacter = await apiService.createCharacter(characterData)
-
-      // 刷新角色列表
-      await loadCharacters()
-
-      // 自动选择新创建的角色
-
-      PopupService.toast('角色创建成功', 'success')
-    }
-  } catch (error) {
-    console.error('创建角色失败:', error)
-    PopupService.toast('角色创建失败', 'error')
-  }
-}
-
-const editCharacter = async (character) => {
-  router.push({ name: 'Character', params: { characterId: character.id } })
-}
-// 重命名角色
-const renameCharacter = async (character) => {
-  try {
-    const result = await PopupService.prompt("编辑角色标题", character.title, "请输入角色标题")
-
-    if (result.isConfirmed) {
-      const newTitle = result.value
-
-      // 更新角色数据
-      const updatedCharacter = {
-        ...character,
-        title: newTitle
-      }
-
-      // 调用API更新角色
-      await apiService.updateCharacter(character.id, updatedCharacter)
-
-      // 刷新角色列表
-      await loadCharacters()
-
-      PopupService.toast('角色标题已更新', 'success')
-    }
-  } catch (error) {
-    console.error('重命名角色失败:', error)
-    PopupService.toast('重命名失败', 'error')
-  }
-}
-
-const createCharacter = () => {
-  router.push({ name: 'Character', params: {} })
-}
-
-// 删除角色
-const deleteCharacter = async (character) => {
-  try {
-    const result = await PopupService.confirm('确认删除', '确定要删除这个角色吗？此操作不可撤销。')
-
-    if (result.isConfirmed) {
-      // 调用API删除角色
-      await apiService.deleteCharacter(character.id)
-
-      // 刷新角色列表
-      await loadCharacters()
-
-      PopupService.toast('角色删除成功', 'success')
-    }
-  } catch (error) {
-    console.error('删除角色失败:', error)
-    PopupService.toast('删除失败', 'error')
-  }
-}
-
-const startNewChat = async (character) => {
-  PopupService.loading('正在创建会话...')
-  const response = await apiService.createSession('123', character.id)
-  if (!response || !response.success) {
-    PopupService.toast('创建会话失败', 'error')
-    return
-  }
-  router.replace({ name: 'Chat', params: { sessionId: response.data.id } })
-  PopupService.close()
-}
 
 // 加载角色列表
 const loadCharacters = async () => {
   try {
     const data = await apiService.fetchCharacters()
-    characters.value = data.items;
-    // if (data.length > 0) {
-    //   selectCharacter(data[0])
-    // }
+    characters.value = data.items
   } catch (error) {
     console.error('获取角色列表失败:', error)
+    toast.error('获取角色列表失败')
   }
 }
 
-// 组件挂载时加载角色列表
-onMounted(() => {
+// 创建角色
+const createCharacter = () => {
+  currentCharacterId.value = ''
+  showModal.value = true
+}
+
+// 编辑角色
+const editCharacter = (character) => {
+  currentCharacterId.value = character.id
+  showModal.value = true
+}
+
+// 删除角色
+const deleteCharacter = async (character) => {
+  try {
+    const result = await confirm('确认删除', `确定要删除角色「${character.title}」吗？此操作不可撤销。`)
+    if (!result) {
+      return
+    }
+    await apiService.deleteCharacter(character.id)
+    await loadCharacters()
+    toast.success('角色删除成功')
+  } catch (error) {
+    toast.error('删除失败')
+    console.error('删除角色失败:', error)
+  }
+}
+
+// 开始对话
+const startNewChat = async (character) => {
+  try {
+    const loading = toast.loading('正在创建会话...', { duration: 0 })
+
+    const response = await apiService.createSession('123', character.id)
+    if (!response || !response.success) {
+      loading.destroy()
+      toast.error('创建会话失败')
+      return
+    }
+
+    loading.destroy()
+    router.replace({ name: 'Chat', params: { sessionId: response.data.id } })
+  } catch (error) {
+    console.error('创建会话失败:', error)
+    toast.error('创建会话失败')
+  }
+}
+
+// 处理保存后的回调
+const handleSaved = (characterData) => {
+  console.log('Character saved:', characterData);
+  const index = characters.value.findIndex(c => c.id === characterData.id)
+  if (index !== -1) {
+    characters.value[index] = reactive(characterData)
+  } else {
+    characters.value.push(reactive(characterData))
+  }
+}
+
+// 生命周期
+onMounted(async () => {
   loadCharacters()
 })
 </script>
 
 <style scoped>
-.characters-panel {
-  margin: 0 auto;
-  height: 100vh;
-  /* 新增：充满整个视口高度 */
-  display: flex;
-  /* 新增：使用flex布局 */
-  flex-direction: column;
-  /* 新增：垂直方向排列 */
-}
-
-.characters-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 15px;
-  border-bottom: 1px solid #e0e6ed;
-}
-
-.characters-header span {
-  font-size: 24px;
-  font-weight: 600;
-  color: #2c3e50;
-}
-
-.new-character-btn {
-  background: linear-gradient(135deg, #4a90e2, #3a7bc8);
-  color: white;
-  border: none;
-  border-radius: 8px;
-  padding: 10px 20px;
-  cursor: pointer;
-  font-size: 15px;
-  font-weight: 500;
-  transition: all 0.3s ease;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  box-shadow: 0 2px 8px rgba(74, 144, 226, 0.3);
-}
-
-.new-character-btn:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(74, 144, 226, 0.4);
-}
-
-/* 新增滚动容器样式 */
-.characters-scroll-container {
-  flex: 1;
-  /* 新增：占据剩余空间 */
-  overflow-y: auto;
-  /* 新增：垂直方向滚动 */
-  min-height: 0;
-  /* 新增：重要！允许flex子项缩小 */
-  width: 100%;
-  padding: 20px;
-}
-
-.characters-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
-  gap: 20px;
-  padding-bottom: 20px;
-  /* 新增：底部留白 */
-}
-
-
-.character-card {
-  background: white;
-  border-radius: 12px;
-  overflow: hidden;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
-  transition: all 0.3s ease;
-  display: flex;
-  flex-direction: column;
-  height: 100%;
-}
-
-.character-card:hover {
-  transform: translateY(-5px);
-  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.12);
-}
-
-.character-avatar {
-  height: 180px;
-  background: linear-gradient(135deg, #4a90e2, #3a7bc8);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  position: relative;
-  overflow: hidden;
-}
-
-.avatar-img {
-  width: 100px;
-  height: 100px;
-  border-radius: 50%;
-  background: rgba(255, 255, 255, 0.2);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: white;
-  font-size: 40px;
-  backdrop-filter: blur(10px);
-  border: 2px solid rgba(255, 255, 255, 0.3);
-}
-
-.avatar-img img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  border-radius: 50%;
-}
-
-.character-info {
-  padding: 20px;
-  flex-grow: 1;
-}
-
-.character-title {
-  font-size: 18px;
-  font-weight: 600;
-  margin-bottom: 8px;
-  color: #2c3e50;
-}
-
-.character-description {
-  color: #7f8c8d;
-  font-size: 14px;
-  line-height: 1.5;
-  margin-bottom: 20px;
+.line-clamp-3 {
   display: -webkit-box;
   -webkit-line-clamp: 3;
   -webkit-box-orient: vertical;
   overflow: hidden;
-}
-
-.character-actions {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 0 20px 20px;
-}
-
-.start-chat-btn {
-  background: linear-gradient(135deg, #4a90e2, #3a7bc8);
-  color: white;
-  border: none;
-  border-radius: 6px;
-  padding: 8px 16px;
-  cursor: pointer;
-  font-size: 14px;
-  font-weight: 500;
-  transition: all 0.2s ease;
-  display: flex;
-  align-items: center;
-  gap: 5px;
-}
-
-.start-chat-btn:hover {
-  background: linear-gradient(135deg, #3a7bc8, #2a6bb8);
-  box-shadow: 0 2px 8px rgba(74, 144, 226, 0.3);
-}
-
-.card-actions {
-  display: flex;
-  gap: 8px;
-}
-
-.character-action-btn {
-  background: none;
-  border: none;
-  color: #95a5a6;
-  cursor: pointer;
-  font-size: 14px;
-  padding: 6px;
-  border-radius: 4px;
-  transition: all 0.2s ease;
-}
-
-.character-action-btn:hover {
-  color: #4a90e2;
-  background-color: #f0f7ff;
-}
-
-.empty-state {
-  grid-column: 1 / -1;
-  text-align: center;
-  padding: 60px 20px;
-  color: #95a5a6;
-}
-
-.empty-state i {
-  font-size: 48px;
-  margin-bottom: 15px;
-  opacity: 0.5;
-}
-
-.empty-state p {
-  font-size: 16px;
-}
-
-/* 响应式设计 */
-@media (max-width: 768px) {
-  .characters-grid {
-    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-  }
-
-  .characters-header {
-    flex-direction: column;
-    gap: 15px;
-    align-items: flex-start;
-  }
-}
-
-@media (max-width: 480px) {
-  .characters-grid {
-    grid-template-columns: 1fr;
-  }
-
-  .characters-panel {
-    padding: 15px;
-  }
 }
 </style>
