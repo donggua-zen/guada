@@ -10,12 +10,17 @@
   },
   "dependencies": {
     "@fortawesome/fontawesome-free": "^7.0.1",
+    "@tailwindcss/vite": "^4.1.16",
+    "@vicons/antd": "^0.13.0",
+    "@vicons/ionicons4": "^0.13.0",
+    "@vicons/material": "^0.13.0",
     "@vuelidate/core": "^2.0.3",
     "@vuelidate/validators": "^2.0.4",
     "cropperjs": "^1.6.2",
     "marked": "^16.3.0",
     "simplebar-vue": "^2.4.2",
     "sweetalert2": "^11.23.0",
+    "tailwindcss": "^4.1.16",
     "vue": "^3.5.21",
     "vue-advanced-cropper": "^2.8.9",
     "vue-cropper": "^0.6.5",
@@ -24,7 +29,9 @@
     "vuex": "^4.1.0"
   },
   "devDependencies": {
+    "@vicons/ionicons5": "^0.13.0",
     "@vitejs/plugin-vue": "^6.0.1",
+    "naive-ui": "^2.43.1",
     "vite": "^7.1.7"
   }
 }

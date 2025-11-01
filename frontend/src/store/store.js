@@ -50,6 +50,15 @@ export const store = reactive({
         }
     },
 
+    updateMessage(sessionId, messageId, content) {
+        const session = this.getSessionState(sessionId);
+        const index = session.messages.findIndex(m => m.id === messageId);
+        if (index !== -1) {
+            session.messages[index].content = content;
+            session.lastUpdated = Date.now();
+        }
+    },
+
     // 流状态管理
     sessionIsStreaming(sessionId) {
         return this.getSessionState(sessionId).isStreaming;

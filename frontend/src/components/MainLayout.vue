@@ -1,6 +1,6 @@
 <template>
     <div class="app-main-container">
-        <Sidebar :active-page="activePage" @change-page="changePage" />
+        <Sidebar @change-page="changePage" />
         <div class="page-container">
             <RouterView></RouterView>
         </div>
@@ -8,7 +8,7 @@
 </template>
 <script setup>
 import { useRouter } from 'vue-router'
-import Sidebar from '../components/Sidebar.vue' 
+import Sidebar from '../components/Sidebar.vue'
 const router = useRouter()
 
 const changePage = (page) => {
@@ -19,8 +19,8 @@ const changePage = (page) => {
         case 'Characters':
             router.replace({ name: 'Characters' })
             break
-        case 'Settings':
-            // router.replace({ name: 'settings' })
+        case 'Models':
+            router.replace({ name: 'Models' })
             break
     }
 }

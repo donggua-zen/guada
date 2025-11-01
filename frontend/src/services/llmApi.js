@@ -105,7 +105,7 @@ class ApiService {
   }
 
   // 获取会话配置
-  async fetchSessionConfig(sessionId) {
+  async fetchSession(sessionId) {
     const data = await this._request(`/sessions/${sessionId}`);
     return data.data;
   }
@@ -197,13 +197,16 @@ class ApiService {
     }
   }
 
-  async uploadAvatar(characterId, avatarFile) {
+  async uploadAvatar(uid, avatarFile, type = 'character') {
     const formData = new FormData();
     formData.append('avatar', avatarFile);
 
     try {
       // 发送POST请求上传头像文件
-      const response = await fetch(`${this.baseURL}/characters/${characterId}/avatars`, {
+
+      const url = type === 'character' ? 'characters' : 'sessions';
+
+      const response = await fetch(`${this.baseURL}/${url}/${uid}/avatars`, {
         method: 'POST',
         body: formData,
       });
@@ -246,15 +249,12 @@ class ApiService {
   }
 
   // 更新会话配置
-  async updateSession(sessionId, config) {
-    const data = await this._request(`/sessions/${sessionId}`, {
+  async updateSession(sessionId, data) {
+    const response = await this._request(`/sessions/${sessionId}`, {
       method: 'PUT',
-      body: {
-        model: config.model,
-        memory_type: config.memory_type,
-      },
+      body: data,
     });
-    return data.data;
+    return response.data;
   }
 
   // 取消当前请求
@@ -275,7 +275,79 @@ class ApiService {
       }, delay);
     };
   }
+
+
+  // 模型服务
+  async getModels() {
+    const data = await this._request('/models');
+    return data.data || { 'models': [], 'providers': [] };
+  }
+
+  async addModel(data) {
+    const response = await this._request('/models', {
+      method: 'POST',
+      body: data,
+    });
+    return response.data;
+  }
+
+  async deleteModel(modelId) {
+    const data = await this._request(`/models/${modelId}`, {
+      method: 'DELETE',
+    });
+    return data.success;
+  }
+
+  async updateModel(modelId, data) {
+    const response = await this._request(`/models/${modelId}`, {
+      method: 'PUT',
+      body: data,
+    });
+    return response.data;
+  }
+
+  async addProvider(data) {
+    const response = await this._request('/providers', {
+      method: 'POST',
+      body: data,
+    });
+    if (!response.success) {
+      throw new Error(data.error);
+    }
+    return response.data;
+  }
+
+  async deleteProvider(providerId) {
+    const data = await this._request(`/providers/${providerId}`, {
+      method: 'DELETE',
+    });
+    return data.success;
+  }
+
+  /**
+   * 更新指定ID的提供者信息
+   *
+   * @param {string} providerId 要更新的提供者ID
+   * @param {Object} data 要更新的提供者数据
+   * @returns {Promise<Object>} 更新后的提供者数据
+   * @throws {Error} 如果更新失败则抛出错误
+   */
+  async updateProvider(providerId, data) {
+    const response = await this._request(`/providers/${providerId}`, {
+      method: 'PUT',
+      body: data,
+    });
+    if (!response.success) {
+      throw new Error(data.error);
+    }
+    return response.data;
+  }
+
 }
+
+
+
+
 
 // 创建默认实例并导出
 export const apiService = new ApiService("/v1");
