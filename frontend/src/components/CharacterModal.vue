@@ -118,8 +118,9 @@ const handleSave = async (data) => {
             character = response;
         }
         if (character && data.avatar_file) {
-            const response = await apiService.uploadAvatar(currentCharacter.value.id, data.avatar_file);
+            const response = await apiService.uploadAvatar(character['id'], data.avatar_file);
             character.avatar_url = response.url + "?v=" + new Date().getTime();
+            character.avatar_file = null;
         }
         if (character) {
             currentCharacter.value = character;
