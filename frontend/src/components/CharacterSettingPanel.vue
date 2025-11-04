@@ -574,7 +574,7 @@ const handleSave = async () => {
             'title': characterForm.title,
             'description': characterForm.description,
             'name': characterForm.name,
-            'avatar_url': characterForm.avatar_url.startsWith('blob:') ? props.data.avatar_url : characterForm.avatar_url,
+            'avatar_url': characterForm.avatar_url.startsWith('blob:') ? (props.data.avatar_url || '') : characterForm.avatar_url,
             'avatar_file': characterForm.avatar_file,
             'identity': characterForm.identity,
             'settings': {
