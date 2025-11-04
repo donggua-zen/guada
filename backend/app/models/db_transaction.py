@@ -1,0 +1,66 @@
+from contextlib import contextmanager
+from .database import db
+import logging
+from threading import local
+
+logger = logging.getLogger(__name__)
+
+# 线程局部存储，用于跟踪事务状态
+_thread_local = local()
+
+
+class SmartTransactionManager:
+    def __init__(self):
+        pass
+
+    def _get_transaction_depth(self):
+        """获取当前线程的事务深度"""
+        if not hasattr(_thread_local, "transaction_depth"):
+            _thread_local.transaction_depth = 0
+        return _thread_local.transaction_depth
+
+    def _set_transaction_depth(self, depth):
+        """设置当前线程的事务深度"""
+        _thread_local.transaction_depth = depth
+
+    def is_in_transaction(self):
+        """检查当前是否在事务中"""
+        return self._get_transaction_depth() > 0
+
+    @contextmanager
+    def transaction(self):
+        current_depth = self._get_transaction_depth()
+        is_outermost = current_depth == 0
+
+        print(f"事务开始 - 深度: {current_depth}, 最外层: {is_outermost}")
+
+        try:
+            self._set_transaction_depth(current_depth + 1)
+            # if is_outermost:
+            #     db.session.begin()  # 显式开始事务
+            
+
+            yield
+
+            if is_outermost:
+                db.session.commit()
+                print("事务提交成功")
+
+        except Exception as e:
+            print(f"事务异常: {e}")
+            if is_outermost:
+                db.session.rollback()
+                print("事务回滚")
+            raise
+        finally:
+            self._set_transaction_depth(current_depth)
+            print(f"事务结束 - 深度恢复为: {current_depth}")
+
+    def execute_in_transaction(self, func, *args, **kwargs):
+        """在事务中执行函数（便捷方法）"""
+        with self.transaction():
+            return func(*args, **kwargs)
+
+
+# 全局智能事务管理器实例
+smart_transaction_manager = SmartTransactionManager()
