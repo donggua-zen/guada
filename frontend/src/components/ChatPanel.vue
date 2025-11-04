@@ -3,35 +3,49 @@
     <!-- 聊天头部 -->
     <div class="chat-header">
       <span id="chat-title">{{ chatTitle }}</span>
-      <button class="clear-chat-btn" title="清空聊天记录" @click="clearChat">
-        <i class="fas fa-trash-alt"></i>
-      </button>
+      <n-button class="clear-chat-btn" title="清空聊天记录" @click="clearChat" text>
+        <template #icon>
+          <n-icon size="24">
+            <DeleteTwotone />
+          </n-icon>
+        </template>
+      </n-button>
     </div>
     <div class="messages-container" ref="messagesContainer">
       <template v-if="activeMessages.length === 0">
-        <div class="welcome-page">
-          <div class="welcome-content">
+        <!-- 欢迎页使用Tailwind CSS重写 -->
+        <div class="flex items-center justify-center h-full min-h-[500px] py-10 px-5">
+          <div
+            class="max-w-[600px] w-full text-center bg-white p-10 rounded-2xl shadow-lg border border-white/20 animate-fade-in-up">
             <!-- 头像区域 -->
-            <div class="avatar-section">
-              <div class="avatar-container">
+            <div class="relative inline-block mb-5">
+              <div
+                class="w-24 h-24 rounded-full bg-gradient-to-br from-[#667eea] to-[var(--primary-color)] flex items-center justify-center mx-auto relative overflow-hidden p-0 animate-bounce-in">
                 <Avatar v-if="session" :src="session.avatar_url" round />
+                <div v-else class="text-4xl text-white">?</div>
               </div>
-              <div class="online-indicator"></div>
+              <div class="absolute bottom-1 right-1 w-5 h-5 bg-green-500 border-2 border-white rounded-full"></div>
             </div>
 
             <!-- 标题和描述 -->
-            <div class="character-info">
-              <h1 class="character-title">{{ session.title }}</h1>
-              <h2 class="character-description">{{ session.description }}</h2>
+            <div class="mb-8">
+              <h1
+                class="text-3xl font-bold text-gray-800 mb-4 bg-gradient-to-br from-[#667eea] to-[var(--primary-color)] bg-clip-text text-transparent">
+                {{ session.title }}
+              </h1>
+              <h2 class="text-lg font-normal text-gray-600 leading-relaxed">
+                {{ session.description }}
+              </h2>
 
               <!-- 详细设置（如果有的话） -->
-              <div v-if="session.system_prompt" class="detailed-setting">
-                <h3>角色设定</h3>
-                <p class="setting-content">{{ session.system_prompt }}</p>
+              <div v-if="session.system_prompt"
+                class="mt-6 p-5 bg-gray-50 rounded-xl border-l-4 border-[var(--primary-color)] text-left">
+                <h3 class="text-base font-semibold text-gray-800 mb-2">角色设定</h3>
+                <p class="text-sm text-gray-600 leading-6">{{ session.system_prompt }}</p>
               </div>
             </div>
 
-            <!-- 交互提示 -->
+            <!-- 交互提示（注释部分保留结构） -->
             <!-- <div class="interaction-hints">
                   <div class="hint-item">
                     <div class="hint-icon">
@@ -47,7 +61,7 @@
                   </div>
                 </div> -->
 
-            <!-- 开始对话按钮 -->
+            <!-- 开始对话按钮（注释部分保留结构） -->
             <!-- <div class="start-conversation">
                   <button class="start-btn" @click="focusInput">
                     <i class="fas fa-paper-plane"></i>
@@ -61,7 +75,7 @@
         <!-- 消息容器 -->
         <SimpleBar :options="scrollbarOptions" :timeout="4000" style="width:100%;height: 100%;padding: 25px 0;"
           ref="simpleBarRef" @scroll="handleScroll">
-          <div class="flex flex-col items-center" style="max-width: 800px;margin: 0 auto;">
+          <div class="flex flex-col items-center px-[20px]" style="max-width: 800px;margin: 0 auto;">
             <MessageItem v-for="(message, index) in activeMessages" :ref="(el) => setItemRef(el, message.id)"
               :key="message.id" :message="message" :avatar="session.avatar_url"
               :is-last="index === activeMessages.length - 1" @delete="deleteMessage" @edit="editMessage"
@@ -78,35 +92,67 @@
 
         <div class="input-actions">
           <div class="tools">
-            <button class="tool-btn" title="上传文件" @click="handleFileUpload">
-              <i class="fas fa-paperclip"></i>
-            </button>
-            <button class="tool-btn" title="联网搜索" @click="handleWebSearch">
-              <i class="fas fa-search"></i>
-            </button>
-            <button class="tool-btn" title="添加图片" @click="handleImageUpload">
-              <i class="fas fa-image"></i>
-            </button>
-            <button class="tool-btn" id="deep-thinking-btn" :class="{ active: isDeepThinking }"
-              :title="isDeepThinking ? '关闭深度思考' : '深度思考'" @click="toggleDeepThinking">
-              <i class="fas fa-brain"></i>
-            </button>
+            <n-button class="tool-btn" title="上传文件" @click="handleFileUpload" text>
+              <template #icon>
+                <n-icon size="22">
+                  <InsertDriveFileTwotone />
+                </n-icon>
+              </template>
+            </n-button>
+            <n-button class="tool-btn" title="联网搜索" @click="handleWebSearch" text>
+              <template #icon>
+                <n-icon size="22">
+                  <ScreenSearchDesktopTwotone />
+                </n-icon>
+              </template>
+            </n-button>
+            <n-button class="tool-btn" title="添加图片" @click="handleImageUpload" text>
+              <template #icon>
+                <n-icon size="22">
+                  <ImageTwotone />
+                </n-icon>
+              </template>
+            </n-button>
+            <n-button class="tool-btn" title="tokens统计" @click="handleTokensStatistic" text>
+              <template #icon>
+                <n-icon size="22">
+                  <DataThresholdingTwotone />
+                </n-icon>
+              </template>
+            </n-button>
+            <n-button class="tool-btn" id="deep-thinking-btn" style="display:none" :class="{ active: isDeepThinking }"
+              :title="isDeepThinking ? '关闭深度思考' : '深度思考'" @click="toggleDeepThinking" text>
+              思考
+            </n-button>
           </div>
 
           <div class="send-actions">
-            <button v-if="!isStreaming" class="send-btn" title="发送" @click="sendMessage"
-              :disabled="!inputMessage.trim()">
-              <i class="fas fa-arrow-up"></i>
-            </button>
-            <button v-if="isStreaming" class="send-btn stop-btn" title="停止生成" @click="abortResponse">
-              <i class="fas fa-stop"></i>
-            </button>
+            <n-button v-if="!isStreaming" class="send-btn" title="发送" @click="sendMessage"
+              :disabled="!inputMessage.trim()" circle type="primary" size="small">
+              <template #icon>
+                <n-icon>
+                  <ArrowUpOutline />
+                </n-icon>
+              </template>
+            </n-button>
+            <n-button v-if="isStreaming" class="send-btn stop-btn" title="停止生成" @click="abortResponse" circle
+              type="error" size="small">
+              <template #icon>
+                <n-icon>
+                  <StopOutline />
+                </n-icon>
+              </template>
+            </n-button>
           </div>
         </div>
       </div>
     </div>
+
+    <!-- Tokens统计模态框 -->
+    <TokenStatisticsModal v-model:show="showTokenModal" :currentSessionId="session.id" />
   </div>
 </template>
+
 <script setup>
 import { ref, computed, watch, nextTick, onMounted, onBeforeUpdate, reactive } from "vue";
 import { store } from "../store/store";
@@ -115,8 +161,33 @@ import { apiService } from "../services/llmApi"
 import Avatar from "./Avatar.vue";
 // import PopupService from "../services/PopupService";
 import { usePopup } from "@/composables/usePopup";
+import TokenStatisticsModal from "./TokenStatisticsModal.vue";
 
-const { confirm, editText, toast, prompt } = usePopup();
+// 导入 xicons 图标
+import {
+  TrashOutline,
+  ArrowUpOutline,
+  StopOutline
+} from "@vicons/ionicons5";
+import {
+  IosSend,
+} from "@vicons/ionicons4";
+import {
+  DeleteTwotone,
+  InsertDriveFileTwotone,
+  ScreenSearchDesktopTwotone,
+  ImageTwotone,
+  DataThresholdingTwotone,
+} from "@vicons/material";
+
+// import {
+//   Brain,
+// } from "@vicons/font-awesome";
+
+// 导入 naive-ui 组件
+import { NButton, NIcon } from "naive-ui";
+
+const { confirm, editText, toast, prompt, notify } = usePopup();
 
 const emit = defineEmits(['update:session']);
 
@@ -132,6 +203,10 @@ const messageInputRef = ref(null);
 const isInputExpanded = ref(false);
 const messagesContainer = ref(null);
 const currentSessionId = ref(null);
+
+// Tokens统计相关
+const showTokenModal = ref(false);
+
 
 // 替换原有的分散状态
 const inputMessage = computed({
@@ -264,6 +339,9 @@ const handleStreamResponse = async (streamingSessionId, userMessageId) => {
     if (error.name !== "AbortError") {
       console.error("Error during streaming:", error);
       message.content = error;
+      if (!assistantMessageId) {
+        notify.error("请求错误", error.message);
+      }
     }
   } finally {
     store.setSessionIsStreaming(streamingSessionId, false);
@@ -457,11 +535,16 @@ const handleImageUpload = () => {
   console.log("图片上传功能");
 };
 
+const handleTokensStatistic = async () => {
+  showTokenModal.value = true;
+};
+
 // 组件挂载时调整输入框高度
 onMounted(() => {
   adjustTextareaHeight();
 });
 </script>
+
 <style scoped>
 .chat-header {
   display: flex;
@@ -514,7 +597,7 @@ onMounted(() => {
 .input-wrapper {
   border: none;
   border-radius: 12px;
-  padding: 18px 20px 12px 20px;
+  padding: 18px 15px 12px 15px;
   background-color: white;
   position: relative;
   box-shadow: 0 2px 12px rgba(0, 0, 0, 0.1);
@@ -559,7 +642,6 @@ onMounted(() => {
 
 .tools {
   display: flex;
-  gap: 12px;
   align-items: flex-end;
 }
 
@@ -574,7 +656,7 @@ onMounted(() => {
   border: none;
   color: #777;
   cursor: pointer;
-  font-size: 18px;
+  font-size: 22px;
   width: 32px;
   height: 32px;
   display: flex;
@@ -596,249 +678,8 @@ onMounted(() => {
   box-shadow: 0 0 0 2px rgba(74, 144, 226, 0.2);
 }
 
-.send-btn {
-  background-color: var(--primary-color);
-  color: white;
-  border: none;
-  border-radius: 50%;
-  width: 34px;
-  height: 34px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  transition: background-color 0.2s;
-  font-size: 16px;
-  align-self: flex-end;
-}
 
-.send-btn:hover:not(:disabled) {
-  background-color: #3a7bc8;
-}
-
-.send-btn:disabled {
-  background-color: #cccccc;
-  cursor: not-allowed;
-}
-
-.stop-btn {
-  background-color: #ff3b30;
-}
-
-.stop-btn:hover {
-  background-color: #e62e24;
-}
-</style>
-<style scoped>
-/* 原有的样式保持不变，添加以下欢迎页样式 */
-
-.welcome-page {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  height: 100%;
-  min-height: 500px;
-  /* background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%); */
-  padding: 40px 20px;
-}
-
-.welcome-content {
-  max-width: 600px;
-  width: 100%;
-  text-align: center;
-  /* background: white; */
-  padding: 40px;
-  border-radius: 20px;
-  /* box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1); */
-  /* border: 1px solid rgba(255, 255, 255, 0.2); */
-}
-
-/* 头像区域 */
-.avatar-section {
-  position: relative;
-  display: inline-block;
-  margin-bottom: 20px;
-}
-
-.avatar-container {
-  width: 100px;
-  height: 100px;
-  border-radius: 50%;
-  background: linear-gradient(135deg, #667eea 0%, var(--primary-color) 100%);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  margin: 0 auto;
-  position: relative;
-  overflow: hidden;
-  padding: 0;
-  gap: 0;
-}
-
-.character-avatar {
-  width: 100%;
-  height: 100%;
-  border-radius: 50%;
-  object-fit: cover;
-  display: block;
-  margin: 0;
-}
-
-.avatar-placeholder {
-  font-size: 40px;
-  color: white;
-}
-
-.online-indicator {
-  position: absolute;
-  bottom: 5px;
-  right: 5px;
-  width: 20px;
-  height: 20px;
-  background: #4CAF50;
-  border: 3px solid white;
-  border-radius: 50%;
-}
-
-/* 角色信息 */
-.character-info {
-  margin-bottom: 30px;
-}
-
-.character-title {
-  font-size: 2.2rem;
-  font-weight: 700;
-  color: #2c3e50;
-  margin: 0 0 15px 0;
-  background: linear-gradient(135deg, #667eea 0%, var(--primary-color) 100%);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
-}
-
-.character-description {
-  font-size: 1.2rem;
-  font-weight: 400;
-  color: #7f8c8d;
-  line-height: 1.6;
-  margin: 0;
-}
-
-.detailed-setting {
-  display: none;
-  margin-top: 25px;
-  padding: 20px;
-  background: #f8f9fa;
-  border-radius: 12px;
-  border-left: 4px solid var(--primary-color);
-}
-
-.detailed-setting h3 {
-  font-size: 1.1rem;
-  color: #2c3e50;
-  margin: 0 0 10px 0;
-  font-weight: 600;
-}
-
-.setting-content {
-  font-size: 1rem;
-  color: #5a6c7d;
-  line-height: 1.5;
-  margin: 0;
-  text-align: left;
-}
-
-/* 交互提示 */
-.interaction-hints {
-  display: flex;
-  flex-direction: column;
-  gap: 15px;
-  margin-bottom: 30px;
-}
-
-.hint-item {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 12px;
-  padding: 12px 20px;
-  /* background: #f8f9fa; */
-  background-color: #ffffff;
-  border-radius: 10px;
-  color: #5a6c7d;
-}
-
-.hint-icon {
-  width: 30px;
-  height: 30px;
-  background: #667eea;
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: white;
-}
-
-/* 开始对话按钮 */
-.start-conversation {
-  margin-top: 20px;
-}
-
-.start-btn {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  color: white;
-  border: none;
-  padding: 15px 30px;
-  border-radius: 25px;
-  font-size: 1.1rem;
-  font-weight: 600;
-  cursor: pointer;
-  transition: all 0.3s ease;
-  display: inline-flex;
-  align-items: center;
-  gap: 10px;
-  box-shadow: 0 4px 15px rgba(102, 126, 234, 0.3);
-}
-
-.start-btn:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 6px 20px rgba(102, 126, 234, 0.4);
-}
-
-.start-btn:active {
-  transform: translateY(0);
-}
-
-/* 响应式设计 */
-@media (max-width: 768px) {
-  .welcome-content {
-    padding: 30px 20px;
-    margin: 20px;
-  }
-
-  .character-title {
-    font-size: 1.8rem;
-  }
-
-  .character-description {
-    font-size: 1.1rem;
-  }
-
-  .avatar-container {
-    width: 80px;
-    height: 80px;
-  }
-
-  .avatar-placeholder {
-    font-size: 32px;
-  }
-}
-
-/* 动画效果 */
-.welcome-content {
-  animation: fadeInUp 0.8s ease-out;
-}
-
+/* 自定义动画 */
 @keyframes fadeInUp {
   from {
     opacity: 0;
@@ -849,10 +690,6 @@ onMounted(() => {
     opacity: 1;
     transform: translateY(0);
   }
-}
-
-.avatar-container {
-  animation: bounceIn 1s ease-out;
 }
 
 @keyframes bounceIn {
@@ -874,5 +711,13 @@ onMounted(() => {
     opacity: 1;
     transform: scale(1);
   }
+}
+
+.animate-fade-in-up {
+  animation: fadeInUp 0.8s ease-out;
+}
+
+.animate-bounce-in {
+  animation: bounceIn 1s ease-out;
 }
 </style>

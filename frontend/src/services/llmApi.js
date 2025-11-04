@@ -131,6 +131,13 @@ class ApiService {
     return data.data || [];
   }
 
+  async getTokenStatistics(sessionId) {
+    const response = await this._request(`/sessions/${sessionId}/tokens`);
+    if (!response.success) {
+      throw new Error(response.error);
+    }
+    return response.data;
+  }
   // 流式获取AI响应
   async *fetchResponse(sessionId, messageId, enableReasoning = false, abortController = null) {
     // this.currentAbortController = new AbortController();
@@ -151,9 +158,28 @@ class ApiService {
         signal: controller.signal,
       });
 
-      if (!response.ok) {
-        throw new Error(`获取响应失败: ${response.status}`);
+      // 检查响应头中的 Content-Type
+      const contentType = response.headers.get('Content-Type');
+
+      // if (!response.ok) {
+      // 如果是 JSON 错误响应，解析错误信息
+      if (contentType && contentType.includes('application/json')) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || `获取响应失败: ${response.status}`);
       }
+      // else {
+      //   throw new Error(`获取响应失败: ${response.status} ${response.statusText}`);
+      // }
+      //  }
+
+      // // 根据 Content-Type 判断响应类型
+      // if (contentType && contentType.includes('application/json')) {
+      //   // 如果是 JSON 响应，直接返回解析后的数据
+      //   const data = await response.json();
+      //   yield data;
+      //   return;
+      // }
+
 
       const reader = response.body.getReader();
       const decoder = new TextDecoder('utf-8');

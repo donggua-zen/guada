@@ -86,8 +86,7 @@
                             <n-form-item label="模型选择">
 
                                 <n-select v-model:value="characterForm.model_id" :options="modelOptions"
-                                    placeholder="请选择模型"
-                                    :fallback-option="(value) => ({ label: `请选择模型`, value:'' })" />
+                                    placeholder="请选择模型" :fallback-option="(value) => ({ label: `请选择模型`, value: '' })" />
                             </n-form-item>
 
                             <!-- 温度设置 -->
@@ -136,14 +135,14 @@
                             <!-- 最大记忆长度 -->
                             <n-form-item label="最大记忆长度">
                                 <n-input-number v-model:value="characterForm.max_memory_length" :min="0" :max="10000"
-                                    placeholder="默认值" style="width: 200px;" />
+                                    placeholder="留空使用默认值" style="width: 200px;" clearable />
                                 <span style="margin-left: 8px; color: #999;">条消息</span>
                             </n-form-item>
 
                             <!-- 短期记忆长度 -->
                             <n-form-item label="短期记忆长度">
                                 <n-input-number v-model:value="characterForm.short_term_memory_length" :min="0"
-                                    :max="1000" placeholder="默认值" style="width: 200px;" />
+                                    :max="1000" placeholder="留空使用默认值" style="width: 200px;" clearable />
                                 <span style="margin-left: 8px; color: #999;">条消息</span>
                             </n-form-item>
                         </n-form>
@@ -197,7 +196,6 @@ import {
     NSlider,
     NInputNumber,
     NSpace,
-    useMessage,
     NModal,
 } from 'naive-ui'
 import { Cropper } from 'vue-advanced-cropper'
@@ -215,7 +213,9 @@ import { required } from '@vuelidate/validators'
 import Avatar from '../components/Avatar.vue'
 
 
-const message = useMessage()
+import { usePopup } from '../composables/usePopup'
+
+const { toast, notify } = usePopup()
 
 // Props
 const props = defineProps({
@@ -414,8 +414,8 @@ watch(() => props.data, (newVal) => {
         characterForm.model_max_tokens = newVal.settings?.model_max_tokens || 2048;
         characterForm.model_top_p = newVal.settings?.model_top_p || 0.9;
         characterForm.model_frequency_penalty = newVal.settings?.model_frequency_penalty || 0.5;
-        characterForm.max_memory_length = newVal.settings?.max_memory_length || 1000;
-        characterForm.short_term_memory_length = newVal.settings?.short_term_memory_length || 100;
+        characterForm.max_memory_length = newVal.settings?.max_memory_length || '';
+        characterForm.short_term_memory_length = newVal.settings?.short_term_memory_length || '';
     }
     //}
 
@@ -430,7 +430,7 @@ const loadModels = async () => {
 
     } catch (error) {
         console.error('获取模型列表失败:', error)
-        PopupService.toast('获取模型列表失败', 'error')
+        notify.error('获取模型列表失败', error)
     }
 }
 
@@ -460,12 +460,12 @@ const handleAvatarUpload = (event) => {
     const file = event.target.files[0]
     if (file) {
         if (!file.type.startsWith('image/')) {
-            message.error('请选择图片文件')
+            toast.error('请选择图片文件')
             return
         }
 
         if (file.size > 5 * 1024 * 1024) {
-            message.error('图片大小不能超过5MB')
+            toast.error('图片大小不能超过5MB')
             return
         }
 
@@ -508,7 +508,7 @@ const cropAvatar = () => {
         // 关闭模态框
         closeCropModal()
 
-        message.success('头像上传成功')
+        toast.success('头像上传成功')
     }, cropFile.value.type, 0.9)
 }
 
@@ -520,7 +520,7 @@ const closeCropModal = () => {
 
 const removeAvatar = () => {
     characterForm.avatar_url = ''
-    message.success('头像已移除')
+    toast.success('头像已移除')
 }
 
 const handleSave = async () => {
@@ -549,7 +549,7 @@ const handleSave = async () => {
                 .flat()
 
             console.error('表单验证失败:', errors)
-            // message.error('请检查表单填写是否正确')
+            // toast.error('请检查表单填写是否正确')
 
             // 自动切换到第一个有错误的tab
             const firstErrorIndex = validationResults.findIndex(result =>
@@ -593,13 +593,13 @@ const handleSave = async () => {
             finalData['settings']['model_frequency_penalty'] = characterForm.model_frequency_penalty;
         }
         emit('update:data', finalData)
-        // message.success('保存成功')
+        // toast.success('保存成功')
         // handleClose()
     } catch (errors) {
         if (errors) {
-            message.error('请检查表单填写是否正确' + errors.toString())
+            toast.error('请检查表单填写是否正确' + errors.toString())
         } else {
-            message.error('保存失败')
+            toast.error('保存失败')
         }
     } finally {
         loading.value = false
