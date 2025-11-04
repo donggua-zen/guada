@@ -3,5 +3,4 @@
 node_modules/
 .venv/
 __pycache__
-frontend/src/components/ChatPage.vue
 backend/data/*
