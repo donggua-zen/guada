@@ -33,7 +33,7 @@
 
 <script setup>
 import { ref, onMounted, computed, watch } from 'vue'
-import { apiService } from '../services/llmApi'
+import { apiService } from '../services/ApiService'
 import PopupService from '../services/PopupService'
 import { useRouter, useRoute } from 'vue-router'
 import { store } from '../store/store'

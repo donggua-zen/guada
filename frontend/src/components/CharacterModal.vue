@@ -13,7 +13,7 @@ import {
     NDrawerContent,
 } from 'naive-ui'
 import CharacterSettingPanel from './CharacterSettingPanel.vue'
-import { apiService } from '../services/llmApi'
+import { apiService } from '../services/ApiService'
 import { usePopup } from '@/composables/usePopup'
 
 const { toast } = usePopup()

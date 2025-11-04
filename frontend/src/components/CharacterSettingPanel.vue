@@ -208,7 +208,7 @@ import {
     CloseOutlined
 } from '@vicons/antd'
 
-import { apiService } from '../services/llmApi'
+import { apiService } from '../services/ApiService'
 import { required } from '@vuelidate/validators'
 import Avatar from '../components/Avatar.vue'
 

@@ -28,7 +28,7 @@
 
 <script setup>
 import { ref, computed, watch, nextTick, onMounted, onBeforeUpdate, reactive } from "vue";
-import { apiService } from "../services/llmApi";
+import { apiService } from "../services/ApiService";
 
 import { useRouter, useRoute } from 'vue-router'
 import SessionsList from "./SessionsList.vue";
