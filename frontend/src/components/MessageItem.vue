@@ -192,6 +192,8 @@ const emit = defineEmits(["delete", "edit", "copy", "regenerate"]);
   display: flex;
   flex-direction: column;
   position: relative;
+  /* 避免无法缩小 */
+  min-width: 0;
 }
 
 /* 修复用户消息对齐问题 */
@@ -504,6 +506,8 @@ const emit = defineEmits(["delete", "edit", "copy", "regenerate"]);
   border-collapse: collapse;
   width: 100%;
   margin-bottom: 1em;
+  max-width: 100%;
+  overflow-x: auto;
 }
 
 .markdown-text th,
