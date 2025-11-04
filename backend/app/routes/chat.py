@@ -183,16 +183,20 @@ def get_tokens(session_id):
 
     system_prompt_tokens = 0
     context_tokens = 0
+    summary_tokens = 0
 
     context_messages = chat_service.construct_context_message(session, active_messages)
 
-    for message in context_messages:
+    for i, message in enumerate(context_messages):
         if message["role"] == "system":
-            system_prompt_tokens += tokenizer.count_tokens(message["content"])
+            if i == 0:  # 第一个系统提示语
+                system_prompt_tokens += tokenizer.count_tokens(message["content"])
+            else:  # 其他系统提示词一般是摘要和召回记录
+                summary_tokens += tokenizer.count_tokens(message["content"])
         else:
             context_tokens += tokenizer.count_tokens(message["content"])
 
-    max_memory_length = system_prompt_tokens + context_tokens
+    max_memory_length = system_prompt_tokens + summary_tokens + context_tokens
     # 简化写法：使用get方法设置默认值
     max_memory_length = (
         settings.get("max_memory_length", max_memory_length) or max_memory_length
@@ -204,6 +208,7 @@ def get_tokens(session_id):
             "data": {
                 "max_memory_length": max_memory_length,
                 "system_prompt_tokens": system_prompt_tokens,
+                "summary_tokens": summary_tokens,
                 "context_tokens": context_tokens,
             },
         }
