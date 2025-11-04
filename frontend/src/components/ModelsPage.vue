@@ -194,7 +194,7 @@ import {
     NInput, NFormItem, NForm, NButton, NSpace, NIcon, NTag, NGrid, NGi,
     NModal, NSelect, NCheckbox, NCheckboxGroup, NInputNumber, NSpin, useNotification
 } from 'naive-ui'
-import { apiService } from '../services/llmApi'
+import { apiService } from '../services/ApiService'
 import { SettingsOutlined, RemoveCircleOutlineRound, DeleteTwotone, AddCircleTwotone, RemoveCircleTwotone } from '@vicons/material'
 import { usePopup } from '@/composables/usePopup'
 

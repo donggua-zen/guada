@@ -4,7 +4,7 @@
 
 <script setup>
 import { ref, computed, onMounted, watch } from 'vue'
-import { apiService } from '../services/llmApi'
+import { apiService } from '../services/ApiService'
 import PopupService from '../services/PopupService'
 import 'vue-advanced-cropper/dist/style.css'
 import CharacterSettingPanel from '../components/CharacterSettingPanel.vue'

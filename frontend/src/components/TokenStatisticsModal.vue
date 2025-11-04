@@ -83,7 +83,7 @@
 <script setup>
 import { ref, computed, watch, defineEmits } from "vue";
 import { NModal } from "naive-ui";
-import { apiService } from "@/services/llmApi";
+import { apiService } from "@/services/ApiService";
 
 const tokenStatistics = ref({
     maxTokens: 0,
@@ -130,7 +130,7 @@ const fetchTokenStatistics = async () => {
     return {
         maxTokens: response.max_memory_length,
         promptTokens: response.system_prompt_tokens,
-        summaryTokens: 0,
+        summaryTokens: response.summary_tokens,
         contextTokens: response.context_tokens,
     };
 };

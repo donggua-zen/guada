@@ -157,7 +157,7 @@
 import { ref, computed, watch, nextTick, onMounted, onBeforeUpdate, reactive } from "vue";
 import { store } from "../store/store";
 import MessageItem from "./MessageItem.vue";
-import { apiService } from "../services/llmApi"
+import { apiService } from "../services/ApiService"
 import Avatar from "./Avatar.vue";
 // import PopupService from "../services/PopupService";
 import { usePopup } from "@/composables/usePopup";

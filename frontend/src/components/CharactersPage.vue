@@ -121,7 +121,7 @@ import Avatar from './Avatar.vue'
 import CharacterModal from './CharacterModal.vue'
 
 // 服务
-import { apiService } from '../services/llmApi'
+import { apiService } from '../services/ApiService'
 
 // 弹窗
 import { usePopup } from '@/composables/usePopup'
