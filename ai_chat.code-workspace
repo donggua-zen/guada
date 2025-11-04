@@ -1,0 +1,22 @@
+{
+	"folders": [
+		{
+			"name": "Frontend",
+			"path": "frontend"
+		},
+		{
+			"name": "Backend",
+			"path": "backend"
+		}
+  	],
+	"folders_": [
+		{
+			"path": "."
+		}
+	],
+	"settings": {
+		"python.terminal.executeInFileDir": true,
+		"python.terminal.activateEnvInCurrentTerminal": false,
+		"python.terminal.activateEnvironment": true
+  	}
+}
