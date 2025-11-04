@@ -79,7 +79,7 @@ def delete_character(character_id):
             character_service.delete_character(character_id)
             avatar_url = character.get("avatar_url")
             if avatar_url and avatar_url.startswith("/static/avatars/character-"):
-                os.remove("." + avatar_url)
+                os.remove("app" + avatar_url)
             return jsonify({"success": True})
     except Exception as e:
         return jsonify({"success": False, "error": str(e)}), 500

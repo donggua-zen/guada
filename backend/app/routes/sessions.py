@@ -1,5 +1,6 @@
 import datetime
 import os
+import shutil
 from flask import Blueprint, jsonify, request
 from app.services import SummaryService
 from app.services import MessageService
@@ -51,7 +52,7 @@ def create_sessions():
     try:
 
         session_data = {
-            "title": request.json["title"] if "title" in request.json else "",
+            "title": request.json.get("title", ""),
             "user_id": "123",
             "avatar_url": "",
             "description": "An helpful AI assistant",
@@ -61,6 +62,7 @@ def create_sessions():
                 "system_prompt": "You are a helpful AI assistant that can answer any question asked by the user",
             },
         }
+
         if "character_id" in request.json:
             character = character_service.get_character_by_id(
                 request.json["character_id"]
@@ -88,16 +90,14 @@ def create_sessions():
                 {"success": False, "error": "Failed to create or resume session."}
             )
 
-        # 拷贝头像
+        # 拷贝头像 - 简化版本
         avatar_path = character["avatar_url"]
         if avatar_path.startswith("/static/avatars/") and os.path.exists(
-            "." + avatar_path
+            "app" + avatar_path
         ):
-            source_file_path = "." + avatar_path
-            target_file_path = "." + "/static/avatars/session-" + data["id"] + ".png"
-            with open(source_file_path, "rb") as source_file:
-                with open(target_file_path, "wb") as target_file:
-                    target_file.write(source_file.read())
+            source_file_path = "app" + avatar_path
+            target_file_path = f"app/static/avatars/session-{data['id']}.jpg"
+            shutil.copy2(source_file_path, target_file_path)
 
         return jsonify({"success": True, "data": data})
     except Exception as e:
