@@ -1,9 +1,6 @@
-# 新增头像上传接口
 import datetime
 import os
 from flask import Blueprint, jsonify, request
-
-from app.services import session_service, character_service
 
 
 upload_bp = Blueprint("upload", __name__)
@@ -32,8 +29,8 @@ def upload_avatar(type: str, uid: str):
             return jsonify({"success": False, "error": "未选择文件"}), 400
 
         # 添加头像上传配置
-        upload_folder = "./static/avatars"
-        allowed_extendsions = {"png", "jpg", "jpeg", "gif"}
+        upload_folder = "app/static/avatars"
+        allowed_extendsions = {"png", "jpg", "jpeg", "gif", "bmp", "webp", "tiff"}
 
         # 确保上传目录存在
         os.makedirs(upload_folder, exist_ok=True)
@@ -49,17 +46,47 @@ def upload_avatar(type: str, uid: str):
             # 生成安全的文件名
             # filename = secure_filename(file.filename)
             # 生成唯一文件名
-            file_extension = file.filename.rsplit(".", 1)[1].lower()
-            unique_filename = f"{type}-{uid}.{file_extension}"
+            unique_filename = f"{type}-{uid}.jpg"
             # 保存文件
             file_path = os.path.join(upload_folder, unique_filename)
-            file.save(file_path)
+
+            try:
+                from PIL import Image
+
+                # 打开图片并转换为RGB模式(去除alpha通道)
+                image = Image.open(file)
+                if image.mode in ("RGBA", "LA", "P"):
+                    # 如果图片有透明通道，转换为RGB并添加白色背景
+                    background = Image.new("RGB", image.size, (255, 255, 255))
+                    if image.mode == "P":
+                        image = image.convert("RGBA")
+                    background.paste(
+                        image, mask=image.split()[-1] if image.mode == "RGBA" else None
+                    )
+                    image = background
+                elif image.mode != "RGB":
+                    image = image.convert("RGB")
+
+                # 保存为JPEG格式
+                image.save(file_path, "JPEG", quality=95)
+            except ImportError:
+                # 如果没有安装PIL，则直接保存原文件
+                file.save(file_path)
+            except Exception as e:
+                # 图片处理出错时尝试直接保存
+                file.save(file_path)
 
             # 生成访问URL
             avatar_url = f"/static/avatars/{unique_filename}"
             if type == "session":
+                from app.services import SessionService
+
+                session_service = SessionService()
                 session_service.update_session(uid, {"avatar_url": avatar_url})
             else:
+                from app.services import CharacterService
+
+                character_service = CharacterService()
                 character_service.update_character(uid, {"avatar_url": avatar_url})
             return jsonify({"success": True, "data": {"url": avatar_url}})
         else:
