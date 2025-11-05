@@ -3,7 +3,6 @@ from typing import Generator, Literal, Optional, Union, overload
 from openai import OpenAI, APIError
 
 
-
 class LLMServiceChunk:
     content: Optional[str] = None
     reasoning_content: Optional[str] = None
@@ -56,7 +55,14 @@ class LLMService:
         thinking: bool = ...,
     ) -> Generator[Union[LLMServiceChunk, dict], None, None]: ...
     def generate_response(
-        self, model, messages, temperature=0.75, stream=False, thinking=False
+        self,
+        model,
+        messages,
+        temperature=None,
+        top_p=None,
+        frequency_penalty=None,
+        stream=False,
+        thinking=False,
     ):
         """
         根据输入的messages和指定的模型生成响应。
@@ -83,9 +89,10 @@ class LLMService:
                 model=model,
                 messages=messages,
                 max_tokens=2500,
+                frequency_penalty=frequency_penalty,
+                top_p=top_p,
                 temperature=temperature,
                 stream=stream,
-                timeout=300,
                 extra_body=(
                     {"enable_thinking": thinking} if thinking is not None else {}
                 ),

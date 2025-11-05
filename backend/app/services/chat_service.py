@@ -125,7 +125,13 @@ class ChatService:
         if model is None:
             raise ValueError("Invalid model name")
 
-        support_thinking = True if "thinking" in model["features"] else None
+        # 更优雅的方式获取模型参数
+        model_params = {
+            "thinking": "thinking" in model.get("features", []),
+            "temperature": session["settings"].get("model_temperature"),
+            "top_p": session["settings"].get("model_top_p"),
+            "frequency_penalty": session["settings"].get("model_frequency_penalty"),
+        }
 
         llm_service = LLMService(
             model["provider"]["api_url"], model["provider"]["api_key"]
@@ -134,8 +140,10 @@ class ChatService:
         generatior = llm_service.generate_response(
             model["model_name"],
             context_messages,
-            temperature=0.75,
+            temperature=model_params["temperature"],
+            top_p=model_params["top_p"],
+            frequency_penalty=model_params["frequency_penalty"],
             stream=True,
-            thinking=support_thinking,
+            thinking=model_params["thinking"],
         )
         return generatior

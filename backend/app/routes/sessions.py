@@ -50,10 +50,9 @@ def create_or_get_sessions():
 @sessions_bp.route("/v1/sessions", methods=["POST"])
 def create_sessions():
     try:
-
         session_data = {
             "title": request.json.get("title", ""),
-            "user_id": "123",
+            "user_id": "123",  # TODO: 应该从认证信息中获取
             "avatar_url": "",
             "description": "An helpful AI assistant",
             "settings": {
@@ -78,26 +77,44 @@ def create_sessions():
                 "memory_type",
                 "max_memory_length",
                 "short_term_memory_length",
+                "model_top_p",
+                "model_temperature",
+                "model_id",
             ]
+            # 更优雅地复制字段
             if "settings" in character:
-                for field in fields:
-                    if field in character["settings"]:
-                        session_data["settings"][field] = character["settings"][field]
+                session_data["settings"].update(
+                    {
+                        field: character["settings"][field]
+                        for field in fields
+                        if field in character["settings"]
+                    }
+                )
 
-        data = session_service.add_new_session(session_data)
+            data = session_service.add_new_session(session_data)
+            # 更安全的头像拷贝方式
+            avatar_path = character["avatar_url"]
+            if avatar_path.startswith("/static/avatars/"):
+                source_file_path = os.path.join("app", avatar_path.lstrip("/"))
+                if os.path.exists(source_file_path):
+                    target_file_path = os.path.join(
+                        "app", "static", "avatars", f"session-{data['id']}.jpg"
+                    )
+                    try:
+                        shutil.copy2(source_file_path, target_file_path)
+                        session_service.update_session(
+                            data["id"],
+                            {"avatar_url": f"/static/avatars/session-{data['id']}.jpg"},
+                        )
+                    except IOError as e:
+                        print(f"Failed to copy avatar: {e}")
+        else:
+            data = session_service.add_new_session(session_data)
+
         if data is None:
             return jsonify(
                 {"success": False, "error": "Failed to create or resume session."}
             )
-
-        # 拷贝头像 - 简化版本
-        avatar_path = character["avatar_url"]
-        if avatar_path.startswith("/static/avatars/") and os.path.exists(
-            "app" + avatar_path
-        ):
-            source_file_path = "app" + avatar_path
-            target_file_path = f"app/static/avatars/session-{data['id']}.jpg"
-            shutil.copy2(source_file_path, target_file_path)
 
         return jsonify({"success": True, "data": data})
     except Exception as e:
