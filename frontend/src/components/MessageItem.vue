@@ -166,21 +166,22 @@ const emit = defineEmits(["delete", "edit", "copy", "regenerate"]);
 .user-message-container .message-card {
   margin-left: auto;
   /* background: linear-gradient(135deg, #4a90e2, #3a7bc8); */
-  background-color: var(--user-popup-bg);
-  color: var(--user-popup-text-color);
+  background-color: var(--user-bubble-bg);
+  color: var(--user-bubble-text-color);
   padding: 8px 12px;
   border-radius: 12px;
   /* box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05); */
   /* box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05), 0 1px 1px rgba(0, 0, 0, 0.05); */
-  border: 1px solid #efefef;
+  border: 1px solid var(--user-bubble-border-color);
   /* width: 100%; */
 }
 
 /* AI消息气泡特定样式 */
 .assistant-message-container .message-card {
   /* background: #ffffff; */
-  background: var(--assitant-popup-bg);
-  color: var(--assitant-popup-text-color);
+  background: var(--assitant-bubble-bg);
+  color: var(--assitant-bubble-text-color);
+  border: 1px solid var(--assistant-bubble-border-color);
   margin-right: auto;
   width: 100%;
   padding: 0;

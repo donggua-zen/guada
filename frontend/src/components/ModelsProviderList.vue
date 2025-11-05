@@ -1,6 +1,6 @@
 <template>
   <div
-    class="providers-panel flex flex-col w-72 min-w-72 h-screen bg-[var(--conversation-bg)] border-r border-[var(--conversation-border-color)]">
+    class="providers-panel flex flex-col w-62 min-w-62 h-screen bg-[var(--conversation-bg)] border-r border-[var(--conversation-border-color)]">
     <div class="providers-list flex-1 overflow-y-auto py-2.5">
       <div v-for="provider in items" :key="provider.id"
         class="provider-item px-3.5 py-3 cursor-pointer flex items-center transition-colors duration-200 rounded-xl mx-2.5 mb-1.5 h-15"
@@ -8,11 +8,10 @@
           'bg-[var(--conversation-active-bg)]': selectedId === provider.id,
           'hover:bg-[var(--conversation-hover-bg)]': selectedId !== provider.id
         }" @click="selectProvider(provider.id)">
-        <div class="provider-avatar w-9 h-9 rounded-full flex items-center justify-center mr-3 flex-shrink-0">
+        <div class="provider-avatar w-8 h-8 rounded-full flex items-center justify-center mr-3 flex-shrink-0">
           <div
-            class="provider-img w-full h-full rounded-full bg-[var(--primary-color)] flex items-center justify-center text-white text-xl overflow-hidden">
-            <!--  -->
-            <!-- <i class="fas fa-user"></i> -->
+            class="provider-img w-full h-full flex items-center justify-center text-white text-xl overflow-hidden">
+            <FolderOpenTwotone :size="16" color="var(--primary-color)" />
           </div>
         </div>
         <div class="provider-info flex-1 min-w-0">
@@ -31,8 +30,7 @@
 <script setup>
 import { ref, onMounted, computed, watch } from 'vue'
 import { NButton } from 'naive-ui'
-
-
+import { FolderOpenTwotone } from '@vicons/material'
 
 const emit = defineEmits(['select', 'update-providers', 'create-group'])
 defineProps({
@@ -53,8 +51,6 @@ const selectProvider = (providerId) => {
 const handleCreateGroup = async () => {
   emit('create-group')
 }
-
-
 </script>
 
 <style scoped>

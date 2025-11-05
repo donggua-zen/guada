@@ -60,12 +60,13 @@
                             label-width="80px" size="large">
                             <!-- 角色名称 -->
                             <n-form-item label="角色名称">
-                                <n-input v-model:value="characterForm.assistant_name" placeholder="请输入角色名称" />
+                                <n-input v-model:value="characterForm.assistant_name" placeholder="请输入角色名称" clearable />
                             </n-form-item>
 
                             <!-- 职业设定 -->
                             <n-form-item label="职业设定">
-                                <n-input v-model:value="characterForm.assistant_identity" placeholder="请输入职业设定" />
+                                <n-input v-model:value="characterForm.assistant_identity" placeholder="请输入职业设定"
+                                    clearable />
                             </n-form-item>
 
                             <!-- 详细设定 -->
@@ -78,15 +79,15 @@
                 </n-tab-pane>
 
                 <!-- 模型设置 -->
-                <n-tab-pane name="model" tab="模型" v-if="!isCharacterMode" display-directive="show">
+                <n-tab-pane name="model" tab="模型" v-if="!isCharacterMode || true" display-directive="show">
                     <div class="py-5">
                         <n-form ref="modelFormRef" :model="characterForm" :rules="modelRules" label-placement="top"
                             label-width="80px" size="large">
                             <!-- 模型选择 -->
-                            <n-form-item label="模型选择">
-
+                            <n-form-item label="模型选择" path="model_id">
                                 <n-select v-model:value="characterForm.model_id" :options="modelOptions"
-                                    placeholder="请选择模型" :fallback-option="(value) => ({ label: `请选择模型`, value: '' })" />
+                                    placeholder="请选择模型"
+                                    :fallback-option="(value) => ({ label: `请选择模型`, value: null })" />
                             </n-form-item>
 
                             <!-- 温度设置 -->
@@ -94,20 +95,14 @@
                                 <n-slider v-model:value="characterForm.model_temperature" :min="0" :max="2"
                                     :step="0.1" />
                                 <n-input-number v-model:value="characterForm.model_temperature" :min="0" :max="2"
-                                    :step="0.1" style="margin-left: 12px; width: 140px;" />
+                                    :step="0.1" style="margin-left: 12px; width: 180px;" clearable />
                             </n-form-item>
 
                             <!-- Top P -->
                             <n-form-item label="Top P">
                                 <n-slider v-model:value="characterForm.model_top_p" :min="0" :max="1" :step="0.1" />
                                 <n-input-number v-model:value="characterForm.model_top_p" :min="0" :max="1" :step="0.1"
-                                    style="margin-left: 12px; width: 140px;" />
-                            </n-form-item>
-
-                            <!-- 最大长度 -->
-                            <n-form-item label="最大长度">
-                                <n-input-number v-model:value="characterForm.model_max_tokens" :min="100" :max="4096"
-                                    :step="100" placeholder="默认2048" style="width: 200px;" />
+                                    style="margin-left: 12px; width: 180px;" clearable />
                             </n-form-item>
 
                             <!-- 频率惩罚 -->
@@ -115,7 +110,7 @@
                                 <n-slider v-model:value="characterForm.model_frequency_penalty" :min="0" :max="2"
                                     :step="0.1" />
                                 <n-input-number v-model:value="characterForm.model_frequency_penalty" :min="0" :max="2"
-                                    :step="0.1" style="margin-left: 12px; width: 140px;" />
+                                    :step="0.1" style="margin-left: 12px; width: 180px;" clearable />
                             </n-form-item>
                         </n-form>
                     </div>
@@ -236,12 +231,11 @@ const props = defineProps({
                 system_prompt: '',
                 model_id: '',
                 memory_type: '',
-                model_temperature: 0.7,
-                model_max_tokens: 2048,
-                model_top_p: 0.9,
-                model_frequency_penalty: 0.5,
-                max_memory_length: 1000,
-                short_term_memory_length: 100
+                model_temperature: '',
+                model_top_p: '',
+                model_frequency_penalty: '',
+                max_memory_length: '',
+                short_term_memory_length: ''
             }
         })
     }
@@ -288,7 +282,6 @@ const characterForm = reactive({
     model_id: '',
     memory_type: '',
     model_temperature: 0.7,
-    model_max_tokens: 2048,
     model_top_p: 0.9,
     model_frequency_penalty: 0.5,
     max_memory_length: 1000,
@@ -299,20 +292,25 @@ const characterForm = reactive({
 const basicRules = {
     title: [
         { required: true, message: '请输入角色标题', trigger: ['input', 'blur'] },
-        { min: 4, max: 20, message: '标题长度在4-20个字符之间', trigger: ['input', 'blur'] }
+        { min: 2, max: 20, message: '标题长度在2-20个字符之间', trigger: ['input', 'blur'] }
     ]
 }
 
 const promptRules = {
     system_prompt: [
         { required: true, message: '请输入详细设定', trigger: ['input', 'blur'] },
-        { min: 8, max: 4000, message: '详细设定长度在8-4000个字符之间', trigger: ['input', 'blur'] }
+        { min: 2, max: 4000, message: '详细设定长度在2-4000个字符之间', trigger: ['input', 'blur'] }
     ]
 }
 
 const modelRules = {
     model_id: [
-        { required: true, message: '请选择模型', trigger: ['change'] },
+        {
+            required: true, message: '请选择模型', trigger: ['change'], validator: (rule, value) => {
+                // 明确检查空值情况
+                return value !== null && value !== '' && value !== undefined;
+            }
+        },
     ],
 }
 
@@ -409,21 +407,20 @@ watch(() => props.data, (newVal) => {
     characterForm.system_prompt = newVal.settings?.system_prompt || '';
     characterForm.model_id = newVal.settings?.model_id || '';
     characterForm.memory_type = newVal.settings?.memory_type || 'sliding_window';
-    if (!isCharacterMode.value) {
-        characterForm.model_temperature = newVal.settings?.model_temperature || 0.7;
-        characterForm.model_max_tokens = newVal.settings?.model_max_tokens || 2048;
-        characterForm.model_top_p = newVal.settings?.model_top_p || 0.9;
-        characterForm.model_frequency_penalty = newVal.settings?.model_frequency_penalty || 0.5;
-        characterForm.max_memory_length = newVal.settings?.max_memory_length || '';
-        characterForm.short_term_memory_length = newVal.settings?.short_term_memory_length || '';
-    }
+    //if (!isCharacterMode.value) {
+    characterForm.model_temperature = newVal.settings?.model_temperature || '';
+    characterForm.model_top_p = newVal.settings?.model_top_p || '';
+    characterForm.model_frequency_penalty = newVal.settings?.model_frequency_penalty || '';
+    characterForm.max_memory_length = newVal.settings?.max_memory_length || '';
+    characterForm.short_term_memory_length = newVal.settings?.short_term_memory_length || '';
+    // }
     //}
 
 }, { immediate: true })
 
 const loadModels = async () => {
     try {
-        const response = await apiService.getModels()
+        const response = await apiService.fetchModels()
 
         models.value = response.models || []
         providers.value = response.providers || []
@@ -436,8 +433,8 @@ const loadModels = async () => {
 
 // 生命周期
 onMounted(async () => {
-    if (!isCharacterMode.value)
-        loadModels();
+    // if (!isCharacterMode.value)
+    loadModels();
 })
 
 onUnmounted(() => {
@@ -529,11 +526,12 @@ const handleSave = async () => {
         var formValidates = [
             basicFormRef.value?.validate(),
             promptFormRef.value?.validate(),
-            memoryFormRef.value?.validate()
+            memoryFormRef.value?.validate(),
+            modelFormRef.value?.validate(),
         ]
-        if (!isCharacterMode.value) {
-            formValidates.push(modelFormRef.value?.validate())
-        }
+        //if (!isCharacterMode.value) {
+        // formValidates.push(modelFormRef.value?.validate())
+        //}
         const validationResults = await Promise.allSettled(formValidates)
 
         // 检查是否有验证失败的表单
@@ -586,12 +584,12 @@ const handleSave = async () => {
                 'short_term_memory_length': characterForm.short_term_memory_length,
             }
         }
-        if (!props.simple) {
-            finalData['settings']['model_id'] = characterForm.model_id;
-            finalData['settings']['model_temperature'] = characterForm.model_temperature;
-            finalData['settings']['model_top_p'] = characterForm.model_top_p;
-            finalData['settings']['model_frequency_penalty'] = characterForm.model_frequency_penalty;
-        }
+        //if (!isCharacterMode.value) {
+        finalData['settings']['model_id'] = characterForm.model_id;
+        finalData['settings']['model_temperature'] = characterForm.model_temperature;
+        finalData['settings']['model_top_p'] = characterForm.model_top_p;
+        finalData['settings']['model_frequency_penalty'] = characterForm.model_frequency_penalty;
+        // }
         emit('update:data', finalData)
         // toast.success('保存成功')
         // handleClose()

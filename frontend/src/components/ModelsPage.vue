@@ -258,7 +258,7 @@ const initData = async () => {
     //     { id: "5", model_name: "gpt-3.5-turbo", provider_id: "3", type: "text", features: ["tools"] },
     //     { id: "6", model_name: "gpt-3.5-turbo", provider_id: "3", type: "text", features: ["tools"] }
     // ];
-    const data = await apiService.getModels();
+    const data = await apiService.fetchModels();
     providers.value = data.providers;
     models.value = data.models;
 };
@@ -343,7 +343,7 @@ const handleCreateGroup = async () => {
 
         if (result) {
             const title = result;
-            const provider = await apiService.addProvider({
+            const provider = await apiService.createProvider({
                 name: title,
                 api_url: "",
                 api_key: ""
@@ -446,7 +446,7 @@ const fetchModelsFromAPI = async () => {
 const handleAddFromFetch = async (model) => {
     try {
         // 调用后台新增模型API
-        const newModel = await apiService.addModel({
+        const newModel = await apiService.createModel({
             ...model,
             provider_id: currentProviderId.value
         });
@@ -577,7 +577,7 @@ const addModel = async (modelData) => {
     await new Promise(resolve => setTimeout(resolve, 100));
 
     // 这里应该是实际的API调用
-    const model = await apiService.addModel(
+    const model = await apiService.createModel(
         {
             ...modelData,
             provider_id: currentProviderId.value
