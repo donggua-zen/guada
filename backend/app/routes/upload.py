@@ -29,8 +29,8 @@ def upload_avatar(type: str, uid: str):
             return jsonify({"success": False, "error": "未选择文件"}), 400
 
         # 添加头像上传配置
-        upload_folder = "app/static/avatars"
-        allowed_extendsions = {"png", "jpg", "jpeg", "gif", "bmp", "webp", "tiff"}
+        upload_folder = os.path.join("app", "static", "avatars")  # 更规范的路径构建
+        allowed_extensions = {"png", "jpg", "jpeg", "gif", "bmp", "webp", "tiff"}
 
         # 确保上传目录存在
         os.makedirs(upload_folder, exist_ok=True)
@@ -38,13 +38,11 @@ def upload_avatar(type: str, uid: str):
         def allowed_file(filename):
             return (
                 "." in filename
-                and filename.rsplit(".", 1)[1].lower() in allowed_extendsions
+                and filename.rsplit(".", 1)[1].lower() in allowed_extensions
             )
 
         # 检查文件类型
         if file and allowed_file(file.filename):
-            # 生成安全的文件名
-            # filename = secure_filename(file.filename)
             # 生成唯一文件名
             unique_filename = f"{type}-{uid}.jpg"
             # 保存文件
@@ -78,16 +76,16 @@ def upload_avatar(type: str, uid: str):
 
             # 生成访问URL
             avatar_url = f"/static/avatars/{unique_filename}"
+
+            from app.services.character_service import CharacterService
+            from app.services.session_service import SessionService
+
             if type == "session":
-                from app.services import SessionService
-
-                session_service = SessionService()
-                session_service.update_session(uid, {"avatar_url": avatar_url})
-            else:
-                from app.services import CharacterService
-
-                character_service = CharacterService()
-                character_service.update_character(uid, {"avatar_url": avatar_url})
+                service = SessionService()
+                service.update_session(uid, {"avatar_url": avatar_url})
+            elif type == "character":
+                service = CharacterService()
+                service.update_character(uid, {"avatar_url": avatar_url})
             return jsonify({"success": True, "data": {"url": avatar_url}})
         else:
             return jsonify({"success": False, "error": "不支持的文件类型"}), 400

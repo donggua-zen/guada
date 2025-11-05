@@ -33,6 +33,9 @@ class CharacterService:
             "memory_type",
             "max_memory_length",
             "short_term_memory_length",
+            "model_top_p",
+            "model_temperature",
+            "model_id",
         ]
 
         data_filtered = {
@@ -79,6 +82,9 @@ class CharacterService:
             "memory_type",
             "max_memory_length",
             "short_term_memory_length",
+            "model_top_p",
+            "model_temperature",
+            "model_id",
         ]
 
         data_filtered = {}
