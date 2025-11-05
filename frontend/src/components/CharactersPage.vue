@@ -177,16 +177,9 @@ const deleteCharacter = async (character) => {
 const startNewChat = async (character) => {
   try {
     const loading = toast.loading('正在创建会话...', { duration: 0 })
-
-    const response = await apiService.createSession('123', character.id)
-    if (!response || !response.success) {
-      loading.destroy()
-      toast.error('创建会话失败')
-      return
-    }
-
+    const response = await apiService.createSession('', character.id)
     loading.destroy()
-    router.replace({ name: 'Chat', params: { sessionId: response.data.id } })
+    router.replace({ name: 'Chat', params: { sessionId: response.id } })
   } catch (error) {
     console.error('创建会话失败:', error)
     toast.error('创建会话失败')

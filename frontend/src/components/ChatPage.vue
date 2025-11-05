@@ -2,7 +2,7 @@
   <div class="flex w-full h-full">
     <sessions-list ref="sessionsListRef" :sessions="sessions" @on-select="selectSession"
       @on-delete="handleDeleteSession" @on-update="handleRenameSession" @on-create="handleCreateSession" />
-    <template v-if="currentSession.id">
+    <template v-if="sessions.length > 0">
       <div class="h-full flex-1 min-w-0">
         <ChatPanel :session="currentSession" @update:session="handleUpdateSession" />
       </div>
@@ -39,7 +39,7 @@ import { store } from "../store/store.js";
 import { usePopup } from "@/composables/usePopup";
 
 const { confirm, editText, toast, prompt } = usePopup();;
-
+const router = useRouter();
 
 const currentSession = ref({
   id: null,
@@ -115,23 +115,14 @@ const handleCreateSession = async () => {
     if (result) {
       const title = result
 
-      // 创建默认对话数据
-      const sessionData = {
-        title: title,
-        name: "",
-        identity: "",
-        system_prompt: "",
-        avatar_url: ""
-      }
-
       // 调用API创建对话
-      const newSession = await apiService.createSession(sessionData)
+      const newSession = await apiService.createSession(title)
 
       // 刷新对话列表
       await loadSessions()
 
       // 自动选择新创建的对话
-      selectSession(newSession)
+      router.replace({ name: 'Chat', params: { sessionId: newSession['id'] } });
 
       toast.success("对话创建成功");
     }
@@ -176,14 +167,9 @@ const handleRenameSession = async (session) => {
 const handleDeleteSession = async (session) => {
   try {
     if (await confirm("确认删除", "确定要删除这个对话吗？此操作不可撤销。")) {
-      const response = await apiService.deleteSession(session.id)
-      if (response.success) {
-        sessions.value = sessions.value.filter(s => s.id !== session.id);
-        toast.success("对话删除成功");
-      } else {
-        console.error('删除对话失败:', response.error || '未知错误')
-        toast.error("对话删除失败");
-      }
+      await apiService.deleteSession(session.id)
+      sessions.value = sessions.value.filter(s => s.id !== session.id);
+      toast.success("对话删除成功");
     }
   } catch (error) {
     console.error('删除对话失败:', error)

@@ -6,7 +6,12 @@ class ApiService {
     this.abortControllerMap = new Map();
   }
 
-  // 通用请求方法
+  /**
+   * 通用请求方法
+   * @param {string} endpoint - API端点
+   * @param {Object} options - 请求选项
+   * @returns {Promise<any>} 返回解析后的JSON数据
+   */
   async _request(endpoint, options = {}) {
     const url = `${this.baseURL}${endpoint}`;
     const config = {
@@ -28,117 +33,173 @@ class ApiService {
         throw new Error(`HTTP错误: ${response.status} ${response.statusText}`);
       }
 
-      return await response.json();
+      const response_json = await response.json();
+      if (!response_json.success) {
+        throw new Error(response_json.error);
+      }
+      return response_json.data;
     } catch (error) {
       console.error(`API请求失败: ${endpoint}`, error);
       throw error;
     }
   }
 
-  // 获取模型列表
+  /**
+   * 获取模型列表
+   * @returns {Promise<Array>} 返回模型数组
+   */
   async fetchModels() {
-    const data = await this._request('/models');
-    return data.data?.models || [];
+    return await this._request('/models');
   }
 
-  // 获取角色列表
+  /**
+   * 获取角色列表
+   * @returns {Promise<Object>} 返回角色数据对象
+   */
   async fetchCharacters() {
-    const data = await this._request('/characters');
-    return data.data || {};
+    return await this._request('/characters');
   }
 
-  // 获取特定角色信息
+  /**
+   * 获取特定角色信息
+   * @param {string} characterId - 角色ID
+   * @returns {Promise<Object|null>} 返回角色数据或null
+   */
   async fetchCharacter(characterId) {
-    const data = await this._request(`/characters/${characterId}`);
-    return data.data || null;
+    return await this._request(`/characters/${characterId}`);
   }
 
-  // 创建新角色
+  /**
+   * 创建新角色
+   * @param {Object} characterData - 角色数据
+   * @returns {Promise<Object>} 返回创建的角色数据
+   */
   async createCharacter(characterData) {
-    const data = await this._request('/characters', {
+    return await this._request('/characters', {
       method: 'POST',
       body: characterData,
     });
-    return data.data;
   }
 
-  // 更新角色信息
+  /**
+   * 更新角色信息
+   * @param {string} characterId - 角色ID
+   * @param {Object} characterData - 更新的角色数据
+   * @returns {Promise<Object>} 返回更新后的角色数据
+   */
   async updateCharacter(characterId, characterData) {
-    const data = await this._request(`/characters/${characterId}`, {
+    return await this._request(`/characters/${characterId}`, {
       method: 'PUT',
       body: characterData,
     });
-    return data.data;
   }
 
-  // 删除角色
+  /**
+   * 删除角色
+   * @param {string} characterId - 角色ID
+   * @returns {Promise<Object>} 返回删除结果
+   */
   async deleteCharacter(characterId) {
-    const data = await this._request(`/characters/${characterId}`, {
+    return await this._request(`/characters/${characterId}`, {
       method: 'DELETE',
     });
-    return data.data;
   }
 
-  // 查询或创建会话
+  /**
+   * 查询或创建会话
+   * @param {string} userId - 用户ID
+   * @param {string} characterId - 角色ID
+   * @returns {Promise<Object>} 返回会话数据
+   */
   async queryOrCreateSession(userId, characterId) {
-    const data = await this._request('/sessions_', {
+    return await this._request('/sessions_', {
       method: 'POST',
       body: { user_id: userId, character_id: characterId },
     });
-    return data.data;
   }
 
-  // 查询或创建会话
-  async createSession(userId, characterId) {
-    const data = await this._request('/sessions', {
+  /**
+   * 创建新会话
+   * @param {string} title - 会话标题
+   * @param {string} [characterId] - 角色ID（可选）
+   * @returns {Promise<Object>} 返回创建的会话数据
+   */
+  async createSession(title, characterId = undefined) {
+    return await this._request('/sessions', {
       method: 'POST',
-      body: { user_id: userId, character_id: characterId },
+      body: { title: title, character_id: characterId },
     });
-    return data;
   }
 
+  /**
+   * 删除会话
+   * @param {string} sessionId - 会话ID
+   * @returns {Promise<Object>} 返回删除结果
+   */
   async deleteSession(sessionId) {
-    const data = await this._request(`/sessions/${sessionId}`, {
+    return await this._request(`/sessions/${sessionId}`, {
       method: 'DELETE',
     });
-    return data;
   }
 
-  // 获取会话配置
+  /**
+   * 获取会话配置
+   * @param {string} sessionId - 会话ID
+   * @returns {Promise<Object>} 返回会话数据
+   */
   async fetchSession(sessionId) {
-    const data = await this._request(`/sessions/${sessionId}`);
-    return data.data;
+    return await this._request(`/sessions/${sessionId}`);
   }
 
+  /**
+   * 获取所有会话
+   * @returns {Promise<Array>} 返回会话数组
+   */
   async fetchSessions() {
-    const data = await this._request('/sessions');
-    return data.data || [];
-  }
-  // 获取会话消息历史
-  async fetchSessionMessages(sessionId) {
-    const data = await this._request(`/sessions/${sessionId}/messages`);
-    return data.data || [];
+    return await this._request('/sessions');
   }
 
-  // 添加消息到会话
-  async addMessage(sessionId, content) {
-    const data = await this._request(`/sessions/${sessionId}/messages`, {
+  /**
+   * 获取会话消息历史
+   * @param {string} sessionId - 会话ID
+   * @returns {Promise<Array>} 返回消息数组
+   */
+  async fetchSessionMessages(sessionId) {
+    return await this._request(`/sessions/${sessionId}/messages`);
+  }
+
+  /**
+   * 添加消息到会话
+   * @param {string} sessionId - 会话ID
+   * @param {string} content - 消息内容
+   * @returns {Promise<Array>} 返回消息数据
+   */
+  async createMessage(sessionId, content) {
+    return await this._request(`/sessions/${sessionId}/messages`, {
       method: 'POST',
       body: {
         content: content
       },
     });
-    return data.data || [];
   }
 
-  async getTokenStatistics(sessionId) {
-    const response = await this._request(`/sessions/${sessionId}/tokens`);
-    if (!response.success) {
-      throw new Error(response.error);
-    }
-    return response.data;
+  /**
+   * 获取会话的token统计信息
+   * @param {string} sessionId - 会话ID
+   * @returns {Promise<Object>} 返回token统计数据
+   */
+  async fetchTokenStatistics(sessionId) {
+    return await this._request(`/sessions/${sessionId}/tokens`);
   }
-  // 流式获取AI响应
+
+  /**
+   * 流式获取AI响应
+   * @param {string} sessionId - 会话ID
+   * @param {string} messageId - 消息ID
+   * @param {boolean} enableReasoning - 是否启用推理
+   * @param {AbortController} abortController - 取消控制器
+   * @yields {Object} 返回流式响应数据
+   */
   async *fetchResponse(sessionId, messageId, enableReasoning = false, abortController = null) {
     // this.currentAbortController = new AbortController();
     try {
@@ -216,6 +277,10 @@ class ApiService {
     }
   }
 
+  /**
+   * 取消响应请求
+   * @param {string} sessionId - 会话ID
+   */
   async cancelResponse(sessionId) {
     const abortController = this.abortControllerMap.get(sessionId);
     if (abortController) {
@@ -223,6 +288,13 @@ class ApiService {
     }
   }
 
+  /**
+   * 上传头像
+   * @param {string} uid - 用户或角色ID
+   * @param {File} avatarFile - 头像文件
+   * @param {string} type - 上传类型 ('character' 或 'session')
+   * @returns {Promise<Array>} 返回上传结果
+   */
   async uploadAvatar(uid, avatarFile, type = 'character') {
     const formData = new FormData();
     formData.append('avatar', avatarFile);
@@ -242,6 +314,9 @@ class ApiService {
       }
 
       const json = await response.json();
+      if (!json.success) {
+        throw new Error(json.error);
+      }
       return json.data || [];
     } catch (error) {
       console.error('上传错误:', error);
@@ -249,41 +324,57 @@ class ApiService {
     }
   }
 
-  // 删除消息
+  /**
+   * 删除消息
+   * @param {string} messageId - 消息ID
+   * @returns {Promise<Object>} 返回删除结果
+   */
   async deleteMessage(messageId) {
-    const data = await this._request(`/messages/${messageId}`, {
+    return await this._request(`/messages/${messageId}`, {
       method: 'DELETE',
     });
-    return data;
   }
 
-  // 更新消息内容
+  /**
+   * 更新消息内容
+   * @param {string} messageId - 消息ID
+   * @param {string} content - 新的消息内容
+   * @returns {Promise<Object>} 返回更新结果
+   */
   async updateMessage(messageId, content) {
-    const data = await this._request(`/messages/${messageId}`, {
+    return await this._request(`/messages/${messageId}`, {
       method: 'PUT',
       body: { content },
     });
-    return data;
   }
 
-  // 清空会话消息
+  /**
+   * 清空会话消息
+   * @param {string} sessionId - 会话ID
+   * @returns {Promise<boolean>} 返回操作是否成功
+   */
   async clearSessionMessages(sessionId) {
-    const data = await this._request(`/sessions/${sessionId}/messages`, {
+    return await this._request(`/sessions/${sessionId}/messages`, {
       method: 'DELETE',
     });
-    return data.success;
   }
 
-  // 更新会话配置
+  /**
+   * 更新会话配置
+   * @param {string} sessionId - 会话ID
+   * @param {Object} data - 更新的数据
+   * @returns {Promise<Object>} 返回更新后的会话数据
+   */
   async updateSession(sessionId, data) {
-    const response = await this._request(`/sessions/${sessionId}`, {
+    return await this._request(`/sessions/${sessionId}`, {
       method: 'PUT',
       body: data,
     });
-    return response.data;
   }
 
-  // 取消当前请求
+  /**
+   * 取消当前请求
+   */
   abortCurrentRequest() {
     if (this.currentAbortController) {
       this.currentAbortController.abort();
@@ -291,7 +382,12 @@ class ApiService {
     }
   }
 
-  // 防抖函数
+  /**
+   * 防抖函数
+   * @param {Function} func - 需要防抖的函数
+   * @param {number} delay - 延迟时间（毫秒）
+   * @returns {Function} 返回防抖后的函数
+   */
   debounce(func, delay) {
     let timer;
     return function (...args) {
@@ -303,51 +399,72 @@ class ApiService {
   }
 
 
-  // 模型服务
-  async getModels() {
-    const data = await this._request('/models');
-    return data.data || { 'models': [], 'providers': [] };
+  /**
+   * 获取模型列表（重复方法，建议移除其中一个）
+   * @returns {Promise<Object>} 返回模型和提供商数据
+   */
+  async fetchModels() {
+    return await this._request('/models');
   }
 
-  async addModel(data) {
-    const response = await this._request('/models', {
+  /**
+   * 创建模型
+   * @param {Object} data - 模型数据
+   * @returns {Promise<Object>} 返回创建的模型数据
+   */
+  async createModel(data) {
+    return await this._request('/models', {
       method: 'POST',
       body: data,
     });
-    return response.data;
   }
 
+  /**
+   * 删除模型
+   * @param {string} modelId - 模型ID
+   * @returns {Promise<boolean>} 返回操作是否成功
+   */
   async deleteModel(modelId) {
-    const data = await this._request(`/models/${modelId}`, {
+    return await this._request(`/models/${modelId}`, {
       method: 'DELETE',
     });
-    return data.success;
   }
 
+  /**
+   * 更新模型
+   * @param {string} modelId - 模型ID
+   * @param {Object} data - 更新的模型数据
+   * @returns {Promise<Object>} 返回更新后的模型数据
+   */
   async updateModel(modelId, data) {
-    const response = await this._request(`/models/${modelId}`, {
+    return await this._request(`/models/${modelId}`, {
       method: 'PUT',
       body: data,
     });
-    return response.data;
   }
 
-  async addProvider(data) {
-    const response = await this._request('/providers', {
+  /**
+   * 创建提供商
+   * @param {Object} data - 提供商数据
+   * @returns {Promise<Object>} 返回创建的提供商数据
+   */
+  async createProvider(data) {
+    return await this._request('/providers', {
       method: 'POST',
       body: data,
     });
-    if (!response.success) {
-      throw new Error(data.error);
-    }
-    return response.data;
   }
 
+  /**
+   * 删除提供商
+   * @param {string} providerId - 提供商ID
+   * @returns {Promise<boolean>} 返回操作是否成功
+   */
   async deleteProvider(providerId) {
-    const data = await this._request(`/providers/${providerId}`, {
+    return await this._request(`/providers/${providerId}`, {
       method: 'DELETE',
     });
-    return data.success;
+
   }
 
   /**
@@ -359,21 +476,13 @@ class ApiService {
    * @throws {Error} 如果更新失败则抛出错误
    */
   async updateProvider(providerId, data) {
-    const response = await this._request(`/providers/${providerId}`, {
+    return await this._request(`/providers/${providerId}`, {
       method: 'PUT',
       body: data,
     });
-    if (!response.success) {
-      throw new Error(data.error);
-    }
-    return response.data;
   }
 
 }
-
-
-
-
 
 // 创建默认实例并导出
 export const apiService = new ApiService("/v1");

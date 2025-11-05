@@ -5,32 +5,45 @@
       <span>会话列表</span>
     </div>
     <div class="sessions-list flex-1 overflow-y-auto py-2.5">
-      <div v-for="session in sortedSessions" :key="session.id"
-        class="session-item group px-3.5 py-3 cursor-pointer flex items-center transition-colors duration-200 rounded-xl mx-2.5 mb-1.5 h-15"
-        :class="{
-          'bg-[var(--conversation-active-bg)]': session.id === currentSessionId,
-          'hover:bg-[var(--conversation-hover-bg)]': session.id !== currentSessionId
-        }" @click="selectSession(session.id)">
-        <div class="session-avatar w-9 h-9 mr-2.5">
-          <Avatar :src="session.avatar_url" round />
+      <template v-if="sortedSessions.length === 0">
+        <div class="empty-state text-center text-gray-500 flex flex-col items-center justify-center h-full">
+          <div class="empty-state-icon">
+            <n-icon>
+              <PlusOutlined />
+            </n-icon>
+          </div>
+          <div class="empty-state-title">没有会话</div>
+          <div class="empty-state-description">点击下方按钮创建新的会话</div>
         </div>
-        <div class="session-info flex-1 min-w-0">
-          <div class="session-title font-medium text-sm truncate text-gray-800">{{ session.title }}</div>
+      </template>
+      <template v-else>
+        <div v-for="session in sortedSessions" :key="session.id"
+          class="session-item group px-3.5 py-3 cursor-pointer flex items-center transition-colors duration-200 rounded-xl mx-2.5 mb-1.5 h-15"
+          :class="{
+            'bg-[var(--conversation-active-bg)]': session.id === currentSessionId,
+            'hover:bg-[var(--conversation-hover-bg)]': session.id !== currentSessionId
+          }" @click="selectSession(session.id)">
+          <div class="session-avatar w-9 h-9 mr-2.5">
+            <Avatar :src="session.avatar_url" round />
+          </div>
+          <div class="session-info flex-1 min-w-0">
+            <div class="session-title font-medium text-sm truncate text-gray-800">{{ session.title }}</div>
+          </div>
+          <!-- 修改这里：添加 group-hover 类 -->
+          <div class="session-actions flex opacity-0 transition-opacity duration-200 group-hover:opacity-100">
+            <n-dropdown trigger="click" :options="dropdownOptions" @select="handleDropdownSelect($event, session)">
+              <n-button quaternary circle @click.stop
+                class="session-action-btn bg-none border-none text-gray-500 cursor-pointer text-sm p-1 rounded">
+                <template #icon>
+                  <n-icon size="16">
+                    <MoreVertOutlined />
+                  </n-icon>
+                </template>
+              </n-button>
+            </n-dropdown>
+          </div>
         </div>
-        <!-- 修改这里：添加 group-hover 类 -->
-        <div class="session-actions flex opacity-0 transition-opacity duration-200 group-hover:opacity-100">
-          <n-dropdown trigger="click" :options="dropdownOptions" @select="handleDropdownSelect($event, session)">
-            <n-button quaternary circle @click.stop
-              class="session-action-btn bg-none border-none text-gray-500 cursor-pointer text-sm p-1 rounded">
-              <template #icon>
-                <n-icon size="16">
-                  <MoreVertOutlined />
-                </n-icon>
-              </template>
-            </n-button>
-          </n-dropdown>
-        </div>
-      </div>
+      </template>
     </div>
     <div class="sessions-footer p-5">
       <n-button block @click="handleCreateSession" type="primary" size="large">

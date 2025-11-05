@@ -17,10 +17,12 @@
     --bg: #F7F7F7;
     --page-bg: #ffffff;
 
-    --user-popup-bg: #fff;
-    --user-popup-text-color: #1F2937;
-    --assitant-popup-bg: none;
-    --assitant-popup-text-color: #1F2937;
+    --user-bubble-bg: #18a058;
+    --user-bubble-text-color: #fff;
+    --user-bubble-border-color: #18a058;
+    --assitant-bubble-bg: none;
+    --assitant-bubble-text-color: #1F2937;
+    --assitant-bubble-border-color: none;
     /* 聊天对话样式 */
     --conversation-bg: #E9EBF2;
     --conversation-text-color: #333;
@@ -40,9 +42,9 @@
     --sidebar-border-color: #ddd;
     --sidebar-text-color: #515151;
     --sidebar-hover-bg: #fafafa;
-    --sidebar-hover-text-color: #0081ff;
+    --sidebar-hover-text-color: #36ad6a;
     --sidebar-active-bg: none;
-    --sidebar-active-text-color: #0081ff;
+    --sidebar-active-text-color: #36ad6a;
 }
 
 @font-face {

@@ -41,7 +41,7 @@ watch(() => props.sessionId, async (newVal) => {
 // 加载模型列表
 const loadModels = async () => {
   try {
-    const response = await apiService.getModels()
+    const response = await apiService.fetchModels()
 
     models.value = response.models || []
     providers.value = response.providers || []

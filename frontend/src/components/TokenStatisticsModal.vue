@@ -124,7 +124,7 @@ const emit = defineEmits(["update:show"]);
 // 模拟获取tokens统计数据的接口
 const fetchTokenStatistics = async () => {
     // 模拟API调用延迟
-    const response = await apiService.getTokenStatistics(props.currentSessionId);
+    const response = await apiService.fetchTokenStatistics(props.currentSessionId);
 
     // 返回模拟数据
     return {
