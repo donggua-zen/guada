@@ -60,7 +60,8 @@ const fetchSession = async (sessionId) => {
 };
 
 const selectSession = async (session) => {
-  await fetchSession(session.id);
+  if (session.id)
+    await fetchSession(session.id);
 };
 
 const updateSessionById = async (sessionId, data) => {

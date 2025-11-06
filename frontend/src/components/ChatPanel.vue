@@ -86,9 +86,9 @@
     </div>
     <!-- 输入区域 -->
     <div class="input-container">
-      <ChatInput v-model:value="inputMessage" :streaming="isStreaming" @send="sendMessage" @abort="abortResponse"
-        @image-upload="handleImageUpload" @file-upload="handleFileUpload" @web-search="handleWebSearch"
-        @tokens-statistic="handleTokensStatistic" />
+      <ChatInput v-model:value="inputMessage.text" :files="inputMessage.files" :streaming="isStreaming"
+        @send="sendMessage" @abort="abortResponse" @image-upload="handleImageUpload" @file-upload="handleFileUpload"
+        @web-search="handleWebSearch" @tokens-statistic="handleTokensStatistic" />
     </div>
 
     <!-- Tokens统计模态框 -->
@@ -106,22 +106,8 @@ import Avatar from "./Avatar.vue";
 import { usePopup } from "@/composables/usePopup";
 import TokenStatisticsModal from "./TokenStatisticsModal.vue";
 import ChatInput from "./ChatInput.vue";
-
-// 导入 xicons 图标
-import {
-  TrashOutline,
-  ArrowUpOutline,
-  StopOutline
-} from "@vicons/ionicons5";
-import {
-  IosSend,
-} from "@vicons/ionicons4";
 import {
   DeleteTwotone,
-  InsertDriveFileTwotone,
-  ScreenSearchDesktopTwotone,
-  ImageTwotone,
-  DataThresholdingTwotone,
 } from "@vicons/material";
 
 // import {
@@ -143,8 +129,6 @@ const scrollbarOptions = ref({
 
 const simpleBarRef = ref(null);
 const messages = ref([]);
-const messageInputRef = ref(null);
-const isInputExpanded = ref(false);
 const messagesContainer = ref(null);
 const currentSessionId = ref(null);
 
@@ -167,12 +151,13 @@ const props = defineProps({
 
 watch(() => props.session, async (session) => {
   currentSessionId.value = session.id;
-  isInputExpanded.value = false;
   if (messagesContainer.value)
     messagesContainer.value.scrollTop = messagesContainer.value.scrollHeight;
-  if (store.getMessages(session.id).length == 0) {
-    const sessionMessages = await apiService.fetchSessionMessages(session.id);
-    store.setMessages(session.id, sessionMessages.items);
+  if (session.id) {
+    if (store.getMessages(session.id).length == 0) {
+      const sessionMessages = await apiService.fetchSessionMessages(session.id);
+      store.setMessages(session.id, sessionMessages.items);
+    }
   }
   await nextTick();
   scrollToBottom();
@@ -290,19 +275,32 @@ const handleStreamResponse = async (streamingSessionId, userMessageId) => {
   }
 };
 
-const handleSendUserMessage = async (text) => {
-  const reponse = await apiService.createMessage(currentSessionId.value, text);
-  const messageId = reponse["id"];
+const handleSendUserMessage = async (data) => {
+  try {
 
-  const message = {
-    id: messageId,
-    role: "user",
-    content: text,
-    reasoning_content: null,
-  };
-  // messages.value.push(message);
-  store.addMessage(currentSessionId.value, message);
-  handleStreamResponse(currentSessionId.value, messageId);
+    const text = data.text;
+    const files = data.files;
+    const reponse = await apiService.createMessage(currentSessionId.value, text);
+    const messageId = reponse["id"];
+
+    const message = reactive({
+      id: messageId,
+      role: "user",
+      content: text,
+      reasoning_content: null,
+      files: files,
+    });
+    // messages.value.push(message);
+
+    store.addMessage(currentSessionId.value, message);
+    for (let i = 0; i < files.length; i++) {
+      await apiService.uploadFile(messageId, files[i].file);
+    }
+    handleStreamResponse(currentSessionId.value, messageId);
+
+  } catch (error) {
+    notify.error("消息发送失败", error.message);
+  }
 };
 
 //聊天逻辑
@@ -349,9 +347,10 @@ const scrollToBottom = () => {
 };
 // 发送消息
 const sendMessage = async () => {
-  const message = inputMessage.value.trim();
-  if (!message || isStreaming.value) return;
-  inputMessage.value = "";
+  const message = inputMessage.value;
+  if ((!message.text?.trim() && !message.files.length) || isStreaming.value) return;
+  // 不要直接修改inputMessage.value,会导致handleSendUserMessage读不到内容
+  inputMessage.value = { text: "", files: [] };
   handleSendUserMessage(message);
 };
 
@@ -423,17 +422,6 @@ const copyMessage = async (message) => {
 // 重新生成响应
 const regenerateResponse = async (message) => {
   handleStreamResponse(currentSessionId.value, message.id);
-};
-
-// 切换深度思考模式
-const toggleDeepThinking = () => {
-  isDeepThinking.value = !isDeepThinking.value;
-};
-
-// 处理文件上传
-const handleFileUpload = () => {
-  // 实现文件上传逻辑
-  console.log("文件上传功能");
 };
 
 // 处理网络搜索

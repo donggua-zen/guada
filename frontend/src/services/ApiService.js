@@ -324,6 +324,33 @@ class ApiService {
     }
   }
 
+
+  async uploadFile(messageId, file) {
+    const formData = new FormData();
+    formData.append('file', file);
+
+    try {
+
+      const response = await fetch(`${this.baseURL}/messages/${messageId}/files`, {
+        method: 'POST',
+        body: formData,
+      });
+
+      if (!response.ok) {
+        throw new Error(`文件上传失败: ${response.status}`);
+      }
+
+      const json = await response.json();
+      if (!json.success) {
+        throw new Error(json.error);
+      }
+      return json.data || [];
+    } catch (error) {
+      console.error('上传错误:', error);
+      throw error;
+    }
+  }
+
   /**
    * 删除消息
    * @param {string} messageId - 消息ID

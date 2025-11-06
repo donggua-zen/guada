@@ -1,11 +1,22 @@
 <template>
     <div class="input-wrapper" :class="{ expanded: isInputExpanded }">
+        <!-- 文件列表显示区域 -->
+        <div class="file-list flex flex-wrap gap-2 mb-3" v-if="uploadFiles.length > 0">
+            <FileItem v-for="file in uploadFiles" :key="file.id" :name="file.display_name" :type="file.file_extension"
+                :size="file.file_size" closable @close="removeFile(file.id)"></FileItem>
+        </div>
+
         <textarea class="message-input" v-model="inputContent" placeholder="输入消息..." @keydown="handleKeydown"
             @input="adjustTextareaHeight" ref="messageInputRef" rows="1"></textarea>
 
+        <!-- 隐藏的文件输入框 -->
+        <input type="file" ref="fileInputRef" style="display: none" multiple
+            accept=".txt,.md,.js,.ts,.html,.css,.json,.xml,.csv,.log,.py,.java,.cpp,.c,.go,.rs,.php,.rb,.sql,.sh,.bat,.yml,.yaml,.ini,.conf,.properties"
+            @change="handleFileSelect">
+
         <div class="input-actions">
             <div class="tools">
-                <n-button class="tool-btn" title="上传文件" @click="handleFileUpload" text>
+                <n-button class="tool-btn" title="上传文件" @click="triggerFileInput" text>
                     <template #icon>
                         <n-icon size="22">
                             <InsertDriveFileTwotone />
@@ -42,7 +53,7 @@
 
             <div class="send-actions">
                 <n-button v-if="!streaming" class="send-btn" title="发送" @click="sendMessage"
-                    :disabled="!inputContent.trim()" circle type="primary" size="small">
+                    :disabled="!inputContent.trim() && uploadFiles.length === 0" circle type="primary" size="small">
                     <template #icon>
                         <n-icon>
                             <ArrowUpOutline />
@@ -61,11 +72,11 @@
         </div>
     </div>
 </template>
+
 <script setup>
-import { defineComponent, ref, watch, computed, onMounted, onBeforeUnmount, nextTick, defineEmits } from 'vue'
-import { useRouter } from 'vue-router'
-import { useRoute } from 'vue-router'
+import { ref, watch, computed, onMounted, onBeforeUnmount, nextTick, defineEmits } from 'vue'
 import { NButton, NIcon } from 'naive-ui'
+import FileItem from './FileItem.vue';
 // 导入 xicons 图标
 import {
     ArrowUpOutline,
@@ -77,16 +88,26 @@ import {
     ScreenSearchDesktopTwotone,
     ImageTwotone,
     DataThresholdingTwotone,
+    CloseOutlined,
 } from "@vicons/material";
 
 const isInputExpanded = ref(false);
 const messageInputRef = ref(null);
+const fileInputRef = ref(null);
+const isDeepThinking = ref(false);
 
+// 文件列表数据
+const fileList = ref([]);
+let fileIdCounter = 0;
 
 const props = defineProps({
     value: {
         type: String,
         default: ''
+    },
+    files: {
+        type: Array,
+        default: () => []
     },
     streaming: {
         type: Boolean,
@@ -94,7 +115,7 @@ const props = defineProps({
     },
 })
 
-const emit = defineEmits(['update:value', 'send', 'abort', 'tokens-statistic'])
+const emit = defineEmits(['update:value', 'send', 'abort', 'tokens-statistic', 'files-change'])
 
 const inputContent = computed(
     {
@@ -107,8 +128,20 @@ const inputContent = computed(
     }
 )
 
+const uploadFiles = computed({
+    get() {
+        return props.files;
+    },
+    set(value) {
+        emit('update:files', value)
+    }
+})
+
 const sendMessage = () => {
-    emit('send', inputContent.value)
+    emit('send', {
+        text: inputContent.value,
+        files: fileList.value
+    })
 }
 
 const handleKeydown = (e) => {
@@ -118,9 +151,65 @@ const handleKeydown = (e) => {
     }
 };
 
-const handleFileUpload = () => {
-    console.log("文件上传功能");
-}
+// 触发文件选择
+const triggerFileInput = () => {
+    fileInputRef.value.click();
+};
+
+// 处理文件选择
+const handleFileSelect = (event) => {
+    const files = event.target.files;
+    if (files.length > 0) {
+        for (let i = 0; i < files.length; i++) {
+            const file = files[i];
+            // 检查文件类型是否为文本类型
+            if (isTextFile(file)) {
+                console.log('file', file);
+                uploadFiles.value.push({
+                    id: fileIdCounter++,
+                    file_name: file.name,
+                    file_size: file.size,
+                    file_extension: getFileExtension(file.name),
+                    file_type: file.type,
+                    display_name: getFileNameWithoutExtension(file.name),
+                    file: file,
+                });
+            }
+        }
+        // 触发文件变化事件
+        // emit('files-change', fileList.value);
+        // 清空input值，允许重复选择同一文件
+        event.target.value = '';
+    }
+};
+
+// 检查是否为文本文件
+const isTextFile = (file) => {
+    const textExtensions = ['.txt', '.md', '.js', '.ts', '.html', '.css', '.json', '.xml', '.csv', '.log', '.py', '.java', '.cpp', '.c', '.go', '.rs', '.php', '.rb', '.sql', '.sh', '.bat', '.yml', '.yaml', '.ini', '.conf', '.properties'];
+    const fileName = file.name.toLowerCase();
+    return textExtensions.some(ext => fileName.endsWith(ext));
+};
+
+// 移除文件
+const removeFile = (fileId) => {
+    const index = uploadFiles.value.findIndex(file => file.id === fileId);
+    if (index !== -1) {
+        uploadFiles.value.splice(index, 1);
+    }
+};
+
+// 获取不包含扩展名的文件名
+const getFileNameWithoutExtension = (fileName) => {
+    const lastDotIndex = fileName.lastIndexOf('.');
+    return lastDotIndex > 0 ? fileName.substring(0, lastDotIndex) : fileName;
+};
+
+// 获取文件扩展名
+const getFileExtension = (fileName) => {
+    const lastDotIndex = fileName.lastIndexOf('.');
+    return lastDotIndex > 0 ? fileName.substring(lastDotIndex + 1).toUpperCase() : 'FILE';
+};
+
 
 const handleImageUpload = () => {
     console.log("图片上传功能");
@@ -131,11 +220,11 @@ const handleWebSearch = () => {
 }
 
 const handleTokensStatistic = () => {
-    emit('event:tokens-statistic')
+    emit('tokens-statistic')
 }
 
 const abortResponse = () => {
-    emit('event:abort')
+    emit('abort')
 }
 
 const toggleDeepThinking = () => {
@@ -165,6 +254,7 @@ watch(inputContent, (newVal) => {
 }, { immediate: true })
 
 </script>
+
 <style scoped>
 .input-wrapper {
     border: none;

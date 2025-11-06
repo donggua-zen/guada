@@ -6,6 +6,12 @@
     </div>
 
     <div class="message-content">
+      <!-- 文件列表显示区域 -->
+      <div class="file-list flex flex-wrap gap-2 mb-3" v-if="message.files && message.files.length > 0">
+        <fileItem v-for="file in message.files" :key="file.id" :name="file.display_name" :type="file.file_extension"
+          :size="file.file_size"></fileItem>
+      </div>
+
       <div class="message-card">
         <div v-if="showThinking" class="thinking-section" :class="{ 'thinking-expanded': isExpanded }">
           <div class="thinking-header" @click="toggleExpand">
@@ -15,6 +21,8 @@
           </div>
           <div class="thinking-content markdown-text" v-html="formattedReasoning"></div>
         </div>
+
+
 
         <div class="message-text markdown-text" v-html="formattedContent"></div>
         <n-alert v-if="message.meta_data && message.meta_data.finish_reason == 'error'" title="API请求错误" type="error">
@@ -38,8 +46,10 @@
 <script setup>
 import { computed, ref } from "vue";
 import { marked } from "marked";
-import { NAlert } from "naive-ui";
+import { NAlert, NIcon } from "naive-ui";
 import Avatar from "./Avatar.vue";
+import { InsertDriveFileTwotone } from "@vicons/material";
+import fileItem from "../components/FileItem.vue";
 
 const props = defineProps({
   message: Object,
@@ -128,6 +138,16 @@ const stopThinking = () => {
 
 defineExpose({ startThinking, stopThinking });
 const emit = defineEmits(["delete", "edit", "copy", "regenerate"]);
+
+
+// 格式化文件大小
+const formatFileSize = (bytes) => {
+  if (bytes === 0) return '0 B';
+  const k = 1024;
+  const sizes = ['B', 'KB', 'MB', 'GB'];
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+};
 </script>
 
 <style scoped>
