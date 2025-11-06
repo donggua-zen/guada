@@ -12,8 +12,9 @@
 
 import datetime
 import html
-from typing import Generator, List, Optional, Tuple
+from typing import Generator, List, Optional, Tuple, Union
 
+from app.repositories.model_repository import ModelRepository
 from app.repositories.session_repository import SessionRepository
 from app.services.domain.memory_strategy import MemoryStrategy
 from app.services.llm_service import LLMServiceChunk
@@ -321,3 +322,56 @@ class ChatService:
             return SlidingWindowWithRAGStrategy()
         else:
             return MemorylessStrategy()
+
+    def token_statistics(self, session_id: str) -> dict:
+        from app.tokenizer.auto_tokenizer import get_tokenizer
+
+        session = SessionRepository.get_session_by_id(session_id)
+
+        if session is None:
+            raise ValueError("Invalid session id")
+        strategy = self.get_memory_strategy(session)
+
+        settings = session["settings"]
+        model = ModelRepository.get_model(model_id=settings["model_id"])
+
+        active_messages = strategy.process_memory(session, current_message_id=None)
+        tokenizer = get_tokenizer(model["model_name"])
+
+        system_prompt_tokens = 0
+        context_tokens = 0
+        summary_tokens = 0
+
+        context_messages = self.construct_context_message(session, active_messages)
+
+        def count_tokens(content: Union[str | list[dict]]):
+            if isinstance(content, str):
+                return tokenizer.count_tokens(content)
+            else:
+                return sum(
+                    count_tokens(item["text"])
+                    for item in content
+                    if item["type"] == "text"
+                )
+
+        for i, message in enumerate(context_messages):
+            if message["role"] == "system":
+                if i == 0:  # 第一个系统提示语
+                    system_prompt_tokens += count_tokens(message["content"])
+                else:  # 其他系统提示词一般是摘要和召回记录
+                    summary_tokens += count_tokens(message["content"])
+            else:
+                context_tokens += count_tokens(message["content"])
+
+        max_memory_length = system_prompt_tokens + summary_tokens + context_tokens
+        # 简化写法：使用get方法设置默认值
+        max_memory_length = (
+            settings.get("max_memory_length", max_memory_length) or max_memory_length
+        )
+
+        return {
+            "max_memory_length": max_memory_length,
+            "system_prompt_tokens": system_prompt_tokens,
+            "summary_tokens": summary_tokens,
+            "context_tokens": context_tokens,
+        }
