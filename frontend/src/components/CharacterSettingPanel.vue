@@ -92,7 +92,7 @@
 
                             <!-- 温度设置 -->
                             <n-form-item label="温度">
-                                <n-slider v-model:value="characterForm.model_temperature" :min="0" :max="2"
+                                <n-slider v-model.number:value="characterForm.model_temperature" :min="0" :max="2"
                                     :step="0.1" />
                                 <n-input-number v-model:value="characterForm.model_temperature" :min="0" :max="2"
                                     :step="0.1" style="margin-left: 12px; width: 180px;" clearable />
@@ -100,14 +100,14 @@
 
                             <!-- Top P -->
                             <n-form-item label="Top P">
-                                <n-slider v-model:value="characterForm.model_top_p" :min="0" :max="1" :step="0.1" />
+                                <n-slider v-model.number:value="characterForm.model_top_p" :min="0" :max="1" :step="0.1" />
                                 <n-input-number v-model:value="characterForm.model_top_p" :min="0" :max="1" :step="0.1"
                                     style="margin-left: 12px; width: 180px;" clearable />
                             </n-form-item>
 
                             <!-- 频率惩罚 -->
                             <n-form-item label="频率惩罚">
-                                <n-slider v-model:value="characterForm.model_frequency_penalty" :min="0" :max="2"
+                                <n-slider v-model.number:value="characterForm.model_frequency_penalty" :min="0" :max="2"
                                     :step="0.1" />
                                 <n-input-number v-model:value="characterForm.model_frequency_penalty" :min="0" :max="2"
                                     :step="0.1" style="margin-left: 12px; width: 180px;" clearable />
@@ -281,11 +281,11 @@ const characterForm = reactive({
     system_prompt: '',
     model_id: '',
     memory_type: '',
-    model_temperature: 0.7,
-    model_top_p: 0.9,
-    model_frequency_penalty: 0.5,
-    max_memory_length: 1000,
-    short_term_memory_length: 100
+    model_temperature: '',
+    model_top_p: '',
+    model_frequency_penalty: '',
+    max_memory_length: '',
+    short_term_memory_length: ''
 })
 
 // 验证规则

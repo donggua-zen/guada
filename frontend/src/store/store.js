@@ -12,7 +12,10 @@ export const store = reactive({
             this.sessions.set(sessionId, {
                 messages: [],
                 isStreaming: false,
-                inputMessage: '', // 保存当前输入框内容
+                inputMessage: {
+                    content: '',
+                    files: [],
+                }, // 保存当前输入框内容
                 scrollPosition: 0, // 滚动位置
                 lastUpdated: Date.now(), // 最后更新时间
                 settings: { // 会话特定设置
@@ -63,7 +66,7 @@ export const store = reactive({
     sessionIsStreaming(sessionId) {
         return this.getSessionState(sessionId).isStreaming;
     },
-    
+
     setSessionIsStreaming(sessionId, isStreaming) {
         this.getSessionState(sessionId).isStreaming = isStreaming;
     },
@@ -72,7 +75,7 @@ export const store = reactive({
     getInputMessage(sessionId) {
         return this.getSessionState(sessionId).inputMessage;
     },
-    
+
     setInputMessage(sessionId, content) {
         console.log('setInputMessage', content);
         this.getSessionState(sessionId).inputMessage = content;
@@ -82,7 +85,7 @@ export const store = reactive({
     setScrollPosition(sessionId, position) {
         this.getSessionState(sessionId).scrollPosition = position;
     },
-    
+
     getScrollPosition(sessionId) {
         return this.getSessionState(sessionId).scrollPosition;
     },
@@ -91,7 +94,7 @@ export const store = reactive({
     getSessionSetting(sessionId, key) {
         return this.getSessionState(sessionId).settings[key];
     },
-    
+
     setSessionSetting(sessionId, key, value) {
         this.getSessionState(sessionId).settings[key] = value;
     },
