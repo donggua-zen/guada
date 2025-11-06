@@ -21,3 +21,16 @@ class Session(ModelBase):
         default=db.func.now(),
         onupdate=db.func.now(),
     )
+
+    messages = db.relationship(
+        "Message",
+        back_populates="session",
+        cascade="all, delete-orphan",
+    )
+
+    summary = db.relationship(
+        "Summary",
+        back_populates="session",
+        cascade="all, delete-orphan",
+        uselist=False,  # 关键参数，表示一对一关系
+    )

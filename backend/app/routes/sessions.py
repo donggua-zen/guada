@@ -5,13 +5,10 @@ from flask import Blueprint, jsonify, request
 from app.services import SummaryService
 from app.services import MessageService
 from app.services import SessionService
-from app.services import CharacterService
 
 
-character_service = CharacterService()
-message_service = MessageService()
 session_service = SessionService()
-summary_service = SummaryService()
+
 
 from app.utils.vector_memory import get_vector_memory
 
@@ -27,31 +24,12 @@ def get_sessions():
     )
 
 
-@sessions_bp.route("/v1/sessions_", methods=["POST"])
-def create_or_get_sessions():
-    try:
-        character = character_service.get_character_by_id(request.json["character_id"])
-
-        data = session_service.create_or_resume_session(
-            user_id=request.json["user_id"],
-            character_id=request.json["character_id"],
-            name=character["title"],
-        )
-        if data is None:
-            return jsonify(
-                {"success": False, "error": "Failed to create or resume session."}
-            )
-
-        return jsonify({"success": True, "data": data})
-    except Exception as e:
-        return jsonify({"success": False, "error": str(e)}), 500
-
-
 @sessions_bp.route("/v1/sessions", methods=["POST"])
-def create_sessions():
+def create_session():
     try:
         session_data = {
             "title": request.json.get("title", ""),
+            "character_id": request.json.get("character_id", None),
             "user_id": "123",  # TODO: 应该从认证信息中获取
             "avatar_url": "",
             "description": "An helpful AI assistant",
@@ -62,54 +40,7 @@ def create_sessions():
             },
         }
 
-        if "character_id" in request.json:
-            character = character_service.get_character_by_id(
-                request.json["character_id"]
-            )
-            session_data["title"] = character["title"]
-            session_data["avatar_url"] = character["avatar_url"]
-            session_data["description"] = character["description"]
-
-            fields = [
-                "assistant_name",
-                "assistant_identity",
-                "system_prompt",
-                "memory_type",
-                "max_memory_length",
-                "short_term_memory_length",
-                "model_top_p",
-                "model_temperature",
-                "model_id",
-            ]
-            # 更优雅地复制字段
-            if "settings" in character:
-                session_data["settings"].update(
-                    {
-                        field: character["settings"][field]
-                        for field in fields
-                        if field in character["settings"]
-                    }
-                )
-
-            data = session_service.add_new_session(session_data)
-            # 更安全的头像拷贝方式
-            avatar_path = character["avatar_url"]
-            if avatar_path.startswith("/static/avatars/"):
-                source_file_path = os.path.join("app", avatar_path.lstrip("/"))
-                if os.path.exists(source_file_path):
-                    target_file_path = os.path.join(
-                        "app", "static", "avatars", f"session-{data['id']}.jpg"
-                    )
-                    try:
-                        shutil.copy2(source_file_path, target_file_path)
-                        session_service.update_session(
-                            data["id"],
-                            {"avatar_url": f"/static/avatars/session-{data['id']}.jpg"},
-                        )
-                    except IOError as e:
-                        print(f"Failed to copy avatar: {e}")
-        else:
-            data = session_service.add_new_session(session_data)
+        data = session_service.create_session(session_data)
 
         if data is None:
             return jsonify(
@@ -123,6 +54,8 @@ def create_sessions():
 
 @sessions_bp.route("/v1/sessions/<session_id>", methods=["DELETE"])
 def delete_session(session_id):
+    summary_service = SummaryService()
+    message_service = MessageService()
     try:
         session_service.delete_session(session_id)
         message_service.delete_messages_by_session_id(session_id)
@@ -136,8 +69,8 @@ def delete_session(session_id):
 @sessions_bp.route("/v1/sessions/<session_id>", methods=["GET"])
 def get_session(session_id):
     try:
-        data = session_service.query_session(session_id=session_id)
-        if len(data) == 0:
+        data = session_service.get_session_by_id(session_id)
+        if not data:
             return (
                 jsonify(
                     {
@@ -147,9 +80,9 @@ def get_session(session_id):
                 ),
                 404,
             )
-        if "memory_type" not in data[0] or data[0]["memory_type"] == "":
-            data[0]["memory_type"] = "sliding_window"
-        return jsonify({"success": True, "data": data[0]})
+        if "memory_type" not in data or data["memory_type"] == "":
+            data["memory_type"] = "sliding_window"
+        return jsonify({"success": True, "data": data})
     except Exception as e:
         return jsonify({"success": False, "error": str(e)}), 500
 
@@ -159,7 +92,34 @@ def update_session(session_id):
     try:
         data = request.json
         data["updated_at"] = datetime.datetime.now(datetime.timezone.utc)
-        session_service.update_session(session_id, request.json)
+        fields = ["title", "description", "avatar_url", "updated_at"]
+
+        extended_fields = [
+            "assistant_name",
+            "assistant_identity",
+            "system_prompt",
+            "memory_type",
+            "max_memory_length",
+            "short_term_memory_length",
+            "model_top_p",
+            "model_temperature",
+            "model_id",
+        ]
+
+        data_filtered = {}
+        # 处理基础字段
+        for field in fields:
+            if field in data:
+                data_filtered[field] = data[field]
+
+        # 处理settings字段
+        if "settings" in data:
+            settings = {}
+            for field in extended_fields:
+                if field in data["settings"]:
+                    settings[field] = data["settings"][field]
+            data_filtered["settings"] = settings
+        session_service.update_session(session_id, data_filtered)
         return jsonify({"success": True})
     except Exception as e:
         return jsonify({"success": False, "error": str(e)}), 500

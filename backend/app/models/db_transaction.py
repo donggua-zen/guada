@@ -38,7 +38,6 @@ class SmartTransactionManager:
             self._set_transaction_depth(current_depth + 1)
             # if is_outermost:
             #     db.session.begin()  # 显式开始事务
-            
 
             yield
 
@@ -57,9 +56,22 @@ class SmartTransactionManager:
             print(f"事务结束 - 深度恢复为: {current_depth}")
 
     def execute_in_transaction(self, func, *args, **kwargs):
-        """在事务中执行函数（便捷方法）"""
-        with self.transaction():
-            return func(*args, **kwargs)
+        """
+        创建一个在数据库事务中执行指定函数的装饰器
+
+        :param func: 需要在事务中执行的函数
+        :param args: 函数的位置参数
+        :param kwargs: 函数的关键字参数
+        :return: 包装后的函数，该函数会在事务上下文中执行原函数
+        """
+
+        def wrapper(*args, **kwargs):
+            """在事务中执行函数（便捷方法）"""
+            # 使用事务上下文管理器执行函数
+            with self.transaction():
+                return func(*args, **kwargs)
+
+        return wrapper
 
 
 # 全局智能事务管理器实例

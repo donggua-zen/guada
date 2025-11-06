@@ -1,5 +1,5 @@
 import ulid
-from .database import ModelBase,db
+from .database import ModelBase, db
 
 
 class ModelProvider(ModelBase):
@@ -15,4 +15,7 @@ class ModelProvider(ModelBase):
         db.DateTime,
         default=db.func.now(),
         onupdate=db.func.now(),
+    )
+    models = db.relationship(
+        "Model", back_populates="provider", cascade="all, delete-orphan"
     )

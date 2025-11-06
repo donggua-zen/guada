@@ -5,12 +5,12 @@ from flask import Blueprint, Response, jsonify, request
 
 from flask import stream_with_context
 from app.services import ChatService
-from app.services import MemoryStrategy
 from app.services import MessageService
 from app.services import SessionService
 
-chat_service = ChatService()
 message_service = MessageService()
+chat_service = ChatService()
+
 session_service = SessionService()
 
 chat_bp = Blueprint("chat", __name__)
@@ -19,111 +19,30 @@ chat_bp = Blueprint("chat", __name__)
 # 流式响应
 @stream_with_context
 def stream_generator(
-    session,
-    active_messages,
-    strategy: MemoryStrategy = None,
+    session_id: str,
+    message_id: str,
 ):
     generator = None
-
-    finish_reason = None
-    finish_reason_error = None
-    reasoning_content = ""
-    content = ""
-    message = message_service.add_message(
-        session_id=session["id"],
-        role="assistant",
-        content="",
-        parent_id=active_messages[-1]["id"] if active_messages else None,
-        reasoning_content="",
-        meta_data={},
-    )
     try:
-        yield f"data: {json.dumps({'message_id':message['id']})}\n\n"
         generator = chat_service.completions(
-            session=session,
-            messages=active_messages,
+            session_id,
+            message_id,
         )
+        print("Generator started.")
         for chunk in generator:
-            response_chunk = {
-                "content": None,
-                "reasoning_content": None,
-            }
-            if chunk.finish_reason is not None:
-                finish_reason = chunk.finish_reason
-                # response_chunk["finish_reason"] = chunk.finish_reason
-                break
-            elif chunk.content is not None:
-                response_chunk["content"] = chunk.content
-                content += chunk.content
-            elif chunk.reasoning_content is not None:
-                response_chunk["reasoning_content"] = chunk.reasoning_content
-                reasoning_content += chunk.reasoning_content
-            else:
-                continue
-            yield f"data: {json.dumps(response_chunk)}\n\n"
-
+            json_chunk = json.dumps(chunk)
+            yield f"data: {json_chunk}\n\n"
+        print("Generator ended.")
     except GeneratorExit:
         if generator is not None:
             generator.close()
-            print("Generator exited.")
+        print("Generator exited.")
+        raise  # 必须重新抛出异常
     except Exception as e:
         print(f"Exception2:{e}\n")
         traceback.print_exc()
-        finish_reason = "error"
-        finish_reason_error = str(e)
-        # yield f"data: {json.dumps({'finish_reason':'error','error': str(e)})}\n\n"
     finally:
-
-        message_service.update_message(
-            message["id"],
-            data={
-                "content": content,
-                "reasoning_content": reasoning_content,
-                "meta_data": {
-                    "finish_reason": finish_reason,
-                    "error": finish_reason_error,
-                },
-            },
-        )
-
-        # 使用策略处理对话后的记忆
-        user_message = active_messages[-1] if active_messages else None
-        if user_message and strategy:
-            strategy.post_process_memory(
-                session["id"],
-                user_message=user_message,
-                assistant_message=message,
-            )
-        yield f"data: {json.dumps({'finish_reason':finish_reason,'error':finish_reason_error})}\n\n"
         yield "data: [DONE]\n\n"
-
-
-def get_memory_strategy(session: dict) -> MemoryStrategy:
-    """
-    根据角色配置获取记忆策略实例
-
-    Args:
-        character: 角色信息
-
-    Returns:
-        记忆策略实例
-    """
-    from app.services.memory_strategy import (
-        MemorylessStrategy,
-        SlidingWindowStrategy,
-        SummaryAugmentedSlidingWindowStrategy,
-        SlidingWindowWithRAGStrategy,
-    )
-
-    memory_type = session.get("memory_type", "sliding_window")
-    if memory_type == "sliding_window":
-        return SlidingWindowStrategy()
-    elif memory_type == "summary_augmented_sliding_window":
-        return SummaryAugmentedSlidingWindowStrategy()
-    elif memory_type == "sliding_window_with_rag":
-        return SlidingWindowWithRAGStrategy()
-    else:
-        return MemorylessStrategy()
 
 
 @chat_bp.route("/v1/sessions/<session_id>/messages/stream", methods=["POST"])
@@ -131,30 +50,9 @@ def chat_completions(session_id):
     try:
         data = request.json
         message_id = data["message"]["message_id"]
-        current_message_id = message_id
 
-        session = session_service.get_session_by_id(session_id=session_id)
-
-        if session is None:
-            return jsonify(
-                {"success": False, "error": f"Session with ID {session_id} not found."}
-            )
-
-        session_service.update_session(
-            session_id,
-            data={
-                "updated_at": datetime.datetime.now(datetime.timezone.utc),
-            },
-        )
-        # character = character_service.get_character_by_id(session["character_id"])
-        strategy = get_memory_strategy(session)
-        active_messages = strategy.process_memory(session, current_message_id)
         return Response(
-            stream_generator(
-                session,
-                active_messages,
-                strategy=strategy,
-            ),
+            stream_generator(session_id, message_id),
             mimetype="text/event-stream",
         )
     except Exception as e:

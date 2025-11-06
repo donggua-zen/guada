@@ -1,7 +1,6 @@
 # message_service.py
 import json
-from app.models import db, Message
-from app.models.db_transaction import smart_transaction_manager
+from app.repositories.message_repository import MessageRepository as MessageRepo
 
 
 class MessageService:
@@ -19,32 +18,21 @@ class MessageService:
         last_n_messages=None,
         order_type="asc",
     ):
-        query = db.session.query(Message).filter(Message.session_id == session_id)
 
-        if start_message_id is not None:
-            query = query.filter(Message.id >= start_message_id)
-
-        if tail_message_id is not None:
-            query = query.filter(Message.id <= tail_message_id)
-
-        if last_n_messages is not None:
-            query.limit(last_n_messages)
-        if order_type == "desc":
-            query = query.order_by(Message.created_at.desc())
-        else:
-            query = query.order_by(Message.created_at.asc())
-        messages = query.all()
-
-        # 转换为字典列表
-        result = [msg.to_dict() for msg in messages]
-
-        return result
+        return MessageRepo.get_messages(
+            session_id,
+            start_message_id,
+            tail_message_id,
+            last_n_messages,
+            order_type,
+            with_files=True,
+        )
 
     def get_message(self, message_id):
-        message = db.session.query(Message).filter(Message.id == message_id).first()
-        if message:
-            return message.to_dict()
-        return None
+        message = MessageRepo.get_message(message_id)
+        if not message:
+            raise Exception("Message not found")
+        return message
 
     def add_message(
         self,
@@ -56,34 +44,31 @@ class MessageService:
         meta_data: dict = None,
         token_count: int = None,
     ):
-        message = Message(
+        message = MessageRepo.add_message(
             session_id=session_id,
             role=role,
             content=content,
             token_count=token_count,
             reasoning_content=reasoning_content,
             parent_id=parent_id,
-            meta_data=json.dumps(meta_data),
+            meta_data=meta_data or {},
         )
-        #with smart_transaction_manager.transaction():
-        db.session.add(message)
-        db.session.commit()
-        return message.to_dict()
+        if not message:
+            raise Exception("Failed to add message")
+        return message
 
     def update_message(self, message_id, data):
-        message = db.session.query(Message).filter(Message.id == message_id).first()
-        if message:
-            with smart_transaction_manager.transaction():
-                for key, value in data.items():
-                    if hasattr(message, key):
-                        setattr(message, key, value)
+        message = MessageRepo.update_message(message_id, data)
+        if not message:
+            raise Exception("Failed to update message")
+        return message
 
     def delete_message(self, message_id):
-        message = db.session.query(Message).filter(Message.id == message_id).first()
-        if message:
-            with smart_transaction_manager.transaction():
-                db.session.delete(message)
+        if not MessageRepo.delete_message(message_id):
+            raise Exception("Failed to delete message")
+        return {}
 
     def delete_messages_by_session_id(self, session_id):
-        with smart_transaction_manager.transaction():
-            db.session.query(Message).filter(Message.session_id == session_id).delete()
+        if not MessageRepo.delete_messages_by_session_id(session_id):
+            raise Exception("Failed to delete messages")
+        return {}

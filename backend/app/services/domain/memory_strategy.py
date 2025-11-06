@@ -22,7 +22,7 @@ from typing import List, Tuple, Optional, Dict, Any
 
 # from app.services import get_message_service
 # from app.services.summary_service import get_summary_service
-from app.services import MessageService, SummaryService
+from app.services import MessageService
 from app.utils.chunking import chunking_text, preprocess_text
 from app.utils.vector_memory import get_vector_memory
 
@@ -193,6 +193,7 @@ class SummaryAugmentedSlidingWindowStrategy(MemoryStrategy):
     """总结增强滑动窗口策略"""
 
     def __init__(self):
+        from app.services.summary_service import SummaryService
         self.rag_helper = rag_helper
         self.message_service = MessageService()
         self.summary_service = SummaryService()
