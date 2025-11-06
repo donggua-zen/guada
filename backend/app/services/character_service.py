@@ -17,7 +17,7 @@ class CharacterService:
     def get_all_characters(self):
         return CharacterRepo.get_all_characters()
 
-    def create_character(data: dict):
+    def create_character(self, data: dict):
         fields = [
             "title",
             "description",
@@ -59,7 +59,7 @@ class CharacterService:
         # 返回完整数据
         return character.to_dict()
 
-    def update_character(id, data: dict):
+    def update_character(self, id, data: dict):
 
         fields = [
             "title",
@@ -97,9 +97,9 @@ class CharacterService:
         character = CharacterRepo.update_character(id, data_filtered)
         if not character:
             raise ValueError(f"Character with ID {id} does not exist.")
-        return character.to_dict()
+        return character
 
-    def delete_character(id):
+    def delete_character(self, id):
 
         character = CharacterRepo.get_character_by_id(id)
         CharacterRepo.delete_character(id)
@@ -107,8 +107,8 @@ class CharacterService:
         if avatar_url and avatar_url.startswith("/static/avatars/character-"):
             os.remove("app" + avatar_url)
 
-    def get_character_by_id(id):
+    def get_character_by_id(self, id):
         character = CharacterRepo.get_character_by_id(id)
         if character:
-            return character.to_dict()
+            return character
         raise ValueError(f"Character with ID {id} does not exist.")
