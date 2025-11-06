@@ -6,7 +6,7 @@ from config import app_config
 import logging
 from logging.handlers import RotatingFileHandler
 import os
-from .models.database import init_db
+from .models.database import init_db, db
 
 
 def create_app(config_name=None):
@@ -46,8 +46,9 @@ class AppInitializer:
         init_db(self.app)
 
         # 其他扩展初始化
-        # from flask_migrate import Migrate
-        # self.migrate = Migrate(self.app, db)
+        from flask_migrate import Migrate
+
+        self.migrate = Migrate(self.app, db)
 
         # from flask_login import LoginManager
         # self.login_manager = LoginManager(self.app)
