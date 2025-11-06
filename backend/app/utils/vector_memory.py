@@ -24,7 +24,8 @@ from openai import OpenAI
 import ulid
 from typing import List, Dict, Optional, Union
 import time
-from app.services import ModelService
+
+from app.repositories.model_repository import ModelRepository
 
 
 class _VectorMemory:
@@ -69,8 +70,8 @@ class _VectorMemory:
         Returns:
             文本的向量表示
         """
-        model_service = ModelService()
-        provider = model_service.get_provider_by_name("硅基流动")
+
+        provider = ModelRepository.get_provider_by_name("硅基流动")
 
         # 初始化OpenAI客户端
         openai_client = OpenAI(
