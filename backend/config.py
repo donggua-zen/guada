@@ -1,8 +1,21 @@
 # config.py
 import os
 from datetime import timedelta
+import sqlite3
+from flask_sqlalchemy import SQLAlchemy
+from sqlalchemy import StaticPool
+from sqlalchemy import StaticPool, event
+from sqlalchemy.engine import Engine
 
 basedir = os.path.abspath(os.path.dirname(__file__))
+
+
+@event.listens_for(Engine, "connect")
+def set_sqlite_pragma(dbapi_connection, connection_record):
+    if isinstance(dbapi_connection, sqlite3.Connection):
+        cursor = dbapi_connection.cursor()
+        cursor.execute("PRAGMA foreign_keys=ON")
+        cursor.close()
 
 
 class Config:
@@ -10,10 +23,21 @@ class Config:
 
     SECRET_KEY = os.environ.get("SECRET_KEY") or "dev-secret-key"
     SQLALCHEMY_TRACK_MODIFICATIONS = False
-
+    SQLALCHEMY_ENGINE_OPTIONS = {
+        "connect_args": {
+            "check_same_thread": False,
+            "timeout": 30,  # SQLite 超时设置
+            # "foreign_keys": 1,  # 启用外键
+        },
+        "poolclass": StaticPool,  # 单线程应用使用静态连接池
+        "pool_pre_ping": True,  # 连接前检查
+    }
     # 其他通用配置
     DEBUG = False
     TESTING = False
+    # SQLite 特定的性能优化
+    SQLITE_JOURNAL_MODE = "WAL"  # 写前日志模式，提高并发
+    SQLITE_SYNCHRONOUS = "NORMAL"  # 同步模式平衡性能和安全
 
 
 class DevelopmentConfig(Config):
