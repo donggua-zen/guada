@@ -65,7 +65,7 @@ def create_character():
                 )
 
         # character = {field: json_data.get(field) for field in fields}
-        character = character_service.add_new_character(json_data)
+        character = character_service.create_character(json_data)
         return jsonify({"success": True, "data": character})
     except Exception as e:
         return jsonify({"success": False, "error": str(e)}), 500
@@ -74,13 +74,8 @@ def create_character():
 @characters_bp.route("/v1/characters/<character_id>", methods=["DELETE"])
 def delete_character(character_id):
     try:
-        character = character_service.get_character_by_id(character_id)
-        if character:
-            character_service.delete_character(character_id)
-            avatar_url = character.get("avatar_url")
-            if avatar_url and avatar_url.startswith("/static/avatars/character-"):
-                os.remove("app" + avatar_url)
-            return jsonify({"success": True})
+        character_service.delete_character(character_id)    
+        return jsonify({"success": True})
     except Exception as e:
         return jsonify({"success": False, "error": str(e)}), 500
 

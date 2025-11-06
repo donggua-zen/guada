@@ -4,6 +4,7 @@ import ulid
 
 from app.models import db, Character
 from app.models.db_transaction import smart_transaction_manager
+from app.repositories.character_repository import CharacterRepository as CharacterRepo
 
 
 class CharacterService:
@@ -14,12 +15,9 @@ class CharacterService:
         pass
 
     def get_all_characters(self):
-        characters = db.session.query(Character).all()
-        results = [character.to_dict() for character in characters]
+        return CharacterRepo.get_all_characters()
 
-        return results
-
-    def add_new_character(self, data: dict):
+    def create_character(data: dict):
         fields = [
             "title",
             "description",
@@ -56,17 +54,12 @@ class CharacterService:
 
         # 创建字符对象
 
-        with smart_transaction_manager.transaction():
-            character = Character(
-                **data_filtered,
-            )
-
-            db.session.add(character)
+        character = CharacterRepo.create_character(data_filtered)
 
         # 返回完整数据
         return character.to_dict()
 
-    def update_character(self, id, data: dict):
+    def update_character(id, data: dict):
 
         fields = [
             "title",
@@ -101,23 +94,21 @@ class CharacterService:
                     settings[field] = data["settings"][field]
             data_filtered["settings"] = settings
 
-        character = db.session.query(Character).filter(Character.id == id).first()
+        character = CharacterRepo.update_character(id, data_filtered)
+        if not character:
+            raise ValueError(f"Character with ID {id} does not exist.")
+        return character.to_dict()
+
+    def delete_character(id):
+
+        character = CharacterRepo.get_character_by_id(id)
+        CharacterRepo.delete_character(id)
+        avatar_url = character.get("avatar_url")
+        if avatar_url and avatar_url.startswith("/static/avatars/character-"):
+            os.remove("app" + avatar_url)
+
+    def get_character_by_id(id):
+        character = CharacterRepo.get_character_by_id(id)
         if character:
-            with smart_transaction_manager.transaction():
-                for key, value in data_filtered.items():
-                    if hasattr(character, key):
-                        setattr(character, key, value)
             return character.to_dict()
         raise ValueError(f"Character with ID {id} does not exist.")
-
-    def delete_character(self, id):
-        character = db.session.query(Character).filter(Character.id == id).first()
-        if character:
-            with smart_transaction_manager.transaction():
-                db.session.delete(character)
-
-    def get_character_by_id(self, id):
-        character = db.session.query(Character).filter(Character.id == id).first()
-        if character:
-            return character.to_dict()
-        return None

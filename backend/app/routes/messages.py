@@ -16,6 +16,11 @@ messages_bp = Blueprint("messages", __name__)
 def get_messages(session_id):
     try:
         messages = message_service.get_messages(session_id=session_id)
+
+        for message in messages:
+            for file in message["files"]:
+                file.pop("content")
+
         return jsonify({"success": True, "data": {"items": messages}})
     except Exception as e:
         return jsonify({"success": False, "error": str(e)}), 500
@@ -64,7 +69,7 @@ def add_message(session_id):
         message = message_service.add_message(
             session_id=session_id,
             role="user",
-            content=request.json["content"],
+            content=request.json.get("content", ""),
             parent_id=last_message[0]["id"] if last_message else None,
             token_count=0,
         )
@@ -72,4 +77,3 @@ def add_message(session_id):
         return jsonify({"success": True, "data": message})
     except Exception as e:
         return jsonify({"success": False, "error": str(e)}), 500
-

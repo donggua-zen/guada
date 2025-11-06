@@ -7,10 +7,29 @@ class LLMServiceChunk:
     content: Optional[str] = None
     reasoning_content: Optional[str] = None
     finish_reason: Optional[str] = None
+    error: Optional[str] = None
 
     def __str__(self):
         """用户友好的字符串表示"""
         return f"LLMServiceChunk(content={self.content}, reasoning_content={self.reasoning_content}, finish_reason={self.finish_reason})"
+
+    def to_dict(self):
+        """
+        将对象转换为字典格式
+
+        Returns:
+            dict: 包含对象属性的字典，包含以下键值对：
+                - content: 内容信息
+                - reasoning_content: 推理内容
+                - finish_reason: 完成原因
+                - error: 错误信息
+        """
+        return {
+            "content": self.content,
+            "reasoning_content": self.reasoning_content,
+            "finish_reason": self.finish_reason,
+            "error": self.error,
+        }
 
 
 class LLMService:
@@ -22,47 +41,41 @@ class LLMService:
 
         self.llm_client = OpenAI(base_url=base_url, api_key=self.api_key)
 
-    def get_models(self):
-        try:
-
-            # 调用OpenAI SDK获取模型列表
-            models = self.llm_client.app.models.list()
-
-            # 提取模型ID列表
-            model_list = [model.id for model in app.models.data]
-
-            return model_list
-        except Exception as e:
-            return []
-
     @overload
     def generate_response(
         self,
-        model: str,
-        messages: list,
-        temperature: float = ...,
-        stream: Literal[False] = ...,
-        thinking: bool = ...,
+        model,
+        messages,
+        temperature,
+        top_p,
+        frequency_penalty,
+        stream: Literal[False],
+        thinking,
     ) -> LLMServiceChunk: ...
 
     @overload
     def generate_response(
         self,
-        model: str,
-        messages: list,
-        temperature: float = ...,
-        stream: Literal[True] = ...,
-        thinking: bool = ...,
-    ) -> Generator[Union[LLMServiceChunk, dict], None, None]: ...
+        model,
+        messages,
+        temperature,
+        top_p,
+        frequency_penalty,
+        stream: Literal[True],
+        thinking,
+        complete_chunk: LLMServiceChunk = ...,
+    ) -> Generator[LLMServiceChunk, None, None]: ...
+
     def generate_response(
         self,
         model,
-        messages,
+        messages: list,
         temperature=None,
         top_p=None,
         frequency_penalty=None,
         stream=False,
         thinking=False,
+        complete_chunk: LLMServiceChunk = None,
     ):
         """
         根据输入的messages和指定的模型生成响应。
@@ -85,30 +98,35 @@ class LLMService:
         """
         response = None
         try:
+            print("request:", model, messages)
+            print("freq_penalty:", frequency_penalty)
+            print("top_p:", top_p)
+            print("temperature:", temperature)
             response = self.llm_client.chat.completions.create(
                 model=model,
                 messages=messages,
                 max_tokens=2500,
-                frequency_penalty=frequency_penalty,
-                top_p=top_p,
-                temperature=temperature,
+                frequency_penalty=frequency_penalty or None,
+                top_p=top_p or None,
+                temperature=temperature or None,
                 stream=stream,
                 extra_body=(
                     {"enable_thinking": thinking} if thinking is not None else {}
                 ),
             )
             if stream:
-                return self._handle_stream_response(response)
+                return self._handle_stream_response(
+                    response, complete_chunk=complete_chunk
+                )
             else:
                 return self._handle_non_stream_response(response)
         except APIError as e:
             print(f"Exception:{e}\n")
             raise Exception(str(e))
         except Exception as e:
-            print(f"Exception:{e}\n")
-            raise e
+            raise
 
-    def _handle_stream_response(self, response):
+    def _handle_stream_response(self, response, complete_chunk: LLMServiceChunk = None):
         """
         处理流式API响应并生成数据块
 
@@ -121,31 +139,43 @@ class LLMService:
 
         """
         try:
-            response_chunk = LLMServiceChunk()
             for chunk in response:
+                response_chunk = LLMServiceChunk()
                 delta = chunk.choices[0].delta
                 # print("chunk:", delta)
                 if chunk.choices[0].finish_reason is not None:
                     print("finished,finish_reason:" + chunk.choices[0].finish_reason)
                     response_chunk.finish_reason = chunk.choices[0].finish_reason
+                    if complete_chunk is not None:
+                        complete_chunk.finish_reason = response_chunk.finish_reason
+
                 elif (
                     hasattr(delta, "reasoning_content")
                     and delta.reasoning_content is not None
                     and len(delta.reasoning_content) > 0
                 ):
                     response_chunk.reasoning_content = delta.reasoning_content
+                    if complete_chunk is not None:
+                        complete_chunk.reasoning_content = (
+                            complete_chunk.reasoning_content or ""
+                        ) + delta.reasoning_content
+
                 elif (
                     hasattr(delta, "content")
                     and delta.content is not None
                     and len(delta.content) > 0
                 ):
                     response_chunk.content = delta.content
+                    if complete_chunk is not None:
+                        complete_chunk.content = (
+                            complete_chunk.content or ""
+                        ) + delta.content
                 else:
                     continue
                 yield response_chunk
         except GeneratorExit as e:
             print(f"GeneratorExit: {e}\n")
-            return None
+            raise  # 必须重新抛出异常
         finally:
             if response is not None:
                 self.close_api_connection(response)

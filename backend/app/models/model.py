@@ -9,7 +9,14 @@ class Model(ModelBase):
 
     id = db.Column(db.String, primary_key=True, default=lambda: str(ulid.new()))
     name = db.Column(db.String, nullable=True)
-    provider_id = db.Column(db.String)
+    # provider_id = db.Column(db.String)
+    provider_id = db.Column(
+        db.String,
+        db.ForeignKey(
+            "model_provider.id", ondelete="CASCADE", name="fk_model_provider_id"
+        ),
+        index=True,
+    )
     model_name = db.Column(db.String)
     model_type = db.Column(db.String)
     max_tokens = db.Column(db.Integer, nullable=True)
@@ -21,3 +28,5 @@ class Model(ModelBase):
         default=db.func.now(),
         onupdate=db.func.now(),
     )
+
+    provider = db.relationship("ModelProvider", back_populates="models")
