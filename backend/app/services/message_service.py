@@ -14,16 +14,16 @@ class MessageService:
         self,
         session_id,
         start_message_id=None,
-        tail_message_id=None,
-        last_n_messages=None,
+        end_message_id=None,
+        limit=None,
         order_type="asc",
     ):
 
         return MessageRepo.get_messages(
             session_id,
             start_message_id,
-            tail_message_id,
-            last_n_messages,
+            end_message_id,
+            limit,
             order_type,
             with_files=True,
         )

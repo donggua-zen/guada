@@ -76,7 +76,7 @@ class SummaryService:
         )
 
     def conditionally_compress_history(
-        self, session: dict, character: dict, messages: list
+        self, session: dict, character: dict, context_messages: list
     ):
         HISTORY_THRESHOLD = 5
 
@@ -97,7 +97,7 @@ class SummaryService:
                 db.session.add(summary)
 
         chunks = chunking_messages(
-            messages=messages,
+            messages=context_messages,
             max_threshold=2000,
             safe_threshold=1000,
             chunk_size=1000,

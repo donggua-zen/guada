@@ -36,8 +36,27 @@ class _TransformersTokenizer(_Tokenizer):
             "app/tokenizer/" + _tokenizer_mapping[model]
         )
 
-    def count_tokens(self, text):
-        return len(self.tokenizer.encode(text))
+    def count_tokens(self, text: list[str] | str) -> int:
+        """
+        计算文本中的token数量
+
+        参数:
+            text: 可以是字符串列表或字符串，如果是列表则递归处理其中的文本内容
+
+        返回值:
+            int: 文本中token的总数量
+        """
+        total_tokens = 0
+        # 处理文本列表的情况，递归计算每个文本元素的token数
+        if isinstance(text, list):
+            for t in text:
+                if isinstance(t, dict):
+                    if t.get("type") == "text":
+                        total_tokens += self.count_tokens(t["text"])
+        # 处理单个字符串的情况，直接编码计算token数
+        elif isinstance(text, str):
+            total_tokens += len(self.tokenizer.encode(text))
+        return total_tokens
 
 
 class _OpenAITokenizer(_Tokenizer):
