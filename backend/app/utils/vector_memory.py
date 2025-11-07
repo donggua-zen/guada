@@ -252,9 +252,7 @@ class _VectorMemory:
         try:
             # 获取会话的所有记忆ID
             session_memories = self.collection.get(
-                where={
-                    "$or": [{"message_id_1": message_id}, {"message_id_2": message_id}]
-                },
+                where={"message_id": message_id},
                 include=["metadatas"],
             )
 

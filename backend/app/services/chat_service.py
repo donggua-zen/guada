@@ -12,8 +12,10 @@
 
 import datetime
 import html
+import traceback
 from typing import Generator, List, Optional, Tuple, Union
 
+from app.repositories.message_repository import MessageRepository
 from app.repositories.model_repository import ModelRepository
 from app.repositories.session_repository import SessionRepository
 from app.services.domain.memory_strategy import MemoryStrategy
@@ -52,7 +54,7 @@ class ChatService:
         # 使用换行符连接所有部分
         return "\n".join(system_prompt_parts)
 
-    def _construct_context_message(self, prompts, messages, merge=False):
+    def _construct_context_message(self, prompts, conversation_messages, merge=False):
         """
         根据角色和消息构造上下文消息列表。
 
@@ -65,7 +67,7 @@ class ChatService:
             list: 构造后的上下文消息列表，每个消息是一个字典，包含 "role" 和 "content" 两个键。
         """
         system_prompt = self._construct_system_prompt(
-            prompts, [msg for msg in messages if msg["role"] == "system"]
+            prompts, [msg for msg in conversation_messages if msg["role"] == "system"]
         )
 
         # 注释掉调试输出，防止敏感信息泄漏
@@ -79,98 +81,124 @@ class ChatService:
         #         print(f"{msg['role']}: {msg['content']}")
         # print("------------------------------------------------------------")
 
-        if merge:
-            if not messages:
-                raise ValueError("当 merge=True 时，messages 不得为空")
-
-            prompt = (
-                "<system_prompt> 你的设定\n"
-                "<history> 历史记录\n"
-                "<user_input> 用户最新输入\n"
-            )
-            escaped_system_prompt = html.escape(system_prompt)
-            prompt += f"<system_prompt>{escaped_system_prompt}</system_prompt>\n"
-            prompt += "<history>"
-            if len(messages) > 1:
-                history_lines = [
-                    f"<message role=\"{msg['role']}\">{html.escape(msg['content'])}</message>"
-                    for msg in messages[:-1]
-                ]
-                prompt += "\n".join(history_lines)
-            prompt += "</history>"
-            user_content = html.escape(messages[-1]["content"])
-            prompt += f"<user_input>{user_content}</user_input>"
-            context_messages = [{"role": "user", "content": prompt}]
-        else:
-            context_messages = [{"role": "system", "content": system_prompt}]
-
-        def gen_content(msg):
-            """
-            生成消息内容，如果包含文件则添加文件内容作为附件。
-
-            Args:
-                msg (dict): 包含 'content' 和可选 'files' 键的消息字典
-
-            Returns:
-                str or list: 消息内容字符串或包含文本和文件内容的列表
-            """
-            files = msg.get("files")
-            base_content = msg.get("content", "")
-
-            # 如果没有附加文件，直接返回原始内容
-            if not files:
-                return base_content
-
-            # 构建包含基础内容和文件内容的列表
-            content_parts = [
-                {
-                    "text": base_content,
-                    "type": "text",
-                }
-            ]
-
-            # 添加每个文件的内容
-            for i, file in enumerate(files):
-                # 确保 file 对象具有所需属性
-                file_name = file.get("file_name", "unknow")
-                file_content = file.get("content", "")
-
-                file_text = (
-                    f"\n\n<ATTACHMENT_FILE>\n"
-                    f"<FILE_INDEX>File {i}</FILE_INDEX>\n"
-                    f"<FILE_NAME>{file_name}</FILE_NAME>\n"
-                    f"<FILE_CONTENT>\n{file_content}\n</FILE_CONTENT>\n"
-                    f"</ATTACHMENT_FILE>\n"
-                )
-
-                content_parts.append(
-                    {
-                        "text": file_text,
-                        "type": "text",
-                    }
-                )
-
-            return content_parts
+        context_messages = [{"role": "system", "content": system_prompt}]
 
         context_messages.extend(
             [
-                {"role": msg["role"], "content": gen_content(msg)}
-                for msg in messages
+                {"role": msg["role"], "content": msg["content"]}
+                for msg in conversation_messages
                 if msg["role"] != "system"
             ]
         )
         return context_messages
 
-    def construct_context_message(self, session: dict, messages: list[dict]):
+    def construct_context_message(
+        self, session: dict, conversation_messages: list[dict]
+    ):
         context_messages = self._construct_context_message(
             {
                 "assistant_name": (session["settings"].get("assistant_name")),
                 "assistant_identity": (session["settings"].get("assistant_identity")),
                 "system_prompt": (session["settings"].get("system_prompt", "")),
             },
-            messages,
+            conversation_messages,
         )
         return context_messages
+
+    def _transform_content_structure(self, msg: dict):
+        """
+        生成消息内容，如果包含文件则添加文件内容作为附件。
+
+        Args:
+            msg (dict): 包含 'content' 和可选 'files' 键的消息字典
+
+        Returns:
+            str or list: 消息内容字符串或包含文本和文件内容的列表
+        """
+        files = msg.get("files")
+
+        # 如果没有附加文件，直接返回原始内容
+        if not files or msg["role"] != "user":
+            return msg
+
+        # 构建包含基础内容和文件内容的列表
+        content_parts = [
+            {
+                "text": msg.get("content", ""),
+                "type": "text",
+            }
+        ]
+
+        # 添加每个文件的内容
+        for i, file in enumerate(files):
+            # 确保 file 对象具有所需属性
+            file_name = file.get("file_name", "unknow")
+            file_content = file.get("content", "")
+
+            file_text = (
+                f"\n\n<ATTACHMENT_FILE>\n"
+                f"<FILE_INDEX>File {i}</FILE_INDEX>\n"
+                f"<FILE_NAME>{file_name}</FILE_NAME>\n"
+                f"<FILE_CONTENT>\n{file_content}\n</FILE_CONTENT>\n"
+                f"</ATTACHMENT_FILE>\n"
+            )
+
+            content_parts.append(
+                {
+                    "text": file_text,
+                    "type": "text",
+                }
+            )
+
+        return {**msg, "content": content_parts}
+
+    def _get_conversation_messages(
+        self, session: dict, user_message_id: str, strategy: MemoryStrategy
+    ):
+        """
+        获取对话消息列表，根据记忆策略处理消息
+
+        参数:
+            session (dict): 会话信息字典，包含会话ID等信息
+            user_message_id (str): 用户消息ID，作为消息获取的结束标识
+            strategy (MemoryStrategy): 记忆策略对象，用于控制消息获取和处理逻辑
+
+        返回:
+            list: 处理后的消息列表
+        """
+        while True:
+            args = {
+                "session_id": session["id"],
+                "start_message_id": None,
+                "end_message_id": None,
+                "include_start": None,
+                "include_end": None,
+                "offset": None,
+                "limit": None,
+                "order_type": "asc",
+                "with_files": True,
+            }
+            conditions = strategy.pre_process_memory(session, None)
+            if not conditions:  # 满足条件则跳出循环
+                break
+
+            args["limit"] = conditions.get("limit", None)
+            args["offset"] = conditions.get("offset", None)
+            args["with_files"] = conditions.get("with_files", True)
+            args["start_message_id"] = conditions.get("after_id", None)
+            args["end_message_id"] = user_message_id
+            args["include_start"] = conditions.get("include_start", False)
+            args["include_end"] = conditions.get("include_end", True)  # 包含用户消息
+            args["order_type"] = conditions.get("direction", "asc")
+
+            messages = MessageRepository.get_messages(**args)
+
+            conversation_messages = [
+                self._transform_content_structure(msg) for msg in messages
+            ]
+
+            strategy.process_memory(session, conversation_messages)
+        return strategy.get_messages()
 
     def completions(
         self, session_id, message_id
@@ -212,13 +240,16 @@ class ChatService:
                 },
             )
             strategy = self.get_memory_strategy(session)
-
-            messages = strategy.process_memory(session, current_message_id)
+            conversation_messages = self._get_conversation_messages(
+                session, user_message_id=current_message_id, strategy=strategy
+            )
             assistant_message = message_service.add_message(
                 session_id=session["id"],
                 role="assistant",
                 content="",
-                parent_id=messages[-1]["id"] if messages else None,
+                parent_id=(
+                    conversation_messages[-1]["id"] if conversation_messages else None
+                ),
                 reasoning_content="",
                 meta_data={},
             )
@@ -238,7 +269,9 @@ class ChatService:
             llm_service = LLMService(
                 model["provider"]["api_url"], model["provider"]["api_key"]
             )
-            context_messages = self.construct_context_message(session, messages)
+            context_messages = self.construct_context_message(
+                session, conversation_messages
+            )
             print(f"Using model: {model['model_name']}")
             yield {"message_id": assistant_message["id"]}
             generator = llm_service.generate_response(
@@ -265,6 +298,7 @@ class ChatService:
             return
         except Exception as e:
             print(f"Error: {e}")
+            traceback.print_exc()
             chunk = LLMServiceChunk()
             chunk.finish_reason = "error"
             chunk.error = str(e)
@@ -288,12 +322,13 @@ class ChatService:
                 )
 
                 # 使用策略处理对话后的记忆
-                user_message = messages[-1] if messages else None
+                user_message = (
+                    conversation_messages[-1] if conversation_messages else None
+                )
                 if user_message and strategy:
                     strategy.post_process_memory(
-                        session["id"],
-                        user_message=user_message,
-                        assistant_message=assistant_message,
+                        session,
+                        [user_message, assistant_message],
                     )
 
     def get_memory_strategy(self, session: dict) -> MemoryStrategy:
@@ -310,16 +345,16 @@ class ChatService:
             MemorylessStrategy,
             SlidingWindowStrategy,
             SummaryAugmentedSlidingWindowStrategy,
-            SlidingWindowWithRAGStrategy,
         )
 
-        memory_type = session.get("memory_type", "sliding_window")
+        memory_type = session["settings"]["memory_type"] or "sliding_window"
+
         if memory_type == "sliding_window":
             return SlidingWindowStrategy()
         elif memory_type == "summary_augmented_sliding_window":
             return SummaryAugmentedSlidingWindowStrategy()
-        elif memory_type == "sliding_window_with_rag":
-            return SlidingWindowWithRAGStrategy()
+        # elif memory_type == "sliding_window_with_rag":
+        #     return SlidingWindowWithRAGStrategy()
         else:
             return MemorylessStrategy()
 
@@ -327,50 +362,44 @@ class ChatService:
         from app.tokenizer.auto_tokenizer import get_tokenizer
 
         session = SessionRepository.get_session_by_id(session_id)
-
         if session is None:
             raise ValueError("Invalid session id")
+
         strategy = self.get_memory_strategy(session)
 
         settings = session["settings"]
         model = ModelRepository.get_model(model_id=settings["model_id"])
 
-        active_messages = strategy.process_memory(session, current_message_id=None)
+        conversation_messages = self._get_conversation_messages(
+            session, strategy=strategy, user_message_id=None
+        )
         tokenizer = get_tokenizer(model["model_name"])
 
         system_prompt_tokens = 0
         context_tokens = 0
         summary_tokens = 0
 
-        context_messages = self.construct_context_message(session, active_messages)
-
-        def count_tokens(content: Union[str | list[dict]]):
-            if isinstance(content, str):
-                return tokenizer.count_tokens(content)
-            else:
-                return sum(
-                    count_tokens(item["text"])
-                    for item in content
-                    if item["type"] == "text"
-                )
+        context_messages = self.construct_context_message(
+            session, conversation_messages
+        )
 
         for i, message in enumerate(context_messages):
             if message["role"] == "system":
                 if i == 0:  # 第一个系统提示语
-                    system_prompt_tokens += count_tokens(message["content"])
+                    system_prompt_tokens += tokenizer.count_tokens(message["content"])
                 else:  # 其他系统提示词一般是摘要和召回记录
-                    summary_tokens += count_tokens(message["content"])
+                    summary_tokens += tokenizer.count_tokens(message["content"])
             else:
-                context_tokens += count_tokens(message["content"])
+                context_tokens += tokenizer.count_tokens(message["content"])
 
-        max_memory_length = system_prompt_tokens + summary_tokens + context_tokens
-        # 简化写法：使用get方法设置默认值
-        max_memory_length = (
-            settings.get("max_memory_length", max_memory_length) or max_memory_length
+        max_memory_tokens = system_prompt_tokens + summary_tokens + context_tokens
+
+        max_memory_tokens = (
+            settings.get("max_memory_tokens", max_memory_tokens) or max_memory_tokens
         )
 
         return {
-            "max_memory_length": max_memory_length,
+            "max_memory_tokens": max_memory_tokens,
             "system_prompt_tokens": system_prompt_tokens,
             "summary_tokens": summary_tokens,
             "context_tokens": context_tokens,

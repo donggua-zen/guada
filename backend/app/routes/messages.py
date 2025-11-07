@@ -62,7 +62,7 @@ def add_message(session_id):
         session = session_service.get_session_by_id(session_id)
         # 获取会话最后一条消息
         last_message = message_service.get_messages(
-            session_id=session_id, order_type="desc", last_n_messages=1
+            session_id=session_id, order_type="desc", limit=1
         )
 
         # 添加新消息到完整历史
