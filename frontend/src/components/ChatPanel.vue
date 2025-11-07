@@ -225,7 +225,10 @@ const handleStreamResponse = async (streamingSessionId, userMessageId) => {
 
       if (response.error) {
         console.error("Error in stream:", response.error);
-        message.meta_data = response;
+        if (assistantMessageId)
+          message.meta_data = response;
+        else
+          notify.error("Error in stream", response.error);
         break;
       }
 

@@ -14,15 +14,21 @@
 
       <div class="message-card">
         <div v-if="showThinking" class="thinking-section" :class="{ 'thinking-expanded': isExpanded }">
-          <div class="thinking-header" @click="toggleExpand">
-            <i class="fas fa-lightbulb"></i>
-            <span>{{ thinkingLabel }}</span>
-            <i class="fas" :class="expandIcon"></i>
+          <div
+            class="inline-flex justify-between items-center text-sm text-gray-700 cursor-pointer font-medium bg-gray-50 rounded-lg py-1 px-2 transition-colors duration-200 mb-1"
+            @click="toggleExpand">
+            <div class="flex items-center inline-flex">
+              <i class="fas fa-lightbulb text-yellow-400 mr-2"></i>
+              <span class="text-gray-600">{{ thinkingLabel }}</span>
+            </div>
+            <i class="fa-angle-down fas transition-transform duration-300 ml-2"
+              :class="[isExpanded ? 'rotate-0' : '-rotate-90']"></i>
           </div>
-          <div class="thinking-content markdown-text" v-html="formattedReasoning"></div>
+          <div class="thinking-content transition-all duration-500 ease-in-out overflow-hidden text-gray-500"
+            :class="isExpanded ? 'max-h-500 opacity-100' : 'max-h-0 opacity-0'">
+            <div class="border-l-2 border-gray-200 pl-4 mb-2  markdown-text" v-html="formattedReasoning"></div>
+          </div>
         </div>
-
-
 
         <div class="message-text markdown-text" v-html="formattedContent"></div>
         <n-alert v-if="message.meta_data && message.meta_data.finish_reason == 'error'" title="API请求错误" type="error">
@@ -33,10 +39,11 @@
         </div>
       </div>
 
-      <div class="message-actions" :style="message.is_streaming ? 'opacity: 0;' : ''">
+      <div class="message-actions" :class="message.is_streaming ? 'opacity-0' : 'opacity-100'">
         <div v-for="action in availableActions" :key="action.name" class="message-action"
           @click="handleAction(action.name)">
-          <i :class="action.icon" alt="{{ action.text }}"></i>
+          <n-icon :component="action.icon" size="15"
+            class="text-gray-400 hover:text-blue-500 transition-colors duration-200" />
         </div>
       </div>
     </div>
@@ -48,7 +55,13 @@ import { computed, ref } from "vue";
 import { marked } from "marked";
 import { NAlert, NIcon } from "naive-ui";
 import Avatar from "./Avatar.vue";
-import { InsertDriveFileTwotone } from "@vicons/material";
+import {
+  InsertDriveFileTwotone,
+  EditTwotone,
+  DeleteTwotone,
+  ContentCopyTwotone,
+  ArrowDownwardTwotone
+} from "@vicons/material";
 import fileItem from "../components/FileItem.vue";
 
 const props = defineProps({
@@ -69,9 +82,6 @@ const messageClass = computed(() =>
 const avatarClass = computed(() =>
   isAssistant.value ? "assistant-avatar" : "user-avatar"
 );
-const avatarIcon = computed(() =>
-  isAssistant.value ? "fas fa-robot" : "fas fa-user"
-);
 
 const showThinking = computed(
   () => isAssistant.value && props.message.reasoning_content
@@ -79,10 +89,6 @@ const showThinking = computed(
 
 const thinkingLabel = ref("已深度思考");
 
-
-const expandIcon = computed(() =>
-  isExpanded.value ? "fa-angle-down" : "fa-angle-right"
-);
 
 const formattedText = ((text) => {
   return text;
@@ -98,15 +104,15 @@ const formattedReasoning = computed(() =>
 
 const availableActions = computed(() => {
   const baseActions = [
-    { name: "delete", icon: "fas fa-trash", text: "删除" },
-    { name: "edit", icon: "fas fa-edit", text: "编辑" },
-    { name: "copy", icon: "fas fa-copy", text: "复制" },
+    { name: "delete", icon: DeleteTwotone, text: "删除" },
+    { name: "edit", icon: EditTwotone, text: "编辑" },
+    { name: "copy", icon: ContentCopyTwotone, text: "复制" },
   ];
 
   if (!isAssistant.value && props.isLast) {
     baseActions.unshift({
       name: "regenerate",
-      icon: "fas fa-arrow-down",
+      icon: ArrowDownwardTwotone,
       text: "重答",
     });
   }
@@ -132,13 +138,11 @@ const startThinking = () => {
 const stopThinking = () => {
   console.log("stopThinking called");
   isThinking.value = false;
-  // isExpanded.value = false;
   thinkingLabel.value = "已深度思考";
 };
 
 defineExpose({ startThinking, stopThinking });
 const emit = defineEmits(["delete", "edit", "copy", "regenerate"]);
-
 
 // 格式化文件大小
 const formatFileSize = (bytes) => {
@@ -172,8 +176,6 @@ const formatFileSize = (bytes) => {
   align-self: flex-start;
 }
 
-
-
 /* 新增卡片式设计 */
 .message-card {
   line-height: 1.5;
@@ -185,20 +187,15 @@ const formatFileSize = (bytes) => {
 /* 用户消息气泡特定样式 */
 .user-message-container .message-card {
   margin-left: auto;
-  /* background: linear-gradient(135deg, #4a90e2, #3a7bc8); */
   background-color: var(--user-bubble-bg);
   color: var(--user-bubble-text-color);
   padding: 8px 12px;
   border-radius: 12px;
-  /* box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05); */
-  /* box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05), 0 1px 1px rgba(0, 0, 0, 0.05); */
   border: 1px solid var(--user-bubble-border-color);
-  /* width: 100%; */
 }
 
 /* AI消息气泡特定样式 */
 .assistant-message-container .message-card {
-  /* background: #ffffff; */
   background: var(--assitant-bubble-bg);
   color: var(--assitant-bubble-text-color);
   border: 1px solid var(--assistant-bubble-border-color);
@@ -213,23 +210,19 @@ const formatFileSize = (bytes) => {
   display: flex;
   flex-direction: column;
   position: relative;
-  /* 避免无法缩小 */
   min-width: 0;
 }
 
 /* 修复用户消息对齐问题 */
 .message.user-message-container {
   flex-direction: row-reverse;
-  /* align-self: flex-end; */
 }
 
 .message.assistant-message-container {
-  /* align-self: flex-start; */
   justify-content: flex-start;
 }
 
 .message.user-message-container .message-content {
-  /* align-items: flex-end; */
   align-items: flex-start;
 }
 
@@ -238,28 +231,14 @@ const formatFileSize = (bytes) => {
   width: 100%;
 }
 
-/* 添加消息操作按钮的默认隐藏和悬停显示样式 */
-.message-content .message-actions {
-  /* opacity: 0; */
-  /* visibility: hidden; */
-  transition:
-    opacity 0.3s ease,
-    visibility 0.3s ease;
-}
-
-.message-content:hover .message-actions {
-  opacity: 1;
-  visibility: visible;
-}
-
 .message-actions {
   display: flex;
   gap: 0;
-  /* 从15px缩短到8px */
   font-size: 14px;
   width: 100%;
   justify-content: flex-end;
   margin-top: 12px;
+  transition: opacity 0.3s ease;
 }
 
 .user-message-container .message-actions {
@@ -279,14 +258,11 @@ const formatFileSize = (bytes) => {
   vertical-align: middle;
 }
 
-
 .message-action {
-  color: #aaa;
   cursor: pointer;
   display: flex;
   align-items: center;
   gap: 4px;
-  transition: color 0.2s;
   padding: 5px 8px;
   border-radius: 4px;
   background: #efefef;
@@ -295,106 +271,14 @@ const formatFileSize = (bytes) => {
 }
 
 .message-action:hover {
-  color: #4a90e2;
   background-color: #f0f7ff;
 }
 
-.user-message-container .message-action:hover {
-  color: #4a90e2;
-  /* background-color: rgba(255, 255, 255, 0.2); */
-}
 
 .ai-meta {
   font-size: 12px;
   color: #999;
   margin-top: 8px;
-}
-
-/* 思考部分样式 */
-.thinking-section {
-  /* background-color: #f8f9fa; */
-  /* border-radius: 8px; */
-  /* padding: 0 12px 0; */
-  margin-bottom: 10px;
-  transition: all 0.3s ease;
-  overflow: hidden;
-  /* border: 1px solid #e9ecef; */
-
-}
-
-.thinking-hide {
-  display: none;
-}
-
-.thinking-content {
-  font-size: 15px;
-  color: var(--thinking-text-color);
-  line-height: 1.8;
-  /* white-space: pre-wrap; */
-  margin-top: 0;
-  padding-top: 0;
-  border-top: none;
-  opacity: 0;
-  transition: all 0.3s ease;
-  display: none;
-  max-width: 100%;
-  border-left: rgba(0, 0, 0, .08) 2px solid;
-  padding: 0 15px;
-}
-
-.thinking-expanded .thinking-content {
-  opacity: 1;
-  margin-top: 12px;
-  /* padding-top: 12px; */
-  /* border-top: 1px solid #e9ecef; */
-}
-
-.thinking-header {
-  /* display: flex; */
-  justify-content: space-between;
-  align-items: center;
-  font-size: 14px;
-  color: #495057;
-  cursor: pointer;
-  font-weight: 500;
-}
-
-.thinking-header:hover {
-  /* background-color: #f1f3f5; */
-}
-
-.thinking-header i:first-child {
-  font-size: 14px;
-  color: #ffd43b;
-  margin-right: 4px;
-}
-
-.thinking-header i:last-child {
-  color: #6c757d;
-  transition: transform 0.3s ease;
-  font-size: 14px;
-}
-
-.thinking-expanded .thinking-header i:last-child {
-  transform: rotate(0deg);
-}
-
-.thinking-header span {
-  flex: 1;
-  padding-left: 5px;
-  color: #666666;
-}
-
-.toggle-thinking {
-  background: none;
-  border: none;
-  color: #4a90e2;
-  cursor: pointer;
-  font-size: 14px;
-}
-
-.thinking-expanded .thinking-content {
-  display: block;
 }
 
 /* 加载动画 */
@@ -411,6 +295,7 @@ const formatFileSize = (bytes) => {
   animation: fa-spin 1s infinite linear;
 }
 </style>
+
 <style>
 .markdown-text p {
   margin-top: 0;
@@ -489,7 +374,6 @@ const formatFileSize = (bytes) => {
   border-radius: 50%;
 }
 
-
 .markdown-text code {
   background-color: #f6f8fa;
   border-radius: 3px;
@@ -507,9 +391,7 @@ const formatFileSize = (bytes) => {
   margin-bottom: 1em;
   border: 1px solid #dfe2e5;
   white-space: pre-wrap;
-  /* 或 pre-line */
   word-wrap: break-word;
-  /* 确保长单词不会溢出容器 */
 }
 
 .markdown-text pre code {
@@ -567,32 +449,8 @@ const formatFileSize = (bytes) => {
   font-style: italic;
 }
 </style>
+
 <style>
-/* 打字机字符动画 */
-/* .typewriter-char {
-  display: inline-block;
-  opacity: 0;
-  animation: typewriter 0.4s ease-out forwards;
-}
-
-@keyframes typewriter {
-  0% {
-    opacity: 0;
-    transform: translateY(5px) scale(0.8);
-  }
-
-  50% {
-    opacity: 0.6;
-    transform: translateY(0) scale(1.05);
-  }
-
-  100% {
-    opacity: 1;
-    transform: translateY(0) scale(1);
-  }
-} */
-
-/* 或者更简单的淡入效果 */
 .typewriter-char {
   opacity: 0;
   animation: charFadeIn 0.2s ease-in forwards;

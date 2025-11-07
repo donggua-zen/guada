@@ -128,7 +128,7 @@ const fetchTokenStatistics = async () => {
 
     // 返回模拟数据
     return {
-        maxTokens: response.max_memory_length,
+        maxTokens: response.max_memory_tokens,
         promptTokens: response.system_prompt_tokens,
         summaryTokens: response.summary_tokens,
         contextTokens: response.context_tokens,

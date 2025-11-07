@@ -100,7 +100,8 @@
 
                             <!-- Top P -->
                             <n-form-item label="Top P">
-                                <n-slider v-model.number:value="characterForm.model_top_p" :min="0" :max="1" :step="0.1" />
+                                <n-slider v-model.number:value="characterForm.model_top_p" :min="0" :max="1"
+                                    :step="0.1" />
                                 <n-input-number v-model:value="characterForm.model_top_p" :min="0" :max="1" :step="0.1"
                                     style="margin-left: 12px; width: 180px;" clearable />
                             </n-form-item>
@@ -128,16 +129,30 @@
                             </n-form-item>
 
                             <!-- 最大记忆长度 -->
+                            <n-form-item label="最大记忆tokens" path="max_memory_tokens">
+                                <n-input-number v-model:value="characterForm.max_memory_tokens" :min="0"
+                                    placeholder="留空默认" style="width: 150px;" clearable />
+                                <span style="margin-left: 8px; color: #999;">条消息</span>
+                            </n-form-item>
+
+                            <!-- 短期记忆长度 -->
+                            <n-form-item label="短期记忆tokens" path="short_term_memory_tokens">
+                                <n-input-number v-model:value="characterForm.short_term_memory_tokens" :min="0"
+                                    placeholder="留空默认" style="width: 150px;" clearable />
+                                <span style="margin-left: 8px; color: #999;">条消息</span>
+                            </n-form-item>
+
+                            <!-- 最大记忆长度 -->
                             <n-form-item label="最大记忆长度">
                                 <n-input-number v-model:value="characterForm.max_memory_length" :min="0" :max="10000"
-                                    placeholder="留空使用默认值" style="width: 200px;" clearable />
+                                    placeholder="留空默认" style="width: 150px;" clearable />
                                 <span style="margin-left: 8px; color: #999;">条消息</span>
                             </n-form-item>
 
                             <!-- 短期记忆长度 -->
                             <n-form-item label="短期记忆长度">
                                 <n-input-number v-model:value="characterForm.short_term_memory_length" :min="0"
-                                    :max="1000" placeholder="留空使用默认值" style="width: 200px;" clearable />
+                                    :max="1000" placeholder="留空默认" style="width: 150px;" clearable />
                                 <span style="margin-left: 8px; color: #999;">条消息</span>
                             </n-form-item>
                         </n-form>
@@ -284,6 +299,8 @@ const characterForm = reactive({
     model_temperature: '',
     model_top_p: '',
     model_frequency_penalty: '',
+    max_memory_tokens: '',
+    short_term_memory_tokens: '',
     max_memory_length: '',
     short_term_memory_length: ''
 })
@@ -312,11 +329,24 @@ const modelRules = {
             }
         },
     ],
+
 }
 
 const memoryRules = {
     memory_type: [
         { required: true, message: '请选择记忆类型', trigger: ['change'] },
+    ],
+    max_memory_tokens: [
+        { min: 256, message: '最大记忆长度最少为256', trigger: ['input', 'blur'] }
+    ],
+    short_term_memory_tokens: [
+        { min: 256, message: '短期记忆长度最少为256', trigger: ['input', 'blur'] }
+    ],
+    max_memory_length: [
+        { min: 1, max: 100000, message: '最大记忆长度在1-100000之间', trigger: ['input', 'blur'] }
+    ],
+    short_term_memory_length: [
+        { min: 1, max: 100000, message: '短期记忆长度在1-100000之间', trigger: ['input', 'blur'] }
     ]
 }
 
@@ -413,6 +443,8 @@ watch(() => props.data, (newVal) => {
     characterForm.model_frequency_penalty = newVal.settings?.model_frequency_penalty || '';
     characterForm.max_memory_length = newVal.settings?.max_memory_length || '';
     characterForm.short_term_memory_length = newVal.settings?.short_term_memory_length || '';
+    characterForm.max_memory_tokens = newVal.settings?.max_memory_tokens || '';
+    characterForm.short_term_memory_tokens = newVal.settings?.short_term_memory_tokens || '';
     // }
     //}
 
@@ -580,6 +612,8 @@ const handleSave = async () => {
                 'assistant_identity': characterForm.assistant_identity,
                 'system_prompt': characterForm.system_prompt,
                 'memory_type': characterForm.memory_type,
+                'max_memory_tokens': characterForm.max_memory_tokens,
+                'short_term_memory_tokens': characterForm.short_term_memory_tokens,
                 'max_memory_length': characterForm.max_memory_length,
                 'short_term_memory_length': characterForm.short_term_memory_length,
             }
