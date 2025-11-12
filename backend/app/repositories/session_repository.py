@@ -26,13 +26,7 @@ class SessionRepository:
     @staticmethod
     @smart_transaction_manager.execute_in_transaction
     def update_session(session_id, data: dict):
-        session = db.session.query(Session).filter(Session.id == session_id).first()
-        if session:
-            for key, value in data.items():
-                if hasattr(session, key):
-                    setattr(session, key, value)
-            return session.to_dict(flush=True)
-        raise None
+        return Session.query.filter(Session.id == session_id).update(data)
 
     @staticmethod
     def get_session_by_id(session_id):
