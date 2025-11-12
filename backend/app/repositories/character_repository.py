@@ -31,13 +31,7 @@ class CharacterRepository:
     @staticmethod
     @smart_transaction_manager.execute_in_transaction
     def update_character(id, data: dict):
-        character = db.session.query(Character).filter(Character.id == id).first()
-        if not character:
-            return None
-        for key, value in data.items():
-            if hasattr(character, key):
-                setattr(character, key, value)
-        return character.to_dict(flush=True)
+        return db.session.query(Character).filter(Character.id == id).update(data)
 
     @staticmethod
     @smart_transaction_manager.execute_in_transaction
