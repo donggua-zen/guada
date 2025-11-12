@@ -53,11 +53,12 @@ export const store = reactive({
         }
     },
 
-    updateMessage(sessionId, messageId, content) {
+    updateMessage(sessionId, messageId, newMessage) {
         const session = this.getSessionState(sessionId);
         const index = session.messages.findIndex(m => m.id === messageId);
         if (index !== -1) {
-            session.messages[index].content = content;
+            const message = session.messages[index];
+            session.messages[index] = { ...message, ...newMessage };
             session.lastUpdated = Date.now();
         }
     },
