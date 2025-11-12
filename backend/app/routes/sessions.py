@@ -120,3 +120,12 @@ def update_session(session_id):
         return jsonify({"success": True})
     except Exception as e:
         return jsonify({"success": False, "error": str(e)}), 500
+
+
+@sessions_bp.route("/v1/sessions/<session_id>/avatars", methods=["POST"])
+def upload_session_avatar(session_id):
+    try:
+        data = session_service.upload_avatar(session_id, request.files["avatar"])
+        return jsonify({"success": True, "data": data})
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
