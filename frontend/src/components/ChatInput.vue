@@ -265,7 +265,7 @@ watch(inputContent, (newVal) => {
     box-shadow: 0 2px 12px rgba(0, 0, 0, 0.1);
     transition: box-shadow 0.3s ease;
     min-height: 60px;
-    max-width: 800px;
+    max-width: 900px;
     width: 100%;
     border: 1px solid rgb(230, 232, 238);
 }
@@ -277,12 +277,11 @@ watch(inputContent, (newVal) => {
 .message-input {
     width: 100%;
     min-height: 24px;
-    max-height: 120px;
     border: none;
     resize: none;
     outline: none;
     font-size: 16px;
-    line-height: 1.5;
+    line-height: 1.8;
     padding: 0;
     background: transparent;
     /* color: #333; */

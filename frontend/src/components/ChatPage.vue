@@ -4,12 +4,17 @@
       @on-delete="handleDeleteSession" @on-update="handleRenameSession" @on-create="handleCreateSession" />
     <template v-if="sessions.length > 0">
       <div class="h-full flex-1 min-w-0">
-        <ChatPanel :session="currentSession" @update:session="handleUpdateSession" />
+        <ChatPanel v-model:session="currentSession" @openSettings="handleOpenSettings" />
       </div>
       <!-- <SettingsPanel :character="activeCharacter" :session="currentSession" @update-character="updateCharacter" /> -->
-      <div class="border-l border-gray-200" style="width: 340px;flex-shrink: 0;">
-        <CharacterSettingPanel :data="currentSession" @update:data="updateSession" />
-      </div>
+      <!-- <div class="border-l border-gray-200" style="width: 340px;flex-shrink: 0;"> -->
+        <n-drawer v-model:show="visible" width="380" placement="right" :mask-closable="false"
+          :auto-focus="false">
+          <n-drawer-content title="对话设置" closable>
+            <CharacterSettingPanel :data="currentSession" @update:data="updateSession" :simple="true" />
+          </n-drawer-content>
+        </n-drawer>
+      <!-- </div> -->
     </template>
     <template v-else>
       <div class="flex-1 flex items-center justify-center">
@@ -27,15 +32,14 @@
 </template>
 
 <script setup>
-import { ref, computed, watch, nextTick, onMounted, onBeforeUpdate, reactive } from "vue";
+import { ref, onMounted, watch } from "vue";
 import { apiService } from "../services/ApiService";
 
-import { useRouter, useRoute } from 'vue-router'
+import { useRouter } from 'vue-router'
 import SessionsList from "./SessionsList.vue";
 import CharacterSettingPanel from "./CharacterSettingPanel.vue";
 import ChatPanel from "./ChatPanel.vue";
-import { NEmpty, NButton } from "naive-ui";
-import { store } from "../store/store.js";
+import { NEmpty,NDrawer,NDrawerContent } from "naive-ui";
 import { usePopup } from "@/composables/usePopup";
 
 const { confirm, editText, toast, prompt } = usePopup();;
@@ -48,15 +52,12 @@ const currentSession = ref({
 
 const sessionsListRef = ref(null);
 const sessions = ref([]);
-
+const visible = ref(false);
 
 
 const fetchSession = async (sessionId) => {
   const session = await apiService.fetchSession(sessionId);
   currentSession.value = session;
-
-  // const character = await apiService.fetchCharacter(session["character_id"]);
-  // activeCharacter.value = character;
 };
 
 const selectSession = async (session) => {
@@ -68,26 +69,33 @@ const updateSessionById = async (sessionId, data) => {
   console.log('更新对话时间:', sessionId);
   const session = sessions.value.find(session => session.id === sessionId);
   if (session) {
-    if ('title' in data) session.title = data.title;
-    if ('avatar_url' in data) session.avatar_url = data.avatar_url;
-    session.updated_at = new Date().toISOString();
+    // 定义需要更新的字段
+    const allowedFields = ['title', 'avatar_url', 'last_message', 'created_at', 'updated_at'];
+    const updateData = {};
+
+    // 只复制允许的字段
+    allowedFields.forEach(field => {
+      if (field in data) {
+        updateData[field] = data[field];
+      }
+    });
+
+    // 批量更新
+    Object.assign(session, updateData);
   }
 }
 
-const handleUpdateSession = async (data) => {
-  updateSessionById(data.id, data);
-}
-
-
+watch(() => currentSession, (session) => {
+  console.log('currentSession:', session);
+  updateSessionById(session.value.id, session.value);
+}, { deep: true });
 
 const updateSession = async (data) => {
-  console.log("handleSave called");
-  console.log(data);
   let session = null;
   try {
     // console.log(characterForm);
     if (currentSession.value && currentSession.value.id) {
-      const response = await apiService.updateSession(currentSession.value.id, data);
+      await apiService.updateSession(currentSession.value.id, data);
       session = { id: currentSession.value.id, ...data };
       // toast.success("角色更新成功");
 
@@ -96,15 +104,17 @@ const updateSession = async (data) => {
         session.avatar_url = response.url + "?v=" + new Date().getTime();
       }
       currentSession.value = session;
-      updateSessionById(session.id, session);
+      // updateSessionById(session.id, session);
     }
-    toast.success("角色更新成功");
+    toast.success("设置成功");
   } catch (error) {
-    toast.error("角色保存失败");
+    toast.error("设置失败");
   }
 };
 
-
+const handleOpenSettings = () => {
+  visible.value = true;
+}
 
 const handleCreateSession = async () => {
   try {
