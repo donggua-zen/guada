@@ -1,5 +1,7 @@
 from flask_sqlalchemy import SQLAlchemy
 
+from app.utils import to_utc8_isoformat
+
 db = SQLAlchemy()
 
 
@@ -17,6 +19,9 @@ def init_db(app):
             traceback.print_exc()
             # 可以选择重新抛出异常或处理
             raise
+
+
+
 
 
 class ModelBase(db.Model):
@@ -37,7 +42,7 @@ class ModelBase(db.Model):
                     value = getattr(self, column.name)
                     if value is None:
                         continue
-                    result[column.name] = value.isoformat()
+                    result[column.name] = to_utc8_isoformat(value)
                 else:
                     result[column.name] = getattr(self, column.name)
         # 处理包含的关系字段

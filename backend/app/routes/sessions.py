@@ -54,13 +54,9 @@ def create_session():
 
 @sessions_bp.route("/v1/sessions/<session_id>", methods=["DELETE"])
 def delete_session(session_id):
-    summary_service = SummaryService()
-    message_service = MessageService()
     try:
         session_service.delete_session(session_id)
-        message_service.delete_messages_by_session_id(session_id)
         vector_memory.delete_session_memories(session_id)
-        summary_service.delete_summary_by_session_id(session_id)
         return jsonify({"success": True})
     except Exception as e:
         return jsonify({"success": False, "error": str(e)}), 500
@@ -101,9 +97,8 @@ def update_session(session_id):
             "memory_type",
             "max_memory_length",
             "short_term_memory_length",
-            'max_memory_tokens',
-            'short_term_memory_tokens'
-            "model_top_p",
+            "max_memory_tokens",
+            "short_term_memory_tokens" "model_top_p",
             "model_temperature",
             "model_id",
         ]

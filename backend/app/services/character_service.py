@@ -1,9 +1,5 @@
 import os
-from pathlib import Path
-import ulid
 
-from app.models import db, Character
-from app.models.db_transaction import smart_transaction_manager
 from app.repositories.character_repository import CharacterRepository as CharacterRepo
 
 
@@ -59,7 +55,7 @@ class CharacterService:
         character = CharacterRepo.create_character(data_filtered)
 
         # 返回完整数据
-        return character.to_dict()
+        return character
 
     def update_character(self, id, data: dict):
 

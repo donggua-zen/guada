@@ -110,13 +110,18 @@ class ChatService:
         生成消息内容，如果包含文件则添加文件内容作为附件。
 
         Args:
-            msg (dict): 包含 'content' 和可选 'files' 键的消息字典
+            msg (dict): 包含 'contents' 和可选 'files' 键的消息字典
 
         Returns:
             str or list: 消息内容字符串或包含文本和文件内容的列表
         """
-        files = msg.get("files")
 
+        msg["content"] = [
+            content["content"] for content in msg["contents"] if content["is_current"]
+        ][0] or ""
+
+        # msg.pop("contents")
+        files = msg.get("files")
         # 如果没有附加文件，直接返回原始内容
         if not files or msg["role"] != "user":
             return msg
@@ -177,6 +182,8 @@ class ChatService:
                 "limit": None,
                 "order_type": "asc",
                 "with_files": True,
+                "with_contents": True,
+                "only_current_content": True,
             }
             conditions = strategy.pre_process_memory(session, None)
             if not conditions:  # 满足条件则跳出循环
@@ -200,8 +207,46 @@ class ChatService:
             strategy.process_memory(session, conversation_messages)
         return strategy.get_messages()
 
+    def _add_assistant_message(
+        self,
+        session: dict,
+        regeneration_mode: str = "overwrite",
+        assistant_message_id: Optional[str] = None,
+        conversation_messages: Optional[list[dict]] = None,
+    ) -> dict:
+
+        if regeneration_mode == "multi_version":
+            if not assistant_message_id:
+                raise ValueError("assistant_message_id is required")
+            return message_service.add_message_content(
+                message_id=assistant_message_id,
+                content="",
+                reasoning_content="",
+                meta_data={},
+            )
+        else:
+            if regeneration_mode == "overwrite":
+                try:
+                    message_service.delete_message(message_id=assistant_message_id)
+                except:
+                    pass
+            return message_service.add_message(
+                session_id=session["id"],
+                role="assistant",
+                content="",
+                parent_id=(
+                    conversation_messages[-1]["id"] if conversation_messages else None
+                ),
+                reasoning_content="",
+                meta_data={},
+            )
+
     def completions(
-        self, session_id, message_id
+        self,
+        session_id: str,
+        message_id: str,
+        regeneration_mode: str = "overwrite",
+        assistant_message_id: str = None,
     ) -> Generator[LLMServiceChunk, None, None]:
         """
         根据会话ID和消息ID生成模型回复的流式响应。
@@ -221,7 +266,6 @@ class ChatService:
         current_message_id = message_id
         model_service = ModelService()
         assistant_message = None
-        messages = []
         complete_chunk = LLMServiceChunk()
         generator = None
         try:
@@ -243,16 +287,25 @@ class ChatService:
             conversation_messages = self._get_conversation_messages(
                 session, user_message_id=current_message_id, strategy=strategy
             )
-            assistant_message = message_service.add_message(
-                session_id=session["id"],
-                role="assistant",
-                content="",
-                parent_id=(
-                    conversation_messages[-1]["id"] if conversation_messages else None
-                ),
-                reasoning_content="",
-                meta_data={},
+
+            assistant_message = self._add_assistant_message(
+                session,
+                regeneration_mode=regeneration_mode,
+                assistant_message_id=assistant_message_id,
+                conversation_messages=conversation_messages,
             )
+
+            assistant_message_current_content = next(
+                (
+                    content
+                    for content in assistant_message["contents"]
+                    if content["is_current"]
+                ),
+                {},
+            )
+
+            if not assistant_message_current_content:
+                raise ValueError("Assistant message content missing")
 
             model = model_service.get_model(session["settings"]["model_id"])
             if model is None:
@@ -273,7 +326,10 @@ class ChatService:
                 session, conversation_messages
             )
             print(f"Using model: {model['model_name']}")
-            yield {"message_id": assistant_message["id"]}
+            yield {
+                "message_id": assistant_message["id"],
+                "content_id": assistant_message_current_content["id"],
+            }
             generator = llm_service.generate_response(
                 model["model_name"],
                 context_messages,

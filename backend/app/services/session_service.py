@@ -69,8 +69,9 @@ class SessionService:
         return session
 
     def get_all_sessions(self) -> list[dict]:
-        sessions = SessionRepo.get_all_sessions()
-        return sessions
+        # sessions = SessionRepo.get_all_sessions()
+        # return sessions
+        return SessionRepo.get_sessions_with_last_message_v2()
 
     def add_new_session(self, data: dict):
 
