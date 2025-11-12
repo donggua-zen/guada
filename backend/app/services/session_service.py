@@ -8,6 +8,8 @@ from app.services.upload_service import UploadService
 
 class SessionService:
     def __init__(self):
+        # 初始化UploadService实例，避免重复创建
+        self.upload_service = UploadService()
         pass
 
     def __del__(self):
@@ -42,25 +44,13 @@ class SessionService:
                     }
                 )
 
+            # 使用实例变量避免重复创建
+            avatar_path = (
+                self.upload_service.duplicate_avatar(character["avatar_url"])
+                or character["avatar_url"]
+            )
+            data["avatar_url"] = avatar_path
             session = self.add_new_session(data)
-            # 更安全的头像拷贝方式
-            avatar_path = character["avatar_url"]
-            if avatar_path.startswith("/static/avatars/"):
-                source_file_path = os.path.join("app", avatar_path.lstrip("/"))
-                if os.path.exists(source_file_path):
-                    target_file_path = os.path.join(
-                        "app", "static", "avatars", f"session-{session['id']}.jpg"
-                    )
-                    try:
-                        shutil.copy2(source_file_path, target_file_path)
-                        self.update_session(
-                            session["id"],
-                            {
-                                "avatar_url": f"/static/avatars/session-{session['id']}.jpg"
-                            },
-                        )
-                    except IOError as e:
-                        print(f"Failed to copy avatar: {e}")
         else:
             session = self.add_new_session(data)
 
@@ -116,10 +106,22 @@ class SessionService:
         return session
 
     def update_session(self, session_id, data: dict):
-        session = SessionRepo.update_session(session_id, data)
-        if session:
-            return session
-        raise ValueError(f"Session with ID {session_id} does not exist.")
+        session = self.get_session_by_id(session_id)
+        if not session:
+            raise ValueError(f"Session with ID {session_id} does not exist.")
+
+        SessionRepo.update_session(session_id, data)
+
+        if "avatar_url" in data and data["avatar_url"] != session["avatar_url"]:
+            old_avatar_url = session["avatar_url"]
+            old_avatar_path = self.upload_service.convert_webpath_to_filepath(
+                old_avatar_url
+            )
+            if old_avatar_url:
+                os.remove(old_avatar_path)
+
+        session.update(data)
+        return session
 
     def get_session_by_id(self, session_id):
         session = SessionRepo.get_session_by_id(session_id)
@@ -145,9 +147,9 @@ class SessionService:
 
     def upload_avatar(self, session_id, avatar_file):
         session = self.get_session_by_id(session_id)
-        uploadService = UploadService()
-        avatar_url = uploadService.upload_avatar(avatar_file, size=(128, 128))
+        # 使用实例变量避免重复创建
+        avatar_url = self.upload_service.upload_avatar(avatar_file, size=(128, 128))
         old_avatar_url = session["avatar_url"]
         self.update_session(session_id, {"avatar_url": avatar_url})
-        os.remove(uploadService.convert_webpath_to_filepath(old_avatar_url))
+        os.remove(self.upload_service.convert_webpath_to_filepath(old_avatar_url))
         return {"url": avatar_url}
