@@ -200,11 +200,11 @@ class ApiService {
    * @param {AbortController} abortController - 取消控制器
    * @yields {Object} 返回流式响应数据
    */
-  async *fetchResponse(sessionId, messageId, enableReasoning = false, abortController = null) {
+  async *chat(sessionId, messageId, regeneration_mode = null, assistant_message_id = null, enableReasoning = false,) {
     // this.currentAbortController = new AbortController();
     try {
       this.cancelResponse(sessionId);
-      const controller = abortController || new AbortController();
+      const controller = new AbortController();
       this.abortControllerMap.set(sessionId, controller);
       const response = await fetch(`${this.baseURL}/sessions/${sessionId}/messages/stream`, {
         method: 'POST',
@@ -212,7 +212,9 @@ class ApiService {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          message: { role: 'user', message_id: messageId },
+          message_id: messageId,
+          assistant_message_id: assistant_message_id,
+          regeneration_mode: regeneration_mode,
           stream: true,
           enable_reasoning: enableReasoning,
         }),
@@ -372,6 +374,14 @@ class ApiService {
     return await this._request(`/messages/${messageId}`, {
       method: 'PUT',
       body: { content },
+    });
+  }
+
+
+  async setMessageCurrentContent(messageId, contentId) {
+    return await this._request(`/message-content/${contentId}/active`, {
+      method: 'PUT',
+      body: { message_id: messageId },
     });
   }
 
