@@ -26,7 +26,7 @@ class CharacterRepository:
         db.session.add(character)
 
         # 返回完整数据
-        return character.to_dict()
+        return character.to_dict(flush=True)
 
     @staticmethod
     @smart_transaction_manager.execute_in_transaction

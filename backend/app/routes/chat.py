@@ -1,4 +1,3 @@
-import datetime
 import json
 import traceback
 from flask import Blueprint, Response, jsonify, request
@@ -21,12 +20,16 @@ chat_bp = Blueprint("chat", __name__)
 def stream_generator(
     session_id: str,
     message_id: str,
+    regeneration_mode: str,
+    assistant_message_id: str = None,
 ):
     generator = None
     try:
         generator = chat_service.completions(
             session_id,
             message_id,
+            regeneration_mode=regeneration_mode,
+            assistant_message_id=assistant_message_id,
         )
         print("Generator started.")
         for chunk in generator:
@@ -49,10 +52,28 @@ def stream_generator(
 def chat_completions(session_id):
     try:
         data = request.json
-        message_id = data["message"]["message_id"]
+        message_id = data.get("message_id")
+        regeneration_mode = data.get("regeneration_mode", "overwrite") or "overwrite"
+        assistant_message_id = data.get("assistant_message_id")
+
+        if regeneration_mode not in ["overwrite", "multi_version", "append"]:
+            return (
+                jsonify(
+                    {
+                        "success": False,
+                        "error": "regeneration_mode must be one of overwrite, multi_version, append.",
+                    }
+                ),
+                400,
+            )
 
         return Response(
-            stream_generator(session_id, message_id),
+            stream_generator(
+                session_id,
+                message_id,
+                regeneration_mode=regeneration_mode,
+                assistant_message_id=assistant_message_id,
+            ),
             mimetype="text/event-stream",
         )
     except Exception as e:

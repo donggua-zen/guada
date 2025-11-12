@@ -38,7 +38,8 @@ class Config:
     # SQLite 特定的性能优化
     SQLITE_JOURNAL_MODE = "WAL"  # 写前日志模式，提高并发
     SQLITE_SYNCHRONOUS = "NORMAL"  # 同步模式平衡性能和安全
-
+    # 设置应用时区
+    TIMEZONE = 'Asia/Shanghai'
 
 class DevelopmentConfig(Config):
     """开发环境配置"""

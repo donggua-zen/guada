@@ -1,4 +1,5 @@
 from flask import Blueprint, Response, jsonify, request
+import app
 from app.services import SummaryService
 from app.services import MessageService
 from app.services import SessionService
@@ -18,11 +19,13 @@ def get_messages(session_id):
         messages = message_service.get_messages(session_id=session_id)
 
         for message in messages:
-            for file in message["files"]:
-                file.pop("content")
+            if "files" in message:
+                for file in message["files"]:
+                    file.pop("content")
 
         return jsonify({"success": True, "data": {"items": messages}})
     except Exception as e:
+        print(e)
         return jsonify({"success": False, "error": str(e)}), 500
 
 
@@ -59,21 +62,23 @@ def update_message(message_id):
 @messages_bp.route("/v1/sessions/<session_id>/messages", methods=["POST"])
 def add_message(session_id):
     try:
-        session = session_service.get_session_by_id(session_id)
-        # 获取会话最后一条消息
-        last_message = message_service.get_messages(
-            session_id=session_id, order_type="desc", limit=1
-        )
-
         # 添加新消息到完整历史
         message = message_service.add_message(
             session_id=session_id,
             role="user",
             content=request.json.get("content", ""),
-            parent_id=last_message[0]["id"] if last_message else None,
-            token_count=0,
+            parent_id=None,
         )
 
         return jsonify({"success": True, "data": message})
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@messages_bp.route("/v1/message-content/<content_id>/active", methods=["PUT"])
+def update_message_active_content(content_id):
+    try:
+        message_service.set_message_current_content(content_id)
+        return jsonify({"success": True})
     except Exception as e:
         return jsonify({"success": False, "error": str(e)}), 500
