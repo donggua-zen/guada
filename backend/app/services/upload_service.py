@@ -1,4 +1,5 @@
 import os
+import shutil
 import uuid
 
 from app.utils import convert_image_to_jpeg
@@ -43,3 +44,18 @@ class UploadService:
     def convert_webpath_to_filepath(self, web_path):
         file_path = os.path.join("app", web_path)
         return file_path
+
+    def duplicate_avatar(self, avatar_path):
+        if avatar_path.startswith("/static/avatars/"):
+            source_file_path = self.convert_webpath_to_filepath(avatar_path)
+            if os.path.exists(source_file_path):
+                target_web_path = os.path.join(
+                    "static", "avatars", f"{uuid.uuid4().hex}.jpg"
+                )
+                target_file_path = self.convert_webpath_to_filepath(target_web_path)
+                try:
+                    shutil.copy2(source_file_path, target_file_path)
+                    return target_web_path
+                except IOError as e:
+                    print(f"Failed to copy avatar: {e}")
+        return None

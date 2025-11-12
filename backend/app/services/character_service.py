@@ -6,6 +6,8 @@ from app.services.upload_service import UploadService
 
 class CharacterService:
     def __init__(self):
+        # 初始化UploadService实例，避免重复创建
+        self.upload_service = UploadService()
         pass
 
     def __del__(self):
@@ -94,10 +96,19 @@ class CharacterService:
                 if field in data["settings"]:
                     settings[field] = data["settings"][field]
             data_filtered["settings"] = settings
-
-        character = CharacterRepo.update_character(id, data_filtered)
+        character = self.get_character_by_id(id)
         if not character:
             raise ValueError(f"Character with ID {id} does not exist.")
+        CharacterRepo.update_character(id, data_filtered)
+        if (
+            "avatar_url" in data_filtered
+            and data["avatar_url"] != character["avatar_url"]
+        ):
+            # 使用实例变量避免重复创建
+            os.remove(
+                self.upload_service.convert_webpath_to_filepath(character["avatar_url"])
+            )
+        character.update(data_filtered)
         return character
 
     def delete_character(self, id):
@@ -116,9 +127,13 @@ class CharacterService:
 
     def upload_avatar(self, character_id, avatar_file):
         character = self.get_character_by_id(character_id)
-        uploadService = UploadService()
-        avatar_url = uploadService.upload_avatar(avatar_file, size=(128, 128))
+        # 使用实例变量避免重复创建
+        avatar_url = self.upload_service.upload_avatar(avatar_file, size=(128, 128))
         old_avatar_url = character["avatar_url"]
         self.update_character(character_id, {"avatar_url": avatar_url})
-        os.remove(uploadService.convert_webpath_to_filepath(old_avatar_url))
+        old_avatar_path = self.upload_service.convert_webpath_to_filepath(
+            old_avatar_url
+        )
+        if old_avatar_url:
+            os.remove(old_avatar_path)
         return {"url": avatar_url}
