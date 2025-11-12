@@ -74,7 +74,7 @@ def create_character():
 @characters_bp.route("/v1/characters/<character_id>", methods=["DELETE"])
 def delete_character(character_id):
     try:
-        character_service.delete_character(character_id)    
+        character_service.delete_character(character_id)
         return jsonify({"success": True})
     except Exception as e:
         return jsonify({"success": False, "error": str(e)}), 500
@@ -98,5 +98,14 @@ def get_character(character_id):
     try:
         character = character_service.get_character_by_id(character_id)
         return jsonify({"success": True, "data": character})
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@characters_bp.route("/v1/characters/<character_id>/avatars", methods=["POST"])
+def upload_character_avatar(character_id):
+    try:
+        data = character_service.upload_avatar(character_id, request.files["avatar"])
+        return jsonify({"success": True, "data": data})
     except Exception as e:
         return jsonify({"success": False, "error": str(e)}), 500

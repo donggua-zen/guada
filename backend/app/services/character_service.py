@@ -1,6 +1,7 @@
 import os
 
 from app.repositories.character_repository import CharacterRepository as CharacterRepo
+from app.services.upload_service import UploadService
 
 
 class CharacterService:
@@ -112,3 +113,12 @@ class CharacterService:
         if character:
             return character
         raise ValueError(f"Character with ID {id} does not exist.")
+
+    def upload_avatar(self, character_id, avatar_file):
+        character = self.get_character_by_id(character_id)
+        uploadService = UploadService()
+        avatar_url = uploadService.upload_avatar(avatar_file, size=(128, 128))
+        old_avatar_url = character["avatar_url"]
+        self.update_character(character_id, {"avatar_url": avatar_url})
+        os.remove(uploadService.convert_webpath_to_filepath(old_avatar_url))
+        return {"url": avatar_url}

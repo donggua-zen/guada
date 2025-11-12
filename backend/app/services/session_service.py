@@ -3,6 +3,7 @@ import os
 import shutil
 from app.repositories.character_repository import CharacterRepository
 from app.repositories.session_repository import SessionRepository as SessionRepo
+from app.services.upload_service import UploadService
 
 
 class SessionService:
@@ -141,3 +142,12 @@ class SessionService:
 
     def get_session_by_id(self, session_id):
         return SessionRepo.get_session_by_id(session_id)
+
+    def upload_avatar(self, session_id, avatar_file):
+        session = self.get_session_by_id(session_id)
+        uploadService = UploadService()
+        avatar_url = uploadService.upload_avatar(avatar_file, size=(128, 128))
+        old_avatar_url = session["avatar_url"]
+        self.update_session(session_id, {"avatar_url": avatar_url})
+        os.remove(uploadService.convert_webpath_to_filepath(old_avatar_url))
+        return {"url": avatar_url}
