@@ -1,9 +1,9 @@
 <template>
     <div class="flex flex-col h-full">
-        <div class="settings-header" v-if="!isCharacterMode">
+        <div class="settings-header" v-if="!isSimpleStyle">
             <h2>智能体设置</h2>
         </div>
-        <div class="flex-1" :class="{ 'p-3': !isCharacterMode }">
+        <div class="flex-1" :class="{ 'p-3': !isSimpleStyle }">
             <n-tabs type="segment" ref="tabsInstRef" v-model:value="tabsValue">
                 <!-- 基础设置 -->
                 <n-tab-pane name="basic" tab="基础" display-directive="show">
@@ -79,7 +79,7 @@
                 </n-tab-pane>
 
                 <!-- 模型设置 -->
-                <n-tab-pane name="model" tab="模型" v-if="!isCharacterMode || true" display-directive="show">
+                <n-tab-pane name="model" tab="模型" v-if="!isSimpleStyle || true" display-directive="show">
                     <div class="py-5">
                         <n-form ref="modelFormRef" :model="characterForm" :rules="modelRules" label-placement="top"
                             label-width="80px" size="large">
@@ -211,12 +211,9 @@ import {
 import { Cropper } from 'vue-advanced-cropper'
 import 'vue-advanced-cropper/dist/style.css'
 import {
-    UserOutlined,
     UploadOutlined,
     DeleteOutlined,
-    SaveOutlined,
-    CloseOutlined
-} from '@vicons/antd'
+    SaveOutlined} from '@vicons/antd'
 
 import { apiService } from '../services/ApiService'
 import { required } from '@vuelidate/validators'
@@ -260,7 +257,7 @@ const props = defineProps({
 const emit = defineEmits(['update:data', 'saved'])
 
 // 响应式数据
-const isCharacterMode = ref(false)
+const isSimpleStyle = ref(false)
 const loading = ref(false)
 const showCropModal = ref(false)
 const cropImageSrc = ref('')
@@ -315,8 +312,7 @@ const basicRules = {
 
 const promptRules = {
     system_prompt: [
-        { required: true, message: '请输入详细设定', trigger: ['input', 'blur'] },
-        { min: 2, max: 4000, message: '详细设定长度在2-4000个字符之间', trigger: ['input', 'blur'] }
+        { min: 2, max: 8000, message: '详细设定长度在8000个字符之间', trigger: ['input', 'blur'] }
     ]
 }
 
@@ -415,7 +411,7 @@ const modelOptions = computed(() => {
 
 // 监听props.show变化
 watch(() => props.simple, (newVal) => {
-    isCharacterMode.value = newVal;
+    isSimpleStyle.value = newVal;
     console.log("style:" + newVal);
 }, { immediate: true })
 
@@ -437,7 +433,7 @@ watch(() => props.data, (newVal) => {
     characterForm.system_prompt = newVal.settings?.system_prompt || '';
     characterForm.model_id = newVal.settings?.model_id || '';
     characterForm.memory_type = newVal.settings?.memory_type || 'sliding_window';
-    //if (!isCharacterMode.value) {
+    //if (!isSimpleStyle.value) {
     characterForm.model_temperature = newVal.settings?.model_temperature || '';
     characterForm.model_top_p = newVal.settings?.model_top_p || '';
     characterForm.model_frequency_penalty = newVal.settings?.model_frequency_penalty || '';
@@ -465,7 +461,7 @@ const loadModels = async () => {
 
 // 生命周期
 onMounted(async () => {
-    // if (!isCharacterMode.value)
+    // if (!isSimpleStyle.value)
     loadModels();
 })
 
@@ -561,7 +557,7 @@ const handleSave = async () => {
             memoryFormRef.value?.validate(),
             modelFormRef.value?.validate(),
         ]
-        //if (!isCharacterMode.value) {
+        //if (!isSimpleStyle.value) {
         // formValidates.push(modelFormRef.value?.validate())
         //}
         const validationResults = await Promise.allSettled(formValidates)
@@ -618,7 +614,7 @@ const handleSave = async () => {
                 'short_term_memory_length': characterForm.short_term_memory_length,
             }
         }
-        //if (!isCharacterMode.value) {
+        //if (!isSimpleStyle.value) {
         finalData['settings']['model_id'] = characterForm.model_id;
         finalData['settings']['model_temperature'] = characterForm.model_temperature;
         finalData['settings']['model_top_p'] = characterForm.model_top_p;

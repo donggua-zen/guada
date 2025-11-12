@@ -2,7 +2,8 @@
     <img v-if="src" :src="avatarSrc" alt="Avatar" class="avatar-image w-full h-full"
         :style="{ borderRadius: props.round ? '50%' : '0' }"></img>
     <div v-else class="avatar-placeholder" :style="{ borderRadius: props.round ? '50%' : '0' }">
-        <UserOutlined />
+        <UserOutlined v-if="props.type === 'user'" />
+        <OpenAI v-else />
     </div>
 
 </template>
@@ -11,6 +12,7 @@ import { computed } from 'vue'
 import {
     UserOutlined,
 } from '@vicons/antd'
+import { OpenAI } from '@/components/icons'
 const props = defineProps({
     src: {
         type: String,
@@ -19,6 +21,10 @@ const props = defineProps({
     round: {
         type: Boolean,
         default: false
+    },
+    type: {
+        type: String,
+        default: 'assistant'
     }
 });
 // 添加时间戳避免缓存
@@ -44,11 +50,12 @@ const avatarSrc = computed(() => {
 .avatar-placeholder {
     width: 100%;
     height: 100%;
-    border: 2px dashed #d0d0d0;
+    /* border: 1px solid #d0d0d0; */
     display: flex;
     align-items: center;
     justify-content: center;
     background-color: #f5f5f5;
     color: #999;
+    overflow: hidden;
 }
 </style>

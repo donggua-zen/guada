@@ -1,8 +1,9 @@
 <template>
   <div class="message" :class="messageClass">
-    <div class="avatar" :class="avatarClass">
-      <Avatar v-if="!isAssistant" src="" :round="true"></Avatar>
-      <Avatar v-else :src="avatar" :round="true"></Avatar>
+    <div class="w-[45px] h-[45px] rounded-full flex items-center justify-center shrink-0 self-start"
+      :class="avatarClass">
+      <Avatar v-if="!isAssistant" src="" :round="true" type="user"></Avatar>
+      <Avatar v-else :src="avatar" :round="true" type="assistant"></Avatar>
     </div>
 
     <div class="message-content">
@@ -18,33 +19,56 @@
             class="inline-flex justify-between items-center text-sm text-gray-700 cursor-pointer font-medium bg-gray-50 rounded-lg py-1 px-2 transition-colors duration-200 mb-1"
             @click="toggleExpand">
             <div class="flex items-center inline-flex">
-              <i class="fas fa-lightbulb text-yellow-400 mr-2"></i>
+              <n-icon size="18" class="text-green-700 mr-1">
+                <Thinking />
+              </n-icon>
               <span class="text-gray-600">{{ thinkingLabel }}</span>
             </div>
             <i class="fa-angle-down fas transition-transform duration-300 ml-2"
               :class="[isExpanded ? 'rotate-0' : '-rotate-90']"></i>
           </div>
           <div class="thinking-content transition-all duration-500 ease-in-out overflow-hidden text-gray-500"
-            :class="isExpanded ? 'max-h-500 opacity-100' : 'max-h-0 opacity-0'">
-            <div class="border-l-2 border-gray-200 pl-4 mb-2  markdown-text" v-html="formattedReasoning"></div>
+            :class="isExpanded ? 'max-h-1500 opacity-100' : 'max-h-0 opacity-0'">
+            <div class="border-l-2 border-gray-200 pl-4 mb-2  markdown-text"
+              v-html="formattedText(getCurrentContent(message.contents).reasoning_content)"></div>
           </div>
         </div>
 
-        <div class="message-text markdown-text" v-html="formattedContent"></div>
+        <div class="message-text markdown-text" v-html="formattedText(getCurrentContent(message.contents).content)">
+        </div>
         <n-alert v-if="message.meta_data && message.meta_data.finish_reason == 'error'" title="API请求错误" type="error">
           {{ message.meta_data.error }}
         </n-alert>
-        <div v-if="message.is_streaming" class="assistant-loading">
+        <div v-if="message.is_streaming" class="assistant-loading flex items-center text-gray-500">
+          <n-icon size="16" class="mr-2">
+            <Loading />
+          </n-icon>
           回答中...
         </div>
       </div>
 
-      <div class="message-actions" :class="message.is_streaming ? 'opacity-0' : 'opacity-100'">
-        <div v-for="action in availableActions" :key="action.name" class="message-action"
+      <div class="message-actions flex gap-0 text-sm w-full mt-3 text-gray-400 items-center"
+        :class="[isAssistant ? 'justify-start' : 'justify-end', message.is_streaming ? 'opacity-0' : 'opacity-100']">
+        <div v-for="action in availableActions" :key="action.name"
+          class="cursor-pointer flex items-center gap-1 py-1 px-2 rounded bg-gray-100 mr-1 text-sm hover:bg-blue-50 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-gray-100 disabled:hover:text-gray-400 active:scale-95 transition-transform duration-100"
           @click="handleAction(action.name)">
-          <n-icon :component="action.icon" size="15"
-            class="text-gray-400 hover:text-blue-500 transition-colors duration-200" />
+          <n-icon :component="action.icon" size="15" />
         </div>
+        <template v-if="isLast && message.contents.length > 1">
+          <div
+            class="cursor-pointer flex items-center gap-1 py-1 px-2 rounded bg-gray-100 mr-1 text-sm hover:bg-blue-50 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-gray-100 disabled:hover:text-gray-400 active:scale-95 transition-transform duration-100"
+            @click="switchContent('prev')" :disabled="!hasPrevContent">
+            <n-icon :component="ArrowLeftTwotone" size="15" />
+          </div>
+          <div class="text-gray-400 hover:text-blue-500 transition-colors duration-200 flex items-center py-1 px-2">
+            {{ getCurrentIndex(message.contents) }} / {{ message.contents.length }}
+          </div>
+          <div
+            class="cursor-pointer flex items-center gap-1 py-1 px-2 rounded bg-gray-100 mr-1 text-sm hover:bg-blue-50 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-gray-100 disabled:hover:text-gray-400 active:scale-95 transition-transform duration-100"
+            @click="switchContent('next')" :disabled="!hasNextContent">
+            <n-icon :component="ArrowRightTwotone" size="15" />
+          </div>
+        </template>
       </div>
     </div>
   </div>
@@ -53,25 +77,38 @@
 <script setup>
 import { computed, ref } from "vue";
 import { marked } from "marked";
-import { NAlert, NIcon } from "naive-ui";
+import { NAlert, NIcon, NButton } from "naive-ui";
 import Avatar from "./Avatar.vue";
 import {
   InsertDriveFileTwotone,
   EditTwotone,
   DeleteTwotone,
   ContentCopyTwotone,
-  ArrowDownwardTwotone
+  ArrowDownwardTwotone,
+  RefreshFilled,
+  ArrowBackIosNewTwotone as ArrowLeftTwotone,
+  ArrowForwardIosTwotone as ArrowRightTwotone
 } from "@vicons/material";
+
+import { Loading, Thinking } from "@/components/icons";
 import fileItem from "../components/FileItem.vue";
 
 const props = defineProps({
-  message: Object,
+  message: {
+    type: Object,
+    required: true
+  },
   avatar: String,
   isLast: {
     type: Boolean,
     default: false
   }
 });
+
+const emit = defineEmits([
+  "switch", // 添加switch事件
+  "delete", "edit", "copy", "generate", "regenerate"
+]);
 
 const isExpanded = ref(false);
 const isThinking = ref(false);
@@ -84,23 +121,26 @@ const avatarClass = computed(() =>
 );
 
 const showThinking = computed(
-  () => isAssistant.value && props.message.reasoning_content
+  () => isAssistant.value && getCurrentContent(props.message.contents).reasoning_content
 );
 
 const thinkingLabel = ref("已深度思考");
 
+// 计算是否有上一个/下一个内容
+const hasPrevContent = computed(() => {
+  const currentIndex = getCurrentIndex(props.message.contents) - 1;
+  return currentIndex > 0;
+});
+
+const hasNextContent = computed(() => {
+  const currentIndex = getCurrentIndex(props.message.contents) - 1;
+  return currentIndex < props.message.contents.length - 1;
+});
 
 const formattedText = ((text) => {
-  return text;
+  if (!text) return "";
+  return marked.parse(text.trim());
 })
-
-const formattedContent = computed(() =>
-  marked.parse(formattedText(props.message.content || "")).trim()
-);
-
-const formattedReasoning = computed(() =>
-  marked.parse(formattedText(props.message.reasoning_content || "")).trim()
-);
 
 const availableActions = computed(() => {
   const baseActions = [
@@ -111,9 +151,17 @@ const availableActions = computed(() => {
 
   if (!isAssistant.value && props.isLast) {
     baseActions.unshift({
-      name: "regenerate",
+      name: "generate",
       icon: ArrowDownwardTwotone,
       text: "重答",
+    });
+  }
+
+  if (isAssistant.value && props.isLast) {
+    baseActions.unshift({
+      name: "regenerate",
+      icon: RefreshFilled,
+      text: "重新生成",
     });
   }
 
@@ -126,6 +174,25 @@ const toggleExpand = () => {
 
 const handleAction = (action) => {
   emit(action, props.message);
+};
+
+const switchContent = (direction) => {
+  const contents = props.message.contents;
+  const currentIndex = contents.findIndex(content => content.is_current);
+
+  if (currentIndex === -1) return;
+
+  let newIndex;
+  if (direction === 'prev' && currentIndex > 0) {
+    newIndex = currentIndex - 1;
+  } else if (direction === 'next' && currentIndex < contents.length - 1) {
+    newIndex = currentIndex + 1;
+  } else {
+    return;
+  }
+
+  // 通过事件通知父组件切换内容
+  emit('switch', props.message, contents[newIndex]);
 };
 
 const startThinking = () => {
@@ -141,17 +208,30 @@ const stopThinking = () => {
   thinkingLabel.value = "已深度思考";
 };
 
-defineExpose({ startThinking, stopThinking });
-const emit = defineEmits(["delete", "edit", "copy", "regenerate"]);
-
-// 格式化文件大小
-const formatFileSize = (bytes) => {
-  if (bytes === 0) return '0 B';
-  const k = 1024;
-  const sizes = ['B', 'KB', 'MB', 'GB'];
-  const i = Math.floor(Math.log(bytes) / Math.log(k));
-  return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+const getCurrentIndex = (messageContents) => {
+  if (!messageContents || messageContents.length === 0) {
+    return 1;
+  }
+  const currentIndex = messageContents.findIndex(content => content.is_current);
+  return currentIndex !== -1 ? currentIndex + 1 : 1;
 };
+
+const getCurrentContent = (messageContents) => {
+  if (!messageContents || messageContents.length === 0) {
+    return {
+      content: "",
+      reasoning_content: "",
+    };
+  }
+  const content = messageContents.find(c => c.is_current);
+  if (content) {
+    return content;
+  }
+  return messageContents[messageContents.length - 1];
+};
+
+defineExpose({ startThinking, stopThinking, switchContent });
+
 </script>
 
 <style scoped>
@@ -163,17 +243,6 @@ const formatFileSize = (bytes) => {
   margin-top: 20px;
   margin-bottom: 25px;
   animation: fadeInUp 0.3s ease;
-}
-
-.avatar {
-  width: 45px;
-  height: 45px;
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-  align-self: flex-start;
 }
 
 /* 新增卡片式设计 */
@@ -231,24 +300,6 @@ const formatFileSize = (bytes) => {
   width: 100%;
 }
 
-.message-actions {
-  display: flex;
-  gap: 0;
-  font-size: 14px;
-  width: 100%;
-  justify-content: flex-end;
-  margin-top: 12px;
-  transition: opacity 0.3s ease;
-}
-
-.user-message-container .message-actions {
-  justify-content: flex-end;
-}
-
-.assistant-message-container .message-actions {
-  justify-content: flex-start;
-}
-
 /* 消息文本格式化 */
 .message-text {
   line-height: 1.8;
@@ -258,23 +309,6 @@ const formatFileSize = (bytes) => {
   vertical-align: middle;
 }
 
-.message-action {
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  padding: 5px 8px;
-  border-radius: 4px;
-  background: #efefef;
-  margin-right: 5px;
-  font-size: 14px;
-}
-
-.message-action:hover {
-  background-color: #f0f7ff;
-}
-
-
 .ai-meta {
   font-size: 12px;
   color: #999;
@@ -283,16 +317,8 @@ const formatFileSize = (bytes) => {
 
 /* 加载动画 */
 .assistant-loading {
-  color: #999;
   font-size: 14px;
   margin-top: 8px;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.fa-spin {
-  animation: fa-spin 1s infinite linear;
 }
 </style>
 
@@ -405,26 +431,35 @@ const formatFileSize = (bytes) => {
   padding-left: 1em;
 }
 
+/* 表格样式优化 - 添加滚动条支持 */
 .markdown-text table {
   border-collapse: collapse;
   width: 100%;
   margin-bottom: 1em;
   max-width: 100%;
+  display: block;
   overflow-x: auto;
+  white-space: nowrap;
+  -webkit-overflow-scrolling: touch;
 }
 
-.markdown-text th,
-.markdown-text td {
+.markdown-text table th,
+.markdown-text table td {
   border: 1px solid #dfe2e5;
   padding: 0.5em 1em;
+  white-space: nowrap;
+  min-width: 100px;
 }
 
-.markdown-text th {
+.markdown-text table th {
   background-color: #f6f8fa;
   font-weight: 600;
+  position: sticky;
+  left: 0;
+  z-index: 1;
 }
 
-.markdown-text tr:nth-child(even) {
+.markdown-text table tr:nth-child(even) {
   background-color: #f6f8fa;
 }
 
@@ -447,6 +482,26 @@ const formatFileSize = (bytes) => {
 
 .markdown-text em {
   font-style: italic;
+}
+
+/* 表格容器样式，确保表格不会撑破容器 */
+.markdown-text {
+  overflow-wrap: break-word;
+  word-wrap: break-word;
+  max-width: 100%;
+}
+
+/* 响应式表格样式 */
+@media (max-width: 768px) {
+  .markdown-text table {
+    font-size: 14px;
+  }
+  
+  .markdown-text table th,
+  .markdown-text table td {
+    padding: 0.3em 0.5em;
+    min-width: 80px;
+  }
 }
 </style>
 

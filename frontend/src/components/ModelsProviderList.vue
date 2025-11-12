@@ -11,7 +11,7 @@
         <div class="provider-avatar w-8 h-8 rounded-full flex items-center justify-center mr-3 flex-shrink-0">
           <div
             class="provider-img w-full h-full flex items-center justify-center text-white text-xl overflow-hidden">
-            <FolderOpenTwotone :size="16" color="var(--primary-color)" />
+            <OpenAI :size="16" color="var(--primary-color)" />
           </div>
         </div>
         <div class="provider-info flex-1 min-w-0">
@@ -31,7 +31,7 @@
 import { ref, onMounted, computed, watch } from 'vue'
 import { NButton } from 'naive-ui'
 import { FolderOpenTwotone } from '@vicons/material'
-
+import { OpenAI } from '@/components/icons'
 const emit = defineEmits(['select', 'update-providers', 'create-group'])
 defineProps({
   items: {
