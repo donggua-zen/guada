@@ -4,3 +4,4 @@ node_modules/
 .venv/
 __pycache__
 backend/data/*
+app/static/avatars/*
