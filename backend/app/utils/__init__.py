@@ -56,3 +56,22 @@ def convert_image_to_jpeg(file, file_path, size=None):
 
     # 保存为JPEG格式
     image.save(file_path, "JPEG", quality=95)
+
+
+def remove_file(file_path):
+    """
+    删除指定文件
+
+    参数:
+        file_path: 文件路径
+
+    返回值:
+        无返回值，直接删除文件
+    """
+    import os
+
+    try:
+        os.remove(file_path)
+        return True
+    except:
+        return False
