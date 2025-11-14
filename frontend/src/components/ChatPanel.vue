@@ -22,11 +22,13 @@
         </n-button>
       </div>
     </div>
+
+    <!-- 消息内容区域 -->
     <div class="messages-container" ref="messagesContainer">
       <template v-if="activeMessages.length === 0">
-        <!-- 欢迎页使用Tailwind CSS重写 -->
+        <!-- 欢迎页 -->
         <div class="flex items-center justify-center h-full min-h-[500px] py-10 px-5">
-          <div class="max-w-[600px] w-full text-center bg-white p-10 rounded-2xl animate-fade-in-up">
+          <div class="max-w-[600px] w-full text-center p-10 rounded-2xl animate-fade-in-up">
             <!-- 头像区域 -->
             <div class="relative inline-block mb-5">
               <div
@@ -47,54 +49,32 @@
                 {{ currentSession.description }}
               </h2>
 
-              <!-- 详细设置（如果有的话） -->
+              <!-- 角色设定 -->
               <div v-if="currentSession.system_prompt"
                 class="mt-6 p-5 bg-gray-50 rounded-xl border-l-4 border-[var(--primary-color)] text-left">
                 <h3 class="text-base font-semibold text-gray-800 mb-2">角色设定</h3>
                 <p class="text-sm text-gray-600 leading-6">{{ currentSession.system_prompt }}</p>
               </div>
             </div>
-
-            <!-- 交互提示（注释部分保留结构） -->
-            <!-- <div class="interaction-hints">
-                  <div class="hint-item">
-                    <div class="hint-icon">
-                      <i class="fas fa-comment-dots"></i>
-                    </div>
-                    <span>开始对话，了解我的能力</span>
-                  </div>
-                  <div class="hint-item">
-                    <div class="hint-icon">
-                      <i class="fas fa-lightbulb"></i>
-                    </div>
-                    <span>我擅长回答各种问题并提供帮助</span>
-                  </div>
-                </div> -->
-
-            <!-- 开始对话按钮（注释部分保留结构） -->
-            <!-- <div class="start-conversation">
-                  <button class="start-btn" @click="focusInput">
-                    <i class="fas fa-paper-plane"></i>
-                    开始对话
-                  </button>
-                </div> -->
           </div>
         </div>
       </template>
       <template v-else>
-        <!-- 消息容器 -->
-        <SimpleBar :options="scrollbarOptions" :timeout="4000" style="width:100%;height: 100%;padding: 25px 0;"
-          ref="simpleBarRef" @scroll="handleScroll">
+        <ScrollContainer ref="scrollContainerRef" :auto-scroll="true" :smooth-scroll="!isStreaming"
+          @scroll-state-change="handleScrollStateChange">
           <div class="flex flex-col items-center px-[20px]" style="max-width: 900px;margin: 0 auto;">
             <MessageItem v-for="(message, index) in activeMessages" :ref="(el) => setItemRef(el, message.id)"
               :key="message.id" :message="message" :avatar="currentSession.avatar_url"
               :is-last="index === activeMessages.length - 1" @delete="deleteMessage" @edit="editMessage"
-              @copy="copyMessage" @generate="generateResponse" @regenerate="regenerateResponse"
-              @switch="switchContent" />
+              @copy="copyMessage" @generate="generateResponse" @regenerate="regenerateResponse" @switch="switchContent"
+              @renderComplete="handleRenderComplete" />
           </div>
-        </SimpleBar>
+        </ScrollContainer>
+        <!-- 消息列表 -->
+
       </template>
     </div>
+
     <!-- 输入区域 -->
     <div class="input-container">
       <ChatInput v-model:value="inputMessage.text" :files="inputMessage.files" :streaming="isStreaming"
@@ -108,58 +88,36 @@
 </template>
 
 <script setup>
-import { ref, computed, watch, nextTick, onMounted, onBeforeUpdate, reactive, createApp } from "vue";
+import { ref, computed, watch, nextTick, onMounted, onBeforeUpdate, reactive } from "vue";
 import { store } from "../store/store";
-import MessageItem from "./MessageItem.vue";
 import { apiService } from "../services/ApiService"
-import Avatar from "./Avatar.vue";
-// import PopupService from "../services/PopupService";
 import { usePopup } from "@/composables/usePopup";
+import { useDebounceFn } from '@vueuse/core'
+
+// 组件导入
+import MessageItem from "./MessageItem.vue";
+import Avatar from "./Avatar.vue";
 import TokenStatisticsModal from "./TokenStatisticsModal.vue";
 import ChatInput from "./ChatInput.vue";
-import {
-  DeleteTwotone,
-  SettingsApplicationsTwotone,
-} from "@vicons/material";
-import {
-  useDebounceFn,    // 函数防抖
-  // useDebounce,      // 值防抖
-  // debouncedWatch,   // 防抖的watch
-  // useThrottleFn,    // 函数节流
-  // useThrottle,      // 值节流
-} from '@vueuse/core'
+import ScrollContainer from "./ScrollContainer.vue";
 
-// import {
-//   Brain,
-// } from "@vicons/font-awesome";
+// 图标导入
+import { DeleteTwotone, SettingsApplicationsTwotone } from "@vicons/material";
 
-// 导入 naive-ui 组件
+// UI组件导入
 import { NButton, NIcon } from "naive-ui";
 
-const { confirm, editText, toast, prompt, notify } = usePopup();
+// 弹出层工具
+const { confirm, editText, toast, notify } = usePopup();
 
-const emit = defineEmits(['update:session']);
-
-const scrollbarOptions = ref({
-  autoHide: true,
-  // forceVisible: true,
-  timeout: 4000
-})
-
-const simpleBarRef = ref(null);
+// 响应式数据
+const scrollContainerRef = ref(null);
 const messagesContainer = ref(null);
 const currentSessionId = ref(null);
-
-// Tokens统计相关
 const showTokenModal = ref(false);
+const itemRefs = ref({});
 
-
-// 替换原有的分散状态
-const inputMessage = computed({
-  get: () => store.getInputMessage(currentSessionId.value) || '',
-  set: (value) => store.setInputMessage(currentSessionId.value, value)
-});
-
+// Props & Emits
 const props = defineProps({
   session: {
     type: Object,
@@ -167,202 +125,168 @@ const props = defineProps({
   },
 });
 
+const emit = defineEmits(['update:session', 'openSettings']);
+
+// 计算属性
 const currentSession = computed({
   get: () => props.session,
-  set: (session) => {
-    emit('update:session', session);
-  }
+  set: (session) => emit('update:session', session)
 });
 
-
-
-watch(() => props.session.id, async (sessionId) => {
-  if (sessionId === currentSessionId.value)
-    return;
-  currentSessionId.value = sessionId;
-  if (messagesContainer.value)
-    messagesContainer.value.scrollTop = messagesContainer.value.scrollHeight;
-  if (sessionId) {
-    if (store.getMessages(sessionId).length == 0) {
-      const sessionMessages = await apiService.fetchSessionMessages(sessionId);
-      store.setMessages(sessionId, sessionMessages.items);
-    }
-  }
-  await nextTick();
-  scrollToBottom();
-}, { immediate: true, deep: true });
-
-
+const chatTitle = computed(() => props.session?.title || "Loading...");
 
 const isStreaming = computed(() => store.sessionIsStreaming(currentSessionId.value));
-const itemRefs = ref({});
 
-const setItemRef = (el, idx) => {
-  if (el) {
-    itemRefs.value[idx] = el;
-  }
-};
-
-const isAtBottom = ref(true) // 初始假设在底部
-const scrollThreshold = 50 // 距离底部的阈值，单位px
-
-// 组件更新前清理无效引用
-onBeforeUpdate(() => {
-  itemRefs.value = {};
+const inputMessage = computed({
+  get: () => store.getInputMessage(currentSessionId.value) || { text: "", files: [] },
+  set: (value) => store.setInputMessage(currentSessionId.value, value)
 });
 
-
-const chatTitle = computed(() => {
-  if (props.session && props.session.title) {
-    return props.session.title;
-  }
-  return "Loading...";
-});
-
-// 计算当前显示的消息
 const activeMessages = computed({
-  get: () => {
-    return store.getMessages(currentSessionId.value) || []
-  },
-  set: (value) => {
-    store.setMessages(currentSessionId.value, value);
-  }
-})
+  get: () => store.getMessages(currentSessionId.value) || [],
+  set: (value) => store.setMessages(currentSessionId.value, value)
+});
 
-const debouncedUpdatedSession = useDebounceFn(async (activeMessages) => {
-  if (activeMessages.value.length) {
-    // 查找最后一条消息
-    const lastMessage = activeMessages.value[activeMessages.value.length - 1];
-    if (lastMessage.is_streaming) {
-      return
-    }
-    // 查找激活的内容
-    const currentContent = lastMessage.contents.find(item => item.is_current)
-    currentSession.value.last_message = {
-      content: currentContent.content,
-      created_at: currentContent.created_at
-    };
-    currentSession.value = { ...currentSession.value }
-  } else {
-    currentSession.value.last_message = null;
-    currentSession.value = { ...currentSession.value }
-  }
-}, 1000);
+// 防抖函数
+const debouncedUpdatedSession = useDebounceFn(updateSessionLastMessage, 1000);
+const debouncedSwitchContent = useDebounceFn(apiService.setMessageCurrentContent, 300);
 
-// 监听消息变化，自动滚动到底部
+// 监听器
+watch(() => props.session.id, handleSessionChange, { immediate: true });
+
 watch(
-  () => activeMessages,
+  () => activeMessages.value,
   () => {
-    debouncedUpdatedSession(activeMessages)
+    debouncedUpdatedSession();
     nextTick(() => {
-      if (isAtBottom.value) {
-        console.log('自动滚动到底部')
-        scrollToBottom()
+      if (!isStreaming.value) {
+        immediateScrollToBottom();
       }
     });
   },
   { deep: true }
 );
 
+// 生命周期
+onBeforeUpdate(() => {
+  itemRefs.value = {};
+});
 
-// 检查是否在底部
-const checkIsAtBottom = () => {
-  const instance = simpleBarRef.value?.SimpleBar
-  if (instance) {
-    const scrollElement = instance.getScrollElement()
-    const distanceToBottom = scrollElement.scrollHeight - scrollElement.scrollTop - scrollElement.clientHeight
-    return distanceToBottom <= scrollThreshold
+onMounted(() => {
+  // 初始化相关逻辑
+});
+
+
+// 立即滚动到底部（无动画）
+function immediateScrollToBottom() {
+  scrollContainerRef.value?.immediateScrollToBottom();
+}
+
+// 修改平滑滚动函数
+function smoothScrollToBottom() {
+  scrollContainerRef.value?.smoothScrollToBottom();
+}
+
+// 修改 handleRenderComplete
+function handleRenderComplete() {
+  // 不再需要 nextTick，因为 MutationObserver 会处理
+  // if (isStreaming.value && isAtBottom.value) {
+  //   smoothScrollToBottom();
+  // }
+}
+
+
+
+// 方法定义
+function setItemRef(el, messageId) {
+  if (el) itemRefs.value[messageId] = el;
+}
+
+function handleSessionChange(newSessionId, oldSessionId) {
+  if (newSessionId === oldSessionId) return;
+
+  currentSessionId.value = newSessionId;
+
+  if (messagesContainer.value) {
+    messagesContainer.value.scrollTop = messagesContainer.value.scrollHeight;
   }
-  return true
+
+  if (newSessionId) {
+    initializeSessionMessages(newSessionId);
+  }
+
+  nextTick(immediateScrollToBottom);
 }
 
-// 滚动事件处理
-const handleScroll = () => {
-  isAtBottom.value = checkIsAtBottom()
+async function initializeSessionMessages(sessionId) {
+  if (store.getMessages(sessionId).length === 0) {
+    const sessionMessages = await apiService.fetchSessionMessages(sessionId);
+    store.setMessages(sessionId, sessionMessages.items);
+  }
 }
 
-const handleStreamResponse = async (streamingSessionId, userMessageId, regeneration_mode = null, assistant_message_id = null,) => {
+
+function updateSessionLastMessage() {
+  if (!activeMessages.value.length) {
+    currentSession.value.last_message = null;
+    currentSession.value = { ...currentSession.value };
+    return;
+  }
+
+  const lastMessage = activeMessages.value[activeMessages.value.length - 1];
+  if (lastMessage.is_streaming) return;
+
+  const currentContent = getCurrentContent(lastMessage.contents);
+  currentSession.value.last_message = {
+    content: currentContent.content,
+    created_at: currentContent.created_at
+  };
+  currentSession.value = { ...currentSession.value };
+}
+
+function getCurrentIndex(messageContents) {
+  if (!messageContents?.length) return 0;
+  const currentIndex = messageContents.findIndex(content => content.is_current);
+  return currentIndex !== -1 ? currentIndex : 0;
+}
+
+function getCurrentContent(messageContents) {
+  const index = getCurrentIndex(messageContents);
+  return messageContents[index];
+}
+
+async function handleStreamResponse(streamingSessionId, userMessageId, regenerationMode = null, assistantMessageId = null) {
   store.setSessionIsStreaming(streamingSessionId, true);
+
   let message = null;
-  let assistantMessageId = null;
-  let assistantContentId = null;
+  let assistantMessageIdResult = null;
+  let contentIndex = 0;
 
   try {
     let responseContent = "";
     let isThinking = false;
     let thinkingContent = "";
-    let content_index = 0;
-    // 调用流式API
+
     for await (const response of apiService.chat(
       streamingSessionId,
       userMessageId,
-      regeneration_mode,
-      assistant_message_id,
-      false)) {
-      // if (!isStreaming.value) break;
-
+      regenerationMode,
+      assistantMessageId,
+      false
+    )) {
       if (response.error) {
-        console.error("Error in stream:", response.error);
-        if (assistantMessageId)
-          message.meta_data = response;
-        else
-          notify.error("Error in stream", response.error);
+        handleStreamError(response, assistantMessageIdResult);
         break;
       }
 
       if (response.message_id && response.content_id) {
-        assistantMessageId = response.message_id;
-        assistantContentId = response.content_id;
-        currentSession.value.updated_at = new Date().toISOString();
-        const assistantMessage = activeMessages.value.find(msg => msg.id === assistantMessageId)
-        if (assistantMessage) {
-          message = assistantMessage;
-          message.contents.forEach((item) => {
-            if (item.is_current) {
-              item.is_current = false;
-            }
-          });
-          message.contents.push({
-            id: assistantContentId,
-            content: "",
-            reasoning_content: null,
-            meta_data: {},
-            is_current: true,
-            created_at: new Date().toISOString(),
-          });
-          message.is_streaming = true;
-          content_index = message.contents.length - 1;
-        } else {
-          message = reactive({
-            id: assistantMessageId,
-            role: "assistant",
-            contents: [{
-              id: assistantContentId,
-              content: "",
-              reasoning_content: null,
-              meta_data: {},
-              is_current: true,
-              created_at: new Date().toISOString(),
-            }],
-            parent_id: userMessageId,
-            is_streaming: true,
-            created_at: new Date().toISOString(),
-          })
-          content_index = 0;
-          store.addMessage(streamingSessionId, message);
-          // activeMessages.value.push(message);
-        }
+        ({ message, contentIndex } = handleNewMessage(response, streamingSessionId, userMessageId));
+        assistantMessageIdResult = response.message_id;
         continue;
       }
 
       if (response.reasoning_content) {
-        if (!isThinking) {
-          isThinking = true;
-          itemRefs.value[message.id]?.startThinking();
-        }
-        thinkingContent += response.reasoning_content;
-        // 更新思考内容
-        message.contents[content_index].reasoning_content = thinkingContent;
+        ({ isThinking, thinkingContent } = handleThinkingContent(response, message, contentIndex, isThinking, thinkingContent));
         continue;
       }
 
@@ -371,96 +295,170 @@ const handleStreamResponse = async (streamingSessionId, userMessageId, regenerat
         itemRefs.value[message.id]?.stopThinking();
       }
 
-      if (response.content) {
-        responseContent += response.content;
-        message.contents[content_index].content = responseContent;// 更新消息内容
-        // messages.value = [...messages.value];
+      if (response.content && contentIndex !== undefined) {
+        responseContent = handleContentResponse(response, message, contentIndex, responseContent);
       }
     }
   } catch (error) {
-    if (error.name !== "AbortError") {
-      console.error("Error during streaming:", error);
-      message.contents[content_index].content = error;
-      if (!assistantMessageId) {
-        notify.error("请求错误", error.message);
-      }
-    }
+    handleStreamCatchError(error, message, contentIndex, assistantMessageIdResult);
   } finally {
-    store.setSessionIsStreaming(streamingSessionId, false);
-    if (message) {
-      message.is_streaming = false;
-      message.id = assistantMessageId;
+    cleanupStreaming(streamingSessionId, message);
+  }
+}
+
+/**
+ * 处理新消息的创建或更新
+ * 
+ * 当从服务器接收到新的响应时，此函数负责处理消息的创建或更新。
+ * 如果消息已存在，则向现有消息添加新的内容项；如果消息不存在，则创建新消息。
+ * 
+ * @param {Object} response - 服务器响应对象
+ * @param {string} response.message_id - 消息ID
+ * @param {string} response.content_id - 内容ID
+ * @param {string} sessionId - 当前会话ID
+ * @param {string} userMessageId - 用户消息ID，作为新助手消息的父ID
+ * @returns {Object} 包含消息对象和内容索引的对象
+ * @returns {Object} return.message - 消息对象（现有或新建）
+ * @returns {number} return.contentIndex - 内容在消息内容数组中的索引
+ */
+function handleNewMessage(response, sessionId, userMessageId) {
+  const { message_id, content_id } = response;
+  currentSession.value.updated_at = new Date().toISOString();
+
+  const existingMessage = activeMessages.value.find(msg => msg.id === message_id);
+
+  if (existingMessage) {
+    existingMessage.contents.forEach(item => item.is_current = false);
+    existingMessage.contents.push({
+      id: content_id,
+      content: "",
+      reasoning_content: null,
+      meta_data: {},
+      is_current: true,
+      created_at: new Date().toISOString(),
+    });
+    existingMessage.is_streaming = true;
+    return {
+      message: existingMessage,
+      contentIndex: existingMessage.contents.length - 1
+    };
+  } else {
+    const newMessage = reactive({
+      id: message_id,
+      role: "assistant",
+      contents: [{
+        id: content_id,
+        content: "",
+        reasoning_content: null,
+        meta_data: {},
+        is_current: true,
+        created_at: new Date().toISOString(),
+      }],
+      parent_id: userMessageId,
+      is_streaming: true,
+      created_at: new Date().toISOString(),
+    });
+    store.addMessage(sessionId, newMessage);
+    return {
+      message: newMessage,
+      contentIndex: 0
+    };
+  }
+}
+
+function handleThinkingContent(response, message, contentIndex, isThinking, thinkingContent) {
+  if (!isThinking) {
+    isThinking = true;
+    itemRefs.value[message.id]?.startThinking();
+  }
+  thinkingContent += response.reasoning_content;
+  message.contents[contentIndex].reasoning_content = thinkingContent;
+  return { isThinking, thinkingContent };
+}
+
+function handleContentResponse(response, message, contentIndex, currentContent) {
+  const newContent = currentContent + response.content;
+  message.contents[contentIndex].content = newContent;
+  return newContent;
+}
+
+function handleStreamError(response, assistantMessageId) {
+  console.error("Error in stream:", response.error);
+  if (assistantMessageId) {
+    // 错误信息已保存在message.meta_data中
+  } else {
+    notify.error("Error in stream", response.error);
+  }
+}
+
+function handleStreamCatchError(error, message, contentIndex, assistantMessageId) {
+  if (error.name !== "AbortError") {
+    console.error("Error during streaming:", error);
+    if (message && contentIndex !== undefined) {
+      message.contents[contentIndex].content = error.message;
+    }
+    if (!assistantMessageId) {
+      notify.error("请求错误", error.message);
     }
   }
-};
+}
 
-const handleSendUserMessage = async (data) => {
+function cleanupStreaming(sessionId, message) {
+  store.setSessionIsStreaming(sessionId, false);
+  if (message) {
+    message.is_streaming = false;
+    itemRefs.value[message.id]?.stopThinking();
+  }
+}
+
+async function handleSendUserMessage(data) {
   try {
-
-    const text = data.text;
-    const files = data.files;
+    const { text, files } = data;
     const response = await apiService.createMessage(currentSessionId.value, text);
-    const messageId = response["id"];
+    const messageId = response.id;
 
-    const message = reactive({ ...response, 'files': files });
-    // messages.value.push(message);
+    const message = reactive({ ...response, files });
     activeMessages.value.push(message);
-    // store.addMessage(currentSessionId.value, message);
-    for (let i = 0; i < files.length; i++) {
-      await apiService.uploadFile(messageId, files[i].file);
-    }
-    handleStreamResponse(currentSessionId.value, messageId);
+    nextTick(() => {
+      immediateScrollToBottom();
+    });
+    // 并行上传文件
+    const uploadPromises = files.map(file =>
+      apiService.uploadFile(messageId, file.file)
+    );
+    await Promise.all(uploadPromises);
 
+    handleStreamResponse(currentSessionId.value, messageId);
   } catch (error) {
     notify.error("消息发送失败", error.message);
   }
-};
-
-const getSimpleBarInstance = (
-) => {
-  return simpleBarRef.value?.SimpleBar
 }
-// 滚动到底部
-const scrollToBottom = () => {
-  const instance = getSimpleBarInstance()
-  if (instance) {
-    const scrollElement = instance.getScrollElement()
-    scrollElement.scrollTop = scrollElement.scrollHeight
-  }
-};
-// 发送消息
-const sendMessage = async () => {
+
+async function sendMessage() {
   const message = inputMessage.value;
   if ((!message.text?.trim() && !message.files.length) || isStreaming.value) return;
-  // 不要直接修改inputMessage.value,会导致handleSendUserMessage读不到内容
+
   inputMessage.value = { text: "", files: [] };
-  handleSendUserMessage(message);
-};
+  await handleSendUserMessage(message);
+}
 
-// 停止生成
-const abortResponse = () => {
+function abortResponse() {
   apiService.cancelResponse(currentSessionId.value);
-};
+}
 
-// 清空聊天
-const clearChat = async () => {
-
-  if (await confirm("清空聊天纪律", "确定要删除所有聊天记录吗？此操作不可撤销。")) {
-    // 清空聊天记录
+async function clearChat() {
+  if (await confirm("清空聊天记录", "确定要删除所有聊天记录吗？此操作不可撤销。")) {
     await apiService.clearSessionMessages(currentSessionId.value);
-    // messages.value = [];
     store.clearSessionState(currentSessionId.value);
     toast.success("聊天记录已清空");
   }
-};
+}
 
-const handleSettingsClick = () => {
+function handleSettingsClick() {
   emit("openSettings");
-};
+}
 
-// 删除消息
-const deleteMessage = async (message) => {
-
+async function deleteMessage(message) {
   try {
     if (await confirm("删除消息", "确定要删除这条消息吗？此操作不可撤销。")) {
       await apiService.deleteMessage(message.id);
@@ -471,25 +469,9 @@ const deleteMessage = async (message) => {
     toast.error("删除失败");
     console.error("删除消息失败:", error);
   }
-};
+}
 
-
-const getCurrentIndex = (messageContents) => {
-  if (!messageContents || messageContents.length === 0) {
-    return 0;
-  }
-  const currentIndex = messageContents.findIndex(content => content.is_current);
-  return currentIndex !== -1 ? currentIndex : 0;
-};
-
-const getCurrentContent = (messageContents) => {
-  const index = getCurrentIndex(messageContents);
-  return messageContents[index];
-};
-
-// 编辑消息
-const editMessage = async (message) => {
-
+async function editMessage(message) {
   try {
     const index = getCurrentIndex(message.contents);
     const result = await editText({
@@ -498,10 +480,10 @@ const editMessage = async (message) => {
       confirmText: "保存",
       cancelText: "取消",
     });
+
     if (result) {
-      const newContent = result;
-      message.contents[index].content = newContent;
-      await apiService.updateMessage(message.id, newContent);
+      message.contents[index].content = result;
+      await apiService.updateMessage(message.id, result);
       store.updateMessage(currentSessionId.value, message.id, message);
       toast.success("消息已更新");
     }
@@ -509,10 +491,9 @@ const editMessage = async (message) => {
     toast.error("更新失败");
     console.error("更新消息失败:", error);
   }
-};
+}
 
-// 复制消息
-const copyMessage = async (message) => {
+async function copyMessage(message) {
   try {
     await navigator.clipboard.writeText(getCurrentContent(message.contents).content);
     toast.success("消息已复制");
@@ -520,54 +501,45 @@ const copyMessage = async (message) => {
     console.error("复制消息失败:", error);
     toast.error("复制失败");
   }
-};
+}
 
-// 重新回答问题
-const generateResponse = async (message) => {
+function generateResponse(message) {
   handleStreamResponse(currentSessionId.value, message.id, 'overwrite');
-};
+}
 
-// 回答多个版本
-const regenerateResponse = async (message) => {
+function regenerateResponse(message) {
   if (message.contents.length >= 5) {
     toast.error("暂时最多支持5个回答版本");
     return;
   }
   handleStreamResponse(currentSessionId.value, message.parent_id, 'multi_version', message.id);
-};
+}
 
-const debouncedSwitchContent = useDebounceFn(async (messageId, contentId) => {
-  await apiService.setMessageCurrentContent(messageId, contentId);
-}, 300);
-
-const switchContent = (message, content) => {
-  message = activeMessages.value.find(m => m.id === message.id);
-  message.contents.forEach(item => {
+function switchContent(message, content) {
+  const targetMessage = activeMessages.value.find(m => m.id === message.id);
+  targetMessage.contents.forEach(item => {
     item.is_current = item.id === content.id;
   });
-  debouncedSwitchContent(message.id, content.id)
-};
+  debouncedSwitchContent(message.id, content.id);
+}
 
-// 处理网络搜索
-const handleWebSearch = () => {
-  // 实现网络搜索逻辑
+// function handleRenderComplete() {
+//   if (isStreaming.value && isAtBottom.value) {
+//     nextTick(smoothScrollToBottom);
+//   }
+// }
+
+function handleWebSearch() {
   console.log("网络搜索功能");
-};
+}
 
-// 处理图片上传
-const handleImageUpload = () => {
-  // 实现图片上传逻辑
+function handleImageUpload() {
   console.log("图片上传功能");
-};
+}
 
-const handleTokensStatistic = async () => {
+function handleTokensStatistic() {
   showTokenModal.value = true;
-};
-
-// 组件挂载时调整输入框高度
-onMounted(() => {
-  // adjustTextareaHeight();
-});
+}
 </script>
 
 <style scoped>
@@ -578,7 +550,6 @@ onMounted(() => {
   height: 60px;
   font-size: 18px;
   font-weight: 600;
-  /* background-color: #ffffff; */
   border-bottom: 1px solid rgba(21, 23, 28, .1);
   border-radius: 0;
   margin: 0 40px;
@@ -613,15 +584,12 @@ onMounted(() => {
 
 .input-container {
   padding: 0 20px 20px 20px;
-  /* background-color: #f9f9f9; */
   display: flex;
   justify-content: center;
   width: 100%;
 }
 
-
-
-/* 自定义动画 */
+/* 动画定义 */
 @keyframes fadeInUp {
   from {
     opacity: 0;
