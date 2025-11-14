@@ -364,6 +364,9 @@ class ChatService:
             yield chunk.to_dict()
             return
         finally:
+            print("Generation complete")
+            print(f"Updating message {assistant_message['id']}")
+            print(f"Updating message {complete_chunk.to_dict()}")
             if assistant_message is not None:
                 message_service.update_message(
                     assistant_message["id"],
