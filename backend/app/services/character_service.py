@@ -2,6 +2,7 @@ import os
 
 from app.repositories.character_repository import CharacterRepository as CharacterRepo
 from app.services.upload_service import UploadService
+from app.utils import remove_file
 
 
 class CharacterService:
@@ -104,10 +105,11 @@ class CharacterService:
             "avatar_url" in data_filtered
             and data["avatar_url"] != character["avatar_url"]
         ):
-            # 使用实例变量避免重复创建
-            os.remove(
-                self.upload_service.convert_webpath_to_filepath(character["avatar_url"])
+            old_avatar_path = self.upload_service.convert_webpath_to_filepath(
+                character["avatar_url"]
             )
+            if old_avatar_path:
+                remove_file(old_avatar_path)
         character.update(data_filtered)
         return character
 
@@ -129,11 +131,5 @@ class CharacterService:
         character = self.get_character_by_id(character_id)
         # 使用实例变量避免重复创建
         avatar_url = self.upload_service.upload_avatar(avatar_file, size=(128, 128))
-        old_avatar_url = character["avatar_url"]
         self.update_character(character_id, {"avatar_url": avatar_url})
-        old_avatar_path = self.upload_service.convert_webpath_to_filepath(
-            old_avatar_url
-        )
-        if old_avatar_url:
-            os.remove(old_avatar_path)
         return {"url": avatar_url}

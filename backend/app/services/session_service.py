@@ -4,6 +4,7 @@ import shutil
 from app.repositories.character_repository import CharacterRepository
 from app.repositories.session_repository import SessionRepository as SessionRepo
 from app.services.upload_service import UploadService
+from app.utils import remove_file
 
 
 class SessionService:
@@ -118,7 +119,7 @@ class SessionService:
                 old_avatar_url
             )
             if old_avatar_url:
-                os.remove(old_avatar_path)
+                remove_file(old_avatar_path)
 
         session.update(data)
         return session
@@ -147,9 +148,13 @@ class SessionService:
 
     def upload_avatar(self, session_id, avatar_file):
         session = self.get_session_by_id(session_id)
+        if not session:
+            raise ValueError(f"Session with ID {session_id} does not exist.")
+
         # 使用实例变量避免重复创建
         avatar_url = self.upload_service.upload_avatar(avatar_file, size=(128, 128))
-        old_avatar_url = session["avatar_url"]
+        # old_avatar_url = session["avatar_url"]
         self.update_session(session_id, {"avatar_url": avatar_url})
-        os.remove(self.upload_service.convert_webpath_to_filepath(old_avatar_url))
+        # 已经在update_session中处理了
+        # os.remove(self.upload_service.convert_webpath_to_filepath(old_avatar_url))
         return {"url": avatar_url}
