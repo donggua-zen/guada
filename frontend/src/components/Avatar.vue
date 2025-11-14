@@ -35,8 +35,9 @@ const avatarSrc = computed(() => {
         return props.src
     }
     // 添加时间戳参数避免缓存
-    const separator = props.src.includes('?') ? '&' : '?'
-    return props.src + separator + 't=' + new Date().getTime()
+    // const separator = props.src.includes('?') ? '&' : '?'
+    return '/'+props.src
+    return props.src
 });
 
 </script>

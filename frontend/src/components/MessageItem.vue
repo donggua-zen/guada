@@ -1,5 +1,5 @@
 <template>
-  <div class="message" :class="messageClass">
+  <div class="message" :class="messageClass" @click="handleCopyClick">
     <div class="w-[45px] h-[45px] rounded-full flex items-center justify-center shrink-0 self-start"
       :class="avatarClass">
       <Avatar v-if="!isAssistant" src="" :round="true" type="user"></Avatar>
@@ -29,12 +29,12 @@
           </div>
           <div class="thinking-content transition-all duration-500 ease-in-out overflow-hidden text-gray-500"
             :class="isExpanded ? 'max-h-1500 opacity-100' : 'max-h-0 opacity-0'">
-            <div class="border-l-2 border-gray-200 pl-4 mb-2  markdown-text"
-              v-html="formattedText(getCurrentContent(message.contents).reasoning_content)"></div>
+            <div class="border-l-2 border-gray-200 pl-4 mb-2  markdown-text" v-html="debouncedThinkingFormattedText">
+            </div>
           </div>
         </div>
 
-        <div class="message-text markdown-text" v-html="formattedText(getCurrentContent(message.contents).content)">
+        <div class="message-text markdown-text" v-html="debouncedFormattedText">
         </div>
         <n-alert v-if="message.meta_data && message.meta_data.finish_reason == 'error'" title="API请求错误" type="error">
           {{ message.meta_data.error }}
@@ -75,12 +75,14 @@
 </template>
 
 <script setup>
-import { computed, ref } from "vue";
-import { marked } from "marked";
+import { computed, ref, watch, onUnmounted, onMounted } from "vue";
+import { Marked } from "marked";
+import { markedHighlight } from 'marked-highlight'
+import hljs from 'highlight.js';
 import { NAlert, NIcon, NButton } from "naive-ui";
+import { useDebounceFn } from "@vueuse/core";
 import Avatar from "./Avatar.vue";
 import {
-  InsertDriveFileTwotone,
   EditTwotone,
   DeleteTwotone,
   ContentCopyTwotone,
@@ -92,6 +94,9 @@ import {
 
 import { Loading, Thinking } from "@/components/icons";
 import fileItem from "../components/FileItem.vue";
+import { usePopup } from "@/composables/usePopup";
+
+const { toast } = usePopup();
 
 const props = defineProps({
   message: {
@@ -107,8 +112,39 @@ const props = defineProps({
 
 const emit = defineEmits([
   "switch", // 添加switch事件
-  "delete", "edit", "copy", "generate", "regenerate"
+  "delete", "edit", "copy", "generate", "regenerate",
+  "renderComplete" // 渲染完成
 ]);
+
+const marked = new Marked(
+  markedHighlight({
+    emptyLangClass: 'hljs',
+    langPrefix: 'hljs language-',
+    highlight(code, lang, info) {
+      const language = hljs.getLanguage(lang) ? lang : 'plaintext';
+      return hljs.highlight(code, { language }).value;
+    }
+  })
+);
+
+
+const renderer = {
+  code(code) {
+    const lang = code.lang || 'text';
+    return `
+      <div class="custom-code-block">
+        <div class="code-header">
+          <span class="code-language">${lang}</span>
+          <button class="copy-code-button">复制</button>
+        </div>
+        <pre class="hljs language-${lang}"><code class="hljs language-${lang}">${code.text}</code></pre>
+      </div>
+    `;
+  }
+};
+
+// 设置自定义渲染器
+marked.use({ renderer });
 
 const isExpanded = ref(false);
 const isThinking = ref(false);
@@ -137,10 +173,88 @@ const hasNextContent = computed(() => {
   return currentIndex < props.message.contents.length - 1;
 });
 
-const formattedText = ((text) => {
-  if (!text) return "";
-  return marked.parse(text.trim());
-})
+const getCurrentContent = (messageContents) => {
+  if (!messageContents || messageContents.length === 0) {
+    return {
+      content: "",
+      reasoning_content: "",
+    };
+  }
+  const content = messageContents.find(c => c.is_current);
+  if (content) {
+    return content;
+  }
+  return messageContents[messageContents.length - 1];
+};
+
+// 主内容消抖处理
+const currentMarkdownContent = ref("");
+const debouncedMarkdownUpdate = useDebounceFn((content) => {
+  currentMarkdownContent.value = content;
+}, 50, { maxWait: 150 });
+
+// 思考内容消抖处理
+const currentThinkingContent = ref("");
+const debouncedThinkingUpdate = useDebounceFn((content) => {
+  currentThinkingContent.value = content;
+}, 50, { maxWait: 150 });
+
+
+
+// 监听主内容变化
+watch(
+  () => getCurrentContent(props.message.contents).content,
+  (newContent, oldContent) => {
+    if (props.message.is_streaming) {
+      debouncedMarkdownUpdate(newContent);
+      // 只在内容有实质性变化时触发渲染完成
+      if (newContent.length > oldContent?.length) {
+        emit("renderComplete");
+      }
+    } else {
+      currentMarkdownContent.value = newContent;
+    }
+  },
+  { immediate: true }
+);
+
+// 监听思考内容变化
+watch(
+  () => getCurrentContent(props.message.contents).reasoning_content,
+  (newContent) => {
+    if (props.message.is_streaming) {
+      debouncedThinkingUpdate(newContent);
+      emit("renderComplete");
+    } else {
+      currentThinkingContent.value = newContent;
+    }
+  },
+  { immediate: true }
+);
+
+// 消抖后的主内容渲染
+const debouncedFormattedText = computed(() => {
+  if (!currentMarkdownContent.value) return "";
+  try {
+    return marked.parse(currentMarkdownContent.value.trim());
+  } catch (error) {
+    console.error("Markdown解析错误:", error);
+    return currentMarkdownContent.value;
+  }
+});
+
+// 消抖后的思考内容渲染
+const debouncedThinkingFormattedText = computed(() => {
+  if (!currentThinkingContent.value) return "";
+  try {
+    return marked.parse(currentThinkingContent.value.trim());
+  } catch (error) {
+    console.error("思考内容Markdown解析错误:", error);
+    return currentThinkingContent.value;
+  }
+});
+
+
 
 const availableActions = computed(() => {
   const baseActions = [
@@ -216,23 +330,38 @@ const getCurrentIndex = (messageContents) => {
   return currentIndex !== -1 ? currentIndex + 1 : 1;
 };
 
-const getCurrentContent = (messageContents) => {
-  if (!messageContents || messageContents.length === 0) {
-    return {
-      content: "",
-      reasoning_content: "",
-    };
+// 复制功能处理
+const handleCopyClick = (event) => {
+  if (event.target.classList.contains('copy-code-button')) {
+    event.stopPropagation(); // 阻止事件冒泡
+    const codeBlock = event.target.closest('.custom-code-block').querySelector('code');
+    if (!codeBlock) return;
+    const text = codeBlock.textContent;
+
+    navigator.clipboard.writeText(text).then(() => {
+      const originalText = event.target.textContent;
+      event.target.textContent = '已复制!';
+      setTimeout(() => {
+        event.target.textContent = originalText;
+      }, 2000);
+      toast.success("已复制");
+    }).catch(err => {
+      console.error('复制失败:', err);
+      event.target.textContent = '复制失败';
+    });
   }
-  const content = messageContents.find(c => c.is_current);
-  if (content) {
-    return content;
-  }
-  return messageContents[messageContents.length - 1];
 };
+
+onMounted(() => {
+});
+
+onUnmounted(() => {
+});
 
 defineExpose({ startThinking, stopThinking, switchContent });
 
 </script>
+
 
 <style scoped>
 /* 消息样式 */
@@ -355,12 +484,6 @@ defineExpose({ startThinking, stopThinking, switchContent });
   padding-bottom: 0.5em;
 }
 
-.markdown-text h3 {}
-
-.markdown-text h4 {}
-
-.markdown-text h5 {}
-
 .markdown-text h6 {
   color: #6a737d;
 }
@@ -411,18 +534,13 @@ defineExpose({ startThinking, stopThinking, switchContent });
 .markdown-text pre {
   background-color: #fff;
   border-radius: 5px;
-  padding: 1em;
+  /* padding: 1em; */
   overflow: auto;
   margin-top: 1rem;
   margin-bottom: 1em;
   border: 1px solid #dfe2e5;
   white-space: pre-wrap;
   word-wrap: break-word;
-}
-
-.markdown-text pre code {
-  background: none;
-  padding: 0;
 }
 
 .markdown-text blockquote {
@@ -496,7 +614,7 @@ defineExpose({ startThinking, stopThinking, switchContent });
   .markdown-text table {
     font-size: 14px;
   }
-  
+
   .markdown-text table th,
   .markdown-text table td {
     padding: 0.3em 0.5em;
@@ -519,5 +637,66 @@ defineExpose({ startThinking, stopThinking, switchContent });
   to {
     opacity: 1;
   }
+}
+</style>
+<style>
+/* 全局样式：确保 v-html 中的代码高亮生效 */
+@import 'highlight.js/styles/androidstudio.css';
+
+/* 确保 hljs 样式正常工作 */
+.custom-code-block pre.hljs {
+  margin: 0;
+  border-radius: 0;
+  border: none;
+  background: #282c34 !important;
+}
+
+.custom-code-block code.hljs {
+  background: transparent !important;
+  display: block;
+  overflow-x: auto;
+}
+
+/* 代码块容器样式 */
+.custom-code-block {
+  position: relative;
+  margin: 1em 0;
+  border-radius: 8px;
+  overflow: hidden;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  background: #282c34;
+}
+
+.code-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 12px;
+  background: #282c34;
+  color: #ccc;
+  font-size: 0.8em;
+  font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+  /* border-bottom: 1px solid #3d3d3d; */
+}
+
+.code-language {
+  font-weight: 600;
+  text-transform: uppercase;
+  color: #abb2bf;
+}
+
+.copy-code-button {
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  color: #ccc;
+  padding: 4px 8px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 0.75em;
+  transition: all 0.2s ease;
+}
+
+.copy-code-button:hover {
+  background: rgba(255, 255, 255, 0.2);
 }
 </style>
