@@ -5,3 +5,4 @@ node_modules/
 __pycache__
 backend/data/*
 app/static/avatars/*
+backend/app/static/avatars/*
