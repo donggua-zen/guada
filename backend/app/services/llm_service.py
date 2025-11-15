@@ -175,7 +175,6 @@ class LLMService:
                 yield response_chunk
         except GeneratorExit as e:
             print(f"GeneratorExit: {e}\n")
-            raise  # 必须重新抛出异常
         finally:
             if response is not None:
                 self.close_api_connection(response)

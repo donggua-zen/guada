@@ -10,6 +10,7 @@
 通过该服务，可以实现角色扮演对话系统的核心功能，支持多种记忆策略和模型供应商的集成。
 """
 
+from contextlib import closing
 import datetime
 import html
 import traceback
@@ -330,27 +331,27 @@ class ChatService:
                 "message_id": assistant_message["id"],
                 "content_id": assistant_message_current_content["id"],
             }
-            generator = llm_service.generate_response(
-                model["model_name"],
-                context_messages,
-                temperature=model_params["temperature"],
-                top_p=model_params["top_p"],
-                frequency_penalty=model_params["frequency_penalty"],
-                stream=True,
-                thinking=model_params["thinking"],
-                complete_chunk=complete_chunk,
-            )
-            for chunk in generator:
-                yield chunk.to_dict()
+
+            with closing(
+                llm_service.generate_response(
+                    model["model_name"],
+                    context_messages,
+                    temperature=model_params["temperature"],
+                    top_p=model_params["top_p"],
+                    frequency_penalty=model_params["frequency_penalty"],
+                    stream=True,
+                    thinking=model_params["thinking"],
+                    complete_chunk=complete_chunk,
+                )
+            ) as generator:
+                for chunk in generator:
+                    yield chunk.to_dict()
             print("Model response complete")
         except GeneratorExit:
             print("User stopped generation")
             if generator is not None:
                 generator.close()
-            chunk = LLMServiceChunk()
-            chunk.finish_reason = "user_stop"
-            complete_chunk.finish_reason = chunk.finish_reason
-            yield chunk.to_dict()
+            complete_chunk.finish_reason = "user_stop"
             return
         except Exception as e:
             print(f"Error: {e}")
@@ -365,8 +366,6 @@ class ChatService:
             return
         finally:
             print("Generation complete")
-            print(f"Updating message {assistant_message['id']}")
-            print(f"Updating message {complete_chunk.to_dict()}")
             if assistant_message is not None:
                 message_service.update_message(
                     assistant_message["id"],
