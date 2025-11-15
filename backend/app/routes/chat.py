@@ -1,3 +1,4 @@
+from contextlib import closing
 import json
 import traceback
 from flask import Blueprint, Response, jsonify, request
@@ -25,26 +26,33 @@ def stream_generator(
 ):
     generator = None
     try:
-        generator = chat_service.completions(
-            session_id,
-            message_id,
-            regeneration_mode=regeneration_mode,
-            assistant_message_id=assistant_message_id,
-        )
-        print("Generator started.")
-        for chunk in generator:
-            json_chunk = json.dumps(chunk)
-            yield f"data: {json_chunk}\n\n"
-        print("Generator ended.")
+        with closing(
+            chat_service.completions(
+                session_id,
+                message_id,
+                regeneration_mode=regeneration_mode,
+                assistant_message_id=assistant_message_id,
+            )
+        ) as generator:
+            # generator = chat_service.completions(
+            #     session_id,
+            #     message_id,
+            #     regeneration_mode=regeneration_mode,
+            #     assistant_message_id=assistant_message_id,
+            # )
+            print("Generator started.")
+            for chunk in generator:
+                json_chunk = json.dumps(chunk)
+                yield f"data: {json_chunk}\n\n"
+            yield "data: [DONE]\n\n"
+            print("Generator ended.")
     except GeneratorExit:
         if generator is not None:
             generator.close()
-        print("Generator exited.")
-        raise  # 必须重新抛出异常
+        return
     except Exception as e:
         print(f"Exception2:{e}\n")
         traceback.print_exc()
-    finally:
         yield "data: [DONE]\n\n"
 
 
