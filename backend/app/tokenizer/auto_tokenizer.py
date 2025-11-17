@@ -77,16 +77,25 @@ class _OpenAITokenizer(_Tokenizer):
         super().__init__(model)
 
     def count_tokens(self, text):
-        encoding_name = self.model_encoding_map.get(
-            self.model, "cl100k_base"
-        )  # 默认回退
+        total_tokens = 0
+        if isinstance(text, list):
+            for t in text:
+                if isinstance(t, dict):
+                    if t.get("type") == "text":
+                        total_tokens += self.count_tokens(t["text"])
+        # 处理单个字符串的情况，直接编码计算token数
+        elif isinstance(text, str):
+            encoding_name = self.model_encoding_map.get(
+                self.model, "cl100k_base"
+            )  # 默认回退
 
-        try:
-            encoding = tiktoken.get_encoding(encoding_name)
-        except KeyError:
-            # 如果编码不存在，回退到 cl100k_base
-            encoding = tiktoken.get_encoding("cl100k_base")
-        return len(encoding.encode(text))
+            try:
+                encoding = tiktoken.get_encoding(encoding_name)
+            except KeyError:
+                # 如果编码不存在，回退到 cl100k_base
+                encoding = tiktoken.get_encoding("cl100k_base")
+            total_tokens += len(encoding.encode(text))
+        return total_tokens
 
 
 _tokenizer_cache: Dict[str, _Tokenizer] = {}

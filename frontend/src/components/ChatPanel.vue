@@ -191,13 +191,13 @@ watch(
   () => activeMessages.value,
   () => {
     debouncedUpdatedSession();
-    if (scrollContainerRef.value?.isAtBottom) {
-      nextTick(() => {
-        if (!isStreaming.value) {
-          immediateScrollToBottom();
-        }
-      });
-    }
+    //if (scrollContainerRef.value?.isAtBottom) {
+    nextTick(() => {
+      if (scrollContainerRef.value?.isAtBottom && !isStreaming.value) {
+        immediateScrollToBottom();
+      }
+    });
+    // }
   },
   { deep: true }
 );
