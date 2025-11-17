@@ -14,6 +14,12 @@ class Session(ModelBase):
     avatar_url = db.Column(db.String, nullable=True)
     description = db.Column(db.String, nullable=True)
     # system_prompt = Column(Text, nullable=True)
+    model_id = db.Column(
+        db.String,
+        db.ForeignKey("model.id", ondelete="SET NULL", name="fk_session_model_id"),
+        index=True,
+        nullable=True,
+    )
     settings = db.Column(db.JSON, nullable=True)
     created_at = db.Column(db.DateTime, default=db.func.now())
     updated_at = db.Column(
@@ -32,5 +38,12 @@ class Session(ModelBase):
         "Summary",
         back_populates="session",
         cascade="all, delete-orphan",
+        uselist=False,  # 关键参数，表示一对一关系
+    )
+
+    model = db.relationship(
+        "Model",
+        # 添加 passive_deletes 配置，确保 SQLAlchemy 知道数据库会处理 SET NULL
+        passive_deletes=True,
         uselist=False,  # 关键参数，表示一对一关系
     )

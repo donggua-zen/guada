@@ -33,9 +33,9 @@ def create_session():
             "user_id": "123",  # TODO: 应该从认证信息中获取
             "avatar_url": "",
             "description": "An helpful AI assistant",
+            "model_id": "",
             "settings": {
                 "memory_type": "sliding_window",
-                "model_id": "",
                 "system_prompt": "You are a helpful AI assistant that can answer any question asked by the user",
             },
         }
@@ -88,7 +88,7 @@ def update_session(session_id):
     try:
         data = request.json
         data["updated_at"] = datetime.datetime.now(datetime.timezone.utc)
-        fields = ["title", "description", "avatar_url", "updated_at"]
+        fields = ["title", "description", "avatar_url", "updated_at", "model_id"]
 
         extended_fields = [
             "assistant_name",
