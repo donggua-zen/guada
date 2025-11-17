@@ -1,8 +1,17 @@
 <template>
-  <div
+  <div v-if="localSidebarVisible"
     class="sessions-panel flex flex-col w-72 min-w-72 h-screen bg-[var(--conversation-bg)] border-r border-[var(--conversation-border-color)]">
     <div class="sessions-header px-5 py-5 text-lg font-semibold flex justify-between items-center">
       <span>会话列表</span>
+      <!-- 新增收缩按钮 -->
+      <n-button quaternary circle @click="handleToggleSidebar" size="small"
+        class="shrink-btn bg-none border-none text-gray-500 cursor-pointer text-sm p-1 rounded" title="收缩侧边栏">
+        <template #icon>
+          <n-icon size="22">
+            <ArrowCircleLeft />
+          </n-icon>
+        </template>
+      </n-button>
     </div>
 
     <!-- 搜索框 -->
@@ -100,21 +109,37 @@ import {
   SearchOutlined,
 } from '@vicons/material'
 
+import {
+  ArrowCircleLeft
+} from './icons'
+
 const route = useRoute()
 const router = useRouter()
 
 // 响应式数据
 const currentSessionId = ref(null)
 const searchKeyword = ref('')
+const localSidebarVisible = computed({
+  get() {
+    return props.sidebarVisible
+  },
+  set(value) {
+    emit('update:sidebarVisible', value)
+  }
+})
 
 // 事件定义
-const emit = defineEmits(['on-select', 'on-update', 'on-create', 'on-delete'])
+const emit = defineEmits(['on-select', 'on-update', 'on-create', 'on-delete', 'update:sidebarVisible'])
 
 // Props 定义
 const props = defineProps({
   sessions: {
     type: Array,
     default: () => []
+  },
+  sidebarVisible: {
+    type: Boolean,
+    default: true
   }
 })
 
@@ -273,6 +298,12 @@ const renameSession = (session) => {
 // 删除会话
 const deleteSession = (session) => {
   emit('on-delete', session)
+}
+
+const handleToggleSidebar = () => {
+  localSidebarVisible.value = false;
+  // emit('toggle-sidebar')
+
 }
 
 // 监听器

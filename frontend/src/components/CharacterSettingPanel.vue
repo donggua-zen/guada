@@ -4,15 +4,15 @@
             <h2>智能体设置</h2>
         </div>
         <div class="flex-1" :class="{ 'p-3': !isSimpleStyle }">
-            <n-tabs type="segment" ref="tabsInstRef" v-model:value="v ">
+            <n-tabs type="segment" ref="tabsInstRef" v-model:value="tabsValue">
                 <!-- 基础设置 -->
                 <n-tab-pane name="basic" tab="基础" display-directive="show">
-                    <div class="py-5">
+                    <div class="py-3">
                         <n-form ref="basicFormRef" :model="characterForm" :rules="basicRules" label-placement="top"
                             label-width="80px" size="large">
                             <!-- 头像设置 -->
                             <n-form-item label="头像设置">
-                                <div class="avatar-upload-container">
+                                <div class="avatar-upload-container ">
                                     <div class="avatar-preview">
                                         <Avatar :src="characterForm.avatar_url"></Avatar>
                                     </div>
@@ -55,9 +55,16 @@
 
                 <!-- 提示词 -->
                 <n-tab-pane name="prompt" tab="提示词" display-directive="show">
-                    <div class="py-5">
+                    <div class="py-3">
                         <n-form ref="promptFormRef" :model="characterForm" :rules="promptRules" label-placement="top"
                             label-width="80px" size="large">
+
+                            <!-- 详细设定 -->
+                            <n-form-item label="详细设定" path="system_prompt">
+                                <n-input v-model:value="characterForm.system_prompt" type="textarea"
+                                    placeholder="请输入详细设定" :autosize="{ minRows: 5, maxRows: 8 }" />
+                            </n-form-item>
+
                             <!-- 角色名称 -->
                             <n-form-item label="角色名称">
                                 <n-input v-model:value="characterForm.assistant_name" placeholder="请输入角色名称" clearable />
@@ -69,18 +76,13 @@
                                     clearable />
                             </n-form-item>
 
-                            <!-- 详细设定 -->
-                            <n-form-item label="详细设定" path="system_prompt">
-                                <n-input v-model:value="characterForm.system_prompt" type="textarea"
-                                    placeholder="请输入详细设定" :autosize="{ minRows: 5, maxRows: 8 }" />
-                            </n-form-item>
                         </n-form>
                     </div>
                 </n-tab-pane>
 
                 <!-- 模型设置 -->
                 <n-tab-pane name="model" tab="模型" v-if="!isSimpleStyle || true" display-directive="show">
-                    <div class="py-5">
+                    <div class="py-3">
                         <n-form ref="modelFormRef" :model="characterForm" :rules="modelRules" label-placement="top"
                             label-width="80px" size="large">
                             <!-- 模型选择 -->
@@ -119,7 +121,7 @@
 
                 <!-- 记忆设置 -->
                 <n-tab-pane name="memory" tab="记忆" display-directive="show">
-                    <div class="py-5">
+                    <div class="py-3">
                         <n-form ref="memoryFormRef" :model="characterForm" :rules="memoryRules" label-placement="top"
                             size="large">
                             <!-- 记忆类型 -->
@@ -160,7 +162,7 @@
                 </n-tab-pane>
             </n-tabs>
         </div>
-        <div class="footer p-5">
+        <div class="footer pb-5">
             <n-button block type="primary" @click="handleSave" size="large">
                 <template #icon>
                     <n-icon>
@@ -251,11 +253,15 @@ const props = defineProps({
                 short_term_memory_length: ''
             }
         })
+    },
+    tab: {
+        type: String,
+        default: 'basic'
     }
 })
 
 // Emits
-const emit = defineEmits(['update:data', 'saved'])
+const emit = defineEmits(['update:data', 'update:tab', 'saved'])
 
 // 响应式数据
 const isSimpleStyle = ref(false)
@@ -280,7 +286,16 @@ const promptFormRef = ref(null)
 const modelFormRef = ref(null)
 const memoryFormRef = ref(null)
 
-const tabsValue = ref('basic')
+// const tabsValue = computed({
+//     get() {
+//         return props.tab
+//     },
+//     set(value) {
+//         emit('update:tab', value)
+//     }
+// })
+
+const tabsValue = ref(props.tab)
 
 // 表单数据
 const characterForm = reactive({
@@ -671,6 +686,7 @@ const handleSave = async () => {
     flex-direction: column;
     align-items: center;
     gap: 15px;
+    width: 100%;
 }
 
 .avatar-upload-actions {

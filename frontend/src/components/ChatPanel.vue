@@ -2,8 +2,25 @@
   <div class="flex flex-col h-full">
     <!-- 聊天头部 -->
     <div class="chat-header">
-      <span class="mr-2">{{ chatTitle }}</span><n-button text="">{{ currentSession.model ? currentSession.model.model_name : ''
-        }}</n-button>
+      <template v-if="!loaclSidebarVisible">
+        <n-button text @click="loaclSidebarVisible = true">
+          <template #icon>
+            <n-icon size="22">
+              <FormatListBulletedSharp />
+            </n-icon>
+          </template>
+        </n-button>
+        <span class="ml-4"></span>
+      </template>
+      <span>{{ chatTitle }}</span>
+      <n-divider vertical />
+      <n-button tertiary round size="small" icon-placement="left" @click="handleSwitchModelClick">{{ currentModelName }}
+        <template #icon>
+          <n-icon size="18">
+            <SettingsTwotone />
+          </n-icon>
+        </template>
+      </n-button>
 
       <div class="flex items-center flex-1 justify-end">
         <n-button class="clear-chat-btn" title="清空聊天记录" @click="clearChat" text>
@@ -14,13 +31,13 @@
           </template>
         </n-button>
 
-        <n-button class="settings-btn ml-2" title="设置" @click="handleSettingsClick" text>
+        <!-- <n-button class="settings-btn ml-2" title="设置" @click="handleSettingsClick" text>
           <template #icon>
             <n-icon size="24">
               <SettingsApplicationsTwotone />
             </n-icon>
           </template>
-        </n-button>
+        </n-button> -->
       </div>
     </div>
 
@@ -103,10 +120,10 @@ import ChatInput from "./ChatInput.vue";
 import ScrollContainer from "./ScrollContainer.vue";
 
 // 图标导入
-import { DeleteTwotone, SettingsApplicationsTwotone } from "@vicons/material";
+import { DeleteTwotone, SettingsTwotone, ArrowDropDownTwotone, FormatListBulletedSharp } from "@vicons/material";
 
 // UI组件导入
-import { NButton, NIcon } from "naive-ui";
+import { NButton, NIcon, NDivider } from "naive-ui";
 
 // 弹出层工具
 const { confirm, editText, toast, notify } = usePopup();
@@ -117,6 +134,14 @@ const messagesContainer = ref(null);
 const currentSessionId = ref(null);
 const showTokenModal = ref(false);
 const itemRefs = ref({});
+const loaclSidebarVisible = computed({
+  get() {
+    return props.sidebarVisible
+  },
+  set(value) {
+    emit('update:sidebarVisible', value)
+  }
+})
 
 // Props & Emits
 const props = defineProps({
@@ -124,9 +149,13 @@ const props = defineProps({
     type: Object,
     default: () => ({})
   },
+  sidebarVisible: {
+    type: Boolean,
+    default: true
+  }
 });
 
-const emit = defineEmits(['update:session', 'openSettings']);
+const emit = defineEmits(['update:session', 'openSettings', 'openSwitchModel', 'update:sidebarVisible']);
 
 // 计算属性
 const currentSession = computed({
@@ -135,6 +164,9 @@ const currentSession = computed({
 });
 
 const chatTitle = computed(() => props.session?.title || "Loading...");
+
+const currentModelName = computed(() => currentSession.value.model ?
+  (currentSession.value.model.model_name.split('/').pop()) : '请选择对话模型');
 
 const isStreaming = computed(() => store.sessionIsStreaming(currentSessionId.value));
 
@@ -159,11 +191,13 @@ watch(
   () => activeMessages.value,
   () => {
     debouncedUpdatedSession();
-    nextTick(() => {
-      if (!isStreaming.value) {
-        immediateScrollToBottom();
-      }
-    });
+    if (scrollContainerRef.value?.isAtBottom) {
+      nextTick(() => {
+        if (!isStreaming.value) {
+          immediateScrollToBottom();
+        }
+      });
+    }
   },
   { deep: true }
 );
@@ -454,6 +488,10 @@ async function clearChat() {
     toast.success("聊天记录已清空");
   }
 }
+
+const handleSwitchModelClick = (modelId) => {
+  emit("openSwitchModel", modelId);
+};
 
 function handleSettingsClick() {
   emit("openSettings");
