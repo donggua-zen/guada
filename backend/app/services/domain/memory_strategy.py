@@ -362,7 +362,7 @@ class MemorylessStrategy(MemoryStrategy):
             self.continue_fetch_messages = False
             return {
                 "limit": 1,
-                "direction": "asc",
+                "direction": "desc",
             }
         return None
 
