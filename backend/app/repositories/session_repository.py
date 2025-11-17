@@ -21,7 +21,7 @@ class SessionRepository:
             **data,
         )
         db.session.add(session)
-        return session.to_dict(flush=True)
+        return session.to_dict(flush=True, include=["model"])
 
     @staticmethod
     @smart_transaction_manager.execute_in_transaction
@@ -32,7 +32,7 @@ class SessionRepository:
     def get_session_by_id(session_id):
         session = db.session.query(Session).filter(Session.id == session_id).first()
         if session:
-            return session.to_dict()
+            return session.to_dict(include=["model"])
         else:
             return None
 

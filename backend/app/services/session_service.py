@@ -23,6 +23,7 @@ class SessionService:
             data["title"] = character["title"]
             data["avatar_url"] = character["avatar_url"]
             data["description"] = character["description"]
+            data["model_id"] = character["model_id"]
 
             fields = [
                 "assistant_name",
@@ -33,7 +34,6 @@ class SessionService:
                 "short_term_memory_length",
                 "model_top_p",
                 "model_temperature",
-                "model_id",
             ]
             # 更优雅地复制字段
             if "settings" in character:
@@ -72,6 +72,7 @@ class SessionService:
             "description",
             "avatar_url",
             "user_id",
+            "model_id",
         ]
 
         extended_fields = [
@@ -83,7 +84,6 @@ class SessionService:
             "short_term_memory_length",
             "model_top_p",
             "model_temperature",
-            "model_id",
         ]
 
         data_filtered = {

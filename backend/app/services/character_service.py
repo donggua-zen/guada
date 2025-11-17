@@ -23,6 +23,7 @@ class CharacterService:
             "description",
             "avatar_url",
             "settings",
+            "model_id",
         ]
         extended_fields = [
             "assistant_name",
@@ -35,7 +36,6 @@ class CharacterService:
             "short_term_memory_tokens",
             "model_top_p",
             "model_temperature",
-            "model_id",
         ]
 
         data_filtered = {
@@ -68,6 +68,7 @@ class CharacterService:
             "description",
             "avatar_url",
             "user_id",
+            "model_id",
         ]
 
         extended_fields = [
@@ -81,7 +82,6 @@ class CharacterService:
             "short_term_memory_tokens",
             "model_top_p",
             "model_temperature",
-            "model_id",
         ]
 
         data_filtered = {}
