@@ -1,20 +1,21 @@
 <template>
   <div class="flex w-full h-full">
-    <sessions-list ref="sessionsListRef" :sessions="sessions" @on-select="selectSession"
-      @on-delete="handleDeleteSession" @on-update="handleRenameSession" @on-create="handleCreateSession" />
+    <sessions-list ref="sessionsListRef" :sessions="sessions" v-model:sidebar-visible="sidebarVisible"
+      @on-select="selectSession" @on-delete="handleDeleteSession" @on-update="handleRenameSession"
+      @on-create="handleCreateSession" />
     <template v-if="sessions.length > 0">
       <div class="h-full flex-1 min-w-0">
-        <ChatPanel v-model:session="currentSession" @openSettings="handleOpenSettings" />
+        <ChatPanel v-model:session="currentSession" v-model:sidebar-visible="sidebarVisible"
+          @openSettings="handleOpenSettings" @openSwitchModel="handleOpenSwitchModel" />
       </div>
-      <!-- <SettingsPanel :character="activeCharacter" :session="currentSession" @update-character="updateCharacter" /> -->
-      <!-- <div class="border-l border-gray-200" style="width: 340px;flex-shrink: 0;"> -->
-        <n-drawer v-model:show="visible" width="380" placement="right" :mask-closable="false"
-          :auto-focus="false">
-          <n-drawer-content title="对话设置" closable>
-            <CharacterSettingPanel :data="currentSession" @update:data="updateSession" :simple="true" />
-          </n-drawer-content>
-        </n-drawer>
-      <!-- </div> -->
+
+      <n-modal v-model:show="visible" :mask-closable="false" :auto-focus="false" style="width: 600px;max-width: 90vw;"
+        title="对话设置" preset="card">
+        <div class="max-h-80vh overflow-y-auto">
+          <CharacterSettingPanel :data="currentSession" @update:data="updateSession" :simple="true"
+            :tab="currentTabValue" />
+        </div>
+      </n-modal>
     </template>
     <template v-else>
       <div class="flex-1 flex items-center justify-center">
@@ -26,7 +27,6 @@
           </template> -->
         </n-empty>
       </div>
-
     </template>
   </div>
 </template>
@@ -39,21 +39,22 @@ import { useRouter } from 'vue-router'
 import SessionsList from "./SessionsList.vue";
 import CharacterSettingPanel from "./CharacterSettingPanel.vue";
 import ChatPanel from "./ChatPanel.vue";
-import { NEmpty,NDrawer,NDrawerContent } from "naive-ui";
+import { NEmpty, NModal, NCard, NButton, NIcon } from "naive-ui";
 import { usePopup } from "@/composables/usePopup";
+import { useStorage } from '@vueuse/core'
 
-const { confirm, editText, toast, prompt } = usePopup();;
+const { confirm, editText, toast, prompt } = usePopup();
 const router = useRouter();
 
 const currentSession = ref({
   id: null,
 });
 
-
 const sessionsListRef = ref(null);
 const sessions = ref([]);
 const visible = ref(false);
-
+const currentTabValue = ref('basic');
+const sidebarVisible = useStorage('sidebarVisible', true); // 控制侧边栏显示状态
 
 const fetchSession = async (sessionId) => {
   const session = await apiService.fetchSession(sessionId);
@@ -93,32 +94,35 @@ watch(() => currentSession, (session) => {
 const updateSession = async (data) => {
   let session = null;
   try {
-    // console.log(characterForm);
     if (currentSession.value && currentSession.value.id) {
       await apiService.updateSession(currentSession.value.id, data);
       session = { id: currentSession.value.id, ...data };
-      // toast.success("角色更新成功");
 
       if (session && data.avatar_file) {
         const response = await apiService.uploadAvatar(currentSession.value.id, data.avatar_file, 'session');
         session.avatar_url = response.url + "?v=" + new Date().getTime();
       }
       currentSession.value = session;
-      // updateSessionById(session.id, session);
     }
     toast.success("设置成功");
   } catch (error) {
     toast.error("设置失败");
   }
+  visible.value = false;
 };
 
 const handleOpenSettings = () => {
+  currentTabValue.value = 'basic';
+  visible.value = true;
+}
+
+const handleOpenSwitchModel = () => {
+  currentTabValue.value = 'model';
   visible.value = true;
 }
 
 const handleCreateSession = async () => {
   try {
-
     const result = await prompt("新建对话", {
       placeholder: "请输入对话名称",
       defaultValue: "新建对话"
@@ -202,3 +206,21 @@ onMounted(() => {
   loadSessions();
 })
 </script>
+
+<style scoped>
+.max-h-80vh {
+  max-height: 80vh;
+}
+
+/* 添加侧边栏动画过渡 */
+.sessions-list-enter-active,
+.sessions-list-leave-active {
+  transition: all 0.3s ease;
+}
+
+.sessions-list-enter-from,
+.sessions-list-leave-to {
+  transform: translateX(-100%);
+  opacity: 0;
+}
+</style>

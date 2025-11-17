@@ -1,6 +1,6 @@
 <!-- ScrollContainer.vue -->
 <template>
-    <SimpleBar :options="scrollbarOptions" :timeout="4000" class="scroll-container" ref="simpleBarRef"
+    <SimpleBar :options="scrollbarOptions" :timeout="6000" class="scroll-container" ref="simpleBarRef"
         @scroll="handleScroll">
         <div class="scroll-content" ref="contentRef">
             <slot></slot>
@@ -13,7 +13,7 @@ import { ref, computed, watch, nextTick, onMounted, onUnmounted } from "vue";
 import { useDebounceFn } from '@vueuse/core'
 
 // 常量定义
-const SCROLL_THRESHOLD = 80;
+const SCROLL_THRESHOLD = 50;
 const SCROLLBAR_OPTIONS = {
     autoHide: true,
     timeout: 4000

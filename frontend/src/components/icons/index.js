@@ -1,3 +1,5 @@
 export { default as Loading } from './Loading.vue'
 export { default as Thinking } from './Thinking.vue'
 export { default as OpenAI } from './OpenAI.vue'
+export { default as SectionsAlt } from './SectionsAlt.vue'
+export { default as ArrowCircleLeft } from './ArrowCircleLeft.vue'
