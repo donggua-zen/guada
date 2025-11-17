@@ -4,7 +4,7 @@
             <h2>智能体设置</h2>
         </div>
         <div class="flex-1" :class="{ 'p-3': !isSimpleStyle }">
-            <n-tabs type="segment" ref="tabsInstRef" v-model:value="tabsValue">
+            <n-tabs type="segment" ref="tabsInstRef" v-model:value="v ">
                 <!-- 基础设置 -->
                 <n-tab-pane name="basic" tab="基础" display-directive="show">
                     <div class="py-5">
@@ -213,7 +213,8 @@ import 'vue-advanced-cropper/dist/style.css'
 import {
     UploadOutlined,
     DeleteOutlined,
-    SaveOutlined} from '@vicons/antd'
+    SaveOutlined
+} from '@vicons/antd'
 
 import { apiService } from '../services/ApiService'
 import { required } from '@vuelidate/validators'
@@ -427,11 +428,12 @@ watch(() => props.data, (newVal) => {
     characterForm.title = newVal.title || '';
     characterForm.description = newVal.description || '';
     characterForm.avatar_url = newVal.avatar_url || '';
+    characterForm.model_id = newVal.model_id || '';
+
     //if (newVal.settings) {
     characterForm.assistant_name = newVal.settings?.assistant_name || '';
     characterForm.assistant_identity = newVal.settings?.assistant_identity || '';
     characterForm.system_prompt = newVal.settings?.system_prompt || '';
-    characterForm.model_id = newVal.settings?.model_id || '';
     characterForm.memory_type = newVal.settings?.memory_type || 'sliding_window';
     //if (!isSimpleStyle.value) {
     characterForm.model_temperature = newVal.settings?.model_temperature || '';
@@ -457,6 +459,10 @@ const loadModels = async () => {
         console.error('获取模型列表失败:', error)
         notify.error('获取模型列表失败', error)
     }
+}
+
+const findModelById = (modelId) => {
+    return models.value.find(model => model.id === modelId)
 }
 
 // 生命周期
@@ -603,6 +609,8 @@ const handleSave = async () => {
             'avatar_url': characterForm.avatar_url.startsWith('blob:') ? (props.data.avatar_url || '') : characterForm.avatar_url,
             'avatar_file': characterForm.avatar_file,
             'identity': characterForm.identity,
+            'model_id': characterForm.model_id,
+            'model': findModelById(characterForm.model_id),
             'settings': {
                 'assistant_name': characterForm.assistant_name,
                 'assistant_identity': characterForm.assistant_identity,
@@ -612,14 +620,13 @@ const handleSave = async () => {
                 'short_term_memory_tokens': characterForm.short_term_memory_tokens,
                 'max_memory_length': characterForm.max_memory_length,
                 'short_term_memory_length': characterForm.short_term_memory_length,
+                // 模型
+                'model_name': findModelById(characterForm.model_id).model_name || '请选择模型',
+                'model_temperature': characterForm.model_temperature,
+                'model_top_p': characterForm.model_top_p,
+                'model_frequency_penalty': characterForm.model_frequency_penalty,
             }
         }
-        //if (!isSimpleStyle.value) {
-        finalData['settings']['model_id'] = characterForm.model_id;
-        finalData['settings']['model_temperature'] = characterForm.model_temperature;
-        finalData['settings']['model_top_p'] = characterForm.model_top_p;
-        finalData['settings']['model_frequency_penalty'] = characterForm.model_frequency_penalty;
-        // }
         emit('update:data', finalData)
         // toast.success('保存成功')
         // handleClose()

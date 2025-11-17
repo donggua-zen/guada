@@ -2,7 +2,8 @@
   <div class="flex flex-col h-full">
     <!-- 聊天头部 -->
     <div class="chat-header">
-      <span id="chat-title">{{ chatTitle }}</span>
+      <span class="mr-2">{{ chatTitle }}</span><n-button text="">{{ currentSession.model ? currentSession.model.model_name : ''
+        }}</n-button>
 
       <div class="flex items-center flex-1 justify-end">
         <n-button class="clear-chat-btn" title="清空聊天记录" @click="clearChat" text>
