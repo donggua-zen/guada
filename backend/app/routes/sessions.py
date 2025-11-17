@@ -33,7 +33,7 @@ def create_session():
             "user_id": "123",  # TODO: 应该从认证信息中获取
             "avatar_url": "",
             "description": "An helpful AI assistant",
-            "model_id": "",
+            "model_id": None,
             "settings": {
                 "memory_type": "sliding_window",
                 "system_prompt": "You are a helpful AI assistant that can answer any question asked by the user",
