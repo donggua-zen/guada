@@ -32,7 +32,9 @@ class SessionRepository:
     def get_session_by_id(session_id):
         session = db.session.query(Session).filter(Session.id == session_id).first()
         if session:
-            return session.to_dict(include=["model"])
+            return session.to_dict(
+                include=[{"field": "model", "include": ["provider"]}]
+            )
         else:
             return None
 

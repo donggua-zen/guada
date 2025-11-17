@@ -21,9 +21,6 @@ def init_db(app):
             raise
 
 
-
-
-
 class ModelBase(db.Model):
     __abstract__ = True
 
@@ -47,24 +44,34 @@ class ModelBase(db.Model):
                     result[column.name] = getattr(self, column.name)
         # 处理包含的关系字段
         for rel_name in include:
-            if hasattr(self, rel_name) and rel_name not in exclude:
-                rel_value = getattr(self, rel_name)
+            with_field: str = None
+            child_include = []
+            if isinstance(rel_name, str):
+                with_field = rel_name
+            elif isinstance(rel_name, dict):
+                with_field = rel_name.get("field", "")
+                child_include = rel_name.get("include", [])
+
+            if hasattr(self, with_field) and with_field not in exclude:
+                rel_value = getattr(self, with_field)
 
                 # 处理关系字段的序列化
                 if rel_value is None:
-                    result[rel_name] = None
+                    result[with_field] = None
                 elif isinstance(rel_value, list):
                     # 处理一对多或多对多关系（列表类型）
-                    result[rel_name] = []
+                    result[with_field] = []
                     for item in rel_value:
                         if hasattr(item, "to_dict"):
-                            result[rel_name].append(item.to_dict())
+                            result[with_field].append(
+                                item.to_dict(include=child_include)
+                            )
                         else:
-                            result[rel_name].append(str(item))
+                            result[with_field].append(str(item))
                 elif hasattr(rel_value, "to_dict"):
                     # 处理多对一关系（单个对象）
-                    result[rel_name] = rel_value.to_dict()
+                    result[with_field] = rel_value.to_dict(include=child_include)
                 else:
                     # 其他处理方式
-                    result[rel_name] = str(rel_value)
+                    result[with_field] = str(rel_value)
         return result

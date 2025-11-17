@@ -12,12 +12,10 @@
 
 from contextlib import closing
 import datetime
-import html
 import traceback
-from typing import Generator, List, Optional, Tuple, Union
+from typing import Generator, Optional
 
 from app.repositories.message_repository import MessageRepository
-from app.repositories.model_repository import ModelRepository
 from app.repositories.session_repository import SessionRepository
 from app.services.domain.memory_strategy import MemoryStrategy
 from app.services.llm_service import LLMServiceChunk
@@ -308,7 +306,7 @@ class ChatService:
             if not assistant_message_current_content:
                 raise ValueError("Assistant message content missing")
 
-            model = model_service.get_model(session["settings"]["model_id"])
+            model = session["model"]
             if model is None:
                 raise ValueError("Invalid model name")
 
@@ -426,7 +424,7 @@ class ChatService:
         strategy = self.get_memory_strategy(session)
 
         settings = session["settings"]
-        model = ModelRepository.get_model(model_id=settings["model_id"])
+        model = session["model"]
 
         conversation_messages = self._get_conversation_messages(
             session, strategy=strategy, user_message_id=None
