@@ -1,5 +1,5 @@
 <template>
-  <div v-if="localSidebarVisible"
+  <div v-show="localSidebarVisible"
     class="sessions-panel flex flex-col w-72 min-w-72 h-screen bg-[var(--conversation-bg)] border-r border-[var(--conversation-border-color)]">
     <div class="sessions-header px-5 py-5 text-lg font-semibold flex justify-between items-center">
       <span>会话列表</span>
