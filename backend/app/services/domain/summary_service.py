@@ -33,7 +33,7 @@ class SummaryService:
         try:
             model = "qwen3-30b-a3b-instruct-2507"
             print(f"调用LLM {model}\n")
-            return self.llm_service.generate_response(
+            return self.llm_service.completions(
                 model, messages=messages, temperature=0.4, stream=False, thinking=False
             )
         except Exception as e:

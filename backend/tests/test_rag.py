@@ -59,7 +59,7 @@ def generate_summary(messages: list[dict]):
         {"role": "user", "content": prompt},
     ]
 
-    results = llm_service.generate_response(
+    results = llm_service.completions(
         llm_model,
         context_message,
         stream=False,
