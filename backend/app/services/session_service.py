@@ -2,6 +2,7 @@
 import os
 import shutil
 from app.repositories.character_repository import CharacterRepository
+from app.repositories.message_repository import MessageRepository
 from app.repositories.session_repository import SessionRepository as SessionRepo
 from app.services.upload_service import UploadService
 from app.utils import remove_file

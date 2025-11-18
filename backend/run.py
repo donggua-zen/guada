@@ -12,9 +12,9 @@ current_directory = os.path.dirname(current_script_path)
 
 os.chdir(current_directory)
 
-logger.debug("当前脚本路径:", current_script_path)
-logger.debug("当前脚本目录:", current_directory)
-logger.debug("拼接后的文件路径:", os.path.join(current_directory, "static"))
+logger.debug("当前脚本路径:%s", current_script_path)
+logger.debug("当前脚本目录:%s", current_directory)
+logger.debug("拼接后的文件路径:%s", os.path.join(current_directory, "static"))
 
 
 if __name__ == "__main__":

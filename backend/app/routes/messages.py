@@ -82,3 +82,13 @@ def update_message_active_content(content_id):
         return jsonify({"success": True})
     except Exception as e:
         return jsonify({"success": False, "error": str(e)}), 500
+
+
+@messages_bp.route("/v1/sessions/<session_id>/messages/import", methods=["POST"])
+def import_messages(session_id):
+    try:
+        messages = request.json
+        message_service.import_messages(session_id, messages)
+        return jsonify({"success": True})
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
