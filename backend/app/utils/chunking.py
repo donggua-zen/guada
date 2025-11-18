@@ -1,6 +1,9 @@
+import logging
 import re
 from typing import List, Dict, Optional
 import unicodedata
+
+logger = logging.getLogger(__name__)
 
 
 def count_effective_length(text: str) -> int:
@@ -55,7 +58,7 @@ def chunking_messages(
     # 动态分块范围：设置最小和最大块大小以减少波动
     min_chunk_size = max(chunk_size // 2, 100)  # 最小块大小基于分块大小，避免过小
     max_chunk_size = int(chunk_size * 1.5)  # 最大块大小允许10%上浮
-    print(f"min_chunk_size:{min_chunk_size} max_chunk_size:{max_chunk_size}")
+    logger.debug(f"min_chunk_size:{min_chunk_size} max_chunk_size:{max_chunk_size}")
     remaining_chars = total_chars
     i = 0
     while i < len(messages):
@@ -182,7 +185,7 @@ def chunking_text(
     for i in range(1, len(chunks)):
         # 获取前一个块的末尾部分作为叠加
         overlap_text = chunks[i - 1][-overlap_size:]
-        print("********叠加文字：", overlap_text)
+        logger.debug("********叠加文字：", overlap_text)
         # 将叠加文字添加到当前块的开头
         chunks[i] = overlap_text + chunks[i]
         # # 确保添加叠加后不超过最大长度

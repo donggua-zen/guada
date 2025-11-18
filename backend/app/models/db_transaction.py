@@ -32,7 +32,7 @@ class SmartTransactionManager:
         current_depth = self._get_transaction_depth()
         is_outermost = current_depth == 0
 
-        print(f"事务开始 - 深度: {current_depth}, 最外层: {is_outermost}")
+        logger.debug(f"事务开始 - 深度: {current_depth}, 最外层: {is_outermost}")
 
         try:
             self._set_transaction_depth(current_depth + 1)
@@ -43,17 +43,17 @@ class SmartTransactionManager:
 
             if is_outermost:
                 db.session.commit()
-                print("事务提交成功")
+                logger.debug("事务提交成功")
 
         except Exception as e:
-            print(f"事务异常: {e}")
+            logger.debug(f"事务异常: {e}")
             if is_outermost:
                 db.session.rollback()
-                print("事务回滚")
+                logger.debug("事务回滚")
             raise
         finally:
             self._set_transaction_depth(current_depth)
-            print(f"事务结束 - 深度恢复为: {current_depth}")
+            logger.debug(f"事务结束 - 深度恢复为: {current_depth}")
 
     def execute_in_transaction(self, func, *args, **kwargs):
         """

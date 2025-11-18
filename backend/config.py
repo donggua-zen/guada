@@ -1,7 +1,10 @@
 # config.py
+import logging
 import os
 from datetime import timedelta
+from pathlib import Path
 import sqlite3
+import sys
 from flask_sqlalchemy import SQLAlchemy
 from sqlalchemy import StaticPool
 from sqlalchemy import StaticPool, event
@@ -16,6 +19,24 @@ def set_sqlite_pragma(dbapi_connection, connection_record):
         cursor = dbapi_connection.cursor()
         cursor.execute("PRAGMA foreign_keys=ON")
         cursor.close()
+
+
+# 创建日志目录
+LOG_DIR = Path("logs")
+LOG_DIR.mkdir(exist_ok=True)
+
+
+def setup_logging():
+    """配置日志系统"""
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+        "[in %(pathname)s:%(lineno)d]",
+        handlers=[
+            logging.StreamHandler(sys.stdout),  # 控制台输出
+            logging.FileHandler(LOG_DIR / "app.log", encoding="utf-8"),  # 文件输出
+        ],
+    )
 
 
 class Config:
@@ -39,7 +60,8 @@ class Config:
     SQLITE_JOURNAL_MODE = "WAL"  # 写前日志模式，提高并发
     SQLITE_SYNCHRONOUS = "NORMAL"  # 同步模式平衡性能和安全
     # 设置应用时区
-    TIMEZONE = 'Asia/Shanghai'
+    TIMEZONE = "Asia/Shanghai"
+
 
 class DevelopmentConfig(Config):
     """开发环境配置"""
@@ -76,6 +98,8 @@ class ProductionConfig(Config):
     if os.environ.get("SECRET_KEY"):
         SECRET_KEY = os.environ.get("SECRET_KEY")
 
+
+setup_logging()
 
 # 配置映射
 app_config = {

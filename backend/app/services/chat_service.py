@@ -12,6 +12,7 @@
 
 from contextlib import closing
 import datetime
+import logging
 import traceback
 from typing import Generator, Optional
 
@@ -22,6 +23,8 @@ from app.services.llm_service import LLMServiceChunk
 from app.services.message_service import MessageService
 
 message_service = MessageService()
+
+logger = logging.getLogger(__name__)
 
 
 class ChatService:
@@ -69,16 +72,17 @@ class ChatService:
             prompts, [msg for msg in conversation_messages if msg["role"] == "system"]
         )
 
-        # 注释掉调试输出，防止敏感信息泄漏
-        # print(f"--------------------({len(messages)} messages)-----------------------------")
-        # if len(messages) > 0:
-        #     for msg in messages[:3]:
-        #         print(f"{msg['role']}: {msg['content']}")
-        #     print(f".......")
-        # if len(messages) > 3:
-        #     for msg in messages[-1:]:
-        #         print(f"{msg['role']}: {msg['content']}")
-        # print("------------------------------------------------------------")
+        logger.debug(
+            f"--------------------({len(conversation_messages)} messages)-----------------------------"
+        )
+        if len(conversation_messages) > 0:
+            for msg in conversation_messages[:3]:
+                logger.debug(f"{msg['role']}: {msg['content']}")
+            logger.debug(f".......")
+        if len(conversation_messages) > 3:
+            for msg in conversation_messages[-1:]:
+                logger.debug(f"{msg['role']}: {msg['content']}")
+        logger.debug("------------------------------------------------------------")
 
         context_messages = [{"role": "system", "content": system_prompt}]
 
@@ -323,7 +327,7 @@ class ChatService:
             context_messages = self.construct_context_message(
                 session, conversation_messages
             )
-            print(f"Using model: {model['model_name']}")
+            logger.debug(f"Using model: {model['model_name']}")
             yield {
                 "message_id": assistant_message["id"],
                 "content_id": assistant_message_current_content["id"],
@@ -344,14 +348,14 @@ class ChatService:
             ) as generator:
                 for chunk in generator:
                     yield chunk.to_dict()
-            print("Model response complete")
+            logger.debug("Model response complete")
         except GeneratorExit:
-            print("User stopped generation")
+            logger.debug("User stopped generation")
             complete_chunk.finish_reason = "user_stop"
             return
         except Exception as e:
-            print(f"Error: {e}")
-            traceback.print_exc()
+            logger.exception(f"Error: {e}")
+            traceback.logger.debug_exc()
             chunk = LLMServiceChunk()
             chunk.finish_reason = "error"
             chunk.error = str(e)
@@ -361,7 +365,7 @@ class ChatService:
             yield chunk.to_dict()
             return
         finally:
-            print("Generation complete")
+            logger.debug("Generation complete")
             if assistant_message is not None:
                 message_service.update_message(
                     assistant_message["id"],

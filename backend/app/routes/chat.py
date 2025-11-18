@@ -1,5 +1,6 @@
 from contextlib import closing
 import json
+import logging
 import traceback
 from flask import Blueprint, Response, jsonify, request
 
@@ -14,6 +15,7 @@ chat_service = ChatService()
 session_service = SessionService()
 
 chat_bp = Blueprint("chat", __name__)
+logger = logging.getLogger(__name__)
 
 
 # 流式响应
@@ -40,18 +42,18 @@ def stream_generator(
             #     regeneration_mode=regeneration_mode,
             #     assistant_message_id=assistant_message_id,
             # )
-            print("Generator started.")
+            logger.debug("Generator started.")
             for chunk in generator:
                 json_chunk = json.dumps(chunk)
                 yield f"data: {json_chunk}\n\n"
             yield "data: [DONE]\n\n"
-            print("Generator ended.")
+            logger.debug("Generator ended.")
     except GeneratorExit:
         if generator is not None:
             generator.close()
         return
     except Exception as e:
-        print(f"Exception2:{e}\n")
+        logger.debug(f"Exception2:{e}\n")
         traceback.print_exc()
         yield "data: [DONE]\n\n"
 
@@ -85,8 +87,8 @@ def chat_completions(session_id):
             mimetype="text/event-stream",
         )
     except Exception as e:
-        print("chat_completions Exception:")
-        print(e)
+        logger.debug("chat_completions Exception:")
+        logger.debug(e)
         traceback.print_exc()
         return jsonify({"success": False, "error": str(e)}), 400
 

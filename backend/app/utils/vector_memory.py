@@ -10,22 +10,21 @@
 通过将文本转换为向量表示，实现高效的语义相似性搜索，支持角色扮演对话系统中的上下文记忆功能。
 """
 
-import json
-import os
-from typing import List, Dict, Optional, Union
+import logging
+from typing import List, Dict, Optional
 from openai import OpenAI
 import chromadb
-from chromadb.config import Settings
 from openai import OpenAI
 from typing import List, Dict, Optional
 import chromadb
-from chromadb.config import Settings
 from openai import OpenAI
 import ulid
-from typing import List, Dict, Optional, Union
+from typing import List, Dict, Optional
 import time
 
 from app.repositories.model_repository import ModelRepository
+
+logger = logging.getLogger(__name__)
 
 
 class _VectorMemory:
@@ -83,7 +82,7 @@ class _VectorMemory:
             )
             return response.data[0].embedding
         except Exception as e:
-            print(f"获取嵌入时出错: {e}")
+            logger.exception(f"获取嵌入时出错: {e}")
             raise
 
     def add_memory(
@@ -211,7 +210,7 @@ class _VectorMemory:
             # self.chroma_client.persist()
             return True
         except Exception as e:
-            print(f"删除记忆时出错: {e}")
+            logger.exception(f"删除记忆时出错: {e}")
             return False
 
     def delete_session_memories(self, session_id: str) -> bool:
@@ -236,7 +235,7 @@ class _VectorMemory:
             # self.chroma_client.persist()
             return True
         except Exception as e:
-            print(f"删除会话记忆时出错: {e}")
+            logger.exception(f"删除会话记忆时出错: {e}")
             return False
 
     def delete_memory_by_message_id(self, message_id: str) -> bool:
@@ -262,7 +261,7 @@ class _VectorMemory:
             # self.chroma_client.persist()
             return True
         except Exception as e:
-            print(f"删除会话记忆时出错: {e}")
+            logger.exception(f"删除会话记忆时出错: {e}")
             return False
 
     def get_session_memories(self, session_id: str) -> List[Dict]:
@@ -297,7 +296,7 @@ class _VectorMemory:
 
             return formatted_results
         except Exception as e:
-            print(f"获取会话记忆时出错: {e}")
+            logger.exception(f"获取会话记忆时出错: {e}")
             return []
 
     def get_all_memories(self, session_id: Optional[str] = None) -> List[Dict]:
@@ -337,7 +336,7 @@ class _VectorMemory:
 
             return formatted_results
         except Exception as e:
-            print(f"获取所有记忆时出错: {e}")
+            logger.exception(f"获取所有记忆时出错: {e}")
             return []
 
     def clear_collection(self) -> bool:
@@ -355,7 +354,7 @@ class _VectorMemory:
             # self.chroma_client.persist()
             return True
         except Exception as e:
-            print(f"清空集合时出错: {e}")
+            logger.exception(f"清空集合时出错: {e}")
             return False
 
     def __del__(self):

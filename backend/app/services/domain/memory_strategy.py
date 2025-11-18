@@ -18,7 +18,8 @@
 """
 
 from abc import ABC, abstractmethod
-from typing import List, Tuple, Optional, Dict, Any
+import logging
+from typing import List, Dict, Any
 
 # from app.services import get_message_service
 # from app.services.summary_service import get_summary_service
@@ -27,6 +28,8 @@ from app.services import MessageService
 from app.tokenizer.auto_tokenizer import get_tokenizer
 from app.utils.chunking import chunking_text, preprocess_text
 from app.utils.vector_memory import get_vector_memory
+
+logger = logging.getLogger(__name__)
 
 vector_memory = get_vector_memory()
 
@@ -126,7 +129,7 @@ class RAGHelper:
             where=exclusion_condition,
         )
         for result in memory_results:
-            print(
+            logger.debug(
                 f"RAG - 内容: {result['content'][:50]}..., 相似度: {result['score']:.3f}"
             )
         # 过滤并返回高分数结果
