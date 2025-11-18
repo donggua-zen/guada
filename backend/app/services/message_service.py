@@ -2,6 +2,7 @@
 import json
 from app.repositories.message_content_repository import MessageContentRepository
 from app.repositories.message_repository import MessageRepository as MessageRepo
+from app.models.db_transaction import smart_transaction_manager
 
 
 class MessageService:
@@ -47,6 +48,7 @@ class MessageService:
         if not message:
             raise Exception("Message not found")
 
+        # 此处并不会实际更改数据库，而是返回给前端使用的数据结构
         for old_content in message["contents"]:
             old_content.update(is_current=False)
 
@@ -104,3 +106,21 @@ class MessageService:
         MessageContentRepository.set_current_content(
             message_id=content["message_id"], content_id=content["id"]
         )
+
+    def import_messages(self, session_id, messages: list[dict]):
+        with smart_transaction_manager.transaction():
+            MessageRepo.delete_messages_by_session_id(session_id)
+            parent_id = None
+            for msg in messages:
+                message_in_db = MessageRepo.add_message(
+                    session_id=session_id,
+                    role=msg["role"],
+                    content=msg["contents"],
+                    files=msg["files"],
+                    parent_id=parent_id,
+                )
+
+                if message_in_db and message_in_db["role"] == "user":
+                    parent_id = message_in_db["id"]
+                else:
+                    parent_id = None

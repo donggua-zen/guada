@@ -4,6 +4,7 @@ from typing import Optional
 from app.models import db, Message
 from app.models.db_transaction import smart_transaction_manager
 from app.models.message_content import MessageContent
+from app.models.file import File as FileModel
 
 
 class MessageRepository:
@@ -119,50 +120,66 @@ class MessageRepository:
     def add_message(
         session_id: str,
         role: str,
-        content: str,
+        content: str | list[dict],
+        files: list[dict] = None,
         parent_id: str = None,
         reasoning_content: str = None,
         meta_data: dict = None,
     ):
-        message_content = MessageContent(
-            content=content,
-            reasoning_content=reasoning_content,
-            is_current=True,
-            meta_data=meta_data or {},
-        )
-        message = Message(
-            session_id=session_id,
-            role=role,
-            contents=[message_content],
-            parent_id=parent_id,
-        )
-        db.session.add(message)
-        return message.to_dict(flush=True, include=["contents"])
+        vailed_contents = []
+        vailed_files = []
+        include = ["contents"]
+        if isinstance(content, list):
+            for item in content:
+                if not isinstance(item, dict):
+                    raise TypeError("Each item in content list must be a dictionary")
 
-    @staticmethod
-    @smart_transaction_manager.execute_in_transaction
-    def add_message_content(
-        session_id: str,
-        role: str,
-        content: str,
-        parent_id: str = None,
-        reasoning_content: str = None,
-        meta_data: dict = None,
-    ):
-        message_content = MessageContent(
-            content=content,
-            reasoning_content=reasoning_content,
-            is_current=True,
-            meta_data=meta_data or {},
-        )
+                vailed_contents.append(
+                    MessageContent(
+                        content=item.get("content"),
+                        reasoning_content=item.get("reasoning_content"),
+                        is_current=item.get("is_current") or True,
+                        meta_data=item.get("meta_data") or {},
+                    )
+                )
+        else:
+            vailed_contents.append(
+                MessageContent(
+                    content=content,
+                    reasoning_content=reasoning_content,
+                    is_current=True,
+                    meta_data=meta_data or {},
+                )
+            )
+        if isinstance(files, list):
+            for item in files:
+                if not isinstance(item, dict):
+                    raise TypeError("Each item in files list must be a dictionary")
+
+                vailed_files.append(
+                    FileModel(
+                        content=item.get("content"),
+                        file_name=item.get("file_name"),
+                        file_extension=item.get("file_extension"),
+                        display_name=item.get("display_name"),
+                        file_type=item.get("file_type"),
+                        file_size=item.get("file_size"),
+                        session_id=item.get("session_id"),
+                        # message_id=item.get("message_id"),
+                        content_hash=item.get("content_hash"),
+                    )
+                )
+            include.append("files")
+
         message = Message(
             session_id=session_id,
             role=role,
-            contents=[message_content],
+            files=vailed_files,
+            contents=vailed_contents,
             parent_id=parent_id,
         )
         db.session.add(message)
-        return message.to_dict(flush=True, include=["contents"])
+        return message.to_dict(flush=True, include=include)
 
     @staticmethod
     @smart_transaction_manager.execute_in_transaction
