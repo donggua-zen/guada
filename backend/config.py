@@ -1,11 +1,9 @@
 # config.py
 import logging
 import os
-from datetime import timedelta
 from pathlib import Path
 import sqlite3
 import sys
-from flask_sqlalchemy import SQLAlchemy
 from sqlalchemy import StaticPool
 from sqlalchemy import StaticPool, event
 from sqlalchemy.engine import Engine
@@ -29,7 +27,7 @@ LOG_DIR.mkdir(exist_ok=True)
 def setup_logging():
     """配置日志系统"""
     logging.basicConfig(
-        level=logging.INFO,
+        level=logging.DEBUG,
         format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
         "[in %(pathname)s:%(lineno)d]",
         handlers=[
