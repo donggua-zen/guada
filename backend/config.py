@@ -28,8 +28,7 @@ def setup_logging():
     """配置日志系统"""
     logging.basicConfig(
         level=logging.DEBUG,
-        format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
-        "[in %(pathname)s:%(lineno)d]",
+        format="%(asctime)s - %(name)s - %(levelname)s - %(message)s" "[in %(lineno)d]",
         handlers=[
             logging.StreamHandler(sys.stdout),  # 控制台输出
             logging.FileHandler(LOG_DIR / "app.log", encoding="utf-8"),  # 文件输出
