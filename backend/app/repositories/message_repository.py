@@ -167,6 +167,16 @@ class MessageRepository:
     @staticmethod
     @smart_transaction_manager.execute_in_transaction
     def update_message(message_id, data):
+        """
+        更新指定消息的信息
+
+        Args:
+            message_id (str): 消息ID
+            data (dict): 包含要更新的字段和值的字典
+
+        Returns:
+            dict: 更新后的消息信息，如果消息不存在则返回None
+        """
         message = db.session.query(Message).filter(Message.id == message_id).first()
         if not message:
             return None
@@ -178,7 +188,7 @@ class MessageRepository:
         for key, value in data.items():
             if hasattr(message, key):
                 message_fields[key] = value
-            elif key in ["content", "reasoning_content"]:
+            elif key in ["content", "reasoning_content", "meta_data"]:
                 content_fields[key] = value
 
         # 更新消息表字段
