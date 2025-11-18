@@ -260,13 +260,12 @@ class ChatService:
         返回:
             Generator[LLMService]: 模型回复的流式响应，每个元素是一个包含部分回复内容的 LLMServiceChunk 对象
         """
-        from app.services import ModelService, LLMService  # 避免循环导入
+        from app.services import LLMService  # 避免循环导入
 
         current_message_id = message_id
-        model_service = ModelService()
         assistant_message = None
         complete_chunk = LLMServiceChunk()
-        generator = None
+        model = None
         try:
             session = SessionRepository.get_session_by_id(session_id)
 
@@ -331,7 +330,7 @@ class ChatService:
             }
 
             with closing(
-                llm_service.generate_response(
+                llm_service.completions(
                     model["model_name"],
                     context_messages,
                     temperature=model_params["temperature"],
@@ -347,8 +346,6 @@ class ChatService:
             print("Model response complete")
         except GeneratorExit:
             print("User stopped generation")
-            if generator is not None:
-                generator.close()
             complete_chunk.finish_reason = "user_stop"
             return
         except Exception as e:
@@ -371,6 +368,7 @@ class ChatService:
                         "content": complete_chunk.content,
                         "reasoning_content": complete_chunk.reasoning_content,
                         "meta_data": {
+                            "model_name": model["model_name"] or "",
                             "finish_reason": complete_chunk.finish_reason,
                             "error": complete_chunk.error,
                         },

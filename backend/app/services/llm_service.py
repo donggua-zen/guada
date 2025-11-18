@@ -42,7 +42,7 @@ class LLMService:
         self.llm_client = OpenAI(base_url=base_url, api_key=self.api_key)
 
     @overload
-    def generate_response(
+    def completions(
         self,
         model,
         messages,
@@ -54,7 +54,7 @@ class LLMService:
     ) -> LLMServiceChunk: ...
 
     @overload
-    def generate_response(
+    def completions(
         self,
         model,
         messages,
@@ -66,7 +66,7 @@ class LLMService:
         complete_chunk: LLMServiceChunk = ...,
     ) -> Generator[LLMServiceChunk, None, None]: ...
 
-    def generate_response(
+    def completions(
         self,
         model,
         messages: list,
