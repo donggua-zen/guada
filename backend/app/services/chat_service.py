@@ -327,6 +327,7 @@ class ChatService:
             yield {
                 "message_id": assistant_message["id"],
                 "content_id": assistant_message_current_content["id"],
+                "model_name": model["model_name"],
             }
 
             with closing(

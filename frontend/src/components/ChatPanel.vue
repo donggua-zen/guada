@@ -357,7 +357,7 @@ async function handleStreamResponse(streamingSessionId, userMessageId, regenerat
  * @returns {number} return.contentIndex - 内容在消息内容数组中的索引
  */
 function handleNewMessage(response, sessionId, userMessageId) {
-  const { message_id, content_id } = response;
+  const { message_id, content_id, model_name } = response;
   currentSession.value.updated_at = new Date().toISOString();
 
   const existingMessage = activeMessages.value.find(msg => msg.id === message_id);
@@ -368,7 +368,7 @@ function handleNewMessage(response, sessionId, userMessageId) {
       id: content_id,
       content: "",
       reasoning_content: null,
-      meta_data: {},
+      meta_data: { 'model_name': model_name },
       is_current: true,
       created_at: new Date().toISOString(),
     });
@@ -385,7 +385,7 @@ function handleNewMessage(response, sessionId, userMessageId) {
         id: content_id,
         content: "",
         reasoning_content: null,
-        meta_data: {},
+        meta_data: { 'model_name': model_name },
         is_current: true,
         created_at: new Date().toISOString(),
       }],

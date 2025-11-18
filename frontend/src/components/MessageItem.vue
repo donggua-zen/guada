@@ -36,6 +36,7 @@
 
         <div class="message-text markdown-text" v-html="debouncedFormattedText">
         </div>
+
         <n-alert v-if="message.meta_data && message.meta_data.finish_reason == 'error'" title="API请求错误" type="error">
           {{ message.meta_data.error }}
         </n-alert>
@@ -44,6 +45,9 @@
             <Loading />
           </n-icon>
           回答中...
+        </div>
+        <div v-if="isAssistant && !message.is_streaming" class="text-sm text-gray-400 mt-2">
+          <span>model: {{ metadata ? metadata.model_name : '' }}</span>
         </div>
       </div>
 
@@ -144,7 +148,7 @@ const renderer = {
 };
 
 // 设置自定义渲染器
-marked.use({ renderer });
+marked.use({ renderer, breaks: true });
 
 const isExpanded = ref(false);
 const isThinking = ref(false);
@@ -159,6 +163,11 @@ const avatarClass = computed(() =>
 const showThinking = computed(
   () => isAssistant.value && getCurrentContent(props.message.contents).reasoning_content
 );
+
+const metadata = computed(() => {
+  const content = getCurrentContent(props.message.contents);
+  return content.meta_data;
+});
 
 const thinkingLabel = ref("已深度思考");
 
