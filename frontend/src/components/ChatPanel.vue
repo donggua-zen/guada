@@ -23,13 +23,16 @@
       </n-button>
 
       <div class="flex items-center flex-1 justify-end">
-        <n-button class="clear-chat-btn" title="清空聊天记录" @click="clearChat" text>
-          <template #icon>
-            <n-icon size="24">
-              <DeleteTwotone />
-            </n-icon>
-          </template>
-        </n-button>
+        <!-- 更多操作下拉菜单 -->
+        <n-dropdown trigger="hover" :options="moreOptions" @select="handleMoreSelect">
+          <n-button class="more-btn" title="更多操作" text>
+            <template #icon>
+              <n-icon size="24">
+                <MoreVertOutlined />
+              </n-icon>
+            </template>
+          </n-button>
+        </n-dropdown>
 
         <!-- <n-button class="settings-btn ml-2" title="设置" @click="handleSettingsClick" text>
           <template #icon>
@@ -106,7 +109,7 @@
 </template>
 
 <script setup>
-import { ref, computed, watch, nextTick, onMounted, onBeforeUpdate, reactive } from "vue";
+import { ref, computed, watch, nextTick, onMounted, onBeforeUpdate, reactive, h } from "vue";
 import { store } from "../store/store";
 import { apiService } from "../services/ApiService"
 import { usePopup } from "@/composables/usePopup";
@@ -120,10 +123,10 @@ import ChatInput from "./ChatInput.vue";
 import ScrollContainer from "./ScrollContainer.vue";
 
 // 图标导入
-import { DeleteTwotone, SettingsTwotone, ArrowDropDownTwotone, FormatListBulletedSharp } from "@vicons/material";
+import { DeleteTwotone, SettingsTwotone, FormatListBulletedSharp, MoreVertOutlined, FileDownloadOutlined, FileUploadOutlined } from "@vicons/material";
 
 // UI组件导入
-import { NButton, NIcon, NDivider } from "naive-ui";
+import { NButton, NIcon, NDivider, NDropdown } from "naive-ui";
 
 // 弹出层工具
 const { confirm, editText, toast, notify } = usePopup();
@@ -142,6 +145,25 @@ const loaclSidebarVisible = computed({
     emit('update:sidebarVisible', value)
   }
 })
+
+// 更多操作下拉菜单选项
+const moreOptions = ref([
+  {
+    label: "清空记录",
+    key: "clear",
+    icon: () => h(NIcon, null, { default: () => h(DeleteTwotone) })
+  },
+  {
+    label: "导出记录",
+    key: "export",
+    icon: () => h(NIcon, null, { default: () => h(FileDownloadOutlined) })
+  },
+  {
+    label: "导入记录",
+    key: "import",
+    icon: () => h(NIcon, null, { default: () => h(FileUploadOutlined) })
+  }
+]);
 
 // Props & Emits
 const props = defineProps({
@@ -191,13 +213,11 @@ watch(
   () => activeMessages.value,
   () => {
     debouncedUpdatedSession();
-    //if (scrollContainerRef.value?.isAtBottom) {
     nextTick(() => {
       if (scrollContainerRef.value?.isAtBottom && !isStreaming.value) {
         immediateScrollToBottom();
       }
     });
-    // }
   },
   { deep: true }
 );
@@ -210,7 +230,6 @@ onBeforeUpdate(() => {
 onMounted(() => {
   // 初始化相关逻辑
 });
-
 
 // 立即滚动到底部（无动画）
 function immediateScrollToBottom() {
@@ -230,7 +249,74 @@ function handleRenderComplete() {
   // }
 }
 
+// 更多操作菜单选择处理
+function handleMoreSelect(key) {
+  switch (key) {
+    case 'clear':
+      clearChat();
+      break;
+    case 'export':
+      exportChat();
+      break;
+    case 'import':
+      importChat();
+      break;
+  }
+}
 
+// 导出聊天记录
+function exportChat() {
+  try {
+    const chatData = {
+      session: currentSession.value,
+      messages: activeMessages.value,
+      exportTime: new Date().toISOString()
+    };
+
+    const dataStr = JSON.stringify(chatData, null, 2);
+    const dataBlob = new Blob([dataStr], { type: 'application/json' });
+
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(dataBlob);
+    link.download = `chat-export-${currentSession.value.title || 'session'}-${new Date().getTime()}.json`;
+    link.click();
+    URL.revokeObjectURL(link.href);
+
+    toast.success("聊天记录导出成功");
+  } catch (error) {
+    console.error("导出聊天记录失败:", error);
+    toast.error("导出失败");
+  }
+}
+
+// 导入聊天记录
+async function importChat() {
+  if (!await confirm("导入聊天记录", "确定要导入聊天记录吗？这将替换当前的聊天记录。")) {
+    return;
+  }
+  const input = document.createElement('input');
+  input.type = 'file';
+  input.accept = '.json';
+
+  input.onchange = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    try {
+      const text = await file.text();
+      const chatData = JSON.parse(text);
+      // 这里可以添加数据验证逻辑
+      await apiService.importMessages(currentSession.value.id, chatData.messages);
+      toast.success("聊天记录导入成功");
+      loadMessages(currentSession.value.id)
+    } catch (error) {
+      console.error("导入聊天记录失败:", error);
+      toast.error("文件格式错误或读取失败");
+    }
+  };
+
+  input.click();
+}
 
 // 方法定义
 function setItemRef(el, messageId) {
@@ -242,24 +328,19 @@ function handleSessionChange(newSessionId, oldSessionId) {
 
   currentSessionId.value = newSessionId;
 
-  if (messagesContainer.value) {
-    messagesContainer.value.scrollTop = messagesContainer.value.scrollHeight;
-  }
-
   if (newSessionId) {
-    initializeSessionMessages(newSessionId);
+    loadMessages(newSessionId);
+    nextTick(immediateScrollToBottom);
   }
 
-  nextTick(immediateScrollToBottom);
 }
 
-async function initializeSessionMessages(sessionId) {
+async function loadMessages(sessionId) {
   if (store.getMessages(sessionId).length === 0) {
     const sessionMessages = await apiService.fetchSessionMessages(sessionId);
     store.setMessages(sessionId, sessionMessages.items);
   }
 }
-
 
 function updateSessionLastMessage() {
   if (!activeMessages.value.length) {
@@ -341,21 +422,6 @@ async function handleStreamResponse(streamingSessionId, userMessageId, regenerat
   }
 }
 
-/**
- * 处理新消息的创建或更新
- * 
- * 当从服务器接收到新的响应时，此函数负责处理消息的创建或更新。
- * 如果消息已存在，则向现有消息添加新的内容项；如果消息不存在，则创建新消息。
- * 
- * @param {Object} response - 服务器响应对象
- * @param {string} response.message_id - 消息ID
- * @param {string} response.content_id - 内容ID
- * @param {string} sessionId - 当前会话ID
- * @param {string} userMessageId - 用户消息ID，作为新助手消息的父ID
- * @returns {Object} 包含消息对象和内容索引的对象
- * @returns {Object} return.message - 消息对象（现有或新建）
- * @returns {number} return.contentIndex - 内容在消息内容数组中的索引
- */
 function handleNewMessage(response, sessionId, userMessageId) {
   const { message_id, content_id, model_name } = response;
   currentSession.value.updated_at = new Date().toISOString();
@@ -493,10 +559,6 @@ const handleSwitchModelClick = (modelId) => {
   emit("openSwitchModel", modelId);
 };
 
-function handleSettingsClick() {
-  emit("openSettings");
-}
-
 async function deleteMessage(message) {
   try {
     if (await confirm("删除消息", "确定要删除这条消息吗？此操作不可撤销。")) {
@@ -562,12 +624,6 @@ function switchContent(message, content) {
   debouncedSwitchContent(message.id, content.id);
 }
 
-// function handleRenderComplete() {
-//   if (isStreaming.value && isAtBottom.value) {
-//     nextTick(smoothScrollToBottom);
-//   }
-// }
-
 function handleWebSearch() {
   console.log("网络搜索功能");
 }
@@ -594,7 +650,7 @@ function handleTokensStatistic() {
   margin: 0 40px;
 }
 
-.clear-chat-btn {
+.more-btn {
   background: none;
   border: none;
   color: #777;
@@ -609,9 +665,9 @@ function handleTokensStatistic() {
   transition: all 0.2s;
 }
 
-.clear-chat-btn:hover {
-  background-color: #ffebee;
-  color: #ff3b30;
+.more-btn:hover {
+  background-color: #f5f5f5;
+  color: #333;
 }
 
 .messages-container {
