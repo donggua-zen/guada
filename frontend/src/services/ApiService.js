@@ -168,6 +168,13 @@ class ApiService {
     return await this._request(`/sessions/${sessionId}/messages`);
   }
 
+  async importMessages(sessionId, messages) {
+    return await this._request(`/sessions/${sessionId}/messages/import`, {
+      method: 'POST',
+      body: messages,
+    });
+  }
+
   /**
    * 添加消息到会话
    * @param {string} sessionId - 会话ID

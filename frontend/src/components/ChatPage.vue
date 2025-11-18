@@ -1,8 +1,8 @@
 <template>
   <div class="flex w-full h-full">
     <sessions-list ref="sessionsListRef" :sessions="sessions" v-model:sidebar-visible="sidebarVisible"
-      @on-select="selectSession" @on-delete="handleDeleteSession" @on-update="handleRenameSession"
-      @on-create="handleCreateSession" />
+      @select="selectSession" @delete="handleDeleteSession" @rename="handleRenameSession"
+      @create="handleCreateSession" />
     <template v-if="sessions.length > 0">
       <div class="h-full flex-1 min-w-0">
         <ChatPanel v-model:session="currentSession" v-model:sidebar-visible="sidebarVisible"
@@ -189,6 +189,17 @@ const handleDeleteSession = async (session) => {
   } catch (error) {
     console.error('删除对话失败:', error)
     toast.error("对话删除失败");
+  }
+}
+
+const handleSaveSession = async () => {
+  try {
+    await updateSession({
+      title: currentSession.value.title,
+      avatar_file: currentSession.value.avatar_file,
+    });
+  } catch (error) {
+    console.error('保存对话失败:', error)
   }
 }
 

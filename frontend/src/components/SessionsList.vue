@@ -129,7 +129,7 @@ const localSidebarVisible = computed({
 })
 
 // 事件定义
-const emit = defineEmits(['on-select', 'on-update', 'on-create', 'on-delete', 'update:sidebarVisible'])
+const emit = defineEmits(['select', 'rename', 'create', 'delete', 'update:sidebarVisible'])
 
 // Props 定义
 const props = defineProps({
@@ -263,7 +263,7 @@ const updateSelectedSession = (sessionId) => {
       if (session.id !== currentSessionId.value) {
         currentSessionId.value = sessionId
         store.setActiveSessionId(sessionId)
-        emit('on-select', session)
+        emit('select', session)
       }
       return
     }
@@ -279,25 +279,17 @@ const updateSelectedSession = (sessionId) => {
 // 处理下拉菜单选择
 const handleDropdownSelect = (key, session) => {
   if (key === 'rename') {
-    renameSession(session)
+    emit('rename', session)
   } else if (key === 'delete') {
-    deleteSession(session)
+    emit('delete', session)
+  } else if (key === 'export') {
+    emit('export', session)
   }
 }
 
 // 创建新会话
 const handleCreateSession = () => {
-  emit('on-create')
-}
-
-// 重命名会话
-const renameSession = (session) => {
-  emit('on-update', session)
-}
-
-// 删除会话
-const deleteSession = (session) => {
-  emit('on-delete', session)
+  emit('create')
 }
 
 const handleToggleSidebar = () => {
