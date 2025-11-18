@@ -1,5 +1,8 @@
+import logging
 import os
 from app import create_app
+
+logger = logging.getLogger(__name__)
 
 # 获取当前脚本的绝对路径
 current_script_path = os.path.abspath(__file__)
@@ -9,9 +12,9 @@ current_directory = os.path.dirname(current_script_path)
 
 os.chdir(current_directory)
 
-print("当前脚本路径:", current_script_path)
-print("当前脚本目录:", current_directory)
-print("拼接后的文件路径:", os.path.join(current_directory, "static"))
+logger.debug("当前脚本路径:", current_script_path)
+logger.debug("当前脚本目录:", current_directory)
+logger.debug("拼接后的文件路径:", os.path.join(current_directory, "static"))
 
 
 if __name__ == "__main__":

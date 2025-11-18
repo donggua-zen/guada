@@ -6,3 +6,4 @@ __pycache__
 backend/data/*
 app/static/avatars/*
 backend/app/static/avatars/*
+backend/logs/*

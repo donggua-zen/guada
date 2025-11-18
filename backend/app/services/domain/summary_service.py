@@ -1,9 +1,12 @@
 # summary_service.py
+import logging
 from app.services.llm_service import LLMServiceChunk
 from typing import NamedTuple, Optional
 from app.utils.chunking import chunking_messages
 from app.models import db, Summary
 from app.models.db_transaction import smart_transaction_manager
+
+logger = logging.getLogger(__name__)
 
 
 class CompressionResult(NamedTuple):
@@ -32,12 +35,12 @@ class SummaryService:
     def call_llm(self, model: str, messages: list) -> LLMServiceChunk:
         try:
             model = "qwen3-30b-a3b-instruct-2507"
-            print(f"调用LLM {model}\n")
+            logger.debug(f"调用LLM {model}\n")
             return self.llm_service.completions(
                 model, messages=messages, temperature=0.4, stream=False, thinking=False
             )
         except Exception as e:
-            print("调用LLM失败:", e)
+            logger.exception("调用LLM失败:", e)
             return None
 
     def generate_recent_summary(
@@ -103,7 +106,7 @@ class SummaryService:
             chunk_size=1000,
         )
 
-        print("生成全局摘要中...")
+        logger.debug("生成全局摘要中...")
         response = self.generate_recent_summary(
             character=character,
             last_summary=summary.master_summary,

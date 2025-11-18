@@ -1,6 +1,9 @@
+import logging
 import time
 from typing import Generator, Literal, Optional, Union, overload
 from openai import OpenAI, APIError
+
+logger = logging.getLogger(__name__)
 
 
 class LLMServiceChunk:
@@ -98,10 +101,10 @@ class LLMService:
         """
         response = None
         try:
-            print("request:", model, messages)
-            print("freq_penalty:", frequency_penalty)
-            print("top_p:", top_p)
-            print("temperature:", temperature)
+            logger.debug("messages:", len(messages))
+            logger.debug("freq_penalty:", frequency_penalty)
+            logger.debug("top_p:", top_p)
+            logger.debug("temperature:", temperature)
             response = self.llm_client.chat.completions.create(
                 model=model,
                 messages=messages,
@@ -121,7 +124,7 @@ class LLMService:
             else:
                 return self._handle_non_stream_response(response)
         except APIError as e:
-            print(f"Exception:{e}\n")
+            logger.exception(f"Exception:{e}\n")
             raise Exception(str(e))
         except Exception as e:
             raise
@@ -142,9 +145,11 @@ class LLMService:
             for chunk in response:
                 response_chunk = LLMServiceChunk()
                 delta = chunk.choices[0].delta
-                # print("chunk:", delta)
+                # logger.debug("chunk:", delta)
                 if chunk.choices[0].finish_reason is not None:
-                    print("finished,finish_reason:" + chunk.choices[0].finish_reason)
+                    logger.debug(
+                        "finished,finish_reason:" + chunk.choices[0].finish_reason
+                    )
                     response_chunk.finish_reason = chunk.choices[0].finish_reason
                     if complete_chunk is not None:
                         complete_chunk.finish_reason = response_chunk.finish_reason
@@ -173,8 +178,8 @@ class LLMService:
                 else:
                     continue
                 yield response_chunk
-        except GeneratorExit as e:
-            print(f"GeneratorExit: {e}\n")
+        except GeneratorExit:
+            logger.info(f"GeneratorExit\n")
         finally:
             if response is not None:
                 self.close_api_connection(response)
@@ -204,20 +209,20 @@ class LLMService:
             # 方法1: 尝试直接关闭响应
             if hasattr(response, "close"):
                 response.close()
-                print("已关闭API连接")
+                logger.debug("已关闭API连接")
                 return
 
             # 方法2: 使用底层客户端关闭
             client = self.llm_client._client
             if client and hasattr(client, "close"):
                 client.close()
-                print("已关闭OpenAI客户端连接")
+                logger.debug("已关闭OpenAI客户端连接")
 
             # 方法3: 使用requests/httpx底层关闭
             if hasattr(response, "_response"):
                 raw_response = response._response
                 if hasattr(raw_response, "close"):
                     raw_response.close()
-                    print("已关闭底层HTTP连接")
+                    logger.debug("已关闭底层HTTP连接")
         except Exception as e:
-            print(f"关闭连接时出错: {e}")
+            logger.exception(f"关闭连接时出错: {e}")

@@ -1,22 +1,22 @@
+import logging
 from flask_sqlalchemy import SQLAlchemy
 
 from app.utils import to_utc8_isoformat
 
 db = SQLAlchemy()
 
+logger = logging.getLogger(__name__)
+
 
 def init_db(app):
     db.init_app(app)
     with app.app_context():
         try:
-            print("开始创建数据库表...")
+            logger.debug("开始创建数据库表...")
             db.create_all()
-            print("数据库表创建成功")
+            logger.debug("数据库表创建成功")
         except Exception as e:
-            print(f"数据库创建失败: {e}")
-            import traceback
-
-            traceback.print_exc()
+            logger.exception(e)
             # 可以选择重新抛出异常或处理
             raise
 
