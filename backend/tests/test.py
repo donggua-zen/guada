@@ -115,7 +115,7 @@ with app.app_context():
             {"role": "user", "content": sysetm_prompt},
         ]
 
-        results = llm_service.generate_response(
+        results = llm_service.completions(
             "deepseek-ai/DeepSeek-V3.2-Exp",
             context_message,
             stream=False,
