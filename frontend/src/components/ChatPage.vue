@@ -57,13 +57,18 @@ const currentTabValue = ref('basic');
 const sidebarVisible = useStorage('sidebarVisible', true); // 控制侧边栏显示状态
 
 const fetchSession = async (sessionId) => {
+  const session_cache = sessions.value.find(session => session.id === sessionId);
+  if (session_cache) {
+    currentSession.value = session_cache;
+  }
   const session = await apiService.fetchSession(sessionId);
   currentSession.value = session;
 };
 
 const selectSession = async (session) => {
-  if (session.id)
+  if (session.id) {
     await fetchSession(session.id);
+  }
 };
 
 const updateSessionById = async (sessionId, data) => {
@@ -87,7 +92,6 @@ const updateSessionById = async (sessionId, data) => {
 }
 
 watch(() => currentSession, (session) => {
-  console.log('currentSession:', session);
   updateSessionById(session.value.id, session.value);
 }, { deep: true });
 

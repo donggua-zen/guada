@@ -203,7 +203,7 @@ const activeMessages = computed({
 
 // 防抖函数
 const debouncedUpdatedSession = useDebounceFn(updateSessionLastMessage, 1000);
-const debouncedSwitchContent = useDebounceFn(apiService.setMessageCurrentContent, 300);
+const debouncedSwitchContent = useDebounceFn((messageId, contentId) => apiService.setMessageCurrentContent(messageId, contentId), 300);
 
 // 监听器
 watch(() => props.session.id, handleSessionChange, { immediate: true });

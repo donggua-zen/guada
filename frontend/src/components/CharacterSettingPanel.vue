@@ -150,7 +150,13 @@
                                 <n-select v-model:value="characterForm.memory_type" :options="memoryOptions"
                                     placeholder="请选择记忆类型" />
                             </n-form-item>
-
+                            <n-form-item label="上下文条数" path="max_memory_length">
+                                <n-slider v-model:value="characterForm.max_memory_length" :min="1" :max="500"
+                                    :step="1" />
+                                <n-input-number v-model:value="characterForm.max_memory_length" :min="1" :max="500"
+                                    :step="1" style="margin-left: 12px; width: 140px;" :show-button="false"
+                                    placeholder="" :parse="parse" :format="format" clearable />
+                            </n-form-item>
                             <!-- 最大记忆长度 -->
                             <n-form-item label="最大记忆tokens" path="max_memory_tokens">
                                 <n-input-number v-model:value="characterForm.max_memory_tokens" :min="0"
@@ -166,13 +172,7 @@
                                     :format="format" clearable />
                                 <span style="margin-left: 8px; color: #999;">条消息</span>
                             </n-form-item>
-                            <n-form-item label="上下文条数" path="max_memory_length">
-                                <n-slider v-model:value="characterForm.max_memory_length" :min="1" :max="500"
-                                    :step="1" />
-                                <n-input-number v-model:value="characterForm.max_memory_length" :min="1" :max="500"
-                                    :step="1" style="margin-left: 12px; width: 140px;" :show-button="false"
-                                    placeholder="" :parse="parse" :format="format" clearable />
-                            </n-form-item>
+
                         </n-form>
                     </div>
                 </n-tab-pane>
