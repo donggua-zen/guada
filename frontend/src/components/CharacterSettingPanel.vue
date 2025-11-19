@@ -11,7 +11,7 @@
                         <n-form ref="basicFormRef" :model="characterForm" :rules="basicRules" label-placement="top"
                             label-width="80px" size="large">
                             <!-- 头像设置 -->
-                            <n-form-item label="头像设置">
+                            <n-form-item label="头像设置" :show-label="false">
                                 <div class="avatar-upload-container ">
                                     <div class="avatar-preview">
                                         <Avatar :src="characterForm.avatar_url"></Avatar>
@@ -58,9 +58,28 @@
                     <div class="py-3">
                         <n-form ref="promptFormRef" :model="characterForm" :rules="promptRules" label-placement="top"
                             label-width="80px" size="large">
+                            <n-form-item :show-label="false" :show-feedback="false">
+                                <div class="flex items-center w-full justify-between">
+                                    <span>系统系提示(角色设定)</span>
+                                    <div class="flex items-center">
+                                        <n-checkbox v-model:checked="characterForm.use_user_prompt" class="ml-2">
+                                            使用User Role
+                                        </n-checkbox>
+                                        <n-tooltip trigger="hover" placement="top">
+                                            <template #trigger>
+                                                <n-icon class="cursor-help text-gray-400 hover:text-gray-600" size="16">
+                                                    <QuestionCircleOutlined />
+                                                </n-icon>
+                                            </template>
+                                            启用后，系统将使用User角色而非System发送设定提示词，以优化部分模型的表现（如DeepSeek）
+                                        </n-tooltip>
+                                    </div>
+
+                                </div>
+                            </n-form-item>
 
                             <!-- 详细设定 -->
-                            <n-form-item label="详细设定" path="system_prompt">
+                            <n-form-item path="system_prompt" :show-label="false">
                                 <n-input v-model:value="characterForm.system_prompt" type="textarea"
                                     placeholder="请输入详细设定" :autosize="{ minRows: 5, maxRows: 8 }" />
                             </n-form-item>
@@ -93,27 +112,29 @@
                             </n-form-item>
 
                             <!-- 温度设置 -->
-                            <n-form-item label="温度">
-                                <n-slider v-model.number:value="characterForm.model_temperature" :min="0" :max="2"
+                            <n-form-item label="温度" path="model_temperature">
+                                <n-slider v-model:value="characterForm.model_temperature" :min="0" :max="2"
                                     :step="0.1" />
                                 <n-input-number v-model:value="characterForm.model_temperature" :min="0" :max="2"
-                                    :step="0.1" style="margin-left: 12px; width: 180px;" clearable />
+                                    :step="0.1" style="margin-left: 12px; width: 140px;" :show-button="false"
+                                    placeholder="" :parse="parse" :format="format" clearable />
                             </n-form-item>
 
                             <!-- Top P -->
-                            <n-form-item label="Top P">
-                                <n-slider v-model.number:value="characterForm.model_top_p" :min="0" :max="1"
-                                    :step="0.1" />
+                            <n-form-item label="Top P" path="model_top_p">
+                                <n-slider v-model:value="characterForm.model_top_p" :min="0" :max="1" :step="0.1" />
                                 <n-input-number v-model:value="characterForm.model_top_p" :min="0" :max="1" :step="0.1"
-                                    style="margin-left: 12px; width: 180px;" clearable />
+                                    style="margin-left: 12px; width: 140px;" :show-button="false" placeholder=""
+                                    :parse="parse" :format="format" clearable />
                             </n-form-item>
 
                             <!-- 频率惩罚 -->
-                            <n-form-item label="频率惩罚">
-                                <n-slider v-model.number:value="characterForm.model_frequency_penalty" :min="0" :max="2"
+                            <n-form-item label="频率惩罚" path="model_frequency_penalty">
+                                <n-slider v-model:value="characterForm.model_frequency_penalty" :min="0" :max="2"
                                     :step="0.1" />
                                 <n-input-number v-model:value="characterForm.model_frequency_penalty" :min="0" :max="2"
-                                    :step="0.1" style="margin-left: 12px; width: 180px;" clearable />
+                                    :step="0.1" style="margin-left: 12px; width: 140px;" :show-button="false"
+                                    placeholder="" :parse="parse" :format="format" clearable />
                             </n-form-item>
                         </n-form>
                     </div>
@@ -133,29 +154,24 @@
                             <!-- 最大记忆长度 -->
                             <n-form-item label="最大记忆tokens" path="max_memory_tokens">
                                 <n-input-number v-model:value="characterForm.max_memory_tokens" :min="0"
-                                    placeholder="留空默认" style="width: 150px;" clearable />
+                                    style="width: 150px;" :show-button="false" placeholder="" :parse="parse"
+                                    :format="format" clearable />
                                 <span style="margin-left: 8px; color: #999;">条消息</span>
                             </n-form-item>
 
                             <!-- 短期记忆长度 -->
                             <n-form-item label="短期记忆tokens" path="short_term_memory_tokens">
                                 <n-input-number v-model:value="characterForm.short_term_memory_tokens" :min="0"
-                                    placeholder="留空默认" style="width: 150px;" clearable />
+                                    style="width: 150px;" :show-button="false" placeholder="" :parse="parse"
+                                    :format="format" clearable />
                                 <span style="margin-left: 8px; color: #999;">条消息</span>
                             </n-form-item>
-
-                            <!-- 最大记忆长度 -->
-                            <n-form-item label="最大记忆长度">
-                                <n-input-number v-model:value="characterForm.max_memory_length" :min="0" :max="10000"
-                                    placeholder="留空默认" style="width: 150px;" clearable />
-                                <span style="margin-left: 8px; color: #999;">条消息</span>
-                            </n-form-item>
-
-                            <!-- 短期记忆长度 -->
-                            <n-form-item label="短期记忆长度">
-                                <n-input-number v-model:value="characterForm.short_term_memory_length" :min="0"
-                                    :max="1000" placeholder="留空默认" style="width: 150px;" clearable />
-                                <span style="margin-left: 8px; color: #999;">条消息</span>
+                            <n-form-item label="上下文条数" path="max_memory_length">
+                                <n-slider v-model:value="characterForm.max_memory_length" :min="1" :max="500"
+                                    :step="1" />
+                                <n-input-number v-model:value="characterForm.max_memory_length" :min="1" :max="500"
+                                    :step="1" style="margin-left: 12px; width: 180px;" :show-button="false"
+                                    placeholder="" :parse="parse" :format="format" clearable />
                             </n-form-item>
                         </n-form>
                     </div>
@@ -209,13 +225,16 @@ import {
     NInputNumber,
     NSpace,
     NModal,
+    NTooltip,
+    NCheckbox
 } from 'naive-ui'
 import { Cropper } from 'vue-advanced-cropper'
 import 'vue-advanced-cropper/dist/style.css'
 import {
     UploadOutlined,
     DeleteOutlined,
-    SaveOutlined
+    SaveOutlined,
+    QuestionCircleOutlined
 } from '@vicons/antd'
 
 import { apiService } from '../services/ApiService'
@@ -249,8 +268,8 @@ const props = defineProps({
                 model_temperature: '',
                 model_top_p: '',
                 model_frequency_penalty: '',
-                max_memory_length: '',
-                short_term_memory_length: ''
+                max_memory_length: 200,
+                use_user_prompt: false
             }
         })
     },
@@ -275,9 +294,6 @@ const avatarInput = ref(null)
 // 模型数据
 const models = ref([]);
 const providers = ref([]);
-
-// 抽屉宽度响应式
-const drawerWidth = ref(600)
 
 // 表单引用
 const tabsInstRef = ref(null)
@@ -309,13 +325,13 @@ const characterForm = reactive({
     system_prompt: '',
     model_id: '',
     memory_type: '',
-    model_temperature: '',
-    model_top_p: '',
-    model_frequency_penalty: '',
-    max_memory_tokens: '',
-    short_term_memory_tokens: '',
-    max_memory_length: '',
-    short_term_memory_length: ''
+    model_temperature: null,
+    model_top_p: null,
+    model_frequency_penalty: null,
+    max_memory_tokens: null,
+    short_term_memory_tokens: null,
+    max_memory_length: 200,
+    use_user_prompt: false
 })
 
 // 验证规则
@@ -349,17 +365,15 @@ const memoryRules = {
         { required: true, message: '请选择记忆类型', trigger: ['change'] },
     ],
     max_memory_tokens: [
-        { min: 256, message: '最大记忆长度最少为256', trigger: ['input', 'blur'] }
+        { type: 'number', min: 256, message: '最大记忆长度最少为256', trigger: ['input', 'blur'] }
     ],
     short_term_memory_tokens: [
-        { min: 256, message: '短期记忆长度最少为256', trigger: ['input', 'blur'] }
+        { type: 'number', min: 256, message: '短期记忆长度最少为256', trigger: ['input', 'blur'] }
     ],
     max_memory_length: [
-        { min: 1, max: 100000, message: '最大记忆长度在1-100000之间', trigger: ['input', 'blur'] }
+        // { type: 'number', required: true, message: '请输入最大记忆长度', trigger: ['input', 'blur'] },
+        { type: 'number', min: 1, max: 500, message: '最大记忆长度在1-500之间', trigger: ['input', 'blur'] },
     ],
-    short_term_memory_length: [
-        { min: 1, max: 100000, message: '短期记忆长度在1-100000之间', trigger: ['input', 'blur'] }
-    ]
 }
 
 // 选项数据
@@ -451,13 +465,13 @@ watch(() => props.data, (newVal) => {
     characterForm.system_prompt = newVal.settings?.system_prompt || '';
     characterForm.memory_type = newVal.settings?.memory_type || 'sliding_window';
     //if (!isSimpleStyle.value) {
-    characterForm.model_temperature = newVal.settings?.model_temperature || '';
-    characterForm.model_top_p = newVal.settings?.model_top_p || '';
-    characterForm.model_frequency_penalty = newVal.settings?.model_frequency_penalty || '';
-    characterForm.max_memory_length = newVal.settings?.max_memory_length || '';
-    characterForm.short_term_memory_length = newVal.settings?.short_term_memory_length || '';
-    characterForm.max_memory_tokens = newVal.settings?.max_memory_tokens || '';
-    characterForm.short_term_memory_tokens = newVal.settings?.short_term_memory_tokens || '';
+    characterForm.model_temperature = newVal.settings?.model_temperature || null;
+    characterForm.model_top_p = newVal.settings?.model_top_p || null;
+    characterForm.model_frequency_penalty = newVal.settings?.model_frequency_penalty || null;
+    characterForm.max_memory_length = newVal.settings?.max_memory_length || null;
+    characterForm.max_memory_tokens = newVal.settings?.max_memory_tokens || null;
+    characterForm.short_term_memory_tokens = newVal.settings?.short_term_memory_tokens || null;
+    characterForm.use_user_prompt = newVal.settings?.use_user_prompt || false;
     // }
     //}
 
@@ -634,12 +648,12 @@ const handleSave = async () => {
                 'max_memory_tokens': characterForm.max_memory_tokens,
                 'short_term_memory_tokens': characterForm.short_term_memory_tokens,
                 'max_memory_length': characterForm.max_memory_length,
-                'short_term_memory_length': characterForm.short_term_memory_length,
                 // 模型
                 'model_name': findModelById(characterForm.model_id).model_name || '请选择模型',
                 'model_temperature': characterForm.model_temperature,
                 'model_top_p': characterForm.model_top_p,
                 'model_frequency_penalty': characterForm.model_frequency_penalty,
+                'use_user_prompt': characterForm.use_user_prompt,
             }
         }
         emit('update:data', finalData)
@@ -654,6 +668,19 @@ const handleSave = async () => {
     } finally {
         loading.value = false
     }
+}
+
+function parse(input) {
+    const nums = input.replace(/,/g, "").trim();
+    if (/^\d+(\.(\d+)?)?$/.test(nums))
+        return Number(nums);
+    return null;
+}
+
+function format(value) {
+    if (value === null || value === "")
+        return "不限制";
+    return value.toLocaleString("en-US");
 }
 </script>
 
