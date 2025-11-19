@@ -170,7 +170,7 @@
                                 <n-slider v-model:value="characterForm.max_memory_length" :min="1" :max="500"
                                     :step="1" />
                                 <n-input-number v-model:value="characterForm.max_memory_length" :min="1" :max="500"
-                                    :step="1" style="margin-left: 12px; width: 180px;" :show-button="false"
+                                    :step="1" style="margin-left: 12px; width: 140px;" :show-button="false"
                                     placeholder="" :parse="parse" :format="format" clearable />
                             </n-form-item>
                         </n-form>
@@ -263,12 +263,12 @@ const props = defineProps({
                 assistant_name: '',
                 assistant_identity: '',
                 system_prompt: '',
-                model_id: '',
-                memory_type: '',
-                model_temperature: '',
-                model_top_p: '',
-                model_frequency_penalty: '',
-                max_memory_length: 200,
+                model_id: null,
+                memory_type: null,
+                model_temperature: null,
+                model_top_p: null,
+                model_frequency_penalty: null,
+                max_memory_length: null,
                 use_user_prompt: false
             }
         })
