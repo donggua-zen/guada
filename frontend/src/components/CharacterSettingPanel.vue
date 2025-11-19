@@ -330,7 +330,7 @@ const characterForm = reactive({
     model_frequency_penalty: null,
     max_memory_tokens: null,
     short_term_memory_tokens: null,
-    max_memory_length: 200,
+    max_memory_length: null,
     use_user_prompt: false
 })
 
@@ -423,7 +423,6 @@ const modelOptions = computed(() => {
             })
         }
     })
-    console.log(options);
     return options
 })
 
