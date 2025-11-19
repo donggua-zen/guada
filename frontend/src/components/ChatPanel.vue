@@ -81,8 +81,7 @@
         </div>
       </template>
       <template v-else>
-        <ScrollContainer ref="scrollContainerRef" :auto-scroll="true" :smooth-scroll="!isStreaming"
-          @scroll-state-change="handleScrollStateChange">
+        <ScrollContainer ref="scrollContainerRef" :auto-scroll="true" :smooth-scroll="!isStreaming">
           <div class="flex flex-col items-center px-[20px]" style="max-width: 900px;margin: 0 auto;">
             <MessageItem v-for="(message, index) in activeMessages" :ref="(el) => setItemRef(el, message.id)"
               :key="message.id" :message="message" :avatar="currentSession.avatar_url"
