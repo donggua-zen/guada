@@ -54,7 +54,7 @@
                       <ChatbubbleEllipses />
                     </n-icon>
                   </template>
-                  对话
+                  使用
                 </n-button>
 
                 <div class="flex gap-1">
