@@ -102,9 +102,9 @@ class LLMService:
         response = None
         try:
             logger.debug("messages:", len(messages))
-            logger.debug("freq_penalty:", frequency_penalty)
-            logger.debug("top_p:", top_p)
-            logger.debug("temperature:", temperature)
+            logger.debug("freq_penalty: %s", frequency_penalty)
+            logger.debug("top_p: %s", top_p)
+            logger.debug("temperature: %s", temperature)
             response = self.llm_client.chat.completions.create(
                 model=model,
                 messages=messages,

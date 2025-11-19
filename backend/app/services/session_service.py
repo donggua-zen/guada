@@ -32,7 +32,6 @@ class SessionService:
                 "system_prompt",
                 "memory_type",
                 "max_memory_length",
-                "short_term_memory_length",
                 "model_top_p",
                 "model_temperature",
             ]
@@ -74,34 +73,12 @@ class SessionService:
             "avatar_url",
             "user_id",
             "model_id",
-        ]
-
-        extended_fields = [
-            "assistant_name",
-            "assistant_identity",
-            "system_prompt",
-            "memory_type",
-            "max_memory_length",
-            "short_term_memory_length",
-            "model_top_p",
-            "model_temperature",
+            "settings",
         ]
 
         data_filtered = {
             field: data.get(field) for field in fields if data.get(field) is not None
         }
-
-        settings = (
-            {
-                key: value
-                for key, value in data.get("settings").items()
-                if key in extended_fields
-            }
-            if data.get("settings")
-            else {}
-        )
-
-        data_filtered["settings"] = settings
 
         # 创建字符对象
         session = SessionRepo.create_session(data_filtered)

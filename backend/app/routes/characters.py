@@ -39,9 +39,18 @@ def create_character():
             "avatar_url",
             "settings",
         ]
+
         extended_fields = [
+            "assistant_name",
+            "assistant_identity",
             "system_prompt",
             "memory_type",
+            "max_memory_length",
+            "max_memory_tokens",
+            "short_term_memory_tokens",
+            "model_top_p",
+            "model_temperature",
+            "use_user_prompt",
         ]
 
         for field in fields:

@@ -24,35 +24,12 @@ class CharacterService:
             "avatar_url",
             "settings",
             "model_id",
-        ]
-        extended_fields = [
-            "assistant_name",
-            "assistant_identity",
-            "system_prompt",
-            "memory_type",
-            "max_memory_length",
-            "short_term_memory_length",
-            "max_memory_tokens",
-            "short_term_memory_tokens",
-            "model_top_p",
-            "model_temperature",
+            "settings",
         ]
 
         data_filtered = {
             field: data.get(field) for field in fields if data.get(field) is not None
         }
-
-        settings = (
-            {
-                key: value
-                for key, value in data.get("settings").items()
-                if key in extended_fields
-            }
-            if data.get("settings")
-            else {}
-        )
-
-        data_filtered["settings"] = settings
 
         # 创建字符对象
 
@@ -69,19 +46,7 @@ class CharacterService:
             "avatar_url",
             "user_id",
             "model_id",
-        ]
-
-        extended_fields = [
-            "assistant_name",
-            "assistant_identity",
-            "system_prompt",
-            "memory_type",
-            "max_memory_length",
-            "short_term_memory_length",
-            "max_memory_tokens",
-            "short_term_memory_tokens",
-            "model_top_p",
-            "model_temperature",
+            "settings",
         ]
 
         data_filtered = {}
@@ -90,13 +55,6 @@ class CharacterService:
             if field in data:
                 data_filtered[field] = data[field]
 
-        # 处理settings字段
-        if "settings" in data:
-            settings = {}
-            for field in extended_fields:
-                if field in data["settings"]:
-                    settings[field] = data["settings"][field]
-            data_filtered["settings"] = settings
         character = self.get_character_by_id(id)
         if not character:
             raise ValueError(f"Character with ID {id} does not exist.")
