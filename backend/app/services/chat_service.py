@@ -56,14 +56,15 @@ class ChatService:
         # 使用换行符连接所有部分
         return "\n".join(system_prompt_parts)
 
-    def _construct_context_message(self, prompts, conversation_messages, merge=False):
+    def _construct_context_message(
+        self, prompts, conversation_messages, use_user_prompt=False
+    ):
         """
         根据角色和消息构造上下文消息列表。
 
         Args:
             prompts: 提示词相关对象或信息。
             messages (list): 消息列表，其中每个消息是一个字典，包含 "role" 和 "content" 两个键。
-            merge (bool): 是否合并系统提示和历史消息，默认为 False。
 
         Returns:
             list: 构造后的上下文消息列表，每个消息是一个字典，包含 "role" 和 "content" 两个键。
@@ -84,7 +85,12 @@ class ChatService:
                 logger.debug(f"{msg['role']}: {msg['content']}")
         logger.debug("------------------------------------------------------------")
 
-        context_messages = [{"role": "system", "content": system_prompt}]
+        context_messages = [
+            {
+                "role": "system" if not use_user_prompt else "user",
+                "content": system_prompt,
+            }
+        ]
 
         context_messages.extend(
             [
@@ -96,7 +102,7 @@ class ChatService:
         return context_messages
 
     def construct_context_message(
-        self, session: dict, conversation_messages: list[dict]
+        self, session: dict, conversation_messages: list[dict], use_user_prompt=False
     ):
         context_messages = self._construct_context_message(
             {
@@ -105,6 +111,7 @@ class ChatService:
                 "system_prompt": (session["settings"].get("system_prompt", "")),
             },
             conversation_messages,
+            use_user_prompt=use_user_prompt,
         )
         return context_messages
 
@@ -319,13 +326,16 @@ class ChatService:
                 "temperature": session["settings"].get("model_temperature"),
                 "top_p": session["settings"].get("model_top_p"),
                 "frequency_penalty": session["settings"].get("model_frequency_penalty"),
+                "use_user_prompt": session["settings"].get("use_user_prompt", False),
             }
 
             llm_service = LLMService(
                 model["provider"]["api_url"], model["provider"]["api_key"]
             )
             context_messages = self.construct_context_message(
-                session, conversation_messages
+                session,
+                conversation_messages,
+                use_user_prompt=model_params["use_user_prompt"],
             )
             logger.debug(f"Using model: {model['model_name']}")
             yield {

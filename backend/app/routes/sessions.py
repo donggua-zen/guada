@@ -96,11 +96,12 @@ def update_session(session_id):
             "system_prompt",
             "memory_type",
             "max_memory_length",
-            "short_term_memory_length",
             "max_memory_tokens",
-            "short_term_memory_tokens" "model_top_p",
+            "short_term_memory_tokens",
+            "model_top_p",
             "model_temperature",
             "model_id",
+            "use_user_prompt",
         ]
 
         data_filtered = {}
