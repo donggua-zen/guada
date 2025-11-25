@@ -102,6 +102,8 @@ def update_session(session_id):
             "model_temperature",
             "model_id",
             "use_user_prompt",
+            "web_search_enabled",
+            "thinking_enabled",
         ]
 
         data_filtered = {}

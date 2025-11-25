@@ -251,6 +251,41 @@ class ChatService:
                 meta_data={},
             )
 
+    def _web_search(self, model: dict, model_params: dict, messages: list[dict]):
+        from app.services.domain.web_search import WebSearch
+        from app.services import LLMService  # 避免循环导入
+
+        conversation_messages = [
+            f'<role="{msg["role"]}">{msg["content"]}<role="{msg["role"]}">'
+            for msg in messages
+        ]
+        prompt = "请根据聊天记录，为最新的用户提问，生成一个简洁明了的搜索词，用于后续的网页搜索。直接输出，不要进行任何额外描述。\n"
+        prompt += "对话记录：\n" + "\n".join(conversation_messages)
+
+        llm_service = LLMService(
+            model["provider"]["api_url"], model["provider"]["api_key"]
+        )
+        chunk = llm_service.completions(
+            model["model_name"],
+            [{"role": "user", "content": prompt}],
+            temperature=model_params["temperature"],
+            top_p=model_params["top_p"],
+            frequency_penalty=model_params["frequency_penalty"],
+            stream=False,
+            thinking=False,
+            complete_chunk=None,
+        )
+
+        logger.debug("搜索词：%s", chunk.content)
+        web_search = WebSearch()
+        results = web_search.search(chunk.content)
+        return "\n".join(
+            [
+                f"position:{result['position']}\ntitle:{result['title']}\n,snippet:{result['snippet']}\n"
+                for result in results
+            ]
+        )
+
     def completions(
         self,
         session_id: str,
@@ -339,11 +374,25 @@ class ChatService:
             )
             logger.debug(f"Using model: {model['model_name']}")
             yield {
+                "type": "create",
                 "message_id": assistant_message["id"],
                 "content_id": assistant_message_current_content["id"],
                 "model_name": model["model_name"],
             }
 
+            if session["settings"].get("web_search_enabled", False):
+                yield {"type": "web_search", "msg": "start"}
+                web_results = self._web_search(
+                    model=model,
+                    model_params=model_params,
+                    messages=context_messages[-10:],
+                )
+                yield {"type": "web_search", "msg": "stop"}
+                prompt = f"请根据搜索结果回答用户问题\n# 搜索结果：\n{web_results} \n# 用户问题：\n"
+                logger.debug("拼接后的用户问题: %s", prompt)
+                context_messages[-1]["content"] = (
+                    prompt + context_messages[-1]["content"]
+                )
             with closing(
                 llm_service.completions(
                     model["model_name"],
@@ -352,12 +401,29 @@ class ChatService:
                     top_p=model_params["top_p"],
                     frequency_penalty=model_params["frequency_penalty"],
                     stream=True,
-                    thinking=model_params["thinking"],
+                    thinking=model_params["thinking"]
+                    and session["settings"].get("thinking_enabled", False),
                     complete_chunk=complete_chunk,
                 )
             ) as generator:
                 for chunk in generator:
-                    yield chunk.to_dict()
+                    if chunk.finish_reason is not None:
+                        yield {
+                            "type": "finish",
+                            "finish_reason": chunk.finish_reason,
+                            "error": chunk.error,
+                        }
+                    elif chunk.reasoning_content is not None:
+                        yield {
+                            "type": "think",
+                            "msg": chunk.reasoning_content,
+                        }
+
+                    elif chunk.content is not None:
+                        yield {
+                            "type": "text",
+                            "msg": chunk.content,
+                        }
             logger.debug("Model response complete")
         except GeneratorExit:
             logger.debug("User stopped generation")
@@ -365,14 +431,17 @@ class ChatService:
             return
         except Exception as e:
             logger.exception(f"Error: {e}")
-            traceback.logger.debug_exc()
             chunk = LLMServiceChunk()
             chunk.finish_reason = "error"
             chunk.error = str(e)
             # 同步更新完整的消息块
             complete_chunk.finish_reason = chunk.finish_reason
             complete_chunk.error = chunk.error
-            yield chunk.to_dict()
+            yield {
+                "type": "finish",
+                "finish_reason": chunk.finish_reason,
+                "error": chunk.error,
+            }
             return
         finally:
             logger.debug("Generation complete")
@@ -473,3 +542,61 @@ class ChatService:
             "summary_tokens": summary_tokens,
             "context_tokens": context_tokens,
         }
+
+    def web_search(self, message_id: str):
+        from app.services.domain.web_search import WebSearch
+        from app.services import LLMService  # 避免循环导入
+
+        message = MessageRepository.get_message(message_id)
+
+        messages = MessageRepository.get_messages(
+            session_id=message["session_id"],
+            end_message_id=message_id,
+            include_end=False,
+            limit=10,
+            with_files=False,
+            with_contents=True,
+            only_current_content=True,
+        )
+        messages.append(message)
+        if messages is None:  # 获取不到消息，则返回空
+            raise ValueError("Invalid message id")
+
+        session = SessionRepository.get_session_by_id(messages[-1]["session_id"])
+
+        conversation_messages = [
+            f'<role="{msg["role"]}">{msg["contents"][0]["content"]}<role="{msg["role"]}">'
+            for msg in messages
+        ]
+        prompt = "请根据聊天记录，为最新的用户提问，生成一个简洁明了的搜索词，用于后续的网页搜索。直接输出，不要进行任何额外描述。\n"
+        prompt += "对话记录：\n" + "\n".join(conversation_messages)
+        model = session["model"]
+        if model is None:
+            raise ValueError("Invalid model name")
+
+        # 更优雅的方式获取模型参数
+        model_params = {
+            "thinking": "thinking" in model.get("features", []),
+            "temperature": session["settings"].get("model_temperature"),
+            "top_p": session["settings"].get("model_top_p"),
+            "frequency_penalty": session["settings"].get("model_frequency_penalty"),
+            "use_user_prompt": session["settings"].get("use_user_prompt", False),
+        }
+        llm_service = LLMService(
+            model["provider"]["api_url"], model["provider"]["api_key"]
+        )
+        chunk = llm_service.completions(
+            model["model_name"],
+            [{"role": "user", "content": prompt}],
+            temperature=model_params["temperature"],
+            top_p=model_params["top_p"],
+            frequency_penalty=model_params["frequency_penalty"],
+            stream=False,
+            thinking=False,
+            complete_chunk=None,
+        )
+
+        logger.debug("搜索词：%s", chunk.content)
+        web_search = WebSearch()
+        results = web_search.search(chunk.content)
+        return {"results": results}
