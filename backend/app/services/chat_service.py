@@ -17,6 +17,7 @@ import traceback
 from typing import Generator, Optional
 
 from app.repositories.message_repository import MessageRepository
+from app.repositories.model_repository import ModelRepository
 from app.repositories.session_repository import SessionRepository
 from app.services.domain.memory_strategy import MemoryStrategy
 from app.services.llm_service import LLMServiceChunk
@@ -252,12 +253,20 @@ class ChatService:
                 meta_data={},
             )
 
-    def _web_search(self, model: dict, model_params: dict, messages: list[dict]):
+    def _web_search(self, model: dict, messages: list[dict], current_date: str = None):
         from app.services.domain.web_search import WebSearch
         from app.services import LLMService  # 避免循环导入
 
         serper_api_key = SettingsManager.get("search_api_key", "")
-        search_prompt_context_length = model_params.get("search_prompt_context_length", 10)
+        search_prompt_context_length = SettingsManager.get(
+            "search_prompt_context_length", 10
+        )
+        default_search_model_id = SettingsManager.get("default_search_model_id", "")
+
+        if default_search_model_id != "" and default_search_model_id != "current":
+            search_model = ModelRepository.get_model(model_id=default_search_model_id)
+            if search_model:  # 搜索功能需要模型
+                model = search_model
 
         if not serper_api_key:  # 搜索功能需要API Key
             raise ValueError("serper_api_key is required")
@@ -268,6 +277,8 @@ class ChatService:
         ]
         prompt = "请根据聊天记录，为最新的用户提问，生成一个简洁明了的搜索词，用于后续的网页搜索。直接输出，不要进行任何额外描述。\n"
         prompt += "对话记录：\n" + "\n".join(conversation_messages)
+        if current_date:  # 搜索功能需要当前日期
+            prompt += f"\n当前日期：{current_date}"
 
         llm_service = LLMService(
             model["provider"]["api_url"], model["provider"]["api_key"]
@@ -275,9 +286,9 @@ class ChatService:
         chunk = llm_service.completions(
             model["model_name"],
             [{"role": "user", "content": prompt}],
-            temperature=model_params["temperature"],
-            top_p=model_params["top_p"],
-            frequency_penalty=model_params["frequency_penalty"],
+            temperature=None,
+            top_p=None,
+            frequency_penalty=None,
             stream=False,
             thinking=False,
             complete_chunk=None,
@@ -388,14 +399,15 @@ class ChatService:
             }
 
             if session["settings"].get("web_search_enabled", False):
+                current_time = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
                 yield {"type": "web_search", "msg": "start"}
                 web_results = self._web_search(
-                    model=model,
-                    model_params=model_params,
-                    messages=context_messages,
+                    model=model, messages=context_messages, current_date=current_time
                 )
                 yield {"type": "web_search", "msg": "stop"}
-                prompt = f"请根据搜索结果回答用户问题\n# 搜索结果：\n{web_results} \n# 用户问题：\n"
+
+                prompt = f"请根据搜索结果回答用户问题\n# 搜索结果：\n{web_results} # 当前时间:{current_time} \n# 用户问题：\n"
                 logger.debug("拼接后的用户问题: %s", prompt)
                 context_messages[-1]["content"] = (
                     prompt + context_messages[-1]["content"]

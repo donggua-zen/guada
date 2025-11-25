@@ -94,7 +94,7 @@
 </template>
 
 <script setup>
-import { ref, watch, computed, onMounted, onBeforeUnmount, nextTick, defineEmits } from 'vue'
+import { ref, watch, computed, nextTick, defineEmits } from 'vue'
 import { NButton, NIcon } from 'naive-ui'
 import FileItem from './FileItem.vue';
 

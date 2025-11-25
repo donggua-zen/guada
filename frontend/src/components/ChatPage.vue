@@ -112,6 +112,7 @@ const updateSession = async (data) => {
   let session = null;
   try {
     if (currentSession.value && currentSession.value.id) {
+      data['settings'] = { ...currentSession.value.settings, ...data.settings }; // 合并设置
       await apiService.updateSession(currentSession.value.id, data);
       session = { id: currentSession.value.id, ...data };
 
@@ -123,6 +124,7 @@ const updateSession = async (data) => {
     }
     toast.success("设置成功");
   } catch (error) {
+    console.error('更新对话失败:', error)
     toast.error("设置失败");
   }
   visible.value = false;
