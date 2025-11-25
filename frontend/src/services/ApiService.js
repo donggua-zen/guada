@@ -334,30 +334,48 @@ class ApiService {
   }
 
 
+  /**
+   * 上传文件到指定消息
+   * @param {string} messageId - 消息ID，用于标识文件关联的消息
+   * @param {File} file - 要上传的文件对象
+   * @returns {Promise<Array|Object>} 返回解析后的数据，如果json.data存在则返回该数据，否则返回空数组
+   * @throws {Error} 当上传失败或服务器返回错误时抛出异常
+   */
   async uploadFile(messageId, file) {
+    // 创建表单数据对象并附加文件
     const formData = new FormData();
     formData.append('file', file);
 
     try {
-
+      // 发送文件上传请求到服务器
       const response = await fetch(`${this.baseURL}/messages/${messageId}/files`, {
         method: 'POST',
         body: formData,
       });
 
+      // 检查响应状态是否成功
       if (!response.ok) {
         throw new Error(`文件上传失败: ${response.status}`);
       }
 
+      // 解析JSON响应数据
       const json = await response.json();
+      // 检查服务器返回的成功标志
       if (!json.success) {
         throw new Error(json.error);
       }
       return json.data || [];
     } catch (error) {
+      // 记录错误日志并重新抛出异常
       console.error('上传错误:', error);
       throw error;
     }
+  }
+
+  async webSearch(messageId) {
+    return await this._request(`/messages/${messageId}/web_serach`, {
+      method: 'GET',
+    });
   }
 
   /**

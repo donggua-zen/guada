@@ -5,11 +5,15 @@
             <RouterView></RouterView>
         </div>
     </div>
+    <!-- <GlobaSettingModal v-model:visible="visible" /> -->
 </template>
 <script setup>
+import { ref } from 'vue'
 import { useRouter } from 'vue-router'
-import Sidebar from '../components/Sidebar.vue'
+import Sidebar from '@/components/Sidebar.vue'
+import GlobaSettingModal from '@/components/GlobaSettingModal.vue'
 const router = useRouter()
+const visible = ref(true)
 
 const changePage = (page) => {
     switch (page) {

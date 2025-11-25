@@ -1,83 +1,92 @@
 <template>
-    <div class="flex w-full h-full">
-        <ModelsProviderList :items="providers" :selectedId="currentProviderId" @select="handleSelectProvider"
-            @createGroup="handleCreateGroup">
-        </ModelsProviderList>
-        <div class="flex-1 p-[20px] sm:container mx-auto">
-            <div class="flex items-center mb-3">
-                <span class="font-bold text-lg mr-2">{{ currentProvider.name }}</span>
-                <n-button type="error" text style="font-size: 24px" @click="handleDeleteProvider(currentProvider)">
-                    <n-icon>
-                        <DeleteTwotone />
-                    </n-icon>
-                </n-button>
-            </div>
-            <n-form ref="formRef" :label-width="80" :model="currentProvider" :rules="providerRules" size="large">
-                <n-form-item label="名字" path="name">
-                    <n-input v-model:value="currentProvider.name" placeholder="输入分组名字"
-                        @update:value="handleProviderChange" />
-                </n-form-item>
-                <n-form-item label="API地址" path="api_url">
-                    <n-input v-model:value="currentProvider.api_url" placeholder="api_url"
-                        @update:value="handleProviderChange" />
-                </n-form-item>
+    <SidebarLayout v-model:sidebar-visible="sidebarVisible" :sidebar-position="'left'">
+        <template #sidebar>
+            <ModelsProviderList :items="providers" :selectedId="currentProviderId" @select="handleSelectProvider"
+                @createGroup="handleCreateGroup">
+            </ModelsProviderList>
+        </template>
+        <template #content>
+            <div class="flex-1 p-[20px] sm:container mx-auto">
+                <div class="flex items-center mb-3">
+                    <span class="font-bold text-lg mr-2">{{ currentProvider.name }}</span>
+                    <n-button type="error" text style="font-size: 24px" @click="handleDeleteProvider(currentProvider)">
+                        <n-icon>
+                            <DeleteTwotone />
+                        </n-icon>
+                    </n-button>
+                </div>
+                <n-divider title-placement="left">
+                    供应商/分组信息
+                </n-divider>
+                <n-form ref="formRef" :label-width="80" :model="currentProvider" :rules="providerRules" size="large" label-placement="left">
+                    <n-form-item label="名字" path="name">
+                        <n-input v-model:value="currentProvider.name" placeholder="输入分组名字"
+                            @update:value="handleProviderChange" />
+                    </n-form-item>
+                    <n-form-item label="API地址" path="api_url">
+                        <n-input v-model:value="currentProvider.api_url" placeholder="api_url"
+                            @update:value="handleProviderChange" />
+                    </n-form-item>
 
-                <!-- 使用 Grid 布局将 API KEY 和按钮放在同一行 -->
-                <n-grid :cols="24" :x-gap="12">
-                    <n-gi :span="18">
-                        <n-form-item label="API KEY" path="api_key">
-                            <n-input v-model:value="currentProvider.api_key" placeholder="api_key"
-                                @update:value="handleProviderChange" />
-                        </n-form-item>
-                    </n-gi>
-                    <n-gi :span="6">
-                        <n-form-item label=" ">
-                            <n-button attr-type="button" @click="handleValidateClick">
-                                验证
-                            </n-button>
-                        </n-form-item>
-                    </n-gi>
-                </n-grid>
-            </n-form>
-            <div class="flex w-full">
-                <span class="font-bold text-lg">模型列表</span>
-                <div class="flex flex-1 justify-end">
-                    <n-space>
-                        <n-button @click="handleAddModel">手动添加</n-button>
-                        <n-button @click="handleFetchModels">获取模型列表</n-button>
-                    </n-space>
+                    <!-- 使用 Grid 布局将 API KEY 和按钮放在同一行 -->
+                    <n-grid :cols="24" :x-gap="12">
+                        <n-gi :span="18">
+                            <n-form-item label="API KEY" path="api_key">
+                                <n-input v-model:value="currentProvider.api_key" placeholder="api_key"
+                                    @update:value="handleProviderChange" />
+                            </n-form-item>
+                        </n-gi>
+                        <n-gi :span="6">
+                            <n-form-item label=" ">
+                                <n-button attr-type="button" @click="handleValidateClick">
+                                    验证
+                                </n-button>
+                            </n-form-item>
+                        </n-gi>
+                    </n-grid>
+                </n-form>
+                <n-divider title-placement="left">
+                    模型列表
+                </n-divider>
+                <div class="flex w-full">
+                    <div class="flex flex-1 justify-end">
+                        <n-space>
+                            <n-button @click="handleAddModel">手动添加</n-button>
+                            <n-button @click="handleFetchModels">获取模型列表</n-button>
+                        </n-space>
+                    </div>
+                </div>
+                <div class="mt-4 rounded border px-3 py-1 border-gray-200">
+                    <ul>
+                        <li v-for="model in currentModels" :key="model.id"
+                            class="flex items-center py-2 border-b border-gray-200 last:border-b-0">
+                            <div class="font-bold">{{ model.model_name }}</div>
+                            &nbsp;
+                            &nbsp;
+                            <n-space>
+                                <n-tag :bordered="false" type="success" size="small">{{ model.model_type }}</n-tag>
+                                <n-tag v-for="feature in model.features" :bordered="false" type="info" size="small">{{
+                                    feature }}</n-tag>
+                            </n-space>
+                            <div class="flex flex-1 justify-end items-center">
+                                <n-button text style="font-size: 24px" @click="handleEditClick(model)">
+                                    <n-icon>
+                                        <SettingsOutlined />
+                                    </n-icon>
+                                </n-button>
+                                &nbsp;
+                                <n-button type="error" text style="font-size: 24px" @click="handleDeleteClick(model)">
+                                    <n-icon>
+                                        <RemoveCircleOutlineRound />
+                                    </n-icon>
+                                </n-button>
+                            </div>
+                        </li>
+                    </ul>
                 </div>
             </div>
-            <div class="mt-4 rounded border px-3 py-1 border-gray-200">
-                <ul>
-                    <li v-for="model in currentModels" :key="model.id"
-                        class="flex items-center py-2 border-b border-gray-200 last:border-b-0">
-                        <div class="font-bold">{{ model.model_name }}</div>
-                        &nbsp;
-                        &nbsp;
-                        <n-space>
-                            <n-tag :bordered="false" type="success" size="small">{{ model.model_type }}</n-tag>
-                            <n-tag v-for="feature in model.features" :bordered="false" type="info" size="small">{{
-                                feature }}</n-tag>
-                        </n-space>
-                        <div class="flex flex-1 justify-end items-center">
-                            <n-button text style="font-size: 24px" @click="handleEditClick(model)">
-                                <n-icon>
-                                    <SettingsOutlined />
-                                </n-icon>
-                            </n-button>
-                            &nbsp;
-                            <n-button type="error" text style="font-size: 24px" @click="handleDeleteClick(model)">
-                                <n-icon>
-                                    <RemoveCircleOutlineRound />
-                                </n-icon>
-                            </n-button>
-                        </div>
-                    </li>
-                </ul>
-            </div>
-        </div>
-    </div>
+        </template>
+    </SidebarLayout>
 
     <!-- 编辑/新增模型信息的模态框 -->
     <n-modal v-model:show="showEditModal" :preset="isEditMode ? 'dialog' : 'dialog'"
@@ -189,26 +198,27 @@
 <script setup>
 import { ref, onMounted, computed, watch } from 'vue'
 import { useRouter } from 'vue-router'
-import ModelsProviderList from '../components/ModelsProviderList.vue'
+import { useDebounceFn } from '@vueuse/core' // 导入防抖函数
+import SidebarLayout from '@/components/layout/SidebarLayout.vue'
+import ModelsProviderList from '@/components/ModelsProviderList.vue'
 import {
     NInput, NFormItem, NForm, NButton, NSpace, NIcon, NTag, NGrid, NGi,
-    NModal, NSelect, NCheckbox, NCheckboxGroup, NInputNumber, NSpin, useNotification
+    NModal, NSelect, NCheckbox, NCheckboxGroup, NInputNumber, NSpin, NDivider
 } from 'naive-ui'
-import { apiService } from '../services/ApiService'
+import { apiService } from '@/services/ApiService'
 import { SettingsOutlined, RemoveCircleOutlineRound, DeleteTwotone, AddCircleTwotone, RemoveCircleTwotone } from '@vicons/material'
 import { usePopup } from '@/composables/usePopup'
+import { useStorage } from '@vueuse/core'
 
 const { notify, confirm, prompt } = usePopup()
 const currentProviderId = ref("");
-const router = useRouter()
-const notification = useNotification()
 
 // 使用响应式数据替代伪数据
 const providers = ref([]);
 const models = ref([]);
 
-// 防抖计时器
-let debounceTimer = null;
+// 删除原来的防抖计时器
+// let debounceTimer = null;
 
 // 新增：判断是编辑模式还是新增模式
 const isEditMode = ref(false);
@@ -217,6 +227,8 @@ const isEditMode = ref(false);
 const showFetchModal = ref(false);
 const fetchingModels = ref(false);
 const fetchedModels = ref([]);
+
+const sidebarVisible = useStorage('modelsPage_sidebarVisible', true); // 控制侧边栏显示状态
 
 // 供应商表单验证规则
 const providerRules = {
@@ -239,25 +251,6 @@ const providerRules = {
 
 // 初始化数据函数 - 模拟网络请求
 const initData = async () => {
-    // 模拟网络请求延迟
-    // await new Promise(resolve => setTimeout(resolve, 100));
-
-    // // 初始化提供商数据
-    // providers.value = [
-    //     { id: "1", name: "硅基流动", api_key: "silk-ai-api-key", api_url: "https://api.silk.ai/v1/chat/completions" },
-    //     { id: "2", name: "OpenAI", api_key: "openai-api-key", api_url: "https://api.openai.com/v1/chat/completions" },
-    //     { id: "3", name: "阿里云", api_key: "aliyun-api-key", api_url: "https://api.aliyun.com/v1/chat/completions" }
-    // ];
-
-    // // 初始化模型数据
-    // models.value = [
-    //     { id: "1", model_name: "gpt-3.5-turbo", provider_id: "1", type: "text", features: ["visual", "tools"] },
-    //     { id: "2", model_name: "gpt-4", provider_id: "1", type: "text", features: ["tools"] },
-    //     { id: "3", model_name: "gpt-3.5-turbo", provider_id: "2", type: "text", features: ["tools"] },
-    //     { id: "4", model_name: "gpt-4", provider_id: "2", type: "text", features: ["tools"] },
-    //     { id: "5", model_name: "gpt-3.5-turbo", provider_id: "3", type: "text", features: ["tools"] },
-    //     { id: "6", model_name: "gpt-3.5-turbo", provider_id: "3", type: "text", features: ["tools"] }
-    // ];
     const data = await apiService.fetchModels();
     providers.value = data.providers;
     models.value = data.models;
@@ -325,14 +318,29 @@ const editModelRules = {
     }
 };
 
-// 显示通知
-const showNotification = (type, title, content, duration = 3000) => {
-    notification[type]({
-        content: title,
-        meta: content,
-        duration,
-        keepAliveOnHover: true
-    });
+// 使用 useDebounceFn 创建防抖函数
+const debouncedProviderChange = useDebounceFn(async () => {
+    try {
+        // 验证表单
+        await formRef.value?.validate();
+
+        // 调用后台API更新供应商信息
+        await apiService.updateProvider(currentProviderId.value, {
+            name: currentProvider.value.name,
+            api_key: currentProvider.value.api_key,
+            api_url: currentProvider.value.api_url
+        });
+
+        // showNotification('success', '保存成功', '供应商信息已更新');
+    } catch (errors) {
+        // 验证失败，不保存
+        console.log('表单验证失败，不保存数据');
+    }
+}, 200); // 200ms 防抖延迟
+
+// 供应商信息变化处理（使用防抖）
+const handleProviderChange = () => {
+    debouncedProviderChange();
 };
 
 const handleCreateGroup = async () => {
@@ -408,8 +416,6 @@ const handleFetchModels = async () => {
     }
 };
 
-
-
 // 模拟从大语言模型API获取模型列表
 const fetchModelsFromAPI = async () => {
     // 这里应该是实际的大语言模型API调用
@@ -429,17 +435,6 @@ const fetchModelsFromAPI = async () => {
         type: 'text', // 根据实际情况获取
         features: []  // 根据实际情况获取
     }));
-
-    // 模拟API调用延迟
-    // await new Promise(resolve => setTimeout(resolve, 1000));
-    // 模拟返回数据 - 原生API只返回基本模型信息
-    // return [
-    //     { id: "api-1", model_name: "gpt-3.5-turbo" },
-    //     { id: "api-2", model_name: "gpt-4" },
-    //     { id: "api-3", model_name: "gpt-4-turbo" },
-    //     { id: "api-4", model_name: "dall-e-3" },
-    //     { id: "api-5", model_name: "whisper-1" }
-    // ];
 };
 
 // 从获取列表中添加模型
@@ -504,34 +499,6 @@ const handleAddModel = () => {
     showEditModal.value = true;
 };
 
-// 供应商信息变化处理（防抖）
-const handleProviderChange = () => {
-    // 清除之前的计时器
-    if (debounceTimer) {
-        clearTimeout(debounceTimer);
-    }
-
-    // 设置新的计时器（200ms防抖）
-    debounceTimer = setTimeout(async () => {
-        try {
-            // 验证表单
-            await formRef.value?.validate();
-
-            // 调用后台API更新供应商信息
-            await apiService.updateProvider(currentProviderId.value, {
-                name: currentProvider.value.name,
-                api_key: currentProvider.value.api_key,
-                api_url: currentProvider.value.api_url
-            });
-
-            // showNotification('success', '保存成功', '供应商信息已更新');
-        } catch (errors) {
-            // 验证失败，不保存
-            console.log('表单验证失败，不保存数据');
-        }
-    }, 200);
-};
-
 // 删除供应商
 const handleDeleteProvider = async (provider) => {
     const result = await confirm("删除供应商", `确定要删除供应商"${provider.name}"吗？这将同时删除该供应商下的所有模型，操作不可恢复。`);
@@ -560,7 +527,7 @@ const handleDeleteProvider = async (provider) => {
     }
 };
 
-// 删除供应商的API调用（空函数，实际使用时替换为真实API）
+// 删除供应商的API调用
 const deleteProvider = async (providerId) => {
     // 这里应该是实际的API调用
     await apiService.deleteProvider(providerId);
@@ -571,7 +538,7 @@ const deleteProvider = async (providerId) => {
     providers.value = providers.value.filter(p => p.id !== providerId);
 };
 
-// 新增模型API调用（空函数，实际使用时替换为真实API）
+// 新增模型API调用
 const addModel = async (modelData) => {
     // 模拟API调用延迟
     await new Promise(resolve => setTimeout(resolve, 100));
@@ -602,11 +569,8 @@ const loadModelsProvider = async () => {
 }
 
 const handleSelectProvider = (providerId) => {
-    // 清除防抖计时器
-    if (debounceTimer) {
-        clearTimeout(debounceTimer);
-        debounceTimer = null;
-    }
+    // 清除防抖函数（如果有正在等待的执行）
+    console.log(debouncedProviderChange);
 
     currentProviderId.value = providerId;
     // 重置表单验证状态
@@ -674,12 +638,11 @@ const handleDeleteClick = async (model) => {
         models.value.splice(index, 1);
         // 强制触发响应式更新
         models.value = [...models.value];
-        //showNotification('success', '删除成功', '模型已删除');
         notify.success('删除成功', '模型已删除');
     }
 }
 
-// 组件卸载时清除计时器
+// 组件卸载时清除计时器（现在由 useDebounceFn 自动处理）
 onMounted(() => {
     loadModelsProvider()
 })

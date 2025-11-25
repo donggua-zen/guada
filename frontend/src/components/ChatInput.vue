@@ -16,17 +16,31 @@
 
         <div class="input-actions">
             <div class="tools">
+                <template v-if="showThinkingButton">
+                    <n-button class="tool-btn" id="deep-thinking-btn" :class="{ active: localThinkingEnabled }"
+                        :title="localThinkingEnabled ? '关闭深度思考' : '深度思考'" @click="toggleDeepThinking" text>
+                        <template #icon>
+                            <n-icon size="22">
+                                <Thinking />
+                            </n-icon>
+                        </template>
+                        思考
+                    </n-button>
+                    <span class="mr-2"></span>
+                </template>
+                <n-button class="tool-btn" :class="{ active: localWebSearchEnabled }" title="联网搜索"
+                    @click="handleWebSearch" text>
+                    <template #icon>
+                        <n-icon size="22">
+                            <ScreenSearchDesktopTwotone />
+                        </n-icon>
+                    </template>
+                    网络
+                </n-button>
                 <n-button class="tool-btn" title="上传文件" @click="triggerFileInput" text>
                     <template #icon>
                         <n-icon size="22">
                             <InsertDriveFileTwotone />
-                        </n-icon>
-                    </template>
-                </n-button>
-                <n-button class="tool-btn" title="联网搜索" @click="handleWebSearch" text>
-                    <template #icon>
-                        <n-icon size="22">
-                            <ScreenSearchDesktopTwotone />
                         </n-icon>
                     </template>
                 </n-button>
@@ -43,11 +57,6 @@
                             <DataThresholdingTwotone />
                         </n-icon>
                     </template>
-                </n-button>
-                <n-button class="tool-btn" id="deep-thinking-btn" style="display:none"
-                    :class="{ active: isDeepThinking }" :title="isDeepThinking ? '关闭深度思考' : '深度思考'"
-                    @click="toggleDeepThinking" text>
-                    思考
                 </n-button>
             </div>
 
@@ -91,6 +100,8 @@ import {
     CloseOutlined,
 } from "@vicons/material";
 
+import { Thinking } from "@/components/icons";
+
 const isInputExpanded = ref(false);
 const messageInputRef = ref(null);
 const fileInputRef = ref(null);
@@ -113,9 +124,39 @@ const props = defineProps({
         type: Boolean,
         default: false
     },
+    webSearchEnabled: {
+        type: Boolean,
+        default: false
+    },
+    thinkingEnabled: {
+        type: Boolean,
+        default: false
+    },
+    showThinkingButton: {
+        type: Boolean,
+        default: false
+    }
 })
 
-const emit = defineEmits(['update:value', 'send', 'abort', 'tokens-statistic', 'files-change'])
+const localWebSearchEnabled = computed({
+    get() {
+        return props.webSearchEnabled;
+    },
+    set(value) {
+        emit('update:webSearchEnabled', value)
+    }
+})
+
+const localThinkingEnabled = computed({
+    get() {
+        return props.thinkingEnabled;
+    },
+    set(value) {
+        emit('update:thinkingEnabled', value)
+    }
+})
+
+const emit = defineEmits(['update:value', 'update:webSearchEnabled', 'update:thinkingEnabled', 'send', 'abort', 'tokens-statistic', 'files-change', 'toggle-web-search', 'toggle-thinking'])
 
 const inputContent = computed(
     {
@@ -216,7 +257,8 @@ const handleImageUpload = () => {
 }
 
 const handleWebSearch = () => {
-    console.log("联网搜索功能");
+    localWebSearchEnabled.value = !localWebSearchEnabled.value;
+    emit('toggle-web-search')
 }
 
 const handleTokensStatistic = () => {
@@ -228,7 +270,8 @@ const abortResponse = () => {
 }
 
 const toggleDeepThinking = () => {
-    //emit('event:toggle-deep-thinking')
+    localThinkingEnabled.value = !localThinkingEnabled.value;
+    emit('toggle-thinking')
 }
 
 // 调整文本区域高度
@@ -317,25 +360,25 @@ watch(inputContent, (newVal) => {
     border: none;
     color: #777;
     cursor: pointer;
-    font-size: 22px;
-    width: 32px;
-    height: 32px;
+    font-size: 14px;
+    /* min-width: 32px;*/
+    height: 28px;
+    padding: 0 8px;
     display: flex;
     align-items: center;
     justify-content: center;
-    border-radius: 8px;
+    border-radius: 6px;
     transition: all 0.2s;
 }
 
 .tool-btn:hover {
-    background-color: #e6f0fa;
+    /* background-color: #e6f0fa; */
     color: #4a90e2;
 }
 
 /* 深度思考按钮激活状态样式 */
-#deep-thinking-btn.active {
+.tool-btn.active {
     background-color: #e6f0fa;
-    color: #4a90e2;
-    box-shadow: 0 0 0 2px rgba(74, 144, 226, 0.2);
+    color: #18a058;
 }
 </style>

@@ -1,49 +1,51 @@
 <template>
-  <div class="flex w-full h-full">
-    <sessions-list ref="sessionsListRef" :sessions="sessions" v-model:sidebar-visible="sidebarVisible"
-      @select="selectSession" @delete="handleDeleteSession" @rename="handleRenameSession"
-      @create="handleCreateSession" />
-    <template v-if="sessions.length > 0">
-      <div class="h-full flex-1 min-w-0">
-        <ChatPanel v-model:session="currentSession" v-model:sidebar-visible="sidebarVisible"
-          @openSettings="handleOpenSettings" @openSwitchModel="handleOpenSwitchModel" />
-      </div>
-
-      <n-modal v-model:show="visible" :mask-closable="false" :auto-focus="false" style="width: 600px;max-width: 90vw;"
-        title="对话设置" preset="card">
-        <div class="max-h-80vh overflow-y-auto">
-          <CharacterSettingPanel :data="currentSession" @update:data="updateSession" :simple="true"
-            :tab="currentTabValue" />
-        </div>
-      </n-modal>
+  <SidebarLayout v-model:sidebar-visible="sidebarVisible" :sidebar-position="'left'">
+    <template #sidebar>
+      <sessions-list ref="sessionsListRef" :sessions="sessions" @select="selectSession" @delete="handleDeleteSession"
+        @rename="handleRenameSession" @create="handleCreateSession" />
     </template>
-    <template v-else>
-      <div class="flex-1 flex items-center justify-center">
-        <n-empty description="你什么也找不到">
-          <!-- <template #extra>
+    <template #content>
+      <!-- 主体 -->
+      <template v-if="sessions.length > 0">
+        <ChatPanel v-model:session="currentSession" v-model:sidebar-visible="sidebarVisible"
+          @openSettings="handleOpenSettings" @openSwitchModel="handleOpenSwitchModel"
+          @saveSettings="handleSaveSessionSettings" />
+        <n-modal v-model:show="visible" :mask-closable="false" :auto-focus="false" style="width: 600px;max-width: 90vw;"
+          title="对话设置" preset="card">
+          <div class="max-h-80vh overflow-y-auto">
+            <CharacterSettingPanel :data="currentSession" @update:data="updateSession" :simple="true"
+              :tab="currentTabValue" />
+          </div>
+        </n-modal>
+      </template>
+      <template v-else>
+        <div class="flex-1 flex items-center justify-center">
+          <n-empty description="你什么也找不到">
+            <!-- <template #extra>
             <n-button size="small">
               看看别的
             </n-button>
           </template> -->
-        </n-empty>
-      </div>
+          </n-empty>
+        </div>
+      </template>
     </template>
-  </div>
+  </SidebarLayout>
 </template>
 
 <script setup>
 import { ref, onMounted, watch } from "vue";
-import { apiService } from "../services/ApiService";
+import { apiService } from "@/services/ApiService";
 
 import { useRouter } from 'vue-router'
-import SessionsList from "./SessionsList.vue";
-import CharacterSettingPanel from "./CharacterSettingPanel.vue";
-import ChatPanel from "./ChatPanel.vue";
-import { NEmpty, NModal, NCard, NButton, NIcon } from "naive-ui";
+import SidebarLayout from "@/components/layout/SidebarLayout.vue";
+import SessionsList from "@/components/SessionsList.vue";
+import CharacterSettingPanel from "@/components/CharacterSettingPanel.vue";
+import ChatPanel from "@/components/ChatPanel.vue";
+import { NEmpty, NModal, NIcon } from "naive-ui";
 import { usePopup } from "@/composables/usePopup";
 import { useStorage } from '@vueuse/core'
-
-const { confirm, editText, toast, prompt } = usePopup();
+const { confirm, toast, prompt } = usePopup();
 const router = useRouter();
 
 const currentSession = ref({
@@ -170,7 +172,7 @@ const handleRenameSession = async (session) => {
       // 调用API更新对话
       await apiService.updateSession(session.id, updatedSession)
 
-      updateSessionById(session.id, updatedSession);
+      // updateSessionById(session.id, updatedSession);
 
       currentSession.value = { ...session, title: newTitle }
 
@@ -196,12 +198,10 @@ const handleDeleteSession = async (session) => {
   }
 }
 
-const handleSaveSession = async () => {
+const handleSaveSessionSettings = async () => {
   try {
-    await updateSession({
-      title: currentSession.value.title,
-      avatar_file: currentSession.value.avatar_file,
-    });
+    await apiService.updateSession(currentSession.value.id, { settings: currentSession.value.settings });
+    // currentSession.value.updated_at = new Datetime //2025-11-24T16:32:21.538968+08:00
   } catch (error) {
     console.error('保存对话失败:', error)
   }
@@ -225,17 +225,5 @@ onMounted(() => {
 <style scoped>
 .max-h-80vh {
   max-height: 80vh;
-}
-
-/* 添加侧边栏动画过渡 */
-.sessions-list-enter-active,
-.sessions-list-leave-active {
-  transition: all 0.3s ease;
-}
-
-.sessions-list-enter-from,
-.sessions-list-leave-to {
-  transform: translateX(-100%);
-  opacity: 0;
 }
 </style>

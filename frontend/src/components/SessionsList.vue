@@ -1,17 +1,8 @@
 <template>
-  <div v-show="localSidebarVisible"
-    class="sessions-panel flex flex-col w-72 min-w-72 h-screen bg-[var(--conversation-bg)] border-r border-[var(--conversation-border-color)]">
+  <div
+    class="sessions-panel flex flex-col  w-full h-full bg-[var(--conversation-bg)] border-r border-[var(--conversation-border-color)]">
     <div class="sessions-header px-5 py-5 text-lg font-semibold flex justify-between items-center">
       <span>会话列表</span>
-      <!-- 新增收缩按钮 -->
-      <n-button quaternary circle @click="handleToggleSidebar" size="small"
-        class="shrink-btn bg-none border-none text-gray-500 cursor-pointer text-sm p-1 rounded" title="收缩侧边栏">
-        <template #icon>
-          <n-icon size="22">
-            <ArrowCircleLeft />
-          </n-icon>
-        </template>
-      </n-button>
     </div>
 
     <!-- 搜索框 -->
@@ -119,27 +110,15 @@ const router = useRouter()
 // 响应式数据
 const currentSessionId = ref(null)
 const searchKeyword = ref('')
-const localSidebarVisible = computed({
-  get() {
-    return props.sidebarVisible
-  },
-  set(value) {
-    emit('update:sidebarVisible', value)
-  }
-})
 
 // 事件定义
-const emit = defineEmits(['select', 'rename', 'create', 'delete', 'update:sidebarVisible'])
+const emit = defineEmits(['select', 'rename', 'create', 'delete'])
 
 // Props 定义
 const props = defineProps({
   sessions: {
     type: Array,
     default: () => []
-  },
-  sidebarVisible: {
-    type: Boolean,
-    default: true
   }
 })
 
@@ -290,12 +269,6 @@ const handleDropdownSelect = (key, session) => {
 // 创建新会话
 const handleCreateSession = () => {
   emit('create')
-}
-
-const handleToggleSidebar = () => {
-  localSidebarVisible.value = false;
-  // emit('toggle-sidebar')
-
 }
 
 // 监听器
