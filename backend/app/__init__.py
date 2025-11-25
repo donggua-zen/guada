@@ -62,6 +62,7 @@ class AppInitializer:
         from app.routes.models import models_bp
         from app.routes.upload import upload_bp
         from app.routes.chat import chat_bp
+        from app.routes.settings import settings_bp
 
         self.app.register_blueprint(sessions_bp)
         self.app.register_blueprint(messages_bp)
@@ -69,6 +70,7 @@ class AppInitializer:
         self.app.register_blueprint(models_bp)
         self.app.register_blueprint(upload_bp)
         self.app.register_blueprint(chat_bp)
+        self.app.register_blueprint(settings_bp)
 
     def initialize_error_handlers(self):
         """注册错误处理器"""

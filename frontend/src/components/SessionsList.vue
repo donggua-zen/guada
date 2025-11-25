@@ -1,15 +1,26 @@
 <template>
   <div
     class="sessions-panel flex flex-col  w-full h-full bg-[var(--conversation-bg)] border-r border-[var(--conversation-border-color)]">
+    <!-- 修改后的会话头部，包含标题和新建按钮 -->
     <div class="sessions-header px-5 py-5 text-lg font-semibold flex justify-between items-center">
       <span>会话列表</span>
+      <!-- 新建会话按钮移动到右侧 -->
+      <n-button @click="handleCreateSession" text size="medium">
+        <template #icon>
+          <n-icon>
+            <ChatBubbleTwotone />
+          </n-icon>
+        </template>
+        新建会话
+      </n-button>
     </div>
 
     <!-- 搜索框 -->
     <div class="search-box px-3 py-3">
-      <n-input v-model:value="searchKeyword" placeholder="搜索会话" clearable @update:value="handleSearchInput">
+      <n-input v-model:value="searchKeyword" placeholder="搜索会话" clearable @update:value="handleSearchInput" size="large"
+        round>
         <template #prefix>
-          <n-icon>
+          <n-icon size="22">
             <SearchOutlined />
           </n-icon>
         </template>
@@ -29,7 +40,7 @@
             {{ searchKeyword ? '未找到匹配的会话' : '没有会话' }}
           </div>
           <div class="empty-state-description">
-            {{ searchKeyword ? '尝试调整搜索关键词' : '点击下方按钮创建新的会话' }}
+            {{ searchKeyword ? '尝试调整搜索关键词' : '点击上方按钮创建新的会话' }}
           </div>
         </div>
       </template>
@@ -72,16 +83,7 @@
       </template>
     </SimpleBar>
 
-    <div class="sessions-footer p-5">
-      <n-button block @click="handleCreateSession" type="primary" size="large">
-        <template #icon>
-          <n-icon>
-            <PlusOutlined />
-          </n-icon>
-        </template>
-        新建会话
-      </n-button>
-    </div>
+    <!-- 移除底部的sessions-footer部分 -->
   </div>
 </template>
 
@@ -98,11 +100,9 @@ import {
   EditOutlined,
   DeleteOutlineOutlined,
   SearchOutlined,
+  ChatBubbleTwotone // 新增图标导入
 } from '@vicons/material'
 
-import {
-  ArrowCircleLeft
-} from './icons'
 
 const route = useRoute()
 const router = useRouter()
@@ -296,6 +296,7 @@ watch(() => route.params.sessionId, (newSessionId) => {
   color: #4a90e2;
   background-color: #e6f0fa;
 }
+
 
 /* SimpleBar 滚动条样式 */
 :deep(.simplebar-scrollbar::before) {

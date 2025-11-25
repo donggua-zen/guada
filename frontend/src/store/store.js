@@ -2,6 +2,7 @@ import { reactive } from 'vue'
 
 export const store = reactive({
     activeSessionId: 0,
+    sessionsList: [],
     sessions: new Map(), // 统一管理所有会话状态
     setActiveSessionId(sessionId) {
         this.activeSessionId = sessionId;
@@ -26,7 +27,13 @@ export const store = reactive({
         }
         return this.sessions.get(sessionId);
     },
-
+    // 会话列表相关方法
+    setSessionsList(sessionsList) {
+        this.sessionsList = sessionsList;
+    },
+    getSessionsList() {
+        return this.sessionsList;
+    },
     // 消息相关方法
     getMessages(sessionId) {
         return this.getSessionState(sessionId).messages;

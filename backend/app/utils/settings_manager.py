@@ -33,6 +33,9 @@ class SettingsManager:
             elif isinstance(value, (dict, list)):
                 value_type = "json"
                 value = json.dumps(value)
+            elif value is None:
+                value_type = "str"
+                value = ""
             else:
                 value_type = "str"
 

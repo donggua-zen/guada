@@ -80,7 +80,6 @@ function handleScroll(event) {
 }
 
 function immediateScrollToBottom() {
-    console.log('immediateScrollToBottom');
     const element = scrollElement.value;
     if (element) {
         element.scrollTop = element.scrollHeight;
@@ -88,11 +87,9 @@ function immediateScrollToBottom() {
 }
 
 function smoothScrollToBottom() {
-    console.log('smoothScrollToBottom');
     const element = scrollElement.value;
     if (element) {
         const currentScrollHeight = element.scrollHeight;
-        console.log('element', element);
         if (currentScrollHeight > lastScrollHeight.value) {
             element.scrollTo({
                 top: currentScrollHeight,
@@ -116,21 +113,18 @@ function initScrollObserver() {
     if (scrollObserver.value) {
         scrollObserver.value.disconnect();
     }
-    console.log('initScrollObserver');
     const wrapper = contentWrapper.value;
     if (!wrapper) return;
-    console.log('wrapper', wrapper);
 
     scrollObserver.value = new MutationObserver((mutations) => {
         const hasContentChange = mutations.some(mutation =>
             mutation.type === 'childList' && mutation.addedNodes.length > 0
         );
-        console.log('hasContentChange', hasContentChange);
         if (hasContentChange && props.autoScroll && isAtBottom.value) {
             requestAnimationFrame(() => {
                 immediateScrollToBottom();
             });
-           
+
         }
     });
 

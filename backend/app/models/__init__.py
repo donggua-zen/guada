@@ -6,4 +6,5 @@ from .session import Session
 from .summary import Summary
 from .file import File
 from .database import db
+from .globa_setting import GlobalSetting
 from .db_transaction import smart_transaction_manager
