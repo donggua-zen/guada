@@ -101,7 +101,7 @@ class LLMService:
         """
         response = None
         try:
-            logger.debug("messages:", len(messages))
+            logger.debug("messages:%d", len(messages))
             logger.debug("freq_penalty: %s", frequency_penalty)
             logger.debug("top_p: %s", top_p)
             logger.debug("temperature: %s", temperature)

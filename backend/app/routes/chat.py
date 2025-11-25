@@ -103,3 +103,20 @@ def get_tokens(session_id):
             "data": data,
         }
     )
+
+
+@chat_bp.route("/v1/messages/<message_id>/web_serach", methods=["GET"])
+def web_search(message_id):
+    try:
+        data = chat_service.web_search(message_id)
+        return jsonify(
+            {
+                "success": True,
+                "data": data,
+            }
+        )
+    except Exception as e:
+        logger.debug("web_search Exception:")
+        logger.debug(e)
+        traceback.print_exc()
+        return jsonify({"success": False, "error": str(e)}), 400
