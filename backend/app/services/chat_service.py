@@ -21,6 +21,7 @@ from app.repositories.session_repository import SessionRepository
 from app.services.domain.memory_strategy import MemoryStrategy
 from app.services.llm_service import LLMServiceChunk
 from app.services.message_service import MessageService
+from app.utils.settings_manager import SettingsManager
 
 message_service = MessageService()
 
@@ -255,9 +256,15 @@ class ChatService:
         from app.services.domain.web_search import WebSearch
         from app.services import LLMService  # 避免循环导入
 
+        serper_api_key = SettingsManager.get("search_api_key", "")
+        search_prompt_context_length = model_params.get("search_prompt_context_length", 10)
+
+        if not serper_api_key:  # 搜索功能需要API Key
+            raise ValueError("serper_api_key is required")
+
         conversation_messages = [
             f'<role="{msg["role"]}">{msg["content"]}<role="{msg["role"]}">'
-            for msg in messages
+            for msg in messages[-search_prompt_context_length:]
         ]
         prompt = "请根据聊天记录，为最新的用户提问，生成一个简洁明了的搜索词，用于后续的网页搜索。直接输出，不要进行任何额外描述。\n"
         prompt += "对话记录：\n" + "\n".join(conversation_messages)
@@ -277,7 +284,7 @@ class ChatService:
         )
 
         logger.debug("搜索词：%s", chunk.content)
-        web_search = WebSearch()
+        web_search = WebSearch(serper_api_key=serper_api_key)
         results = web_search.search(chunk.content)
         return "\n".join(
             [
@@ -385,7 +392,7 @@ class ChatService:
                 web_results = self._web_search(
                     model=model,
                     model_params=model_params,
-                    messages=context_messages[-10:],
+                    messages=context_messages,
                 )
                 yield {"type": "web_search", "msg": "stop"}
                 prompt = f"请根据搜索结果回答用户问题\n# 搜索结果：\n{web_results} \n# 用户问题：\n"

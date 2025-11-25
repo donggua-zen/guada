@@ -11,14 +11,15 @@ SERPER_API_KEY = "64574816f00e700629e18cea9f479e0556dcfa76"
 
 class WebSearch:
     # lm_service: LLMService = None
+    serper_api_key: str = ""
 
-    # def __init__(self, lm_service: LLMService):
-    #     self.lm_service = lm_service
+    def __init__(self, serper_api_key: str):
+        self.serper_api_key = serper_api_key
 
     def search_with_serper(self, query, num_results=5):
         """使用Serper API进行搜索"""
         url = "https://google.serper.dev/search"
-        headers = {"X-API-KEY": SERPER_API_KEY, "Content-Type": "application/json"}
+        headers = {"X-API-KEY": self.serper_api_key, "Content-Type": "application/json"}
         payload = {"q": query, "num": num_results, "hl": "zh-cn"}
 
         response = requests.post(url, headers=headers, data=json.dumps(payload))
@@ -38,7 +39,7 @@ class WebSearch:
                     "snippet": result.get("snippet"),
                     "position": result.get("position"),
                 }
-                for result in search_results["organic"][:3]
+                for result in search_results["organic"]
             ]
         return []
 
@@ -66,38 +67,3 @@ class WebSearch:
         # 步骤1: 进行搜索
         search_results = self.search_with_serper(user_query)
         return self.get_search_context(search_results)
-
-    #         # 步骤2: 将搜索结果作为上下文提供给LLM
-    #     enhanced_prompt = f"""
-    # 基于以下搜索信息来回答问题：
-
-    # 搜索信息：
-    # {search_context}
-
-    # 用户问题：{user_query}
-
-    # 请根据以上信息回答用户的问题，如果信息不足请注明。
-    # """
-    #     else:
-    #         enhanced_prompt = user_query
-
-    #     # 步骤3: 调用OpenAI API
-    #     response = openai.ChatCompletion.create(
-    #         model="gpt-3.5-turbo",
-    #         messages=[
-    #             {
-    #                 "role": "system",
-    #                 "content": "你是一个有帮助的助手，能够结合网络搜索信息回答问题。",
-    #             },
-    #             {"role": "user", "content": enhanced_prompt},
-    #         ],
-    #         max_tokens=1000,
-    #     )
-
-    #     return response.choices[0].message.content
-
-
-# 使用示例
-# web_search = WebSearch()
-# result = web_search.search_with_serper("今天北京天气怎么样？")
-# print(result)
