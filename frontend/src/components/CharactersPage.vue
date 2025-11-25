@@ -99,6 +99,7 @@
 <script setup>
 import { ref, onMounted, reactive } from 'vue'
 import { useRouter } from 'vue-router'
+import SidebarLayout from '@/components/layout/SidebarLayout.vue'
 import {
   NButton,
   NIcon,

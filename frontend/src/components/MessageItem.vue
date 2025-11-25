@@ -37,14 +37,19 @@
         <div class="message-text markdown-text" v-html="debouncedFormattedText">
         </div>
 
-        <n-alert v-if="message.meta_data && message.meta_data.finish_reason == 'error'" title="API请求错误" type="error">
-          {{ message.meta_data.error }}
+        <n-alert v-if="metadata && metadata.finish_reason == 'error'" title="API请求错误" type="error">
+          {{ metadata.error }}
         </n-alert>
         <div v-if="message.is_streaming" class="assistant-loading flex items-center text-gray-500">
           <n-icon size="16" class="mr-2">
             <Loading />
           </n-icon>
-          回答中...
+          <template v-if="isWebSearching">
+            搜索中...
+          </template>
+          <template v-else>
+            回答中...
+          </template>
         </div>
         <div v-if="isAssistant && !message.is_streaming" class="text-sm text-gray-400 mt-2">
           <span>model: {{ metadata ? metadata.model_name : '' }}</span>
@@ -152,6 +157,7 @@ marked.use({ renderer, breaks: true });
 
 const isExpanded = ref(false);
 const isThinking = ref(false);
+const isWebSearching = ref(false);
 const isAssistant = computed(() => props.message.role === "assistant");
 const messageClass = computed(() =>
   isAssistant.value ? "assistant-message-container" : "user-message-container"
@@ -331,6 +337,14 @@ const stopThinking = () => {
   thinkingLabel.value = "已深度思考";
 };
 
+const startWebSearch = () => {
+  isWebSearching.value = true;
+};
+
+const stopWebSearch = () => {
+  isWebSearching.value = false;
+};
+
 const getCurrentIndex = (messageContents) => {
   if (!messageContents || messageContents.length === 0) {
     return 1;
@@ -367,7 +381,7 @@ onMounted(() => {
 onUnmounted(() => {
 });
 
-defineExpose({ startThinking, stopThinking, switchContent });
+defineExpose({ startThinking, stopThinking, switchContent, startWebSearch, stopWebSearch });
 
 </script>
 

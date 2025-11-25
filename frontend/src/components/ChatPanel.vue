@@ -2,8 +2,8 @@
   <div class="flex flex-col h-full">
     <!-- 聊天头部 -->
     <div class="chat-header">
-      <template v-if="!loaclSidebarVisible">
-        <n-button text @click="loaclSidebarVisible = true">
+      <template v-if="!localSidebarVisible">
+        <n-button text @click="localSidebarVisible = true">
           <template #icon>
             <n-icon size="22">
               <FormatListBulletedSharp />
@@ -97,8 +97,10 @@
 
     <!-- 输入区域 -->
     <div class="input-container">
-      <ChatInput v-model:value="inputMessage.text" :files="inputMessage.files" :streaming="isStreaming"
-        @send="sendMessage" @abort="abortResponse" @image-upload="handleImageUpload" @web-search="handleWebSearch"
+      <ChatInput v-model:value="inputMessage.text" v-model:web-search-enabled="webSearchEnabled"
+        v-model:thinking-enabled="thinkingEnabled" :show-thinking-button="supprtedThinkingSwicth"
+        :files="inputMessage.files" :streaming="isStreaming" @send="sendMessage" @abort="abortResponse"
+        @image-upload="handleImageUpload" @toggle-web-search="handleWebSearch" @toggle-thinking="toggleDeepThinking"
         @tokens-statistic="handleTokensStatistic" />
     </div>
 
@@ -125,7 +127,7 @@ import ScrollContainer from "./ScrollContainer.vue";
 import { DeleteTwotone, SettingsTwotone, FormatListBulletedSharp, MoreVertOutlined, FileDownloadOutlined, FileUploadOutlined } from "@vicons/material";
 
 // UI组件导入
-import { NButton, NIcon, NDivider, NDropdown } from "naive-ui";
+import { NButton, NIcon, NDivider, NDropdown, c } from "naive-ui";
 
 // 弹出层工具
 const { confirm, editText, toast, notify } = usePopup();
@@ -136,14 +138,8 @@ const messagesContainer = ref(null);
 const currentSessionId = ref(null);
 const showTokenModal = ref(false);
 const itemRefs = ref({});
-const loaclSidebarVisible = computed({
-  get() {
-    return props.sidebarVisible
-  },
-  set(value) {
-    emit('update:sidebarVisible', value)
-  }
-})
+
+
 
 // 更多操作下拉菜单选项
 const moreOptions = ref([
@@ -176,7 +172,7 @@ const props = defineProps({
   }
 });
 
-const emit = defineEmits(['update:session', 'openSettings', 'openSwitchModel', 'update:sidebarVisible']);
+const emit = defineEmits(['update:session', 'openSettings', 'openSwitchModel', 'update:sidebarVisible', 'saveSettings']);
 
 // 计算属性
 const currentSession = computed({
@@ -201,9 +197,43 @@ const activeMessages = computed({
   set: (value) => store.setMessages(currentSessionId.value, value)
 });
 
+const webSearchEnabled = computed({
+  get() {
+    return currentSession.value.settings?.web_search_enabled;
+  },
+  set(value) {
+    currentSession.value.settings['web_search_enabled'] = value;
+  }
+})
+
+const thinkingEnabled = computed({
+  get() {
+    return currentSession.value.settings?.thinking_enabled;
+  },
+  set(value) {
+    currentSession.value.settings['thinking_enabled'] = value;
+  }
+})
+
+const supprtedThinkingSwicth = computed(() => {
+  return currentSession.value.model?.features?.includes('thinking')
+})
+
+const localSidebarVisible = computed({
+  get() {
+    return props.sidebarVisible
+  },
+  set(value) {
+    emit('update:sidebarVisible', value)
+  }
+})
+
 // 防抖函数
 const debouncedUpdatedSession = useDebounceFn(updateSessionLastMessage, 1000);
 const debouncedSwitchContent = useDebounceFn((messageId, contentId) => apiService.setMessageCurrentContent(messageId, contentId), 300);
+const debouncedSaveSession = useDebounceFn(() => {
+  emit('saveSettings');
+}, 200);
 
 // 监听器
 watch(() => props.session.id, handleSessionChange, { immediate: true });
@@ -389,29 +419,42 @@ async function handleStreamResponse(streamingSessionId, userMessageId, regenerat
       assistantMessageId,
       false
     )) {
-      if (response.error) {
-        handleStreamError(response, assistantMessageIdResult);
-        break;
+      if (response.type == "finish") {
+        handleStreamFinish(response, message, contentIndex, assistantMessageIdResult);
+        break
       }
 
-      if (response.message_id && response.content_id) {
+      if (response.type == "create") {
         ({ message, contentIndex } = handleNewMessage(response, streamingSessionId, userMessageId));
         assistantMessageIdResult = response.message_id;
         continue;
       }
 
-      if (response.reasoning_content) {
-        ({ isThinking, thinkingContent } = handleThinkingContent(response, message, contentIndex, isThinking, thinkingContent));
+      if (response.type == "web_search") {
+        if (response.msg == "start") {
+          itemRefs.value[message.id]?.startWebSearch();
+        } else {
+          itemRefs.value[message.id]?.stopWebSearch();
+        }
         continue;
       }
 
-      if (isThinking) {
-        isThinking = false;
-        itemRefs.value[message.id]?.stopThinking();
+      if (response.type == "think") {
+        if (!isThinking) {
+          isThinking = true;
+          itemRefs.value[message.id]?.startThinking();
+        }
+        thinkingContent = handleThinkingContent(response, message, contentIndex, thinkingContent);
+        continue;
       }
 
-      if (response.content && contentIndex !== undefined) {
+      if (response.type == "text") {
+        if (isThinking) {
+          isThinking = false;
+          itemRefs.value[message.id]?.stopThinking();
+        }
         responseContent = handleContentResponse(response, message, contentIndex, responseContent);
+        continue;
       }
     }
   } catch (error) {
@@ -466,26 +509,25 @@ function handleNewMessage(response, sessionId, userMessageId) {
   }
 }
 
-function handleThinkingContent(response, message, contentIndex, isThinking, thinkingContent) {
-  if (!isThinking) {
-    isThinking = true;
-    itemRefs.value[message.id]?.startThinking();
-  }
-  thinkingContent += response.reasoning_content;
+function handleThinkingContent(response, message, contentIndex, thinkingContent) {
+  thinkingContent += response.msg;
   message.contents[contentIndex].reasoning_content = thinkingContent;
-  return { isThinking, thinkingContent };
+  return thinkingContent;
 }
 
 function handleContentResponse(response, message, contentIndex, currentContent) {
-  const newContent = currentContent + response.content;
+  const newContent = currentContent + response.msg;
   message.contents[contentIndex].content = newContent;
   return newContent;
 }
 
-function handleStreamError(response, assistantMessageId) {
+function handleStreamFinish(response, message, contentIndex, assistantMessageId) {
+  if (response.finish_reason !== "error") {
+    return;
+  }
   console.error("Error in stream:", response.error);
-  if (assistantMessageId) {
-    // 错误信息已保存在message.meta_data中
+  if (message && assistantMessageId) {
+    message.contents[contentIndex].meta_data = { ...message.contents[contentIndex].meta_data, 'error': response.error, 'finish_reason': response.finish_reason };
   } else {
     notify.error("Error in stream", response.error);
   }
@@ -623,9 +665,20 @@ function switchContent(message, content) {
   debouncedSwitchContent(message.id, content.id);
 }
 
-function handleWebSearch() {
-  console.log("网络搜索功能");
+const handleWebSearch = () => {
+  // currentSession['web_search']
+  debouncedSaveSession();
+  const lastMessage = activeMessages.value[activeMessages.value.length - 1];
+  apiService.webSearch(lastMessage['id']).then(result => {
+    console.log(result);
+  }).catch(error => {
+    console.error(error);
+  });
 }
+
+const toggleDeepThinking = () => {
+  debouncedSaveSession();
+};
 
 function handleImageUpload() {
   console.log("图片上传功能");
