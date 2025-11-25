@@ -1,5 +1,6 @@
 <template>
   <div class="app-sidebar">
+    <!-- 原有的侧边栏按钮 -->
     <div v-for="item in sidebarItems" :key="item.id" class="sidebar-btn" :class="{ active: $route.name === item.id }"
       @click="$emit('change-page', item.id)" :title="item.title">
       <div class="icon-wrapper">
@@ -7,11 +8,19 @@
       </div>
       <span>{{ item.title }}</span>
     </div>
+
+    <!-- 新增的设置按钮 -->
+    <div class="sidebar-btn settings-btn" title="设置" @click="$emit('open-settings')">
+      <div class="icon-wrapper">
+        <component :is="SettingsTwotone" :size="20" />
+      </div>
+      <span>设置</span>
+    </div>
   </div>
 </template>
 
 <script setup>
-import { ChatBubbleTwotone, ContactsTwotone, CloudUploadTwotone } from '@vicons/material'
+import { ChatBubbleTwotone, ContactsTwotone, CloudUploadTwotone, SettingsTwotone } from '@vicons/material'
 
 const sidebarItems = [
   {
@@ -30,6 +39,9 @@ const sidebarItems = [
     title: '模型'
   }
 ]
+
+// 定义抛出的事件
+defineEmits(['change-page', 'open-settings'])
 </script>
 
 <style scoped>
@@ -90,5 +102,11 @@ const sidebarItems = [
   background: var(--sidebar-hover-bg);
   color: var(--sidebar-hover-text-color);
   transition: all 0.2s ease;
+}
+
+/* 设置按钮样式 - 固定在底部 */
+.settings-btn {
+  margin-top: auto;
+  margin-bottom: 20px;
 }
 </style>

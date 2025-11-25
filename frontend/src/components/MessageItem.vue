@@ -16,7 +16,7 @@
       <div class="message-card">
         <div v-if="showThinking" class="thinking-section" :class="{ 'thinking-expanded': isExpanded }">
           <div
-            class="inline-flex justify-between items-center text-sm text-gray-700 cursor-pointer font-medium bg-gray-50 rounded-lg py-1 px-2 transition-colors duration-200 mb-1"
+            class="inline-flex justify-between items-center text-sm text-gray-700 cursor-pointer font-medium py-1 transition-colors duration-200 mb-1"
             @click="toggleExpand">
             <div class="flex items-center inline-flex">
               <n-icon size="18" class="text-green-700 mr-1">

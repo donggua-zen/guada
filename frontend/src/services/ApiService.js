@@ -544,6 +544,18 @@ class ApiService {
     });
   }
 
+
+  async fetchSettings() {
+    return await this._request('/settings');
+  }
+
+  async updateSettings(data) {
+    return await this._request('/settings', {
+      method: 'PUT',
+      body: data,
+    });
+  }
+
 }
 
 // 创建默认实例并导出

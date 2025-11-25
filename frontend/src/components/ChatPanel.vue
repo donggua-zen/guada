@@ -241,7 +241,6 @@ watch(() => props.session.id, handleSessionChange, { immediate: true });
 watch(
   () => activeMessages.value,
   () => {
-    debouncedUpdatedSession();
     nextTick(() => {
       if (scrollContainerRef.value?.isAtBottom && !isStreaming.value) {
         immediateScrollToBottom();
@@ -337,7 +336,8 @@ async function importChat() {
       // 这里可以添加数据验证逻辑
       await apiService.importMessages(currentSession.value.id, chatData.messages);
       toast.success("聊天记录导入成功");
-      loadMessages(currentSession.value.id)
+      loadMessages(currentSession.value.id);
+      debouncedUpdatedSession();
     } catch (error) {
       console.error("导入聊天记录失败:", error);
       toast.error("文件格式错误或读取失败");
@@ -461,6 +461,7 @@ async function handleStreamResponse(streamingSessionId, userMessageId, regenerat
     handleStreamCatchError(error, message, contentIndex, assistantMessageIdResult);
   } finally {
     cleanupStreaming(streamingSessionId, message);
+    debouncedUpdatedSession();
   }
 }
 
@@ -569,7 +570,7 @@ async function handleSendUserMessage(data) {
       apiService.uploadFile(messageId, file.file)
     );
     await Promise.all(uploadPromises);
-
+    debouncedUpdatedSession();
     handleStreamResponse(currentSessionId.value, messageId);
   } catch (error) {
     notify.error("消息发送失败", error.message);
@@ -592,6 +593,7 @@ async function clearChat() {
   if (await confirm("清空聊天记录", "确定要删除所有聊天记录吗？此操作不可撤销。")) {
     await apiService.clearSessionMessages(currentSessionId.value);
     store.clearSessionState(currentSessionId.value);
+    debouncedUpdatedSession();
     toast.success("聊天记录已清空");
   }
 }
@@ -605,6 +607,7 @@ async function deleteMessage(message) {
     if (await confirm("删除消息", "确定要删除这条消息吗？此操作不可撤销。")) {
       await apiService.deleteMessage(message.id);
       store.deleteMessage(currentSessionId.value, message.id);
+      debouncedUpdatedSession();
       toast.success("消息已删除");
     }
   } catch (error) {
@@ -627,6 +630,7 @@ async function editMessage(message) {
       message.contents[index].content = result;
       await apiService.updateMessage(message.id, result);
       store.updateMessage(currentSessionId.value, message.id, message);
+      debouncedUpdatedSession();
       toast.success("消息已更新");
     }
   } catch (error) {
@@ -663,17 +667,11 @@ function switchContent(message, content) {
     item.is_current = item.id === content.id;
   });
   debouncedSwitchContent(message.id, content.id);
+  debouncedUpdatedSession();
 }
 
 const handleWebSearch = () => {
-  // currentSession['web_search']
   debouncedSaveSession();
-  const lastMessage = activeMessages.value[activeMessages.value.length - 1];
-  apiService.webSearch(lastMessage['id']).then(result => {
-    console.log(result);
-  }).catch(error => {
-    console.error(error);
-  });
 }
 
 const toggleDeepThinking = () => {
@@ -730,7 +728,7 @@ function handleTokensStatistic() {
 }
 
 .input-container {
-  padding: 0 20px 20px 20px;
+  padding: 0 20px 10px 20px;
   display: flex;
   justify-content: center;
   width: 100%;

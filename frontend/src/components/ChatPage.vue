@@ -19,7 +19,7 @@
         </n-modal>
       </template>
       <template v-else>
-        <div class="flex-1 flex items-center justify-center">
+        <div class="h-full flex-1 flex items-center justify-center">
           <n-empty description="你什么也找不到">
             <!-- <template #extra>
             <n-button size="small">
@@ -36,16 +36,20 @@
 <script setup>
 import { ref, onMounted, watch } from "vue";
 import { apiService } from "@/services/ApiService";
-
 import { useRouter } from 'vue-router'
+import { NEmpty, NModal, NIcon } from "naive-ui";
+import { usePopup } from "@/composables/usePopup";
+import { useStorage } from '@vueuse/core'
+import { store } from "@/store/store"
+import { computed } from "vue";
+const { confirm, toast, prompt } = usePopup();
+
+// 引入组件
 import SidebarLayout from "@/components/layout/SidebarLayout.vue";
 import SessionsList from "@/components/SessionsList.vue";
 import CharacterSettingPanel from "@/components/CharacterSettingPanel.vue";
 import ChatPanel from "@/components/ChatPanel.vue";
-import { NEmpty, NModal, NIcon } from "naive-ui";
-import { usePopup } from "@/composables/usePopup";
-import { useStorage } from '@vueuse/core'
-const { confirm, toast, prompt } = usePopup();
+
 const router = useRouter();
 
 const currentSession = ref({
@@ -53,16 +57,23 @@ const currentSession = ref({
 });
 
 const sessionsListRef = ref(null);
-const sessions = ref([]);
+const sessions = computed({
+  get() {
+    return store.getSessionsList();
+  },
+  set(value) {
+    store.setSessionsList(value);
+  }
+});
 const visible = ref(false);
 const currentTabValue = ref('basic');
 const sidebarVisible = useStorage('sidebarVisible', true); // 控制侧边栏显示状态
 
 const fetchSession = async (sessionId) => {
-  const session_cache = sessions.value.find(session => session.id === sessionId);
-  if (session_cache) {
-    currentSession.value = session_cache;
-  }
+  // const session_cache = sessions.value.find(session => session.id === sessionId);
+  // if (session_cache) {
+  //   currentSession.value = session_cache;
+  // }
   const session = await apiService.fetchSession(sessionId);
   currentSession.value = session;
 };
@@ -106,7 +117,7 @@ const updateSession = async (data) => {
 
       if (session && data.avatar_file) {
         const response = await apiService.uploadAvatar(currentSession.value.id, data.avatar_file, 'session');
-        session.avatar_url = response.url + "?v=" + new Date().getTime();
+        session.avatar_url = response.url;
       }
       currentSession.value = session;
     }

@@ -1,9 +1,9 @@
 /* 通用重置和基础样式 */
 @import "tailwindcss";
+
 :root {
-    --primary-color: #615ced;
-    /* 紫色主题色 */
-    --secondary-color: #f0f0f0;
+    --primary-color: #18a058;
+    --secondary-color: #e6f5f0;
     /* 灰色背景色 */
     --bg: #fafafa;
     --page-bg: #e2e6ee;
@@ -11,11 +11,10 @@
     --secondary-text-color: #666;
     --thinking-text-color: #495057;
     /* 灰色文字颜色 */
-    --primary-color: #3498db;
     --primary-text-color: #1F2937;
     --primary-text-light-color: #fff;
     --bg: #F7F7F7;
-    --page-bg: #f7f7f7;
+    --page-bg: #fff;
 
     --user-bubble-bg: #18a058;
     --user-bubble-text-color: #fff;
@@ -25,6 +24,7 @@
     --assitant-bubble-border-color: none;
     /* 聊天对话样式 */
     --conversation-bg: #E9EBF2;
+    /* #E9EBF2;*/
     --conversation-text-color: #333;
     --conversation-border-color: #efefef;
     --conversation-border-radius: 10px;
@@ -39,12 +39,14 @@
     --sidebar-bg: #0081ff;
     --sidebar-bg: linear-gradient(135deg, #efefef, #efefef);
     --sidebar-bg: #fff;
-    --sidebar-border-color: #ddd;
+    --sidebar-border-color: #eee;
     --sidebar-text-color: #515151;
     --sidebar-hover-bg: #fafafa;
     --sidebar-hover-text-color: #36ad6a;
     --sidebar-active-bg: none;
     --sidebar-active-text-color: #36ad6a;
+
+
 }
 
 @font-face {
