@@ -105,6 +105,11 @@ class LLMService:
             logger.debug("freq_penalty: %s", frequency_penalty)
             logger.debug("top_p: %s", top_p)
             logger.debug("temperature: %s", temperature)
+
+            extra_body = {}
+            if thinking:
+                extra_body["enable_thinking"] = thinking
+
             response = self.llm_client.chat.completions.create(
                 model=model,
                 messages=messages,
@@ -113,9 +118,7 @@ class LLMService:
                 top_p=top_p or None,
                 temperature=temperature or None,
                 stream=stream,
-                extra_body=(
-                    {"enable_thinking": thinking} if thinking is not None else {}
-                ),
+                extra_body=extra_body,
             )
             if stream:
                 return self._handle_stream_response(
