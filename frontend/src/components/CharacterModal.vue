@@ -1,9 +1,4 @@
 <template>
-    <!-- <n-drawer v-model:show="visible" :width="drawerWidth" placement="right" :mask-closable="false" :auto-focus="false">
-        <n-drawer-content title="角色设置" closable>
-            <CharacterSettingPanel :data="currentCharacter" :simple="true" @update:data="handleSave" />
-        </n-drawer-content>
-    </n-drawer> -->
     <n-modal v-model:show="visible" :mask-closable="false" :auto-focus="false" style="width: 600px;max-width: 90vw;"
         title="角色设置" preset="card">
         <div class="max-h-80vh overflow-y-auto">

@@ -181,11 +181,13 @@ class ApiService {
    * @param {string} content - 消息内容
    * @returns {Promise<Array>} 返回消息数据
    */
-  async createMessage(sessionId, content) {
+  async createMessage(sessionId, content, files = [], replaceMessageId = null) {
     return await this._request(`/sessions/${sessionId}/messages`, {
       method: 'POST',
       body: {
-        content: content
+        content: content,
+        files: files,
+        replace_message_id: replaceMessageId
       },
     });
   }
@@ -341,14 +343,14 @@ class ApiService {
    * @returns {Promise<Array|Object>} 返回解析后的数据，如果json.data存在则返回该数据，否则返回空数组
    * @throws {Error} 当上传失败或服务器返回错误时抛出异常
    */
-  async uploadFile(messageId, file) {
+  async uploadFile(sessionId, file) {
     // 创建表单数据对象并附加文件
     const formData = new FormData();
     formData.append('file', file);
 
     try {
       // 发送文件上传请求到服务器
-      const response = await fetch(`${this.baseURL}/messages/${messageId}/files`, {
+      const response = await fetch(`${this.baseURL}/sessions/${sessionId}/files`, {
         method: 'POST',
         body: formData,
       });
@@ -370,6 +372,13 @@ class ApiService {
       console.error('上传错误:', error);
       throw error;
     }
+  }
+
+  async copyMessageFile(messageId, fileId) {
+    return await this._request(`/files/${fileId}`, {
+      method: 'PUT',
+      body: { type: 'copy', message_id: messageId },
+    });
   }
 
   async webSearch(messageId) {

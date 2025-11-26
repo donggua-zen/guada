@@ -12,9 +12,10 @@
         </n-button>
         <span class="ml-4"></span>
       </template>
-      <span>{{ chatTitle }}</span>
+      <span class="hidden md:block">{{ chatTitle }}</span>
       <n-divider vertical />
-      <n-button tertiary round size="small" icon-placement="left" @click="handleSwitchModelClick">{{ currentModelName }}
+      <n-button tertiary round size="small" icon-placement="left" @click="handleSwitchModelClick">
+        {{ currentModelName }}
         <template #icon>
           <n-icon size="18">
             <SettingsTwotone />
@@ -33,19 +34,11 @@
             </template>
           </n-button>
         </n-dropdown>
-
-        <!-- <n-button class="settings-btn ml-2" title="设置" @click="handleSettingsClick" text>
-          <template #icon>
-            <n-icon size="24">
-              <SettingsApplicationsTwotone />
-            </n-icon>
-          </template>
-        </n-button> -->
       </div>
     </div>
 
     <!-- 消息内容区域 -->
-    <div class="messages-container" ref="messagesContainer">
+    <div class="messages-container" ref="messagesContainerRef">
       <template v-if="activeMessages.length === 0">
         <!-- 欢迎页 -->
         <div class="flex items-center justify-center h-full min-h-[500px] py-10 px-5">
@@ -82,28 +75,35 @@
       </template>
       <template v-else>
         <ScrollContainer ref="scrollContainerRef" :auto-scroll="true" :smooth-scroll="!isStreaming">
-          <div class="flex flex-col items-center px-[20px]" style="max-width: 900px;margin: 0 auto;">
+          <div class="flex flex-col items-center px-[20px]" style="max-width: 900px; margin: 0 auto">
             <MessageItem v-for="(message, index) in activeMessages" :ref="(el) => setItemRef(el, message.id)"
               :key="message.id" :message="message" :avatar="currentSession.avatar_url"
-              :is-last="index === activeMessages.length - 1" @delete="deleteMessage" @edit="editMessage"
-              @copy="copyMessage" @generate="generateResponse" @regenerate="regenerateResponse" @switch="switchContent"
-              @renderComplete="handleRenderComplete" />
+              :is-last="index == activeMessages.length - 1"
+              :allow-generate="!isStreaming && allowReSendMessage(message, index)" @delete="deleteMessage"
+              @edit="editMessage" @copy="copyMessage" @generate="generateResponse" @regenerate="regenerateResponse"
+              @switch="switchContent" @renderComplete="handleRenderComplete" />
           </div>
         </ScrollContainer>
-        <!-- 消息列表 -->
-
       </template>
     </div>
 
     <!-- 输入区域 -->
-    <div class="input-container">
+    <div class="px-5 pb-2.5 w-full flex flex-col items-center">
       <ChatInput v-model:value="inputMessage.text" v-model:web-search-enabled="webSearchEnabled"
-        v-model:thinking-enabled="thinkingEnabled" :show-thinking-button="supprtedThinkingSwicth"
+        v-model:thinking-enabled="thinkingEnabled" :show-thinking-button="supportedThinkingSwitch"
         :files="inputMessage.files" :streaming="isStreaming" @send="sendMessage" @abort="abortResponse"
         @image-upload="handleImageUpload" @toggle-web-search="handleWebSearch" @toggle-thinking="toggleDeepThinking"
         @tokens-statistic="handleTokensStatistic" />
+      <div class="ai-disclaimer text-xs text-gray-400 text-center mt-2">内容由AI生成，仅供参考</div>
     </div>
-
+    <n-modal v-model:show="showEditMessageModal" :mask-closable="false" :auto-focus="false"
+      style="width: 900px; max-width: 90vw" title="编辑消息" preset="card">
+      <ChatInput v-model:value="editInputMessage.text" v-model:web-search-enabled="webSearchEnabled"
+        v-model:thinking-enabled="thinkingEnabled" :show-thinking-button="supportedThinkingSwitch" :shadow="false"
+        :files="editInputMessage.files" :streaming="isStreaming" @send="reSendMessage" @abort="abortResponse"
+        @image-upload="handleImageUpload" @toggle-web-search="handleWebSearch" @toggle-thinking="toggleDeepThinking"
+        @tokens-statistic="handleTokensStatistic" />
+    </n-modal>
     <!-- Tokens统计模态框 -->
     <TokenStatisticsModal v-model:show="showTokenModal" :currentSessionId="currentSession.id" />
   </div>
@@ -112,9 +112,9 @@
 <script setup>
 import { ref, computed, watch, nextTick, onMounted, onBeforeUpdate, reactive, h } from "vue";
 import { store } from "../store/store";
-import { apiService } from "../services/ApiService"
+import { apiService } from "../services/ApiService";
 import { usePopup } from "@/composables/usePopup";
-import { useDebounceFn } from '@vueuse/core'
+import { useDebounceFn } from "@vueuse/core";
 
 // 组件导入
 import MessageItem from "./MessageItem.vue";
@@ -124,22 +124,28 @@ import ChatInput from "./ChatInput.vue";
 import ScrollContainer from "./ScrollContainer.vue";
 
 // 图标导入
-import { DeleteTwotone, SettingsTwotone, FormatListBulletedSharp, MoreVertOutlined, FileDownloadOutlined, FileUploadOutlined } from "@vicons/material";
+import {
+  DeleteTwotone,
+  SettingsTwotone,
+  FormatListBulletedSharp,
+  MoreVertOutlined,
+  FileDownloadOutlined,
+  FileUploadOutlined
+} from "@vicons/material";
 
 // UI组件导入
-import { NButton, NIcon, NDivider, NDropdown, c } from "naive-ui";
+import { NButton, NIcon, NDivider, NDropdown, NModal } from "naive-ui";
 
 // 弹出层工具
 const { confirm, editText, toast, notify } = usePopup();
 
 // 响应式数据
 const scrollContainerRef = ref(null);
-const messagesContainer = ref(null);
+const messagesContainerRef = ref(null);
 const currentSessionId = ref(null);
 const showTokenModal = ref(false);
+const showEditMessageModal = ref(false);
 const itemRefs = ref({});
-
-
 
 // 更多操作下拉菜单选项
 const moreOptions = ref([
@@ -172,18 +178,27 @@ const props = defineProps({
   }
 });
 
-const emit = defineEmits(['update:session', 'openSettings', 'openSwitchModel', 'update:sidebarVisible', 'saveSettings']);
+const emit = defineEmits([
+  "update:session",
+  "openSettings",
+  "openSwitchModel",
+  "update:sidebarVisible",
+  "saveSettings"
+]);
 
 // 计算属性
 const currentSession = computed({
   get: () => props.session,
-  set: (session) => emit('update:session', session)
+  set: (session) => emit("update:session", session)
 });
 
 const chatTitle = computed(() => props.session?.title || "Loading...");
 
-const currentModelName = computed(() => currentSession.value.model ?
-  (currentSession.value.model.model_name.split('/').pop()) : '请选择对话模型');
+const currentModelName = computed(() =>
+  currentSession.value.model
+    ? currentSession.value.model.model_name.split("/").pop()
+    : "请选择对话模型"
+);
 
 const isStreaming = computed(() => store.sessionIsStreaming(currentSessionId.value));
 
@@ -191,6 +206,8 @@ const inputMessage = computed({
   get: () => store.getInputMessage(currentSessionId.value) || { text: "", files: [] },
   set: (value) => store.setInputMessage(currentSessionId.value, value)
 });
+
+const editInputMessage = ref({ old_message_id: "", text: "", files: [] });
 
 const activeMessages = computed({
   get: () => store.getMessages(currentSessionId.value) || [],
@@ -202,37 +219,40 @@ const webSearchEnabled = computed({
     return currentSession.value.settings?.web_search_enabled;
   },
   set(value) {
-    currentSession.value.settings['web_search_enabled'] = value;
+    currentSession.value.settings["web_search_enabled"] = value;
   }
-})
+});
 
 const thinkingEnabled = computed({
   get() {
     return currentSession.value.settings?.thinking_enabled;
   },
   set(value) {
-    currentSession.value.settings['thinking_enabled'] = value;
+    currentSession.value.settings["thinking_enabled"] = value;
   }
-})
+});
 
-const supprtedThinkingSwicth = computed(() => {
-  return currentSession.value.model?.features?.includes('thinking')
-})
+const supportedThinkingSwitch = computed(() => {
+  return currentSession.value.model?.features?.includes("thinking");
+});
 
 const localSidebarVisible = computed({
   get() {
-    return props.sidebarVisible
+    return props.sidebarVisible;
   },
   set(value) {
-    emit('update:sidebarVisible', value)
+    emit("update:sidebarVisible", value);
   }
-})
+});
 
 // 防抖函数
 const debouncedUpdatedSession = useDebounceFn(updateSessionLastMessage, 1000);
-const debouncedSwitchContent = useDebounceFn((messageId, contentId) => apiService.setMessageCurrentContent(messageId, contentId), 300);
+const debouncedSwitchContent = useDebounceFn(
+  (messageId, contentId) => apiService.setMessageCurrentContent(messageId, contentId),
+  300
+);
 const debouncedSaveSession = useDebounceFn(() => {
-  emit('saveSettings');
+  emit("saveSettings");
 }, 200);
 
 // 监听器
@@ -259,40 +279,35 @@ onMounted(() => {
   // 初始化相关逻辑
 });
 
-// 立即滚动到底部（无动画）
+// 滚动功能
 function immediateScrollToBottom() {
   scrollContainerRef.value?.immediateScrollToBottom();
 }
 
-// 修改平滑滚动函数
 function smoothScrollToBottom() {
   scrollContainerRef.value?.smoothScrollToBottom();
 }
 
-// 修改 handleRenderComplete
 function handleRenderComplete() {
-  // 不再需要 nextTick，因为 MutationObserver 会处理
-  // if (isStreaming.value && isAtBottom.value) {
-  //   smoothScrollToBottom();
-  // }
+  // 消息渲染完成时的处理
 }
 
 // 更多操作菜单选择处理
 function handleMoreSelect(key) {
   switch (key) {
-    case 'clear':
+    case "clear":
       clearChat();
       break;
-    case 'export':
+    case "export":
       exportChat();
       break;
-    case 'import':
+    case "import":
       importChat();
       break;
   }
 }
 
-// 导出聊天记录
+// 聊天记录导入导出
 function exportChat() {
   try {
     const chatData = {
@@ -302,11 +317,12 @@ function exportChat() {
     };
 
     const dataStr = JSON.stringify(chatData, null, 2);
-    const dataBlob = new Blob([dataStr], { type: 'application/json' });
+    const dataBlob = new Blob([dataStr], { type: "application/json" });
 
-    const link = document.createElement('a');
+    const link = document.createElement("a");
     link.href = URL.createObjectURL(dataBlob);
-    link.download = `chat-export-${currentSession.value.title || 'session'}-${new Date().getTime()}.json`;
+    link.download = `chat-export-${currentSession.value.title || "session"
+      }-${new Date().getTime()}.json`;
     link.click();
     URL.revokeObjectURL(link.href);
 
@@ -317,14 +333,13 @@ function exportChat() {
   }
 }
 
-// 导入聊天记录
 async function importChat() {
-  if (!await confirm("导入聊天记录", "确定要导入聊天记录吗？这将替换当前的聊天记录。")) {
+  if (!(await confirm("导入聊天记录", "确定要导入聊天记录吗？这将替换当前的聊天记录。"))) {
     return;
   }
-  const input = document.createElement('input');
-  input.type = 'file';
-  input.accept = '.json';
+  const input = document.createElement("input");
+  input.type = "file";
+  input.accept = ".json";
 
   input.onchange = async (e) => {
     const file = e.target.files[0];
@@ -347,7 +362,7 @@ async function importChat() {
   input.click();
 }
 
-// 方法定义
+// 会话相关方法
 function setItemRef(el, messageId) {
   if (el) itemRefs.value[messageId] = el;
 }
@@ -361,7 +376,6 @@ function handleSessionChange(newSessionId, oldSessionId) {
     loadMessages(newSessionId);
     nextTick(immediateScrollToBottom);
   }
-
 }
 
 async function loadMessages(sessionId) {
@@ -391,7 +405,7 @@ function updateSessionLastMessage() {
 
 function getCurrentIndex(messageContents) {
   if (!messageContents?.length) return 0;
-  const currentIndex = messageContents.findIndex(content => content.is_current);
+  const currentIndex = messageContents.findIndex((content) => content.is_current);
   return currentIndex !== -1 ? currentIndex : 0;
 }
 
@@ -400,7 +414,19 @@ function getCurrentContent(messageContents) {
   return messageContents[index];
 }
 
-async function handleStreamResponse(streamingSessionId, userMessageId, regenerationMode = null, assistantMessageId = null) {
+function allowReSendMessage(message, index) {
+  if (message.role !== "user") return false;
+  // 最后一条user消息允许重新再发送栏中编辑
+  return index >= activeMessages.value.length - 2;
+}
+
+// 流式响应处理
+async function handleStreamResponse(
+  streamingSessionId,
+  userMessageId,
+  regenerationMode = null,
+  assistantMessageId = null
+) {
   store.setSessionIsStreaming(streamingSessionId, true);
 
   let message = null;
@@ -421,7 +447,7 @@ async function handleStreamResponse(streamingSessionId, userMessageId, regenerat
     )) {
       if (response.type == "finish") {
         handleStreamFinish(response, message, contentIndex, assistantMessageIdResult);
-        break
+        break;
       }
 
       if (response.type == "create") {
@@ -469,17 +495,17 @@ function handleNewMessage(response, sessionId, userMessageId) {
   const { message_id, content_id, model_name } = response;
   currentSession.value.updated_at = new Date().toISOString();
 
-  const existingMessage = activeMessages.value.find(msg => msg.id === message_id);
+  const existingMessage = activeMessages.value.find((msg) => msg.id === message_id);
 
   if (existingMessage) {
-    existingMessage.contents.forEach(item => item.is_current = false);
+    existingMessage.contents.forEach((item) => (item.is_current = false));
     existingMessage.contents.push({
       id: content_id,
       content: "",
       reasoning_content: null,
-      meta_data: { 'model_name': model_name },
+      meta_data: { model_name },
       is_current: true,
-      created_at: new Date().toISOString(),
+      created_at: new Date().toISOString()
     });
     existingMessage.is_streaming = true;
     return {
@@ -490,17 +516,19 @@ function handleNewMessage(response, sessionId, userMessageId) {
     const newMessage = reactive({
       id: message_id,
       role: "assistant",
-      contents: [{
-        id: content_id,
-        content: "",
-        reasoning_content: null,
-        meta_data: { 'model_name': model_name },
-        is_current: true,
-        created_at: new Date().toISOString(),
-      }],
+      contents: [
+        {
+          id: content_id,
+          content: "",
+          reasoning_content: null,
+          meta_data: { model_name },
+          is_current: true,
+          created_at: new Date().toISOString()
+        }
+      ],
       parent_id: userMessageId,
       is_streaming: true,
-      created_at: new Date().toISOString(),
+      created_at: new Date().toISOString()
     });
     store.addMessage(sessionId, newMessage);
     return {
@@ -528,7 +556,11 @@ function handleStreamFinish(response, message, contentIndex, assistantMessageId)
   }
   console.error("Error in stream:", response.error);
   if (message && assistantMessageId) {
-    message.contents[contentIndex].meta_data = { ...message.contents[contentIndex].meta_data, 'error': response.error, 'finish_reason': response.finish_reason };
+    message.contents[contentIndex].meta_data = {
+      ...message.contents[contentIndex].meta_data,
+      error: response.error,
+      finish_reason: response.finish_reason
+    };
   } else {
     notify.error("Error in stream", response.error);
   }
@@ -554,37 +586,57 @@ function cleanupStreaming(sessionId, message) {
   }
 }
 
-async function handleSendUserMessage(data) {
-  try {
-    const { text, files } = data;
-    const response = await apiService.createMessage(currentSessionId.value, text);
-    const messageId = response.id;
+// 消息发送处理
+async function sendNewMessage(text, files, replaceMessageId = null) {
+  // 过滤出含有file.file的有效文件
+  const filesWithContent = files.filter((file) => file.file);
 
-    const message = reactive({ ...response, files });
-    activeMessages.value.push(message);
-    nextTick(() => {
-      immediateScrollToBottom();
-    });
-    // 并行上传文件
-    const uploadPromises = files.map(file =>
-      apiService.uploadFile(messageId, file.file)
-    );
-    await Promise.all(uploadPromises);
-    debouncedUpdatedSession();
-    handleStreamResponse(currentSessionId.value, messageId);
-  } catch (error) {
-    notify.error("消息发送失败", error.message);
+  // 批量上传文件
+  const uploadPromises = filesWithContent.map((file) =>
+    apiService.uploadFile(currentSessionId.value.id, file.file)
+  );
+
+  // 等待所有文件上传完成
+  const uploadResults = await Promise.all(uploadPromises);
+
+  // 处理上传结果
+  const updatedFiles = [...files]; // 创建副本避免修改原数组
+  uploadResults.forEach((response, index) => {
+    try {
+      // 更新对应文件的信息
+      const fileIndex = files.indexOf(filesWithContent[index]);
+      if (fileIndex !== -1) {
+        updatedFiles[fileIndex] = {
+          ...updatedFiles[fileIndex],
+          ...response
+        };
+        // 移除原始文件对象以节省内存
+        delete updatedFiles[fileIndex].file;
+        delete updatedFiles[fileIndex].content;
+      }
+    } catch (error) {
+      console.error(`文件 ${index} 处理失败:`, error);
+    }
+  });
+
+  const response = await apiService.createMessage(currentSessionId.value, text, files, replaceMessageId);
+  const message = reactive({ ...response, files });
+  if (replaceMessageId) {
+    store.deleteMessage(currentSessionId.value, replaceMessageId);
+    const assistantMessage = activeMessages.value.find((msg) => msg.parent_id === replaceMessageId);
+    if (assistantMessage) {
+      store.deleteMessage(currentSessionId.value, assistantMessage.id);
+    }
   }
+  activeMessages.value.push(message);
+  nextTick(() => {
+    immediateScrollToBottom();
+  });
+  debouncedUpdatedSession();
+  return message;
 }
 
-async function sendMessage() {
-  const message = inputMessage.value;
-  if ((!message.text?.trim() && !message.files.length) || isStreaming.value) return;
-
-  inputMessage.value = { text: "", files: [] };
-  await handleSendUserMessage(message);
-}
-
+// 消息操作方法
 function abortResponse() {
   apiService.cancelResponse(currentSessionId.value);
 }
@@ -604,8 +656,19 @@ const handleSwitchModelClick = (modelId) => {
 
 async function deleteMessage(message) {
   try {
-    if (await confirm("删除消息", "确定要删除这条消息吗？此操作不可撤销。")) {
+    if (
+      await confirm(
+        "删除消息",
+        message.role === "user"
+          ? "确定要删除这条提问吗？对应的回答也会被删除。此操作不可撤销。"
+          : "确定要删除这条回答吗？此操作不可撤销。"
+      )
+    ) {
       await apiService.deleteMessage(message.id);
+      if (message.role === "user") {
+        const assistantMessage = activeMessages.value.find((msg) => msg.parent_id === message.id);
+        store.deleteMessage(currentSessionId.value, assistantMessage.id);
+      }
       store.deleteMessage(currentSessionId.value, message.id);
       debouncedUpdatedSession();
       toast.success("消息已删除");
@@ -623,7 +686,7 @@ async function editMessage(message) {
       title: "编辑消息",
       defaultValue: message.contents[index].content,
       confirmText: "保存",
-      cancelText: "取消",
+      cancelText: "取消"
     });
 
     if (result) {
@@ -649,8 +712,40 @@ async function copyMessage(message) {
   }
 }
 
+async function sendMessage() {
+  const data = inputMessage.value;
+  if ((!data.text?.trim() && !data.files.length) || isStreaming.value) return;
+
+  inputMessage.value = { text: "", files: [] };
+  try {
+    const { text, files } = data;
+    const message = await sendNewMessage(text, files);
+    handleStreamResponse(currentSessionId.value, message.id);
+  } catch (error) {
+    notify.error("消息发送失败", error.message);
+  }
+}
+
+async function reSendMessage() {
+  try {
+    const data = editInputMessage.value;
+    const { text, files } = data;
+    const message = await sendNewMessage(text, files, data.old_message_id);
+    editInputMessage.value = { old_message_id: "", text: "", files: [] };
+    showEditMessageModal.value = false;
+    handleStreamResponse(currentSessionId.value, message.id);
+  } catch (error) {
+    notify.error("消息发送失败", error.message);
+  }
+}
+
 function generateResponse(message) {
-  handleStreamResponse(currentSessionId.value, message.id, 'overwrite');
+  editInputMessage.value = {
+    old_message_id: message.id,
+    text: message.contents[0].content,
+    files: message.files
+  };
+  showEditMessageModal.value = true;
 }
 
 function regenerateResponse(message) {
@@ -658,21 +753,22 @@ function regenerateResponse(message) {
     toast.error("暂时最多支持5个回答版本");
     return;
   }
-  handleStreamResponse(currentSessionId.value, message.parent_id, 'multi_version', message.id);
+  handleStreamResponse(currentSessionId.value, message.parent_id, "multi_version", message.id);
 }
 
 function switchContent(message, content) {
-  const targetMessage = activeMessages.value.find(m => m.id === message.id);
-  targetMessage.contents.forEach(item => {
+  const targetMessage = activeMessages.value.find((m) => m.id === message.id);
+  targetMessage.contents.forEach((item) => {
     item.is_current = item.id === content.id;
   });
   debouncedSwitchContent(message.id, content.id);
   debouncedUpdatedSession();
 }
 
+// 设置操作
 const handleWebSearch = () => {
   debouncedSaveSession();
-}
+};
 
 const toggleDeepThinking = () => {
   debouncedSaveSession();
@@ -695,7 +791,7 @@ function handleTokensStatistic() {
   height: 60px;
   font-size: 18px;
   font-weight: 600;
-  border-bottom: 1px solid rgba(21, 23, 28, .1);
+  border-bottom: 1px solid rgba(21, 23, 28, 0.1);
   border-radius: 0;
   margin: 0 40px;
 }
@@ -725,13 +821,6 @@ function handleTokensStatistic() {
   overflow-y: hidden;
   width: 100%;
   align-items: center;
-}
-
-.input-container {
-  padding: 0 20px 10px 20px;
-  display: flex;
-  justify-content: center;
-  width: 100%;
 }
 
 /* 动画定义 */

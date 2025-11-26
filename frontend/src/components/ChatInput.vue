@@ -1,7 +1,7 @@
 <template>
     <div class="w-full flex flex-col items-center">
-        <div class="rounded-[22px] p-[18px_10px_12px_10px] bg-white relative shadow-[0_2px_16px_rgba(0,0,0,0.1)] transition-all duration-300 min-h-[60px] max-w-[900px] w-full border border-[rgb(230,232,238)]"
-            :class="{ expanded: isInputExpanded }">
+        <div class="rounded-[22px] p-[18px_10px_12px_10px] bg-white relative transition-all duration-300 min-h-[60px] max-w-[900px] w-full border border-[rgb(230,232,238)]"
+            :class="{ expanded: isInputExpanded, 'shadow-[0_2px_16px_rgba(0,0,0,0.1)]': shadow }">
             <!-- 文件列表显示区域 -->
             <div class="file-list flex flex-wrap gap-2 mb-3" v-if="uploadFiles.length > 0">
                 <FileItem v-for="file in uploadFiles" :key="file.id" :name="file.display_name"
@@ -85,10 +85,6 @@
                     </div>
                 </div>
             </div>
-
-        </div>
-        <div class="ai-disclaimer text-xs text-gray-400 text-center mt-2">
-            内容由AI生成，仅供参考
         </div>
     </div>
 </template>
@@ -139,6 +135,10 @@ const props = defineProps({
     showThinkingButton: {
         type: Boolean,
         default: false
+    },
+    shadow: {
+        type: Boolean,
+        default: true
     }
 })
 
