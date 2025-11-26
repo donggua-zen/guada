@@ -1,5 +1,6 @@
 # message_service.py
 import json
+from app.repositories.file_repository import FileRepository
 from app.repositories.message_content_repository import MessageContentRepository
 from app.repositories.message_repository import MessageRepository as MessageRepo
 from app.models.db_transaction import smart_transaction_manager
@@ -67,21 +68,31 @@ class MessageService:
         session_id: str,
         role: str,
         content: str,
+        files: list[str] = None,
         parent_id: str = None,
-        reasoning_content: str = None,
+        replace_message_id: str = None,
         meta_data: dict = None,
     ):
-        message = MessageRepo.add_message(
-            session_id=session_id,
-            role=role,
-            content=content,
-            reasoning_content=reasoning_content,
-            parent_id=parent_id,
-            meta_data=meta_data or {},
-        )
-        if not message:
-            raise Exception("Failed to add message")
-        return message
+        with smart_transaction_manager.transaction():
+            message = MessageRepo.add_message(
+                session_id=session_id,
+                role=role,
+                content=content,
+                parent_id=parent_id,
+                meta_data=meta_data or {},
+            )
+            if not message:
+                raise Exception("Failed to add message")
+            if files:
+                file_ids = [file["id"] for file in files]
+                FileRepository.update_files(file_ids, {"message_id": message["id"]})
+            FileRepository.delete_not_related_files(session_id)
+
+            if replace_message_id:
+                self.delete_message(replace_message_id)
+
+            message["files"] = files
+            return message
 
     def update_message(self, message_id, data):
         message = MessageRepo.update_message(message_id, data)
@@ -90,8 +101,17 @@ class MessageService:
         return message
 
     def delete_message(self, message_id):
-        if not MessageRepo.delete_message(message_id):
-            raise Exception("Failed to delete message")
+        message = MessageRepo.get_message(
+            message_id, with_contents=False, with_files=False
+        )
+        if not message:
+            raise Exception("Message not found")
+        with smart_transaction_manager.transaction():
+            if not MessageRepo.delete_message(message_id):
+                raise Exception("Failed to delete message")
+            if message["role"] == "user":
+                MessageRepo.delete_message_by_parent_id(message_id)
+
         return {}
 
     def delete_messages_by_session_id(self, session_id):

@@ -249,7 +249,6 @@ class ChatService:
                 parent_id=(
                     conversation_messages[-1]["id"] if conversation_messages else None
                 ),
-                reasoning_content="",
                 meta_data={},
             )
 

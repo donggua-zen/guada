@@ -1,3 +1,4 @@
+from typing import Optional
 from app.repositories.file_repository import FileRepository as FileRepo
 from app.repositories.message_repository import MessageRepository
 
@@ -48,13 +49,34 @@ class FileService:
             raise Exception("删除文件失败")
         return {}
 
-    def upload_message_file(self, message_id, file):
+    def copy_message_file(self, file_id, message_id, session_id: Optional[str] = None):
+        file = FileRepo.get_file(file_id)
+        file_name = file["file_name"]
+        display_name = file["display_name"]
+        file_ext = file["file_ext"]
+        file_type = file["file_type"]
+        file_size = file["file_size"]
+        file_content = file["file_content"]
+        content_hash = file["content_hash"]
+        if session_id is None:
+            session_id = file["session_id"]
+        return self.add_file(
+            file_name,
+            display_name,
+            file_ext,
+            file_type,
+            file_size,
+            file_content,
+            session_id,
+            message_id,
+            content_hash,
+        )
+
+    def upload_message_file(self, sessions_id, file):
         # 添加hashlib导入用于计算文件hash
         import hashlib
 
-        message = MessageRepository.get_message(message_id)
-        session_id = message["session_id"]
-        message_id = message["id"]
+        session_id = sessions_id
 
         try:
 
@@ -90,7 +112,7 @@ class FileService:
                 file_size=file_size,
                 file_content=file_content,
                 session_id=session_id,
-                message_id=message_id,
+                message_id=None,
                 content_hash=file_hash,  # 使用计算出的hash值替换空字符串
             )
 

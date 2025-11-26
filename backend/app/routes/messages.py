@@ -67,6 +67,8 @@ def add_message(session_id):
             session_id=session_id,
             role="user",
             content=request.json.get("content", ""),
+            files=request.json.get("files", []),
+            replace_message_id=request.json.get("replace_message_id", None),
             parent_id=None,
         )
 
