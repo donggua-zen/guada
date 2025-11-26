@@ -248,8 +248,8 @@ const updateSelectedSession = (sessionId) => {
         store.setActiveSessionId(sessionId)
         emit('select', session)
       }
-      return
     }
+    return
   }
 
   // 如果没有找到会话，选择第一个会话

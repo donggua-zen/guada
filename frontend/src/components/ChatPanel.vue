@@ -587,13 +587,13 @@ function cleanupStreaming(sessionId, message) {
 }
 
 // 消息发送处理
-async function sendNewMessage(text, files, replaceMessageId = null) {
+async function sendNewMessage(sessionId, text, files, replaceMessageId = null) {
   // 过滤出含有file.file的有效文件
   const filesWithContent = files.filter((file) => file.file);
 
   // 批量上传文件
   const uploadPromises = filesWithContent.map((file) =>
-    apiService.uploadFile(currentSessionId.value.id, file.file)
+    apiService.uploadFile(sessionId, file.file)
   );
 
   // 等待所有文件上传完成
@@ -619,13 +619,13 @@ async function sendNewMessage(text, files, replaceMessageId = null) {
     }
   });
 
-  const response = await apiService.createMessage(currentSessionId.value, text, files, replaceMessageId);
-  const message = reactive({ ...response, files });
+  const response = await apiService.createMessage(sessionId, text, updatedFiles, replaceMessageId);
+  const message = reactive({ ...response, files: updatedFiles });
   if (replaceMessageId) {
-    store.deleteMessage(currentSessionId.value, replaceMessageId);
+    store.deleteMessage(sessionId, replaceMessageId);
     const assistantMessage = activeMessages.value.find((msg) => msg.parent_id === replaceMessageId);
     if (assistantMessage) {
-      store.deleteMessage(currentSessionId.value, assistantMessage.id);
+      store.deleteMessage(sessionId, assistantMessage.id);
     }
   }
   activeMessages.value.push(message);
@@ -716,10 +716,10 @@ async function sendMessage() {
   const data = inputMessage.value;
   if ((!data.text?.trim() && !data.files.length) || isStreaming.value) return;
 
-  inputMessage.value = { text: "", files: [] };
   try {
     const { text, files } = data;
-    const message = await sendNewMessage(text, files);
+    const message = await sendNewMessage(currentSession.value.id, text, files);
+    inputMessage.value = { text: "", files: [] };
     handleStreamResponse(currentSessionId.value, message.id);
   } catch (error) {
     notify.error("消息发送失败", error.message);
@@ -730,7 +730,7 @@ async function reSendMessage() {
   try {
     const data = editInputMessage.value;
     const { text, files } = data;
-    const message = await sendNewMessage(text, files, data.old_message_id);
+    const message = await sendNewMessage(currentSession.value.id, text, files, data.old_message_id);
     editInputMessage.value = { old_message_id: "", text: "", files: [] };
     showEditMessageModal.value = false;
     handleStreamResponse(currentSessionId.value, message.id);
