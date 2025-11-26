@@ -16,62 +16,32 @@ const routes = [
             {
                 path: '', meta: { requiresLayout: true },
                 name: 'Home',
-                redirect: '/chat'
+                redirect: '/chat',
             },
             {
                 path: '/chat/:sessionId?',
                 name: 'Chat',
-                meta: { requiresLayout: true },
+                meta: { requiresLayout: true, title: '对话' },
                 component: () => import('./components/ChatPage.vue')
             },
             {
                 path: '/characters',
                 name: 'Characters',
-                meta: { requiresLayout: true },
+                meta: { requiresLayout: true, title: '角色' },
                 component: () => import('./components/CharactersPage.vue')
             },
             {
                 path: '/models',
                 name: 'Models',
-                meta: { requiresLayout: true },
+                meta: { requiresLayout: true, title: '模型' },
                 component: () => import('./components/ModelsPage.vue')
             },
         ]
     },
-   
-
-    // {
-    //     path: '/settings',
-    //     name: 'Settings',
-    //     component: () => import('./components/SettingsPage.vue')
-    // },
-    // 动态路由示例
-    //   {
-    //     path: '/user/:id',
-    //     name: 'User',
-    //     component: () => import('../views/UserView.vue'),
-    //     props: true // 将路由参数作为props传递给组件
-    //   },
-    //   {
-    //     path: '/product/:category/:id',
-    //     name: 'Product',
-    //     component: () => import('../views/ProductView.vue')
-    //   },
-    //   // 可选参数路由
-    //   {
-    //     path: '/settings/:tab?',
-    //     name: 'Settings',
-    //     component: () => import('../views/SettingsView.vue')
-    //   },
-    //   // 通配符路由（404页面）
-    //   {
-    //     path: '/:pathMatch(.*)*',
-    //     name: 'NotFound',
-    //     component: () => import('../views/NotFoundView.vue')
-    //   }
 ]
 import SimpleBar from 'simplebar-vue'
 import 'simplebar-vue/dist/simplebar.min.css'
+
 const route = createRouter({
     history: createWebHistory(),
     routes

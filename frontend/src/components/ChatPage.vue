@@ -42,7 +42,7 @@ import { usePopup } from "@/composables/usePopup";
 import { useStorage } from '@vueuse/core'
 import { store } from "@/store/store"
 import { computed } from "vue";
-const { confirm, toast, prompt } = usePopup();
+import { useTitle } from '@/composables/useTitle'
 
 // 引入组件
 import SidebarLayout from "@/components/layout/SidebarLayout.vue";
@@ -50,7 +50,10 @@ import SessionsList from "@/components/SessionsList.vue";
 import CharacterSettingPanel from "@/components/CharacterSettingPanel.vue";
 import ChatPanel from "@/components/ChatPanel.vue";
 
+const { confirm, toast, prompt } = usePopup();
 const router = useRouter();
+const title = useTitle();
+
 
 const currentSession = ref({
   id: null,
@@ -105,6 +108,8 @@ const updateSessionById = async (sessionId, data) => {
 }
 
 watch(() => currentSession, (session) => {
+  if (session.value)
+    title.value = `${session.value.title}-对话`;
   updateSessionById(session.value.id, session.value);
 }, { deep: true });
 
