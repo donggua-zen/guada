@@ -37,6 +37,7 @@ def create_character():
             "title",
             "description",
             "avatar_url",
+            "model_id",
             "settings",
         ]
 
@@ -93,7 +94,7 @@ def delete_character(character_id):
 def update_character(character_id):
     try:
         request_data = request.json
-        fields = ["title", "description", "avatar_url", "settings"]
+        fields = ["title", "description", "avatar_url", "model_id", "settings"]
 
         data = {field: request_data.get(field) for field in fields}
         character_service.update_character(character_id, data)
