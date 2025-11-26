@@ -8,7 +8,7 @@
       <n-button @click="handleCreateSession" text size="medium">
         <template #icon>
           <n-icon>
-            <ChatBubbleTwotone />
+            <CommentAdd16Regular />
           </n-icon>
         </template>
         新建会话
@@ -102,6 +102,10 @@ import {
   SearchOutlined,
   ChatBubbleTwotone // 新增图标导入
 } from '@vicons/material'
+
+import {
+  CommentAdd16Regular
+} from '@vicons/fluent'
 
 
 const route = useRoute()

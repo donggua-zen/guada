@@ -1,6 +1,6 @@
 <template>
   <div class="message" :class="messageClass" @click="handleCopyClick">
-    <div class="w-[45px] h-[45px] rounded-full flex items-center justify-center shrink-0 self-start"
+    <div class="hidden md:block w-[45px] h-[45px] rounded-full flex items-center justify-center shrink-0 self-start"
       :class="avatarClass">
       <Avatar v-if="!isAssistant" src="" :round="true" type="user"></Avatar>
       <Avatar v-else :src="avatar" :round="true" type="assistant"></Avatar>
@@ -58,23 +58,39 @@
 
       <div class="message-actions flex gap-0 text-sm w-full mt-3 text-gray-400 items-center"
         :class="[isAssistant ? 'justify-start' : 'justify-end', message.is_streaming ? 'opacity-0' : 'opacity-100']">
-        <div v-for="action in availableActions" :key="action.name"
-          class="cursor-pointer flex items-center gap-1 py-1 px-2 rounded bg-gray-100 mr-1 text-sm hover:bg-blue-50 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-gray-100 disabled:hover:text-gray-400 active:scale-95 transition-transform duration-100"
-          @click="handleAction(action.name)">
-          <n-icon :component="action.icon" size="15" />
+        <!-- 保留的按钮：generate, regenerate, copy -->
+        <template v-if="!isAssistant && props.allowGenerate">
+          <div class="message-action-button" @click="handleAction('generate')">
+            <n-icon :component="ArrowDownwardTwotone" size="15" />
+          </div>
+        </template>
+
+        <template v-if="isAssistant && props.isLast">
+          <div class="message-action-button" @click="handleAction('regenerate')">
+            <n-icon :component="RefreshFilled" size="15" />
+          </div>
+        </template>
+
+        <div class="message-action-button" @click="handleAction('copy')">
+          <n-icon :component="ContentCopyTwotone" size="15" />
         </div>
+
+        <!-- 更多按钮下拉菜单 -->
+        <n-dropdown trigger="click" :options="moreOptions" @select="handleMoreAction">
+          <div class="message-action-button">
+            <n-icon :component="MoreVertOutlined" size="15" />
+          </div>
+        </n-dropdown>
+
+        <!-- 内容切换按钮（如果需要） -->
         <template v-if="isLast && message.contents.length > 1">
-          <div
-            class="cursor-pointer flex items-center gap-1 py-1 px-2 rounded bg-gray-100 mr-1 text-sm hover:bg-blue-50 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-gray-100 disabled:hover:text-gray-400 active:scale-95 transition-transform duration-100"
-            @click="switchContent('prev')" :disabled="!hasPrevContent">
+          <div class="message-action-button" @click="switchContent('prev')" :disabled="!hasPrevContent">
             <n-icon :component="ArrowLeftTwotone" size="15" />
           </div>
           <div class="text-gray-400 hover:text-blue-500 transition-colors duration-200 flex items-center py-1 px-2">
             {{ getCurrentIndex(message.contents) }} / {{ message.contents.length }}
           </div>
-          <div
-            class="cursor-pointer flex items-center gap-1 py-1 px-2 rounded bg-gray-100 mr-1 text-sm hover:bg-blue-50 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-gray-100 disabled:hover:text-gray-400 active:scale-95 transition-transform duration-100"
-            @click="switchContent('next')" :disabled="!hasNextContent">
+          <div class="message-action-button" @click="switchContent('next')" :disabled="!hasNextContent">
             <n-icon :component="ArrowRightTwotone" size="15" />
           </div>
         </template>
@@ -88,7 +104,7 @@ import { computed, ref, watch, onUnmounted, onMounted } from "vue";
 import { Marked } from "marked";
 import { markedHighlight } from 'marked-highlight'
 import hljs from 'highlight.js';
-import { NAlert, NIcon, NButton } from "naive-ui";
+import { NAlert, NIcon, NButton, NDropdown } from "naive-ui";
 import { useDebounceFn } from "@vueuse/core";
 import Avatar from "./Avatar.vue";
 import {
@@ -98,7 +114,8 @@ import {
   ArrowDownwardTwotone,
   RefreshFilled,
   ArrowBackIosNewTwotone as ArrowLeftTwotone,
-  ArrowForwardIosTwotone as ArrowRightTwotone
+  ArrowForwardIosTwotone as ArrowRightTwotone,
+  MoreVertOutlined
 } from "@vicons/material";
 
 import { Loading, Thinking } from "@/components/icons";
@@ -114,6 +131,10 @@ const props = defineProps({
   },
   avatar: String,
   isLast: {
+    type: Boolean,
+    default: false
+  },
+  allowGenerate: {
     type: Boolean,
     default: false
   }
@@ -135,7 +156,6 @@ const marked = new Marked(
     }
   })
 );
-
 
 const renderer = {
   code(code) {
@@ -214,8 +234,6 @@ const debouncedThinkingUpdate = useDebounceFn((content) => {
   currentThinkingContent.value = content;
 }, 50, { maxWait: 150 });
 
-
-
 // 监听主内容变化
 watch(
   () => getCurrentContent(props.message.contents).content,
@@ -269,32 +287,21 @@ const debouncedThinkingFormattedText = computed(() => {
   }
 });
 
-
-
-const availableActions = computed(() => {
-  const baseActions = [
-    { name: "delete", icon: DeleteTwotone, text: "删除" },
-    { name: "edit", icon: EditTwotone, text: "编辑" },
-    { name: "copy", icon: ContentCopyTwotone, text: "复制" },
+// 更多按钮的选项
+const moreOptions = computed(() => {
+  const options = [
+    {
+      label: '编辑内容',
+      key: 'edit',
+      icon: () => h(NIcon, { component: EditTwotone, size: 15 })
+    },
+    {
+      label: '删除消息',
+      key: 'delete',
+      icon: () => h(NIcon, { component: DeleteTwotone, size: 15 })
+    }
   ];
-
-  if (!isAssistant.value && props.isLast) {
-    baseActions.unshift({
-      name: "generate",
-      icon: ArrowDownwardTwotone,
-      text: "重答",
-    });
-  }
-
-  if (isAssistant.value && props.isLast) {
-    baseActions.unshift({
-      name: "regenerate",
-      icon: RefreshFilled,
-      text: "重新生成",
-    });
-  }
-
-  return baseActions;
+  return options;
 });
 
 const toggleExpand = () => {
@@ -303,6 +310,10 @@ const toggleExpand = () => {
 
 const handleAction = (action) => {
   emit(action, props.message);
+};
+
+const handleMoreAction = (key) => {
+  emit(key, props.message);
 };
 
 const switchContent = (direction) => {
@@ -342,7 +353,7 @@ const startWebSearch = () => {
 };
 
 const stopWebSearch = () => {
-  isWebSearching.value = false;
+  isWebSearch.value = false;
 };
 
 const getCurrentIndex = (messageContents) => {
@@ -382,11 +393,21 @@ onUnmounted(() => {
 });
 
 defineExpose({ startThinking, stopThinking, switchContent, startWebSearch, stopWebSearch });
-
 </script>
 
+<script>
+import { h } from 'vue';
+
+export default {
+  components: {
+    NDropdown
+  }
+}
+</script>
 
 <style scoped>
+@reference "tailwindcss";
+
 /* 消息样式 */
 .message {
   display: flex;
@@ -471,6 +492,11 @@ defineExpose({ startThinking, stopThinking, switchContent, startWebSearch, stopW
 .assistant-loading {
   font-size: 14px;
   margin-top: 8px;
+}
+
+/* 重用的消息操作按钮样式 */
+.message-action-button {
+  @apply cursor-pointer flex items-center gap-1 py-1 px-2 rounded bg-gray-100 mr-1 text-sm hover:bg-blue-50 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-gray-100 disabled:hover:text-gray-400 active:scale-95 transition-transform duration-100;
 }
 </style>
 
@@ -646,22 +672,6 @@ defineExpose({ startThinking, stopThinking, switchContent, startWebSearch, stopW
 }
 </style>
 
-<style>
-.typewriter-char {
-  opacity: 0;
-  animation: charFadeIn 0.2s ease-in forwards;
-}
-
-@keyframes charFadeIn {
-  from {
-    opacity: 0;
-  }
-
-  to {
-    opacity: 1;
-  }
-}
-</style>
 <style>
 /* 全局样式：确保 v-html 中的代码高亮生效 */
 @import 'highlight.js/styles/androidstudio.css';
