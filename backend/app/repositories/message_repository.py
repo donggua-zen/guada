@@ -225,8 +225,13 @@ class MessageRepository:
 
     @staticmethod
     @smart_transaction_manager.execute_in_transaction
-    def delete_message(message_id):
+    def delete_message(message_id: str):
         return db.session.query(Message).filter(Message.id == message_id).delete()
+
+    @staticmethod
+    @smart_transaction_manager.execute_in_transaction
+    def delete_message_by_parent_id(parent_id: str):
+        return db.session.query(Message).filter(Message.parent_id == parent_id).delete()
 
     @staticmethod
     @smart_transaction_manager.execute_in_transaction

@@ -53,3 +53,25 @@ class FileRepository:
             return False
         db.session.delete(file)
         return True
+
+    @staticmethod
+    @smart_transaction_manager.execute_in_transaction
+    def update_files(file_ids: list[str], data: dict):
+        return (
+            db.session.query(FileModel).filter(FileModel.id.in_(file_ids)).update(data)
+        )
+
+    @staticmethod
+    @smart_transaction_manager.execute_in_transaction
+    def delete_not_related_files(session_id: str):
+        """
+        删除没有关联的消息的文件
+        :param session_id: 会话ID
+        :return: 删除的文件数量
+        """
+        return (
+            db.session.query(FileModel)
+            .filter(FileModel.session_id == session_id)
+            .filter(FileModel.message_id.is_(None))
+            .delete()
+        )

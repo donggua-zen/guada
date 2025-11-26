@@ -60,7 +60,7 @@ class AppInitializer:
         from app.routes.messages import messages_bp
         from app.routes.characters import characters_bp
         from app.routes.models import models_bp
-        from app.routes.upload import upload_bp
+        from app.routes.files import files_bp
         from app.routes.chat import chat_bp
         from app.routes.settings import settings_bp
 
@@ -68,7 +68,7 @@ class AppInitializer:
         self.app.register_blueprint(messages_bp)
         self.app.register_blueprint(characters_bp)
         self.app.register_blueprint(models_bp)
-        self.app.register_blueprint(upload_bp)
+        self.app.register_blueprint(files_bp)
         self.app.register_blueprint(chat_bp)
         self.app.register_blueprint(settings_bp)
 
