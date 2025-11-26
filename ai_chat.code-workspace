@@ -17,6 +17,7 @@
 	"settings": {
 		"python.terminal.executeInFileDir": true,
 		"python.terminal.activateEnvInCurrentTerminal": false,
-		"python.terminal.activateEnvironment": true
+		"python.terminal.activateEnvironment": true,
+		"css.lint.unknownAtRules": "ignore"
   	}
 }
