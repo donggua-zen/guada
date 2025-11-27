@@ -31,7 +31,7 @@ class ModelBase(db.Model):
         if include is None:
             include = []
         if flush:
-            db.session.flush()
+            db.session.flush([self])
         result = {}
         for column in self.__table__.columns:
             if column.name not in exclude:

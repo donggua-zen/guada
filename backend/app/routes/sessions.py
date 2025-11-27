@@ -27,16 +27,19 @@ def get_sessions():
 @sessions_bp.route("/v1/sessions", methods=["POST"])
 def create_session():
     try:
+        settings = request.json.get("settings", {})
         session_data = {
             "title": request.json.get("title", ""),
             "character_id": request.json.get("character_id", None),
             "user_id": "123",  # TODO: 应该从认证信息中获取
             "avatar_url": "",
             "description": "An helpful AI assistant",
-            "model_id": None,
+            "model_id": request.json.get("model_id", None),
             "settings": {
                 "memory_type": "sliding_window",
                 "system_prompt": "You are a helpful AI assistant that can answer any question asked by the user",
+                "thinking_enabled": settings.get("thinking_enabled", False),
+                "web_search_enabled": settings.get("web_search_enabled", False),
             },
         }
 

@@ -130,6 +130,10 @@ body {
     width: 100vw;
 }
 
+.app-text-light-color {
+    color: var(--primary-text-light-color);
+}
+
 /* 动画效果 */
 @keyframes fadeInUp {
     from {

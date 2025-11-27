@@ -113,12 +113,12 @@ class LLMService:
             response = self.llm_client.chat.completions.create(
                 model=model,
                 messages=messages,
-                max_tokens=2500,
                 frequency_penalty=frequency_penalty or None,
                 top_p=top_p or None,
                 temperature=temperature or None,
                 stream=stream,
                 extra_body=extra_body,
+                timeout=15,
             )
             if stream:
                 return self._handle_stream_response(

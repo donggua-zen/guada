@@ -178,7 +178,7 @@ const deleteCharacter = async (character) => {
 const startNewChat = async (character) => {
   try {
     const loading = toast.loading('正在创建会话...', { duration: 0 })
-    const response = await apiService.createSession('', character.id)
+    const response = await apiService.createSession({ title: character.title }, character.id)
     loading.destroy()
     router.replace({ name: 'Chat', params: { sessionId: response.id } })
   } catch (error) {

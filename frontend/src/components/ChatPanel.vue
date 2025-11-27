@@ -57,10 +57,10 @@
             <div class="mb-8">
               <h1
                 class="text-3xl font-bold text-gray-800 mb-4 bg-gradient-to-br from-[#667eea] to-[var(--primary-color)] bg-clip-text text-transparent">
-                {{ currentSession.title }}
+                {{ currentSession.title || '' }}
               </h1>
               <h2 class="text-lg font-normal text-gray-600 leading-relaxed">
-                {{ currentSession.description }}
+                {{ currentSession.description || '' }}
               </h2>
 
               <!-- 角色设定 -->
@@ -89,17 +89,20 @@
 
     <!-- 输入区域 -->
     <div class="px-5 pb-2.5 w-full flex flex-col items-center">
-      <ChatInput v-model:value="inputMessage.text" v-model:web-search-enabled="webSearchEnabled"
-        v-model:thinking-enabled="thinkingEnabled" :show-thinking-button="supportedThinkingSwitch"
-        :files="inputMessage.files" :streaming="isStreaming" @send="sendMessage" @abort="abortResponse"
-        @image-upload="handleImageUpload" @toggle-web-search="handleWebSearch" @toggle-thinking="toggleDeepThinking"
-        @tokens-statistic="handleTokensStatistic" />
+      <div class="w-full flex items-center max-w-[900px]">
+        <ChatInput v-model:value="inputMessage.text" v-model:web-search-enabled="webSearchEnabled"
+          v-model:thinking-enabled="thinkingEnabled" :buttons="chatInputButtons" :files="inputMessage.files"
+          :streaming="isStreaming" @send="sendMessage" @abort="abortResponse" @image-upload="handleImageUpload"
+          @toggle-web-search="handleWebSearch" @toggle-thinking="toggleDeepThinking"
+          @tokens-statistic="handleTokensStatistic" />
+      </div>
       <div class="ai-disclaimer text-xs text-gray-400 text-center mt-2">内容由AI生成，仅供参考</div>
+
     </div>
     <n-modal v-model:show="showEditMessageModal" :mask-closable="false" :auto-focus="false"
       style="width: 860px; max-width: 90vw" title="编辑消息" preset="card">
       <ChatInput v-model:value="editInputMessage.text" v-model:web-search-enabled="webSearchEnabled"
-        v-model:thinking-enabled="thinkingEnabled" :show-thinking-button="supportedThinkingSwitch" :shadow="false"
+        v-model:thinking-enabled="thinkingEnabled" :buttons="chatInputButtons" :shadow="false"
         :files="editInputMessage.files" :streaming="isStreaming" @send="reSendMessage" @abort="abortResponse"
         @image-upload="handleImageUpload" @toggle-web-search="handleWebSearch" @toggle-thinking="toggleDeepThinking"
         @tokens-statistic="handleTokensStatistic" />
@@ -192,6 +195,7 @@ const currentSession = computed({
   set: (session) => emit("update:session", session)
 });
 
+
 const chatTitle = computed(() => props.session?.title || "Loading...");
 
 const currentModelName = computed(() =>
@@ -232,9 +236,14 @@ const thinkingEnabled = computed({
   }
 });
 
-const supportedThinkingSwitch = computed(() => {
-  return currentSession.value.model?.features?.includes("thinking");
-});
+
+
+const chatInputButtons = computed(() => {
+  return {
+    thinkingButton: currentSession.value.model?.features?.includes("thinking"),
+    imagesButton: currentSession.value.model?.features?.includes("visual"),
+  }
+})
 
 const localSidebarVisible = computed({
   get() {
@@ -256,7 +265,7 @@ const debouncedSaveSession = useDebounceFn(() => {
 }, 200);
 
 // 监听器
-watch(() => props.session.id, handleSessionChange, { immediate: true });
+watch(() => props.session?.id, handleSessionChange, { immediate: true });
 
 watch(
   () => activeMessages.value,
@@ -781,6 +790,9 @@ function handleImageUpload() {
 function handleTokensStatistic() {
   showTokenModal.value = true;
 }
+
+defineExpose({ sendMessage })
+
 </script>
 
 <style scoped>

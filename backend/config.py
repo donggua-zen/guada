@@ -47,7 +47,7 @@ class Config:
             "timeout": 30,  # SQLite 超时设置
             # "foreign_keys": 1,  # 启用外键
         },
-        "poolclass": StaticPool,  # 单线程应用使用静态连接池
+        # "poolclass": StaticPool,  # 单线程应用使用静态连接池
         "pool_pre_ping": True,  # 连接前检查
     }
     # 其他通用配置

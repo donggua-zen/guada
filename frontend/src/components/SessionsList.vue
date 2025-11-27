@@ -8,7 +8,7 @@
       <n-button @click="handleCreateSession" text size="medium">
         <template #icon>
           <n-icon>
-            <CommentAdd16Regular />
+            <ChatNew />
           </n-icon>
         </template>
         新建会话
@@ -102,8 +102,8 @@ import {
 } from '@vicons/material'
 
 import {
-  CommentAdd16Regular
-} from '@vicons/fluent'
+  ChatNew
+} from '@/components/icons'
 
 
 // 响应式数据
