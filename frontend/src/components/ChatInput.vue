@@ -1,7 +1,7 @@
 <template>
     <div class="w-full flex flex-col items-center">
-        <div class="rounded-[22px] p-[18px_10px_12px_10px] bg-white relative transition-all duration-300 min-h-[60px] max-w-[900px] w-full border border-[rgb(230,232,238)]"
-            :class="{ expanded: isInputExpanded, 'shadow-[0_2px_16px_rgba(0,0,0,0.1)]': shadow }">
+        <div class="p-[18px_10px_12px_10px] bg-white transition-all duration-300 min-h-[60px] w-full "
+            :class="styleClass">
             <!-- 文件列表显示区域 -->
             <div class="file-list flex flex-wrap gap-2 mb-3" v-if="uploadFiles.length > 0">
                 <FileItem v-for="file in uploadFiles" :key="file.id" :name="file.display_name"
@@ -9,7 +9,8 @@
             </div>
 
             <textarea class="message-input" v-model="inputContent" placeholder="输入消息..." @keydown="handleKeydown"
-                @input="adjustTextareaHeight" ref="messageInputRef" rows="1"></textarea>
+                @input="adjustTextareaHeight" ref="messageInputRef" rows="1" @focus="handleFocus"
+                @blur="handleBlur"></textarea>
 
             <!-- 隐藏的文件输入框 -->
             <input type="file" ref="fileInputRef" style="display: none" multiple
@@ -18,7 +19,7 @@
 
             <div class="input-actions w-full flex justify-between">
                 <div class="tools left-tools">
-                    <template v-if="showThinkingButton">
+                    <template v-if="showButtons.thinkingButton">
                         <n-button class="tool-btn" id="deep-thinking-btn" :class="{ active: localThinkingEnabled }"
                             :title="localThinkingEnabled ? '关闭深度思考' : '深度思考'" @click="toggleDeepThinking" text>
                             <template #icon>
@@ -30,8 +31,8 @@
                         </n-button>
                         <span class="mr-1"></span>
                     </template>
-                    <n-button class="tool-btn" :class="{ active: localWebSearchEnabled }" title="联网搜索"
-                        @click="handleWebSearch" text>
+                    <n-button v-if="showButtons.webSearchButton" class="tool-btn"
+                        :class="{ active: localWebSearchEnabled }" title="联网搜索" @click="handleWebSearch" text>
                         <template #icon>
                             <n-icon size="18">
                                 <Network />
@@ -42,21 +43,24 @@
                 </div>
                 <div class="right-actions">
                     <div class="tools right-tools">
-                        <n-button class="tool-btn" title="上传文件" @click="triggerFileInput" text>
+                        <n-button v-if="showButtons.filesButton" class="tool-btn" title="上传文件" @click="triggerFileInput"
+                            text>
                             <template #icon>
                                 <n-icon size="22">
                                     <InsertDriveFileTwotone />
                                 </n-icon>
                             </template>
                         </n-button>
-                        <n-button class="tool-btn" title="添加图片" @click="handleImageUpload" text>
+                        <n-button v-if="showButtons.imagesButton" class="tool-btn" title="添加图片"
+                            @click="handleImageUpload" text>
                             <template #icon>
                                 <n-icon size="22">
                                     <ImageTwotone />
                                 </n-icon>
                             </template>
                         </n-button>
-                        <n-button class="tool-btn" title="tokens统计" @click="handleTokensStatistic" text>
+                        <n-button v-if="showButtons.tokensButton" class="tool-btn" title="tokens统计"
+                            @click="handleTokensStatistic" text>
                             <template #icon>
                                 <n-icon size="22">
                                     <DataThresholdingTwotone />
@@ -102,6 +106,7 @@ import {
 } from "@vicons/material";
 
 import { Thinking2, Network, ArrowSend, Stop } from "@/components/icons";
+import { reactive } from 'vue';
 
 const isInputExpanded = ref(false);
 const messageInputRef = ref(null);
@@ -110,6 +115,33 @@ const fileInputRef = ref(null);
 // 文件列表数据
 const fileList = ref([]);
 let fileIdCounter = 0;
+
+const showButtons = reactive({
+    thinkingButton: false,
+    webSearchButton: true,
+    filesButton: true,
+    imagesButton: true,
+    tokensButton: true,
+});
+
+const styleClass = computed(() => {
+    const classes = [];
+    if (isInputExpanded) {
+        classes.push('expanded');
+    }
+    if (!props.clean) {
+        if (props.shadow) {
+            classes.push('shadow-[0_2px_16px_rgba(0,0,0,0.1)]');
+        }
+        if (props.border) {
+            classes.push('border border-[rgb(230,232,238)]');
+        }
+        if (props.round) {
+            classes.push('rounded-[22px]');
+        }
+    }
+    return classes.join(' ') + ' ' + props.class;
+});
 
 const props = defineProps({
     value: {
@@ -132,15 +164,43 @@ const props = defineProps({
         type: Boolean,
         default: false
     },
-    showThinkingButton: {
-        type: Boolean,
-        default: false
-    },
     shadow: {
         type: Boolean,
         default: true
-    }
+    },
+    buttons: {
+        type: Object,
+        default: () => []
+    },
+    clean: {
+        type: Boolean,
+        default: false
+    },
+    border: {
+        type: Boolean,
+        default: true
+    },
+    round: {
+        type: Boolean,
+        default: true
+    },
+
+    class: {
+        type: String,
+        default: ''
+    },
+
 })
+
+watch(() => props.buttons, (value) => {
+    Object.keys(showButtons).forEach(key => {
+        if (key in value) {
+            showButtons[key] = value[key] || false;
+        } else {
+            showButtons[key] = true;
+        }
+    });
+}, { immediate: true })
 
 const localWebSearchEnabled = computed({
     get() {
@@ -160,7 +220,7 @@ const localThinkingEnabled = computed({
     }
 })
 
-const emit = defineEmits(['update:value', 'update:webSearchEnabled', 'update:thinkingEnabled', 'send', 'abort', 'tokens-statistic', 'files-change', 'toggle-web-search', 'toggle-thinking'])
+const emit = defineEmits(['update:value', 'update:webSearchEnabled', 'update:thinkingEnabled', 'send', 'abort', 'tokens-statistic', 'files-change', 'toggle-web-search', 'toggle-thinking', 'focus', 'blur'])
 
 const inputContent = computed(
     {
@@ -278,6 +338,13 @@ const toggleDeepThinking = () => {
     emit('toggle-thinking')
 }
 
+const handleFocus = () => {
+    emit('focus');
+};
+
+const handleBlur = () => {
+    emit('blur');
+};
 // 调整文本区域高度
 const adjustTextareaHeight = () => {
     const textarea = messageInputRef.value;

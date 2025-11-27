@@ -572,6 +572,10 @@ export default {
   border-radius: 50%;
 }
 
+.markdown-text ul li:empty {
+  display: none;
+}
+
 .markdown-text code {
   background-color: #f6f8fa;
   border-radius: 3px;

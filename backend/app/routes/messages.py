@@ -1,3 +1,4 @@
+import logging
 from flask import Blueprint, Response, jsonify, request
 import app
 from app.services import SummaryService
@@ -11,6 +12,8 @@ summary_service = SummaryService()
 session_service = SessionService()
 
 messages_bp = Blueprint("messages", __name__)
+
+logger = logging.getLogger(__name__)
 
 
 @messages_bp.route("/v1/sessions/<session_id>/messages", methods=["GET"])
@@ -62,6 +65,7 @@ def update_message(message_id):
 @messages_bp.route("/v1/sessions/<session_id>/messages", methods=["POST"])
 def add_message(session_id):
     try:
+        logger.info("add message1")
         # 添加新消息到完整历史
         message = message_service.add_message(
             session_id=session_id,
@@ -71,7 +75,7 @@ def add_message(session_id):
             replace_message_id=request.json.get("replace_message_id", None),
             parent_id=None,
         )
-
+        logger.info("add message2")
         return jsonify({"success": True, "data": message})
     except Exception as e:
         return jsonify({"success": False, "error": str(e)}), 500

@@ -120,14 +120,14 @@ class ApiService {
 
   /**
    * 创建新会话
-   * @param {string} title - 会话标题
+   * @param {string} data - 创建会话信息
    * @param {string} [characterId] - 角色ID（可选）
    * @returns {Promise<Object>} 返回创建的会话数据
    */
-  async createSession(title, characterId = undefined) {
+  async createSession(data, characterId = undefined) {
     return await this._request('/sessions', {
       method: 'POST',
-      body: { title: title, character_id: characterId },
+      body: { ...data, character_id: characterId },
     });
   }
 

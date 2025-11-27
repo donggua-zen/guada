@@ -6,8 +6,8 @@
     </template>
     <template #content>
       <!-- 主体 -->
-      <template v-if="sessions.length > 0">
-        <ChatPanel v-model:session="currentSession" v-model:sidebar-visible="sidebarVisible"
+      <template v-if="sessions.length > 0 && currentSession">
+        <ChatPanel ref="chatPanelRef" v-model:session="currentSession" v-model:sidebar-visible="sidebarVisible"
           @openSettings="handleOpenSettings" @openSwitchModel="handleOpenSwitchModel"
           @saveSettings="handleSaveSessionSettings" />
         <n-modal v-model:show="settingsModalVisible" :mask-closable="false" :auto-focus="false"
@@ -20,13 +20,14 @@
       </template>
       <template v-else>
         <div class="h-full flex-1 flex items-center justify-center">
-          <n-empty description="你什么也找不到">
-            <!-- <template #extra>
+          <!-- <n-empty description="你什么也找不到"> -->
+          <!-- <template #extra>
             <n-button size="small">
               看看别的
             </n-button>
           </template> -->
-          </n-empty>
+          <!-- </n-empty> -->
+          <CreateSessionChatPanel @createSession="handleCreateSessionWithMessage" />
         </div>
       </template>
     </template>
@@ -48,6 +49,7 @@ import SidebarLayout from "@/components/layout/SidebarLayout.vue";
 import SessionsList from "@/components/SessionsList.vue";
 import CharacterSettingPanel from "@/components/CharacterSettingPanel.vue";
 import ChatPanel from "@/components/ChatPanel.vue";
+import CreateSessionChatPanel from "@/components/CreateSessionChatPanel.vue";
 
 // 组合式函数
 const { confirm, toast, prompt } = usePopup();
@@ -56,6 +58,7 @@ const route = useRoute();
 const title = useTitle();
 
 // 响应式数据
+const chatPanelRef = ref(null);
 // 当前会话对象，包含会话的基本信息和设置
 const currentSession = ref({
   id: null,
@@ -107,10 +110,14 @@ const fetchSession = async (sessionId) => {
  * @param {Object} session - 包含会话信息的对象
  */
 const selectSession = async (session) => {
-  if (session.id) {
+  if (session && session.id) {
     router.replace({ name: 'Chat', params: { sessionId: session.id } });
     store.setActiveSessionId(session.id);
     await fetchSession(session.id);
+  } else {
+    router.replace({ name: 'Chat' });
+    store.setActiveSessionId(null);
+    currentSession.value = null;
   }
 };
 
@@ -175,6 +182,7 @@ const updateSession = async (data) => {
  */
 const updateSelectedSession = (sessionId) => {
   if (sortedSessions.value.length === 0) {
+    selectSession(null);
     return;
   }
 
@@ -182,7 +190,7 @@ const updateSelectedSession = (sessionId) => {
   if (sessionId) {
     const session = sortedSessions.value.find(s => s.id === sessionId);
     if (session) {
-      if (session.id !== currentSession.value.id) {
+      if (session.id !== currentSession.value?.id) {
         selectSession(session);
       }
       return;
@@ -241,29 +249,41 @@ const handleOpenSwitchModel = () => {
  * 显示输入对话名称的提示框，创建新会话后刷新列表并自动选择新会话
  */
 const handleCreateSession = async () => {
-  try {
-    const result = await prompt("新建对话", {
-      placeholder: "请输入对话名称",
-      defaultValue: "新建对话"
-    });
-    if (result) {
-      const title = result;
+  // try {
+  //   const result = await prompt("新建对话", {
+  //     placeholder: "请输入对话名称",
+  //     defaultValue: "新建对话"
+  //   });
+  //   if (result) {
+  //     const title = result;
 
-      // 调用API创建对话
-      const newSession = await apiService.createSession(title);
+  //     // 调用API创建对话
+  //     const newSession = await apiService.createSession({ title });
 
-      // 刷新对话列表
-      await loadSessions();
+  //     // 刷新对话列表
+  //     await loadSessions();
 
-      // 自动选择新创建的对话
-      router.replace({ name: 'Chat', params: { sessionId: newSession['id'] } });
+  //     // 自动选择新创建的对话
+  //     router.replace({ name: 'Chat', params: { sessionId: newSession['id'] } });
 
-      toast.success("对话创建成功");
-    }
-  } catch (error) {
-    console.error('创建对话失败:', error);
-    toast.error("对话创建失败");
-  }
+  //     toast.success("对话创建成功");
+  //   }
+  // } catch (error) {
+  //   console.error('创建对话失败:', error);
+  //   toast.error("对话创建失败");
+  // }
+  currentSession.value = null;
+  router.push({ name: 'Chat', params: { sessionId: 'new-session' } });
+};
+
+const handleCreateSessionWithMessage = async (session, inputMessage) => {
+  const response = await apiService.createSession(session)
+  store.setInputMessage(response.id, inputMessage)
+  // 刷新对话列表
+  await loadSessions();
+  await selectSession(response);
+  chatPanelRef.value.sendMessage()
+  // router.replace({ name: 'Chat', params: { sessionId: response.id } })
 };
 
 /**
@@ -354,9 +374,8 @@ watch(
   (session) => {
     if (session.value) {
       title.value = `${session.value.title}-对话`;
-
+      updateSessionById(session.value.id, session.value);
     }
-    updateSessionById(session.value.id, session.value);
   },
   { deep: true }
 );
@@ -374,7 +393,10 @@ watch(
 watch(
   () => route.params.sessionId,
   (newSessionId) => {
-    updateSelectedSession(newSessionId);
+    if (newSessionId === 'new-session')
+      return;
+    if (newSessionId !== currentSession.value?.id)
+      updateSelectedSession(newSessionId);
   }
 );
 
