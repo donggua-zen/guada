@@ -50,7 +50,7 @@
           :class="{
             'bg-[var(--conversation-active-bg)]': session.id === currentSessionId,
             'hover:bg-[var(--conversation-hover-bg)]': session.id !== currentSessionId
-          }" @click="selectSession(session.id)">
+          }" @click="selectSession(session)">
           <div class="session-avatar w-9 h-9 mr-2.5">
             <Avatar :src="session.avatar_url" round />
           </div>
@@ -90,7 +90,6 @@
 <script setup>
 import { ref, computed, watch, h } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
-import { store } from '../store/store'
 import Avatar from '../components/Avatar.vue'
 import { NButton, NDropdown, NIcon, NInput } from 'naive-ui'
 import { useDebounceFn } from '@vueuse/core'
@@ -99,8 +98,7 @@ import {
   MoreVertOutlined,
   EditOutlined,
   DeleteOutlineOutlined,
-  SearchOutlined,
-  ChatBubbleTwotone // 新增图标导入
+  SearchOutlined
 } from '@vicons/material'
 
 import {
@@ -108,11 +106,8 @@ import {
 } from '@vicons/fluent'
 
 
-const route = useRoute()
-const router = useRouter()
-
 // 响应式数据
-const currentSessionId = ref(null)
+const currentSessionId = computed(() => props.current?.id)
 const searchKeyword = ref('')
 
 // 事件定义
@@ -123,6 +118,10 @@ const props = defineProps({
   sessions: {
     type: Array,
     default: () => []
+  },
+  current: {
+    type: Object,
+    default: () => ({})
   }
 })
 
@@ -134,13 +133,7 @@ const simpleBarOptions = {
 
 // 计算属性
 // 排序后的会话列表
-const sortedSessions = computed(() => {
-  return [...props.sessions].sort((a, b) => {
-    const timeA = a.updated_at ? new Date(a.updated_at) : new Date(a.created_at || 0)
-    const timeB = b.updated_at ? new Date(b.updated_at) : new Date(b.created_at || 0)
-    return timeB - timeA // 降序排列，最新的在前面
-  })
-})
+const sortedSessions = computed(() => props.sessions)
 
 // 过滤后的会话列表
 const filteredSessions = computed(() => {
@@ -233,31 +226,6 @@ const handleSearchInput = (value) => {
   debouncedSearch()
 }
 
-// 选择会话
-const selectSession = (sessionId) => {
-  router.replace({ name: 'Chat', params: { sessionId } })
-}
-
-// 更新选中的会话
-const updateSelectedSession = (sessionId) => {
-  if (sessionId) {
-    const session = sortedSessions.value.find(s => s.id === sessionId)
-    if (session) {
-      if (session.id !== currentSessionId.value) {
-        currentSessionId.value = sessionId
-        store.setActiveSessionId(sessionId)
-        emit('select', session)
-      }
-    }
-    return
-  }
-
-  // 如果没有找到会话，选择第一个会话
-  const newSessionId = sortedSessions.value.length > 0 ? sortedSessions.value[0].id : null
-  if (newSessionId) {
-    selectSession(newSessionId)
-  }
-}
 
 // 处理下拉菜单选择
 const handleDropdownSelect = (key, session) => {
@@ -274,21 +242,11 @@ const handleDropdownSelect = (key, session) => {
 const handleCreateSession = () => {
   emit('create')
 }
+const selectSession = (session) => {
+  emit('select', session)
+}
 
-// 监听器
-// 监听会话列表变化
-watch(() => props.sessions, () => {
-  updateSelectedSession(route.params.sessionId)
-}, { immediate: true, deep: true })
 
-// 监听路由参数变化
-watch(() => route.params.sessionId, (newSessionId) => {
-  if (!newSessionId) {
-    selectSession(store.activeSessionId)
-    return
-  }
-  updateSelectedSession(newSessionId)
-}, { immediate: true })
 </script>
 
 <style scoped>
