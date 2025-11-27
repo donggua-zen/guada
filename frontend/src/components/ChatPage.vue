@@ -108,6 +108,8 @@ const fetchSession = async (sessionId) => {
  */
 const selectSession = async (session) => {
   if (session.id) {
+    router.replace({ name: 'Chat', params: { sessionId: session.id } });
+    store.setActiveSessionId(session.id);
     await fetchSession(session.id);
   }
 };
@@ -306,6 +308,22 @@ const handleDeleteSession = async (session) => {
   try {
     if (await confirm("确认删除", "确定要删除这个对话吗？此操作不可撤销。")) {
       await apiService.deleteSession(session.id);
+      const index = sortedSessions.value.findIndex(s => s.id === session.id);
+      console.log('index', index);
+      // 如果删除的是当前会话
+      if (currentSession.value && currentSession.value.id === session.id) {
+        if (index < sortedSessions.value.length - 1) {
+          console.log('index', index);
+          // 选择下一个会话
+          await selectSession(sortedSessions.value[index + 1]);
+        } else if (index > 1) {
+          console.log('index', index);
+          await selectSession(sortedSessions.value[index - 1]);
+        } else {
+          // 没有其他会话了
+          currentSession.value = { id: null };
+        }
+      }
       sessions.value = sessions.value.filter(s => s.id !== session.id);
       toast.success("对话删除成功");
     }
@@ -336,8 +354,7 @@ watch(
   (session) => {
     if (session.value) {
       title.value = `${session.value.title}-对话`;
-      router.replace({ name: 'Chat', params: { sessionId: session.value.id } });
-      store.setActiveSessionId(session.value.id);
+
     }
     updateSessionById(session.value.id, session.value);
   },
