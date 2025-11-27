@@ -97,7 +97,7 @@
       <div class="ai-disclaimer text-xs text-gray-400 text-center mt-2">内容由AI生成，仅供参考</div>
     </div>
     <n-modal v-model:show="showEditMessageModal" :mask-closable="false" :auto-focus="false"
-      style="width: 900px; max-width: 90vw" title="编辑消息" preset="card">
+      style="width: 860px; max-width: 90vw" title="编辑消息" preset="card">
       <ChatInput v-model:value="editInputMessage.text" v-model:web-search-enabled="webSearchEnabled"
         v-model:thinking-enabled="thinkingEnabled" :show-thinking-button="supportedThinkingSwitch" :shadow="false"
         :files="editInputMessage.files" :streaming="isStreaming" @send="reSendMessage" @abort="abortResponse"
