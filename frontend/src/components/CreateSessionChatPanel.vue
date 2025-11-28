@@ -35,16 +35,16 @@
             class="animate-outside rounded-full border border-gray-200 hover:bg-gray-50 transition-all duration-300 ease-in-out overflow-hidden"
             :style="{ width: containerWidth + 'px' }">
             <div ref="innerEl"
-              class="animate-inside flex items-center justify-center  px-3 py-2 text-gray-500 cursor-pointer min-w-[min-content]"
+              class="animate-inside flex items-center justify-center px-2 py-1 text-gray-500 cursor-pointer min-w-[min-content]"
               :style="{ width: 'fit-content' }">
               <OpenAI class="w-5 h-5 mr-1 flex-shrink-0" />
-              <span class="whitespace-nowrap">{{ currentModelName }}</span>
+              <span class="whitespace-nowrap mr-1">{{ currentModelName }}</span>
             </div>
           </div>
         </n-popselect>
       </div>
       <div class="w-full  max-w-[900px]">
-        <ChatInput class="border border-gray-300" v-model:value="inputMessage.text"
+        <ChatInput class="border border-gray-400" v-model:value="inputMessage.text"
           v-model:web-search-enabled="webSearchEnabled" v-model:thinking-enabled="thinkingEnabled"
           :buttons="chatInputButtons" :files="inputMessage.files" :streaming="false" @send="sendMessage"
           @toggle-web-search="handleWebSearch" @toggle-thinking="toggleDeepThinking" :shadow="inputHasShadow"
@@ -94,6 +94,11 @@ const providers = ref([]);
 const inputHasShadow = ref(false);
 const innerEl = ref(null)
 const containerWidth = ref(100) // 初始宽度
+
+const inputMessage = ref({
+  text: "",
+  files: []
+});
 
 
 // 计算属性
@@ -190,13 +195,6 @@ const emit = defineEmits([
 const chatTitle = ""
 
 
-
-const inputMessage = computed({
-  get: () => store.getInputMessage(currentSessionId.value) || { text: "", files: [] },
-  set: (value) => store.setInputMessage(currentSessionId.value, value)
-});
-
-
 const webSearchEnabled = computed({
   get() {
     return currentSession.value.settings?.web_search_enabled;
@@ -265,8 +263,12 @@ const handleSwitchModelClick = (modelId) => {
   emit("openSwitchModel", modelId);
 };
 
-
-
+const autoTitle = () => {
+  if (inputMessage.value.text && inputMessage.value.text.length > 0) {
+    return inputMessage.value.text.substring(0, 20);
+  }
+  return "新建对话"
+}
 
 const sendMessage = () => {
   if (!currentModel.value) {
@@ -275,7 +277,7 @@ const sendMessage = () => {
   }
   emit("createSession", {
     model_id: currentModel.value.id,
-    title: currentSession.value.title,
+    title: autoTitle(),
     settings: currentSession.value.settings
   }, { ...inputMessage.value });
   inputMessage.value = { text: "", files: [] };
@@ -288,7 +290,7 @@ const handleCreateSessionClick = () => {
   }
   emit("createSession", {
     model_id: currentModel.value.id,
-    title: currentSession.value.title,
+    title: autoTitle(),
     settings: currentSession.value.settings
   })
 }
