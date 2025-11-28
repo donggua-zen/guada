@@ -35,10 +35,10 @@
 </template>
 
 <script setup>
-import { ref, onMounted, watch, computed } from "vue";
+import { ref, onMounted, watch, computed, nextTick } from "vue";
 import { apiService } from "@/services/ApiService";
 import { useRouter, useRoute } from 'vue-router';
-import { NEmpty, NModal } from "naive-ui";
+import { NModal } from "naive-ui";
 import { usePopup } from "@/composables/usePopup";
 import { useStorage } from '@vueuse/core';
 import { store } from "@/store/store";
@@ -247,29 +247,6 @@ const handleOpenSwitchModel = () => {
  * 显示输入对话名称的提示框，创建新会话后刷新列表并自动选择新会话
  */
 const handleCreateSession = async () => {
-  // try {
-  //   const result = await prompt("新建对话", {
-  //     placeholder: "请输入对话名称",
-  //     defaultValue: "新建对话"
-  //   });
-  //   if (result) {
-  //     const title = result;
-
-  //     // 调用API创建对话
-  //     const newSession = await apiService.createSession({ title });
-
-  //     // 刷新对话列表
-  //     await loadSessions();
-
-  //     // 自动选择新创建的对话
-  //     router.replace({ name: 'Chat', params: { sessionId: newSession['id'] } });
-
-  //     toast.success("对话创建成功");
-  //   }
-  // } catch (error) {
-  //   console.error('创建对话失败:', error);
-  //   toast.error("对话创建失败");
-  // }
   currentSession.value = null;
   router.push({ name: 'Chat', params: { sessionId: 'new-session' } });
 };
@@ -281,9 +258,10 @@ const handleCreateSessionWithMessage = async (session, inputMessage) => {
   await selectSession(response);
   if (inputMessage) {
     store.setInputMessage(response.id, inputMessage)
-    chatPanelRef.value.sendMessage()
+    nextTick(() => {
+      chatPanelRef.value.sendMessage()
+    })
   }
-  // router.replace({ name: 'Chat', params: { sessionId: response.id } })
 };
 
 /**
