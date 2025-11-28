@@ -4,8 +4,9 @@
             :class="styleClass">
             <!-- 文件列表显示区域 -->
             <div class="file-list flex flex-wrap gap-2 mb-3" v-if="uploadFiles.length > 0">
-                <FileItem v-for="file in uploadFiles" :key="file.id" :name="file.display_name"
-                    :type="file.file_extension" :size="file.file_size" closable @close="removeFile(file.id)"></FileItem>
+                <FileItem v-for="file in uploadFiles" :key="file.id" :name="file.display_name" :type="file.file_type"
+                    :ext="file.file_extension" :size="file.file_size" :preview-url="file.preview_url" closable
+                    @close="removeFile(file.id)"></FileItem>
             </div>
 
             <textarea class="message-input" v-model="inputContent" placeholder="输入消息..." @keydown="handleKeydown"
@@ -13,9 +14,10 @@
                 @blur="handleBlur"></textarea>
 
             <!-- 隐藏的文件输入框 -->
-            <input type="file" ref="fileInputRef" style="display: none" multiple
-                :accept="text_file_extensions.join(',')" @change="handleFileSelect">
-
+            <input type="file" ref="fileInputRef" style="display: none" multiple :accept="textFileExtensions.join(',')"
+                @change="handleFileSelect">
+            <input type="file" ref="imageInputRef" style="display: none" multiple
+                :accept="imageFileExtensions.join(',')" @change="handleImageSelect">
             <div class="input-actions w-full flex justify-between">
                 <div class="tools left-tools">
                     <template v-if="showButtons.thinkingButton">
@@ -51,7 +53,7 @@
                             </template>
                         </n-button>
                         <n-button v-if="showButtons.imagesButton" class="tool-btn" title="添加图片"
-                            @click="handleImageUpload" text>
+                            @click="triggerImageInput" text>
                             <template #icon>
                                 <n-icon size="22">
                                     <ImageTwotone />
@@ -93,7 +95,7 @@
 </template>
 
 <script setup>
-import { ref, watch, computed, nextTick, defineEmits } from 'vue'
+import { ref, watch, computed, nextTick, defineEmits, onUnmounted } from 'vue'
 import { NButton, NIcon } from 'naive-ui'
 import FileItem from './FileItem.vue';
 
@@ -106,11 +108,15 @@ import {
 
 import { Thinking2, Network, ArrowSend, Stop } from "@/components/icons";
 import { reactive } from 'vue';
+import { usePopup } from '@/composables/usePopup';
+
+const { confirm } = usePopup();
 
 const isInputExpanded = ref(false);
 const messageInputRef = ref(null);
 const fileInputRef = ref(null);
-const text_file_extensions = [
+const imageInputRef = ref(null);
+const textFileExtensions = [
     '.txt', '.md', '.js', '.ts', '.html', '.css',
     '.json', '.xml', '.csv', '.log', '.py', '.java',
     '.cpp', '.c', '.go', '.rs', '.php', '.rb', '.sql',
@@ -127,8 +133,11 @@ const text_file_extensions = [
     '.proto', '.graphql', '.sol'
 ];
 
-// 文件列表数据
-const fileList = ref([]);
+const imageFileExtensions = [
+    '.jpg', '.jpeg', '.png', '.gif', '.bmp', '.svg', '.webp', '.ico',
+    '.tif', '.tiff', '.psd', '.ai', '.eps',
+]
+
 let fileIdCounter = 0;
 
 const showButtons = reactive({
@@ -217,6 +226,20 @@ watch(() => props.buttons, (value) => {
     });
 }, { immediate: true })
 
+// 监听外部传入的 files 变化
+watch(() => props.files, (newFiles, oldFiles) => {
+    // 释放被移除的图片的 blob URL
+    if (oldFiles && oldFiles.length > 0) {
+        oldFiles.forEach(oldFile => {
+            // 检查这个文件是否还在新数组中
+            const stillExists = newFiles.some(newFile => newFile.id === oldFile.id);
+            if (!stillExists) {
+                revokeImagePreviewUrl(oldFile);
+            }
+        });
+    }
+}, { deep: true });
+
 const localWebSearchEnabled = computed({
     get() {
         return props.webSearchEnabled;
@@ -260,7 +283,7 @@ const uploadFiles = computed({
 const sendMessage = () => {
     emit('send', {
         text: inputContent.value,
-        files: fileList.value
+        files: uploadFiles.value
     })
 }
 
@@ -272,8 +295,28 @@ const handleKeydown = (e) => {
 };
 
 // 触发文件选择
-const triggerFileInput = () => {
+const triggerFileInput = async () => {
+    // 检测是否已经选择图片文件
+    if (uploadFiles.value.some(file => file.file_type === 'image')) {
+        if (!await confirm('覆盖图片', '暂不支持同时上传图片和文件，是否要覆盖全部图片？')) {
+            return;
+        }
+        uploadFiles.value.forEach(file => {
+            revokeImagePreviewUrl(file);
+        })
+        uploadFiles.value = [];
+    }
     fileInputRef.value.click();
+};
+
+const triggerImageInput = async () => {
+    if (uploadFiles.value.some(file => file.file_type !== 'image')) {
+        if (!await confirm('覆盖文件', '暂不支持同时上传图片和文件，是否要覆盖全部文件？')) {
+            return;
+        }
+        uploadFiles.value = [];
+    }
+    imageInputRef.value.click();
 };
 
 // 处理文件选择
@@ -290,9 +333,38 @@ const handleFileSelect = (event) => {
                     file_name: file.name,
                     file_size: file.size,
                     file_extension: getFileExtension(file.name),
-                    file_type: file.type,
+                    file_type: 'text',
                     display_name: getFileNameWithoutExtension(file.name),
                     file: file,
+                    preview_url: ''
+                });
+            }
+        }
+        // 触发文件变化事件
+        // emit('files-change', fileList.value);
+        // 清空input值，允许重复选择同一文件
+        event.target.value = '';
+    }
+};
+
+const handleImageSelect = (event) => {
+    const files = event.target.files;
+    if (files.length > 0) {
+        for (let i = 0; i < files.length; i++) {
+            const file = files[i];
+            // 检查文件类型是否为文本类型
+            if (isImageFile(file)) {
+                const previewUrl = URL.createObjectURL(file);
+                console.log('file', file);
+                uploadFiles.value.push({
+                    id: fileIdCounter++,
+                    file_name: file.name,
+                    file_size: file.size,
+                    file_extension: getFileExtension(file.name),
+                    file_type: 'image',
+                    display_name: getFileNameWithoutExtension(file.name),
+                    file: file,
+                    preview_url: previewUrl,
                 });
             }
         }
@@ -305,18 +377,37 @@ const handleFileSelect = (event) => {
 
 // 检查是否为文本文件
 const isTextFile = (file) => {
-    const textExtensions = text_file_extensions;
+    const textExtensions = textFileExtensions;
     const fileName = file.name.toLowerCase();
     return textExtensions.some(ext => fileName.endsWith(ext));
 };
+
+const isImageFile = (file) => {
+    const imageExtensions = imageFileExtensions;
+    const fileName = file.name.toLowerCase();
+    return imageExtensions.some(ext => fileName.endsWith(ext));
+}
 
 // 移除文件
 const removeFile = (fileId) => {
     const index = uploadFiles.value.findIndex(file => file.id === fileId);
     if (index !== -1) {
+        const file = uploadFiles.value[index];
+        // 如果是图片文件，释放预览URL
+        revokeImagePreviewUrl(file.preview_url);
         uploadFiles.value.splice(index, 1);
     }
 };
+
+const revokeImagePreviewUrl = (file) => {
+    if (file && file.file_type === 'image' && file.preview_url) {
+        // 只释放 blob URL，不释放普通 HTTP URL
+        if (file.preview_url.startsWith('blob:')) {
+            URL.revokeObjectURL(file.preview_url);
+            file.preview_url = '';
+        }
+    }
+}
 
 // 获取不包含扩展名的文件名
 const getFileNameWithoutExtension = (fileName) => {
@@ -331,9 +422,12 @@ const getFileExtension = (fileName) => {
 };
 
 
-const handleImageUpload = () => {
-    console.log("图片上传功能");
-}
+// 组件卸载时释放所有 blob URL
+onUnmounted(() => {
+    uploadFiles.value.forEach(file => {
+        revokeImagePreviewUrl(file);
+    });
+});
 
 const handleWebSearch = () => {
     localWebSearchEnabled.value = !localWebSearchEnabled.value;
