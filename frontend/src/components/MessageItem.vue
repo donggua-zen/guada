@@ -41,7 +41,7 @@
           {{ metadata.error }}
         </n-alert>
         <div v-if="message.is_streaming" class="assistant-loading flex items-center text-gray-500">
-          <n-icon size="16" class="mr-2">
+          <n-icon size="16" class="mr-2 relative">
             <Loading />
           </n-icon>
           <template v-if="isWebSearching">
@@ -51,8 +51,21 @@
             回答中...
           </template>
         </div>
-        <div v-if="isAssistant && !message.is_streaming" class="text-sm text-gray-400 mt-2">
-          <span>model: {{ metadata ? metadata.model_name : '' }}</span>
+        <div v-if="isAssistant && !message.is_streaming" class="text-xs text-gray-400 mt-2">
+          <div class="flex items-center">
+            <div class="mr-2 flex items-center">
+              <div class="inline-block h-3 w-3 flex flex-shrink-0 items-center justify-center mr-1 relative top-[1px]">
+                <CloudUploadTwotone />
+              </div><span class="">{{
+                currentModelName
+              }}</span>
+            </div>
+            <div class="flex items-center">
+              <div class="inline-block h-3 w-3 flex flex-shrink-0 items-center justify-center mr-1 relative top-[1px]">
+                <AccessTimeTwotone />
+              </div><span class="" title="">{{ currentContentTime }}</span>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -115,13 +128,15 @@ import {
   RefreshFilled,
   ArrowBackIosNewTwotone as ArrowLeftTwotone,
   ArrowForwardIosTwotone as ArrowRightTwotone,
-  MoreVertOutlined
+  MoreVertOutlined,
+  CloudUploadTwotone,
+  AccessTimeTwotone,
 } from "@vicons/material";
 
 import { Loading, Thinking } from "@/components/icons";
 import fileItem from "../components/FileItem.vue";
 import { usePopup } from "@/composables/usePopup";
-
+import { formatTime } from '@/utils'
 const { toast } = usePopup();
 
 const props = defineProps({
@@ -194,6 +209,20 @@ const metadata = computed(() => {
   const content = getCurrentContent(props.message.contents);
   return content.meta_data;
 });
+
+const currentModelName = computed(() => {
+  const modelName = metadata.value?.model_name;
+  return modelName
+    ? modelName.split("/").pop()
+    : "unknown"
+});
+
+const currentContentTime = computed(() => {
+  const content = getCurrentContent(props.message.contents);
+  return content.created_at
+    ? formatTime(content.created_at)
+    : ""
+})
 
 const thinkingLabel = ref("已深度思考");
 
