@@ -276,11 +276,13 @@ const handleCreateSession = async () => {
 
 const handleCreateSessionWithMessage = async (session, inputMessage) => {
   const response = await apiService.createSession(session)
-  store.setInputMessage(response.id, inputMessage)
   // 刷新对话列表
   await loadSessions();
   await selectSession(response);
-  chatPanelRef.value.sendMessage()
+  if (inputMessage) {
+    store.setInputMessage(response.id, inputMessage)
+    chatPanelRef.value.sendMessage()
+  }
   // router.replace({ name: 'Chat', params: { sessionId: response.id } })
 };
 

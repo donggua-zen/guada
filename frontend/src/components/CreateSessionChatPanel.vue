@@ -28,7 +28,7 @@
 
     <!-- 输入区域 -->
     <div class="px-5 pb-2.5 w-full flex-1 flex flex-col items-center justify-center">
-      <h1 class="text-3xl mb-4 text-gray-600">Hi，想聊些什么？</h1>
+      <h1 class="text-3xl mb-6 text-gray-600">Hi，想聊些什么？</h1>
       <div class="mb-3 mx-auto flex items-start w-full max-w-[900px]">
         <n-popselect v-model:value="currentSession.model_id" :options="modelOptions" trigger="click">
           <div
@@ -50,17 +50,21 @@
           @image-upload="handleImageUpload" @toggle-web-search="handleWebSearch" @toggle-thinking="toggleDeepThinking"
           :shadow="inputHasShadow" @focus="inputHasShadow = true" @blur="inputHasShadow = false" />
       </div>
-
+      <div>
+        <div class="flex items-center justify-center mt-6">
+          您也可以<span class="w-1"></span><n-button secondary type="primary" round size="small"
+            @click="handleCreateSessionClick">直接创建会话</n-button>
+        </div>
+      </div>
     </div>
   </div>
 </template>
 
 <script setup>
-import { ref, computed, watch, onMounted, onBeforeUpdate, reactive, nextTick } from "vue";
+import { ref, computed, watch, onMounted, onBeforeUpdate, nextTick } from "vue";
 import { store } from "../store/store";
 import { apiService } from "../services/ApiService";
 import { usePopup } from "@/composables/usePopup";
-import { useRouter } from "vue-router";
 
 // 组件导入
 import ChatInput from "./ChatInput.vue";
@@ -235,7 +239,9 @@ const loadModels = async () => {
 
     models.value = response.models || []
     providers.value = response.providers || []
-
+    if (models.value.length > 0) {
+      currentSession.value.model_id = models.value[0].id
+    }
   } catch (error) {
     console.error('获取模型列表失败:', error)
     notify.error('获取模型列表失败', error)
@@ -255,12 +261,6 @@ onMounted(() => {
 });
 
 // 消息发送处理
-async function sendNewMessage(sessionId, text, files, replaceMessageId = null) {
-
-}
-
-
-
 const handleSwitchModelClick = (modelId) => {
   emit("openSwitchModel", modelId);
 };
@@ -268,7 +268,7 @@ const handleSwitchModelClick = (modelId) => {
 
 
 
-const sendMessage = async () => {
+const sendMessage = () => {
   if (!currentModel.value) {
     notify.error('请选择对话模型');
     return;
@@ -281,6 +281,17 @@ const sendMessage = async () => {
   inputMessage.value = { text: "", files: [] };
 }
 
+const handleCreateSessionClick = () => {
+  if (!currentModel.value) {
+    notify.error('请选择对话模型');
+    return;
+  }
+  emit("createSession", {
+    model_id: currentModel.value.id,
+    title: currentSession.value.title,
+    settings: currentSession.value.settings
+  })
+}
 
 // 设置操作
 const handleWebSearch = () => {
@@ -291,9 +302,6 @@ const toggleDeepThinking = () => {
 
 };
 
-function handleImageUpload() {
-  console.log("图片上传功能");
-}
 
 
 </script>
