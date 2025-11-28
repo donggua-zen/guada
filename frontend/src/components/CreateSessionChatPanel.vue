@@ -28,13 +28,18 @@
 
     <!-- 输入区域 -->
     <div class="px-5 pb-2.5 w-full flex-1 flex flex-col items-center justify-center">
-      <h1 class="text-3xl mb-4 text-gray-600">想聊些什么？</h1>
-      <div class="mb-3 mx-auto flex items-start w-full  max-w-[900px]">
+      <h1 class="text-3xl mb-4 text-gray-600">Hi，想聊些什么？</h1>
+      <div class="mb-3 mx-auto flex items-start w-full max-w-[900px]">
         <n-popselect v-model:value="currentSession.model_id" :options="modelOptions" trigger="click">
           <div
-            class="flex items-center justify-center rounded-full border border-gray-200 px-3 py-2 hover:bg-gray-50 transition-colors text-gray-500 cursor-pointer">
-            <OpenAI class="w-5 h-5 mr-1" />
-            <span>{{ currentModelName }}</span>
+            class="animate-outside rounded-full border border-gray-200 hover:bg-gray-50 transition-all duration-300 ease-in-out overflow-hidden"
+            :style="{ width: containerWidth + 'px' }">
+            <div ref="innerEl"
+              class="animate-inside flex items-center justify-center  px-3 py-2 text-gray-500 cursor-pointer min-w-[min-content]"
+              :style="{ width: 'fit-content' }">
+              <OpenAI class="w-5 h-5 mr-1 flex-shrink-0" />
+              <span class="whitespace-nowrap">{{ currentModelName }}</span>
+            </div>
           </div>
         </n-popselect>
       </div>
@@ -51,7 +56,7 @@
 </template>
 
 <script setup>
-import { ref, computed, watch, onMounted, onBeforeUpdate, reactive } from "vue";
+import { ref, computed, watch, onMounted, onBeforeUpdate, reactive, nextTick } from "vue";
 import { store } from "../store/store";
 import { apiService } from "../services/ApiService";
 import { usePopup } from "@/composables/usePopup";
@@ -83,6 +88,9 @@ const models = ref([]);
 const providers = ref([]);
 
 const inputHasShadow = ref(false);
+const innerEl = ref(null)
+const containerWidth = ref(100) // 初始宽度
+
 
 // 计算属性
 const currentSession = ref({
@@ -109,6 +117,20 @@ const currentModelName = computed(() => {
   const model = currentModel.value
   return model ? model.model_name.split("/").pop() : "请选择对话模型"
 });
+
+// 更新容器宽度
+const updateContainerWidth = () => {
+  if (innerEl.value) {
+    const innerWidth = innerEl.value.scrollWidth
+    containerWidth.value = innerWidth
+  }
+}
+
+// 监听模型名称变化
+watch(currentModelName, async () => {
+  await nextTick() // 等待DOM更新
+  updateContainerWidth()
+}, { immediate: true })
 
 const modelOptions = computed(() => {
   if (!models.value.length || !providers.value.length) return []
