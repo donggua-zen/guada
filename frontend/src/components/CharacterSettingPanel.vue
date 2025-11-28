@@ -178,14 +178,14 @@
                 </n-tab-pane>
             </n-tabs>
         </div>
-        <div class="footer pb-5">
-            <n-button block type="primary" @click="handleSave" size="large">
+        <div class="footer pb-5 flex justify-end">
+            <n-button round type="primary" @click="handleSave" size="large">
                 <template #icon>
                     <n-icon>
                         <SaveOutlined />
                     </n-icon>
                 </template>
-                保存全部设置
+                保存
             </n-button>
         </div>
     </div>

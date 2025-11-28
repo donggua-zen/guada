@@ -495,7 +495,7 @@ async function handleStreamResponse(
   } catch (error) {
     handleStreamCatchError(error, message, contentIndex, assistantMessageIdResult);
   } finally {
-    cleanupStreaming(streamingSessionId, message);
+    cleanupStreaming(streamingSessionId, message, contentIndex);
     debouncedUpdatedSession();
   }
 }
@@ -514,7 +514,8 @@ function handleNewMessage(response, sessionId, userMessageId) {
       reasoning_content: null,
       meta_data: { model_name },
       is_current: true,
-      created_at: new Date().toISOString()
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString()
     });
     existingMessage.is_streaming = true;
     return {
@@ -532,7 +533,8 @@ function handleNewMessage(response, sessionId, userMessageId) {
           reasoning_content: null,
           meta_data: { model_name },
           is_current: true,
-          created_at: new Date().toISOString()
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString()
         }
       ],
       parent_id: userMessageId,
@@ -587,10 +589,11 @@ function handleStreamCatchError(error, message, contentIndex, assistantMessageId
   }
 }
 
-function cleanupStreaming(sessionId, message) {
+function cleanupStreaming(sessionId, message, contentIndex) {
   store.setSessionIsStreaming(sessionId, false);
   if (message) {
     message.is_streaming = false;
+    message.contents[contentIndex].updated_at = new Date().toISOString();
     itemRefs.value[message.id]?.stopThinking();
   }
 }
