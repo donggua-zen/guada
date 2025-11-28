@@ -4,7 +4,7 @@
       <sessions-list ref="sessionsListRef" :sessions="sortedSessions" :current="currentSession" @select="selectSession"
         @delete="handleDeleteSession" @rename="handleRenameSession" @create="handleCreateSession" />
     </template>
-    <template #content>
+    <template v-if="!isLoading" #content>
       <!-- 主体 -->
       <template v-if="sessions.length > 0 && currentSession">
         <ChatPanel ref="chatPanelRef" v-model:session="currentSession" v-model:sidebar-visible="sidebarVisible"
@@ -60,9 +60,7 @@ const title = useTitle();
 // 响应式数据
 const chatPanelRef = ref(null);
 // 当前会话对象，包含会话的基本信息和设置
-const currentSession = ref({
-  id: null,
-});
+const currentSession = ref(null);
 
 // 会话列表组件引用，用于调用组件内部方法
 const sessionsListRef = ref(null);
@@ -73,6 +71,7 @@ const settingsModalVisible = ref(false);
 // 控制侧边栏的显示状态，使用本地存储保持用户偏好
 const sidebarVisible = useStorage('sidebarVisible', true);
 
+const isLoading = ref(true);
 // 计算属性
 // 获取和设置会话列表的计算属性，与store中的会话列表保持同步
 const sessions = computed({
@@ -87,7 +86,8 @@ const sessions = computed({
 // 获取按更新时间排序的会话列表，最新的会话排在前面
 // 如果会话没有更新时间，则使用创建时间进行排序
 const sortedSessions = computed(() => {
-  return [...sessions.value].sort((a, b) => {
+  const sessions_ = [...sessions.value];
+  return sessions_.sort((a, b) => {
     const timeA = a.updated_at ? new Date(a.updated_at) : new Date(a.created_at || 0);
     const timeB = b.updated_at ? new Date(b.updated_at) : new Date(b.created_at || 0);
     return timeB - timeA; // 降序排列，最新的在前面
@@ -180,7 +180,7 @@ const updateSession = async (data) => {
  * 优先级：URL参数中的会话ID > 存储中的活动会话ID > 列表中的第一个会话
  * @param {string|number|null} sessionId - 要选择的会话ID，如果为null则使用存储中的ID
  */
-const updateSelectedSession = (sessionId) => {
+const updateSelectedSession = async (sessionId) => {
   if (sortedSessions.value.length === 0) {
     selectSession(null);
     return;
@@ -191,7 +191,7 @@ const updateSelectedSession = (sessionId) => {
     const session = sortedSessions.value.find(s => s.id === sessionId);
     if (session) {
       if (session.id !== currentSession.value?.id) {
-        selectSession(session);
+        await selectSession(session);
       }
       return;
     }
@@ -201,7 +201,7 @@ const updateSelectedSession = (sessionId) => {
     if (storeCurrentSessionId) {
       const session = sortedSessions.value.find(s => s.id === storeCurrentSessionId);
       if (session) {
-        selectSession(session);
+        await selectSession(session);
       }
       return;
     }
@@ -219,8 +219,6 @@ const loadSessions = async () => {
   try {
     const data = await apiService.fetchSessions();
     sessions.value = data.items;
-    const pathSessionId = route.params.sessionId;
-    updateSelectedSession(pathSessionId);
   } catch (error) {
     console.error('获取对话列表失败:', error);
   }
@@ -384,6 +382,8 @@ watch(
 watch(
   () => sessions,
   () => {
+    if (route.params.sessionId === 'new-session')
+      return;
     updateSelectedSession(route.params.sessionId);
   },
   { deep: true }
@@ -402,8 +402,12 @@ watch(
 
 // 生命周期
 // 组件挂载完成后加载会话列表
-onMounted(() => {
-  loadSessions();
+onMounted(async () => {
+  await loadSessions();
+  const pathSessionId = route.params.sessionId;
+  if (pathSessionId !== 'new-session')
+    await updateSelectedSession(pathSessionId);
+  isLoading.value = false;
 });
 </script>
 
