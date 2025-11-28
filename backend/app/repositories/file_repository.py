@@ -17,6 +17,8 @@ class FileRepository:
         session_id: str,
         message_id: str,
         content_hash: str,
+        url: str = None,
+        preview_url: str = None,
     ):
         """
         添加文件到数据库
@@ -41,6 +43,8 @@ class FileRepository:
             session_id=session_id,
             message_id=message_id,
             content_hash=content_hash,
+            url=url,
+            preview_url=preview_url,
         )
         db.session.add(filemodel)
         return filemodel.to_dict(flush=True)

@@ -1,6 +1,9 @@
+import os
 from typing import Optional
+import uuid
 from app.repositories.file_repository import FileRepository as FileRepo
 from app.repositories.message_repository import MessageRepository
+from app.utils import build_url_path, resize_and_convert_image
 
 
 class FileService:
@@ -18,6 +21,8 @@ class FileService:
         session_id: str,
         message_id: str,
         content_hash: str,
+        url: str = None,
+        preview_url: str = None,
     ):
         """
         添加文件到数据库
@@ -42,6 +47,8 @@ class FileService:
             session_id,
             message_id,
             content_hash,
+            url,
+            preview_url,
         )
 
     def delete_file(self, file_id: int):
@@ -72,11 +79,33 @@ class FileService:
             content_hash,
         )
 
+    def upload_message_image_file(self, file):
+        # 添加头像上传配置
+        upload_folder = os.path.join("app", "static", "uploads", "images")
+        preview_folder = os.path.join("app", "static", "uploads", "previews")
+        web_path = os.path.join("static", "uploads", "images")
+        preview_web_path = os.path.join("static", "uploads", "previews")
+        unique_filename = f"{uuid.uuid4().hex}.jpg"
+        # 确保上传目录存在
+        os.makedirs(upload_folder, exist_ok=True)
+        os.makedirs(preview_folder, exist_ok=True)
+        file_path = os.path.join(upload_folder, unique_filename)
+        preview_file_path = os.path.join(preview_folder, unique_filename)
+        # 上传图
+        resize_and_convert_image(file, file_path, 512, 512)
+        # 预览图
+        resize_and_convert_image(file, preview_file_path, 512, 512)
+
+        return build_url_path(web_path, unique_filename), build_url_path(
+            preview_web_path, unique_filename
+        )
+
     def upload_message_file(self, sessions_id, file):
         # 添加hashlib导入用于计算文件hash
         import hashlib
 
         session_id = sessions_id
+        allowed_jpeg_extensions = {"png", "jpg", "jpeg", "gif", "bmp", "webp", "tiff"}
 
         try:
 
@@ -90,18 +119,25 @@ class FileService:
             file_ext = (
                 file.filename.rsplit(".", 1)[1].lower() if "." in file.filename else ""
             )
+            pic_path = None
+            preview_path = None
+            file_content = None
+
+            file_type = "text"
             file_size = len(file.read())
             file.seek(0)  # 重置文件指针
 
-            # 读取文件内容
-            file_content = file.read().decode("utf-8")
-            file.seek(0)  # 重置文件指针
+            if file_ext in allowed_jpeg_extensions:
+                pic_path, preview_path = self.upload_message_image_file(file)
+                file_type = "image"
+            else:
+                file_type = "text"
+                # 读取文件内容
+                file_content = file.read().decode("utf-8")
+                file.seek(0)  # 重置文件指针
 
             # 计算文件hash值
-            file_hash = hashlib.sha256(file_content.encode("utf-8")).hexdigest()
-
-            # 设置文件类型为text
-            file_type = "text"
+            file_hash = "none"
 
             # 调用file_service保存文件信息到数据库
             file_info = self.add_file(
@@ -113,7 +149,9 @@ class FileService:
                 file_content=file_content,
                 session_id=session_id,
                 message_id=None,
-                content_hash=file_hash,  # 使用计算出的hash值替换空字符串
+                content_hash=file_hash,
+                url=pic_path,
+                preview_url=preview_path,
             )
 
             return file_info
