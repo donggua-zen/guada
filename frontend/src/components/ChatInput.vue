@@ -14,8 +14,7 @@
 
             <!-- 隐藏的文件输入框 -->
             <input type="file" ref="fileInputRef" style="display: none" multiple
-                accept=".txt,.md,.js,.ts,.html,.css,.json,.xml,.csv,.log,.py,.java,.cpp,.c,.go,.rs,.php,.rb,.sql,.sh,.bat,.yml,.yaml,.ini,.conf,.properties"
-                @change="handleFileSelect">
+                :accept="text_file_extensions.join(',')" @change="handleFileSelect">
 
             <div class="input-actions w-full flex justify-between">
                 <div class="tools left-tools">
@@ -111,6 +110,22 @@ import { reactive } from 'vue';
 const isInputExpanded = ref(false);
 const messageInputRef = ref(null);
 const fileInputRef = ref(null);
+const text_file_extensions = [
+    '.txt', '.md', '.js', '.ts', '.html', '.css',
+    '.json', '.xml', '.csv', '.log', '.py', '.java',
+    '.cpp', '.c', '.go', '.rs', '.php', '.rb', '.sql',
+    '.sh', '.bat', '.yml', '.yaml', '.ini', '.conf',
+    '.properties', '.vue',
+
+    '.toml', '.env', '.cfg', '.config', '.reg', '.pem',
+    '.tex', '.rst', '.adoc', '.org',
+    '.swift', '.kt', '.scala', '.dart', '.ex', '.r', '.jl',
+    '.ps1', '.vbs', '.fish',
+    '.j2', '.ejs', '.hbs',
+    '.lock', '.patch', '.diff',
+    '.ics', '.vcf', '.srt',
+    '.proto', '.graphql', '.sol'
+];
 
 // 文件列表数据
 const fileList = ref([]);
@@ -290,7 +305,7 @@ const handleFileSelect = (event) => {
 
 // 检查是否为文本文件
 const isTextFile = (file) => {
-    const textExtensions = ['.txt', '.md', '.js', '.ts', '.html', '.css', '.json', '.xml', '.csv', '.log', '.py', '.java', '.cpp', '.c', '.go', '.rs', '.php', '.rb', '.sql', '.sh', '.bat', '.yml', '.yaml', '.ini', '.conf', '.properties'];
+    const textExtensions = text_file_extensions;
     const fileName = file.name.toLowerCase();
     return textExtensions.some(ext => fileName.endsWith(ext));
 };
