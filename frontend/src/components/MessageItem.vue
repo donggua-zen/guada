@@ -8,9 +8,9 @@
 
     <div class="message-content">
       <!-- 文件列表显示区域 -->
-      <div class="file-list flex flex-wrap gap-2 mb-3" v-if="message.files && message.files.length > 0">
-        <fileItem v-for="file in message.files" :key="file.id" :name="file.display_name" :type="file.file_extension"
-          :size="file.file_size"></fileItem>
+      <div class="file-list flex flex-wrap gap-2 mb-3 ml-auto" v-if="message.files && message.files.length > 0">
+        <fileItem v-for="file in message.files" :key="file.id" :name="file.display_name" :type="file.file_type"
+          :ext="file.file_extension" :size="file.file_size" :preview-url="file.preview_url"></fileItem>
       </div>
 
       <div class="message-card">
@@ -509,12 +509,6 @@ export default {
   font-size: 16px;
   max-width: 100%;
   vertical-align: middle;
-}
-
-.ai-meta {
-  font-size: 12px;
-  color: #999;
-  margin-top: 8px;
 }
 
 /* 加载动画 */

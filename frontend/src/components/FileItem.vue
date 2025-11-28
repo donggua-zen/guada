@@ -1,16 +1,26 @@
 <template>
-    <div class="file-item flex items-center bg-gray-50 border border-gray-200 rounded-lg px-2 py-1.5 min-w-40 max-w-48 relative transition-all duration-200 hover:bg-gray-100 hover:border-gray-300"
-        @mouseenter="close_button_visible = true" @mouseleave="close_button_visible = false">
-        <div class="file-icon mr-2 text-gray-500 flex items-center w-8 h-8">
-            <img :src="fileIcon" class="w-full h-full">
-        </div>
-        <div class="file-info flex-1 min-w-0">
-            <div class="file-name text-sm font-medium text-gray-700 truncate">{{ name }}</div>
-            <div class="file-details text-xs text-gray-500">{{ type }} · {{
-                formatFileSize(size) }}</div>
-        </div>
+    <div class="file-item flex items-center relative " @mouseenter="close_button_visible = true"
+        @mouseleave="close_button_visible = false">
+        <template v-if="type === 'image'">
+            <div class="image-preview w-15 h-15 rounded-lg overflow-hidden">
+                <img :src="previewUrl" class="w-full h-full object-cover"></img>
+            </div>
+        </template>
+        <template v-else>
+            <div
+                class="flex items-center px-2 py-1.5  bg-gray-50 border border-gray-200 rounded-lg transition-all duration-200 hover:bg-gray-100 hover:border-gray-300">
+                <div class="file-icon mr-2 text-gray-500 flex items-center w-8 h-8">
+                    <img :src="fileIcon" class="w-full h-full">
+                </div>
+                <div class="file-info flex-1 min-w-32 max-w-40 ">
+                    <div class="file-name text-sm font-medium text-gray-700 truncate">{{ name }}</div>
+                    <div class="file-details text-xs text-gray-500">{{ ext }} · {{
+                        formatFileSize(size) }}</div>
+                </div>
+            </div>
+        </template>
         <div v-if="closable"
-            class="file-remove absolute top-1 right-1 w-4 h-4 rounded-full bg-red-500 text-white flex items-center justify-center cursor-pointer transition-all duration-200 hover:bg-red-600 hover:scale-110"
+            class="file-remove absolute -top-1 -right-1 w-4 h-4 rounded-full bg-red-500 text-white flex items-center justify-center cursor-pointer transition-all duration-200 hover:bg-red-600 hover:scale-110"
             v-show="close_button_visible" @click="removeFile">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
                 <path
@@ -37,7 +47,9 @@ import fileZipIcon from '@/assets/file_zip.svg'
 const props = defineProps({
     name: String,
     type: String,
+    ext: String,
     size: Number,
+    previewUrl: String,
     closable: Boolean,
 })
 const emit = defineEmits(['close'])
@@ -97,7 +109,7 @@ const fileIconMap = {
 
 // 计算属性：根据文件类型返回对应的图标
 const fileIcon = computed(() => {
-    const lowerType = props.type?.toLowerCase()
+    const lowerType = props.ext?.toLowerCase()
     return fileIconMap[lowerType] || fileTxtIcon
 })
 
