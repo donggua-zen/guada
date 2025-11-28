@@ -47,8 +47,8 @@
         <ChatInput class="border border-gray-300" v-model:value="inputMessage.text"
           v-model:web-search-enabled="webSearchEnabled" v-model:thinking-enabled="thinkingEnabled"
           :buttons="chatInputButtons" :files="inputMessage.files" :streaming="false" @send="sendMessage"
-          @image-upload="handleImageUpload" @toggle-web-search="handleWebSearch" @toggle-thinking="toggleDeepThinking"
-          :shadow="inputHasShadow" @focus="inputHasShadow = true" @blur="inputHasShadow = false" />
+          @toggle-web-search="handleWebSearch" @toggle-thinking="toggleDeepThinking" :shadow="inputHasShadow"
+          @focus="inputHasShadow = true" @blur="inputHasShadow = false" />
       </div>
       <div>
         <div class="flex items-center justify-center mt-6">
