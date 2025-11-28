@@ -92,9 +92,8 @@
       <div class="w-full flex items-center max-w-[860px]">
         <ChatInput v-model:value="inputMessage.text" v-model:web-search-enabled="webSearchEnabled"
           v-model:thinking-enabled="thinkingEnabled" :buttons="chatInputButtons" :files="inputMessage.files"
-          :streaming="isStreaming" @send="sendMessage" @abort="abortResponse" @image-upload="handleImageUpload"
-          @toggle-web-search="handleWebSearch" @toggle-thinking="toggleDeepThinking"
-          @tokens-statistic="handleTokensStatistic" />
+          :streaming="isStreaming" @send="sendMessage" @abort="abortResponse" @toggle-web-search="handleWebSearch"
+          @toggle-thinking="toggleDeepThinking" @tokens-statistic="handleTokensStatistic" />
       </div>
       <div class="ai-disclaimer text-xs text-gray-400 text-center mt-2">内容由AI生成，仅供参考</div>
 
@@ -104,7 +103,7 @@
       <ChatInput v-model:value="editInputMessage.text" v-model:web-search-enabled="webSearchEnabled"
         v-model:thinking-enabled="thinkingEnabled" :buttons="chatInputButtons" :shadow="false"
         :files="editInputMessage.files" :streaming="isStreaming" @send="reSendMessage" @abort="abortResponse"
-        @image-upload="handleImageUpload" @toggle-web-search="handleWebSearch" @toggle-thinking="toggleDeepThinking"
+        @toggle-web-search="handleWebSearch" @toggle-thinking="toggleDeepThinking"
         @tokens-statistic="handleTokensStatistic" />
     </n-modal>
     <!-- Tokens统计模态框 -->
@@ -785,10 +784,6 @@ const handleWebSearch = () => {
 const toggleDeepThinking = () => {
   debouncedSaveSession();
 };
-
-function handleImageUpload() {
-  console.log("图片上传功能");
-}
 
 function handleTokensStatistic() {
   showTokenModal.value = true;
