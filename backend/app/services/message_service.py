@@ -86,7 +86,9 @@ class MessageService:
             if files:
                 file_ids = [file["id"] for file in files]
                 FileRepository.update_files(file_ids, {"message_id": message["id"]})
-            FileRepository.delete_not_related_files(session_id)
+
+            # 由定时器清理旧文件
+            # FileRepository.delete_not_related_files(session_id)
 
             if replace_message_id:
                 self.delete_message(replace_message_id)
