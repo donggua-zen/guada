@@ -10,9 +10,11 @@
 通过该服务，可以实现角色扮演对话系统的核心功能，支持多种记忆策略和模型供应商的集成。
 """
 
+import base64
 from contextlib import closing
 import datetime
 import logging
+import os
 import traceback
 from typing import Generator, Optional
 
@@ -22,6 +24,7 @@ from app.repositories.session_repository import SessionRepository
 from app.services.domain.memory_strategy import MemoryStrategy
 from app.services.llm_service import LLMServiceChunk
 from app.services.message_service import MessageService
+from app.utils import convert_webpath_to_filepath
 from app.utils.settings_manager import SettingsManager
 
 message_service = MessageService()
@@ -148,24 +151,69 @@ class ChatService:
 
         # 添加每个文件的内容
         for i, file in enumerate(files):
-            # 确保 file 对象具有所需属性
-            file_name = file.get("file_name", "unknow")
-            file_content = file.get("content", "")
+            if file.get("file_type") == "image":
+                file_url = file.get("url", "")
+                image_body = {}
+                if file_url.startswith("/"):
+                    file_path = convert_webpath_to_filepath(file_url)
+                    try:
+                        if os.path.exists(file_path):
+                            with open(file_path, "rb") as image_file:
+                                # 读取图片文件并编码为base64
+                                base64_data = base64.b64encode(
+                                    image_file.read()
+                                ).decode("utf-8")
 
-            file_text = (
-                f"\n\n<ATTACHMENT_FILE>\n"
-                f"<FILE_INDEX>File {i}</FILE_INDEX>\n"
-                f"<FILE_NAME>{file_name}</FILE_NAME>\n"
-                f"<FILE_CONTENT>\n{file_content}\n</FILE_CONTENT>\n"
-                f"</ATTACHMENT_FILE>\n"
-            )
+                                # 根据文件扩展名确定MIME类型
+                                file_extension = file.get("file_extension")
+                                mime_type = "image/jpeg"  # 默认值
+                                if file_extension == "png":
+                                    mime_type = "image/png"
+                                elif file_extension == "gif":
+                                    mime_type = "image/gif"
+                                elif file_extension == "bmp":
+                                    mime_type = "image/bmp"
+                                elif file_extension == "webp":
+                                    mime_type = "image/webp"
 
-            content_parts.append(
-                {
-                    "text": file_text,
-                    "type": "text",
-                }
-            )
+                                # 构造data URI格式
+                                image_body["url"] = (
+                                    f"data:{mime_type};base64,{base64_data}"
+                                )
+                            logger.debug(f"成功将图片 {file_path} 转换为base64格式")
+                        else:
+                            logger.warning(f"图片文件不存在: {file_path}")
+                            image_body["url"] = ""  # 文件不存在时设置为空
+                    except Exception as e:
+                        logger.error(f"图片文件读取失败: {file_path}, 错误: {str(e)}")
+                        image_body["url"] = ""  # 读取失败时设置为空
+                else:
+                    image_body["url"] = file_url
+                content_parts.append(
+                    {
+                        "type": "image_url",
+                        "image_url": image_body,
+                    }
+                )
+            elif file.get("file_type") == "text":
+                # 确保 file 对象具有所需属性
+                file_name = file.get("file_name", "unknow")
+                file_content = file.get("content", "")
+
+                file_text = (
+                    f"\n\n<ATTACHMENT_FILE>\n"
+                    f"<FILE_INDEX>File {i}</FILE_INDEX>\n"
+                    f"<FILE_NAME>{file_name}</FILE_NAME>\n"
+                    f"<FILE_CONTENT>\n{file_content}\n</FILE_CONTENT>\n"
+                    f"</ATTACHMENT_FILE>\n"
+                )
+
+                content_parts.append(
+                    {
+                        "text": file_text,
+                        "type": "text",
+                    }
+                )
 
         return {**msg, "content": content_parts}
 

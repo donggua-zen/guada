@@ -26,7 +26,8 @@ class Message(ModelBase):
     files = db.relationship(
         "File",
         back_populates="message",
-        cascade="all, delete-orphan",
+        # cascade="all, delete-orphan",
+        cascade="save-update, merge, refresh-expire",  # 不要级联删除files，files会置空外键
     )
     session = db.relationship(
         "Session",

@@ -82,6 +82,10 @@ class AppInitializer:
 
     def initialize_shell_context(self):
         """注册shell上下文"""
+        # 注册命令行命令
+        import commands
+
+        self.app.cli.add_command(commands.cleanup)
 
         # @self.app.shell_context_processor
         # def make_shell_context():
