@@ -1,6 +1,6 @@
 <template>
-    <div class="file-item flex items-center relative " @mouseenter="close_button_visible = true"
-        @mouseleave="close_button_visible = false">
+    <div class="file-item flex items-center relative" :class="{ 'cursor-pointer': clickable }"
+        @mouseenter="close_button_visible = true" @click="handleClick" @mouseleave="close_button_visible = false">
         <template v-if="type === 'image'">
             <div class="image-preview w-15 h-15 rounded-lg overflow-hidden">
                 <img :src="previewUrl" class="w-full h-full object-cover"></img>
@@ -51,8 +51,9 @@ const props = defineProps({
     size: Number,
     previewUrl: String,
     closable: Boolean,
+    clickable: Boolean
 })
-const emit = defineEmits(['close'])
+const emit = defineEmits(['close', 'click'])
 const close_button_visible = ref(false)
 
 // 文件类型到图标的映射
@@ -124,5 +125,10 @@ const formatFileSize = (bytes) => {
 
 const removeFile = () => {
     emit('close')
+}
+
+const handleClick = () => {
+    if (!props.clickable) return
+    emit('click')
 }
 </script>
