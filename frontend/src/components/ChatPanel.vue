@@ -39,7 +39,7 @@
 
     <!-- 消息内容区域 -->
     <div class="messages-container" ref="messagesContainerRef">
-      <template v-if="activeMessages.length === 0">
+      <template v-if="!isLoading && activeMessages.length === 0">
         <!-- 欢迎页 -->
         <div class="flex items-center justify-center h-full min-h-[500px] py-10 px-5">
           <div class="max-w-[600px] w-full text-center p-10 rounded-2xl animate-fade-in-up">
@@ -92,7 +92,7 @@
       <div class="w-full flex items-center max-w-[860px]">
         <ChatInput v-model:value="inputMessage.text" v-model:web-search-enabled="webSearchEnabled"
           v-model:thinking-enabled="thinkingEnabled" :buttons="chatInputButtons" :files="inputMessage.files"
-          :streaming="isStreaming" @send="sendMessage" @abort="abortResponse" @toggle-web-search="handleWebSearch"
+          :streaming="isStreaming" @send="handleSendMessage" @abort="abortResponse" @toggle-web-search="handleWebSearch"
           @toggle-thinking="toggleDeepThinking" @tokens-statistic="handleTokensStatistic" />
       </div>
       <div class="ai-disclaimer text-xs text-gray-400 text-center mt-2">内容由AI生成，仅供参考</div>
@@ -102,7 +102,7 @@
       style="width: 860px; max-width: 90vw" title="编辑消息" preset="card">
       <ChatInput v-model:value="editInputMessage.text" v-model:web-search-enabled="webSearchEnabled"
         v-model:thinking-enabled="thinkingEnabled" :buttons="chatInputButtons" :shadow="false"
-        :files="editInputMessage.files" :streaming="isStreaming" @send="reSendMessage" @abort="abortResponse"
+        :files="editInputMessage.files" :streaming="isStreaming" @send="handleReSendMessage" @abort="abortResponse"
         @toggle-web-search="handleWebSearch" @toggle-thinking="toggleDeepThinking"
         @tokens-statistic="handleTokensStatistic" />
     </n-modal>
@@ -148,6 +148,7 @@ const currentSessionId = ref(null);
 const showTokenModal = ref(false);
 const showEditMessageModal = ref(false);
 const itemRefs = ref({});
+const isLoading = ref(false)
 
 // 更多操作下拉菜单选项
 const moreOptions = ref([
@@ -377,7 +378,7 @@ function setItemRef(el, messageId) {
 
 function handleSessionChange(newSessionId, oldSessionId) {
   if (newSessionId === oldSessionId) return;
-
+  isLoading.value = true;
   currentSessionId.value = newSessionId;
 
   if (newSessionId) {
@@ -390,6 +391,7 @@ async function loadMessages(sessionId) {
   if (store.getMessages(sessionId).length === 0) {
     const sessionMessages = await apiService.fetchSessionMessages(sessionId);
     store.setMessages(sessionId, sessionMessages.items);
+    isLoading.value = false;
   }
 }
 
@@ -428,6 +430,76 @@ function allowReSendMessage(message, index) {
   return index >= activeMessages.value.length - 2;
 }
 
+async function* dummy_chat(_sessionId, _messageId, _regeneration_mode = null, _assistant_message_id = null) {
+  // 模拟创建消息
+  yield {
+    type: "create",
+    message_id: "dummy-assistant-message-id",
+    content_id: "dummy-content-id",
+    model_name: "Dummy Model"
+  };
+
+  // 模拟网络搜索
+  yield {
+    type: "web_search",
+    msg: "start"
+  };
+
+  yield {
+    type: "web_search",
+    msg: "end"
+  };
+
+
+
+  yield {
+    type: "think",
+    msg: "正在分析问题..."
+  };
+
+  // 模拟逐步思考过程
+  const thoughts = [
+    "\n\n首先，我需要理解用户的问题。",
+    "\n然后，我会考虑相关的知识点。",
+    "\n最后，我会组织语言给出详细回答。"
+  ];
+  for (let i = 0; i < 5; i++) {
+    for (const thought of thoughts) {
+      yield {
+        type: "think",
+        msg: thought
+      };
+      // 模拟延迟
+      await new Promise(resolve => setTimeout(resolve, 100));
+    }
+  }
+
+
+  // 模拟实际回答内容
+  const responseText = "这是模拟的回答内容。通过这个模拟函数，我们可以在没有真实API的情况下测试界面交互和功能。\n\n" +
+    "模拟的内容包括：\n" +
+    "1. 消息创建过程\n" +
+    "2. 网络搜索提示\n" +
+    "3. 思考过程（可选）\n" +
+    "4. 实际回答内容\n\n" +
+    "这样开发者就可以在开发过程中方便地进行调试和界面优化。";
+  for (let i = 0; i < 5; i++) {
+    for (let y = 0; y < responseText.length; y++) {
+      yield {
+        type: "text",
+        msg: responseText.charAt(y)
+      };
+      // 模拟打字效果
+      await new Promise(resolve => setTimeout(resolve, 20));
+    }
+  }
+  // 模拟结束
+  yield {
+    type: "finish",
+    finish_reason: "stop"
+  };
+}
+
 // 流式响应处理
 async function handleStreamResponse(
   streamingSessionId,
@@ -435,6 +507,9 @@ async function handleStreamResponse(
   regenerationMode = null,
   assistantMessageId = null
 ) {
+
+  const USE_DUMMY_CHAT = false; // 设为 true 使用模拟接口，设为 false 使用真实接口
+
   store.setSessionIsStreaming(streamingSessionId, true);
 
   let message = null;
@@ -446,12 +521,13 @@ async function handleStreamResponse(
     let isThinking = false;
     let thinkingContent = "";
 
-    for await (const response of apiService.chat(
+    const chatSouce = USE_DUMMY_CHAT ? dummy_chat : apiService.chat;
+
+    for await (const response of chatSouce(
       streamingSessionId,
       userMessageId,
       regenerationMode,
       assistantMessageId,
-      false
     )) {
       if (response.type == "finish") {
         handleStreamFinish(response, message, contentIndex, assistantMessageIdResult);
@@ -640,10 +716,10 @@ async function sendNewMessage(sessionId, text, files, replaceMessageId = null) {
     }
   }
   activeMessages.value.push(message);
-  nextTick(() => {
+  debouncedUpdatedSession();
+  await nextTick(() => {
     immediateScrollToBottom();
   });
-  debouncedUpdatedSession();
   return message;
 }
 
@@ -723,7 +799,7 @@ async function copyMessage(message) {
   }
 }
 
-async function sendMessage() {
+async function handleSendMessage() {
   const data = inputMessage.value;
   if ((!data.text?.trim() && !data.files.length) || isStreaming.value) return;
 
@@ -737,7 +813,7 @@ async function sendMessage() {
   }
 }
 
-async function reSendMessage() {
+async function handleReSendMessage() {
   try {
     const data = editInputMessage.value;
     const { text, files } = data;
@@ -789,7 +865,7 @@ function handleTokensStatistic() {
   showTokenModal.value = true;
 }
 
-defineExpose({ sendMessage })
+defineExpose({ sendMessage: handleSendMessage })
 
 </script>
 

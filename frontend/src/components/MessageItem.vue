@@ -41,7 +41,7 @@
           {{ metadata.error }}
         </n-alert>
         <div v-if="message.is_streaming" class="assistant-loading flex items-center text-gray-500">
-          <n-icon size="16" class="mr-2 relative">
+          <n-icon size="16" class="mr-2 relative top-[1px]">
             <Loading />
           </n-icon>
           <template v-if="isWebSearching">
@@ -51,7 +51,7 @@
             回答中...
           </template>
         </div>
-        <div v-if="isAssistant && !message.is_streaming" class="text-xs text-gray-400 mt-2">
+        <div v-else-if="isAssistant" class="text-xs text-gray-400 mt-2">
           <div class="flex items-center">
             <div class="mr-2 flex items-center">
               <div class="inline-block h-3 w-3 flex flex-shrink-0 items-center justify-center mr-1 relative top-[1px]">
@@ -365,15 +365,14 @@ const switchContent = (direction) => {
 };
 
 const startThinking = () => {
-  console.log("startThinking called");
   isThinking.value = true;
   isExpanded.value = true;
   thinkingLabel.value = "正在思考...";
 };
 
 const stopThinking = () => {
-  console.log("stopThinking called");
   isThinking.value = false;
+  isExpanded.value = false;
   thinkingLabel.value = "已深度思考";
 };
 
@@ -382,7 +381,7 @@ const startWebSearch = () => {
 };
 
 const stopWebSearch = () => {
-  isWebSearch.value = false;
+  isWebSearching.value = false;
 };
 
 const getCurrentIndex = (messageContents) => {
@@ -661,7 +660,7 @@ export default {
   height: 1px;
   background-color: #eaecef;
   border: none;
-  margin: 1.5em 0;
+  margin: 1.2em 0;
 }
 
 .markdown-text img {

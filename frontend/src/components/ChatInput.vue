@@ -14,10 +14,10 @@
                 @blur="handleBlur"></textarea>
 
             <!-- 隐藏的文件输入框 -->
-            <input type="file" ref="fileInputRef" style="display: none" multiple :accept="textFileExtensions.join(',')"
-                @change="handleFileSelect">
+            <input type="file" ref="fileInputRef" style="display: none" multiple
+                :accept="getFileExtensionsFromType('TEXT').join(',')" @change="handleFileSelect">
             <input type="file" ref="imageInputRef" style="display: none" multiple
-                :accept="imageFileExtensions.join(',')" @change="handleImageSelect">
+                :accept="getFileExtensionsFromType('IMAGE').join(',')" @change="handleImageSelect">
             <div class="input-actions w-full flex justify-between">
                 <div class="tools left-tools">
                     <template v-if="showButtons.thinkingButton">
@@ -94,52 +94,60 @@
     </div>
 </template>
 
+
 <script setup>
-import { ref, watch, computed, nextTick, defineEmits, onUnmounted } from 'vue'
+import { ref, watch, computed, nextTick, defineEmits, onUnmounted, onMounted } from 'vue'
 import { NButton, NIcon } from 'naive-ui'
 import FileItem from './FileItem.vue';
-
-// 导入 xicons 图标
 import {
     InsertDriveFileTwotone,
     ImageTwotone,
     DataThresholdingTwotone,
 } from "@vicons/material";
-
 import { Thinking2, Network, ArrowSend, Stop } from "@/components/icons";
 import { reactive } from 'vue';
 import { usePopup } from '@/composables/usePopup';
 
 const { confirm } = usePopup();
 
+// 响应式数据
 const isInputExpanded = ref(false);
 const messageInputRef = ref(null);
 const fileInputRef = ref(null);
 const imageInputRef = ref(null);
-const textFileExtensions = [
-    '.txt', '.md', '.js', '.ts', '.html', '.css',
-    '.json', '.xml', '.csv', '.log', '.py', '.java',
-    '.cpp', '.c', '.go', '.rs', '.php', '.rb', '.sql',
-    '.sh', '.bat', '.yml', '.yaml', '.ini', '.conf',
-    '.properties', '.vue',
-
-    '.toml', '.env', '.cfg', '.config', '.reg', '.pem',
-    '.tex', '.rst', '.adoc', '.org',
-    '.swift', '.kt', '.scala', '.dart', '.ex', '.r', '.jl',
-    '.ps1', '.vbs', '.fish',
-    '.j2', '.ejs', '.hbs',
-    '.lock', '.patch', '.diff',
-    '.ics', '.vcf', '.srt',
-    '.proto', '.graphql', '.sol'
-];
-
-const imageFileExtensions = [
-    '.jpg', '.jpeg', '.png', '.gif', '.bmp', '.svg', '.webp', '.ico',
-    '.tif', '.tiff', '.psd', '.ai', '.eps',
-]
-
 let fileIdCounter = 0;
 
+// 常量定义
+const FILE_TYPES = {
+    TEXT: {
+        extensions: [
+            '.txt', '.md', '.js', '.ts', '.html', '.css', '.json', '.xml', '.csv', '.log',
+            '.py', '.java', '.cpp', '.c', '.go', '.rs', '.php', '.rb', '.sql', '.sh',
+            '.bat', '.yml', '.yaml', '.ini', '.conf', '.properties', '.vue', '.toml',
+            '.env', '.cfg', '.config', '.reg', '.pem', '.tex', '.rst', '.adoc', '.org',
+            '.swift', '.kt', '.scala', '.dart', '.ex', '.r', '.jl', '.ps1', '.vbs', '.fish',
+            '.j2', '.ejs', '.hbs', '.lock', '.patch', '.diff', '.ics', '.vcf', '.srt',
+            '.proto', '.graphql', '.sol'
+        ],
+        type: 'text'
+    },
+    IMAGE: {
+        extensions: [
+            '.jpg', '.jpeg', '.png', '.gif', '.bmp', '.svg', '.webp', '.ico',
+            '.tif', '.tiff', '.psd', '.ai', '.eps'
+        ],
+        type: 'image'
+    }
+};
+
+const MIME_TO_EXT = {
+    'image/jpeg': 'jpg', 'image/png': 'png', 'image/gif': 'gif', 'image/bmp': 'bmp',
+    'image/svg+xml': 'svg', 'image/webp': 'webp', 'text/plain': 'txt', 'text/html': 'html',
+    'text/css': 'css', 'application/javascript': 'js', 'application/json': 'json',
+    'text/csv': 'csv', 'application/xml': 'xml'
+};
+
+// 配置
 const showButtons = reactive({
     thinkingButton: false,
     webSearchButton: true,
@@ -148,144 +156,193 @@ const showButtons = reactive({
     tokensButton: true,
 });
 
+const props = defineProps({
+    value: { type: String, default: '' },
+    files: { type: Array, default: () => [] },
+    streaming: { type: Boolean, default: false },
+    webSearchEnabled: { type: Boolean, default: false },
+    thinkingEnabled: { type: Boolean, default: false },
+    shadow: { type: Boolean, default: true },
+    buttons: { type: Object, default: () => [] },
+    clean: { type: Boolean, default: false },
+    border: { type: Boolean, default: true },
+    round: { type: Boolean, default: true },
+    class: { type: String, default: '' },
+});
+
+// 计算属性
 const styleClass = computed(() => {
     const classes = [];
-    if (isInputExpanded) {
+    if (isInputExpanded.value) {
         classes.push('expanded');
     }
     if (!props.clean) {
-        if (props.shadow) {
-            classes.push('shadow-[0_2px_16px_rgba(0,0,0,0.1)]');
-        }
-        if (props.border) {
-            classes.push('border border-[rgb(230,232,238)]');
-        }
-        if (props.round) {
-            classes.push('rounded-[22px]');
-        }
+        if (props.shadow) classes.push('shadow-[0_2px_16px_rgba(0,0,0,0.1)]');
+        if (props.border) classes.push('border border-[rgb(230,232,238)]');
+        if (props.round) classes.push('rounded-[22px]');
     }
     return classes.join(' ') + ' ' + props.class;
 });
 
-const props = defineProps({
-    value: {
-        type: String,
-        default: ''
-    },
-    files: {
-        type: Array,
-        default: () => []
-    },
-    streaming: {
-        type: Boolean,
-        default: false
-    },
-    webSearchEnabled: {
-        type: Boolean,
-        default: false
-    },
-    thinkingEnabled: {
-        type: Boolean,
-        default: false
-    },
-    shadow: {
-        type: Boolean,
-        default: true
-    },
-    buttons: {
-        type: Object,
-        default: () => []
-    },
-    clean: {
-        type: Boolean,
-        default: false
-    },
-    border: {
-        type: Boolean,
-        default: true
-    },
-    round: {
-        type: Boolean,
-        default: true
-    },
-
-    class: {
-        type: String,
-        default: ''
-    },
-
-})
-
-watch(() => props.buttons, (value) => {
-    Object.keys(showButtons).forEach(key => {
-        if (key in value) {
-            showButtons[key] = value[key] || false;
-        } else {
-            showButtons[key] = true;
-        }
-    });
-}, { immediate: true })
-
-// 监听外部传入的 files 变化
-watch(() => props.files, (newFiles, oldFiles) => {
-    // 释放被移除的图片的 blob URL
-    if (oldFiles && oldFiles.length > 0) {
-        oldFiles.forEach(oldFile => {
-            // 检查这个文件是否还在新数组中
-            const stillExists = newFiles.some(newFile => newFile.id === oldFile.id);
-            if (!stillExists) {
-                revokeImagePreviewUrl(oldFile);
-            }
-        });
-    }
-}, { deep: true });
-
 const localWebSearchEnabled = computed({
-    get() {
-        return props.webSearchEnabled;
-    },
-    set(value) {
-        emit('update:webSearchEnabled', value)
-    }
-})
+    get: () => props.webSearchEnabled,
+    set: (value) => emit('update:webSearchEnabled', value)
+});
 
 const localThinkingEnabled = computed({
-    get() {
-        return props.thinkingEnabled;
-    },
-    set(value) {
-        emit('update:thinkingEnabled', value)
-    }
-})
+    get: () => props.thinkingEnabled,
+    set: (value) => emit('update:thinkingEnabled', value)
+});
 
-const emit = defineEmits(['update:value', 'update:webSearchEnabled', 'update:thinkingEnabled', 'send', 'abort', 'tokens-statistic', 'files-change', 'toggle-web-search', 'toggle-thinking', 'focus', 'blur'])
-
-const inputContent = computed(
-    {
-        get() {
-            return props.value;
-        },
-        set(value) {
-            emit('update:value', value)
-        }
-    }
-)
+const inputContent = computed({
+    get: () => props.value,
+    set: (value) => emit('update:value', value)
+});
 
 const uploadFiles = computed({
-    get() {
-        return props.files;
-    },
-    set(value) {
-        emit('update:files', value)
+    get: () => props.files,
+    set: (value) => emit('update:files', value)
+});
+
+const emit = defineEmits([
+    'update:value', 'update:webSearchEnabled', 'update:thinkingEnabled',
+    'send', 'abort', 'tokens-statistic', 'files-change',
+    'toggle-web-search', 'toggle-thinking', 'focus', 'blur'
+]);
+
+// 工具函数
+const getFileExtension = (fileName) => {
+    const lastDotIndex = fileName.lastIndexOf('.');
+    return lastDotIndex > 0 ? fileName.substring(lastDotIndex + 1).toUpperCase() : 'FILE';
+};
+
+const getFileNameWithoutExtension = (fileName) => {
+    const lastDotIndex = fileName.lastIndexOf('.');
+    return lastDotIndex > 0 ? fileName.substring(0, lastDotIndex) : fileName;
+};
+
+const getFileExtensionFromType = (mimeType) => {
+    return MIME_TO_EXT[mimeType] || mimeType.split('/')[1] || 'file';
+};
+
+const isFileType = (file, fileType) => {
+    const fileName = file.name.toLowerCase();
+    return FILE_TYPES[fileType].extensions.some(ext => fileName.endsWith(ext));
+};
+
+const getFileExtensionsFromType = (type) => {
+    return FILE_TYPES[type].extensions;
+}
+
+const createFileObject = (file, fileType, isPasted = false) => {
+    const isImage = fileType === 'IMAGE';
+    const previewUrl = isImage ? URL.createObjectURL(file) : '';
+    const timestamp = Date.now();
+
+    return {
+        id: fileIdCounter++,
+        file_name: file.name || `pasted-${fileType.toLowerCase()}-${timestamp}.${getFileExtensionFromType(file.type)}`,
+        file_size: file.size,
+        file_extension: isPasted ? getFileExtensionFromType(file.type) : getFileExtension(file.name),
+        file_type: FILE_TYPES[fileType].type,
+        display_name: file.name ? getFileNameWithoutExtension(file.name) : `pasted-${fileType.toLowerCase()}-${timestamp}`,
+        file: file,
+        preview_url: previewUrl,
+    };
+};
+
+const revokeImagePreviewUrl = (file) => {
+    if (file?.file_type === 'image' && file.preview_url?.startsWith('blob:')) {
+        URL.revokeObjectURL(file.preview_url);
+        file.previewUrl = null;
     }
-})
+};
+
+// 文件处理函数
+const checkFileConflict = async (newFileType) => {
+    const currentFileType = uploadFiles.value[0]?.file_type;
+    const conflictType = newFileType === 'image' ? '文件' : '图片';
+
+    if (currentFileType && currentFileType !== newFileType) {
+        const confirmed = await confirm(`覆盖${conflictType}`, `暂不支持同时上传图片和文件，是否要覆盖全部${conflictType}？`);
+        if (!confirmed) return false;
+
+        uploadFiles.value.forEach(revokeImagePreviewUrl);
+        uploadFiles.value = [];
+    }
+    return true;
+};
+
+const processFiles = async (files, fileType) => {
+    if (files.length === 0) return;
+
+    const normalizedFileType = fileType.toUpperCase();
+    if (!(await checkFileConflict(FILE_TYPES[normalizedFileType].type))) return;
+
+    for (const file of files) {
+        if (isFileType(file, normalizedFileType)) {
+            uploadFiles.value.push(createFileObject(file, normalizedFileType));
+        }
+    }
+};
+
+// 事件处理函数
+const handleFileSelect = (event) => {
+    processFiles(Array.from(event.target.files), 'TEXT');
+    event.target.value = '';
+};
+
+const handleImageSelect = (event) => {
+    processFiles(Array.from(event.target.files), 'IMAGE');
+    event.target.value = '';
+};
+
+const handlePaste = async (event) => {
+    if (!event.clipboardData?.items) return;
+
+    const items = event.clipboardData.items;
+    const files = [];
+
+    for (let i = 0; i < items.length; i++) {
+        if (items[i].kind === 'file') {
+            const file = items[i].getAsFile();
+            if (file) files.push(file);
+        }
+    }
+
+    if (files.length > 0) {
+        event.preventDefault();
+
+        // 优先处理图片文件
+        const imageFiles = files.filter(file => isFileType(file, 'IMAGE'));
+        const textFiles = files.filter(file => isFileType(file, 'TEXT'));
+
+        if (imageFiles.length > 0) {
+            await processFiles(imageFiles, 'IMAGE');
+        } else if (textFiles.length > 0) {
+            await processFiles(textFiles, 'TEXT');
+        }
+    }
+};
+
+const removeFile = (fileId) => {
+    const index = uploadFiles.value.findIndex(file => file.id === fileId);
+    if (index !== -1) {
+        revokeImagePreviewUrl(uploadFiles.value[index]);
+        uploadFiles.value.splice(index, 1);
+    }
+};
+
+// UI 交互函数
+const triggerFileInput = () => fileInputRef.value.click();
+const triggerImageInput = () => imageInputRef.value.click();
 
 const sendMessage = () => {
     emit('send', {
         text: inputContent.value,
         files: uploadFiles.value
-    })
-}
+    });
+};
 
 const handleKeydown = (e) => {
     if (e.key === 'Enter' && !e.shiftKey) {
@@ -294,140 +351,15 @@ const handleKeydown = (e) => {
     }
 };
 
-// 触发文件选择
-const triggerFileInput = async () => {
-    // 检测是否已经选择图片文件
-    if (uploadFiles.value.some(file => file.file_type === 'image')) {
-        if (!await confirm('覆盖图片', '暂不支持同时上传图片和文件，是否要覆盖全部图片？')) {
-            return;
-        }
-        uploadFiles.value.forEach(file => {
-            revokeImagePreviewUrl(file);
-        })
-        uploadFiles.value = [];
-    }
-    fileInputRef.value.click();
+const adjustTextareaHeight = () => {
+    const textarea = messageInputRef.value;
+    if (!textarea) return;
+
+    textarea.style.height = "auto";
+    const height = Math.min(textarea.scrollHeight, 240);
+    textarea.style.height = height + "px";
+    isInputExpanded.value = textarea.scrollHeight > 60;
 };
-
-const triggerImageInput = async () => {
-    if (uploadFiles.value.some(file => file.file_type !== 'image')) {
-        if (!await confirm('覆盖文件', '暂不支持同时上传图片和文件，是否要覆盖全部文件？')) {
-            return;
-        }
-        uploadFiles.value = [];
-    }
-    imageInputRef.value.click();
-};
-
-// 处理文件选择
-const handleFileSelect = (event) => {
-    const files = event.target.files;
-    if (files.length > 0) {
-        for (let i = 0; i < files.length; i++) {
-            const file = files[i];
-            // 检查文件类型是否为文本类型
-            if (isTextFile(file)) {
-                console.log('file', file);
-                uploadFiles.value.push({
-                    id: fileIdCounter++,
-                    file_name: file.name,
-                    file_size: file.size,
-                    file_extension: getFileExtension(file.name),
-                    file_type: 'text',
-                    display_name: getFileNameWithoutExtension(file.name),
-                    file: file,
-                    preview_url: ''
-                });
-            }
-        }
-        // 触发文件变化事件
-        // emit('files-change', fileList.value);
-        // 清空input值，允许重复选择同一文件
-        event.target.value = '';
-    }
-};
-
-const handleImageSelect = (event) => {
-    const files = event.target.files;
-    if (files.length > 0) {
-        for (let i = 0; i < files.length; i++) {
-            const file = files[i];
-            // 检查文件类型是否为文本类型
-            if (isImageFile(file)) {
-                const previewUrl = URL.createObjectURL(file);
-                console.log('file', file);
-                uploadFiles.value.push({
-                    id: fileIdCounter++,
-                    file_name: file.name,
-                    file_size: file.size,
-                    file_extension: getFileExtension(file.name),
-                    file_type: 'image',
-                    display_name: getFileNameWithoutExtension(file.name),
-                    file: file,
-                    preview_url: previewUrl,
-                });
-            }
-        }
-        // 触发文件变化事件
-        // emit('files-change', fileList.value);
-        // 清空input值，允许重复选择同一文件
-        event.target.value = '';
-    }
-};
-
-// 检查是否为文本文件
-const isTextFile = (file) => {
-    const textExtensions = textFileExtensions;
-    const fileName = file.name.toLowerCase();
-    return textExtensions.some(ext => fileName.endsWith(ext));
-};
-
-const isImageFile = (file) => {
-    const imageExtensions = imageFileExtensions;
-    const fileName = file.name.toLowerCase();
-    return imageExtensions.some(ext => fileName.endsWith(ext));
-}
-
-// 移除文件
-const removeFile = (fileId) => {
-    const index = uploadFiles.value.findIndex(file => file.id === fileId);
-    if (index !== -1) {
-        const file = uploadFiles.value[index];
-        // 如果是图片文件，释放预览URL
-        revokeImagePreviewUrl(file.preview_url);
-        uploadFiles.value.splice(index, 1);
-    }
-};
-
-const revokeImagePreviewUrl = (file) => {
-    if (file && file.file_type === 'image' && file.preview_url) {
-        // 只释放 blob URL，不释放普通 HTTP URL
-        if (file.preview_url.startsWith('blob:')) {
-            URL.revokeObjectURL(file.preview_url);
-            file.preview_url = '';
-        }
-    }
-}
-
-// 获取不包含扩展名的文件名
-const getFileNameWithoutExtension = (fileName) => {
-    const lastDotIndex = fileName.lastIndexOf('.');
-    return lastDotIndex > 0 ? fileName.substring(0, lastDotIndex) : fileName;
-};
-
-// 获取文件扩展名
-const getFileExtension = (fileName) => {
-    const lastDotIndex = fileName.lastIndexOf('.');
-    return lastDotIndex > 0 ? fileName.substring(lastDotIndex + 1).toUpperCase() : 'FILE';
-};
-
-
-// 组件卸载时释放所有 blob URL
-onUnmounted(() => {
-    uploadFiles.value.forEach(file => {
-        revokeImagePreviewUrl(file);
-    });
-});
 
 const handleWebSearch = () => {
     localWebSearchEnabled.value = !localWebSearchEnabled.value;
@@ -454,30 +386,36 @@ const handleFocus = () => {
 const handleBlur = () => {
     emit('blur');
 };
-// 调整文本区域高度
-const adjustTextareaHeight = () => {
-    const textarea = messageInputRef.value;
-    if (!textarea) return;
 
-    // 重置高度为auto以获取正确的内容高度
-    textarea.style.height = "auto";
-    // 计算内容高度
-    const height = Math.min(textarea.scrollHeight, 240); // 限制最大高度为120px
-    // 设置新高度
-    textarea.style.height = height + "px";
-
-    // 根据高度决定是否展开输入区域
-    isInputExpanded.value = textarea.scrollHeight > 60;
-};
-
-watch(inputContent, (newVal) => {
-    nextTick(() => {
-        adjustTextareaHeight();
+// 生命周期和监听器
+watch(() => props.buttons, (value) => {
+    Object.keys(showButtons).forEach(key => {
+        showButtons[key] = key in value ? value[key] : true;
     });
-}, { immediate: true })
+}, { immediate: true });
 
+watch(() => props.files, (newFiles, oldFiles) => {
+    oldFiles?.forEach(oldFile => {
+        if (!newFiles.some(newFile => newFile.id === oldFile.id)) {
+            revokeImagePreviewUrl(oldFile);
+        }
+    });
+}, { deep: true });
+
+watch(inputContent, () => {
+    nextTick(adjustTextareaHeight);
+}, { immediate: true });
+
+onMounted(() => {
+    document.addEventListener('paste', handlePaste);
+    adjustTextareaHeight();
+});
+
+onUnmounted(() => {
+    document.removeEventListener('paste', handlePaste);
+    uploadFiles.value.forEach(revokeImagePreviewUrl);
+});
 </script>
-
 <style scoped>
 .message-input {
     width: 100%;

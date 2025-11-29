@@ -51,9 +51,9 @@ const scrollElement = computed(() => getSimpleBarInstance()?.getScrollElement())
 const contentWrapper = computed(() => getSimpleBarInstance()?.getContentElement());
 
 // 防抖函数
-const debouncedScrollStateChange = useDebounceFn((state) => {
-    emit('scroll-state-change', state);
-}, 150);
+// const debouncedScrollStateChange = useDebounceFn((state) => {
+//     emit('scroll-state-change', state);
+// }, 150);
 
 // 方法
 function getSimpleBarInstance() {
@@ -65,6 +65,7 @@ function checkIsAtBottom() {
     if (!element) return true;
 
     const distanceToBottom = element.scrollHeight - element.scrollTop - element.clientHeight;
+    // console.log('distanceToBottom', distanceToBottom);
     return distanceToBottom <= props.scrollThreshold;
 }
 
@@ -72,9 +73,9 @@ function handleScroll(event) {
     const wasAtBottom = isAtBottom.value;
     isAtBottom.value = checkIsAtBottom();
 
-    if (wasAtBottom !== isAtBottom.value) {
-        debouncedScrollStateChange(isAtBottom.value);
-    }
+    // if (wasAtBottom !== isAtBottom.value) {
+    //     debouncedScrollStateChange(isAtBottom.value);
+    // }
 
     emit('scroll', event);
 }
@@ -83,6 +84,7 @@ function immediateScrollToBottom() {
     const element = scrollElement.value;
     if (element) {
         element.scrollTop = element.scrollHeight;
+        isAtBottom.value = true;
     }
 }
 
@@ -120,12 +122,13 @@ function initScrollObserver() {
         const hasContentChange = mutations.some(mutation =>
             mutation.type === 'childList' && mutation.addedNodes.length > 0
         );
+        // console.log('hasContentChange', hasContentChange);
         if (hasContentChange && props.autoScroll && isAtBottom.value) {
             requestAnimationFrame(() => {
                 immediateScrollToBottom();
             });
-
         }
+        // isAtBottom.value = checkIsAtBottom();
     });
 
     scrollObserver.value.observe(wrapper, {
