@@ -23,10 +23,12 @@
     --assitant-bubble-text-color: #1F2937;
     --assitant-bubble-border-color: none;
     /* 聊天对话样式 */
-    --conversation-bg: #E9EBF2;
+    /* --conversation-bg: #E9EBF2; */
+    --conversation-bg: #f1f5f9;
     /* #E9EBF2;*/
     --conversation-text-color: #333;
-    --conversation-border-color: #efefef;
+    /* --conversation-border-color: #efefef; */
+    --conversation-border-color: transparent;
     --conversation-border-radius: 10px;
     --conversation-padding: 15px;
     --conversation-font-size: 16px;
