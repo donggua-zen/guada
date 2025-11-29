@@ -177,7 +177,8 @@ const styleClass = computed(() => {
         classes.push('expanded');
     }
     if (!props.clean) {
-        if (props.shadow) classes.push('shadow-[0_2px_16px_rgba(0,0,0,0.1)]');
+        // if (props.shadow) classes.push('shadow-[0_2px_16px_rgba(0,0,0,0.1)]');
+        if (props.shadow) classes.push('shadow-[0_6px_30px_0_rgba(0,0,0,.08)]');
         if (props.border) classes.push('border border-[rgb(230,232,238)]');
         if (props.round) classes.push('rounded-[22px]');
     }
