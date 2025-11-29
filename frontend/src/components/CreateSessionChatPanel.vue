@@ -12,16 +12,7 @@
         </n-button>
         <span class="ml-4"></span>
       </template>
-      <span class="hidden md:block">{{ chatTitle }}</span>
-      <n-divider vertical />
-      <n-button tertiary round size="small" icon-placement="left" @click="handleSwitchModelClick">
-        {{ currentModelName }}
-        <template #icon>
-          <n-icon size="18">
-            <SettingsTwotone />
-          </n-icon>
-        </template>
-      </n-button>
+      <span class="hidden md:block">{{ title }}</span>
     </div>
 
 
@@ -44,7 +35,7 @@
         </n-popselect>
       </div>
       <div class="w-full  max-w-[900px]">
-        <ChatInput class="border border-gray-400" v-model:value="inputMessage.text"
+        <ChatInput class="border" :class="{ 'border-gray-400': !inputHasShadow }" v-model:value="inputMessage.text"
           v-model:web-search-enabled="webSearchEnabled" v-model:thinking-enabled="thinkingEnabled"
           :buttons="chatInputButtons" :files="inputMessage.files" :streaming="false" @send="sendMessage"
           @toggle-web-search="handleWebSearch" @toggle-thinking="toggleDeepThinking" :shadow="inputHasShadow"
@@ -62,10 +53,10 @@
 
 <script setup>
 import { ref, computed, watch, onMounted, onBeforeUpdate, nextTick } from "vue";
-import { store } from "../store/store";
+import { useStorage } from "@vueuse/core"
 import { apiService } from "../services/ApiService";
 import { usePopup } from "@/composables/usePopup";
-
+import { useTitle } from "../composables/useTitle";
 // 组件导入
 import ChatInput from "./ChatInput.vue";
 
@@ -84,7 +75,7 @@ import { NButton, NIcon, NDivider, NPopselect } from "naive-ui";
 const { notify } = usePopup();
 
 // 响应式数据
-const currentSessionId = ref(null);
+const title = useTitle();
 const itemRefs = ref({});
 
 // 模型数据
@@ -94,6 +85,8 @@ const providers = ref([]);
 const inputHasShadow = ref(false);
 const innerEl = ref(null)
 const containerWidth = ref(100) // 初始宽度
+
+const lastSelectedModelId = useStorage('lastSelectedModelId', '');
 
 const inputMessage = ref({
   text: "",
@@ -137,6 +130,8 @@ const updateContainerWidth = () => {
 
 // 监听模型名称变化
 watch(currentModelName, async () => {
+  if (currentModel.value)
+    lastSelectedModelId.value = currentModel.value.id
   await nextTick() // 等待DOM更新
   updateContainerWidth()
 }, { immediate: true })
@@ -192,9 +187,6 @@ const emit = defineEmits([
 ]);
 
 
-const chatTitle = ""
-
-
 const webSearchEnabled = computed({
   get() {
     return currentSession.value.settings?.web_search_enabled;
@@ -238,7 +230,14 @@ const loadModels = async () => {
     models.value = response.models || []
     providers.value = response.providers || []
     if (models.value.length > 0) {
+      if (lastSelectedModelId.value) {
+        if (models.value.find(model => model.id === lastSelectedModelId.value)) {
+          currentSession.value.model_id = lastSelectedModelId.value;
+          return;
+        }
+      }
       currentSession.value.model_id = models.value[0].id
+      lastSelectedModelId.value = currentSession.value.model_id
     }
   } catch (error) {
     console.error('获取模型列表失败:', error)
@@ -254,14 +253,10 @@ onBeforeUpdate(() => {
 });
 
 onMounted(() => {
+  title.value = "你今天想聊点什么";
   // 初始化相关逻辑
   loadModels();
 });
-
-// 消息发送处理
-const handleSwitchModelClick = (modelId) => {
-  emit("openSwitchModel", modelId);
-};
 
 const autoTitle = () => {
   if (inputMessage.value.text && inputMessage.value.text.length > 0) {
