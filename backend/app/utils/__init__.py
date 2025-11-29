@@ -59,7 +59,9 @@ def convert_image_to_jpeg(file, file_path, size=None):
     image.save(file_path, "JPEG", quality=95)
 
 
-def resize_and_convert_image(file, output_path, width=None, height=None):
+def resize_and_convert_image(
+    file, output_path, width=None, height=None, force_scale=True
+):
     """
     调整图片尺寸并转换为JPEG格式保存
 
@@ -101,7 +103,12 @@ def resize_and_convert_image(file, output_path, width=None, height=None):
     if width is None and height is None:
         # 情况1: 不调整尺寸，保持原样
         pass
-
+    elif (
+        not force_scale
+        and (width is None or width > original_width)
+        and (height is None or height > original_height)
+    ):
+        pass
     elif width is not None and height is None:
         # 情况2: 只提供宽度，高度按比例计算
         ratio = width / original_width
