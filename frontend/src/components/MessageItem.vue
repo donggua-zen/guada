@@ -8,7 +8,7 @@
 
     <div class="message-content">
       <div class="message-card">
-        <div v-if="showThinking" class="thinking-section" :class="{ 'thinking-expanded': isExpanded }">
+        <div v-if="hasThinking" class="thinking-section" :class="{ 'thinking-expanded': isExpanded }">
           <div
             class="inline-flex justify-between items-center text-sm text-gray-700 cursor-pointer font-medium py-1 transition-colors duration-200 mb-1"
             @click="toggleExpand">
@@ -34,16 +34,11 @@
         <n-alert v-if="metadata && metadata.finish_reason == 'error'" title="API请求错误" type="error">
           {{ metadata.error }}
         </n-alert>
-        <div v-if="message.is_streaming" class="assistant-loading flex items-center text-gray-500">
+        <div v-if="state.is_streaming" class="assistant-loading flex items-center text-gray-500">
           <n-icon size="16" class="mr-2 relative top-[1px]">
             <Loading />
           </n-icon>
-          <template v-if="isWebSearching">
-            搜索中...
-          </template>
-          <template v-else>
-            回答中...
-          </template>
+          {{ state.is_web_searching ? '搜索中...' : '回答中...' }}
         </div>
         <div v-else-if="isAssistant" class="text-xs text-gray-400 mt-2">
           <div class="flex items-center">
@@ -68,7 +63,7 @@
           :ext="file.file_extension" :size="file.file_size" :preview-url="file.preview_url"
           :clickable="file.file_type === 'image'" @click="handleImageClick(index)"></fileItem>
       </div>
-      <div class="message-actions flex gap-0 text-sm w-full mt-3 text-gray-400 items-center"
+      <div class="message-actions flex gap-0 text-sm w-full mt-3 text-gray-400 items-center" v-if="!state.is_streaming"
         :class="[isAssistant ? 'justify-start' : 'justify-start', message.is_streaming ? 'opacity-0' : 'opacity-100']">
         <!-- 保留的按钮：generate, regenerate, copy -->
         <template v-if="!isAssistant && props.allowGenerate">
@@ -193,8 +188,6 @@ marked.use({ renderer, breaks: true });
 const showImageViewer = ref(false);
 const currentPreViewIndex = ref(0);
 const isExpanded = ref(false);
-const isThinking = ref(false);
-const isWebSearching = ref(false);
 
 const previewList = computed(() => {
   const files = props.message.files || [];
@@ -209,13 +202,28 @@ const avatarClass = computed(() =>
   isAssistant.value ? "assistant-avatar" : "user-avatar"
 );
 
-const showThinking = computed(
+const hasThinking = computed(
   () => isAssistant.value && getCurrentContent(props.message.contents).reasoning_content
 );
 
 const metadata = computed(() => {
   const content = getCurrentContent(props.message.contents);
   return content.meta_data;
+});
+
+const state = computed(() => {
+  if (isAssistant.value) {
+    return props.message.state || {
+      is_streaming: false,
+      is_thinking: false,
+      is_web_searching: false,
+    }
+  }
+  return {
+    is_streaming: false,
+    is_thinking: false,
+    is_web_searching: false,
+  }
 });
 
 const currentModelName = computed(() => {
@@ -232,7 +240,9 @@ const currentContentTime = computed(() => {
     : ""
 })
 
-const thinkingLabel = ref("已深度思考");
+const thinkingLabel = computed(() => {
+  return state.value.is_thinking ? "思考中..." : "已深度思考"
+});
 
 // 计算是否有上一个/下一个内容
 const hasPrevContent = computed(() => {
@@ -372,24 +382,12 @@ const switchContent = (direction) => {
   emit('switch', props.message, contents[newIndex]);
 };
 
-const startThinking = () => {
-  isThinking.value = true;
+const showThinking = () => {
   isExpanded.value = true;
-  thinkingLabel.value = "正在思考...";
 };
 
-const stopThinking = () => {
-  isThinking.value = false;
+const hideThinking = () => {
   isExpanded.value = false;
-  thinkingLabel.value = "已深度思考";
-};
-
-const startWebSearch = () => {
-  isWebSearching.value = true;
-};
-
-const stopWebSearch = () => {
-  isWebSearching.value = false;
 };
 
 const handleImageClick = (index) => {
@@ -433,7 +431,7 @@ onMounted(() => {
 onUnmounted(() => {
 });
 
-defineExpose({ startThinking, stopThinking, switchContent, startWebSearch, stopWebSearch });
+defineExpose({ showThinking, hideThinking, switchContent, });
 </script>
 
 <script>
@@ -461,7 +459,6 @@ export default {
 
 /* 新增卡片式设计 */
 .message-card {
-  line-height: 1.5;
   font-size: 16px;
   letter-spacing: 1px;
   transition: all 0.3s ease;
@@ -469,11 +466,11 @@ export default {
 
 /* 用户消息气泡特定样式 */
 .user-message-container .message-card {
-  margin-left: auto;
+  /* margin-left: auto; */
   background-color: var(--user-bubble-bg);
   color: var(--user-bubble-text-color);
   padding: 5px 12px;
-  border-radius: 12px;
+  border-radius: 16px;
   border: 1px solid var(--user-bubble-border-color);
 }
 
@@ -516,7 +513,7 @@ export default {
 
 /* 消息文本格式化 */
 .message-text {
-  line-height: 1.8;
+  line-height: 1.7;
   color: inherit;
   font-size: 16px;
   max-width: 100%;
@@ -554,7 +551,6 @@ export default {
   margin-top: 1.2em;
   margin-bottom: 0.8em;
   font-weight: 600;
-  line-height: 1.5;
   font-size: 16px;
   color: inherit;
 }
@@ -583,7 +579,7 @@ export default {
 
 .markdown-text ol {
   list-style: decimal;
-  padding-left: 20px;
+  padding-left: 30px;
 }
 
 .markdown-text ul {
@@ -593,7 +589,7 @@ export default {
 
 .markdown-text ul li {
   position: relative;
-  padding-left: 16px;
+  padding-left: 14px;
 }
 
 .markdown-text ul li::before {
@@ -601,9 +597,9 @@ export default {
   position: absolute;
   left: 2px;
   top: 0.7em;
-  width: 5px;
-  height: 5px;
-  background-color: #444;
+  width: 4px;
+  height: 4px;
+  background-color: #555;
   border-radius: 50%;
 }
 
@@ -632,9 +628,37 @@ export default {
 }
 
 .markdown-text blockquote {
-  border-left: 4px solid #dfe2e5;
-  margin: 0 0 1em;
-  padding-left: 1em;
+  font-size: 1em;
+  font-style: normal;
+  padding: 30px 30px;
+  margin: 0 0 15px;
+  position: relative;
+  text-indent: 0;
+  border: none;
+}
+
+.markdown-text blockquote:before {
+  content: "“";
+  left: 0px;
+  top: 0;
+  color: #E0E0E0;
+  font-size: 4em;
+  font-family: Arial, serif;
+  line-height: 1em;
+  font-weight: 700;
+  position: absolute;
+}
+
+.markdown-text blockquote:after {
+  content: "”";
+  right: 0px;
+  color: #E0E0E0;
+  font-size: 4em;
+  font-family: Arial, serif;
+  line-height: 1em;
+  font-weight: 700;
+  position: absolute;
+  bottom: -31px;
 }
 
 /* 表格样式优化 - 添加滚动条支持 */

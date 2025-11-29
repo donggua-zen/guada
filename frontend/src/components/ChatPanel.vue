@@ -518,9 +518,8 @@ async function handleStreamResponse(
 
   try {
     let responseContent = "";
-    let isThinking = false;
     let thinkingContent = "";
-
+    let itemRef = null;
     // const chatSouce = USE_DUMMY_CHAT ? dummy_chat : apiService.chat;
 
     for await (const response of apiService.chat(
@@ -542,26 +541,26 @@ async function handleStreamResponse(
 
       if (response.type == "web_search") {
         if (response.msg == "start") {
-          itemRefs.value[message.id]?.startWebSearch();
+          message.state.is_web_searching = true;
         } else {
-          itemRefs.value[message.id]?.stopWebSearch();
+          message.state.is_web_searching = false;
         }
         continue;
       }
 
       if (response.type == "think") {
-        if (!isThinking) {
-          isThinking = true;
-          itemRefs.value[message.id]?.startThinking();
+        if (!message?.state.is_thinking) {
+          message.state.is_thinking = true;
+          itemRefs.value[message.id].showThinking();
         }
         thinkingContent = handleThinkingContent(response, message, contentIndex, thinkingContent);
         continue;
       }
 
       if (response.type == "text") {
-        if (isThinking) {
-          isThinking = false;
-          itemRefs.value[message.id]?.stopThinking();
+        if (message?.state.is_thinking) {
+          message.state.is_thinking = false;
+          itemRefs.value[message.id].hideThinking();
         }
         responseContent = handleContentResponse(response, message, contentIndex, responseContent);
         continue;
@@ -592,7 +591,11 @@ function handleNewMessage(response, sessionId, userMessageId) {
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString()
     });
-    existingMessage.is_streaming = true;
+    existingMessage.state = {
+      is_web_searching: false,
+      is_thinking: false,
+      is_streaming: true
+    };
     return {
       message: existingMessage,
       contentIndex: existingMessage.contents.length - 1
@@ -613,7 +616,11 @@ function handleNewMessage(response, sessionId, userMessageId) {
         }
       ],
       parent_id: userMessageId,
-      is_streaming: true,
+      state: {
+        is_web_searching: false,
+        is_thinking: false,
+        is_streaming: true
+      },
       created_at: new Date().toISOString()
     });
     store.addMessage(sessionId, newMessage);
@@ -667,9 +674,11 @@ function handleStreamCatchError(error, message, contentIndex, assistantMessageId
 function cleanupStreaming(sessionId, message, contentIndex) {
   store.setSessionIsStreaming(sessionId, false);
   if (message) {
-    message.is_streaming = false;
+    message.state.is_streaming = false;
+    message.state.is_thinking = false;
+    message.state.is_web_searching = false;
     message.contents[contentIndex].updated_at = new Date().toISOString();
-    itemRefs.value[message.id]?.stopThinking();
+    itemRefs.value[message.id]?.hideThinking();
   }
 }
 
