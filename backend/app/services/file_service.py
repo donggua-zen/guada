@@ -92,9 +92,13 @@ class FileService:
         file_path = os.path.join(upload_folder, unique_filename)
         preview_file_path = os.path.join(preview_folder, unique_filename)
         # 上传图
-        resize_and_convert_image(file, file_path, 512, 512)
+        resize_and_convert_image(
+            file, file_path, width=512, height=None, force_scale=False
+        )
         # 预览图
-        resize_and_convert_image(file, preview_file_path, 512, 512)
+        resize_and_convert_image(
+            file, preview_file_path, width=256, height=256, force_scale=False
+        )
 
         return build_url_path(web_path, unique_filename), build_url_path(
             preview_web_path, unique_filename
