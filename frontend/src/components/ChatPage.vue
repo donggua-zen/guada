@@ -115,7 +115,7 @@ const selectSession = async (session) => {
     store.setActiveSessionId(session.id);
     await fetchSession(session.id);
   } else {
-    router.replace({ name: 'Chat' });
+    router.replace({ name: 'Chat', params: { sessionId: 'new-session' } });
     store.setActiveSessionId(null);
     currentSession.value = null;
   }
@@ -128,7 +128,8 @@ const selectSession = async (session) => {
  * @param {Object} data - 包含要更新的数据的对象
  */
 const updateSessionById = async (sessionId, data) => {
-  console.log('更新对话时间:', sessionId);
+  console.log('会话更新:', sessionId);
+  // console.trace();
   const session = sessions.value.find(session => session.id === sessionId);
   if (session) {
     // 定义需要更新的字段
@@ -208,7 +209,8 @@ const updateSelectedSession = async (sessionId) => {
   }
 
   // 如果没有找到会话，选择第一个会话
-  selectSession(sortedSessions.value[0]);
+  // selectSession(sortedSessions.value[0]);
+  selectSession(null);
 };
 
 /**
@@ -247,8 +249,7 @@ const handleOpenSwitchModel = () => {
  * 显示输入对话名称的提示框，创建新会话后刷新列表并自动选择新会话
  */
 const handleCreateSession = async () => {
-  currentSession.value = null;
-  router.push({ name: 'Chat', params: { sessionId: 'new-session' } });
+  selectSession(null);
 };
 
 const handleCreateSessionWithMessage = async (session, inputMessage) => {
@@ -307,15 +308,12 @@ const handleDeleteSession = async (session) => {
     if (await confirm("确认删除", "确定要删除这个对话吗？此操作不可撤销。")) {
       await apiService.deleteSession(session.id);
       const index = sortedSessions.value.findIndex(s => s.id === session.id);
-      console.log('index', index);
       // 如果删除的是当前会话
       if (currentSession.value && currentSession.value.id === session.id) {
         if (index < sortedSessions.value.length - 1) {
-          console.log('index', index);
           // 选择下一个会话
           await selectSession(sortedSessions.value[index + 1]);
         } else if (index > 1) {
-          console.log('index', index);
           await selectSession(sortedSessions.value[index - 1]);
         } else {
           // 没有其他会话了
@@ -359,15 +357,15 @@ watch(
 );
 
 // 监听会话列表的变化，更新选中的会话
-watch(
-  () => sessions,
-  () => {
-    if (route.params.sessionId === 'new-session')
-      return;
-    updateSelectedSession(route.params.sessionId);
-  },
-  { deep: true }
-);
+// watch(
+//   () => sessions,
+//   () => {
+//     if (route.params.sessionId === 'new-session')
+//       return;
+//     updateSelectedSession(route.params.sessionId);
+//   },
+//   { deep: true }
+// );
 
 // 监听路由参数中会话ID的变化，更新选中的会话
 watch(
