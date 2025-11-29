@@ -1,7 +1,8 @@
 <template>
     <img v-if="src" :src="avatarSrc" alt="Avatar" class="avatar-image w-full h-full"
         :style="{ borderRadius: props.round ? '50%' : '0' }"></img>
-    <div v-else class="avatar-placeholder" :style="{ borderRadius: props.round ? '50%' : '0' }">
+    <div v-else class="avatar-placeholder" :style="{ borderRadius: props.round ? '50%' : '0' }"
+        :class="{ 'avatar-user': props.type === 'user' }">
         <UserOutlined v-if="props.type === 'user'" />
         <OpenAI v-else />
     </div>
@@ -36,7 +37,7 @@ const avatarSrc = computed(() => {
     }
     // 添加时间戳参数避免缓存
     // const separator = props.src.includes('?') ? '&' : '?'
-    return '/'+props.src
+    return '/' + props.src
     return props.src
 });
 
@@ -58,5 +59,15 @@ const avatarSrc = computed(() => {
     background-color: #f5f5f5;
     color: #999;
     overflow: hidden;
+}
+
+.avatar-placeholder.avatar-user {
+    background-color: #999;
+    color: #fff;
+}
+
+.avatar-placeholder svg {
+    width: 65%;
+    height: 65%;
 }
 </style>

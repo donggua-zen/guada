@@ -75,7 +75,7 @@
       </template>
       <template v-else>
         <ScrollContainer ref="scrollContainerRef" :auto-scroll="true" :smooth-scroll="!isStreaming">
-          <div class="flex flex-col items-center px-[20px]" style="max-width: 900px; margin: 0 auto">
+          <div class="flex flex-col items-center px-[20px]" style="max-width: 1000px; margin: 0 auto">
             <MessageItem v-for="(message, index) in activeMessages" :ref="(el) => setItemRef(el, message.id)"
               :key="message.id" :message="message" :avatar="currentSession.avatar_url"
               :is-last="index == activeMessages.length - 1"
@@ -89,7 +89,7 @@
 
     <!-- 输入区域 -->
     <div class="px-5 pb-2.5 w-full flex flex-col items-center">
-      <div class="w-full flex items-center max-w-[860px]">
+      <div class="w-full flex items-center max-w-[960px]">
         <ChatInput v-model:value="inputMessage.text" v-model:web-search-enabled="webSearchEnabled"
           v-model:thinking-enabled="thinkingEnabled" :buttons="chatInputButtons" :files="inputMessage.files"
           :streaming="isStreaming" @send="handleSendMessage" @abort="abortResponse" @toggle-web-search="handleWebSearch"
@@ -521,9 +521,9 @@ async function handleStreamResponse(
     let isThinking = false;
     let thinkingContent = "";
 
-    const chatSouce = USE_DUMMY_CHAT ? dummy_chat : apiService.chat;
+    // const chatSouce = USE_DUMMY_CHAT ? dummy_chat : apiService.chat;
 
-    for await (const response of chatSouce(
+    for await (const response of apiService.chat(
       streamingSessionId,
       userMessageId,
       regenerationMode,

@@ -1,18 +1,12 @@
 <template>
   <div class="message" :class="messageClass" @click="handleCopyClick">
-    <div class="hidden md:block w-[45px] h-[45px] rounded-full flex items-center justify-center shrink-0 self-start"
+    <div class="hidden md:block w-[40px] h-[40px] rounded-full flex items-center justify-center shrink-0 self-start"
       :class="avatarClass">
       <Avatar v-if="!isAssistant" src="" :round="true" type="user"></Avatar>
       <Avatar v-else :src="avatar" :round="true" type="assistant"></Avatar>
     </div>
 
     <div class="message-content">
-      <!-- 文件列表显示区域 -->
-      <div class="file-list flex flex-wrap gap-2 mb-3 ml-auto" v-if="message.files && message.files.length > 0">
-        <fileItem v-for="file in message.files" :key="file.id" :name="file.display_name" :type="file.file_type"
-          :ext="file.file_extension" :size="file.file_size" :preview-url="file.preview_url"></fileItem>
-      </div>
-
       <div class="message-card">
         <div v-if="showThinking" class="thinking-section" :class="{ 'thinking-expanded': isExpanded }">
           <div
@@ -68,9 +62,14 @@
           </div>
         </div>
       </div>
-
+      <!-- 文件列表显示区域 -->
+      <div class="file-list flex flex-wrap gap-2 mt-3" v-if="message.files && message.files.length > 0">
+        <fileItem v-for="file, index in message.files" :key="file.id" :name="file.display_name" :type="file.file_type"
+          :ext="file.file_extension" :size="file.file_size" :preview-url="file.preview_url"
+          :clickable="file.file_type === 'image'" @click="handleImageClick(index)"></fileItem>
+      </div>
       <div class="message-actions flex gap-0 text-sm w-full mt-3 text-gray-400 items-center"
-        :class="[isAssistant ? 'justify-start' : 'justify-end', message.is_streaming ? 'opacity-0' : 'opacity-100']">
+        :class="[isAssistant ? 'justify-start' : 'justify-start', message.is_streaming ? 'opacity-0' : 'opacity-100']">
         <!-- 保留的按钮：generate, regenerate, copy -->
         <template v-if="!isAssistant && props.allowGenerate">
           <div class="message-action-button" @click="handleAction('generate')">
@@ -110,6 +109,7 @@
       </div>
     </div>
   </div>
+  <n-image-group v-model:show="showImageViewer" v-model:current="currentPreViewIndex" :src-list="previewList" />
 </template>
 
 <script setup>
@@ -117,7 +117,7 @@ import { computed, ref, watch, onUnmounted, onMounted } from "vue";
 import { Marked } from "marked";
 import { markedHighlight } from 'marked-highlight'
 import hljs from 'highlight.js';
-import { NAlert, NIcon, NButton, NDropdown } from "naive-ui";
+import { NAlert, NIcon, NImageGroup, NDropdown } from "naive-ui";
 import { useDebounceFn } from "@vueuse/core";
 import Avatar from "./Avatar.vue";
 import {
@@ -190,9 +190,17 @@ const renderer = {
 // 设置自定义渲染器
 marked.use({ renderer, breaks: true });
 
+const showImageViewer = ref(false);
+const currentPreViewIndex = ref(0);
 const isExpanded = ref(false);
 const isThinking = ref(false);
 const isWebSearching = ref(false);
+
+const previewList = computed(() => {
+  const files = props.message.files || [];
+  return files.map(file => file.url || file.preview_url);
+})
+
 const isAssistant = computed(() => props.message.role === "assistant");
 const messageClass = computed(() =>
   isAssistant.value ? "assistant-message-container" : "user-message-container"
@@ -384,6 +392,11 @@ const stopWebSearch = () => {
   isWebSearching.value = false;
 };
 
+const handleImageClick = (index) => {
+  currentPreViewIndex.value = index;
+  showImageViewer.value = true;
+};
+
 const getCurrentIndex = (messageContents) => {
   if (!messageContents || messageContents.length === 0) {
     return 1;
@@ -459,7 +472,7 @@ export default {
   margin-left: auto;
   background-color: var(--user-bubble-bg);
   color: var(--user-bubble-text-color);
-  padding: 8px 12px;
+  padding: 5px 12px;
   border-radius: 12px;
   border: 1px solid var(--user-bubble-border-color);
 }
@@ -485,7 +498,7 @@ export default {
 
 /* 修复用户消息对齐问题 */
 .message.user-message-container {
-  flex-direction: row-reverse;
+  /* flex-direction: row-reverse; */
 }
 
 .message.assistant-message-container {

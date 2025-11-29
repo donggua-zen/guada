@@ -356,7 +356,8 @@ const adjustTextareaHeight = () => {
     if (!textarea) return;
 
     textarea.style.height = "auto";
-    const height = Math.min(textarea.scrollHeight, 240);
+    let height = Math.min(textarea.scrollHeight, 240);
+    if (height < 45) height = 45;
     textarea.style.height = height + "px";
     isInputExpanded.value = textarea.scrollHeight > 60;
 };
@@ -423,7 +424,7 @@ onUnmounted(() => {
     border: none;
     resize: none;
     outline: none;
-    font-size: 16px;
+    font-size: 15px;
     line-height: 1.8;
     padding: 0 8px;
     background: transparent;
@@ -432,6 +433,7 @@ onUnmounted(() => {
     margin-bottom: 10px;
     box-sizing: border-box;
     transition: height 0.2s ease;
+    min-height: 45px;
 }
 
 
