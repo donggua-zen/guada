@@ -15,14 +15,13 @@ from contextlib import closing
 import datetime
 import logging
 import os
-import traceback
 from typing import Generator, Optional
 
 from app.repositories.message_repository import MessageRepository
 from app.repositories.model_repository import ModelRepository
 from app.repositories.session_repository import SessionRepository
 from app.services.domain.memory_strategy import MemoryStrategy
-from app.services.llm_service import LLMServiceChunk
+from app.services.llm_service import LLMService, LLMServiceChunk
 from app.services.message_service import MessageService
 from app.utils import convert_webpath_to_filepath
 from app.utils.settings_manager import SettingsManager
@@ -371,8 +370,6 @@ class ChatService:
         返回:
             Generator[LLMService]: 模型回复的流式响应，每个元素是一个包含部分回复内容的 LLMServiceChunk 对象
         """
-        from app.services import LLMService  # 避免循环导入
-
         current_message_id = message_id
         assistant_message = None
         complete_chunk = LLMServiceChunk()

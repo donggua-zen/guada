@@ -1,6 +1,5 @@
 import logging
-import time
-from typing import Generator, Literal, Optional, Union, overload
+from typing import Generator, Literal, Optional, overload
 from openai import OpenAI, APIError
 
 logger = logging.getLogger(__name__)
