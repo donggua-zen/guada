@@ -1,8 +1,20 @@
 <template>
   <SidebarLayout v-model:sidebar-visible="sidebarVisible" :sidebar-position="'left'">
     <template #sidebar>
-      <sessions-list ref="sessionsListRef" :sessions="sortedSessions" :current="currentSession" @select="selectSession"
-        @delete="handleDeleteSession" @rename="handleRenameSession" @create="handleCreateSession" />
+      <template v-if="authStore.isAuthenticated">
+        <sessions-list ref="sessionsListRef" :sessions="sortedSessions" :current="currentSession"
+          @select="selectSession" @delete="handleDeleteSession" @rename="handleRenameSession"
+          @create="handleCreateSession" />
+      </template>
+      <template v-else>
+        <div
+          class="h-full w-full flex-1 flex items-center justify-center bg-[var(--conversation-bg)] border-r border-[var(--conversation-border-color)]">
+          <n-empty description="请先登录">
+            <template #extra>
+            </template>
+          </n-empty>
+        </div>
+      </template>
     </template>
     <template v-if="!isLoading" #content>
       <!-- 主体 -->
@@ -38,10 +50,11 @@
 import { ref, onMounted, watch, computed, nextTick } from "vue";
 import { apiService } from "@/services/ApiService";
 import { useRouter, useRoute } from 'vue-router';
-import { NModal } from "naive-ui";
+import { NModal, NEmpty } from "naive-ui";
 import { usePopup } from "@/composables/usePopup";
 import { useStorage } from '@vueuse/core';
-import { store } from "@/store/store";
+import { store } from "@/stores/store";
+import { useAuthStore } from "@/stores/auth";
 import { useTitle } from '@/composables/useTitle';
 
 // 引入组件
@@ -72,6 +85,11 @@ const settingsModalVisible = ref(false);
 const sidebarVisible = useStorage('sidebarVisible', true);
 
 const isLoading = ref(true);
+
+// 登录信息
+
+const authStore = useAuthStore();
+
 // 计算属性
 // 获取和设置会话列表的计算属性，与store中的会话列表保持同步
 const sessions = computed({
@@ -182,7 +200,7 @@ const updateSession = async (data) => {
  * @param {string|number|null} sessionId - 要选择的会话ID，如果为null则使用存储中的ID
  */
 const updateSelectedSession = async (sessionId) => {
-  if (sortedSessions.value.length === 0) {
+  if (sortedSessions.value.length === 0 || !authStore.isAuthenticated) {
     selectSession(null);
     return;
   }
@@ -253,6 +271,8 @@ const handleCreateSession = async () => {
 };
 
 const handleCreateSessionWithMessage = async (session, inputMessage) => {
+  if (!authStore.isAuthenticated)
+    return;
   const response = await apiService.createSession(session)
   // 刷新对话列表
   await loadSessions();
@@ -381,10 +401,12 @@ watch(
 // 生命周期
 // 组件挂载完成后加载会话列表
 onMounted(async () => {
-  await loadSessions();
-  const pathSessionId = route.params.sessionId;
-  if (pathSessionId !== 'new-session')
-    await updateSelectedSession(pathSessionId);
+  if (authStore.isAuthenticated) {
+    await loadSessions();
+    const pathSessionId = route.params.sessionId;
+    if (pathSessionId !== 'new-session')
+      await updateSelectedSession(pathSessionId);
+  }
   isLoading.value = false;
 });
 </script>

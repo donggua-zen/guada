@@ -74,8 +74,8 @@
         </div>
       </template>
       <template v-else>
-        <ScrollContainer ref="scrollContainerRef" :auto-scroll="true" :smooth-scroll="!isStreaming">
-          <div class="flex flex-col items-center px-[20px]" style="max-width: 1000px; margin: 0 auto">
+        <scroll-container ref="scrollContainerRef" :auto-scroll="true" :smooth-scroll="!isStreaming">
+          <div class="flex flex-col items-center px-[20px] max-w-[1000px] mx-auto">
             <MessageItem v-for="(message, index) in activeMessages" :ref="(el) => setItemRef(el, message.id)"
               :key="message.id" :message="message" :avatar="currentSession.avatar_url"
               :is-last="index == activeMessages.length - 1"
@@ -83,7 +83,7 @@
               @edit="editMessage" @copy="copyMessage" @generate="generateResponse" @regenerate="regenerateResponse"
               @switch="switchContent" @renderComplete="handleRenderComplete" />
           </div>
-        </ScrollContainer>
+        </scroll-container>
       </template>
     </div>
 
@@ -113,7 +113,7 @@
 
 <script setup>
 import { ref, computed, watch, nextTick, onMounted, onBeforeUpdate, reactive, h } from "vue";
-import { store } from "../store/store";
+import { store } from "../stores/store";
 import { apiService } from "../services/ApiService";
 import { usePopup } from "@/composables/usePopup";
 import { useDebounceFn } from "@vueuse/core";
@@ -123,7 +123,7 @@ import MessageItem from "./MessageItem.vue";
 import Avatar from "./Avatar.vue";
 import TokenStatisticsModal from "./TokenStatisticsModal.vue";
 import ChatInput from "./ChatInput.vue";
-import ScrollContainer from "./ScrollContainer.vue";
+import ScrollContainer from "@/components/layout/ScrollContainer.vue";
 
 // 图标导入
 import {
@@ -376,22 +376,21 @@ function setItemRef(el, messageId) {
   if (el) itemRefs.value[messageId] = el;
 }
 
-function handleSessionChange(newSessionId, oldSessionId) {
+async function handleSessionChange(newSessionId, oldSessionId) {
   if (newSessionId === oldSessionId) return;
   isLoading.value = true;
   currentSessionId.value = newSessionId;
-
   if (newSessionId) {
-    loadMessages(newSessionId);
+    await loadMessages(newSessionId);
     nextTick(immediateScrollToBottom);
   }
+  isLoading.value = false;
 }
 
 async function loadMessages(sessionId) {
   if (store.getMessages(sessionId).length === 0) {
     const sessionMessages = await apiService.fetchSessionMessages(sessionId);
     store.setMessages(sessionId, sessionMessages.items);
-    isLoading.value = false;
   }
 }
 
@@ -403,7 +402,7 @@ function updateSessionLastMessage() {
   }
 
   const lastMessage = activeMessages.value[activeMessages.value.length - 1];
-  if (lastMessage.is_streaming) return;
+  if (lastMessage?.state?.is_streaming) return;
 
   const currentContent = getCurrentContent(lastMessage.contents);
   currentSession.value.last_message = {
@@ -763,7 +762,8 @@ async function deleteMessage(message) {
       await apiService.deleteMessage(message.id);
       if (message.role === "user") {
         const assistantMessage = activeMessages.value.find((msg) => msg.parent_id === message.id);
-        store.deleteMessage(currentSessionId.value, assistantMessage.id);
+        if (assistantMessage)
+          store.deleteMessage(currentSessionId.value, assistantMessage.id);
       }
       store.deleteMessage(currentSessionId.value, message.id);
       debouncedUpdatedSession();

@@ -52,7 +52,7 @@
             <div class="flex items-center">
               <div class="inline-block h-3 w-3 flex flex-shrink-0 items-center justify-center mr-1 relative top-[1px]">
                 <AccessTimeTwotone />
-              </div><span class="" title="">{{ currentContentTime }}</span>
+              </div><span class="" :title="currentContentTime.full">{{ currentContentTime.firendly }}</span>
             </div>
           </div>
         </div>
@@ -113,7 +113,7 @@ import { Marked } from "marked";
 import { markedHighlight } from 'marked-highlight'
 import hljs from 'highlight.js';
 import { NAlert, NIcon, NImageGroup, NDropdown } from "naive-ui";
-import { useDebounceFn } from "@vueuse/core";
+import { timestamp, useDebounceFn } from "@vueuse/core";
 import Avatar from "./Avatar.vue";
 import {
   EditTwotone,
@@ -235,9 +235,10 @@ const currentModelName = computed(() => {
 
 const currentContentTime = computed(() => {
   const content = getCurrentContent(props.message.contents);
-  return content.created_at
-    ? formatTime(content.created_at)
-    : ""
+  return {
+    firendly: formatTime(content.created_at, 'friendly'),
+    full: formatTime(content.created_at, 'full')
+  };
 })
 
 const thinkingLabel = computed(() => {
@@ -534,12 +535,12 @@ export default {
 
 <style>
 .markdown-text p {
-  margin-top: 0;
-  margin-bottom: 10px;
+  margin-top: 10px;
+  margin-bottom: 0;
 }
 
-.markdown-text :last-child {
-  margin: 0;
+.markdown-text :first-child {
+  margin-top: 0;
 }
 
 .markdown-text h1,
@@ -578,18 +579,53 @@ export default {
 }
 
 .markdown-text ol {
-  list-style: decimal;
-  padding-left: 30px;
+  list-style: none;
+  list-style-position: inside;
+  counter-reset: item;
 }
 
 .markdown-text ul {
   list-style: none;
   padding-left: 0;
+  display: flex;
+  align-items: flex-start;
+  width: 100%;
+  flex-direction: column;
+  margin-top: 10px;
 }
 
-.markdown-text ul li {
+.markdown-text ol>li,
+.markdown-text ul>li {
   position: relative;
+  margin-bottom: 10px;
+  margin-top: 0;
+}
+
+.markdown-text ul>li {
   padding-left: 14px;
+
+}
+
+.markdown-text ol>li {
+  flex-wrap: wrap;
+  /* 关键：允许换行 */
+  counter-increment: item;
+}
+
+.markdown-text ol>li:before {
+  content: counter(item) ".";
+  /* 固定宽度 */
+  text-align: right;
+  color: #666;
+  min-width: 14px;
+  display: inline-block;
+  padding-right: 5px;
+}
+
+/* 其他子元素保持正常流 */
+ol>*:not(li) {
+  display: block;
+  margin: 1em 0;
 }
 
 .markdown-text ul li::before {
@@ -603,8 +639,16 @@ export default {
   border-radius: 50%;
 }
 
+.markdown-text ul li:last-child {
+  margin-bottom: 0;
+}
+
 .markdown-text ul li:empty {
   display: none;
+}
+
+.markdown-text ul li ul {
+  margin-top: 10px;
 }
 
 .markdown-text code {
@@ -628,69 +672,52 @@ export default {
 }
 
 .markdown-text blockquote {
-  font-size: 1em;
-  font-style: normal;
-  padding: 30px 30px;
-  margin: 0 0 15px;
-  position: relative;
-  text-indent: 0;
-  border: none;
-}
-
-.markdown-text blockquote:before {
-  content: "“";
-  left: 0px;
-  top: 0;
-  color: #E0E0E0;
-  font-size: 4em;
-  font-family: Arial, serif;
-  line-height: 1em;
-  font-weight: 700;
-  position: absolute;
-}
-
-.markdown-text blockquote:after {
-  content: "”";
-  right: 0px;
-  color: #E0E0E0;
-  font-size: 4em;
-  font-family: Arial, serif;
-  line-height: 1em;
-  font-weight: 700;
-  position: absolute;
-  bottom: -31px;
+  border-left: 4px solid #dfe2e5;
+  margin: 1em 0 0;
+  padding-left: 1em;
 }
 
 /* 表格样式优化 - 添加滚动条支持 */
 .markdown-text table {
   border-collapse: collapse;
-  width: 100%;
   margin-bottom: 1em;
   max-width: 100%;
   display: block;
   overflow-x: auto;
-  white-space: nowrap;
   -webkit-overflow-scrolling: touch;
 }
+
+
+/* .markdown-text table tr:first-child { 
+  border-top: none;
+} */
 
 .markdown-text table th,
 .markdown-text table td {
   border: 1px solid #dfe2e5;
-  padding: 0.5em 1em;
-  white-space: nowrap;
+  vertical-align: top;
+  padding: 0.5em;
   min-width: 100px;
+  max-width: 580px;
 }
+
+.markdown-text table th:last-child,
+.markdown-text table td:last-child {
+  padding-right: 0;
+}
+
 
 .markdown-text table th {
   background-color: #f6f8fa;
-  font-weight: 600;
+  /* font-weight: 600; */
+  text-align: center;
   position: sticky;
   left: 0;
   z-index: 1;
 }
 
 .markdown-text table tr:nth-child(even) {
-  background-color: #f6f8fa;
+  /* background-color: #f6f8fa; */
 }
 
 .markdown-text hr {

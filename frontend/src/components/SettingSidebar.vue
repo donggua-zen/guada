@@ -36,7 +36,7 @@ import { ref, onMounted, computed, watch } from 'vue'
 import { apiService } from '../services/ApiService'
 import PopupService from '../services/PopupService'
 import { useRouter, useRoute } from 'vue-router'
-import { store } from '../store/store'
+import { store } from '../stores/store'
 
 const sessions = ref([]);
 // const activeSession = ref(null);

@@ -1,6 +1,37 @@
+import axios from 'axios';
+import { useStorage } from '@vueuse/core';
+
 class ApiService {
   constructor(baseURL = '/v1') {
     this.baseURL = baseURL;
+    const accessTokenStore = useStorage('token', '');
+    // 创建 Axios 实例
+    this.axiosInstance = axios.create({
+      baseURL: this.baseURL,
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${accessTokenStore.value}`,
+      },
+    });
+
+    // 添加响应拦截器处理通用错误
+    this.axiosInstance.interceptors.response.use(
+      (response) => {
+        // 检查响应中的 success 字段
+        if (response.data && !response.data.success) {
+          throw new Error(response.data.error || '请求失败');
+        }
+        return response.data ? response.data.data : response;
+      },
+      (error) => {
+        console.error('API请求失败:', error);
+        if (error.status === 401) {
+          window.location.href = '/login';
+          return;
+        }
+        throw error;
+      }
+    );
 
     this.currentAbortController = null;
     this.abortControllerMap = new Map();
@@ -10,34 +41,15 @@ class ApiService {
    * 通用请求方法
    * @param {string} endpoint - API端点
    * @param {Object} options - 请求选项
-   * @returns {Promise<any>} 返回解析后的JSON数据
+   * @returns {Promise<any>} 返回解析后的数据
    */
   async _request(endpoint, options = {}) {
-    const url = `${this.baseURL}${endpoint}`;
-    const config = {
-      headers: {
-        'Content-Type': 'application/json',
-        ...options.headers,
-      },
-      ...options,
-    };
-
-    if (config.body && typeof config.body === 'object') {
-      config.body = JSON.stringify(config.body);
-    }
-
     try {
-      const response = await fetch(url, config);
-
-      if (!response.ok) {
-        throw new Error(`HTTP错误: ${response.status} ${response.statusText}`);
-      }
-
-      const response_json = await response.json();
-      if (!response_json.success) {
-        throw new Error(response_json.error);
-      }
-      return response_json.data;
+      const response = await this.axiosInstance({
+        url: endpoint,
+        ...options,
+      });
+      return response;
     } catch (error) {
       console.error(`API请求失败: ${endpoint}`, error);
       throw error;
@@ -77,7 +89,7 @@ class ApiService {
   async createCharacter(characterData) {
     return await this._request('/characters', {
       method: 'POST',
-      body: characterData,
+      data: characterData,
     });
   }
 
@@ -90,7 +102,7 @@ class ApiService {
   async updateCharacter(characterId, characterData) {
     return await this._request(`/characters/${characterId}`, {
       method: 'PUT',
-      body: characterData,
+      data: characterData,
     });
   }
 
@@ -114,7 +126,7 @@ class ApiService {
   async queryOrCreateSession(userId, characterId) {
     return await this._request('/sessions_', {
       method: 'POST',
-      body: { user_id: userId, character_id: characterId },
+      data: { user_id: userId, character_id: characterId },
     });
   }
 
@@ -127,7 +139,7 @@ class ApiService {
   async createSession(data, characterId = undefined) {
     return await this._request('/sessions', {
       method: 'POST',
-      body: { ...data, character_id: characterId },
+      data: { ...data, character_id: characterId },
     });
   }
 
@@ -171,7 +183,7 @@ class ApiService {
   async importMessages(sessionId, messages) {
     return await this._request(`/sessions/${sessionId}/messages/import`, {
       method: 'POST',
-      body: messages,
+      data: messages,
     });
   }
 
@@ -184,7 +196,7 @@ class ApiService {
   async createMessage(sessionId, content, files = [], replaceMessageId = null) {
     return await this._request(`/sessions/${sessionId}/messages`, {
       method: 'POST',
-      body: {
+      data: {
         content: content,
         files: files,
         replace_message_id: replaceMessageId
@@ -210,7 +222,7 @@ class ApiService {
    * @yields {Object} 返回流式响应数据
    */
   async *chat(sessionId, messageId, regeneration_mode = null, assistant_message_id = null, enableReasoning = false,) {
-    // this.currentAbortController = new AbortController();
+    // 由于流式请求的特殊性，仍然使用fetch
     try {
       this.cancelResponse(sessionId);
       const controller = new AbortController();
@@ -233,25 +245,10 @@ class ApiService {
       // 检查响应头中的 Content-Type
       const contentType = response.headers.get('Content-Type');
 
-      // if (!response.ok) {
-      // 如果是 JSON 错误响应，解析错误信息
       if (contentType && contentType.includes('application/json')) {
         const errorData = await response.json();
         throw new Error(errorData.error || `获取响应失败: ${response.status}`);
       }
-      // else {
-      //   throw new Error(`获取响应失败: ${response.status} ${response.statusText}`);
-      // }
-      //  }
-
-      // // 根据 Content-Type 判断响应类型
-      // if (contentType && contentType.includes('application/json')) {
-      //   // 如果是 JSON 响应，直接返回解析后的数据
-      //   const data = await response.json();
-      //   yield data;
-      //   return;
-      // }
-
 
       const reader = response.body.getReader();
       const decoder = new TextDecoder('utf-8');
@@ -311,64 +308,41 @@ class ApiService {
     formData.append('avatar', avatarFile);
 
     try {
-      // 发送POST请求上传头像文件
-
       const url = type === 'character' ? 'characters' : 'sessions';
 
-      const response = await fetch(`${this.baseURL}/${url}/${uid}/avatars`, {
-        method: 'POST',
-        body: formData,
+      const response = await this.axiosInstance.post(`/${url}/${uid}/avatars`, formData, {
+        headers: {
+          'Content-Type': 'multipart/form-data',
+        },
       });
 
-      if (!response.ok) {
-        throw new Error(`上传头像失败: ${response.status}`);
-      }
-
-      const json = await response.json();
-      if (!json.success) {
-        throw new Error(json.error);
-      }
-      return json.data || [];
+      return response.data || [];
     } catch (error) {
       console.error('上传错误:', error);
       throw error;
     }
   }
 
-
   /**
    * 上传文件到指定消息
-   * @param {string} messageId - 消息ID，用于标识文件关联的消息
+   * @param {string} sessionId - 会话ID
    * @param {File} file - 要上传的文件对象
-   * @returns {Promise<Array|Object>} 返回解析后的数据，如果json.data存在则返回该数据，否则返回空数组
+   * @returns {Promise<Array|Object>} 返回解析后的数据
    * @throws {Error} 当上传失败或服务器返回错误时抛出异常
    */
   async uploadFile(sessionId, file) {
-    // 创建表单数据对象并附加文件
     const formData = new FormData();
     formData.append('file', file);
 
     try {
-      // 发送文件上传请求到服务器
-      const response = await fetch(`${this.baseURL}/sessions/${sessionId}/files`, {
-        method: 'POST',
-        body: formData,
+      const response = await this.axiosInstance.post(`/sessions/${sessionId}/files`, formData, {
+        headers: {
+          'Content-Type': 'multipart/form-data',
+        },
       });
 
-      // 检查响应状态是否成功
-      if (!response.ok) {
-        throw new Error(`文件上传失败: ${response.status}`);
-      }
-
-      // 解析JSON响应数据
-      const json = await response.json();
-      // 检查服务器返回的成功标志
-      if (!json.success) {
-        throw new Error(json.error);
-      }
-      return json.data || [];
+      return response.data || [];
     } catch (error) {
-      // 记录错误日志并重新抛出异常
       console.error('上传错误:', error);
       throw error;
     }
@@ -377,7 +351,7 @@ class ApiService {
   async copyMessageFile(messageId, fileId) {
     return await this._request(`/files/${fileId}`, {
       method: 'PUT',
-      body: { type: 'copy', message_id: messageId },
+      data: { type: 'copy', message_id: messageId },
     });
   }
 
@@ -407,15 +381,14 @@ class ApiService {
   async updateMessage(messageId, content) {
     return await this._request(`/messages/${messageId}`, {
       method: 'PUT',
-      body: { content },
+      data: { content },
     });
   }
-
 
   async setMessageCurrentContent(messageId, contentId) {
     return await this._request(`/message-content/${contentId}/active`, {
       method: 'PUT',
-      body: { message_id: messageId },
+      data: { message_id: messageId },
     });
   }
 
@@ -439,7 +412,7 @@ class ApiService {
   async updateSession(sessionId, data) {
     return await this._request(`/sessions/${sessionId}`, {
       method: 'PUT',
-      body: data,
+      data: data,
     });
   }
 
@@ -469,15 +442,6 @@ class ApiService {
     };
   }
 
-
-  /**
-   * 获取模型列表（重复方法，建议移除其中一个）
-   * @returns {Promise<Object>} 返回模型和提供商数据
-   */
-  async fetchModels() {
-    return await this._request('/models');
-  }
-
   /**
    * 创建模型
    * @param {Object} data - 模型数据
@@ -486,7 +450,7 @@ class ApiService {
   async createModel(data) {
     return await this._request('/models', {
       method: 'POST',
-      body: data,
+      data: data,
     });
   }
 
@@ -510,7 +474,7 @@ class ApiService {
   async updateModel(modelId, data) {
     return await this._request(`/models/${modelId}`, {
       method: 'PUT',
-      body: data,
+      data: data,
     });
   }
 
@@ -522,7 +486,7 @@ class ApiService {
   async createProvider(data) {
     return await this._request('/providers', {
       method: 'POST',
-      body: data,
+      data: data,
     });
   }
 
@@ -535,24 +499,20 @@ class ApiService {
     return await this._request(`/providers/${providerId}`, {
       method: 'DELETE',
     });
-
   }
 
   /**
    * 更新指定ID的提供者信息
-   *
-   * @param {string} providerId 要更新的提供者ID
-   * @param {Object} data 要更新的提供者数据
+   * @param {string} providerId - 要更新的提供者ID
+   * @param {Object} data - 要更新的提供者数据
    * @returns {Promise<Object>} 更新后的提供者数据
-   * @throws {Error} 如果更新失败则抛出错误
    */
   async updateProvider(providerId, data) {
     return await this._request(`/providers/${providerId}`, {
       method: 'PUT',
-      body: data,
+      data: data,
     });
   }
-
 
   async fetchSettings() {
     return await this._request('/settings');
@@ -561,10 +521,24 @@ class ApiService {
   async updateSettings(data) {
     return await this._request('/settings', {
       method: 'PUT',
-      body: data,
+      data: data,
     });
   }
 
+
+  // ========== 认证相关接口 ==========
+
+  /**
+   * 用户登录
+   * @param {Object} credentials - 登录凭据
+   * @returns {Promise<Object>} 返回登录结果
+   */
+  async login(credentials) {
+    return await this._request('/auth/login', {
+      method: 'POST',
+      data: credentials
+    });
+  }
 }
 
 // 创建默认实例并导出

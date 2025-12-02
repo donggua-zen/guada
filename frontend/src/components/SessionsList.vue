@@ -28,68 +28,72 @@
     </div>
 
     <!-- 会话列表区域 -->
-    <SimpleBar class="sessions-list flex-1 py-2.5" style="height: calc(100vh - 200px)" :options="simpleBarOptions">
-      <template v-if="filteredSessions.length === 0">
-        <div class="empty-state text-center text-gray-500 flex flex-col items-center justify-center h-full">
-          <div class="empty-state-icon">
-            <n-icon>
-              <PlusOutlined />
-            </n-icon>
-          </div>
-          <div class="empty-state-title">
-            {{ searchKeyword ? '未找到匹配的会话' : '没有会话' }}
-          </div>
-          <div class="empty-state-description">
-            {{ searchKeyword ? '尝试调整搜索关键词' : '点击上方按钮创建新的会话' }}
-          </div>
-        </div>
-      </template>
-      <template v-else>
-        <div v-for="session in filteredSessions" :key="session.id"
-          class="session-item group px-3.5 py-3 cursor-pointer flex items-center transition-colors duration-200 rounded-3xl mx-2.5 mb-1.5 h-15"
-          :class="{
-            'bg-[var(--conversation-active-bg)]': session.id === currentSessionId,
-            'hover:bg-[var(--conversation-hover-bg)]': session.id !== currentSessionId
-          }" @click="selectSession(session)">
-          <div class="session-avatar w-9 h-9 mr-2.5">
-            <Avatar :src="session.avatar_url" round />
-          </div>
-          <div class="session-info flex-1 min-w-0">
-            <div class="session-header flex justify-between items-start mb-1">
-              <div class="session-title font-medium text-sm truncate text-gray-800">
-                {{ session.title }}
-              </div>
-              <div v-if="session.last_message" class="session-time text-xs text-gray-500 whitespace-nowrap ml-2">
-                {{ formatTime(session.last_message.created_at) }}
-              </div>
+    <div class="sessions-list flex-1 overflow-hidden py-2.5">
+      <scroll-container class="">
+        <template v-if="filteredSessions.length === 0">
+          <div class="empty-state text-center text-gray-500 flex flex-col items-center justify-center h-full">
+            <div class="empty-state-icon">
+              <n-icon>
+                <PlusOutlined />
+              </n-icon>
             </div>
-            <div class="session-message text-xs truncate text-gray-500">
-              {{ session.last_message ? session.last_message.content : '无消息' }}
+            <div class="empty-state-title">
+              {{ searchKeyword ? '未找到匹配的会话' : '没有会话' }}
+            </div>
+            <div class="empty-state-description">
+              {{ searchKeyword ? '尝试调整搜索关键词' : '点击上方按钮创建新的会话' }}
             </div>
           </div>
-          <div class="session-actions flex opacity-0 transition-opacity duration-200 group-hover:opacity-100">
-            <n-dropdown trigger="click" :options="dropdownOptions" @select="handleDropdownSelect($event, session)">
-              <n-button quaternary circle @click.stop
-                class="session-action-btn bg-none border-none text-gray-500 cursor-pointer text-sm p-1 rounded">
-                <template #icon>
-                  <n-icon size="16">
-                    <MoreVertOutlined />
-                  </n-icon>
-                </template>
-              </n-button>
-            </n-dropdown>
+        </template>
+        <template v-else>
+          <div v-for="session in filteredSessions" :key="session.id"
+            class="session-item group px-3.5 py-3 cursor-pointer flex items-center transition-colors duration-200 rounded-3xl mx-2.5 mb-1.5 h-15"
+            :class="{
+              'bg-[var(--conversation-active-bg)]': session.id === currentSessionId,
+              'hover:bg-[var(--conversation-hover-bg)]': session.id !== currentSessionId
+            }" @click="selectSession(session)">
+            <div class="session-avatar w-9 h-9 mr-2.5">
+              <Avatar :src="session.avatar_url" round />
+            </div>
+            <div class="session-info flex-1 min-w-0">
+              <div class="session-header flex justify-between items-start mb-1">
+                <div class="session-title font-medium text-sm truncate text-gray-800">
+                  {{ session.title }}
+                </div>
+                <div v-if="session.last_message" class="session-time text-xs text-gray-500 whitespace-nowrap ml-2">
+                  {{ formatTime(session.last_message.created_at) }}
+                </div>
+              </div>
+              <div class="session-message text-xs truncate text-gray-500">
+                {{ session.last_message ? session.last_message.content : '无消息' }}
+              </div>
+            </div>
+            <div class="session-actions flex opacity-0 transition-opacity duration-200 group-hover:opacity-100">
+              <n-dropdown trigger="click" :options="dropdownOptions" @select="handleDropdownSelect($event, session)">
+                <n-button quaternary circle @click.stop
+                  class="session-action-btn bg-none border-none text-gray-500 cursor-pointer text-sm p-1 rounded">
+                  <template #icon>
+                    <n-icon size="16">
+                      <MoreVertOutlined />
+                    </n-icon>
+                  </template>
+                </n-button>
+              </n-dropdown>
+            </div>
           </div>
-        </div>
-      </template>
-    </SimpleBar>
+        </template>
+      </scroll-container>
+
+    </div>
 
     <!-- 移除底部的sessions-footer部分 -->
   </div>
 </template>
 
 <script setup>
-import { ref, computed, watch, h } from 'vue'
+import { ref, computed, h } from 'vue'
 import Avatar from '../components/Avatar.vue'
+import ScrollContainer from '../components/layout/ScrollContainer.vue'
 import { NButton, NDropdown, NIcon, NInput } from 'naive-ui'
 import { useDebounceFn } from '@vueuse/core'
 import { formatTime } from '@/utils'
@@ -207,13 +211,4 @@ const selectSession = (session) => {
   background-color: #e6f0fa;
 }
 
-
-/* SimpleBar 滚动条样式 */
-:deep(.simplebar-scrollbar::before) {
-  background-color: #c1c1c1;
-}
-
-:deep(.simplebar-scrollbar.simplebar-visible::before) {
-  opacity: 0.6;
-}
 </style>
