@@ -542,4 +542,4 @@ class ApiService {
 }
 
 // 创建默认实例并导出
-export const apiService = new ApiService("/v1");
+export const apiService = new ApiService("/api/v1");
