@@ -19,9 +19,13 @@ def set_sqlite_pragma(dbapi_connection, connection_record):
 
 
 # 创建日志目录
-LOG_DIR = Path("logs")
+LOG_DIR = Path(os.path.join(basedir, "logs"))
 LOG_DIR.mkdir(exist_ok=True)
 
+DATA_DIR = Path(os.path.join(basedir, "data"))
+DATA_DIR.mkdir(exist_ok=True)
+
+print(f"{DATA_DIR}")
 
 def setup_logging():
     """配置日志系统"""
@@ -67,9 +71,9 @@ class DevelopmentConfig(Config):
     """开发环境配置"""
 
     DEBUG = True
-    SQLALCHEMY_DATABASE_URI = os.environ.get(
-        "DEV_DATABASE_URL"
-    ) or "sqlite:///" + os.path.join(basedir, "data", "app.db")
+    SQLALCHEMY_DATABASE_URI = os.environ.get("DEV_DATABASE_URL") or "sqlite:///" + str(
+        DATA_DIR / "app.db"
+    )
 
     # 开发环境特定配置
     SQLALCHEMY_ECHO = True  # 输出SQL语句
@@ -90,9 +94,9 @@ class TestingConfig(Config):
 class ProductionConfig(Config):
     """生产环境配置"""
 
-    SQLALCHEMY_DATABASE_URI = os.environ.get(
-        "DATABASE_URL"
-    ) or "sqlite:///" + os.path.join(basedir, "data", "app.db")
+    SQLALCHEMY_DATABASE_URI = os.environ.get("DATABASE_URL") or "sqlite:///" + str(
+        DATA_DIR / "app.db"
+    )
 
     # 生产环境特定配置
     if os.environ.get("SECRET_KEY"):
