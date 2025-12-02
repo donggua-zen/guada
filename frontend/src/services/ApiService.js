@@ -359,7 +359,7 @@ class ApiService {
         },
       });
 
-      return response.data || [];
+      return response || [];
     } catch (error) {
       console.error('上传错误:', error);
       throw error;
