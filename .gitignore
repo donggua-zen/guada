@@ -8,3 +8,4 @@ app/static/avatars/*
 backend/app/static/avatars/*
 backend/logs/*
 backend/app/static/uploads/*
+backend/static/*

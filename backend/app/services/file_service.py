@@ -3,7 +3,8 @@ from typing import Optional
 import uuid
 from app.repositories.file_repository import FileRepository as FileRepo
 from app.repositories.message_repository import MessageRepository
-from app.utils import build_url_path, resize_and_convert_image
+from app.utils import build_url_path, convert_webpath_to_filepath, resize_and_convert_image
+from config import STATIC_FILES_DIR
 
 
 class FileService:
@@ -81,10 +82,11 @@ class FileService:
 
     def upload_message_image_file(self, file):
         # 添加头像上传配置
-        upload_folder = os.path.join("app", "static", "uploads", "images")
-        preview_folder = os.path.join("app", "static", "uploads", "previews")
         web_path = os.path.join("static", "uploads", "images")
         preview_web_path = os.path.join("static", "uploads", "previews")
+        upload_folder = convert_webpath_to_filepath(web_path)
+        preview_folder = convert_webpath_to_filepath(preview_web_path)
+        
         unique_filename = f"{uuid.uuid4().hex}.jpg"
         # 确保上传目录存在
         os.makedirs(upload_folder, exist_ok=True)
