@@ -4,7 +4,7 @@ from app.utils.settings_manager import SettingsManager
 settings_bp = Blueprint("settings", __name__)
 
 
-@settings_bp.route("/v1/settings", methods=["GET"])
+@settings_bp.route("/api/v1/settings", methods=["GET"])
 def get_settings():
     settings = {
         "default_chat_model_id": SettingsManager.get("default_chat_model_id", None),
@@ -22,7 +22,7 @@ def get_settings():
     return jsonify({"success": True, "data": settings})
 
 
-@settings_bp.route("/v1/settings", methods=["PUT"])
+@settings_bp.route("/api/v1/settings", methods=["PUT"])
 def update_settings():
     settings = {
         "default_chat_model_id": request.json.get("default_chat_model_id", None),

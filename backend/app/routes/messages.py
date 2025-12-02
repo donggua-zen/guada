@@ -17,7 +17,7 @@ messages_bp = Blueprint("messages", __name__)
 logger = logging.getLogger(__name__)
 
 
-@messages_bp.route("/v1/sessions/<session_id>/messages", methods=["GET"])
+@messages_bp.route("/api/v1/sessions/<session_id>/messages", methods=["GET"])
 @jwt_required()
 def get_messages(session_id):
     try:
@@ -34,7 +34,7 @@ def get_messages(session_id):
         return jsonify({"success": False, "error": str(e)}), 500
 
 
-@messages_bp.route("/v1/sessions/<session_id>/messages", methods=["DELETE"])
+@messages_bp.route("/api/v1/sessions/<session_id>/messages", methods=["DELETE"])
 @jwt_required()
 def clear_session_messages(session_id):
     try:
@@ -46,7 +46,7 @@ def clear_session_messages(session_id):
         return jsonify({"success": False, "error": str(e)}), 500
 
 
-@messages_bp.route("/v1/messages/<message_id>", methods=["DELETE"])
+@messages_bp.route("/api/v1/messages/<message_id>", methods=["DELETE"])
 @jwt_required()
 def delete_message(message_id):
     try:
@@ -57,7 +57,7 @@ def delete_message(message_id):
         return jsonify({"success": False, "error": str(e)}), 500
 
 
-@messages_bp.route("/v1/messages/<message_id>", methods=["PUT"])
+@messages_bp.route("/api/v1/messages/<message_id>", methods=["PUT"])
 @jwt_required()
 def update_message(message_id):
     try:
@@ -67,7 +67,7 @@ def update_message(message_id):
         return jsonify({"success": False, "error": str(e)}), 500
 
 
-@messages_bp.route("/v1/sessions/<session_id>/messages", methods=["POST"])
+@messages_bp.route("/api/v1/sessions/<session_id>/messages", methods=["POST"])
 @jwt_required()
 def add_message(session_id):
     try:
@@ -87,7 +87,7 @@ def add_message(session_id):
         return jsonify({"success": False, "error": str(e)}), 500
 
 
-@messages_bp.route("/v1/message-content/<content_id>/active", methods=["PUT"])
+@messages_bp.route("/api/v1/message-content/<content_id>/active", methods=["PUT"])
 @jwt_required()
 def update_message_active_content(content_id):
     try:
@@ -97,7 +97,7 @@ def update_message_active_content(content_id):
         return jsonify({"success": False, "error": str(e)}), 500
 
 
-@messages_bp.route("/v1/sessions/<session_id>/messages/import", methods=["POST"])
+@messages_bp.route("/api/v1/sessions/<session_id>/messages/import", methods=["POST"])
 @jwt_required()
 def import_messages(session_id):
     try:

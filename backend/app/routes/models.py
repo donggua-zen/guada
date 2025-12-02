@@ -11,7 +11,7 @@ model_service = ModelService()
 # 模型相关
 
 
-@models_bp.route("/v1/models", methods=["GET"])
+@models_bp.route("/api/v1/models", methods=["GET"])
 def get_models():
     try:
         models = model_service.get_all_models()
@@ -29,7 +29,7 @@ def get_models():
         return jsonify({"success": False, "error": str(e)}), 500
 
 
-@models_bp.route("/v1/models/<model_id>", methods=["DELETE"])
+@models_bp.route("/api/v1/models/<model_id>", methods=["DELETE"])
 @jwt_required()
 def delete_model(model_id):
     try:
@@ -39,7 +39,7 @@ def delete_model(model_id):
         return jsonify({"success": False, "error": str(e)}), 500
 
 
-@models_bp.route("/v1/models", methods=["POST"])
+@models_bp.route("/api/v1/models", methods=["POST"])
 @jwt_required()
 def create_model():
     try:
@@ -60,7 +60,7 @@ def create_model():
         return jsonify({"success": False, "error": str(e)}), 500
 
 
-@models_bp.route("/v1/models/<model_id>", methods=["PUT"])
+@models_bp.route("/api/v1/models/<model_id>", methods=["PUT"])
 @jwt_required()
 def update_model(model_id):
     try:
@@ -80,7 +80,7 @@ def update_model(model_id):
         return jsonify({"success": False, "error": str(e)}), 500
 
 
-# @models_bp.route("/v1/providers", methods=["DELETE"])
+# @models_bp.route("/api/v1/providers", methods=["DELETE"])
 # def delete_provider(provider_id):
 #     try:
 #         model_service.delete_provider(provider_id)
@@ -89,7 +89,7 @@ def update_model(model_id):
 #         return jsonify({"success": False, "error": str(e)}), 500
 
 
-@models_bp.route("/v1/providers", methods=["POST"])
+@models_bp.route("/api/v1/providers", methods=["POST"])
 @jwt_required()
 def create_provider():
     try:
@@ -106,7 +106,7 @@ def create_provider():
         return jsonify({"success": False, "error": str(e)}), 500
 
 
-@models_bp.route("/v1/providers/<provider_id>", methods=["PUT"])
+@models_bp.route("/api/v1/providers/<provider_id>", methods=["PUT"])
 @jwt_required()
 def update_provider(provider_id):
     try:
@@ -124,7 +124,7 @@ def update_provider(provider_id):
         return jsonify({"success": False, "error": str(e)}), 500
 
 
-@models_bp.route("/v1/providers/<provider_id>", methods=["DELETE"])
+@models_bp.route("/api/v1/providers/<provider_id>", methods=["DELETE"])
 @jwt_required()
 def delete_provider(provider_id):
     try:

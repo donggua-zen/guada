@@ -59,7 +59,7 @@ def stream_generator(
         yield "data: [DONE]\n\n"
 
 
-@chat_bp.route("/v1/sessions/<session_id>/messages/stream", methods=["POST"])
+@chat_bp.route("/api/v1/sessions/<session_id>/messages/stream", methods=["POST"])
 @jwt_required()
 def chat_completions(session_id):
     try:
@@ -95,7 +95,7 @@ def chat_completions(session_id):
         return jsonify({"success": False, "error": str(e)}), 400
 
 
-@chat_bp.route("/v1/sessions/<session_id>/tokens", methods=["GET"])
+@chat_bp.route("/api/v1/sessions/<session_id>/tokens", methods=["GET"])
 @jwt_required()
 def get_tokens(session_id):
     data = chat_service.token_statistics(session_id)
@@ -108,7 +108,7 @@ def get_tokens(session_id):
     )
 
 
-@chat_bp.route("/v1/messages/<message_id>/web_serach", methods=["GET"])
+@chat_bp.route("/api/v1/messages/<message_id>/web_serach", methods=["GET"])
 @jwt_required()
 def web_search(message_id):
     try:

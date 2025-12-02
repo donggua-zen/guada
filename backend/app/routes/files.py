@@ -5,7 +5,7 @@ from flask_jwt_extended import jwt_required
 files_bp = Blueprint("files", __name__)
 
 
-@files_bp.route("/v1/sessions/<sessions_id>/files", methods=["POST"])
+@files_bp.route("/api/v1/sessions/<sessions_id>/files", methods=["POST"])
 @jwt_required()
 def upload_message_file(sessions_id):
     from app.services.file_service import FileService
@@ -33,7 +33,7 @@ def upload_message_file(sessions_id):
         return jsonify({"success": False, "error": str(e)}), 500
 
 
-@files_bp.route("/v1/files/<file_id>", methods=["PUT"])
+@files_bp.route("/api/v1/files/<file_id>", methods=["PUT"])
 @jwt_required()
 def update_message_file(file_id):
     from app.services.file_service import FileService

@@ -11,7 +11,7 @@ character_service = CharacterService()
 characters_bp = Blueprint("characters", __name__)
 
 
-@characters_bp.route("/v1/characters", methods=["GET"])
+@characters_bp.route("/api/v1/characters", methods=["GET"])
 def get_characters():
     try:
         all_characters = character_service.get_all_characters()
@@ -30,7 +30,7 @@ def get_characters():
         return jsonify({"success": False, "error": str(e)}), 500
 
 
-@characters_bp.route("/v1/characters", methods=["POST"])
+@characters_bp.route("/api/v1/characters", methods=["POST"])
 @jwt_required()
 def create_character():
     try:
@@ -83,7 +83,7 @@ def create_character():
         return jsonify({"success": False, "error": str(e)}), 500
 
 
-@characters_bp.route("/v1/characters/<character_id>", methods=["DELETE"])
+@characters_bp.route("/api/v1/characters/<character_id>", methods=["DELETE"])
 @jwt_required()
 def delete_character(character_id):
     try:
@@ -93,7 +93,7 @@ def delete_character(character_id):
         return jsonify({"success": False, "error": str(e)}), 500
 
 
-@characters_bp.route("/v1/characters/<character_id>", methods=["PUT"])
+@characters_bp.route("/api/v1/characters/<character_id>", methods=["PUT"])
 @jwt_required()
 def update_character(character_id):
     try:
@@ -107,7 +107,7 @@ def update_character(character_id):
         return jsonify({"success": False, "error": str(e)}), 500
 
 
-@characters_bp.route("/v1/characters/<character_id>", methods=["GET"])
+@characters_bp.route("/api/v1/characters/<character_id>", methods=["GET"])
 def get_character(character_id):
     try:
         character = character_service.get_character_by_id(character_id)
@@ -116,7 +116,7 @@ def get_character(character_id):
         return jsonify({"success": False, "error": str(e)}), 500
 
 
-@characters_bp.route("/v1/characters/<character_id>/avatars", methods=["POST"])
+@characters_bp.route("/api/v1/characters/<character_id>/avatars", methods=["POST"])
 @jwt_required()
 def upload_character_avatar(character_id):
     try:

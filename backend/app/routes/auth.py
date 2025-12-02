@@ -7,7 +7,7 @@ from app.models.user import User
 auth_bp = Blueprint("auth", __name__)
 
 
-@auth_bp.route("/v1/auth/register", methods=["POST"])
+@auth_bp.route("/api/v1/auth/register", methods=["POST"])
 def register():
     data = request.get_json()
 
@@ -37,7 +37,7 @@ def register():
     )
 
 
-@auth_bp.route("/v1/auth/login", methods=["POST"])
+@auth_bp.route("/api/v1/auth/login", methods=["POST"])
 def login():
     data = request.get_json()
     type = data.get("type")
@@ -79,7 +79,7 @@ def login():
     return jsonify({"error": "用户名或密码错误"}), 401
 
 
-@auth_bp.route("/v1/profile", methods=["GET"])
+@auth_bp.route("/api/v1/profile", methods=["GET"])
 @jwt_required()
 def profile():
     user_id = get_jwt_identity()
