@@ -243,10 +243,12 @@ class ApiService {
       this.cancelResponse(sessionId);
       const controller = new AbortController();
       this.abortControllerMap.set(sessionId, controller);
+      const accessToken = this.tokenStore.value;
       const response = await fetch(`${this.baseURL}/sessions/${sessionId}/messages/stream`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          'Authorization': `Bearer ${accessToken}`,
         },
         body: JSON.stringify({
           message_id: messageId,
