@@ -116,3 +116,5 @@ class AppInitializer:
             self.app.logger.addHandler(file_handler)
             self.app.logger.setLevel(logging.INFO)
             self.app.logger.info("应用启动")
+
+app = create_app()
