@@ -18,7 +18,7 @@ vector_memory = get_vector_memory()
 sessions_bp = Blueprint("sessions", __name__)
 
 
-@sessions_bp.route("/v1/sessions", methods=["GET"])
+@sessions_bp.route("/api/v1/sessions", methods=["GET"])
 @jwt_required()
 def get_sessions():
     return jsonify(
@@ -26,7 +26,7 @@ def get_sessions():
     )
 
 
-@sessions_bp.route("/v1/sessions", methods=["POST"])
+@sessions_bp.route("/api/v1/sessions", methods=["POST"])
 @jwt_required()
 def create_session():
     try:
@@ -59,7 +59,7 @@ def create_session():
         return jsonify({"success": False, "error": str(e)}), 500
 
 
-@sessions_bp.route("/v1/sessions/<session_id>", methods=["DELETE"])
+@sessions_bp.route("/api/v1/sessions/<session_id>", methods=["DELETE"])
 @jwt_required()
 def delete_session(session_id):
     try:
@@ -70,7 +70,7 @@ def delete_session(session_id):
         return jsonify({"success": False, "error": str(e)}), 500
 
 
-@sessions_bp.route("/v1/sessions/<session_id>", methods=["GET"])
+@sessions_bp.route("/api/v1/sessions/<session_id>", methods=["GET"])
 @jwt_required()
 def get_session(session_id):
     try:
@@ -92,7 +92,7 @@ def get_session(session_id):
         return jsonify({"success": False, "error": str(e)}), 500
 
 
-@sessions_bp.route("/v1/sessions/<session_id>", methods=["PUT"])
+@sessions_bp.route("/api/v1/sessions/<session_id>", methods=["PUT"])
 @jwt_required()
 def update_session(session_id):
     try:
@@ -135,7 +135,7 @@ def update_session(session_id):
         return jsonify({"success": False, "error": str(e)}), 500
 
 
-@sessions_bp.route("/v1/sessions/<session_id>/avatars", methods=["POST"])
+@sessions_bp.route("/api/v1/sessions/<session_id>/avatars", methods=["POST"])
 @jwt_required()
 def upload_session_avatar(session_id):
     try:
