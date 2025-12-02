@@ -303,7 +303,7 @@ class ChatService:
         from app.services.domain.web_search import WebSearch
         from app.services import LLMService  # 避免循环导入
 
-        serper_api_key = SettingsManager.get("search_api_key", "")
+        api_key = SettingsManager.get("search_api_key", "")
         search_prompt_context_length = SettingsManager.get(
             "search_prompt_context_length", 10
         )
@@ -314,8 +314,8 @@ class ChatService:
             if search_model:  # 搜索功能需要模型
                 model = search_model
 
-        if not serper_api_key:  # 搜索功能需要API Key
-            raise ValueError("serper_api_key is required")
+        if not api_key:  # 搜索功能需要API Key
+            raise ValueError("api_key is required")
 
         conversation_messages = [
             f'<role="{msg["role"]}">{msg["content"]}<role="{msg["role"]}">'
@@ -341,11 +341,11 @@ class ChatService:
         )
 
         logger.debug("搜索词：%s", chunk.content)
-        web_search = WebSearch(serper_api_key=serper_api_key)
+        web_search = WebSearch(api_key=api_key)
         results = web_search.search(chunk.content)
         return "\n".join(
             [
-                f"position:{result['position']}\ntitle:{result['title']}\n,snippet:{result['snippet']}\n"
+                f"position:{result['position']}\nsite:{result['site']}\nname:{result['name']}\nsummary:{result['summary']}\n"
                 for result in results
             ]
         )
@@ -452,7 +452,6 @@ class ChatService:
                 yield {"type": "web_search", "msg": "stop"}
 
                 prompt = f"请根据搜索结果回答用户问题\n# 搜索结果：\n{web_results} # 当前时间:{current_time} \n# 用户问题：\n"
-                logger.debug("拼接后的用户问题: %s", prompt)
                 context_messages[-1]["content"] = (
                     prompt + context_messages[-1]["content"]
                 )
