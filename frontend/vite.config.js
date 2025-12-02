@@ -17,10 +17,10 @@ export default defineConfig({
   server: {
     proxy: {
       // 代理 API 请求
-      '/v1': {
+      '/api/v1': {
         target: 'http://localhost:5000', // 后端地址
         changeOrigin: true,
-        rewrite: (path) => path.replace(/^\/api/, '')
+        // rewrite: (path) => path.replace(/^\/api/, '')
       },
       // 代理静态资源请求
       '/static': {
