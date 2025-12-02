@@ -18,7 +18,8 @@
                 <n-divider title-placement="left">
                     供应商/分组信息
                 </n-divider>
-                <n-form ref="formRef" :label-width="80" :model="currentProvider" :rules="providerRules" size="large" label-placement="left">
+                <n-form ref="formRef" :label-width="80" :model="currentProvider" :rules="providerRules" size="large"
+                    label-placement="left">
                     <n-form-item label="名字" path="name">
                         <n-input v-model:value="currentProvider.name" placeholder="输入分组名字"
                             @update:value="handleProviderChange" />
@@ -49,10 +50,10 @@
                     模型列表
                 </n-divider>
                 <div class="flex w-full">
-                    <div class="flex flex-1 justify-end">
+                    <div class="flex flex-1 justify-start items-center">
                         <n-space>
-                            <n-button @click="handleAddModel">手动添加</n-button>
-                            <n-button @click="handleFetchModels">获取模型列表</n-button>
+                            <n-button @click="handleAddModel" strong secondary>手动添加</n-button>
+                            <n-button @click="handleFetchModels" strong secondary>获取模型列表</n-button>
                         </n-space>
                     </div>
                 </div>
@@ -66,7 +67,7 @@
                             <n-space>
                                 <n-tag :bordered="false" type="success" size="small">{{ model.model_type }}</n-tag>
                                 <n-tag v-for="feature in model.features" :bordered="false" type="info" size="small">{{
-                                    feature }}</n-tag>
+                                    getLableName(feature) }}</n-tag>
                             </n-space>
                             <div class="flex flex-1 justify-end items-center">
                                 <n-button text style="font-size: 24px" @click="handleEditClick(model)">
@@ -106,7 +107,7 @@
                     <n-space>
                         <n-checkbox value="visual" label="视觉" />
                         <n-checkbox value="tools" label="工具" />
-                        <n-checkbox value="thinking" label="思考" />
+                        <n-checkbox value="thinking" label="混合思考" />
                     </n-space>
                 </n-checkbox-group>
             </n-form-item>
@@ -144,7 +145,7 @@
                                     <n-space class="ml-2">
                                         <n-tag v-for="feature in model.features" :bordered="false" type="info"
                                             size="small">
-                                            {{ feature }}
+                                            {{ getLableName(feature) }}
                                         </n-tag>
                                     </n-space>
                                 </div>
@@ -172,7 +173,7 @@
                                     <n-space class="ml-2">
                                         <n-tag v-for="feature in model.features" :bordered="false" type="info"
                                             size="small">
-                                            {{ feature }}
+                                            {{ getLableName(feature) }}
                                         </n-tag>
                                     </n-space>
                                 </div>
@@ -317,6 +318,19 @@ const editModelRules = {
         trigger: 'blur'
     }
 };
+
+const getLableName = (type) => {
+    switch (type) {
+        case 'visual':
+            return '视觉';
+        case 'tools':
+            return '工具调用';
+        case 'thinking':
+            return '混合思考';
+        default:
+            return type;
+    }
+}
 
 // 使用 useDebounceFn 创建防抖函数
 const debouncedProviderChange = useDebounceFn(async () => {

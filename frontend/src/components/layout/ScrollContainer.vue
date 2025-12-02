@@ -1,29 +1,31 @@
 <!-- ScrollContainer.vue -->
 <template>
-    <SimpleBar :options="scrollbarOptions" :timeout="6000" class="scroll-container" ref="simpleBarRef"
-        @scroll="handleScroll">
-        <div class="scroll-content" ref="contentRef">
+    <simple-bar class="scroll-container" :auto-hide="true" :timeout="6000" ref="simpleBarRef" @scroll="handleScroll">
+        <div :class="mergredClasses" :style="attrs.style">
             <slot></slot>
         </div>
-    </SimpleBar>
+    </simple-bar>
 </template>
 
 <script setup>
 import { ref, computed, watch, nextTick, onMounted, onUnmounted } from "vue";
 import { useDebounceFn } from '@vueuse/core'
+import SimpleBar from 'simplebar-vue'
+import 'simplebar-vue/dist/simplebar.min.css'
 
 // 常量定义
 const SCROLL_THRESHOLD = 50;
-const SCROLLBAR_OPTIONS = {
-    autoHide: true,
-    timeout: 4000
-};
+import { useAttrs } from 'vue'
 
+defineOptions({
+    inheritAttrs: false // 禁用自动继承
+})
+const attrs = useAttrs()
 // Props
 const props = defineProps({
     autoScroll: {
         type: Boolean,
-        default: true
+        default: false
     },
     scrollThreshold: {
         type: Number,
@@ -35,13 +37,21 @@ const props = defineProps({
     }
 });
 
+const mergredClasses = computed(() => {
+    let mergredClass = [];
+    const classes = [attrs.class];
+    if (mergredClass.value) {
+        classes.push(mergredClass.value);
+    }
+    console.log('classes', attrs);
+    return classes.join(' ');
+})
+
 // Emits
 const emit = defineEmits(['scroll', 'scroll-to-bottom', 'scroll-state-change']);
 
 // 响应式数据
 const simpleBarRef = ref(null);
-const contentRef = ref(null);
-const scrollbarOptions = ref(SCROLLBAR_OPTIONS);
 const isAtBottom = ref(true);
 const scrollObserver = ref(null);
 const lastScrollHeight = ref(0);
@@ -54,7 +64,6 @@ const contentWrapper = computed(() => getSimpleBarInstance()?.getContentElement(
 // const debouncedScrollStateChange = useDebounceFn((state) => {
 //     emit('scroll-state-change', state);
 // }, 150);
-
 // 方法
 function getSimpleBarInstance() {
     return simpleBarRef.value?.SimpleBar;
@@ -140,7 +149,7 @@ function initScrollObserver() {
 
 // 监听器
 watch(() => simpleBarRef.value, (newVal) => {
-    if (newVal) {
+    if (newVal && props.autoScroll) {
         nextTick(() => {
             initScrollObserver();
         });
@@ -174,8 +183,12 @@ defineExpose({
     width: 100%;
     height: 100%;
 }
+/* SimpleBar 滚动条样式 */
+:deep(.simplebar-scrollbar::before) {
+    background-color: #999;
+}
 
-.scroll-content {
-    padding: 25px 0;
+:deep(.simplebar-scrollbar.simplebar-visible::before) {
+    opacity: 0.6;
 }
 </style>

@@ -85,7 +85,6 @@ export const store = reactive({
     },
 
     setInputMessage(sessionId, content) {
-        console.log('setInputMessage', content);
         this.getSessionState(sessionId).inputMessage = content;
     },
 
