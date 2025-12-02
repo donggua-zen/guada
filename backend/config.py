@@ -25,7 +25,9 @@ LOG_DIR.mkdir(exist_ok=True)
 DATA_DIR = Path(os.path.join(basedir, "data"))
 DATA_DIR.mkdir(exist_ok=True)
 
-print(f"{DATA_DIR}")
+STATIC_FILES_DIR = Path(os.path.join(basedir, "static"))
+STATIC_FILES_DIR.mkdir(exist_ok=True)
+
 
 def setup_logging():
     """配置日志系统"""

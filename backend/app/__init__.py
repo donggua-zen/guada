@@ -2,12 +2,13 @@
 from flask import Flask
 from flask_cors import CORS
 from flask_sqlalchemy import SQLAlchemy
-from config import app_config
+from config import STATIC_FILES_DIR, app_config
 import logging
 from logging.handlers import RotatingFileHandler
 import os
 from .models.database import init_db, db
 from .models.user import jwt
+
 
 def create_app(config_name=None):
     """创建Flask应用的工厂函数"""
@@ -15,7 +16,9 @@ def create_app(config_name=None):
     if config_name is None:
         config_name = os.environ.get("FLASK_CONFIG", "development")
 
-    app = Flask(__name__, static_folder="static")
+    app = Flask(
+        __name__, static_folder=str(STATIC_FILES_DIR), static_url_path="/static"
+    )
 
     # 加载配置
     app.config.from_object(app_config[config_name])
@@ -116,5 +119,6 @@ class AppInitializer:
             self.app.logger.addHandler(file_handler)
             self.app.logger.setLevel(logging.INFO)
             self.app.logger.info("应用启动")
+
 
 app = create_app()
