@@ -5,6 +5,7 @@ import traceback
 from flask import Blueprint, Response, jsonify, request
 
 from flask import stream_with_context
+from flask_jwt_extended import jwt_required
 from app.services import ChatService
 from app.services import MessageService
 from app.services import SessionService
@@ -59,6 +60,7 @@ def stream_generator(
 
 
 @chat_bp.route("/v1/sessions/<session_id>/messages/stream", methods=["POST"])
+@jwt_required()
 def chat_completions(session_id):
     try:
         data = request.json
@@ -94,6 +96,7 @@ def chat_completions(session_id):
 
 
 @chat_bp.route("/v1/sessions/<session_id>/tokens", methods=["GET"])
+@jwt_required()
 def get_tokens(session_id):
     data = chat_service.token_statistics(session_id)
 
@@ -106,6 +109,7 @@ def get_tokens(session_id):
 
 
 @chat_bp.route("/v1/messages/<message_id>/web_serach", methods=["GET"])
+@jwt_required()
 def web_search(message_id):
     try:
         data = chat_service.web_search(message_id)

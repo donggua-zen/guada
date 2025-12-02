@@ -1,5 +1,6 @@
 from .character import Character
 from .message import Message
+from .message_content import MessageContent
 from .model_provider import ModelProvider
 from .model import Model
 from .session import Session
@@ -7,4 +8,5 @@ from .summary import Summary
 from .file import File
 from .database import db
 from .globa_setting import GlobalSetting
+from .user import User
 from .db_transaction import smart_transaction_manager

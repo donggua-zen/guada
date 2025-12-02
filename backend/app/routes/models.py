@@ -1,5 +1,6 @@
 import datetime
 from flask import Blueprint, jsonify, request
+from flask_jwt_extended import jwt_required
 
 from app.services import ModelService
 
@@ -29,6 +30,7 @@ def get_models():
 
 
 @models_bp.route("/v1/models/<model_id>", methods=["DELETE"])
+@jwt_required()
 def delete_model(model_id):
     try:
         model_service.delete_model(model_id)
@@ -38,6 +40,7 @@ def delete_model(model_id):
 
 
 @models_bp.route("/v1/models", methods=["POST"])
+@jwt_required()
 def create_model():
     try:
         request_data = request.json
@@ -58,6 +61,7 @@ def create_model():
 
 
 @models_bp.route("/v1/models/<model_id>", methods=["PUT"])
+@jwt_required()
 def update_model(model_id):
     try:
         request_data = request.json
@@ -86,6 +90,7 @@ def update_model(model_id):
 
 
 @models_bp.route("/v1/providers", methods=["POST"])
+@jwt_required()
 def create_provider():
     try:
         request_data = request.json
@@ -102,6 +107,7 @@ def create_provider():
 
 
 @models_bp.route("/v1/providers/<provider_id>", methods=["PUT"])
+@jwt_required()
 def update_provider(provider_id):
     try:
         request_data = request.json
@@ -119,6 +125,7 @@ def update_provider(provider_id):
 
 
 @models_bp.route("/v1/providers/<provider_id>", methods=["DELETE"])
+@jwt_required()
 def delete_provider(provider_id):
     try:
         model_service.delete_provider(provider_id)

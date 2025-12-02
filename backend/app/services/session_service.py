@@ -1,6 +1,7 @@
 # session_service.py
 import os
 import shutil
+from typing import Optional
 from app.repositories.character_repository import CharacterRepository
 from app.repositories.message_repository import MessageRepository
 from app.repositories.session_repository import SessionRepository as SessionRepo
@@ -60,10 +61,10 @@ class SessionService:
 
         return session
 
-    def get_all_sessions(self) -> list[dict]:
-        # sessions = SessionRepo.get_all_sessions()
+    def get_sessions(self, user_id: Optional[str] = None) -> list[dict]:
+        # sessions = SessionRepo.get_sessions()
         # return sessions
-        return SessionRepo.get_sessions_with_last_message_v2()
+        return SessionRepo.get_sessions_with_last_message_v2(user_id)
 
     def add_new_session(self, data: dict):
 

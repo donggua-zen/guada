@@ -15,7 +15,7 @@ from character_service import get_character_service
 from message_service import get_message_service
 from session_service import get_session_service
 
-sessions = get_session_service().get_all_sessions()
+sessions = get_session_service().get_sessions()
 
 for session in sessions:
     # messages = get_message_service().get_messages(session["id"])

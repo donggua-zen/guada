@@ -1,5 +1,6 @@
 import logging
 from flask import Blueprint, Response, jsonify, request
+from flask_jwt_extended import jwt_required
 import app
 from app.services import SummaryService
 from app.services import MessageService
@@ -17,6 +18,7 @@ logger = logging.getLogger(__name__)
 
 
 @messages_bp.route("/v1/sessions/<session_id>/messages", methods=["GET"])
+@jwt_required()
 def get_messages(session_id):
     try:
         messages = message_service.get_messages(session_id=session_id)
@@ -33,6 +35,7 @@ def get_messages(session_id):
 
 
 @messages_bp.route("/v1/sessions/<session_id>/messages", methods=["DELETE"])
+@jwt_required()
 def clear_session_messages(session_id):
     try:
         message_service.delete_messages_by_session_id(session_id)
@@ -44,6 +47,7 @@ def clear_session_messages(session_id):
 
 
 @messages_bp.route("/v1/messages/<message_id>", methods=["DELETE"])
+@jwt_required()
 def delete_message(message_id):
     try:
         message_service.delete_message(message_id)
@@ -54,6 +58,7 @@ def delete_message(message_id):
 
 
 @messages_bp.route("/v1/messages/<message_id>", methods=["PUT"])
+@jwt_required()
 def update_message(message_id):
     try:
         message_service.update_message(message_id, {"content": request.json["content"]})
@@ -63,6 +68,7 @@ def update_message(message_id):
 
 
 @messages_bp.route("/v1/sessions/<session_id>/messages", methods=["POST"])
+@jwt_required()
 def add_message(session_id):
     try:
         logger.info("add message1")
@@ -82,6 +88,7 @@ def add_message(session_id):
 
 
 @messages_bp.route("/v1/message-content/<content_id>/active", methods=["PUT"])
+@jwt_required()
 def update_message_active_content(content_id):
     try:
         message_service.set_message_current_content(content_id)
@@ -91,6 +98,7 @@ def update_message_active_content(content_id):
 
 
 @messages_bp.route("/v1/sessions/<session_id>/messages/import", methods=["POST"])
+@jwt_required()
 def import_messages(session_id):
     try:
         messages = request.json

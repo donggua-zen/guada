@@ -1,4 +1,5 @@
 # session_service.py
+from typing import Optional
 from app.models import db, Session
 from app.models.db_transaction import smart_transaction_manager
 from app.models.message import Message
@@ -9,7 +10,7 @@ from app.utils import to_utc8_isoformat
 class SessionRepository:
 
     @staticmethod
-    def get_all_sessions() -> list[dict]:
+    def get_sessions() -> list[dict]:
         sessions = db.session.query(Session).order_by(Session.updated_at.desc()).all()
         return [session.to_dict() for session in sessions]
 
@@ -61,7 +62,7 @@ class SessionRepository:
             db.session.delete(session)
 
     @staticmethod
-    def get_sessions_with_last_message_v2():
+    def get_sessions_with_last_message_v2(user_id: Optional[str] = None):
 
         # 使用窗口函数一次性查询
         subquery = (
@@ -87,19 +88,23 @@ class SessionRepository:
         )
 
         # 查询session和最后一条消息
-        sessions_with_messages = (
-            db.session.query(
-                Session,
-                subquery.c.content,
-                subquery.c.reasoning_content,
-                subquery.c.created_at,
-            )
-            .outerjoin(
-                subquery,
-                db.and_(Session.id == subquery.c.session_id, subquery.c.rn == 1),
-            )
-            .all()
+        query = db.session.query(
+            Session,
+            subquery.c.content,
+            subquery.c.reasoning_content,
+            subquery.c.created_at,
+        ).outerjoin(
+            subquery,
+            db.and_(
+                Session.id == subquery.c.session_id,
+                subquery.c.rn == 1,
+            ),
         )
+
+        # 如果提供了user_id，则添加过滤条件
+        if user_id is not None:
+            query = query.filter(Session.user_id == user_id)
+        sessions_with_messages = query.all()
 
         # 组装结果
         result = []

@@ -4,8 +4,7 @@ import os
 from pathlib import Path
 import sqlite3
 import sys
-from sqlalchemy import StaticPool
-from sqlalchemy import StaticPool, event
+from sqlalchemy import event
 from sqlalchemy.engine import Engine
 
 basedir = os.path.abspath(os.path.dirname(__file__))
@@ -50,6 +49,10 @@ class Config:
         # "poolclass": StaticPool,  # 单线程应用使用静态连接池
         "pool_pre_ping": True,  # 连接前检查
     }
+
+    JWT_SECRET_KEY = "your-secret-key-change-this"
+    JWT_ACCESS_TOKEN_EXPIRES = 3600 * 24 * 7  # 7天
+
     # 其他通用配置
     DEBUG = False
     TESTING = False

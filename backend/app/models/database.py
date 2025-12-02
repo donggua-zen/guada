@@ -14,6 +14,14 @@ def init_db(app):
         try:
             logger.debug("开始创建数据库表...")
             db.create_all()
+            # 可选：创建默认管理员用户
+            from app.models.user import User
+
+            if not User.query.filter_by(email="admin@dingd.cn").first():
+                admin = User(nickname="admin", email="admin@dingd.cn")
+                admin.set_password("123456")
+                db.session.add(admin)
+                db.session.commit()
             logger.debug("数据库表创建成功")
         except Exception as e:
             logger.exception(e)

@@ -2,6 +2,7 @@ import datetime
 import os
 import shutil
 from flask import Blueprint, jsonify, request
+from flask_jwt_extended import get_jwt_identity, jwt_required
 from app.services import SummaryService
 from app.services import MessageService
 from app.services import SessionService
@@ -18,20 +19,23 @@ sessions_bp = Blueprint("sessions", __name__)
 
 
 @sessions_bp.route("/v1/sessions", methods=["GET"])
+@jwt_required()
 def get_sessions():
     return jsonify(
-        {"success": True, "data": {"items": session_service.get_all_sessions()}}
+        {"success": True, "data": {"items": session_service.get_sessions()}}
     )
 
 
 @sessions_bp.route("/v1/sessions", methods=["POST"])
+@jwt_required()
 def create_session():
     try:
         settings = request.json.get("settings", {})
+        user_id = get_jwt_identity()
         session_data = {
             "title": request.json.get("title", ""),
             "character_id": request.json.get("character_id", None),
-            "user_id": "123",  # TODO: 应该从认证信息中获取
+            "user_id": user_id, 
             "avatar_url": "",
             "description": "An helpful AI assistant",
             "model_id": request.json.get("model_id", None),
@@ -56,6 +60,7 @@ def create_session():
 
 
 @sessions_bp.route("/v1/sessions/<session_id>", methods=["DELETE"])
+@jwt_required()
 def delete_session(session_id):
     try:
         session_service.delete_session(session_id)
@@ -66,6 +71,7 @@ def delete_session(session_id):
 
 
 @sessions_bp.route("/v1/sessions/<session_id>", methods=["GET"])
+@jwt_required()
 def get_session(session_id):
     try:
         data = session_service.get_session_by_id(session_id)
@@ -87,6 +93,7 @@ def get_session(session_id):
 
 
 @sessions_bp.route("/v1/sessions/<session_id>", methods=["PUT"])
+@jwt_required()
 def update_session(session_id):
     try:
         data = request.json
@@ -129,6 +136,7 @@ def update_session(session_id):
 
 
 @sessions_bp.route("/v1/sessions/<session_id>/avatars", methods=["POST"])
+@jwt_required()
 def upload_session_avatar(session_id):
     try:
         data = session_service.upload_avatar(session_id, request.files["avatar"])

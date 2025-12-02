@@ -7,7 +7,7 @@ import logging
 from logging.handlers import RotatingFileHandler
 import os
 from .models.database import init_db, db
-
+from .models.user import jwt
 
 def create_app(config_name=None):
     """创建Flask应用的工厂函数"""
@@ -44,6 +44,7 @@ class AppInitializer:
     def initialize_extensions(self):
         """初始化扩展"""
         init_db(self.app)
+        jwt.init_app(self.app)
 
         # 其他扩展初始化
         from flask_migrate import Migrate
@@ -63,6 +64,7 @@ class AppInitializer:
         from app.routes.files import files_bp
         from app.routes.chat import chat_bp
         from app.routes.settings import settings_bp
+        from app.routes.auth import auth_bp
 
         self.app.register_blueprint(sessions_bp)
         self.app.register_blueprint(messages_bp)
@@ -71,6 +73,7 @@ class AppInitializer:
         self.app.register_blueprint(files_bp)
         self.app.register_blueprint(chat_bp)
         self.app.register_blueprint(settings_bp)
+        self.app.register_blueprint(auth_bp)
 
     def initialize_error_handlers(self):
         """注册错误处理器"""

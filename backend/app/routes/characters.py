@@ -1,6 +1,7 @@
 import datetime
 import os
 from flask import Blueprint, jsonify, request
+from flask_jwt_extended import jwt_required
 
 from app.services import CharacterService
 
@@ -30,6 +31,7 @@ def get_characters():
 
 
 @characters_bp.route("/v1/characters", methods=["POST"])
+@jwt_required()
 def create_character():
     try:
         json_data = request.json
@@ -82,6 +84,7 @@ def create_character():
 
 
 @characters_bp.route("/v1/characters/<character_id>", methods=["DELETE"])
+@jwt_required()
 def delete_character(character_id):
     try:
         character_service.delete_character(character_id)
@@ -91,6 +94,7 @@ def delete_character(character_id):
 
 
 @characters_bp.route("/v1/characters/<character_id>", methods=["PUT"])
+@jwt_required()
 def update_character(character_id):
     try:
         request_data = request.json
@@ -113,6 +117,7 @@ def get_character(character_id):
 
 
 @characters_bp.route("/v1/characters/<character_id>/avatars", methods=["POST"])
+@jwt_required()
 def upload_character_avatar(character_id):
     try:
         data = character_service.upload_avatar(character_id, request.files["avatar"])
