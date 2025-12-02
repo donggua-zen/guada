@@ -1,6 +1,7 @@
 import logging
 import os
-from app import create_app
+
+from app import app
 
 logger = logging.getLogger(__name__)
 
@@ -18,5 +19,4 @@ logger.debug("拼接后的文件路径:%s", os.path.join(current_directory, "sta
 
 
 if __name__ == "__main__":
-    app = create_app()
     app.run(host="0.0.0.0", port=5000, debug=True)
