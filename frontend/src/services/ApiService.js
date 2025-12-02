@@ -4,13 +4,13 @@ import { useStorage } from '@vueuse/core';
 class ApiService {
   constructor(baseURL = '/v1') {
     this.baseURL = baseURL;
-    const accessTokenStore = useStorage('token', '');
+    this.tokenStore = useStorage('token', '');
+
     // 创建 Axios 实例
     this.axiosInstance = axios.create({
       baseURL: this.baseURL,
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${accessTokenStore.value}`,
       },
     });
 
@@ -32,6 +32,22 @@ class ApiService {
         throw error;
       }
     );
+
+    // 添加请求拦截器动态设置 token
+    this.axiosInstance.interceptors.request.use(
+      (config) => {
+        // 每次请求前获取最新的 token
+        const token = this.tokenStore.value;
+        if (token) {
+          config.headers.Authorization = `Bearer ${token}`;
+        }
+        return config;
+      },
+      (error) => {
+        return Promise.reject(error);
+      }
+    );
+
 
     this.currentAbortController = null;
     this.abortControllerMap = new Map();
