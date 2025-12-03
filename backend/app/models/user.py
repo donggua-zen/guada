@@ -9,7 +9,7 @@ bcrypt = Bcrypt()
 jwt = JWTManager()
 
 class User(ModelBase):
-    id = db.Column(db.String, primary_key=True, default=lambda: str(ulid.new()))
+    id = db.Column(db.String(26), primary_key=True, default=lambda: str(ulid.new()))
     nickname = db.Column(db.String(80), nullable=True)
     phone = db.Column(db.String(20), index=True, nullable=True)
     email = db.Column(db.String(120), index=True, nullable=True)

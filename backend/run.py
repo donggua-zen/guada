@@ -1,6 +1,10 @@
 import logging
 import os
 
+from dotenv import load_dotenv
+
+load_dotenv()  # 默认会从当前目录加载 .env 文件
+
 from app import app
 
 logger = logging.getLogger(__name__)

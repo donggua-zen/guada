@@ -6,7 +6,7 @@ from .database import ModelBase, db
 class File(ModelBase):
     __tablename__ = "file"
 
-    id = db.Column(db.String, primary_key=True, default=lambda: str(ulid.new()))
+    id = db.Column(db.String(26), primary_key=True, default=lambda: str(ulid.new()))
     file_name = db.Column(db.String(255), nullable=False)
     display_name = db.Column(db.String(255), nullable=False)
     file_size = db.Column(db.BigInteger, nullable=False)
