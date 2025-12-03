@@ -6,17 +6,17 @@ from .database import ModelBase, db
 class Message(ModelBase):
     __tablename__ = "message"
 
-    id = db.Column(db.String, primary_key=True, default=lambda: str(ulid.new()))
-    # session_id = db.Column(db.String, index=True)
+    id = db.Column(db.String(26), primary_key=True, default=lambda: str(ulid.new()))
+    # session_id = db.Column(db.String(26), index=True)
     session_id = db.Column(
-        db.String,
+        db.String(26),
         db.ForeignKey("session.id", ondelete="CASCADE", name="fk_message_session_id"),
         index=True,
     )
-    role = db.Column(db.String)
+    role = db.Column(db.String(50))
     # content = db.Column(db.Text, nullable=True)
     # reasoning_content = db.Column(db.Text, nullable=True)
-    parent_id = db.Column(db.String, nullable=True)
+    parent_id = db.Column(db.String(26), nullable=True)
     created_at = db.Column(db.DateTime, default=db.func.now())
     updated_at = db.Column(
         db.DateTime,

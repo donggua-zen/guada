@@ -5,17 +5,17 @@ from .database import ModelBase, db
 class Session(ModelBase):
     __tablename__ = "session"
 
-    id = db.Column(db.String, primary_key=True, default=lambda: str(ulid.new()))
-    title = db.Column(db.String, index=True)
-    user_id = db.Column(db.String, index=True)
+    id = db.Column(db.String(26), primary_key=True, default=lambda: str(ulid.new()))
+    title = db.Column(db.String(255), index=True)
+    user_id = db.Column(db.String(26), index=True)
     # character_id = Column(String, index=True)
     # memory_type = Column(String, nullable=True)
     # model = Column(String, nullable=True)
-    avatar_url = db.Column(db.String, nullable=True)
-    description = db.Column(db.String, nullable=True)
+    avatar_url = db.Column(db.String(255), nullable=True)
+    description = db.Column(db.String(512), nullable=True)
     # system_prompt = Column(Text, nullable=True)
     model_id = db.Column(
-        db.String,
+        db.String(26),
         db.ForeignKey("model.id", ondelete="SET NULL", name="fk_session_model_id"),
         index=True,
         nullable=True,

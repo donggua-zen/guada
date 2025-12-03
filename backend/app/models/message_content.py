@@ -6,10 +6,10 @@ from .database import ModelBase, db
 class MessageContent(ModelBase):
     __tablename__ = "message_content"
 
-    id = db.Column(db.String, primary_key=True, default=lambda: str(ulid.new()))
-    # session_id = db.Column(db.String, index=True)
+    id = db.Column(db.String(26), primary_key=True, default=lambda: str(ulid.new()))
+    # session_id = db.Column(db.String(26), index=True)
     message_id = db.Column(
-        db.String,
+        db.String(26),
         db.ForeignKey(
             "message.id", ondelete="CASCADE", name="fk_message_content_message_id"
         ),
