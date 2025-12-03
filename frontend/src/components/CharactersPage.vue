@@ -1,8 +1,8 @@
 <template>
-  <div class="flex flex-col h-screen bg-gray-50">
+  <div class="flex flex-col h-screen bg-[var(--bg)]">
     <!-- 头部 -->
     <div class="flex justify-between items-center p-4 bg-white border-b border-gray-200">
-      <span class="text-2xl font-semibold text-gray-800">角色列表</span>
+      <span class="text-lg font-semibold text-gray-800">角色列表</span>
       <n-button type="primary" @click="createCharacter" class="flex items-center">
         <template #icon>
           <n-icon>
@@ -14,74 +14,116 @@
     </div>
 
     <!-- 角色列表 -->
-    <div class=" flex-1 overflow-y-auto p-6">
-      <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-        <!-- 角色卡片 -->
-        <div v-for="character in characters" :key="character.id"
-          class="bg-white rounded-xl shadow-sm hover:shadow-md transition-all duration-300 hover:-translate-y-1 flex flex-col h-full min-h-[180px]">
-          <div class="flex p-4 flex-1">
-            <!-- 头像区域 -->
-            <div class="flex-shrink-0 mr-4">
-              <div class="w-16 h-16 overflow-hidden">
-                <Avatar :src="character.avatar_url" />
-              </div>
-            </div>
+    <div class="flex-1 overflow-y-auto p-6 flex flex-col items-center">
+      <div class="mb-4 w-full max-w-80">
+        <n-tabs v-model:value="charactersType" type="segment" pane-wrapper-style="display:none"
+          pane-style="display:none">
+          <n-tab-pane name="private" tab="我的模板"></n-tab-pane>
+          <n-tab-pane name="shared" tab="共享模板"></n-tab-pane>
+        </n-tabs>
+      </div>
+      <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-6 w-full">
+        <!-- 骨架屏加载效果 -->
+        <template v-if="loading">
+          <div v-for="i in skeletonCount" :key="i"
+            class="bg-white rounded-xl shadow-sm flex flex-col min-h-[180px] animate-pulse">
+            <div class="flex p-4 flex-1 flex-col">
+              <!-- 头像区域 -->
+              <div class="flex flex-rows">
+                <div class="flex-shrink-0 mr-4">
+                  <div class="w-16 h-16 bg-gray-200"></div>
+                </div>
 
-            <!-- 内容区域 -->
-            <div class="flex-1 min-w-0 flex flex-col">
-              <!-- 标题和描述 -->
-              <div class="flex-1">
-                <h3 class="text-lg font-semibold text-gray-800 truncate mb-2">{{ character.title }}</h3>
-                <div class="h-15 overflow-hidden">
-                  <n-popover trigger="hover" placement="top" :show-arrow="false">
-                    <template #trigger>
-                      <p class="text-sm text-gray-600 line-clamp-3 leading-5 cursor-help">
-                        {{ character.description || '暂无描述' }}
-                      </p>
-                    </template>
-                    <div class="max-w-xs p-2">
-                      <span class="text-sm whitespace-pre-wrap">{{ character.description || '暂无描述' }}</span>
-                    </div>
-                  </n-popover>
+                <!-- 内容区域 -->
+                <div class="flex-1 min-w-0 flex flex-col">
+                  <!-- 标题 -->
+                  <!-- <div class="h-5 bg-gray-200 rounded mb-2 w-full"></div>-->
+                  <h3 class="text-lg  bg-gray-200 font-semibold text-gray-800 truncate mb-2">&nbsp;</h3>
+                  <!-- 描述 -->
+                  <div class="h-15 space-y-2">
+                    <div class="h-3 bg-gray-200 rounded"></div>
+                    <div class="h-3 bg-gray-200 rounded w-4/5"></div>
+                    <div class="h-3 bg-gray-200 rounded w-3/5"></div>
+                  </div>
                 </div>
               </div>
-
               <!-- 操作按钮 -->
               <div class="flex justify-between items-center mt-4 pt-3 border-t border-gray-100">
-                <n-button type="primary" size="small" @click="startNewChat(character)" class="flex items-center gap-1">
+                <div class="h-7 w-20 bg-gray-200 rounded-full"></div>
+                <div class="flex gap-1">
+                  <div class="w-8 h-8 rounded-full bg-gray-200"></div>
+                  <div class="w-8 h-8 rounded-full bg-gray-200"></div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </template>
+        <template v-else>
+          <!-- 角色卡片 -->
+          <div v-for="character in characters" :key="character.id"
+            class="bg-white rounded-xl shadow-sm hover:shadow-lg transition-all duration-300 flex flex-col min-h-[180px]">
+            <div class="flex p-4 flex-1 flex-col">
+              <!-- 头像区域 -->
+              <div class="flex flex-rows">
+                <div class="flex-shrink-0 mr-4">
+                  <div class="w-16 h-16 overflow-hidden">
+                    <Avatar :src="character.avatar_url" />
+                  </div>
+                </div>
+
+                <!-- 内容区域 -->
+                <div class="flex-1 min-w-0 flex flex-col">
+                  <!-- 标题和描述 -->
+                  <h3 class="text-lg font-semibold text-gray-800 truncate mb-2">{{ character.title }}</h3>
+                  <div class="h-15 overflow-hidden">
+                    <n-popover trigger="hover" placement="top" :show-arrow="false">
+                      <template #trigger>
+                        <p class="text-sm text-gray-600 line-clamp-3 leading-5 cursor-help">
+                          {{ character.description || '暂无描述' }}
+                        </p>
+                      </template>
+                      <div class="max-w-xs p-2">
+                        <span class="text-sm whitespace-pre-wrap">{{ character.description || '暂无描述' }}</span>
+                      </div>
+                    </n-popover>
+                  </div>
+                </div>
+              </div>
+              <!-- 操作按钮 -->
+              <div class="flex justify-between items-center mt-4 pt-3 border-t border-gray-100">
+                <n-button secondary type="primary" round size="small" @click="startNewChat(character)"
+                  class="flex items-center gap-1">
                   <template #icon>
-                    <n-icon>
+                    <n-icon size="16">
                       <ChatbubbleEllipses />
                     </n-icon>
                   </template>
                   使用
                 </n-button>
 
-                <div class="flex gap-1">
-                  <n-button size="small" quaternary circle @click="editCharacter(character)"
-                    class="text-blue-500 hover:text-blue-600">
+                <div v-if="charactersType == 'private'" class="flex gap-1">
+                  <n-button size="small" quaternary circle @click="shareCharacter(character)"
+                    class="text-gray-500 hover:text-gray-600" :class="{ '!text-yellow-500': character.is_public }">
                     <template #icon>
-                      <n-icon>
-                        <EditOutlined />
+                      <n-icon :component="ShareTwotone" size="18">
                       </n-icon>
                     </template>
                   </n-button>
-                  <n-button size="small" quaternary circle @click="deleteCharacter(character)"
-                    class="text-red-500 hover:text-red-600">
-                    <template #icon>
-                      <n-icon>
-                        <DeleteOutlineOutlined />
-                      </n-icon>
-                    </template>
-                  </n-button>
+
+                  <!-- 更多按钮下拉菜单 -->
+                  <n-dropdown trigger="click" :options="moreOptions" @select="handleMoreAction($event, character)">
+                    <n-button size="small" quaternary circle>
+                      <n-icon :component="MoreVertOutlined" size="18" />
+                    </n-button>
+                  </n-dropdown>
                 </div>
               </div>
+
             </div>
           </div>
-        </div>
-
+        </template>
         <!-- 空状态 -->
-        <div v-if="characters.length === 0" class="col-span-full text-center py-12 text-gray-500">
+        <div v-if="!loading && characters.length === 0" class="col-span-full text-center py-12 text-gray-500">
           <n-icon size="48" class="text-gray-300 mb-3">
             <People />
           </n-icon>
@@ -97,14 +139,16 @@
 </template>
 
 <script setup>
-import { ref, onMounted, reactive } from 'vue'
+import { ref, onMounted, reactive, computed, h } from 'vue'
 import { useRouter } from 'vue-router'
 import SidebarLayout from '@/components/layout/SidebarLayout.vue'
 import {
   NButton,
   NIcon,
-  useDialog,
-  NPopover
+  NPopover,
+  NTabs,
+  NTabPane,
+  NDropdown,
 } from 'naive-ui'
 import {
   ChatbubbleEllipses,
@@ -113,8 +157,10 @@ import {
 
 import {
   PlusOutlined,
-  EditOutlined,
-  DeleteOutlineOutlined,
+  EditTwotone,
+  ShareTwotone,
+  DeleteTwotone,
+  MoreVertOutlined,
 } from '@vicons/material'
 
 // 组件
@@ -125,7 +171,8 @@ import CharacterModal from './CharacterModal.vue'
 import { apiService } from '../services/ApiService'
 
 // 弹窗
-import { usePopup } from '@/composables/usePopup'
+import { usePopup } from '../composables/usePopup'
+import { watch } from 'vue'
 
 const { confirm, toast } = usePopup()
 
@@ -134,15 +181,42 @@ const characters = ref([])
 const showModal = ref(false)
 const currentCharacterId = ref('')
 const router = useRouter()
+const charactersType = ref('private')
+const loading = ref(true)
+const skeletonCount = ref(10)
+
+// 更多按钮的选项
+const moreOptions = computed(() => {
+  const options = [
+    {
+      label: '编辑模板',
+      key: 'edit',
+      icon: () => h(NIcon, { component: EditTwotone, size: 15 })
+    },
+    {
+      label: '删除模板',
+      key: 'delete',
+      icon: () => h(NIcon, { component: DeleteTwotone, size: 15 })
+    }
+  ];
+  return options;
+});
 
 // 加载角色列表
-const loadCharacters = async () => {
+const loadCharacters = async (type) => {
+  loading.value = true
   try {
-    const data = await apiService.fetchCharacters()
+    // 确保至少显示500ms的加载动画，避免闪烁
+    const [data] = await Promise.all([
+      apiService.fetchCharacters(type),
+      new Promise(resolve => setTimeout(resolve, 500))
+    ])
     characters.value = data.items
   } catch (error) {
     console.error('获取角色列表失败:', error)
     toast.error('获取角色列表失败')
+  } finally {
+    loading.value = false
   }
 }
 
@@ -158,6 +232,14 @@ const editCharacter = (character) => {
   showModal.value = true
 }
 
+const handleMoreAction = (key, character) => {
+  if (key === 'edit') {
+    editCharacter(character)
+  } else if (key === 'delete') {
+    deleteCharacter(character)
+  }
+};
+
 // 删除角色
 const deleteCharacter = async (character) => {
   try {
@@ -166,7 +248,7 @@ const deleteCharacter = async (character) => {
       return
     }
     await apiService.deleteCharacter(character.id)
-    await loadCharacters()
+    await loadCharacters(charactersType.value)
     toast.success('角色删除成功')
   } catch (error) {
     toast.error('删除失败')
@@ -187,6 +269,17 @@ const startNewChat = async (character) => {
   }
 }
 
+const shareCharacter = async (character) => {
+  try {
+    await apiService.updateCharacter(character.id, { is_public: !character.is_public })
+    character.is_public = !character.is_public
+    toast.success(character.is_public ? '角色已公开' : '角色已私密')
+  } catch (error) {
+    console.error('更新角色失败:', error)
+    toast.error('更新角色失败')
+  }
+}
+
 // 处理保存后的回调
 const handleSaved = (characterData) => {
   console.log('Character saved:', characterData);
@@ -198,9 +291,13 @@ const handleSaved = (characterData) => {
   }
 }
 
+watch(() => charactersType.value, async () => {
+  loadCharacters(charactersType.value)
+})
+
 // 生命周期
 onMounted(async () => {
-  loadCharacters()
+  loadCharacters(charactersType.value)
 })
 </script>
 
