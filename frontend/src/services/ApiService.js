@@ -84,8 +84,11 @@ class ApiService {
    * 获取角色列表
    * @returns {Promise<Object>} 返回角色数据对象
    */
-  async fetchCharacters() {
-    return await this._request('/characters');
+  async fetchCharacters(type = 'private') {
+    if (type === 'private') {
+      return await this._request('/characters');
+    }
+    return await this._request('/shared/characters');
   }
 
   /**
