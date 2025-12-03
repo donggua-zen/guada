@@ -1,12 +1,25 @@
 <template>
     <div class="min-h-screen bg-gray-50 flex items-center justify-center p-4">
-        <div class="flex bg-white rounded-xl overflow-hidden shadow-[0_6px_30px_0_rgba(0,0,0,.08)] py-10">
-            <div class="w-120 h-full items-center justify-center">
-                <img src="/images/girl_book.png" class="w-80 h-80 mx-auto">
+        <div class="flex bg-white rounded-xl overflow-hidden shadow-[0_6px_30px_0_rgba(0,0,0,.08)] py-10 items-center justify-center">
+            <div class="flex w-120 items-center justify-center">
+                <div class="w-90 h-90">
+                    <!-- <img src="/images/girl_book.png" class="w-80 h-80 mx-auto"> -->
+                    <n-carousel autoplay direction="horizontal" :show-arrow="false" dot-type="line"
+                        dot-placement="bottom">
+                        <img class="carousel-img h-full" style="object-fit: cover" src="/images/girl_book_512.webp">
+                        <img class="carousel-img h-full" style="object-fit: cover"
+                            src="/images/boy_book_512.webp"><template #dots="{ total, currentIndex, to }">
+                            <ul class="custom-dots">
+                                <li v-for="index of total" :key="index"
+                                    :class="{ ['is-active']: currentIndex === index - 1 }" @click="to(index - 1)" />
+                            </ul>
+                        </template>
+                    </n-carousel>
+                </div>
             </div>
-            <div>
+            <div class="flex items-center justify-centeri flex-col">
                 <!-- 登录方式切换 -->
-                <div class="flex justify-center px-4">
+                <div class="flex justify-center px-4 w-full">
                     <n-tabs v-model:value="loginType" type="segment" animated class="w-full">
                         <n-tab-pane name="phone" tab="手机登录"></n-tab-pane>
                         <n-tab-pane name="email" tab="邮箱登录"></n-tab-pane>
@@ -95,6 +108,7 @@ import {
     NTabPane,
     NIcon,
     NCheckbox,
+    NCarousel,
 } from 'naive-ui'
 
 import {
@@ -231,5 +245,33 @@ const handleLogin = async () => {
 .n-form-item-label {
     font-weight: 500;
     color: #374151;
+}
+</style>
+<style scoped>
+.custom-dots {
+    display: flex;
+    margin: 0;
+    padding: 0;
+    position: absolute;
+    bottom: 20px;
+    left: 20px;
+}
+
+.custom-dots li {
+    display: inline-block;
+    width: 12px;
+    height: 4px;
+    margin: 0 3px;
+    border-radius: 4px;
+    background-color: var(--secondary-color);
+    transition:
+        width 0.3s,
+        background-color 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    cursor: pointer;
+}
+
+.custom-dots li.is-active {
+    width: 40px;
+    background-color: var(--primary-color);
 }
 </style>
