@@ -560,6 +560,12 @@ class ApiService {
       data: credentials
     });
   }
+
+  async getProfile() {
+    return await this._request('/auth/profile', {
+      method: 'GET'
+    });
+  }
 }
 
 // 创建默认实例并导出
