@@ -6,6 +6,7 @@ class ModelProvider(ModelBase):
     __tablename__ = "model_provider"
 
     id = db.Column(db.String(26), primary_key=True, default=lambda: str(ulid.new()))
+    user_id = db.Column(db.String(26), index=True)
     name = db.Column(db.String(32))
     provider = db.Column(db.String(32))
     api_url = db.Column(db.String(255))

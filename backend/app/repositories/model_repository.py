@@ -4,14 +4,34 @@ from app.models.db_transaction import smart_transaction_manager
 
 class ModelRepository:
     @staticmethod
-    def get_all_models():
+    def get_models():
         models = db.session.query(Model).all()
         return [m.to_dict() for m in models]
 
     @staticmethod
-    def get_all_providers():
+    def get_providers():
         providers = db.session.query(ModelProvider).all()
         return [p.to_dict() for p in providers]
+
+    @staticmethod
+    def get_providers_with_models(user_id):
+        """
+        获取指定用户的所有模型提供商及其关联的模型信息
+
+        Args:
+            user_id: 用户ID，用于筛选特定用户的模型提供商
+
+        Returns:
+            list: 包含模型提供商及其关联模型信息的字典列表，每个元素都是
+                  ModelProvider对象调用to_dict方法并包含models字段的结果
+        """
+        providers = (
+            db.session.query(ModelProvider)
+            .filter(ModelProvider.user_id == user_id)
+            .options(db.selectinload(ModelProvider.models))
+            .all()
+        )
+        return [p.to_dict(include=["models"]) for p in providers]
 
     @staticmethod
     @smart_transaction_manager.execute_in_transaction

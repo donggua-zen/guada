@@ -1,15 +1,18 @@
 # models.py
-from flask_sqlalchemy import SQLAlchemy
 import ulid
 from flask_bcrypt import Bcrypt
-from flask_jwt_extended import JWTManager, create_access_token, create_refresh_token
+from flask_jwt_extended import JWTManager
 from app.models.database import ModelBase, db
 
 bcrypt = Bcrypt()
 jwt = JWTManager()
 
+
 class User(ModelBase):
     id = db.Column(db.String(26), primary_key=True, default=lambda: str(ulid.new()))
+    role = db.Column(db.String(20), nullable=True)
+    avatar_url = db.Column(db.String(255), nullable=True)
+    parent_id = db.Column(db.String(26), nullable=True, index=True)
     nickname = db.Column(db.String(80), nullable=True)
     phone = db.Column(db.String(20), index=True, nullable=True)
     email = db.Column(db.String(120), index=True, nullable=True)
