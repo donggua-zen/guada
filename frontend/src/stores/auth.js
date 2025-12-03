@@ -40,21 +40,21 @@ export const useAuthStore = defineStore('auth', () => {
     function logout() {
         user.value = null
         token.value = null
-    
+
         // apiService.logout()
     }
 
     async function checkAuth() {
         if (!token.value) return false
-        return true
-        // try {
-        //     const userData = await apiService.getProfile()
-        //     user.value = userData
-        //     return true
-        // } catch (error) {
-        //     logout()
-        //     return false
-        // }
+        try {
+            const userData = await apiService.getProfile()
+            user.value = userData
+            return true
+        } catch (error) {
+            console.error(error)
+            logout()
+            return false
+        }
     }
 
     return {
