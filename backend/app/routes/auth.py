@@ -79,9 +79,9 @@ def login():
     return jsonify({"error": "用户名或密码错误"}), 401
 
 
-@auth_bp.route("/api/v1/profile", methods=["GET"])
+@auth_bp.route("/api/v1/auth/profile", methods=["GET"])
 @jwt_required()
-def profile():
+def get_profile():
     user_id = get_jwt_identity()
-    user = User.query.get(user_id)
-    return jsonify(user.to_dict())
+    user = User.query.filter_by(id=user_id).first()
+    return jsonify({"success": True, "data": user.to_dict()})
