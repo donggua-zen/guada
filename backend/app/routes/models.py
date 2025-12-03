@@ -1,6 +1,6 @@
 import datetime
 from flask import Blueprint, jsonify, request
-from flask_jwt_extended import jwt_required
+from flask_jwt_extended import get_jwt_identity, jwt_required
 
 from app.services import ModelService
 
@@ -12,17 +12,15 @@ model_service = ModelService()
 
 
 @models_bp.route("/api/v1/models", methods=["GET"])
+@jwt_required()
 def get_models():
     try:
-        models = model_service.get_all_models()
-        providers = model_service.get_all_providers()
+        user_id = get_jwt_identity()
+        models = model_service.get_models_and_providers(user_id=user_id)
         return jsonify(
             {
                 "success": True,
-                "data": {
-                    "models": models,
-                    "providers": providers,
-                },
+                "data": models,
             }
         )
     except Exception as e:

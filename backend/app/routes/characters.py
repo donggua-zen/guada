@@ -1,7 +1,7 @@
 import datetime
 import os
 from flask import Blueprint, jsonify, request
-from flask_jwt_extended import jwt_required
+from flask_jwt_extended import get_jwt_identity, jwt_required
 
 from app.services import CharacterService
 
@@ -12,9 +12,11 @@ characters_bp = Blueprint("characters", __name__)
 
 
 @characters_bp.route("/api/v1/characters", methods=["GET"])
+@jwt_required()
 def get_characters():
     try:
-        all_characters = character_service.get_all_characters()
+        user_id = get_jwt_identity()
+        all_characters = character_service.get_characters(user_id=user_id)
 
         characters = [
             {
@@ -22,6 +24,30 @@ def get_characters():
                 "title": char.get("title"),
                 "description": char.get("description"),
                 "avatar_url": char.get("avatar_url"),
+                "is_public": char.get("is_public"),
+            }
+            for char in all_characters
+        ]
+        return jsonify({"success": True, "data": {"items": characters}})
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@characters_bp.route("/api/v1/shared/characters", methods=["GET"])
+@jwt_required()
+def get_shared_characters():
+    try:
+        user_id = get_jwt_identity()
+
+        all_characters = character_service.get_shared_characters(user_id=user_id)
+
+        characters = [
+            {
+                "id": char.get("id"),
+                "title": char.get("title"),
+                "description": char.get("description"),
+                "avatar_url": char.get("avatar_url"),
+                "is_public": char.get("is_public"),
             }
             for char in all_characters
         ]
@@ -34,7 +60,9 @@ def get_characters():
 @jwt_required()
 def create_character():
     try:
+        user_id = get_jwt_identity()
         json_data = request.json
+        json_data["user_id"] = user_id
         fields = [
             "title",
             "description",
@@ -87,7 +115,8 @@ def create_character():
 @jwt_required()
 def delete_character(character_id):
     try:
-        character_service.delete_character(character_id)
+        user_id = get_jwt_identity()
+        character_service.delete_character(character_id, user_id=user_id)
         return jsonify({"success": True})
     except Exception as e:
         return jsonify({"success": False, "error": str(e)}), 500
@@ -98,19 +127,33 @@ def delete_character(character_id):
 def update_character(character_id):
     try:
         request_data = request.json
-        fields = ["title", "description", "avatar_url", "model_id", "settings"]
+        user_id = get_jwt_identity()
+        fields = [
+            "title",
+            "description",
+            "avatar_url",
+            "model_id",
+            "settings",
+            "is_public",
+        ]
 
-        data = {field: request_data.get(field) for field in fields}
-        character_service.update_character(character_id, data)
+        data = {
+            field: request_data.get(field)
+            for field in fields
+            if request_data.get(field)
+        }
+        character_service.update_character(character_id, user_id=user_id, data=data)
         return jsonify({"success": True, "data": data})
     except Exception as e:
         return jsonify({"success": False, "error": str(e)}), 500
 
 
 @characters_bp.route("/api/v1/characters/<character_id>", methods=["GET"])
+@jwt_required()
 def get_character(character_id):
     try:
-        character = character_service.get_character_by_id(character_id)
+        user_id = get_jwt_identity()
+        character = character_service.get_character_by_id(character_id, user_id=user_id)
         return jsonify({"success": True, "data": character})
     except Exception as e:
         return jsonify({"success": False, "error": str(e)}), 500
@@ -120,7 +163,10 @@ def get_character(character_id):
 @jwt_required()
 def upload_character_avatar(character_id):
     try:
-        data = character_service.upload_avatar(character_id, request.files["avatar"])
+        user_id = get_jwt_identity()
+        data = character_service.upload_avatar(
+            character_id, user_id=user_id, avatar_file=request.files["avatar"]
+        )
         return jsonify({"success": True, "data": data})
     except Exception as e:
         return jsonify({"success": False, "error": str(e)}), 500

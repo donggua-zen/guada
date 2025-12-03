@@ -9,7 +9,6 @@ class Model(ModelBase):
 
     id = db.Column(db.String(26), primary_key=True, default=lambda: str(ulid.new()))
     name = db.Column(db.String(255), nullable=True)
-    # provider_id = db.Column(db.String(26))
     provider_id = db.Column(
         db.String(26),
         db.ForeignKey(

@@ -21,8 +21,9 @@ sessions_bp = Blueprint("sessions", __name__)
 @sessions_bp.route("/api/v1/sessions", methods=["GET"])
 @jwt_required()
 def get_sessions():
+    user_id = get_jwt_identity()
     return jsonify(
-        {"success": True, "data": {"items": session_service.get_sessions()}}
+        {"success": True, "data": {"items": session_service.get_sessions(user_id=user_id)}}
     )
 
 

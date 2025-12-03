@@ -17,11 +17,14 @@ def init_db(app):
             # 可选：创建默认管理员用户
             from app.models.user import User
 
-            if not User.query.filter_by(email="admin@dingd.cn").first():
-                admin = User(nickname="admin", email="admin@dingd.cn")
-                admin.set_password("123456")
-                db.session.add(admin)
-                db.session.commit()
+            try:
+                if not User.query.filter_by(email="admin@dingd.cn").first():
+                    admin = User(nickname="admin", email="admin@dingd.cn")
+                    admin.set_password("123456")
+                    db.session.add(admin)
+                    db.session.commit()
+            except Exception as e:
+                logger.exception(e)
             logger.debug("数据库表创建成功")
         except Exception as e:
             logger.exception(e)

@@ -7,12 +7,24 @@ class ModelService:
     def __init__(self):
         pass
 
-    def get_all_models(self):
-        models = ModelRepo.get_all_models()
+    def get_models_and_providers(self, user_id):
+        models = []
+        providers = []
+        results = ModelRepo.get_providers_with_models(user_id=user_id)
+        for result in results:
+            models.extend(result.pop("models"))
+            providers.append(result)
+        return {
+            "models": models,
+            "providers": providers,
+        }
+
+    def get_models(self):
+        models = ModelRepo.get_models()
         return models
 
-    def get_all_providers(self):
-        providers = ModelRepo.get_all_providers()
+    def get_providers(self):
+        providers = ModelRepo.get_providers()
         return providers
 
     def delete_model(self, model_id):

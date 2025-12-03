@@ -1,5 +1,6 @@
 import os
 from pathlib import Path
+from typing import Optional, Union
 import ulid
 
 from app.models import db, Character
@@ -9,10 +10,21 @@ from app.models.db_transaction import smart_transaction_manager
 class CharacterRepository:
 
     @staticmethod
-    def get_all_characters():
-        characters = db.session.query(Character).all()
+    def get_characters(user_id: Optional[str | list[str]] = None):
+        if isinstance(user_id, str):
+            characters = (
+                db.session.query(Character).filter(Character.user_id == user_id).all()
+            )
+        elif isinstance(user_id, list):
+            characters = (
+                db.session.query(Character)
+                .filter(Character.user_id.in_(user_id))
+                .filter(Character.is_public == True)
+                .all()
+            )
+        else:
+            characters = db.session.query(Character).all()
         results = [character.to_dict() for character in characters]
-
         return results
 
     @staticmethod
@@ -41,8 +53,11 @@ class CharacterRepository:
             db.session.delete(character)
 
     @staticmethod
-    def get_character_by_id(id):
-        character = db.session.query(Character).filter(Character.id == id).first()
+    def get_character_by_id(id, user_id: Optional[str] = None):
+        query = db.session.query(Character).filter(Character.id == id)
+        if user_id:
+            query = query.filter(Character.user_id == user_id)
+        character = query.first()
         if character:
             return character.to_dict()
         return None
