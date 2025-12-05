@@ -13,29 +13,9 @@
                             <!-- 头像设置 -->
                             <n-form-item label="头像设置" :show-label="false">
                                 <div class="avatar-upload-container ">
-                                    <div class="avatar-preview">
-                                        <Avatar :src="characterForm.avatar_url"></Avatar>
-                                    </div>
-                                    <div class="avatar-upload-actions">
-                                        <n-button @click="triggerAvatarUpload" size="medium">
-                                            <template #icon>
-                                                <n-icon>
-                                                    <UploadOutlined />
-                                                </n-icon>
-                                            </template>
-                                            上传头像
-                                        </n-button>
-                                        <n-button @click="removeAvatar" v-if="characterForm.avatar_url" size="medium">
-                                            <template #icon>
-                                                <n-icon>
-                                                    <DeleteOutlined />
-                                                </n-icon>
-                                            </template>
-                                            移除
-                                        </n-button>
-                                    </div>
-                                    <input ref="avatarInput" type="file" accept="image/*" style="display: none"
-                                        @change="handleAvatarUpload">
+                                    <AvatarPreview :src="characterForm.avatar_url" type="assistant"
+                                        @avatar-changed="handleAvatarChanged">
+                                    </AvatarPreview>
                                 </div>
                             </n-form-item>
 
@@ -189,24 +169,6 @@
             </n-button>
         </div>
     </div>
-    <!-- 头像裁剪模态框 -->
-    <n-modal v-model:show="showCropModal" preset="card" title="裁剪头像" style="width: 600px;">
-        <div class="modal-body">
-            <cropper ref="cropperAvatar" :src="cropImageSrc" :stencil-props="{
-                aspectRatio: 1,
-                movable: true,
-                resizable: true
-            }" :resize-image="{
-                adjustStencil: false
-            }" @change="handleCropChange" :output-type="'png'" :output-size="{ width: 500, height: 500 }" />
-        </div>
-        <template #footer>
-            <n-space justify="end">
-                <n-button @click="closeCropModal">取消</n-button>
-                <n-button type="primary" @click="cropAvatar">确认裁剪</n-button>
-            </n-space>
-        </template>
-    </n-modal>
 
 </template>
 
@@ -228,21 +190,17 @@ import {
     NTooltip,
     NCheckbox
 } from 'naive-ui'
-import { Cropper } from 'vue-advanced-cropper'
-import 'vue-advanced-cropper/dist/style.css'
 import {
-    UploadOutlined,
-    DeleteOutlined,
     SaveOutlined,
     QuestionCircleOutlined
 } from '@vicons/antd'
 
 import { apiService } from '../services/ApiService'
 import { required } from '@vuelidate/validators'
-import Avatar from '../components/Avatar.vue'
 
 
 import { usePopup } from '../composables/usePopup'
+import AvatarPreview from './AvatarPreview.vue'
 
 const { toast, notify } = usePopup()
 
@@ -285,11 +243,6 @@ const emit = defineEmits(['update:data', 'update:tab', 'saved'])
 // 响应式数据
 const isSimpleStyle = ref(false)
 const loading = ref(false)
-const showCropModal = ref(false)
-const cropImageSrc = ref('')
-const cropFile = ref(null)
-const cropperAvatar = ref(null)
-const avatarInput = ref(null)
 
 // 模型数据
 const models = ref([]);
@@ -426,31 +379,14 @@ const modelOptions = computed(() => {
     return options
 })
 
-// 响应式调整抽屉宽度
-// const updateDrawerWidth = () => {
-//     const width = window.innerWidth
-//     if (width < 768) {
-//         drawerWidth.value = '90%'
-//     } else if (width < 1200) {
-//         drawerWidth.value = 400
-//     } else {
-//         drawerWidth.value = 400
-//     }
-// }
-
 // 监听props.show变化
 watch(() => props.simple, (newVal) => {
     isSimpleStyle.value = newVal;
-    console.log("style:" + newVal);
 }, { immediate: true })
 
 watch(() => props.data, (newVal) => {
 
     characterForm.avatar_file = null;
-    if (characterForm.avatar_url && characterForm.avatar_url.startsWith('blob:')) {
-        URL.revokeObjectURL(characterForm.avatar_url);
-        characterForm.avatar_url = '';
-    }
 
     characterForm.id = newVal.id || '';
     characterForm.title = newVal.title || '';
@@ -458,12 +394,10 @@ watch(() => props.data, (newVal) => {
     characterForm.avatar_url = newVal.avatar_url || '';
     characterForm.model_id = newVal.model_id || '';
 
-    //if (newVal.settings) {
     characterForm.assistant_name = newVal.settings?.assistant_name || '';
     characterForm.assistant_identity = newVal.settings?.assistant_identity || '';
     characterForm.system_prompt = newVal.settings?.system_prompt || '';
     characterForm.memory_type = newVal.settings?.memory_type || 'sliding_window';
-    //if (!isSimpleStyle.value) {
     characterForm.model_temperature = newVal.settings?.model_temperature || null;
     characterForm.model_top_p = newVal.settings?.model_top_p || null;
     characterForm.model_frequency_penalty = newVal.settings?.model_frequency_penalty || null;
@@ -471,10 +405,12 @@ watch(() => props.data, (newVal) => {
     characterForm.max_memory_tokens = newVal.settings?.max_memory_tokens || null;
     characterForm.short_term_memory_tokens = newVal.settings?.short_term_memory_tokens || null;
     characterForm.use_user_prompt = newVal.settings?.use_user_prompt || false;
-    // }
-    //}
 
 }, { immediate: true })
+
+const handleAvatarChanged = (file) => {
+    characterForm.avatar_file = file
+}
 
 const loadModels = async () => {
     try {
@@ -506,81 +442,7 @@ onUnmounted(() => {
     }
 })
 
-// 方法
-const handleClose = () => {
 
-}
-
-const triggerAvatarUpload = () => {
-    avatarInput.value.click()
-}
-
-const handleAvatarUpload = (event) => {
-    const file = event.target.files[0]
-    if (file) {
-        if (!file.type.startsWith('image/')) {
-            toast.error('请选择图片文件')
-            return
-        }
-
-        if (file.size > 5 * 1024 * 1024) {
-            toast.error('图片大小不能超过5MB')
-            return
-        }
-
-        const reader = new FileReader()
-        reader.onload = (e) => {
-            cropImageSrc.value = e.target.result
-            cropFile.value = file
-            showCropModal.value = true
-        }
-        reader.readAsDataURL(file)
-    }
-
-    // 清空input，允许重复选择同一文件
-    event.target.value = ''
-}
-
-const handleCropChange = ({ coordinates, canvas }) => {
-    console.log('裁剪坐标:', coordinates)
-}
-
-const cropAvatar = () => {
-    if (!cropperAvatar.value) return
-
-    const { canvas } = cropperAvatar.value.getResult()
-
-    canvas.toBlob((blob) => {
-        // 创建新文件对象
-        const croppedFile = new File([blob], cropFile.value.name, {
-            type: cropFile.value.type,
-        })
-
-        // 创建预览URL
-        const previewUrl = URL.createObjectURL(croppedFile)
-        if (characterForm.avatar_url && characterForm.avatar_url.startsWith('blob:')) {
-            URL.revokeObjectURL(characterForm.avatar_url);
-        }
-        characterForm.avatar_url = previewUrl;
-        characterForm.avatar_file = croppedFile;
-        console.log('裁剪后的图片:', previewUrl);
-        // 关闭模态框
-        closeCropModal()
-
-        toast.success('头像上传成功')
-    }, cropFile.value.type, 0.9)
-}
-
-const closeCropModal = () => {
-    showCropModal.value = false
-    cropImageSrc.value = ''
-    cropFile.value = null
-}
-
-const removeAvatar = () => {
-    characterForm.avatar_url = ''
-    toast.success('头像已移除')
-}
 
 const handleSave = async () => {
     try {
@@ -634,7 +496,7 @@ const handleSave = async () => {
             'title': characterForm.title,
             'description': characterForm.description,
             'name': characterForm.name,
-            'avatar_url': characterForm.avatar_url.startsWith('blob:') ? (props.data.avatar_url || '') : characterForm.avatar_url,
+            'avatar_url': characterForm.avatar_url,
             'avatar_file': characterForm.avatar_file,
             'identity': characterForm.identity,
             'model_id': characterForm.model_id,
@@ -684,13 +546,6 @@ function format(value) {
 </script>
 
 <style scoped>
-/* .settings-header {
-  font-size: 18px;
-  font-weight: 600;
-  margin-bottom: 20px;
-  padding-bottom: 15px;
-  border-bottom: 1px solid #eee;
-} */
 .settings-header {
     display: flex;
     justify-content: space-between;

@@ -37,9 +37,9 @@
                                     @update:value="handleProviderChange" />
                             </n-form-item>
                         </n-gi>
-                        <n-gi :span="6">
+                        <n-gi :span="6" style="display: none;">
                             <n-form-item label=" ">
-                                <n-button attr-type="button" @click="handleValidateClick">
+                                <n-button attr-type="button">
                                     验证
                                 </n-button>
                             </n-form-item>
@@ -198,17 +198,16 @@
 
 <script setup>
 import { ref, onMounted, computed, watch } from 'vue'
-import { useRouter } from 'vue-router'
 import { useDebounceFn } from '@vueuse/core' // 导入防抖函数
-import SidebarLayout from '@/components/layout/SidebarLayout.vue'
-import ModelsProviderList from '@/components/ModelsProviderList.vue'
+import SidebarLayout from '../components/layout/SidebarLayout.vue'
+import ModelsProviderList from '../components/ModelsProviderList.vue'
 import {
     NInput, NFormItem, NForm, NButton, NSpace, NIcon, NTag, NGrid, NGi,
     NModal, NSelect, NCheckbox, NCheckboxGroup, NInputNumber, NSpin, NDivider
 } from 'naive-ui'
-import { apiService } from '@/services/ApiService'
+import { apiService } from '../services/ApiService'
 import { SettingsOutlined, RemoveCircleOutlineRound, DeleteTwotone, AddCircleTwotone, RemoveCircleTwotone } from '@vicons/material'
-import { usePopup } from '@/composables/usePopup'
+import { usePopup } from '../composables/usePopup'
 import { useStorage } from '@vueuse/core'
 
 const { notify, confirm, prompt } = usePopup()

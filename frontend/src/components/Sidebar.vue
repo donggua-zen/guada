@@ -20,7 +20,7 @@
 </template>
 
 <script setup>
-import { ChatBubbleTwotone, ContactsTwotone, CloudUploadTwotone, SettingsTwotone } from '@vicons/material'
+import { ChatBubbleTwotone, ContactsTwotone, CloudUploadTwotone, SettingsTwotone, AccountCircleTwotone } from '@vicons/material'
 
 const sidebarItems = [
   {
@@ -37,6 +37,11 @@ const sidebarItems = [
     id: 'Models',
     icon: CloudUploadTwotone,
     title: '模型'
+  },
+  {
+    id: 'My',
+    icon: AccountCircleTwotone,
+    title: '我的'
   }
 ]
 

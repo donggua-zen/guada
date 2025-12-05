@@ -2,9 +2,12 @@
     <div class="flex w-full h-full">
         <!-- 侧边栏容器 -->
         <div :class="[
-            'h-full relative transform transition-all duration-300 ease-in-out justify-content-end flex-shrink-0',
-            sidebarVisible ? 'max-w-72 min-w-72' : 'max-w-0 min-w-0'
-        ]" :style="{ width: sidebarVisible ? `${sidebarWidth}px` : '0' }">
+            'h-full relative transform transition-all duration-300 ease-in-out justify-content-end flex-shrink-0'
+        ]" :style="{
+            width: sidebarVisible ? `${sidebarWidth}px` : '0',
+            maxWidth: sidebarVisible ? `${sidebarWidth}px` : '0',
+            minWidth: sidebarVisible ? `${sidebarWidth}px` : '0'
+        }">
             <div class="absolute right-0 h-full" :style="{ width: `${sidebarWidth}px` }">
                 <slot name="sidebar" :sidebar-visible="sidebarVisible" />
             </div>
