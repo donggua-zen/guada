@@ -17,6 +17,7 @@ import logging
 import os
 from typing import Generator, Optional
 
+from app.exceptions import APIException
 from app.models.model import Model
 from app.models.session import Session
 from app.repositories.message_repository import MessageRepository
@@ -566,7 +567,7 @@ class ChatService:
 
         session = SessionRepository.get_session_by_id(session_id)
         if session is None:
-            raise ValueError("Invalid session id")
+            raise APIException("Session not found", status_code=404)
 
         strategy = self.get_memory_strategy(session.settings["memory_type"])
 
@@ -624,8 +625,6 @@ class ChatService:
             only_current_content=True,
         )
         messages.append(message)
-        if messages is None:  # 获取不到消息，则返回空
-            raise ValueError("Invalid message id")
 
         session = SessionRepository.get_session_by_id(messages[-1].session_id)
 
@@ -637,7 +636,7 @@ class ChatService:
         prompt += "对话记录：\n" + "\n".join(conversation_messages)
         model = session.model
         if model is None:
-            raise ValueError("Invalid model name")
+            raise APIException("模型未指定", status_code=400)
 
         # 更优雅的方式获取模型参数
         model_params = {

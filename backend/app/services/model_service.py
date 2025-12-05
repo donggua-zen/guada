@@ -1,3 +1,4 @@
+from app.exceptions import APIException
 from app.models import db, Model, ModelProvider
 from app.models.db_transaction import smart_transaction_manager
 from app.repositories.model_repository import ModelRepository as ModelRepo
@@ -29,7 +30,7 @@ class ModelService:
 
     def delete_model(self, model_id):
         if not ModelRepo.delete_model(model_id):
-            raise ValueError(f"Model with ID '{model_id}' not found.")
+            raise APIException("Model not found", status_code=404)
 
     def delete_provider(self, provider_id):
         ModelRepo.delete_provider(provider_id)
@@ -67,7 +68,7 @@ class ModelService:
     def get_model(self, model_id):
         model = ModelRepo.get_model(model_id)
         if not model:
-            raise ValueError(f"Model with ID '{model_id}' not found.")
+            raise APIException("Model not found", status_code=404)
         return model.to_dict()
 
     def update_model(self, model_id, data):
@@ -81,11 +82,11 @@ class ModelService:
     def get_model_by_name(self, model_name, provider_name=None):
         model = ModelRepo.get_model_by_name(model_name, provider_name)
         if not model:
-            raise ValueError(f"Model with name '{model_name}' not found.")
+            raise APIException("Model not found", status_code=404)
         return model.to_dict()
 
     def get_provider_by_name(self, provider_name):
         provider = ModelRepo.get_provider_by_name(provider_name)
         if not provider:
-            raise ValueError(f"Provider with name '{provider_name}' not found.")
+            raise APIException("Provider not found", status_code=404)
         return provider.to_dict()

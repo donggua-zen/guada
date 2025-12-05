@@ -1,5 +1,6 @@
 # message_service.py
 import json
+from app.exceptions import APIException
 from app.models.message_content import MessageContent
 from app.repositories.file_repository import FileRepository
 from app.repositories.message_content_repository import MessageContentRepository
@@ -128,7 +129,7 @@ class MessageService:
         with smart_transaction():
             message = MessageRepo.get_message(message_id)
             if not message:
-                raise Exception("Message not found")
+                raise APIException("Message not found", status_code=404)
             found = False
             for content in message.contents:
                 if content.id == content_id:
@@ -138,7 +139,7 @@ class MessageService:
                     content.is_current = False
 
             if not found:
-                raise Exception("Content not found")
+                raise APIException("Content not found", status_code=404)
 
     def import_messages(self, session_id, messages: list[dict]):
         with smart_transaction():
