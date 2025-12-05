@@ -88,15 +88,17 @@ class MessageService:
                 raise Exception("Failed to add message")
             if files:
                 file_ids = [file["id"] for file in files]
-                FileRepository.update_files(file_ids, {"message_id": message["id"]})
+                FileRepository.update_files(file_ids, {"message_id": message.id})
 
             # 由定时器清理旧文件
             # FileRepository.delete_not_related_files(session_id)
 
             if replace_message_id:
                 self.delete_message(replace_message_id)
-            message_dict = message.to_dict(flush=True)
-            message_dict["files"] = files
+            # files 默认懒加载，此时查询数据是最新状态
+            # 必须设置flush=True，提交之前的SQL
+            message_dict = message.to_dict(flush=True, include=["contents", "files"])
+            # message_dict["files"] = files
             return message_dict
 
     def update_message(self, message_id, data):
@@ -106,9 +108,7 @@ class MessageService:
         return message.to_dict()
 
     def delete_message(self, message_id):
-        message = MessageRepo.get_message(
-            message_id, with_contents=False, with_files=False
-        )
+        message = MessageRepo.get_message(message_id=message_id)
         if not message:
             raise Exception("Message not found")
         with smart_transaction():
@@ -124,13 +124,21 @@ class MessageService:
             raise Exception("Failed to delete messages")
         return {}
 
-    def set_message_current_content(self, content_id):
-        content = MessageContentRepository.get_content(content_id)
-        if not content:
-            raise Exception("Content not found")
-        MessageContentRepository.set_current_content(
-            message_id=content["message_id"], content_id=content["id"]
-        )
+    def set_message_current_content(self, message_id, content_id):
+        with smart_transaction():
+            message = MessageRepo.get_message(message_id)
+            if not message:
+                raise Exception("Message not found")
+            found = False
+            for content in message.contents:
+                if content.id == content_id:
+                    found = True
+                    content.is_current = True
+                else:
+                    content.is_current = False
+
+            if not found:
+                raise Exception("Content not found")
 
     def import_messages(self, session_id, messages: list[dict]):
         with smart_transaction():

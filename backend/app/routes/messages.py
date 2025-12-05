@@ -79,7 +79,10 @@ def add_message(session_id):
 @jwt_required()
 @handle_exceptions
 def update_message_active_content(content_id):
-    message_service.set_message_current_content(content_id)
+    message_id = request.json["message_id"]
+    message_service.set_message_current_content(
+        message_id=message_id, content_id=content_id
+    )
     return jsonify({"success": True})
 
 

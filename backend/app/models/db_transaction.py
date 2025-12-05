@@ -44,6 +44,8 @@ class SmartTransactionManager:
             if is_outermost:
                 db.session.commit()
                 logger.debug("事务提交成功")
+            else:
+                db.session.flush()
 
         except Exception as e:
             logger.debug(f"事务异常: {e}")

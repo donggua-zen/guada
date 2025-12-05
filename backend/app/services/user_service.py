@@ -1,8 +1,9 @@
 from app.repositories.user_repository import UserRepository
+from app.models.db_transaction import smart_transaction
 
 
 class UserService:
-    def add_subaccount(self, user_id, data: dict):
+    def create_subaccount(self, user_id, data: dict):
         """
         为主账户添加子账户
 
@@ -25,9 +26,16 @@ class UserService:
             raise Exception("Only primary users can add subaccounts")
         # 检查要添加的用户是否已经存在
         if UserRepository.user_exists(email=data["email"]):
-            raise Exception("No Permission")
+            raise Exception("账户已存在")
         data["parent_id"] = user_id
-        return UserRepository.add_user(data=data).to_dict()
+        data["role"] = "subaccount"
+        data["password_hash"] = ""
+        password = data.pop("password")
+        with smart_transaction():
+            user = UserRepository.add_user(data=data)
+            if password:  # 如果有密码，则设置密码
+                user.set_password(password)
+        return user.to_dict()
 
     def get_subaccounts(self, user_id):
         """
@@ -47,7 +55,7 @@ class UserService:
         if user.role != "primary":
             raise Exception("No Permission")
         subaccounts = UserRepository.get_child_users_by_id(user_id=user_id)
-        return [subaccount.to_dict() for subaccount in subaccounts]
+        return {"items": [subaccount.to_dict() for subaccount in subaccounts]}
 
     def delete_subaccount(self, user_id, subaccount_id):
         """
@@ -74,3 +82,24 @@ class UserService:
             raise Exception("No Permission")
         # 执行删除操作
         UserRepository.delete_user(user_id=subaccount_id)
+
+    def update_password(self, user_id, old_password, new_password):
+        """
+        更新用户的密码
+
+        Args:
+            user_id: 用户ID
+            old_password: 旧密码
+            new_password: 新密码
+
+            Raises:
+                Exception: 当用户不存在、密码错误或更新失败时抛出异常
+        """
+
+        user = UserRepository.get_user_by_id(user_id=user_id)
+        if not user:
+            raise Exception("User not found")
+        if not user.check_password(old_password):
+            raise Exception("Password error")
+        user.set_password(new_password)
+        return {}
