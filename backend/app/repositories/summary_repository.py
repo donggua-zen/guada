@@ -1,9 +1,9 @@
 # summary_service.py
-from app.services.llm_service import LLMRepositoryChunk
+from app.services.domain.llm_service import LLMRepositoryChunk
 from typing import NamedTuple, Optional
 from app.utils.chunking import chunking_messages
 from app.models import db, Summary
-from app.models.db_transaction import smart_transaction_manager
+from app.models.db_transaction import execute_in_transaction
 
 
 class CompressionResult(NamedTuple):
@@ -15,7 +15,7 @@ class CompressionResult(NamedTuple):
 class SummaryRepository:
 
     @staticmethod
-    @smart_transaction_manager.execute_in_transaction
+    @execute_in_transaction
     def add_summary(
         session_id, summary, master_summary="", last_message_id="", history=[]
     ):
@@ -38,7 +38,7 @@ class SummaryRepository:
         return None
 
     @staticmethod
-    @smart_transaction_manager.execute_in_transaction
+    @execute_in_transaction
     def delete_summary_by_session_id(session_id):
         summary = (
             db.session.query(Summary).filter(Summary.session_id == session_id).first()

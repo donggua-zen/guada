@@ -70,7 +70,7 @@ class LLMService:
 
     def completions(
         self,
-        model,
+        model: str,
         messages: list,
         temperature=None,
         top_p=None,

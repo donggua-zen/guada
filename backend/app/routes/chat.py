@@ -9,6 +9,7 @@ from flask_jwt_extended import jwt_required
 from app.services import ChatService
 from app.services import MessageService
 from app.services import SessionService
+from app.utils.decorators import handle_exceptions
 
 message_service = MessageService()
 chat_service = ChatService()
@@ -61,38 +62,34 @@ def stream_generator(
 
 @chat_bp.route("/api/v1/sessions/<session_id>/messages/stream", methods=["POST"])
 @jwt_required()
+@handle_exceptions
 def chat_completions(session_id):
-    try:
-        data = request.json
-        message_id = data.get("message_id")
-        regeneration_mode = data.get("regeneration_mode", "overwrite") or "overwrite"
-        assistant_message_id = data.get("assistant_message_id")
 
-        if regeneration_mode not in ["overwrite", "multi_version", "append"]:
-            return (
-                jsonify(
-                    {
-                        "success": False,
-                        "error": "regeneration_mode must be one of overwrite, multi_version, append.",
-                    }
-                ),
-                400,
-            )
+    data = request.json
+    message_id = data.get("message_id")
+    regeneration_mode = data.get("regeneration_mode", "overwrite") or "overwrite"
+    assistant_message_id = data.get("assistant_message_id")
 
-        return Response(
-            stream_generator(
-                session_id,
-                message_id,
-                regeneration_mode=regeneration_mode,
-                assistant_message_id=assistant_message_id,
+    if regeneration_mode not in ["overwrite", "multi_version", "append"]:
+        return (
+            jsonify(
+                {
+                    "success": False,
+                    "error": "regeneration_mode must be one of overwrite, multi_version, append.",
+                }
             ),
-            mimetype="text/event-stream",
+            400,
         )
-    except Exception as e:
-        logger.debug("chat_completions Exception:")
-        logger.debug(e)
-        traceback.print_exc()
-        return jsonify({"success": False, "error": str(e)}), 400
+
+    return Response(
+        stream_generator(
+            session_id,
+            message_id,
+            regeneration_mode=regeneration_mode,
+            assistant_message_id=assistant_message_id,
+        ),
+        mimetype="text/event-stream",
+    )
 
 
 @chat_bp.route("/api/v1/sessions/<session_id>/tokens", methods=["GET"])
@@ -110,17 +107,13 @@ def get_tokens(session_id):
 
 @chat_bp.route("/api/v1/messages/<message_id>/web_serach", methods=["GET"])
 @jwt_required()
+@handle_exceptions
 def web_search(message_id):
-    try:
-        data = chat_service.web_search(message_id)
-        return jsonify(
-            {
-                "success": True,
-                "data": data,
-            }
-        )
-    except Exception as e:
-        logger.debug("web_search Exception:")
-        logger.debug(e)
-        traceback.print_exc()
-        return jsonify({"success": False, "error": str(e)}), 400
+
+    data = chat_service.web_search(message_id)
+    return jsonify(
+        {
+            "success": True,
+            "data": data,
+        }
+    )

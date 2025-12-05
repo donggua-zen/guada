@@ -1,10 +1,7 @@
-import os
-from pathlib import Path
-from typing import Optional, Union
-import ulid
+from typing import Optional
 
 from app.models import db, Character
-from app.models.db_transaction import smart_transaction_manager
+from app.models.db_transaction import execute_in_transaction
 
 
 class CharacterRepository:
@@ -24,11 +21,10 @@ class CharacterRepository:
             )
         else:
             characters = db.session.query(Character).all()
-        results = [character.to_dict() for character in characters]
-        return results
+        return characters
 
     @staticmethod
-    @smart_transaction_manager.execute_in_transaction
+    @execute_in_transaction
     def create_character(data: dict):
 
         character = Character(
@@ -38,15 +34,15 @@ class CharacterRepository:
         db.session.add(character)
 
         # 返回完整数据
-        return character.to_dict(flush=True)
+        return character
 
     @staticmethod
-    @smart_transaction_manager.execute_in_transaction
+    @execute_in_transaction
     def update_character(id, data: dict):
         return db.session.query(Character).filter(Character.id == id).update(data)
 
     @staticmethod
-    @smart_transaction_manager.execute_in_transaction
+    @execute_in_transaction
     def delete_character(id):
         character = db.session.query(Character).filter(Character.id == id).first()
         if character:
@@ -57,7 +53,4 @@ class CharacterRepository:
         query = db.session.query(Character).filter(Character.id == id)
         if user_id:
             query = query.filter(Character.user_id == user_id)
-        character = query.first()
-        if character:
-            return character.to_dict()
-        return None
+        return query.first()

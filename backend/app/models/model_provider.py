@@ -1,5 +1,10 @@
+from typing import TYPE_CHECKING, List
 import ulid
 from .database import ModelBase, db
+from sqlalchemy.orm import Mapped
+
+if TYPE_CHECKING:
+    from .model import Model
 
 
 class ModelProvider(ModelBase):
@@ -17,6 +22,6 @@ class ModelProvider(ModelBase):
         default=db.func.now(),
         onupdate=db.func.now(),
     )
-    models = db.relationship(
+    models: Mapped[List["Model"]] = db.relationship(
         "Model", back_populates="provider", cascade="all, delete-orphan"
     )

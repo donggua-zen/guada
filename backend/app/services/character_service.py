@@ -17,16 +17,18 @@ class CharacterService:
         pass
 
     def get_characters(self, user_id: Optional[str | list[list]] = None):
-        return CharacterRepo.get_characters(user_id=user_id)
+        characters = CharacterRepo.get_characters(user_id=user_id)
+        return [character.to_dict() for character in characters]
 
     def get_shared_characters(self, user_id: str):
         user = UserRepository.get_user_by_id(user_id)
         parent_id = user_id
-        if user["role"] == "child" and user["parent_id"] is None:
-            parent_id = user["parent_id"]
+        if user.role == "child" and user.parent_id is None:
+            parent_id = user.parent_id
         child_users = UserRepository.get_child_users_by_id(user_id=parent_id)
-        user_ids = [parent_id] + [user["id"] for user in child_users]
-        return CharacterRepo.get_characters(user_id=user_ids)
+        user_ids = [parent_id] + [user.id for user in child_users]
+        characters = CharacterRepo.get_characters(user_id=user_ids)
+        return [character.to_dict() for character in characters]
 
     def create_character(self, data: dict):
         fields = [
@@ -47,7 +49,7 @@ class CharacterService:
         character = CharacterRepo.create_character(data_filtered)
 
         # 返回完整数据
-        return character
+        return character.to_dict()
 
     def update_character(self, id, user_id: str, data: dict):
 
@@ -66,33 +68,30 @@ class CharacterService:
             if field in data:
                 data_filtered[field] = data[field]
 
-        character = self.get_character_by_id(id, user_id=user_id)
+        character = CharacterRepo.get_character_by_id(id, user_id=user_id)
         if not character:
             raise ValueError(f"Character with ID {id} does not exist.")
 
-        CharacterRepo.update_character(id, data_filtered)
-        if (
-            "avatar_url" in data_filtered
-            and data["avatar_url"] != character["avatar_url"]
-        ):
-            old_avatar_path = convert_webpath_to_filepath(character["avatar_url"])
+        character.update(data_filtered)
+        if "avatar_url" in data_filtered and data["avatar_url"] != character.avatar_url:
+            old_avatar_path = convert_webpath_to_filepath(character.avatar_url)
             if old_avatar_path:
                 remove_file(old_avatar_path)
-        character.update(data_filtered)
-        return character
+                
+        return character.to_dict()
 
     def delete_character(self, id, user_id: str):
         character = CharacterRepo.get_character_by_id(id, user_id=user_id)
         if character:
             CharacterRepo.delete_character(id)
-            avatar_url = character.get("avatar_url")
+            avatar_url = character.avatar_url
             if avatar_url and avatar_url.startswith("/static/avatars/character-"):
                 os.remove(convert_webpath_to_filepath(avatar_url))
 
     def get_character_by_id(self, id, user_id: str = None):
         character = CharacterRepo.get_character_by_id(id, user_id=user_id)
         if character:
-            return character
+            return character.to_dict()
         raise ValueError(f"Character with ID {id} does not exist.")
 
     def upload_avatar(self, character_id, user_id: str, avatar_file):

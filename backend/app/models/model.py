@@ -1,7 +1,13 @@
 # models.py
 
+from typing import TYPE_CHECKING
 import ulid
 from .database import ModelBase, db
+
+from sqlalchemy.orm import Mapped
+
+if TYPE_CHECKING:
+    from .model_provider import ModelProvider
 
 
 class Model(ModelBase):
@@ -28,4 +34,6 @@ class Model(ModelBase):
         onupdate=db.func.now(),
     )
 
-    provider = db.relationship("ModelProvider", back_populates="models")
+    provider: Mapped["ModelProvider"] = db.relationship(
+        "ModelProvider", back_populates="models"
+    )

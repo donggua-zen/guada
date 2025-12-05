@@ -2,7 +2,7 @@
 import json
 from typing import Optional
 from app.models import db, Message
-from app.models.db_transaction import smart_transaction_manager
+from app.models.db_transaction import execute_in_transaction
 from app.models.message_content import MessageContent
 from app.models.file import File as FileModel
 
@@ -65,20 +65,11 @@ class MessageRepository:
         # print("include",include)
         messages = query.all()
 
-        result = [msg.to_dict(include=include) for msg in messages]
-        return result
+        return messages
 
     @staticmethod
-    def get_message(message_id, with_files=False, with_contents=True):
-        message = db.session.query(Message).filter(Message.id == message_id).first()
-        if message:
-            include = []
-            if with_contents:
-                include.append("contents")
-            if with_files:
-                include.append("files")
-            return message.to_dict(include=include)
-        return None
+    def get_message(message_id):
+        return db.session.query(Message).filter(Message.id == message_id).first()
 
     @staticmethod
     def get_conversation_messages(
@@ -95,11 +86,9 @@ class MessageRepository:
             .limit(2)
         )
 
-        include = []
         # 转换为字典列表
         if with_files:
             query = query.options(db.selectinload(Message.files))
-            include.append("files")
         if with_contents:
             if only_current_content:
                 query = query.options(
@@ -109,14 +98,10 @@ class MessageRepository:
                 )
             else:
                 query = query.options(db.selectinload(Message.versions))
-            include.append("contents")
-        messages = query.all()
-        if messages:
-            return [msg.to_dict(include=include) for msg in messages]
-        return []
+        return query.all()
 
     @staticmethod
-    @smart_transaction_manager.execute_in_transaction
+    @execute_in_transaction
     def add_message(
         session_id: str,
         role: str,
@@ -128,7 +113,6 @@ class MessageRepository:
     ):
         vailed_contents = []
         vailed_files = []
-        include = ["contents"]
         if isinstance(content, list):
             for item in content:
                 if not isinstance(item, dict):
@@ -169,7 +153,6 @@ class MessageRepository:
                         content_hash=item.get("content_hash"),
                     )
                 )
-            include.append("files")
 
         message = Message(
             session_id=session_id,
@@ -179,10 +162,10 @@ class MessageRepository:
             parent_id=parent_id,
         )
         db.session.add(message)
-        return message.to_dict(flush=True, include=include)
+        return message
 
     @staticmethod
-    @smart_transaction_manager.execute_in_transaction
+    @execute_in_transaction
     def update_message(message_id, data):
         """
         更新指定消息的信息
@@ -221,20 +204,20 @@ class MessageRepository:
                 if hasattr(current_content, key):
                     setattr(current_content, key, value)
 
-        return message.to_dict(flush=True)
+        return message
 
     @staticmethod
-    @smart_transaction_manager.execute_in_transaction
+    @execute_in_transaction
     def delete_message(message_id: str):
         return db.session.query(Message).filter(Message.id == message_id).delete()
 
     @staticmethod
-    @smart_transaction_manager.execute_in_transaction
+    @execute_in_transaction
     def delete_message_by_parent_id(parent_id: str):
         return db.session.query(Message).filter(Message.parent_id == parent_id).delete()
 
     @staticmethod
-    @smart_transaction_manager.execute_in_transaction
+    @execute_in_transaction
     def delete_messages_by_session_id(session_id):
         return (
             db.session.query(Message).filter(Message.session_id == session_id).delete()

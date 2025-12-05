@@ -1,6 +1,11 @@
+from typing import TYPE_CHECKING, List
 import ulid
-
 from .database import ModelBase, db
+from sqlalchemy.orm import Mapped
+
+if TYPE_CHECKING:
+    from app.models.file import File
+    from app.models.message_content import MessageContent
 
 
 class Message(ModelBase):
@@ -23,7 +28,7 @@ class Message(ModelBase):
         default=db.func.now(),
         onupdate=db.func.now(),
     )
-    files = db.relationship(
+    files: Mapped[List["File"]] = db.relationship(
         "File",
         back_populates="message",
         # cascade="all, delete-orphan",
@@ -34,7 +39,7 @@ class Message(ModelBase):
         back_populates="messages",
     )
 
-    contents = db.relationship(
+    contents: Mapped[List["MessageContent"]] = db.relationship(
         "MessageContent",
         back_populates="message",
         cascade="all, delete-orphan",

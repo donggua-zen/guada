@@ -67,7 +67,7 @@ class AppInitializer:
         from app.routes.files import files_bp
         from app.routes.chat import chat_bp
         from app.routes.settings import settings_bp
-        from app.routes.auth import auth_bp
+        from app.routes.user import user_bp
 
         self.app.register_blueprint(sessions_bp)
         self.app.register_blueprint(messages_bp)
@@ -76,7 +76,7 @@ class AppInitializer:
         self.app.register_blueprint(files_bp)
         self.app.register_blueprint(chat_bp)
         self.app.register_blueprint(settings_bp)
-        self.app.register_blueprint(auth_bp)
+        self.app.register_blueprint(user_bp)
 
     def initialize_error_handlers(self):
         """注册错误处理器"""

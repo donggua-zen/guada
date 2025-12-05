@@ -1,17 +1,17 @@
 from app.models import db, Model, ModelProvider
-from app.models.db_transaction import smart_transaction_manager
+from app.models.db_transaction import execute_in_transaction
 
 
 class ModelRepository:
     @staticmethod
     def get_models():
         models = db.session.query(Model).all()
-        return [m.to_dict() for m in models]
+        return models
 
     @staticmethod
     def get_providers():
         providers = db.session.query(ModelProvider).all()
-        return [p.to_dict() for p in providers]
+        return providers
 
     @staticmethod
     def get_providers_with_models(user_id):
@@ -31,34 +31,24 @@ class ModelRepository:
             .options(db.selectinload(ModelProvider.models))
             .all()
         )
-        return [p.to_dict(include=["models"]) for p in providers]
+        return providers
 
     @staticmethod
-    @smart_transaction_manager.execute_in_transaction
+    @execute_in_transaction
     def delete_model(model_id):
-        model = db.session.query(Model).filter(Model.id == model_id).first()
-        if not model:
-            return None
-        db.session.delete(model)
-        return True
+        return db.session.query(Model).filter(Model.id == model_id).delete()
 
     @staticmethod
-    @smart_transaction_manager.execute_in_transaction
+    @execute_in_transaction
     def delete_provider(provider_id):
-        provider = (
+        return (
             db.session.query(ModelProvider)
             .filter(ModelProvider.id == provider_id)
-            .first()
-        )
-        if not provider:
-            raise ValueError(f"Provider with ID '{provider_id}' not found.")
-        db.session.delete(provider)
-        db.session.delete_all(
-            db.session.query(Model).filter(Model.provider_id == provider_id)
+            .delete()
         )
 
     @staticmethod
-    @smart_transaction_manager.execute_in_transaction
+    @execute_in_transaction
     def add_model(
         model_name,
         model_type,
@@ -78,61 +68,36 @@ class ModelRepository:
             max_output_tokens=max_output_tokens,
         )
         db.session.add(model)
-        return model.to_dict(flush=True)
+        return model
 
     @staticmethod
-    @smart_transaction_manager.execute_in_transaction
-    def add_provider(name, api_key, api_url):
+    @execute_in_transaction
+    def add_provider(name, user_id, api_key, api_url):
         provider = ModelProvider(
+            user_id=user_id,
             name=name,
             api_key=api_key,
             api_url=api_url,
         )
         db.session.add(provider)
-        return provider.to_dict(flush=True)
+        return provider
 
     @staticmethod
     def get_model(model_id):
-        model = db.session.query(Model).filter(Model.id == model_id).first()
-        if not model:
-            return None
-        provider = (
-            db.session.query(ModelProvider)
-            .filter(ModelProvider.id == model.provider_id)
-            .first()
-        )
-        if not provider:
-            return None
-
-        return {
-            "id": model.id,
-            "model_name": model.model_name,
-            "model_type": model.model_type,
-            "name": model.name,
-            "provider_id": model.provider_id,
-            "features": model.features,
-            "max_tokens": model.max_tokens,
-            "max_output_tokens": model.max_output_tokens,
-            "provider": {
-                "id": provider.id,
-                "name": provider.name,
-                "api_key": provider.api_key,
-                "api_url": provider.api_url,
-            },
-        }
+        return db.session.query(Model).filter(Model.id == model_id).first()
 
     @staticmethod
-    @smart_transaction_manager.execute_in_transaction
+    @execute_in_transaction
     def update_model(model_id, data):
         model = db.session.query(Model).filter(Model.id == model_id).first()
         if not model:
             raise ValueError(f"Model with ID '{model_id}' not found.")
         for key, value in data.items():
             setattr(model, key, value)
-        return model.to_dict(flush=True)
+        return model
 
     @staticmethod
-    @smart_transaction_manager.execute_in_transaction
+    @execute_in_transaction
     def update_provider(provider_id, data):
         provider = (
             db.session.query(ModelProvider)
@@ -143,7 +108,7 @@ class ModelRepository:
             raise ValueError(f"Provider with ID '{provider_id}' not found.")
         for key, value in data.items():
             setattr(provider, key, value)
-        return provider.to_dict(flush=True)
+        return provider
 
     @staticmethod
     def get_model_by_name(model_name, provider_name=None):
@@ -167,9 +132,7 @@ class ModelRepository:
                 db.session.query(Model).filter(Model.model_name == model_name).first()
             )
 
-        if not model:
-            return None
-        return model.to_dict()
+        return model
 
     @staticmethod
     def get_provider_by_name(provider_name):
@@ -178,6 +141,4 @@ class ModelRepository:
             .filter(ModelProvider.name == provider_name)
             .first()
         )
-        if not provider:
-            return None
-        return provider.to_dict()
+        return provider

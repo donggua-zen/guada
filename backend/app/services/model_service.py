@@ -12,8 +12,8 @@ class ModelService:
         providers = []
         results = ModelRepo.get_providers_with_models(user_id=user_id)
         for result in results:
-            models.extend(result.pop("models"))
-            providers.append(result)
+            models.extend([model.to_dict() for model in result.models])
+            providers.append(result.to_dict())
         return {
             "models": models,
             "providers": providers,
@@ -21,11 +21,11 @@ class ModelService:
 
     def get_models(self):
         models = ModelRepo.get_models()
-        return models
+        return [model.to_dict() for model in models]
 
     def get_providers(self):
         providers = ModelRepo.get_providers()
-        return providers
+        return [provider.to_dict() for provider in providers]
 
     def delete_model(self, model_id):
         if not ModelRepo.delete_model(model_id):
@@ -53,38 +53,39 @@ class ModelService:
             max_tokens=max_tokens,
             max_output_tokens=max_output_tokens,
         )
-        return model
+        return model.to_dict()
 
-    def add_provider(self, name, api_key, api_url):
+    def add_provider(self, user_id, name, api_key, api_url):
         provider = ModelRepo.add_provider(
+            user_id=user_id,
             name=name,
             api_key=api_key,
             api_url=api_url,
         )
-        return provider
+        return provider.to_dict()
 
     def get_model(self, model_id):
         model = ModelRepo.get_model(model_id)
         if not model:
             raise ValueError(f"Model with ID '{model_id}' not found.")
-        return model
+        return model.to_dict()
 
     def update_model(self, model_id, data):
         model = ModelRepo.update_model(model_id, data)
-        return model
+        return model.to_dict()
 
     def update_provider(self, provider_id, data):
         provider = ModelRepo.update_provider(provider_id, data)
-        return provider
+        return provider.to_dict()
 
     def get_model_by_name(self, model_name, provider_name=None):
         model = ModelRepo.get_model_by_name(model_name, provider_name)
         if not model:
             raise ValueError(f"Model with name '{model_name}' not found.")
-        return model
+        return model.to_dict()
 
     def get_provider_by_name(self, provider_name):
         provider = ModelRepo.get_provider_by_name(provider_name)
         if not provider:
             raise ValueError(f"Provider with name '{provider_name}' not found.")
-        return provider
+        return provider.to_dict()

@@ -1,10 +1,9 @@
 # session_service.py
 from typing import Optional
 from app.models import db, Session
-from app.models.db_transaction import smart_transaction_manager
+from app.models.db_transaction import execute_in_transaction
 from app.models.message import Message
 from app.models.message_content import MessageContent
-from app.utils import to_utc8_isoformat
 
 
 class SessionRepository:
@@ -15,29 +14,24 @@ class SessionRepository:
         return [session.to_dict() for session in sessions]
 
     @staticmethod
-    @smart_transaction_manager.execute_in_transaction
+    @execute_in_transaction
     def create_session(data: dict):
         # 创建字符对象
         session = Session(
             **data,
         )
         db.session.add(session)
-        return session.to_dict(flush=True, include=["model"])
+        return session
 
     @staticmethod
-    @smart_transaction_manager.execute_in_transaction
+    @execute_in_transaction
     def update_session(session_id, data: dict):
         return Session.query.filter(Session.id == session_id).update(data)
 
     @staticmethod
     def get_session_by_id(session_id):
         session = db.session.query(Session).filter(Session.id == session_id).first()
-        if session:
-            return session.to_dict(
-                include=[{"field": "model", "include": ["provider"]}]
-            )
-        else:
-            return None
+        return session
 
     @staticmethod
     def query_session(session_id=None, user_id=None, character_id=None):
@@ -50,21 +44,29 @@ class SessionRepository:
         if character_id is not None:
             query = query.filter(Session.character_id == character_id)
 
-        sessions = query.all()
-
-        return [session.to_dict() for session in sessions]
+        return query.all()
 
     @staticmethod
-    @smart_transaction_manager.execute_in_transaction
+    @execute_in_transaction
     def delete_session(session_id):
-        session = db.session.query(Session).filter(Session.id == session_id).first()
-        if session:
-            db.session.delete(session)
+        return db.session.query(Session).filter(Session.id == session_id).delete()
 
     @staticmethod
     def get_sessions_with_last_message_v2(user_id: Optional[str] = None):
+        """
+        获取会话列表及其最后一条消息
 
-        # 使用窗口函数一次性查询
+        通过使用窗口函数一次性查询所有会话及每个会话的最后一条消息内容，
+        提高查询效率，避免N+1查询问题。
+
+        Args:
+            user_id (Optional[str]): 用户ID，如果提供则只返回该用户的会话
+
+        Returns:
+            list: 包含会话对象及最后一条消息相关信息的元组列表
+                  每个元素是一个包含Session对象、消息内容、推理内容和创建时间的元组
+        """
+        # 使用窗口函数获取每个会话的最新消息
         subquery = (
             db.session.query(
                 Message.session_id,
@@ -87,7 +89,7 @@ class SessionRepository:
             .subquery()
         )
 
-        # 查询session和最后一条消息
+        # 查询会话信息并关联最新的消息内容
         query = db.session.query(
             Session,
             subquery.c.content,
@@ -101,28 +103,28 @@ class SessionRepository:
             ),
         )
 
-        # 如果提供了user_id，则添加过滤条件
+        # 根据用户ID过滤会话（如果提供了user_id）
         if user_id is not None:
             query = query.filter(Session.user_id == user_id)
         sessions_with_messages = query.all()
-
+        return sessions_with_messages
         # 组装结果
-        result = []
-        for (
-            session,
-            content,
-            reasoning_content,
-            message_created_at,
-        ) in sessions_with_messages:
-            session_data = session.to_dict()
+        # result = []
+        # for (
+        #     session,
+        #     content,
+        #     reasoning_content,
+        #     message_created_at,
+        # ) in sessions_with_messages:
+        #     session_data = session.to_dict()
 
-            if content is not None:
-                session_data["last_message"] = {
-                    "content": content,
-                    "reasoning_content": reasoning_content,
-                    "created_at": to_utc8_isoformat(message_created_at),
-                }
+        #     if content is not None:
+        #         session_data["last_message"] = {
+        #             "content": content,
+        #             "reasoning_content": reasoning_content,
+        #             "created_at": to_utc8_isoformat(message_created_at),
+        #         }
 
-            result.append(session_data)
+        #     result.append(session_data)
 
-        return result
+        # return result

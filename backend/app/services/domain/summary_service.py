@@ -1,10 +1,10 @@
 # summary_service.py
 import logging
-from app.services.llm_service import LLMServiceChunk
+from app.services.domain.llm_service import LLMServiceChunk
 from typing import NamedTuple, Optional
 from app.utils.chunking import chunking_messages
 from app.models import db, Summary
-from app.models.db_transaction import smart_transaction_manager
+from app.models.db_transaction import smart_transaction, smart_transaction_manager
 
 logger = logging.getLogger(__name__)
 
@@ -90,7 +90,7 @@ class SummaryService:
         )
 
         if summary is None:
-            with smart_transaction_manager.transaction():
+            with smart_transaction():
                 summary = Summary(
                     session_id=session["id"],
                     master_summary="",
@@ -128,5 +128,5 @@ class SummaryService:
             db.session.query(Summary).filter(Summary.session_id == session_id).first()
         )
         if summary:
-            with smart_transaction_manager.transaction():
+            with smart_transaction():
                 db.session.delete(summary)

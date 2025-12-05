@@ -3,7 +3,11 @@ from typing import Optional
 import uuid
 from app.repositories.file_repository import FileRepository as FileRepo
 from app.repositories.message_repository import MessageRepository
-from app.utils import build_url_path, convert_webpath_to_filepath, resize_and_convert_image
+from app.utils import (
+    build_url_path,
+    convert_webpath_to_filepath,
+    resize_and_convert_image,
+)
 from config import STATIC_FILES_DIR
 
 
@@ -38,7 +42,7 @@ class FileService:
         :param message_id: 消息ID
         :return: 文件信息
         """
-        return FileRepo.add_file(
+        file = FileRepo.add_file(
             file_name,
             display_name,
             file_ext,
@@ -51,6 +55,8 @@ class FileService:
             url,
             preview_url,
         )
+
+        return file.to_dict()
 
     def delete_file(self, file_id: int):
         if not FileRepo.delete_file(file_id):
@@ -86,7 +92,7 @@ class FileService:
         preview_web_path = os.path.join("static", "uploads", "previews")
         upload_folder = convert_webpath_to_filepath(web_path)
         preview_folder = convert_webpath_to_filepath(preview_web_path)
-        
+
         unique_filename = f"{uuid.uuid4().hex}.jpg"
         # 确保上传目录存在
         os.makedirs(upload_folder, exist_ok=True)
@@ -107,9 +113,6 @@ class FileService:
         )
 
     def upload_message_file(self, sessions_id, file):
-        # 添加hashlib导入用于计算文件hash
-        import hashlib
-
         session_id = sessions_id
         allowed_jpeg_extensions = {"png", "jpg", "jpeg", "gif", "bmp", "webp", "tiff"}
 

@@ -1,5 +1,12 @@
+from typing import TYPE_CHECKING, Optional
 import ulid
+
 from .database import ModelBase, db
+from sqlalchemy.orm import Mapped
+
+if TYPE_CHECKING:
+    from app.models.model import Model
+    from app.models.message import Message
 
 
 class Session(ModelBase):
@@ -28,7 +35,7 @@ class Session(ModelBase):
         onupdate=db.func.now(),
     )
 
-    messages = db.relationship(
+    messages: Mapped[list["Message"]] = db.relationship(
         "Message",
         back_populates="session",
         cascade="all, delete-orphan",
@@ -41,7 +48,7 @@ class Session(ModelBase):
         uselist=False,  # 关键参数，表示一对一关系
     )
 
-    model = db.relationship(
+    model: Mapped[Optional["Model"]] = db.relationship(
         "Model",
         # 添加 passive_deletes 配置，确保 SQLAlchemy 知道数据库会处理 SET NULL
         passive_deletes=True,

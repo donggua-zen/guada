@@ -1,12 +1,12 @@
 from app.models import db, Message
-from app.models.db_transaction import smart_transaction_manager
+from app.models.db_transaction import execute_in_transaction
 from app.models.message_content import MessageContent
 
 
-class MessageContentRepository():
+class MessageContentRepository:
 
     @staticmethod
-    @smart_transaction_manager.execute_in_transaction
+    @execute_in_transaction
     def add_content(
         message_id: str,
         content: str,
@@ -31,10 +31,10 @@ class MessageContentRepository():
         )
 
         db.session.add(message_conetnt)
-        return message_conetnt.to_dict(flush=True)
+        return message_conetnt
 
     @staticmethod
-    @smart_transaction_manager.execute_in_transaction
+    @execute_in_transaction
     def delete_conent(id: str):
         return db.session.query(MessageContent).filter(MessageContent.id == id).delete()
 
@@ -50,10 +50,10 @@ class MessageContentRepository():
 
         if message_content is None:
             return None
-        return message_content.to_dict()
+        return message_content
 
     @staticmethod
-    @smart_transaction_manager.execute_in_transaction
+    @execute_in_transaction
     def set_current_content(message_id: str, content_id: str):
         db.session.query(MessageContent).filter(
             MessageContent.message_id == message_id,
