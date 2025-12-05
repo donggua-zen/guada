@@ -1,6 +1,7 @@
 import os
 from typing import Optional
 
+from app.exceptions import APIException
 from app.repositories.character_repository import CharacterRepository as CharacterRepo
 from app.repositories.user_repository import UserRepository
 from app.services.upload_service import UploadService
@@ -70,7 +71,7 @@ class CharacterService:
 
         character = CharacterRepo.get_character_by_id(id, user_id=user_id)
         if not character:
-            raise ValueError(f"Character with ID {id} does not exist.")
+            raise APIException("Character not found", 404)
 
         character.update(data_filtered)
         if "avatar_url" in data_filtered and data["avatar_url"] != character.avatar_url:
@@ -92,7 +93,7 @@ class CharacterService:
         character = CharacterRepo.get_character_by_id(id, user_id=user_id)
         if character:
             return character.to_dict()
-        raise ValueError(f"Character with ID {id} does not exist.")
+        raise APIException("Character not found", status_code=404)
 
     def upload_avatar(self, character_id, user_id: str, avatar_file):
         character = self.get_character_by_id(character_id)
