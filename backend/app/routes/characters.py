@@ -29,7 +29,7 @@ def get_characters():
         }
         for char in all_characters
     ]
-    return jsonify({"success": True, "data": {"items": characters}})
+    return {"items": characters}
 
 
 @characters_bp.route("/api/v1/shared/characters", methods=["GET"])
@@ -50,7 +50,7 @@ def get_shared_characters():
         }
         for char in all_characters
     ]
-    return jsonify({"success": True, "data": {"items": characters}})
+    return {"items": characters}
 
 
 @characters_bp.route("/api/v1/characters", methods=["POST"])
@@ -83,25 +83,14 @@ def create_character():
 
     for field in fields:
         if field not in json_data:
-            return (
-                jsonify({"success": False, "error": f"Field '{field}' is required."}),
-                400,
-            )
+            raise Exception(f"Field '{field}' is required.")
     for field in extended_fields:
         if field not in json_data["settings"]:
-            return (
-                jsonify(
-                    {
-                        "success": False,
-                        "error": f"Field 'settings.{field}' is required.",
-                    }
-                ),
-                400,
-            )
+            raise Exception(f"Field 'settings.{field}' is required.")
 
     # character = {field: json_data.get(field) for field in fields}
     character = character_service.create_character(json_data)
-    return jsonify({"success": True, "data": character})
+    return character
 
 
 @characters_bp.route("/api/v1/characters/<character_id>", methods=["DELETE"])
@@ -110,7 +99,6 @@ def create_character():
 def delete_character(character_id):
     user_id = get_jwt_identity()
     character_service.delete_character(character_id, user_id=user_id)
-    return jsonify({"success": True})
 
 
 @characters_bp.route("/api/v1/characters/<character_id>", methods=["PUT"])
@@ -132,7 +120,7 @@ def update_character(character_id):
         field: request_data.get(field) for field in fields if request_data.get(field)
     }
     character_service.update_character(character_id, user_id=user_id, data=data)
-    return jsonify({"success": True, "data": data})
+    return data
 
 
 @characters_bp.route("/api/v1/characters/<character_id>", methods=["GET"])
@@ -141,7 +129,7 @@ def update_character(character_id):
 def get_character(character_id):
     user_id = get_jwt_identity()
     character = character_service.get_character_by_id(character_id, user_id=user_id)
-    return jsonify({"success": True, "data": character})
+    return character
 
 
 @characters_bp.route("/api/v1/characters/<character_id>/avatars", methods=["POST"])
@@ -152,4 +140,4 @@ def upload_character_avatar(character_id):
     data = character_service.upload_avatar(
         character_id, user_id=user_id, avatar_file=request.files["avatar"]
     )
-    return jsonify({"success": True, "data": data})
+    return data

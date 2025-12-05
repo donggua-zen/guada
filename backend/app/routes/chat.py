@@ -71,15 +71,7 @@ def chat_completions(session_id):
     assistant_message_id = data.get("assistant_message_id")
 
     if regeneration_mode not in ["overwrite", "multi_version", "append"]:
-        return (
-            jsonify(
-                {
-                    "success": False,
-                    "error": "regeneration_mode must be one of overwrite, multi_version, append.",
-                }
-            ),
-            400,
-        )
+        raise Exception("Invalid regeneration mode")
 
     return Response(
         stream_generator(
@@ -96,13 +88,7 @@ def chat_completions(session_id):
 @jwt_required()
 def get_tokens(session_id):
     data = chat_service.token_statistics(session_id)
-
-    return jsonify(
-        {
-            "success": True,
-            "data": data,
-        }
-    )
+    return data
 
 
 @chat_bp.route("/api/v1/messages/<message_id>/web_serach", methods=["GET"])
@@ -111,9 +97,4 @@ def get_tokens(session_id):
 def web_search(message_id):
 
     data = chat_service.web_search(message_id)
-    return jsonify(
-        {
-            "success": True,
-            "data": data,
-        }
-    )
+    return data
