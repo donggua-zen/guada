@@ -1,9 +1,10 @@
 # message_service.py
 import json
+from app.models.message_content import MessageContent
 from app.repositories.file_repository import FileRepository
 from app.repositories.message_content_repository import MessageContentRepository
 from app.repositories.message_repository import MessageRepository as MessageRepo
-from app.models.db_transaction import smart_transaction_manager
+from app.models.db_transaction import smart_transaction, smart_transaction_manager
 
 
 class MessageService:
@@ -22,7 +23,7 @@ class MessageService:
         order_type="asc",
     ):
 
-        return MessageRepo.get_messages(
+        messages = MessageRepo.get_messages(
             session_id,
             start_message_id,
             end_message_id,
@@ -31,12 +32,13 @@ class MessageService:
             with_files=True,
             with_contents=True,
         )
+        return [message.to_dict(include=["files", "contents"]) for message in messages]
 
     def get_message(self, message_id):
         message = MessageRepo.get_message(message_id)
         if not message:
             raise Exception("Message not found")
-        return message
+        return message.to_dict()
 
     def add_message_content(
         self,
@@ -45,23 +47,24 @@ class MessageService:
         reasoning_content: str = None,
         meta_data: dict = None,
     ):
-        message = MessageRepo.get_message(message_id=message_id)
-        if not message:
-            raise Exception("Message not found")
+        with smart_transaction():
+            message = MessageRepo.get_message(message_id=message_id)
+            if not message:
+                raise Exception("Message not found")
 
-        # 此处并不会实际更改数据库，而是返回给前端使用的数据结构
-        for old_content in message["contents"]:
-            old_content.update(is_current=False)
+            for old_content in message.contents:
+                old_content.is_current = False
 
-        content = MessageContentRepository.add_content(
-            message_id=message_id,
-            content=content,
-            reasoning_content=reasoning_content,
-            meta_data=meta_data or {},
-        )
+            message_conetnt = MessageContent(
+                message_id=message_id,
+                content=content,
+                reasoning_content=reasoning_content,
+                meta_data=meta_data,
+                is_current=True,
+            )
 
-        message["contents"].append(content)
-        return message
+            message.contents.append(message_conetnt)
+        return message.to_dict(include=["contents"])
 
     def add_message(
         self,
@@ -73,7 +76,7 @@ class MessageService:
         replace_message_id: str = None,
         meta_data: dict = None,
     ):
-        with smart_transaction_manager.transaction():
+        with smart_transaction():
             message = MessageRepo.add_message(
                 session_id=session_id,
                 role=role,
@@ -92,15 +95,15 @@ class MessageService:
 
             if replace_message_id:
                 self.delete_message(replace_message_id)
-
-            message["files"] = files
-            return message
+            message_dict = message.to_dict(flush=True)
+            message_dict["files"] = files
+            return message_dict
 
     def update_message(self, message_id, data):
         message = MessageRepo.update_message(message_id, data)
         if not message:
             raise Exception("Failed to update message")
-        return message
+        return message.to_dict()
 
     def delete_message(self, message_id):
         message = MessageRepo.get_message(
@@ -108,10 +111,10 @@ class MessageService:
         )
         if not message:
             raise Exception("Message not found")
-        with smart_transaction_manager.transaction():
+        with smart_transaction():
             if not MessageRepo.delete_message(message_id):
                 raise Exception("Failed to delete message")
-            if message["role"] == "user":
+            if message.role == "user":
                 MessageRepo.delete_message_by_parent_id(message_id)
 
         return {}
@@ -130,7 +133,7 @@ class MessageService:
         )
 
     def import_messages(self, session_id, messages: list[dict]):
-        with smart_transaction_manager.transaction():
+        with smart_transaction():
             MessageRepo.delete_messages_by_session_id(session_id)
             parent_id = None
             for msg in messages:
@@ -142,7 +145,7 @@ class MessageService:
                     parent_id=parent_id,
                 )
 
-                if message_in_db and message_in_db["role"] == "user":
-                    parent_id = message_in_db["id"]
+                if message_in_db and message_in_db.role == "user":
+                    parent_id = message_in_db.id
                 else:
                     parent_id = None

@@ -76,3 +76,5 @@ class SmartTransactionManager:
 
 # 全局智能事务管理器实例
 smart_transaction_manager = SmartTransactionManager()
+execute_in_transaction = smart_transaction_manager.execute_in_transaction
+smart_transaction = smart_transaction_manager.transaction

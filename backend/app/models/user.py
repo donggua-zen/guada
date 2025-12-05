@@ -14,8 +14,18 @@ class User(ModelBase):
     avatar_url = db.Column(db.String(255), nullable=True)
     parent_id = db.Column(db.String(26), nullable=True, index=True)
     nickname = db.Column(db.String(80), nullable=True)
-    phone = db.Column(db.String(20), index=True, nullable=True)
-    email = db.Column(db.String(120), index=True, nullable=True)
+    phone = db.Column(
+        db.String(20),
+        index=True,
+        nullable=True,
+        unique=True,
+    )
+    email = db.Column(
+        db.String(120),
+        index=True,
+        nullable=True,
+        unique=True,
+    )
     password_hash = db.Column(db.String(128), nullable=False)
     created_at = db.Column(db.DateTime, default=db.func.now())
     updated_at = db.Column(

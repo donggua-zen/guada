@@ -86,3 +86,13 @@ class ModelBase(db.Model):
                     # 其他处理方式
                     result[with_field] = str(rel_value)
         return result
+
+    def update(self, data: dict, exclude=[], exclude_none=False):
+        """从字典更新，可选排除 None 值"""
+        for key, value in data.items():
+            if exclude_none and value is None:
+                continue
+            if key not in exclude:
+                if hasattr(self, key):
+                    setattr(self, key, value)
+        return self

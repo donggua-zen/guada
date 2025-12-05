@@ -17,11 +17,13 @@ import logging
 import os
 from typing import Generator, Optional
 
+from app.models.model import Model 
+from app.models.session import Session
 from app.repositories.message_repository import MessageRepository
 from app.repositories.model_repository import ModelRepository
 from app.repositories.session_repository import SessionRepository
 from app.services.domain.memory_strategy import MemoryStrategy
-from app.services.llm_service import LLMService, LLMServiceChunk
+from app.services.domain.llm_service import LLMService, LLMServiceChunk
 from app.services.message_service import MessageService
 from app.utils import convert_webpath_to_filepath
 from app.utils.settings_manager import SettingsManager
@@ -106,13 +108,13 @@ class ChatService:
         return context_messages
 
     def construct_context_message(
-        self, session: dict, conversation_messages: list[dict], use_user_prompt=False
+        self, session: Session, conversation_messages: list[dict], use_user_prompt=False
     ):
         context_messages = self._construct_context_message(
             {
-                "assistant_name": (session["settings"].get("assistant_name")),
-                "assistant_identity": (session["settings"].get("assistant_identity")),
-                "system_prompt": (session["settings"].get("system_prompt", "")),
+                "assistant_name": (session.settings.get("assistant_name")),
+                "assistant_identity": (session.settings.get("assistant_identity")),
+                "system_prompt": (session.settings.get("system_prompt", "")),
             },
             conversation_messages,
             use_user_prompt=use_user_prompt,
@@ -217,7 +219,7 @@ class ChatService:
         return {**msg, "content": content_parts}
 
     def _get_conversation_messages(
-        self, session: dict, user_message_id: str, strategy: MemoryStrategy
+        self, session: Session, user_message_id: str, strategy: MemoryStrategy
     ):
         """
         获取对话消息列表，根据记忆策略处理消息
@@ -230,9 +232,10 @@ class ChatService:
         返回:
             list: 处理后的消息列表
         """
+        session_dict = session.to_dict()
         while True:
             args = {
-                "session_id": session["id"],
+                "session_id": session.id,
                 "start_message_id": None,
                 "end_message_id": None,
                 "include_start": None,
@@ -244,7 +247,7 @@ class ChatService:
                 "with_contents": True,
                 "only_current_content": True,
             }
-            conditions = strategy.pre_process_memory(session, None)
+            conditions = strategy.pre_process_memory(session_dict, None)
             if not conditions:  # 满足条件则跳出循环
                 break
 
@@ -259,20 +262,25 @@ class ChatService:
 
             messages = MessageRepository.get_messages(**args)
 
+            include = ["contents"]
+            if args["with_files"]:  # 获取文件内容
+                include.append("files")
+
             conversation_messages = [
-                self._transform_content_structure(msg) for msg in messages
+                self._transform_content_structure(msg.to_dict(include=include))
+                for msg in messages
             ]
 
-            strategy.process_memory(session, conversation_messages)
+            strategy.process_memory(session_dict, conversation_messages)
         return strategy.get_messages()
 
     def _add_assistant_message(
         self,
-        session: dict,
+        session_id: str,
         regeneration_mode: str = "overwrite",
         assistant_message_id: Optional[str] = None,
         conversation_messages: Optional[list[dict]] = None,
-    ) -> dict:
+    ):
 
         if regeneration_mode == "multi_version":
             if not assistant_message_id:
@@ -290,7 +298,7 @@ class ChatService:
                 except:
                     pass
             return message_service.add_message(
-                session_id=session["id"],
+                session_id=session_id,
                 role="assistant",
                 content="",
                 parent_id=(
@@ -299,7 +307,7 @@ class ChatService:
                 meta_data={},
             )
 
-    def _web_search(self, model: dict, messages: list[dict], current_date: str = None):
+    def _web_search(self, model: Model, messages: list[dict], current_date: str = None):
         from app.services.domain.web_search import WebSearch
         from app.services import LLMService  # 避免循环导入
 
@@ -326,11 +334,9 @@ class ChatService:
         if current_date:  # 搜索功能需要当前日期
             prompt += f"\n当前日期：{current_date}"
 
-        llm_service = LLMService(
-            model["provider"]["api_url"], model["provider"]["api_key"]
-        )
+        llm_service = LLMService(model.provider.api_url, model.provider.api_key)
         chunk = llm_service.completions(
-            model["model_name"],
+            model.model_name,
             [{"role": "user", "content": prompt}],
             temperature=None,
             top_p=None,
@@ -380,22 +386,19 @@ class ChatService:
             if session is None:
                 raise ValueError("Invalid session id")
 
-            if "settings" not in session or not isinstance(session["settings"], dict):
-                raise ValueError("Session settings missing or invalid")
-
             SessionRepository.update_session(
                 session_id,
                 data={
                     "updated_at": datetime.datetime.now(datetime.timezone.utc),
                 },
             )
-            strategy = self.get_memory_strategy(session)
+            strategy = self.get_memory_strategy(session.settings["memory_type"])
             conversation_messages = self._get_conversation_messages(
                 session, user_message_id=current_message_id, strategy=strategy
             )
 
             assistant_message = self._add_assistant_message(
-                session,
+                session.id,
                 regeneration_mode=regeneration_mode,
                 assistant_message_id=assistant_message_id,
                 conversation_messages=conversation_messages,
@@ -404,8 +407,8 @@ class ChatService:
             assistant_message_current_content = next(
                 (
                     content
-                    for content in assistant_message["contents"]
-                    if content["is_current"]
+                    for content in assistant_message.contents
+                    if content.is_current
                 ),
                 {},
             )
@@ -413,36 +416,34 @@ class ChatService:
             if not assistant_message_current_content:
                 raise ValueError("Assistant message content missing")
 
-            model = session["model"]
+            model = session.model
             if model is None:
                 raise ValueError("Invalid model name")
 
             # 更优雅的方式获取模型参数
             model_params = {
-                "thinking": "thinking" in model.get("features", []),
-                "temperature": session["settings"].get("model_temperature"),
-                "top_p": session["settings"].get("model_top_p"),
-                "frequency_penalty": session["settings"].get("model_frequency_penalty"),
-                "use_user_prompt": session["settings"].get("use_user_prompt", False),
+                "thinking": "thinking" in model.features,
+                "temperature": session.settings.get("model_temperature"),
+                "top_p": session.settings.get("model_top_p"),
+                "frequency_penalty": session.settings.get("model_frequency_penalty"),
+                "use_user_prompt": session.settings.get("use_user_prompt", False),
             }
 
-            llm_service = LLMService(
-                model["provider"]["api_url"], model["provider"]["api_key"]
-            )
+            llm_service = LLMService(model.provider.api_url, model.provider.api_key)
             context_messages = self.construct_context_message(
                 session,
                 conversation_messages,
                 use_user_prompt=model_params["use_user_prompt"],
             )
-            logger.debug(f"Using model: {model['model_name']}")
+            logger.debug(f"Using model: {model.model_name}")
             yield {
                 "type": "create",
-                "message_id": assistant_message["id"],
-                "content_id": assistant_message_current_content["id"],
+                "message_id": assistant_message.id,
+                "content_id": assistant_message_current_content.id,
                 "model_name": model["model_name"],
             }
 
-            if session["settings"].get("web_search_enabled", False):
+            if session.settings.get("web_search_enabled", False):
                 current_time = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
                 yield {"type": "web_search", "msg": "start"}
@@ -464,7 +465,7 @@ class ChatService:
                     frequency_penalty=model_params["frequency_penalty"],
                     stream=True,
                     thinking=model_params["thinking"]
-                    and session["settings"].get("thinking_enabled", False),
+                    and session.settings.get("thinking_enabled", False),
                     complete_chunk=complete_chunk,
                 )
             ) as generator:
@@ -509,12 +510,12 @@ class ChatService:
             logger.debug("Generation complete")
             if assistant_message is not None:
                 message_service.update_message(
-                    assistant_message["id"],
+                    assistant_message.id,
                     data={
                         "content": complete_chunk.content,
                         "reasoning_content": complete_chunk.reasoning_content,
                         "meta_data": {
-                            "model_name": model["model_name"] or "",
+                            "model_name": model.model_name,
                             "finish_reason": complete_chunk.finish_reason,
                             "error": complete_chunk.error,
                         },
@@ -527,11 +528,11 @@ class ChatService:
                 )
                 if user_message and strategy:
                     strategy.post_process_memory(
-                        session,
+                        session.to_dict(),
                         [user_message, assistant_message],
                     )
 
-    def get_memory_strategy(self, session: dict) -> MemoryStrategy:
+    def get_memory_strategy(self, memory_type: str) -> MemoryStrategy:
         """
         根据角色配置获取记忆策略实例
 
@@ -547,7 +548,9 @@ class ChatService:
             SummaryAugmentedSlidingWindowStrategy,
         )
 
-        memory_type = session["settings"]["memory_type"] or "sliding_window"
+        if not memory_type:
+            memory_type = "sliding_window"
+        # memory_type = session["settings"]["memory_type"] or "sliding_window"
 
         if memory_type == "sliding_window":
             return SlidingWindowStrategy()
@@ -565,22 +568,22 @@ class ChatService:
         if session is None:
             raise ValueError("Invalid session id")
 
-        strategy = self.get_memory_strategy(session)
+        strategy = self.get_memory_strategy(session.settings["memory_type"])
 
-        settings = session["settings"]
-        model = session["model"]
+        settings = session.settings
+        model = session.model
 
         conversation_messages = self._get_conversation_messages(
             session, strategy=strategy, user_message_id=None
         )
-        tokenizer = get_tokenizer(model["model_name"])
+        tokenizer = get_tokenizer(model.model_name)
 
         system_prompt_tokens = 0
         context_tokens = 0
         summary_tokens = 0
 
         context_messages = self.construct_context_message(
-            session, conversation_messages
+            session, [msg for msg in conversation_messages]
         )
 
         for i, message in enumerate(context_messages):
@@ -612,7 +615,7 @@ class ChatService:
         message = MessageRepository.get_message(message_id)
 
         messages = MessageRepository.get_messages(
-            session_id=message["session_id"],
+            session_id=message.session_id,
             end_message_id=message_id,
             include_end=False,
             limit=10,
@@ -624,31 +627,31 @@ class ChatService:
         if messages is None:  # 获取不到消息，则返回空
             raise ValueError("Invalid message id")
 
-        session = SessionRepository.get_session_by_id(messages[-1]["session_id"])
+        session = SessionRepository.get_session_by_id(messages[-1].session_id)
 
         conversation_messages = [
-            f'<role="{msg["role"]}">{msg["contents"][0]["content"]}<role="{msg["role"]}">'
+            f'<role="{msg.role}">{msg.contents[0].content}<role="{msg.role}">'
             for msg in messages
         ]
         prompt = "请根据聊天记录，为最新的用户提问，生成一个简洁明了的搜索词，用于后续的网页搜索。直接输出，不要进行任何额外描述。\n"
         prompt += "对话记录：\n" + "\n".join(conversation_messages)
-        model = session["model"]
+        model = session.model
         if model is None:
             raise ValueError("Invalid model name")
 
         # 更优雅的方式获取模型参数
         model_params = {
-            "thinking": "thinking" in model.get("features", []),
-            "temperature": session["settings"].get("model_temperature"),
-            "top_p": session["settings"].get("model_top_p"),
-            "frequency_penalty": session["settings"].get("model_frequency_penalty"),
-            "use_user_prompt": session["settings"].get("use_user_prompt", False),
+            "thinking": "thinking" in model.features,
+            "temperature": session.settings.get("model_temperature"),
+            "top_p": session.settings.get("model_top_p"),
+            "frequency_penalty": session.settings.get("model_frequency_penalty"),
+            "use_user_prompt": session.settings.get("use_user_prompt", False),
         }
         llm_service = LLMService(
             model["provider"]["api_url"], model["provider"]["api_key"]
         )
         chunk = llm_service.completions(
-            model["model_name"],
+            model.model_name,
             [{"role": "user", "content": prompt}],
             temperature=model_params["temperature"],
             top_p=model_params["top_p"],

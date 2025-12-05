@@ -6,7 +6,8 @@ from app.repositories.character_repository import CharacterRepository
 from app.repositories.message_repository import MessageRepository
 from app.repositories.session_repository import SessionRepository as SessionRepo
 from app.services.upload_service import UploadService
-from app.utils import remove_file
+from app.utils import remove_file, to_utc8_isoformat
+from app.models.db_transaction import smart_transaction, smart_transaction_manager
 
 
 class SessionService:
@@ -40,33 +41,50 @@ class SessionService:
             if "settings" in character:
                 data["settings"].update(
                     {
-                        field: character["settings"][field]
+                        field: character.settings[field]
                         for field in fields
-                        if field in character["settings"]
+                        if field in character.settings
                     }
                 )
 
             # 使用实例变量避免重复创建
             avatar_path = (
-                self.upload_service.duplicate_avatar(character["avatar_url"])
-                or character["avatar_url"]
+                self.upload_service.duplicate_avatar(character.avatar_url)
+                or character.avatar_url
             )
             data["avatar_url"] = avatar_path
-            session = self.add_new_session(data)
+            session = self._add_new_session(data)
         else:
-            session = self.add_new_session(data)
+            session = self._add_new_session(data)
 
         if session is None:
             raise ValueError("Failed to create session")
 
-        return session
+        return session.to_dict(include=["model"])
 
     def get_sessions(self, user_id: Optional[str] = None) -> list[dict]:
-        # sessions = SessionRepo.get_sessions()
-        # return sessions
-        return SessionRepo.get_sessions_with_last_message_v2(user_id)
+        sessions = SessionRepo.get_sessions_with_last_message_v2(user_id)
+        result = []
+        for (
+            session,
+            content,
+            reasoning_content,
+            message_created_at,
+        ) in sessions:
+            session_data = session.to_dict()
 
-    def add_new_session(self, data: dict):
+            if content is not None:
+                session_data["last_message"] = {
+                    "content": content,
+                    "reasoning_content": reasoning_content,
+                    "created_at": to_utc8_isoformat(message_created_at),
+                }
+
+            result.append(session_data)
+
+        return result
+
+    def _add_new_session(self, data: dict):
 
         fields = [
             "title",
@@ -86,29 +104,23 @@ class SessionService:
         return session
 
     def update_session(self, session_id, data: dict):
-        session = self.get_session_by_id(session_id)
-        if not session:
-            raise ValueError(f"Session with ID {session_id} does not exist.")
 
-        SessionRepo.update_session(session_id, data)
+        with smart_transaction():
+            session = self.get_session_by_id(session_id)
+            if not session:
+                raise ValueError(f"Session with ID {session_id} does not exist.")
 
-        if "avatar_url" in data and data["avatar_url"] != session["avatar_url"]:
-            old_avatar_url = session["avatar_url"]
-            old_avatar_path = self.upload_service.convert_webpath_to_filepath(
-                old_avatar_url
-            )
-            if old_avatar_url:
-                remove_file(old_avatar_path)
+            old_avatar_url = session.avatar_url
 
-        session.update(data)
-        return session
+            session.update(data)
 
-    def get_session_by_id(self, session_id):
-        session = SessionRepo.get_session_by_id(session_id)
-        if session:
-            return session
-
-        raise ValueError(f"Session with ID {session_id} does not exist.")
+            if "avatar_url" in data and data["avatar_url"] != old_avatar_path:
+                old_avatar_path = self.upload_service.convert_webpath_to_filepath(
+                    old_avatar_url
+                )
+                if old_avatar_url:
+                    remove_file(old_avatar_path)
+            return session.to_dict(flush=True)
 
     def query_session(self, session_id=None, user_id=None, character_id=None):
 
@@ -122,18 +134,18 @@ class SessionService:
     def delete_session(self, session_id):
         SessionRepo.delete_session(session_id)
 
-    def get_session_by_id(self, session_id):
-        return SessionRepo.get_session_by_id(session_id)
+    def get_session(self, session_id):
+        session = SessionRepo.get_session_by_id(session_id)
+        if not session:
+            raise ValueError(f"Session with ID {session_id} does not exist.")
+        return session.to_dict(include=["model"])
 
     def upload_avatar(self, session_id, avatar_file):
-        session = self.get_session_by_id(session_id)
+        session = SessionRepo.get_session_by_id(session_id)
         if not session:
             raise ValueError(f"Session with ID {session_id} does not exist.")
 
         # 使用实例变量避免重复创建
         avatar_url = self.upload_service.upload_avatar(avatar_file, size=(128, 128))
-        # old_avatar_url = session["avatar_url"]
-        self.update_session(session_id, {"avatar_url": avatar_url})
-        # 已经在update_session中处理了
-        # os.remove(self.upload_service.convert_webpath_to_filepath(old_avatar_url))
+        session.update({"avatar_url": avatar_url})
         return {"url": avatar_url}

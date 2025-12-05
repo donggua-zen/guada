@@ -4,10 +4,10 @@ from flask_jwt_extended import jwt_required, get_jwt_identity, create_access_tok
 from app.models.database import db
 from app.models.user import User
 
-auth_bp = Blueprint("auth", __name__)
+user_bp = Blueprint("user", __name__)
 
 
-@auth_bp.route("/api/v1/auth/register", methods=["POST"])
+@user_bp.route("/api/v1/auth/register", methods=["POST"])
 def register():
     data = request.get_json()
 
@@ -37,7 +37,7 @@ def register():
     )
 
 
-@auth_bp.route("/api/v1/auth/login", methods=["POST"])
+@user_bp.route("/api/v1/auth/login", methods=["POST"])
 def login():
     data = request.get_json()
     type = data.get("type")
@@ -79,9 +79,14 @@ def login():
     return jsonify({"error": "用户名或密码错误"}), 401
 
 
-@auth_bp.route("/api/v1/auth/profile", methods=["GET"])
+@user_bp.route("/api/v1/auth/profile", methods=["GET"])
 @jwt_required()
 def get_profile():
     user_id = get_jwt_identity()
     user = User.query.filter_by(id=user_id).first()
     return jsonify({"success": True, "data": user.to_dict()})
+
+@user_bp.route("/api/v1/subaccounts", methods=["POST"])
+@jwt_required()
+def create_subaccount():
+    user_id = get_jwt_identity()
