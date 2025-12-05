@@ -1,4 +1,4 @@
-from flask import Blueprint, jsonify, request
+from flask import Blueprint, request
 from flask_jwt_extended import get_jwt_identity, jwt_required
 
 from app.services import ModelService
@@ -17,12 +17,7 @@ model_service = ModelService()
 def get_models():
     user_id = get_jwt_identity()
     models = model_service.get_models_and_providers(user_id=user_id)
-    return jsonify(
-        {
-            "success": True,
-            "data": models,
-        }
-    )
+    return models
 
 
 @models_bp.route("/api/v1/models/<model_id>", methods=["DELETE"])
@@ -30,7 +25,6 @@ def get_models():
 @handle_exceptions
 def delete_model(model_id):
     model_service.delete_model(model_id)
-    return jsonify({"success": True})
 
 
 @models_bp.route("/api/v1/models", methods=["POST"])
@@ -49,7 +43,7 @@ def create_model():
     ]
     data = {field: request_data.get(field) for field in fields}
     data = model_service.add_model(**data)
-    return jsonify({"success": True, "data": data})
+    return data
 
 
 @models_bp.route("/api/v1/models/<model_id>", methods=["PUT"])
@@ -67,7 +61,7 @@ def update_model(model_id):
     ]
     data = {field: request_data.get(field) for field in fields}
     data = model_service.update_model(model_id, data)
-    return jsonify({"success": True, "data": data})
+    return data
 
 
 @models_bp.route("/api/v1/providers", methods=["POST"])
@@ -83,7 +77,7 @@ def create_provider():
     ]
     data = {field: request_data.get(field) for field in fields}
     data = model_service.add_provider(user_id=user_id, **data)
-    return jsonify({"success": True, "data": data})
+    return data
 
 
 @models_bp.route("/api/v1/providers/<provider_id>", methods=["PUT"])
@@ -99,7 +93,7 @@ def update_provider(provider_id):
     ]
     data = {field: request_data.get(field) for field in fields}
     model_service.update_provider(provider_id, data)
-    return jsonify({"success": True, "data": data})
+    return data
 
 
 @models_bp.route("/api/v1/providers/<provider_id>", methods=["DELETE"])
@@ -107,4 +101,3 @@ def update_provider(provider_id):
 @handle_exceptions
 def delete_provider(provider_id):
     model_service.delete_provider(provider_id)
-    return jsonify({"success": True})

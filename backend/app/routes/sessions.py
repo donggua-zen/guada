@@ -1,7 +1,7 @@
 import datetime
 import os
 import shutil
-from flask import Blueprint, jsonify, request
+from flask import Blueprint, request
 from flask_jwt_extended import get_jwt_identity, jwt_required
 from app.services import SummaryService
 from app.services import MessageService
@@ -24,12 +24,7 @@ sessions_bp = Blueprint("sessions", __name__)
 @handle_exceptions
 def get_sessions():
     user_id = get_jwt_identity()
-    return jsonify(
-        {
-            "success": True,
-            "data": {"items": session_service.get_sessions(user_id=user_id)},
-        }
-    )
+    return {"items": session_service.get_sessions(user_id=user_id)}
 
 
 @sessions_bp.route("/api/v1/sessions", methods=["POST"])
@@ -56,11 +51,9 @@ def create_session():
     data = session_service.create_session(session_data)
 
     if data is None:
-        return jsonify(
-            {"success": False, "error": "Failed to create or resume session."}
-        )
+        raise Exception("Failed to create or resume session.")
 
-    return jsonify({"success": True, "data": data})
+    return data
 
 
 @sessions_bp.route("/api/v1/sessions/<session_id>", methods=["DELETE"])
@@ -69,7 +62,6 @@ def create_session():
 def delete_session(session_id):
     session_service.delete_session(session_id)
     vector_memory.delete_session_memories(session_id)
-    return jsonify({"success": True})
 
 
 @sessions_bp.route("/api/v1/sessions/<session_id>", methods=["GET"])
@@ -78,18 +70,10 @@ def delete_session(session_id):
 def get_session(session_id):
     data = session_service.get_session(session_id)
     if not data:
-        return (
-            jsonify(
-                {
-                    "success": False,
-                    "error": f"Session with ID {session_id} not found.",
-                }
-            ),
-            404,
-        )
+        raise Exception(f"Session with ID {session_id} not found.")
     if "memory_type" not in data or data["memory_type"] == "":
         data["memory_type"] = "sliding_window"
-    return jsonify({"success": True, "data": data})
+    return data
 
 
 @sessions_bp.route("/api/v1/sessions/<session_id>", methods=["PUT"])
@@ -130,7 +114,6 @@ def update_session(session_id):
                 settings[field] = data["settings"][field]
         data_filtered["settings"] = settings
     session_service.update_session(session_id, data_filtered)
-    return jsonify({"success": True})
 
 
 @sessions_bp.route("/api/v1/sessions/<session_id>/avatars", methods=["POST"])
@@ -138,4 +121,4 @@ def update_session(session_id):
 @handle_exceptions
 def upload_session_avatar(session_id):
     data = session_service.upload_avatar(session_id, request.files["avatar"])
-    return jsonify({"success": True, "data": data})
+    return data

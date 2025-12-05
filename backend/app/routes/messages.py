@@ -1,5 +1,5 @@
 import logging
-from flask import Blueprint, Response, jsonify, request
+from flask import Blueprint, request
 from flask_jwt_extended import jwt_required
 import app
 from app.services import SummaryService
@@ -29,7 +29,7 @@ def get_messages(session_id):
             for file in message["files"]:
                 file.pop("content")
 
-    return jsonify({"success": True, "data": {"items": messages}})
+    return {"items": messages}
 
 
 @messages_bp.route("/api/v1/sessions/<session_id>/messages", methods=["DELETE"])
@@ -39,7 +39,6 @@ def clear_session_messages(session_id):
     message_service.delete_messages_by_session_id(session_id)
     summary_service.delete_summary_by_session_id(session_id)
     vector_memory.delete_session_memories(session_id)
-    return jsonify({"success": True})
 
 
 @messages_bp.route("/api/v1/messages/<message_id>", methods=["DELETE"])
@@ -48,7 +47,6 @@ def clear_session_messages(session_id):
 def delete_message(message_id):
     message_service.delete_message(message_id)
     vector_memory.delete_memory_by_message_id(message_id)
-    return jsonify({"success": True})
 
 
 @messages_bp.route("/api/v1/messages/<message_id>", methods=["PUT"])
@@ -56,7 +54,6 @@ def delete_message(message_id):
 @handle_exceptions
 def update_message(message_id):
     message_service.update_message(message_id, {"content": request.json["content"]})
-    return jsonify({"success": True})
 
 
 @messages_bp.route("/api/v1/sessions/<session_id>/messages", methods=["POST"])
@@ -72,7 +69,7 @@ def add_message(session_id):
         replace_message_id=request.json.get("replace_message_id", None),
         parent_id=None,
     )
-    return jsonify({"success": True, "data": message})
+    return message
 
 
 @messages_bp.route("/api/v1/message-content/<content_id>/active", methods=["PUT"])
@@ -83,7 +80,6 @@ def update_message_active_content(content_id):
     message_service.set_message_current_content(
         message_id=message_id, content_id=content_id
     )
-    return jsonify({"success": True})
 
 
 @messages_bp.route("/api/v1/sessions/<session_id>/messages/import", methods=["POST"])
@@ -92,4 +88,3 @@ def update_message_active_content(content_id):
 def import_messages(session_id):
     messages = request.json
     message_service.import_messages(session_id, messages)
-    return jsonify({"success": True})
