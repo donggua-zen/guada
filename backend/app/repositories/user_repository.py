@@ -20,7 +20,7 @@ class UserRepository:
     @staticmethod
     @execute_in_transaction
     def add_user(data: dict):
-        user = User(**user)
+        user = User(**data)
         db.session.add(user)
         return user
 
@@ -28,6 +28,11 @@ class UserRepository:
     @execute_in_transaction
     def update_user(user_id: str, data: dict):
         return User.query.filter_by(id=user_id).update(data)
+
+    @staticmethod
+    @execute_in_transaction
+    def delete_user(user_id: str):
+        return User.query.filter_by(id=user_id).delete()
 
     @staticmethod
     @execute_in_transaction

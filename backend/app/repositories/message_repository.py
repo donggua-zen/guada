@@ -47,11 +47,9 @@ class MessageRepository:
         if limit is not None:
             query = query.limit(limit)
 
-        include = []
         # 转换为字典列表
         if with_files:
             query = query.options(db.selectinload(Message.files))
-            include.append("files")
         if with_contents:
             if only_current_content:
                 query = query.options(
@@ -61,8 +59,6 @@ class MessageRepository:
                 )
             else:
                 query = query.options(db.selectinload(Message.contents))
-            include.append("contents")
-        # print("include",include)
         messages = query.all()
 
         return messages

@@ -51,20 +51,3 @@ class MessageContentRepository:
         if message_content is None:
             return None
         return message_content
-
-    @staticmethod
-    @execute_in_transaction
-    def set_current_content(message_id: str, content_id: str):
-        db.session.query(MessageContent).filter(
-            MessageContent.message_id == message_id,
-            MessageContent.is_current == True,
-        ).update({"is_current": False})
-        return (
-            db.session.query(MessageContent)
-            .filter(
-                MessageContent.id == content_id,
-            )
-            .update({"is_current": True})
-        )
-
-    # def set_current_content_by_index(self, message_id: str, index: int):

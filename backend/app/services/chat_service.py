@@ -17,7 +17,7 @@ import logging
 import os
 from typing import Generator, Optional
 
-from app.models.model import Model 
+from app.models.model import Model
 from app.models.session import Session
 from app.repositories.message_repository import MessageRepository
 from app.repositories.model_repository import ModelRepository
@@ -377,7 +377,7 @@ class ChatService:
             Generator[LLMService]: 模型回复的流式响应，每个元素是一个包含部分回复内容的 LLMServiceChunk 对象
         """
         current_message_id = message_id
-        assistant_message = None
+        assistant_message: dict = None
         complete_chunk = LLMServiceChunk()
         model = None
         try:
@@ -407,8 +407,8 @@ class ChatService:
             assistant_message_current_content = next(
                 (
                     content
-                    for content in assistant_message.contents
-                    if content.is_current
+                    for content in assistant_message["contents"]
+                    if content["is_current"]
                 ),
                 {},
             )
@@ -438,9 +438,9 @@ class ChatService:
             logger.debug(f"Using model: {model.model_name}")
             yield {
                 "type": "create",
-                "message_id": assistant_message.id,
-                "content_id": assistant_message_current_content.id,
-                "model_name": model["model_name"],
+                "message_id": assistant_message["id"],
+                "content_id": assistant_message_current_content["id"],
+                "model_name": model.model_name,
             }
 
             if session.settings.get("web_search_enabled", False):
@@ -458,7 +458,7 @@ class ChatService:
                 )
             with closing(
                 llm_service.completions(
-                    model["model_name"],
+                    model.model_name,
                     context_messages,
                     temperature=model_params["temperature"],
                     top_p=model_params["top_p"],
@@ -510,7 +510,7 @@ class ChatService:
             logger.debug("Generation complete")
             if assistant_message is not None:
                 message_service.update_message(
-                    assistant_message.id,
+                    assistant_message["id"],
                     data={
                         "content": complete_chunk.content,
                         "reasoning_content": complete_chunk.reasoning_content,

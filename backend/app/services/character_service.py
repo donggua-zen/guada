@@ -77,7 +77,7 @@ class CharacterService:
             old_avatar_path = convert_webpath_to_filepath(character.avatar_url)
             if old_avatar_path:
                 remove_file(old_avatar_path)
-                
+
         return character.to_dict()
 
     def delete_character(self, id, user_id: str):
