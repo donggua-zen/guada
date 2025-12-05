@@ -17,8 +17,7 @@
 
     <!-- 搜索框 -->
     <div class="search-box px-3 py-3">
-      <n-input v-model:value="searchKeyword" placeholder="搜索分组" clearable @update:value="handleSearchInput" size="large"
-        round>
+      <n-input v-model:value="searchKeyword" placeholder="搜索分组" clearable size="large" round>
         <template #prefix>
           <n-icon size="22">
             <SearchOutlined />
@@ -95,7 +94,6 @@ const handleCreateGroup = async () => {
 </script>
 
 <style scoped>
-
 .new-provider-btn:hover {
   background-color: #3a7bc8;
 }

@@ -18,13 +18,16 @@ const globaSettings = ref({})
 const changePage = (page) => {
     switch (page) {
         case 'Chat':
-            router.replace({ name: 'Chat' })
+            router.push({ name: 'Chat' })
             break
         case 'Characters':
-            router.replace({ name: 'Characters' })
+            router.push({ name: 'Characters' })
             break
         case 'Models':
-            router.replace({ name: 'Models' })
+            router.push({ name: 'Models' })
+            break
+        case 'My':
+            router.push({ name: 'My' })
             break
     }
 }

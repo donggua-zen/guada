@@ -36,6 +36,11 @@ const routes = [
                 name: 'Models',
                 meta: { requiresLayout: true, title: '模型', requiresAuth: true },
                 component: () => import('./components/ModelsPage.vue')
+            }, {
+                path: '/user/profile',
+                name: 'My',
+                meta: { requiresLayout: true, title: '用户', requiresAuth: true },
+                component: () => import('./components/user/UserPage.vue')
             },
         ]
     },
@@ -62,7 +67,7 @@ router.beforeEach(async (to, from, next) => {
             return next('/login')
         }
     }
-
+    console.log('to', to)
     // if (to.meta.requiresGuest && authStore.isAuthenticated) {
     //     return next('/chat')
     // }
