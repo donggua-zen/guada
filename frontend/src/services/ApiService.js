@@ -562,10 +562,52 @@ class ApiService {
   }
 
   async getProfile() {
-    return await this._request('/auth/profile', {
+    return await this._request('/user/profile', {
       method: 'GET'
     });
   }
+
+  async updateProfile(data) {
+    return await this._request('/user/profile', {
+      method: 'PUT',
+      data: data
+    });
+  }
+
+  async changePassword(data, oldPassword, newPassword) {
+    return await this._request('/user/password', {
+      method: 'PUT',
+      data: {
+        old_password: oldPassword,
+        new_password: newPassword
+      }
+    });
+  }
+
+  async createSubaccount(data) {
+    return await this._request('/subaccounts', {
+      method: 'POST',
+      data: data
+    });
+  }
+
+  async updateSubaccount(subaccountId, data) {
+    return await this._request(`/subaccounts/${subaccountId}`, {
+      method: 'PUT',
+      data: data
+    })
+  }
+
+  async deleteSubaccount(subaccountId) {
+    return await this._request(`/subaccounts/${subaccountId}`, {
+      method: 'DELETE'
+    })
+  }
+
+  async fetchSubaccounts() {
+    return await this._request('/subaccounts');
+  }
+
 }
 
 // 创建默认实例并导出
