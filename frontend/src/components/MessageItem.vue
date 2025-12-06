@@ -592,13 +592,13 @@ export default {
   align-items: flex-start;
   width: 100%;
   flex-direction: column;
-  margin-top: 10px;
+  margin-top: 8px;
 }
 
 .markdown-text ol>li,
 .markdown-text ul>li {
   position: relative;
-  margin-bottom: 10px;
+  margin-bottom: 8px;
   margin-top: 0;
 }
 
@@ -609,7 +609,8 @@ export default {
 .markdown-text ol>li {
   flex-wrap: wrap;
   counter-increment: item;
-  padding-left: 3ch; /* 预留3个字符宽度 */
+  padding-left: 3ch;
+  /* 预留3个字符宽度 */
   position: relative;
 }
 
@@ -652,7 +653,7 @@ ol>*:not(li) {
 }
 
 .markdown-text ul li ul {
-  margin-top: 10px;
+  margin-top: 8px;
 }
 
 .markdown-text code {
