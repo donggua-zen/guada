@@ -8,7 +8,19 @@ import { createRouter, createWebHistory } from 'vue-router'
 
 import { createPinia } from 'pinia'
 import { useAuthStore } from './stores/auth'
-// import { Children } from 'react'
+import NProgress from 'nprogress'
+import 'nprogress/nprogress.css'
+
+// 配置NProgress
+NProgress.configure({
+    easing: 'ease-in-out',
+    speed: 1000,
+    showSpinner: false,
+    trickle: true,
+    trickleSpeed: 200,
+    minimum: 0.08
+})
+
 const routes = [
     {
         path: '/',
@@ -58,6 +70,7 @@ const router = createRouter({
 });
 
 router.beforeEach(async (to, from, next) => {
+    NProgress.start()  // 开始进度条
     const authStore = useAuthStore()
 
     // 检查认证状态
@@ -73,6 +86,12 @@ router.beforeEach(async (to, from, next) => {
 
     next()
 })
+
+// 全局后置守卫
+router.afterEach(() => {
+    NProgress.done()  // 结束进度条
+})
+
 const app = createApp(App)
 const pinia = createPinia()
 
