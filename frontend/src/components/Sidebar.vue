@@ -10,7 +10,7 @@
     </div>
 
     <!-- 新增的设置按钮 -->
-    <div v-if="authStore.user.role == 'primary'" class="sidebar-btn settings-btn" title="设置"
+    <div v-if="authStore.user && authStore.user.role == 'primary'" class="sidebar-btn settings-btn" title="设置"
       @click="$emit('open-settings')">
       <div class="icon-wrapper">
         <component :is="SettingsTwotone" :size="20" />
