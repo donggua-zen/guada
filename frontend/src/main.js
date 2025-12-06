@@ -67,7 +67,6 @@ router.beforeEach(async (to, from, next) => {
             return next('/login')
         }
     }
-    console.log('to', to)
     // if (to.meta.requiresGuest && authStore.isAuthenticated) {
     //     return next('/chat')
     // }
