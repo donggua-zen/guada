@@ -2,7 +2,7 @@ from flask import Blueprint, request
 from flask_jwt_extended import get_jwt_identity, jwt_required
 
 from app.services import ModelService
-from app.utils.decorators import handle_exceptions
+from app.utils.decorators import handle_response
 
 
 models_bp = Blueprint("models", __name__)
@@ -13,7 +13,7 @@ model_service = ModelService()
 
 @models_bp.route("/api/v1/models", methods=["GET"])
 @jwt_required()
-@handle_exceptions
+@handle_response
 def get_models():
     user_id = get_jwt_identity()
     models = model_service.get_models_and_providers(user_id=user_id)
@@ -22,14 +22,14 @@ def get_models():
 
 @models_bp.route("/api/v1/models/<model_id>", methods=["DELETE"])
 @jwt_required()
-@handle_exceptions
+@handle_response
 def delete_model(model_id):
     model_service.delete_model(model_id)
 
 
 @models_bp.route("/api/v1/models", methods=["POST"])
 @jwt_required()
-@handle_exceptions
+@handle_response
 def create_model():
     request_data = request.json
     fields = [
@@ -48,7 +48,7 @@ def create_model():
 
 @models_bp.route("/api/v1/models/<model_id>", methods=["PUT"])
 @jwt_required()
-@handle_exceptions
+@handle_response
 def update_model(model_id):
     request_data = request.json
     fields = [
@@ -66,7 +66,7 @@ def update_model(model_id):
 
 @models_bp.route("/api/v1/providers", methods=["POST"])
 @jwt_required()
-@handle_exceptions
+@handle_response
 def create_provider():
     request_data = request.json
     user_id = get_jwt_identity()
@@ -82,7 +82,7 @@ def create_provider():
 
 @models_bp.route("/api/v1/providers/<provider_id>", methods=["PUT"])
 @jwt_required()
-@handle_exceptions
+@handle_response
 def update_provider(provider_id):
     request_data = request.json
     fields = [
@@ -98,6 +98,6 @@ def update_provider(provider_id):
 
 @models_bp.route("/api/v1/providers/<provider_id>", methods=["DELETE"])
 @jwt_required()
-@handle_exceptions
+@handle_response
 def delete_provider(provider_id):
     model_service.delete_provider(provider_id)

@@ -11,7 +11,7 @@ from app.services import SessionService
 session_service = SessionService()
 
 
-from app.utils.decorators import handle_exceptions
+from app.utils.decorators import handle_response
 from app.utils.vector_memory import get_vector_memory
 
 vector_memory = get_vector_memory()
@@ -21,7 +21,7 @@ sessions_bp = Blueprint("sessions", __name__)
 
 @sessions_bp.route("/api/v1/sessions", methods=["GET"])
 @jwt_required()
-@handle_exceptions
+@handle_response
 def get_sessions():
     user_id = get_jwt_identity()
     return {"items": session_service.get_sessions(user_id=user_id)}
@@ -29,7 +29,7 @@ def get_sessions():
 
 @sessions_bp.route("/api/v1/sessions", methods=["POST"])
 @jwt_required()
-@handle_exceptions
+@handle_response
 def create_session():
     settings = request.json.get("settings", {})
     user_id = get_jwt_identity()
@@ -58,7 +58,7 @@ def create_session():
 
 @sessions_bp.route("/api/v1/sessions/<session_id>", methods=["DELETE"])
 @jwt_required()
-@handle_exceptions
+@handle_response
 def delete_session(session_id):
     session_service.delete_session(session_id)
     vector_memory.delete_session_memories(session_id)
@@ -66,7 +66,7 @@ def delete_session(session_id):
 
 @sessions_bp.route("/api/v1/sessions/<session_id>", methods=["GET"])
 @jwt_required()
-@handle_exceptions
+@handle_response
 def get_session(session_id):
     data = session_service.get_session(session_id)
     if not data:
@@ -78,7 +78,7 @@ def get_session(session_id):
 
 @sessions_bp.route("/api/v1/sessions/<session_id>", methods=["PUT"])
 @jwt_required()
-@handle_exceptions
+@handle_response
 def update_session(session_id):
     data = request.json
     data["updated_at"] = datetime.datetime.now(datetime.timezone.utc)
@@ -118,7 +118,7 @@ def update_session(session_id):
 
 @sessions_bp.route("/api/v1/sessions/<session_id>/avatars", methods=["POST"])
 @jwt_required()
-@handle_exceptions
+@handle_response
 def upload_session_avatar(session_id):
     data = session_service.upload_avatar(session_id, request.files["avatar"])
     return data
