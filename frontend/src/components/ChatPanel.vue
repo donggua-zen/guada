@@ -386,10 +386,16 @@ async function handleSessionChange(newSessionId, oldSessionId) {
   currentSessionId.value = newSessionId;
   if (newSessionId) {
     await loadMessages(newSessionId);
-    nextTick(immediateScrollToBottom);
+    nextTick(() => {
+      smoothScrollToBottom();
+      if (inputMessage.value?.isWaiting) {
+        handleSendMessage();
+      }
+    });
   }
   isLoading.value = false;
 }
+
 
 async function loadMessages(sessionId) {
   if (store.getMessages(sessionId).length === 0) {

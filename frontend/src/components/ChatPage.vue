@@ -278,13 +278,11 @@ const handleCreateSessionWithMessage = async (session, inputMessage) => {
   const response = await apiService.createSession(session)
   // 刷新对话列表
   await loadSessions();
-  await selectSession(response);
   if (inputMessage) {
+    inputMessage.isWaiting = true
     store.setInputMessage(response.id, inputMessage)
-    nextTick(() => {
-      chatPanelRef.value.sendMessage()
-    })
   }
+  await selectSession(response);
 };
 
 /**
