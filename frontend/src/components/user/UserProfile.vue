@@ -1,7 +1,7 @@
 <template>
   <div class="max-w-128">
-    <n-form ref="basicFormRef" :model="userForm" :rules="basicRules" label-placement="top"
-      label-width="80px" size="large">
+    <n-form ref="basicFormRef" :model="userForm" :rules="basicRules" label-placement="top" label-width="80px"
+      size="large">
       <!-- 头像设置 -->
       <n-form-item label="头像设置" :show-label="false">
         <AvatarPreview :src="userForm.avatar_url" :type="'user'" @avatar-changed="handleAvaterChanged" />
@@ -23,7 +23,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, shallowRef } from 'vue'
 import { NButton, NForm, NFormItem, NInput } from 'naive-ui'
 import AvatarPreview from '../AvatarPreview.vue'
 import { useAuthStore } from '../../stores/auth'
@@ -34,14 +34,14 @@ const { toast } = usePopup()
 const authStore = useAuthStore()
 
 const basicFormRef = ref(null)
-const avater_file = ref(null)
+let avater_file = shallowRef(null)
 const originalUserForm = ref({})
 
 const userForm = ref({
-    nickname: '',
-    phone: '',
-    email: '',
-    avatar_url: '',
+  nickname: '',
+  phone: '',
+  email: '',
+  avatar_url: '',
 })
 
 const basicRules = ref({
@@ -91,6 +91,7 @@ const isFormChanged = computed(() => {
 })
 
 const handleAvaterChanged = (file) => {
+  console.log('file', file)
   avater_file.value = file
 }
 
@@ -100,10 +101,17 @@ const handleSaveUserInfo = async () => {
       nickname: userForm.value.nickname,
       phone: userForm.value.phone,
       email: userForm.value.email,
-      avatar_url: userForm.value.avatar_url
     })
+
+    if (avater_file.value) {
+      const formData = new FormData()
+      formData.append('avatar', avater_file.value)
+      const response = await apiService.uploadUserAvatar(avater_file.value)
+      avater_file.value = null
+      userForm.value.avatar_url = response.url
+    }
+    authStore.user = { ...authStore.user, ...userForm.value }
     toast.success('用户信息保存成功')
-    
     // 更新原始表单数据
     originalUserForm.value = { ...userForm.value }
   } catch (error) {

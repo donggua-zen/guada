@@ -3,8 +3,8 @@
     <div v-for="account in subAccounts" :key="account.id"
       class="border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow cursor-pointer relative">
       <div class="flex flex-col items-center text-center pt-4">
-        <div class="w-16 h-16 rounded-full bg-gray-200 mb-3 flex items-center justify-center">
-          <span class="text-gray-500 text-2xl">{{ account.initials }}</span>
+        <div class="w-16 h-16 mb-3 flex items-center justify-center">
+          <Avatar :src="account.avatar_url" type="user" round />
         </div>
         <h3 class="font-medium text-gray-900 truncate w-full">{{ account.nickname }}</h3>
         <p class="text-sm text-gray-500 truncate w-full mt-1">{{ account.email }}</p>
@@ -64,6 +64,7 @@ import { NButton, NForm, NFormItem, NInput, NIcon, NDropdown, NModal } from 'nai
 import { MoreVertOutlined, EditOutlined, DeleteOutlineOutlined } from '@vicons/material'
 import { usePopup } from '../../composables/usePopup'
 import { apiService } from '../../services/ApiService'
+import Avatar from '../../components/Avatar.vue'
 
 const { toast } = usePopup()
 

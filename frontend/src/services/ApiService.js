@@ -29,6 +29,9 @@ class ApiService {
           window.location.href = '/login';
           return;
         }
+        if (error.response.data.error) {
+          throw new Error(error.response.data.error || '请求失败');
+        }
         throw error;
       }
     );
@@ -331,13 +334,27 @@ class ApiService {
     try {
       const url = type === 'character' ? 'characters' : 'sessions';
 
-      const response = await this.axiosInstance.post(`/${url}/${uid}/avatars`, formData, {
+      return await this.axiosInstance.post(`/${url}/${uid}/avatars`, formData, {
+        headers: {
+          'Content-Type': 'multipart/form-data',
+        },
+      });
+    } catch (error) {
+      console.error('上传错误:', error);
+      throw error;
+    }
+  }
+
+  async uploadUserAvatar(avatarFile) {
+    const formData = new FormData();
+    formData.append('avatar', avatarFile);
+    try {
+      return await this.axiosInstance.post(`/user/avatars`, formData, {
         headers: {
           'Content-Type': 'multipart/form-data',
         },
       });
 
-      return response || [];
     } catch (error) {
       console.error('上传错误:', error);
       throw error;
@@ -356,13 +373,11 @@ class ApiService {
     formData.append('file', file);
 
     try {
-      const response = await this.axiosInstance.post(`/sessions/${sessionId}/files`, formData, {
+      return await this.axiosInstance.post(`/sessions/${sessionId}/files`, formData, {
         headers: {
           'Content-Type': 'multipart/form-data',
         },
       });
-
-      return response || [];
     } catch (error) {
       console.error('上传错误:', error);
       throw error;
@@ -574,7 +589,7 @@ class ApiService {
     });
   }
 
-  async changePassword(data, oldPassword, newPassword) {
+  async changePassword(oldPassword, newPassword) {
     return await this._request('/user/password', {
       method: 'PUT',
       data: {
