@@ -5,7 +5,7 @@ import app
 from app.services import SummaryService
 from app.services import MessageService
 from app.services import SessionService
-from app.utils.decorators import handle_exceptions
+from app.utils.decorators import handle_response
 from app.utils.vector_memory import get_vector_memory
 
 vector_memory = get_vector_memory()
@@ -20,7 +20,7 @@ logger = logging.getLogger(__name__)
 
 @messages_bp.route("/api/v1/sessions/<session_id>/messages", methods=["GET"])
 @jwt_required()
-@handle_exceptions
+@handle_response
 def get_messages(session_id):
     messages = message_service.get_messages(session_id=session_id)
 
@@ -34,7 +34,7 @@ def get_messages(session_id):
 
 @messages_bp.route("/api/v1/sessions/<session_id>/messages", methods=["DELETE"])
 @jwt_required()
-@handle_exceptions
+@handle_response
 def clear_session_messages(session_id):
     message_service.delete_messages_by_session_id(session_id)
     summary_service.delete_summary_by_session_id(session_id)
@@ -43,7 +43,7 @@ def clear_session_messages(session_id):
 
 @messages_bp.route("/api/v1/messages/<message_id>", methods=["DELETE"])
 @jwt_required()
-@handle_exceptions
+@handle_response
 def delete_message(message_id):
     message_service.delete_message(message_id)
     vector_memory.delete_memory_by_message_id(message_id)
@@ -51,14 +51,14 @@ def delete_message(message_id):
 
 @messages_bp.route("/api/v1/messages/<message_id>", methods=["PUT"])
 @jwt_required()
-@handle_exceptions
+@handle_response
 def update_message(message_id):
     message_service.update_message(message_id, {"content": request.json["content"]})
 
 
 @messages_bp.route("/api/v1/sessions/<session_id>/messages", methods=["POST"])
 @jwt_required()
-@handle_exceptions
+@handle_response
 def add_message(session_id):
     # 添加新消息到完整历史
     message = message_service.add_message(
@@ -74,7 +74,7 @@ def add_message(session_id):
 
 @messages_bp.route("/api/v1/message-content/<content_id>/active", methods=["PUT"])
 @jwt_required()
-@handle_exceptions
+@handle_response
 def update_message_active_content(content_id):
     message_id = request.json["message_id"]
     message_service.set_message_current_content(
@@ -84,7 +84,7 @@ def update_message_active_content(content_id):
 
 @messages_bp.route("/api/v1/sessions/<session_id>/messages/import", methods=["POST"])
 @jwt_required()
-@handle_exceptions
+@handle_response
 def import_messages(session_id):
     messages = request.json
     message_service.import_messages(session_id, messages)

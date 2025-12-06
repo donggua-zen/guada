@@ -9,7 +9,7 @@ from flask_jwt_extended import jwt_required
 from app.services import ChatService
 from app.services import MessageService
 from app.services import SessionService
-from app.utils.decorators import handle_exceptions
+from app.utils.decorators import handle_response
 
 message_service = MessageService()
 chat_service = ChatService()
@@ -62,7 +62,7 @@ def stream_generator(
 
 @chat_bp.route("/api/v1/sessions/<session_id>/messages/stream", methods=["POST"])
 @jwt_required()
-@handle_exceptions
+@handle_response
 def chat_completions(session_id):
 
     data = request.json
@@ -93,7 +93,7 @@ def get_tokens(session_id):
 
 @chat_bp.route("/api/v1/messages/<message_id>/web_serach", methods=["GET"])
 @jwt_required()
-@handle_exceptions
+@handle_response
 def web_search(message_id):
 
     data = chat_service.web_search(message_id)
