@@ -48,7 +48,6 @@ export const useAuthStore = defineStore('auth', () => {
         try {
             const userData = await apiService.getProfile()
             user.value = userData
-            console.log(userData)
             return true
         } catch (error) {
             console.error(error)

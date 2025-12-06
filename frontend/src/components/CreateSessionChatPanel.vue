@@ -19,6 +19,9 @@
 
     <!-- 输入区域 -->
     <div class="px-5 pb-2.5 w-full flex-1 flex flex-col items-center justify-center">
+      <div class="banner max-w-full mx-auto w-80 mb-4">
+        <img src="/images/chat_banner.webp" alt=""></img>
+      </div>
       <h1 class="text-3xl mb-6 text-gray-600">Hi，想聊些什么？</h1>
       <div class="mb-3 mx-auto flex items-start w-full max-w-[900px]">
         <n-popselect v-model:value="currentSession.model_id" :options="modelOptions" trigger="click">
