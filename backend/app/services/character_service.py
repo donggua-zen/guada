@@ -24,7 +24,7 @@ class CharacterService:
     def get_shared_characters(self, user_id: str):
         user = UserRepository.get_user_by_id(user_id)
         parent_id = user_id
-        if user.role == "child" and user.parent_id is None:
+        if user.role != "primary" and user.parent_id is not None:
             parent_id = user.parent_id
         child_users = UserRepository.get_child_users_by_id(user_id=parent_id)
         user_ids = [parent_id] + [user.id for user in child_users]
