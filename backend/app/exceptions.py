@@ -37,3 +37,8 @@ class AuthenticationError(APIException):
 class ParameterError(APIException):
     status_code = 400
     message = "Invalid parameter"
+
+
+class PerssionDeniedError(APIException):
+    status_code = 403
+    message = "Permission denied"
