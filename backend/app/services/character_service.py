@@ -6,6 +6,7 @@ from app.repositories.character_repository import CharacterRepository as Charact
 from app.repositories.user_repository import UserRepository
 from app.services.upload_service import UploadService
 from app.utils import convert_webpath_to_filepath, remove_file
+from app.models.db_transaction import smart_transaction
 
 
 class CharacterService:
@@ -69,11 +70,12 @@ class CharacterService:
             if field in data:
                 data_filtered[field] = data[field]
 
-        character = CharacterRepo.get_character_by_id(id, user_id=user_id)
-        if not character:
-            raise APIException("Character not found", 404)
+        with smart_transaction():
+            character = CharacterRepo.get_character_by_id(id, user_id=user_id)
+            if not character:
+                raise APIException("Character not found", 404)
+            character.update(data_filtered)
 
-        character.update(data_filtered)
         if "avatar_url" in data_filtered and data["avatar_url"] != character.avatar_url:
             old_avatar_path = convert_webpath_to_filepath(character.avatar_url)
             if old_avatar_path:
