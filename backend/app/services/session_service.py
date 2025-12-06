@@ -23,10 +23,10 @@ class SessionService:
         character_id = data.get("character_id", None)
         if character_id is not None:
             character = CharacterRepository.get_character_by_id(character_id)
-            data["title"] = character["title"]
-            data["avatar_url"] = character["avatar_url"]
-            data["description"] = character["description"]
-            data["model_id"] = character["model_id"]
+            data["title"] = character.title
+            data["avatar_url"] = character.avatar_url
+            data["description"] = character.description
+            data["model_id"] = character.model_id
 
             fields = [
                 "assistant_name",
@@ -38,14 +38,14 @@ class SessionService:
                 "model_temperature",
             ]
             # 更优雅地复制字段
-            if "settings" in character:
-                data["settings"].update(
-                    {
-                        field: character.settings[field]
-                        for field in fields
-                        if field in character.settings
-                    }
-                )
+
+            data["settings"].update(
+                {
+                    field: character.settings[field]
+                    for field in fields
+                    if field in character.settings
+                }
+            )
 
             # 使用实例变量避免重复创建
             avatar_path = (
