@@ -191,7 +191,7 @@ const saveAccount = () => {
           const response = await apiService.createSubaccount(newAccount);
 
           subAccounts.value.push(response)
-          toast('账户添加成功')
+          toast.success('账户添加成功')
         } else {
           // 编辑账户逻辑
           const index = subAccounts.value.findIndex(acc => acc.id === editingAccount.value.id)
