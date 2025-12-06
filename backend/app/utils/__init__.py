@@ -171,6 +171,7 @@ def build_url_path(*path_parts):
 
 
 def convert_webpath_to_filepath(web_path):
+    if not web_path: return ""
     # 检测路径是否包含?，若有则将?及其后面的内容删除
     if "?" in web_path:
         web_path = web_path.split("?")[0]
