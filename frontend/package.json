@@ -23,6 +23,7 @@
     "highlight.js": "^11.11.1",
     "marked": "^16.4.2",
     "marked-highlight": "^2.2.3",
+    "nprogress": "^0.2.0",
     "pinia": "^3.0.4",
     "simplebar-vue": "^2.4.2",
     "sweetalert2": "^11.23.0",
