@@ -77,7 +77,8 @@
         <scroll-container ref="scrollContainerRef" :auto-scroll="true" :smooth-scroll="!isStreaming">
           <div class="flex flex-col items-center px-[20px] max-w-[1000px] mx-auto">
             <MessageItem v-for="(message, index) in activeMessages" :ref="(el) => setItemRef(el, message.id)"
-              :key="message.id" :message="message" :avatar="currentSession.avatar_url"
+              :key="message.id" :message="message"
+              :avatar="message.role == 'user' ? authStore.user.avatar_url : currentSession.avatar_url"
               :is-last="index == activeMessages.length - 1"
               :allow-generate="!isStreaming && allowReSendMessage(message, index)" @delete="deleteMessage"
               @edit="editMessage" @copy="copyMessage" @generate="generateResponse" @regenerate="regenerateResponse"
@@ -117,6 +118,7 @@ import { store } from "../stores/store";
 import { apiService } from "../services/ApiService";
 import { usePopup } from "@/composables/usePopup";
 import { useDebounceFn } from "@vueuse/core";
+import { useAuthStore } from "../stores/auth"
 
 // 组件导入
 import MessageItem from "./MessageItem.vue";
@@ -140,6 +142,7 @@ import { NButton, NIcon, NDivider, NDropdown, NModal } from "naive-ui";
 
 // 弹出层工具
 const { confirm, editText, toast, notify } = usePopup();
+const authStore = useAuthStore()
 
 // 响应式数据
 const scrollContainerRef = ref(null);
