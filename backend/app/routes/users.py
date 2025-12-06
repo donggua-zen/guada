@@ -6,7 +6,6 @@ from app.exceptions import (
     NotFoundError,
     ParameterError,
     PerssionDeniedError,
-    ValidationError,
 )
 from app.models.database import db
 from app.models.user import User
@@ -15,12 +14,12 @@ from app.services.user_service import UserService
 from app.utils.decorators import handle_response
 from app.models.db_transaction import smart_transaction
 
-user_bp = Blueprint("user", __name__)
+users_bp = Blueprint("users", __name__)
 
 user_service = UserService()
 
 
-@user_bp.route("/api/v1/auth/register", methods=["POST"])
+@users_bp.route("/api/v1/auth/register", methods=["POST"])
 @handle_response
 def register():
     data = request.get_json()
@@ -46,7 +45,7 @@ def register():
     }
 
 
-@user_bp.route("/api/v1/auth/login", methods=["POST"])
+@users_bp.route("/api/v1/auth/login", methods=["POST"])
 @handle_response
 def login():
     data = request.get_json()
@@ -84,16 +83,16 @@ def login():
     raise AuthenticationError("用户名或密码错误")
 
 
-@user_bp.route("/api/v1/user/profile", methods=["GET"])
+@users_bp.route("/api/v1/user/profile", methods=["GET"])
 @jwt_required()
 @handle_response
 def get_profile():
     user_id = get_jwt_identity()
-    user = User.query.filter_by(id=user_id).first()
+    user = UserRepository.get_user_by_id(user_id=user_id)
     return user.to_dict()
 
 
-@user_bp.route("/api/v1/user/profile", methods=["PUT"])
+@users_bp.route("/api/v1/user/profile", methods=["PUT"])
 @jwt_required()
 @handle_response
 def update_profile():
@@ -102,8 +101,9 @@ def update_profile():
     UserRepository.update_user(user_id, data)
 
 
-@user_bp.route("/api/v1/user/password", methods=["PUT"])
+@users_bp.route("/api/v1/user/password", methods=["PUT"])
 @jwt_required()
+@handle_response
 def update_password():
     user_id = get_jwt_identity()
     data = request.get_json()
@@ -111,11 +111,10 @@ def update_password():
     new_password = data.get("new_password")
     if not old_password or not new_password:
         raise ParameterError("请填写旧密码和新密码")
+    return user_service.update_password(user_id, old_password, new_password)
 
-    UserRepository.update_password(user_id, old_password, new_password)
 
-
-@user_bp.route("/api/v1/subaccounts", methods=["POST"])
+@users_bp.route("/api/v1/subaccounts", methods=["POST"])
 @jwt_required()
 @handle_response
 def create_subaccount():
@@ -125,7 +124,7 @@ def create_subaccount():
     return account
 
 
-@user_bp.route("/api/v1/subaccounts", methods=["GET"])
+@users_bp.route("/api/v1/subaccounts", methods=["GET"])
 @jwt_required()
 @handle_response
 def get_subaccounts():
@@ -134,7 +133,7 @@ def get_subaccounts():
     return accounts
 
 
-@user_bp.route("/api/v1/subaccounts/<account_id>", methods=["DELETE"])
+@users_bp.route("/api/v1/subaccounts/<account_id>", methods=["DELETE"])
 @jwt_required()
 @handle_response
 def delete_subaccount(account_id):
@@ -145,7 +144,7 @@ def delete_subaccount(account_id):
     user_service.delete_subaccount(user_id, account_id)
 
 
-@user_bp.route("/api/v1/subaccounts/<account_id>", methods=["PUT"])
+@users_bp.route("/api/v1/subaccounts/<account_id>", methods=["PUT"])
 @jwt_required()
 @handle_response
 def update_subaccount(account_id):
@@ -165,3 +164,14 @@ def update_subaccount(account_id):
         if user_id != account_id:
             if "password" in data:
                 subaccount.set_password(data["password"])
+
+
+# 上传头像
+@users_bp.route("/api/v1/user/avatars", methods=["POST"])
+@jwt_required()
+@handle_response
+def upload_avatar():
+    user_id = get_jwt_identity()
+    return user_service.upload_avatar(
+        user_id=user_id, avatar_file=request.files["avatar"]
+    )

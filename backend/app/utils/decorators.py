@@ -3,6 +3,8 @@ import logging
 
 from flask import Response, jsonify
 
+from app.exceptions import APIException
+
 logger = logging.getLogger(__name__)
 
 
@@ -20,6 +22,8 @@ def handle_response(func):
                     return response
             else:  # 响应为空
                 return jsonify({"success": True})
+        except APIException as e:
+            return jsonify({"success": False, "error": e.message}), e.status_code
         except Exception as e:
             logger.exception(e)
             return jsonify({"success": False, "error": str(e)}), 500

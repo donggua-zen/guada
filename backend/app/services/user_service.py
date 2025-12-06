@@ -1,6 +1,8 @@
 from app.exceptions import NotFoundError, PerssionDeniedError, ValidationError
 from app.repositories.user_repository import UserRepository
 from app.models.db_transaction import smart_transaction
+from app.services.upload_service import UploadService
+from app.utils import convert_webpath_to_filepath, remove_file
 
 
 class UserService:
@@ -104,3 +106,16 @@ class UserService:
             raise ValidationError("Password error")
         user.set_password(new_password)
         return {}
+
+    def upload_avatar(self, user_id: str, avatar_file):
+        user = UserRepository.get_user_by_id(user_id=user_id)
+        if not user:
+            raise NotFoundError("User not found")
+        upload_service = UploadService()
+        avatar_url = upload_service.upload_avatar(avatar_file, size=(128, 128))
+        if user.avatar_url:
+            old_avatar_path = convert_webpath_to_filepath(user.avatar_url)
+            if old_avatar_path:
+                remove_file(old_avatar_path)
+        UserRepository.update_user(user_id=user_id, data={"avatar_url": avatar_url})
+        return {"url": avatar_url}
