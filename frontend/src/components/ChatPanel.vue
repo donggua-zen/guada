@@ -73,12 +73,12 @@
           </div>
         </div>
       </template>
-      <template v-else>
+      <template v-else-if="authStore.isAuthenticated">
         <scroll-container ref="scrollContainerRef" :auto-scroll="true" :smooth-scroll="!isStreaming">
           <div class="flex flex-col items-center px-[20px] max-w-[1000px] mx-auto">
             <MessageItem v-for="(message, index) in activeMessages" :ref="(el) => setItemRef(el, message.id)"
               :key="message.id" :message="message"
-              :avatar="message.role == 'user' ? authStore.user.avatar_url : currentSession.avatar_url"
+              :avatar="message.role == 'user' ? userAvater : currentSession.avatar_url"
               :is-last="index == activeMessages.length - 1"
               :allow-generate="!isStreaming && allowReSendMessage(message, index)" @delete="deleteMessage"
               @edit="editMessage" @copy="copyMessage" @generate="generateResponse" @regenerate="regenerateResponse"
@@ -200,6 +200,7 @@ const currentSession = computed({
 
 
 const chatTitle = computed(() => props.session?.title || "Loading...");
+const userAvater = computed(() => authStore.user?.avatar_url);
 
 const currentModelName = computed(() =>
   currentSession.value.model

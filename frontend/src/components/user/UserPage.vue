@@ -32,8 +32,7 @@
     </SidebarLayout>
 </template>
 <script setup>
-import { ref, onMounted, computed, markRaw, watch, h } from 'vue'
-import { useDebounceFn } from '@vueuse/core' // 导入防抖函数
+import { ref, onMounted, computed } from 'vue'
 import SidebarLayout from '../layout/SidebarLayout.vue'
 import UserProfile from './UserProfile.vue'
 import UserSubaccounts from './UserSubaccounts.vue'
@@ -63,8 +62,9 @@ import { useAuthStore } from '../../stores/auth'
 
 import { usePopup } from '../../composables/usePopup'
 import { apiService } from '../../services/ApiService'
+import { useRouter } from 'vue-router'
 
-const { toast, notify } = usePopup()
+const { toast, notify, confirm } = usePopup()
 
 const authStore = useAuthStore()
 const sidebarVisible = ref(true)
@@ -72,6 +72,7 @@ const currentTabValue = ref('/user/profile')
 const userProfileRef = ref(null)
 const userSubaccountsRef = ref(null)
 const userSecurityRef = ref(null)
+const router = useRouter()
 
 // 添加密码表单数据
 
@@ -95,8 +96,8 @@ const sidebarItems = [
         roles: ['primary', 'subaccount'],
     },
     {
-        label: '模型管理',
-        path: '/user/models',
+        label: '退出登录',
+        path: '/user/exit',
         icon: CloudDownloadOutlined,
         roles: ['primary'],
     }
@@ -112,6 +113,17 @@ const currentItem = computed(() => {
 })
 
 const handleItemClick = (item) => {
+    if (item.path === '/user/exit') {
+        async function logout() {
+            const result = await confirm('退出登录', '确定要退出登录吗？')
+            if (result) {
+                authStore.logout()
+                router.push({ name: 'Login' })
+            }
+        }
+        logout()
+        return;
+    }
     currentTabValue.value = item.path
 }
 

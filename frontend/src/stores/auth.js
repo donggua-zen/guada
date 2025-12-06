@@ -38,9 +38,8 @@ export const useAuthStore = defineStore('auth', () => {
     }
 
     function logout() {
-        user.value = null
         token.value = null
-
+        user.value = null
         // apiService.logout()
     }
 
