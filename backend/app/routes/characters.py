@@ -4,7 +4,7 @@ from flask import Blueprint, jsonify, request
 from flask_jwt_extended import get_jwt_identity, jwt_required
 
 from app.services import CharacterService
-from app.utils.decorators import handle_exceptions
+from app.utils.decorators import handle_response
 
 character_service = CharacterService()
 
@@ -14,7 +14,7 @@ characters_bp = Blueprint("characters", __name__)
 
 @characters_bp.route("/api/v1/characters", methods=["GET"])
 @jwt_required()
-@handle_exceptions
+@handle_response
 def get_characters():
     user_id = get_jwt_identity()
     all_characters = character_service.get_characters(user_id=user_id)
@@ -34,7 +34,7 @@ def get_characters():
 
 @characters_bp.route("/api/v1/shared/characters", methods=["GET"])
 @jwt_required()
-@handle_exceptions
+@handle_response
 def get_shared_characters():
     user_id = get_jwt_identity()
 
@@ -55,7 +55,7 @@ def get_shared_characters():
 
 @characters_bp.route("/api/v1/characters", methods=["POST"])
 @jwt_required()
-@handle_exceptions
+@handle_response
 def create_character():
     user_id = get_jwt_identity()
     json_data = request.json
@@ -95,7 +95,7 @@ def create_character():
 
 @characters_bp.route("/api/v1/characters/<character_id>", methods=["DELETE"])
 @jwt_required()
-@handle_exceptions
+@handle_response
 def delete_character(character_id):
     user_id = get_jwt_identity()
     character_service.delete_character(character_id, user_id=user_id)
@@ -103,7 +103,7 @@ def delete_character(character_id):
 
 @characters_bp.route("/api/v1/characters/<character_id>", methods=["PUT"])
 @jwt_required()
-@handle_exceptions
+@handle_response
 def update_character(character_id):
     request_data = request.json
     user_id = get_jwt_identity()
@@ -125,7 +125,7 @@ def update_character(character_id):
 
 @characters_bp.route("/api/v1/characters/<character_id>", methods=["GET"])
 @jwt_required()
-@handle_exceptions
+@handle_response
 def get_character(character_id):
     user_id = get_jwt_identity()
     character = character_service.get_character_by_id(character_id, user_id=user_id)
@@ -134,7 +134,7 @@ def get_character(character_id):
 
 @characters_bp.route("/api/v1/characters/<character_id>/avatars", methods=["POST"])
 @jwt_required()
-@handle_exceptions
+@handle_response
 def upload_character_avatar(character_id):
     user_id = get_jwt_identity()
     data = character_service.upload_avatar(

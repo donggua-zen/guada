@@ -6,7 +6,7 @@ from flask import Response, jsonify
 logger = logging.getLogger(__name__)
 
 
-def handle_exceptions(func):
+def handle_response(func):
     """统一异常处理装饰器"""
 
     @wraps(func)

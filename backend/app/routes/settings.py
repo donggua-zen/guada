@@ -1,12 +1,12 @@
 from flask import Blueprint, request
-from app.utils.decorators import handle_exceptions
+from app.utils.decorators import handle_response
 from app.utils.settings_manager import SettingsManager
 
 settings_bp = Blueprint("settings", __name__)
 
 
 @settings_bp.route("/api/v1/settings", methods=["GET"])
-@handle_exceptions
+@handle_response
 def get_settings():
     settings = {
         "default_chat_model_id": SettingsManager.get("default_chat_model_id", None),
@@ -25,7 +25,7 @@ def get_settings():
 
 
 @settings_bp.route("/api/v1/settings", methods=["PUT"])
-@handle_exceptions
+@handle_response
 def update_settings():
     settings = {
         "default_chat_model_id": request.json.get("default_chat_model_id", None),
