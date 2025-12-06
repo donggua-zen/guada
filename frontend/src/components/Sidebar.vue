@@ -1,8 +1,8 @@
 <template>
   <div class="app-sidebar">
     <!-- 原有的侧边栏按钮 -->
-    <div v-for="item in sidebarItems" :key="item.id" class="sidebar-btn" :class="{ active: $route.name === item.id }"
-      @click="$emit('change-page', item.id)" :title="item.title">
+    <div v-for="item in filteredSidebarItems" :key="item.id" class="sidebar-btn"
+      :class="{ active: $route.name === item.id }" @click="$emit('change-page', item.id)" :title="item.title">
       <div class="icon-wrapper">
         <component :is="item.icon" :size="20" />
       </div>
@@ -10,7 +10,8 @@
     </div>
 
     <!-- 新增的设置按钮 -->
-    <div class="sidebar-btn settings-btn" title="设置" @click="$emit('open-settings')">
+    <div v-if="authStore.user.role == 'primary'" class="sidebar-btn settings-btn" title="设置"
+      @click="$emit('open-settings')">
       <div class="icon-wrapper">
         <component :is="SettingsTwotone" :size="20" />
       </div>
@@ -20,23 +21,30 @@
 </template>
 
 <script setup>
+import { computed } from 'vue'
 import { ChatBubbleTwotone, ContactsTwotone, CloudUploadTwotone, SettingsTwotone, AccountCircleTwotone } from '@vicons/material'
+import { useAuthStore } from '../stores/auth'
+
+const authStore = useAuthStore()
 
 const sidebarItems = [
   {
     id: 'Chat',
     icon: ChatBubbleTwotone,
-    title: '对话'
+    title: '对话',
+    roles: ['primary', 'subaccount']
   },
   {
     id: 'Characters',
     icon: ContactsTwotone,
-    title: '角色'
+    title: '角色',
+    roles: ['primary', 'subaccount'],
   },
   {
     id: 'Models',
     icon: CloudUploadTwotone,
-    title: '模型'
+    title: '模型',
+    roles: ['primary']
   },
   {
     id: 'My',
@@ -44,7 +52,10 @@ const sidebarItems = [
     title: '我的'
   }
 ]
-
+const filteredSidebarItems = computed(() => {
+  const userRole = authStore.user?.role || 'primary'
+  return sidebarItems.filter(item => !item.roles || item.roles.includes(userRole))
+})
 // 定义抛出的事件
 defineEmits(['change-page', 'open-settings'])
 </script>
