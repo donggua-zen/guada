@@ -2,7 +2,7 @@
   <div class="message" :class="messageClass" @click="handleCopyClick">
     <div class="hidden md:block w-[40px] h-[40px] rounded-full flex items-center justify-center shrink-0 self-start"
       :class="avatarClass">
-      <Avatar v-if="!isAssistant" src="" :round="true" type="user"></Avatar>
+      <Avatar v-if="!isAssistant" :src="avatar" :round="true" type="user"></Avatar>
       <Avatar v-else :src="avatar" :round="true" type="assistant"></Avatar>
     </div>
 

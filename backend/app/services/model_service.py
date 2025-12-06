@@ -2,6 +2,7 @@ from app.exceptions import APIException
 from app.models import db, Model, ModelProvider
 from app.models.db_transaction import smart_transaction_manager
 from app.repositories.model_repository import ModelRepository as ModelRepo
+from app.repositories.user_repository import UserRepository
 
 
 class ModelService:
@@ -11,7 +12,9 @@ class ModelService:
     def get_models_and_providers(self, user_id):
         models = []
         providers = []
-        results = ModelRepo.get_providers_with_models(user_id=user_id)
+        user = UserRepository.get_user_by_id(user_id)
+        models_user_id = user_id if user.role == "primary" else user.parent_id
+        results = ModelRepo.get_providers_with_models(user_id=models_user_id)
         for result in results:
             models.extend([model.to_dict() for model in result.models])
             providers.append(result.to_dict())
