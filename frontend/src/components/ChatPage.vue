@@ -47,7 +47,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted, watch, computed, nextTick } from "vue";
+import { ref, onMounted, watch, computed, nextTick, defineAsyncComponent } from "vue";
 import { apiService } from "@/services/ApiService";
 import { useRouter, useRoute } from 'vue-router';
 import { NModal, NEmpty } from "naive-ui";
@@ -60,9 +60,11 @@ import { useTitle } from '@/composables/useTitle';
 // 引入组件
 import SidebarLayout from "@/components/layout/SidebarLayout.vue";
 import SessionsList from "@/components/SessionsList.vue";
-import CharacterSettingPanel from "@/components/CharacterSettingPanel.vue";
+// 将 CharacterSettingPanel 改为动态引入
+const CharacterSettingPanel = defineAsyncComponent(() => import("@/components/CharacterSettingPanel.vue"));
 import ChatPanel from "@/components/ChatPanel.vue";
-import CreateSessionChatPanel from "@/components/CreateSessionChatPanel.vue";
+// import CreateSessionChatPanel from "@/components/CreateSessionChatPanel.vue";
+const CreateSessionChatPanel = defineAsyncComponent(() => import("@/components/CreateSessionChatPanel.vue"));
 
 // 组合式函数
 const { confirm, toast, prompt } = usePopup();
