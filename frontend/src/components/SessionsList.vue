@@ -47,39 +47,41 @@
         </template>
         <template v-else>
           <div v-for="session in filteredSessions" :key="session.id"
-            class="session-item group px-3.5 py-3 cursor-pointer flex items-center transition-colors duration-200 rounded-3xl mx-2.5 mb-1.5 h-15"
+            class="group px-3 py-2 cursor-pointer flex items-center transition-colors duration-200 rounded-2xl mx-2.5 mb-1.5"
             :class="{
-              'bg-[var(--conversation-active-bg)]': session.id === currentSessionId,
+              'bg-[var(--conversation-active-bg)] font-bold': session.id === currentSessionId,
               'hover:bg-[var(--conversation-hover-bg)]': session.id !== currentSessionId
             }" @click="selectSession(session)">
-            <div class="session-avatar w-9 h-9 mr-2.5">
+            <div class="session-avatar w-6 h-6 mr-1.5">
               <Avatar :src="session.avatar_url" round />
             </div>
-            <div class="session-info flex-1 min-w-0">
-              <div class="session-header flex justify-between items-start mb-1">
-                <div class="session-title font-medium text-sm truncate text-gray-800">
+            <div class="session-info flex-1 min-w-0 flex">
+              <div class="session-header flex flex-1 flex-col justify-between items-start min-w-0">
+                <div class="session-title truncate text-[15px] text-gray-800 w-full">
                   {{ session.title }}
                 </div>
-                <div v-if="session.last_message" class="session-time text-xs text-gray-500 whitespace-nowrap ml-2">
+                <div v-if="session.last_message" class="text-xs text-gray-500 whitespace-nowrap" style="display: none;">
                   {{ formatTime(session.last_message.created_at) }}
                 </div>
               </div>
-              <div class="session-message text-xs truncate text-gray-500">
-                {{ session.last_message ? session.last_message.content : '无消息' }}
-              </div>
-            </div>
-            <div class="session-actions flex opacity-0 transition-opacity duration-200 group-hover:opacity-100">
-              <n-dropdown trigger="click" :options="dropdownOptions" @select="handleDropdownSelect($event, session)">
-                <n-button quaternary circle @click.stop
-                  class="session-action-btn bg-none border-none text-gray-500 cursor-pointer text-sm p-1 rounded">
-                  <template #icon>
+
+              <!-- <div class="session-message text-xs truncate text-gray-500" style="display: none;">
+                  {{ session.last_message ? session.last_message.content : '无消息' }}
+                </div> -->
+              <div
+                class="session-actions flex items-center opacity-0 transition-opacity duration-200 group-hover:opacity-100">
+                <n-dropdown trigger="click" :options="dropdownOptions" @select="handleDropdownSelect($event, session)">
+                  <div @click.stop class="text-gray-500 cursor-pointer flex items-center">
                     <n-icon size="16">
                       <MoreVertOutlined />
                     </n-icon>
-                  </template>
-                </n-button>
-              </n-dropdown>
+                  </div>
+                </n-dropdown>
+              </div>
+
+
             </div>
+
           </div>
         </template>
       </scroll-container>
@@ -202,13 +204,8 @@ const selectSession = (session) => {
 </script>
 
 <style scoped>
-.session-item {
-  height: 60px;
-}
-
 .session-action-btn:hover {
   color: #4a90e2;
   background-color: #e6f0fa;
 }
-
 </style>
