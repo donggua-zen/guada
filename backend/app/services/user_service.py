@@ -1,3 +1,4 @@
+from app.exceptions import NotFoundError, PerssionDeniedError, ValidationError
 from app.repositories.user_repository import UserRepository
 from app.models.db_transaction import smart_transaction
 
@@ -20,13 +21,13 @@ class UserService:
         user = UserRepository.get_user_by_id(user_id=user_id)
         # 检查用户是否存在
         if not user:
-            raise Exception("User not found")
+            raise NotFoundError("User not found")
         # 检查用户是否有权限添加子账户（只有主账户可以添加）
         if user.role != "primary":
-            raise Exception("Only primary users can add subaccounts")
+            raise PerssionDeniedError("Only primary users can add subaccounts")
         # 检查要添加的用户是否已经存在
         if UserRepository.user_exists(email=data["email"]):
-            raise Exception("账户已存在")
+            raise ValidationError("账户已存在")
         data["parent_id"] = user_id
         data["role"] = "subaccount"
         data["password_hash"] = ""
@@ -51,9 +52,9 @@ class UserService:
         """
         user = UserRepository.get_user_by_id(user_id=user_id)
         if not user:
-            raise Exception("User not found")
+            raise NotFoundError("User not found")
         if user.role != "primary":
-            raise Exception("No Permission")
+            raise PerssionDeniedError("No Permission")
         subaccounts = UserRepository.get_child_users_by_id(user_id=user_id)
         return {"items": [subaccount.to_dict() for subaccount in subaccounts]}
 
@@ -71,15 +72,15 @@ class UserService:
         # 验证主账户权限
         user = UserRepository.get_user_by_id(user_id=user_id)
         if not user:
-            raise Exception("User not found")
+            raise NotFoundError("User not found")
         if user.role != "primary":
-            raise Exception("No Permission")
+            raise PerssionDeniedError("No Permission")
         # 验证子账户是否存在及归属关系
         subaccount = UserRepository.get_user_by_id(user_id=subaccount_id)
         if not subaccount:
-            raise Exception("Subaccount not found")
+            raise NotFoundError("Subaccount not found")
         if subaccount.parent_id != user_id:
-            raise Exception("No Permission")
+            raise PerssionDeniedError("No Permission")
         # 执行删除操作
         UserRepository.delete_user(user_id=subaccount_id)
 
@@ -98,8 +99,8 @@ class UserService:
 
         user = UserRepository.get_user_by_id(user_id=user_id)
         if not user:
-            raise Exception("User not found")
+            raise NotFoundError("User not found")
         if not user.check_password(old_password):
-            raise Exception("Password error")
+            raise ValidationError("Password error")
         user.set_password(new_password)
         return {}

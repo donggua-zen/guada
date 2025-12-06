@@ -1,6 +1,13 @@
 # auth.py
 from flask import Blueprint, request
 from flask_jwt_extended import jwt_required, get_jwt_identity, create_access_token
+from app.exceptions import (
+    AuthenticationError,
+    NotFoundError,
+    ParameterError,
+    PerssionDeniedError,
+    ValidationError,
+)
 from app.models.database import db
 from app.models.user import User
 from app.repositories.user_repository import UserRepository
@@ -52,14 +59,14 @@ def login():
         phone = data.get("phone")
         password = data.get("password")
         if not phone or not password:
-            raise Exception("请填写手机号码和密码")
+            raise ParameterError("请填写手机号码和密码")
     elif type == "email":
         email = data.get("email")
         password = data.get("password")
         if not email or not password:
-            raise Exception("请填写邮箱和密码")
+            raise ParameterError("请填写邮箱和密码")
     else:
-        raise Exception("请选择正确的登录方式")
+        raise ParameterError("请选择正确的登录方式")
 
     user = (
         User.query.filter_by(phone=data["phone"]).first()
@@ -74,7 +81,7 @@ def login():
             "user": user.to_dict(),
         }
 
-    raise Exception("用户名或密码错误")
+    raise AuthenticationError("用户名或密码错误")
 
 
 @user_bp.route("/api/v1/user/profile", methods=["GET"])
@@ -103,7 +110,7 @@ def update_password():
     old_password = data.get("old_password")
     new_password = data.get("new_password")
     if not old_password or not new_password:
-        raise Exception("请填写旧密码和新密码")
+        raise ParameterError("请填写旧密码和新密码")
 
     UserRepository.update_password(user_id, old_password, new_password)
 
@@ -134,7 +141,7 @@ def delete_subaccount(account_id):
     user_id = get_jwt_identity()
     subaccount = UserRepository.get_user_by_id(user_id=account_id)
     if subaccount.role != "subaccount" or subaccount.parent_id != user_id:
-        raise Exception("该用户不是子账户")
+        raise PerssionDeniedError("该用户不是子账户")
     user_service.delete_subaccount(user_id, account_id)
 
 
@@ -147,9 +154,9 @@ def update_subaccount(account_id):
         subaccount = UserRepository.get_user_by_id(account_id)
         data = request.get_json()
         if not subaccount or subaccount.role != "subaccount":
-            raise Exception("该用户不存在")
+            raise NotFoundError("该用户不存在")
         if user_id != account_id and user_id != subaccount.parent_id:
-            raise Exception("无权限")
+            raise PerssionDeniedError("无权限")
 
         fields = ["nickname", "email", "phone"]
         for field in fields:
