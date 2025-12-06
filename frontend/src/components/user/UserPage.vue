@@ -99,7 +99,7 @@ const sidebarItems = [
         label: '退出登录',
         path: '/user/exit',
         icon: CloudDownloadOutlined,
-        roles: ['primary'],
+        roles: ['primary', 'subaccount'],
     }
 ]
 
