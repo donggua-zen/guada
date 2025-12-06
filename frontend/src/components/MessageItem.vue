@@ -579,8 +579,9 @@ export default {
 }
 
 .markdown-text ol {
+  /* list-style: decimal-leading-zero; */
+  /* list-style-position: inside; */
   list-style: none;
-  list-style-position: inside;
   counter-reset: item;
 }
 
@@ -603,23 +604,26 @@ export default {
 
 .markdown-text ul>li {
   padding-left: 14px;
-
 }
 
 .markdown-text ol>li {
   flex-wrap: wrap;
-  /* 关键：允许换行 */
   counter-increment: item;
+  padding-left: 3ch; /* 预留3个字符宽度 */
+  position: relative;
 }
 
 .markdown-text ol>li:before {
   content: counter(item) ".";
-  /* 固定宽度 */
   text-align: right;
   color: #666;
   min-width: 14px;
   display: inline-block;
   padding-right: 5px;
+  display: inline-block;
+  width: 2.5ch;
+  position: absolute;
+  left: 0;
 }
 
 /* 其他子元素保持正常流 */
