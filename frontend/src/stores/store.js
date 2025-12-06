@@ -16,6 +16,8 @@ export const store = reactive({
                 inputMessage: {
                     content: '',
                     files: [],
+                    // 是否待发送消息
+                    isWaiting: false
                 }, // 保存当前输入框内容
                 scrollPosition: 0, // 滚动位置
                 lastUpdated: Date.now(), // 最后更新时间
