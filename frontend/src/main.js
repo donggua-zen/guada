@@ -1,9 +1,6 @@
 import { createApp } from 'vue'
 import './style.css'
 import App from './App.vue'
-// 引入 Font Awesome
-import '@fortawesome/fontawesome-free/css/all.min.css'
-// import ModalContainer from './components/ModalContainer.vue'
 import { createRouter, createWebHistory } from 'vue-router'
 
 import { createPinia } from 'pinia'
