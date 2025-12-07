@@ -896,7 +896,7 @@ defineExpose({ sendMessage: handleSendMessage })
   height: 60px;
   font-size: 18px;
   font-weight: 600;
-  border-bottom: 1px solid rgba(21, 23, 28, 0.1);
+  /* border-bottom: 1px solid rgba(21, 23, 28, 0.1); */
   border-radius: 0;
   margin: 0 40px;
 }
