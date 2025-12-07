@@ -106,7 +106,7 @@ class SessionService:
     def update_session(self, session_id, data: dict):
 
         with smart_transaction():
-            session = self.get_session_by_id(session_id)
+            session = SessionRepo.get_session_by_id(session_id)
             if not session:
                 raise ValueError(f"Session with ID {session_id} does not exist.")
 
