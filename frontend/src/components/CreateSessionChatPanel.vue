@@ -38,11 +38,12 @@
         </n-popselect>
       </div>
       <div class="w-full  max-w-[900px]">
-        <ChatInput class="border" :class="{ 'border-gray-400': !inputHasShadow }" v-model:value="inputMessage.text"
-          v-model:web-search-enabled="webSearchEnabled" v-model:thinking-enabled="thinkingEnabled"
-          :buttons="chatInputButtons" :files="inputMessage.files" :streaming="false" @send="sendMessage"
-          @toggle-web-search="handleWebSearch" @toggle-thinking="toggleDeepThinking" :shadow="inputHasShadow"
-          @focus="inputHasShadow = true" @blur="inputHasShadow = false" />
+        <ChatInput class="border" :class="{ 'border-gray-400': !inputHasShadow, 'border-gray-300': inputHasShadow }"
+          v-model:value="inputMessage.text" v-model:web-search-enabled="webSearchEnabled"
+          v-model:thinking-enabled="thinkingEnabled" :buttons="chatInputButtons" :files="inputMessage.files"
+          :streaming="false" @send="sendMessage" @toggle-web-search="handleWebSearch"
+          @toggle-thinking="toggleDeepThinking" :shadow="inputHasShadow" @focus="inputHasShadow = true"
+          @blur="inputHasShadow = false" />
       </div>
       <div>
         <div class="flex items-center justify-center mt-6">
