@@ -2,9 +2,9 @@
   <SidebarLayout v-model:sidebar-visible="sidebarVisible" :sidebar-position="'left'">
     <template #sidebar>
       <template v-if="authStore.isAuthenticated">
-        <sessions-list ref="sessionsListRef" :sessions="sortedSessions" :current="currentSession"
-          @select="selectSession" @delete="handleDeleteSession" @rename="handleRenameSession"
-          @create="handleCreateSession" />
+        <sessions-list ref="sessionsListRef" :btn-active="targetPage" :sessions="sortedSessions"
+          :current="currentSession" @select="selectSession" @delete="handleDeleteSession" @rename="handleRenameSession"
+          @btn-click="handleSidebarClick" />
       </template>
       <template v-else>
         <div
@@ -18,7 +18,15 @@
     </template>
     <template v-if="!isLoading" #content>
       <!-- 主体 -->
-      <template v-if="sessions.length > 0 && currentSession">
+      <template v-if="targetPage == 'characters'">
+        <CharactersPanel @create-session="handleCreateSessionWithMessage" />
+      </template>
+      <template v-else-if="targetPage == 'new-session'">
+        <div class="h-full flex-1 flex items-center justify-center">
+          <CreateSessionChatPanel @create-session="handleCreateSessionWithMessage" />
+        </div>
+      </template>
+      <template v-else-if="sessions.length > 0 && currentSession">
         <ChatPanel ref="chatPanelRef" v-model:session="currentSession" v-model:sidebar-visible="sidebarVisible"
           @openSettings="handleOpenSettings" @openSwitchModel="handleOpenSwitchModel"
           @saveSettings="handleSaveSessionSettings" />
@@ -30,18 +38,7 @@
           </div>
         </n-modal>
       </template>
-      <template v-else>
-        <div class="h-full flex-1 flex items-center justify-center">
-          <!-- <n-empty description="你什么也找不到"> -->
-          <!-- <template #extra>
-            <n-button size="small">
-              看看别的
-            </n-button>
-          </template> -->
-          <!-- </n-empty> -->
-          <CreateSessionChatPanel @createSession="handleCreateSessionWithMessage" />
-        </div>
-      </template>
+
     </template>
   </SidebarLayout>
 </template>
@@ -65,6 +62,7 @@ const CharacterSettingPanel = defineAsyncComponent(() => import("@/components/Ch
 import ChatPanel from "@/components/ChatPanel.vue";
 // import CreateSessionChatPanel from "@/components/CreateSessionChatPanel.vue";
 const CreateSessionChatPanel = defineAsyncComponent(() => import("@/components/CreateSessionChatPanel.vue"));
+const CharactersPanel = defineAsyncComponent(() => import("@/components/CharactersPage.vue"));
 
 // 组合式函数
 const { confirm, toast, prompt } = usePopup();
@@ -87,6 +85,7 @@ const settingsModalVisible = ref(false);
 const sidebarVisible = useStorage('sidebarVisible', true);
 
 const isLoading = ref(true);
+const targetPage = ref(null);
 
 // 登录信息
 
@@ -268,8 +267,13 @@ const handleOpenSwitchModel = () => {
  * 创建新会话
  * 显示输入对话名称的提示框，创建新会话后刷新列表并自动选择新会话
  */
-const handleCreateSession = async () => {
-  selectSession(null);
+const handleSidebarClick = async (key) => {
+  if (key === 'create') {
+    selectSession(null);
+  } else if (key === 'characters') {
+    router.replace({ name: 'Chat', params: { sessionId: 'characters' } });
+  }
+
 };
 
 const handleCreateSessionWithMessage = async (session, inputMessage) => {
@@ -386,15 +390,20 @@ watch(
 //   },
 //   { deep: true }
 // );
-
+const specialRoutes = ['new-session', 'characters'];
 // 监听路由参数中会话ID的变化，更新选中的会话
 watch(
   () => route.params.sessionId,
   (newSessionId) => {
-    if (newSessionId === 'new-session')
+    if (specialRoutes.includes(newSessionId)) {
+      targetPage.value = newSessionId;
+      currentSession.value = null;
       return;
-    if (newSessionId !== currentSession.value?.id)
+    }
+    if (newSessionId !== currentSession.value?.id) {
+      targetPage.value = null;
       updateSelectedSession(newSessionId);
+    }
   }
 );
 
@@ -404,7 +413,9 @@ onMounted(async () => {
   if (authStore.isAuthenticated) {
     await loadSessions();
     const pathSessionId = route.params.sessionId;
-    if (pathSessionId !== 'new-session')
+    if (specialRoutes.includes(pathSessionId))
+      targetPage.value = pathSessionId;
+    else
       await updateSelectedSession(pathSessionId);
   }
   isLoading.value = false;
