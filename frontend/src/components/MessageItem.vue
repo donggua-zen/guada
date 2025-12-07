@@ -18,8 +18,8 @@
               </n-icon>
               <span class="text-gray-600">{{ thinkingLabel }}</span>
             </div>
-            <i class="fa-angle-down fas transition-transform duration-300 ml-2"
-              :class="[isExpanded ? 'rotate-0' : '-rotate-90']"></i>
+            <n-icon :component="ArrowRightTwotone" class="transition-transform duration-300 ml-2"
+              :class="[isExpanded ? 'rotate-90' : 'rotate-0']"></n-icon>
           </div>
           <div class="thinking-content transition-all duration-500 ease-in-out overflow-hidden text-gray-500"
             :class="isExpanded ? 'max-h-1500 opacity-100' : 'max-h-0 opacity-0'">
