@@ -279,14 +279,20 @@ const handleSidebarClick = async (key) => {
 const handleCreateSessionWithMessage = async (session, inputMessage) => {
   if (!authStore.isAuthenticated)
     return;
-  const response = await apiService.createSession(session)
-  // 刷新对话列表
-  await loadSessions();
-  if (inputMessage) {
-    inputMessage.isWaiting = true
-    store.setInputMessage(response.id, inputMessage)
+  try {
+    const response = await apiService.createSession(session)
+    // 刷新对话列表
+    await loadSessions();
+    if (inputMessage) {
+      inputMessage.isWaiting = true
+      store.setInputMessage(response.id, inputMessage)
+    }
+    await selectSession(response);
+  } catch (error) {
+    console.error('创建对话失败:', error);
+    toast.error("创建对话失败");
   }
-  await selectSession(response);
+
 };
 
 /**
