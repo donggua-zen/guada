@@ -583,6 +583,7 @@ export default {
   /* list-style-position: inside; */
   list-style: none;
   counter-reset: item;
+  margin-top: 8px;
 }
 
 .markdown-text ul {
