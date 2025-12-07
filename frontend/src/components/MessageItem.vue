@@ -633,7 +633,7 @@ ol>*:not(li) {
   margin: 1em 0;
 }
 
-.markdown-text ul li::before {
+.markdown-text ul>li::before {
   content: "";
   position: absolute;
   left: 2px;
@@ -644,15 +644,15 @@ ol>*:not(li) {
   border-radius: 50%;
 }
 
-.markdown-text ul li:last-child {
+.markdown-text ul>li:last-child {
   margin-bottom: 0;
 }
 
-.markdown-text ul li:empty {
+.markdown-text ul>li:empty {
   display: none;
 }
 
-.markdown-text ul li ul {
+.markdown-text ul>li ul {
   margin-top: 8px;
 }
 
