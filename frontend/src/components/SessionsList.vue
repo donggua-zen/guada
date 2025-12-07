@@ -16,7 +16,7 @@
     </div>
 
     <!-- 搜索框 -->
-    <div class="search-box px-3 py-3">
+    <div class="search-box px-3 py-2">
       <n-input v-model:value="searchKeyword" placeholder="搜索会话" clearable @update:value="handleSearchInput" size="large"
         round>
         <template #prefix>
@@ -33,7 +33,7 @@
         <div @click="handleButtonClick('characters')"
           :class="{ 'bg-[var(--conversation-hover-bg)]': btnActive === 'characters' }"
           class="hover:bg-[var(--conversation-hover-bg)] px-3 py-2 cursor-pointer flex items-center transition-colors duration-200 rounded-2xl mx-2.5 mb-1.5">
-          <div class="session-avatar w-4.5 h-4.5 mr-1.5">
+          <div class="session-avatar w-4.5 h-4.5 mr-1.5 text-[var(--primary-color)]">
             <AlternateEmailTwotone />
           </div>
           <span class="flex-1">角色提示词模板</span>
