@@ -1,6 +1,6 @@
 <template>
     <div class="w-full flex flex-col items-center">
-        <div class="p-[18px_10px_12px_10px] bg-white transition-all duration-300 min-h-[60px] w-full "
+        <div class="p-[18px_15px_12px_15px] bg-white transition-all duration-300 min-h-[60px] w-full "
             :class="styleClass">
             <!-- 文件列表显示区域 -->
             <div class="file-list flex flex-wrap gap-2 mb-3" v-if="uploadFiles.length > 0">
@@ -30,7 +30,7 @@
                             </template>
                             思考
                         </n-button>
-                        <span class="mr-1"></span>
+                        <span class="mr-2.5"></span>
                     </template>
                     <n-button v-if="showButtons.webSearchButton" class="tool-btn"
                         :class="{ active: localWebSearchEnabled }" title="联网搜索" @click="handleWebSearch" text>
@@ -463,7 +463,6 @@ onUnmounted(() => {
 
 .tool-btn {
     background: none;
-    border: none;
     color: #777;
     cursor: pointer;
     font-size: 14px;
@@ -472,9 +471,12 @@ onUnmounted(() => {
     display: flex;
     align-items: center;
     justify-content: center;
-    border-radius: 6px;
     transition: all 0.2s;
     border-radius: 28px;
+}
+
+.left-tools .tool-btn {
+    border: 1px solid rgba(0, 0, 0, 0.1);
 }
 
 .right-tools .tool-btn {
@@ -487,6 +489,7 @@ onUnmounted(() => {
 
 /* 深度思考按钮激活状态样式 */
 .tool-btn.active {
+    border-color: var(--primary-color);
     background-color: var(--secondary-color);
     color: var(--primary-color);
 }
