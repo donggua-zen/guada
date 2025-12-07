@@ -54,8 +54,7 @@ def get_engine_options(database_uri):
     else:
         return {
             "connect_args": {
-                "time_zone": "+00:00",  # MySQL连接时指定时区
-                "timeout": 30,
+                "init_command": "SET time_zone='+00:00'",
             },
             "pool_pre_ping": True,
         }
