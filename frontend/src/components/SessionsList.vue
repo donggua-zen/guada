@@ -5,7 +5,7 @@
     <div class="sessions-header px-5 py-5 text-lg font-semibold flex justify-between items-center">
       <span>会话列表</span>
       <!-- 新建会话按钮移动到右侧 -->
-      <n-button @click="handleCreateSession" text size="medium">
+      <n-button @click="handleButtonClick('create')" text size="medium">
         <template #icon>
           <n-icon>
             <ChatNew />
@@ -30,6 +30,18 @@
     <!-- 会话列表区域 -->
     <div class="sessions-list flex-1 overflow-hidden py-2.5">
       <scroll-container class="">
+        <div @click="handleButtonClick('characters')"
+          :class="{ 'bg-[var(--conversation-hover-bg)]': btnActive === 'characters' }"
+          class="hover:bg-[var(--conversation-hover-bg)] px-3 py-2 cursor-pointer flex items-center transition-colors duration-200 rounded-2xl mx-2.5 mb-1.5">
+          <div class="session-avatar w-4.5 h-4.5 mr-1.5">
+            <AlternateEmailTwotone />
+          </div>
+          <span class="flex-1">角色提示词模板</span>
+          <div class="session-avatar w-3 h-3 ml-1.5 text-gray-400">
+            <ArrowRightTwotone />
+          </div>
+        </div>
+        <div class="px-6 py-3 text-gray-400">对话记录</div>
         <template v-if="filteredSessions.length === 0">
           <div class="empty-state text-center text-gray-500 flex flex-col items-center justify-center h-full">
             <div class="empty-state-icon">
@@ -105,7 +117,9 @@ import {
   MoreVertOutlined,
   EditOutlined,
   DeleteOutlineOutlined,
-  SearchOutlined
+  SearchOutlined,
+  AlternateEmailTwotone,
+  ArrowForwardIosTwotone as ArrowRightTwotone,
 } from '@vicons/material'
 
 import {
@@ -118,7 +132,7 @@ const currentSessionId = computed(() => props.current?.id)
 const searchKeyword = ref('')
 
 // 事件定义
-const emit = defineEmits(['select', 'rename', 'create', 'delete'])
+const emit = defineEmits(['select', 'rename', 'btn-click', 'delete'])
 
 // Props 定义
 const props = defineProps({
@@ -126,17 +140,15 @@ const props = defineProps({
     type: Array,
     default: () => []
   },
+  btnActive: {
+    type: String,
+    default: ''
+  },
   current: {
     type: Object,
     default: () => ({})
   }
 })
-
-// SimpleBar 配置
-const simpleBarOptions = {
-  autoHide: true,
-  clickOnTrack: false
-}
 
 // 计算属性
 // 排序后的会话列表
@@ -194,9 +206,10 @@ const handleDropdownSelect = (key, session) => {
 }
 
 // 创建新会话
-const handleCreateSession = () => {
-  emit('create')
+const handleButtonClick = (key) => {
+  emit('btn-click', key)
 }
+
 const selectSession = (session) => {
   emit('select', session)
 }

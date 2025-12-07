@@ -140,28 +140,15 @@ class ApiService {
   }
 
   /**
-   * 查询或创建会话
-   * @param {string} userId - 用户ID
-   * @param {string} characterId - 角色ID
-   * @returns {Promise<Object>} 返回会话数据
-   */
-  async queryOrCreateSession(userId, characterId) {
-    return await this._request('/sessions_', {
-      method: 'POST',
-      data: { user_id: userId, character_id: characterId },
-    });
-  }
-
-  /**
    * 创建新会话
    * @param {string} data - 创建会话信息
    * @param {string} [characterId] - 角色ID（可选）
    * @returns {Promise<Object>} 返回创建的会话数据
    */
-  async createSession(data, characterId = undefined) {
+  async createSession(data) {
     return await this._request('/sessions', {
       method: 'POST',
-      data: { ...data, character_id: characterId },
+      data: { ...data },
     });
   }
 

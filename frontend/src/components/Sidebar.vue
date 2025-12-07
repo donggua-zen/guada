@@ -35,12 +35,6 @@ const sidebarItems = [
     roles: ['primary', 'subaccount']
   },
   {
-    id: 'Characters',
-    icon: ContactsTwotone,
-    title: '角色',
-    roles: ['primary', 'subaccount'],
-  },
-  {
     id: 'Models',
     icon: CloudUploadTwotone,
     title: '模型',

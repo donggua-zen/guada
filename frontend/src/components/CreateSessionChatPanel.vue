@@ -187,7 +187,7 @@ const props = defineProps({
 const emit = defineEmits([
   "update:session",
   "update:sidebarVisible",
-  "createSession"
+  "create-session"
 ]);
 
 
@@ -274,7 +274,7 @@ const sendMessage = () => {
     notify.error('请选择对话模型');
     return;
   }
-  emit("createSession", {
+  emit("create-session", {
     model_id: currentModel.value.id,
     title: autoTitle(),
     settings: currentSession.value.settings
@@ -287,7 +287,7 @@ const handleCreateSessionClick = () => {
     notify.error('请选择对话模型');
     return;
   }
-  emit("createSession", {
+  emit("create-session", {
     model_id: currentModel.value.id,
     title: autoTitle(),
     settings: currentSession.value.settings
