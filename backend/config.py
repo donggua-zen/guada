@@ -40,6 +40,7 @@ def setup_logging():
         ],
     )
 
+
 def get_engine_options(database_uri):
     """根据数据库URI返回相应的引擎选项"""
     if database_uri and database_uri.startswith("sqlite"):
@@ -52,8 +53,13 @@ def get_engine_options(database_uri):
         }
     else:
         return {
+            "connect_args": {
+                "time_zone": "+00:00",  # MySQL连接时指定时区
+                "timeout": 30,
+            },
             "pool_pre_ping": True,
         }
+
 
 class Config:
     """基础配置"""
@@ -70,7 +76,7 @@ class Config:
         # "poolclass": StaticPool,  # 单线程应用使用静态连接池
         "pool_pre_ping": True,  # 连接前检查
     }
-    
+
     JWT_SECRET_KEY = "your-secret-key-change-this"
     JWT_ACCESS_TOKEN_EXPIRES = 3600 * 24 * 7  # 7天
 
@@ -96,6 +102,7 @@ class DevelopmentConfig(Config):
     SQLALCHEMY_ECHO = True  # 输出SQL语句
     SQLALCHEMY_ENGINE_OPTIONS = get_engine_options(SQLALCHEMY_DATABASE_URI)
 
+
 class TestingConfig(Config):
     """测试环境配置"""
 
@@ -116,7 +123,7 @@ class ProductionConfig(Config):
         DATA_DIR / "app.db"
     )
     SQLALCHEMY_ENGINE_OPTIONS = get_engine_options(SQLALCHEMY_DATABASE_URI)
-    
+
     # 生产环境特定配置
     if os.environ.get("SECRET_KEY"):
         SECRET_KEY = os.environ.get("SECRET_KEY")
