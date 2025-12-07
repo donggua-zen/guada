@@ -69,7 +69,8 @@
                   {{ session.last_message ? session.last_message.content : '无消息' }}
                 </div> -->
               <div
-                class="session-actions flex items-center opacity-0 transition-opacity duration-200 group-hover:opacity-100">
+                class="session-actions flex items-center opacity-0 transition-opacity duration-200 group-hover:opacity-100"
+                :class="{ 'opacity-100': session.id === currentSessionId }">
                 <n-dropdown trigger="click" :options="dropdownOptions" @select="handleDropdownSelect($event, session)">
                   <div @click.stop class="text-gray-500 cursor-pointer flex items-center">
                     <n-icon size="16">
