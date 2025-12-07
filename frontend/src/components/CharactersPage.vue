@@ -1,7 +1,7 @@
 <template>
-  <div class="flex flex-col h-screen bg-[var(--bg)]">
+  <div class="flex flex-col h-screen bgx-[var(--bg)]">
     <!-- 头部 -->
-    <div class="flex justify-between items-center p-4 bg-white border-b border-gray-200">
+    <div class="flex justify-between items-center px-6 py-4 bg-white">
       <span class="text-lg font-semibold text-gray-800">角色列表</span>
       <n-button type="primary" @click="createCharacter" class="flex items-center">
         <template #icon>
@@ -14,7 +14,7 @@
     </div>
 
     <!-- 角色列表 -->
-    <div class="flex-1 overflow-y-auto p-6 flex flex-col items-center">
+    <div class="flex-1 overflow-y-auto p-6 flex flex-col items-start">
       <div class="mb-4 w-full max-w-80">
         <n-tabs v-model:value="charactersType" type="segment" pane-wrapper-style="display:none"
           pane-style="display:none">
@@ -26,7 +26,7 @@
         <!-- 骨架屏加载效果 -->
         <template v-if="loading">
           <div v-for="i in skeletonCount" :key="i"
-            class="bg-white rounded-xl shadow-sm flex flex-col min-h-[180px] animate-pulse">
+            class="bg-white rounded-xl border border-gray-200 flex flex-col min-h-[180px] animate-pulse">
             <div class="flex p-4 flex-1 flex-col">
               <!-- 头像区域 -->
               <div class="flex flex-rows">
@@ -61,7 +61,7 @@
         <template v-else>
           <!-- 角色卡片 -->
           <div v-for="character in characters" :key="character.id"
-            class="bg-white rounded-xl shadow-sm hover:shadow-lg transition-all duration-300 flex flex-col min-h-[180px]">
+            class="bg-white rounded-xl border border-gray-200 hover:border-gray-300 transition-all duration-300 flex flex-col min-h-[180px]">
             <div class="flex p-4 flex-1 flex-col">
               <!-- 头像区域 -->
               <div class="flex flex-rows">
@@ -202,6 +202,8 @@ const moreOptions = computed(() => {
   return options;
 });
 
+const emit = defineEmits(['create-session'])
+
 // 加载角色列表
 const loadCharacters = async (type) => {
   loading.value = true
@@ -258,15 +260,7 @@ const deleteCharacter = async (character) => {
 
 // 开始对话
 const startNewChat = async (character) => {
-  try {
-    const loading = toast.loading('正在创建会话...', { duration: 0 })
-    const response = await apiService.createSession({ title: character.title }, character.id)
-    loading.destroy()
-    router.replace({ name: 'Chat', params: { sessionId: response.id } })
-  } catch (error) {
-    console.error('创建会话失败:', error)
-    toast.error('创建会话失败')
-  }
+  emit('create-session', { title: character.title, character_id: character.id })
 }
 
 const shareCharacter = async (character) => {
