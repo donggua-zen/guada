@@ -14,6 +14,14 @@ class ModelRepository:
         return providers
 
     @staticmethod
+    def get_provider(provider_id):
+        return (
+            db.session.query(ModelProvider)
+            .filter(ModelProvider.id == provider_id)
+            .first()
+        )
+
+    @staticmethod
     def get_providers_with_models(user_id):
         """
         获取指定用户的所有模型提供商及其关联的模型信息

@@ -1,3 +1,4 @@
+from openai import OpenAI
 from app.exceptions import APIException
 from app.models import db, Model, ModelProvider
 from app.models.db_transaction import smart_transaction_manager
@@ -93,3 +94,31 @@ class ModelService:
         if not provider:
             raise APIException("Provider not found", status_code=404)
         return provider.to_dict()
+
+    def get_provider_remote_models(self, user_id, provider_id):
+        provider = ModelRepo.get_provider(provider_id=provider_id)
+        if not provider or provider.user_id != user_id:
+            raise APIException("Provider not found", status_code=404)
+        api_key = provider.api_key
+        api_url = provider.api_url
+        client = OpenAI(base_url=api_url, api_key=api_key)
+
+        try:
+            # 获取模型列表
+            models = client.models.list()
+
+            # 提取模型信息并格式化
+            model_list = []
+            for model in models:
+                model_data = {
+                    "model_name": model.id,
+                    "model_type": "text",  # 默认类型，可根据需要进一步分类
+                    "features": [],  # 默认功能列表为空
+                }
+                model_list.append(model_data)
+
+            return {"items": model_list}
+        except Exception as e:
+            raise APIException(
+                f"Failed to fetch models from provider: {str(e)}", status_code=500
+            )

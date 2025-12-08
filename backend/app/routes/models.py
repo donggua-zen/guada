@@ -101,3 +101,13 @@ def update_provider(provider_id):
 @handle_response
 def delete_provider(provider_id):
     model_service.delete_provider(provider_id)
+
+
+@models_bp.route("/api/v1/providers/<provider_id>/remote_models", methods=["GET"])
+@jwt_required()
+@handle_response
+def get_provider_remote_models(provider_id):
+    user_id = get_jwt_identity()
+    return model_service.get_provider_remote_models(
+        user_id=user_id, provider_id=provider_id
+    )
