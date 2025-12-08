@@ -595,10 +595,6 @@ export default {
 .markdown-text ul {
   list-style: none;
   padding-left: 0;
-  display: flex;
-  align-items: flex-start;
-  width: 100%;
-  flex-direction: column;
   margin-top: 8px;
 }
 
