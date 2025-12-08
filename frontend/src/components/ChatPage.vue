@@ -55,7 +55,7 @@ import { useAuthStore } from "@/stores/auth";
 import { useTitle } from '@/composables/useTitle';
 
 // 引入组件
-import SidebarLayout from "@/components/layout/SidebarLayout.vue";
+import { SidebarLayout } from "./ui";
 import SessionsList from "@/components/SessionsList.vue";
 // 将 CharacterSettingPanel 改为动态引入
 const CharacterSettingPanel = defineAsyncComponent(() => import("@/components/CharacterSettingPanel.vue"));

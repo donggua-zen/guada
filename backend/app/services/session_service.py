@@ -114,7 +114,7 @@ class SessionService:
 
             session.update(data)
 
-            if "avatar_url" in data and data["avatar_url"] != old_avatar_path:
+            if "avatar_url" in data and data["avatar_url"] != old_avatar_url:
                 old_avatar_path = self.upload_service.convert_webpath_to_filepath(
                     old_avatar_url
                 )

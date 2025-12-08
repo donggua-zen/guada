@@ -210,7 +210,7 @@
 <script setup>
 import { ref, onMounted, computed, watch } from 'vue'
 import { useDebounceFn } from '@vueuse/core' // 导入防抖函数
-import SidebarLayout from '../components/layout/SidebarLayout.vue'
+import { SidebarLayout } from "./ui";
 import ModelsProviderList from '../components/ModelsProviderList.vue'
 import {
     NInput, NFormItem, NForm, NButton, NSpace, NIcon, NTag, NGrid, NGi,

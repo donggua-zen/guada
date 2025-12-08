@@ -25,7 +25,7 @@
 <script setup>
 import { ref, computed, onMounted, shallowRef } from 'vue'
 import { NButton, NForm, NFormItem, NInput } from 'naive-ui'
-import AvatarPreview from '../AvatarPreview.vue'
+import { AvatarPreview } from '../ui'
 import { useAuthStore } from '../../stores/auth'
 import { usePopup } from '../../composables/usePopup'
 import { apiService } from '../../services/ApiService'

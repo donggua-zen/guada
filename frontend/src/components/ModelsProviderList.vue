@@ -52,7 +52,7 @@
 import { ref, onMounted, computed, watch } from 'vue'
 import { NButton, NIcon, NInput } from 'naive-ui'
 import { OpenAI } from '@/components/icons'
-import ScrollContainer from '../components/layout/ScrollContainer.vue'
+import ScrollContainer from './ui/ScrollContainer.vue'
 import {
   PlusOutlined,
   SearchOutlined,
