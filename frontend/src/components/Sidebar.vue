@@ -56,7 +56,7 @@ defineEmits(['change-page', 'open-settings'])
 
 <style scoped>
 .app-sidebar {
-  width: 70px;
+  width: 60px;
   background: var(--sidebar-bg);
   padding: 20px 0;
   height: 100vh;
@@ -104,12 +104,12 @@ defineEmits(['change-page', 'open-settings'])
 }
 
 .sidebar-btn.active {
-  background: var(--sidebar-active-bg);
+  /* background: var(--sidebar-active-bg); */
   color: var(--sidebar-active-text-color);
 }
 
 .sidebar-btn:hover {
-  background: var(--sidebar-hover-bg);
+  /* background: var(--sidebar-hover-bg); */
   color: var(--sidebar-hover-text-color);
   transition: all 0.2s ease;
 }
