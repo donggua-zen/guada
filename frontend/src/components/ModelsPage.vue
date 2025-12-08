@@ -128,18 +128,29 @@
     <n-modal v-model:show="showFetchModal" preset="dialog" title="获取模型列表" :show-footer="false"
         style="width: 90%; max-width: 800px">
         <div class="max-h-[60vh] overflow-y-auto">
+            <div class="p-4">
+                <n-input v-model:value="searchModelName" placeholder="搜索模型名称" clearable
+                    @update:value="handleSearchModel">
+                    <template #prefix>
+                        <n-icon>
+                            <SearchOutlined />
+                        </n-icon>
+                    </template>
+                </n-input>
+            </div>
+
             <div v-if="fetchingModels" class="flex justify-center items-center py-8">
                 <n-spin size="large" />
             </div>
             <div v-else>
                 <!-- 已添加的模型 -->
-                <div v-if="addedModels.length > 0">
+                <div v-if="filteredAddedModels.length > 0">
                     <h3 class="font-bold text-lg mb-3 text-green-600">已添加的模型</h3>
                     <ul>
-                        <li v-for="model in addedModels" :key="model.id"
+                        <li v-for="model in filteredAddedModels" :key="model.id"
                             class="flex items-center py-3 border-b border-gray-200 last:border-b-0">
                             <div class="flex-1">
-                                <div class="font-bold text-lg">{{ model.model_name }}</div>
+                                <div class="font-bold text-base">{{ model.model_name }}</div>
                                 <div class="flex items-center mt-2">
                                     <n-tag :bordered="false" type="success" size="small">{{ model.model_type }}</n-tag>
                                     <n-space class="ml-2">
@@ -161,13 +172,13 @@
                 </div>
 
                 <!-- 可添加的模型 -->
-                <div v-if="availableModels.length > 0">
+                <div v-if="filteredAvailableModels.length > 0">
                     <h3 class="font-bold text-lg mb-3 mt-6 text-blue-600">可添加的模型</h3>
                     <ul>
-                        <li v-for="model in availableModels" :key="model.id"
+                        <li v-for="model in filteredAvailableModels" :key="model.id"
                             class="flex items-center py-3 border-b border-gray-200 last:border-b-0">
                             <div class="flex-1">
-                                <div class="font-bold text-lg">{{ model.model_name }}</div>
+                                <div class="font-bold text-base">{{ model.model_name }}</div>
                                 <div class="flex items-center mt-2">
                                     <n-tag :bordered="false" type="success" size="small">{{ model.model_type }}</n-tag>
                                     <n-space class="ml-2">
@@ -178,7 +189,7 @@
                                     </n-space>
                                 </div>
                             </div>
-                            <n-button type="primary" @click="handleAddFromFetch(model)">
+                            <n-button text type="primary" @click="handleAddFromFetch(model)" size="small">
                                 <n-icon>
                                     <AddCircleTwotone />
                                 </n-icon>
@@ -188,8 +199,8 @@
                     </ul>
                 </div>
 
-                <div v-if="fetchedModels.length === 0" class="text-center py-8 text-gray-500">
-                    暂无模型数据
+                <div v-if="filteredFetchedModels.length === 0" class="text-center py-8 text-gray-500">
+                    暂无匹配的模型数据
                 </div>
             </div>
         </div>
@@ -206,7 +217,7 @@ import {
     NModal, NSelect, NCheckbox, NCheckboxGroup, NInputNumber, NSpin, NDivider
 } from 'naive-ui'
 import { apiService } from '../services/ApiService'
-import { SettingsOutlined, RemoveCircleOutlineRound, DeleteTwotone, AddCircleTwotone, RemoveCircleTwotone } from '@vicons/material'
+import { SettingsOutlined, RemoveCircleOutlineRound, DeleteTwotone, AddCircleTwotone, RemoveCircleTwotone, SearchOutlined } from '@vicons/material'
 import { usePopup } from '../composables/usePopup'
 import { useStorage } from '@vueuse/core'
 
@@ -268,16 +279,6 @@ const currentModels = computed(() => {
     return models.value.filter(m => m.provider_id === currentProviderId.value);
 });
 
-// 计算已添加和可添加的模型
-const addedModels = computed(() => {
-    const currentModelIds = currentModels.value.map(m => m.model_name);
-    return fetchedModels.value.filter(model => currentModelIds.includes(model.model_name));
-});
-
-const availableModels = computed(() => {
-    const currentModelIds = currentModels.value.map(m => m.model_name);
-    return fetchedModels.value.filter(model => !currentModelIds.includes(model.model_name));
-});
 
 const formRef = ref(null);
 
@@ -659,6 +660,41 @@ const handleDeleteClick = async (model) => {
 onMounted(() => {
     loadModelsProvider()
 })
+
+// 添加搜索相关的响应式变量
+const searchModelName = ref('')
+
+// 添加搜索处理函数
+const handleSearchModel = useDebounceFn((value) => {
+    // 防抖处理，无需额外操作，只需依赖 computed 属性
+}, 300)
+
+// 计算过滤后的模型列表
+const filteredFetchedModels = computed(() => {
+    if (!searchModelName.value) {
+        return fetchedModels.value
+    }
+
+    const searchTerm = searchModelName.value.toLowerCase()
+    return fetchedModels.value.filter(model =>
+        model.model_name.toLowerCase().includes(searchTerm)
+    )
+})
+
+const filteredAddedModels = computed(() => {
+    const currentModelIds = currentModels.value.map(m => m.model_name)
+    return filteredFetchedModels.value.filter(model =>
+        currentModelIds.includes(model.model_name)
+    )
+})
+
+const filteredAvailableModels = computed(() => {
+    const currentModelIds = currentModels.value.map(m => m.model_name)
+    return filteredFetchedModels.value.filter(model =>
+        !currentModelIds.includes(model.model_name)
+    )
+})
+
 </script>
 
 <style scoped></style>
