@@ -5,14 +5,12 @@
     <div class="sessions-header px-5 py-5 text-lg font-semibold flex justify-between items-center">
       <span>聊天对话</span>
       <!-- 新建会话按钮移动到右侧 -->
-      <n-button @click="handleButtonClick('create')" text size="medium">
-        <template #icon>
-          <n-icon>
-            <ChatNew />
-          </n-icon>
-        </template>
+      <button @click="handleButtonClick('create')" class="text-sm cursor-pointer flex items-center hover:text-[var(--primary-color)] transition-colors duration-200">
+        <n-icon class="mr-2" :size="16">
+          <ChatNew />
+        </n-icon>
         新建会话
-      </n-button>
+      </button>
     </div>
 
     <!-- 搜索框 -->

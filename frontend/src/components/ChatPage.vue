@@ -1,10 +1,10 @@
 <template>
-  <SidebarLayout v-model:sidebar-visible="sidebarVisible" :sidebar-position="'left'">
+  <sidebar-layout v-model:sidebar-visible="sidebarVisible" :sidebar-position="'left'">
     <template #sidebar>
       <template v-if="authStore.isAuthenticated">
-        <sessions-list ref="sessionsListRef" :btn-active="targetPage" :sessions="sortedSessions"
-          :current="currentSession" @select="goChatRoute($event.id)" @delete="handleDeleteSession"
-          @rename="handleRenameSession" @btn-click="handleSidebarClick" />
+        <chat-sidebar ref="chatSidebarRef" :btn-active="targetPage" :sessions="sortedSessions" :current="currentSession"
+          @select="goChatRoute($event.id)" @delete="handleDeleteSession" @rename="handleRenameSession"
+          @btn-click="handleSidebarClick" />
       </template>
       <template v-else>
         <div
@@ -19,11 +19,11 @@
     <template v-if="!isLoading" #content>
       <!-- 主体 -->
       <template v-if="targetPage == 'characters'">
-        <CharactersPanel @create-session="handleCreateSessionWithMessage" />
+        <characters-panel @create-session="handleCreateSessionWithMessage" />
       </template>
       <template v-else-if="targetPage == 'new-session'">
         <div class="h-full flex-1 flex items-center justify-center">
-          <CreateSessionChatPanel @create-session="handleCreateSessionWithMessage" />
+          <create-session-chat-panel @create-session="handleCreateSessionWithMessage" />
         </div>
       </template>
       <template v-else-if="sessions.length > 0 && currentSession">
@@ -33,14 +33,14 @@
         <n-modal v-model:show="settingsModalVisible" :mask-closable="false" :auto-focus="false"
           style="width: 600px;max-width: 90vw;" title="对话设置" preset="card">
           <div class="max-h-[80vh] overflow-y-auto">
-            <CharacterSettingPanel :data="currentSession" @update:data="updateSession" :simple="true"
+            <character-setting-panel :data="currentSession" @update:data="updateSession" :simple="true"
               :tab="currentTabValue" />
           </div>
         </n-modal>
       </template>
 
     </template>
-  </SidebarLayout>
+  </sidebar-layout>
 </template>
 
 <script setup>
@@ -56,12 +56,9 @@ import { useTitle } from '@/composables/useTitle';
 
 // 引入组件
 import { SidebarLayout } from "./ui";
-import SessionsList from "@/components/SessionsList.vue";
-// 将 CharacterSettingPanel 改为动态引入
+import ChatSidebar from "@/components/ChatSidebar.vue";
 const CharacterSettingPanel = defineAsyncComponent(() => import("@/components/CharacterSettingPanel.vue"));
-// import ChatPanel from "@/components/ChatPanel.vue";
 const ChatPanel = defineAsyncComponent(() => import("@/components/ChatPanel.vue"));
-// import CreateSessionChatPanel from "@/components/CreateSessionChatPanel.vue";
 const CreateSessionChatPanel = defineAsyncComponent(() => import("@/components/CreateSessionChatPanel.vue"));
 const CharactersPanel = defineAsyncComponent(() => import("@/components/CharactersPage.vue"));
 
@@ -77,7 +74,7 @@ const chatPanelRef = ref(null);
 const currentSession = ref(null);
 
 // 会话列表组件引用，用于调用组件内部方法
-const sessionsListRef = ref(null);
+const chatSidebarRef = ref(null);
 // 设置面板当前激活的标签页
 const currentTabValue = ref('basic');
 // 控制设置模态框的显示与隐藏

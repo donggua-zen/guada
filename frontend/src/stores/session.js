@@ -31,7 +31,7 @@ export const useSessionStore = defineStore('session', () => {
     }
 
     // 会话列表相关方法
-    const setSessionsList = (list) => {
+    const setChatSidebar = (list) => {
         sessionsList.value = list
     }
 
@@ -121,7 +121,7 @@ export const useSessionStore = defineStore('session', () => {
 
         // actions
         getSessionState,
-        setSessionsList,
+        setChatSidebar,
         getMessages,
         addMessage,
         setMessages,
