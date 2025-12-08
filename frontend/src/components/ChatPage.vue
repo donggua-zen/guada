@@ -3,8 +3,8 @@
     <template #sidebar>
       <template v-if="authStore.isAuthenticated">
         <sessions-list ref="sessionsListRef" :btn-active="targetPage" :sessions="sortedSessions"
-          :current="currentSession" @select="selectSession" @delete="handleDeleteSession" @rename="handleRenameSession"
-          @btn-click="handleSidebarClick" />
+          :current="currentSession" @select="goChatRoute($event.id)" @delete="handleDeleteSession"
+          @rename="handleRenameSession" @btn-click="handleSidebarClick" />
       </template>
       <template v-else>
         <div
@@ -32,7 +32,7 @@
           @saveSettings="handleSaveSessionSettings" />
         <n-modal v-model:show="settingsModalVisible" :mask-closable="false" :auto-focus="false"
           style="width: 600px;max-width: 90vw;" title="对话设置" preset="card">
-          <div class="max-h-80vh overflow-y-auto">
+          <div class="max-h-[80vh] overflow-y-auto">
             <CharacterSettingPanel :data="currentSession" @update:data="updateSession" :simple="true"
               :tab="currentTabValue" />
           </div>
@@ -59,7 +59,8 @@ import SidebarLayout from "@/components/layout/SidebarLayout.vue";
 import SessionsList from "@/components/SessionsList.vue";
 // 将 CharacterSettingPanel 改为动态引入
 const CharacterSettingPanel = defineAsyncComponent(() => import("@/components/CharacterSettingPanel.vue"));
-import ChatPanel from "@/components/ChatPanel.vue";
+// import ChatPanel from "@/components/ChatPanel.vue";
+const ChatPanel = defineAsyncComponent(() => import("@/components/ChatPanel.vue"));
 // import CreateSessionChatPanel from "@/components/CreateSessionChatPanel.vue";
 const CreateSessionChatPanel = defineAsyncComponent(() => import("@/components/CreateSessionChatPanel.vue"));
 const CharactersPanel = defineAsyncComponent(() => import("@/components/CharactersPage.vue"));
@@ -128,14 +129,13 @@ const fetchSession = async (sessionId) => {
  * 选择会话，加载会话详情
  * @param {Object} session - 包含会话信息的对象
  */
-const selectSession = async (session) => {
-  if (session && session.id) {
-    router.replace({ name: 'Chat', params: { sessionId: session.id } });
-    store.setActiveSessionId(session.id);
-    await fetchSession(session.id);
+const goChatRoute = async (sessionId, redirect = false) => {
+  if (sessionId) {
+    router.replace({ name: 'Chat', params: { sessionId: sessionId } });
+  } else if (store.activeSessionId) {
+    router.replace({ name: 'Chat', params: { sessionId: store.activeSessionId } });
   } else {
     router.replace({ name: 'Chat', params: { sessionId: 'new-session' } });
-    store.setActiveSessionId(null);
     currentSession.value = null;
   }
 };
@@ -195,41 +195,22 @@ const updateSession = async (data) => {
   settingsModalVisible.value = false;
 };
 
-/**
- * 更新选中的会话
- * 优先级：URL参数中的会话ID > 存储中的活动会话ID > 列表中的第一个会话
- * @param {string|number|null} sessionId - 要选择的会话ID，如果为null则使用存储中的ID
- */
+
 const updateSelectedSession = async (sessionId) => {
-  if (sortedSessions.value.length === 0 || !authStore.isAuthenticated) {
-    selectSession(null);
+  if (sortedSessions.value.length === 0 || !authStore.isAuthenticated || !sessionId) {
+    goChatRoute('new-session');
     return;
   }
 
-  // 如果传入了sessionId，直接查找并选择
-  if (sessionId) {
-    const session = sortedSessions.value.find(s => s.id === sessionId);
-    if (session) {
-      if (session.id !== currentSession.value?.id) {
-        await selectSession(session);
-      }
-      return;
-    }
-  } else {
-    // 如果没有传入sessionId，尝试使用存储中的活动会话ID
-    const storeCurrentSessionId = store.activeSessionId;
-    if (storeCurrentSessionId) {
-      const session = sortedSessions.value.find(s => s.id === storeCurrentSessionId);
-      if (session) {
-        await selectSession(session);
-      }
-      return;
-    }
+  const session = sortedSessions.value.find(s => s.id === sessionId);
+  if (!session) {
+    goChatRoute('new-session');
+    return;
+  }
+  if (session.id !== currentSession.value?.id) {
+    await fetchSession(session.id);
   }
 
-  // 如果没有找到会话，选择第一个会话
-  // selectSession(sortedSessions.value[0]);
-  selectSession(null);
 };
 
 /**
@@ -269,9 +250,9 @@ const handleOpenSwitchModel = () => {
  */
 const handleSidebarClick = async (key) => {
   if (key === 'create') {
-    selectSession(null);
+    goChatRoute('new-session');
   } else if (key === 'characters') {
-    router.replace({ name: 'Chat', params: { sessionId: 'characters' } });
+    goChatRoute('characters');
   }
 
 };
@@ -287,7 +268,7 @@ const handleCreateSessionWithMessage = async (session, inputMessage) => {
       inputMessage.isWaiting = true
       store.setInputMessage(response.id, inputMessage)
     }
-    await selectSession(response);
+    await goChatRoute(response.id);
   } catch (error) {
     console.error('创建对话失败:', error);
     toast.error("创建对话失败");
@@ -342,12 +323,12 @@ const handleDeleteSession = async (session) => {
       if (currentSession.value && currentSession.value.id === session.id) {
         if (index < sortedSessions.value.length - 1) {
           // 选择下一个会话
-          await selectSession(sortedSessions.value[index + 1]);
+          goChatRoute(sortedSessions.value[index + 1].id);
         } else if (index > 1) {
-          await selectSession(sortedSessions.value[index - 1]);
+          goChatRoute(sortedSessions.value[index - 1].id);
         } else {
           // 没有其他会话了
-          currentSession.value = { id: null };
+          goChatRoute('new-session');
         }
       }
       sessions.value = sessions.value.filter(s => s.id !== session.id);
@@ -386,30 +367,29 @@ watch(
   { deep: true }
 );
 
-// 监听会话列表的变化，更新选中的会话
-// watch(
-//   () => sessions,
-//   () => {
-//     if (route.params.sessionId === 'new-session')
-//       return;
-//     updateSelectedSession(route.params.sessionId);
-//   },
-//   { deep: true }
-// );
+
 const specialRoutes = ['new-session', 'characters'];
+
+const handleRouteChange = (newSessionId) => {
+  if (!newSessionId) {
+    goChatRoute(null);
+    return;
+  }
+  store.setActiveSessionId(newSessionId);
+  if (specialRoutes.includes(newSessionId)) {
+    targetPage.value = newSessionId;
+    currentSession.value = null;
+    return;
+  }
+  targetPage.value = null;
+  updateSelectedSession(newSessionId);
+};
+
 // 监听路由参数中会话ID的变化，更新选中的会话
 watch(
   () => route.params.sessionId,
   (newSessionId) => {
-    if (specialRoutes.includes(newSessionId)) {
-      targetPage.value = newSessionId;
-      currentSession.value = null;
-      return;
-    }
-    if (newSessionId !== currentSession.value?.id) {
-      targetPage.value = null;
-      updateSelectedSession(newSessionId);
-    }
+    handleRouteChange(newSessionId);
   }
 );
 
@@ -418,18 +398,8 @@ watch(
 onMounted(async () => {
   if (authStore.isAuthenticated) {
     await loadSessions();
-    const pathSessionId = route.params.sessionId;
-    if (specialRoutes.includes(pathSessionId))
-      targetPage.value = pathSessionId;
-    else
-      await updateSelectedSession(pathSessionId);
+    handleRouteChange(route.params.sessionId);
   }
   isLoading.value = false;
 });
 </script>
-
-<style scoped>
-.max-h-80vh {
-  max-height: 80vh;
-}
-</style>
