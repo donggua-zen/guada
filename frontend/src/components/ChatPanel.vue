@@ -260,7 +260,7 @@ const localSidebarVisible = computed({
 });
 
 // 防抖函数
-const debouncedUpdatedSession = useDebounceFn(updateSessionLastMessage, 1000);
+// const debouncedUpdatedSession = useDebounceFn(updateSessionLastMessage, 1000);
 const debouncedSwitchContent = useDebounceFn(
   (messageId, contentId) => apiService.setMessageCurrentContent(messageId, contentId),
   300
@@ -366,7 +366,7 @@ async function importChat() {
       await apiService.importMessages(currentSession.value.id, chatData.messages);
       toast.success("聊天记录导入成功");
       loadMessages(currentSession.value.id);
-      debouncedUpdatedSession();
+      // debouncedUpdatedSession();
     } catch (error) {
       console.error("导入聊天记录失败:", error);
       toast.error("文件格式错误或读取失败");
@@ -405,23 +405,23 @@ async function loadMessages(sessionId) {
   }
 }
 
-function updateSessionLastMessage() {
-  if (!activeMessages.value.length) {
-    currentSession.value.last_message = null;
-    currentSession.value = { ...currentSession.value };
-    return;
-  }
+// function updateSessionLastMessage() {
+//   if (!activeMessages.value.length) {
+//     currentSession.value.last_message = null;
+//     currentSession.value = { ...currentSession.value };
+//     return;
+//   }
 
-  const lastMessage = activeMessages.value[activeMessages.value.length - 1];
-  if (lastMessage?.state?.is_streaming) return;
+//   const lastMessage = activeMessages.value[activeMessages.value.length - 1];
+//   if (lastMessage?.state?.is_streaming) return;
 
-  const currentContent = getCurrentContent(lastMessage.contents);
-  currentSession.value.last_message = {
-    content: currentContent.content,
-    created_at: currentContent.created_at
-  };
-  currentSession.value = { ...currentSession.value };
-}
+//   const currentContent = getCurrentContent(lastMessage.contents);
+//   currentSession.value.last_message = {
+//     content: currentContent.content,
+//     created_at: currentContent.created_at
+//   };
+//   currentSession.value = { ...currentSession.value };
+// }
 
 function getCurrentIndex(messageContents) {
   if (!messageContents?.length) return 0;
@@ -529,7 +529,7 @@ async function handleStreamResponse(
   try {
     let responseContent = "";
     let thinkingContent = "";
-    let itemRef = null;
+    // let itemRef = null;
     // const chatSouce = USE_DUMMY_CHAT ? dummy_chat : apiService.chat;
 
     for await (const response of apiService.chat(
@@ -580,7 +580,7 @@ async function handleStreamResponse(
     handleStreamCatchError(error, message, contentIndex, assistantMessageIdResult);
   } finally {
     cleanupStreaming(streamingSessionId, message, contentIndex);
-    debouncedUpdatedSession();
+    // debouncedUpdatedSession();
   }
 }
 
@@ -735,7 +735,7 @@ async function sendNewMessage(sessionId, text, files, replaceMessageId = null) {
     }
   }
   activeMessages.value.push(message);
-  debouncedUpdatedSession();
+  // debouncedUpdatedSession();
   await nextTick(() => {
     immediateScrollToBottom();
   });
@@ -751,7 +751,7 @@ async function clearChat() {
   if (await confirm("清空聊天记录", "确定要删除所有聊天记录吗？此操作不可撤销。")) {
     await apiService.clearSessionMessages(currentSessionId.value);
     sessionStore.clearSessionState(currentSessionId.value);
-    debouncedUpdatedSession();
+    // debouncedUpdatedSession();
     toast.success("聊天记录已清空");
   }
 }
@@ -777,7 +777,7 @@ async function deleteMessage(message) {
           sessionStore.deleteMessage(currentSessionId.value, assistantMessage.id);
       }
       sessionStore.deleteMessage(currentSessionId.value, message.id);
-      debouncedUpdatedSession();
+      // debouncedUpdatedSession();
       toast.success("消息已删除");
     }
   } catch (error) {
@@ -800,7 +800,7 @@ async function editMessage(message) {
       message.contents[index].content = result;
       await apiService.updateMessage(message.id, result);
       sessionStore.updateMessage(currentSessionId.value, message.id, message);
-      debouncedUpdatedSession();
+      // debouncedUpdatedSession();
       toast.success("消息已更新");
     }
   } catch (error) {
@@ -869,7 +869,7 @@ function switchContent(message, content) {
     item.is_current = item.id === content.id;
   });
   debouncedSwitchContent(message.id, content.id);
-  debouncedUpdatedSession();
+  // debouncedUpdatedSession();
 }
 
 // 设置操作
