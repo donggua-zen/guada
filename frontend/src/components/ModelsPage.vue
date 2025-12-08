@@ -430,25 +430,9 @@ const handleFetchModels = async () => {
     }
 };
 
-// 模拟从大语言模型API获取模型列表
 const fetchModelsFromAPI = async () => {
-    // 这里应该是实际的大语言模型API调用
-    let apiUrl = currentProvider.value.api_url;
-    if (apiUrl.includes('https://dashscope.aliyuncs.com')) {
-        apiUrl = apiUrl.replace('https://dashscope.aliyuncs.com', '/proxy/aliyun');
-    }
-    const response = await fetch(apiUrl + '/models', {
-        headers: {
-            'Authorization': `Bearer ${currentProvider.value.api_key}`,
-            'Content-Type': 'application/json'
-        }
-    });
-    const data = await response.json();
-    return data.data.map(model => ({
-        model_name: model.id,
-        type: 'text', // 根据实际情况获取
-        features: []  // 根据实际情况获取
-    }));
+    const data = await apiService.fetchRemoteModels(currentProvider.value.id)
+    return data.items;
 };
 
 // 从获取列表中添加模型
