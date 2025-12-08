@@ -34,7 +34,7 @@
                         <n-gi :span="18">
                             <n-form-item label="API KEY" path="api_key">
                                 <n-input v-model:value="currentProvider.api_key" placeholder="api_key"
-                                    @update:value="handleProviderChange" />
+                                    @update:value="handleProviderChange" type="password" show-password-on="click" />
                             </n-form-item>
                         </n-gi>
                         <n-gi :span="6" style="display: none;">
