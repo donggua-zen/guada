@@ -50,7 +50,7 @@ import { useRouter, useRoute } from 'vue-router';
 import { NModal, NEmpty } from "naive-ui";
 import { usePopup } from "@/composables/usePopup";
 import { useStorage } from '@vueuse/core';
-import { store } from "@/stores/store";
+import { useSessionStore } from "@/stores/session";
 import { useAuthStore } from "@/stores/auth";
 import { useTitle } from '@/composables/useTitle';
 
@@ -89,17 +89,17 @@ const isLoading = ref(true);
 const targetPage = ref(null);
 
 // 登录信息
-
 const authStore = useAuthStore();
+const sessionStore = useSessionStore();
 
 // 计算属性
 // 获取和设置会话列表的计算属性，与store中的会话列表保持同步
 const sessions = computed({
   get() {
-    return store.getSessionsList();
+    return sessionStore.sessionsList;
   },
   set(value) {
-    store.setSessionsList(value);
+    sessionStore.sessionsList = value;
   }
 });
 
@@ -132,8 +132,8 @@ const fetchSession = async (sessionId) => {
 const goChatRoute = async (sessionId, redirect = false) => {
   if (sessionId) {
     router.replace({ name: 'Chat', params: { sessionId: sessionId } });
-  } else if (store.activeSessionId) {
-    router.replace({ name: 'Chat', params: { sessionId: store.activeSessionId } });
+  } else if (sessionStore.activeSessionId) {
+    router.replace({ name: 'Chat', params: { sessionId: sessionStore.activeSessionId } });
   } else {
     router.replace({ name: 'Chat', params: { sessionId: 'new-session' } });
     currentSession.value = null;
@@ -266,7 +266,7 @@ const handleCreateSessionWithMessage = async (session, inputMessage) => {
     await loadSessions();
     if (inputMessage) {
       inputMessage.isWaiting = true
-      store.setInputMessage(response.id, inputMessage)
+      sessionStore.setInputMessage(response.id, inputMessage)
     }
     await goChatRoute(response.id);
   } catch (error) {
@@ -375,7 +375,7 @@ const handleRouteChange = (newSessionId) => {
     goChatRoute(null);
     return;
   }
-  store.setActiveSessionId(newSessionId);
+  sessionStore.activeSessionId = newSessionId;
   if (specialRoutes.includes(newSessionId)) {
     targetPage.value = newSessionId;
     currentSession.value = null;

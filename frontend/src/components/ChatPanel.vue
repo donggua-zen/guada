@@ -114,10 +114,10 @@
 
 <script setup>
 import { ref, computed, watch, nextTick, onMounted, onBeforeUpdate, reactive, h } from "vue";
-import { store } from "../stores/store";
 import { apiService } from "../services/ApiService";
 import { usePopup } from "@/composables/usePopup";
 import { useDebounceFn } from "@vueuse/core";
+import { useSessionStore } from "../stores/session";
 import { useAuthStore } from "../stores/auth"
 
 // 组件导入
@@ -143,6 +143,7 @@ import { NButton, NIcon, NDivider, NDropdown, NModal } from "naive-ui";
 // 弹出层工具
 const { confirm, editText, toast, notify } = usePopup();
 const authStore = useAuthStore()
+const sessionStore = useSessionStore();
 
 // 响应式数据
 const scrollContainerRef = ref(null);
@@ -208,18 +209,18 @@ const currentModelName = computed(() =>
     : "请选择对话模型"
 );
 
-const isStreaming = computed(() => store.sessionIsStreaming(currentSessionId.value));
+const isStreaming = computed(() => sessionStore.sessionIsStreaming(currentSessionId.value));
 
 const inputMessage = computed({
-  get: () => store.getInputMessage(currentSessionId.value) || { text: "", files: [] },
-  set: (value) => store.setInputMessage(currentSessionId.value, value)
+  get: () => sessionStore.getInputMessage(currentSessionId.value) || { text: "", files: [] },
+  set: (value) => sessionStore.setInputMessage(currentSessionId.value, value)
 });
 
 const editInputMessage = ref({ old_message_id: "", text: "", files: [] });
 
 const activeMessages = computed({
-  get: () => store.getMessages(currentSessionId.value) || [],
-  set: (value) => store.setMessages(currentSessionId.value, value)
+  get: () => sessionStore.getMessages(currentSessionId.value) || [],
+  set: (value) => sessionStore.setMessages(currentSessionId.value, value)
 });
 
 const webSearchEnabled = computed({
@@ -398,9 +399,9 @@ async function handleSessionChange(newSessionId, oldSessionId) {
 
 
 async function loadMessages(sessionId) {
-  if (store.getMessages(sessionId).length === 0) {
+  if (sessionStore.getMessages(sessionId).length === 0) {
     const sessionMessages = await apiService.fetchSessionMessages(sessionId);
-    store.setMessages(sessionId, sessionMessages.items);
+    sessionStore.setMessages(sessionId, sessionMessages.items);
   }
 }
 
@@ -519,7 +520,7 @@ async function handleStreamResponse(
 
   const USE_DUMMY_CHAT = false; // 设为 true 使用模拟接口，设为 false 使用真实接口
 
-  store.setSessionIsStreaming(streamingSessionId, true);
+  sessionStore.setSessionIsStreaming(streamingSessionId, true);
 
   let message = null;
   let assistantMessageIdResult = null;
@@ -632,7 +633,7 @@ function handleNewMessage(response, sessionId, userMessageId) {
       },
       created_at: new Date().toISOString()
     });
-    store.addMessage(sessionId, newMessage);
+    sessionStore.addMessage(sessionId, newMessage);
     return {
       message: newMessage,
       contentIndex: 0
@@ -681,7 +682,7 @@ function handleStreamCatchError(error, message, contentIndex, assistantMessageId
 }
 
 function cleanupStreaming(sessionId, message, contentIndex) {
-  store.setSessionIsStreaming(sessionId, false);
+  sessionStore.setSessionIsStreaming(sessionId, false);
   if (message) {
     message.state.is_streaming = false;
     message.state.is_thinking = false;
@@ -727,10 +728,10 @@ async function sendNewMessage(sessionId, text, files, replaceMessageId = null) {
   const response = await apiService.createMessage(sessionId, text, updatedFiles, replaceMessageId);
   const message = reactive({ ...response, files: updatedFiles });
   if (replaceMessageId) {
-    store.deleteMessage(sessionId, replaceMessageId);
+    sessionStore.deleteMessage(sessionId, replaceMessageId);
     const assistantMessage = activeMessages.value.find((msg) => msg.parent_id === replaceMessageId);
     if (assistantMessage) {
-      store.deleteMessage(sessionId, assistantMessage.id);
+      sessionStore.deleteMessage(sessionId, assistantMessage.id);
     }
   }
   activeMessages.value.push(message);
@@ -749,7 +750,7 @@ function abortResponse() {
 async function clearChat() {
   if (await confirm("清空聊天记录", "确定要删除所有聊天记录吗？此操作不可撤销。")) {
     await apiService.clearSessionMessages(currentSessionId.value);
-    store.clearSessionState(currentSessionId.value);
+    sessionStore.clearSessionState(currentSessionId.value);
     debouncedUpdatedSession();
     toast.success("聊天记录已清空");
   }
@@ -773,9 +774,9 @@ async function deleteMessage(message) {
       if (message.role === "user") {
         const assistantMessage = activeMessages.value.find((msg) => msg.parent_id === message.id);
         if (assistantMessage)
-          store.deleteMessage(currentSessionId.value, assistantMessage.id);
+          sessionStore.deleteMessage(currentSessionId.value, assistantMessage.id);
       }
-      store.deleteMessage(currentSessionId.value, message.id);
+      sessionStore.deleteMessage(currentSessionId.value, message.id);
       debouncedUpdatedSession();
       toast.success("消息已删除");
     }
@@ -798,7 +799,7 @@ async function editMessage(message) {
     if (result) {
       message.contents[index].content = result;
       await apiService.updateMessage(message.id, result);
-      store.updateMessage(currentSessionId.value, message.id, message);
+      sessionStore.updateMessage(currentSessionId.value, message.id, message);
       debouncedUpdatedSession();
       toast.success("消息已更新");
     }
