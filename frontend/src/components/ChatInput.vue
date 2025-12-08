@@ -339,7 +339,7 @@ const triggerFileInput = () => fileInputRef.value.click();
 const triggerImageInput = () => imageInputRef.value.click();
 
 const sendMessage = () => {
-    if (!inputContent.trim()) {
+    if (!inputContent.value.trim()) {
         return;
     }
     emit('send', {
