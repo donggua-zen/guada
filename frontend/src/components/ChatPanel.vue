@@ -46,7 +46,7 @@
             <!-- 头像区域 -->
             <div class="relative inline-block mb-5">
               <div
-                class="w-24 h-24 rounded-full bg-gradient-to-br from-[#667eea] to-[var(--primary-color)] flex items-center justify-center mx-auto relative overflow-hidden p-0 animate-bounce-in">
+                class="w-24 h-24 rounded-full  flex items-center justify-center mx-auto relative overflow-hidden p-0 animate-bounce-in">
                 <Avatar v-if="currentSession" :src="currentSession.avatar_url" round />
                 <div v-else class="text-4xl text-white">?</div>
               </div>
