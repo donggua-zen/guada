@@ -33,7 +33,7 @@
 </template>
 <script setup>
 import { ref, onMounted, computed } from 'vue'
-import { SidebarLayout } from "./ui";
+import { SidebarLayout } from "../ui";
 import UserProfile from './UserProfile.vue'
 import UserSubaccounts from './UserSubaccounts.vue'
 import UserSecurity from './UserSecurity.vue'
