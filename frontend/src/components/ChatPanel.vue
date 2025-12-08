@@ -388,7 +388,7 @@ async function handleSessionChange(newSessionId, oldSessionId) {
   if (newSessionId) {
     await loadMessages(newSessionId);
     nextTick(() => {
-      smoothScrollToBottom();
+      immediateScrollToBottom();
       if (inputMessage.value?.isWaiting) {
         handleSendMessage();
       }
