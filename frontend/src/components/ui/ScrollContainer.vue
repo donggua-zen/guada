@@ -183,6 +183,7 @@ defineExpose({
     width: 100%;
     height: 100%;
 }
+
 /* SimpleBar 滚动条样式 */
 :deep(.simplebar-scrollbar::before) {
     background-color: #999;
@@ -190,5 +191,9 @@ defineExpose({
 
 :deep(.simplebar-scrollbar.simplebar-visible::before) {
     opacity: 0.6;
+}
+
+:deep(.simplebar-content-wrapper) {
+    outline: none;
 }
 </style>
