@@ -1,24 +1,41 @@
 <template>
-  <div class="message" :class="messageClass" @click="handleCopyClick">
-    <div class="hidden md:block w-[40px] h-[40px] rounded-full flex items-center justify-center shrink-0 self-start"
+  <div class="message" :class="messageClass">
+    <div class="hidden  w-[40px] h-[40px] rounded-full flex items-center justify-center shrink-0 self-start"
       :class="avatarClass">
       <Avatar v-if="!isAssistant" :src="avatar" :round="true" type="user"></Avatar>
       <Avatar v-else :src="avatar" :round="true" type="assistant"></Avatar>
     </div>
 
     <div class="message-content">
+      <div v-if="isAssistant" class="text-xs text-gray-400 mb-3">
+        <div class="flex items-center">
+          <div class="mr-2 flex items-center">
+            <div class="w-5.5 h-5.5 mr-2">
+              <Avatar :src="avatar" :round="false" type="assistant"></Avatar>
+            </div>
+            <span class="text-lg text-gray-450">{{
+              currentModelName
+            }}</span>
+          </div>
+          <div class="flex items-center">
+            <div class="inline-block h-3 w-3 flex flex-shrink-0 items-center justify-center mr-1 relative top-[1px]">
+              <AccessTimeTwotone />
+            </div><span class="" :title="currentContentTime.full">{{ currentContentTime.firendly }}</span>
+          </div>
+        </div>
+      </div>
       <div class="message-card">
         <div v-if="hasThinking" class="thinking-section" :class="{ 'thinking-expanded': isExpanded }">
           <div
             class="inline-flex justify-between items-center text-sm text-gray-700 cursor-pointer font-medium py-1 transition-colors duration-200 mb-1"
             @click="toggleExpand">
             <div class="flex items-center inline-flex">
-              <n-icon size="18" class="text-green-700 mr-1">
+              <!-- <n-icon size="18" class="text-green-700 mr-1">
                 <Thinking />
-              </n-icon>
-              <span class="text-gray-600">{{ thinkingLabel }}</span>
+              </n-icon> -->
+              <span class="text-gray-500">{{ thinkingLabel }}</span>
             </div>
-            <n-icon :component="ArrowRightTwotone" class="transition-transform duration-300 ml-2"
+            <n-icon :component="ArrowRightTwotone" class="transition-transform duration-300 ml-2" size="10"
               :class="[isExpanded ? 'rotate-90' : 'rotate-0']"></n-icon>
           </div>
           <div class="thinking-content transition-all duration-500 ease-in-out overflow-hidden text-gray-500"
@@ -40,31 +57,16 @@
           </n-icon>
           {{ state.is_web_searching ? '搜索中...' : '回答中...' }}
         </div>
-        <div v-else-if="isAssistant" class="text-xs text-gray-400 mt-2">
-          <div class="flex items-center">
-            <div class="mr-2 flex items-center">
-              <div class="inline-block h-3 w-3 flex flex-shrink-0 items-center justify-center mr-1 relative top-[1px]">
-                <CloudUploadTwotone />
-              </div><span class="">{{
-                currentModelName
-              }}</span>
-            </div>
-            <div class="flex items-center">
-              <div class="inline-block h-3 w-3 flex flex-shrink-0 items-center justify-center mr-1 relative top-[1px]">
-                <AccessTimeTwotone />
-              </div><span class="" :title="currentContentTime.full">{{ currentContentTime.firendly }}</span>
-            </div>
-          </div>
-        </div>
+
       </div>
       <!-- 文件列表显示区域 -->
-      <div class="file-list flex flex-wrap gap-2 mt-3" v-if="message.files && message.files.length > 0">
+      <div class="file-list flex flex-wrap gap-2 mt-3 ml-auto" v-if="message.files && message.files.length > 0">
         <fileItem v-for="file, index in message.files" :key="file.id" :name="file.display_name" :type="file.file_type"
           :ext="file.file_extension" :size="file.file_size" :preview-url="file.preview_url"
           :clickable="file.file_type === 'image'" @click="handleImageClick(index)"></fileItem>
       </div>
       <div class="message-actions flex gap-0 text-sm w-full mt-3 text-gray-400 items-center" v-if="!state.is_streaming"
-        :class="[isAssistant ? 'justify-start' : 'justify-start', message.is_streaming ? 'opacity-0' : 'opacity-100']">
+        :class="[isAssistant ? 'justify-start' : 'justify-end', message.is_streaming ? 'opacity-0' : 'opacity-100']">
         <!-- 保留的按钮：generate, regenerate, copy -->
         <template v-if="!isAssistant && props.allowGenerate">
           <div class="message-action-button" @click="handleAction('generate')">
@@ -166,7 +168,11 @@ const marked = new Marked(
     }
   })
 );
-
+// 在 markdown 渲染上下文中无法使用 Vue 组件，所以我们直接使用 SVG 字符串
+const coypysvg = `<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24">
+  <path fill="currentColor" d="M8 7h11v14H8z" opacity=".3"/>
+  <path fill="currentColor" d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/>
+</svg>`
 const renderer = {
   code(code) {
     const lang = code.lang || 'text';
@@ -174,7 +180,7 @@ const renderer = {
       <div class="custom-code-block">
         <div class="code-header">
           <span class="code-language">${lang}</span>
-          <button class="copy-code-button">复制</button>
+          <button class="copy-code-button" onclick="window.handleCopyCode(this)"><i role="img">${coypysvg}</i></button>
         </div>
         <pre class="hljs language-${lang}"><code class="hljs language-${lang}">${code.text}</code></pre>
       </div>
@@ -404,32 +410,31 @@ const getCurrentIndex = (messageContents) => {
   return currentIndex !== -1 ? currentIndex + 1 : 1;
 };
 
-// 复制功能处理
-const handleCopyClick = (event) => {
-  if (event.target.classList.contains('copy-code-button')) {
-    event.stopPropagation(); // 阻止事件冒泡
-    const codeBlock = event.target.closest('.custom-code-block').querySelector('code');
+// 注册全局复制代码函数
+const registerGlobalCopyFunction = () => {
+  window.handleCopyCode = function (button) {
+    const codeBlock = button.closest('.custom-code-block').querySelector('code');
     if (!codeBlock) return;
     const text = codeBlock.textContent;
 
     navigator.clipboard.writeText(text).then(() => {
-      const originalText = event.target.textContent;
-      event.target.textContent = '已复制!';
-      setTimeout(() => {
-        event.target.textContent = originalText;
-      }, 2000);
-      toast.success("已复制");
+      toast.success("代码已复制到剪贴板");
     }).catch(err => {
       console.error('复制失败:', err);
-      event.target.textContent = '复制失败';
+      toast.error("复制失败");
     });
-  }
+  };
 };
 
 onMounted(() => {
+  registerGlobalCopyFunction();
 });
 
 onUnmounted(() => {
+  // 清理全局函数
+  if (typeof window.handleCopyCode !== 'undefined') {
+    delete window.handleCopyCode;
+  }
 });
 
 defineExpose({ showThinking, hideThinking, switchContent, });
@@ -473,6 +478,7 @@ export default {
   padding: 5px 12px;
   border-radius: 16px;
   border: 1px solid var(--user-bubble-border-color);
+  margin-left: auto;
 }
 
 /* AI消息气泡特定样式 */
@@ -496,7 +502,7 @@ export default {
 
 /* 修复用户消息对齐问题 */
 .message.user-message-container {
-  /* flex-direction: row-reverse; */
+  flex-direction: row-reverse;
 }
 
 .message.assistant-message-container {
@@ -770,14 +776,14 @@ ol>*:not(li) {
 
 <style>
 /* 全局样式：确保 v-html 中的代码高亮生效 */
-@import 'highlight.js/styles/androidstudio.css';
+@import 'highlight.js/styles/foundation.css';
 
 /* 确保 hljs 样式正常工作 */
 .custom-code-block pre.hljs {
   margin: 0;
   border-radius: 0;
   border: none;
-  background: #282c34 !important;
+  background: #fafafb !important;
 }
 
 .custom-code-block code.hljs {
@@ -790,10 +796,10 @@ ol>*:not(li) {
 .custom-code-block {
   position: relative;
   margin: 1em 0;
-  border-radius: 8px;
+  border-radius: 14px;
   overflow: hidden;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-  background: #282c34;
+  background: #f3f4f6;
+  border: 1px solid #e3e3e7;
 }
 
 .code-header {
@@ -801,28 +807,31 @@ ol>*:not(li) {
   justify-content: space-between;
   align-items: center;
   padding: 8px 12px;
-  background: #282c34;
-  color: #ccc;
+  background: #f3f3f5;
+  color: #222;
   font-size: 0.8em;
-  font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
-  /* border-bottom: 1px solid #3d3d3d; */
 }
 
 .code-language {
   font-weight: 600;
   text-transform: uppercase;
-  color: #abb2bf;
+  color: #666;
 }
 
 .copy-code-button {
-  background: rgba(255, 255, 255, 0.1);
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  color: #ccc;
-  padding: 4px 8px;
-  border-radius: 4px;
+  color: #666;
   cursor: pointer;
-  font-size: 0.75em;
   transition: all 0.2s ease;
+  font-size: 15px;
+}
+
+.copy-code-button:hover {
+  color: #333;
+}
+
+.copy-code-button svg {
+  width: 15px;
+  height: 15px;
 }
 
 .copy-code-button:hover {
