@@ -318,6 +318,7 @@ const handleDeleteSession = async (session) => {
   try {
     if (await confirm("确认删除", "确定要删除这个对话吗？此操作不可撤销。")) {
       await apiService.deleteSession(session.id);
+      sessionStore.clearSessionState(session.id);
       const index = sortedSessions.value.findIndex(s => s.id === session.id);
       // 如果删除的是当前会话
       if (currentSession.value && currentSession.value.id === session.id) {
