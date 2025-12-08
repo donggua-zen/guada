@@ -122,9 +122,7 @@ import { useAuthStore } from "../stores/auth"
 
 // 组件导入
 import MessageItem from "./MessageItem.vue";
-import Avatar from "./Avatar.vue";
-import ChatInput from "./ChatInput.vue";
-import ScrollContainer from "@/components/layout/ScrollContainer.vue";
+import { Avatar, ChatInput, ScrollContainer } from "./ui";
 // 异步组件导入
 // import TokenStatisticsModal from "./TokenStatisticsModal.vue";
 const TokenStatisticsModal = defineAsyncComponent(() => import("./TokenStatisticsModal.vue"));

@@ -107,8 +107,8 @@
 
 <script setup>
 import { ref, computed, h } from 'vue'
-import Avatar from '../components/Avatar.vue'
-import ScrollContainer from '../components/layout/ScrollContainer.vue'
+import Avatar from './ui/Avatar.vue'
+import ScrollContainer from './ui/ScrollContainer.vue'
 import { NButton, NDropdown, NIcon, NInput } from 'naive-ui'
 import { useDebounceFn } from '@vueuse/core'
 import { formatTime } from '@/utils'

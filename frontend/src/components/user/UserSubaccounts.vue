@@ -64,7 +64,7 @@ import { NButton, NForm, NFormItem, NInput, NIcon, NDropdown, NModal } from 'nai
 import { MoreVertOutlined, EditOutlined, DeleteOutlineOutlined } from '@vicons/material'
 import { usePopup } from '../../composables/usePopup'
 import { apiService } from '../../services/ApiService'
-import Avatar from '../../components/Avatar.vue'
+import Avatar from '../ui/Avatar.vue'
 
 const { toast } = usePopup()
 

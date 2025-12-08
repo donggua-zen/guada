@@ -114,7 +114,7 @@ import { markedHighlight } from 'marked-highlight'
 import hljs from 'highlight.js';
 import { NAlert, NIcon, NImageGroup, NDropdown } from "naive-ui";
 import { useDebounceFn } from "@vueuse/core";
-import Avatar from "./Avatar.vue";
+import Avatar from "./ui/Avatar.vue";
 import {
   EditTwotone,
   DeleteTwotone,
@@ -129,7 +129,7 @@ import {
 } from "@vicons/material";
 
 import { Loading, Thinking } from "@/components/icons";
-import fileItem from "../components/FileItem.vue";
+import fileItem from "./ui/FileItem.vue";
 import { usePopup } from "@/composables/usePopup";
 import { formatTime } from '@/utils'
 const { toast } = usePopup();

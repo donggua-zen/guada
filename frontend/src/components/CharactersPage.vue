@@ -141,7 +141,6 @@
 <script setup>
 import { ref, onMounted, reactive, computed, h } from 'vue'
 import { useRouter } from 'vue-router'
-import SidebarLayout from '@/components/layout/SidebarLayout.vue'
 import {
   NButton,
   NIcon,
@@ -164,7 +163,7 @@ import {
 } from '@vicons/material'
 
 // 组件
-import Avatar from './Avatar.vue'
+import Avatar from './ui/Avatar.vue'
 import CharacterModal from './CharacterModal.vue'
 
 // 服务

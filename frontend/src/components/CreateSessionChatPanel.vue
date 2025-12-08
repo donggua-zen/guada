@@ -38,12 +38,11 @@
         </n-popselect>
       </div> -->
       <div class="w-full  max-w-[900px]">
-        <ChatInput class="border" :class="{ 'border-gray-400': !inputHasShadow}"
-          v-model:value="inputMessage.text" v-model:web-search-enabled="webSearchEnabled"
-          v-model:thinking-enabled="thinkingEnabled" :buttons="chatInputButtons" :files="inputMessage.files"
-          :streaming="false" @send="sendMessage" @toggle-web-search="handleWebSearch"
-          @toggle-thinking="toggleDeepThinking" :shadow="inputHasShadow" @focus="inputHasShadow = true"
-          @blur="inputHasShadow = false">
+        <ChatInput class="border" :class="{ 'border-gray-400': !inputHasShadow }" v-model:value="inputMessage.text"
+          v-model:web-search-enabled="webSearchEnabled" v-model:thinking-enabled="thinkingEnabled"
+          :buttons="chatInputButtons" :files="inputMessage.files" :streaming="false" @send="sendMessage"
+          @toggle-web-search="handleWebSearch" @toggle-thinking="toggleDeepThinking" :shadow="inputHasShadow"
+          @focus="inputHasShadow = true" @blur="inputHasShadow = false">
           <template #buttons>
             <n-popselect v-model:value="currentSession.model_id" :options="modelOptions" trigger="click">
               <div
@@ -77,7 +76,7 @@ import { apiService } from "../services/ApiService";
 import { usePopup } from "@/composables/usePopup";
 import { useTitle } from "../composables/useTitle";
 // 组件导入
-import ChatInput from "./ChatInput.vue";
+import { ChatInput } from "./ui";
 
 // 图标导入
 import {

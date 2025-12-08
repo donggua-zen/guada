@@ -196,11 +196,10 @@ import {
 } from '@vicons/antd'
 
 import { apiService } from '../services/ApiService'
-import { required } from '@vuelidate/validators'
 
 
 import { usePopup } from '../composables/usePopup'
-import AvatarPreview from './AvatarPreview.vue'
+import { AvatarPreview } from './ui/'
 
 const { toast, notify } = usePopup()
 
