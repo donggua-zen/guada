@@ -23,7 +23,7 @@
         <img src="/images/chat_banner.webp" alt=""></img>
       </div>
       <h1 class="text-3xl mb-6 text-gray-600">Hi，想聊些什么？</h1>
-      <div class="mb-3 mx-auto flex items-start w-full max-w-[900px]">
+      <!-- <div class="mb-3 mx-auto flex items-start w-full max-w-[900px]">
         <n-popselect v-model:value="currentSession.model_id" :options="modelOptions" trigger="click">
           <div
             class="animate-outside rounded-full border border-gray-200 hover:bg-gray-50 transition-all duration-300 ease-in-out overflow-hidden"
@@ -36,14 +36,29 @@
             </div>
           </div>
         </n-popselect>
-      </div>
+      </div> -->
       <div class="w-full  max-w-[900px]">
-        <ChatInput class="border" :class="{ 'border-gray-400': !inputHasShadow, 'border-gray-300': inputHasShadow }"
+        <ChatInput class="border" :class="{ 'border-gray-400': !inputHasShadow}"
           v-model:value="inputMessage.text" v-model:web-search-enabled="webSearchEnabled"
           v-model:thinking-enabled="thinkingEnabled" :buttons="chatInputButtons" :files="inputMessage.files"
           :streaming="false" @send="sendMessage" @toggle-web-search="handleWebSearch"
           @toggle-thinking="toggleDeepThinking" :shadow="inputHasShadow" @focus="inputHasShadow = true"
-          @blur="inputHasShadow = false" />
+          @blur="inputHasShadow = false">
+          <template #buttons>
+            <n-popselect v-model:value="currentSession.model_id" :options="modelOptions" trigger="click">
+              <div
+                class="animate-outside rounded-full border border-gray-200 hover:bg-gray-50 transition-all duration-300 ease-in-out overflow-hidden mr-2.5"
+                :style="{ width: containerWidth + 'px' }" style="height:28px">
+                <div ref="innerEl"
+                  class="animate-inside flex items-center justify-center px-2 py-1 text-gray-500 cursor-pointer min-w-[min-content]"
+                  :style="{ width: 'fit-content' }" style="height:26px">
+                  <OpenAI class="w-5 h-5 mr-1 flex-shrink-0" />
+                  <span class="whitespace-nowrap mr-1 text-sm">{{ currentModelName }}</span>
+                </div>
+              </div>
+            </n-popselect>
+          </template>
+        </ChatInput>
       </div>
       <div>
         <div class="flex items-center justify-center mt-6">

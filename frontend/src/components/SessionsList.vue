@@ -3,7 +3,7 @@
     class="sessions-panel flex flex-col  w-full h-full bg-[var(--conversation-bg)] border-r border-[var(--conversation-border-color)]">
     <!-- 修改后的会话头部，包含标题和新建按钮 -->
     <div class="sessions-header px-5 py-5 text-lg font-semibold flex justify-between items-center">
-      <span>会话列表</span>
+      <span>聊天对话</span>
       <!-- 新建会话按钮移动到右侧 -->
       <n-button @click="handleButtonClick('create')" text size="medium">
         <template #icon>
