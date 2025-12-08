@@ -9,9 +9,9 @@
                     @close="removeFile(file.id)"></FileItem>
             </div>
 
-            <textarea class="message-input" v-model="inputContent" placeholder="输入消息..." @keydown="handleKeydown"
-                @input="adjustTextareaHeight" ref="messageInputRef" rows="1" @focus="handleFocus"
-                @blur="handleBlur"></textarea>
+            <textarea class="message-input" v-model="inputContent" placeholder="Enter发送, Shift+Enter换行"
+                @keydown="handleKeydown" @input="adjustTextareaHeight" ref="messageInputRef" rows="1"
+                @focus="handleFocus" @blur="handleBlur"></textarea>
 
             <!-- 隐藏的文件输入框 -->
             <input type="file" ref="fileInputRef" style="display: none" multiple
@@ -20,6 +20,7 @@
                 :accept="getFileExtensionsFromType('IMAGE').join(',')" @change="handleImageSelect">
             <div class="input-actions w-full flex justify-between">
                 <div class="tools left-tools">
+                    <slot name="buttons"></slot>
                     <template v-if="showButtons.thinkingButton">
                         <n-button class="tool-btn" id="deep-thinking-btn" :class="{ active: localThinkingEnabled }"
                             :title="localThinkingEnabled ? '关闭深度思考' : '深度思考'" @click="toggleDeepThinking" text>
@@ -71,8 +72,7 @@
                     </div>
                     <div class="send-actions">
                         <n-button v-if="!streaming" class="send-btn" title="发送" @click="sendMessage"
-                            :disabled="!inputContent.trim() && uploadFiles.length === 0" circle type="primary"
-                            size="small">
+                            :disabled="!inputContent.trim()" circle type="primary" size="small">
                             <template #icon>
                                 <n-icon>
                                     <ArrowSend />
@@ -339,6 +339,9 @@ const triggerFileInput = () => fileInputRef.value.click();
 const triggerImageInput = () => imageInputRef.value.click();
 
 const sendMessage = () => {
+    if (!inputContent.trim()) {
+        return;
+    }
     emit('send', {
         text: inputContent.value,
         files: uploadFiles.value
