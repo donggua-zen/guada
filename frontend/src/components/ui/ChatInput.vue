@@ -22,26 +22,22 @@
                 <div class="tools left-tools">
                     <slot name="buttons"></slot>
                     <template v-if="showButtons.thinkingButton">
-                        <n-button class="tool-btn" id="deep-thinking-btn" :class="{ active: localThinkingEnabled }"
+                        <button class="tool-btn" id="deep-thinking-btn" :class="{ active: localThinkingEnabled }"
                             :title="localThinkingEnabled ? '关闭深度思考' : '深度思考'" @click="toggleDeepThinking" text>
-                            <template #icon>
-                                <n-icon size="18">
-                                    <Thinking2 />
-                                </n-icon>
-                            </template>
+                            <n-icon size="18" class="mr-1">
+                                <Thinking2 />
+                            </n-icon>
                             思考
-                        </n-button>
+                        </button>
                         <span class="mr-2.5"></span>
                     </template>
-                    <n-button v-if="showButtons.webSearchButton" class="tool-btn"
+                    <button v-if="showButtons.webSearchButton" class="tool-btn"
                         :class="{ active: localWebSearchEnabled }" title="联网搜索" @click="handleWebSearch" text>
-                        <template #icon>
-                            <n-icon size="18">
-                                <Network />
-                            </n-icon>
-                        </template>
+                        <n-icon size="18" class="mr-1">
+                            <Network />
+                        </n-icon>
                         网络
-                    </n-button>
+                    </button>
                 </div>
                 <div class="right-actions">
                     <div class="tools right-tools">
@@ -466,7 +462,7 @@ onUnmounted(() => {
 
 .tool-btn {
     background: none;
-    color: #777;
+    color: #666;
     cursor: pointer;
     font-size: 14px;
     height: 28px;
@@ -484,10 +480,6 @@ onUnmounted(() => {
 
 .right-tools .tool-btn {
     padding: 0 5px;
-}
-
-.tool-btn:hover {
-    color: #4a90e2;
 }
 
 /* 深度思考按钮激活状态样式 */
