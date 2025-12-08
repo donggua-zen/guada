@@ -113,7 +113,7 @@
 </template>
 
 <script setup>
-import { ref, computed, watch, nextTick, onMounted, onBeforeUpdate, reactive, h } from "vue";
+import { ref, computed, watch, nextTick, onMounted, onBeforeUpdate, reactive, h, defineAsyncComponent } from "vue";
 import { apiService } from "../services/ApiService";
 import { usePopup } from "@/composables/usePopup";
 import { useDebounceFn } from "@vueuse/core";
@@ -123,9 +123,11 @@ import { useAuthStore } from "../stores/auth"
 // 组件导入
 import MessageItem from "./MessageItem.vue";
 import Avatar from "./Avatar.vue";
-import TokenStatisticsModal from "./TokenStatisticsModal.vue";
 import ChatInput from "./ChatInput.vue";
 import ScrollContainer from "@/components/layout/ScrollContainer.vue";
+// 异步组件导入
+// import TokenStatisticsModal from "./TokenStatisticsModal.vue";
+const TokenStatisticsModal = defineAsyncComponent(() => import("./TokenStatisticsModal.vue"));
 
 // 图标导入
 import {
