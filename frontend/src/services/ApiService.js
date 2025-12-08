@@ -83,6 +83,10 @@ class ApiService {
     return await this._request('/models');
   }
 
+  async fetchRemoteModels(provider_id) {
+    return await this._request(`/providers/${provider_id}/remote_models`);
+  }
+
   /**
    * 获取角色列表
    * @returns {Promise<Object>} 返回角色数据对象
