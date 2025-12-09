@@ -9,11 +9,11 @@
     <div class="message-content">
       <div v-if="isAssistant" class="text-xs text-gray-400 mb-3">
         <div class="flex items-center">
-          <div class="mr-2 flex items-center">
+          <div class="mr-5 flex items-center">
             <div class="w-5.5 h-5.5 mr-2 relative top-[0px]">
               <Avatar :src="avatar" :round="false" type="assistant"></Avatar>
             </div>
-            <span class="text-[1.3em] text-gray-450">{{
+            <span class="text-[1.3em] text-gray-500 font-">{{
               currentModelName
             }}</span>
           </div>
@@ -178,7 +178,7 @@ const renderer = {
     const lang = code.lang || 'text';
     return `
       <div class="custom-code-block">
-        <div class="code-header">
+        <div class="code-header" style="position: sticky;">
           <span class="code-language">${lang}</span>
           <button class="copy-code-button" onclick="window.handleCopyCode(this)"><i role="img">${coypysvg}</i></button>
         </div>
