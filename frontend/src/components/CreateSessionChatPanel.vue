@@ -73,21 +73,20 @@
 import { ref, computed, watch, onMounted, onBeforeUpdate, nextTick } from "vue";
 import { useStorage } from "@vueuse/core"
 import { apiService } from "../services/ApiService";
-import { usePopup } from "@/composables/usePopup";
+import { usePopup } from "../composables/usePopup";
 import { useTitle } from "../composables/useTitle";
 // 组件导入
 import { ChatInput } from "./ui";
 
 // 图标导入
 import {
-  SettingsTwotone,
   FormatListBulletedSharp
 } from "@vicons/material";
 
 import { OpenAI } from "@/components/icons"
 
 // UI组件导入
-import { NButton, NIcon, NDivider, NPopselect } from "naive-ui";
+import { NButton, NIcon, NPopselect } from "naive-ui";
 
 // 弹出层工具
 const { notify } = usePopup();

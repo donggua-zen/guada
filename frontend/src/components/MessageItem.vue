@@ -1,10 +1,10 @@
 <template>
   <div class="message" :class="messageClass">
-    <div class="hidden  w-[40px] h-[40px] rounded-full flex items-center justify-center shrink-0 self-start"
+    <!-- <div class="hidden w-[40px] h-[40px] rounded-full flex items-center justify-center shrink-0 self-start"
       :class="avatarClass">
       <Avatar v-if="!isAssistant" :src="avatar" :round="true" type="user"></Avatar>
       <Avatar v-else :src="avatar" :round="true" type="assistant"></Avatar>
-    </div>
+    </div> -->
 
     <div class="message-content">
       <div v-if="isAssistant" class="text-xs text-gray-400 mb-3">
@@ -25,22 +25,20 @@
         </div>
       </div>
       <div class="message-card">
+        <!-- 优化后的思考框部分 -->
         <div v-if="hasThinking" class="thinking-section" :class="{ 'thinking-expanded': isExpanded }">
           <div
             class="inline-flex justify-between items-center text-sm text-gray-700 cursor-pointer font-medium py-1 transition-colors duration-200 mb-1"
             @click="toggleExpand">
             <div class="flex items-center inline-flex">
-              <!-- <n-icon size="18" class="text-green-700 mr-1">
-                <Thinking />
-              </n-icon> -->
               <span class="text-gray-500">{{ thinkingLabel }}</span>
             </div>
             <n-icon :component="ArrowRightTwotone" class="transition-transform duration-300 ml-2" size="10"
               :class="[isExpanded ? 'rotate-90' : 'rotate-0']"></n-icon>
           </div>
-          <div class="thinking-content transition-all duration-500 ease-in-out overflow-hidden text-gray-500"
-            :class="isExpanded ? 'max-h-1500 opacity-100' : 'max-h-0 opacity-0'">
-            <div class="border-l-2 border-gray-200 pl-4 mb-2  markdown-text" v-html="debouncedThinkingFormattedText">
+          <div class="thinking-container" :class="{ expanded: isExpanded }">
+            <div class="thinking-content markdown-text py-0 border-l-2 pl-4 border-gray-300 mb-2 text-gray-500"
+              v-html="debouncedThinkingFormattedText">
             </div>
           </div>
         </div>
@@ -51,21 +49,22 @@
         <n-alert v-if="metadata && metadata.finish_reason == 'error'" title="API请求错误" type="error">
           {{ metadata.error }}
         </n-alert>
-        <div v-if="state.is_streaming" class="assistant-loading flex items-center text-gray-500">
+        <div v-if="streamingState.is_streaming" class="assistant-loading flex items-center text-gray-500">
           <n-icon size="16" class="mr-2 relative top-[1px]">
             <Loading />
           </n-icon>
-          {{ state.is_web_searching ? '搜索中...' : '回答中...' }}
+          {{ streamingState.is_web_searching ? '搜索中...' : '回答中...' }}
         </div>
 
       </div>
       <!-- 文件列表显示区域 -->
       <div class="file-list flex flex-wrap gap-2 mt-3 ml-auto" v-if="message.files && message.files.length > 0">
-        <fileItem v-for="file, index in message.files" :key="file.id" :name="file.display_name" :type="file.file_type"
+        <file-item v-for="file, index in message.files" :key="file.id" :name="file.display_name" :type="file.file_type"
           :ext="file.file_extension" :size="file.file_size" :preview-url="file.preview_url"
-          :clickable="file.file_type === 'image'" @click="handleImageClick(index)"></fileItem>
+          :clickable="file.file_type === 'image'" @click="handleImageClick(index)"></file-item>
       </div>
-      <div class="message-actions flex gap-0 text-sm w-full mt-3 text-gray-400 items-center" v-if="!state.is_streaming"
+      <div class="message-actions flex gap-0 text-sm w-full mt-3 text-gray-400 items-center"
+        v-if="!streamingState.is_streaming"
         :class="[isAssistant ? 'justify-start' : 'justify-end', message.is_streaming ? 'opacity-0' : 'opacity-100']">
         <!-- 保留的按钮：generate, regenerate, copy -->
         <template v-if="!isAssistant && props.allowGenerate">
@@ -110,13 +109,12 @@
 </template>
 
 <script setup>
-import { computed, ref, watch, onUnmounted, onMounted } from "vue";
+import { computed, ref, watch, onUnmounted, onMounted, h } from "vue";
 import { Marked } from "marked";
 import { markedHighlight } from 'marked-highlight'
 import hljs from 'highlight.js';
 import { NAlert, NIcon, NImageGroup, NDropdown } from "naive-ui";
 import { useDebounceFn } from "@vueuse/core";
-import Avatar from "./ui/Avatar.vue";
 import {
   EditTwotone,
   DeleteTwotone,
@@ -126,14 +124,13 @@ import {
   ArrowBackIosNewTwotone as ArrowLeftTwotone,
   ArrowForwardIosTwotone as ArrowRightTwotone,
   MoreVertOutlined,
-  CloudUploadTwotone,
   AccessTimeTwotone,
 } from "@vicons/material";
 
-import { Loading, Thinking } from "@/components/icons";
-import fileItem from "./ui/FileItem.vue";
-import { usePopup } from "@/composables/usePopup";
-import { formatTime } from '@/utils'
+import { Loading } from "./icons";
+import { FileItem, Avatar } from "./ui";
+import { usePopup } from "../composables/usePopup";
+import { formatTime } from '../utils'
 const { toast } = usePopup();
 
 const props = defineProps({
@@ -154,8 +151,7 @@ const props = defineProps({
 
 const emit = defineEmits([
   "switch", // 添加switch事件
-  "delete", "edit", "copy", "generate", "regenerate",
-  "renderComplete" // 渲染完成
+  "delete", "edit", "copy", "generate", "regenerate"
 ]);
 
 const marked = new Marked(
@@ -204,9 +200,9 @@ const isAssistant = computed(() => props.message.role === "assistant");
 const messageClass = computed(() =>
   isAssistant.value ? "assistant-message-container" : "user-message-container"
 );
-const avatarClass = computed(() =>
-  isAssistant.value ? "assistant-avatar" : "user-avatar"
-);
+// const avatarClass = computed(() =>
+//   isAssistant.value ? "assistant-avatar" : "user-avatar"
+// );
 
 const hasThinking = computed(
   () => isAssistant.value && getCurrentContent(props.message.contents).reasoning_content
@@ -217,20 +213,17 @@ const metadata = computed(() => {
   return content.meta_data;
 });
 
-const state = computed(() => {
-  if (isAssistant.value) {
-    return props.message.state || {
-      is_streaming: false,
-      is_thinking: false,
-      is_web_searching: false,
-    }
-  }
-  return {
-    is_streaming: false,
-    is_thinking: false,
-    is_web_searching: false,
-  }
-});
+
+// 优化：使用更精确的依赖
+const state = computed(() =>
+  isAssistant.value ? props.message.state : null
+);
+
+const streamingState = computed(() => ({
+  is_streaming: state.value?.is_streaming ?? false,
+  is_thinking: state.value?.is_thinking ?? false,
+  is_web_searching: state.value?.is_web_searching ?? false,
+}));
 
 const currentModelName = computed(() => {
   const modelName = metadata.value?.model_name;
@@ -248,7 +241,7 @@ const currentContentTime = computed(() => {
 })
 
 const thinkingLabel = computed(() => {
-  return state.value.is_thinking ? "思考中..." : "已深度思考"
+  return streamingState.value.is_thinking ? "思考中..." : "已深度思考"
 });
 
 // 计算是否有上一个/下一个内容
@@ -294,10 +287,6 @@ watch(
   (newContent, oldContent) => {
     if (props.message.is_streaming) {
       debouncedMarkdownUpdate(newContent);
-      // 只在内容有实质性变化时触发渲染完成
-      if (newContent.length > oldContent?.length) {
-        emit("renderComplete");
-      }
     } else {
       currentMarkdownContent.value = newContent;
     }
@@ -311,7 +300,6 @@ watch(
   (newContent) => {
     if (props.message.is_streaming) {
       debouncedThinkingUpdate(newContent);
-      emit("renderComplete");
     } else {
       currentThinkingContent.value = newContent;
     }
@@ -412,6 +400,9 @@ const getCurrentIndex = (messageContents) => {
 
 // 注册全局复制代码函数
 const registerGlobalCopyFunction = () => {
+  if (typeof window.handleCopyCode !== 'undefined') {
+    return;
+  }
   window.handleCopyCode = function (button) {
     const codeBlock = button.closest('.custom-code-block').querySelector('code');
     if (!codeBlock) return;
@@ -440,16 +431,6 @@ onUnmounted(() => {
 defineExpose({ showThinking, hideThinking, switchContent, });
 </script>
 
-<script>
-import { h } from 'vue';
-
-export default {
-  components: {
-    NDropdown
-  }
-}
-</script>
-
 <style scoped>
 @reference "tailwindcss";
 
@@ -472,7 +453,6 @@ export default {
 
 /* 用户消息气泡特定样式 */
 .user-message-container .message-card {
-  /* margin-left: auto; */
   background-color: var(--user-bubble-bg);
   color: var(--user-bubble-text-color);
   padding: 5px 12px;
@@ -537,6 +517,38 @@ export default {
 .message-action-button {
   @apply cursor-pointer flex items-center gap-1 py-1 px-2 rounded bg-gray-100 mr-1 text-sm hover:bg-blue-50 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-gray-100 disabled:hover:text-gray-400 active:scale-95 transition-transform duration-100;
 }
+
+/* 优化后的思考框样式 - 使用CSS Grid方案 */
+.thinking-container {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+  will-change: grid-template-rows;
+  overflow: hidden;
+}
+
+.thinking-container.expanded {
+  grid-template-rows: 1fr;
+}
+
+.thinking-content {
+  min-height: 0;
+  opacity: 0;
+  transform: translateY(-10px);
+  transition: opacity 0.3s ease, transform 0.3s ease;
+  transition-delay: 0s;
+}
+
+.thinking-container.expanded .thinking-content {
+  opacity: 1;
+  transform: translateY(0);
+  transition-delay: 0.1s;
+}
+
+/* 优化性能：减少重排 */
+.thinking-content>* {
+  transform: translateZ(0);
+}
 </style>
 
 <style>
@@ -585,8 +597,6 @@ export default {
 }
 
 .markdown-text ol {
-  /* list-style: decimal-leading-zero; */
-  /* list-style-position: inside; */
   list-style: none;
   counter-reset: item;
   margin-top: 8px;
@@ -613,7 +623,6 @@ export default {
   flex-wrap: wrap;
   counter-increment: item;
   padding-left: 3ch;
-  /* 预留3个字符宽度 */
   position: relative;
 }
 
@@ -670,7 +679,6 @@ ol>*:not(li) {
 .markdown-text pre {
   background-color: #fff;
   border-radius: 5px;
-  /* padding: 1em; */
   overflow: auto;
   margin-top: 1rem;
   margin-bottom: 1em;
@@ -695,11 +703,6 @@ ol>*:not(li) {
   -webkit-overflow-scrolling: touch;
 }
 
-
-/* .markdown-text table tr:first-child { 
-  border-top: none;
-} */
-
 .markdown-text table th,
 .markdown-text table td {
   border: 1px solid #dfe2e5;
@@ -714,24 +717,17 @@ ol>*:not(li) {
   padding-right: 0;
 }
 
-
 .markdown-text table th {
   background-color: #f6f8fa;
-  /* font-weight: 600; */
   text-align: center;
   position: sticky;
   left: 0;
   z-index: 1;
 }
 
-.markdown-text table tr:nth-child(even) {
-  /* background-color: #f6f8fa; */
-}
-
 .markdown-text hr {
-  height: 1px;
-  background-color: #eaecef;
-  border: none;
+  height: 0px;
+  border-top: 2px dotted #efefef;
   margin: 1.2em 0;
 }
 
