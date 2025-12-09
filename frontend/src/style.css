@@ -50,34 +50,14 @@
 
 }
 
-@font-face {
-    font-family: 'Alibaba PuHuiTi';
-    src:
-        url('/static/fonts/AlibabaPuHuiTi-3-55-Regular.woff2') format('woff2'),
-        url('/static/fonts/AlibabaPuHuiTi-3-55-Regular.woff') format('woff'),
-        url('/static/fonts/AlibabaPuHuiTi-3-55-Regular.ttf') format('truetype');
-    font-weight: 400;
-    font-style: normal;
-}
+@import "./font-family.css";
 
-/* @font-face {
-    font-family: 'Alibaba PuHuiTi';
-    src: url('/static/fonts/AlibabaPuHuiTi-3-65-Medium.ttf') format('truetype');
-    font-weight: 500;
-    font-style: normal;
-}
-
-@font-face {
-    font-family: 'Alibaba PuHuiTi';
-    src: url('/static/fonts/AlibabaPuHuiTi-3-85-Bold.ttf') format('truetype');
-    font-weight: 700;
-    font-style: normal;
-} */
 
 * {
     box-sizing: border-box;
-    /* font-family: 'Alibaba PuHuiTi', 'PingFang SC', system-ui, -apple-system, BlinkMacSystemFont, 'Helvetica Neue', 'Hiragino Sans GB', 'Microsoft YaHei UI', 'Microsoft YaHei', Arial, sans-serif; */
     font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Helvetica Neue", Helvetica, Arial, sans-serif;
+    /* font-family: 'Alibaba PuHuiTi', 'PingFang SC', system-ui, -apple-system, BlinkMacSystemFont, 'Helvetica Neue', 'Hiragino Sans GB', 'Microsoft YaHei UI', 'Microsoft YaHei', Arial, sans-serif;
+    font-weight: 300; */
 }
 
 body {
@@ -87,11 +67,10 @@ body {
     padding: 0;
     /* 使用更适合中文显示的字体栈 */
     /* font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', 'Helvetica Neue', Helvetica, Arial, sans-serif; */
-
-
-    font-family: 'Alibaba PuHuiTi', 'PingFang SC', system-ui, -apple-system, BlinkMacSystemFont, 'Helvetica Neue', 'Hiragino Sans GB', 'Microsoft YaHei UI', 'Microsoft YaHei', Arial, sans-serif;
     font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Helvetica Neue", Helvetica, Arial, sans-serif;
     overflow: hidden;
+    /* font-family: 'Alibaba PuHuiTi', 'PingFang SC', system-ui, -apple-system, BlinkMacSystemFont, 'Helvetica Neue', 'Hiragino Sans GB', 'Microsoft YaHei UI', 'Microsoft YaHei', Arial, sans-serif; */
+
 }
 
 /* 布局结构 */
@@ -147,4 +126,3 @@ body {
         transform: translateY(0);
     }
 }
-

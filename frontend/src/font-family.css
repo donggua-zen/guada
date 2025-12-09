@@ -1,0 +1,78 @@
+/* 阿里巴巴普惠体 - 35 (Thin) - 字重: 100 */
+@font-face {
+    font-family: 'Alibaba PuHuiTi';
+    src: url('/fonts/AlibabaPuHuiTi-3-35-Thin.woff2') format('woff2'),
+         url('/fonts/AlibabaPuHuiTi-3-35-Thin.ttf') format('truetype');
+    font-weight: 100;
+    font-style: normal;
+}
+
+/* 阿里巴巴普惠体 - 45 (Light) - 字重: 300 */
+@font-face {
+    font-family: 'Alibaba PuHuiTi';
+    src: url('/fonts/AlibabaPuHuiTi-3-45-Light.woff2') format('woff2'),
+         url('/fonts/AlibabaPuHuiTi-3-45-Light.ttf') format('truetype');
+    font-weight: 300;
+    font-style: normal;
+}
+
+/* 阿里巴巴普惠体 - 55 (Regular) - 字重: 400 */
+@font-face {
+    font-family: 'Alibaba PuHuiTi';
+    src: url('/fonts/AlibabaPuHuiTi-3-55-Regular.woff2') format('woff2'),
+         url('/fonts/AlibabaPuHuiTi-3-55-Regular.woff') format('woff'),
+         url('/fonts/AlibabaPuHuiTi-3-55-Regular.ttf') format('truetype');
+    font-weight: 400;
+    font-style: normal;
+}
+
+/* 阿里巴巴普惠体 - 65 (Medium) - 字重: 500 */
+@font-face {
+    font-family: 'Alibaba PuHuiTi';
+    src: url('/fonts/AlibabaPuHuiTi-3-65-Medium.woff2') format('woff2'),
+         url('/fonts/AlibabaPuHuiTi-3-65-Medium.ttf') format('truetype');
+    font-weight: 500;
+    font-style: normal;
+}
+
+/* 阿里巴巴普惠体 - 75 (SemiBold) - 字重: 600 */
+@font-face {
+    font-family: 'Alibaba PuHuiTi';
+    src: url('/fonts/AlibabaPuHuiTi-3-75-SemiBold.woff2') format('woff2'),
+         url('/fonts/AlibabaPuHuiTi-3-75-SemiBold.ttf') format('truetype');
+    font-weight: 600;
+    font-style: normal;
+}
+
+/* 阿里巴巴普惠体 - 85 (Bold) - 字重: 700 */
+@font-face {
+    font-family: 'Alibaba PuHuiTi';
+    src: url('/fonts/AlibabaPuHuiTi-3-85-Bold.woff2') format('woff2'),
+         url('/fonts/AlibabaPuHuiTi-3-85-Bold.ttf') format('truetype');
+    font-weight: 700;
+    font-style: normal;
+}
+
+/* 阿里巴巴普惠体 - 95 (ExtraBold) - 字重: 800 */
+@font-face {
+    font-family: 'Alibaba PuHuiTi';
+    src: url('/fonts/AlibabaPuHuiTi-3-95-ExtraBold.woff2') format('woff2');
+    font-weight: 800;
+    font-style: normal;
+}
+
+/* 阿里巴巴普惠体 - 105 (Heavy) - 字重: 900 */
+@font-face {
+    font-family: 'Alibaba PuHuiTi';
+    src: url('/fonts/AlibabaPuHuiTi-3-105-Heavy.woff2') format('woff2');
+    font-weight: 900;
+    font-style: normal;
+}
+
+/* 阿里巴巴普惠体 - 115 (Black) - 字重: 950 */
+@font-face {
+    font-family: 'Alibaba PuHuiTi';
+    src: url('/fonts/AlibabaPuHuiTi-3-115-Black.woff2') format('woff2');
+    font-weight: 950;
+    font-style: normal;
+}
