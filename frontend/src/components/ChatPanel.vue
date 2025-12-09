@@ -82,7 +82,7 @@
               :is-last="index == activeMessages.length - 1"
               :allow-generate="!isStreaming && allowReSendMessage(message, index)" @delete="deleteMessage"
               @edit="editMessage" @copy="copyMessage" @generate="generateResponse" @regenerate="regenerateResponse"
-              @switch="switchContent" @renderComplete="handleRenderComplete" />
+              @switch="switchContent" />
           </div>
         </scroll-container>
       </template>
@@ -300,10 +300,6 @@ function immediateScrollToBottom() {
 
 function smoothScrollToBottom() {
   scrollContainerRef.value?.smoothScrollToBottom();
-}
-
-function handleRenderComplete() {
-  // 消息渲染完成时的处理
 }
 
 // 更多操作菜单选择处理
