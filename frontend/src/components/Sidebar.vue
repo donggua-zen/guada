@@ -1,5 +1,5 @@
 <template>
-  <div class="app-sidebar">
+  <div class="app-sidebar h-full w-18 min-h-0 max-h-full">
     <!-- 原有的侧边栏按钮 -->
     <div v-for="item in filteredSidebarItems" :key="item.id" class="sidebar-btn"
       :class="{ active: $route.name === item.id }" @click="$emit('change-page', item.id)" :title="item.title">
@@ -56,10 +56,8 @@ defineEmits(['change-page', 'open-settings'])
 
 <style scoped>
 .app-sidebar {
-  width: 60px;
   background: var(--sidebar-bg);
   padding: 20px 0;
-  height: 100vh;
   border-right: 1px solid var(--sidebar-border-color);
   display: flex;
   flex-direction: column;

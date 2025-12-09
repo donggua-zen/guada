@@ -45,10 +45,11 @@ const routes = [
                 name: 'Models',
                 meta: { requiresLayout: true, title: '模型', requiresAuth: true },
                 component: () => import('./components/ModelsPage.vue')
-            }, {
+            },
+            {
                 path: '/user/profile',
                 name: 'My',
-                meta: { requiresLayout: true, title: '用户', requiresAuth: true },
+                meta: { requiresLayout: true, title: '用户', requiresAuth: true, sidebar: false },
                 component: () => import('./components/user/UserPage.vue')
             },
         ]

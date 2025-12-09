@@ -1,6 +1,6 @@
 <template>
     <div class="w-full flex flex-col items-center">
-        <div class="p-[18px_15px_12px_15px] bg-white transition-all duration-300 min-h-[60px] w-full "
+        <div class="p-[18px_15px_12px_15px] bg-[#f3f5f9] transition-all duration-300 min-h-[60px] w-full "
             :class="styleClass">
             <!-- 文件列表显示区域 -->
             <div class="file-list flex flex-wrap gap-2 mb-3" v-if="uploadFiles.length > 0">
@@ -41,48 +41,38 @@
                 </div>
                 <div class="right-actions">
                     <div class="tools right-tools">
-                        <n-button v-if="showButtons.filesButton" class="tool-btn" title="上传文件" @click="triggerFileInput"
+                        <button v-if="showButtons.filesButton" class="tool-btn" title="上传文件" @click="triggerFileInput"
                             text>
-                            <template #icon>
-                                <n-icon size="22">
-                                    <InsertDriveFileTwotone />
-                                </n-icon>
-                            </template>
-                        </n-button>
-                        <n-button v-if="showButtons.imagesButton" class="tool-btn" title="添加图片"
-                            @click="triggerImageInput" text>
-                            <template #icon>
-                                <n-icon size="22">
-                                    <ImageTwotone />
-                                </n-icon>
-                            </template>
-                        </n-button>
-                        <n-button v-if="showButtons.tokensButton" class="tool-btn" title="tokens统计"
-                            @click="handleTokensStatistic" text>
-                            <template #icon>
-                                <n-icon size="22">
-                                    <DataThresholdingTwotone />
-                                </n-icon>
-                            </template>
-                        </n-button>
+                            <n-icon size="22">
+                                <InsertDriveFileTwotone />
+                            </n-icon>
+                        </button>
+                        <button v-if="showButtons.imagesButton" class="tool-btn" title="添加图片"
+                            @click="triggerImageInput">
+                            <n-icon size="22">
+                                <ImageTwotone />
+                            </n-icon>
+                        </button>
+                        <button v-if="showButtons.tokensButton" class="tool-btn" title="tokens统计"
+                            @click="handleTokensStatistic">
+                            <n-icon size="22">
+                                <DataThresholdingTwotone />
+                            </n-icon>
+                        </button>
                     </div>
                     <div class="send-actions">
-                        <n-button v-if="!streaming" class="send-btn" title="发送" @click="sendMessage"
-                            :disabled="!inputContent.trim()" circle type="primary" size="small">
-                            <template #icon>
-                                <n-icon>
-                                    <ArrowSend />
-                                </n-icon>
-                            </template>
-                        </n-button>
-                        <n-button v-else class="send-btn stop-btn" title="停止生成" @click="abortResponse" circle
+                        <button v-if="!streaming" class="send-btn rounded-full" title="发送" @click="sendMessage"
+                            :disabled="!inputContent.trim()" size="small">
+                            <n-icon size="18">
+                                <ArrowSend />
+                            </n-icon>
+                        </button>
+                        <button v-else class="send-btn stop-btn rounded-full" title="停止生成" @click="abortResponse" circle
                             type="error" size="small">
-                            <template #icon>
-                                <n-icon>
-                                    <Stop />
-                                </n-icon>
-                            </template>
-                        </n-button>
+                            <n-icon size="18">
+                                <Stop />
+                            </n-icon>
+                        </button>
                     </div>
                 </div>
             </div>
@@ -112,7 +102,7 @@ const messageInputRef = ref(null);
 const fileInputRef = ref(null);
 const imageInputRef = ref(null);
 let fileIdCounter = 0;
-
+const focused = ref(false);
 // 常量定义
 const FILE_TYPES = {
     TEXT: {
@@ -174,9 +164,8 @@ const styleClass = computed(() => {
     }
     if (!props.clean) {
         // if (props.shadow) classes.push('shadow-[0_2px_16px_rgba(0,0,0,0.1)]');
-        if (props.shadow) classes.push('shadow-[0_6px_30px_0_rgba(0,0,0,.08)]');
-        if (props.border) classes.push('border border-[rgb(230,232,238)]');
         if (props.round) classes.push('rounded-[22px]');
+        if (props.border) classes.push('border border-gray-300');
     }
     return classes.join(' ') + ' ' + props.class;
 });
@@ -381,10 +370,12 @@ const toggleDeepThinking = () => {
 }
 
 const handleFocus = () => {
+    focused.value = true;
     emit('focus');
 };
 
 const handleBlur = () => {
+    focused.value = false;
     emit('blur');
 };
 
@@ -461,7 +452,6 @@ onUnmounted(() => {
 
 
 .tool-btn {
-    background: none;
     color: #666;
     cursor: pointer;
     font-size: 14px;
@@ -476,6 +466,7 @@ onUnmounted(() => {
 
 .left-tools .tool-btn {
     border: 1px solid rgba(0, 0, 0, 0.1);
+    background: #fff;
 }
 
 .right-tools .tool-btn {
@@ -487,5 +478,20 @@ onUnmounted(() => {
     border-color: var(--primary-color);
     background-color: var(--secondary-color);
     color: var(--primary-color);
+}
+
+.send-btn {
+    background: var(--primary-color);
+    color: #fff;
+    border: none;
+    padding: 6px 6px;
+    display: flex;
+    border-radius: 50%;
+    align-items: center;
+    cursor: pointer;
+}
+
+.send-btn:disabled {
+    background-color: color-mix(in srgb, var(--primary-color) 50%, white);
 }
 </style>

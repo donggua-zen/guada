@@ -1,5 +1,5 @@
 <template>
-    <n-config-provider :theme="theme" :locale="zhCN" :date-locale="dateZhCN">
+    <n-config-provider :theme-overrides="themeOverrides" :theme="theme" :locale="zhCN" :date-locale="dateZhCN">
         <n-notification-provider>
             <n-dialog-provider>
                 <n-message-provider>
@@ -19,7 +19,26 @@ import { NConfigProvider, NNotificationProvider, NDialogProvider, NMessageProvid
 import { zhCN, dateZhCN } from 'naive-ui'
 const theme = ref(null);
 import { useTitle } from './composables/useTitle'
-
+/**
+  * js 文件下使用这个做类型提示
+  * @type import('naive-ui').GlobalThemeOverrides
+  */
+const themeOverrides = {
+    common: {
+        primaryColor: '#142042'
+    },
+    Button: {
+        textColor: '#1F2937'
+    },
+    Select: {
+        // peers: {
+        //     InternalSelection: {
+        //         textColor: '#FF0000'
+        //     }
+        // }
+    }
+    // ...
+}
 const router = useRouter()
 const title = useTitle()
 router.beforeEach((to, from, next) => {

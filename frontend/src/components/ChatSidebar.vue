@@ -5,7 +5,8 @@
     <div class="sessions-header px-5 py-5 text-lg font-semibold flex justify-between items-center">
       <span>聊天对话</span>
       <!-- 新建会话按钮移动到右侧 -->
-      <button @click="handleButtonClick('create')" class="text-sm cursor-pointer flex items-center hover:text-[var(--primary-color)] transition-colors duration-200">
+      <button @click="handleButtonClick('create')"
+        class="text-sm cursor-pointer flex items-center hover:text-[var(--primary-color)] transition-colors duration-200">
         <n-icon class="mr-2" :size="16">
           <ChatNew />
         </n-icon>
@@ -57,21 +58,18 @@
         </template>
         <template v-else>
           <div v-for="session in filteredSessions" :key="session.id"
-            class="group px-3 py-2 cursor-pointer flex items-center transition-colors duration-200 rounded-2xl mx-2.5 mb-1.5"
+            class="group px-3 py-2 cursor-pointer flex items-center transition-colors duration-200 rounded-xl mx-2.5 mb-1.5"
             :class="{
-              'bg-[var(--conversation-active-bg)] font-bold': session.id === currentSessionId,
-              'hover:bg-[var(--conversation-hover-bg)]': session.id !== currentSessionId
+              'bg-[var(--conversation-active-bg)] font-bold text-[var(--conversation-active-text-color)]': session.id === currentSessionId,
+              'hover:bg-[var(--conversation-hover-bg)] text-[var(--conversation-text-color)]': session.id !== currentSessionId
             }" @click="selectSession(session)">
             <div class="session-avatar w-6 h-6 mr-1.5">
               <Avatar :src="session.avatar_url" round />
             </div>
             <div class="session-info flex-1 min-w-0 flex">
               <div class="session-header flex flex-1 flex-col justify-between items-start min-w-0">
-                <div class="session-title truncate text-[15px] text-gray-800 w-full">
+                <div class="session-title truncate text-[15px] w-full">
                   {{ session.title }}
-                </div>
-                <div v-if="session.last_message" class="text-xs text-gray-500 whitespace-nowrap" style="display: none;">
-                  {{ formatTime(session.last_message.created_at) }}
                 </div>
               </div>
 

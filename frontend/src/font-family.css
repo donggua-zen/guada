@@ -2,7 +2,7 @@
 @font-face {
     font-family: 'Alibaba PuHuiTi';
     src: url('/fonts/AlibabaPuHuiTi-3-35-Thin.woff2') format('woff2'),
-         url('/fonts/AlibabaPuHuiTi-3-35-Thin.ttf') format('truetype');
+        url('/fonts/AlibabaPuHuiTi-3-35-Thin.ttf') format('truetype');
     font-weight: 100;
     font-style: normal;
 }
@@ -11,7 +11,7 @@
 @font-face {
     font-family: 'Alibaba PuHuiTi';
     src: url('/fonts/AlibabaPuHuiTi-3-45-Light.woff2') format('woff2'),
-         url('/fonts/AlibabaPuHuiTi-3-45-Light.ttf') format('truetype');
+        url('/fonts/AlibabaPuHuiTi-3-45-Light.ttf') format('truetype');
     font-weight: 300;
     font-style: normal;
 }
@@ -20,8 +20,8 @@
 @font-face {
     font-family: 'Alibaba PuHuiTi';
     src: url('/fonts/AlibabaPuHuiTi-3-55-Regular.woff2') format('woff2'),
-         url('/fonts/AlibabaPuHuiTi-3-55-Regular.woff') format('woff'),
-         url('/fonts/AlibabaPuHuiTi-3-55-Regular.ttf') format('truetype');
+        url('/fonts/AlibabaPuHuiTi-3-55-Regular.woff') format('woff'),
+        url('/fonts/AlibabaPuHuiTi-3-55-Regular.ttf') format('truetype');
     font-weight: 400;
     font-style: normal;
 }
@@ -30,7 +30,7 @@
 @font-face {
     font-family: 'Alibaba PuHuiTi';
     src: url('/fonts/AlibabaPuHuiTi-3-65-Medium.woff2') format('woff2'),
-         url('/fonts/AlibabaPuHuiTi-3-65-Medium.ttf') format('truetype');
+        url('/fonts/AlibabaPuHuiTi-3-65-Medium.ttf') format('truetype');
     font-weight: 500;
     font-style: normal;
 }
@@ -39,7 +39,7 @@
 @font-face {
     font-family: 'Alibaba PuHuiTi';
     src: url('/fonts/AlibabaPuHuiTi-3-75-SemiBold.woff2') format('woff2'),
-         url('/fonts/AlibabaPuHuiTi-3-75-SemiBold.ttf') format('truetype');
+        url('/fonts/AlibabaPuHuiTi-3-75-SemiBold.ttf') format('truetype');
     font-weight: 600;
     font-style: normal;
 }
@@ -48,7 +48,7 @@
 @font-face {
     font-family: 'Alibaba PuHuiTi';
     src: url('/fonts/AlibabaPuHuiTi-3-85-Bold.woff2') format('woff2'),
-         url('/fonts/AlibabaPuHuiTi-3-85-Bold.ttf') format('truetype');
+        url('/fonts/AlibabaPuHuiTi-3-85-Bold.ttf') format('truetype');
     font-weight: 700;
     font-style: normal;
 }
@@ -75,4 +75,8 @@
     src: url('/fonts/AlibabaPuHuiTi-3-115-Black.woff2') format('woff2');
     font-weight: 950;
     font-style: normal;
+}
+
+.font-alibaba {
+    font-family: 'Alibaba PuHuiTi'
 }

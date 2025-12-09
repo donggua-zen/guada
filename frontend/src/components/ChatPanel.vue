@@ -13,17 +13,15 @@
         <span class="ml-4"></span>
       </template>
       <span class="hidden md:block">{{ chatTitle }}</span>
-      <n-divider vertical />
-      <n-button tertiary round size="small" icon-placement="left" @click="handleSwitchModelClick">
-        {{ currentModelName }}
-        <template #icon>
-          <n-icon size="18">
-            <SettingsTwotone />
-          </n-icon>
-        </template>
-      </n-button>
-
       <div class="flex items-center flex-1 justify-end">
+        <n-button tertiary round size="small" icon-placement="left" @click="handleSwitchModelClick">
+          {{ currentModelName }}
+          <template #icon>
+            <n-icon size="18">
+              <SettingsTwotone />
+            </n-icon>
+          </template>
+        </n-button>
         <!-- 更多操作下拉菜单 -->
         <n-dropdown trigger="hover" :options="moreOptions" @select="handleMoreSelect">
           <n-button class="more-btn" title="更多操作" text>
