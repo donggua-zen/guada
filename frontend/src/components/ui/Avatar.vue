@@ -5,7 +5,7 @@
         'rounded-full': props.round,
         'rounded-lg': !props.round, 'avatar-user': props.type === 'user'
     }">
-        <UserOutlined v-if="props.type === 'user'" />
+        <UserOutlined v-if="props.type === 'user'" class="w-[65%] h-[65%]" />
         <OpenAI v-else />
     </div>
 
@@ -28,6 +28,10 @@ const props = defineProps({
     type: {
         type: String,
         default: 'assistant'
+    },
+    full: {
+        type: Boolean,
+        default: false
     }
 });
 // 添加时间戳避免缓存
@@ -66,10 +70,5 @@ const avatarSrc = computed(() => {
 .avatar-placeholder.avatar-user {
     background-color: #999;
     color: #fff;
-}
-
-.avatar-placeholder svg {
-    width: 65%;
-    height: 65%;
 }
 </style>

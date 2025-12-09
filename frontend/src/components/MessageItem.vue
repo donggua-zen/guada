@@ -10,10 +10,10 @@
       <div v-if="isAssistant" class="text-xs text-gray-400 mb-3">
         <div class="flex items-center">
           <div class="mr-2 flex items-center">
-            <div class="w-5.5 h-5.5 mr-2">
+            <div class="w-5.5 h-5.5 mr-2 relative top-[0px]">
               <Avatar :src="avatar" :round="false" type="assistant"></Avatar>
             </div>
-            <span class="text-lg text-gray-450">{{
+            <span class="text-[1.3em] text-gray-450">{{
               currentModelName
             }}</span>
           </div>
