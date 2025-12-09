@@ -18,7 +18,7 @@
 
 
     <!-- 输入区域 -->
-    <div class="px-5 pb-2.5 w-full flex-1 flex flex-col items-center justify-center">
+    <div class="px-5 pb-2.5 w-full flex-1 flex flex-col items-center justify-center mb-40">
       <div class="banner max-w-full mx-auto w-80 mb-4">
         <img src="/images/chat_banner.webp" alt=""></img>
       </div>
@@ -46,7 +46,7 @@
           <template #buttons>
             <n-popselect v-model:value="currentSession.model_id" :options="modelOptions" trigger="click">
               <div
-                class="animate-outside rounded-full border border-gray-200 hover:bg-gray-50 transition-all duration-300 ease-in-out overflow-hidden mr-2.5"
+                class="animate-outside bg-white rounded-full border border-gray-200 hover:bg-gray-50 transition-all duration-300 ease-in-out overflow-hidden mr-2.5"
                 :style="{ width: containerWidth + 'px' }" style="height:28px">
                 <div ref="innerEl"
                   class="animate-inside flex items-center justify-center px-2 py-1 text-gray-500 cursor-pointer min-w-[min-content]"

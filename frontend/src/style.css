@@ -3,7 +3,10 @@
 
 :root {
     --primary-color: #18a058;
+    --primary-color: #142042;
+    --primary-color-light: #a8ff00;
     --secondary-color: #e6f5f0;
+    --secondary-color: color-mix(in srgb, var(--primary-color) 20%, white);
     /* 灰色背景色 */
     --bg: #fafafa;
     --primary-text-color: #333;
@@ -23,25 +26,23 @@
     --assitant-bubble-border-color: none;
     /* 聊天对话样式 */
     /* --conversation-bg: #E9EBF2; */
-    --conversation-bg: #f3f4f6;
+    --conversation-bg: #fff;
     /* #E9EBF2;*/
     --conversation-text-color: #333;
     /* --conversation-border-color: #efefef; */
-    --conversation-border-color: transparent;
+    --conversation-border-color: #efefef;
     --conversation-border-radius: 10px;
     --conversation-padding: 15px;
     --conversation-font-size: 16px;
     --conversation-line-height: 1.5;
-    --conversation-active-bg: #fff;
+    --conversation-active-bg: #f0f4fc;
     --conversation-active-text-color: #1F2937;
     --conversation-hover-bg: #ffffff;
     --conversation-hover-text-color: #1F2937;
     /*侧边栏*/
-    --sidebar-bg: #0081ff;
-    --sidebar-bg: linear-gradient(135deg, #efefef, #efefef);
     --sidebar-bg: #fff;
     --sidebar-border-color: #eee;
-    --sidebar-text-color: #515151;
+    --sidebar-text-color: #0f1b3d;
     --sidebar-hover-bg: #fafafa;
     --sidebar-hover-text-color: #36ad6a;
     --sidebar-active-bg: none;
@@ -101,13 +102,6 @@ body {
 
 .page.active {
     display: flex;
-}
-
-/* 调整原有布局 */
-.app-main-container {
-    display: flex;
-    height: 100vh;
-    width: 100vw;
 }
 
 .app-text-light-color {
