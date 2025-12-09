@@ -43,7 +43,6 @@ const mergredClasses = computed(() => {
     if (mergredClass.value) {
         classes.push(mergredClass.value);
     }
-    console.log('classes', attrs);
     return classes.join(' ');
 })
 
