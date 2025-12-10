@@ -29,11 +29,11 @@
     <div class="sessions-list flex-1 overflow-hidden py-2.5">
       <scroll-container class="">
         <div @click="handleButtonClick('characters')" :class="{
+          'hover:bg-[var(--conversation-hover-bg)] text-[var(--conversation-text-color)]': btnActive !== 'characters',
           'bg-[var(--conversation-active-bg)] font-bold text-[var(--conversation-active-text-color)]': btnActive === 'characters',
-          'hover:bg-[var(--conversation-hover-bg)] text-[var(--conversation-text-color)]': btnActive !== 'characters'
         }"
-          class="hover:bg-[var(--conversation-hover-bg)] px-3 py-2 cursor-pointer flex items-center transition-colors duration-200 rounded-2xl mx-2.5 mb-1.5">
-          <div class="session-avatar w-4.5 h-4.5 mr-1.5 text-[var(--primary)]">
+          class="px-3 py-2 cursor-pointer flex items-center transition-colors duration-200 rounded-lg mx-2.5 mb-1.5">
+          <div class="session-avatar w-4.5 h-4.5 mr-1.5 text-[var(--primary-color)]">
             <AlternateEmailTwotone />
           </div>
           <span class="flex-1">角色提示词模板</span>
@@ -59,9 +59,9 @@
         </template>
         <template v-else>
           <div v-for="session in filteredSessions" :key="session.id"
-            class="group px-3 py-2 cursor-pointer flex items-center transition-colors duration-200 rounded-xl mx-2.5 mb-1.5"
+            class="group px-3 py-1.5 cursor-pointer flex items-center transition-colors duration-200 rounded-lg mx-2.5 mb-1"
             :class="{
-              'bg-[var(--conversation-active-bg)] font-bold text-[var(--conversation-active-text-color)]': session.id === currentSessionId,
+              'bg-[var(--conversation-active-bg)] text-[var(--conversation-active-text-color)]': session.id === currentSessionId,
               'hover:bg-[var(--conversation-hover-bg)] text-[var(--conversation-text-color)]': session.id !== currentSessionId
             }" @click="selectSession(session)">
             <div class="session-avatar w-6 h-6 mr-1.5">
@@ -69,7 +69,7 @@
             </div>
             <div class="session-info flex-1 min-w-0 flex">
               <div class="session-header flex flex-1 flex-col justify-between items-start min-w-0">
-                <div class="session-title truncate text-[15px] w-full">
+                <div class="session-title truncate text-[14px] w-full">
                   {{ session.title }}
                 </div>
               </div>
@@ -98,16 +98,32 @@
 
     </div>
 
-    <!-- 移除底部的sessions-footer部分 -->
+    <!-- 部的footer部分 -->
+    <div class="flex items-center justify-between p-3">
+      <div @click="handleButtonClick('profile')"
+        class="cursor-pointer p-2 rounded-lg flex items-center hover:bg-[var(--conversation-hover-bg)] transition-colors duration-200">
+        <div class="w-7 h-7 ">
+          <avatar type="user" :round="true" :src="authStore.user.avatar_url" />
+        </div>
+        <span class="ml-3">{{ authStore.user.nickname }}</span>
+      </div>
+      <div @click="handleButtonClick('models')"
+        class="cursor-pointer h-6.5 px-2 rounded-lg flex justify-center items-center hover:bg-[var(--conversation-hover-bg)] transition-colors duration-200">
+        <SettingsOutlined class="w-4.5 h-4.5 text-gray-500" />
+        <span class="ml-1 text-base text-gray-500">管理模型</span>
+      </div>
+
+    </div>
+
   </div>
 </template>
 
 <script setup>
 import { ref, computed, h } from 'vue'
-import Avatar from './ui/Avatar.vue'
-import { ScrollContainer, UiButton } from './ui'
+import { ScrollContainer, UiButton, Avatar } from './ui'
 import { NDropdown, NIcon, NInput } from 'naive-ui'
 import { useDebounceFn } from '@vueuse/core'
+import { useAuthStore } from '../stores/auth'
 import {
   PlusOutlined,
   MoreVertOutlined,
@@ -116,12 +132,14 @@ import {
   SearchOutlined,
   AlternateEmailTwotone,
   ArrowForwardIosTwotone as ArrowRightTwotone,
+  SettingsOutlined,
 } from '@vicons/material'
 
 import {
   ChatNew
 } from '@/components/icons'
 
+const authStore = useAuthStore()
 
 // 响应式数据
 const currentSessionId = computed(() => props.current?.id)

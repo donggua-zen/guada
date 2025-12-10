@@ -25,7 +25,7 @@
                         <ui-button type="default" round-full class="tool-btn" id="deep-thinking-btn"
                             :class="{ active: localThinkingEnabled }" :title="localThinkingEnabled ? '关闭深度思考' : '深度思考'"
                             @click="toggleDeepThinking" text>
-                            <n-icon size="18" class="mr-1">
+                            <n-icon size="16" class="mr-1">
                                 <Thinking2 />
                             </n-icon>
                             思考
@@ -34,7 +34,7 @@
                     </template>
                     <ui-button type="default" round-full v-if="showButtons.webSearchButton" class="tool-btn"
                         :class="{ active: localWebSearchEnabled }" title="联网搜索" @click="handleWebSearch" text>
-                        <n-icon size="18" class="mr-1">
+                        <n-icon size="16" class="mr-1">
                             <Network />
                         </n-icon>
                         网络
@@ -62,13 +62,13 @@
                         </ui-button>
                     </div>
                     <div class="send-actions">
-                        <ui-button v-if="!streaming" class="send-btn rounded-full" title="发送" @click="sendMessage"
+                        <ui-button v-if="!streaming" class="send-btn" title="发送" @click="sendMessage"
                             :disabled="!inputContent.trim()" size="small">
                             <n-icon size="18">
                                 <ArrowSend />
                             </n-icon>
                         </ui-button>
-                        <ui-button v-else class="send-btn stop-btn rounded-full" title="停止生成" @click="abortResponse"
+                        <ui-button v-else class="send-btn stop-btn" title="停止生成" @click="abortResponse"
                             circle type="error" size="small">
                             <n-icon size="18">
                                 <Stop />
@@ -167,10 +167,10 @@ const styleClass = computed(() => {
     if (!props.clean) {
         if (props.round) classes.push('rounded-[22px]');
         if (focused.value) {
-            if (props.shadow) classes.push('shadow-[0_2px_32px_rgba(0,0,0,0.13)]');
-            if (props.border) classes.push('border border-gray-300');
+            if (props.shadow) classes.push('shadow-[0_2px_32px_rgba(0,0,0,0.11)]');
+            if (props.border) classes.push('border border-gray-200');
         } else {
-            if (props.border) classes.push('border border-gray-400');
+            if (props.border) classes.push('border border-gray-300');
         }
     }
     return classes.join(' ') + ' ' + props.class;
@@ -458,7 +458,7 @@ onUnmounted(() => {
 
 
 .tool-btn {
-    color: #666;
+    color: #888;
     cursor: pointer;
     font-size: 14px;
     height: 28px;
@@ -477,13 +477,13 @@ onUnmounted(() => {
 
 /* 深度思考按钮激活状态样式 */
 .tool-btn.active {
-    border-color: var(--primary);
-    background-color: var(--secondary);
-    color: var(--primary);
+    border-color: var(--primary-color);
+    background-color: var(--secondary-color);
+    color: var(--primary-color);
 }
 
 .send-btn {
-    background: var(--primary);
+    background: var(--primary-color);
     color: #fff;
     border: none;
     padding: 6px 6px;
@@ -494,6 +494,6 @@ onUnmounted(() => {
 }
 
 .send-btn:disabled {
-    background-color: color-mix(in srgb, var(--primary) 50%, white);
+    background-color: color-mix(in srgb, var(--primary-color) 50%, white);
 }
 </style>

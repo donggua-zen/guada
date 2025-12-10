@@ -1,93 +1,79 @@
 <template>
-    <SidebarLayout v-model:sidebar-visible="sidebarVisible" :sidebar-position="'left'">
-        <template #sidebar>
-            <ModelsProviderList :items="providers" :selectedId="currentProviderId" @select="handleSelectProvider"
-                @createGroup="handleCreateGroup">
-            </ModelsProviderList>
-        </template>
-        <template #content>
-            <div class="flex-1 p-[20px] sm:container mx-auto">
-                <div class="flex items-center mb-3">
+    <template v-if="!showDetail">
+        <ModelsProviderList :items="providers" @item-click="handleItemClick" @createGroup="handleCreateGroup"
+            @item-edit="handleEditProvider" @item-delete="handleDeleteProviderFromList">
+        </ModelsProviderList>
+    </template>
+    <template v-else>
+        <div class="flex-1">
+            <div class="flex items-center mb-6">
+                <n-button text style="font-size: 24px" @click="showDetail = false">
+                    <n-icon size="16">
+                        <ArrowBackIosFilled />
+                    </n-icon>
                     <span class="font-bold text-lg mr-2">{{ currentProvider.name }}</span>
-                    <n-button type="error" text style="font-size: 24px" @click="handleDeleteProvider(currentProvider)">
-                        <n-icon>
-                            <DeleteTwotone />
-                        </n-icon>
-                    </n-button>
-                </div>
-                <n-divider title-placement="left">
-                    供应商/分组信息
-                </n-divider>
-                <n-form ref="formRef" :label-width="80" :model="currentProvider" :rules="providerRules" size="large"
-                    label-placement="left">
-                    <n-form-item label="名字" path="name">
-                        <n-input v-model:value="currentProvider.name" placeholder="输入分组名字"
-                            @update:value="handleProviderChange" />
-                    </n-form-item>
-                    <n-form-item label="API地址" path="api_url">
-                        <n-input v-model:value="currentProvider.api_url" placeholder="api_url"
-                            @update:value="handleProviderChange" />
-                    </n-form-item>
+                </n-button>
 
-                    <!-- 使用 Grid 布局将 API KEY 和按钮放在同一行 -->
-                    <n-grid :cols="24" :x-gap="12">
-                        <n-gi :span="18">
-                            <n-form-item label="API KEY" path="api_key">
-                                <n-input v-model:value="currentProvider.api_key" placeholder="api_key"
-                                    @update:value="handleProviderChange" type="password" show-password-on="click" />
-                            </n-form-item>
-                        </n-gi>
-                        <n-gi :span="6" style="display: none;">
-                            <n-form-item label=" ">
-                                <n-button attr-type="button">
-                                    验证
-                                </n-button>
-                            </n-form-item>
-                        </n-gi>
-                    </n-grid>
-                </n-form>
-                <n-divider title-placement="left">
-                    模型列表
-                </n-divider>
-                <div class="flex w-full">
-                    <div class="flex flex-1 justify-start items-center">
-                        <n-space>
-                            <n-button @click="handleAddModel" strong secondary>手动添加</n-button>
-                            <n-button @click="handleFetchModels" strong secondary>获取模型列表</n-button>
-                        </n-space>
-                    </div>
-                </div>
-                <div class="mt-4 rounded border px-3 py-1 border-gray-200">
-                    <ul>
-                        <li v-for="model in currentModels" :key="model.id"
-                            class="flex items-center py-2 border-b border-gray-200 last:border-b-0">
-                            <div class="font-bold">{{ model.model_name }}</div>
-                            &nbsp;
-                            &nbsp;
-                            <n-space>
-                                <n-tag :bordered="false" type="success" size="small">{{ model.model_type }}</n-tag>
-                                <n-tag v-for="feature in model.features" :bordered="false" type="info" size="small">{{
-                                    getLableName(feature) }}</n-tag>
-                            </n-space>
-                            <div class="flex flex-1 justify-end items-center">
-                                <n-button text style="font-size: 24px" @click="handleEditClick(model)">
-                                    <n-icon>
-                                        <SettingsOutlined />
-                                    </n-icon>
-                                </n-button>
-                                &nbsp;
-                                <n-button type="error" text style="font-size: 24px" @click="handleDeleteClick(model)">
-                                    <n-icon>
-                                        <RemoveCircleOutlineRound />
-                                    </n-icon>
-                                </n-button>
-                            </div>
-                        </li>
-                    </ul>
+                <n-button text style="font-size: 24px" @click="handleEditProvider(currentProvider)">
+                    <n-icon>
+                        <SettingsOutlined />
+                    </n-icon>
+                </n-button>
+            </div>
+            <div class="flex w-full">
+                <div class="flex flex-1 justify-start items-center">
+                    <n-space>
+                        <n-button @click="handleAddModel" strong secondary>手动添加</n-button>
+                        <n-button @click="handleFetchModels" strong secondary>获取模型列表</n-button>
+                    </n-space>
                 </div>
             </div>
-        </template>
-    </SidebarLayout>
+            <div class="mt-4 rounded border px-3 py-1 border-gray-200">
+                <ul>
+                    <li v-for="model in currentModels" :key="model.id"
+                        class="flex items-center py-2 border-b border-gray-200 last:border-b-0">
+                        <div class="font-bold">{{ model.model_name }}</div>
+                        &nbsp;
+                        &nbsp;
+                        <n-space>
+                            <n-tag :bordered="false" type="success" size="small">{{ model.model_type }}</n-tag>
+                            <n-tag v-for="feature in model.features" :bordered="false" type="info" size="small">{{
+                                getLableName(feature) }}</n-tag>
+                        </n-space>
+                        <div class="flex flex-1 justify-end items-center">
+                            <n-button text style="font-size: 24px" @click="handleEditClick(model)">
+                                <n-icon>
+                                    <SettingsOutlined />
+                                </n-icon>
+                            </n-button>
+                            &nbsp;
+                            <n-button type="error" text style="font-size: 24px" @click="handleDeleteClick(model)">
+                                <n-icon>
+                                    <RemoveCircleOutlineRound />
+                                </n-icon>
+                            </n-button>
+                        </div>
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </template>
+    <n-modal v-model:show="showProviderModal" preset="dialog" title="编辑供应商" positive-text="确定" negative-text="取消"
+        @positive-click="handleSaveProvider">
+        <n-form ref="formRef" :label-width="80" :model="currentProviderEdit" :rules="providerRules" size="large"
+            label-placement="left">
+            <n-form-item label="名字" path="name">
+                <n-input v-model:value="currentProviderEdit.name" placeholder="输入分组名字" />
+            </n-form-item>
+            <n-form-item label="API地址" path="api_url">
+                <n-input v-model:value="currentProviderEdit.api_url" placeholder="api_url" />
+            </n-form-item>
+            <n-form-item label="API KEY" path="api_key">
+                <n-input v-model:value="currentProviderEdit.api_key" placeholder="api_key" type="password"
+                    show-password-on="click" />
+            </n-form-item>
+        </n-form>
+    </n-modal>
 
     <!-- 编辑/新增模型信息的模态框 -->
     <n-modal v-model:show="showEditModal" :preset="isEditMode ? 'dialog' : 'dialog'"
@@ -210,15 +196,18 @@
 <script setup>
 import { ref, onMounted, computed, watch } from 'vue'
 import { useDebounceFn } from '@vueuse/core' // 导入防抖函数
-import { SidebarLayout } from "./ui";
-import ModelsProviderList from '../components/ModelsProviderList.vue'
+import { SidebarLayout } from "../ui";
+import ModelsProviderList from './ModelsProviderList.vue'
 import {
     NInput, NFormItem, NForm, NButton, NSpace, NIcon, NTag, NGrid, NGi,
     NModal, NSelect, NCheckbox, NCheckboxGroup, NInputNumber, NSpin, NDivider
 } from 'naive-ui'
-import { apiService } from '../services/ApiService'
-import { SettingsOutlined, RemoveCircleOutlineRound, DeleteTwotone, AddCircleTwotone, RemoveCircleTwotone, SearchOutlined } from '@vicons/material'
-import { usePopup } from '../composables/usePopup'
+import { apiService } from '../../services/ApiService'
+import {
+    SettingsOutlined, RemoveCircleOutlineRound, DeleteTwotone, AddCircleTwotone,
+    RemoveCircleTwotone, SearchOutlined, ArrowBackIosFilled
+} from '@vicons/material'
+import { usePopup } from '../../composables/usePopup'
 import { useStorage } from '@vueuse/core'
 
 const { notify, confirm, prompt } = usePopup()
@@ -227,19 +216,28 @@ const currentProviderId = ref("");
 // 使用响应式数据替代伪数据
 const providers = ref([]);
 const models = ref([]);
+const showDetail = ref(false);
+
+// 添加用于编辑的临时数据
+const currentProviderEdit = ref({
+    name: "",
+    api_url: "",
+    api_key: ""
+});
 
 // 删除原来的防抖计时器
 // let debounceTimer = null;
 
 // 新增：判断是编辑模式还是新增模式
 const isEditMode = ref(false);
+const isProviderEditMode = ref(false);
 
 // 获取模型列表相关状态
+const showProviderModal = ref(false);
 const showFetchModal = ref(false);
 const fetchingModels = ref(false);
 const fetchedModels = ref([]);
 
-const sidebarVisible = useStorage('modelsPage_sidebarVisible', true); // 控制侧边栏显示状态
 
 // 供应商表单验证规则
 const providerRules = {
@@ -358,25 +356,48 @@ const handleProviderChange = () => {
 };
 
 const handleCreateGroup = async () => {
-    try {
-        const result = await prompt('创建分组', {
-            placeholder: '创建模型组',
-        })
 
-        if (result) {
-            const title = result;
+    // 以新增模式打开编辑弹窗
+    currentProviderId.value = null;
+    // 初始化编辑表单数据
+    currentProviderEdit.value = {
+        name: "新分组",
+        api_url: "",
+        api_key: ""
+    };
+    // 重置表单验证状态并打开编辑弹窗
+    formRef.value?.restoreValidation();
+    isProviderEditMode.value = false;
+    showProviderModal.value = true;
+}
+
+
+const handleSaveProvider = async () => {
+    try {
+        if (isProviderEditMode.value) {
+            // 编辑模式
+            await apiService.updateProvider(currentProviderId.value, {
+                name: currentProviderEdit.value.name,
+                api_key: currentProviderEdit.value.api_key,
+                api_url: currentProviderEdit.value.api_url
+            })
+            notify.success('更新成功', '供应商信息已更新', { duration: 2000 });
+            //更新列表
+            const provider = providers.value.find(p => p.id === currentProviderId.value);
+            provider.name = currentProviderEdit.value.name;
+            provider.api_url = currentProviderEdit.value.api_url;
+            provider.api_key = currentProviderEdit.value.api_key;
+        } else {
             const provider = await apiService.createProvider({
-                name: title,
-                api_url: "",
-                api_key: ""
+                name: currentProviderEdit.value.name,
+                api_url: currentProviderEdit.value.api_url,
+                api_key: currentProviderEdit.value.api_key
             });
-            providers.value.push(provider);
-            currentProviderId.value = providers.value[providers.value.length - 1].id;
-            notify.success('创建成功', '分组创建成功', { duration: 2000 });
+            providers.value.push(provider); notify.success('创建成功', '分组创建成功', { duration: 2000 });
         }
     } catch (error) {
-        console.error('创建会话失败:', error)
-        notify.error('创建失败', '分组创建成功', { duration: 2000 });
+        console.error('编辑分组失败:', error)
+        notify.error('编辑失败', '分组编辑失败', { duration: 2000 });
     }
 }
 
@@ -566,14 +587,11 @@ const loadModelsProvider = async () => {
     }
 }
 
-const handleSelectProvider = (providerId) => {
+const handleItemClick = (provider) => {
     // 清除防抖函数（如果有正在等待的执行）
-    console.log(debouncedProviderChange);
-
-    currentProviderId.value = providerId;
-    // 重置表单验证状态
-    formRef.value?.restoreValidation();
-}
+    showDetail.value = true;
+    currentProviderId.value = provider.id;
+};
 
 const handleEditClick = (model) => {
     isEditMode.value = true;
@@ -678,6 +696,51 @@ const filteredAvailableModels = computed(() => {
         !currentModelIds.includes(model.model_name)
     )
 })
+
+// 添加处理编辑供应商的方法
+const handleEditProvider = (provider) => {
+    // 设置当前供应商ID
+    currentProviderId.value = provider.id;
+    isProviderEditMode.value = true;
+    // 初始化编辑表单数据
+    currentProviderEdit.value = {
+        name: provider.name || "",
+        api_url: provider.api_url || "",
+        api_key: provider.api_key || ""
+    };
+
+    // 重置表单验证状态
+    formRef.value?.restoreValidation();
+    showProviderModal.value = true;
+};
+
+// 添加从列表中删除供应商的方法
+const handleDeleteProviderFromList = async (provider) => {
+    const result = await confirm("删除供应商", `确定要删除供应商"${provider.name}"吗？这将同时删除该供应商下的所有模型，操作不可恢复。`);
+
+    if (!result) {
+        return;
+    }
+
+    try {
+        // 调用删除API
+        await deleteProvider(provider.id);
+
+        // 删除该供应商下的所有模型
+        models.value = models.value.filter(m => m.provider_id !== provider.id);
+
+        // 更新当前选中的供应商
+        if (providers.value.length > 0) {
+            currentProviderId.value = providers.value[0].id;
+        } else {
+            currentProviderId.value = "";
+        }
+
+        notify.success('删除成功', `供应商"${provider.name}"已删除`, { duration: 2000 });
+    } catch (error) {
+        notify.error('删除失败', '删除供应商时发生错误', { duration: 2000 });
+    }
+};
 
 </script>
 

@@ -30,7 +30,7 @@
         <ChatPanel ref="chatPanelRef" v-model:session="currentSession" v-model:sidebar-visible="sidebarVisible"
           @openSettings="handleOpenSettings" @openSwitchModel="handleOpenSwitchModel"
           @saveSettings="handleSaveSessionSettings" />
-        <n-modal v-model:show="settingsModalVisible" :mask-closable="false" :auto-focus="false"
+        <n-modal v-model:show="sessionSettingsModalVisible" :mask-closable="false" :auto-focus="false"
           style="width: 600px;max-width: 90vw;" title="对话设置" preset="card">
           <div class="max-h-[80vh] overflow-y-auto">
             <character-setting-panel :data="currentSession" @update:data="updateSession" :simple="true"
@@ -41,6 +41,7 @@
 
     </template>
   </sidebar-layout>
+  <settings-modal v-model:visible="systemSettingsModalVisible" :default="systemSettingsPath"></settings-modal>
 </template>
 
 <script setup>
@@ -61,6 +62,7 @@ const CharacterSettingPanel = defineAsyncComponent(() => import("@/components/Ch
 const ChatPanel = defineAsyncComponent(() => import("@/components/ChatPanel.vue"));
 const CreateSessionChatPanel = defineAsyncComponent(() => import("@/components/CreateSessionChatPanel.vue"));
 const CharactersPanel = defineAsyncComponent(() => import("@/components/CharactersPage.vue"));
+const SettingsModal = defineAsyncComponent(() => import("@/components/settings/SettingsModal.vue"));
 
 // 组合式函数
 const { confirm, toast, prompt } = usePopup();
@@ -78,7 +80,9 @@ const chatSidebarRef = ref(null);
 // 设置面板当前激活的标签页
 const currentTabValue = ref('basic');
 // 控制设置模态框的显示与隐藏
-const settingsModalVisible = ref(false);
+const sessionSettingsModalVisible = ref(false);
+const systemSettingsModalVisible = ref(false);
+const systemSettingsPath = ref('/user/profile');
 // 控制侧边栏的显示状态，使用本地存储保持用户偏好
 const sidebarVisible = useStorage('sidebarVisible', true);
 
@@ -144,7 +148,6 @@ const goChatRoute = async (sessionId, redirect = false) => {
  * @param {Object} data - 包含要更新的数据的对象
  */
 const updateSessionById = async (sessionId, data) => {
-  console.log('会话更新:', sessionId);
   // console.trace();
   const session = sessions.value.find(session => session.id === sessionId);
   if (session) {
@@ -189,7 +192,7 @@ const updateSession = async (data) => {
     console.error('更新对话失败:', error);
     toast.error("设置失败");
   }
-  settingsModalVisible.value = false;
+  sessionSettingsModalVisible.value = false;
 };
 
 
@@ -230,7 +233,7 @@ const loadSessions = async () => {
  */
 const handleOpenSettings = () => {
   currentTabValue.value = 'basic';
-  settingsModalVisible.value = true;
+  sessionSettingsModalVisible.value = true;
 };
 
 /**
@@ -238,7 +241,7 @@ const handleOpenSettings = () => {
  */
 const handleOpenSwitchModel = () => {
   currentTabValue.value = 'model';
-  settingsModalVisible.value = true;
+  sessionSettingsModalVisible.value = true;
 };
 
 /**
@@ -250,6 +253,12 @@ const handleSidebarClick = async (key) => {
     goChatRoute('new-session');
   } else if (key === 'characters') {
     goChatRoute('characters');
+  } else if (key === 'models') {
+    systemSettingsPath.value = '/settings/models'
+    systemSettingsModalVisible.value = true
+  } else if (key === 'profile') {
+    systemSettingsPath.value = '/user/profile'
+    systemSettingsModalVisible.value = true
   }
 
 };

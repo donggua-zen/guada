@@ -25,10 +25,17 @@ import { useTitle } from './composables/useTitle'
   */
 const themeOverrides = {
     common: {
-        primaryColor: '#142042'
+        primaryColor: '#18a058',
+        primaryColorHover: '#18a058',
+        primaryColorPressed: '#18a058',
+        primaryColorSuppl: '#18a058',
+        primaryColorDisabled: '#18a058',
+
     },
     Button: {
-        textColor: '#1F2937'
+        textColor: '#1F2937',
+        color:'#18a058',
+        colorFocus:'#18a058'
     },
     Select: {
         // peers: {

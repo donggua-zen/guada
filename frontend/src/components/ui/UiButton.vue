@@ -4,7 +4,7 @@
     </div>
 </template>
 <script setup>
-import { defineEmits, defineProps, computed } from "vue";
+import { defineEmits, defineProps, computed, useAttrs } from "vue";
 const emits = defineEmits(["click"]);
 const props = defineProps({
     type: {
@@ -27,21 +27,28 @@ const props = defineProps({
         type: Boolean,
         default: true
     },
+    size: {
+        type: String,
+        default: "md"
+    }
 })
 const handleClick = (e) => {
     emits("click", e);
 };
 
 const typeClasses = {
-    'default': "text-[var(--primary-text-color)] hover:bg-[var(--secondary)]",
-    'primary': "bg-[var(--primary)] text-white hover:bg-[var(--primary-light)]",
-    'text': "hover:text-[var(--primary)] hover:bg-[var(--tertiary)]"
+    'default': "text-[var(--primary-text-color)] hover:bg-[var(--tertiary-color)]",
+    'primary': "bg-[var(--primary-color)] text-white hover:bg-[var(--primary-light)]",
+    'text': "hover:text-[var(--primary-color)] hover:bg-[var(--tertiary-color)]"
 };
 
-
+// defineOptions({
+//     inheritAttrs: false // 禁用自动继承
+// })
+// const attrs = useAttrs()
 const btnClasses = computed(() => {
     let classes = [
-        "cursor-pointer px-1.5 py-1 flex items-center justify-center transition-colors duration-200",
+        "cursor-pointer flex items-center justify-center transition-colors duration-200",
     ];
     if (typeClasses[props.type]) {
         classes.push(typeClasses[props.type]);
@@ -55,6 +62,17 @@ const btnClasses = computed(() => {
     if (props.border) {
         classes.push("border border-gray-200");
     }
+    if (props.size === "sm") {
+        classes.push("text-sm px-2 py-1");
+    } else if (props.size === "lg") {
+        classes.push("text-lg px-2 py-1");
+    } else if (props.size === "md") {
+        classes.push("text-base px-2 py-1");
+    } else if (props.size === "base") {
+
+    }
+
+
     return classes.join(" ");
 });
 </script>

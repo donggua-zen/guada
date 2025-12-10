@@ -1,5 +1,5 @@
 <template>
-  <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
+  <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
     <div v-for="account in subAccounts" :key="account.id"
       class="border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow cursor-pointer relative">
       <div class="flex flex-col items-center text-center pt-4">

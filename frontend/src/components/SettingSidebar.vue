@@ -279,7 +279,7 @@ onMounted(() => {
   width: 100%;
   height: 100%;
   border-radius: 50%;
-  background: var(--primary);
+  background: var(--primary-color);
   display: flex;
   align-items: center;
   justify-content: center;
