@@ -68,8 +68,8 @@
                                 <ArrowSend />
                             </n-icon>
                         </ui-button>
-                        <ui-button v-else class="send-btn stop-btn" title="停止生成" @click="abortResponse"
-                            circle type="error" size="small">
+                        <ui-button v-else class="send-btn stop-btn" title="停止生成" @click="abortResponse" circle
+                            type="error" size="small">
                             <n-icon size="18">
                                 <Stop />
                             </n-icon>
@@ -86,7 +86,7 @@
 import { ref, watch, computed, nextTick, defineEmits, onUnmounted, onMounted } from 'vue'
 import { NIcon } from 'naive-ui'
 import FileItem from './FileItem.vue';
-import { UiButton } from '../ui';
+import UiButton from '../ui/UiButton.vue';
 import {
     InsertDriveFileTwotone,
     ImageTwotone,

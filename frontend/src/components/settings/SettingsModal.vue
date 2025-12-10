@@ -1,6 +1,7 @@
 <template>
     <n-modal v-model:show="modalVisible" :title="currentItem.label" :mask-closable="false" :auto-focus="false"
-        style="max-width: 90vw;width: 1100px; height: 60vh;" header-class="ml-2" content-class="overflow-hidden" preset="card">
+        style="max-width: 90vw;width: 1100px; height: 60vh;" header-class="ml-2" content-class="overflow-hidden"
+        preset="card">
         <div class="h-full flex flex-col">
             <SidebarLayout v-model:sidebar-visible="sidebarVisible" :sidebar-width="220" :z-index="51"
                 class="flex-1 overflow-hidden">
@@ -25,19 +26,19 @@
                     <div class="px-3 h-full">
                         <div class="w-full h-full flex flex-col overflow-hidden min-h-0">
                             <template v-if="currentTabValue === '/user/profile'">
-                                <UserProfile ref="userProfileRef" class="flex-1 overflow-hidden" />
+                                <UserProfile ref="userProfileRef" />
                             </template>
                             <template v-else-if="currentTabValue === '/user/subaccounts'">
-                                <UserSubaccounts ref="userSubaccountsRef" class="flex-1 overflow-hidden" />
+                                <UserSubaccounts ref="userSubaccountsRef" />
                             </template>
                             <template v-else-if="currentTabValue === '/user/security'">
-                                <UserSecurity ref="userSecurityRef" class="flex-1 overflow-hidden" />
+                                <UserSecurity ref="userSecurityRef" />
                             </template>
                             <template v-else-if="currentTabValue === '/settings/models'">
-                                <ModelsSettings class="flex-1 overflow-hidden" />
+                                <ModelsSettings />
                             </template>
                             <template v-else-if="currentTabValue === '/settings/chat'">
-                                <ChatSettings ref="chatSettingsRef" class="flex-1 overflow-hidden" />
+                                <ChatSettings ref="chatSettingsRef" />
                             </template>
                         </div>
                     </div>
