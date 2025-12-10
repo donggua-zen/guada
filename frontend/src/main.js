@@ -33,25 +33,7 @@ const routes = [
                 name: 'Chat',
                 meta: { requiresLayout: true, title: '对话', requiresAuth: true },
                 component: () => import('./components/ChatPage.vue')
-            },
-            {
-                path: '/characters',
-                name: 'Characters',
-                meta: { requiresLayout: true, title: '角色', requiresAuth: true },
-                component: () => import('./components/CharactersPage.vue')
-            },
-            {
-                path: '/models',
-                name: 'Models',
-                meta: { requiresLayout: true, title: '模型', requiresAuth: true },
-                component: () => import('./components/user/ModelsPage.vue')
-            },
-            {
-                path: '/user/profile',
-                name: 'My',
-                meta: { requiresLayout: true, title: '用户', requiresAuth: true, sidebar: false },
-                component: () => import('./components/user/SettingsModal.vue')
-            },
+            }
         ]
     },
     {
