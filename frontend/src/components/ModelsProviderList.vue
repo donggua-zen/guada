@@ -36,7 +36,7 @@
           }" @click="selectProvider(provider.id)">
           <div class="provider-avatar w-6 h-6 rounded-full flex items-center justify-center mr-3 flex-shrink-0">
             <div class="provider-img w-full h-full flex items-center justify-center text-white text-xl overflow-hidden">
-              <OpenAI :size="16" color="var(--primary-color)" />
+              <OpenAI :size="16" color="var(--primary)" />
             </div>
           </div>
           <div class="provider-info flex-1 min-w-0">

@@ -263,7 +263,7 @@ const handleLogin = async () => {
     height: 4px;
     margin: 0 3px;
     border-radius: 4px;
-    background-color: var(--secondary-color);
+    background-color: var(--secondary);
     transition:
         width 0.3s,
         background-color 0.3s cubic-bezier(0.4, 0, 0.2, 1);
@@ -272,6 +272,6 @@ const handleLogin = async () => {
 
 .custom-dots li.is-active {
     width: 40px;
-    background-color: var(--primary-color);
+    background-color: var(--primary);
 }
 </style>

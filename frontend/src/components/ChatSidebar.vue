@@ -2,16 +2,15 @@
   <div
     class="sessions-panel flex flex-col  w-full h-full bg-[var(--conversation-bg)] border-r border-[var(--conversation-border-color)]">
     <!-- 修改后的会话头部，包含标题和新建按钮 -->
-    <div class="sessions-header px-5 py-5 text-lg font-semibold flex justify-between items-center">
+    <div class="sessions-header px-5 pt-5 pb-3 text-lg font-semibold flex justify-between items-center">
       <span>聊天对话</span>
       <!-- 新建会话按钮移动到右侧 -->
-      <button @click="handleButtonClick('create')"
-        class="text-sm cursor-pointer flex items-center hover:text-[var(--primary-color)] transition-colors duration-200">
+      <ui-button type="default" :border="false" round @click="handleButtonClick('create')" class="text-sm">
         <n-icon class="mr-2" :size="16">
           <ChatNew />
         </n-icon>
         新建会话
-      </button>
+      </ui-button>
     </div>
 
     <!-- 搜索框 -->
@@ -29,10 +28,12 @@
     <!-- 会话列表区域 -->
     <div class="sessions-list flex-1 overflow-hidden py-2.5">
       <scroll-container class="">
-        <div @click="handleButtonClick('characters')"
-          :class="{ 'bg-[var(--conversation-hover-bg)]': btnActive === 'characters' }"
+        <div @click="handleButtonClick('characters')" :class="{
+          'bg-[var(--conversation-active-bg)] font-bold text-[var(--conversation-active-text-color)]': btnActive === 'characters',
+          'hover:bg-[var(--conversation-hover-bg)] text-[var(--conversation-text-color)]': btnActive !== 'characters'
+        }"
           class="hover:bg-[var(--conversation-hover-bg)] px-3 py-2 cursor-pointer flex items-center transition-colors duration-200 rounded-2xl mx-2.5 mb-1.5">
-          <div class="session-avatar w-4.5 h-4.5 mr-1.5 text-[var(--primary-color)]">
+          <div class="session-avatar w-4.5 h-4.5 mr-1.5 text-[var(--primary)]">
             <AlternateEmailTwotone />
           </div>
           <span class="flex-1">角色提示词模板</span>
@@ -104,10 +105,9 @@
 <script setup>
 import { ref, computed, h } from 'vue'
 import Avatar from './ui/Avatar.vue'
-import ScrollContainer from './ui/ScrollContainer.vue'
-import { NButton, NDropdown, NIcon, NInput } from 'naive-ui'
+import { ScrollContainer, UiButton } from './ui'
+import { NDropdown, NIcon, NInput } from 'naive-ui'
 import { useDebounceFn } from '@vueuse/core'
-import { formatTime } from '@/utils'
 import {
   PlusOutlined,
   MoreVertOutlined,

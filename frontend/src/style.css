@@ -2,11 +2,12 @@
 @import "tailwindcss";
 
 :root {
-    --primary-color: #18a058;
-    --primary-color: #142042;
-    --primary-color-light: #a8ff00;
-    --secondary-color: #e6f5f0;
-    --secondary-color: color-mix(in srgb, var(--primary-color) 20%, white);
+    --primary: #18a058;
+    --primary: #142042;
+    --primary-light: #222d4a;
+    --secondary: #e6f5f0;
+    --secondary: #14204214;
+    --tertiary:#14204210;
     /* 灰色背景色 */
     --bg: #fafafa;
     --primary-text-color: #333;
@@ -35,9 +36,10 @@
     --conversation-padding: 15px;
     --conversation-font-size: 16px;
     --conversation-line-height: 1.5;
-    --conversation-active-bg: #f0f4fc;
+    /* --conversation-active-bg: #f0f4fc; */
+    --conversation-active-bg: var(--secondary);
     --conversation-active-text-color: #1F2937;
-    --conversation-hover-bg: #ffffff;
+    --conversation-hover-bg: var(--secondary);
     --conversation-hover-text-color: #1F2937;
     /*侧边栏*/
     --sidebar-bg: #fff;

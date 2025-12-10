@@ -1,6 +1,6 @@
 <template>
     <div class="w-full flex flex-col items-center">
-        <div class="p-[18px_15px_12px_15px] bg-[#f3f5f9] transition-all duration-300 min-h-[60px] w-full "
+        <div class="p-[18px_15px_12px_15px] bg-white transition-all duration-300 min-h-[60px] w-full "
             :class="styleClass">
             <!-- 文件列表显示区域 -->
             <div class="file-list flex flex-wrap gap-2 mb-3" v-if="uploadFiles.length > 0">
@@ -22,57 +22,58 @@
                 <div class="tools left-tools">
                     <slot name="buttons"></slot>
                     <template v-if="showButtons.thinkingButton">
-                        <button class="tool-btn" id="deep-thinking-btn" :class="{ active: localThinkingEnabled }"
-                            :title="localThinkingEnabled ? '关闭深度思考' : '深度思考'" @click="toggleDeepThinking" text>
+                        <ui-button type="default" round-full class="tool-btn" id="deep-thinking-btn"
+                            :class="{ active: localThinkingEnabled }" :title="localThinkingEnabled ? '关闭深度思考' : '深度思考'"
+                            @click="toggleDeepThinking" text>
                             <n-icon size="18" class="mr-1">
                                 <Thinking2 />
                             </n-icon>
                             思考
-                        </button>
+                        </ui-button>
                         <span class="mr-2.5"></span>
                     </template>
-                    <button v-if="showButtons.webSearchButton" class="tool-btn"
+                    <ui-button type="default" round-full v-if="showButtons.webSearchButton" class="tool-btn"
                         :class="{ active: localWebSearchEnabled }" title="联网搜索" @click="handleWebSearch" text>
                         <n-icon size="18" class="mr-1">
                             <Network />
                         </n-icon>
                         网络
-                    </button>
+                    </ui-button>
                 </div>
                 <div class="right-actions">
                     <div class="tools right-tools">
-                        <button v-if="showButtons.filesButton" class="tool-btn" title="上传文件" @click="triggerFileInput"
-                            text>
+                        <ui-button :border="false" v-if="showButtons.filesButton" class="tool-btn" title="上传文件"
+                            @click="triggerFileInput" text>
                             <n-icon size="22">
                                 <InsertDriveFileTwotone />
                             </n-icon>
-                        </button>
-                        <button v-if="showButtons.imagesButton" class="tool-btn" title="添加图片"
+                        </ui-button>
+                        <ui-button :border="false" v-if="showButtons.imagesButton" class="tool-btn" title="添加图片"
                             @click="triggerImageInput">
                             <n-icon size="22">
                                 <ImageTwotone />
                             </n-icon>
-                        </button>
-                        <button v-if="showButtons.tokensButton" class="tool-btn" title="tokens统计"
+                        </ui-button>
+                        <ui-button :border="false" v-if="showButtons.tokensButton" class="tool-btn" title="tokens统计"
                             @click="handleTokensStatistic">
                             <n-icon size="22">
                                 <DataThresholdingTwotone />
                             </n-icon>
-                        </button>
+                        </ui-button>
                     </div>
                     <div class="send-actions">
-                        <button v-if="!streaming" class="send-btn rounded-full" title="发送" @click="sendMessage"
+                        <ui-button v-if="!streaming" class="send-btn rounded-full" title="发送" @click="sendMessage"
                             :disabled="!inputContent.trim()" size="small">
                             <n-icon size="18">
                                 <ArrowSend />
                             </n-icon>
-                        </button>
-                        <button v-else class="send-btn stop-btn rounded-full" title="停止生成" @click="abortResponse" circle
-                            type="error" size="small">
+                        </ui-button>
+                        <ui-button v-else class="send-btn stop-btn rounded-full" title="停止生成" @click="abortResponse"
+                            circle type="error" size="small">
                             <n-icon size="18">
                                 <Stop />
                             </n-icon>
-                        </button>
+                        </ui-button>
                     </div>
                 </div>
             </div>
@@ -83,8 +84,9 @@
 
 <script setup>
 import { ref, watch, computed, nextTick, defineEmits, onUnmounted, onMounted } from 'vue'
-import { NButton, NIcon } from 'naive-ui'
+import { NIcon } from 'naive-ui'
 import FileItem from './FileItem.vue';
+import { UiButton } from '../ui';
 import {
     InsertDriveFileTwotone,
     ImageTwotone,
@@ -163,9 +165,13 @@ const styleClass = computed(() => {
         classes.push('expanded');
     }
     if (!props.clean) {
-        // if (props.shadow) classes.push('shadow-[0_2px_16px_rgba(0,0,0,0.1)]');
         if (props.round) classes.push('rounded-[22px]');
-        if (props.border) classes.push('border border-gray-300');
+        if (focused.value) {
+            if (props.shadow) classes.push('shadow-[0_2px_32px_rgba(0,0,0,0.13)]');
+            if (props.border) classes.push('border border-gray-300');
+        } else {
+            if (props.border) classes.push('border border-gray-400');
+        }
     }
     return classes.join(' ') + ' ' + props.class;
 });
@@ -461,13 +467,9 @@ onUnmounted(() => {
     align-items: center;
     justify-content: center;
     transition: all 0.2s;
-    border-radius: 28px;
 }
 
-.left-tools .tool-btn {
-    border: 1px solid rgba(0, 0, 0, 0.1);
-    background: #fff;
-}
+.left-tools .tool-btn {}
 
 .right-tools .tool-btn {
     padding: 0 5px;
@@ -475,13 +477,13 @@ onUnmounted(() => {
 
 /* 深度思考按钮激活状态样式 */
 .tool-btn.active {
-    border-color: var(--primary-color);
-    background-color: var(--secondary-color);
-    color: var(--primary-color);
+    border-color: var(--primary);
+    background-color: var(--secondary);
+    color: var(--primary);
 }
 
 .send-btn {
-    background: var(--primary-color);
+    background: var(--primary);
     color: #fff;
     border: none;
     padding: 6px 6px;
@@ -492,6 +494,6 @@ onUnmounted(() => {
 }
 
 .send-btn:disabled {
-    background-color: color-mix(in srgb, var(--primary-color) 50%, white);
+    background-color: color-mix(in srgb, var(--primary) 50%, white);
 }
 </style>

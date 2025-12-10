@@ -1,7 +1,7 @@
 <template>
   <div class="flex flex-col h-full">
     <!-- 聊天头部 -->
-    <div class="chat-header">
+    <div class="chat-header mt-4 mx-5">
       <template v-if="!localSidebarVisible">
         <n-button text @click="localSidebarVisible = true">
           <template #icon>
@@ -54,7 +54,7 @@
             <!-- 标题和描述 -->
             <div class="mb-8">
               <h1
-                class="text-3xl font-bold text-gray-800 mb-4 bg-gradient-to-br from-[#667eea] to-[var(--primary-color)] bg-clip-text text-transparent">
+                class="text-3xl font-bold text-gray-800 mb-4 bg-gradient-to-br from-[#667eea] to-[var(--primary)] bg-clip-text text-transparent">
                 {{ currentSession.title || '' }}
               </h1>
               <h2 class="text-lg font-normal text-gray-600 leading-relaxed">
@@ -63,7 +63,7 @@
 
               <!-- 角色设定 -->
               <div v-if="currentSession.system_prompt"
-                class="mt-6 p-5 bg-gray-50 rounded-xl border-l-4 border-[var(--primary-color)] text-left">
+                class="mt-6 p-5 bg-gray-50 rounded-xl border-l-4 border-[var(--primary)] text-left">
                 <h3 class="text-base font-semibold text-gray-800 mb-2">角色设定</h3>
                 <p class="text-sm text-gray-600 leading-6">{{ currentSession.system_prompt }}</p>
               </div>
@@ -888,12 +888,8 @@ defineExpose({ sendMessage: handleSendMessage })
   display: flex;
   justify-content: space-between;
   align-items: center;
-  height: 60px;
   font-size: 18px;
   font-weight: 600;
-  /* border-bottom: 1px solid rgba(21, 23, 28, 0.1); */
-  border-radius: 0;
-  margin: 0 40px;
 }
 
 .more-btn {

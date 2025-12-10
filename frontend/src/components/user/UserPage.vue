@@ -2,8 +2,8 @@
     <SidebarLayout v-model:sidebar-visible="sidebarVisible" :sidebar-width="220">
         <template #sidebar>
             <div class="flex flex-col h-full border-r border-gray-200 items-center relative p-3">
-                <div class="w-full cursor-pointer h-10 flex items-center justify-center hover:text-[var(--primary-color)] hover:bg-[var(--secondary-color)] px-6 py-3 mb-3 rounded-full transition-colors duration-200"
-                    :class="{ 'bg-[var(--secondary-color)] text-[var(--primary-color)]': currentTabValue === item.path }"
+                <div class="w-full cursor-pointer h-10 flex items-center justify-center hover:text-[var(--primary)] hover:bg-[var(--secondary)] px-6 py-3 mb-3 rounded-full transition-colors duration-200"
+                    :class="{ 'bg-[var(--secondary)] text-[var(--primary)]': currentTabValue === item.path }"
                     v-for="item in filteredSidebarItems" @click="handleItemClick(item)">
                     <div class="flex-1 w-full flex items-center gap-x-2">
                         <component :is="item.icon" class="w-5 h-5"></component>
