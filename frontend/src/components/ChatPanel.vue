@@ -136,7 +136,6 @@ const sessionStore = useSessionStore();
 
 // 响应式数据
 const scrollContainerRef = ref(null);
-const messagesContainerRef = ref(null);
 const currentSessionId = ref(null);
 const showTokenModal = ref(false);
 const showEditMessageModal = ref(false);
@@ -179,7 +178,7 @@ const emit = defineEmits([
   "openSettings",
   "openSwitchModel",
   "update:sidebarVisible",
-  "saveSettings"
+  "save-settings"
 ]);
 
 // 计算属性
@@ -218,6 +217,7 @@ const webSearchEnabled = computed({
   },
   set(value) {
     currentSession.value.settings["web_search_enabled"] = value;
+    currentSession.value.updated_at = new Date().toISOString();
   }
 });
 
@@ -227,6 +227,7 @@ const thinkingEnabled = computed({
   },
   set(value) {
     currentSession.value.settings["thinking_enabled"] = value;
+    currentSession.value.updated_at = new Date().toISOString();
   }
 });
 
@@ -255,7 +256,7 @@ const debouncedSwitchContent = useDebounceFn(
   300
 );
 const debouncedSaveSession = useDebounceFn(() => {
-  emit("saveSettings");
+  emit("save-settings");
 }, 200);
 
 // 监听器

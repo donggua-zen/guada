@@ -29,7 +29,7 @@
       <template v-else-if="sessions.length > 0 && currentSession">
         <ChatPanel ref="chatPanelRef" v-model:session="currentSession" v-model:sidebar-visible="sidebarVisible"
           @openSettings="handleOpenSettings" @openSwitchModel="handleOpenSwitchModel"
-          @saveSettings="handleSaveSessionSettings" />
+          @save-settings="handleSaveSessionSettings" />
         <n-modal v-model:show="sessionSettingsModalVisible" :mask-closable="false" :auto-focus="false"
           style="width: 600px;max-width: 90vw;" title="对话设置" preset="card">
           <div class="max-h-[80vh] overflow-y-auto">
@@ -179,7 +179,7 @@ const updateSession = async (data) => {
       // 合并设置
       data.settings = { ...currentSession.value.settings, ...data.settings };
       await apiService.updateSession(currentSession.value.id, data);
-      session = { id: currentSession.value.id, ...data };
+      session = { id: currentSession.value.id, ...data, updated_at: new Date().toISOString() };
 
       if (session && data.avatar_file) {
         const response = await apiService.uploadAvatar(currentSession.value.id, data.avatar_file, 'session');
