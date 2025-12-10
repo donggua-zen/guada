@@ -1,11 +1,11 @@
 <template>
-    <template v-if="!showDetail">
-        <ModelsProviderList :items="providers" @item-click="handleItemClick" @createGroup="handleCreateGroup"
-            @item-edit="handleEditProvider" @item-delete="handleDeleteProviderFromList">
-        </ModelsProviderList>
-    </template>
-    <template v-else>
-        <div class="flex-1">
+    <div class="flex-1"> <template v-if="!showDetail">
+            <ModelsProviderList :items="providers" @item-click="handleItemClick" @createGroup="handleCreateGroup"
+                @item-edit="handleEditProvider" @item-delete="handleDeleteProviderFromList">
+            </ModelsProviderList>
+        </template>
+        <template v-else>
+
             <div class="flex items-center mb-6">
                 <n-button text style="font-size: 24px" @click="showDetail = false">
                     <n-icon size="16">
@@ -56,8 +56,9 @@
                     </li>
                 </ul>
             </div>
-        </div>
-    </template>
+        </template>
+    </div>
+
     <n-modal v-model:show="showProviderModal" preset="dialog" title="编辑供应商" positive-text="确定" negative-text="取消"
         @positive-click="handleSaveProvider">
         <n-form ref="formRef" :label-width="80" :model="currentProviderEdit" :rules="providerRules" size="large"
