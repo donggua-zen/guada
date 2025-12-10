@@ -86,6 +86,7 @@ def chat_completions(session_id):
 
 @chat_bp.route("/api/v1/sessions/<session_id>/tokens", methods=["GET"])
 @jwt_required()
+@handle_response
 def get_tokens(session_id):
     data = chat_service.token_statistics(session_id)
     return data
