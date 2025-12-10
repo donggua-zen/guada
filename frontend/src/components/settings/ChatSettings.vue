@@ -2,9 +2,9 @@
     <div class="flex flex-col h-full">
         <div class="flex-1 overflow-hidden">
             <ScrollContainer class="h-full">
-                <div class=" px-4">
+                <div class="px-4">
                     <!-- 对话设置部分 -->
-                    <div class="mb-8">
+                    <div class="mb-8" style="display: none;">
                         <h3 class="text-lg mb-4 pb-2 text-gray-500">对话设置</h3>
                         <n-form ref="chatFormRef" :model="settingsForm" :rules="chatRules" label-placement="left"
                             label-width="105" size="large">
