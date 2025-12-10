@@ -2,17 +2,17 @@
 @import "tailwindcss";
 
 :root {
-    --primary: #18a058;
-    --primary: #142042;
-    --primary-light: #222d4a;
-    --secondary: #e6f5f0;
-    --secondary: #14204214;
-    --tertiary:#14204210;
+    --primary-color: #18a058;
+    --primary-light-color: #2aa262;
+    --secondary-color: #e6f5f0;
+    --secondary-color: #18a05716;
+    /* --secondary: #00A0E91b; */
+    --tertiary-color: #00000008;
+    --bg-hover: #00000008;
     /* 灰色背景色 */
     --bg: #fafafa;
     --primary-text-color: #333;
     --secondary-text-color: #666;
-    --thinking-text-color: #495057;
     /* 灰色文字颜色 */
     --primary-text-color: #1F2937;
     --primary-text-light-color: #fff;
@@ -26,8 +26,8 @@
     --assitant-bubble-text-color: #1F2937;
     --assitant-bubble-border-color: none;
     /* 聊天对话样式 */
-    /* --conversation-bg: #E9EBF2; */
-    --conversation-bg: #fff;
+    --conversation-bg: #fbfbfb;
+    /* --conversation-bg: #fff; */
     /* #E9EBF2;*/
     --conversation-text-color: #333;
     /* --conversation-border-color: #efefef; */
@@ -35,11 +35,10 @@
     --conversation-border-radius: 10px;
     --conversation-padding: 15px;
     --conversation-font-size: 16px;
-    --conversation-line-height: 1.5;
     /* --conversation-active-bg: #f0f4fc; */
-    --conversation-active-bg: var(--secondary);
+    --conversation-active-bg: #efefef;
     --conversation-active-text-color: #1F2937;
-    --conversation-hover-bg: var(--secondary);
+    --conversation-hover-bg: #efefef;
     --conversation-hover-text-color: #1F2937;
     /*侧边栏*/
     --sidebar-bg: #fff;
