@@ -6,7 +6,8 @@
         ]" :style="{
             width: sidebarVisible ? `${sidebarWidth}px` : '0',
             maxWidth: sidebarVisible ? `${sidebarWidth}px` : '0',
-            minWidth: sidebarVisible ? `${sidebarWidth}px` : '0'
+            minWidth: sidebarVisible ? `${sidebarWidth}px` : '0',
+            zIndex: zIndex
         }">
             <div class="absolute right-0 h-full" :style="{ width: `${sidebarWidth}px` }">
                 <slot name="sidebar" :sidebar-visible="sidebarVisible" />
@@ -14,8 +15,9 @@
 
             <!-- 折叠展开按钮 -->
             <button v-if="showToggleButton" @click="$emit('update:sidebarVisible', !sidebarVisible)"
-                class="absolute top-1/2 right-0 transform -translate-y-1/2 translate-x-full w-4 h-16 flex items-center justify-center bg-white rounded-r-lg shadow-sm hover:bg-gray-50 focus:outline-none z-10"
-                :title="sidebarVisible ? '折叠侧边栏' : '展开侧边栏'">
+                class="absolute  top-1/2 right-0 transition-all transform -translate-y-1/2 w-4 h-16 flex items-center justify-center bg-white shadow-sm hover:bg-gray-50 focus:outline-none z-10"
+                :title="sidebarVisible ? '折叠侧边栏' : '展开侧边栏'"
+                :class="sidebarVisible ? 'translate-x-1/2 rounded-lg border border-gray-200' : 'translate-x-full rounded-r-lg border-r border-gray-200'">
                 <slot name="toggle-icon" :sidebar-visible="sidebarVisible">
                     <n-icon :component="sidebarVisible ? ArrowLeftTwotone : ArrowRightTwotone" class="text-gray-600" />
                 </slot>
@@ -59,6 +61,10 @@ const props = defineProps({
         type: String,
         default: 'left', // 'left' 或 'right'
         validator: (value) => ['left', 'right'].includes(value)
+    },
+    zIndex: {
+        type: Number,
+        default: 50
     }
 });
 

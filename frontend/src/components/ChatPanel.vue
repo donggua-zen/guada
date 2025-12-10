@@ -12,25 +12,16 @@
         </n-button>
         <span class="ml-4"></span>
       </template>
-      <span class="hidden md:block">{{ chatTitle }}</span>
+      <ui-button :border="false" class="rounded-lg hover:bg-[--bg-hover] text-base" @click="handleSwitchModelClick">
+        {{ currentModelName }}
+        <SettingsTwotone class="w-4 h-4 ml-2" />
+      </ui-button>
       <div class="flex items-center flex-1 justify-end">
-        <n-button tertiary round size="small" icon-placement="left" @click="handleSwitchModelClick">
-          {{ currentModelName }}
-          <template #icon>
-            <n-icon size="18">
-              <SettingsTwotone />
-            </n-icon>
-          </template>
-        </n-button>
         <!-- 更多操作下拉菜单 -->
         <n-dropdown trigger="hover" :options="moreOptions" @select="handleMoreSelect">
-          <n-button class="more-btn" title="更多操作" text>
-            <template #icon>
-              <n-icon size="24">
-                <MoreVertOutlined />
-              </n-icon>
-            </template>
-          </n-button>
+          <ui-button class="more-btn" :border="false" title="更多操作" text>
+            <MoreVertOutlined class="w-5.5 h-5.5" />
+          </ui-button>
         </n-dropdown>
       </div>
     </div>
@@ -54,7 +45,7 @@
             <!-- 标题和描述 -->
             <div class="mb-8">
               <h1
-                class="text-3xl font-bold text-gray-800 mb-4 bg-gradient-to-br from-[#667eea] to-[var(--primary)] bg-clip-text text-transparent">
+                class="text-3xl font-bold text-gray-800 mb-4 bg-gradient-to-br from-[#667eea] to-[var(--primary-color)] bg-clip-text text-transparent">
                 {{ currentSession.title || '' }}
               </h1>
               <h2 class="text-lg font-normal text-gray-600 leading-relaxed">
@@ -63,7 +54,7 @@
 
               <!-- 角色设定 -->
               <div v-if="currentSession.system_prompt"
-                class="mt-6 p-5 bg-gray-50 rounded-xl border-l-4 border-[var(--primary)] text-left">
+                class="mt-6 p-5 bg-gray-50 rounded-xl border-l-4 border-[var(--primary-color)] text-left">
                 <h3 class="text-base font-semibold text-gray-800 mb-2">角色设定</h3>
                 <p class="text-sm text-gray-600 leading-6">{{ currentSession.system_prompt }}</p>
               </div>
@@ -136,8 +127,8 @@ import {
 } from "@vicons/material";
 
 // UI组件导入
-import { NButton, NIcon, NDivider, NDropdown, NModal } from "naive-ui";
-
+import { NButton, NIcon, NDropdown, NModal } from "naive-ui";
+import { UiButton } from "./ui";
 // 弹出层工具
 const { confirm, editText, toast, notify } = usePopup();
 const authStore = useAuthStore()
@@ -294,10 +285,6 @@ onMounted(() => {
 // 滚动功能
 function immediateScrollToBottom() {
   scrollContainerRef.value?.immediateScrollToBottom();
-}
-
-function smoothScrollToBottom() {
-  scrollContainerRef.value?.smoothScrollToBottom();
 }
 
 // 更多操作菜单选择处理
@@ -888,28 +875,6 @@ defineExpose({ sendMessage: handleSendMessage })
   display: flex;
   justify-content: space-between;
   align-items: center;
-  font-size: 18px;
-  font-weight: 600;
-}
-
-.more-btn {
-  background: none;
-  border: none;
-  color: #777;
-  cursor: pointer;
-  font-size: 16px;
-  width: 36px;
-  height: 36px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 8px;
-  transition: all 0.2s;
-}
-
-.more-btn:hover {
-  background-color: #f5f5f5;
-  color: #333;
 }
 
 .messages-container {
