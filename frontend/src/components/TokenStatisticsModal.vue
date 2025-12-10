@@ -1,5 +1,5 @@
 <template>
-    <n-modal v-model:show="showTokenModal" preset="dialog" title="Tokens估算" positive-text="确认" :show-icon="false"
+    <n-modal v-model:show="showTokenModal" preset="dialog" title="Tokens估算(不含图片)" positive-text="确认" :show-icon="false"
         style="width: 500px">
         <div class="token-statistics">
             <!-- 统计条 -->
