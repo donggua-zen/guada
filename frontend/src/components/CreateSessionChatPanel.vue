@@ -38,15 +38,13 @@
         </n-popselect>
       </div> -->
       <div class="w-full  max-w-[900px]">
-        <ChatInput class="border" :class="{ 'border-gray-400': !inputHasShadow }" v-model:value="inputMessage.text"
-          v-model:web-search-enabled="webSearchEnabled" v-model:thinking-enabled="thinkingEnabled"
-          :buttons="chatInputButtons" :files="inputMessage.files" :streaming="false" @send="sendMessage"
-          @toggle-web-search="handleWebSearch" @toggle-thinking="toggleDeepThinking" :shadow="inputHasShadow"
-          @focus="inputHasShadow = true" @blur="inputHasShadow = false">
+        <ChatInput v-model:value="inputMessage.text" v-model:web-search-enabled="webSearchEnabled"
+          v-model:thinking-enabled="thinkingEnabled" :buttons="chatInputButtons" :files="inputMessage.files"
+          :streaming="false" @send="sendMessage" @toggle-web-search="handleWebSearch"
+          @toggle-thinking="toggleDeepThinking">
           <template #buttons>
             <n-popselect v-model:value="currentSession.model_id" :options="modelOptions" trigger="click">
-              <div
-                class="animate-outside bg-white rounded-full border border-gray-200 hover:bg-gray-50 transition-all duration-300 ease-in-out overflow-hidden mr-2.5"
+              <ui-button :round-full="true" class="animate-outside transition-all duration-300 ease-in-out overflow-hidden mr-2.5"
                 :style="{ width: containerWidth + 'px' }" style="height:28px">
                 <div ref="innerEl"
                   class="animate-inside flex items-center justify-center px-2 py-1 text-gray-500 cursor-pointer min-w-[min-content]"
@@ -54,7 +52,7 @@
                   <OpenAI class="w-5 h-5 mr-1 flex-shrink-0" />
                   <span class="whitespace-nowrap mr-1 text-sm">{{ currentModelName }}</span>
                 </div>
-              </div>
+              </ui-button>
             </n-popselect>
           </template>
         </ChatInput>
@@ -76,7 +74,7 @@ import { apiService } from "../services/ApiService";
 import { usePopup } from "../composables/usePopup";
 import { useTitle } from "../composables/useTitle";
 // 组件导入
-import { ChatInput } from "./ui";
+import { ChatInput, UiButton } from "./ui";
 
 // 图标导入
 import {
@@ -99,7 +97,6 @@ const itemRefs = ref({});
 const models = ref([]);
 const providers = ref([]);
 
-const inputHasShadow = ref(false);
 const innerEl = ref(null)
 const containerWidth = ref(100) // 初始宽度
 
