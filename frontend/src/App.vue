@@ -25,25 +25,14 @@ import { useTitle } from './composables/useTitle'
   */
 const themeOverrides = {
     common: {
-        primaryColor: '#18a058',
-        primaryColorHover: '#18a058',
-        primaryColorPressed: '#18a058',
-        primaryColorSuppl: '#18a058',
-        primaryColorDisabled: '#18a058',
+        primaryColor: '#fb7299',
+        primaryColorHover: '#fb7299',
+        primaryColorPressed: '#fb72998',
+        primaryColorSuppl: '#fb7299',
+        primaryColorDisabled: '#fb7299',
 
     },
-    Button: {
-        textColor: '#1F2937',
-        color:'#18a058',
-        colorFocus:'#18a058'
-    },
-    Select: {
-        // peers: {
-        //     InternalSelection: {
-        //         textColor: '#FF0000'
-        //     }
-        // }
-    }
+   
     // ...
 }
 const router = useRouter()

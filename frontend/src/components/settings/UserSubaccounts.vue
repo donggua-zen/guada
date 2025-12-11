@@ -11,9 +11,9 @@
       </div>
       <div class="absolute bottom-2 right-2">
         <n-dropdown :options="dropdownOptions" @select="(key) => handleDropdownSelect(key, account)" trigger="hover">
-          <n-button text>
+          <UiButton text>
             <MoreVertOutlined class="h-5 w-5 text-gray-500" />
-          </n-button>
+          </UiButton>
         </n-dropdown>
       </div>
     </div>
@@ -51,8 +51,8 @@
     </n-form>
     <template #footer>
       <div class="flex justify-end gap-2">
-        <n-button @click="showAccountModal = false">取消</n-button>
-        <n-button type="primary" @click="saveAccount">保存</n-button>
+        <UiButton @click="showAccountModal = false">取消</UiButton>
+        <UiButton type="primary" @click="saveAccount">保存</UiButton>
       </div>
     </template>
   </n-modal>
@@ -60,11 +60,11 @@
 
 <script setup>
 import { ref, computed, onMounted, h } from 'vue'
-import { NButton, NForm, NFormItem, NInput, NIcon, NDropdown, NModal } from 'naive-ui'
+import { NForm, NFormItem, NInput, NIcon, NDropdown, NModal } from 'naive-ui'
 import { MoreVertOutlined, EditOutlined, DeleteOutlineOutlined } from '@vicons/material'
 import { usePopup } from '../../composables/usePopup'
 import { apiService } from '../../services/ApiService'
-import Avatar from '../ui/Avatar.vue'
+import { UiButton, Avatar } from '../ui/'
 
 const { toast } = usePopup()
 
