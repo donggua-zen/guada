@@ -35,7 +35,7 @@
 <script setup>
 import { ref, onMounted, onUnmounted, computed, watch, } from 'vue'
 import Avatar from './Avatar.vue'
-import UiButton from './UIButton.vue'
+import UiButton from './UiButton.vue'
 import { Cropper } from 'vue-advanced-cropper'
 import 'vue-advanced-cropper/dist/style.css'
 import {
