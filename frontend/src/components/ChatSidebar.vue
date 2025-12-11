@@ -5,12 +5,12 @@
     <div class="sessions-header px-5 pt-5 pb-3 text-lg font-semibold flex justify-between items-center">
       <span>聊天对话</span>
       <!-- 新建会话按钮移动到右侧 -->
-      <ui-button type="default" :border="false" round @click="handleButtonClick('create')" class="text-sm">
+      <UiButton type="default" :border="false" round @click="handleButtonClick('create')" class="text-sm">
         <n-icon class="mr-2" :size="16">
           <ChatNew />
         </n-icon>
         新建会话
-      </ui-button>
+      </UiButton>
     </div>
 
     <!-- 搜索框 -->
@@ -27,7 +27,7 @@
 
     <!-- 会话列表区域 -->
     <div class="sessions-list flex-1 overflow-hidden py-2.5">
-      <scroll-container class="">
+      <ScrollContainer class="">
         <div @click="handleButtonClick('characters')" :class="{
           'hover:bg-[var(--conversation-hover-bg)] text-[var(--conversation-text-color)]': btnActive !== 'characters',
           'bg-[var(--conversation-active-bg)] font-bold text-[var(--conversation-active-text-color)]': btnActive === 'characters',
@@ -94,7 +94,7 @@
 
           </div>
         </template>
-      </scroll-container>
+      </ScrollContainer>
 
     </div>
 
@@ -103,7 +103,7 @@
       <div @click="handleButtonClick('profile')"
         class="cursor-pointer p-2 rounded-lg flex items-center hover:bg-[var(--conversation-hover-bg)] transition-colors duration-200">
         <div class="w-7 h-7 ">
-          <avatar type="user" :round="true" :src="authStore.user.avatar_url" />
+          <Avatar type="user" :round="true" :src="authStore.user.avatar_url" />
         </div>
         <span class="ml-3">{{ authStore.user.nickname }}</span>
       </div>

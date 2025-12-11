@@ -22,58 +22,58 @@
                 <div class="tools left-tools">
                     <slot name="buttons"></slot>
                     <template v-if="showButtons.thinkingButton">
-                        <ui-button type="default" round-full class="tool-btn" id="deep-thinking-btn"
+                        <UiButton type="default" round-full class="tool-btn" id="deep-thinking-btn"
                             :class="{ active: localThinkingEnabled }" :title="localThinkingEnabled ? '关闭深度思考' : '深度思考'"
                             @click="toggleDeepThinking" text>
                             <n-icon size="16" class="mr-1">
                                 <Thinking2 />
                             </n-icon>
                             思考
-                        </ui-button>
+                        </UiButton>
                         <span class="mr-2.5"></span>
                     </template>
-                    <ui-button type="default" round-full v-if="showButtons.webSearchButton" class="tool-btn"
+                    <UiButton type="default" round-full v-if="showButtons.webSearchButton" class="tool-btn"
                         :class="{ active: localWebSearchEnabled }" title="联网搜索" @click="handleWebSearch" text>
                         <n-icon size="16" class="mr-1">
                             <Network />
                         </n-icon>
                         网络
-                    </ui-button>
+                    </UiButton>
                 </div>
                 <div class="right-actions">
                     <div class="tools right-tools">
-                        <ui-button :border="false" v-if="showButtons.filesButton" class="tool-btn" title="上传文件"
+                        <UiButton :border="false" v-if="showButtons.filesButton" class="tool-btn" title="上传文件"
                             @click="triggerFileInput" text>
                             <n-icon size="22">
                                 <InsertDriveFileTwotone />
                             </n-icon>
-                        </ui-button>
-                        <ui-button :border="false" v-if="showButtons.imagesButton" class="tool-btn" title="添加图片"
+                        </UiButton>
+                        <UiButton :border="false" v-if="showButtons.imagesButton" class="tool-btn" title="添加图片"
                             @click="triggerImageInput">
                             <n-icon size="22">
                                 <ImageTwotone />
                             </n-icon>
-                        </ui-button>
-                        <ui-button :border="false" v-if="showButtons.tokensButton" class="tool-btn" title="tokens统计"
+                        </UiButton>
+                        <UiButton :border="false" v-if="showButtons.tokensButton" class="tool-btn" title="tokens统计"
                             @click="handleTokensStatistic">
                             <n-icon size="22">
                                 <DataThresholdingTwotone />
                             </n-icon>
-                        </ui-button>
+                        </UiButton>
                     </div>
                     <div class="send-actions">
-                        <ui-button v-if="!streaming" class="send-btn" title="发送" @click="sendMessage"
+                        <UiButton v-if="!streaming" class="send-btn" title="发送" @click="sendMessage"
                             :disabled="!inputContent.trim()" size="small">
                             <n-icon size="18">
                                 <ArrowSend />
                             </n-icon>
-                        </ui-button>
-                        <ui-button v-else class="send-btn stop-btn" title="停止生成" @click="abortResponse" circle
+                        </UiButton>
+                        <UiButton v-else class="send-btn stop-btn" title="停止生成" @click="abortResponse" circle
                             type="error" size="small">
                             <n-icon size="18">
                                 <Stop />
                             </n-icon>
-                        </ui-button>
+                        </UiButton>
                     </div>
                 </div>
             </div>
