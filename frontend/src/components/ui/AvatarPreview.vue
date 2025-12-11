@@ -4,14 +4,12 @@
             <Avatar :src="previewUrl" :type="type"></Avatar>
         </div>
         <div class="avatar-upload-actions mt-3">
-            <n-button @click="triggerAvatarUpload" round strong secondary type="primary" size="small">
+            <UiButton @click="triggerAvatarUpload" round :border="false" plain type="primary" size="small">
                 <template #icon>
-                    <n-icon>
-                        <FileUploadOutlined />
-                    </n-icon>
+                    <FileUploadOutlined />
                 </template>
                 更换头像
-            </n-button>
+            </UiButton>
         </div>
         <input ref="avatarInput" type="file" accept="image/*" style="display: none" @change="handleAvatarChanged">
     </div>
@@ -28,8 +26,8 @@
         </div>
         <template #footer>
             <n-space justify="end">
-                <n-button @click="closeCropModal">取消</n-button>
-                <n-button type="primary" @click="cropAvatar">确认裁剪</n-button>
+                <UiButton @click="closeCropModal">取消</UiButton>
+                <UiButton type="primary" @click="cropAvatar">确认裁剪</UiButton>
             </n-space>
         </template>
     </n-modal>
@@ -37,10 +35,10 @@
 <script setup>
 import { ref, onMounted, onUnmounted, computed, watch, } from 'vue'
 import Avatar from './Avatar.vue'
+import UiButton from './UIButton.vue'
 import { Cropper } from 'vue-advanced-cropper'
 import 'vue-advanced-cropper/dist/style.css'
 import {
-    NButton,
     NIcon,
     NModal,
     NSpace

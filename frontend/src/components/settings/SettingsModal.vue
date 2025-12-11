@@ -9,8 +9,8 @@
                     <div class="flex flex-col h-full border-r border-gray-200 items-center relative py-2 pr-3 bg-white">
                         <div class="w-full py-1 flex items-center justify-center  px-2 mb-3 rounded-lg transition-colors duration-200"
                             :class="{
-                                'bg-[var(--secondary-color)] text-[var(--primary-color)]': currentTabValue === item.path,
-                                'cursor-pointer hover:text-[var(--primary-color)] hover:bg-[var(--secondary-color)]': item.path
+                                'bg-[var(--primary-color-100)] text-[var(--primary-color)]': currentTabValue === item.path,
+                                'cursor-pointer hover:text-[var(--primary-color)] hover:bg-[var(--primary-color-100)]': item.path
                             }" v-for="item in filteredSidebarItems" @click="handleItemClick(item)">
                             <div v-if="item.path" class="flex-1 w-full flex items-center gap-x-2">
                                 <component :is="item.icon" class="w-5 h-5"></component>
@@ -49,7 +49,7 @@
     </n-modal>
 </template>
 <script setup>
-import { ref, onMounted, computed, defineProps, watch } from 'vue'
+import { ref, onMounted, computed, watch } from 'vue'
 import { SidebarLayout } from "../ui";
 import UserProfile from './UserProfile.vue'
 import UserSubaccounts from './UserSubaccounts.vue'

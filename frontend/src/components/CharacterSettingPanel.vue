@@ -159,14 +159,14 @@
             </n-tabs>
         </div>
         <div class="footer pb-5 flex justify-end">
-            <n-button round type="primary" @click="handleSave" size="large">
+            <UiButton round type="primary" @click="handleSave" size="large">
                 <template #icon>
                     <n-icon>
                         <SaveOutlined />
                     </n-icon>
                 </template>
                 保存
-            </n-button>
+            </UiButton>
         </div>
     </div>
 
@@ -199,7 +199,7 @@ import { apiService } from '../services/ApiService'
 
 
 import { usePopup } from '../composables/usePopup'
-import { AvatarPreview } from './ui/'
+import { AvatarPreview,UiButton } from './ui/'
 
 const { toast, notify } = usePopup()
 

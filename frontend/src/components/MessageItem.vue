@@ -68,38 +68,38 @@
         :class="[isAssistant ? 'justify-start' : 'justify-end', message.is_streaming ? 'opacity-0' : 'opacity-100']">
 
 
-        <div class="message-action-button" @click="handleAction('copy')">
+        <div class="message-actioUiButton" @click="handleAction('copy')">
           <n-icon :component="ContentCopyTwotone" size="16" />
         </div>
 
         <template v-if="!isAssistant && props.allowGenerate">
-          <div class="message-action-button" @click="handleAction('generate')">
+          <div class="message-actioUiButton" @click="handleAction('generate')">
             <n-icon :component="ArrowDownwardTwotone" size="16" />
           </div>
         </template>
 
         <template v-if="isAssistant && props.isLast">
-          <div class="message-action-button" @click="handleAction('regenerate')">
+          <div class="message-actioUiButton" @click="handleAction('regenerate')">
             <n-icon :component="RefreshFilled" size="16" />
           </div>
         </template>
 
         <!-- 内容切换按钮（如果需要） -->
         <template v-if="isLast && message.contents.length > 1">
-          <div class="message-action-button" @click="switchContent('prev')" :disabled="!hasPrevContent">
+          <div class="message-actioUiButton" @click="switchContent('prev')" :disabled="!hasPrevContent">
             <n-icon :component="ArrowLeftTwotone" size="16" />
           </div>
           <div class="text-gray-700 hover:text-blue-500 transition-colors duration-200 flex items-center py-1 px-2">
             {{ getCurrentIndex(message.contents) }} / {{ message.contents.length }}
           </div>
-          <div class="message-action-button" @click="switchContent('next')" :disabled="!hasNextContent">
+          <div class="message-actioUiButton" @click="switchContent('next')" :disabled="!hasNextContent">
             <n-icon :component="ArrowRightTwotone" size="16" />
           </div>
         </template>
 
         <!-- 更多按钮下拉菜单 -->
         <n-dropdown trigger="click" :options="moreOptions" @select="handleMoreAction">
-          <div class="message-action-button">
+          <div class="message-actioUiButton">
             <n-icon :component="MoreVertOutlined" size="16" />
           </div>
         </n-dropdown>
@@ -517,7 +517,7 @@ defineExpose({ showThinking, hideThinking, switchContent, });
 }
 
 /* 重用的消息操作按钮样式 */
-.message-action-button {
+.message-actioUiButton {
   @apply cursor-pointer flex items-center gap-1 py-1 px-1 rounded mr-1 hover:bg-blue-50 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-gray-100 disabled:hover:text-gray-400 transition-transform duration-100;
 }
 

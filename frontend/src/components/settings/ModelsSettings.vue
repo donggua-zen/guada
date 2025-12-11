@@ -7,24 +7,24 @@
         <template v-else>
 
             <div class="flex items-center mb-6">
-                <n-button text style="font-size: 24px" @click="showDetail = false">
+                <UiButton text style="font-size: 24px" @click="showDetail = false">
                     <n-icon size="16">
                         <ArrowBackIosFilled />
                     </n-icon>
                     <span class="font-bold text-lg mr-2">{{ currentProvider.name }}</span>
-                </n-button>
+                </UiButton>
 
-                <n-button text style="font-size: 24px" @click="handleEditProvider(currentProvider)">
+                <UiButton text style="font-size: 24px" @click="handleEditProvider(currentProvider)">
                     <n-icon>
                         <SettingsOutlined />
                     </n-icon>
-                </n-button>
+                </UiButton>
             </div>
             <div class="flex w-full">
                 <div class="flex flex-1 justify-start items-center">
                     <n-space>
-                        <n-button @click="handleAddModel" strong secondary>手动添加</n-button>
-                        <n-button @click="handleFetchModels" strong secondary>获取模型列表</n-button>
+                        <UiButton @click="handleAddModel" strong secondary>手动添加</UiButton>
+                        <UiButton @click="handleFetchModels" strong secondary>获取模型列表</UiButton>
                     </n-space>
                 </div>
             </div>
@@ -41,17 +41,17 @@
                                 getLableName(feature) }}</n-tag>
                         </n-space>
                         <div class="flex flex-1 justify-end items-center">
-                            <n-button text style="font-size: 24px" @click="handleEditClick(model)">
+                            <UiButton text style="font-size: 24px" @click="handleEditClick(model)">
                                 <n-icon>
                                     <SettingsOutlined />
                                 </n-icon>
-                            </n-button>
+                            </UiButton>
                             &nbsp;
-                            <n-button type="error" text style="font-size: 24px" @click="handleDeleteClick(model)">
+                            <UiButton type="error" text style="font-size: 24px" @click="handleDeleteClick(model)">
                                 <n-icon>
                                     <RemoveCircleOutlineRound />
                                 </n-icon>
-                            </n-button>
+                            </UiButton>
                         </div>
                     </li>
                 </ul>
@@ -148,12 +148,12 @@
                                     </n-space>
                                 </div>
                             </div>
-                            <n-button type="error" text @click="handleRemoveFromFetch(model)">
+                            <UiButton type="error" text @click="handleRemoveFromFetch(model)">
                                 <n-icon>
                                     <RemoveCircleTwotone />
                                 </n-icon>
                                 <span class="ml-1">移除</span>
-                            </n-button>
+                            </UiButton>
                         </li>
                     </ul>
                 </div>
@@ -176,12 +176,12 @@
                                     </n-space>
                                 </div>
                             </div>
-                            <n-button text type="primary" @click="handleAddFromFetch(model)" size="small">
+                            <UiButton text type="primary" @click="handleAddFromFetch(model)" size="small">
                                 <n-icon>
                                     <AddCircleTwotone />
                                 </n-icon>
                                 <span class="ml-1">添加</span>
-                            </n-button>
+                            </UiButton>
                         </li>
                     </ul>
                 </div>
@@ -197,7 +197,7 @@
 <script setup>
 import { ref, onMounted, computed, watch } from 'vue'
 import { useDebounceFn } from '@vueuse/core' // 导入防抖函数
-import { SidebarLayout } from "../ui";
+import { UiButton } from "../ui";
 import ModelsProviderList from './ModelsProviderList.vue'
 import {
     NInput, NFormItem, NForm, NButton, NSpace, NIcon, NTag, NGrid, NGi,
