@@ -1,6 +1,7 @@
 <template>
     <div class="min-h-screen bg-gray-50 flex items-center justify-center p-4">
-        <div class="flex bg-white rounded-xl overflow-hidden shadow-[0_6px_30px_0_rgba(0,0,0,.08)] py-10 items-center justify-center">
+        <div
+            class="flex bg-white rounded-xl overflow-hidden shadow-[0_6px_30px_0_rgba(0,0,0,.08)] py-10 items-center justify-center">
             <div class="flex w-120 items-center justify-center">
                 <div class="w-90 h-90">
                     <!-- <img src="/images/girl_book.png" class="w-80 h-80 mx-auto"> -->
@@ -63,14 +64,12 @@
 
                         <!-- 登录按钮 -->
                         <div class="flex justify-center items-center mb-4">
-                            <n-button type="primary" round block size="large" :loading="loading" @click="handleLogin">
+                            <UiButton type="primary" round block size="large" :loading="loading" @click="handleLogin">
                                 <template #icon>
-                                    <n-icon>
-                                        <LoginIcon />
-                                    </n-icon>
+                                    <LoginIcon />
                                 </template>
                                 {{ loading ? '登录中...' : '立即登录' }}
-                            </n-button>
+                            </UiButton>
                         </div>
 
                     </n-form>
@@ -80,16 +79,17 @@
                         <n-checkbox v-model:checked="rememberMe">
                             记住我
                         </n-checkbox>
-                        <n-button text type="primary" size="small" style="display: none;">
+                        <UiButton text type="primary" size="small" style="display: none;">
                             忘记密码？
-                        </n-button>
+                        </UiButton>
                     </div>
                 </div>
 
                 <!-- 底部信息 -->
                 <div class="px-8 py-4 bg-gray-50 text-center text-sm text-gray-500 border-t display-none"
                     style="display: none;">
-                    <p>还没有账号？<n-button text type="primary">立即注册</n-button></p>
+                    <p>还没有账号？<UiButton text type="primary">立即注册</UiButton>
+                    </p>
                 </div>
             </div>
 
@@ -103,7 +103,6 @@ import {
     NForm,
     NFormItem,
     NInput,
-    NButton,
     NTabs,
     NTabPane,
     NIcon,
@@ -123,6 +122,7 @@ import { useRouter } from 'vue-router'
 import { useAuthStore } from '../stores/auth'
 import { usePopup } from '../composables/usePopup'
 import { useStorage } from '@vueuse/core'
+import { UiButton } from './ui'
 
 const authStore = useAuthStore()
 // 消息提示
@@ -233,7 +233,7 @@ const handleLogin = async () => {
     --n-border-focus: 1px solid #3b82f6;
 }
 
-.n-button {
+.UiButton {
     --n-height: 44px;
     --n-font-size: 16px;
 }

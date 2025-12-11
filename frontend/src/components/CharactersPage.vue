@@ -3,14 +3,12 @@
     <!-- 头部 -->
     <div class="flex justify-between items-center px-6 py-4 bg-white">
       <span class="text-lg font-semibold text-gray-800">角色列表</span>
-      <n-button type="primary" @click="createCharacter" class="flex items-center">
+      <UiButton type="primary" @click="createCharacter" class="flex items-center">
         <template #icon>
-          <n-icon>
-            <PlusOutlined />
-          </n-icon>
+          <PlusOutlined />
         </template>
         新建角色
-      </n-button>
+      </UiButton>
     </div>
 
     <!-- 角色列表 -->
@@ -91,30 +89,27 @@
               </div>
               <!-- 操作按钮 -->
               <div class="flex justify-between items-center mt-4 pt-3 border-t border-gray-100">
-                <n-button secondary type="primary" round size="small" @click="startNewChat(character)"
+                <UiButton type="primary" round size="small" @click="startNewChat(character)"
                   class="flex items-center gap-1">
                   <template #icon>
-                    <n-icon size="16">
-                      <ChatbubbleEllipses />
-                    </n-icon>
+                    <ChatbubbleEllipses />
                   </template>
                   使用
-                </n-button>
+                </UiButton>
 
                 <div v-if="charactersType == 'private'" class="flex gap-1">
-                  <n-button size="small" quaternary circle @click="shareCharacter(character)"
+                  <UiButton size="small" text  @click="shareCharacter(character)"
                     class="text-gray-500 hover:text-gray-600" :class="{ '!text-yellow-500': character.is_public }">
                     <template #icon>
-                      <n-icon :component="ShareTwotone" size="18">
-                      </n-icon>
+                      <ShareTwotone />
                     </template>
-                  </n-button>
+                  </UiButton>
 
                   <!-- 更多按钮下拉菜单 -->
                   <n-dropdown trigger="click" :options="moreOptions" @select="handleMoreAction($event, character)">
-                    <n-button size="small" quaternary circle>
+                    <UiButton size="small" text>
                       <n-icon :component="MoreVertOutlined" size="18" />
-                    </n-button>
+                    </UiButton>
                   </n-dropdown>
                 </div>
               </div>
@@ -142,7 +137,6 @@
 import { ref, onMounted, reactive, computed, h } from 'vue'
 import { useRouter } from 'vue-router'
 import {
-  NButton,
   NIcon,
   NPopover,
   NTabs,
@@ -163,7 +157,7 @@ import {
 } from '@vicons/material'
 
 // 组件
-import Avatar from './ui/Avatar.vue'
+import { Avatar, UiButton } from './ui'
 import CharacterModal from './CharacterModal.vue'
 
 // 服务

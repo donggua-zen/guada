@@ -15,7 +15,7 @@
           placeholder="请再次输入新密码" />
       </n-form-item>
       <n-form-item>
-        <n-button type="primary" @click="handleChangePassword">确认修改</n-button>
+        <UiButton type="primary" @click="handleChangePassword">确认修改</UiButton>
       </n-form-item>
     </n-form>
   </div>

@@ -22,21 +22,21 @@
                 <div class="tools left-tools">
                     <slot name="buttons"></slot>
                     <template v-if="showButtons.thinkingButton">
-                        <UiButton type="default" round-full class="tool-btn" id="deep-thinking-btn"
+                        <UiButton type="default" round class="tool-btn" id="deep-thinking-btn"
                             :class="{ active: localThinkingEnabled }" :title="localThinkingEnabled ? '关闭深度思考' : '深度思考'"
-                            @click="toggleDeepThinking" text>
-                            <n-icon size="16" class="mr-1">
+                            @click="toggleDeepThinking">
+                            <template #icon>
                                 <Thinking2 />
-                            </n-icon>
+                            </template>
                             思考
                         </UiButton>
                         <span class="mr-2.5"></span>
                     </template>
-                    <UiButton type="default" round-full v-if="showButtons.webSearchButton" class="tool-btn"
-                        :class="{ active: localWebSearchEnabled }" title="联网搜索" @click="handleWebSearch" text>
-                        <n-icon size="16" class="mr-1">
+                    <UiButton type="default" round v-if="showButtons.webSearchButton" class="tool-btn"
+                        :class="{ active: localWebSearchEnabled }" title="联网搜索" @click="handleWebSearch">
+                        <template #icon>
                             <Network />
-                        </n-icon>
+                        </template>
                         网络
                     </UiButton>
                 </div>
@@ -83,7 +83,7 @@
 
 
 <script setup>
-import { ref, watch, computed, nextTick, defineEmits, onUnmounted, onMounted } from 'vue'
+import { ref, watch, computed, nextTick, onUnmounted, onMounted } from 'vue'
 import { NIcon } from 'naive-ui'
 import FileItem from './FileItem.vue';
 import UiButton from '../ui/UiButton.vue';
@@ -478,7 +478,7 @@ onUnmounted(() => {
 /* 深度思考按钮激活状态样式 */
 .tool-btn.active {
     border-color: var(--primary-color);
-    background-color: var(--secondary-color);
+    background-color: var(--primary-color-0f);
     color: var(--primary-color);
 }
 

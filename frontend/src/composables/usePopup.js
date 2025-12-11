@@ -92,7 +92,7 @@ export function usePopup() {
                         },
                         onKeydown: (e) => {
                             if (e.key === 'Enter') {
-                                e.target.closest('.n-dialog__action').querySelector('.n-button--primary-type').click()
+                                e.target.closest('.n-dialog__action').querySelector('.UiButton--primary-type').click()
                             }
                         }
                     })

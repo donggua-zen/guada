@@ -2,38 +2,67 @@
 @import "tailwindcss";
 
 :root {
-    --primary-color: #262626;
-    --primary-color-hover: #404040;
-    --primary-color-active: #1a1a1a;
-    --primary-color-disabled: #3f3f3f;
+    --primary-color: #fb7299;
+    --primary-color-hover: color-mix(in srgb, var(--primary-color) 90%, black);
+    --primary-color-active: color-mix(in srgb, var(--primary-color) 70%, black);
+    --primary-color-disabled: color-mix(in srgb, var(--primary-color) 40%, white);
     --primary-text: #fff;
+    --primary-text-disabled: color-mix(in srgb, var(--primary-text) 40%, white);
+    --primary-color-0f: #fb72990f;
+    /* 明度变体 - 用于视觉层次 */
+    --primary-color-100: color-mix(in srgb, var(--primary-color) 10%, white);
+    --primary-color-300: color-mix(in srgb, var(--primary-color) 30%, white);
+    --primary-color-400: color-mix(in srgb, var(--primary-color) 40%, white);
+    --primary-color-500: color-mix(in srgb, var(--primary-color) 50%, white);
+    --primary-color-700: color-mix(in srgb, var(--primary-color) 70%, white);
+    --primary-color-900: color-mix(in srgb, var(--primary-color) 90%, white);
 
-    --secondary-color: rgba(83, 164, 255, 0.15);
+    --secondary-color: #1e1e20;
     /* #53a4ff27转换为rgba */
-    --secondary-color-hover: rgba(83, 164, 255, 0.30);
+    --secondary-color-hover: color-mix(in srgb, var(--secondary-color) 90%, var(--primary-color));
     /* #53a4ff4d转换为rgba */
-    --secondary-color-active: rgba(83, 164, 255, 0.60);
+    --secondary-color-active: color-mix(in srgb, var(--secondary-color) 70%, white);
     /* #53a4ff99转换为rgba */
-    --secondary-color-disabled: rgba(83, 164, 255, 0.10);
+    --secondary-color-disabled: color-mix(in srgb, var(--secondary-color) 60%, white);
     /* #53a4ff1a转换为rgba */
-    --secondary-text: #333;
+    --secondary-text: #fff;
+    --secondary-text-disabled: color-mix(in srgb, var(--secondary-text) 70%, black);
 
-    --tertiary-color: rgba(0, 0, 0, 0.03);
+    --tertiary-color: #f8f8f8;
     /* #00000008转换为rgba */
-    --tertiary-color-hover: rgba(0, 0, 0, 0.20);
+    --tertiary-color-hover: color-mix(in srgb, var(--tertiary-color) 90%, black);
     /* #00000033转换为rgba */
-    --tertiary-color-active: rgba(0, 0, 0, 0.30);
+    --tertiary-color-active: color-mix(in srgb, var(--tertiary-color) 80%, black);
     /* #0000004d转换为rgba */
-    --tertiary-color-disabled: rgba(0, 0, 0, 0.12);
-    /* #0000001f转换为rgba *
+    --tertiary-color-disabled: color-mix(in srgb, var(--tertiary-color) 70%, white);
+    --tertiary-text: #333;
+    --tertiary-text-disabled: rgba(46, 51, 56, 0.8);
 
+
+    --error-color: #ff4d4f;
+    --error-color-hover: color-mix(in srgb, var(--error-color) 90%, black);
+    --error-color-active: rgba(255, 77, 79, 0.80);
+    --error-color-disabled: rgba(255, 77, 79, 0.8);
+    --error-text: #fff;
+    --error-text-disabled: rgba(255, 255, 255, 0.8);
+
+    --warning-color: #ffc53d;
+    --warning-color-hover: rgba(255, 198, 61, 0.9);
+    --warning-color-active: rgba(255, 198, 61, 0.60);
+    --warning-color-disabled: rgba(255, 198, 61, 0.8);
+    --warning-text: #333;
+    --warning-text-disabled: rgba(51, 51, 51, 0.8);
+
+    /* #0000001f转换为rgba *
     --normal-color: #ffffff;
 
     --bg-hover: #00000008;
     /* 灰色背景色 */
     --bg: #fafafa;
     /* 灰色文字颜色 */
-    --primary-text-color: #1F2937;
+    --text-primary-color: #1F2937;
+    --text-primary-disabled: rgba(51, 51, 51, 0.8);
+    --text-gray: #efefef;
     --primary-text-light-color: #fff;
     --bg: #f1f5f9;
     --page-bg: #fff;
@@ -46,7 +75,7 @@
     --assitant-bubble-border-color: none;
     /* 聊天对话样式 */
     --conversation-bg: #fbfbfb;
-    /* --conversation-bg: #fff; */
+    --conversation-bg: #fff;
     /* #E9EBF2;*/
     --conversation-text-color: #333;
     /* --conversation-border-color: #efefef; */
@@ -55,10 +84,10 @@
     --conversation-padding: 15px;
     --conversation-font-size: 16px;
     /* --conversation-active-bg: #f0f4fc; */
-    --conversation-active-bg: #efefef;
-    --conversation-active-text-color: #1F2937;
-    --conversation-hover-bg: #efefef;
-    --conversation-hover-text-color: #1F2937;
+    --conversation-active-bg: var(--primary-color-100);
+    --conversation-active-text-color: var(--primary-color);
+    --conversation-hover-bg: var(--primary-color-100);
+    --conversation-hover-text-color: var(--primary-color);
     /*侧边栏*/
     --sidebar-bg: #fff;
     --sidebar-border-color: #eee;
@@ -67,7 +96,6 @@
     --sidebar-hover-text-color: #36ad6a;
     --sidebar-active-bg: none;
     --sidebar-active-text-color: #36ad6a;
-
 
 }
 
@@ -126,6 +154,24 @@ body {
 
 .app-text-light-color {
     color: var(--primary-text-light-color);
+}
+
+/* 修改进度条颜色 */
+#nprogress .bar {
+    background: var(--primary-color) !important;
+    /* 红色 */
+    height: 3px !important;
+}
+
+/* 修改进度条尖角阴影 */
+#nprogress .peg {
+    box-shadow: 0 0 10px var(--primary-color), 0 0 5px var(--primary-color) !important;
+}
+
+/* 修改圆形加载器颜色（如果启用） */
+#nprogress .spinner-icon {
+    border-top-color: var(--primary-color) !important;
+    border-left-color: var(--primary-color) !important;
 }
 
 /* 动画效果 */

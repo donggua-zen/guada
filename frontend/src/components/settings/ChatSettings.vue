@@ -68,15 +68,15 @@
                 </div>
             </ScrollContainer>
         </div>
-        <div class="footer pt-3 px-4 flex justify-end">
-            <n-button type="primary" @click="handleSave">
+        <div class="footer pt-3 px-4 flex justify-start">
+            <UiButton type="primary" @click="handleSave">
                 <template #icon>
                     <n-icon>
                         <SaveOutlined />
                     </n-icon>
                 </template>
                 保存全部设置
-            </n-button>
+            </UiButton>
         </div>
     </div>
 </template>
@@ -84,13 +84,10 @@
 <script setup>
 import { ref, reactive, computed, onMounted, onUnmounted } from 'vue'
 import {
-    NTabs,
-    NTabPane,
     NForm,
     NFormItem,
     NInput,
     NSelect,
-    NButton,
     NIcon,
     NSlider,
     NInputNumber,
@@ -100,7 +97,7 @@ import {
 } from '@vicons/antd'
 
 import { apiService } from '@/services/ApiService'
-import { ScrollContainer } from '@/components/ui/'
+import { ScrollContainer, UiButton } from '@/components/ui'
 
 import { usePopup } from '@/composables/usePopup'
 

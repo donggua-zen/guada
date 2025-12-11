@@ -3,13 +3,13 @@
     <!-- 聊天头部 -->
     <div class="chat-header mt-4 mx-5">
       <template v-if="!localSidebarVisible">
-        <n-button text @click="localSidebarVisible = true">
+        <UiButton text @click="localSidebarVisible = true">
           <template #icon>
             <n-icon size="22">
               <FormatListBulletedSharp />
             </n-icon>
           </template>
-        </n-button>
+        </UiButton>
         <span class="ml-4"></span>
       </template>
       <UiButton :border="false" class="rounded-lg hover:bg-[--bg-hover] text-base" @click="handleSwitchModelClick">

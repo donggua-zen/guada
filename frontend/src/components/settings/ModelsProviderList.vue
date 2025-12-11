@@ -5,14 +5,14 @@
     <div class="sessions-header py-1 text-lg font-semibold flex justify-between items-center">
       <span>分组列表</span>
       <!-- 新建会话按钮移动到右侧 -->
-      <n-button @click="handleCreateGroup" text size="medium">
+      <UiButton @click="handleCreateGroup" text size="medium">
         <template #icon>
           <n-icon>
             <PlusOutlined />
           </n-icon>
         </template>
         新建分组
-      </n-button>
+      </UiButton>
     </div>
 
     <!-- 搜索框 -->
@@ -40,17 +40,17 @@
             <div class="provider-title font-medium text-sm truncate text-gray-800">{{ provider.name }}</div>
           </div>
           <div class="provider-actions flex items-center">
-            <n-button text @click.stop="handleEditProvider(provider)">
+            <UiButton text @click.stop="handleEditProvider(provider)">
               <n-icon size="18" class="text-gray-500 hover:text-blue-500">
                 <EditOutlined />
               </n-icon>
-            </n-button>
+            </UiButton>
             &nbsp;&nbsp;
-            <n-button text @click.stop="handleDeleteProvider(provider)">
+            <UiButton text @click.stop="handleDeleteProvider(provider)">
               <n-icon size="18" class="text-gray-500 hover:text-red-500">
                 <DeleteOutlineOutlined />
               </n-icon>
-            </n-button>
+            </UiButton>
           </div>
         </div>
       </ScrollContainer>

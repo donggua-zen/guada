@@ -16,7 +16,7 @@
         <n-input v-model:value="userForm.phone" placeholder="手机号码" />
       </n-form-item>
       <n-form-item>
-        <n-button type="primary" @click="handleSaveUserInfo" :disabled="!isFormChanged">保存信息</n-button>
+        <UiButton type="primary" @click="handleSaveUserInfo" :disabled="!isFormChanged">保存信息</UiButton>
       </n-form-item>
     </n-form>
   </div>
@@ -24,8 +24,8 @@
 
 <script setup>
 import { ref, computed, onMounted, shallowRef } from 'vue'
-import { NButton, NForm, NFormItem, NInput } from 'naive-ui'
-import { AvatarPreview } from '../ui'
+import { NForm, NFormItem, NInput } from 'naive-ui'
+import { AvatarPreview, UiButton } from '../ui'
 import { useAuthStore } from '../../stores/auth'
 import { usePopup } from '../../composables/usePopup'
 import { apiService } from '../../services/ApiService'

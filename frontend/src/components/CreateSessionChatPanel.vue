@@ -3,13 +3,13 @@
     <!-- 聊天头部 -->
     <div class="chat-header " style="display: none;">
       <template v-if="!localSidebarVisible">
-        <n-button text @click="localSidebarVisible = true">
+        <UiButton text @click="localSidebarVisible = true">
           <template #icon>
             <n-icon size="22">
               <FormatListBulletedSharp />
             </n-icon>
           </template>
-        </n-button>
+        </UiButton>
         <span class="ml-4"></span>
       </template>
       <span class="hidden md:block">{{ title }}</span>
@@ -45,7 +45,7 @@
           <template #buttons>
             <n-popselect v-model:value="currentSession.model_id" :options="modelOptions" trigger="click">
               <button
-                class="rounded-full animate-outside transition-all duration-300 ease-in-out overflow-hidden mr-2.5 border border-[var(--primary-color)] bg-[var(--secondary-color)] hover: bg-[var(--secondary-color)]"
+                class="rounded-full animate-outside transition-all duration-300 ease-in-out overflow-hidden mr-2.5 border border-[var(--primary-color)] bg-[var(--primary-color-0f)] hover:bg-[var(--primary-color-0f)]"
                 :style="{ width: containerWidth + 'px' }" style="height:28px">
                 <div ref="innerEl"
                   class="animate-inside flex items-center justify-center px-2 py-1 text-[var(--primary-color)]  cursor-pointer min-w-[min-content]"
@@ -60,12 +60,13 @@
       </div>
       <div>
         <div class="flex items-center justify-center mt-6">
-          您也可以<span class="w-1"></span><UiButton type="secondary" round-full :border="false" size="sm"
-            @click="handleCreateSessionClick">直接创建会话</UiButton>
+          您也可以<span class="w-1"></span>
+          <UiButton type="primary" plain round :border="false" size="small" @click="handleCreateSessionClick">直接创建会话
+          </UiButton>
         </div>
       </div>
-      
-    
+
+
     </div>
   </div>
 </template>

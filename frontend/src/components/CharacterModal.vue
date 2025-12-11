@@ -10,8 +10,6 @@
 <script setup>
 import { ref, reactive, watch, computed, onMounted, onUnmounted } from 'vue'
 import {
-    NDrawer,
-    NDrawerContent,
     NModal,
 } from 'naive-ui'
 import CharacterSettingPanel from './CharacterSettingPanel.vue'
