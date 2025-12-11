@@ -27,7 +27,7 @@
     </div>
 
     <div class="providers-list flex-1 overflow-hidden py-2.5">
-      <scroll-container>
+      <ScrollContainer>
         <div v-for="provider in filteredItems" :key="provider.id"
           class="hover:bg-[var(--conversation-hover-bg)] provider-item px-3.5 cursor-pointer flex items-center transition-colors duration-200 rounded-3xl mb-1.5 h-10"
           @click="selectProvider(provider)">
@@ -53,7 +53,7 @@
             </n-button>
           </div>
         </div>
-      </scroll-container>
+      </ScrollContainer>
     </div>
   </div>
 </template>

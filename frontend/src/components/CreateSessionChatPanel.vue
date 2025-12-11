@@ -60,10 +60,12 @@
       </div>
       <div>
         <div class="flex items-center justify-center mt-6">
-          您也可以<span class="w-1"></span><n-button secondary type="primary" round size="small"
-            @click="handleCreateSessionClick">直接创建会话</n-button>
+          您也可以<span class="w-1"></span><UiButton type="secondary" round-full :border="false" size="sm"
+            @click="handleCreateSessionClick">直接创建会话</UiButton>
         </div>
       </div>
+      
+    
     </div>
   </div>
 </template>

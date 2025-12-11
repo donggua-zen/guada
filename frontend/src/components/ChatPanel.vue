@@ -12,16 +12,16 @@
         </n-button>
         <span class="ml-4"></span>
       </template>
-      <ui-button :border="false" class="rounded-lg hover:bg-[--bg-hover] text-base" @click="handleSwitchModelClick">
+      <UiButton :border="false" class="rounded-lg hover:bg-[--bg-hover] text-base" @click="handleSwitchModelClick">
         {{ currentModelName }}
         <SettingsTwotone class="w-4 h-4 ml-2" />
-      </ui-button>
+      </UiButton>
       <div class="flex items-center flex-1 justify-end">
         <!-- 更多操作下拉菜单 -->
         <n-dropdown trigger="hover" :options="moreOptions" @select="handleMoreSelect">
-          <ui-button class="more-btn" :border="false" title="更多操作" text>
+          <UiButton class="more-btn" :border="false" title="更多操作" text>
             <MoreVertOutlined class="w-5.5 h-5.5" />
-          </ui-button>
+          </UiButton>
         </n-dropdown>
       </div>
     </div>
@@ -63,7 +63,7 @@
         </div>
       </template>
       <template v-else-if="authStore.isAuthenticated">
-        <scroll-container ref="scrollContainerRef" :auto-scroll="true" :smooth-scroll="!isStreaming">
+        <ScrollContainer ref="scrollContainerRef" :auto-scroll="true" :smooth-scroll="!isStreaming">
           <div class="flex flex-col items-center px-[20px] max-w-[1000px] mx-auto">
             <MessageItem v-for="(message, index) in activeMessages" :ref="(el) => setItemRef(el, message.id)"
               :key="message.id" :message="message"
@@ -73,7 +73,7 @@
               @edit="editMessage" @copy="copyMessage" @generate="generateResponse" @regenerate="regenerateResponse"
               @switch="switchContent" />
           </div>
-        </scroll-container>
+        </ScrollContainer>
       </template>
     </div>
 

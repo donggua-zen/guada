@@ -2,17 +2,36 @@
 @import "tailwindcss";
 
 :root {
-    --primary-color: #18a058;
-    --primary-light-color: #2aa262;
-    --secondary-color: #e6f5f0;
-    --secondary-color: #18a05716;
-    /* --secondary: #00A0E91b; */
-    --tertiary-color: #00000008;
+    --primary-color: #262626;
+    --primary-color-hover: #404040;
+    --primary-color-active: #1a1a1a;
+    --primary-color-disabled: #3f3f3f;
+    --primary-text: #fff;
+
+    --secondary-color: rgba(83, 164, 255, 0.15);
+    /* #53a4ff27转换为rgba */
+    --secondary-color-hover: rgba(83, 164, 255, 0.30);
+    /* #53a4ff4d转换为rgba */
+    --secondary-color-active: rgba(83, 164, 255, 0.60);
+    /* #53a4ff99转换为rgba */
+    --secondary-color-disabled: rgba(83, 164, 255, 0.10);
+    /* #53a4ff1a转换为rgba */
+    --secondary-text: #333;
+
+    --tertiary-color: rgba(0, 0, 0, 0.03);
+    /* #00000008转换为rgba */
+    --tertiary-color-hover: rgba(0, 0, 0, 0.20);
+    /* #00000033转换为rgba */
+    --tertiary-color-active: rgba(0, 0, 0, 0.30);
+    /* #0000004d转换为rgba */
+    --tertiary-color-disabled: rgba(0, 0, 0, 0.12);
+    /* #0000001f转换为rgba *
+
+    --normal-color: #ffffff;
+
     --bg-hover: #00000008;
     /* 灰色背景色 */
     --bg: #fafafa;
-    --primary-text-color: #333;
-    --secondary-text-color: #666;
     /* 灰色文字颜色 */
     --primary-text-color: #1F2937;
     --primary-text-light-color: #fff;

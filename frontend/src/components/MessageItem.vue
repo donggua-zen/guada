@@ -63,45 +63,48 @@
           :ext="file.file_extension" :size="file.file_size" :preview-url="file.preview_url"
           :clickable="file.file_type === 'image'" @click="handleImageClick(index)"></file-item>
       </div>
-      <div class="message-actions flex gap-0 text-sm w-full mt-3 text-gray-400 items-center"
+      <div class="message-actions flex gap-0 text-sm w-full mt-3 text-gray-500 items-center"
         v-if="!streamingState.is_streaming"
         :class="[isAssistant ? 'justify-start' : 'justify-end', message.is_streaming ? 'opacity-0' : 'opacity-100']">
-        <!-- 保留的按钮：generate, regenerate, copy -->
+
+
+        <div class="message-action-button" @click="handleAction('copy')">
+          <n-icon :component="ContentCopyTwotone" size="16" />
+        </div>
+
         <template v-if="!isAssistant && props.allowGenerate">
           <div class="message-action-button" @click="handleAction('generate')">
-            <n-icon :component="ArrowDownwardTwotone" size="15" />
+            <n-icon :component="ArrowDownwardTwotone" size="16" />
           </div>
         </template>
 
         <template v-if="isAssistant && props.isLast">
           <div class="message-action-button" @click="handleAction('regenerate')">
-            <n-icon :component="RefreshFilled" size="15" />
+            <n-icon :component="RefreshFilled" size="16" />
           </div>
         </template>
-
-        <div class="message-action-button" @click="handleAction('copy')">
-          <n-icon :component="ContentCopyTwotone" size="15" />
-        </div>
-
-        <!-- 更多按钮下拉菜单 -->
-        <n-dropdown trigger="click" :options="moreOptions" @select="handleMoreAction">
-          <div class="message-action-button">
-            <n-icon :component="MoreVertOutlined" size="15" />
-          </div>
-        </n-dropdown>
 
         <!-- 内容切换按钮（如果需要） -->
         <template v-if="isLast && message.contents.length > 1">
           <div class="message-action-button" @click="switchContent('prev')" :disabled="!hasPrevContent">
-            <n-icon :component="ArrowLeftTwotone" size="15" />
+            <n-icon :component="ArrowLeftTwotone" size="16" />
           </div>
-          <div class="text-gray-400 hover:text-blue-500 transition-colors duration-200 flex items-center py-1 px-2">
+          <div class="text-gray-700 hover:text-blue-500 transition-colors duration-200 flex items-center py-1 px-2">
             {{ getCurrentIndex(message.contents) }} / {{ message.contents.length }}
           </div>
           <div class="message-action-button" @click="switchContent('next')" :disabled="!hasNextContent">
-            <n-icon :component="ArrowRightTwotone" size="15" />
+            <n-icon :component="ArrowRightTwotone" size="16" />
           </div>
         </template>
+
+        <!-- 更多按钮下拉菜单 -->
+        <n-dropdown trigger="click" :options="moreOptions" @select="handleMoreAction">
+          <div class="message-action-button">
+            <n-icon :component="MoreVertOutlined" size="16" />
+          </div>
+        </n-dropdown>
+
+
       </div>
     </div>
   </div>
@@ -515,7 +518,7 @@ defineExpose({ showThinking, hideThinking, switchContent, });
 
 /* 重用的消息操作按钮样式 */
 .message-action-button {
-  @apply cursor-pointer flex items-center gap-1 py-1 px-2 rounded bg-gray-100 mr-1 text-sm hover:bg-blue-50 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-gray-100 disabled:hover:text-gray-400 active:scale-95 transition-transform duration-100;
+  @apply cursor-pointer flex items-center gap-1 py-1 px-1 rounded mr-1 hover:bg-blue-50 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-gray-100 disabled:hover:text-gray-400 transition-transform duration-100;
 }
 
 /* 优化后的思考框样式 - 使用CSS Grid方案 */

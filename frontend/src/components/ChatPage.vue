@@ -1,5 +1,5 @@
 <template>
-  <sidebar-layout v-model:sidebar-visible="sidebarVisible" :sidebar-position="'left'">
+  <SidebarLayout v-model:sidebar-visible="sidebarVisible" :sidebar-position="'left'">
     <template #sidebar>
       <template v-if="authStore.isAuthenticated">
         <chat-sidebar ref="chatSidebarRef" :btn-active="targetPage" :sessions="sortedSessions" :current="currentSession"
@@ -19,11 +19,11 @@
     <template v-if="!isLoading" #content>
       <!-- 主体 -->
       <template v-if="targetPage == 'characters'">
-        <characters-panel @create-session="handleCreateSessionWithMessage" />
+        <CharactersPanel @create-session="handleCreateSessionWithMessage" />
       </template>
       <template v-else-if="targetPage == 'new-session'">
         <div class="h-full flex-1 flex items-center justify-center">
-          <create-session-chat-panel @create-session="handleCreateSessionWithMessage" />
+          <CreateSessionChatPanel @create-session="handleCreateSessionWithMessage" />
         </div>
       </template>
       <template v-else-if="sessions.length > 0 && currentSession">
@@ -40,8 +40,8 @@
       </template>
 
     </template>
-  </sidebar-layout>
-  <settings-modal v-model:visible="systemSettingsModalVisible" :default="systemSettingsPath"></settings-modal>
+  </SidebarLayout>
+  <SettingsModal v-model:visible="systemSettingsModalVisible" :default="systemSettingsPath"></SettingsModal>
 </template>
 
 <script setup>
