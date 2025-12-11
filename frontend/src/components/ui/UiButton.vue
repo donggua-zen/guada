@@ -1,7 +1,7 @@
 <template>
-    <div :class="btnClasses" @click="handleClick">
+    <button :class="btnClasses" @click="handleClick">
         <slot></slot>
-    </div>
+    </button>
 </template>
 <script setup>
 import { defineEmits, defineProps, computed, useAttrs } from "vue";
@@ -15,7 +15,7 @@ const props = defineProps({
         type: Boolean,
         default: false
     },
-    round: {
+    rounded: {
         type: Boolean,
         default: true
     },
@@ -37,9 +37,20 @@ const handleClick = (e) => {
 };
 
 const typeClasses = {
-    'default': "text-[var(--primary-text-color)] hover:bg-[var(--tertiary-color)]",
-    'primary': "bg-[var(--primary-color)] text-white hover:bg-[var(--primary-light)]",
-    'text': "hover:text-[var(--primary-color)] hover:bg-[var(--tertiary-color)]"
+    'default': {
+        'base': "text-[var(--primary-text)] hover:bg-[var(--tertiary-color)]",
+    },
+    'primary': {
+        'base': "bg-[var(--primary-color)] text-[var(--primary-text)] hover:bg-[var(--primary-color-hover)]",
+        'disabled': "bg-[var(--primary-color)]",
+    },
+    'secondary': {
+        'base': "bg-[var(--secondary-color)] text-[var(--secondary-text)] hover:bg-[var(--secondary-color-hover)]",
+        'disabled': "bg-[var(--secondary-color-disabled)]",
+    },
+    'tertiary': {
+        'base': "bg-[var(--tertiary-color)] text-[var(--tertiary-text)] hover:bg-[var(--tertiary-color-hover)]",
+    }
 };
 
 // defineOptions({
@@ -48,26 +59,26 @@ const typeClasses = {
 // const attrs = useAttrs()
 const btnClasses = computed(() => {
     let classes = [
-        "cursor-pointer flex items-center justify-center transition-colors duration-200",
+        "display-inline cursor-pointer flex items-center justify-center transition-colors duration-200",
     ];
     if (typeClasses[props.type]) {
-        classes.push(typeClasses[props.type]);
+        classes.push(typeClasses[props.type].base);
     }
 
     if (props.roundFull) {
         classes.push("rounded-full");
-    } else if (props.round) {
-        classes.push("rounded-md");
+    } else if (props.rounded) {
+        classes.push("rounded-sm");
     }
     if (props.border) {
         classes.push("border border-gray-200");
     }
-    if (props.size === "sm") {
-        classes.push("text-sm px-2 py-1");
-    } else if (props.size === "lg") {
+    if (props.size === "small") {
+        classes.push("text-[13px] px-3 py-0.5");
+    } else if (props.size === "large") {
         classes.push("text-lg px-2 py-1");
-    } else if (props.size === "md") {
-        classes.push("text-base px-2 py-1");
+    } else if (props.size === "medium") {
+        classes.push("text-[14px] px-3 py-1.5");
     } else if (props.size === "base") {
 
     }
