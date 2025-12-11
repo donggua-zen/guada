@@ -1,8 +1,8 @@
-<svg width="300" height="300" xmlns="http://www.w3.org/2000/svg">
+<svg width="24.000000000000004" height="24.000000000000004" xmlns="http://www.w3.org/2000/svg">
 
  <g>
   <title>Layer 1</title>
-  <rect x="0" y="0" stroke-width="0" rx="46" id="svg_1" height="300" width="300" stroke="#000" fill="#1A333F"/>
-  <text transform="matrix(9.93185 0 0 8.80258 -616.228 -1003.23)" stroke="#000" xml:space="preserve" text-anchor="start" font-family="'Andada Pro'" font-size="26" id="svg_2" y="140.6059" x="63.80556" stroke-width="0" fill="#FFFF91">核</text>
+  <rect rx="4" id="svg_3" height="24" width="24" y="0" x="0" stroke-width="0" stroke="#000" fill="#fb7299"/>
+  <text transform="matrix(0.956276 0 0 0.935873 -0.358554 0.510815)" stroke="#000" xml:space="preserve" text-anchor="start" font-family="Noto Sans JP" font-size="24" id="svg_2" y="19.00966" x="1.34374" stroke-width="0" fill="#ffffff">@</text>
  </g>
 </svg>
