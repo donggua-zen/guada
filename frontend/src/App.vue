@@ -1,21 +1,19 @@
 <template>
-    <n-config-provider :theme-overrides="themeOverrides" :theme="theme" :locale="zhCN" :date-locale="dateZhCN">
-        <n-notification-provider>
-            <n-dialog-provider>
-                <n-message-provider>
-                    <n-loading-bar-provider>
-                        <RouterView></RouterView>
-                    </n-loading-bar-provider>
-                </n-message-provider>
-            </n-dialog-provider>
-        </n-notification-provider>
-    </n-config-provider>
+    <NConfigProvider :theme-overrides="themeOverrides" :theme="theme" :locale="zhCN" :date-locale="dateZhCN">
+        <NNotificationProvider>
+            <NDialogProvider>
+                <NMessageProvider>
+                    <RouterView></RouterView>
+                </NMessageProvider>
+            </NDialogProvider>
+        </NNotificationProvider>
+    </NConfigProvider>
 </template>
 
 <script setup>
 import { ref } from 'vue'
 import { useRouter, RouterView } from 'vue-router'
-import { NConfigProvider, NNotificationProvider, NDialogProvider, NMessageProvider, NLoadingBarProvider } from 'naive-ui'
+import { NConfigProvider, NNotificationProvider, NDialogProvider, NMessageProvider } from 'naive-ui'
 import { zhCN, dateZhCN } from 'naive-ui'
 const theme = ref(null);
 import { useTitle } from './composables/useTitle'
@@ -32,7 +30,7 @@ const themeOverrides = {
         primaryColorDisabled: '#fb7299',
 
     },
-   
+
     // ...
 }
 const router = useRouter()
