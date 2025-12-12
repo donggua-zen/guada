@@ -22,7 +22,7 @@
 
 <script setup>
 import { computed } from 'vue'
-import { ChatBubbleTwotone, ContactsTwotone, CloudUploadTwotone, SettingsTwotone, AccountCircleTwotone } from '@vicons/material'
+import { ChatBubbleTwotone, CloudUploadTwotone, SettingsTwotone, AccountCircleTwotone } from '@vicons/material'
 import { useAuthStore } from '../stores/auth'
 
 const authStore = useAuthStore()
