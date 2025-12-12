@@ -1,13 +1,14 @@
 <template>
     <button :disabled="disabled" :style="btnThemeStyle" :class="btnClasses" @click="handleClick">
-        <div v-if="$slots.icon" name="icon" class="flex items-center justify-center" :class="iconClasses">
+        <div v-if="$slots.icon" name="icon" class="flex items-center justify-center align-middle leading-none" :class="iconClasses">
             <slot name="icon"></slot>
         </div>
         <slot></slot>
     </button>
 </template>
 <script setup>
-import { computed } from "vue";
+import { computed, useSlots } from "vue";
+const $slots = useSlots();
 const emits = defineEmits(["click"]);
 const props = defineProps({
     type: {
@@ -138,17 +139,20 @@ const colorMap = {
 
 const sizeMap = {
     small: {
-        icon: "w-4 h-4 mr-0.5",
+        icon: "w-4 h-4",
+        iconPadding: "mr-0.5",
         text: "text-[12px]",
         padding: "px-3 h-[28px]",
     },
     medium: {
-        icon: "w-4.5 h-4.5 mr-1",
+        icon: "w-4.5 h-4.5",
+        iconPadding: "mr-1",
         text: "text-[14px]",
         padding: "px-3 h-[34px]",
     },
     large: {
-        icon: "w-5 h-5 mr-1.5",
+        icon: "w-5 h-5",
+        iconPadding: "mr-1.5",
         text: "text-[16px]",
         padding: "px-4 h-[40px]",
     },
@@ -207,16 +211,20 @@ const btnThemeStyle = computed(() => {
 // const attrs = useAttrs()
 
 const iconClasses = computed(() => {
-    let classes = []
+    let classes = [];
     const sizeClasses = sizeMap[props.size.toLowerCase()] || sizeMap.medium;
     classes.push(sizeClasses.icon);
+    // 只有当存在默认插槽（文字内容）时才添加图标右边距
+    if ($slots.default) {
+        classes.push(sizeClasses.iconPadding);
+    }
     return classes.join(" ");
 });
 
 const btnClasses = computed(() => {
     let classes = [
         props.block ? "flex w-full" : "inline-flex",
-        "cursor-pointer items-center justify-center transition-all duration-200",
+        "cursor-pointer items-center justify-center align-middle transition-all duration-200",
         "disabled:cursor-not-allowed",
     ];
 

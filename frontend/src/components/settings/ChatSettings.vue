@@ -71,9 +71,7 @@
         <div class="footer pt-3 px-4 flex justify-start">
             <UiButton type="primary" @click="handleSave">
                 <template #icon>
-                    <n-icon>
-                        <SaveOutlined />
-                    </n-icon>
+                    <SaveOutlined />
                 </template>
                 保存全部设置
             </UiButton>

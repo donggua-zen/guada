@@ -1,22 +1,25 @@
 <template>
   <div class="flex flex-col h-full">
     <!-- 聊天头部 -->
-    <div class="chat-header mt-4 mx-5">
-      <template v-if="!localSidebarVisible">
-        <UiButton text @click="localSidebarVisible = true">
-          <template #icon>
-            <n-icon size="22">
+    <div class="flex items-center justify-center mt-4 mx-5">
+      <div class="">
+        <!-- <template v-if="!localSidebarVisible"> -->
+          <UiButton text @click="localSidebarVisible = true" :class="{'lg:hidden':localSidebarVisible}">
+            <template #icon>
               <FormatListBulletedSharp />
-            </n-icon>
-          </template>
-        </UiButton>
-        <span class="ml-4"></span>
-      </template>
-      <UiButton :border="false" class="rounded-lg hover:bg-[--bg-hover] text-base" @click="handleSwitchModelClick">
+            </template>
+          </UiButton>
+        <!-- </template> -->
+      </div>
+
+      <!-- 在移动端居中显示，PC端左对齐 -->
+      <UiButton :border="false" class="rounded-lg hover:bg-[--bg-hover] text-base lg:mx-0 mx-auto"
+        @click="handleSwitchModelClick">
         {{ currentModelName }}
         <SettingsTwotone class="w-4 h-4 ml-2" />
       </UiButton>
-      <div class="flex items-center flex-1 justify-end">
+
+      <div class="flex items-center lg:flex-1 justify-end">
         <!-- 更多操作下拉菜单 -->
         <n-dropdown trigger="hover" :options="moreOptions" @select="handleMoreSelect">
           <UiButton class="more-btn" :border="false" title="更多操作" text>
@@ -44,8 +47,7 @@
 
             <!-- 标题和描述 -->
             <div class="mb-8">
-              <h1
-                class="text-3xl font-bold mb-4 text-[var(--primary-color)]">
+              <h1 class="text-3xl font-bold mb-4 text-[var(--primary-color)]">
                 {{ currentSession.title || '' }}
               </h1>
               <h2 class="text-lg font-normal text-gray-600 leading-relaxed">
@@ -872,12 +874,6 @@ defineExpose({ sendMessage: handleSendMessage })
 </script>
 
 <style scoped>
-.chat-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
-
 .messages-container {
   flex: 1;
   overflow-y: hidden;

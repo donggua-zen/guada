@@ -1,8 +1,8 @@
 <template>
-    <div class="min-h-screen bg-gray-50 flex items-center justify-center p-4">
+    <div class="min-h-screen flex items-center justify-center md:bg-gray-50 md:p-4">
         <div
-            class="flex bg-white rounded-xl overflow-hidden shadow-[0_6px_30px_0_rgba(0,0,0,.08)] py-10 items-center justify-center">
-            <div class="flex w-120 items-center justify-center">
+            class="flex bg-white rounded-xl overflow-hidden md:shadow-[0_6px_30px_0_rgba(0,0,0,.08)] py-10 items-center justify-center">
+            <div class="hidden md:flex w-120 items-center justify-center">
                 <div class="w-90 h-90">
                     <!-- <img src="/images/girl_book.png" class="w-80 h-80 mx-auto"> -->
                     <n-carousel autoplay direction="horizontal" :show-arrow="false" dot-type="line"

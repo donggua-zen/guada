@@ -46,12 +46,12 @@
             <n-popselect v-model:value="currentSession.model_id" :options="modelOptions" trigger="click">
               <button
                 class="rounded-full animate-outside transition-all duration-300 ease-in-out overflow-hidden mr-2.5 border border-[var(--primary-color)] bg-[var(--primary-color-0f)] hover:bg-[var(--primary-color-0f)]"
-                :style="{ width: containerWidth + 'px' }" style="height:28px">
+                :style="{ width: isMobile ? 'auto' : containerWidth + 'px' }" style="height:28px">
                 <div ref="innerEl"
                   class="animate-inside flex items-center justify-center px-2 py-1 text-[var(--primary-color)]  cursor-pointer min-w-[min-content]"
                   :style="{ width: 'fit-content' }" style="height:26px">
-                  <OpenAI class="w-5 h-5 mr-1 flex-shrink-0" />
-                  <span class="whitespace-nowrap mr-1 text-sm">{{ currentModelName }}</span>
+                  <OpenAI class="w-5 h-5 flex-shrink-0" />
+                  <span class="whitespace-nowrap mx-1 text-sm hidden md:block">{{ currentModelName }}</span>
                 </div>
               </button>
             </n-popselect>
@@ -89,6 +89,10 @@ import { OpenAI } from "@/components/icons"
 
 // UI组件导入
 import { NButton, NIcon, NPopselect } from "naive-ui";
+import { useBreakpoints, breakpointsTailwind } from '@vueuse/core'
+
+const breakpoints = useBreakpoints(breakpointsTailwind)
+const isMobile = breakpoints.smaller('md') // md = 768px
 
 // 弹出层工具
 const { notify } = usePopup();
@@ -145,6 +149,10 @@ const updateContainerWidth = () => {
     containerWidth.value = innerWidth
   }
 }
+
+watch(isMobile, () => {
+  updateContainerWidth()
+})
 
 // 监听模型名称变化
 watch(currentModelName, async () => {
