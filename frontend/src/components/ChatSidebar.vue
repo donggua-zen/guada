@@ -106,7 +106,7 @@
         </div>
         <span class="ml-3">{{ authStore.user.nickname }}</span>
       </div>
-      <div @click="handleButtonClick('models')"
+      <div v-if="authStore.user.role == 'primary'" @click="handleButtonClick('models')"
         class="cursor-pointer h-6.5 px-2 rounded-lg flex justify-center items-center hover:bg-[var(--conversation-hover-bg)] transition-colors duration-200">
         <SettingsOutlined class="w-4.5 h-4.5 text-gray-500" />
         <span class="ml-1 text-base text-gray-500">管理模型</span>

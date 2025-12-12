@@ -1,7 +1,7 @@
 <template>
-    <n-modal v-model:show="modalVisible" :title="currentItem.label" :mask-closable="false" :auto-focus="false"
-        style="max-width: 90vw;width: 1100px; height: 60vh;" header-class="ml-2" content-class="overflow-hidden"
-        preset="card">
+    <n-modal v-model:show="modalVisible" :title="currentItem ? currentItem.label : '设置'" :mask-closable="false"
+        :auto-focus="false" style="max-width: 90vw;width: 1100px; height: 60vh;" header-class="ml-2"
+        content-class="overflow-hidden" preset="card">
         <div class="h-full flex flex-col">
             <SidebarLayout v-model:sidebar-visible="sidebarVisible" :sidebar-width="220" :z-index="51"
                 class="flex-1 overflow-hidden">
@@ -108,7 +108,7 @@ const sidebarItems = [
     {
         label: '系统设置',
         path: null,
-        roles: ['primary', 'subaccount'],
+        roles: ['primary'],
     },
     {
         label: '模型管理',
