@@ -124,6 +124,10 @@ npm run dev
 npm run build
 ```
 
+## 设置密码
+
+ **注意初次访问请访问 http://xxxxx/password设置管理员账户！！！
+** 
 ## API文档
 
 后端API遵循RESTful设计原则，主要接口包括：
