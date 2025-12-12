@@ -26,7 +26,7 @@
     </div>
 
     <!-- 会话列表区域 -->
-    <div class="sessions-list flex-1 overflow-hidden py-2.5">
+    <div class="sessions-list flex-1 overflow-hidden py-1">
       <ScrollContainer class="">
         <div @click="handleButtonClick('characters')" :class="{
           'hover:bg-[var(--conversation-hover-bg)] text-[var(--conversation-text-color)]': btnActive !== 'characters',
@@ -98,7 +98,7 @@
     </div>
 
     <!-- 部的footer部分 -->
-    <div class="flex items-center justify-between p-3">
+    <div class="flex items-center justify-between px-3">
       <div @click="handleButtonClick('profile')"
         class="cursor-pointer p-2 rounded-lg flex items-center hover:bg-[var(--conversation-hover-bg)] transition-colors duration-200">
         <div class="w-7 h-7 ">
