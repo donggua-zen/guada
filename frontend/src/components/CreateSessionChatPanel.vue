@@ -37,7 +37,7 @@
           </div>
         </n-popselect>
       </div> -->
-      <div class="w-full  max-w-[900px]">
+      <div class="w-full  max-w-[800px]">
         <ChatInput v-model:value="inputMessage.text" v-model:web-search-enabled="webSearchEnabled"
           v-model:thinking-enabled="thinkingEnabled" :buttons="chatInputButtons" :files="inputMessage.files"
           :streaming="false" @send="sendMessage" @toggle-web-search="handleWebSearch"
