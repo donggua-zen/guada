@@ -105,8 +105,6 @@
 * {
     box-sizing: border-box;
     font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Helvetica Neue", Helvetica, Arial, sans-serif;
-    /* font-family: 'Alibaba PuHuiTi', 'PingFang SC', system-ui, -apple-system, BlinkMacSystemFont, 'Helvetica Neue', 'Hiragino Sans GB', 'Microsoft YaHei UI', 'Microsoft YaHei', Arial, sans-serif;
-    font-weight: 300; */
 }
 
 body {
@@ -114,12 +112,16 @@ body {
     height: 100vh;
     margin: 0;
     padding: 0;
-    /* 使用更适合中文显示的字体栈 */
-    /* font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', 'Helvetica Neue', Helvetica, Arial, sans-serif; */
     font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Helvetica Neue", Helvetica, Arial, sans-serif;
     overflow: hidden;
-    /* font-family: 'Alibaba PuHuiTi', 'PingFang SC', system-ui, -apple-system, BlinkMacSystemFont, 'Helvetica Neue', 'Hiragino Sans GB', 'Microsoft YaHei UI', 'Microsoft YaHei', Arial, sans-serif; */
+}
 
+body,
+html,
+#app,
+.n-config-provider {
+    width: 100%;
+    height: 100%;
 }
 
 /* 布局结构 */
@@ -156,7 +158,7 @@ body {
     color: var(--primary-text-light-color);
 }
 
-#nprogress{
+#nprogress {
     z-index: 9999 !important;
     position: fixed !important;
 }
