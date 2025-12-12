@@ -41,12 +41,19 @@ const routes = [
         name: 'Login',
         meta: { title: '登录' },
         component: () => import('./components/LoginPage.vue')
-    }, {
+    },
+    {
+        path: '/password',
+        name: 'Password',
+        meta: { title: '密码设置' },
+        component: () => import('./components/PasswordPage.vue')
+    },
+    {
         path: '/test',
         name: 'Test',
         meta: { title: 'UI测试' },
         component: () => import('./components/test/ui.vue')
-    }
+    },
 ]
 
 const router = createRouter({
