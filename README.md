@@ -1,5 +1,7 @@
 # AI Chat - 智能AI对话系统
 
+> 本文档由AI起草~
+
 AI Chat 是一个功能强大的AI对话系统，支持多角色对话、会话管理、模型配置和多种高级AI功能。该项目采用前后端分离架构，后端基于Python Flask，前端使用Vue 3 + Vite构建。
 
 ![Python](https://img.shields.io/badge/Python-3.8+-blue.svg)
