@@ -1,4 +1,6 @@
+from typing import Optional
 from app.exceptions import NotFoundError, PerssionDeniedError, ValidationError
+from app.models.user import User
 from app.repositories.user_repository import UserRepository
 from app.models.db_transaction import smart_transaction
 from app.services.upload_service import UploadService
@@ -119,3 +121,32 @@ class UserService:
                 remove_file(old_avatar_path)
         UserRepository.update_user(user_id=user_id, data={"avatar_url": avatar_url})
         return {"url": avatar_url}
+
+    def reset_primary_password(
+        self,
+        password,
+        email: Optional[str] = None,
+        phone: Optional[str] = None,
+    ):
+        """
+        重置主账户密码
+
+        Args:
+            password: 新密码
+            email: 可选，主账户邮箱
+            phone: 可选，主账户手机号
+
+        Raises:
+            ValidationError: 当既没有提供邮箱也没有提供手机号时抛出异常
+        """
+        if not email and not phone:
+            raise ValidationError("Email or phone number is required")
+        with smart_transaction():
+            user = UserRepository.get_primary_user()
+            if not user:
+                user = User()
+            if email:
+                user.email = email
+            if phone:
+                user.phone = phone
+            user.set_password(password)

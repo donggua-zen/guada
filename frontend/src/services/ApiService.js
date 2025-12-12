@@ -614,6 +614,19 @@ class ApiService {
     return await this._request('/subaccounts');
   }
 
+  async checkResetPassword() {
+    return await this._request(`/user/reset-password`, {
+      method: 'GET'
+    });
+  }
+
+  async resetPrimayPassword(data) {
+    return await this._request(`/user/reset-password`, {
+      method: 'POST',
+      data: data
+    });
+  }
+
 }
 
 // 创建默认实例并导出
