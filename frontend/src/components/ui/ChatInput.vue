@@ -290,30 +290,70 @@ const handleImageSelect = (event) => {
 };
 
 const handlePaste = async (event) => {
-    if (!event.clipboardData?.items) return;
+    const clipboardData = event.clipboardData;
+    if (!clipboardData?.items) return;
 
-    const items = event.clipboardData.items;
-    const files = [];
+    // 立即阻止默认粘贴行为，避免浏览器自动插入内容
+    event.preventDefault();
 
-    for (let i = 0; i < items.length; i++) {
-        if (items[i].kind === 'file') {
-            const file = items[i].getAsFile();
-            if (file) files.push(file);
+    const items = Array.from(clipboardData.items);
+    let pastedText = '';
+    const filesToProcess = [];
+
+    // 提取所有文件项（包括可能的图片）
+    for (const item of items) {
+        if (item.kind === 'file') {
+            const file = item.getAsFile();
+            if (file) filesToProcess.push(file);
         }
     }
 
-    if (files.length > 0) {
-        event.preventDefault();
+    // 提取文本内容（异步）
+    const textItem = items.find(item => item.kind === 'string' && item.type.startsWith('text/'));
+    if (textItem) {
+        pastedText = await new Promise((resolve) => {
+            textItem.getAsString(resolve);
+        });
+    }
 
-        // 优先处理图片文件
-        const imageFiles = files.filter(file => isFileType(file, 'IMAGE'));
-        const textFiles = files.filter(file => isFileType(file, 'TEXT'));
+    // Step 3: 判断文本长度并决定如何处理
+    const MAX_TEXT_LENGTH = 1000;
+    if (pastedText && pastedText.length > MAX_TEXT_LENGTH) {
+        // 超长文本 → 转为 .txt 文件
+        const blob = new Blob([pastedText], { type: 'text/plain' });
+        const file = new File([blob], `pasted_text_${Date.now()}.txt`, { type: 'text/plain' });
+        filesToProcess.push(file);
+    } else if (pastedText) {
+        // 短文本 → 手动插入到 textarea，保留光标位置
+        const textarea = messageInputRef.value;
+        if (textarea) {
+            const start = textarea.selectionStart;
+            const end = textarea.selectionEnd;
+            const currentValue = inputContent.value || '';
+            const newValue = currentValue.slice(0, start) + pastedText + currentValue.slice(end);
+
+            // 更新绑定值
+            inputContent.value = newValue;
+
+            // 恢复光标位置（需 nextTick 确保 DOM 已更新）
+            nextTick(() => {
+                textarea.setSelectionRange(start + pastedText.length, start + pastedText.length);
+                textarea.focus();
+            });
+        }
+    }
+
+    // 处理文件（优先图片，否则文本类文件）
+    if (filesToProcess.length > 0) {
+        const imageFiles = filesToProcess.filter(file => isFileType(file, 'IMAGE'));
+        const textFiles = filesToProcess.filter(file => isFileType(file, 'TEXT'));
 
         if (imageFiles.length > 0) {
             await processFiles(imageFiles, 'IMAGE');
         } else if (textFiles.length > 0) {
             await processFiles(textFiles, 'TEXT');
         }
+        // TODO：如果既不是图片也不是支持的文本类型，会被忽略（可选加提示）
     }
 };
 
