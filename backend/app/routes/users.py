@@ -1,4 +1,5 @@
 # auth.py
+import os
 from flask import Blueprint, request
 from flask_jwt_extended import jwt_required, get_jwt_identity, create_access_token
 from app.exceptions import (
@@ -175,3 +176,44 @@ def upload_avatar():
     return user_service.upload_avatar(
         user_id=user_id, avatar_file=request.files["avatar"]
     )
+
+
+@users_bp.route("/api/v1/user/reset-password", methods=["GET"])
+@handle_response
+def check_reset_password():
+    # 判断标记文件是否存在
+    if os.path.exists("password_is_set.txt"):
+        raise PerssionDeniedError("")
+
+
+@users_bp.route("/api/v1/user/reset-password", methods=["POST"])
+@handle_response
+def reset_password():
+    """
+    重置用户密码
+
+    该函数允许用户通过手机或邮箱方式重置其主要密码，并在重置后创建标记文件防止再次重置
+    """
+    check_reset_password()
+    data = request.get_json()
+    type = data.get("type")
+
+    # 根据不同类型验证并获取相应的账户信息和密码
+    if type == "phone":
+        phone = data.get("phone")
+        password = data.get("password")
+        if not phone or not password:
+            raise ParameterError("请填写手机号码和密码")
+    elif type == "email":
+        email = data.get("email")
+        password = data.get("password")
+        if not email or not password:
+            raise ParameterError("请填写邮箱和密码")
+    else:
+        raise ParameterError("请选择正确的方式")
+    user_service.reset_primary_password(
+        password, phone=data.get("phone"), email=data.get("email")
+    )
+    # 创建标记文件
+    with open("password_is_set.txt", "w"):
+        pass

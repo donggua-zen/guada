@@ -5,6 +5,11 @@ from app.models.db_transaction import execute_in_transaction
 
 
 class UserRepository:
+
+    @staticmethod
+    def get_primary_user():
+        return User.query.filter(User.role == "primary").first()
+
     @staticmethod
     def get_user_by_id(user_id: str) -> User | None:
         return User.query.filter_by(id=user_id).first()
