@@ -58,6 +58,11 @@ import { useTitle } from '@/composables/useTitle';
 // 引入组件
 import { SidebarLayout } from "./ui";
 import ChatSidebar from "@/components/ChatSidebar.vue";
+import { useBreakpoints, breakpointsTailwind } from '@vueuse/core'
+
+const breakpoints = useBreakpoints(breakpointsTailwind)
+const isMobile = breakpoints.smaller('md') // md = 768px
+
 const CharacterSettingPanel = defineAsyncComponent(() => import("@/components/CharacterSettingPanel.vue"));
 const ChatPanel = defineAsyncComponent(() => import("@/components/ChatPanel.vue"));
 const CreateSessionChatPanel = defineAsyncComponent(() => import("@/components/CreateSessionChatPanel.vue"));
@@ -131,6 +136,9 @@ const fetchSession = async (sessionId) => {
  * @param {Object} session - 包含会话信息的对象
  */
 const goChatRoute = async (sessionId, redirect = false) => {
+  if (isMobile.value) {
+    sidebarVisible.value = false;
+  }
   if (sessionId) {
     router.replace({ name: 'Chat', params: { sessionId: sessionId } });
   } else if (sessionStore.activeSessionId) {

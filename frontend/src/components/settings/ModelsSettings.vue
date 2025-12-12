@@ -177,9 +177,7 @@
                                 </div>
                             </div>
                             <UiButton text type="primary" @click="handleAddFromFetch(model)" size="small">
-                                <n-icon>
-                                    <AddCircleTwotone />
-                                </n-icon>
+                                <AddCircleTwotone />
                                 <span class="ml-1">添加</span>
                             </UiButton>
                         </li>
