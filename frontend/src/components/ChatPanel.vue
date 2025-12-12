@@ -1,7 +1,7 @@
 <template>
   <div class="flex flex-col h-full">
     <!-- 聊天头部 -->
-    <div class="flex items-center justify-center mt-4 mx-5">
+    <div class="flex items-center justify-center py-2 px-5">
       <div class="">
         <!-- <template v-if="!localSidebarVisible"> -->
           <UiButton text @click="localSidebarVisible = true" :class="{'lg:hidden':localSidebarVisible}">
