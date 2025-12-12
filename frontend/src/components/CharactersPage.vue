@@ -98,7 +98,7 @@
                 </UiButton>
 
                 <div v-if="charactersType == 'private'" class="flex gap-1">
-                  <UiButton size="small" text  @click="shareCharacter(character)"
+                  <UiButton size="small" text @click="shareCharacter(character)"
                     class="text-gray-500 hover:text-gray-600" :class="{ '!text-yellow-500': character.is_public }">
                     <template #icon>
                       <ShareTwotone />
@@ -156,6 +156,8 @@ import {
   MoreVertOutlined,
 } from '@vicons/material'
 
+import { useTitle } from '../composables/useTitle'
+
 // 组件
 import { Avatar, UiButton } from './ui'
 import CharacterModal from './CharacterModal.vue'
@@ -168,6 +170,7 @@ import { usePopup } from '../composables/usePopup'
 import { watch } from 'vue'
 
 const { confirm, toast } = usePopup()
+const title = useTitle('角色提示词模板')
 
 // 响应式数据
 const characters = ref([])
