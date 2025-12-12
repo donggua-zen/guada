@@ -1,6 +1,6 @@
 // src/composables/usePopup.js
 import { ref, h } from 'vue'
-import { useDialog, useMessage, useNotification, useLoadingBar } from 'naive-ui'
+import { useDialog, useMessage, useNotification } from 'naive-ui'
 
 /**
  * 常用弹窗 Hook
@@ -10,7 +10,7 @@ export function usePopup() {
     const dialog = useDialog()
     const message = useMessage()
     const notification = useNotification()
-    const loadingBar = useLoadingBar()
+    // const loadingBar = useLoadingBar()
 
     /**
      * 确认对话框
@@ -286,25 +286,7 @@ export function usePopup() {
          * 开始加载
          */
         start: (text) => {
-            loadingBar.start()
-            if (text) {
-                return toast.loading(text)
-            }
-            return null
-        },
-
-        /**
-         * 结束加载
-         */
-        finish: () => {
-            loadingBar.finish()
-        },
-
-        /**
-         * 加载错误
-         */
-        error: () => {
-            loadingBar.error()
+            return toast.loading(text || '处理中...')
         },
 
         /**
@@ -314,7 +296,7 @@ export function usePopup() {
             const hide = loading.start(loadingText)
             try {
                 const result = await promiseFn()
-                loading.finish()
+                // loading.finish()
                 if (hide) hide()
                 return result
             } catch (error) {
@@ -359,7 +341,6 @@ export function usePopup() {
         $dialog: dialog,
         $message: message,
         $notification: notification,
-        $loadingBar: loadingBar
     }
 }
 
