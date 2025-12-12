@@ -1,8 +1,11 @@
 <template>
-    <div class="flex w-full h-full">
+    <div class="flex w-full h-full relative overflow-hidden">
+        <!-- 遮罩层：仅在移动端且 sidebarVisible 时显示 -->
+        <div v-if="isMobile && sidebarVisible" class="absolute inset-0 bg-black opacity-40 z-[49]"
+            @click="$emit('update:sidebarVisible', false)"></div>
         <!-- 侧边栏容器 -->
         <div :class="[
-            'h-full relative transform transition-all duration-300 ease-in-out justify-content-end flex-shrink-0'
+            'h-full absolute md:relative transform transition-all duration-300 ease-in-out justify-content-end flex-shrink-0'
         ]" :style="{
             width: sidebarVisible ? `${sidebarWidth}px` : '0',
             maxWidth: sidebarVisible ? `${sidebarWidth}px` : '0',
@@ -38,7 +41,10 @@ import {
     ArrowBackIosNewTwotone as ArrowLeftTwotone,
     ArrowForwardIosTwotone as ArrowRightTwotone
 } from "@vicons/material";
+import { useBreakpoints, breakpointsTailwind } from '@vueuse/core'
 
+const breakpoints = useBreakpoints(breakpointsTailwind)
+const isMobile = breakpoints.smaller('md') // md = 768px
 // Props
 const props = defineProps({
     // 侧边栏显示状态

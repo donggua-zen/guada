@@ -161,9 +161,7 @@
         <div class="footer pb-5 flex justify-end">
             <UiButton round type="primary" @click="handleSave" size="large">
                 <template #icon>
-                    <n-icon>
-                        <SaveOutlined />
-                    </n-icon>
+                    <SaveOutlined />
                 </template>
                 保存
             </UiButton>
@@ -199,7 +197,7 @@ import { apiService } from '../services/ApiService'
 
 
 import { usePopup } from '../composables/usePopup'
-import { AvatarPreview,UiButton } from './ui/'
+import { AvatarPreview, UiButton } from './ui/'
 
 const { toast, notify } = usePopup()
 
