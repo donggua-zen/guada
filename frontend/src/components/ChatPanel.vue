@@ -80,7 +80,7 @@
     </div>
 
     <!-- 输入区域 -->
-    <div class="px-5 pb-2.5 w-full flex flex-col items-center">
+    <div class="px-5 pb-2.5 pt-2 w-full flex flex-col items-center">
       <div class="w-full flex items-center max-w-[960px]">
         <ChatInput v-model:value="inputMessage.text" v-model:web-search-enabled="webSearchEnabled"
           v-model:thinking-enabled="thinkingEnabled" :buttons="chatInputButtons" :files="inputMessage.files"
