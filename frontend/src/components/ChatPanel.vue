@@ -45,7 +45,7 @@
             <!-- 标题和描述 -->
             <div class="mb-8">
               <h1
-                class="text-3xl font-bold text-gray-800 mb-4 bg-gradient-to-br from-[#667eea] to-[var(--primary-color)] bg-clip-text text-transparent">
+                class="text-3xl font-bold mb-4 text-[var(--primary-color)]">
                 {{ currentSession.title || '' }}
               </h1>
               <h2 class="text-lg font-normal text-gray-600 leading-relaxed">
