@@ -156,6 +156,11 @@ body {
     color: var(--primary-text-light-color);
 }
 
+#nprogress{
+    z-index: 9999 !important;
+    position: fixed !important;
+}
+
 /* 修改进度条颜色 */
 #nprogress .bar {
     background: var(--primary-color) !important;

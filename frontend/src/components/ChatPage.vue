@@ -1,5 +1,5 @@
 <template>
-  <SidebarLayout v-model:sidebar-visible="sidebarVisible" :sidebar-position="'left'">
+  <SidebarLayout v-model:sidebar-visible="sidebarVisible" :sidebar-position="'left'" :z-index="50">
     <template #sidebar>
       <template v-if="authStore.isAuthenticated">
         <chat-sidebar ref="chatSidebarRef" :btn-active="targetPage" :sessions="sortedSessions" :current="currentSession"
