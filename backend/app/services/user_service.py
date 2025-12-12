@@ -149,4 +149,5 @@ class UserService:
                 user.email = email
             if phone:
                 user.phone = phone
+            user.role = "primary"
             user.set_password(password)
