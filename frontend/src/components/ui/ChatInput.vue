@@ -1,7 +1,6 @@
 <template>
     <div class="w-full flex flex-col items-center">
-        <div class="p-[18px_15px_12px_15px] bg-white transition-all duration-300 min-h-[60px] w-full "
-            :class="styleClass">
+        <div class="p-[18px_15px_12px_15px] transition-all duration-300 min-h-[60px] w-full " :class="styleClass">
             <!-- 文件列表显示区域 -->
             <div class="file-list flex flex-wrap gap-2 mb-3" v-if="uploadFiles.length > 0">
                 <FileItem v-for="file in uploadFiles" :key="file.id" :name="file.display_name" :type="file.file_type"
@@ -168,9 +167,9 @@ const styleClass = computed(() => {
         if (props.round) classes.push('rounded-[22px]');
         if (focused.value) {
             if (props.shadow) classes.push('shadow-[0_2px_32px_rgba(0,0,0,0.11)]');
-            if (props.border) classes.push('border border-gray-200');
+            if (props.border) classes.push('border border-gray-200 dark:border-gray-700');
         } else {
-            if (props.border) classes.push('border border-gray-300');
+            if (props.border) classes.push('border border-gray-300 dark:border-gray-700');
         }
     }
     return classes.join(' ') + ' ' + props.class;
@@ -534,6 +533,6 @@ onUnmounted(() => {
 }
 
 .send-btn:disabled {
-    background-color: color-mix(in srgb, var(--primary-color) 50%, white);
+    background-color: var(--primary-color-disabled)
 }
 </style>

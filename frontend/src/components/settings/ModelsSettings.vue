@@ -28,11 +28,11 @@
                     </n-space>
                 </div>
             </div>
-            <div class="mt-4 rounded border px-3 py-1 border-gray-200">
+            <div class="mt-4 rounded border px-3 py-1 border-gray-200 dark:border-gray-700">
                 <ul>
                     <li v-for="model in currentModels" :key="model.id"
-                        class="flex items-center py-2 border-b border-gray-200 last:border-b-0">
-                        <div class="font-bold">{{ model.model_name }}</div>
+                        class="flex items-center py-2 border-b border-gray-200 dark:border-gray-700 last:border-b-0">
+                        <div class="font-bold dark:font-normal">{{ model.model_name }}</div>
                         &nbsp;
                         &nbsp;
                         <n-space>

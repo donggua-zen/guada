@@ -18,7 +18,7 @@
       </div>
     </div>
     <div
-      class="border border-gray-300 rounded-lg p-4 flex items-center justify-center hover:shadow-md transition-shadow cursor-pointer bg-gray-50"
+      class="border border-gray-300 dark:border-gray-700 rounded-lg p-4 flex items-center justify-center hover:shadow-md transition-shadow cursor-pointer bg-gray-50"
       @click="handleAddAccount">
       <div class="flex flex-col items-center">
         <div class="w-16 h-16 rounded-full bg-gray-200 mb-3 flex items-center justify-center">

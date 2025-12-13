@@ -4,11 +4,11 @@
     <div class="flex items-center justify-center py-2 px-5">
       <div class="">
         <!-- <template v-if="!localSidebarVisible"> -->
-          <UiButton text @click="localSidebarVisible = true" :class="{'lg:hidden':localSidebarVisible}">
-            <template #icon>
-              <FormatListBulletedSharp />
-            </template>
-          </UiButton>
+        <UiButton text @click="localSidebarVisible = true" :class="{ 'lg:hidden': localSidebarVisible }">
+          <template #icon>
+            <FormatListBulletedSharp />
+          </template>
+        </UiButton>
         <!-- </template> -->
       </div>
 
@@ -20,6 +20,9 @@
       </UiButton>
 
       <div class="flex items-center lg:flex-1 justify-end">
+        <UiButton text @click="toggleDark">
+          {{ isDark ? '亮色' : '暗色' }}
+        </UiButton>
         <!-- 更多操作下拉菜单 -->
         <n-dropdown trigger="hover" :options="moreOptions" @select="handleMoreSelect">
           <UiButton class="more-btn" :border="false" title="更多操作" text>
@@ -110,6 +113,7 @@ import { usePopup } from "@/composables/usePopup";
 import { useDebounceFn } from "@vueuse/core";
 import { useSessionStore } from "../stores/session";
 import { useAuthStore } from "../stores/auth"
+import { useTheme } from "../composables/useTheme";
 
 // 组件导入
 import MessageItem from "./MessageItem.vue";
@@ -125,16 +129,22 @@ import {
   FormatListBulletedSharp,
   MoreVertOutlined,
   FileDownloadOutlined,
-  FileUploadOutlined
+  FileUploadOutlined,
+  // WbSunnyTwotone,
 } from "@vicons/material";
 
 // UI组件导入
-import { NButton, NIcon, NDropdown, NModal } from "naive-ui";
+import { NDropdown, NModal, NIcon } from "naive-ui";
 import { UiButton } from "./ui";
+
 // 弹出层工具
 const { confirm, editText, toast, notify } = usePopup();
 const authStore = useAuthStore()
 const sessionStore = useSessionStore();
+
+// 主题
+
+const { isDark, toggleDark } = useTheme()
 
 // 响应式数据
 const scrollContainerRef = ref(null);

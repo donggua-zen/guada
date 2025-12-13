@@ -4,7 +4,7 @@
             :sidebar-width="sidebarWidth" :z-index="51" class="flex-1 overflow-hidden">
             <template #sidebar>
                 <div
-                    class="flex flex-col w-full h-full border-r border-gray-200 items-center relative px-3 md:px-0 py-2 pr-3 bg-gray-100 md:bg-white">
+                    class="flex flex-col w-full h-full border-r border-gray-200 dark:border-gray-700 items-center relative px-3 md:px-0 py-2 pr-3 bg-gray-100 md:bg-white dark:bg-transparent">
                     <div class="lex flex-col w-full" v-for="group in filteredSidebarItems"
                         @click="handleItemClick(item)">
                         <div class="flex-1 flex items-center justify-start mx-2 my-3">
@@ -32,7 +32,8 @@
                 <div class="h-full flex flex-col" v-if="currentItem">
                     <div
                         class="relative flex items-center justify-center md:justify-start py-2 border-b-1 border-gray-100 mb-2 mx-0 md:mx-3">
-                        <UiButton class="absolute block md:hidden left-1" text style="font-size: 24px" @click="router.back()">
+                        <UiButton class="absolute block md:hidden left-1" text style="font-size: 24px"
+                            @click="router.back()">
                             <template #icon>
                                 <ArrowBackIosFilled />
                             </template>
@@ -228,12 +229,9 @@ const handleItemClick = (item) => {
         logout()
         return;
     }
-    if (isMobile.value) {
+    if (isMobile.value)
         sidebarVisible.value = false
-        router.push({ name: 'Settings', params: { tab: item.path } })
-    } else {
-        currentTabValue.value = item.path
-    }
+    router.push({ name: 'Settings', params: { tab: item.path } })
 }
 
 watch(() => isMobile.value, (newState) => {
