@@ -251,7 +251,11 @@ class ChatService:
 
         # 更优雅的方式获取模型参数
         model_params = {
-            "thinking": True if "thinking" in model.features else None,
+            "thinking": (
+                session.settings.get("thinking_enabled")
+                if "thinking" in model.features
+                else None
+            ),
             "temperature": session.settings.get("model_temperature"),
             "top_p": session.settings.get("model_top_p"),
             "frequency_penalty": session.settings.get("model_frequency_penalty"),
