@@ -560,7 +560,7 @@ defineExpose({ showThinking, hideThinking, switchContent, });
   margin-bottom: 0;
 }
 
-.markdown-text :first-child {
+.markdown-text>:first-child {
   margin-top: 0;
 }
 
