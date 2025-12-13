@@ -44,6 +44,7 @@ class MemoryManagerService:
         if system_message:  # 添加系统消息
             tokens_total += tokenizer.count_tokens(system_message["content"])
             system_message['tokens'] = tokens_total
+            max_messages -= 1
 
         offset_message_id = None
         while max_messages > len(conversation_messages):
