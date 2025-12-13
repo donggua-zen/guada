@@ -37,6 +37,12 @@ const routes = [
         ]
     },
     {
+        path: '/settings/:tab?',
+        name: 'Settings',
+        meta: { title: '设置', requiresAuth: true },
+        component: () => import('./components/settings/SettingsMainPage.vue')
+    },
+    {
         path: '/login',
         name: 'Login',
         meta: { title: '登录' },

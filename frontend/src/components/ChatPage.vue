@@ -41,7 +41,12 @@
 
     </template>
   </SidebarLayout>
-  <SettingsModal v-model:visible="systemSettingsModalVisible" :default="systemSettingsPath"></SettingsModal>
+  <!-- <n-modal v-model:show="systemSettingsModalVisible" :title="currentItem ? currentItem.label : '设置'"
+    :mask-closable="false" :auto-focus="false" class=":w-[1100px] max-w-[90vw] md:h-[60vh]" header-class="ml-2"
+    content-class="overflow-hidden" preset="card">
+    <SettingsMainPage :default="systemSettingsPath" />
+  </n-modal> -->
+  <!-- <SettingsModal v-model:visible="systemSettingsModalVisible" :default="systemSettingsPath"></SettingsModal> -->
 </template>
 
 <script setup>
@@ -67,7 +72,7 @@ const CharacterSettingPanel = defineAsyncComponent(() => import("@/components/Ch
 const ChatPanel = defineAsyncComponent(() => import("@/components/ChatPanel.vue"));
 const CreateSessionChatPanel = defineAsyncComponent(() => import("@/components/CreateSessionChatPanel.vue"));
 const CharactersPanel = defineAsyncComponent(() => import("@/components/CharactersPage.vue"));
-const SettingsModal = defineAsyncComponent(() => import("@/components/settings/SettingsModal.vue"));
+const SettingsMainPage = defineAsyncComponent(() => import("@/components/settings/SettingsMainPage.vue"));
 
 // 组合式函数
 const { confirm, toast, prompt } = usePopup();
@@ -86,7 +91,7 @@ const chatSidebarRef = ref(null);
 const currentTabValue = ref('basic');
 // 控制设置模态框的显示与隐藏
 const sessionSettingsModalVisible = ref(false);
-const systemSettingsModalVisible = ref(false);
+// const systemSettingsModalVisible = ref(false);
 const systemSettingsPath = ref('/user/profile');
 // 控制侧边栏的显示状态，使用本地存储保持用户偏好
 const sidebarVisible = useStorage('sidebarVisible', true);
@@ -262,11 +267,19 @@ const handleSidebarClick = async (key) => {
   } else if (key === 'characters') {
     goChatRoute('characters');
   } else if (key === 'models') {
-    systemSettingsPath.value = '/settings/models'
-    systemSettingsModalVisible.value = true
+    // if (isMobile.value) {
+    router.push({ name: 'Settings', params: { tab: 'models' } });
+    // } else {
+    //   systemSettingsPath.value = '/settings/models'
+    //   systemSettingsModalVisible.value = true
+    // }
   } else if (key === 'profile') {
-    systemSettingsPath.value = '/user/profile'
-    systemSettingsModalVisible.value = true
+    // if (isMobile.value) {
+    router.push({ name: 'Settings', params: { tab: 'profile' } });
+    // } else {
+    //   systemSettingsPath.value = '/user/profile'
+    //   systemSettingsModalVisible.value = true
+    // }
   }
 
 };
