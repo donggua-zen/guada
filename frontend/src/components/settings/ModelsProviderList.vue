@@ -1,15 +1,12 @@
 <template>
-  <div
-    class="providers-panel flex flex-col h-full">
+  <div class="providers-panel flex flex-col h-full">
     <!-- 修改后的会话头部，包含标题和新建按钮 -->
     <div class="sessions-header py-1 text-lg font-semibold flex justify-between items-center">
       <span>分组列表</span>
       <!-- 新建会话按钮移动到右侧 -->
-      <UiButton @click="handleCreateGroup" text size="medium">
+      <UiButton type="default" :border="false" @click="handleCreateGroup" size="medium">
         <template #icon>
-          <n-icon>
-            <PlusOutlined />
-          </n-icon>
+          <PlusOutlined />
         </template>
         新建分组
       </UiButton>
@@ -37,7 +34,7 @@
             </div>
           </div>
           <div class="provider-info flex-1 min-w-0">
-            <div class="provider-title font-medium text-sm truncate text-gray-800">{{ provider.name }}</div>
+            <div class="provider-title font-medium text-sm truncate">{{ provider.name }}</div>
           </div>
           <div class="provider-actions flex items-center">
             <UiButton text @click.stop="handleEditProvider(provider)">
@@ -62,7 +59,7 @@
 import { ref, onMounted, computed, watch } from 'vue'
 import { NIcon, NInput } from 'naive-ui'
 import { OpenAI } from '@/components/icons'
-import { ScrollContainer,UiButton } from '../ui/'
+import { ScrollContainer, UiButton } from '../ui/'
 import {
   PlusOutlined,
   SearchOutlined,

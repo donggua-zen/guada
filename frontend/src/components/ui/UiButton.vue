@@ -184,8 +184,8 @@ const btnThemeStyle = computed(() => {
         return {
             ...baseStyles,
             '--btn-bg': 'transparent',
-            '--btn-hover': `color-mix(in srgb, var(--text-gray) 50%, transparent)`,
-            '--btn-active': `color-mix(in srgb, var(--text-gray) 60%, transparent)`,
+            '--btn-hover': `color-mix(in srgb, var(--text-gray) 40%, transparent)`,
+            '--btn-active': `color-mix(in srgb, var(--text-gray) 50%, transparent)`,
             '--btn-text': 'var(--btn-base-color)',
             '--btn-border': `none`,
         }
