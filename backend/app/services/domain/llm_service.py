@@ -108,10 +108,13 @@ class LLMService:
             extra_body = {}
             if thinking:
                 extra_body["enable_thinking"] = thinking
-
+            filter_message = [
+                {"role": message["role"], "content": message["content"]}
+                for message in messages
+            ]
             response = self.llm_client.chat.completions.create(
                 model=model,
-                messages=messages,
+                messages=filter_message,
                 frequency_penalty=frequency_penalty or None,
                 top_p=top_p or None,
                 temperature=temperature or None,
