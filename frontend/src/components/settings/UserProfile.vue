@@ -1,6 +1,6 @@
 <template>
   <div class="max-w-128">
-    <n-form ref="basicFormRef" :model="userForm" :rules="basicRules" label-placement="top" label-width="80px"
+    <n-form ref="basicFormRef" :model="userForm" :rules="basicRules" label-placement="left" label-width="80px"
       size="large">
       <!-- 头像设置 -->
       <n-form-item label="头像设置" :show-label="false">

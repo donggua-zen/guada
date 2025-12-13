@@ -60,9 +60,9 @@
 
 <script setup>
 import { ref, onMounted, computed, watch } from 'vue'
-import { NButton, NIcon, NInput } from 'naive-ui'
+import { NIcon, NInput } from 'naive-ui'
 import { OpenAI } from '@/components/icons'
-import { ScrollContainer } from '../ui/'
+import { ScrollContainer,UiButton } from '../ui/'
 import {
   PlusOutlined,
   SearchOutlined,

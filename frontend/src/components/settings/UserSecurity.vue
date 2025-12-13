@@ -1,6 +1,6 @@
 <template>
   <div class="max-w-128">
-    <n-form ref="passwordFormRef" :model="passwordForm" :rules="passwordRules" label-placement="top" label-width="80px"
+    <n-form ref="passwordFormRef" :model="passwordForm" :rules="passwordRules" label-placement="left" label-width="80px"
       size="large">
       <n-form-item label="原密码" path="oldPassword">
         <n-input v-model:value="passwordForm.oldPassword" type="password" show-password-on="click"
@@ -23,9 +23,10 @@
 
 <script setup>
 import { ref } from 'vue'
-import { NButton, NForm, NFormItem, NInput } from 'naive-ui'
+import { NForm, NFormItem, NInput } from 'naive-ui'
 import { usePopup } from '../../composables/usePopup'
 import { apiService } from '../../services/ApiService'
+import { UiButton } from '../ui'
 
 const { toast } = usePopup()
 

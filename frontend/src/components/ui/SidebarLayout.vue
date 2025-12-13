@@ -7,12 +7,12 @@
         <div :class="[
             'h-full absolute md:relative transform transition-all duration-300 ease-in-out justify-content-end flex-shrink-0'
         ]" :style="{
-            width: sidebarVisible ? `${sidebarWidth}px` : '0',
-            maxWidth: sidebarVisible ? `${sidebarWidth}px` : '0',
-            minWidth: sidebarVisible ? `${sidebarWidth}px` : '0',
+            width: sidebarContainerWidth,
+            maxWidth: sidebarContainerWidth,
+            minWidth: sidebarContainerWidth,
             zIndex: zIndex
         }">
-            <div class="absolute right-0 h-full" :style="{ width: `${sidebarWidth}px` }">
+            <div class="absolute right-0 h-full" :style="{ width: sidebarWidth < 0 ? '100vw' : `${sidebarWidth}px` }">
                 <slot name="sidebar" :sidebar-visible="sidebarVisible" />
             </div>
 
@@ -75,10 +75,10 @@ const props = defineProps({
 });
 
 // 计算侧边栏实际位置类
-const sidebarPositionClasses = computed(() => {
-    return props.sidebarPosition === 'left'
-        ? 'left-0'
-        : 'right-0';
+const sidebarContainerWidth = computed(() => {
+    if (props.sidebarVisible === false)
+        return '0';
+    return props.sidebarWidth < 0 ? '100%' : props.sidebarWidth + 'px';
 });
 
 // 计算切换按钮位置
