@@ -267,7 +267,10 @@ class ChatService:
             "message_id": assistant_message["id"],
             "content_id": assistant_message_current_content["id"],
             "model_name": model.model_name,
-        }
+        }            
+        
+        complete_chunk = LLMServiceChunk()
+
         try:
             if session.settings.get("web_search_enabled", False):
 
@@ -278,7 +281,6 @@ class ChatService:
                 )
                 yield {"type": "web_search", "msg": "stop"}
 
-            complete_chunk = LLMServiceChunk()
 
             llm_service = LLMService(model.provider.api_url, model.provider.api_key)
             logger.debug(f"Using model: {model.model_name}")
