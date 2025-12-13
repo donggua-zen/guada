@@ -126,14 +126,14 @@
                         <n-form ref="memoryFormRef" :model="characterForm" :rules="memoryRules" label-placement="top"
                             size="large">
                             <!-- 记忆类型 -->
-                            <n-form-item label="记忆类型">
+                            <!-- <n-form-item label="记忆类型">
                                 <n-select v-model:value="characterForm.memory_type" :options="memoryOptions"
                                     placeholder="请选择记忆类型" />
-                            </n-form-item>
+                            </n-form-item> -->
                             <n-form-item label="上下文条数" path="max_memory_length">
-                                <n-slider v-model:value="characterForm.max_memory_length" :min="1" :max="500"
+                                <n-slider v-model:value="characterForm.max_memory_length" :min="2" :max="500"
                                     :step="1" />
-                                <n-input-number v-model:value="characterForm.max_memory_length" :min="1" :max="500"
+                                <n-input-number v-model:value="characterForm.max_memory_length" :min="2" :max="500"
                                     :step="1" style="margin-left: 12px; width: 140px;" :show-button="false"
                                     placeholder="" :parse="parse" :format="format" clearable />
                             </n-form-item>
@@ -142,7 +142,7 @@
                                 <n-input-number v-model:value="characterForm.max_memory_tokens" :min="0"
                                     style="width: 150px;" :show-button="false" placeholder="" :parse="parse"
                                     :format="format" clearable />
-                                <span style="margin-left: 8px; color: #999;">条消息</span>
+                                <span style="margin-left: 8px; color: #999;">tokens</span>
                             </n-form-item>
 
                             <!-- 短期记忆长度 -->
@@ -150,7 +150,7 @@
                                 <n-input-number v-model:value="characterForm.short_term_memory_tokens" :min="0"
                                     style="width: 150px;" :show-button="false" placeholder="" :parse="parse"
                                     :format="format" clearable />
-                                <span style="margin-left: 8px; color: #999;">条消息</span>
+                                <span style="margin-left: 8px; color: #999;">tokens</span>
                             </n-form-item>
 
                         </n-form>
@@ -179,12 +179,9 @@ import {
     NFormItem,
     NInput,
     NSelect,
-    NButton,
     NIcon,
     NSlider,
     NInputNumber,
-    NSpace,
-    NModal,
     NTooltip,
     NCheckbox
 } from 'naive-ui'
@@ -246,7 +243,6 @@ const models = ref([]);
 const providers = ref([]);
 
 // 表单引用
-const tabsInstRef = ref(null)
 const basicFormRef = ref(null)
 const promptFormRef = ref(null)
 const modelFormRef = ref(null)
@@ -322,7 +318,7 @@ const memoryRules = {
     ],
     max_memory_length: [
         // { type: 'number', required: true, message: '请输入最大记忆长度', trigger: ['input', 'blur'] },
-        { type: 'number', min: 1, max: 500, message: '最大记忆长度在1-500之间', trigger: ['input', 'blur'] },
+        { type: 'number', min: 2, max: 500, message: '最大记忆长度在2-500之间', trigger: ['input', 'blur'] },
     ],
 }
 
