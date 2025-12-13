@@ -1,5 +1,6 @@
 /* 通用重置和基础样式 */
 @import "tailwindcss";
+@custom-variant dark (&:where(.dark, .dark *));
 
 :root {
     --primary-color: #fb7299;
@@ -74,7 +75,6 @@
     --assitant-bubble-text-color: #1F2937;
     --assitant-bubble-border-color: none;
     /* 聊天对话样式 */
-    --conversation-bg: #fbfbfb;
     --conversation-bg: #fff;
     /* #E9EBF2;*/
     --conversation-text-color: #333;
@@ -99,6 +99,48 @@
 
 }
 
+:root.dark {
+    /* 主色调调整（在暗色模式下可以稍微调整饱和度） */
+    --primary-color: #ff85a7;
+    --primary-color-hover: color-mix(in srgb, var(--primary-color) 80%, white);
+    --primary-color-active: color-mix(in srgb, var(--primary-color) 60%, white);
+    --primary-color-100: color-mix(in srgb, var(--primary-color) 10%, #1a1a1a);
+    --primary-color-300: color-mix(in srgb, var(--primary-color) 30%, #1a1a1a);
+    --primary-color-500: color-mix(in srgb, var(--primary-color) 50%, #1a1a1a);
+    --primary-color-700: color-mix(in srgb, var(--primary-color) 70%, #1a1a1a);
+    --primary-color-900: color-mix(in srgb, var(--primary-color) 90%, #1a1a1a);
+    --text-primary-color: #d4d4d4;
+    --primary-color-disabled: color-mix(in srgb, var(--primary-color) 40%, #1a1a1a);
+    /* 次要颜色 */
+    --secondary-color: #37415190;
+    --secondary-color-hover: color-mix(in srgb, var(--secondary-color) 90%, white);
+    --secondary-color-active: color-mix(in srgb, var(--secondary-color) 70%, white);
+
+    /* 第三级颜色 */
+    --tertiary-color: #2d2d2d;
+    --tertiary-color-hover: color-mix(in srgb, var(--tertiary-color) 90%, white);
+    --tertiary-color-active: color-mix(in srgb, var(--tertiary-color) 80%, white);
+    --tertiary-text: #e5e7eb;
+    --tertiary-text-disabled: rgba(229, 231, 235, 0.6);
+    --conversation-bg: #1e1e1e;
+
+    /* 对话样式 */
+    --conversation-text-color: #e5e7eb;
+    --conversation-border-color: #374151;
+    --conversation-active-bg: var(--primary-color-100);
+    --conversation-active-text-color: var(--primary-color);
+    --conversation-hover-bg: var(--primary-color-100);
+    --conversation-hover-text-color: var(--primary-color);
+
+    /* 气泡颜色 */
+    --user-bubble-bg: #374151;
+    --user-bubble-text-color: #d4d4d4;
+    --user-bubble-border-color: #4b5563;
+    --assitant-bubble-bg: none;
+    --assitant-bubble-text-color: #d4d4d4;
+    --assitant-bubble-border-color: #374151;
+}
+
 @import "./font-family.css";
 
 
@@ -114,6 +156,11 @@ body {
     padding: 0;
     font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Helvetica Neue", Helvetica, Arial, sans-serif;
     overflow: hidden;
+}
+
+.dark body {
+    color: #fff;
+    background: #1E1E1E;
 }
 
 body,

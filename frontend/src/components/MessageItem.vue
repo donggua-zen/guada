@@ -756,6 +756,61 @@ ol>*:not(li) {
   max-width: 100%;
 }
 
+
+/* 暗色模式下的 Markdown 文本样式 */
+.dark .markdown-text h6 {
+  color: #8b949e;
+}
+
+.dark .markdown-text a {
+  color: #58a6ff;
+}
+
+.dark .markdown-text a:hover {
+  color: #79c0ff;
+}
+
+.dark .markdown-text ol>li:before {
+  color: #8b949e;
+}
+
+.dark .markdown-text ul>li::before {
+  background-color: #8b949e;
+}
+
+.dark .markdown-text code {
+  background-color: #2d333b;
+  color: #d4d4d4;
+}
+
+.dark .markdown-text pre {
+  background-color: #1e1e1e;
+  border-color: #333;
+}
+
+.dark .markdown-text blockquote {
+  border-left-color: #333;
+}
+
+.dark .markdown-text table th,
+.dark .markdown-text table td {
+  border-color: #333;
+}
+
+.dark .markdown-text table th {
+  background-color: #2d333b;
+  color: #d4d4d4;
+}
+
+.dark .markdown-text table td {
+  background-color: #1e1e1e;
+  color: #d4d4d4;
+}
+
+.dark .markdown-text hr {
+  border-top-color: #333;
+}
+
 /* 响应式表格样式 */
 @media (max-width: 768px) {
   .markdown-text table {
@@ -832,5 +887,135 @@ ol>*:not(li) {
 
 .copy-code-button:hover {
   background: rgba(255, 255, 255, 0.2);
+}
+
+/* 暗色模式样式 */
+.dark .custom-code-block {
+  background: #1e1e1e;
+  border-color: #333;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+}
+
+.dark .custom-code-block pre.hljs {
+  background: #1e1e1e !important;
+  color: #d4d4d4;
+}
+
+.dark .custom-code-block code.hljs {
+  color: #d4d4d4;
+  background: transparent !important;
+}
+
+.dark .code-header {
+  background: #252526;
+  color: #cccccc;
+  border-bottom: 1px solid #333;
+}
+
+.dark .code-language {
+  color: #858585;
+  font-weight: 500;
+}
+
+.dark .copy-code-button {
+  color: #858585;
+  background: transparent;
+}
+
+.dark .copy-code-button:hover {
+  color: #d4d4d4;
+  background: rgba(255, 255, 255, 0.1);
+}
+
+/* HLJS 语法高亮暗色主题覆盖 */
+.dark pre.hljs {
+  color: #d4d4d4;
+}
+
+.dark .hljs-keyword,
+.dark .hljs-selector-tag,
+.dark .hljs-title,
+.dark .hljs-section,
+.dark .hljs-doctag,
+.dark .hljs-name,
+.dark .hljs-strong {
+  color: #569cd6;
+}
+
+.dark .hljs-comment {
+  color: #6a9955;
+}
+
+.dark .hljs-string,
+.dark .hljs-title,
+.dark .hljs-section,
+.dark .hljs-built_in,
+.dark .hljs-literal,
+.dark .hljs-type,
+.dark .hljs-addition,
+.dark .hljs-tag,
+.dark .hljs-quote,
+.dark .hljs-name,
+.dark .hljs-selector-id,
+.dark .hljs-selector-class {
+  color: #ce9178;
+}
+
+.dark .hljs-meta,
+.dark .hljs-subst,
+.dark .hljs-symbol,
+.dark .hljs-regexp,
+.dark .hljs-attribute,
+.dark .hljs-deletion,
+.dark .hljs-variable,
+.dark .hljs-template-variable,
+.dark .hljs-link,
+.dark .hljs-bullet {
+  color: #b5cea8;
+}
+
+.dark .hljs-emphasis {
+  font-style: italic;
+}
+
+.dark .hljs-strong {
+  font-weight: bold;
+}
+
+/* 行号样式（如果有的话） */
+.dark .custom-code-block .line-numbers {
+  background: #252526;
+  color: #858585;
+  border-right: 1px solid #333;
+}
+
+/* 代码块内部滚动条样式 */
+.dark .custom-code-block ::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+.dark .custom-code-block ::-webkit-scrollbar-track {
+  background: #252526;
+}
+
+.dark .custom-code-block ::-webkit-scrollbar-thumb {
+  background: #424242;
+  border-radius: 4px;
+}
+
+.dark .custom-code-block ::-webkit-scrollbar-thumb:hover {
+  background: #535353;
+}
+
+/* 代码块高亮行（如果有高亮功能） */
+.dark .custom-code-block .highlighted-line {
+  background: rgba(86, 156, 214, 0.1);
+}
+
+/* 代码块行号高亮 */
+.dark .custom-code-block .highlighted-line-number {
+  color: #569cd6;
+  background: rgba(86, 156, 214, 0.1);
 }
 </style>

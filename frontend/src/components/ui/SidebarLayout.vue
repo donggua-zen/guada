@@ -18,11 +18,11 @@
 
             <!-- 折叠展开按钮 -->
             <button v-if="showToggleButton" @click="$emit('update:sidebarVisible', !sidebarVisible)"
-                class="absolute  top-1/2 right-0 transition-all transform -translate-y-1/2 w-4 h-16 flex items-center justify-center bg-white shadow-sm hover:bg-gray-50 focus:outline-none z-10"
+                class="absolute  top-1/2 right-0 transition-all transform -translate-y-1/2 w-4 h-16 flex items-center justify-center bg-white dark:bg-gray-700 shadow-sm hover:bg-gray-50 focus:outline-none z-10  border-gray-200 dark:border-gray-700 dark:hover:bg-gray-600"
                 :title="sidebarVisible ? '折叠侧边栏' : '展开侧边栏'"
-                :class="sidebarVisible ? 'translate-x-1/2 rounded-lg border border-gray-200' : 'translate-x-full rounded-r-lg border-r border-gray-200'">
+                :class="sidebarVisible ? 'translate-x-1/2 rounded-lg border' : 'translate-x-full rounded-r-lg border-r'">
                 <slot name="toggle-icon" :sidebar-visible="sidebarVisible">
-                    <n-icon :component="sidebarVisible ? ArrowLeftTwotone : ArrowRightTwotone" class="text-gray-600" />
+                    <n-icon :component="sidebarVisible ? ArrowLeftTwotone : ArrowRightTwotone" class="text-gray-600 dark:text-gray-200" />
                 </slot>
             </button>
         </div>

@@ -14,9 +14,13 @@
 import { ref } from 'vue'
 import { useRouter, RouterView } from 'vue-router'
 import { NConfigProvider, NNotificationProvider, NDialogProvider, NMessageProvider } from 'naive-ui'
-import { zhCN, dateZhCN } from 'naive-ui'
-const theme = ref(null);
+import { zhCN, dateZhCN, darkTheme } from 'naive-ui'
 import { useTitle } from './composables/useTitle'
+import { useTheme } from './composables/useTheme'
+import { computed } from 'vue';
+const { isDark, toggleDark } = useTheme()
+const theme = computed(() => isDark.value ? darkTheme : null);
+
 /**
   * js 文件下使用这个做类型提示
   * @type import('naive-ui').GlobalThemeOverrides
