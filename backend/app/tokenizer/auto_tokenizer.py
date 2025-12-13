@@ -102,12 +102,27 @@ _tokenizer_cache: Dict[str, _Tokenizer] = {}
 
 
 def get_tokenizer(model: str) -> _Tokenizer:
+    """
+    根据模型名称获取对应的分词器实例
+
+    首先在预定义的分词器映射表中查找匹配的分词器，如果找到且未缓存则创建新的分词器实例并缓存，
+    否则返回默认的OpenAI分词器实例
+
+    参数:
+        model: 模型名称字符串
+
+    返回值:
+        _Tokenizer: 分词器实例
+    """
     model = model.lower()
 
+    # 在分词器映射表中查找匹配的分词器
     for k, v in _tokenizer_mapping.items():
         if model.find(k.lower()) >= 0:
+            # 如果该分词器尚未缓存，则创建并缓存
             if k not in _tokenizer_cache:
                 _tokenizer_cache[k] = _TransformersTokenizer(k)
             return _tokenizer_cache[k]
 
+    # 如果没有找到匹配的分词器，则使用OpenAI分词器
     return _OpenAITokenizer(model)
