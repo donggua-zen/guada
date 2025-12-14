@@ -1,153 +1,250 @@
 <template>
-    <div class="min-h-screen bg-gray-50 flex items-center justify-center p-4">
-        <div
-            class="flex flex-col lg:flex-row bg-white rounded-xl overflow-hidden shadow-[0_6px_30px_0_rgba(0,0,0,.08)] w-full max-w-6xl">
-            <!-- 左侧说明区域 - 在移动端位于上方 -->
+    <div class="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100 p-4">
+        <div class="flex flex-col md:flex-row bg-white rounded-2xl overflow-hidden shadow-xl max-w-4xl w-full">
+            <!-- 左侧说明区域 -->
             <div
-                class="lg:w-2/5 bg-gradient-to-br from-blue-50 to-indigo-50 p-6 md:p-8 flex items-center justify-center">
-                <div class="max-w-md w-full">
-                    <h2 class="text-xl md:text-2xl font-bold text-gray-800 mb-4 md:mb-6 text-center">欢迎使用 AI 聊天系统</h2>
-                    <div class="space-y-4">
-                        <div class="flex items-start">
-                            <div class="flex-shrink-0 mt-1">
-                                <svg class="h-5 w-5 text-blue-500" fill="currentColor" viewBox="0 0 20 20">
+                class="hidden md:flex md:w-1/2 bg-gradient-to-br from-indigo-500 to-purple-600 items-center justify-center p-8">
+                <div class="text-center text-white">
+                    <h1 class="text-3xl font-bold mb-4">设置安全密码</h1>
+                    <p class="text-indigo-100 mb-6">为了保护您的账户安全，请设置一个强密码</p>
+                    <div class="space-y-4 text-left">
+                        <div class="flex items-center">
+                            <div class="flex-shrink-0 leading-none">
+                                <svg class="h-5 w-5 text-green-300" fill="currentColor" viewBox="0 0 20 20">
                                     <path fill-rule="evenodd"
                                         d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z"
                                         clip-rule="evenodd" />
                                 </svg>
                             </div>
-                            <p class="ml-3 text-gray-600 text-sm md:text-base">您好！这是您首次登录系统，请设置一个安全密码。</p>
+                            <p class="ml-3 text-indigo-100 text-sm">使用至少8位字符的密码</p>
                         </div>
 
-                        <div class="bg-blue-50 border-l-4 border-blue-500 p-4 rounded">
-                            <div class="flex">
-                                <div class="flex-shrink-0">
-                                    <svg class="h-5 w-5 text-blue-500" fill="currentColor" viewBox="0 0 20 20">
-                                        <path fill-rule="evenodd"
-                                            d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z"
-                                            clip-rule="evenodd" />
-                                    </svg>
-                                </div>
-                                <div class="ml-3">
-                                    <p class="text-sm text-blue-700">
-                                        <strong>安全提示：</strong>请勿使用常用密码，建议使用包含大小写字母、数字和特殊字符的组合。
-                                    </p>
-                                </div>
-                            </div>
-                        </div>
-
-                        <div class="flex items-start">
-                            <div class="flex-shrink-0 mt-1">
-                                <svg class="h-5 w-5 text-green-500" fill="currentColor" viewBox="0 0 20 20">
+                        <div class="flex items-center">
+                            <div class="flex-shrink-0 leading-none">
+                                <svg class="h-5 w-5 text-green-300" fill="currentColor" viewBox="0 0 20 20">
                                     <path fill-rule="evenodd"
                                         d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z"
                                         clip-rule="evenodd" />
                                 </svg>
                             </div>
-                            <p class="ml-3 text-gray-600 text-sm md:text-base">设置完成后，您将可以正常使用系统的所有功能。</p>
+                            <p class="ml-3 text-indigo-100 text-sm">混合使用大小写字母、数字和符号</p>
                         </div>
 
-                        <div class="bg-yellow-50 border-l-4 border-yellow-500 p-4 rounded">
-                            <div class="flex">
-                                <div class="flex-shrink-0">
-                                    <svg class="h-5 w-5 text-yellow-500" fill="currentColor" viewBox="0 0 20 20">
-                                        <path fill-rule="evenodd"
-                                            d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z"
-                                            clip-rule="evenodd" />
-                                    </svg>
-                                </div>
-                                <div class="ml-3">
-                                    <p class="text-sm text-yellow-700">
-                                        <strong>重置说明：</strong>如需再次设置密码，请删除后端目录下的 <code
-                                            class="bg-gray-100 px-1 rounded">password_is_set.txt</code> 文件并刷新本页面。
-                                    </p>
-                                </div>
+                        <div class="flex items-center">
+                            <div class="flex-shrink-0 leading-none">
+                                <svg class="h-5 w-5 text-green-300" fill="currentColor" viewBox="0 0 20 20">
+                                    <path fill-rule="evenodd"
+                                        d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z"
+                                        clip-rule="evenodd" />
+                                </svg>
                             </div>
+                            <p class="ml-3 text-indigo-100 text-sm">避免使用常见的密码组合</p>
+                        </div>
+
+                        <div class="flex items-center">
+                            <div class="flex-shrink-0 leading-none">
+                                <svg class="h-5 w-5 text-green-300" fill="currentColor" viewBox="0 0 20 20">
+                                    <path fill-rule="evenodd"
+                                        d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z"
+                                        clip-rule="evenodd" />
+                                </svg>
+                            </div>
+                            <p class="ml-3 text-indigo-100 text-sm">定期更换密码以保障账户安全</p>
                         </div>
                     </div>
                 </div>
+
             </div>
 
-            <!-- 右侧表单区域 - 在移动端位于下方 -->
-            <div class="lg:w-3/5 p-6 md:p-8 flex items-center justify-center">
-                <div class="w-full max-w-md">
-                    <!-- 登录方式切换 -->
-                    <div class="flex justify-center mb-6">
-                        <n-tabs v-model:value="loginType" type="segment" animated class="w-full">
-                            <n-tab-pane name="phone" tab="手机账户"></n-tab-pane>
-                            <n-tab-pane name="email" tab="邮箱账户"></n-tab-pane>
-                        </n-tabs>
-                    </div>
+            <!-- 右侧表单区域 -->
+            <div class="w-full md:w-1/2 p-8 flex flex-col justify-center">
+                <div class="text-center mb-8">
+                    <h2 class="text-3xl font-bold text-gray-800 mb-2">设置密码</h2>
+                    <p class="text-gray-500" v-if="canReset">这是您首次登录系统，请设置一个安全密码</p>
+                    <p class="text-gray-500" v-else>您当前没有权限重置密码</p>
+                </div>
 
-                    <!-- 登录表单 -->
-                    <div class="w-full">
-                        <template v-if="canReset">
-                            <n-form :model="form" :rules="rules" ref="formRef" label-placement="top"
-                                :show-label="false">
-                                <!-- 手机号/邮箱输入 -->
-                                <n-form-item v-if="loginType === 'phone'" label="手机" path="phone" class="mb-4">
+                <!-- 登录方式切换 -->
+                <div class="flex justify-center mb-6">
+                    <n-tabs v-model:value="loginType" type="segment" class="w-full" v-if="canReset">
+                        <n-tab-pane name="phone" tab="手机账户">
+                            <n-form :model="form" :rules="rules" ref="formRef" label-placement="top" :show-label="false"
+                                class="mt-4">
+                                <n-form-item path="phone" class="mb-4">
                                     <n-input name="login-phone" v-model:value="form.phone" placeholder="请输入手机号"
-                                        size="large">
+                                        size="large" class="rounded-lg">
                                         <template #prefix>
-                                            <n-icon>
+                                            <n-icon class="text-gray-400">
                                                 <PhoneIcon />
                                             </n-icon>
                                         </template>
                                     </n-input>
                                 </n-form-item>
 
-                                <n-form-item v-else label="邮箱" path="email" class="mb-4">
-                                    <n-input name="login-email" v-model:value="form.email" placeholder="请输入邮箱"
-                                        size="large">
+                                <n-form-item label="密码" path="password" class="mb-4">
+                                    <n-input name="login-password" v-model:value="form.password" type="password"
+                                        show-password-on="click" placeholder="请输入密码" size="large" class="rounded-lg">
                                         <template #prefix>
-                                            <n-icon>
+                                            <n-icon class="text-gray-400">
+                                                <LockIcon />
+                                            </n-icon>
+                                        </template>
+                                    </n-input>
+                                </n-form-item>
+
+                                <n-form-item label="确认密码" path="confirmPassword" class="mb-6">
+                                    <n-input name="confirm-password" v-model:value="form.confirmPassword"
+                                        type="password" show-password-on="click" placeholder="请再次输入密码" size="large"
+                                        class="rounded-lg">
+                                        <template #prefix>
+                                            <n-icon class="text-gray-400">
+                                                <LockIcon />
+                                            </n-icon>
+                                        </template>
+                                    </n-input>
+                                </n-form-item>
+                            </n-form>
+                        </n-tab-pane>
+
+                        <n-tab-pane name="email" tab="邮箱账户">
+                            <n-form :model="form" :rules="rules" ref="formRef" label-placement="top" :show-label="false"
+                                class="mt-4">
+                                <n-form-item path="email" class="mb-4">
+                                    <n-input name="login-email" v-model:value="form.email" placeholder="请输入邮箱地址"
+                                        size="large" class="rounded-lg">
+                                        <template #prefix>
+                                            <n-icon class="text-gray-400">
                                                 <MailIcon />
                                             </n-icon>
                                         </template>
                                     </n-input>
                                 </n-form-item>
-                                <!-- 密码输入 -->
+
                                 <n-form-item label="密码" path="password" class="mb-4">
                                     <n-input name="login-password" v-model:value="form.password" type="password"
-                                        placeholder="请输入密码" size="large">
+                                        show-password-on="click" placeholder="请输入密码" size="large" class="rounded-lg">
                                         <template #prefix>
-                                            <n-icon>
+                                            <n-icon class="text-gray-400">
                                                 <LockIcon />
                                             </n-icon>
                                         </template>
                                     </n-input>
                                 </n-form-item>
 
-                                <!-- 确认密码输入 -->
                                 <n-form-item label="确认密码" path="confirmPassword" class="mb-6">
                                     <n-input name="confirm-password" v-model:value="form.confirmPassword"
-                                        type="password" placeholder="请再次输入密码" size="large">
+                                        type="password" show-password-on="click" placeholder="请再次输入密码" size="large"
+                                        class="rounded-lg">
                                         <template #prefix>
-                                            <n-icon>
+                                            <n-icon class="text-gray-400">
                                                 <LockIcon />
                                             </n-icon>
                                         </template>
                                     </n-input>
                                 </n-form-item>
-
-                                <!-- 登录按钮 -->
-                                <div class="flex justify-center">
-                                    <UiButton type="primary" round block size="large" :loading="loading"
-                                        @click="handleLogin">
-                                        <template #icon>
-                                            <LoginIcon />
-                                        </template>
-                                        {{ loading ? '设置中...' : '立刻设置' }}
-                                    </UiButton>
-                                </div>
                             </n-form>
-                        </template>
-                        <template v-else>
-                            <div class="text-center py-8">
-                                <div class="text-lg text-gray-500 mb-4">无权限重置密码</div>
+                        </n-tab-pane>
+                    </n-tabs>
+
+                    <div v-else class="w-full text-center py-8">
+                        <n-result status="403" title="无权限重置密码" description="您当前没有权限重置密码">
+                            <template #footer>
                                 <n-button @click="router.go(0)">刷新页面</n-button>
+                            </template>
+                        </n-result>
+
+                        <div class="mt-6 bg-red-50 border border-red-200 rounded-xl p-5 text-left shadow-sm">
+                            <div class="flex">
+                                <div class="flex-shrink-0">
+                                    <svg class="h-6 w-6 text-red-500" xmlns="http://www.w3.org/2000/svg"
+                                        viewBox="0 0 20 20" fill="currentColor">
+                                        <path fill-rule="evenodd"
+                                            d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z"
+                                            clip-rule="evenodd" />
+                                    </svg>
+                                </div>
+                                <div class="ml-4">
+                                    <h3 class="text-lg font-medium text-red-800">权限说明</h3>
+                                    <div class="mt-3 text-sm text-red-700">
+                                        <p class="mb-2">您当前没有权限重置密码，请按以下步骤操作：</p>
+                                        <ol class="list-decimal pl-5 space-y-1">
+                                            <li>子账户重置请联系系统管理员</li>
+                                            <li>主账户如需重置，请删除后端目录下的 <code
+                                                    class="bg-red-100 px-1.5 py-0.5 rounded text-red-800 font-mono">password_is_set.txt</code>
+                                                文件</li>
+                                            <li>刷新本页面重新设置密码</li>
+                                        </ol>
+                                    </div>
+                                </div>
                             </div>
-                        </template>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 设置按钮 -->
+                <UiButton v-if="canReset" type="primary" round block size="large" :loading="loading"
+                    @click="handleLogin"
+                    class="mb-6 py-3 font-medium rounded-lg shadow-md hover:shadow-lg transition-shadow">
+                    <template #icon>
+                        <LoginIcon />
+                    </template>
+                    {{ loading ? '设置中...' : '立即设置' }}
+                </UiButton>
+
+                <!-- 移动端安全提醒 -->
+                <div class="md:hidden space-y-4 mb-6" v-if="canReset">
+                    <div class="bg-blue-50 border-l-4 border-blue-500 p-4 rounded">
+                        <div class="flex">
+                            <div class="flex-shrink-0">
+                                <svg class="h-5 w-5 text-blue-500" fill="currentColor" viewBox="0 0 20 20">
+                                    <path fill-rule="evenodd"
+                                        d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z"
+                                        clip-rule="evenodd" />
+                                </svg>
+                            </div>
+                            <div class="ml-3">
+                                <p class="text-sm text-blue-700">
+                                    <strong>安全提示：</strong>请勿使用常用密码，建议使用包含大小写字母、数字和特殊字符的组合。
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="bg-yellow-50 border-l-4 border-yellow-500 p-4 rounded">
+                        <div class="flex">
+                            <div class="flex-shrink-0">
+                                <svg class="h-5 w-5 text-yellow-500" fill="currentColor" viewBox="0 0 20 20">
+                                    <path fill-rule="evenodd"
+                                        d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z"
+                                        clip-rule="evenodd" />
+                                </svg>
+                            </div>
+                            <div class="ml-3">
+                                <p class="text-sm text-yellow-700">
+                                    <strong>重置说明：</strong>如需再次设置密码，请删除后端目录下的 <code
+                                        class="bg-gray-100 px-1 rounded">password_is_set.txt</code> 文件并刷新本页面。
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div v-else class="md:hidden">
+                    <div class="bg-red-50 border-l-4 border-red-500 p-4 rounded">
+                        <div class="flex">
+                            <div class="flex-shrink-0">
+                                <svg class="h-5 w-5 text-red-500" fill="currentColor" viewBox="0 0 20 20">
+                                    <path fill-rule="evenodd"
+                                        d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z"
+                                        clip-rule="evenodd" />
+                                </svg>
+                            </div>
+                            <div class="ml-3">
+                                <p class="text-sm text-red-700">
+                                    您当前没有权限重置密码，请联系管理员或刷新页面重试。
+                                </p>
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -164,7 +261,8 @@ import {
     NTabs,
     NTabPane,
     NIcon,
-    NButton
+    NButton,
+    NCarousel
 } from 'naive-ui'
 
 import {
@@ -197,8 +295,6 @@ const form = reactive({
     password: '',
     confirmPassword: ''
 })
-
-// 记住我
 
 // 加载状态
 const loading = ref(false)
@@ -270,7 +366,7 @@ const handleLogin = async () => {
                 if (loginType.value === 'phone') {
                     await apiService.resetPrimayPassword({
                         type: loginType.value,
-                        email: form.email,
+                        phone: form.phone,
                         password: form.password,
                     });
                 } else {
@@ -280,7 +376,7 @@ const handleLogin = async () => {
                         password: form.password,
                     })
                 }
-                await confirmSuccess('登录成功', '密码重置成功，点击确认跳转到首页');
+                await confirmSuccess('设置成功', '密码设置成功，点击确认跳转到首页');
                 router.replace('/')
 
             } catch (error) {
@@ -307,24 +403,62 @@ onMounted(async () => {
 
 </script>
 
-<style>
+<style scoped>
 /* 自定义样式 */
-.n-input {
+.carousel-img {
+    border-radius: 12px;
+}
+
+:deep(.n-input) {
     --n-border: 1px solid #e5e7eb;
-    --n-border-focus: 1px solid #3b82f6;
+    --n-border-focus: 1px solid #4f46e5;
+    --n-box-shadow-focus: 0 0 0 2px rgba(79, 70, 229, 0.2);
 }
 
-.UiButton {
-    --n-height: 44px;
+:deep(.UiButton) {
+    --n-height: 46px;
     --n-font-size: 16px;
+    --n-color-primary: #4f46e5;
+    --n-color-primary-hover: #4338ca;
+    --n-color-primary-pressed: #3730a3;
 }
 
-.n-tabs .n-tabs-nav {
-    padding: 0 16px;
+:deep(.n-tabs .n-tabs-nav) {
+    padding: 0;
+    border-radius: 12px;
+    background-color: rgb(247, 247, 250);
+    padding: 4px;
 }
 
-.n-form-item-label {
+:deep(.n-tabs .n-tabs-tab) {
+    border-radius: 8px;
+    transition: all 0.2s ease;
+}
+
+:deep(.n-tabs .n-tabs-tab--active) {
+    background-color: white;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+:deep(.n-form-item-label) {
     font-weight: 500;
     color: #374151;
+}
+
+/* 自定义轮播图指示器 */
+:deep(.n-carousel .n-carousel__dots) {
+    bottom: -10px;
+}
+
+:deep(.n-carousel .n-carousel__dots .n-carousel__dot) {
+    background-color: rgba(255, 255, 255, 0.5);
+    width: 8px;
+    height: 8px;
+}
+
+:deep(.n-carousel .n-carousel__dots .n-carousel__dot.n-carousel__dot--active) {
+    background-color: white;
+    width: 20px;
+    border-radius: 4px;
 }
 </style>

@@ -90,7 +90,7 @@
                     <n-checkbox v-model:checked="rememberMe" class="text-gray-600">
                         记住我
                     </n-checkbox>
-                    <UiButton text type="primary" size="small" class="text-indigo-600 hover:text-indigo-800">
+                    <UiButton text type="primary" size="small" class="text-indigo-600 hover:text-indigo-800" @click="handleForgetPassword">
                         忘记密码？
                     </UiButton>
                 </div>
@@ -243,6 +243,10 @@ const handleLogin = async () => {
             toast.error('请检查输入信息')
         }
     })
+}
+
+const handleForgetPassword = () => {
+    router.push('/password')
 }
 </script>
 
