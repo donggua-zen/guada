@@ -68,7 +68,7 @@
         </div>
       </template>
       <template v-else-if="authStore.isAuthenticated">
-        <ScrollContainer ref="scrollContainerRef" :auto-scroll="true" :smooth-scroll="!isStreaming">
+        <ScrollContainer ref="scrollContainerRef" :auto-scroll="true" @scroll="handleScroll">
           <div class="flex flex-col items-center px-[20px] max-w-[1000px] mx-auto">
             <MessageItem v-for="(message, index) in activeMessages" :ref="(el) => setItemRef(el, message.id)"
               :key="message.id" :message="message"
@@ -76,7 +76,7 @@
               :is-last="index == activeMessages.length - 1"
               :allow-generate="!isStreaming && allowReSendMessage(message, index)" @delete="deleteMessage"
               @edit="editMessage" @copy="copyMessage" @generate="generateResponse" @regenerate="regenerateResponse"
-              @switch="switchContent" />
+              @render-complete="handleRenderComplete" @switch="switchContent" />
           </div>
         </ScrollContainer>
       </template>
@@ -148,11 +148,13 @@ const { isDark, toggleDark } = useTheme()
 
 // 响应式数据
 const scrollContainerRef = ref(null);
+const messagesContainerRef = ref(null);
 const currentSessionId = ref(null);
 const showTokenModal = ref(false);
 const showEditMessageModal = ref(false);
 const itemRefs = ref({});
 const isLoading = ref(false)
+const autoScrollToBottom = ref(false);
 
 // 更多操作下拉菜单选项
 const moreOptions = ref([
@@ -274,17 +276,17 @@ const debouncedSaveSession = useDebounceFn(() => {
 // 监听器
 watch(() => props.session?.id, handleSessionChange, { immediate: true });
 
-watch(
-  () => activeMessages.value,
-  () => {
-    nextTick(() => {
-      if (scrollContainerRef.value?.isAtBottom && !isStreaming.value) {
-        immediateScrollToBottom();
-      }
-    });
-  },
-  { deep: true }
-);
+// watch(
+//   () => activeMessages.value,
+//   () => {
+//     nextTick(() => {
+//       if (scrollContainerRef.value?.isAtBottom && !isStreaming.value) {
+//         immediateScrollToBottom();
+//       }
+//     });
+//   },
+//   { deep: true }
+// );
 
 // 生命周期
 onBeforeUpdate(() => {
@@ -298,6 +300,31 @@ onMounted(() => {
 // 滚动功能
 function immediateScrollToBottom() {
   scrollContainerRef.value?.immediateScrollToBottom();
+}
+
+const handleRenderComplete = () => {
+  if (autoScrollToBottom.value) {
+    nextTick(() => {
+      immediateScrollToBottom();
+    });
+  }
+}
+
+const handleScroll = (event) => {
+  if (scrollContainerRef.value && isStreaming.value) {
+    if (scrollContainerRef.value.isAtBottom) {
+      const streamingMessage = activeMessages.value.find(message => message.state?.is_streaming)
+      const el = itemRefs.value[streamingMessage.id]?.el
+      if (!el) return
+      const minHeight = parseFloat(el.style.minHeight) || 0
+      const height = el.getBoundingClientRect().height
+      if (height > minHeight) {
+        autoScrollToBottom.value = true
+        return
+      }
+    }
+    autoScrollToBottom.value = false
+  }
 }
 
 // 更多操作菜单选择处理
@@ -399,24 +426,6 @@ async function loadMessages(sessionId) {
   }
 }
 
-// function updateSessionLastMessage() {
-//   if (!activeMessages.value.length) {
-//     currentSession.value.last_message = null;
-//     currentSession.value = { ...currentSession.value };
-//     return;
-//   }
-
-//   const lastMessage = activeMessages.value[activeMessages.value.length - 1];
-//   if (lastMessage?.state?.is_streaming) return;
-
-//   const currentContent = getCurrentContent(lastMessage.contents);
-//   currentSession.value.last_message = {
-//     content: currentContent.content,
-//     created_at: currentContent.created_at
-//   };
-//   currentSession.value = { ...currentSession.value };
-// }
-
 function getCurrentIndex(messageContents) {
   if (!messageContents?.length) return 0;
   const currentIndex = messageContents.findIndex((content) => content.is_current);
@@ -434,76 +443,6 @@ function allowReSendMessage(message, index) {
   return index >= activeMessages.value.length - 2;
 }
 
-async function* dummy_chat(_sessionId, _messageId, _regeneration_mode = null, _assistant_message_id = null) {
-  // 模拟创建消息
-  yield {
-    type: "create",
-    message_id: "dummy-assistant-message-id",
-    content_id: "dummy-content-id",
-    model_name: "Dummy Model"
-  };
-
-  // 模拟网络搜索
-  yield {
-    type: "web_search",
-    msg: "start"
-  };
-
-  yield {
-    type: "web_search",
-    msg: "end"
-  };
-
-
-
-  yield {
-    type: "think",
-    msg: "正在分析问题..."
-  };
-
-  // 模拟逐步思考过程
-  const thoughts = [
-    "\n\n首先，我需要理解用户的问题。",
-    "\n然后，我会考虑相关的知识点。",
-    "\n最后，我会组织语言给出详细回答。"
-  ];
-  for (let i = 0; i < 5; i++) {
-    for (const thought of thoughts) {
-      yield {
-        type: "think",
-        msg: thought
-      };
-      // 模拟延迟
-      await new Promise(resolve => setTimeout(resolve, 100));
-    }
-  }
-
-
-  // 模拟实际回答内容
-  const responseText = "这是模拟的回答内容。通过这个模拟函数，我们可以在没有真实API的情况下测试界面交互和功能。\n\n" +
-    "模拟的内容包括：\n" +
-    "1. 消息创建过程\n" +
-    "2. 网络搜索提示\n" +
-    "3. 思考过程（可选）\n" +
-    "4. 实际回答内容\n\n" +
-    "这样开发者就可以在开发过程中方便地进行调试和界面优化。";
-  for (let i = 0; i < 5; i++) {
-    for (let y = 0; y < responseText.length; y++) {
-      yield {
-        type: "text",
-        msg: responseText.charAt(y)
-      };
-      // 模拟打字效果
-      await new Promise(resolve => setTimeout(resolve, 20));
-    }
-  }
-  // 模拟结束
-  yield {
-    type: "finish",
-    finish_reason: "stop"
-  };
-}
-
 // 流式响应处理
 async function handleStreamResponse(
   streamingSessionId,
@@ -512,7 +451,6 @@ async function handleStreamResponse(
   assistantMessageId = null
 ) {
 
-  const USE_DUMMY_CHAT = false; // 设为 true 使用模拟接口，设为 false 使用真实接口
 
   sessionStore.setSessionIsStreaming(streamingSessionId, true);
 
@@ -523,8 +461,6 @@ async function handleStreamResponse(
   try {
     let responseContent = "";
     let thinkingContent = "";
-    // let itemRef = null;
-    // const chatSouce = USE_DUMMY_CHAT ? dummy_chat : apiService.chat;
 
     for await (const response of apiService.chat(
       streamingSessionId,
@@ -540,6 +476,28 @@ async function handleStreamResponse(
       if (response.type == "create") {
         ({ message, contentIndex } = handleNewMessage(response, streamingSessionId, userMessageId));
         assistantMessageIdResult = response.message_id;
+        nextTick(() => {
+          const userMessageElement = itemRefs.value[userMessageId].el;
+          const assistantElement = itemRefs.value[message.id].el;
+
+          const userRect = userMessageElement.getBoundingClientRect();
+          const containerRect = messagesContainerRef.value.getBoundingClientRect();
+
+          const userStyle = window.getComputedStyle(userMessageElement);
+          const assistantStyle = window.getComputedStyle(assistantElement);
+
+          const userMargin = parseFloat(userStyle.marginTop) + parseFloat(userStyle.marginBottom);
+          const assistantMargin = parseFloat(assistantStyle.marginTop) + parseFloat(assistantStyle.marginBottom);
+
+          const userHeight = userRect.height + userMargin;
+          const maxHeight = containerRect.height / 3;
+          const minHeight = containerRect.height - Math.min(maxHeight, userHeight);
+
+          assistantElement.style.minHeight = (minHeight - assistantMargin) + 'px';
+
+          immediateScrollToBottom();
+          autoScrollToBottom.value = false;
+        });
         continue;
       }
 
@@ -728,11 +686,14 @@ async function sendNewMessage(sessionId, text, files, replaceMessageId = null) {
       sessionStore.deleteMessage(sessionId, assistantMessage.id);
     }
   }
+  if (itemRefs.value.length > 0) {
+    itemRefs.value[itemRefs.value.length - 1].el.style.minHeight = 'auto';
+  }
   activeMessages.value.push(message);
   // debouncedUpdatedSession();
-  await nextTick(() => {
-    immediateScrollToBottom();
-  });
+  await nextTick();
+  immediateScrollToBottom();
+  autoScrollToBottom.value = false;
   return message;
 }
 
@@ -863,6 +824,9 @@ function switchContent(message, content) {
     item.is_current = item.id === content.id;
   });
   debouncedSwitchContent(message.id, content.id);
+  nextTick(() => {
+    immediateScrollToBottom();
+  });
   // debouncedUpdatedSession();
 }
 
