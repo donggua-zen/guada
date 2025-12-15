@@ -1,10 +1,12 @@
 import axios from 'axios';
 import { useStorage } from '@vueuse/core';
+import { apiServiceDummy } from './ApiServiceDummy';
 
 class ApiService {
   constructor(baseURL = '/v1') {
     this.baseURL = baseURL;
     this.tokenStore = useStorage('token', '');
+    this.dummy = apiServiceDummy;
 
     // 创建 Axios 实例
     this.axiosInstance = axios.create({

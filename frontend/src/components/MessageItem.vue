@@ -1,5 +1,5 @@
 <template>
-  <div class="message" :class="messageClass">
+  <div class="message" :class="messageClass" ref="rootRef">
     <!-- <div class="hidden w-[40px] h-[40px] rounded-full flex items-center justify-center shrink-0 self-start"
       :class="avatarClass">
       <Avatar v-if="!isAssistant" :src="avatar" :round="true" type="user"></Avatar>
@@ -49,7 +49,8 @@
         <n-alert v-if="metadata && metadata.finish_reason == 'error'" title="API请求错误" type="error">
           {{ metadata.error }}
         </n-alert>
-        <div v-if="streamingState.is_streaming" class="assistant-loading flex items-center text-gray-500">
+        <div v-if="streamingState.is_streaming" class="assistant-loading flex items-center text-gray-500"
+          style="position: sticky;top:0;">
           <n-icon size="16" class="mr-2 relative top-[1px]">
             <Loading />
           </n-icon>
@@ -59,9 +60,9 @@
       </div>
       <!-- 文件列表显示区域 -->
       <div class="file-list flex flex-wrap gap-2 mt-3 ml-auto" v-if="message.files && message.files.length > 0">
-        <file-item v-for="file, index in message.files" :key="file.id" :name="file.display_name" :type="file.file_type"
+        <FileItem v-for="file, index in message.files" :key="file.id" :name="file.display_name" :type="file.file_type"
           :ext="file.file_extension" :size="file.file_size" :preview-url="file.preview_url"
-          :clickable="file.file_type === 'image'" @click="handleImageClick(index)"></file-item>
+          :clickable="file.file_type === 'image'" @click="handleImageClick(index)"></FileItem>
       </div>
       <div class="message-actions flex gap-0 text-sm w-full mt-3 text-gray-500 items-center"
         v-if="!streamingState.is_streaming"
@@ -112,7 +113,7 @@
 </template>
 
 <script setup>
-import { computed, ref, watch, onUnmounted, onMounted, h } from "vue";
+import { computed, ref, watch, onUnmounted, onMounted, h, nextTick } from "vue";
 import { Marked } from "marked";
 import { markedHighlight } from 'marked-highlight'
 import hljs from 'highlight.js';
@@ -154,7 +155,8 @@ const props = defineProps({
 
 const emit = defineEmits([
   "switch", // 添加switch事件
-  "delete", "edit", "copy", "generate", "regenerate"
+  "delete", "edit", "copy", "generate", "regenerate",
+  "render-complete"
 ]);
 
 const marked = new Marked(
@@ -177,7 +179,7 @@ const renderer = {
     const lang = code.lang || 'text';
     return `
       <div class="custom-code-block">
-        <div class="code-header" style="position: sticky;">
+        <div class="code-header">
           <span class="code-language">${lang}</span>
           <button class="copy-code-button" onclick="window.handleCopyCode(this)"><i role="img">${coypysvg}</i></button>
         </div>
@@ -193,6 +195,7 @@ marked.use({ renderer, breaks: true });
 const showImageViewer = ref(false);
 const currentPreViewIndex = ref(0);
 const isExpanded = ref(false);
+const rootRef = ref(null);
 
 const previewList = computed(() => {
   const files = props.message.files || [];
@@ -274,22 +277,32 @@ const getCurrentContent = (messageContents) => {
 
 // 主内容消抖处理
 const currentMarkdownContent = ref("");
-const debouncedMarkdownUpdate = useDebounceFn((content) => {
+const debouncedMarkdownUpdate = useDebounceFn(async (content) => {
   currentMarkdownContent.value = content;
+  emit("render-complete");
 }, 50, { maxWait: 150 });
 
 // 思考内容消抖处理
 const currentThinkingContent = ref("");
-const debouncedThinkingUpdate = useDebounceFn((content) => {
+const debouncedThinkingUpdate = useDebounceFn(async (content) => {
   currentThinkingContent.value = content;
+  emit("render-complete");
 }, 50, { maxWait: 150 });
+
+// 处理流式内容更新的通用函数
+const processStreamingContent = (content, oldContent, updateFunction) => {
+  if (!content) {
+    content = ""
+  }
+  updateFunction(content);
+};
 
 // 监听主内容变化
 watch(
   () => getCurrentContent(props.message.contents).content,
   (newContent, oldContent) => {
-    if (props.message.is_streaming) {
-      debouncedMarkdownUpdate(newContent);
+    if (props.message.state?.is_streaming) {
+      processStreamingContent(newContent, oldContent, debouncedMarkdownUpdate);
     } else {
       currentMarkdownContent.value = newContent;
     }
@@ -300,9 +313,9 @@ watch(
 // 监听思考内容变化
 watch(
   () => getCurrentContent(props.message.contents).reasoning_content,
-  (newContent) => {
-    if (props.message.is_streaming) {
-      debouncedThinkingUpdate(newContent);
+  (newContent, oldContent) => {
+    if (props.message.state?.is_streaming) {
+      processStreamingContent(newContent, oldContent, debouncedThinkingUpdate);
     } else {
       currentThinkingContent.value = newContent;
     }
@@ -431,7 +444,7 @@ onUnmounted(() => {
   }
 });
 
-defineExpose({ showThinking, hideThinking, switchContent, });
+defineExpose({ el: rootRef, showThinking, hideThinking, switchContent, });
 </script>
 
 <style scoped>
@@ -446,6 +459,8 @@ defineExpose({ showThinking, hideThinking, switchContent, });
   margin-bottom: 25px;
   animation: fadeInUp 0.3s ease;
 }
+
+.message:last-child {}
 
 /* 新增卡片式设计 */
 .message-card {
