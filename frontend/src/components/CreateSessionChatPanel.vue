@@ -1,21 +1,8 @@
 <template>
   <div class="flex flex-col h-full w-full">
     <!-- 聊天头部 -->
-    <div class="chat-header " style="display: none;">
-      <template v-if="!localSidebarVisible">
-        <UiButton text @click="localSidebarVisible = true">
-          <template #icon>
-            <n-icon size="22">
-              <FormatListBulletedSharp />
-            </n-icon>
-          </template>
-        </UiButton>
-        <span class="ml-4"></span>
-      </template>
-      <span class="hidden md:block">{{ title }}</span>
-    </div>
-
-
+    <ChatHeader :current-model-name="currentModelName" :sidebar-visible="localSidebarVisible" :has-more-options="false"
+      @open-switch-model="handleSwitchModelClick" />
 
     <!-- 输入区域 -->
     <div class="px-5 pb-2.5 w-full flex-1 flex flex-col items-center justify-center mb-40">
@@ -23,38 +10,22 @@
         <img src="/images/chat_banner.webp" alt=""></img>
       </div>
       <h1 class="text-3xl mb-6 text-gray-600">Hi，想聊些什么？</h1>
-      <!-- <div class="mb-3 mx-auto flex items-start w-full max-w-[900px]">
-        <n-popselect v-model:value="currentSession.model_id" :options="modelOptions" trigger="click">
-          <div
-            class="animate-outside rounded-full border border-gray-200 hover:bg-gray-50 transition-all duration-300 ease-in-out overflow-hidden"
-            :style="{ width: containerWidth + 'px' }">
-            <div ref="innerEl"
-              class="animate-inside flex items-center justify-center px-2 py-1 text-gray-500 cursor-pointer min-w-[min-content]"
-              :style="{ width: 'fit-content' }">
-              <OpenAI class="w-5 h-5 mr-1 flex-shrink-0" />
-              <span class="whitespace-nowrap mr-1">{{ currentModelName }}</span>
-            </div>
-          </div>
-        </n-popselect>
-      </div> -->
       <div class="w-full  max-w-[800px]">
         <ChatInput v-model:value="inputMessage.text" v-model:web-search-enabled="webSearchEnabled"
           v-model:thinking-enabled="thinkingEnabled" :buttons="chatInputButtons" :files="inputMessage.files"
           :streaming="false" @send="sendMessage" @toggle-web-search="handleWebSearch"
           @toggle-thinking="toggleDeepThinking">
           <template #buttons>
-            <n-popselect v-model:value="currentSession.model_id" :options="modelOptions" trigger="click">
-              <button
-                class="rounded-full animate-outside transition-all duration-300 ease-in-out overflow-hidden mr-2.5 border border-[var(--primary-color)] bg-[var(--primary-color-0f)] hover:bg-[var(--primary-color-0f)]"
-                :style="{ width: isMobile ? 'auto' : containerWidth + 'px' }" style="height:28px">
-                <div ref="innerEl"
-                  class="animate-inside flex items-center justify-center px-2 py-1 text-[var(--primary-color)]  cursor-pointer min-w-[min-content]"
-                  :style="{ width: 'fit-content' }" style="height:26px">
-                  <OpenAI class="w-5 h-5 flex-shrink-0" />
-                  <span class="whitespace-nowrap mx-1 text-sm hidden md:block">{{ currentModelName }}</span>
-                </div>
-              </button>
-            </n-popselect>
+            <button @click="handleSwitchModelClick"
+              class="hidden md:inline-flex rounded-full animate-outside transition-all duration-300 ease-in-out overflow-hidden mr-2.5 border border-[var(--primary-color)] bg-[var(--primary-color-0f)] hover:bg-[var(--primary-color-0f)]"
+              :style="{ width: containerWidth + 'px' }" style="height:28px">
+              <div ref="innerEl"
+                class="animate-inside flex items-center justify-center px-2 py-1 text-[var(--primary-color)]  cursor-pointer min-w-[min-content]"
+                :style="{ width: 'fit-content' }" style="height:26px">
+                <OpenAI class="w-5 h-5 flex-shrink-0" />
+                <span class="whitespace-nowrap mx-1 text-sm hidden md:block">{{ currentModelName }}</span>
+              </div>
+            </button>
           </template>
         </ChatInput>
       </div>
@@ -65,30 +36,27 @@
           </UiButton>
         </div>
       </div>
-
-
     </div>
+    <n-popselect ref="popselectRef" scrollable :x="x" :y="y" v-model:value="currentSession.model_id"
+      :options="modelOptions" trigger="manual" v-model:show="showPopover"
+      @clickoutside="handleClickOutside">Loading</n-popselect>
   </div>
 </template>
 
 <script setup>
-import { ref, computed, watch, onMounted, onBeforeUpdate, nextTick } from "vue";
+import { ref, computed, watch, onMounted, nextTick } from "vue";
 import { useStorage } from "@vueuse/core"
 import { apiService } from "../services/ApiService";
 import { usePopup } from "../composables/usePopup";
 import { useTitle } from "../composables/useTitle";
 // 组件导入
 import { ChatInput, UiButton } from "./ui";
-
-// 图标导入
-import {
-  FormatListBulletedSharp
-} from "@vicons/material";
+import ChatHeader from "./ChatHeader.vue";
 
 import { OpenAI } from "@/components/icons"
 
 // UI组件导入
-import { NButton, NIcon, NPopselect } from "naive-ui";
+import { NPopselect } from "naive-ui";
 import { useBreakpoints, breakpointsTailwind } from '@vueuse/core'
 
 const breakpoints = useBreakpoints(breakpointsTailwind)
@@ -99,7 +67,7 @@ const { notify } = usePopup();
 
 // 响应式数据
 const title = useTitle();
-const itemRefs = ref({});
+const popselectRef = ref(null);
 
 // 模型数据
 const models = ref([]);
@@ -115,6 +83,9 @@ const inputMessage = ref({
   files: []
 });
 
+const x = ref(0)
+const y = ref(0)
+const showPopover = ref(false)
 
 // 计算属性
 const currentSession = ref({
@@ -128,7 +99,6 @@ const currentSession = ref({
   }
 })
 
-
 const currentModel = computed(() => {
   if (currentSession.value.model_id) {
     const model = models.value.find(model => model.id === currentSession.value.model_id)
@@ -141,6 +111,32 @@ const currentModelName = computed(() => {
   const model = currentModel.value
   return model ? model.model_name.split("/").pop() : "请选择对话模型"
 });
+
+const emitPopoverTarget = ref(null);
+
+const handleSwitchModelClick = (e) => {
+  e.stopPropagation();
+  if (showPopover.value) {
+    showPopover.value = false
+  }
+  else {
+    showPopover.value = true
+    emitPopoverTarget.value = e.target
+    const el = e.target
+    const rect = el.getBoundingClientRect()
+    const bottom = rect.bottom
+    const left = rect.left + (rect.width / 2)
+    x.value = left
+    y.value = bottom
+  }
+}
+
+const handleClickOutside = (e) => {
+  if (emitPopoverTarget.value && emitPopoverTarget.value === e.target) {
+    return
+  }
+  showPopover.value = false
+}
 
 // 更新容器宽度
 const updateContainerWidth = () => {
@@ -156,6 +152,7 @@ watch(isMobile, () => {
 
 // 监听模型名称变化
 watch(currentModelName, async () => {
+  showPopover.value = false
   if (currentModel.value)
     lastSelectedModelId.value = currentModel.value.id
   await nextTick() // 等待DOM更新
@@ -179,7 +176,6 @@ const modelOptions = computed(() => {
         label: provider.name,
         key: provider.id,
         disabled: true,
-
       })
 
       // 添加该分组下的模型选项
@@ -194,6 +190,7 @@ const modelOptions = computed(() => {
   })
   return options
 })
+
 // Props & Emits
 const props = defineProps({
   session: {
@@ -211,7 +208,6 @@ const emit = defineEmits([
   "update:sidebarVisible",
   "create-session"
 ]);
-
 
 const webSearchEnabled = computed({
   get() {
@@ -248,7 +244,6 @@ const localSidebarVisible = computed({
   }
 });
 
-
 const loadModels = async () => {
   try {
     const response = await apiService.fetchModels()
@@ -256,13 +251,9 @@ const loadModels = async () => {
     models.value = response.models || []
     providers.value = response.providers || []
     if (models.value.length > 0) {
-      if (lastSelectedModelId.value) {
-        if (models.value.find(model => model.id === lastSelectedModelId.value)) {
-          currentSession.value.model_id = lastSelectedModelId.value;
-          return;
-        }
-      }
-      currentSession.value.model_id = models.value[0].id
+      // 优先使用上次选择的模型
+      const savedModel = models.value.find(model => model.id === lastSelectedModelId.value)
+      currentSession.value.model_id = savedModel ? savedModel.id : models.value[0].id
       lastSelectedModelId.value = currentSession.value.model_id
     }
   } catch (error) {
@@ -270,13 +261,6 @@ const loadModels = async () => {
     notify.error('获取模型列表失败', error)
   }
 }
-
-
-
-// 生命周期
-onBeforeUpdate(() => {
-  itemRefs.value = {};
-});
 
 onMounted(() => {
   title.value = "你今天想聊点什么";
@@ -317,15 +301,9 @@ const handleCreateSessionClick = () => {
 }
 
 // 设置操作
-const handleWebSearch = () => {
+const handleWebSearch = () => { };
 
-};
-
-const toggleDeepThinking = () => {
-
-};
-
-
+const toggleDeepThinking = () => { };
 
 </script>
 
