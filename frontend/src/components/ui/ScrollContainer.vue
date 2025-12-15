@@ -1,6 +1,6 @@
 <!-- ScrollContainer.vue -->
 <template>
-    <simple-bar class="ScrollContainer" :auto-hide="true" timeout="6000" ref="simpleBarRef" @scroll="handleScroll">
+    <simple-bar class="ScrollContainer" :auto-hide="true" :timeout="6000" ref="simpleBarRef" @scroll="handleScroll">
         <div :class="mergredClasses" :style="attrs.style">
             <slot></slot>
         </div>

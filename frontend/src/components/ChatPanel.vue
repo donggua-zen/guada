@@ -1,36 +1,9 @@
 <template>
   <div class="flex flex-col h-full">
     <!-- 聊天头部 -->
-    <div class="flex items-center justify-center py-2 px-5">
-      <div class="">
-        <!-- <template v-if="!localSidebarVisible"> -->
-        <UiButton text @click="localSidebarVisible = true" :class="{ 'lg:hidden': localSidebarVisible }">
-          <template #icon>
-            <FormatListBulletedSharp />
-          </template>
-        </UiButton>
-        <!-- </template> -->
-      </div>
-
-      <!-- 在移动端居中显示，PC端左对齐 -->
-      <UiButton :border="false" class="rounded-lg hover:bg-[--bg-hover] text-base lg:mx-0 mx-auto"
-        @click="handleSwitchModelClick">
-        {{ currentModelName }}
-        <SettingsTwotone class="w-4 h-4 ml-2" />
-      </UiButton>
-
-      <div class="flex items-center lg:flex-1 justify-end">
-        <UiButton text @click="toggleDark">
-          {{ isDark ? '亮色' : '暗色' }}
-        </UiButton>
-        <!-- 更多操作下拉菜单 -->
-        <n-dropdown trigger="hover" :options="moreOptions" @select="handleMoreSelect">
-          <UiButton class="more-btn" :border="false" title="更多操作" text>
-            <MoreVertOutlined class="w-5.5 h-5.5" />
-          </UiButton>
-        </n-dropdown>
-      </div>
-    </div>
+    <ChatHeader :current-model-name="currentModelName" :sidebar-visible="localSidebarVisible"
+      @toggle-sidebar="toggleSidebar" @open-switch-model="handleSwitchModelClick"
+      @select-more-option="handleMoreSelect" />
 
     <!-- 消息内容区域 -->
     <div class="messages-container" ref="messagesContainerRef">
@@ -113,28 +86,17 @@ import { usePopup } from "@/composables/usePopup";
 import { useDebounceFn } from "@vueuse/core";
 import { useSessionStore } from "../stores/session";
 import { useAuthStore } from "../stores/auth"
-import { useTheme } from "../composables/useTheme";
 
 // 组件导入
 import MessageItem from "./MessageItem.vue";
+import ChatHeader from "./ChatHeader.vue";
 import { Avatar, ChatInput, ScrollContainer } from "./ui";
 // 异步组件导入
 // import TokenStatisticsModal from "./TokenStatisticsModal.vue";
 const TokenStatisticsModal = defineAsyncComponent(() => import("./TokenStatisticsModal.vue"));
 
-// 图标导入
-import {
-  DeleteTwotone,
-  SettingsTwotone,
-  FormatListBulletedSharp,
-  MoreVertOutlined,
-  FileDownloadOutlined,
-  FileUploadOutlined,
-  // WbSunnyTwotone,
-} from "@vicons/material";
-
 // UI组件导入
-import { NDropdown, NModal, NIcon } from "naive-ui";
+import { NModal, NIcon } from "naive-ui";
 import { UiButton } from "./ui";
 
 // 弹出层工具
@@ -142,9 +104,7 @@ const { confirm, editText, toast, notify } = usePopup();
 const authStore = useAuthStore()
 const sessionStore = useSessionStore();
 
-// 主题
 
-const { isDark, toggleDark } = useTheme()
 
 // 响应式数据
 const scrollContainerRef = ref(null);
@@ -156,24 +116,6 @@ const itemRefs = ref({});
 const isLoading = ref(false)
 const autoScrollToBottom = ref(false);
 
-// 更多操作下拉菜单选项
-const moreOptions = ref([
-  {
-    label: "清空记录",
-    key: "clear",
-    icon: () => h(NIcon, null, { default: () => h(DeleteTwotone) })
-  },
-  {
-    label: "导出记录",
-    key: "export",
-    icon: () => h(NIcon, null, { default: () => h(FileDownloadOutlined) })
-  },
-  {
-    label: "导入记录",
-    key: "import",
-    icon: () => h(NIcon, null, { default: () => h(FileUploadOutlined) })
-  }
-]);
 
 // Props & Emits
 const props = defineProps({
@@ -842,6 +784,10 @@ const toggleDeepThinking = () => {
 function handleTokensStatistic() {
   showTokenModal.value = true;
 }
+
+const toggleSidebar = () => {
+  localSidebarVisible.value = !localSidebarVisible.value;
+};
 
 defineExpose({ sendMessage: handleSendMessage })
 
