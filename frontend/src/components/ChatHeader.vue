@@ -9,9 +9,9 @@
             </UiButton>
         </div>
 
-        <UiButton text class="lg:mx-0 mx-auto" @click="$emit('open-switch-model', $event)">
-            {{ currentModelName }}
-            <SettingsTwotone class="w-4 h-4 ml-2" />
+        <UiButton text class="lg:mx-0 mx-auto max-w-[180px] md:max-w-[300px]" @click="$emit('open-switch-model', $event)">
+            <span class="truncate">{{ currentModelName }}</span>
+            <SettingsTwotone class="w-4 h-4 ml-2 flex-shrink-0" />
         </UiButton>
 
         <div class="flex items-center lg:flex-1 justify-end">
