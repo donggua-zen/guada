@@ -9,8 +9,7 @@
             </UiButton>
         </div>
 
-        <UiButton :border="false" class="rounded-lg hover:bg-[var(--color-surface)] text-base lg:mx-0 mx-auto"
-            @click="$emit('open-switch-model', $event)">
+        <UiButton text class="lg:mx-0 mx-auto" @click="$emit('open-switch-model', $event)">
             {{ currentModelName }}
             <SettingsTwotone class="w-4 h-4 ml-2" />
         </UiButton>

@@ -18,7 +18,7 @@
             }}</span>
           </div>
           <div class="flex items-center">
-            <div class="inline-block h-3 w-3 flex flex-shrink-0 items-center justify-center mr-1 relative top-[1px]">
+            <div class="inline-block h-3 w-3 flex flex-shrink-0 items-center justify-center mr-1 relative">
               <AccessTimeTwotone />
             </div><span class="" :title="currentContentTime.full">{{ currentContentTime.firendly }}</span>
           </div>
@@ -37,7 +37,8 @@
               :class="[isExpanded ? 'rotate-90' : 'rotate-0']"></n-icon>
           </div>
           <div class="thinking-container" :class="{ expanded: isExpanded }">
-            <div class="thinking-content markdown-text py-0 border-l-2 pl-4 border-gray-300 mb-2 text-gray-500"
+            <div
+              class="thinking-content markdown-text py-0 border-l-2 pl-4 border-gray-200 dark:border-gray-700 mb-2 text-gray-500 dark:text-gray-400"
               v-html="debouncedThinkingFormattedText">
             </div>
           </div>
@@ -90,7 +91,7 @@
           <div class="message-action-button" @click="switchContent('prev')" :disabled="!hasPrevContent">
             <n-icon :component="ArrowLeftTwotone" size="16" />
           </div>
-          <div class="text-gray-700 hover:text-blue-500 transition-colors duration-200 flex items-center py-1 px-2">
+          <div class="text-gray-700 transition-colors duration-200 flex items-center py-1 px-2">
             {{ getCurrentIndex(message.contents) }} / {{ message.contents.length }}
           </div>
           <div class="message-action-button" @click="switchContent('next')" :disabled="!hasNextContent">
@@ -533,7 +534,7 @@ defineExpose({ el: rootRef, showThinking, hideThinking, switchContent, });
 
 /* 重用的消息操作按钮样式 */
 .message-action-button {
-  @apply cursor-pointer flex items-center gap-1 py-1 px-1 rounded mr-1 hover:bg-blue-50 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-gray-100 disabled:hover:text-gray-400 transition-transform duration-100;
+  @apply cursor-pointer flex items-center gap-1 py-1 px-1 rounded mr-1 hover:bg-[var(--color-surface)] disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-gray-100 disabled:hover:text-gray-400 transition-transform duration-100;
 }
 
 /* 优化后的思考框样式 - 使用CSS Grid方案 */
@@ -567,6 +568,8 @@ defineExpose({ el: rootRef, showThinking, hideThinking, switchContent, });
 .thinking-content>* {
   transform: translateZ(0);
 }
+
+.dark {}
 </style>
 
 <style>
