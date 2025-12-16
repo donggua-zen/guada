@@ -713,30 +713,38 @@ ol>*:not(li) {
 
 /* 表格样式优化 - 添加滚动条支持 */
 .markdown-text table {
-  border-collapse: collapse;
-  margin-bottom: 1em;
+  border-collapse: separate;
+  border-spacing: 0;
+  margin-top: 1em;
   max-width: 100%;
-  display: block;
+  /* display: block; */
   overflow-x: auto;
   -webkit-overflow-scrolling: touch;
+  overflow: hidden;
+  border: 1px solid #dfe2e5;
+  border-radius: 14px;
 }
 
 .markdown-text table th,
 .markdown-text table td {
-  border: 1px solid #dfe2e5;
+  border-right: 1px solid #dfe2e5;
+  border-top: 1px solid #dfe2e5;
   vertical-align: top;
   padding: 0.5em;
   min-width: 100px;
-  max-width: 580px;
 }
 
 .markdown-text table th:last-child,
 .markdown-text table td:last-child {
-  padding-right: 0;
+  border-right: none;
+}
+
+.markdown-text table thead th {
+  border-top: none;
 }
 
 .markdown-text table th {
-  background-color: #f6f8fa;
+  background-color: #f3f3f5;
   text-align: center;
   position: sticky;
   left: 0;
@@ -830,6 +838,7 @@ ol>*:not(li) {
 @media (max-width: 768px) {
   .markdown-text table {
     font-size: 14px;
+    border-radius: 6px;
   }
 
   .markdown-text table th,
