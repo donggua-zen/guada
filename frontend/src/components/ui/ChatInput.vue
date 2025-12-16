@@ -516,13 +516,13 @@ onUnmounted(() => {
 
 /* 深度思考按钮激活状态样式 */
 .tool-btn.active {
-    border-color: var(--primary-color);
-    background-color: var(--primary-color-0f);
-    color: var(--primary-color);
+    border-color: var(--color-primary);
+    background-color: var(--color-primary-0f);
+    color: var(--color-primary);
 }
 
 .send-btn {
-    background: var(--primary-color);
+    background: var(--color-primary);
     color: #fff;
     border: none;
     padding: 6px 6px;
@@ -533,6 +533,6 @@ onUnmounted(() => {
 }
 
 .send-btn:disabled {
-    background-color: var(--primary-color-disabled)
+    background-color: var(--color-primary-disabled)
 }
 </style>
