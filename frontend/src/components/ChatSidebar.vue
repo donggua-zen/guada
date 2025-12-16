@@ -1,6 +1,6 @@
 <template>
   <div
-    class="sessions-panel flex flex-col  w-full h-full bg-[var(--conversation-bg)] border-r border-[var(--conversation-border-color)]">
+    class="sessions-panel flex flex-col  w-full h-full bg-[var(--color-conversation-bg)] border-r border-[var(--color-conversation-border)]">
     <!-- 修改后的会话头部，包含标题和新建按钮 -->
     <div class="sessions-header px-5 pt-5 pb-3 text-lg font-semibold flex justify-between items-center">
       <span>聊天对话</span>
@@ -29,10 +29,10 @@
     <div class="sessions-list flex-1 overflow-hidden py-1">
       <ScrollContainer class="">
         <div @click="handleButtonClick('characters')" :class="{
-          'hover:bg-[var(--conversation-hover-bg)] text-[var(--conversation-text-color)]': btnActive !== 'characters',
-          'bg-[var(--conversation-active-bg)] font-bold text-[var(--conversation-active-text-color)]': btnActive === 'characters',
+          'hover:bg-[var(--color-conversation-bg-hover)] text-[var(--color-conversation-text)]': btnActive !== 'characters',
+          'bg-[var(--color-conversation-bg-active)] font-bold text-[var(--color-conversation-text-active)]': btnActive === 'characters',
         }" class="px-3 py-2 cursor-pointer flex items-center transition-colors duration-200 rounded-lg mx-2.5 mb-1.5">
-          <div class="session-avatar w-4.5 h-4.5 mr-1.5 text-[var(--primary-color)]">
+          <div class="session-avatar w-4.5 h-4.5 mr-1.5 text-[var(--color-primary)]">
             <AlternateEmailTwotone />
           </div>
           <span class="flex-1">角色提示词模板</span>
@@ -60,8 +60,8 @@
           <div v-for="session in filteredSessions" :key="session.id"
             class="group px-3 py-1.5 cursor-pointer flex items-center transition-colors duration-200 rounded-lg mx-2.5 mb-1"
             :class="{
-              'bg-[var(--conversation-active-bg)] text-[var(--conversation-active-text-color)]': session.id === currentSessionId,
-              'hover:bg-[var(--conversation-hover-bg)] hover:text-[var(--conversation-hover-text-color)] text-[var(--conversation-text-color)]': session.id !== currentSessionId
+              'bg-[var(--color-conversation-bg-active)] text-[var(--color-conversation-text-active)]': session.id === currentSessionId,
+              'hover:bg-[var(--color-conversation-bg-hover)] hover:text-[var(--color-conversation-text-hover)] text-[var(--color-conversation-text)]': session.id !== currentSessionId
             }" @click="selectSession(session)">
             <div class="session-avatar w-6 h-6 mr-1.5">
               <Avatar :src="session.avatar_url" round />
@@ -100,14 +100,14 @@
     <!-- 部的footer部分 -->
     <div class="flex items-center justify-between px-3">
       <div @click="handleButtonClick('profile')"
-        class="cursor-pointer p-2 rounded-lg flex items-center hover:bg-[var(--conversation-hover-bg)] transition-colors duration-200">
+        class="cursor-pointer p-2 rounded-lg flex items-center hover:bg-[var(--color-conversation-bg-hover)] transition-colors duration-200">
         <div class="w-7 h-7 ">
           <Avatar type="user" :round="true" :src="authStore.user.avatar_url" />
         </div>
         <span class="ml-3">{{ authStore.user.nickname }}</span>
       </div>
       <div v-if="authStore.user.role == 'primary'" @click="handleButtonClick('models')"
-        class="cursor-pointer h-6.5 px-2 rounded-lg flex justify-center items-center hover:bg-[var(--conversation-hover-bg)] transition-colors duration-200">
+        class="cursor-pointer h-6.5 px-2 rounded-lg flex justify-center items-center hover:bg-[var(--color-conversation-bg-hover)] transition-colors duration-200">
         <SettingsOutlined class="w-4.5 h-4.5 text-gray-500" />
         <span class="ml-1 text-base text-gray-500">管理模型</span>
       </div>
