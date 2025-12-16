@@ -5,23 +5,9 @@
 
 
 :root {
-    --color-primary: #fb7299;
-    --color-primary-hover: color-mix(in srgb, var(--color-primary) 90%, black);
-    --color-primary-active: color-mix(in srgb, var(--color-primary) 70%, black);
-    --color-primary-disabled: color-mix(in srgb, var(--color-primary) 40%, white);
-    --primary-text: #fff;
-    --color-primary-text-disabled: var(--primary-text);
     --color-primary-0f: #fb72990f;
-    /* 明度变体 - 用于视觉层次 */
-    /* --color-primary-100: color-mix(in srgb, var(--color-primary) 10%, white);
-    --color-primary-300: color-mix(in srgb, var(--color-primary) 30%, white);
-    --color-primary-400: color-mix(in srgb, var(--color-primary) 40%, white);
-    --color-primary-500: color-mix(in srgb, var(--color-primary) 50%, white);
-    --color-primary-700: color-mix(in srgb, var(--color-primary) 70%, white);
-    --color-primary-900: color-mix(in srgb, var(--color-primary) 90%, white); */
 
-
-    --color-primary: oklch(72.566% 0.17069 4.4542);
+    /* --color-primary: oklch(72.566% 0.17069 4.4542);
     --color-primary-50: oklch(97.435% 0.01346 0.25383);
     --color-primary-100: oklch(95.25% 0.02411 358.28);
     --color-primary-200: oklch(91.107% 0.04823 358.6);
@@ -32,12 +18,25 @@
     --color-primary-700: oklch(72.566% 0.17069 4.4542);
     --color-primary-800: oklch(69.574% 0.19291 5.8639);
     --color-primary-900: oklch(67.118% 0.21299 8.1541);
-    --color-primary-950: oklch(66.081% 0.22168 9.2391);
+    --color-primary-950: oklch(66.081% 0.22168 9.2391); */
+    --color-primary: oklch(72.118% 0.17434 4.6237);
+    --color-primary-50: oklch(98.921% 0.00548 3.3339);
+    --color-primary-100: oklch(96.614% 0.01843 356.42);
+    --color-primary-200: oklch(92.119% 0.04192 359.34);
+    --color-primary-300: oklch(87.574% 0.06833 358.92);
+    --color-primary-400: oklch(83.432% 0.09481 0.91169);
+    --color-primary-500: oklch(79.406% 0.12101 1.7634);
+    --color-primary-600: oklch(75.718% 0.14788 3.5877);
+    --color-primary-700: oklch(72.118% 0.17434 4.6237);
+    --color-primary-800: oklch(70.529% 0.18714 5.6012);
+    --color-primary-900: oklch(68.911% 0.1982 6.5103);
+    --color-primary-950: oklch(68.276% 0.20329 7.1683);
 
     --color-primary-disabled: var(--color-primary-200);
     --color-primary-hover: var(--color-primary-800);
     --color-primary-active: var(--color-primary-900);
-
+    --color-primary-text: #fff;
+    --color-primary-text-disabled: var(--color-primary-text);
 
     --color-secondary: oklch(70.645% 0.14612 233.1);
     --color-secondary-50: oklch(97.205% 0.01869 222.16);
@@ -64,7 +63,7 @@
     --color-secondary-text-disabled: #fff;
 
 
-    --color-error: oklch(67.325% 0.21434 24.465);
+    --color-error: oklch(67.322% 0.21434 24.448);
     --color-error-50: oklch(98.673% 0.00641 17.265);
     --color-error-100: oklch(95.82% 0.02069 17.519);
     --color-error-200: oklch(90.231% 0.05076 18.134);
@@ -101,11 +100,13 @@
     --color-warning-text: #333;
     --color-warning-text-disabled: rgba(51, 51, 51, 0.5);
 
-    --color-text: #1F2937;
-    --color-text-disabled: rgba(51, 51, 51, 0.8);
-    --color-surface: #f7f7f7;
+    --color-text: #333333;
+    --color-text-gray: #666;
+    --color-text-disabled: #9ca3af;
+    --color-surface: rgb(247, 247, 250);
+    --color-surface-border: #efefef;
     --color-bg: #fff;
-    --color-border: #efefef;
+    --color-border: #d1d5db;
 
     --color-bubble-user-bg: #efefef;
     --color-bubble-user-text: #1F2937;
@@ -204,7 +205,7 @@
     --color-primary-800: var(--color-primary-800);
     --color-primary-900: var(--color-primary-900);
 
-    --color-surface:var(--color-surface);
+    --color-surface: var(--color-surface);
 }
 
 @import "./font-family.css";
