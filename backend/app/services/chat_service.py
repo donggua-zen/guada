@@ -138,12 +138,10 @@ class ChatService:
         )
 
         # 将搜索结果附加到最新的用户消息中
-        prompt = f"请根据搜索结果回答用户问题\n# 搜索结果：\n{web_results} # 当前时间:{current_time} \n# 用户问题：\n"
-        conversation_messages[-1]["content"] = (
-            prompt + conversation_messages[-1]["content"]
-        )
+        prompt = f"请根据相关的搜索结果回答用户问题，若内容不相关或者不可信可以不采用\n# 搜索结果：\n{web_results} # 当前时间:{current_time} \n# 用户问题：\n"
+        messages[-1]["content"] = prompt + messages[-1]["content"]
 
-        return conversation_messages
+        return messages
 
     def chunk_to_response(self, chunk: LLMServiceChunk) -> dict:
         """
@@ -267,8 +265,8 @@ class ChatService:
             "message_id": assistant_message["id"],
             "content_id": assistant_message_current_content["id"],
             "model_name": model.model_name,
-        }            
-        
+        }
+
         complete_chunk = LLMServiceChunk()
 
         try:
@@ -280,7 +278,6 @@ class ChatService:
                     messages=conversation_messages,
                 )
                 yield {"type": "web_search", "msg": "stop"}
-
 
             llm_service = LLMService(model.provider.api_url, model.provider.api_key)
             logger.debug(f"Using model: {model.model_name}")
