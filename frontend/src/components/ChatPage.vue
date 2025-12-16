@@ -41,12 +41,6 @@
 
     </template>
   </SidebarLayout>
-  <!-- <n-modal v-model:show="systemSettingsModalVisible" :title="currentItem ? currentItem.label : '设置'"
-    :mask-closable="false" :auto-focus="false" class=":w-[1100px] max-w-[90vw] md:h-[60vh]" header-class="ml-2"
-    content-class="overflow-hidden" preset="card">
-    <SettingsMainPage :default="systemSettingsPath" />
-  </n-modal> -->
-  <!-- <SettingsModal v-model:visible="systemSettingsModalVisible" :default="systemSettingsPath"></SettingsModal> -->
 </template>
 
 <script setup>
@@ -80,8 +74,6 @@ const router = useRouter();
 const route = useRoute();
 const title = useTitle();
 
-// 响应式数据
-const chatPanelRef = ref(null);
 // 当前会话对象，包含会话的基本信息和设置
 const currentSession = ref(null);
 
@@ -267,21 +259,10 @@ const handleSidebarClick = async (key) => {
   } else if (key === 'characters') {
     goChatRoute('characters');
   } else if (key === 'models') {
-    // if (isMobile.value) {
     router.push({ name: 'Settings', params: { tab: 'models' } });
-    // } else {
-    //   systemSettingsPath.value = '/settings/models'
-    //   systemSettingsModalVisible.value = true
-    // }
   } else if (key === 'profile') {
-    // if (isMobile.value) {
     router.push({ name: 'Settings', params: { tab: 'profile' } });
-    // } else {
-    //   systemSettingsPath.value = '/user/profile'
-    //   systemSettingsModalVisible.value = true
-    // }
   }
-
 };
 
 const handleCreateSessionWithMessage = async (session, inputMessage) => {

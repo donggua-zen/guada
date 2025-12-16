@@ -256,6 +256,7 @@ const handleScroll = (event) => {
   if (scrollContainerRef.value && isStreaming.value) {
     if (scrollContainerRef.value.isAtBottom) {
       const streamingMessage = activeMessages.value.find(message => message.state?.is_streaming)
+      if (!streamingMessage) return
       const el = itemRefs.value[streamingMessage.id]?.el
       if (!el) return
       const minHeight = parseFloat(el.style.minHeight) || 0
@@ -628,8 +629,8 @@ async function sendNewMessage(sessionId, text, files, replaceMessageId = null) {
       sessionStore.deleteMessage(sessionId, assistantMessage.id);
     }
   }
-  if (itemRefs.value.length > 0) {
-    itemRefs.value[itemRefs.value.length - 1].el.style.minHeight = 'auto';
+  if (activeMessages.value.length > 0) {
+    itemRefs.value[activeMessages.value[activeMessages.value.length - 1].id].el.style.minHeight = '0';
   }
   activeMessages.value.push(message);
   // debouncedUpdatedSession();
@@ -674,6 +675,7 @@ async function deleteMessage(message) {
           sessionStore.deleteMessage(currentSessionId.value, assistantMessage.id);
       }
       sessionStore.deleteMessage(currentSessionId.value, message.id);
+      delete itemRefs.value[message.id];
       // debouncedUpdatedSession();
       toast.success("消息已删除");
     }

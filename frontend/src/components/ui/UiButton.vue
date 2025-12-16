@@ -73,7 +73,7 @@ const colorMap = {
     primary: {
         color: 'var(--color-primary)',
         bg: 'var(--color-primary)',
-        text: 'var(--primary-text)',
+        text: 'var(--color-primary-text)',
         border: 'var(--color-primary)',
         hoverBorder: 'var(--color-primary-hover)',
         activeBorder: 'var(--color-primary-active)',
@@ -127,16 +127,16 @@ const colorMap = {
 
 const sizeMap = {
     small: {
-        icon: "w-4 h-4",
+        icon: "w-3.5 h-3.5",
         iconPadding: "mr-0.5",
         text: "text-[12px]",
-        padding: "px-3 h-[28px]",
+        padding: "px-3 h-[26px]",
     },
     medium: {
-        icon: "w-4.5 h-4.5",
+        icon: "w-4 h-4",
         iconPadding: "mr-1",
         text: "text-[14px]",
-        padding: "px-3 h-[34px]",
+        padding: "px-3 h-[30px]",
     },
     large: {
         icon: "w-5 h-5",
@@ -154,11 +154,11 @@ const btnThemeStyle = computed(() => {
         '--btn-base-hover': theme.hoverBg,
     };
 
-    if (props.plain) {
+    if (props.plain && props.type != "default") {
         // 使用透明度创建浅色背景
         return {
             ...baseStyles,
-            '--btn-bg': `color-mix(in srgb, var(--btn-base-color) 20%, transparent)`,
+            '--btn-bg': `color-mix(in srgb, var(--btn-base-color) 10%, transparent)`,
             '--btn-text': 'var(--btn-base-color)',
             '--btn-border': `var(--btn-base-border)`,
             '--btn-border-hover': theme.hoverBorder,
@@ -172,7 +172,7 @@ const btnThemeStyle = computed(() => {
         return {
             ...baseStyles,
             '--btn-bg': 'transparent',
-            '--btn-hover': `color-mix(in srgb, var(--color-surface) 40%, transparent)`,
+            '--btn-hover': `var(--color-surface)`,
             '--btn-active': `color-mix(in srgb, var(--color-surface) 50%, transparent)`,
             '--btn-text': 'var(--btn-base-color)',
             '--btn-border': `none`,
@@ -235,7 +235,7 @@ const btnClasses = computed(() => {
     classes.push(
         `bg-[var(--btn-bg)]`,
         `text-[var(--btn-text)]`,
-        `hover:bg-[var(--btn-hover)]`,
+        !props.disabled ? `md:hover:bg-[var(--btn-hover)]` : '',
         `active:bg-[var(--btn-active)]`,
         `active:border-[var(--btn-border-active)]`,
         `disabled:bg-[var(--btn-bg-disabled)]`,
@@ -246,7 +246,7 @@ const btnClasses = computed(() => {
     if (!props.text && props.border) {
         classes.push(
             `border border-[var(--btn-border)]`,
-            `hover:border-[var(--btn-border-hover)]`,
+            !props.disabled ? `md:hover:border-[var(--btn-border-hover)]` : '',
             `disabled:border-[var(--btn-border-disabled)]`,
         )
     }

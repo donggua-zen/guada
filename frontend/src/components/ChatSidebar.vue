@@ -5,7 +5,7 @@
     <div class="sessions-header px-5 pt-5 pb-3 text-lg font-semibold flex justify-between items-center">
       <span>聊天对话</span>
       <!-- 新建会话按钮移动到右侧 -->
-      <UiButton type="default" :border="false" @click="handleButtonClick('create')" class="text-sm">
+      <UiButton text type="default" @click="handleButtonClick('create')">
         <template #icon>
           <ChatNew />
         </template>
@@ -58,10 +58,10 @@
         </template>
         <template v-else>
           <div v-for="session in filteredSessions" :key="session.id"
-            class="group px-3 py-1.5 cursor-pointer flex items-center transition-colors duration-200 rounded-lg mx-2.5 mb-1"
+            class="group px-3 py-1.5 cursor-pointer flex items-center transition-all duration-200 rounded-lg mx-2.5 mb-1"
             :class="{
-              'bg-[var(--color-conversation-bg-active)] text-[var(--color-conversation-text-active)]': session.id === currentSessionId,
-              'hover:bg-[var(--color-conversation-bg-hover)] hover:text-[var(--color-conversation-text-hover)] text-[var(--color-conversation-text)]': session.id !== currentSessionId
+              'bg-[var(--color-conversation-bg-active)] font-bold text-[var(--color-conversation-text-active)]': session.id === currentSessionId,
+              'hover:bg-[var(--color-conversation-bg-hover)] font-boldhover:text-[var(--color-conversation-text-hover)] text-[var(--color-conversation-text)]': session.id !== currentSessionId
             }" @click="selectSession(session)">
             <div class="session-avatar w-6 h-6 mr-1.5">
               <Avatar :src="session.avatar_url" round />
@@ -100,14 +100,14 @@
     <!-- 部的footer部分 -->
     <div class="flex items-center justify-between px-3">
       <div @click="handleButtonClick('profile')"
-        class="cursor-pointer p-2 rounded-lg flex items-center hover:bg-[var(--color-conversation-bg-hover)] transition-colors duration-200">
+        class="cursor-pointer p-2 rounded-lg flex items-center md:hover:bg-[var(--color-surface)] transition-colors duration-200">
         <div class="w-7 h-7 ">
           <Avatar type="user" :round="true" :src="authStore.user.avatar_url" />
         </div>
         <span class="ml-3">{{ authStore.user.nickname }}</span>
       </div>
       <div v-if="authStore.user.role == 'primary'" @click="handleButtonClick('models')"
-        class="cursor-pointer h-6.5 px-2 rounded-lg flex justify-center items-center hover:bg-[var(--color-conversation-bg-hover)] transition-colors duration-200">
+        class="cursor-pointer h-6.5 px-2 rounded-lg flex justify-center items-center md:hover:bg-[var(--color-surface)] transition-colors duration-200">
         <SettingsOutlined class="w-4.5 h-4.5 text-gray-500" />
         <span class="ml-1 text-base text-gray-500">管理模型</span>
       </div>

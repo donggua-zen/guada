@@ -18,21 +18,19 @@
             <input type="file" ref="imageInputRef" style="display: none" multiple
                 :accept="getFileExtensionsFromType('IMAGE').join(',')" @change="handleImageSelect">
             <div class="input-actions w-full flex justify-between">
-                <div class="tools left-tools">
+                <div class="tools left-tools flex gap-2">
                     <slot name="buttons"></slot>
                     <template v-if="showButtons.thinkingButton">
-                        <UiButton type="default" round class="tool-btn" id="deep-thinking-btn"
-                            :class="{ active: localThinkingEnabled }" :title="localThinkingEnabled ? '关闭深度思考' : '深度思考'"
+                        <UiButton round :type="localThinkingEnabled ? 'primary' : 'default'" plain
                             @click="toggleDeepThinking">
                             <template #icon>
                                 <Thinking2 />
                             </template>
                             思考
                         </UiButton>
-                        <span class="mr-2.5"></span>
                     </template>
-                    <UiButton type="default" round v-if="showButtons.webSearchButton" class="tool-btn"
-                        :class="{ active: localWebSearchEnabled }" title="联网搜索" @click="handleWebSearch">
+                    <UiButton round v-if="showButtons.webSearchButton"
+                        :type="localWebSearchEnabled ? 'primary' : 'default'" plain @click="handleWebSearch">
                         <template #icon>
                             <Network />
                         </template>
@@ -525,7 +523,8 @@ onUnmounted(() => {
     background: var(--color-primary);
     color: #fff;
     border: none;
-    padding: 6px 6px;
+    height: 30px;
+    width: 30px;
     display: flex;
     border-radius: 50%;
     align-items: center;

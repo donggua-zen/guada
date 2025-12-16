@@ -16,16 +16,16 @@
           :streaming="false" @send="sendMessage" @toggle-web-search="handleWebSearch"
           @toggle-thinking="toggleDeepThinking">
           <template #buttons>
-            <button @click="handleSwitchModelClick"
-              class="hidden md:inline-flex rounded-full animate-outside transition-all duration-300 ease-in-out overflow-hidden mr-2.5 border border-[var(--color-primary)] bg-[var(--color-primary-0f)] hover:bg-[var(--color-primary-0f)]"
-              :style="{ width: containerWidth + 'px' }" style="height:28px">
+            <UiButton @click="handleSwitchModelClick" round plain type="primary"
+              class="hidden md:inline-flex animate-outside transition-all duration-300 ease-in-out overflow-hidden"
+              :style="{ width: containerWidth + 'px' }">
               <div ref="innerEl"
-                class="animate-inside flex items-center justify-center px-2 py-1 text-[var(--color-primary)]  cursor-pointer min-w-[min-content]"
+                class="animate-inside flex items-center justify-center px-2 py-1 text-[var(--color-primary)] min-w-[min-content]"
                 :style="{ width: 'fit-content' }" style="height:26px">
                 <OpenAI class="w-5 h-5 flex-shrink-0" />
                 <span class="whitespace-nowrap mx-1 text-sm hidden md:block">{{ currentModelName }}</span>
               </div>
-            </button>
+            </UiButton>
           </template>
         </ChatInput>
       </div>
