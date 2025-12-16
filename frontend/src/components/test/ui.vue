@@ -62,7 +62,7 @@ const themes = [
     'default',
     'Primary',
     'Secondary',
-    'Tertiary',
+    // 'Tertiary',
     'Error',
     'Warning',
 ];

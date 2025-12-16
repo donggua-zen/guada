@@ -1,7 +1,7 @@
 <template>
-  <div class="flex flex-col h-screen bgx-[var(--bg)]">
+  <div class="flex flex-col h-screen">
     <!-- 头部 -->
-    <div class="flex justify-between items-center px-6 py-4 bg-white">
+    <div class="flex justify-between items-center px-6 py-4">
       <span class="text-lg font-semibold text-gray-800">角色列表</span>
       <UiButton type="primary" @click="createCharacter" class="flex items-center">
         <template #icon>
@@ -24,33 +24,33 @@
         <!-- 骨架屏加载效果 -->
         <template v-if="loading">
           <div v-for="i in skeletonCount" :key="i"
-            class="bg-white rounded-xl border border-gray-200 flex flex-col min-h-[180px] animate-pulse">
+            class="rounded-xl border border-gray-200 flex flex-col min-h-[180px] animate-pulse">
             <div class="flex p-4 flex-1 flex-col">
               <!-- 头像区域 -->
               <div class="flex flex-rows">
                 <div class="flex-shrink-0 mr-4">
-                  <div class="w-16 h-16 bg-gray-200"></div>
+                  <div class="w-16 h-16 bg-surface"></div>
                 </div>
 
                 <!-- 内容区域 -->
                 <div class="flex-1 min-w-0 flex flex-col">
                   <!-- 标题 -->
-                  <!-- <div class="h-5 bg-gray-200 rounded mb-2 w-full"></div>-->
-                  <h3 class="text-lg  bg-gray-200 font-semibold text-gray-800 truncate mb-2">&nbsp;</h3>
+                  <!-- <div class="h-5 bg-surface rounded mb-2 w-full"></div>-->
+                  <h3 class="text-lg bg-surface font-semibold text-gray-800 truncate mb-2">&nbsp;</h3>
                   <!-- 描述 -->
                   <div class="h-15 space-y-2">
-                    <div class="h-3 bg-gray-200 rounded"></div>
-                    <div class="h-3 bg-gray-200 rounded w-4/5"></div>
-                    <div class="h-3 bg-gray-200 rounded w-3/5"></div>
+                    <div class="h-3 bg-surface rounded"></div>
+                    <div class="h-3 bg-surface rounded w-4/5"></div>
+                    <div class="h-3 bg-surface rounded w-3/5"></div>
                   </div>
                 </div>
               </div>
               <!-- 操作按钮 -->
               <div class="flex justify-between items-center mt-4 pt-3 border-t border-gray-100">
-                <div class="h-7 w-20 bg-gray-200 rounded-full"></div>
+                <div class="h-7 w-20 bg-surface rounded-full"></div>
                 <div class="flex gap-1">
-                  <div class="w-8 h-8 rounded-full bg-gray-200"></div>
-                  <div class="w-8 h-8 rounded-full bg-gray-200"></div>
+                  <div class="w-8 h-8 rounded-full bg-surface"></div>
+                  <div class="w-8 h-8 rounded-full bg-surface"></div>
                 </div>
               </div>
             </div>
@@ -59,7 +59,7 @@
         <template v-else>
           <!-- 角色卡片 -->
           <div v-for="character in characters" :key="character.id"
-            class="bg-white rounded-xl border border-gray-200 hover:border-gray-300 transition-all duration-300 flex flex-col min-h-[180px]">
+            class="rounded-xl border border-gray-200 hover:border-gray-300 transition-all duration-300 flex flex-col min-h-[180px]">
             <div class="flex p-4 flex-1 flex-col">
               <!-- 头像区域 -->
               <div class="flex flex-rows">

@@ -471,18 +471,18 @@ defineExpose({ el: rootRef, showThinking, hideThinking, switchContent, });
 
 /* 用户消息气泡特定样式 */
 .user-message-container .message-card {
-  background-color: var(--user-bubble-bg);
-  color: var(--user-bubble-text-color);
+  background-color: var(--color-bubble-user-bg);
+  color: var(--color-bubble-user-text);
   padding: 5px 12px;
   border-radius: 16px;
-  border: 1px solid var(--user-bubble-border-color);
+  border: 1px solid var(--color-bubble-user-border);
   margin-left: auto;
 }
 
 /* AI消息气泡特定样式 */
 .assistant-message-container .message-card {
-  background: var(--assitant-bubble-bg);
-  color: var(--assitant-bubble-text-color);
+  background: var(--color-bubble-assitant-bg);
+  color: var(--color-bubble-assitant-text);
   border: 1px solid var(--assistant-bubble-border-color);
   margin-right: auto;
   width: 100%;

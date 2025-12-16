@@ -23,7 +23,7 @@
 
             <!-- 标题和描述 -->
             <div class="mb-8">
-              <h1 class="text-3xl font-bold mb-4 text-[var(--primary-color)]">
+              <h1 class="text-3xl font-bold mb-4 text-[var(--color-primary)]">
                 {{ currentSession.title || '' }}
               </h1>
               <h2 class="text-lg font-normal text-gray-600 leading-relaxed">
@@ -32,7 +32,7 @@
 
               <!-- 角色设定 -->
               <div v-if="currentSession.system_prompt"
-                class="mt-6 p-5 bg-gray-50 rounded-xl border-l-4 border-[var(--primary-color)] text-left">
+                class="mt-6 p-5 bg-gray-50 rounded-xl border-l-4 border-[var(--color-primary)] text-left">
                 <h3 class="text-base font-semibold text-gray-800 mb-2">角色设定</h3>
                 <p class="text-sm text-gray-600 leading-6">{{ currentSession.system_prompt }}</p>
               </div>

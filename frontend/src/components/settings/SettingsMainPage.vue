@@ -12,11 +12,11 @@
                         </div>
                         <div class="flex flex-col w-full rounded-lg bg-white md:bg-transparent px-4 md:px-0">
                             <div class="flex items-center justify-centertransition-colors duration-200" :class="{
-                                'bg-[var(--primary-color-100)] text-[var(--primary-color)]': !isMobile && currentTabValue === item.path,
+                                'bg-[var(--color-primary-100)] text-[var(--color-primary)]': !isMobile && currentTabValue === item.path,
                                 'border-b border-gray-200 py-3 px-1 last:border-b-0': isMobile,
                                 'rounded-lg mx-1 mb-2 mt-1 py-1 px-2 cursor-pointer': !isMobile,
-                                'active:bg-[var(--primary-color-100)]': isMobile,
-                                'hover:text-[var(--primary-color)] hover:bg-[var(--primary-color-100)]': !isMobile,
+                                'active:bg-[var(--color-primary-100)]': isMobile,
+                                'hover:text-[var(--color-primary)] hover:bg-[var(--color-primary-100)]': !isMobile,
                             }" v-for="item in group.items" @click="handleItemClick(item)">
                                 <div class="flex-1 w-full flex items-center gap-x-2">
                                     <component :is="item.icon" class="w-5 h-5"></component>

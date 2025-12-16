@@ -2,143 +2,209 @@
 @import "tailwindcss";
 @custom-variant dark (&:where(.dark, .dark *));
 
+
+
 :root {
-    --primary-color: #fb7299;
-    --primary-color-hover: color-mix(in srgb, var(--primary-color) 90%, black);
-    --primary-color-active: color-mix(in srgb, var(--primary-color) 70%, black);
-    --primary-color-disabled: color-mix(in srgb, var(--primary-color) 40%, white);
+    --color-primary: #fb7299;
+    --color-primary-hover: color-mix(in srgb, var(--color-primary) 90%, black);
+    --color-primary-active: color-mix(in srgb, var(--color-primary) 70%, black);
+    --color-primary-disabled: color-mix(in srgb, var(--color-primary) 40%, white);
     --primary-text: #fff;
-    --primary-text-disabled: color-mix(in srgb, var(--primary-text) 40%, white);
-    --primary-color-0f: #fb72990f;
+    --color-primary-text-disabled: var(--primary-text);
+    --color-primary-0f: #fb72990f;
     /* 明度变体 - 用于视觉层次 */
-    --primary-color-100: color-mix(in srgb, var(--primary-color) 10%, white);
-    --primary-color-300: color-mix(in srgb, var(--primary-color) 30%, white);
-    --primary-color-400: color-mix(in srgb, var(--primary-color) 40%, white);
-    --primary-color-500: color-mix(in srgb, var(--primary-color) 50%, white);
-    --primary-color-700: color-mix(in srgb, var(--primary-color) 70%, white);
-    --primary-color-900: color-mix(in srgb, var(--primary-color) 90%, white);
+    /* --color-primary-100: color-mix(in srgb, var(--color-primary) 10%, white);
+    --color-primary-300: color-mix(in srgb, var(--color-primary) 30%, white);
+    --color-primary-400: color-mix(in srgb, var(--color-primary) 40%, white);
+    --color-primary-500: color-mix(in srgb, var(--color-primary) 50%, white);
+    --color-primary-700: color-mix(in srgb, var(--color-primary) 70%, white);
+    --color-primary-900: color-mix(in srgb, var(--color-primary) 90%, white); */
 
-    --secondary-color: #1e1e20;
+
+    --color-primary: oklch(72.566% 0.17069 4.4542);
+    --color-primary-50: oklch(97.435% 0.01346 0.25383);
+    --color-primary-100: oklch(95.25% 0.02411 358.28);
+    --color-primary-200: oklch(91.107% 0.04823 358.6);
+    --color-primary-300: oklch(86.951% 0.0718 359.99);
+    --color-primary-400: oklch(83.232% 0.09601 1.1852);
+    --color-primary-500: oklch(79.406% 0.12101 1.7634);
+    --color-primary-600: oklch(75.894% 0.14668 3.373);
+    --color-primary-700: oklch(72.566% 0.17069 4.4542);
+    --color-primary-800: oklch(69.574% 0.19291 5.8639);
+    --color-primary-900: oklch(67.118% 0.21299 8.1541);
+    --color-primary-950: oklch(66.081% 0.22168 9.2391);
+
+    --color-primary-disabled: var(--color-primary-200);
+    --color-primary-hover: var(--color-primary-800);
+    --color-primary-active: var(--color-primary-900);
+
+
+    --color-secondary: oklch(70.645% 0.14612 233.1);
+    --color-secondary-50: oklch(97.205% 0.01869 222.16);
+    --color-secondary-100: oklch(94.886% 0.03466 221.88);
+    --color-secondary-200: oklch(90.388% 0.06622 221.86);
+    --color-secondary-300: oklch(86.223% 0.09496 222.67);
+    --color-secondary-400: oklch(82.459% 0.11938 224.22);
+    --color-secondary-500: oklch(78.943% 0.13807 227.44);
+    --color-secondary-600: oklch(76.104% 0.15071 231.02);
+    --color-secondary-700: oklch(70.645% 0.14612 233.1);
+    --color-secondary-800: oklch(68.498% 0.14112 232.79);
+    --color-secondary-900: oklch(66.385% 0.13699 232.92);
+    --color-secondary-950: oklch(65.177% 0.13475 233.07);
+
+
     /* #53a4ff27转换为rgba */
-    --secondary-color-hover: color-mix(in srgb, var(--secondary-color) 90%, var(--primary-color));
+    --color-secondary-hover: var(--color-secondary-800);
     /* #53a4ff4d转换为rgba */
-    --secondary-color-active: color-mix(in srgb, var(--secondary-color) 70%, white);
+    --color-secondary-active: var(--color-secondary-900);
     /* #53a4ff99转换为rgba */
-    --secondary-color-disabled: color-mix(in srgb, var(--secondary-color) 60%, white);
+    --color-secondary-disabled: var(--color-secondary-200);
     /* #53a4ff1a转换为rgba */
-    --secondary-text: #fff;
-    --secondary-text-disabled: color-mix(in srgb, var(--secondary-text) 70%, black);
-
-    --tertiary-color: #f8f8f8;
-    /* #00000008转换为rgba */
-    --tertiary-color-hover: color-mix(in srgb, var(--tertiary-color) 90%, black);
-    /* #00000033转换为rgba */
-    --tertiary-color-active: color-mix(in srgb, var(--tertiary-color) 80%, black);
-    /* #0000004d转换为rgba */
-    --tertiary-color-disabled: color-mix(in srgb, var(--tertiary-color) 70%, white);
-    --tertiary-text: #333;
-    --tertiary-text-disabled: rgba(46, 51, 56, 0.8);
+    --color-secondary-text: #fff;
+    --color-secondary-text-disabled: #fff;
 
 
-    --error-color: #ff4d4f;
-    --error-color-hover: color-mix(in srgb, var(--error-color) 90%, black);
-    --error-color-active: rgba(255, 77, 79, 0.80);
-    --error-color-disabled: rgba(255, 77, 79, 0.8);
-    --error-text: #fff;
-    --error-text-disabled: rgba(255, 255, 255, 0.8);
+    --color-error: oklch(67.325% 0.21434 24.465);
+    --color-error-50: oklch(98.673% 0.00641 17.265);
+    --color-error-100: oklch(95.82% 0.02069 17.519);
+    --color-error-200: oklch(90.231% 0.05076 18.134);
+    --color-error-300: oklch(84.677% 0.08395 18.053);
+    --color-error-400: oklch(79.612% 0.11733 19.355);
+    --color-error-500: oklch(74.8% 0.15235 20.901);
+    --color-error-600: oklch(70.746% 0.18471 22.667);
+    --color-error-700: oklch(67.325% 0.21434 24.465);
+    --color-error-800: oklch(66.284% 0.22382 25.295);
+    --color-error-900: oklch(65.465% 0.23146 26.027);
+    --color-error-950: oklch(65.058% 0.23531 26.42);
+    --color-error-hover: var(--color-error-800);
+    --color-error-active: var(--color-error-900);
+    --color-error-disabled: var(--color-error-200);
+    --color-error-text: #fff;
+    --color-error-text-disabled: #fff;
 
-    --warning-color: #ffc53d;
-    --warning-color-hover: rgba(255, 198, 61, 0.9);
-    --warning-color-active: rgba(255, 198, 61, 0.60);
-    --warning-color-disabled: rgba(255, 198, 61, 0.8);
-    --warning-text: #333;
-    --warning-text-disabled: rgba(51, 51, 51, 0.8);
+    --color-warning: oklch(85.37% 0.15721 84.13);
+    --color-warning-50: oklch(99.091% 0.01226 91.515);
+    --color-warning-100: oklch(97.756% 0.02514 86.868);
+    --color-warning-200: oklch(95.531% 0.05228 87.893);
+    --color-warning-300: oklch(93.388% 0.07847 88.132);
+    --color-warning-400: oklch(91.138% 0.10239 87.181);
+    --color-warning-500: oklch(89.178% 0.1246 86.881);
+    --color-warning-600: oklch(87.125% 0.14289 85.479);
+    --color-warning-700: oklch(85.37% 0.15721 84.13);
+    --color-warning-800: oklch(84.741% 0.16102 83.382);
+    --color-warning-900: oklch(84.13% 0.16379 82.456);
+    --color-warning-950: oklch(83.921% 0.16525 82.257);
 
-    /* #0000001f转换为rgba *
-    --normal-color: #ffffff;
+    --color-warning-hover: var(--color-warning-800);
+    --color-warning-active: var(--color-warning-900);
+    --color-warning-disabled: var(--color-warning-200);
+    --color-warning-text: #333;
+    --color-warning-text-disabled: rgba(51, 51, 51, 0.5);
 
-    --bg-hover: #00000008;
-    /* 灰色背景色 */
-    --bg: #fafafa;
-    /* 灰色文字颜色 */
-    --text-primary-color: #1F2937;
-    --text-primary-disabled: rgba(51, 51, 51, 0.8);
-    --text-gray: #efefef;
-    --primary-text-light-color: #fff;
-    --bg: #f1f5f9;
-    --page-bg: #fff;
+    --color-text: #1F2937;
+    --color-text-disabled: rgba(51, 51, 51, 0.8);
+    --color-surface: #f7f7f7;
+    --color-bg: #fff;
+    --color-border: #efefef;
 
-    --user-bubble-bg: #efefef;
-    --user-bubble-text-color: #1F2937;
-    --user-bubble-border-color: #efefef;
-    --assitant-bubble-bg: none;
-    --assitant-bubble-text-color: #1F2937;
-    --assitant-bubble-border-color: none;
+    --color-bubble-user-bg: #efefef;
+    --color-bubble-user-text: #1F2937;
+    --color-bubble-user-border: #efefef;
+    --color-bubble-assitant-bg: none;
+    --color-bubble-assitant-text: #1F2937;
+    --color-bubble-assitant-border: none;
     /* 聊天对话样式 */
-    --conversation-bg: #fff;
-    /* #E9EBF2;*/
-    --conversation-text-color: #333;
-    /* --conversation-border-color: #efefef; */
-    --conversation-border-color: #efefef;
-    --conversation-border-radius: 10px;
-    --conversation-padding: 15px;
-    --conversation-font-size: 16px;
-    /* --conversation-active-bg: #f0f4fc; */
-    --conversation-active-bg: var(--primary-color-100);
-    --conversation-active-text-color: var(--primary-color);
-    --conversation-hover-bg: var(--primary-color-100);
-    --conversation-hover-text-color: var(--primary-color);
-    /*侧边栏*/
-    --sidebar-bg: #fff;
-    --sidebar-border-color: #eee;
-    --sidebar-text-color: #0f1b3d;
-    --sidebar-hover-bg: #fafafa;
-    --sidebar-hover-text-color: #36ad6a;
-    --sidebar-active-bg: none;
-    --sidebar-active-text-color: #36ad6a;
+    --color-conversation-bg: #fff;
+    --color-conversation-text: #333;
+    --color-conversation-border: #efefef;
+    --color-conversation-bg-active: var(--color-primary-100);
+    --color-conversation-text-active: var(--color-primary);
+    --color-conversation-bg-hover: var(--color-primary-100);
+    --color-conversation-text-hover: var(--color-primary);
 
+    /* --color-gray-50: #f9fafb;
+    --color-gray-100: #f3f4f6;
+    --color-gray-200: #e5e7eb;
+    --color-gray-300: #d1d5db;
+    --color-gray-400: #9ca3af;
+    --color-gray-500: #6b7280;
+    --color-gray-600: #4b5563;
+    --color-gray-700: #374151;
+    --color-gray-800: #1f2937;
+    --color-gray-900: #111827;
+    --color-gray-950: #030712; */
 }
 
 :root.dark {
     /* 主色调调整（在暗色模式下可以稍微调整饱和度） */
-    --primary-color: #ff85a7;
-    --primary-color-hover: color-mix(in srgb, var(--primary-color) 80%, white);
-    --primary-color-active: color-mix(in srgb, var(--primary-color) 60%, white);
-    --primary-color-100: color-mix(in srgb, var(--primary-color) 10%, #1a1a1a);
-    --primary-color-300: color-mix(in srgb, var(--primary-color) 30%, #1a1a1a);
-    --primary-color-500: color-mix(in srgb, var(--primary-color) 50%, #1a1a1a);
-    --primary-color-700: color-mix(in srgb, var(--primary-color) 70%, #1a1a1a);
-    --primary-color-900: color-mix(in srgb, var(--primary-color) 90%, #1a1a1a);
-    --text-primary-color: #d4d4d4;
-    --primary-color-disabled: color-mix(in srgb, var(--primary-color) 40%, #1a1a1a);
-    /* 次要颜色 */
-    --secondary-color: #37415190;
-    --secondary-color-hover: color-mix(in srgb, var(--secondary-color) 90%, white);
-    --secondary-color-active: color-mix(in srgb, var(--secondary-color) 70%, white);
+    --color-primary: #ff85a7;
+    --color-primary-hover: color-mix(in srgb, var(--color-primary) 80%, white);
+    --color-primary-active: color-mix(in srgb, var(--color-primary) 60%, white);
+    --color-primary-50: color-mix(in srgb, var(--color-primary) 5%, #1a1a1a);
+    --color-primary-100: color-mix(in srgb, var(--color-primary) 10%, #1a1a1a);
+    --color-primary-200: color-mix(in srgb, var(--color-primary) 20%, #1a1a1a);
+    --color-primary-300: color-mix(in srgb, var(--color-primary) 30%, #1a1a1a);
+    --color-primary-500: color-mix(in srgb, var(--color-primary) 50%, #1a1a1a);
+    --color-primary-700: color-mix(in srgb, var(--color-primary) 70%, #1a1a1a);
+    --color-primary-900: color-mix(in srgb, var(--color-primary) 90%, #1a1a1a);
+    --color-primary-text-disabled: rgba(245, 245, 245, 0.5);
+    --color-primary-disabled: color-mix(in srgb, var(--color-primary) 40%, #1a1a1a);
 
-    /* 第三级颜色 */
-    --tertiary-color: #2d2d2d;
-    --tertiary-color-hover: color-mix(in srgb, var(--tertiary-color) 90%, white);
-    --tertiary-color-active: color-mix(in srgb, var(--tertiary-color) 80%, white);
-    --tertiary-text: #e5e7eb;
-    --tertiary-text-disabled: rgba(229, 231, 235, 0.6);
-    --conversation-bg: #1e1e1e;
+    /* 次要颜色 */
+    --color-secondary: #37415190;
+    --color-secondary-hover: color-mix(in srgb, var(--color-secondary) 90%, white);
+    --color-secondary-active: color-mix(in srgb, var(--color-secondary) 70%, white);
+    --color-secondary-disabled: color-mix(in srgb, var(--color-secondary) 40%, #1a1a1a);
+    --color-secondary-text: #d4d4d4;
+    --color-secondary-text-disabled: rgba(245, 245, 245, 0.5);
 
     /* 对话样式 */
-    --conversation-text-color: #e5e7eb;
-    --conversation-border-color: #374151;
-    --conversation-active-bg: var(--primary-color-100);
-    --conversation-active-text-color: var(--primary-color);
-    --conversation-hover-bg: var(--primary-color-100);
-    --conversation-hover-text-color: var(--primary-color);
+    --color-conversation-bg: #1e1e1e;
+    --color-conversation-bg-hover: var(--color-primary-100);
+    --color-conversation-bg-active: var(--color-primary-100);
+    --color-conversation-text: #e5e7eb;
+    --color-conversation-border: #374151;
+    --color-conversation-text-active: var(--color-primary);
+    --color-conversation-text-hover: var(--color-primary);
 
     /* 气泡颜色 */
-    --user-bubble-bg: #374151;
-    --user-bubble-text-color: #d4d4d4;
-    --user-bubble-border-color: #4b5563;
-    --assitant-bubble-bg: none;
-    --assitant-bubble-text-color: #d4d4d4;
-    --assitant-bubble-border-color: #374151;
+    --color-bubble-user-bg: #374151;
+    --color-bubble-user-text: #d4d4d4;
+    --color-bubble-user-border: #4b5563;
+    --color-bubble-assitant-bg: none;
+    --color-bubble-assitant-text: #d4d4d4;
+    --color-bubble-assitant-border: #374151;
+
+    --color-surface: #1f2937;
+    --color-text: #d4d4d4;
+    /* 
+    --color-gray-50: #111827;
+    --color-gray-100: #1f2937;
+    --color-gray-200: #374151;
+    --color-gray-300: #4b5563;
+    --color-gray-400: #6b7280;
+    --color-gray-500: #9ca3af;
+    --color-gray-600: #d1d5db;
+    --color-gray-700: #e5e7eb;
+    --color-gray-800: #f3f4f6;
+    --color-gray-900: #f9fafb;
+    --color-gray-950: #ffffff; */
+}
+
+@theme {
+    --color-primary: var(--color-primary);
+    --color-primary-50: var(--color-primary-50);
+    --color-primary-100: var(--color-primary-100);
+    --color-primary-200: var(--color-primary-200);
+    --color-primary-300: var(--color-primary-300);
+    --color-primary-400: var(--color-primary-400);
+    --color-primary-500: var(--color-primary-500);
+    --color-primary-600: var(--color-primary-600);
+    --color-primary-700: var(--color-primary-700);
+    --color-primary-800: var(--color-primary-800);
+    --color-primary-900: var(--color-primary-900);
+
+    --color-surface:var(--color-surface);
 }
 
 @import "./font-family.css";
@@ -181,16 +247,6 @@ html,
     gap: 0;
 }
 
-/* 页面容器样式 */
-.page-container {
-    flex: 1;
-    /* display: flex;
-            flex-direction: column; */
-    height: 100vh;
-    overflow: hidden;
-    background-color: var(--page-bg);
-}
-
 .page {
     display: none;
     width: 100%;
@@ -212,20 +268,20 @@ html,
 
 /* 修改进度条颜色 */
 #nprogress .bar {
-    background: var(--primary-color) !important;
+    background: var(--color-primary) !important;
     /* 红色 */
     height: 3px !important;
 }
 
 /* 修改进度条尖角阴影 */
 #nprogress .peg {
-    box-shadow: 0 0 10px var(--primary-color), 0 0 5px var(--primary-color) !important;
+    box-shadow: 0 0 10px var(--color-primary), 0 0 5px var(--color-primary) !important;
 }
 
 /* 修改圆形加载器颜色（如果启用） */
 #nprogress .spinner-icon {
-    border-top-color: var(--primary-color) !important;
-    border-left-color: var(--primary-color) !important;
+    border-top-color: var(--color-primary) !important;
+    border-left-color: var(--color-primary) !important;
 }
 
 /* 动画效果 */

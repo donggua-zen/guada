@@ -26,11 +26,11 @@
     <div class="providers-list flex-1 overflow-hidden py-2.5">
       <ScrollContainer>
         <div v-for="provider in filteredItems" :key="provider.id"
-          class="hover:bg-[var(--conversation-hover-bg)] provider-item px-3.5 cursor-pointer flex items-center transition-colors duration-200 rounded-3xl mb-1.5 h-10"
+          class="hover:bg-[var(--color-conversation-bg-hover)] provider-item px-3.5 cursor-pointer flex items-center transition-colors duration-200 rounded-3xl mb-1.5 h-10"
           @click="selectProvider(provider)">
           <div class="provider-avatar w-6 h-6 rounded-full flex items-center justify-center mr-3 flex-shrink-0">
             <div class="provider-img w-full h-full flex items-center justify-center text-white text-xl overflow-hidden">
-              <OpenAI :size="16" color="var(--primary-color)" />
+              <OpenAI :size="16" color="var(--color-primary)" />
             </div>
           </div>
           <div class="provider-info flex-1 min-w-0">

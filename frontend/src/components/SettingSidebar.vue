@@ -204,8 +204,8 @@ onMounted(() => {
   display: flex;
   flex-direction: column;
   height: 100vh;
-  background-color: var(--conversation-bg);
-  border-right: 1px solid var(--conversation-border-color);
+  background-color: var(--color-conversation-bg);
+  border-right: 1px solid var(--color-conversation-border);
 }
 
 .sessions-header {
@@ -255,13 +255,13 @@ onMounted(() => {
 }
 
 .session-item:hover {
-  background-color: var(--conversation-hover-bg);
+  background-color: var(--color-conversation-bg-hover);
   transition: background-color 0.2s;
   /* border-color: #d0e6ff; */
 }
 
 .session-item.active {
-  background-color: var(--conversation-active-bg);
+  background-color: var(--color-conversation-bg-active);
 }
 
 .session-avatar {
@@ -279,7 +279,7 @@ onMounted(() => {
   width: 100%;
   height: 100%;
   border-radius: 50%;
-  background: var(--primary-color);
+  background: var(--color-primary);
   display: flex;
   align-items: center;
   justify-content: center;

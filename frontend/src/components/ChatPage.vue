@@ -8,7 +8,7 @@
       </template>
       <template v-else>
         <div
-          class="h-full w-full flex-1 flex items-center justify-center bg-[var(--conversation-bg)] border-r border-[var(--conversation-border-color)]">
+          class="h-full w-full flex-1 flex items-center justify-center bg-[var(--color-conversation-bg)] border-r border-[var(--color-conversation-border)]">
           <n-empty description="请先登录">
             <template #extra>
             </template>
