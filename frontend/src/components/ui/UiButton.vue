@@ -1,5 +1,5 @@
 <template>
-    <button :disabled="disabled" :style="btnThemeStyle" :class="btnClasses" @click="handleClick">
+    <button type="button" :disabled="disabled" :style="btnThemeStyle" :class="btnClasses" @click="handleClick">
         <div v-if="$slots.icon" name="icon" class="flex items-center justify-center align-middle leading-none"
             :class="iconClasses">
             <slot name="icon"></slot>
