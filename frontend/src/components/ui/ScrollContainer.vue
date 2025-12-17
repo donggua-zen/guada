@@ -1,7 +1,7 @@
 <!-- ScrollContainer.vue -->
 <template>
     <simple-bar class="ScrollContainer" :auto-hide="true" :timeout="6000" ref="simpleBarRef" @scroll="handleScroll">
-        <div :class="mergredClasses" :style="attrs.style">
+        <div ref="contentElement" :class="mergredClasses" :style="attrs.style">
             <slot></slot>
         </div>
     </simple-bar>
@@ -55,9 +55,10 @@ const isAtBottom = ref(true);
 const scrollObserver = ref(null);
 const lastScrollHeight = ref(0);
 
+const contentElement = ref(null);
 // 计算属性
 const scrollElement = computed(() => getSimpleBarInstance()?.getScrollElement());
-const contentElement = computed(() => getSimpleBarInstance()?.getContentElement());
+const scrollContentElement = computed(() => getSimpleBarInstance()?.getContentElement());
 const contentWrapper = computed(() => getSimpleBarInstance()?.getContentElement());
 
 
@@ -198,11 +199,13 @@ onUnmounted(() => {
 
 // 暴露给父组件的方法
 defineExpose({
-    contentWrapper,
+    contentElement,
+    scrollContentElement,
     scrollToBottom,
     immediateScrollToBottom,
     smoothScrollToBottom,
     getScrollElement: () => scrollElement.value,
+    scrollTop: () => scrollElement.value?.scrollTop,
     getScrollInstance: getSimpleBarInstance,
     isAtBottom: computed(() => isAtBottom.value)
 });
