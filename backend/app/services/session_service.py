@@ -52,7 +52,8 @@ class SessionService:
                 self.upload_service.duplicate_avatar(character.avatar_url)
                 or character.avatar_url
             )
-            data["avatar_url"] = avatar_path
+            if avatar_path:
+                data["avatar_url"] = avatar_path
             session = self._add_new_session(data)
         else:
             session = self._add_new_session(data)
