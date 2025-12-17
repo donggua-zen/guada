@@ -649,11 +649,9 @@ defineExpose({ el: rootRef, showThinking, hideThinking, switchContent, });
 
 .markdown-text ol>li:before {
   content: counter(item) ".";
-  text-align: right;
+  text-align: left;
   color: #666;
   min-width: 14px;
-  display: inline-block;
-  padding-right: 5px;
   display: inline-block;
   width: 2.5ch;
   position: absolute;
@@ -818,6 +816,7 @@ ol>*:not(li) {
   border-left-color: #333;
 }
 
+.dark .markdown-text table,
 .dark .markdown-text table th,
 .dark .markdown-text table td {
   border-color: #333;

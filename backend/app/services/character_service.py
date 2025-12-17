@@ -32,51 +32,24 @@ class CharacterService:
         characters = CharacterRepo.get_characters(user_id=user_ids)
         return [character.to_dict() for character in characters]
 
-    def create_character(self, data: dict):
-        fields = [
-            "title",
-            "description",
-            "avatar_url",
-            "settings",
-            "model_id",
-            "settings",
-        ]
-
-        data_filtered = {
-            field: data.get(field) for field in fields if data.get(field) is not None
-        }
+    def create_character(self, user_id: str, data: dict):
 
         # 创建字符对象
 
-        character = CharacterRepo.create_character(data_filtered)
+        character = CharacterRepo.create_character(user_id=user_id, data=data)
 
         # 返回完整数据
         return character.to_dict()
 
     def update_character(self, id, user_id: str, data: dict):
 
-        fields = [
-            "title",
-            "description",
-            "avatar_url",
-            "model_id",
-            "settings",
-            "is_public",
-        ]
-
-        data_filtered = {}
-        # 处理基础字段
-        for field in fields:
-            if field in data:
-                data_filtered[field] = data[field]
-
         with smart_transaction():
             character = CharacterRepo.get_character_by_id(id, user_id=user_id)
             if not character:
                 raise APIException("Character not found", 404)
-            character.update(data_filtered)
+            character.update(data)
 
-        if "avatar_url" in data_filtered and data["avatar_url"] != character.avatar_url:
+        if "avatar_url" in data and data["avatar_url"] != character.avatar_url:
             old_avatar_path = convert_webpath_to_filepath(character.avatar_url)
             if old_avatar_path:
                 remove_file(old_avatar_path)
