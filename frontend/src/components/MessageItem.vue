@@ -1,11 +1,5 @@
 <template>
   <div class="message" :class="messageClass" ref="rootRef">
-    <!-- <div class="hidden w-[40px] h-[40px] rounded-full flex items-center justify-center shrink-0 self-start"
-      :class="avatarClass">
-      <Avatar v-if="!isAssistant" :src="avatar" :round="true" type="user"></Avatar>
-      <Avatar v-else :src="avatar" :round="true" type="assistant"></Avatar>
-    </div> -->
-
     <div class="message-content">
       <div v-if="isAssistant" class="text-xs text-gray-400 mb-3">
         <div class="flex items-center">
@@ -834,6 +828,12 @@ ol>*:not(li) {
 
 .dark .markdown-text hr {
   border-top-color: #333;
+}
+
+/* 添加第一列居中对齐的样式 */
+.markdown-text table td:first-child,
+.markdown-text table th:first-child {
+  text-align: center;
 }
 
 /* 响应式表格样式 */
