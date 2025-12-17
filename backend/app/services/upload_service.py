@@ -58,7 +58,7 @@ class UploadService:
             raise
 
     def duplicate_avatar(self, avatar_path):
-        if avatar_path.startswith("/static/avatars/"):
+        if avatar_path and avatar_path.startswith("/static/avatars/"):
             source_file_path = convert_webpath_to_filepath(avatar_path)
             if os.path.exists(source_file_path):
                 target_web_path = os.path.join(
