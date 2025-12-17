@@ -6,7 +6,7 @@
       @select-more-option="handleMoreSelect" />
 
     <!-- 消息内容区域 -->
-    <div class="messages-container" ref="messagesContainerRef">
+    <div class="flex-1 overflow-hidden w-full items-center" ref="messagesContainerRef">
       <template v-if="!isLoading && activeMessages.length === 0">
         <!-- 欢迎页 -->
         <div class="flex items-center justify-center h-full min-h-[500px] py-10 px-5">
@@ -43,13 +43,22 @@
       <template v-else-if="authStore.isAuthenticated">
         <ScrollContainer ref="scrollContainerRef" :auto-scroll="true" @scroll="handleScroll">
           <div class="flex flex-col items-center px-[20px] max-w-[1000px] mx-auto">
-            <MessageItem v-for="(message, index) in activeMessages" :ref="(el) => setItemRef(el, message.id)"
+            <div class="w-full" v-for="(pair, index) in messagePairs" :key="pair[0].id"
+              :style="{ minHeight: index < messagePairs.length - 1 ? '0' : placeholder }">
+              <MessageItem v-for="message in pair" :ref="(el) => setItemRef(el, message.id)" :key="message.id"
+                :message="message" :avatar="message.role == 'user' ? userAvater : currentSession.avatar_url"
+                :is-last="message.index == activeMessages.length - 1"
+                :allow-generate="!isStreaming && allowReSendMessage(message, message.index)" @delete="deleteMessage"
+                @edit="editMessage" @copy="copyMessage" @generate="generateResponse" @regenerate="regenerateResponse"
+                @render-complete="handleRenderComplete" @switch="switchContent" />
+            </div>
+            <!-- <MessageItem v-for="(message, index) in activeMessages" :ref="(el) => setItemRef(el, message.id)"
               :key="message.id" :message="message"
               :avatar="message.role == 'user' ? userAvater : currentSession.avatar_url"
               :is-last="index == activeMessages.length - 1"
               :allow-generate="!isStreaming && allowReSendMessage(message, index)" @delete="deleteMessage"
               @edit="editMessage" @copy="copyMessage" @generate="generateResponse" @regenerate="regenerateResponse"
-              @render-complete="handleRenderComplete" @switch="switchContent" />
+              @render-complete="handleRenderComplete" @switch="switchContent" /> -->
           </div>
         </ScrollContainer>
       </template>
@@ -96,7 +105,7 @@ import { Avatar, ChatInput, ScrollContainer } from "./ui";
 const TokenStatisticsModal = defineAsyncComponent(() => import("./TokenStatisticsModal.vue"));
 
 // UI组件导入
-import { NModal, NIcon } from "naive-ui";
+import { NModal } from "naive-ui";
 import { UiButton } from "./ui";
 
 // 弹出层工具
@@ -115,7 +124,6 @@ const showEditMessageModal = ref(false);
 const itemRefs = ref({});
 const isLoading = ref(false)
 const autoScrollToBottom = ref(false);
-
 
 // Props & Emits
 const props = defineProps({
@@ -166,6 +174,41 @@ const activeMessages = computed({
   get: () => sessionStore.getMessages(currentSessionId.value) || [],
   set: (value) => sessionStore.setMessages(currentSessionId.value, value)
 });
+
+const messagePairs = computed(() => {
+  const groups = [];
+  let i = 0;
+
+  while (i < activeMessages.value.length) {
+    const current = activeMessages.value[i];
+
+    // 如果是用户消息，尝试和下一条配对
+    if (current.role === 'user') {
+      const next = activeMessages.value[i + 1];
+      // 检查下一条是否存在、是 assistant、且 parent_id 匹配
+      if (
+        next &&
+        next.role === 'assistant' &&
+        next.parent_id === current.id // 注意字段名，按实际改
+      ) {
+        current.index = i;
+        next.index = i + 1;
+        groups.push([current, next]);
+        i += 2; // 跳过两条
+        continue;
+      }
+      // 无法配对，单独成组
+      groups.push([current]);
+      i += 1;
+    } else {
+      current.index = i;
+      // 当前是 assistant（孤立答案）
+      groups.push([current]);
+      i += 1;
+    }
+  }
+  return groups;
+})
 
 const webSearchEnabled = computed({
   get() {
@@ -348,6 +391,7 @@ function setItemRef(el, messageId) {
 async function handleSessionChange(newSessionId, oldSessionId) {
   if (newSessionId === oldSessionId) return;
   isLoading.value = true;
+  updatePlaceholder(null);
   currentSessionId.value = newSessionId;
   if (newSessionId) {
     await loadMessages(newSessionId);
@@ -386,6 +430,8 @@ function allowReSendMessage(message, index) {
   return index >= activeMessages.value.length - 2;
 }
 
+
+
 // 流式响应处理
 async function handleStreamResponse(
   streamingSessionId,
@@ -393,7 +439,6 @@ async function handleStreamResponse(
   regenerationMode = null,
   assistantMessageId = null
 ) {
-
 
   sessionStore.setSessionIsStreaming(streamingSessionId, true);
 
@@ -404,6 +449,17 @@ async function handleStreamResponse(
   try {
     let responseContent = "";
     let thinkingContent = "";
+
+
+    if (assistantMessageId) {
+      const assistantMessage = activeMessages.value.find(message => message.id === assistantMessageId);
+      if (assistantMessage) {
+        assistantMessage.contents.forEach(content => {
+          content.is_current = false;
+        });
+        assistantMessage.state = { is_streaming: true };
+      }
+    }
 
     for await (const response of apiService.chat(
       streamingSessionId,
@@ -420,24 +476,6 @@ async function handleStreamResponse(
         ({ message, contentIndex } = handleNewMessage(response, streamingSessionId, userMessageId));
         assistantMessageIdResult = response.message_id;
         nextTick(() => {
-          const userMessageElement = itemRefs.value[userMessageId].el;
-          const assistantElement = itemRefs.value[message.id].el;
-
-          const userRect = userMessageElement.getBoundingClientRect();
-          const containerRect = messagesContainerRef.value.getBoundingClientRect();
-
-          const userStyle = window.getComputedStyle(userMessageElement);
-          const assistantStyle = window.getComputedStyle(assistantElement);
-
-          const userMargin = parseFloat(userStyle.marginTop) + parseFloat(userStyle.marginBottom);
-          const assistantMargin = parseFloat(assistantStyle.marginTop) + parseFloat(assistantStyle.marginBottom);
-
-          const userHeight = userRect.height + userMargin;
-          const maxHeight = containerRect.height / 3;
-          const minHeight = containerRect.height - Math.min(maxHeight, userHeight);
-
-          assistantElement.style.minHeight = (minHeight - assistantMargin) + 'px';
-
           immediateScrollToBottom();
           autoScrollToBottom.value = false;
         });
@@ -483,57 +521,44 @@ function handleNewMessage(response, sessionId, userMessageId) {
   const { message_id, content_id, model_name } = response;
   currentSession.value.updated_at = new Date().toISOString();
 
-  const existingMessage = activeMessages.value.find((msg) => msg.id === message_id);
-
-  if (existingMessage) {
-    existingMessage.contents.forEach((item) => (item.is_current = false));
-    existingMessage.contents.push({
-      id: content_id,
-      content: "",
-      reasoning_content: null,
-      meta_data: { model_name },
-      is_current: true,
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString()
-    });
-    existingMessage.state = {
-      is_web_searching: false,
-      is_thinking: false,
-      is_streaming: true
-    };
-    return {
-      message: existingMessage,
-      contentIndex: existingMessage.contents.length - 1
-    };
-  } else {
-    const newMessage = reactive({
+  let existingMessage = activeMessages.value.find((msg) => msg.id === message_id);
+  const time = new Date().toISOString();
+  if (!existingMessage) {
+    existingMessage = reactive({
       id: message_id,
       role: "assistant",
-      contents: [
-        {
-          id: content_id,
-          content: "",
-          reasoning_content: null,
-          meta_data: { model_name },
-          is_current: true,
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString()
-        }
-      ],
+      contents: [],
       parent_id: userMessageId,
       state: {
         is_web_searching: false,
         is_thinking: false,
         is_streaming: true
       },
-      created_at: new Date().toISOString()
+      created_at: time
     });
-    sessionStore.addMessage(sessionId, newMessage);
-    return {
-      message: newMessage,
-      contentIndex: 0
-    };
+    activeMessages.value.push(existingMessage);
   }
+
+  existingMessage.contents.forEach((item) => (item.is_current = false));
+  existingMessage.contents.push({
+    id: content_id,
+    content: "",
+    reasoning_content: null,
+    meta_data: { model_name },
+    is_current: true,
+    created_at: time,
+    updated_at: time
+  });
+  existingMessage.state = {
+    is_web_searching: false,
+    is_thinking: false,
+    is_streaming: true
+  };
+  return {
+    message: existingMessage,
+    contentIndex: existingMessage.contents.length - 1
+  };
+
 }
 
 function handleThinkingContent(response, message, contentIndex, thinkingContent) {
@@ -587,6 +612,116 @@ function cleanupStreaming(sessionId, message, contentIndex) {
   }
 }
 
+// 消息操作方法
+function abortResponse() {
+  apiService.cancelResponse(currentSessionId.value);
+}
+
+async function clearChat() {
+  if (await confirm("清空聊天记录", "确定要删除所有聊天记录吗？此操作不可撤销。")) {
+    await apiService.clearSessionMessages(currentSessionId.value);
+    sessionStore.clearSessionState(currentSessionId.value);
+    // debouncedUpdatedSession();
+    toast.success("聊天记录已清空");
+  }
+}
+
+const handleSwitchModelClick = (modelId) => {
+  emit("openSwitchModel", modelId);
+};
+
+async function deleteMessage(message) {
+  try {
+    if (
+      await confirm(
+        "删除消息",
+        message.role === "user"
+          ? "确定要删除这条提问吗？对应的回答也会被删除。此操作不可撤销。"
+          : "确定要删除这条回答吗？此操作不可撤销。"
+      )
+    ) {
+      await apiService.deleteMessage(message.id);
+      if (message.role === "user") {
+        const assistantMessage = activeMessages.value.find((msg) => msg.parent_id === message.id);
+        if (assistantMessage)
+          sessionStore.deleteMessage(currentSessionId.value, assistantMessage.id);
+      }
+      sessionStore.deleteMessage(currentSessionId.value, message.id);
+      delete itemRefs.value[message.id];
+      toast.success("消息已删除");
+    }
+  } catch (error) {
+    toast.error("删除失败");
+    console.error("删除消息失败:", error);
+  }
+}
+
+async function editMessage(message) {
+  try {
+    const index = getCurrentIndex(message.contents);
+    const result = await editText({
+      title: "编辑消息",
+      defaultValue: message.contents[index].content,
+      confirmText: "保存",
+      cancelText: "取消"
+    });
+
+    if (result) {
+      message.contents[index].content = result;
+      await apiService.updateMessage(message.id, result);
+      sessionStore.updateMessage(currentSessionId.value, message.id, message);
+      // debouncedUpdatedSession();
+      toast.success("消息已更新");
+    }
+  } catch (error) {
+    toast.error("更新失败");
+    console.error("更新消息失败:", error);
+  }
+}
+
+async function copyMessage(message) {
+  try {
+    await navigator.clipboard.writeText(getCurrentContent(message.contents).content);
+    toast.success("消息已复制");
+  } catch (error) {
+    console.error("复制消息失败:", error);
+    toast.error("复制失败");
+  }
+}
+
+const placeholder = ref("auto");
+
+/**
+ * 更新占位符元素的最小高度，确保滚动容器能够正确显示内容
+ * @param {string} userMessageId - 用户消息的ID，用于定位对应的DOM元素
+ */
+function updatePlaceholder(userMessageId) {
+  try {
+
+    if (!userMessageId) {
+      placeholder.value = "auto";
+      return;
+    }
+    const userMessageRef = itemRefs.value[userMessageId];
+    if (!userMessageRef || !userMessageRef.el) {
+      console.warn(`Element for userMessageId ${userMessageId} not found`);
+      return;
+    }
+    const userMessageElement = userMessageRef.el;
+    const containerRect = messagesContainerRef.value.getBoundingClientRect();
+    const style = window.getComputedStyle(userMessageElement); // 修正可能的拼写错误
+    const userElHeight = parseFloat(style.height) + parseFloat(style.marginTop) + parseFloat(style.marginBottom);
+
+    const baseMinHeight = containerRect.height;
+    if (userElHeight > containerRect.height / 3) {
+      baseMinHeight += (userElHeight - containerRect.height / 3)
+    }
+    placeholder.value = baseMinHeight + "px";
+  } catch (error) {
+    console.error("Error updating placeholder:", error);
+  }
+}
+
 // 消息发送处理
 async function sendNewMessage(sessionId, text, files, replaceMessageId = null) {
   // 过滤出含有file.file的有效文件
@@ -629,93 +764,13 @@ async function sendNewMessage(sessionId, text, files, replaceMessageId = null) {
       sessionStore.deleteMessage(sessionId, assistantMessage.id);
     }
   }
-  if (activeMessages.value.length > 0) {
-    itemRefs.value[activeMessages.value[activeMessages.value.length - 1].id].el.style.minHeight = '0';
-  }
   activeMessages.value.push(message);
   // debouncedUpdatedSession();
   await nextTick();
+  updatePlaceholder(message.id);
   immediateScrollToBottom();
   autoScrollToBottom.value = false;
   return message;
-}
-
-// 消息操作方法
-function abortResponse() {
-  apiService.cancelResponse(currentSessionId.value);
-}
-
-async function clearChat() {
-  if (await confirm("清空聊天记录", "确定要删除所有聊天记录吗？此操作不可撤销。")) {
-    await apiService.clearSessionMessages(currentSessionId.value);
-    sessionStore.clearSessionState(currentSessionId.value);
-    // debouncedUpdatedSession();
-    toast.success("聊天记录已清空");
-  }
-}
-
-const handleSwitchModelClick = (modelId) => {
-  emit("openSwitchModel", modelId);
-};
-
-async function deleteMessage(message) {
-  try {
-    if (
-      await confirm(
-        "删除消息",
-        message.role === "user"
-          ? "确定要删除这条提问吗？对应的回答也会被删除。此操作不可撤销。"
-          : "确定要删除这条回答吗？此操作不可撤销。"
-      )
-    ) {
-      await apiService.deleteMessage(message.id);
-      if (message.role === "user") {
-        const assistantMessage = activeMessages.value.find((msg) => msg.parent_id === message.id);
-        if (assistantMessage)
-          sessionStore.deleteMessage(currentSessionId.value, assistantMessage.id);
-      }
-      sessionStore.deleteMessage(currentSessionId.value, message.id);
-      delete itemRefs.value[message.id];
-      // debouncedUpdatedSession();
-      toast.success("消息已删除");
-    }
-  } catch (error) {
-    toast.error("删除失败");
-    console.error("删除消息失败:", error);
-  }
-}
-
-async function editMessage(message) {
-  try {
-    const index = getCurrentIndex(message.contents);
-    const result = await editText({
-      title: "编辑消息",
-      defaultValue: message.contents[index].content,
-      confirmText: "保存",
-      cancelText: "取消"
-    });
-
-    if (result) {
-      message.contents[index].content = result;
-      await apiService.updateMessage(message.id, result);
-      sessionStore.updateMessage(currentSessionId.value, message.id, message);
-      // debouncedUpdatedSession();
-      toast.success("消息已更新");
-    }
-  } catch (error) {
-    toast.error("更新失败");
-    console.error("更新消息失败:", error);
-  }
-}
-
-async function copyMessage(message) {
-  try {
-    await navigator.clipboard.writeText(getCurrentContent(message.contents).content);
-    toast.success("消息已复制");
-  } catch (error) {
-    console.error("复制消息失败:", error);
-    toast.error("复制失败");
-  }
 }
 
 async function handleSendMessage() {
@@ -759,6 +814,7 @@ function regenerateResponse(message) {
     toast.error("暂时最多支持5个回答版本");
     return;
   }
+  updatePlaceholder(message.parent_id);
   handleStreamResponse(currentSessionId.value, message.parent_id, "multi_version", message.id);
 }
 
@@ -796,13 +852,6 @@ defineExpose({ sendMessage: handleSendMessage })
 </script>
 
 <style scoped>
-.messages-container {
-  flex: 1;
-  overflow-y: hidden;
-  width: 100%;
-  align-items: center;
-}
-
 /* 动画定义 */
 @keyframes fadeInUp {
   from {
