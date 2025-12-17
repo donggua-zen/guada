@@ -59,7 +59,6 @@ def get_shared_characters():
 def create_character():
     user_id = get_jwt_identity()
     json_data = request.json
-    json_data["user_id"] = user_id
     fields = [
         "title",
         "description",
@@ -89,7 +88,7 @@ def create_character():
             raise Exception(f"Field 'settings.{field}' is required.")
 
     # character = {field: json_data.get(field) for field in fields}
-    character = character_service.create_character(json_data)
+    character = character_service.create_character(user_id=user_id, data=json_data)
     return character
 
 
