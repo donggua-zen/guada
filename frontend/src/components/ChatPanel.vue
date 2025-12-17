@@ -52,13 +52,6 @@
                 @edit="editMessage" @copy="copyMessage" @generate="generateResponse" @regenerate="regenerateResponse"
                 @render-complete="handleRenderComplete" @switch="switchContent" />
             </div>
-            <!-- <MessageItem v-for="(message, index) in activeMessages" :ref="(el) => setItemRef(el, message.id)"
-              :key="message.id" :message="message"
-              :avatar="message.role == 'user' ? userAvater : currentSession.avatar_url"
-              :is-last="index == activeMessages.length - 1"
-              :allow-generate="!isStreaming && allowReSendMessage(message, index)" @delete="deleteMessage"
-              @edit="editMessage" @copy="copyMessage" @generate="generateResponse" @regenerate="regenerateResponse"
-              @render-complete="handleRenderComplete" @switch="switchContent" /> -->
           </div>
         </ScrollContainer>
       </template>
@@ -124,6 +117,7 @@ const showEditMessageModal = ref(false);
 const itemRefs = ref({});
 const isLoading = ref(false)
 const autoScrollToBottom = ref(false);
+const placeholder = ref("auto");
 
 // Props & Emits
 const props = defineProps({
@@ -261,17 +255,6 @@ const debouncedSaveSession = useDebounceFn(() => {
 // 监听器
 watch(() => props.session?.id, handleSessionChange, { immediate: true });
 
-// watch(
-//   () => activeMessages.value,
-//   () => {
-//     nextTick(() => {
-//       if (scrollContainerRef.value?.isAtBottom && !isStreaming.value) {
-//         immediateScrollToBottom();
-//       }
-//     });
-//   },
-//   { deep: true }
-// );
 
 // 生命周期
 onBeforeUpdate(() => {
@@ -688,8 +671,6 @@ async function copyMessage(message) {
     toast.error("复制失败");
   }
 }
-
-const placeholder = ref("auto");
 
 /**
  * 更新占位符元素的最小高度，确保滚动容器能够正确显示内容
