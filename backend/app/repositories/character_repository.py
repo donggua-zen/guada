@@ -25,10 +25,11 @@ class CharacterRepository:
 
     @staticmethod
     @execute_in_transaction
-    def create_character(data: dict):
+    def create_character(user_id: str, data: dict):
 
         character = Character(
             **data,
+            user_id=user_id,
         )
 
         db.session.add(character)
