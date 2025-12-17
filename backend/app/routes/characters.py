@@ -80,6 +80,10 @@ def create_character():
         "use_user_prompt",
     ]
 
+    data_filted = {
+        field: json_data.get(field) for field in fields if json_data.get(field)
+    }
+
     for field in fields:
         if field not in json_data:
             raise Exception(f"Field '{field}' is required.")
@@ -88,9 +92,7 @@ def create_character():
             raise Exception(f"Field 'settings.{field}' is required.")
 
     # character = {field: json_data.get(field) for field in fields}
-    character = character_service.create_character(user_id=user_id, data=json_data)
-    return character
-
+    return character_service.create_character(user_id=user_id, data=data_filted)
 
 @characters_bp.route("/api/v1/characters/<character_id>", methods=["DELETE"])
 @jwt_required()
