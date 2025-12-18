@@ -90,7 +90,8 @@
                     <n-checkbox v-model:checked="rememberMe" class="text-gray-600">
                         记住我
                     </n-checkbox>
-                    <UiButton text type="primary" size="small" class="text-indigo-600 hover:text-indigo-800" @click="handleForgetPassword">
+                    <UiButton text type="primary" size="small" class="text-indigo-600 hover:text-indigo-800"
+                        @click="handleForgetPassword">
                         忘记密码？
                     </UiButton>
                 </div>
@@ -264,7 +265,7 @@ const handleForgetPassword = () => {
 
 :deep(.UiButton) {
     --n-height: 46px;
-    --n-font-size: 16px;
+    --n-font-size: var(--size-text-base);
     --n-color-primary: #4f46e5;
     --n-color-primary-hover: #4338ca;
     --n-color-primary-pressed: #3730a3;
