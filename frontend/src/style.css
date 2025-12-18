@@ -123,6 +123,9 @@
     --color-conversation-bg-hover: var(--color-primary-100);
     --color-conversation-text-hover: var(--color-primary);
 
+    --size-text-base: 16px;
+    --size-text-sm: 14px;
+
     /* --color-gray-50: #f9fafb;
     --color-gray-100: #f3f4f6;
     --color-gray-200: #e5e7eb;

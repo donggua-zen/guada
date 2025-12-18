@@ -68,7 +68,7 @@
             </div>
             <div class="session-info flex-1 min-w-0 flex">
               <div class="session-header flex flex-1 flex-col justify-between items-start min-w-0">
-                <div class="session-title truncate text-[14px] w-full">
+                <div class="session-title truncate text-[var(--size-text-sm)] w-full">
                   {{ session.title }}
                 </div>
               </div>

@@ -458,7 +458,7 @@ onUnmounted(() => {
     border: none;
     resize: none;
     outline: none;
-    font-size: 15px;
+    font-size: var(--size-text-base);
     line-height: 1.8;
     padding: 0 8px;
     background: transparent;

@@ -280,14 +280,15 @@ const handleRenderComplete = () => {
 
 const handleScroll = (event) => {
   if (scrollContainerRef.value && isStreaming.value) {
-    if (scrollContainerRef.value.isAtBottom) {
+    if (scrollContainerRef.value.isAtBottom && !autoScrollToBottom.value) {
       const streamingMessage = activeMessages.value.find(message => message.state?.is_streaming)
       if (!streamingMessage) return
-      const el = itemRefs.value[streamingMessage.id]?.el
+      const el = itemRefs.value[streamingMessage.id]?.el?.parentNode
       if (!el) return
       const minHeight = parseFloat(el.style.minHeight) || 0
       const height = el.getBoundingClientRect().height
-      if (height > minHeight) {
+      // +1 防止小数点误差
+      if (height > minHeight + 1) {
         autoScrollToBottom.value = true
         return
       }
