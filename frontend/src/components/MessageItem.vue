@@ -31,14 +31,14 @@
               :class="[isExpanded ? 'rotate-90' : 'rotate-0']"></n-icon>
           </div>
           <div class="thinking-container" :class="{ expanded: isExpanded }">
-            <div
+            <div @click="handleClick"
               class="thinking-content markdown-text py-0 border-l-2 pl-4 border-gray-200 dark:border-gray-700 mb-2 text-gray-500 dark:text-gray-400"
               v-html="debouncedThinkingFormattedText">
             </div>
           </div>
         </div>
 
-        <div class="message-text markdown-text" v-html="debouncedFormattedText">
+        <div class="message-text markdown-text" @click="handleClick" v-html="debouncedFormattedText">
         </div>
 
         <n-alert v-if="metadata && metadata.finish_reason == 'error'" title="API请求错误" type="error">
@@ -46,7 +46,7 @@
         </n-alert>
         <div v-if="streamingState.is_streaming" class="assistant-loading flex items-center text-gray-500"
           style="position: sticky;top:0;">
-          <n-icon size="16" class="mr-2 relative top-[1px]">
+          <n-icon size="16" class="mr-2 relative top-[0px]">
             <Loading />
           </n-icon>
           {{ streamingState.is_web_searching ? '搜索中...' : '回答中...' }}
@@ -109,9 +109,6 @@
 
 <script setup>
 import { computed, ref, watch, onUnmounted, onMounted, h, nextTick } from "vue";
-import { Marked } from "marked";
-import { markedHighlight } from 'marked-highlight'
-import hljs from 'highlight.js';
 import { NAlert, NIcon, NImageGroup, NDropdown } from "naive-ui";
 import { useDebounceFn } from "@vueuse/core";
 import {
@@ -130,6 +127,10 @@ import { Loading } from "./icons";
 import { FileItem, Avatar } from "./ui";
 import { usePopup } from "../composables/usePopup";
 import { formatTime } from '../utils'
+import { useMarkdown } from "../composables/useMarkdown";
+
+const { marked } = useMarkdown()
+
 const { toast } = usePopup();
 
 const props = defineProps({
@@ -154,38 +155,6 @@ const emit = defineEmits([
   "render-complete"
 ]);
 
-const marked = new Marked(
-  markedHighlight({
-    emptyLangClass: 'hljs',
-    langPrefix: 'hljs language-',
-    highlight(code, lang, info) {
-      const language = hljs.getLanguage(lang) ? lang : 'plaintext';
-      return hljs.highlight(code, { language }).value;
-    }
-  })
-);
-// 在 markdown 渲染上下文中无法使用 Vue 组件，所以我们直接使用 SVG 字符串
-const coypysvg = `<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24">
-  <path fill="currentColor" d="M8 7h11v14H8z" opacity=".3"/>
-  <path fill="currentColor" d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/>
-</svg>`
-const renderer = {
-  code(code) {
-    const lang = code.lang || 'text';
-    return `
-      <div class="custom-code-block">
-        <div class="code-header">
-          <span class="code-language">${lang}</span>
-          <button class="copy-code-button" onclick="window.handleCopyCode(this)"><i role="img">${coypysvg}</i></button>
-        </div>
-        <pre class="hljs language-${lang}"><code class="hljs language-${lang}">${code.text}</code></pre>
-      </div>
-    `;
-  }
-};
-
-// 设置自定义渲染器
-marked.use({ renderer, breaks: true });
 
 const showImageViewer = ref(false);
 const currentPreViewIndex = ref(0);
@@ -409,35 +378,23 @@ const getCurrentIndex = (messageContents) => {
   return currentIndex !== -1 ? currentIndex + 1 : 1;
 };
 
-// 注册全局复制代码函数
-const registerGlobalCopyFunction = () => {
-  if (typeof window.handleCopyCode !== 'undefined') {
-    return;
+const handleClick = (event) => {
+  if (event.target.closest('.copy-code-button')) {
+    const button = event.target.closest('.copy-code-button')
+    const codeBlock = button.closest('.custom-code-block')
+    const codeElement = codeBlock?.querySelector('code')
+
+    if (codeElement) {
+      navigator.clipboard.writeText(codeElement.textContent).then(() => {
+        toast.success("代码已复制到剪贴板")
+      }).catch(err => {
+        console.error('复制失败:', err)
+        toast.error("复制失败")
+      })
+    }
   }
-  window.handleCopyCode = function (button) {
-    const codeBlock = button.closest('.custom-code-block').querySelector('code');
-    if (!codeBlock) return;
-    const text = codeBlock.textContent;
+}
 
-    navigator.clipboard.writeText(text).then(() => {
-      toast.success("代码已复制到剪贴板");
-    }).catch(err => {
-      console.error('复制失败:', err);
-      toast.error("复制失败");
-    });
-  };
-};
-
-onMounted(() => {
-  registerGlobalCopyFunction();
-});
-
-onUnmounted(() => {
-  // 清理全局函数
-  if (typeof window.handleCopyCode !== 'undefined') {
-    delete window.handleCopyCode;
-  }
-});
 
 defineExpose({ el: rootRef, showThinking, hideThinking, switchContent, });
 </script>
@@ -455,13 +412,12 @@ defineExpose({ el: rootRef, showThinking, hideThinking, switchContent, });
   animation: fadeInUp 0.3s ease;
 }
 
-.message:last-child {}
-
 /* 新增卡片式设计 */
 .message-card {
-  font-size: 16px;
+  font-size: var(--size-text-base);
   letter-spacing: 1px;
   transition: all 0.3s ease;
+  max-width: 100%;
 }
 
 /* 用户消息气泡特定样式 */
@@ -515,14 +471,13 @@ defineExpose({ el: rootRef, showThinking, hideThinking, switchContent, });
 .message-text {
   line-height: 1.7;
   color: inherit;
-  font-size: 16px;
   max-width: 100%;
   vertical-align: middle;
 }
 
 /* 加载动画 */
 .assistant-loading {
-  font-size: 14px;
+  font-size: var(--size-text-sm);
   margin-top: 8px;
 }
 
@@ -567,481 +522,7 @@ defineExpose({ el: rootRef, showThinking, hideThinking, switchContent, });
 </style>
 
 <style>
-.markdown-text p {
-  margin-top: 10px;
-  margin-bottom: 0;
-}
-
-.markdown-text>:first-child {
-  margin-top: 0;
-}
-
-.markdown-text h1,
-.markdown-text h2,
-.markdown-text h3,
-.markdown-text h4,
-.markdown-text h5,
-.markdown-text h6 {
-  margin-top: 1.2em;
-  margin-bottom: 0.8em;
-  font-weight: 600;
-  font-size: 16px;
-  color: inherit;
-}
-
-.markdown-text h1 {
-  font-size: 18px;
-  padding-bottom: 0.5em;
-}
-
-.markdown-text h2 {
-  padding-bottom: 0.5em;
-}
-
-.markdown-text h6 {
-  color: #6a737d;
-}
-
-.markdown-text a {
-  color: #0366d6;
-  text-decoration: none;
-}
-
-.markdown-text a:hover {
-  text-decoration: underline;
-}
-
-.markdown-text ol {
-  list-style: none;
-  counter-reset: item;
-  margin-top: 8px;
-}
-
-.markdown-text ul {
-  list-style: none;
-  padding-left: 0;
-  margin-top: 8px;
-}
-
-.markdown-text ol>li,
-.markdown-text ul>li {
-  position: relative;
-  margin-bottom: 8px;
-  margin-top: 0;
-}
-
-.markdown-text ul>li {
-  padding-left: 14px;
-}
-
-.markdown-text ol>li {
-  flex-wrap: wrap;
-  counter-increment: item;
-  padding-left: 3ch;
-  position: relative;
-}
-
-.markdown-text ol>li:before {
-  content: counter(item) ".";
-  text-align: left;
-  color: #666;
-  min-width: 14px;
-  display: inline-block;
-  width: 2.5ch;
-  position: absolute;
-  left: 0;
-}
-
-/* 其他子元素保持正常流 */
-ol>*:not(li) {
-  display: block;
-  margin: 1em 0;
-}
-
-.markdown-text ul>li::before {
-  content: "";
-  position: absolute;
-  left: 2px;
-  top: 0.7em;
-  width: 4px;
-  height: 4px;
-  background-color: #555;
-  border-radius: 50%;
-}
-
-.markdown-text ul>li:last-child {
-  margin-bottom: 0;
-}
-
-.markdown-text ul>li:empty {
-  display: none;
-}
-
-.markdown-text ul>li ul {
-  margin-top: 8px;
-}
-
-.markdown-text code {
-  background-color: #f6f8fa;
-  border-radius: 3px;
-  padding: 0.2em 0.4em;
-  font-size: 0.9em;
-  font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
-}
-
-.markdown-text pre {
-  background-color: #fff;
-  border-radius: 5px;
-  overflow: auto;
-  margin-top: 1rem;
-  margin-bottom: 1em;
-  border: 1px solid #dfe2e5;
-  white-space: pre-wrap;
-  word-wrap: break-word;
-}
-
-.markdown-text blockquote {
-  border-left: 4px solid #dfe2e5;
-  margin: 1em 0 0;
-  padding-left: 1em;
-}
-
-/* 表格样式优化 - 添加滚动条支持 */
-.markdown-text table {
-  border-collapse: separate;
-  border-spacing: 0;
-  margin-top: 1em;
-  max-width: 100%;
-  /* display: block; */
-  overflow-x: auto;
-  -webkit-overflow-scrolling: touch;
-  overflow: hidden;
-  border: 1px solid #dfe2e5;
-  border-radius: 14px;
-}
-
-.markdown-text table th,
-.markdown-text table td {
-  border-right: 1px solid #dfe2e5;
-  border-top: 1px solid #dfe2e5;
-  vertical-align: top;
-  padding: 0.5em;
-  min-width: 100px;
-}
-
-.markdown-text table th:last-child,
-.markdown-text table td:last-child {
-  border-right: none;
-}
-
-.markdown-text table thead th {
-  border-top: none;
-}
-
-.markdown-text table th {
-  background-color: #f3f3f5;
-  text-align: center;
-  position: sticky;
-  left: 0;
-  z-index: 1;
-}
-
-.markdown-text hr {
-  height: 0px;
-  border-top: 2px dotted #efefef;
-  margin: 1.2em 0;
-}
-
-.markdown-text img {
-  max-width: 100%;
-  height: auto;
-  border-radius: 3px;
-}
-
-.markdown-text strong {
-  font-weight: 600;
-}
-
-.markdown-text em {
-  font-style: italic;
-}
-
-/* 表格容器样式，确保表格不会撑破容器 */
-.markdown-text {
-  overflow-wrap: break-word;
-  word-wrap: break-word;
-  word-break: break-word;
-  max-width: 100%;
-}
-
-
-/* 暗色模式下的 Markdown 文本样式 */
-.dark .markdown-text h6 {
-  color: #8b949e;
-}
-
-.dark .markdown-text a {
-  color: #58a6ff;
-}
-
-.dark .markdown-text a:hover {
-  color: #79c0ff;
-}
-
-.dark .markdown-text ol>li:before {
-  color: #8b949e;
-}
-
-.dark .markdown-text ul>li::before {
-  background-color: #8b949e;
-}
-
-.dark .markdown-text code {
-  background-color: #2d333b;
-  color: #d4d4d4;
-}
-
-.dark .markdown-text pre {
-  background-color: #1e1e1e;
-  border-color: #333;
-}
-
-.dark .markdown-text blockquote {
-  border-left-color: #333;
-}
-
-.dark .markdown-text table,
-.dark .markdown-text table th,
-.dark .markdown-text table td {
-  border-color: #333;
-}
-
-.dark .markdown-text table th {
-  background-color: #2d333b;
-  color: #d4d4d4;
-}
-
-.dark .markdown-text table td {
-  background-color: #1e1e1e;
-  color: #d4d4d4;
-}
-
-.dark .markdown-text hr {
-  border-top-color: #333;
-}
-
-/* 添加第一列居中对齐的样式 */
-.markdown-text table td:first-child,
-.markdown-text table th:first-child {
-  text-align: center;
-}
-
-/* 响应式表格样式 */
-@media (max-width: 768px) {
-  .markdown-text table {
-    font-size: 14px;
-    border-radius: 6px;
-  }
-
-  .markdown-text table th,
-  .markdown-text table td {
-    padding: 0.3em 0.5em;
-    min-width: 80px;
-  }
-}
-</style>
-
-<style>
+@import "@/assets/markdown.css";
 /* 全局样式：确保 v-html 中的代码高亮生效 */
 @import 'highlight.js/styles/foundation.css';
-
-/* 确保 hljs 样式正常工作 */
-.custom-code-block pre.hljs {
-  margin: 0;
-  border-radius: 0;
-  border: none;
-  background: #fafafb !important;
-}
-
-.custom-code-block code.hljs {
-  background: transparent !important;
-  display: block;
-  overflow-x: auto;
-}
-
-/* 代码块容器样式 */
-.custom-code-block {
-  position: relative;
-  margin: 1em 0;
-  border-radius: 14px;
-  overflow: hidden;
-  background: #f3f4f6;
-  border: 1px solid #e3e3e7;
-}
-
-.code-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 8px 12px;
-  background: #f3f3f5;
-  color: #222;
-  font-size: 0.8em;
-}
-
-.code-language {
-  font-weight: 600;
-  text-transform: uppercase;
-  color: #666;
-}
-
-.copy-code-button {
-  color: #666;
-  cursor: pointer;
-  transition: all 0.2s ease;
-  font-size: 15px;
-}
-
-.copy-code-button:hover {
-  color: #333;
-}
-
-.copy-code-button svg {
-  width: 15px;
-  height: 15px;
-}
-
-.copy-code-button:hover {
-  background: rgba(255, 255, 255, 0.2);
-}
-
-/* 暗色模式样式 */
-.dark .custom-code-block {
-  background: #1e1e1e;
-  border-color: #333;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
-}
-
-.dark .custom-code-block pre.hljs {
-  background: #1e1e1e !important;
-  color: #d4d4d4;
-}
-
-.dark .custom-code-block code.hljs {
-  color: #d4d4d4;
-  background: transparent !important;
-}
-
-.dark .code-header {
-  background: #252526;
-  color: #cccccc;
-  border-bottom: 1px solid #333;
-}
-
-.dark .code-language {
-  color: #858585;
-  font-weight: 500;
-}
-
-.dark .copy-code-button {
-  color: #858585;
-  background: transparent;
-}
-
-.dark .copy-code-button:hover {
-  color: #d4d4d4;
-  background: rgba(255, 255, 255, 0.1);
-}
-
-/* HLJS 语法高亮暗色主题覆盖 */
-.dark pre.hljs {
-  color: #d4d4d4;
-}
-
-.dark .hljs-keyword,
-.dark .hljs-selector-tag,
-.dark .hljs-title,
-.dark .hljs-section,
-.dark .hljs-doctag,
-.dark .hljs-name,
-.dark .hljs-strong {
-  color: #569cd6;
-}
-
-.dark .hljs-comment {
-  color: #6a9955;
-}
-
-.dark .hljs-string,
-.dark .hljs-title,
-.dark .hljs-section,
-.dark .hljs-built_in,
-.dark .hljs-literal,
-.dark .hljs-type,
-.dark .hljs-addition,
-.dark .hljs-tag,
-.dark .hljs-quote,
-.dark .hljs-name,
-.dark .hljs-selector-id,
-.dark .hljs-selector-class {
-  color: #ce9178;
-}
-
-.dark .hljs-meta,
-.dark .hljs-subst,
-.dark .hljs-symbol,
-.dark .hljs-regexp,
-.dark .hljs-attribute,
-.dark .hljs-deletion,
-.dark .hljs-variable,
-.dark .hljs-template-variable,
-.dark .hljs-link,
-.dark .hljs-bullet {
-  color: #b5cea8;
-}
-
-.dark .hljs-emphasis {
-  font-style: italic;
-}
-
-.dark .hljs-strong {
-  font-weight: bold;
-}
-
-/* 行号样式（如果有的话） */
-.dark .custom-code-block .line-numbers {
-  background: #252526;
-  color: #858585;
-  border-right: 1px solid #333;
-}
-
-/* 代码块内部滚动条样式 */
-.dark .custom-code-block ::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
-}
-
-.dark .custom-code-block ::-webkit-scrollbar-track {
-  background: #252526;
-}
-
-.dark .custom-code-block ::-webkit-scrollbar-thumb {
-  background: #424242;
-  border-radius: 4px;
-}
-
-.dark .custom-code-block ::-webkit-scrollbar-thumb:hover {
-  background: #535353;
-}
-
-/* 代码块高亮行（如果有高亮功能） */
-.dark .custom-code-block .highlighted-line {
-  background: rgba(86, 156, 214, 0.1);
-}
-
-/* 代码块行号高亮 */
-.dark .custom-code-block .highlighted-line-number {
-  color: #569cd6;
-  background: rgba(86, 156, 214, 0.1);
-}
 </style>
