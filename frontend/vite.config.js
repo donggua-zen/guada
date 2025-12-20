@@ -29,19 +29,19 @@ export default defineConfig({
       resolvers: [ElementPlusResolver()],
     }),
   ],
-  optimizeDeps: {
-    force: false, // 不要强制预构建
-    // 明确需要预构建的包
-    include: [
-      'vue',
-      'vue-router',
-      'pinia',
-      'axios',
-      'dayjs',
-      'lodash-es',
-      'naive-ui',
-    ]
-  },
+  // optimizeDeps: {
+  //   force: false, // 不要强制预构建
+  //   // 明确需要预构建的包
+  //   include: [
+  //     'vue',
+  //     'vue-router',
+  //     'pinia',
+  //     'axios',
+  //     'dayjs',
+  //     'lodash-es',
+  //     'naive-ui',
+  //   ]
+  // },
   resolve: {
     alias: {
       '@': path.resolve(__dirname, './src'),

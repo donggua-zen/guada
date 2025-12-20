@@ -4,12 +4,12 @@
             <Avatar :src="previewUrl" :type="type"></Avatar>
         </div>
         <div class="avatar-upload-actions mt-3">
-            <UiButton @click="triggerAvatarUpload" round :border="false" plain type="primary" size="small">
+            <el-button @click="triggerAvatarUpload" round :border="false" plain type="primary" size="small">
                 <template #icon>
                     <FileUploadOutlined />
                 </template>
                 更换头像
-            </UiButton>
+            </el-button>
         </div>
         <input ref="avatarInput" type="file" accept="image/*" style="display: none" @change="handleAvatarChanged">
     </div>
@@ -26,8 +26,8 @@
         </div>
         <template #footer>
             <div class="flex justify-end gap-2">
-                <UiButton @click="closeCropModal">取消</UiButton>
-                <UiButton type="primary" @click="cropAvatar">确认裁剪</UiButton>
+                <el-button @click="closeCropModal">取消</el-button>
+                <el-button type="primary" @click="cropAvatar">确认裁剪</el-button>
             </div>
         </template>
     </el-dialog>
@@ -35,7 +35,7 @@
 <script setup>
 import { ref, onMounted, onUnmounted, computed, watch, } from 'vue'
 import Avatar from './Avatar.vue'
-import UiButton from './UiButton.vue'
+import { ElButton } from 'element-plus'
 import { Cropper } from 'vue-advanced-cropper'
 import 'vue-advanced-cropper/dist/style.css'
 import { ElDialog } from 'element-plus'

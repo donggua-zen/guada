@@ -10,3 +10,4 @@ backend/logs/*
 backend/app/static/uploads/*
 backend/static/*
 .env
+frontend/stats.html

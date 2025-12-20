@@ -564,7 +564,6 @@ defineExpose({ el: rootRef, showThinking, hideThinking, switchContent, });
   transform: translateZ(0);
 }
 
-.dark {}
 </style>
 
 <style>
