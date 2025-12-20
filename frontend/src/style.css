@@ -251,16 +251,6 @@ html,
     gap: 0;
 }
 
-.page {
-    display: none;
-    width: 100%;
-    height: 100%;
-}
-
-.page.active {
-    display: flex;
-}
-
 .app-text-light-color {
     color: var(--primary-text-light-color);
 }

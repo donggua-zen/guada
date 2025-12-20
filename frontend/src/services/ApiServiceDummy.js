@@ -1,6 +1,3 @@
-import axios from 'axios';
-import { useStorage } from '@vueuse/core';
-
 class ApiServiceDummy {
   constructor(baseURL = '/v1') {
     this.baseURL = baseURL;
