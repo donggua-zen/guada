@@ -75,7 +75,6 @@
 import { ref, watch, computed, nextTick, onUnmounted, onMounted } from 'vue'
 import { ElIcon, ElButton } from 'element-plus';
 import FileItem from './FileItem.vue';
-import UiButton from './UiButton.vue';
 import {
     InsertDriveFileTwotone,
     ImageTwotone,
