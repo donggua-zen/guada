@@ -32,12 +32,12 @@
                 <div class="h-full flex flex-col" v-if="currentItem">
                     <div
                         class="relative flex items-center justify-center md:justify-start py-2 border-b-1 border-gray-100 mb-2 mx-0 md:mx-3">
-                        <UiButton class="absolute block md:hidden left-1" text style="font-size: 24px"
+                        <el-button v-if="isMobile" class="absolute block left-1" text style="font-size: 24px"
                             @click="router.back()">
                             <template #icon>
                                 <ArrowBackIosFilled />
                             </template>
-                        </UiButton>
+                        </el-button>
                         <div class="text-lg">{{ currentItem.label }}</div>
                         <div class="flex items-center"></div>
                     </div>
@@ -66,7 +66,8 @@
 </template>
 <script setup>
 import { ref, onMounted, computed, watch } from 'vue'
-import { SidebarLayout, UiButton } from "../ui";
+import { SidebarLayout } from "../ui";
+import { ElButton } from 'element-plus';
 import UserProfile from './UserProfile.vue'
 import UserSubaccounts from './UserSubaccounts.vue'
 import UserSecurity from './UserSecurity.vue'

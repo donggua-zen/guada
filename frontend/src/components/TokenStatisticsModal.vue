@@ -1,6 +1,5 @@
 <template>
-    <n-modal v-model:show="showTokenModal" preset="dialog" title="Tokens估算(不含图片)" positive-text="确认" :show-icon="false"
-        style="width: 500px">
+    <el-dialog v-model="showTokenModal" title="Tokens估算(不含图片)" width="500px" :show-close="true">
         <div class="token-statistics">
             <!-- 统计条 -->
             <div class="mb-6">
@@ -78,11 +77,16 @@
                 </div>
             </div>
         </div>
-    </n-modal>
+        <template #footer>
+            <span class="dialog-footer">
+                <el-button @click="showTokenModal = false">确认</el-button>
+            </span>
+        </template>
+    </el-dialog>
 </template>
 <script setup>
 import { ref, computed, watch } from "vue";
-import { NModal } from "naive-ui";
+import { ElDialog, ElButton } from "element-plus";
 import { apiService } from "@/services/ApiService";
 
 const tokenStatistics = ref({

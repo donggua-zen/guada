@@ -65,116 +65,106 @@
                 </div>
 
                 <!-- 登录方式切换 -->
-                <div class="flex justify-center mb-6">
-                    <n-tabs v-model:value="loginType" type="segment" class="w-full" v-if="canReset">
-                        <n-tab-pane name="phone" tab="手机账户">
-                            <n-form :model="form" :rules="rules" ref="formRef" label-placement="top" :show-label="false"
-                                class="mt-4">
-                                <n-form-item path="phone" class="mb-4">
-                                    <n-input name="login-phone" v-model:value="form.phone" placeholder="请输入手机号"
-                                        size="large" class="rounded-lg">
-                                        <template #prefix>
-                                            <n-icon class="text-gray-400">
-                                                <PhoneIcon />
-                                            </n-icon>
-                                        </template>
-                                    </n-input>
-                                </n-form-item>
+                <div class="flex justify-center mb-6 custom-segmented">
+                    <el-segmented v-model="loginType" :options="loginTypeOptions" block v-if="canReset" />
+                </div>
 
-                                <n-form-item label="密码" path="password" class="mb-4">
-                                    <n-input name="login-password" v-model:value="form.password" type="password"
-                                        show-password-on="click" placeholder="请输入密码" size="large" class="rounded-lg">
-                                        <template #prefix>
-                                            <n-icon class="text-gray-400">
-                                                <LockIcon />
-                                            </n-icon>
-                                        </template>
-                                    </n-input>
-                                </n-form-item>
+                <!-- 手机账户表单 -->
+                <div v-show="loginType === 'phone'" v-if="canReset">
+                    <el-form :model="form" :rules="rules" ref="formRef" label-position="top" class="mt-4">
+                        <el-form-item prop="phone" class="mb-4">
+                            <el-input v-model="form.phone" placeholder="请输入手机号" size="large">
+                                <template #prefix>
+                                    <el-icon class="text-gray-400">
+                                        <PhoneIcon />
+                                    </el-icon>
+                                </template>
+                            </el-input>
+                        </el-form-item>
 
-                                <n-form-item label="确认密码" path="confirmPassword" class="mb-6">
-                                    <n-input name="confirm-password" v-model:value="form.confirmPassword"
-                                        type="password" show-password-on="click" placeholder="请再次输入密码" size="large"
-                                        class="rounded-lg">
-                                        <template #prefix>
-                                            <n-icon class="text-gray-400">
-                                                <LockIcon />
-                                            </n-icon>
-                                        </template>
-                                    </n-input>
-                                </n-form-item>
-                            </n-form>
-                        </n-tab-pane>
+                        <el-form-item label="密码" prop="password" class="mb-4">
+                            <el-input v-model="form.password" type="password" show-password placeholder="请输入密码"
+                                size="large">
+                                <template #prefix>
+                                    <el-icon class="text-gray-400">
+                                        <LockIcon />
+                                    </el-icon>
+                                </template>
+                            </el-input>
+                        </el-form-item>
 
-                        <n-tab-pane name="email" tab="邮箱账户">
-                            <n-form :model="form" :rules="rules" ref="formRef" label-placement="top" :show-label="false"
-                                class="mt-4">
-                                <n-form-item path="email" class="mb-4">
-                                    <n-input name="login-email" v-model:value="form.email" placeholder="请输入邮箱地址"
-                                        size="large" class="rounded-lg">
-                                        <template #prefix>
-                                            <n-icon class="text-gray-400">
-                                                <MailIcon />
-                                            </n-icon>
-                                        </template>
-                                    </n-input>
-                                </n-form-item>
+                        <el-form-item label="确认密码" prop="confirmPassword" class="mb-6">
+                            <el-input v-model="form.confirmPassword" type="password" show-password placeholder="请再次输入密码"
+                                size="large">
+                                <template #prefix>
+                                    <el-icon class="text-gray-400">
+                                        <LockIcon />
+                                    </el-icon>
+                                </template>
+                            </el-input>
+                        </el-form-item>
+                    </el-form>
+                </div>
 
-                                <n-form-item label="密码" path="password" class="mb-4">
-                                    <n-input name="login-password" v-model:value="form.password" type="password"
-                                        show-password-on="click" placeholder="请输入密码" size="large" class="rounded-lg">
-                                        <template #prefix>
-                                            <n-icon class="text-gray-400">
-                                                <LockIcon />
-                                            </n-icon>
-                                        </template>
-                                    </n-input>
-                                </n-form-item>
+                <!-- 邮箱账户表单 -->
+                <div v-show="loginType === 'email'" v-if="canReset">
+                    <el-form :model="form" :rules="rules" ref="formRef" label-position="top" class="mt-4">
+                        <el-form-item prop="email" class="mb-4">
+                            <el-input v-model="form.email" placeholder="请输入邮箱地址" size="large">
+                                <template #prefix>
+                                    <el-icon class="text-gray-400">
+                                        <MailIcon />
+                                    </el-icon>
+                                </template>
+                            </el-input>
+                        </el-form-item>
 
-                                <n-form-item label="确认密码" path="confirmPassword" class="mb-6">
-                                    <n-input name="confirm-password" v-model:value="form.confirmPassword"
-                                        type="password" show-password-on="click" placeholder="请再次输入密码" size="large"
-                                        class="rounded-lg">
-                                        <template #prefix>
-                                            <n-icon class="text-gray-400">
-                                                <LockIcon />
-                                            </n-icon>
-                                        </template>
-                                    </n-input>
-                                </n-form-item>
-                            </n-form>
-                        </n-tab-pane>
-                    </n-tabs>
+                        <el-form-item label="密码" prop="password" class="mb-4">
+                            <el-input v-model="form.password" type="password" show-password placeholder="请输入密码"
+                                size="large">
+                                <template #prefix>
+                                    <el-icon class="text-gray-400">
+                                        <LockIcon />
+                                    </el-icon>
+                                </template>
+                            </el-input>
+                        </el-form-item>
 
-                    <div v-else class="w-full text-center py-8">
-                        <n-result status="403" title="无权限重置密码" description="您当前没有权限重置密码">
-                            <template #footer>
-                                <n-button @click="router.go(0)">刷新页面</n-button>
-                            </template>
-                        </n-result>
+                        <el-form-item label="确认密码" prop="confirmPassword" class="mb-6">
+                            <el-input v-model="form.confirmPassword" type="password" show-password placeholder="请再次输入密码"
+                                size="large">
+                                <template #prefix>
+                                    <el-icon class="text-gray-400">
+                                        <LockIcon />
+                                    </el-icon>
+                                </template>
+                            </el-input>
+                        </el-form-item>
+                    </el-form>
+                </div>
 
-                        <div class="mt-6 bg-red-50 border border-red-200 rounded-xl p-5 text-left shadow-sm">
-                            <div class="flex">
-                                <div class="flex-shrink-0">
-                                    <svg class="h-6 w-6 text-red-500" xmlns="http://www.w3.org/2000/svg"
-                                        viewBox="0 0 20 20" fill="currentColor">
-                                        <path fill-rule="evenodd"
-                                            d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z"
-                                            clip-rule="evenodd" />
-                                    </svg>
-                                </div>
-                                <div class="ml-4">
-                                    <h3 class="text-lg font-medium text-red-800">权限说明</h3>
-                                    <div class="mt-3 text-sm text-red-700">
-                                        <p class="mb-2">您当前没有权限重置密码，请按以下步骤操作：</p>
-                                        <ol class="list-decimal pl-5 space-y-1">
-                                            <li>子账户重置请联系系统管理员</li>
-                                            <li>主账户如需重置，请删除后端目录下的 <code
-                                                    class="bg-red-100 px-1.5 py-0.5 rounded text-red-800 font-mono">password_is_set.txt</code>
-                                                文件</li>
-                                            <li>刷新本页面重新设置密码</li>
-                                        </ol>
-                                    </div>
+                <div v-else class="w-full text-center py-8">
+                    <div class="mt-6 bg-red-50 border border-red-200 rounded-xl p-5 text-left shadow-sm">
+                        <div class="flex">
+                            <div class="flex-shrink-0">
+                                <svg class="h-6 w-6 text-red-500" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20"
+                                    fill="currentColor">
+                                    <path fill-rule="evenodd"
+                                        d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z"
+                                        clip-rule="evenodd" />
+                                </svg>
+                            </div>
+                            <div class="ml-4">
+                                <h3 class="text-lg font-medium text-red-800">权限说明</h3>
+                                <div class="mt-3 text-sm text-red-700">
+                                    <p class="mb-2">您当前没有权限重置密码，请按以下步骤操作：</p>
+                                    <ol class="list-decimal pl-5 space-y-1">
+                                        <li>子账户重置请联系系统管理员</li>
+                                        <li>主账户如需重置，请删除后端目录下的 <code
+                                                class="bg-red-100 px-1.5 py-0.5 rounded text-red-800 font-mono">password_is_set.txt</code>
+                                            文件</li>
+                                        <li>刷新本页面重新设置密码</li>
+                                    </ol>
                                 </div>
                             </div>
                         </div>
@@ -182,14 +172,13 @@
                 </div>
 
                 <!-- 设置按钮 -->
-                <UiButton v-if="canReset" type="primary" round block size="large" :loading="loading"
-                    @click="handleLogin"
-                    class="mb-6 py-3 font-medium rounded-lg shadow-md hover:shadow-lg transition-shadow">
+                <el-button v-if="canReset" type="primary" round size="large" :loading="loading" @click="handleLogin"
+                    class="mb-6 py-3 font-medium rounded-lg shadow-md hover:shadow-lg transition-shadow w-full">
                     <template #icon>
                         <LoginIcon />
                     </template>
                     {{ loading ? '设置中...' : '立即设置' }}
-                </UiButton>
+                </el-button>
 
                 <!-- 移动端安全提醒 -->
                 <div class="md:hidden space-y-4 mb-6" v-if="canReset">
@@ -255,17 +244,6 @@
 <script setup>
 import { ref, reactive, onMounted } from 'vue'
 import {
-    NForm,
-    NFormItem,
-    NInput,
-    NTabs,
-    NTabPane,
-    NIcon,
-    NButton,
-    NCarousel
-} from 'naive-ui'
-
-import {
     PhoneIphoneOutlined as PhoneIcon,
     MailOutlineOutlined as MailIcon,
     LockOutlined as LockIcon,
@@ -277,7 +255,17 @@ import { useRouter } from 'vue-router'
 import { apiService } from '../services/ApiService'
 import { usePopup } from '../composables/usePopup'
 import { useStorage } from '@vueuse/core'
-import { UiButton } from './ui'
+
+// Element Plus 组件导入
+import {
+    ElForm,
+    ElFormItem,
+    ElInput,
+    ElSegmented,
+    ElIcon,
+    ElButton,
+    ElResult
+} from 'element-plus'
 
 // 消息提示
 const { toast, confirmSuccess } = usePopup()
@@ -286,6 +274,19 @@ const router = useRouter()
 
 // 登录方式切换
 const loginType = useStorage('login-type', 'phone')
+
+// 登录选项
+const loginTypeOptions = [
+    {
+        label: '手机账户',
+        value: 'phone'
+    },
+    {
+        label: '邮箱账户',
+        value: 'email'
+    }
+]
+
 const canReset = ref(false)
 
 // 表单数据
@@ -304,33 +305,37 @@ const rules = {
     phone: {
         required: true,
         trigger: ['input', 'blur'],
-        validator: (rule, value) => {
+        validator: (rule, value, callback) => {
             if (loginType.value === 'phone') {
                 if (!value) {
-                    return new Error('请输入手机号')
+                    callback(new Error('请输入手机号'))
+                    return
                 }
                 const phoneRegex = /^1[3-9]\d{9}$/
                 if (!phoneRegex.test(value)) {
-                    return new Error('请输入正确的手机号')
+                    callback(new Error('请输入正确的手机号'))
+                    return
                 }
             }
-            return true
+            callback()
         }
     },
     email: {
         required: true,
         trigger: ['input', 'blur'],
-        validator: (rule, value) => {
+        validator: (rule, value, callback) => {
             if (loginType.value === 'email') {
                 if (!value) {
-                    return new Error('请输入邮箱')
+                    callback(new Error('请输入邮箱'))
+                    return
                 }
                 const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
                 if (!emailRegex.test(value)) {
-                    return new Error('请输入正确的邮箱')
+                    callback(new Error('请输入正确的邮箱'))
+                    return
                 }
             }
-            return true
+            callback()
         }
     },
     password: {
@@ -341,14 +346,16 @@ const rules = {
     confirmPassword: {
         required: true,
         trigger: ['input', 'blur'],
-        validator: (rule, value) => {
+        validator: (rule, value, callback) => {
             if (!value) {
-                return new Error('请再次输入密码')
+                callback(new Error('请再次输入密码'))
+                return
             }
             if (value !== form.password) {
-                return new Error('两次输入的密码不一致')
+                callback(new Error('两次输入的密码不一致'))
+                return
             }
-            return true
+            callback()
         }
     }
 }
@@ -358,8 +365,8 @@ const formRef = ref(null)
 
 // 登录处理
 const handleLogin = async () => {
-    await formRef.value?.validate(async (errors) => {
-        if (!errors) {
+    formRef.value?.validate(async (valid) => {
+        if (valid) {
             loading.value = true
             try {
 
@@ -381,7 +388,7 @@ const handleLogin = async () => {
 
             } catch (error) {
                 console.error(error)
-                toast.error(error)
+                toast.error(error.message || error.toString())
             } finally {
                 loading.value = false
             }
@@ -405,60 +412,51 @@ onMounted(async () => {
 
 <style scoped>
 /* 自定义样式 */
-.carousel-img {
+
+.custom-segmented .el-segmented {
+    --el-segmented-item-selected-color: var(--el-text-color-primary);
+    --el-segmented-item-selected-bg-color: white;
+    --el-border-radius-base: 12px;
+    /* background-color: rgb(247, 247, 250); */
+    padding: 8px 8px;
+}
+
+.custom-segmented .el-segmented__item {
     border-radius: 12px;
-}
-
-:deep(.n-input) {
-    --n-border: 1px solid #e5e7eb;
-    --n-border-focus: 1px solid #4f46e5;
-    --n-box-shadow-focus: 0 0 0 2px rgba(79, 70, 229, 0.2);
-}
-
-:deep(.UiButton) {
-    --n-height: 46px;
-    --n-font-size: 16px;
-    --n-color-primary: #4f46e5;
-    --n-color-primary-hover: #4338ca;
-    --n-color-primary-pressed: #3730a3;
-}
-
-:deep(.n-tabs .n-tabs-nav) {
-    padding: 0;
-    border-radius: 12px;
-    background-color: rgb(247, 247, 250);
-    padding: 4px;
-}
-
-:deep(.n-tabs .n-tabs-tab) {
-    border-radius: 8px;
     transition: all 0.2s ease;
+    padding: 5px 30px;
+    margin-left: 10px;
+
 }
 
-:deep(.n-tabs .n-tabs-tab--active) {
-    background-color: white;
+.custom-segmented .el-segmented__item:first-child {
+    margin-left: 0;
+}
+
+.custom-segmented .el-segmented__item.is-selected {
+    border-radius: 12px;
     box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
 }
 
-:deep(.n-form-item-label) {
+:deep(.el-input__wrapper) {
+    box-shadow: 0 0 0 1px #e5e7eb inset;
+}
+
+:deep(.el-input.is-focus .el-input__wrapper) {
+    box-shadow: 0 0 0 1px #4f46e5 inset;
+}
+
+:deep(.el-button--primary) {
+    --el-button-bg-color: #4f46e5;
+    --el-button-border-color: #4f46e5;
+    --el-button-hover-bg-color: #4338ca;
+    --el-button-hover-border-color: #4338ca;
+    --el-button-active-bg-color: #3730a3;
+    --el-button-active-border-color: #3730a3;
+}
+
+:deep(.el-form-item__label) {
     font-weight: 500;
     color: #374151;
-}
-
-/* 自定义轮播图指示器 */
-:deep(.n-carousel .n-carousel__dots) {
-    bottom: -10px;
-}
-
-:deep(.n-carousel .n-carousel__dots .n-carousel__dot) {
-    background-color: rgba(255, 255, 255, 0.5);
-    width: 8px;
-    height: 8px;
-}
-
-:deep(.n-carousel .n-carousel__dots .n-carousel__dot.n-carousel__dot--active) {
-    background-color: white;
-    width: 20px;
-    border-radius: 4px;
 }
 </style>

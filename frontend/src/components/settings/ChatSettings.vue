@@ -6,75 +6,79 @@
                     <!-- 对话设置部分 -->
                     <div class="mb-8" style="display: none;">
                         <h3 class="text-lg mb-4 pb-2 text-gray-500">对话设置</h3>
-                        <n-form ref="chatFormRef" :model="settingsForm" :rules="chatRules" label-placement="left"
-                            label-width="105" size="large">
+                        <el-form ref="chatFormRef" :model="settingsForm" :rules="chatRules" label-position="left"
+                            label-width="105px" size="large">
                             <!-- 模型选择 -->
-                            <n-form-item label="对话模型" path="default_chat_model_id">
-                                <n-select v-model:value="settingsForm.default_chat_model_id" :options="chatModelOptions"
-                                    placeholder="请选择模型"
-                                    :fallback-option="(value) => ({ label: `请选择模型`, value: null })" />
-                            </n-form-item>
-                        </n-form>
+                            <el-form-item label="对话模型" prop="default_chat_model_id">
+                                <el-select v-model="settingsForm.default_chat_model_id" placeholder="请选择模型"
+                                    style="width: 100%">
+                                    <el-option v-for="option in chatModelOptions" :key="option.key"
+                                        :label="option.label" :value="option.value" :disabled="option.disabled" />
+                                </el-select>
+                            </el-form-item>
+                        </el-form>
                     </div>
 
                     <!-- 网络搜索部分 -->
                     <div class="mb-8">
                         <h3 class="text-lg mb-4 pb-2 text-gray-500">网络搜索</h3>
-                        <n-form ref="webSearchFormRef" :model="settingsForm" :rules="webSearchRules"
-                            label-placement="left" size="large" label-width="105">
+                        <el-form ref="webSearchFormRef" :model="settingsForm" :rules="webSearchRules"
+                            label-position="left" size="large" label-width="105px">
                             <!-- 搜索模型 -->
-                            <n-form-item label="搜索模型" path="default_search_model_id">
-                                <n-select v-model:value="settingsForm.default_search_model_id"
-                                    :options="allowCurrentModelOptions"
-                                    :fallback-option="(value) => ({ label: `和对话模型相同`, value: 'current' })" />
-                            </n-form-item>
-                            <n-form-item label="搜索API key" path="search_api_key">
-                                <n-input v-model:value="settingsForm.search_api_key" placeholder="" />
-                            </n-form-item>
-                            <n-form-item label="上下文条数" path="search_prompt_context_length">
-                                <n-slider v-model:value="settingsForm.search_prompt_context_length" :min="1" :max="20"
-                                    :step="1" />
-                                <n-input-number v-model:value="settingsForm.search_prompt_context_length" :min="1"
-                                    :max="20" :step="1" style="margin-left: 12px; width: 140px;" :show-button="false"
-                                    placeholder="" clearable />
-                            </n-form-item>
-                        </n-form>
+                            <el-form-item label="搜索模型" prop="default_search_model_id">
+                                <el-select v-model="settingsForm.default_search_model_id" style="width: 100%">
+                                    <el-option v-for="option in allowCurrentModelOptions" :key="option.key"
+                                        :label="option.label" :value="option.value" />
+                                </el-select>
+                            </el-form-item>
+                            <el-form-item label="搜索API key" prop="search_api_key">
+                                <el-input v-model="settingsForm.search_api_key" placeholder="" />
+                            </el-form-item>
+                            <el-form-item label="上下文条数" prop="search_prompt_context_length">
+                                    <el-slider v-model="settingsForm.search_prompt_context_length" :min="1" :max="20"
+                                        :step="1" class="flex-1" />
+                                    <el-input-number v-model="settingsForm.search_prompt_context_length" :min="1"
+                                        :max="20" :step="1" controls-position="right"
+                                        style="margin-left: 12px; width: 140px;" placeholder="" />
+                            
+                            </el-form-item>
+                        </el-form>
                     </div>
 
                     <!-- 摘要生成部分 -->
                     <div class="mb-8">
                         <h3 class="text-lg mb-4 pb-2 text-gray-500">摘要生成</h3>
-                        <n-form ref="summaryFormRef" :model="settingsForm" :rules="summaryRules" label-placement="left"
-                            label-width="105" size="large">
-                            <n-form-item label="摘要模型" path="default_summary_model_id">
-                                <n-select v-model:value="settingsForm.default_summary_model_id"
-                                    :options="allowCurrentModelOptions"
-                                    :fallback-option="(value) => ({ label: `和对话模型相同`, value: 'current' })" />
-                            </n-form-item>
-                            <!-- <n-form-item :show-label="true" :show-feedback="false">
+                        <el-form ref="summaryFormRef" :model="settingsForm" :rules="summaryRules" label-position="left"
+                            label-width="105px" size="large">
+                            <el-form-item label="摘要模型" prop="default_summary_model_id">
+                                <el-select v-model="settingsForm.default_summary_model_id" style="width: 100%" :options="allowCurrentModelOptions">
+                                
+                                </el-select>
+                            </el-form-item>
+                            <!-- <el-form-item :show-label="true" :show-feedback="false">
                                 <div class="flex items-center w-full justify-between">
                                     <span>摘要提示词</span>
                                 </div>
-                            </n-form-item> -->
+                            </el-form-item> -->
 
                             <!-- 详细设定 -->
-                            <n-form-item path="system_prompt" label="摘要提示词" :show-label="true">
-                                <n-input v-model:value="settingsForm.system_prompt" type="textarea" placeholder="摘要提示词"
+                            <el-form-item prop="system_prompt" label="摘要提示词" :show-label="true">
+                                <el-input v-model="settingsForm.system_prompt" type="textarea" placeholder="摘要提示词"
                                     :autosize="{ minRows: 5, maxRows: 8 }" />
-                            </n-form-item>
+                            </el-form-item>
 
-                        </n-form>
+                        </el-form>
                     </div>
                 </div>
             </ScrollContainer>
         </div>
         <div class="footer pt-3 px-4 flex justify-start">
-            <UiButton type="primary" @click="handleSave">
+            <el-button type="primary" @click="handleSave">
                 <template #icon>
                     <SaveOutlined />
                 </template>
                 保存全部设置
-            </UiButton>
+            </el-button>
         </div>
     </div>
 </template>
@@ -82,22 +86,25 @@
 <script setup>
 import { ref, reactive, computed, onMounted, onUnmounted } from 'vue'
 import {
-    NForm,
-    NFormItem,
-    NInput,
-    NSelect,
-    NIcon,
-    NSlider,
-    NInputNumber,
-} from 'naive-ui'
-import {
     SaveOutlined,
 } from '@vicons/antd'
 
 import { apiService } from '@/services/ApiService'
-import { ScrollContainer, UiButton } from '@/components/ui'
+import { ScrollContainer } from '@/components/ui'
 
 import { usePopup } from '@/composables/usePopup'
+
+// Element Plus 组件导入
+import {
+    ElForm,
+    ElFormItem,
+    ElInput,
+    ElSelect,
+    ElOption,
+    ElSlider,
+    ElInputNumber,
+    ElButton
+} from 'element-plus'
 
 const { toast, notify } = usePopup()
 

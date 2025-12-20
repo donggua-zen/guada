@@ -3,22 +3,21 @@
     <!-- 头部 -->
     <div class="flex justify-between items-center px-6 py-4">
       <span class="text-lg font-semibold text-gray-800">角色列表</span>
-      <UiButton type="primary" @click="createCharacter" class="flex items-center">
+      <el-button type="primary" @click="createCharacter" class="flex items-center">
         <template #icon>
           <PlusOutlined />
         </template>
         新建角色
-      </UiButton>
+      </el-button>
     </div>
 
     <!-- 角色列表 -->
     <div class="flex-1 overflow-y-auto p-6 flex flex-col items-start">
       <div class="mb-4 w-full max-w-80">
-        <n-tabs v-model:value="charactersType" type="segment" pane-wrapper-style="display:none"
-          pane-style="display:none">
-          <n-tab-pane name="private" tab="我的模板"></n-tab-pane>
-          <n-tab-pane name="shared" tab="共享模板"></n-tab-pane>
-        </n-tabs>
+        <el-segmented v-model="charactersType" :options="[
+          { label: '我的模板', value: 'private' },
+          { label: '共享模板', value: 'shared' }
+        ]" />
       </div>
       <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-6 w-full">
         <!-- 骨架屏加载效果 -->
@@ -74,43 +73,60 @@
                   <!-- 标题和描述 -->
                   <h3 class="text-lg font-semibold text-gray-800 truncate mb-2">{{ character.title }}</h3>
                   <div class="h-15 overflow-hidden">
-                    <n-popover trigger="hover" placement="top" :show-arrow="false">
-                      <template #trigger>
-                        <p class="text-sm text-gray-600 line-clamp-3 leading-5 cursor-help">
-                          {{ character.description || '暂无描述' }}
-                        </p>
-                      </template>
-                      <div class="max-w-xs p-2">
-                        <span class="text-sm whitespace-pre-wrap">{{ character.description || '暂无描述' }}</span>
-                      </div>
-                    </n-popover>
+                    <el-tooltip effect="dark" :content="character.description || '暂无描述'" placement="top">
+                      <p class="text-sm text-gray-600 line-clamp-3 leading-5 cursor-help">
+                        {{ character.description || '暂无描述' }}
+                      </p>
+                    </el-tooltip>
                   </div>
                 </div>
               </div>
               <!-- 操作按钮 -->
               <div class="flex justify-between items-center mt-4 pt-3 border-t border-gray-100">
-                <UiButton type="primary" round size="small" @click="startNewChat(character)"
+                <el-button type="primary" round size="small" @click="startNewChat(character)"
                   class="flex items-center gap-1">
                   <template #icon>
                     <ChatbubbleEllipses />
                   </template>
                   使用
-                </UiButton>
+                </el-button>
 
                 <div v-if="charactersType == 'private'" class="flex gap-1">
-                  <UiButton size="small" text @click="shareCharacter(character)"
+                  <el-button size="small" link @click="shareCharacter(character)"
                     class="text-gray-500 hover:text-gray-600" :class="{ '!text-yellow-500': character.is_public }">
                     <template #icon>
                       <ShareTwotone />
                     </template>
-                  </UiButton>
+                  </el-button>
 
                   <!-- 更多按钮下拉菜单 -->
-                  <n-dropdown trigger="click" :options="moreOptions" @select="handleMoreAction($event, character)">
-                    <UiButton size="small" text>
-                      <n-icon :component="MoreVertOutlined" size="18" />
-                    </UiButton>
-                  </n-dropdown>
+                  <el-dropdown trigger="click" @command="handleMoreAction($event, character)">
+                    <el-button size="small" link>
+                      <el-icon :size="18">
+                        <MoreVertOutlined />
+                      </el-icon>
+                    </el-button>
+                    <template #dropdown>
+                      <el-dropdown-menu>
+                        <el-dropdown-item command="edit">
+                          <div class="flex items-center">
+                            <el-icon class="mr-2">
+                              <EditTwotone />
+                            </el-icon>
+                            <span>编辑模板</span>
+                          </div>
+                        </el-dropdown-item>
+                        <el-dropdown-item command="delete" divided>
+                          <div class="flex items-center">
+                            <el-icon class="mr-2">
+                              <DeleteTwotone />
+                            </el-icon>
+                            <span>删除模板</span>
+                          </div>
+                        </el-dropdown-item>
+                      </el-dropdown-menu>
+                    </template>
+                  </el-dropdown>
                 </div>
               </div>
 
@@ -119,9 +135,9 @@
         </template>
         <!-- 空状态 -->
         <div v-if="!loading && characters.length === 0" class="col-span-full text-center py-12 text-gray-500">
-          <n-icon size="48" class="text-gray-300 mb-3">
+          <el-icon size="48" class="text-gray-300 mb-3">
             <People />
-          </n-icon>
+          </el-icon>
           <p class="text-lg">暂无角色</p>
           <p class="text-sm mt-1">点击上方按钮创建第一个角色</p>
         </div>
@@ -137,12 +153,14 @@
 import { ref, onMounted, reactive, computed, h } from 'vue'
 import { useRouter } from 'vue-router'
 import {
-  NIcon,
-  NPopover,
-  NTabs,
-  NTabPane,
-  NDropdown,
-} from 'naive-ui'
+  ElIcon,
+  ElTooltip,
+  ElSegmented,
+  ElDropdown,
+  ElDropdownMenu,
+  ElDropdownItem,
+  ElButton
+} from 'element-plus'
 import {
   ChatbubbleEllipses,
   People
@@ -159,7 +177,7 @@ import {
 import { useTitle } from '../composables/useTitle'
 
 // 组件
-import { Avatar, UiButton } from './ui'
+import { Avatar } from './ui'
 import CharacterModal from './CharacterModal.vue'
 
 // 服务
@@ -180,23 +198,6 @@ const router = useRouter()
 const charactersType = ref('private')
 const loading = ref(true)
 const skeletonCount = ref(10)
-
-// 更多按钮的选项
-const moreOptions = computed(() => {
-  const options = [
-    {
-      label: '编辑模板',
-      key: 'edit',
-      icon: () => h(NIcon, { component: EditTwotone, size: 15 })
-    },
-    {
-      label: '删除模板',
-      key: 'delete',
-      icon: () => h(NIcon, { component: DeleteTwotone, size: 15 })
-    }
-  ];
-  return options;
-});
 
 const emit = defineEmits(['create-session'])
 
