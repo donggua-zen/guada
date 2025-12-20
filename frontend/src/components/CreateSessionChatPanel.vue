@@ -16,47 +16,59 @@
           :streaming="false" @send="sendMessage" @toggle-web-search="handleWebSearch"
           @toggle-thinking="toggleDeepThinking">
           <template #buttons>
-            <UiButton @click="handleSwitchModelClick" round plain type="primary"
-              class="hidden md:inline-flex animate-outside transition-all duration-300 ease-in-out overflow-hidden"
-              :style="{ width: containerWidth + 'px' }">
-              <div ref="innerEl"
-                class="animate-inside flex items-center justify-center px-2 py-1 text-[var(--color-primary)] min-w-[min-content]"
+            <el-button @click="handleSwitchModelClick" ref="outside" round plain type="primary"
+              class="animate-outside transition-all duration-300 ease-in-out overflow-hidden"
+              :style="{ width: containerWidth + 'px', display: isMobile ? 'none' : 'inline-flex' }">
+              <div ref="innerEl" class="animate-inside flex items-center justify-center min-w-[min-content]"
                 :style="{ width: 'fit-content' }" style="height:26px">
-                <OpenAI class="w-5 h-5 flex-shrink-0" />
+                <OpenAI class="w-4 h-4 flex-shrink-0" />
                 <span class="whitespace-nowrap mx-1 text-sm hidden md:block">{{ currentModelName }}</span>
               </div>
-            </UiButton>
+            </el-button>
           </template>
         </ChatInput>
       </div>
       <div>
         <div class="flex items-center justify-center mt-6">
           您也可以<span class="w-1"></span>
-          <UiButton type="primary" plain round :border="false" size="small" @click="handleCreateSessionClick">直接创建会话
-          </UiButton>
+          <el-button type="primary" plain round size="small" @click="handleCreateSessionClick">直接创建会话
+          </el-button>
         </div>
       </div>
     </div>
-    <n-popselect ref="popselectRef" scrollable :x="x" :y="y" v-model:value="currentSession.model_id"
-      :options="modelOptions" trigger="manual" v-model:show="showPopover"
-      @clickoutside="handleClickOutside">Loading</n-popselect>
+    <el-dropdown ref="dropdownRef" :virtual-ref="triggerRef" :show-arrow="false" virtual-triggering trigger="manual"
+      placement="bottom" popper-class="model-selector-dropdown" @visible-change="handleVisibleChange"
+      @command="handleCommand">
+      <template #dropdown>
+        <el-dropdown-menu class="max-h-80 overflow-y-auto">
+          <template v-for="option in modelOptions" :key="option.key">
+            <el-dropdown-item v-if="!option.disabled" :command="option.value"
+              :class="{ 'bg-[var(--color-primary-200)]': currentSession.model_id === option.value }">
+              <span :class="{ 'text-[var(--color-primary)]': currentSession.model_id === option.value }"> {{
+                option.label }}</span>
+            </el-dropdown-item>
+            <div v-else class="px-4 py-2 text-gray-400 cursor-default">{{ option.label }}</div>
+          </template>
+        </el-dropdown-menu>
+      </template>
+    </el-dropdown>
   </div>
 </template>
 
 <script setup>
-import { ref, computed, watch, onMounted, nextTick } from "vue";
+import { ref, computed, watch, onMounted, nextTick, onBeforeUnmount } from "vue";
 import { useStorage } from "@vueuse/core"
 import { apiService } from "../services/ApiService";
 import { usePopup } from "../composables/usePopup";
 import { useTitle } from "../composables/useTitle";
 // 组件导入
-import { ChatInput, UiButton } from "./ui";
+import { ChatInput } from "./ui";
 import ChatHeader from "./ChatHeader.vue";
 
 import { OpenAI } from "@/components/icons"
 
 // UI组件导入
-import { NPopselect } from "naive-ui";
+import { ElDropdown, ElDropdownMenu, ElDropdownItem, ElButton } from "element-plus";
 import { useBreakpoints, breakpointsTailwind } from '@vueuse/core'
 
 const breakpoints = useBreakpoints(breakpointsTailwind)
@@ -67,13 +79,14 @@ const { notify } = usePopup();
 
 // 响应式数据
 const title = useTitle();
-const popselectRef = ref(null);
+const dropdownRef = ref(null);
 
 // 模型数据
 const models = ref([]);
 const providers = ref([]);
 
 const innerEl = ref(null)
+const outside = ref(null)
 const containerWidth = ref(100) // 初始宽度
 
 const lastSelectedModelId = useStorage('lastSelectedModelId', '');
@@ -83,9 +96,9 @@ const inputMessage = ref({
   files: []
 });
 
-const x = ref(0)
-const y = ref(0)
-const showPopover = ref(false)
+const showDropdown = ref(false);
+
+const triggerRef = ref(null)
 
 // 计算属性
 const currentSession = ref({
@@ -112,47 +125,43 @@ const currentModelName = computed(() => {
   return model ? model.model_name.split("/").pop() : "请选择对话模型"
 });
 
-const emitPopoverTarget = ref(null);
 
 const handleSwitchModelClick = (e) => {
   e.stopPropagation();
-  if (showPopover.value) {
-    showPopover.value = false
+  // 查找最近的 button 元素，确保获取的是按钮本身的坐标
+  const buttonEl = e.target.closest('button');
+  console.log(buttonEl)
+  if (buttonEl) {
+    showDropdown.value = !showDropdown.value;
+    triggerRef.value = buttonEl
+    if (showDropdown.value) {
+      dropdownRef.value.handleOpen();
+    } else {
+      dropdownRef.value.handleClose();
+    }
   }
-  else {
-    showPopover.value = true
-    emitPopoverTarget.value = e.target
-    const el = e.target
-    const rect = el.getBoundingClientRect()
-    const bottom = rect.bottom
-    const left = rect.left + (rect.width / 2)
-    x.value = left
-    y.value = bottom
-  }
-}
-
-const handleClickOutside = (e) => {
-  if (emitPopoverTarget.value && emitPopoverTarget.value === e.target) {
-    return
-  }
-  showPopover.value = false
 }
 
 // 更新容器宽度
 const updateContainerWidth = () => {
   if (innerEl.value) {
     const innerWidth = innerEl.value.scrollWidth
-    containerWidth.value = innerWidth
+    console.log(outside.value.$el)
+    const left = window.getComputedStyle(outside.value.$el)
+    containerWidth.value = innerWidth + parseInt(left.paddingLeft) + parseInt(left.paddingRight)
   }
 }
 
 watch(isMobile, () => {
-  updateContainerWidth()
+  if (!isMobile) {
+    nextTick(() => {
+      updateContainerWidth()
+    })
+  }
 })
 
 // 监听模型名称变化
 watch(currentModelName, async () => {
-  showPopover.value = false
   if (currentModel.value)
     lastSelectedModelId.value = currentModel.value.id
   await nextTick() // 等待DOM更新
@@ -305,6 +314,46 @@ const handleWebSearch = () => { };
 
 const toggleDeepThinking = () => { };
 
+const handleVisibleChange = (visible) => {
+  if (!visible) {
+    showDropdown.value = false;
+    if (currentModel.value) {
+      lastSelectedModelId.value = currentModel.value.id
+      updateContainerWidth()
+    }
+  }
+}
+
+// 添加处理下拉菜单选择的方法
+const handleCommand = (command) => {
+  currentSession.value.model_id = command;
+  showDropdown.value = false;
+  if (currentModel.value) {
+    lastSelectedModelId.value = currentModel.value.id
+    updateContainerWidth()
+  }
+}
+
+// 在onMounted中添加事件监听器
+onMounted(() => {
+  // 点击外部关闭下拉框
+  const handleClickOutside = (e) => {
+    if (showDropdown.value && dropdownRef.value) {
+      const dropdownEl = dropdownRef.value.triggerRef?.el;
+      if (dropdownEl && !dropdownEl.contains(e.target)) {
+        showDropdown.value = false;
+      }
+    }
+  };
+
+  document.addEventListener('click', handleClickOutside);
+
+  // 清理事件监听器
+  onBeforeUnmount(() => {
+    document.removeEventListener('click', handleClickOutside);
+  });
+});
+
 </script>
 
 <style scoped>
@@ -318,5 +367,10 @@ const toggleDeepThinking = () => { };
   border-bottom: 1px solid rgba(21, 23, 28, 0.1);
   border-radius: 0;
   margin: 0 40px;
+}
+
+:deep(.model-selector-dropdown) {
+  transform: translateX(-50%) !important;
+  min-width: 200px;
 }
 </style>

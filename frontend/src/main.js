@@ -1,11 +1,15 @@
 import { createApp } from 'vue'
-import './style.css'
+
 import App from './App.vue'
 import { createRouter, createWebHistory } from 'vue-router'
-
 import { createPinia } from 'pinia'
 import { useAuthStore } from './stores/auth'
 import NProgress from 'nprogress'
+
+import 'element-plus/dist/index.css'
+import 'element-plus/theme-chalk/dark/css-vars.css'
+import './tailwind.css'
+import './style.css'
 import 'nprogress/nprogress.css'
 
 // 配置NProgress

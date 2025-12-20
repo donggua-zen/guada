@@ -21,56 +21,48 @@
                 <div class="tools left-tools flex gap-2">
                     <slot name="buttons"></slot>
                     <template v-if="showButtons.thinkingButton">
-                        <UiButton round :type="localThinkingEnabled ? 'primary' : 'default'" plain
-                            @click="toggleDeepThinking">
-                            <template #icon>
-                                <Thinking2 />
-                            </template>
+                        <el-button round :type="localThinkingEnabled ? 'primary' : 'default'" plain
+                            @click="toggleDeepThinking" :icon="Thinking2">
                             思考
-                        </UiButton>
+                        </el-button>
                     </template>
-                    <UiButton round v-if="showButtons.webSearchButton"
+                    <el-button round v-if="showButtons.webSearchButton"
                         :type="localWebSearchEnabled ? 'primary' : 'default'" plain @click="handleWebSearch">
                         <template #icon>
                             <Network />
                         </template>
                         网络
-                    </UiButton>
+                    </el-button>
                 </div>
                 <div class="right-actions">
                     <div class="tools right-tools">
-                        <UiButton :border="false" v-if="showButtons.filesButton" class="tool-btn" title="上传文件"
+                        <el-button v-if="showButtons.filesButton" class="tool-btn" title="上传文件"
                             @click="triggerFileInput" text>
-                            <n-icon size="22">
+                            <el-icon size="22">
                                 <InsertDriveFileTwotone />
-                            </n-icon>
-                        </UiButton>
-                        <UiButton :border="false" v-if="showButtons.imagesButton" class="tool-btn" title="添加图片"
-                            @click="triggerImageInput">
-                            <n-icon size="22">
+                            </el-icon>
+                        </el-button>
+                        <el-button v-if="showButtons.imagesButton" class="tool-btn" title="添加图片"
+                            @click="triggerImageInput" text>
+                            <el-icon size="22">
                                 <ImageTwotone />
-                            </n-icon>
-                        </UiButton>
-                        <UiButton :border="false" v-if="showButtons.tokensButton" class="tool-btn" title="tokens统计"
-                            @click="handleTokensStatistic">
-                            <n-icon size="22">
+                            </el-icon>
+                        </el-button>
+                        <el-button v-if="showButtons.tokensButton" class="tool-btn" title="tokens统计"
+                            @click="handleTokensStatistic" text>
+                            <el-icon size="22">
                                 <DataThresholdingTwotone />
-                            </n-icon>
-                        </UiButton>
+                            </el-icon>
+                        </el-button>
                     </div>
                     <div class="send-actions">
-                        <UiButton v-if="!streaming" class="send-btn" title="发送" @click="sendMessage"
-                            :disabled="!inputContent.trim()" size="small">
-                            <n-icon size="18">
-                                <ArrowSend />
-                            </n-icon>
-                        </UiButton>
-                        <UiButton v-else class="send-btn stop-btn" title="停止生成" @click="abortResponse" circle
-                            type="error" size="small">
-                            <n-icon size="18">
-                                <Stop />
-                            </n-icon>
-                        </UiButton>
+                        <el-button v-if="!streaming" class="send-btn" type="primary" title="发送" @click="sendMessage"
+                            circle :disabled="!inputContent.trim()" :icon="ArrowSend">
+                        </el-button>
+                        <el-button v-else class="send-btn stop-btn" title="停止生成" @click="abortResponse" circle
+                            type="error" :icon="icon">
+
+                        </el-button>
                     </div>
                 </div>
             </div>
@@ -81,9 +73,9 @@
 
 <script setup>
 import { ref, watch, computed, nextTick, onUnmounted, onMounted } from 'vue'
-import { NIcon } from 'naive-ui'
+import { ElIcon, ElButton } from 'element-plus';
 import FileItem from './FileItem.vue';
-import UiButton from '../ui/UiButton.vue';
+import UiButton from './UiButton.vue';
 import {
     InsertDriveFileTwotone,
     ImageTwotone,
@@ -476,6 +468,16 @@ onUnmounted(() => {
     align-items: center;
 }
 
+:deep(.left-tools .el-button--primary.is-plain) {
+    --el-button-hover-bg-color: var(--el-color-primary-light-8) !important;
+    --el-button-hover-text-color: var(--el-color-primary) !important;
+    --el-button-active-bg-color: var(--el-color-primary-light-7) !important;
+}
+
+:deep(.el-button+.el-button) {
+    margin-left: 0;
+}
+
 .right-actions {
     display: flex;
     align-items: center;
@@ -483,12 +485,6 @@ onUnmounted(() => {
 }
 
 .right-tools {
-    display: flex;
-    align-items: center;
-    gap: 4px;
-}
-
-.send-actions {
     display: flex;
     align-items: center;
 }
@@ -517,21 +513,5 @@ onUnmounted(() => {
     border-color: var(--color-primary);
     background-color: var(--color-primary-0f);
     color: var(--color-primary);
-}
-
-.send-btn {
-    background: var(--color-primary);
-    color: #fff;
-    border: none;
-    height: 30px;
-    width: 30px;
-    display: flex;
-    border-radius: 50%;
-    align-items: center;
-    cursor: pointer;
-}
-
-.send-btn:disabled {
-    background-color: var(--color-primary-disabled)
 }
 </style>

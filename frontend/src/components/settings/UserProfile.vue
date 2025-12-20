@@ -1,34 +1,41 @@
 <template>
   <div class="max-w-128">
-    <n-form ref="basicFormRef" :model="userForm" :rules="basicRules" label-placement="left" label-width="80px"
+    <el-form ref="basicFormRef" :model="userForm" :rules="basicRules" label-position="left" label-width="80px"
       size="large">
       <!-- 头像设置 -->
-      <n-form-item label="头像设置" :show-label="false">
+      <el-form-item label="头像设置" :show-label="false">
         <AvatarPreview :src="userForm.avatar_url" :type="'user'" @avatar-changed="handleAvaterChanged" />
-      </n-form-item>
-      <n-form-item label="昵称" path="nickname">
-        <n-input v-model:value="userForm.nickname" placeholder="昵称" />
-      </n-form-item>
-      <n-form-item label="邮箱" path="email">
-        <n-input v-model:value="userForm.email" placeholder="邮箱" />
-      </n-form-item>
-      <n-form-item label="手机号码" path="phone">
-        <n-input v-model:value="userForm.phone" placeholder="手机号码" />
-      </n-form-item>
-      <n-form-item>
-        <UiButton type="primary" @click="handleSaveUserInfo" :disabled="!isFormChanged">保存信息</UiButton>
-      </n-form-item>
-    </n-form>
+      </el-form-item>
+      <el-form-item label="昵称" prop="nickname">
+        <el-input v-model="userForm.nickname" placeholder="昵称" />
+      </el-form-item>
+      <el-form-item label="邮箱" prop="email">
+        <el-input v-model="userForm.email" placeholder="邮箱" />
+      </el-form-item>
+      <el-form-item label="手机号码" prop="phone">
+        <el-input v-model="userForm.phone" placeholder="手机号码" />
+      </el-form-item>
+      <el-form-item>
+        <el-button type="primary" @click="handleSaveUserInfo" :disabled="!isFormChanged">保存信息</el-button>
+      </el-form-item>
+    </el-form>
   </div>
 </template>
 
 <script setup>
 import { ref, computed, onMounted, shallowRef } from 'vue'
-import { NForm, NFormItem, NInput } from 'naive-ui'
-import { AvatarPreview, UiButton } from '../ui'
+import { AvatarPreview } from '../ui'
 import { useAuthStore } from '../../stores/auth'
 import { usePopup } from '../../composables/usePopup'
 import { apiService } from '../../services/ApiService'
+
+// Element Plus 组件导入
+import {
+  ElForm,
+  ElFormItem,
+  ElInput,
+  ElButton
+} from 'element-plus'
 
 const { toast } = usePopup()
 const authStore = useAuthStore()
@@ -59,22 +66,37 @@ const basicRules = ref({
       trigger: 'blur',
     },
     {
-      validator: (rule, value) => {
-        if (!value) return true // 如果没有值，则由required规则处理
+      validator: (rule, value, callback) => {
+        if (!value) {
+          callback(); // 如果没有值，则由required规则处理
+          return;
+        }
 
         const isValid = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/.test(value)
-        return isValid || new Error('请输入正确的邮箱')
+        if (isValid) {
+          callback();
+        } else {
+          callback(new Error('请输入正确的邮箱'));
+        }
       },
       trigger: 'blur'
     }
   ],
   phone: [
     {
-      validator: (rule, value) => {
-        if (!value) return true // 如果没有值，则不需要验证
+      validator: (rule, value, callback) => {
+        if (!value) {
+          callback(); // 如果没有值，则不需要验证
+
+          return;
+        }
 
         const isValid = /^1[3-9]\d{9}$/.test(value)
-        return isValid || new Error('请输入正确的手机号码')
+        if (isValid) {
+          callback();
+        } else {
+          callback(new Error('请输入正确的手机号码'));
+        }
       },
       trigger: 'blur'
     },

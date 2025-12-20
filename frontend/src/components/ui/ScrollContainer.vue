@@ -95,7 +95,7 @@ function immediateScrollToBottom() {
     const element = scrollElement.value;
     if (element) {
         element.scrollTop = element.scrollHeight;
-        isAtBottom.value = true;
+        // isAtBottom.value = true;
     }
 }
 

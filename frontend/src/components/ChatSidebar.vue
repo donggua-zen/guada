@@ -1,28 +1,20 @@
 <template>
   <div
-    class="sessions-panel flex flex-col  w-full h-full bg-[var(--color-conversation-bg)] border-r border-[var(--color-conversation-border)]">
+    class="flex flex-col w-full h-full bg-[var(--color-conversation-bg)] border-r border-[var(--color-conversation-border)] tranistion-all duration-200">
     <!-- 修改后的会话头部，包含标题和新建按钮 -->
-    <div class="sessions-header px-5 pt-5 pb-3 text-lg font-semibold flex justify-between items-center">
-      <span>聊天对话</span>
+    <div class="sessions-header px-4 pt-5 pb-3 flex justify-between items-center">
+      <span class="font-semibold text-lg">聊天对话</span>
       <!-- 新建会话按钮移动到右侧 -->
-      <UiButton text type="default" @click="handleButtonClick('create')">
-        <template #icon>
-          <ChatNew />
-        </template>
+      <el-button type="primary" @click="handleButtonClick('create')" :icon="ChatNew">
         新建会话
-      </UiButton>
+      </el-button>
     </div>
 
     <!-- 搜索框 -->
     <div class="search-box px-3 py-2">
-      <n-input v-model:value="searchKeyword" placeholder="搜索会话" clearable @update:value="handleSearchInput" size="large"
-        round>
-        <template #prefix>
-          <n-icon size="22">
-            <SearchOutlined />
-          </n-icon>
-        </template>
-      </n-input>
+      <el-input v-model="searchKeyword" :prefix-icon="SearchOutlined" placeholder="搜索会话" clearable
+        @input="handleSearchInput" class="rounded-full">
+      </el-input>
     </div>
 
     <!-- 会话列表区域 -->
@@ -35,18 +27,18 @@
           <div class="session-avatar w-4.5 h-4.5 mr-1.5 text-[var(--color-primary)]">
             <AlternateEmailTwotone />
           </div>
-          <span class="flex-1">角色提示词模板</span>
-          <div class="session-avatar w-3 h-3 ml-1.5 text-gray-400">
+          <span class="flex-1 text-sm">角色提示词模板</span>
+          <div class="session-avatar w-3 h-3 ml-1.5">
             <ArrowRightTwotone />
           </div>
         </div>
-        <div class="px-6 py-3 text-gray-400">对话记录</div>
+        <div class="px-6 py-3 text-gray-400 text-sm">对话记录</div>
         <template v-if="filteredSessions.length === 0">
           <div class="empty-state text-center text-gray-500 flex flex-col items-center justify-center h-full">
             <div class="empty-state-icon">
-              <n-icon>
+              <el-icon>
                 <PlusOutlined />
-              </n-icon>
+              </el-icon>
             </div>
             <div class="empty-state-title">
               {{ searchKeyword ? '未找到匹配的会话' : '没有会话' }}
@@ -68,7 +60,7 @@
             </div>
             <div class="session-info flex-1 min-w-0 flex">
               <div class="session-header flex flex-1 flex-col justify-between items-start min-w-0">
-                <div class="session-title truncate text-[var(--size-text-sm)] w-full">
+                <div class="session-title truncate text-sm w-full">
                   {{ session.title }}
                 </div>
               </div>
@@ -79,13 +71,25 @@
               <div
                 class="session-actions flex items-center opacity-0 transition-opacity duration-200 group-hover:opacity-100"
                 :class="{ 'opacity-100': session.id === currentSessionId }">
-                <n-dropdown trigger="click" :options="dropdownOptions" @select="handleDropdownSelect($event, session)">
+                <el-dropdown trigger="click" @command="(command) => handleDropdownSelect(command, session)">
                   <div @click.stop class="cursor-pointer flex items-center">
-                    <n-icon size="16">
+                    <el-icon>
                       <MoreVertOutlined />
-                    </n-icon>
+                    </el-icon>
                   </div>
-                </n-dropdown>
+                  <template #dropdown>
+                    <el-dropdown-menu>
+                      <el-dropdown-item command="rename">
+                        <EditOutlined class="w-4 h-4 mr-2 inline-block" />
+                        重命名
+                      </el-dropdown-item>
+                      <el-dropdown-item command="delete">
+                        <DeleteOutlineOutlined class="w-4 h-4 mr-2 inline-block" />
+                        删除
+                      </el-dropdown-item>
+                    </el-dropdown-menu>
+                  </template>
+                </el-dropdown>
               </div>
 
 
@@ -106,11 +110,10 @@
         </div>
         <span class="ml-3">{{ authStore.user.nickname }}</span>
       </div>
-      <div v-if="authStore.user.role == 'primary'" @click="handleButtonClick('models')"
-        class="cursor-pointer h-6.5 px-2 rounded-lg flex justify-center items-center md:hover:bg-[var(--color-surface)] transition-colors duration-200">
-        <SettingsOutlined class="w-4.5 h-4.5 text-gray-500" />
-        <span class="ml-1 text-base text-gray-500">管理模型</span>
-      </div>
+      <el-button text v-if="authStore.user.role == 'primary'" :icon="SettingsOutlined"
+        @click="handleButtonClick('models')">
+        管理模型
+      </el-button>
 
     </div>
 
@@ -118,9 +121,8 @@
 </template>
 
 <script setup>
-import { ref, computed, h } from 'vue'
-import { ScrollContainer, UiButton, Avatar } from './ui'
-import { NDropdown, NIcon, NInput } from 'naive-ui'
+import { ref, computed } from 'vue'
+import { ScrollContainer, Avatar } from './ui'
 import { useDebounceFn } from '@vueuse/core'
 import { useAuthStore } from '../stores/auth'
 import {
@@ -137,6 +139,16 @@ import {
 import {
   ChatNew
 } from '@/components/icons'
+
+// Element Plus 组件导入
+import {
+  ElButton,
+  ElInput,
+  ElIcon,
+  ElDropdown,
+  ElDropdownMenu,
+  ElDropdownItem
+} from 'element-plus'
 
 const authStore = useAuthStore()
 
@@ -179,20 +191,6 @@ const filteredSessions = computed(() => {
   )
 })
 
-// 下拉菜单选项
-const dropdownOptions = [
-  {
-    label: '重命名',
-    key: 'rename',
-    icon: () => h(NIcon, null, { default: () => h(EditOutlined) })
-  },
-  {
-    label: '删除',
-    key: 'delete',
-    icon: () => h(NIcon, null, { default: () => h(DeleteOutlineOutlined) })
-  }
-]
-
 // 方法定义
 
 // 防抖搜索
@@ -208,12 +206,12 @@ const handleSearchInput = (value) => {
 
 
 // 处理下拉菜单选择
-const handleDropdownSelect = (key, session) => {
-  if (key === 'rename') {
+const handleDropdownSelect = (command, session) => {
+  if (command === 'rename') {
     emit('rename', session)
-  } else if (key === 'delete') {
+  } else if (command === 'delete') {
     emit('delete', session)
-  } else if (key === 'export') {
+  } else if (command === 'export') {
     emit('export', session)
   }
 }
@@ -234,5 +232,13 @@ const selectSession = (session) => {
 .session-action-btn:hover {
   color: #4a90e2;
   background-color: #e6f0fa;
+}
+
+:deep(.el-input__wrapper) {
+  box-shadow: 0 0 0 1px #e5e7eb inset;
+}
+
+:deep(.el-input.is-focus .el-input__wrapper) {
+  box-shadow: 0 0 0 1px #4f46e5 inset;
 }
 </style>

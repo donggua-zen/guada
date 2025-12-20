@@ -3,168 +3,153 @@
         <div class="settings-header" v-if="!isSimpleStyle">
             <h2>智能体设置</h2>
         </div>
-        <div class="flex-1" :class="{ 'p-3': !isSimpleStyle }">
-            <n-tabs type="segment" ref="tabsInstRef" v-model:value="tabsValue">
+        <div class="flex-1">
+            <el-tabs ref="tabsInstRef" v-model="tabsValue">
                 <!-- 基础设置 -->
-                <n-tab-pane name="basic" tab="基础" display-directive="show">
-                    <div class="py-3">
-                        <n-form ref="basicFormRef" :model="characterForm" :rules="basicRules" label-placement="top"
+                <el-tab-pane name="basic" label="基础">
+                    <div class="p-3">
+                        <el-form ref="basicFormRef" :model="characterForm" :rules="basicRules" label-position="top"
                             label-width="80px" size="large">
                             <!-- 头像设置 -->
-                            <n-form-item label="头像设置" :show-label="false">
+                            <el-form-item label="头像设置" :show-label="false">
                                 <div class="avatar-upload-container ">
                                     <AvatarPreview :src="characterForm.avatar_url" type="assistant"
                                         @avatar-changed="handleAvatarChanged">
                                     </AvatarPreview>
                                 </div>
-                            </n-form-item>
+                            </el-form-item>
 
                             <!-- 角色标题 -->
-                            <n-form-item label="角色标题" path="title">
-                                <n-input v-model:value="characterForm.title" placeholder="请输入角色标题" />
-                            </n-form-item>
+                            <el-form-item label="角色标题" prop="title">
+                                <el-input v-model="characterForm.title" placeholder="请输入角色标题" />
+                            </el-form-item>
 
                             <!-- 角色描述 -->
-                            <n-form-item label="角色描述" path="description">
-                                <n-input v-model:value="characterForm.description" type="textarea" placeholder="请输入角色描述"
+                            <el-form-item label="角色描述" prop="description">
+                                <el-input v-model="characterForm.description" type="textarea" placeholder="请输入角色描述"
                                     :autosize="{ minRows: 3, maxRows: 5 }" />
-                            </n-form-item>
-                        </n-form>
+                            </el-form-item>
+                        </el-form>
                     </div>
-                </n-tab-pane>
+                </el-tab-pane>
 
                 <!-- 提示词 -->
-                <n-tab-pane name="prompt" tab="提示词" display-directive="show">
-                    <div class="py-3">
-                        <n-form ref="promptFormRef" :model="characterForm" :rules="promptRules" label-placement="top"
+                <el-tab-pane name="prompt" label="提示词">
+                    <div class="p-3">
+                        <el-form ref="promptFormRef" :model="characterForm" :rules="promptRules" label-position="top"
                             label-width="80px" size="large">
-                            <n-form-item :show-label="false" :show-feedback="false">
+                            <el-form-item :show-label="false" :show-feedback="false">
                                 <div class="flex items-center w-full justify-between">
                                     <span>系统系提示(角色设定)</span>
                                     <div class="flex items-center">
-                                        <n-checkbox v-model:checked="characterForm.use_user_prompt" class="ml-2">
+                                        <el-checkbox v-model="characterForm.use_user_prompt" class="ml-2">
                                             使用User Role
-                                        </n-checkbox>
-                                        <n-tooltip trigger="hover" placement="top">
-                                            <template #trigger>
-                                                <n-icon class="cursor-help text-gray-400 hover:text-gray-600" size="16">
-                                                    <QuestionCircleOutlined />
-                                                </n-icon>
-                                            </template>
-                                            启用后，系统将使用User角色而非System发送设定提示词，以优化部分模型的表现（如DeepSeek）
-                                        </n-tooltip>
+                                        </el-checkbox>
+                                        <el-tooltip content="启用后，系统将使用User角色而非System发送设定提示词，以优化部分模型的表现（如DeepSeek）"
+                                            placement="top">
+                                            <el-icon class="cursor-help text-gray-400 hover:text-gray-600" size="16">
+                                                <QuestionCircleOutlined />
+                                            </el-icon>
+                                        </el-tooltip>
                                     </div>
 
                                 </div>
-                            </n-form-item>
+                            </el-form-item>
 
                             <!-- 详细设定 -->
-                            <n-form-item path="system_prompt" :show-label="false">
-                                <n-input v-model:value="characterForm.system_prompt" type="textarea"
-                                    placeholder="请输入详细设定" :autosize="{ minRows: 5, maxRows: 8 }" />
-                            </n-form-item>
+                            <el-form-item prop="system_prompt" :show-label="false">
+                                <el-input v-model="characterForm.system_prompt" type="textarea" placeholder="请输入详细设定"
+                                    :autosize="{ minRows: 5, maxRows: 8 }" />
+                            </el-form-item>
 
                             <!-- 角色名称 -->
-                            <n-form-item label="角色名称">
-                                <n-input v-model:value="characterForm.assistant_name" placeholder="请输入角色名称" clearable />
-                            </n-form-item>
+                            <el-form-item label="角色名称">
+                                <el-input v-model="characterForm.assistant_name" placeholder="请输入角色名称" clearable />
+                            </el-form-item>
 
                             <!-- 职业设定 -->
-                            <n-form-item label="职业设定">
-                                <n-input v-model:value="characterForm.assistant_identity" placeholder="请输入职业设定"
-                                    clearable />
-                            </n-form-item>
+                            <el-form-item label="职业设定">
+                                <el-input v-model="characterForm.assistant_identity" placeholder="请输入职业设定" clearable />
+                            </el-form-item>
 
-                        </n-form>
+                        </el-form>
                     </div>
-                </n-tab-pane>
+                </el-tab-pane>
 
                 <!-- 模型设置 -->
-                <n-tab-pane name="model" tab="模型" v-if="!isSimpleStyle || true" display-directive="show">
-                    <div class="py-3">
-                        <n-form ref="modelFormRef" :model="characterForm" :rules="modelRules" label-placement="top"
+                <el-tab-pane name="model" label="模型" v-if="!isSimpleStyle || true">
+                    <div class="p-3">
+                        <el-form ref="modelFormRef" :model="characterForm" :rules="modelRules" label-position="top"
                             label-width="80px" size="large">
                             <!-- 模型选择 -->
-                            <n-form-item label="模型选择" path="model_id">
-                                <n-select v-model:value="characterForm.model_id" :options="modelOptions"
-                                    placeholder="请选择模型"
-                                    :fallback-option="(value) => ({ label: `请选择模型`, value: null })" />
-                            </n-form-item>
+                            <el-form-item label="模型选择" prop="model_id">
+                                <el-select v-model="characterForm.model_id" :options="modelOptions" placeholder="请选择模型"
+                                    clearable>
+                                </el-select>
+                            </el-form-item>
 
                             <!-- 温度设置 -->
-                            <n-form-item label="温度" path="model_temperature">
-                                <n-slider v-model:value="characterForm.model_temperature" :min="0" :max="2"
-                                    :step="0.1" />
-                                <n-input-number v-model:value="characterForm.model_temperature" :min="0" :max="2"
-                                    :step="0.1" style="margin-left: 12px; width: 140px;" :show-button="false"
-                                    placeholder="" :parse="parse" :format="format" clearable />
-                            </n-form-item>
+                            <el-form-item label="温度" prop="model_temperature">
+                                <el-slider-optional v-model="characterForm.model_temperature" :min="0" :max="2"
+                                    :step="0.1" show-input />
+                            </el-form-item>
 
                             <!-- Top P -->
-                            <n-form-item label="Top P" path="model_top_p">
-                                <n-slider v-model:value="characterForm.model_top_p" :min="0" :max="1" :step="0.1" />
-                                <n-input-number v-model:value="characterForm.model_top_p" :min="0" :max="1" :step="0.1"
-                                    style="margin-left: 12px; width: 140px;" :show-button="false" placeholder=""
-                                    :parse="parse" :format="format" clearable />
-                            </n-form-item>
+                            <el-form-item label="Top P" prop="model_top_p">
+                                <el-slider-optional v-model="characterForm.model_top_p" :min="0" :max="1" :step="0.1"
+                                    show-input />
+                            </el-form-item>
 
                             <!-- 频率惩罚 -->
-                            <n-form-item label="频率惩罚" path="model_frequency_penalty">
-                                <n-slider v-model:value="characterForm.model_frequency_penalty" :min="0" :max="2"
-                                    :step="0.1" />
-                                <n-input-number v-model:value="characterForm.model_frequency_penalty" :min="0" :max="2"
-                                    :step="0.1" style="margin-left: 12px; width: 140px;" :show-button="false"
-                                    placeholder="" :parse="parse" :format="format" clearable />
-                            </n-form-item>
-                        </n-form>
+                            <el-form-item label="频率惩罚" prop="model_frequency_penalty">
+                                <el-slider-optional v-model="characterForm.model_frequency_penalty" :min="0" :max="2"
+                                    :step="0.1" show-input />
+                            </el-form-item>
+                        </el-form>
                     </div>
-                </n-tab-pane>
+                </el-tab-pane>
 
                 <!-- 记忆设置 -->
-                <n-tab-pane name="memory" tab="记忆" display-directive="show">
-                    <div class="py-3">
-                        <n-form ref="memoryFormRef" :model="characterForm" :rules="memoryRules" label-placement="top"
+                <el-tab-pane name="memory" label="记忆">
+                    <div class="p-3">
+                        <el-form ref="memoryFormRef" :model="characterForm" :rules="memoryRules" label-position="top"
                             size="large">
                             <!-- 记忆类型 -->
-                            <!-- <n-form-item label="记忆类型">
-                                <n-select v-model:value="characterForm.memory_type" :options="memoryOptions"
-                                    placeholder="请选择记忆类型" />
-                            </n-form-item> -->
-                            <n-form-item label="上下文条数" path="max_memory_length">
-                                <n-slider v-model:value="characterForm.max_memory_length" :min="2" :max="500"
-                                    :step="1" />
-                                <n-input-number v-model:value="characterForm.max_memory_length" :min="2" :max="500"
-                                    :step="1" style="margin-left: 12px; width: 140px;" :show-button="false"
-                                    placeholder="" :parse="parse" :format="format" clearable />
-                            </n-form-item>
+                            <!-- <el-form-item label="记忆类型">
+                                <el-select v-model="characterForm.memory_type" placeholder="请选择记忆类型">
+                                    <el-option v-for="option in memoryOptions" :key="option.value" :label="option.label"
+                                        :value="option.value" />
+                                </el-select>
+                            </el-form-item> -->
+                            <el-form-item label="上下文条数" prop="max_memory_length">
+                                <el-slider-optional v-model="characterForm.max_memory_length" :min="2" :max="500"
+                                    :step="1" show-input optional-direction="max" optional-text="No Limit" />
+                            </el-form-item>
                             <!-- 最大记忆长度 -->
-                            <n-form-item label="最大记忆tokens" path="max_memory_tokens">
-                                <n-input-number v-model:value="characterForm.max_memory_tokens" :min="0"
-                                    style="width: 150px;" :show-button="false" placeholder="" :parse="parse"
-                                    :format="format" clearable />
+                            <el-form-item label="最大记忆tokens" prop="max_memory_tokens">
+                                <el-input-number v-model="characterForm.max_memory_tokens" :min="0"
+                                    style="width: 150px;" controls-position="right" placeholder="" :parser="parse"
+                                    :formatter="format" />
                                 <span style="margin-left: 8px; color: #999;">tokens</span>
-                            </n-form-item>
+                            </el-form-item>
 
                             <!-- 短期记忆长度 -->
-                            <n-form-item label="短期记忆tokens" path="short_term_memory_tokens">
-                                <n-input-number v-model:value="characterForm.short_term_memory_tokens" :min="0"
-                                    style="width: 150px;" :show-button="false" placeholder="" :parse="parse"
-                                    :format="format" clearable />
+                            <el-form-item label="短期记忆tokens" prop="short_term_memory_tokens">
+                                <el-input-number v-model="characterForm.short_term_memory_tokens" :min="0"
+                                    style="width: 150px;" controls-position="right" placeholder="" :parser="parse"
+                                    :formatter="format" />
                                 <span style="margin-left: 8px; color: #999;">tokens</span>
-                            </n-form-item>
+                            </el-form-item>
 
-                        </n-form>
+                        </el-form>
                     </div>
-                </n-tab-pane>
-            </n-tabs>
+                </el-tab-pane>
+            </el-tabs>
         </div>
         <div class="footer pb-5 flex justify-end">
-            <UiButton round type="primary" @click="handleSave" size="large">
-                <template #icon>
-                    <SaveOutlined />
-                </template>
-                保存
-            </UiButton>
+            <el-button round block type="primary" @click="handleSave" size="large">
+                应用全部设置
+            </el-button>
         </div>
     </div>
 
@@ -173,20 +158,20 @@
 <script setup>
 import { ref, reactive, watch, computed, onMounted, onUnmounted } from 'vue'
 import {
-    NTabs,
-    NTabPane,
-    NForm,
-    NFormItem,
-    NInput,
-    NSelect,
-    NIcon,
-    NSlider,
-    NInputNumber,
-    NTooltip,
-    NCheckbox
-} from 'naive-ui'
+    ElTabs,
+    ElTabPane,
+    ElForm,
+    ElFormItem,
+    ElInput,
+    ElSelect,
+    ElSlider,
+    ElInputNumber,
+    ElTooltip,
+    ElCheckbox,
+    ElIcon,
+    ElButton
+} from 'element-plus'
 import {
-    SaveOutlined,
     QuestionCircleOutlined
 } from '@vicons/antd'
 
@@ -194,7 +179,7 @@ import { apiService } from '../services/ApiService'
 
 
 import { usePopup } from '../composables/usePopup'
-import { AvatarPreview, UiButton } from './ui/'
+import { AvatarPreview, ElSliderOptional } from './ui/'
 
 const { toast, notify } = usePopup()
 
@@ -248,15 +233,6 @@ const promptFormRef = ref(null)
 const modelFormRef = ref(null)
 const memoryFormRef = ref(null)
 
-// const tabsValue = computed({
-//     get() {
-//         return props.tab
-//     },
-//     set(value) {
-//         emit('update:tab', value)
-//     }
-// })
-
 const tabsValue = ref(props.tab)
 
 // 表单数据
@@ -297,9 +273,13 @@ const promptRules = {
 const modelRules = {
     model_id: [
         {
-            required: true, message: '请选择模型', trigger: ['change'], validator: (rule, value) => {
+            required: true, message: '请选择模型', trigger: ['change'], validator: (rule, value, callback) => {
                 // 明确检查空值情况
-                return value !== null && value !== '' && value !== undefined;
+                if (value !== null && value !== '' && value !== undefined) {
+                    callback();
+                } else {
+                    callback(new Error('请选择模型'));
+                }
             }
         },
     ],

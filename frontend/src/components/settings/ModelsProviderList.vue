@@ -4,23 +4,23 @@
     <div class="sessions-header py-1 text-lg font-semibold flex justify-between items-center">
       <span>分组列表</span>
       <!-- 新建会话按钮移动到右侧 -->
-      <UiButton type="default" :border="false" @click="handleCreateGroup" size="medium">
+      <el-button @click="handleCreateGroup" size="default">
         <template #icon>
           <PlusOutlined />
         </template>
         新建分组
-      </UiButton>
+      </el-button>
     </div>
 
     <!-- 搜索框 -->
     <div class="search-box py-3">
-      <n-input v-model:value="searchKeyword" placeholder="搜索分组" clearable size="large" round>
+      <el-input v-model="searchKeyword" placeholder="搜索分组" clearable size="large" class="rounded-full">
         <template #prefix>
-          <n-icon size="22">
+          <el-icon>
             <SearchOutlined />
-          </n-icon>
+          </el-icon>
         </template>
-      </n-input>
+      </el-input>
     </div>
 
     <div class="providers-list flex-1 overflow-hidden py-2.5">
@@ -37,17 +37,17 @@
             <div class="provider-title font-medium text-sm truncate">{{ provider.name }}</div>
           </div>
           <div class="provider-actions flex items-center">
-            <UiButton text @click.stop="handleEditProvider(provider)">
-              <n-icon size="18" class="text-gray-500 hover:text-blue-500">
+            <el-button link @click.stop="handleEditProvider(provider)">
+              <el-icon>
                 <EditOutlined />
-              </n-icon>
-            </UiButton>
+              </el-icon>
+            </el-button>
             &nbsp;&nbsp;
-            <UiButton text @click.stop="handleDeleteProvider(provider)">
-              <n-icon size="18" class="text-gray-500 hover:text-red-500">
+            <el-button link @click.stop="handleDeleteProvider(provider)">
+              <el-icon>
                 <DeleteOutlineOutlined />
-              </n-icon>
-            </UiButton>
+              </el-icon>
+            </el-button>
           </div>
         </div>
       </ScrollContainer>
@@ -56,16 +56,22 @@
 </template>
 
 <script setup>
-import { ref, onMounted, computed, watch } from 'vue'
-import { NIcon, NInput } from 'naive-ui'
+import { ref, computed } from 'vue'
 import { OpenAI } from '@/components/icons'
-import { ScrollContainer, UiButton } from '../ui/'
+import { ScrollContainer } from '../ui/'
 import {
   PlusOutlined,
   SearchOutlined,
   EditOutlined,
   DeleteOutlineOutlined
 } from '@vicons/material'
+
+// Element Plus 组件导入
+import {
+  ElIcon,
+  ElInput,
+  ElButton
+} from 'element-plus'
 
 const searchKeyword = ref('')
 
@@ -122,5 +128,13 @@ const handleDeleteProvider = (provider) => {
   width: 100%;
   height: 100%;
   object-fit: cover;
+}
+
+:deep(.el-input__wrapper) {
+  box-shadow: 0 0 0 1px #e5e7eb inset;
+}
+
+:deep(.el-input.is-focus .el-input__wrapper) {
+  box-shadow: 0 0 0 1px #4f46e5 inset;
 }
 </style>

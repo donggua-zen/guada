@@ -14,7 +14,7 @@
         <input ref="avatarInput" type="file" accept="image/*" style="display: none" @change="handleAvatarChanged">
     </div>
     <!-- 头像裁剪模态框 -->
-    <n-modal v-model:show="showCropModal" preset="card" title="裁剪头像" style="width: 600px;">
+    <el-dialog v-model="showCropModal" title="裁剪头像" width="600px">
         <div class="modal-body">
             <cropper ref="cropperAvatar" :src="cropImageSrc" :stencil-props="{
                 aspectRatio: 1,
@@ -25,12 +25,12 @@
             }" :output-type="'png'" :output-size="{ width: 500, height: 500 }" />
         </div>
         <template #footer>
-            <n-space justify="end">
+            <div class="flex justify-end gap-2">
                 <UiButton @click="closeCropModal">取消</UiButton>
                 <UiButton type="primary" @click="cropAvatar">确认裁剪</UiButton>
-            </n-space>
+            </div>
         </template>
-    </n-modal>
+    </el-dialog>
 </template>
 <script setup>
 import { ref, onMounted, onUnmounted, computed, watch, } from 'vue'
@@ -38,11 +38,7 @@ import Avatar from './Avatar.vue'
 import UiButton from './UiButton.vue'
 import { Cropper } from 'vue-advanced-cropper'
 import 'vue-advanced-cropper/dist/style.css'
-import {
-    NIcon,
-    NModal,
-    NSpace
-} from 'naive-ui'
+import { ElDialog } from 'element-plus'
 
 import {
     FileUploadOutlined,

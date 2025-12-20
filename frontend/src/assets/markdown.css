@@ -116,7 +116,7 @@ ol>*:not(li) {
     background-color: #f6f8fa;
     border-radius: 3px;
     padding: 0.2em 0.4em;
-    font-size: 0.9em;
+    /* font-size: 0.9em; */
     font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
 }
 
@@ -232,7 +232,7 @@ ol>*:not(li) {
 }
 
 .dark .markdown-text code {
-    background-color: #2d333b;
+    background-color: #252526;
     color: #d4d4d4;
 }
 
@@ -257,7 +257,7 @@ ol>*:not(li) {
 }
 
 .dark .markdown-text table td {
-    background-color: #1e1e1e;
+    background-color: #252526;
     color: #d4d4d4;
 }
 
@@ -353,7 +353,7 @@ ol>*:not(li) {
 }
 
 .dark .custom-code-block pre.hljs {
-    background: #1e1e1e !important;
+    background: #252526 !important;
     color: #d4d4d4;
 }
 

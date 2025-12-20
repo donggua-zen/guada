@@ -31,8 +31,42 @@
             </UiButton>
         </div>
     </div>
+
+    <div class="flex flex-wrap gap-4 mb-4">
+        <el-slider-optional v-model:value="value1" optional-direction="max" optional-text="No Limit"/>
+        <el-slider-optional v-model:value="value2" optional-direction="min" />
+    </div>
 </template>
+<style>
+.n-button:not(.n-button--disabled):focus {
+    outline: none;
+    background-color: var(--n-color);
+    color: var(--n-text-color);
+}
+
+.n-button:not(.n-button--disabled):focus .n-button__state-border {
+    /* display: none; */
+    border: var(--n-border);
+}
+
+.n-button:not(.n-button--disabled):hover {
+    color: var(--n-text-color-hover);
+    background-color: var(--n-color-hover);
+}
+
+.n-button:not(.n-button--disabled):hover .n-button__state-border {
+    /* display: none; */
+
+    border: var(--n-border-hover);
+}
+</style>
 <script setup>
+
+import { ref, watch } from 'vue';
+import ElSliderOptional from '../ui/ElSliderOptional.vue'
+const value1 = ref(50);
+const value2 = ref(50);
+
 import { UiButton } from '../ui';
 // 图标导入
 import {

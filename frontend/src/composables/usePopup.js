@@ -1,15 +1,17 @@
 // src/composables/usePopup.js
-import { ref, h } from 'vue'
-import { useDialog, useMessage, useNotification } from 'naive-ui'
+import { ref, h, render } from 'vue'
+import {
+    ElMessageBox,
+    ElMessage,
+    ElNotification,
+    ElButton
+} from 'element-plus'
 
 /**
  * 常用弹窗 Hook
  * 在 Vue 组件上下文中使用，确保主题和配置一致性
  */
 export function usePopup() {
-    const dialog = useDialog()
-    const message = useMessage()
-    const notification = useNotification()
     // const loadingBar = useLoadingBar()
 
     /**
@@ -20,25 +22,26 @@ export function usePopup() {
      * @returns {Promise<boolean>}
      */
     const confirm = (title, content, options = {}) => {
+        const {
+            type = 'warning',
+            confirmText = '确认',
+            cancelText = '取消'
+        } = options
+
         return new Promise((resolve) => {
-            const {
-                type = 'warning',
-                confirmText = '确认',
-                cancelText = '取消',
-                showIcon = true
-            } = options
-
-            const dialogMethod = dialog[type] || dialog.warning
-
-            dialogMethod({
+            ElMessageBox({
                 title,
-                content,
-                positiveText: confirmText,
-                negativeText: cancelText,
-                showIcon,
-                onPositiveClick: () => resolve(true),
-                onNegativeClick: () => resolve(false),
-                onMaskClick: () => resolve(false)
+                message: content,
+                type,
+                confirmButtonText: confirmText,
+                cancelButtonText: cancelText,
+                showCancelButton: true,
+                distinguishCancelAndClose: true,
+                dangerouslyUseHTMLString: true
+            }).then(() => {
+                resolve(true)
+            }).catch(() => {
+                resolve(false)
             })
         })
     }
@@ -73,51 +76,29 @@ export function usePopup() {
             validation
         } = options
 
-        const inputValue = ref(defaultValue)
-
         return new Promise((resolve) => {
-            dialog.create({
-                title,
-                content: () => h('div', [
-                    h('input', {
-                        value: inputValue.value,
-                        placeholder,
-                        onInput: (e) => { inputValue.value = e.target.value },
-                        style: {
-                            width: '100%',
-                            padding: '8px 12px',
-                            border: '1px solid #d0d0d0',
-                            borderRadius: '4px',
-                            fontSize: '14px'
-                        },
-                        onKeydown: (e) => {
-                            if (e.key === 'Enter') {
-                                e.target.closest('.n-dialog__action').querySelector('.UiButton--primary-type').click()
-                            }
-                        }
-                    })
-                ]),
-                positiveText: confirmText,
-                negativeText: cancelText,
-                onPositiveClick: () => {
-                    const value = inputValue.value.trim()
+            ElMessageBox.prompt('', title, {
+                confirmButtonText: confirmText,
+                cancelButtonText: cancelText,
+                inputPlaceholder: placeholder,
+                inputValue: defaultValue,
+                dangerouslyUseHTMLString: true,
+                distinguishCancelAndClose: true
+            }).then(({ value }) => {
+                const inputValue = value.trim()
 
-                    if (required && !value) {
-                        message.error('内容不能为空')
-                        return false
-                    }
-
-                    if (validation && !validation(value)) {
-                        return false
-                    }
-
-                    resolve(value)
-                    return true
-                },
-                onNegativeClick: () => {
-                    resolve(null)
-                    return true
+                if (required && !inputValue) {
+                    ElMessage.error('内容不能为空')
+                    return resolve(null)
                 }
+
+                if (validation && !validation(inputValue)) {
+                    return resolve(null)
+                }
+
+                resolve(inputValue)
+            }).catch(() => {
+                resolve(null)
             })
         })
     }
@@ -138,45 +119,63 @@ export function usePopup() {
             rows = 6
         } = options
 
-        const textValue = ref(defaultValue)
+        // 使用 Element Plus 的 VNode 方式创建自定义内容
+        const container = h('div', {
+            style: {
+                width: '100%',
+                padding: '12px 0'
+            }
+        }, [
+            h('textarea', {
+                value: defaultValue,
+                placeholder,
+                style: {
+                    width: '100%',
+                    minHeight: `${rows * 24}px`,
+                    padding: '12px',
+                    border: '1px solid #dcdfe6',
+                    borderRadius: '4px',
+                    fontSize: '14px',
+                    resize: 'vertical',
+                    fontFamily: 'inherit',
+                    boxSizing: 'border-box'
+                },
+                onInput: (e) => {
+                    // 注意：这里我们无法直接访问 textarea 元素
+                    // 在 beforeClose 回调中仍然需要通过 DOM 查询获取值
+                }
+            })
+        ])
 
         return new Promise((resolve) => {
-            dialog.create({
+            ElMessageBox({
                 title,
-                content: () => h('div', [
-                    h('textarea', {
-                        value: textValue.value,
-                        placeholder,
-                        onInput: (e) => { textValue.value = e.target.value },
-                        style: {
-                            width: '100%',
-                            minHeight: `${rows * 24}px`,
-                            padding: '12px',
-                            border: '1px solid #d0d0d0',
-                            borderRadius: '4px',
-                            fontSize: '14px',
-                            resize: 'vertical',
-                            fontFamily: 'inherit'
+                message: container,
+                confirmButtonText: confirmText,
+                cancelButtonText: cancelText,
+                showCancelButton: true,
+                distinguishCancelAndClose: true,
+                customClass: 'w-full',
+                beforeClose: (action, instance, done) => {
+                    if (action === 'confirm') {
+                        // 通过查询 DOM 获取 textarea 的值
+                        const textarea = instance.message.el.querySelector('textarea')
+                        const value = textarea ? textarea.value.trim() : ''
+
+                        if (required && !value) {
+                            ElMessage.error('内容不能为空')
+                            return
                         }
-                    })
-                ]),
-                positiveText: confirmText,
-                negativeText: cancelText,
-                onPositiveClick: () => {
-                    const value = textValue.value.trim()
 
-                    if (required && !value) {
-                        message.error('内容不能为空')
-                        return false
+                        done()
+                        resolve(value)
+                    } else {
+                        done()
+                        resolve(null)
                     }
-
-                    resolve(value)
-                    return true
-                },
-                onNegativeClick: () => {
-                    resolve(null)
-                    return true
                 }
+            }).catch(() => {
+                resolve(null)
             })
         })
     }
@@ -189,35 +188,55 @@ export function usePopup() {
          * 成功提示
          */
         success: (content, duration = 2000) => {
-            message.success(content, { duration, keepAliveOnHover: true })
+            ElMessage.success({
+                message: content,
+                duration,
+                showClose: true
+            })
         },
 
         /**
          * 错误提示
          */
         error: (content, duration = 3000) => {
-            message.error(content, { duration, keepAliveOnHover: true })
+            ElMessage.error({
+                message: content,
+                duration,
+                showClose: true
+            })
         },
 
         /**
          * 警告提示
          */
         warning: (content, duration = 2500) => {
-            message.warning(content, { duration, keepAliveOnHover: true })
+            ElMessage.warning({
+                message: content,
+                duration,
+                showClose: true
+            })
         },
 
         /**
          * 信息提示
          */
         info: (content, duration = 2000) => {
-            message.info(content, { duration, keepAliveOnHover: true })
+            ElMessage.info({
+                message: content,
+                duration,
+                showClose: true
+            })
         },
 
         /**
          * 加载中提示
          */
         loading: (content, duration = 0) => {
-            return message.loading(content, { duration })
+            return ElMessage.loading({
+                message: content,
+                duration,
+                showClose: true
+            })
         }
     }
 
@@ -229,11 +248,10 @@ export function usePopup() {
          * 成功通知
          */
         success: (title, content, options = {}) => {
-            notification.success({
+            ElNotification.success({
                 title,
-                content,
+                message: content,
                 duration: 3000,
-                keepAliveOnHover: true,
                 ...options
             })
         },
@@ -242,11 +260,10 @@ export function usePopup() {
          * 错误通知
          */
         error: (title, content, options = {}) => {
-            notification.error({
+            ElNotification.error({
                 title,
-                content,
+                message: content,
                 duration: 5000,
-                keepAliveOnHover: true,
                 ...options
             })
         },
@@ -255,11 +272,10 @@ export function usePopup() {
          * 警告通知
          */
         warning: (title, content, options = {}) => {
-            notification.warning({
+            ElNotification.warning({
                 title,
-                content,
+                message: content,
                 duration: 4000,
-                keepAliveOnHover: true,
                 ...options
             })
         },
@@ -268,11 +284,10 @@ export function usePopup() {
          * 信息通知
          */
         info: (title, content, options = {}) => {
-            notification.info({
+            ElNotification.info({
                 title,
-                content,
+                message: content,
                 duration: 3000,
-                keepAliveOnHover: true,
                 ...options
             })
         }
@@ -311,8 +326,8 @@ export function usePopup() {
      * 关闭所有消息和弹窗
      */
     const closeAll = () => {
-        message.destroyAll()
-        // dialog 没有 destroyAll 方法，需要单独处理
+        ElMessage.closeAll()
+        // ElMessageBox 没有 closeAll 方法
     }
 
     return {
@@ -336,11 +351,6 @@ export function usePopup() {
 
         // 工具方法
         closeAll,
-
-        // 原始 API（用于特殊场景）
-        $dialog: dialog,
-        $message: message,
-        $notification: notification,
     }
 }
 

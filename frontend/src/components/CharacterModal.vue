@@ -1,17 +1,17 @@
 <template>
-    <n-modal v-model:show="visible" :mask-closable="false" :auto-focus="false" style="width: 600px;max-width: 90vw;"
-        title="角色设置" preset="card">
+    <el-dialog v-model="visible" :close-on-click-modal="false" style="width: 600px;max-width: 90vw;"
+        title="角色设置">
         <div class="max-h-80vh overflow-y-auto">
             <CharacterSettingPanel :data="currentCharacter" @update:data="handleSave" :simple="true" />
         </div>
-    </n-modal>
+    </el-dialog>
 </template>
 
 <script setup>
 import { ref, reactive, watch, computed, onMounted, onUnmounted } from 'vue'
 import {
-    NModal,
-} from 'naive-ui'
+    ElDialog
+} from 'element-plus'
 import CharacterSettingPanel from './CharacterSettingPanel.vue'
 import { apiService } from '../services/ApiService'
 import { usePopup } from '@/composables/usePopup'
