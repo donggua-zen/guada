@@ -15,7 +15,7 @@ export default defineConfig({
     vue(),
     tailwindcss(),
     visualizer({
-      open: true,           // 构建完成后自动打开报告
+      open: false,           // 构建完成后自动打开报告
       gzipSize: true,       // 显示 gzip 压缩后的大小
       brotliSize: true,     // 显示 Brotli 压缩后的大小
       filename: 'stats.html' // 报告文件名
