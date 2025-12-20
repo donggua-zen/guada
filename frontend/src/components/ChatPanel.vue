@@ -68,14 +68,13 @@
       <div class="ai-disclaimer text-xs text-gray-400 text-center mt-2">内容由AI生成，仅供参考</div>
 
     </div>
-    <n-modal v-model:show="showEditMessageModal" :mask-closable="false" :auto-focus="false"
-      style="width: 860px; max-width: 90vw" title="编辑消息" preset="card">
+    <el-dialog v-model="showEditMessageModal" :append-to-body="true" style="width: 860px; max-width: 90vw" title="编辑消息">
       <ChatInput v-model:value="editInputMessage.text" v-model:web-search-enabled="webSearchEnabled"
         v-model:thinking-enabled="thinkingEnabled" :buttons="chatInputButtons" :shadow="false"
         :files="editInputMessage.files" :streaming="isStreaming" @send="handleReSendMessage" @abort="abortResponse"
         @toggle-web-search="handleWebSearch" @toggle-thinking="toggleDeepThinking"
         @tokens-statistic="handleTokensStatistic" />
-    </n-modal>
+    </el-dialog>
     <!-- Tokens统计模态框 -->
     <TokenStatisticsModal v-model:show="showTokenModal" :currentSessionId="currentSession.id" />
   </div>
@@ -94,12 +93,10 @@ import MessageItem from "./MessageItem.vue";
 import ChatHeader from "./ChatHeader.vue";
 import { Avatar, ChatInput, ScrollContainer } from "./ui";
 // 异步组件导入
-// import TokenStatisticsModal from "./TokenStatisticsModal.vue";
 const TokenStatisticsModal = defineAsyncComponent(() => import("./TokenStatisticsModal.vue"));
 
 // UI组件导入
-import { NModal } from "naive-ui";
-import { UiButton } from "./ui";
+import { ElDialog } from "element-plus";
 
 // 弹出层工具
 const { confirm, editText, toast, notify } = usePopup();
@@ -117,6 +114,7 @@ const showEditMessageModal = ref(false);
 const itemRefs = ref({});
 const isLoading = ref(false)
 const autoScrollToBottom = ref(false);
+const autoScrollToBottomSet = ref(-1);
 const placeholder = ref("auto");
 
 // Props & Emits
@@ -175,7 +173,7 @@ const messagePairs = computed(() => {
 
   while (i < activeMessages.value.length) {
     const current = activeMessages.value[i];
-
+    current.index = i;
     // 如果是用户消息，尝试和下一条配对
     if (current.role === 'user') {
       const next = activeMessages.value[i + 1];
@@ -185,7 +183,6 @@ const messagePairs = computed(() => {
         next.role === 'assistant' &&
         next.parent_id === current.id // 注意字段名，按实际改
       ) {
-        current.index = i;
         next.index = i + 1;
         groups.push([current, next]);
         i += 2; // 跳过两条
@@ -195,7 +192,6 @@ const messagePairs = computed(() => {
       groups.push([current]);
       i += 1;
     } else {
-      current.index = i;
       // 当前是 assistant（孤立答案）
       groups.push([current]);
       i += 1;
@@ -265,35 +261,46 @@ onMounted(() => {
   // 初始化相关逻辑
 });
 
+const debouncedResetScrollFlag = useDebounceFn(() => {
+  autoScrollToBottomSet.value = -1
+}, 100);
 // 滚动功能
-function immediateScrollToBottom() {
+function immediateScrollToBottom(persistent = false) {
+
+  autoScrollToBottom.value = persistent
+  autoScrollToBottomSet.value = persistent ? 1 : 0
+  debouncedResetScrollFlag();
+
   scrollContainerRef.value?.immediateScrollToBottom();
 }
 
 const handleRenderComplete = () => {
+  console.log("handleRenderComplete")
   if (autoScrollToBottom.value) {
     nextTick(() => {
-      immediateScrollToBottom();
+      console.log("handleRenderComplete2")
+
+      immediateScrollToBottom(true);
     });
   }
 }
 
 const handleScroll = (event) => {
-  if (scrollContainerRef.value && isStreaming.value) {
-    if (scrollContainerRef.value.isAtBottom && !autoScrollToBottom.value) {
-      const streamingMessage = activeMessages.value.find(message => message.state?.is_streaming)
-      if (!streamingMessage) return
-      const el = itemRefs.value[streamingMessage.id]?.el?.parentNode
-      if (!el) return
-      const minHeight = parseFloat(el.style.minHeight) || 0
-      const height = el.getBoundingClientRect().height
-      // +1 防止小数点误差
-      if (height > minHeight + 1) {
-        autoScrollToBottom.value = true
+  console.log(event)
+  if (scrollContainerRef.value) {
+    console.log("handleScroll")
+    console.log("autoScrollToBottom.value", autoScrollToBottom.value, scrollContainerRef.value.isAtBottom)
+    if (scrollContainerRef.value.isAtBottom) {
+      console.log("set", autoScrollToBottomSet.value)
+      if (autoScrollToBottomSet.value >= 0) {
+        autoScrollToBottom.value = autoScrollToBottomSet.value === 1
+        // autoScrollToBottomSet.value = -1
         return
       }
+      autoScrollToBottom.value = true
+    } else {
+      autoScrollToBottom.value = false
     }
-    autoScrollToBottom.value = false
   }
 }
 
@@ -411,6 +418,7 @@ function getCurrentContent(messageContents) {
 function allowReSendMessage(message, index) {
   if (message.role !== "user") return false;
   // 最后一条user消息允许重新再发送栏中编辑
+  console.log("index", index, activeMessages.value.length)
   return index >= activeMessages.value.length - 2;
 }
 
@@ -434,17 +442,6 @@ async function handleStreamResponse(
     let responseContent = "";
     let thinkingContent = "";
 
-
-    if (assistantMessageId) {
-      const assistantMessage = activeMessages.value.find(message => message.id === assistantMessageId);
-      if (assistantMessage) {
-        assistantMessage.contents.forEach(content => {
-          content.is_current = false;
-        });
-        assistantMessage.state = { is_streaming: true };
-      }
-    }
-
     for await (const response of apiService.chat(
       streamingSessionId,
       userMessageId,
@@ -459,10 +456,10 @@ async function handleStreamResponse(
       if (response.type == "create") {
         ({ message, contentIndex } = handleNewMessage(response, streamingSessionId, userMessageId));
         assistantMessageIdResult = response.message_id;
-        nextTick(() => {
-          immediateScrollToBottom();
-          autoScrollToBottom.value = false;
-        });
+        // nextTick(() => {
+        //   // immediateScrollToBottom();
+        //   autoScrollToBottom.value = false;
+        // });
         continue;
       }
 
@@ -478,7 +475,6 @@ async function handleStreamResponse(
       if (response.type == "think") {
         if (!message?.state.is_thinking) {
           message.state.is_thinking = true;
-          itemRefs.value[message.id].showThinking();
         }
         thinkingContent = handleThinkingContent(response, message, contentIndex, thinkingContent);
         continue;
@@ -487,7 +483,6 @@ async function handleStreamResponse(
       if (response.type == "text") {
         if (message?.state.is_thinking) {
           message.state.is_thinking = false;
-          itemRefs.value[message.id].hideThinking();
         }
         responseContent = handleContentResponse(response, message, contentIndex, responseContent);
         continue;
@@ -592,7 +587,6 @@ function cleanupStreaming(sessionId, message, contentIndex) {
     message.state.is_thinking = false;
     message.state.is_web_searching = false;
     message.contents[contentIndex].updated_at = new Date().toISOString();
-    itemRefs.value[message.id]?.hideThinking();
   }
 }
 
@@ -694,7 +688,7 @@ function updatePlaceholder(userMessageId) {
     const style = window.getComputedStyle(userMessageElement); // 修正可能的拼写错误
     const userElHeight = parseFloat(style.height) + parseFloat(style.marginTop) + parseFloat(style.marginBottom);
 
-    const baseMinHeight = containerRect.height;
+    let baseMinHeight = containerRect.height;
     if (userElHeight > containerRect.height / 3) {
       baseMinHeight += (userElHeight - containerRect.height / 3)
     }
@@ -751,7 +745,7 @@ async function sendNewMessage(sessionId, text, files, replaceMessageId = null) {
   await nextTick();
   updatePlaceholder(message.id);
   immediateScrollToBottom();
-  autoScrollToBottom.value = false;
+  // autoScrollToBottom.value = false;
   return message;
 }
 
@@ -796,8 +790,21 @@ function regenerateResponse(message) {
     toast.error("暂时最多支持5个回答版本");
     return;
   }
+
+
+  const assistantMessage = activeMessages.value.find(message => message.id === message.id);
+  if (assistantMessage) {
+    assistantMessage.contents.forEach(content => {
+      content.is_current = false;
+    });
+    assistantMessage.state = { is_streaming: true };
+  }
+
   updatePlaceholder(message.parent_id);
-  handleStreamResponse(currentSessionId.value, message.parent_id, "multi_version", message.id);
+  nextTick(() => {
+    immediateScrollToBottom();
+    handleStreamResponse(currentSessionId.value, message.parent_id, "multi_version", message.id);
+  });
 }
 
 function switchContent(message, content) {

@@ -30,24 +30,22 @@
         <ChatPanel ref="chatPanelRef" v-model:session="currentSession" v-model:sidebar-visible="sidebarVisible"
           @openSettings="handleOpenSettings" @openSwitchModel="handleOpenSwitchModel"
           @save-settings="handleSaveSessionSettings" />
-        <n-modal v-model:show="sessionSettingsModalVisible" :mask-closable="false" :auto-focus="false"
-          style="width: 600px;max-width: 90vw;" title="对话设置" preset="card">
+        <el-dialog v-model="sessionSettingsModalVisible" :append-to-body="true"
+          style="width: 600px;max-width: 90vw;" title="对话设置">
           <div class="max-h-[80vh] overflow-y-auto">
             <character-setting-panel :data="currentSession" @update:data="updateSession" :simple="true"
               :tab="currentTabValue" />
           </div>
-        </n-modal>
+        </el-dialog>
       </template>
 
     </template>
   </SidebarLayout>
 </template>
-
 <script setup>
 import { ref, onMounted, watch, computed, nextTick, defineAsyncComponent } from "vue";
 import { apiService } from "@/services/ApiService";
 import { useRouter, useRoute } from 'vue-router';
-import { NModal, NEmpty } from "naive-ui";
 import { usePopup } from "@/composables/usePopup";
 import { useStorage } from '@vueuse/core';
 import { useSessionStore } from "@/stores/session";
@@ -57,6 +55,7 @@ import { useTitle } from '@/composables/useTitle';
 // 引入组件
 import { SidebarLayout } from "./ui";
 import ChatSidebar from "@/components/ChatSidebar.vue";
+import { ElDialog } from "element-plus";
 import { useBreakpoints, breakpointsTailwind } from '@vueuse/core'
 
 const breakpoints = useBreakpoints(breakpointsTailwind)

@@ -1,8 +1,5 @@
 /* 通用重置和基础样式 */
-@import "tailwindcss";
-@custom-variant dark (&:where(.dark, .dark *));
-
-
+@import "./font-family.css";
 
 :root {
     --color-primary-0f: #fb72990f;
@@ -28,9 +25,13 @@
     --color-primary-500: oklch(79.406% 0.12101 1.7634);
     --color-primary-600: oklch(75.718% 0.14788 3.5877);
     --color-primary-700: oklch(72.118% 0.17434 4.6237);
-    --color-primary-800: oklch(70.529% 0.18714 5.6012);
+    /* --color-primary-800: oklch(70.529% 0.18714 5.6012); */
+    --color-primary-800: oklch(69.574% 0.19291 5.8639);
     --color-primary-900: oklch(68.911% 0.1982 6.5103);
-    --color-primary-950: oklch(68.276% 0.20329 7.1683);
+    /* --color-primary-950: oklch(68.276% 0.20329 7.1683); */
+    --color-primary-950: oklch(66.081% 0.22168 9.2391);
+
+
 
     --color-primary-disabled: var(--color-primary-200);
     --color-primary-hover: var(--color-primary-800);
@@ -62,43 +63,6 @@
     --color-secondary-text: #fff;
     --color-secondary-text-disabled: #fff;
 
-
-    --color-error: oklch(67.322% 0.21434 24.448);
-    --color-error-50: oklch(98.673% 0.00641 17.265);
-    --color-error-100: oklch(95.82% 0.02069 17.519);
-    --color-error-200: oklch(90.231% 0.05076 18.134);
-    --color-error-300: oklch(84.677% 0.08395 18.053);
-    --color-error-400: oklch(79.612% 0.11733 19.355);
-    --color-error-500: oklch(74.8% 0.15235 20.901);
-    --color-error-600: oklch(70.746% 0.18471 22.667);
-    --color-error-700: oklch(67.325% 0.21434 24.465);
-    --color-error-800: oklch(66.284% 0.22382 25.295);
-    --color-error-900: oklch(65.465% 0.23146 26.027);
-    --color-error-950: oklch(65.058% 0.23531 26.42);
-    --color-error-hover: var(--color-error-800);
-    --color-error-active: var(--color-error-900);
-    --color-error-disabled: var(--color-error-200);
-    --color-error-text: #fff;
-    --color-error-text-disabled: #fff;
-
-    --color-warning: oklch(85.37% 0.15721 84.13);
-    --color-warning-50: oklch(99.091% 0.01226 91.515);
-    --color-warning-100: oklch(97.756% 0.02514 86.868);
-    --color-warning-200: oklch(95.531% 0.05228 87.893);
-    --color-warning-300: oklch(93.388% 0.07847 88.132);
-    --color-warning-400: oklch(91.138% 0.10239 87.181);
-    --color-warning-500: oklch(89.178% 0.1246 86.881);
-    --color-warning-600: oklch(87.125% 0.14289 85.479);
-    --color-warning-700: oklch(85.37% 0.15721 84.13);
-    --color-warning-800: oklch(84.741% 0.16102 83.382);
-    --color-warning-900: oklch(84.13% 0.16379 82.456);
-    --color-warning-950: oklch(83.921% 0.16525 82.257);
-
-    --color-warning-hover: var(--color-warning-800);
-    --color-warning-active: var(--color-warning-900);
-    --color-warning-disabled: var(--color-warning-200);
-    --color-warning-text: #333;
-    --color-warning-text-disabled: rgba(51, 51, 51, 0.5);
 
     --color-text: #333333;
     --color-text-gray: #666;
@@ -139,7 +103,7 @@
     --color-gray-950: #030712; */
 }
 
-:root.dark {
+html.dark {
     /* 主色调调整（在暗色模式下可以稍微调整饱和度） */
     --color-primary: #ff85a7;
     --color-primary-hover: color-mix(in srgb, var(--color-primary) 80%, white);
@@ -163,11 +127,11 @@
     --color-secondary-text-disabled: rgba(245, 245, 245, 0.5);
 
     /* 对话样式 */
-    --color-conversation-bg: #1e1e1e;
+    --color-conversation-bg: #252526;
     --color-conversation-bg-hover: var(--color-primary-100);
     --color-conversation-bg-active: var(--color-primary-100);
     --color-conversation-text: #e5e7eb;
-    --color-conversation-border: #374151;
+    --color-conversation-border: #252526;
     --color-conversation-text-active: var(--color-primary);
     --color-conversation-text-hover: var(--color-primary);
 
@@ -180,7 +144,7 @@
     --color-bubble-assitant-border: #374151;
 
     --color-surface: #1f2937;
-    --color-text: #d4d4d4;
+    --color-text: #f7f7f7;
     /* 
     --color-gray-50: #111827;
     --color-gray-100: #1f2937;
@@ -195,7 +159,42 @@
     --color-gray-950: #ffffff; */
 }
 
-@theme {
+:root {
+    --el-color-primary: var(--color-primary) !important;
+    --el-color-primary-light-9: var(--color-primary-100) !important;
+    --el-color-primary-light-8: var(--color-primary-200) !important;
+    --el-color-primary-light-7: var(--color-primary-300) !important;
+    --el-color-primary-light-5: var(--color-primary-500) !important;
+    --el-color-primary-light-3: var(--color-primary-800) !important;
+    --el-color-primary-dark-2: var(--color-primary-950) !important;
+    --el-color-primary-light-1: var(--color-primary-950) !important;
+}
+
+html.dark {
+    --el-color-primary: var(--color-primary) !important;
+    --el-color-primary-light-9: var(--color-primary-100) !important;
+    --el-color-primary-light-8: var(--color-primary-200) !important;
+    --el-color-primary-light-7: var(--color-primary-300) !important;
+    --el-color-primary-light-5: var(--color-primary-500) !important;
+    --el-color-primary-light-3: var(--color-primary-800) !important;
+    --el-color-primary-dark-2: var(--color-primary-950) !important;
+    --el-color-primary-light-1: var(--color-primary-950) !important;
+}
+
+.el-button:not(.el-button--large) {
+    height: 28px;
+}
+
+.el-button.is-circle {
+    width: 28px;
+}
+
+.el-button,
+.el-button.is-round {
+    padding: 6px 15px;
+}
+
+/* @theme {
     --color-primary: var(--color-primary);
     --color-primary-50: var(--color-primary-50);
     --color-primary-100: var(--color-primary-100);
@@ -209,9 +208,9 @@
     --color-primary-900: var(--color-primary-900);
 
     --color-surface: var(--color-surface);
-}
+} */
 
-@import "./font-family.css";
+
 
 
 * {
@@ -226,11 +225,12 @@ body {
     padding: 0;
     font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Helvetica Neue", Helvetica, Arial, sans-serif;
     overflow: hidden;
+    transition: background-color 0.3s, color 0.3s;
 }
 
 .dark body {
     color: #fff;
-    background: #1E1E1E;
+    background: #1e1e1e;
 }
 
 body,
@@ -286,6 +286,10 @@ html,
 #nprogress .spinner-icon {
     border-top-color: var(--color-primary) !important;
     border-left-color: var(--color-primary) !important;
+}
+
+.el-message-box__message {
+    width: 100%;
 }
 
 /* 动画效果 */

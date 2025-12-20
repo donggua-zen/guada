@@ -7,25 +7,25 @@
         <template v-else>
 
             <div class="flex items-center mb-6">
-                <UiButton text style="font-size: 24px" @click="showDetail = false">
-                    <n-icon size="16">
+                <el-button link style="font-size: 24px" @click="showDetail = false">
+                    <el-icon>
                         <ArrowBackIosFilled />
-                    </n-icon>
+                    </el-icon>
                     <span class="font-bold text-lg mr-2">{{ currentProvider.name }}</span>
-                </UiButton>
+                </el-button>
 
-                <UiButton text style="font-size: 24px" @click="handleEditProvider(currentProvider)">
-                    <n-icon>
+                <el-button link style="font-size: 24px" @click="handleEditProvider(currentProvider)">
+                    <el-icon>
                         <SettingsOutlined />
-                    </n-icon>
-                </UiButton>
+                    </el-icon>
+                </el-button>
             </div>
             <div class="flex w-full">
                 <div class="flex flex-1 justify-start items-center">
-                    <n-space>
-                        <UiButton @click="handleAddModel" strong secondary>手动添加</UiButton>
-                        <UiButton @click="handleFetchModels" strong secondary>获取模型列表</UiButton>
-                    </n-space>
+                    <el-space>
+                        <el-button @click="handleAddModel">手动添加</el-button>
+                        <el-button @click="handleFetchModels">获取模型列表</el-button>
+                    </el-space>
                 </div>
             </div>
             <div class="mt-4 rounded border px-3 py-1 border-gray-200 dark:border-gray-700">
@@ -35,23 +35,23 @@
                         <div class="font-bold dark:font-normal">{{ model.model_name }}</div>
                         &nbsp;
                         &nbsp;
-                        <n-space>
-                            <n-tag :bordered="false" type="success" size="small">{{ model.model_type }}</n-tag>
-                            <n-tag v-for="feature in model.features" :bordered="false" type="info" size="small">{{
-                                getLableName(feature) }}</n-tag>
-                        </n-space>
+                        <el-space>
+                            <el-tag type="success">{{ model.model_type }}</el-tag>
+                            <el-tag v-for="feature in model.features" type="info">{{
+                                getLableName(feature) }}</el-tag>
+                        </el-space>
                         <div class="flex flex-1 justify-end items-center">
-                            <UiButton text style="font-size: 24px" @click="handleEditClick(model)">
-                                <n-icon>
+                            <el-button link style="font-size: 24px" @click="handleEditClick(model)">
+                                <el-icon>
                                     <SettingsOutlined />
-                                </n-icon>
-                            </UiButton>
+                                </el-icon>
+                            </el-button>
                             &nbsp;
-                            <UiButton type="error" text style="font-size: 24px" @click="handleDeleteClick(model)">
-                                <n-icon>
+                            <el-button type="danger" link style="font-size: 24px" @click="handleDeleteClick(model)">
+                                <el-icon>
                                     <RemoveCircleOutlineRound />
-                                </n-icon>
-                            </UiButton>
+                                </el-icon>
+                            </el-button>
                         </div>
                     </li>
                 </ul>
@@ -59,75 +59,93 @@
         </template>
     </div>
 
-    <n-modal v-model:show="showProviderModal" preset="dialog" title="编辑供应商" positive-text="确定" negative-text="取消"
-        @positive-click="handleSaveProvider">
-        <n-form ref="formRef" :label-width="80" :model="currentProviderEdit" :rules="providerRules" size="large"
-            label-placement="left">
-            <n-form-item label="名字" path="name">
-                <n-input v-model:value="currentProviderEdit.name" placeholder="输入分组名字" />
-            </n-form-item>
-            <n-form-item label="API地址" path="api_url">
-                <n-input v-model:value="currentProviderEdit.api_url" placeholder="api_url" />
-            </n-form-item>
-            <n-form-item label="API KEY" path="api_key">
-                <n-input v-model:value="currentProviderEdit.api_key" placeholder="api_key" type="password"
-                    show-password-on="click" />
-            </n-form-item>
-        </n-form>
-    </n-modal>
+    <el-dialog v-model="showProviderModal" title="编辑供应商" width="30%" align-center>
+        <el-form ref="formRef" :label-width="80" :model="currentProviderEdit" :rules="providerRules" size="large"
+            label-position="left">
+            <el-form-item label="名字" prop="name">
+                <el-input v-model="currentProviderEdit.name" placeholder="输入分组名字" />
+            </el-form-item>
+            <el-form-item label="API地址" prop="api_url">
+                <el-input v-model="currentProviderEdit.api_url" placeholder="api_url" />
+            </el-form-item>
+            <el-form-item label="API KEY" prop="api_key">
+                <el-input v-model="currentProviderEdit.api_key" placeholder="api_key" type="password"
+                    show-password />
+            </el-form-item>
+        </el-form>
+        <template #footer>
+            <span class="dialog-footer">
+                <el-button @click="showProviderModal = false">取消</el-button>
+                <el-button type="primary" @click="handleSaveProvider">确定</el-button>
+            </span>
+        </template>
+    </el-dialog>
 
     <!-- 编辑/新增模型信息的模态框 -->
-    <n-modal v-model:show="showEditModal" :preset="isEditMode ? 'dialog' : 'dialog'"
-        :title="isEditMode ? '编辑模型信息' : '新增模型'" positive-text="保存" negative-text="取消" @positive-click="handleSaveModel">
-        <n-form ref="editFormRef" :model="editModelForm" :rules="editModelRules" label-placement="left"
+    <el-dialog v-model="showEditModal" :title="isEditMode ? '编辑模型信息' : '新增模型'" width="30%" align-center>
+        <el-form ref="editFormRef" :model="editModelForm" :rules="editModelRules" label-position="left"
             label-width="120px" size="large">
-            <n-form-item label="模型名字" path="model_name">
-                <n-input v-model:value="editModelForm.model_name" placeholder="请输入模型名字" />
-            </n-form-item>
+            <el-form-item label="模型名字" prop="model_name">
+                <el-input v-model="editModelForm.model_name" placeholder="请输入模型名字" />
+            </el-form-item>
 
-            <n-form-item label="模型类型" path="model_type">
-                <n-select v-model:value="editModelForm.model_type" :options="modelTypeOptions" placeholder="请选择模型类型" />
-            </n-form-item>
+            <el-form-item label="模型类型" prop="model_type">
+                <el-select v-model="editModelForm.model_type" placeholder="请选择模型类型" style="width: 100%">
+                    <el-option
+                        v-for="option in modelTypeOptions"
+                        :key="option.value"
+                        :label="option.label"
+                        :value="option.value"
+                    />
+                </el-select>
+            </el-form-item>
 
-            <n-form-item label="模型能力" path="features">
-                <n-checkbox-group v-model:value="editModelForm.features">
-                    <n-space>
-                        <n-checkbox value="visual" label="视觉" />
-                        <n-checkbox value="tools" label="工具" />
-                        <n-checkbox value="thinking" label="混合思考" />
-                    </n-space>
-                </n-checkbox-group>
-            </n-form-item>
+            <el-form-item label="模型能力" prop="features">
+                <el-checkbox-group v-model="editModelForm.features">
+                    <el-space>
+                        <el-checkbox label="visual" value="visual">视觉</el-checkbox>
+                        <el-checkbox label="tools" value="tools">工具</el-checkbox>
+                        <el-checkbox label="thinking" value="thinking">混合思考</el-checkbox>
+                    </el-space>
+                </el-checkbox-group>
+            </el-form-item>
 
-            <n-form-item label="最大上下文" path="max_tokens">
-                <n-input-number v-model:value="editModelForm.max_tokens" placeholder="请输入最大上下文长度" style="width: 100%"
-                    :min="1" />
-            </n-form-item>
+            <el-form-item label="最大上下文" prop="max_tokens">
+                <el-input-number v-model="editModelForm.max_tokens" placeholder="请输入最大上下文长度" style="width: 100%"
+                    :min="1" controls-position="right" />
+            </el-form-item>
 
-            <n-form-item label="最大输出长度" path="max_output_tokens">
-                <n-input-number v-model:value="editModelForm.max_output_tokens" placeholder="请输入最大输出长度"
-                    style="width: 100%" :min="1" />
-            </n-form-item>
-        </n-form>
-    </n-modal>
+            <el-form-item label="最大输出长度" prop="max_output_tokens">
+                <el-input-number v-model="editModelForm.max_output_tokens" placeholder="请输入最大输出长度"
+                    style="width: 100%" :min="1" controls-position="right" />
+            </el-form-item>
+        </el-form>
+        <template #footer>
+            <span class="dialog-footer">
+                <el-button @click="showEditModal = false">取消</el-button>
+                <el-button type="primary" @click="handleSaveModel">保存</el-button>
+            </span>
+        </template>
+    </el-dialog>
 
     <!-- 获取模型列表的模态框 -->
-    <n-modal v-model:show="showFetchModal" preset="dialog" title="获取模型列表" :show-footer="false"
-        style="width: 90%; max-width: 800px">
+    <el-dialog v-model="showFetchModal" title="获取模型列表" width="50%" align-center>
         <div class="max-h-[60vh] overflow-y-auto">
             <div class="p-4">
-                <n-input v-model:value="searchModelName" placeholder="搜索模型名称" clearable
-                    @update:value="handleSearchModel">
+                <el-input v-model="searchModelName" placeholder="搜索模型名称" clearable
+                    @input="handleSearchModel">
                     <template #prefix>
-                        <n-icon>
+                        <el-icon>
                             <SearchOutlined />
-                        </n-icon>
+                        </el-icon>
                     </template>
-                </n-input>
+                </el-input>
             </div>
 
             <div v-if="fetchingModels" class="flex justify-center items-center py-8">
-                <n-spin size="large" />
+                <el-icon class="is-loading" style="font-size: 24px;">
+                    <!-- <Loading /> -->
+                </el-icon>
             </div>
             <div v-else>
                 <!-- 已添加的模型 -->
@@ -139,21 +157,20 @@
                             <div class="flex-1">
                                 <div class="font-bold text-base">{{ model.model_name }}</div>
                                 <div class="flex items-center mt-2">
-                                    <n-tag :bordered="false" type="success" size="small">{{ model.model_type }}</n-tag>
-                                    <n-space class="ml-2">
-                                        <n-tag v-for="feature in model.features" :bordered="false" type="info"
-                                            size="small">
+                                    <el-tag type="success">{{ model.model_type }}</el-tag>
+                                    <el-space class="ml-2">
+                                        <el-tag v-for="feature in model.features" type="info">
                                             {{ getLableName(feature) }}
-                                        </n-tag>
-                                    </n-space>
+                                        </el-tag>
+                                    </el-space>
                                 </div>
                             </div>
-                            <UiButton type="error" text @click="handleRemoveFromFetch(model)">
-                                <n-icon>
+                            <el-button type="danger" link @click="handleRemoveFromFetch(model)">
+                                <el-icon>
                                     <RemoveCircleTwotone />
-                                </n-icon>
+                                </el-icon>
                                 <span class="ml-1">移除</span>
-                            </UiButton>
+                            </el-button>
                         </li>
                     </ul>
                 </div>
@@ -167,19 +184,20 @@
                             <div class="flex-1">
                                 <div class="font-bold text-base">{{ model.model_name }}</div>
                                 <div class="flex items-center mt-2">
-                                    <n-tag :bordered="false" type="success" size="small">{{ model.model_type }}</n-tag>
-                                    <n-space class="ml-2">
-                                        <n-tag v-for="feature in model.features" :bordered="false" type="info"
-                                            size="small">
+                                    <el-tag type="success">{{ model.model_type }}</el-tag>
+                                    <el-space class="ml-2">
+                                        <el-tag v-for="feature in model.features" type="info">
                                             {{ getLableName(feature) }}
-                                        </n-tag>
-                                    </n-space>
+                                        </el-tag>
+                                    </el-space>
                                 </div>
                             </div>
-                            <UiButton text type="primary" @click="handleAddFromFetch(model)" size="small">
-                                <AddCircleTwotone />
+                            <el-button link type="primary" @click="handleAddFromFetch(model)" size="small">
+                                <el-icon>
+                                    <AddCircleTwotone />
+                                </el-icon>
                                 <span class="ml-1">添加</span>
-                            </UiButton>
+                            </el-button>
                         </li>
                     </ul>
                 </div>
@@ -189,25 +207,37 @@
                 </div>
             </div>
         </div>
-    </n-modal>
+    </el-dialog>
 </template>
 
 <script setup>
 import { ref, onMounted, computed, watch } from 'vue'
-import { useDebounceFn } from '@vueuse/core' // 导入防抖函数
-import { UiButton } from "../ui";
+import { useDebounceFn } from '@vueuse/core' // 导入防抖函数'
 import ModelsProviderList from './ModelsProviderList.vue'
-import {
-    NInput, NFormItem, NForm, NButton, NSpace, NIcon, NTag, NGrid, NGi,
-    NModal, NSelect, NCheckbox, NCheckboxGroup, NInputNumber, NSpin, NDivider
-} from 'naive-ui'
-import { apiService } from '../../services/ApiService'
 import {
     SettingsOutlined, RemoveCircleOutlineRound, DeleteTwotone, AddCircleTwotone,
     RemoveCircleTwotone, SearchOutlined, ArrowBackIosFilled
 } from '@vicons/material'
+import { apiService } from '../../services/ApiService'
 import { usePopup } from '../../composables/usePopup'
 import { useStorage } from '@vueuse/core'
+
+// Element Plus 组件导入
+import {
+    ElInput,
+    ElFormItem,
+    ElForm,
+    ElButton,
+    ElSpace,
+    ElIcon,
+    ElTag,
+    ElDialog,
+    ElSelect,
+    ElOption,
+    ElCheckbox,
+    ElCheckboxGroup,
+    ElInputNumber
+} from 'element-plus'
 
 const { notify, confirm, prompt } = usePopup()
 const currentProviderId = ref("");

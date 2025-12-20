@@ -10,11 +10,23 @@
         <p class="text-sm text-gray-500 truncate w-full mt-1">{{ account.email }}</p>
       </div>
       <div class="absolute bottom-2 right-2">
-        <n-dropdown :options="dropdownOptions" @select="(key) => handleDropdownSelect(key, account)" trigger="hover">
-          <UiButton text>
+        <el-dropdown @command="(command) => handleDropdownSelect(command, account)">
+          <el-button link>
             <MoreVertOutlined class="h-5 w-5 text-gray-500" />
-          </UiButton>
-        </n-dropdown>
+          </el-button>
+          <template #dropdown>
+            <el-dropdown-menu>
+              <el-dropdown-item command="edit">
+                <EditOutlined class="w-4 h-4 mr-2 inline-block" />
+                编辑
+              </el-dropdown-item>
+              <el-dropdown-item command="delete">
+                <DeleteOutlineOutlined class="w-4 h-4 mr-2 inline-block" />
+                删除
+              </el-dropdown-item>
+            </el-dropdown-menu>
+          </template>
+        </el-dropdown>
       </div>
     </div>
     <div
@@ -33,38 +45,49 @@
   </div>
 
   <!-- 子账户编辑/新增模态框 -->
-  <n-modal v-model:show="showAccountModal" preset="card" style="width: 500px;" :title="modalTitle">
-    <n-form ref="accountFormRef" :model="accountForm" :rules="accountFormRules" label-placement="top">
-      <n-form-item label="昵称" path="nickname">
-        <n-input v-model:value="accountForm.nickname" placeholder="请输入昵称" />
-      </n-form-item>
-      <n-form-item label="邮箱" path="email">
-        <n-input v-model:value="accountForm.email" placeholder="请输入邮箱" />
-      </n-form-item>
-      <n-form-item label="密码" path="password">
-        <n-input v-model:value="accountForm.password" type="password" show-password-on="click" placeholder="请输入密码" />
-      </n-form-item>
-      <n-form-item v-if="isAddingAccount" label="确认密码" path="confirmPassword">
-        <n-input v-model:value="accountForm.confirmPassword" type="password" show-password-on="click"
+  <el-dialog v-model="showAccountModal" :title="modalTitle" width="500px">
+    <el-form ref="accountFormRef" :model="accountForm" :rules="accountFormRules" label-position="top">
+      <el-form-item label="昵称" prop="nickname">
+        <el-input v-model="accountForm.nickname" placeholder="请输入昵称" />
+      </el-form-item>
+      <el-form-item label="邮箱" prop="email">
+        <el-input v-model="accountForm.email" placeholder="请输入邮箱" />
+      </el-form-item>
+      <el-form-item label="密码" prop="password">
+        <el-input v-model="accountForm.password" type="password" show-password placeholder="请输入密码" />
+      </el-form-item>
+      <el-form-item v-if="isAddingAccount" label="确认密码" prop="confirmPassword">
+        <el-input v-model="accountForm.confirmPassword" type="password" show-password
           placeholder="请再次输入密码" />
-      </n-form-item>
-    </n-form>
+      </el-form-item>
+    </el-form>
     <template #footer>
       <div class="flex justify-end gap-2">
-        <UiButton @click="showAccountModal = false">取消</UiButton>
-        <UiButton type="primary" @click="saveAccount">保存</UiButton>
+        <el-button @click="showAccountModal = false">取消</el-button>
+        <el-button type="primary" @click="saveAccount">保存</el-button>
       </div>
     </template>
-  </n-modal>
+  </el-dialog>
 </template>
 
 <script setup>
-import { ref, computed, onMounted, h } from 'vue'
-import { NForm, NFormItem, NInput, NIcon, NDropdown, NModal } from 'naive-ui'
+import { ref, computed, onMounted } from 'vue'
 import { MoreVertOutlined, EditOutlined, DeleteOutlineOutlined } from '@vicons/material'
 import { usePopup } from '../../composables/usePopup'
 import { apiService } from '../../services/ApiService'
-import { UiButton, Avatar } from '../ui/'
+import { Avatar } from '../ui/'
+
+// Element Plus 组件导入
+import {
+  ElForm,
+  ElFormItem,
+  ElInput,
+  ElDialog,
+  ElDropdown,
+  ElDropdownMenu,
+  ElDropdownItem,
+  ElButton
+} from 'element-plus'
 
 const { toast } = usePopup()
 
@@ -177,8 +200,8 @@ const handleDropdownSelect = (key, account) => {
 }
 
 const saveAccount = () => {
-  accountFormRef.value?.validate(async (errors) => {
-    if (!errors) {
+  accountFormRef.value?.validate(async (valid) => {
+    if (valid) {
       try {
         if (isAddingAccount.value) {
           // 新增账户逻辑

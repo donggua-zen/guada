@@ -1,7 +1,7 @@
 <template>
     <div class="flex w-full h-full relative overflow-hidden">
         <!-- 遮罩层：仅在移动端且 sidebarVisible 时显示 -->
-        <div v-if="isMobile && sidebarVisible" class="absolute inset-0 bg-black opacity-40 z-[49]"
+        <div v-if="isMobile && sidebarVisible" class="absolute inset-0 bg-black opacity-40 z-[19]"
             @click="$emit('update:sidebarVisible', false)"></div>
         <!-- 侧边栏容器 -->
         <div :class="[
@@ -18,11 +18,11 @@
 
             <!-- 折叠展开按钮 -->
             <button v-if="showToggleButton" @click="$emit('update:sidebarVisible', !sidebarVisible)"
-                class="absolute  top-1/2 right-0 transition-all transform -translate-y-1/2 w-4 h-16 flex items-center justify-center bg-white dark:bg-gray-700 shadow-sm hover:bg-gray-50 focus:outline-none z-10  border-gray-200 dark:border-gray-700 dark:hover:bg-gray-600"
+                class="absolute  top-1/2 right-0 transition-all transform -translate-y-1/2 w-4 h-16 flex items-center justify-center bg-white dark:bg-gray-800 shadow-sm hover:bg-gray-50 focus:outline-none z-10  border-gray-200 dark:border-gray-800 dark:hover:bg-gray-600"
                 :title="sidebarVisible ? '折叠侧边栏' : '展开侧边栏'"
                 :class="sidebarVisible ? 'translate-x-1/2 rounded-lg border' : 'translate-x-full rounded-r-lg border-r'">
                 <slot name="toggle-icon" :sidebar-visible="sidebarVisible">
-                    <n-icon :component="sidebarVisible ? ArrowLeftTwotone : ArrowRightTwotone" class="text-gray-600 dark:text-gray-200" />
+                    <component :is="sidebarVisible ? ArrowLeftTwotone : ArrowRightTwotone" class="text-gray-600 dark:text-gray-200" />
                 </slot>
             </button>
         </div>
@@ -36,7 +36,6 @@
 
 <script setup>
 import { computed } from "vue";
-import { NIcon } from "naive-ui";
 import {
     ArrowBackIosNewTwotone as ArrowLeftTwotone,
     ArrowForwardIosTwotone as ArrowRightTwotone

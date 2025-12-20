@@ -1,5 +1,5 @@
 <template>
-  <div class="message" :class="messageClass" ref="rootRef">
+  <div v-if="!streamingState.is_placeholder" class="message" :class="messageClass" ref="rootRef">
     <div class="message-content">
       <div v-if="isAssistant" class="text-xs text-gray-400 mb-3">
         <div class="flex items-center">
@@ -27,8 +27,10 @@
             <div class="flex items-center inline-flex">
               <span class="text-gray-500">{{ thinkingLabel }}</span>
             </div>
-            <n-icon :component="ArrowRightTwotone" class="transition-transform duration-300 ml-2" size="10"
-              :class="[isExpanded ? 'rotate-90' : 'rotate-0']"></n-icon>
+            <el-icon :class="['transition-transform duration-300 ml-2', isExpanded ? 'rotate-90' : 'rotate-0']"
+              size="10">
+              <ArrowRightTwotone />
+            </el-icon>
           </div>
           <div class="thinking-container" :class="{ expanded: isExpanded }">
             <div @click="handleClick"
@@ -41,14 +43,14 @@
         <div class="message-text markdown-text" @click="handleClick" v-html="debouncedFormattedText">
         </div>
 
-        <n-alert v-if="metadata && metadata.finish_reason == 'error'" title="API请求错误" type="error">
+        <el-alert v-if="metadata && metadata.finish_reason == 'error'" title="API请求错误" type="error" :closable="false">
           {{ metadata.error }}
-        </n-alert>
+        </el-alert>
         <div v-if="streamingState.is_streaming" class="assistant-loading flex items-center text-gray-500"
           style="position: sticky;top:0;">
-          <n-icon size="16" class="mr-2 relative top-[0px]">
+          <el-icon size="16" class="mr-2 relative top-[0px]">
             <Loading />
-          </n-icon>
+          </el-icon>
           {{ streamingState.is_web_searching ? '搜索中...' : '回答中...' }}
         </div>
 
@@ -65,51 +67,83 @@
 
 
         <div class="message-action-button" @click="handleAction('copy')">
-          <n-icon :component="ContentCopyTwotone" size="16" />
+          <el-icon :size="16">
+            <ContentCopyTwotone />
+          </el-icon>
         </div>
 
         <template v-if="!isAssistant && props.allowGenerate">
           <div class="message-action-button" @click="handleAction('generate')">
-            <n-icon :component="ArrowDownwardTwotone" size="16" />
+            <el-icon :size="16">
+              <ArrowDownwardTwotone />
+            </el-icon>
           </div>
         </template>
 
         <template v-if="isAssistant && props.isLast">
           <div class="message-action-button" @click="handleAction('regenerate')">
-            <n-icon :component="RefreshFilled" size="16" />
+            <el-icon :size="16">
+              <RefreshFilled />
+            </el-icon>
           </div>
         </template>
 
         <!-- 内容切换按钮（如果需要） -->
         <template v-if="isLast && message.contents.length > 1">
           <div class="message-action-button" @click="switchContent('prev')" :disabled="!hasPrevContent">
-            <n-icon :component="ArrowLeftTwotone" size="16" />
+            <el-icon :size="16">
+              <ArrowLeftTwotone />
+            </el-icon>
           </div>
           <div class="text-gray-700 transition-colors duration-200 flex items-center py-1 px-2">
             {{ getCurrentIndex(message.contents) }} / {{ message.contents.length }}
           </div>
           <div class="message-action-button" @click="switchContent('next')" :disabled="!hasNextContent">
-            <n-icon :component="ArrowRightTwotone" size="16" />
+            <el-icon :size="16">
+              <ArrowRightTwotone />
+            </el-icon>
           </div>
         </template>
 
         <!-- 更多按钮下拉菜单 -->
-        <n-dropdown trigger="click" :options="moreOptions" @select="handleMoreAction">
+        <el-dropdown trigger="click" @command="handleMoreAction">
           <div class="message-action-button">
-            <n-icon :component="MoreVertOutlined" size="16" />
+            <el-icon :size="16">
+              <MoreVertOutlined />
+            </el-icon>
           </div>
-        </n-dropdown>
-
+          <template #dropdown>
+            <el-dropdown-menu>
+              <el-dropdown-item command="edit">
+                <div class="flex items-center">
+                  <el-icon class="mr-2">
+                    <EditTwotone />
+                  </el-icon>
+                  编辑内容
+                </div>
+              </el-dropdown-item>
+              <el-dropdown-item command="delete">
+                <div class="flex items-center">
+                  <el-icon class="mr-2">
+                    <DeleteTwotone />
+                  </el-icon>
+                  删除消息
+                </div>
+              </el-dropdown-item>
+            </el-dropdown-menu>
+          </template>
+        </el-dropdown>
 
       </div>
     </div>
   </div>
-  <n-image-group v-model:show="showImageViewer" v-model:current="currentPreViewIndex" :src-list="previewList" />
+  <el-image-viewer v-if="showImageViewer" v-model:visible="showImageViewer" :url-list="previewList"
+    :initial-index="currentPreViewIndex" @close="showImageViewer = false" :teleported="true"/>
 </template>
 
 <script setup>
 import { computed, ref, watch, onUnmounted, onMounted, h, nextTick } from "vue";
-import { NAlert, NIcon, NImageGroup, NDropdown } from "naive-ui";
+import { ElAlert, ElIcon, ElImageViewer, ElDropdown, ElDropdownMenu, ElDropdownItem } from "element-plus";
 import { useDebounceFn } from "@vueuse/core";
 import {
   EditTwotone,
@@ -193,6 +227,7 @@ const streamingState = computed(() => ({
   is_streaming: state.value?.is_streaming ?? false,
   is_thinking: state.value?.is_thinking ?? false,
   is_web_searching: state.value?.is_web_searching ?? false,
+  is_placeholder: props.message.contents.filter(content => content.is_current).length == 0
 }));
 
 const currentModelName = computed(() => {
@@ -286,6 +321,17 @@ watch(
   },
   { immediate: true }
 );
+
+watch(
+  () => props.message?.state?.is_thinking,
+  (newState, oldState) => {
+    if (newState) {
+      showThinking();
+    } else {
+      hideThinking();
+    }
+  }
+)
 
 // 消抖后的主内容渲染
 const debouncedFormattedText = computed(() => {
