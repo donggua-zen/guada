@@ -23,11 +23,11 @@
         <!-- 骨架屏加载效果 -->
         <template v-if="loading">
           <div v-for="i in skeletonCount" :key="i"
-            class="rounded-xl border border-gray-200 flex flex-col min-h-[180px] animate-pulse">
+            class="rounded-xl border border-gray-200 dark:border-gray-700 flex flex-col min-h-45 animate-pulse">
             <div class="flex p-4 flex-1 flex-col">
               <!-- 头像区域 -->
               <div class="flex flex-rows">
-                <div class="flex-shrink-0 mr-4">
+                <div class="shrink-0 mr-4">
                   <div class="w-16 h-16 bg-surface"></div>
                 </div>
 
@@ -35,7 +35,7 @@
                 <div class="flex-1 min-w-0 flex flex-col">
                   <!-- 标题 -->
                   <!-- <div class="h-5 bg-surface rounded mb-2 w-full"></div>-->
-                  <h3 class="text-lg bg-surface font-semibold text-gray-800 truncate mb-2">&nbsp;</h3>
+                  <h3 class="text-lg bg-surface font-semibold text-gray-800 dark:text-gray-200 truncate mb-2">&nbsp;</h3>
                   <!-- 描述 -->
                   <div class="h-15 space-y-2">
                     <div class="h-3 bg-surface rounded"></div>
@@ -45,7 +45,7 @@
                 </div>
               </div>
               <!-- 操作按钮 -->
-              <div class="flex justify-between items-center mt-4 pt-3 border-t border-gray-100">
+              <div class="flex justify-between items-center mt-4 pt-3 border-t border-gray-100 dark:border-gray-700">
                 <div class="h-7 w-20 bg-surface rounded-full"></div>
                 <div class="flex gap-1">
                   <div class="w-8 h-8 rounded-full bg-surface"></div>
@@ -58,11 +58,11 @@
         <template v-else>
           <!-- 角色卡片 -->
           <div v-for="character in characters" :key="character.id"
-            class="rounded-xl border border-gray-200 hover:border-gray-300 transition-all duration-300 flex flex-col min-h-[180px]">
+            class="rounded-xl border border-gray-200 dark:border-gray-700 hover:border-gray-300 transition-all duration-300 flex flex-col min-h-[180px]">
             <div class="flex p-4 flex-1 flex-col">
               <!-- 头像区域 -->
               <div class="flex flex-rows">
-                <div class="flex-shrink-0 mr-4">
+                <div class="shrink-0 mr-4">
                   <div class="w-16 h-16 overflow-hidden">
                     <Avatar :src="character.avatar_url" />
                   </div>
@@ -71,10 +71,10 @@
                 <!-- 内容区域 -->
                 <div class="flex-1 min-w-0 flex flex-col">
                   <!-- 标题和描述 -->
-                  <h3 class="text-lg font-semibold text-gray-800 truncate mb-2">{{ character.title }}</h3>
+                  <h3 class="text-lg font-semibold text-gray-800 dark:text-gray-200 truncate mb-2">{{ character.title }}</h3>
                   <div class="h-15 overflow-hidden">
                     <el-tooltip effect="dark" :content="character.description || '暂无描述'" placement="top">
-                      <p class="text-sm text-gray-600 line-clamp-3 leading-5 cursor-help">
+                      <p class="text-sm text-gray-600 dark:text-gray-400 line-clamp-3 leading-5 cursor-help">
                         {{ character.description || '暂无描述' }}
                       </p>
                     </el-tooltip>
@@ -82,7 +82,7 @@
                 </div>
               </div>
               <!-- 操作按钮 -->
-              <div class="flex justify-between items-center mt-4 pt-3 border-t border-gray-100">
+              <div class="flex justify-between items-center mt-4 pt-3 border-t border-gray-100 dark:border-gray-700">
                 <el-button type="primary" round size="small" @click="startNewChat(character)"
                   class="flex items-center gap-1">
                   <template #icon>
@@ -93,7 +93,7 @@
 
                 <div v-if="charactersType == 'private'" class="flex gap-1">
                   <el-button size="small" link @click="shareCharacter(character)"
-                    class="text-gray-500 hover:text-gray-600" :class="{ '!text-yellow-500': character.is_public }">
+                    class="text-gray-500 hover:text-gray-600" :class="{ 'text-yellow-500!': character.is_public }">
                     <template #icon>
                       <ShareTwotone />
                     </template>
