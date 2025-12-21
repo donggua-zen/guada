@@ -43,20 +43,17 @@ class MemoryManagerService:
         system_message = self._construct_system_message(prompt_settings)
         if system_message:  # 添加系统消息
             tokens_total += tokenizer.count_tokens(system_message["content"])
-            system_message['tokens'] = tokens_total
+            system_message["tokens"] = tokens_total
             max_messages -= 1
 
-        offset_message_id = None
         while max_messages > len(conversation_messages) and tokens_total <= max_tokens:
             args = {
                 "session_id": session_id,
                 "start_message_id": None,
-                "end_message_id": (
-                    offset_message_id if offset_message_id else user_message_id
-                ),
+                "end_message_id": user_message_id,
                 "include_start": False,
-                "include_end": False if offset_message_id else True,
-                "offset": None,
+                "include_end": True,
+                "offset": len(conversation_messages),
                 "limit": min(100, max_messages - len(conversation_messages)),
                 "order_type": "desc",
                 "with_files": True,
@@ -84,8 +81,6 @@ class MemoryManagerService:
                     if tokens_total > max_tokens:
                         break
                     conversation_messages.append(transformed_msg)
-
-            offset_message_id = messages[-1].id if messages else None
 
         if system_message:
             conversation_messages.append(system_message)
