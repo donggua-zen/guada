@@ -47,7 +47,7 @@ class MemoryManagerService:
             max_messages -= 1
 
         offset_message_id = None
-        while max_messages > len(conversation_messages):
+        while max_messages > len(conversation_messages) and tokens_total <= max_tokens:
             args = {
                 "session_id": session_id,
                 "start_message_id": None,
@@ -81,7 +81,7 @@ class MemoryManagerService:
                     )
                     tokens_total += transformed_msg["tokens"]
 
-                    if tokens_total >= max_tokens:
+                    if tokens_total > max_tokens:
                         break
                     conversation_messages.append(transformed_msg)
 
