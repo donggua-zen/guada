@@ -118,6 +118,8 @@ ol>*:not(li) {
     padding: 0.2em 0.4em;
     /* font-size: 0.9em; */
     font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+    font-size: var(--size-text-base) !important;
+
 }
 
 .markdown-text pre {
@@ -129,6 +131,7 @@ ol>*:not(li) {
     border: 1px solid #dfe2e5;
     white-space: pre-wrap;
     word-wrap: break-word;
+    font-size: var(--size-text-base) !important;
 }
 
 .markdown-text blockquote {
@@ -308,6 +311,7 @@ ol>*:not(li) {
     background: #f3f4f6;
     border: 1px solid #e3e3e7;
 }
+
 
 .code-header {
     display: flex;
