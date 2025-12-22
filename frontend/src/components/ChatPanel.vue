@@ -744,7 +744,9 @@ async function sendNewMessage(sessionId, text, files, replaceMessageId = null) {
   // debouncedUpdatedSession();
   await nextTick();
   updatePlaceholder(message.id);
-  immediateScrollToBottom();
+  requestAnimationFrame(() => {
+    immediateScrollToBottom();
+  });
   // autoScrollToBottom.value = false;
   return message;
 }
