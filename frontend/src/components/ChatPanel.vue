@@ -1,8 +1,8 @@
 <template>
   <div class="flex flex-col h-full">
     <!-- 聊天头部 -->
-    <ChatHeader :current-model-name="currentModelName" :sidebar-visible="localSidebarVisible"
-      @toggle-sidebar="toggleSidebar" @open-switch-model="handleSwitchModelClick"
+    <ChatHeader :current-model-name="currentModelName" :sidebar-visible="sidebarVisible"
+      @toggle-sidebar="emit('update:sidebarVisible', !sidebarVisible)" @open-switch-model="handleSwitchModelClick"
       @select-more-option="handleMoreSelect" />
 
     <!-- 消息内容区域 -->
@@ -228,15 +228,6 @@ const chatInputButtons = computed(() => {
     imagesButton: currentSession.value.model?.features?.includes("visual"),
   }
 })
-
-const localSidebarVisible = computed({
-  get() {
-    return props.sidebarVisible;
-  },
-  set(value) {
-    emit("update:sidebarVisible", value);
-  }
-});
 
 // 防抖函数
 // const debouncedUpdatedSession = useDebounceFn(updateSessionLastMessage, 1000);
@@ -833,10 +824,6 @@ const toggleDeepThinking = () => {
 function handleTokensStatistic() {
   showTokenModal.value = true;
 }
-
-const toggleSidebar = () => {
-  localSidebarVisible.value = !localSidebarVisible.value;
-};
 
 defineExpose({ sendMessage: handleSendMessage })
 
