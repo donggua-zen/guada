@@ -35,12 +35,12 @@
                                 <el-input v-model="settingsForm.search_api_key" placeholder="" />
                             </el-form-item>
                             <el-form-item label="上下文条数" prop="search_prompt_context_length">
-                                    <el-slider v-model="settingsForm.search_prompt_context_length" :min="1" :max="20"
-                                        :step="1" class="flex-1" />
-                                    <el-input-number v-model="settingsForm.search_prompt_context_length" :min="1"
-                                        :max="20" :step="1" controls-position="right"
-                                        style="margin-left: 12px; width: 140px;" placeholder="" />
-                            
+                                <el-slider v-model="settingsForm.search_prompt_context_length" :min="1" :max="20"
+                                    :step="1" class="flex-1" />
+                                <el-input-number v-model="settingsForm.search_prompt_context_length" :min="1" :max="20"
+                                    :step="1" controls-position="right" style="margin-left: 12px; width: 140px;"
+                                    placeholder="" />
+
                             </el-form-item>
                         </el-form>
                     </div>
@@ -51,8 +51,9 @@
                         <el-form ref="summaryFormRef" :model="settingsForm" :rules="summaryRules" label-position="left"
                             label-width="105px" size="large">
                             <el-form-item label="摘要模型" prop="default_summary_model_id">
-                                <el-select v-model="settingsForm.default_summary_model_id" style="width: 100%" :options="allowCurrentModelOptions">
-                                
+                                <el-select v-model="settingsForm.default_summary_model_id" style="width: 100%"
+                                    :options="allowCurrentModelOptions">
+
                                 </el-select>
                             </el-form-item>
                             <!-- <el-form-item :show-label="true" :show-feedback="false">
@@ -227,8 +228,11 @@ const loadModels = async () => {
     try {
         const response = await apiService.fetchModels()
 
-        models.value = response.models || []
-        providers.value = response.providers || []
+        response.items.forEach(provider => {
+            models.value.push(...provider.models)
+            delete provider.models
+            providers.value.push(provider)
+        })
 
     } catch (error) {
         console.error('获取模型列表失败:', error)

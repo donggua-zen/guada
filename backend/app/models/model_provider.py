@@ -1,7 +1,9 @@
 from typing import TYPE_CHECKING, List
 import ulid
-from .database import ModelBase, db
-from sqlalchemy.orm import Mapped
+from sqlalchemy import String, DateTime, ForeignKey, Column
+from sqlalchemy.orm import Mapped, relationship
+from sqlalchemy.sql import func
+from app.database import ModelBase
 
 if TYPE_CHECKING:
     from .model import Model
@@ -10,18 +12,18 @@ if TYPE_CHECKING:
 class ModelProvider(ModelBase):
     __tablename__ = "model_provider"
 
-    id = db.Column(db.String(26), primary_key=True, default=lambda: str(ulid.new()))
-    user_id = db.Column(db.String(26), index=True)
-    name = db.Column(db.String(32))
-    provider = db.Column(db.String(32))
-    api_url = db.Column(db.String(255))
-    api_key = db.Column(db.String(255), nullable=True)
-    created_at = db.Column(db.DateTime, default=db.func.now())
-    updated_at = db.Column(
-        db.DateTime,
-        default=db.func.now(),
-        onupdate=db.func.now(),
+    id = Column(String(26), primary_key=True, default=lambda: str(ulid.new()))
+    user_id = Column(String(26), index=True)
+    name = Column(String(32))
+    provider = Column(String(32))
+    api_url = Column(String(255))
+    api_key = Column(String(255), nullable=True)
+    created_at = Column(DateTime, default=func.now())
+    updated_at = Column(
+        DateTime,
+        default=func.now(),
+        onupdate=func.now(),
     )
-    models: Mapped[List["Model"]] = db.relationship(
+    models: Mapped[List["Model"]] = relationship(
         "Model", back_populates="provider", cascade="all, delete-orphan"
     )

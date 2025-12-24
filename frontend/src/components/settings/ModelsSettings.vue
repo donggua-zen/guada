@@ -69,8 +69,7 @@
                 <el-input v-model="currentProviderEdit.api_url" placeholder="api_url" />
             </el-form-item>
             <el-form-item label="API KEY" prop="api_key">
-                <el-input v-model="currentProviderEdit.api_key" placeholder="api_key" type="password"
-                    show-password />
+                <el-input v-model="currentProviderEdit.api_key" placeholder="api_key" type="password" show-password />
             </el-form-item>
         </el-form>
         <template #footer>
@@ -91,12 +90,8 @@
 
             <el-form-item label="模型类型" prop="model_type">
                 <el-select v-model="editModelForm.model_type" placeholder="请选择模型类型" style="width: 100%">
-                    <el-option
-                        v-for="option in modelTypeOptions"
-                        :key="option.value"
-                        :label="option.label"
-                        :value="option.value"
-                    />
+                    <el-option v-for="option in modelTypeOptions" :key="option.value" :label="option.label"
+                        :value="option.value" />
                 </el-select>
             </el-form-item>
 
@@ -116,8 +111,8 @@
             </el-form-item>
 
             <el-form-item label="最大输出长度" prop="max_output_tokens">
-                <el-input-number v-model="editModelForm.max_output_tokens" placeholder="请输入最大输出长度"
-                    style="width: 100%" :min="1" controls-position="right" />
+                <el-input-number v-model="editModelForm.max_output_tokens" placeholder="请输入最大输出长度" style="width: 100%"
+                    :min="1" controls-position="right" />
             </el-form-item>
         </el-form>
         <template #footer>
@@ -132,8 +127,7 @@
     <el-dialog v-model="showFetchModal" title="获取模型列表" width="50%" align-center>
         <div class="max-h-[60vh] overflow-y-auto">
             <div class="p-4">
-                <el-input v-model="searchModelName" placeholder="搜索模型名称" clearable
-                    @input="handleSearchModel">
+                <el-input v-model="searchModelName" placeholder="搜索模型名称" clearable @input="handleSearchModel">
                     <template #prefix>
                         <el-icon>
                             <SearchOutlined />
@@ -289,9 +283,12 @@ const providerRules = {
 
 // 初始化数据函数 - 模拟网络请求
 const initData = async () => {
-    const data = await apiService.fetchModels();
-    providers.value = data.providers;
-    models.value = data.models;
+    const response = await apiService.fetchModels();
+    response.items.forEach(provider => {
+        models.value.push(...provider.models)
+        delete provider.models
+        providers.value.push(provider)
+    })
 };
 
 const currentProvider = computed(() => {

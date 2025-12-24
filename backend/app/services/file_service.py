@@ -2,20 +2,18 @@ import os
 from typing import Optional
 import uuid
 from app.repositories.file_repository import FileRepository as FileRepo
-from app.repositories.message_repository import MessageRepository
 from app.utils import (
     build_url_path,
     convert_webpath_to_filepath,
     resize_and_convert_image,
 )
-from config import STATIC_FILES_DIR
 
 
 class FileService:
-    def __init__(self):
-        pass
+    def __init__(self, file_repo: FileRepo):
+        self.file_repo = file_repo
 
-    def add_file(
+    async def add_file(
         self,
         file_name: str,
         display_name: str,
@@ -42,7 +40,7 @@ class FileService:
         :param message_id: 消息ID
         :return: 文件信息
         """
-        file = FileRepo.add_file(
+        file = await self.file_repo.add_file(
             file_name,
             display_name,
             file_ext,
@@ -56,15 +54,15 @@ class FileService:
             preview_url,
         )
 
-        return file.to_dict()
+        return file
 
-    def delete_file(self, file_id: int):
-        if not FileRepo.delete_file(file_id):
+    async def delete_file(self, file_id: int):
+        if not await self.file_repo.delete_file(file_id):
             raise Exception("删除文件失败")
         return {}
 
-    def copy_message_file(self, file_id, message_id, session_id: Optional[str] = None):
-        file = FileRepo.get_file(file_id)
+    async def copy_message_file(self, file_id, message_id, session_id: Optional[str] = None):
+        file = await self.file_repo.get_file(file_id)
         file_name = file["file_name"]
         display_name = file["display_name"]
         file_ext = file["file_ext"]
@@ -74,7 +72,7 @@ class FileService:
         content_hash = file["content_hash"]
         if session_id is None:
             session_id = file["session_id"]
-        return self.add_file(
+        return await self.add_file(
             file_name,
             display_name,
             file_ext,
@@ -112,7 +110,7 @@ class FileService:
             preview_web_path, unique_filename
         )
 
-    def upload_message_file(self, sessions_id, file):
+    async def upload_message_file(self, sessions_id, file):
         session_id = sessions_id
         allowed_jpeg_extensions = {"png", "jpg", "jpeg", "gif", "bmp", "webp", "tiff"}
 
@@ -149,7 +147,7 @@ class FileService:
             file_hash = "none"
 
             # 调用file_service保存文件信息到数据库
-            file_info = self.add_file(
+            file_info = await self.add_file(
                 file_name=file_name,
                 display_name=display_name,
                 file_ext=file_ext,
