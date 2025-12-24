@@ -1,3 +1,4 @@
+from datetime import datetime, timezone
 import ulid
 from sqlalchemy import String, DateTime, Boolean, Text, JSON, ForeignKey, Column
 from sqlalchemy.orm import relationship
@@ -18,11 +19,11 @@ class MessageContent(ModelBase):
     content = Column(Text, nullable=True)
     reasoning_content = Column(Text, nullable=True)
     meta_data = Column(JSON, nullable=True)
-    created_at = Column(DateTime, default=func.now())
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
     updated_at = Column(
         DateTime,
-        default=func.now(),
-        onupdate=func.now(),
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
     )
 
     message = relationship(

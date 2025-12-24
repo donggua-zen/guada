@@ -3,7 +3,7 @@ import logging
 from typing import AsyncGenerator
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
 from sqlalchemy.orm import DeclarativeBase
-from sqlalchemy import text
+from sqlalchemy import event, text
 from app.utils import to_utc8_isoformat
 
 logger = logging.getLogger(__name__)
@@ -77,12 +77,31 @@ class DatabaseManager:
     """异步数据库管理器"""
 
     def __init__(self, database_url: str):
-        self.engine = create_async_engine(
-            database_url,
-            echo=False,
-            pool_pre_ping=True,
-            pool_recycle=3600,
-        )
+
+        if database_url.startswith("sqlite"):
+            self.engine = create_async_engine(
+                database_url,
+                echo=False,
+                pool_pre_ping=True,
+                connect_args={
+                    "check_same_thread": False,
+                    "timeout": 30,
+                },
+                # poolclass=AsyncAdaptedQueuePool,
+            )
+
+            # 关键：注册连接事件，启用外键
+            @event.listens_for(self.engine.sync_engine, "connect")
+            def set_sqlite_pragma(dbapi_connection, connection_record):
+                dbapi_connection.execute("PRAGMA foreign_keys=ON")
+
+        else:
+            self.engine = create_async_engine(
+                database_url,
+                pool_pre_ping=True,
+                pool_recycle=3600,
+                # 注意：asyncmy / aiomysql 不支持 init_command
+            )
         self.async_session_factory = async_sessionmaker(
             self.engine,
             class_=AsyncSession,
@@ -137,7 +156,7 @@ async def init_db(database_url: str = None):
     if database_url is None:
         database_url = settings.DATABASE_URL
     db_manager = DatabaseManager(database_url)
-    await db_manager.create_tables()
+    # await db_manager.create_tables()
     return db_manager
 
 

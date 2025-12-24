@@ -1,5 +1,6 @@
 # models.py
 
+from datetime import datetime, timezone
 from typing import TYPE_CHECKING
 import ulid
 from sqlalchemy import String, DateTime, JSON, ForeignKey, Column, Integer
@@ -26,11 +27,11 @@ class Model(ModelBase):
     max_tokens = Column(Integer, nullable=True)
     max_output_tokens = Column(Integer, nullable=True)
     features = Column(JSON, nullable=True)
-    created_at = Column(DateTime, default=func.now())
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
     updated_at = Column(
         DateTime,
-        default=func.now(),
-        onupdate=func.now(),
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
     )
 
     provider: Mapped["ModelProvider"] = relationship(
