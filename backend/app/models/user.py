@@ -1,14 +1,15 @@
 # user.py
+from datetime import datetime, timezone
 import ulid
 from sqlalchemy import String, DateTime, Column
 from sqlalchemy.sql import func
 from app.database import ModelBase
-import bcrypt
+from sqlalchemy.orm import relationship
 
 
 class User(ModelBase):
-    __tablename__ = 'user'
-    
+    __tablename__ = "user"
+
     id = Column(String(26), primary_key=True, default=lambda: str(ulid.new()))
     role = Column(String(20), nullable=True)
     avatar_url = Column(String(255), nullable=True)
@@ -27,9 +28,16 @@ class User(ModelBase):
         unique=True,
     )
     password_hash = Column(String(128), nullable=False)
-    created_at = Column(DateTime, default=func.now())
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
     updated_at = Column(
         DateTime,
-        default=func.now(),
-        onupdate=func.now(),
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
     )
+
+    # settings = relationship(
+    #     "Setting",
+    #     back_populates="user",
+    #     cascade="all, delete-orphan",
+    #     uselist=False,  # 关键参数，表示一对一关系
+    # )

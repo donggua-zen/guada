@@ -1,3 +1,4 @@
+from datetime import datetime, timezone
 import ulid
 from sqlalchemy import String, DateTime, Boolean, JSON, ForeignKey, Column
 from sqlalchemy.orm import relationship
@@ -21,11 +22,11 @@ class Character(ModelBase):
         nullable=True,
     )
     settings = Column(JSON, nullable=True)
-    created_at = Column(DateTime, default=func.now())
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
     updated_at = Column(
         DateTime,
-        default=func.now(),
-        onupdate=func.now(),
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
     )
 
     model = relationship(

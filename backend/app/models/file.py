@@ -1,3 +1,4 @@
+from datetime import datetime, timezone
 import ulid
 
 from sqlalchemy import String, DateTime, Text, BigInteger, ForeignKey, Column, Boolean
@@ -28,11 +29,11 @@ class File(ModelBase):
         nullable=True,
     )
     is_public = Column(Boolean, default=False)
-    created_at = Column(DateTime, default=func.now())
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
     updated_at = Column(
         DateTime,
-        default=func.now(),
-        onupdate=func.now(),
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
     )
 
     message = relationship(

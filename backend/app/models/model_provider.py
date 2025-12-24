@@ -1,3 +1,4 @@
+from datetime import datetime, timezone
 from typing import TYPE_CHECKING, List
 import ulid
 from sqlalchemy import String, DateTime, ForeignKey, Column
@@ -18,11 +19,11 @@ class ModelProvider(ModelBase):
     provider = Column(String(32))
     api_url = Column(String(255))
     api_key = Column(String(255), nullable=True)
-    created_at = Column(DateTime, default=func.now())
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
     updated_at = Column(
         DateTime,
-        default=func.now(),
-        onupdate=func.now(),
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
     )
     models: Mapped[List["Model"]] = relationship(
         "Model", back_populates="provider", cascade="all, delete-orphan"

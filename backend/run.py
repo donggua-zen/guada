@@ -26,8 +26,12 @@ logger.debug("当前脚本目录:%s", current_directory)
 if __name__ == "__main__":
     import uvicorn
 
-    app = create_app()
-    app.mount(
-        "/static", StaticFiles(directory=settings.STATIC_FILES_DIR), name="static"
+    # app = create_app()
+
+    uvicorn.run(
+        "app:create_app",
+        host="0.0.0.0",
+        port=8000,
+        reload=True,
+        reload_includes=["app"],
     )
-    uvicorn.run(app, host="0.0.0.0", port=8000)
