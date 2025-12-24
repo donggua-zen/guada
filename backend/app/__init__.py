@@ -3,12 +3,12 @@ from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 import logging
 from app.database import close_db, init_db
+from app.config import settings
 from app.routes import (
     chat_router,
     characters_router,
     messages_router,
     sessions_router,
-    settings,
     users_router,
     settings_router,
     files_router,
