@@ -40,6 +40,7 @@ class ModelProviderOut(BaseModel):
     name: Optional[str] = None
     provider: Optional[str] = None
     api_url: Optional[str] = None
+    api_key: Optional[str] = None
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
     models: Optional[List[ModelOut]] = []
