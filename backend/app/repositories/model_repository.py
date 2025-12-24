@@ -1,28 +1,36 @@
-from app.models import db, Model, ModelProvider
-from app.models.db_transaction import execute_in_transaction
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select, delete
+from sqlalchemy.orm import selectinload
+from app.models.model import Model
+from app.models.model_provider import ModelProvider
 
 
 class ModelRepository:
-    @staticmethod
-    def get_models():
-        models = db.session.query(Model).all()
+    def __init__(self, session: AsyncSession):
+        """
+        初始化ModelRepository
+        :param session: 异步数据库会话
+        """
+        self.session = session
+
+    async def get_models(self):
+        stmt = select(Model)
+        result = await self.session.execute(stmt)
+        models = result.scalars().all()
         return models
 
-    @staticmethod
-    def get_providers():
-        providers = db.session.query(ModelProvider).all()
+    async def get_providers(self):
+        stmt = select(ModelProvider)
+        result = await self.session.execute(stmt)
+        providers = result.scalars().all()
         return providers
 
-    @staticmethod
-    def get_provider(provider_id):
-        return (
-            db.session.query(ModelProvider)
-            .filter(ModelProvider.id == provider_id)
-            .first()
-        )
+    async def get_provider(self, provider_id):
+        stmt = select(ModelProvider).filter(ModelProvider.id == provider_id)
+        result = await self.session.execute(stmt)
+        return result.scalar_one_or_none()
 
-    @staticmethod
-    def get_providers_with_models(user_id):
+    async def get_providers_with_models(self, user_id):
         """
         获取指定用户的所有模型提供商及其关联的模型信息
 
@@ -33,31 +41,27 @@ class ModelRepository:
             list: 包含模型提供商及其关联模型信息的字典列表，每个元素都是
                   ModelProvider对象调用to_dict方法并包含models字段的结果
         """
-        providers = (
-            db.session.query(ModelProvider)
+        stmt = (
+            select(ModelProvider)
             .filter(ModelProvider.user_id == user_id)
-            .options(db.selectinload(ModelProvider.models))
-            .all()
+            .options(selectinload(ModelProvider.models))
         )
+        result = await self.session.execute(stmt)
+        providers = result.scalars().all()
         return providers
 
-    @staticmethod
-    @execute_in_transaction
-    def delete_model(model_id):
-        return db.session.query(Model).filter(Model.id == model_id).delete()
+    async def delete_model(self, model_id):
+        stmt = delete(Model).where(Model.id == model_id)
+        result = await self.session.execute(stmt)
+        return result.rowcount > 0
 
-    @staticmethod
-    @execute_in_transaction
-    def delete_provider(provider_id):
-        return (
-            db.session.query(ModelProvider)
-            .filter(ModelProvider.id == provider_id)
-            .delete()
-        )
+    async def delete_provider(self, provider_id):
+        stmt = delete(ModelProvider).where(ModelProvider.id == provider_id)
+        result = await self.session.execute(stmt)
+        return result.rowcount > 0
 
-    @staticmethod
-    @execute_in_transaction
-    def add_model(
+    async def add_model(
+        self,
         model_name,
         model_type,
         provider_id,
@@ -75,78 +79,68 @@ class ModelRepository:
             max_tokens=max_tokens,
             max_output_tokens=max_output_tokens,
         )
-        db.session.add(model)
-        return model
+        self.session.add(model)
+        await self.session.flush()
+        return await self.get_model(model.id)
 
-    @staticmethod
-    @execute_in_transaction
-    def add_provider(name, user_id, api_key, api_url):
+    async def add_provider(self, name, user_id, api_key, api_url):
         provider = ModelProvider(
             user_id=user_id,
             name=name,
             api_key=api_key,
             api_url=api_url,
         )
-        db.session.add(provider)
-        return provider
+        self.session.add(provider)
+        await self.session.flush()
+        stmt = select(ModelProvider).filter(ModelProvider.id == provider.id)
+        result = await self.session.execute(stmt)
+        return result.scalar_one_or_none()
 
-    @staticmethod
-    def get_model(model_id):
-        return db.session.query(Model).filter(Model.id == model_id).first()
+    async def get_model(self, model_id):
+        stmt = select(Model).filter(Model.id == model_id)
+        stmt = stmt.options(selectinload(Model.provider))
+        result = await self.session.execute(stmt)
+        return result.scalar_one_or_none()
 
-    @staticmethod
-    @execute_in_transaction
-    def update_model(model_id, data):
-        model = db.session.query(Model).filter(Model.id == model_id).first()
+    async def update_model(self, model_id, data):
+        stmt = select(Model).filter(Model.id == model_id)
+        result = await self.session.execute(stmt)
+        model = result.scalar_one_or_none()
         if not model:
             raise ValueError(f"Model with ID '{model_id}' not found.")
         for key, value in data.items():
             setattr(model, key, value)
         return model
 
-    @staticmethod
-    @execute_in_transaction
-    def update_provider(provider_id, data):
-        provider = (
-            db.session.query(ModelProvider)
-            .filter(ModelProvider.id == provider_id)
-            .first()
-        )
+    async def update_provider(self, provider_id, data):
+        stmt = select(ModelProvider).filter(ModelProvider.id == provider_id)
+        result = await self.session.execute(stmt)
+        provider = result.scalar_one_or_none()
         if not provider:
             raise ValueError(f"Provider with ID '{provider_id}' not found.")
         for key, value in data.items():
             setattr(provider, key, value)
         return provider
 
-    @staticmethod
-    def get_model_by_name(model_name, provider_name=None):
-        model = None
+    async def get_model_by_name(self, model_name, provider_name=None):
         if provider_name:
-            provider = (
-                db.session.query(ModelProvider)
-                .filter(ModelProvider.name == provider_name)
-                .first()
-            )
+            stmt = select(ModelProvider).filter(ModelProvider.name == provider_name)
+            result = await self.session.execute(stmt)
+            provider = result.scalar_one_or_none()
             if not provider:
                 return None
-            model = (
-                db.session.query(Model)
+            stmt = (
+                select(Model)
                 .filter(Model.model_name == model_name)
                 .filter(Model.provider_id == provider.id)
-                .first()
             )
         else:
-            model = (
-                db.session.query(Model).filter(Model.model_name == model_name).first()
-            )
+            stmt = select(Model).filter(Model.model_name == model_name)
 
-        return model
+        result = await self.session.execute(stmt)
+        return result.scalar_one_or_none()
 
-    @staticmethod
-    def get_provider_by_name(provider_name):
-        provider = (
-            db.session.query(ModelProvider)
-            .filter(ModelProvider.name == provider_name)
-            .first()
-        )
-        return provider
+    async def get_provider_by_name(self, provider_name):
+        stmt = select(ModelProvider).filter(ModelProvider.name == provider_name)
+        result = await self.session.execute(stmt)
+        return result.scalar_one_or_none()

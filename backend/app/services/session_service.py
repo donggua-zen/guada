@@ -1,32 +1,35 @@
 # session_service.py
-import os
-import shutil
 from typing import Optional
+from app.models.user import User
 from app.repositories.character_repository import CharacterRepository
-from app.repositories.message_repository import MessageRepository
 from app.repositories.session_repository import SessionRepository as SessionRepo
 from app.services.upload_service import UploadService
 from app.utils import remove_file, to_utc8_isoformat
-from app.models.db_transaction import smart_transaction, smart_transaction_manager
+from app.schemas.common import PaginatedResponse
+from app.schemas.session import SessionOut
+
+# from app.models.db_transaction import get_transaction_manager
 
 
 class SessionService:
-    def __init__(self):
+    def __init__(self, session_repo: SessionRepo, character_repo: CharacterRepository):
         # 初始化UploadService实例，避免重复创建
         self.upload_service = UploadService()
-        pass
+        self.session_repo = session_repo
+        self.character_repo = character_repo
 
     def __del__(self):
         pass
 
-    def create_session(self, data: dict):
+    async def create_session(self, user: User, data: dict):
         character_id = data.get("character_id", None)
         if character_id is not None:
-            character = CharacterRepository.get_character_by_id(character_id)
+            character = await self.character_repo.get_character_by_id(character_id)
             data["title"] = character.title
             data["avatar_url"] = character.avatar_url
             data["description"] = character.description
             data["model_id"] = character.model_id
+            data["user_id"] = user.id  # 添加用户ID
 
             fields = [
                 "assistant_name",
@@ -54,38 +57,21 @@ class SessionService:
             )
             if avatar_path:
                 data["avatar_url"] = avatar_path
-            session = self._add_new_session(data)
+            session = await self._add_new_session(data)
         else:
-            session = self._add_new_session(data)
+            data["user_id"] = user.id  # 添加用户ID
+            session = await self._add_new_session(data)
 
         if session is None:
             raise ValueError("Failed to create session")
 
-        return session.to_dict(include=["model"])
+        return session
 
-    def get_sessions(self, user_id: Optional[str] = None) -> list[dict]:
-        sessions = SessionRepo.get_sessions_with_last_message_v2(user_id)
-        result = []
-        for (
-            session,
-            content,
-            reasoning_content,
-            message_created_at,
-        ) in sessions:
-            session_data = session.to_dict()
+    async def get_sessions(self, user: User) -> list[dict]:
+        sessions = await self.session_repo.get_sessions(user.id)
+        return PaginatedResponse(items=sessions, size=len(sessions))
 
-            if content is not None:
-                session_data["last_message"] = {
-                    "content": content,
-                    "reasoning_content": reasoning_content,
-                    "created_at": to_utc8_isoformat(message_created_at),
-                }
-
-            result.append(session_data)
-
-        return result
-
-    def _add_new_session(self, data: dict):
+    async def _add_new_session(self, data: dict):
 
         fields = [
             "title",
@@ -101,50 +87,70 @@ class SessionService:
         }
 
         # 创建字符对象
-        session = SessionRepo.create_session(data_filtered)
+        session = await self.session_repo.create_session(data_filtered)
         return session
 
-    def update_session(self, session_id, data: dict):
+    async def update_session(self, session_id, user: User, data: dict):
 
-        with smart_transaction():
-            session = SessionRepo.get_session_by_id(session_id)
-            if not session:
-                raise ValueError(f"Session with ID {session_id} does not exist.")
+        # 验证会话是否属于当前用户
+        session = await self.session_repo.get_session_by_id(session_id)
+        if not session or session.user_id != user.id:
+            raise ValueError(
+                f"Session with ID {session_id} does not exist or does not belong to user."
+            )
 
-            old_avatar_url = session.avatar_url
+        old_avatar_url = session.avatar_url
 
-            session.update(data)
+        session.update(data)
 
-            if "avatar_url" in data and data["avatar_url"] != old_avatar_url:
-                old_avatar_path = self.upload_service.convert_webpath_to_filepath(
-                    old_avatar_url
-                )
-                if old_avatar_url:
-                    remove_file(old_avatar_path)
-            return session.to_dict(flush=True)
+        if "avatar_url" in data and data["avatar_url"] != old_avatar_url:
+            old_avatar_path = self.upload_service.convert_webpath_to_filepath(
+                old_avatar_url
+            )
+            if old_avatar_url:
+                remove_file(old_avatar_path)
+        self.session_repo.session.refresh(session)
+        return session
 
-    def query_session(self, session_id=None, user_id=None, character_id=None):
+    async def query_session(
+        self, session_id=None, user: User = None, character_id=None
+    ):
 
-        sessions = SessionRepo.query_session(session_id, user_id, character_id)
+        sessions = await self.session_repo.query_session(
+            session_id, user.id if user else None, character_id
+        )
 
         if not sessions:  # 如果没有查询到结果，则返回None
-            return []
+            return PaginatedResponse(items=[], size=0)
 
-        return sessions
+        return PaginatedResponse(
+            items=[SessionOut.model_validate(s) for s in sessions], size=len(sessions)
+        )
 
-    def delete_session(self, session_id):
-        SessionRepo.delete_session(session_id)
+    async def delete_session(self, session_id, user: User):
+        # 验证会话是否属于当前用户
+        session = await self.session_repo.get_session_by_id(session_id)
+        if not session or session.user_id != user.id:
+            raise ValueError(
+                f"Session with ID {session_id} does not exist or does not belong to user."
+            )
 
-    def get_session(self, session_id):
-        session = SessionRepo.get_session_by_id(session_id)
-        if not session:
-            raise ValueError(f"Session with ID {session_id} does not exist.")
-        return session.to_dict(include=["model"])
+        await self.session_repo.delete_session(session_id)
 
-    def upload_avatar(self, session_id, avatar_file):
-        session = SessionRepo.get_session_by_id(session_id)
-        if not session:
-            raise ValueError(f"Session with ID {session_id} does not exist.")
+    async def get_session(self, session_id, user: User):
+        session = await self.session_repo.get_session_by_id(session_id)
+        if not session or session.user_id != user.id:
+            raise ValueError(
+                f"Session with ID {session_id} does not exist or does not belong to user."
+            )
+        return session
+
+    async def upload_avatar(self, session_id, user: User, avatar_file):
+        session = await self.session_repo.get_session_by_id(session_id)
+        if not session or session.user_id != user.id:
+            raise ValueError(
+                f"Session with ID {session_id} does not exist or does not belong to user."
+            )
 
         # 使用实例变量避免重复创建
         avatar_url = self.upload_service.upload_avatar(avatar_file, size=(128, 128))

@@ -1,8 +1,10 @@
 from typing import TYPE_CHECKING, Optional
 import ulid
 
-from .database import ModelBase, db
-from sqlalchemy.orm import Mapped
+from sqlalchemy import String, DateTime, JSON, ForeignKey, Column, Text, BigInteger
+from sqlalchemy.orm import Mapped, relationship
+from sqlalchemy.sql import func
+from app.database import ModelBase
 
 if TYPE_CHECKING:
     from app.models.model import Model
@@ -12,43 +14,39 @@ if TYPE_CHECKING:
 class Session(ModelBase):
     __tablename__ = "session"
 
-    id = db.Column(db.String(26), primary_key=True, default=lambda: str(ulid.new()))
-    title = db.Column(db.String(255), index=True)
-    user_id = db.Column(db.String(26), index=True)
-    # character_id = Column(String, index=True)
-    # memory_type = Column(String, nullable=True)
-    # model = Column(String, nullable=True)
-    avatar_url = db.Column(db.String(255), nullable=True)
-    description = db.Column(db.String(512), nullable=True)
-    # system_prompt = Column(Text, nullable=True)
-    model_id = db.Column(
-        db.String(26),
-        db.ForeignKey("model.id", ondelete="SET NULL", name="fk_session_model_id"),
+    id = Column(String(26), primary_key=True, default=lambda: str(ulid.new()))
+    title = Column(String(255), index=True)
+    user_id = Column(String(26), index=True)
+    avatar_url = Column(String(255), nullable=True)
+    description = Column(String(512), nullable=True)
+    model_id = Column(
+        String(26),
+        ForeignKey("model.id", ondelete="SET NULL"),
         index=True,
         nullable=True,
     )
-    settings = db.Column(db.JSON, nullable=True)
-    created_at = db.Column(db.DateTime, default=db.func.now())
-    updated_at = db.Column(
-        db.DateTime,
-        default=db.func.now(),
-        onupdate=db.func.now(),
+    settings = Column(JSON, nullable=True)
+    created_at = Column(DateTime, default=func.now())
+    updated_at = Column(
+        DateTime,
+        default=func.now(),
+        onupdate=func.now(),
     )
 
-    messages: Mapped[list["Message"]] = db.relationship(
+    messages: Mapped[list["Message"]] = relationship(
         "Message",
         back_populates="session",
         cascade="all, delete-orphan",
     )
 
-    summary = db.relationship(
+    summary = relationship(
         "Summary",
         back_populates="session",
         cascade="all, delete-orphan",
         uselist=False,  # 关键参数，表示一对一关系
     )
 
-    model: Mapped[Optional["Model"]] = db.relationship(
+    model: Mapped[Optional["Model"]] = relationship(
         "Model",
         # 添加 passive_deletes 配置，确保 SQLAlchemy 知道数据库会处理 SET NULL
         passive_deletes=True,

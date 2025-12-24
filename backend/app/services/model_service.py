@@ -1,45 +1,36 @@
 from openai import OpenAI
+from app.models.user import User
 from app.exceptions import APIException
-from app.models import db, Model, ModelProvider
-from app.models.db_transaction import smart_transaction_manager
 from app.repositories.model_repository import ModelRepository as ModelRepo
-from app.repositories.user_repository import UserRepository
+from app.schemas.common import PaginatedResponse
+from app.schemas.model import ModelOut
+from app.schemas.model_provider import ModelProviderOut
 
 
 class ModelService:
-    def __init__(self):
-        pass
+    def __init__(self, model_repo: ModelRepo):
+        self.model_repo = model_repo
 
-    def get_models_and_providers(self, user_id):
-        models = []
-        providers = []
-        user = UserRepository.get_user_by_id(user_id)
-        models_user_id = user_id if user.role == "primary" else user.parent_id
-        results = ModelRepo.get_providers_with_models(user_id=models_user_id)
-        for result in results:
-            models.extend([model.to_dict() for model in result.models])
-            providers.append(result.to_dict())
-        return {
-            "models": models,
-            "providers": providers,
-        }
+    async def get_models_and_providers(self, user: User):
+        user_id = user.id if user.role == "primary" else user.parent_id
+        results = await self.model_repo.get_providers_with_models(user_id)
+        return PaginatedResponse(items=[ModelProviderOut.model_validate(m) for m in results])
 
-    def get_models(self):
-        models = ModelRepo.get_models()
-        return [model.to_dict() for model in models]
+    async def get_providers(self):
+        providers = await self.model_repo.get_providers()
+        return PaginatedResponse(
+            items=[ModelProviderOut.model_validate(p) for p in providers],
+            size=len(providers),
+        )
 
-    def get_providers(self):
-        providers = ModelRepo.get_providers()
-        return [provider.to_dict() for provider in providers]
-
-    def delete_model(self, model_id):
-        if not ModelRepo.delete_model(model_id):
+    async def delete_model(self, model_id):
+        if not await self.model_repo.delete_model(model_id):
             raise APIException("Model not found", status_code=404)
 
-    def delete_provider(self, provider_id):
-        ModelRepo.delete_provider(provider_id)
+    async def delete_provider(self, provider_id):
+        await self.model_repo.delete_provider(provider_id)
 
-    def add_model(
+    async def add_model(
         self,
         model_name,
         model_type,
@@ -49,7 +40,7 @@ class ModelService:
         max_tokens: int = None,
         max_output_tokens: int = None,
     ):
-        model = ModelRepo.add_model(
+        model = await self.model_repo.add_model(
             model_name=model_name,
             model_type=model_type,
             name=name,
@@ -58,46 +49,46 @@ class ModelService:
             max_tokens=max_tokens,
             max_output_tokens=max_output_tokens,
         )
-        return model.to_dict()
+        return model
 
-    def add_provider(self, user_id, name, api_key, api_url):
-        provider = ModelRepo.add_provider(
-            user_id=user_id,
+    async def add_provider(self, user: User, name, api_key, api_url):
+        provider = await self.model_repo.add_provider(
+            user_id=user.id,
             name=name,
             api_key=api_key,
             api_url=api_url,
         )
-        return provider.to_dict()
+        return provider
 
-    def get_model(self, model_id):
-        model = ModelRepo.get_model(model_id)
+    async def get_model(self, model_id):
+        model = await self.model_repo.get_model(model_id)
         if not model:
             raise APIException("Model not found", status_code=404)
-        return model.to_dict()
+        return model
 
-    def update_model(self, model_id, data):
-        model = ModelRepo.update_model(model_id, data)
-        return model.to_dict()
+    async def update_model(self, model_id, data):
+        model = await self.model_repo.update_model(model_id, data)
+        return model
 
-    def update_provider(self, provider_id, data):
-        provider = ModelRepo.update_provider(provider_id, data)
-        return provider.to_dict()
+    async def update_provider(self, provider_id, data):
+        provider = await self.model_repo.update_provider(provider_id, data)
+        return provider
 
-    def get_model_by_name(self, model_name, provider_name=None):
-        model = ModelRepo.get_model_by_name(model_name, provider_name)
+    async def get_model_by_name(self, model_name, provider_name=None):
+        model = await self.model_repo.get_model_by_name(model_name, provider_name)
         if not model:
             raise APIException("Model not found", status_code=404)
-        return model.to_dict()
+        return model
 
-    def get_provider_by_name(self, provider_name):
-        provider = ModelRepo.get_provider_by_name(provider_name)
+    async def get_provider_by_name(self, provider_name):
+        provider = await self.model_repo.get_provider_by_name(provider_name)
         if not provider:
             raise APIException("Provider not found", status_code=404)
-        return provider.to_dict()
+        return provider
 
-    def get_provider_remote_models(self, user_id, provider_id):
-        provider = ModelRepo.get_provider(provider_id=provider_id)
-        if not provider or provider.user_id != user_id:
+    async def get_provider_remote_models(self, user: User, provider_id):
+        provider = await self.model_repo.get_provider(provider_id=provider_id)
+        if not provider or provider.user_id != user.id:
             raise APIException("Provider not found", status_code=404)
         api_key = provider.api_key
         api_url = provider.api_url
@@ -117,7 +108,10 @@ class ModelService:
                 }
                 model_list.append(model_data)
 
-            return {"items": model_list}
+            return PaginatedResponse(
+                items=[ModelOut.model_validate(m) for m in model_list],
+                size=len(model_list),
+            )
         except Exception as e:
             raise APIException(
                 f"Failed to fetch models from provider: {str(e)}", status_code=500

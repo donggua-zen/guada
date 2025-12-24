@@ -389,8 +389,11 @@ const loadModels = async () => {
     try {
         const response = await apiService.fetchModels()
 
-        models.value = response.models || []
-        providers.value = response.providers || []
+        response.items.forEach(provider => {
+            models.value.push(...provider.models)
+            delete provider.models
+            providers.value.push(provider)
+        })
 
     } catch (error) {
         console.error('获取模型列表失败:', error)

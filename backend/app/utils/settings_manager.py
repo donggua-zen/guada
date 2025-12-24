@@ -1,12 +1,18 @@
 # 工具类简化操作
 import json
-from app.models.globa_setting import GlobalSetting, db
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select, insert, update
+from app.models.globa_setting import GlobalSetting
 
 
 class SettingsManager:
-    @staticmethod
-    def get(key, default=None):
-        setting = GlobalSetting.query.filter_by(key=key).first()
+    def __init__(self, session: AsyncSession):
+        self.session = session
+
+    async def get(self, key, default=None):
+        stmt = select(GlobalSetting).where(GlobalSetting.key == key)
+        result = await self.session.execute(stmt)
+        setting = result.scalar_one_or_none()
         if setting:
             # 根据value_type转换值
             if setting.value_type == "int":
@@ -21,8 +27,7 @@ class SettingsManager:
                 return setting.value or default
         return default
 
-    @staticmethod
-    def set(key, value, value_type="auto", description="", category="general"):
+    async def set(self, key, value, value_type="auto", description="", category="general"):
         if value_type == "auto":
             if isinstance(value, bool):
                 value_type = "bool"
@@ -39,37 +44,31 @@ class SettingsManager:
             else:
                 value_type = "str"
 
-        setting = GlobalSetting.query.filter_by(key=key).first()
+        stmt = select(GlobalSetting).where(GlobalSetting.key == key)
+        result = await self.session.execute(stmt)
+        setting = result.scalar_one_or_none()
+        
         if setting:
-            setting.value = str(value)
-            setting.value_type = value_type
-            setting.description = description or setting.description
-            setting.category = category or setting.category
+            # 更新现有设置
+            update_stmt = update(GlobalSetting).where(
+                GlobalSetting.key == key
+            ).values(
+                value=str(value),
+                value_type=value_type,
+                description=description or setting.description,
+                category=category or setting.category
+            )
+            await self.session.execute(update_stmt)
         else:
-            setting = GlobalSetting(
+            # 创建新设置
+            new_setting = GlobalSetting(
                 key=key,
                 value=str(value),
                 value_type=value_type,
                 description=description,
                 category=category,
             )
-            db.session.add(setting)
+            self.session.add(new_setting)
 
-        db.session.commit()
-        return setting
-
-
-# 使用示例
-# settings_manager = SettingsManager()
-
-# # 设置值
-# settings_manager.set(
-#     "default_model", "gpt-4", description="默认AI模型", category="model"
-# )
-# settings_manager.set("max_tokens", 1000, value_type="int", category="model")
-# settings_manager.set("temperature", 0.7, value_type="float", category="model")
-# settings_manager.set("enable_history", True, category="system")
-
-# # 获取值
-# default_model = settings_manager.get("default_model", "gpt-3.5-turbo")
-# max_tokens = settings_manager.get("max_tokens", 500)
+        await self.session.commit()
+        return new_setting
