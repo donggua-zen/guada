@@ -2,6 +2,8 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 import logging
+
+from fastapi.staticfiles import StaticFiles
 from app.database import close_db, init_db
 from app.config import settings
 from app.routes import (
@@ -59,6 +61,10 @@ def create_app():
     app.include_router(files_router, tags=["files"])
     app.include_router(models_router, tags=["models"])
     logger.info("路由注册完成")
+    
+    app.mount(
+        "/static", StaticFiles(directory=settings.STATIC_FILES_DIR), name="static"
+    )
     return app
 
 

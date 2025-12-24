@@ -1,3 +1,4 @@
+from datetime import datetime, timezone
 from sqlalchemy import JSON, Column, DateTime, ForeignKey, String, Text, func
 from sqlalchemy.orm import relationship
 import ulid
@@ -16,11 +17,11 @@ class Summary(ModelBase):
     master_summary = Column(Text, nullable=True)
     last_message_id = Column(String(26), nullable=True)
     history = Column(JSON, nullable=True)  # 存储摘要历史
-    created_at = Column(DateTime, default=func.now())
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
     updated_at = Column(
         DateTime,
-        default=func.now(),
-        onupdate=func.now(),
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
     )
 
     session = relationship("Session", back_populates="summary")

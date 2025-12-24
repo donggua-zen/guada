@@ -23,7 +23,7 @@ from app.services.chat.memory_manager_service import MemoryManagerService
 from app.services.domain.llm_service import LLMService, LLMServiceChunk
 from app.services.domain.web_search_engine import WebSearchEngine
 from app.services.message_service import MessageService
-from app.utils.settings_manager import SettingsManager
+from app.services.settings_manager import SettingsManager
 
 logger = logging.getLogger(__name__)
 
@@ -35,11 +35,13 @@ class ChatService:
         model_repo: ModelRepository,
         message_service: MessageService,
         memory_manager_service: MemoryManagerService,
+        setting_service: SettingsManager,
     ):
         self.session_repo = session_repo
         self.model_repo = model_repo
         self.message_service = message_service
         self.memory_manager_service = memory_manager_service
+        self.setting_service = setting_service
 
     async def _add_assistant_message(
         self,
@@ -92,11 +94,13 @@ class ChatService:
             ValueError: 当未配置搜索API密钥时抛出异常
         """
 
-        api_key = SettingsManager.get("search_api_key", "")
-        search_prompt_context_length = SettingsManager.get(
+        api_key = self.setting_service.get("search_api_key", "")
+        search_prompt_context_length = self.setting_service.get(
             "search_prompt_context_length", 10
         )
-        default_search_model_id = SettingsManager.get("default_search_model_id", "")
+        default_search_model_id = self.setting_service.get(
+            "default_search_model_id", ""
+        )
 
         # 如果配置了专用的搜索模型且不是当前模型，则切换到该模型
         if default_search_model_id != "" and default_search_model_id != "current":

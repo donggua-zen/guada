@@ -1,3 +1,4 @@
+from datetime import datetime, timezone
 from sqlalchemy import Integer, String, Text, DateTime, Column
 from sqlalchemy.sql import func
 from app.database import ModelBase
@@ -14,11 +15,11 @@ class GlobalSetting(ModelBase):
     )  # 值类型：str, int, float, bool, json
     description = Column(Text)  # 设置项描述
     category = Column(String(50), default="general")  # 分类：model, ui, system等
-    created_at = Column(DateTime, default=func.now())
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
     updated_at = Column(
         DateTime,
-        default=func.now(),
-        onupdate=func.now(),
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
     )
 
     def __repr__(self):

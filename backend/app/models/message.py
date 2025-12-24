@@ -1,3 +1,4 @@
+from datetime import datetime, timezone
 from typing import TYPE_CHECKING, List
 import ulid
 from sqlalchemy import String, DateTime, ForeignKey, Column, Text
@@ -21,11 +22,11 @@ class Message(ModelBase):
     )
     role = Column(String(50))
     parent_id = Column(String(26), nullable=True)
-    created_at = Column(DateTime, default=func.now())
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
     updated_at = Column(
         DateTime,
-        default=func.now(),
-        onupdate=func.now(),
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
     )
     files: Mapped[List["File"]] = relationship(
         "File",

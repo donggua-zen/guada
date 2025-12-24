@@ -1,3 +1,4 @@
+from datetime import datetime, timezone
 import ulid
 from sqlalchemy import String, DateTime, Integer, Boolean, Column
 from sqlalchemy.sql import func
@@ -10,5 +11,9 @@ class Avatar:
     width = Column(Integer)
     height = Column(Integer)
     is_deleted = Column(Boolean, default=False)
-    created_at = Column(DateTime, default=func.now())
-    updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    updated_at = Column(
+        DateTime,
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
+    )
