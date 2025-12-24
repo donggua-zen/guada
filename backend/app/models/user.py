@@ -1,47 +1,35 @@
-# models.py
+# user.py
 import ulid
-from flask_bcrypt import Bcrypt
-from flask_jwt_extended import JWTManager
-from app.models.database import ModelBase, db
-
-bcrypt = Bcrypt()
-jwt = JWTManager()
+from sqlalchemy import String, DateTime, Column
+from sqlalchemy.sql import func
+from app.database import ModelBase
+import bcrypt
 
 
 class User(ModelBase):
-    id = db.Column(db.String(26), primary_key=True, default=lambda: str(ulid.new()))
-    role = db.Column(db.String(20), nullable=True)
-    avatar_url = db.Column(db.String(255), nullable=True)
-    parent_id = db.Column(db.String(26), nullable=True, index=True)
-    nickname = db.Column(db.String(80), nullable=True)
-    phone = db.Column(
-        db.String(20),
-        index=True,
+    __tablename__ = 'user'
+    
+    id = Column(String(26), primary_key=True, default=lambda: str(ulid.new()))
+    role = Column(String(20), nullable=True)
+    avatar_url = Column(String(255), nullable=True)
+    parent_id = Column(String(26), nullable=True, index=True)
+    nickname = Column(String(80), nullable=True)
+    phone = Column(
+        String(20),
+        index=True,  # 保留索引
         nullable=True,
         unique=True,
     )
-    email = db.Column(
-        db.String(120),
-        index=True,
+    email = Column(
+        String(120),
+        index=True,  # 保留索引
         nullable=True,
         unique=True,
     )
-    password_hash = db.Column(db.String(128), nullable=False)
-    created_at = db.Column(db.DateTime, default=db.func.now())
-    updated_at = db.Column(
-        db.DateTime,
-        default=db.func.now(),
-        onupdate=db.func.now(),
+    password_hash = Column(String(128), nullable=False)
+    created_at = Column(DateTime, default=func.now())
+    updated_at = Column(
+        DateTime,
+        default=func.now(),
+        onupdate=func.now(),
     )
-
-    def set_password(self, password):
-        self.password_hash = bcrypt.generate_password_hash(password).decode("utf-8")
-
-    def check_password(self, password):
-        return bcrypt.check_password_hash(self.password_hash, password)
-
-    def to_dict(self, exclude=None, include=None, flush=False):
-        if exclude is None:
-            exclude = []
-        exclude = ["password_hash", *exclude]
-        return super().to_dict(exclude, include, flush)

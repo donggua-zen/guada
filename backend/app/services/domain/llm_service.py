@@ -1,6 +1,6 @@
 import logging
-from typing import Generator, Literal, Optional, overload
-from openai import OpenAI, APIError
+from typing import AsyncGenerator, Literal, Optional, overload
+from openai import AsyncOpenAI, APIError
 
 logger = logging.getLogger(__name__)
 
@@ -41,10 +41,10 @@ class LLMService:
         self.base_url = base_url
         self.api_key = api_key
 
-        self.llm_client = OpenAI(base_url=base_url, api_key=self.api_key)
+        self.llm_client = AsyncOpenAI(base_url=base_url, api_key=self.api_key)
 
     @overload
-    def completions(
+    async def completions(
         self,
         model,
         messages,
@@ -56,7 +56,7 @@ class LLMService:
     ) -> LLMServiceChunk: ...
 
     @overload
-    def completions(
+    async def completions(
         self,
         model,
         messages,
@@ -66,9 +66,9 @@ class LLMService:
         stream: Literal[True],
         thinking,
         complete_chunk: LLMServiceChunk = ...,
-    ) -> Generator[LLMServiceChunk, None, None]: ...
+    ) -> AsyncGenerator[LLMServiceChunk, None]: ...
 
-    def completions(
+    async def completions(
         self,
         model: str,
         messages: list,
@@ -112,7 +112,7 @@ class LLMService:
                 {"role": message["role"], "content": message["content"]}
                 for message in messages
             ]
-            response = self.llm_client.chat.completions.create(
+            response = await self.llm_client.chat.completions.create(
                 model=model,
                 messages=filter_message,
                 frequency_penalty=frequency_penalty or None,
@@ -123,9 +123,8 @@ class LLMService:
                 timeout=15,
             )
             if stream:
-                return self._handle_stream_response(
-                    response, complete_chunk=complete_chunk
-                )
+                # 对于异步流式响应，需要直接返回异步生成器
+                return self._handle_stream_response(response, complete_chunk=complete_chunk)
             else:
                 return self._handle_non_stream_response(response)
         except APIError as e:
@@ -134,7 +133,7 @@ class LLMService:
         except Exception as e:
             raise
 
-    def _handle_stream_response(self, response, complete_chunk: LLMServiceChunk = None):
+    async def _handle_stream_response(self, response, complete_chunk: LLMServiceChunk = None):
         """
         处理流式API响应并生成数据块
 
@@ -147,7 +146,7 @@ class LLMService:
 
         """
         try:
-            for chunk in response:
+            async for chunk in response:
                 response_chunk = LLMServiceChunk()
                 delta = chunk.choices[0].delta
                 # logger.debug("chunk:", delta)

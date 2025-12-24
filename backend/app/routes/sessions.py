@@ -1,45 +1,41 @@
 import datetime
-import os
-import shutil
-from flask import Blueprint, request
-from flask_jwt_extended import get_jwt_identity, jwt_required
-from app.services import SummaryService
-from app.services import MessageService
-from app.services import SessionService
-
-
-session_service = SessionService()
-
-
-from app.utils.decorators import handle_response
+from fastapi import APIRouter, Depends, Request
+from app.dependencies import get_session_service, get_current_user
+from app.schemas.common import PaginatedResponse
+from app.services.session_service import SessionService
+from app.models.user import User
+from app.schemas.session import SessionItemOut, SessionOut
 from app.utils.vector_memory import get_vector_memory
+
 
 vector_memory = get_vector_memory()
 
-sessions_bp = Blueprint("sessions", __name__)
+sessions_router = APIRouter(prefix="/api/v1")
 
 
-@sessions_bp.route("/api/v1/sessions", methods=["GET"])
-@jwt_required()
-@handle_response
-def get_sessions():
-    user_id = get_jwt_identity()
-    return {"items": session_service.get_sessions(user_id=user_id)}
+@sessions_router.get("/sessions", response_model=PaginatedResponse[SessionItemOut])
+async def get_sessions(
+    session_service: SessionService = Depends(get_session_service),
+    current_user: User = Depends(get_current_user),
+):
+    sessions = await session_service.get_sessions(current_user)
+    return sessions
 
 
-@sessions_bp.route("/api/v1/sessions", methods=["POST"])
-@jwt_required()
-@handle_response
-def create_session():
-    settings = request.json.get("settings", {})
-    user_id = get_jwt_identity()
+@sessions_router.post("/sessions", response_model=SessionOut)
+async def create_session(
+    request: Request,
+    session_service: SessionService = Depends(get_session_service),
+    current_user: User = Depends(get_current_user),
+):
+    json_data = await request.json()
+    settings = json_data.get("settings", {})
     session_data = {
-        "title": request.json.get("title", ""),
-        "character_id": request.json.get("character_id", None),
-        "user_id": user_id,
+        "title": json_data.get("title", ""),
+        "character_id": json_data.get("character_id", None),
         "avatar_url": "",
         "description": "An helpful AI assistant",
-        "model_id": request.json.get("model_id", None),
+        "model_id": json_data.get("model_id", None),
         "settings": {
             "memory_type": "sliding_window",
             "system_prompt": "You are a helpful AI assistant that can answer any question asked by the user",
@@ -48,39 +44,43 @@ def create_session():
         },
     }
 
-    data = session_service.create_session(session_data)
+    data = await session_service.create_session(current_user, session_data)
 
     if data is None:
         raise Exception("Failed to create or resume session.")
-
     return data
 
 
-@sessions_bp.route("/api/v1/sessions/<session_id>", methods=["DELETE"])
-@jwt_required()
-@handle_response
-def delete_session(session_id):
-    session_service.delete_session(session_id)
+@sessions_router.delete("/sessions/{session_id}")
+async def delete_session(
+    session_id: str,
+    session_service: SessionService = Depends(get_session_service),
+    current_user: User = Depends(get_current_user),
+):
+    await session_service.delete_session(session_id, current_user)
     vector_memory.delete_session_memories(session_id)
 
 
-@sessions_bp.route("/api/v1/sessions/<session_id>", methods=["GET"])
-@jwt_required()
-@handle_response
-def get_session(session_id):
-    data = session_service.get_session(session_id)
+@sessions_router.get("/sessions/{session_id}", response_model=SessionOut)
+async def get_session(
+    session_id: str,
+    session_service: SessionService = Depends(get_session_service),
+    current_user: User = Depends(get_current_user),
+):
+    data = await session_service.get_session(session_id, current_user)
     if not data:
         raise Exception(f"Session with ID {session_id} not found.")
-    if "memory_type" not in data or data["memory_type"] == "":
-        data["memory_type"] = "sliding_window"
     return data
 
 
-@sessions_bp.route("/api/v1/sessions/<session_id>", methods=["PUT"])
-@jwt_required()
-@handle_response
-def update_session(session_id):
-    data = request.json
+@sessions_router.put("/sessions/{session_id}", response_model=SessionOut)
+async def update_session(
+    session_id: str,
+    request: Request,
+    session_service: SessionService = Depends(get_session_service),
+    current_user: User = Depends(get_current_user),
+):
+    data = await request.json()
     data["updated_at"] = datetime.datetime.now(datetime.timezone.utc)
     fields = ["title", "description", "avatar_url", "updated_at", "model_id"]
 
@@ -113,12 +113,16 @@ def update_session(session_id):
             if field in data["settings"]:
                 settings[field] = data["settings"][field]
         data_filtered["settings"] = settings
-    session_service.update_session(session_id, data_filtered)
+    return await session_service.update_session(session_id, current_user, data_filtered)
 
 
-@sessions_bp.route("/api/v1/sessions/<session_id>/avatars", methods=["POST"])
-@jwt_required()
-@handle_response
-def upload_session_avatar(session_id):
-    data = session_service.upload_avatar(session_id, request.files["avatar"])
-    return data
+@sessions_router.post("/sessions/{session_id}/avatars")
+async def upload_session_avatar(
+    session_id: str,
+    request: Request,
+    session_service: SessionService = Depends(get_session_service),
+    current_user: User = Depends(get_current_user),
+):
+    form = await request.form()
+    avatar_file = form.get("avatar")
+    return await session_service.upload_avatar(session_id, current_user, avatar_file)

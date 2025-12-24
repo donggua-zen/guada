@@ -1,16 +1,25 @@
 # message_service.py
 import json
 from typing import Optional
-from app.models import db, Message
-from app.models.db_transaction import execute_in_transaction
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select, desc, asc, delete
+from sqlalchemy.orm import selectinload
+from app.models.message import Message
 from app.models.message_content import MessageContent
 from app.models.file import File as FileModel
 
 
 class MessageRepository:
 
-    @staticmethod
-    def get_messages(
+    def __init__(self, session: AsyncSession):
+        """
+        初始化MessageRepository
+        :param session: 异步数据库会话
+        """
+        self.session = session
+
+    async def get_messages(
+        self,
         session_id: str,
         start_message_id: Optional[str] = None,
         end_message_id: Optional[str] = None,
@@ -23,82 +32,102 @@ class MessageRepository:
         with_contents=False,
         only_current_content=False,
     ):
-        query = db.session.query(Message).filter(Message.session_id == session_id)
+        stmt = select(Message).filter(Message.session_id == session_id)
 
         if start_message_id is not None:
             if include_start:
-                query = query.filter(Message.id >= start_message_id)
+                stmt = stmt.filter(Message.id >= start_message_id)
             else:
-                query = query.filter(Message.id > start_message_id)
+                stmt = stmt.filter(Message.id > start_message_id)
 
         if end_message_id is not None:
             if include_end:
-                query = query.filter(Message.id <= end_message_id)
+                stmt = stmt.filter(Message.id <= end_message_id)
             else:
-                query = query.filter(Message.id < end_message_id)
+                stmt = stmt.filter(Message.id < end_message_id)
 
         if order_type == "desc":
-            query = query.order_by(Message.id.desc())
+            stmt = stmt.order_by(desc(Message.id))
         else:
-            query = query.order_by(Message.id.asc())
+            stmt = stmt.order_by(asc(Message.id))
 
         if offset is not None:
-            query = query.offset(offset)
+            stmt = stmt.offset(offset)
         if limit is not None:
-            query = query.limit(limit)
+            stmt = stmt.limit(limit)
 
-        # 转换为字典列表
+        # 加载关联数据
         if with_files:
-            query = query.options(db.selectinload(Message.files))
+            stmt = stmt.options(selectinload(Message.files))
         if with_contents:
             if only_current_content:
-                query = query.options(
-                    db.selectinload(
+                stmt = stmt.options(
+                    selectinload(
                         Message.contents.and_(MessageContent.is_current == True)
                     )
                 )
             else:
-                query = query.options(db.selectinload(Message.contents))
-        messages = query.all()
+                stmt = stmt.options(selectinload(Message.contents))
+
+        result = await self.session.execute(stmt)
+        messages = result.scalars().all()
 
         return messages
 
-    @staticmethod
-    def get_message(message_id):
-        return db.session.query(Message).filter(Message.id == message_id).first()
+    async def get_message(
+        self,
+        message_id,
+        with_files=False,
+        with_contents=True,
+        only_current_content=False,
+    ):
+        stmt = select(Message).filter(Message.id == message_id)
+        if with_files:
+            stmt = stmt.options(selectinload(Message.files))
+        if with_contents:
+            if only_current_content:
+                stmt = stmt.options(
+                    selectinload(
+                        Message.contents.and_(MessageContent.is_current == True)
+                    )
+                )
+            else:
+                stmt = stmt.options(selectinload(Message.contents))
+        result = await self.session.execute(stmt)
+        return result.scalar_one_or_none()
 
-    @staticmethod
-    def get_conversation_messages(
+    async def get_conversation_messages(
+        self,
         session_id,
         parent_id,
         with_files=False,
         with_contents=True,
         only_current_content=False,
     ):
-
-        query = (
-            db.session.query(Message)
+        stmt = (
+            select(Message)
             .filter(Message.session_id == session_id, Message.parent_id == parent_id)
             .limit(2)
         )
 
-        # 转换为字典列表
+        # 加载关联数据
         if with_files:
-            query = query.options(db.selectinload(Message.files))
+            stmt = stmt.options(selectinload(Message.files))
         if with_contents:
             if only_current_content:
-                query = query.options(
-                    db.selectinload(Message.versions).filter(
+                stmt = stmt.options(
+                    selectinload(Message.versions).filter(
                         MessageContent.is_current == True
                     )
                 )
             else:
-                query = query.options(db.selectinload(Message.versions))
-        return query.all()
+                stmt = stmt.options(selectinload(Message.versions))
 
-    @staticmethod
-    @execute_in_transaction
-    def add_message(
+        result = await self.session.execute(stmt)
+        return result.scalars().all()
+
+    async def add_message(
+        self,
         session_id: str,
         role: str,
         content: str | list[dict],
@@ -107,14 +136,15 @@ class MessageRepository:
         reasoning_content: str = None,
         meta_data: dict = None,
     ):
-        vailed_contents = []
-        vailed_files = []
+        validated_contents = []
+        validated_files = []
+
         if isinstance(content, list):
             for item in content:
                 if not isinstance(item, dict):
                     raise TypeError("Each item in content list must be a dictionary")
 
-                vailed_contents.append(
+                validated_contents.append(
                     MessageContent(
                         content=item.get("content"),
                         reasoning_content=item.get("reasoning_content"),
@@ -123,7 +153,7 @@ class MessageRepository:
                     )
                 )
         else:
-            vailed_contents.append(
+            validated_contents.append(
                 MessageContent(
                     content=content,
                     reasoning_content=reasoning_content,
@@ -131,12 +161,13 @@ class MessageRepository:
                     meta_data=meta_data or {},
                 )
             )
+
         if isinstance(files, list):
             for item in files:
                 if not isinstance(item, dict):
                     raise TypeError("Each item in files list must be a dictionary")
 
-                vailed_files.append(
+                validated_files.append(
                     FileModel(
                         content=item.get("content"),
                         file_name=item.get("file_name"),
@@ -153,16 +184,16 @@ class MessageRepository:
         message = Message(
             session_id=session_id,
             role=role,
-            files=vailed_files,
-            contents=vailed_contents,
+            files=validated_files,
+            contents=validated_contents,
             parent_id=parent_id,
         )
-        db.session.add(message)
-        return message
 
-    @staticmethod
-    @execute_in_transaction
-    def update_message(message_id, data):
+        self.session.add(message)
+        await self.session.flush()
+        return await self.get_message(message.id, with_files=True, with_contents=True)
+
+    async def update_message(self, message_id, data):
         """
         更新指定消息的信息
 
@@ -173,7 +204,10 @@ class MessageRepository:
         Returns:
             dict: 更新后的消息信息，如果消息不存在则返回None
         """
-        message = db.session.query(Message).filter(Message.id == message_id).first()
+        stmt = select(Message).filter(Message.id == message_id)
+        result = await self.session.execute(stmt)
+        message = result.scalar_one_or_none()
+
         if not message:
             return None
 
@@ -200,21 +234,20 @@ class MessageRepository:
                 if hasattr(current_content, key):
                     setattr(current_content, key, value)
 
-        return message
+        await self.session.flush()
+        return await self.get_message(message.id, with_files=True, with_contents=True)
 
-    @staticmethod
-    @execute_in_transaction
-    def delete_message(message_id: str):
-        return db.session.query(Message).filter(Message.id == message_id).delete()
+    async def delete_message(self, message_id: str):
+        stmt = delete(Message).where(Message.id == message_id)
+        result = await self.session.execute(stmt)
+        return result.rowcount > 0
 
-    @staticmethod
-    @execute_in_transaction
-    def delete_message_by_parent_id(parent_id: str):
-        return db.session.query(Message).filter(Message.parent_id == parent_id).delete()
+    async def delete_message_by_parent_id(self, parent_id: str):
+        stmt = delete(Message).where(Message.parent_id == parent_id)
+        result = await self.session.execute(stmt)
+        return result.rowcount
 
-    @staticmethod
-    @execute_in_transaction
-    def delete_messages_by_session_id(session_id):
-        return (
-            db.session.query(Message).filter(Message.session_id == session_id).delete()
-        )
+    async def delete_messages_by_session_id(self, session_id):
+        stmt = delete(Message).where(Message.session_id == session_id)
+        result = await self.session.execute(stmt)
+        return result.rowcount

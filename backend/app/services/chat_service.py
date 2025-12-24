@@ -13,7 +13,7 @@
 from contextlib import closing
 import datetime
 import logging
-from typing import Generator, Optional
+from typing import AsyncGenerator, Optional
 
 from app.exceptions import APIException
 from app.models.model import Model
@@ -25,16 +25,23 @@ from app.services.domain.web_search_engine import WebSearchEngine
 from app.services.message_service import MessageService
 from app.utils.settings_manager import SettingsManager
 
-message_service = MessageService()
-
 logger = logging.getLogger(__name__)
 
 
 class ChatService:
-    def __init__(self):
-        pass
+    def __init__(
+        self,
+        session_repo: SessionRepository,
+        model_repo: ModelRepository,
+        message_service: MessageService,
+        memory_manager_service: MemoryManagerService,
+    ):
+        self.session_repo = session_repo
+        self.model_repo = model_repo
+        self.message_service = message_service
+        self.memory_manager_service = memory_manager_service
 
-    def _add_assistant_message(
+    async def _add_assistant_message(
         self,
         session_id: str,
         regeneration_mode: str = "overwrite",
@@ -45,7 +52,7 @@ class ChatService:
         if regeneration_mode == "multi_version":
             if not assistant_message_id:
                 raise ValueError("assistant_message_id is required")
-            return message_service.add_message_content(
+            return await self.message_service.add_message_content(
                 message_id=assistant_message_id,
                 content="",
                 reasoning_content="",
@@ -54,10 +61,12 @@ class ChatService:
         else:
             if regeneration_mode == "overwrite":
                 try:
-                    message_service.delete_message(message_id=assistant_message_id)
+                    await self.message_service.delete_message(
+                        message_id=assistant_message_id
+                    )
                 except:
                     pass
-            return message_service.add_message(
+            return await self.message_service.add_message(
                 session_id=session_id,
                 role="assistant",
                 content="",
@@ -65,7 +74,7 @@ class ChatService:
                 meta_data={},
             )
 
-    def _web_search(self, model: Model, messages: list[dict]):
+    async def _web_search(self, model: Model, messages: list[dict]):
         """
         执行网络搜索操作，基于对话历史生成搜索查询并获取相关结果
 
@@ -91,7 +100,9 @@ class ChatService:
 
         # 如果配置了专用的搜索模型且不是当前模型，则切换到该模型
         if default_search_model_id != "" and default_search_model_id != "current":
-            search_model = ModelRepository.get_model(model_id=default_search_model_id)
+            search_model = await self.model_repo.get_model(
+                model_id=default_search_model_id
+            )
             if search_model:  # 搜索功能需要模型
                 model = search_model
 
@@ -112,7 +123,7 @@ class ChatService:
 
         # 使用LLM生成搜索关键词
         llm_service = LLMService(model.provider.api_url, model.provider.api_key)
-        chunk = llm_service.completions(
+        chunk = await llm_service.completions(
             model.model_name,
             [{"role": "user", "content": prompt}],
             temperature=None,
@@ -126,8 +137,8 @@ class ChatService:
         logger.debug("搜索词：%s", chunk.content)
 
         # 执行网络搜索并获取结果
-        web_search = WebSearchEngine(api_key=api_key)
-        results = web_search.search(chunk.content)
+        async with WebSearchEngine(api_key=api_key) as web_search:
+            results = await web_search.search(chunk.content)
 
         # 格式化搜索结果
         web_results = "\n".join(
@@ -176,13 +187,13 @@ class ChatService:
                 "msg": chunk.content,
             }
 
-    def completions(
+    async def completions(
         self,
         session_id: str,
         message_id: str,
         regeneration_mode: str = "overwrite",
         assistant_message_id: str = None,
-    ) -> Generator[LLMServiceChunk, None, None]:
+    ) -> AsyncGenerator[LLMServiceChunk, None]:
         """
         根据会话ID和消息ID生成模型回复的流式响应。
 
@@ -198,33 +209,34 @@ class ChatService:
         """
         current_message_id = message_id
 
-        session = SessionRepository.get_session_by_id(session_id)
+        session = await self.session_repo.get_session_by_id(session_id)
 
         if session is None:
             raise ValueError("Invalid session id")
 
-        SessionRepository.update_session(
+        await self.session_repo.update_session(
             session_id,
             data={
                 "updated_at": datetime.datetime.now(datetime.timezone.utc),
             },
         )
-        memory_manager = MemoryManagerService()
-        conversation_messages = memory_manager.get_conversation_messages(
-            session_id=session_id,
-            model_name=session.model.model_name,
-            user_message_id=current_message_id,
-            max_messages=session.settings.get("max_memory_length", 9999) or 9999,
-            max_tokens=session.settings.get("max_memory_tokens", 32 * 1024)
-            or 32 * 1024,
-            prompt_settings={
-                "assistant_name": (session.settings.get("assistant_name")),
-                "assistant_identity": (session.settings.get("assistant_identity")),
-                "system_prompt": (session.settings.get("system_prompt", "")),
-            },
+        conversation_messages = (
+            await self.memory_manager_service.get_conversation_messages(
+                session_id=session_id,
+                model_name=session.model.model_name,
+                user_message_id=current_message_id,
+                max_messages=session.settings.get("max_memory_length", 9999) or 9999,
+                max_tokens=session.settings.get("max_memory_tokens", 32 * 1024)
+                or 32 * 1024,
+                prompt_settings={
+                    "assistant_name": (session.settings.get("assistant_name")),
+                    "assistant_identity": (session.settings.get("assistant_identity")),
+                    "system_prompt": (session.settings.get("system_prompt", "")),
+                },
+            )
         )
 
-        assistant_message = self._add_assistant_message(
+        assistant_message = await self._add_assistant_message(
             session.id,
             regeneration_mode=regeneration_mode,
             assistant_message_id=assistant_message_id,
@@ -232,11 +244,7 @@ class ChatService:
         )
 
         assistant_message_current_content = next(
-            (
-                content
-                for content in assistant_message["contents"]
-                if content["is_current"]
-            ),
+            (content for content in assistant_message.contents if content.is_current),
             {},
         )
 
@@ -244,6 +252,7 @@ class ChatService:
             raise ValueError("Assistant message content missing")
 
         model = session.model
+        provider = await self.model_repo.get_provider(model.provider_id)
         if model is None:
             raise ValueError("Invalid model name")
 
@@ -262,8 +271,8 @@ class ChatService:
 
         yield {
             "type": "create",
-            "message_id": assistant_message["id"],
-            "content_id": assistant_message_current_content["id"],
+            "message_id": assistant_message.id,
+            "content_id": assistant_message_current_content.id,
             "model_name": model.model_name,
         }
 
@@ -273,29 +282,30 @@ class ChatService:
             if session.settings.get("web_search_enabled", False):
 
                 yield {"type": "web_search", "msg": "start"}
-                conversation_messages = self._web_search(
+                conversation_messages = await self._web_search(
                     model=model,
                     messages=conversation_messages,
                 )
                 yield {"type": "web_search", "msg": "stop"}
 
-            llm_service = LLMService(model.provider.api_url, model.provider.api_key)
+            llm_service = LLMService(provider.api_url, provider.api_key)
             logger.debug(f"Using model: {model.model_name}")
 
-            with closing(
-                llm_service.completions(
-                    model.model_name,
-                    messages=conversation_messages,
-                    temperature=model_params["temperature"],
-                    top_p=model_params["top_p"],
-                    frequency_penalty=model_params["frequency_penalty"],
-                    stream=True,
-                    thinking=model_params["thinking"],
-                    complete_chunk=complete_chunk,
-                )
-            ) as generator:
-                for chunk in generator:
-                    yield self.chunk_to_response(chunk)
+            # 直接获取异步生成器
+            generator = await llm_service.completions(
+                model.model_name,
+                messages=conversation_messages,
+                temperature=model_params["temperature"],
+                top_p=model_params["top_p"],
+                frequency_penalty=model_params["frequency_penalty"],
+                stream=True,
+                thinking=model_params["thinking"],
+                complete_chunk=complete_chunk,
+            )
+
+            # 异步遍历生成器
+            async for chunk in generator:
+                yield self.chunk_to_response(chunk)
             logger.debug("Model response complete")
         except GeneratorExit:
             logger.debug("User stopped generation")
@@ -313,8 +323,8 @@ class ChatService:
         finally:
             logger.debug("Generation complete")
             if assistant_message is not None:
-                message_service.update_message(
-                    assistant_message["id"],
+                await self.message_service.update_message(
+                    assistant_message.id,
                     data={
                         "content": complete_chunk.content,
                         "reasoning_content": complete_chunk.reasoning_content,
@@ -336,29 +346,30 @@ class ChatService:
                 #         [user_message, assistant_message],
                 #     )
 
-    def token_statistics(self, session_id: str) -> dict:
+    async def token_statistics(self, session_id: str) -> dict:
         from app.tokenizer.auto_tokenizer import get_tokenizer
 
-        session = SessionRepository.get_session_by_id(session_id)
+        session = await self.session_repo.get_session_by_id(session_id)
         if session is None:
             raise APIException("Session not found", status_code=404)
 
         settings = session.settings
         model = session.model
 
-        memory_manager = MemoryManagerService()
-        conversation_messages = memory_manager.get_conversation_messages(
-            session_id=session_id,
-            model_name=session.model.model_name,
-            user_message_id=None,
-            max_messages=session.settings.get("max_memory_length", 9999) or 9999,
-            max_tokens=session.settings.get("max_memory_tokens", 32 * 1024)
-            or 32 * 1024,
-            prompt_settings={
-                "assistant_name": (session.settings.get("assistant_name")),
-                "assistant_identity": (session.settings.get("assistant_identity")),
-                "system_prompt": (session.settings.get("system_prompt", "")),
-            },
+        conversation_messages = (
+            await self.memory_manager_service.get_conversation_messages(
+                session_id=session_id,
+                model_name=session.model.model_name,
+                user_message_id=None,
+                max_messages=session.settings.get("max_memory_length", 9999) or 9999,
+                max_tokens=session.settings.get("max_memory_tokens", 32 * 1024)
+                or 32 * 1024,
+                prompt_settings={
+                    "assistant_name": (session.settings.get("assistant_name")),
+                    "assistant_identity": (session.settings.get("assistant_identity")),
+                    "system_prompt": (session.settings.get("system_prompt", "")),
+                },
+            )
         )
 
         system_prompt_tokens = 0

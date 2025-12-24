@@ -1,22 +1,24 @@
-from .database import ModelBase, db
+from sqlalchemy import Integer, String, Text, DateTime, Column
+from sqlalchemy.sql import func
+from app.database import ModelBase
 
 
 class GlobalSetting(ModelBase):
     __tablename__ = "global_settings"
 
-    id = db.Column(db.Integer, primary_key=True)
-    key = db.Column(db.String(100), unique=True, nullable=False)
-    value = db.Column(db.Text)  # 使用Text类型存储各种值
-    value_type = db.Column(
-        db.String(20), default="str"
+    id = Column(Integer, primary_key=True)
+    key = Column(String(100), unique=True, nullable=False)
+    value = Column(Text)  # 使用Text类型存储各种值
+    value_type = Column(
+        String(20), default="str"
     )  # 值类型：str, int, float, bool, json
-    description = db.Column(db.Text)  # 设置项描述
-    category = db.Column(db.String(50), default="general")  # 分类：model, ui, system等
-    created_at = db.Column(db.DateTime, default=db.func.now())
-    updated_at = db.Column(
-        db.DateTime,
-        default=db.func.now(),
-        onupdate=db.func.now(),
+    description = Column(Text)  # 设置项描述
+    category = Column(String(50), default="general")  # 分类：model, ui, system等
+    created_at = Column(DateTime, default=func.now())
+    updated_at = Column(
+        DateTime,
+        default=func.now(),
+        onupdate=func.now(),
     )
 
     def __repr__(self):

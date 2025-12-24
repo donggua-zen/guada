@@ -2,6 +2,7 @@ import base64
 import logging
 import os
 from typing import Optional
+
 from app.repositories.message_repository import MessageRepository
 from app.tokenizer.auto_tokenizer import get_tokenizer
 from app.utils import convert_webpath_to_filepath
@@ -11,8 +12,8 @@ logger = logging.getLogger(__name__)
 
 class MemoryManagerService:
 
-    def __init__(self):
-        pass
+    def __init__(self, message_repo: MessageRepository):
+        self.message_repo = message_repo
 
     def _construct_system_message(self, prompt_settings):
         system_prompt_parts = []
@@ -26,7 +27,7 @@ class MemoryManagerService:
             "content": "\n".join(system_prompt_parts),
         }
 
-    def get_conversation_messages(
+    async def get_conversation_messages(
         self,
         session_id: str,
         model_name: str,
@@ -61,7 +62,7 @@ class MemoryManagerService:
                 "only_current_content": True,
             }
 
-            messages = MessageRepository.get_messages(**args)
+            messages = await self.message_repo.get_messages(**args)
             if not messages:  # 没有更多消息则跳出循环
                 break
             include = ["contents"]
@@ -70,7 +71,7 @@ class MemoryManagerService:
 
             for msg in messages:
                 transformed_msg = self._transform_content_structure(
-                    msg.to_dict(include=include)
+                    await msg.to_dict_async(include=include)
                 )
                 if max_tokens:
                     transformed_msg["tokens"] = tokenizer.count_tokens(

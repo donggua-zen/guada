@@ -1,58 +1,76 @@
 # session_service.py
 from typing import Optional
-from app.models import db, Session
-from app.models.db_transaction import execute_in_transaction
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select, desc, func, and_, or_, delete
+from sqlalchemy.orm import selectinload
+from app.models.session import Session
 from app.models.message import Message
 from app.models.message_content import MessageContent
 
 
 class SessionRepository:
 
-    @staticmethod
-    def get_sessions() -> list[dict]:
-        sessions = db.session.query(Session).order_by(Session.updated_at.desc()).all()
-        return [session.to_dict() for session in sessions]
+    def __init__(self, session: AsyncSession):
+        """
+        初始化SessionRepository
+        :param session: 异步数据库会话
+        """
+        self.session = session
 
-    @staticmethod
-    @execute_in_transaction
-    def create_session(data: dict):
-        # 创建字符对象
-        session = Session(
-            **data,
+    async def get_sessions(self, user_id: str) -> list[dict]:
+        stmt = (
+            select(Session)
+            .filter(Session.user_id == user_id)
+            .order_by(desc(Session.updated_at))
         )
-        db.session.add(session)
-        return session
+        result = await self.session.execute(stmt)
+        sessions = result.scalars().all()
+        return sessions
 
-    @staticmethod
-    @execute_in_transaction
-    def update_session(session_id, data: dict):
-        return Session.query.filter(Session.id == session_id).update(data)
+    async def create_session(self, data: dict):
+        # 创建会话对象
+        session = Session(**data)
+        self.session.add(session)
+        await self.session.flush()
+        return await self.get_session_by_id(session.id)
 
-    @staticmethod
-    def get_session_by_id(session_id):
-        session = db.session.query(Session).filter(Session.id == session_id).first()
-        return session
+    async def update_session(self, session_id, data: dict):
+        stmt = select(Session).filter(Session.id == session_id)
+        result = await self.session.execute(stmt)
+        session = result.scalar_one_or_none()
 
-    @staticmethod
-    def query_session(session_id=None, user_id=None, character_id=None):
-        query = db.session.query(Session)
+        if session:
+            for key, value in data.items():
+                setattr(session, key, value)
+            await self.session.flush()
+            return await self.get_session_by_id(session.id)
+        return None
+
+    async def get_session_by_id(self, session_id):
+        stmt = select(Session).filter(Session.id == session_id)
+        stmt = stmt.options(selectinload(Session.model))
+        result = await self.session.execute(stmt)
+        return result.scalar_one_or_none()
+
+    async def query_session(self, session_id=None, user_id=None, character_id=None):
+        stmt = select(Session)
 
         if session_id is not None:
-            query = query.filter(Session.id == session_id)
+            stmt = stmt.filter(Session.id == session_id)
         if user_id is not None:
-            query = query.filter(Session.user_id == user_id)
+            stmt = stmt.filter(Session.user_id == user_id)
         if character_id is not None:
-            query = query.filter(Session.character_id == character_id)
+            stmt = stmt.filter(Session.character_id == character_id)
 
-        return query.all()
+        result = await self.session.execute(stmt)
+        return result.scalars().all()
 
-    @staticmethod
-    @execute_in_transaction
-    def delete_session(session_id):
-        return db.session.query(Session).filter(Session.id == session_id).delete()
+    async def delete_session(self, session_id):
+        stmt = delete(Session).where(Session.id == session_id)
+        result = await self.session.execute(stmt)
+        return result.rowcount > 0
 
-    @staticmethod
-    def get_sessions_with_last_message_v2(user_id: Optional[str] = None):
+    async def get_sessions_with_last_message_v2(self, user_id: Optional[str] = None):
         """
         获取会话列表及其最后一条消息
 
@@ -67,19 +85,19 @@ class SessionRepository:
                   每个元素是一个包含Session对象、消息内容、推理内容和创建时间的元组
         """
         # 使用窗口函数获取每个会话的最新消息
-        subquery = (
-            db.session.query(
+        subquery_stmt = (
+            select(
                 Message.session_id,
                 MessageContent.content,
                 MessageContent.reasoning_content,
                 MessageContent.created_at,
                 Message.id,
-                db.func.row_number()
+                func.row_number()
                 .over(
                     partition_by=Message.session_id,
                     order_by=[
-                        db.desc(Message.id),
-                        db.desc(MessageContent.is_current),
+                        desc(Message.id),
+                        desc(MessageContent.is_current),
                     ],
                 )
                 .label("rn"),
@@ -90,41 +108,23 @@ class SessionRepository:
         )
 
         # 查询会话信息并关联最新的消息内容
-        query = db.session.query(
+        stmt = select(
             Session,
-            subquery.c.content,
-            subquery.c.reasoning_content,
-            subquery.c.created_at,
+            subquery_stmt.c.content,
+            subquery_stmt.c.reasoning_content,
+            subquery_stmt.c.created_at,
         ).outerjoin(
-            subquery,
-            db.and_(
-                Session.id == subquery.c.session_id,
-                subquery.c.rn == 1,
+            subquery_stmt,
+            and_(
+                Session.id == subquery_stmt.c.session_id,
+                subquery_stmt.c.rn == 1,
             ),
         )
 
         # 根据用户ID过滤会话（如果提供了user_id）
         if user_id is not None:
-            query = query.filter(Session.user_id == user_id)
-        sessions_with_messages = query.all()
+            stmt = stmt.filter(Session.user_id == user_id)
+
+        result = await self.session.execute(stmt)
+        sessions_with_messages = result.all()
         return sessions_with_messages
-        # 组装结果
-        # result = []
-        # for (
-        #     session,
-        #     content,
-        #     reasoning_content,
-        #     message_created_at,
-        # ) in sessions_with_messages:
-        #     session_data = session.to_dict()
-
-        #     if content is not None:
-        #         session_data["last_message"] = {
-        #             "content": content,
-        #             "reasoning_content": reasoning_content,
-        #             "created_at": to_utc8_isoformat(message_created_at),
-        #         }
-
-        #     result.append(session_data)
-
-        # return result

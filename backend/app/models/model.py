@@ -2,9 +2,10 @@
 
 from typing import TYPE_CHECKING
 import ulid
-from .database import ModelBase, db
-
-from sqlalchemy.orm import Mapped
+from sqlalchemy import String, DateTime, JSON, ForeignKey, Column, Integer
+from sqlalchemy.orm import Mapped, relationship
+from sqlalchemy.sql import func
+from app.database import ModelBase
 
 if TYPE_CHECKING:
     from .model_provider import ModelProvider
@@ -13,27 +14,25 @@ if TYPE_CHECKING:
 class Model(ModelBase):
     __tablename__ = "model"
 
-    id = db.Column(db.String(26), primary_key=True, default=lambda: str(ulid.new()))
-    name = db.Column(db.String(255), nullable=True)
-    provider_id = db.Column(
-        db.String(26),
-        db.ForeignKey(
-            "model_provider.id", ondelete="CASCADE", name="fk_model_provider_id"
-        ),
+    id = Column(String(26), primary_key=True, default=lambda: str(ulid.new()))
+    name = Column(String(255), nullable=True)
+    provider_id = Column(
+        String(26),
+        ForeignKey("model_provider.id", ondelete="CASCADE"),
         index=True,
     )
-    model_name = db.Column(db.String(255))
-    model_type = db.Column(db.String(255))
-    max_tokens = db.Column(db.Integer, nullable=True)
-    max_output_tokens = db.Column(db.Integer, nullable=True)
-    features = db.Column(db.JSON, nullable=True)
-    created_at = db.Column(db.DateTime, default=db.func.now())
-    updated_at = db.Column(
-        db.DateTime,
-        default=db.func.now(),
-        onupdate=db.func.now(),
+    model_name = Column(String(255))
+    model_type = Column(String(255))
+    max_tokens = Column(Integer, nullable=True)
+    max_output_tokens = Column(Integer, nullable=True)
+    features = Column(JSON, nullable=True)
+    created_at = Column(DateTime, default=func.now())
+    updated_at = Column(
+        DateTime,
+        default=func.now(),
+        onupdate=func.now(),
     )
 
-    provider: Mapped["ModelProvider"] = db.relationship(
+    provider: Mapped["ModelProvider"] = relationship(
         "ModelProvider", back_populates="models"
     )

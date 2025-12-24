@@ -3,8 +3,7 @@ import logging
 from app.services.domain.llm_service import LLMServiceChunk
 from typing import NamedTuple, Optional
 from app.utils.chunking import chunking_messages
-from app.models import db, Summary
-from app.models.db_transaction import smart_transaction, smart_transaction_manager
+from app.models import Summary
 
 logger = logging.getLogger(__name__)
 
@@ -25,11 +24,7 @@ class SummaryService:
         pass
 
     def get_last_message_id(self, session_id: str):
-        summary = (
-            db.session.query(Summary).filter(Summary.session_id == session_id).first()
-        )
-        if summary and summary.last_message_id:
-            return summary.last_message_id
+       
         return None
 
     def call_llm(self, model: str, messages: list) -> LLMServiceChunk:
@@ -81,52 +76,53 @@ class SummaryService:
     def conditionally_compress_history(
         self, session: dict, character: dict, context_messages: list
     ):
-        HISTORY_THRESHOLD = 5
+        # HISTORY_THRESHOLD = 5
 
-        summary = (
-            db.session.query(Summary)
-            .filter(Summary.session_id == session["id"])
-            .first()
-        )
+        # summary = (
+        #     db.session.query(Summary)
+        #     .filter(Summary.session_id == session["id"])
+        #     .first()
+        # )
 
-        if summary is None:
-            with smart_transaction():
-                summary = Summary(
-                    session_id=session["id"],
-                    master_summary="",
-                    last_message_id="",
-                    history="[]",
-                )
-                db.session.add(summary)
+        # if summary is None:
 
-        chunks = chunking_messages(
-            messages=context_messages,
-            max_threshold=2000,
-            safe_threshold=1000,
-            chunk_size=1000,
-        )
+        #     summary = Summary(
+        #         session_id=session["id"],
+        #         master_summary="",
+        #         last_message_id="",
+        #         history="[]",
+        #     )
+        #     db.session.add(summary)
 
-        logger.debug("生成全局摘要中...")
-        response = self.generate_recent_summary(
-            character=character,
-            last_summary=summary.master_summary,
-            messages=chunks[-1],
-        )
-        summary.master_summary = response.content
-        summary.history = None
+        # chunks = chunking_messages(
+        #     messages=context_messages,
+        #     max_threshold=2000,
+        #     safe_threshold=1000,
+        #     chunk_size=1000,
+        # )
 
-        active_messages = chunks[-1] if len(chunks) > 0 else []
+        # logger.debug("生成全局摘要中...")
+        # response = self.generate_recent_summary(
+        #     character=character,
+        #     last_summary=summary.master_summary,
+        #     messages=chunks[-1],
+        # )
+        # summary.master_summary = response.content
+        # summary.history = None
 
-        return CompressionResult(
-            summary=summary.master_summary,
-            last_message_id=summary.last_message_id,
-            active_messages=active_messages,
-        )
+        # active_messages = chunks[-1] if len(chunks) > 0 else []
+
+        # return CompressionResult(
+        #     summary=summary.master_summary,
+        #     last_message_id=summary.last_message_id,
+        #     active_messages=active_messages,
+        # )
+        pass
 
     def delete_summary_by_session_id(self, session_id):
-        summary = (
-            db.session.query(Summary).filter(Summary.session_id == session_id).first()
-        )
-        if summary:
-            with smart_transaction():
-                db.session.delete(summary)
+        # summary = (
+        #     db.session.query(Summary).filter(Summary.session_id == session_id).first()
+        # )
+        # if summary:
+        #     db.session.delete(summary)
+        pass

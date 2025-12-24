@@ -1,57 +1,71 @@
 from typing import Optional
-
-from app.models import db, Character
-from app.models.db_transaction import execute_in_transaction
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select, delete
+from sqlalchemy.orm import joinedload
+from app.models.character import Character
 
 
 class CharacterRepository:
 
-    @staticmethod
-    def get_characters(user_id: Optional[str | list[str]] = None):
+    def __init__(self, session: AsyncSession):
+        """
+        初始化CharacterRepository
+        :param session: 异步数据库会话
+        """
+        self.session = session
+
+    async def get_characters(self, user_id: Optional[str | list[str]] = None):
         if isinstance(user_id, str):
-            characters = (
-                db.session.query(Character).filter(Character.user_id == user_id).all()
-            )
+            stmt = select(Character).filter(Character.user_id == user_id)
+            result = await self.session.execute(stmt)
+            characters = result.scalars().all()
         elif isinstance(user_id, list):
-            characters = (
-                db.session.query(Character)
+            stmt = (
+                select(Character)
                 .filter(Character.user_id.in_(user_id))
                 .filter(Character.is_public == True)
-                .all()
             )
+            result = await self.session.execute(stmt)
+            characters = result.scalars().all()
         else:
-            characters = db.session.query(Character).all()
+            stmt = select(Character)
+            result = await self.session.execute(stmt)
+            characters = result.scalars().all()
         return characters
 
-    @staticmethod
-    @execute_in_transaction
-    def create_character(user_id: str, data: dict):
-
+    async def create_character(self, user_id: str, data: dict):
         character = Character(
             **data,
             user_id=user_id,
         )
 
-        db.session.add(character)
+        self.session.add(character)
+        await self.session.flush()
+        return await self.get_character_by_id(character.id, with_model=True)
 
-        # 返回完整数据
-        return character
+    async def update_character(self, id, data: dict):
+        stmt = select(Character).filter(Character.id == id)
+        result = await self.session.execute(stmt)
+        character = result.scalar_one_or_none()
 
-    @staticmethod
-    @execute_in_transaction
-    def update_character(id, data: dict):
-        return db.session.query(Character).filter(Character.id == id).update(data)
-
-    @staticmethod
-    @execute_in_transaction
-    def delete_character(id):
-        character = db.session.query(Character).filter(Character.id == id).first()
         if character:
-            db.session.delete(character)
+            for key, value in data.items():
+                setattr(character, key, value)
+            return character
+        return None
 
-    @staticmethod
-    def get_character_by_id(id, user_id: Optional[str] = None):
-        query = db.session.query(Character).filter(Character.id == id)
+    async def delete_character(self, id):
+        stmt = delete(Character).where(Character.id == id)
+        result = await self.session.execute(stmt)
+        return result.rowcount
+
+    async def get_character_by_id(
+        self, id, user_id: Optional[str] = None, with_model: bool = True
+    ):
+        stmt = select(Character).filter(Character.id == id)
         if user_id:
-            query = query.filter(Character.user_id == user_id)
-        return query.first()
+            stmt = stmt.filter(Character.user_id == user_id)
+        if with_model:
+            stmt = stmt.options(joinedload(Character.model))
+        result = await self.session.execute(stmt)
+        return result.scalar_one_or_none()

@@ -1,37 +1,36 @@
-from flask import Blueprint, request
-from flask_jwt_extended import get_jwt_identity, jwt_required
-
-from app.services import ModelService
-from app.utils.decorators import handle_response
-
-
-models_bp = Blueprint("models", __name__)
-
-model_service = ModelService()
-# 模型相关
+from fastapi import APIRouter, Depends, Request
+from app.dependencies import get_model_service, get_current_user
+from app.schemas.common import PaginatedResponse
+from app.services.model_service import ModelService
+from app.models.user import User
+from app.schemas.model import ModelOut
+from app.schemas.model_provider import ModelProviderOut
 
 
-@models_bp.route("/api/v1/models", methods=["GET"])
-@jwt_required()
-@handle_response
-def get_models():
-    user_id = get_jwt_identity()
-    models = model_service.get_models_and_providers(user_id=user_id)
+models_router = APIRouter(prefix="/api/v1")
+
+
+@models_router.get("/models", response_model=PaginatedResponse[ModelProviderOut])
+async def get_models(
+    model_service: ModelService = Depends(get_model_service),
+    current_user: User = Depends(get_current_user),
+):
+    models = await model_service.get_models_and_providers(current_user)
     return models
 
 
-@models_bp.route("/api/v1/models/<model_id>", methods=["DELETE"])
-@jwt_required()
-@handle_response
-def delete_model(model_id):
-    model_service.delete_model(model_id)
+@models_router.delete("/models/{model_id}")
+async def delete_model(
+    model_id: str, model_service: ModelService = Depends(get_model_service)
+):
+    await model_service.delete_model(model_id)
 
 
-@models_bp.route("/api/v1/models", methods=["POST"])
-@jwt_required()
-@handle_response
-def create_model():
-    request_data = request.json
+@models_router.post("/models", response_model=ModelOut)
+async def create_model(
+    request: Request, model_service: ModelService = Depends(get_model_service)
+):
+    request_data = await request.json()
     fields = [
         "model_name",
         "model_type",
@@ -42,15 +41,16 @@ def create_model():
         "max_output_tokens",
     ]
     data = {field: request_data.get(field) for field in fields}
-    data = model_service.add_model(**data)
-    return data
+    return await model_service.add_model(**data)
 
 
-@models_bp.route("/api/v1/models/<model_id>", methods=["PUT"])
-@jwt_required()
-@handle_response
-def update_model(model_id):
-    request_data = request.json
+@models_router.put("/models/{model_id}", response_model=ModelOut)
+async def update_model(
+    model_id: str,
+    request: Request,
+    model_service: ModelService = Depends(get_model_service),
+):
+    request_data = await request.json()
     fields = [
         "model_name",
         "model_type",
@@ -60,54 +60,54 @@ def update_model(model_id):
         "max_output_tokens",
     ]
     data = {field: request_data.get(field) for field in fields}
-    data = model_service.update_model(model_id, data)
-    return data
+    return await model_service.update_model(model_id, data)
 
 
-@models_bp.route("/api/v1/providers", methods=["POST"])
-@jwt_required()
-@handle_response
-def create_provider():
-    request_data = request.json
-    user_id = get_jwt_identity()
+@models_router.post("/providers", response_model=ModelProviderOut)
+async def create_provider(
+    request: Request,
+    model_service: ModelService = Depends(get_model_service),
+    current_user: User = Depends(get_current_user),
+):
+    request_data = await request.json()
     fields = [
         "name",
         "api_key",
         "api_url",
     ]
     data = {field: request_data.get(field) for field in fields}
-    data = model_service.add_provider(user_id=user_id, **data)
-    return data
+    return await model_service.add_provider(current_user, **data)
 
 
-@models_bp.route("/api/v1/providers/<provider_id>", methods=["PUT"])
-@jwt_required()
-@handle_response
-def update_provider(provider_id):
-    request_data = request.json
+@models_router.put("/providers/{provider_id}", response_model=ModelProviderOut)
+async def update_provider(
+    provider_id: str,
+    request: Request,
+    model_service: ModelService = Depends(get_model_service),
+):
+    request_data = await request.json()
     fields = [
-        "provider_id",
         "name",
         "api_key",
         "api_url",
     ]
     data = {field: request_data.get(field) for field in fields}
-    model_service.update_provider(provider_id, data)
-    return data
+    return await model_service.update_provider(provider_id, data)
 
 
-@models_bp.route("/api/v1/providers/<provider_id>", methods=["DELETE"])
-@jwt_required()
-@handle_response
-def delete_provider(provider_id):
-    model_service.delete_provider(provider_id)
+@models_router.delete("/providers/{provider_id}")
+async def delete_provider(
+    provider_id: str, model_service: ModelService = Depends(get_model_service)
+):
+    await model_service.delete_provider(provider_id)
 
 
-@models_bp.route("/api/v1/providers/<provider_id>/remote_models", methods=["GET"])
-@jwt_required()
-@handle_response
-def get_provider_remote_models(provider_id):
-    user_id = get_jwt_identity()
-    return model_service.get_provider_remote_models(
-        user_id=user_id, provider_id=provider_id
+@models_router.get("/providers/{provider_id}/remote_models")
+async def get_provider_remote_models(
+    provider_id: str,
+    model_service: ModelService = Depends(get_model_service),
+    current_user: User = Depends(get_current_user),
+):
+    return await model_service.get_provider_remote_models(
+        current_user, provider_id=provider_id
     )

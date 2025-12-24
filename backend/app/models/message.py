@@ -1,7 +1,9 @@
 from typing import TYPE_CHECKING, List
 import ulid
-from .database import ModelBase, db
-from sqlalchemy.orm import Mapped
+from sqlalchemy import String, DateTime, ForeignKey, Column, Text
+from sqlalchemy.orm import Mapped, relationship
+from sqlalchemy.sql import func
+from app.database import ModelBase
 
 if TYPE_CHECKING:
     from app.models.file import File
@@ -11,43 +13,32 @@ if TYPE_CHECKING:
 class Message(ModelBase):
     __tablename__ = "message"
 
-    id = db.Column(db.String(26), primary_key=True, default=lambda: str(ulid.new()))
-    # session_id = db.Column(db.String(26), index=True)
-    session_id = db.Column(
-        db.String(26),
-        db.ForeignKey("session.id", ondelete="CASCADE", name="fk_message_session_id"),
+    id = Column(String(26), primary_key=True, default=lambda: str(ulid.new()))
+    session_id = Column(
+        String(26),
+        ForeignKey("session.id", ondelete="CASCADE"),
         index=True,
     )
-    role = db.Column(db.String(50))
-    # content = db.Column(db.Text, nullable=True)
-    # reasoning_content = db.Column(db.Text, nullable=True)
-    parent_id = db.Column(db.String(26), nullable=True)
-    created_at = db.Column(db.DateTime, default=db.func.now())
-    updated_at = db.Column(
-        db.DateTime,
-        default=db.func.now(),
-        onupdate=db.func.now(),
+    role = Column(String(50))
+    parent_id = Column(String(26), nullable=True)
+    created_at = Column(DateTime, default=func.now())
+    updated_at = Column(
+        DateTime,
+        default=func.now(),
+        onupdate=func.now(),
     )
-    files: Mapped[List["File"]] = db.relationship(
+    files: Mapped[List["File"]] = relationship(
         "File",
         back_populates="message",
-        # cascade="all, delete-orphan",
         cascade="save-update, merge, refresh-expire",  # 不要级联删除files，files会置空外键
     )
-    session = db.relationship(
+    session = relationship(
         "Session",
         back_populates="messages",
     )
 
-    contents: Mapped[List["MessageContent"]] = db.relationship(
+    contents: Mapped[List["MessageContent"]] = relationship(
         "MessageContent",
         back_populates="message",
         cascade="all, delete-orphan",
     )
-
-    # session = db.relationship(
-    #     "Session",
-    #     primaryjoin="Message.session_id == Session.id",
-    #     back_populates="messages",
-    #     foreign_keys="[Message.session_id]",
-    # )

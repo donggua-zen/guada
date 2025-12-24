@@ -1,32 +1,31 @@
 import ulid
-
-from .database import ModelBase, db
+from sqlalchemy import String, DateTime, Boolean, Text, JSON, ForeignKey, Column
+from sqlalchemy.orm import relationship
+from sqlalchemy.sql import func
+from app.database import ModelBase
 
 
 class MessageContent(ModelBase):
     __tablename__ = "message_content"
 
-    id = db.Column(db.String(26), primary_key=True, default=lambda: str(ulid.new()))
-    # session_id = db.Column(db.String(26), index=True)
-    message_id = db.Column(
-        db.String(26),
-        db.ForeignKey(
-            "message.id", ondelete="CASCADE", name="fk_message_content_message_id"
-        ),
+    id = Column(String(26), primary_key=True, default=lambda: str(ulid.new()))
+    message_id = Column(
+        String(26),
+        ForeignKey("message.id", ondelete="CASCADE"),
         index=True,
     )
-    is_current = db.Column(db.Boolean, default=False)
-    content = db.Column(db.Text, nullable=True)
-    reasoning_content = db.Column(db.Text, nullable=True)
-    meta_data = db.Column(db.JSON, nullable=True)
-    created_at = db.Column(db.DateTime, default=db.func.now())
-    updated_at = db.Column(
-        db.DateTime,
-        default=db.func.now(),
-        onupdate=db.func.now(),
+    is_current = Column(Boolean, default=False)
+    content = Column(Text, nullable=True)
+    reasoning_content = Column(Text, nullable=True)
+    meta_data = Column(JSON, nullable=True)
+    created_at = Column(DateTime, default=func.now())
+    updated_at = Column(
+        DateTime,
+        default=func.now(),
+        onupdate=func.now(),
     )
 
-    message = db.relationship(
+    message = relationship(
         "Message",
         back_populates="contents",
     )

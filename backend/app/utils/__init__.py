@@ -1,6 +1,6 @@
 from datetime import datetime, timedelta, timezone
 import os
-from config import STATIC_FILES_DIR
+from app.config import settings
 
 
 def to_utc8_isoformat(dt: datetime):
@@ -171,7 +171,8 @@ def build_url_path(*path_parts):
 
 
 def convert_webpath_to_filepath(web_path):
-    if not web_path: return ""
+    if not web_path:
+        return ""
     # 检测路径是否包含?，若有则将?及其后面的内容删除
     if "?" in web_path:
         web_path = web_path.split("?")[0]
@@ -179,6 +180,6 @@ def convert_webpath_to_filepath(web_path):
     if web_path.startswith("static"):
         # 只替换开头的 static/ 部分，然后正确拼接路径
         relative_path = web_path[len("static") + 1 :]
-        file_path = os.path.join(str(STATIC_FILES_DIR), relative_path)
+        file_path = os.path.join(str(settings.STATIC_FILES_DIR), relative_path)
         return file_path
     raise ValueError("无效的web路径")

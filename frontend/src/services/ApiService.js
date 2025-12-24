@@ -20,10 +20,10 @@ class ApiService {
     this.axiosInstance.interceptors.response.use(
       (response) => {
         // 检查响应中的 success 字段
-        if (response.data && !response.data.success) {
-          throw new Error(response.data.error || '请求失败');
-        }
-        return response.data ? response.data.data : response;
+        // if (response.data && !response.data.success) {
+        //   throw new Error(response.data.error || '请求失败');
+        // }
+        return response.data ? response.data : response;
       },
       (error) => {
         console.error('API请求失败:', error);

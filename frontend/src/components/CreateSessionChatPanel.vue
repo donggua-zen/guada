@@ -146,7 +146,6 @@ const handleSwitchModelClick = (e) => {
 const updateContainerWidth = () => {
   if (innerEl.value) {
     const innerWidth = innerEl.value.scrollWidth
-    console.log(outside.value.$el)
     const left = window.getComputedStyle(outside.value.$el)
     containerWidth.value = innerWidth + parseInt(left.paddingLeft) + parseInt(left.paddingRight)
   }
@@ -256,9 +255,11 @@ const localSidebarVisible = computed({
 const loadModels = async () => {
   try {
     const response = await apiService.fetchModels()
-
-    models.value = response.models || []
-    providers.value = response.providers || []
+    response.items.forEach(provider => {
+      models.value.push(...provider.models)
+      delete provider.models
+      providers.value.push(provider)
+    })
     if (models.value.length > 0) {
       // 优先使用上次选择的模型
       const savedModel = models.value.find(model => model.id === lastSelectedModelId.value)

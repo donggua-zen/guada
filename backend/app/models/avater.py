@@ -1,13 +1,14 @@
 import ulid
-from app import db
+from sqlalchemy import String, DateTime, Integer, Boolean, Column
+from sqlalchemy.sql import func
 
 
 class Avatar:
-    id = db.Column(db.String(26), primary_key=True, default=lambda: str(ulid.new()))
-    filename = db.Column(db.String(255))
-    file_size = db.Column(db.Integer)
-    width = db.Column(db.Integer)
-    height = db.Column(db.Integer)
-    is_deleted = db.Column(db.Boolean, default=False)
-    created_at = db.Column(db.DateTime, default=db.func.now())
-    updated_at = db.Column(db.DateTime, default=db.func.now(), onupdate=db.func.now())
+    id = Column(String(26), primary_key=True, default=lambda: str(ulid.new()))
+    filename = Column(String(255))
+    file_size = Column(Integer)
+    width = Column(Integer)
+    height = Column(Integer)
+    is_deleted = Column(Boolean, default=False)
+    created_at = Column(DateTime, default=func.now())
+    updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
