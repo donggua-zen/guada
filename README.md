@@ -2,7 +2,7 @@
 
 > 目前项目还在持续开发中，很多功能仍未实现。
 
-AI Chat 是一个功能强大的AI对话系统，支持配置兼容的OpenAI 的API接口、支持多角色对话、会话管理、模型配置和多种高级AI功能。该项目采用前后端分离架构，后端基于Python Flask，前端使用Vue 3 + Vite构建。
+AI Chat 是一个功能强大的AI对话系统，支持配置兼容的OpenAI API接口、多角色对话、会话管理、模型配置和多种高级AI功能。该项目采用前后端分离架构，后端基于Python Flask，前端使用Vue 3 + Vite构建。
 
 ![Python](https://img.shields.io/badge/Python-3.8+-blue.svg)
 ![Vue.js](https://img.shields.io/badge/Vue.js-3.x-4FC08D?style=flat&logo=vue.js&logoColor=white)
@@ -126,8 +126,8 @@ npm run build
 
 ## 设置密码
 
- **注意初次访问请访问 http://xxxxx/password设置管理员账户！！！
-** 
+**注意初次访问请访问 http://xxxxx/password设置管理员账户！！！**
+
 ## API文档
 
 后端API遵循RESTful设计原则，主要接口包括：
