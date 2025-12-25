@@ -29,7 +29,9 @@ def make_sync_url(async_url: str) -> str:
 
 
 config = context.config
-config.set_main_option("sqlalchemy.url", make_sync_url(settings.DATABASE_URL))
+# 🔥 关键：转义所有 % 为 %%
+escaped_sync_url = settings.DATABASE_URL.replace("%", "%%")
+config.set_main_option("sqlalchemy.url", make_sync_url(escaped_sync_url))
 
 # Interpret the config file for Python logging.
 # This line sets up loggers basically.
