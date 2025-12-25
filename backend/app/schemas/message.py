@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Optional, List
 from pydantic import BaseModel
-from .file import File, FileOut  # 导入File schema
+from .file import File, FileBound, FileOut  # 导入File schema
 from .message_content import (
     MessageContent,
     MessageContentOut,
@@ -15,18 +15,13 @@ class MessageBase(BaseModel):
 
 
 class MessageCreate(BaseModel):
-    session_id: str
-    role: str
     content: str
-    files: Optional[List[dict]] = None
-    parent_id: Optional[str] = None
+    files: Optional[List[FileBound]] = None
     replace_message_id: Optional[str] = None
-    meta_data: Optional[dict] = None
 
 
 class MessageUpdate(BaseModel):
-    content: Optional[str] = None
-    meta_data: Optional[dict] = None
+    content: str = None
 
 
 class MessageInDBBase(MessageBase):
