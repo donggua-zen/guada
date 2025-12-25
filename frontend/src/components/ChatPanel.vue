@@ -785,7 +785,7 @@ function regenerateResponse(message) {
   }
 
 
-  const assistantMessage = activeMessages.value.find(message => message.id === message.id);
+  const assistantMessage = activeMessages.value.find(m => m.id === message.id);
   if (assistantMessage) {
     assistantMessage.contents.forEach(content => {
       content.is_current = false;
