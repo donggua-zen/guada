@@ -70,7 +70,7 @@ async def add_message(
         session_id=session_id,
         role="user",
         content=message.content,
-        files=message.files,
+        files=[file.model_dump() for file in message.files],
         replace_message_id=message.replace_message_id,
         parent_id=None,
     )

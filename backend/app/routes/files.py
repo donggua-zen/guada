@@ -18,9 +18,6 @@ async def upload_message_file(
 
     file_info = await file_service.upload_message_file(sessions_id, file)
 
-    # 删除返回数据中的content字段
-    file_info.pop("content", None)
-
     return file_info
 
 

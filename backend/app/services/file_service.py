@@ -1,6 +1,9 @@
 import os
+import shutil
 from typing import Optional
 import uuid
+import aiofiles
+import pdfplumber
 from app.repositories.file_repository import FileRepository as FileRepo
 from app.utils import (
     build_url_path,
@@ -61,7 +64,9 @@ class FileService:
             raise Exception("删除文件失败")
         return {}
 
-    async def copy_message_file(self, file_id, message_id, session_id: Optional[str] = None):
+    async def copy_message_file(
+        self, file_id, message_id, session_id: Optional[str] = None
+    ):
         file = await self.file_repo.get_file(file_id)
         file_name = file["file_name"]
         display_name = file["display_name"]
@@ -110,6 +115,31 @@ class FileService:
             preview_web_path, unique_filename
         )
 
+    async def save_file(self, file, file_ext):
+        # 定义PDF文件保存路径
+        web_path = os.path.join("static", "uploads", "files")
+        upload_folder = convert_webpath_to_filepath(web_path)
+        os.makedirs(upload_folder, exist_ok=True)
+        unique_filename = f"{uuid.uuid4().hex}.{file_ext}"
+        file_path = os.path.join(upload_folder, unique_filename)
+        # 保存文件到本地
+        async with aiofiles.open(file_path, "wb") as out_file:
+            # 逐块读取并写入（避免一次性加载大文件到内存）
+            while content := await file.read(1024 * 1024 * 5):  # 每次读 1MB
+                await out_file.write(content)
+        return build_url_path(web_path, unique_filename), file_path
+
+    async def parse_pdf_file(self, file_path):
+
+        # 提取PDF文本内容
+        text_content = ""
+        with pdfplumber.open(file_path) as pdf:
+            for page_num, page in enumerate(pdf.pages, start=1):
+                text = page.extract_text()
+                if text:
+                    text_content += text + "\n"
+        return text_content
+
     async def upload_message_file(self, sessions_id, file):
         session_id = sessions_id
         allowed_jpeg_extensions = {"png", "jpg", "jpeg", "gif", "bmp", "webp", "tiff"}
@@ -126,21 +156,25 @@ class FileService:
             file_ext = (
                 file.filename.rsplit(".", 1)[1].lower() if "." in file.filename else ""
             )
-            pic_path = None
+            file_url = None
             preview_path = None
             file_content = None
 
             file_type = "text"
-            file_size = len(file.read())
-            file.seek(0)  # 重置文件指针
+            file_size = len(await file.read())
+            await file.seek(0)  # 重置文件指针
 
             if file_ext in allowed_jpeg_extensions:
-                pic_path, preview_path = self.upload_message_image_file(file)
+                file_url, preview_path = self.upload_message_image_file(file)
                 file_type = "image"
+            elif file_ext == "pdf":
+                file_type = "text"
+                file_url, file_path = await self.save_file(file, file_ext)
+                file_content = await self.parse_pdf_file(file_path)
             else:
                 file_type = "text"
                 # 读取文件内容
-                file_content = file.read().decode("utf-8")
+                file_content = await file.read().decode("utf-8")
                 file.seek(0)  # 重置文件指针
 
             # 计算文件hash值
@@ -157,7 +191,7 @@ class FileService:
                 session_id=session_id,
                 message_id=None,
                 content_hash=file_hash,
-                url=pic_path,
+                url=file_url,
                 preview_url=preview_path,
             )
 
