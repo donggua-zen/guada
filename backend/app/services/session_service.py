@@ -1,10 +1,9 @@
 # session_service.py
-from typing import Optional
 from app.models.user import User
 from app.repositories.character_repository import CharacterRepository
 from app.repositories.session_repository import SessionRepository as SessionRepo
 from app.services.upload_service import UploadService
-from app.utils import remove_file, to_utc8_isoformat
+from app.utils import convert_webpath_to_filepath, remove_file
 from app.schemas.common import PaginatedResponse
 from app.schemas.session import SessionOut
 
@@ -104,9 +103,7 @@ class SessionService:
         session.update(data)
 
         if "avatar_url" in data and data["avatar_url"] != old_avatar_url:
-            old_avatar_path = self.upload_service.convert_webpath_to_filepath(
-                old_avatar_url
-            )
+            old_avatar_path = convert_webpath_to_filepath(old_avatar_url)
             if old_avatar_url:
                 remove_file(old_avatar_path)
         self.session_repo.session.refresh(session)
