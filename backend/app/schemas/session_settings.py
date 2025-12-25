@@ -1,5 +1,5 @@
 from typing import Optional
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 
 
 class SessionSettings(BaseModel):
@@ -15,3 +15,17 @@ class SessionSettings(BaseModel):
     use_user_prompt: Optional[bool] = None
     web_search_enabled: Optional[bool] = False
     thinking_enabled: Optional[bool] = False
+
+    @field_validator(
+        "max_memory_length",
+        "max_memory_tokens",
+        "short_term_memory_tokens",
+        "model_top_p",
+        "model_temperature",
+        mode="before",
+    )
+    @classmethod
+    def empty_str_to_none(cls, v):
+        if v == "":
+            return None
+        return v
