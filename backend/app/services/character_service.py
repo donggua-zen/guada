@@ -1,8 +1,8 @@
 import os
 from typing import Optional
 
+from fastapi import HTTPException
 from app.models.user import User
-from app.exceptions import APIException
 from app.repositories.character_repository import CharacterRepository as CharacterRepo
 from app.repositories.user_repository import UserRepository
 from app.services.upload_service import UploadService
@@ -50,7 +50,7 @@ class CharacterService:
 
         character = await self.character_repo.get_character_by_id(id, user_id=user.id)
         if not character:
-            raise APIException("Character not found", 404)
+            raise HTTPException(status_code=404, detail="Character not found")
         character.update(data)
 
         if "avatar_url" in data and data["avatar_url"] != character.avatar_url:
@@ -74,14 +74,14 @@ class CharacterService:
         )
         if character:
             return character
-        raise APIException("Character not found", status_code=404)
+        raise HTTPException(status_code=404, detail="Character not found")
 
     async def upload_avatar(self, character_id, user: User, avatar_file):
         character = await self.character_repo.get_character_by_id(
             character_id, user_id=user.id
         )
         if not character:
-            raise APIException("Character not found", status_code=404)
+            raise HTTPException(status_code=404, detail="Character not found")
         # 使用实例变量避免重复创建
         avatar_url = self.upload_service.upload_avatar(avatar_file, size=(128, 128))
         return await self.update_character(

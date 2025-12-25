@@ -15,7 +15,7 @@ import datetime
 import logging
 from typing import AsyncGenerator, Optional
 
-from app.exceptions import APIException
+from fastapi import HTTPException
 from app.models.model import Model
 from app.repositories.model_repository import ModelRepository
 from app.repositories.session_repository import SessionRepository
@@ -216,7 +216,7 @@ class ChatService:
         session = await self.session_repo.get_session_by_id(session_id)
 
         if session is None:
-            raise ValueError("Invalid session id")
+            raise HTTPException(status_code=404, detail="Invalid session id")
 
         await self.session_repo.update_session(
             session_id,
@@ -258,7 +258,7 @@ class ChatService:
         model = session.model
         provider = await self.model_repo.get_provider(model.provider_id)
         if model is None:
-            raise ValueError("Invalid model name")
+            raise HTTPException(status_code=404, detail="Invalid model name")
 
         # 更优雅的方式获取模型参数
         model_params = {
@@ -355,7 +355,7 @@ class ChatService:
 
         session = await self.session_repo.get_session_by_id(session_id)
         if session is None:
-            raise APIException("Session not found", status_code=404)
+            raise HTTPException(status_code=404, detail="Session not found")
 
         settings = session.settings
         model = session.model

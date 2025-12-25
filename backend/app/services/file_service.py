@@ -4,6 +4,7 @@ from typing import Optional
 import uuid
 import aiofiles
 import pdfplumber
+from fastapi import HTTPException
 from app.repositories.file_repository import FileRepository as FileRepo
 from app.utils import (
     build_url_path,
@@ -61,7 +62,7 @@ class FileService:
 
     async def delete_file(self, file_id: int):
         if not await self.file_repo.delete_file(file_id):
-            raise Exception("删除文件失败")
+            raise HTTPException(status_code=500, detail="删除文件失败")
         return {}
 
     async def copy_message_file(
@@ -198,4 +199,4 @@ class FileService:
             return file_info
 
         except Exception as e:
-            raise e
+            raise HTTPException(status_code=500, detail=str(e))

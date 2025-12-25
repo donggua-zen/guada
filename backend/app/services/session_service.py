@@ -6,6 +6,7 @@ from app.services.upload_service import UploadService
 from app.utils import convert_webpath_to_filepath, remove_file
 from app.schemas.common import PaginatedResponse
 from app.schemas.session import SessionOut
+from fastapi import HTTPException
 
 # from app.models.db_transaction import get_transaction_manager
 
@@ -62,7 +63,7 @@ class SessionService:
             session = await self._add_new_session(data)
 
         if session is None:
-            raise ValueError("Failed to create session")
+            raise HTTPException(status_code=500, detail="Failed to create session")
 
         return session
 
@@ -94,8 +95,9 @@ class SessionService:
         # 验证会话是否属于当前用户
         session = await self.session_repo.get_session_by_id(session_id)
         if not session or session.user_id != user.id:
-            raise ValueError(
-                f"Session with ID {session_id} does not exist or does not belong to user."
+            raise HTTPException(
+                status_code=404,
+                detail=f"Session with ID {session_id} does not exist or does not belong to user.",
             )
 
         old_avatar_url = session.avatar_url
@@ -128,8 +130,9 @@ class SessionService:
         # 验证会话是否属于当前用户
         session = await self.session_repo.get_session_by_id(session_id)
         if not session or session.user_id != user.id:
-            raise ValueError(
-                f"Session with ID {session_id} does not exist or does not belong to user."
+            raise HTTPException(
+                status_code=404,
+                detail=f"Session with ID {session_id} does not exist or does not belong to user.",
             )
 
         await self.session_repo.delete_session(session_id)
@@ -137,16 +140,18 @@ class SessionService:
     async def get_session(self, session_id, user: User):
         session = await self.session_repo.get_session_by_id(session_id)
         if not session or session.user_id != user.id:
-            raise ValueError(
-                f"Session with ID {session_id} does not exist or does not belong to user."
+            raise HTTPException(
+                status_code=404,
+                detail=f"Session with ID {session_id} does not exist or does not belong to user.",
             )
         return session
 
     async def upload_avatar(self, session_id, user: User, avatar_file):
         session = await self.session_repo.get_session_by_id(session_id)
         if not session or session.user_id != user.id:
-            raise ValueError(
-                f"Session with ID {session_id} does not exist or does not belong to user."
+            raise HTTPException(
+                status_code=404,
+                detail=f"Session with ID {session_id} does not exist or does not belong to user.",
             )
 
         # 使用实例变量避免重复创建
