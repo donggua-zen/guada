@@ -1,6 +1,8 @@
 from datetime import datetime
 from typing import Optional, List, Dict, Any
 from pydantic import BaseModel
+
+from app.schemas.session_settings import SessionSettings
 from .message import Message  # 导入Message schema
 from .model import Model, ModelOut  # 导入Model schema
 
@@ -11,7 +13,7 @@ class SessionBase(BaseModel):
     avatar_url: Optional[str] = None
     description: Optional[str] = None
     model_id: Optional[str] = None
-    settings: Optional[Dict[str, Any]] = None
+    settings: Optional[SessionSettings] = None
 
 
 class SessionCreate(BaseModel):
@@ -19,7 +21,7 @@ class SessionCreate(BaseModel):
     avatar_url: Optional[str] = None
     description: Optional[str] = None
     model_id: Optional[str] = None
-    settings: Optional[Dict[str, Any]] = None
+    settings: Optional[SessionSettings] = None
     character_id: Optional[str] = None
 
 
@@ -28,7 +30,7 @@ class SessionUpdate(BaseModel):
     avatar_url: Optional[str] = None
     description: Optional[str] = None
     model_id: Optional[str] = None
-    settings: Optional[Dict[str, Any]] = None
+    settings: Optional[SessionSettings] = None
 
 
 class SessionInDBBase(SessionBase):
@@ -49,7 +51,7 @@ class SessionItemOut(BaseModel):
     avatar_url: Optional[str] = None
     description: Optional[str] = None
     model_id: Optional[str] = None
-    settings: Optional[Dict[str, Any]] = None
+    settings: Optional[SessionSettings] = None
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
 

@@ -19,11 +19,8 @@ class MessageContentCreate(BaseModel):
     set_current: Optional[bool] = True
 
 
-class MessageContentUpdate(BaseModel):
-    content: Optional[str] = None
-    reasoning_content: Optional[str] = None
-    meta_data: Optional[dict] = None
-    is_current: Optional[bool] = None
+class MessageContentActive(BaseModel):
+    message_id: str
 
 
 class MessageContentInDBBase(MessageContentBase):
