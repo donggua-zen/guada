@@ -98,6 +98,7 @@ class DatabaseManager:
         else:
             self.engine = create_async_engine(
                 database_url,
+                echo=False,
                 pool_pre_ping=True,
                 pool_recycle=3600,
                 # 注意：asyncmy / aiomysql 不支持 init_command
@@ -166,6 +167,14 @@ async def close_db():
         await db_manager.close()
     else:
         logger.warning("No database manager instance found.")
+
+
+def get_db_manager() -> DatabaseManager:
+    """获取数据库管理器实例"""
+    global db_manager
+    if db_manager is None:
+        raise RuntimeError("数据库未初始化，请先调用 init_db")
+    return db_manager
 
 
 @contextlib.asynccontextmanager

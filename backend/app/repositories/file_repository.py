@@ -95,7 +95,6 @@ class FileRepository:
         stmt = select(FileModel).where(
             and_(
                 FileModel.message_id.is_(None),  # message_id为空
-                FileModel.session_id.is_(None),  # session_id也为空
                 FileModel.created_at < cutoff_time,  # 创建时间早于 cutoff_time
             )
         )
@@ -108,7 +107,6 @@ class FileRepository:
         stmt = select(func.count(FileModel.id)).where(
             and_(
                 FileModel.message_id.is_(None),
-                FileModel.session_id.is_(None),
                 FileModel.created_at < cutoff_time,
             )
         )

@@ -3,7 +3,7 @@ import logging
 from app.repositories.model_repository import ModelRepository
 from app.services.domain.llm_service import LLMService
 from app.services.domain.web_search_engine import WebSearchEngine
-from app.utils.settings_manager import SettingsManager
+from app.services.settings_manager import SettingsManager
 
 logger = logging.getLogger(__name__)
 
