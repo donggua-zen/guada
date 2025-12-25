@@ -2,7 +2,6 @@ import logging
 from fastapi import HTTPException
 from openai import AsyncOpenAI
 from app.models.user import User
-from app.exceptions import APIException
 from app.repositories.model_repository import ModelRepository as ModelRepo
 from app.schemas.common import PaginatedResponse
 from app.schemas.model import ModelOut
@@ -31,7 +30,7 @@ class ModelService:
 
     async def delete_model(self, model_id):
         if not await self.model_repo.delete_model(model_id):
-            raise APIException("Model not found", status_code=404)
+            raise HTTPException(status_code=404, detail="Model not found")
 
     async def delete_provider(self, provider_id):
         await self.model_repo.delete_provider(provider_id)
@@ -69,7 +68,7 @@ class ModelService:
     async def get_model(self, model_id):
         model = await self.model_repo.get_model(model_id)
         if not model:
-            raise APIException("Model not found", status_code=404)
+            raise HTTPException(status_code=404, detail="Model not found")
         return model
 
     async def update_model(self, model_id, data):
@@ -83,13 +82,13 @@ class ModelService:
     async def get_model_by_name(self, model_name, provider_name=None):
         model = await self.model_repo.get_model_by_name(model_name, provider_name)
         if not model:
-            raise APIException("Model not found", status_code=404)
+            raise HTTPException(status_code=404, detail="Model not found")
         return model
 
     async def get_provider_by_name(self, provider_name):
         provider = await self.model_repo.get_provider_by_name(provider_name)
         if not provider:
-            raise APIException("Provider not found", status_code=404)
+            raise HTTPException(status_code=404, detail="Provider not found")
         return provider
 
     async def get_provider_remote_models(self, user: User, provider_id):

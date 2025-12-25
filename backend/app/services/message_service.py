@@ -9,6 +9,7 @@ from app.repositories.message_repository import MessageRepository as MessageRepo
 from app.repositories.message_content_repository import MessageContentRepository
 from app.schemas.common import PaginatedResponse
 from app.schemas.message import MessageOut
+from fastapi import HTTPException
 
 
 class MessageService:
@@ -50,7 +51,7 @@ class MessageService:
     async def get_message(self, message_id):
         message = await self.message_repo.get_message(message_id)
         if not message:
-            raise Exception("Message not found")
+            raise HTTPException(status_code=404, detail="Message not found")
         return message
 
     async def add_message_content(
@@ -63,7 +64,7 @@ class MessageService:
         # 直接调用仓库方法，不再使用事务管理器
         message = await self.message_repo.get_message(message_id=message_id)
         if not message:
-            raise Exception("Message not found")
+            raise HTTPException(status_code=404, detail="Message not found")
 
         for old_content in message.contents:
             old_content.is_current = False
@@ -98,7 +99,7 @@ class MessageService:
             meta_data=meta_data or {},
         )
         if not message:
-            raise Exception("Failed to add message")
+            raise HTTPException(status_code=500, detail="Failed to add message")
         if files:
             file_ids = [file["id"] for file in files]
             await self.file_repo.update_files(file_ids, {"message_id": message.id})
@@ -113,16 +114,16 @@ class MessageService:
     async def update_message(self, message_id, data):
         message = await self.message_repo.update_message(message_id, data)
         if not message:
-            raise Exception("Failed to update message")
+            raise HTTPException(status_code=500, detail="Failed to update message")
         return message
 
     async def delete_message(self, message_id):
         message = await self.message_repo.get_message(message_id=message_id)
         if not message:
-            raise Exception("Message not found")
+            raise HTTPException(status_code=404, detail="Message not found")
         # 不再使用事务管理器
         if not await self.message_repo.delete_message(message_id):
-            raise Exception("Failed to delete message")
+            raise HTTPException(status_code=500, detail="Failed to delete message")
         if message.role == "user":
             await self.message_repo.delete_message_by_parent_id(message_id)
 
@@ -130,7 +131,7 @@ class MessageService:
 
     async def delete_messages_by_session_id(self, session_id):
         if not await self.message_repo.delete_messages_by_session_id(session_id):
-            raise Exception("Failed to delete messages")
+            raise HTTPException(status_code=500, detail="Failed to delete messages")
         return {}
 
     async def set_message_current_content(self, message_id, content_id):

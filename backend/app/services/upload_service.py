@@ -4,6 +4,7 @@ import traceback
 from typing import Optional
 import uuid
 
+from fastapi import HTTPException
 from app.utils import convert_image_to_jpeg, convert_webpath_to_filepath
 from app.config import settings
 
@@ -59,14 +60,15 @@ class UploadService:
 
             # 检查文件对象和文件类型合法性
             if not file:
-                raise ValueError("File object is required")
+                raise HTTPException(status_code=400, detail="File object is required")
 
             if not hasattr(file, "filename"):
-                raise ValueError("File object must have filename attribute")
+                raise HTTPException(status_code=400, detail="File object must have filename attribute")
 
             if not self.allowed_file(file.filename):
-                raise ValueError(
-                    f"Invalid file type. Allowed types: {', '.join(self.ALLOWED_EXTENSIONS)}"
+                raise HTTPException(
+                    status_code=400, 
+                    detail=f"Invalid file type. Allowed types: {', '.join(self.ALLOWED_EXTENSIONS)}"
                 )
 
             # 生成唯一文件名并保存
@@ -80,9 +82,9 @@ class UploadService:
 
         except Exception as e:
             traceback.print_exc()
-            if isinstance(e, (ValueError, IOError)):
+            if isinstance(e, HTTPException):
                 raise
-            raise RuntimeError(f"Failed to upload avatar: {str(e)}") from e
+            raise HTTPException(status_code=500, detail=f"Failed to upload avatar: {str(e)}") from e
 
     def duplicate_avatar(self, avatar_path: str) -> Optional[str]:
         """
