@@ -1,10 +1,11 @@
 # 工具类简化操作
-import json
+import logging
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, insert, update
-from app.models.globa_setting import GlobalSetting
+from sqlalchemy import select
 from app.models.user_setting import UserSetting
+from sqlalchemy.orm.attributes import flag_modified
 
+logger = logging.getLogger(__name__)
 
 class SettingsManager:
 
@@ -28,10 +29,12 @@ class SettingsManager:
         return default
 
     def set(self, key, value):
+        # logger.info(f"{self.user_id} {key} {value}")
         if self.setting_model:
             if not self.setting_model.settings:
                 self.setting_model.settings = {}
-            self.setting_model.settings[key] = value
+            self.setting_model.settings[key] = value  
+            flag_modified(self.setting_model, 'settings')
 
     def get_all(self):
         return self.setting_model.settings if self.setting_model else {}
