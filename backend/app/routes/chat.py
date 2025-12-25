@@ -73,5 +73,4 @@ async def chat_completions(
 async def get_tokens(
     session_id: str, chat_service: ChatService = Depends(get_chat_service)
 ):
-    data = await chat_service.token_statistics(session_id)
-    return {"success": True, "data": data}
+    return await chat_service.token_statistics(session_id)
