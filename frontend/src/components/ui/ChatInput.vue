@@ -103,7 +103,7 @@ const FILE_TYPES = {
             '.env', '.cfg', '.config', '.reg', '.pem', '.tex', '.rst', '.adoc', '.org',
             '.swift', '.kt', '.scala', '.dart', '.ex', '.r', '.jl', '.ps1', '.vbs', '.fish',
             '.j2', '.ejs', '.hbs', '.lock', '.patch', '.diff', '.ics', '.vcf', '.srt',
-            '.proto', '.graphql', '.sol'
+            '.proto', '.graphql', '.sol', '.pdf'
         ],
         type: 'text'
     },

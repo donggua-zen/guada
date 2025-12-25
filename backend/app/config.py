@@ -55,21 +55,34 @@ settings = Settings()
 
 def setup_logging():
     """配置日志系统"""
-    logging.basicConfig(
-        level=logging.DEBUG if settings.DEBUG else logging.INFO,
-        format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",  # "[in %(lineno)d]"
-        handlers=[
-            logging.StreamHandler(sys.stdout),  # 控制台输出
-            logging.FileHandler(
-                settings.LOG_DIR / "app.log", encoding="utf-8"
-            ),  # 文件输出
-        ],
+    # logging.basicConfig(
+    #     level=logging.DEBUG if settings.DEBUG else logging.INFO,
+    #     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",  # "[in %(lineno)d]"
+    #     handlers=[
+    #         logging.StreamHandler(sys.stdout),  # 控制台输出
+    #         logging.FileHandler(
+    #             settings.LOG_DIR / "app.log", encoding="utf-8"
+    #         ),  # 文件输出
+    #     ],
+    # )  
+    # 1. 创建 formatter
+    formatter = logging.Formatter(
+        "%(levelname)s:\t  %(name)s: %(message)s - %(asctime)s"
     )
 
-    logging.getLogger("aiosqlite").setLevel(logging.WARNING)
-    logging.getLogger("aiomysql").setLevel(logging.WARNING)
-    logging.getLogger("sqlalchemy").setLevel(logging.WARNING)
-    logging.getLogger("urllib3").setLevel(logging.WARNING)
+    # 2. 创建 handlers
+    console_handler = logging.StreamHandler(sys.stdout)
+    console_handler.setFormatter(formatter)
+
+    file_handler = logging.FileHandler(settings.LOG_DIR / "app.log", encoding="utf-8")
+    file_handler.setFormatter(formatter)
+    # 3. 配置你自己的应用 logger（不是 root！）
+    app_logger = logging.getLogger("app")  # ← 关键：命名空间隔离
+    app_logger.setLevel(logging.DEBUG if settings.DEBUG else logging.INFO)
+    app_logger.propagate = False  # ← 阻止传播到 root，避免重复
+    app_logger.addHandler(console_handler)
+    app_logger.addHandler(file_handler)
+
 
 
 def get_database_url() -> str:
