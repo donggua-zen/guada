@@ -50,6 +50,10 @@ class FileInDBBase(FileBase):
         from_attributes = True
 
 
+class FileBound(BaseModel):
+    id: str
+
+
 class File(FileInDBBase):
     pass
 

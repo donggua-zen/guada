@@ -4,7 +4,7 @@ from app.dependencies import get_session_service, get_current_user
 from app.schemas.common import PaginatedResponse
 from app.services.session_service import SessionService
 from app.models.user import User
-from app.schemas.session import SessionItemOut, SessionOut
+from app.schemas.session import SessionCreate, SessionItemOut, SessionOut, SessionUpdate
 from app.utils.vector_memory import get_vector_memory
 
 
@@ -18,37 +18,17 @@ async def get_sessions(
     session_service: SessionService = Depends(get_session_service),
     current_user: User = Depends(get_current_user),
 ):
-    sessions = await session_service.get_sessions(current_user)
-    return sessions
+    return await session_service.get_sessions(current_user)
 
 
 @sessions_router.post("/sessions", response_model=SessionOut)
 async def create_session(
-    request: Request,
+    request: SessionCreate,
     session_service: SessionService = Depends(get_session_service),
     current_user: User = Depends(get_current_user),
 ):
-    json_data = await request.json()
-    settings = json_data.get("settings", {})
-    session_data = {
-        "title": json_data.get("title", ""),
-        "character_id": json_data.get("character_id", None),
-        "avatar_url": "",
-        "description": "An helpful AI assistant",
-        "model_id": json_data.get("model_id", None),
-        "settings": {
-            "memory_type": "sliding_window",
-            "system_prompt": "You are a helpful AI assistant that can answer any question asked by the user",
-            "thinking_enabled": settings.get("thinking_enabled", False),
-            "web_search_enabled": settings.get("web_search_enabled", False),
-        },
-    }
-
-    data = await session_service.create_session(current_user, session_data)
-
-    if data is None:
-        raise Exception("Failed to create or resume session.")
-    return data
+    session_data = request.model_dump()
+    return await session_service.create_session(current_user, session_data)
 
 
 @sessions_router.delete("/sessions/{session_id}")
@@ -76,44 +56,14 @@ async def get_session(
 @sessions_router.put("/sessions/{session_id}", response_model=SessionOut)
 async def update_session(
     session_id: str,
-    request: Request,
+    request: SessionUpdate,
     session_service: SessionService = Depends(get_session_service),
     current_user: User = Depends(get_current_user),
 ):
-    data = await request.json()
+    data = request.model_dump(exclude_unset=True)
     data["updated_at"] = datetime.datetime.now(datetime.timezone.utc)
-    fields = ["title", "description", "avatar_url", "updated_at", "model_id"]
 
-    extended_fields = [
-        "assistant_name",
-        "assistant_identity",
-        "system_prompt",
-        "memory_type",
-        "max_memory_length",
-        "max_memory_tokens",
-        "short_term_memory_tokens",
-        "model_top_p",
-        "model_temperature",
-        "model_id",
-        "use_user_prompt",
-        "web_search_enabled",
-        "thinking_enabled",
-    ]
-
-    data_filtered = {}
-    # 处理基础字段
-    for field in fields:
-        if field in data:
-            data_filtered[field] = data[field]
-
-    # 处理settings字段
-    if "settings" in data:
-        settings = {}
-        for field in extended_fields:
-            if field in data["settings"]:
-                settings[field] = data["settings"][field]
-        data_filtered["settings"] = settings
-    return await session_service.update_session(session_id, current_user, data_filtered)
+    return await session_service.update_session(session_id, current_user, data)
 
 
 @sessions_router.post("/sessions/{session_id}/avatars")

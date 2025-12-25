@@ -1,7 +1,7 @@
 from .user import User, UserCreate, UserUpdate, UserInDBBase, UserOut
 from .session import Session, SessionCreate, SessionUpdate, SessionInDBBase, SessionOut
 from .message import Message, MessageCreate, MessageUpdate, MessageInDBBase, MessageOut
-from .message_content import MessageContent, MessageContentCreate, MessageContentUpdate, MessageContentInDBBase, MessageContentOut
+from .message_content import MessageContent, MessageContentCreate, MessageContentInDBBase, MessageContentOut
 from .character import Character, CharacterCreate, CharacterUpdate, CharacterInDBBase, CharacterOut
 from .model import Model, ModelCreate, ModelUpdate, ModelInDBBase, ModelOut
 from .model_provider import ModelProviderCreate, ModelProviderUpdate, ModelProviderInDBBase, ModelProviderOut
@@ -27,7 +27,6 @@ __all__ = [
     "MessageOut",
     "MessageContent",
     "MessageContentCreate",
-    "MessageContentUpdate",
     "MessageContentInDBBase",
     "MessageContentOut",
     "Character",

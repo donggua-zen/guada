@@ -1,6 +1,8 @@
 from datetime import datetime
 from typing import Optional, Dict, Any
 from pydantic import BaseModel
+
+from app.schemas.session_settings import SessionSettings
 from .model import ModelOut  # 导入Model schema
 
 
@@ -11,16 +13,16 @@ class CharacterBase(BaseModel):
     avatar_url: Optional[str] = None
     is_public: Optional[bool] = None
     model_id: Optional[str] = None
-    settings: Optional[Dict[str, Any]] = None
+    settings: Optional[SessionSettings] = None
 
 
 class CharacterCreate(BaseModel):
     title: str
+    model_id: str
     description: Optional[str] = None
     avatar_url: Optional[str] = None
     is_public: Optional[bool] = False
-    model_id: Optional[str] = None
-    settings: Optional[Dict[str, Any]] = None
+    settings: Optional[SessionSettings] = None
 
 
 class CharacterUpdate(BaseModel):
@@ -29,7 +31,7 @@ class CharacterUpdate(BaseModel):
     avatar_url: Optional[str] = None
     is_public: Optional[bool] = None
     model_id: Optional[str] = None
-    settings: Optional[Dict[str, Any]] = None
+    settings: Optional[SessionSettings] = None
 
 
 class CharacterInDBBase(CharacterBase):
@@ -51,7 +53,7 @@ class CharacterItemOut(BaseModel):
     avatar_url: Optional[str] = None
     is_public: Optional[bool] = None
     model_id: Optional[str] = None
-    settings: Optional[Dict[str, Any]] = None
+    settings: Optional[SessionSettings] = None
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
 
