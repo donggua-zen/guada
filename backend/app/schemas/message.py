@@ -1,6 +1,8 @@
 from datetime import datetime
 from typing import Optional, List
 from pydantic import BaseModel
+
+from app.schemas.base import BaseResponse
 from .file import File, FileBound, FileOut  # 导入File schema
 from .message_content import (
     MessageContent,
@@ -36,13 +38,11 @@ class Message(MessageInDBBase):
     contents: Optional[List[MessageContent]] = []
 
 
-class MessageOut(BaseModel):
+class MessageOut(BaseResponse):
     id: str
     session_id: Optional[str] = None
     role: Optional[str] = None
     parent_id: Optional[str] = None
-    created_at: Optional[datetime] = None
-    updated_at: Optional[datetime] = None
     files: Optional[List[FileOut]] = []
     contents: Optional[List[MessageContentOut]] = []
 

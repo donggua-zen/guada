@@ -2,6 +2,8 @@ from datetime import datetime
 from typing import Optional, List
 from pydantic import BaseModel
 
+from app.schemas.base import BaseResponse
+
 
 class ModelBase(BaseModel):
     name: Optional[str] = None
@@ -43,7 +45,7 @@ class Model(ModelInDBBase):
     pass
 
 
-class ModelOut(BaseModel):
+class ModelOut(BaseResponse):
     id: str
     name: Optional[str] = None
     provider_id: Optional[str] = None
@@ -52,8 +54,6 @@ class ModelOut(BaseModel):
     max_tokens: Optional[int] = None
     max_output_tokens: Optional[int] = None
     features: Optional[List[str]] = None
-    created_at: Optional[datetime] = None
-    updated_at: Optional[datetime] = None
 
     class Config:
         from_attributes = True

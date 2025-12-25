@@ -2,6 +2,7 @@ from datetime import datetime
 from typing import Optional, Dict, Any
 from pydantic import BaseModel
 
+from app.schemas.base import BaseResponse
 from app.schemas.session_settings import SessionSettings
 from .model import ModelOut  # 导入Model schema
 
@@ -45,7 +46,7 @@ class Character(CharacterInDBBase):
     pass
 
 
-class CharacterItemOut(BaseModel):
+class CharacterItemOut(BaseResponse):
     id: str
     user_id: Optional[str] = None
     title: Optional[str] = None
@@ -54,8 +55,6 @@ class CharacterItemOut(BaseModel):
     is_public: Optional[bool] = None
     model_id: Optional[str] = None
     settings: Optional[SessionSettings] = None
-    created_at: Optional[datetime] = None
-    updated_at: Optional[datetime] = None
 
     class Config:
         from_attributes = True
