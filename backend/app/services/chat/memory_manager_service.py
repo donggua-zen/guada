@@ -21,6 +21,8 @@ class MemoryManagerService:
         # 安全地获取 system_prompt
         if "system_prompt" not in prompt_settings:
             return None
+        if prompt_settings["system_prompt"] is None:
+            return None
         system_prompt_parts.append(prompt_settings["system_prompt"])
         return {
             "role": "system" if not prompt_settings.get("use_user_prompt") else "user",
