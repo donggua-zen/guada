@@ -2,6 +2,7 @@ from datetime import datetime
 from typing import Optional, List, Dict, Any
 from pydantic import BaseModel
 
+from app.schemas.base import BaseResponse
 from app.schemas.session_settings import SessionSettings
 from .message import Message  # 导入Message schema
 from .model import Model, ModelOut  # 导入Model schema
@@ -44,7 +45,7 @@ class Session(SessionInDBBase):
     messages: Optional[List[Message]] = []
 
 
-class SessionItemOut(BaseModel):
+class SessionItemOut(BaseResponse):
     id: str
     title: Optional[str] = None
     user_id: Optional[str] = None
@@ -52,8 +53,6 @@ class SessionItemOut(BaseModel):
     description: Optional[str] = None
     model_id: Optional[str] = None
     settings: Optional[SessionSettings] = None
-    created_at: Optional[datetime] = None
-    updated_at: Optional[datetime] = None
 
     class Config:
         from_attributes = True

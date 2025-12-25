@@ -2,6 +2,8 @@ from datetime import datetime
 from typing import Optional, List, Any
 from pydantic import BaseModel
 
+from app.schemas.base import BaseResponse
+
 
 class SummaryBase(BaseModel):
     session_id: Optional[str] = None
@@ -34,14 +36,12 @@ class Summary(SummaryInDBBase):
     pass
 
 
-class SummaryOut(BaseModel):
+class SummaryOut(BaseResponse):
     id: str
     session_id: Optional[str] = None
     master_summary: Optional[str] = None
     last_message_id: Optional[str] = None
     history: Optional[List[Any]] = None
-    created_at: Optional[datetime] = None
-    updated_at: Optional[datetime] = None
 
     class Config:
         from_attributes = True

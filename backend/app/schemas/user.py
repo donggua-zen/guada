@@ -2,6 +2,8 @@ from datetime import datetime
 from typing import Optional, List
 from pydantic import BaseModel
 
+from app.schemas.base import BaseResponse
+
 
 class UserBase(BaseModel):
     role: Optional[str] = None
@@ -46,7 +48,7 @@ class UserWithPassword(UserInDBBase):
     password_hash: str
 
 
-class UserOut(BaseModel):
+class UserOut(BaseResponse):
     id: str
     role: Optional[str] = None
     avatar_url: Optional[str] = None
@@ -54,8 +56,6 @@ class UserOut(BaseModel):
     nickname: Optional[str] = None
     phone: Optional[str] = None
     email: Optional[str] = None
-    created_at: Optional[datetime] = None
-    updated_at: Optional[datetime] = None
 
     class Config:
         from_attributes = True

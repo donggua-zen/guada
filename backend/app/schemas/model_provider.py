@@ -1,6 +1,8 @@
 from datetime import datetime
 from typing import Optional, List
 from pydantic import BaseModel
+
+from app.schemas.base import BaseResponse
 from .model import ModelOut  # 导入Model schema
 
 
@@ -30,15 +32,13 @@ class ModelProviderInDBBase(ModelProviderBase):
         from_attributes = True
 
 
-class ModelProviderOut(BaseModel):
+class ModelProviderOut(BaseResponse):
     id: str
     user_id: Optional[str] = None
     name: Optional[str] = None
     provider: Optional[str] = None
     api_url: Optional[str] = None
     api_key: Optional[str] = None
-    created_at: Optional[datetime] = None
-    updated_at: Optional[datetime] = None
     models: Optional[List[ModelOut]] = []
 
     class Config:

@@ -2,6 +2,8 @@ from datetime import datetime
 from typing import Optional
 from pydantic import BaseModel
 
+from app.schemas.base import BaseResponse
+
 
 class FileBase(BaseModel):
     file_name: Optional[str] = None
@@ -58,7 +60,7 @@ class File(FileInDBBase):
     pass
 
 
-class FileOut(BaseModel):
+class FileOut(BaseResponse):
     id: str
     file_name: Optional[str] = None
     display_name: Optional[str] = None
@@ -73,8 +75,6 @@ class FileOut(BaseModel):
     session_id: Optional[str] = None
     message_id: Optional[str] = None
     is_public: Optional[bool] = None
-    created_at: Optional[datetime] = None
-    updated_at: Optional[datetime] = None
 
     class Config:
         from_attributes = True
