@@ -57,7 +57,7 @@ def setup_logging():
     """配置日志系统"""
     logging.basicConfig(
         level=logging.DEBUG if settings.DEBUG else logging.INFO,
-        format="%(asctime)s - %(name)s - %(levelname)s - %(message)s" "[in %(lineno)d]",
+        format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",  # "[in %(lineno)d]"
         handlers=[
             logging.StreamHandler(sys.stdout),  # 控制台输出
             logging.FileHandler(
@@ -65,6 +65,11 @@ def setup_logging():
             ),  # 文件输出
         ],
     )
+
+    logging.getLogger("aiosqlite").setLevel(logging.WARNING)
+    logging.getLogger("aiomysql").setLevel(logging.WARNING)
+    logging.getLogger("sqlalchemy").setLevel(logging.WARNING)
+    logging.getLogger("urllib3").setLevel(logging.WARNING)
 
 
 def get_database_url() -> str:
