@@ -92,6 +92,7 @@ class SessionService:
             old_avatar_path = convert_webpath_to_filepath(old_avatar_url)
             if old_avatar_url:
                 remove_file(old_avatar_path)
+        await self.session_repo.session.flush()
         await self.session_repo.session.refresh(session)
         return session
 
