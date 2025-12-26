@@ -31,24 +31,8 @@ class SessionService:
             data["model_id"] = character.model_id
             data["user_id"] = user.id  # 添加用户ID
 
-            fields = [
-                "assistant_name",
-                "assistant_identity",
-                "system_prompt",
-                "memory_type",
-                "max_memory_length",
-                "model_top_p",
-                "model_temperature",
-            ]
             # 更优雅地复制字段
-
-            data["settings"].update(
-                {
-                    field: character.settings[field]
-                    for field in fields
-                    if field in character.settings
-                }
-            )
+            data["settings"] = character.settings
 
             # 使用实例变量避免重复创建
             avatar_path = (
@@ -108,7 +92,7 @@ class SessionService:
             old_avatar_path = convert_webpath_to_filepath(old_avatar_url)
             if old_avatar_url:
                 remove_file(old_avatar_path)
-        self.session_repo.session.refresh(session)
+        await self.session_repo.session.refresh(session)
         return session
 
     async def query_session(

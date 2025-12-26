@@ -204,10 +204,7 @@ class MessageRepository:
         Returns:
             dict: 更新后的消息信息，如果消息不存在则返回None
         """
-        stmt = select(Message).filter(Message.id == message_id)
-        result = await self.session.execute(stmt)
-        message = result.scalar_one_or_none()
-
+        message = await self.get_message(message_id)
         if not message:
             return None
 

@@ -10,12 +10,16 @@
 通过该服务，可以实现角色扮演对话系统的核心功能，支持多种记忆策略和模型供应商的集成。
 """
 
+import asyncio
 from contextlib import closing
 import datetime
 import logging
+import sqlite3
 from typing import AsyncGenerator, Optional
 
 from fastapi import HTTPException
+from app.models.message import Message
+from app.models.message_content import MessageContent
 from app.models.model import Model
 from app.repositories.model_repository import ModelRepository
 from app.repositories.session_repository import SessionRepository
@@ -218,12 +222,8 @@ class ChatService:
         if session is None:
             raise HTTPException(status_code=404, detail="Invalid session id")
 
-        await self.session_repo.update_session(
-            session_id,
-            data={
-                "updated_at": datetime.datetime.now(datetime.timezone.utc),
-            },
-        )
+        session.updated_at = datetime.datetime.now(datetime.timezone.utc)
+
         conversation_messages = (
             await self.memory_manager_service.get_conversation_messages(
                 session_id=session_id,
@@ -296,7 +296,7 @@ class ChatService:
             logger.debug(f"Using model: {model.model_name}")
 
             # 直接获取异步生成器
-            generator = await llm_service.completions(
+            generator = llm_service.completions(
                 model.model_name,
                 messages=conversation_messages,
                 temperature=model_params["temperature"],
@@ -311,10 +311,10 @@ class ChatService:
             async for chunk in generator:
                 yield self.chunk_to_response(chunk)
             logger.debug("Model response complete")
-        except GeneratorExit:
+        except asyncio.CancelledError:
             logger.debug("User stopped generation")
             complete_chunk.finish_reason = "user_stop"
-            return
+            raise
         except Exception as e:
             logger.exception(f"Error: {e}")
             chunk = LLMServiceChunk()
@@ -326,29 +326,30 @@ class ChatService:
             yield self.chunk_to_response(chunk)
         finally:
             logger.debug("Generation complete")
-            if assistant_message is not None:
-                await self.message_service.update_message(
-                    assistant_message.id,
-                    data={
-                        "content": complete_chunk.content,
-                        "reasoning_content": complete_chunk.reasoning_content,
-                        "meta_data": {
-                            "model_name": model.model_name,
-                            "finish_reason": complete_chunk.finish_reason,
-                            "error": complete_chunk.error,
-                        },
-                    },
+            if assistant_message_current_content:
+                #TODO 这里不知道为什么这样写，为什么要异步，为什么要保护，但是必须这样写
+                await asyncio.shield(
+                    self.response_finish(
+                        message_content=assistant_message_current_content,
+                        complete_chunk=complete_chunk,
+                        model=model,
+                    )
                 )
+                await asyncio.shield(self.session_repo.session.commit())
+            logger.debug("Generation complete1")
+            # )
 
-                # 使用策略处理对话后的记忆
-                # user_message = (
-                #     conversation_messages[-1] if conversation_messages else None
-                # )
-                # if user_message and strategy:
-                #     strategy.post_process_memory(
-                #         session.to_dict(),
-                #         [user_message, assistant_message],
-                #     )
+    async def response_finish(
+        self, message_content: MessageContent, complete_chunk, model
+    ):
+        logger.debug("response_finish start")
+        message_content.content = complete_chunk.content
+        message_content.meta_data = {
+            "model_name": model.model_name,
+            "finish_reason": complete_chunk.finish_reason,
+            "error": complete_chunk.error,
+        }
+        logger.debug("response_finish end")
 
     async def token_statistics(self, session_id: str) -> dict:
         from app.tokenizer.auto_tokenizer import get_tokenizer
