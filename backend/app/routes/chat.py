@@ -1,6 +1,9 @@
+from asyncio import CancelledError
+import asyncio
 import json
 import logging
 from fastapi import APIRouter, Depends, Request
+from fastapi import HTTPException
 from fastapi.responses import StreamingResponse
 from app.dependencies import get_chat_service
 from app.services.chat_service import ChatService
@@ -12,6 +15,7 @@ logger = logging.getLogger(__name__)
 
 # 流式响应
 async def stream_generator(
+    request: Request,
     session_id: str,
     message_id: str,
     regeneration_mode: str,
@@ -29,15 +33,17 @@ async def stream_generator(
         )
         logger.debug("Generator started.")
         async for chunk in generator:
+            if await request.is_disconnected():  # 判断是否已断开连接
+                logger.debug("Client disconnected.")
+                await generator.aclose()
+                break
             json_chunk = json.dumps(chunk, ensure_ascii=False)
             yield f"data: {json_chunk}\n\n"
         yield "data: [DONE]\n\n"
         logger.debug("Generator ended.")
-    except GeneratorExit:
-        # 如果发生异常退出，则尝试关闭生成器
-        if generator is not None:
-            await generator.aclose()
-        return
+    except asyncio.CancelledError:
+        logger.debug("Generator cancelled.")
+        raise
     except Exception as e:
         logger.error(f"Stream generation error: {e}", exc_info=True)
         yield "data: [DONE]\n\n"
@@ -55,10 +61,11 @@ async def chat_completions(
     assistant_message_id = data.get("assistant_message_id")
 
     if regeneration_mode not in ["overwrite", "multi_version", "append"]:
-        raise ValueError("Invalid regeneration mode")
+        raise HTTPException(status_code=400, detail="Invalid regeneration mode")
 
     return StreamingResponse(
         stream_generator(
+            request,
             session_id,
             message_id,
             regeneration_mode=regeneration_mode,

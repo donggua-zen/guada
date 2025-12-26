@@ -1,5 +1,6 @@
 import datetime
 from fastapi import APIRouter, Depends, Request
+from fastapi import HTTPException
 from app.dependencies import get_session_service, get_current_user
 from app.schemas.common import PaginatedResponse
 from app.services.session_service import SessionService
@@ -49,7 +50,7 @@ async def get_session(
 ):
     data = await session_service.get_session(session_id, current_user)
     if not data:
-        raise Exception(f"Session with ID {session_id} not found.")
+        raise HTTPException(status_code=404, detail=f"Session with ID {session_id} not found.")
     return data
 
 

@@ -1,3 +1,4 @@
+import asyncio
 import logging
 from typing import AsyncGenerator, Literal, Optional, overload
 from openai import AsyncOpenAI, APIError
@@ -124,69 +125,61 @@ class LLMService:
             )
             if stream:
                 # 对于异步流式响应，需要直接返回异步生成器
-                return self._handle_stream_response(response, complete_chunk=complete_chunk)
+                async for chunk in response:
+                    response_chunk = self._handle_stream_chunk(
+                        chunk, complete_chunk=complete_chunk
+                    )
+                    if response_chunk:
+                        yield response_chunk
+                    else:
+                        continue
             else:
-                return self._handle_non_stream_response(response)
+                yield self._handle_non_stream_response(response)
+        except asyncio.CancelledError as e:
+            logger.error(f"asyncio.CancelledError\n")
+            raise
+            # raise Exception(str(e))
         except APIError as e:
             logger.exception(f"Exception:{e}\n")
             raise Exception(str(e))
         except Exception as e:
             raise
-
-    async def _handle_stream_response(self, response, complete_chunk: LLMServiceChunk = None):
-        """
-        处理流式API响应并生成数据块
-
-        Args:
-            response: 流式API响应对象
-
-        Yields:
-            LLMServiceChunk: 包含推理内容和响应内容的数据块对象
-
-
-        """
-        try:
-            async for chunk in response:
-                response_chunk = LLMServiceChunk()
-                delta = chunk.choices[0].delta
-                # logger.debug("chunk:", delta)
-                if chunk.choices[0].finish_reason is not None:
-                    logger.debug(
-                        "finished,finish_reason:" + chunk.choices[0].finish_reason
-                    )
-                    response_chunk.finish_reason = chunk.choices[0].finish_reason
-                    if complete_chunk is not None:
-                        complete_chunk.finish_reason = response_chunk.finish_reason
-
-                elif (
-                    hasattr(delta, "reasoning_content")
-                    and delta.reasoning_content is not None
-                    and len(delta.reasoning_content) > 0
-                ):
-                    response_chunk.reasoning_content = delta.reasoning_content
-                    if complete_chunk is not None:
-                        complete_chunk.reasoning_content = (
-                            complete_chunk.reasoning_content or ""
-                        ) + delta.reasoning_content
-
-                elif (
-                    hasattr(delta, "content")
-                    and delta.content is not None
-                    and len(delta.content) > 0
-                ):
-                    response_chunk.content = delta.content
-                    if complete_chunk is not None:
-                        complete_chunk.content = (
-                            complete_chunk.content or ""
-                        ) + delta.content
-                else:
-                    continue
-                yield response_chunk
-        except GeneratorExit:
-            logger.info(f"GeneratorExit\n")
         finally:
             if response is not None:
-                self.close_api_connection(response)
+                await self.close_api_connection(response)
+
+    def _handle_stream_chunk(self, chunk, complete_chunk: LLMServiceChunk = None):
+        response_chunk = LLMServiceChunk()
+        delta = chunk.choices[0].delta
+        # logger.debug("chunk:", delta)
+        if chunk.choices[0].finish_reason is not None:
+            logger.debug("finished,finish_reason:" + chunk.choices[0].finish_reason)
+            response_chunk.finish_reason = chunk.choices[0].finish_reason
+            if complete_chunk is not None:
+                complete_chunk.finish_reason = response_chunk.finish_reason
+
+        elif (
+            hasattr(delta, "reasoning_content")
+            and delta.reasoning_content is not None
+            and len(delta.reasoning_content) > 0
+        ):
+            response_chunk.reasoning_content = delta.reasoning_content
+            if complete_chunk is not None:
+                complete_chunk.reasoning_content = (
+                    complete_chunk.reasoning_content or ""
+                ) + delta.reasoning_content
+
+        elif (
+            hasattr(delta, "content")
+            and delta.content is not None
+            and len(delta.content) > 0
+        ):
+            response_chunk.content = delta.content
+            if complete_chunk is not None:
+                complete_chunk.content = (complete_chunk.content or "") + delta.content
+        else:
+            return None
+        return response_chunk
 
     def _handle_non_stream_response(self, response):
         """
@@ -207,26 +200,14 @@ class LLMService:
                 response_chunk.content = message.content.strip()
         return response_chunk
 
-    def close_api_connection(self, response):
+    async def close_api_connection(self, response):
         """强制关闭底层API连接"""
         try:
             # 方法1: 尝试直接关闭响应
             if hasattr(response, "close"):
-                response.close()
+                await response.close()
                 logger.debug("已关闭API连接")
                 return
-
-            # 方法2: 使用底层客户端关闭
-            client = self.llm_client._client
-            if client and hasattr(client, "close"):
-                client.close()
-                logger.debug("已关闭OpenAI客户端连接")
-
-            # 方法3: 使用requests/httpx底层关闭
-            if hasattr(response, "_response"):
-                raw_response = response._response
-                if hasattr(raw_response, "close"):
-                    raw_response.close()
-                    logger.debug("已关闭底层HTTP连接")
+            logger.warning("无法直接关闭API连接")
         except Exception as e:
             logger.exception(f"关闭连接时出错: {e}")

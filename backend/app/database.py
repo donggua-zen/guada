@@ -1,9 +1,10 @@
+import asyncio
 import contextlib
 import logging
 from typing import AsyncGenerator
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
 from sqlalchemy.orm import DeclarativeBase
-from sqlalchemy import event, text
+from sqlalchemy import AsyncAdaptedQueuePool, NullPool, event, text
 from app.utils import to_utc8_isoformat
 
 logger = logging.getLogger(__name__)
@@ -73,6 +74,14 @@ class ModelBase(DeclarativeBase):
         return self
 
 
+class CustomAsyncSession(AsyncSession):
+    """自定义异步会话类，用于处理外键检查"""
+
+    async def close(self):
+        logger.debug("关闭数据库连接 custom async session")
+        return await super().close()
+
+
 class DatabaseManager:
     """异步数据库管理器"""
 
@@ -87,7 +96,7 @@ class DatabaseManager:
                     "check_same_thread": False,
                     "timeout": 30,
                 },
-                # poolclass=AsyncAdaptedQueuePool,
+                poolclass=NullPool,
             )
 
             # 关键：注册连接事件，启用外键
@@ -105,7 +114,7 @@ class DatabaseManager:
             )
         self.async_session_factory = async_sessionmaker(
             self.engine,
-            class_=AsyncSession,
+            class_=CustomAsyncSession,
             expire_on_commit=False,
         )
 
@@ -118,7 +127,8 @@ class DatabaseManager:
                 await session.rollback()
                 raise e
             finally:
-                await session.close()
+                logger.debug("数据库会话已关闭")
+                # await asyncio.shield(session.close())
 
     async def create_tables(self):
         """创建所有表"""
@@ -192,6 +202,35 @@ async def get_db_session() -> AsyncGenerator[AsyncSession, None]:
     if db_manager is None:
         raise RuntimeError("数据库未初始化，请先调用 init_db")
 
+    logger.debug("获取数据库会话")
+    session = None
+    # try:
+    #     async with db_manager.async_session_factory() as session:
+    #         try:
+    #             logger.debug("------start------")
+    #             yield session
+    #             logger.debug("------end------")
+    #             await session.commit()
+    #             logger.debug("------commit------")
+    #         # except asyncio.CancelledError:
+    #         #     # 处理请求取消
+    #         #     logger.warning("请求被取消，执行回滚")
+    #         #     await session.rollback()
+    #         #     raise
+    #         except Exception as e:
+    #             logger.error(f"数据库会话异常: {e}")
+    #             await session.rollback()
+    #             raise
+    # except Exception as e:
+    #     logger.error(f"会话创建异常: {e}")
+    #     raise
+    # await session.close()
     async for session in db_manager.get_session():
         async with session.begin():
-            yield session
+            try:
+                yield session
+            except (Exception, BaseException) as e:
+                logging.error("数据库会话异常")
+                await session.rollback()
+                logging.error("数据库会话异常，已回滚")
+                logger.exception(e)

@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends, Request, File, UploadFile
+from fastapi import HTTPException
 from app.dependencies import get_file_service
 from app.services.file_service import FileService
 from app.schemas.file import FileOut
@@ -14,7 +15,7 @@ async def upload_message_file(
 ):
     # 检查文件名
     if not file.filename or file.filename == "":
-        raise Exception("未选择文件")
+        raise HTTPException(status_code=400, detail="未选择文件")
 
     file_info = await file_service.upload_message_file(sessions_id, file)
 
@@ -33,4 +34,4 @@ async def update_message_file(
     if file_type == "copy":
         return await file_service.copy_message_file(file_id, message_id)
     else:
-        raise Exception("不支持的type")
+        raise HTTPException(status_code=400, detail="不支持的type")

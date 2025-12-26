@@ -1,8 +1,10 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
+from fastapi.exceptions import FastAPIError, RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 import logging
 
+from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from app.database import close_db, init_db
 from app.config import settings
@@ -28,6 +30,7 @@ async def lifespan(app: FastAPI):
     await init_db(database_url)
     logger.info("应用启动完成")
     yield
+    logger.info("应用关闭中")
     await close_db()
     # 关闭时清理资源
 
@@ -61,10 +64,29 @@ def create_app():
     app.include_router(files_router, tags=["files"])
     app.include_router(models_router, tags=["models"])
     logger.info("路由注册完成")
-    
+
     app.mount(
         "/static", StaticFiles(directory=settings.STATIC_FILES_DIR), name="static"
     )
+
+    # 全局异常处理器：捕获所有未处理的 Exception
+    async def global_exception_handler(request, exc: Exception):
+        # 让 HTTP 相关异常继续抛出，由默认处理器处理
+        if isinstance(exc, (HTTPException, RequestValidationError, FastAPIError)):
+            raise  # 或者 return 默认响应
+
+        # 处理真正的“意外”异常
+        # 记录日志（生产环境非常重要）
+        logging.error(f"Unhandled exception: {exc}", exc_info=True)
+
+        # 返回统一错误格式
+        return JSONResponse(
+            status_code=500,
+            content={"detail": "Internal Server Error", "error": str(exc)},
+        )
+
+    app.add_exception_handler(Exception, global_exception_handler)
+
     return app
 
 

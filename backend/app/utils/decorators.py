@@ -1,9 +1,7 @@
 from functools import wraps
 import logging
 
-from flask import Response, jsonify
-
-from app.exceptions import APIException
+from fastapi import HTTPException
 
 logger = logging.getLogger(__name__)
 
@@ -16,16 +14,9 @@ def handle_response(func):
         try:
             response = func(*args, **kwargs)
             if response:  # 响应不为空
-                if isinstance(response, dict):  # 响应为字典
-                    return jsonify({"success": True, "data": response})
-                else:
-                    return response
-            else:  # 响应为空
-                return jsonify({"success": True})
-        except APIException as e:
-            return jsonify({"success": False, "error": e.message}), e.status_code
+                return response
         except Exception as e:
             logger.exception(e)
-            return jsonify({"success": False, "error": str(e)}), 500
+            raise HTTPException(status_code=500, detail=str(e))
 
     return wrapper
