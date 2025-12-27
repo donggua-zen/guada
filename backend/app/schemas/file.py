@@ -1,6 +1,6 @@
 from datetime import datetime
 from typing import Optional
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 from app.schemas.base import BaseResponse
 
@@ -48,8 +48,7 @@ class FileUpdate(BaseModel):
 class FileInDBBase(FileBase):
     id: str
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class FileBound(BaseModel):
@@ -76,5 +75,4 @@ class FileOut(BaseResponse):
     message_id: Optional[str] = None
     is_public: Optional[bool] = None
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)

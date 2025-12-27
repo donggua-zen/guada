@@ -1,6 +1,6 @@
 from datetime import datetime
 from typing import Optional, List, Any
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 from app.schemas.base import BaseResponse
 
@@ -28,8 +28,7 @@ class SummaryUpdate(BaseModel):
 class SummaryInDBBase(SummaryBase):
     id: str
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class Summary(SummaryInDBBase):
@@ -43,5 +42,4 @@ class SummaryOut(BaseResponse):
     last_message_id: Optional[str] = None
     history: Optional[List[Any]] = None
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)

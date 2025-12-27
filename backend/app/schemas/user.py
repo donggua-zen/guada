@@ -1,6 +1,6 @@
 from datetime import datetime
 from typing import Optional, List
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 from app.schemas.base import BaseResponse
 
@@ -36,8 +36,7 @@ class UserUpdate(BaseModel):
 class UserInDBBase(UserBase):
     id: str
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class User(UserInDBBase):
@@ -57,5 +56,4 @@ class UserOut(BaseResponse):
     phone: Optional[str] = None
     email: Optional[str] = None
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)

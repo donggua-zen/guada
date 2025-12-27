@@ -1,6 +1,6 @@
 from datetime import datetime
 from typing import Optional, Dict, Any
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 from app.schemas.base import BaseResponse
 from app.schemas.session_settings import SessionSettings
@@ -38,8 +38,7 @@ class CharacterUpdate(BaseModel):
 class CharacterInDBBase(CharacterBase):
     id: str
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class Character(CharacterInDBBase):
@@ -56,12 +55,10 @@ class CharacterItemOut(BaseResponse):
     model_id: Optional[str] = None
     settings: Optional[SessionSettings] = None
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class CharacterOut(CharacterItemOut):
     model: Optional[ModelOut] = None  # 添加模型信息
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)

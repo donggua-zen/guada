@@ -1,6 +1,6 @@
 from datetime import datetime
 from typing import Optional, List
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 from app.schemas.base import BaseResponse
 
@@ -37,8 +37,7 @@ class ModelUpdate(BaseModel):
 class ModelInDBBase(ModelBase):
     id: str
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class Model(ModelInDBBase):
@@ -55,5 +54,4 @@ class ModelOut(BaseResponse):
     max_output_tokens: Optional[int] = None
     features: Optional[List[str]] = None
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
