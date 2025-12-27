@@ -1,6 +1,6 @@
 from datetime import datetime
 from typing import Optional
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 from app.schemas.base import BaseResponse
 
@@ -28,8 +28,7 @@ class MessageContentActive(BaseModel):
 class MessageContentInDBBase(MessageContentBase):
     id: str
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class MessageContent(MessageContentInDBBase):
@@ -44,5 +43,4 @@ class MessageContentOut(BaseResponse):
     reasoning_content: Optional[str] = None
     meta_data: Optional[dict] = None
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)

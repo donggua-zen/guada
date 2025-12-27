@@ -1,6 +1,6 @@
 from datetime import datetime
 from typing import Optional, List
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 from app.schemas.base import BaseResponse
 from .file import File, FileBound, FileOut  # 导入File schema
@@ -29,8 +29,7 @@ class MessageUpdate(BaseModel):
 class MessageInDBBase(MessageBase):
     id: str
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class Message(MessageInDBBase):
@@ -46,5 +45,4 @@ class MessageOut(BaseResponse):
     files: Optional[List[FileOut]] = []
     contents: Optional[List[MessageContentOut]] = []
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
