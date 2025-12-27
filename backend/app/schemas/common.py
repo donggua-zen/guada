@@ -1,6 +1,6 @@
 # schemas/common.py
 from typing import Optional, TypeVar, Generic, List
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 T = TypeVar("T")
 
@@ -11,7 +11,4 @@ class PaginatedResponse(BaseModel, Generic[T]):
     page: Optional[int] = None
     size: Optional[int] = None
 
-    class Config:
-        # 注意：这里不需要 from_attributes=True！
-        # 因为 T 是 Pydantic 模型（如 UserOut），不是 ORM 对象
-        pass
+    model_config = ConfigDict(arbitrary_types_allowed=True)

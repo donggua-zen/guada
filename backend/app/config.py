@@ -38,8 +38,8 @@ class Settings(BaseSettings):
     # CORS配置
     ALLOWED_ORIGINS: list = ["*"]
 
-    class Config:
-        env_file = ".env"  # 从.env文件加载环境变量
+    # class Config:
+    #     env_file = ".env"  # 从.env文件加载环境变量
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
