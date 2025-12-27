@@ -5,6 +5,7 @@ from app.services.model_service import ModelService
 from app.models.user import User
 from app.schemas.model import ModelCreate, ModelOut, ModelUpdate
 from app.schemas.model_provider import (
+    ModelProviderBaseOut,
     ModelProviderCreate,
     ModelProviderOut,
     ModelProviderUpdate,
@@ -50,18 +51,11 @@ async def update_model(
     request: ModelUpdate,
     model_service: ModelService = Depends(get_model_service),
 ):
-    data = {
-        "model_name": request.model_name,
-        "model_type": request.model_type,
-        "name": request.name,
-        "features": request.features,
-        "max_tokens": request.max_tokens,
-        "max_output_tokens": request.max_output_tokens,
-    }
+    data = request.model_dump()
     return await model_service.update_model(model_id, data)
 
 
-@models_router.post("/providers", response_model=ModelProviderOut)
+@models_router.post("/providers", response_model=ModelProviderBaseOut)
 async def create_provider(
     request: ModelProviderCreate,
     model_service: ModelService = Depends(get_model_service),
@@ -75,17 +69,13 @@ async def create_provider(
     )
 
 
-@models_router.put("/providers/{provider_id}", response_model=ModelProviderOut)
+@models_router.put("/providers/{provider_id}", response_model=ModelProviderBaseOut)
 async def update_provider(
     provider_id: str,
     request: ModelProviderUpdate,
     model_service: ModelService = Depends(get_model_service),
 ):
-    data = {
-        "name": request.name,
-        "api_key": request.api_key,
-        "api_url": request.api_url,
-    }
+    data = request.model_dump()
     return await model_service.update_provider(provider_id, data)
 
 

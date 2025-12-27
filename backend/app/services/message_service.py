@@ -130,8 +130,7 @@ class MessageService:
         return {}
 
     async def delete_messages_by_session_id(self, session_id):
-        if not await self.message_repo.delete_messages_by_session_id(session_id):
-            raise HTTPException(status_code=500, detail="Failed to delete messages")
+        await self.message_repo.delete_messages_by_session_id(session_id)
         return {}
 
     async def set_message_current_content(self, message_id, content_id):
