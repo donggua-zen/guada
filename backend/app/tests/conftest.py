@@ -13,9 +13,11 @@ from app.database import ModelBase
 from app.dependencies import get_current_user, get_db_session
 from app.models.user import User
 from app import create_app
+from app.security import hash_password
 
 
 # ———————— 通用 Fixtures ————————
+
 
 @pytest.fixture(scope="session")
 def event_loop():
@@ -60,7 +62,16 @@ async def app(test_db_session):
     async def override_get_db_session():
         yield test_db_session
 
-    mock_user = User(id="test-user-ulid-00000000000000", nickname="tester", role="primary")
+    mock_user = User(
+        id="test-user-ulid-000000000000",
+        email="test@example.com",
+        nickname="tester",
+        role="primary",
+        password_hash=hash_password("test-password"),
+    )
+
+    test_db_session.add(mock_user)
+    await test_db_session.commit()
 
     async def override_get_current_user():
         return mock_user
@@ -77,7 +88,6 @@ async def app(test_db_session):
 async def client(app) -> AsyncGenerator[httpx.AsyncClient, None]:
     """Async HTTP client for testing FastAPI app"""
     async with httpx.AsyncClient(
-        transport=ASGITransport(app=app),
-        base_url="http://test"
+        transport=ASGITransport(app=app), base_url="http://test"
     ) as c:
         yield c

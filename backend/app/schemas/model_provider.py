@@ -31,13 +31,16 @@ class ModelProviderInDBBase(ModelProviderBase):
     model_config = ConfigDict(from_attributes=True)
 
 
-class ModelProviderOut(BaseResponse):
+class ModelProviderBaseOut(BaseResponse):
     id: str
     user_id: Optional[str] = None
     name: Optional[str] = None
     provider: Optional[str] = None
     api_url: Optional[str] = None
     api_key: Optional[str] = None
-    models: Optional[List[ModelOut]] = []
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class ModelProviderOut(ModelProviderBaseOut):
+    models: Optional[List[ModelOut]] = []

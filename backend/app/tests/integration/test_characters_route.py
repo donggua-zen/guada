@@ -3,18 +3,43 @@ import pytest
 import httpx
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.character import Character
-
 
 @pytest.mark.asyncio
 async def test_end_to_end_character_flow(
     client: httpx.AsyncClient, test_db_session: AsyncSession
 ):
+    # 首先创建模型供应商
+    provider_data = {
+        "name": "Test Provider",
+        "api_url": "https://api.test.com",
+        "api_key": "test-api-key",
+    }
+
+    provider_response = await client.post("/api/v1/providers", json=provider_data)
+    # 检查供应商创建是否成功
+    assert provider_response.status_code in [200, 201]
+    provider_data_response = provider_response.json()
+    provider_id = provider_data_response["id"]
+
+    # 然后创建模型
+    model_data = {
+        "name": "Test Model",
+        "provider_id": provider_id,
+        "model_name": "test-model-name",
+        "model_type": "llm",
+    }
+
+    model_response = await client.post("/api/v1/models", json=model_data)
+    # 检查模型创建是否成功
+    assert model_response.status_code in [200, 201]
+    model_data_response = model_response.json()
+    model_id = model_data_response["id"]
+
     # 创建角色
     character_data = {
         "title": "Test Character",
         "description": "A test character for integration",
-        "model_id": "test-model-id",
+        "model_id": model_id,
         "is_public": False,
     }
 
@@ -60,10 +85,35 @@ async def test_end_to_end_character_flow(
 async def test_character_creation_validation(
     client: httpx.AsyncClient, test_db_session: AsyncSession
 ):
+    # 首先创建模型供应商
+    provider_data = {
+        "name": "Test Provider Validation",
+        "api_url": "https://api.validation.com",
+        "api_key": "validation-api-key",
+    }
+
+    provider_response = await client.post("/api/v1/providers", json=provider_data)
+    assert provider_response.status_code in [200, 201]
+    provider_data_response = provider_response.json()
+    provider_id = provider_data_response["id"]
+
+    # 然后创建模型
+    model_data = {
+        "name": "Test Model Validation",
+        "provider_id": provider_id,
+        "model_name": "test-model-name-validation",
+        "model_type": "llm",
+    }
+
+    model_response = await client.post("/api/v1/models", json=model_data)
+    assert model_response.status_code in [200, 201]
+    model_data_response = model_response.json()
+    model_id = model_data_response["id"]
+
     # 测试缺少必要字段时的错误
     invalid_character_data = {
         "description": "A character without a title",
-        "model_id": "test-model-id",
+        "model_id": model_id,
         # 缺少必需的 title 字段
     }
 
@@ -76,11 +126,36 @@ async def test_character_creation_validation(
 async def test_shared_characters(
     client: httpx.AsyncClient, test_db_session: AsyncSession
 ):
+    # 首先创建模型供应商
+    provider_data = {
+        "name": "Test Provider Shared",
+        "api_url": "https://api.shared.com",
+        "api_key": "shared-api-key",
+    }
+
+    provider_response = await client.post("/api/v1/providers", json=provider_data)
+    assert provider_response.status_code in [200, 201]
+    provider_data_response = provider_response.json()
+    provider_id = provider_data_response["id"]
+
+    # 然后创建模型
+    model_data = {
+        "name": "Test Model Shared",
+        "provider_id": provider_id,
+        "model_name": "test-model-name-shared",
+        "model_type": "llm",
+    }
+
+    model_response = await client.post("/api/v1/models", json=model_data)
+    assert model_response.status_code in [200, 201]
+    model_data_response = model_response.json()
+    model_id = model_data_response["id"]
+
     # 创建一个公开角色
     public_character_data = {
         "title": "Public Character",
         "description": "A public test character",
-        "model_id": "test-model-id",
+        "model_id": model_id,
         "is_public": True,
     }
 
