@@ -84,10 +84,12 @@ async def get_profile(current_user: User = Depends(get_current_user)):
 
 @users_router.put("/user/profile", response_model=UserOut)
 async def update_profile(
-    request: Request, current_user: User = Depends(get_current_user)
+    request: Request,
+    current_user: User = Depends(get_current_user),
+    user_service: UserService = Depends(get_user_service),
 ):
     data = await request.json()
-    return await current_user.update_profile(data)
+    return await user_service.user_repo.update_user(current_user.id, data)
 
 
 @users_router.put("/user/password")
