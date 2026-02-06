@@ -221,6 +221,9 @@ class ChatService:
 
         if session is None:
             raise HTTPException(status_code=404, detail="Invalid session id")
+        
+        # 立刻提交，避免锁表
+        self.session_repo.session.commit()
 
         session.updated_at = datetime.datetime.now(datetime.timezone.utc)
 
