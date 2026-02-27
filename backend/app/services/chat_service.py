@@ -260,11 +260,9 @@ class ChatService:
         if model is None:
             raise HTTPException(status_code=404, detail="Invalid model name")
 
-        # 立刻提交，避免锁表
-        self.session_repo.session.commit()
-
         # 更优雅的方式获取模型参数
         model_params = {
+            "web_search_enabled": (session.settings.get("web_search_enabled")),
             "thinking": (
                 session.settings.get("thinking_enabled")
                 if "thinking" in model.features
@@ -276,6 +274,9 @@ class ChatService:
             "use_user_prompt": session.settings.get("use_user_prompt", False),
         }
 
+        # 立刻提交，避免锁表
+        self.session_repo.session.commit()
+        
         yield {
             "type": "create",
             "message_id": assistant_message.id,
@@ -286,7 +287,7 @@ class ChatService:
         complete_chunk = LLMServiceChunk()
 
         try:
-            if session.settings.get("web_search_enabled", False):
+            if model_params.get("web_search_enabled", False):
 
                 yield {"type": "web_search", "msg": "start"}
                 conversation_messages = await self._web_search(
