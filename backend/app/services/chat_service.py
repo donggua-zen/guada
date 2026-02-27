@@ -221,9 +221,6 @@ class ChatService:
 
         if session is None:
             raise HTTPException(status_code=404, detail="Invalid session id")
-        
-        # 立刻提交，避免锁表
-        self.session_repo.session.commit()
 
         session.updated_at = datetime.datetime.now(datetime.timezone.utc)
 
@@ -262,6 +259,9 @@ class ChatService:
         provider = await self.model_repo.get_provider(model.provider_id)
         if model is None:
             raise HTTPException(status_code=404, detail="Invalid model name")
+
+        # 立刻提交，避免锁表
+        self.session_repo.session.commit()
 
         # 更优雅的方式获取模型参数
         model_params = {
@@ -330,7 +330,7 @@ class ChatService:
         finally:
             logger.debug("Generation complete")
             if assistant_message_current_content:
-                #TODO 这里不知道为什么这样写，为什么要异步，为什么要保护，但是必须这样写
+                # TODO 这里不知道为什么这样写，为什么要异步，为什么要保护，但是必须这样写
                 await asyncio.shield(
                     self.response_finish(
                         message_content=assistant_message_current_content,
@@ -346,6 +346,7 @@ class ChatService:
         self, message_content: MessageContent, complete_chunk, model
     ):
         logger.debug("response_finish start")
+        message_content.reasoning_content = complete_chunk.reasoning_content
         message_content.content = complete_chunk.content
         message_content.meta_data = {
             "model_name": model.model_name,
