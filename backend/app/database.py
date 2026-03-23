@@ -118,17 +118,24 @@ class DatabaseManager:
             expire_on_commit=False,
         )
 
-    async def get_session(self) -> AsyncGenerator[AsyncSession, None]:
-        """获取数据库会话"""
-        async with self.async_session_factory() as session:
-            try:
-                yield session
-            except Exception as e:
-                await session.rollback()
-                raise e
-            finally:
-                logger.debug("数据库会话已关闭")
-                # await asyncio.shield(session.close())
+    # async def get_session(self) -> AsyncGenerator[AsyncSession, None]:
+    #     """获取数据库会话"""
+    #     async with self.async_session_factory() as session:
+    #         try:
+    #             logger.debug("获取数据库会话11")
+    #             yield session
+    #             logger.debug("数据库会话已提交22")
+    #             await session.commit()
+    #         except asyncio.CancelledError:
+    #             logger.error("数据库会话已取消")
+    #             raise
+    #         except Exception as e:
+    #             logger.error(f"数据库会话提交失败: {e}")
+    #             await session.rollback()
+    #             raise
+    #         finally:
+    #             logger.debug("数据库会话已关闭")
+    # await asyncio.shield(session.close())
 
     async def create_tables(self):
         """创建所有表"""
@@ -197,40 +204,53 @@ async def transaction(session: AsyncSession):
         raise
 
 
-async def get_db_session() -> AsyncGenerator[AsyncSession, None]:
+async def get_db_session():
     """获取数据库会话的依赖项"""
     if db_manager is None:
         raise RuntimeError("数据库未初始化，请先调用 init_db")
+    async with db_manager.async_session_factory() as session:
+        try:
+            logger.debug("获取数据库会话11")
+            yield session
+            logger.debug("数据库会话已提交22")
+            if session.is_active:
+                await session.commit()
+        except GeneratorExit:
+            logger.error("数据库会话已取消1")
+            raise
+        except asyncio.CancelledError:
+            logger.error("数据库会话已取消2")
+            raise
+        except Exception as e:
+            logger.error(f"数据库会话提交失败: {e}")
+            logger.exception(e)
+            await session.rollback()
+            # raise
+        finally:
+            logger.debug("数据库会话已关闭")
+   
 
-    logger.debug("获取数据库会话")
-    session = None
+    # logger.debug("获取数据库会话")
+    # session = None
+    # return db_manager.get_session()
+    # async for session in db_manager.get_session():
+    #     try:
+    #         yield session
+    #     except asyncio.CancelledError:
+    #         logger.error("数据库会话已取消")
+    #         raise
+    #     except Exception as e:
+    #         logger.error("数据库会话异常")
+    #         await session.rollback()
+    #         r
+    # async with session.begin():
     # try:
-    #     async with db_manager.async_session_factory() as session:
-    #         try:
-    #             logger.debug("------start------")
-    #             yield session
-    #             logger.debug("------end------")
-    #             await session.commit()
-    #             logger.debug("------commit------")
-    #         # except asyncio.CancelledError:
-    #         #     # 处理请求取消
-    #         #     logger.warning("请求被取消，执行回滚")
-    #         #     await session.rollback()
-    #         #     raise
-    #         except Exception as e:
-    #             logger.error(f"数据库会话异常: {e}")
-    #             await session.rollback()
-    #             raise
-    # except Exception as e:
-    #     logger.error(f"会话创建异常: {e}")
-    #     raise
-    # await session.close()
-    async for session in db_manager.get_session():
-        async with session.begin():
-            try:
-                yield session
-            except (Exception, BaseException) as e:
-                logging.error("数据库会话异常")
-                await session.rollback()
-                logging.error("数据库会话异常，已回滚")
-                logger.exception(e)
+    #     yield session
+    #     await session.commit()
+    # except (Exception, BaseException) as e:
+    #     logging.error("数据库会话异常")
+    #     await session.rollback()
+    #     logging.error("数据库会话异常，已回滚")
+    #     logger.exception(e)
+    # finally:
+    #     await session.close()

@@ -13,16 +13,18 @@ from app.repositories.message_repository import MessageRepository
 from app.repositories.model_repository import ModelRepository
 from app.repositories.session_repository import SessionRepository
 from app.repositories.user_repository import UserRepository
+from app.repositories.mcp_server_repository import MCPServerRepository
 from app.security import ALGORITHM, SECRET_KEY, oauth2_scheme
 from app.services.character_service import CharacterService
 from app.services.chat.memory_manager_service import MemoryManagerService
-from app.services.chat_service import ChatService
+from app.services.agent_service import AgentService
 from app.services.file_service import FileService
 from app.services.message_service import MessageService
 from app.services.model_service import ModelService
 from app.services.session_service import SessionService
 from app.services.settings_manager import SettingsManager
 from app.services.user_service import UserService
+from app.services.mcp_server_service import MCPServerService
 
 
 T = TypeVar("T")
@@ -41,6 +43,7 @@ get_session_repository = create_repo_dependency(SessionRepository)
 get_model_repository = create_repo_dependency(ModelRepository)
 get_user_repository = create_repo_dependency(UserRepository)
 get_file_repository = create_repo_dependency(FileRepository)
+get_mcp_server_repository = create_repo_dependency(MCPServerRepository)
 
 
 async def get_current_user(
@@ -101,18 +104,18 @@ def get_memory_manager_service(
     return MemoryManagerService(message_repo=message_repo)
 
 
-def get_chat_service(
+def get_agent_service(
     session_repo: SessionRepository = Depends(get_session_repository),
     model_repo: ModelRepository = Depends(get_model_repository),
-    message_service: MessageService = Depends(get_message_service),
+    message_repo: MessageService = Depends(get_message_repository),
     memory_manager_service: MemoryManagerService = Depends(get_memory_manager_service),
     settings_manager: SettingsManager = Depends(get_settings_service),
-) -> ChatService:
+) -> AgentService:
     """聊天服务依赖"""
-    return ChatService(
+    return AgentService(
         session_repo=session_repo,
         model_repo=model_repo,
-        message_service=message_service,
+        message_repo=message_repo,
         memory_manager_service=memory_manager_service,
         setting_service=settings_manager,
     )
@@ -151,6 +154,12 @@ def get_file_service(
 ) -> FileService:
     return FileService(file_repo=file_repo)
 
+
+def get_mcp_server_service(
+    mcp_repo: MCPServerRepository = Depends(get_mcp_server_repository),
+) -> MCPServerService:
+    """MCP 服务器服务依赖"""
+    return MCPServerService(mcp_repo=mcp_repo)
 
 # async def get_character_repository(
 #     session=Depends(get_db_session),

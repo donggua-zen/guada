@@ -1,6 +1,6 @@
 import asyncio
 import logging
-from typing import AsyncGenerator, Literal, Optional, overload
+from typing import AsyncGenerator, List, Literal, Optional, overload
 from openai import AsyncOpenAI, APIError
 
 logger = logging.getLogger(__name__)
@@ -11,6 +11,7 @@ class LLMServiceChunk:
     reasoning_content: Optional[str] = None
     finish_reason: Optional[str] = None
     error: Optional[str] = None
+    additional_kwargs: Optional[dict] = {}
 
     def __str__(self):
         """用户友好的字符串表示"""
@@ -32,6 +33,7 @@ class LLMServiceChunk:
             "reasoning_content": self.reasoning_content,
             "finish_reason": self.finish_reason,
             "error": self.error,
+            "additional_kwargs": self.additional_kwargs,
         }
 
 
@@ -79,6 +81,7 @@ class LLMService:
         stream=False,
         thinking=False,
         complete_chunk: LLMServiceChunk = None,
+        tools: Optional[list[dict]] = None,
     ):
         """
         根据输入的messages和指定的模型生成响应。
@@ -109,19 +112,49 @@ class LLMService:
             extra_body = {}
             if thinking:
                 extra_body["enable_thinking"] = thinking
-            filter_message = [
-                {"role": message["role"], "content": message["content"]}
-                for message in messages
-            ]
+            oai_messages = []
+            for message in messages:
+                # 构建基础消息对象，只包含必要字段
+                print(message)
+                oai_message = {
+                    "role": message["role"],
+                    "content": message.get("content", ""),
+                }
+
+                # 可选字段：如果存在则添加
+                if message.get("reasoning_content"):
+                    oai_message["reasoning_content"] = message["reasoning_content"]
+
+                if message.get("tool_call_id"):
+                    oai_message["tool_call_id"] = message["tool_call_id"]
+
+                if message.get("tool_calls", None):
+                    oai_message["tool_calls"] = []
+                    for tool_call in message["tool_calls"]:
+                        oai_message["tool_calls"].append(
+                            {
+                                "id": tool_call["id"],
+                                "index": tool_call["index"],
+                                "type": tool_call["type"],
+                                "function": {
+                                    "name": tool_call["name"],
+                                    "arguments": tool_call["arguments"],
+                                },
+                            }
+                        )
+                oai_messages.append(oai_message)
+            print(oai_messages)
             response = await self.llm_client.chat.completions.create(
                 model=model,
-                messages=filter_message,
+                messages=oai_messages,
                 frequency_penalty=frequency_penalty or None,
                 top_p=top_p or None,
                 temperature=temperature or None,
                 stream=stream,
                 extra_body=extra_body,
-                timeout=15,
+                timeout=60,
+                tool_choice="auto",
+                tools=tools,
             )
             if stream:
                 # 对于异步流式响应，需要直接返回异步生成器
@@ -135,10 +168,6 @@ class LLMService:
                         continue
             else:
                 yield self._handle_non_stream_response(response)
-        except asyncio.CancelledError as e:
-            logger.error(f"asyncio.CancelledError\n")
-            raise
-            # raise Exception(str(e))
         except APIError as e:
             logger.exception(f"Exception:{e}\n")
             raise Exception(str(e))
@@ -177,6 +206,20 @@ class LLMService:
             response_chunk.content = delta.content
             if complete_chunk is not None:
                 complete_chunk.content = (complete_chunk.content or "") + delta.content
+        elif (
+            hasattr(delta, "tool_calls")
+            and delta.tool_calls is not None
+            and len(delta.tool_calls) > 0
+        ):
+            response_chunk.additional_kwargs["tool_calls"] = []
+            for tool_call in delta.tool_calls:
+                tc = {}
+                tc["id"] = tool_call.id
+                tc["index"] = tool_call.index
+                tc["type"] = "function"
+                tc["name"] = tool_call.function.name
+                tc["arguments"] = tool_call.function.arguments
+                response_chunk.additional_kwargs["tool_calls"].append(tc)
         else:
             return None
         return response_chunk
@@ -198,6 +241,20 @@ class LLMService:
                 response_chunk.reasoning_content = message.reasoning_content
             if hasattr(message, "content") and message.content:
                 response_chunk.content = message.content.strip()
+            if hasattr(message, "tool_calls") and message.tool_calls:
+                calls = []
+                for tool_call in message.tool_calls:
+                    tc = {}
+                    tc["id"] = tool_call.id
+                    tc["index"] = tool_call.index
+                    tc["type"] = "function"
+                    tc["arguments"] = tool_call.function.arguments
+                    tc["name"] = tool_call.function.name
+                    calls.append(tc)
+                response_chunk.additional_kwargs["tool_calls"] = calls
+            if hasattr(message, "finish_reason") and message.finish_reason:
+                response_chunk.finish_reason = message.finish_reason
+
         return response_chunk
 
     async def close_api_connection(self, response):

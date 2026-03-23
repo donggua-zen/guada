@@ -5,8 +5,9 @@ import logging
 from fastapi import APIRouter, Depends, Request
 from fastapi import HTTPException
 from fastapi.responses import StreamingResponse
-from app.dependencies import get_chat_service
-from app.services.chat_service import ChatService
+from app.dependencies import get_agent_service
+from app.services.agent_service import AgentService
+from fastapi import BackgroundTasks
 
 chat_router = APIRouter(prefix="/api/v1")
 
@@ -20,7 +21,7 @@ async def stream_generator(
     message_id: str,
     regeneration_mode: str,
     assistant_message_id: str = None,
-    chat_service: ChatService = Depends(get_chat_service),
+    chat_service: AgentService = None,
 ):
     generator = None
     try:
@@ -53,7 +54,7 @@ async def stream_generator(
 async def chat_completions(
     session_id: str,
     request: Request,
-    chat_service: ChatService = Depends(get_chat_service),
+    chat_service: AgentService = Depends(get_agent_service),
 ):
     data = await request.json()
     message_id = data.get("message_id")
@@ -78,6 +79,6 @@ async def chat_completions(
 
 @chat_router.get("/sessions/{session_id}/tokens")
 async def get_tokens(
-    session_id: str, chat_service: ChatService = Depends(get_chat_service)
+    session_id: str, chat_service: AgentService = Depends(get_agent_service)
 ):
     return await chat_service.token_statistics(session_id)

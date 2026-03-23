@@ -53,9 +53,7 @@ async def update_message(
     message_service: MessageService = Depends(get_message_service),
     _: User = Depends(get_current_user),
 ):
-    return await message_service.update_message(
-        message_id, {"content": message.content}
-    )
+    return await message_service.update_message(message_id, message.model_dump(exclude_unset=True))
 
 
 @messages_router.post("/sessions/{session_id}/messages", response_model=MessageOut)

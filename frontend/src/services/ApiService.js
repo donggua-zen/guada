@@ -407,10 +407,10 @@ class ApiService {
    * @param {string} content - 新的消息内容
    * @returns {Promise<Object>} 返回更新结果
    */
-  async updateMessage(messageId, content) {
+  async updateMessage(messageId, data) {
     return await this._request(`/messages/${messageId}`, {
       method: 'PUT',
-      data: { content },
+      data: data,
     });
   }
 
@@ -626,6 +626,89 @@ class ApiService {
     return await this._request(`/user/reset-password`, {
       method: 'POST',
       data: data
+    });
+  }
+
+  // ========== MCP 服务器相关接口 ==========
+
+  /**
+   * 获取所有 MCP 服务器
+   * @returns {Promise<Object>} 返回 MCP 服务器分页数据
+   */
+  async fetchMcpServers() {
+    return await this._request('/mcp-servers');
+  }
+
+  /**
+   * 获取单个 MCP 服务器详情
+   * @param {string} serverId - 服务器 ID
+   * @returns {Promise<Object>} 返回 MCP 服务器详细信息
+   */
+  async fetchMcpServer(serverId) {
+    return await this._request(`/mcp-servers/${serverId}`);
+  }
+
+  // 别名方法，为了兼容其他调用方式
+  async fetchMcpServerById(serverId) {
+    return await this.fetchMcpServer(serverId);
+  }
+
+  /**
+   * 创建 MCP 服务器
+   * @param {Object} serverData - 服务器数据
+   * @returns {Promise<Object>} 返回创建的服务器数据
+   */
+  async createMcpServer(serverData) {
+    return await this._request('/mcp-servers', {
+      method: 'POST',
+      data: serverData,
+    });
+  }
+
+  /**
+   * 更新 MCP 服务器
+   * @param {string} serverId - 服务器 ID
+   * @param {Object} serverData - 更新的服务器数据
+   * @returns {Promise<Object>} 返回更新后的服务器数据
+   */
+  async updateMcpServer(serverId, serverData) {
+    return await this._request(`/mcp-servers/${serverId}`, {
+      method: 'PUT',
+      data: serverData,
+    });
+  }
+
+  /**
+   * 删除 MCP 服务器
+   * @param {string} serverId - 服务器 ID
+   * @returns {Promise<boolean>} 返回操作是否成功
+   */
+  async deleteMcpServer(serverId) {
+    return await this._request(`/mcp-servers/${serverId}`, {
+      method: 'DELETE',
+    });
+  }
+
+  /**
+   * 切换 MCP 服务器启用状态
+   * @param {string} serverId - 服务器 ID
+   * @param {boolean} enabled - 是否启用
+   * @returns {Promise<Object>} 返回更新后的服务器数据
+   */
+  async toggleMcpServer(serverId, enabled) {
+    return await this._request(`/mcp-servers/${serverId}/toggle?enabled=${enabled}`, {
+      method: 'PATCH',
+    });
+  }
+
+  /**
+   * 刷新 MCP 服务器的工具列表
+   * @param {string} serverId - 服务器 ID
+   * @returns {Promise<Object>} 返回更新后的服务器数据（包含最新工具）
+   */
+  async refreshMcpTools(serverId) {
+    return await this._request(`/mcp-servers/${serverId}/refresh-tools`, {
+      method: 'POST',
     });
   }
 

@@ -35,7 +35,7 @@ class MemoryManagerService:
         model_name: str,
         user_message_id: str,
         max_messages: Optional[int] = 200,
-        max_tokens: Optional[int] = None,
+        # max_tokens: Optional[int] = None,
         prompt_settings: dict = {},
     ) -> list[dict]:
 
@@ -45,11 +45,11 @@ class MemoryManagerService:
 
         system_message = self._construct_system_message(prompt_settings)
         if system_message:  # 添加系统消息
-            tokens_total += tokenizer.count_tokens(system_message["content"])
-            system_message["tokens"] = tokens_total
+            # tokens_total += tokenizer.count_tokens(system_message["content"])
+            # system_message["tokens"] = tokens_total
             max_messages -= 1
 
-        while max_messages > len(conversation_messages) and tokens_total <= max_tokens:
+        while max_messages > len(conversation_messages):
             args = {
                 "session_id": session_id,
                 "start_message_id": None,
@@ -72,18 +72,12 @@ class MemoryManagerService:
                 include.append("files")
 
             for msg in messages:
-                transformed_msg = self._transform_content_structure(
+                # 注意可能返回多条消息
+                transformed_msgs = self._transform_content_structure(
                     await msg.to_dict_async(include=include)
                 )
-                if max_tokens:
-                    transformed_msg["tokens"] = tokenizer.count_tokens(
-                        transformed_msg["content"]
-                    )
-                    tokens_total += transformed_msg["tokens"]
-
-                    if tokens_total > max_tokens:
-                        break
-                    conversation_messages.append(transformed_msg)
+                transformed_msgs.reverse()
+                conversation_messages.extend(transformed_msgs)
 
         if system_message:
             conversation_messages.append(system_message)
@@ -103,39 +97,71 @@ class MemoryManagerService:
         Returns:
             str or list: 消息内容字符串或包含文本和文件内容的列表
         """
-        if "contents" in msg:
-            msg["content"] = [
-                content["content"]
-                for content in msg["contents"]
-                if content["is_current"]
-            ][0] or ""
+        transformed_msgs = []
 
-        # msg.pop("contents")
-        files = msg.get("files")
-        # 如果没有附加文件，直接返回原始内容
-        if not files or msg["role"] != "user":
-            return msg
+        if msg["role"] == "assistant":
+            for turn in msg["contents"]:
+                base_msg = {
+                    "role": turn.get("role"),
+                    "content": turn.get("content"),
+                    "reasoning_content": turn.get("reasoning_content"),
+                }
+                if "tool_calls" in turn["additional_kwargs"]:
+                    base_msg["tool_calls"] = turn["additional_kwargs"]["tool_calls"]
+                transformed_msgs.append(base_msg)
+                if "tool_calls_response" in turn["additional_kwargs"]:
+                    transformed_msgs.extend(
+                        [
+                            {
+                                "role": "tool",
+                                **res,
+                            }
+                            for res in turn["additional_kwargs"]["tool_calls_response"]
+                        ]
+                    )
+            # transformed_msgs = [
+            #     {
+            #         "role": turn.get("role"),
+            #         "reasoning_content": turn.get("reasoning_content"),
+            #         "content": turn.get("content"),
+            #         **turn["additional_kwargs"],
+            #     }
+            #     for turn in msg["contents"]
+            # ]
+        else:
+            active_content = msg["contents"][0]
+            # 处理用户消息
+            transformed_msgs = [
+                {
+                    "role": msg["role"],
+                    "content": active_content["content"],
+                }
+            ]
+            # msg.pop("contents")
+            files = msg.get("files")
+            # 如果没有附加文件，直接返回原始内容
+            if files:
+                # 构建包含基础内容和文件内容的列表
+                content_parts = [
+                    {
+                        "text": transformed_msgs[0]["content"],
+                        "type": "text",
+                    }
+                ]
 
-        # 构建包含基础内容和文件内容的列表
-        content_parts = [
-            {
-                "text": msg.get("content", ""),
-                "type": "text",
-            }
-        ]
+                # 添加每个文件的内容
+                for i, file in enumerate(files):
+                    if file.get("file_type") == "image":
+                        image_part = self._transform_image_file(file)
+                        if image_part:
+                            content_parts.append(image_part)
+                    elif file.get("file_type") == "text":
+                        text_part = self._transform_text_file(file, i)
+                        if text_part:
+                            content_parts.append(text_part)
+                transformed_msgs[0]["content"] = content_parts
 
-        # 添加每个文件的内容
-        for i, file in enumerate(files):
-            if file.get("file_type") == "image":
-                image_part = self._transform_image_file(file)
-                if image_part:
-                    content_parts.append(image_part)
-            elif file.get("file_type") == "text":
-                text_part = self._transform_text_file(file, i)
-                if text_part:
-                    content_parts.append(text_part)
-
-        return {**msg, "content": content_parts}
+        return transformed_msgs
 
     def _transform_image_file(self, file: dict):
         """
