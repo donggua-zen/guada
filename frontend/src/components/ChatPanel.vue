@@ -59,23 +59,31 @@
 
     <!-- 输入区域 -->
     <div class="px-5 pb-2.5 pt-2 w-full flex flex-col items-center">
+      <!-- 编辑模式提示条 -->
+      <div v-if="editMode.isActive" 
+           class="w-full max-w-[960px] mb-3 animate-fade-in-down">
+        <div class="edit-mode-banner">
+          <span class="edit-mode-icon">📝</span>
+          <span class="edit-mode-text">正在编辑消息</span>
+          <el-button 
+            size="small" 
+            @click="exitEditMode"
+            class="cancel-edit-btn">
+            取消
+          </el-button>
+        </div>
+      </div>
+      
       <div class="w-full flex items-center max-w-[960px]">
         <ChatInput v-model:value="inputMessage.text" v-model:web-search-enabled="webSearchEnabled"
           v-model:thinking-enabled="thinkingEnabled" :buttons="chatInputButtons" :files="inputMessage.files"
           :streaming="isStreaming" @send="handleSendMessage" @abort="abortResponse" @toggle-web-search="handleWebSearch"
           @toggle-thinking="toggleDeepThinking" @tokens-statistic="handleTokensStatistic" />
       </div>
-      <div class="ai-disclaimer text-xs text-gray-400 text-center mt-2">内容由AI生成，仅供参考</div>
+      <div class="ai-disclaimer text-xs text-gray-400 text-center mt-2">内容由 AI 生成，仅供参考</div>
 
     </div>
-    <el-dialog v-model="showEditMessageModal" :append-to-body="true" style="width: 860px; max-width: 90vw" title="编辑消息">
-      <ChatInput v-model:value="editInputMessage.text" v-model:web-search-enabled="webSearchEnabled"
-        v-model:thinking-enabled="thinkingEnabled" :buttons="chatInputButtons" :shadow="false"
-        :files="editInputMessage.files" :streaming="isStreaming" @send="handleReSendMessage" @abort="abortResponse"
-        @toggle-web-search="handleWebSearch" @toggle-thinking="toggleDeepThinking"
-        @tokens-statistic="handleTokensStatistic" />
-    </el-dialog>
-    <!-- Tokens统计模态框 -->
+    <!-- Tokens 统计模态框 -->
     <TokenStatisticsModal v-model:show="showTokenModal" :currentSessionId="currentSession.id" />
   </div>
 </template>
@@ -116,6 +124,14 @@ const isLoading = ref(false)
 const autoScrollToBottom = ref(false);
 const autoScrollToBottomSet = ref(-1);
 const placeholder = ref("auto");
+
+// 编辑模式状态
+const editMode = reactive({
+  isActive: false,
+  message: null,  // 被编辑的消息
+  messageText: "",
+  messageFiles: []
+});
 
 // Props & Emits
 const props = defineProps({
@@ -393,6 +409,26 @@ async function handleSessionChange(newSessionId, oldSessionId) {
 async function loadMessages(sessionId) {
   if (sessionStore.getMessages(sessionId).length === 0) {
     const sessionMessages = await apiService.fetchSessionMessages(sessionId);
+    
+    // 处理历史消息，从 meta_data 中回填 thinking_duration_ms
+    sessionMessages.items.forEach(message => {
+      if (message.contents && Array.isArray(message.contents)) {
+        message.contents.forEach(content => {
+          // 如果 meta_data 中有思考时长，则使用后端保存的值（覆盖可能存在的旧值）
+          if (content.meta_data?.thinking_duration_ms) {
+            content.thinking_duration_ms = content.meta_data.thinking_duration_ms;
+          }
+          // 初始化 state，防止未定义错误
+          if (!content.state) {
+            content.state = {
+              is_streaming: false,
+              is_thinking: false,
+            };
+          }
+        });
+      }
+    });
+    
     sessionStore.setMessages(sessionId, sessionMessages.items);
   }
 }
@@ -469,15 +505,39 @@ async function handleStreamResponse(
       // }
 
       if (response.type == "think") {
-        if (!message?.contents[contentIndex].state.is_thinking) {
-          message.contents[contentIndex].state.is_thinking = true;
+        const content = message?.contents[contentIndex];
+        
+        // 首次收到 think 事件，记录开始时间并启动计时器
+        if (!content.state.is_thinking) {
+          content.state.is_thinking = true;
+          content.thinking_started_at = Date.now();
+          
+          // 启动实时计时器，每 100ms 更新一次
+          content._thinkingTimer = setInterval(() => {
+            if (content.thinking_started_at) {
+              content.thinking_duration_ms = Date.now() - content.thinking_started_at;
+            }
+          }, 100);
         }
+        
         thinkingContent += response.msg;
         message.contents[contentIndex].reasoning_content = thinkingContent;
         continue;
       }
+      
+      // 思考结束后重置状态
       if (message.contents[contentIndex]?.state.is_thinking) {
-        message.contents[contentIndex].state.is_thinking = false;
+        const content = message.contents[contentIndex];
+        content.state.is_thinking = false;
+        
+        // 停止计时器并计算最终时长
+        if (content._thinkingTimer) {
+          clearInterval(content._thinkingTimer);
+          content._thinkingTimer = null;
+        }
+        if (content.thinking_started_at) {
+          content.thinking_duration_ms = Date.now() - content.thinking_started_at;
+        }
       }
       if (response.type == "tool_calls") {
         message.contents[contentIndex].additional_kwargs = {
@@ -531,6 +591,8 @@ function handleNewMessage(response, sessionId, userMessageId) {
     meta_data: { model_name },
     created_at: time,
     updated_at: time,
+    thinking_started_at: null,
+    thinking_duration_ms: null,
     state: {
       is_streaming: true,
       is_thinking: false,
@@ -588,6 +650,14 @@ function cleanupStreaming(sessionId, message, contentIndex) {
     message.state.is_streaming = false;
     message.state.is_thinking = false;
     message.state.is_web_searching = false;
+    
+    // 清理计时器，防止内存泄漏
+    const content = message.contents[contentIndex];
+    if (content?._thinkingTimer) {
+      clearInterval(content._thinkingTimer);
+      content._thinkingTimer = null;
+    }
+    
     message.contents[contentIndex].updated_at = new Date().toISOString();
   }
 }
@@ -759,6 +829,14 @@ async function handleSendMessage() {
 
   try {
     const { text, files } = data;
+    
+    // 如果是编辑模式，使用重新发送逻辑
+    if (editMode.isActive && editMode.message) {
+      await sendEditMessage(text, files);
+      return;
+    }
+    
+    // 否则发送新消息
     const message = await sendNewMessage(currentSession.value.id, text, files);
     inputMessage.value = { text: "", files: [] };
     handleStreamResponse(currentSessionId.value, message.id);
@@ -767,13 +845,29 @@ async function handleSendMessage() {
   }
 }
 
-async function handleReSendMessage() {
+function exitEditMode() {
+  editMode.isActive = false;
+  editMode.message = null;
+  editMode.messageText = "";
+  editMode.messageFiles = [];
+  inputMessage.value = { text: "", files: [] };
+}
+
+async function sendEditMessage(text, files) {
+  if (!editMode.message) return;
+  
   try {
-    const data = editInputMessage.value;
-    const { text, files } = data;
-    const message = await sendNewMessage(currentSession.value.id, text, files, data.old_message_id);
-    editInputMessage.value = { old_message_id: "", text: "", files: [] };
-    showEditMessageModal.value = false;
+    const message = await sendNewMessage(
+      currentSession.value.id, 
+      text, 
+      files, 
+      editMode.message.id
+    );
+    
+    // 退出编辑模式
+    exitEditMode();
+    
+    // 开始流式响应
     handleStreamResponse(currentSessionId.value, message.id);
   } catch (error) {
     notify.error("消息发送失败", error.message);
@@ -781,12 +875,22 @@ async function handleReSendMessage() {
 }
 
 function generateResponse(message) {
-  editInputMessage.value = {
-    old_message_id: message.id,
+  // 进入编辑模式
+  editMode.isActive = true;
+  editMode.message = message;
+  editMode.messageText = message.contents[0].content;
+  editMode.messageFiles = message.files || [];
+  
+  // 将消息内容设置到输入框
+  inputMessage.value = {
     text: message.contents[0].content,
-    files: message.files
+    files: message.files || []
   };
-  showEditMessageModal.value = true;
+  
+  // 滚动到底部以便用户看到输入框
+  nextTick(() => {
+    immediateScrollToBottom();
+  });
 }
 
 function regenerateResponse(message) {
@@ -881,11 +985,80 @@ defineExpose({ sendMessage: handleSendMessage })
   }
 }
 
+@keyframes fadeInDown {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
 .animate-fade-in-up {
   animation: fadeInUp 0.8s ease-out;
 }
 
 .animate-bounce-in {
   animation: bounceIn 1s ease-out;
+}
+
+.animate-fade-in-down {
+  animation: fadeInDown 0.3s ease-out;
+}
+
+/* 编辑模式提示条样式 */
+.edit-mode-banner {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 16px;
+  background: #fff7e6;
+  border: 1px solid #e6a23c;
+  border-radius: 6px;
+  box-shadow: 0 2px 8px rgba(230, 162, 60, 0.1);
+  transition: all 0.3s ease;
+}
+
+.edit-mode-banner:hover {
+  box-shadow: 0 3px 12px rgba(230, 162, 60, 0.15);
+}
+
+.edit-mode-icon {
+  font-size: 18px;
+  flex-shrink: 0;
+}
+
+.edit-mode-text {
+  flex: 1;
+  color: #606266;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+/* 取消编辑按钮样式 */
+.cancel-edit-btn {
+  background: transparent;
+  border: 1px solid #f56c6c;
+  color: #f56c6c;
+  font-size: 13px;
+  padding: 5px 12px;
+  border-radius: 4px;
+  transition: all 0.2s ease;
+  cursor: pointer;
+}
+
+.cancel-edit-btn:hover {
+  background: #f56c6c;
+  color: white;
+  border-color: #f56c6c;
+  transform: translateY(-1px);
+  box-shadow: 0 2px 6px rgba(245, 108, 108, 0.2);
+}
+
+.cancel-edit-btn:active {
+  transform: translateY(0);
+  box-shadow: 0 1px 3px rgba(245, 108, 108, 0.15);
 }
 </style>
