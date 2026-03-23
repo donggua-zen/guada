@@ -15,7 +15,7 @@
             <div class="relative inline-block mb-5">
               <div
                 class="w-24 h-24 rounded-full  flex items-center justify-center mx-auto relative overflow-hidden p-0 animate-bounce-in">
-                <Avatar v-if="currentSession" :src="currentSession.avatar_url" round />
+                <Avatar v-if="currentSession" :src="currentSession.character.avatar_url" round />
                 <div v-else class="text-4xl text-white">?</div>
               </div>
               <div class="absolute bottom-1 right-1 w-5 h-5 bg-green-500 border-2 border-white rounded-full"></div>
@@ -24,17 +24,17 @@
             <!-- 标题和描述 -->
             <div class="mb-8">
               <h1 class="text-3xl font-bold mb-4 text-[var(--color-primary)]">
-                {{ currentSession.title || '' }}
+                {{ currentSession.character.title || '' }}
               </h1>
               <h2 class="text-lg font-normal text-gray-600 leading-relaxed">
-                {{ currentSession.description || '' }}
+                {{ currentSession.character.description || '' }}
               </h2>
 
               <!-- 角色设定 -->
-              <div v-if="currentSession.system_prompt"
+              <div v-if="currentSession.settings?.system_prompt"
                 class="mt-6 p-5 bg-gray-50 rounded-xl border-l-4 border-[var(--color-primary)] text-left">
                 <h3 class="text-base font-semibold text-gray-800 mb-2">角色设定</h3>
-                <p class="text-sm text-gray-600 leading-6">{{ currentSession.system_prompt }}</p>
+                <p class="text-sm text-gray-600 leading-6">{{ currentSession.settings.system_prompt }}</p>
               </div>
             </div>
           </div>

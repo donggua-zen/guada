@@ -33,7 +33,7 @@
         <el-dialog v-model="sessionSettingsModalVisible" :append-to-body="true"
           style="width: 600px;max-width: 90vw;" title="对话设置">
           <div class="max-h-[80vh] overflow-y-auto">
-            <character-setting-panel :data="currentSession" @update:data="updateSession" :simple="true"
+            <session-setting-panel :data="currentSession" @update:data="updateSession" :simple="true"
               :tab="currentTabValue" />
           </div>
         </el-dialog>
@@ -61,6 +61,7 @@ import { useBreakpoints, breakpointsTailwind } from '@vueuse/core'
 const breakpoints = useBreakpoints(breakpointsTailwind)
 const isMobile = breakpoints.smaller('md') // md = 768px
 
+const SessionSettingPanel = defineAsyncComponent(() => import("@/components/SessionSettingPanel.vue"));
 const CharacterSettingPanel = defineAsyncComponent(() => import("@/components/CharacterSettingPanel.vue"));
 const ChatPanel = defineAsyncComponent(() => import("@/components/ChatPanel.vue"));
 const CreateSessionChatPanel = defineAsyncComponent(() => import("@/components/CreateSessionChatPanel.vue"));
@@ -173,7 +174,7 @@ const updateSessionById = async (sessionId, data) => {
 
 /**
  * 更新当前会话的设置
- * 合并现有设置与新设置，上传头像（如果存在），并关闭设置模态框
+ * 合并现有设置与新设置，并关闭设置模态框
  * @param {Object} data - 包含新设置的数据对象
  */
 const updateSession = async (data) => {
@@ -184,11 +185,6 @@ const updateSession = async (data) => {
       data.settings = { ...currentSession.value.settings, ...data.settings };
       await apiService.updateSession(currentSession.value.id, data);
       session = { id: currentSession.value.id, ...data, updated_at: new Date().toISOString() };
-
-      if (session && data.avatar_file) {
-        const response = await apiService.uploadAvatar(currentSession.value.id, data.avatar_file, 'session');
-        session.avatar_url = response.url;
-      }
       currentSession.value = session;
     }
     toast.success("设置成功");

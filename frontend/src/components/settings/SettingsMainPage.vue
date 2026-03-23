@@ -243,7 +243,7 @@ const handleItemClick = (item) => {
     }
     if (isMobile.value)
         sidebarVisible.value = false
-    router.push({ name: 'Settings', params: { tab: item.path } })
+    router.replace({ name: 'Settings', params: { tab: item.path } })
 }
 
 watch(() => isMobile.value, (newState) => {
