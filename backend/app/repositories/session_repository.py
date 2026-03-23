@@ -6,6 +6,7 @@ from sqlalchemy.orm import selectinload
 from app.models.session import Session
 from app.models.message import Message
 from app.models.message_content import MessageContent
+from app.models.character import Character
 
 
 class SessionRepository:
@@ -22,6 +23,9 @@ class SessionRepository:
             select(Session)
             .filter(Session.user_id == user_id)
             .order_by(desc(Session.updated_at))
+            .options(
+                selectinload(Session.character)
+            )
         )
         result = await self.session.execute(stmt)
         sessions = result.scalars().all()
@@ -48,12 +52,17 @@ class SessionRepository:
 
     async def get_session_by_id(self, session_id):
         stmt = select(Session).filter(Session.id == session_id)
-        stmt = stmt.options(selectinload(Session.model))
+        stmt = stmt.options(
+            selectinload(Session.model),
+            selectinload(Session.character).selectinload(Character.model)
+        )
         result = await self.session.execute(stmt)
         return result.scalar_one_or_none()
 
     async def query_session(self, session_id=None, user_id=None, character_id=None):
-        stmt = select(Session)
+        stmt = select(Session).options(
+            selectinload(Session.character).selectinload(Character.model)
+        )
 
         if session_id is not None:
             stmt = stmt.filter(Session.id == session_id)

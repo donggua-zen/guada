@@ -3,7 +3,6 @@ from typing import Optional, Dict, Any
 from pydantic import BaseModel, ConfigDict
 
 from app.schemas.base import BaseResponse
-from app.schemas.session_settings import SessionSettings
 from .model import ModelOut  # 导入Model schema
 
 
@@ -14,7 +13,7 @@ class CharacterBase(BaseModel):
     avatar_url: Optional[str] = None
     is_public: Optional[bool] = None
     model_id: Optional[str] = None
-    settings: Optional[SessionSettings] = None
+    settings: Optional[dict] = None
 
 
 class CharacterCreate(BaseModel):
@@ -23,7 +22,7 @@ class CharacterCreate(BaseModel):
     description: Optional[str] = None
     avatar_url: Optional[str] = None
     is_public: Optional[bool] = False
-    settings: Optional[SessionSettings] = None
+    settings: Optional[dict] = None
 
 
 class CharacterUpdate(BaseModel):
@@ -32,7 +31,7 @@ class CharacterUpdate(BaseModel):
     avatar_url: Optional[str] = None
     is_public: Optional[bool] = None
     model_id: Optional[str] = None
-    settings: Optional[SessionSettings] = None
+    settings: Optional[dict] = None
 
 
 class CharacterInDBBase(CharacterBase):
@@ -53,7 +52,7 @@ class CharacterItemOut(BaseResponse):
     avatar_url: Optional[str] = None
     is_public: Optional[bool] = None
     model_id: Optional[str] = None
-    settings: Optional[SessionSettings] = None
+    settings: Optional[dict] = None
 
     model_config = ConfigDict(from_attributes=True)
 

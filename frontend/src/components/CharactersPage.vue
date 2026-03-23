@@ -35,7 +35,8 @@
                 <div class="flex-1 min-w-0 flex flex-col">
                   <!-- 标题 -->
                   <!-- <div class="h-5 bg-surface rounded mb-2 w-full"></div>-->
-                  <h3 class="text-lg bg-surface font-semibold text-gray-800 dark:text-gray-200 truncate mb-2">&nbsp;</h3>
+                  <h3 class="text-lg bg-surface font-semibold text-gray-800 dark:text-gray-200 truncate mb-2">&nbsp;
+                  </h3>
                   <!-- 描述 -->
                   <div class="h-15 space-y-2">
                     <div class="h-3 bg-surface rounded"></div>
@@ -71,7 +72,8 @@
                 <!-- 内容区域 -->
                 <div class="flex-1 min-w-0 flex flex-col">
                   <!-- 标题和描述 -->
-                  <h3 class="text-lg font-semibold text-gray-800 dark:text-gray-200 truncate mb-2">{{ character.title }}</h3>
+                  <h3 class="text-lg font-semibold text-gray-800 dark:text-gray-200 truncate mb-2">{{ character.title }}
+                  </h3>
                   <div class="h-15 overflow-hidden">
                     <el-tooltip effect="dark" :content="character.description || '暂无描述'" placement="top">
                       <p class="text-sm text-gray-600 dark:text-gray-400 line-clamp-3 leading-5 cursor-help">
@@ -257,7 +259,10 @@ const deleteCharacter = async (character) => {
 
 // 开始对话
 const startNewChat = async (character) => {
-  emit('create-session', { title: character.title, character_id: character.id })
+  emit('create-session', {
+    character_id: character.id,
+    title: character.title,
+  })
 }
 
 const shareCharacter = async (character) => {

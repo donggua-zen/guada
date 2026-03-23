@@ -26,6 +26,12 @@ class Session(ModelBase):
         index=True,
         nullable=True,
     )
+    character_id = Column(
+        String(26),
+        ForeignKey("character.id", ondelete="SET NULL"),
+        index=True,
+        nullable=True,
+    )
     settings = Column(JSON, nullable=True)
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
     updated_at = Column(
@@ -52,4 +58,10 @@ class Session(ModelBase):
         # 添加 passive_deletes 配置，确保 SQLAlchemy 知道数据库会处理 SET NULL
         passive_deletes=True,
         uselist=False,  # 关键参数，表示一对一关系
+    )
+
+    character: Mapped[Optional["Character"]] = relationship(
+        "Character",
+        passive_deletes=True,
+        uselist=False,
     )

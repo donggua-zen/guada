@@ -28,7 +28,7 @@ async def create_session(
     session_service: SessionService = Depends(get_session_service),
     current_user: User = Depends(get_current_user),
 ):
-    session_data = request.model_dump()
+    session_data = request.model_dump(exclude_unset=True)
     return await session_service.create_session(current_user, session_data)
 
 
@@ -65,15 +65,3 @@ async def update_session(
     data["updated_at"] = datetime.datetime.now(datetime.timezone.utc)
 
     return await session_service.update_session(session_id, current_user, data)
-
-
-@sessions_router.post("/sessions/{session_id}/avatars")
-async def upload_session_avatar(
-    session_id: str,
-    request: Request,
-    session_service: SessionService = Depends(get_session_service),
-    current_user: User = Depends(get_current_user),
-):
-    form = await request.form()
-    avatar_file = form.get("avatar")
-    return await session_service.upload_avatar(session_id, current_user, avatar_file)

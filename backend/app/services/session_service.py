@@ -22,29 +22,41 @@ class SessionService:
         pass
 
     async def create_session(self, user: User, data: dict):
-        character_id = data.get("character_id", None)
-        if character_id is not None:
-            character = await self.character_repo.get_character_by_id(character_id)
-            data["title"] = character.title
-            data["avatar_url"] = character.avatar_url
-            data["description"] = character.description
-            data["model_id"] = character.model_id
-            data["user_id"] = user.id  # 添加用户ID
+        character_id = data.get("character_id")
+        if not character_id:
+            raise HTTPException(status_code=400, detail="character_id is required")
 
-            # 更优雅地复制字段
-            data["settings"] = character.settings
-
-            # 使用实例变量避免重复创建
-            avatar_path = (
-                self.upload_service.duplicate_avatar(character.avatar_url)
-                or character.avatar_url
+        # 获取角色信息
+        character = await self.character_repo.get_character_by_id(character_id)
+        if not character:
+            raise HTTPException(
+                status_code=404, detail=f"Character with ID {character_id} not found"
             )
-            if avatar_path:
-                data["avatar_url"] = avatar_path
-            session = await self._add_new_session(data)
-        else:
-            data["user_id"] = user.id  # 添加用户ID
-            session = await self._add_new_session(data)
+
+        # 继承角色配置，只允许覆盖 model_id和 settings.max_memory_length
+        session_data = {
+            "user_id": user.id,
+            "character_id": character_id,  # 绑定角色
+            "title": character.title,  # 不再允许覆盖，直接使用角色的 title
+            "avatar_url": character.avatar_url,  # 不再允许覆盖，直接使用角色的 avatar
+            "description": character.description,  # 不再允许覆盖，直接使用角色的 description
+            "model_id": data.get("model_id", character.model_id),  # 允许覆盖
+        }
+
+        # 合并 settings：只从角色继承 max_memory_length，然后合并用户传入的设置（用户设置优先）
+        session_data["settings"] = {}
+
+        # 1. 从角色继承 max_memory_length
+        if character.settings and "max_memory_length" in character.settings:
+            session_data["settings"]["max_memory_length"] = character.settings[
+                "max_memory_length"
+            ]
+
+        # 2. 合并用户传入的设置（会覆盖继承的值）
+        if data.get("settings"):
+            session_data["settings"].update(data["settings"])
+
+        session = await self._add_new_session(session_data)
 
         if session is None:
             raise HTTPException(status_code=500, detail="Failed to create session")
@@ -63,6 +75,7 @@ class SessionService:
             "avatar_url",
             "user_id",
             "model_id",
+            "character_id",
             "settings",
         ]
 
@@ -84,14 +97,19 @@ class SessionService:
                 detail=f"Session with ID {session_id} does not exist or does not belong to user.",
             )
 
-        old_avatar_url = session.avatar_url
+        # 只允许更新 model_id 和 settings.max_memory_length
+        allowed_fields = ["model_id", "settings"]
+        filtered_data = {k: v for k, v in data.items() if k in allowed_fields}
 
-        session.update(data)
+        # 如果更新了 settings，只保留 max_memory_length
+        if "settings" in filtered_data:
+            filtered_data["settings"] = {
+                "max_memory_length": filtered_data["settings"].get("max_memory_length"),
+                "thinking_enabled": filtered_data["settings"].get("thinking_enabled"),
+            }
 
-        if "avatar_url" in data and data["avatar_url"] != old_avatar_url:
-            old_avatar_path = convert_webpath_to_filepath(old_avatar_url)
-            if old_avatar_url:
-                remove_file(old_avatar_path)
+        session.update(filtered_data)
+
         await self.session_repo.session.flush()
         await self.session_repo.session.refresh(session)
         return session
@@ -130,16 +148,3 @@ class SessionService:
                 detail=f"Session with ID {session_id} does not exist or does not belong to user.",
             )
         return session
-
-    async def upload_avatar(self, session_id, user: User, avatar_file):
-        session = await self.session_repo.get_session_by_id(session_id)
-        if not session or session.user_id != user.id:
-            raise HTTPException(
-                status_code=404,
-                detail=f"Session with ID {session_id} does not exist or does not belong to user.",
-            )
-
-        # 使用实例变量避免重复创建
-        avatar_url = self.upload_service.upload_avatar(avatar_file, size=(128, 128))
-        session.update({"avatar_url": avatar_url})
-        return {"url": avatar_url}
