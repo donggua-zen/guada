@@ -487,7 +487,7 @@ const formatToolResponse = (response) => {
   try {
     // 如果是字符串，尝试解析为 JSON
     const parsed = typeof response === 'string' ? JSON.parse(response) : response;
-    return JSON.stringify(parsed, null, 2);
+    return JSON.stringify(parsed['content'], null, 2);
   } catch (e) {
     // 如果解析失败，直接返回字符串
     return String(response);

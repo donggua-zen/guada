@@ -10,7 +10,22 @@
         <img src="/images/chat_banner.webp" alt=""></img>
       </div>
       <h1 class="text-3xl mb-6 text-gray-600">Hi，想聊些什么？</h1>
-      <div class="w-full  max-w-[800px]">
+      
+      <!-- 角色选择提示 -->
+      <div v-if="!currentSession.character_id" class="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-lg max-w-md">
+        <div class="flex items-start">
+          <el-icon class="text-blue-500 mt-1 mr-2"><InfoFilled /></el-icon>
+          <div>
+            <p class="text-sm text-gray-700 font-medium">需要选择角色模板</p>
+            <p class="text-xs text-gray-600 mt-1">请先前往角色页面选择一个角色模板，然后才能创建会话</p>
+            <el-button type="primary" size="small" class="mt-2" @click="router.push({ name: 'Characters' })">
+              去选择角色
+            </el-button>
+          </div>
+        </div>
+      </div>
+      
+      <div v-else class="w-full  max-w-[800px]">
         <ChatInput v-model:value="inputMessage.text" v-model:web-search-enabled="webSearchEnabled"
           v-model:thinking-enabled="thinkingEnabled" :buttons="chatInputButtons" :files="inputMessage.files"
           :streaming="false" @send="sendMessage" @toggle-web-search="handleWebSearch"
@@ -66,6 +81,7 @@ import { ChatInput } from "./ui";
 import ChatHeader from "./ChatHeader.vue";
 
 import { OpenAI } from "@/components/icons"
+import { InfoFilled } from '@vicons/material'
 
 // UI组件导入
 import { ElDropdown, ElDropdownMenu, ElDropdownItem, ElButton } from "element-plus";
@@ -102,6 +118,7 @@ const triggerRef = ref(null)
 
 // 计算属性
 const currentSession = ref({
+  character_id: null,  // 必须绑定角色
   model_id: null,
   avatar_url: null,
   title: "新建对话",
@@ -290,7 +307,13 @@ const sendMessage = () => {
     notify.error('请选择对话模型');
     return;
   }
+  if (!currentSession.value.character_id) {
+    notify.error('请先选择一个角色模板');
+    router.push({ name: 'Characters' });
+    return;
+  }
   emit("create-session", {
+    character_id: currentSession.value.character_id,
     model_id: currentModel.value.id,
     title: autoTitle(),
     settings: currentSession.value.settings
@@ -303,7 +326,13 @@ const handleCreateSessionClick = () => {
     notify.error('请选择对话模型');
     return;
   }
+  if (!currentSession.value.character_id) {
+    notify.error('请先选择一个角色模板');
+    router.push({ name: 'Characters' });
+    return;
+  }
   emit("create-session", {
+    character_id: currentSession.value.character_id,
     model_id: currentModel.value.id,
     title: autoTitle(),
     settings: currentSession.value.settings

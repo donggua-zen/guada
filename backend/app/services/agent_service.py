@@ -45,79 +45,92 @@ class AgentService:
         message_repo: MessageRepository,
         memory_manager_service: MemoryManagerService,
         setting_service: SettingsManager,
+        mcp_tool_manager: MCPToolManager,
     ):
         self.session_repo = session_repo
         self.model_repo = model_repo
         self.message_repo = message_repo
         self.memory_manager_service = memory_manager_service
         self.setting_service = setting_service
-        self.mcp_tool_manager = None  # 延迟初始化
+        self.mcp_tool_manager = mcp_tool_manager
 
-    async def _get_mcp_tools_schema(self, session_id: str) -> list:
+    async def _get_mcp_tools_schema(
+        self, 
+        character_settings: Optional[Dict[str, Any]] = None
+    ) -> list:
         """
-        获取所有已启用的 MCP 工具的 schema
-        
+        获取 MCP 工具的 schema
+
         Args:
-            session_id: 会话 ID
-            
+            character_settings: 角色的 settings 字典 (包含 mcp_servers 字段)
+
         Returns:
             list: MCP 工具 schema 列表
         """
         try:
-            # 创建数据库会话获取 MCP 工具
-            db_manager = get_db_manager()
-            async with db_manager.async_session_factory() as session:
-                mcp_tool_manager = MCPToolManager(session)
-                all_mcp_tools = await mcp_tool_manager.get_all_mcp_tools()
-                
-                # 转换为 OpenAI function calling 格式
-                mcp_tools_schema = []
-                for tool_name, tool_data in all_mcp_tools.items():
-                    if isinstance(tool_data, dict):
-                        schema = {
-                            "type": "function",
-                            "function": {
-                                "name": tool_name,
-                                "description": tool_data.get("description", f"MCP tool: {tool_name}"),
-                                "parameters": tool_data.get("inputSchema", {}) or tool_data.get("parameters", {}),
-                            }
-                        }
-                        mcp_tools_schema.append(schema)
-                
-                return mcp_tools_schema
+            # 提取角色已启用的 MCP 服务器 ID 列表
+            enabled_mcp_servers = None
+            if character_settings:
+                enabled_mcp_servers = character_settings.get('mcp_servers')
+                logger.info(f"Character has {len(enabled_mcp_servers or [])} enabled MCP servers")
+            
+            # 使用注入的 MCPToolManager
+            all_mcp_tools = await self.mcp_tool_manager.get_all_mcp_tools(
+                enabled_mcp_servers=enabled_mcp_servers
+            )
+
+            # 转换为 OpenAI function calling 格式
+            mcp_tools_schema = []
+            for tool_name, tool_data in all_mcp_tools.items():
+                if isinstance(tool_data, dict):
+                    schema = {
+                        "type": "function",
+                        "function": {
+                            "name": tool_name,
+                            "description": tool_data.get(
+                                "description", f"MCP tool: {tool_name}"
+                            ),
+                            "parameters": tool_data.get("inputSchema", {})
+                            or tool_data.get("parameters", {}),
+                        },
+                    }
+                    mcp_tools_schema.append(schema)
+
+            return mcp_tools_schema
         except Exception as e:
             logger.error(f"Error loading MCP tools: {e}")
             return []
 
     async def _execute_mcp_tool(
-        self, 
-        tool_name: str, 
-        arguments: Dict[str, Any]
+        self, tool_name: str, arguments: Dict[str, Any]
     ) -> Dict[str, Any]:
         """
         执行 MCP 工具调用
-        
+
         Args:
             tool_name: 工具名称（包含 mcp__前缀）
             arguments: 工具参数
-            
+
         Returns:
             Dict: 工具调用结果
         """
         try:
-            db_manager = get_db_manager()
-            async with db_manager.async_session_factory() as session:
-                mcp_tool_manager = MCPToolManager(session)
-                result = await mcp_tool_manager.execute_tool(tool_name, arguments)
-                
-                return {
-                    "tool_call_id": None,  # 会在上层设置
-                    "role": "tool",
-                    "name": tool_name,
-                    "content": str(result) if not isinstance(result, str) else result,
-                }
+            # 使用注入的 MCPToolManager
+            result = await self.mcp_tool_manager.execute_tool(tool_name, arguments)
+
+            return {
+                "tool_call_id": None,  # 会在上层设置
+                "role": "tool",
+                "name": tool_name,
+                "content": (
+                    str(result["content"])
+                    if not isinstance(result["content"], str)
+                    else result["content"]
+                ),
+            }
         except Exception as e:
             logger.error(f"Error executing MCP tool {tool_name}: {e}")
+            logger.exception(e)
             return {
                 "tool_call_id": None,
                 "role": "tool",
@@ -131,23 +144,24 @@ class AgentService:
     ) -> List[Dict[str, Any]]:
         """
         处理所有工具调用（包括本地工具和 MCP 工具）
-        
+
         Args:
             tool_calls: 工具调用列表
-            
+
         Returns:
             List[Dict]: 工具执行结果列表
         """
         tool_results = []
-        
+
         for tool_call in tool_calls:
             func_name = tool_call["name"]
-            
+
             # 解析参数
             try:
                 import json
+
                 arguments = json.loads(tool_call["arguments"])
-                
+
                 # 判断是否为 MCP 工具
                 if func_name.startswith("mcp__"):
                     # MCP 工具调用
@@ -159,7 +173,7 @@ class AgentService:
                     # 本地工具调用
                     local_result = await handle_tool_calls([tool_call])
                     tool_results.extend(local_result)
-                    
+
             except Exception as e:
                 logger.error(f"Error handling tool call {func_name}: {e}")
                 tool_results.append(
@@ -170,7 +184,7 @@ class AgentService:
                         "content": f"Error: {str(e)}",
                     }
                 )
-        
+
         return tool_results
 
     async def completions(
@@ -242,10 +256,20 @@ class AgentService:
 
             # 获取 MCP 工具列表并合并到本地工具
             all_tools_schema = get_tools_schema()  # 本地工具
-            mcp_tools_schema = await self._get_mcp_tools_schema(session_id)  # MCP 工具
-            all_tools_schema.extend(mcp_tools_schema)  # 合并工具列表
             
-            logger.info(f"Using {len(all_tools_schema)} tools (including {len(mcp_tools_schema)} MCP tools)")
+            # 从角色设置中提取 MCP 配置
+            character_settings = {}
+            if hasattr(session, 'character') and session.character:
+                character_settings = session.character.settings or {}
+            
+            mcp_tools_schema = await self._get_mcp_tools_schema(
+                character_settings=character_settings
+            )  # MCP 工具
+            all_tools_schema.extend(mcp_tools_schema)  # 合并工具列表
+
+            logger.info(
+                f"Using {len(all_tools_schema)} tools (including {len(mcp_tools_schema)} MCP tools)"
+            )
             # 提交会话更新
             # await self.session_repo.session.commit()
             # await self.session_repo.session.begin()
@@ -449,18 +473,33 @@ class AgentService:
         return session
 
     async def _get_conversation_messages(self, session, current_message_id: str):
-        """获取对话消息"""
+        """获取对话消息
+
+        根据会话绑定的角色配置和会话自定义设置构建提示词
+        """
+        # 获取会话设置
+        session_settings = session.settings or {}
+
+        # 如果有绑定的角色，从角色设置中继承默认值
+        character_settings = {}
+        if hasattr(session, "character") and session.character:
+            character_settings = session.character.settings or {}
+
+        # 合并策略：会话设置优先，未设置的字段从角色继承
+        merged_settings = {**character_settings, **session_settings}
+
         return await self.memory_manager_service.get_conversation_messages(
             session_id=session.id,
-            model_name=session.model.model_name,
+            model_name=session.model.model_name if session.model else None,
             user_message_id=current_message_id,
-            max_messages=session.settings.get("max_memory_length", 9999) or 9999,
-            # max_tokens=session.settings.get("max_memory_tokens", 32 * 1024)
+            max_messages=merged_settings.get("max_memory_length", 9999) or 9999,
+            # max_tokens=merged_settings.get("max_memory_tokens", 32 * 1024)
             # or 32 * 1024,
             prompt_settings={
-                "assistant_name": session.settings.get("assistant_name"),
-                "assistant_identity": session.settings.get("assistant_identity"),
-                "system_prompt": session.settings.get("system_prompt", ""),
+                "assistant_name": merged_settings.get("assistant_name"),
+                "assistant_identity": merged_settings.get("assistant_identity"),
+                "system_prompt": merged_settings.get("system_prompt", ""),
+                "use_user_prompt": merged_settings.get("use_user_prompt", False),
             },
         )
 
@@ -473,18 +512,32 @@ class AgentService:
         return model, provider
 
     def _extract_model_params(self, session, model):
-        """提取模型参数"""
+        """提取模型参数
+
+        优先使用会话的设置，如果会话没有设置则从角色配置继承
+        """
+        # 获取会话设置
+        session_settings = session.settings or {}
+
+        # 如果有绑定的角色，从角色设置中继承默认值
+        character_settings = {}
+        if hasattr(session, "character") and session.character:
+            character_settings = session.character.settings or {}
+
+        # 合并策略：会话设置优先，未设置的字段从角色继承
+        merged_settings = {**character_settings, **session_settings}
+
         return {
-            "web_search_enabled": session.settings.get("web_search_enabled"),
+            "web_search_enabled": merged_settings.get("web_search_enabled"),
             "thinking": (
-                session.settings.get("thinking_enabled")
-                if "thinking" in model.features
+                merged_settings.get("thinking_enabled")
+                if model and "thinking" in (model.features or [])
                 else None
             ),
-            "temperature": session.settings.get("model_temperature"),
-            "top_p": session.settings.get("model_top_p"),
-            "frequency_penalty": session.settings.get("model_frequency_penalty"),
-            "use_user_prompt": session.settings.get("use_user_prompt", False),
+            "temperature": merged_settings.get("model_temperature"),
+            "top_p": merged_settings.get("model_top_p"),
+            "frequency_penalty": merged_settings.get("model_frequency_penalty"),
+            "use_user_prompt": merged_settings.get("use_user_prompt", False),
         }
 
     def _create_error_response(self, error_msg: str):
@@ -561,21 +614,32 @@ class AgentService:
         if session is None:
             raise HTTPException(status_code=404, detail="Session not found")
 
-        settings = session.settings
+        # 获取会话设置
+        session_settings = session.settings or {}
+
+        # 如果有绑定的角色，从角色设置中继承默认值
+        character_settings = {}
+        if hasattr(session, "character") and session.character:
+            character_settings = session.character.settings or {}
+
+        # 合并策略：会话设置优先，未设置的字段从角色继承
+        merged_settings = {**character_settings, **session_settings}
+
         model = session.model
 
         conversation_messages = (
             await self.memory_manager_service.get_conversation_messages(
                 session_id=session_id,
-                model_name=session.model.model_name,
+                model_name=session.model.model_name if session.model else None,
                 user_message_id=None,
-                max_messages=session.settings.get("max_memory_length", 9999) or 9999,
-                max_tokens=session.settings.get("max_memory_tokens", 32 * 1024)
+                max_messages=merged_settings.get("max_memory_length", 9999) or 9999,
+                max_tokens=merged_settings.get("max_memory_tokens", 32 * 1024)
                 or 32 * 1024,
                 prompt_settings={
-                    "assistant_name": (session.settings.get("assistant_name")),
-                    "assistant_identity": (session.settings.get("assistant_identity")),
-                    "system_prompt": (session.settings.get("system_prompt", "")),
+                    "assistant_name": merged_settings.get("assistant_name"),
+                    "assistant_identity": merged_settings.get("assistant_identity"),
+                    "system_prompt": merged_settings.get("system_prompt", ""),
+                    "use_user_prompt": merged_settings.get("use_user_prompt", False),
                 },
             )
         )
@@ -596,12 +660,15 @@ class AgentService:
         max_memory_tokens = system_prompt_tokens + summary_tokens + context_tokens
 
         max_memory_tokens = (
-            settings.get("max_memory_tokens", max_memory_tokens) or max_memory_tokens
+            merged_settings.get("max_memory_tokens", max_memory_tokens)
+            or max_memory_tokens
         )
 
-        return {
-            "max_memory_tokens": max_memory_tokens,
-            "system_prompt_tokens": system_prompt_tokens,
-            "summary_tokens": summary_tokens,
-            "context_tokens": context_tokens,
-        },
+        return (
+            {
+                "max_memory_tokens": max_memory_tokens,
+                "system_prompt_tokens": system_prompt_tokens,
+                "summary_tokens": summary_tokens,
+                "context_tokens": context_tokens,
+            },
+        )

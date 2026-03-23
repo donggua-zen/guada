@@ -25,6 +25,7 @@ from app.services.session_service import SessionService
 from app.services.settings_manager import SettingsManager
 from app.services.user_service import UserService
 from app.services.mcp_server_service import MCPServerService
+from app.services.mcp.tool_manager import MCPToolManager
 
 
 T = TypeVar("T")
@@ -110,6 +111,7 @@ def get_agent_service(
     message_repo: MessageService = Depends(get_message_repository),
     memory_manager_service: MemoryManagerService = Depends(get_memory_manager_service),
     settings_manager: SettingsManager = Depends(get_settings_service),
+    mcp_tool_manager: MCPToolManager = Depends(create_repo_dependency(MCPToolManager)),
 ) -> AgentService:
     """聊天服务依赖"""
     return AgentService(
@@ -118,6 +120,7 @@ def get_agent_service(
         message_repo=message_repo,
         memory_manager_service=memory_manager_service,
         setting_service=settings_manager,
+        mcp_tool_manager=mcp_tool_manager,
     )
 
 

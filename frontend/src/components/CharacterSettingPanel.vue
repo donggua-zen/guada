@@ -126,21 +126,101 @@
                                     :step="1" show-input optional-direction="max" optional-text="No Limit" />
                             </el-form-item>
                             <!-- 最大记忆长度 -->
-                            <el-form-item label="最大记忆tokens" prop="max_memory_tokens">
+                            <el-form-item label="最大记忆 tokens" prop="max_memory_tokens">
                                 <el-input-number v-model="characterForm.max_memory_tokens" :min="0"
                                     style="width: 150px;" controls-position="right" placeholder="" :parser="parse"
                                     :formatter="format" />
                                 <span style="margin-left: 8px; color: #999;">tokens</span>
                             </el-form-item>
-
+                
                             <!-- 短期记忆长度 -->
-                            <el-form-item label="短期记忆tokens" prop="short_term_memory_tokens">
+                            <el-form-item label="短期记忆 tokens" prop="short_term_memory_tokens">
                                 <el-input-number v-model="characterForm.short_term_memory_tokens" :min="0"
                                     style="width: 150px;" controls-position="right" placeholder="" :parser="parse"
                                     :formatter="format" />
                                 <span style="margin-left: 8px; color: #999;">tokens</span>
                             </el-form-item>
-
+                
+                        </el-form>
+                    </div>
+                </el-tab-pane>
+                
+                <!-- 本地工具 -->
+                <el-tab-pane name="local_tools" label="本地工具">
+                    <div class="p-3">
+                        <el-form label-position="top" size="large">
+                            <el-form-item label="可用工具">
+                                <el-checkbox-group v-model="characterForm.enabled_tools">
+                                    <div class="tool-item p-3 border rounded mb-2">
+                                        <el-checkbox value="get_current_time" class="w-full">
+                                            <div class="flex items-center justify-between w-full">
+                                                <div>
+                                                    <div class="font-medium">获取当前时间</div>
+                                                    <div class="text-sm text-gray-500">返回当前的日期和时间信息</div>
+                                                </div>
+                                                <el-tag type="info" size="small">内置</el-tag>
+                                            </div>
+                                        </el-checkbox>
+                                    </div>
+                                </el-checkbox-group>
+                            </el-form-item>
+                        </el-form>
+                    </div>
+                </el-tab-pane>
+                
+                <!-- MCP 工具 -->
+                <el-tab-pane name="mcp_tools" label="MCP 工具">
+                    <div class="p-3">
+                        <el-form label-position="top" size="large">
+                            <el-alert
+                                title="MCP 服务说明"
+                                type="info"
+                                :closable="false"
+                                class="mb-4"
+                                show-icon>
+                                <p class="text-sm">启用表示此角色可以使用该 MCP 服务，禁用不会影响其他角色或全局 MCP 服务</p>
+                            </el-alert>
+                
+                            <div v-if="mcpServers.length === 0" class="text-center text-gray-500 py-8">
+                                <el-icon size="48" class="mb-2">
+                                    <InfoCircleOutlined />
+                                </el-icon>
+                                <div>暂无已启动的 MCP 服务器</div>
+                            </div>
+                
+                            <div v-else>
+                                <div v-for="server in mcpServers" :key="server.id" 
+                                     class="mcp-server-item p-3 border rounded mb-3">
+                                    <div class="flex items-start justify-between">
+                                        <div class="flex-1 mr-4">
+                                            <div class="font-medium text-base mb-1">
+                                                {{ server.name }}
+                                                <el-tag v-if="server.enabled" type="success" size="small" class="ml-2">
+                                                    运行中
+                                                </el-tag>
+                                                <el-tag v-else type="info" size="small" class="ml-2">
+                                                    未运行
+                                                </el-tag>
+                                            </div>
+                                            <div class="text-sm text-gray-500 mb-1">{{ server.url }}</div>
+                                            <div v-if="server.description" class="text-sm text-gray-600">
+                                                {{ server.description }}
+                                            </div>
+                                            <div v-if="server.tools && Object.keys(server.tools).length > 0" 
+                                                 class="text-sm text-gray-500 mt-2">
+                                                可用工具：{{ Object.keys(server.tools).length }} 个
+                                            </div>
+                                        </div>
+                                                        
+                                        <!-- 启用/禁用开关 -->
+                                        <el-switch
+                                            :model-value="characterForm.enabled_mcp_servers.includes(server.id)"
+                                            @update:model-value="handleMcpServerToggle(server.id, $event)"
+                                            :disabled="!server.enabled"
+                                        />
+                                    </div>
+                                </div>
+                            </div>
                         </el-form>
                     </div>
                 </el-tab-pane>
@@ -169,10 +249,14 @@ import {
     ElTooltip,
     ElCheckbox,
     ElIcon,
-    ElButton
+    ElButton,
+    ElAlert,
+    ElTag,
+    ElCheckboxGroup
 } from 'element-plus'
 import {
-    QuestionCircleOutlined
+    QuestionCircleOutlined,
+    InfoCircleOutlined
 } from '@vicons/antd'
 
 import { apiService } from '../services/ApiService'
@@ -253,7 +337,9 @@ const characterForm = reactive({
     max_memory_tokens: null,
     short_term_memory_tokens: null,
     max_memory_length: null,
-    use_user_prompt: false
+    use_user_prompt: false,
+    enabled_tools: [],  // 启用的本地工具
+    enabled_mcp_servers: []  // 启用的 MCP 服务器 ID 数组
 })
 
 // 验证规则
@@ -352,7 +438,10 @@ const modelOptions = computed(() => {
     return options
 })
 
-// 监听props.show变化
+// MCP 服务器数据
+const mcpServers = ref([]);
+
+// 监听 props.show 变化
 watch(() => props.simple, (newVal) => {
     isSimpleStyle.value = newVal;
 }, { immediate: true })
@@ -378,11 +467,28 @@ watch(() => props.data, (newVal) => {
     characterForm.max_memory_tokens = newVal.settings?.max_memory_tokens || null;
     characterForm.short_term_memory_tokens = newVal.settings?.short_term_memory_tokens || null;
     characterForm.use_user_prompt = newVal.settings?.use_user_prompt || false;
+    // 加载已启用的工具
+    characterForm.enabled_tools = newVal.settings?.tools || [];
+    // 加载已启用的 MCP 服务器 (数组格式)
+    characterForm.enabled_mcp_servers = newVal.settings?.mcp_servers || [];
 
 }, { immediate: true })
 
 const handleAvatarChanged = (file) => {
     characterForm.avatar_file = file
+}
+
+// MCP 服务器开关切换处理
+const handleMcpServerToggle = (serverId, enabled) => {
+    const index = characterForm.enabled_mcp_servers.indexOf(serverId);
+    if (enabled && index === -1) {
+        // 启用：添加到数组
+        characterForm.enabled_mcp_servers.push(serverId);
+    } else if (!enabled && index !== -1) {
+        // 禁用：从数组移除
+        characterForm.enabled_mcp_servers.splice(index, 1);
+    }
+    console.log(`MCP 服务器 ${serverId} ${enabled ? '启用' : '禁用'}, 当前列表:`, characterForm.enabled_mcp_servers);
 }
 
 const loadModels = async () => {
@@ -401,6 +507,16 @@ const loadModels = async () => {
     }
 }
 
+const loadMCPServers = async () => {
+    try {
+        const response = await apiService.getMcpServers()
+        // 只显示已启动的服务器
+        mcpServers.value = response.items.filter(server => server.enabled)
+    } catch (error) {
+        console.error('获取 MCP 服务器列表失败:', error)
+    }
+}
+
 const findModelById = (modelId) => {
     return models.value.find(model => model.id === modelId)
 }
@@ -409,6 +525,7 @@ const findModelById = (modelId) => {
 onMounted(async () => {
     // if (!isSimpleStyle.value)
     loadModels();
+    loadMCPServers();
 })
 
 onUnmounted(() => {
@@ -491,6 +608,9 @@ const handleSave = async () => {
                 'model_top_p': characterForm.model_top_p,
                 'model_frequency_penalty': characterForm.model_frequency_penalty,
                 'use_user_prompt': characterForm.use_user_prompt,
+                // 工具配置
+                'tools': characterForm.enabled_tools,
+                'mcp_servers': characterForm.enabled_mcp_servers,  // 数组格式：[serverId1, serverId2]
             }
         }
         emit('update:data', finalData)
@@ -558,5 +678,51 @@ function format(value) {
 
 .modal-body {
     height: 400px;
+}
+
+.tool-item {
+    transition: all 0.2s;
+}
+
+.tool-item:hover {
+    border-color: var(--el-color-primary);
+    background-color: #f5f7fa;
+}
+
+.mcp-server-item {
+    transition: all 0.2s;
+}
+
+.mcp-server-item:hover {
+    border-color: var(--el-color-primary-light-5);
+}
+
+.tool-checkbox-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: 12px;
+}
+
+.tool-checkbox-item {
+    display: block;
+}
+
+.tool-name {
+    font-size: 13px;
+    padding: 8px 12px;
+    background-color: #f5f7fa;
+    border-radius: 4px;
+    transition: all 0.2s;
+}
+
+.tool-checkbox-item :deep(.el-checkbox__input) {
+    position: absolute;
+    left: -9999px;
+}
+
+.tool-checkbox-item.is-checked .tool-name {
+    background-color: var(--el-color-primary-light-9);
+    color: var(--el-color-primary);
+    border: 1px solid var(--el-color-primary);
 }
 </style>

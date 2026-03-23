@@ -31,15 +31,31 @@ class MCPToolManager:
         self._tools_cache: Dict[str, Dict[str, Any]] = {}
         self._clients_cache: Dict[str, MCPClient] = {}
     
-    async def get_all_mcp_tools(self) -> Dict[str, Dict[str, Any]]:
+    async def get_all_mcp_tools(
+        self, 
+        enabled_mcp_servers: Optional[List[str]] = None
+    ) -> Dict[str, Dict[str, Any]]:
         """
-        获取所有已启用 MCP 服务器的工具列表
+        获取 MCP 工具列表
+        
+        Args:
+            enabled_mcp_servers: 已启用的 MCP 服务器 ID 列表 (来自角色的 settings.mcp_servers)
+                                如果为 None，则加载所有已启用的 MCP 服务器
         
         Returns:
             Dict: 以 tool_name 为键的工具字典，格式为 {tool_name: tool_schema}
         """
-        # 查询所有已启用的 MCP 服务器
-        stmt = select(MCPServer).filter(MCPServer.enabled == True)
+        # 查询 MCP 服务器
+        if enabled_mcp_servers:
+            # 只查询角色已启用的 MCP 服务器
+            stmt = select(MCPServer).filter(
+                MCPServer.enabled == True,
+                MCPServer.id.in_(enabled_mcp_servers)
+            )
+        else:
+            # 查询所有已启用的 MCP 服务器
+            stmt = select(MCPServer).filter(MCPServer.enabled == True)
+        
         result = await self.session.execute(stmt)
         servers = result.scalars().all()
         
@@ -146,24 +162,30 @@ class MCPToolManager:
             raise ValueError(f"Not an MCP tool: {full_tool_name}")
         
         # 从数据库中获取服务器信息
-        # 使用 SQLAlchemy 的 JSON 操作符检查工具是否存在
+        # 直接通过 ID 查询，不需要检查工具是否存在（已在 get_all_mcp_tools 中过滤）
         stmt = select(MCPServer).filter(
-            MCPServer.enabled == True,
-            MCPServer.tools[original_name] != None  # type: ignore
-        )
+            MCPServer.enabled == True
+        ).limit(10)  # 限制数量避免过多
         result = await self.session.execute(stmt)
-        server = result.scalar_one_or_none()
+        servers = result.scalars().all()
         
-        if not server:
+        # 查找包含该工具的服务器
+        target_server = None
+        for server in servers:
+            if server.tools and original_name in server.tools:
+                target_server = server
+                break
+        
+        if not target_server:
             raise ValueError(f"MCP tool '{original_name}' not found or server disabled")
         
         # 调用 MCP 工具
         mcp_result = await self.call_mcp_tool(
             tool_name=original_name,
             arguments=arguments,
-            server_id=server.id,
-            server_url=server.url,
-            headers=server.headers
+            server_id=target_server.id,
+            server_url=target_server.url,
+            headers=target_server.headers
         )
         
         # 处理结果格式

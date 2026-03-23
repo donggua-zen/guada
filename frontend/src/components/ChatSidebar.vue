@@ -56,7 +56,8 @@
               'hover:bg-[var(--color-conversation-bg-hover)] font-boldhover:text-[var(--color-conversation-text-hover)] text-[var(--color-conversation-text)]': session.id !== currentSessionId
             }" @click="selectSession(session)">
             <div class="session-avatar w-6 h-6 mr-1.5">
-              <Avatar :src="session.avatar_url" round />
+              <!-- 优先使用角色的 avatar，如果没有则使用会话的 avatar -->
+              <Avatar :src="session.character?.avatar_url || session.avatar_url" round />
             </div>
             <div class="session-info flex-1 min-w-0 flex">
               <div class="session-header flex flex-1 flex-col justify-between items-start min-w-0">

@@ -712,6 +712,14 @@ class ApiService {
     });
   }
 
+  /**
+   * 获取所有 MCP 服务器列表
+   * @returns {Promise<Object>} 返回 MCP 服务器列表数据
+   */
+  async getMcpServers() {
+    return await this._request('/mcp-servers');
+  }
+
 }
 
 // 创建默认实例并导出

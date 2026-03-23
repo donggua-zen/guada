@@ -4,32 +4,26 @@ from pydantic import BaseModel, ConfigDict
 
 from app.schemas.base import BaseResponse
 from app.schemas.session_settings import SessionSettings
-from .message import Message  # 导入Message schema
-from .model import Model, ModelOut  # 导入Model schema
+from .message import Message  # 导入 Message schema
+from .model import Model, ModelOut  # 导入 Model schema
+from .character import CharacterOut, CharacterItemOut  # 导入 Character schema
 
 
 class SessionBase(BaseModel):
     title: Optional[str] = None
     user_id: Optional[str] = None
-    avatar_url: Optional[str] = None
     description: Optional[str] = None
     model_id: Optional[str] = None
     settings: Optional[SessionSettings] = None
 
 
 class SessionCreate(BaseModel):
-    title: Optional[str] = None
-    avatar_url: Optional[str] = None
-    description: Optional[str] = None
-    model_id: Optional[str] = None
-    settings: Optional[SessionSettings] = None
-    character_id: Optional[str] = None
+    character_id: str  # 必填，绑定角色
+    model_id: Optional[str] = None  # 可选，如果提供则覆盖角色的 model_id
+    settings: Optional[SessionSettings] = None  # 可选，只保存覆盖的配置（max_memory_length）
 
 
 class SessionUpdate(BaseModel):
-    title: Optional[str] = None
-    avatar_url: Optional[str] = None
-    description: Optional[str] = None
     model_id: Optional[str] = None
     settings: Optional[SessionSettings] = None
 
@@ -48,15 +42,17 @@ class SessionItemOut(BaseResponse):
     id: str
     title: Optional[str] = None
     user_id: Optional[str] = None
-    avatar_url: Optional[str] = None
     description: Optional[str] = None
     model_id: Optional[str] = None
+    character_id: Optional[str] = None  # 添加角色 ID
     settings: Optional[SessionSettings] = None
+    character: Optional[CharacterItemOut] = None  # 使用 CharacterItemOut(不含 model)
 
     model_config = ConfigDict(from_attributes=True)
 
 
 class SessionOut(SessionItemOut):
     model: Optional[ModelOut] = None  # 添加模型信息
+    character: Optional[CharacterItemOut] = None  # 添加角色信息
 
     model_config = ConfigDict(from_attributes=True)
