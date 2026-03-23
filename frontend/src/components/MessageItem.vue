@@ -31,6 +31,15 @@
                   <PsychologyOutlined />
                 </el-icon>
                 <span class="text-gray-500">{{ turn.state?.is_thinking ? '思考中...' : '已深度思考' }}</span>
+                <!-- 思考时长显示：优先使用 thinking_duration_ms，如果没有则从 meta_data 读取 -->
+                <span v-if="getThinkingDuration(turn)" class="text-xs text-gray-400 ml-2">
+                  <template v-if="turn.state?.is_thinking">
+                    已思考 {{ formatDuration(getThinkingDuration(turn)) }}
+                  </template>
+                  <template v-else>
+                    思考耗时 {{ formatDuration(getThinkingDuration(turn)) }}
+                  </template>
+                </span>
               </div>
               <el-icon
                 :class="['transition-transform duration-300 ml-2', isTurnExpanded(turn.id, 'thinking') ? 'rotate-90' : 'rotate-0']"
@@ -492,6 +501,28 @@ const formatToolResponse = (response) => {
     // 如果解析失败，直接返回字符串
     return String(response);
   }
+};
+
+// 格式化思考时长
+const formatDuration = (ms) => {
+  if (!ms) return '';
+  const seconds = ms / 1000;
+  if (seconds < 60) {
+    return `${seconds.toFixed(1)}s`;
+  }
+  const minutes = Math.floor(seconds / 60);
+  const remainingSeconds = (seconds % 60).toFixed(1);
+  return `${minutes}分${remainingSeconds}秒`;
+};
+
+// 获取思考时长：优先使用 meta_data 中的值（后端保存的），如果没有则使用 thinking_duration_ms
+const getThinkingDuration = (turn) => {
+  // 如果正在思考中，使用实时计算的 thinking_duration_ms
+  if (turn.state?.is_thinking) {
+    return turn.thinking_duration_ms;
+  }
+  // 思考完成后，优先使用 meta_data 中的值（后端保存的准确值）
+  return turn.meta_data?.thinking_duration_ms || turn.thinking_duration_ms;
 };
 
 defineExpose({ el: rootRef, showThinking, hideThinking, switchContent, });
