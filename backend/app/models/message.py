@@ -22,6 +22,7 @@ class Message(ModelBase):
     )
     role = Column(String(50))
     parent_id = Column(String(26), nullable=True)
+    current_turns_id = Column(String(26), nullable=True)
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
     updated_at = Column(
         DateTime,

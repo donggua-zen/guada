@@ -19,30 +19,113 @@
         </div>
       </div>
       <div class="message-card">
-        <!-- 优化后的思考框部分 -->
-        <div v-if="hasThinking" class="thinking-section" :class="{ 'thinking-expanded': isExpanded }">
-          <div
-            class="inline-flex justify-between items-center text-sm text-gray-700 cursor-pointer font-medium py-1 transition-colors duration-200 mb-1"
-            @click="toggleExpand">
-            <div class="flex items-center inline-flex">
-              <span class="text-gray-500">{{ thinkingLabel }}</span>
+        <template v-for="(turn, index) in turns" :key="turn.id">
+          <!-- 优化后的思考框部分 -->
+          <div v-if="turn.reasoning_content" class="thinking-section mb-3"
+            :class="{ 'expanded': isTurnExpanded(turn.id, 'thinking') }">
+            <div
+              class="collapsible-header inline-flex justify-between items-center text-sm text-gray-700 cursor-pointer font-medium py-2 px-3 transition-colors duration-200 rounded-t-lg bg-gray-50 dark:bg-gray-800/50 border border-b-0 border-gray-200 dark:border-gray-700 w-full"
+              @click.stop="toggleExpand(turn.id, 'thinking')">
+              <div class="flex items-center inline-flex">
+                <el-icon class="mr-1.5" size="16">
+                  <PsychologyOutlined />
+                </el-icon>
+                <span class="text-gray-500">{{ turn.state?.is_thinking ? '思考中...' : '已深度思考' }}</span>
+              </div>
+              <el-icon
+                :class="['transition-transform duration-300 ml-2', isTurnExpanded(turn.id, 'thinking') ? 'rotate-90' : 'rotate-0']"
+                size="10">
+                <ArrowRightTwotone />
+              </el-icon>
             </div>
-            <el-icon :class="['transition-transform duration-300 ml-2', isExpanded ? 'rotate-90' : 'rotate-0']"
-              size="10">
-              <ArrowRightTwotone />
-            </el-icon>
-          </div>
-          <div class="thinking-container" :class="{ expanded: isExpanded }">
-            <div @click="handleClick"
-              class="thinking-content markdown-text py-0 border-l-2 pl-4 border-gray-200 dark:border-gray-700 mb-2 text-gray-500 dark:text-gray-400"
-              v-html="debouncedThinkingFormattedText">
+
+            <div class="thinking-container" :class="{ expanded: isTurnExpanded(turn.id, 'thinking') }">
+              <div class="thinking-content-wrapper">
+                <MarkdownContent @click.stop="handleClick"
+                  class="thinking-content markdown-text py-3 px-4 pl-4 border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50 text-gray-500 dark:text-gray-400"
+                  :content="turn.reasoning_content" />
+              </div>
             </div>
           </div>
-        </div>
+          <MarkdownContent v-if="turn.content" class="message-text markdown-text" @click="handleClick"
+            v-html2="debouncedFormattedText" :content="turn.content" />
+          <!-- 优化工具调用显示 -->
+          <div v-if="turn.additional_kwargs && turn.additional_kwargs.tool_calls" class="tool-calls-section mb-3"
+            :class="{ 'expanded': isTurnExpanded(turn.id, 'tool') }">
+            <div
+              class="collapsible-header flex items-center text-sm font-medium text-gray-600 dark:text-gray-400 py-2 px-3 cursor-pointer rounded-t-lg bg-gray-50 dark:bg-gray-800/50 border border-b-0 border-gray-200 dark:border-gray-700 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors duration-200"
+              @click.stop="toggleExpand(turn.id, 'tool')">
+              <div class="flex items-center flex-1">
+                <el-icon class="mr-1.5" size="16">
+                  <BuildTwotone />
+                </el-icon>
+                <span>工具调用</span>
+                <span class="ml-2 text-xs text-gray-500 bg-gray-100 dark:bg-gray-700 px-2 py-0.5 rounded-full">
+                  {{ turn.additional_kwargs.tool_calls.length }} 个工具
+                </span>
+              </div>
+              <el-icon
+                :class="['transition-transform duration-300', isTurnExpanded(turn.id, 'tool') ? 'rotate-90' : 'rotate-0']"
+                size="10">
+                <ArrowRightTwotone />
+              </el-icon>
+            </div>
 
-        <div class="message-text markdown-text" @click="handleClick" v-html="debouncedFormattedText">
-        </div>
+            <div class="tool-calls-container" :class="{ expanded: isTurnExpanded(turn.id, 'tool') }">
+              <div class="tool-calls-list-wrapper">
+                <div
+                  class="tool-calls-list space-y-2 p-3 border border-t-0 border-gray-200 dark:border-gray-700 rounded-b-lg bg-white dark:bg-gray-900/50">
+                  <div v-for="(tool, toolIndex) in turn.additional_kwargs.tool_calls" :key="toolIndex"
+                    class="tool-call-item transition-all">
 
+                    <!-- 工具名称和参数 -->
+                    <div class="tool-info mb-2">
+                      <div class="flex items-center gap-2 mb-1.5">
+                        <span class="tool-name text-sm font-semibold text-blue-600 dark:text-blue-400">
+                          {{ tool.name || 'Unknown Tool' }}
+                        </span>
+                        <span class="text-xs text-gray-400">•</span>
+                        <span class="text-xs text-gray-500 dark:text-gray-400">
+                          调用 #{{ toolIndex + 1 }}
+                        </span>
+                      </div>
+
+                      <!-- 工具参数 -->
+                      <div v-if="tool.arguments || tool.args" class="tool-arguments mt-1.5">
+                        <div class="text-xs text-gray-500 dark:text-gray-400 mb-1 flex items-center">
+                          <el-icon size="12" class="mr-1">
+                            <SettingsOutlined />
+                          </el-icon>
+                          参数
+                        </div>
+                        <pre
+                          class="bg-white dark:bg-gray-900/50 border border-gray-200 dark:border-gray-700 rounded p-2 text-xs overflow-x-auto text-gray-700 dark:text-gray-300"><code>{{ formatToolArgs(tool.arguments || tool.args) }}</code></pre>
+                      </div>
+                    </div>
+
+                    <!-- 工具调用响应结果 -->
+                    <div v-if="turn.additional_kwargs.tool_calls_response"
+                      class="tool-response mt-2 pt-2 border-t border-gray-200 dark:border-gray-700">
+                      <div class="text-xs text-gray-500 dark:text-gray-400 mb-1 flex items-center">
+                        <el-icon size="12" class="mr-1">
+                          <CheckCircleOutlined />
+                        </el-icon>
+                        响应结果
+                      </div>
+                      <div
+                        class="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded p-2 text-xs text-green-800 dark:text-green-300">
+                        <pre
+                          class="overflow-x-auto">{{ formatToolResponse(turn.additional_kwargs.tool_calls_response[toolIndex]) }}</pre>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+
+        </template>
         <el-alert v-if="metadata && metadata.finish_reason == 'error'" title="API请求错误" type="error" :closable="false">
           {{ metadata.error }}
         </el-alert>
@@ -51,7 +134,7 @@
           <el-icon size="16" class="mr-2 relative top-[0px]">
             <Loading />
           </el-icon>
-          {{ streamingState.is_web_searching ? '搜索中...' : '回答中...' }}
+          回答中
         </div>
 
       </div>
@@ -96,7 +179,7 @@
             </el-icon>
           </div>
           <div class="text-gray-700 transition-colors duration-200 flex items-center py-1 px-2">
-            {{ getCurrentIndex(message.contents) }} / {{ message.contents.length }}
+            {{ getCurrentIndex(message.contents) + 1 }} / {{ content_versions.length }}
           </div>
           <div class="message-action-button" @click="switchContent('next')" :disabled="!hasNextContent">
             <el-icon :size="16">
@@ -138,7 +221,7 @@
     </div>
   </div>
   <el-image-viewer v-if="showImageViewer" v-model:visible="showImageViewer" :url-list="previewList"
-    :initial-index="currentPreViewIndex" @close="showImageViewer = false" :teleported="true"/>
+    :initial-index="currentPreViewIndex" @close="showImageViewer = false" :teleported="true" />
 </template>
 
 <script setup>
@@ -155,15 +238,17 @@ import {
   ArrowForwardIosTwotone as ArrowRightTwotone,
   MoreVertOutlined,
   AccessTimeTwotone,
+  BuildTwotone,
+  SettingsOutlined,
+  CheckCircleOutlined,
+  PsychologyOutlined,
 } from "@vicons/material";
 
 import { Loading } from "./icons";
 import { FileItem, Avatar } from "./ui";
 import { usePopup } from "../composables/usePopup";
 import { formatTime } from '../utils'
-import { useMarkdown } from "../composables/useMarkdown";
 
-const { marked } = useMarkdown()
 
 const { toast } = usePopup();
 
@@ -192,7 +277,7 @@ const emit = defineEmits([
 
 const showImageViewer = ref(false);
 const currentPreViewIndex = ref(0);
-const isExpanded = ref(false);
+const expandedStates = ref(new Map()); // 使用 Map 存储不同区域的展开状态：{ [turnId_type]: boolean }
 const rootRef = ref(null);
 
 const previewList = computed(() => {
@@ -208,12 +293,20 @@ const messageClass = computed(() =>
 //   isAssistant.value ? "assistant-avatar" : "user-avatar"
 // );
 
-const hasThinking = computed(
-  () => isAssistant.value && getCurrentContent(props.message.contents).reasoning_content
-);
+const turns = computed(() => {
+  if (isAssistant.value) {
+    console.log("turns", props.message.contents.filter(content => content.turns_id == props.message.current_turns_id))
+    return props.message.contents.filter(content => content.turns_id == props.message.current_turns_id)
+  }
+  return props.message.contents
+});
+
+// const hasThinking = computed(
+//   () => isAssistant.value && getCurrentContent(props.message.contents).reasoning_content
+// );
 
 const metadata = computed(() => {
-  const content = getCurrentContent(props.message.contents);
+  const content = turns.value[0];
   return content.meta_data;
 });
 
@@ -227,7 +320,7 @@ const streamingState = computed(() => ({
   is_streaming: state.value?.is_streaming ?? false,
   is_thinking: state.value?.is_thinking ?? false,
   is_web_searching: state.value?.is_web_searching ?? false,
-  is_placeholder: props.message.contents.filter(content => content.is_current).length == 0
+  is_placeholder: false
 }));
 
 const currentModelName = computed(() => {
@@ -238,122 +331,37 @@ const currentModelName = computed(() => {
 });
 
 const currentContentTime = computed(() => {
-  const content = getCurrentContent(props.message.contents);
+  const content = turns.value[0];
   return {
     firendly: formatTime(content.created_at, 'friendly'),
     full: formatTime(content.created_at, 'full')
   };
 })
 
-const thinkingLabel = computed(() => {
-  return streamingState.value.is_thinking ? "思考中..." : "已深度思考"
-});
-
 // 计算是否有上一个/下一个内容
 const hasPrevContent = computed(() => {
-  const currentIndex = getCurrentIndex(props.message.contents) - 1;
+  const currentIndex = getCurrentIndex();
   return currentIndex > 0;
 });
 
 const hasNextContent = computed(() => {
-  const currentIndex = getCurrentIndex(props.message.contents) - 1;
-  return currentIndex < props.message.contents.length - 1;
+  const currentIndex = getCurrentIndex() + 1;
+  return currentIndex < content_versions.value.length;
 });
 
-const getCurrentContent = (messageContents) => {
-  if (!messageContents || messageContents.length === 0) {
-    return {
-      content: "",
-      reasoning_content: "",
-    };
-  }
-  const content = messageContents.find(c => c.is_current);
-  if (content) {
-    return content;
-  }
-  return messageContents[messageContents.length - 1];
-};
 
-// 主内容消抖处理
-const currentMarkdownContent = ref("");
-const debouncedMarkdownUpdate = useDebounceFn(async (content) => {
-  currentMarkdownContent.value = content;
-  emit("render-complete");
-}, 50, { maxWait: 150 });
 
-// 思考内容消抖处理
-const currentThinkingContent = ref("");
-const debouncedThinkingUpdate = useDebounceFn(async (content) => {
-  currentThinkingContent.value = content;
-  emit("render-complete");
-}, 50, { maxWait: 150 });
+// watch(
+//   () => props.message?.state?.is_thinking,
+//   (newState, oldState) => {
+//     if (newState) {
+//       showThinking();
+//     } else {
+//       hideThinking();
+//     }
+//   }
+// )
 
-// 处理流式内容更新的通用函数
-const processStreamingContent = (content, oldContent, updateFunction) => {
-  if (!content) {
-    content = ""
-  }
-  updateFunction(content);
-};
-
-// 监听主内容变化
-watch(
-  () => getCurrentContent(props.message.contents).content,
-  (newContent, oldContent) => {
-    if (props.message.state?.is_streaming) {
-      processStreamingContent(newContent, oldContent, debouncedMarkdownUpdate);
-    } else {
-      currentMarkdownContent.value = newContent;
-    }
-  },
-  { immediate: true }
-);
-
-// 监听思考内容变化
-watch(
-  () => getCurrentContent(props.message.contents).reasoning_content,
-  (newContent, oldContent) => {
-    if (props.message.state?.is_streaming) {
-      processStreamingContent(newContent, oldContent, debouncedThinkingUpdate);
-    } else {
-      currentThinkingContent.value = newContent;
-    }
-  },
-  { immediate: true }
-);
-
-watch(
-  () => props.message?.state?.is_thinking,
-  (newState, oldState) => {
-    if (newState) {
-      showThinking();
-    } else {
-      hideThinking();
-    }
-  }
-)
-
-// 消抖后的主内容渲染
-const debouncedFormattedText = computed(() => {
-  if (!currentMarkdownContent.value) return "";
-  try {
-    return marked.parse(currentMarkdownContent.value.trim());
-  } catch (error) {
-    console.error("Markdown解析错误:", error);
-    return currentMarkdownContent.value;
-  }
-});
-
-// 消抖后的思考内容渲染
-const debouncedThinkingFormattedText = computed(() => {
-  if (!currentThinkingContent.value) return "";
-  try {
-    return marked.parse(currentThinkingContent.value.trim());
-  } catch (error) {
-    console.error("思考内容Markdown解析错误:", error);
-    return currentThinkingContent.value;
-  }
-});
 
 // 更多按钮的选项
 const moreOptions = computed(() => {
@@ -372,8 +380,21 @@ const moreOptions = computed(() => {
   return options;
 });
 
-const toggleExpand = () => {
-  isExpanded.value = !isExpanded.value;
+const toggleExpand = (turnId, type) => {
+  const key = `${turnId}_${type}`;
+  // 工具调用框默认闭合，思考框默认展开
+  const defaultState = type === 'tool' ? false : true;
+  const currentState = expandedStates.value.get(key) ?? defaultState;
+  expandedStates.value.set(key, !currentState);
+  // 触发响应式更新
+  expandedStates.value = new Map(expandedStates.value);
+};
+
+const isTurnExpanded = (turnId, type) => {
+  const key = `${turnId}_${type}`;
+  // 工具调用框默认闭合，思考框默认展开
+  const defaultState = type === 'tool' ? false : true;
+  return expandedStates.value.get(key) ?? defaultState;
 };
 
 const handleAction = (action) => {
@@ -384,23 +405,35 @@ const handleMoreAction = (key) => {
   emit(key, props.message);
 };
 
+const content_versions = computed(() => {
+  const versions = props.message.contents;
+  const turns_id_collection = []
+  for (let i = 0; i < versions.length; i++) {
+    const turns_id = versions[i].turns_id
+    if (!turns_id_collection.includes(turns_id)) {
+      turns_id_collection.push(turns_id)
+    }
+  }
+  return turns_id_collection;
+})
+
 const switchContent = (direction) => {
   const contents = props.message.contents;
-  const currentIndex = contents.findIndex(content => content.is_current);
+  const currentIndex = content_versions.value.findIndex(version => version === props.message.current_turns_id);
 
   if (currentIndex === -1) return;
 
   let newIndex;
   if (direction === 'prev' && currentIndex > 0) {
     newIndex = currentIndex - 1;
-  } else if (direction === 'next' && currentIndex < contents.length - 1) {
+  } else if (direction === 'next' && currentIndex < content_versions.value.length - 1) {
     newIndex = currentIndex + 1;
   } else {
     return;
   }
 
   // 通过事件通知父组件切换内容
-  emit('switch', props.message, contents[newIndex]);
+  emit('switch', props.message, content_versions.value[newIndex]);
 };
 
 const showThinking = () => {
@@ -416,12 +449,8 @@ const handleImageClick = (index) => {
   showImageViewer.value = true;
 };
 
-const getCurrentIndex = (messageContents) => {
-  if (!messageContents || messageContents.length === 0) {
-    return 1;
-  }
-  const currentIndex = messageContents.findIndex(content => content.is_current);
-  return currentIndex !== -1 ? currentIndex + 1 : 1;
+const getCurrentIndex = () => {
+  return content_versions.value.findIndex(version => version === props.message.current_turns_id);
 };
 
 const handleClick = (event) => {
@@ -441,6 +470,29 @@ const handleClick = (event) => {
   }
 }
 
+const formatToolArgs = (args) => {
+  if (!args) return '{}';
+  try {
+    // 如果是字符串，尝试解析为 JSON
+    const parsed = typeof args === 'string' ? JSON.parse(args) : args;
+    return JSON.stringify(parsed, null, 2);
+  } catch (e) {
+    // 如果解析失败，直接返回字符串
+    return String(args);
+  }
+};
+
+const formatToolResponse = (response) => {
+  if (!response) return '无响应';
+  try {
+    // 如果是字符串，尝试解析为 JSON
+    const parsed = typeof response === 'string' ? JSON.parse(response) : response;
+    return JSON.stringify(parsed, null, 2);
+  } catch (e) {
+    // 如果解析失败，直接返回字符串
+    return String(response);
+  }
+};
 
 defineExpose({ el: rootRef, showThinking, hideThinking, switchContent, });
 </script>
@@ -532,12 +584,71 @@ defineExpose({ el: rootRef, showThinking, hideThinking, switchContent, });
   @apply cursor-pointer flex items-center gap-1 py-1 px-1 rounded mr-1 hover:bg-[var(--color-surface)] disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-gray-100 disabled:hover:text-gray-400 transition-transform duration-100;
 }
 
-/* 优化后的思考框样式 - 使用CSS Grid方案 */
+/* 统一的折叠框样式 */
+.collapsible-section {
+  animation: fadeIn 0.3s ease;
+}
+
+/* 折叠框头部样式 */
+.collapsible-header {
+  user-select: none;
+}
+
+/* 折叠框容器样式 */
+.collapsible-container {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  will-change: grid-template-rows;
+  overflow: hidden;
+  border-radius: 0 0 8px 8px;
+}
+
+.collapsible-container.expanded {
+  grid-template-rows: 1fr;
+}
+
+.collapsible-content {
+  min-height: 0;
+  opacity: 0;
+  transform: translateY(-8px);
+  transition: opacity 0.25s ease, transform 0.25s ease;
+}
+
+.collapsible-container.expanded .collapsible-content {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+/* 思考框特定样式 */
+.thinking-section {
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.thinking-section .collapsible-header {
+  border-radius: 8px;
+  transition: border-radius 0.3s ease;
+}
+
+.thinking-section.expanded .collapsible-header,
+.thinking-container.expanded~.collapsible-header {
+  border-radius: 8px 8px 0 0;
+}
+
+.thinking-section:not(.expanded) .collapsible-header {
+  border-radius: 8px;
+  border-bottom: 1px solid var(--color-border-light, #e5e7eb) !important;
+}
+
+.dark .thinking-section:not(.expanded) .collapsible-header {
+  border-bottom-color: var(--color-border-dark, #374151) !important;
+}
+
 .thinking-container {
   display: grid;
   grid-template-rows: 0fr;
-  transition: grid-template-rows 0.4s cubic-bezier(0.4, 0, 0.2, 1);
-  will-change: grid-template-rows;
+  transition: grid-template-rows 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   overflow: hidden;
 }
 
@@ -545,25 +656,116 @@ defineExpose({ el: rootRef, showThinking, hideThinking, switchContent, });
   grid-template-rows: 1fr;
 }
 
-.thinking-content {
+.thinking-content-wrapper {
   min-height: 0;
   opacity: 0;
-  transform: translateY(-10px);
-  transition: opacity 0.3s ease, transform 0.3s ease;
-  transition-delay: 0s;
+  transform: translateY(-8px);
+  transition: opacity 0.25s ease, transform 0.25s ease;
+  overflow: hidden;
 }
 
-.thinking-container.expanded .thinking-content {
+.thinking-container.expanded .thinking-content-wrapper {
   opacity: 1;
   transform: translateY(0);
-  transition-delay: 0.1s;
 }
 
-/* 优化性能：减少重排 */
-.thinking-content>* {
-  transform: translateZ(0);
+.thinking-content {
+  border: 1px solid var(--color-border-light, #e5e7eb);
+  border-top: none;
+  border-radius: 0 0 8px 8px;
+  background-color: var(--color-bg-light, #f9fafb);
 }
 
+.dark .thinking-content {
+  border-color: var(--color-border-dark, #374151);
+  background-color: var(--color-bg-dark, rgba(31, 41, 55, 0.5));
+}
+
+/* 工具调用特定样式 */
+.tool-calls-section {
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.tool-calls-section .collapsible-header {
+  border-radius: 8px;
+  transition: border-radius 0.3s ease;
+}
+
+.tool-calls-section.expanded .collapsible-header,
+.tool-calls-container.expanded~.collapsible-header {
+  border-radius: 8px 8px 0 0;
+}
+
+.tool-calls-section:not(.expanded) .collapsible-header {
+  border-radius: 8px;
+  border-bottom: 1px solid var(--color-border-light, #e5e7eb) !important;
+}
+
+.dark .tool-calls-section:not(.expanded) .collapsible-header {
+  border-bottom-color: var(--color-border-dark, #374151) !important;
+}
+
+.tool-calls-container {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  overflow: hidden;
+}
+
+.tool-calls-container.expanded {
+  grid-template-rows: 1fr;
+}
+
+.tool-calls-list-wrapper {
+  min-height: 0;
+  opacity: 0;
+  transform: translateY(-8px);
+  transition: opacity 0.25s ease, transform 0.25s ease;
+  overflow: hidden;
+}
+
+.tool-calls-container.expanded .tool-calls-list-wrapper {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.tool-calls-list {
+  padding: 12px;
+  border: 1px solid var(--color-border-light, #e5e7eb);
+  border-top: none;
+  border-radius: 0 0 8px 8px;
+  background-color: var(--color-bg-white, #ffffff);
+}
+
+.dark .tool-calls-list {
+  border-color: var(--color-border-dark, #374151);
+  background-color: var(--color-bg-dark, rgba(17, 24, 39, 0.5));
+}
+
+.tool-call-item {
+  position: relative;
+}
+
+
+
+.tool-arguments pre,
+.tool-response pre {
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(-5px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
 </style>
 
 <style>

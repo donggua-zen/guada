@@ -7,7 +7,6 @@ from app.schemas.base import BaseResponse
 
 class MessageContentBase(BaseModel):
     message_id: Optional[str] = None
-    is_current: Optional[bool] = None
     content: Optional[str] = None
     reasoning_content: Optional[str] = None
     meta_data: Optional[dict] = None
@@ -38,9 +37,10 @@ class MessageContent(MessageContentInDBBase):
 class MessageContentOut(BaseResponse):
     id: str
     message_id: Optional[str] = None
+    turns_id: Optional[str] = None
     is_current: Optional[bool] = None
     content: Optional[str] = None
     reasoning_content: Optional[str] = None
     meta_data: Optional[dict] = None
-
+    additional_kwargs: Optional[dict] = None
     model_config = ConfigDict(from_attributes=True)

@@ -57,6 +57,9 @@
                         <template v-else-if="currentTabValue === 'chat'">
                             <ChatSettings ref="chatSettingsRef" />
                         </template>
+                        <template v-else-if="currentTabValue === 'mcp'">
+                            <MCPServers />
+                        </template>
                     </div>
                 </div>
 
@@ -73,6 +76,7 @@ import UserSubaccounts from './UserSubaccounts.vue'
 import UserSecurity from './UserSecurity.vue'
 import ModelsSettings from './ModelsSettings.vue';
 import ChatSettings from './ChatSettings.vue'
+import MCPServers from './MCPServers.vue'
 
 import {
     PersonOutlineOutlined,
@@ -80,6 +84,7 @@ import {
     VerifiedUserOutlined,
     CloudDownloadOutlined,
     ArrowBackIosFilled,
+    DnsOutlined,
 } from '@vicons/material'
 
 import { useAuthStore } from '../../stores/auth'
@@ -147,6 +152,12 @@ const sidebarItems = [
                 label: '对话设置',
                 path: 'chat',
                 icon: VerifiedUserOutlined,
+                roles: ['primary'],
+            },
+            {
+                label: 'MCP 服务器',
+                path: 'mcp',
+                icon: DnsOutlined,
                 roles: ['primary'],
             },]
     },
