@@ -371,6 +371,13 @@ class AgentService:
                                 need_to_continue = False
 
                             complete_chunk["finish_reason"] = chunk.finish_reason
+                            
+                            # 兜底：如果直到 finish 都没有记录结束时间（只有思考没有内容），在此记录
+                            if hasattr(messgae_content, '_thinking_started_at') and \
+                               not hasattr(messgae_content, '_thinking_finished_at'):
+                                messgae_content._thinking_finished_at = datetime.datetime.now(datetime.timezone.utc)
+                                logger.info(f"Thinking finished at finish_reason (fallback)")
+                            
                             yield {
                                 "type": "finish",
                                 "finish_reason": chunk.finish_reason,
@@ -378,6 +385,10 @@ class AgentService:
                             }
                             break
                         elif chunk.reasoning_content is not None:
+                            # 首次检测到 reasoning_content，记录思考开始时间
+                            if not hasattr(messgae_content, '_thinking_started_at'):
+                                messgae_content._thinking_started_at = datetime.datetime.now(datetime.timezone.utc)
+                            
                             complete_chunk["reasoning_content"] = (
                                 complete_chunk["reasoning_content"] or ""
                             ) + chunk.reasoning_content
@@ -387,6 +398,12 @@ class AgentService:
                             }
 
                         elif chunk.content is not None:
+                            # 首次遇到普通内容，记录思考结束时间（如果有思考过程）
+                            if hasattr(messgae_content, '_thinking_started_at') and \
+                               not hasattr(messgae_content, '_thinking_finished_at'):
+                                messgae_content._thinking_finished_at = datetime.datetime.now(datetime.timezone.utc)
+                                logger.info(f"Thinking finished at first content chunk")
+                            
                             complete_chunk["content"] = (
                                 complete_chunk["content"] or ""
                             ) + chunk.content
@@ -395,6 +412,12 @@ class AgentService:
                                 "msg": chunk.content,
                             }
                         elif "tool_calls" in chunk.additional_kwargs:
+                            # 首次遇到工具调用，记录思考结束时间（如果有思考过程）
+                            if hasattr(messgae_content, '_thinking_started_at') and \
+                               not hasattr(messgae_content, '_thinking_finished_at'):
+                                messgae_content._thinking_finished_at = datetime.datetime.now(datetime.timezone.utc)
+                                logger.info(f"Thinking finished at first tool_calls chunk")
+                            
                             if complete_chunk.get("tool_calls") is None:
                                 complete_chunk["tool_calls"] = []
                             for tool_call in chunk.additional_kwargs["tool_calls"]:
@@ -558,6 +581,19 @@ class AgentService:
             if message_content is None:
                 logger.error("Message content not found")
                 return
+            
+            # 计算思考时长（如果有记录）
+            thinking_duration_ms = None
+            if hasattr(message_content, '_thinking_started_at') and \
+               hasattr(message_content, '_thinking_finished_at'):
+                thinking_duration_ms = int(
+                    (message_content._thinking_finished_at - 
+                     message_content._thinking_started_at).total_seconds() * 1000
+                )
+                logger.info(f"Thinking duration calculated: {thinking_duration_ms}ms")
+            else:
+                logger.warning(f"Thinking timestamps not found. Has start: {hasattr(message_content, '_thinking_started_at')}, Has finish: {hasattr(message_content, '_thinking_finished_at')}")
+            
             message_content.role = "assistant"
             message_content.reasoning_content = complete_chunk.get("reasoning_content")
             message_content.content = complete_chunk.get("content")
@@ -573,11 +609,19 @@ class AgentService:
                     message_content.additional_kwargs[key] = complete_chunk[key]
             message_content.tool_calls = complete_chunk.get("tool_calls")
             message_content.finish_reason = complete_chunk.get("finish_reason")
+            
+            # 构建 meta_data，添加思考时长
             message_content.meta_data = {
                 "model_name": model.model_name,
                 "finish_reason": complete_chunk.get("finish_reason"),
                 "error": complete_chunk.get("error"),
             }
+            
+            # 如果有思考时长，保存到 meta_data
+            if thinking_duration_ms is not None:
+                message_content.meta_data["thinking_duration_ms"] = thinking_duration_ms
+                logger.info(f"Thinking duration saved to meta_data: {thinking_duration_ms}ms")
+            
             logger.debug("22222")
 
         if not safesave:

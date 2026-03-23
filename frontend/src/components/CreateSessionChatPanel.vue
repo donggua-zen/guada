@@ -17,15 +17,27 @@
           <el-icon class="text-blue-500 mt-1 mr-2"><InfoFilled /></el-icon>
           <div>
             <p class="text-sm text-gray-700 font-medium">需要选择角色模板</p>
-            <p class="text-xs text-gray-600 mt-1">请先前往角色页面选择一个角色模板，然后才能创建会话</p>
-            <el-button type="primary" size="small" class="mt-2" @click="router.push({ name: 'Characters' })">
-              去选择角色
+            <p class="text-xs text-gray-600 mt-1">请先选择一个角色模板，然后才能创建会话</p>
+            <el-button type="primary" size="small" class="mt-2" @click="showCharacterSelector = true">
+              选择角色
             </el-button>
           </div>
         </div>
       </div>
       
-      <div v-else class="w-full  max-w-[800px]">
+      <!-- 已选角色显示 -->
+      <div v-if="currentSession.character_id" class="mb-6 flex items-center gap-3 p-3 bg-gray-50 border border-gray-200 rounded-lg max-w-md cursor-pointer hover:bg-gray-100 transition-colors" @click="showCharacterSelector = true">
+        <div class="w-10 h-10 flex-shrink-0 overflow-hidden rounded">
+          <Avatar :src="currentCharacter?.avatar_url" type="assistant" class="w-full h-full object-cover" />
+        </div>
+        <div class="flex-1 min-w-0">
+          <p class="text-sm font-medium text-gray-700 truncate">{{ currentCharacter?.title || '未命名角色' }}</p>
+          <p class="text-xs text-gray-500 truncate">{{ currentCharacter?.description || '暂无描述' }}</p>
+        </div>
+        <el-icon class="text-gray-400 flex-shrink-0"><ArrowRightTwotone /></el-icon>
+      </div>
+      
+      <div v-if="currentSession.character_id" class="w-full  max-w-[800px]">
         <ChatInput v-model:value="inputMessage.text" v-model:web-search-enabled="webSearchEnabled"
           v-model:thinking-enabled="thinkingEnabled" :buttons="chatInputButtons" :files="inputMessage.files"
           :streaming="false" @send="sendMessage" @toggle-web-search="handleWebSearch"
@@ -51,6 +63,51 @@
         </div>
       </div>
     </div>
+    
+    <!-- 角色选择器弹窗 -->
+    <el-dialog v-model="showCharacterSelector" title="选择角色" :width="isMobile ? '90%' : '450px'" :append-to-body="true">
+      <!-- 搜索框 -->
+      <div class="mb-4">
+        <el-input v-model="characterSearchText" placeholder="搜索角色..." prefix-icon="Search" clearable />
+      </div>
+      
+      <!-- 角色列表 -->
+      <div class="character-list max-h-96 overflow-y-auto">
+        <div v-for="character in filteredCharacters" :key="character.id" 
+             class="character-item flex items-center gap-3 p-3 rounded-lg cursor-pointer hover:bg-gray-50 transition-colors border border-transparent"
+             :class="{ 'bg-blue-50 border-blue-200': currentSession.character_id === character.id }"
+             @click="selectCharacter(character)">
+          <div class="w-12 h-12 flex-shrink-0 overflow-hidden rounded">
+            <Avatar :src="character.avatar_url" type="assistant" class="w-full h-full object-cover" />
+          </div>
+          <div class="flex-1 min-w-0">
+            <p class="text-sm font-medium text-gray-700 truncate">{{ character.title }}</p>
+            <p class="text-xs text-gray-500 truncate mt-1">{{ character.description || '暂无描述' }}</p>
+          </div>
+          <el-icon v-if="currentSession.character_id === character.id" class="text-blue-500 flex-shrink-0" size="20">
+            <CheckCircleFilled />
+          </el-icon>
+        </div>
+        
+        <!-- 空状态 -->
+        <div v-if="filteredCharacters.length === 0" class="text-center py-8 text-gray-400">
+          <el-icon size="48" class="mb-2"><Search /></el-icon>
+          <p>未找到匹配的角色</p>
+        </div>
+      </div>
+      
+      <!-- 底部按钮 -->
+      <template #footer>
+        <div class="flex justify-between items-center">
+          <el-button @click="goToCharactersPage" plain>
+            <el-icon class="mr-1"><Apps /></el-icon>
+            管理角色
+          </el-button>
+          <el-button @click="showCharacterSelector = false">取消</el-button>
+        </div>
+      </template>
+    </el-dialog>
+    
     <el-dropdown ref="dropdownRef" :virtual-ref="triggerRef" :show-arrow="false" virtual-triggering trigger="manual"
       placement="bottom" popper-class="model-selector-dropdown" @visible-change="handleVisibleChange"
       @command="handleCommand">
@@ -76,6 +133,7 @@ import { useStorage } from "@vueuse/core"
 import { apiService } from "../services/ApiService";
 import { usePopup } from "../composables/usePopup";
 import { useTitle } from "../composables/useTitle";
+import { useRouter } from 'vue-router';
 // 组件导入
 import { ChatInput } from "./ui";
 import ChatHeader from "./ChatHeader.vue";
@@ -92,6 +150,7 @@ const isMobile = breakpoints.smaller('md') // md = 768px
 
 // 弹出层工具
 const { notify } = usePopup();
+const router = useRouter();
 
 // 响应式数据
 const title = useTitle();
@@ -101,11 +160,17 @@ const dropdownRef = ref(null);
 const models = ref([]);
 const providers = ref([]);
 
+// 角色数据
+const characters = ref([]);
+const showCharacterSelector = ref(false);
+const characterSearchText = ref('');
+
 const innerEl = ref(null)
 const outside = ref(null)
 const containerWidth = ref(100) // 初始宽度
 
 const lastSelectedModelId = useStorage('lastSelectedModelId', '');
+const lastSelectedCharacterId = useStorage('lastSelectedCharacterId', '');
 
 const inputMessage = ref({
   text: "",
@@ -140,6 +205,26 @@ const currentModel = computed(() => {
 const currentModelName = computed(() => {
   const model = currentModel.value
   return model ? model.model_name.split("/").pop() : "请选择对话模型"
+});
+
+// 当前选中的角色
+const currentCharacter = computed(() => {
+  if (currentSession.value.character_id) {
+    return characters.value.find(c => c.id === currentSession.value.character_id);
+  }
+  return null;
+});
+
+// 过滤后的角色列表（支持搜索）
+const filteredCharacters = computed(() => {
+  if (!characterSearchText.value) {
+    return characters.value;
+  }
+  const searchText = characterSearchText.value.toLowerCase();
+  return characters.value.filter(char => 
+    char.title?.toLowerCase().includes(searchText) ||
+    char.description?.toLowerCase().includes(searchText)
+  );
 });
 
 
@@ -289,10 +374,47 @@ const loadModels = async () => {
   }
 }
 
+// 加载角色列表
+const loadCharacters = async () => {
+  try {
+    const response = await apiService.fetchCharacters('private');
+    characters.value = response.items || [];
+    
+    // 优先使用上次选择的角色
+    if (characters.value.length > 0) {
+      const savedCharacter = characters.value.find(c => c.id === lastSelectedCharacterId.value);
+      if (savedCharacter) {
+        currentSession.value.character_id = savedCharacter.id;
+      } else {
+        // 如果没有保存的角色，使用第一个
+        currentSession.value.character_id = characters.value[0].id;
+      }
+    }
+  } catch (error) {
+    console.error('获取角色列表失败:', error);
+    notify.error('获取角色列表失败', error);
+  }
+};
+
+// 选择角色
+const selectCharacter = (character) => {
+  currentSession.value.character_id = character.id;
+  lastSelectedCharacterId.value = character.id;
+  showCharacterSelector.value = false;
+  characterSearchText.value = '';
+};
+
+// 前往角色管理页面
+const goToCharactersPage = () => {
+  showCharacterSelector.value = false;
+  router.replace({ name: 'Chat', params: { sessionId: 'characters' } });
+};
+
 onMounted(() => {
   title.value = "你今天想聊点什么";
   // 初始化相关逻辑
   loadModels();
+  loadCharacters();
 });
 
 const autoTitle = () => {

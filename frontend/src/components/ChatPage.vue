@@ -182,6 +182,7 @@ const updateSession = async (data) => {
   try {
     if (currentSession.value && currentSession.value.id) {
       // 合并设置
+      data.character = currentSession.value.character;
       data.settings = { ...currentSession.value.settings, ...data.settings };
       await apiService.updateSession(currentSession.value.id, data);
       session = { id: currentSession.value.id, ...data, updated_at: new Date().toISOString() };
