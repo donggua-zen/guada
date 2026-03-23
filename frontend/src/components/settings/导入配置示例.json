@@ -1,0 +1,35 @@
+{
+  "mcpServers": {
+    "WebSearch": {
+      "type": "streamableHttp",
+      "description": "基于通义实验室 Text-Embedding，GTE-reRank，Query 改写，搜索判定等多种检索模型及语义理解，串接专业搜索工程框架及各类型实时信息检索工具，提供实时互联网全栈信息检索，提升 LLM 回答准确性及时效性。",
+      "isActive": true,
+      "name": "阿里云百炼_联网搜索",
+      "baseUrl": "https://dashscope.aliyuncs.com/api/v1/mcps/WebSearch/mcp",
+      "headers": {
+        "Authorization": "Bearer sk-b4ed412869c342b5b50a0f3177af5d5c"
+      }
+    },
+    "ImageGeneration": {
+      "type": "streamableHttp",
+      "description": "通义万相 AI 绘画服务，支持文生图、图生图等多种功能",
+      "isActive": true,
+      "name": "阿里云百炼_AI 绘画",
+      "baseUrl": "https://dashscope.aliyuncs.com/api/v1/mcps/ImageGeneration/mcp",
+      "headers": {
+        "Authorization": "Bearer sk-your-api-key-here"
+      }
+    },
+    "DocumentAnalysis": {
+      "type": "streamableHttp",
+      "description": "文档智能分析服务，支持 PDF、Word 等格式文档的内容提取和分析",
+      "isActive": false,
+      "name": "文档分析服务",
+      "baseUrl": "https://example.com/mcp/document-analysis",
+      "headers": {
+        "Authorization": "Bearer sk-document-key",
+        "X-API-Version": "v2"
+      }
+    }
+  }
+}

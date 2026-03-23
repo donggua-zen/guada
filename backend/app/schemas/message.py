@@ -23,7 +23,8 @@ class MessageCreate(BaseModel):
 
 
 class MessageUpdate(BaseModel):
-    content: str = None
+    content: Optional[str] = None
+    current_turns_id: Optional[str] = None
 
 
 class MessageInDBBase(MessageBase):
@@ -44,5 +45,5 @@ class MessageOut(BaseResponse):
     parent_id: Optional[str] = None
     files: Optional[List[FileOut]] = []
     contents: Optional[List[MessageContentOut]] = []
-
+    current_turns_id: Optional[str] = None
     model_config = ConfigDict(from_attributes=True)

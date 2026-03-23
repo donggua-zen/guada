@@ -20,23 +20,23 @@ class MessageContentRepository:
         meta_data: dict = None,
         set_current: bool = True,
     ):
-        if set_current:
-            # 批量更新：将该消息的所有内容 is_current 设为 False
-            stmt = select(MessageContent).filter(
-                MessageContent.message_id == message_id,
-                MessageContent.is_current == True,
-            )
-            result = await self.session.execute(stmt)
-            message_contents = result.scalars().all()
-            for msg_content in message_contents:
-                msg_content.is_current = False
+        # if set_current:
+        #     # 批量更新：将该消息的所有内容 is_current 设为 False
+        #     stmt = select(MessageContent).filter(
+        #         MessageContent.message_id == message_id,
+        #         MessageContent.is_current == True,
+        #     )
+        #     result = await self.session.execute(stmt)
+        #     message_contents = result.scalars().all()
+        #     for msg_content in message_contents:
+        #         msg_content.is_current = False
 
         message_content = MessageContent(
             message_id=message_id,
             content=content,
             reasoning_content=reasoning_content,
             meta_data=meta_data,
-            is_current=set_current,
+            # is_current=set_current,
         )
 
         self.session.add(message_content)

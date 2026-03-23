@@ -14,7 +14,8 @@ import asyncio
 import datetime
 import logging
 import ulid
-from typing import AsyncGenerator, Optional, cast
+import json
+from typing import AsyncGenerator, Optional, cast, List, Dict, Any
 
 from fastapi import HTTPException
 from sqlalchemy import select
@@ -30,6 +31,7 @@ from app.services.domain.function_calling.utils import (
     handle_tool_calls,
 )
 from app.services.domain.llm_service import LLMService, LLMServiceChunk
+from app.services.mcp.tool_manager import MCPToolManager
 from app.services.settings_manager import SettingsManager
 
 logger = logging.getLogger(__name__)
@@ -49,39 +51,127 @@ class AgentService:
         self.message_repo = message_repo
         self.memory_manager_service = memory_manager_service
         self.setting_service = setting_service
+        self.mcp_tool_manager = None  # 延迟初始化
 
-    # async def _add_assistant_message(
-    #     self,
-    #     session_id: str,
-    #     regeneration_mode: str = "overwrite",
-    #     assistant_message_id: Optional[str] = None,
-    #     parent_id: Optional[str] = None,
-    # ):
+    async def _get_mcp_tools_schema(self, session_id: str) -> list:
+        """
+        获取所有已启用的 MCP 工具的 schema
+        
+        Args:
+            session_id: 会话 ID
+            
+        Returns:
+            list: MCP 工具 schema 列表
+        """
+        try:
+            # 创建数据库会话获取 MCP 工具
+            db_manager = get_db_manager()
+            async with db_manager.async_session_factory() as session:
+                mcp_tool_manager = MCPToolManager(session)
+                all_mcp_tools = await mcp_tool_manager.get_all_mcp_tools()
+                
+                # 转换为 OpenAI function calling 格式
+                mcp_tools_schema = []
+                for tool_name, tool_data in all_mcp_tools.items():
+                    if isinstance(tool_data, dict):
+                        schema = {
+                            "type": "function",
+                            "function": {
+                                "name": tool_name,
+                                "description": tool_data.get("description", f"MCP tool: {tool_name}"),
+                                "parameters": tool_data.get("inputSchema", {}) or tool_data.get("parameters", {}),
+                            }
+                        }
+                        mcp_tools_schema.append(schema)
+                
+                return mcp_tools_schema
+        except Exception as e:
+            logger.error(f"Error loading MCP tools: {e}")
+            return []
 
-    #     if regeneration_mode == "multi_version":
-    #         if not assistant_message_id:
-    #             raise ValueError("assistant_message_id is required")
-    #         return await self.message_service.add_message_content(
-    #             message_id=assistant_message_id,
-    #             content=None,
-    #             reasoning_content=None,
-    #             meta_data={},
-    #         )
-    #     else:
-    #         if regeneration_mode == "overwrite":
-    #             try:
-    #                 await self.message_service.delete_message(
-    #                     message_id=assistant_message_id
-    #                 )
-    #             except:
-    #                 pass
-    #         return await self.message_service.add_message(
-    #             session_id=session_id,
-    #             role="assistant",
-    #             content=None,
-    #             parent_id=parent_id,
-    #             meta_data={},
-    #         )
+    async def _execute_mcp_tool(
+        self, 
+        tool_name: str, 
+        arguments: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        """
+        执行 MCP 工具调用
+        
+        Args:
+            tool_name: 工具名称（包含 mcp__前缀）
+            arguments: 工具参数
+            
+        Returns:
+            Dict: 工具调用结果
+        """
+        try:
+            db_manager = get_db_manager()
+            async with db_manager.async_session_factory() as session:
+                mcp_tool_manager = MCPToolManager(session)
+                result = await mcp_tool_manager.execute_tool(tool_name, arguments)
+                
+                return {
+                    "tool_call_id": None,  # 会在上层设置
+                    "role": "tool",
+                    "name": tool_name,
+                    "content": str(result) if not isinstance(result, str) else result,
+                }
+        except Exception as e:
+            logger.error(f"Error executing MCP tool {tool_name}: {e}")
+            return {
+                "tool_call_id": None,
+                "role": "tool",
+                "name": tool_name,
+                "content": f"Error: {str(e)}",
+            }
+
+    async def _handle_all_tool_calls(
+        self,
+        tool_calls: List[dict],
+    ) -> List[Dict[str, Any]]:
+        """
+        处理所有工具调用（包括本地工具和 MCP 工具）
+        
+        Args:
+            tool_calls: 工具调用列表
+            
+        Returns:
+            List[Dict]: 工具执行结果列表
+        """
+        tool_results = []
+        
+        for tool_call in tool_calls:
+            func_name = tool_call["name"]
+            
+            # 解析参数
+            try:
+                import json
+                arguments = json.loads(tool_call["arguments"])
+                
+                # 判断是否为 MCP 工具
+                if func_name.startswith("mcp__"):
+                    # MCP 工具调用
+                    logger.info(f"Calling MCP tool: {func_name}")
+                    result = await self._execute_mcp_tool(func_name, arguments)
+                    result["tool_call_id"] = tool_call["id"]
+                    tool_results.append(result)
+                else:
+                    # 本地工具调用
+                    local_result = await handle_tool_calls([tool_call])
+                    tool_results.extend(local_result)
+                    
+            except Exception as e:
+                logger.error(f"Error handling tool call {func_name}: {e}")
+                tool_results.append(
+                    {
+                        "tool_call_id": tool_call["id"],
+                        "role": "tool",
+                        "name": func_name,
+                        "content": f"Error: {str(e)}",
+                    }
+                )
+        
+        return tool_results
 
     async def completions(
         self,
@@ -150,6 +240,12 @@ class AgentService:
             # 获取模型参数
             model_params = self._extract_model_params(session, model)
 
+            # 获取 MCP 工具列表并合并到本地工具
+            all_tools_schema = get_tools_schema()  # 本地工具
+            mcp_tools_schema = await self._get_mcp_tools_schema(session_id)  # MCP 工具
+            all_tools_schema.extend(mcp_tools_schema)  # 合并工具列表
+            
+            logger.info(f"Using {len(all_tools_schema)} tools (including {len(mcp_tools_schema)} MCP tools)")
             # 提交会话更新
             # await self.session_repo.session.commit()
             # await self.session_repo.session.begin()
@@ -205,7 +301,7 @@ class AgentService:
                         top_p=model_params["top_p"],
                         frequency_penalty=model_params["frequency_penalty"],
                         stream=True,
-                        tools=get_tools_schema(),
+                        tools=all_tools_schema,  # 使用合并后的工具列表
                         thinking=model_params["thinking"],
                     )
 
@@ -215,7 +311,8 @@ class AgentService:
                         chunk = cast(LLMServiceChunk, chunk)
                         if chunk.finish_reason is not None:
                             if chunk.finish_reason == "tool_calls":
-                                tool_call_response = await handle_tool_calls(
+                                # 处理工具调用（包括本地工具和 MCP 工具）
+                                tool_call_response = await self._handle_all_tool_calls(
                                     complete_chunk.get("tool_calls")
                                 )
                                 chat_turns.extend(tool_call_response)
@@ -507,4 +604,4 @@ class AgentService:
             "system_prompt_tokens": system_prompt_tokens,
             "summary_tokens": summary_tokens,
             "context_tokens": context_tokens,
-        }
+        },

@@ -44,6 +44,7 @@ class MessageService:
             with_files=True,
             with_contents=True,
         )
+        print(messages)
         return PaginatedResponse(
             items=[MessageOut.model_validate(m) for m in messages], size=len(messages)
         )
@@ -80,7 +81,12 @@ class MessageService:
         message.contents.append(message_conetnt)
         await self.message_repo.session.flush()  # 刷新以确保更改生效
         return message
-
+    # async def add_message_without_content(self, message_id: str):
+    #     message = await self.message_repo.get_message(message_id=message_id)
+    #     if not message:
+    #         raise HTTPException(
+                
+    #         )
     async def add_message(
         self,
         session_id: str,

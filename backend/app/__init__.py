@@ -17,6 +17,7 @@ from app.routes import (
     settings_router,
     files_router,
     models_router,
+    mcp_servers_router,
 )
 
 logger = logging.getLogger(__name__)
@@ -63,6 +64,7 @@ def create_app():
     app.include_router(settings_router, tags=["settings"])
     app.include_router(files_router, tags=["files"])
     app.include_router(models_router, tags=["models"])
+    app.include_router(mcp_servers_router, tags=["mcp_servers"])
     logger.info("路由注册完成")
 
     app.mount(

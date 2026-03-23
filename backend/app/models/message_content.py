@@ -15,9 +15,11 @@ class MessageContent(ModelBase):
         ForeignKey("message.id", ondelete="CASCADE"),
         index=True,
     )
-    is_current = Column(Boolean, default=False)
+    turns_id = Column(String(26), index=True, nullable=False)
+    role = Column(String(32))
     content = Column(Text, nullable=True)
     reasoning_content = Column(Text, nullable=True)
+    additional_kwargs = Column(JSON, nullable=True)
     meta_data = Column(JSON, nullable=True)
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
     updated_at = Column(

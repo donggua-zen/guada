@@ -7,6 +7,7 @@ from sqlalchemy.orm import selectinload
 from app.models.message import Message
 from app.models.message_content import MessageContent
 from app.models.file import File as FileModel
+import ulid
 
 
 class MessageRepository:
@@ -63,7 +64,9 @@ class MessageRepository:
             if only_current_content:
                 stmt = stmt.options(
                     selectinload(
-                        Message.contents.and_(MessageContent.is_current == True)
+                        Message.contents.and_(
+                            MessageContent.turns_id == Message.current_turns_id
+                        )
                     )
                 )
             else:
@@ -88,7 +91,9 @@ class MessageRepository:
             if only_current_content:
                 stmt = stmt.options(
                     selectinload(
-                        Message.contents.and_(MessageContent.is_current == True)
+                        Message.contents.and_(
+                            MessageContent.turns_id == Message.current_turns_id
+                        )
                     )
                 )
             else:
@@ -96,41 +101,54 @@ class MessageRepository:
         result = await self.session.execute(stmt)
         return result.scalar_one_or_none()
 
-    async def get_conversation_messages(
-        self,
-        session_id,
-        parent_id,
-        with_files=False,
-        with_contents=True,
-        only_current_content=False,
+    # async def get_conversation_messages(
+    #     self,
+    #     session_id,
+    #     parent_id,
+    #     with_files=False,
+    #     with_contents=True,
+    #     only_current_content=False,
+    # ):
+    #     stmt = (
+    #         select(Message)
+    #         .filter(Message.session_id == session_id, Message.parent_id == parent_id)
+    #         .limit(2)
+    #     )
+
+    #     # 加载关联数据
+    #     if with_files:
+    #         stmt = stmt.options(selectinload(Message.files))
+    #     if with_contents:
+    #         if only_current_content:
+    #             stmt = stmt.options(
+    #                 selectinload(Message.versions).filter(
+    #                     MessageContent.is_current == True
+    #                 )
+    #             )
+    #         else:
+    #             stmt = stmt.options(selectinload(Message.versions))
+
+    #     result = await self.session.execute(stmt)
+    #     return result.scalars().all()
+
+    async def add_message_structure(
+        self, session_id: str, role: str, parent_id: str = None
     ):
-        stmt = (
-            select(Message)
-            .filter(Message.session_id == session_id, Message.parent_id == parent_id)
-            .limit(2)
+        message = Message(
+            session_id=session_id,
+            role=role,
+            parent_id=parent_id,
         )
 
-        # 加载关联数据
-        if with_files:
-            stmt = stmt.options(selectinload(Message.files))
-        if with_contents:
-            if only_current_content:
-                stmt = stmt.options(
-                    selectinload(Message.versions).filter(
-                        MessageContent.is_current == True
-                    )
-                )
-            else:
-                stmt = stmt.options(selectinload(Message.versions))
-
-        result = await self.session.execute(stmt)
-        return result.scalars().all()
+        self.session.add(message)
+        await self.session.flush()
+        return await self.get_message(message.id, with_files=True, with_contents=True)
 
     async def add_message(
         self,
         session_id: str,
         role: str,
-        content: str | list[dict],
+        content: str,
         files: list[dict] = None,
         parent_id: str = None,
         reasoning_content: str = None,
@@ -139,28 +157,16 @@ class MessageRepository:
         validated_contents = []
         validated_files = []
 
-        if isinstance(content, list):
-            for item in content:
-                if not isinstance(item, dict):
-                    raise TypeError("Each item in content list must be a dictionary")
-
-                validated_contents.append(
-                    MessageContent(
-                        content=item.get("content"),
-                        reasoning_content=item.get("reasoning_content"),
-                        is_current=item.get("is_current") or True,
-                        meta_data=item.get("meta_data") or {},
-                    )
-                )
-        else:
-            validated_contents.append(
-                MessageContent(
-                    content=content,
-                    reasoning_content=reasoning_content,
-                    is_current=True,
-                    meta_data=meta_data or {},
-                )
+        turns_id = str(ulid.new())
+        validated_contents.append(
+            MessageContent(
+                role=role,
+                turns_id=turns_id,
+                content=content,
+                reasoning_content=reasoning_content,
+                meta_data=meta_data or {},
             )
+        )
 
         if isinstance(files, list):
             for item in files:
@@ -187,6 +193,7 @@ class MessageRepository:
             files=validated_files,
             contents=validated_contents,
             parent_id=parent_id,
+            current_turns_id=turns_id,
         )
 
         self.session.add(message)
@@ -204,7 +211,7 @@ class MessageRepository:
         Returns:
             dict: 更新后的消息信息，如果消息不存在则返回None
         """
-        message = await self.get_message(message_id)
+        message = await self.get_message(message_id, only_current_content=True)
         if not message:
             return None
 
@@ -224,7 +231,7 @@ class MessageRepository:
 
         # 更新当前内容
         if content_fields:
-            current_content = next((c for c in message.contents if c.is_current), None)
+            current_content = message.contents[-1]
             if not current_content:
                 return None
             for key, value in content_fields.items():

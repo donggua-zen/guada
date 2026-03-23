@@ -6,6 +6,7 @@ from .users import users_router
 from .sessions import sessions_router
 from .models import models_router
 from .settings import settings_router
+from .mcp_servers import mcp_servers_router
 
 __all__ = [
     "characters_router",
@@ -15,5 +16,6 @@ __all__ = [
     "users_router",
     "sessions_router",
     "models_router",
-    "settings_router"
+    "settings_router",
+    "mcp_servers_router"
 ]

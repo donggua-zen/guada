@@ -232,7 +232,9 @@ const chatInputButtons = computed(() => {
 // 防抖函数
 // const debouncedUpdatedSession = useDebounceFn(updateSessionLastMessage, 1000);
 const debouncedSwitchContent = useDebounceFn(
-  (messageId, contentId) => apiService.setMessageCurrentContent(messageId, contentId),
+  (messageId, turns_id) => apiService.updateMessage(messageId, {
+    current_turns_id: turns_id,
+  }),
   300
 );
 const debouncedSaveSession = useDebounceFn(() => {
@@ -432,7 +434,6 @@ async function handleStreamResponse(
   try {
     let responseContent = "";
     let thinkingContent = "";
-
     for await (const response of apiService.chat(
       streamingSessionId,
       userMessageId,
@@ -441,8 +442,11 @@ async function handleStreamResponse(
     )) {
       if (response.type == "finish") {
         handleStreamFinish(response, message, contentIndex, assistantMessageIdResult);
-        break;
+        responseContent = "";
+        thinkingContent = "";
+        continue;
       }
+
 
       if (response.type == "create") {
         ({ message, contentIndex } = handleNewMessage(response, streamingSessionId, userMessageId));
@@ -454,28 +458,37 @@ async function handleStreamResponse(
         continue;
       }
 
-      if (response.type == "web_search") {
-        if (response.msg == "start") {
-          message.state.is_web_searching = true;
-        } else {
-          message.state.is_web_searching = false;
-        }
-        continue;
-      }
+
+      // if (response.type == "web_search") {
+      //   if (response.msg == "start") {
+      //     message.state.is_web_searching = true;
+      //   } else {
+      //     message.state.is_web_searching = false;
+      //   }
+      //   continue;
+      // }
 
       if (response.type == "think") {
-        if (!message?.state.is_thinking) {
-          message.state.is_thinking = true;
+        if (!message?.contents[contentIndex].state.is_thinking) {
+          message.contents[contentIndex].state.is_thinking = true;
         }
-        thinkingContent = handleThinkingContent(response, message, contentIndex, thinkingContent);
+        thinkingContent += response.msg;
+        message.contents[contentIndex].reasoning_content = thinkingContent;
         continue;
       }
-
-      if (response.type == "text") {
-        if (message?.state.is_thinking) {
-          message.state.is_thinking = false;
+      if (message.contents[contentIndex]?.state.is_thinking) {
+        message.contents[contentIndex].state.is_thinking = false;
+      }
+      if (response.type == "tool_calls") {
+        message.contents[contentIndex].additional_kwargs = {
+          tool_calls: response.tool_calls,
+          tool_calls_response: response.tool_calls_response
         }
-        responseContent = handleContentResponse(response, message, contentIndex, responseContent);
+        continue;
+      }
+      if (response.type == "text") {
+        responseContent = responseContent + response.msg;
+        message.contents[contentIndex].content = responseContent;
         continue;
       }
     }
@@ -488,7 +501,7 @@ async function handleStreamResponse(
 }
 
 function handleNewMessage(response, sessionId, userMessageId) {
-  const { message_id, content_id, model_name } = response;
+  const { message_id, turns_id, content_id, model_name } = response;
   currentSession.value.updated_at = new Date().toISOString();
 
   let existingMessage = activeMessages.value.find((msg) => msg.id === message_id);
@@ -499,29 +512,33 @@ function handleNewMessage(response, sessionId, userMessageId) {
       role: "assistant",
       contents: [],
       parent_id: userMessageId,
+      current_turns_id: turns_id,
       state: {
         is_web_searching: false,
-        is_thinking: false,
         is_streaming: true
       },
       created_at: time
     });
     activeMessages.value.push(existingMessage);
   }
-
-  existingMessage.contents.forEach((item) => (item.is_current = false));
+  existingMessage.current_turns_id = turns_id;
   existingMessage.contents.push({
     id: content_id,
-    content: "",
+    content: null,
     reasoning_content: null,
+    turns_id: turns_id,
+    additional_kwargs: [],
     meta_data: { model_name },
-    is_current: true,
     created_at: time,
-    updated_at: time
+    updated_at: time,
+    state: {
+      is_streaming: true,
+      is_thinking: false,
+    },
   });
+
   existingMessage.state = {
     is_web_searching: false,
-    is_thinking: false,
     is_streaming: true
   };
   return {
@@ -531,19 +548,10 @@ function handleNewMessage(response, sessionId, userMessageId) {
 
 }
 
-function handleThinkingContent(response, message, contentIndex, thinkingContent) {
-  thinkingContent += response.msg;
-  message.contents[contentIndex].reasoning_content = thinkingContent;
-  return thinkingContent;
-}
-
-function handleContentResponse(response, message, contentIndex, currentContent) {
-  const newContent = currentContent + response.msg;
-  message.contents[contentIndex].content = newContent;
-  return newContent;
-}
-
 function handleStreamFinish(response, message, contentIndex, assistantMessageId) {
+  if (response.finish_reason === "tool_calls") {
+
+  }
   if (response.finish_reason !== "error") {
     return;
   }
@@ -553,7 +561,10 @@ function handleStreamFinish(response, message, contentIndex, assistantMessageId)
       ...message.contents[contentIndex].meta_data,
       error: response.error,
       finish_reason: response.finish_reason
+
     };
+    message.contents[contentIndex].state.is_streaming = false;
+    message.contents[contentIndex].state.is_thinking = false;
   } else {
     notify.error("Error in stream", response.error);
   }
@@ -637,7 +648,7 @@ async function editMessage(message) {
 
     if (result) {
       message.contents[index].content = result;
-      await apiService.updateMessage(message.id, result);
+      await apiService.updateMessage(message.id, { content: result });
       sessionStore.updateMessage(currentSessionId.value, message.id, message);
       // debouncedUpdatedSession();
       toast.success("消息已更新");
@@ -779,7 +790,15 @@ function generateResponse(message) {
 }
 
 function regenerateResponse(message) {
-  if (message.contents.length >= 5) {
+  const versions = []
+  for (let i = 0; i < message.contents.length; i++) {
+    const turns_id = message.contents[i].turns_id
+    if (!versions.includes(turns_id)) {
+      versions.push(turns_id)
+    }
+  }
+
+  if (versions.length >= 5) {
     toast.error("暂时最多支持5个回答版本");
     return;
   }
@@ -800,12 +819,10 @@ function regenerateResponse(message) {
   });
 }
 
-function switchContent(message, content) {
+function switchContent(message, turns_id) {
   const targetMessage = activeMessages.value.find((m) => m.id === message.id);
-  targetMessage.contents.forEach((item) => {
-    item.is_current = item.id === content.id;
-  });
-  debouncedSwitchContent(message.id, content.id);
+  targetMessage.current_turns_id = turns_id
+  debouncedSwitchContent(message.id, turns_id);
   nextTick(() => {
     immediateScrollToBottom();
   });

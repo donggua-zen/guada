@@ -51,13 +51,13 @@ export default defineConfig({
     proxy: {
       // 代理 API 请求
       '/api/v1': {
-        target: 'http://localhost:8000', // 后端地址
+        target: 'http://localhost:8800', // 后端地址
         changeOrigin: true,
         // rewrite: (path) => path.replace(/^\/api/, '')
       },
       // 代理静态资源请求
       '/static': {
-        target: 'http://localhost:8000',
+        target: 'http://localhost:8800',
         changeOrigin: true
       }
     }
