@@ -1,111 +1,82 @@
 <template>
   <div
-    class="flex flex-col w-full h-full bg-[var(--color-conversation-bg)] border-r border-[var(--color-conversation-border)] tranistion-all duration-200">
-    <!-- 修改后的会话头部，包含标题和新建按钮 -->
-    <div class="sessions-header px-4 pt-5 pb-3 flex justify-between items-center">
-      <span class="font-semibold text-lg">聊天对话</span>
-      <!-- 新建会话按钮移动到右侧 -->
-      <el-button type="primary" @click="handleButtonClick('create')" :icon="ChatNew">
+    class="flex flex-col w-full h-full bg-[var(--color-conversation-bg)] border-r border-[var(--color-conversation-border)] transition-all duration-300">
+    <!-- 会话头部 -->
+    <div class="sessions-header px-4 pt-4.5 pb-3.5 flex justify-between items-center border-b border-[var(--color-conversation-border)]">
+      <span class="font-semibold text-base text-[var(--color-text)]">聊天对话</span>
+      <el-button type="primary" @click="handleButtonClick('create')" :icon="ChatNew" class="new-chat-btn">
         新建会话
       </el-button>
     </div>
 
     <!-- 搜索框 -->
-    <div class="search-box px-3 py-2">
+    <div class="search-box px-3.5 py-3">
       <el-input v-model="searchKeyword" :prefix-icon="SearchOutlined" placeholder="搜索会话" clearable
-        @input="handleSearchInput" class="rounded-full">
+        @input="handleSearchInput" class="search-input">
       </el-input>
     </div>
 
     <!-- 会话列表区域 -->
-    <div class="sessions-list flex-1 overflow-hidden py-1">
-      <ScrollContainer class="">
-        <div class="px-6 py-3 text-gray-400 text-sm">对话记录</div>
+    <div class="sessions-list flex-1 overflow-hidden py-2">
+      <ScrollContainer class="h-full">
+        <div class="px-5 py-2.5 text-xs font-medium text-gray-400 uppercase tracking-wider">对话记录</div>
         <template v-if="filteredSessions.length === 0">
-          <div class="empty-state text-center text-gray-500 flex flex-col items-center justify-center h-full">
-            <div class="empty-state-icon">
-              <el-icon>
+          <div class="empty-state text-center text-gray-500 flex flex-col items-center justify-center h-full py-12">
+            <div class="empty-state-icon mb-3 text-gray-300">
+              <el-icon size="32">
                 <PlusOutlined />
               </el-icon>
             </div>
-            <div class="empty-state-title">
+            <div class="empty-state-title text-sm font-medium mb-1">
               {{ searchKeyword ? '未找到匹配的会话' : '没有会话' }}
             </div>
-            <div class="empty-state-description">
+            <div class="empty-state-description text-xs text-gray-400">
               {{ searchKeyword ? '尝试调整搜索关键词' : '点击上方按钮创建新的会话' }}
             </div>
           </div>
         </template>
         <template v-else>
           <div v-for="session in filteredSessions" :key="session.id"
-            class="group px-3 py-1.5 cursor-pointer flex items-center transition-all duration-200 rounded-lg mx-2.5 mb-1"
+            class="session-item group"
             :class="{
-              'bg-[var(--color-conversation-bg-active)] font-bold text-[var(--color-conversation-text-active)]': session.id === currentSessionId,
-              'hover:bg-[var(--color-conversation-bg-hover)] font-boldhover:text-[var(--color-conversation-text-hover)] text-[var(--color-conversation-text)]': session.id !== currentSessionId
+              'session-item-active': session.id === currentSessionId,
+              'session-item-inactive': session.id !== currentSessionId
             }" @click="selectSession(session)">
-            <div class="session-avatar w-6 h-6 mr-1.5">
-              <!-- 优先使用角色的 avatar，如果没有则使用会话的 avatar -->
+            <div class="session-avatar">
               <Avatar :src="session.character?.avatar_url || session.avatar_url" round />
             </div>
-            <div class="session-info flex-1 min-w-0 flex">
-              <div class="session-header flex flex-1 flex-col justify-between items-start min-w-0">
-                <div class="session-title truncate text-sm w-full">
-                  {{ session.title }}
-                </div>
+            <div class="session-info flex-1 min-w-0 flex items-center">
+              <div class="session-title truncate text-sm font-medium w-full">
+                {{ session.title }}
               </div>
-
-              <!-- <div class="session-message text-xs truncate text-gray-500" style="display: none;">
-                  {{ session.last_message ? session.last_message.content : '无消息' }}
-                </div> -->
-              <div
-                class="session-actions flex items-center opacity-0 transition-opacity duration-200 group-hover:opacity-100"
-                :class="{ 'opacity-100': session.id === currentSessionId }">
-                <el-dropdown trigger="click" @command="(command) => handleDropdownSelect(command, session)">
-                  <div @click.stop class="cursor-pointer flex items-center">
-                    <el-icon>
-                      <MoreVertOutlined />
-                    </el-icon>
-                  </div>
-                  <template #dropdown>
-                    <el-dropdown-menu>
-                      <el-dropdown-item command="rename">
-                        <EditOutlined class="w-4 h-4 mr-2 inline-block" />
-                        重命名
-                      </el-dropdown-item>
-                      <el-dropdown-item command="delete">
-                        <DeleteOutlineOutlined class="w-4 h-4 mr-2 inline-block" />
-                        删除
-                      </el-dropdown-item>
-                    </el-dropdown-menu>
-                  </template>
-                </el-dropdown>
-              </div>
-
-
             </div>
-
+            <div
+              class="session-actions flex items-center opacity-0 group-hover:opacity-100"
+              :class="{ 'opacity-100': session.id === currentSessionId }">
+              <el-dropdown trigger="click" @command="(command) => handleDropdownSelect(command, session)">
+                <template #dropdown>
+                  <el-dropdown-menu>
+                    <el-dropdown-item command="rename">
+                      <EditOutlined class="w-4 h-4 mr-2 inline-block" />
+                      重命名
+                    </el-dropdown-item>
+                    <el-dropdown-item command="delete">
+                      <DeleteOutlineOutlined class="w-4 h-4 mr-2 inline-block" />
+                      删除
+                    </el-dropdown-item>
+                  </el-dropdown-menu>
+                </template>
+                <div @click.stop class="session-action-trigger">
+                  <el-icon class="w-4 h-4">
+                    <MoreVertOutlined />
+                  </el-icon>
+                </div>
+              </el-dropdown>
+            </div>
           </div>
         </template>
       </ScrollContainer>
-
     </div>
-
-    <!-- 部的footer部分 -->
-    <div class="flex items-center justify-between px-3">
-      <div @click="handleButtonClick('profile')"
-        class="cursor-pointer p-2 rounded-lg flex items-center md:hover:bg-[var(--color-surface)] transition-colors duration-200">
-        <div class="w-7 h-7 ">
-          <Avatar type="user" :round="true" :src="authStore.user.avatar_url" />
-        </div>
-        <span class="ml-3">{{ authStore.user.nickname }}</span>
-      </div>
-      <el-button text v-if="authStore.user.role == 'primary'" :icon="SettingsOutlined"
-        @click="handleButtonClick('models')">
-        管理模型
-      </el-button>
-
-    </div>
-
   </div>
 </template>
 
@@ -121,9 +92,6 @@ import {
   EditOutlined,
   DeleteOutlineOutlined,
   SearchOutlined,
-  AlternateEmailTwotone,
-  ArrowForwardIosTwotone as ArrowRightTwotone,
-  SettingsOutlined,
 } from '@vicons/material'
 
 import {
@@ -132,7 +100,6 @@ import {
 
 // Element Plus 组件导入
 import {
-  ElButton,
   ElInput,
   ElIcon,
   ElDropdown,
@@ -211,10 +178,6 @@ const handleDropdownSelect = (command, session) => {
 const handleButtonClick = (key) => {
   if (key === 'create') {
     emit('create')
-  } else if (key === 'profile') {
-    router.push({ name: 'Settings', params: { tab: 'profile' } })
-  } else if (key === 'models') {
-    router.push({ name: 'Settings', params: { tab: 'models' } })
   }
 }
 
@@ -226,16 +189,114 @@ const selectSession = (session) => {
 </script>
 
 <style scoped>
-.session-action-btn:hover {
-  color: #4a90e2;
-  background-color: #e6f0fa;
+/* 新建会话按钮 */
+.new-chat-btn {
+  height: 28px;
+  padding: 6px 12px;
+  font-size: 13px;
+  border-radius: 6px;
 }
 
-:deep(.el-input__wrapper) {
-  box-shadow: 0 0 0 1px #e5e7eb inset;
+/* 搜索框样式 */
+.search-input :deep(.el-input__wrapper) {
+  background-color: var(--color-surface);
+  border-radius: 8px;
+  box-shadow: 0 0 0 1px var(--color-border) inset;
+  padding: 6px 12px;
+  transition: all 0.2s ease;
 }
 
-:deep(.el-input.is-focus .el-input__wrapper) {
-  box-shadow: 0 0 0 1px #4f46e5 inset;
+.search-input :deep(.el-input__wrapper:hover) {
+  box-shadow: 0 0 0 1px var(--color-primary-300) inset;
+}
+
+.search-input :deep(.el-input__wrapper.is-focus) {
+  box-shadow: 0 0 0 1px var(--color-primary) inset;
+}
+
+.search-input :deep(.el-input__inner) {
+  font-size: 13px;
+}
+
+/* 会话项样式 */
+.session-item {
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+  padding: 0.625rem 0.75rem;
+  margin: 0.125rem 0.625rem;
+  border-radius: 0.5rem;
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.session-item-inactive {
+  color: var(--color-text);
+}
+
+.session-item-inactive:hover {
+  background-color: var(--color-conversation-bg-hover);
+  color: var(--color-conversation-text-hover);
+}
+
+.session-item-active {
+  background-color: var(--color-conversation-bg-active);
+  color: var(--color-conversation-text-active);
+}
+
+.session-avatar {
+  width: 1.5rem;
+  height: 1.5rem;
+  flex-shrink: 0;
+}
+
+.session-title {
+  line-height: 1.4;
+}
+
+.session-actions {
+  margin-left: auto;
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+
+/* 鼠标悬停时会话项的操作按钮显示 */
+.session-item:hover .session-actions {
+  opacity: 1;
+}
+
+.session-action-trigger {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.25rem;
+  border-radius: 0.25rem;
+  cursor: pointer;
+  transition: background-color 0.2s ease;
+}
+
+.session-action-trigger:hover {
+  background-color: rgba(0, 0, 0, 0.05);
+}
+
+.dark .session-action-trigger:hover {
+  background-color: rgba(255, 255, 255, 0.1);
+}
+
+/* 空状态 */
+.empty-state-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* 滚动条美化 */
+:deep(.el-scrollbar__bar) {
+  opacity: 0.6;
+  transition: opacity 0.2s;
+}
+
+:deep(.el-scrollbar__bar:hover) {
+  opacity: 1;
 }
 </style>
