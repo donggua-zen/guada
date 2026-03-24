@@ -12,6 +12,7 @@ class LLMServiceChunk:
     finish_reason: Optional[str] = None
     error: Optional[str] = None
     additional_kwargs: Optional[dict] = {}
+    usage: Optional[dict] = None  # 新增：usage 信息
 
     def __str__(self):
         """用户友好的字符串表示"""
@@ -27,6 +28,7 @@ class LLMServiceChunk:
                 - reasoning_content: 推理内容
                 - finish_reason: 完成原因
                 - error: 错误信息
+                - usage: tokens 消耗信息（如果存在）
         """
         return {
             "content": self.content,
@@ -34,6 +36,7 @@ class LLMServiceChunk:
             "finish_reason": self.finish_reason,
             "error": self.error,
             "additional_kwargs": self.additional_kwargs,
+            "usage": self.usage,  # 新增
         }
 
 
@@ -159,6 +162,10 @@ class LLMService:
             if stream:
                 # 对于异步流式响应，需要直接返回异步生成器
                 async for chunk in response:
+                    # 检查 chunk 是否包含 usage（通常在最后一个 chunk）
+                    if hasattr(chunk, 'usage') and chunk.usage is not None:
+                        logger.debug(f"Got usage from chunk: prompt={chunk.usage.prompt_tokens}, completion={chunk.usage.completion_tokens}, total={chunk.usage.total_tokens}")
+                    
                     response_chunk = self._handle_stream_chunk(
                         chunk, complete_chunk=complete_chunk
                     )
@@ -181,6 +188,17 @@ class LLMService:
         response_chunk = LLMServiceChunk()
         delta = chunk.choices[0].delta
         # logger.debug("chunk:", delta)
+        
+        # 提取 usage 信息（如果存在）
+        if hasattr(chunk, 'usage') and chunk.usage is not None:
+            response_chunk.usage = {
+                "prompt_tokens": chunk.usage.prompt_tokens,
+                "completion_tokens": chunk.usage.completion_tokens,
+                "total_tokens": chunk.usage.total_tokens,
+            }
+            if complete_chunk is not None:
+                complete_chunk.usage = response_chunk.usage
+        
         if chunk.choices[0].finish_reason is not None:
             logger.debug("finished,finish_reason:" + chunk.choices[0].finish_reason)
             response_chunk.finish_reason = chunk.choices[0].finish_reason
