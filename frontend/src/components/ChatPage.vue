@@ -9,10 +9,7 @@
       <template v-else>
         <div
           class="h-full w-full flex-1 flex items-center justify-center bg-[var(--color-conversation-bg)] border-r border-[var(--color-conversation-border)]">
-          <n-empty description="请先登录">
-            <template #extra>
-            </template>
-          </n-empty>
+          <el-empty description="请先登录" />
         </div>
       </template>
     </template>
@@ -20,10 +17,9 @@
       <!-- 主体内容 -->
       <template v-if="sessions.length > 0 && currentSession">
         <ChatPanel ref="chatPanelRef" v-model:session="currentSession" v-model:sidebar-visible="sidebarVisible"
-          @openSettings="handleOpenSettings" @openSwitchModel="handleOpenSwitchModel"
-          @save-settings="handleSaveSessionSettings" />
-        <el-dialog v-model="sessionSettingsModalVisible" :append-to-body="true"
-          style="width: 600px;max-width: 90vw;" title="对话设置">
+          @openSettings="handleOpenSettings" @save-settings="handleSaveSessionSettings" />
+        <el-dialog v-model="sessionSettingsModalVisible" :append-to-body="true" style="width: 600px;max-width: 90vw;"
+          title="对话设置">
           <div class="max-h-[80vh] overflow-y-auto">
             <session-setting-panel :data="currentSession" @update:data="updateSession" :simple="true"
               :tab="currentTabValue" />
@@ -51,7 +47,7 @@ import { useTitle } from '@/composables/useTitle';
 // 引入组件
 import { SidebarLayout } from "./ui";
 import ChatSidebar from "@/components/ChatSidebar.vue";
-import { ElDialog } from "element-plus";
+import { ElDialog, ElEmpty } from "element-plus";
 import { useBreakpoints, breakpointsTailwind } from '@vueuse/core'
 
 const breakpoints = useBreakpoints(breakpointsTailwind)
@@ -224,14 +220,6 @@ const handleOpenSettings = () => {
 };
 
 /**
- * 打开设置面板，设置为模型设置标签页
- */
-const handleOpenSwitchModel = () => {
-  currentTabValue.value = 'model';
-  sessionSettingsModalVisible.value = true;
-};
-
-/**
  * 创建新会话
  */
 const handleCreateSession = async () => {
@@ -328,7 +316,7 @@ const handleDeleteSession = async (session) => {
  */
 const handleSaveSessionSettings = async () => {
   try {
-    await apiService.updateSession(currentSession.value.id, { settings: currentSession.value.settings });
+    await apiService.updateSession(currentSession.value.id, { model_id: currentSession.value.model_id, settings: currentSession.value.settings });
   } catch (error) {
     console.error('保存对话设置失败:', error);
   }

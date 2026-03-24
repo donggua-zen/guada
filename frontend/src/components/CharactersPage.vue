@@ -1,13 +1,15 @@
 <template>
   <SidebarLayout v-model:sidebar-visible="sidebarVisible" :sidebar-position="'left'" :z-index="50" :show-toggle-button="false">
     <template #sidebar>
-      <!-- 左侧二级侧边栏 - 可以添加助手相关的筛选或分类 -->
-      <div class="h-full w-64 bg-[var(--color-conversation-bg)] border-r border-[var(--color-conversation-border)] p-4">
-        <div class="text-sm font-medium text-gray-500 mb-3">助手分类</div>
-        <el-segmented v-model="charactersType" :options="[
-          { label: '我的模板', value: 'private' },
-          { label: '共享模板', value: 'shared' }
-        ]" block />
+      <!-- 左侧二级侧边栏 - 助手分类 -->
+      <div class="h-full w-56 bg-[var(--color-conversation-bg)] border-r border-[var(--color-conversation-border)] flex flex-col">
+        <div class="px-4 py-4 border-b border-[var(--color-conversation-border)]">
+          <div class="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">助手分类</div>
+          <el-segmented v-model="charactersType" :options="[
+            { label: '我的模板', value: 'private' },
+            { label: '共享模板', value: 'shared' }
+          ]" block class="segmented-control" />
+        </div>
       </div>
     </template>
     <template #content>
@@ -311,5 +313,40 @@ onMounted(async () => {
   -webkit-line-clamp: 3;
   -webkit-box-orient: vertical;
   overflow: hidden;
+}
+
+/* Segmented Control 样式优化 */
+:deep(.segmented-control .el-segmented) {
+  background-color: var(--color-surface);
+  padding: 0.25rem;
+  border-radius: 0.5rem;
+}
+
+:deep(.segmented-control .el-segmented__item) {
+  font-size: 13px;
+  font-weight: 500;
+  padding: 0.375rem 0.75rem;
+  border-radius: 0.375rem;
+  transition: all 0.2s ease;
+}
+
+:deep(.segmented-control .el-segmented__item--selected) {
+  background-color: var(--color-bg);
+  color: var(--color-primary);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+}
+
+/* 助手卡片样式优化 */
+.rounded-xl {
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.rounded-xl:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 16px rgba(0, 0, 0, 0.08);
+}
+
+.dark .rounded-xl:hover {
+  box-shadow: 0 8px 16px rgba(0, 0, 0, 0.2);
 }
 </style>

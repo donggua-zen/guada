@@ -7,6 +7,7 @@ import { useMarkdown } from "../composables/useMarkdown";
 import { useDebounceFn } from '@vueuse/core';
 
 const { marked } = useMarkdown()
+const emit = defineEmits(["render-complete"]);
 
 const currentMarkdownContent = ref("");
 const debouncedMarkdownUpdate = useDebounceFn(async (content) => {
@@ -48,9 +49,9 @@ watch(
             processStreamingContent(newContent, oldContent, debouncedMarkdownUpdate);
         } else {
             currentMarkdownContent.value = newContent;
+            emit("render-complete");
         }
     },
     { immediate: true }
 );
-const emit = defineEmits(["render-complete"]);
 </script>
