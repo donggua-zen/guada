@@ -335,38 +335,30 @@ class AgentService:
                         chunk = cast(LLMServiceChunk, chunk)
                         if chunk.finish_reason is not None:
                             if chunk.finish_reason == "tool_calls":
-                                # 处理工具调用（包括本地工具和 MCP 工具）
-                                tool_call_response = await self._handle_all_tool_calls(
-                                    complete_chunk.get("tool_calls")
-                                )
-                                chat_turns.extend(tool_call_response)
-                                # for tool_call in tool_call_response:
-                                # assistant_message.contents.append(
-                                #     MessageContent(
-                                #         turns_id=turns_id,
-                                #         role=tool_call["role"],
-                                #         content=tool_call["content"],
-                                #         additional_kwargs={
-                                #             "tool_call_id": tool_call[
-                                #                 "tool_call_id"
-                                #             ],
-                                #             "name": tool_call["name"],
-                                #         },
-                                #     )
-                                # )
-                                # pass
-                                complete_chunk["tool_calls_response"] = [
-                                    tool_call for tool_call in tool_call_response
-                                ]
-                                yield {
-                                    "type": "tool_calls",
-                                    "tool_calls": complete_chunk["tool_calls"],
-                                    "tool_calls_response": complete_chunk[
-                                        "tool_calls_response"
-                                    ],
-                                }
-                                # self.message_repo.session.commit()
-                                need_to_continue = True
+                                # 检查是否禁用了工具调用结果携带功能
+                                disabled_tool_results = merged_settings.get("disabled_tool_results", False)
+                                
+                                if not disabled_tool_results:
+                                    # 未禁用工具调用结果，处理工具调用（包括本地工具和 MCP 工具）
+                                    tool_call_response = await self._handle_all_tool_calls(
+                                        complete_chunk.get("tool_calls")
+                                    )
+                                    chat_turns.extend(tool_call_response)
+                                    complete_chunk["tool_calls_response"] = [
+                                        tool_call for tool_call in tool_call_response
+                                    ]
+                                    yield {
+                                        "type": "tool_calls",
+                                        "tool_calls": complete_chunk["tool_calls"],
+                                        "tool_calls_response": complete_chunk[
+                                            "tool_calls_response"
+                                        ],
+                                    }
+                                    need_to_continue = True
+                                else:
+                                    # 已禁用工具调用结果，直接结束
+                                    logger.info("Tool results disabled, skipping tool execution")
+                                    need_to_continue = False
                             else:
                                 need_to_continue = False
 
@@ -524,6 +516,7 @@ class AgentService:
                 "system_prompt": merged_settings.get("system_prompt", ""),
                 "use_user_prompt": merged_settings.get("use_user_prompt", False),
             },
+            disabled_tool_results=merged_settings.get("disabled_tool_results", False),
         )
 
     async def _validate_model_config(self, session):
@@ -694,6 +687,7 @@ class AgentService:
                     "system_prompt": merged_settings.get("system_prompt", ""),
                     "use_user_prompt": merged_settings.get("use_user_prompt", False),
                 },
+                disabled_tool_results=merged_settings.get("disabled_tool_results", False),
             )
         )
 
