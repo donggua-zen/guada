@@ -52,12 +52,12 @@
               <div class="thinking-content-wrapper">
                 <MarkdownContent @click.stop="handleClick"
                   class="thinking-content markdown-text py-3 px-4 pl-4 border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50 text-gray-500 dark:text-gray-400"
-                  :content="turn.reasoning_content" />
+                  :content="turn.reasoning_content" @render-complete="handleRenderComplete" />
               </div>
             </div>
           </div>
           <MarkdownContent v-if="turn.content" class="message-text markdown-text" @click="handleClick"
-            v-html2="debouncedFormattedText" :content="turn.content" />
+            @render-complete="handleRenderComplete" :content="turn.content" />
           <!-- 优化工具调用显示 -->
           <div v-if="turn.additional_kwargs && turn.additional_kwargs.tool_calls" class="tool-calls-section mb-3"
             :class="{ 'expanded': isTurnExpanded(turn.id, 'tool') }">
@@ -108,7 +108,8 @@
                           参数
                         </div>
                         <pre
-                          class="bg-white dark:bg-gray-900/50 border border-gray-200 dark:border-gray-700 rounded p-2 text-xs overflow-x-auto text-gray-700 dark:text-gray-300"><code>{{ formatToolArgs(tool.arguments || tool.args) }}</code></pre>
+                          class="bg-white dark:bg-gray-900/50 border border-gray-200 dark:border-gray-700 rounded p-2 text-xs overflow-x-auto text-gray-700 dark:text-gray-300">
+                <code>{{ formatToolArgs(tool.arguments || tool.args) }}</code></pre>
                       </div>
                     </div>
 
@@ -123,8 +124,8 @@
                       </div>
                       <div
                         class="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded p-2 text-xs text-green-800 dark:text-green-300">
-                        <pre
-                          class="overflow-x-auto">{{ formatToolResponse(turn.additional_kwargs.tool_calls_response[toolIndex]) }}</pre>
+                        <pre class="overflow-x-auto">{{ formatToolResponse(turn.additional_kwargs.tool_calls_response[toolIndex])
+                }}</pre>
                       </div>
                     </div>
                   </div>
@@ -388,6 +389,10 @@ const moreOptions = computed(() => {
   ];
   return options;
 });
+
+const handleRenderComplete = () => {
+  emit('render-complete', props.message);
+};
 
 const toggleExpand = (turnId, type) => {
   const key = `${turnId}_${type}`;

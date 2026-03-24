@@ -1,8 +1,7 @@
 <template>
-  <div class="flex flex-col h-full">
+  <div class="flex flex-col h-full" style="position: relative;">
     <!-- 聊天头部 -->
-    <ChatHeader :current-model-name="currentModelName" :sidebar-visible="sidebarVisible"
-      @toggle-sidebar="emit('update:sidebarVisible', !sidebarVisible)" @open-switch-model="handleSwitchModelClick"
+    <ChatHeader :sidebar-visible="sidebarVisible" @toggle-sidebar="emit('update:sidebarVisible', !sidebarVisible)"
       @select-more-option="handleMoreSelect" />
 
     <!-- 消息内容区域 -->
@@ -42,7 +41,7 @@
       </template>
       <template v-else-if="authStore.isAuthenticated">
         <ScrollContainer ref="scrollContainerRef" :auto-scroll="true" @scroll="handleScroll">
-          <div class="flex flex-col items-center px-[20px] max-w-[1000px] mx-auto">
+          <div class="flex flex-col items-center px-[20px] max-w-[1000px] mx-auto pb-35">
             <div class="w-full" v-for="(pair, index) in messagePairs" :key="pair[0].id"
               :style="{ minHeight: index < messagePairs.length - 1 ? '0' : placeholder }">
               <MessageItem v-for="message in pair" :ref="(el) => setItemRef(el, message.id)" :key="message.id"
@@ -58,29 +57,29 @@
     </div>
 
     <!-- 输入区域 -->
-    <div class="px-5 pb-2.5 pt-2 w-full flex flex-col items-center">
+    <div class="px-5 pb-2.5 pt-2 w-full flex flex-col items-center" style="position: absolute; bottom: 0;">
       <!-- 编辑模式提示条 -->
-      <div v-if="editMode.isActive" 
-           class="w-full max-w-[960px] mb-3 animate-fade-in-down">
+      <div v-if="editMode.isActive" class="w-full max-w-[960px] mb-[-0.6rem]">
         <div class="edit-mode-banner">
           <span class="edit-mode-icon">📝</span>
           <span class="edit-mode-text">正在编辑消息</span>
-          <el-button 
-            size="small" 
-            @click="exitEditMode"
-            class="cancel-edit-btn">
+          <el-button size="small" @click="exitEditMode" class="cancel-edit-btn">
             取消
           </el-button>
         </div>
       </div>
-      
+
       <div class="w-full flex items-center max-w-[960px]">
         <ChatInput v-model:value="inputMessage.text" v-model:web-search-enabled="webSearchEnabled"
-          v-model:thinking-enabled="thinkingEnabled" :buttons="chatInputButtons" :files="inputMessage.files"
-          :streaming="isStreaming" @send="handleSendMessage" @abort="abortResponse" @toggle-web-search="handleWebSearch"
-          @toggle-thinking="toggleDeepThinking" @tokens-statistic="handleTokensStatistic" />
+          v-model:thinking-enabled="thinkingEnabled" :config="{
+            modelId: currentModelId,
+            maxMemoryLength: currentSession.settings?.max_memory_length || null
+          }" :buttons="chatInputButtons" :files="inputMessage.files" :streaming="isStreaming"
+          :session-id="currentSessionId" @config-change="handleConfigChange" @send="handleSendMessage"
+          @abort="abortResponse" @toggle-web-search="handleWebSearch" @toggle-thinking="toggleDeepThinking"
+          @tokens-statistic="handleTokensStatistic" />
       </div>
-      <div class="ai-disclaimer text-xs text-gray-400 text-center mt-2">内容由 AI 生成，仅供参考</div>
+      <!-- <div class="ai-disclaimer text-xs text-gray-400 text-center mt-2">内容由 AI 生成，仅供参考</div> -->
 
     </div>
     <!-- Tokens 统计模态框 -->
@@ -148,7 +147,6 @@ const props = defineProps({
 const emit = defineEmits([
   "update:session",
   "openSettings",
-  "openSwitchModel",
   "update:sidebarVisible",
   "save-settings"
 ]);
@@ -236,12 +234,29 @@ const thinkingEnabled = computed({
   }
 });
 
+const currentModelId = computed({
+  get() {
+    return currentSession.value.model_id;
+  },
+  set(value) {
+    // 更新 model_id
+    if (currentSession.value) {
+      currentSession.value.model_id = value;
+      currentSession.value.updated_at = new Date().toISOString();
+      // 触发保存
+      debouncedSaveSession();
+    }
+  }
+});
+
 
 
 const chatInputButtons = computed(() => {
+  // 根据 currentModelId 获取模型信息
+  const model = currentSession.value.model || null;
   return {
-    thinkingButton: currentSession.value.model?.features?.includes("thinking"),
-    imagesButton: currentSession.value.model?.features?.includes("visual"),
+    thinkingButton: model?.features?.includes("thinking"),
+    imagesButton: model?.features?.includes("visual"),
   }
 })
 
@@ -256,6 +271,14 @@ const debouncedSwitchContent = useDebounceFn(
 const debouncedSaveSession = useDebounceFn(() => {
   emit("save-settings");
 }, 200);
+
+const handleConfigChange = (config) => {
+  if (typeof config.modelId !== 'undefined')
+    currentSession.value.model_id = config.modelId;
+  if (typeof config.maxMemoryLength !== 'undefined')
+    currentSession.value.settings.max_memory_length = config.maxMemoryLength;
+  emit("save-settings");
+};
 
 // 监听器
 watch(() => props.session?.id, handleSessionChange, { immediate: true });
@@ -409,7 +432,7 @@ async function handleSessionChange(newSessionId, oldSessionId) {
 async function loadMessages(sessionId) {
   if (sessionStore.getMessages(sessionId).length === 0) {
     const sessionMessages = await apiService.fetchSessionMessages(sessionId);
-    
+
     // 处理历史消息，从 meta_data 中回填 thinking_duration_ms
     sessionMessages.items.forEach(message => {
       if (message.contents && Array.isArray(message.contents)) {
@@ -428,7 +451,7 @@ async function loadMessages(sessionId) {
         });
       }
     });
-    
+
     sessionStore.setMessages(sessionId, sessionMessages.items);
   }
 }
@@ -506,12 +529,12 @@ async function handleStreamResponse(
 
       if (response.type == "think") {
         const content = message?.contents[contentIndex];
-        
+
         // 首次收到 think 事件，记录开始时间并启动计时器
         if (!content.state.is_thinking) {
           content.state.is_thinking = true;
           content.thinking_started_at = Date.now();
-          
+
           // 启动实时计时器，每 100ms 更新一次
           content._thinkingTimer = setInterval(() => {
             if (content.thinking_started_at) {
@@ -519,17 +542,17 @@ async function handleStreamResponse(
             }
           }, 100);
         }
-        
+
         thinkingContent += response.msg;
         message.contents[contentIndex].reasoning_content = thinkingContent;
         continue;
       }
-      
+
       // 思考结束后重置状态
       if (message.contents[contentIndex]?.state.is_thinking) {
         const content = message.contents[contentIndex];
         content.state.is_thinking = false;
-        
+
         // 停止计时器并计算最终时长
         if (content._thinkingTimer) {
           clearInterval(content._thinkingTimer);
@@ -650,14 +673,14 @@ function cleanupStreaming(sessionId, message, contentIndex) {
     message.state.is_streaming = false;
     message.state.is_thinking = false;
     message.state.is_web_searching = false;
-    
+
     // 清理计时器，防止内存泄漏
     const content = message.contents[contentIndex];
     if (content?._thinkingTimer) {
       clearInterval(content._thinkingTimer);
       content._thinkingTimer = null;
     }
-    
+
     message.contents[contentIndex].updated_at = new Date().toISOString();
   }
 }
@@ -675,10 +698,6 @@ async function clearChat() {
     toast.success("聊天记录已清空");
   }
 }
-
-const handleSwitchModelClick = (modelId) => {
-  emit("openSwitchModel", modelId);
-};
 
 async function deleteMessage(message) {
   try {
@@ -829,13 +848,13 @@ async function handleSendMessage() {
 
   try {
     const { text, files } = data;
-    
+
     // 如果是编辑模式，使用重新发送逻辑
     if (editMode.isActive && editMode.message) {
       await sendEditMessage(text, files);
       return;
     }
-    
+
     // 否则发送新消息
     const message = await sendNewMessage(currentSession.value.id, text, files);
     inputMessage.value = { text: "", files: [] };
@@ -855,18 +874,18 @@ function exitEditMode() {
 
 async function sendEditMessage(text, files) {
   if (!editMode.message) return;
-  
+
   try {
     const message = await sendNewMessage(
-      currentSession.value.id, 
-      text, 
-      files, 
+      currentSession.value.id,
+      text,
+      files,
       editMode.message.id
     );
-    
+
     // 退出编辑模式
     exitEditMode();
-    
+
     // 开始流式响应
     handleStreamResponse(currentSessionId.value, message.id);
   } catch (error) {
@@ -880,13 +899,13 @@ function generateResponse(message) {
   editMode.message = message;
   editMode.messageText = message.contents[0].content;
   editMode.messageFiles = message.files || [];
-  
+
   // 将消息内容设置到输入框
   inputMessage.value = {
     text: message.contents[0].content,
     files: message.files || []
   };
-  
+
   // 滚动到底部以便用户看到输入框
   nextTick(() => {
     immediateScrollToBottom();
@@ -990,6 +1009,7 @@ defineExpose({ sendMessage: handleSendMessage })
     opacity: 0;
     transform: translateY(-10px);
   }
+
   to {
     opacity: 1;
     transform: translateY(0);
@@ -1013,7 +1033,7 @@ defineExpose({ sendMessage: handleSendMessage })
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: 10px 16px;
+  padding: 10px 12px 15px 12px;
   background: #fff7e6;
   border: 1px solid #e6a23c;
   border-radius: 6px;
