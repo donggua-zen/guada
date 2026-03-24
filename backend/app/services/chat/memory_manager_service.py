@@ -37,6 +37,7 @@ class MemoryManagerService:
         max_messages: Optional[int] = 200,
         # max_tokens: Optional[int] = None,
         prompt_settings: dict = {},
+        disabled_tool_results: bool = False,  # 新增参数：是否禁用工具调用结果
     ) -> list[dict]:
 
         conversation_messages = []
@@ -74,7 +75,8 @@ class MemoryManagerService:
             for msg in messages:
                 # 注意可能返回多条消息
                 transformed_msgs = self._transform_content_structure(
-                    await msg.to_dict_async(include=include)
+                    await msg.to_dict_async(include=include),
+                    disabled_tool_results=disabled_tool_results,
                 )
                 transformed_msgs.reverse()
                 conversation_messages.extend(transformed_msgs)
@@ -87,12 +89,15 @@ class MemoryManagerService:
 
     # def get_memory_strategy(self, memory_type: str) -> MemoryStrategy:
     #     pass
-    def _transform_content_structure(self, msg: dict):
+    def _transform_content_structure(
+        self, msg: dict, disabled_tool_results: bool = True
+    ):
         """
         生成消息内容，如果包含文件则添加文件内容作为附件。
 
         Args:
             msg (dict): 包含 'contents' 和可选 'files' 键的消息字典
+            disabled_tool_results (bool): 是否禁用工具调用结果。如果为 True，则过滤掉 tool_calls 和 tool_calls_response
 
         Returns:
             str or list: 消息内容字符串或包含文本和文件内容的列表
@@ -107,8 +112,13 @@ class MemoryManagerService:
                     "reasoning_content": turn.get("reasoning_content"),
                 }
                 if "tool_calls" in turn["additional_kwargs"]:
+                    # 只有在未禁用工具调用结果时才添加工具调用中间过程
+                    if disabled_tool_results:
+                        continue
                     base_msg["tool_calls"] = turn["additional_kwargs"]["tool_calls"]
                 transformed_msgs.append(base_msg)
+
+                # 只有在未禁用工具调用结果时才添加工具响应
                 if "tool_calls_response" in turn["additional_kwargs"]:
                     transformed_msgs.extend(
                         [
