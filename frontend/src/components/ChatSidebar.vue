@@ -20,18 +20,6 @@
     <!-- 会话列表区域 -->
     <div class="sessions-list flex-1 overflow-hidden py-1">
       <ScrollContainer class="">
-        <div @click="handleButtonClick('characters')" :class="{
-          'hover:bg-[var(--color-conversation-bg-hover)] text-[var(--color-conversation-text)]': btnActive !== 'characters',
-          'bg-[var(--color-conversation-bg-active)] font-bold text-[var(--color-conversation-text-active)]': btnActive === 'characters',
-        }" class="px-3 py-2 cursor-pointer flex items-center transition-colors duration-200 rounded-lg mx-2.5 mb-1.5">
-          <div class="session-avatar w-4.5 h-4.5 mr-1.5 text-[var(--color-primary)]">
-            <AlternateEmailTwotone />
-          </div>
-          <span class="flex-1 text-sm">角色提示词模板</span>
-          <div class="session-avatar w-3 h-3 ml-1.5">
-            <ArrowRightTwotone />
-          </div>
-        </div>
         <div class="px-6 py-3 text-gray-400 text-sm">对话记录</div>
         <template v-if="filteredSessions.length === 0">
           <div class="empty-state text-center text-gray-500 flex flex-col items-center justify-center h-full">
@@ -123,6 +111,7 @@
 
 <script setup>
 import { ref, computed } from 'vue'
+import { useRouter } from 'vue-router'
 import { ScrollContainer, Avatar } from './ui'
 import { useDebounceFn } from '@vueuse/core'
 import { useAuthStore } from '../stores/auth'
@@ -152,13 +141,14 @@ import {
 } from 'element-plus'
 
 const authStore = useAuthStore()
+const router = useRouter()
 
 // 响应式数据
 const currentSessionId = computed(() => props.current?.id)
 const searchKeyword = ref('')
 
 // 事件定义
-const emit = defineEmits(['select', 'rename', 'btn-click', 'delete'])
+const emit = defineEmits(['select', 'rename', 'delete', 'create'])
 
 // Props 定义
 const props = defineProps({
@@ -219,11 +209,17 @@ const handleDropdownSelect = (command, session) => {
 
 // 创建新会话
 const handleButtonClick = (key) => {
-  emit('btn-click', key)
+  if (key === 'create') {
+    emit('create')
+  } else if (key === 'profile') {
+    router.push({ name: 'Settings', params: { tab: 'profile' } })
+  } else if (key === 'models') {
+    router.push({ name: 'Settings', params: { tab: 'models' } })
+  }
 }
 
 const selectSession = (session) => {
-  emit('select', session)
+  emit('select', session.id)  // 修复：传递 session.id 而不是整个 session 对象
 }
 
 

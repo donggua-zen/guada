@@ -12,7 +12,7 @@ import './tailwind.css'
 import './style.css'
 import 'nprogress/nprogress.css'
 
-// 配置NProgress
+// 配置 NProgress
 NProgress.configure({
     easing: 'ease-in-out',
     speed: 1000,
@@ -28,23 +28,29 @@ const routes = [
         component: () => import('./components/MainLayout.vue'),
         children: [
             {
-                path: '', meta: { requiresLayout: true, requiresAuth: true },
+                path: '',
                 name: 'Home',
                 redirect: '/chat',
             },
             {
-                path: '/chat/:sessionId?',
+                path: 'chat/:sessionId?',
                 name: 'Chat',
-                meta: { requiresLayout: true, title: '对话', requiresAuth: true },
+                meta: { title: '对话', requiresAuth: true },
                 component: () => import('./components/ChatPage.vue')
+            },
+            {
+                path: 'characters',
+                name: 'Characters',
+                meta: { title: '助手', requiresAuth: true },
+                component: () => import('./components/CharactersPage.vue')
+            },
+            {
+                path: 'settings/:tab?',
+                name: 'Settings',
+                meta: { title: '设置', requiresAuth: true },
+                component: () => import('./components/settings/SettingsMainPage.vue')
             }
         ]
-    },
-    {
-        path: '/settings/:tab?',
-        name: 'Settings',
-        meta: { title: '设置', requiresAuth: true },
-        component: () => import('./components/settings/SettingsMainPage.vue')
     },
     {
         path: '/login',
@@ -61,7 +67,7 @@ const routes = [
     {
         path: '/test',
         name: 'Test',
-        meta: { title: 'UI测试' },
+        meta: { title: 'UI 测试' },
         component: () => import('./components/test/ui.vue')
     },
 ]
@@ -82,9 +88,6 @@ router.beforeEach(async (to, from, next) => {
             return next('/login')
         }
     }
-    // if (to.meta.requiresGuest && authStore.isAuthenticated) {
-    //     return next('/chat')
-    // }
 
     next()
 })
@@ -100,3 +103,4 @@ const pinia = createPinia()
 app.use(pinia)
 app.use(router)
 app.mount('#app')
+

@@ -108,31 +108,7 @@ const sidebarWidth = computed(() => {
     return isMobile.value ? -1 : 200
 })
 
-const props = defineProps({
-    visible: Boolean,
-    default: {
-        type: String,
-        default: 'profile'
-    }
-})
-
-const currentTabValue = ref(props.default)
-
 const emits = defineEmits(['update:visible'])
-const modalVisible = computed({
-    get() {
-        return props.visible
-    },
-    set(value) {
-        emits('update:visible', value)
-    }
-});
-
-watch(() => props.visible, (value) => {
-    if (value) {
-        currentTabValue.value = props.default
-    }
-})
 
 // 添加密码表单数据
 
@@ -193,6 +169,28 @@ const sidebarItems = [
             }]
     }
 ]
+
+// 获取第一个可用的设置项路径作为默认值
+const getDefaultTabPath = () => {
+    const userRole = authStore.user?.role || 'primary'
+    for (const group of sidebarItems) {
+        if (group.roles && !group.roles.includes(userRole)) continue
+        if (group.items && group.items.length > 0) {
+            const firstValidItem = group.items.find(item => {
+                if (!item.roles || item.roles.includes(userRole)) {
+                    return item.path && item.path !== 'exit'
+                }
+                return false
+            })
+            if (firstValidItem) {
+                return firstValidItem.path
+            }
+        }
+    }
+    return 'profile' // fallback
+}
+
+const currentTabValue = ref(getDefaultTabPath())
 
 const filteredSidebarItems = computed(() => {
     const userRole = authStore.user?.role || 'primary'
@@ -260,7 +258,8 @@ watch(() => route.params.tab, (newPath) => {
     if (isMobile.value) {
         sidebarVisible.value = !newPath
     }
-    currentTabValue.value = newPath
+    // 如果有路由参数则使用路由参数，否则使用默认值
+    currentTabValue.value = newPath || getDefaultTabPath()
 })
 
 onMounted(() => {
@@ -269,6 +268,12 @@ onMounted(() => {
     } else {
         sidebarVisible.value = true
     }
-    currentTabValue.value = route.params.tab
+    // 如果没有路由参数，则跳转到默认标签页
+    if (!route.params.tab) {
+        const defaultTab = getDefaultTabPath()
+        router.replace({ name: 'Settings', params: { tab: defaultTab } })
+    } else {
+        currentTabValue.value = route.params.tab
+    }
 })
 </script>

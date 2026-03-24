@@ -2,9 +2,9 @@
   <SidebarLayout v-model:sidebar-visible="sidebarVisible" :sidebar-position="'left'" :z-index="50">
     <template #sidebar>
       <template v-if="authStore.isAuthenticated">
-        <chat-sidebar ref="chatSidebarRef" :btn-active="targetPage" :sessions="sortedSessions" :current="currentSession"
-          @select="goChatRoute($event.id)" @delete="handleDeleteSession" @rename="handleRenameSession"
-          @btn-click="handleSidebarClick" />
+        <chat-sidebar ref="chatSidebarRef" :sessions="sortedSessions" :current="currentSession"
+          @select="goChatRoute($event)" @delete="handleDeleteSession" @rename="handleRenameSession"
+          @create="handleCreateSession" />
       </template>
       <template v-else>
         <div
@@ -17,16 +17,8 @@
       </template>
     </template>
     <template v-if="!isLoading" #content>
-      <!-- 主体 -->
-      <template v-if="targetPage == 'characters'">
-        <CharactersPanel @create-session="handleCreateSessionWithMessage" />
-      </template>
-      <template v-else-if="targetPage == 'new-session'">
-        <div class="h-full flex-1 flex items-center justify-center">
-          <CreateSessionChatPanel @create-session="handleCreateSessionWithMessage" />
-        </div>
-      </template>
-      <template v-else-if="sessions.length > 0 && currentSession">
+      <!-- 主体内容 -->
+      <template v-if="sessions.length > 0 && currentSession">
         <ChatPanel ref="chatPanelRef" v-model:session="currentSession" v-model:sidebar-visible="sidebarVisible"
           @openSettings="handleOpenSettings" @openSwitchModel="handleOpenSwitchModel"
           @save-settings="handleSaveSessionSettings" />
@@ -38,12 +30,16 @@
           </div>
         </el-dialog>
       </template>
-
+      <template v-else>
+        <div class="h-full flex-1 flex items-center justify-center">
+          <CreateSessionChatPanel @create-session="handleCreateSessionWithMessage" />
+        </div>
+      </template>
     </template>
   </SidebarLayout>
 </template>
 <script setup>
-import { ref, onMounted, watch, computed, nextTick, defineAsyncComponent } from "vue";
+import { ref, onMounted, watch, computed, defineAsyncComponent } from "vue";
 import { apiService } from "@/services/ApiService";
 import { useRouter, useRoute } from 'vue-router';
 import { usePopup } from "@/composables/usePopup";
@@ -62,11 +58,8 @@ const breakpoints = useBreakpoints(breakpointsTailwind)
 const isMobile = breakpoints.smaller('md') // md = 768px
 
 const SessionSettingPanel = defineAsyncComponent(() => import("@/components/SessionSettingPanel.vue"));
-const CharacterSettingPanel = defineAsyncComponent(() => import("@/components/CharacterSettingPanel.vue"));
 const ChatPanel = defineAsyncComponent(() => import("@/components/ChatPanel.vue"));
 const CreateSessionChatPanel = defineAsyncComponent(() => import("@/components/CreateSessionChatPanel.vue"));
-const CharactersPanel = defineAsyncComponent(() => import("@/components/CharactersPage.vue"));
-const SettingsMainPage = defineAsyncComponent(() => import("@/components/settings/SettingsMainPage.vue"));
 
 // 组合式函数
 const { confirm, toast, prompt } = usePopup();
@@ -83,20 +76,17 @@ const chatSidebarRef = ref(null);
 const currentTabValue = ref('basic');
 // 控制设置模态框的显示与隐藏
 const sessionSettingsModalVisible = ref(false);
-// const systemSettingsModalVisible = ref(false);
-const systemSettingsPath = ref('/user/profile');
 // 控制侧边栏的显示状态，使用本地存储保持用户偏好
 const sidebarVisible = useStorage('sidebarVisible', true);
 
 const isLoading = ref(true);
-const targetPage = ref(null);
 
 // 登录信息
 const authStore = useAuthStore();
 const sessionStore = useSessionStore();
 
 // 计算属性
-// 获取和设置会话列表的计算属性，与store中的会话列表保持同步
+// 获取和设置会话列表的计算属性，与 store 中的会话列表保持同步
 const sessions = computed({
   get() {
     return sessionStore.sessionsList;
@@ -107,12 +97,11 @@ const sessions = computed({
 });
 
 // 获取按更新时间排序的会话列表，最新的会话排在前面
-// 如果会话没有更新时间，则使用创建时间进行排序
 const sortedSessions = computed(() => {
   const sessions_ = [...sessions.value];
   return sessions_.sort((a, b) => {
     const timeA = a.updated_at ? new Date(a.updated_at) : new Date(a.created_at || 0);
-    const timeB = b.updated_at ? new Date(b.updated_at) : new Date(b.created_at || 0);
+    const timeB = b.updated_at ? new Date(b.updated_at) : new Date(a.created_at || 0);
     return timeB - timeA; // 降序排列，最新的在前面
   });
 });
@@ -120,7 +109,7 @@ const sortedSessions = computed(() => {
 // 业务逻辑函数
 
 /**
- * 根据会话ID从API获取会话详情
+ * 根据会话 ID 从 API 获取会话详情
  * @param {string|number} sessionId - 会话的唯一标识符
  */
 const fetchSession = async (sessionId) => {
@@ -132,7 +121,7 @@ const fetchSession = async (sessionId) => {
  * 选择会话，加载会话详情
  * @param {Object} session - 包含会话信息的对象
  */
-const goChatRoute = async (sessionId, redirect = false) => {
+const goChatRoute = async (sessionId) => {
   if (isMobile.value) {
     sidebarVisible.value = false;
   }
@@ -141,19 +130,18 @@ const goChatRoute = async (sessionId, redirect = false) => {
   } else if (sessionStore.activeSessionId) {
     router.replace({ name: 'Chat', params: { sessionId: sessionStore.activeSessionId } });
   } else {
-    router.replace({ name: 'Chat', params: { sessionId: 'new-session' } });
+    router.replace({ name: 'Chat', params: { sessionId: null } });
     currentSession.value = null;
   }
 };
 
 /**
- * 根据会话ID更新会话信息
+ * 根据会话 ID 更新会话信息
  * 只更新允许的字段，防止意外修改敏感数据
  * @param {string|number} sessionId - 会话的唯一标识符
  * @param {Object} data - 包含要更新的数据的对象
  */
 const updateSessionById = async (sessionId, data) => {
-  // console.trace();
   const session = sessions.value.find(session => session.id === sessionId);
   if (session) {
     // 定义需要更新的字段
@@ -196,27 +184,25 @@ const updateSession = async (data) => {
   sessionSettingsModalVisible.value = false;
 };
 
-
 const updateSelectedSession = async (sessionId) => {
   if (sortedSessions.value.length === 0 || !authStore.isAuthenticated || !sessionId) {
-    goChatRoute('new-session');
+    currentSession.value = null;
     return;
   }
 
   const session = sortedSessions.value.find(s => s.id === sessionId);
   if (!session) {
-    goChatRoute('new-session');
+    currentSession.value = null;
     return;
   }
   if (session.id !== currentSession.value?.id) {
     await fetchSession(session.id);
   }
-
 };
 
 /**
  * 加载会话列表
- * 从API获取会话列表，更新本地数据，并根据URL参数选择会话
+ * 从 API 获取会话列表，更新本地数据
  */
 const loadSessions = async () => {
   try {
@@ -247,18 +233,10 @@ const handleOpenSwitchModel = () => {
 
 /**
  * 创建新会话
- * 显示输入对话名称的提示框，创建新会话后刷新列表并自动选择新会话
  */
-const handleSidebarClick = async (key) => {
-  if (key === 'create') {
-    goChatRoute('new-session');
-  } else if (key === 'characters') {
-    goChatRoute('characters');
-  } else if (key === 'models') {
-    router.push({ name: 'Settings', params: { tab: 'models' } });
-  } else if (key === 'profile') {
-    router.push({ name: 'Settings', params: { tab: 'profile' } });
-  }
+const handleCreateSession = async () => {
+  router.replace({ name: 'Chat', params: { sessionId: null } });
+  currentSession.value = null;
 };
 
 const handleCreateSessionWithMessage = async (session, inputMessage) => {
@@ -277,7 +255,6 @@ const handleCreateSessionWithMessage = async (session, inputMessage) => {
     console.error('创建对话失败:', error);
     toast.error("创建对话失败");
   }
-
 };
 
 /**
@@ -300,7 +277,7 @@ const handleRenameSession = async (session) => {
         title: newTitle
       };
 
-      // 调用API更新对话
+      // 调用 API 更新对话
       await apiService.updateSession(session.id, updatedSession);
 
       currentSession.value = { ...session, title: newTitle };
@@ -329,11 +306,11 @@ const handleDeleteSession = async (session) => {
         if (index < sortedSessions.value.length - 1) {
           // 选择下一个会话
           goChatRoute(sortedSessions.value[index + 1].id);
-        } else if (index > 1) {
+        } else if (index > 0) {
           goChatRoute(sortedSessions.value[index - 1].id);
         } else {
           // 没有其他会话了
-          goChatRoute('new-session');
+          goChatRoute(null);
         }
       }
       sessions.value = sessions.value.filter(s => s.id !== session.id);
@@ -359,8 +336,7 @@ const handleSaveSessionSettings = async () => {
 
 // 监听器
 
-// 监听当前会话的变化，更新页面标题、路由参数和存储中的活动会话ID
-// 同时更新会话列表中的会话信息
+// 监听当前会话的变化，更新页面标题
 watch(
   () => currentSession,
   (session) => {
@@ -372,30 +348,18 @@ watch(
   { deep: true }
 );
 
-
-const specialRoutes = ['new-session', 'characters'];
-
-const handleRouteChange = (newSessionId) => {
-  if (!newSessionId) {
-    goChatRoute(null);
-    return;
-  }
-  sessionStore.activeSessionId = newSessionId;
-  if (specialRoutes.includes(newSessionId)) {
-    targetPage.value = newSessionId;
-    currentSession.value = null;
-    return;
-  }
-  targetPage.value = null;
-  updateSelectedSession(newSessionId);
-};
-
-// 监听路由参数中会话ID的变化，更新选中的会话
+// 监听路由参数中会话 ID 的变化，更新选中的会话
 watch(
   () => route.params.sessionId,
   (newSessionId) => {
-    handleRouteChange(newSessionId);
-  }
+    if (!newSessionId) {
+      currentSession.value = null;
+      return;
+    }
+    sessionStore.activeSessionId = newSessionId;
+    updateSelectedSession(newSessionId);
+  },
+  { immediate: true }
 );
 
 // 生命周期
@@ -403,7 +367,10 @@ watch(
 onMounted(async () => {
   if (authStore.isAuthenticated) {
     await loadSessions();
-    handleRouteChange(route.params.sessionId);
+    if (route.params.sessionId) {
+      sessionStore.activeSessionId = route.params.sessionId;
+      updateSelectedSession(route.params.sessionId);
+    }
   }
   isLoading.value = false;
 });
