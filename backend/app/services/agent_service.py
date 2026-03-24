@@ -610,7 +610,7 @@ class AgentService:
             message_content.tool_calls = complete_chunk.get("tool_calls")
             message_content.finish_reason = complete_chunk.get("finish_reason")
             
-            # 构建 meta_data，添加思考时长
+            # 构建 meta_data，添加思考时长和 usage 信息
             message_content.meta_data = {
                 "model_name": model.model_name,
                 "finish_reason": complete_chunk.get("finish_reason"),
@@ -621,6 +621,15 @@ class AgentService:
             if thinking_duration_ms is not None:
                 message_content.meta_data["thinking_duration_ms"] = thinking_duration_ms
                 logger.info(f"Thinking duration saved to meta_data: {thinking_duration_ms}ms")
+            
+            # 如果有 usage 信息，保存到 meta_data
+            if complete_chunk.get("usage"):
+                message_content.meta_data["usage"] = complete_chunk["usage"]
+                logger.info(
+                    f"Tokens saved: prompt={complete_chunk['usage']['prompt_tokens']}, "
+                    f"completion={complete_chunk['usage']['completion_tokens']}, "
+                    f"total={complete_chunk['usage']['total_tokens']}"
+                )
             
             logger.debug("22222")
 
