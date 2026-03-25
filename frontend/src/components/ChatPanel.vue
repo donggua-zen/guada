@@ -530,29 +530,54 @@ async function copyMessage(message) {
  * @param {string} userMessageId - 用户消息的 ID，用于定位对应的 DOM 元素
  */
 function updatePlaceholder(userMessageId) {
+  // 常量定义：消息高度阈值比例（超过 1/3 视口时触发调整）
+  const MESSAGE_HEIGHT_THRESHOLD_RATIO = 1 / 3;
+  // 最大占位符倍数（不超过容器高度的 3 倍）
+  const MAX_PLACEHOLDER_MULTIPLIER = 3;
+  
   try {
-
+    // 空值处理：重置为自动高度
     if (!userMessageId) {
       placeholder.value = "auto";
       return;
     }
-    const userMessageRef = itemRefs.value[userMessageId];
-    if (!userMessageRef || !userMessageRef.el) {
-      console.warn(`Element for userMessageId ${userMessageId} not found`);
-      return;
-    }
-    const userMessageElement = userMessageRef.el;
-    const containerRect = messagesContainerRef.value.getBoundingClientRect();
-    const style = window.getComputedStyle(userMessageElement); // 修正可能的拼写错误
-    const userElHeight = parseFloat(style.height) + parseFloat(style.marginTop) + parseFloat(style.marginBottom);
-
-    let baseMinHeight = containerRect.height;
-    if (userElHeight > containerRect.height / 3) {
-      baseMinHeight += (userElHeight - containerRect.height / 3)
-    }
-    placeholder.value = baseMinHeight + "px";
+    
+    // 使用 requestAnimationFrame 批量 DOM 操作，避免布局抖动
+    requestAnimationFrame(() => {
+      const userMessageRef = itemRefs.value[userMessageId];
+      
+      // 改进错误处理：元素不存在时降级为自动高度
+      if (!userMessageRef || !userMessageRef.el) {
+        console.warn(`Element for userMessageId ${userMessageId} not found`);
+        placeholder.value = "auto";
+        return;
+      }
+      
+      const userMessageElement = userMessageRef.el;
+      
+      // 批量读取 DOM 属性（只触发一次重排）
+      const containerRect = messagesContainerRef.value.getBoundingClientRect();
+      const style = window.getComputedStyle(userMessageElement);
+      const userElHeight = parseFloat(style.height) 
+                         + parseFloat(style.marginTop) 
+                         + parseFloat(style.marginBottom);
+      
+      // 动态计算最小高度
+      let baseMinHeight = containerRect.height;
+      
+      if (userElHeight > containerRect.height * MESSAGE_HEIGHT_THRESHOLD_RATIO) {
+        baseMinHeight += (userElHeight - containerRect.height * MESSAGE_HEIGHT_THRESHOLD_RATIO);
+      }
+      
+      // 限制最大值，防止布局错乱
+      const maxHeight = containerRect.height * MAX_PLACEHOLDER_MULTIPLIER;
+      placeholder.value = Math.min(baseMinHeight, maxHeight) + "px";
+    });
+    
   } catch (error) {
     console.error("Error updating placeholder:", error);
+    // 错误时降级为自动高度
+    placeholder.value = "auto";
   }
 }
 
