@@ -562,11 +562,50 @@ async function handleStreamResponse(
           content.thinking_duration_ms = Date.now() - content.thinking_started_at;
         }
       }
-      if (response.type == "tool_calls") {
-        message.contents[contentIndex].additional_kwargs = {
-          tool_calls: response.tool_calls,
-          tool_calls_response: response.tool_calls_response
+      // 处理工具调用（增量更新）
+      if (response.type == "tool_call") {
+        const content = message.contents[contentIndex];
+        
+        // 初始化 additional_kwargs
+        if (!content.additional_kwargs) {
+          content.additional_kwargs = {};
         }
+        if (!content.additional_kwargs.tool_calls) {
+          content.additional_kwargs.tool_calls = [];
+        }
+        
+        // 累加增量的 tool_calls
+        for (const toolCall of response.tool_calls) {
+          const index = toolCall.index;
+          
+          // 查找是否已存在该索引的工具调用
+          let existingToolCall = content.additional_kwargs.tool_calls.find(tc => tc.index === index);
+          
+          if (!existingToolCall) {
+            // 如果是新的工具调用，添加到列表
+            content.additional_kwargs.tool_calls.push({
+              id: toolCall.id,
+              index: toolCall.index,
+              type: toolCall.type,
+              name: toolCall.name,
+              arguments: toolCall.arguments || ''
+            });
+          } else {
+            // 如果已存在，累加参数字符串
+            if (toolCall.arguments !== null && toolCall.arguments !== undefined) {
+              existingToolCall.arguments += toolCall.arguments;
+            }
+          }
+        }
+        continue;
+      }
+      // 处理工具调用结果（一次性接收）
+      if (response.type == "tool_calls_response") {
+        const content = message.contents[contentIndex];
+        if (!content.additional_kwargs) {
+          content.additional_kwargs = {};
+        }
+        content.additional_kwargs.tool_calls_response = response.tool_calls_response;
         continue;
       }
       if (response.type == "text") {
@@ -634,25 +673,44 @@ function handleNewMessage(response, sessionId, userMessageId) {
 }
 
 function handleStreamFinish(response, message, contentIndex, assistantMessageId) {
-  if (response.finish_reason === "tool_calls") {
-
-  }
-  if (response.finish_reason !== "error") {
+  if (!message || contentIndex === undefined) {
     return;
   }
-  console.error("Error in stream:", response.error);
-  if (message && assistantMessageId) {
-    message.contents[contentIndex].meta_data = {
-      ...message.contents[contentIndex].meta_data,
+
+  const content = message.contents[contentIndex];
+  
+  // 保存 usage 信息到 meta_data
+  if (response.usage) {
+    content.meta_data = {
+      ...content.meta_data,
+      ...response.usage
+    };
+  }
+  
+  // 保存 finish_reason
+  if (response.finish_reason) {
+    content.meta_data = {
+      ...content.meta_data,
+      finish_reason: response.finish_reason
+    };
+  }
+  
+  // 处理错误情况
+  if (response.finish_reason === "error") {
+    console.error("Error in stream:", response.error);
+    content.meta_data = {
+      ...content.meta_data,
       error: response.error,
       finish_reason: response.finish_reason
-
     };
-    message.contents[contentIndex].state.is_streaming = false;
-    message.contents[contentIndex].state.is_thinking = false;
-  } else {
-    notify.error("Error in stream", response.error);
+    content.state.is_streaming = false;
+    content.state.is_thinking = false;
+    return;
   }
+  
+  // 正常结束，更新状态
+  content.state.is_streaming = false;
+  content.state.is_thinking = false;
 }
 
 function handleStreamCatchError(error, message, contentIndex, assistantMessageId) {

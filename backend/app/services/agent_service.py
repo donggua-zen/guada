@@ -360,8 +360,7 @@ class AgentService:
                                     tool_call for tool_call in tool_call_response
                                 ]
                                 yield {
-                                    "type": "tool_calls",
-                                    "tool_calls": complete_chunk["tool_calls"],
+                                    "type": "tool_calls_response",
                                     "tool_calls_response": complete_chunk[
                                         "tool_calls_response"
                                     ],
@@ -470,6 +469,32 @@ class AgentService:
                                     complete_chunk["tool_calls"][index][
                                         "arguments"
                                     ] += tool_call["arguments"]
+                            yield {
+                                "type": "tool_call",
+                                "tool_calls": [
+                                    {
+                                        "id": tool_call[
+                                            "id"
+                                        ],  # 全量，除第一次外可能为空
+                                        "index": tool_call[
+                                            "index"
+                                        ],  # 全量，除第一次外可能为空
+                                        "type": tool_call[
+                                            "type"
+                                        ],  # 全量，除第一次外可能为空
+                                        "name": tool_call[
+                                            "name"
+                                        ],  # 全量，除第一次外可能为空
+                                        "arguments": tool_call[
+                                            "arguments"
+                                        ],  # 增量传输，每次只传输新增内容，有可能为空
+                                    }
+                                    for tool_call in chunk.additional_kwargs[
+                                        "tool_calls"
+                                    ]
+                                ],
+                                "usage": complete_chunk.get("usage"),
+                            }
                 except asyncio.CancelledError:
                     logger.debug("User stopped generation")
                     complete_chunk["finish_reason"] = "user_stop"
