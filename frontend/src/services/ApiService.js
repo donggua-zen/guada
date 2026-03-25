@@ -446,6 +446,17 @@ class ApiService {
   }
 
   /**
+   * 生成会话标题
+   * @param {string} sessionId - 会话 ID
+   * @returns {Promise<Object>} 返回生成的标题信息
+   */
+  async generateSessionTitle(sessionId) {
+    return await this._request(`/sessions/${sessionId}/generate-title`, {
+      method: 'POST',
+    });
+  }
+
+  /**
    * 取消当前请求
    */
   abortCurrentRequest() {

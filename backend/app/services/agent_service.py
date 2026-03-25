@@ -323,8 +323,8 @@ class AgentService:
                 }
                 try:
                     # 调用 LLM 服务生成流式响应
-                    generator = llm_service.completions(
-                        model.model_name,
+                    generator = await llm_service.completions(
+                        model=model.model_name,
                         messages=conversation_messages + chat_turns,
                         temperature=model_params["temperature"],
                         top_p=model_params["top_p"],

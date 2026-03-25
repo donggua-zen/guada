@@ -107,6 +107,13 @@ export const useSessionStore = defineStore('session', () => {
         getSessionState(sessionId).settings[key] = value
     }
 
+    // 更新会话标题
+    const updateSessionTitle = (sessionId, title) => {
+        const session = getSessionState(sessionId)
+        session.title = title
+        session.lastUpdated = Date.now()
+    }
+
     // 清理会话状态（删除会话时调用）
     const clearSessionState = (sessionId) => {
         sessions.value.delete(sessionId)
@@ -135,6 +142,7 @@ export const useSessionStore = defineStore('session', () => {
         getScrollPosition,
         getSessionSetting,
         setSessionSetting,
+        updateSessionTitle,
         clearSessionState
     }
 })

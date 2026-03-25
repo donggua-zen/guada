@@ -65,3 +65,17 @@ async def update_session(
     data["updated_at"] = datetime.datetime.now(datetime.timezone.utc)
 
     return await session_service.update_session(session_id, current_user, data)
+
+
+@sessions_router.post("/sessions/{session_id}/generate-title", response_model=dict)
+async def generate_session_title(
+    session_id: str,
+    session_service: SessionService = Depends(get_session_service),
+    current_user: User = Depends(get_current_user),
+):
+    """根据会话的第一轮对话生成标题
+    
+    在用户完成第一轮对话后调用此接口，自动生成会话标题。
+    如果会话未配置模型或消息不足，则跳过标题生成。
+    """
+    return await session_service.generate_session_title(session_id, current_user)

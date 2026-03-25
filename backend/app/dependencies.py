@@ -135,9 +135,18 @@ def get_character_service(
 def get_session_service(
     session_repo: SessionRepository = Depends(get_session_repository),
     character_repo: CharacterRepository = Depends(get_character_repository),
+    message_repo: MessageRepository = Depends(get_message_repository),
+    model_repo: ModelRepository = Depends(get_model_repository),
+    setting_service: SettingsManager = Depends(get_settings_service),
 ) -> SessionService:
     """会话服务依赖"""
-    return SessionService(session_repo=session_repo, character_repo=character_repo)
+    return SessionService(
+        session_repo=session_repo,
+        character_repo=character_repo,
+        message_repo=message_repo,
+        model_repo=model_repo,
+        setting_service=setting_service
+    )
 
 
 def get_model_service(

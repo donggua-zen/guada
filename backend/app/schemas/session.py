@@ -19,6 +19,7 @@ class SessionBase(BaseModel):
 
 class SessionCreate(BaseModel):
     character_id: str  # 必填，绑定角色
+    title: Optional[str] = None  # 可选，会话标题
     model_id: Optional[str] = None  # 可选，如果提供则覆盖角色的 model_id
     settings: Optional[SessionSettings] = None  # 可选，只保存覆盖的配置（max_memory_length）
 

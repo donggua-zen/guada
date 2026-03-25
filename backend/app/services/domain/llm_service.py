@@ -59,6 +59,7 @@ class LLMService:
         frequency_penalty,
         stream: Literal[False],
         thinking,
+        max_tokens,
     ) -> LLMServiceChunk: ...
 
     @overload
@@ -71,7 +72,96 @@ class LLMService:
         frequency_penalty,
         stream: Literal[True],
         thinking,
+        max_tokens,
     ) -> AsyncGenerator[LLMServiceChunk, None]: ...
+
+    async def completions_non_stream(
+        self,
+        model: str,
+        oai_messages: list,
+        temperature=None,
+        top_p=None,
+        frequency_penalty=None,
+        extra_body: dict = {},
+        tools: Optional[list[dict]] = None,
+        max_tokens: Optional[int] = None,
+    ) -> LLMServiceChunk:
+        """非流式模式下的 completions 实现"""
+        response = None
+        try:
+            response = await self.llm_client.chat.completions.create(
+                model=model,
+                messages=oai_messages,
+                frequency_penalty=frequency_penalty or None,
+                top_p=top_p or None,
+                temperature=temperature or None,
+                max_tokens=max_tokens,
+                stream=False,
+                extra_body=extra_body,
+                timeout=60,
+                tool_choice="auto",
+                tools=tools,
+            )
+
+            return self._handle_non_stream_response(response)
+        except APIError as e:
+            logger.exception(f"Exception:{e}\n")
+            raise Exception(str(e))
+        except Exception as e:
+            raise
+        finally:
+            if response is not None:
+                await self.close_api_connection(response)
+
+    async def completions_stream(
+        self,
+        model: str,
+        oai_messages: list,
+        temperature=None,
+        top_p=None,
+        frequency_penalty=None,
+        extra_body: dict = {},
+        tools: Optional[list[dict]] = None,
+        max_tokens: Optional[int] = None,
+    ) -> AsyncGenerator[LLMServiceChunk, None]:
+        """流式模式下的 completions 实现"""
+        response = None
+        try:
+            response = await self.llm_client.chat.completions.create(
+                model=model,
+                messages=oai_messages,
+                frequency_penalty=frequency_penalty or None,
+                top_p=top_p or None,
+                temperature=temperature or None,
+                max_tokens=max_tokens,
+                stream=True,
+                extra_body=extra_body,
+                timeout=60,
+                tool_choice="auto",
+                tools=tools,
+            )
+
+            # 对于异步流式响应，需要直接返回异步生成器
+            async for chunk in response:
+                # 检查 chunk 是否包含 usage（通常在最后一个 chunk）
+                if hasattr(chunk, "usage") and chunk.usage is not None:
+                    logger.debug(
+                        f"Got usage from chunk: prompt={chunk.usage.prompt_tokens}, completion={chunk.usage.completion_tokens}, total={chunk.usage.total_tokens}"
+                    )
+
+                response_chunk = self._handle_stream_chunk(chunk)
+                if response_chunk:
+                    yield response_chunk
+                else:
+                    continue
+        except APIError as e:
+            logger.exception(f"Exception:{e}\n")
+            raise Exception(str(e))
+        except Exception as e:
+            raise
+        finally:
+            if response is not None:
+                await self.close_api_connection(response)
 
     async def completions(
         self,
@@ -83,104 +173,88 @@ class LLMService:
         stream=False,
         thinking=False,
         tools: Optional[list[dict]] = None,
+        max_tokens: Optional[int] = None,
     ):
         """
-        根据输入的messages和指定的模型生成响应。
+        根据输入的 messages 和指定的模型生成响应。
 
         Args:
             model (str): 使用的模型名称。
             messages (list): 输入的消息列表。
-            temperature (float, optional): 温度参数，用于控制生成文本的随机性。默认为0.75。
-            stream (bool, optional): 是否以流式方式生成响应。默认为False。
-            thinking (bool, optional): 是否在生成响应时启用思考功能。默认为False。
+            temperature (float, optional): 温度参数，用于控制生成文本的随机性。默认为 0.75。
+            stream (bool, optional): 是否以流式方式生成响应。默认为 False。
+            thinking (bool, optional): 是否在生成响应时启用思考功能。默认为 False。
+            max_tokens (int, optional): 限制生成的最大 token 数。默认为 None（不限制）。
 
         Returns:
-            如果stream为True，则返回一个生成器，生成包含"reasoning_content"和"content"的字典。
-            如果stream为False，则返回一个元组，包含完整的响应文本和推理内容（如果有的话）。
+            如果 stream 为 True，则返回一个生成器，生成包含"reasoning_content"和"content"的字典。
+            如果 stream 为 False，则返回 LLMServiceChunk 对象。
 
         Raises:
-            APIError: 如果API调用失败，则抛出此异常。
+            APIError: 如果 API 调用失败，则抛出此异常。
             Exception: 如果发生其他类型的异常，则抛出此异常。
 
         """
-        response = None
-        try:
-            logger.debug("messages:%d", len(messages))
-            logger.debug("freq_penalty: %s", frequency_penalty)
-            logger.debug("top_p: %s", top_p)
-            logger.debug("temperature: %s", temperature)
+        # 准备消息数据（公共逻辑）
+        logger.debug("messages:%d", len(messages))
+        logger.debug("freq_penalty: %s", frequency_penalty)
+        logger.debug("top_p: %s", top_p)
+        logger.debug("temperature: %s", temperature)
 
-            extra_body = {}
-            if thinking:
-                extra_body["enable_thinking"] = thinking
-            oai_messages = []
-            for message in messages:
-                # 构建基础消息对象，只包含必要字段
-                print(message)
-                oai_message = {
-                    "role": message["role"],
-                    "content": message.get("content", ""),
-                }
-
-                # 可选字段：如果存在则添加
-                if message.get("reasoning_content"):
-                    oai_message["reasoning_content"] = message["reasoning_content"]
-
-                if message.get("tool_call_id"):
-                    oai_message["tool_call_id"] = message["tool_call_id"]
-
-                if message.get("tool_calls", None):
-                    oai_message["tool_calls"] = []
-                    for tool_call in message["tool_calls"]:
-                        oai_message["tool_calls"].append(
-                            {
-                                "id": tool_call["id"],
-                                "index": tool_call["index"],
-                                "type": tool_call["type"],
-                                "function": {
-                                    "name": tool_call["name"],
-                                    "arguments": tool_call["arguments"],
-                                },
-                            }
-                        )
-                oai_messages.append(oai_message)
-            print(oai_messages)
-            response = await self.llm_client.chat.completions.create(
+        extra_body = {}
+        if thinking:
+            extra_body["enable_thinking"] = thinking
+        oai_messages = []
+        for message in messages:
+            oai_message = {
+                "role": message["role"],
+                "content": message.get("content", ""),
+            }
+            if message.get("reasoning_content"):
+                oai_message["reasoning_content"] = message["reasoning_content"]
+            if message.get("tool_call_id"):
+                oai_message["tool_call_id"] = message["tool_call_id"]
+            if message.get("tool_calls", None):
+                oai_message["tool_calls"] = []
+                for tool_call in message["tool_calls"]:
+                    oai_message["tool_calls"].append(
+                        {
+                            "id": tool_call["id"],
+                            "index": tool_call["index"],
+                            "type": tool_call["type"],
+                            "function": {
+                                "name": tool_call["name"],
+                                "arguments": tool_call["arguments"],
+                            },
+                        }
+                    )
+            oai_messages.append(oai_message)
+        
+        # 根据 stream 参数选择不同的实现
+        if stream:
+            # 流式模式：使用独立的流式方法
+            return self.completions_stream(
                 model=model,
-                messages=oai_messages,
-                frequency_penalty=frequency_penalty or None,
-                top_p=top_p or None,
-                temperature=temperature or None,
-                stream=stream,
+                oai_messages=oai_messages,
+                temperature=temperature,
+                top_p=top_p,
+                frequency_penalty=frequency_penalty,
                 extra_body=extra_body,
-                timeout=60,
-                tool_choice="auto",
                 tools=tools,
+                max_tokens=max_tokens,
             )
-            if stream:
-                # 对于异步流式响应，需要直接返回异步生成器
-                async for chunk in response:
-                    # 检查 chunk 是否包含 usage（通常在最后一个 chunk）
-                    if hasattr(chunk, "usage") and chunk.usage is not None:
-                        logger.debug(
-                            f"Got usage from chunk: prompt={chunk.usage.prompt_tokens}, completion={chunk.usage.completion_tokens}, total={chunk.usage.total_tokens}"
-                        )
-
-                    response_chunk = self._handle_stream_chunk(chunk)
-                    if response_chunk:
-                        yield response_chunk
-                    else:
-                        continue
-            else:
-                yield self._handle_non_stream_response(response)
-        except APIError as e:
-            logger.exception(f"Exception:{e}\n")
-            raise Exception(str(e))
-        except Exception as e:
-            raise
-        finally:
-            if response is not None:
-                await self.close_api_connection(response)
+        else:
+            # 非流式模式：使用独立的非流式方法
+            return await self.completions_non_stream(
+                model=model,
+                oai_messages=oai_messages,
+                temperature=temperature,
+                top_p=top_p,
+                frequency_penalty=frequency_penalty,
+                extra_body=extra_body,
+                tools=tools,
+                max_tokens=max_tokens,
+            )
 
     def _handle_stream_chunk(self, chunk):
         response_chunk = LLMServiceChunk()

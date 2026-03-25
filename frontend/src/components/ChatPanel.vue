@@ -227,8 +227,45 @@ const handleConfigChange = (config) => {
   emit("save-settings");
 };
 
+// 标题生成标记（需要在 handleSessionChange 之前声明）
+let hasGeneratedTitle = ref(false);
+
 // 监听器
 watch(() => props.session?.id, handleSessionChange, { immediate: true });
+
+// 监听流式状态变化，在第一次对话完成后生成标题
+watch(() => isStreaming.value, async (newVal, oldVal) => {
+  // 当流式状态从 true 变为 false 时（即助手回复完成）
+  if (oldVal === true && newVal === false) {
+    // 检查是否是第一条助手消息
+    const firstAssistantMessage = activeMessages.value.find(m => m.role === 'assistant');
+    
+    if (firstAssistantMessage && !hasGeneratedTitle.value) {
+      // 标记已生成标题，避免重复调用
+      hasGeneratedTitle.value = true;
+      
+      // 调用标题生成 API
+      try {
+        const result = await apiService.generateSessionTitle(currentSessionId.value);
+        
+        // 如果成功生成了新标题
+        if (!result.skipped && result.title) {
+          // 更新会话标题
+          currentSession.value.title = result.title;
+          
+          // 通知用户
+          notify.success('标题已更新', `会话标题已自动更新为"${result.title}"`);
+          
+          // 同步到 session store
+          sessionStore.updateSessionTitle(currentSessionId.value, result.title);
+        }
+      } catch (error) {
+        console.error('生成会话标题失败:', error);
+        // 不显示错误提示，避免影响用户体验
+      }
+    }
+  }
+}, { immediate: true });
 
 
 // 生命周期
@@ -371,17 +408,32 @@ async function handleSessionChange(newSessionId, oldSessionId) {
   if (newSessionId === oldSessionId) return;
   isLoading.value = true;
   updatePlaceholder(null);
+  hasGeneratedTitle.value = false; // 重置标题生成标记
   currentSessionId.value = newSessionId;
   if (newSessionId) {
-    await loadMessages(newSessionId);
-    nextTick(() => {
-      immediateScrollToBottom();
-      if (inputMessage.value?.isWaiting) {
-        handleSendMessage();
-      }
-    });
+    try {
+      // 获取会话配置
+      const sessionData = await apiService.fetchSession(newSessionId);
+      currentSession.value = sessionData;
+      
+      // 加载消息
+      await loadMessages(newSessionId);
+      
+      nextTick(() => {
+        immediateScrollToBottom();
+        if (inputMessage.value?.isWaiting) {
+          handleSendMessage();
+        }
+      });
+    } catch (error) {
+      console.error('加载会话失败:', error);
+      notify.error('加载会话失败', error.message);
+    } finally {
+      isLoading.value = false;
+    }
+  } else {
+    isLoading.value = false;
   }
-  isLoading.value = false;
 }
 
 
