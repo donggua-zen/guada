@@ -47,7 +47,7 @@
               <MessageItem v-for="message in pair" :ref="(el) => setItemRef(el, message.id)" :key="message.id"
                 :message="message" :avatar="message.role == 'user' ? userAvater : currentSession.avatar_url"
                 :is-last="message.index == activeMessages.length - 1"
-                :allow-generate="!isStreaming && allowReSendMessage(message, message.index)" @delete="deleteMessage"
+                :allow-generate="!isStreaming && allowReSendMessage(message, message.index, activeMessages)" @delete="deleteMessage"
                 @edit="editMessage" @copy="copyMessage" @generate="generateResponse" @regenerate="regenerateResponse"
                 @render-complete="handleRenderComplete" @switch="switchContent" />
             </div>
@@ -59,7 +59,7 @@
     <!-- 输入区域 -->
     <div class="px-5 pb-2.5 pt-2 w-full flex flex-col items-center" style="position: absolute; bottom: 0;">
       <!-- 编辑模式提示条 -->
-      <div v-if="editMode.isActive" class="w-full max-w-[960px] mb-[-0.6rem]">
+      <div v-if="editMode" class="w-full max-w-[960px] mb-[-0.6rem]">
         <div class="edit-mode-banner">
           <span class="edit-mode-icon">📝</span>
           <span class="edit-mode-text">正在编辑消息</span>
@@ -88,12 +88,14 @@
 </template>
 
 <script setup>
-import { ref, computed, watch, nextTick, onMounted, onBeforeUpdate, reactive, h, defineAsyncComponent } from "vue";
+import { ref, computed, watch, nextTick, onMounted, onBeforeUpdate, reactive, shallowRef, h, defineAsyncComponent } from "vue";
 import { apiService } from "../services/ApiService";
 import { usePopup } from "@/composables/usePopup";
 import { useDebounceFn } from "@vueuse/core";
 import { useSessionStore } from "../stores/session";
 import { useAuthStore } from "../stores/auth"
+import { pairMessages, getCurrentTurns, allowReSendMessage } from "@/utils/messageUtils"
+import { useStreamResponse } from "@/composables/useStreamResponse"
 
 // 组件导入
 import MessageItem from "./MessageItem.vue";
@@ -102,13 +104,20 @@ import { Avatar, ChatInput, ScrollContainer } from "./ui";
 // 异步组件导入
 const TokenStatisticsModal = defineAsyncComponent(() => import("./TokenStatisticsModal.vue"));
 
-// UI组件导入
+// UI 组件导入
 import { ElDialog } from "element-plus";
+
+// 常量定义
+const MAX_REGENERATE_VERSIONS = 5
+const RESEND_MESSAGE_THRESHOLD = 2
 
 // 弹出层工具
 const { confirm, editText, toast, notify } = usePopup();
 const authStore = useAuthStore()
 const sessionStore = useSessionStore();
+
+// 初始化流式响应处理器
+const streamHandler = useStreamResponse(sessionStore, apiService)
 
 
 
@@ -118,19 +127,14 @@ const messagesContainerRef = ref(null);
 const currentSessionId = ref(null);
 const showTokenModal = ref(false);
 const showEditMessageModal = ref(false);
-const itemRefs = ref({});
+const itemRefs = shallowRef({}); // 使用 shallowRef 减少响应式开销
 const isLoading = ref(false)
 const autoScrollToBottom = ref(false);
 const autoScrollToBottomSet = ref(-1);
 const placeholder = ref("auto");
 
-// 编辑模式状态
-const editMode = reactive({
-  isActive: false,
-  message: null,  // 被编辑的消息
-  messageText: "",
-  messageFiles: []
-});
+// 编辑模式状态（简化）
+const editMode = ref(null); // null 表示非编辑模式，{ message, inputMessage } 表示编辑模式
 
 // Props & Emits
 const props = defineProps({
@@ -182,36 +186,7 @@ const activeMessages = computed({
 });
 
 const messagePairs = computed(() => {
-  const groups = [];
-  let i = 0;
-
-  while (i < activeMessages.value.length) {
-    const current = activeMessages.value[i];
-    current.index = i;
-    // 如果是用户消息，尝试和下一条配对
-    if (current.role === 'user') {
-      const next = activeMessages.value[i + 1];
-      // 检查下一条是否存在、是 assistant、且 parent_id 匹配
-      if (
-        next &&
-        next.role === 'assistant' &&
-        next.parent_id === current.id // 注意字段名，按实际改
-      ) {
-        next.index = i + 1;
-        groups.push([current, next]);
-        i += 2; // 跳过两条
-        continue;
-      }
-      // 无法配对，单独成组
-      groups.push([current]);
-      i += 1;
-    } else {
-      // 当前是 assistant（孤立答案）
-      groups.push([current]);
-      i += 1;
-    }
-  }
-  return groups;
+  return pairMessages(activeMessages.value)
 })
 
 const webSearchEnabled = computed({
@@ -406,11 +381,20 @@ async function importChat() {
   input.click();
 }
 
-// 会话相关方法
+/**
+ * 设置消息项引用
+ * @param {any} el - DOM 元素或组件实例
+ * @param {string} messageId - 消息 ID
+ */
 function setItemRef(el, messageId) {
   if (el) itemRefs.value[messageId] = el;
 }
 
+/**
+ * 处理会话切换
+ * @param {string} newSessionId - 新会话 ID
+ * @param {string} oldSessionId - 旧会话 ID
+ */
 async function handleSessionChange(newSessionId, oldSessionId) {
   if (newSessionId === oldSessionId) return;
   isLoading.value = true;
@@ -429,6 +413,10 @@ async function handleSessionChange(newSessionId, oldSessionId) {
 }
 
 
+/**
+ * 加载会话消息
+ * @param {string} sessionId - 会话 ID
+ */
 async function loadMessages(sessionId) {
   if (sessionStore.getMessages(sessionId).length === 0) {
     const sessionMessages = await apiService.fetchSessionMessages(sessionId);
@@ -452,296 +440,45 @@ async function loadMessages(sessionId) {
       }
     });
 
+    // 使用 shallowRef 优化大对象
     sessionStore.setMessages(sessionId, sessionMessages.items);
   }
 }
 
-function getCurrentIndex(messageContents) {
-  if (!messageContents?.length) return 0;
-  const currentIndex = messageContents.findIndex((content) => content.is_current);
-  return currentIndex !== -1 ? currentIndex : 0;
-}
-
-function getCurrentContent(messageContents) {
-  const index = getCurrentIndex(messageContents);
-  return messageContents[index];
-}
-
-function allowReSendMessage(message, index) {
-  if (message.role !== "user") return false;
-  // 最后一条user消息允许重新再发送栏中编辑
-  console.log("index", index, activeMessages.value.length)
-  return index >= activeMessages.value.length - 2;
-}
+// 注意：getCurrentTurns, allowReSendMessage 已直接从 utils/messageUtils 导入
+// 不需要包装函数，直接使用即可
 
 
 
-// 流式响应处理
+// 流式响应处理（委托给 composable 处理）
 async function handleStreamResponse(
   streamingSessionId,
   userMessageId,
   regenerationMode = null,
   assistantMessageId = null
 ) {
-
-  sessionStore.setSessionIsStreaming(streamingSessionId, true);
-
-  let message = null;
-  let assistantMessageIdResult = null;
-  let contentIndex = 0;
-
   try {
-    let responseContent = "";
-    let thinkingContent = "";
-    for await (const response of apiService.chat(
+    await streamHandler.processStream(
       streamingSessionId,
       userMessageId,
       regenerationMode,
-      assistantMessageId,
-    )) {
-      if (response.type == "finish") {
-        handleStreamFinish(response, message, contentIndex, assistantMessageIdResult);
-        responseContent = "";
-        thinkingContent = "";
-        continue;
-      }
-
-
-      if (response.type == "create") {
-        ({ message, contentIndex } = handleNewMessage(response, streamingSessionId, userMessageId));
-        assistantMessageIdResult = response.message_id;
-        // nextTick(() => {
-        //   // immediateScrollToBottom();
-        //   autoScrollToBottom.value = false;
-        // });
-        continue;
-      }
-
-
-      // if (response.type == "web_search") {
-      //   if (response.msg == "start") {
-      //     message.state.is_web_searching = true;
-      //   } else {
-      //     message.state.is_web_searching = false;
-      //   }
-      //   continue;
-      // }
-
-      if (response.type == "think") {
-        const content = message?.contents[contentIndex];
-
-        // 首次收到 think 事件，记录开始时间并启动计时器
-        if (!content.state.is_thinking) {
-          content.state.is_thinking = true;
-          content.thinking_started_at = Date.now();
-
-          // 启动实时计时器，每 100ms 更新一次
-          content._thinkingTimer = setInterval(() => {
-            if (content.thinking_started_at) {
-              content.thinking_duration_ms = Date.now() - content.thinking_started_at;
-            }
-          }, 100);
-        }
-
-        thinkingContent += response.msg;
-        message.contents[contentIndex].reasoning_content = thinkingContent;
-        continue;
-      }
-
-      // 思考结束后重置状态
-      if (message.contents[contentIndex]?.state.is_thinking) {
-        const content = message.contents[contentIndex];
-        content.state.is_thinking = false;
-
-        // 停止计时器并计算最终时长
-        if (content._thinkingTimer) {
-          clearInterval(content._thinkingTimer);
-          content._thinkingTimer = null;
-        }
-        if (content.thinking_started_at) {
-          content.thinking_duration_ms = Date.now() - content.thinking_started_at;
-        }
-      }
-      // 处理工具调用（增量更新）
-      if (response.type == "tool_call") {
-        const content = message.contents[contentIndex];
-        
-        // 初始化 additional_kwargs
-        if (!content.additional_kwargs) {
-          content.additional_kwargs = {};
-        }
-        if (!content.additional_kwargs.tool_calls) {
-          content.additional_kwargs.tool_calls = [];
-        }
-        
-        // 累加增量的 tool_calls
-        for (const toolCall of response.tool_calls) {
-          const index = toolCall.index;
-          
-          // 查找是否已存在该索引的工具调用
-          let existingToolCall = content.additional_kwargs.tool_calls.find(tc => tc.index === index);
-          
-          if (!existingToolCall) {
-            // 如果是新的工具调用，添加到列表
-            content.additional_kwargs.tool_calls.push({
-              id: toolCall.id,
-              index: toolCall.index,
-              type: toolCall.type,
-              name: toolCall.name,
-              arguments: toolCall.arguments || ''
-            });
-          } else {
-            // 如果已存在，累加参数字符串
-            if (toolCall.arguments !== null && toolCall.arguments !== undefined) {
-              existingToolCall.arguments += toolCall.arguments;
-            }
-          }
-        }
-        continue;
-      }
-      // 处理工具调用结果（一次性接收）
-      if (response.type == "tool_calls_response") {
-        const content = message.contents[contentIndex];
-        if (!content.additional_kwargs) {
-          content.additional_kwargs = {};
-        }
-        content.additional_kwargs.tool_calls_response = response.tool_calls_response;
-        continue;
-      }
-      if (response.type == "text") {
-        responseContent = responseContent + response.msg;
-        message.contents[contentIndex].content = responseContent;
-        continue;
-      }
-    }
+      assistantMessageId
+    )
   } catch (error) {
-    handleStreamCatchError(error, message, contentIndex, assistantMessageIdResult);
-  } finally {
-    cleanupStreaming(streamingSessionId, message, contentIndex);
-    // debouncedUpdatedSession();
-  }
-}
-
-function handleNewMessage(response, sessionId, userMessageId) {
-  const { message_id, turns_id, content_id, model_name } = response;
-  currentSession.value.updated_at = new Date().toISOString();
-
-  let existingMessage = activeMessages.value.find((msg) => msg.id === message_id);
-  const time = new Date().toISOString();
-  if (!existingMessage) {
-    existingMessage = reactive({
-      id: message_id,
-      role: "assistant",
-      contents: [],
-      parent_id: userMessageId,
-      current_turns_id: turns_id,
-      state: {
-        is_web_searching: false,
-        is_streaming: true
-      },
-      created_at: time
-    });
-    activeMessages.value.push(existingMessage);
-  }
-  existingMessage.current_turns_id = turns_id;
-  existingMessage.contents.push({
-    id: content_id,
-    content: null,
-    reasoning_content: null,
-    turns_id: turns_id,
-    additional_kwargs: [],
-    meta_data: { model_name },
-    created_at: time,
-    updated_at: time,
-    thinking_started_at: null,
-    thinking_duration_ms: null,
-    state: {
-      is_streaming: true,
-      is_thinking: false,
-    },
-  });
-
-  existingMessage.state = {
-    is_web_searching: false,
-    is_streaming: true
-  };
-  return {
-    message: existingMessage,
-    contentIndex: existingMessage.contents.length - 1
-  };
-
-}
-
-function handleStreamFinish(response, message, contentIndex, assistantMessageId) {
-  if (!message || contentIndex === undefined) {
-    return;
-  }
-
-  const content = message.contents[contentIndex];
-  
-  // 保存 usage 信息到 meta_data
-  if (response.usage) {
-    content.meta_data = {
-      ...content.meta_data,
-      ...response.usage
-    };
-  }
-  
-  // 保存 finish_reason
-  if (response.finish_reason) {
-    content.meta_data = {
-      ...content.meta_data,
-      finish_reason: response.finish_reason
-    };
-  }
-  
-  // 处理错误情况
-  if (response.finish_reason === "error") {
-    console.error("Error in stream:", response.error);
-    content.meta_data = {
-      ...content.meta_data,
-      error: response.error,
-      finish_reason: response.finish_reason
-    };
-    content.state.is_streaming = false;
-    content.state.is_thinking = false;
-    return;
-  }
-  
-  // 正常结束，更新状态
-  content.state.is_streaming = false;
-  content.state.is_thinking = false;
-}
-
-function handleStreamCatchError(error, message, contentIndex, assistantMessageId) {
-  if (error.name !== "AbortError") {
-    console.error("Error during streaming:", error);
-    if (message && contentIndex !== undefined) {
-      message.contents[contentIndex].content = error.message;
-    }
-    if (!assistantMessageId) {
-      notify.error("请求错误", error.message);
+    // 错误已在 composable 中处理，这里只负责显示通知
+    if (error.name !== 'AbortError') {
+      notify.error("请求错误", error.message)
     }
   }
 }
 
-function cleanupStreaming(sessionId, message, contentIndex) {
-  sessionStore.setSessionIsStreaming(sessionId, false);
-  if (message) {
-    message.state.is_streaming = false;
-    message.state.is_thinking = false;
-    message.state.is_web_searching = false;
 
-    // 清理计时器，防止内存泄漏
-    const content = message.contents[contentIndex];
-    if (content?._thinkingTimer) {
-      clearInterval(content._thinkingTimer);
-      content._thinkingTimer = null;
-    }
 
-    message.contents[contentIndex].updated_at = new Date().toISOString();
-  }
-}
+
+
+
+
+
 
 // 消息操作方法
 function abortResponse() {
@@ -785,16 +522,19 @@ async function deleteMessage(message) {
 
 async function editMessage(message) {
   try {
-    const index = getCurrentIndex(message.contents);
+    // 使用 getCurrentTurns 获取当前版本的内容数组，取最后一个作为编辑对象
+    const turns = getCurrentTurns(message)
+    const currentContent = turns[turns.length - 1]
+    
     const result = await editText({
       title: "编辑消息",
-      defaultValue: message.contents[index].content,
+      defaultValue: currentContent.content,
       confirmText: "保存",
       cancelText: "取消"
     });
 
     if (result) {
-      message.contents[index].content = result;
+      currentContent.content = result;
       await apiService.updateMessage(message.id, { content: result });
       sessionStore.updateMessage(currentSessionId.value, message.id, message);
       // debouncedUpdatedSession();
@@ -808,7 +548,11 @@ async function editMessage(message) {
 
 async function copyMessage(message) {
   try {
-    await navigator.clipboard.writeText(getCurrentContent(message.contents).content);
+    // 使用 getCurrentTurns 获取当前版本的内容数组，取最后一个作为复制对象
+    const turns = getCurrentTurns(message)
+    const currentContent = turns[turns.length - 1]
+    
+    await navigator.clipboard.writeText(currentContent.content);
     toast.success("消息已复制");
   } catch (error) {
     console.error("复制消息失败:", error);
@@ -818,7 +562,7 @@ async function copyMessage(message) {
 
 /**
  * 更新占位符元素的最小高度，确保滚动容器能够正确显示内容
- * @param {string} userMessageId - 用户消息的ID，用于定位对应的DOM元素
+ * @param {string} userMessageId - 用户消息的 ID，用于定位对应的 DOM 元素
  */
 function updatePlaceholder(userMessageId) {
   try {
@@ -847,7 +591,14 @@ function updatePlaceholder(userMessageId) {
   }
 }
 
-// 消息发送处理
+/**
+ * 发送新消息
+ * @param {string} sessionId - 会话 ID
+ * @param {string} text - 消息文本
+ * @param {Array} files - 附件列表
+ * @param {string|null} replaceMessageId - 要替换的消息 ID
+ * @returns {Promise<Object>} 创建的消息对象
+ */
 async function sendNewMessage(sessionId, text, files, replaceMessageId = null) {
   // 过滤出含有file.file的有效文件
   const filesWithContent = files.filter((file) => file.file);
@@ -900,6 +651,9 @@ async function sendNewMessage(sessionId, text, files, replaceMessageId = null) {
   return message;
 }
 
+/**
+ * 处理发送消息
+ */
 async function handleSendMessage() {
   const data = inputMessage.value;
   if ((!data.text?.trim() && !data.files.length) || isStreaming.value) return;
@@ -908,7 +662,7 @@ async function handleSendMessage() {
     const { text, files } = data;
 
     // 如果是编辑模式，使用重新发送逻辑
-    if (editMode.isActive && editMode.message) {
+    if (editMode.value && editMode.value.message) {
       await sendEditMessage(text, files);
       return;
     }
@@ -922,23 +676,28 @@ async function handleSendMessage() {
   }
 }
 
+/**
+ * 退出编辑模式
+ */
 function exitEditMode() {
-  editMode.isActive = false;
-  editMode.message = null;
-  editMode.messageText = "";
-  editMode.messageFiles = [];
+  editMode.value = null;
   inputMessage.value = { text: "", files: [] };
 }
 
+/**
+ * 发送编辑后的消息
+ * @param {string} text - 消息文本
+ * @param {Array} files - 附件列表
+ */
 async function sendEditMessage(text, files) {
-  if (!editMode.message) return;
+  if (!editMode.value) return;
 
   try {
     const message = await sendNewMessage(
       currentSession.value.id,
       text,
       files,
-      editMode.message.id
+      editMode.value.message.id
     );
 
     // 退出编辑模式
@@ -951,18 +710,22 @@ async function sendEditMessage(text, files) {
   }
 }
 
+/**
+ * 进入编辑模式以重新生成消息
+ * @param {Object} message - 要编辑的消息对象
+ */
 function generateResponse(message) {
   // 进入编辑模式
-  editMode.isActive = true;
-  editMode.message = message;
-  editMode.messageText = message.contents[0].content;
-  editMode.messageFiles = message.files || [];
+  editMode.value = {
+    message: message,
+    inputMessage: {
+      text: message.contents[0].content,
+      files: message.files || []
+    }
+  }
 
   // 将消息内容设置到输入框
-  inputMessage.value = {
-    text: message.contents[0].content,
-    files: message.files || []
-  };
+  inputMessage.value = editMode.value.inputMessage
 
   // 滚动到底部以便用户看到输入框
   nextTick(() => {
@@ -970,6 +733,10 @@ function generateResponse(message) {
   });
 }
 
+/**
+ * 重新生成响应（多版本）
+ * @param {Object} message - 消息对象
+ */
 function regenerateResponse(message) {
   const versions = []
   for (let i = 0; i < message.contents.length; i++) {
@@ -979,8 +746,8 @@ function regenerateResponse(message) {
     }
   }
 
-  if (versions.length >= 5) {
-    toast.error("暂时最多支持5个回答版本");
+  if (versions.length >= MAX_REGENERATE_VERSIONS) {
+    toast.error(`暂时最多支持${MAX_REGENERATE_VERSIONS}个回答版本`);
     return;
   }
 

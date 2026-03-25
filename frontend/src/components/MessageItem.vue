@@ -109,7 +109,8 @@
                         </div>
                         <pre
                           class="bg-white dark:bg-gray-900/50 border border-gray-200 dark:border-gray-700 rounded p-2 text-xs overflow-x-auto text-gray-700 dark:text-gray-300">
-                <code>{{ formatToolArgs(tool.arguments || tool.args) }}</code></pre>
+                <code>{{ formatToolArgs(tool.arguments || tool.args) }}</code>
+              </pre>
                       </div>
                     </div>
 
@@ -125,7 +126,7 @@
                       <div
                         class="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded p-2 text-xs text-green-800 dark:text-green-300">
                         <pre class="overflow-x-auto">{{ formatToolResponse(turn.additional_kwargs.tool_calls_response[toolIndex])
-                }}</pre>
+                        }}</pre>
                       </div>
                     </div>
                   </div>
@@ -189,7 +190,7 @@
             </el-icon>
           </div>
           <div class="text-gray-700 transition-colors duration-200 flex items-center py-1 px-2">
-            {{ getCurrentIndex(message.contents) + 1 }} / {{ content_versions.length }}
+            {{ getCurrentVersionIndex(message.contents) + 1 }} / {{ content_versions.length }}
           </div>
           <div class="message-action-button" @click="switchContent('next')" :disabled="!hasNextContent">
             <el-icon :size="16">
@@ -258,6 +259,7 @@ import { Loading } from "./icons";
 import { FileItem, Avatar } from "./ui";
 import { usePopup } from "../composables/usePopup";
 import { formatTime } from '../utils'
+import { getCurrentTurns, getContentVersions } from '@/utils/messageUtils'
 
 
 const { toast } = usePopup();
@@ -304,12 +306,9 @@ const messageClass = computed(() =>
 // );
 
 const turns = computed(() => {
-  if (isAssistant.value) {
-    console.log("turns", props.message.contents.filter(content => content.turns_id == props.message.current_turns_id))
-    return props.message.contents.filter(content => content.turns_id == props.message.current_turns_id)
-  }
-  return props.message.contents
-});
+  // 使用工具函数获取当前版本的内容
+  return getCurrentTurns(props.message)
+})
 
 // const hasThinking = computed(
 //   () => isAssistant.value && getCurrentContent(props.message.contents).reasoning_content
@@ -350,14 +349,19 @@ const currentContentTime = computed(() => {
 
 // 计算是否有上一个/下一个内容
 const hasPrevContent = computed(() => {
-  const currentIndex = getCurrentIndex();
-  return currentIndex > 0;
-});
+  const currentIndex = getCurrentVersionIndex()
+  return currentIndex > 0
+})
 
 const hasNextContent = computed(() => {
-  const currentIndex = getCurrentIndex() + 1;
-  return currentIndex < content_versions.value.length;
-});
+  const currentIndex = getCurrentVersionIndex() + 1
+  return currentIndex < content_versions.value.length
+})
+
+// 获取当前索引（本地实现，不再依赖废弃的函数）
+const getCurrentVersionIndex = () => {
+  return content_versions.value.findIndex(version => version === props.message.current_turns_id)
+}
 
 
 
@@ -420,35 +424,27 @@ const handleMoreAction = (key) => {
 };
 
 const content_versions = computed(() => {
-  const versions = props.message.contents;
-  const turns_id_collection = []
-  for (let i = 0; i < versions.length; i++) {
-    const turns_id = versions[i].turns_id
-    if (!turns_id_collection.includes(turns_id)) {
-      turns_id_collection.push(turns_id)
-    }
-  }
-  return turns_id_collection;
+  // 使用工具函数获取所有版本号
+  return getContentVersions(props.message)
 })
 
 const switchContent = (direction) => {
-  const contents = props.message.contents;
-  const currentIndex = content_versions.value.findIndex(version => version === props.message.current_turns_id);
+  const currentIndex = getCurrentVersionIndex()
 
-  if (currentIndex === -1) return;
+  if (currentIndex === -1) return
 
-  let newIndex;
+  let newIndex
   if (direction === 'prev' && currentIndex > 0) {
-    newIndex = currentIndex - 1;
+    newIndex = currentIndex - 1
   } else if (direction === 'next' && currentIndex < content_versions.value.length - 1) {
-    newIndex = currentIndex + 1;
+    newIndex = currentIndex + 1
   } else {
-    return;
+    return
   }
 
   // 通过事件通知父组件切换内容
-  emit('switch', props.message, content_versions.value[newIndex]);
-};
+  emit('switch', props.message, content_versions.value[newIndex])
+}
 
 const showThinking = () => {
   isExpanded.value = true;
@@ -463,9 +459,7 @@ const handleImageClick = (index) => {
   showImageViewer.value = true;
 };
 
-const getCurrentIndex = () => {
-  return content_versions.value.findIndex(version => version === props.message.current_turns_id);
-};
+
 
 const handleClick = (event) => {
   if (event.target.closest('.copy-code-button')) {
