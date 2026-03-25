@@ -175,7 +175,8 @@ class FileService:
             else:
                 file_type = "text"
                 # 读取文件内容
-                file_content = await file.read().decode("utf-8")
+                content_bytes = await file.read()
+                file_content = content_bytes.decode("utf-8")
                 file.seek(0)  # 重置文件指针
 
             # 计算文件hash值
