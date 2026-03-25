@@ -71,7 +71,6 @@ class LLMService:
         frequency_penalty,
         stream: Literal[True],
         thinking,
-        complete_chunk: LLMServiceChunk = ...,
     ) -> AsyncGenerator[LLMServiceChunk, None]: ...
 
     async def completions(
@@ -83,7 +82,6 @@ class LLMService:
         frequency_penalty=None,
         stream=False,
         thinking=False,
-        complete_chunk: LLMServiceChunk = None,
         tools: Optional[list[dict]] = None,
     ):
         """
@@ -163,12 +161,12 @@ class LLMService:
                 # 对于异步流式响应，需要直接返回异步生成器
                 async for chunk in response:
                     # 检查 chunk 是否包含 usage（通常在最后一个 chunk）
-                    if hasattr(chunk, 'usage') and chunk.usage is not None:
-                        logger.debug(f"Got usage from chunk: prompt={chunk.usage.prompt_tokens}, completion={chunk.usage.completion_tokens}, total={chunk.usage.total_tokens}")
-                    
-                    response_chunk = self._handle_stream_chunk(
-                        chunk, complete_chunk=complete_chunk
-                    )
+                    if hasattr(chunk, "usage") and chunk.usage is not None:
+                        logger.debug(
+                            f"Got usage from chunk: prompt={chunk.usage.prompt_tokens}, completion={chunk.usage.completion_tokens}, total={chunk.usage.total_tokens}"
+                        )
+
+                    response_chunk = self._handle_stream_chunk(chunk)
                     if response_chunk:
                         yield response_chunk
                     else:
@@ -184,26 +182,22 @@ class LLMService:
             if response is not None:
                 await self.close_api_connection(response)
 
-    def _handle_stream_chunk(self, chunk, complete_chunk: LLMServiceChunk = None):
+    def _handle_stream_chunk(self, chunk):
         response_chunk = LLMServiceChunk()
         delta = chunk.choices[0].delta
         # logger.debug("chunk:", delta)
-        
+
         # 提取 usage 信息（如果存在）
-        if hasattr(chunk, 'usage') and chunk.usage is not None:
+        if hasattr(chunk, "usage") and chunk.usage is not None:
             response_chunk.usage = {
                 "prompt_tokens": chunk.usage.prompt_tokens,
                 "completion_tokens": chunk.usage.completion_tokens,
                 "total_tokens": chunk.usage.total_tokens,
             }
-            if complete_chunk is not None:
-                complete_chunk.usage = response_chunk.usage
-        
+
         if chunk.choices[0].finish_reason is not None:
             logger.debug("finished,finish_reason:" + chunk.choices[0].finish_reason)
             response_chunk.finish_reason = chunk.choices[0].finish_reason
-            if complete_chunk is not None:
-                complete_chunk.finish_reason = response_chunk.finish_reason
 
         elif (
             hasattr(delta, "reasoning_content")
@@ -211,10 +205,6 @@ class LLMService:
             and len(delta.reasoning_content) > 0
         ):
             response_chunk.reasoning_content = delta.reasoning_content
-            if complete_chunk is not None:
-                complete_chunk.reasoning_content = (
-                    complete_chunk.reasoning_content or ""
-                ) + delta.reasoning_content
 
         elif (
             hasattr(delta, "content")
@@ -222,8 +212,7 @@ class LLMService:
             and len(delta.content) > 0
         ):
             response_chunk.content = delta.content
-            if complete_chunk is not None:
-                complete_chunk.content = (complete_chunk.content or "") + delta.content
+
         elif (
             hasattr(delta, "tool_calls")
             and delta.tool_calls is not None
