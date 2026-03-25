@@ -87,6 +87,47 @@ class MemoryManagerService:
         conversation_messages.reverse()
         return conversation_messages
 
+    async def get_recent_messages_for_summary(
+        self,
+        session_id: str,
+        model_name: str,
+        prompt_settings: dict = {},
+        disabled_tool_results: bool = True,
+    ) -> list[dict]:
+        """
+        获取最近的 3 条消息用于标题生成或其他总结任务
+        
+        Args:
+            session_id: 会话 ID
+            model_name: 模型名称（用于 tokenizer）
+            prompt_settings: 提示词配置（可能包含系统消息）
+            disabled_tool_results: 是否禁用工具调用结果，默认 True（总结任务通常不需要工具调用细节）
+            
+        Returns:
+            list[dict]: 最多 3 条消息（不含系统消息），按时间正序排列（从旧到新）
+        """
+        # 复用现有方法获取最近的消息（不指定 end_message_id，默认获取到最新消息）
+        all_messages = await self.get_conversation_messages(
+            session_id=session_id,
+            model_name=model_name,
+            user_message_id=None,  # 不指定，获取最新消息
+            max_messages=3,  # 限制 3 条
+            prompt_settings=prompt_settings,
+            disabled_tool_results=disabled_tool_results,
+        )
+        
+        # 过滤掉系统消息
+        non_system_messages = [
+            msg for msg in all_messages 
+            if msg.get("role") != "system"
+        ]
+        
+        # get_conversation_messages 返回的是倒序，需要反转成正序
+        non_system_messages.reverse()
+        
+        # 只取最新的 3 条（已经是正序：从旧到新）
+        return non_system_messages[:3]
+
     # def get_memory_strategy(self, memory_type: str) -> MemoryStrategy:
     #     pass
     def _transform_content_structure(
