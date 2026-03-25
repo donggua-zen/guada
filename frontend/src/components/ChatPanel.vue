@@ -47,9 +47,9 @@
               <MessageItem v-for="message in pair" :ref="(el) => setItemRef(el, message.id)" :key="message.id"
                 :message="message" :avatar="message.role == 'user' ? userAvater : currentSession.avatar_url"
                 :is-last="message.index == activeMessages.length - 1"
-                :allow-generate="!isStreaming && allowReSendMessage(message, message.index, activeMessages)" @delete="deleteMessage"
-                @edit="editMessage" @copy="copyMessage" @generate="generateResponse" @regenerate="regenerateResponse"
-                @render-complete="handleRenderComplete" @switch="switchContent" />
+                :allow-generate="!isStreaming && allowReSendMessage(message, message.index, activeMessages)"
+                @delete="deleteMessage" @edit="editMessage" @copy="copyMessage" @generate="generateResponse"
+                @regenerate="regenerateResponse" @render-complete="handleRenderComplete" @switch="switchContent" />
             </div>
           </div>
         </ScrollContainer>
@@ -70,14 +70,12 @@
       </div>
 
       <div class="w-full flex items-center max-w-[960px]">
-        <ChatInput v-model:value="inputMessage.text" v-model:web-search-enabled="webSearchEnabled"
-          v-model:thinking-enabled="thinkingEnabled" :config="{
-            modelId: currentModelId,
-            maxMemoryLength: currentSession.settings?.max_memory_length || null
-          }" :buttons="chatInputButtons" :files="inputMessage.files" :streaming="isStreaming"
-          :session-id="currentSessionId" @config-change="handleConfigChange" @send="handleSendMessage"
-          @abort="abortResponse" @toggle-web-search="handleWebSearch" @toggle-thinking="toggleDeepThinking"
-          @tokens-statistic="handleTokensStatistic" />
+        <ChatInput v-model:value="inputMessage.text" v-model:thinking-enabled="thinkingEnabled" :config="{
+          modelId: currentModelId,
+          maxMemoryLength: currentSession.settings?.max_memory_length || null
+        }" :files="inputMessage.files" :streaming="isStreaming" :session-id="currentSessionId"
+          @config-change="handleConfigChange" @send="handleSendMessage" @abort="abortResponse"
+          @toggle-thinking="toggleDeepThinking" @tokens-statistic="handleTokensStatistic" />
       </div>
       <!-- <div class="ai-disclaimer text-xs text-gray-400 text-center mt-2">内容由 AI 生成，仅供参考</div> -->
 
@@ -105,11 +103,9 @@ import { Avatar, ChatInput, ScrollContainer } from "./ui";
 const TokenStatisticsModal = defineAsyncComponent(() => import("./TokenStatisticsModal.vue"));
 
 // UI 组件导入
-import { ElDialog } from "element-plus";
 
 // 常量定义
 const MAX_REGENERATE_VERSIONS = 5
-const RESEND_MESSAGE_THRESHOLD = 2
 
 // 弹出层工具
 const { confirm, editText, toast, notify } = usePopup();
@@ -126,7 +122,6 @@ const scrollContainerRef = ref(null);
 const messagesContainerRef = ref(null);
 const currentSessionId = ref(null);
 const showTokenModal = ref(false);
-const showEditMessageModal = ref(false);
 const itemRefs = shallowRef({}); // 使用 shallowRef 减少响应式开销
 const isLoading = ref(false)
 const autoScrollToBottom = ref(false);
@@ -162,7 +157,6 @@ const currentSession = computed({
 });
 
 
-const chatTitle = computed(() => props.session?.title || "Loading...");
 const userAvater = computed(() => authStore.user?.avatar_url);
 
 const currentModelName = computed(() =>
@@ -178,8 +172,6 @@ const inputMessage = computed({
   set: (value) => sessionStore.setInputMessage(currentSessionId.value, value)
 });
 
-const editInputMessage = ref({ old_message_id: "", text: "", files: [] });
-
 const activeMessages = computed({
   get: () => sessionStore.getMessages(currentSessionId.value) || [],
   set: (value) => sessionStore.setMessages(currentSessionId.value, value)
@@ -188,16 +180,6 @@ const activeMessages = computed({
 const messagePairs = computed(() => {
   return pairMessages(activeMessages.value)
 })
-
-const webSearchEnabled = computed({
-  get() {
-    return currentSession.value.settings?.web_search_enabled;
-  },
-  set(value) {
-    currentSession.value.settings["web_search_enabled"] = value;
-    currentSession.value.updated_at = new Date().toISOString();
-  }
-});
 
 const thinkingEnabled = computed({
   get() {
@@ -224,16 +206,6 @@ const currentModelId = computed({
   }
 });
 
-
-
-const chatInputButtons = computed(() => {
-  // 根据 currentModelId 获取模型信息
-  const model = currentSession.value.model || null;
-  return {
-    thinkingButton: model?.features?.includes("thinking"),
-    imagesButton: model?.features?.includes("visual"),
-  }
-})
 
 // 防抖函数
 // const debouncedUpdatedSession = useDebounceFn(updateSessionLastMessage, 1000);
@@ -473,13 +445,6 @@ async function handleStreamResponse(
 }
 
 
-
-
-
-
-
-
-
 // 消息操作方法
 function abortResponse() {
   apiService.cancelResponse(currentSessionId.value);
@@ -525,7 +490,7 @@ async function editMessage(message) {
     // 使用 getCurrentTurns 获取当前版本的内容数组，取最后一个作为编辑对象
     const turns = getCurrentTurns(message)
     const currentContent = turns[turns.length - 1]
-    
+
     const result = await editText({
       title: "编辑消息",
       defaultValue: currentContent.content,
@@ -551,7 +516,7 @@ async function copyMessage(message) {
     // 使用 getCurrentTurns 获取当前版本的内容数组，取最后一个作为复制对象
     const turns = getCurrentTurns(message)
     const currentContent = turns[turns.length - 1]
-    
+
     await navigator.clipboard.writeText(currentContent.content);
     toast.success("消息已复制");
   } catch (error) {
@@ -777,10 +742,6 @@ function switchContent(message, turns_id) {
   // debouncedUpdatedSession();
 }
 
-// 设置操作
-const handleWebSearch = () => {
-  debouncedSaveSession();
-};
 
 const toggleDeepThinking = () => {
   debouncedSaveSession();

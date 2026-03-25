@@ -31,14 +31,13 @@ export function useStreamResponse(sessionStore, apiService) {
 
     if (!existingMessage) {
       // 创建新消息 (使用 shallowReactive 减少响应式深度)
-      existingMessage = shallowReactive({
+      existingMessage = reactive({
         id: message_id,
         role: 'assistant',
         contents: [],
         parent_id: userMessageId,
         current_turns_id: turns_id,
         state: {
-          is_web_searching: false,
           is_streaming: true
         },
         created_at: time
@@ -49,7 +48,7 @@ export function useStreamResponse(sessionStore, apiService) {
     existingMessage.current_turns_id = turns_id
 
     // 创建新内容块
-    const newContent = shallowReactive({
+    const newContent = reactive({
       id: content_id,
       content: null,
       reasoning_content: null,
@@ -68,7 +67,6 @@ export function useStreamResponse(sessionStore, apiService) {
 
     existingMessage.contents.push(newContent)
     existingMessage.state = {
-      is_web_searching: false,
       is_streaming: true
     }
 
@@ -264,7 +262,6 @@ export function useStreamResponse(sessionStore, apiService) {
     if (message) {
       message.state.is_streaming = false
       message.state.is_thinking = false
-      message.state.is_web_searching = false
 
       // 清理计时器，防止内存泄漏
       const content = message.contents[contentIndex]

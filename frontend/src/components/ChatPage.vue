@@ -340,6 +340,8 @@ watch(
 watch(
   () => route.params.sessionId,
   (newSessionId) => {
+    if (isLoading.value)
+      return;
     if (!newSessionId) {
       currentSession.value = null;
       return;
