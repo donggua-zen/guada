@@ -114,33 +114,27 @@
                     <div class="p-3">
                         <el-form ref="memoryFormRef" :model="characterForm" :rules="memoryRules" label-position="top"
                             size="large">
-                            <!-- 记忆类型 -->
-                            <!-- <el-form-item label="记忆类型">
-                                <el-select v-model="characterForm.memory_type" placeholder="请选择记忆类型">
-                                    <el-option v-for="option in memoryOptions" :key="option.value" :label="option.label"
-                                        :value="option.value" />
-                                </el-select>
-                            </el-form-item> -->
+                            <!-- 上下文条数 -->
                             <el-form-item label="上下文条数" prop="max_memory_length">
                                 <el-slider-optional v-model="characterForm.max_memory_length" :min="2" :max="500"
                                     :step="1" show-input optional-direction="max" optional-text="No Limit" />
                             </el-form-item>
-                            <!-- 最大记忆长度 -->
-                            <el-form-item label="最大记忆 tokens" prop="max_memory_tokens">
-                                <el-input-number v-model="characterForm.max_memory_tokens" :min="0"
-                                    style="width: 150px;" controls-position="right" placeholder="" :parser="parse"
-                                    :formatter="format" />
-                                <span style="margin-left: 8px; color: #999;">tokens</span>
+                            
+                            <!-- 禁用工具调用结果 -->
+                            <el-form-item label="禁用工具调用结果" prop="disabled_tool_results">
+                                <div class="flex items-center justify-between w-full">
+                                    <div class="flex-1 mr-4">
+                                        <div class="text-sm font-medium mb-1">工具调用结果</div>
+                                        <div class="text-xs text-gray-500">启用后，模型将跳过工具调用的执行，直接返回最终答案，节省 tokens 和响应时间</div>
+                                    </div>
+                                    <el-switch
+                                        v-model="characterForm.disabled_tool_results"
+                                        inline-prompt
+                                        active-text="开"
+                                        inactive-text="关"
+                                    />
+                                </div>
                             </el-form-item>
-                
-                            <!-- 短期记忆长度 -->
-                            <el-form-item label="短期记忆 tokens" prop="short_term_memory_tokens">
-                                <el-input-number v-model="characterForm.short_term_memory_tokens" :min="0"
-                                    style="width: 150px;" controls-position="right" placeholder="" :parser="parse"
-                                    :formatter="format" />
-                                <span style="margin-left: 8px; color: #999;">tokens</span>
-                            </el-form-item>
-                
                         </el-form>
                     </div>
                 </el-tab-pane>
@@ -252,7 +246,8 @@ import {
     ElButton,
     ElAlert,
     ElTag,
-    ElCheckboxGroup
+    ElCheckboxGroup,
+    ElSwitch
 } from 'element-plus'
 import {
     QuestionCircleOutlined,
@@ -334,9 +329,8 @@ const characterForm = reactive({
     model_temperature: null,
     model_top_p: null,
     model_frequency_penalty: null,
-    max_memory_tokens: null,
-    short_term_memory_tokens: null,
     max_memory_length: null,
+    disabled_tool_results: false,  // 新增：是否禁用工具调用结果
     use_user_prompt: false,
     enabled_tools: [],  // 启用的本地工具
     enabled_mcp_servers: []  // 启用的 MCP 服务器 ID 数组
@@ -373,18 +367,8 @@ const modelRules = {
 }
 
 const memoryRules = {
-    memory_type: [
-        { required: true, message: '请选择记忆类型', trigger: ['change'] },
-    ],
-    max_memory_tokens: [
-        { type: 'number', min: 256, message: '最大记忆长度最少为256', trigger: ['input', 'blur'] }
-    ],
-    short_term_memory_tokens: [
-        { type: 'number', min: 256, message: '短期记忆长度最少为256', trigger: ['input', 'blur'] }
-    ],
     max_memory_length: [
-        // { type: 'number', required: true, message: '请输入最大记忆长度', trigger: ['input', 'blur'] },
-        { type: 'number', min: 2, max: 500, message: '最大记忆长度在2-500之间', trigger: ['input', 'blur'] },
+        { type: 'number', min: 2, max: 500, message: '最大记忆长度在 2-500 之间', trigger: ['input', 'blur'] },
     ],
 }
 
@@ -464,8 +448,7 @@ watch(() => props.data, (newVal) => {
     characterForm.model_top_p = newVal.settings?.model_top_p || null;
     characterForm.model_frequency_penalty = newVal.settings?.model_frequency_penalty || null;
     characterForm.max_memory_length = newVal.settings?.max_memory_length || null;
-    characterForm.max_memory_tokens = newVal.settings?.max_memory_tokens || null;
-    characterForm.short_term_memory_tokens = newVal.settings?.short_term_memory_tokens || null;
+    characterForm.disabled_tool_results = newVal.settings?.disabled_tool_results ?? false;  // 加载新字段
     characterForm.use_user_prompt = newVal.settings?.use_user_prompt || false;
     // 加载已启用的工具
     characterForm.enabled_tools = newVal.settings?.tools || [];
@@ -599,9 +582,8 @@ const handleSave = async () => {
                 'assistant_identity': characterForm.assistant_identity,
                 'system_prompt': characterForm.system_prompt,
                 'memory_type': characterForm.memory_type,
-                'max_memory_tokens': characterForm.max_memory_tokens,
-                'short_term_memory_tokens': characterForm.short_term_memory_tokens,
                 'max_memory_length': characterForm.max_memory_length,
+                'disabled_tool_results': characterForm.disabled_tool_results,  // 新增字段
                 // 模型
                 'model_name': findModelById(characterForm.model_id).model_name || '请选择模型',
                 'model_temperature': characterForm.model_temperature,
@@ -627,18 +609,13 @@ const handleSave = async () => {
     }
 }
 
-function parse(input) {
-    const nums = input.replace(/,/g, "").trim();
-    if (/^\d+(\.(\d+)?)?$/.test(nums))
-        return Number(nums);
-    return null;
-}
-
 function format(value) {
     if (value === null || value === "")
         return "不限制";
     return value.toLocaleString("en-US");
 }
+
+// 移除不再需要的 parse 和 format 方法（已删除 max_memory_tokens 和 short_term_memory_tokens）
 </script>
 
 <style scoped>
