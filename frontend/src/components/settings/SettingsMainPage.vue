@@ -54,8 +54,8 @@
                         <template v-else-if="currentTabValue === 'models'">
                             <ModelsSettings />
                         </template>
-                        <template v-else-if="currentTabValue === 'chat'">
-                            <ChatSettings ref="chatSettingsRef" />
+                        <template v-else-if="currentTabValue === 'default-models'">
+                            <DefaultModelSettings />
                         </template>
                         <template v-else-if="currentTabValue === 'mcp'">
                             <MCPServers />
@@ -75,7 +75,7 @@ import UserProfile from './UserProfile.vue'
 import UserSubaccounts from './UserSubaccounts.vue'
 import UserSecurity from './UserSecurity.vue'
 import ModelsSettings from './ModelsSettings.vue';
-import ChatSettings from './ChatSettings.vue'
+import DefaultModelSettings from './DefaultModelSettings.vue'
 import MCPServers from './MCPServers.vue'
 
 import {
@@ -125,9 +125,9 @@ const sidebarItems = [
                 icon: CloudDownloadOutlined,
                 roles: ['primary'],
             }, {
-                label: '对话设置',
-                path: 'chat',
-                icon: VerifiedUserOutlined,
+                label: '默认模型',
+                path: 'default-models',
+                icon: DnsOutlined,
                 roles: ['primary'],
             },
             {

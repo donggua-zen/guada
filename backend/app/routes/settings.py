@@ -31,13 +31,20 @@ async def get_settings(
         "search_api_key": settings_service.get("search_api_key", ""),
         "summary_model_id": settings_service.get("summary_model_id", None),
         "summary_prompt": settings_service.get("summary_prompt", ""),
+        # 新增的默认模型设置
+        "default_title_summary_model_id": settings_service.get("default_title_summary_model_id", None),
+        "default_title_summary_prompt": settings_service.get("default_title_summary_prompt", ""),
+        "default_translation_model_id": settings_service.get("default_translation_model_id", None),
+        "default_translation_prompt": settings_service.get("default_translation_prompt", ""),
+        "default_history_compression_model_id": settings_service.get("default_history_compression_model_id", None),
+        "default_history_compression_prompt": settings_service.get("default_history_compression_prompt", ""),
     }
     return settings
 
 
 @settings_router.put("/settings")
 async def update_settings(
-    request_data: Dict[str, Any],
+    request_data: dict[str, Any],
     settings_service: SettingsManager = Depends(get_settings_service),
 ):
     settings = {
@@ -50,6 +57,13 @@ async def update_settings(
         "search_api_key": request_data.get("search_api_key", ""),
         "summary_model_id": request_data.get("summary_model_id", None),
         "summary_prompt": request_data.get("summary_prompt", ""),
+        # 新增的默认模型设置
+        "default_title_summary_model_id": request_data.get("default_title_summary_model_id", None),
+        "default_title_summary_prompt": request_data.get("default_title_summary_prompt", ""),
+        "default_translation_model_id": request_data.get("default_translation_model_id", None),
+        "default_translation_prompt": request_data.get("default_translation_prompt", ""),
+        "default_history_compression_model_id": request_data.get("default_history_compression_model_id", None),
+        "default_history_compression_prompt": request_data.get("default_history_compression_prompt", ""),
     }
 
     for key, value in settings.items():
