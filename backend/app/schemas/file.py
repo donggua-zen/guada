@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import Optional
+from typing import Optional, Dict, Any
 from pydantic import BaseModel, ConfigDict
 
 from app.schemas.base import BaseResponse
@@ -19,6 +19,7 @@ class FileBase(BaseModel):
     session_id: Optional[str] = None
     message_id: Optional[str] = None
     is_public: Optional[bool] = None
+    file_metadata: Optional[Dict[str, Any]] = None
 
 
 class FileCreate(BaseModel):
@@ -34,6 +35,7 @@ class FileCreate(BaseModel):
     session_id: Optional[str] = None
     message_id: Optional[str] = None
     is_public: Optional[bool] = False
+    file_metadata: Optional[Dict[str, Any]] = None
 
 
 class FileUpdate(BaseModel):
@@ -43,6 +45,7 @@ class FileUpdate(BaseModel):
     url: Optional[str] = None
     preview_url: Optional[str] = None
     is_public: Optional[bool] = None
+    file_metadata: Optional[Dict[str, Any]] = None
 
 
 class FileInDBBase(FileBase):
@@ -74,5 +77,6 @@ class FileOut(BaseResponse):
     session_id: Optional[str] = None
     message_id: Optional[str] = None
     is_public: Optional[bool] = None
+    file_metadata: Optional[Dict[str, Any]] = None
 
     model_config = ConfigDict(from_attributes=True)

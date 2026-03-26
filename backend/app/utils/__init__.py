@@ -2,6 +2,23 @@ from datetime import datetime, timedelta, timezone
 import os
 from app.config import settings
 
+# 导入统一的路径管理工具
+from .upload_paths import (
+    upload_paths,
+    get_images_upload_dir,
+    get_previews_upload_dir,
+    get_files_upload_dir,
+    get_avatars_upload_dir,
+    build_image_save_path,
+    build_preview_save_path,
+    build_file_save_path,
+    build_avatar_save_path,
+    to_image_web_url,
+    to_preview_web_url,
+    to_file_web_url,
+    to_avatar_web_url,
+)
+
 
 def to_utc8_isoformat(dt: datetime):
     """
@@ -64,28 +81,29 @@ def resize_and_convert_image(
     file, output_path, width=None, height=None, force_scale=True
 ):
     """
-    调整图片尺寸并转换为JPEG格式保存
+    调整图片尺寸并转换为 JPEG 格式保存
 
     参数:
         file: 图片文件对象或文件路径，支持多种图片格式
-        output_path: 转换后JPEG图片的保存路径
-        width: 可选参数，目标宽度，如果为None则按高度等比例缩放
-        height: 可选参数，目标高度，如果为None则按宽度等比例缩放
-
+        output_path: 转换后 JPEG 图片的保存路径
+        width: 可选参数，目标宽度，如果为 None 则按高度等比例缩放
+        height: 可选参数，目标高度，如果为 None 则按宽度等比例缩放
+    
     返回值:
-        无返回值，直接将转换后的JPEG图片保存到指定路径
-
+        tuple: (最终宽度，最终高度) 缩放后的图片尺寸
+    
     说明:
-        - 如果width和height都为None: 保持原尺寸
-        - 如果只提供width: 按宽度等比例缩放，高度自动计算
-        - 如果只提供height: 按高度等比例缩放，宽度自动计算
-        - 如果同时提供width和height: 裁剪缩放，保证图片完全填充目标尺寸
+        - 如果 width 和 height 都为 None: 保持原尺寸
+        - 如果只提供 width: 按宽度等比例缩放，高度自动计算
+        - 如果只提供 height: 按高度等比例缩放，宽度自动计算
+        - 如果同时提供 width 和 height: 裁剪缩放，保证图片完全填充目标尺寸
     """
 
     from PIL import Image
-
-    # 打开图片并转换为RGB模式(去除alpha通道)
+    
+    # 直接打开图片（支持文件路径或字节流）
     image = Image.open(file)
+    
     if image.mode in ("RGBA", "LA", "P"):
         # 如果图片有透明通道，转换为RGB并添加白色背景
         background = Image.new("RGB", image.size, (255, 255, 255))
@@ -141,8 +159,11 @@ def resize_and_convert_image(
         # 裁剪图片
         image = resized_image.crop((left, top, right, bottom))
 
-    # 保存为JPEG格式
+    # 保存为 JPEG 格式
     image.save(output_path, "JPEG", quality=95)
+        
+    # 返回最终尺寸
+    return image.size
 
 
 def remove_file(file_path):

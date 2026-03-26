@@ -1,7 +1,7 @@
 from datetime import datetime, timezone
 import ulid
 
-from sqlalchemy import String, DateTime, Text, BigInteger, ForeignKey, Column, Boolean
+from sqlalchemy import String, DateTime, Text, BigInteger, ForeignKey, Column, Boolean, JSON
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from app.database import ModelBase
@@ -29,6 +29,7 @@ class File(ModelBase):
         nullable=True,
     )
     is_public = Column(Boolean, default=False)
+    file_metadata = Column(JSON, nullable=True)
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
     updated_at = Column(
         DateTime,

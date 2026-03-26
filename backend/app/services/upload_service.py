@@ -5,7 +5,7 @@ from typing import Optional
 import uuid
 
 from fastapi import HTTPException
-from app.utils import convert_image_to_jpeg, convert_webpath_to_filepath
+from app.utils import convert_image_to_jpeg, convert_webpath_to_filepath, upload_paths
 from app.config import settings
 
 
@@ -13,9 +13,8 @@ class UploadService:
     # 定义允许的文件扩展名常量
     ALLOWED_EXTENSIONS = {"png", "jpg", "jpeg", "gif", "bmp", "webp", "tiff"}
 
-    # 定义头像上传相关路径常量
+    # 头像上传相关配置（使用统一的路径管理）
     AVATAR_UPLOAD_SUBDIR = "avatars"
-    AVATAR_WEB_PATH_PREFIX = "/static/avatars/"
 
     @classmethod
     def allowed_file(cls, filename: str) -> bool:
@@ -49,14 +48,11 @@ class UploadService:
             IOError: 当文件操作失败时抛出
         """
         try:
-            # 构建上传目录和Web路径
-            upload_folder = os.path.join(
-                str(settings.TATIC_FILES_DIR), self.AVATAR_UPLOAD_SUBDIR
-            )
-            web_path = os.path.join("static", self.AVATAR_UPLOAD_SUBDIR)
-
+            # 使用统一的路径管理工具
+            avatars_dir = upload_paths.get_avatars_upload_dir()
+                    
             # 确保上传目录存在
-            os.makedirs(upload_folder, exist_ok=True)
+            os.makedirs(avatars_dir, exist_ok=True)
 
             # 检查文件对象和文件类型合法性
             if not file:
@@ -73,12 +69,13 @@ class UploadService:
 
             # 生成唯一文件名并保存
             unique_filename = f"{uuid.uuid4().hex}.jpg"
-            file_path = os.path.join(upload_folder, unique_filename)
+            file_path = upload_paths.build_avatar_save_path(unique_filename)
 
             # 转换并保存图片
             convert_image_to_jpeg(file, file_path, size)
-
-            return os.path.join(web_path, unique_filename)
+            
+            # 使用统一的路径管理工具转换为 Web 路径
+            return upload_paths.to_web_path(file_path, "avatars")
 
         except Exception as e:
             traceback.print_exc()
@@ -98,7 +95,7 @@ class UploadService:
         """
         try:
             if not avatar_path or not avatar_path.startswith(
-                self.AVATAR_WEB_PATH_PREFIX
+                upload_paths.avatars_web_prefix
             ):
                 return None
 
@@ -107,9 +104,7 @@ class UploadService:
                 return None
 
             # 生成新的目标路径
-            target_web_path = os.path.join(
-                "static", "avatars", f"{uuid.uuid4().hex}.jpg"
-            )
+            target_web_path = upload_paths.get_avatar_web_url(f"{uuid.uuid4().hex}.jpg")
             target_file_path = convert_webpath_to_filepath(target_web_path)
 
             # 使用copy2复制文件，保留元数据

@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, Request, File, UploadFile
 from fastapi import HTTPException
 from app.dependencies import get_file_service
-from app.services.file_service import FileService
+from app.services.enhanced_file_service import EnhancedFileService
 from app.schemas.file import FileOut
 
 files_router = APIRouter(prefix="/api/v1")
@@ -11,7 +11,7 @@ files_router = APIRouter(prefix="/api/v1")
 async def upload_message_file(
     sessions_id: str,
     file: UploadFile = File(...),
-    file_service: FileService = Depends(get_file_service)
+    file_service: EnhancedFileService = Depends(get_file_service)
 ):
     # 检查文件名
     if not file.filename or file.filename == "":
@@ -26,7 +26,7 @@ async def upload_message_file(
 async def update_message_file(
     file_id: str,
     request: Request,
-    file_service: FileService = Depends(get_file_service)
+    file_service: EnhancedFileService = Depends(get_file_service)
 ):
     json_data = await request.json()
     message_id = json_data.get("message_id")
