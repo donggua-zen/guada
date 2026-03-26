@@ -108,8 +108,7 @@
                           参数
                         </div>
                         <pre
-                          class="bg-white dark:bg-gray-900/50 border border-gray-200 dark:border-gray-700 rounded p-2 text-xs overflow-x-auto text-gray-700 dark:text-gray-300">
-                <code>{{ formatToolArgs(tool.arguments || tool.args) }}</code>
+                          class="bg-white dark:bg-gray-900/50 border border-gray-200 dark:border-gray-700 rounded p-2 text-xs overflow-x-auto text-gray-700 dark:text-gray-300"><code>{{ formatToolArgs(tool.arguments || tool.args) }}</code>
               </pre>
                       </div>
                     </div>
