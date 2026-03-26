@@ -136,9 +136,29 @@
 
 
         </template>
-        <el-alert v-if="metadata && metadata.finish_reason == 'error'" title="API请求错误" type="error" :closable="false">
+        <el-alert v-if="metadata && metadata.finish_reason == 'error'" title="API 请求错误" type="error" :closable="false">
           {{ metadata.error }}
         </el-alert>
+                
+        <!-- ✅ 新增：Token 消耗显示区域 -->
+        <div v-if="isAssistant && tokenUsage && !streamingState.is_streaming" class="token-usage-section mt-2">
+          <div class="flex items-center gap-3 text-xs text-gray-400">
+            <el-icon size="13" class="text-gray-400">
+              <InsightsTwotone />
+            </el-icon>
+            <span class="text-gray-500">Tokens:</span>
+            <span class="token-item">
+              <span class="text-gray-400 dark:text-gray-300 text-xs">Prompt</span>&nbsp;<span class="text-gray-500 dark:text-gray-300">{{ formatTokenNumber(tokenUsage.prompt_tokens) }}</span>
+            </span>
+            <span class="token-item">
+              <span class="text-gray-400 dark:text-gray-300">Completion</span>&nbsp;<span class="text-gray-500 dark:text-gray-300">{{ formatTokenNumber(tokenUsage.completion_tokens) }}</span>
+            </span>
+            <span class="token-item">
+              <span class="text-gray-400 dark:text-gray-300">Total</span>&nbsp;<span class="text-gray-500 dark:text-gray-300">{{ formatTokenNumber(tokenUsage.total_tokens) }}</span>
+            </span>
+          </div>
+        </div>
+                
         <div v-if="streamingState.is_streaming" class="assistant-loading flex items-center text-gray-500"
           style="position: sticky;top:0;">
           <el-icon size="16" class="mr-2 relative top-[0px]">
@@ -252,6 +272,7 @@ import {
   SettingsOutlined,
   CheckCircleOutlined,
   PsychologyOutlined,
+  InsightsTwotone, // Token 消耗显示图标
 } from "@vicons/material";
 
 import { Loading } from "./icons";
@@ -345,6 +366,17 @@ const currentContentTime = computed(() => {
     full: formatTime(content.created_at, 'full')
   };
 })
+
+// ✅ 新增：获取 token usage 的计算属性
+const tokenUsage = computed(() => {
+  if (!isAssistant.value || !turns.value || turns.value.length === 0) {
+    return null;
+  }
+  
+  // 获取最后一个 turn 的 meta_data.usage
+  const lastTurn = turns.value[turns.value.length - 1];
+  return lastTurn?.meta_data?.usage || null;
+});
 
 // 计算是否有上一个/下一个内容
 const hasPrevContent = computed(() => {
@@ -511,6 +543,22 @@ const formatDuration = (ms) => {
   const minutes = Math.floor(seconds / 60);
   const remainingSeconds = (seconds % 60).toFixed(1);
   return `${minutes}分${remainingSeconds}秒`;
+};
+
+// ✅ 格式化 token 数字：1600 -> 1.6K
+const formatTokenNumber = (num) => {
+  if (!num && num !== 0) return '0';
+  
+  if (num >= 1000000) {
+    // 大于 100 万，显示为 M
+    return (num / 1000000).toFixed(1).replace(/\.0$/, '') + 'M';
+  } else if (num >= 1000) {
+    // 大于 1000，显示为 K
+    return (num / 1000).toFixed(1).replace(/\.0$/, '') + 'K';
+  } else {
+    // 小于 1000，直接显示
+    return num.toString();
+  }
 };
 
 // 获取思考时长：优先使用 meta_data 中的值（后端保存的），如果没有则使用 thinking_duration_ms
@@ -794,6 +842,24 @@ defineExpose({ el: rootRef, showThinking, hideThinking, switchContent, });
     opacity: 1;
     transform: translateY(0);
   }
+}
+
+/* ✅ Token 消耗显示样式 - 简约风格 */
+.token-usage-section {
+  padding: 4px 0;
+  animation: fadeIn 0.3s ease;
+}
+
+.token-item {
+  display: inline-flex;
+  align-items: center;
+  font-size: 12px;
+  white-space: nowrap; /* 防止换行 */
+}
+
+.token-item strong {
+  font-weight: 600;
+  color: inherit;
 }
 </style>
 

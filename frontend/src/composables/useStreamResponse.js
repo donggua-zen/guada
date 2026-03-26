@@ -194,11 +194,11 @@ export function useStreamResponse(sessionStore, apiService) {
 
     const content = message.contents[contentIndex]
 
-    // 保存 usage 信息到 meta_data
+    // 保存 usage 信息到 meta_data.usage
     if (response.usage) {
       content.meta_data = {
         ...content.meta_data,
-        ...response.usage
+        usage: response.usage  // ✅ 修复：将 usage 保存在 meta_data.usage 中
       }
     }
 
@@ -304,6 +304,16 @@ export function useStreamResponse(sessionStore, apiService) {
         regenerationMode,
         assistantMessageId
       )) {
+        // ✅ 修复：实时检测并保存 usage，不等待 finish 事件
+        // 这样即使被取消或发生异常，已接收到的 usage 也不会丢失
+        if (response.usage && message && contentIndex !== undefined) {
+          const content = message.contents[contentIndex]
+          content.meta_data = {
+            ...content.meta_data,
+            usage: response.usage  // ✅ 实时更新 usage
+          }
+        }
+
         if (response.type === 'finish') {
           handleStreamFinish(response, message, contentIndex, assistantMessageIdResult)
           responseContent = ''
