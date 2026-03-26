@@ -18,7 +18,7 @@ from app.security import ALGORITHM, SECRET_KEY, oauth2_scheme
 from app.services.character_service import CharacterService
 from app.services.chat.memory_manager_service import MemoryManagerService
 from app.services.agent_service import AgentService
-from app.services.file_service import FileService
+from app.services.enhanced_file_service import EnhancedFileService
 from app.services.message_service import MessageService
 from app.services.model_service import ModelService
 from app.services.session_service import SessionService
@@ -163,8 +163,13 @@ def get_user_service(
 
 def get_file_service(
     file_repo: FileRepository = Depends(get_file_repository),
-) -> FileService:
-    return FileService(file_repo=file_repo)
+) -> EnhancedFileService:
+    """
+    文件服务依赖
+    
+    返回 EnhancedFileService 实例，提供完整的文件上传功能
+    """
+    return EnhancedFileService(file_repo)
 
 
 def get_mcp_server_service(

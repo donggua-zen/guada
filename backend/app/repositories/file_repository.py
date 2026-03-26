@@ -25,6 +25,7 @@ class FileRepository:
         content_hash: str,
         url: str = None,
         preview_url: str = None,
+        file_metadata: dict = None,
     ):
         """
         添加文件到数据库
@@ -35,8 +36,9 @@ class FileRepository:
         :param file_type: 文件类型(text, image, video, audio, file)
         :param file_size: 文件大小
         :param file_content: 文件内容
-        :param session_id: 会话ID
-        :param message_id: 消息ID
+        :param session_id: 会话 ID
+        :param message_id: 消息 ID
+        :param file_metadata: 文件元数据（如图片的宽高）
         :return: 文件信息
         """
         filemodel = FileModel(
@@ -51,6 +53,7 @@ class FileRepository:
             content_hash=content_hash,
             url=url,
             preview_url=preview_url,
+            file_metadata=file_metadata,
         )
         self.session.add(filemodel)
         await self.session.flush()

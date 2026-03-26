@@ -42,3 +42,27 @@ class ParameterError(APIException):
 class PerssionDeniedError(APIException):
     status_code = 403
     message = "Permission denied"
+
+
+class FileUploadError(APIException):
+    """文件上传错误"""
+    status_code = 500
+    message = "File upload failed"
+
+
+class FileValidationError(APIException):
+    """文件验证错误"""
+    status_code = 400
+    message = "Invalid file"
+
+
+class FileSizeLimitExceededError(APIException):
+    """文件大小超出限制"""
+    status_code = 413
+    message = "File size exceeds limit"
+
+
+class UnsupportedFileTypeError(APIException):
+    """不支持的文件类型"""
+    status_code = 415
+    message = "Unsupported file type"
