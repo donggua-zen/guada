@@ -27,13 +27,7 @@
                             思考
                         </el-button>
                     </template>
-                    <el-button round v-if="showButtons.webSearchButton"
-                        :type="localWebSearchEnabled ? 'primary' : 'default'" plain @click="handleWebSearch">
-                        <template #icon>
-                            <Network />
-                        </template>
-                        网络
-                    </el-button>
+
                 </div>
                 <div class="right-actions">
                     <!-- 模型选择按钮 -->
@@ -171,18 +165,17 @@
 
 <script setup>
 import { ref, watch, computed, nextTick, onUnmounted, onMounted } from 'vue'
-import { ElIcon, ElButton, ElDropdown, ElDropdownMenu, ElDropdownItem, ElDialog, ElTabs, ElTabPane, ElInput, ElForm, ElFormItem, ElTag } from 'element-plus';
+import { ElIcon, ElButton, ElDialog, ElTabs, ElTabPane, ElInput, ElForm, ElFormItem, ElTag } from 'element-plus';
 import FileItem from './FileItem.vue';
 import { OpenAI } from "@/components/icons";
 import {
     InsertDriveFileTwotone,
     ImageTwotone,
-    DataThresholdingTwotone,
     ArrowDropDownTwotone,
     SearchFilled,
     CheckCircleFilled
 } from "@vicons/material";
-import { Thinking2, Network, ArrowSend, Stop } from "@/components/icons";
+import { Thinking2, ArrowSend } from "@/components/icons";
 import { reactive } from 'vue';
 import { usePopup } from '@/composables/usePopup';
 import { useBreakpoints, breakpointsTailwind } from '@vueuse/core'
