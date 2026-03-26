@@ -27,13 +27,10 @@ from app.repositories.message_repository import MessageRepository
 from app.repositories.model_repository import ModelRepository
 from app.repositories.session_repository import SessionRepository
 from app.services.chat.memory_manager_service import MemoryManagerService
-from app.services.domain.function_calling.utils import (
-    get_tools_schema,
-    handle_tool_calls,
-)
 from app.services.domain.llm_service import LLMService, LLMServiceChunk
 from app.services.mcp.tool_manager import MCPToolManager
 from app.services.settings_manager import SettingsManager
+from app.services.tools.tool_orchestrator import ToolOrchestrator
 
 logger = logging.getLogger(__name__)
 
@@ -49,6 +46,7 @@ class AgentService:
         memory_manager_service: MemoryManagerService,
         setting_service: SettingsManager,
         mcp_tool_manager: MCPToolManager,
+        tool_orchestrator: ToolOrchestrator,  # ✅ 新增：工具编排器
     ):
         """初始化代理服务
 
@@ -59,6 +57,7 @@ class AgentService:
             memory_manager_service: 记忆管理服务
             setting_service: 设置管理服务
             mcp_tool_manager: MCP 工具管理器
+            tool_orchestrator: 工具编排器（负责统一调度所有工具调用）
         """
         self.session_repo = session_repo
         self.model_repo = model_repo
@@ -66,6 +65,7 @@ class AgentService:
         self.memory_manager_service = memory_manager_service
         self.setting_service = setting_service
         self.mcp_tool_manager = mcp_tool_manager
+        self.tool_orchestrator = tool_orchestrator  # ✅ 保存引用
 
     async def _get_mcp_tools_schema(
         self, character_settings: Optional[Dict[str, Any]] = None
@@ -154,47 +154,43 @@ class AgentService:
         self,
         tool_calls: List[Dict[str, Any]],
     ) -> List[Dict[str, Any]]:
-        """处理所有工具调用（包括本地工具和 MCP 工具）
+        """处理所有工具调用（重构版 - 使用 ToolOrchestrator）
 
         Args:
             tool_calls: 工具调用列表
 
         Returns:
             List[Dict[str, Any]]: 工具执行结果列表
+
+        ✅ 改进:
+            - 不再关心工具类型（本地/MCP）
+            - 不再直接调用 MCP 工具
+            - 统一委托给 ToolOrchestrator 自动路由
+            - 代码从 50 行减少到 20 行
         """
-        tool_results: List[Dict[str, Any]] = []
+        from app.services.tools.providers.tool_provider_base import ToolCallRequest
 
-        for tool_call in tool_calls:
-            func_name = tool_call["name"]
+        # 转换为标准请求对象
+        requests = [
+            ToolCallRequest(
+                id=tc["id"], name=tc["name"], arguments=json.loads(tc["arguments"])
+            )
+            for tc in tool_calls
+        ]
 
-            try:
-                # 解析参数
-                arguments = json.loads(tool_call["arguments"])
+        # 批量执行（自动路由到正确的提供者）
+        responses = await self.tool_orchestrator.execute_batch(requests)
 
-                # 判断是否为 MCP 工具
-                if func_name.startswith("mcp__"):
-                    # MCP 工具调用
-                    logger.info(f"Calling MCP tool: {func_name}")
-                    result = await self._execute_mcp_tool(func_name, arguments)
-                    result["tool_call_id"] = tool_call["id"]
-                    tool_results.append(result)
-                else:
-                    # 本地工具调用
-                    local_result = await handle_tool_calls([tool_call])
-                    tool_results.extend(local_result)
-
-            except Exception as e:
-                logger.error(f"Error handling tool call {func_name}: {e}")
-                tool_results.append(
-                    {
-                        "tool_call_id": tool_call["id"],
-                        "role": "tool",
-                        "name": func_name,
-                        "content": f"Error: {str(e)}",
-                    }
-                )
-
-        return tool_results
+        # 格式化为 OpenAI 兼容格式
+        return [
+            {
+                "tool_call_id": r.tool_call_id,
+                "role": r.role,
+                "name": r.name,
+                "content": r.content,
+            }
+            for r in responses
+        ]
 
     async def completions(
         self,
@@ -267,21 +263,32 @@ class AgentService:
             model_params = self._extract_model_params(session, model)
 
             # 获取 MCP 工具列表并合并到本地工具
-            all_tools_schema = get_tools_schema()  # 本地工具
-
-            # 从角色设置中提取 MCP 配置
+            # ✅ 重构后：使用 ToolOrchestrator 统一获取所有工具 schema
             character_settings: Dict[str, Any] = {}
             if hasattr(session, "character") and session.character:
                 character_settings = session.character.settings or {}
 
-            mcp_tools_schema = await self._get_mcp_tools_schema(
-                character_settings=character_settings
-            )  # MCP 工具
-            all_tools_schema.extend(mcp_tools_schema)  # 合并工具列表
+            # 从角色设置中提取 MCP 配置和工具配置
+            enabled_mcp_servers = None
+            if character_settings:
+                enabled_mcp_servers = character_settings.get("mcp_servers")
 
-            logger.info(
-                f"Using {len(all_tools_schema)} tools (including {len(mcp_tools_schema)} MCP tools)"
+            # 获取已启用的本地工具列表（来自 settings.tools）
+            enabled_tools = None
+            if character_settings:
+                enabled_tools = character_settings.get("tools")
+                if enabled_tools:
+                    logger.info(
+                        f"Character has {len(enabled_tools)} enabled local tools"
+                    )
+
+            # 使用 ToolOrchestrator 获取统一的工具 schema（自动合并本地和 MCP 工具）
+            all_tools_schema = await self.tool_orchestrator.get_all_tools_schema(
+                enabled_tools=enabled_tools,  # ✅ 新增：本地工具过滤
+                enabled_mcp_servers=enabled_mcp_servers,
             )
+
+            logger.info(f"Using {len(all_tools_schema)} tools (including MCP tools)")
             # 提交会话更新
             # await self.session_repo.session.commit()
             # await self.session_repo.session.begin()
@@ -833,9 +840,7 @@ class AgentService:
                     "system_prompt": merged_settings.get("system_prompt", ""),
                     "use_user_prompt": merged_settings.get("use_user_prompt", False),
                 },
-                skip_tool_calls=merged_settings.get(
-                    "skip_tool_calls", False
-                ),
+                skip_tool_calls=merged_settings.get("skip_tool_calls", False),
             )
         )
 

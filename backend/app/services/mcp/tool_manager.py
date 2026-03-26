@@ -51,8 +51,11 @@ class MCPToolManager:
                 MCPServer.enabled == True, MCPServer.id.in_(enabled_mcp_servers)
             )
         else:
+            # return {}
             # 查询所有已启用的 MCP 服务器
-            return {}
+            stmt = select(MCPServer).filter(
+                MCPServer.enabled == True,
+            )
 
         result = await self.session.execute(stmt)
         servers = result.scalars().all()
