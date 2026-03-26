@@ -827,8 +827,6 @@ class AgentService:
                 model_name=session.model.model_name if session.model else None,
                 user_message_id=None,
                 max_messages=merged_settings.get("max_memory_length", 9999) or 9999,
-                max_tokens=merged_settings.get("max_memory_tokens", 32 * 1024)
-                or 32 * 1024,
                 prompt_settings={
                     "assistant_name": merged_settings.get("assistant_name"),
                     "assistant_identity": merged_settings.get("assistant_identity"),
