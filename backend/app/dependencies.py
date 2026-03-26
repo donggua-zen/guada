@@ -26,6 +26,9 @@ from app.services.settings_manager import SettingsManager
 from app.services.user_service import UserService
 from app.services.mcp_server_service import MCPServerService
 from app.services.mcp.tool_manager import MCPToolManager
+from app.services.tools.tool_orchestrator import ToolOrchestrator
+from app.services.tools.providers.local_tool_provider import LocalToolProvider
+from app.services.tools.providers.mcp_tool_provider import MCPToolProvider as NewMCPToolProvider
 
 
 T = TypeVar("T")
@@ -105,6 +108,47 @@ def get_memory_manager_service(
     return MemoryManagerService(message_repo=message_repo)
 
 
+def get_local_tool_provider() -> LocalToolProvider:
+    """创建本地工具提供者"""
+    from app.services.domain.function_calling.utils import (
+        get_current_time,
+        function_schema,
+    )
+    
+    provider = LocalToolProvider()
+    provider.register(
+        name="get_current_time",
+        func=get_current_time,
+        schema=function_schema(get_current_time)
+    )
+    
+    return provider
+
+
+def get_mcp_tool_provider(session: AsyncSession = Depends(get_db_session)) -> NewMCPToolProvider:
+    """创建 MCP 工具提供者"""
+    return NewMCPToolProvider(session)
+
+
+def get_tool_orchestrator(
+    session: AsyncSession = Depends(get_db_session),
+) -> ToolOrchestrator:
+    """创建工具编排器（自动注入所有 Provider）"""
+    orchestrator = ToolOrchestrator()
+    
+    # 添加提供者（按优先级排序）
+    orchestrator.add_provider(
+        get_local_tool_provider(),
+        priority=0  # 本地工具优先级高
+    )
+    orchestrator.add_provider(
+        get_mcp_tool_provider(session),
+        priority=1  # MCP 工具优先级低
+    )
+    
+    return orchestrator
+
+
 def get_agent_service(
     session_repo: SessionRepository = Depends(get_session_repository),
     model_repo: ModelRepository = Depends(get_model_repository),
@@ -112,6 +156,7 @@ def get_agent_service(
     memory_manager_service: MemoryManagerService = Depends(get_memory_manager_service),
     settings_manager: SettingsManager = Depends(get_settings_service),
     mcp_tool_manager: MCPToolManager = Depends(create_repo_dependency(MCPToolManager)),
+    tool_orchestrator: ToolOrchestrator = Depends(get_tool_orchestrator),  # ✅ 新增依赖
 ) -> AgentService:
     """聊天服务依赖"""
     return AgentService(
@@ -121,6 +166,7 @@ def get_agent_service(
         memory_manager_service=memory_manager_service,
         setting_service=settings_manager,
         mcp_tool_manager=mcp_tool_manager,
+        tool_orchestrator=tool_orchestrator,  # ✅ 传入工具编排器
     )
 
 
