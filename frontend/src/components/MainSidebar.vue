@@ -3,7 +3,7 @@
     class="flex flex-col h-full bg-[var(--color-conversation-bg)] border-r border-[var(--color-conversation-border)] transition-all duration-300"
     :style="{ width: sidebarWidth, minWidth: sidebarWidth, maxWidth: sidebarWidth }">
     <!-- 顶部 Logo/标题 -->
-    <div class="px-2.5 py-4 flex items-center justify-center border-b border-[var(--color-conversation-border)]">
+    <div class="px-2.5 py-4 flex items-center justify-center">
       <div class="w-9 h-9 rounded-xl bg-gradient-to-br from-[var(--color-primary)] to-[var(--color-primary-600)] flex items-center justify-center shadow-md">
         <span class="text-white font-semibold text-sm">AI</span>
       </div>

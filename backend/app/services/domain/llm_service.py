@@ -79,9 +79,9 @@ class LLMService:
         self,
         model: str,
         oai_messages: list,
-        temperature=None,
-        top_p=None,
-        frequency_penalty=None,
+        temperature: Optional[float] = None,
+        top_p: Optional[float] = None,
+        frequency_penalty: Optional[float] = None,
         extra_body: dict = {},
         tools: Optional[list[dict]] = None,
         max_tokens: Optional[int] = None,
@@ -89,19 +89,27 @@ class LLMService:
         """非流式模式下的 completions 实现"""
         response = None
         try:
-            response = await self.llm_client.chat.completions.create(
-                model=model,
-                messages=oai_messages,
-                frequency_penalty=frequency_penalty or None,
-                top_p=top_p or None,
-                temperature=temperature or None,
-                max_tokens=max_tokens,
-                stream=False,
-                extra_body=extra_body,
-                timeout=60,
-                tool_choice="auto",
-                tools=tools,
-            )
+            kwargs = {
+                "model": model,
+                "messages": oai_messages,
+                "stream": False,
+                "timeout": 60,
+            }
+            if temperature is not None:
+                kwargs["temperature"] = temperature
+            if top_p is not None:
+                kwargs["top_p"] = top_p
+            if frequency_penalty is not None:
+                kwargs["frequency_penalty"] = frequency_penalty
+            if max_tokens is not None:
+                kwargs["max_tokens"] = max_tokens
+            if tools is not None:
+                kwargs["tools"] = tools
+                kwargs["tool_choice"] = "auto"  # 只在有 tools 时设置 tool_choice
+            if extra_body:
+                kwargs["extra_body"] = extra_body
+                
+            response = await self.llm_client.chat.completions.create(**kwargs)
 
             return self._handle_non_stream_response(response)
         except APIError as e:
@@ -117,9 +125,9 @@ class LLMService:
         self,
         model: str,
         oai_messages: list,
-        temperature=None,
-        top_p=None,
-        frequency_penalty=None,
+        temperature: Optional[float] = None,
+        top_p: Optional[float] = None,
+        frequency_penalty: Optional[float] = None,
         extra_body: dict = {},
         tools: Optional[list[dict]] = None,
         max_tokens: Optional[int] = None,
@@ -127,19 +135,33 @@ class LLMService:
         """流式模式下的 completions 实现"""
         response = None
         try:
-            response = await self.llm_client.chat.completions.create(
-                model=model,
-                messages=oai_messages,
-                frequency_penalty=frequency_penalty or None,
-                top_p=top_p or None,
-                temperature=temperature or None,
-                max_tokens=max_tokens,
-                stream=True,
-                extra_body=extra_body,
-                timeout=60,
-                tool_choice="auto",
-                tools=tools,
-            )
+            # 1. 构建基础参数字典（总是传递的参数）
+            kwargs = {
+                "model": model,
+                "messages": oai_messages,
+                "stream": True,
+                "timeout": 60,
+            }
+
+            # 2. 只传递非 None 的 optional 参数
+            if temperature is not None:
+                kwargs["temperature"] = temperature
+            if top_p is not None:
+                kwargs["top_p"] = top_p
+            if frequency_penalty is not None:
+                kwargs["frequency_penalty"] = frequency_penalty
+            if max_tokens is not None:
+                kwargs["max_tokens"] = max_tokens
+
+            # 3. 处理 tools 和 tool_choice
+            if tools is not None:
+                kwargs["tools"] = tools
+                kwargs["tool_choice"] = "auto"  # 只在有 tools 时设置 tool_choice
+            # 4. 处理 extra_body
+            if extra_body:
+                kwargs["extra_body"] = extra_body
+
+            response = await self.llm_client.chat.completions.create(**kwargs)
 
             # 对于异步流式响应，需要直接返回异步生成器
             async for chunk in response:
@@ -167,11 +189,11 @@ class LLMService:
         self,
         model: str,
         messages: list,
-        temperature=None,
-        top_p=None,
-        frequency_penalty=None,
-        stream=False,
-        thinking=False,
+        temperature: Optional[float] = None,
+        top_p: Optional[float] = None,
+        frequency_penalty: Optional[float] = None,
+        stream: Optional[bool] = False,
+        thinking: Optional[bool] = False,
         tools: Optional[list[dict]] = None,
         max_tokens: Optional[int] = None,
     ):
@@ -229,7 +251,7 @@ class LLMService:
                         }
                     )
             oai_messages.append(oai_message)
-        
+
         # 根据 stream 参数选择不同的实现
         if stream:
             # 流式模式：使用独立的流式方法

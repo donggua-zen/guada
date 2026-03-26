@@ -1,8 +1,12 @@
 <template>
   <div class="flex flex-col h-full w-full">
     <!-- 聊天头部 -->
-    <ChatHeader :sidebar-visible="localSidebarVisible" :has-more-options="false"
-      @toggle-sidebar="emit('update:sidebarVisible', !localSidebarVisible)" />
+    <ChatHeader 
+      :sidebar-visible="localSidebarVisible" 
+      :has-more-options="false"
+      title="新建对话"
+      @toggle-sidebar="emit('update:sidebarVisible', !localSidebarVisible)" 
+    />
 
     <!-- 输入区域 -->
     <div class="px-5 pb-2.5 w-full flex-1 flex flex-col items-center justify-center mb-40">
