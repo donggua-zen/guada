@@ -152,9 +152,9 @@ async def test_session_with_character(
     character_id = character_data_response["id"]
     assert character_data_response["title"] == "Test Character"
 
-    # 使用角色创建会话
+    # 使用角色创建会话（提供自定义 title）
     session_data = {
-        "title": "Test Session with Character",
+        "title": "Custom Session with Character",  # ✅ 提供自定义标题
         "model_id": model_id,
         "character_id": character_id,
     }
@@ -164,14 +164,14 @@ async def test_session_with_character(
     session_data_response = response.json()
     session_id = session_data_response["id"]
 
-    # 验证会话标题是否与角色标题一致
-    assert session_data_response["title"] == character_data_response["title"]
-
-    # 获取会话并验证是否包含角色信息
+    # ✅ 业务逻辑确认：如果参数提供 title，优先使用参数的
+    assert session_data_response["title"] == "Custom Session with Character"
+    
+    # 获取会话并验证标题
     response = await client.get(f"/api/v1/sessions/{session_id}")
     assert response.status_code == 200
     session = response.json()
-    assert session["title"] == character_data_response["title"]
+    assert session["title"] == "Custom Session with Character"
     # 如果API返回角色信息，可以在这里验证
 
     # 删除会话

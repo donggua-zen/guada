@@ -130,9 +130,9 @@ async def test_chat_session_with_character(
     character_id = character_data_response["id"]
     assert character_data_response["title"] == "Test Character"
 
-    # 使用角色创建会话
+    # 使用角色创建会话（提供自定义 title）
     session_data = {
-        "title": "Test Chat Session with Character",
+        "title": "Custom Session Title",  # ✅ 提供自定义标题
         "model_id": model_id,
         "character_id": character_id,
     }
@@ -141,7 +141,10 @@ async def test_chat_session_with_character(
     assert response.status_code == 200
     session_data_response = response.json()
     session_id = session_data_response["id"]
-    assert session_data_response["title"] == character_data_response["title"]
+    
+    # ✅ 业务逻辑确认：如果参数提供 title，优先使用参数的
+    assert session_data_response["title"] == "Custom Session Title"
+    
     # 发送消息到会话
     message_data = {"content": "Hello, character!", "files": []}
 
@@ -155,3 +158,68 @@ async def test_chat_session_with_character(
     # 删除会话
     response = await client.delete(f"/api/v1/sessions/{session_id}")
     assert response.status_code == 200
+
+
+@pytest.mark.asyncio
+async def test_session_title_inheritance_from_character(
+    client: httpx.AsyncClient, test_db_session: AsyncSession
+):
+    """测试会话标题继承逻辑：不提供 title 时继承角色标题
+    
+    业务规则:
+    1. 如果参数提供 title，优先使用参数的
+    2. 如果参数未提供 title，则继承角色的标题
+    """
+    # 首先创建模型供应商
+    provider_data = {
+        "name": "Test Provider Inheritance",
+        "api_url": "https://api.test.com",
+        "api_key": "test-api-key",
+    }
+
+    provider_response = await client.post("/api/v1/providers", json=provider_data)
+    assert provider_response.status_code in [200, 201]
+    provider_data_response = provider_response.json()
+    provider_id = provider_data_response["id"]
+
+    # 然后创建模型
+    model_data = {
+        "name": "Test Model Inheritance",
+        "provider_id": provider_id,
+        "model_name": "test-model-name",
+        "model_type": "llm",
+    }
+
+    model_response = await client.post("/api/v1/models", json=model_data)
+    assert model_response.status_code in [200, 201]
+    model_data_response = model_response.json()
+    model_id = model_data_response["id"]
+
+    # 创建角色
+    character_data = {
+        "title": "Inherited Character Title",
+        "description": "A test character for title inheritance",
+        "model_id": model_id,
+        "is_public": False,
+    }
+
+    response = await client.post("/api/v1/characters", json=character_data)
+    assert response.status_code == 200
+    character_data_response = response.json()
+    character_id = character_data_response["id"]
+    assert character_data_response["title"] == "Inherited Character Title"
+
+    # 使用角色创建会话（不提供 title，验证继承）
+    session_data = {
+        "model_id": model_id,
+        "character_id": character_id,
+        # ✅ 不提供 title 字段，应该继承角色标题
+    }
+
+    response = await client.post("/api/v1/sessions", json=session_data)
+    assert response.status_code == 200
+    session_data_response = response.json()
+    session_id = session_data_response["id"]
+    
+    # ✅ 业务逻辑确认：不提供 title 时继承角色标题
+    assert session_data_response["title"] == "Inherited Character Title"

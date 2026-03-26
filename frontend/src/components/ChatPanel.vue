@@ -44,7 +44,12 @@
         </div>
       </template>
       <template v-else-if="authStore.isAuthenticated">
-        <ScrollContainer ref="scrollContainerRef" :auto-scroll="true" @scroll="handleScroll">
+        <ScrollContainer 
+          ref="scrollContainerRef" 
+          :auto-scroll="true" 
+          @scroll="handleScroll"
+          @is-at-bottom-change="handleIsAtBottomChange"
+        >
           <div class="flex flex-col items-center px-[20px] max-w-[1000px] mx-auto pb-35">
             <div class="w-full" v-for="(pair, index) in messagePairs" :key="pair[0].id"
               :style="{ minHeight: index < messagePairs.length - 1 ? '0' : placeholder }">
@@ -57,6 +62,13 @@
             </div>
           </div>
         </ScrollContainer>
+        
+        <!-- 回到底部悬浮按钮 -->
+        <ScrollToBottomButton 
+          :show="showScrollToBottomBtn" 
+          :is-streaming="shouldButtonBreathe"
+          @click="handleScrollToBottomClick"
+        />
       </template>
     </div>
 
@@ -93,7 +105,7 @@
 import { ref, computed, watch, nextTick, onMounted, onBeforeUpdate, reactive, shallowRef, h, defineAsyncComponent } from "vue";
 import { apiService } from "../services/ApiService";
 import { usePopup } from "@/composables/usePopup";
-import { useDebounceFn } from "@vueuse/core";
+import { useDebounceFn, useThrottleFn } from "@vueuse/core";
 import { useSessionStore } from "../stores/session";
 import { useAuthStore } from "../stores/auth"
 import { pairMessages, getCurrentTurns, allowReSendMessage } from "@/utils/messageUtils"
@@ -102,7 +114,7 @@ import { useStreamResponse } from "@/composables/useStreamResponse"
 // 组件导入
 import MessageItem from "./MessageItem.vue";
 import ChatHeader from "./ChatHeader.vue";
-import { Avatar, ChatInput, ScrollContainer } from "./ui";
+import { Avatar, ChatInput, ScrollContainer, ScrollToBottomButton } from "./ui";
 // 异步组件导入
 const TokenStatisticsModal = defineAsyncComponent(() => import("./TokenStatisticsModal.vue"));
 
@@ -131,6 +143,8 @@ const isLoading = ref(false)
 const autoScrollToBottom = ref(false);
 const autoScrollToBottomSet = ref(-1);
 const placeholder = ref("auto");
+// 回到底部按钮相关状态
+const showScrollToBottomBtn = ref(false);
 
 // 编辑模式状态（简化）
 const editMode = ref(null); // null 表示非编辑模式，{ message, inputMessage } 表示编辑模式
@@ -170,6 +184,9 @@ const currentModelName = computed(() =>
 );
 
 const isStreaming = computed(() => sessionStore.sessionIsStreaming(currentSessionId.value));
+
+// 按钮是否应该显示呼吸动画（与 isStreaming 解耦，避免隐藏时冲突）
+const shouldButtonBreathe = ref(false)
 
 const inputMessage = computed({
   get: () => sessionStore.getInputMessage(currentSessionId.value) || { text: "", files: [] },
@@ -231,6 +248,86 @@ const handleConfigChange = (config) => {
   emit("save-settings");
 };
 
+// 滚动相关工具函数（需要在 watch 之前定义）
+const debouncedResetScrollFlag = useDebounceFn(() => {
+  autoScrollToBottomSet.value = -1
+}, 100);
+
+/**
+ * 处理滚动到底部状态变化
+ * @param {boolean} isAtBottom - 是否在底部
+ */
+const handleIsAtBottomChange = useThrottleFn((isAtBottom) => {
+  console.log('[ScrollButton] isAtBottom change:', isAtBottom)
+  
+  // 如果在底部，立即隐藏按钮（同时停止呼吸动画以避免冲突）
+  if (isAtBottom) {
+    // 先停止呼吸动画，避免与淡出动画冲突
+    shouldButtonBreathe.value = false
+    // 然后隐藏按钮
+    showScrollToBottomBtn.value = false
+    console.log('[ScrollButton] Button hidden immediately due to at bottom')
+  }
+}, 50)  // ← 减少节流时间到 50ms，更快响应
+
+/**
+ * 处理回到底部按钮点击
+ */
+const handleScrollToBottomClick = () => {
+  console.log('[ScrollButton] clicked')
+  scrollToBottomSmooth()
+}
+
+/**
+ * 平滑滚动到底部（优先使用平滑滚动）
+ */
+function scrollToBottomSmooth() {
+  if (scrollContainerRef.value) {
+    scrollContainerRef.value.smoothScrollToBottom()
+    
+    // 强制设置为自动滚动模式
+    nextTick(() => {
+      immediateScrollToBottom(true)
+    })
+  }
+}
+
+/**
+ * 智能更新回到底部按钮显示状态
+ * 在流式输出时，如果用户不在底部，显示按钮
+ */
+const updateScrollButtonVisibility = useDebounceFn(() => {
+  // 检查是否在底部 - 注意：isAtBottom 是 computed，不需要 .value
+  const isAtBottom = scrollContainerRef.value?.isAtBottom
+  
+  console.log('[ScrollButton] updateScrollButtonVisibility:', {
+    isAtBottom,
+    isStreaming: isStreaming.value,
+    shouldButtonBreathe: shouldButtonBreathe.value,
+    showBefore: showScrollToBottomBtn.value,
+    hasScrollContainer: !!scrollContainerRef.value,
+    hasIsAtBottom: !!scrollContainerRef.value?.isAtBottom
+  })
+  
+  // 如果在底部，总是隐藏按钮（无延迟）
+  if (isAtBottom) {
+    showScrollToBottomBtn.value = false
+    console.log('[ScrollButton] HIDDEN - at bottom')
+    return
+  }
+  
+  // 不在底部时，只在流式输出期间显示按钮
+  if (isStreaming.value) {
+    showScrollToBottomBtn.value = true
+    // 确保呼吸动画也开启
+    shouldButtonBreathe.value = true
+    console.log('[ScrollButton] SHOWN - streaming and not at bottom, breathing enabled')
+  } else {
+    showScrollToBottomBtn.value = false
+    console.log('[ScrollButton] HIDDEN - not streaming')
+  }
+}, 50)  // ← 减少防抖时间到 50ms，更快响应
+
 // 标题生成标记（需要在 handleSessionChange 之前声明）
 let hasGeneratedTitle = ref(false);
 
@@ -239,12 +336,16 @@ watch(() => props.session?.id, handleSessionChange, { immediate: true });
 
 // 监听流式状态变化，在第一次对话完成后生成标题
 watch(() => isStreaming.value, async (newVal, oldVal) => {
+  console.log('[ScrollButton] Streaming watch triggered:', { oldVal, newVal })
+  
   // 当流式状态从 true 变为 false 时（即助手回复完成）
   if (oldVal === true && newVal === false) {
-    // 检查是否是第一条助手消息
-    const firstAssistantMessage = activeMessages.value.find(m => m.role === 'assistant');
+    console.log('[ScrollButton] Streaming finished, checking title generation')
     
-    if (firstAssistantMessage && !hasGeneratedTitle.value) {
+    // 检查是否是第一条助手消息
+    // const firstAssistantMessage = activeMessages.value.find(m => m.role === 'assistant');
+    
+    if (activeMessages.value.length == 2 && !hasGeneratedTitle.value) {
       // 标记已生成标题，避免重复调用
       hasGeneratedTitle.value = true;
       
@@ -268,7 +369,25 @@ watch(() => isStreaming.value, async (newVal, oldVal) => {
         // 不显示错误提示，避免影响用户体验
       }
     }
+    
+    // 流式结束，隐藏按钮（已在 updateScrollButtonVisibility 中处理）
+    console.log('[ScrollButton] Streaming ended, button will be hidden by updateScrollButtonVisibility')
   }
+}, { immediate: true });
+
+// 监听消息变化，智能显示回到底部按钮
+watch(() => activeMessages.value.length, () => {
+  console.log('[ScrollButton] Message count changed:', activeMessages.value.length)
+  updateScrollButtonVisibility()
+}, { immediate: true });
+
+// 监听流式状态变化，控制按钮显示和呼吸动画
+watch(() => isStreaming.value, (newVal) => {
+  console.log('[ScrollButton] Streaming state changed:', newVal)
+  // 更新呼吸动画状态
+  shouldButtonBreathe.value = newVal
+  // 流式状态变化时立即更新按钮状态
+  updateScrollButtonVisibility()
 }, { immediate: true });
 
 
@@ -281,12 +400,8 @@ onMounted(() => {
   // 初始化相关逻辑
 });
 
-const debouncedResetScrollFlag = useDebounceFn(() => {
-  autoScrollToBottomSet.value = -1
-}, 100);
 // 滚动功能
 function immediateScrollToBottom(persistent = false) {
-
   autoScrollToBottom.value = persistent
   autoScrollToBottomSet.value = persistent ? 1 : 0
   debouncedResetScrollFlag();
@@ -299,10 +414,14 @@ const handleRenderComplete = () => {
   if (autoScrollToBottom.value) {
     nextTick(() => {
       console.log("handleRenderComplete2")
-
       immediateScrollToBottom(true);
     });
   }
+  
+  // 渲染完成后更新按钮状态
+  nextTick(() => {
+    updateScrollButtonVisibility()
+  })
 }
 
 const handleScroll = (event) => {

@@ -15,13 +15,13 @@ export function pairMessages(messages) {
 
   while (i < messages.length) {
     const current = messages[i]
-    
+
     // 为每条消息设置索引（用于显示）
     current.index = i
-    
+
     if (current.role === 'user') {
       const next = messages[i + 1]
-      
+
       // 检查下一条是否存在、是 assistant、且 parent_id 匹配
       if (
         next &&
@@ -33,7 +33,7 @@ export function pairMessages(messages) {
         i += 2
         continue
       }
-      
+
       // 无法配对，单独成组
       pairs.push([current])
       i += 1
@@ -43,7 +43,7 @@ export function pairMessages(messages) {
       i += 1
     }
   }
-  
+
   return pairs
 }
 
@@ -67,13 +67,17 @@ export function getCurrentIndex(messageContents) {
  */
 export function getCurrentTurns(message) {
   if (!message?.contents) return []
-  
+
   // 如果是 assistant 消息，根据 current_turns_id 过滤
   if (message.role === 'assistant' && message.current_turns_id) {
-    return message.contents.filter(content => content.turns_id === message.current_turns_id)
+    const matchedContents = message.contents.filter(
+      content => content.turns_id === message.current_turns_id
+    )
+
+    return matchedContents 
   }
-  
-  // 否则返回所有内容
+
+  // User 消息或没有 current_turns_id 的情况：返回所有内容
   return message.contents
 }
 
@@ -84,14 +88,14 @@ export function getCurrentTurns(message) {
  */
 export function getContentVersions(message) {
   if (!message?.contents) return []
-  
+
   const versions = new Set()
   message.contents.forEach(content => {
     if (content.turns_id) {
       versions.add(content.turns_id)
     }
   })
-  
+
   return Array.from(versions)
 }
 
