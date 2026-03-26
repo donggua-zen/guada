@@ -1,8 +1,12 @@
 <template>
   <div class="flex flex-col h-full" style="position: relative;">
     <!-- 聊天头部 -->
-    <ChatHeader :sidebar-visible="sidebarVisible" @toggle-sidebar="emit('update:sidebarVisible', !sidebarVisible)"
-      @select-more-option="handleMoreSelect" />
+    <ChatHeader 
+      :sidebar-visible="sidebarVisible" 
+      :title="currentSession?.title || ''"
+      @toggle-sidebar="emit('update:sidebarVisible', !sidebarVisible)"
+      @select-more-option="handleMoreSelect" 
+    />
 
     <!-- 消息内容区域 -->
     <div class="flex-1 overflow-hidden w-full items-center" ref="messagesContainerRef">
@@ -615,7 +619,7 @@ function updatePlaceholder(userMessageId) {
                          + parseFloat(style.marginBottom);
       
       // 动态计算最小高度
-      let baseMinHeight = containerRect.height;
+      let baseMinHeight = containerRect.height - 140;
       
       if (userElHeight > containerRect.height * MESSAGE_HEIGHT_THRESHOLD_RATIO) {
         baseMinHeight += (userElHeight - containerRect.height * MESSAGE_HEIGHT_THRESHOLD_RATIO);

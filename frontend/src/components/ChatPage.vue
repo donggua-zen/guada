@@ -28,7 +28,10 @@
       </template>
       <template v-else>
         <div class="h-full flex-1 flex items-center justify-center">
-          <CreateSessionChatPanel @create-session="handleCreateSessionWithMessage" />
+          <CreateSessionChatPanel 
+            v-model:sidebar-visible="sidebarVisible"
+            @create-session="handleCreateSessionWithMessage" 
+          />
         </div>
       </template>
     </template>
