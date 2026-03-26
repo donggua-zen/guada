@@ -121,14 +121,14 @@
                             </el-form-item>
                             
                             <!-- 禁用工具调用结果 -->
-                            <el-form-item label="禁用工具调用结果" prop="disabled_tool_results">
+                            <el-form-item label="禁用工具调用结果" prop="skip_tool_calls">
                                 <div class="flex items-center justify-between w-full">
                                     <div class="flex-1 mr-4">
                                         <div class="text-sm font-medium mb-1">工具调用结果</div>
                                         <div class="text-xs text-gray-500">启用后，模型将跳过工具调用的执行，直接返回最终答案，节省 tokens 和响应时间</div>
                                     </div>
                                     <el-switch
-                                        v-model="characterForm.disabled_tool_results"
+                                        v-model="characterForm.skip_tool_calls"
                                         inline-prompt
                                         active-text="开"
                                         inactive-text="关"
@@ -330,7 +330,7 @@ const characterForm = reactive({
     model_top_p: null,
     model_frequency_penalty: null,
     max_memory_length: null,
-    disabled_tool_results: false,  // 新增：是否禁用工具调用结果
+    skip_tool_calls: false,  // 新增：是否禁用工具调用结果
     use_user_prompt: false,
     enabled_tools: [],  // 启用的本地工具
     enabled_mcp_servers: []  // 启用的 MCP 服务器 ID 数组
@@ -448,7 +448,7 @@ watch(() => props.data, (newVal) => {
     characterForm.model_top_p = newVal.settings?.model_top_p || null;
     characterForm.model_frequency_penalty = newVal.settings?.model_frequency_penalty || null;
     characterForm.max_memory_length = newVal.settings?.max_memory_length || null;
-    characterForm.disabled_tool_results = newVal.settings?.disabled_tool_results ?? false;  // 加载新字段
+    characterForm.skip_tool_calls = newVal.settings?.skip_tool_calls ?? false;  // 加载新字段
     characterForm.use_user_prompt = newVal.settings?.use_user_prompt || false;
     // 加载已启用的工具
     characterForm.enabled_tools = newVal.settings?.tools || [];
@@ -583,7 +583,7 @@ const handleSave = async () => {
                 'system_prompt': characterForm.system_prompt,
                 'memory_type': characterForm.memory_type,
                 'max_memory_length': characterForm.max_memory_length,
-                'disabled_tool_results': characterForm.disabled_tool_results,  // 新增字段
+                'skip_tool_calls': characterForm.skip_tool_calls,  // 新增字段
                 // 模型
                 'model_name': findModelById(characterForm.model_id).model_name || '请选择模型',
                 'model_temperature': characterForm.model_temperature,

@@ -34,6 +34,11 @@ const props = defineProps({
     smoothScroll: {
         type: Boolean,
         default: false
+    },
+    // 是否启用智能回到底部按钮
+    enableScrollButton: {
+        type: Boolean,
+        default: true
     }
 });
 
@@ -47,7 +52,7 @@ const mergredClasses = computed(() => {
 })
 
 // Emits
-const emit = defineEmits(['scroll', 'scroll-to-bottom', 'scroll-state-change']);
+const emit = defineEmits(['scroll', 'scroll-to-bottom', 'scroll-state-change', 'is-at-bottom-change']);
 
 // 响应式数据
 const simpleBarRef = ref(null);
@@ -82,12 +87,14 @@ function checkIsAtBottom() {
 }
 
 function handleScroll(event) {
+    const wasAtBottom = isAtBottom.value;
     isAtBottom.value = checkIsAtBottom();
-    // console.log(event);
-    // if (wasAtBottom !== isAtBottom.value) {
-    //     debouncedScrollStateChange(isAtBottom.value);
-    // }
-    // console.log
+    
+    // 当状态改变时发出事件
+    if (wasAtBottom !== isAtBottom.value) {
+        emit('is-at-bottom-change', isAtBottom.value);
+    }
+    
     emit('scroll', event);
 }
 
