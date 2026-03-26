@@ -347,9 +347,9 @@ class AgentService:
                             }
                         if chunk.finish_reason is not None:
                             if chunk.finish_reason == "tool_calls":
-                                # 检查是否禁用了工具调用结果携带功能
-                                disabled_tool_results = merged_settings.get(
-                                    "disabled_tool_results", False
+                                # 检查是否跳过了工具调用轮次
+                                skip_tool_calls = merged_settings.get(
+                                    "skip_tool_calls", False
                                 )
 
                                 tool_call_response = await self._handle_all_tool_calls(
@@ -593,7 +593,7 @@ class AgentService:
                 "system_prompt": merged_settings.get("system_prompt", ""),
                 "use_user_prompt": merged_settings.get("use_user_prompt", False),
             },
-            disabled_tool_results=merged_settings.get("disabled_tool_results", False),
+            skip_tool_calls=merged_settings.get("skip_tool_calls", False),
         )
 
     async def _validate_model_config(self, session: Message):
@@ -833,8 +833,8 @@ class AgentService:
                     "system_prompt": merged_settings.get("system_prompt", ""),
                     "use_user_prompt": merged_settings.get("use_user_prompt", False),
                 },
-                disabled_tool_results=merged_settings.get(
-                    "disabled_tool_results", False
+                skip_tool_calls=merged_settings.get(
+                    "skip_tool_calls", False
                 ),
             )
         )

@@ -203,7 +203,7 @@ class SessionService:
             session_id=session_id,
             model_name=title_model_id,
             prompt_settings={},  # 标题生成不需要系统消息
-            disabled_tool_results=True,  # 禁用工具调用结果
+            skip_tool_calls=True,  # 跳过工具调用轮次
         )
 
         if len(recent_messages) < 2:
