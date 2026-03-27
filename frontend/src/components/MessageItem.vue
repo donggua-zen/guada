@@ -52,12 +52,13 @@
               <div class="thinking-content-wrapper">
                 <MarkdownContent @click.stop="handleClick"
                   class="thinking-content markdown-text py-3 px-4 pl-4 border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50 text-gray-500 dark:text-gray-400"
-                  :content="turn.reasoning_content" @render-complete="handleRenderComplete" />
+                  :content="turn.reasoning_content" :debounced="turn.state?.is_streaming"
+                  @render-complete="handleRenderComplete" />
               </div>
             </div>
           </div>
           <MarkdownContent v-if="turn.content" class="message-text markdown-text" @click="handleClick"
-            @render-complete="handleRenderComplete" :content="turn.content" />
+            @render-complete="handleRenderComplete" :content="turn.content" :debounced="turn.state?.is_streaming" />
           <!-- 优化工具调用显示 -->
           <div v-if="turn.additional_kwargs && turn.additional_kwargs.tool_calls" class="tool-calls-section mb-3"
             :class="{ 'expanded': isTurnExpanded(turn.id, 'tool') }">
@@ -108,7 +109,8 @@
                           参数
                         </div>
                         <pre
-                          class="bg-white dark:bg-gray-900/50 border border-gray-200 dark:border-gray-700 rounded p-2 text-xs overflow-x-auto text-gray-700 dark:text-gray-300"><code>{{ formatToolArgs(tool.arguments || tool.args) }}</code>
+                          class="bg-white dark:bg-gray-900/50 border border-gray-200 dark:border-gray-700 rounded p-2 text-xs overflow-x-auto text-gray-700 dark:text-gray-300">
+                <code>{{ formatToolArgs(tool.arguments || tool.args) }}</code>
               </pre>
                       </div>
                     </div>
@@ -139,7 +141,7 @@
         <el-alert v-if="metadata && metadata.finish_reason == 'error'" title="API 请求错误" type="error" :closable="false">
           {{ metadata.error }}
         </el-alert>
-                
+
         <!-- ✅ 新增：Token 消耗显示区域 -->
         <div v-if="isAssistant && tokenUsage && !streamingState.is_streaming" class="token-usage-section mt-2">
           <div class="flex items-center gap-3 text-xs text-gray-400">
@@ -148,17 +150,21 @@
             </el-icon>
             <span class="text-gray-500">Tokens:</span>
             <span class="token-item">
-              <span class="text-gray-400 dark:text-gray-300 text-xs">Prompt</span>&nbsp;<span class="text-gray-500 dark:text-gray-300">{{ formatTokenNumber(tokenUsage.prompt_tokens) }}</span>
+              <span class="text-gray-400 dark:text-gray-300 text-xs">Prompt</span>&nbsp;<span
+                class="text-gray-500 dark:text-gray-300">{{ formatTokenNumber(tokenUsage.prompt_tokens) }}</span>
             </span>
             <span class="token-item">
-              <span class="text-gray-400 dark:text-gray-300">Completion</span>&nbsp;<span class="text-gray-500 dark:text-gray-300">{{ formatTokenNumber(tokenUsage.completion_tokens) }}</span>
+              <span class="text-gray-400 dark:text-gray-300">Completion</span>&nbsp;<span
+                class="text-gray-500 dark:text-gray-300">{{ formatTokenNumber(tokenUsage.completion_tokens) }}</span>
             </span>
             <span class="token-item">
-              <span class="text-gray-400 dark:text-gray-300">Total</span>&nbsp;<span class="text-gray-500 dark:text-gray-300">{{ formatTokenNumber(tokenUsage.total_tokens) }}</span>
+              <span class="text-gray-400 dark:text-gray-300">Total</span>&nbsp;<span
+                class="text-gray-500 dark:text-gray-300">{{
+                  formatTokenNumber(tokenUsage.total_tokens) }}</span>
             </span>
           </div>
         </div>
-                
+
         <div v-if="streamingState.is_streaming" class="assistant-loading flex items-center text-gray-500"
           style="position: sticky;top:0;">
           <el-icon size="16" class="mr-2 relative top-[0px]">
@@ -372,7 +378,7 @@ const tokenUsage = computed(() => {
   if (!isAssistant.value || !turns.value || turns.value.length === 0) {
     return null;
   }
-  
+
   // 获取最后一个 turn 的 meta_data.usage
   const lastTurn = turns.value[turns.value.length - 1];
   return lastTurn?.meta_data?.usage || null;
@@ -548,7 +554,7 @@ const formatDuration = (ms) => {
 // ✅ 格式化 token 数字：1600 -> 1.6K
 const formatTokenNumber = (num) => {
   if (!num && num !== 0) return '0';
-  
+
   if (num >= 1000000) {
     // 大于 100 万，显示为 M
     return (num / 1000000).toFixed(1).replace(/\.0$/, '') + 'M';
@@ -854,17 +860,12 @@ defineExpose({ el: rootRef, showThinking, hideThinking, switchContent, });
   display: inline-flex;
   align-items: center;
   font-size: 12px;
-  white-space: nowrap; /* 防止换行 */
+  white-space: nowrap;
+  /* 防止换行 */
 }
 
 .token-item strong {
   font-weight: 600;
   color: inherit;
 }
-</style>
-
-<style>
-@import "@/assets/markdown.css";
-/* 全局样式：确保 v-html 中的代码高亮生效 */
-@import 'highlight.js/styles/foundation.css';
 </style>

@@ -18,6 +18,7 @@
     "@vuelidate/validators": "^2.0.4",
     "@vueuse/core": "^14.1.0",
     "axios": "^1.13.2",
+    "diff-dom": "^5.2.1",
     "element-plus": "^2.13.0",
     "highlight.js": "^11.11.1",
     "marked": "^16.4.2",
