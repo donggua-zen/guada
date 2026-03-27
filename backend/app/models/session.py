@@ -39,6 +39,12 @@ class Session(ModelBase):
         default=lambda: datetime.now(timezone.utc),
         onupdate=lambda: datetime.now(timezone.utc),
     )
+    last_active_at = Column(
+        DateTime,
+        default=lambda: datetime.now(timezone.utc),
+        index=True,
+        nullable=True,
+    )
 
     messages: Mapped[list["Message"]] = relationship(
         "Message",

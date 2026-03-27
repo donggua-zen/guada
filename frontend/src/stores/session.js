@@ -32,7 +32,12 @@ export const useSessionStore = defineStore('session', () => {
 
     // 会话列表相关方法
     const setChatSidebar = (list) => {
-        sessionsList.value = list
+        // 按 last_active_at 或 updated_at 降序排序
+        sessionsList.value = list.sort((a, b) => {
+            const timeA = new Date(a.last_active_at || a.updated_at || 0)
+            const timeB = new Date(b.last_active_at || b.updated_at || 0)
+            return timeB - timeA  // 降序排列，最新的在前
+        })
     }
 
     // 消息相关方法
@@ -114,6 +119,16 @@ export const useSessionStore = defineStore('session', () => {
         session.lastUpdated = Date.now()
     }
 
+    // 更新会话最后活跃时间
+    const updateSessionLastActiveTime = (sessionId, timestamp) => {
+        const session = sessionsList.value.find(s => s.id === sessionId)
+        if (session) {
+            session.last_active_at = timestamp || new Date().toISOString()
+            // 重新触发排序
+            setChatSidebar(sessionsList.value)
+        }
+    }
+
     // 清理会话状态（删除会话时调用）
     const clearSessionState = (sessionId) => {
         sessions.value.delete(sessionId)
@@ -143,6 +158,7 @@ export const useSessionStore = defineStore('session', () => {
         getSessionSetting,
         setSessionSetting,
         updateSessionTitle,
+        updateSessionLastActiveTime,
         clearSessionState
     }
 })

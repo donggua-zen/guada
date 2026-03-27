@@ -19,10 +19,29 @@ class SessionRepository:
         self.session = session
 
     async def get_sessions(self, user_id: str) -> list[dict]:
+        """
+        获取用户会话列表，按最后活跃时间降序排序
+        
+        排序规则：
+        1. 优先按 last_active_at 降序（最新对话在最前）
+        2. 如果 last_active_at 相同，按 updated_at 降序
+        3. 如果都为 NULL，按 created_at 降序
+        
+        Args:
+            user_id: 用户 ID
+            
+        Returns:
+            会话列表
+        """
         stmt = (
             select(Session)
             .filter(Session.user_id == user_id)
-            .order_by(desc(Session.updated_at))
+            # ✅ 主要排序：last_active_at 降序
+            .order_by(
+                desc(Session.last_active_at),
+                desc(Session.updated_at),
+                desc(Session.created_at)
+            )
             .options(
                 selectinload(Session.character)
             )
