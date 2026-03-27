@@ -95,12 +95,18 @@ const sessions = computed({
   }
 });
 
-// 获取按更新时间排序的会话列表，最新的会话排在前面
+// 获取按最后活跃时间降序排序的会话列表，最新的对话排在前面
+// ✅ 修复：使用 last_active_at 优先排序，与后端数据库排序逻辑一致
 const sortedSessions = computed(() => {
   const sessions_ = [...sessions.value];
   return sessions_.sort((a, b) => {
-    const timeA = a.updated_at ? new Date(a.updated_at) : new Date(a.created_at || 0);
-    const timeB = b.updated_at ? new Date(b.updated_at) : new Date(a.created_at || 0);
+    // ✅ 主要排序：last_active_at（最后活跃时间）
+    const timeA = a.last_active_at 
+      ? new Date(a.last_active_at) 
+      : (a.updated_at ? new Date(a.updated_at) : new Date(a.created_at || 0));
+    const timeB = b.last_active_at 
+      ? new Date(b.last_active_at) 
+      : (b.updated_at ? new Date(b.updated_at) : new Date(b.created_at || 0));
     return timeB - timeA; // 降序排列，最新的在前面
   });
 });

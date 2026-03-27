@@ -217,7 +217,10 @@ class AgentService:
 
         # 验证会话存在性
         session = await self._validate_session(session_id)
-        session.updated_at = datetime.datetime.now(datetime.timezone.utc)
+        # 更新最后活跃时间为当前 UTC 时间
+        session.last_active_at = datetime.datetime.now(datetime.timezone.utc)
+        # 立即提交事务，确保流式开始时数据已持久化
+        await self.session_repo.session.commit()
         chat_turns: List[Dict[str, Any]] = []
 
         try:
