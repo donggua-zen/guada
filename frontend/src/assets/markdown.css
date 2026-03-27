@@ -7,6 +7,10 @@
     margin-top: 0;
 }
 
+.markdown-text>div>:first-child {
+    margin-top: 0;
+}
+
 .markdown-text h1,
 .markdown-text h2,
 .markdown-text h3,
