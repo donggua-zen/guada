@@ -293,6 +293,8 @@ export function useStreamResponse(sessionStore, apiService) {
     let message = null
     let contentIndex = 0
     let assistantMessageIdResult = null
+    // ✅ 修复：添加标志位，确保一次流式会话只更新一次时间戳
+    let hasUpdatedActiveTime = false
 
     try {
       let responseContent = ''
@@ -326,6 +328,13 @@ export function useStreamResponse(sessionStore, apiService) {
           message = result.message
           contentIndex = result.contentIndex
           assistantMessageIdResult = response.message_id
+          
+          // ✅ 修复：仅在第一个 create 事件时更新时间戳，避免工具调用多轮次导致重复更新
+          if (!hasUpdatedActiveTime) {
+            sessionStore.updateSessionLastActiveTime(streamingSessionId, new Date().toISOString())
+            hasUpdatedActiveTime = true
+          }
+          
           continue
         }
 

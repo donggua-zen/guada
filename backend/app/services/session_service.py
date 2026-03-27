@@ -86,6 +86,7 @@ class SessionService:
         return PaginatedResponse(items=sessions, size=len(sessions))
 
     async def _add_new_session(self, data: dict):
+        import datetime
 
         fields = [
             "title",
@@ -100,6 +101,9 @@ class SessionService:
         data_filtered = {
             field: data.get(field) for field in fields if data.get(field) is not None
         }
+        
+        # 初始化 last_active_at 字段
+        data_filtered["last_active_at"] = datetime.datetime.now(datetime.timezone.utc)
 
         # 创建字符对象
         session = await self.session_repo.create_session(data_filtered)
