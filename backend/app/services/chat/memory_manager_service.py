@@ -49,100 +49,56 @@ class MemoryManagerService:
         self.message_repo = message_repo
         self._tokenizer_cache: Dict[str, Any] = {}
 
-    def _construct_system_message(
-        self, prompt_settings: Dict[str, Any]
-    ) -> Optional[Dict[str, str]]:
-        """
-        构造系统消息
-
-        Args:
-            prompt_settings: 提示词配置字典，包含 system_prompt 和 use_user_prompt 等键
-
-        Returns:
-            Optional[Dict[str, str]]: 系统消息字典（包含 role 和 content），如果没有系统消息则返回 None
-
-        Raises:
-            TypeError: 如果 prompt_settings 不是字典类型
-        """
-        # 输入验证
-        if not isinstance(prompt_settings, dict):
-            logger.warning(
-                f"prompt_settings 类型错误，期望 dict，实际：{type(prompt_settings)}"
-            )
-            return None
-
-        # 安全地获取 system_prompt
-        system_prompt = prompt_settings.get("system_prompt")
-        if system_prompt is None:
-            return None
-
-        # 确定角色类型
-        role = "user" if prompt_settings.get("use_user_prompt", False) else "system"
-
-        return {
-            "role": role,
-            "content": system_prompt,
-        }
-
     async def get_conversation_messages(
         self,
         session_id: str,
-        model_name: str,
         user_message_id: Optional[str] = None,
         max_messages: Optional[int] = None,
-        prompt_settings: Optional[Dict[str, Any]] = None,
         skip_tool_calls: bool = False,
     ) -> List[Dict[str, Any]]:
         """
         获取对话历史消息
-            
-        从数据库中检索指定会话的对话消息，支持分页、系统消息处理和文件内容加载。
+
+        从数据库中检索指定会话的对话消息，支持分页、文件内容加载。
         消息按时间倒序返回（最新的在前）。
-            
+
+        ⚠️ 注意：此方法不再处理系统提示词，调用方需要自行构造并添加到消息列表
+
         Args:
             session_id: 会话 ID
-            model_name: 模型名称（用于 tokenizer，当前未使用但保留用于未来扩展）
             user_message_id: 可选的用户消息 ID，如果提供则只获取到此消息为止的历史
             max_messages: 最大消息数量，默认为 DEFAULT_MAX_MESSAGES (200)
-            prompt_settings: 提示词配置字典，可能包含 system_prompt 和 use_user_prompt
-            skip_tool_calls: 是否跳过包含工具调用的轮次。如果为 True，则过滤掉所有包含 tool_calls 
+            skip_tool_calls: 是否跳过包含工具调用的轮次。如果为 True，则过滤掉所有包含 tool_calls
                             或 tool_calls_response 的消息轮次；默认为 False（保留所有消息）
-                
+
         Returns:
             List[Dict[str, Any]]: 消息列表，每个消息是一个字典，包含 role、content 等字段
-                                 如果包含系统消息，系统消息会在列表末尾（因为会被反转）
-                
+                                 消息按时间倒序排列（最新在前），调用方需要自行反转
+
         Raises:
             ValueError: 如果 session_id 为空或无效
             Exception: 数据库查询失败或其他未知错误
-                
+
         Example:
             >>> messages = await memory_manager.get_conversation_messages(
             ...     session_id="session_123",
-            ...     model_name="gpt-4",
             ...     max_messages=50,
             ...     skip_tool_calls=True  # 跳过工具调用轮次
             ... )
+            >>> # 调用方需要自行添加系统提示词（如果有）
+            >>> if system_prompt:
+            ...     messages.insert(0, {"role": "system", "content": system_prompt})
+            >>> # 注意：返回的消息已经是倒序（最新在前），无需再次反转
         """
         # 参数验证
         if not session_id or not isinstance(session_id, str):
             raise ValueError(f"无效的 session_id: {session_id}")
 
-        if not model_name or not isinstance(model_name, str):
-            raise ValueError(f"无效的 model_name: {model_name}")
-
         # 使用默认值
         if max_messages is None:
             max_messages = self.DEFAULT_MAX_MESSAGES
-        if prompt_settings is None:
-            prompt_settings = {}
 
         conversation_messages: List[Dict[str, Any]] = []
-
-        # 处理系统消息
-        system_message = self._construct_system_message(prompt_settings)
-        if system_message:
-            max_messages -= 1  # 系统消息占用一个位置
 
         # 分批获取消息直到达到上限
         while len(conversation_messages) < max_messages:
@@ -183,10 +139,6 @@ class MemoryManagerService:
                 transformed_msgs.reverse()
                 conversation_messages.extend(transformed_msgs)
 
-        # 添加系统消息到末尾
-        if system_message:
-            conversation_messages.append(system_message)
-
         # 反转为正序（最新的在前）
         conversation_messages.reverse()
         return conversation_messages
@@ -194,34 +146,31 @@ class MemoryManagerService:
     async def get_recent_messages_for_summary(
         self,
         session_id: str,
-        model_name: str,
-        prompt_settings: Optional[Dict[str, Any]] = None,
         skip_tool_calls: bool = True,
     ) -> List[Dict[str, Any]]:
         """
         获取最近的对话消息用于总结任务
-            
+
         获取最近的 3 条消息（不含系统消息），用于生成会话标题或其他总结任务。
         返回的消息按时间正序排列（从旧到新）。
-            
+
+        ⚠️ 注意：此方法不再处理系统提示词，返回的消息仅包含用户和助手对话
+
         Args:
             session_id: 会话 ID
-            model_name: 模型名称（用于 tokenizer，当前未使用但保留用于未来扩展）
-            prompt_settings: 提示词配置字典，可能包含 system_prompt 和 use_user_prompt
             skip_tool_calls: 是否跳过包含工具调用的轮次。默认为 True（总结任务通常不需要工具调用细节）
-                
+
         Returns:
             List[Dict[str, Any]]: 最多 3 条消息（不含系统消息），按时间正序排列（从旧到新）
                                  如果会话中没有非系统消息，返回空列表
-                
+
         Raises:
-            ValueError: 如果 session_id 或 model_name 为空或无效
+            ValueError: 如果 session_id 为空或无效
             Exception: 数据库查询失败或其他未知错误
-                
+
         Example:
             >>> recent_msgs = await memory_manager.get_recent_messages_for_summary(
             ...     session_id="session_123",
-            ...     model_name="gpt-4",
             ...     skip_tool_calls=True  # 跳过工具调用轮次
             ... )
         """
@@ -229,20 +178,15 @@ class MemoryManagerService:
         if not session_id or not isinstance(session_id, str):
             raise ValueError(f"无效的 session_id: {session_id}")
 
-        if not model_name or not isinstance(model_name, str):
-            raise ValueError(f"无效的 model_name: {model_name}")
-
         # 复用现有方法获取最近的消息（不指定 end_message_id，默认获取到最新消息）
         all_messages = await self.get_conversation_messages(
             session_id=session_id,
-            model_name=model_name,
             user_message_id=None,  # 不指定，获取最新消息
             max_messages=self.DEFAULT_SUMMARY_MESSAGE_COUNT,  # 限制 3 条
-            prompt_settings=prompt_settings,
             skip_tool_calls=skip_tool_calls,
         )
 
-        # 过滤掉系统消息
+        # 过滤掉系统消息（理论上不应该有，因为 get_conversation_messages 不再返回系统消息）
         non_system_messages = [
             msg for msg in all_messages if msg.get("role") != "system"
         ]
@@ -266,7 +210,7 @@ class MemoryManagerService:
 
         Args:
             msg: 消息字典，包含 'role'、'contents' 和可选的 'files' 键
-            skip_tool_calls: 是否跳过包含工具调用的轮次。如果为 True，则过滤掉所有包含 
+            skip_tool_calls: 是否跳过包含工具调用的轮次。如果为 True，则过滤掉所有包含
                             tool_calls 或 tool_calls_response 的消息轮次
 
         Returns:
@@ -292,7 +236,7 @@ class MemoryManagerService:
             for turn in msg["contents"]:
                 base_msg = {
                     "role": turn.get("role", "assistant"),
-                    "content": turn.get("content", ""),
+                    "content": turn.get("content", "") or "",
                     "reasoning_content": turn.get("reasoning_content"),
                 }
 
