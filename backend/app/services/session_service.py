@@ -205,8 +205,6 @@ class SessionService:
         # 使用 MemoryManagerService 获取最近的 3 条消息（已过滤系统消息，正序排列）
         recent_messages = await self.memory_manager.get_recent_messages_for_summary(
             session_id=session_id,
-            model_name=title_model_id,
-            prompt_settings={},  # 标题生成不需要系统消息
             skip_tool_calls=True,  # 跳过工具调用轮次
         )
 
