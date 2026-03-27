@@ -75,10 +75,3 @@ async def chat_completions(
         ),
         media_type="text/event-stream",
     )
-
-
-@chat_router.get("/sessions/{session_id}/tokens")
-async def get_tokens(
-    session_id: str, chat_service: AgentService = Depends(get_agent_service)
-):
-    return await chat_service.token_statistics(session_id)
