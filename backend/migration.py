@@ -25,7 +25,7 @@ def main():
     # 执行命令
     try:
         if args.command == "upgrade":
-            command.upgrade(alembic_cfg, "head")
+            command.upgrade(alembic_cfg, "heads")
         elif args.command == "downgrade":
             command.downgrade(alembic_cfg, "-1")
         elif args.command == "revision":
