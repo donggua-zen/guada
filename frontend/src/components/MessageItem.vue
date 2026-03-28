@@ -869,3 +869,8 @@ defineExpose({ el: rootRef, showThinking, hideThinking, switchContent, });
   color: inherit;
 }
 </style>
+<style>
+@import "@/assets/markdown.css";
+/* 全局样式：确保 v-html 中的代码高亮生效 */
+@import 'highlight.js/styles/foundation.css';
+</style>

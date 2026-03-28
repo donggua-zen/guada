@@ -410,7 +410,6 @@ function immediateScrollToBottom(persistent = false) {
 }
 
 const handleRenderComplete = () => {
-  console.log("handleRenderComplete")
   if (autoScrollToBottom.value) {
     nextTick(() => {
       console.log("handleRenderComplete2")
@@ -425,12 +424,8 @@ const handleRenderComplete = () => {
 }
 
 const handleScroll = (event) => {
-  console.log(event)
   if (scrollContainerRef.value) {
-    console.log("handleScroll")
-    console.log("autoScrollToBottom.value", autoScrollToBottom.value, scrollContainerRef.value.isAtBottom)
     if (scrollContainerRef.value.isAtBottom) {
-      console.log("set", autoScrollToBottomSet.value)
       if (autoScrollToBottomSet.value >= 0) {
         autoScrollToBottom.value = autoScrollToBottomSet.value === 1
         // autoScrollToBottomSet.value = -1
@@ -937,6 +932,7 @@ function switchContent(message, turns_id) {
   targetMessage.current_turns_id = turns_id
   debouncedSwitchContent(message.id, turns_id);
   nextTick(() => {
+    console.log("debouncedSwitchContent immediateScrollToBottom");
     immediateScrollToBottom();
   });
   // debouncedUpdatedSession();

@@ -46,8 +46,8 @@ onMounted(() => {
             return false;
         }
     });
-
     console.log('[Markdown] DiffDOM engine initialized');
+    renderWithDiffDOM(); // 初始渲染
 });
 
 /**
@@ -64,6 +64,8 @@ const renderWithDiffDOM = () => {
 
     // 2. 与上一次渲染的 HTML 进行比较
     if (newHTML === lastRenderedHTML) {
+        console.log('oldHtml', lastRenderedHTML)
+        console.log('newHtml', newHTML)
         console.log('[Markdown-DiffDOM] Content unchanged, skip update');
         return;
     }
@@ -133,26 +135,26 @@ watch(
         });
 
         // 根据 debounced 属性选择渲染方式
-        nextTick(() => {
-            if (props.debounced) {
-                // 消抖模式：延迟渲染，减少流式输出时的频繁更新
-                console.log('[Markdown-Debounce] Using debounced render mode');
-                debouncedRenderWithDiffDOM();
-            } else {
-                // 即时模式：立即渲染，保持编辑模式的响应性
-                console.log('[Markdown-DiffDOM] Using immediate render mode');
-                renderWithDiffDOM();
-            }
-        });
+        //nextTick(() => {
+        if (props.debounced) {
+            // 消抖模式：延迟渲染，减少流式输出时的频繁更新
+            console.log('[Markdown-Debounce] Using debounced render mode');
+            debouncedRenderWithDiffDOM();
+        } else {
+            // 即时模式：立即渲染，保持编辑模式的响应性
+            console.log('[Markdown-DiffDOM] Using immediate render mode');
+            renderWithDiffDOM();
+        }
+        //});
     },
-    { immediate: true }
+    //{ immediate: true }
 );
 
 // 🔹 生命周期：清理资源
 onBeforeUnmount(() => {
     // useDebounceFn 返回的函数不需要手动清理
     // VueUse 会自动处理
-    
+
     console.log('[Markdown] Component unmounted, cleanup completed');
 });
 </script>
@@ -180,9 +182,4 @@ onBeforeUnmount(() => {
         transform: translateY(0);
     }
 }
-</style>
-<style>
-@import "@/assets/markdown.css";
-/* 全局样式：确保 v-html 中的代码高亮生效 */
-@import 'highlight.js/styles/foundation.css';
 </style>
