@@ -12,7 +12,7 @@
             minWidth: sidebarContainerWidth,
             zIndex: zIndex
         }">
-            <div class="absolute right-0 h-full" :style="{ width: sidebarWidth < 0 ? '100vw' : `${sidebarWidth}px` }">
+            <div class="absolute right-0 h-full" :style="{ width: (sidebarWidth ?? 288) < 0 ? '100vw' : `${sidebarWidth ?? 288}px` }">
                 <slot name="sidebar" :sidebar-visible="sidebarVisible" />
             </div>
 
@@ -34,8 +34,9 @@
     </div>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { computed } from "vue";
+// @ts-ignore - icons 类型缺失
 import {
     ArrowBackIosNewTwotone as ArrowLeftTwotone,
     ArrowForwardIosTwotone as ArrowRightTwotone
@@ -44,47 +45,27 @@ import { useBreakpoints, breakpointsTailwind } from '@vueuse/core'
 
 const breakpoints = useBreakpoints(breakpointsTailwind)
 const isMobile = breakpoints.smaller('md') // md = 768px
-// Props
-const props = defineProps({
-    // 侧边栏显示状态
-    sidebarVisible: {
-        type: Boolean,
-        default: true
-    },
-    // 侧边栏宽度（像素）
-    sidebarWidth: {
-        type: Number,
-        default: 288 // 72 * 4 = 288px (Tailwind w-72)
-    },
-    // 是否显示切换按钮
-    showToggleButton: {
-        type: Boolean,
-        default: true
-    },
-    // 侧边栏位置（左/右）
-    sidebarPosition: {
-        type: String,
-        default: 'left', // 'left' 或 'right'
-        validator: (value) => ['left', 'right'].includes(value)
-    },
-    zIndex: {
-        type: Number,
-        default: 50
-    }
-});
+// Props 类型化
+const props = defineProps<{
+    sidebarVisible?: boolean;
+    sidebarWidth?: number;
+    showToggleButton?: boolean;
+    sidebarPosition?: 'left' | 'right';
+    zIndex?: number;
+}>();
 
-// 计算侧边栏实际位置类
-const sidebarContainerWidth = computed(() => {
+// 计算侧边栏实际位置类 - 类型化
+const sidebarContainerWidth = computed((): string => {
     if (props.sidebarVisible === false)
         return '0';
-    return props.sidebarWidth < 0 ? '100%' : props.sidebarWidth + 'px';
+    return (props.sidebarWidth ?? 288) < 0 ? '100%' : (props.sidebarWidth ?? 288) + 'px';
 });
 
-// 计算切换按钮位置
-const toggleButtonClasses = computed(() => {
+// 计算切换按钮位置 - 类型化（此计算属性在模板中未使用，可以保留或删除）
+const toggleButtonClasses = computed((): string => {
     const baseClasses = "absolute top-1/2 transform -translate-y-1/2 w-5 h-16 flex items-center justify-center bg-white rounded-r-lg shadow-sm hover:bg-gray-50 focus:outline-none z-10";
 
-    if (props.sidebarPosition === 'left') {
+    if ((props.sidebarPosition ?? 'left') === 'left') {
         return props.sidebarVisible
             ? `${baseClasses} left-full -translate-x-full rounded-l-lg rounded-r-none`
             : `${baseClasses} left-0 translate-x-0 rounded-r-lg rounded-l-none`;
@@ -95,8 +76,11 @@ const toggleButtonClasses = computed(() => {
     }
 });
 
-// 事件
-const emit = defineEmits(['update:sidebarVisible', 'toggle']);
+// Emits 类型化
+const emit = defineEmits<{
+    'update:sidebarVisible': [value: boolean]
+    toggle: []
+}>();
 </script>
 
 <style scoped>

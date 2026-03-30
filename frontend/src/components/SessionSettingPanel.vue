@@ -28,7 +28,7 @@
     </div>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { ref, reactive, watch, computed, onMounted } from 'vue'
 import {
     ElForm,
@@ -37,59 +37,54 @@ import {
     ElButton
 } from 'element-plus'
 
-import { apiService } from '../services/ApiService'
+import { apiService } from '@/services/ApiService'
 import { usePopup } from '../composables/usePopup'
 
 const { toast, notify } = usePopup()
 
-// Props
-const props = defineProps({
-    simple: {
-        type: Boolean,
-        default: false
-    },
-    data: {
-        type: Object,
-        default: () => ({
-            id: '',
-            title: '',
-            model_id: null,
-            settings: {
-                max_memory_length: null
-            }
-        })
-    },
-    tab: {
-        type: String,
-        default: ''
-    }
-})
+// Props - 类型化
+const props = defineProps<{
+    simple?: boolean;
+    data?: {
+        id?: string;
+        title?: string;
+        model_id?: string | null;
+        settings?: {
+            max_memory_length?: number | null;
+        };
+    };
+    tab?: string;
+}>()
 
-// Emits
-const emit = defineEmits(['update:data', 'update:tab', 'saved'])
+// Emits - 类型化
+const emit = defineEmits<{
+    'update:data': [data: any]
+    'update:tab': [tab: string]
+    'saved': []
+}>()
 
-// 响应式数据
+// 响应式数据 - 类型化
 const isSimpleStyle = ref(false)
 const loading = ref(false)
 
 // 模型数据
-const models = ref([]);
-const providers = ref([]);
+const models = ref<any[]>([]);
+const providers = ref<any[]>([]);
 
 // 表单引用
-const modelFormRef = ref(null)
+const modelFormRef = ref<any>(null)
 
-// 表单数据
-const sessionForm = reactive({
+// 表单数据 - 类型化
+const sessionForm = reactive<any>({
     model_id: '',
     max_memory_length: null
 })
 
-// 验证规则
+// 验证规则 - 类型化
 const modelRules = {
     model_id: [
         {
-            required: true, message: '请选择模型', trigger: ['change'], validator: (rule, value, callback) => {
+            required: true, message: '请选择模型', trigger: ['change'], validator: (rule: any, value: any, callback: any) => {
                 if (value !== null && value !== '' && value !== undefined) {
                     callback();
                 } else {
@@ -104,7 +99,7 @@ const modelRules = {
 const modelOptions = computed(() => {
     if (!models.value.length || !providers.value.length) return []
 
-    const options = []
+    const options: any[] = []
 
     providers.value?.forEach(provider => {
         const providerModels = models.value.filter(model =>
@@ -145,18 +140,25 @@ watch(() => props.simple, (newVal) => {
 
 
 watch(() => props.data, (newVal) => {
-    sessionForm.model_id = newVal.model_id || '';
-    sessionForm.model_temperature = newVal.settings?.model_temperature || null;
-    sessionForm.model_top_p = newVal.settings?.model_top_p || null;
-    sessionForm.model_frequency_penalty = newVal.settings?.model_frequency_penalty || null;
-    sessionForm.max_memory_length = newVal.settings?.max_memory_length || null;
-    sessionForm.max_memory_tokens = newVal.settings?.max_memory_tokens || null;
+    if (newVal) {
+        sessionForm.model_id = newVal.model_id || '';
+        // @ts-ignore - sessionForm 可能包含其他属性
+        sessionForm.model_temperature = newVal.settings?.model_temperature || null;
+        // @ts-ignore
+        sessionForm.model_top_p = newVal.settings?.model_top_p || null;
+        // @ts-ignore
+        sessionForm.model_frequency_penalty = newVal.settings?.model_frequency_penalty || null;
+        sessionForm.max_memory_length = newVal.settings?.max_memory_length || null;
+        // @ts-ignore
+        sessionForm.max_memory_tokens = newVal.settings?.max_memory_tokens || null;
+    }
 }, { immediate: true })
 
-const loadModels = async () => {
+const loadModels = async (): Promise<void> => {
     try {
+        // @ts-ignore - ApiService 尚未完全迁移到 TypeScript
         const response = await apiService.fetchModels()
-        response.items.forEach(provider => {
+        response.items.forEach((provider: any) => {
             models.value.push(...provider.models)
             delete provider.models
             providers.value.push(provider)
@@ -167,26 +169,28 @@ const loadModels = async () => {
     }
 }
 
-const findModelById = (modelId) => {
+const findModelById = (modelId: string): any => {
     return models.value.find(model => model.id === modelId)
 }
 
-const handleModelChange = (modelId) => {
+const handleModelChange = (modelId: string): void => {
     // 模型变化时的回调
     console.log('Model changed to:', modelId)
 }
 
 // 监听 props.data 变化
 watch(() => props.data, (newVal) => {
-    sessionForm.model_id = newVal.model_id || '';
-    sessionForm.max_memory_length = newVal.settings?.max_memory_length || null;
+    if (newVal) {
+        sessionForm.model_id = newVal.model_id || '';
+        sessionForm.max_memory_length = newVal.settings?.max_memory_length || null;
+    }
 }, { immediate: true })
 
 onMounted(async () => {
     loadModels();
 })
 
-const handleSave = async () => {
+const handleSave = async (): Promise<void> => {
     try {
         // 验证表单
         const validationResults = await Promise.allSettled([
@@ -211,7 +215,7 @@ const handleSave = async () => {
         loading.value = true
 
         // 触发保存事件
-        let finalData = {
+        let finalData: any = {
             'model_id': sessionForm.model_id,
             'model': findModelById(sessionForm.model_id),
             'settings': {

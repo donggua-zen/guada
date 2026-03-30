@@ -160,9 +160,11 @@
   <CharacterModal v-model:show="showModal" v-model:characterId="currentCharacterId" @saved="handleSaved" />
 </template>
 
-<script setup>
+<!-- @ts-ignore - UI 组件和 Element Plus 尚未完全迁移到 TypeScript -->
+<script setup lang="ts">
 import { ref, onMounted, reactive, watch } from 'vue'
 import { useRouter } from 'vue-router'
+// @ts-ignore - Element Plus 类型缺失
 import {
   ElIcon,
   ElTooltip,
@@ -172,6 +174,7 @@ import {
   ElDropdownItem,
   ElButton
 } from 'element-plus'
+// @ts-ignore - icons 类型缺失
 import {
   ChatbubbleEllipses,
   People
@@ -187,9 +190,12 @@ import {
 
 import { useTitle } from '../composables/useTitle'
 import { useStorage } from '@vueuse/core'
+// @ts-ignore - UI 组件类型缺失
 import { SidebarLayout } from './ui'
+// @ts-ignore - UI 组件类型缺失
 import { Avatar } from './ui'
 import CharacterModal from './CharacterModal.vue'
+// @ts-ignore - ApiService 尚未迁移到 TypeScript
 import { apiService } from '../services/ApiService'
 import { usePopup } from '../composables/usePopup'
 
@@ -197,17 +203,17 @@ const { confirm, toast } = usePopup()
 const router = useRouter()
 const title = useTitle('助手')
 
-// 响应式数据
-const characters = ref([])
+// 响应式数据 - 类型化
+const characters = ref<any[]>([])
 const showModal = ref(false)
 const currentCharacterId = ref('')
-const charactersType = useStorage('charactersType', 'private')
+const charactersType = useStorage<'private' | 'public'>('charactersType', 'private')
 const loading = ref(true)
 const skeletonCount = ref(10)
-const sidebarVisible = useStorage('sidebarVisible', true)
+const sidebarVisible = useStorage<boolean>('sidebarVisible', true)
 
-// 加载角色列表
-const loadCharacters = async (type) => {
+// 加载角色列表 - 类型化
+const loadCharacters = async (type: 'private' | 'public'): Promise<void> => {
   loading.value = true
   try {
     // 确保至少显示 500ms 的加载动画，避免闪烁
@@ -216,7 +222,7 @@ const loadCharacters = async (type) => {
       new Promise(resolve => setTimeout(resolve, 500))
     ])
     characters.value = data.items
-  } catch (error) {
+  } catch (error: any) {
     console.error('获取助手列表失败:', error)
     toast.error('获取助手列表失败')
   } finally {
@@ -224,19 +230,19 @@ const loadCharacters = async (type) => {
   }
 }
 
-// 创建助手
-const createCharacter = () => {
+// 创建助手 - 类型化
+const createCharacter = (): void => {
   currentCharacterId.value = ''
   showModal.value = true
 }
 
-// 编辑助手
-const editCharacter = (character) => {
+// 编辑助手 - 类型化
+const editCharacter = (character: any): void => {
   currentCharacterId.value = character.id
   showModal.value = true
 }
 
-const handleMoreAction = (key, character) => {
+const handleMoreAction = (key: string, character: any): void => {
   if (key === 'edit') {
     editCharacter(character)
   } else if (key === 'delete') {
@@ -244,8 +250,8 @@ const handleMoreAction = (key, character) => {
   }
 };
 
-// 删除助手
-const deleteCharacter = async (character) => {
+// 删除助手 - 类型化
+const deleteCharacter = async (character: any): Promise<void> => {
   try {
     const result = await confirm('确认删除', `确定要删除助手「${character.title}」吗？此操作不可撤销。`)
     if (!result) {
@@ -254,14 +260,14 @@ const deleteCharacter = async (character) => {
     await apiService.deleteCharacter(character.id)
     await loadCharacters(charactersType.value)
     toast.success('助手删除成功')
-  } catch (error) {
+  } catch (error: any) {
     toast.error('删除失败')
     console.error('删除助手失败:', error)
   }
 }
 
-// 开始对话 - 创建会话并跳转到聊天页面
-const startNewChat = async (character) => {
+// 开始对话 - 创建会话并跳转到聊天页面 - 类型化
+const startNewChat = async (character: any): Promise<void> => {
   try {
     const session = await apiService.createSession({
       character_id: character.id,
@@ -270,25 +276,25 @@ const startNewChat = async (character) => {
     // 刷新路由到聊天页面
     router.replace({ name: 'Chat', params: { sessionId: session.id } })
     toast.success('会话创建成功')
-  } catch (error) {
+  } catch (error: any) {
     console.error('创建会话失败:', error)
     toast.error('创建会话失败')
   }
 }
 
-const shareCharacter = async (character) => {
+const shareCharacter = async (character: any): Promise<void> => {
   try {
     await apiService.updateCharacter(character.id, { is_public: !character.is_public })
     character.is_public = !character.is_public
     toast.success(character.is_public ? '助手已公开' : '助手已私密')
-  } catch (error) {
+  } catch (error: any) {
     console.error('更新助手失败:', error)
     toast.error('更新助手失败')
   }
 }
 
-// 处理保存后的回调
-const handleSaved = (characterData) => {
+// 处理保存后的回调 - 类型化
+const handleSaved = (characterData: any): void => {
   const index = characters.value.findIndex(c => c.id === characterData.id)
   if (index !== -1) {
     characters.value[index] = reactive(characterData)
@@ -297,12 +303,13 @@ const handleSaved = (characterData) => {
   }
 }
 
+// Watch 监听器 - 类型化
 watch(() => charactersType.value, async () => {
   loadCharacters(charactersType.value)
 })
 
-// 生命周期
-onMounted(async () => {
+// 生命周期 - 类型化
+onMounted(async (): Promise<void> => {
   loadCharacters(charactersType.value)
 })
 </script>

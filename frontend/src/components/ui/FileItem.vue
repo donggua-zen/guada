@@ -1,4 +1,5 @@
 <template>
+    <!-- @ts-ignore - fileIcon 类型推断问题 -->
     <div class="file-item flex items-center relative" :class="{ 'cursor-pointer': clickable }"
         @mouseenter="close_button_visible = true" @click="handleClick" @mouseleave="close_button_visible = false">
         <template v-if="type === 'image'">
@@ -30,7 +31,7 @@
     </div>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { ref, computed } from 'vue'
 
 // 导入所有图标
@@ -44,16 +45,22 @@ import fileVideoIcon from '@/assets/file_video.svg'
 import fileWordIcon from '@/assets/file_word.svg'
 import fileZipIcon from '@/assets/file_zip.svg'
 
-const props = defineProps({
-    name: String,
-    type: String,
-    ext: String,
-    size: Number,
-    previewUrl: String,
-    closable: Boolean,
-    clickable: Boolean
-})
-const emit = defineEmits(['close', 'click'])
+// Props 类型化
+const props = defineProps<{
+    name?: string;
+    type?: string;
+    ext?: string;
+    size?: number;
+    previewUrl?: string;
+    closable?: boolean;
+    clickable?: boolean;
+}>()
+
+// Emits 类型化
+const emit = defineEmits<{
+    close: []
+    click: []
+}>()
 const close_button_visible = ref(false)
 
 // 文件类型到图标的映射
@@ -108,26 +115,28 @@ const fileIconMap = {
     'gz': fileZipIcon,
 }
 
-// 计算属性：根据文件类型返回对应的图标
-const fileIcon = computed(() => {
+// 计算属性：根据文件类型返回对应的图标 - 类型化
+const fileIcon = computed((): any => {
     const lowerType = props.ext?.toLowerCase()
-    return fileIconMap[lowerType] || fileTxtIcon
+    return (fileIconMap as any)[lowerType || ''] || fileTxtIcon
 })
 
-// 格式化文件大小
-const formatFileSize = (bytes) => {
-    if (bytes === 0) return '0 B';
+// 格式化文件大小 - 类型化
+const formatFileSize = (bytes: number | undefined): string => {
+    if (!bytes || bytes === 0) return '0 B';
     const k = 1024;
-    const sizes = ['B', 'KB', 'MB', 'GB'];
+    const sizes: string[] = ['B', 'KB', 'MB', 'GB'];
     const i = Math.floor(Math.log(bytes) / Math.log(k));
     return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
 };
 
-const removeFile = () => {
+// 移除文件 - 类型化
+const removeFile = (): void => {
     emit('close')
 }
 
-const handleClick = () => {
+// 处理点击 - 类型化
+const handleClick = (): void => {
     if (!props.clickable) return
     emit('click')
 }

@@ -10,34 +10,26 @@
     </div>
 
 </template>
-<script setup>
+<script setup lang="ts">
 import { computed } from 'vue'
+// @ts-ignore - icons 类型缺失
 import {
     UserOutlined,
 } from '@vicons/antd'
+// @ts-ignore - icons 类型缺失
 import { OpenAI } from '@/components/icons'
-const props = defineProps({
-    src: {
-        type: String,
-        default: ''
-    },
-    round: {
-        type: Boolean,
-        default: false
-    },
-    type: {
-        type: String,
-        default: 'assistant'
-    },
-    full: {
-        type: Boolean,
-        default: false
-    }
-});
-// 添加时间戳避免缓存
-const avatarSrc = computed(() => {
+
+// Props 类型化
+const props = defineProps<{
+    src?: string;
+    round?: boolean;
+    type?: 'user' | 'assistant';
+    full?: boolean;
+}>();
+// 添加时间戳避免缓存 - 类型化
+const avatarSrc = computed((): string => {
     if (!props.src) return ''
-    // 如果已经是blob URL或者是base64，直接返回
+    // 如果已经是 blob URL 或者是 base64，直接返回
     if (props.src.startsWith('blob:') || props.src.startsWith('data:')) {
         return props.src
     }

@@ -50,7 +50,7 @@
     </div>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import {
     FormatListBulletedSharp,
     MoreVertOutlined,
@@ -69,27 +69,20 @@ import {
 
 import LeftBarIcon from './icons/LeftBarIcon.vue';
 
-const props = defineProps({
-    sidebarVisible: {
-        type: Boolean,
-        default: undefined
-    },
-    hasMoreOptions: {
-        type: Boolean,
-        default: true
-    },
-    title: {
-        type: String,
-        default: ''
-    }
-});
+// Props - 类型化
+const props = defineProps<{
+    sidebarVisible?: boolean;
+    hasMoreOptions?: boolean;
+    title?: string;
+}>();
 
-const emit = defineEmits([
-    'toggle-sidebar',
-    'select-more-option'
-]);
+// Emits - 类型化
+const emit = defineEmits<{
+    'toggle-sidebar': []
+    'select-more-option': [command: string]
+}>();
 
-const handleSelect = (command) => {
+const handleSelect = (command: string): void => {
     emit('select-more-option', command);
 };
 </script>

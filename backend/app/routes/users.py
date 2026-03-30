@@ -51,19 +51,18 @@ async def login(
 ):
     data = await request.json()
     type = data.get("type")
-    email = data.get("email")
-    phone = data.get("phone")
+    username = data.get("username")
     password = data.get("password")
 
     user = None
     if type == "phone":
-        if not phone or not password:
+        if not username or not password:
             raise HTTPException(status_code=400, detail="请填写手机号码和密码")
-        user = await user_service.user_repo.get_user_by_phone(phone)
+        user = await user_service.user_repo.get_user_by_phone(username)
     elif type == "email":
-        if not email or not password:
+        if not username or not password:
             raise HTTPException(status_code=400, detail="请填写邮箱和密码")
-        user = await user_service.user_repo.get_user_by_email(email)
+        user = await user_service.user_repo.get_user_by_email(username)
     else:
         raise HTTPException(status_code=400, detail="请选择正确的登录方式")
 

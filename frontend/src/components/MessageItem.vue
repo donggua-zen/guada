@@ -96,7 +96,7 @@
                         </span>
                         <span class="text-xs text-gray-400">•</span>
                         <span class="text-xs text-gray-500 dark:text-gray-400">
-                          调用 #{{ toolIndex + 1 }}
+                          调用 #{{ (toolIndex as number) + 1 }}
                         </span>
                       </div>
 
@@ -178,7 +178,7 @@
       <div class="file-list flex flex-wrap gap-2 mt-3 ml-auto" v-if="message.files && message.files.length > 0">
         <FileItem v-for="file, index in message.files" :key="file.id" :name="file.display_name" :type="file.file_type"
           :ext="file.file_extension" :size="file.file_size" :preview-url="file.preview_url"
-          :clickable="file.file_type === 'image'" @click="handleImageClick(index)"></FileItem>
+          :clickable="file.file_type === 'image'" @click="handleImageClick(index as number)"></FileItem>
       </div>
       <div class="message-actions flex gap-0 text-sm w-full mt-3 text-gray-500 items-center"
         v-if="!streamingState.is_streaming"
@@ -260,8 +260,8 @@
     :initial-index="currentPreViewIndex" @close="showImageViewer = false" :teleported="true" />
 </template>
 
-<script setup>
-import { computed, ref, watch, onUnmounted, onMounted, h, nextTick } from "vue";
+<script setup lang="ts">
+import { computed, ref, watch, onUnmounted, onMounted, onBeforeUnmount, h, nextTick, type Ref } from "vue";
 import { ElAlert, ElIcon, ElImageViewer, ElDropdown, ElDropdownMenu, ElDropdownItem } from "element-plus";
 import { useDebounceFn } from "@vueuse/core";
 import {
@@ -281,7 +281,9 @@ import {
   InsightsTwotone, // Token 消耗显示图标
 } from "@vicons/material";
 
+// @ts-ignore - icons 组件尚未迁移到 TypeScript
 import { Loading } from "./icons";
+// @ts-ignore - UI 组件尚未迁移到 TypeScript
 import { FileItem, Avatar } from "./ui";
 import { usePopup } from "../composables/usePopup";
 import { formatTime } from '../utils'
@@ -306,21 +308,128 @@ const props = defineProps({
   }
 });
 
-const emit = defineEmits([
-  "switch", // 添加switch事件
-  "delete", "edit", "copy", "generate", "regenerate",
-  "render-complete"
-]);
+// 类型化 emit 定义
+const emit = defineEmits<{
+  switch: [message: any, content: any]
+  delete: [message: any]
+  edit: [message: any]
+  copy: [message: any]
+  generate: [message: any]
+  regenerate: [message: any]
+  'render-complete': [message: any]
+}>();
 
-
+// ============================================
+// 🔹 响应式数据
+// ============================================
 const showImageViewer = ref(false);
 const currentPreViewIndex = ref(0);
-const expandedStates = ref(new Map()); // 使用 Map 存储不同区域的展开状态：{ [turnId_type]: boolean }
-const rootRef = ref(null);
+const expandedStates = ref<Map<string, boolean>>(new Map()); // 使用 Map 存储不同区域的展开状态：{ [turnId_type]: boolean }
+const rootRef = ref<HTMLElement | null>(null);
+
+// ============================================
+// 🔹 ResizeObserver + 图片加载监听机制
+// ============================================
+let resizeObserver: ResizeObserver | null = null;
+
+/**
+ * 防抖触发 render-complete 事件
+ * 避免频繁触发滚动逻辑，延迟 200ms
+ * 使用 VueUse 的 useDebounceFn 官方实现
+ */
+const debouncedEmitRenderComplete = useDebounceFn(() => {
+  console.log('[MessageItem] Render complete triggered by ResizeObserver or image load');
+  emit('render-complete', props.message);
+}, 200); // 200ms 防抖延迟
+
+/**
+ * 等待图片加载完成
+ * 确保所有可见图片都加载完成后才触发滚动
+ */
+const waitForImagesLoaded = async (): Promise<void> => {
+  if (!rootRef.value) return;
+
+  const images = Array.from(rootRef.value.querySelectorAll('img'));
+
+  if (images.length === 0) {
+    return; // 没有图片，直接返回
+  }
+
+  console.log(`[MessageItem] Waiting for ${images.length} image(s) to load`);
+
+  const promises = images.map(img => {
+    if (img.complete) {
+      // 已经加载完成
+      return Promise.resolve();
+    }
+
+    // 等待加载完成或失败
+    return new Promise<void>(resolve => {
+      const onLoad = () => {
+        console.log('[MessageItem] Image loaded:', img.src);
+        resolve();
+      };
+
+      img.addEventListener('load', onLoad, { once: true });
+      img.addEventListener('error', () => {
+        console.warn('[MessageItem] Image failed to load:', img.src);
+        resolve(); // 即使失败也继续，避免阻塞
+      }, { once: true });
+    });
+  });
+
+  await Promise.all(promises);
+  console.log('[MessageItem] All images loaded');
+};
+
+/**
+ * 初始化 ResizeObserver 监听 DOM 尺寸变化
+ * 捕获所有导致高度变化的情况（图片加载、内容展开、动画等）
+ */
+const initResizeObserver = () => {
+  if (!rootRef.value) return;
+
+  const targetElement = rootRef.value.querySelector('.message-card');
+  if (!targetElement) return;
+
+  resizeObserver = new ResizeObserver((entries) => {
+    for (const entry of entries) {
+      // 只有当高度发生变化时才触发
+      if (entry.contentRect.height > 0) {
+        // console.log('[MessageItem] Content height changed:', entry.contentRect.height);
+        // debouncedEmitRenderComplete();
+        emit('render-complete', props.message);
+      }
+    }
+  });
+
+  resizeObserver.observe(targetElement);
+  console.log('[MessageItem] ResizeObserver initialized');
+};
+
+/**
+ * 监听文件列表变化，处理图片加载
+ */
+watch(
+  () => props.message.files,
+  async (newFiles) => {
+    if (newFiles && newFiles.length > 0) {
+      // 等待下一帧，确保 DOM 已经更新
+      await nextTick();
+
+      // 等待图片加载完成
+      //await waitForImagesLoaded();
+
+      // 图片加载完成后触发渲染完成事件
+      //debouncedEmitRenderComplete();
+    }
+  },
+  { immediate: true }
+);
 
 const previewList = computed(() => {
   const files = props.message.files || [];
-  return files.map(file => file.url || file.preview_url);
+  return files.map((file: any) => file.url || file.preview_url);
 })
 
 const isAssistant = computed(() => props.message.role === "assistant");
@@ -333,7 +442,7 @@ const messageClass = computed(() =>
 
 const turns = computed(() => {
   // 使用工具函数获取当前版本的内容
-  return getCurrentTurns(props.message)
+  return getCurrentTurns(props.message as any)
 })
 
 // const hasThinking = computed(
@@ -368,8 +477,8 @@ const currentModelName = computed(() => {
 const currentContentTime = computed(() => {
   const content = turns.value[0];
   return {
-    firendly: formatTime(content.created_at, 'friendly'),
-    full: formatTime(content.created_at, 'full')
+    firendly: formatTime(content.created_at || '', 'friendly'),
+    full: formatTime(content.created_at || '', 'full')
   };
 })
 
@@ -396,46 +505,35 @@ const hasNextContent = computed(() => {
 })
 
 // 获取当前索引（本地实现，不再依赖废弃的函数）
-const getCurrentVersionIndex = () => {
+const getCurrentVersionIndex = (contents?: any): number => {
+  if (!contents) {
+    return content_versions.value.findIndex(version => version === props.message.current_turns_id)
+  }
   return content_versions.value.findIndex(version => version === props.message.current_turns_id)
 }
 
 
-
-// watch(
-//   () => props.message?.state?.is_thinking,
-//   (newState, oldState) => {
-//     if (newState) {
-//       showThinking();
-//     } else {
-//       hideThinking();
-//     }
-//   }
-// )
-
-
-// 更多按钮的选项
-const moreOptions = computed(() => {
-  const options = [
-    {
-      label: '编辑内容',
-      key: 'edit',
-      icon: () => h(NIcon, { component: EditTwotone, size: 15 })
-    },
-    {
-      label: '删除消息',
-      key: 'delete',
-      icon: () => h(NIcon, { component: DeleteTwotone, size: 15 })
-    }
-  ];
-  return options;
+// 🔹 生命周期：初始化 ResizeObserver（延迟到 DOM 完全渲染后）
+onMounted(() => {
+  nextTick(() => {
+    initResizeObserver();
+  });
 });
 
+
+// moreOptions 计算属性已废弃，不再使用
+
+/**
+ * Markdown 渲染完成处理
+ * 保留原有逻辑，与 ResizeObserver 协同工作
+ */
 const handleRenderComplete = () => {
-  emit('render-complete', props.message);
+  console.log('[MessageItem] Markdown render complete event received');
+  // Markdown 渲染完成后立即触发，不需要等待防抖
+  // emit('render-complete', props.message);
 };
 
-const toggleExpand = (turnId, type) => {
+const toggleExpand = (turnId: string, type: 'thinking' | 'tool') => {
   const key = `${turnId}_${type}`;
   // 工具调用框默认闭合，思考框默认展开
   const defaultState = type === 'tool' ? false : true;
@@ -445,27 +543,28 @@ const toggleExpand = (turnId, type) => {
   expandedStates.value = new Map(expandedStates.value);
 };
 
-const isTurnExpanded = (turnId, type) => {
+const isTurnExpanded = (turnId: string, type: 'thinking' | 'tool'): boolean => {
   const key = `${turnId}_${type}`;
   // 工具调用框默认闭合，思考框默认展开
   const defaultState = type === 'tool' ? false : true;
   return expandedStates.value.get(key) ?? defaultState;
 };
 
-const handleAction = (action) => {
-  emit(action, props.message);
+const handleAction = (action: 'switch' | 'delete' | 'edit' | 'copy' | 'generate' | 'regenerate') => {
+  emit(action as any, props.message);
 };
 
-const handleMoreAction = (key) => {
-  emit(key, props.message);
+const handleMoreAction = (key: 'edit' | 'delete') => {
+  emit(key as any, props.message);
 };
 
 const content_versions = computed(() => {
   // 使用工具函数获取所有版本号
-  return getContentVersions(props.message)
+  return getContentVersions(props.message as any)
 })
 
-const switchContent = (direction) => {
+// @ts-ignore - getCurrentVersionIndex 参数类型兼容
+const switchContent = (direction: 'prev' | 'next') => {
   const currentIndex = getCurrentVersionIndex()
 
   if (currentIndex === -1) return
@@ -483,26 +582,33 @@ const switchContent = (direction) => {
   emit('switch', props.message, content_versions.value[newIndex])
 }
 
-const showThinking = () => {
-  isExpanded.value = true;
-};
+// isExpanded 变量已废弃，使用 expandedStates Map 替代
 
-const hideThinking = () => {
-  isExpanded.value = false;
-};
-
-const handleImageClick = (index) => {
+const handleImageClick = (index: number) => {
   currentPreViewIndex.value = index;
   showImageViewer.value = true;
 };
 
+// 🔹 生命周期：清理资源
+onBeforeUnmount(() => {
+  // 清理 ResizeObserver
+  if (resizeObserver) {
+    resizeObserver.disconnect();
+    resizeObserver = null;
+    console.log('[MessageItem] ResizeObserver disconnected');
+  }
 
+  // useDebounceFn 会自动清理，不需要手动处理
 
-const handleClick = (event) => {
-  if (event.target.closest('.copy-code-button')) {
-    const button = event.target.closest('.copy-code-button')
-    const codeBlock = button.closest('.custom-code-block')
-    const codeElement = codeBlock?.querySelector('code')
+  console.log('[MessageItem] Component unmounted, cleanup completed');
+});
+
+const handleClick = (event: MouseEvent) => {
+  const target = event.target as HTMLElement;
+  if (target.closest('.copy-code-button')) {
+    const button = target.closest('.copy-code-button') as HTMLElement;
+    const codeBlock = button.closest('.custom-code-block');
+    const codeElement = codeBlock?.querySelector('code');
 
     if (codeElement) {
       navigator.clipboard.writeText(codeElement.textContent).then(() => {
@@ -515,7 +621,7 @@ const handleClick = (event) => {
   }
 }
 
-const formatToolArgs = (args) => {
+const formatToolArgs = (args: any): string => {
   if (!args) return '{}';
   try {
     // 如果是字符串，尝试解析为 JSON
@@ -527,7 +633,7 @@ const formatToolArgs = (args) => {
   }
 };
 
-const formatToolResponse = (response) => {
+const formatToolResponse = (response: any): string => {
   if (!response) return '无响应';
   try {
     // 如果是字符串，尝试解析为 JSON
@@ -540,7 +646,7 @@ const formatToolResponse = (response) => {
 };
 
 // 格式化思考时长
-const formatDuration = (ms) => {
+const formatDuration = (ms: number | null): string => {
   if (!ms) return '';
   const seconds = ms / 1000;
   if (seconds < 60) {
@@ -552,7 +658,7 @@ const formatDuration = (ms) => {
 };
 
 // ✅ 格式化 token 数字：1600 -> 1.6K
-const formatTokenNumber = (num) => {
+const formatTokenNumber = (num: number | null): string => {
   if (!num && num !== 0) return '0';
 
   if (num >= 1000000) {
@@ -568,7 +674,7 @@ const formatTokenNumber = (num) => {
 };
 
 // 获取思考时长：优先使用 meta_data 中的值（后端保存的），如果没有则使用 thinking_duration_ms
-const getThinkingDuration = (turn) => {
+const getThinkingDuration = (turn: any): number | null => {
   // 如果正在思考中，使用实时计算的 thinking_duration_ms
   if (turn.state?.is_thinking) {
     return turn.thinking_duration_ms;
@@ -577,7 +683,11 @@ const getThinkingDuration = (turn) => {
   return turn.meta_data?.thinking_duration_ms || turn.thinking_duration_ms;
 };
 
-defineExpose({ el: rootRef, showThinking, hideThinking, switchContent, });
+// defineExpose 已移除，相关方法通过事件传递
+// 暴露 rootRef 以便父组件可以访问 DOM 元素
+defineExpose({
+  el: rootRef
+});
 </script>
 
 <style scoped>

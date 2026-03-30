@@ -7,7 +7,7 @@
     </el-dialog>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { ref, reactive, watch, computed, onMounted, onUnmounted } from 'vue'
 import {
     ElDialog
@@ -18,37 +18,32 @@ import { usePopup } from '@/composables/usePopup'
 
 const { toast } = usePopup()
 
-// Props
-const props = defineProps({
-    show: {
-        type: Boolean,
-        default: false
-    },
-    mode: {
-        type: String,
-        default: 'edit'
-    },
-    characterId: {
-        type: String,
-        default: ''
-    }
-})
+// Props - 类型化
+const props = defineProps<{
+    show?: boolean;
+    mode?: string;
+    characterId?: string;
+}>()
 
-// Emits
-const emit = defineEmits(['update:data', 'saved'])
+// Emits - 类型化
+const emit = defineEmits<{
+    'update:data': [data: any]
+    'saved': [character: any]
+    'update:show': [show: boolean]
+}>()
 
-// 响应式数据
+// 响应式数据 - 类型化
 const visible = ref(false)
 const loading = ref(false)
-const currentCharacter = ref({})
+const currentCharacter = ref<any>({})
 
 // 抽屉宽度响应式
-const drawerWidth = ref(600)
+const drawerWidth = ref<number | string>(600)
 
 
 
 // 响应式调整抽屉宽度
-const updateDrawerWidth = () => {
+const updateDrawerWidth = (): void => {
     const width = window.innerWidth
     if (width < 768) {
         drawerWidth.value = '90%'
@@ -97,16 +92,15 @@ onUnmounted(() => {
     window.removeEventListener('resize', updateDrawerWidth)
 })
 
-// 方法
-const handleClose = () => {
+// 方法 - 类型化
+const handleClose = (): void => {
     visible.value = false
 }
 
-
-const handleSave = async (data) => {
+const handleSave = async (data: any): Promise<void> => {
     console.log("handleSave called");
     console.log(data);
-    let character = null;
+    let character: any = null;
     try {
         // console.log(characterForm);
         if (currentCharacter.value && currentCharacter.value.id) {

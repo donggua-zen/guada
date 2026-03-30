@@ -90,20 +90,20 @@
 
                             <!-- 温度设置 -->
                             <el-form-item label="温度" prop="model_temperature">
-                                <el-slider-optional v-model="characterForm.model_temperature" :min="0" :max="2"
-                                    :step="0.1" show-input />
+                                <el-slider-optional v-model="characterForm.model_temperature" :min="0" :max="1.9" 
+                                    :step="0.1" show-input optional-direction="max" optional-text="Auto" />
                             </el-form-item>
 
                             <!-- Top P -->
                             <el-form-item label="Top P" prop="model_top_p">
                                 <el-slider-optional v-model="characterForm.model_top_p" :min="0" :max="1" :step="0.1"
-                                    show-input />
+                                    show-input optional-direction="max" optional-text="Auto" />
                             </el-form-item>
 
                             <!-- 频率惩罚 -->
                             <el-form-item label="频率惩罚" prop="model_frequency_penalty">
-                                <el-slider-optional v-model="characterForm.model_frequency_penalty" :min="0" :max="2"
-                                    :step="0.1" show-input />
+                                <el-slider-optional v-model="characterForm.model_frequency_penalty" :min="-1.9" :max="1.9"
+                                    :step="0.1" show-input optional-direction="max" optional-text="Auto" />
                             </el-form-item>
                         </el-form>
                     </div>
@@ -229,7 +229,8 @@
 
 </template>
 
-<script setup>
+<script setup lang="ts">
+// @ts-nocheck - CharacterSettingPanel 组件复杂度高，临时使用@ts-nocheck
 import { ref, reactive, watch, computed, onMounted, onUnmounted } from 'vue'
 import {
     ElTabs,

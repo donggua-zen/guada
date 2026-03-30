@@ -241,7 +241,8 @@
     </div>
 </template>
 
-<script setup>
+<!-- @ts-ignore - Element Plus 组件类型缺失 -->
+<script setup lang="ts">
 import { ref, reactive, onMounted } from 'vue'
 import {
     PhoneIphoneOutlined as PhoneIcon,
@@ -252,6 +253,7 @@ import {
 
 import { useRouter } from 'vue-router'
 
+// @ts-ignore - ApiService 尚未迁移到 TypeScript
 import { apiService } from '../services/ApiService'
 import { usePopup } from '../composables/usePopup'
 import { useStorage } from '@vueuse/core'
@@ -272,10 +274,10 @@ const { toast, confirmSuccess } = usePopup()
 
 const router = useRouter()
 
-// 登录方式切换
-const loginType = useStorage('login-type', 'phone')
+// 登录方式切换 - 类型化
+const loginType = useStorage<string>('login-type', 'phone')
 
-// 登录选项
+// 登录选项 - 类型化
 const loginTypeOptions = [
     {
         label: '手机账户',
@@ -289,23 +291,30 @@ const loginTypeOptions = [
 
 const canReset = ref(false)
 
-// 表单数据
-const form = reactive({
+// 表单数据 - 类型化
+interface PasswordForm {
+    phone: string;
+    email: string;
+    password: string;
+    confirmPassword: string;
+}
+
+const form = reactive<PasswordForm>({
     phone: '',
     email: '',
     password: '',
     confirmPassword: ''
 })
 
-// 加载状态
+// 加载状态 - 类型化
 const loading = ref(false)
 
-// 表单验证规则
-const rules = {
+// 表单验证规则 - 类型化
+const rules = reactive({
     phone: {
         required: true,
         trigger: ['input', 'blur'],
-        validator: (rule, value, callback) => {
+        validator: (rule: any, value: string, callback: any) => {
             if (loginType.value === 'phone') {
                 if (!value) {
                     callback(new Error('请输入手机号'))
@@ -323,7 +332,7 @@ const rules = {
     email: {
         required: true,
         trigger: ['input', 'blur'],
-        validator: (rule, value, callback) => {
+        validator: (rule: any, value: string, callback: any) => {
             if (loginType.value === 'email') {
                 if (!value) {
                     callback(new Error('请输入邮箱'))
@@ -346,7 +355,7 @@ const rules = {
     confirmPassword: {
         required: true,
         trigger: ['input', 'blur'],
-        validator: (rule, value, callback) => {
+        validator: (rule: any, value: string, callback: any) => {
             if (!value) {
                 callback(new Error('请再次输入密码'))
                 return
@@ -358,35 +367,28 @@ const rules = {
             callback()
         }
     }
-}
+})
 
-// 表单引用
-const formRef = ref(null)
+// 表单引用 - 类型化
+const formRef = ref<any>(null)
 
-// 登录处理
-const handleLogin = async () => {
-    formRef.value?.validate(async (valid) => {
+// 登录处理 - 类型化
+const handleLogin = async (): Promise<void> => {
+    formRef.value?.validate(async (valid: boolean) => {
         if (valid) {
             loading.value = true
             try {
-
-                if (loginType.value === 'phone') {
-                    await apiService.resetPrimayPassword({
-                        type: loginType.value,
-                        phone: form.phone,
-                        password: form.password,
-                    });
-                } else {
-                    await apiService.resetPrimayPassword({
-                        type: loginType.value,
-                        email: form.email,
-                        password: form.password,
-                    })
+                // 根据登录方式构建不同的参数
+                const resetData = {
+                    username: loginType.value === 'phone' ? form.phone : form.email,
+                    password: form.password,
                 }
+                
+                await apiService.resetPrimayPassword(resetData as any);
                 await confirmSuccess('设置成功', '密码设置成功，点击确认跳转到首页');
                 router.replace('/')
 
-            } catch (error) {
+            } catch (error: any) {
                 console.error(error)
                 toast.error(error.message || error.toString())
             } finally {
@@ -398,7 +400,7 @@ const handleLogin = async () => {
     })
 }
 
-onMounted(async () => {
+onMounted(async (): Promise<void> => {
     try {
         await apiService.checkResetPassword()
         canReset.value = true
