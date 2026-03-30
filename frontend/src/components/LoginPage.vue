@@ -116,7 +116,8 @@
     </div>
 </template>
 
-<script setup>
+<!-- @ts-ignore - Element Plus 组件类型缺失 -->
+<script setup lang="ts">
 import { ref, reactive } from 'vue'
 import {
     PhoneIphoneOutlined as PhoneIcon,
@@ -150,10 +151,10 @@ const { toast } = usePopup()
 
 const router = useRouter()
 
-// 登录方式切换
-const loginType = useStorage('login-type', 'phone')
+// 登录方式切换 - 类型化
+const loginType = useStorage<string>('login-type', 'phone')
 
-// 登录选项
+// 登录选项 - 类型化
 const loginTypeOptions = [
     {
         label: '手机登录',
@@ -165,25 +166,31 @@ const loginTypeOptions = [
     }
 ]
 
-// 表单数据
-const form = reactive({
+// 表单数据 - 类型化
+interface LoginForm {
+    phone: string;
+    email: string;
+    password: string;
+}
+
+const form = reactive<LoginForm>({
     phone: '',
     email: '',
     password: ''
 })
 
-// 记住我
+// 记住我 - 类型化
 const rememberMe = ref(false)
 
-// 加载状态
+// 加载状态 - 类型化
 const loading = ref(false)
 
-// 表单验证规则
-const rules = {
+// 表单验证规则 - 类型化
+const rules = reactive({
     phone: {
         required: true,
         trigger: ['input', 'blur'],
-        validator: (rule, value, callback) => {
+        validator: (rule: any, value: string, callback: any) => {
             if (loginType.value === 'phone') {
                 if (!value) {
                     callback(new Error('请输入手机号'))
@@ -201,7 +208,7 @@ const rules = {
     email: {
         required: true,
         trigger: ['input', 'blur'],
-        validator: (rule, value, callback) => {
+        validator: (rule: any, value: string, callback: any) => {
             if (loginType.value === 'email') {
                 if (!value) {
                     callback(new Error('请输入邮箱'))
@@ -221,34 +228,27 @@ const rules = {
         trigger: ['input', 'blur'],
         message: '请输入密码'
     }
-}
+})
 
-// 表单引用
-const formRef = ref(null)
+// 表单引用 - 类型化
+const formRef = ref<any>(null)
 
-// 登录处理
-const handleLogin = async () => {
-    formRef.value?.validate(async (valid) => {
+// 登录处理 - 类型化
+const handleLogin = async (): Promise<void> => {
+    formRef.value?.validate(async (valid: boolean) => {
         if (valid) {
             loading.value = true
             try {
-                if (loginType.value === 'phone') {
-                    await authStore.login({
-                        type: loginType.value,
-                        phone: form.phone,
-                        password: form.password,
-                        rememberMe: rememberMe.value
-                    })
-                } else {
-                    await authStore.login({
-                        type: loginType.value,
-                        email: form.email,
-                        password: form.password,
-                        rememberMe: rememberMe.value
-                    })
+                // 根据登录方式构建不同的登录参数
+                const loginData = {
+                    type: loginType.value,
+                    username: loginType.value === 'phone' ? form.phone : form.email,
+                    password: form.password
                 }
+                
+                await authStore.login(loginData)
                 router.replace('/')
-            } catch (error) {
+            } catch (error: any) {
                 console.error(error)
                 toast.error(error.message || error.toString())
             } finally {
@@ -260,7 +260,7 @@ const handleLogin = async () => {
     })
 }
 
-const handleForgetPassword = () => {
+const handleForgetPassword = (): void => {
     router.push('/password')
 }
 </script>

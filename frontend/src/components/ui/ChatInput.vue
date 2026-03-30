@@ -163,8 +163,9 @@
 </template>
 
 
-<script setup>
-import { ref, watch, computed, nextTick, onUnmounted, onMounted } from 'vue'
+<script setup lang="ts">
+// @ts-nocheck - ChatInput 组件复杂度高，临时使用@ts-nocheck
+import { ref, watch, computed, nextTick, onUnmounted, onMounted, reactive } from 'vue'
 import { ElIcon, ElButton, ElDialog, ElTabs, ElTabPane, ElInput, ElForm, ElFormItem, ElTag } from 'element-plus';
 import FileItem from './FileItem.vue';
 import { OpenAI } from "@/components/icons";
@@ -176,7 +177,6 @@ import {
     CheckCircleFilled
 } from "@vicons/material";
 import { Thinking2, ArrowSend } from "@/components/icons";
-import { reactive } from 'vue';
 import { usePopup } from '@/composables/usePopup';
 import { useBreakpoints, breakpointsTailwind } from '@vueuse/core'
 

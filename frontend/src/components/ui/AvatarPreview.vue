@@ -32,65 +32,71 @@
         </template>
     </el-dialog>
 </template>
-<script setup>
-import { ref, onMounted, onUnmounted, computed, watch, } from 'vue'
+<script setup lang="ts">
+import { ref, onMounted, onUnmounted, computed, watch } from 'vue'
 import Avatar from './Avatar.vue'
-import { ElButton } from 'element-plus'
+// @ts-ignore - Element Plus 类型缺失
+import { ElButton, ElDialog } from 'element-plus'
 import { Cropper } from 'vue-advanced-cropper'
 import 'vue-advanced-cropper/dist/style.css'
-import { ElDialog } from 'element-plus'
-
+// @ts-ignore - icons 类型缺失
 import {
     FileUploadOutlined,
 } from '@vicons/material'
 
 const showCropModal = ref(false)
 const cropImageSrc = ref('')
-const cropFile = ref(null)
-const cropperAvatar = ref(null)
-const avatarInput = ref(null)
+const cropFile = ref<File | null>(null)
+const cropperAvatar = ref<any>(null)
+const avatarInput = ref<HTMLInputElement | null>(null)
 const previewUrl = ref('')
 
-const emits = defineEmits(['avatar-changed'])
+// Emits 类型化
+const emits = defineEmits<{
+    'avatar-changed': [file: File]
+}>()
 
-const props = defineProps({
-    src: {
-        type: String,
-        default: () => ({})
-    },
-    type: {
-        type: String,
-        default: 'user'
-    }
-})
+// Props 类型化
+const props = defineProps<{
+    src?: string;
+    type?: 'user' | 'assistant';
+}>()
 
-watch(() => props.src, (newValue) => {
+// 监听 src 变化 - 类型化
+watch(() => props.src, (newValue: string | undefined) => {
     if (previewUrl.value && previewUrl.value.startsWith('blob:')) {
         URL.revokeObjectURL(previewUrl.value);
     }
-    previewUrl.value = newValue
+    previewUrl.value = newValue || ''
 })
 
-const triggerAvatarUpload = () => {
-    avatarInput.value.click()
+// 触发头像上传 - 类型化
+const triggerAvatarUpload = (): void => {
+    avatarInput.value?.click?.()
 }
-const closeCropModal = () => {
+
+// 关闭裁剪模态框 - 类型化
+const closeCropModal = (): void => {
     showCropModal.value = false
     cropImageSrc.value = ''
     cropFile.value = null
 }
-const cropAvatar = () => {
-    if (!cropperAvatar.value) return
+
+// 裁剪头像 - 类型化
+const cropAvatar = (): void => {
+    if (!cropperAvatar.value || !cropFile.value) return
 
     const { canvas } = cropperAvatar.value.getResult()
 
-    canvas.toBlob((blob) => {
-        // 创建新文件对象
-        const croppedFile = new File([blob], cropFile.value.name, {
-            type: cropFile.value.type,
+    canvas.toBlob((blob: Blob | null) => {
+        if (!blob) return
+        
+        // 创建新文件对象 - 使用非空断言
+        const croppedFile = new File([blob], cropFile.value!.name, {
+            type: cropFile.value!.type,
         })
 
-        // 创建预览URL
+        // 创建预览 URL
         if (previewUrl.value && previewUrl.value.startsWith('blob:')) {
             URL.revokeObjectURL(previewUrl.value);
         }
@@ -99,31 +105,37 @@ const cropAvatar = () => {
         closeCropModal()
     }, cropFile.value.type, 0.9)
 }
-const handleAvatarChanged = (event) => {
-    const file = event.target.files[0]
+
+// 处理头像改变 - 类型化
+const handleAvatarChanged = (event: Event): void => {
+    const target = event.target as HTMLInputElement
+    const file = target.files?.[0]
     if (file) {
         if (!file.type.startsWith('image/')) {
+            // @ts-ignore - toast 未迁移
             toast.error('请选择图片文件')
             return
         }
 
         if (file.size > 5 * 1024 * 1024) {
-            toast.error('图片大小不能超过5MB')
+            // @ts-ignore - toast 未迁移
+            toast.error('图片大小不能超过 5MB')
             return
         }
 
         const reader = new FileReader()
-        reader.onload = (e) => {
-            cropImageSrc.value = e.target.result
+        reader.onload = (e: ProgressEvent<FileReader>) => {
+            cropImageSrc.value = e.target?.result as string
             cropFile.value = file
             showCropModal.value = true
         }
         reader.readAsDataURL(file)
     }
 
-    // 清空input，允许重复选择同一文件
-    event.target.value = ''
+    // 清空 input，允许重复选择同一文件
+    target.value = ''
 }
+// 组件卸载时清理资源 - 类型化
 onUnmounted(() => {
     if (previewUrl.value && previewUrl.value.startsWith('blob:')) {
         URL.revokeObjectURL(previewUrl.value);

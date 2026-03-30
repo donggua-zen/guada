@@ -1,12 +1,8 @@
 <template>
   <div class="flex flex-col h-full" style="position: relative;">
     <!-- 聊天头部 -->
-    <ChatHeader 
-      :sidebar-visible="sidebarVisible" 
-      :title="currentSession?.title || ''"
-      @toggle-sidebar="emit('update:sidebarVisible', !sidebarVisible)"
-      @select-more-option="handleMoreSelect" 
-    />
+    <ChatHeader :sidebar-visible="sidebarVisible" :title="currentSession?.title || ''"
+      @toggle-sidebar="emit('update:sidebarVisible', !sidebarVisible)" @select-more-option="handleMoreSelect" />
 
     <!-- 消息内容区域 -->
     <div class="flex-1 overflow-hidden w-full items-center" ref="messagesContainerRef">
@@ -27,48 +23,41 @@
             <!-- 标题和描述 -->
             <div class="mb-8">
               <h1 class="text-3xl font-bold mb-4 text-[var(--color-primary)]">
-                {{ currentSession.character.title || '' }}
+                {{ currentSession?.character.title || '' }}
               </h1>
               <h2 class="text-lg font-normal text-gray-600 leading-relaxed">
-                {{ currentSession.character.description || '' }}
+                {{ currentSession?.character.description || '' }}
               </h2>
 
               <!-- 角色设定 -->
-              <div v-if="currentSession.settings?.system_prompt"
+              <div v-if="currentSession?.settings?.system_prompt"
                 class="mt-6 p-5 bg-gray-50 rounded-xl border-l-4 border-[var(--color-primary)] text-left">
                 <h3 class="text-base font-semibold text-gray-800 mb-2">角色设定</h3>
-                <p class="text-sm text-gray-600 leading-6">{{ currentSession.settings.system_prompt }}</p>
+                <p class="text-sm text-gray-600 leading-6">{{ currentSession?.settings.system_prompt }}</p>
               </div>
             </div>
           </div>
         </div>
       </template>
       <template v-else-if="authStore.isAuthenticated">
-        <ScrollContainer 
-          ref="scrollContainerRef" 
-          :auto-scroll="true" 
-          @scroll="handleScroll"
-          @is-at-bottom-change="handleIsAtBottomChange"
-        >
+        <ScrollContainer ref="scrollContainerRef" :auto-scroll="true" @scroll="handleScroll"
+          @is-at-bottom-change="handleIsAtBottomChange">
           <div class="flex flex-col items-center px-[20px] max-w-[1000px] mx-auto pb-35">
             <div class="w-full" v-for="(pair, index) in messagePairs" :key="pair[0].id"
               :style="{ minHeight: index < messagePairs.length - 1 ? '0' : placeholder }">
               <MessageItem v-for="message in pair" :ref="(el) => setItemRef(el, message.id)" :key="message.id"
-                :message="message" :avatar="message.role == 'user' ? userAvater : currentSession.avatar_url"
+                :message="message" :avatar="message.role == 'user' ? userAvater : currentSession?.avatar_url"
                 :is-last="message.index == activeMessages.length - 1"
-                :allow-generate="!isStreaming && allowReSendMessage(message, message.index, activeMessages)"
+                :allow-generate="!isStreaming && allowReSendMessage(message, message.index ?? 0, activeMessages)"
                 @delete="deleteMessage" @edit="editMessage" @copy="copyMessage" @generate="generateResponse"
                 @regenerate="regenerateResponse" @render-complete="handleRenderComplete" @switch="switchContent" />
             </div>
           </div>
         </ScrollContainer>
-        
+
         <!-- 回到底部悬浮按钮 -->
-        <ScrollToBottomButton 
-          :show="showScrollToBottomBtn" 
-          :is-streaming="shouldButtonBreathe"
-          @click="handleScrollToBottomClick"
-        />
+        <ScrollToBottomButton :show="showScrollToBottomBtn" :is-streaming="shouldButtonBreathe"
+          @click="handleScrollToBottomClick" />
       </template>
     </div>
 
@@ -86,9 +75,9 @@
       </div>
 
       <div class="w-full flex items-center max-w-[960px]">
-        <ChatInput v-model:value="inputMessage.text" v-model:thinking-enabled="thinkingEnabled" :config="{
+        <ChatInput v-model:value="inputMessage.content" v-model:thinking-enabled="thinkingEnabled" :config="{
           modelId: currentModelId,
-          maxMemoryLength: currentSession.settings?.max_memory_length || null
+          maxMemoryLength: currentSession?.settings?.max_memory_length || null
         }" :files="inputMessage.files" :streaming="isStreaming" :session-id="currentSessionId"
           @config-change="handleConfigChange" @send="handleSendMessage" @abort="abortResponse"
           @toggle-thinking="toggleDeepThinking" @tokens-statistic="handleTokensStatistic" />
@@ -97,12 +86,12 @@
 
     </div>
     <!-- Tokens 统计模态框 -->
-    <TokenStatisticsModal v-model:show="showTokenModal" :currentSessionId="currentSession.id" />
+    <TokenStatisticsModal v-model:show="showTokenModal" :currentSessionId="currentSession?.id" />
   </div>
 </template>
 
-<script setup>
-import { ref, computed, watch, nextTick, onMounted, onBeforeUpdate, reactive, shallowRef, h, defineAsyncComponent } from "vue";
+<script setup lang="ts">
+import { ref, computed, watch, nextTick, onMounted, onBeforeUpdate, reactive, shallowRef, h, defineAsyncComponent, type Ref, type ComputedRef, type ComponentPublicInstance } from "vue";
 import { apiService } from "../services/ApiService";
 import { usePopup } from "@/composables/usePopup";
 import { useDebounceFn, useThrottleFn } from "@vueuse/core";
@@ -110,6 +99,7 @@ import { useSessionStore } from "../stores/session";
 import { useAuthStore } from "../stores/auth"
 import { pairMessages, getCurrentTurns, allowReSendMessage } from "@/utils/messageUtils"
 import { useStreamResponse } from "@/composables/useStreamResponse"
+import type { Session } from '@/types/session';
 
 // 组件导入
 import MessageItem from "./MessageItem.vue";
@@ -133,12 +123,13 @@ const streamHandler = useStreamResponse(sessionStore, apiService)
 
 
 
-// 响应式数据
-const scrollContainerRef = ref(null);
-const messagesContainerRef = ref(null);
-const currentSessionId = ref(null);
+// 响应式数据 - 类型化
+const scrollContainerRef = ref<any>(null);
+const messagesContainerRef = ref<HTMLElement | null>(null);
+const currentSessionId = ref<string | null>(null);
 const showTokenModal = ref(false);
-const itemRefs = shallowRef({}); // 使用 shallowRef 减少响应式开销
+// 使用 shallowRef 减少响应式开销，存储消息项组件实例
+const itemRefs = shallowRef<Record<string, ComponentPublicInstance | null>>({}); 
 const isLoading = ref(false)
 const autoScrollToBottom = ref(false);
 const autoScrollToBottomSet = ref(-1);
@@ -147,81 +138,92 @@ const placeholder = ref("auto");
 const showScrollToBottomBtn = ref(false);
 
 // 编辑模式状态（简化）
-const editMode = ref(null); // null 表示非编辑模式，{ message, inputMessage } 表示编辑模式
+const editMode = ref<{ message: any; inputMessage: { content: string; files: any[]; isWaiting?: boolean } } | null>(null); // null 表示非编辑模式，{ message, inputMessage } 表示编辑模式
 
-// Props & Emits
-const props = defineProps({
-  session: {
-    type: Object,
-    default: () => ({})
-  },
-  sidebarVisible: {
-    type: Boolean,
-    default: true
-  }
-});
+// Props & Emits - 类型化
+const props = defineProps<{
+  session: Session | null;
+  sidebarVisible?: boolean;
+}>();
 
-const emit = defineEmits([
-  "update:session",
-  "openSettings",
-  "update:sidebarVisible",
-  "save-settings"
-]);
+const emit = defineEmits<{
+  'update:session': [session: Session]
+  openSettings: []
+  'update:sidebarVisible': [visible: boolean]
+  'save-settings': []
+}>();
 
-// 计算属性
+// 计算属性 - 类型化
 const currentSession = computed({
   get: () => props.session,
-  set: (session) => emit("update:session", session)
+  set: (session: Session | null) => emit("update:session", session!)
 });
 
 
 const userAvater = computed(() => authStore.user?.avatar_url);
 
-const currentModelName = computed(() =>
-  currentSession.value.model
-    ? currentSession.value.model.model_name.split("/").pop()
-    : "请选择对话模型"
-);
+const currentModelName = computed(() => {
+  if (!currentSession.value?.model) return "请选择对话模型";
+  return currentSession.value.model.model_name.split("/").pop() || "unknown";
+});
 
-const isStreaming = computed(() => sessionStore.sessionIsStreaming(currentSessionId.value));
+const isStreaming = computed(() => {
+  const sessionId = currentSessionId.value;
+  return sessionId ? sessionStore.sessionIsStreaming(sessionId) : false;
+});
 
 // 按钮是否应该显示呼吸动画（与 isStreaming 解耦，避免隐藏时冲突）
 const shouldButtonBreathe = ref(false)
 
 const inputMessage = computed({
-  get: () => sessionStore.getInputMessage(currentSessionId.value) || { text: "", files: [] },
-  set: (value) => sessionStore.setInputMessage(currentSessionId.value, value)
+  get: () => {
+    const sessionId = currentSessionId.value;
+    return sessionId ? sessionStore.getInputMessage(sessionId) || { content: "", files: [], isWaiting: false } : { content: "", files: [], isWaiting: false };
+  },
+  set: (value: { content: string; files: any[]; isWaiting?: boolean }) => {
+    const sessionId = currentSessionId.value;
+    if (sessionId) {
+      sessionStore.setInputMessage(sessionId, value);
+    }
+  }
 });
 
 const activeMessages = computed({
-  get: () => sessionStore.getMessages(currentSessionId.value) || [],
-  set: (value) => sessionStore.setMessages(currentSessionId.value, value)
+  get: () => {
+    const sessionId = currentSessionId.value;
+    return sessionId ? sessionStore.getMessages(sessionId) || [] : [];
+  },
+  set: (value: any[]) => {
+    const sessionId = currentSessionId.value;
+    if (sessionId) {
+      sessionStore.setMessages(sessionId, value);
+    }
+  }
 });
 
-const messagePairs = computed(() => {
-  return pairMessages(activeMessages.value)
-})
+const messagePairs = computed(() => pairMessages(activeMessages.value));
 
 const thinkingEnabled = computed({
   get() {
-    return currentSession.value.settings?.thinking_enabled;
+    return currentSession.value?.settings?.thinking_enabled;
   },
-  set(value) {
-    currentSession.value.settings["thinking_enabled"] = value;
-    currentSession.value.updated_at = new Date().toISOString();
+  set(value: boolean) {
+    if (currentSession.value?.settings) {
+      currentSession.value.settings["thinking_enabled"] = value;
+      currentSession.value.updated_at = new Date().toISOString();
+    }
   }
 });
 
 const currentModelId = computed({
   get() {
-    return currentSession.value.model_id;
+    return currentSession.value?.model_id ?? null;
   },
-  set(value) {
-    // 更新 model_id
+  set(value: string | null) {
     if (currentSession.value) {
-      currentSession.value.model_id = value;
+      // 如果值为 null，使用空字符串作为后备（符合 Session 类型定义）
+      currentSession.value.model_id = value || '';
       currentSession.value.updated_at = new Date().toISOString();
-      // 触发保存
       debouncedSaveSession();
     }
   }
@@ -240,7 +242,8 @@ const debouncedSaveSession = useDebounceFn(() => {
   emit("save-settings");
 }, 200);
 
-const handleConfigChange = (config) => {
+const handleConfigChange = (config: any) => {
+  if (!currentSession.value) return;
   if (typeof config.modelId !== 'undefined')
     currentSession.value.model_id = config.modelId;
   if (typeof config.maxMemoryLength !== 'undefined')
@@ -259,7 +262,7 @@ const debouncedResetScrollFlag = useDebounceFn(() => {
  */
 const handleIsAtBottomChange = useThrottleFn((isAtBottom) => {
   console.log('[ScrollButton] isAtBottom change:', isAtBottom)
-  
+
   // 如果在底部，立即隐藏按钮（同时停止呼吸动画以避免冲突）
   if (isAtBottom) {
     // 先停止呼吸动画，避免与淡出动画冲突
@@ -284,7 +287,7 @@ const handleScrollToBottomClick = () => {
 function scrollToBottomSmooth() {
   if (scrollContainerRef.value) {
     scrollContainerRef.value.smoothScrollToBottom()
-    
+
     // 强制设置为自动滚动模式
     nextTick(() => {
       immediateScrollToBottom(true)
@@ -299,7 +302,7 @@ function scrollToBottomSmooth() {
 const updateScrollButtonVisibility = useDebounceFn(() => {
   // 检查是否在底部 - 注意：isAtBottom 是 computed，不需要 .value
   const isAtBottom = scrollContainerRef.value?.isAtBottom
-  
+
   console.log('[ScrollButton] updateScrollButtonVisibility:', {
     isAtBottom,
     isStreaming: isStreaming.value,
@@ -308,14 +311,14 @@ const updateScrollButtonVisibility = useDebounceFn(() => {
     hasScrollContainer: !!scrollContainerRef.value,
     hasIsAtBottom: !!scrollContainerRef.value?.isAtBottom
   })
-  
+
   // 如果在底部，总是隐藏按钮（无延迟）
   if (isAtBottom) {
     showScrollToBottomBtn.value = false
     console.log('[ScrollButton] HIDDEN - at bottom')
     return
   }
-  
+
   // 不在底部时，只在流式输出期间显示按钮
   if (isStreaming.value) {
     showScrollToBottomBtn.value = true
@@ -332,44 +335,51 @@ const updateScrollButtonVisibility = useDebounceFn(() => {
 let hasGeneratedTitle = ref(false);
 
 // 监听器
-watch(() => props.session?.id, handleSessionChange, { immediate: true });
+watch(() => props.session?.id, async (newSessionId: string | undefined, oldSessionId: string | undefined) => {
+  await handleSessionChange(newSessionId ?? null, oldSessionId ?? null);
+}, { immediate: true });
 
 // 监听流式状态变化，在第一次对话完成后生成标题
 watch(() => isStreaming.value, async (newVal, oldVal) => {
   console.log('[ScrollButton] Streaming watch triggered:', { oldVal, newVal })
-  
+
   // 当流式状态从 true 变为 false 时（即助手回复完成）
   if (oldVal === true && newVal === false) {
     console.log('[ScrollButton] Streaming finished, checking title generation')
-    
+
     // 检查是否是第一条助手消息
     // const firstAssistantMessage = activeMessages.value.find(m => m.role === 'assistant');
-    
+
     if (activeMessages.value.length == 2 && !hasGeneratedTitle.value) {
       // 标记已生成标题，避免重复调用
       hasGeneratedTitle.value = true;
-      
+
       // 调用标题生成 API
       try {
+        if (!currentSessionId.value) return;
         const result = await apiService.generateSessionTitle(currentSessionId.value);
-        
+
         // 如果成功生成了新标题
         if (!result.skipped && result.title) {
           // 更新会话标题
-          currentSession.value.title = result.title;
-          
-          // 通知用户
-          notify.success('标题已更新', `会话标题已自动更新为"${result.title}"`);
-          
-          // 同步到 session store
-          sessionStore.updateSessionTitle(currentSessionId.value, result.title);
+          if (currentSession.value) {
+            currentSession.value.title = result.title;
+
+            // 通知用户
+            notify.success('标题已更新', `会话标题已自动更新为"${result.title}"`);
+
+            // 同步到 session store
+            if (currentSessionId.value) {
+              sessionStore.updateSessionTitle(currentSessionId.value, result.title);
+            }
+          }
         }
       } catch (error) {
         console.error('生成会话标题失败:', error);
         // 不显示错误提示，避免影响用户体验
       }
     }
-    
+
     // 流式结束，隐藏按钮（已在 updateScrollButtonVisibility 中处理）
     console.log('[ScrollButton] Streaming ended, button will be hidden by updateScrollButtonVisibility')
   }
@@ -416,14 +426,14 @@ const handleRenderComplete = () => {
       immediateScrollToBottom(true);
     });
   }
-  
+
   // 渲染完成后更新按钮状态
   nextTick(() => {
     updateScrollButtonVisibility()
   })
 }
 
-const handleScroll = (event) => {
+const handleScroll = (_event: any) => {
   if (scrollContainerRef.value) {
     if (scrollContainerRef.value.isAtBottom) {
       if (autoScrollToBottomSet.value >= 0) {
@@ -439,7 +449,7 @@ const handleScroll = (event) => {
 }
 
 // 更多操作菜单选择处理
-function handleMoreSelect(key) {
+function handleMoreSelect(key: string) {
   switch (key) {
     case "clear":
       clearChat();
@@ -456,6 +466,11 @@ function handleMoreSelect(key) {
 // 聊天记录导入导出
 function exportChat() {
   try {
+    if (!currentSession.value) {
+      toast.error("当前没有活动的会话");
+      return;
+    }
+
     const chatData = {
       session: currentSession.value,
       messages: activeMessages.value,
@@ -480,6 +495,11 @@ function exportChat() {
 }
 
 async function importChat() {
+  if (!currentSession.value) {
+    toast.error("当前没有活动的会话");
+    return;
+  }
+
   if (!(await confirm("导入聊天记录", "确定要导入聊天记录吗？这将替换当前的聊天记录。"))) {
     return;
   }
@@ -487,14 +507,20 @@ async function importChat() {
   input.type = "file";
   input.accept = ".json";
 
-  input.onchange = async (e) => {
-    const file = e.target.files[0];
+  input.onchange = async (e: Event) => {
+    const target = e.target as HTMLInputElement;
+    if (!target) return;
+    const file = target.files?.[0];
     if (!file) return;
 
     try {
       const text = await file.text();
       const chatData = JSON.parse(text);
       // 这里可以添加数据验证逻辑
+      if (!currentSession.value) {
+        toast.error("当前没有活动的会话");
+        return;
+      }
       await apiService.importMessages(currentSession.value.id, chatData.messages);
       toast.success("聊天记录导入成功");
       loadMessages(currentSession.value.id);
@@ -510,19 +536,15 @@ async function importChat() {
 
 /**
  * 设置消息项引用
- * @param {any} el - DOM 元素或组件实例
- * @param {string} messageId - 消息 ID
  */
-function setItemRef(el, messageId) {
+function setItemRef(el: any, messageId: string) {
   if (el) itemRefs.value[messageId] = el;
 }
 
 /**
  * 处理会话切换
- * @param {string} newSessionId - 新会话 ID
- * @param {string} oldSessionId - 旧会话 ID
  */
-async function handleSessionChange(newSessionId, oldSessionId) {
+async function handleSessionChange(newSessionId: string | null, oldSessionId: string | null) {
   if (newSessionId === oldSessionId) return;
   isLoading.value = true;
   updatePlaceholder(null);
@@ -533,13 +555,13 @@ async function handleSessionChange(newSessionId, oldSessionId) {
       // 获取会话配置
       const sessionData = await apiService.fetchSession(newSessionId);
       currentSession.value = sessionData;
-      
+
       // 加载消息
       await loadMessages(newSessionId);
-      
+
       nextTick(() => {
         immediateScrollToBottom();
-        if (inputMessage.value?.isWaiting) {
+        if (inputMessage.value && 'isWaiting' in inputMessage.value && inputMessage.value.isWaiting) {
           handleSendMessage();
         }
       });
@@ -557,9 +579,8 @@ async function handleSessionChange(newSessionId, oldSessionId) {
 
 /**
  * 加载会话消息
- * @param {string} sessionId - 会话 ID
  */
-async function loadMessages(sessionId) {
+async function loadMessages(sessionId: string) {
   if (sessionStore.getMessages(sessionId).length === 0) {
     const sessionMessages = await apiService.fetchSessionMessages(sessionId);
 
@@ -594,10 +615,10 @@ async function loadMessages(sessionId) {
 
 // 流式响应处理（委托给 composable 处理）
 async function handleStreamResponse(
-  streamingSessionId,
-  userMessageId,
-  regenerationMode = null,
-  assistantMessageId = null
+  streamingSessionId: string,
+  userMessageId: string,
+  regenerationMode: any = null,
+  assistantMessageId: string | null = null
 ) {
   try {
     await streamHandler.processStream(
@@ -617,19 +638,23 @@ async function handleStreamResponse(
 
 // 消息操作方法
 function abortResponse() {
-  apiService.cancelResponse(currentSessionId.value);
+  if (currentSessionId.value) {
+    apiService.cancelResponse(currentSessionId.value);
+  }
 }
 
 async function clearChat() {
   if (await confirm("清空聊天记录", "确定要删除所有聊天记录吗？此操作不可撤销。")) {
-    await apiService.clearSessionMessages(currentSessionId.value);
-    sessionStore.clearSessionState(currentSessionId.value);
+    if (currentSessionId.value) {
+      await apiService.clearSessionMessages(currentSessionId.value);
+      sessionStore.clearSessionState(currentSessionId.value);
+    }
     // debouncedUpdatedSession();
     toast.success("聊天记录已清空");
   }
 }
 
-async function deleteMessage(message) {
+async function deleteMessage(message: any) {
   try {
     if (
       await confirm(
@@ -642,10 +667,13 @@ async function deleteMessage(message) {
       await apiService.deleteMessage(message.id);
       if (message.role === "user") {
         const assistantMessage = activeMessages.value.find((msg) => msg.parent_id === message.id);
-        if (assistantMessage)
+        if (assistantMessage && currentSessionId.value) {
           sessionStore.deleteMessage(currentSessionId.value, assistantMessage.id);
+        }
       }
-      sessionStore.deleteMessage(currentSessionId.value, message.id);
+      if (currentSessionId.value) {
+        sessionStore.deleteMessage(currentSessionId.value, message.id);
+      }
       delete itemRefs.value[message.id];
       toast.success("消息已删除");
     }
@@ -655,7 +683,7 @@ async function deleteMessage(message) {
   }
 }
 
-async function editMessage(message) {
+async function editMessage(message: any) {
   try {
     // 使用 getCurrentTurns 获取当前版本的内容数组，取最后一个作为编辑对象
     const turns = getCurrentTurns(message)
@@ -663,17 +691,20 @@ async function editMessage(message) {
 
     const result = await editText({
       title: "编辑消息",
-      defaultValue: currentContent.content,
+      defaultValue: currentContent.content || "",
       confirmText: "保存",
       cancelText: "取消"
-    });
+    }) as string | null;
 
-    if (result) {
+    if (result != null && currentSessionId.value) {
       currentContent.content = result;
       await apiService.updateMessage(message.id, { content: result });
       sessionStore.updateMessage(currentSessionId.value, message.id, message);
       // debouncedUpdatedSession();
       toast.success("消息已更新");
+    } else if (result === null || result === undefined) {
+      // 用户取消了编辑
+      toast.info("已取消编辑");
     }
   } catch (error) {
     toast.error("更新失败");
@@ -681,14 +712,16 @@ async function editMessage(message) {
   }
 }
 
-async function copyMessage(message) {
+async function copyMessage(message: any) {
   try {
     // 使用 getCurrentTurns 获取当前版本的内容数组，取最后一个作为复制对象
     const turns = getCurrentTurns(message)
     const currentContent = turns[turns.length - 1]
 
-    await navigator.clipboard.writeText(currentContent.content);
-    toast.success("消息已复制");
+    if (currentContent.content) {
+      await navigator.clipboard.writeText(currentContent.content);
+      toast.success("消息已复制");
+    }
   } catch (error) {
     console.error("复制消息失败:", error);
     toast.error("复制失败");
@@ -696,54 +729,83 @@ async function copyMessage(message) {
 }
 
 /**
- * 更新占位符元素的最小高度，确保滚动容器能够正确显示内容
- * @param {string} userMessageId - 用户消息的 ID，用于定位对应的 DOM 元素
+ * 更新占位符元素的最小高度
  */
-function updatePlaceholder(userMessageId) {
+function updatePlaceholder(userMessageId: string | null) {
   // 常量定义：消息高度阈值比例（超过 1/3 视口时触发调整）
   const MESSAGE_HEIGHT_THRESHOLD_RATIO = 1 / 3;
   // 最大占位符倍数（不超过容器高度的 3 倍）
   const MAX_PLACEHOLDER_MULTIPLIER = 3;
-  
+
   try {
     // 空值处理：重置为自动高度
     if (!userMessageId) {
       placeholder.value = "auto";
       return;
     }
-    
+
     // 使用 requestAnimationFrame 批量 DOM 操作，避免布局抖动
     requestAnimationFrame(() => {
       const userMessageRef = itemRefs.value[userMessageId];
-      
+
       // 改进错误处理：元素不存在时降级为自动高度
-      if (!userMessageRef || !userMessageRef.el) {
-        console.warn(`Element for userMessageId ${userMessageId} not found`);
+      if (!userMessageRef) {
+        console.warn(`Component ref for userMessageId ${userMessageId} not found`, userMessageRef);
         placeholder.value = "auto";
         return;
       }
+
+      // 使用组件暴露的 el 属性（而不是 $el，因为 $el 可能是 Text Node）
+      const userMessageElement = (userMessageRef as any).el;
       
-      const userMessageElement = userMessageRef.el;
+      // 详细的调试日志
+      console.log('[updatePlaceholder]', {
+        messageId: userMessageId,
+        hasRef: !!userMessageRef,
+        hasEl: !!userMessageElement,
+        elType: userMessageElement?.constructor?.name,
+        nodeType: userMessageElement?.nodeType,
+        nodeName: userMessageElement?.nodeName,
+        element: userMessageElement
+      });
       
+      if (!userMessageElement) {
+        console.warn(`Element (el) for userMessageId ${userMessageId} is null/undefined`);
+        placeholder.value = "auto";
+        return;
+      }
+
+      // 确保是 Element 类型（不是 Text Node、Comment Node 等）
+      if (!(userMessageElement instanceof Element)) {
+        console.warn(`el is not an Element type for userMessageId ${userMessageId}, got:`, userMessageElement?.nodeType, userMessageElement?.nodeName);
+        placeholder.value = "auto";
+        return;
+      }
+
       // 批量读取 DOM 属性（只触发一次重排）
+      if (!messagesContainerRef.value) {
+        console.warn('messagesContainerRef not available');
+        placeholder.value = "auto";
+        return;
+      }
       const containerRect = messagesContainerRef.value.getBoundingClientRect();
       const style = window.getComputedStyle(userMessageElement);
-      const userElHeight = parseFloat(style.height) 
-                         + parseFloat(style.marginTop) 
-                         + parseFloat(style.marginBottom);
-      
+      const userElHeight = parseFloat(style.height)
+        + parseFloat(style.marginTop)
+        + parseFloat(style.marginBottom);
+
       // 动态计算最小高度
       let baseMinHeight = containerRect.height - 140;
-      
+
       if (userElHeight > containerRect.height * MESSAGE_HEIGHT_THRESHOLD_RATIO) {
         baseMinHeight += (userElHeight - containerRect.height * MESSAGE_HEIGHT_THRESHOLD_RATIO);
       }
-      
+
       // 限制最大值，防止布局错乱
       const maxHeight = containerRect.height * MAX_PLACEHOLDER_MULTIPLIER;
       placeholder.value = Math.min(baseMinHeight, maxHeight) + "px";
     });
-    
+
   } catch (error) {
     console.error("Error updating placeholder:", error);
     // 错误时降级为自动高度
@@ -753,13 +815,13 @@ function updatePlaceholder(userMessageId) {
 
 /**
  * 发送新消息
- * @param {string} sessionId - 会话 ID
- * @param {string} text - 消息文本
- * @param {Array} files - 附件列表
- * @param {string|null} replaceMessageId - 要替换的消息 ID
- * @returns {Promise<Object>} 创建的消息对象
  */
-async function sendNewMessage(sessionId, text, files, replaceMessageId = null) {
+async function sendNewMessage(
+  sessionId: string,
+  text: string,
+  files: any[],
+  replaceMessageId: string | null = null
+) {
   // 过滤出含有file.file的有效文件
   const filesWithContent = files.filter((file) => file.file);
 
@@ -804,6 +866,7 @@ async function sendNewMessage(sessionId, text, files, replaceMessageId = null) {
   // debouncedUpdatedSession();
   await nextTick();
   updatePlaceholder(message.id);
+  await nextTick();
   requestAnimationFrame(() => {
     immediateScrollToBottom();
   });
@@ -816,22 +879,29 @@ async function sendNewMessage(sessionId, text, files, replaceMessageId = null) {
  */
 async function handleSendMessage() {
   const data = inputMessage.value;
-  if ((!data.text?.trim() && !data.files.length) || isStreaming.value) return;
+  if ((!data.content?.trim() && !data.files.length) || isStreaming.value) return;
 
   try {
-    const { text, files } = data;
+    const { content, files } = data;
 
     // 如果是编辑模式，使用重新发送逻辑
     if (editMode.value && editMode.value.message) {
-      await sendEditMessage(text, files);
+      await sendEditMessage(content, files);
       return;
     }
 
     // 否则发送新消息
-    const message = await sendNewMessage(currentSession.value.id, text, files);
-    inputMessage.value = { text: "", files: [] };
-    handleStreamResponse(currentSessionId.value, message.id);
-  } catch (error) {
+    if (!currentSession.value) {
+      notify.error("发送失败", "当前没有活动的会话");
+      return;
+    }
+
+    const message = await sendNewMessage(currentSession.value.id, content, files);
+    inputMessage.value = { content: "", files: [], isWaiting: false };
+    if (currentSessionId.value) {
+      handleStreamResponse(currentSessionId.value, message.id);
+    }
+  } catch (error: any) {
     notify.error("消息发送失败", error.message);
   }
 }
@@ -841,16 +911,14 @@ async function handleSendMessage() {
  */
 function exitEditMode() {
   editMode.value = null;
-  inputMessage.value = { text: "", files: [] };
+  inputMessage.value = { content: "", files: [], isWaiting: false };
 }
 
 /**
  * 发送编辑后的消息
- * @param {string} text - 消息文本
- * @param {Array} files - 附件列表
  */
-async function sendEditMessage(text, files) {
-  if (!editMode.value) return;
+async function sendEditMessage(text: string, files: any[]) {
+  if (!editMode.value || !currentSession.value) return;
 
   try {
     const message = await sendNewMessage(
@@ -864,23 +932,25 @@ async function sendEditMessage(text, files) {
     exitEditMode();
 
     // 开始流式响应
-    handleStreamResponse(currentSessionId.value, message.id);
-  } catch (error) {
+    if (currentSessionId.value) {
+      handleStreamResponse(currentSessionId.value, message.id);
+    }
+  } catch (error: any) {
     notify.error("消息发送失败", error.message);
   }
 }
 
 /**
  * 进入编辑模式以重新生成消息
- * @param {Object} message - 要编辑的消息对象
  */
-function generateResponse(message) {
+function generateResponse(message: any) {
   // 进入编辑模式
   editMode.value = {
     message: message,
     inputMessage: {
-      text: message.contents[0].content,
-      files: message.files || []
+      content: message.contents[0].content,
+      files: message.files || [],
+      isWaiting: false
     }
   }
 
@@ -895,10 +965,9 @@ function generateResponse(message) {
 
 /**
  * 重新生成响应（多版本）
- * @param {Object} message - 消息对象
  */
-function regenerateResponse(message) {
-  const versions = []
+function regenerateResponse(message: any) {
+  const versions: string[] = []
   for (let i = 0; i < message.contents.length; i++) {
     const turns_id = message.contents[i].turns_id
     if (!versions.includes(turns_id)) {
@@ -914,20 +983,19 @@ function regenerateResponse(message) {
 
   const assistantMessage = activeMessages.value.find(m => m.id === message.id);
   if (assistantMessage) {
-    assistantMessage.contents.forEach(content => {
-      content.is_current = false;
-    });
     assistantMessage.state = { is_streaming: true };
   }
 
   updatePlaceholder(message.parent_id);
   nextTick(() => {
     immediateScrollToBottom();
-    handleStreamResponse(currentSessionId.value, message.parent_id, "multi_version", message.id);
+    if (currentSessionId.value) {
+      handleStreamResponse(currentSessionId.value, message.parent_id, "multi_version", message.id);
+    }
   });
 }
 
-function switchContent(message, turns_id) {
+function switchContent(message: any, turns_id: string) {
   const targetMessage = activeMessages.value.find((m) => m.id === message.id);
   targetMessage.current_turns_id = turns_id
   debouncedSwitchContent(message.id, turns_id);

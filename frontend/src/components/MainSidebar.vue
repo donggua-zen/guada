@@ -67,16 +67,18 @@
         <div class="user-avatar">
           <Avatar type="user" :round="true" :src="authStore.user?.avatar_url" />
         </div>
-        <span class="user-name">{{ authStore.user?.nickname || '用户' }}</span>
+        <span class="user-name">{{ authStore.user?.username || '用户' }}</span>
       </div>
     </div>
   </div>
 </template>
 
-<script setup>
+<!-- @ts-ignore - UI 组件尚未完全迁移到 TypeScript -->
+<script setup lang="ts">
 import { computed } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useAuthStore } from '../stores/auth'
+// @ts-ignore - UI 组件类型缺失
 import { Avatar } from './ui'
 import { useTheme } from "../composables/useTheme";
 
@@ -101,22 +103,19 @@ const router = useRouter()
 const route = useRoute()
 const authStore = useAuthStore()
 
-const props = defineProps({
-  activeTab: {
-    type: String,
-    default: 'chat',
-    validator: (value) => ['chat', 'characters', 'settings'].includes(value)
-  },
-  sidebarWidth: {
-    type: String,
-    default: '64px'  // 优化为更紧凑的宽度
-  }
-})
+// Props 定义 - 类型化
+const props = defineProps<{
+  activeTab?: string;
+  sidebarWidth?: string;
+}>()
 
-const emit = defineEmits(['update:activeTab'])
+// Emits 类型化
+const emit = defineEmits<{
+  'update:activeTab': [tab: string]
+}>()
 
-// 处理导航点击
-const handleNavClick = (tab) => {
+// 处理导航点击 - 类型化
+const handleNavClick = (tab: string): void => {
   if (tab === 'chat') {
     router.replace({ name: 'Chat' })
   } else if (tab === 'characters') {
