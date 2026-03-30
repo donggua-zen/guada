@@ -58,6 +58,12 @@ class Session(ModelBase):
         cascade="all, delete-orphan",
         uselist=False,  # 关键参数，表示一对一关系
     )
+    
+    memories = relationship(
+        "Memory",
+        back_populates="session",
+        cascade="all, delete-orphan",  # 删除会话时自动删除记忆
+    )
 
     model: Mapped[Optional["Model"]] = relationship(
         "Model",
