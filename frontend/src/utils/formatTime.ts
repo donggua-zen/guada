@@ -1,11 +1,10 @@
 /**
  * 格式化时间显示
- * @param {string} dateString - 日期字符串
- * @param {string} style - 显示样式，默认为'firendly'友好显示，其他值则显示年月日时分
- * @returns {string} 格式化后的时间字符串
+ * @param dateString - 日期字符串
+ * @param style - 显示样式，默认为'friendly'友好显示，其他值则显示年月日时分
+ * @returns 格式化后的时间字符串
  */
-export const formatTime = (dateString, style = 'friendly') => {
-
+export const formatTime = (dateString: string, style: string = 'friendly'): string => {
     if (!dateString) return ''
 
     const date = new Date(dateString)
@@ -18,7 +17,13 @@ export const formatTime = (dateString, style = 'friendly') => {
 
     if (style !== 'friendly') {
         // 返回年月时分
-        return date.toLocaleString('zh-CN', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })
+        return date.toLocaleString('zh-CN', {
+            year: 'numeric',
+            month: '2-digit',
+            day: '2-digit',
+            hour: '2-digit',
+            minute: '2-digit'
+        })
     }
 
     // 计算相差天数
@@ -61,5 +66,4 @@ export const formatTime = (dateString, style = 'friendly') => {
 
     // 更早
     return '更早'
-
 }

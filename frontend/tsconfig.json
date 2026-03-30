@@ -1,0 +1,77 @@
+{
+  "compilerOptions": {
+    /* 语言和模块配置 */
+    "target": "ES2020",
+    "module": "ESNext",
+    "lib": ["ES2020", "DOM", "DOM.Iterable"],
+    "moduleResolution": "bundler",
+    "resolveJsonModule": true,
+    "allowImportingTsExtensions": true,
+    
+    /* 类型检查 - 初期宽松模式 */
+    "strict": false,
+    "noImplicitAny": true,
+    "strictNullChecks": true,
+    "strictFunctionTypes": true,
+    "strictBindCallApply": true,
+    "strictPropertyInitialization": false,
+    "noImplicitThis": true,
+    "alwaysStrict": true,
+    
+    /* 未使用的代码检查 - 初期关闭 */
+    "noUnusedLocals": false,
+    "noUnusedParameters": false,
+    "noImplicitReturns": false,
+    "noFallthroughCasesInSwitch": false,
+    
+    /* 互操作性 */
+    "esModuleInterop": true,
+    "allowSyntheticDefaultImports": true,
+    "forceConsistentCasingInFileNames": true,
+    
+    /* 输出配置 */
+    "declaration": true,
+    "declarationMap": true,
+    "sourceMap": true,
+    "removeComments": false,
+    
+    /* 性能优化 */
+    "skipLibCheck": true,
+    "isolatedModules": true,
+    
+    /* Vue 特定配置 */
+    "jsx": "preserve",
+    "jsxFactory": "h",
+    "jsxFragmentFactory": "Fragment",
+    
+    /* 路径解析 */
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["./src/*"]
+    },
+    
+    /* 类型根目录 */
+    "typeRoots": ["./node_modules/@types", "./src/types"],
+    
+    /* 弃用警告处理 */
+    "ignoreDeprecations": "6.0"
+  },
+  
+  "include": [
+    "src/**/*.ts",
+    "src/**/*.d.ts",
+    "src/**/*.tsx",
+    "src/**/*.vue"
+  ],
+  
+  "exclude": [
+    "node_modules",
+    "dist",
+    "build"
+  ],
+  
+  "vueCompilerOptions": {
+    "target": 3.5,
+    "plugins": []
+  }
+}

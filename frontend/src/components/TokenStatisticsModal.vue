@@ -84,51 +84,63 @@
         </template>
     </el-dialog>
 </template>
-<script setup>
+<script setup lang="ts">
 import { ref, computed, watch } from "vue";
+// @ts-ignore - Element Plus 尚未完全迁移到 TypeScript
 import { ElDialog, ElButton } from "element-plus";
+// @ts-ignore - ApiService 尚未迁移到 TypeScript
 import { apiService } from "@/services/ApiService";
 
-const tokenStatistics = ref({
+// Token 统计数据接口
+interface TokenStatistics {
+    maxTokens: number;
+    promptTokens: number;
+    summaryTokens: number;
+    contextTokens: number;
+}
+
+const tokenStatistics = ref<TokenStatistics>({
     maxTokens: 0,
     promptTokens: 0,
     summaryTokens: 0,
     contextTokens: 0
 });
 
-const props = defineProps({
-    currentSessionId: String,
-    show: {
-        type: Boolean,
-        default: false
-    },
-});
+// Props 类型化
+const props = defineProps<{
+    currentSessionId?: string;
+    show?: boolean;
+}>();
 
+// Emits 类型化
+const emit = defineEmits<{
+    'update:show': [value: boolean]
+}>();
+
+// 计算属性 - 双向绑定
 const showTokenModal = computed({
-    get() {
-        return props.show;
+    get(): boolean {
+        return props.show ?? false;
     },
-    set(value) {
+    set(value: boolean) {
         emit('update:show', value)
     }
 })
 
-// 计算属性
-const maxTokens = computed(() => tokenStatistics.value.maxTokens);
-const promptTokens = computed(() => tokenStatistics.value.promptTokens);
-const summaryTokens = computed(() => tokenStatistics.value.summaryTokens);
-const contextTokens = computed(() => tokenStatistics.value.contextTokens);
-const usedTokens = computed(() =>
+// 计算属性 - 类型化
+const maxTokens = computed((): number => tokenStatistics.value.maxTokens);
+const promptTokens = computed((): number => tokenStatistics.value.promptTokens);
+const summaryTokens = computed((): number => tokenStatistics.value.summaryTokens);
+const contextTokens = computed((): number => tokenStatistics.value.contextTokens);
+const usedTokens = computed((): number =>
     promptTokens.value + summaryTokens.value + contextTokens.value
 );
 
-const emit = defineEmits(["update:show"]);
 
-
-// 模拟获取tokens统计数据的接口
-const fetchTokenStatistics = async () => {
-    // 模拟API调用延迟
-    const response = await apiService.fetchTokenStatistics(props.currentSessionId);
+// 模拟获取 tokens 统计数据的接口 - 类型化
+const fetchTokenStatistics = async (): Promise<TokenStatistics> => {
+    // 模拟 API 调用延迟
+    const response = await apiService.fetchTokenStatistics(props.currentSessionId || '');
 
     // 返回模拟数据
     return {
@@ -139,19 +151,21 @@ const fetchTokenStatistics = async () => {
     };
 };
 
-// 处理tokens统计
-const handleTokensStatistic = async () => {
+// 处理 tokens 统计 - 类型化
+const handleTokensStatistic = async (): Promise<void> => {
     try {
         // 调用模拟接口获取数据
         const data = await fetchTokenStatistics();
         tokenStatistics.value = data;
-    } catch (error) {
-        console.error("获取tokens统计失败:", error);
+    } catch (error: any) {
+        console.error("获取 tokens 统计失败:", error);
         // notify.error("获取统计信息失败");
     }
 };
-watch(() => showTokenModal, async (newValue) => {
-    if (newValue.value) {
+
+// Watch 监听器 - 类型化
+watch(() => props.show, async (newValue: boolean | undefined) => {
+    if (newValue) {
         handleTokensStatistic();
     } else {
         tokenStatistics.value = {
@@ -161,7 +175,7 @@ watch(() => showTokenModal, async (newValue) => {
             contextTokens: 0
         };
     }
-}, { immediate: true, deep: true });
+}, { immediate: true });
 </script>
 <style scoped>
 /* Tokens统计模态框样式 */

@@ -37,17 +37,19 @@
     </template>
   </SidebarLayout>
 </template>
-<script setup>
-import { ref, onMounted, watch, computed, defineAsyncComponent } from "vue";
+<script setup lang="ts">
+import { ref, onMounted, watch, computed, defineAsyncComponent, type Ref } from "vue";
 import { apiService } from "@/services/ApiService";
-import { useRouter, useRoute } from 'vue-router';
+import { useRouter, useRoute, type RouteParams } from 'vue-router';
 import { usePopup } from "@/composables/usePopup";
 import { useStorage } from '@vueuse/core';
 import { useSessionStore } from "@/stores/session";
 import { useAuthStore } from "@/stores/auth";
 import { useTitle } from '@/composables/useTitle';
+import type { Session } from '@/types/session';
 
 // 引入组件
+// @ts-ignore - UI 组件尚未迁移到 TypeScript
 import { SidebarLayout } from "./ui";
 import ChatSidebar from "@/components/ChatSidebar.vue";
 import { ElDialog, ElEmpty } from "element-plus";
@@ -67,12 +69,12 @@ const route = useRoute();
 const title = useTitle();
 
 // 当前会话对象，包含会话的基本信息和设置
-const currentSession = ref(null);
+const currentSession: Ref<Session | null> = ref(null);
 
 // 会话列表组件引用，用于调用组件内部方法
-const chatSidebarRef = ref(null);
+const chatSidebarRef = ref<InstanceType<typeof ChatSidebar> | null>(null);
 // 设置面板当前激活的标签页
-const currentTabValue = ref('basic');
+const currentTabValue = ref<'basic' | string>('basic');
 // 控制设置模态框的显示与隐藏
 const sessionSettingsModalVisible = ref(false);
 // 控制侧边栏的显示状态，使用本地存储保持用户偏好
@@ -101,12 +103,12 @@ const sortedSessions = computed(() => {
   const sessions_ = [...sessions.value];
   return sessions_.sort((a, b) => {
     // ✅ 主要排序：last_active_at（最后活跃时间）
-    const timeA = a.last_active_at 
-      ? new Date(a.last_active_at) 
-      : (a.updated_at ? new Date(a.updated_at) : new Date(a.created_at || 0));
-    const timeB = b.last_active_at 
-      ? new Date(b.last_active_at) 
-      : (b.updated_at ? new Date(b.updated_at) : new Date(b.created_at || 0));
+    const timeA: number = a.last_active_at 
+      ? new Date(a.last_active_at).getTime()
+      : (a.updated_at ? new Date(a.updated_at).getTime() : new Date(a.created_at || 0).getTime());
+    const timeB: number = b.last_active_at 
+      ? new Date(b.last_active_at).getTime()
+      : (b.updated_at ? new Date(b.updated_at).getTime() : new Date(b.created_at || 0).getTime());
     return timeB - timeA; // 降序排列，最新的在前面
   });
 });
@@ -115,18 +117,16 @@ const sortedSessions = computed(() => {
 
 /**
  * 根据会话 ID 从 API 获取会话详情
- * @param {string|number} sessionId - 会话的唯一标识符
  */
-const fetchSession = async (sessionId) => {
+const fetchSession = async (sessionId: string) => {
   const session = await apiService.fetchSession(sessionId);
   currentSession.value = session;
 };
 
 /**
  * 选择会话，加载会话详情
- * @param {Object} session - 包含会话信息的对象
  */
-const goChatRoute = async (sessionId) => {
+const goChatRoute = async (sessionId: string | null) => {
   if (isMobile.value) {
     sidebarVisible.value = false;
   }
@@ -143,18 +143,16 @@ const goChatRoute = async (sessionId) => {
 /**
  * 根据会话 ID 更新会话信息
  * 只更新允许的字段，防止意外修改敏感数据
- * @param {string|number} sessionId - 会话的唯一标识符
- * @param {Object} data - 包含要更新的数据的对象
  */
-const updateSessionById = async (sessionId, data) => {
+const updateSessionById = async (sessionId: string, data: any) => {
   const session = sessions.value.find(session => session.id === sessionId);
   if (session) {
     // 定义需要更新的字段
     const allowedFields = ['title', 'avatar_url', 'last_message', 'created_at', 'updated_at'];
-    const updateData = {};
+    const updateData: any = {};
 
     // 只复制允许的字段
-    allowedFields.forEach(field => {
+    allowedFields.forEach((field: string) => {
       if (field in data) {
         updateData[field] = data[field];
       }
@@ -168,9 +166,8 @@ const updateSessionById = async (sessionId, data) => {
 /**
  * 更新当前会话的设置
  * 合并现有设置与新设置，并关闭设置模态框
- * @param {Object} data - 包含新设置的数据对象
  */
-const updateSession = async (data) => {
+const updateSession = async (data: any) => {
   let session = null;
   try {
     if (currentSession.value && currentSession.value.id) {
@@ -189,7 +186,7 @@ const updateSession = async (data) => {
   sessionSettingsModalVisible.value = false;
 };
 
-const updateSelectedSession = async (sessionId) => {
+const updateSelectedSession = async (sessionId: string) => {
   if (sortedSessions.value.length === 0 || !authStore.isAuthenticated || !sessionId) {
     currentSession.value = null;
     return;
@@ -236,7 +233,7 @@ const handleCreateSession = async () => {
   currentSession.value = null;
 };
 
-const handleCreateSessionWithMessage = async (session, inputMessage) => {
+const handleCreateSessionWithMessage = async (session: any, inputMessage: any) => {
   if (!authStore.isAuthenticated)
     return;
   try {
@@ -259,7 +256,7 @@ const handleCreateSessionWithMessage = async (session, inputMessage) => {
  * 显示输入新名称的提示框，更新会话标题
  * @param {Object} session - 要重命名的会话对象
  */
-const handleRenameSession = async (session) => {
+const handleRenameSession = async (session: any) => {
   try {
     const result = await prompt("重命名对话", {
       placeholder: "请输入对话名称",
@@ -292,7 +289,7 @@ const handleRenameSession = async (session) => {
  * 显示确认删除的提示框，删除会话后从列表中移除
  * @param {Object} session - 要删除的会话对象
  */
-const handleDeleteSession = async (session) => {
+const handleDeleteSession = async (session: any) => {
   try {
     if (await confirm("确认删除", "确定要删除这个对话吗？此操作不可撤销。")) {
       await apiService.deleteSession(session.id);
@@ -325,8 +322,13 @@ const handleDeleteSession = async (session) => {
  */
 const handleSaveSessionSettings = async () => {
   try {
-    await apiService.updateSession(currentSession.value.id, { model_id: currentSession.value.model_id, settings: currentSession.value.settings });
-  } catch (error) {
+    if (currentSession.value) {
+      await apiService.updateSession(currentSession.value.id, { 
+        model_id: currentSession.value.model_id, 
+        settings: currentSession.value.settings 
+      });
+    }
+  } catch (error: any) {
     console.error('保存对话设置失败:', error);
   }
 };
@@ -355,8 +357,9 @@ watch(
       currentSession.value = null;
       return;
     }
-    sessionStore.activeSessionId = newSessionId;
-    updateSelectedSession(newSessionId);
+    const sessionId = Array.isArray(newSessionId) ? newSessionId[0] : newSessionId;
+    sessionStore.activeSessionId = sessionId;
+    updateSelectedSession(sessionId);
   },
   { immediate: true }
 );
@@ -367,8 +370,9 @@ onMounted(async () => {
   if (authStore.isAuthenticated) {
     await loadSessions();
     if (route.params.sessionId) {
-      sessionStore.activeSessionId = route.params.sessionId;
-      updateSelectedSession(route.params.sessionId);
+      const sessionId = Array.isArray(route.params.sessionId) ? route.params.sessionId[0] : route.params.sessionId;
+      sessionStore.activeSessionId = sessionId;
+      updateSelectedSession(sessionId);
     }
   }
   isLoading.value = false;

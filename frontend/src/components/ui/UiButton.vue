@@ -7,57 +7,47 @@
         <slot></slot>
     </button>
 </template>
-<script setup>
+<script setup lang="ts">
 import { computed, useSlots } from "vue";
-const $slots = useSlots();
-const emits = defineEmits(["click"]);
-const props = defineProps({
-    type: {
-        type: String,
-        default: "default"
-    },
-    disabled: {
-        type: Boolean,
-        default: false
-    },
-    round: {
-        type: Boolean,
-        default: false
-    },
-    roundFull: {
-        type: Boolean,
-        default: false
-    },
-    border: {
-        type: Boolean,
-        default: true
-    },
-    block: {
-        type: Boolean,
-        default: false
-    },
-    size: {
-        type: String,
-        default: "md"
-    },
-    disabled: {
-        type: Boolean,
-        default: false
-    },
-    plain: {
-        type: Boolean,
-        default: false
-    },
-    text: {
-        type: Boolean,
-        default: false
-    }
 
-})
-const handleClick = (e) => {
+const $slots = useSlots();
+
+// Emits 类型化
+const emits = defineEmits<{
+    click: [event: MouseEvent]
+}>();
+// Props 类型化
+const props = defineProps<{
+    type?: string;
+    disabled?: boolean;
+    round?: boolean;
+    roundFull?: boolean;
+    border?: boolean;
+    block?: boolean;
+    size?: string;
+    plain?: boolean;
+    text?: boolean;
+}>()
+// 点击处理 - 类型化
+const handleClick = (e: MouseEvent): void => {
     emits("click", e);
 };
-const colorMap = {
+// 颜色映射 - 类型化
+interface ButtonTheme {
+    color: string;
+    bg: string;
+    text: string;
+    border: string;
+    hoverBorder: string;
+    activeBorder: string;
+    disabledBorder: string;
+    hoverBg: string;
+    activeBg?: string;
+    disabledBg: string;
+    disabledText: string;
+}
+
+const colorMap: Record<string, ButtonTheme> = {
     default: {
         color: 'var(--color-text)',
         bg: 'transparent',
@@ -91,7 +81,6 @@ const colorMap = {
         hoverBorder: 'var(--color-secondary-hover)',
         activeBorder: 'var(--color-secondary-active)',
         disabledBorder: 'var(--color-secondary-disabled)',
-        disabledText: 'var(--color-secondary-text-disabled)',
         hoverBg: 'var(--color-secondary-hover)',
         activeBg: 'var(--color-secondary-active)',
         disabledBg: 'var(--color-secondary-disabled)',
@@ -125,7 +114,15 @@ const colorMap = {
     }
 };
 
-const sizeMap = {
+// 尺寸映射 - 类型化
+interface SizeClasses {
+    icon: string;
+    iconPadding: string;
+    text: string;
+    padding: string;
+}
+
+const sizeMap: Record<string, SizeClasses> = {
     small: {
         icon: "w-3.5 h-3.5",
         iconPadding: "mr-0.5",
@@ -145,8 +142,8 @@ const sizeMap = {
         padding: "px-4 h-[40px]",
     },
 }
-const btnThemeStyle = computed(() => {
-    const theme = colorMap[props.type.toLowerCase()] || colorMap.default;
+const btnThemeStyle = computed((): any => {
+    const theme = colorMap[(props.type || 'default').toLowerCase()] || colorMap.default;
     const baseStyles = {
         '--btn-base-color': theme.color,
         '--btn-base-text': theme.text,
@@ -198,9 +195,9 @@ const btnThemeStyle = computed(() => {
 // })
 // const attrs = useAttrs()
 
-const iconClasses = computed(() => {
-    let classes = [];
-    const sizeClasses = sizeMap[props.size.toLowerCase()] || sizeMap.medium;
+const iconClasses = computed((): string => {
+    let classes: string[] = [];
+    const sizeClasses = sizeMap[(props.size || 'medium').toLowerCase()] || sizeMap.medium;
     classes.push(sizeClasses.icon);
     // 只有当存在默认插槽（文字内容）时才添加图标右边距
     if ($slots.default) {
@@ -209,8 +206,8 @@ const iconClasses = computed(() => {
     return classes.join(" ");
 });
 
-const btnClasses = computed(() => {
-    let classes = [
+const btnClasses = computed((): string => {
+    let classes: string[] = [
         props.block ? "flex w-full" : "inline-flex",
         "cursor-pointer items-center justify-center align-middle transition-all duration-200",
         "disabled:cursor-not-allowed",
@@ -257,7 +254,7 @@ const btnClasses = computed(() => {
         classes.push("rounded-md");
     }
 
-    const sizeClasses = sizeMap[props.size.toLowerCase()] || sizeMap.medium;
+    const sizeClasses = sizeMap[(props.size || 'medium').toLowerCase()] || sizeMap.medium;
     classes.push(sizeClasses.text, sizeClasses.padding);
     return classes.join(" ");
 });

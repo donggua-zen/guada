@@ -25,34 +25,24 @@
     </Transition>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { ref, computed, watch, onMounted } from 'vue'
 import { useDebounceFn } from '@vueuse/core'
 
-// Props
-const props = defineProps({
-    // 是否显示按钮
-    show: {
-        type: Boolean,
-        default: false
-    },
-    // 是否正在流式输出（用于呼吸动画）
-    isStreaming: {
-        type: Boolean,
-        default: false
-    },
-    // 点击回调
-    onClick: {
-        type: Function,
-        default: () => {}
-    }
-})
+// Props 类型化
+const props = defineProps<{
+    show?: boolean;
+    isStreaming?: boolean;
+    onClick?: (event: MouseEvent) => void;
+}>()
 
-// Emits
-const emit = defineEmits(['click'])
+// Emits 类型化
+const emit = defineEmits<{
+    click: [event: MouseEvent]
+}>()
 
-// 响应式数据
-const buttonRef = ref(null)
+// 响应式数据 - 类型化
+const buttonRef = ref<HTMLButtonElement | null>(null)
 
 // 调试：监听 props 变化
 watch(() => props.isStreaming, (newVal) => {
@@ -68,11 +58,13 @@ watch(() => props.show, (newVal) => {
   console.log('[ScrollButton Component] show prop changed:', newVal)
 }, { immediate: true })
 
-// 方法
-function handleClick(event) {
+// 方法 - 类型化
+function handleClick(event: MouseEvent): void {
   console.log('[ScrollButton Component] handleClick called')
   emit('click', event)
-  props.onClick(event)
+  if (props.onClick) {
+    props.onClick(event)
+  }
 }
 
 // 暴露方法给父组件
