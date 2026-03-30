@@ -29,6 +29,7 @@ from app.services.mcp.tool_manager import MCPToolManager
 from app.services.tools.tool_orchestrator import ToolOrchestrator
 from app.services.tools.providers.local_tool_provider import LocalToolProvider
 from app.services.tools.providers.mcp_tool_provider import MCPToolProvider as NewMCPToolProvider
+from app.services.tools.providers.memory_tool_provider import MemoryToolProvider
 
 
 T = TypeVar("T")
@@ -116,12 +117,20 @@ def get_local_tool_provider() -> LocalToolProvider:
     )
     
     provider = LocalToolProvider()
-    provider.register(
+    provider.register( 
         name="get_current_time",
         func=get_current_time,
         schema=function_schema(get_current_time)
     )
     
+    return provider
+
+
+def get_memory_tool_provider(
+    session: AsyncSession = Depends(get_db_session),
+) -> MemoryToolProvider:
+    """创建记忆工具提供者"""
+    provider = MemoryToolProvider(session)
     return provider
 
 
@@ -140,6 +149,10 @@ def get_tool_orchestrator(
     orchestrator.add_provider(
         get_local_tool_provider(),
         priority=0  # 本地工具优先级高
+    )
+    orchestrator.add_provider(
+        get_memory_tool_provider(session),  # ✅ 新增
+        priority=5  # 记忆工具中等优先级
     )
     orchestrator.add_provider(
         get_mcp_tool_provider(session),
