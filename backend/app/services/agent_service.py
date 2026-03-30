@@ -30,7 +30,15 @@ from app.services.chat.memory_manager_service import MemoryManagerService
 from app.services.domain.llm_service import LLMService, LLMServiceChunk
 from app.services.mcp.tool_manager import MCPToolManager
 from app.services.settings_manager import SettingsManager
-from app.services.tools.tool_orchestrator import ToolOrchestrator
+from app.services.tools.tool_orchestrator import (
+    ToolOrchestrator,
+    ToolExecutionContext,
+    ProviderConfig,
+)
+from app.services.tools.providers.tool_provider_base import (
+    ToolCallRequest,
+    ToolCallResponse,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -108,36 +116,79 @@ class AgentService:
 
         return session_settings, character_settings, merged_settings
 
+    async def _build_system_prompt(
+        self,
+        merged_settings: Dict[str, Any],
+        session_id: str,
+    ) -> str:
+        """构建完整的系统提示词（包含工具注入）
+
+        Args:
+            merged_settings: 合并后的设置
+            session_id: 会话 ID
+
+        Returns:
+            str: 完整的系统提示词
+        """
+        # 1. 基础系统提示词
+        system_prompt = merged_settings.get("system_prompt", "")
+
+        # 2. 获取所有工具的提示词注入
+        tool_prompts = []
+
+        # 从 ToolOrchestrator 获取所有 Provider 的提示词
+        if hasattr(self.tool_orchestrator, "get_all_tool_prompts"):
+            prompts = await self.tool_orchestrator.get_all_tool_prompts(session_id)
+            if prompts:
+                tool_prompts.append(prompts)
+
+        # 3. 合并提示词
+        if tool_prompts:
+            system_prompt += "\n\n" + "\n\n".join(tool_prompts)
+
+        logger.debug(f"Built system prompt with {len(tool_prompts)} tool injections")
+        return system_prompt
+
     async def _handle_all_tool_calls(
         self,
         tool_calls: List[Dict[str, Any]],
+        context: ToolExecutionContext,  # ✅ 新增参数
     ) -> List[Dict[str, Any]]:
         """处理所有工具调用（重构版 - 使用 ToolOrchestrator）
 
         Args:
             tool_calls: 工具调用列表
+            session_id: 当前会话 ID（用于自动注入）
 
         Returns:
             List[Dict[str, Any]]: 工具执行结果列表
 
-        ✅ 改进:
-            - 不再关心工具类型（本地/MCP）
-            - 不再直接调用 MCP 工具
-            - 统一委托给 ToolOrchestrator 自动路由
-            - 代码从 50 行减少到 20 行
         """
-        from app.services.tools.providers.tool_provider_base import ToolCallRequest
 
-        # 转换为标准请求对象
-        requests = [
-            ToolCallRequest(
-                id=tc["id"], name=tc["name"], arguments=json.loads(tc["arguments"])
+        requests = []
+        for tc in tool_calls:
+            # ✅ 确保 arguments 是字典类型（兼容字符串和字典）
+            arguments = tc.get("arguments", {})
+            if isinstance(arguments, str):
+                try:
+                    arguments = json.loads(arguments)
+                except json.JSONDecodeError as e:
+                    logger.error(f"Failed to parse arguments JSON: {e}")
+                    arguments = {}
+
+            # 创建请求对象
+            requests.append(
+                ToolCallRequest(
+                    id=tc["id"],
+                    name=tc["name"],
+                    arguments=arguments,
+                )
             )
-            for tc in tool_calls
-        ]
 
-        # 批量执行（自动路由到正确的提供者）
-        responses = await self.tool_orchestrator.execute_batch(requests)
+        # 批量执行（自动路由到正确的提供者，使用上下文缓存）
+        responses = await self.tool_orchestrator.execute_batch(
+            requests, context=context
+        )
 
         # 格式化为 OpenAI 兼容格式
         return [
@@ -233,13 +284,18 @@ class AgentService:
             if enabled_tools:
                 logger.info(f"Character has {len(enabled_tools)} enabled local tools")
 
-            # 使用 ToolOrchestrator 获取统一的工具 schema（自动合并本地和 MCP 工具）
-            all_tools_schema = await self.tool_orchestrator.get_all_tools_schema(
-                enabled_tools=enabled_tools,  # ✅ 新增：本地工具过滤
-                enabled_mcp_servers=enabled_mcp_servers,
+            # ✅ 构建工具执行上下文（与 execute_batch 使用相同的上下文以复用缓存）
+            tool_context = ToolExecutionContext(
+                session_id=session.id,
+                mcp=ProviderConfig(enabled_tools=enabled_mcp_servers),
+                local=ProviderConfig(enabled_tools=enabled_tools),
+                memory=ProviderConfig(enabled_tools=True),
             )
 
-            logger.info(f"Using {len(all_tools_schema)} tools (including MCP tools)")
+            # 使用 ToolOrchestrator 获取统一的工具 schema（自动合并本地和 MCP 工具）
+            # ⭐ 关键：直接返回 OpenAI API 要求的数组格式
+            tools = await self.tool_orchestrator.get_all_tools(tool_context)
+            logger.info(f"Using {len(tools)} tools (including MCP tools)")
 
             # 调用 LLM 服务生成回复
             llm_service = LLMService(provider.api_url, provider.api_key)
@@ -288,7 +344,7 @@ class AgentService:
                         top_p=model_params["top_p"],
                         frequency_penalty=model_params["frequency_penalty"],
                         stream=True,
-                        tools=all_tools_schema,  # 使用合并后的工具列表
+                        tools=tools,  # ✅ 直接使用数组，无需转换
                         thinking=model_params["thinking"],
                     )
 
@@ -306,7 +362,8 @@ class AgentService:
                         if chunk.finish_reason is not None:
                             if chunk.finish_reason == "tool_calls":
                                 tool_call_response = await self._handle_all_tool_calls(
-                                    complete_chunk.get("tool_calls")
+                                    complete_chunk.get("tool_calls"),
+                                    context=tool_context,  # ✅ 传递工具执行上下文
                                 )
                                 chat_turns.extend(tool_call_response)
                                 complete_chunk["tool_calls_response"] = [
@@ -537,7 +594,7 @@ class AgentService:
 
         # ✅ 重构：在 AgentService 中直接构造并添加系统提示词
         # ⚠️ 注意：系统提示词必须位于消息列表顶部（最前面）
-        system_prompt = merged_settings.get("system_prompt")
+        system_prompt = await self._build_system_prompt(merged_settings, session.id)
         if system_prompt:
             # ✅ 新增：替换系统提示词中的变量
             system_prompt = self._replace_system_prompt_variables(system_prompt)
