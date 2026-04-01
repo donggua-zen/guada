@@ -133,23 +133,11 @@ class IToolProvider(ABC):
         """
         pass
 
-    @abstractmethod
-    async def is_available(self, tool_name: str) -> bool:
-        """检查工具是否可用
-
-        Args:
-            tool_name: 工具名称（不含命名空间前缀）
-
-        Returns:
-            bool: 工具是否可用
-        """
-        pass
-
     # ========== 最终方法（子类不应覆写）==========
 
     async def get_tools_namespaced(
         self, enabled_ids: Optional[Union[List[str], bool]] = None
-    ) -> Dict[str, Dict[str, Any]]:
+    ) -> List[Dict[str, Any]]:
         """获取带命名空间的工具列表（最终实现，子类不应覆写）
 
         这是统一的公共方法，负责：
@@ -172,19 +160,18 @@ class IToolProvider(ABC):
         tools = await self._get_tools_internal(enabled_ids=enabled_ids)
 
         if self.namespace:
-            namespaced_tools = {}
-            for name, schema in tools.items():
+            namespaced_tools = []
+            for schema in tools:
                 # 添加命名空间到字典键
-                namespaced_key = f"{self.namespace}__{name}"
-                
+                namespaced_key = f"{self.namespace}__{schema["function"]["name"]}"
+
                 # 同时更新 schema 中的 function.name
                 import copy
+
                 namespaced_schema = copy.deepcopy(schema)
-                if "function" in namespaced_schema:
-                    namespaced_schema["function"]["name"] = namespaced_key
-                
-                namespaced_tools[namespaced_key] = namespaced_schema
-            
+                namespaced_schema["function"]["name"] = namespaced_key
+                namespaced_tools.append(namespaced_schema)
+
             return namespaced_tools
         return tools
 
@@ -208,7 +195,7 @@ class IToolProvider(ABC):
         """
         # 保存原始名称（带命名空间）
         original_name = request.name
-        
+
         # 1. 如果有命名空间，移除前缀
         if self.namespace and request.name.startswith(f"{self.namespace}__"):
             stripped_name = request.name[len(self.namespace) + 2 :]
@@ -220,11 +207,11 @@ class IToolProvider(ABC):
 
         # 2. 调用子类实现执行工具（传递注入参数）
         response = await self._execute_internal(request, inject_params)
-        
+
         # 3. ✅ 添加回命名空间前缀到响应的 name 字段
         if self.namespace:
             response.name = f"{self.namespace}__{response.name}"
-        
+
         return response
 
     # ========== 辅助方法（默认实现） ==========

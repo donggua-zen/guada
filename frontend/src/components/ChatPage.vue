@@ -240,6 +240,7 @@ const handleCreateSessionWithMessage = async (session: any, inputMessage: any) =
     const response = await apiService.createSession(session)
     // 刷新对话列表
     await loadSessions();
+    console.log('Created session:', session,inputMessage);
     if (inputMessage) {
       inputMessage.isWaiting = true
       sessionStore.setInputMessage(response.id, inputMessage)

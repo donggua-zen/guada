@@ -78,9 +78,9 @@
         <ChatInput v-model:value="inputMessage.content" v-model:thinking-enabled="thinkingEnabled" :config="{
           modelId: currentModelId,
           maxMemoryLength: currentSession?.settings?.max_memory_length || null
-        }" :files="inputMessage.files" :streaming="isStreaming" :session-id="currentSessionId"
-          @config-change="handleConfigChange" @send="handleSendMessage" @abort="abortResponse"
-          @toggle-thinking="toggleDeepThinking" @tokens-statistic="handleTokensStatistic" />
+        }" :files="inputMessage.files" :streaming="isStreaming" @config-change="handleConfigChange"
+          @send="handleSendMessage" @abort="abortResponse" @toggle-thinking="toggleDeepThinking"
+          @tokens-statistic="handleTokensStatistic" />
       </div>
       <!-- <div class="ai-disclaimer text-xs text-gray-400 text-center mt-2">内容由 AI 生成，仅供参考</div> -->
 
@@ -129,7 +129,7 @@ const messagesContainerRef = ref<HTMLElement | null>(null);
 const currentSessionId = ref<string | null>(null);
 const showTokenModal = ref(false);
 // 使用 shallowRef 减少响应式开销，存储消息项组件实例
-const itemRefs = shallowRef<Record<string, ComponentPublicInstance | null>>({}); 
+const itemRefs = shallowRef<Record<string, ComponentPublicInstance | null>>({});
 const isLoading = ref(false)
 const autoScrollToBottom = ref(false);
 const autoScrollToBottomSet = ref(-1);
@@ -757,7 +757,7 @@ function updatePlaceholder(userMessageId: string | null) {
 
       // 使用组件暴露的 el 属性（而不是 $el，因为 $el 可能是 Text Node）
       const userMessageElement = (userMessageRef as any).el;
-      
+
       // 详细的调试日志
       console.log('[updatePlaceholder]', {
         messageId: userMessageId,
@@ -768,7 +768,7 @@ function updatePlaceholder(userMessageId: string | null) {
         nodeName: userMessageElement?.nodeName,
         element: userMessageElement
       });
-      
+
       if (!userMessageElement) {
         console.warn(`Element (el) for userMessageId ${userMessageId} is null/undefined`);
         placeholder.value = "auto";
@@ -883,19 +883,16 @@ async function handleSendMessage() {
 
   try {
     const { content, files } = data;
-
     // 如果是编辑模式，使用重新发送逻辑
     if (editMode.value && editMode.value.message) {
       await sendEditMessage(content, files);
       return;
     }
-
     // 否则发送新消息
     if (!currentSession.value) {
       notify.error("发送失败", "当前没有活动的会话");
       return;
     }
-
     const message = await sendNewMessage(currentSession.value.id, content, files);
     inputMessage.value = { content: "", files: [], isWaiting: false };
     if (currentSessionId.value) {

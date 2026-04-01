@@ -57,29 +57,25 @@ class LocalToolProvider(IToolProvider):
 
     async def _get_tools_internal(
         self, enabled_ids: Optional[Union[List[str], bool]] = None
-    ) -> Dict[str, Dict[str, Any]]:
+    ) -> List[Dict[str, Any]]:
         if isinstance(enabled_ids, bool) and enabled_ids:
-            return self._schemas.copy()
+            return [self._schemas[name] for name in self._schemas]
         elif isinstance(enabled_ids, list) and enabled_ids:
-            return {
-                name: schema
-                for name, schema in self._schemas.items()
-                if name in enabled_ids
-            }
+            return [
+                schema for name, schema in self._schemas.items() if name in enabled_ids
+            ]
         else:
-            return {}
+            return []
 
     async def _execute_internal(
-        self, 
-        request: ToolCallRequest, 
-        inject_params: Optional[Dict[str, Any]] = None
+        self, request: ToolCallRequest, inject_params: Optional[Dict[str, Any]] = None
     ) -> ToolCallResponse:
         """实际执行本地工具调用（名称已去除前缀）
-        
+
         Args:
             request: 工具调用请求（名称已去除命名空间前缀）
             inject_params: 注入参数字典（如 session_id, user_id 等），本地工具暂不使用
-        
+
         Returns:
             ToolCallResponse: 工具调用结果
         """
@@ -122,14 +118,3 @@ class LocalToolProvider(IToolProvider):
                 content=f"Error: {str(e)}",
                 is_error=True,
             )
-
-    async def is_available(self, tool_name: str) -> bool:
-        """检查工具是否已注册
-
-        Args:
-            tool_name: 工具名称
-
-        Returns:
-            bool: 工具是否可用
-        """
-        return tool_name in self._tools

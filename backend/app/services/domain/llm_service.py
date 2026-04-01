@@ -166,10 +166,10 @@ class LLMService:
             # 对于异步流式响应，需要直接返回异步生成器
             async for chunk in response:
                 # 检查 chunk 是否包含 usage（通常在最后一个 chunk）
-                if hasattr(chunk, "usage") and chunk.usage is not None:
-                    logger.debug(
-                        f"Got usage from chunk: prompt={chunk.usage.prompt_tokens}, completion={chunk.usage.completion_tokens}, total={chunk.usage.total_tokens}"
-                    )
+                # if hasattr(chunk, "usage") and chunk.usage is not None:
+                #     logger.debug(
+                #         f"Got usage from chunk: prompt={chunk.usage.prompt_tokens}, completion={chunk.usage.completion_tokens}, total={chunk.usage.total_tokens}"
+                #     )
 
                 response_chunk = self._handle_stream_chunk(chunk)
                 if response_chunk:
