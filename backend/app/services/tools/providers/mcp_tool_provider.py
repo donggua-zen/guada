@@ -56,7 +56,7 @@ class MCPToolProvider(IToolProvider):
 
     async def _get_tools_internal(
         self, enabled_ids: Optional[Union[List[str], bool]] = None
-    ) -> Dict[str, Dict[str, Any]]:
+    ) -> List[Dict[str, Any]]:
         """
         获取 MCP 工具列表
 
@@ -98,7 +98,7 @@ class MCPToolProvider(IToolProvider):
         result = await self.session.execute(stmt)
         servers = result.scalars().all()
 
-        all_tools = {}
+        all_tools = []
 
         for server in servers:
             if not server.tools:
@@ -122,7 +122,7 @@ class MCPToolProvider(IToolProvider):
                     },
                 }
 
-                all_tools[tool_name] = openai_schema
+                all_tools.append(openai_schema)
                 logger.debug(
                     f"Added MCP tool (OpenAI format): {tool_name} from server {server.name}"
                 )
@@ -185,24 +185,6 @@ class MCPToolProvider(IToolProvider):
                 content=f"Error: {str(e)}",
                 is_error=True,
             )
-
-    async def is_available(self, tool_name: str) -> bool:
-        """检查 MCP 工具是否可用
-
-        Args:
-            tool_name: 工具名称（可能包含或不包含 "mcp__" 前缀）
-
-        Returns:
-            bool: 工具是否可用
-        """
-        try:
-            # 添加前缀进行检查
-            prefixed_name = tool_name
-            if not tool_name.startswith("mcp__"):
-                prefixed_name = f"mcp__{tool_name}"
-
-            tools = await self.get_tools()
-            return prefixed_name in tools
         except Exception:
             return False
 

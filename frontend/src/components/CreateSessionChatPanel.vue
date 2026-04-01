@@ -1,12 +1,8 @@
 <template>
   <div class="flex flex-col h-full w-full">
     <!-- 聊天头部 -->
-    <ChatHeader 
-      :sidebar-visible="localSidebarVisible" 
-      :has-more-options="false"
-      title="新建对话"
-      @toggle-sidebar="emit('update:sidebarVisible', !localSidebarVisible)" 
-    />
+    <ChatHeader :sidebar-visible="localSidebarVisible" :has-more-options="false" title="新建对话"
+      @toggle-sidebar="emit('update:sidebarVisible', !localSidebarVisible)" />
 
     <!-- 输入区域 -->
     <div class="px-5 pb-2.5 w-full flex-1 flex flex-col items-center justify-center mb-40">
@@ -32,12 +28,10 @@
       </div>
 
       <div class="w-full  max-w-[800px]">
-        <!-- @ts-ignore - ChatInput 组件尚未迁移到 TypeScript -->
-        <ChatInput v-model:value="inputMessage.text" v-model:thinking-enabled="thinkingEnabled"
-          :config="{ modelId: (lastModelConfig.value as any)?.modelId || currentCharacter?.model_id, maxMemoryLength: (lastModelConfig.value as any)?.maxMemoryLength || currentCharacter?.settings?.max_memory_length }"
+        <ChatInput v-model:value="inputMessage.content" v-model:thinking-enabled="thinkingEnabled"
+          :config="{ modelId: currentModelId, maxMemoryLength: (lastModelConfig.value as any)?.maxMemoryLength || currentCharacter?.settings?.max_memory_length }"
           @config-change="handleConfigChange" :buttons="chatInputButtons" :files="inputMessage.files" :streaming="false"
-          :session-id="null" @send="sendMessage" @toggle-web-search="handleWebSearch"
-          @toggle-thinking="toggleDeepThinking" />
+          @send="sendMessage" @toggle-thinking="toggleDeepThinking" />
       </div>
       <div>
         <div class="flex items-center justify-center mt-6">
@@ -98,9 +92,7 @@
   </div>
 </template>
 
-<!-- @ts-ignore - UI 组件尚未完全迁移到 TypeScript -->
 <script setup lang="ts">
-// @ts-nocheck - TypeScript 迁移进行中
 import { ref, computed, watch, onMounted } from "vue";
 import { useStorage } from "@vueuse/core"
 import { apiService } from '@/services/ApiService';
@@ -127,10 +119,6 @@ const router = useRouter();
 // 响应式数据 - 类型化
 const title = useTitle();
 
-// 模型数据
-const models = ref<any[]>([]);
-const providers = ref<any[]>([]);
-
 // 角色数据
 const characters = ref<any[]>([]);
 const showCharacterSelector = ref(false);
@@ -140,8 +128,14 @@ const characterSearchText = ref('');
 const lastModelConfig = useStorage<any>('lastModelConfig', {});
 const lastSelectedCharacterId = useStorage('lastSelectedCharacterId', '');
 
+// 思考模型状态本地存储
+const lastThinkingEnabled = useStorage<boolean>('lastThinkingEnabled', false);
+
+// 用户手动选择的模型 ID（刷新页面后从 localStorage 恢复）
+const userSelectedModelId = useStorage<string | null>('userSelectedModelId', null);
+
 const inputMessage = ref({
-  text: "",
+  content: "",
   files: []
 });
 
@@ -152,7 +146,7 @@ const currentSession = ref<any>({
   avatar_url: null,
   title: "新建对话",
   settings: {
-    thinking_enabled: false,
+    thinking_enabled: lastThinkingEnabled.value, // 从本地存储加载
     model_name: null,
   }
 })
@@ -175,10 +169,38 @@ const currentCharacter = computed(() => {
   return null;
 });
 
-watch(() => currentCharacter.value, (newCharacter) => {
-  if (newCharacter) {
-    currentSession.value.model_id = newCharacter.model_id;
-    currentSession.value.settings = { ...(currentSession.value.settings || {}), max_memory_length: newCharacter.value?.settings?.max_memory_length };
+// 当前使用的模型 ID（优先使用用户手动选择的，否则使用角色默认）
+const currentModelId = computed(() => {
+  // 如果用户手动选择过模型，使用用户选择的
+  if (userSelectedModelId.value) {
+    return userSelectedModelId.value;
+  }
+  // 否则使用角色的默认模型
+  return currentCharacter.value?.model_id;
+});
+
+// 监听角色变化，当角色切换时重置为角色默认模型
+watch(() => currentSession.value.character_id, (newCharId, oldCharId) => {
+  if (newCharId && newCharId !== oldCharId) {
+    // 角色切换时，重置为角色默认模型
+    const newCharacter = characters.value.find(c => c.id === newCharId);
+    if (newCharacter) {
+      currentSession.value.model_id = newCharacter.model_id;
+      // 切换角色时，思考模型状态重置为上次用户选择的状态（而非角色默认值）
+      currentSession.value.settings = {
+        ...(currentSession.value.settings || {}),
+        thinking_enabled: lastThinkingEnabled.value,
+        max_memory_length: newCharacter.settings?.max_memory_length
+      };
+      // 清空用户手动选择的模型 ID（这样 currentModelId 就会使用角色默认模型）
+      // userSelectedModelId.value = null;
+      // 更新本地存储的配置信息
+      lastModelConfig.value = {
+        ...lastModelConfig.value,
+        modelId: newCharacter.model_id,
+        maxMemoryLength: newCharacter.settings?.max_memory_length
+      };
+    }
   }
 });
 
@@ -216,6 +238,8 @@ const thinkingEnabled = computed({
   },
   set(value) {
     currentSession.value.settings["thinking_enabled"] = value;
+    // 保存到本地存储
+    lastThinkingEnabled.value = value;
   }
 });
 
@@ -246,9 +270,29 @@ const loadCharacters = async (): Promise<void> => {
       const savedCharacter = characters.value.find(c => c.id === lastSelectedCharacterId.value);
       if (savedCharacter) {
         currentSession.value.character_id = savedCharacter.id;
+        // 如果有用户手动选择的模型，使用用户的；否则使用角色默认
+        if (userSelectedModelId.value) {
+          currentSession.value.model_id = userSelectedModelId.value;
+          currentSession.value.settings = {
+            ...currentSession.value.settings,
+            max_memory_length: lastModelConfig.value.maxMemoryLength
+          };
+        } else {
+          // 没有用户选择，使用角色默认模型
+          currentSession.value.model_id = savedCharacter.model_id;
+          currentSession.value.settings = {
+            ...currentSession.value.settings,
+            max_memory_length: savedCharacter.settings?.max_memory_length
+          };
+        }
       } else {
         // 如果没有保存的角色，使用第一个
         currentSession.value.character_id = characters.value[0].id;
+        currentSession.value.model_id = characters.value[0].model_id;
+        currentSession.value.settings = {
+          ...currentSession.value.settings,
+          max_memory_length: characters.value[0].settings?.max_memory_length
+        };
       }
     }
   } catch (error) {
@@ -263,21 +307,37 @@ const selectCharacter = (character: any): void => {
   lastSelectedCharacterId.value = character.id;
   showCharacterSelector.value = false;
   characterSearchText.value = '';
+  // 切换角色时，使用角色的默认模型
   currentSession.value.model_id = character.model_id;
-  // @ts-ignore - settings 类型需要更精确的定义
-  currentSession.value.settings = { ...(currentSession.value.settings || {}), max_memory_length: character.settings?.max_memory_length };
+  // 思考模型状态保持用户上次选择的状态
+  currentSession.value.settings = {
+    ...(currentSession.value.settings || {}),
+    thinking_enabled: lastThinkingEnabled.value,
+    max_memory_length: character.settings?.max_memory_length
+  };
+  // 清空用户手动选择的模型 ID（这样 currentModelId 就会使用角色默认模型）
+  userSelectedModelId.value = null;
+  // 更新本地存储的配置信息
   lastModelConfig.value = {
+    ...lastModelConfig.value,
     modelId: character.model_id,
     maxMemoryLength: character.settings?.max_memory_length
   }
 };
 
 const handleConfigChange = (config: any): void => {
-  if (typeof config.modelId !== 'undefined')
+  if (typeof config.modelId !== 'undefined') {
     currentSession.value.model_id = config.modelId;
-  // @ts-ignore - settings 类型需要更精确的定义
-  currentSession.value.settings = { ...(currentSession.value.settings || {}), max_memory_length: config.maxMemoryLength };
-  lastModelConfig.value = { ...lastModelConfig.value, ...config };
+    // 用户手动切换模型，保存到本地存储
+    console.log('保存用户手动切换的模型:', config.modelId);
+    userSelectedModelId.value = config.modelId;
+  }
+  if (typeof config.maxMemoryLength !== 'undefined') {
+    // @ts-ignore - settings 类型需要更精确的定义
+    currentSession.value.settings = { ...(currentSession.value.settings || {}), max_memory_length: config.maxMemoryLength };
+    // 保存到本地存储
+    lastModelConfig.value = { ...lastModelConfig.value, maxMemoryLength: config.maxMemoryLength };
+  }
 };
 
 // 前往角色管理页面
@@ -293,21 +353,20 @@ onMounted(() => {
 });
 
 const autoTitle = (): string => {
-  if (inputMessage.value.text && inputMessage.value.text.length > 0) {
-    return inputMessage.value.text.substring(0, 20);
+  if (inputMessage.value.content && inputMessage.value.content.length > 0) {
+    return inputMessage.value.content.substring(0, 20);
   }
   return "新建对话"
 }
 
 const sendMessage = (): void => {
   if (!currentSession.value.character_id) {
-    notify.error('请先选择一个角色模板');
+    notify.error("创建失败", '请先选择一个角色模板');
     return;
   }
-  // @ts-ignore - emit 参数类型需要调整
-  emit("create-session" as any, {
+  emit("create-session", {
     character_id: currentSession.value.character_id,
-    model_id: currentSession.value.model_id,
+    model_id: currentModelId.value,
     title: autoTitle(),
     settings: currentSession.value.settings
   }, { ...inputMessage.value });
@@ -315,20 +374,18 @@ const sendMessage = (): void => {
 
 const handleCreateSessionClick = (): void => {
   if (!currentSession.value.character_id) {
-    notify.error('请先选择一个角色模板');
+    notify.error("创建失败", '请先选择一个角色模板');
     return;
   }
-  // @ts-ignore - emit 参数类型需要调整
   emit("create-session" as any, {
     character_id: currentSession.value.character_id,
-    model_id: currentSession.value.model_id,
+    model_id: currentModelId.value,
     title: autoTitle(),
     settings: currentSession.value.settings
   })
 }
 
 // 设置操作
-const handleWebSearch = (): void => { };
 
 const toggleDeepThinking = (): void => { };
 

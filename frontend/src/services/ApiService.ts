@@ -214,7 +214,7 @@ class ApiService implements IApiService {
     }
 
     async generateSessionTitle(sessionId: string): Promise<{ title: string; skipped?: boolean }> {
-        return await this._request(`/sessions/${sessionId}/title`)
+        return await this._request(`/sessions/${sessionId}/generate-title`, { method: 'POST' })
     }
 
     // ========== 消息管理 ==========
