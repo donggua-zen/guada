@@ -237,7 +237,7 @@ class MemoryManagerService:
                 base_msg = {
                     "role": turn.get("role", "assistant"),
                     "content": turn.get("content", "") or "",
-                    "reasoning_content": turn.get("reasoning_content"),
+                    # "reasoning_content": turn.get("reasoning_content"),
                 }
 
                 # 处理工具调用

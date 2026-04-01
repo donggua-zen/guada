@@ -1,13 +1,15 @@
 """
 记忆工具提供者实现
 
-提供长期记忆的增删改查功能
-已重构为统一的 IToolProvider 接口，移除 Family 中间层
+提供长期记忆和短期记忆的完整管理功能
+已重构为支持长期/短期记忆分离架构
 存放在 providers 目录，符合统一架构规范
 """
 
 import json
 import logging
+from datetime import datetime, timedelta, timezone
+from enum import Enum
 from typing import Any, Dict, List, Literal, Optional
 
 from pydantic import BaseModel, Field
@@ -26,63 +28,121 @@ logger = logging.getLogger(__name__)
 
 
 # ============================================================================
+# 枚举定义
+# ============================================================================
+
+
+class MemoryCategory(str, Enum):
+    """记忆分类"""
+
+    LONG_TERM = "long_term"
+    SHORT_TERM = "short_term"
+
+
+class WriteMode(str, Enum):
+    """写入模式"""
+
+    APPEND = "append"  # 追加模式（默认）
+    OVERWRITE = "overwrite"  # 覆盖模式
+
+
+class LongTermMemoryType(str, Enum):
+    """长期记忆类型"""
+
+    FACTUAL = "factual"
+    SOUL = "soul"
+
+
+class ViewLongTermMemoryParams(BaseModel):
+    """查看长期记忆参数"""
+
+    memory_type: LongTermMemoryType = Field(
+        ...,
+        description="长期记忆类型：FACTUAL(事实性)/SOUL(人格定义)",
+    )
+
+
+class ShortTermMemoryType(str, Enum):
+    """短期记忆类型"""
+
+    TEMPORARY = "temporary"
+    CONTEXT = "context"
+
+
+# ============================================================================
 # Pydantic 参数模型（用于自动生成 Schema）
 # ============================================================================
 
 
-class AddMemoryParams(BaseModel):
-    """添加记忆的参数"""
+# ============================================================================
+# 长期记忆参数模型（仅支持编辑/Upsert）
+# ============================================================================
+
+
+class UpsertLongTermMemoryParams(BaseModel):
+    """Upsert 长期记忆参数（按类型编辑或自动创建）
+
+    设计说明:
+    - 基于 memory_type 进行 Upsert 操作
+    - 如果该类型的记录存在则更新，不存在则自动创建
+    - 支持两种写入模式：追加（默认）和覆盖
+    """
+
+    memory_type: LongTermMemoryType = Field(
+        default=LongTermMemoryType.FACTUAL,
+        description="长期记忆类型：FACTUAL(事实性)/SOUL(人格定义)",
+    )
+    content: str = Field(..., description="记忆内容")
+    write_mode: WriteMode = Field(
+        default=WriteMode.APPEND,
+        description="写入模式：append(追加，默认)/overwrite(覆盖)",
+    )
+
+
+# ============================================================================
+# 短期记忆参数模型（完整 CRUD）
+# ============================================================================
+
+
+class AddShortTermMemoryParams(BaseModel):
+    """添加短期记忆参数"""
 
     content: str = Field(..., description="要记住的内容")
-    memory_type: Literal["general", "emotional", "factual"] = Field(
-        default="general",
-        description="记忆类型：general(一般)/emotional(情感)/factual(事实)",
+    memory_type: ShortTermMemoryType = Field(
+        default=ShortTermMemoryType.TEMPORARY,
+        description="短期记忆类型：TEMPORARY(临时)/CONTEXT(上下文)",
     )
-    importance: int = Field(
-        default=5,
-        ge=1,
-        le=10,
-        description="重要性评分 (1-10)，日常对话 (1-3), 偏好 (4-6), 关键信息 (7-10)",
+    ttl_seconds: Optional[int] = Field(
+        default=3600,  # 默认 1 小时过期
+        ge=60,
+        description="生存时间（秒），过期后自动清理",
     )
-    tags: List[str] = Field(
-        default_factory=list, description="标签列表，用于分类和检索"
-    )
+    tags: List[str] = Field(default_factory=list, description="标签列表")
 
 
-class SearchMemoriesParams(BaseModel):
-    """搜索记忆的参数"""
+class SearchShortTermMemoryParams(BaseModel):
+    """搜索短期记忆参数"""
 
     query: str = Field(..., description="搜索关键词")
-    memory_type: Optional[Literal["general", "emotional", "factual"]] = Field(
+    memory_type: Optional[ShortTermMemoryType] = Field(
         default=None, description="记忆类型过滤"
-    )
-    min_importance: Optional[int] = Field(
-        default=None, ge=1, le=10, description="最小重要性"
     )
     limit: int = Field(default=10, ge=1, description="返回数量限制")
 
 
-class EditMemoryParams(BaseModel):
-    """编辑记忆的参数"""
+class DeleteShortTermMemoryParams(BaseModel):
+    """删除短期记忆参数"""
 
-    memory_id: str = Field(..., description="记忆 ID")
-    content: Optional[str] = Field(default=None, description="新的记忆内容")
-    importance: Optional[int] = Field(
-        default=None, ge=1, le=10, description="新的重要性评分"
-    )
-
-
-class SummarizeMemoriesParams(BaseModel):
-    """总结记忆参数"""
-
-    limit: int = Field(default=20, ge=1, description="最多总结多少条记忆")
+    memory_id: str = Field(..., description="要删除的记忆 ID")
 
 
 class MemoryToolProvider(IToolProvider):
-    """记忆工具提供者（统一实现）
+    """记忆工具提供者（重构版）
 
-    提供长期记忆的增删改查功能
-    已重构为统一的 IToolProvider 接口，移除 Family 中间层
+    工具列表设计:
+    - long_term__view: 查看长期记忆
+    - long_term__edit: 编辑长期记忆
+    （短期记忆工具暂时不暴露给 AI）
 
     Attributes:
         session: 数据库会话
@@ -108,43 +168,63 @@ class MemoryToolProvider(IToolProvider):
 
     async def _get_tools_internal(
         self, enabled_ids: Optional[List[str] | bool] = None
-    ) -> Dict[str, Dict[str, Any]]:
-        """获取工具列表（使用 Pydantic 自动生成 Schema，返回完整 OpenAI 格式）
+    ) -> List[Dict[str, Any]]:
+        """获取工具列表（重构为分组设计）
 
         Returns:
-            Dict: {tool_name: openai_format_schema}
-                  每个 schema 都是完整的 OpenAI Function Calling 格式
-                  注意：tool_name 不含命名空间，由父类 get_tools_namespaced() 添加
+            List[Dict[str, Any]]: 工具 schema 列表，每个都是完整的 OpenAI Function Calling 格式
+                                  列表中的每个元素包含 tool_name 作为 key
         """
-        # 延迟初始化工具 Schema
-        
         if not self.tools:
             from app.utils.openai_tool_converter import convert_to_openai_tool
 
-            self.tools = {
-                "add_memory": convert_to_openai_tool(
-                    MemoryToolProvider.add_memory, description="添加新的长期记忆"
+            # 长期记忆工具组
+            long_term_tools = [
+                convert_to_openai_tool(
+                    self._long_term__view,
+                    name="long_term__view",
+                    description="查看长期记忆（支持按类型筛选）",
                 ),
-                "search_memories": convert_to_openai_tool(
-                    MemoryToolProvider.search_memories, description="搜索长期记忆"
+                convert_to_openai_tool(
+                    self._long_term__edit,
+                    name="long_term__edit",
+                    description="Upsert 长期记忆（按类型编辑或自动创建）",
                 ),
-                "edit_memory": convert_to_openai_tool(
-                    MemoryToolProvider.edit_memory, description="编辑已有记忆"
-                ),
-                "summarize_memories": convert_to_openai_tool(
-                    MemoryToolProvider.summarize_memories,
-                    description="总结所有长期记忆",
-                ),
-            }
+            ]
+
+            # 暂时不暴露短期记忆工具给 AI
+            # # 短期记忆工具组
+            # short_term_tools = [
+            #     convert_to_openai_tool(
+            #         self._add_short_term,
+            #         name="short_term__add",
+            #         description="添加短期记忆",
+            #     ),
+            #     convert_to_openai_tool(
+            #         self._search_short_term,
+            #         name="short_term__search",
+            #         description="搜索短期记忆",
+            #     ),
+            #     convert_to_openai_tool(
+            #         self._delete_short_term,
+            #         name="short_term__delete",
+            #         description="删除短期记忆",
+            #     ),
+            # ]
+            self.tools = long_term_tools
 
         if isinstance(enabled_ids, bool) and enabled_ids:
             return self.tools
         elif isinstance(enabled_ids, list) and enabled_ids:
-            return {
-                name: self.tools[name] for name in enabled_ids if name in self.tools
-            }
+            # 过滤列表
+            filtered_list = []
+            for tool_item in self.tools:
+                tool_name = tool_item["function"]["name"]
+                if tool_name in enabled_ids:
+                    filtered_list.append(tool_item)
+            return filtered_list
         else:
-            return {}
+            return []
 
     async def _execute_internal(
         self, request: "ToolCallRequest", inject_params: Optional[Dict[str, Any]] = None
@@ -162,7 +242,7 @@ class MemoryToolProvider(IToolProvider):
 
         try:
             tool_name = request.name  # 已经是去掉前缀的名称
-            arguments = json.loads(request.arguments)
+            arguments = request.arguments
 
             # 直接使用注入参数（由 execute_with_namespace() 传递）
             result_str = await self._execute_tool(tool_name, arguments, inject_params)
@@ -189,13 +269,14 @@ class MemoryToolProvider(IToolProvider):
         arguments: Dict[str, Any],
         inject_params: Optional[Dict[str, Any]] = None,
     ) -> str:
-        """执行具体的记忆工具逻辑
+        """执行具体的记忆工具逻辑（重构版）
 
-        改进：将 arguments 转换为对应的 Pydantic 模型，利用模型验证功能
-        新增：inject_params 用于传递注入参数（如 session_id），不写入模型
+        设计说明:
+        - 将 arguments 转换为对应的 Pydantic 模型，利用模型验证功能
+        - inject_params 用于传递注入参数（如 session_id），不写入模型
 
         Args:
-            tool_name: 工具名称（不含前缀）
+            tool_name: 工具名称（不含前缀，如 "long_term__edit"）
             arguments: 参数字典（工具参数，不包含注入参数）
             inject_params: 注入参数字典（如 session_id, user_id 等）
 
@@ -205,152 +286,197 @@ class MemoryToolProvider(IToolProvider):
         if inject_params is None:
             inject_params = {}
 
-        if tool_name == "add_memory":
-            # 转换为 Pydantic 模型，自动验证参数
-            params = AddMemoryParams(**arguments)
-            return await self.add_memory(params, inject_params)
-        elif tool_name == "search_memories":
-            params = SearchMemoriesParams(**arguments)
-            return await self.search_memories(params, inject_params)
-        elif tool_name == "edit_memory":
-            params = EditMemoryParams(**arguments)
-            return await self.edit_memory(params, inject_params)
-        elif tool_name == "summarize_memories":
-            params = SummarizeMemoriesParams(**arguments)
-            return await self.summarize_memories(params, inject_params)
+        # 验证 session_id 注入
+        session_id = inject_params.get("session_id")
+        if not session_id:
+            return "❌ 错误：缺少 session_id 注入参数"
+
+        # 长期记忆工具
+        if tool_name == "long_term__view":
+            params = ViewLongTermMemoryParams(**arguments)
+            return await self._long_term__view(params, session_id)
+        elif tool_name == "long_term__edit":
+            params = UpsertLongTermMemoryParams(**arguments)
+            return await self._long_term__edit(params, session_id)
+
+        # 短期记忆工具
+        elif tool_name == "short_term__add":
+            params = AddShortTermMemoryParams(**arguments)
+            return await self._add_short_term(params, session_id)
+
+        elif tool_name == "short_term__search":
+            params = SearchShortTermMemoryParams(**arguments)
+            return await self._search_short_term(params, session_id)
+
+        elif tool_name == "short_term__delete":
+            params = DeleteShortTermMemoryParams(**arguments)
+            return await self._delete_short_term(params, session_id)
+
         else:
-            return f"Unknown memory tool: {tool_name}"
+            return f"❌ 未知工具：{tool_name}"
 
-    async def is_available(self, tool_name: str) -> bool:
-        """检查工具是否可用
+    # ============================================================================
+    # 长期记忆工具方法
+    # ============================================================================
 
-        改进：支持带命名空间前缀和不带前缀的检查
-        """
-        # 支持带前缀和不带前缀的检查
-        base_name = tool_name.replace(f"{self.namespace}__", "")
-        # 使用 _get_tools_internal() 获取工具（不含命名空间）
-        tools = await self._get_tools_internal(enabled_ids=True)
-        return base_name in tools or tool_name in tools
-
-    async def add_memory(
-        self, params: AddMemoryParams, inject_params: Optional[Dict[str, Any]] = None
+    async def _long_term__view(
+        self,
+        params: ViewLongTermMemoryParams,
+        session_id: str,
     ) -> str:
-        """添加记忆
-
-        改进：使用 Pydantic 模型参数，自动验证数据
+        """查看长期记忆（支持按类型筛选）
 
         Args:
-            params: 添加记忆参数（已验证）
-            inject_params: 注入参数（如 session_id）
+            params: 查看参数
+            session_id: 会话 ID
+
+        Returns:
+            格式化后的记忆内容
         """
-        # 从注入参数中获取 session_id
-        session_id = (
-            inject_params.get("session_id", "unknown") if inject_params else "unknown"
+        from sqlalchemy import select, desc
+        from app.models.memory import Memory, MemoryCategory
+
+        try:
+            # 构建查询
+            stmt = (
+                select(Memory)
+                .filter(
+                    Memory.session_id == session_id,
+                    Memory.category == MemoryCategory.LONG_TERM.value,
+                    Memory.memory_type == params.memory_type.value,
+                )
+                .order_by(desc(Memory.importance), desc(Memory.created_at))
+            )
+
+            result = await self.session.execute(stmt)
+            memories = result.scalars().all()
+
+            if not memories:
+                return f"❌ 未找到{params.memory_type.value}类型的长期记忆"
+
+            results = []
+            for i, mem in enumerate(memories, 1):
+                # created = mem.created_at.strftime("%Y-%m-%d %H:%M")
+                results.append(f"{i}. {mem.content}")
+
+            return "\n".join(results)
+
+        except Exception as e:
+            logger.error(f"Error viewing long term memories: {e}")
+            return f"❌ 查看长期记忆时出错：{str(e)}"
+
+    async def _long_term__edit(
+        self,
+        params: UpsertLongTermMemoryParams,
+        session_id: str,
+    ) -> str:
+        """Upsert 长期记忆（按类型编辑或自动创建）
+
+        Args:
+            params: Upsert 参数
+            session_id: 会话 ID（用于数据隔离）
+        """
+        memory = await self.repo.upsert_long_term_memory(
+            session_id=session_id,
+            memory_type=params.memory_type.value,
+            content=params.content,
+            write_mode=params.write_mode.value,
         )
 
-        memory = await self.repo.create_memory(
+        mode_desc = "追加" if params.write_mode == WriteMode.APPEND else "覆盖"
+        return f"✓ 长期记忆已{mode_desc}"
+
+    # ============================================================================
+    # 短期记忆工具方法
+    # ============================================================================
+
+    async def _add_short_term(
+        self,
+        params: AddShortTermMemoryParams,
+        session_id: str,
+    ) -> str:
+        """添加短期记忆
+
+        Args:
+            params: 添加参数
+            session_id: 会话 ID
+        """
+        memory = await self.repo.add_short_term_memory(
             session_id=session_id,
             content=params.content,
-            memory_type=params.memory_type,
-            importance=params.importance,
+            memory_type=params.memory_type.value,
+            ttl_seconds=params.ttl_seconds or 3600,
             tags=params.tags,
         )
-        return f"✓ 记忆已添加 (ID: {memory.id}, 重要性：{memory.importance})"
 
-    async def search_memories(
+        expires_at = memory.expires_at
+        if expires_at:
+            expires_str = expires_at.strftime("%Y-%m-%d %H:%M")
+        else:
+            expires_str = "永不过期"
+
+        return f"✓ 短期记忆已添加 (ID: {memory.id}, 过期时间：{expires_str})"
+
+    async def _search_short_term(
         self,
-        params: SearchMemoriesParams,
-        inject_params: Optional[Dict[str, Any]] = None,
+        params: SearchShortTermMemoryParams,
+        session_id: str,
     ) -> str:
-        """搜索记忆
-
-        改进：使用 Pydantic 模型参数，自动验证数据
+        """搜索短期记忆
 
         Args:
-            params: 搜索记忆参数（已验证）
-            inject_params: 注入参数（如 session_id）
+            params: 搜索参数
+            session_id: 会话 ID
         """
-        # 从注入参数中获取 session_id
-        session_id = (
-            inject_params.get("session_id", "unknown") if inject_params else "unknown"
-        )
-
-        memories = await self.repo.search_memories(
+        memories = await self.repo.search_short_term_memories(
             session_id=session_id,
             query=params.query,
-            memory_type=params.memory_type,
-            min_importance=params.min_importance,
+            memory_type=params.memory_type.value if params.memory_type else None,
             limit=params.limit,
         )
 
         if not memories:
-            return "未找到相关记忆"
+            return "❌ 未找到相关短期记忆"
 
         results = []
         for mem in memories:
-            results.append(
-                f"[{mem.importance}][{mem.memory_type}] {mem.content} "
-                f"(标签：{', '.join(mem.tags or [])})"
-            )
+            expires_str = ""
+            if mem.expires_at:
+                expires_str = f" [过期：{mem.expires_at.strftime('%m-%d %H:%M')}]"
 
-        return f"找到 {len(memories)} 条记忆:\n" + "\n".join(results)
+            results.append(f"- {mem.content}{expires_str}")
 
-    async def edit_memory(
-        self, params: EditMemoryParams, inject_params: Optional[Dict[str, Any]] = None
-    ) -> str:
-        """编辑记忆
+        return f"找到 {len(memories)} 条短期记忆:\n" + "\n".join(results)
 
-        改进：使用 Pydantic 模型参数，自动验证数据
-
-        Args:
-            params: 编辑记忆参数（已验证）
-            inject_params: 注入参数（如 session_id）
-        """
-        # 从注入参数中获取 session_id（用于权限验证）
-        session_id = inject_params.get("session_id") if inject_params else None
-        memory = await self.repo.update_memory(
-            memory_id=params.memory_id,
-            content=params.content,
-            importance=params.importance,
-        )
-
-        if not memory:
-            return f"未找到记忆：{params.memory_id}"
-
-        return f"✓ 记忆已更新 (ID: {memory.id})"
-
-    async def summarize_memories(
+    async def _delete_short_term(
         self,
-        params: SummarizeMemoriesParams,
-        inject_params: Optional[Dict[str, Any]] = None,
+        params: DeleteShortTermMemoryParams,
+        session_id: str,
     ) -> str:
-        """总结记忆
-
-        改进：使用 Pydantic 模型参数，自动验证数据
+        """删除短期记忆
 
         Args:
-            params: 总结记忆参数（已验证）
-            inject_params: 注入参数（如 session_id）
+            params: 删除参数
+            session_id: 会话 ID（用于权限验证）
         """
-        # 从注入参数中获取 session_id
-        session_id = (
-            inject_params.get("session_id", "unknown") if inject_params else "unknown"
+        success = await self.repo.delete_short_term_memory(
+            session_id=session_id,
+            memory_id=params.memory_id,
         )
 
-        summary = await self.repo.summarize_memories(
-            session_id=session_id,
-            limit=params.limit,
-        )
-        return f"长期记忆摘要:\n{summary}"
+        if not success:
+            return f"❌ 未找到记忆或无权删除：{params.memory_id}"
+
+        return f"✓ 短期记忆已删除 (ID: {params.memory_id})"
 
     async def get_prompt(self, inject_params: Optional[Dict[str, Any]] = None) -> str:
-        """获取记忆工具的提示词注入（注入当前记忆）
+        """获取记忆工具的提示词注入（注入所有长期记忆 + 工具使用说明）
 
         Args:
             inject_params: 注入参数字典（如 session_id, user_id 等）
 
         Returns:
-            str: 包含记忆内容的提示词
+            str: 包含记忆内容和工具用法的提示词
         """
         try:
             # 从注入参数中获取 session_id
@@ -359,22 +485,138 @@ class MemoryToolProvider(IToolProvider):
                 if inject_params
                 else "unknown"
             )
-            memories = await self._get_relevant_memories(session_id)
 
-            if not memories:
-                return ""  # 没有记忆，不注入提示词
+            # 获取所有长期记忆（不限制数量）
+            long_term_memories = await self._get_long_term_memories(session_id)
 
-            # 构建记忆提示词
-            prompt_parts = ["【重要记忆】"]
+            prompt_parts = []
 
-            for memory in memories[:5]:  # 最多注入 5 条记忆
+            # ========== 第一部分：长期记忆注入 ==========
+            if long_term_memories:
+                prompt_parts.append("【重要记忆】")
+
+                # 按类型分组展示
+                factual_memories = [
+                    m for m in long_term_memories if m.get("memory_type") == "factual"
+                ]
+                soul_memories = [
+                    m for m in long_term_memories if m.get("memory_type") == "soul"
+                ]
+
+                prompt_parts.append("\n### 事实性记忆 (FACTUAL)")
                 prompt_parts.append(
-                    f"- {memory.get('content', '')} "
-                    f"(类型：{memory.get('memory_type', 'general')}, "
-                    f"重要性：{memory.get('importance', 5)}/10)"
+                    "这些是核心事实知识库，包括用户偏好、重要决策、项目状态等关键信息："
+                )
+                if factual_memories:
+
+                    for i, memory in enumerate(factual_memories, 1):
+                        prompt_parts.append(f"{i}. {memory.get('content', '')} ")
+                else:
+                    prompt_parts.append("目前没有事实性记忆")
+
+                prompt_parts.append("\n### 人格定义 (SOUL)")
+                prompt_parts.append("这些定义了 AI 的角色定位、语言风格和行为规则：")
+                if soul_memories:
+                    for i, memory in enumerate(soul_memories, 1):
+                        prompt_parts.append(f"{i}. {memory.get('content', '')} ")
+                else:
+                    prompt_parts.append("目前没有人格定义记忆")
+                prompt_parts.append(
+                    "\n在与用户对话时，请始终考虑以上记忆内容，确保回应符合已知信息和角色定位。\n"
                 )
 
-            prompt_parts.append("\n在与用户对话时，请考虑以上记忆内容。")
+            # ========== 第二部分：工具使用说明 ==========
+            prompt_parts.append("【记忆工具使用说明】")
+
+            tool_instructions = """
+你拥有以下记忆管理工具，可以主动调用它们来维护和更新长期记忆：
+
+### 1. 查看长期记忆 (long_term__view)
+**用途**: 查看当前已存储的长期记忆
+
+**何时使用**:
+- 在对话开始时回顾已有的重要记忆
+- 回答用户关于'你还记得什么'的问题
+- 确认是否需要更新或补充记忆
+
+**参数**:
+- `memory_type`: 必选，'factual'(事实) 或 'soul'(人格定义)
+
+**示例**:
+```json
+{
+  "name": "memory__long_term__view",
+  "arguments": {
+    "memory_type": "factual"
+  }
+}
+```
+
+### 2. 长期记忆管理 (long_term__edit)
+**用途**: 添加或更新重要的长期记忆
+
+**何时使用**:
+- 用户明确表达了个人偏好（如'我喜欢喝咖啡'）
+- 用户分享了重要事实（如'我在北京工作'）
+- 用户做出了关键决策（如'我决定学习 Python'）
+- 需要记录用户的价值观或信念
+
+**注意事项**:
+- 确保内容简洁明了，分类清晰
+- 避免重复信息，只记录最新内容
+- 如果冗余内容过多，请精简记忆内容并使用覆盖模式替换
+
+**写入模式**:
+- `append`(默认): 追加模式，将新内容添加到现有记忆中，适合累积信息
+- `overwrite`: 覆盖模式，完全替换原有记忆，适合修正或更新信息
+
+**参数**:
+- `memory_type`: 'factual'(事实) 或 'soul'(人格定义)
+- `content`: 要记住的内容（简洁明了）
+- `write_mode`: 'append'(追加) 或 'overwrite'(覆盖)，默认 'append'
+
+**示例 1 - 追加模式**:
+```json
+{
+  "name": "memory__long_term__edit",
+  "arguments": {
+    "memory_type": "factual",
+    "content": "用户喜欢喝黑咖啡，不加糖也不加奶",
+    "write_mode": "append"
+  }
+}
+```
+
+**示例 2 - 覆盖模式**:
+```json
+{
+  "name": "memory__long_term__edit",
+  "arguments": {
+    "memory_type": "factual",
+    "content": "用户现在住在上海（之前在北京）",
+    "write_mode": "overwrite"
+  }
+}
+```
+"""
+            prompt_parts.append(tool_instructions)
+
+            # ========== 第三部分：使用策略 ==========
+            # prompt_parts.append("\n【记忆使用策略】")
+            # prompt_parts.append(
+            #     "1. **主动记录**: 当用户分享重要信息时，立即使用 `long_term__edit` 记录"
+            # )
+            # prompt_parts.append(
+            #     "2. **定期回顾**: 在对话开始时，搜索相关记忆以提供个性化服务"
+            # )
+            # prompt_parts.append(
+            #     "3. **及时更新**: 当信息变化时，再次调用 `long_term__edit` 更新同类型记忆"
+            # )
+            # prompt_parts.append("4. **清理维护**: 适时删除过期或无用的短期记忆")
+            # prompt_parts.append("5. **重要性评估**:\n")
+            # prompt_parts.append("   - 1-3 分：日常对话，无需特别记录")
+            # prompt_parts.append("   - 4-6 分：用户偏好和习惯，值得记住")
+            # prompt_parts.append("   - 7-10 分：关键信息，必须长期保存\n")
 
             return "\n".join(prompt_parts)
 
@@ -382,14 +624,37 @@ class MemoryToolProvider(IToolProvider):
             logger.error(f"Error getting memory prompt: {e}")
             return ""  # 出错时返回空字符串，不影响对话
 
-    async def _get_relevant_memories(self, session_id: str) -> List[Dict[str, Any]]:
-        """获取与当前会话相关的记忆（内部方法）
+    async def _get_long_term_memories(self, session_id: str) -> List[Dict[str, Any]]:
+        """获取所有长期记忆（用于提示词注入）
 
-        TODO: 实现记忆查询逻辑
-        这里可以根据 session_id 查询最近的记忆
-        或者根据对话上下文进行向量搜索
+        Args:
+            session_id: 会话 ID
+
+        Returns:
+            List[Dict[str, Any]]: 长期记忆列表
         """
-        return []
+        try:
+            # 使用 Repository 获取所有长期记忆
+            from sqlalchemy import select, desc
+            from app.models.memory import Memory, MemoryCategory
+
+            stmt = (
+                select(Memory)
+                .filter(
+                    Memory.session_id == session_id,
+                    Memory.category == MemoryCategory.LONG_TERM.value,
+                )
+                .order_by(desc(Memory.importance), desc(Memory.created_at))
+            )
+
+            result = await self.session.execute(stmt)
+            memories = result.scalars().all()
+
+            return [mem.to_dict() for mem in memories]
+
+        except Exception as e:
+            logger.error(f"Error getting long term memories: {e}")
+            return []
 
 
 # ============================================================================

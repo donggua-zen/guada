@@ -62,7 +62,7 @@ class ToolExecutionContext(BaseModel):
 
         Args:
             namespace: Provider 命名空间
-            tools: 已启用的工具名列表（不含命名空间前缀）
+            tools: 已启用的工具名列表（含命名空间前缀）
         """
         self._resolved_tools_cache[namespace] = tools
 
@@ -153,15 +153,13 @@ class ToolOrchestrator:
             tools_namespaced = await provider.get_tools_namespaced(enabled_ids)
 
             # ✅ 添加到结果数组（直接添加 schema，不需要 tool_name 作为 key）
-            for tool_schema in tools_namespaced.values():
-                all_tools_array.append(tool_schema)
+            all_tools_array.extend(tools_namespaced)
 
             # ✅ 缓存已解析的工具列表（用于后续 execute() 检查）
             if context:
                 # 提取纯工具名（不含命名空间）进行缓存
                 pure_tool_names = [
-                    name.replace(f"{namespace}__", "") if namespace else name
-                    for name in tools_namespaced.keys()
+                    tool["function"]["name"] for tool in tools_namespaced
                 ]
                 context.set_resolved_tools(namespace, pure_tool_names)
 
@@ -336,8 +334,7 @@ class ToolOrchestrator:
         enabled_tools = None
 
         # 尝试从缓存中获取
-        if context and hasattr(context, "_resolved_tools_cache"):
-            enabled_tools = context.get_resolved_tools(namespace)
+        enabled_tools = context.get_resolved_tools(namespace)
 
         # 如果缓存未命中，调用 get_tools_namespaced() 获取并缓存
         if enabled_tools is None:
@@ -346,10 +343,7 @@ class ToolOrchestrator:
             tools_namespaced = await provider.get_tools_namespaced(enabled_ids)
 
             # 提取纯工具名（不含命名空间）进行缓存
-            pure_tool_names = [
-                name.replace(f"{namespace}__", "") if namespace else name
-                for name in tools_namespaced.keys()
-            ]
+            pure_tool_names = [tool["function"]["name"] for tool in tools_namespaced]
 
             if context:
                 context.set_resolved_tools(namespace, pure_tool_names)
@@ -359,7 +353,7 @@ class ToolOrchestrator:
             logger.debug(f"Cache hit for {namespace} tools")
 
         # 5. 检查工具是否启用
-        if tool_name not in enabled_tools:
+        if request.name not in enabled_tools:
             logger.warning(f"Tool {request.name} is not enabled")
             return ToolCallResponse(
                 tool_call_id=request.id,
@@ -382,7 +376,9 @@ class ToolOrchestrator:
             logger.debug(
                 f"Executing tool {request.name} via {provider.__class__.__name__}"
             )
-            return await provider.execute_with_namespace(provider_request)
+            return await provider.execute_with_namespace(
+                provider_request, {"session_id": context.session_id}
+            )
         except Exception as e:
             logger.error(f"Error executing tool {request.name}: {e}")
             logger.exception(e)
@@ -408,9 +404,9 @@ class ToolOrchestrator:
             List[ToolCallResponse]: 工具调用结果列表
 
         特点:
-            - 并发执行所有请求（使用 asyncio.gather）
-            - 异常会被转换为错误响应，不会中断其他请求
-            - 适合一次调用多个工具的场景
+            - 依次执行所有请求，避免数据库并发问题
+            - 异常会被转换为错误响应，不会中断后续请求
+            - 适合需要按顺序调用多个工具的场景
 
         示例:
             responses = await orchestrator.execute_batch([
@@ -421,27 +417,22 @@ class ToolOrchestrator:
         if not requests:
             return []
 
-        # 创建所有任务
-        tasks = [self.execute(req, context) for req in requests]
-
-        # 并发执行
-        results = await gather(*tasks, return_exceptions=True)
-
-        # 处理异常情况
+        # 依次执行所有请求
         responses = []
-        for req, result in zip(requests, results):
-            if isinstance(result, Exception):
-                logger.error(f"Exception in batch execution for {req.name}: {result}")
+        for req in requests:
+            try:
+                result = await self.execute(req, context)
+                responses.append(result)
+            except Exception as e:
+                logger.error(f"Exception in batch execution for {req.name}: {e}")
                 responses.append(
                     ToolCallResponse(
                         tool_call_id=req.id,
                         name=req.name,
-                        content=str(result),
+                        content=str(e),
                         is_error=True,
                     )
                 )
-            else:
-                responses.append(result)
 
         logger.debug(f"Batch executed {len(requests)} tool calls")
         return responses
