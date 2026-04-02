@@ -37,3 +37,10 @@ class Model(ModelBase):
     provider: Mapped["ModelProvider"] = relationship(
         "ModelProvider", back_populates="models"
     )
+    
+    # 知识库关联
+    knowledge_bases: Mapped[list["KnowledgeBase"]] = relationship(
+        "KnowledgeBase",
+        back_populates="embedding_model",
+        lazy="select"
+    )
