@@ -1,311 +1,386 @@
 <!-- components/KnowledgeBasePage.vue -->
 <template>
-    <div class="knowledge-base-page flex h-full">
-        <!-- 左侧二级侧边栏：知识库列表 -->
-        <div class="kb-sidebar w-80 border-r border-gray-200 dark:border-gray-700 flex flex-col">
-            <!-- 头部 -->
-            <div class="p-4 border-b border-gray-200 dark:border-gray-700">
-                <div class="flex justify-between items-center">
-                    <h2 class="text-lg font-bold">知识库</h2>
-                    <el-button type="primary" size="small" @click="showCreateModal = true" :loading="store.loading"
-                        circle>
-                        <el-icon>
-                            <Plus />
-                        </el-icon>
-                    </el-button>
-                </div>
-            </div>
-
-            <!-- 知识库列表 -->
-            <div class="flex-1 overflow-y-auto py-2">
-                <el-empty v-if="store.knowledgeBases.length === 0" description="暂无知识库" :image-size="80" />
-
-                <div v-else>
-                    <div v-for="kb in store.knowledgeBases" :key="kb.id" class="kb-item group" :class="{
-                        'kb-item-active': store.activeKnowledgeBaseId === kb.id,
-                        'kb-item-inactive': store.activeKnowledgeBaseId !== kb.id
-                    }" @click="handleSelectKB(kb)">
-                        <div class="kb-item-content">
-                            <div class="kb-info flex-1 min-w-0 flex items-center">
-                                <div class="kb-title truncate text-sm font-medium w-full">
-                                    {{ kb.name }}
-                                </div>
-                            </div>
-                        </div>
-                        <div class="kb-desc mt-0.5 truncate text-xs">
-                            {{ kb.description || '暂无描述' }}
-                        </div>
-                        <div class="kb-actions flex items-center opacity-0 group-hover:opacity-100"
-                            :class="{ 'opacity-100': store.activeKnowledgeBaseId === kb.id }">
-                            <el-dropdown trigger="click" @command="(command) => handleDropdownCommand(command, kb)">
-                                <template #dropdown>
-                                    <el-dropdown-menu>
-                                        <el-dropdown-item command="edit">
-                                            <Edit class="w-4 h-4 mr-2 inline-block" />
-                                            编辑
-                                        </el-dropdown-item>
-                                        <el-dropdown-item command="delete">
-                                            <Delete class="w-4 h-4 mr-2 inline-block" />
-                                            删除
-                                        </el-dropdown-item>
-                                    </el-dropdown-menu>
-                                </template>
-                                <div @click.stop class="kb-action-trigger">
-                                    <el-icon class="w-4 h-4">
-                                        <MoreFilled />
-                                    </el-icon>
-                                </div>
-                            </el-dropdown>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- 右侧主区域：文件列表和管理 -->
-        <div class="kb-main flex-1 flex flex-col">
-            <template v-if="store.activeKnowledgeBaseId">
-                <!-- 文件列表头部 -->
-                <div class="p-4 border-b border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800">
+    <SidebarLayout v-model:sidebar-visible="kbSidebarVisible" :sidebar-width="320" :sidebar-position="'left'"
+        :z-index="50" :show-toggle-button="true">
+        <!-- 左侧侧边栏：知识库列表 -->
+        <template #sidebar>
+            <div
+                class="kb-sidebar h-full flex flex-col bg-[var(--color-conversation-bg)] border-r border-gray-200 dark:border-gray-700">
+                <!-- 头部 -->
+                <div class="px-4 pt-4.5 pb-3.5 border-b border-gray-200 dark:border-gray-700">
                     <div class="flex justify-between items-center">
-                        <div class="flex items-center gap-3">
-                            <div
-                                class="w-10 h-10 flex items-center justify-center bg-blue-100 dark:bg-blue-900/30 rounded-lg">
-                                <i class="iconfont icon-database text-blue-600 dark:text-blue-400"></i>
-                            </div>
-                            <div>
-                                <h3 class="text-lg font-semibold text-gray-800 dark:text-gray-200">
-                                    {{ currentKB?.name }}
-                                </h3>
-                                <p class="text-xs text-gray-500 dark:text-gray-400">
-                                    {{ currentKB?.description || '暂无描述' }}
-                                </p>
-                            </div>
-                        </div>
-                        <el-button type="primary" @click="showUploadModal = true">
-                            <el-icon>
-                                <Upload />
-                            </el-icon>
-                            上传文件
+                        <span class="font-semibold text-base text-[var(--color-text)]">知识库</span>
+                        <el-button type="primary" @click="showCreateModal = true" :icon="Plus">
+                            新建
                         </el-button>
                     </div>
                 </div>
 
-                <!-- 统一文件列表（包含上传任务和数据库记录） -->
-                <div class="flex-1 overflow-y-auto p-4">
-                    <!-- 上传区域 -->
-                    <div class="p-4 mb-6">
-                        <el-upload ref="uploadRef" drag :auto-upload="false" :on-change="handleFileChange" :limit="10"
-                            :show-file-list="false" multiple
-                            accept=".txt,.md,.pdf,.docx,.py,.js,.ts,.java,.cpp,.c,.go,.rs,.json,.xml,.yaml,.yml,.csv,.html,.css"
-                            class="w-full">
-                            <i class="iconfont icon-upload text-4xl text-gray-400"></i>
-                            <div class="el-upload__text">
-                                拖拽文件到此处或<em>点击上传</em>
-                            </div>
-                            <template #tip>
-                                <div class="el-upload__tip text-sm text-gray-500">
-                                    支持格式：txt, md, pdf, docx, 代码文件等，单个文件最大 50MB
+                <!-- 搜索框 -->
+                <div class="search-box px-3.5 py-3">
+                    <el-input v-model="searchKeyword" placeholder="搜索知识库" clearable class="search-input" />
+                </div>
+
+                <!-- 知识库列表 -->
+                <div class="flex-1 overflow-y-auto py-2">
+                    <ScrollContainer>
+                        <template v-if="filteredKnowledgeBases.length === 0">
+                            <div
+                                class="empty-state text-center text-gray-500 flex flex-col items-center justify-center h-full py-12">
+                                <div class="empty-state-icon mb-3 text-gray-300">
+                                    <el-icon size="32">
+                                        <Plus />
+                                    </el-icon>
                                 </div>
-                            </template>
-                        </el-upload>
+                                <div class="empty-state-title text-sm font-medium mb-1">
+                                    {{ searchKeyword ? '未找到匹配的知识库' : '没有知识库' }}
+                                </div>
+                                <div class="empty-state-description text-xs text-gray-400">
+                                    {{ searchKeyword ? '尝试调整搜索关键词' : '点击上方按钮创建新的知识库' }}
+                                </div>
+                            </div>
+                        </template>
+                        <template v-else>
+                            <div v-for="kb in filteredKnowledgeBases" :key="kb.id" class="kb-item group" :class="{
+                                'kb-item-active': store.activeKnowledgeBaseId === kb.id,
+                                'kb-item-inactive': store.activeKnowledgeBaseId !== kb.id
+                            }" @click="handleSelectKB(kb)">
+                                <div class="kb-info flex-1 min-w-0 flex items-center">
+                                    <div class="kb-title truncate text-sm font-medium w-full">
+                                        {{ kb.name }}
+                                    </div>
+                                </div>
+                                <div class="kb-desc mt-0.5 truncate text-xs">
+                                    {{ kb.description || '暂无描述' }}
+                                </div>
+                                <div class="kb-actions flex items-center opacity-0 group-hover:opacity-100"
+                                    :class="{ 'opacity-100': store.activeKnowledgeBaseId === kb.id }">
+                                    <el-dropdown trigger="click"
+                                        @command="(command) => handleDropdownCommand(command, kb)">
+                                        <template #dropdown>
+                                            <el-dropdown-menu>
+                                                <el-dropdown-item command="edit">
+                                                    <Edit class="w-4 h-4 mr-2 inline-block" />
+                                                    编辑
+                                                </el-dropdown-item>
+                                                <el-dropdown-item command="delete">
+                                                    <Delete class="w-4 h-4 mr-2 inline-block" />
+                                                    删除
+                                                </el-dropdown-item>
+                                            </el-dropdown-menu>
+                                        </template>
+                                        <div @click.stop class="kb-action-trigger">
+                                            <el-icon class="w-4 h-4">
+                                                <MoreFilled />
+                                            </el-icon>
+                                        </div>
+                                    </el-dropdown>
+                                </div>
+                            </div>
+                        </template>
+                    </ScrollContainer>
+                </div>
+            </div>
+        </template>
+
+        <!-- 右侧主区域：文件列表和管理 -->
+        <template #content>
+            <div class="kb-main h-full flex flex-col bg-white dark:bg-gray-900">
+                <template v-if="store.activeKnowledgeBaseId">
+                    <!-- 文件列表头部 -->
+                    <div class="px-4 py-4 border-b border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900">
+                        <div class="flex justify-between items-center">
+                            <div class="flex items-center gap-3">
+                                <!-- 侧边栏切换按钮 -->
+                                <div v-if="kbSidebarVisible !== undefined"
+                                    class="cursor-pointer p-1 rounded-lg text-gray-600 dark:text-gray-400 transition-all duration-200 hover:bg-gray-100 dark:hover:bg-gray-800 hover:text-gray-900 dark:hover:text-gray-100"
+                                    @click="kbSidebarVisible = !kbSidebarVisible"
+                                    :title="kbSidebarVisible ? '收起知识库列表' : '展开知识库列表'">
+                                    <LeftBarIcon class="w-5 h-5" />
+                                </div>
+                                <h3 class="text-lg font-semibold text-gray-900 dark:text-gray-100">
+                                    {{ currentKB?.name }}
+                                </h3>
+                            </div>
+                            <el-button type="primary" @click="showUploadModal = true">
+                                <el-icon>
+                                    <Upload />
+                                </el-icon>
+                                上传文件
+                            </el-button>
+                        </div>
                     </div>
 
-                    <!-- 文件列表 -->
-                    <div v-if="files.length > 0" class="grid gap-4">
-                        <div v-for="file in files" :key="file.id"
-                            class="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-4 hover:shadow-md transition-all"
-                            :class="{
-                                'border-l-4 border-l-green-500': file.processing_status === 'completed',
-                                'border-l-4 border-l-red-500': file.processing_status === 'failed',
-                                'border-l-4 border-l-blue-500': file.processing_status === 'processing' || file.processing_status === 'uploading'
-                            }">
-                            <div class="flex items-start gap-3">
-                                <!-- 文件图标 -->
-                                <div
-                                    class="w-12 h-12 flex items-center justify-center bg-blue-50 dark:bg-blue-900/20 rounded-lg flex-shrink-0">
-                                    <img :src="getFileIcon(file.file_type, file.file_extension)"
-                                        class="w-8 h-8 object-contain" alt="file icon" />
+                    <!-- 统一文件列表（包含上传任务和数据库记录） -->
+                    <div class="flex-1 overflow-y-auto p-4">
+                        <!-- 上传区域 -->
+                        <div class="mb-6">
+                            <el-upload ref="uploadRef" drag :auto-upload="false" :on-change="handleFileChange"
+                                :limit="10" :show-file-list="false" multiple
+                                accept=".txt,.md,.pdf,.docx,.py,.js,.ts,.java,.cpp,.c,.go,.rs,.json,.xml,.yaml,.yml,.csv,.html,.css"
+                                class="w-full">
+                                <i class="iconfont icon-upload text-4xl text-gray-400"></i>
+                                <div class="el-upload__text">
+                                    拖拽文件到此处或<em>点击上传</em>
                                 </div>
+                                <template #tip>
+                                    <div class="el-upload__tip text-sm text-gray-500">
+                                        支持格式:txt, md, pdf, docx, 代码文件等，单个文件最大 50MB
+                                    </div>
+                                </template>
+                            </el-upload>
+                        </div>
 
-                                <!-- 文件信息 -->
-                                <div class="flex-1 min-w-0">
-                                    <div class="flex justify-between items-start mb-2">
-                                        <div class="min-w-0 flex-1">
-                                            <h4 class="text-base font-medium text-gray-800 dark:text-gray-200 truncate">
+                        <!-- 文件列表 -->
+                        <div v-if="files.length > 0" class="grid gap-3">
+                            <div v-for="file in files" :key="file.id"
+                                class="file-item group bg-white border border-gray-200 rounded-lg px-3 py-2.5 hover:shadow-md transition-all cursor-pointer dark:bg-gray-800 dark:border-gray-700"
+                                @click="handleViewFile(file)">
+                                <div class="flex items-center gap-3">
+                                    <!-- 文件图标 -->
+                                    <div class="w-10 h-10 flex items-center justify-center flex-shrink-0">
+                                        <img :src="getFileIcon(file.file_type, file.file_extension)"
+                                            class="w-8 h-8 object-contain" alt="file icon" />
+                                    </div>
+
+                                    <!-- 文件信息 -->
+                                    <div class="flex-1 min-w-0">
+                                        <div class="flex items-center justify-between mb-0.5">
+                                            <h4
+                                                class="text-sm font-medium text-gray-900 truncate pr-2 dark:text-gray-100">
                                                 {{ file.display_name }}
                                             </h4>
-                                            <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                                                {{ formatSize(file.file_size) }} · {{ file.file_extension ?
-                                                    file.file_extension.toUpperCase() : 'UNKNOWN' }}
-                                                <span v-if="file.isTempTask"
-                                                    class="ml-2 px-2 py-0.5 bg-yellow-100 text-yellow-700 rounded text-xs">正在上传</span>
-                                            </p>
+                                            <el-tag size="small" :type="getStatusType(file.processing_status)">
+                                                {{ getStatusText(file.processing_status) }}
+                                            </el-tag>
                                         </div>
-                                        <el-tag size="small" :type="getStatusType(file.processing_status)">
-                                            {{ getStatusText(file.processing_status) }}
-                                        </el-tag>
-                                    </div>
-
-                                    <!-- 进度条 -->
-                                    <div v-if="shouldShowProgress(file.processing_status)" class="mb-2">
-                                        <el-progress :percentage="file.progress_percentage"
-                                            :status="file.processing_status === 'failed' ? 'exception' : undefined"
-                                            :stroke-width="4" />
-                                        <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                                            {{ file.current_step || '处理中...' }}
+                                        <p class="text-xs text-gray-500 dark:text-gray-400">
+                                            {{ formatSize(file.file_size) }} · {{ file.file_extension ?
+                                                file.file_extension.toUpperCase() : 'UNKNOWN' }}
+                                            <span v-if="file.isTempTask"
+                                                class="ml-2 px-1.5 py-0.5 bg-yellow-100 text-yellow-700 rounded text-xs">上传中</span>
                                         </p>
                                     </div>
+                                </div>
 
-                                    <!-- 元信息 -->
-                                    <div class="flex gap-4 text-xs text-gray-500 dark:text-gray-400 mt-2">
-                                        <span v-if="file.total_chunks">分块数：{{ file.total_chunks }}</span>
-                                        <span v-if="file.total_tokens">Token 数：{{ file.total_tokens.toLocaleString()
-                                            }}</span>
-                                        <span v-if="file.uploaded_at">上传时间：{{ formatDate(file.uploaded_at) }}</span>
-                                    </div>
+                                <!-- 进度条 -->
+                                <div v-if="file.processing_status === 'processing' || file.processing_status === 'uploading'"
+                                    class="mt-2">
+                                    <el-progress :percentage="file.progress_percentage"
+                                        v-if="file.processing_status === 'uploading'" :stroke-width="3" />
+                                    <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                                        {{ file.current_step || '处理中...' }}
+                                    </p>
+                                </div>
 
-                                    <!-- 错误信息 -->
-                                    <div v-if="file.processing_status === 'failed' && file.error_message"
-                                        class="mt-2 p-2 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded text-xs text-red-600 dark:text-red-400">
-                                        {{ file.error_message }}
-                                    </div>
+                                <!-- 错误信息 -->
+                                <div v-if="file.processing_status === 'failed' && file.error_message"
+                                    class="mt-2 p-2 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded text-xs text-red-600 dark:text-red-400">
+                                    {{ file.error_message }}
+                                </div>
 
-                                    <!-- 操作按钮 -->
-                                    <div class="flex gap-2 mt-3">
-                                        <el-button size="small" type="primary" link @click="handleViewFile(file)">
-                                            <i class="iconfont icon-view mr-1"></i>
-                                            查看
-                                        </el-button>
-                                        <el-button size="small" type="danger" link @click="handleDeleteFile(file)">
-                                            <i class="iconfont icon-delete mr-1"></i>
-                                            删除
-                                        </el-button>
+                                <!-- 详细信息 (可选展开) -->
+                                <div v-if="file.processing_status === 'completed' && (file.total_chunks || file.total_tokens)"
+                                    class="mt-2 pt-2 border-t border-gray-100 dark:border-gray-700">
+                                    <div
+                                        class="flex items-center justify-between gap-3 text-xs text-gray-500 dark:text-gray-400">
+                                        <div class="flex gap-3">
+                                            <span v-if="file.total_chunks">{{ file.total_chunks }} 分块</span>
+                                        </div>
+                                        <!-- 操作按钮 -->
+                                        <div class="flex items-center gap-1 flex-shrink-0" @click.stop>
+                                            <el-button size="small" link @click="handleRetryFile(file)">
+                                                <RefreshRight class="w-3 h-3 mr-1" />
+                                                重新处理
+                                            </el-button>
+                                            <el-button size="small" type="danger" link @click="handleDeleteFile(file)">
+                                                <Delete class="w-3 h-3 mr-1" />
+                                                删除
+                                            </el-button>
+                                        </div>
                                     </div>
                                 </div>
                             </div>
                         </div>
+
+                        <!-- 空状态 -->
+                        <div v-else-if="!store.loading" class="mt-6">
+                            <div
+                                class="empty-state text-center text-gray-500 flex flex-col items-center justify-center py-12">
+                                <div class="empty-state-icon mb-3 text-gray-300">
+                                    <el-icon size="48">
+                                        <Upload />
+                                    </el-icon>
+                                </div>
+                                <div class="empty-state-title text-sm font-medium mb-1">
+                                    暂无文件
+                                </div>
+                                <div class="empty-state-description text-xs text-gray-400 mb-3">
+                                    点击上方按钮或拖拽文件上传
+                                </div>
+                                <el-button type="primary" @click="showUploadModal = true">上传第一个文件</el-button>
+                            </div>
+                        </div>
                     </div>
+                </template>
 
-                    <!-- 空状态 -->
-                    <div v-else-if="!store.loading" class="mt-6">
-                        <el-empty description="暂无文件" :image-size="100">
-                            <el-button type="primary" @click="showUploadModal = true">上传第一个文件</el-button>
-                        </el-empty>
+                <template v-else>
+                    <!-- 未选择知识库时的空状态 -->
+                    <div class="flex-1 flex items-center justify-center">
+                        <div
+                            class="empty-state text-center text-gray-500 flex flex-col items-center justify-center py-12">
+                            <div class="empty-state-icon mb-3 text-gray-300">
+                                <el-icon size="48">
+                                    <MoreFilled />
+                                </el-icon>
+                            </div>
+                            <div class="empty-state-title text-sm font-medium mb-1">
+                                请选择一个知识库
+                            </div>
+                            <div class="empty-state-description text-xs text-gray-400 mb-3">
+                                从左侧列表选择或创建新的知识库
+                            </div>
+                            <el-button type="primary" @click="showCreateModal = true">创建知识库</el-button>
+                        </div>
                     </div>
-                </div>
-            </template>
+                </template>
+            </div>
+        </template>
+    </SidebarLayout>
 
-            <template v-else>
-                <!-- 未选择知识库时的空状态 -->
-                <div class="flex-1 flex items-center justify-center">
-                    <el-empty description="请选择一个知识库" :image-size="120">
-                        <el-button type="primary" @click="showCreateModal = true">创建知识库</el-button>
-                    </el-empty>
-                </div>
-            </template>
-        </div>
+    <!-- 创建/编辑知识库对话框 -->
+    <el-dialog v-model="showCreateModal" title="创建知识库" width="600px" :close-on-click-modal="false">
+        <el-form :model="createForm" label-width="140px" size="large">
+            <el-form-item label="知识库名称" required>
+                <el-input v-model="createForm.name" placeholder="请输入知识库名称" maxlength="255" show-word-limit />
+            </el-form-item>
 
-        <!-- 创建对话框 -->
-        <el-dialog v-model="showCreateModal" title="创建知识库" width="600px" :close-on-click-modal="false">
-            <el-form :model="createForm" label-width="140px" size="large">
-                <el-form-item label="知识库名称" required>
-                    <el-input v-model="createForm.name" placeholder="请输入名称" maxlength="255" show-word-limit />
-                </el-form-item>
+            <el-form-item label="描述">
+                <el-input v-model="createForm.description" type="textarea" :rows="3" placeholder="可选，描述知识库的用途和特点"
+                    maxlength="2000" show-word-limit />
+            </el-form-item>
 
-                <el-form-item label="描述">
-                    <el-input v-model="createForm.description" type="textarea" :rows="3" placeholder="可选，描述知识库用途"
-                        maxlength="2000" show-word-limit />
-                </el-form-item>
+            <el-form-item label="向量模型" required>
+                <el-select v-model="createForm.embedding_model_id" placeholder="请选择向量模型" class="w-full">
+                    <template v-for="provider in embeddingProviders" :key="provider.id">
+                        <!-- 分组标题（不可点击） -->
+                        <el-option :label="provider.name" :value="''" disabled />
+                        <!-- 模型选项 -->
+                        <el-option v-for="model in provider.models" :key="model.id" :label="model.model_name"
+                            :value="model.id" />
+                    </template>
+                </el-select>
+            </el-form-item>
 
-                <el-form-item label="向量模型" required>
-                    <EmbeddingModelSelector v-model:model-id="createForm.embedding_model_id" />
-                </el-form-item>
+            <el-divider />
 
-                <el-divider />
+            <!-- 分块大小配置 -->
+            <el-form-item>
+                <template #label>
+                    <span class="font-medium text-gray-700 dark:text-gray-300">最大分块大小</span>
+                </template>
+                <el-input-number v-model="createForm.chunk_max_size" :min="100" :max="5000" :step="100"
+                    class="w-full" />
+            </el-form-item>
 
-                <el-form-item label="分块配置">
-                    <div class="flex gap-4 w-full">
-                        <el-form-item label="最大分块大小">
-                            <el-input-number v-model="createForm.chunk_max_size" :min="100" :max="5000" :step="100" />
-                        </el-form-item>
-                        <el-form-item label="重叠大小">
-                            <el-input-number v-model="createForm.chunk_overlap_size" :min="0" :max="500" :step="10" />
-                        </el-form-item>
-                        <el-form-item label="最小分块大小">
-                            <el-input-number v-model="createForm.chunk_min_size" :min="10" :max="500" :step="10" />
-                        </el-form-item>
-                    </div>
-                </el-form-item>
+            <el-form-item>
+                <template #label>
+                    <span class="font-medium text-gray-700 dark:text-gray-300">重叠大小</span>
+                </template>
+                <el-input-number v-model="createForm.chunk_overlap_size" :min="0" :max="500" :step="10"
+                    class="w-full" />
+            </el-form-item>
 
-                <el-form-item label="可见性">
-                    <el-switch v-model="createForm.is_public" />
-                    <span class="text-sm text-gray-500 ml-2">公开的知识库可被其他人查看</span>
-                </el-form-item>
-            </el-form>
+            <el-form-item>
+                <template #label>
+                    <span class="font-medium text-gray-700 dark:text-gray-300">最小分块大小</span>
+                </template>
+                <el-input-number v-model="createForm.chunk_min_size" :min="10" :max="500" :step="10" class="w-full" />
+            </el-form-item>
 
-            <template #footer>
+            <el-form-item label="可见性">
+                <el-switch v-model="createForm.is_public" />
+                <span class="text-sm text-gray-500 dark:text-gray-400 ml-2">公开的知识库可被其他人查看</span>
+            </el-form-item>
+        </el-form>
+
+        <template #footer>
+            <div class="flex justify-end gap-3">
                 <el-button @click="showCreateModal = false">取消</el-button>
                 <el-button type="primary" @click="handleCreate" :loading="store.loading">
                     创建
                 </el-button>
-            </template>
-        </el-dialog>
+            </div>
+        </template>
+    </el-dialog>
 
-        <!-- 编辑对话框 -->
-        <el-dialog v-model="showEditModal" title="编辑知识库" width="600px" :close-on-click-modal="false">
-            <el-form :model="editForm" label-width="140px" size="large">
-                <el-form-item label="知识库名称" required>
-                    <el-input v-model="editForm.name" placeholder="请输入名称" maxlength="255" show-word-limit />
-                </el-form-item>
+    <!-- 编辑知识库对话框 -->
+    <el-dialog v-model="showEditModal" title="编辑知识库" width="600px" :close-on-click-modal="false">
+        <el-form :model="editForm" label-width="140px" size="large">
+            <el-form-item label="知识库名称" required>
+                <el-input v-model="editForm.name" placeholder="请输入知识库名称" maxlength="255" show-word-limit />
+            </el-form-item>
 
-                <el-form-item label="描述">
-                    <el-input v-model="editForm.description" type="textarea" :rows="3" placeholder="可选，描述知识库用途"
-                        maxlength="2000" show-word-limit />
-                </el-form-item>
+            <el-form-item label="描述">
+                <el-input v-model="editForm.description" type="textarea" :rows="3" placeholder="可选，描述知识库的用途和特点"
+                    maxlength="2000" show-word-limit />
+            </el-form-item>
 
-                <el-divider />
+            <el-divider />
 
-                <el-form-item label="分块配置">
-                    <div class="flex gap-4 w-full">
-                        <el-form-item label="最大分块大小">
-                            <el-input-number v-model="editForm.chunk_max_size" :min="100" :max="5000" :step="100" />
-                        </el-form-item>
-                        <el-form-item label="重叠大小">
-                            <el-input-number v-model="editForm.chunk_overlap_size" :min="0" :max="500" :step="10" />
-                        </el-form-item>
-                        <el-form-item label="最小分块大小">
-                            <el-input-number v-model="editForm.chunk_min_size" :min="10" :max="500" :step="10" />
-                        </el-form-item>
-                    </div>
-                </el-form-item>
+            <!-- 分块大小配置 -->
+            <el-form-item>
+                <template #label>
+                    <span class="font-medium text-gray-700 dark:text-gray-300">最大分块大小</span>
+                </template>
+                <el-input-number v-model="editForm.chunk_max_size" :min="100" :max="5000" :step="100" class="w-full" />
+            </el-form-item>
 
-                <el-form-item label="可见性">
-                    <el-switch v-model="editForm.is_public" />
-                    <span class="text-sm text-gray-500 ml-2">公开的知识库可被其他人查看</span>
-                </el-form-item>
-            </el-form>
+            <el-form-item>
+                <template #label>
+                    <span class="font-medium text-gray-700 dark:text-gray-300">重叠大小</span>
+                </template>
+                <el-input-number v-model="editForm.chunk_overlap_size" :min="0" :max="500" :step="10" class="w-full" />
+            </el-form-item>
 
-            <template #footer>
+            <el-form-item>
+                <template #label>
+                    <span class="font-medium text-gray-700 dark:text-gray-300">最小分块大小</span>
+                </template>
+                <el-input-number v-model="editForm.chunk_min_size" :min="10" :max="500" :step="10" class="w-full" />
+            </el-form-item>
+
+            <el-form-item label="可见性">
+                <el-switch v-model="editForm.is_public" />
+                <span class="text-sm text-gray-500 dark:text-gray-400 ml-2">公开的知识库可被其他人查看</span>
+            </el-form-item>
+        </el-form>
+
+        <template #footer>
+            <div class="flex justify-end gap-3">
                 <el-button @click="showEditModal = false">取消</el-button>
                 <el-button type="primary" @click="handleUpdate" :loading="store.loading">
                     保存
                 </el-button>
-            </template>
-        </el-dialog>
-    </div>
+            </div>
+        </template>
+    </el-dialog>
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, onMounted, computed, watch } from 'vue'
+import { ref, reactive, onMounted, onUnmounted, computed, watch } from 'vue'
 import { ElMessage, ElMessageBox, ElDropdown, ElDropdownMenu, ElDropdownItem } from 'element-plus'
-import { Plus, Edit, Delete, Upload, MoreFilled } from '@element-plus/icons-vue'
+import { Plus, Edit, Delete, Upload, MoreFilled, RefreshRight } from '@element-plus/icons-vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useKnowledgeBaseStore } from '@/stores/knowledgeBase'
 import { useFileUploadStore } from '@/stores/fileUpload'
 import type { KnowledgeBase, KBFile } from '@/stores/knowledgeBase'
 import type { UploadTask, UnifiedFileRecord } from '@/stores/fileUpload'
-import EmbeddingModelSelector from '@/components/ui/EmbeddingModelSelector.vue'
+import ScrollContainer from '@/components/ui/ScrollContainer.vue'
+import SidebarLayout from '@/components/ui/SidebarLayout.vue'
+import LeftBarIcon from './icons/LeftBarIcon.vue'
+import { useStorage } from '@vueuse/core'
+import { usePopup } from '@/composables/usePopup'
 
 // 导入所有文件图标
 import fileCodeIcon from '@/assets/file_code.svg'
@@ -318,6 +393,8 @@ import fileVideoIcon from '@/assets/file_video.svg'
 import fileWordIcon from '@/assets/file_word.svg'
 import fileZipIcon from '@/assets/file_zip.svg'
 
+// 初始化组合式函数
+const { confirm, toast } = usePopup()
 const store = useKnowledgeBaseStore()
 const uploadStore = useFileUploadStore()
 const route = useRoute()
@@ -327,7 +404,11 @@ const router = useRouter()
 const showCreateModal = ref(false)
 const showEditModal = ref(false)
 const showUploadModal = ref(false)
+const searchKeyword = ref('')
 const files = ref<UnifiedFileRecord[]>([])
+const kbSidebarVisible = useStorage('kbSidebarVisible', true) // 知识库侧边栏可见状态，持久化到 localStorage
+const embeddingModels = ref<any[]>([]) // 嵌入模型列表
+const embeddingProviders = ref<any[]>([]) // 嵌入模型供应商列表
 
 // ========== 创建表单 ==========
 const createForm = reactive({
@@ -352,12 +433,56 @@ const editForm = reactive({
 })
 
 // ========== 计算属性 ==========
+/**
+ * 当前选中的知识库对象
+ */
 const currentKB = computed(() => {
     if (!store.activeKnowledgeBaseId) return null
     return store.knowledgeBases.find(kb => kb.id === store.activeKnowledgeBaseId) || null
 })
 
+/**
+ * 过滤后的知识库列表（支持搜索）
+ */
+const filteredKnowledgeBases = computed(() => {
+    if (!searchKeyword.value.trim()) {
+        return store.knowledgeBases
+    }
+    const keyword = searchKeyword.value.toLowerCase().trim()
+    return store.knowledgeBases.filter(kb =>
+        kb.name?.toLowerCase().includes(keyword) ||
+        kb.description?.toLowerCase().includes(keyword)
+    )
+})
+
 // ========== Methods ==========
+
+/**
+ * 加载嵌入模型列表
+ */
+const loadEmbeddingModels = async () => {
+    try {
+        const { apiService } = await import('@/services/ApiService')
+        const response = await apiService.fetchModels()
+
+        // 只保留 embedding 类型的模型
+        embeddingModels.value = []
+        embeddingProviders.value = response.items
+            .filter((provider: any) => {
+                const embeddingModels_ = provider.models.filter(
+                    (m: any) => m.model_type === 'embedding'
+                )
+                return embeddingModels_.length > 0
+            })
+            .map((provider: any) => ({
+                id: provider.id,
+                name: provider.name,
+                models: provider.models.filter((m: any) => m.model_type === 'embedding')
+            }))
+    } catch (error: any) {
+        console.error('获取嵌入模型列表失败:', error)
+    }
+}
 
 /**
  * 处理下拉菜单命令
@@ -381,10 +506,10 @@ async function handleSelectKB(kb: KnowledgeBase) {
 
     try {
         await refreshFileList()
-        ElMessage.success(`已选择：${kb.name}`)
+        toast.success(`已选择：${kb.name}`)
     } catch (error) {
         console.error('加载文件列表失败:', error)
-        ElMessage.error('加载文件列表失败')
+        toast.error('加载文件列表失败')
     }
 }
 
@@ -394,12 +519,12 @@ async function handleSelectKB(kb: KnowledgeBase) {
 async function handleCreate() {
     // 验证必填字段
     if (!createForm.name.trim()) {
-        ElMessage.warning('请输入知识库名称')
+        toast.warning('请输入知识库名称')
         return
     }
 
     if (!createForm.embedding_model_id) {
-        ElMessage.warning('请选择向量模型')
+        toast.warning('请选择向量模型')
         return
     }
 
@@ -414,7 +539,7 @@ async function handleCreate() {
             is_public: createForm.is_public
         })
 
-        ElMessage.success('创建成功')
+        toast.success('创建成功')
         showCreateModal.value = false
 
         // 重置表单
@@ -424,7 +549,7 @@ async function handleCreate() {
         await store.fetchKnowledgeBases()
     } catch (error: any) {
         console.error('创建失败:', error)
-        ElMessage.error(error.response?.data?.detail || '创建失败')
+        toast.error(error.response?.data?.detail || '创建失败')
     }
 }
 
@@ -449,7 +574,7 @@ function handleEdit(kb: KnowledgeBase) {
  */
 async function handleUpdate() {
     if (!editForm.name.trim()) {
-        ElMessage.warning('请输入知识库名称')
+        toast.warning('请输入知识库名称')
         return
     }
 
@@ -463,14 +588,14 @@ async function handleUpdate() {
             is_public: editForm.is_public
         })
 
-        ElMessage.success('保存成功')
+        toast.success('保存成功')
         showEditModal.value = false
 
         // 刷新列表
         await store.fetchKnowledgeBases()
     } catch (error: any) {
         console.error('更新失败:', error)
-        ElMessage.error(error.response?.data?.detail || '更新失败')
+        toast.error(error.response?.data?.detail || '更新失败')
     }
 }
 
@@ -479,22 +604,20 @@ async function handleUpdate() {
  */
 async function handleDelete(kb: KnowledgeBase) {
     try {
-        await ElMessageBox.confirm(
-            `确定要删除知识库"${kb.name}"吗？此操作不可恢复。`,
+        const confirmed = await confirm(
             '警告',
-            {
-                confirmButtonText: '删除',
-                cancelButtonText: '取消',
-                type: 'warning'
-            }
+            `确定要删除知识库"${kb.name}"吗？此操作不可恢复。`,
+            { type: 'warning' }
         )
 
+        if (!confirmed) return
+
         await store.deleteKnowledgeBase(kb.id)
-        ElMessage.success('删除成功')
+        toast.success('删除成功')
     } catch (error: any) {
         if (error !== 'cancel') {
             console.error('删除失败:', error)
-            ElMessage.error(error.response?.data?.detail || '删除失败')
+            toast.error(error.response?.data?.detail || '删除失败')
         }
     }
 }
@@ -531,7 +654,7 @@ async function handleFileChange(file: any) {
     // 验证文件大小
     const maxSize = 50 * 1024 * 1024 // 50MB
     if (rawFile.size > maxSize) {
-        ElMessage.error(`文件大小超过限制 (${maxSize / 1024 / 1024}MB)`)
+        toast.error(`文件大小超过限制 (${maxSize / 1024 / 1024}MB)`)
         return
     }
 
@@ -590,10 +713,10 @@ async function handleFileChange(file: any) {
         console.log(`[DEBUG] 上传开始，刷新列表显示临时任务：${task.fileName}`)
         await refreshFileList()
 
-        ElMessage.success(`开始上传：${rawFile.name}`)
+        toast.success(`开始上传：${rawFile.name}`)
     } catch (error: any) {
         console.error('上传失败:', error)
-        ElMessage.error(error.response?.data?.detail || '上传失败')
+        toast.error(error.response?.data?.detail || '上传失败')
     }
 }
 
@@ -759,7 +882,45 @@ function getStatusText(status: string): string {
  * 判断是否显示进度条
  */
 function shouldShowProgress(status: string): boolean {
-    return status === 'uploading' || status === 'processing'
+    return status === 'uploading'
+}
+
+/**
+ * 判断是否显示刷新/重试按钮（仅在 failed 或 completed 状态显示）
+ */
+function shouldShowRefreshButton(status: string): boolean {
+    return status === 'failed' || status === 'completed'
+}
+
+/**
+ * 重新处理文件（用于失败或已完成的文件）
+ */
+async function handleRetryFile(file: UnifiedFileRecord) {
+    try {
+        const confirmed = await confirm(
+            '警告',
+            `确定要重新处理文件"${file.display_name}"吗？这将重新启动后台处理任务。`,
+            { type: 'warning' }
+        )
+
+        if (!confirmed) return
+
+        if (!store.activeKnowledgeBaseId) return
+
+        // 调用后端 API 重新处理文件
+        const { apiService } = await import('@/services/ApiService')
+        await apiService.retryKBFile(store.activeKnowledgeBaseId, file.id)
+
+        toast.success('已开始重新处理文件')
+
+        // 刷新文件列表
+        await refreshFileList()
+    } catch (error: any) {
+        if (error !== 'cancel') {
+            console.error('重新处理失败:', error)
+            toast.error(error.response?.data?.detail || error.message || '重新处理失败')
+        }
+    }
 }
 
 /**
@@ -782,7 +943,7 @@ function formatDate(dateString: string | null): string {
  */
 function handleViewFile(file: UnifiedFileRecord) {
     // TODO: 跳转到文件详情页或打开预览
-    ElMessage.info('查看功能开发中...')
+    toast.info('查看功能开发中...')
 }
 
 /**
@@ -790,33 +951,32 @@ function handleViewFile(file: UnifiedFileRecord) {
  */
 async function handleDeleteFile(file: UnifiedFileRecord) {
     try {
-        await ElMessageBox.confirm(
-            `确定要删除文件"${file.display_name}"吗？此操作不可恢复。`,
+        const confirmed = await confirm(
             '警告',
-            {
-                confirmButtonText: '删除',
-                cancelButtonText: '取消',
-                type: 'warning'
-            }
+            `确定要删除文件"${file.display_name}"吗？此操作不可恢复。`,
+            { type: 'warning' }
         )
+
+        if (!confirmed) return
 
         if (!store.activeKnowledgeBaseId) return
 
         await store.deleteFile(store.activeKnowledgeBaseId, file.id)
-        ElMessage.success('删除成功')
+        toast.success('删除成功')
 
         // 刷新列表
         await refreshFileList()
     } catch (error: any) {
         if (error !== 'cancel') {
             console.error('删除失败:', error)
-            ElMessage.error(error.response?.data?.detail || '删除失败')
+            toast.error(error.response?.data?.detail || '删除失败')
         }
     }
 }
 
 // ========== Lifecycle ==========
 onMounted(async () => {
+    await loadEmbeddingModels() // 加载嵌入模型列表
     await store.fetchKnowledgeBases()
 
     // 从路由参数读取知识库 ID
@@ -838,6 +998,12 @@ onMounted(async () => {
     }
 })
 
+// ✅ 关键修复：组件销毁时清理轮询定时器，防止内存泄漏
+onUnmounted(() => {
+    console.log('[DEBUG] KnowledgeBasePage 组件销毁，清理轮询定时器')
+    store.stopAllFileProcessingPolling()
+})
+
 /**
  * 刷新文件列表并启动未完成文件的轮询
  */
@@ -855,27 +1021,32 @@ async function refreshFileList() {
         console.log(`[DEBUG] refreshFileList: 合并后的文件列表：${files.value.length} 个文件`)
 
         // 3. ✅ 关键修复：对每个 processing/failed 状态的文件启动轮询（使用 knowledgeBase store 的轮询）
-        // for (const file of files.value) {
-        //     // 只轮询 processing 状态的文件（不包括 uploading，那是上传逻辑）
-        //     if (file.processing_status === 'processing' || file.processing_status === 'pending') {
-        //         console.log(`[DEBUG] 启动轮询：${file.display_name}, status=${file.processing_status}`)
-        //         store.startFileProcessingPolling(
-        //             store.activeKnowledgeBaseId,
-        //             file.file_id,
-        //             (updatedFile: KBFile) => {
-        //                 // 更新本地列表中的文件状态
-        //                 const index = files.value.findIndex((f) => f.id === updatedFile.id)
-        //                 if (index !== -1) {
-        //                     const fileToUpdate = files.value[index]
-        //                     fileToUpdate.processing_status = updatedFile.processing_status
-        //                     fileToUpdate.progress_percentage = updatedFile.progress_percentage
-        //                     fileToUpdate.current_step = updatedFile.current_step
-        //                     fileToUpdate.error_message = updatedFile.error_message
-        //                 }
-        //             }
-        //         )
-        //     }
-        // }
+        // 收集所有需要轮询的文件 ID
+        const processingFileIds = files.value
+            .filter(f => f.processing_status === 'processing' || f.processing_status === 'pending')
+            .map(f => f.file_id)
+
+        // 批量启动轮询（多个文件共享一个定时器）
+        if (processingFileIds.length > 0) {
+            console.log(`[DEBUG] 批量启动轮询：${processingFileIds.length} 个文件`)
+            store.startFileProcessingPolling(
+                store.activeKnowledgeBaseId,
+                processingFileIds,
+                (updatedFile: KBFile) => {
+                    // 更新本地列表中的文件状态
+                    const index = files.value.findIndex((f) => f.id === updatedFile.id)
+                    if (index !== -1) {
+                        const fileToUpdate = files.value[index]
+                        fileToUpdate.processing_status = updatedFile.processing_status
+                        fileToUpdate.progress_percentage = updatedFile.progress_percentage
+                        fileToUpdate.current_step = updatedFile.current_step
+                        fileToUpdate.error_message = updatedFile.error_message
+                        fileToUpdate.total_chunks = updatedFile.total_chunks || undefined
+                        fileToUpdate.total_tokens = updatedFile.total_tokens || undefined
+                    }
+                }
+            )
+        }
     } catch (error) {
         console.error('加载文件列表失败:', error)
     }
@@ -896,6 +1067,27 @@ watch(() => route.params.id, async (newKbId: string | string[] | undefined) => {
 </script>
 
 <style scoped>
+/* 搜索框样式 */
+.search-box :deep(.el-input__wrapper) {
+    background-color: var(--color-surface);
+    border-radius: 8px;
+    box-shadow: 0 0 0 1px var(--color-border) inset;
+    padding: 6px 12px;
+    transition: all 0.2s ease;
+}
+
+.search-box :deep(.el-input__wrapper:hover) {
+    box-shadow: 0 0 0 1px var(--color-primary-300) inset;
+}
+
+.search-box :deep(.el-input__wrapper.is-focus) {
+    box-shadow: 0 0 0 1px var(--color-primary) inset;
+}
+
+.search-box :deep(.el-input__inner) {
+    font-size: 13px;
+}
+
 /* 知识库列表项样式 - 参考 ChatSidebar.vue */
 .kb-item {
     display: flex;
@@ -920,20 +1112,6 @@ watch(() => route.params.id, async (newKbId: string | string[] | undefined) => {
 .kb-item-active {
     background-color: var(--color-conversation-bg-active);
     color: var(--color-conversation-text-active);
-}
-
-.kb-item-content {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-    width: 100%;
-}
-
-.kb-info {
-    display: flex;
-    align-items: center;
-    flex: 1;
-    min-width: 0;
 }
 
 .kb-title {
@@ -981,6 +1159,22 @@ watch(() => route.params.id, async (newKbId: string | string[] | undefined) => {
 
 .dark .kb-action-trigger:hover {
     background-color: rgba(255, 255, 255, 0.1);
+}
+
+/* 空状态样式 */
+.empty-state-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+/* 文件列表项样式 - 参考 FileItem.vue */
+.file-item {
+    transition: all 0.2s ease;
+}
+
+.file-item:hover {
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
 }
 
 /* 滚动条美化 - 参考 ChatSidebar.vue */
