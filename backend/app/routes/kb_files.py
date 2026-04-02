@@ -8,8 +8,8 @@ import logging
 import asyncio
 import aiofiles
 from pathlib import Path
-from typing import Optional
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Query
+from typing import Optional, List
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Query, Body
 from fastapi.responses import JSONResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.database import get_db_session
@@ -307,6 +307,54 @@ async def get_file_processing_status(
         raise HTTPException(status_code=500, detail=str(e))
 
 
+# ✅ 新增：批量查询文件处理状态接口
+@router.post("/status/batch", response_model=List[FileProcessingStatusResponse])
+async def batch_get_file_processing_status(
+    kb_id: str,
+    file_ids: List[str] = Body(..., embed=True, description="文件 ID 列表"),
+    current_user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_db_session),
+):
+    """
+    批量查询文件处理状态（推荐用于多文件轮询场景）
+
+    一次性返回多个文件的处理状态，减少 HTTP 请求次数
+
+    - **file_ids**: 要查询的文件 ID 列表
+    """
+    from app.repositories.kb_repository import KBRepository
+    from app.repositories.kb_file_repository import KBFileRepository
+
+    try:
+        # 验证知识库权限
+        kb_repo = KBRepository(session)
+        kb = await kb_repo.get_kb(kb_id)
+
+        if not kb:
+            raise HTTPException(status_code=404, detail="知识库不存在")
+
+        if kb.user_id != current_user.id:
+            raise HTTPException(status_code=403, detail="无权访问该知识库")
+
+        # 批量获取文件记录
+        file_repo = KBFileRepository(session)
+        file_records = await file_repo.get_files_by_ids(file_ids)
+
+        # 转换为响应格式
+        responses = [
+            FileProcessingStatusResponse.model_validate(file_record)
+            for file_record in file_records
+        ]
+
+        return responses
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception(f"批量查询文件状态失败：{e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @router.delete("/{file_id}", response_model=MessageResponse)
 async def delete_kb_file(
     kb_id: str,
@@ -316,7 +364,6 @@ async def delete_kb_file(
 ):
     """删除文件及其所有分块"""
     from app.repositories.kb_repository import KBRepository
-    from app.repositories.kb_file_repository import KBFileRepository
     from app.services.kb_file_service import KBFileService
 
     try:
@@ -344,4 +391,77 @@ async def delete_kb_file(
         raise
     except Exception as e:
         logger.exception(f"删除文件失败：{e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/{file_id}/retry", response_model=MessageResponse)
+async def retry_file_processing(
+    kb_id: str,
+    file_id: str,
+    current_user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_db_session),
+):
+    """
+    重新处理文件（用于失败或已完成的文件）
+    
+    会重新启动后台处理任务，包括：
+    1. 文件解析
+    2. 文本分块
+    3. 向量化
+    4. 存储到 ChromaDB 和数据库
+    """
+    from app.repositories.kb_repository import KBRepository
+    from app.repositories.kb_file_repository import KBFileRepository
+    from app.services.kb_file_service import KBFileService
+    import asyncio
+
+    try:
+        # 验证知识库权限
+        kb_repo = KBRepository(session)
+        kb = await kb_repo.get_kb(kb_id)
+
+        if not kb:
+            raise HTTPException(status_code=404, detail="知识库不存在")
+
+        if kb.user_id != current_user.id:
+            raise HTTPException(status_code=403, detail="无权访问该知识库")
+
+        # 获取文件记录
+        file_repo = KBFileRepository(session)
+        file_record = await file_repo.get_file(file_id)
+
+        if not file_record:
+            raise HTTPException(status_code=404, detail="文件不存在")
+
+        # 检查文件状态，只允许 failed 或 completed 状态的文件重新处理
+        if file_record.processing_status not in ["failed", "completed"]:
+            raise HTTPException(
+                status_code=400,
+                detail=f"当前状态不允许重新处理（当前状态：{file_record.processing_status}）"
+            )
+
+        # 重置文件状态为 pending
+        await file_repo.update_processing_status(
+            file_id=file_id,
+            status="pending",
+            progress=0,
+            current_step="等待重新处理...",
+            error_message=None,
+        )
+        await session.commit()
+
+        # 启动后台处理任务
+        asyncio.create_task(
+            _process_file_in_background(
+                file_id=file_id,
+            )
+        )
+
+        logger.info(f"重新开始处理文件：{file_record.display_name}, KB={kb_id}")
+        return MessageResponse(message="文件已开始重新处理", success=True)
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception(f"重新处理文件失败：{e}")
         raise HTTPException(status_code=500, detail=str(e))

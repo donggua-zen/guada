@@ -3,7 +3,7 @@
 """
 
 from typing import List, Optional
-from sqlalchemy import select, update
+from sqlalchemy import select, update, delete as sql_delete
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.kb_file import KBFile
 
@@ -134,7 +134,7 @@ class KBFileRepository:
         await self.session.execute(stmt)
 
     async def delete_file(self, file_id: str) -> bool:
-        """删除文件
+        """删除文件（真实删除）
 
         Args:
             file_id: 文件 ID
@@ -142,9 +142,7 @@ class KBFileRepository:
         Returns:
             bool: 是否成功删除
         """
-        stmt = update(KBFile).where(KBFile.id == file_id).values(
-            processing_status="deleted"
-        )
+        stmt = sql_delete(KBFile).where(KBFile.id == file_id)
         result = await self.session.execute(stmt)
         return result.rowcount > 0
 
@@ -199,3 +197,20 @@ class KBFileRepository:
         )
         result = await self.session.execute(stmt)
         return result.scalar_one_or_none()
+    
+    # ✅ 新增：批量查询文件（用于批量轮询状态）
+    async def get_files_by_ids(self, file_ids: List[str]) -> List[KBFile]:
+        """根据文件 ID 列表批量查询文件
+        
+        Args:
+            file_ids: 文件 ID 列表
+        
+        Returns:
+            List[KBFile]: 文件列表，可能为空列表
+        """
+        if not file_ids:
+            return []
+        
+        stmt = select(KBFile).where(KBFile.id.in_(file_ids))
+        result = await self.session.execute(stmt)
+        return list(result.scalars().all())

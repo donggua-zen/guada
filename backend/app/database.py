@@ -216,13 +216,13 @@ async def get_db_session():
             if session.is_active:
                 await session.commit()
         except asyncio.CancelledError:
-            logger.error("数据库会话已取消2")
+            logger.error("数据库会话已取消 2")
             raise
         except Exception as e:
-            logger.error(f"数据库会话提交失败: {e}")
+            logger.error(f"数据库会话提交失败：{e}")
             logger.exception(e)
             await session.rollback()
-            # raise
+            raise  # 重新抛出异常，让上层处理
         finally:
             logger.debug("数据库会话已关闭")
    
