@@ -258,6 +258,88 @@ class VectorService:
             logger.error(f"❌ 删除向量集合失败：{e}")
             return False
 
+    async def delete_vectors_by_ids(
+        self,
+        knowledge_base_id: str,
+        vector_ids: List[str],
+    ) -> bool:
+        """
+        从向量库中删除指定的向量（异步方法，使用线程池执行同步操作）
+
+        Args:
+            knowledge_base_id: 知识库 ID
+            vector_ids: 要删除的向量 ID 列表
+
+        Returns:
+            bool: 是否成功删除
+        """
+        loop = asyncio.get_event_loop()
+
+        def _delete_sync():
+            client = self._get_chroma_client()
+
+            try:
+                collection_name = f"kb_{knowledge_base_id}"
+                collection = client.get_collection(name=collection_name)
+                
+                # 批量删除向量
+                collection.delete(ids=vector_ids)
+                
+                logger.info(f"✅ 从向量库删除 {len(vector_ids)} 个向量")
+                return True
+            except Exception as e:
+                logger.error(f"❌ 删除向量失败：{e}")
+                return False
+
+        # 在线程池中执行
+        try:
+            return await loop.run_in_executor(self.executor, _delete_sync)
+        except Exception as e:
+            logger.error(f"❌ 删除向量失败：{e}")
+            return False
+
+    async def delete_vectors_by_where(
+        self,
+        knowledge_base_id: str,
+        where_filter: Dict,
+    ) -> bool:
+        """
+        根据 metadata 条件从向量库中删除向量（异步方法，使用线程池执行同步操作）
+        
+        ✅ 优化方法：直接使用 where 条件删除，无需先查询 vector_id
+
+        Args:
+            knowledge_base_id: 知识库 ID
+            where_filter: metadata 过滤条件，例如 {"file_id": "xxx"}
+
+        Returns:
+            bool: 是否成功删除
+        """
+        loop = asyncio.get_event_loop()
+
+        def _delete_sync():
+            client = self._get_chroma_client()
+
+            try:
+                collection_name = f"kb_{knowledge_base_id}"
+                collection = client.get_collection(name=collection_name)
+                
+                # 使用 where 条件删除（ChromaDB 原生支持）
+                collection.delete(where=where_filter)
+                
+                logger.info(f"✅ 根据条件删除向量：{where_filter}")
+                return True
+            except Exception as e:
+                logger.error(f"❌ 根据条件删除向量失败：{e}")
+                return False
+
+        # 在线程池中执行
+        try:
+            return await loop.run_in_executor(self.executor, _delete_sync)
+        except Exception as e:
+            logger.error(f"❌ 根据条件删除向量失败：{e}")
+            return False
+
     async def get_collection_stats(self, knowledge_base_id: str) -> Optional[Dict]:
         """
         获取知识库向量集合的统计信息（异步方法，使用线程池执行同步操作）
