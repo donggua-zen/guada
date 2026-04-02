@@ -37,6 +37,7 @@
     "@types/nprogress": "^0.2.3",
     "@vitejs/plugin-vue": "^6.0.3",
     "rollup-plugin-visualizer": "^6.0.5",
+    "sass-embedded": "^1.98.0",
     "tailwindcss": "^4.1.18",
     "typescript": "^6.0.2",
     "unplugin-auto-import": "^20.3.0",

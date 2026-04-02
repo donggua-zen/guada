@@ -24,6 +24,7 @@ import type { Character, CharacterListResponse } from '@/types/character'
 import type { Session, SessionListResponse } from '@/types/session'
 import type { Message } from '@/types/message'
 import type { PaginatedResponse } from '@/types/common'
+import type { KnowledgeBase, KBFile, KnowledgeSearchResult } from '@/stores/knowledgeBase'
 
 class ApiService implements IApiService {
     baseURL: string
@@ -477,7 +478,128 @@ class ApiService implements IApiService {
         return this.fetchMcpServers()
     }
 
-    // ========== 工具方法 ==========
+    // ========== 知识库管理 ==========
+
+    /**
+     * 获取知识库列表
+     */
+    async fetchKnowledgeBases(): Promise<PaginatedResponse<KnowledgeBase>> {
+        return await this._request('/knowledge-bases')
+    }
+
+    /**
+     * 创建知识库
+     */
+    async createKnowledgeBase(data: {
+        name: string
+        description?: string
+        embedding_model_id: string
+        chunk_max_size?: number
+        chunk_overlap_size?: number
+        chunk_min_size?: number
+        is_public?: boolean
+    }): Promise<KnowledgeBase> {
+        return await this._request('/knowledge-bases', { method: 'POST', data })
+    }
+
+    /**
+     * 更新知识库
+     */
+    async updateKnowledgeBase(kbId: string, data: Partial<KnowledgeBase>): Promise<KnowledgeBase> {
+        return await this._request(`/knowledge-bases/${kbId}`, { method: 'PUT', data })
+    }
+
+    /**
+     * 删除知识库
+     */
+    async deleteKnowledgeBase(kbId: string): Promise<{ success: boolean }> {
+        return await this._request(`/knowledge-bases/${kbId}`, { method: 'DELETE' })
+    }
+
+    /**
+     * 获取单个知识库详情
+     */
+    async getKnowledgeBase(kbId: string): Promise<KnowledgeBase> {
+        return await this._request(`/knowledge-bases/${kbId}`)
+    }
+
+    // ========== 知识库文件管理 ==========
+
+    /**
+     * 获取知识库文件列表
+     */
+    async fetchKBFiles(kbId: string): Promise<PaginatedResponse<KBFile>> {
+        return await this._request(`/knowledge-bases/${kbId}/files`)
+    }
+
+    /**
+     * 上传文件到知识库
+     */
+    async uploadKBFile(kbId: string, file: File): Promise<KBFile> {
+        const formData = new FormData()
+        formData.append('file', file)
+
+        try {
+            // 使用 _request 方法确保携带认证信息
+            return await this._request(
+                `/knowledge-bases/${kbId}/files/upload`,
+                {
+                    method: 'POST',
+                    data: formData,
+                    headers: {
+                        'Content-Type': 'multipart/form-data',
+                    },
+                }
+            )
+        } catch (error) {
+            console.error('上传文件失败:', error)
+            throw error
+        }
+    }
+
+    /**
+     * 获取文件详情
+     */
+    async getKBFile(kbId: string, fileId: string): Promise<KBFile> {
+        return await this._request(`/knowledge-bases/${kbId}/files/${fileId}`)
+    }
+
+    /**
+     * 删除知识库文件
+     */
+    async deleteKBFile(kbId: string, fileId: string): Promise<{ success: boolean }> {
+        return await this._request(`/knowledge-bases/${kbId}/files/${fileId}`, { method: 'DELETE' })
+    }
+
+    /**
+     * 查询文件处理状态
+     */
+    async getFileProcessingStatus(kbId: string, fileId: string): Promise<KBFile> {
+        return await this._request(`/knowledge-bases/${kbId}/files/${fileId}/status`)
+    }
+
+    // ========== 知识库搜索 ==========
+
+    /**
+     * 在知识库中搜索
+     */
+    async searchKnowledgeBase(
+        kbId: string,
+        query: string,
+        topK: number = 5,
+        filterFileId?: string
+    ): Promise<KnowledgeSearchResult> {
+        return await this._request(`/knowledge-bases/${kbId}/search`, {
+            method: 'POST',
+            data: {
+                query,
+                top_k: topK,
+                filter_file_id: filterFileId,
+            },
+        })
+    }
+
+    // ========== 工具方法 ============
     debounce<T extends (...args: any[]) => any>(func: T, delay: number): T {
         let timer: number | undefined
         return function (this: any, ...args: Parameters<T>) {

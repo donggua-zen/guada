@@ -1,10 +1,10 @@
 """
 向量记忆管理模块
 
-该模块提供基于Chroma向量数据库的记忆存储和检索功能，主要用于:
+该模块提供基于 Chroma 向量数据库的记忆存储和检索功能，主要用于:
 1. 对话内容的向量化存储
 2. 相似对话历史的检索
-3. 按会话ID管理记忆
+3. 按会话 ID 管理记忆
 4. 记忆的增删改查操作
 
 通过将文本转换为向量表示，实现高效的语义相似性搜索，支持角色扮演对话系统中的上下文记忆功能。
@@ -14,12 +14,7 @@ import logging
 from typing import List, Dict, Optional
 from openai import OpenAI
 import chromadb
-from openai import OpenAI
-from typing import List, Dict, Optional
-import chromadb
-from openai import OpenAI
 import ulid
-from typing import List, Dict, Optional
 import time
 
 from app.repositories.model_repository import ModelRepository
@@ -48,8 +43,15 @@ class _VectorMemory:
         #     )
         # )
 
-        # 初始化Chroma客户端（新API）
-        self.chroma_client = chromadb.PersistentClient(path=persist_directory)
+        # 初始化 Chroma 客户端（新 API）
+        # ✅ 使用统一配置，避免与 vector_service.py 冲突
+        self.chroma_client = chromadb.PersistentClient(
+            path=persist_directory,
+            settings=chromadb.config.Settings(
+                anonymized_telemetry=False,
+                allow_reset=True,
+            )
+        )
 
         # 创建或获取集合
         self.collection = self.chroma_client.get_or_create_collection(
