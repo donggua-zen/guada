@@ -124,7 +124,7 @@ def chunking_messages(
 
 def chunking_text(
     text: str,
-    max_chunk_size: int = 1000,
+    max_chunk_size: int = 800,
     overlap_size: int = 100,
     min_chunk_size: int = 50,
 ) -> List[str]:
@@ -185,7 +185,8 @@ def chunking_text(
     for i in range(1, len(chunks)):
         # 获取前一个块的末尾部分作为叠加
         overlap_text = chunks[i - 1][-overlap_size:]
-        logger.debug("********叠加文字：", overlap_text)
+        print("********叠加文字：", overlap_text)
+        # logger.debug("********叠加文字：", overlap_text)
         # 将叠加文字添加到当前块的开头
         chunks[i] = overlap_text + chunks[i]
         # # 确保添加叠加后不超过最大长度

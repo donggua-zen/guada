@@ -50,6 +50,8 @@ class UploadPathConfig:
     # 头像上传子目录（与 upload_service.py 保持一致）
     AVATARS_SUBDIR: str = "avatars"
     
+    KNOWLEDGE_BASE_SUBDIR: str = "knowledge_base"
+    
     # ========== 路径属性（只读） ==========
     
     @property
@@ -71,6 +73,11 @@ class UploadPathConfig:
     def files_dir(self) -> Path:
         """文件上传目录的绝对路径"""
         return self.upload_root / self.FILES_SUBDIR
+    
+    @property
+    def knowledge_base_dir(self) -> Path:
+        """知识库上传目录的绝对路径"""
+        return self.upload_root / self.KNOWLEDGE_BASE_SUBDIR
     
     @property
     def avatars_dir(self) -> Path:
@@ -98,6 +105,11 @@ class UploadPathConfig:
     def avatars_web_prefix(self) -> str:
         """头像 Web 路径前缀"""
         return f"/static/{self.AVATARS_SUBDIR}"
+    
+    @property
+    def knowledge_base_web_prefix(self) -> str:
+        """知识库 Web 路径前缀"""
+        return f"/static/{self.UPLOAD_ROOT_SUBDIR}/{self.KNOWLEDGE_BASE_SUBDIR}"
     
     # ========== 初始化方法 ==========
     
@@ -197,6 +209,18 @@ class UploadPathConfig:
             Path: 完整的头像保存路径
         """
         return self.avatars_dir / filename
+    
+    def build_knowledge_base_save_path(self, filename: str) -> Path:
+        """
+        构建知识库保存的完整路径
+        
+        Args:
+            filename: 文件名（包含扩展名）
+            
+        Returns:
+            Path: 完整的文件保存路径
+        """
+        return self.knowledge_base_dir / filename
     
     def to_web_path(self, file_path: Path, subdir: str) -> str:
         """

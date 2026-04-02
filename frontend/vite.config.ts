@@ -54,7 +54,7 @@ export default defineConfig({
     proxy: {
       // 代理 API 请求
       '/api/v1': {
-        target: 'http://localhost:8800', // 后端地址
+        target: 'http://localhost:8800', // 后端地址（run.py 启动的端口）
         changeOrigin: true,
         // rewrite: (path) => path.replace(/^\/api/, '')
       },

@@ -215,9 +215,6 @@ async def get_db_session():
             logger.debug("数据库会话已提交22")
             if session.is_active:
                 await session.commit()
-        except GeneratorExit:
-            logger.error("数据库会话已取消1")
-            raise
         except asyncio.CancelledError:
             logger.error("数据库会话已取消2")
             raise

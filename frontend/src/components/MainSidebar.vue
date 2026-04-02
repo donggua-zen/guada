@@ -49,6 +49,19 @@
         </div>
         <span class="nav-label">设置</span>
       </div>
+
+      <!-- 知识库 -->
+      <div @click="handleNavClick('knowledge-base')"
+        :class="[
+          'nav-item group',
+          currentActiveTab === 'knowledge-base' ? 'nav-item-active' : 'nav-item-inactive'
+        ]">
+        <div class="nav-icon">
+          <LibraryBooksTwotone v-if="currentActiveTab === 'knowledge-base'" class="w-5 h-5" />
+          <MenuBookOutlined v-else class="w-5 h-5" />
+        </div>
+        <span class="nav-label">知识库</span>
+      </div>
     </div>
 
     <!-- 底部用户信息 -->
@@ -75,7 +88,7 @@
 
 <!-- @ts-ignore - UI 组件尚未完全迁移到 TypeScript -->
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, watch } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useAuthStore } from '../stores/auth'
 // @ts-ignore - UI 组件类型缺失
@@ -96,7 +109,9 @@ import {
   SettingsOutlined,
   SettingsTwotone,
   WbSunnyTwotone,
-  NightlightRound
+  NightlightRound,
+  LibraryBooksTwotone,
+  MenuBookOutlined
 } from '@vicons/material'
 
 const router = useRouter()
@@ -114,6 +129,23 @@ const emit = defineEmits<{
   'update:activeTab': [tab: string]
 }>()
 
+// 计算当前激活的 tab（根据路由）
+const currentActiveTab = computed(() => {
+  const routeName = route.name as string
+  if (routeName === 'Chat') return 'chat'
+  if (routeName === 'Characters') return 'characters'
+  if (routeName === 'Settings') return 'settings'
+  if (routeName === 'KnowledgeBase') return 'knowledge-base'
+  return props.activeTab || ''
+})
+
+// 监听路由变化，更新 activeTab
+watch(currentActiveTab, (newTab) => {
+  if (newTab) {
+    emit('update:activeTab', newTab)
+  }
+}, { immediate: true })
+
 // 处理导航点击 - 类型化
 const handleNavClick = (tab: string): void => {
   if (tab === 'chat') {
@@ -122,6 +154,8 @@ const handleNavClick = (tab: string): void => {
     router.replace({ name: 'Characters' })
   } else if (tab === 'settings') {
     router.replace({ name: 'Settings' })
+  } else if (tab === 'knowledge-base') {
+    router.replace({ name: 'KnowledgeBase' })
   }
 }
 </script>

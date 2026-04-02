@@ -47,7 +47,7 @@ class Memory(ModelBase):
         created_at: 创建时间
         updated_at: 更新时间
     """
-    __tablename__ = "memories"
+    __tablename__ = "memory"
     
     id = Column(String(26), primary_key=True, default=lambda: str(ulid.new()))
     
