@@ -90,6 +90,25 @@ class KBChunkRepository:
         result = await self.session.execute(stmt)
         return result.scalars().all()
 
+    async def get_chunks_by_file_with_vector_ids(
+        self,
+        file_id: str,
+    ) -> List[KBChunk]:
+        """获取文件的所有分块（包含 vector_id）
+
+        Args:
+            file_id: 文件 ID
+
+        Returns:
+            List[KBChunk]: 分块列表，包含 vector_id
+        """
+        stmt = select(KBChunk).where(
+            KBChunk.file_id == file_id
+        ).order_by(KBChunk.chunk_index)
+        
+        result = await self.session.execute(stmt)
+        return result.scalars().all()
+
     async def list_chunks_by_kb(
         self,
         knowledge_base_id: str,
