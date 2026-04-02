@@ -24,7 +24,7 @@ import type { Character, CharacterListResponse } from '@/types/character'
 import type { Session, SessionListResponse } from '@/types/session'
 import type { Message } from '@/types/message'
 import type { PaginatedResponse } from '@/types/common'
-import type { KnowledgeBase, KBFile, KnowledgeSearchResult } from '@/stores/knowledgeBase'
+import type { KnowledgeBase, KBFile } from '@/stores/knowledgeBase'
 
 class ApiService implements IApiService {
     baseURL: string
@@ -578,6 +578,31 @@ class ApiService implements IApiService {
         return await this._request(`/knowledge-bases/${kbId}/files/${fileId}/status`)
     }
 
+    /**
+     * 批量查询文件处理状态（推荐用于多文件轮询）
+     * @param kbId 知识库 ID
+     * @param fileIds 文件 ID 列表
+     * @returns 文件状态列表
+     */
+    async batchGetFileProcessingStatus(kbId: string, fileIds: string[]): Promise<KBFile[]> {
+        return await this._request(`/knowledge-bases/${kbId}/files/status/batch`, {
+            method: 'POST',
+            data: { file_ids: fileIds },
+        })
+    }
+
+    /**
+     * 重新处理文件（用于失败或已完成的文件）
+     * @param kbId 知识库 ID
+     * @param fileId 文件 ID
+     * @returns 操作结果
+     */
+    async retryKBFile(kbId: string, fileId: string): Promise<{ success: boolean; message: string }> {
+        return await this._request(`/knowledge-bases/${kbId}/files/${fileId}/retry`, {
+            method: 'POST',
+        })
+    }
+
     // ========== 知识库搜索 ==========
 
     /**
@@ -588,7 +613,7 @@ class ApiService implements IApiService {
         query: string,
         topK: number = 5,
         filterFileId?: string
-    ): Promise<KnowledgeSearchResult> {
+    ): Promise<any> {
         return await this._request(`/knowledge-bases/${kbId}/search`, {
             method: 'POST',
             data: {
