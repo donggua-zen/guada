@@ -117,7 +117,7 @@ def cleanup_orphaned(
         orphaned_files = await cleanup_service.find_orphaned_files()
 
         if not orphaned_files:
-            typer.echo("✅ 没有找到需要清理的孤儿文件")
+            typer.echo("没有找到需要清理的孤儿文件")
             return
 
         if dry_run:
@@ -130,7 +130,7 @@ def cleanup_orphaned(
         else:
             typer.echo(f"🗑️ 开始清理 {len(orphaned_files)} 个孤儿文件...")
             result = await cleanup_service.cleanup_orphaned_files(dry_run=False)
-            typer.echo("✅ 清理完成:")
+            typer.echo("清理完成:")
             typer.echo(f"   总共处理: {result['total']} 个文件")
             typer.echo(f"   成功删除: {result['deleted']} 个文件")
             typer.echo(f"   错误数量: {len(result['errors'])}")
@@ -206,7 +206,7 @@ def list_orphaned(
         orphaned_files = await cleanup_service.find_orphaned_files()
 
         if not orphaned_files:
-            typer.echo("✅ 没有找到孤儿文件")
+            typer.echo("没有找到孤儿文件")
             return
 
         typer.echo(f"📋 找到 {len(orphaned_files)} 个孤儿文件:")
@@ -238,7 +238,7 @@ def health_check():
         # 检查数据库连接
         is_db_healthy = await db_manager.health_check()
         if is_db_healthy:
-            typer.echo("✅ 数据库连接正常")
+            typer.echo("数据库连接正常")
         else:
             typer.echo("❌ 数据库连接异常")
             return
@@ -247,14 +247,14 @@ def health_check():
         session = await db_manager.get_session()
         file_repo = FileRepository(session)
         total_files = await file_repo.count_all_files()
-        typer.echo(f"✅ 文件仓库正常，总文件数: {total_files}")
+        typer.echo(f"文件仓库正常，总文件数: {total_files}")
 
         # 检查静态文件目录
         static_dir = Path(settings.STATIC_FILES_DIR)
         if static_dir.exists():
-            typer.echo(f"✅ 静态文件目录存在: {static_dir}")
+            typer.echo(f"静态文件目录存在: {static_dir}")
         else:
-            typer.echo(f"⚠️ 静态文件目录不存在: {static_dir}")
+            typer.echo(f"静态文件目录不存在: {static_dir}")
 
     asyncio.run(run_async_command(_health_check))
 

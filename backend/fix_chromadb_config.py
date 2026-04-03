@@ -32,7 +32,7 @@ def fix_chromadb_config_conflict():
     # 备份重要数据（如果存在）
     backup_dir = Path("./data/chroma_db_backup")
     if not backup_dir.exists() and chroma_dir.exists():
-        print(f"\n⚠️  建议先备份数据")
+        print(f"\n 建议先备份数据")
         print(f"   可以手动复制 {chroma_dir} 到安全位置")
         
         response = input("\n是否继续？这将删除现有的 ChromaDB 数据 (y/N): ")
@@ -50,18 +50,18 @@ def fix_chromadb_config_conflict():
                     for f in chroma_dir.glob(file_path.name):
                         f.unlink()
                         deleted_count += 1
-                        print(f"✅ 删除：{f}")
+                        print(f"删除：{f}")
                 else:
                     file_path.unlink()
                     deleted_count += 1
-                    print(f"✅ 删除：{file_path}")
+                    print(f"删除：{file_path}")
             except Exception as e:
                 print(f"❌ 删除失败 {file_path}: {e}")
     
-    print(f"\n✅ 修复完成！共删除 {deleted_count} 个文件")
+    print(f"\n修复完成！共删除 {deleted_count} 个文件")
     print("\n下一步:")
     print("1. 重启后端服务：python run.py")
-    print("2. 观察日志：应该看到 '✅ ChromaDB 客户端已初始化'")
+    print("2. 观察日志：应该看到 'ChromaDB 客户端已初始化'")
     print("3. 上传测试文件验证功能正常")
 
 

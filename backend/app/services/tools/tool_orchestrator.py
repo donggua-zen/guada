@@ -13,6 +13,8 @@ from typing import Any, Dict, List, Optional, Tuple, Union
 from asyncio import gather
 from pydantic import BaseModel, Field, PrivateAttr
 
+from app.models import knowledge_base
+
 from .providers.tool_provider_base import (
     IToolProvider,
     ToolCallRequest,
@@ -45,17 +47,15 @@ class ToolExecutionContext(BaseModel):
         _resolved_tools_cache: 按 namespace 缓存已解析的工具列表
     """
 
-    session_id: str
-    mcp: Optional[ProviderConfig] = None
-    local: Optional[ProviderConfig] = None
-    memory: Optional[ProviderConfig] = None
+    inject_params: Optional[Dict[str, Any]] = {}
+    provider_configs: Dict[str, ProviderConfig] = {}
 
     # 缓存已解析的工具列表（避免重复查询）
     _resolved_tools_cache: Dict[str, List[str]] = PrivateAttr(default_factory=dict)
 
     def get_provider_config(self, namespace: str) -> Optional[ProviderConfig]:
         """获取指定 Provider 的配置"""
-        return getattr(self, namespace, None)
+        return self.provider_configs.get(namespace, None)
 
     def set_resolved_tools(self, namespace: str, tools: List[str]) -> None:
         """缓存已解析的工具列表
@@ -107,7 +107,7 @@ class ToolOrchestrator:
         """初始化工具编排器"""
         self._namespace_to_provider: Dict[str, IToolProvider] = (
             {}
-        )  # ✅ 命名空间到 Provider 的映射
+        )  # 命名空间到 Provider 的映射
 
     def add_provider(self, provider: IToolProvider, priority: int = 0):
         """添加工具提供者
@@ -117,10 +117,10 @@ class ToolOrchestrator:
             priority: 优先级（数字越小优先级越高，默认为 0）
 
         注意:
-            - ✅ 改进：自动建立命名空间到 Provider 的映射
-            - ✅ 改进：移除优先级排序逻辑（不再需要）
+            - 改进：自动建立命名空间到 Provider 的映射
+            - 改进：移除优先级排序逻辑（不再需要）
         """
-        # ✅ 改进：建立命名空间到 Provider 的映射
+        # 改进：建立命名空间到 Provider 的映射
         if provider.namespace:
             self._namespace_to_provider[provider.namespace] = provider
             logger.info(f"Added tool provider '{provider.namespace}'")
@@ -137,25 +137,28 @@ class ToolOrchestrator:
 
         Returns:
             list: [{type: "function", function: {...}}, ...]
-                  ✅ 改进：直接返回 OpenAI API 要求的数组格式
-                  ✅ 改进：根据 enabled_tools 过滤
+                  改进：直接返回 OpenAI API 要求的数组格式
+                  改进：根据 enabled_tools 过滤
         """
         all_tools_array = []
 
         for namespace, provider in self._namespace_to_provider.items():
-            # ✅ 委托给 Provider 进行过滤
+            # 委托给 Provider 进行过滤
             provider_config = (
                 context.get_provider_config(namespace) if context else None
             )
-            enabled_ids = provider_config.enabled_tools if provider_config else None
+            if provider_config is None:
+                continue
 
-            # ✅ 直接获取已过滤的工具（一次查询完成）
+            enabled_ids = provider_config.enabled_tools
+
+            # 直接获取已过滤的工具（一次查询完成）
             tools_namespaced = await provider.get_tools_namespaced(enabled_ids)
 
-            # ✅ 添加到结果数组（直接添加 schema，不需要 tool_name 作为 key）
+            # 添加到结果数组（直接添加 schema，不需要 tool_name 作为 key）
             all_tools_array.extend(tools_namespaced)
 
-            # ✅ 缓存已解析的工具列表（用于后续 execute() 检查）
+            # 缓存已解析的工具列表（用于后续 execute() 检查）
             if context:
                 # 提取纯工具名（不含命名空间）进行缓存
                 pure_tool_names = [
@@ -166,61 +169,7 @@ class ToolOrchestrator:
         logger.debug(f"Total tools available: {len(all_tools_array)}")
         return all_tools_array
 
-    async def get_all_tools_schema(
-        self,
-        enabled_tools: Optional[list] = None,
-        enabled_mcp_servers: Optional[list] = None,
-    ) -> list:
-        """获取所有工具的 schema（OpenAI Function Calling 格式）
-
-        ⚠️ 注意：此方法已废弃，请使用 get_all_tools() + context 的方式
-
-        Args:
-            enabled_tools: 已启用的工具 ID/名称列表（None 表示全部启用）
-                          ⚠️ 注意：此参数已不再使用
-            enabled_mcp_servers: 已启用的 MCP 服务器 ID 列表（None 表示全部启用）
-                                  ⚠️ 注意：此参数已不再使用
-
-        Returns:
-            List[Dict]: OpenAI Function Calling 格式的工具 schema 列表
-
-        Deprecated:
-            推荐使用 ToolExecutionContext 进行工具过滤：
-            ```python
-            context = ToolExecutionContext(
-                session_id="xxx",
-                mcp=ProviderConfig(enabled_tools=["server_1"]),
-                local=ProviderConfig(enabled_tools=["tool_1"])
-            )
-            tools = await orchestrator.get_all_tools(context)
-            ```
-        """
-        # ⚠️ 向后兼容：直接获取所有工具（不应用过滤）
-        # 新的调用者应该使用 get_all_tools(context)
-        all_tools = await self.get_all_tools()
-        tools_schema = []
-
-        for tool_name, tool_data in all_tools.items():
-            if isinstance(tool_data, dict):
-                schema = {
-                    "type": "function",
-                    "function": {
-                        "name": tool_name,
-                        "description": tool_data.get(
-                            "description", f"Tool: {tool_name}"
-                        ),
-                        "parameters": tool_data.get("inputSchema", {})
-                        or tool_data.get("parameters", {}),
-                    },
-                }
-                tools_schema.append(schema)
-
-        logger.info(
-            f"Generated schema for {len(tools_schema)} tools (filtered from {len(all_tools)} total tools)"
-        )
-        return tools_schema
-
-    async def get_all_tool_prompts(self, session_id: str) -> str:
+    async def get_all_tool_prompts(self, context: ToolExecutionContext) -> str:
         """获取所有工具的提示词注入
 
         Args:
@@ -233,8 +182,13 @@ class ToolOrchestrator:
 
         for provider in self._namespace_to_provider.values():
             try:
-                # ✅ 使用新的 get_prompt() 接口，传递注入参数
-                inject_params = {"session_id": session_id}
+                # 使用新的 get_prompt() 接口，传递注入参数
+                provider_config = context.get_provider_config(provider.namespace)
+                if provider_config is None:
+                    continue
+                if provider_config.enabled_tools is False:
+                    continue
+                inject_params = context.inject_params or {}
                 prompt = await provider.get_prompt(inject_params)
                 if prompt:
                     prompts.append(prompt)
@@ -255,16 +209,16 @@ class ToolOrchestrator:
             IToolProvider: 工具提供者或 None
 
         策略:
-            1. ✅ 提取命名空间前缀（O(1)）
-            2. ✅ 直接从字典查找（O(1)）
-            3. ✅ 找不到返回 None（不遍历后备）
+            1. 提取命名空间前缀（O(1)）
+            2. 直接从字典查找（O(1)）
+            3. 找不到返回 None（不遍历后备）
 
         注意:
             - 如果工具名不包含命名空间前缀，直接返回 None
             - 如果命名空间未注册，直接返回 None
-            - ✅ 时间复杂度：O(1)
+            - 时间复杂度：O(1)
         """
-        # ✅ 改进：通过命名空间前缀直接匹配
+        # 改进：通过命名空间前缀直接匹配
         if "__" not in tool_name:
             logger.warning(f"Tool name without namespace prefix: {tool_name}")
             return None
@@ -329,7 +283,7 @@ class ToolOrchestrator:
                 is_error=True,
             )
 
-        # 4. ✅ 直接使用 get_tools_namespaced() 检查工具是否启用
+        # 4. 直接使用 get_tools_namespaced() 检查工具是否启用
         #    不再调用 resolve_enabled_tools()，统一方法
         enabled_tools = None
 
@@ -365,7 +319,7 @@ class ToolOrchestrator:
         # 6. 准备传递给 Provider 的参数
         provider_request = ToolCallRequest(
             id=request.id,
-            name=tool_name,  # ✅ 去掉命名空间前缀
+            name=tool_name,  # 去掉命名空间前缀
             arguments={
                 **request.arguments,
             },
@@ -377,7 +331,7 @@ class ToolOrchestrator:
                 f"Executing tool {request.name} via {provider.__class__.__name__}"
             )
             return await provider.execute_with_namespace(
-                provider_request, {"session_id": context.session_id}
+                provider_request, context.inject_params
             )
         except Exception as e:
             logger.error(f"Error executing tool {request.name}: {e}")

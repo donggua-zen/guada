@@ -71,6 +71,7 @@ async def add_message(
         files=[file.model_dump() for file in message.files],
         replace_message_id=message.replace_message_id,
         parent_id=None,
+        knowledge_base_ids=message.knowledge_base_ids,  # 传递知识库 ID 列表
     )
 
 

@@ -112,9 +112,9 @@ class KBFileService:
                     raise RuntimeError(f"知识库不存在：{knowledge_base_id}")
 
                 if not file_record:
-                    # ⚠️ 文件记录不存在，可能是上传过程出现问题
+                    # 文件记录不存在，可能是上传过程出现问题
                     logger.warning(
-                        f"⚠️ 文件记录不存在，跳过处理："
+                        f"文件记录不存在，跳过处理："
                         f"KB={knowledge_base_id}, file={file_name}, hash={content_hash[:16]}..."
                     )
                     return None
@@ -194,21 +194,21 @@ class KBFileService:
                             knowledge_base_id=knowledge_base_id,
                             where_filter={"file_id": file_id}
                         )
-                        logger.info(f"✅ 从向量库删除文件 {file_id} 的旧向量")
+                        logger.info(f"从向量库删除文件 {file_id} 的旧向量")
                     except Exception as e:
                         # 向量删除失败不影响后续流程，但记录详细日志
-                        logger.warning(f"⚠️ 向量库删除失败，但不影响后续处理：{e}")
+                        logger.warning(f"向量库删除失败，但不影响后续处理：{e}")
 
                     # 2. 从数据库删除旧分块记录
                     deleted_count = await self.chunk_repo.delete_chunks_by_file(file_id)
                     if deleted_count > 0:
-                        logger.info(f"✅ 删除 {deleted_count} 个旧分块记录")
+                        logger.info(f"删除 {deleted_count} 个旧分块记录")
                     else:
                         logger.debug(f"ℹ️ 文件 {file_id} 没有旧分块记录")
                         
                 except Exception as e:
                     # 清理旧数据失败不影响后续流程，继续执行向量化和存储
-                    logger.warning(f"⚠️ 清理旧数据失败，但继续执行后续流程：{e}")
+                    logger.warning(f"清理旧数据失败，但继续执行后续流程：{e}")
 
                 # 7. 批量向量化
                 all_embeddings: List[List[float]] = []
@@ -372,20 +372,20 @@ class KBFileService:
 
             # 1. 从 ChromaDB 删除向量（使用 metadata 条件删除，无需先查询 vector_id）
             try:
-                # ✅ 优化：直接使用 where 条件删除，减少一次数据库查询
+                # 优化：直接使用 where 条件删除，减少一次数据库查询
                 # ChromaDB 支持通过 metadata 过滤删除：collection.delete(where={"file_id": file_id})
                 await self.vector_service.delete_vectors_by_where(
                     knowledge_base_id=kb_id,
                     where_filter={"file_id": file_id}
                 )
-                logger.info(f"✅ 从向量库删除文件 {file_id} 的所有向量")
+                logger.info(f"从向量库删除文件 {file_id} 的所有向量")
             except Exception as e:
                 # 向量删除失败不影响后续数据库清理，但记录详细日志
-                logger.error(f"⚠️ 向量库删除失败，但不影响数据库清理：{e}")
+                logger.error(f"向量库删除失败，但不影响数据库清理：{e}")
 
             # 2. 从数据库删除分块（级联删除）
             deleted_count = await self.chunk_repo.delete_chunks_by_file(file_id)
-            logger.info(f"✅ 删除 {deleted_count} 个分块")
+            logger.info(f"删除 {deleted_count} 个分块")
 
             # 3. 删除文件记录
             success = await self.file_repo.delete_file(file_id)

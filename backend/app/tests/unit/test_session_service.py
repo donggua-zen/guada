@@ -81,7 +81,7 @@ class TestSessionServiceCreate:
         # Act: 提供自定义 title 创建会话
         data = {
             "character_id": "char-1",
-            "title": "自定义标题",  # ✅ 提供自定义标题
+            "title": "自定义标题",  # 提供自定义标题
             "model_id": "model-1"
         }
         
@@ -103,7 +103,7 @@ class TestSessionServiceCreate:
         
         mock_character = MagicMock()
         mock_character.id = "char-1"
-        mock_character.title = "继承的角色标题"  # ✅ 角色标题
+        mock_character.title = "继承的角色标题"  # 角色标题
         mock_character.model_id = "model-1"
         mock_character.avatar_url = "/avatar.png"
         mock_character.description = "角色描述"
@@ -251,7 +251,7 @@ class TestSessionServiceSettings:
             "character_id": "char-1",
             "model_id": "model-1",
             "settings": {
-                "max_memory_length": 20  # ✅ 覆盖角色的 10
+                "max_memory_length": 20  # 覆盖角色的 10
             }
         }
         

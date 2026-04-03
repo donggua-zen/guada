@@ -23,6 +23,7 @@ export interface SessionSettings {
 export interface InputMessageState {
     content: string
     files: any[]
+    knowledgeBaseIds?: string[]
     isWaiting: boolean
 }
 

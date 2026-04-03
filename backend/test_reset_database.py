@@ -30,7 +30,7 @@ def test_import():
             reset_database,
             main,
         )
-        print("✅ 所有函数导入成功")
+        print("所有函数导入成功")
         return True
     except ImportError as e:
         print(f"❌ 导入失败：{e}")
@@ -62,7 +62,7 @@ def test_function_signatures():
             print(f"❌ {func.__name__} 不是异步函数")
             return False
     
-    print("✅ 所有函数签名正确")
+    print("所有函数签名正确")
     return True
 
 
@@ -76,7 +76,7 @@ if __name__ == "__main__":
     
     print("=" * 60)
     if success:
-        print("✅ 所有测试通过！模块可以正常导入和调用。")
+        print("所有测试通过！模块可以正常导入和调用。")
     else:
         print("❌ 测试失败！")
         sys.exit(1)

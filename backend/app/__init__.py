@@ -28,7 +28,7 @@ from app.routes import (
 logger = logging.getLogger(__name__)
 
 
-# ✅ 完善：恢复未完成的文件处理任务
+# 完善：恢复未完成的文件处理任务
 async def _resume_pending_file_tasks():
     """
     恢复所有 pending/processing 状态的文件处理任务
@@ -42,7 +42,7 @@ async def _resume_pending_file_tasks():
     try:
         logger.info("🔄 开始扫描未完成的知识库文件任务...")
 
-        # ✅ 关键：创建独立的数据库会话用于恢复任务
+        # 关键：创建独立的数据库会话用于恢复任务
         async for session in get_db_session():
             from app.repositories.kb_file_repository import KBFileRepository
 
@@ -56,7 +56,7 @@ async def _resume_pending_file_tasks():
             logger.info(f"📋 发现 {len(pending_files)} 个未完成任务")
 
             if not pending_files:
-                logger.info("✅ 没有需要恢复的任务")
+                logger.info("没有需要恢复的任务")
                 return
 
             # 统计信息
@@ -71,7 +71,7 @@ async def _resume_pending_file_tasks():
                         or not Path(file_record.file_path).exists()
                     ):
                         logger.warning(
-                            f"⚠️ 文件不存在，标记为失败：{file_record.display_name} (ID: {file_record.id})"
+                            f"文件不存在，标记为失败：{file_record.display_name} (ID: {file_record.id})"
                         )
 
                         # 更新状态为 failed
@@ -85,7 +85,7 @@ async def _resume_pending_file_tasks():
                         failed_count += 1
                         continue
 
-                    # ✅ 关键：重新启动任务（使用 asyncio.create_task）
+                    # 关键：重新启动任务（使用 asyncio.create_task）
                     logger.info(
                         f"🔄 准备恢复任务：{file_record.display_name} (ID: {file_record.id}, 状态：{file_record.processing_status})"
                     )
@@ -107,7 +107,7 @@ async def _resume_pending_file_tasks():
                     failed_count += 1
 
             logger.info(
-                f"✅ 任务恢复完成：成功 {resumed_count} 个，失败 {failed_count} 个"
+                f"任务恢复完成：成功 {resumed_count} 个，失败 {failed_count} 个"
             )
 
             break
@@ -130,7 +130,7 @@ async def _resume_single_file_task(
     try:
         logger.info(f"▶️ 开始恢复任务：{file_id} ({display_name})")
 
-        # ✅ 关键：使用独立的数据库会话（避免与其他操作冲突）
+        # 关键：使用独立的数据库会话（避免与其他操作冲突）
         async for session in get_db_session():
             from app.services.kb_file_service import KBFileService
 
@@ -140,7 +140,7 @@ async def _resume_single_file_task(
             # 执行文件处理（会自动等待信号量）
             await kb_file_service.process_file(file_id=file_id)
 
-            logger.info(f"✅ 任务恢复成功： (ID: {file_id}, 名称: {display_name})")
+            logger.info(f"任务恢复成功： (ID: {file_id}, 名称: {display_name})")
 
     except Exception as e:
         logger.exception(
@@ -156,7 +156,7 @@ async def lifespan(app: FastAPI):
     database_url = settings.DATABASE_URL
     await init_db(database_url)
 
-    # ✅ 新增：恢复未完成的文件处理任务
+    # 新增：恢复未完成的文件处理任务
     await _resume_pending_file_tasks()
 
     logger.info("应用启动完成")

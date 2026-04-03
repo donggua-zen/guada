@@ -190,7 +190,8 @@ class ApiService implements IApiService {
         sessionId: string,
         content: string,
         files: any[] = [],
-        replaceMessageId: string | null = null
+        replaceMessageId: string | null = null,
+        knowledgeBaseIds?: string[]
     ): Promise<Message> {
         return await this._request(`/sessions/${sessionId}/messages`, {
             method: 'POST',
@@ -198,6 +199,7 @@ class ApiService implements IApiService {
                 content,
                 files,
                 replace_message_id: replaceMessageId,
+                knowledge_base_ids: knowledgeBaseIds,
             },
         })
     }

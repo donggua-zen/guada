@@ -101,7 +101,7 @@ class SessionService:
         data_filtered = {
             field: data.get(field) for field in fields if data.get(field) is not None
         }
-        
+
         # 初始化 last_active_at 字段
         data_filtered["last_active_at"] = datetime.datetime.now(datetime.timezone.utc)
 
@@ -123,12 +123,16 @@ class SessionService:
         allowed_fields = ["model_id", "settings"]
         filtered_data = {k: v for k, v in data.items() if k in allowed_fields}
 
-        # 如果更新了 settings，只保留 max_memory_length
-        if "settings" in filtered_data:
-            filtered_data["settings"] = {
-                "max_memory_length": filtered_data["settings"].get("max_memory_length"),
-                "thinking_enabled": filtered_data["settings"].get("thinking_enabled"),
-            }
+        # 如果更新了 settings，只保留允许的配置项
+        # if "settings" in filtered_data:
+        #     filtered_data["settings"] = {
+        #         "max_memory_length": filtered_data["settings"].get("max_memory_length"),
+        #         "thinking_enabled": filtered_data["settings"].get("thinking_enabled"),
+        #         "skip_tool_calls": filtered_data["settings"].get("skip_tool_calls"),
+        #         "referenced_kbs": filtered_data["settings"].get(
+        #             "referenced_kbs"
+        #         ),  # 新增：保留知识库选择
+        #     }
 
         session.update(filtered_data)
 

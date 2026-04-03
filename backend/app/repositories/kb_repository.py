@@ -73,6 +73,25 @@ class KBRepository:
         result = await self.session.execute(stmt)
         return result.scalar_one_or_none()
 
+    async def get_kbs_by_ids(self, kb_ids: List[str]) -> List[KnowledgeBase]:
+        """批量获取知识库（使用 IN 查询）
+
+        Args:
+            kb_ids: 知识库 ID 列表
+
+        Returns:
+            List[KnowledgeBase]: 知识库列表（可能为空）
+        """
+        if not kb_ids:
+            return []
+        
+        stmt = select(KnowledgeBase).where(
+            KnowledgeBase.id.in_(kb_ids),
+            KnowledgeBase.is_active == True
+        )
+        result = await self.session.execute(stmt)
+        return result.scalars().all()
+
     async def list_kbs(
         self,
         user_id: str,
