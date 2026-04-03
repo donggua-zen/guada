@@ -174,7 +174,18 @@
         </div>
 
       </div>
+      <!--知识库-->
+      <div class="knowledge-base flex flex-wrap gap-2 mt-3 ml-auto"
+        v-if="message.role === 'user' && turns[0].additional_kwargs?.referenced_kbs && turns[0].additional_kwargs?.referenced_kbs.length > 0">
+        <div v-for="kb, index in turns[0].additional_kwargs?.referenced_kbs" :key="kb.id">
+          <div
+            class="knowledge-base-item rounded-md px-2 py-1 bg-gray-100 dark:bg-gray-800/50 text-gray-500 dark:text-gray-400 text-xs">
+            {{ kb.name }}
+          </div>
+        </div>
+      </div>
       <!-- 文件列表显示区域 -->
+
       <div class="file-list flex flex-wrap gap-2 mt-3 ml-auto" v-if="message.files && message.files.length > 0">
         <FileItem v-for="file, index in message.files" :key="file.id" :name="file.display_name" :type="file.file_type"
           :ext="file.file_extension" :size="file.file_size" :preview-url="file.preview_url"

@@ -54,7 +54,7 @@ class TestAgentServiceHandleAllToolCalls:
         def multiply_numbers(x: int, y: int) -> int:
             return x * y
         
-        # ✅ 本地工具直接注册，不使用前缀
+        # 本地工具直接注册，不使用前缀
         tool_provider_factory.register_simple_tool(local_provider, "add", add_numbers)
         tool_provider_factory.register_simple_tool(local_provider, "multiply", multiply_numbers)
         
@@ -82,12 +82,12 @@ class TestAgentServiceHandleAllToolCalls:
         tool_calls = [
             {
                 "id": "call-1",
-                "name": "local__add",  # ✅ 使用命名空间前缀
-                "arguments": {"a": 5, "b": 3}  # ✅ 使用字典类型
+                "name": "local__add",  # 使用命名空间前缀
+                "arguments": {"a": 5, "b": 3}  # 使用字典类型
             }
         ]
         
-        # ✅ 创建 ToolExecutionContext
+        # 创建 ToolExecutionContext
         context = ToolExecutionContext(
             session_id="test-session-1",
             local=ProviderConfig(enabled_tools=True)
@@ -99,7 +99,7 @@ class TestAgentServiceHandleAllToolCalls:
         # Assert
         assert len(responses) == 1
         assert responses[0]["tool_call_id"] == "call-1"
-        assert responses[0]["name"] == "local__add"  # ✅ 返回的是带命名空间的名称
+        assert responses[0]["name"] == "local__add"  # 返回的是带命名空间的名称
         assert responses[0]["role"] == "tool"
         assert responses[0]["content"] == "8"  # 5 + 3
     
@@ -112,17 +112,17 @@ class TestAgentServiceHandleAllToolCalls:
         tool_calls = [
             {
                 "id": "call-1",
-                "name": "local__add",  # ✅ 使用命名空间前缀
-                "arguments": {"a": 10, "b": 20}  # ✅ 使用字典类型
+                "name": "local__add",  # 使用命名空间前缀
+                "arguments": {"a": 10, "b": 20}  # 使用字典类型
             },
             {
                 "id": "call-2",
-                "name": "local__multiply",  # ✅ 使用命名空间前缀
-                "arguments": {"x": 3, "y": 4}  # ✅ 使用字典类型
+                "name": "local__multiply",  # 使用命名空间前缀
+                "arguments": {"x": 3, "y": 4}  # 使用字典类型
             }
         ]
         
-        # ✅ 创建 ToolExecutionContext
+        # 创建 ToolExecutionContext
         context = ToolExecutionContext(
             session_id="test-session-1",
             local=ProviderConfig(enabled_tools=True)
@@ -149,11 +149,11 @@ class TestAgentServiceHandleAllToolCalls:
             {
                 "id": "call-unknown",
                 "name": "nonexistent_tool",
-                "arguments": {}  # ✅ 使用空字典
+                "arguments": {}  # 使用空字典
             }
         ]
             
-        # ✅ 创建 ToolExecutionContext
+        # 创建 ToolExecutionContext
         context = ToolExecutionContext(
             session_id="test-session-1",
             local=ProviderConfig(enabled_tools=True)
@@ -179,12 +179,12 @@ class TestAgentServiceHandleAllToolCalls:
         tool_calls = [
             {
                 "id": "call-bad-json",
-                "name": "local__add",  # ✅ 使用命名空间前缀
+                "name": "local__add",  # 使用命名空间前缀
                 "arguments": "invalid json {"  # ❌ 这里故意使用字符串来测试错误处理
             }
         ]
         
-        # ✅ 创建 ToolExecutionContext
+        # 创建 ToolExecutionContext
         context = ToolExecutionContext(
             session_id="test-session-1",
             local=ProviderConfig(enabled_tools=True)

@@ -75,7 +75,8 @@ class ApiServiceDummy {
         sessionId: string,
         content: string,
         files: any[] = [],
-        replaceMessageId: string | null = null
+        replaceMessageId: string | null = null,
+        knowledgeBaseIds?: string[]
     ): Promise<ApiResponse<any>> {
         return {
             data: {

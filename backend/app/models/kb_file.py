@@ -68,7 +68,7 @@ class KBFile(ModelBase):
         String(64), nullable=False, index=True, comment="文件内容哈希（SHA-256）"
     )
 
-    # ✅ 新增：文件存储路径（绝对路径，用于服务重启后恢复）
+    # 新增：文件存储路径（绝对路径，用于服务重启后恢复）
     file_path = Column(String(500), nullable=True, comment="文件存储路径（绝对路径）")
 
     # 文件内容（纯文本文件存储完整内容）

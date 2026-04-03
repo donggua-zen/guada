@@ -7,7 +7,7 @@ class BaseResponse(BaseModel):
     # 基础时间字段 - 所有继承此类的 Schema 都会自动包含这些字段
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
-    last_active_at: Optional[datetime] = None  # ✅ 新增：最后活跃时间
+    last_active_at: Optional[datetime] = None  # 新增：最后活跃时间
 
     @field_validator("created_at", "updated_at", "last_active_at", mode="before")
     @classmethod

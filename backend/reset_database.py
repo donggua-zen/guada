@@ -301,7 +301,7 @@ async def reset_database(force: bool = False):
     
     # 警告提示
     if not force:
-        print("\n⚠️  警告：此操作将执行以下动作：")
+        print("\n 警告：此操作将执行以下动作：")
         print("   1. 删除数据库中所有现有表（不可恢复！）")
         print("   2. 重新创建所有数据库表")
         print("   3. 导入默认测试数据")
@@ -369,7 +369,7 @@ async def reset_database(force: bool = False):
                 raise
         
         logger.info("=" * 60)
-        logger.info("✅ 数据库重置完成！")
+        logger.info("数据库重置完成！")
         logger.info("=" * 60)
         logger.info("\n默认登录信息:")
         logger.info("  邮箱：admin@example.com")

@@ -20,6 +20,7 @@ class MessageCreate(BaseModel):
     content: str
     files: Optional[List[FileBound]] = None
     replace_message_id: Optional[str] = None
+    knowledge_base_ids: Optional[List[str]] = None
 
 
 class MessageUpdate(BaseModel):
