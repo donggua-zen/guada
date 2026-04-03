@@ -1,13 +1,13 @@
 <!-- components/KnowledgeBasePage.vue -->
 <template>
-    <SidebarLayout v-model:sidebar-visible="kbSidebarVisible" :sidebar-width="320" :sidebar-position="'left'"
-        :z-index="50" :show-toggle-button="true">
+    <SidebarLayout v-model:sidebar-visible="kbSidebarVisible" :sidebar-position="'left'" :z-index="50"
+        :show-toggle-button="true">
         <!-- 左侧侧边栏：知识库列表 -->
         <template #sidebar>
             <div
                 class="kb-sidebar h-full flex flex-col bg-[var(--color-conversation-bg)] border-r border-gray-200 dark:border-gray-700">
                 <!-- 头部 -->
-                <div class="px-4 pt-4.5 pb-3.5 border-b border-gray-200 dark:border-gray-700">
+                <div class="px-4 pt-3.5 pb-3.5 border-b border-gray-200 dark:border-gray-700">
                     <div class="flex justify-between items-center">
                         <span class="font-semibold text-base text-[var(--color-text)]">知识库</span>
                         <el-button type="primary" @click="showCreateModal = true" :icon="Plus">
@@ -50,11 +50,10 @@
                                         {{ kb.name }}
                                     </div>
                                 </div>
-                                <div class="kb-desc mt-0.5 truncate text-xs">
+                                <!-- <div class="kb-desc mt-0.5 truncate text-xs">
                                     {{ kb.description || '暂无描述' }}
-                                </div>
-                                <div class="kb-actions flex items-center opacity-0 group-hover:opacity-100"
-                                    :class="{ 'opacity-100': store.activeKnowledgeBaseId === kb.id }">
+                                </div> -->
+                                <div class="kb-actions flex items-center opacity-0 group-hover:opacity-100">
                                     <el-dropdown trigger="click"
                                         @command="(command) => handleDropdownCommand(command, kb)">
                                         <template #dropdown>
@@ -88,7 +87,7 @@
             <div class="kb-main h-full flex flex-col bg-white dark:bg-gray-900">
                 <template v-if="store.activeKnowledgeBaseId">
                     <!-- 文件列表头部 -->
-                    <div class="px-4 py-4 border-b border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900">
+                    <div class="px-4 py-3.5 border-b border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900">
                         <div class="flex justify-between items-center">
                             <div class="flex items-center gap-3">
                                 <!-- 侧边栏切换按钮 -->
@@ -506,7 +505,7 @@ async function handleSelectKB(kb: KnowledgeBase) {
 
     try {
         await refreshFileList()
-        toast.success(`已选择：${kb.name}`)
+        // toast.success(`已选择：${kb.name}`)
     } catch (error) {
         console.error('加载文件列表失败:', error)
         toast.error('加载文件列表失败')
@@ -1139,9 +1138,9 @@ watch(() => route.params.id, async (newKbId: string | string[] | undefined) => {
 }
 
 /* 选中状态下操作按钮始终显示 */
-.kb-item-active .kb-actions {
+/* .kb-item-active .kb-actions {
     opacity: 1;
-}
+} */
 
 .kb-action-trigger {
     display: flex;

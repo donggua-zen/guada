@@ -48,7 +48,13 @@
     <el-dialog v-model="showCharacterSelector" title="选择角色" :width="isMobile ? '90%' : '450px'" :append-to-body="true">
       <!-- 搜索框 -->
       <div class="mb-4">
-        <el-input v-model="characterSearchText" placeholder="搜索角色..." prefix-icon="SearchFilled" clearable />
+        <el-input v-model="characterSearchText" placeholder="搜索角色..." clearable>
+          <template #prefix>
+            <el-icon>
+              <SearchFilled />
+            </el-icon>
+          </template>
+        </el-input>
       </div>
 
       <!-- 角色列表 -->
@@ -71,8 +77,8 @@
 
         <!-- 空状态 -->
         <div v-if="filteredCharacters.length === 0" class="text-center py-8 text-gray-400">
-          <el-icon size="48" class="mb-2">
-            <Search />
+          <el-icon :size="48" color="rgb(156 163 175)" class="mb-2">
+            <SearchFilled />
           </el-icon>
           <p>未找到匹配的角色</p>
         </div>

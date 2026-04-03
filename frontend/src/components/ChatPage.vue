@@ -28,17 +28,15 @@
       </template>
       <template v-else>
         <div class="h-full flex-1 flex items-center justify-center">
-          <CreateSessionChatPanel 
-            v-model:sidebar-visible="sidebarVisible"
-            @create-session="handleCreateSessionWithMessage" 
-          />
+          <CreateSessionChatPanel v-model:sidebar-visible="sidebarVisible"
+            @create-session="handleCreateSessionWithMessage" />
         </div>
       </template>
     </template>
   </SidebarLayout>
 </template>
 <script setup lang="ts">
-import { ref, onMounted, watch, computed, defineAsyncComponent, type Ref } from "vue";
+import { ref, onMounted, watch, computed, defineAsyncComponent, type Ref, nextTick } from "vue";
 import { apiService } from "@/services/ApiService";
 import { useRouter, useRoute, type RouteParams } from 'vue-router';
 import { usePopup } from "@/composables/usePopup";
@@ -103,10 +101,10 @@ const sortedSessions = computed(() => {
   const sessions_ = [...sessions.value];
   return sessions_.sort((a, b) => {
     // ✅ 主要排序：last_active_at（最后活跃时间）
-    const timeA: number = a.last_active_at 
+    const timeA: number = a.last_active_at
       ? new Date(a.last_active_at).getTime()
       : (a.updated_at ? new Date(a.updated_at).getTime() : new Date(a.created_at || 0).getTime());
-    const timeB: number = b.last_active_at 
+    const timeB: number = b.last_active_at
       ? new Date(b.last_active_at).getTime()
       : (b.updated_at ? new Date(b.updated_at).getTime() : new Date(b.created_at || 0).getTime());
     return timeB - timeA; // 降序排列，最新的在前面
@@ -240,7 +238,7 @@ const handleCreateSessionWithMessage = async (session: any, inputMessage: any) =
     const response = await apiService.createSession(session)
     // 刷新对话列表
     await loadSessions();
-    console.log('Created session:', session,inputMessage);
+    console.log('Created session:', session, inputMessage);
     if (inputMessage) {
       inputMessage.isWaiting = true
       sessionStore.setInputMessage(response.id, inputMessage)
@@ -324,9 +322,9 @@ const handleDeleteSession = async (session: any) => {
 const handleSaveSessionSettings = async () => {
   try {
     if (currentSession.value) {
-      await apiService.updateSession(currentSession.value.id, { 
-        model_id: currentSession.value.model_id, 
-        settings: currentSession.value.settings 
+      await apiService.updateSession(currentSession.value.id, {
+        model_id: currentSession.value.model_id,
+        settings: currentSession.value.settings
       });
     }
   } catch (error: any) {
@@ -368,12 +366,13 @@ watch(
 // 生命周期
 // 组件挂载完成后加载会话列表
 onMounted(async () => {
+  isLoading.value = true;
   if (authStore.isAuthenticated) {
     await loadSessions();
     if (route.params.sessionId) {
       const sessionId = Array.isArray(route.params.sessionId) ? route.params.sessionId[0] : route.params.sessionId;
       sessionStore.activeSessionId = sessionId;
-      updateSelectedSession(sessionId);
+      await updateSelectedSession(sessionId);
     }
   }
   isLoading.value = false;

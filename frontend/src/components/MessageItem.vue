@@ -179,7 +179,8 @@
         v-if="message.role === 'user' && turns[0].additional_kwargs?.referenced_kbs && turns[0].additional_kwargs?.referenced_kbs.length > 0">
         <div v-for="kb, index in turns[0].additional_kwargs?.referenced_kbs" :key="kb.id">
           <div
-            class="knowledge-base-item rounded-md px-2 py-1 bg-gray-100 dark:bg-gray-800/50 text-gray-500 dark:text-gray-400 text-xs">
+            class="knowledge-base-item rounded-md px-2 py-1 bg-gray-100 dark:bg-gray-800/50 text-gray-500 dark:text-gray-400 text-xs flex items-center gap-1">
+            <MenuBookOutlined class="w-4 h-4" />
             {{ kb.name }}
           </div>
         </div>
@@ -290,6 +291,7 @@ import {
   CheckCircleOutlined,
   PsychologyOutlined,
   InsightsTwotone, // Token 消耗显示图标
+  MenuBookOutlined,
 } from "@vicons/material";
 
 // @ts-ignore - icons 组件尚未迁移到 TypeScript
@@ -349,7 +351,7 @@ let resizeObserver: ResizeObserver | null = null;
  * 使用 VueUse 的 useDebounceFn 官方实现
  */
 const debouncedEmitRenderComplete = useDebounceFn(() => {
-  console.log('[MessageItem] Render complete triggered by ResizeObserver or image load');
+  // console.log('[MessageItem] Render complete triggered by ResizeObserver or image load');
   emit('render-complete', props.message);
 }, 200); // 200ms 防抖延迟
 
@@ -397,26 +399,26 @@ const waitForImagesLoaded = async (): Promise<void> => {
  * 初始化 ResizeObserver 监听 DOM 尺寸变化
  * 捕获所有导致高度变化的情况（图片加载、内容展开、动画等）
  */
-const initResizeObserver = () => {
-  if (!rootRef.value) return;
+// const initResizeObserver = () => {
+//   if (!rootRef.value) return;
 
-  const targetElement = rootRef.value.querySelector('.message-card');
-  if (!targetElement) return;
+//   const targetElement = rootRef.value.querySelector('.message-card');
+//   if (!targetElement) return;
 
-  resizeObserver = new ResizeObserver((entries) => {
-    for (const entry of entries) {
-      // 只有当高度发生变化时才触发
-      if (entry.contentRect.height > 0) {
-        // console.log('[MessageItem] Content height changed:', entry.contentRect.height);
-        // debouncedEmitRenderComplete();
-        emit('render-complete', props.message);
-      }
-    }
-  });
+//   resizeObserver = new ResizeObserver((entries) => {
+//     for (const entry of entries) {
+//       // 只有当高度发生变化时才触发
+//       if (entry.contentRect.height > 0) {
+//         // console.log('[MessageItem] Content height changed:', entry.contentRect.height);
+//         // debouncedEmitRenderComplete();
+//         emit('render-complete', props.message);
+//       }
+//     }
+//   });
 
-  resizeObserver.observe(targetElement);
-  console.log('[MessageItem] ResizeObserver initialized');
-};
+//   resizeObserver.observe(targetElement);
+//   // console.log('[MessageItem] ResizeObserver initialized');
+// };
 
 /**
  * 监听文件列表变化，处理图片加载
@@ -525,11 +527,11 @@ const getCurrentVersionIndex = (contents?: any): number => {
 
 
 // 🔹 生命周期：初始化 ResizeObserver（延迟到 DOM 完全渲染后）
-onMounted(() => {
-  nextTick(() => {
-    initResizeObserver();
-  });
-});
+// onMounted(() => {
+//   nextTick(() => {
+//     initResizeObserver();
+//   });
+// });
 
 
 // moreOptions 计算属性已废弃，不再使用
@@ -539,7 +541,7 @@ onMounted(() => {
  * 保留原有逻辑，与 ResizeObserver 协同工作
  */
 const handleRenderComplete = () => {
-  console.log('[MessageItem] Markdown render complete event received');
+  // console.log('[MessageItem] Markdown render complete event received');
   // Markdown 渲染完成后立即触发，不需要等待防抖
   // emit('render-complete', props.message);
 };
@@ -606,7 +608,7 @@ onBeforeUnmount(() => {
   if (resizeObserver) {
     resizeObserver.disconnect();
     resizeObserver = null;
-    console.log('[MessageItem] ResizeObserver disconnected');
+    // console.log('[MessageItem] ResizeObserver disconnected');
   }
 
   // useDebounceFn 会自动清理，不需要手动处理

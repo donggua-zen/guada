@@ -57,10 +57,10 @@
           currentActiveTab === 'knowledge-base' ? 'nav-item-active' : 'nav-item-inactive'
         ]">
         <div class="nav-icon">
-          <LibraryBooksTwotone v-if="currentActiveTab === 'knowledge-base'" class="w-5 h-5" />
+          <MenuBookOutlined v-if="currentActiveTab === 'knowledge-base'" class="w-5 h-5" />
           <MenuBookOutlined v-else class="w-5 h-5" />
         </div>
-        <span class="nav-label">知识库</span>
+        <span class="nav-label">知识</span>
       </div>
     </div>
 
