@@ -181,13 +181,13 @@ html.dark {
     --el-color-primary-light-1: var(--color-primary-950) !important;
 }
 
-.el-button:not(.el-button--large) {
+/* .el-button:not(.el-button--large) {
     height: 28px;
 }
 
 .el-button.is-circle {
     width: 28px;
-}
+} */
 
 .el-button,
 .el-button.is-round {

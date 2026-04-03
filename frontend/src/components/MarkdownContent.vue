@@ -62,7 +62,6 @@ const renderWithDiffDOM = async () => {
     if (newHTML === lastRenderedHTML) {
         console.log('oldHtml', lastRenderedHTML)
         console.log('newHtml', newHTML)
-        console.log('[Markdown-DiffDOM] Content unchanged, skip update');
         return;
     }
 
@@ -77,21 +76,18 @@ const renderWithDiffDOM = async () => {
         const diffs = diffEngine.diff(markdownContainerRef.value, tempContainer);
 
         if (diffs && diffs.length > 0) {
-            console.log(`[Markdown-DiffDOM] Found ${diffs.length} differences`);
 
             // 应用差异
             if (!diffEngine) return;
             const result = diffEngine.apply(markdownContainerRef.value, diffs) as any;
 
-                if (result !== false && result !== undefined) {
-                console.log('[Markdown-DiffDOM] Changes applied successfully');
+            if (result !== false && result !== undefined) {
 
                 // 5. 更新记录
                 lastRenderedHTML = newHTML as string;
 
                 // 6. 性能统计
                 const duration = performance.now() - startTime;
-                console.log(`[Markdown-DiffDOM] Update completed in ${duration.toFixed(2)}ms`);
 
                 // 7. 触发事件
                 emit("render-complete");
@@ -99,7 +95,6 @@ const renderWithDiffDOM = async () => {
                 console.error('[Markdown-DiffDOM] Failed to apply changes');
             }
         } else {
-            console.log('[Markdown-DiffDOM] No differences found');
             lastRenderedHTML = newHTML as string;
         }
     } catch (error) {
@@ -118,7 +113,7 @@ const renderWithDiffDOM = async () => {
  * 延迟时间：50ms（适合流式输出场景）
  */
 const debouncedRenderWithDiffDOM = useDebounceFn(() => {
-    console.log('[Markdown-Debounce] Executing debounced render');
+    // console.log('[Markdown-Debounce] Executing debounced render');
     renderWithDiffDOM();
 }, 50); // 50ms 延迟，可根据需要调整
 
@@ -126,21 +121,21 @@ const debouncedRenderWithDiffDOM = useDebounceFn(() => {
 watch(
     () => props.content,
     (newContent, oldContent) => {
-        console.log('[Markdown-DiffDOM] Content updated:', {
-            newLength: newContent?.length,
-            oldLength: oldContent?.length,
-            debounced: props.debounced
-        });
+        // console.log('[Markdown-DiffDOM] Content updated:', {
+        //     newLength: newContent?.length,
+        //     oldLength: oldContent?.length,
+        //     debounced: props.debounced
+        // });
 
         // 根据 debounced 属性选择渲染方式
         //nextTick(() => {
         if (props.debounced) {
             // 消抖模式：延迟渲染，减少流式输出时的频繁更新
-            console.log('[Markdown-Debounce] Using debounced render mode');
+            // console.log('[Markdown-Debounce] Using debounced render mode');
             debouncedRenderWithDiffDOM();
         } else {
             // 即时模式：立即渲染，保持编辑模式的响应性
-            console.log('[Markdown-DiffDOM] Using immediate render mode');
+            // console.log('[Markdown-DiffDOM] Using immediate render mode');
             renderWithDiffDOM();
         }
         //});

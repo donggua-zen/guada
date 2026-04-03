@@ -2,7 +2,7 @@
   <div
     class="flex flex-col w-full h-full bg-[var(--color-conversation-bg)] border-r border-[var(--color-conversation-border)] transition-all duration-300">
     <!-- 会话头部 -->
-    <div class="sessions-header px-4 pt-4.5 pb-3.5 flex justify-between items-center border-b border-[var(--color-conversation-border)]">
+    <div class="sessions-header px-4 pt-3.5 pb-3.5 flex justify-between items-center border-b border-[var(--color-conversation-border)]">
       <span class="font-semibold text-base text-[var(--color-text)]">聊天对话</span>
       <el-button type="primary" @click="handleButtonClick('create')" :icon="ChatNew" class="new-chat-btn">
         新建会话
@@ -68,7 +68,7 @@
                 </template>
                 <div @click.stop class="session-action-trigger">
                   <el-icon class="w-4 h-4">
-                    <MoreVertOutlined />
+                    <MoreFilled />
                   </el-icon>
                 </div>
               </el-dropdown>
@@ -90,11 +90,12 @@ import { useDebounceFn } from '@vueuse/core'
 import { useAuthStore } from '../stores/auth'
 import {
   PlusOutlined,
-  MoreVertOutlined,
   EditOutlined,
   DeleteOutlineOutlined,
   SearchOutlined,
 } from '@vicons/material'
+
+import { MoreFilled } from '@element-plus/icons-vue'
 
 // @ts-ignore - icons 组件类型缺失
 import {
@@ -188,13 +189,6 @@ const selectSession = (session: any): void => {
 </script>
 
 <style scoped>
-/* 新建会话按钮 */
-.new-chat-btn {
-  height: 28px;
-  padding: 6px 12px;
-  font-size: 13px;
-  border-radius: 6px;
-}
 
 /* 搜索框样式 */
 .search-input :deep(.el-input__wrapper) {

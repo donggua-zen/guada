@@ -20,6 +20,8 @@ declare module 'vue' {
     CharactersPage: typeof import('./src/components/CharactersPage.vue')['default']
     ChatHeader: typeof import('./src/components/ChatHeader.vue')['default']
     ChatInput: typeof import('./src/components/ui/ChatInput.vue')['default']
+    ChatInputArea: typeof import('./src/components/ChatPanel/ChatInputArea.vue')['default']
+    ChatMessages: typeof import('./src/components/ChatPanel/ChatMessages.vue')['default']
     ChatNew: typeof import('./src/components/icons/ChatNew.vue')['default']
     ChatPage: typeof import('./src/components/ChatPage.vue')['default']
     ChatPanel: typeof import('./src/components/ChatPanel.vue')['default']
@@ -80,5 +82,6 @@ declare module 'vue' {
     UserProfile: typeof import('./src/components/settings/UserProfile.vue')['default']
     UserSecurity: typeof import('./src/components/settings/UserSecurity.vue')['default']
     UserSubaccounts: typeof import('./src/components/settings/UserSubaccounts.vue')['default']
+    WelcomeScreen: typeof import('./src/components/ChatPanel/WelcomeScreen.vue')['default']
   }
 }

@@ -1,6 +1,6 @@
 <template>
     <div class="w-full flex flex-col items-center">
-        <div class="p-[18px_12px_10px_12px] transition-all duration-300 min-h-[60px] w-full bg-white dark:bg-[#1e1e1e]"
+        <div class="p-[16px_12px_10px_12px] transition-all duration-300 min-h-[60px] w-full bg-white dark:bg-[#1e1e1e]"
             :class="styleClass">
             <!-- 文件列表显示区域 -->
             <div class="file-list flex flex-wrap gap-2 mb-3" v-if="uploadFiles.length > 0">
@@ -10,12 +10,12 @@
             </div>
 
             <!-- 已选知识库标签显示区域 -->
-            <div class="kb-list flex flex-wrap gap-2 mb-3" v-if="selectedKnowledgeBases.length > 0">
+            <div class="kb-list flex flex-wrap gap-2 mb-1.5 mx-1.5" v-if="selectedKnowledgeBases.length > 0">
                 <el-tag v-for="kb in selectedKnowledgeBases" :key="kb.id" closable type="info"
                     @close="removeKnowledgeBase(kb.id)" class="text-xs">
                     <span class="flex items-center gap-1">
                         <el-icon size="14">
-                            <LibraryBooksTwotone />
+                            <MenuBookOutlined />
                         </el-icon>
                         {{ kb.name }}
                     </span>
@@ -35,14 +35,14 @@
                 <div class="tools left-tools flex gap-2 items-center">
                     <slot name="buttons"></slot>
                     <template v-if="showButtons.thinkingButton">
-                        <el-button round :type="localThinkingEnabled ? 'primary' : 'default'" plain
+                        <el-button size="small" round :type="localThinkingEnabled ? 'primary' : 'default'" plain
                             @click="toggleDeepThinking" :icon="Thinking2">
                             思考
                         </el-button>
                     </template>
                     <!-- 知识库选择按钮 -->
                     <el-button v-if="showButtons.knowledgeBaseButton" round plain @click="openKnowledgeBaseDialog"
-                        :icon="LibraryBooksTwotone">
+                        :icon="MenuBookOutlined" size="small">
                         知识库
                     </el-button>
                 </div>
@@ -73,13 +73,11 @@
                             </el-icon>
                         </el-button>
                     </div>
-                    <div class="send-actions">
+                    <div>
                         <el-button v-if="!streaming" class="send-btn" type="primary" title="发送" @click="sendMessage"
-                            circle :disabled="!inputContent.trim()" :icon="ArrowSend">
-                        </el-button>
+                            circle :disabled="!inputContent.trim()" :icon="ArrowSend" />
                         <el-button v-else class="send-btn stop-btn" title="停止生成" @click="abortResponse" circle
-                            type="error" :icon="icon">
-
+                            type="error" :icon="Stop">
                         </el-button>
                     </div>
                 </div>
@@ -238,9 +236,9 @@ import {
     ArrowDropDownTwotone,
     SearchFilled,
     CheckCircleFilled,
-    LibraryBooksTwotone
+    MenuBookOutlined
 } from "@vicons/material";
-import { Thinking2, ArrowSend } from "@/components/icons";
+import { Thinking2, ArrowSend, Stop } from "@/components/icons";
 import { usePopup } from '@/composables/usePopup';
 import { useBreakpoints, breakpointsTailwind } from '@vueuse/core'
 
@@ -563,7 +561,6 @@ const applyKnowledgeBaseSelection = () => {
     if (Object.keys(configChanges).length > 0) {
         console.log('Applying knowledge base selection:', configChanges);
         emit('config-change', configChanges);
-        emit('update:knowledgeBaseIds', tempKnowledgeBaseIds.value);
     }
 
     kbDialogVisible.value = false;
@@ -585,9 +582,14 @@ const loadModels = async () => {
         const { apiService } = await import('@/services/ApiService');
         const response = await apiService.fetchModels();
         response.items.forEach(provider => {
-            models.value.push(...provider.models);
+            // 过滤只保留 mode_type 为 'text' 的模型
+            const textModels = provider.models.filter(model => model.model_type === "text");
+            models.value.push(...textModels);
             delete provider.models;
-            providers.value.push(provider);
+            // 只有当该供应商有符合条件的模型时才加入列表
+            if (textModels.length > 0) {
+                providers.value.push(provider);
+            }
         });
         if (models.value.length > 0 && !props.modelId) {
             // 如果没有传入 modelId，默认选择第一个
