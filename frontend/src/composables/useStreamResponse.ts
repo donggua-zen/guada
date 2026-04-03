@@ -69,8 +69,8 @@ export function useStreamResponse(sessionStore: any, apiService: any) {
    * 处理新消息创建
    */
   function handleNewMessage(
-    response: StreamResponse, 
-    sessionId: string, 
+    response: StreamResponse,
+    sessionId: string,
     userMessageId: string
   ): { message: Message; contentIndex: number } {
     const { message_id, turns_id, content_id, model_name } = response
@@ -229,8 +229,8 @@ export function useStreamResponse(sessionStore: any, apiService: any) {
    * 处理流式完成事件
    */
   function handleStreamFinish(
-    response: StreamResponse, 
-    message: Message | null, 
+    response: StreamResponse,
+    message: Message | null,
     contentIndex: number | undefined,
     assistantMessageId: string | null
   ): void {
@@ -278,8 +278,8 @@ export function useStreamResponse(sessionStore: any, apiService: any) {
    * 处理流式响应错误
    */
   function handleStreamCatchError(
-    error: Error, 
-    message: Message | null, 
+    error: Error,
+    message: Message | null,
     contentIndex: number | undefined,
     assistantMessageId: string | null
   ): void {
@@ -299,8 +299,8 @@ export function useStreamResponse(sessionStore: any, apiService: any) {
    * 清理流式响应状态
    */
   function cleanupStreaming(
-    sessionId: string, 
-    message: Message | null, 
+    sessionId: string,
+    message: Message | null,
     contentIndex: number
   ): void {
     streamingState.isStreaming = false
@@ -378,13 +378,13 @@ export function useStreamResponse(sessionStore: any, apiService: any) {
           message = result.message
           contentIndex = result.contentIndex
           assistantMessageIdResult = response.message_id!
-          
+
           // ✅ 修复：仅在第一个 create 事件时更新时间戳，避免工具调用多轮次导致重复更新
           if (!hasUpdatedActiveTime) {
             sessionStore.updateSessionLastActiveTime(streamingSessionId, new Date().toISOString())
             hasUpdatedActiveTime = true
           }
-          
+
           continue
         }
 
@@ -429,14 +429,5 @@ export function useStreamResponse(sessionStore: any, apiService: any) {
   return {
     streamingState,
     processStream,
-    handleNewMessage,
-    handleThink,
-    handleThinkEnd,
-    handleToolCall,
-    handleToolCallsResponse,
-    handleText,
-    handleStreamFinish,
-    handleStreamCatchError,
-    cleanupStreaming
   }
 }

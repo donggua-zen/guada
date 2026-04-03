@@ -35,6 +35,9 @@ const avatarSrc = computed((): string => {
     }
     // 添加时间戳参数避免缓存
     // const separator = props.src.includes('?') ? '&' : '?'
+    if (props.src.startsWith('/'))
+        return props.src
+
     return '/' + props.src
     // return props.src
 });
