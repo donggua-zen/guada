@@ -34,7 +34,7 @@ def main():
     # 执行升级
     try:
         command.upgrade(alembic_cfg, 'head')
-        print("✅ Database migration completed successfully!")
+        print("Database migration completed successfully!")
     except Exception as e:
         print(f"❌ Migration failed: {e}")
         import traceback

@@ -208,7 +208,7 @@ class IToolProvider(ABC):
         # 2. 调用子类实现执行工具（传递注入参数）
         response = await self._execute_internal(request, inject_params)
 
-        # 3. ✅ 添加回命名空间前缀到响应的 name 字段
+        # 3. 添加回命名空间前缀到响应的 name 字段
         if self.namespace:
             response.name = f"{self.namespace}__{response.name}"
 

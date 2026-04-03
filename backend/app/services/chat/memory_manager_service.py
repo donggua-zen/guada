@@ -3,7 +3,10 @@ import logging
 import os
 from functools import lru_cache
 from pathlib import Path
+from tkinter import NO
 from typing import Any, Dict, List, Optional
+
+from sqlalchemy.sql import roles
 
 from app.repositories.message_repository import MessageRepository
 from app.tokenizer.auto_tokenizer import get_tokenizer
@@ -62,7 +65,7 @@ class MemoryManagerService:
         从数据库中检索指定会话的对话消息，支持分页、文件内容加载。
         消息按时间倒序返回（最新的在前）。
 
-        ⚠️ 注意：此方法不再处理系统提示词，调用方需要自行构造并添加到消息列表
+        注意：此方法不再处理系统提示词，调用方需要自行构造并添加到消息列表
 
         Args:
             session_id: 会话 ID
@@ -128,13 +131,29 @@ class MemoryManagerService:
             if query_args["with_files"]:
                 include_fields.append("files")
 
+            # 新增：标记是否是第一条用户消息（用于知识库引用追加）
+            is_first_user_message_processed = False
+
             for msg in messages:
                 # 转换为字典并处理内容结构
                 msg_dict = await msg.to_dict_async(include=include_fields)
+
+                # 判断是否是第一条用户消息（倒序中的第一条用户消息）
+                is_first_user_message = (
+                    not is_first_user_message_processed
+                    and msg_dict.get("role") == "user"
+                )
+
                 transformed_msgs = self._transform_content_structure(
                     msg_dict,
                     skip_tool_calls=skip_tool_calls,
+                    is_first_user_message=is_first_user_message,
                 )
+
+                # 如果处理了第一条用户消息，标记为 True
+                if is_first_user_message:
+                    is_first_user_message_processed = True
+
                 # 反转后添加（保持原始顺序）
                 transformed_msgs.reverse()
                 conversation_messages.extend(transformed_msgs)
@@ -154,7 +173,7 @@ class MemoryManagerService:
         获取最近的 3 条消息（不含系统消息），用于生成会话标题或其他总结任务。
         返回的消息按时间正序排列（从旧到新）。
 
-        ⚠️ 注意：此方法不再处理系统提示词，返回的消息仅包含用户和助手对话
+        注意：此方法不再处理系统提示词，返回的消息仅包含用户和助手对话
 
         Args:
             session_id: 会话 ID
@@ -200,7 +219,10 @@ class MemoryManagerService:
     # def get_memory_strategy(self, memory_type: str) -> MemoryStrategy:
     #     pass
     def _transform_content_structure(
-        self, msg: Dict[str, Any], skip_tool_calls: bool = True
+        self,
+        msg: Dict[str, Any],
+        skip_tool_calls: bool = True,
+        is_first_user_message: bool = False,
     ) -> List[Dict[str, Any]]:
         """
         转换消息内容结构为模型可识别的格式
@@ -208,10 +230,15 @@ class MemoryManagerService:
         处理消息的内容和附件（图片、文本文件），转换为 LLM API 所需的格式。
         支持多轮对话的消息拆分和工具调用结果的处理。
 
+        新增：如果用户消息包含 referenced_kbs 元数据，会在消息内容后追加知识库信息
+        （仅在 is_first_user_message=True 时生效）
+
         Args:
             msg: 消息字典，包含 'role'、'contents' 和可选的 'files' 键
             skip_tool_calls: 是否跳过包含工具调用的轮次。如果为 True，则过滤掉所有包含
                             tool_calls 或 tool_calls_response 的消息轮次
+            is_first_user_message: 是否是第一条用户消息（倒序中的第一条）。只有在此消息
+                                  且为用户消息时才会追加知识库引用信息
 
         Returns:
             List[Dict[str, Any]]: 转换后的消息列表，每条消息包含 role、content 等字段
@@ -221,17 +248,14 @@ class MemoryManagerService:
             ValueError: 如果 msg 格式不正确或缺少必需字段
             KeyError: 如果访问不存在的字段
         """
-        # 输入验证
-        if not isinstance(msg, dict):
-            raise ValueError(f"msg 必须是字典类型，实际：{type(msg)}")
         if "role" not in msg:
             raise ValueError("msg 必须包含 'role' 字段")
         if "contents" not in msg or not isinstance(msg["contents"], list):
             raise ValueError("msg 必须包含 'contents' 列表字段")
 
-        transformed_msgs: List[Dict[str, Any]] = []
-
         if msg["role"] == "assistant":
+            transformed_msgs: List[Dict[str, Any]] = []
+
             # 处理助手消息（可能包含多个 turn 和工具调用）
             for turn in msg["contents"]:
                 base_msg = {
@@ -267,7 +291,7 @@ class MemoryManagerService:
                             for res in tool_responses
                         ]
                     )
-
+                return transformed_msgs
         else:
             # 处理用户消息
             if not msg["contents"]:
@@ -275,23 +299,25 @@ class MemoryManagerService:
                 return [{"role": msg["role"], "content": ""}]
 
             active_content = msg["contents"][0]
-            transformed_msgs = [
+            content = active_content.get("content", "")
+
+            transformed_parts = [
                 {
-                    "role": msg["role"],
-                    "content": active_content.get("content", ""),
+                    "text": content,
+                    "type": "text",
                 }
             ]
+            # 新增：检查是否有知识库引用并追加到消息内容（仅在第一条用户消息时）
+            metadata = {}
+            if is_first_user_message:
+                kb_info = self._append_kb_reference_info(active_content)
+                if kb_info:
+                    transformed_parts.append({"text": kb_info, "type": "text"})
+                    metadata["referenced_kbs"] = kb_info
 
             # 处理附加文件
             files = msg.get("files")
             if files and isinstance(files, list):
-                # 构建包含基础内容和文件内容的列表
-                content_parts = [
-                    {
-                        "text": transformed_msgs[0]["content"],
-                        "type": "text",
-                    }
-                ]
 
                 # 添加每个文件的内容
                 for i, file in enumerate(files):
@@ -303,17 +329,76 @@ class MemoryManagerService:
                     if file_type == "image":
                         image_part = self._transform_image_file(file)
                         if image_part:
-                            content_parts.append(image_part)
+                            transformed_parts.append(image_part)
                     elif file_type == "text":
                         text_part = self._transform_text_file(file, i)
                         if text_part:
-                            content_parts.append(text_part)
+                            transformed_parts.append(text_part)
                     else:
                         logger.debug(f"未知的文件类型：{file_type}")
 
-                transformed_msgs[0]["content"] = content_parts
+            if len(transformed_parts) == 1:
+                return [
+                    {
+                        "role": "user",
+                        "content": transformed_parts[0]["text"],
+                        "_metadata": metadata,
+                    }
+                ]
 
-        return transformed_msgs
+            return [
+                {
+                    "role": "user",
+                    "content": transformed_parts,
+                    "_metadata": metadata,
+                }
+            ]
+
+    def _append_kb_reference_info(self, active_content: Dict[str, Any]) -> str:
+        """
+        在用户消息内容后追加知识库引用信息
+
+        如果消息的 additional_kwargs 中包含 referenced_kbs，构建格式化的知识库信息
+        并追加到原始内容后面。
+
+        Args:
+            content: 用户原始消息内容
+            active_content: 消息的活动内容对象（包含 additional_kwargs）
+
+        Returns:
+            str: 追加后的完整内容
+        """
+        try:
+            # 从 additional_kwargs 中提取 referenced_kbs
+            additional_kwargs = active_content.get("additional_kwargs", {})
+            referenced_kbs = additional_kwargs.get("referenced_kbs", [])
+
+            if not referenced_kbs or not isinstance(referenced_kbs, list):
+                return None
+
+            # 构建知识库引用信息文本
+            kb_info_lines = ["【当前引用的知识库】"]
+            for kb in referenced_kbs:
+                kb_name = kb.get("name", "未知")
+                kb_id = kb.get("id", "unknown")
+                kb_description = kb.get("description", "") or ""
+
+                line = f"- 名称：{kb_name}, ID: {kb_id}"
+                if kb_description:
+                    line += f", 简介：{kb_description}"
+                kb_info_lines.append(line)
+
+            kb_reference_text = "\n".join(kb_info_lines)
+            logger.debug(
+                f"Appending knowledge base reference info: {len(referenced_kbs)} KBs"
+            )
+
+            # 追加到原始内容后面
+            return kb_reference_text
+
+        except Exception as e:
+            logger.warning(f"Failed to append knowledge base reference info: {e}")
+            return None
 
     def _transform_image_file(self, file: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         """

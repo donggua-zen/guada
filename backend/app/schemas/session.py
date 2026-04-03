@@ -48,7 +48,7 @@ class SessionItemOut(BaseResponse):
     character_id: Optional[str] = None  # 添加角色 ID
     settings: Optional[SessionSettings] = None
     character: Optional[CharacterItemOut] = None  # 使用 CharacterItemOut(不含 model)
-    # ✅ 时间字段已从 BaseResponse 自动继承：created_at, updated_at, last_active_at
+    # 时间字段已从 BaseResponse 自动继承：created_at, updated_at, last_active_at
 
     model_config = ConfigDict(from_attributes=True)
 

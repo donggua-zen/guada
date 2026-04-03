@@ -36,7 +36,7 @@ class SessionRepository:
         stmt = (
             select(Session)
             .filter(Session.user_id == user_id)
-            # ✅ 主要排序：last_active_at 降序
+            # 主要排序：last_active_at 降序
             .order_by(
                 desc(Session.last_active_at),
                 desc(Session.updated_at),

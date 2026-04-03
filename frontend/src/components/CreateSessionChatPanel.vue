@@ -28,10 +28,12 @@
       </div>
 
       <div class="w-full  max-w-[800px]">
-        <ChatInput v-model:value="inputMessage.content" v-model:thinking-enabled="thinkingEnabled"
-          :config="{ modelId: currentModelId, maxMemoryLength: (lastModelConfig.value as any)?.maxMemoryLength || currentCharacter?.settings?.max_memory_length }"
-          @config-change="handleConfigChange" :buttons="chatInputButtons" :files="inputMessage.files" :streaming="false"
-          @send="sendMessage" @toggle-thinking="toggleDeepThinking" />
+        <ChatInput v-model:value="inputMessage.content" v-model:thinking-enabled="thinkingEnabled" :config="{
+          modelId: currentModelId,
+          maxMemoryLength: (lastModelConfig.value as any)?.maxMemoryLength || currentCharacter?.settings?.max_memory_length,
+          knowledgeBaseIds: currentSession?.settings?.referenced_kbs || []
+        }" @config-change="handleConfigChange" :buttons="chatInputButtons" :files="inputMessage.files"
+          :streaming="false" @send="sendMessage" @toggle-thinking="toggleDeepThinking" />
       </div>
       <div>
         <div class="flex items-center justify-center mt-6">
@@ -134,6 +136,9 @@ const lastThinkingEnabled = useStorage<boolean>('lastThinkingEnabled', false);
 // 用户手动选择的模型 ID（刷新页面后从 localStorage 恢复）
 const userSelectedModelId = useStorage<string | null>('userSelectedModelId', null);
 
+// 🔥 新增：用户选择的知识库 ID 列表（刷新页面后从 localStorage 恢复）
+const userSelectedKnowledgeBaseIds = useStorage<string[]>('userSelectedKnowledgeBaseIds', []);
+
 const inputMessage = ref({
   content: "",
   files: []
@@ -147,6 +152,7 @@ const currentSession = ref<any>({
   title: "新建对话",
   settings: {
     thinking_enabled: lastThinkingEnabled.value, // 从本地存储加载
+    referenced_kbs: userSelectedKnowledgeBaseIds.value, // 🔥 新增：从 localStorage 加载知识库选择
     model_name: null,
   }
 })
@@ -338,6 +344,13 @@ const handleConfigChange = (config: any): void => {
     // 保存到本地存储
     lastModelConfig.value = { ...lastModelConfig.value, maxMemoryLength: config.maxMemoryLength };
   }
+  // 🔥 新增：保存知识库选择到会话设置和本地存储
+  if (typeof config.knowledgeBaseIds !== 'undefined') {
+    currentSession.value.settings = { ...(currentSession.value.settings || {}), referenced_kbs: config.knowledgeBaseIds };
+    // 🔥 保存到 localStorage，实现持久化
+    userSelectedKnowledgeBaseIds.value = config.knowledgeBaseIds;
+    console.log('保存知识库选择到本地存储:', config.knowledgeBaseIds);
+  }
 };
 
 // 前往角色管理页面
@@ -364,12 +377,17 @@ const sendMessage = (): void => {
     notify.error("创建失败", '请先选择一个角色模板');
     return;
   }
+  // 🔥 修复：传递完整的 payload，包含 knowledgeBaseIds
   emit("create-session", {
     character_id: currentSession.value.character_id,
     model_id: currentModelId.value,
     title: autoTitle(),
     settings: currentSession.value.settings
-  }, { ...inputMessage.value });
+  }, {
+    content: inputMessage.value.content,      // ✅ 使用 content 字段
+    files: inputMessage.value.files || [],    // ✅ 使用 files 字段
+    knowledgeBaseIds: currentSession.value.settings?.referenced_kbs || []  // 🔥 新增：传递知识库 ID
+  });
 }
 
 const handleCreateSessionClick = (): void => {

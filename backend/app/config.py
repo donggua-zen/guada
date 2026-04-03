@@ -47,6 +47,7 @@ class Settings(BaseSettings):
         self.LOG_DIR.mkdir(exist_ok=True)
         self.DATA_DIR.mkdir(exist_ok=True)
         self.STATIC_FILES_DIR.mkdir(exist_ok=True)
+        
 
 
 # 创建全局配置实例

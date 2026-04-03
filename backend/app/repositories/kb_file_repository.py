@@ -162,7 +162,7 @@ class KBFileRepository:
         result = await self.session.execute(stmt)
         return result.scalar() or 0
     
-    # ✅ 新增：根据状态查询文件（用于服务重启后恢复）
+    # 新增：根据状态查询文件（用于服务重启后恢复）
     async def get_files_by_status(self, statuses: List[str]) -> List[KBFile]:
         """根据处理状态查询文件
         
@@ -176,7 +176,30 @@ class KBFileRepository:
         result = await self.session.execute(stmt)
         return list(result.scalars().all())
     
-    # ✅ 新增：根据内容哈希查询文件（用于去重检测）
+    # 新增：根据知识库 ID 和状态查询文件（用于过滤 completed 文件）
+    async def get_files_by_knowledge_base_and_status(
+        self,
+        knowledge_base_id: str,
+        statuses: List[str],
+    ) -> List[KBFile]:
+        """根据知识库 ID 和处理状态查询文件
+        
+        Args:
+            knowledge_base_id: 知识库 ID
+            statuses: 状态列表，如 ["completed"]
+        
+        Returns:
+            List[KBFile]: 文件列表
+        """
+        stmt = select(KBFile).where(
+            KBFile.knowledge_base_id == knowledge_base_id,
+            KBFile.processing_status.in_(statuses)
+        ).order_by(KBFile.uploaded_at.desc())
+        
+        result = await self.session.execute(stmt)
+        return list(result.scalars().all())
+    
+    # 新增：根据内容哈希查询文件（用于去重检测）
     async def get_file_by_hash(
         self,
         knowledge_base_id: str,
@@ -198,7 +221,7 @@ class KBFileRepository:
         result = await self.session.execute(stmt)
         return result.scalar_one_or_none()
     
-    # ✅ 新增：批量查询文件（用于批量轮询状态）
+    # 新增：批量查询文件（用于批量轮询状态）
     async def get_files_by_ids(self, file_ids: List[str]) -> List[KBFile]:
         """根据文件 ID 列表批量查询文件
         

@@ -29,7 +29,7 @@ def make_sync_url(async_url: str) -> str:
 
 
 config = context.config
-# 🔥 关键：转义所有 % 为 %%
+# 关键：转义所有 % 为 %%
 escaped_sync_url = settings.DATABASE_URL.replace("%", "%%")
 config.set_main_option("sqlalchemy.url", make_sync_url(escaped_sync_url))
 

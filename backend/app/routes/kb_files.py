@@ -104,7 +104,7 @@ async def upload_file_to_kb(
 
         content_hash = hashlib.md5(content).hexdigest()
 
-        # ✅ 先创建文件记录到数据库（基础信息），包含文件路径
+        # 先创建文件记录到数据库（基础信息），包含文件路径
         from app.repositories.kb_file_repository import KBFileRepository
 
         file_repo = KBFileRepository(session)
@@ -119,7 +119,7 @@ async def upload_file_to_kb(
             content_hash=content_hash,
         )
 
-        # ✅ 新增：保存文件路径到数据库（用于服务重启后恢复）
+        # 新增：保存文件路径到数据库（用于服务重启后恢复）
         file_record.file_path = str(file_path.absolute())
         await session.commit()
         await session.refresh(file_record)  # 刷新获取最新数据
@@ -128,11 +128,11 @@ async def upload_file_to_kb(
             f"文件记录已创建：{file.filename}, KB={kb_id}, File ID={file_record.id}"
         )
 
-        # ✅ 关键修复：使用 asyncio.create_task 启动真正的后台任务
+        # 关键修复：使用 asyncio.create_task 启动真正的后台任务
         # 不再使用 BackgroundTasks（那是请求级别的，不会执行）
         asyncio.create_task(
             _process_file_in_background(
-                file_id=file_record.id,  # ✅ 简化：只传文件 ID
+                file_id=file_record.id,  # 简化：只传文件 ID
             )
         )
 
@@ -150,7 +150,7 @@ async def upload_file_to_kb(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-# ✅ 新增：后台文件处理函数（独立于请求）
+# 新增：后台文件处理函数（独立于请求）
 async def _process_file_in_background(
     file_id: str,
 ):
@@ -307,7 +307,7 @@ async def get_file_processing_status(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-# ✅ 新增：批量查询文件处理状态接口
+# 新增：批量查询文件处理状态接口
 @router.post("/status/batch", response_model=List[FileProcessingStatusResponse])
 async def batch_get_file_processing_status(
     kb_id: str,

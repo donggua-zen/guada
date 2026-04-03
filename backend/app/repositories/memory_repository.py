@@ -438,7 +438,7 @@ class MemoryRepository:
     ) -> List[Memory]:
         """搜索相似记忆（基于向量相似度）
 
-        ⚠️ 预留接口，暂不实现
+        预留接口，暂不实现
 
         Args:
             session_id: 会话 ID

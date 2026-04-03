@@ -27,6 +27,7 @@ declare module 'vue' {
     CreateSessionChatPanel: typeof import('./src/components/CreateSessionChatPanel.vue')['default']
     DefaultModelSettings: typeof import('./src/components/settings/DefaultModelSettings.vue')['default']
     ElButton: typeof import('element-plus/es')['ElButton']
+    ElCheckbox: typeof import('element-plus/es')['ElCheckbox']
     ElDialog: typeof import('element-plus/es')['ElDialog']
     ElDivider: typeof import('element-plus/es')['ElDivider']
     ElEmpty: typeof import('element-plus/es')['ElEmpty']

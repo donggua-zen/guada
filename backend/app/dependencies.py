@@ -23,12 +23,17 @@ from app.services.message_service import MessageService
 from app.services.model_service import ModelService
 from app.services.session_service import SessionService
 from app.services.settings_manager import SettingsManager
+from app.services.tools.providers.knowledge_base_tool_provider import (
+    KnowledgeBaseToolProvider,
+)
 from app.services.user_service import UserService
 from app.services.mcp_server_service import MCPServerService
 from app.services.mcp.tool_manager import MCPToolManager
 from app.services.tools.tool_orchestrator import ToolOrchestrator
 from app.services.tools.providers.local_tool_provider import LocalToolProvider
-from app.services.tools.providers.mcp_tool_provider import MCPToolProvider as NewMCPToolProvider
+from app.services.tools.providers.mcp_tool_provider import (
+    MCPToolProvider as NewMCPToolProvider,
+)
 from app.services.tools.providers.memory_tool_provider import MemoryToolProvider
 
 
@@ -115,14 +120,14 @@ def get_local_tool_provider() -> LocalToolProvider:
         get_current_time,
         function_schema,
     )
-    
+
     provider = LocalToolProvider()
-    provider.register( 
+    provider.register(
         name="get_current_time",
         func=get_current_time,
-        schema=function_schema(get_current_time)
+        schema=function_schema(get_current_time),
     )
-    
+
     return provider
 
 
@@ -134,9 +139,18 @@ def get_memory_tool_provider(
     return provider
 
 
-def get_mcp_tool_provider(session: AsyncSession = Depends(get_db_session)) -> NewMCPToolProvider:
+def get_mcp_tool_provider(
+    session: AsyncSession = Depends(get_db_session),
+) -> NewMCPToolProvider:
     """创建 MCP 工具提供者"""
     return NewMCPToolProvider(session)
+
+
+def get_knowledge_base_tool_provider(
+    session: AsyncSession = Depends(get_db_session),
+) -> KnowledgeBaseToolProvider:
+    """创建知识库工具提供者"""
+    return KnowledgeBaseToolProvider(session)
 
 
 def get_tool_orchestrator(
@@ -144,21 +158,20 @@ def get_tool_orchestrator(
 ) -> ToolOrchestrator:
     """创建工具编排器（自动注入所有 Provider）"""
     orchestrator = ToolOrchestrator()
-    
+
     # 添加提供者（按优先级排序）
+    orchestrator.add_provider(get_local_tool_provider(), priority=0)  # 本地工具优先级高
     orchestrator.add_provider(
-        get_local_tool_provider(),
-        priority=0  # 本地工具优先级高
+        get_memory_tool_provider(session), priority=5  # 新增  # 记忆工具中等优先级
     )
     orchestrator.add_provider(
-        get_memory_tool_provider(session),  # ✅ 新增
-        priority=5  # 记忆工具中等优先级
+        get_knowledge_base_tool_provider(session),
+        priority=5,  # 新增  # 知识库工具中等优先级
     )
     orchestrator.add_provider(
-        get_mcp_tool_provider(session),
-        priority=1  # MCP 工具优先级低
+        get_mcp_tool_provider(session), priority=1  # MCP 工具优先级低
     )
-    
+
     return orchestrator
 
 
@@ -169,7 +182,7 @@ def get_agent_service(
     memory_manager_service: MemoryManagerService = Depends(get_memory_manager_service),
     settings_manager: SettingsManager = Depends(get_settings_service),
     mcp_tool_manager: MCPToolManager = Depends(create_repo_dependency(MCPToolManager)),
-    tool_orchestrator: ToolOrchestrator = Depends(get_tool_orchestrator),  # ✅ 新增依赖
+    tool_orchestrator: ToolOrchestrator = Depends(get_tool_orchestrator),  # 新增依赖
 ) -> AgentService:
     """聊天服务依赖"""
     return AgentService(
@@ -179,7 +192,7 @@ def get_agent_service(
         memory_manager_service=memory_manager_service,
         setting_service=settings_manager,
         mcp_tool_manager=mcp_tool_manager,
-        tool_orchestrator=tool_orchestrator,  # ✅ 传入工具编排器
+        tool_orchestrator=tool_orchestrator,  # 传入工具编排器
     )
 
 
@@ -204,7 +217,7 @@ def get_session_service(
         character_repo=character_repo,
         message_repo=message_repo,
         model_repo=model_repo,
-        setting_service=setting_service
+        setting_service=setting_service,
     )
 
 
@@ -225,7 +238,7 @@ def get_file_service(
 ) -> EnhancedFileService:
     """
     文件服务依赖
-    
+
     返回 EnhancedFileService 实例，提供完整的文件上传功能
     """
     return EnhancedFileService(file_repo)
@@ -236,6 +249,7 @@ def get_mcp_server_service(
 ) -> MCPServerService:
     """MCP 服务器服务依赖"""
     return MCPServerService(mcp_repo=mcp_repo)
+
 
 # async def get_character_repository(
 #     session=Depends(get_db_session),

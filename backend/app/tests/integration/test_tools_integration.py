@@ -37,7 +37,7 @@ class TestLocalToolProviderIntegration:
         # Act: 执行工具（使用 execute_with_namespace 方法）
         request = ToolCallRequest(
             id="time-call-1",
-            name="local__get_current_time",  # ✅ 使用命名空间前缀
+            name="local__get_current_time",  # 使用命名空间前缀
             arguments={}
         )
         
@@ -45,7 +45,7 @@ class TestLocalToolProviderIntegration:
         
         # Assert
         assert response.tool_call_id == "time-call-1"
-        assert response.name == "local__get_current_time"  # ✅ 返回带命名空间的名称
+        assert response.name == "local__get_current_time"  # 返回带命名空间的名称
         assert response.is_error is False
         assert "2026-03-29" in response.content
     
@@ -72,7 +72,7 @@ class TestLocalToolProviderIntegration:
         # Act
         request = ToolCallRequest(
             id="async-call-1",
-            name="local__fetch_url",  # ✅ 使用命名空间前缀
+            name="local__fetch_url",  # 使用命名空间前缀
             arguments={"url": "https://api.example.com"}
         )
         
@@ -80,7 +80,7 @@ class TestLocalToolProviderIntegration:
         
         # Assert
         assert response.is_error is False
-        assert response.name == "local__fetch_url"  # ✅ 返回带命名空间的名称
+        assert response.name == "local__fetch_url"  # 返回带命名空间的名称
         assert "Fetched: https://api.example.com" in response.content
     
     @pytest.mark.asyncio
@@ -109,7 +109,7 @@ class TestLocalToolProviderIntegration:
         # Act: 不提供必需参数
         request = ToolCallRequest(
             id="bad-call-1",
-            name="local__require_param",  # ✅ 使用命名空间前缀
+            name="local__require_param",  # 使用命名空间前缀
             arguments={}  # ❌ 缺少必需的 value 参数
         )
         
@@ -156,15 +156,15 @@ class TestToolOrchestratorBatchExecution:
         """测试批量执行多个工具"""
         # Arrange
         requests = [
-            ToolCallRequest(id="batch-1", name="local__add", arguments={"a": 5, "b": 3}),  # ✅ 使用命名空间
-            ToolCallRequest(id="batch-2", name="local__subtract", arguments={"x": 10, "y": 4}),  # ✅ 使用命名空间
-            ToolCallRequest(id="batch-3", name="local__multiply", arguments={"m": 2, "n": 6})  # ✅ 使用命名空间
+            ToolCallRequest(id="batch-1", name="local__add", arguments={"a": 5, "b": 3}),  # 使用命名空间
+            ToolCallRequest(id="batch-2", name="local__subtract", arguments={"x": 10, "y": 4}),  # 使用命名空间
+            ToolCallRequest(id="batch-3", name="local__multiply", arguments={"m": 2, "n": 6})  # 使用命名空间
         ]
         
-        # ✅ 创建 ToolExecutionContext，启用所有工具
+        # 创建 ToolExecutionContext，启用所有工具
         context = ToolExecutionContext(
             session_id="test-session",
-            local=ProviderConfig(enabled_tools=True)  # ✅ 启用所有本地工具
+            local=ProviderConfig(enabled_tools=True)  # 启用所有本地工具
         )
         
         # Act
@@ -187,11 +187,11 @@ class TestToolOrchestratorBatchExecution:
         """测试部分失败时的批量执行"""
         # Arrange
         requests = [
-            ToolCallRequest(id="good-call", name="local__add", arguments={"a": 1, "b": 2}),  # ✅ 使用命名空间
+            ToolCallRequest(id="good-call", name="local__add", arguments={"a": 1, "b": 2}),  # 使用命名空间
             ToolCallRequest(id="bad-call", name="nonexistent_tool", arguments={})  # ❌ 不存在的工具
         ]
         
-        # ✅ 创建 ToolExecutionContext
+        # 创建 ToolExecutionContext
         context = ToolExecutionContext(
             session_id="test-session",
             local=ProviderConfig(enabled_tools=True)
@@ -265,11 +265,11 @@ class TestToolOrchestratorPriority:
         # Arrange
         request = ToolCallRequest(
             id="priority-test",
-            name="local__get_version",  # ✅ 使用命名空间前缀
+            name="local__get_version",  # 使用命名空间前缀
             arguments={}
         )
         
-        # ✅ 创建 ToolExecutionContext
+        # 创建 ToolExecutionContext
         context = ToolExecutionContext(
             session_id="test-session",
             local=ProviderConfig(enabled_tools=True)

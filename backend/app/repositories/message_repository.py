@@ -149,10 +149,11 @@ class MessageRepository:
         session_id: str,
         role: str,
         content: str,
-        files: list[dict] = None,
-        parent_id: str = None,
-        reasoning_content: str = None,
-        meta_data: dict = None,
+        files: Optional[list[dict]] = None,
+        parent_id: Optional[str] = None,
+        reasoning_content: Optional[str] = None,
+        meta_data: Optional[dict] = None,
+        additional_kwargs: Optional[dict] = None,
     ):
         validated_contents = []
         validated_files = []
@@ -165,6 +166,7 @@ class MessageRepository:
                 content=content,
                 reasoning_content=reasoning_content,
                 meta_data=meta_data or {},
+                additional_kwargs=additional_kwargs or {},
             )
         )
 

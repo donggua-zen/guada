@@ -9,6 +9,19 @@
                     @close="removeFile(file.id)"></FileItem>
             </div>
 
+            <!-- 已选知识库标签显示区域 -->
+            <div class="kb-list flex flex-wrap gap-2 mb-3" v-if="selectedKnowledgeBases.length > 0">
+                <el-tag v-for="kb in selectedKnowledgeBases" :key="kb.id" closable type="info"
+                    @close="removeKnowledgeBase(kb.id)" class="text-xs">
+                    <span class="flex items-center gap-1">
+                        <el-icon size="14">
+                            <LibraryBooksTwotone />
+                        </el-icon>
+                        {{ kb.name }}
+                    </span>
+                </el-tag>
+            </div>
+
             <textarea class="message-input" v-model="inputContent" placeholder="Enter发送, Shift+Enter换行"
                 @keydown="handleKeydown" @input="adjustTextareaHeight" ref="messageInputRef" rows="1"
                 @focus="handleFocus" @blur="handleBlur"></textarea>
@@ -27,7 +40,11 @@
                             思考
                         </el-button>
                     </template>
-
+                    <!-- 知识库选择按钮 -->
+                    <el-button v-if="showButtons.knowledgeBaseButton" round plain @click="openKnowledgeBaseDialog"
+                        :icon="LibraryBooksTwotone">
+                        知识库
+                    </el-button>
                 </div>
                 <div class="right-actions">
                     <!-- 模型选择按钮 -->
@@ -160,6 +177,52 @@
             </div>
         </template>
     </el-dialog>
+
+    <!-- 知识库选择对话框 -->
+    <el-dialog v-model="kbDialogVisible" title="选择知识库" :width="isMobile ? '90%' : '600px'" :append-to-body="true"
+        destroy-on-close>
+        <div class="mb-4">
+            <el-input v-model="kbSearchText" placeholder="搜索知识库..." clearable>
+                <template #prefix>
+                    <el-icon>
+                        <SearchFilled />
+                    </el-icon>
+                </template>
+            </el-input>
+        </div>
+        <div class="kb-list-container max-h-80 overflow-y-auto">
+            <div v-if="filteredKnowledgeBases.length === 0" class="text-center py-8 text-gray-400">
+                <el-icon size="48" class="mb-2">
+                    <SearchFilled />
+                </el-icon>
+                <p>未找到匹配的知识库</p>
+            </div>
+            <div v-else class="space-y-2">
+                <div v-for="kb in filteredKnowledgeBases" :key="kb.id"
+                    class="kb-item p-3 rounded-lg cursor-pointer border transition-all flex items-start gap-3" :class="{
+                        'bg-blue-50 border-blue-300': tempKnowledgeBaseIds.includes(kb.id),
+                        'border-gray-200 hover:bg-gray-50': !tempKnowledgeBaseIds.includes(kb.id)
+                    }" @click="toggleKnowledgeBaseSelection(kb.id)">
+                    <el-checkbox :model-value="tempKnowledgeBaseIds.includes(kb.id)" @click.stop
+                        @change="toggleKnowledgeBaseSelection(kb.id)" />
+                    <div class="flex-1 min-w-0">
+                        <div class="font-medium text-sm mb-1">{{ kb.name }}</div>
+                        <div v-if="kb.description" class="text-xs text-gray-500 truncate">{{ kb.description }}</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div v-if="tempKnowledgeBaseIds.length > 0" class="mt-4 text-sm text-gray-600">
+            已选择 <span class="font-medium text-blue-600">{{ tempKnowledgeBaseIds.length }}</span> 个知识库
+        </div>
+
+        <template #footer>
+            <div class="flex justify-end gap-3">
+                <el-button @click="kbDialogVisible = false">取消</el-button>
+                <el-button type="primary" @click="applyKnowledgeBaseSelection">应用</el-button>
+            </div>
+        </template>
+    </el-dialog>
 </template>
 
 
@@ -174,7 +237,8 @@ import {
     ImageTwotone,
     ArrowDropDownTwotone,
     SearchFilled,
-    CheckCircleFilled
+    CheckCircleFilled,
+    LibraryBooksTwotone
 } from "@vicons/material";
 import { Thinking2, ArrowSend } from "@/components/icons";
 import { usePopup } from '@/composables/usePopup';
@@ -201,6 +265,11 @@ const tempModelId = ref(null); // 临时选中的模型 ID
 const models = ref([]);
 const providers = ref([]);
 const sessionId = ref(null);
+// 知识库选择器相关
+const kbDialogVisible = ref(false);
+const kbSearchText = ref('');
+const tempKnowledgeBaseIds = ref<string[]>([]); // 临时选中的知识库 ID 列表
+const knowledgeBases = ref<any[]>([]); // 知识库列表
 // 常量定义
 const FILE_TYPES = {
     TEXT: {
@@ -238,6 +307,7 @@ const showButtons = reactive({
     filesButton: true,
     imagesButton: false,
     tokensButton: true,
+    knowledgeBaseButton: true, // 知识库选择按钮
 });
 
 const props = defineProps({
@@ -257,7 +327,8 @@ const props = defineProps({
         type: Object,
         default: () => ({
             modelId: null,
-            maxMemoryLength: null
+            maxMemoryLength: null,
+            knowledgeBaseIds: [] // 新增：知识库 ID 列表
         })
     },
 });
@@ -322,6 +393,22 @@ const currentModelName = computed(() => {
     return model ? model.model_name.split("/").pop() : "请选择模型";
 });
 
+// 当前选中的知识库列表（根据 ID 从完整列表中过滤）
+const selectedKnowledgeBases = computed(() => {
+    const kbIds = props.config?.knowledgeBaseIds || [];
+    return knowledgeBases.value.filter(kb => kbIds.includes(kb.id));
+});
+
+// 过滤后的知识库列表（支持搜索）
+const filteredKnowledgeBases = computed(() => {
+    if (!kbSearchText.value) return knowledgeBases.value;
+    const searchText = kbSearchText.value.toLowerCase();
+    return knowledgeBases.value.filter(kb =>
+        kb.name?.toLowerCase().includes(searchText) ||
+        kb.description?.toLowerCase().includes(searchText)
+    );
+});
+
 // 过滤后的模型列表（支持搜索）
 const filteredModels = computed(() => {
     if (!modelSearchText.value) return models.value;
@@ -353,7 +440,7 @@ const emit = defineEmits([
     'update:value', 'update:webSearchEnabled', 'update:thinkingEnabled',
     'send', 'abort', 'tokens-statistic', 'files-change',
     'toggle-web-search', 'toggle-thinking', 'focus', 'blur',
-    'update:modelId', 'config-change'
+    'update:modelId', 'config-change', 'update:knowledgeBaseIds'
 ]);
 
 // 工具函数
@@ -443,6 +530,55 @@ const applyModelSettings = () => {
     modelDialogVisible.value = false;
 };
 
+// 打开知识库对话框
+const openKnowledgeBaseDialog = () => {
+    kbSearchText.value = '';
+    // 初始化临时值为当前值
+    tempKnowledgeBaseIds.value = [...(props.config?.knowledgeBaseIds || [])];
+    kbDialogVisible.value = true;
+};
+
+// 切换知识库选中状态
+const toggleKnowledgeBaseSelection = (kbId: string) => {
+    const index = tempKnowledgeBaseIds.value.indexOf(kbId);
+    if (index === -1) {
+        tempKnowledgeBaseIds.value.push(kbId);
+    } else {
+        tempKnowledgeBaseIds.value.splice(index, 1);
+    }
+};
+
+// 应用知识库选择
+const applyKnowledgeBaseSelection = () => {
+    // 构建配置变更对象
+    const configChanges = {};
+
+    // 检查知识库 ID 列表是否有变化
+    const currentKbIds = props.config?.knowledgeBaseIds || [];
+    if (JSON.stringify(tempKnowledgeBaseIds.value.sort()) !== JSON.stringify(currentKbIds.sort())) {
+        configChanges.knowledgeBaseIds = tempKnowledgeBaseIds.value;
+    }
+
+    // 只有当有配置变更时才发送事件
+    if (Object.keys(configChanges).length > 0) {
+        console.log('Applying knowledge base selection:', configChanges);
+        emit('config-change', configChanges);
+        emit('update:knowledgeBaseIds', tempKnowledgeBaseIds.value);
+    }
+
+    kbDialogVisible.value = false;
+};
+
+// 移除单个知识库
+const removeKnowledgeBase = (kbId: string) => {
+    const currentKbIds = props.config?.knowledgeBaseIds || [];
+    const newKbIds = currentKbIds.filter(id => id !== kbId);
+
+    // 🔥 修复：同时触发两个事件
+    emit('update:knowledgeBaseIds', newKbIds);  // 更新本地状态
+    emit('config-change', { knowledgeBaseIds: newKbIds });  // 通知父组件保存配置
+};
+
 // 加载模型列表
 const loadModels = async () => {
     try {
@@ -459,6 +595,17 @@ const loadModels = async () => {
         }
     } catch (error) {
         console.error('获取模型列表失败:', error);
+    }
+};
+
+// 加载知识库列表
+const loadKnowledgeBases = async () => {
+    try {
+        const { apiService } = await import('@/services/ApiService');
+        const response = await apiService.fetchKnowledgeBases();
+        knowledgeBases.value = response.items || [];
+    } catch (error) {
+        console.error('获取知识库列表失败:', error);
     }
 };
 
@@ -582,12 +729,13 @@ const triggerFileInput = () => fileInputRef.value.click();
 const triggerImageInput = () => imageInputRef.value.click();
 
 const sendMessage = () => {
-    if (!inputContent.value.trim()) {
+    if (!inputContent.value.trim() && uploadFiles.value.length === 0) {
         return;
     }
     emit('send', {
-        text: inputContent.value,
-        files: uploadFiles.value
+        content: inputContent.value,
+        files: uploadFiles.value,
+        knowledgeBaseIds: props.config?.knowledgeBaseIds || [] // 新增：传递知识库 ID 列表
     });
 };
 
@@ -673,6 +821,7 @@ onMounted(() => {
     document.addEventListener('paste', handlePaste);
     adjustTextareaHeight();
     loadModels();
+    loadKnowledgeBases(); // 加载知识库列表
 
     // 清理事件监听器
     onUnmounted(() => {
@@ -807,5 +956,18 @@ onMounted(() => {
     .model-selector-btn {
         display: none !important;
     }
+}
+
+/* 知识库选择对话框样式 */
+:deep(.kb-item) {
+    transition: all 0.2s;
+}
+
+:deep(.kb-item:hover) {
+    border-color: var(--el-color-primary-light-5);
+}
+
+.kb-list {
+    padding: 0 2px;
 }
 </style>

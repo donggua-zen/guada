@@ -25,7 +25,7 @@ class VectorService:
         """初始化向量服务"""
         self.chroma_client = None
         self.collection_map = {}  # kb_id -> collection
-        # ✅ 新增：线程池，用于在异步上下文中执行同步操作
+        # 新增：线程池，用于在异步上下文中执行同步操作
         self.executor = ThreadPoolExecutor(
             max_workers=4, thread_name_prefix="chroma_worker"
         )
@@ -33,7 +33,7 @@ class VectorService:
     def _get_chroma_client(self, persist_directory: str = "./data/chroma_db"):
         """获取 ChromaDB 客户端（单例模式）"""
         if self.chroma_client is None:
-            # ✅ 使用统一的配置，避免 "instance already exists" 错误
+            # 使用统一的配置，避免 "instance already exists" 错误
             self.chroma_client = chromadb.PersistentClient(
                 path=persist_directory,
                 settings=chromadb.config.Settings(
@@ -41,7 +41,7 @@ class VectorService:
                     allow_reset=True,
                 ),
             )
-            logger.info(f"✅ ChromaDB 客户端已初始化：{persist_directory}")
+            logger.info(f"ChromaDB 客户端已初始化：{persist_directory}")
         return self.chroma_client
 
     async def get_embedding(
@@ -68,7 +68,7 @@ class VectorService:
         """
 
         try:
-            # ✅ 使用异步 OpenAI 客户端
+            # 使用异步 OpenAI 客户端
             client = AsyncOpenAI(
                 base_url=base_url,
                 api_key=api_key,
@@ -137,7 +137,7 @@ class VectorService:
                 metadatas=metadatas,
             )
 
-            logger.info(f"✅ 添加 {len(ids)} 个分块到知识库 {knowledge_base_id}")
+            logger.info(f"添加 {len(ids)} 个分块到知识库 {knowledge_base_id}")
             return ids
 
         # 在线程池中执行，不阻塞事件循环
@@ -152,7 +152,8 @@ class VectorService:
         self,
         knowledge_base_id: str,
         query_text: str,
-        provider_name: str,
+        base_url: str,  # 新增：向量模型 API 地址
+        api_key: str,  # 新增：向量模型 API 密钥
         model_name: str,
         top_k: int = 5,
         filter_metadata: Optional[Dict] = None,
@@ -175,7 +176,7 @@ class VectorService:
 
         # 先获取查询文本的向量（这是异步方法）
         query_embedding = await self.get_embedding(
-            query_text, provider_name, model_name
+            query_text, base_url, api_key, model_name
         )
 
         def _search_sync():
@@ -217,7 +218,7 @@ class VectorService:
                     }
                     formatted_results.append(result)
 
-            logger.info(f"✅ 搜索到 {len(formatted_results)} 个相似分块")
+            logger.info(f"搜索到 {len(formatted_results)} 个相似分块")
             return formatted_results
 
         # 在线程池中执行
@@ -245,7 +246,7 @@ class VectorService:
             try:
                 collection_name = f"kb_{knowledge_base_id}"
                 client.delete_collection(name=collection_name)
-                logger.info(f"✅ 删除知识库向量集合：{knowledge_base_id}")
+                logger.info(f"删除知识库向量集合：{knowledge_base_id}")
                 return True
             except Exception as e:
                 logger.error(f"删除向量集合失败：{e}")
@@ -281,11 +282,11 @@ class VectorService:
             try:
                 collection_name = f"kb_{knowledge_base_id}"
                 collection = client.get_collection(name=collection_name)
-                
+
                 # 批量删除向量
                 collection.delete(ids=vector_ids)
-                
-                logger.info(f"✅ 从向量库删除 {len(vector_ids)} 个向量")
+
+                logger.info(f"从向量库删除 {len(vector_ids)} 个向量")
                 return True
             except Exception as e:
                 logger.error(f"❌ 删除向量失败：{e}")
@@ -305,8 +306,8 @@ class VectorService:
     ) -> bool:
         """
         根据 metadata 条件从向量库中删除向量（异步方法，使用线程池执行同步操作）
-        
-        ✅ 优化方法：直接使用 where 条件删除，无需先查询 vector_id
+
+        优化方法：直接使用 where 条件删除，无需先查询 vector_id
 
         Args:
             knowledge_base_id: 知识库 ID
@@ -323,11 +324,11 @@ class VectorService:
             try:
                 collection_name = f"kb_{knowledge_base_id}"
                 collection = client.get_collection(name=collection_name)
-                
+
                 # 使用 where 条件删除（ChromaDB 原生支持）
                 collection.delete(where=where_filter)
-                
-                logger.info(f"✅ 根据条件删除向量：{where_filter}")
+
+                logger.info(f"根据条件删除向量：{where_filter}")
                 return True
             except Exception as e:
                 logger.error(f"❌ 根据条件删除向量失败：{e}")

@@ -81,11 +81,12 @@ class MessageService:
         message.contents.append(message_conetnt)
         await self.message_repo.session.flush()  # 刷新以确保更改生效
         return message
+
     # async def add_message_without_content(self, message_id: str):
     #     message = await self.message_repo.get_message(message_id=message_id)
     #     if not message:
     #         raise HTTPException(
-                
+
     #         )
     async def add_message(
         self,
@@ -96,22 +97,41 @@ class MessageService:
         parent_id: str = None,
         replace_message_id: str = None,
         meta_data: dict = None,
+        knowledge_base_ids: list[str] = None,  # 新增参数
     ):
+        # 如果有知识库引用，保存到消息内容中
+        additional_kwargs = {}
+        if knowledge_base_ids and len(knowledge_base_ids) > 0:
+            # 优化：使用 IN 查询批量获取知识库信息（避免 N+1 查询）
+            from app.repositories.kb_repository import KBRepository
+
+            kb_repo = KBRepository(self.message_repo.session)
+            kbs = await kb_repo.get_kbs_by_ids(knowledge_base_ids)
+
+            kb_metadata = [
+                {
+                    "id": kb.id,
+                    "name": kb.name,
+                    "description": kb.description,
+                }
+                for kb in kbs
+            ]
+
+            additional_kwargs["referenced_kbs"] = kb_metadata
+
         message = await self.message_repo.add_message(
             session_id=session_id,
             role=role,
             content=content,
             parent_id=parent_id,
             meta_data=meta_data or {},
+            additional_kwargs=additional_kwargs,
         )
         if not message:
             raise HTTPException(status_code=500, detail="Failed to add message")
         if files:
             file_ids = [file["id"] for file in files]
             await self.file_repo.update_files(file_ids, {"message_id": message.id})
-
-        # 由定时器清理旧文件
-        # await self.file_repo.delete_not_related_files(session_id)
 
         if replace_message_id:
             await self.delete_message(replace_message_id)

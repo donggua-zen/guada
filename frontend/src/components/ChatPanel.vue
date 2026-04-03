@@ -77,10 +77,10 @@
       <div class="w-full flex items-center max-w-[960px]">
         <ChatInput v-model:value="inputMessage.content" v-model:thinking-enabled="thinkingEnabled" :config="{
           modelId: currentModelId,
-          maxMemoryLength: currentSession?.settings?.max_memory_length || null
+          maxMemoryLength: currentSession?.settings?.max_memory_length || null,
+          knowledgeBaseIds: editMode?.message?.knowledgeBaseIds || currentSession?.settings?.referenced_kbs || []
         }" :files="inputMessage.files" :streaming="isStreaming" @config-change="handleConfigChange"
-          @send="handleSendMessage" @abort="abortResponse" @toggle-thinking="toggleDeepThinking"
-          @tokens-statistic="handleTokensStatistic" />
+          @send="handleSendMessage" @abort="abortResponse" @toggle-thinking="toggleDeepThinking" />
       </div>
       <!-- <div class="ai-disclaimer text-xs text-gray-400 text-center mt-2">内容由 AI 生成，仅供参考</div> -->
 
@@ -99,7 +99,7 @@ import { useSessionStore } from "../stores/session";
 import { useAuthStore } from "../stores/auth"
 import { pairMessages, getCurrentTurns, allowReSendMessage } from "@/utils/messageUtils"
 import { useStreamResponse } from "@/composables/useStreamResponse"
-import type { Session } from '@/types/session';
+import type { InputMessageState, Session } from '@/types/session';
 
 // 组件导入
 import MessageItem from "./MessageItem.vue";
@@ -138,7 +138,7 @@ const placeholder = ref("auto");
 const showScrollToBottomBtn = ref(false);
 
 // 编辑模式状态（简化）
-const editMode = ref<{ message: any; inputMessage: { content: string; files: any[]; isWaiting?: boolean } } | null>(null); // null 表示非编辑模式，{ message, inputMessage } 表示编辑模式
+const editMode = ref<{ message: any; inputMessage: typeof inputMessage | null } | null>(null); // null 表示非编辑模式，{ message, inputMessage } 表示编辑模式
 
 // Props & Emits - 类型化
 const props = defineProps<{
@@ -162,10 +162,7 @@ const currentSession = computed({
 
 const userAvater = computed(() => authStore.user?.avatar_url);
 
-const currentModelName = computed(() => {
-  if (!currentSession.value?.model) return "请选择对话模型";
-  return currentSession.value.model.model_name.split("/").pop() || "unknown";
-});
+
 
 const isStreaming = computed(() => {
   const sessionId = currentSessionId.value;
@@ -178,9 +175,9 @@ const shouldButtonBreathe = ref(false)
 const inputMessage = computed({
   get: () => {
     const sessionId = currentSessionId.value;
-    return sessionId ? sessionStore.getInputMessage(sessionId) || { content: "", files: [], isWaiting: false } : { content: "", files: [], isWaiting: false };
+    return sessionId ? sessionStore.getInputMessage(sessionId) : { content: "", files: [], knowledgeBaseIds: [], isWaiting: false };
   },
-  set: (value: { content: string; files: any[]; isWaiting?: boolean }) => {
+  set: (value: InputMessageState) => {
     const sessionId = currentSessionId.value;
     if (sessionId) {
       sessionStore.setInputMessage(sessionId, value);
@@ -248,6 +245,14 @@ const handleConfigChange = (config: any) => {
     currentSession.value.model_id = config.modelId;
   if (typeof config.maxMemoryLength !== 'undefined')
     currentSession.value.settings.max_memory_length = config.maxMemoryLength;
+  // 🔥 新增：保存知识库选择到会话设置
+  if (typeof config.knowledgeBaseIds !== 'undefined') {
+    if (editMode.value) {
+      editMode.value.message.knowledgeBaseIds = config.knowledgeBaseIds;
+    } else {
+      currentSession.value.settings.referenced_kbs = config.knowledgeBaseIds;
+    }
+  }
   emit("save-settings");
 };
 
@@ -820,9 +825,10 @@ async function sendNewMessage(
   sessionId: string,
   text: string,
   files: any[],
-  replaceMessageId: string | null = null
+  replaceMessageId: string | null = null,
+  knowledgeBaseIds?: string[]
 ) {
-  // 过滤出含有file.file的有效文件
+  // 过滤出含有 file.file 的有效文件
   const filesWithContent = files.filter((file) => file.file);
 
   // 批量上传文件
@@ -853,7 +859,7 @@ async function sendNewMessage(
     }
   });
 
-  const response = await apiService.createMessage(sessionId, text, updatedFiles, replaceMessageId);
+  const response = await apiService.createMessage(sessionId, text, updatedFiles, replaceMessageId, knowledgeBaseIds);
   const message = reactive({ ...response, files: updatedFiles });
   if (replaceMessageId) {
     sessionStore.deleteMessage(sessionId, replaceMessageId);
@@ -877,15 +883,17 @@ async function sendNewMessage(
 /**
  * 处理发送消息
  */
-async function handleSendMessage() {
-  const data = inputMessage.value;
+async function handleSendMessage(payload?: InputMessageState) {
+  const data = payload || inputMessage.value;
+  if (!data) return;
   if ((!data.content?.trim() && !data.files.length) || isStreaming.value) return;
+  console.log('[handleSendMessage]', { data });
 
   try {
-    const { content, files } = data;
+    const { content, files, knowledgeBaseIds } = data;
     // 如果是编辑模式，使用重新发送逻辑
     if (editMode.value && editMode.value.message) {
-      await sendEditMessage(content, files);
+      await sendEditMessage(content, files, knowledgeBaseIds);
       return;
     }
     // 否则发送新消息
@@ -893,8 +901,8 @@ async function handleSendMessage() {
       notify.error("发送失败", "当前没有活动的会话");
       return;
     }
-    const message = await sendNewMessage(currentSession.value.id, content, files);
-    inputMessage.value = { content: "", files: [], isWaiting: false };
+    const message = await sendNewMessage(currentSession.value.id, content, files, null, knowledgeBaseIds);
+    inputMessage.value = { content: "", files: [], knowledgeBaseIds: [], isWaiting: false };
     if (currentSessionId.value) {
       handleStreamResponse(currentSessionId.value, message.id);
     }
@@ -908,13 +916,13 @@ async function handleSendMessage() {
  */
 function exitEditMode() {
   editMode.value = null;
-  inputMessage.value = { content: "", files: [], isWaiting: false };
+  inputMessage.value = { content: "", files: [], knowledgeBaseIds: [], isWaiting: false };
 }
 
 /**
  * 发送编辑后的消息
  */
-async function sendEditMessage(text: string, files: any[]) {
+async function sendEditMessage(text: string, files: any[], knowledgeBaseIds?: string[]) {
   if (!editMode.value || !currentSession.value) return;
 
   try {
@@ -922,7 +930,8 @@ async function sendEditMessage(text: string, files: any[]) {
       currentSession.value.id,
       text,
       files,
-      editMode.value.message.id
+      editMode.value.message.id,
+      knowledgeBaseIds
     );
 
     // 退出编辑模式
@@ -941,18 +950,26 @@ async function sendEditMessage(text: string, files: any[]) {
  * 进入编辑模式以重新生成消息
  */
 function generateResponse(message: any) {
+  message.knowledgeBaseIds = []
+  console.log('[generateResponse]', { message });
+  for (let i = 0; i < message.contents[0].additional_kwargs?.referenced_kbs?.length; i++) {
+    message.knowledgeBaseIds.push(message.contents[0].additional_kwargs?.referenced_kbs[i].id)
+  }
+  const inputMsg = {
+    content: message.contents[0].content,
+    files: message.files || [],
+    knowledgeBaseIds: [],
+    isWaiting: false
+  }
+
   // 进入编辑模式
   editMode.value = {
     message: message,
-    inputMessage: {
-      content: message.contents[0].content,
-      files: message.files || [],
-      isWaiting: false
-    }
+    inputMessage: inputMsg
   }
 
   // 将消息内容设置到输入框
-  inputMessage.value = editMode.value.inputMessage
+  inputMessage.value = inputMsg
 
   // 滚动到底部以便用户看到输入框
   nextTick(() => {

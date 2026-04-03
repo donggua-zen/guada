@@ -44,7 +44,7 @@ class _VectorMemory:
         # )
 
         # 初始化 Chroma 客户端（新 API）
-        # ✅ 使用统一配置，避免与 vector_service.py 冲突
+        # 使用统一配置，避免与 vector_service.py 冲突
         self.chroma_client = chromadb.PersistentClient(
             path=persist_directory,
             settings=chromadb.config.Settings(

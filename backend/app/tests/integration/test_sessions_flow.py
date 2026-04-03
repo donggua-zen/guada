@@ -52,7 +52,7 @@ async def test_session_creation_when_title_provided_should_use_custom_title(
     session_data = {
         "character_id": character.id,
         "model_id": model_id,
-        "title": "自定义会话标题"  # ✅ 提供自定义标题
+        "title": "自定义会话标题"  # 提供自定义标题
     }
     
     response = await client.post("/api/v1/sessions", json=session_data)
@@ -155,7 +155,7 @@ async def test_session_creation_with_settings_should_merge_max_memory_length(
         "character_id": character.id,
         "model_id": model_id,
         "settings": {
-            "max_memory_length": 20  # ✅ 覆盖角色的 10
+            "max_memory_length": 20  # 覆盖角色的 10
         }
     }
     
@@ -259,7 +259,7 @@ async def test_session_lifecycle_flow(
     
     # 3. Update: 更新会话（注意：SessionUpdate schema 只允许更新 model_id 和 settings）
     update_data = {
-        "model_id": model_id  # ✅ 只能更新这些字段
+        "model_id": model_id  # 只能更新这些字段
     }
     
     update_response = await client.put(f"/api/v1/sessions/{session_id}", json=update_data)

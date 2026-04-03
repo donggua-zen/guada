@@ -35,7 +35,7 @@ def main():
                 message=args.message,
                 autogenerate=autogenerate
             )
-        print(f"✅ Successfully executed: {args.command}")
+        print(f"Successfully executed: {args.command}")
     except Exception as e:
         print(f"❌ Migration failed: {e}")
         sys.exit(1)

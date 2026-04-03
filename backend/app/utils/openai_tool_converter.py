@@ -201,7 +201,7 @@ def convert_to_openai_tool(
         for param_name, param in sig.parameters.items():
             param_type = param.annotation
             
-            # ✅ 简化规则：检查是否是 Pydantic 模型类型
+            # 简化规则：检查是否是 Pydantic 模型类型
             if isinstance(param_type, type) and issubclass(param_type, BaseModel):
                 # Pydantic 模型参数：展开所有字段到 parameters
                 model_schema = param_type.model_json_schema(schema_generator=CleanGenerateJsonSchemaClass)
@@ -214,7 +214,7 @@ def convert_to_openai_tool(
                 # 添加必填字段
                 openai_schema["required"].extend(model_schema.get("required", []))
                 
-            # ✅ 简化规则：其他所有参数都视为注入参数
+            # 简化规则：其他所有参数都视为注入参数
             else:
                 injected_params.add(param_name)
                 logger.debug(f"Detected injected parameter '{param_name}' for function {name}")
@@ -280,7 +280,7 @@ def build_func_arguments(
     for param_name, param in sig.parameters.items():
         param_type = param.annotation
         
-        # ✅ Pydantic 模型参数：从 arguments 构建模型实例
+        # Pydantic 模型参数：从 arguments 构建模型实例
         if isinstance(param_type, type) and issubclass(param_type, BaseModel):
             model_fields = {}
             model_schema = param_type.model_json_schema()
@@ -293,7 +293,7 @@ def build_func_arguments(
             model_instance = param_type(**model_fields)
             args.append(model_instance)
             
-        # ✅ 普通参数：从 inject_context 注入
+        # 普通参数：从 inject_context 注入
         else:
             # 这是注入参数
             if inject_context and param_name in inject_context:

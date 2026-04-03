@@ -23,6 +23,7 @@ from sqlalchemy import select
 from app.database import get_db_manager
 from app.models.message import Message
 from app.models.message_content import MessageContent
+from app.models.session import Session
 from app.repositories.message_repository import MessageRepository
 from app.repositories.model_repository import ModelRepository
 from app.repositories.session_repository import SessionRepository
@@ -70,7 +71,7 @@ class AgentService:
         memory_manager_service: MemoryManagerService,
         setting_service: SettingsManager,
         mcp_tool_manager: MCPToolManager,
-        tool_orchestrator: ToolOrchestrator,  # ✅ 新增：工具编排器
+        tool_orchestrator: ToolOrchestrator,  # 新增：工具编排器
     ):
         """初始化代理服务
 
@@ -89,10 +90,10 @@ class AgentService:
         self.memory_manager_service = memory_manager_service
         self.setting_service = setting_service
         self.mcp_tool_manager = mcp_tool_manager
-        self.tool_orchestrator = tool_orchestrator  # ✅ 保存引用
+        self.tool_orchestrator = tool_orchestrator  # 保存引用
 
     def _merge_settings(
-        self, session: Message
+        self, session: Session
     ) -> tuple[Dict[str, Any], Dict[str, Any], Dict[str, Any]]:
         """统一处理会话和角色设置的合并逻辑
 
@@ -108,8 +109,7 @@ class AgentService:
         session_settings = session.settings or {}
         character_settings: Dict[str, Any] = {}
 
-        if hasattr(session, "character") and session.character:
-            character_settings = session.character.settings or {}
+        character_settings = session.character.settings or {}
 
         # 合并策略：会话设置优先，未设置的字段从角色继承
         merged_settings = {**character_settings, **session_settings}
@@ -119,7 +119,7 @@ class AgentService:
     async def _build_system_prompt(
         self,
         merged_settings: Dict[str, Any],
-        session_id: str,
+        context: ToolExecutionContext,
     ) -> str:
         """构建完整的系统提示词（包含工具注入）
 
@@ -137,10 +137,9 @@ class AgentService:
         tool_prompts = []
 
         # 从 ToolOrchestrator 获取所有 Provider 的提示词
-        if hasattr(self.tool_orchestrator, "get_all_tool_prompts"):
-            prompts = await self.tool_orchestrator.get_all_tool_prompts(session_id)
-            if prompts:
-                tool_prompts.append(prompts)
+        prompts = await self.tool_orchestrator.get_all_tool_prompts(context=context)
+        if prompts:
+            tool_prompts.append(prompts)
 
         # 3. 合并提示词
         if tool_prompts:
@@ -152,7 +151,7 @@ class AgentService:
     async def _handle_all_tool_calls(
         self,
         tool_calls: List[Dict[str, Any]],
-        context: ToolExecutionContext,  # ✅ 新增参数
+        context: ToolExecutionContext,  # 新增参数
     ) -> List[Dict[str, Any]]:
         """处理所有工具调用（重构版 - 使用 ToolOrchestrator）
 
@@ -167,7 +166,7 @@ class AgentService:
 
         requests = []
         for tc in tool_calls:
-            # ✅ 确保 arguments 是字典类型（兼容字符串和字典）
+            # 确保 arguments 是字典类型（兼容字符串和字典）
             arguments = tc.get("arguments", {})
             if isinstance(arguments, str):
                 try:
@@ -232,17 +231,22 @@ class AgentService:
         await self.session_repo.session.commit()
         chat_turns: List[Dict[str, Any]] = []
 
-        # ✅ 修复：创建专用的思考时间信息对象，避免依赖 message_content 的临时属性
+        # 修复：创建专用的思考时间信息对象，避免依赖 message_content 的临时属性
         # 注意：只需要保存当前轮次的思考时间信息
         current_turn_thinking_info: Optional[ThinkingTimeInfo] = None
 
         try:
-            # ✅ 重构：使用统一的设置合并方法
+            # 重构：使用统一的设置合并方法
             _, _, merged_settings = self._merge_settings(session)
 
             # 获取对话消息
-            conversation_messages = await self._get_conversation_messages(
-                session, current_message_id, merged_settings
+            conversation_messages = (
+                await self.memory_manager_service.get_conversation_messages(
+                    session_id=session.id,
+                    user_message_id=current_message_id,
+                    max_messages=merged_settings.get("max_memory_length", 9999) or 9999,
+                    skip_tool_calls=merged_settings.get("skip_tool_calls", False),
+                )
             )
 
             # 创建助手消息
@@ -270,7 +274,7 @@ class AgentService:
             # 获取模型参数
             model_params = self._extract_model_params(session, model, merged_settings)
 
-            # ✅ 重构：使用统一的设置合并方法提取工具配置
+            # 重构：使用统一的设置合并方法提取工具配置
             _, character_settings, _ = self._merge_settings(session)
 
             # 从角色设置中提取 MCP 配置和工具配置
@@ -284,16 +288,43 @@ class AgentService:
             if enabled_tools:
                 logger.info(f"Character has {len(enabled_tools)} enabled local tools")
 
-            # ✅ 构建工具执行上下文（与 execute_batch 使用相同的上下文以复用缓存）
-            tool_context = ToolExecutionContext(
-                session_id=session.id,
-                mcp=ProviderConfig(enabled_tools=enabled_mcp_servers),
-                local=ProviderConfig(enabled_tools=enabled_tools),
-                memory=ProviderConfig(enabled_tools=True),
+            # 新增：检查当前用户消息是否有知识库引用
+            has_kb_reference = (
+                "_metadata" in conversation_messages[-1]
+                and "referenced_kbs" in conversation_messages[-1]["_metadata"]
             )
 
+            # 构建工具执行上下文（与 execute_batch 使用相同的上下文以复用缓存）
+            tool_context = ToolExecutionContext(
+                inject_params={"session_id": session.id, "user_id": session.user_id},
+                provider_configs={
+                    "mcp": ProviderConfig(enabled_tools=enabled_mcp_servers),
+                    "local": ProviderConfig(enabled_tools=enabled_tools),
+                    "memory": ProviderConfig(enabled_tools=True),
+                    # 如果有知识库引用，启用 knowledge_base provider（不限制具体 ID，让 AI 自行选择）
+                    "knowledge_base": ProviderConfig(
+                        enabled_tools=True if has_kb_reference else False,
+                    ),
+                },
+            )
+
+            # 追加系统提示词
+            # 注意：系统提示词必须位于消息列表顶部（最前面）
+            system_prompt = await self._build_system_prompt(
+                merged_settings, tool_context
+            )
+            if system_prompt:
+                # 新增：替换系统提示词中的变量
+                system_prompt = self._replace_system_prompt_variables(system_prompt)
+                use_user_prompt = merged_settings.get("use_user_prompt", False)
+                system_message = {
+                    "role": "user" if use_user_prompt else "system",
+                    "content": system_prompt,
+                }
+                # 修复：插入到列表开头，而不是追加到末尾
+            conversation_messages.insert(0, system_message)
             # 使用 ToolOrchestrator 获取统一的工具 schema（自动合并本地和 MCP 工具）
-            # ⭐ 关键：直接返回 OpenAI API 要求的数组格式
+            # 关键：直接返回 OpenAI API 要求的数组格式
             tools = await self.tool_orchestrator.get_all_tools(tool_context)
             logger.info(f"Using {len(tools)} tools (including MCP tools)")
 
@@ -317,7 +348,7 @@ class AgentService:
                 assistant_message.contents.append(messgae_content)
                 await self.message_repo.session.commit()
 
-                # ✅ 修复：为当前轮次创建思考时间信息对象
+                # 修复：为当前轮次创建思考时间信息对象
                 current_turn_thinking_info = ThinkingTimeInfo()
 
                 # 发送创建消息事件
@@ -344,7 +375,7 @@ class AgentService:
                         top_p=model_params["top_p"],
                         frequency_penalty=model_params["frequency_penalty"],
                         stream=True,
-                        tools=tools,  # ✅ 直接使用数组，无需转换
+                        tools=tools,  # 直接使用数组，无需转换
                         thinking=model_params["thinking"],
                     )
 
@@ -363,7 +394,7 @@ class AgentService:
                             if chunk.finish_reason == "tool_calls":
                                 tool_call_response = await self._handle_all_tool_calls(
                                     complete_chunk.get("tool_calls"),
-                                    context=tool_context,  # ✅ 传递工具执行上下文
+                                    context=tool_context,  # 传递工具执行上下文
                                 )
                                 chat_turns.extend(tool_call_response)
                                 complete_chunk["tool_calls_response"] = [
@@ -396,7 +427,7 @@ class AgentService:
                             }
                             break
                         elif chunk.reasoning_content is not None:
-                            # ✅ 修复：使用 current_turn_thinking_info 记录思考开始时间
+                            # 修复：使用 current_turn_thinking_info 记录思考开始时间
                             if (
                                 current_turn_thinking_info
                                 and not current_turn_thinking_info.thinking_started_at
@@ -415,7 +446,7 @@ class AgentService:
                             }
 
                         elif chunk.content is not None:
-                            # ✅ 优化：使用统一的辅助方法记录思考结束时间
+                            # 优化：使用统一的辅助方法记录思考结束时间
                             self._record_thinking_finished(
                                 current_turn_thinking_info, "first content chunk"
                             )
@@ -430,7 +461,7 @@ class AgentService:
                             }
 
                         elif "tool_calls" in chunk.additional_kwargs:
-                            # ✅ 优化：使用统一的辅助方法记录思考结束时间
+                            # 优化：使用统一的辅助方法记录思考结束时间
                             self._record_thinking_finished(
                                 current_turn_thinking_info, "first tool_calls chunk"
                             )
@@ -497,7 +528,7 @@ class AgentService:
                     logger.debug("User stopped generation")
                     complete_chunk["finish_reason"] = "user_stop"
 
-                    # ✅ 优化：使用统一的辅助方法记录思考结束时间
+                    # 优化：使用统一的辅助方法记录思考结束时间
                     self._record_thinking_finished(
                         current_turn_thinking_info, "user stop"
                     )
@@ -523,7 +554,7 @@ class AgentService:
                                     messgae_content,
                                     complete_chunk,
                                     model,
-                                    current_turn_thinking_info,  # ✅ 传入思考时间信息
+                                    current_turn_thinking_info,  # 传入思考时间信息
                                     safesave=True,
                                 )
                             ),
@@ -534,7 +565,7 @@ class AgentService:
                             messgae_content,
                             complete_chunk,
                             model,
-                            current_turn_thinking_info,  # ✅ 传入思考时间信息
+                            current_turn_thinking_info,  # 传入思考时间信息
                             safesave=False,
                         )
 
@@ -543,7 +574,7 @@ class AgentService:
 
     # 辅助方法
 
-    async def _validate_session(self, session_id: str) -> Message:
+    async def _validate_session(self, session_id: str) -> Session:
         """验证会话是否存在
 
         Args:
@@ -560,54 +591,6 @@ class AgentService:
             raise HTTPException(status_code=404, detail="Invalid session id")
         return session
 
-    async def _get_conversation_messages(
-        self,
-        session: Message,
-        current_message_id: str,
-        merged_settings: Optional[Dict[str, Any]] = None,
-    ) -> List[Dict[str, Any]]:
-        """获取对话消息
-
-        根据会话绑定的角色配置和会话自定义设置构建提示词
-
-        Args:
-            session: 会话对象
-            current_message_id: 当前消息 ID
-            merged_settings: 合并后的设置字典（可选，避免重复计算）
-
-        Returns:
-            List[Dict[str, Any]]: 对话消息列表
-        """
-        # ✅ 重构：使用传入的 merged_settings 或重新计算
-        if merged_settings is None:
-            _, _, merged_settings = self._merge_settings(session)
-
-        # ✅ 重构：不再传入 prompt_settings
-        conversation_messages = (
-            await self.memory_manager_service.get_conversation_messages(
-                session_id=session.id,
-                user_message_id=current_message_id,
-                max_messages=merged_settings.get("max_memory_length", 9999) or 9999,
-                skip_tool_calls=merged_settings.get("skip_tool_calls", False),
-            )
-        )
-
-        # ✅ 重构：在 AgentService 中直接构造并添加系统提示词
-        # ⚠️ 注意：系统提示词必须位于消息列表顶部（最前面）
-        system_prompt = await self._build_system_prompt(merged_settings, session.id)
-        if system_prompt:
-            # ✅ 新增：替换系统提示词中的变量
-            system_prompt = self._replace_system_prompt_variables(system_prompt)
-            use_user_prompt = merged_settings.get("use_user_prompt", False)
-            system_message = {
-                "role": "user" if use_user_prompt else "system",
-                "content": system_prompt,
-            }
-            # ✅ 修复：插入到列表开头，而不是追加到末尾
-            conversation_messages.insert(0, system_message)
-        logger.debug(f"Conversation messages: {conversation_messages}")
-        return conversation_messages
-
     def _replace_system_prompt_variables(self, system_prompt: str) -> str:
         """替换系统提示词中的变量
 
@@ -620,7 +603,7 @@ class AgentService:
         Returns:
             str: 替换后的系统提示词
         """
-        # ✅ 当前仅支持 {time} 变量，但保留扩展能力
+        # 当前仅支持 {time} 变量，但保留扩展能力
         if "{time}" in system_prompt:
             current_time = datetime.datetime.now(datetime.timezone.utc).strftime(
                 "%Y-%m-%d %H:%M:%S UTC"
@@ -656,7 +639,7 @@ class AgentService:
             )
             logger.info(f"Thinking finished at {reason}")
 
-    async def _validate_model_config(self, session: Message):
+    async def _validate_model_config(self, session: Session):
         """验证模型配置
 
         Args:
@@ -692,12 +675,8 @@ class AgentService:
         Returns:
             Dict[str, Any]: 模型参数字典
         """
-        # ✅ 重构：使用传入的 merged_settings 或重新计算
-        if merged_settings is None:
-            _, _, merged_settings = self._merge_settings(session)
 
         return {
-            "web_search_enabled": merged_settings.get("web_search_enabled"),
             "thinking": (
                 merged_settings.get("thinking_enabled")
                 if model and "thinking" in (model.features or [])
@@ -708,20 +687,6 @@ class AgentService:
             "frequency_penalty": merged_settings.get("model_frequency_penalty"),
             "use_user_prompt": merged_settings.get("use_user_prompt", False),
         }
-
-    def _create_error_response(self, error_msg: str) -> Dict[str, Any]:
-        """创建错误响应
-
-        Args:
-            error_msg: 错误消息
-
-        Returns:
-            Dict[str, Any]: 错误响应字典
-        """
-        chunk = LLMServiceChunk()
-        chunk.finish_reason = "error"
-        chunk.error = "An error occurred during processing"
-        return self.chunk_to_response(chunk)
 
     async def _save_generation_resources(
         self,
@@ -747,7 +712,7 @@ class AgentService:
                 logger.error("Message content not found")
                 return
 
-            # ✅ 修复：从 current_turn_thinking_info 计算思考时长
+            # 修复：从 current_turn_thinking_info 计算思考时长
             thinking_duration_ms: Optional[int] = None
             if current_turn_thinking_info:
                 if (
@@ -789,7 +754,7 @@ class AgentService:
             for key in additional_kwargs:
                 if key in complete_chunk:
                     message_content.additional_kwargs[key] = complete_chunk[key]
-            # ✅ 重构：移除冗余的 tool_calls 字段，已保存在 additional_kwargs 中
+            # 重构：移除冗余的 tool_calls 字段，已保存在 additional_kwargs 中
             # message_content.tool_calls = complete_chunk.get("tool_calls")  # ❌ 已删除
             message_content.finish_reason = complete_chunk.get("finish_reason")
 
@@ -855,20 +820,3 @@ class AgentService:
                     logger.debug("Database session closed")
 
         logger.debug("Generation cleanup completed")
-
-    def _create_error_response(self, error_msg: str) -> Dict[str, Any]:
-        """创建错误响应
-
-        ⚠️ **DEPRECATED**: 此方法已废弃，将在未来版本中移除。
-        原因：逻辑过于简单，无需单独封装方法。
-
-        Args:
-            error_msg: 错误消息
-
-        Returns:
-            Dict[str, Any]: 错误响应字典
-        """
-        chunk = LLMServiceChunk()
-        chunk.finish_reason = "error"
-        chunk.error = "An error occurred during processing"
-        return self.chunk_to_response(chunk)
