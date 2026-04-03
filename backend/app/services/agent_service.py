@@ -29,7 +29,6 @@ from app.repositories.model_repository import ModelRepository
 from app.repositories.session_repository import SessionRepository
 from app.services.chat.memory_manager_service import MemoryManagerService
 from app.services.domain.llm_service import LLMService, LLMServiceChunk
-from app.services.mcp.tool_manager import MCPToolManager
 from app.services.settings_manager import SettingsManager
 from app.services.tools.tool_orchestrator import (
     ToolOrchestrator,
@@ -70,7 +69,6 @@ class AgentService:
         message_repo: MessageRepository,
         memory_manager_service: MemoryManagerService,
         setting_service: SettingsManager,
-        mcp_tool_manager: MCPToolManager,
         tool_orchestrator: ToolOrchestrator,  # 新增：工具编排器
     ):
         """初始化代理服务
@@ -81,7 +79,6 @@ class AgentService:
             message_repo: 消息仓库
             memory_manager_service: 记忆管理服务
             setting_service: 设置管理服务
-            mcp_tool_manager: MCP 工具管理器
             tool_orchestrator: 工具编排器（负责统一调度所有工具调用）
         """
         self.session_repo = session_repo
@@ -89,7 +86,6 @@ class AgentService:
         self.message_repo = message_repo
         self.memory_manager_service = memory_manager_service
         self.setting_service = setting_service
-        self.mcp_tool_manager = mcp_tool_manager
         self.tool_orchestrator = tool_orchestrator  # 保存引用
 
     def _merge_settings(

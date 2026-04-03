@@ -43,10 +43,9 @@
         <ScrollContainer ref="scrollContainerRef" :auto-scroll="true" @scroll="handleScroll"
           @is-at-bottom-change="handleIsAtBottomChange">
           <div class="flex flex-col items-center px-[20px] max-w-[1000px] mx-auto pb-35">
-            <div class="w-full" v-for="(pair, index) in messagePairs" :key="pair[0].id"
-              :style="{ minHeight: index < messagePairs.length - 1 ? '0' : placeholder }">
-              <MessageItem v-for="message in pair" :ref="(el) => setItemRef(el, message.id)" :key="message.id"
-                :message="message" :avatar="message.role == 'user' ? userAvater : currentSession?.avatar_url"
+            <div class="w-full" v-for="(pair, index) in messagePairs" :key="pair[0].id">
+              <MessageItem v-for="message in pair" :key="message.id" :message="message"
+                :avatar="message.role == 'user' ? userAvater : currentSession?.avatar_url"
                 :is-last="message.index == activeMessages.length - 1"
                 :allow-generate="!isStreaming && allowReSendMessage(message, message.index ?? 0, activeMessages)"
                 @delete="deleteMessage" @edit="editMessage" @copy="copyMessage" @generate="generateResponse"
@@ -125,20 +124,16 @@ const streamHandler = useStreamResponse(sessionStore, apiService)
 
 // 响应式数据 - 类型化
 const scrollContainerRef = ref<any>(null);
-const messagesContainerRef = ref<HTMLElement | null>(null);
 const currentSessionId = ref<string | null>(null);
 const showTokenModal = ref(false);
-// 使用 shallowRef 减少响应式开销，存储消息项组件实例
-const itemRefs = shallowRef<Record<string, ComponentPublicInstance | null>>({});
 const isLoading = ref(false)
 const autoScrollToBottom = ref(false);
 const autoScrollToBottomSet = ref(-1);
-const placeholder = ref("auto");
 // 回到底部按钮相关状态
 const showScrollToBottomBtn = ref(false);
 
 // 编辑模式状态（简化）
-const editMode = ref<{ message: any; inputMessage: typeof inputMessage | null } | null>(null); // null 表示非编辑模式，{ message, inputMessage } 表示编辑模式
+const editMode = ref<{ message: any; inputMessage: InputMessageState } | null>(null); // null 表示非编辑模式，{ message, inputMessage } 表示编辑模式
 
 // Props & Emits - 类型化
 const props = defineProps<{
@@ -408,7 +403,7 @@ watch(() => isStreaming.value, (newVal) => {
 
 // 生命周期
 onBeforeUpdate(() => {
-  itemRefs.value = {};
+  // itemRefs.value = {};
 });
 
 onMounted(() => {
@@ -539,12 +534,6 @@ async function importChat() {
   input.click();
 }
 
-/**
- * 设置消息项引用
- */
-function setItemRef(el: any, messageId: string) {
-  if (el) itemRefs.value[messageId] = el;
-}
 
 /**
  * 处理会话切换
@@ -552,7 +541,6 @@ function setItemRef(el: any, messageId: string) {
 async function handleSessionChange(newSessionId: string | null, oldSessionId: string | null) {
   if (newSessionId === oldSessionId) return;
   isLoading.value = true;
-  updatePlaceholder(null);
   hasGeneratedTitle.value = false; // 重置标题生成标记
   currentSessionId.value = newSessionId;
   if (newSessionId) {
@@ -679,7 +667,6 @@ async function deleteMessage(message: any) {
       if (currentSessionId.value) {
         sessionStore.deleteMessage(currentSessionId.value, message.id);
       }
-      delete itemRefs.value[message.id];
       toast.success("消息已删除");
     }
   } catch (error) {
@@ -733,90 +720,6 @@ async function copyMessage(message: any) {
   }
 }
 
-/**
- * 更新占位符元素的最小高度
- */
-function updatePlaceholder(userMessageId: string | null) {
-  // 常量定义：消息高度阈值比例（超过 1/3 视口时触发调整）
-  const MESSAGE_HEIGHT_THRESHOLD_RATIO = 1 / 3;
-  // 最大占位符倍数（不超过容器高度的 3 倍）
-  const MAX_PLACEHOLDER_MULTIPLIER = 3;
-
-  try {
-    // 空值处理：重置为自动高度
-    if (!userMessageId) {
-      placeholder.value = "auto";
-      return;
-    }
-
-    // 使用 requestAnimationFrame 批量 DOM 操作，避免布局抖动
-    requestAnimationFrame(() => {
-      const userMessageRef = itemRefs.value[userMessageId];
-
-      // 改进错误处理：元素不存在时降级为自动高度
-      if (!userMessageRef) {
-        console.warn(`Component ref for userMessageId ${userMessageId} not found`, userMessageRef);
-        placeholder.value = "auto";
-        return;
-      }
-
-      // 使用组件暴露的 el 属性（而不是 $el，因为 $el 可能是 Text Node）
-      const userMessageElement = (userMessageRef as any).el;
-
-      // 详细的调试日志
-      console.log('[updatePlaceholder]', {
-        messageId: userMessageId,
-        hasRef: !!userMessageRef,
-        hasEl: !!userMessageElement,
-        elType: userMessageElement?.constructor?.name,
-        nodeType: userMessageElement?.nodeType,
-        nodeName: userMessageElement?.nodeName,
-        element: userMessageElement
-      });
-
-      if (!userMessageElement) {
-        console.warn(`Element (el) for userMessageId ${userMessageId} is null/undefined`);
-        placeholder.value = "auto";
-        return;
-      }
-
-      // 确保是 Element 类型（不是 Text Node、Comment Node 等）
-      if (!(userMessageElement instanceof Element)) {
-        console.warn(`el is not an Element type for userMessageId ${userMessageId}, got:`, userMessageElement?.nodeType, userMessageElement?.nodeName);
-        placeholder.value = "auto";
-        return;
-      }
-
-      // 批量读取 DOM 属性（只触发一次重排）
-      if (!messagesContainerRef.value) {
-        console.warn('messagesContainerRef not available');
-        placeholder.value = "auto";
-        return;
-      }
-      const containerRect = messagesContainerRef.value.getBoundingClientRect();
-      const style = window.getComputedStyle(userMessageElement);
-      const userElHeight = parseFloat(style.height)
-        + parseFloat(style.marginTop)
-        + parseFloat(style.marginBottom);
-
-      // 动态计算最小高度
-      let baseMinHeight = containerRect.height - 140;
-
-      if (userElHeight > containerRect.height * MESSAGE_HEIGHT_THRESHOLD_RATIO) {
-        baseMinHeight += (userElHeight - containerRect.height * MESSAGE_HEIGHT_THRESHOLD_RATIO);
-      }
-
-      // 限制最大值，防止布局错乱
-      const maxHeight = containerRect.height * MAX_PLACEHOLDER_MULTIPLIER;
-      placeholder.value = Math.min(baseMinHeight, maxHeight) + "px";
-    });
-
-  } catch (error) {
-    console.error("Error updating placeholder:", error);
-    // 错误时降级为自动高度
-    placeholder.value = "auto";
-  }
-}
 
 /**
  * 发送新消息
@@ -869,9 +772,6 @@ async function sendNewMessage(
     }
   }
   activeMessages.value.push(message);
-  // debouncedUpdatedSession();
-  await nextTick();
-  updatePlaceholder(message.id);
   await nextTick();
   requestAnimationFrame(() => {
     immediateScrollToBottom();
@@ -1000,7 +900,6 @@ function regenerateResponse(message: any) {
     assistantMessage.state = { is_streaming: true };
   }
 
-  updatePlaceholder(message.parent_id);
   nextTick(() => {
     immediateScrollToBottom();
     if (currentSessionId.value) {

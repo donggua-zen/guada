@@ -181,7 +181,6 @@ def get_agent_service(
     message_repo: MessageService = Depends(get_message_repository),
     memory_manager_service: MemoryManagerService = Depends(get_memory_manager_service),
     settings_manager: SettingsManager = Depends(get_settings_service),
-    mcp_tool_manager: MCPToolManager = Depends(create_repo_dependency(MCPToolManager)),
     tool_orchestrator: ToolOrchestrator = Depends(get_tool_orchestrator),  # 新增依赖
 ) -> AgentService:
     """聊天服务依赖"""
@@ -191,7 +190,6 @@ def get_agent_service(
         message_repo=message_repo,
         memory_manager_service=memory_manager_service,
         setting_service=settings_manager,
-        mcp_tool_manager=mcp_tool_manager,
         tool_orchestrator=tool_orchestrator,  # 传入工具编排器
     )
 
