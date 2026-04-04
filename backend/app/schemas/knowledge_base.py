@@ -151,14 +151,24 @@ class KnowledgeSearchRequest(BaseModel):
     query: str = Field(..., min_length=1, max_length=2000, description="查询文本")
     top_k: int = Field(default=5, ge=1, le=20, description="返回结果数量")
     filter_file_id: Optional[str] = Field(None, description="按文件 ID 过滤")
+    
+    # 混合搜索参数
+    use_hybrid_search: bool = Field(default=True, description="是否使用混合搜索")
+    semantic_weight: float = Field(default=0.6, ge=0.0, le=1.0, description="语义权重")
+    keyword_weight: float = Field(default=0.4, ge=0.0, le=1.0, description="关键词权重")
 
 
 class SearchChunkResponse(BaseModel):
     """搜索分块结果"""
     content: str
     metadata: Dict[str, Any]
-    similarity: float
+    similarity: float  # 兼容旧版，纯语义搜索时使用
     file_name: Optional[str] = None
+    
+    # 混合搜索分数字段（可选）
+    semantic_score: Optional[float] = Field(None, description="语义分数")
+    keyword_score: Optional[float] = Field(None, description="关键词分数")
+    final_score: Optional[float] = Field(None, description="综合分数")
 
 
 class KnowledgeSearchResponse(BaseModel):

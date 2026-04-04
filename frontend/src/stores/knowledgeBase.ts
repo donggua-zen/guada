@@ -194,11 +194,14 @@ export const useKnowledgeBaseStore = defineStore('knowledgeBase', () => {
 
     /**
      * 获取知识库文件列表
+     * @param kbId 知识库 ID
+     * @param skip 跳过数量（用于分页）
+     * @param limit 返回数量限制（用于分页）
      */
-    async function fetchFiles(kbId: string) {
+    async function fetchFiles(kbId: string, skip?: number, limit?: number) {
         loading.value = true
         try {
-            const response = await apiService.fetchKBFiles(kbId)
+            const response = await apiService.fetchKBFiles(kbId, skip, limit)
             return response
         } catch (error) {
             console.error('获取文件列表失败:', error)

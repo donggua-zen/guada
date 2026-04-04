@@ -4,7 +4,8 @@
     :style="{ width: sidebarWidth, minWidth: sidebarWidth, maxWidth: sidebarWidth }">
     <!-- 顶部 Logo/标题 -->
     <div class="px-2.5 py-4 flex items-center justify-center">
-      <div class="w-9 h-9 rounded-xl bg-gradient-to-br from-[var(--color-primary)] to-[var(--color-primary-600)] flex items-center justify-center shadow-md">
+      <div
+        class="w-9 h-9 rounded-xl bg-gradient-to-br from-[var(--color-primary)] to-[var(--color-primary-600)] flex items-center justify-center shadow-md">
         <span class="text-white font-semibold text-sm">AI</span>
       </div>
     </div>
@@ -12,11 +13,10 @@
     <!-- 导航菜单 -->
     <div class="flex-1 py-5 px-2 space-y-1">
       <!-- 对话 -->
-      <div @click="handleNavClick('chat')"
-        :class="[
-          'nav-item group',
-          activeTab === 'chat' ? 'nav-item-active' : 'nav-item-inactive'
-        ]">
+      <div @click="handleNavClick('chat')" :class="[
+        'nav-item group',
+        activeTab === 'chat' ? 'nav-item-active' : 'nav-item-inactive'
+      ]">
         <div class="nav-icon">
           <ChatbubbleEllipses v-if="activeTab === 'chat'" class="w-5 h-5" />
           <ChatbubbleEllipsesOutline v-else class="w-5 h-5" />
@@ -25,11 +25,10 @@
       </div>
 
       <!-- 助手 -->
-      <div @click="handleNavClick('characters')"
-        :class="[
-          'nav-item group',
-          activeTab === 'characters' ? 'nav-item-active' : 'nav-item-inactive'
-        ]">
+      <div @click="handleNavClick('characters')" :class="[
+        'nav-item group',
+        activeTab === 'characters' ? 'nav-item-active' : 'nav-item-inactive'
+      ]">
         <div class="nav-icon">
           <AlternateEmailTwotone v-if="activeTab === 'characters'" class="w-5 h-5" />
           <PeopleOutline v-else class="w-5 h-5" />
@@ -38,11 +37,10 @@
       </div>
 
       <!-- 设置 -->
-      <div @click="handleNavClick('settings')"
-        :class="[
-          'nav-item group',
-          activeTab === 'settings' ? 'nav-item-active' : 'nav-item-inactive'
-        ]">
+      <div @click="handleNavClick('settings')" :class="[
+        'nav-item group',
+        activeTab === 'settings' ? 'nav-item-active' : 'nav-item-inactive'
+      ]">
         <div class="nav-icon">
           <SettingsTwotone v-if="activeTab === 'settings'" class="w-5 h-5" />
           <SettingsOutlined v-else class="w-5 h-5" />
@@ -51,11 +49,10 @@
       </div>
 
       <!-- 知识库 -->
-      <div @click="handleNavClick('knowledge-base')"
-        :class="[
-          'nav-item group',
-          currentActiveTab === 'knowledge-base' ? 'nav-item-active' : 'nav-item-inactive'
-        ]">
+      <div @click="handleNavClick('knowledge-base')" :class="[
+        'nav-item group',
+        currentActiveTab === 'knowledge-base' ? 'nav-item-active' : 'nav-item-inactive'
+      ]">
         <div class="nav-icon">
           <MenuBookOutlined v-if="currentActiveTab === 'knowledge-base'" class="w-5 h-5" />
           <MenuBookOutlined v-else class="w-5 h-5" />
@@ -75,7 +72,7 @@
         </div>
         <span class="nav-label">{{ isDark ? '亮色' : '暗色' }}</span>
       </div>
-      
+
       <div class="user-profile">
         <div class="user-avatar">
           <Avatar type="user" :round="true" :src="authStore.user?.avatar_url" />
@@ -86,17 +83,17 @@
   </div>
 </template>
 
-<!-- @ts-ignore - UI 组件尚未完全迁移到 TypeScript -->
 <script setup lang="ts">
 import { computed, watch } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useAuthStore } from '../stores/auth'
-// @ts-ignore - UI 组件类型缺失
 import { Avatar } from './ui'
 import { useTheme } from "../composables/useTheme";
+import { useSessionStore } from '../stores/session'
 
 // 主题
 const { isDark, toggleDark } = useTheme()
+const sessionStore = useSessionStore()
 
 // 图标
 import {
@@ -110,7 +107,6 @@ import {
   SettingsTwotone,
   WbSunnyTwotone,
   NightlightRound,
-  LibraryBooksTwotone,
   MenuBookOutlined
 } from '@vicons/material'
 
@@ -149,7 +145,11 @@ watch(currentActiveTab, (newTab) => {
 // 处理导航点击 - 类型化
 const handleNavClick = (tab: string): void => {
   if (tab === 'chat') {
-    router.replace({ name: 'Chat' })
+    if (sessionStore.activeSessionId) {
+      router.replace({ name: 'Chat', params: { sessionId: sessionStore.activeSessionId } })
+    } else {
+      router.replace({ name: 'Chat' })
+    }
   } else if (tab === 'characters') {
     router.replace({ name: 'Characters' })
   } else if (tab === 'settings') {
