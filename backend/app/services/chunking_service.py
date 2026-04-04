@@ -1,40 +1,41 @@
 """
 智能文本分块服务
 
-基于语义和结构进行文本分块，使用段落感知分块策略：
-- 保持段落完整性
-- 在段落边界处分块
-- 自动处理超大段落
+基于 Token 数量进行文本分块，保持语义连贯性：
+- 使用项目现有的 tokenizer 模块计算 Token 数
+- 优先在句子或段落边界处分块
 - 支持分块重叠（避免信息丢失）
 """
 
 import logging
+import asyncio
 from typing import List, Dict, Optional
-from app.utils.chunking import chunking_text, preprocess_text
+from app.tokenizer.auto_tokenizer import get_tokenizer
+from app.utils.chunking import preprocess_text
 
 logger = logging.getLogger(__name__)
 
 
 class ChunkingService:
-    """智能文本分块服务"""
+    """基于 Token 的智能文本分块服务"""
 
     def __init__(
         self,
-        max_chunk_size: int = 1000,
+        chunk_size: int = 1000,
         overlap_size: int = 100,
-        min_chunk_size: int = 50,
+        model_name: str = "gpt-4o",
     ):
         """
         初始化分块服务
 
         Args:
-            max_chunk_size: 最大分块大小（字符数）
-            overlap_size: 分块重叠大小（字符数）
-            min_chunk_size: 最小分块大小（字符数）
+            chunk_size: 分块大小限制（Token 数）
+            overlap_size: 分块重叠大小（Token 数）
+            model_name: 用于计算 Token 的模型名称
         """
-        self.max_chunk_size = max_chunk_size
+        self.chunk_size = chunk_size
         self.overlap_size = overlap_size
-        self.min_chunk_size = min_chunk_size
+        self.tokenizer = get_tokenizer(model_name)
 
     async def chunk_text(
         self,
@@ -42,15 +43,14 @@ class ChunkingService:
         metadata: Optional[Dict] = None,
     ) -> List[Dict]:
         """
-        对文本进行分块（使用段落感知分块）
+        对文本进行基于 Token 的分块
 
         Args:
             text: 待分块的文本
             metadata: 元数据（会添加到每个分块中）
 
         Returns:
-            List[Dict]: 分块结果，每个分块包含 content, chunk_index, metadata, overlap_length 等字段
-                       overlap_length: 重叠区域的字符长度，0 表示无重叠
+            List[Dict]: 分块结果
         """
         if not text or len(text.strip()) == 0:
             return []
@@ -58,138 +58,116 @@ class ChunkingService:
         # 预处理文本
         text = preprocess_text(text)
 
-        # 使用段落感知分块（返回带重叠长度的分块）
-        chunks_with_overlap = await self._paragraph_based_chunking_with_overlap(text)
+        # 执行分块 (同步逻辑放入线程池)
+        chunks_data = await asyncio.to_thread(self._token_based_chunking, text)
 
-        # 为每个分块添加索引和元数据
         result = []
-        for idx, chunk_data in enumerate(chunks_with_overlap):
+        prev_tokens_list = None
+        
+        for idx, content in enumerate(chunks_data):
+            # 对当前分块内容进行 Token 编码
+            current_tokens_list = self.tokenizer.encode(content)
+            token_count = len(current_tokens_list)
+            
+            overlap_length = 0
+            clean_content = content
+            
+            # 处理重叠逻辑
+            if idx > 0 and self.overlap_size > 0 and prev_tokens_list:
+                # 获取前一个分块的末尾 tokens 作为重叠部分
+                overlap_token_ids = prev_tokens_list[-self.overlap_size:] if len(prev_tokens_list) >= self.overlap_size else prev_tokens_list
+                overlap_text = self.tokenizer.decode(overlap_token_ids)
+                
+                # 检查当前分块是否已经自然包含了这部分重叠（例如因为句子边界导致的自然衔接）
+                if content.startswith(overlap_text):
+                    # 如果自然包含，则 clean_content 不需要再次剥离，但记录重叠长度
+                    overlap_length = len(overlap_token_ids)
+                else:
+                    # 如果不包含，说明我们需要在逻辑上记录重叠，但在物理存储上可能需要 prepend
+                    # 为了简化，这里我们假设 content 是纯净的，重叠仅用于检索时的上下文增强
+                    # 在实际 RAG 中，通常会将 overlap 拼接到 content 前面或后面
+                    # 这里我们选择将重叠部分拼接到 content 前面形成完整的 chunk 用于 embedding
+                    full_embedding_content = overlap_text + content
+                    overlap_length = len(overlap_token_ids)
+                    # 更新 token_count 为包含重叠后的总数
+                    token_count = self.tokenizer.count_tokens(full_embedding_content)
+                    clean_content = content # 保持原始内容用于展示
+                    content = full_embedding_content # 更新 content 为包含重叠的内容用于存储/索引
+
             full_chunk = {
-                "content": chunk_data["content"],
+                "content": content,
+                "clean_content": clean_content,
                 "chunk_index": idx,
                 "metadata": {
-                    **metadata,
-                    "overlap_length": chunk_data["overlap_length"],
+                    **(metadata or {}),
+                    "overlap_length": overlap_length,
+                    "chunk_size": len(clean_content),
+                    "token_count": token_count,
+                    "clean_size": len(clean_content),
+                    "strategy": "token",
                 },
             }
-            # 添加分块特定的元数据
-            full_chunk["metadata"]["chunk_size"] = len(chunk_data["content"])
-            full_chunk["metadata"]["strategy"] = "paragraph"
-            # 计算纯净内容（不含重叠部分）
-            if chunk_data["overlap_length"] > 0:
-                full_chunk["clean_content"] = chunk_data["content"][
-                    chunk_data["overlap_length"] :
-                ]  # 去除重叠部分
-                full_chunk["metadata"]["clean_size"] = len(full_chunk["clean_content"])
-            else:
-                full_chunk["clean_content"] = chunk_data["content"]
-                full_chunk["metadata"]["clean_size"] = len(chunk_data["content"])
-
             result.append(full_chunk)
+            
+            # 更新 prev_tokens_list 供下一次迭代使用
+            # 注意：如果 content 已经被修改为包含重叠，我们需要重新 encode 或者使用原始的 current_tokens_list
+            # 这里为了准确性，我们对最终的 content 重新 encode
+            prev_tokens_list = self.tokenizer.encode(content)
 
-        logger.info(f"文本分块完成：共{len(result)}个分块，策略=paragraph")
+        logger.info(f"文本分块完成：共{len(result)}个分块，策略=token")
         return result
 
-    async def _paragraph_based_chunking_with_overlap(self, text: str) -> List[Dict]:
+    def _token_based_chunking(self, text: str) -> List[str]:
         """
-        基于段落的分块（带重叠区域长度）
-
-        尽可能保持段落完整性，在段落边界处分块
-        为每个分块计算重叠部分的字符长度
-
-        Args:
-            text: 文本内容
-
-        Returns:
-            List[Dict]: 分块列表，每个分块包含 content 和 overlap_length
+        基于 Token 数量和句子边界的智能分块逻辑
+        
+        策略：
+        1. 按句子边界分割文本，保持语义完整性。
+        2. 累加句子到当前分块，直到加入下一个句子会超出 chunk_size。
+        3. 严禁将一个句子强行拆分或合并进已满的分块。
         """
-        # 按段落分割
-        paragraphs = [p.strip() for p in text.split("\n\n") if p.strip()]
+        import re
+        # 使用正则表达式按句子边界分割（支持中英文标点）
+        # (?<=[。！？.!?]) 表示在句号、感叹号、问号之后分割，但保留标点在句子末尾
+        sentences = re.split(r'(?<=[。！？.!?])', text)
+        # 过滤掉空字符串并去除首尾空白
+        sentences = [s.strip() for s in sentences if s.strip()]
+        
+        if not sentences:
+            return [text] if text else []
 
-        if not paragraphs:
-            return []
-
-        # 第一阶段：初步分块（不处理重叠）
-        raw_chunks = []
-        current_chunk = ""
-
-        for para in paragraphs:
-            # 如果当前段落加到当前块会超出限制
-            if len(current_chunk) + len(para) > self.max_chunk_size:
-                # 如果当前块不为空，保存它
-                if current_chunk:
-                    raw_chunks.append(current_chunk)
-
-                # 如果单个段落就超出限制，需要进一步分块
-                if len(para) > self.max_chunk_size:
-                    sub_chunks = self._simple_fixed_chunking(para)
-                    raw_chunks.extend(sub_chunks[:-1])  # 除了最后一个
-                    current_chunk = sub_chunks[-1] if sub_chunks else ""
-                else:
-                    current_chunk = para
-            else:
-                # 添加到当前块
-                current_chunk = current_chunk + "\n\n" + para if current_chunk else para
-
-        # 添加最后一个块
-        if current_chunk:
-            raw_chunks.append(current_chunk)
-
-        # 第二阶段：处理重叠，计算重叠长度
-        if len(raw_chunks) <= 1 or self.overlap_size <= 0:
-            # 无需重叠，所有块的 overlap_length 为 0
-            return [{"content": chunk, "overlap_length": 0} for chunk in raw_chunks]
-
-        # 为每个块计算重叠长度
-        result = []
-        for i, chunk in enumerate(raw_chunks):
-            if i == 0:
-                # 第一个块没有重叠
-                result.append({"content": chunk, "overlap_length": 0})
-            else:
-                # 计算需要添加的重叠文本长度
-                prev_chunk = raw_chunks[i - 1]
-                actual_overlap_len = min(self.overlap_size, len(prev_chunk))
-                overlap_text = prev_chunk[len(prev_chunk) - actual_overlap_len :]
-
-                # 在当前块开头添加重叠文本
-                new_content = overlap_text + chunk
-                # overlap_length 就是重叠文本的长度
-                overlap_length = len(overlap_text)
-
-                result.append(
-                    {"content": new_content, "overlap_length": overlap_length}
-                )
-
-        return result
-
-    def _simple_fixed_chunking(self, text: str) -> List[str]:
-        """
-        简单的固定大小分块（用于处理超大段落）
-
-        Args:
-            text: 文本内容
-
-        Returns:
-            List[str]: 分块列表
-        """
         chunks = []
-        for i in range(0, len(text), self.max_chunk_size):
-            chunk = text[i : i + self.max_chunk_size]
-            chunks.append(chunk)
+        current_chunk_sentences = []
+        current_tokens = 0
+
+        for sentence in sentences:
+            sentence_tokens = self.tokenizer.count_tokens(sentence)
+            
+            # 检查加入当前句子后是否超出限制
+            # 如果当前分块不为空，需要考虑句子间的分隔符（这里简化为空格或换行，视情况而定，暂按空格估算或直接累加）
+            # 为了精确，我们计算加入分隔符后的总 Token 数
+            separator = " "
+            separator_tokens = self.tokenizer.count_tokens(separator) if current_chunk_sentences else 0
+            
+            total_needed = current_tokens + separator_tokens + sentence_tokens
+
+            if total_needed > self.chunk_size and current_chunk_sentences:
+                # 如果超出限制且当前分块已有内容，则结束当前分块
+                chunks.append(" ".join(current_chunk_sentences))
+                # 开始新分块，当前句子作为起始
+                current_chunk_sentences = [sentence]
+                current_tokens = sentence_tokens
+            else:
+                # 加入当前句子
+                if current_chunk_sentences:
+                    current_chunk_sentences.append(sentence)
+                    current_tokens += separator_tokens + sentence_tokens
+                else:
+                    current_chunk_sentences.append(sentence)
+                    current_tokens += sentence_tokens
+
+        # 处理最后一个分块
+        if current_chunk_sentences:
+            chunks.append(" ".join(current_chunk_sentences))
+
         return chunks
-
-    def estimate_token_count(self, text: str) -> int:
-        """
-        估算文本的 token 数量
-
-        简单估算：中文约 1.5 字符/token，英文约 4 字符/token
-
-        Args:
-            text: 文本内容
-
-        Returns:
-            int: 估算的 token 数量
-        """
-        # 粗略估算：平均 3 字符/token
-        return len(text) // 3

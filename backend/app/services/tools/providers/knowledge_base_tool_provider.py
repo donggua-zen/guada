@@ -39,11 +39,32 @@ class SearchKnowledgeBaseParams(BaseModel):
     )
     top_k: int = Field(..., ge=1, le=20, description="期望返回的最相似分块数量（必填）")
 
+    # 混合搜索参数
+    use_hybrid_search: bool = Field(
+        default=True, description="是否启用混合搜索（语义 + 关键词）"
+    )
+    semantic_weight: float = Field(
+        default=0.6, ge=0.0, le=1.0, description="语义搜索权重（0-1）"
+    )
+    keyword_weight: float = Field(
+        default=0.4, ge=0.0, le=1.0, description="关键词搜索权重（0-1）"
+    )
+    enable_rerank: bool = Field(default=True, description="是否启用重排序")
+
 
 class ListKnowledgeBaseFilesParams(BaseModel):
     """知识库文件列表参数"""
 
     knowledge_base_id: str = Field(..., description="目标知识库 ID（必填）")
+
+    # 分页参数
+    page: int = Field(default=1, ge=1, description="页码（从 1 开始）")
+    page_size: int = Field(default=30, ge=1, le=50, description="每页数量（最大 50）")
+
+    # 搜索参数
+    keyword: Optional[str] = Field(
+        None, description="文件名关键词（模糊匹配，不区分大小写）"
+    )
 
 
 class GetKnowledgeBaseChunksParams(BaseModel):
@@ -278,15 +299,30 @@ class KnowledgeBaseToolProvider(IToolProvider):
             api_key = model.provider.api_key
             logger.info(f"使用向量模型：provider={provider_name}, model={model_name}")
 
-            # 执行搜索
-            results = await vector_service.search_similar_chunks(
+            # 🔥 新增：动态权重计算
+            if params.enable_rerank:
+                semantic_weight, keyword_weight = self._calculate_dynamic_weights(
+                    params.query
+                )
+            else:
+                semantic_weight = params.semantic_weight
+                keyword_weight = params.keyword_weight
+
+            logger.info(
+                f"混合搜索配置：semantic={semantic_weight:.2f}, keyword={keyword_weight:.2f}, hybrid={params.use_hybrid_search}"
+            )
+
+            # 🔥 执行混合搜索
+            results = await vector_service.search_similar_chunks_hybrid(
                 knowledge_base_id=params.knowledge_base_id,
                 query_text=params.query,
-                base_url=base_url,  # 修改：传递 base_url
-                api_key=api_key,  # 修改：传递 api_key
+                base_url=base_url,
+                api_key=api_key,
                 model_name=model_name,
                 top_k=params.top_k,
                 filter_metadata=filter_metadata,
+                semantic_weight=semantic_weight,
+                keyword_weight=keyword_weight,
             )
 
             if not results:
@@ -310,19 +346,29 @@ class KnowledgeBaseToolProvider(IToolProvider):
             for result in results:
                 content = result["content"]
                 metadata = result["metadata"]
-                similarity = result["similarity"]
                 file_id = metadata.get("file_id", "unknown")
 
                 # 获取文件名
                 file_name = await self._get_file_name(file_id)
 
-                structured_results.append(
-                    {
-                        "content": content,
-                        "metadata": {**metadata, "file_name": file_name},
-                        "similarity": round(similarity, 4),
-                    }
-                )
+                # 构建结果对象（包含混合搜索分数）
+                result_item = {
+                    "content": content,
+                    "metadata": {**metadata, "file_name": file_name},
+                    "similarity": round(result.get("similarity", 0.0), 4),
+                }
+
+                # 如果是混合搜索，添加额外分数信息
+                if "final_score" in result:
+                    result_item["semantic_score"] = round(
+                        result.get("semantic_score", 0.0), 4
+                    )
+                    result_item["keyword_score"] = round(
+                        result.get("keyword_score", 0.0), 4
+                    )
+                    result_item["final_score"] = round(result["final_score"], 4)
+
+                structured_results.append(result_item)
 
             response_data = {
                 "success": True,
@@ -351,19 +397,20 @@ class KnowledgeBaseToolProvider(IToolProvider):
         params: ListKnowledgeBaseFilesParams,
         user_id: str,
     ) -> str:
-        """知识库文件列表
+        """知识库文件列表（支持分页和关键词搜索）
 
         Args:
-            params: 文件列表参数
+            params: 文件列表参数（包含分页和搜索参数）
             user_id: 用户 ID（用于权限验证）
 
         Returns:
-            JSON 格式化的文件列表
+            JSON 格式化的文件列表（包含分页元信息）
         """
         try:
             from app.repositories.kb_repository import KBRepository
             from app.repositories.kb_file_repository import KBFileRepository
             import json
+            import math
 
             # 验证知识库权限（基础验证：确保是用户的知识库）
             kb_repo = KBRepository(self.session)
@@ -383,7 +430,7 @@ class KnowledgeBaseToolProvider(IToolProvider):
                     indent=2,
                 )
 
-            # 获取文件列表（只返回已处理完成的文件）
+            # 获取所有已处理完成的文件
             file_repo = KBFileRepository(self.session)
             completed_files = await file_repo.get_files_by_knowledge_base_and_status(
                 knowledge_base_id=params.knowledge_base_id, statuses=["completed"]
@@ -397,35 +444,59 @@ class KnowledgeBaseToolProvider(IToolProvider):
                         "data": {
                             "files": [],
                             "total": 0,
+                            "page": params.page,
+                            "page_size": params.page_size,
+                            "total_pages": 0,
                             "knowledge_base_id": params.knowledge_base_id,
                             "filter": "completed_only",
+                            "keyword": params.keyword,
                         },
                     },
                     ensure_ascii=False,
                     indent=2,
                 )
 
+            # 关键词过滤（如果提供了 keyword）
+            filtered_files = completed_files
+            if params.keyword:
+                keyword_lower = params.keyword.lower()
+                filtered_files = [
+                    file
+                    for file in completed_files
+                    if (
+                        (
+                            file.display_name
+                            and keyword_lower in file.display_name.lower()
+                        )
+                        or (file.file_name and keyword_lower in file.file_name.lower())
+                    )
+                ]
+
+            # 计算分页信息
+            total = len(filtered_files)
+            total_pages = math.ceil(total / params.page_size) if total > 0 else 0
+
+            # 确保页码在有效范围内
+            page = max(1, min(params.page, total_pages)) if total_pages > 0 else 1
+
+            # 计算切片索引
+            start_index = (page - 1) * params.page_size
+            end_index = start_index + params.page_size
+
+            # 分页切片
+            paginated_files = filtered_files[start_index:end_index]
+
             # 构建结构化文件列表
             structured_files = []
-            for file in completed_files:
+            for file in paginated_files:
                 structured_files.append(
                     {
                         "id": file.id,
                         "display_name": file.display_name,
-                        "file_name": file.file_name,
-                        "file_size": file.file_size,
                         "file_size_formatted": self._format_file_size(file.file_size),
-                        "file_type": file.file_type,
-                        "file_extension": file.file_extension,
-                        "processing_status": file.processing_status,
-                        "progress_percentage": file.progress_percentage,
-                        "current_step": file.current_step,
                         "total_chunks": file.total_chunks or 0,
                         "uploaded_at": (
                             file.uploaded_at.isoformat() if file.uploaded_at else None
-                        ),
-                        "processed_at": (
-                            file.processed_at.isoformat() if file.processed_at else None
                         ),
                     }
                 )
@@ -435,10 +506,15 @@ class KnowledgeBaseToolProvider(IToolProvider):
                 "error": None,
                 "data": {
                     "files": structured_files,
-                    "total": len(structured_files),
+                    "total": total,
+                    "page": page,
+                    "page_size": params.page_size,
+                    "total_pages": total_pages,
                     "knowledge_base_id": params.knowledge_base_id,
                     "filter": "completed_only",
-                    "note": "只返回处理完成的文件",
+                    "keyword": params.keyword,
+                    "has_next": page < total_pages,
+                    "has_prev": page > 1,
                 },
             }
 
@@ -588,6 +664,37 @@ class KnowledgeBaseToolProvider(IToolProvider):
     # ============================================================================
     # 辅助方法
     # ============================================================================
+
+    def _calculate_dynamic_weights(self, query: str) -> tuple[float, float]:
+        """
+        根据查询特征动态调整权重
+
+        Args:
+            query: 查询文本
+
+        Returns:
+            (semantic_weight, keyword_weight)
+        """
+        import re
+
+        # 规则 1: 查询包含引号（精确匹配需求）
+        if '"' in query or "'" in query:
+            logger.info("检测到引号，提高关键词权重")
+            return 0.4, 0.6
+
+        # 规则 2: 查询包含代码特征（{} [] () ）
+        if re.search(r"[{}\[\]\(\);]", query):
+            logger.info("检测到代码特征，大幅提高关键词权重")
+            return 0.3, 0.7
+
+        # 规则 3: 查询很短（< 5 词），可能是术语
+        if len(query.split()) < 5:
+            logger.info("短查询，使用平衡权重")
+            return 0.5, 0.5
+
+        # 规则 4: 默认情况（语义为主）
+        logger.info("使用默认权重配置")
+        return 0.6, 0.4
 
     async def _get_file_name(self, file_id: str) -> str:
         """根据文件 ID 获取文件名

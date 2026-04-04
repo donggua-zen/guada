@@ -90,9 +90,8 @@ function handleScroll(event: Event): void {
         if (isAtBottom.value) {
             needScrollToBottom.value = true;
         }
-        if (lastScrollTop.value < scrollElement.value.scrollTop) {
-            needScrollToBottom.value = false;
-        } else if (lastScrollTop.value > scrollElement.value.scrollTop) {
+        // 只有向上滚动时才将需要自动滚动到底部的标志置为 false
+        if (lastScrollTop.value > scrollElement.value.scrollTop) {
             needScrollToBottom.value = false;
         }
     }

@@ -465,3 +465,64 @@ async def retry_file_processing(
     except Exception as e:
         logger.exception(f"重新处理文件失败：{e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/{file_id}/chunks", response_model=List[dict])
+async def get_file_chunks(
+    kb_id: str,
+    file_id: str,
+    skip: int = Query(0, ge=0, description="跳过数量"),
+    limit: int = Query(10, ge=1, le=50, description="返回数量限制"),
+    current_user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_db_session),
+):
+    """
+    获取文件的分块内容
+    
+    - **file_id**: 文件 ID
+    - **skip**: 跳过的分块数
+    - **limit**: 返回的最大分块数（默认10个，最多50个）
+    
+    返回文件的文本分块内容，用于前端查看
+    """
+    from app.repositories.kb_repository import KBRepository
+    from app.repositories.kb_file_repository import KBFileRepository
+    from app.repositories.kb_chunk_repository import KBChunkRepository
+
+    try:
+        # 验证知识库权限
+        kb_repo = KBRepository(session)
+        kb = await kb_repo.get_kb(kb_id)
+
+        if not kb:
+            raise HTTPException(status_code=404, detail="知识库不存在")
+
+        if kb.user_id != current_user.id:
+            raise HTTPException(status_code=403, detail="无权访问该知识库")
+
+        # 验证文件是否存在
+        file_repo = KBFileRepository(session)
+        file_record = await file_repo.get_file(file_id)
+
+        if not file_record:
+            raise HTTPException(status_code=404, detail="文件不存在")
+
+        # 检查文件处理状态，只允许 completed 状态的文件查看分块
+        if file_record.processing_status != "completed":
+            raise HTTPException(
+                status_code=400,
+                detail=f"文件尚未处理完成，当前状态：{file_record.processing_status}"
+            )
+
+        # 获取文件的分块列表
+        chunk_repo = KBChunkRepository(session)
+        chunks = await chunk_repo.list_chunks_by_file(file_id, skip=skip, limit=limit)
+
+        # 转换为字典格式并返回
+        return [chunk.to_dict() for chunk in chunks]
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception(f"获取文件分块失败：{e}")
+        raise HTTPException(status_code=500, detail=str(e))

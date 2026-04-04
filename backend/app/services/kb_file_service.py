@@ -156,9 +156,8 @@ class KBFileService:
 
                 # 5. 初始化分块服务
                 self.chunking_service = ChunkingService(
-                    max_chunk_size=kb.chunk_max_size,
+                    chunk_size=kb.chunk_max_size,
                     overlap_size=kb.chunk_overlap_size,
-                    min_chunk_size=kb.chunk_min_size,
                 )
 
                 # 6. 文本分块
@@ -187,12 +186,12 @@ class KBFileService:
                 # 在向量化和存储之前，先删除该文件已存在的旧分块记录和向量数据
                 try:
                     logger.info(f"🔄 检测到文件 {file_id}，开始清理旧数据...")
-                    
+
                     # 1. 从 ChromaDB 删除旧向量（使用 metadata 条件删除）
                     try:
                         await self.vector_service.delete_vectors_by_where(
                             knowledge_base_id=knowledge_base_id,
-                            where_filter={"file_id": file_id}
+                            where_filter={"file_id": file_id},
                         )
                         logger.info(f"从向量库删除文件 {file_id} 的旧向量")
                     except Exception as e:
@@ -205,7 +204,7 @@ class KBFileService:
                         logger.info(f"删除 {deleted_count} 个旧分块记录")
                     else:
                         logger.debug(f"ℹ️ 文件 {file_id} 没有旧分块记录")
-                        
+
                 except Exception as e:
                     # 清理旧数据失败不影响后续流程，继续执行向量化和存储
                     logger.warning(f"清理旧数据失败，但继续执行后续流程：{e}")
@@ -272,9 +271,7 @@ class KBFileService:
                         chunk_index=chunk["chunk_index"],
                         vector_id=f"chunk_{idx}_{file_id}",
                         embedding_dimensions=len(all_embeddings[idx]),
-                        token_count=self.chunking_service.estimate_token_count(
-                            chunk["content"]
-                        ),
+                        token_count=chunk.get("metadata", {}).get("token_count"),
                         metadata=chunk.get("metadata"),
                     )
 
@@ -286,7 +283,7 @@ class KBFileService:
                     current_step="处理完成",
                     total_chunks=total_chunks,
                     total_tokens=sum(
-                        self.chunking_service.estimate_token_count(c["content"])
+                        c["metadata"]["token_count"] if c["metadata"] else 0
                         for c in chunks
                     ),
                 )
@@ -375,8 +372,7 @@ class KBFileService:
                 # 优化：直接使用 where 条件删除，减少一次数据库查询
                 # ChromaDB 支持通过 metadata 过滤删除：collection.delete(where={"file_id": file_id})
                 await self.vector_service.delete_vectors_by_where(
-                    knowledge_base_id=kb_id,
-                    where_filter={"file_id": file_id}
+                    knowledge_base_id=kb_id, where_filter={"file_id": file_id}
                 )
                 logger.info(f"从向量库删除文件 {file_id} 的所有向量")
             except Exception as e:

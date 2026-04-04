@@ -12,3 +12,4 @@ backend/static/*
 .env
 frontend/stats.html
 backend/experiment/**
+backend/tests/verification/**

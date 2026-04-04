@@ -304,12 +304,15 @@ export const useFileUploadStore = defineStore('fileUpload', () => {
 
     /**
      * 合并数据库记录和上传任务为统一列表
+     * @param dbFiles 数据库文件记录
+     * @param kbId 知识库 ID
+     * @param extraTempTasks 额外的临时任务列表（用于无限滚动时保留临时任务）
      */
-    function mergeFilesWithTasks(dbFiles: any[], kbId: string): UnifiedFileRecord[] {
+    function mergeFilesWithTasks(dbFiles: any[], kbId: string, extraTempTasks?: UploadTask[]): UnifiedFileRecord[] {
         const result: UnifiedFileRecord[] = []
 
         // ✅ 1. 先添加临时上传任务（让它们显示在前面）
-        const tasks = getTasksByKB(kbId)
+        let tasks = extraTempTasks || getTasksByKB(kbId)
         if (tasks.length > 0) {
             console.log(`[DEBUG] mergeFilesWithTasks: 添加了 ${tasks.length} 个临时任务到列表前面`)
             tasks.forEach(task => {

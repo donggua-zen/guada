@@ -133,7 +133,7 @@ const goChatRoute = async (sessionId: string | null) => {
   } else if (sessionStore.activeSessionId) {
     router.replace({ name: 'Chat', params: { sessionId: sessionStore.activeSessionId } });
   } else {
-    router.replace({ name: 'Chat', params: { sessionId: null } });
+    router.replace({ name: 'Chat', params: { sessionId: 'new-session' } });
     currentSession.value = null;
   }
 };
@@ -227,7 +227,7 @@ const handleOpenSettings = () => {
  * 创建新会话
  */
 const handleCreateSession = async () => {
-  router.replace({ name: 'Chat', params: { sessionId: null } });
+  router.replace({ name: 'Chat', params: { sessionId: 'new-session' } });
   currentSession.value = null;
 };
 
@@ -349,18 +349,17 @@ watch(
 // 监听路由参数中会话 ID 的变化，更新选中的会话
 watch(
   () => route.params.sessionId,
-  (newSessionId) => {
-    if (isLoading.value)
-      return;
+  async (newSessionId) => {
+    // if (isLoading.value)
+    //   return;
     if (!newSessionId) {
       currentSession.value = null;
       return;
     }
     const sessionId = Array.isArray(newSessionId) ? newSessionId[0] : newSessionId;
     sessionStore.activeSessionId = sessionId;
-    updateSelectedSession(sessionId);
-  },
-  { immediate: true }
+    await updateSelectedSession(sessionId);
+  }
 );
 
 // 生命周期
@@ -372,8 +371,17 @@ onMounted(async () => {
     if (route.params.sessionId) {
       const sessionId = Array.isArray(route.params.sessionId) ? route.params.sessionId[0] : route.params.sessionId;
       sessionStore.activeSessionId = sessionId;
-      await updateSelectedSession(sessionId);
+      await updateSelectedSession(sessionId); isLoading.value = false;
+    } else {
+      currentSession.value = null;
     }
+    // if (route.params.sessionId) {
+    //   const sessionId = Array.isArray(route.params.sessionId) ? route.params.sessionId[0] : route.params.sessionId;
+    //   sessionStore.activeSessionId = sessionId;
+    //   await updateSelectedSession(sessionId);
+    // } else {
+    //   sessionStore.activeSessionId = null;
+    // }
   }
   isLoading.value = false;
 });

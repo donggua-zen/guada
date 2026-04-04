@@ -7,17 +7,19 @@
             drag
             :auto-upload="false"
             :on-change="handleFileChange"
-            :limit="10"
+            limit="300"
             multiple
+            webkitdirectory
             accept=".txt,.md,.pdf,.docx,.py,.js,.ts,.java,.cpp,.c,.go,.rs,.json,.xml,.yaml,.yml,.csv,.html,.css"
             class="w-full"
         >
             <i class="iconfont icon-upload text-4xl text-gray-400"></i>
             <div class="el-upload__text">
-                拖拽文件到此处或<em>点击上传</em>
+                拖拽文件夹到此处或<em>点击选择文件夹</em>
             </div>
             <template #tip>
                 <div class="el-upload__tip text-sm text-gray-500">
+                    支持上传整个文件夹，会自动依次上传内部所有文件<br>
                     支持格式：txt, md, pdf, docx, 代码文件等，单个文件最大 50MB
                 </div>
             </template>
@@ -59,35 +61,85 @@ const stats = computed(() => uploadStore.getUploadStats())
 // ========== Methods ==========
 
 /**
- * 处理文件选择
+ * 处理文件/文件夹选择
  */
-async function handleFileChange(file: any) {
+async function handleFileChange(file: any, fileList: any[]) {
     const rawFile = file.raw
     if (!rawFile) return
     
     // 验证文件大小
     const maxSize = 50 * 1024 * 1024 // 50MB
-    if (rawFile.size > maxSize) {
-        ElMessage.error(`文件大小超过限制 (${maxSize / 1024 / 1024}MB)`)
-        return
-    }
     
     try {
-        await uploadStore.uploadToKnowledgeBase(
-            props.kbId,
-            rawFile,
-            (task) => {
-                // 进度更新回调
-                if (task.status === 'completed') {
-                    ElMessage.success(`${task.fileName} 处理完成`)
-                    emit('upload-complete', task)
-                } else if (task.status === 'failed') {
-                    ElMessage.error(`${task.fileName} 处理失败：${task.errorMessage}`)
+        // 检查是否为文件夹上传（webkitdirectory）
+        if (fileList && fileList.length > 0) {
+            // 文件夹上传模式：遍历所有选中的文件
+            ElMessage.info(`检测到文件夹，共 ${fileList.length} 个文件，开始依次上传...`)
+            
+            let successCount = 0
+            let failCount = 0
+            
+            for (const f of fileList) {
+                const singleFile = f.raw
+                if (!singleFile) continue
+                
+                // 验证文件大小
+                if (singleFile.size > maxSize) {
+                    ElMessage.warning(`${singleFile.name} 文件大小超过限制 (${maxSize / 1024 / 1024}MB)，已跳过`)
+                    failCount++
+                    continue
+                }
+                
+                try {
+                    await uploadStore.uploadToKnowledgeBase(
+                        props.kbId,
+                        singleFile,
+                        (task) => {
+                            // 进度更新回调
+                            if (task.status === 'completed') {
+                                ElMessage.success(`${task.fileName} 处理完成`)
+                                emit('upload-complete', task)
+                                successCount++
+                            } else if (task.status === 'failed') {
+                                ElMessage.error(`${task.fileName} 处理失败：${task.errorMessage}`)
+                                failCount++
+                            }
+                        }
+                    )
+                } catch (error: any) {
+                    console.error(`${singleFile.name} 上传失败:`, error)
+                    ElMessage.error(`${singleFile.name} 上传失败：${error.response?.data?.detail || '未知错误'}`)
+                    failCount++
                 }
             }
-        )
-        
-        ElMessage.success(`开始上传：${rawFile.name}`)
+            
+            // 显示总结消息
+            if (successCount > 0) {
+                ElMessage.success(`文件夹上传完成：成功 ${successCount} 个，失败 ${failCount} 个`)
+            }
+        } else {
+            // 单文件上传模式（兼容旧逻辑）
+            if (rawFile.size > maxSize) {
+                ElMessage.error(`文件大小超过限制 (${maxSize / 1024 / 1024}MB)`)
+                return
+            }
+            
+            await uploadStore.uploadToKnowledgeBase(
+                props.kbId,
+                rawFile,
+                (task) => {
+                    // 进度更新回调
+                    if (task.status === 'completed') {
+                        ElMessage.success(`${task.fileName} 处理完成`)
+                        emit('upload-complete', task)
+                    } else if (task.status === 'failed') {
+                        ElMessage.error(`${task.fileName} 处理失败：${task.errorMessage}`)
+                    }
+                }
+            )
+            
+            ElMessage.success(`开始上传：${rawFile.name}`)
+        }
     } catch (error: any) {
         console.error('上传失败:', error)
         ElMessage.error(error.response?.data?.detail || '上传失败')
