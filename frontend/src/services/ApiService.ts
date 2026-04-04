@@ -529,9 +529,19 @@ class ApiService implements IApiService {
 
     /**
      * 获取知识库文件列表
+     * @param kbId 知识库 ID
+     * @param skip 跳过数量（用于分页）
+     * @param limit 返回数量限制（用于分页）
      */
-    async fetchKBFiles(kbId: string): Promise<PaginatedResponse<KBFile>> {
-        return await this._request(`/knowledge-bases/${kbId}/files`)
+    async fetchKBFiles(kbId: string, skip?: number, limit?: number): Promise<PaginatedResponse<KBFile>> {
+        const params = new URLSearchParams()
+        if (skip !== undefined) params.append('skip', skip.toString())
+        if (limit !== undefined) params.append('limit', limit.toString())
+        
+        const queryString = params.toString()
+        const url = queryString ? `/knowledge-bases/${kbId}/files?${queryString}` : `/knowledge-bases/${kbId}/files`
+        
+        return await this._request(url)
     }
 
     /**
@@ -589,7 +599,7 @@ class ApiService implements IApiService {
     async batchGetFileProcessingStatus(kbId: string, fileIds: string[]): Promise<KBFile[]> {
         return await this._request(`/knowledge-bases/${kbId}/files/status/batch`, {
             method: 'POST',
-            data: { file_ids: fileIds },
+            data: { file_ids: fileIds }
         })
     }
 
@@ -603,6 +613,23 @@ class ApiService implements IApiService {
         return await this._request(`/knowledge-bases/${kbId}/files/${fileId}/retry`, {
             method: 'POST',
         })
+    }
+
+    /**
+     * 获取文件的分块内容
+     * @param kbId 知识库 ID
+     * @param fileId 文件 ID
+     * @param skip 跳过的分块数
+     * @param limit 返回的最大分块数（默认 10 个，最多 50 个）
+     * @returns 分块列表
+     */
+    async getKBFileChunks(
+        kbId: string,
+        fileId: string,
+        skip: number = 0,
+        limit: number = 10
+    ): Promise<any[]> {
+        return await this._request(`/knowledge-bases/${kbId}/files/${fileId}/chunks?skip=${skip}&limit=${limit}`)
     }
 
     // ========== 知识库搜索 ==========

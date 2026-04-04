@@ -4,82 +4,15 @@
         :show-toggle-button="true">
         <!-- 左侧侧边栏：知识库列表 -->
         <template #sidebar>
-            <div
-                class="kb-sidebar h-full flex flex-col bg-[var(--color-conversation-bg)] border-r border-gray-200 dark:border-gray-700">
-                <!-- 头部 -->
-                <div class="px-4 pt-3.5 pb-3.5 border-b border-gray-200 dark:border-gray-700">
-                    <div class="flex justify-between items-center">
-                        <span class="font-semibold text-base text-[var(--color-text)]">知识库</span>
-                        <el-button type="primary" @click="showCreateModal = true" :icon="Plus">
-                            新建
-                        </el-button>
-                    </div>
-                </div>
-
-                <!-- 搜索框 -->
-                <div class="search-box px-3.5 py-3">
-                    <el-input v-model="searchKeyword" placeholder="搜索知识库" clearable class="search-input" />
-                </div>
-
-                <!-- 知识库列表 -->
-                <div class="flex-1 overflow-y-auto py-2">
-                    <ScrollContainer>
-                        <template v-if="filteredKnowledgeBases.length === 0">
-                            <div
-                                class="empty-state text-center text-gray-500 flex flex-col items-center justify-center h-full py-12">
-                                <div class="empty-state-icon mb-3 text-gray-300">
-                                    <el-icon size="32">
-                                        <Plus />
-                                    </el-icon>
-                                </div>
-                                <div class="empty-state-title text-sm font-medium mb-1">
-                                    {{ searchKeyword ? '未找到匹配的知识库' : '没有知识库' }}
-                                </div>
-                                <div class="empty-state-description text-xs text-gray-400">
-                                    {{ searchKeyword ? '尝试调整搜索关键词' : '点击上方按钮创建新的知识库' }}
-                                </div>
-                            </div>
-                        </template>
-                        <template v-else>
-                            <div v-for="kb in filteredKnowledgeBases" :key="kb.id" class="kb-item group" :class="{
-                                'kb-item-active': store.activeKnowledgeBaseId === kb.id,
-                                'kb-item-inactive': store.activeKnowledgeBaseId !== kb.id
-                            }" @click="handleSelectKB(kb)">
-                                <div class="kb-info flex-1 min-w-0 flex items-center">
-                                    <div class="kb-title truncate text-sm font-medium w-full">
-                                        {{ kb.name }}
-                                    </div>
-                                </div>
-                                <!-- <div class="kb-desc mt-0.5 truncate text-xs">
-                                    {{ kb.description || '暂无描述' }}
-                                </div> -->
-                                <div class="kb-actions flex items-center opacity-0 group-hover:opacity-100">
-                                    <el-dropdown trigger="click"
-                                        @command="(command) => handleDropdownCommand(command, kb)">
-                                        <template #dropdown>
-                                            <el-dropdown-menu>
-                                                <el-dropdown-item command="edit">
-                                                    <Edit class="w-4 h-4 mr-2 inline-block" />
-                                                    编辑
-                                                </el-dropdown-item>
-                                                <el-dropdown-item command="delete">
-                                                    <Delete class="w-4 h-4 mr-2 inline-block" />
-                                                    删除
-                                                </el-dropdown-item>
-                                            </el-dropdown-menu>
-                                        </template>
-                                        <div @click.stop class="kb-action-trigger">
-                                            <el-icon class="w-4 h-4">
-                                                <MoreFilled />
-                                            </el-icon>
-                                        </div>
-                                    </el-dropdown>
-                                </div>
-                            </div>
-                        </template>
-                    </ScrollContainer>
-                </div>
-            </div>
+            <KBSidebar
+                :knowledge-bases="store.knowledgeBases"
+                :active-id="store.activeKnowledgeBaseId"
+                v-model:search-keyword="searchKeyword"
+                @select="handleSelectKB"
+                @create="showCreateModal = true"
+                @edit="handleEdit"
+                @delete="handleDelete"
+            />
         </template>
 
         <!-- 右侧主区域：文件列表和管理 -->
@@ -101,21 +34,28 @@
                                     {{ currentKB?.name }}
                                 </h3>
                             </div>
-                            <el-button type="primary" @click="showUploadModal = true">
-                                <el-icon>
-                                    <Upload />
-                                </el-icon>
-                                上传文件
-                            </el-button>
+                            <div class="flex items-center gap-2">
+                                <!-- 搜索按钮 -->
+                                <el-button @click="showSearchDialog = true">
+                                    <el-icon><Search /></el-icon>
+                                    搜索
+                                </el-button>
+                                <el-button type="primary" @click="showUploadModal = true">
+                                    <el-icon>
+                                        <Upload />
+                                    </el-icon>
+                                    上传文件
+                                </el-button>
+                            </div>
                         </div>
                     </div>
 
                     <!-- 统一文件列表（包含上传任务和数据库记录） -->
-                    <div class="flex-1 overflow-y-auto p-4">
+                    <div ref="fileListContainer" class="flex-1 overflow-y-auto p-4" @scroll="handleScroll">
                         <!-- 上传区域 -->
                         <div class="mb-6">
                             <el-upload ref="uploadRef" drag :auto-upload="false" :on-change="handleFileChange"
-                                :limit="10" :show-file-list="false" multiple
+                                :limit="1000" :show-file-list="false" multiple
                                 accept=".txt,.md,.pdf,.docx,.py,.js,.ts,.java,.cpp,.c,.go,.rs,.json,.xml,.yaml,.yml,.csv,.html,.css"
                                 class="w-full">
                                 <i class="iconfont icon-upload text-4xl text-gray-400"></i>
@@ -132,73 +72,31 @@
 
                         <!-- 文件列表 -->
                         <div v-if="files.length > 0" class="grid gap-3">
-                            <div v-for="file in files" :key="file.id"
-                                class="file-item group bg-white border border-gray-200 rounded-lg px-3 py-2.5 hover:shadow-md transition-all cursor-pointer dark:bg-gray-800 dark:border-gray-700"
-                                @click="handleViewFile(file)">
-                                <div class="flex items-center gap-3">
-                                    <!-- 文件图标 -->
-                                    <div class="w-10 h-10 flex items-center justify-center flex-shrink-0">
-                                        <img :src="getFileIcon(file.file_type, file.file_extension)"
-                                            class="w-8 h-8 object-contain" alt="file icon" />
-                                    </div>
+                            <KBFileItem 
+                                v-for="file in files" 
+                                :key="file.id"
+                                :file="file"
+                                :is-temp-task="file.isTempTask"
+                                @view="handleViewFile"
+                                @retry="handleRetryFile"
+                                @delete="handleDeleteFile"
+                            />
+                        </div>
 
-                                    <!-- 文件信息 -->
-                                    <div class="flex-1 min-w-0">
-                                        <div class="flex items-center justify-between mb-0.5">
-                                            <h4
-                                                class="text-sm font-medium text-gray-900 truncate pr-2 dark:text-gray-100">
-                                                {{ file.display_name }}
-                                            </h4>
-                                            <el-tag size="small" :type="getStatusType(file.processing_status)">
-                                                {{ getStatusText(file.processing_status) }}
-                                            </el-tag>
-                                        </div>
-                                        <p class="text-xs text-gray-500 dark:text-gray-400">
-                                            {{ formatSize(file.file_size) }} · {{ file.file_extension ?
-                                                file.file_extension.toUpperCase() : 'UNKNOWN' }}
-                                            <span v-if="file.isTempTask"
-                                                class="ml-2 px-1.5 py-0.5 bg-yellow-100 text-yellow-700 rounded text-xs">上传中</span>
-                                        </p>
-                                    </div>
-                                </div>
-
-                                <!-- 进度条 -->
-                                <div v-if="file.processing_status === 'processing' || file.processing_status === 'uploading'"
-                                    class="mt-2">
-                                    <el-progress :percentage="file.progress_percentage"
-                                        v-if="file.processing_status === 'uploading'" :stroke-width="3" />
-                                    <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                                        {{ file.current_step || '处理中...' }}
-                                    </p>
-                                </div>
-
-                                <!-- 错误信息 -->
-                                <div v-if="file.processing_status === 'failed' && file.error_message"
-                                    class="mt-2 p-2 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded text-xs text-red-600 dark:text-red-400">
-                                    {{ file.error_message }}
-                                </div>
-
-                                <!-- 详细信息 (可选展开) -->
-                                <div v-if="file.processing_status === 'completed' && (file.total_chunks || file.total_tokens)"
-                                    class="mt-2 pt-2 border-t border-gray-100 dark:border-gray-700">
-                                    <div
-                                        class="flex items-center justify-between gap-3 text-xs text-gray-500 dark:text-gray-400">
-                                        <div class="flex gap-3">
-                                            <span v-if="file.total_chunks">{{ file.total_chunks }} 分块</span>
-                                        </div>
-                                        <!-- 操作按钮 -->
-                                        <div class="flex items-center gap-1 flex-shrink-0" @click.stop>
-                                            <el-button size="small" link @click="handleRetryFile(file)">
-                                                <RefreshRight class="w-3 h-3 mr-1" />
-                                                重新处理
-                                            </el-button>
-                                            <el-button size="small" type="danger" link @click="handleDeleteFile(file)">
-                                                <Delete class="w-3 h-3 mr-1" />
-                                                删除
-                                            </el-button>
-                                        </div>
-                                    </div>
-                                </div>
+                        <!-- 加载更多提示 -->
+                        <div v-if="files.length > 0" class="mt-4 text-center">
+                            <div v-if="isLoadingMore" class="text-sm text-gray-500 dark:text-gray-400 py-2">
+                                <el-icon class="animate-spin mr-2">
+                                    <Loading />
+                                </el-icon>
+                                加载中...
+                            </div>
+                            <div v-else-if="hasMoreFiles" class="text-sm text-gray-400 dark:text-gray-500 py-2 cursor-pointer hover:text-gray-600 dark:hover:text-gray-300"
+                                @click="loadMoreFiles">
+                                点击加载更多
+                            </div>
+                            <div v-else-if="totalFiles > pageSize" class="text-sm text-gray-400 dark:text-gray-500 py-2">
+                                没有更多了
                             </div>
                         </div>
 
@@ -364,12 +262,25 @@
             </div>
         </template>
     </el-dialog>
+
+    <!-- 文件分块查看弹窗 -->
+    <FileChunksViewer 
+        v-model="showFileChunksModal" 
+        :selected-file="selectedFile"
+    />
+
+    <!-- 知识库搜索对话框 -->
+    <KBSearchDialog
+        v-model="showSearchDialog"
+        :knowledge-bases="store.knowledgeBases"
+        :default-kb-id="store.activeKnowledgeBaseId"
+    />
 </template>
 
 <script setup lang="ts">
 import { ref, reactive, onMounted, onUnmounted, computed, watch } from 'vue'
-import { ElMessage, ElMessageBox, ElDropdown, ElDropdownMenu, ElDropdownItem } from 'element-plus'
-import { Plus, Edit, Delete, Upload, MoreFilled, RefreshRight } from '@element-plus/icons-vue'
+import { ElDropdown, ElDropdownMenu, ElDropdownItem } from 'element-plus'
+import { Plus, Edit, Delete, Upload, MoreFilled, RefreshRight, Loading, Search } from '@element-plus/icons-vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useKnowledgeBaseStore } from '@/stores/knowledgeBase'
 import { useFileUploadStore } from '@/stores/fileUpload'
@@ -378,19 +289,9 @@ import type { UploadTask, UnifiedFileRecord } from '@/stores/fileUpload'
 import ScrollContainer from '@/components/ui/ScrollContainer.vue'
 import SidebarLayout from '@/components/ui/SidebarLayout.vue'
 import LeftBarIcon from './icons/LeftBarIcon.vue'
+import { FileChunksViewer, KBFileItem, KBSidebar, KBSearchDialog } from './KnowledgeBasePage'
 import { useStorage } from '@vueuse/core'
 import { usePopup } from '@/composables/usePopup'
-
-// 导入所有文件图标
-import fileCodeIcon from '@/assets/file_code.svg'
-import fileExcelIcon from '@/assets/file_excel.svg'
-import fileHtmlIcon from '@/assets/file_html.svg'
-import fileMusicIcon from '@/assets/file_music.svg'
-import filePptIcon from '@/assets/file_ppt.svg'
-import fileTxtIcon from '@/assets/file_txt.svg'
-import fileVideoIcon from '@/assets/file_video.svg'
-import fileWordIcon from '@/assets/file_word.svg'
-import fileZipIcon from '@/assets/file_zip.svg'
 
 // 初始化组合式函数
 const { confirm, toast } = usePopup()
@@ -403,11 +304,23 @@ const router = useRouter()
 const showCreateModal = ref(false)
 const showEditModal = ref(false)
 const showUploadModal = ref(false)
+const showFileChunksModal = ref(false)  // 文件分块查看弹窗
+const showSearchDialog = ref(false)  // 搜索对话框
+const selectedFile = ref<UnifiedFileRecord | null>(null)  // 选中的文件
 const searchKeyword = ref('')
 const files = ref<UnifiedFileRecord[]>([])
 const kbSidebarVisible = useStorage('kbSidebarVisible', true) // 知识库侧边栏可见状态，持久化到 localStorage
 const embeddingModels = ref<any[]>([]) // 嵌入模型列表
 const embeddingProviders = ref<any[]>([]) // 嵌入模型供应商列表
+
+// 无限滚动相关状态
+const fileListContainer = ref<HTMLElement | null>(null) // 文件列表容器引用
+const currentPage = ref(1) // 当前页码
+const pageSize = ref(30) // 每页数量
+const totalFiles = ref(0) // 文件总数
+const isLoadingMore = ref(false) // 是否正在加载更多
+const scrollThreshold = 50 // 滚动触发阈值（像素）
+let scrollTimer: number | null = null // 滚动防抖定时器
 
 // ========== 创建表单 ==========
 const createForm = reactive({
@@ -441,17 +354,12 @@ const currentKB = computed(() => {
 })
 
 /**
- * 过滤后的知识库列表（支持搜索）
+ * 是否还有更多文件可加载
  */
-const filteredKnowledgeBases = computed(() => {
-    if (!searchKeyword.value.trim()) {
-        return store.knowledgeBases
-    }
-    const keyword = searchKeyword.value.toLowerCase().trim()
-    return store.knowledgeBases.filter(kb =>
-        kb.name?.toLowerCase().includes(keyword) ||
-        kb.description?.toLowerCase().includes(keyword)
-    )
+const hasMoreFiles = computed(() => {
+    // 只计算非临时任务的文件数量
+    const dbFilesCount = files.value.filter(f => !f.isTempTask).length
+    return dbFilesCount < totalFiles.value
 })
 
 // ========== Methods ==========
@@ -480,17 +388,6 @@ const loadEmbeddingModels = async () => {
             }))
     } catch (error: any) {
         console.error('获取嵌入模型列表失败:', error)
-    }
-}
-
-/**
- * 处理下拉菜单命令
- */
-function handleDropdownCommand(command: string, kb: KnowledgeBase) {
-    if (command === 'edit') {
-        handleEdit(kb)
-    } else if (command === 'delete') {
-        handleDelete(kb)
     }
 }
 
@@ -528,7 +425,7 @@ async function handleCreate() {
     }
 
     try {
-        await store.createKnowledgeBase({
+        const newKb = await store.createKnowledgeBase({
             name: createForm.name,
             description: createForm.description || undefined,
             embedding_model_id: createForm.embedding_model_id,
@@ -546,6 +443,12 @@ async function handleCreate() {
 
         // 刷新列表
         await store.fetchKnowledgeBases()
+        
+        // ✅ 关键修改：创建成功后自动选中新建的知识库
+        const createdKb = store.knowledgeBases.find(kb => kb.id === newKb.id)
+        if (createdKb) {
+            await handleSelectKB(createdKb)
+        }
     } catch (error: any) {
         console.error('创建失败:', error)
         toast.error(error.response?.data?.detail || '创建失败')
@@ -611,13 +514,55 @@ async function handleDelete(kb: KnowledgeBase) {
 
         if (!confirmed) return
 
+        // 记录当前删除的知识库 ID 和索引
+        const deletedKbId = kb.id
+        const currentIndex = store.knowledgeBases.findIndex(k => k.id === deletedKbId)
+        
+        // 执行删除
         await store.deleteKnowledgeBase(kb.id)
         toast.success('删除成功')
+        
+        // 删除后处理：自动选中下一个知识库
+        handleAfterDelete(deletedKbId, currentIndex)
     } catch (error: any) {
         if (error !== 'cancel') {
             console.error('删除失败:', error)
             toast.error(error.response?.data?.detail || '删除失败')
         }
+    }
+}
+
+/**
+ * 删除知识库后的自动选中逻辑
+ */
+function handleAfterDelete(deletedKbId: string, currentIndex: number) {
+    // 获取删除后的列表（从 store 中获取最新列表）
+    const remainingKBs = store.knowledgeBases.filter(kb => kb.id !== deletedKbId)
+    
+    if (remainingKBs.length === 0) {
+        // 如果列表为空，清空选中状态
+        store.setActiveKnowledgeBase(null)
+        router.replace({ name: 'KnowledgeBase' })
+        return
+    }
+    
+    // 计算应该选中的索引
+    let nextIndex = currentIndex
+    
+    // 如果删除的是最后一个元素，则选中前一个
+    if (currentIndex >= remainingKBs.length) {
+        nextIndex = remainingKBs.length - 1
+    }
+    
+    // 确保索引有效
+    if (nextIndex < 0) {
+        nextIndex = 0
+    }
+    
+    // 选中下一个知识库
+    const nextKb = remainingKBs[nextIndex]
+    if (nextKb) {
+        handleSelectKB(nextKb)
     }
 }
 
@@ -720,179 +665,94 @@ async function handleFileChange(file: any) {
 }
 
 /**
- * 文件类型到图标的映射
+ * 处理滚动事件（带防抖）
  */
-const fileIconMap: Record<string, string> = {
-    // 代码文件
-    'js': fileCodeIcon,
-    'ts': fileCodeIcon,
-    'vue': fileCodeIcon,
-    'py': fileCodeIcon,
-    'java': fileCodeIcon,
-    'h': fileCodeIcon,
-    'hpp': fileCodeIcon,
-    'cpp': fileCodeIcon,
-    'c': fileCodeIcon,
-    'go': fileCodeIcon,
-    'rs': fileCodeIcon,
-    'php': fileCodeIcon,
-    'rb': fileCodeIcon,
-    'css': fileCodeIcon,
-    'json': fileCodeIcon,
-    'xml': fileCodeIcon,
-    'sh': fileCodeIcon,
-    'yaml': fileCodeIcon,
-    'yml': fileCodeIcon,
+function handleScroll(event: Event) {
+    // 清除之前的定时器
+    if (scrollTimer !== null) {
+        clearTimeout(scrollTimer)
+    }
 
-    // html
-    'html': fileHtmlIcon,
-    'htm': fileHtmlIcon,
-
-    // 文档文件
-    'doc': fileWordIcon,
-    'docx': fileWordIcon,
-    'xls': fileExcelIcon,
-    'xlsx': fileExcelIcon,
-    'csv': fileExcelIcon,
-    'ppt': filePptIcon,
-    'pptx': filePptIcon,
-    'txt': fileTxtIcon,
-    'md': fileTxtIcon,
-    'markdown': fileTxtIcon,
-
-    // 媒体文件
-    'mp3': fileMusicIcon,
-    'wav': fileMusicIcon,
-    'flac': fileMusicIcon,
-    'mp4': fileVideoIcon,
-    'avi': fileVideoIcon,
-    'mkv': fileVideoIcon,
-    'mov': fileVideoIcon,
-
-    // 压缩文件
-    'zip': fileZipIcon,
-    'rar': fileZipIcon,
-    '7z': fileZipIcon,
-    'tar': fileZipIcon,
-    'gz': fileZipIcon,
+    // 设置防抖，300ms 后执行
+    scrollTimer = window.setTimeout(() => {
+        checkScrollPosition()
+    }, 300)
 }
 
 /**
- * 根据文件扩展名获取图标
+ * 检查滚动位置，判断是否需要加载更多
  */
-function getFileIcon(fileType?: string, fileExtension?: string): string {
-    // ✅ 优先从文件名推断（最可靠）
-    let ext = ''
-
-    // 方法 1: 从 fileExtension 提取（去掉点号）
-    if (fileExtension) {
-        ext = fileExtension.toLowerCase().replace(/^\./, '')  // 只去掉开头的点
+function checkScrollPosition() {
+    if (!fileListContainer.value || isLoadingMore.value || !hasMoreFiles.value) {
+        return
     }
 
-    // 方法 2: 如果还是空，尝试从 fileType (MIME) 推断
-    if (!ext && fileType) {
-        const mimeMap: Record<string, string> = {
-            // 文档类
-            'application/pdf': 'pdf',
-            'application/msword': 'doc',
-            'application/vnd.openxmlformats-officedocument.wordprocessingml.document': 'docx',
-            'application/vnd.ms-excel': 'xls',
-            'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': 'xlsx',
+    const { scrollTop, scrollHeight, clientHeight } = fileListContainer.value
+    const distanceToBottom = scrollHeight - scrollTop - clientHeight
 
-            // 文本类
-            'text/plain': 'txt',
-            'text/html': 'html',
-            'text/css': 'css',
-            'text/javascript': 'js',
-            'application/json': 'json',
-            'application/xml': 'xml',
-            'text/xml': 'xml',
+    // 如果距离底部小于阈值，则加载更多
+    if (distanceToBottom <= scrollThreshold) {
+        loadMoreFiles()
+    }
+}
 
-            // 代码类
-            'application/x-python-code': 'py',
-            'text/x-python': 'py',
-            'text/x-java-source': 'java',
-            'text/x-c': 'c',
-            'text/x-c++': 'cpp',
-            'text/x-go': 'go',
-            'text/x-rust': 'rs',
-            'text/x-php': 'php',
-            'text/x-ruby': 'rb',
+/**
+ * 加载更多文件
+ */
+async function loadMoreFiles() {
+    if (!store.activeKnowledgeBaseId || isLoadingMore.value || !hasMoreFiles.value) {
+        return
+    }
 
-            // 压缩文件
-            'application/zip': 'zip',
-            'application/x-zip-compressed': 'zip',
-            'application/x-rar-compressed': 'rar'
+    isLoadingMore.value = true
+
+    try {
+        // 计算下一页的 skip 值（只计算非临时任务的文件）
+        const dbFilesCount = files.value.filter(f => !f.isTempTask).length
+        const skip = dbFilesCount
+
+        // 从数据库加载下一页文件记录
+        const response = await store.fetchFiles(store.activeKnowledgeBaseId, skip, pageSize.value)
+        const newDbFiles = (response.items || []) as KBFile[]
+
+        // 更新总数
+        totalFiles.value = response.total || 0
+
+        if (newDbFiles.length > 0) {
+            // 合并新文件到现有列表（保留临时任务）
+            const existingDbFiles = files.value.filter(f => !f.isTempTask)
+            
+            // 合并：临时任务 + 已有数据库文件 + 新加载的数据库文件
+            // mergeFilesWithTasks 会自动从 store 获取临时任务
+            files.value = uploadStore.mergeFilesWithTasks(
+                [...existingDbFiles, ...newDbFiles],
+                store.activeKnowledgeBaseId
+            )
+
+            // 页码递增
+            currentPage.value++
+
+            console.log(`[DEBUG] 加载更多文件：${newDbFiles.length} 个，当前总共 ${files.value.length} 个`)
         }
-        ext = mimeMap[fileType] || 'txt'
+    } catch (error) {
+        console.error('加载更多文件失败:', error)
+        toast.error('加载更多文件失败')
+    } finally {
+        isLoadingMore.value = false
     }
-
-    // 方法 3: 如果还是空，默认 txt
-    if (!ext) {
-        ext = 'txt'
-    }
-
-    console.log(`[DEBUG] getFileIcon: fileType=${fileType}, fileExtension=${fileExtension} → ext=${ext}`)
-    return fileIconMap[ext] || fileTxtIcon
 }
 
 /**
- * 格式化文件大小
+ * 重置分页状态
  */
-function formatSize(bytes: number): string {
-    if (bytes === 0) return '0 B'
-    const k = 1024
-    const sizes = ['B', 'KB', 'MB', 'GB']
-    const i = Math.floor(Math.log(bytes) / Math.log(k))
-    return (bytes / Math.pow(k, i)).toFixed(2) + ' ' + sizes[i]
+function resetPagination() {
+    currentPage.value = 1
+    totalFiles.value = 0
+    isLoadingMore.value = false
 }
 
 /**
- * 获取状态标签类型
- */
-function getStatusType(status: string): string {
-    const types: Record<string, string> = {
-        'uploading': 'warning',
-        'uploaded': 'info',
-        'pending': 'info',
-        'processing': 'warning',
-        'completed': 'success',
-        'failed': 'danger',
-    }
-    return types[status] || 'info'
-}
-
-/**
- * 获取状态文本
- */
-function getStatusText(status: string): string {
-    const texts: Record<string, string> = {
-        'uploading': '上传中',
-        'uploaded': '等待处理',
-        'pending': '等待处理',
-        'processing': '处理中',
-        'completed': '已完成',
-        'failed': '失败',
-    }
-    return texts[status] || status
-}
-
-/**
- * 判断是否显示进度条
- */
-function shouldShowProgress(status: string): boolean {
-    return status === 'uploading'
-}
-
-/**
- * 判断是否显示刷新/重试按钮（仅在 failed 或 completed 状态显示）
- */
-function shouldShowRefreshButton(status: string): boolean {
-    return status === 'failed' || status === 'completed'
-}
-
-/**
- * 重新处理文件（用于失败或已完成的文件）
+ * 处理上传完成事件
  */
 async function handleRetryFile(file: UnifiedFileRecord) {
     try {
@@ -941,8 +801,15 @@ function formatDate(dateString: string | null): string {
  * 查看文件详情
  */
 function handleViewFile(file: UnifiedFileRecord) {
-    // TODO: 跳转到文件详情页或打开预览
-    toast.info('查看功能开发中...')
+    // 仅对已完成处理的文件启用查看功能
+    if (file.processing_status !== 'completed') {
+        toast.warning('文件尚未处理完成，无法查看分块内容')
+        return
+    }
+    
+    // 打开分块查看弹窗
+    showFileChunksModal.value = true
+    selectedFile.value = file
 }
 
 /**
@@ -997,10 +864,16 @@ onMounted(async () => {
     }
 })
 
-// ✅ 关键修复：组件销毁时清理轮询定时器，防止内存泄漏
+// ✅ 关键修复：组件销毁时清理轮询定时器和滚动定时器，防止内存泄漏
 onUnmounted(() => {
-    console.log('[DEBUG] KnowledgeBasePage 组件销毁，清理轮询定时器')
+    console.log('[DEBUG] KnowledgeBasePage 组件销毁，清理定时器')
     store.stopAllFileProcessingPolling()
+    
+    // 清理滚动防抖定时器
+    if (scrollTimer !== null) {
+        clearTimeout(scrollTimer)
+        scrollTimer = null
+    }
 })
 
 /**
@@ -1010,10 +883,17 @@ async function refreshFileList() {
     if (!store.activeKnowledgeBaseId) return
 
     try {
-        // 1. 从数据库加载文件记录
-        const response = await store.fetchFiles(store.activeKnowledgeBaseId)
+        // 重置分页状态
+        resetPagination()
+
+        // 1. 从数据库加载第一页文件记录
+        const response = await store.fetchFiles(store.activeKnowledgeBaseId, 0, pageSize.value)
         const dbFiles = (response.items || []) as KBFile[]
-        console.log(`[DEBUG] refreshFileList: 从数据库加载了 ${dbFiles.length} 个文件`)
+        
+        // 更新总数
+        totalFiles.value = response.total || 0
+        
+        console.log(`[DEBUG] refreshFileList: 从数据库加载了 ${dbFiles.length} 个文件，总数：${totalFiles.value}`)
 
         // 2. 合并数据库记录和上传任务为统一列表
         files.value = uploadStore.mergeFilesWithTasks(dbFiles, store.activeKnowledgeBaseId)
@@ -1066,123 +946,10 @@ watch(() => route.params.id, async (newKbId: string | string[] | undefined) => {
 </script>
 
 <style scoped>
-/* 搜索框样式 */
-.search-box :deep(.el-input__wrapper) {
-    background-color: var(--color-surface);
-    border-radius: 8px;
-    box-shadow: 0 0 0 1px var(--color-border) inset;
-    padding: 6px 12px;
-    transition: all 0.2s ease;
-}
-
-.search-box :deep(.el-input__wrapper:hover) {
-    box-shadow: 0 0 0 1px var(--color-primary-300) inset;
-}
-
-.search-box :deep(.el-input__wrapper.is-focus) {
-    box-shadow: 0 0 0 1px var(--color-primary) inset;
-}
-
-.search-box :deep(.el-input__inner) {
-    font-size: 13px;
-}
-
-/* 知识库列表项样式 - 参考 ChatSidebar.vue */
-.kb-item {
-    display: flex;
-    align-items: center;
-    gap: 0.625rem;
-    padding: 0.625rem 0.75rem;
-    margin: 0.125rem 0.625rem;
-    border-radius: 0.5rem;
-    cursor: pointer;
-    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-}
-
-.kb-item-inactive {
-    color: var(--color-text);
-}
-
-.kb-item-inactive:hover {
-    background-color: var(--color-conversation-bg-hover);
-    color: var(--color-conversation-text-hover);
-}
-
-.kb-item-active {
-    background-color: var(--color-conversation-bg-active);
-    color: var(--color-conversation-text-active);
-}
-
-.kb-title {
-    line-height: 1.4;
-}
-
-.kb-desc {
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-    color: var(--color-text-secondary);
-    font-size: 0.75rem;
-    margin-left: 2rem;
-}
-
-.kb-actions {
-    margin-left: auto;
-    opacity: 0;
-    transition: opacity 0.2s ease;
-}
-
-/* 鼠标悬停时操作按钮显示 */
-.kb-item:hover .kb-actions {
-    opacity: 1;
-}
-
-/* 选中状态下操作按钮始终显示 */
-/* .kb-item-active .kb-actions {
-    opacity: 1;
-} */
-
-.kb-action-trigger {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    padding: 0.25rem;
-    border-radius: 0.25rem;
-    cursor: pointer;
-    transition: background-color 0.2s ease;
-}
-
-.kb-action-trigger:hover {
-    background-color: rgba(0, 0, 0, 0.05);
-}
-
-.dark .kb-action-trigger:hover {
-    background-color: rgba(255, 255, 255, 0.1);
-}
-
 /* 空状态样式 */
 .empty-state-icon {
     display: flex;
     align-items: center;
     justify-content: center;
-}
-
-/* 文件列表项样式 - 参考 FileItem.vue */
-.file-item {
-    transition: all 0.2s ease;
-}
-
-.file-item:hover {
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
-}
-
-/* 滚动条美化 - 参考 ChatSidebar.vue */
-.kb-sidebar :deep(.el-scrollbar__bar) {
-    opacity: 0.6;
-    transition: opacity 0.2s;
-}
-
-.kb-sidebar :deep(.el-scrollbar__bar:hover) {
-    opacity: 1;
 }
 </style>

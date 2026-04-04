@@ -1,6 +1,6 @@
 # pip3 install transformers
 # python3 deepseek_tokenizer.py
-from typing import Dict
+from typing import Dict, List
 import tiktoken
 from tokenizers import Tokenizer
 
@@ -27,6 +27,14 @@ class _Tokenizer:
 
     def count_tokens(self, text) -> int:
         return 0
+
+    def encode(self, text: str) -> List[int]:
+        """将文本转换为 Token ID 列表"""
+        raise NotImplementedError
+
+    def decode(self, token_ids: List[int]) -> str:
+        """将 Token ID 列表还原为文本"""
+        raise NotImplementedError
 
 
 class _TransformersTokenizer(_Tokenizer):
@@ -57,6 +65,18 @@ class _TransformersTokenizer(_Tokenizer):
         elif isinstance(text, str):
             total_tokens += len(self.tokenizer.encode(text))
         return total_tokens
+
+    def encode(self, text: str) -> List[int]:
+        """将文本转换为 Token ID 列表"""
+        if not isinstance(text, str):
+            return []
+        return self.tokenizer.encode(text).ids
+
+    def decode(self, token_ids: List[int]) -> str:
+        """将 Token ID 列表还原为文本"""
+        if not token_ids:
+            return ""
+        return self.tokenizer.decode(token_ids)
 
 
 class _OpenAITokenizer(_Tokenizer):
@@ -96,6 +116,28 @@ class _OpenAITokenizer(_Tokenizer):
                 encoding = tiktoken.get_encoding("cl100k_base")
             total_tokens += len(encoding.encode(text))
         return total_tokens
+
+    def encode(self, text: str) -> List[int]:
+        """将文本转换为 Token ID 列表"""
+        if not isinstance(text, str):
+            return []
+        encoding_name = self.model_encoding_map.get(self.model, "cl100k_base")
+        try:
+            encoding = tiktoken.get_encoding(encoding_name)
+        except KeyError:
+            encoding = tiktoken.get_encoding("cl100k_base")
+        return encoding.encode(text)
+
+    def decode(self, token_ids: List[int]) -> str:
+        """将 Token ID 列表还原为文本"""
+        if not token_ids:
+            return ""
+        encoding_name = self.model_encoding_map.get(self.model, "cl100k_base")
+        try:
+            encoding = tiktoken.get_encoding(encoding_name)
+        except KeyError:
+            encoding = tiktoken.get_encoding("cl100k_base")
+        return encoding.decode(token_ids)
 
 
 _tokenizer_cache: Dict[str, _Tokenizer] = {}
