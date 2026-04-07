@@ -1,11 +1,10 @@
 from datetime import datetime
 from typing import Optional, List
-from pydantic import BaseModel, ConfigDict
 
-from app.schemas.base import BaseResponse
+from app.schemas.base import CamelBaseModel, BaseResponse
 
 
-class UserBase(BaseModel):
+class UserBase(CamelBaseModel):
     role: Optional[str] = None
     avatar_url: Optional[str] = None
     parent_id: Optional[str] = None
@@ -16,7 +15,7 @@ class UserBase(BaseModel):
     updated_at: Optional[datetime] = None
 
 
-class UserCreate(BaseModel):
+class UserCreate(CamelBaseModel):
     role: Optional[str] = None
     nickname: Optional[str] = None
     phone: Optional[str] = None
@@ -24,7 +23,7 @@ class UserCreate(BaseModel):
     password: str
 
 
-class UserUpdate(BaseModel):
+class UserUpdate(CamelBaseModel):
     role: Optional[str] = None
     avatar_url: Optional[str] = None
     parent_id: Optional[str] = None
@@ -35,8 +34,6 @@ class UserUpdate(BaseModel):
 
 class UserInDBBase(UserBase):
     id: str
-
-    model_config = ConfigDict(from_attributes=True)
 
 
 class User(UserInDBBase):
@@ -56,4 +53,7 @@ class UserOut(BaseResponse):
     phone: Optional[str] = None
     email: Optional[str] = None
 
-    model_config = ConfigDict(from_attributes=True)
+
+class UserVerifyResponse(BaseResponse):
+    access_token: str
+    user: User
