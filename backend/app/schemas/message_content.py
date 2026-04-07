@@ -2,17 +2,17 @@ from datetime import datetime
 from typing import Optional
 from pydantic import BaseModel, ConfigDict
 
-from app.schemas.base import BaseResponse
+from app.schemas.base import BaseResponse, CamelBaseModel
 
 
-class MessageContentBase(BaseModel):
+class MessageContentBase(CamelBaseModel):
     message_id: Optional[str] = None
     content: Optional[str] = None
     reasoning_content: Optional[str] = None
     meta_data: Optional[dict] = None
 
 
-class MessageContentCreate(BaseModel):
+class MessageContentCreate(CamelBaseModel):
     message_id: str
     content: str
     reasoning_content: Optional[str] = None
@@ -20,7 +20,7 @@ class MessageContentCreate(BaseModel):
     set_current: Optional[bool] = True
 
 
-class MessageContentActive(BaseModel):
+class MessageContentActive(CamelBaseModel):
     message_id: str
 
 
@@ -43,4 +43,3 @@ class MessageContentOut(BaseResponse):
     reasoning_content: Optional[str] = None
     meta_data: Optional[dict] = None
     additional_kwargs: Optional[dict] = None
-    model_config = ConfigDict(from_attributes=True)

@@ -47,4 +47,3 @@ class MessageOut(BaseResponse):
     files: Optional[List[FileOut]] = []
     contents: Optional[List[MessageContentOut]] = []
     current_turns_id: Optional[str] = None
-    model_config = ConfigDict(from_attributes=True)

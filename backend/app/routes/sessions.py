@@ -6,10 +6,7 @@ from app.schemas.common import PaginatedResponse
 from app.services.session_service import SessionService
 from app.models.user import User
 from app.schemas.session import SessionCreate, SessionItemOut, SessionOut, SessionUpdate
-from app.utils.vector_memory import get_vector_memory
 
-
-vector_memory = get_vector_memory()
 
 sessions_router = APIRouter(prefix="/api/v1")
 
@@ -39,7 +36,6 @@ async def delete_session(
     current_user: User = Depends(get_current_user),
 ):
     await session_service.delete_session(session_id, current_user)
-    vector_memory.delete_session_memories(session_id)
 
 
 @sessions_router.get("/sessions/{session_id}", response_model=SessionOut)
