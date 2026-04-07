@@ -6,6 +6,7 @@ from app.schemas.user import UserOut
 from app.services.user_service import UserService
 from app.models.user import User
 from app.security import create_access_token, verify_password
+from app.schemas.user import UserVerifyResponse
 
 users_router = APIRouter(prefix="/api/v1")
 
@@ -45,7 +46,7 @@ async def register(
     return user
 
 
-@users_router.post("/auth/login")
+@users_router.post("/auth/login", response_model=UserVerifyResponse)
 async def login(
     request: Request, user_service: UserService = Depends(get_user_service)
 ):
