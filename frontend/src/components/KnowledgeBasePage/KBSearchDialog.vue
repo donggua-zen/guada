@@ -63,15 +63,15 @@
                                 <template v-if="hasHybridScores(result)">
                                     <el-tag size="small" type="primary" effect="plain">
                                         <span class="text-xs">语义</span>
-                                        <span class="ml-1 font-medium">{{ (result.semantic_score || 0).toFixed(2) }}</span>
+                                        <span class="ml-1 font-medium">{{ (result.semanticScore || 0).toFixed(2) }}</span>
                                     </el-tag>
                                     <el-tag size="small" type="success" effect="plain">
                                         <span class="text-xs">关键词</span>
-                                        <span class="ml-1 font-medium">{{ (result.keyword_score || 0).toFixed(2) }}</span>
+                                        <span class="ml-1 font-medium">{{ (result.keywordScore || 0).toFixed(2) }}</span>
                                     </el-tag>
                                     <el-tag size="small" type="warning">
                                         <span class="text-xs">综合</span>
-                                        <span class="ml-1 font-bold">{{ (result.final_score || 0).toFixed(2) }}</span>
+                                        <span class="ml-1 font-bold">{{ (result.finalScore || 0).toFixed(2) }}</span>
                                     </el-tag>
                                 </template>
                                 <!-- 纯语义搜索模式：显示相似度 -->
@@ -85,9 +85,9 @@
                         </div>
 
                         <!-- 来源文件 -->
-                        <div v-if="result.file_name || result.metadata?.file_id" class="mb-2">
+                        <div v-if="result.fileName || result.metadata?.fileId" class="mb-2">
                             <el-tag size="small" type="info">
-                                {{ result.file_name || '未知文件' }}
+                                {{ result.fileName || '未知文件' }}
                             </el-tag>
                         </div>
 
@@ -141,10 +141,10 @@ interface SearchResult {
     content: string
     metadata: Record<string, any>
     similarity?: number  // 旧版字段，兼容纯语义搜索
-    semantic_score?: number  // 语义分数
-    keyword_score?: number   // 关键词分数
-    final_score?: number     // 综合分数
-    file_name?: string
+    semanticScore?: number  // 语义分数
+    keywordScore?: number   // 关键词分数
+    finalScore?: number     // 综合分数
+    fileName?: string
 }
 
 interface Props {
@@ -290,9 +290,9 @@ function highlightText(text: string, query: string): string {
  * 判断是否有混合搜索分数
  */
 function hasHybridScores(result: SearchResult): boolean {
-    return result.semantic_score !== undefined && 
-           result.keyword_score !== undefined && 
-           result.final_score !== undefined
+    return result.semanticScore !== undefined && 
+           result.keywordScore !== undefined && 
+           result.finalScore !== undefined
 }
 
 /**

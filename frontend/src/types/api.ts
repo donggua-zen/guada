@@ -12,15 +12,15 @@ import type { Message } from './message'
  */
 export interface Model {
     id: string
-    model_name: string
-    provider_id: string
-    provider_name?: string
-    is_active: boolean
-    context_window?: number
-    max_tokens?: number
+    modelName: string
+    providerId: string
+    providerName?: string
+    isActive: boolean
+    contextWindow?: number
+    maxTokens?: number
     description?: string
-    created_at?: string
-    updated_at?: string
+    createdAt?: string
+    updatedAt?: string
 }
 
 /**
@@ -29,11 +29,30 @@ export interface Model {
 export interface ModelProvider {
     id: string
     name: string
-    api_base?: string
-    api_key_set: boolean
-    is_active: boolean
-    created_at?: string
-    updated_at?: string
+    provider?: string  // 供应商标识符 (siliconflow, openai, custom 等)
+    protocol?: string  // 协议类型 (openai, openai-response, gemini, anthropic)
+    apiBase?: string
+    apiUrl?: string
+    apiKey?: string
+    apiKeySet: boolean
+    isActive: boolean
+    avatarUrl?: string
+    attributes?: any
+    createdAt?: string
+    updatedAt?: string
+}
+
+/**
+ * 供应商模板
+ */
+export interface ProviderTemplate {
+    id: string
+    name: string
+    protocol?: string  // 协议类型
+    avatarUrl?: string
+    defaultApiUrl?: string
+    description?: string
+    attributes?: any
 }
 
 /**
@@ -56,9 +75,9 @@ export interface McpServer {
     args?: string[]
     env?: Record<string, string>
     tools: McpTool[]
-    is_active: boolean
-    created_at?: string
-    updated_at?: string
+    isActive: boolean
+    createdAt?: string
+    updatedAt?: string
 }
 
 /**
@@ -68,25 +87,27 @@ export interface User {
     id: string
     username: string
     email?: string
-    avatar_url?: string
-    is_active: boolean
-    created_at?: string
-    updated_at?: string
+    avatarUrl?: string
+    role?: 'primary' | 'subaccount'  // 用户角色：主账户或子账户
+    isActive: boolean
+    createdAt?: string
+    updatedAt?: string
 }
 
 /**
  * 认证令牌
  */
 export interface AuthToken {
-    access_token: string
-    token_type: string
-    expires_in?: number
+    accessToken: string
+    tokenType?: string
+    expiresIn?: number
 }
 
 /**
  * 登录请求
  */
 export interface LoginRequest {
+    type: 'phone' | 'email'
     username: string
     password: string
 }
@@ -129,8 +150,8 @@ export interface ApiResponses {
     deleteMessage: { success: boolean }
     
     // 认证相关
-    login: { access_token: string; user: User }
-    register: { access_token: string; user: User }
+    login: { accessToken: string; user: User }
+    register: { accessToken?: string; user?: User }
     getProfile: User
     updateProfile: User
     

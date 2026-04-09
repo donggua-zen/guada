@@ -59,8 +59,7 @@ export class UsersController {
   @Post('user/avatars')
   @UseInterceptors(FileInterceptor('avatar'))
   async uploadAvatar(@UploadedFile() file: any, @CurrentUser() user: any) {
-    const fileUrl = `/uploads/${file.originalname}`;
-    return this.userService.uploadAvatar(user.sub, fileUrl);
+    return this.userService.uploadAvatar(user.sub, file);
   }
 
   @Get('user/reset-password')

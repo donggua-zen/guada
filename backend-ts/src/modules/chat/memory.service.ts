@@ -1,20 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { MessageRepository } from '../../common/database/message.repository';
-
-export interface MessagePart {
-    type: string;
-    text?: string;
-    image_url?: string;
-}
-
-export interface MessageRecord {
-    role: string;
-    content: string | MessagePart[];
-    reasoningContent?: string | undefined;
-    toolCalls?: any[] | undefined;
-    metadata?: Record<string, any> | undefined;
-    toolCallId?: string | undefined;
-}
+import { MessageRecord, MessagePart } from './types/llm.types';
 
 @Injectable()
 export class MemoryManagerService {

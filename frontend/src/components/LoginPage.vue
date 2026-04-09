@@ -241,9 +241,10 @@ const handleLogin = async (): Promise<void> => {
             try {
                 // 根据登录方式构建不同的登录参数
                 const loginData = {
-                    type: loginType.value,
+                    type: loginType.value as 'phone' | 'email',
                     username: loginType.value === 'phone' ? form.phone : form.email,
-                    password: form.password
+                    password: form.password,
+                    rememberMe: rememberMe.value  // 传递记住我状态
                 }
                 
                 await authStore.login(loginData)

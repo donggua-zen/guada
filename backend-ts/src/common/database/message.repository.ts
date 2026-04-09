@@ -129,6 +129,18 @@ export class MessageRepository {
   }
 
   /**
+   * 根据 ID 获取消息及其当前内容版本（便捷方法）
+   * 与 Python 后端 get_message(message_id, only_current_content=True) 一致
+   */
+  async findByIdWithCurrentContent(messageId: string) {
+    return this.findById(messageId, {
+      withFiles: false,
+      withContents: true,
+      onlyCurrentContent: true,
+    });
+  }
+
+  /**
    * 创建新消息
    */
   async create(data: {

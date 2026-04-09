@@ -158,12 +158,12 @@
             </el-form-item>
 
             <el-form-item label="向量模型" required>
-                <el-select v-model="createForm.embedding_model_id" placeholder="请选择向量模型" class="w-full">
+                <el-select v-model="createForm.embeddingModelId" placeholder="请选择向量模型" class="w-full">
                     <template v-for="provider in embeddingProviders" :key="provider.id">
                         <!-- 分组标题（不可点击） -->
                         <el-option :label="provider.name" :value="''" disabled />
                         <!-- 模型选项 -->
-                        <el-option v-for="model in provider.models" :key="model.id" :label="model.model_name"
+                        <el-option v-for="model in provider.models" :key="model.id" :label="model.modelName"
                             :value="model.id" />
                     </template>
                 </el-select>
@@ -176,7 +176,7 @@
                 <template #label>
                     <span class="font-medium text-gray-700 dark:text-gray-300">最大分块大小</span>
                 </template>
-                <el-input-number v-model="createForm.chunk_max_size" :min="100" :max="5000" :step="100"
+                <el-input-number v-model="createForm.chunkMaxSize" :min="100" :max="5000" :step="100"
                     class="w-full" />
             </el-form-item>
 
@@ -184,7 +184,7 @@
                 <template #label>
                     <span class="font-medium text-gray-700 dark:text-gray-300">重叠大小</span>
                 </template>
-                <el-input-number v-model="createForm.chunk_overlap_size" :min="0" :max="500" :step="10"
+                <el-input-number v-model="createForm.chunkOverlapSize" :min="0" :max="500" :step="10"
                     class="w-full" />
             </el-form-item>
 
@@ -192,11 +192,11 @@
                 <template #label>
                     <span class="font-medium text-gray-700 dark:text-gray-300">最小分块大小</span>
                 </template>
-                <el-input-number v-model="createForm.chunk_min_size" :min="10" :max="500" :step="10" class="w-full" />
+                <el-input-number v-model="createForm.chunkMinSize" :min="10" :max="500" :step="10" class="w-full" />
             </el-form-item>
 
             <el-form-item label="可见性">
-                <el-switch v-model="createForm.is_public" />
+                <el-switch v-model="createForm.isPublic" />
                 <span class="text-sm text-gray-500 dark:text-gray-400 ml-2">公开的知识库可被其他人查看</span>
             </el-form-item>
         </el-form>
@@ -230,25 +230,25 @@
                 <template #label>
                     <span class="font-medium text-gray-700 dark:text-gray-300">最大分块大小</span>
                 </template>
-                <el-input-number v-model="editForm.chunk_max_size" :min="100" :max="5000" :step="100" class="w-full" />
+                <el-input-number v-model="editForm.chunkMaxSize" :min="100" :max="5000" :step="100" class="w-full" />
             </el-form-item>
 
             <el-form-item>
                 <template #label>
                     <span class="font-medium text-gray-700 dark:text-gray-300">重叠大小</span>
                 </template>
-                <el-input-number v-model="editForm.chunk_overlap_size" :min="0" :max="500" :step="10" class="w-full" />
+                <el-input-number v-model="editForm.chunkOverlapSize" :min="0" :max="500" :step="10" class="w-full" />
             </el-form-item>
 
             <el-form-item>
                 <template #label>
                     <span class="font-medium text-gray-700 dark:text-gray-300">最小分块大小</span>
                 </template>
-                <el-input-number v-model="editForm.chunk_min_size" :min="10" :max="500" :step="10" class="w-full" />
+                <el-input-number v-model="editForm.chunkMinSize" :min="10" :max="500" :step="10" class="w-full" />
             </el-form-item>
 
             <el-form-item label="可见性">
-                <el-switch v-model="editForm.is_public" />
+                <el-switch v-model="editForm.isPublic" />
                 <span class="text-sm text-gray-500 dark:text-gray-400 ml-2">公开的知识库可被其他人查看</span>
             </el-form-item>
         </el-form>
@@ -326,11 +326,11 @@ let scrollTimer: number | null = null // 滚动防抖定时器
 const createForm = reactive({
     name: '',
     description: '',
-    embedding_model_id: '',
-    chunk_max_size: 1000,
-    chunk_overlap_size: 100,
-    chunk_min_size: 50,
-    is_public: false
+    embeddingModelId: '',
+    chunkMaxSize: 1000,
+    chunkOverlapSize: 100,
+    chunkMinSize: 50,
+    isPublic: false
 })
 
 // ========== 编辑表单 ==========
@@ -338,10 +338,10 @@ const editForm = reactive({
     id: '',
     name: '',
     description: '',
-    chunk_max_size: 1000,
-    chunk_overlap_size: 100,
-    chunk_min_size: 50,
-    is_public: false
+    chunkMaxSize: 1000,
+    chunkOverlapSize: 100,
+    chunkMinSize: 50,
+    isPublic: false
 })
 
 // ========== 计算属性 ==========
@@ -377,14 +377,14 @@ const loadEmbeddingModels = async () => {
         embeddingProviders.value = response.items
             .filter((provider: any) => {
                 const embeddingModels_ = provider.models.filter(
-                    (m: any) => m.model_type === 'embedding'
+                    (m: any) => m.modelType === 'embedding'
                 )
                 return embeddingModels_.length > 0
             })
             .map((provider: any) => ({
                 id: provider.id,
                 name: provider.name,
-                models: provider.models.filter((m: any) => m.model_type === 'embedding')
+                models: provider.models.filter((m: any) => m.modelType === 'embedding')
             }))
     } catch (error: any) {
         console.error('获取嵌入模型列表失败:', error)
@@ -419,7 +419,7 @@ async function handleCreate() {
         return
     }
 
-    if (!createForm.embedding_model_id) {
+    if (!createForm.embeddingModelId) {
         toast.warning('请选择向量模型')
         return
     }
@@ -428,11 +428,11 @@ async function handleCreate() {
         const newKb = await store.createKnowledgeBase({
             name: createForm.name,
             description: createForm.description || undefined,
-            embedding_model_id: createForm.embedding_model_id,
-            chunk_max_size: createForm.chunk_max_size,
-            chunk_overlap_size: createForm.chunk_overlap_size,
-            chunk_min_size: createForm.chunk_min_size,
-            is_public: createForm.is_public
+            embeddingModelId: createForm.embeddingModelId,
+            chunkMaxSize: createForm.chunkMaxSize,
+            chunkOverlapSize: createForm.chunkOverlapSize,
+            chunkMinSize: createForm.chunkMinSize,
+            isPublic: createForm.isPublic
         })
 
         toast.success('创建成功')
@@ -463,10 +463,10 @@ function handleEdit(kb: KnowledgeBase) {
         id: kb.id,
         name: kb.name,
         description: kb.description || '',
-        chunk_max_size: kb.chunk_max_size,
-        chunk_overlap_size: kb.chunk_overlap_size,
-        chunk_min_size: kb.chunk_min_size,
-        is_public: kb.is_public
+        chunkMaxSize: kb.chunkMaxSize,
+        chunkOverlapSize: kb.chunkOverlapSize,
+        chunkMinSize: kb.chunkMinSize,
+        isPublic: kb.isPublic
     })
     showEditModal.value = true
 }
@@ -484,10 +484,10 @@ async function handleUpdate() {
         await store.updateKnowledgeBase(editForm.id, {
             name: editForm.name,
             description: editForm.description,
-            chunk_max_size: editForm.chunk_max_size,
-            chunk_overlap_size: editForm.chunk_overlap_size,
-            chunk_min_size: editForm.chunk_min_size,
-            is_public: editForm.is_public
+            chunkMaxSize: editForm.chunkMaxSize,
+            chunkOverlapSize: editForm.chunkOverlapSize,
+            chunkMinSize: editForm.chunkMinSize,
+            isPublic: editForm.isPublic
         })
 
         toast.success('保存成功')
@@ -572,11 +572,11 @@ function handleAfterDelete(deletedKbId: string, currentIndex: number) {
 function resetForm() {
     createForm.name = ''
     createForm.description = ''
-    createForm.embedding_model_id = ''
-    createForm.chunk_max_size = 1000
-    createForm.chunk_overlap_size = 100
-    createForm.chunk_min_size = 50
-    createForm.is_public = false
+    createForm.embeddingModelId = ''
+    createForm.chunkMaxSize = 1000
+    createForm.chunkOverlapSize = 100
+    createForm.chunkMinSize = 50
+    createForm.isPublic = false
 }
 
 /**
@@ -619,22 +619,22 @@ async function handleFileChange(file: any) {
                         return f.id === updatedTask.id
                     }
                     // 匹配数据库记录（使用真实 ID）
-                    return f.file_id === updatedTask.fileId
+                    return f.fileId === updatedTask.fileId
                 })
 
                 console.log(`[DEBUG] 查找索引：index=${index}, updatedTask.fileId=${updatedTask.fileId}, files.length=${files.value.length}`)
 
                 if (index !== -1) {
-                    console.log(`[DEBUG] 找到匹配项：files[${index}].id=${files.value[index].id}, files[${index}].file_id=${files.value[index].file_id}`)
+                    console.log(`[DEBUG] 找到匹配项：files[${index}].id=${files.value[index].id}, files[${index}].file_id=${files.value[index].fileId}`)
 
                     // ✅ 关键修复 2: 使用 Vue 的响应式方式更新整个对象
                     // 不要直接修改属性，而是替换整个对象
                     files.value[index] = {
                         ...files.value[index],
-                        processing_status: updatedTask.status,
-                        progress_percentage: updatedTask.progress,
-                        current_step: updatedTask.currentStep,
-                        error_message: updatedTask.errorMessage
+                        processingStatus: updatedTask.status,
+                        progressPercentage: updatedTask.progress,
+                        currentStep: updatedTask.currentStep,
+                        errorMessage: updatedTask.errorMessage
                     }
 
                     console.log(`[DEBUG] 更新了文件 ${updatedTask.fileName} 的状态：${updatedTask.status}`)
@@ -758,7 +758,7 @@ async function handleRetryFile(file: UnifiedFileRecord) {
     try {
         const confirmed = await confirm(
             '警告',
-            `确定要重新处理文件"${file.display_name}"吗？这将重新启动后台处理任务。`,
+            `确定要重新处理文件"${file.displayName}"吗？这将重新启动后台处理任务。`,
             { type: 'warning' }
         )
 
@@ -802,7 +802,7 @@ function formatDate(dateString: string | null): string {
  */
 function handleViewFile(file: UnifiedFileRecord) {
     // 仅对已完成处理的文件启用查看功能
-    if (file.processing_status !== 'completed') {
+    if (file.processingStatus !== 'completed') {
         toast.warning('文件尚未处理完成，无法查看分块内容')
         return
     }
@@ -819,7 +819,7 @@ async function handleDeleteFile(file: UnifiedFileRecord) {
     try {
         const confirmed = await confirm(
             '警告',
-            `确定要删除文件"${file.display_name}"吗？此操作不可恢复。`,
+            `确定要删除文件"${file.displayName}"吗？此操作不可恢复。`,
             { type: 'warning' }
         )
 
@@ -902,8 +902,8 @@ async function refreshFileList() {
         // 3. ✅ 关键修复：对每个 processing/failed 状态的文件启动轮询（使用 knowledgeBase store 的轮询）
         // 收集所有需要轮询的文件 ID
         const processingFileIds = files.value
-            .filter(f => f.processing_status === 'processing' || f.processing_status === 'pending')
-            .map(f => f.file_id)
+            .filter(f => f.processingStatus === 'processing' || f.processingStatus === 'pending')
+            .map(f => f.fileId)
 
         // 批量启动轮询（多个文件共享一个定时器）
         if (processingFileIds.length > 0) {
@@ -916,12 +916,12 @@ async function refreshFileList() {
                     const index = files.value.findIndex((f) => f.id === updatedFile.id)
                     if (index !== -1) {
                         const fileToUpdate = files.value[index]
-                        fileToUpdate.processing_status = updatedFile.processing_status
-                        fileToUpdate.progress_percentage = updatedFile.progress_percentage
-                        fileToUpdate.current_step = updatedFile.current_step
-                        fileToUpdate.error_message = updatedFile.error_message
-                        fileToUpdate.total_chunks = updatedFile.total_chunks || undefined
-                        fileToUpdate.total_tokens = updatedFile.total_tokens || undefined
+                        fileToUpdate.processingStatus = updatedFile.processingStatus
+                        fileToUpdate.progressPercentage = updatedFile.progressPercentage
+                        fileToUpdate.currentStep = updatedFile.currentStep
+                        fileToUpdate.errorMessage = updatedFile.errorMessage
+                        fileToUpdate.totalChunks = updatedFile.totalChunks || undefined
+                        fileToUpdate.totalTokens = updatedFile.totalTokens || undefined
                     }
                 }
             )

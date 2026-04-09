@@ -1,0 +1,1735 @@
+﻿python : 2026-04-08 12:18:02,659 - INFO - ====
+==============================================
+==============================
+所在位置 行:1 字符: 35
++ ... \backend" ; python tests/verification/te
+st_business_scenario_bm25.py  ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: ( 
+   2026-04-08 12:1...===============:String)  
+   [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandEr 
+   ror
+ 
+2026-04-08 12:18:02,659 - INFO - 真实业务场景 BM25 召
+回准确性对比测试
+2026-04-08 12:18:02,659 - INFO - =============
+==============================================
+=====================
+2026-04-08 12:18:02,659 - INFO - 
+测试配置:
+2026-04-08 12:18:02,659 - INFO -   分块大小: 1000 
+tokens
+2026-04-08 12:18:02,659 - INFO -   重叠大小: 100 t
+okens
+2026-04-08 12:18:02,659 - INFO -   最大文档数: 200
+2026-04-08 12:18:02,660 - INFO - =============
+==============================================
+=====================
+2026-04-08 12:18:02,660 - INFO - 从 2 个目录加载文档并分
+块...
+2026-04-08 12:18:02,660 - INFO - 分块参数: chunk_s
+ize=1000, overlap_size=100
+2026-04-08 12:18:02,660 - INFO -   扫描目录: D:\编程
+开发\AI\ai_chat\backend\tests\verification\..\..
+\..\backend\docs
+2026-04-08 12:18:02,752 - INFO -   扫描目录: D:\编程
+开发\AI\ai_chat\backend\tests\verification\..\..
+\..\backend-ts\docs
+2026-04-08 12:18:02,813 - INFO - 加载了 200 个文档
+2026-04-08 12:18:03,165 - INFO - 生成了 427 个分块
+2026-04-08 12:18:03,165 - INFO - 平均每文档分块数: 2.1
+2026-04-08 12:18:03,165 - INFO - 
+==============================================
+==================================
+2026-04-08 12:18:03,165 - INFO - 测试: 测试知识库和向量检
+索相关文档
+2026-04-08 12:18:03,165 - INFO - =============
+==============================================
+=====================
+2026-04-08 12:18:03,176 - INFO - 
+[Python/Qdrant] 查询: '知识库 向量搜索'
+Building prefix dict from the default dictiona
+ry ...
+2026-04-08 12:18:03,177 - DEBUG - Building pre
+fix dict from the default dictionary ...
+Loading model from cache C:\Users\22071\AppDat
+a\Local\Temp\jieba.cache
+2026-04-08 12:18:03,177 - DEBUG - Loading mode
+l from cache C:\Users\22071\AppData\Local\Temp
+\jieba.cache
+Loading model cost 0.775 seconds.
+2026-04-08 12:18:03,952 - DEBUG - Loading mode
+l cost 0.775 seconds.
+Prefix dict has been built successfully.
+2026-04-08 12:18:03,952 - DEBUG - Prefix dict 
+has been built successfully.
+2026-04-08 12:18:05,118 - INFO -   匹配分块数: 426/
+427
+2026-04-08 12:18:05,118 - INFO -   Top-1: back
+end/knowledge_base\KNOWLEDGE_BASE_TOOL_PROVIDE
+R.md (分数: 9.6701)
+2026-04-08 12:18:05,130 - INFO - 
+[TypeScript/SQLite FTS5 - 改进前] 查询: '知识库 向量搜索'
+2026-04-08 12:18:06,285 - INFO -   匹配分块数: 10/4
+27
+2026-04-08 12:18:06,286 - INFO -   Top-1: back
+end/architecture\IMPROVEMENT_2_SESSION_INJECTI
+ON.md (分数: 0.757327)
+2026-04-08 12:18:06,291 - INFO - 
+[TypeScript/SQLite FTS5 - 改进后] 查询: '知识库 向量搜索'
+2026-04-08 12:18:06,291 - INFO -   [阶段 1] FTS5
+ 快速召回 Top-50...
+2026-04-08 12:18:07,517 - INFO -   动态候选集大小: 10
+6 (总文档: 427, 占比: 24.8%)
+2026-04-08 12:18:07,517 - INFO -   FTS5 召回候选数:
+ 106
+2026-04-08 12:18:07,518 - INFO -   [阶段 2] rank
+-bm25 重新计算分数...
+2026-04-08 12:18:07,807 - INFO -   语料库平均长度: 69
+4.4 tokens
+2026-04-08 12:18:07,807 - INFO -   精排后匹配数: 106
+2026-04-08 12:18:07,807 - INFO -   Top-1: back
+end/knowledge_base\README.md (分数: 1081.7094)
+2026-04-08 12:18:07,813 - INFO - 
+--- 召回准确性评估（三方对比） ---
+2026-04-08 12:18:07,813 - INFO - 查询: '知识库 向量搜索
+'
+2026-04-08 12:18:07,813 - INFO - 相关关键词: ['know
+ledge', 'vector', 'search', 'qdrant', 'lancedb
+']
+2026-04-08 12:18:07,814 - INFO - 
+[Python] Top-10 结果及相关性分析:
+2026-04-08 12:18:07,814 - INFO - 排名   | 文档    
+                                   | 分数       
+  | 相关性    | 匹配关键词
+2026-04-08 12:18:07,814 - INFO - -----+-------
+-----------------------------------+----------
+--+--------+---------------------
+2026-04-08 12:18:07,814 - INFO - 1    | backen
+d/knowledge_base\KNOWLEDGE_BASE... | 9.6701   
+  | 2      | knowledge, vector
+2026-04-08 12:18:07,814 - INFO - 2    | backen
+d/QDRANT_VERIFICATION_REPORT.md    | 9.5100   
+  | 3      | vector, search, qdrant
+2026-04-08 12:18:07,814 - INFO - 3    | backen
+d/QDRANT_USAGE_GUIDE.md            | 9.1019   
+  | 2      | vector, qdrant
+2026-04-08 12:18:07,815 - INFO - 4    | backen
+d-ts/LANCEDB_QUICKSTART.md         | 9.0534   
+  | 3      | vector, qdrant, lancedb
+2026-04-08 12:18:07,815 - INFO - 5    | backen
+d-ts/BUSINESS_LOGIC_AUDIT_REPOR... | 8.9812   
+  | 2      | knowledge, qdrant
+2026-04-08 12:18:07,815 - INFO - 6    | backen
+d/knowledge_base\KNOWLEDGE_BASE... | 8.8375   
+  | 0      | -
+2026-04-08 12:18:07,815 - INFO - 7    | backen
+d/VECTOR_SEARCH_PARAMS_FIX.md      | 8.7642   
+  | 2      | knowledge, search
+2026-04-08 12:18:07,815 - INFO - 8    | backen
+d/knowledge_base\SERVICE_STATUS.md | 8.5971   
+  | 1      | knowledge
+2026-04-08 12:18:07,815 - INFO - 9    | backen
+d/knowledge_base\KNOWLEDGE_BASE... | 8.5892   
+  | 0      | -
+2026-04-08 12:18:07,815 - INFO - 10   | backen
+d-ts/LANCEDB_IMPLEMENTATION_COM... | 8.5240   
+  | 3      | vector, qdrant, lancedb
+2026-04-08 12:18:07,816 - INFO - 
+[TypeScript (改进前)] Top-10 结果及相关性分析:
+2026-04-08 12:18:07,816 - INFO - 排名   | 文档    
+                                   | 分数       
+  | 相关性    | 匹配关键词
+2026-04-08 12:18:07,816 - INFO - -----+-------
+-----------------------------------+----------
+--+--------+---------------------
+2026-04-08 12:18:07,816 - INFO - 1    | backen
+d/architecture\IMPROVEMENT_2_SE... | 0.7573   
+  | 1      | search
+2026-04-08 12:18:07,817 - INFO - 2    | backen
+d-ts/AGENT_INFINITE_LOOP_FIX.md    | 0.7777   
+  | 0      | -
+2026-04-08 12:18:07,817 - INFO - 3    | backen
+d-ts/BM25_COMPARISON_TEST_GUIDE.md | 0.7909   
+  | 0      | -
+2026-04-08 12:18:07,817 - INFO - 4    | backen
+d-ts/HYBRID_SEARCH_BM25_ANALYSI... | 0.8056   
+  | 0      | -
+2026-04-08 12:18:07,817 - INFO - 5    | backen
+d/knowledge_base\AUTO_RECOVERY_... | 0.8092   
+  | 0      | -
+2026-04-08 12:18:07,817 - INFO - 6    | backen
+d/knowledge_base\CHROMADB_ASYNC... | 0.8401   
+  | 1      | vector
+2026-04-08 12:18:07,817 - INFO - 7    | backen
+d-ts/MESSAGE_FIELDS_CLEANUP.md     | 0.8404   
+  | 1      | knowledge
+2026-04-08 12:18:07,817 - INFO - 8    | backen
+d-ts/API_KEY_CONFIGURATION.md      | 0.8424   
+  | 0      | -
+2026-04-08 12:18:07,817 - INFO - 9    | backen
+d/architecture\OPENAI_TOOL_CONV... | 0.8460   
+  | 0      | -
+2026-04-08 12:18:07,817 - INFO - 10   | backen
+d-ts/JSON_FIELD_NAMING_CONSISTE... | 0.8531   
+  | 0      | -
+2026-04-08 12:18:07,817 - INFO - 
+[TypeScript (改进后)] Top-10 结果及相关性分析:
+2026-04-08 12:18:07,817 - INFO - 排名   | 文档    
+                                   | 分数       
+  | 相关性    | 匹配关键词
+2026-04-08 12:18:07,817 - INFO - -----+-------
+-----------------------------------+----------
+--+--------+---------------------
+2026-04-08 12:18:07,817 - INFO - 1    | backen
+d/knowledge_base\README.md         | 1081.7094
+  | 0      | -
+2026-04-08 12:18:07,817 - INFO - 2    | backen
+d/knowledge_base\AUTO_RECOVERY_... | 955.0417 
+  | 0      | -
+2026-04-08 12:18:07,817 - INFO - 3    | backen
+d/knowledge_base\HYBRID_SEARCH_... | 722.7316 
+  | 0      | -
+2026-04-08 12:18:07,817 - INFO - 4    | backen
+d/knowledge_base\HYBRID_SEARCH_... | 630.0301 
+  | 0      | -
+2026-04-08 12:18:07,817 - INFO - 5    | backen
+d-ts/BM25_FIX_SUMMARY.md           | 618.3525 
+  | 0      | -
+2026-04-08 12:18:07,817 - INFO - 6    | backen
+d/knowledge_base\README.md         | 559.9531 
+  | 2      | vector, search
+2026-04-08 12:18:07,817 - INFO - 7    | backen
+d/knowledge_base\FILES_FILTER_O... | 554.7137 
+  | 0      | -
+2026-04-08 12:18:07,817 - INFO - 8    | backen
+d/knowledge_base\AUTO_RECOVERY_... | 512.9449 
+  | 0      | -
+2026-04-08 12:18:07,817 - INFO - 9    | backen
+d/DATABASE_RESET_QUICKSTART.md     | 497.1809 
+  | 0      | -
+2026-04-08 12:18:07,817 - INFO - 10   | backen
+d-ts/FULL_METADATA_FILTERING.md    | 492.0256 
+  | 2      | qdrant, lancedb
+2026-04-08 12:18:07,818 - INFO - 
+指标              | Python     | TS 改进前     | TS
+ 改进后     | 提升
+2026-04-08 12:18:07,818 - INFO - -------------
+---+------------+------------+------------+---
+--------
+2026-04-08 12:18:07,818 - INFO - MRR          
+   | 1.0000     | 1.0000     | 0.1667     | -0
+.8333
+2026-04-08 12:18:07,818 - INFO - NDCG@1       
+   | 1.0000     | 1.0000     | 0.0000     | -1
+.0000
+2026-04-08 12:18:07,818 - INFO - NDCG@3       
+   | 1.0000     | 0.4693     | 0.0000     | -0
+.4693
+2026-04-08 12:18:07,818 - INFO - NDCG@5       
+   | 1.0000     | 0.4693     | 0.0000     | -0
+.4693
+2026-04-08 12:18:07,818 - INFO - NDCG@10      
+   | 0.9830     | 0.7929     | 0.3956     | -0
+.3972
+2026-04-08 12:18:07,818 - INFO - Recall@1     
+   | 0.1250     | 0.3333     | 0.0000     | -0
+.3333
+2026-04-08 12:18:07,818 - INFO - Recall@3     
+   | 0.3750     | 0.3333     | 0.0000     | -0
+.3333
+2026-04-08 12:18:07,818 - INFO - Recall@5     
+   | 0.6250     | 0.3333     | 0.0000     | -0
+.3333
+2026-04-08 12:18:07,818 - INFO - Recall@10    
+   | 1.0000     | 1.0000     | 1.0000     | 0.
+0000
+2026-04-08 12:18:07,818 - INFO - Precision@1  
+   | 1.0000     | 1.0000     | 0.0000     | -1
+.0000
+2026-04-08 12:18:07,818 - INFO - Precision@3  
+   | 1.0000     | 0.3333     | 0.0000     | -0
+.3333
+2026-04-08 12:18:07,818 - INFO - Precision@5  
+   | 1.0000     | 0.2000     | 0.0000     | -0
+.2000
+2026-04-08 12:18:07,818 - INFO - Precision@10 
+   | 0.8000     | 0.3000     | 0.2000     | -0
+.1000
+2026-04-08 12:18:07,818 - INFO - 
+\U0001f3c6 MRR 优胜者: Python
+2026-04-08 12:18:07,818 - INFO - 
+==============================================
+==================================
+2026-04-08 12:18:07,818 - INFO - 测试: 测试 BM25 算
+法相关文档
+2026-04-08 12:18:07,818 - INFO - =============
+==============================================
+=====================
+2026-04-08 12:18:07,818 - INFO - 
+[Python/Qdrant] 查询: 'BM25 评分 关键词'
+2026-04-08 12:18:08,951 - INFO -   匹配分块数: 426/
+427
+2026-04-08 12:18:08,951 - INFO -   Top-1: back
+end-ts/BM25_FIX_SUMMARY.md (分数: 17.5330)
+2026-04-08 12:18:08,958 - INFO - 
+[TypeScript/SQLite FTS5 - 改进前] 查询: 'BM25 评分 关键
+词'
+2026-04-08 12:18:10,113 - INFO -   匹配分块数: 10/4
+27
+2026-04-08 12:18:10,113 - INFO -   Top-1: back
+end/VERIFICATION_SCRIPTS_GUIDE.md (分数: 1.32658
+2)
+2026-04-08 12:18:10,117 - INFO - 
+[TypeScript/SQLite FTS5 - 改进后] 查询: 'BM25 评分 关键
+词'
+2026-04-08 12:18:10,117 - INFO -   [阶段 1] FTS5
+ 快速召回 Top-50...
+2026-04-08 12:18:11,366 - INFO -   动态候选集大小: 10
+6 (总文档: 427, 占比: 24.8%)
+2026-04-08 12:18:11,366 - INFO -   FTS5 召回候选数:
+ 89
+2026-04-08 12:18:11,366 - INFO -   [阶段 2] rank
+-bm25 重新计算分数...
+2026-04-08 12:18:11,639 - INFO -   语料库平均长度: 68
+7.8 tokens
+2026-04-08 12:18:11,639 - INFO -   精排后匹配数: 89
+2026-04-08 12:18:11,639 - INFO -   Top-1: back
+end-ts/BM25_FIX_SUMMARY.md (分数: 1694.9252)
+2026-04-08 12:18:11,644 - INFO - 
+--- 召回准确性评估（三方对比） ---
+2026-04-08 12:18:11,644 - INFO - 查询: 'BM25 评分 
+关键词'
+2026-04-08 12:18:11,644 - INFO - 相关关键词: ['bm25
+', 'keyword', 'rank', 'fts', 'search']
+2026-04-08 12:18:11,645 - INFO - 
+[Python] Top-10 结果及相关性分析:
+2026-04-08 12:18:11,645 - INFO - 排名   | 文档    
+                                   | 分数       
+  | 相关性    | 匹配关键词
+2026-04-08 12:18:11,645 - INFO - -----+-------
+-----------------------------------+----------
+--+--------+---------------------
+2026-04-08 12:18:11,645 - INFO - 1    | backen
+d-ts/BM25_FIX_SUMMARY.md           | 17.5330  
+  | 2      | bm25, fts
+2026-04-08 12:18:11,645 - INFO - 2    | backen
+d-ts/BM25_FIX_SUMMARY.md           | 17.2494  
+  | 3      | bm25, keyword, rank, fts, search
+2026-04-08 12:18:11,645 - INFO - 3    | backen
+d-ts/BM25_COMPARISON_TEST_GUIDE.md | 15.6640  
+  | 1      | bm25
+2026-04-08 12:18:11,645 - INFO - 4    | backen
+d-ts/BM25_TOKENIZATION_DEBUG_RE... | 15.6466  
+  | 1      | bm25
+2026-04-08 12:18:11,645 - INFO - 5    | backen
+d-ts/HYBRID_SEARCH_BM25_ANALYSI... | 15.4500  
+  | 2      | bm25, fts
+2026-04-08 12:18:11,645 - INFO - 6    | backen
+d-ts/BM25_COMPARISON_TEST_SUMMA... | 14.7728  
+  | 1      | bm25
+2026-04-08 12:18:11,645 - INFO - 7    | backen
+d-ts/BM25_COMPARISON_COMPLETE_S... | 14.7341  
+  | 3      | bm25, fts, search
+2026-04-08 12:18:11,645 - INFO - 8    | backen
+d-ts/BUSINESS_SCENARIO_BM25_COM... | 13.8557  
+  | 3      | bm25, keyword, rank, fts, search
+2026-04-08 12:18:11,646 - INFO - 9    | backen
+d-ts/PRODUCTION_BM25_COMPARISON... | 13.4148  
+  | 3      | bm25, rank, fts, search
+2026-04-08 12:18:11,646 - INFO - 10   | backen
+d/knowledge_base\HYBRID_SEARCH_... | 12.7617  
+  | 1      | keyword
+2026-04-08 12:18:11,648 - INFO - 
+[TypeScript (改进前)] Top-10 结果及相关性分析:
+2026-04-08 12:18:11,648 - INFO - 排名   | 文档    
+                                   | 分数       
+  | 相关性    | 匹配关键词
+2026-04-08 12:18:11,648 - INFO - -----+-------
+-----------------------------------+----------
+--+--------+---------------------
+2026-04-08 12:18:11,648 - INFO - 1    | backen
+d/VERIFICATION_SCRIPTS_GUIDE.md    | 1.3266   
+  | 2      | bm25, search
+2026-04-08 12:18:11,648 - INFO - 2    | backen
+d-ts/BUSINESS_LOGIC_AUDIT_REPOR... | 1.4125   
+  | 1      | bm25
+2026-04-08 12:18:11,648 - INFO - 3    | backen
+d-ts/BUSINESS_LOGIC_AUDIT_REPOR... | 1.4557   
+  | 1      | bm25
+2026-04-08 12:18:11,648 - INFO - 4    | backen
+d/HYBRID_SEARCH_TEST_REPORT.md     | 1.4741   
+  | 1      | bm25
+2026-04-08 12:18:11,648 - INFO - 5    | backen
+d/knowledge_base\DEPLOYMENT_AND... | 1.4967   
+  | 0      | -
+2026-04-08 12:18:11,648 - INFO - 6    | backen
+d-ts/MESSAGES_MODULE_IMPLEMENTA... | 1.7676   
+  | 0      | -
+2026-04-08 12:18:11,648 - INFO - 7    | backen
+d/knowledge_base\KNOWLEDGE_BASE... | 1.9550   
+  | 0      | -
+2026-04-08 12:18:11,648 - INFO - 8    | backen
+d-ts/LANCEDB_CHINESE_FTS_IMPLEM... | 1.9964   
+  | 3      | bm25, fts, search
+2026-04-08 12:18:11,648 - INFO - 9    | backen
+d-ts/BUSINESS_LOGIC_AUDIT_REPOR... | 1.9969   
+  | 1      | bm25
+2026-04-08 12:18:11,648 - INFO - 10   | backen
+d/knowledge_base\HYBRID_SEARCH_... | 2.0517   
+  | 1      | bm25
+2026-04-08 12:18:11,649 - INFO - 
+[TypeScript (改进后)] Top-10 结果及相关性分析:
+2026-04-08 12:18:11,649 - INFO - 排名   | 文档    
+                                   | 分数       
+  | 相关性    | 匹配关键词
+2026-04-08 12:18:11,649 - INFO - -----+-------
+-----------------------------------+----------
+--+--------+---------------------
+2026-04-08 12:18:11,649 - INFO - 1    | backen
+d-ts/BM25_FIX_SUMMARY.md           | 1694.9252
+  | 2      | bm25, fts
+2026-04-08 12:18:11,649 - INFO - 2    | backen
+d-ts/HYBRID_SEARCH_BM25_ANALYSI... | 1153.1477
+  | 3      | bm25, rank, fts
+2026-04-08 12:18:11,649 - INFO - 3    | backen
+d/knowledge_base\HYBRID_SEARCH_... | 796.0089 
+  | 0      | -
+2026-04-08 12:18:11,649 - INFO - 4    | backen
+d-ts/BM25_COMPARISON_TEST_GUIDE.md | 775.5651 
+  | 2      | bm25, rank
+2026-04-08 12:18:11,649 - INFO - 5    | backen
+d-ts/BUSINESS_LOGIC_AUDIT_REPOR... | 757.4361 
+  | 1      | bm25
+2026-04-08 12:18:11,650 - INFO - 6    | backen
+d-ts/BM25_COMPARISON_TEST_SUMMA... | 727.2769 
+  | 1      | bm25
+2026-04-08 12:18:11,650 - INFO - 7    | backen
+d-ts/HYBRID_SEARCH_BM25_ANALYSI... | 659.0461 
+  | 2      | bm25, fts
+2026-04-08 12:18:11,650 - INFO - 8    | backen
+d-ts/BM25_FIX_SUMMARY.md           | 656.5869 
+  | 3      | bm25, keyword, rank, fts, search
+2026-04-08 12:18:11,650 - INFO - 9    | backen
+d/knowledge_base\HYBRID_SEARCH_... | 655.4010 
+  | 1      | bm25
+2026-04-08 12:18:11,650 - INFO - 10   | backen
+d-ts/BM25_TOKENIZATION_DEBUG_RE... | 648.8126 
+  | 1      | bm25
+2026-04-08 12:18:11,650 - INFO - 
+指标              | Python     | TS 改进前     | TS
+ 改进后     | 提升
+2026-04-08 12:18:11,650 - INFO - -------------
+---+------------+------------+------------+---
+--------
+2026-04-08 12:18:11,650 - INFO - MRR          
+   | 1.0000     | 1.0000     | 1.0000     | 0.
+0000
+2026-04-08 12:18:11,650 - INFO - NDCG@1       
+   | 1.0000     | 1.0000     | 1.0000     | 0.
+0000
+2026-04-08 12:18:11,650 - INFO - NDCG@3       
+   | 1.0000     | 1.0000     | 0.7654     | -0
+.2346
+2026-04-08 12:18:11,650 - INFO - NDCG@5       
+   | 1.0000     | 0.8688     | 0.8304     | -0
+.0384
+2026-04-08 12:18:11,650 - INFO - NDCG@10      
+   | 1.0000     | 0.9530     | 0.9504     | -0
+.0026
+2026-04-08 12:18:11,650 - INFO - Recall@1     
+   | 0.1000     | 0.1429     | 0.1111     | -0
+.0317
+2026-04-08 12:18:11,650 - INFO - Recall@3     
+   | 0.3000     | 0.4286     | 0.2222     | -0
+.2063
+2026-04-08 12:18:11,650 - INFO - Recall@5     
+   | 0.5000     | 0.5714     | 0.4444     | -0
+.1270
+2026-04-08 12:18:11,650 - INFO - Recall@10    
+   | 1.0000     | 1.0000     | 1.0000     | 0.
+0000
+2026-04-08 12:18:11,651 - INFO - Precision@1  
+   | 1.0000     | 1.0000     | 1.0000     | 0.
+0000
+2026-04-08 12:18:11,651 - INFO - Precision@3  
+   | 1.0000     | 1.0000     | 0.6667     | -0
+.3333
+2026-04-08 12:18:11,651 - INFO - Precision@5  
+   | 1.0000     | 0.8000     | 0.8000     | 0.
+0000
+2026-04-08 12:18:11,651 - INFO - Precision@10 
+   | 1.0000     | 0.7000     | 0.9000     | +0
+.2000
+2026-04-08 12:18:11,651 - INFO - 
+\U0001f3c6 MRR 优胜者: Python
+2026-04-08 12:18:11,651 - INFO - 
+==============================================
+==================================
+2026-04-08 12:18:11,651 - INFO - 测试: 测试数据库迁移相关
+文档
+2026-04-08 12:18:11,651 - INFO - =============
+==============================================
+=====================
+2026-04-08 12:18:11,651 - INFO - 
+[Python/Qdrant] 查询: '数据库迁移 Prisma'
+2026-04-08 12:18:12,860 - INFO -   匹配分块数: 426/
+427
+2026-04-08 12:18:12,860 - INFO -   Top-1: back
+end-ts/PRISMA_JSON_TYPE_UPGRADE.md (分数: 9.7780
+)
+2026-04-08 12:18:12,868 - INFO - 
+[TypeScript/SQLite FTS5 - 改进前] 查询: '数据库迁移 Pris
+ma'
+2026-04-08 12:18:14,112 - INFO -   匹配分块数: 10/4
+27
+2026-04-08 12:18:14,112 - INFO -   Top-1: back
+end/knowledge_base\FILES_FILTER_OPTIMIZATION.m
+d (分数: 0.418251)
+2026-04-08 12:18:14,134 - INFO - 
+[TypeScript/SQLite FTS5 - 改进后] 查询: '数据库迁移 Pris
+ma'
+2026-04-08 12:18:14,136 - INFO -   [阶段 1] FTS5
+ 快速召回 Top-50...
+2026-04-08 12:18:15,353 - INFO -   动态候选集大小: 10
+6 (总文档: 427, 占比: 24.8%)
+2026-04-08 12:18:15,354 - INFO -   FTS5 召回候选数:
+ 106
+2026-04-08 12:18:15,354 - INFO -   [阶段 2] rank
+-bm25 重新计算分数...
+2026-04-08 12:18:15,678 - INFO -   语料库平均长度: 72
+0.9 tokens
+2026-04-08 12:18:15,678 - INFO -   精排后匹配数: 106
+2026-04-08 12:18:15,678 - INFO -   Top-1: back
+end/knowledge_base\FRONTEND_FILE_LIST_REFACTOR
+.md (分数: 786.8641)
+2026-04-08 12:18:15,692 - INFO - 
+--- 召回准确性评估（三方对比） ---
+2026-04-08 12:18:15,692 - INFO - 查询: '数据库迁移 Pr
+isma'
+2026-04-08 12:18:15,692 - INFO - 相关关键词: ['migr
+ation', 'prisma', 'database', 'schema']
+2026-04-08 12:18:15,693 - INFO - 
+[Python] Top-10 结果及相关性分析:
+2026-04-08 12:18:15,693 - INFO - 排名   | 文档    
+                                   | 分数       
+  | 相关性    | 匹配关键词
+2026-04-08 12:18:15,693 - INFO - -----+-------
+-----------------------------------+----------
+--+--------+---------------------
+2026-04-08 12:18:15,693 - INFO - 1    | backen
+d-ts/PRISMA_JSON_TYPE_UPGRADE.md   | 9.7780   
+  | 2      | prisma, schema
+2026-04-08 12:18:15,694 - INFO - 2    | backen
+d-ts/PRISMA_JSON_TYPE_UPGRADE.md   | 9.6222   
+  | 2      | prisma, schema
+2026-04-08 12:18:15,694 - INFO - 3    | backen
+d-ts/PRISMA_SQLITE_JSON_SUPPORT... | 9.6210   
+  | 2      | prisma, schema
+2026-04-08 12:18:15,694 - INFO - 4    | backen
+d-ts/PRISMA_SQLITE_JSON_SUPPORT... | 9.5084   
+  | 2      | prisma, schema
+2026-04-08 12:18:15,694 - INFO - 5    | backen
+d-ts/PRISMA_SQLITE_JSON_SUPPORT... | 8.9824   
+  | 2      | prisma, schema
+2026-04-08 12:18:15,694 - INFO - 6    | backen
+d-ts/MESSAGE_REPOSITORY_ENHANCE... | 8.8074   
+  | 2      | prisma, schema
+2026-04-08 12:18:15,694 - INFO - 7    | backen
+d-ts/MIGRATION_COMPLETION_REPOR... | 8.3739   
+  | 2      | prisma, schema
+2026-04-08 12:18:15,694 - INFO - 8    | backen
+d-ts/PRISMA_FIELD_NAMING.md        | 8.3669   
+  | 2      | prisma, schema
+2026-04-08 12:18:15,694 - INFO - 9    | backen
+d-ts/API_NAMING_CONVENTION_ANAL... | 8.3119   
+  | 1      | prisma
+2026-04-08 12:18:15,694 - INFO - 10   | backen
+d-ts/MIGRATION_COMPLETION_REPOR... | 8.1461   
+  | 2      | prisma, schema
+2026-04-08 12:18:15,695 - INFO - 
+[TypeScript (改进前)] Top-10 结果及相关性分析:
+2026-04-08 12:18:15,695 - INFO - 排名   | 文档    
+                                   | 分数       
+  | 相关性    | 匹配关键词
+2026-04-08 12:18:15,695 - INFO - -----+-------
+-----------------------------------+----------
+--+--------+---------------------
+2026-04-08 12:18:15,695 - INFO - 1    | backen
+d/knowledge_base\FILES_FILTER_O... | 0.4183   
+  | 0      | -
+2026-04-08 12:18:15,695 - INFO - 2    | backen
+d/knowledge_base\FILE_UPLOAD_FI... | 0.4203   
+  | 0      | -
+2026-04-08 12:18:15,695 - INFO - 3    | backen
+d/architecture\AGENT_SERVICE_CO... | 0.4358   
+  | 1      | schema
+2026-04-08 12:18:15,695 - INFO - 4    | backen
+d/knowledge_base\REMOVE_POLLING... | 0.4363   
+  | 0      | -
+2026-04-08 12:18:15,695 - INFO - 5    | backen
+d/architecture\TESTING_ISSUES.md   | 0.4369   
+  | 0      | -
+2026-04-08 12:18:15,695 - INFO - 6    | backen
+d/architecture\TOOL_CALLS_REFAC... | 0.4512   
+  | 1      | schema
+2026-04-08 12:18:15,695 - INFO - 7    | backen
+d-ts/AGENT_STREAMING_CREATE_EVE... | 0.4512   
+  | 0      | -
+2026-04-08 12:18:15,695 - INFO - 8    | backen
+d/architecture\TOOL_CALLS_REFAC... | 0.4554   
+  | 1      | schema
+2026-04-08 12:18:15,695 - INFO - 9    | backen
+d/knowledge_base\PHASE2_COMPLET... | 0.4590   
+  | 0      | -
+2026-04-08 12:18:15,695 - INFO - 10   | backen
+d-ts/CHUNKING_SERVICE_USAGE.md     | 0.4597   
+  | 0      | -
+2026-04-08 12:18:15,696 - INFO - 
+[TypeScript (改进后)] Top-10 结果及相关性分析:
+2026-04-08 12:18:15,696 - INFO - 排名   | 文档    
+                                   | 分数       
+  | 相关性    | 匹配关键词
+2026-04-08 12:18:15,696 - INFO - -----+-------
+-----------------------------------+----------
+--+--------+---------------------
+2026-04-08 12:18:15,696 - INFO - 1    | backen
+d/knowledge_base\FRONTEND_FILE_... | 786.8641 
+  | 0      | -
+2026-04-08 12:18:15,696 - INFO - 2    | backen
+d-ts/HYBRID_SEARCH_BM25_ANALYSI... | 740.9527 
+  | 0      | -
+2026-04-08 12:18:15,696 - INFO - 3    | backen
+d/knowledge_base\AUTO_RECOVERY_... | 584.6814 
+  | 0      | -
+2026-04-08 12:18:15,696 - INFO - 4    | backen
+d/DATABASE_RESET_QUICKSTART.md     | 497.9507 
+  | 0      | -
+2026-04-08 12:18:15,696 - INFO - 5    | backen
+d/knowledge_base\FRONTEND_FILE_... | 483.4771 
+  | 0      | -
+2026-04-08 12:18:15,696 - INFO - 6    | backen
+d/knowledge_base\BACKEND_PROCES... | 448.5388 
+  | 0      | -
+2026-04-08 12:18:15,696 - INFO - 7    | backen
+d/knowledge_base\FILE_PROCESSIN... | 424.3377 
+  | 0      | -
+2026-04-08 12:18:15,696 - INFO - 8    | backen
+d/architecture\MCP_RESOLVE_ENAB... | 410.8870 
+  | 0      | -
+2026-04-08 12:18:15,696 - INFO - 9    | backen
+d/architecture\EXECUTE_CACHE_OP... | 404.0959 
+  | 0      | -
+2026-04-08 12:18:15,696 - INFO - 10   | backen
+d-ts/LANCEDB_CHINESE_SEARCH_SOL... | 386.8135 
+  | 0      | -
+2026-04-08 12:18:15,696 - INFO - 
+指标              | Python     | TS 改进前     | TS
+ 改进后     | 提升
+2026-04-08 12:18:15,696 - INFO - -------------
+---+------------+------------+------------+---
+--------
+2026-04-08 12:18:15,696 - INFO - MRR          
+   | 1.0000     | 0.3333     | 0.0000     | -0
+.3333
+2026-04-08 12:18:15,696 - INFO - NDCG@1       
+   | 1.0000     | 0.0000     | 0.0000     | 0.
+0000
+2026-04-08 12:18:15,696 - INFO - NDCG@3       
+   | 1.0000     | 0.2346     | 0.0000     | -0
+.2346
+2026-04-08 12:18:15,697 - INFO - NDCG@5       
+   | 1.0000     | 0.2346     | 0.0000     | -0
+.2346
+2026-04-08 12:18:15,697 - INFO - NDCG@10      
+   | 1.0000     | 0.5498     | 0.0000     | -0
+.5498
+2026-04-08 12:18:15,697 - INFO - Recall@1     
+   | 0.1000     | 0.0000     | 0.0000     | 0.
+0000
+2026-04-08 12:18:15,697 - INFO - Recall@3     
+   | 0.3000     | 0.3333     | 0.0000     | -0
+.3333
+2026-04-08 12:18:15,697 - INFO - Recall@5     
+   | 0.5000     | 0.3333     | 0.0000     | -0
+.3333
+2026-04-08 12:18:15,697 - INFO - Recall@10    
+   | 1.0000     | 1.0000     | 0.0000     | -1
+.0000
+2026-04-08 12:18:15,697 - INFO - Precision@1  
+   | 1.0000     | 0.0000     | 0.0000     | 0.
+0000
+2026-04-08 12:18:15,697 - INFO - Precision@3  
+   | 1.0000     | 0.3333     | 0.0000     | -0
+.3333
+2026-04-08 12:18:15,697 - INFO - Precision@5  
+   | 1.0000     | 0.2000     | 0.0000     | -0
+.2000
+2026-04-08 12:18:15,697 - INFO - Precision@10 
+   | 1.0000     | 0.3000     | 0.0000     | -0
+.3000
+2026-04-08 12:18:15,697 - INFO - 
+\U0001f3c6 MRR 优胜者: Python
+2026-04-08 12:18:15,697 - INFO - 
+==============================================
+==================================
+2026-04-08 12:18:15,697 - INFO - 测试: 测试认证授权相关文
+档
+2026-04-08 12:18:15,697 - INFO - =============
+==============================================
+=====================
+2026-04-08 12:18:15,698 - INFO - 
+[Python/Qdrant] 查询: 'JWT 认证 权限'
+2026-04-08 12:18:16,930 - INFO -   匹配分块数: 426/
+427
+2026-04-08 12:18:16,930 - INFO -   Top-1: back
+end-ts/MESSAGES_MODULE_IMPLEMENTATION.md (分数: 
+18.3731)
+2026-04-08 12:18:16,939 - INFO - 
+[TypeScript/SQLite FTS5 - 改进前] 查询: 'JWT 认证 权限'
+2026-04-08 12:18:18,097 - INFO -   匹配分块数: 10/4
+27
+2026-04-08 12:18:18,097 - INFO -   Top-1: back
+end/architecture\MCP_TOOLS_SCHEMA_UNIFICATION.
+md (分数: 1.614742)
+2026-04-08 12:18:18,103 - INFO - 
+[TypeScript/SQLite FTS5 - 改进后] 查询: 'JWT 认证 权限'
+2026-04-08 12:18:18,103 - INFO -   [阶段 1] FTS5
+ 快速召回 Top-50...
+2026-04-08 12:18:19,298 - INFO -   动态候选集大小: 10
+6 (总文档: 427, 占比: 24.8%)
+2026-04-08 12:18:19,301 - INFO -   FTS5 召回候选数:
+ 68
+2026-04-08 12:18:19,301 - INFO -   [阶段 2] rank
+-bm25 重新计算分数...
+2026-04-08 12:18:19,523 - INFO -   语料库平均长度: 76
+4.6 tokens
+2026-04-08 12:18:19,524 - INFO -   精排后匹配数: 68
+2026-04-08 12:18:19,524 - INFO -   Top-1: back
+end-ts/BUSINESS_LOGIC_AUDIT_REPORT_V2.md (分数: 
+715.7910)
+2026-04-08 12:18:19,530 - INFO - 
+--- 召回准确性评估（三方对比） ---
+2026-04-08 12:18:19,530 - INFO - 查询: 'JWT 认证 权
+限'
+2026-04-08 12:18:19,530 - INFO - 相关关键词: ['jwt'
+, 'auth', 'permission', 'security', 'guard', '
+token']
+2026-04-08 12:18:19,531 - INFO - 
+[Python] Top-10 结果及相关性分析:
+2026-04-08 12:18:19,531 - INFO - 排名   | 文档    
+                                   | 分数       
+  | 相关性    | 匹配关键词
+2026-04-08 12:18:19,531 - INFO - -----+-------
+-----------------------------------+----------
+--+--------+---------------------
+2026-04-08 12:18:19,531 - INFO - 1    | backen
+d-ts/MESSAGES_MODULE_IMPLEMENTA... | 18.3731  
+  | 2      | jwt, token
+2026-04-08 12:18:19,531 - INFO - 2    | backen
+d-ts/JWT_USER_ID_FIELD_FIX.md      | 17.2181  
+  | 3      | jwt, auth, guard, token
+2026-04-08 12:18:19,531 - INFO - 3    | backen
+d-ts/LARGE_SCALE_TEST_RESULTS.md   | 14.4300  
+  | 1      | jwt
+2026-04-08 12:18:19,531 - INFO - 4    | backen
+d/knowledge_base\TEST_REPORT.md    | 14.3480  
+  | 2      | jwt, token
+2026-04-08 12:18:19,531 - INFO - 5    | backen
+d-ts/BACKEND_LOGIC_AUDIT_REPORT.md | 13.5702  
+  | 2      | auth, guard
+2026-04-08 12:18:19,531 - INFO - 6    | backen
+d/BM25_CHINESE_SUPPORT_REPORT.md   | 13.4596  
+  | 3      | jwt, auth, token
+2026-04-08 12:18:19,532 - INFO - 7    | backen
+d-ts/BM25_COMPARISON_COMPLETE_S... | 13.1504  
+  | 1      | jwt
+2026-04-08 12:18:19,532 - INFO - 8    | backen
+d-ts/BUSINESS_SCENARIO_BM25_COM... | 12.6973  
+  | 3      | jwt, auth, permission, security, 
+guard
+2026-04-08 12:18:19,532 - INFO - 9    | backen
+d-ts/BUSINESS_LOGIC_AUDIT_REPOR... | 12.5129  
+  | 0      | -
+2026-04-08 12:18:19,532 - INFO - 10   | backen
+d/knowledge_base\TEST_REPORT.md    | 12.3357  
+  | 2      | jwt, token
+2026-04-08 12:18:19,533 - INFO - 
+[TypeScript (改进前)] Top-10 结果及相关性分析:
+2026-04-08 12:18:19,533 - INFO - 排名   | 文档    
+                                   | 分数       
+  | 相关性    | 匹配关键词
+2026-04-08 12:18:19,533 - INFO - -----+-------
+-----------------------------------+----------
+--+--------+---------------------
+2026-04-08 12:18:19,533 - INFO - 1    | backen
+d/architecture\MCP_TOOLS_SCHEMA... | 1.6147   
+  | 0      | -
+2026-04-08 12:18:19,533 - INFO - 2    | backen
+d/architecture\LOCAL_TOOLS_ENAB... | 1.6270   
+  | 0      | -
+2026-04-08 12:18:19,533 - INFO - 3    | backen
+d/knowledge_base\README.md         | 1.7242   
+  | 1      | token
+2026-04-08 12:18:19,533 - INFO - 4    | backen
+d-ts/PAGINATION_HELPER_UNIFICAT... | 1.8496   
+  | 0      | -
+2026-04-08 12:18:19,533 - INFO - 5    | backen
+d-ts/MESSAGES_STREAM_ENDPOINT_A... | 1.8660   
+  | 1      | token
+2026-04-08 12:18:19,533 - INFO - 6    | backen
+d-ts/MESSAGES_LIST_PAGINATION_F... | 1.9098   
+  | 1      | token
+2026-04-08 12:18:19,533 - INFO - 7    | backen
+d-ts/401_AUTH_ERROR_FIX.md         | 1.9453   
+  | 1      | auth
+2026-04-08 12:18:19,533 - INFO - 8    | backen
+d/architecture\TOOL_CALLS_REFAC... | 1.9710   
+  | 0      | -
+2026-04-08 12:18:19,533 - INFO - 9    | backen
+d/knowledge_base\JSON_FORMAT_UP... | 1.9736   
+  | 0      | -
+2026-04-08 12:18:19,533 - INFO - 10   | backen
+d/architecture\TEST_COVERAGE_AN... | 1.9999   
+  | 0      | -
+2026-04-08 12:18:19,533 - INFO - 
+[TypeScript (改进后)] Top-10 结果及相关性分析:
+2026-04-08 12:18:19,533 - INFO - 排名   | 文档    
+                                   | 分数       
+  | 相关性    | 匹配关键词
+2026-04-08 12:18:19,534 - INFO - -----+-------
+-----------------------------------+----------
+--+--------+---------------------
+2026-04-08 12:18:19,534 - INFO - 1    | backen
+d-ts/BUSINESS_LOGIC_AUDIT_REPOR... | 715.7910 
+  | 0      | -
+2026-04-08 12:18:19,534 - INFO - 2    | backen
+d-ts/BUSINESS_LOGIC_AUDIT_REPOR... | 666.4563 
+  | 0      | -
+2026-04-08 12:18:19,534 - INFO - 3    | backen
+d/knowledge_base\ROUTE_FIX_REPO... | 648.7636 
+  | 0      | -
+2026-04-08 12:18:19,534 - INFO - 4    | backen
+d-ts/MESSAGES_MODULE_IMPLEMENTA... | 617.7255 
+  | 2      | jwt, token
+2026-04-08 12:18:19,534 - INFO - 5    | backen
+d/knowledge_base\TEST_REPORT.md    | 613.7658 
+  | 2      | jwt, token
+2026-04-08 12:18:19,534 - INFO - 6    | backen
+d-ts/LLM_PROVIDER_CONFIG_FIX.md    | 596.3520 
+  | 1      | token
+2026-04-08 12:18:19,534 - INFO - 7    | backen
+d/BM25_CHINESE_SUPPORT_REPORT.md   | 539.6386 
+  | 3      | jwt, auth, token
+2026-04-08 12:18:19,534 - INFO - 8    | backen
+d/knowledge_base\KNOWLEDGE_BASE... | 527.7494 
+  | 1      | token
+2026-04-08 12:18:19,534 - INFO - 9    | backen
+d-ts/KNOWLEDGE_BASE_FIELD_MAPPI... | 527.0974 
+  | 2      | jwt, token
+2026-04-08 12:18:19,534 - INFO - 10   | backen
+d-ts/JWT_USER_ID_FIELD_FIX.md      | 519.1607 
+  | 3      | jwt, auth, guard, token
+2026-04-08 12:18:19,534 - INFO - 
+指标              | Python     | TS 改进前     | TS
+ 改进后     | 提升
+2026-04-08 12:18:19,534 - INFO - -------------
+---+------------+------------+------------+---
+--------
+2026-04-08 12:18:19,534 - INFO - MRR          
+   | 1.0000     | 0.3333     | 0.2500     | -0
+.0833
+2026-04-08 12:18:19,534 - INFO - NDCG@1       
+   | 1.0000     | 0.0000     | 0.0000     | 0.
+0000
+2026-04-08 12:18:19,534 - INFO - NDCG@3       
+   | 1.0000     | 0.2346     | 0.0000     | -0
+.2346
+2026-04-08 12:18:19,534 - INFO - NDCG@5       
+   | 1.0000     | 0.3462     | 0.2773     | -0
+.0689
+2026-04-08 12:18:19,534 - INFO - NDCG@10      
+   | 0.9972     | 0.6154     | 0.6632     | +0
+.0478
+2026-04-08 12:18:19,534 - INFO - Recall@1     
+   | 0.1111     | 0.0000     | 0.0000     | 0.
+0000
+2026-04-08 12:18:19,534 - INFO - Recall@3     
+   | 0.3333     | 0.2500     | 0.0000     | -0
+.2500
+2026-04-08 12:18:19,535 - INFO - Recall@5     
+   | 0.5556     | 0.5000     | 0.2857     | -0
+.2143
+2026-04-08 12:18:19,535 - INFO - Recall@10    
+   | 1.0000     | 1.0000     | 1.0000     | 0.
+0000
+2026-04-08 12:18:19,535 - INFO - Precision@1  
+   | 1.0000     | 0.0000     | 0.0000     | 0.
+0000
+2026-04-08 12:18:19,535 - INFO - Precision@3  
+   | 1.0000     | 0.3333     | 0.0000     | -0
+.3333
+2026-04-08 12:18:19,535 - INFO - Precision@5  
+   | 1.0000     | 0.4000     | 0.4000     | 0.
+0000
+2026-04-08 12:18:19,535 - INFO - Precision@10 
+   | 0.9000     | 0.4000     | 0.7000     | +0
+.3000
+2026-04-08 12:18:19,535 - INFO - 
+\U0001f3c6 MRR 优胜者: Python
+2026-04-08 12:18:19,536 - INFO - 
+==============================================
+==================================
+2026-04-08 12:18:19,536 - INFO - 测试: 测试性能优化相关文
+档
+2026-04-08 12:18:19,536 - INFO - =============
+==============================================
+=====================
+2026-04-08 12:18:19,536 - INFO - 
+[Python/Qdrant] 查询: '性能优化 缓存'
+2026-04-08 12:18:20,810 - INFO -   匹配分块数: 426/
+427
+2026-04-08 12:18:20,810 - INFO -   Top-1: back
+end/architecture\EXECUTE_CACHE_OPTIMIZATION.md
+ (分数: 7.7651)
+2026-04-08 12:18:20,816 - INFO - 
+[TypeScript/SQLite FTS5 - 改进前] 查询: '性能优化 缓存'
+2026-04-08 12:18:21,942 - INFO -   匹配分块数: 10/4
+27
+2026-04-08 12:18:21,942 - INFO -   Top-1: back
+end/architecture\TOOL_ENABLEMENT_IMPLEMENTATIO
+N.md (分数: 0.221819)
+2026-04-08 12:18:21,947 - INFO - 
+[TypeScript/SQLite FTS5 - 改进后] 查询: '性能优化 缓存'
+2026-04-08 12:18:21,947 - INFO -   [阶段 1] FTS5
+ 快速召回 Top-50...
+2026-04-08 12:18:23,102 - INFO -   动态候选集大小: 10
+6 (总文档: 427, 占比: 24.8%)
+2026-04-08 12:18:23,103 - INFO -   FTS5 召回候选数:
+ 106
+2026-04-08 12:18:23,103 - INFO -   [阶段 2] rank
+-bm25 重新计算分数...
+2026-04-08 12:18:23,450 - INFO -   语料库平均长度: 70
+5.9 tokens
+2026-04-08 12:18:23,451 - INFO -   精排后匹配数: 106
+2026-04-08 12:18:23,451 - INFO -   Top-1: back
+end/architecture\MCP_TOOLS_SCHEMA_UNIFICATION.
+md (分数: 843.2329)
+2026-04-08 12:18:23,461 - INFO - 
+--- 召回准确性评估（三方对比） ---
+2026-04-08 12:18:23,461 - INFO - 查询: '性能优化 缓存'
+2026-04-08 12:18:23,461 - INFO - 相关关键词: ['cach
+e', 'performance', 'optimization', 'speed']
+2026-04-08 12:18:23,462 - INFO - 
+[Python] Top-10 结果及相关性分析:
+2026-04-08 12:18:23,462 - INFO - 排名   | 文档    
+                                   | 分数       
+  | 相关性    | 匹配关键词
+2026-04-08 12:18:23,462 - INFO - -----+-------
+-----------------------------------+----------
+--+--------+---------------------
+2026-04-08 12:18:23,462 - INFO - 1    | backen
+d/architecture\EXECUTE_CACHE_OP... | 7.7651   
+  | 0      | -
+2026-04-08 12:18:23,462 - INFO - 2    | backen
+d/architecture\EXECUTE_CACHE_OP... | 7.7275   
+  | 0      | -
+2026-04-08 12:18:23,462 - INFO - 3    | backen
+d/architecture\AGENT_SERVICE_CO... | 7.3507   
+  | 0      | -
+2026-04-08 12:18:23,462 - INFO - 4    | backen
+d/knowledge_base\LIST_FILES_PAG... | 7.2088   
+  | 0      | -
+2026-04-08 12:18:23,462 - INFO - 5    | backen
+d/QDRANT_MIGRATION_SUMMARY.md      | 7.0371   
+  | 0      | -
+2026-04-08 12:18:23,462 - INFO - 6    | backen
+d/knowledge_base\FRONTEND_INTEG... | 6.9073   
+  | 0      | -
+2026-04-08 12:18:23,462 - INFO - 7    | backen
+d/BM25_CHINESE_SUPPORT_REPORT.md   | 6.9015   
+  | 0      | -
+2026-04-08 12:18:23,462 - INFO - 8    | backen
+d/architecture\NAMESPACE_BASED_... | 6.7916   
+  | 0      | -
+2026-04-08 12:18:23,462 - INFO - 9    | backen
+d/BM25_CHINESE_SUPPORT_REPORT.md   | 6.7780   
+  | 0      | -
+2026-04-08 12:18:23,462 - INFO - 10   | backen
+d/architecture\PURE_NAMESPACE_M... | 6.7544   
+  | 1      | cache
+2026-04-08 12:18:23,464 - INFO - 
+[TypeScript (改进前)] Top-10 结果及相关性分析:
+2026-04-08 12:18:23,464 - INFO - 排名   | 文档    
+                                   | 分数       
+  | 相关性    | 匹配关键词
+2026-04-08 12:18:23,464 - INFO - -----+-------
+-----------------------------------+----------
+--+--------+---------------------
+2026-04-08 12:18:23,464 - INFO - 1    | backen
+d/architecture\TOOL_ENABLEMENT_... | 0.2218   
+  | 0      | -
+2026-04-08 12:18:23,465 - INFO - 2    | backen
+d/architecture\IMPROVEMENT_2_SE... | 0.2249   
+  | 1      | cache
+2026-04-08 12:18:23,465 - INFO - 3    | backen
+d-ts/PAGINATION_HELPER_UNIFICAT... | 0.2274   
+  | 0      | -
+2026-04-08 12:18:23,465 - INFO - 4    | backen
+d-ts/MCP_CLIENT_REFACTORING.md     | 0.2309   
+  | 0      | -
+2026-04-08 12:18:23,465 - INFO - 5    | backen
+d-ts/BM25_COMPARISON_TEST_GUIDE.md | 0.2348   
+  | 0      | -
+2026-04-08 12:18:23,465 - INFO - 6    | backen
+d/architecture\IToolProvider_RE... | 0.2351   
+  | 0      | -
+2026-04-08 12:18:23,465 - INFO - 7    | backen
+d-ts/MESSAGE_MODEL_REFACTOR.md     | 0.2354   
+  | 0      | -
+2026-04-08 12:18:23,465 - INFO - 8    | backen
+d/knowledge_base\JSON_FORMAT_UP... | 0.2370   
+  | 0      | -
+2026-04-08 12:18:23,465 - INFO - 9    | backen
+d/knowledge_base\FILE_ICON_IMPL... | 0.2392   
+  | 0      | -
+2026-04-08 12:18:23,465 - INFO - 10   | backen
+d/architecture\PYDANTIC_AUTO_SC... | 0.2427   
+  | 0      | -
+2026-04-08 12:18:23,466 - INFO - 
+[TypeScript (改进后)] Top-10 结果及相关性分析:
+2026-04-08 12:18:23,466 - INFO - 排名   | 文档    
+                                   | 分数       
+  | 相关性    | 匹配关键词
+2026-04-08 12:18:23,466 - INFO - -----+-------
+-----------------------------------+----------
+--+--------+---------------------
+2026-04-08 12:18:23,466 - INFO - 1    | backen
+d/architecture\MCP_TOOLS_SCHEMA... | 843.2329 
+  | 0      | -
+2026-04-08 12:18:23,466 - INFO - 2    | backen
+d/knowledge_base\FILE_ICON_IMPL... | 758.5648 
+  | 0      | -
+2026-04-08 12:18:23,466 - INFO - 3    | backen
+d/knowledge_base\FILE_UPLOAD_FI... | 669.8321 
+  | 0      | -
+2026-04-08 12:18:23,466 - INFO - 4    | backen
+d/knowledge_base\FILES_FILTER_O... | 608.8261 
+  | 0      | -
+2026-04-08 12:18:23,466 - INFO - 5    | backen
+d/architecture\MCP_TOOLS_SCHEMA... | 559.8534 
+  | 0      | -
+2026-04-08 12:18:23,466 - INFO - 6    | backen
+d-ts/BUSINESS_LOGIC_AUDIT_REPOR... | 532.0002 
+  | 0      | -
+2026-04-08 12:18:23,466 - INFO - 7    | backen
+d/knowledge_base\HYBRID_SEARCH_... | 531.5225 
+  | 0      | -
+2026-04-08 12:18:23,466 - INFO - 8    | backen
+d/knowledge_base\VECTORSERVICE_... | 377.1206 
+  | 0      | -
+2026-04-08 12:18:23,466 - INFO - 9    | backen
+d/architecture\PYDANTIC_SCHEMA_... | 372.7040 
+  | 0      | -
+2026-04-08 12:18:23,466 - INFO - 10   | backen
+d/architecture\BUSINESS_LOGIC_C... | 361.5058 
+  | 0      | -
+2026-04-08 12:18:23,466 - INFO - 
+指标              | Python     | TS 改进前     | TS
+ 改进后     | 提升
+2026-04-08 12:18:23,467 - INFO - -------------
+---+------------+------------+------------+---
+--------
+2026-04-08 12:18:23,467 - INFO - MRR          
+   | 0.1000     | 0.5000     | 0.0000     | -0
+.5000
+2026-04-08 12:18:23,467 - INFO - NDCG@1       
+   | 0.0000     | 0.0000     | 0.0000     | 0.
+0000
+2026-04-08 12:18:23,467 - INFO - NDCG@3       
+   | 0.0000     | 0.6309     | 0.0000     | -0
+.6309
+2026-04-08 12:18:23,467 - INFO - NDCG@5       
+   | 0.0000     | 0.6309     | 0.0000     | -0
+.6309
+2026-04-08 12:18:23,467 - INFO - NDCG@10      
+   | 0.2891     | 0.6309     | 0.0000     | -0
+.6309
+2026-04-08 12:18:23,467 - INFO - Recall@1     
+   | 0.0000     | 0.0000     | 0.0000     | 0.
+0000
+2026-04-08 12:18:23,467 - INFO - Recall@3     
+   | 0.0000     | 1.0000     | 0.0000     | -1
+.0000
+2026-04-08 12:18:23,467 - INFO - Recall@5     
+   | 0.0000     | 1.0000     | 0.0000     | -1
+.0000
+2026-04-08 12:18:23,467 - INFO - Recall@10    
+   | 1.0000     | 1.0000     | 0.0000     | -1
+.0000
+2026-04-08 12:18:23,467 - INFO - Precision@1  
+   | 0.0000     | 0.0000     | 0.0000     | 0.
+0000
+2026-04-08 12:18:23,467 - INFO - Precision@3  
+   | 0.0000     | 0.3333     | 0.0000     | -0
+.3333
+2026-04-08 12:18:23,467 - INFO - Precision@5  
+   | 0.0000     | 0.2000     | 0.0000     | -0
+.2000
+2026-04-08 12:18:23,467 - INFO - Precision@10 
+   | 0.1000     | 0.1000     | 0.0000     | -0
+.1000
+2026-04-08 12:18:23,467 - INFO - 
+\U0001f3c6 MRR 优胜者: TypeScript (改进前)
+2026-04-08 12:18:23,467 - INFO - 
+==============================================
+==================================
+2026-04-08 12:18:23,467 - INFO - 测试: 测试混合搜索相关文
+档
+2026-04-08 12:18:23,467 - INFO - =============
+==============================================
+=====================
+2026-04-08 12:18:23,467 - INFO - 
+[Python/Qdrant] 查询: '混合搜索 hybrid search'
+2026-04-08 12:18:24,748 - INFO -   匹配分块数: 426/
+427
+2026-04-08 12:18:24,749 - INFO -   Top-1: back
+end-ts/BUSINESS_SCENARIO_BM25_COMPARISON_REPOR
+T.md (分数: 20.9582)
+2026-04-08 12:18:24,757 - INFO - 
+[TypeScript/SQLite FTS5 - 改进前] 查询: '混合搜索 hybri
+d search'
+2026-04-08 12:18:25,912 - INFO -   匹配分块数: 10/4
+27
+2026-04-08 12:18:25,912 - INFO -   Top-1: back
+end-ts/PRODUCTION_BM25_COMPARISON_ANALYSIS.md 
+(分数: 0.707040)
+2026-04-08 12:18:25,916 - INFO - 
+[TypeScript/SQLite FTS5 - 改进后] 查询: '混合搜索 hybri
+d search'
+2026-04-08 12:18:25,916 - INFO -   [阶段 1] FTS5
+ 快速召回 Top-50...
+2026-04-08 12:18:27,066 - INFO -   动态候选集大小: 10
+6 (总文档: 427, 占比: 24.8%)
+2026-04-08 12:18:27,067 - INFO -   FTS5 召回候选数:
+ 106
+2026-04-08 12:18:27,067 - INFO -   [阶段 2] rank
+-bm25 重新计算分数...
+2026-04-08 12:18:27,368 - INFO -   语料库平均长度: 71
+1.8 tokens
+2026-04-08 12:18:27,368 - INFO -   精排后匹配数: 106
+2026-04-08 12:18:27,369 - INFO -   Top-1: back
+end-ts/HYBRID_SEARCH_BM25_ANALYSIS.md (分数: 118
+5.2434)
+2026-04-08 12:18:27,374 - INFO - 
+--- 召回准确性评估（三方对比） ---
+2026-04-08 12:18:27,374 - INFO - 查询: '混合搜索 hyb
+rid search'
+2026-04-08 12:18:27,374 - INFO - 相关关键词: ['hybr
+id', 'semantic', 'keyword', 'fusion', 'rerank'
+]
+2026-04-08 12:18:27,374 - INFO - 
+[Python] Top-10 结果及相关性分析:
+2026-04-08 12:18:27,375 - INFO - 排名   | 文档    
+                                   | 分数       
+  | 相关性    | 匹配关键词
+2026-04-08 12:18:27,375 - INFO - -----+-------
+-----------------------------------+----------
+--+--------+---------------------
+2026-04-08 12:18:27,375 - INFO - 1    | backen
+d-ts/BUSINESS_SCENARIO_BM25_COM... | 20.9582  
+  | 3      | hybrid, semantic, keyword, fusion
+, rerank
+2026-04-08 12:18:27,375 - INFO - 2    | backen
+d/QDRANT_VERIFICATION_REPORT.md    | 17.4501  
+  | 1      | hybrid
+2026-04-08 12:18:27,375 - INFO - 3    | backen
+d/MIXED_SEARCH_SUMMARY.md          | 15.4744  
+  | 1      | hybrid
+2026-04-08 12:18:27,375 - INFO - 4    | backen
+d/VERIFICATION_SCRIPTS_GUIDE.md    | 14.9720  
+  | 1      | hybrid
+2026-04-08 12:18:27,376 - INFO - 5    | backen
+d-ts/BM25_COMPARISON_COMPLETE_S... | 14.4424  
+  | 1      | hybrid
+2026-04-08 12:18:27,376 - INFO - 6    | backen
+d-ts/LARGE_SCALE_TEST_RESULTS.md   | 14.2825  
+  | 1      | hybrid
+2026-04-08 12:18:27,376 - INFO - 7    | backen
+d/knowledge_base\HYBRID_SEARCH_... | 13.1242  
+  | 0      | -
+2026-04-08 12:18:27,376 - INFO - 8    | backen
+d/knowledge_base\HYBRID_SEARCH_... | 12.7220  
+  | 0      | -
+2026-04-08 12:18:27,376 - INFO - 9    | backen
+d-ts/BUSINESS_SCENARIO_BM25_COM... | 12.1249  
+  | 1      | hybrid
+2026-04-08 12:18:27,376 - INFO - 10   | backen
+d/knowledge_base\HYBRID_SEARCH_... | 11.9784  
+  | 0      | -
+2026-04-08 12:18:27,377 - INFO - 
+[TypeScript (改进前)] Top-10 结果及相关性分析:
+2026-04-08 12:18:27,377 - INFO - 排名   | 文档    
+                                   | 分数       
+  | 相关性    | 匹配关键词
+2026-04-08 12:18:27,377 - INFO - -----+-------
+-----------------------------------+----------
+--+--------+---------------------
+2026-04-08 12:18:27,377 - INFO - 1    | backen
+d-ts/PRODUCTION_BM25_COMPARISON... | 0.7070   
+  | 0      | -
+2026-04-08 12:18:27,377 - INFO - 2    | backen
+d-ts/AGENT_INFINITE_LOOP_FIX.md    | 0.7777   
+  | 0      | -
+2026-04-08 12:18:27,377 - INFO - 3    | backen
+d-ts/BM25_COMPARISON_TEST_GUIDE.md | 0.7909   
+  | 0      | -
+2026-04-08 12:18:27,377 - INFO - 4    | backen
+d/knowledge_base\VECTORSERVICE_... | 0.8120   
+  | 0      | -
+2026-04-08 12:18:27,377 - INFO - 5    | backen
+d/knowledge_base\SERVICE_STATUS.md | 0.8332   
+  | 0      | -
+2026-04-08 12:18:27,377 - INFO - 6    | backen
+d/knowledge_base\PHASE2_COMPLET... | 0.8355   
+  | 0      | -
+2026-04-08 12:18:27,377 - INFO - 7    | backen
+d/knowledge_base\API_SERVICE_IN... | 0.8401   
+  | 0      | -
+2026-04-08 12:18:27,377 - INFO - 8    | backen
+d/knowledge_base\CHROMADB_ASYNC... | 0.8401   
+  | 0      | -
+2026-04-08 12:18:27,377 - INFO - 9    | backen
+d/architecture\OPENAI_TOOL_CONV... | 0.8460   
+  | 0      | -
+2026-04-08 12:18:27,377 - INFO - 10   | backen
+d-ts/JSON_FIELD_NAMING_CONSISTE... | 0.8531   
+  | 0      | -
+2026-04-08 12:18:27,378 - INFO - 
+[TypeScript (改进后)] Top-10 结果及相关性分析:
+2026-04-08 12:18:27,378 - INFO - 排名   | 文档    
+                                   | 分数       
+  | 相关性    | 匹配关键词
+2026-04-08 12:18:27,378 - INFO - -----+-------
+-----------------------------------+----------
+--+--------+---------------------
+2026-04-08 12:18:27,378 - INFO - 1    | backen
+d-ts/HYBRID_SEARCH_BM25_ANALYSI... | 1185.2434
+  | 0      | -
+2026-04-08 12:18:27,378 - INFO - 2    | backen
+d-ts/BM25_FIX_SUMMARY.md           | 1140.0717
+  | 0      | -
+2026-04-08 12:18:27,378 - INFO - 3    | backen
+d/knowledge_base\KNOWLEDGE_BASE... | 917.2193 
+  | 0      | -
+2026-04-08 12:18:27,378 - INFO - 4    | backen
+d/knowledge_base\FILES_FILTER_O... | 900.1643 
+  | 0      | -
+2026-04-08 12:18:27,378 - INFO - 5    | backen
+d/knowledge_base\README.md         | 745.7401 
+  | 0      | -
+2026-04-08 12:18:27,378 - INFO - 6    | backen
+d/architecture\FILE_NAMING_NORM... | 676.3407 
+  | 0      | -
+2026-04-08 12:18:27,378 - INFO - 7    | backen
+d-ts/BUSINESS_SCENARIO_BM25_COM... | 649.2023 
+  | 0      | -
+2026-04-08 12:18:27,378 - INFO - 8    | backen
+d/architecture\LONG_TERM_MEMORY... | 626.6603 
+  | 0      | -
+2026-04-08 12:18:27,378 - INFO - 9    | backen
+d/knowledge_base\KNOWLEDGE_BASE... | 602.6189 
+  | 0      | -
+2026-04-08 12:18:27,378 - INFO - 10   | backen
+d/knowledge_base\CHROMADB_ASYNC... | 600.3243 
+  | 0      | -
+2026-04-08 12:18:27,378 - INFO - 
+指标              | Python     | TS 改进前     | TS
+ 改进后     | 提升
+2026-04-08 12:18:27,378 - INFO - -------------
+---+------------+------------+------------+---
+--------
+2026-04-08 12:18:27,378 - INFO - MRR          
+   | 1.0000     | 0.0000     | 0.0000     | 0.
+0000
+2026-04-08 12:18:27,378 - INFO - NDCG@1       
+   | 1.0000     | 0.0000     | 0.0000     | 0.
+0000
+2026-04-08 12:18:27,379 - INFO - NDCG@3       
+   | 1.0000     | 0.0000     | 0.0000     | 0.
+0000
+2026-04-08 12:18:27,379 - INFO - NDCG@5       
+   | 1.0000     | 0.0000     | 0.0000     | 0.
+0000
+2026-04-08 12:18:27,379 - INFO - NDCG@10      
+   | 0.9911     | 0.0000     | 0.0000     | 0.
+0000
+2026-04-08 12:18:27,379 - INFO - Recall@1     
+   | 0.1429     | 0.0000     | 0.0000     | 0.
+0000
+2026-04-08 12:18:27,379 - INFO - Recall@3     
+   | 0.4286     | 0.0000     | 0.0000     | 0.
+0000
+2026-04-08 12:18:27,379 - INFO - Recall@5     
+   | 0.7143     | 0.0000     | 0.0000     | 0.
+0000
+2026-04-08 12:18:27,379 - INFO - Recall@10    
+   | 1.0000     | 0.0000     | 0.0000     | 0.
+0000
+2026-04-08 12:18:27,379 - INFO - Precision@1  
+   | 1.0000     | 0.0000     | 0.0000     | 0.
+0000
+2026-04-08 12:18:27,379 - INFO - Precision@3  
+   | 1.0000     | 0.0000     | 0.0000     | 0.
+0000
+2026-04-08 12:18:27,379 - INFO - Precision@5  
+   | 1.0000     | 0.0000     | 0.0000     | 0.
+0000
+2026-04-08 12:18:27,379 - INFO - Precision@10 
+   | 0.7000     | 0.0000     | 0.0000     | 0.
+0000
+2026-04-08 12:18:27,379 - INFO - 
+\U0001f3c6 MRR 优胜者: Python
+2026-04-08 12:18:27,379 - INFO - 
+==============================================
+==================================
+2026-04-08 12:18:27,379 - INFO - 测试: 测试消息分页相关文
+档
+2026-04-08 12:18:27,379 - INFO - =============
+==============================================
+=====================
+2026-04-08 12:18:27,379 - INFO - 
+[Python/Qdrant] 查询: '消息分页 pagination'
+2026-04-08 12:18:28,494 - INFO -   匹配分块数: 426/
+427
+2026-04-08 12:18:28,494 - INFO -   Top-1: back
+end-ts/LARGE_SCALE_TEST_RESULTS.md (分数: 13.027
+7)
+2026-04-08 12:18:28,500 - INFO - 
+[TypeScript/SQLite FTS5 - 改进前] 查询: '消息分页 pagin
+ation'
+2026-04-08 12:18:29,709 - INFO -   匹配分块数: 10/4
+27
+2026-04-08 12:18:29,709 - INFO -   Top-1: back
+end/knowledge_base\EMBEDDING_MODEL_ID_REFACTOR
+_SUMMARY.md (分数: 1.597298)
+2026-04-08 12:18:29,717 - INFO - 
+[TypeScript/SQLite FTS5 - 改进后] 查询: '消息分页 pagin
+ation'
+2026-04-08 12:18:29,717 - INFO -   [阶段 1] FTS5
+ 快速召回 Top-50...
+2026-04-08 12:18:30,923 - INFO -   动态候选集大小: 10
+6 (总文档: 427, 占比: 24.8%)
+2026-04-08 12:18:30,923 - INFO -   FTS5 召回候选数:
+ 74
+2026-04-08 12:18:30,923 - INFO -   [阶段 2] rank
+-bm25 重新计算分数...
+2026-04-08 12:18:31,143 - INFO -   语料库平均长度: 73
+0.0 tokens
+2026-04-08 12:18:31,143 - INFO -   精排后匹配数: 74
+2026-04-08 12:18:31,143 - INFO -   Top-1: back
+end-ts/MESSAGE_QUERY_OPTIMIZATION_REPORT.md (分
+数: 689.4470)
+2026-04-08 12:18:31,150 - INFO - 
+--- 召回准确性评估（三方对比） ---
+2026-04-08 12:18:31,150 - INFO - 查询: '消息分页 pag
+ination'
+2026-04-08 12:18:31,150 - INFO - 相关关键词: ['pagi
+nation', 'message', 'page']
+2026-04-08 12:18:31,151 - INFO - 
+[Python] Top-10 结果及相关性分析:
+2026-04-08 12:18:31,151 - INFO - 排名   | 文档    
+                                   | 分数       
+  | 相关性    | 匹配关键词
+2026-04-08 12:18:31,151 - INFO - -----+-------
+-----------------------------------+----------
+--+--------+---------------------
+2026-04-08 12:18:31,151 - INFO - 1    | backen
+d-ts/LARGE_SCALE_TEST_RESULTS.md   | 13.0277  
+  | 1      | pagination
+2026-04-08 12:18:31,151 - INFO - 2    | backen
+d-ts/PAGINATION_HELPER_UNIFICAT... | 11.9576  
+  | 2      | pagination, page
+2026-04-08 12:18:31,151 - INFO - 3    | backen
+d-ts/MESSAGES_MODULE_IMPLEMENTA... | 11.3811  
+  | 1      | message
+2026-04-08 12:18:31,151 - INFO - 4    | backen
+d-ts/MESSAGE_QUERY_OPTIMIZATION... | 11.2926  
+  | 1      | message
+2026-04-08 12:18:31,151 - INFO - 5    | backen
+d-ts/MESSAGES_LIST_PAGINATION_F... | 11.1642  
+  | 1      | message
+2026-04-08 12:18:31,152 - INFO - 6    | backen
+d-ts/MESSAGE_QUERY_OPTIMIZATION... | 11.1271  
+  | 0      | -
+2026-04-08 12:18:31,152 - INFO - 7    | backen
+d-ts/BACKEND_LOGIC_AUDIT_REPORT.md | 9.9090   
+  | 1      | message
+2026-04-08 12:18:31,152 - INFO - 8    | backen
+d-ts/MESSAGE_FIELDS_CLEANUP.md     | 8.5034   
+  | 1      | message
+2026-04-08 12:18:31,152 - INFO - 9    | backen
+d-ts/MESSAGES_STREAM_ENDPOINT_A... | 8.3647   
+  | 1      | message
+2026-04-08 12:18:31,152 - INFO - 10   | backen
+d-ts/PAGINATION_FIX_COMPLETE.md    | 7.9742   
+  | 1      | page
+2026-04-08 12:18:31,152 - INFO - 
+[TypeScript (改进前)] Top-10 结果及相关性分析:
+2026-04-08 12:18:31,152 - INFO - 排名   | 文档    
+                                   | 分数       
+  | 相关性    | 匹配关键词
+2026-04-08 12:18:31,152 - INFO - -----+-------
+-----------------------------------+----------
+--+--------+---------------------
+2026-04-08 12:18:31,153 - INFO - 1    | backen
+d/knowledge_base\EMBEDDING_MODE... | 1.5973   
+  | 0      | -
+2026-04-08 12:18:31,153 - INFO - 2    | backen
+d-ts/JSON_FIELD_SERIALIZATION_C... | 1.7460   
+  | 0      | -
+2026-04-08 12:18:31,153 - INFO - 3    | backen
+d/architecture\MEMORY_PROMPT_RE... | 1.7800   
+  | 0      | -
+2026-04-08 12:18:31,153 - INFO - 4    | backen
+d/knowledge_base\README.md         | 1.7881   
+  | 0      | -
+2026-04-08 12:18:31,153 - INFO - 5    | backen
+d-ts/JSON_FIELD_NAMING_FIX_COMP... | 1.8116   
+  | 0      | -
+2026-04-08 12:18:31,153 - INFO - 6    | backen
+d/architecture\AGENT_SERVICE_CO... | 1.8161   
+  | 0      | -
+2026-04-08 12:18:31,153 - INFO - 7    | backen
+d-ts/API_KEY_CONFIGURATION.md      | 1.8259   
+  | 0      | -
+2026-04-08 12:18:31,153 - INFO - 8    | backen
+d-ts/AGENT_INFINITE_LOOP_FIX.md    | 1.8348   
+  | 0      | -
+2026-04-08 12:18:31,153 - INFO - 9    | backen
+d-ts/MCP_CLIENT_REFACTORING.md     | 1.8348   
+  | 0      | -
+2026-04-08 12:18:31,153 - INFO - 10   | backen
+d/knowledge_base\FILE_ICON_IMPL... | 1.9005   
+  | 1      | page
+2026-04-08 12:18:31,153 - INFO - 
+[TypeScript (改进后)] Top-10 结果及相关性分析:
+2026-04-08 12:18:31,153 - INFO - 排名   | 文档    
+                                   | 分数       
+  | 相关性    | 匹配关键词
+2026-04-08 12:18:31,154 - INFO - -----+-------
+-----------------------------------+----------
+--+--------+---------------------
+2026-04-08 12:18:31,154 - INFO - 1    | backen
+d-ts/MESSAGE_QUERY_OPTIMIZATION... | 689.4470 
+  | 1      | message
+2026-04-08 12:18:31,154 - INFO - 2    | backen
+d-ts/LARGE_SCALE_TEST_RESULTS.md   | 509.3132 
+  | 1      | pagination
+2026-04-08 12:18:31,154 - INFO - 3    | backen
+d-ts/PAGINATION_HELPER_UNIFICAT... | 449.1093 
+  | 2      | pagination, page
+2026-04-08 12:18:31,154 - INFO - 4    | backen
+d-ts/BUSINESS_LOGIC_AUDIT_REPOR... | 384.3531 
+  | 0      | -
+2026-04-08 12:18:31,154 - INFO - 5    | backen
+d-ts/MESSAGES_MODULE_IMPLEMENTA... | 381.5580 
+  | 1      | message
+2026-04-08 12:18:31,154 - INFO - 6    | backen
+d-ts/MESSAGE_QUERY_OPTIMIZATION... | 367.5003 
+  | 1      | pagination
+2026-04-08 12:18:31,154 - INFO - 7    | backen
+d-ts/PAGINATION_FIX_COMPLETE.md    | 362.8680 
+  | 1      | page
+2026-04-08 12:18:31,154 - INFO - 8    | backen
+d/knowledge_base\LIST_FILES_PAG... | 359.0590 
+  | 0      | -
+2026-04-08 12:18:31,154 - INFO - 9    | backen
+d-ts/MESSAGE_FIELDS_CLEANUP.md     | 346.8058 
+  | 1      | message
+2026-04-08 12:18:31,154 - INFO - 10   | backen
+d-ts/JSON_FIELD_NAMING_FIX_COMP... | 346.2016 
+  | 0      | -
+2026-04-08 12:18:31,154 - INFO - 
+指标              | Python     | TS 改进前     | TS
+ 改进后     | 提升
+2026-04-08 12:18:31,154 - INFO - -------------
+---+------------+------------+------------+---
+--------
+2026-04-08 12:18:31,154 - INFO - MRR          
+   | 1.0000     | 0.1000     | 1.0000     | +0
+.9000
+2026-04-08 12:18:31,154 - INFO - NDCG@1       
+   | 1.0000     | 0.0000     | 1.0000     | +1
+.0000
+2026-04-08 12:18:31,154 - INFO - NDCG@3       
+   | 1.0000     | 0.0000     | 1.0000     | +1
+.0000
+2026-04-08 12:18:31,154 - INFO - NDCG@5       
+   | 1.0000     | 0.0000     | 0.8539     | +0
+.8539
+2026-04-08 12:18:31,154 - INFO - NDCG@10      
+   | 0.9842     | 0.2891     | 0.9644     | +0
+.6753
+2026-04-08 12:18:31,154 - INFO - Recall@1     
+   | 0.1111     | 0.0000     | 0.1429     | +0
+.1429
+2026-04-08 12:18:31,154 - INFO - Recall@3     
+   | 0.3333     | 0.0000     | 0.4286     | +0
+.4286
+2026-04-08 12:18:31,155 - INFO - Recall@5     
+   | 0.5556     | 0.0000     | 0.5714     | +0
+.5714
+2026-04-08 12:18:31,155 - INFO - Recall@10    
+   | 1.0000     | 1.0000     | 1.0000     | 0.
+0000
+2026-04-08 12:18:31,155 - INFO - Precision@1  
+   | 1.0000     | 0.0000     | 1.0000     | +1
+.0000
+2026-04-08 12:18:31,155 - INFO - Precision@3  
+   | 1.0000     | 0.0000     | 1.0000     | +1
+.0000
+2026-04-08 12:18:31,155 - INFO - Precision@5  
+   | 1.0000     | 0.0000     | 0.8000     | +0
+.8000
+2026-04-08 12:18:31,155 - INFO - Precision@10 
+   | 0.9000     | 0.1000     | 0.7000     | +0
+.6000
+2026-04-08 12:18:31,155 - INFO - 
+\U0001f3c6 MRR 优胜者: Python
+2026-04-08 12:18:31,155 - INFO - 
+==============================================
+==================================
+2026-04-08 12:18:31,155 - INFO - 测试: 测试 SSE 流式
+响应相关文档
+2026-04-08 12:18:31,155 - INFO - =============
+==============================================
+=====================
+2026-04-08 12:18:31,155 - INFO - 
+[Python/Qdrant] 查询: 'SSE 流式响应'
+2026-04-08 12:18:32,260 - INFO -   匹配分块数: 426/
+427
+2026-04-08 12:18:32,261 - INFO -   Top-1: back
+end-ts/MESSAGES_STREAM_ENDPOINT_ADDED.md (分数: 
+17.4731)
+2026-04-08 12:18:32,268 - INFO - 
+[TypeScript/SQLite FTS5 - 改进前] 查询: 'SSE 流式响应'
+2026-04-08 12:18:33,472 - INFO -   匹配分块数: 10/4
+27
+2026-04-08 12:18:33,473 - INFO -   Top-1: back
+end/architecture\TEST_REFACTORING_SUMMARY.md (
+分数: 0.779828)
+2026-04-08 12:18:33,476 - INFO - 
+[TypeScript/SQLite FTS5 - 改进后] 查询: 'SSE 流式响应'
+2026-04-08 12:18:33,476 - INFO -   [阶段 1] FTS5
+ 快速召回 Top-50...
+2026-04-08 12:18:34,622 - INFO -   动态候选集大小: 10
+6 (总文档: 427, 占比: 24.8%)
+2026-04-08 12:18:34,622 - INFO -   FTS5 召回候选数:
+ 104
+2026-04-08 12:18:34,623 - INFO -   [阶段 2] rank
+-bm25 重新计算分数...
+2026-04-08 12:18:34,979 - INFO -   语料库平均长度: 73
+0.2 tokens
+2026-04-08 12:18:34,979 - INFO -   精排后匹配数: 104
+2026-04-08 12:18:34,979 - INFO -   Top-1: back
+end-ts/AGENT_STREAMING_CREATE_EVENT_FIX.md (分数
+: 822.0894)
+2026-04-08 12:18:34,989 - INFO - 
+--- 召回准确性评估（三方对比） ---
+2026-04-08 12:18:34,989 - INFO - 查询: 'SSE 流式响应
+'
+2026-04-08 12:18:34,990 - INFO - 相关关键词: ['sse'
+, 'stream', 'event']
+2026-04-08 12:18:34,991 - INFO - 
+[Python] Top-10 结果及相关性分析:
+2026-04-08 12:18:34,991 - INFO - 排名   | 文档    
+                                   | 分数       
+  | 相关性    | 匹配关键词
+2026-04-08 12:18:34,992 - INFO - -----+-------
+-----------------------------------+----------
+--+--------+---------------------
+2026-04-08 12:18:34,992 - INFO - 1    | backen
+d-ts/MESSAGES_STREAM_ENDPOINT_A... | 17.4731  
+  | 2      | sse, event
+2026-04-08 12:18:34,992 - INFO - 2    | backen
+d-ts/AGENT_STREAMING_CREATE_EVE... | 16.1368  
+  | 1      | sse
+2026-04-08 12:18:34,992 - INFO - 3    | backen
+d-ts/AGENT_STREAMING_CREATE_EVE... | 15.8681  
+  | 1      | sse
+2026-04-08 12:18:34,992 - INFO - 4    | backen
+d-ts/LLM_SERVICE_CAMELCASE_AND_... | 14.3867  
+  | 1      | sse
+2026-04-08 12:18:34,992 - INFO - 5    | backen
+d-ts/BACKEND_LOGIC_AUDIT_REPORT.md | 14.2492  
+  | 2      | sse, event
+2026-04-08 12:18:34,992 - INFO - 6    | backen
+d-ts/LARGE_SCALE_TEST_RESULTS.md   | 12.5167  
+  | 1      | sse
+2026-04-08 12:18:34,992 - INFO - 7    | backen
+d-ts/LLM_SERVICE_CAMELCASE_AND_... | 10.8839  
+  | 0      | -
+2026-04-08 12:18:34,993 - INFO - 8    | backen
+d-ts/MULTI_TURN_MESSAGE_CONTENT... | 9.5562   
+  | 1      | sse
+2026-04-08 12:18:34,993 - INFO - 9    | backen
+d-ts/MESSAGE_CONTENT_MODEL_REFA... | 9.1266   
+  | 1      | sse
+2026-04-08 12:18:34,993 - INFO - 10   | backen
+d-ts/LLM_SERVICE_TS_VS_PYTHON_C... | 8.9620   
+  | 0      | -
+2026-04-08 12:18:34,994 - INFO - 
+[TypeScript (改进前)] Top-10 结果及相关性分析:
+2026-04-08 12:18:34,994 - INFO - 排名   | 文档    
+                                   | 分数       
+  | 相关性    | 匹配关键词
+2026-04-08 12:18:34,994 - INFO - -----+-------
+-----------------------------------+----------
+--+--------+---------------------
+2026-04-08 12:18:34,994 - INFO - 1    | backen
+d/architecture\TEST_REFACTORING... | 0.7798   
+  | 0      | -
+2026-04-08 12:18:34,994 - INFO - 2    | backen
+d/knowledge_base\EMBEDDING_MODE... | 0.8334   
+  | 0      | -
+2026-04-08 12:18:34,994 - INFO - 3    | backen
+d/architecture\MCP_TOOLS_SCHEMA... | 0.8738   
+  | 0      | -
+2026-04-08 12:18:34,994 - INFO - 4    | backen
+d-ts/JSON_FIELD_SERIALIZATION_C... | 0.9110   
+  | 0      | -
+2026-04-08 12:18:34,994 - INFO - 5    | backen
+d/knowledge_base\DEPLOYMENT_AND... | 0.9288   
+  | 0      | -
+2026-04-08 12:18:34,994 - INFO - 6    | backen
+d/BM25_PERFORMANCE_REPORT.md       | 0.9698   
+  | 0      | -
+2026-04-08 12:18:34,994 - INFO - 7    | backen
+d/knowledge_base\FILE_PROCESSIN... | 0.9827   
+  | 0      | -
+2026-04-08 12:18:34,994 - INFO - 8    | backen
+d/knowledge_base\FILES_FILTER_O... | 0.9887   
+  | 0      | -
+2026-04-08 12:18:34,995 - INFO - 9    | backen
+d-ts/MESSAGES_MODULE_IMPLEMENTA... | 0.9911   
+  | 0      | -
+2026-04-08 12:18:34,995 - INFO - 10   | backen
+d/knowledge_base\HYBRID_SEARCH_... | 1.0071   
+  | 0      | -
+2026-04-08 12:18:34,995 - INFO - 
+[TypeScript (改进后)] Top-10 结果及相关性分析:
+2026-04-08 12:18:34,995 - INFO - 排名   | 文档    
+                                   | 分数       
+  | 相关性    | 匹配关键词
+2026-04-08 12:18:34,995 - INFO - -----+-------
+-----------------------------------+----------
+--+--------+---------------------
+2026-04-08 12:18:34,996 - INFO - 1    | backen
+d-ts/AGENT_STREAMING_CREATE_EVE... | 822.0894 
+  | 1      | sse
+2026-04-08 12:18:34,996 - INFO - 2    | backen
+d/architecture\TOOL_PROVIDER_NA... | 749.6023 
+  | 0      | -
+2026-04-08 12:18:34,996 - INFO - 3    | backen
+d-ts/MESSAGES_STREAM_ENDPOINT_A... | 672.0605 
+  | 2      | sse, event
+2026-04-08 12:18:34,996 - INFO - 4    | backen
+d/knowledge_base\KNOWLEDGE_BASE... | 663.7666 
+  | 0      | -
+2026-04-08 12:18:34,996 - INFO - 5    | backen
+d-ts/AGENT_STREAMING_CREATE_EVE... | 636.2259 
+  | 1      | sse
+2026-04-08 12:18:34,996 - INFO - 6    | backen
+d-ts/BACKEND_LOGIC_AUDIT_REPORT.md | 630.4824 
+  | 2      | sse, event
+2026-04-08 12:18:34,996 - INFO - 7    | backen
+d-ts/LLM_SERVICE_CAMELCASE_AND_... | 611.6314 
+  | 1      | sse
+2026-04-08 12:18:34,996 - INFO - 8    | backen
+d-ts/LLM_SERVICE_CAMELCASE_AND_... | 548.7087 
+  | 0      | -
+2026-04-08 12:18:34,996 - INFO - 9    | backen
+d-ts/LARGE_SCALE_TEST_RESULTS.md   | 542.2602 
+  | 1      | sse
+2026-04-08 12:18:34,996 - INFO - 10   | backen
+d/architecture\NAMESPACE_STRIPP... | 476.6628 
+  | 0      | -
+2026-04-08 12:18:34,996 - INFO - 
+指标              | Python     | TS 改进前     | TS
+ 改进后     | 提升
+2026-04-08 12:18:34,996 - INFO - -------------
+---+------------+------------+------------+---
+--------
+2026-04-08 12:18:34,996 - INFO - MRR          
+   | 1.0000     | 0.0000     | 1.0000     | +1
+.0000
+2026-04-08 12:18:34,996 - INFO - NDCG@1       
+   | 1.0000     | 0.0000     | 1.0000     | +1
+.0000
+2026-04-08 12:18:34,996 - INFO - NDCG@3       
+   | 1.0000     | 0.0000     | 0.7039     | +0
+.7039
+2026-04-08 12:18:34,997 - INFO - NDCG@5       
+   | 1.0000     | 0.0000     | 0.6399     | +0
+.6399
+2026-04-08 12:18:34,998 - INFO - NDCG@10      
+   | 0.9918     | 0.0000     | 0.8707     | +0
+.8707
+2026-04-08 12:18:34,998 - INFO - Recall@1     
+   | 0.1250     | 0.0000     | 0.1667     | +0
+.1667
+2026-04-08 12:18:34,998 - INFO - Recall@3     
+   | 0.3750     | 0.0000     | 0.3333     | +0
+.3333
+2026-04-08 12:18:34,998 - INFO - Recall@5     
+   | 0.6250     | 0.0000     | 0.5000     | +0
+.5000
+2026-04-08 12:18:34,999 - INFO - Recall@10    
+   | 1.0000     | 0.0000     | 1.0000     | +1
+.0000
+2026-04-08 12:18:34,999 - INFO - Precision@1  
+   | 1.0000     | 0.0000     | 1.0000     | +1
+.0000
+2026-04-08 12:18:34,999 - INFO - Precision@3  
+   | 1.0000     | 0.0000     | 0.6667     | +0
+.6667
+2026-04-08 12:18:34,999 - INFO - Precision@5  
+   | 1.0000     | 0.0000     | 0.6000     | +0
+.6000
+2026-04-08 12:18:34,999 - INFO - Precision@10 
+   | 0.8000     | 0.0000     | 0.6000     | +0
+.6000
+2026-04-08 12:18:34,999 - INFO - 
+\U0001f3c6 MRR 优胜者: Python
+2026-04-08 12:18:34,999 - INFO - 
+==============================================
+==================================
+2026-04-08 12:18:35,000 - INFO - 总体统计（三方对比）
+2026-04-08 12:18:35,000 - INFO - =============
+==============================================
+=====================
+2026-04-08 12:18:35,000 - INFO - 总查询数: 8
+2026-04-08 12:18:35,000 - INFO - Python 优胜: 7
+2026-04-08 12:18:35,000 - INFO - TypeScript (改
+进前) 优胜: 1
+2026-04-08 12:18:35,000 - INFO - TypeScript (改
+进后) 优胜: 0
+2026-04-08 12:18:35,000 - INFO - 
+平均 MRR:
+2026-04-08 12:18:35,001 - INFO -   Python:    
+          0.8875
+2026-04-08 12:18:35,001 - INFO -   TypeScript 
+(改进前): 0.4083
+2026-04-08 12:18:35,002 - INFO -   TypeScript 
+(改进后): 0.4271
+2026-04-08 12:18:35,002 - INFO -   提升幅度:      
+      +0.0187 (4.6%)
+2026-04-08 12:18:35,002 - INFO - 
+\U0001f3c6 总体优胜者: Python
+2026-04-08 12:18:35,013 - INFO - 
+测试结果已导出到: D:\编程开发\AI\ai_chat\backend\tests\ver
+ification\business_scenario_bm25_comparison.js
+on

@@ -9,13 +9,13 @@ export class McpServersController {
   constructor(private readonly mcpService: McpServerService) {}
 
   @Get()
-  async getAllServers() {
-    return this.mcpService.getAllServers();
+  async getAllServers(@CurrentUser() user: any) {
+    return this.mcpService.getAllServers(user.sub);
   }
 
   @Get(':id')
-  async getServer(@Param('id') id: string) {
-    return this.mcpService.getServerById(id);
+  async getServer(@Param('id') id: string, @CurrentUser() user: any) {
+    return this.mcpService.getServerById(id, user.sub);
   }
 
   @Post()

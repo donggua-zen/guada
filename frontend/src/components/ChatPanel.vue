@@ -14,7 +14,7 @@
             <div class="relative inline-block mb-5">
               <div
                 class="w-24 h-24 rounded-full  flex items-center justify-center mx-auto relative overflow-hidden p-0 animate-bounce-in">
-                <Avatar v-if="currentSession" :src="currentSession.character.avatar_url" round />
+                <Avatar v-if="currentSession" :src="currentSession.character.avatarUrl" round />
                 <div v-else class="text-4xl text-white">?</div>
               </div>
               <div class="absolute bottom-1 right-1 w-5 h-5 bg-green-500 border-2 border-white rounded-full"></div>
@@ -30,10 +30,10 @@
               </h2>
 
               <!-- 角色设定 -->
-              <div v-if="currentSession?.settings?.system_prompt"
+              <div v-if="currentSession?.settings?.systemPrompt"
                 class="mt-6 p-5 bg-gray-50 rounded-xl border-l-4 border-(--color-primary) text-left">
                 <h3 class="text-base font-semibold text-gray-800 mb-2">角色设定</h3>
-                <p class="text-sm text-gray-600 leading-6">{{ currentSession?.settings.system_prompt }}</p>
+                <p class="text-sm text-gray-600 leading-6">{{ currentSession?.settings.systemPrompt }}</p>
               </div>
             </div>
           </div>
@@ -44,7 +44,7 @@
           <div class="flex flex-col items-center px-5 max-w-250 mx-auto pb-35">
             <div class="w-full last:min-h-60" v-for="(pair, index) in messagePairs" :key="pair[0].id">
               <MessageItem v-for="message in pair" :key="message.id" :message="message"
-                :avatar="message.role == 'user' ? userAvater : currentSession?.avatar_url"
+                :avatar="message.role == 'user' ? userAvater : currentSession?.avatarUrl"
                 :is-last="message.index == activeMessages.length - 1"
                 :allow-generate="!isStreaming && allowReSendMessage(message, message.index ?? 0, activeMessages)"
                 @delete="deleteMessage" @edit="editMessage" @copy="copyMessage" @generate="generateResponse"
@@ -75,8 +75,8 @@
       <div class="w-full flex items-center max-w-[960px]">
         <ChatInput v-model:value="inputMessage.content" v-model:thinking-enabled="thinkingEnabled" :config="{
           modelId: currentModelId,
-          maxMemoryLength: currentSession?.settings?.max_memory_length || null,
-          knowledgeBaseIds: inputMessage?.knowledgeBaseIds || currentSession?.settings?.referenced_kbs || []
+          maxMemoryLength: currentSession?.settings?.maxMemoryLength || null,
+          knowledgeBaseIds: inputMessage?.knowledgeBaseIds || currentSession?.settings?.referencedKbs || []
         }" :files="inputMessage.files" :streaming="isStreaming" @config-change="handleConfigChange"
           @send="handleSendMessage" @abort="abortResponse" @toggle-thinking="toggleDeepThinking" />
       </div>
@@ -139,7 +139,7 @@ const currentSession = computed({
   set: (session: Session | null) => emit("update:session", session!)
 });
 
-const userAvater = computed(() => authStore.user?.avatar_url);
+const userAvater = computed(() => authStore.user?.avatarUrl);
 
 // 使用 useSessionChat composable
 const {
@@ -249,24 +249,24 @@ const messagePairs = computed(() => pairMessages(activeMessages.value));
 
 const thinkingEnabled = computed({
   get() {
-    return currentSession.value?.settings?.thinking_enabled;
+    return currentSession.value?.settings?.thinkingEnabled;
   },
   set(value: boolean) {
     if (currentSession.value?.settings) {
-      currentSession.value.settings["thinking_enabled"] = value;
-      currentSession.value.updated_at = new Date().toISOString();
+      currentSession.value.settings.thinkingEnabled = value;
+      currentSession.value.updatedAt = new Date().toISOString();
     }
   }
 });
 
 const currentModelId = computed({
   get() {
-    return currentSession.value?.model_id ?? null;
+    return currentSession.value?.modelId ?? null;
   },
   set(value: string | null) {
     if (currentSession.value) {
-      currentSession.value.model_id = value || '';
-      currentSession.value.updated_at = new Date().toISOString();
+      currentSession.value.modelId = value || '';
+      currentSession.value.updatedAt = new Date().toISOString();
       debouncedSaveSession();
     }
   }
@@ -276,13 +276,13 @@ const currentModelId = computed({
 const handleConfigChange = (config: any) => {
   if (!currentSession.value) return;
   if (typeof config.modelId !== 'undefined')
-    currentSession.value.model_id = config.modelId;
+    currentSession.value.modelId = config.modelId;
   if (typeof config.maxMemoryLength !== 'undefined')
-    currentSession.value.settings.max_memory_length = config.maxMemoryLength;
+    currentSession.value.settings.maxMemoryLength = config.maxMemoryLength;
   if (typeof config.knowledgeBaseIds !== 'undefined') {
     inputMessage.value.knowledgeBaseIds = config.knowledgeBaseIds;
     if (!editMode.value) {
-      currentSession.value.settings.referenced_kbs = config.knowledgeBaseIds;
+      currentSession.value.settings.referencedKbs = config.knowledgeBaseIds;
     }
   }
   debouncedSaveSession();
@@ -303,7 +303,6 @@ watch(() => isStreaming.value, async (newVal, oldVal) => {
   // 当流式状态从 true 变为 false 时（即助手回复完成）
   if (oldVal === true && newVal === false) {
     if (activeMessages.value.length == 2 && !hasGeneratedTitle.value) {
-      hasGeneratedTitle.value = true;
       await generateTitleIfNeeded(currentSessionId.value!, activeMessages.value, currentSession);
     }
   }
@@ -419,7 +418,10 @@ async function handleSessionChange(newSessionId: string | null, oldSessionId: st
       immediateScrollToBottom();
 
       nextTick(() => {
+        if (!currentSession.value)
+          return;
         if (inputMessage.value?.isWaiting) {
+          currentSession.value.settings.referencedKbs = inputMessage.value.knowledgeBaseIds;
           handleSendMessage(inputMessage.value);
         }
       });
@@ -485,7 +487,7 @@ async function deleteMessage(message: any) {
     ) {
       await apiService.deleteMessage(message.id);
       if (message.role === "user") {
-        const assistantMessage = activeMessages.value.find((msg) => msg.parent_id === message.id);
+        const assistantMessage = activeMessages.value.find((msg) => msg.parentId === message.id);
         if (assistantMessage && currentSessionId.value) {
           sessionStore.deleteMessage(currentSessionId.value, assistantMessage.id);
         }
@@ -564,8 +566,8 @@ async function handleSendMessage(payload?: InputMessageState) {
     // 统一处理发送后的滚动和流式响应
     await nextTick();
     immediateScrollToBottom();
-    if (message.session_id) {
-      handleStreamResponse(message.session_id, message.id);
+    if (message.sessionId) {
+      handleStreamResponse(message.sessionId, message.id);
     }
   } catch (error: any) {
     notify.error("消息发送失败", error.message);
@@ -597,21 +599,21 @@ function regenerateResponse(message: any) {
 
   const assistantMessage = activeMessages.value.find(m => m.id === message.id);
   if (assistantMessage) {
-    assistantMessage.state = { is_streaming: true };
+    assistantMessage.state = { isStreaming: true };
   }
 
   nextTick(() => {
     immediateScrollToBottom();
-    if (message.session_id) {
-      handleStreamResponse(message.session_id, message.parent_id, "multi_version", message.id);
+    if (message.sessionId) {
+      handleStreamResponse(message.sessionId, message.parentId, "multi_version", message.id);
     }
   });
 }
 
 function switchContent(message: any, turns_id: string) {
   const targetMessage = activeMessages.value.find((m) => m.id === message.id);
-  targetMessage.current_turns_id = turns_id
-  apiService.updateMessage(message.id, { current_turns_id: turns_id });
+  targetMessage.currentTurnsId = turns_id
+  apiService.updateMessage(message.id, { currentTurnsId: turns_id });
   nextTick(() => {
     immediateScrollToBottom();
   });

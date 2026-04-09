@@ -8,6 +8,7 @@ import { KnowledgeBaseService } from './knowledge-base.service';
 import { KbFileService } from './kb-file.service';
 import { FileParserService } from './file-parser.service';
 import { EmbeddingService } from './embedding.service';
+import { ChunkingService } from './chunking.service';
 import { KnowledgeBaseRepository } from '../../common/database/knowledge-base.repository';
 import { KBFileRepository } from '../../common/database/kb-file.repository';
 import { KBChunkRepository } from '../../common/database/kb-chunk.repository';
@@ -22,6 +23,7 @@ import { AuthModule } from '../auth/auth.module';
     KbFileService,
     FileParserService,
     EmbeddingService,
+    ChunkingService,
     KnowledgeBaseRepository,
     KBFileRepository,
     KBChunkRepository,

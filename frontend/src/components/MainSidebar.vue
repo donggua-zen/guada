@@ -36,13 +36,13 @@
         <span class="nav-label">助手</span>
       </div>
 
-      <!-- 设置 -->
-      <div @click="handleNavClick('settings')" :class="[
+      <!-- 系统设置 -->
+      <div @click="handleNavClick('setting')" :class="[
         'nav-item group',
-        activeTab === 'settings' ? 'nav-item-active' : 'nav-item-inactive'
+        currentActiveTab === 'setting' ? 'nav-item-active' : 'nav-item-inactive'
       ]">
         <div class="nav-icon">
-          <SettingsTwotone v-if="activeTab === 'settings'" class="w-5 h-5" />
+          <SettingsTwotone v-if="currentActiveTab === 'setting'" class="w-5 h-5" />
           <SettingsOutlined v-else class="w-5 h-5" />
         </div>
         <span class="nav-label">设置</span>
@@ -73,9 +73,9 @@
         <span class="nav-label">{{ isDark ? '亮色' : '暗色' }}</span>
       </div>
 
-      <div class="user-profile">
+      <div class="user-profile" @click="handleUserProfileClick">
         <div class="user-avatar">
-          <Avatar type="user" :round="true" :src="authStore.user?.avatar_url" />
+          <Avatar type="user" :round="true" :src="authStore.user?.avatarUrl" />
         </div>
         <span class="user-name">{{ authStore.user?.username || '用户' }}</span>
       </div>
@@ -130,7 +130,8 @@ const currentActiveTab = computed(() => {
   const routeName = route.name as string
   if (routeName === 'Chat') return 'chat'
   if (routeName === 'Characters') return 'characters'
-  if (routeName === 'Settings') return 'settings'
+  if (routeName === 'AccountCenter') return 'account'
+  if (routeName === 'SystemSettings') return 'setting'
   if (routeName === 'KnowledgeBase') return 'knowledge-base'
   return props.activeTab || ''
 })
@@ -152,11 +153,17 @@ const handleNavClick = (tab: string): void => {
     }
   } else if (tab === 'characters') {
     router.replace({ name: 'Characters' })
-  } else if (tab === 'settings') {
-    router.replace({ name: 'Settings' })
+  } else if (tab === 'setting') {
+    // 跳转到系统设置，默认显示第一个标签页
+    router.replace({ name: 'SystemSettings' })
   } else if (tab === 'knowledge-base') {
     router.replace({ name: 'KnowledgeBase' })
   }
+}
+
+// 处理用户头像点击 - 跳转到账户中心
+const handleUserProfileClick = (): void => {
+  router.replace({ name: 'AccountCenter' })
 }
 </script>
 

@@ -70,8 +70,11 @@ model ModelProvider {
   userId    String   @map("user_id")
   name      String
   provider  String
+  protocol  String?
   apiUrl    String   @map("api_url")
   apiKey    String?  @map("api_key")
+  avatarUrl String?  @map("avatar_url")
+  attributes Json?   
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
   models    Model[]
@@ -113,6 +116,7 @@ model User {
   knowledgeBases KnowledgeBase[]
   sessions       Session[]
   settings       UserSetting?
+  mcpServers     McpServer[]
 
   @@map("user")
 }
@@ -252,7 +256,8 @@ model File {
 
 model GlobalSetting {
   id          Int      @id @default(autoincrement())
-  key         String   @unique
+  key         String
+  userId      String?  @map("user_id")
   value       String?
   valueType   String   @default("str") @map("value_type")
   description String?
@@ -260,6 +265,8 @@ model GlobalSetting {
   createdAt   DateTime @default(now()) @map("created_at")
   updatedAt   DateTime @updatedAt @map("updated_at")
 
+  @@unique([key, userId])
+  @@index([userId])
   @@map("global_settings")
 }
 
@@ -271,8 +278,10 @@ model McpServer {
   headers     Json?
   tools       Json?
   enabled     Boolean  @default(true)
+  userId      String   @map("user_id")
   createdAt   DateTime @default(now()) @map("created_at")
   updatedAt   DateTime @updatedAt @map("updated_at")
+  user        User     @relation(fields: [userId], references: [id])
 
   @@map("mcp_server")
 }

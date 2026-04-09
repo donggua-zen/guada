@@ -10,16 +10,16 @@ export interface KnowledgeBase {
     id: string
     name: string
     description: string | null
-    user_id: string
-    embedding_model_id: string
-    chunk_max_size: number
-    chunk_overlap_size: number
-    chunk_min_size: number
-    is_active: boolean
-    is_public: boolean
-    metadata_config: Record<string, any> | null
-    created_at: string
-    updated_at: string
+    userId: string
+    embeddingModelId: string
+    chunkMaxSize: number
+    chunkOverlapSize: number
+    chunkMinSize: number
+    isActive: boolean
+    isPublic: boolean
+    metadataConfig: Record<string, any> | null
+    createdAt: string
+    updatedAt: string
 }
 
 /**
@@ -27,21 +27,21 @@ export interface KnowledgeBase {
  */
 export interface KBFile {
     id: string
-    knowledge_base_id: string
-    file_name: string
-    display_name: string
-    file_size: number
-    file_type: string
-    file_extension: string
-    content_hash: string
-    processing_status: 'uploading' | 'uploaded' | 'pending' | 'processing' | 'completed' | 'failed'
-    progress_percentage: number
-    current_step: string | null
-    error_message: string | null
-    total_chunks: number
-    total_tokens: number
-    uploaded_at: string
-    processed_at: string | null
+    knowledgeBaseId: string
+    fileName: string
+    displayName: string
+    fileSize: number
+    fileType: string
+    fileExtension: string
+    contentHash: string
+    processingStatus: 'uploading' | 'uploaded' | 'pending' | 'processing' | 'completed' | 'failed'
+    progressPercentage: number
+    currentStep: string | null
+    errorMessage: string | null
+    totalChunks: number
+    totalTokens: number
+    uploadedAt: string
+    processedAt: string | null
     isTempTask?: boolean // 标记是否为临时上传任务
 }
 
@@ -113,11 +113,11 @@ export const useKnowledgeBaseStore = defineStore('knowledgeBase', () => {
     async function createKnowledgeBase(data: {
         name: string
         description?: string
-        embedding_model_id: string
-        chunk_max_size?: number
-        chunk_overlap_size?: number
-        chunk_min_size?: number
-        is_public?: boolean
+        embeddingModelId: string
+        chunkMaxSize?: number
+        chunkOverlapSize?: number
+        chunkMinSize?: number
+        isPublic?: boolean
     }) {
         loading.value = true
         try {
@@ -301,8 +301,8 @@ export const useKnowledgeBaseStore = defineStore('knowledgeBase', () => {
                     }
 
                     // 如果单个文件处理完成或失败，从轮询列表中移除
-                    if (response.processing_status === 'completed' ||
-                        response.processing_status === 'failed') {
+                    if (response.processingStatus === 'completed' ||
+                        response.processingStatus === 'failed') {
                         pollingFileIds.delete(response.id)
                         fileCallbacks.value.delete(response.id)
                     }

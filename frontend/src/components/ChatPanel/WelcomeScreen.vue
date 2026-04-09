@@ -25,12 +25,12 @@
 
         <!-- 角色设定 -->
         <div
-          v-if="session?.settings?.system_prompt"
+          v-if="session?.settings?.systemPrompt"
           class="mt-6 p-5 bg-gray-50 rounded-xl border-l-4 border-[var(--color-primary)] text-left"
         >
           <h3 class="text-base font-semibold text-gray-800 mb-2">角色设定</h3>
           <p class="text-sm text-gray-600 leading-6">
-            {{ session?.settings.system_prompt }}
+            {{ session?.settings.systemPrompt }}
           </p>
         </div>
       </div>

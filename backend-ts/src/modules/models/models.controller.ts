@@ -6,7 +6,7 @@ import { ModelService } from './model.service';
 @Controller()
 @UseGuards(AuthGuard)
 export class ModelsController {
-  constructor(private readonly modelService: ModelService) {}
+  constructor(private readonly modelService: ModelService) { }
 
   @Get('models')
   async getModels(@CurrentUser() user: any) {
@@ -36,13 +36,28 @@ export class ModelsController {
     return { success: true };
   }
 
+  @Get('providers/templates')
+  async getProviderTemplates() {
+    return this.modelService.getProviderTemplates();
+  }
+
   @Post('providers')
   async createProvider(@Body() body: any, @CurrentUser() user: any) {
-    return this.modelService.addProvider(user.sub, body.name, body.api_key, body.api_url);
+    return this.modelService.addProvider(
+      user.sub,
+      body.name,
+      body.apiKey || body.api_key,  // 支持 camelCase 和 snake_case
+      body.apiUrl || body.api_url,
+      body.provider,
+      body.protocol,
+      body.avatarUrl || body.avatar_url,
+      body.attributes,
+    );
   }
 
   @Put('providers/:id')
   async updateProvider(@Param('id') id: string, @Body() data: any, @CurrentUser() user: any) {
+    // 过滤掉不允许更新的字段（由 Service 层处理）
     return this.modelService.updateProvider(id, data, user.sub);
   }
 

@@ -1,4 +1,4 @@
-import { Injectable, Logger, NotFoundException, Inject } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException, Inject, OnModuleInit } from '@nestjs/common';
 import * as crypto from 'crypto';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -8,11 +8,12 @@ import { KBFileRepository } from '../../common/database/kb-file.repository';
 import { KBChunkRepository } from '../../common/database/kb-chunk.repository';
 import { FileParserService } from './file-parser.service';
 import { EmbeddingService } from './embedding.service';
+import { ChunkingService } from './chunking.service';
 import { VectorDatabase } from '../../common/vector-db/interfaces/vector-database.interface';
 import { createPaginatedResponse } from '../../common/types/pagination';
 
 @Injectable()
-export class KbFileService {
+export class KbFileService implements OnModuleInit {
   private readonly logger = new Logger(KbFileService.name);
   private static processingSemaphore: Promise<void> = Promise.resolve();
 
@@ -23,8 +24,45 @@ export class KbFileService {
     private chunkRepo: KBChunkRepository,
     private parserService: FileParserService,
     private embeddingService: EmbeddingService,
+    private chunkingService: ChunkingService,
     @Inject('VECTOR_DB') private vectorDb: VectorDatabase,
   ) {}
+
+  async onModuleInit() {
+    await this.resumePendingFileTasks();
+  }
+
+  /**
+   * 恢复未完成的文件处理任务
+   */
+  private async resumePendingFileTasks() {
+    try {
+      this.logger.log('🔄 开始扫描未完成的知识库文件任务...');
+      
+      const pendingFiles = await this.fileRepo.findByStatus(['pending', 'processing']);
+      this.logger.log(`📋 发现 ${pendingFiles.length} 个未完成任务`);
+
+      for (const file of pendingFiles) {
+        // 检查物理文件是否存在
+        if (!file.filePath || !fs.existsSync(file.filePath)) {
+          this.logger.error(`❌ 文件不存在，标记为失败：${file.displayName} (${file.filePath})`);
+          await this.fileRepo.updateProcessingStatus(
+            file.id,
+            'failed',
+            undefined,
+            undefined,
+            '文件丢失，无法恢复',
+          );
+          continue;
+        }
+
+        this.logger.log(`🔄 恢复任务：${file.displayName}`);
+        this.processFileInBackground(file.id);
+      }
+    } catch (error: any) {
+      this.logger.error(`恢复任务失败：${error.message}`);
+    }
+  }
 
   /**
    * 上传文件到知识库
@@ -143,8 +181,14 @@ export class KbFileService {
         '文件解析完成，正在分块...',
       );
 
-      // 5. 文本分块（简化实现）
-      const chunks = this.chunkText(content, kb.chunkMaxSize, kb.chunkOverlapSize);
+      // 5. 文本分块（使用智能分块服务）
+      // 固定使用 cl100k_base 编码进行 Token 计数
+      const chunksData = await this.chunkingService.chunkText(content, {
+        chunkSize: kb.chunkMaxSize,
+        overlapSize: kb.chunkOverlapSize,
+      });
+      
+      const chunks = chunksData.map(chunk => chunk.content);
       const totalChunks = chunks.length;
 
       this.logger.log(`文本分块完成：共${totalChunks}个分块`);
@@ -177,12 +221,12 @@ export class KbFileService {
       }
 
       // 7. 批量向量化
-      const model = await this.prisma.model.findUnique({
+      const modelWithProvider = await this.prisma.model.findUnique({
         where: { id: kb.embeddingModelId },
         include: { provider: true },
       });
 
-      if (!model) {
+      if (!modelWithProvider) {
         throw new Error(`向量模型不存在：${kb.embeddingModelId}`);
       }
 
@@ -196,9 +240,9 @@ export class KbFileService {
 
       const allEmbeddings = await this.embeddingService.getEmbeddings(
         chunks,
-        model.provider.apiUrl || '',
-        model.provider.apiKey || '',
-        model.modelName,
+        modelWithProvider.provider.apiUrl || '',
+        modelWithProvider.provider.apiKey || '',
+        modelWithProvider.modelName,
       );
 
       await this.fileRepo.updateProcessingStatus(
@@ -234,25 +278,28 @@ export class KbFileService {
       );
 
       // 9. 保存到数据库
-      for (let idx = 0; idx < chunks.length; idx++) {
+      for (let idx = 0; idx < chunksData.length; idx++) {
+        const chunkData = chunksData[idx];
         await this.chunkRepo.create({
           fileId: fileId,
           knowledgeBaseId: knowledgeBaseId,
-          content: chunks[idx],
+          content: chunkData.cleanContent, // 存储纯净内容
           chunkIndex: idx,
           vectorId: `chunk_${idx}_${fileId}`,
           embeddingDimensions: allEmbeddings[idx].length,
-          tokenCount: chunks[idx].length, // 简化：使用字符数作为 token 数
+          tokenCount: chunkData.metadata.tokenCount,
           metadata: {
             fileId: fileId,
             knowledgeBaseId: knowledgeBaseId,
             fileName: displayName,
+            overlapLength: chunkData.metadata.overlapLength,
+            strategy: chunkData.metadata.strategy,
           },
         });
       }
 
       // 10. 标记为完成
-      const totalTokens = chunks.reduce((sum, chunk) => sum + chunk.length, 0);
+      const totalTokens = chunksData.reduce((sum, chunk) => sum + chunk.metadata.tokenCount, 0);
       await this.fileRepo.updateProcessingStatus(
         fileId,
         'completed',
@@ -276,25 +323,6 @@ export class KbFileService {
         error.message,
       );
     }
-  }
-
-  /**
-   * 简单的文本分块算法
-   */
-  private chunkText(text: string, chunkSize: number, overlapSize: number): string[] {
-    const chunks: string[] = [];
-    let start = 0;
-
-    while (start < text.length) {
-      const end = Math.min(start + chunkSize, text.length);
-      const chunk = text.substring(start, end);
-      chunks.push(chunk);
-
-      if (end >= text.length) break;
-      start = end - overlapSize;
-    }
-
-    return chunks;
   }
 
   /**

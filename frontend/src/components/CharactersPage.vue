@@ -72,7 +72,7 @@
                   <div class="flex flex-rows">
                     <div class="shrink-0 mr-4">
                       <div class="w-16 h-16 overflow-hidden rounded-full">
-                        <Avatar :src="character.avatar_url" />
+                        <Avatar :src="character.avatarUrl" />
                       </div>
                     </div>
 
@@ -102,7 +102,7 @@
 
                     <div v-if="charactersType == 'private'" class="flex gap-1">
                       <el-button size="small" link @click="shareCharacter(character)"
-                        class="text-gray-500 hover:text-gray-600" :class="{ 'text-yellow-500!': character.is_public }">
+                        class="text-gray-500 hover:text-gray-600" :class="{ 'text-yellow-500!': character.isPublic }">
                         <template #icon>
                           <ShareTwotone />
                         </template>
@@ -270,7 +270,7 @@ const deleteCharacter = async (character: any): Promise<void> => {
 const startNewChat = async (character: any): Promise<void> => {
   try {
     const session = await apiService.createSession({
-      character_id: character.id,
+      characterId: character.id,
       title: character.title,
     })
     // 刷新路由到聊天页面
@@ -284,9 +284,9 @@ const startNewChat = async (character: any): Promise<void> => {
 
 const shareCharacter = async (character: any): Promise<void> => {
   try {
-    await apiService.updateCharacter(character.id, { is_public: !character.is_public })
-    character.is_public = !character.is_public
-    toast.success(character.is_public ? '助手已公开' : '助手已私密')
+    await apiService.updateCharacter(character.id, { isPublic: !character.isPublic })
+    character.isPublic = !character.isPublic
+    toast.success(character.isPublic ? '助手已公开' : '助手已私密')
   } catch (error: any) {
     console.error('更新助手失败:', error)
     toast.error('更新助手失败')

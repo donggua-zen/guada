@@ -6,7 +6,8 @@ import { MessageContentRepository } from '../../common/database/message-content.
 import { CharacterRepository } from '../../common/database/character.repository';
 import { LLMService } from './llm.service';
 import { ToolOrchestrator } from '../tools/tool-orchestrator.service';
-import { MemoryManagerService, MessageRecord } from './memory.service';
+import { MemoryManagerService } from './memory.service';
+import { MessageRecord, LLMResponseChunk } from './types/llm.types';
 
 /**
  * 思考时间信息（简单数据容器）
@@ -108,7 +109,7 @@ export class AgentService {
         // 3. 多轮工具调用循环
         let needToContinue = true;
         const chatTurns: MessageRecord[] = [];
-        const llm = new LLMService();
+        const llm = this.llmService;
 
         // 防止无限循环的安全机制
         let iterationCount = 0;
@@ -158,168 +159,211 @@ export class AgentService {
                 modelName: session.model?.modelName,
             };
 
-            const stream = llm.completions({
-                model: session.model?.modelName || 'gpt-3.5-turbo',
-                messages: [...messages, ...chatTurns],
-                tools,
-                temperature: mergedSettings.modelTemperature,
-                top_p: mergedSettings.modelTopP,
-                frequency_penalty: mergedSettings.modelFrequencyPenalty,  // 新增
-                max_tokens: session.model?.maxOutputTokens,  // 新增：从模型配置获取
-                thinking: mergedSettings.thinkingEnabled,  // 新增
-                modelConfig: session.model,  // 传递模型配置（包含供应商信息）
-                stream: true, // 显式开启流式
-                abortSignal,  // 传递中断信号
-            });
+            // 用于跟踪当前轮次的完整数据（包括错误信息）
+            let currentChunk: MessageRecord = { role: 'assistant', content: '' };
 
-            let currentChunk: {
-                role: string,
-                content: string,
-                reasoningContent?: string,
-                toolCalls?: any[],
-                toolCallsResponse?: any,
-                usage?: any,
-                finishReason?: string,
-            } = { role: 'assistant', content: '' };
+            let streamError: Error | null = null;  // 记录流式过程中的错误
 
-            for await (const chunk of stream) {
-                // 增量累加逻辑（使用驼峰式命名）
-                if (chunk.content) currentChunk.content += chunk.content;
-                if (chunk.reasoningContent) {
-                    // 记录思考开始时间（第一次收到 reasoning_content 时）
-                    if (!currentTurnThinkingInfo.thinkingStartedAt) {
-                        currentTurnThinkingInfo.thinkingStartedAt = new Date();
-                        this.logger.debug('Thinking started');
+            try {
+                const stream = llm.completions({
+                    model: session.model?.modelName || 'gpt-3.5-turbo',
+                    messages: [...messages, ...chatTurns],
+                    tools,
+                    temperature: mergedSettings.modelTemperature,
+                    topP: mergedSettings.modelTopP,
+                    frequencyPenalty: mergedSettings.modelFrequencyPenalty,  // 新增
+                    maxTokens: session.model?.maxOutputTokens,  // 新增：从模型配置获取
+                    modelConfig: session.model,  // 传递模型配置（包含供应商信息）
+                    stream: true, // 显式开启流式
+                    thinkingEnabled: mergedSettings.thinkingEnabled || false, // 显式传递思考模式开关
+                    abortSignal,  // 传递中断信号
+                });
+
+                for await (const chunk of stream as AsyncGenerator<LLMResponseChunk>) {
+                    // 增量累加逻辑（使用驼峰式命名）
+                    if (chunk.content) currentChunk.content += chunk.content;
+                    if (chunk.reasoningContent) {
+                        // 记录思考开始时间（第一次收到 reasoning_content 时）
+                        if (!currentTurnThinkingInfo.thinkingStartedAt) {
+                            currentTurnThinkingInfo.thinkingStartedAt = new Date();
+                            this.logger.debug('Thinking started');
+                        }
+
+                        if (currentChunk.reasoningContent === undefined) {
+                            currentChunk.reasoningContent = chunk.reasoningContent;
+                        } else
+                            currentChunk.reasoningContent += chunk.reasoningContent;
+                    }
+                    if (chunk.toolCalls) {
+                        // 记录思考结束时间（第一次收到 tool_calls 时）
+                        this.recordThinkingFinished(currentTurnThinkingInfo, 'first tool_calls chunk');
+
+                        this.accumulateToolCalls(currentChunk, chunk.toolCalls);
+                        this.logger.log(`Accumulated ${chunk.toolCalls.length} tool calls`);
                     }
 
-                    if (currentChunk.reasoningContent === undefined) {
-                        currentChunk.reasoningContent = chunk.reasoningContent;
-                    } else
-                        currentChunk.reasoningContent += chunk.reasoningContent;
-                }
-                if (chunk.toolCalls) {
-                    // 记录思考结束时间（第一次收到 tool_calls 时）
-                    this.recordThinkingFinished(currentTurnThinkingInfo, 'first tool_calls chunk');
+                    if (chunk.content) {
+                        // 记录思考结束时间（第一次收到 content 时）
+                        this.recordThinkingFinished(currentTurnThinkingInfo, 'first content chunk');
+                    }
 
-                    this.accumulateToolCalls(currentChunk, chunk.toolCalls);
-                    this.logger.log(`Accumulated ${chunk.toolCalls.length} tool calls`);
-                }
-
-                if (chunk.content) {
-                    // 记录思考结束时间（第一次收到 content 时）
-                    this.recordThinkingFinished(currentTurnThinkingInfo, 'first content chunk');
-                }
-
-                // 累加 usage 和 finishReason（用于最后保存到数据库）
-                if (chunk.usage) {
-                    currentChunk.usage = chunk.usage;
-                }
-                if (chunk.finishReason) {
-                    currentChunk.finishReason = chunk.finishReason;
-                }
-
-                // 实时 Yield 给前端（过滤空 chunk）
-                // 只有在有实际内容、推理内容、工具调用、结束原因或 usage 时才 yield
-                if (
-                    chunk.content ||
-                    chunk.reasoningContent ||
-                    chunk.toolCalls ||
-                    chunk.finishReason ||
-                    chunk.usage
-                ) {
-                    // 更严谨的类型判断：确保 msg 不为 null
-                    let eventType: string;
-                    let msg: string | null = null;
-
+                    // 累加 usage 和 finishReason（用于最后保存到数据库）
+                    if (chunk.usage) {
+                        currentChunk.usage = chunk.usage;
+                    }
                     if (chunk.finishReason) {
-                        eventType = 'finish';
-                    } else if (chunk.reasoningContent) {
-                        eventType = 'think';
-                        msg = chunk.reasoningContent;
-                    } else if (chunk.content) {
-                        eventType = 'text';
-                        msg = chunk.content;
-                    } else if (chunk.toolCalls) {
-                        eventType = 'tool_call';
-                    } else if (chunk.usage) {
-                        // 只有 usage 没有内容的情况，跳过不发送
-                        continue;
-                    } else {
-                        // 其他未知情况，跳过
-                        continue;
+                        currentChunk.finishReason = chunk.finishReason;
                     }
 
-                    yield {
-                        type: eventType,
-                        msg,  // 确保 msg 有值或是 null（finish/tool_call 时）
-                        toolCalls: chunk.toolCalls,
-                        finishReason: chunk.finishReason,
-                        usage: chunk.usage,
-                    };
-                }
+                    // 实时 Yield 给前端（过滤空 chunk）
+                    // 只有在有实际内容、推理内容、工具调用、结束原因或 usage 时才 yield
+                    if (
+                        chunk.content ||
+                        chunk.reasoningContent ||
+                        chunk.toolCalls ||
+                        chunk.finishReason ||
+                        chunk.usage
+                    ) {
+                        // 更严谨的类型判断：确保 msg 不为 null
+                        let eventType: string;
+                        let msg: string | null = null;
 
-                // 处理结束原因
-                if (chunk.finishReason === 'tool_calls') {
-                    // 兜底：如果直到 finish 都没有记录结束时间（只有思考没有内容），在此记录
-                    this.recordThinkingFinished(currentTurnThinkingInfo, 'finish_reason (fallback)');
+                        if (chunk.finishReason) {
+                            eventType = 'finish';
+                        } else if (chunk.reasoningContent) {
+                            eventType = 'think';
+                            msg = chunk.reasoningContent;
+                        } else if (chunk.content) {
+                            eventType = 'text';
+                            msg = chunk.content;
+                        } else if (chunk.toolCalls) {
+                            eventType = 'tool_call';
+                        } else if (chunk.usage) {
+                            // 只有 usage 没有内容的情况，跳过不发送
+                            continue;
+                        } else {
+                            // 其他未知情况，跳过
+                            continue;
+                        }
 
-                    this.logger.log('Tool calls:', currentChunk.toolCalls);
-                    const toolResponses = await this.toolOrchestrator.executeBatch(
-                        currentChunk.toolCalls.map((tc: any) => ({
+                        yield {
+                            type: eventType,
+                            msg,  // 确保 msg 有值或是 null（finish/tool_call 时）
+                            toolCalls: chunk.toolCalls,
+                            finishReason: chunk.finishReason,
+                            usage: chunk.usage,
+                        };
+                    }
 
-                            id: tc.id,
-                            name: tc.name,
-                            arguments: JSON.parse(tc.arguments) || {},
-                        })),
-                        toolContext  // 传递完整的工具执行上下文
-                    );
+                    // 处理结束原因
+                    if (chunk.finishReason === 'tool_calls') {
+                        // 兜底：如果直到 finish 都没有记录结束时间（只有思考没有内容），在此记录
+                        this.recordThinkingFinished(currentTurnThinkingInfo, 'finish_reason (fallback)');
 
-                    // Yield tool_calls_response 事件（与 Python 后端保持一致）
-                    yield {
-                        type: 'tool_calls_response',
-                        toolCallsResponse: toolResponses.map(tr => ({
+                        this.logger.log('Tool calls:', currentChunk.toolCalls);
+                        const toolResponses = await this.toolOrchestrator.executeBatch(
+                            currentChunk.toolCalls.map((tc: any) => ({
+
+                                id: tc.id,
+                                name: tc.name,
+                                arguments: JSON.parse(tc.arguments) || {},
+                            })),
+                            toolContext  // 传递完整的工具执行上下文
+                        );
+
+                        // Yield tool_calls_response 事件（与 Python 后端保持一致）
+                        yield {
+                            type: 'tool_calls_response',
+                            toolCallsResponse: toolResponses.map(tr => ({
+                                role: tr.role,
+                                name: tr.name,
+                                content: tr.content,
+                                toolCallId: tr.toolCallId,
+                            })),
+                            usage: chunk.usage,
+                        };
+
+                        chatTurns.push(currentChunk);
+                        chatTurns.push(...toolResponses.map(tr => ({
+                            role: tr.role as any,
+                            name: tr.name,
+                            content: tr.content,
+                            toolCallId: tr.toolCallId,
+                        })));
+
+                        currentChunk.toolCallsResponse = toolResponses.map(tr => ({
                             role: tr.role,
                             name: tr.name,
                             content: tr.content,
                             toolCallId: tr.toolCallId,
-                        })),
-                        usage: chunk.usage,
+                        }));
+
+                    } else if (chunk.finishReason) {
+                        needToContinue = false;
+                    }
+                }
+            } catch (error) {
+                // 捕获流式过程中的异常（包括 AbortError、APIError 等）
+                streamError = error instanceof Error ? error : new Error(String(error));
+                this.logger.error(`Stream error in iteration ${iterationCount}:`, streamError);
+
+                // 根据错误类型设置 finishReason 和 error 信息
+                if (streamError.name === 'AbortError' || streamError.message.includes('abort')) {
+                    // 用户主动中止（客户端断开连接）
+                    currentChunk.finishReason = 'user_abort';
+                    currentChunk.error = 'User aborted the request';
+                    this.logger.debug('User stopped generation (AbortError)');
+
+                    // 优化：记录思考结束时间
+                    this.recordThinkingFinished(currentTurnThinkingInfo, 'user abort');
+                } else if (streamError.message.includes('timed out') || streamError.message.includes('timeout')) {
+                    // 超时错误
+                    currentChunk.finishReason = 'timeout';
+                    currentChunk.error = streamError.message;
+                    this.logger.warn('LLM request timed out');
+
+                    // 记录思考结束时间
+                    this.recordThinkingFinished(currentTurnThinkingInfo, 'timeout');
+                } else {
+                    // 其他 API 错误或运行时错误
+                    currentChunk.finishReason = 'error';
+                    currentChunk.error = streamError.message;
+                    this.logger.error(`LLM API error: ${streamError.message}`);
+
+                    // 记录思考结束时间
+                    this.recordThinkingFinished(currentTurnThinkingInfo, 'api error');
+
+                    // 向前端发送错误事件
+                    yield {
+                        type: 'finish',
+                        finishReason: 'error',
+                        error: streamError.message,
+                        usage: currentChunk.usage,
                     };
 
-                    chatTurns.push(currentChunk);
-                    chatTurns.push(...toolResponses.map(tr => ({
-                        role: tr.role,
-                        name: tr.name,
-                        content: tr.content,
-                        toolCallId: tr.toolCallId,
-                    })));
-
-                    currentChunk.toolCallsResponse = toolResponses.map(tr => ({
-                        role: tr.role,
-                        name: tr.name,
-                        content: tr.content,
-                        toolCallId: tr.toolCallId,
-                    }));
-
-                } else if (chunk.finishReason) {
-                    needToContinue = false;
                 }
+                // 发生错误时停止继续迭代
+                needToContinue = false;
+            } finally {
+                // 无论成功、失败还是中止，都要保存当前已生成的内容
+                // 计算思考时长并保存到数据库
+                const thinkingDurationMs = this.calculateThinkingDuration(currentTurnThinkingInfo);
+
+                // 更新已存在的消息内容（而不是创建新的）
+                // 注意：即使发生错误，也要保存已生成的部分内容
+                await this.updateMessageContent(
+                    messageContent.id,
+                    currentChunk,
+                    session.model?.modelName,
+                    thinkingDurationMs  // 传入思考时长
+                );
+
+                this.logger.debug(`Iteration ${iterationCount} cleanup completed. Finish reason: ${currentChunk.finishReason}`);
             }
 
             if (!needToContinue) {
                 chatTurns.push(currentChunk);
             }
-
-            // 计算思考时长并保存到数据库
-            const thinkingDurationMs = this.calculateThinkingDuration(currentTurnThinkingInfo);
-
-            // 更新已存在的消息内容（而不是创建新的）
-            await this.updateMessageContent(
-                messageContent.id,
-                currentChunk,
-                session.model?.modelName,
-                thinkingDurationMs  // 传入思考时长
-            );
         }
     }
 
@@ -441,11 +485,17 @@ export class AgentService {
         thinkingDurationMs?: number | null  // 新增参数：思考时长
     ) {
         try {
-            // 构建 meta_data，添加思考时长和 usage 信息
+            // 构建 meta_data，添加思考时长、usage 和错误信息
             const metaData: any = {
                 modelName: modelName,  // 驼峰式
                 finishReason: chunk.finishReason  // 驼峰式
             };
+
+            // 如果有错误信息，保存到 meta_data（与 Python 后端保持一致）
+            if (chunk.error) {
+                metaData.error = chunk.error;
+                this.logger.warn(`Error saved to metaData: ${chunk.error}`);
+            }
 
             // 如果有思考时长，保存到 meta_data
             if (thinkingDurationMs !== null && thinkingDurationMs !== undefined) {
@@ -474,9 +524,10 @@ export class AgentService {
                 } : undefined,
             });
 
-            this.logger.log(`Message content updated: ${contentId}`);
+            this.logger.log(`Message content updated: ${contentId}, finishReason: ${chunk.finishReason}`);
         } catch (error) {
             this.logger.error('Failed to update message content', error);
+            // 注意：即使保存失败，也不应该抛出异常，避免影响上层逻辑
         }
     }
 

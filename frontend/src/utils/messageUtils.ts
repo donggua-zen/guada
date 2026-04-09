@@ -11,13 +11,13 @@ export interface Message {
     id: string
     role: 'user' | 'assistant'
     contents: MessageContent[]
-    parent_id?: string
-    current_turns_id?: string
+    parentId?: string
+    currentTurnsId?: string
     state: {
-        is_streaming: boolean
-        is_thinking?: boolean
+        isStreaming: boolean
+        isThinking?: boolean
     }
-    created_at?: string
+    createdAt?: string
     files?: FileAttachment[]
     index?: number
 }
@@ -28,20 +28,20 @@ export interface Message {
 export interface MessageContent {
     id: string
     content: string | null
-    reasoning_content?: string | null
-    turns_id?: string
-    additional_kwargs?: Record<string, any>
-    meta_data?: Record<string, any>
-    created_at?: string
-    updated_at?: string
-    thinking_started_at?: number | null
-    thinking_duration_ms?: number | null
+    reasoningContent?: string | null
+    turnsId?: string
+    additionalKwargs?: Record<string, any>
+    metaData?: Record<string, any>
+    createdAt?: string
+    updatedAt?: string
+    thinkingStartedAt?: number | null
+    thinkingDurationMs?: number | null
     state: {
-        is_streaming: boolean
-        is_thinking: boolean
+        isStreaming: boolean
+        isThinking: boolean
     }
     _thinkingTimer?: number
-    is_current?: boolean
+    isCurrent?: boolean
 }
 
 /**
@@ -80,11 +80,11 @@ export function pairMessages(messages: Message[]): MessagePair[] {
         if (current.role === 'user') {
             const next = messages[i + 1]
 
-            // 检查下一条是否存在、是 assistant、且 parent_id 匹配
+            // 检查下一条是否存在、是 assistant、且 parentId 匹配
             if (
                 next &&
                 next.role === 'assistant' &&
-                next.parent_id === current.id
+                next.parentId === current.id
             ) {
                 next.index = i + 1
                 pairs.push([current, next])
@@ -107,12 +107,12 @@ export function pairMessages(messages: Message[]): MessagePair[] {
 
 /**
  * 获取当前内容索引（已废弃）
- * @deprecated 已废弃，直接使用 message.current_turns_id 和 turns 过滤
+ * @deprecated 已废弃，直接使用 message.currentTurnsId 和 turns 过滤
  */
 export function getCurrentIndex(messageContents: MessageContent[]): number {
-    console.warn('getCurrentIndex 已废弃，请使用 message.current_turns_id')
+    console.warn('getCurrentIndex 已废弃，请使用 message.currentTurnsId')
     if (!messageContents?.length) return 0
-    const currentIndex = messageContents.findIndex(content => content.is_current)
+    const currentIndex = messageContents.findIndex(content => content.isCurrent)
     return currentIndex !== -1 ? currentIndex : 0
 }
 
@@ -124,31 +124,31 @@ export function getCurrentIndex(messageContents: MessageContent[]): number {
 export function getCurrentTurns(message: Message): MessageContent[] {
     if (!message?.contents) return []
 
-    // 如果是 assistant 消息，根据 current_turns_id 过滤
-    if (message.role === 'assistant' && message.current_turns_id) {
+    // 如果是 assistant 消息，根据 currentTurnsId 过滤
+    if (message.role === 'assistant' && message.currentTurnsId) {
         const matchedContents = message.contents.filter(
-            content => content.turns_id === message.current_turns_id
+            content => content.turnsId === message.currentTurnsId
         )
 
         return matchedContents
     }
 
-    // User 消息或没有 current_turns_id 的情况：返回所有内容
+    // User 消息或没有 currentTurnsId 的情况：返回所有内容
     return message.contents
 }
 
 /**
  * 获取当前内容的版本号集合
  * @param message - 消息对象
- * @returns 所有唯一的 turns_id 集合
+ * @returns 所有唯一的 turnsId 集合
  */
 export function getContentVersions(message: Message): string[] {
     if (!message?.contents) return []
 
     const versions = new Set<string>()
     message.contents.forEach(content => {
-        if (content.turns_id) {
-            versions.add(content.turns_id)
+        if (content.turnsId) {
+            versions.add(content.turnsId)
         }
     })
 

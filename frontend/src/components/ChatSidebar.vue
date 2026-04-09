@@ -43,7 +43,7 @@
               'session-item-inactive': session.id !== currentSessionId
             }" @click="selectSession(session)">
             <div class="session-avatar">
-              <Avatar :src="session.character?.avatar_url || session.avatar_url" round />
+              <Avatar :src="session.character?.avatarUrl || session.avatarUrl" round />
             </div>
             <div class="session-info flex-1 min-w-0 flex items-center">
               <div class="session-title truncate text-sm font-medium w-full">

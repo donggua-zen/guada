@@ -21,8 +21,8 @@ export class SettingsService {
 
   constructor(private settingRepo: GlobalSettingRepository) {}
 
-  async getSettings() {
-    const allSettings = await this.settingRepo.findAll();
+  async getSettings(userId: string) {
+    const allSettings = await this.settingRepo.findAll(userId);
     const settingsMap: Record<string, any> = {};
     
     // 初始化默认值
@@ -39,15 +39,16 @@ export class SettingsService {
     return settingsMap;
   }
 
-  async updateSettings(data: Record<string, any>) {
+  async updateSettings(userId: string, data: Record<string, any>) {
     // 将 camelCase 转换为 snake_case 存储到数据库
     const updates = Object.entries(data).map(([key, value]) => ({
       key: this.camelToSnake(key),
       value,
+      userId,
     }));
     
     await this.settingRepo.saveBatch(updates);
-    return this.getSettings();
+    return this.getSettings(userId);
   }
 
   /**
