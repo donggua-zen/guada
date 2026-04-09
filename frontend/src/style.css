@@ -293,3 +293,14 @@ html,
         transform: translateY(0);
     }
 }
+
+*::-webkit-scrollbar {
+    /* width: 0; */
+    /* Chrome/Safari */
+    /* background: transparent; */
+}
+
+* {
+    /* scrollbar-color: transparent transparent; */
+    /* Firefox */
+}

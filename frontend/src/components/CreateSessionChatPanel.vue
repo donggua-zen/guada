@@ -30,8 +30,8 @@
       <div class="w-full  max-w-[800px]">
         <ChatInput v-model:value="inputMessage.content" v-model:thinking-enabled="thinkingEnabled" :config="{
           modelId: currentModelId,
-          maxMemoryLength: (lastModelConfig.value as any)?.maxMemoryLength || currentCharacter?.settings?.max_memory_length,
-          knowledgeBaseIds: currentSession?.settings?.referenced_kbs || []
+          maxMemoryLength: (lastModelConfig.value as any)?.maxMemoryLength || currentCharacter?.settings?.maxMemoryLength,
+          knowledgeBaseIds: currentSession?.settings?.referencedKbs || []
         }" @config-change="handleConfigChange" :buttons="chatInputButtons" :files="inputMessage.files"
           :streaming="false" @send="sendMessage" @toggle-thinking="toggleDeepThinking" />
       </div>
@@ -61,7 +61,7 @@
       <div class="character-list max-h-96 overflow-y-auto">
         <div v-for="character in filteredCharacters" :key="character.id"
           class="character-item flex items-center gap-3 p-3 rounded-lg cursor-pointer hover:bg-gray-50 transition-colors border border-transparent"
-          :class="{ 'bg-blue-50 border-blue-200': currentSession.character_id === character.id }"
+          :class="{ 'bg-blue-50 border-blue-200': currentSession.characterId === character.id }"
           @click="selectCharacter(character)">
           <div class="w-12 h-12 flex-shrink-0 overflow-hidden rounded">
             <Avatar :src="character.avatar_url" type="assistant" class="w-full h-full object-cover" />
@@ -70,7 +70,7 @@
             <p class="text-sm font-medium text-gray-700 truncate">{{ character.title }}</p>
             <p class="text-xs text-gray-500 truncate mt-1">{{ character.description || '暂无描述' }}</p>
           </div>
-          <el-icon v-if="currentSession.character_id === character.id" class="text-blue-500 flex-shrink-0" size="20">
+          <el-icon v-if="currentSession.characterId === character.id" class="text-blue-500 flex-shrink-0" size="20">
             <CheckCircleFilled />
           </el-icon>
         </div>
@@ -152,14 +152,14 @@ const inputMessage = ref({
 
 // 计算属性
 const currentSession = ref<any>({
-  character_id: null,  // 必须绑定角色
+  characterId: null,  // 必须绑定角色
   model_id: null,
   avatar_url: null,
   title: "新建对话",
   settings: {
-    thinking_enabled: lastThinkingEnabled.value, // 从本地存储加载
-    referenced_kbs: userSelectedKnowledgeBaseIds.value, // 🔥 新增：从 localStorage 加载知识库选择
-    model_name: null,
+    thinkingEnabled: lastThinkingEnabled.value, // 从本地存储加载
+    referencedKbs: userSelectedKnowledgeBaseIds.value, // 🔥 新增：从 localStorage 加载知识库选择
+    modelName: null,
   }
 })
 
@@ -175,8 +175,8 @@ const currentSession = ref<any>({
 
 // 当前选中的角色
 const currentCharacter = computed(() => {
-  if (currentSession.value.character_id) {
-    return characters.value.find(c => c.id === currentSession.value.character_id);
+  if (currentSession.value.characterId) {
+    return characters.value.find(c => c.id === currentSession.value.characterId);
   }
   return null;
 });
@@ -192,7 +192,7 @@ const currentModelId = computed(() => {
 });
 
 // 监听角色变化，当角色切换时重置为角色默认模型
-watch(() => currentSession.value.character_id, (newCharId, oldCharId) => {
+watch(() => currentSession.value.characterId, (newCharId, oldCharId) => {
   if (newCharId && newCharId !== oldCharId) {
     // 角色切换时，重置为角色默认模型
     const newCharacter = characters.value.find(c => c.id === newCharId);
@@ -202,7 +202,7 @@ watch(() => currentSession.value.character_id, (newCharId, oldCharId) => {
       currentSession.value.settings = {
         ...(currentSession.value.settings || {}),
         thinking_enabled: lastThinkingEnabled.value,
-        max_memory_length: newCharacter.settings?.max_memory_length
+        maxMemoryLength: newCharacter.settings?.maxMemoryLength
       };
       // 清空用户手动选择的模型 ID（这样 currentModelId 就会使用角色默认模型）
       // userSelectedModelId.value = null;
@@ -210,7 +210,7 @@ watch(() => currentSession.value.character_id, (newCharId, oldCharId) => {
       lastModelConfig.value = {
         ...lastModelConfig.value,
         modelId: newCharacter.model_id,
-        maxMemoryLength: newCharacter.settings?.max_memory_length
+        maxMemoryLength: newCharacter.settings?.maxMemoryLength
       };
     }
   }
@@ -281,29 +281,29 @@ const loadCharacters = async (): Promise<void> => {
     if (characters.value.length > 0) {
       const savedCharacter = characters.value.find(c => c.id === lastSelectedCharacterId.value);
       if (savedCharacter) {
-        currentSession.value.character_id = savedCharacter.id;
+        currentSession.value.characterId = savedCharacter.id;
         // 如果有用户手动选择的模型，使用用户的；否则使用角色默认
         if (userSelectedModelId.value) {
           currentSession.value.model_id = userSelectedModelId.value;
           currentSession.value.settings = {
             ...currentSession.value.settings,
-            max_memory_length: lastModelConfig.value.maxMemoryLength
+            maxMemoryLength: lastModelConfig.value.maxMemoryLength
           };
         } else {
           // 没有用户选择，使用角色默认模型
           currentSession.value.model_id = savedCharacter.model_id;
           currentSession.value.settings = {
             ...currentSession.value.settings,
-            max_memory_length: savedCharacter.settings?.max_memory_length
+            maxMemoryLength: savedCharacter.settings?.maxMemoryLength
           };
         }
       } else {
         // 如果没有保存的角色，使用第一个
-        currentSession.value.character_id = characters.value[0].id;
+        currentSession.value.characterId = characters.value[0].id;
         currentSession.value.model_id = characters.value[0].model_id;
         currentSession.value.settings = {
           ...currentSession.value.settings,
-          max_memory_length: characters.value[0].settings?.max_memory_length
+          maxMemoryLength: characters.value[0].settings?.maxMemoryLength
         };
       }
     }
@@ -315,7 +315,7 @@ const loadCharacters = async (): Promise<void> => {
 
 // 选择角色
 const selectCharacter = (character: any): void => {
-  currentSession.value.character_id = character.id;
+  currentSession.value.characterId = character.id;
   lastSelectedCharacterId.value = character.id;
   showCharacterSelector.value = false;
   characterSearchText.value = '';
@@ -325,7 +325,7 @@ const selectCharacter = (character: any): void => {
   currentSession.value.settings = {
     ...(currentSession.value.settings || {}),
     thinking_enabled: lastThinkingEnabled.value,
-    max_memory_length: character.settings?.max_memory_length
+    maxMemoryLength: character.settings?.maxMemoryLength
   };
   // 清空用户手动选择的模型 ID（这样 currentModelId 就会使用角色默认模型）
   userSelectedModelId.value = null;
@@ -333,7 +333,7 @@ const selectCharacter = (character: any): void => {
   lastModelConfig.value = {
     ...lastModelConfig.value,
     modelId: character.model_id,
-    maxMemoryLength: character.settings?.max_memory_length
+    maxMemoryLength: character.settings?.maxMemoryLength
   }
 };
 
@@ -346,13 +346,13 @@ const handleConfigChange = (config: any): void => {
   }
   if (typeof config.maxMemoryLength !== 'undefined') {
     // @ts-ignore - settings 类型需要更精确的定义
-    currentSession.value.settings = { ...(currentSession.value.settings || {}), max_memory_length: config.maxMemoryLength };
+    currentSession.value.settings = { ...(currentSession.value.settings || {}), maxMemoryLength: config.maxMemoryLength };
     // 保存到本地存储
     lastModelConfig.value = { ...lastModelConfig.value, maxMemoryLength: config.maxMemoryLength };
   }
   // 🔥 新增：保存知识库选择到会话设置和本地存储
   if (typeof config.knowledgeBaseIds !== 'undefined') {
-    currentSession.value.settings = { ...(currentSession.value.settings || {}), referenced_kbs: config.knowledgeBaseIds };
+    currentSession.value.settings = { ...(currentSession.value.settings || {}), referencedKbs: config.knowledgeBaseIds };
     // 🔥 保存到 localStorage，实现持久化
     userSelectedKnowledgeBaseIds.value = config.knowledgeBaseIds;
     console.log('保存知识库选择到本地存储:', config.knowledgeBaseIds);
@@ -379,30 +379,30 @@ const autoTitle = (): string => {
 }
 
 const sendMessage = (): void => {
-  if (!currentSession.value.character_id) {
+  if (!currentSession.value.characterId) {
     notify.error("创建失败", '请先选择一个角色模板');
     return;
   }
   // 🔥 修复：传递完整的 payload，包含 knowledgeBaseIds
   emit("create-session", {
-    character_id: currentSession.value.character_id,
+    characterId: currentSession.value.characterId,
     model_id: currentModelId.value,
     title: autoTitle(),
     settings: currentSession.value.settings
   }, {
     content: inputMessage.value.content,      // ✅ 使用 content 字段
     files: inputMessage.value.files || [],    // ✅ 使用 files 字段
-    knowledgeBaseIds: currentSession.value.settings?.referenced_kbs || []  // 🔥 新增：传递知识库 ID
+    knowledgeBaseIds: currentSession.value.settings?.referencedKbs  || []  // 🔥 新增：传递知识库 ID
   });
 }
 
 const handleCreateSessionClick = (): void => {
-  if (!currentSession.value.character_id) {
+  if (!currentSession.value.characterId) {
     notify.error("创建失败", '请先选择一个角色模板');
     return;
   }
   emit("create-session" as any, {
-    character_id: currentSession.value.character_id,
+    characterId: currentSession.value.characterId,
     model_id: currentModelId.value,
     title: autoTitle(),
     settings: currentSession.value.settings

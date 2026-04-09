@@ -70,9 +70,10 @@ export class KbSearchController {
       queryEmbedding,
       searchRequest.query,
       searchRequest.topK || 5,
-      searchRequest.semanticWeight || 0.6,
-      searchRequest.keywordWeight || 0.4,
+      searchRequest.semanticWeight || 0.3,  // 默认语义权重 30%
+      searchRequest.keywordWeight || 0.7,   // 默认关键词权重 70%
       filterOptions,
+      searchRequest.enableBM25Rerank ?? true,  // ✅ 新增：是否启用 BM25 重排，默认 true
     );
 
     // ✅ 调试日志：检查底层返回的分数

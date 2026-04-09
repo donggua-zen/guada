@@ -111,7 +111,7 @@ async function loadChunks() {
     }
     
     // 仅对已完成处理的文件启用查看功能
-    if (props.selectedFile.processing_status !== 'completed') {
+    if (props.selectedFile.processingStatus !== 'completed') {
         toast.warning('文件尚未处理完成，无法查看分块内容')
         return
     }
@@ -133,7 +133,7 @@ async function loadChunks() {
         chunks.value = data
         
         // 使用文件记录中的total_chunks字段作为总分块数
-        totalChunks.value = props.selectedFile.total_chunks || 0
+        totalChunks.value = props.selectedFile.totalChunks || 0
     } catch (error: any) {
         console.error('获取文件分块失败:', error)
         toast.error(error.response?.data?.detail || '获取文件分块失败')

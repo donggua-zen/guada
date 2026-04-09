@@ -14,16 +14,18 @@ current_directory = os.path.dirname(current_script_path)
 os.chdir(current_directory)
 
 
+from app import create_app
 
 if __name__ == "__main__":
     import uvicorn
 
-    # app = create_app()
+    app = create_app()
 
     uvicorn.run(
         "app:create_app",
+        # app,
         host="0.0.0.0",
-        port=8800,
+        port=3000,
         reload=True,
         reload_includes=["app"],
     )

@@ -104,7 +104,7 @@ export class SessionService {
     }
 
     // 只允许更新特定字段
-    const allowedFields = ['modelId', 'settings'];
+    const allowedFields = ['modelId', 'settings', 'title'];
     const updateData: any = {};
 
     for (const key of allowedFields) {
@@ -144,7 +144,7 @@ export class SessionService {
       }
 
       // 从全局设置中获取标题总结模型
-      const titleModelId = await this.getGlobalSetting('default_title_summary_model_id');
+      const titleModelId = await this.getGlobalSetting('default_title_summary_model_id', userId);
 
       if (!titleModelId) {
         this.logger.log(
@@ -266,10 +266,10 @@ export class SessionService {
   }
 
   /**
-   * 获取全局设置值
+   * 获取全局设置值（优先用户设置，回退到全局默认）
    */
-  private async getGlobalSetting(key: string, defaultValue: any = null): Promise<any> {
-    const setting = await this.globalSettingRepo.findByKey(key);
+  private async getGlobalSetting(key: string, userId: string, defaultValue: any = null): Promise<any> {
+    const setting = await this.globalSettingRepo.findByKey(key, userId);
     return setting ? setting.value : defaultValue;
   }
 }

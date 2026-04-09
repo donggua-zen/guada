@@ -68,7 +68,8 @@ class ApiService implements IApiService {
         // 添加请求拦截器动态设置 token
         this.axiosInstance.interceptors.request.use(
             (config) => {
-                const token = this.tokenStore.value
+                // 优先从 localStorage 读取（记住我），否则使用 sessionStorage
+                const token = localStorage.getItem('token') || sessionStorage.getItem('token')
                 if (token) {
                     config.headers.Authorization = `Bearer ${token}`
                 }
@@ -105,8 +106,8 @@ class ApiService implements IApiService {
         return await this._request('/models')
     }
 
-    async fetchRemoteModels(provider_id: string): Promise<Model[]> {
-        return await this._request(`/providers/${provider_id}/remote_models`)
+    async fetchRemoteModels(providerId: string): Promise<PaginatedResponse<Model>> {
+        return await this._request(`/providers/${providerId}/remote_models`)
     }
 
     async createModel(data: any): Promise<Model> {
@@ -132,6 +133,10 @@ class ApiService implements IApiService {
 
     async updateProvider(providerId: string, data: any): Promise<any> {
         return await this._request(`/providers/${providerId}`, { method: 'PUT', data })
+    }
+
+    async getProviderTemplates(): Promise<any[]> {
+        return await this._request('/providers/templates')
     }
 
     // ========== 角色相关 ==========
@@ -198,8 +203,8 @@ class ApiService implements IApiService {
             data: {
                 content,
                 files,
-                replace_message_id: replaceMessageId,
-                knowledge_base_ids: knowledgeBaseIds,
+                replaceMessageId: replaceMessageId,
+                knowledgeBaseIds: knowledgeBaseIds,
             },
         })
     }
@@ -209,7 +214,7 @@ class ApiService implements IApiService {
     }
 
     async clearSessionMessages(sessionId: string): Promise<boolean> {
-        return await this._request(`/sessions/${sessionId}/messages/clear`, { method: 'DELETE' })
+        return await this._request(`/sessions/${sessionId}/messages`, { method: 'DELETE' })
     }
 
     async updateSession(sessionId: string, data: any): Promise<Session> {
@@ -237,28 +242,30 @@ class ApiService implements IApiService {
     async *chat(
         sessionId: string,
         messageId: string,
-        regeneration_mode: string | null = null,
-        assistant_message_id: string | null = null,
+        regenerationMode: string | null = null,
+        assistantMessageId: string | null = null,
         enableReasoning: boolean = false
     ): AsyncGenerator<StreamEvent, void, unknown> {
         try {
             this.cancelResponse(sessionId)
             const controller = new AbortController()
             this.abortControllerMap.set(sessionId, controller)
-            const accessToken = this.tokenStore.value
+            // 优先从 localStorage 读取（记住我），否则使用 sessionStorage
+            const accessToken = localStorage.getItem('token') || sessionStorage.getItem('token')
 
-            const response = await fetch(`${this.baseURL}/sessions/${sessionId}/messages/stream`, {
+            const response = await fetch(`${this.baseURL}/chat/stream`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
                     Authorization: `Bearer ${accessToken}`,
                 },
                 body: JSON.stringify({
-                    message_id: messageId,
-                    assistant_message_id,
-                    regeneration_mode,
+                    sessionId: sessionId,
+                    messageId: messageId,
+                    assistantMessageId: assistantMessageId,
+                    regenerationMode: regenerationMode,
                     stream: true,
-                    enable_reasoning: enableReasoning,
+                    enableReasoning: enableReasoning,
                 }),
                 signal: controller.signal,
             })
@@ -374,7 +381,7 @@ class ApiService implements IApiService {
     async copyMessageFile(messageId: string, fileId: string): Promise<any> {
         return await this._request(`/files/${fileId}`, {
             method: 'PUT',
-            data: { type: 'copy', message_id: messageId },
+            data: { type: 'copy', messageId: messageId },
         })
     }
 
@@ -402,7 +409,7 @@ class ApiService implements IApiService {
     async changePassword(oldPassword: string, newPassword: string): Promise<any> {
         return await this._request('/user/password/change', {
             method: 'POST',
-            data: { old_password: oldPassword, new_password: newPassword },
+            data: { oldPassword: oldPassword, newPassword: newPassword },
         })
     }
 
@@ -473,7 +480,7 @@ class ApiService implements IApiService {
     }
 
     async refreshMcpTools(serverId: string): Promise<McpServer> {
-        return await this._request(`/mcp-servers/${serverId}/refresh`, { method: 'POST' })
+        return await this._request(`/mcp-servers/${serverId}/refresh-tools`, { method: 'POST' })
     }
 
     async getMcpServers(): Promise<PaginatedResponse<McpServer>> {
@@ -495,13 +502,14 @@ class ApiService implements IApiService {
     async createKnowledgeBase(data: {
         name: string
         description?: string
-        embedding_model_id: string
-        chunk_max_size?: number
-        chunk_overlap_size?: number
-        chunk_min_size?: number
-        is_public?: boolean
+        embeddingModelId: string
+        chunkMaxSize?: number
+        chunkOverlapSize?: number
+        chunkMinSize?: number
+        isPublic?: boolean
     }): Promise<KnowledgeBase> {
-        return await this._request('/knowledge-bases', { method: 'POST', data })
+      
+        return await this._request('/knowledge-bases', { method: 'POST', data: data })
     }
 
     /**
@@ -599,7 +607,7 @@ class ApiService implements IApiService {
     async batchGetFileProcessingStatus(kbId: string, fileIds: string[]): Promise<KBFile[]> {
         return await this._request(`/knowledge-bases/${kbId}/files/status/batch`, {
             method: 'POST',
-            data: { file_ids: fileIds }
+            data: { fileIds: fileIds }
         })
     }
 
@@ -647,8 +655,8 @@ class ApiService implements IApiService {
             method: 'POST',
             data: {
                 query,
-                top_k: topK,
-                filter_file_id: filterFileId,
+                topK: topK,
+                filterFileId: filterFileId,
             },
         })
     }

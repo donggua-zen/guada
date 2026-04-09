@@ -2,6 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import * as crypto from 'crypto';
 import * as fs from 'fs';
 import * as path from 'path';
+import sharp from 'sharp';
 import { FileRepository } from '../../common/database/file.repository';
 import { PrismaService } from '../../common/database/prisma.service';
 
@@ -98,9 +99,8 @@ export class FileService {
     const fileExt = this.getFileExtension(fileName).toLowerCase();
 
     // 生成显示名称（不含扩展名）
-    const displayName = fileName.includes('.')
-      ? fileName.rsplit('.', 1)[0]
-      : fileName;
+    const lastDotIndex = fileName.lastIndexOf('.');
+    const displayName = lastDotIndex > 0 ? fileName.substring(0, lastDotIndex) : fileName;
 
     return {
       fileName,
@@ -234,19 +234,38 @@ export class FileService {
     // 生成唯一文件名
     const uniqueFilename = `${crypto.randomUUID()}.jpg`;
     const filePath = path.join(imagesDir, uniqueFilename);
+    const previewPath = path.join(previewsDir, uniqueFilename);
 
-    // 保存图片
-    fs.writeFileSync(filePath, file.buffer);
+    try {
+      // 使用 sharp 处理图片：缩放并转换为 JPEG
+      const imageProcessor = sharp(file.buffer);
+      
+      // 获取原始尺寸信息
+      const originalMetadata = await imageProcessor.metadata();
+      const metadata = {
+        width: originalMetadata.width || 0,
+        height: originalMetadata.height || 0,
+      };
 
-    // TODO: 生成预览图和调整尺寸（需要安装 sharp 库）
-    // const previewPath = path.join(previewsDir, uniqueFilename);
-    // await this.resizeImage(filePath, previewPath);
+      // 1. 保存原图（最大边长 1024px）
+      await imageProcessor.clone()
+        .resize(1024, 1024, { fit: 'inside', withoutEnlargement: true })
+        .jpeg({ quality: 85 })
+        .toFile(filePath);
 
-    const url = `/static/uploads/images/${uniqueFilename}`;
-    const previewUrl = null; // 暂时不生成预览图
-    const metadata = null; // 暂时不提取元数据
+      // 2. 生成缩略图（最大边长 256px）
+      await sharp(file.buffer)
+        .resize(256, 256, { fit: 'inside', withoutEnlargement: true })
+        .jpeg({ quality: 75 })
+        .toFile(previewPath);
 
-    return { url, previewUrl, metadata };
+      const url = `/static/uploads/images/${uniqueFilename}`;
+      const previewUrl = `/static/uploads/previews/${uniqueFilename}`;
+      
+      return { url, previewUrl, metadata };
+    } catch (error: any) {
+      throw new Error(`图片处理失败: ${error.message}`);
+    }
   }
 
   /**

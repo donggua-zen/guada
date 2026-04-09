@@ -2,6 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { IToolProvider, ToolCallRequest, ToolCallResponse } from '../interfaces/tool-provider.interface';
 import { PrismaService } from '../../../common/database/prisma.service';
 import { McpClientService } from '../../../common/mcp/mcp-client.service';
+import { buildOpenAITool, SimpleToolDef } from '../utils/tool-builder';
 
 @Injectable()
 export class MCPToolProvider implements IToolProvider {
@@ -13,37 +14,37 @@ export class MCPToolProvider implements IToolProvider {
         private prisma: PrismaService,
     ) { }
 
-    async getToolsNamespaced(enabledIds?: string[] | boolean): Promise<any[]> {
-        if (enabledIds === false) return [];
+    async getToolsNamespaced(enabledTools: Record<string, any> | boolean, injectParams: Record<string, any>): Promise<any[]> {
+        if (enabledTools === false) return [];
 
         const whereClause: any = { enabled: true };
-        if (Array.isArray(enabledIds)) {
-            whereClause.id = { in: enabledIds };
+        if (Array.isArray(enabledTools)) {
+            whereClause.id = { in: enabledTools };
+        }
+
+        if (injectParams.userId) {
+            whereClause.userId = injectParams.userId;
         }
 
         const servers = await this.prisma.mcpServer.findMany({ where: whereClause });
-        const allTools: any[] = [];
+        const allTools: SimpleToolDef[] = [];
 
         for (const server of servers) {
             if (!server.tools) continue;
 
-            // 遍历服务器缓存的工具并转换为 OpenAI 格式
-            if (server.tools) {
-                const tools = server.tools as Record<string, any>;
-                for (const [toolName, toolSchema] of Object.entries(tools)) {
-                    allTools.push({
-                        type: 'function',
-                        function: {
-                            name: `${this.namespace}__${toolName}`,
-                            description: (toolSchema as any).description || `Execute ${toolName}`,
-                            parameters: (toolSchema as any).inputSchema || { type: 'object', properties: {} },
-                        },
-                    });
-                }
+            // 遍历服务器缓存的工具并转换为简化的定义格式
+            const tools = server.tools as Record<string, any>;
+            for (const [toolName, toolSchema] of Object.entries(tools)) {
+                allTools.push({
+                    name: toolName,
+                    description: (toolSchema as any).description || `Execute ${toolName}`,
+                    parameters: (toolSchema as any).inputSchema || { type: 'object', properties: {} },
+                });
             }
         }
 
-        return allTools;
+        // 统一使用助手函数生成最终的 OpenAI 格式
+        return allTools.map(tool => buildOpenAITool(this.namespace, tool));
     }
 
     async executeWithNamespace(request: ToolCallRequest, injectParams?: Record<string, any>): Promise<ToolCallResponse> {

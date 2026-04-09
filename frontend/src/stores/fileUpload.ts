@@ -27,22 +27,22 @@ export interface UploadTask {
  */
 export interface UnifiedFileRecord {
     id: string
-    file_id: string // 数据库文件 ID
-    knowledge_base_id?: string // 知识库 ID（可选，用于兼容）
-    file_name: string
-    display_name: string
-    file_size: number
-    file_type: string
-    file_extension: string
-    content_hash?: string // 内容哈希（可选，临时任务没有）
-    processing_status: 'uploading' | 'uploaded' | 'pending' | 'processing' | 'completed' | 'failed'
-    progress_percentage: number
-    current_step: string | null
-    error_message: string | null
-    uploaded_at: string | null
-    processed_at: string | null
-    total_chunks?: number
-    total_tokens?: number
+    fileId: string // 数据库文件 ID
+    knowledgeBaseId?: string // 知识库 ID（可选，用于兼容）
+    fileName: string
+    displayName: string
+    fileSize: number
+    fileType: string
+    fileExtension: string
+    contentHash?: string // 内容哈希（可选，临时任务没有）
+    processingStatus: 'uploading' | 'uploaded' | 'pending' | 'processing' | 'completed' | 'failed'
+    progressPercentage: number
+    currentStep: string | null
+    errorMessage: string | null
+    uploadedAt: string | null
+    processedAt: string | null
+    totalChunks?: number
+    totalTokens?: number
     isTempTask?: boolean // 标记是否为临时上传任务
 }
 
@@ -286,18 +286,18 @@ export const useFileUploadStore = defineStore('fileUpload', () => {
     function taskToFileRecord(task: UploadTask): UnifiedFileRecord {
         return {
             id: task.id,
-            file_id: task.fileId,
-            file_name: task.fileName,
-            display_name: task.fileName,
-            file_size: task.fileSize,
-            file_type: task.fileType,
-            file_extension: task.fileExtension || '',
-            processing_status: task.status,
-            progress_percentage: task.progress,
-            current_step: task.currentStep,
-            error_message: task.errorMessage,
-            uploaded_at: task.uploadedAt,
-            processed_at: task.processedAt,
+            fileId: task.fileId,
+            fileName: task.fileName,
+            displayName: task.fileName,
+            fileSize: task.fileSize,
+            fileType: task.fileType,
+            fileExtension: task.fileExtension || '',
+            processingStatus: task.status,
+            progressPercentage: task.progress,
+            currentStep: task.currentStep,
+            errorMessage: task.errorMessage,
+            uploadedAt: task.uploadedAt,
+            processedAt: task.processedAt,
             isTempTask: true
         }
     }
@@ -324,22 +324,22 @@ export const useFileUploadStore = defineStore('fileUpload', () => {
         dbFiles.forEach((file: any) => {
             result.push({
                 id: file.id,
-                file_id: file.id,
-                knowledge_base_id: file.knowledge_base_id,
-                file_name: file.file_name,
-                display_name: file.display_name,
-                file_size: file.file_size,
-                file_type: file.file_type,
-                file_extension: file.file_extension,
-                content_hash: file.content_hash,
-                processing_status: file.processing_status,
-                progress_percentage: file.progress_percentage,
-                current_step: file.current_step,
-                error_message: file.error_message,
-                uploaded_at: file.uploaded_at,
-                processed_at: file.processed_at,
-                total_chunks: file.total_chunks,
-                total_tokens: file.total_tokens,
+                fileId: file.id,
+                knowledgeBaseId: file.knowledgeBaseId,
+                fileName: file.fileName,
+                displayName: file.displayName,
+                fileSize: file.fileSize,
+                fileType: file.fileType,
+                fileExtension: file.fileExtension,
+                contentHash: file.contentHash,
+                processingStatus: file.processingStatus,
+                progressPercentage: file.progressPercentage,
+                currentStep: file.currentStep,
+                errorMessage: file.errorMessage,
+                uploadedAt: file.uploadedAt,
+                processedAt: file.processedAt,
+                totalChunks: file.totalChunks,
+                totalTokens: file.totalTokens,
                 isTempTask: false
             })
         })

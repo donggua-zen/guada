@@ -11,9 +11,9 @@ import type { Character } from './character'
  */
 export interface SessionSettings {
     isDeepThinking?: boolean
-    thinking_enabled?: boolean
-    max_memory_length?: number
-    system_prompt?: string
+    thinkingEnabled?: boolean
+    maxMemoryLength?: number
+    systemPrompt?: string
     [key: string]: any
 }
 
@@ -45,8 +45,8 @@ export interface SessionState {
  */
 export interface SessionModel {
     id: string
-    model_name: string
-    provider_id?: string
+    modelName: string
+    providerId?: string
 }
 
 /**
@@ -56,23 +56,23 @@ export interface Session {
     id: string
     title: string
     character: Character
-    character_id: string
-    model_id: string
+    characterId: string
+    modelId: string
     model?: SessionModel
-    user_id: string
+    userId: string
     settings: SessionSettings
-    created_at: ISODateString
-    updated_at: ISODateString
-    last_active_at?: ISODateString
-    avatar_url?: string
+    createdAt: ISODateString
+    updatedAt: ISODateString
+    lastActiveAt?: ISODateString
+    avatarUrl?: string
 }
 
 /**
  * 创建会话请求数据
  */
 export interface CreateSessionRequest {
-    character_id: string
-    model_id?: string
+    characterId: string
+    modelId?: string
     title?: string
     settings?: Partial<SessionSettings>
 }
@@ -82,7 +82,7 @@ export interface CreateSessionRequest {
  */
 export interface UpdateSessionRequest {
     title?: string
-    model_id?: string
+    modelId?: string
     settings?: Partial<SessionSettings>
 }
 
@@ -93,5 +93,5 @@ export interface SessionListResponse {
     items: Session[]
     total: number
     page: number
-    page_size: number
+    pageSize: number
 }

@@ -101,20 +101,21 @@ const handleSave = async (data: any): Promise<void> => {
     console.log("handleSave called");
     console.log(data);
     let character: any = null;
+    let characterData = data;
+    delete characterData.avatarFile; // Remove avatarFile from data
     try {
         // console.log(characterForm);
         if (currentCharacter.value && currentCharacter.value.id) {
-            const response = await apiService.updateCharacter(currentCharacter.value.id, data);
-            character = { id: currentCharacter.value.id, ...data };
-            // toast.success("角色更新成功");
+            const response = await apiService.updateCharacter(currentCharacter.value.id, characterData);
+            character = response;
         } else {
-            const response = await apiService.createCharacter(data);
+            const response = await apiService.createCharacter(characterData);
             character = response;
         }
-        if (character && data.avatar_file) {
-            const response = await apiService.uploadAvatar(character['id'], data.avatar_file);
-            character.avatar_url = response.url + "?v=" + new Date().getTime();
-            character.avatar_file = null;
+        if (character && data.avatarFile) {
+            const response = await apiService.uploadAvatar(character['id'], data.avatarFile);
+            character.avatarUrl = response.url + "?v=" + new Date().getTime();
+            character.avatarFile = null;
         }
         if (character) {
             currentCharacter.value = character;

@@ -1,0 +1,161 @@
+[
+  {
+    "test_name": "连字符词汇匹配",
+    "query": "DV430FBM",
+    "num_documents": 5,
+    "results": [
+      {
+        "index": 3,
+        "document": "DV430FBM 系列产品的技术规格说明",
+        "bm25_score": 0.9312179258174736,
+        "rank": 1
+      },
+      {
+        "index": 0,
+        "document": "这款 DV430FBM-N20 冰箱具有出色的节能性能和大容量存储空间",
+        "bm25_score": 0.6302256991965026,
+        "rank": 2
+      },
+      {
+        "index": 1,
+        "document": "普通家用冰箱介绍，适合小家庭使用",
+        "bm25_score": 0,
+        "rank": 3
+      },
+      {
+        "index": 2,
+        "document": "另一款家电产品，功能齐全",
+        "bm25_score": 0,
+        "rank": 4
+      },
+      {
+        "index": 4,
+        "document": "冰箱维护保养指南",
+        "bm25_score": 0,
+        "rank": 5
+      }
+    ],
+    "ranking_correct": false,
+    "top_doc_rank": 2
+  },
+  {
+    "test_name": "中英文混合搜索",
+    "query": "冰箱 节能",
+    "num_documents": 4,
+    "results": [
+      {
+        "index": 1,
+        "document": "节能冰箱推荐，省电又环保",
+        "bm25_score": 1.924264785941482,
+        "rank": 1
+      },
+      {
+        "index": 3,
+        "document": "冰箱选购指南，关注能效等级",
+        "bm25_score": 0.7030650257507871,
+        "rank": 2
+      },
+      {
+        "index": 0,
+        "document": "This is a refrigerator with energy saving features",
+        "bm25_score": 0,
+        "rank": 3
+      },
+      {
+        "index": 2,
+        "document": "空调产品介绍，制冷效果好",
+        "bm25_score": 0,
+        "rank": 4
+      }
+    ],
+    "ranking_correct": true,
+    "top_doc_rank": 1
+  },
+  {
+    "test_name": "纯英文搜索",
+    "query": "energy saving refrigerator",
+    "num_documents": 4,
+    "results": [
+      {
+        "index": 0,
+        "document": "Energy saving refrigerator with advanced technolog...",
+        "bm25_score": 2.9298668069853986,
+        "rank": 1
+      },
+      {
+        "index": 3,
+        "document": "Refrigerator maintenance tips and tricks",
+        "bm25_score": 0.7069183165975602,
+        "rank": 2
+      },
+      {
+        "index": 1,
+        "document": "普通冰箱，无特殊功能",
+        "bm25_score": 0,
+        "rank": 3
+      },
+      {
+        "index": 2,
+        "document": "节能型家电产品介绍",
+        "bm25_score": 0,
+        "rank": 4
+      }
+    ],
+    "ranking_correct": true,
+    "top_doc_rank": 1
+  },
+  {
+    "test_name": "短查询词",
+    "query": "DV430",
+    "num_documents": 3,
+    "results": [
+      {
+        "index": 1,
+        "document": "DV430 系列产品线介绍",
+        "bm25_score": 1.092569294494075,
+        "rank": 1
+      },
+      {
+        "index": 0,
+        "document": "DV430FBM-N20 型号详细说明",
+        "bm25_score": 0,
+        "rank": 2
+      },
+      {
+        "index": 2,
+        "document": "其他型号冰箱对比",
+        "bm25_score": 0,
+        "rank": 3
+      }
+    ],
+    "ranking_correct": false,
+    "top_doc_rank": 2
+  },
+  {
+    "test_name": "长查询词",
+    "query": "节能大容量冰箱推荐",
+    "num_documents": 3,
+    "results": [
+      {
+        "index": 0,
+        "document": "推荐几款节能大容量的家用冰箱，性价比高",
+        "bm25_score": 2.486994207724866,
+        "rank": 1
+      },
+      {
+        "index": 2,
+        "document": "冰箱品牌排行榜",
+        "bm25_score": 0.15722851300577587,
+        "rank": 2
+      },
+      {
+        "index": 1,
+        "document": "小型冰箱适合单身公寓",
+        "bm25_score": 0.14611550292421582,
+        "rank": 3
+      }
+    ],
+    "ranking_correct": true,
+    "top_doc_rank": 1
+  }
+]

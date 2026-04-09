@@ -87,4 +87,12 @@ export class KBFileRepository {
       where: { knowledgeBaseId: kbId },
     });
   }
+
+  async findByStatus(statuses: string[]) {
+    return this.prisma.kBFile.findMany({
+      where: {
+        processingStatus: { in: statuses },
+      },
+    });
+  }
 }
