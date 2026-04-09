@@ -3,8 +3,8 @@
     <div 
         class="file-item group bg-white border border-gray-200 rounded-lg px-3 py-2.5 hover:shadow-md transition-all dark:bg-gray-800 dark:border-gray-700"
         :class="{
-            'cursor-pointer': file.processing_status === 'completed',
-            'cursor-not-allowed': file.processing_status !== 'completed'
+            'cursor-pointer': file.processingStatus === 'completed',
+            'cursor-not-allowed': file.processingStatus !== 'completed'
         }"
         @click="handleClick"
     >
@@ -18,43 +18,43 @@
             <div class="flex-1 min-w-0">
                 <div class="flex items-center justify-between mb-0.5">
                     <h4 class="text-sm font-medium text-gray-900 truncate pr-2 dark:text-gray-100">
-                        {{ file.display_name }}
+                        {{ file.displayName }}
                     </h4>
                     <el-tag size="small" :type="statusType">
                         {{ statusText }}
                     </el-tag>
                 </div>
                 <p class="text-xs text-gray-500 dark:text-gray-400">
-                    {{ formatSize(file.file_size) }} · {{ file.file_extension ? file.file_extension.toUpperCase() : 'UNKNOWN' }}
+                    {{ formatSize(file.fileSize) }} · {{ file.fileExtension ? file.fileExtension.toUpperCase() : 'UNKNOWN' }}
                     <span v-if="isTempTask" class="ml-2 px-1.5 py-0.5 bg-yellow-100 text-yellow-700 rounded text-xs">上传中</span>
                 </p>
             </div>
         </div>
 
         <!-- 进度条 -->
-        <div v-if="file.processing_status === 'processing' || file.processing_status === 'uploading'" class="mt-2">
+        <div v-if="file.processingStatus === 'processing' || file.processingStatus === 'uploading'" class="mt-2">
             <el-progress 
-                v-if="file.processing_status === 'uploading'" 
-                :percentage="file.progress_percentage" 
+                v-if="file.processingStatus === 'uploading'" 
+                :percentage="file.progressPercentage" 
                 :stroke-width="3" 
             />
             <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                {{ file.current_step || '处理中...' }}
+                {{ file.currentStep || '处理中...' }}
             </p>
         </div>
 
         <!-- 错误信息 -->
-        <div v-if="file.processing_status === 'failed' && file.error_message" 
+        <div v-if="file.processingStatus === 'failed' && file.errorMessage" 
             class="mt-2 p-2 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded text-xs text-red-600 dark:text-red-400">
-            {{ file.error_message }}
+            {{ file.errorMessage }}
         </div>
 
         <!-- 详细信息 (可选展开) -->
-        <div v-if="file.processing_status === 'completed' && (file.total_chunks || file.total_tokens)" 
+        <div v-if="file.processingStatus === 'completed' || file.processingStatus === 'failed'" 
             class="mt-2 pt-2 border-t border-gray-100 dark:border-gray-700">
             <div class="flex items-center justify-between gap-3 text-xs text-gray-500 dark:text-gray-400">
                 <div class="flex gap-3">
-                    <span v-if="file.total_chunks">{{ file.total_chunks }} 分块</span>
+                    <span v-if="file.totalChunks">{{ file.totalChunks }} 分块</span>
                 </div>
                 <!-- 操作按钮 -->
                 <div class="flex items-center gap-1 shrink-0" @click.stop>
@@ -166,12 +166,12 @@ const fileIcon = computed(() => {
     let ext = ''
 
     // 方法 1: 从 fileExtension 提取（去掉点号）
-    if (props.file.file_extension) {
-        ext = props.file.file_extension.toLowerCase().replace(/^\./, '')
+    if (props.file.fileExtension) {
+        ext = props.file.fileExtension.toLowerCase().replace(/^\./, '')
     }
 
     // 方法 2: 如果还是空，尝试从 fileType (MIME) 推断
-    if (!ext && props.file.file_type) {
+    if (!ext && props.file.fileType) {
         const mimeMap: Record<string, string> = {
             'application/pdf': 'pdf',
             'application/msword': 'doc',
@@ -198,7 +198,7 @@ const fileIcon = computed(() => {
             'application/x-zip-compressed': 'zip',
             'application/x-rar-compressed': 'rar'
         }
-        ext = mimeMap[props.file.file_type] || 'txt'
+        ext = mimeMap[props.file.fileType] || 'txt'
     }
 
     // 方法 3: 如果还是空，默认 txt
@@ -232,7 +232,7 @@ const statusType = computed(() => {
         'completed': 'success',
         'failed': 'danger',
     }
-    return types[props.file.processing_status] || 'info'
+    return types[props.file.processingStatus] || 'info'
 })
 
 /**
@@ -247,14 +247,14 @@ const statusText = computed(() => {
         'completed': '已完成',
         'failed': '失败',
     }
-    return texts[props.file.processing_status] || props.file.processing_status
+    return texts[props.file.processingStatus] || props.file.processingStatus
 })
 
 /**
  * 处理点击事件
  */
 function handleClick() {
-    if (props.file.processing_status === 'completed') {
+    if (props.file.processingStatus === 'completed') {
         emit('view', props.file)
     }
 }

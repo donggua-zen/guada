@@ -88,7 +88,7 @@ export function useMessageOperations(
             sessionStore.deleteMessage(currentSessionId.value, replaceMessageId)
             const assistantMessage = sessionStore
                 .getMessages(currentSessionId.value)
-                .find((msg: any) => msg.parent_id === replaceMessageId)
+                .find((msg: any) => msg.parentId === replaceMessageId)
             if (assistantMessage) {
                 sessionStore.deleteMessage(currentSessionId.value, assistantMessage.id)
             }
@@ -132,7 +132,7 @@ export function useMessageOperations(
      */
     function enterEditMode(message: any) {
         let knowledgeBaseIds = []
-        const referencedKbs = message.contents[0].additional_kwargs?.referenced_kbs || []
+        const referencedKbs = message.contents[0].additionalKwargs?.referencedKbs || []
         for (let i = 0; i < referencedKbs.length; i++) {
             knowledgeBaseIds.push(referencedKbs[i].id)
         }

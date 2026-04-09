@@ -133,25 +133,79 @@ export class MessageService {
     }
 
     /**
-     * 更新消息
+     * 更新消息（与 Python 后端保持一致）
+     * 
+     * 支持更新两类字段：
+     * 1. Message 表字段：role, currentTurnsId
+     * 2. MessageContent 表字段：content, reasoningContent, metaData, additionalKwargs
+     * 
+     * @param messageId 消息 ID
+     * @param data 包含要更新的字段的对象
+     * @returns 更新后的消息对象
      */
     async updateMessage(messageId: string, data: any) {
-        const message = await this.messageRepo.findById(messageId);
+        // 获取消息及其当前内容版本（与 Python 后端一致）
+        const message = await this.messageRepo.findByIdWithCurrentContent(messageId);
         if (!message) {
             throw new HttpException('Message not found', HttpStatus.NOT_FOUND);
         }
 
-        // 只允许更新特定字段
-        const allowedFields = ['role'];
-        const updateData: any = {};
+        // 分离消息字段和内容字段（与 Python 后端逻辑一致）
+        const messageFields: any = {};
+        const contentFields: any = {};
 
-        for (const key of allowedFields) {
-            if (data[key] !== undefined) {
-                updateData[key] = data[key];
+        // 定义 Message 表的字段
+        const messageTableFields = ['role', 'currentTurnsId'];
+        
+        // 定义 MessageContent 表的字段
+        const contentTableFields = ['content', 'reasoningContent', 'metaData', 'additionalKwargs'];
+
+        for (const [key, value] of Object.entries(data)) {
+            if (messageTableFields.includes(key)) {
+                // Message 表字段
+                messageFields[key] = value;
+            } else if (contentTableFields.includes(key)) {
+                // MessageContent 表字段
+                contentFields[key] = value;
+            } else {
+                this.logger.warn(`Unknown field '${key}' ignored in updateMessage`);
             }
         }
 
-        return this.messageRepo.update(messageId, updateData);
+        // 更新 Message 表字段
+        if (Object.keys(messageFields).length > 0) {
+            await this.messageRepo.update(messageId, messageFields);
+            this.logger.debug(`Updated message fields: ${Object.keys(messageFields).join(', ')}`);
+        }
+
+        // 更新 MessageContent 表字段（更新当前内容版本）
+        if (Object.keys(contentFields).length > 0) {
+            // 获取当前内容版本（与 Python 后端 message.contents[-1] 一致）
+            const currentContent = message.contents && message.contents.length > 0 
+                ? message.contents[message.contents.length - 1] 
+                : null;
+
+            if (!currentContent) {
+                this.logger.error(`No content found for message ${messageId}`);
+                throw new HttpException('Message content not found', HttpStatus.NOT_FOUND);
+            }
+
+            // 更新当前内容版本
+            await this.contentRepo.update(currentContent.id, contentFields);
+            this.logger.debug(`Updated content fields: ${Object.keys(contentFields).join(', ')}`);
+        }
+
+        // 返回更新后的完整消息（包含最新的内容）
+        const updatedMessage = await this.messageRepo.findById(messageId);
+        if (updatedMessage) {
+            // 格式化返回数据
+            updatedMessage.contents.forEach(content => {
+                content.metaData = content.metaData || null;
+                content.additionalKwargs = content.additionalKwargs || null;
+            });
+        }
+
+        return updatedMessage;
     }
 
     /**

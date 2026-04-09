@@ -21,8 +21,8 @@ class ApiServiceDummy {
         return { data: [] }
     }
 
-    async fetchRemoteModels(provider_id: string): Promise<ApiResponse<any[]>> {
-        return { data: [] }
+    async fetchRemoteModels(providerId: string): Promise<ApiResponse<any>> {
+        return { data: { items: [], size: 0 } }
     }
 
     // ========== 角色相关 ==========
@@ -96,8 +96,8 @@ class ApiServiceDummy {
     async *chat(
         sessionId: string,
         messageId: string,
-        regeneration_mode: string | null = null,
-        assistant_message_id: string | null = null,
+        regenerationMode: string | null = null,
+        assistantMessageId: string | null = null,
         enableReasoning: boolean = false
     ): AsyncGenerator<any, void, unknown> {
         // Mock 空响应
@@ -214,7 +214,7 @@ class ApiServiceDummy {
     async login(credentials: any): Promise<ApiResponse<any>> {
         return {
             data: {
-                access_token: 'mock-token',
+                accessToken: 'mock-token',
                 user: { id: 'mock-id', username: credentials.username }
             }
         }

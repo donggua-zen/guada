@@ -13,7 +13,7 @@
                             <!-- 头像设置 -->
                             <el-form-item label="头像设置" :show-label="false">
                                 <div class="avatar-upload-container ">
-                                    <AvatarPreview :src="characterForm.avatar_url" type="assistant"
+                                    <AvatarPreview :src="characterForm.avatarUrl" type="assistant"
                                         @avatar-changed="handleAvatarChanged">
                                     </AvatarPreview>
                                 </div>
@@ -42,7 +42,7 @@
                                 <div class="flex items-center w-full justify-between">
                                     <span>系统系提示(角色设定)</span>
                                     <div class="flex items-center">
-                                        <el-checkbox v-model="characterForm.use_user_prompt" class="ml-2">
+                                        <el-checkbox v-model="characterForm.useUserPrompt" class="ml-2">
                                             使用User Role
                                         </el-checkbox>
                                         <el-tooltip content="启用后，系统将使用User角色而非System发送设定提示词，以优化部分模型的表现（如DeepSeek）"
@@ -57,19 +57,19 @@
                             </el-form-item>
 
                             <!-- 详细设定 -->
-                            <el-form-item prop="system_prompt" :show-label="false">
-                                <el-input v-model="characterForm.system_prompt" type="textarea" placeholder="请输入详细设定"
+                            <el-form-item prop="systemPrompt" :show-label="false">
+                                <el-input v-model="characterForm.systemPrompt" type="textarea" placeholder="请输入详细设定"
                                     :autosize="{ minRows: 5, maxRows: 8 }" />
                             </el-form-item>
 
                             <!-- 角色名称 -->
                             <el-form-item label="角色名称">
-                                <el-input v-model="characterForm.assistant_name" placeholder="请输入角色名称" clearable />
+                                <el-input v-model="characterForm.assistantName" placeholder="请输入角色名称" clearable />
                             </el-form-item>
 
                             <!-- 职业设定 -->
                             <el-form-item label="职业设定">
-                                <el-input v-model="characterForm.assistant_identity" placeholder="请输入职业设定" clearable />
+                                <el-input v-model="characterForm.assistantIdentity" placeholder="请输入职业设定" clearable />
                             </el-form-item>
 
                         </el-form>
@@ -82,27 +82,27 @@
                         <el-form ref="modelFormRef" :model="characterForm" :rules="modelRules" label-position="top"
                             label-width="80px" size="large">
                             <!-- 模型选择 -->
-                            <el-form-item label="模型选择" prop="model_id">
-                                <el-select v-model="characterForm.model_id" :options="modelOptions" placeholder="请选择模型"
+                            <el-form-item label="模型选择" prop="modelId">
+                                <el-select v-model="characterForm.modelId" :options="modelOptions" placeholder="请选择模型"
                                     clearable>
                                 </el-select>
                             </el-form-item>
 
                             <!-- 温度设置 -->
-                            <el-form-item label="温度" prop="model_temperature">
-                                <el-slider-optional v-model="characterForm.model_temperature" :min="0" :max="1.9" 
+                            <el-form-item label="温度" prop="modelTemperature">
+                                <el-slider-optional v-model="characterForm.modelTemperature" :min="0" :max="1.9" 
                                     :step="0.1" show-input optional-direction="max" optional-text="Auto" />
                             </el-form-item>
 
                             <!-- Top P -->
-                            <el-form-item label="Top P" prop="model_top_p">
-                                <el-slider-optional v-model="characterForm.model_top_p" :min="0" :max="1" :step="0.1"
+                            <el-form-item label="Top P" prop="modelTopP">
+                                <el-slider-optional v-model="characterForm.modelTopP" :min="0" :max="1" :step="0.1"
                                     show-input optional-direction="max" optional-text="Auto" />
                             </el-form-item>
 
                             <!-- 频率惩罚 -->
-                            <el-form-item label="频率惩罚" prop="model_frequency_penalty">
-                                <el-slider-optional v-model="characterForm.model_frequency_penalty" :min="-1.9" :max="1.9"
+                            <el-form-item label="频率惩罚" prop="modelFrequencyPenalty">
+                                <el-slider-optional v-model="characterForm.modelFrequencyPenalty" :min="-1.9" :max="1.9"
                                     :step="0.1" show-input optional-direction="max" optional-text="Auto" />
                             </el-form-item>
                         </el-form>
@@ -115,20 +115,20 @@
                         <el-form ref="memoryFormRef" :model="characterForm" :rules="memoryRules" label-position="top"
                             size="large">
                             <!-- 上下文条数 -->
-                            <el-form-item label="上下文条数" prop="max_memory_length">
-                                <el-slider-optional v-model="characterForm.max_memory_length" :min="2" :max="500"
+                            <el-form-item label="上下文条数" prop="maxMemoryLength">
+                                <el-slider-optional v-model="characterForm.maxMemoryLength" :min="2" :max="500"
                                     :step="1" show-input optional-direction="max" optional-text="No Limit" />
                             </el-form-item>
                             
                             <!-- 禁用工具调用结果 -->
-                            <el-form-item label="禁用工具调用结果" prop="skip_tool_calls">
+                            <el-form-item label="禁用工具调用结果" prop="skipToolCalls">
                                 <div class="flex items-center justify-between w-full">
                                     <div class="flex-1 mr-4">
                                         <div class="text-sm font-medium mb-1">工具调用结果</div>
                                         <div class="text-xs text-gray-500">启用后，模型将跳过工具调用的执行，直接返回最终答案，节省 tokens 和响应时间</div>
                                     </div>
                                     <el-switch
-                                        v-model="characterForm.skip_tool_calls"
+                                        v-model="characterForm.skipToolCalls"
                                         inline-prompt
                                         active-text="开"
                                         inactive-text="关"
@@ -144,7 +144,7 @@
                     <div class="p-3">
                         <el-form label-position="top" size="large">
                             <el-form-item label="可用工具">
-                                <el-checkbox-group v-model="characterForm.enabled_tools">
+                                <el-checkbox-group v-model="characterForm.enabledTools">
                                     <div class="tool-item p-3 border rounded mb-2">
                                         <el-checkbox value="get_current_time" class="w-full">
                                             <div class="flex items-center justify-between w-full">
@@ -208,7 +208,7 @@
                                                         
                                         <!-- 启用/禁用开关 -->
                                         <el-switch
-                                            :model-value="characterForm.enabled_mcp_servers.includes(server.id)"
+                                            :model-value="characterForm.enabledMcpServers.includes(server.id)"
                                             @update:model-value="handleMcpServerToggle(server.id, $event)"
                                             :disabled="!server.enabled"
                                         />
@@ -275,18 +275,18 @@ const props = defineProps({
             id: '',
             title: '',
             description: '',
-            avatar_url: '',
+            avatarUrl: '',
             settings: {
-                assistant_name: '',
-                assistant_identity: '',
-                system_prompt: '',
-                model_id: null,
-                memory_type: null,
-                model_temperature: null,
-                model_top_p: null,
-                model_frequency_penalty: null,
-                max_memory_length: null,
-                use_user_prompt: false
+                assistantName: '',
+                assistantIdentity: '',
+                systemPrompt: '',
+                modelId: null,
+                memoryType: null,
+                modelTemperature: null,
+                modelTopP: null,
+                modelFrequencyPenalty: null,
+                maxMemoryLength: null,
+                useUserPrompt: false
             }
         })
     },
@@ -320,21 +320,21 @@ const characterForm = reactive({
     id: '',
     title: '',
     description: '',
-    avatar_url: '',
-    avatar_file: null,
-    assistant_name: '',
-    assistant_identity: '',
-    system_prompt: '',
-    model_id: '',
-    memory_type: '',
-    model_temperature: null,
-    model_top_p: null,
-    model_frequency_penalty: null,
-    max_memory_length: null,
-    skip_tool_calls: false,  // 新增：是否禁用工具调用结果
-    use_user_prompt: false,
-    enabled_tools: [],  // 启用的本地工具
-    enabled_mcp_servers: []  // 启用的 MCP 服务器 ID 数组
+    avatarUrl: '',
+    avatarFile: null,
+    assistantName: '',
+    assistantIdentity: '',
+    systemPrompt: '',
+    modelId: '',
+    memoryType: '',
+    modelTemperature: null,
+    modelTopP: null,
+    modelFrequencyPenalty: null,
+    maxMemoryLength: null,
+    skipToolCalls: false,  // 新增：是否禁用工具调用结果
+    useUserPrompt: false,
+    enabledTools: [],  // 启用的本地工具
+    enabledMcpServers: []  // 启用的 MCP 服务器 ID 数组
 })
 
 // 验证规则
@@ -346,13 +346,13 @@ const basicRules = {
 }
 
 const promptRules = {
-    system_prompt: [
+    systemPrompt: [
         { min: 2, max: 8000, message: '详细设定长度在8000个字符之间', trigger: ['input', 'blur'] }
     ]
 }
 
 const modelRules = {
-    model_id: [
+    modelId: [
         {
             required: true, message: '请选择模型', trigger: ['change'], validator: (rule, value, callback) => {
                 // 明确检查空值情况
@@ -368,7 +368,7 @@ const modelRules = {
 }
 
 const memoryRules = {
-    max_memory_length: [
+    maxMemoryLength: [
         { type: 'number', min: 2, max: 500, message: '最大记忆长度在 2-500 之间', trigger: ['input', 'blur'] },
     ],
 }
@@ -398,7 +398,7 @@ const modelOptions = computed(() => {
     providers.value?.forEach(provider => {
         // 获取该供应商下的text类型模型
         const providerModels = models.value.filter(model =>
-            model.provider_id === provider.id && model.model_type === 'text'
+            model.providerId === provider.id && model.modelType === 'text'
         )
 
         if (providerModels.length > 0) {
@@ -413,7 +413,7 @@ const modelOptions = computed(() => {
             // 添加该分组下的模型选项
             providerModels.forEach(model => {
                 options.push({
-                    label: model.model_name,
+                    label: model.modelName,
                     value: model.id,
                     key: model.id
                 })
@@ -433,46 +433,46 @@ watch(() => props.simple, (newVal) => {
 
 watch(() => props.data, (newVal) => {
 
-    characterForm.avatar_file = null;
+    characterForm.avatarFile = null;
 
     characterForm.id = newVal.id || '';
     characterForm.title = newVal.title || '';
     characterForm.description = newVal.description || '';
-    characterForm.avatar_url = newVal.avatar_url || '';
-    characterForm.model_id = newVal.model_id || '';
+    characterForm.avatarUrl = newVal.avatarUrl || '';
+    characterForm.modelId = newVal.modelId || '';
 
-    characterForm.assistant_name = newVal.settings?.assistant_name || '';
-    characterForm.assistant_identity = newVal.settings?.assistant_identity || '';
-    characterForm.system_prompt = newVal.settings?.system_prompt || '';
-    characterForm.memory_type = newVal.settings?.memory_type || 'sliding_window';
-    characterForm.model_temperature = newVal.settings?.model_temperature || null;
-    characterForm.model_top_p = newVal.settings?.model_top_p || null;
-    characterForm.model_frequency_penalty = newVal.settings?.model_frequency_penalty || null;
-    characterForm.max_memory_length = newVal.settings?.max_memory_length || null;
-    characterForm.skip_tool_calls = newVal.settings?.skip_tool_calls ?? false;  // 加载新字段
-    characterForm.use_user_prompt = newVal.settings?.use_user_prompt || false;
+    characterForm.assistantName = newVal.settings?.assistantName || '';
+    characterForm.assistantIdentity = newVal.settings?.assistantIdentity || '';
+    characterForm.systemPrompt = newVal.settings?.systemPrompt || '';
+    characterForm.memoryType = newVal.settings?.memoryType || 'sliding_window';
+    characterForm.modelTemperature = newVal.settings?.modelTemperature || null;
+    characterForm.modelTopP = newVal.settings?.modelTopP || null;
+    characterForm.modelFrequencyPenalty = newVal.settings?.modelFrequencyPenalty || null;
+    characterForm.maxMemoryLength = newVal.settings?.maxMemoryLength || null;
+    characterForm.skipToolCalls = newVal.settings?.skipToolCalls ?? false;  // 加载新字段
+    characterForm.useUserPrompt = newVal.settings?.useUserPrompt || false;
     // 加载已启用的工具
-    characterForm.enabled_tools = newVal.settings?.tools || [];
+    characterForm.enabledTools = newVal.settings?.tools || [];
     // 加载已启用的 MCP 服务器 (数组格式)
-    characterForm.enabled_mcp_servers = newVal.settings?.mcp_servers || [];
+    characterForm.enabledMcpServers = newVal.settings?.mcpServers || [];
 
 }, { immediate: true })
 
 const handleAvatarChanged = (file) => {
-    characterForm.avatar_file = file
+    characterForm.avatarFile = file
 }
 
 // MCP 服务器开关切换处理
 const handleMcpServerToggle = (serverId, enabled) => {
-    const index = characterForm.enabled_mcp_servers.indexOf(serverId);
+    const index = characterForm.enabledMcpServers.indexOf(serverId);
     if (enabled && index === -1) {
         // 启用：添加到数组
-        characterForm.enabled_mcp_servers.push(serverId);
+        characterForm.enabledMcpServers.push(serverId);
     } else if (!enabled && index !== -1) {
         // 禁用：从数组移除
-        characterForm.enabled_mcp_servers.splice(index, 1);
+        characterForm.enabledMcpServers.splice(index, 1);
     }
-    console.log(`MCP 服务器 ${serverId} ${enabled ? '启用' : '禁用'}, 当前列表:`, characterForm.enabled_mcp_servers);
+    console.log(`MCP 服务器 ${serverId} ${enabled ? '启用' : '禁用'}, 当前列表:`, characterForm.enabledMcpServers);
 }
 
 const loadModels = async () => {
@@ -514,8 +514,8 @@ onMounted(async () => {
 
 onUnmounted(() => {
     // window.removeEventListener('resize', updateDrawerWidth)
-    if (characterForm.avatar_url && characterForm.avatar_url.startsWith('blob:')) {
-        URL.revokeObjectURL(characterForm.avatar_url);
+    if (characterForm.avatarUrl && characterForm.avatarUrl.startsWith('blob:')) {
+        URL.revokeObjectURL(characterForm.avatarUrl);
     }
 })
 
@@ -573,27 +573,26 @@ const handleSave = async () => {
             'title': characterForm.title,
             'description': characterForm.description,
             'name': characterForm.name,
-            'avatar_url': characterForm.avatar_url,
-            'avatar_file': characterForm.avatar_file,
+            'avatarUrl': characterForm.avatarUrl,
+            'avatarFile': characterForm.avatarFile,
             'identity': characterForm.identity,
-            'model_id': characterForm.model_id,
-            'model': findModelById(characterForm.model_id),
+            'modelId': characterForm.modelId,
             'settings': {
-                'assistant_name': characterForm.assistant_name,
-                'assistant_identity': characterForm.assistant_identity,
-                'system_prompt': characterForm.system_prompt,
-                'memory_type': characterForm.memory_type,
-                'max_memory_length': characterForm.max_memory_length,
-                'skip_tool_calls': characterForm.skip_tool_calls,  // 新增字段
+                'assistantName': characterForm.assistantName,
+                'assistantIdentity': characterForm.assistantIdentity,
+                'systemPrompt': characterForm.systemPrompt,
+                'memoryType': characterForm.memoryType,
+                'maxMemoryLength': characterForm.maxMemoryLength,
+                'skipToolCalls': characterForm.skipToolCalls,  // 新增字段
                 // 模型
-                'model_name': findModelById(characterForm.model_id).model_name || '请选择模型',
-                'model_temperature': characterForm.model_temperature,
-                'model_top_p': characterForm.model_top_p,
-                'model_frequency_penalty': characterForm.model_frequency_penalty,
-                'use_user_prompt': characterForm.use_user_prompt,
+                'modelName': findModelById(characterForm.modelId).modelName || '请选择模型',
+                'modelTemperature': characterForm.modelTemperature,
+                'modelTopP': characterForm.modelTopP,
+                'modelFrequencyPenalty': characterForm.modelFrequencyPenalty,
+                'useUserPrompt': characterForm.useUserPrompt,
                 // 工具配置
-                'tools': characterForm.enabled_tools,
-                'mcp_servers': characterForm.enabled_mcp_servers,  // 数组格式：[serverId1, serverId2]
+                'tools': characterForm.enabledTools,
+                'mcpServers': characterForm.enabledMcpServers,  // 数组格式：[serverId1, serverId2]
             }
         }
         emit('update:data', finalData)

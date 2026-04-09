@@ -144,13 +144,20 @@ export interface VectorDatabase {
 
   /**
    * 混合搜索（语义 + 关键词加权融合）
+   * 
+   * 实现参考 Python 后端 vector_service.py：
+   * - 扩大召回：两个搜索引擎都召回 top_k * 4 个结果
+   * - Min-Max 归一化：将分数缩放到 [0, 1]
+   * - 加权融合：final_score = semantic_weight * semantic_norm + keyword_weight * keyword_norm
+   * 
    * @param collectionName 集合名称
    * @param queryEmbedding 查询向量
    * @param queryText 查询文本
    * @param topK 返回结果数量
-   * @param semanticWeight 语义权重 (0-1)
-   * @param keywordWeight 关键词权重 (0-1)
+   * @param semanticWeight 语义权重 (0-1)，默认 0.3
+   * @param keywordWeight 关键词权重 (0-1)，默认 0.7
    * @param filterOptions 过滤选项（支持 documentId 或其他 metadata）
+   * @param enableBM25Rerank 是否启用 BM25 重排，默认 true
    * @returns 搜索结果列表（按最终分数降序）
    */
   hybridSearch(
@@ -161,6 +168,7 @@ export interface VectorDatabase {
     semanticWeight?: number,
     keywordWeight?: number,
     filterOptions?: { documentId?: string; metadata?: Record<string, any> },
+    enableBM25Rerank?: boolean,
   ): Promise<SearchResult[]>;
 
   /**

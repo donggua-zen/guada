@@ -1,0 +1,503 @@
+{
+  "test_date": "2026-04-08",
+  "results": [
+    {
+      "query_name": "知识库相关",
+      "query": "知识库 向量搜索",
+      "keywords": [
+        "知识库",
+        "向量",
+        "搜索"
+      ],
+      "total_docs": 30,
+      "matched_docs": 30,
+      "top_results": [
+        {
+          "index": 28,
+          "path": "architecture\\MEMORY_PROMPT_REFACTOR_REPORT.md",
+          "score": 7.539701781297802,
+          "preview": "记忆提示词重构完成报告\r \r 📋 重构概述\r \r 本次重构优化了 方法，实现了以下功能：\r \r 注入所有长期记忆（不再限制数量）\r 按类型分组展示记忆（FACTUAL / SOUL）\r 完整的工具使",
+          "rank": 1
+        },
+        {
+          "index": 9,
+          "path": "architecture\\FILE_NAMING_NORMALIZATION.md",
+          "score": 3.7910309232264403,
+          "preview": "文件命名规范化 - 重构补充\r \r 🎯 问题发现\r \r 在重构过程中，新增的文件命名方式与项目现有规范不一致：\r \r 修改前的命名\r \r \r 项目现有规范\r \r \r \r \r ✅ 规范化重命名\r \r ",
+          "rank": 2
+        },
+        {
+          "index": 17,
+          "path": "architecture\\IMPROVEMENT_2_SESSION_INJECTION.md",
+          "score": 1.0103091394653643,
+          "preview": "\"\"\"\r 改进方案 2：会话级参数自动注入\r \r 解决记忆工具需要 session_id 但 LLM 不会提供的问题\r \"\"\"\r \r =================================",
+          "rank": 3
+        },
+        {
+          "index": 3,
+          "path": "architecture\\BUSINESS_LOGIC_TESTS_FIXED.md",
+          "score": 0.035623565600434885,
+          "preview": "业务逻辑测试修复总结\r \r 修复时间: 2026-03-27 \r 状态: ✅ 已完成\r \r \r \r 📊 修复成果总览\r \r 测试结果对比\r \r | 指标 | 修复前 | 修复后 | 改进 |\r |-",
+          "rank": 4
+        },
+        {
+          "index": 0,
+          "path": "architecture\\AGENT_SERVICE_CONTEXT_CACHING.md",
+          "score": 0.035587865095125404,
+          "preview": "AgentService 适配 ToolExecutionContext - 统一上下文复用缓存\r \r 📋 概述\r \r 重构 中的工具调用逻辑，使用统一的 贯穿工具获取和执行流程，充分利用上下文缓存",
+          "rank": 5
+        },
+        {
+          "index": 2,
+          "path": "architecture\\BUSINESS_LOGIC_CONFIRMED.md",
+          "score": 0.03558493339357036,
+          "preview": "业务逻辑确认更新\r \r 确认时间: 2026-03-27 \r 确认者: 用户 \r 状态: ✅ 全部已确认\r \r \r \r 📋 确认的业务逻辑清单\r \r ✅ 工具调用结果显示策略\r \r 变更: → \r ",
+          "rank": 6
+        },
+        {
+          "index": 25,
+          "path": "architecture\\MCP_RESOLVE_ENABLED_TOOLS_SIMPLIFICATION.md",
+          "score": 0.035584838262769536,
+          "preview": "MCP resolveenabledtools 简化优化\r \r 📋 概述\r \r 简化 方法，参考 对 参数的处理方式，直接从数据库查询获取工具列表。\r \r \r \r ✅ 优化内容\r \r 修改前实现\r ",
+          "rank": 7
+        },
+        {
+          "index": 26,
+          "path": "architecture\\MCP_TOOLS_SCHEMA_UNIFICATION.md",
+          "score": 0.03558066415876997,
+          "preview": "MCP Tools Schema 统一优化 - 重构补充\r \r 🎯 优化机会识别\r \r 在之前的重构中，我们发现工具 schema 获取逻辑存在重复和分散的问题：\r \r 修改前的问题\r \r 逻辑分离",
+          "rank": 8
+        },
+        {
+          "index": 16,
+          "path": "architecture\\IMPROVEMENT_1_NAMESPACE_AUTOMATION.md",
+          "score": 0.03557994708766604,
+          "preview": "\"\"\"\r 改进方案 1：工具命名空间自动化\r \r 提供三种实现方案供选择：\r 方案 A：声明式 namespace 属性（推荐）\r 方案 B：自动推导命名空间\r 方案 C：配置式命名\r \"\"\"\r \r ",
+          "rank": 9
+        },
+        {
+          "index": 8,
+          "path": "architecture\\FAMILIES_DIRECTORY_CLEANUP.md",
+          "score": 0.035579674662394076,
+          "preview": "删除 families 目录 - 清理废弃的工具族代码\r \r 📋 概述\r \r 彻底删除已废弃的 目录及其所有残留引用，完成从工具族（ToolFamily）模式向统一 Provider 模式的迁移。\r",
+          "rank": 10
+        }
+      ]
+    },
+    {
+      "query_name": "BM25 算法",
+      "query": "BM25 评分 关键词",
+      "keywords": [
+        "BM25",
+        "评分",
+        "关键词"
+      ],
+      "total_docs": 30,
+      "matched_docs": 30,
+      "top_results": [
+        {
+          "index": 28,
+          "path": "architecture\\MEMORY_PROMPT_REFACTOR_REPORT.md",
+          "score": 5.908682285311008,
+          "preview": "记忆提示词重构完成报告\r \r 📋 重构概述\r \r 本次重构优化了 方法，实现了以下功能：\r \r 注入所有长期记忆（不再限制数量）\r 按类型分组展示记忆（FACTUAL / SOUL）\r 完整的工具使",
+          "rank": 1
+        },
+        {
+          "index": 23,
+          "path": "architecture\\LONG_TERM_MEMORY_METHOD_MERGER.md",
+          "score": 3.5283830608696256,
+          "preview": "长期记忆工具方法合并重构报告\r \r 📋 重构背景\r \r 问题分析\r \r 在之前的简化重构后，我们发现了新的冗余问题：\r \r 方法重复: 和 两个方法功能完全相同\r 参数模型冗余: 和 结构相同\r 工",
+          "rank": 2
+        },
+        {
+          "index": 24,
+          "path": "architecture\\LONG_TERM_MEMORY_SIMPLIFICATION.md",
+          "score": 3.2951080921135274,
+          "preview": "长期记忆参数简化重构报告\r \r 📋 重构背景\r \r 问题分析\r \r 在之前的重构中，虽然已经将长期记忆编辑从\"按 ID\"改为\"按类型\"，但仍然保留了重要性和标签参数。但实际上：\r \r 每种类型最多一",
+          "rank": 3
+        },
+        {
+          "index": 8,
+          "path": "architecture\\FAMILIES_DIRECTORY_CLEANUP.md",
+          "score": 2.694051118794337,
+          "preview": "删除 families 目录 - 清理废弃的工具族代码\r \r 📋 概述\r \r 彻底删除已废弃的 目录及其所有残留引用，完成从工具族（ToolFamily）模式向统一 Provider 模式的迁移。\r",
+          "rank": 4
+        },
+        {
+          "index": 11,
+          "path": "architecture\\GET_PROMPT_INJECT_PARAMS_UNIFICATION.md",
+          "score": 0.6390992518012615,
+          "preview": "get_prompt() 注入参数统一化设计\r \r 📋 概述\r \r 将 方法的参数从单一的 改为通用的注入参数字典 ，与工具执行系统保持一致，实现整个调用链路的参数统一。\r \r \r \r ✅ 核心设计",
+          "rank": 5
+        },
+        {
+          "index": 10,
+          "path": "architecture\\FUNCTION_AUTO_PARSING_COMPLETE.md",
+          "score": 0.6378295208537136,
+          "preview": "函数参数自动解析与构建 - 完整实现\r \r 📋 概述\r \r 增强 方法，支持自动解析函数签名，识别 Pydantic 模型参数和注入参数，并在调用时自动构建参数。\r \r \r \r ✅ 核心功能\r \r ",
+          "rank": 6
+        },
+        {
+          "index": 19,
+          "path": "architecture\\INJECT_PARAMS_CHAIN_DESIGN.md",
+          "score": 0.635687096794846,
+          "preview": "注入参数传递链设计\r \r 📋 概述\r \r 在工具提供者架构中实现注入参数的完整传递链，从 到最终的 ，确保注入参数（如 session_id）能够正确传递到业务逻辑层。\r \r \r \r ✅ 核心设计理",
+          "rank": 7
+        },
+        {
+          "index": 18,
+          "path": "architecture\\INJECTED_PARAMS_SEPARATION.md",
+          "score": 0.6322924598271187,
+          "preview": "注入参数与工具参数分离设计\r \r 📋 概述\r \r 在工具执行方法中实现注入参数（如 session_id）与工具参数（Pydantic 模型）的分离，确保注入参数不写入模型、不传递给 OpenAI。",
+          "rank": 8
+        },
+        {
+          "index": 27,
+          "path": "architecture\\MCP_TOOL_MANAGER_MERGE.md",
+          "score": 0.6180527738810296,
+          "preview": "MCPToolManager 合并到 MCPToolProvider 总结\r \r 📋 概述\r \r 将 的功能合并到 中，降低封装层级，让 Provider 直接管理 MCP 服务器连接、客户端缓存和",
+          "rank": 9
+        },
+        {
+          "index": 5,
+          "path": "architecture\\EXECUTE_CACHE_OPTIMIZATION.md",
+          "score": 0.6100104894490866,
+          "preview": "execute() 方法性能优化 - 避免重复查询\r \r 📋 概述\r \r 在 方法中添加缓存机制，避免在批量执行工具时重复调用 进行数据库查询，显著提升性能。\r \r \r \r ✅ 问题分析\r \r 当前",
+          "rank": 10
+        }
+      ]
+    },
+    {
+      "query_name": "数据库迁移",
+      "query": "数据库 迁移 Alembic",
+      "keywords": [
+        "数据库",
+        "迁移",
+        "Alembic"
+      ],
+      "total_docs": 30,
+      "matched_docs": 30,
+      "top_results": [
+        {
+          "index": 0,
+          "path": "architecture\\AGENT_SERVICE_CONTEXT_CACHING.md",
+          "score": 4.848071470425282,
+          "preview": "AgentService 适配 ToolExecutionContext - 统一上下文复用缓存\r \r 📋 概述\r \r 重构 中的工具调用逻辑，使用统一的 贯穿工具获取和执行流程，充分利用上下文缓存",
+          "rank": 1
+        },
+        {
+          "index": 5,
+          "path": "architecture\\EXECUTE_CACHE_OPTIMIZATION.md",
+          "score": 3.716737828865749,
+          "preview": "execute() 方法性能优化 - 避免重复查询\r \r 📋 概述\r \r 在 方法中添加缓存机制，避免在批量执行工具时重复调用 进行数据库查询，显著提升性能。\r \r \r \r ✅ 问题分析\r \r 当前",
+          "rank": 2
+        },
+        {
+          "index": 25,
+          "path": "architecture\\MCP_RESOLVE_ENABLED_TOOLS_SIMPLIFICATION.md",
+          "score": 3.5999132277248895,
+          "preview": "MCP resolveenabledtools 简化优化\r \r 📋 概述\r \r 简化 方法，参考 对 参数的处理方式，直接从数据库查询获取工具列表。\r \r \r \r ✅ 优化内容\r \r 修改前实现\r ",
+          "rank": 3
+        },
+        {
+          "index": 13,
+          "path": "architecture\\GET_TOOLS_NAMESPACED_OPTIMIZATION.md",
+          "score": 3.597453504415233,
+          "preview": "gettoolsnamespaced 与 resolveenabledtools 合并优化\r \r 📋 概述\r \r 将 和 两个方法合并为一个，直接在 中接收启用参数并返回过滤后的工具 schema，",
+          "rank": 4
+        },
+        {
+          "index": 27,
+          "path": "architecture\\MCP_TOOL_MANAGER_MERGE.md",
+          "score": 1.9982910874625635,
+          "preview": "MCPToolManager 合并到 MCPToolProvider 总结\r \r 📋 概述\r \r 将 的功能合并到 中，降低封装层级，让 Provider 直接管理 MCP 服务器连接、客户端缓存和",
+          "rank": 5
+        },
+        {
+          "index": 6,
+          "path": "architecture\\EXECUTE_METHOD_REMOVAL.md",
+          "score": 1.7266299362002842,
+          "preview": "移除 execute 方法统一使用 executewithnamespace\r \r 📋 概述\r \r 将 接口中的抽象方法从 改为 ，简化接口设计，明确职责。\r \r \r \r ✅ 实施内容\r \r 1. ",
+          "rank": 6
+        },
+        {
+          "index": 12,
+          "path": "architecture\\GET_TOOLS_METHOD_REMOVAL.md",
+          "score": 1.6503087553067293,
+          "preview": "移除 gettools 方法统一使用 gettools_namespaced\r \r 📋 概述\r \r 将 接口中的抽象方法从 改为 ，简化接口设计，明确命名空间处理职责。\r \r \r \r ✅ 实施内容\r",
+          "rank": 7
+        },
+        {
+          "index": 7,
+          "path": "architecture\\EXECUTE_WITH_NAMESPACE_EXTRACTION.md",
+          "score": 1.5126577358651656,
+          "preview": "executewithnamespace() 方法提取到父类\r \r 📋 概述\r \r 将 方法中移除命名空间前缀的通用逻辑提取到父类 中作为默认实现，减少代码重复，提升可维护性。\r \r \r \r ✅ 优",
+          "rank": 8
+        },
+        {
+          "index": 21,
+          "path": "architecture\\LOCAL_TOOLS_ENABLED_CONFIG.md",
+          "score": 1.190876498638094,
+          "preview": "本地工具启用控制 - settings.tools 支持\r \r 🎯 需求背景\r \r 在之前的重构中，我们实现了：\r ✅ MCP 服务器级别的启用控制（通过 ）\r ❌ 缺少本地工具级别的启用控制\r \r",
+          "rank": 9
+        },
+        {
+          "index": 8,
+          "path": "architecture\\FAMILIES_DIRECTORY_CLEANUP.md",
+          "score": 1.1859600027607293,
+          "preview": "删除 families 目录 - 清理废弃的工具族代码\r \r 📋 概述\r \r 彻底删除已废弃的 目录及其所有残留引用，完成从工具族（ToolFamily）模式向统一 Provider 模式的迁移。\r",
+          "rank": 10
+        }
+      ]
+    },
+    {
+      "query_name": "API 认证",
+      "query": "JWT 认证 权限",
+      "keywords": [
+        "JWT",
+        "认证",
+        "权限"
+      ],
+      "total_docs": 30,
+      "matched_docs": 30,
+      "top_results": [
+        {
+          "index": 21,
+          "path": "architecture\\LOCAL_TOOLS_ENABLED_CONFIG.md",
+          "score": 3.2037500704056168,
+          "preview": "本地工具启用控制 - settings.tools 支持\r \r 🎯 需求背景\r \r 在之前的重构中，我们实现了：\r ✅ MCP 服务器级别的启用控制（通过 ）\r ❌ 缺少本地工具级别的启用控制\r \r",
+          "rank": 1
+        },
+        {
+          "index": 3,
+          "path": "architecture\\BUSINESS_LOGIC_TESTS_FIXED.md",
+          "score": 0.07124713120086977,
+          "preview": "业务逻辑测试修复总结\r \r 修复时间: 2026-03-27 \r 状态: ✅ 已完成\r \r \r \r 📊 修复成果总览\r \r 测试结果对比\r \r | 指标 | 修复前 | 修复后 | 改进 |\r |-",
+          "rank": 2
+        },
+        {
+          "index": 17,
+          "path": "architecture\\IMPROVEMENT_2_SESSION_INJECTION.md",
+          "score": 0.07121680929389934,
+          "preview": "\"\"\"\r 改进方案 2：会话级参数自动注入\r \r 解决记忆工具需要 session_id 但 LLM 不会提供的问题\r \"\"\"\r \r =================================",
+          "rank": 3
+        },
+        {
+          "index": 9,
+          "path": "architecture\\FILE_NAMING_NORMALIZATION.md",
+          "score": 0.07118995816695416,
+          "preview": "文件命名规范化 - 重构补充\r \r 🎯 问题发现\r \r 在重构过程中，新增的文件命名方式与项目现有规范不一致：\r \r 修改前的命名\r \r \r 项目现有规范\r \r \r \r \r ✅ 规范化重命名\r \r ",
+          "rank": 4
+        },
+        {
+          "index": 0,
+          "path": "architecture\\AGENT_SERVICE_CONTEXT_CACHING.md",
+          "score": 0.07117573019025081,
+          "preview": "AgentService 适配 ToolExecutionContext - 统一上下文复用缓存\r \r 📋 概述\r \r 重构 中的工具调用逻辑，使用统一的 贯穿工具获取和执行流程，充分利用上下文缓存",
+          "rank": 5
+        },
+        {
+          "index": 2,
+          "path": "architecture\\BUSINESS_LOGIC_CONFIRMED.md",
+          "score": 0.07116986678714073,
+          "preview": "业务逻辑确认更新\r \r 确认时间: 2026-03-27 \r 确认者: 用户 \r 状态: ✅ 全部已确认\r \r \r \r 📋 确认的业务逻辑清单\r \r ✅ 工具调用结果显示策略\r \r 变更: → \r ",
+          "rank": 6
+        },
+        {
+          "index": 25,
+          "path": "architecture\\MCP_RESOLVE_ENABLED_TOOLS_SIMPLIFICATION.md",
+          "score": 0.07116967652553907,
+          "preview": "MCP resolveenabledtools 简化优化\r \r 📋 概述\r \r 简化 方法，参考 对 参数的处理方式，直接从数据库查询获取工具列表。\r \r \r \r ✅ 优化内容\r \r 修改前实现\r ",
+          "rank": 7
+        },
+        {
+          "index": 26,
+          "path": "architecture\\MCP_TOOLS_SCHEMA_UNIFICATION.md",
+          "score": 0.07116132831753993,
+          "preview": "MCP Tools Schema 统一优化 - 重构补充\r \r 🎯 优化机会识别\r \r 在之前的重构中，我们发现工具 schema 获取逻辑存在重复和分散的问题：\r \r 修改前的问题\r \r 逻辑分离",
+          "rank": 8
+        },
+        {
+          "index": 16,
+          "path": "architecture\\IMPROVEMENT_1_NAMESPACE_AUTOMATION.md",
+          "score": 0.07115989417533208,
+          "preview": "\"\"\"\r 改进方案 1：工具命名空间自动化\r \r 提供三种实现方案供选择：\r 方案 A：声明式 namespace 属性（推荐）\r 方案 B：自动推导命名空间\r 方案 C：配置式命名\r \"\"\"\r \r ",
+          "rank": 9
+        },
+        {
+          "index": 8,
+          "path": "architecture\\FAMILIES_DIRECTORY_CLEANUP.md",
+          "score": 0.07115934932478815,
+          "preview": "删除 families 目录 - 清理废弃的工具族代码\r \r 📋 概述\r \r 彻底删除已废弃的 目录及其所有残留引用，完成从工具族（ToolFamily）模式向统一 Provider 模式的迁移。\r",
+          "rank": 10
+        }
+      ]
+    },
+    {
+      "query_name": "性能优化",
+      "query": "性能优化 缓存",
+      "keywords": [
+        "性能",
+        "优化",
+        "缓存"
+      ],
+      "total_docs": 30,
+      "matched_docs": 30,
+      "top_results": [
+        {
+          "index": 5,
+          "path": "architecture\\EXECUTE_CACHE_OPTIMIZATION.md",
+          "score": 4.837885992254243,
+          "preview": "execute() 方法性能优化 - 避免重复查询\r \r 📋 概述\r \r 在 方法中添加缓存机制，避免在批量执行工具时重复调用 进行数据库查询，显著提升性能。\r \r \r \r ✅ 问题分析\r \r 当前",
+          "rank": 1
+        },
+        {
+          "index": 0,
+          "path": "architecture\\AGENT_SERVICE_CONTEXT_CACHING.md",
+          "score": 4.449317312536286,
+          "preview": "AgentService 适配 ToolExecutionContext - 统一上下文复用缓存\r \r 📋 概述\r \r 重构 中的工具调用逻辑，使用统一的 贯穿工具获取和执行流程，充分利用上下文缓存",
+          "rank": 2
+        },
+        {
+          "index": 15,
+          "path": "architecture\\IMPROVEMENTS_VERIFICATION_REPORT.md",
+          "score": 3.3714385222957306,
+          "preview": "工具族架构改进方案 - 验证报告\r \r ✅ 验证结果\r \r 验证时间: 2026-03-28 \r 验证环境: Python 虚拟环境 (.venv) \r 验证脚本: \r \r 测试结果\r \r \r \r \r",
+          "rank": 3
+        },
+        {
+          "index": 26,
+          "path": "architecture\\MCP_TOOLS_SCHEMA_UNIFICATION.md",
+          "score": 3.2675197299559438,
+          "preview": "MCP Tools Schema 统一优化 - 重构补充\r \r 🎯 优化机会识别\r \r 在之前的重构中，我们发现工具 schema 获取逻辑存在重复和分散的问题：\r \r 修改前的问题\r \r 逻辑分离",
+          "rank": 4
+        },
+        {
+          "index": 28,
+          "path": "architecture\\MEMORY_PROMPT_REFACTOR_REPORT.md",
+          "score": 2.929658834739549,
+          "preview": "记忆提示词重构完成报告\r \r 📋 重构概述\r \r 本次重构优化了 方法，实现了以下功能：\r \r 注入所有长期记忆（不再限制数量）\r 按类型分组展示记忆（FACTUAL / SOUL）\r 完整的工具使",
+          "rank": 5
+        },
+        {
+          "index": 14,
+          "path": "architecture\\IMPROVEMENTS_IMPLEMENTATION_SUMMARY.md",
+          "score": 2.8535760354809314,
+          "preview": "工具族架构改进方案 - 实施总结\r \r 📋 概述\r \r 本次重构实施了两大关键改进方案，显著提升了工具族架构的可维护性和开发体验：\r \r 工具命名空间自动化 - 消除手动添加前缀的重复代码\r 会话级",
+          "rank": 6
+        },
+        {
+          "index": 25,
+          "path": "architecture\\MCP_RESOLVE_ENABLED_TOOLS_SIMPLIFICATION.md",
+          "score": 2.500840287341186,
+          "preview": "MCP resolveenabledtools 简化优化\r \r 📋 概述\r \r 简化 方法，参考 对 参数的处理方式，直接从数据库查询获取工具列表。\r \r \r \r ✅ 优化内容\r \r 修改前实现\r ",
+          "rank": 7
+        },
+        {
+          "index": 13,
+          "path": "architecture\\GET_TOOLS_NAMESPACED_OPTIMIZATION.md",
+          "score": 2.484720235250273,
+          "preview": "gettoolsnamespaced 与 resolveenabledtools 合并优化\r \r 📋 概述\r \r 将 和 两个方法合并为一个，直接在 中接收启用参数并返回过滤后的工具 schema，",
+          "rank": 8
+        },
+        {
+          "index": 27,
+          "path": "architecture\\MCP_TOOL_MANAGER_MERGE.md",
+          "score": 2.1222148317203957,
+          "preview": "MCPToolManager 合并到 MCPToolProvider 总结\r \r 📋 概述\r \r 将 的功能合并到 中，降低封装层级，让 Provider 直接管理 MCP 服务器连接、客户端缓存和",
+          "rank": 9
+        },
+        {
+          "index": 21,
+          "path": "architecture\\LOCAL_TOOLS_ENABLED_CONFIG.md",
+          "score": 2.092334453802687,
+          "preview": "本地工具启用控制 - settings.tools 支持\r \r 🎯 需求背景\r \r 在之前的重构中，我们实现了：\r ✅ MCP 服务器级别的启用控制（通过 ）\r ❌ 缺少本地工具级别的启用控制\r \r",
+          "rank": 10
+        }
+      ]
+    },
+    {
+      "query_name": "混合搜索",
+      "query": "混合搜索 hybrid search",
+      "keywords": [
+        "混合",
+        "搜索",
+        "hybrid"
+      ],
+      "total_docs": 30,
+      "matched_docs": 30,
+      "top_results": [
+        {
+          "index": 28,
+          "path": "architecture\\MEMORY_PROMPT_REFACTOR_REPORT.md",
+          "score": 5.548414071761462,
+          "preview": "记忆提示词重构完成报告\r \r 📋 重构概述\r \r 本次重构优化了 方法，实现了以下功能：\r \r 注入所有长期记忆（不再限制数量）\r 按类型分组展示记忆（FACTUAL / SOUL）\r 完整的工具使",
+          "rank": 1
+        },
+        {
+          "index": 9,
+          "path": "architecture\\FILE_NAMING_NORMALIZATION.md",
+          "score": 3.8266259023099174,
+          "preview": "文件命名规范化 - 重构补充\r \r 🎯 问题发现\r \r 在重构过程中，新增的文件命名方式与项目现有规范不一致：\r \r 修改前的命名\r \r \r 项目现有规范\r \r \r \r \r ✅ 规范化重命名\r \r ",
+          "rank": 2
+        },
+        {
+          "index": 23,
+          "path": "architecture\\LONG_TERM_MEMORY_METHOD_MERGER.md",
+          "score": 3.1044207847583523,
+          "preview": "长期记忆工具方法合并重构报告\r \r 📋 重构背景\r \r 问题分析\r \r 在之前的简化重构后，我们发现了新的冗余问题：\r \r 方法重复: 和 两个方法功能完全相同\r 参数模型冗余: 和 结构相同\r 工",
+          "rank": 3
+        },
+        {
+          "index": 10,
+          "path": "architecture\\FUNCTION_AUTO_PARSING_COMPLETE.md",
+          "score": 2.677300299568543,
+          "preview": "函数参数自动解析与构建 - 完整实现\r \r 📋 概述\r \r 增强 方法，支持自动解析函数签名，识别 Pydantic 模型参数和注入参数，并在调用时自动构建参数。\r \r \r \r ✅ 核心功能\r \r ",
+          "rank": 4
+        },
+        {
+          "index": 8,
+          "path": "architecture\\FAMILIES_DIRECTORY_CLEANUP.md",
+          "score": 2.31723672689988,
+          "preview": "删除 families 目录 - 清理废弃的工具族代码\r \r 📋 概述\r \r 彻底删除已废弃的 目录及其所有残留引用，完成从工具族（ToolFamily）模式向统一 Provider 模式的迁移。\r",
+          "rank": 5
+        },
+        {
+          "index": 26,
+          "path": "architecture\\MCP_TOOLS_SCHEMA_UNIFICATION.md",
+          "score": 2.246088537404084,
+          "preview": "MCP Tools Schema 统一优化 - 重构补充\r \r 🎯 优化机会识别\r \r 在之前的重构中，我们发现工具 schema 获取逻辑存在重复和分散的问题：\r \r 修改前的问题\r \r 逻辑分离",
+          "rank": 6
+        },
+        {
+          "index": 17,
+          "path": "architecture\\IMPROVEMENT_2_SESSION_INJECTION.md",
+          "score": 2.0206182789307285,
+          "preview": "\"\"\"\r 改进方案 2：会话级参数自动注入\r \r 解决记忆工具需要 session_id 但 LLM 不会提供的问题\r \"\"\"\r \r =================================",
+          "rank": 7
+        },
+        {
+          "index": 3,
+          "path": "architecture\\BUSINESS_LOGIC_TESTS_FIXED.md",
+          "score": 0.07124713120086977,
+          "preview": "业务逻辑测试修复总结\r \r 修复时间: 2026-03-27 \r 状态: ✅ 已完成\r \r \r \r 📊 修复成果总览\r \r 测试结果对比\r \r | 指标 | 修复前 | 修复后 | 改进 |\r |-",
+          "rank": 8
+        },
+        {
+          "index": 0,
+          "path": "architecture\\AGENT_SERVICE_CONTEXT_CACHING.md",
+          "score": 0.07117573019025081,
+          "preview": "AgentService 适配 ToolExecutionContext - 统一上下文复用缓存\r \r 📋 概述\r \r 重构 中的工具调用逻辑，使用统一的 贯穿工具获取和执行流程，充分利用上下文缓存",
+          "rank": 9
+        },
+        {
+          "index": 2,
+          "path": "architecture\\BUSINESS_LOGIC_CONFIRMED.md",
+          "score": 0.07116986678714073,
+          "preview": "业务逻辑确认更新\r \r 确认时间: 2026-03-27 \r 确认者: 用户 \r 状态: ✅ 全部已确认\r \r \r \r 📋 确认的业务逻辑清单\r \r ✅ 工具调用结果显示策略\r \r 变更: → \r ",
+          "rank": 10
+        }
+      ]
+    }
+  ]
+}

@@ -9,6 +9,8 @@ import { ModelRepository } from '../../common/database/model.repository';
 import { GlobalSettingRepository } from '../../common/database/global-setting.repository';
 import { AgentService } from './agent.service';
 import { LLMService } from './llm.service';
+import { OpenAIAdapter } from './adapters/openai.adapter';
+import { GeminiAdapter } from './adapters/gemini.adapter';
 import { MemoryManagerService } from './memory.service';
 import { ToolOrchestrator } from '../tools/tool-orchestrator.service';
 import { ChatController } from './chat.controller';
@@ -24,7 +26,9 @@ import { ToolsModule } from '../tools/tools.module';
   controllers: [ChatController, MessagesController, SessionsController],
   providers: [
     AgentService, 
-    LLMService, 
+    LLMService,
+    OpenAIAdapter,
+    GeminiAdapter,
     MemoryManagerService,
     MessageService,
     SessionService,

@@ -45,10 +45,16 @@ const routes = [
                 component: () => import('./components/CharactersPage.vue')
             },
             {
-                path: 'settings/:tab?',
-                name: 'Settings',
-                meta: { title: '设置', requiresAuth: true },
-                component: () => import('./components/settings/SettingsMainPage.vue')
+                path: 'account/:tab?',
+                name: 'AccountCenter',
+                meta: { title: '账户中心', requiresAuth: true },
+                component: () => import('./components/account/AccountCenter.vue')
+            },
+            {
+                path: 'setting/:tab?',
+                name: 'SystemSettings',
+                meta: { title: '系统设置', requiresAuth: true },
+                component: () => import('./components/setting/SystemSettings.vue')
             },
             {
                 path: 'knowledge-base/:id?',

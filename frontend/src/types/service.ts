@@ -18,6 +18,7 @@ export type StreamEvent =
     | StreamCreateEvent
     | StreamThinkEvent
     | StreamToolCallEvent
+    | StreamToolCallsResponseEvent  // ✅ 新增
     | StreamTextEvent
     | StreamFinishEvent
 
@@ -26,10 +27,10 @@ export type StreamEvent =
  */
 export interface StreamCreateEvent {
     type: 'create'
-    message_id: string
-    turns_id: string
-    content_id: string
-    model_name: string
+    messageId: string
+    turnsId: string
+    contentId: string
+    modelName: string
 }
 
 /**
@@ -45,7 +46,16 @@ export interface StreamThinkEvent {
  */
 export interface StreamToolCallEvent {
     type: 'tool_call'
-    tool_calls: ToolCall[]
+    toolCalls: ToolCall[]  // ✅ 驼峰式
+}
+
+/**
+ * 工具调用结果事件（一次性返回）
+ */
+export interface StreamToolCallsResponseEvent {
+    type: 'tool_calls_response'
+    toolCallsResponse: any[]  // ✅ 驼峰式
+    usage?: TokenUsage
 }
 
 /**
@@ -73,7 +83,7 @@ export interface StreamTextEvent {
 export interface StreamFinishEvent {
     type: 'finish'
     usage?: TokenUsage
-    finish_reason: string
+    finishReason: string  // ✅ 驼峰式
     error?: string
 }
 
@@ -81,11 +91,11 @@ export interface StreamFinishEvent {
  * Token 使用统计
  */
 export interface TokenUsage {
-    prompt_tokens: number
-    completion_tokens: number
-    total_tokens: number
-    prompt_cache_hit_tokens?: number
-    prompt_cache_miss_tokens?: number
+    promptTokens: number
+    completionTokens: number
+    totalTokens: number
+    promptCacheHitTokens?: number
+    promptCacheMissTokens?: number
 }
 
 // ========== 认证相关类型 ==========
@@ -111,8 +121,8 @@ export interface RegisterRequest {
  * 登录响应
  */
 export interface LoginResponse {
-    access_token: string
-    token_type: string
+    accessToken: string
+    tokenType: string
     user: User
 }
 
@@ -123,10 +133,10 @@ export interface User {
     id: string
     username: string
     email?: string
-    avatar_url?: string
-    is_active: boolean
-    created_at?: string
-    updated_at?: string
+    avatarUrl?: string
+    isActive: boolean
+    createdAt?: string
+    updatedAt?: string
 }
 
 // ========== 子账户管理类型 ==========
@@ -138,9 +148,9 @@ export interface Subaccount {
     id: string
     username: string
     email?: string
-    is_active: boolean
-    created_at?: string
-    updated_at?: string
+    isActive: boolean
+    createdAt?: string
+    updatedAt?: string
 }
 
 // ========== 设置管理类型 ==========
@@ -192,7 +202,7 @@ export interface ResetPasswordRequest {
 export interface IApiService {
     // 模型管理
     fetchModels(): Promise<PaginatedResponse<Model>>
-    fetchRemoteModels(provider_id: string): Promise<Model[]>
+    fetchRemoteModels(providerId: string): Promise<PaginatedResponse<Model>>
     createModel(data: any): Promise<Model>
     updateModel(modelId: string, data: any): Promise<Model>
     deleteModel(modelId: string): Promise<boolean>
@@ -236,8 +246,8 @@ export interface IApiService {
     chat(
         sessionId: string,
         messageId: string,
-        regeneration_mode?: string | null,
-        assistant_message_id?: string | null,
+        regenerationMode?: string | null,
+        assistantMessageId?: string | null,
         enableReasoning?: boolean
     ): AsyncGenerator<StreamEvent, void, unknown>
     cancelResponse(sessionId: string): Promise<void>

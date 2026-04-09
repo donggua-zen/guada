@@ -3,6 +3,7 @@ import { ModelRepository } from '../../common/database/model.repository';
 import { UserRepository } from '../../common/database/user.repository';
 import { OpenAI } from 'openai';
 import { createPaginatedResponse } from '../../common/types/pagination';
+import { PROVIDER_TEMPLATES } from '../../constants/provider-templates';
 
 @Injectable()
 export class ModelService {
@@ -26,22 +27,71 @@ export class ModelService {
 
         const providers = await this.modelRepo.getProvidersWithModels(effectiveUserId);
 
+        // 动态合并模板 attributes
+        const mergedProviders = providers.map(provider => {
+            if (provider.provider && provider.provider !== 'custom') {
+                const template = PROVIDER_TEMPLATES.find(t => t.id === provider.provider);
+                if (template) {
+                    return {
+                        ...provider,
+                        attributes: template.attributes, // 实时从文件获取
+                        name: template.name, // 确保名称同步
+                        avatarUrl: template.avatarUrl,
+                        protocol: template.protocol,
+                    };
+                }
+            }
+            return provider;
+        });
+
         // 返回分页响应格式
         return {
-            items: providers,
-            size: providers.length,
+            items: mergedProviders,
+            size: mergedProviders.length,
         };
+    }
+
+    /**
+     * 获取可用的供应商模板列表
+     */
+    getProviderTemplates() {
+        return PROVIDER_TEMPLATES;
     }
 
     /**
      * 添加新的模型提供商
      */
-    async addProvider(userId: string, name: string, apiKey: string, apiUrl: string) {
+    async addProvider(userId: string, name: string, apiKey: string, apiUrl: string, provider?: string, protocol?: string, avatarUrl?: string, attributes?: any) {
+        let finalName = name;
+        let finalApiUrl = apiUrl;
+        let finalProtocol = protocol;
+        let finalAvatarUrl = avatarUrl;
+        let finalAttributes = attributes;
+        let finalProviderType = provider;
+
+        const template = provider ? PROVIDER_TEMPLATES.find(t => t.id === provider) : undefined;
+
+        if (template) {
+            finalName = template.name;
+            finalApiUrl = template.defaultApiUrl;
+            finalProtocol = template.protocol;
+            finalAvatarUrl = template.avatarUrl;
+            finalAttributes = undefined; // 预定义供应商不存储 attributes，运行时动态查询
+            finalProviderType = provider;
+        } else {
+            // 自定义供应商，providerType 为 'custom'
+            finalProviderType = 'custom';
+        }
+
         return this.modelRepo.createProvider({
             userId,
-            name,
-            apiKey, // 生产环境应加密存储
-            apiUrl,
+            name: finalName,
+            provider: finalProviderType,  // 使用 providerType 作为供应商标识符
+            protocol: finalProtocol,
+            apiKey,
+            apiUrl: finalApiUrl,
+            avatarUrl: finalAvatarUrl,
+            attributes: finalAttributes,
         });
     }
 
@@ -117,6 +167,14 @@ export class ModelService {
             throw new Error('Provider not found or unauthorized');
         }
 
+        // 如果不是 custom 类型，禁止修改 name、apiUrl、protocol
+        if (provider.provider !== 'custom') {
+            const { name, apiUrl, protocol, ...allowedData } = data;
+            // 只允许更新 apiKey 等其他字段
+            return this.modelRepo.updateProvider(providerId, allowedData);
+        }
+
+        // custom 类型可以更新所有字段
         return this.modelRepo.updateProvider(providerId, data);
     }
 

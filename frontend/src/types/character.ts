@@ -16,13 +16,13 @@ export interface Character {
     id: string
     title: string
     description?: string
-    system_prompt?: string
-    avatar_url?: string
-    user_id: string
+    systemPrompt?: string
+    avatarUrl?: string
+    userId: string
     type: CharacterType
-    is_active: boolean
-    created_at: ISODateString
-    updated_at: ISODateString
+    isActive: boolean
+    createdAt: ISODateString
+    updatedAt: ISODateString
     settings?: CharacterSettings
 }
 
@@ -44,7 +44,7 @@ export interface CharacterSettings {
 export interface CreateCharacterRequest {
     title: string
     description?: string
-    system_prompt?: string
+    systemPrompt?: string
     avatar?: string
     type?: CharacterType
     settings?: Partial<CharacterSettings>
@@ -56,9 +56,9 @@ export interface CreateCharacterRequest {
 export interface UpdateCharacterRequest {
     title?: string
     description?: string
-    system_prompt?: string
+    systemPrompt?: string
     avatar?: string
-    is_active?: boolean
+    isActive?: boolean
     settings?: Partial<CharacterSettings>
 }
 
@@ -69,5 +69,5 @@ export interface CharacterListResponse {
     items: Character[]
     total: number
     page: number
-    page_size: number
+    pageSize: number
 }

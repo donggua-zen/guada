@@ -1,5 +1,5 @@
 <template>
-  <div v-if="!streamingState.is_placeholder" class="message" :class="messageClass" ref="rootRef">
+  <div v-if="!streamingState.isPlaceholder" class="message" :class="messageClass" ref="rootRef">
     <div class="message-content">
       <div v-if="isAssistant" class="text-xs text-gray-400 mb-3">
         <div class="flex items-center">
@@ -21,7 +21,7 @@
       <div class="message-card">
         <template v-for="(turn, index) in turns" :key="turn.id">
           <!-- 优化后的思考框部分 -->
-          <div v-if="turn.reasoning_content" class="thinking-section mb-3"
+          <div v-if="turn.reasoningContent" class="thinking-section mb-3"
             :class="{ 'expanded': isTurnExpanded(turn.id, 'thinking') }">
             <div
               class="collapsible-header inline-flex justify-between items-center text-sm text-gray-700 cursor-pointer font-medium py-2 px-3 transition-colors duration-200 rounded-t-lg bg-gray-50 dark:bg-gray-800/50 border border-b-0 border-gray-200 dark:border-gray-700 w-full"
@@ -30,10 +30,10 @@
                 <el-icon class="mr-1.5" size="16">
                   <PsychologyOutlined />
                 </el-icon>
-                <span class="text-gray-500">{{ turn.state?.is_thinking ? '思考中...' : '已深度思考' }}</span>
-                <!-- 思考时长显示：优先使用 thinking_duration_ms，如果没有则从 meta_data 读取 -->
+                <span class="text-gray-500">{{ turn.state?.isThinking ? '思考中...' : '已深度思考' }}</span>
+                <!-- 思考时长显示：优先使用 thinkingDurationMs，如果没有则从 metaData 读取 -->
                 <span v-if="getThinkingDuration(turn)" class="text-xs text-gray-400 ml-2">
-                  <template v-if="turn.state?.is_thinking">
+                  <template v-if="turn.state?.isThinking">
                     已思考 {{ formatDuration(getThinkingDuration(turn)) }}
                   </template>
                   <template v-else>
@@ -52,15 +52,15 @@
               <div class="thinking-content-wrapper">
                 <MarkdownContent @click.stop="handleClick"
                   class="thinking-content markdown-text py-3 px-4 pl-4 border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50 text-gray-500 dark:text-gray-400"
-                  :content="turn.reasoning_content" :debounced="turn.state?.is_streaming"
+                  :content="turn.reasoningContent" :debounced="turn.state?.isStreaming"
                   @render-complete="handleRenderComplete" />
               </div>
             </div>
           </div>
           <MarkdownContent v-if="turn.content" class="message-text markdown-text" @click="handleClick"
-            @render-complete="handleRenderComplete" :content="turn.content" :debounced="turn.state?.is_streaming" />
+            @render-complete="handleRenderComplete" :content="turn.content" :debounced="turn.state?.isStreaming" />
           <!-- 优化工具调用显示 -->
-          <div v-if="turn.additional_kwargs && turn.additional_kwargs.tool_calls" class="tool-calls-section mb-3"
+          <div v-if="turn.additionalKwargs && turn.additionalKwargs.toolCalls" class="tool-calls-section mb-3"
             :class="{ 'expanded': isTurnExpanded(turn.id, 'tool') }">
             <div
               class="collapsible-header flex items-center text-sm font-medium text-gray-600 dark:text-gray-400 py-2 px-3 cursor-pointer rounded-t-lg bg-gray-50 dark:bg-gray-800/50 border border-b-0 border-gray-200 dark:border-gray-700 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors duration-200"
@@ -71,7 +71,7 @@
                 </el-icon>
                 <span>工具调用</span>
                 <span class="ml-2 text-xs text-gray-500 bg-gray-100 dark:bg-gray-700 px-2 py-0.5 rounded-full">
-                  {{ turn.additional_kwargs.tool_calls.length }} 个工具
+                  {{ turn.additionalKwargs.toolCalls.length }} 个工具
                 </span>
               </div>
               <el-icon
@@ -85,7 +85,7 @@
               <div class="tool-calls-list-wrapper">
                 <div
                   class="tool-calls-list space-y-2 p-3 border border-t-0 border-gray-200 dark:border-gray-700 rounded-b-lg bg-white dark:bg-gray-900/50">
-                  <div v-for="(tool, toolIndex) in turn.additional_kwargs.tool_calls" :key="toolIndex"
+                  <div v-for="(tool, toolIndex) in turn.additionalKwargs.toolCalls" :key="toolIndex"
                     class="tool-call-item transition-all">
 
                     <!-- 工具名称和参数 -->
@@ -116,7 +116,7 @@
                     </div>
 
                     <!-- 工具调用响应结果 -->
-                    <div v-if="turn.additional_kwargs.tool_calls_response"
+                    <div v-if="turn.additionalKwargs.toolCallsResponse"
                       class="tool-response mt-2 pt-2 border-t border-gray-200 dark:border-gray-700">
                       <div class="text-xs text-gray-500 dark:text-gray-400 mb-1 flex items-center">
                         <el-icon size="12" class="mr-1">
@@ -126,7 +126,7 @@
                       </div>
                       <div
                         class="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded p-2 text-xs text-green-800 dark:text-green-300">
-                        <pre class="overflow-x-auto">{{ formatToolResponse(turn.additional_kwargs.tool_calls_response[toolIndex])
+                        <pre class="overflow-x-auto">{{ formatToolResponse(turn.additionalKwargs.toolCallsResponse[toolIndex])
                         }}</pre>
                       </div>
                     </div>
@@ -138,12 +138,12 @@
 
 
         </template>
-        <el-alert v-if="metadata && metadata.finish_reason == 'error'" title="API 请求错误" type="error" :closable="false">
+        <el-alert v-if="metadata && metadata.finishReason == 'error'" title="API 请求错误" type="error" :closable="false">
           {{ metadata.error }}
         </el-alert>
 
         <!-- ✅ 新增：Token 消耗显示区域 -->
-        <div v-if="isAssistant && tokenUsage && !streamingState.is_streaming" class="token-usage-section mt-2">
+        <div v-if="isAssistant && tokenUsage && !streamingState.isStreaming" class="token-usage-section mt-2">
           <div class="flex items-center gap-3 text-xs text-gray-400">
             <el-icon size="13" class="text-gray-400">
               <InsightsTwotone />
@@ -151,21 +151,21 @@
             <span class="text-gray-500">Tokens:</span>
             <span class="token-item">
               <span class="text-gray-400 dark:text-gray-300 text-xs">Prompt</span>&nbsp;<span
-                class="text-gray-500 dark:text-gray-300">{{ formatTokenNumber(tokenUsage.prompt_tokens) }}</span>
+                class="text-gray-500 dark:text-gray-300">{{ formatTokenNumber(tokenUsage.promptTokens) }}</span>
             </span>
             <span class="token-item">
               <span class="text-gray-400 dark:text-gray-300">Completion</span>&nbsp;<span
-                class="text-gray-500 dark:text-gray-300">{{ formatTokenNumber(tokenUsage.completion_tokens) }}</span>
+                class="text-gray-500 dark:text-gray-300">{{ formatTokenNumber(tokenUsage.completionTokens) }}</span>
             </span>
             <span class="token-item">
               <span class="text-gray-400 dark:text-gray-300">Total</span>&nbsp;<span
                 class="text-gray-500 dark:text-gray-300">{{
-                  formatTokenNumber(tokenUsage.total_tokens) }}</span>
+                  formatTokenNumber(tokenUsage.totalTokens) }}</span>
             </span>
           </div>
         </div>
 
-        <div v-if="streamingState.is_streaming" class="assistant-loading flex items-center text-gray-500"
+        <div v-if="streamingState.isStreaming" class="assistant-loading flex items-center text-gray-500"
           style="position: sticky;top:0;">
           <el-icon size="16" class="mr-2 relative top-[0px]">
             <Loading />
@@ -176,8 +176,8 @@
       </div>
       <!--知识库-->
       <div class="knowledge-base flex flex-wrap gap-2 mt-3 ml-auto"
-        v-if="message.role === 'user' && turns[0].additional_kwargs?.referenced_kbs && turns[0].additional_kwargs?.referenced_kbs.length > 0">
-        <div v-for="kb, index in turns[0].additional_kwargs?.referenced_kbs" :key="kb.id">
+        v-if="message.role === 'user' && turns[0].additionalKwargs?.referencedKbs && turns[0].additionalKwargs?.referencedKbs.length > 0">
+        <div v-for="kb, index in turns[0].additionalKwargs?.referencedKbs" :key="kb.id">
           <div
             class="knowledge-base-item rounded-md px-2 py-1 bg-gray-100 dark:bg-gray-800/50 text-gray-500 dark:text-gray-400 text-xs flex items-center gap-1">
             <MenuBookOutlined class="w-4 h-4" />
@@ -188,13 +188,13 @@
       <!-- 文件列表显示区域 -->
 
       <div class="file-list flex flex-wrap gap-2 mt-3 ml-auto" v-if="message.files && message.files.length > 0">
-        <FileItem v-for="file, index in message.files" :key="file.id" :name="file.display_name" :type="file.file_type"
-          :ext="file.file_extension" :size="file.file_size" :preview-url="file.preview_url"
-          :clickable="file.file_type === 'image'" @click="handleImageClick(index as number)"></FileItem>
+        <FileItem v-for="file, index in message.files" :key="file.id" :name="file.displayName" :type="file.fileType"
+          :ext="file.fileExtension" :size="file.fileSize" :preview-url="file.previewUrl"
+          :clickable="file.fileType === 'image'" @click="handleImageClick(index as number)"></FileItem>
       </div>
       <div class="message-actions flex gap-0 text-sm w-full mt-3 text-gray-500 items-center"
-        v-if="!streamingState.is_streaming"
-        :class="[isAssistant ? 'justify-start' : 'justify-end', message.is_streaming ? 'opacity-0' : 'opacity-100']">
+        v-if="!streamingState.isStreaming"
+        :class="[isAssistant ? 'justify-start' : 'justify-end', message.isStreaming ? 'opacity-0' : 'opacity-100']">
 
 
         <div class="message-action-button" @click="handleAction('copy')">
@@ -227,7 +227,7 @@
             </el-icon>
           </div>
           <div class="text-gray-700 transition-colors duration-200 flex items-center py-1 px-2">
-            {{ getCurrentVersionIndex(message.contents) + 1 }} / {{ content_versions.length }}
+            {{ getCurrentVersionIndex(message.contents) + 1 }} / {{ contentVersions.length }}
           </div>
           <div class="message-action-button" @click="switchContent('next')" :disabled="!hasNextContent">
             <el-icon :size="16">
@@ -442,7 +442,7 @@ watch(
 
 const previewList = computed(() => {
   const files = props.message.files || [];
-  return files.map((file: any) => file.url || file.preview_url);
+  return files.map((file: any) => file.url || file.previewUrl);
 })
 
 const isAssistant = computed(() => props.message.role === "assistant");
@@ -459,12 +459,12 @@ const turns = computed(() => {
 })
 
 // const hasThinking = computed(
-//   () => isAssistant.value && getCurrentContent(props.message.contents).reasoning_content
+//   () => isAssistant.value && getCurrentContent(props.message.contents).reasoningContent
 // );
 
 const metadata = computed(() => {
   const content = turns.value[0];
-  return content.meta_data;
+  return content.metaData;
 });
 
 
@@ -474,14 +474,14 @@ const state = computed(() =>
 );
 
 const streamingState = computed(() => ({
-  is_streaming: state.value?.is_streaming ?? false,
-  is_thinking: state.value?.is_thinking ?? false,
-  is_web_searching: state.value?.is_web_searching ?? false,
-  is_placeholder: false
+  isStreaming: state.value?.isStreaming ?? false,
+  isThinking: state.value?.isThinking ?? false,
+  isWebSearching: state.value?.isWebSearching ?? false,
+  isPlaceholder: false
 }));
 
 const currentModelName = computed(() => {
-  const modelName = metadata.value?.model_name;
+  const modelName = metadata.value?.modelName;
   return modelName
     ? modelName.split("/").pop()
     : "unknown"
@@ -490,8 +490,8 @@ const currentModelName = computed(() => {
 const currentContentTime = computed(() => {
   const content = turns.value[0];
   return {
-    firendly: formatTime(content.created_at || '', 'friendly'),
-    full: formatTime(content.created_at || '', 'full')
+    firendly: formatTime(content.createdAt || '', 'friendly'),
+    full: formatTime(content.createdAt || '', 'full')
   };
 })
 
@@ -501,9 +501,9 @@ const tokenUsage = computed(() => {
     return null;
   }
 
-  // 获取最后一个 turn 的 meta_data.usage
+  // 获取最后一个 turn 的 metaData.usage
   const lastTurn = turns.value[turns.value.length - 1];
-  return lastTurn?.meta_data?.usage || null;
+  return lastTurn?.metaData?.usage || null;
 });
 
 // 计算是否有上一个/下一个内容
@@ -514,15 +514,15 @@ const hasPrevContent = computed(() => {
 
 const hasNextContent = computed(() => {
   const currentIndex = getCurrentVersionIndex() + 1
-  return currentIndex < content_versions.value.length
+  return currentIndex < contentVersions.value.length
 })
 
 // 获取当前索引（本地实现，不再依赖废弃的函数）
 const getCurrentVersionIndex = (contents?: any): number => {
   if (!contents) {
-    return content_versions.value.findIndex(version => version === props.message.current_turns_id)
+    return contentVersions.value.findIndex(version => version === props.message.currentTurnsId)
   }
-  return content_versions.value.findIndex(version => version === props.message.current_turns_id)
+  return contentVersions.value.findIndex(version => version === props.message.currentTurnsId)
 }
 
 
@@ -571,7 +571,7 @@ const handleMoreAction = (key: 'edit' | 'delete') => {
   emit(key as any, props.message);
 };
 
-const content_versions = computed(() => {
+const contentVersions = computed(() => {
   // 使用工具函数获取所有版本号
   return getContentVersions(props.message as any)
 })
@@ -585,14 +585,14 @@ const switchContent = (direction: 'prev' | 'next') => {
   let newIndex
   if (direction === 'prev' && currentIndex > 0) {
     newIndex = currentIndex - 1
-  } else if (direction === 'next' && currentIndex < content_versions.value.length - 1) {
+  } else if (direction === 'next' && currentIndex < contentVersions.value.length - 1) {
     newIndex = currentIndex + 1
   } else {
     return
   }
 
   // 通过事件通知父组件切换内容
-  emit('switch', props.message, content_versions.value[newIndex])
+  emit('switch', props.message, contentVersions.value[newIndex])
 }
 
 // isExpanded 变量已废弃，使用 expandedStates Map 替代
@@ -686,14 +686,14 @@ const formatTokenNumber = (num: number | null): string => {
   }
 };
 
-// 获取思考时长：优先使用 meta_data 中的值（后端保存的），如果没有则使用 thinking_duration_ms
+// 获取思考时长：优先使用 metaData 中的值（后端保存的），如果没有则使用 thinkingDurationMs
 const getThinkingDuration = (turn: any): number | null => {
-  // 如果正在思考中，使用实时计算的 thinking_duration_ms
-  if (turn.state?.is_thinking) {
-    return turn.thinking_duration_ms;
+  // 如果正在思考中，使用实时计算的 thinkingDurationMs
+  if (turn.state?.isThinking) {
+    return turn.thinkingDurationMs;
   }
-  // 思考完成后，优先使用 meta_data 中的值（后端保存的准确值）
-  return turn.meta_data?.thinking_duration_ms || turn.thinking_duration_ms;
+  // 思考完成后，优先使用 metaData 中的值（后端保存的准确值）
+  return turn.metaData?.thinkingDurationMs || turn.thinkingDurationMs;
 };
 
 // defineExpose 已移除，相关方法通过事件传递

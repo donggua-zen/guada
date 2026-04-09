@@ -24,7 +24,7 @@ export const useSessionStore = defineStore('session', () => {
                 inputMessage: {
                     content: '',
                     files: [],
-                    isWaiting: false
+                    isWaiting: false,
                 },
                 scrollPosition: 0,
                 lastUpdated: Date.now(),
@@ -41,10 +41,10 @@ export const useSessionStore = defineStore('session', () => {
      * @param list - 会话列表
      */
     const setChatSidebar = (list: Session[]): void => {
-        // 按 last_active_at 或 updated_at 降序排序
+        // 按 lastActiveAt 或 updatedAt 降序排序
         sessionsList.value = list.sort((a, b) => {
-            const timeA = new Date(a.last_active_at || a.updated_at || 0).getTime()
-            const timeB = new Date(b.last_active_at || b.updated_at || 0).getTime()
+            const timeA = new Date(a.lastActiveAt || a.updatedAt || 0).getTime()
+            const timeB = new Date(b.lastActiveAt || b.updatedAt || 0).getTime()
             return timeB - timeA  // 降序排列，最新的在前
         })
     }
@@ -198,7 +198,7 @@ export const useSessionStore = defineStore('session', () => {
     const updateSessionLastActiveTime = (sessionId: string, timestamp?: string): void => {
         const session = sessionsList.value.find(s => s.id === sessionId)
         if (session) {
-            session.last_active_at = timestamp || new Date().toISOString()
+            session.lastActiveAt = timestamp || new Date().toISOString()
             // 重新触发排序
             setChatSidebar(sessionsList.value)
         }

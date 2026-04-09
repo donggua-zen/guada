@@ -2,13 +2,17 @@ import { Injectable } from '@nestjs/common';
 import * as bcrypt from 'bcrypt';
 import * as fs from 'fs';
 import * as path from 'path';
+import sharp from 'sharp';
+import * as crypto from 'crypto';
 import { UserRepository } from '../../common/database/user.repository';
 
 @Injectable()
 export class UserService {
   private resetPasswordFlagPath = path.join(process.cwd(), 'password_is_set.txt');
+  private readonly AVATAR_UPLOAD_DIR = path.join(process.cwd(), 'static', 'uploads', 'avatars');
+  private readonly ALLOWED_MIME_TYPES = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
 
-  constructor(private userRepo: UserRepository) {}
+  constructor(private userRepo: UserRepository) { }
 
   async getProfile(userId: string) {
     return this.userRepo.findById(userId);
@@ -49,8 +53,67 @@ export class UserService {
     return this.userRepo.update(accountId, { deletedAt: new Date() }); // 软删除或根据需求物理删除
   }
 
-  async uploadAvatar(userId: string, fileUrl: string) {
-    return this.userRepo.update(userId, { avatarUrl: fileUrl });
+  /**
+   * 上传并处理用户头像
+   */
+  async uploadAvatar(userId: string, file: any) {
+    const user = await this.userRepo.findById(userId);
+    if (!user) {
+      throw new Error('用户不存在');
+    }
+
+    // 1. 验证文件类型
+    if (!file || !this.ALLOWED_MIME_TYPES.includes(file.mimetype)) {
+      throw new Error(`不支持的文件类型。允许的类型: ${this.ALLOWED_MIME_TYPES.join(', ')}`);
+    }
+
+    // 2. 确保上传目录存在
+    if (!fs.existsSync(this.AVATAR_UPLOAD_DIR)) {
+      fs.mkdirSync(this.AVATAR_UPLOAD_DIR, { recursive: true });
+    }
+
+    // 3. 生成唯一文件名
+    const uniqueFilename = `${crypto.randomUUID()}.jpg`;
+    const filePath = path.join(this.AVATAR_UPLOAD_DIR, uniqueFilename);
+
+    try {
+      // 4. 使用 sharp 缩放并转换为 JPEG
+      await sharp(file.buffer)
+        .resize(128, 128, { fit: 'cover' })
+        .jpeg({ quality: 95 })
+        .toFile(filePath);
+
+      // 5. 清理旧头像
+      if (user.avatarUrl) {
+        const oldFilePath = this.getFilePathFromUrl(user.avatarUrl);
+        if (oldFilePath && fs.existsSync(oldFilePath)) {
+          fs.unlinkSync(oldFilePath);
+        }
+      }
+
+      // 6. 更新数据库
+      const webUrl = `/static/uploads/avatars/${uniqueFilename}`;
+      await this.userRepo.update(userId, { avatarUrl: webUrl });
+
+      return { url: webUrl };
+    } catch (error: any) {
+      // 如果处理失败，删除可能已生成的临时文件
+      if (fs.existsSync(filePath)) {
+        fs.unlinkSync(filePath);
+      }
+      throw new Error(`头像上传失败: ${error.message}`);
+    }
+  }
+
+  /**
+   * 将 Web URL 转换为服务器文件路径
+   */
+  private getFilePathFromUrl(url: string): string | null {
+    if (!url || !url.startsWith('/static/uploads/avatars/')) {
+      return null;
+    }
+    const filename = path.basename(url);
+    return path.join(this.AVATAR_UPLOAD_DIR, filename);
   }
 
   isPasswordResetAllowed(): boolean {

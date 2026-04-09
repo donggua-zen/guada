@@ -12,26 +12,42 @@ import type { User, LoginRequest, RegisterRequest } from '@/types/api'
 export const useAuthStore = defineStore('auth', () => {
     // 状态
     const user: Ref<User | null> = ref(null)
-    const token: Ref<string | null> = useStorage('token', null)
+    
+    // Token 存储：优先从 localStorage 读取（记住我），否则使用 sessionStorage
+    const getStoredToken = (): string | null => {
+        return localStorage.getItem('token') || sessionStorage.getItem('token')
+    }
+    
+    const token: Ref<string | null> = ref(getStoredToken())
 
     // 计算属性
     const isAuthenticated: ComputedRef<boolean> = computed(() => !!token.value)
 
     // Actions
-    async function login(credentials: LoginRequest): Promise<boolean> {
+    async function login(credentials: LoginRequest & { rememberMe?: boolean }): Promise<boolean> {
         try {
             const result = await apiService.login(credentials)
             console.log('登录响应:', result)
             
             // 处理可能的响应格式
-            const access_token = (result as any).access_token || (result as any).data?.access_token
+            const accessToken = (result as any).accessToken || (result as any).data?.accessToken
             const userData = (result as any).user || (result as any).data?.user
             
-            if (!access_token) {
+            if (!accessToken) {
                 throw new Error('登录失败：未获取到 token')
             }
 
-            token.value = access_token
+            // 根据 rememberMe 决定存储位置
+            const shouldRemember = credentials.rememberMe === true
+            if (shouldRemember) {
+                localStorage.setItem('token', accessToken)
+                localStorage.setItem('user', JSON.stringify(userData))
+            } else {
+                sessionStorage.setItem('token', accessToken)
+                sessionStorage.setItem('user', JSON.stringify(userData))
+            }
+
+            token.value = accessToken
             user.value = userData
 
             return true
@@ -47,14 +63,18 @@ export const useAuthStore = defineStore('auth', () => {
             console.log('注册响应:', result)
             
             // 处理可能的响应格式
-            const access_token = (result as any).access_token || (result as any).data?.access_token
+            const accessToken = (result as any).accessToken || (result as any).data?.accessToken
             const newUser = (result as any).user || (result as any).data?.user
             
-            if (!access_token) {
+            if (!accessToken) {
                 throw new Error('注册失败：未获取到 token')
             }
 
-            token.value = access_token
+            // 注册后默认不记住，使用 sessionStorage
+            sessionStorage.setItem('token', accessToken)
+            sessionStorage.setItem('user', JSON.stringify(newUser))
+
+            token.value = accessToken
             user.value = newUser
 
             return true
@@ -65,16 +85,33 @@ export const useAuthStore = defineStore('auth', () => {
     }
 
     function logout(): void {
+        // 清除所有存储中的认证信息
+        localStorage.removeItem('token')
+        localStorage.removeItem('user')
+        sessionStorage.removeItem('token')
+        sessionStorage.removeItem('user')
+        
         token.value = null
         user.value = null
-        // apiService.logout()
     }
 
     async function checkAuth(): Promise<boolean> {
-        if (!token.value) return false
+        const storedToken = getStoredToken()
+        if (!storedToken) return false
+        
         try {
             const userData = await apiService.getProfile()
             user.value = userData
+            token.value = storedToken
+            
+            // 同步用户信息到存储
+            const storedUser = localStorage.getItem('user') || sessionStorage.getItem('user')
+            if (storedUser) {
+                localStorage.setItem('user', JSON.stringify(userData))
+            } else {
+                sessionStorage.setItem('user', JSON.stringify(userData))
+            }
+            
             return true
         } catch (error) {
             console.error(error)

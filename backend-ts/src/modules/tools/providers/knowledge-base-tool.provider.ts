@@ -6,6 +6,7 @@ import { KBChunkRepository } from '../../../common/database/kb-chunk.repository'
 import { VectorDbService } from '../../../common/vector-db/vector-db.service';
 import { EmbeddingService } from '../../knowledge-base/embedding.service';
 import { IToolProvider, ToolCallRequest, ToolCallResponse } from '../interfaces/tool-provider.interface';
+import { buildOpenAITool, SimpleToolDef } from '../utils/tool-builder';
 
 @Injectable()
 export class KnowledgeBaseToolProvider implements IToolProvider {
@@ -21,117 +22,110 @@ export class KnowledgeBaseToolProvider implements IToolProvider {
         private embeddingService: EmbeddingService,
     ) { }
 
-    async getToolsNamespaced(enabledTools: any): Promise<any[]> {
-        return [
-            {
-                type: 'function',
-                function: {
-                    name: 'knowledge_base__search',
-                    description: '在知识库中搜索相关内容',
-                    parameters: {
-                        type: 'object',
-                        properties: {
-                            knowledge_base_id: {
-                                type: 'string',
-                                description: '知识库 ID',
-                            },
-                            query: {
-                                type: 'string',
-                                description: '查询文本',
-                            },
-                            top_k: {
-                                type: 'number',
-                                description: '返回结果数量（默认5）',
-                                default: 5,
-                            },
-                            filter_file_id: {
-                                type: 'string',
-                                description: '可选，按文件 ID 过滤',
-                            },
-                        },
-                        required: ['knowledge_base_id', 'query'],
+    private readonly toolsConfig: SimpleToolDef[] = [
+        {
+            name: 'search',
+            description: '在知识库中搜索相关内容',
+            parameters: {
+                type: 'object',
+                properties: {
+                    knowledge_base_id: {
+                        type: 'string',
+                        description: '知识库 ID',
+                    },
+                    query: {
+                        type: 'string',
+                        description: '查询文本',
+                    },
+                    top_k: {
+                        type: 'number',
+                        description: '返回结果数量（默认5）',
+                        default: 5,
+                    },
+                    filter_file_id: {
+                        type: 'string',
+                        description: '可选，按文件 ID 过滤',
                     },
                 },
+                required: ['knowledge_base_id', 'query'],
             },
-            {
-                type: 'function',
-                function: {
-                    name: 'knowledge_base__list_files',
-                    description: '列出知识库中的所有文件',
-                    parameters: {
-                        type: 'object',
-                        properties: {
-                            knowledge_base_id: {
-                                type: 'string',
-                                description: '知识库 ID',
-                            },
-                            skip: {
-                                type: 'number',
-                                description: '跳过数量（默认0）',
-                                default: 0,
-                            },
-                            limit: {
-                                type: 'number',
-                                description: '返回数量限制（默认50）',
-                                default: 50,
-                            },
-                        },
-                        required: ['knowledge_base_id'],
+        },
+        {
+            name: 'list_files',
+            description: '列出知识库中的所有文件',
+            parameters: {
+                type: 'object',
+                properties: {
+                    knowledge_base_id: {
+                        type: 'string',
+                        description: '知识库 ID',
+                    },
+                    skip: {
+                        type: 'number',
+                        description: '跳过数量（默认0）',
+                        default: 0,
+                    },
+                    limit: {
+                        type: 'number',
+                        description: '返回数量限制（默认50）',
+                        default: 50,
                     },
                 },
+                required: ['knowledge_base_id'],
             },
-            {
-                type: 'function',
-                function: {
-                    name: 'knowledge_base__get_chunks',
-                    description: '获取文件的分块内容',
-                    parameters: {
-                        type: 'object',
-                        properties: {
-                            file_id: {
-                                type: 'string',
-                                description: '文件 ID',
-                            },
-                            skip: {
-                                type: 'number',
-                                description: '跳过的分块数（默认0）',
-                                default: 0,
-                            },
-                            limit: {
-                                type: 'number',
-                                description: '返回的最大分块数（默认10）',
-                                default: 10,
-                            },
-                        },
-                        required: ['file_id'],
+        },
+        {
+            name: 'get_chunks',
+            description: '获取文件的分块内容',
+            parameters: {
+                type: 'object',
+                properties: {
+                    file_id: {
+                        type: 'string',
+                        description: '文件 ID',
+                    },
+                    skip: {
+                        type: 'number',
+                        description: '跳过的分块数（默认0）',
+                        default: 0,
+                    },
+                    limit: {
+                        type: 'number',
+                        description: '返回的最大分块数（默认10）',
+                        default: 10,
                     },
                 },
+                required: ['file_id'],
             },
-        ];
+        },
+    ];
+
+    async getToolsNamespaced(enabledTools: Record<string, any> | boolean, injectParams: Record<string, any>): Promise<any[]> {
+        return this.toolsConfig.map(tool => buildOpenAITool(this.namespace, tool));
     }
 
     async executeWithNamespace(request: ToolCallRequest, injectParams: any): Promise<ToolCallResponse> {
-        const { name, arguments: args } = request;
+        // 1. 统一剥离命名空间前缀，获取核心工具名
+        const coreName = request.name.replace(`${this.namespace}__`, '');
+        
+        // 2. 建立工具名到处理函数的映射
+        const handlers: Record<string, (args: any, params: any) => Promise<ToolCallResponse>> = {
+            'search': this.handleSearch.bind(this),
+            'list_files': this.handleListFiles.bind(this),
+            'get_chunks': this.handleGetChunks.bind(this),
+        };
+
+        const handler = handlers[coreName];
 
         try {
-            if (name === 'knowledge_base__search') {
-                return await this.handleSearch(args, injectParams);
-            } else if (name === 'knowledge_base__list_files') {
-                return await this.handleListFiles(args, injectParams);
-            } else if (name === 'knowledge_base__get_chunks') {
-                return await this.handleGetChunks(args, injectParams);
-            } else {
-                return {
-                    tool_call_id: request.id,
-                    role: 'tool',
-                    name: request.name,
-                    content: `未知工具：${name}`,
-                };
+            if (!handler) {
+                throw new Error(`未知工具：${request.name}`);
             }
+            return await handler(request.arguments, injectParams);
         } catch (error: any) {
-            this.logger.error(`工具执行失败：${error.message}`);
+            this.logger.error(`工具执行失败 [${request.name}]：${error.message}`);
             return {
-                tool_call_id: request.id,
+                toolCallId: request.id,
                 role: 'tool',
                 name: request.name,
                 content: `工具执行失败：${error.message}`,
@@ -237,7 +231,6 @@ export class KnowledgeBaseToolProvider implements IToolProvider {
         const formattedResults = results.map((result: any) => ({
             content: result.content,
             metadata: result.metadata,
-            similarity: result.similarity || 0.0,
             file_name: result.metadata?.file_name,
         }));
 

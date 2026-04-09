@@ -122,13 +122,19 @@ export class ChatController {
     // 创建 AbortController 用于中断 LLM 请求
     const abortController = new AbortController();
     
-    // 监听客户端断开连接事件
-    req.on('close', () => {
-      if (!res.writableEnded) {
-        console.log('Client disconnected (stream endpoint), aborting LLM request');
+    // 标记是否已处理断开连接
+    let isAborted = false;
+
+    const handleDisconnect = () => {
+      if (!isAborted && !res.writableEnded) {
+        isAborted = true;
         abortController.abort();
       }
-    });
+    };
+
+    // 同时监听 req 和 res 的 close 事件以提高可靠性
+    req.on('close', handleDisconnect);
+    res.on('close', handleDisconnect);
 
     try {
       const iterator = this.agentService.completions(

@@ -13,8 +13,8 @@ export type MessageRole = 'user' | 'assistant'
  * 消息状态
  */
 export interface MessageState {
-    is_streaming: boolean
-    is_thinking?: boolean
+    isStreaming: boolean
+    isThinking?: boolean
 }
 
 /**
@@ -36,17 +36,17 @@ export interface FileAttachment {
 export interface MessageContent {
     id: string
     content: string | null
-    reasoning_content?: string | null
-    turns_id?: string
-    additional_kwargs?: Record<string, any>
-    meta_data?: Record<string, any>
-    created_at?: ISODateString
-    updated_at?: ISODateString
-    thinking_started_at?: number | null
-    thinking_duration_ms?: number | null
+    reasoningContent?: string | null
+    turnsId?: string
+    additionalKwargs?: Record<string, any>
+    metaData?: Record<string, any>
+    createdAt?: ISODateString
+    updatedAt?: ISODateString
+    thinkingStartedAt?: number | null
+    thinkingDurationMs?: number | null
     state: MessageState
     _thinkingTimer?: number
-    is_current?: boolean
+    isCurrent?: boolean
 }
 
 /**
@@ -56,10 +56,10 @@ export interface Message {
     id: string
     role: MessageRole
     contents: MessageContent[]
-    parent_id?: string
-    current_turns_id?: string
+    parentId?: string
+    currentTurnsId?: string
     state: MessageState
-    created_at?: ISODateString
+    createdAt?: ISODateString
     files?: FileAttachment[]
     index?: number
 }

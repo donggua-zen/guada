@@ -35,21 +35,21 @@ export class McpServerService {
         }
     }
 
-    async getAllServers() {
-        const servers = await this.mcpRepo.findAll();
+    async getAllServers(userId: string) {
+        const servers = await this.mcpRepo.findAll(userId);
         return {
             items: servers,
             size: servers.length,
         };
     }
 
-    async getServerById(id: string) {
-        const server = await this.mcpRepo.findById(id);
+    async getServerById(id: string, userId: string) {
+        const server = await this.mcpRepo.findById(id, userId);
         if (!server) throw new Error('MCP Server not found');
         return server;
     }
 
-    async createServer(data: any, userId?: string) {
+    async createServer(data: any, userId: string) {
         // 1. 先创建服务器记录
         const server = await this.mcpRepo.create({
             name: data.name,
@@ -57,6 +57,7 @@ export class McpServerService {
             description: data.description,
             headers: data.headers || null,
             enabled: data.enabled !== undefined ? data.enabled : true,
+            userId: userId,
         });
 
         // 2. 尝试获取工具列表（不阻塞创建流程）
@@ -77,11 +78,11 @@ export class McpServerService {
         return server;
     }
 
-    async updateServer(id: string, data: any, userId?: string) {
-        // 获取当前服务器信息
-        const currentServer = await this.mcpRepo.findById(id);
+    async updateServer(id: string, data: any, userId: string) {
+        // 获取当前服务器信息并验证归属权
+        const currentServer = await this.mcpRepo.findById(id, userId);
         if (!currentServer) {
-            throw new Error('MCP Server not found');
+            throw new Error('MCP Server not found or unauthorized');
         }
 
         // 检查是否需要重新获取工具列表
@@ -111,8 +112,8 @@ export class McpServerService {
         if (data.headers !== undefined) updateData.headers = data.headers;
         if (data.enabled !== undefined) updateData.enabled = data.enabled;
 
-        // 执行更新
-        const server = await this.mcpRepo.update(id, updateData);
+        // 执行更新（带权限校验）
+        const server = await this.mcpRepo.update(id, updateData, userId);
 
         // 如果需要且提供了必要的信息，重新获取工具列表
         if (needRefreshTools && serverUrl) {
@@ -130,28 +131,28 @@ export class McpServerService {
         return server;
     }
 
-    async deleteServer(id: string, userId?: string) {
-        const success = await this.mcpRepo.delete(id);
+    async deleteServer(id: string, userId: string) {
+        const success = await this.mcpRepo.delete(id, userId);
         if (!success) {
-            throw new Error('MCP Server not found');
+            throw new Error('MCP Server not found or unauthorized');
         }
         this.logger.log(`Deleted MCP server: ${id}`);
         return true;
     }
 
-    async toggleServerStatus(id: string, enabled: boolean, userId?: string) {
-        const server = await this.mcpRepo.update(id, { enabled });
+    async toggleServerStatus(id: string, enabled: boolean, userId: string) {
+        const server = await this.mcpRepo.update(id, { enabled }, userId);
         if (!server) {
-            throw new Error('MCP Server not found');
+            throw new Error('MCP Server not found or unauthorized');
         }
         this.logger.log(`Toggled MCP server status: ${id} -> ${enabled ? 'enabled' : 'disabled'}`);
         return server;
     }
 
-    async refreshTools(id: string, userId?: string) {
-        const server = await this.mcpRepo.findById(id);
+    async refreshTools(id: string, userId: string) {
+        const server = await this.mcpRepo.findById(id, userId);
         if (!server) {
-            throw new Error('MCP Server not found');
+            throw new Error('MCP Server not found or unauthorized');
         }
 
         if (!server.url) {

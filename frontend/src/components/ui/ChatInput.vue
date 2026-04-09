@@ -4,8 +4,8 @@
             :class="styleClass">
             <!-- 文件列表显示区域 -->
             <div class="file-list flex flex-wrap gap-2 mb-3" v-if="uploadFiles.length > 0">
-                <FileItem v-for="file in uploadFiles" :key="file.id" :name="file.display_name" :type="file.file_type"
-                    :ext="file.file_extension" :size="file.file_size" :preview-url="file.preview_url" closable
+                <FileItem v-for="file in uploadFiles" :key="file.id" :name="file.displayName" :type="file.fileType"
+                    :ext="file.fileExtension" :size="file.fileSize" :preview-url="file.previewUrl" closable
                     @close="removeFile(file.id)"></FileItem>
             </div>
 
@@ -75,7 +75,7 @@
                     </div>
                     <div>
                         <el-button v-if="!streaming" class="send-btn" type="primary" title="发送" @click="sendMessage"
-                            circle :disabled="!inputContent.trim()" :icon="ArrowSend" />
+                            circle :disabled="!inputContent.trim() || !props.config?.modelId" :icon="ArrowSend" />
                         <el-button v-else class="send-btn stop-btn" title="停止生成" @click="abortResponse" circle
                             type="error" :icon="Stop">
                         </el-button>
@@ -115,7 +115,7 @@
                                     <div class="flex items-start justify-between gap-2">
                                         <div class="flex-1 min-w-0">
                                             <div class="flex items-center gap-2 mb-1">
-                                                <div class="font-medium text-sm truncate">{{ model.model_name }}</div>
+                                                <div class="font-medium text-sm truncate">{{ model.modelName }}</div>
                                                 <!-- 特性标签 -->
                                                 <div class="flex-shrink-0 flex gap-1">
                                                     <el-tag v-if="model.features?.includes('tools')" size="small"
@@ -211,7 +211,18 @@
             </div>
         </div>
         <div v-if="tempKnowledgeBaseIds.length > 0" class="mt-4 text-sm text-gray-600">
-            已选择 <span class="font-medium text-blue-600">{{ tempKnowledgeBaseIds.length }}</span> 个知识库
+            <div class="flex items-center gap-2">
+                <span>已选择 <span class="font-medium text-blue-600">{{ tempValidKnowledgeBasesCount }}</span> 个知识库</span>
+                <template v-if="tempKnowledgeBaseIds.length !== tempValidKnowledgeBasesCount">
+                    <span class="text-gray-400">•</span>
+                    <span class="text-xs text-gray-500">
+                        （<span class="text-orange-600">{{ tempKnowledgeBaseIds.length - tempValidKnowledgeBasesCount }}</span> 个无效ID将被自动清理）
+                    </span>
+                </template>
+            </div>
+            <div v-if="tempKnowledgeBaseIds.length !== tempValidKnowledgeBasesCount" class="mt-1 text-xs text-gray-500">
+                注：无效的知识库ID指那些已被删除或不存在的知识库
+            </div>
         </div>
 
         <template #footer>
@@ -388,13 +399,32 @@ watch(() => currentModel.value?.features, (features) => {
 
 const currentModelName = computed(() => {
     const model = currentModel.value;
-    return model ? model.model_name.split("/").pop() : "请选择模型";
+    return model ? model.modelName.split("/").pop() : "请选择模型";
 });
 
 // 当前选中的知识库列表（根据 ID 从完整列表中过滤）
 const selectedKnowledgeBases = computed(() => {
     const kbIds = props.config?.knowledgeBaseIds || [];
     return knowledgeBases.value.filter(kb => kbIds.includes(kb.id));
+});
+
+// 🔥 新增：有效的已选择知识库数量（只统计实际存在的知识库）
+const selectedKnowledgeBasesCount = computed(() => {
+    return selectedKnowledgeBases.value.length;
+});
+
+// 🔥 新增：本地存储中的知识库ID总数（包含已删除的无效ID）
+const totalKnowledgeBasesCount = computed(() => {
+    return props.config?.knowledgeBaseIds?.length || 0;
+});
+
+// 🔥 新增：临时选择的有效知识库数量（用于对话框显示）
+const tempValidKnowledgeBasesCount = computed(() => {
+    if (!tempKnowledgeBaseIds.value.length) return 0;
+    // 从所有知识库中过滤出临时选择的且实际存在的知识库
+    return knowledgeBases.value.filter(kb => 
+        tempKnowledgeBaseIds.value.includes(kb.id)
+    ).length;
 });
 
 // 过滤后的知识库列表（支持搜索）
@@ -412,7 +442,7 @@ const filteredModels = computed(() => {
     if (!modelSearchText.value) return models.value;
     const searchText = modelSearchText.value.toLowerCase();
     return models.value.filter(model =>
-        model.model_name?.toLowerCase().includes(searchText) ||
+        model.modelName?.toLowerCase().includes(searchText) ||
         model.description?.toLowerCase().includes(searchText)
     );
 });
@@ -424,7 +454,7 @@ const filteredProviders = computed(() => {
     const filtered = filteredModels.value;
     return providers.value.map(provider => ({
         ...provider,
-        models: filtered.filter(model => model.provider_id === provider.id)
+        models: filtered.filter(model => model.providerId === provider.id)
     })).filter(provider => provider.models.length > 0);
 });
 
@@ -472,19 +502,19 @@ const createFileObject = (file, fileType, isPasted = false) => {
 
     return {
         id: fileIdCounter++,
-        file_name: file.name || `pasted-${fileType.toLowerCase()}-${timestamp}.${getFileExtensionFromType(file.type)}`,
-        file_size: file.size,
-        file_extension: isPasted ? getFileExtensionFromType(file.type) : getFileExtension(file.name),
-        file_type: FILE_TYPES[fileType].type,
-        display_name: file.name ? getFileNameWithoutExtension(file.name) : `pasted-${fileType.toLowerCase()}-${timestamp}`,
+        fileName: file.name || `pasted-${fileType.toLowerCase()}-${timestamp}.${getFileExtensionFromType(file.type)}`,
+        fileSize: file.size,
+        fileExtension: isPasted ? getFileExtensionFromType(file.type) : getFileExtension(file.name),
+        fileType: FILE_TYPES[fileType].type,
+        displayName: file.name ? getFileNameWithoutExtension(file.name) : `pasted-${fileType.toLowerCase()}-${timestamp}`,
         file: file,
-        preview_url: previewUrl,
+        previewUrl: previewUrl,
     };
 };
 
 const revokeImagePreviewUrl = (file) => {
-    if (file?.file_type === 'image' && file.preview_url?.startsWith('blob:')) {
-        URL.revokeObjectURL(file.preview_url);
+    if (file?.fileType === 'image' && file.previewUrl?.startsWith('blob:')) {
+        URL.revokeObjectURL(file.previewUrl);
         file.previewUrl = null;
     }
 };
@@ -529,8 +559,14 @@ const applyModelSettings = () => {
 };
 
 // 打开知识库对话框
-const openKnowledgeBaseDialog = () => {
+const openKnowledgeBaseDialog = async () => {
     kbSearchText.value = '';
+    // 重新加载知识库列表，确保数据是最新的
+    try {
+        await loadKnowledgeBases();
+    } catch (error) {
+        console.error('加载知识库列表失败:', error);
+    }
     // 初始化临时值为当前值
     tempKnowledgeBaseIds.value = [...(props.config?.knowledgeBaseIds || [])];
     kbDialogVisible.value = true;
@@ -551,15 +587,25 @@ const applyKnowledgeBaseSelection = () => {
     // 构建配置变更对象
     const configChanges = {};
 
+    // 🔥 改进：过滤掉无效的知识库ID（那些在实际知识库列表中不存在的ID）
+    const validTempKbIds = tempKnowledgeBaseIds.value.filter(id =>
+        knowledgeBases.value.some(kb => kb.id === id)
+    );
+
     // 检查知识库 ID 列表是否有变化
     const currentKbIds = props.config?.knowledgeBaseIds || [];
-    if (JSON.stringify(tempKnowledgeBaseIds.value.sort()) !== JSON.stringify(currentKbIds.sort())) {
-        configChanges.knowledgeBaseIds = tempKnowledgeBaseIds.value;
+    if (JSON.stringify(validTempKbIds.sort()) !== JSON.stringify(currentKbIds.sort())) {
+        configChanges.knowledgeBaseIds = validTempKbIds;
     }
 
     // 只有当有配置变更时才发送事件
     if (Object.keys(configChanges).length > 0) {
-        console.log('Applying knowledge base selection:', configChanges);
+        console.log('🔥 应用知识库选择:', {
+            临时选择: tempKnowledgeBaseIds.value,
+            有效选择: validTempKbIds,
+            当前选择: currentKbIds,
+            变更: configChanges
+        });
         emit('config-change', configChanges);
     }
 
@@ -583,7 +629,7 @@ const loadModels = async () => {
         const response = await apiService.fetchModels();
         response.items.forEach(provider => {
             // 过滤只保留 mode_type 为 'text' 的模型
-            const textModels = provider.models.filter(model => model.model_type === "text");
+            const textModels = provider.models.filter(model => model.modelType === "text");
             models.value.push(...textModels);
             delete provider.models;
             // 只有当该供应商有符合条件的模型时才加入列表
@@ -606,6 +652,27 @@ const loadKnowledgeBases = async () => {
         const { apiService } = await import('@/services/ApiService');
         const response = await apiService.fetchKnowledgeBases();
         knowledgeBases.value = response.items || [];
+        
+        // 🔥 新增：自动清理本地存储中的无效知识库ID
+        const localKbIds = props.config?.knowledgeBaseIds || [];
+        if (localKbIds.length > 0 && knowledgeBases.value.length > 0) {
+            // 过滤出有效的知识库ID
+            const validKbIds = localKbIds.filter(id => 
+                knowledgeBases.value.some(kb => kb.id === id)
+            );
+            
+            // 如果本地存储中有无效的ID，自动清理它们
+            if (validKbIds.length !== localKbIds.length) {
+                console.log('🔥 自动清理无效知识库ID', {
+                    原数量: localKbIds.length,
+                    有效数量: validKbIds.length,
+                    清理数量: localKbIds.length - validKbIds.length
+                });
+                
+                // 通知父组件更新配置，清除无效的知识库ID
+                emit('config-change', { knowledgeBaseIds: validKbIds });
+            }
+        }
     } catch (error) {
         console.error('获取知识库列表失败:', error);
     }
@@ -613,7 +680,7 @@ const loadKnowledgeBases = async () => {
 
 // 文件处理函数
 const checkFileConflict = async (newFileType) => {
-    const currentFileType = uploadFiles.value[0]?.file_type;
+    const currentFileType = uploadFiles.value[0]?.fileType;
     const conflictType = newFileType === 'image' ? '文件' : '图片';
 
     if (currentFileType && currentFileType !== newFileType) {

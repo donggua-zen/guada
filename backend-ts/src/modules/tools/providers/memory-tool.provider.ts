@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { IToolProvider, ToolCallRequest, ToolCallResponse } from '../interfaces/tool-provider.interface';
 import { PrismaService } from '../../../common/database/prisma.service';
+import { buildOpenAITool, SimpleToolDef } from '../utils/tool-builder';
 
 @Injectable()
 export class MemoryToolProvider implements IToolProvider {
@@ -9,68 +10,67 @@ export class MemoryToolProvider implements IToolProvider {
 
     constructor(private prisma: PrismaService) { }
 
-    async getToolsNamespaced(enabledIds?: string[] | boolean): Promise<any[]> {
-        if (enabledIds === false) return [];
+    private readonly toolsConfig: SimpleToolDef[] = [
+        {
+            name: 'long_term__view',
+            description: '查看长期记忆（支持按类型筛选：factual 或 soul）',
+            parameters: {
+                type: 'object',
+                properties: {
+                    memory_type: {
+                        type: 'string',
+                        enum: ['factual', 'soul'],
+                        description: '长期记忆类型'
+                    },
+                },
+                required: ['memory_type'],
+            },
+        },
+        {
+            name: 'long_term__edit',
+            description: 'Upsert 长期记忆（按类型编辑或自动创建）',
+            parameters: {
+                type: 'object',
+                properties: {
+                    memory_type: {
+                        type: 'string',
+                        enum: ['factual', 'soul'],
+                        description: '长期记忆类型'
+                    },
+                    content: { type: 'string', description: '记忆内容' },
+                    write_mode: {
+                        type: 'string',
+                        enum: ['append', 'overwrite'],
+                        description: '写入模式：追加或覆盖'
+                    },
+                },
+                required: ['memory_type', 'content'],
+            },
+        },
+    ];
 
-        const tools = [
-            {
-                type: 'function',
-                function: {
-                    name: `${this.namespace}__long_term__view`,
-                    description: '查看长期记忆（支持按类型筛选：factual 或 soul）',
-                    parameters: {
-                        type: 'object',
-                        properties: {
-                            memory_type: {
-                                type: 'string',
-                                enum: ['factual', 'soul'],
-                                description: '长期记忆类型'
-                            },
-                        },
-                        required: ['memory_type'],
-                    },
-                },
-            },
-            {
-                type: 'function',
-                function: {
-                    name: `${this.namespace}__long_term__edit`,
-                    description: 'Upsert 长期记忆（按类型编辑或自动创建）',
-                    parameters: {
-                        type: 'object',
-                        properties: {
-                            memory_type: {
-                                type: 'string',
-                                enum: ['factual', 'soul'],
-                                description: '长期记忆类型'
-                            },
-                            content: { type: 'string', description: '记忆内容' },
-                            write_mode: {
-                                type: 'string',
-                                enum: ['append', 'overwrite'],
-                                description: '写入模式：追加或覆盖'
-                            },
-                        },
-                        required: ['memory_type', 'content'],
-                    },
-                },
-            },
-        ];
-        return tools;
+    async getToolsNamespaced(enabledTools: Record<string, any> | boolean, injectParams: Record<string, any>): Promise<any[]> {
+        if (enabledTools === false) return [];
+        return this.toolsConfig.map(tool => buildOpenAITool(this.namespace, tool));
     }
 
     async executeWithNamespace(request: ToolCallRequest, injectParams?: Record<string, any>): Promise<ToolCallResponse> {
-        const toolName = request.name.replace(`${this.namespace}__`, '');
+        // 1. 统一剥离命名空间前缀
+        const coreName = request.name.replace(`${this.namespace}__`, '');
+
+        // 2. 建立工具名到处理函数的映射
+        const handlers: Record<string, (args: any, params?: Record<string, any>) => Promise<string>> = {
+            'long_term__view': this.handleLongTermView.bind(this),
+            'long_term__edit': this.handleLongTermEdit.bind(this),
+        };
+
+        const handler = handlers[coreName];
 
         try {
-            let content = '';
-            if (toolName === 'long_term__view') {
-                content = await this.handleLongTermView(request.arguments, injectParams);
-            } else if (toolName === 'long_term__edit') {
-                content = await this.handleLongTermEdit(request.arguments, injectParams);
-            } else {
-                content = `Unknown tool: ${toolName}`;
+            if (!handler) {
+                throw new Error(`未知工具：${request.name}`);
             }
+            const content = await handler(request.arguments, injectParams);
 
             return {
                 toolCallId: request.id,
@@ -80,7 +80,7 @@ export class MemoryToolProvider implements IToolProvider {
                 isError: false,
             };
         } catch (error: any) {
-            this.logger.error(`Error executing Memory tool ${toolName}`, error);
+            this.logger.error(`Error executing Memory tool ${coreName}`, error);
             return {
                 toolCallId: request.id,
                 role: 'tool',

@@ -13,3 +13,5 @@ backend/static/*
 frontend/stats.html
 backend/experiment/**
 backend/tests/verification/**
+backend/build/**
+backend/dist/**

@@ -19,9 +19,9 @@ export interface PaginatedResponse<T> {
   items: T[]
   total: number
   page: number
-  page_size: number
-  has_next: boolean
-  has_prev: boolean
+  pageSize: number
+  hasNext: boolean
+  hasPrev: boolean
 }
 
 /**

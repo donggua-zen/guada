@@ -32,7 +32,7 @@ export class ToolOrchestrator {
             const config = context.getProviderConfig(namespace);
             if (!config) continue;
             if (config.enabled_tools === false) continue;
-            const tools = await provider.getToolsNamespaced(config.enabled_tools);
+            const tools = await provider.getToolsNamespaced(config.enabled_tools, context.inject_params);
             allTools.push(...tools);
         }
         this.logger.debug(`Collected ${allTools} tools`);

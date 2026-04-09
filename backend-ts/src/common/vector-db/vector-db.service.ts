@@ -101,6 +101,7 @@ export class VectorDbService {
    * @param semanticWeight 语义权重 (0-1)，默认 0.6
    * @param keywordWeight 关键词权重 (0-1)，默认 0.4
    * @param filterOptions 过滤选项（支持 documentId 或其他 metadata）
+   * @param enableBM25Rerank 是否启用 BM25 重排，默认 true
    * @returns 搜索结果列表
    */
   async searchChunksHybrid(
@@ -111,9 +112,10 @@ export class VectorDbService {
     semanticWeight: number = 0.6,
     keywordWeight: number = 0.4,
     filterOptions?: { documentId?: string; metadata?: Record<string, any> },
+    enableBM25Rerank: boolean = true,  // ✅ 新增：是否启用 BM25 重排
   ): Promise<SearchResult[]> {
     this.logger.debug(
-      `混合搜索表 ${tableId}，topK=${topK}，filter=${JSON.stringify(filterOptions)}`,
+      `混合搜索表 ${tableId}，topK=${topK}，filter=${JSON.stringify(filterOptions)}，BM25重排=${enableBM25Rerank}`,
     );
 
     return await this.vectorDb.hybridSearch(
@@ -124,6 +126,7 @@ export class VectorDbService {
       semanticWeight,
       keywordWeight,
       filterOptions,
+      enableBM25Rerank,
     );
   }
 
