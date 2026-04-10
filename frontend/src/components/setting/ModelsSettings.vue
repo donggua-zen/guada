@@ -463,6 +463,9 @@ const handleSaveProvider = async () => {
                     provider.protocol = currentProviderEdit.value.protocol;
                 }
             }
+            
+            // 关闭弹窗
+            showProviderModal.value = false;
         } else {
             const payload = {
                 name: currentProviderEdit.value.name,
@@ -475,6 +478,9 @@ const handleSaveProvider = async () => {
             const provider = await apiService.createProvider(payload);
             providers.value.push(provider);
             notify.success('创建成功', '分组创建成功', { duration: 2000 });
+            
+            // 关闭弹窗
+            showProviderModal.value = false;
         }
     } catch (error) {
         console.error('编辑分组失败:', error)
@@ -575,7 +581,7 @@ const handleRemoveFromFetch = async (model) => {
         if (index >= 0) {
             models.value.splice(index, 1);
             models.value = [...models.value];
-            notify.success('移除成功', `模型 ${model.model_name} 已从列表中移除`, { duration: 2000 });
+            notify.success('移除成功', `模型 ${model.modelName} 已从列表中移除`, { duration: 2000 });
         }
     } catch (error) {
         notify.error('移除失败', '移除模型时发生错误', { duration: 2000 });
@@ -766,21 +772,21 @@ const filteredFetchedModels = computed(() => {
 
     const searchTerm = searchModelName.value.toLowerCase()
     return fetchedModels.value.filter(model =>
-        model.model_name.toLowerCase().includes(searchTerm)
+        model.modelName.toLowerCase().includes(searchTerm)
     )
 })
 
 const filteredAddedModels = computed(() => {
-    const currentModelIds = currentModels.value.map(m => m.model_name)
+    const currentModelNames = currentModels.value.map(m => m.modelName)
     return filteredFetchedModels.value.filter(model =>
-        currentModelIds.includes(model.model_name)
+        currentModelNames.includes(model.modelName)
     )
 })
 
 const filteredAvailableModels = computed(() => {
-    const currentModelIds = currentModels.value.map(m => m.model_name)
+    const currentModelNames = currentModels.value.map(m => m.modelName)
     return filteredFetchedModels.value.filter(model =>
-        !currentModelIds.includes(model.model_name)
+        !currentModelNames.includes(model.modelName)
     )
 })
 

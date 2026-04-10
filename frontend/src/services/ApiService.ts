@@ -364,7 +364,8 @@ class ApiService implements IApiService {
 
     async uploadFile(sessionId: string, file: File): Promise<UploadResponse> {
         const formData = new FormData()
-        formData.append('file', file)
+        // 确保文件名在 FormData 中正确编码
+        formData.append('file', file, file.name)
 
         try {
             return await this.axiosInstance.post(`/sessions/${sessionId}/files`, formData, {

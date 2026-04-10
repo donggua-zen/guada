@@ -344,7 +344,7 @@ export function useStreamResponse(sessionStore: any, apiService: any) {
     let message: Message | null = null
     let contentIndex = 0
     let assistantMessageIdResult: string | null = null
-    // ✅ 修复：添加标志位，确保一次流式会话只更新一次时间戳
+    // 修复：添加标志位，确保一次流式会话只更新一次时间戳
     let hasUpdatedActiveTime = false
 
     try {
@@ -357,7 +357,7 @@ export function useStreamResponse(sessionStore: any, apiService: any) {
         regenerationMode,
         assistantMessageId
       )) {
-        // ✅ 修复：实时检测并保存 usage，不等待 finish 事件
+        // 修复：实时检测并保存 usage，不等待 finish 事件
         // 这样即使被取消或发生异常，已接收到的 usage 也不会丢失
         if (response.usage && message && contentIndex !== undefined) {
           const content = message.contents[contentIndex]
@@ -380,7 +380,7 @@ export function useStreamResponse(sessionStore: any, apiService: any) {
           contentIndex = result.contentIndex
           assistantMessageIdResult = response.message_id!
 
-          // ✅ 修复：仅在第一个 create 事件时更新时间戳，避免工具调用多轮次导致重复更新
+          // 修复：仅在第一个 create 事件时更新时间戳，避免工具调用多轮次导致重复更新
           if (!hasUpdatedActiveTime) {
             sessionStore.updateSessionLastActiveTime(streamingSessionId, new Date().toISOString())
             hasUpdatedActiveTime = true
@@ -402,13 +402,13 @@ export function useStreamResponse(sessionStore: any, apiService: any) {
 
         // 处理工具调用（增量更新）
         if (response.type === 'tool_call') {
-          handleToolCall(message!.contents[contentIndex], response.toolCalls)  // ✅ 驼峰式
+          handleToolCall(message!.contents[contentIndex], response.toolCalls)  // 驼峰式
           continue
         }
 
         // 处理工具调用结果（一次性接收）
         if (response.type === 'tool_calls_response') {
-          handleToolCallsResponse(message!.contents[contentIndex], response.toolCallsResponse)  // ✅ 驼峰式
+          handleToolCallsResponse(message!.contents[contentIndex], response.toolCallsResponse)  // 驼峰式
           continue
         }
 
