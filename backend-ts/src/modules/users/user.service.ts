@@ -5,14 +5,17 @@ import * as path from 'path';
 import sharp from 'sharp';
 import * as crypto from 'crypto';
 import { UserRepository } from '../../common/database/user.repository';
+import { UploadPathService } from '../../common/services/upload-path.service';
 
 @Injectable()
 export class UserService {
   private resetPasswordFlagPath = path.join(process.cwd(), 'password_is_set.txt');
-  private readonly AVATAR_UPLOAD_DIR = path.join(process.cwd(), 'static', 'uploads', 'avatars');
   private readonly ALLOWED_MIME_TYPES = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
 
-  constructor(private userRepo: UserRepository) { }
+  constructor(
+    private uploadPathService: UploadPathService,
+    private userRepo: UserRepository,
+  ) { }
 
   async getProfile(userId: string) {
     return this.userRepo.findById(userId);
@@ -67,14 +70,12 @@ export class UserService {
       throw new Error(`不支持的文件类型。允许的类型: ${this.ALLOWED_MIME_TYPES.join(', ')}`);
     }
 
-    // 2. 确保上传目录存在
-    if (!fs.existsSync(this.AVATAR_UPLOAD_DIR)) {
-      fs.mkdirSync(this.AVATAR_UPLOAD_DIR, { recursive: true });
-    }
+    // 2. 获取物理路径（自动创建目录）
+    const avatarDir = this.uploadPathService.getPhysicalPath('avatars');
 
     // 3. 生成唯一文件名
     const uniqueFilename = `${crypto.randomUUID()}.jpg`;
-    const filePath = path.join(this.AVATAR_UPLOAD_DIR, uniqueFilename);
+    const filePath = path.join(avatarDir, uniqueFilename);
 
     try {
       // 4. 使用 sharp 缩放并转换为 JPEG
@@ -85,14 +86,14 @@ export class UserService {
 
       // 5. 清理旧头像
       if (user.avatarUrl) {
-        const oldFilePath = this.getFilePathFromUrl(user.avatarUrl);
+        const oldFilePath = this.uploadPathService.getPathFromWebUrl(user.avatarUrl);
         if (oldFilePath && fs.existsSync(oldFilePath)) {
           fs.unlinkSync(oldFilePath);
         }
       }
 
-      // 6. 更新数据库
-      const webUrl = `/static/uploads/avatars/${uniqueFilename}`;
+      // 6. 更新数据库（直接获取 Web URL）
+      const webUrl = this.uploadPathService.getWebUrl('avatars', uniqueFilename);
       await this.userRepo.update(userId, { avatarUrl: webUrl });
 
       return { url: webUrl };
@@ -103,17 +104,6 @@ export class UserService {
       }
       throw new Error(`头像上传失败: ${error.message}`);
     }
-  }
-
-  /**
-   * 将 Web URL 转换为服务器文件路径
-   */
-  private getFilePathFromUrl(url: string): string | null {
-    if (!url || !url.startsWith('/static/uploads/avatars/')) {
-      return null;
-    }
-    const filename = path.basename(url);
-    return path.join(this.AVATAR_UPLOAD_DIR, filename);
   }
 
   isPasswordResetAllowed(): boolean {
