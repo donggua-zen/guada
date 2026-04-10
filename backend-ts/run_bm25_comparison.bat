@@ -22,7 +22,7 @@ if not exist "tests\verification\bm25_python_results.json" (
 )
 
 echo.
-echo ✅ Python 端测试完成
+echo Python 端测试完成
 
 echo.
 echo 步骤 2: 运行 TypeScript 端测试并对比...
@@ -36,7 +36,7 @@ if not exist "bm25_ts_results.json" (
 )
 
 echo.
-echo ✅ TypeScript 端测试完成
+echo TypeScript 端测试完成
 
 echo.
 echo 步骤 3: 生成可视化报告...
@@ -44,7 +44,7 @@ echo ------------------------------------------
 
 REM 检查是否生成了对比报告
 if exist "bm25_comparison_report.json" (
-    echo ✅ 对比报告已生成: bm25_comparison_report.json
+    echo 对比报告已生成: bm25_comparison_report.json
     
     REM 显示关键统计信息
     echo.

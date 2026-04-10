@@ -43,7 +43,7 @@ function logInfo(message: string) {
 }
 
 function logSuccess(message: string) {
-  log(`✅ ${message}`, colors.green);
+  log(`${message}`, colors.green);
 }
 
 function logWarning(message: string) {
@@ -91,7 +91,7 @@ async function createModelProvider(userId: string) {
   // 从环境变量读取 API Key，如果未设置则使用默认值
   const apiKey = process.env.SILICONFLOW_API_KEY || 'sk-ccdjtlfjhfrkyhcsiijmwahhxaqnfplyaesoqigjvbizbmsy';
 
-  // ✅ 调试日志
+  // 调试日志
   logInfo(`API Key length: ${apiKey.length}`);
   logInfo(`API Key preview: ${apiKey.substring(0, 10)}...${apiKey.substring(apiKey.length - 4)}`);
 

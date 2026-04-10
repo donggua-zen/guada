@@ -7,6 +7,7 @@ import { CharacterRepository } from '../../common/database/character.repository'
 import { KnowledgeBaseRepository } from '../../common/database/knowledge-base.repository';
 import { ModelRepository } from '../../common/database/model.repository';
 import { GlobalSettingRepository } from '../../common/database/global-setting.repository';
+import { FileRepository } from '../../common/database/file.repository';
 import { AgentService } from './agent.service';
 import { LLMService } from './llm.service';
 import { OpenAIAdapter } from './adapters/openai.adapter';
@@ -39,6 +40,7 @@ import { ToolsModule } from '../tools/tools.module';
     KnowledgeBaseRepository,
     ModelRepository,
     GlobalSettingRepository,
+    FileRepository,
     PrismaService
   ],
   exports: [AgentService],

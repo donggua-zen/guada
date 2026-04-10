@@ -80,7 +80,7 @@ async function main() {
     console.log('  4. SQLite 本身将 JSON 存储为 TEXT 类型');
     console.log('  5. Prisma 会在应用层自动处理序列化/反序列化\n');
 
-    console.log('  ✅ 可以迁移！');
+    console.log('  可以迁移！');
     console.log('  当前项目的 Prisma 版本完全支持 SQLite Json 类型');
     console.log('  可以将 String 类型字段安全地迁移为 Json 类型\n');
 

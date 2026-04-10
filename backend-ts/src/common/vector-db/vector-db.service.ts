@@ -112,7 +112,7 @@ export class VectorDbService {
     semanticWeight: number = 0.6,
     keywordWeight: number = 0.4,
     filterOptions?: { documentId?: string; metadata?: Record<string, any> },
-    enableBM25Rerank: boolean = true,  // ✅ 新增：是否启用 BM25 重排
+    enableBM25Rerank: boolean = true,  // 新增：是否启用 BM25 重排
   ): Promise<SearchResult[]> {
     this.logger.debug(
       `混合搜索表 ${tableId}，topK=${topK}，filter=${JSON.stringify(filterOptions)}，BM25重排=${enableBM25Rerank}`,

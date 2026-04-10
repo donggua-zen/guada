@@ -18,7 +18,7 @@ export class KnowledgeBaseService {
    * 创建知识库
    */
   async create(userId: string, data: any) {
-    // ✅ 验证必填字段
+    // 验证必填字段
     if (!data.name) {
       throw new Error('知识库名称不能为空');
     }
@@ -30,7 +30,7 @@ export class KnowledgeBaseService {
       const kb = await this.kbRepo.create({
         name: data.name,
         userId: userId,
-        embeddingModelId: data.embeddingModelId,  // ✅ 使用驼峰式（Prisma TypeScript 属性名）
+        embeddingModelId: data.embeddingModelId,  // 使用驼峰式（Prisma TypeScript 属性名）
         description: data.description || null,
         chunkMaxSize: data.chunkMaxSize || 1000,
         chunkOverlapSize: data.chunkOverlapSize || 100,

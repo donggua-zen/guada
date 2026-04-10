@@ -59,7 +59,7 @@ export class AgentService {
             inject_params: { session_id: sessionId, user_id: session.userId },
             provider_configs: {
                 mcp: { enabled_tools: true },
-                local: { enabled_tools: true },
+                time: { enabled_tools: true },
                 memory: { enabled_tools: true },
                 knowledge_base: { enabled_tools: historyMessages[historyMessages.length - 1]?.metadata?.referencedKbs ? true : false },
             },
@@ -71,7 +71,7 @@ export class AgentService {
         // 3. 准备提示词和工具
         const systemPrompt = await this._buildSystemPrompt(mergedSettings, toolContext);
         const finalSystemPrompt = this.replaceVariables(systemPrompt || 'You are a helpful assistant.');
-        const messages = [{ role: 'system', content: finalSystemPrompt }, ...historyMessages];
+        const messages = [{ role: 'system', content: finalSystemPrompt } as MessageRecord, ...historyMessages];
         const tools = await this.toolOrchestrator.getAllTools(toolContext);
 
         // 3. 处理再生模式（与 Python 后端保持一致）
@@ -165,17 +165,20 @@ export class AgentService {
             let streamError: Error | null = null;  // 记录流式过程中的错误
 
             try {
+                const canThinking = mergedSettings.thinkingEnabled && (session.model?.features as any[]).includes('thinking');
+                const canUseTools = (session.model?.features as any[]).includes('tools');
+
                 const stream = llm.completions({
                     model: session.model?.modelName || 'gpt-3.5-turbo',
                     messages: [...messages, ...chatTurns],
-                    tools,
+                    tools: canUseTools ? tools : undefined,
                     temperature: mergedSettings.modelTemperature,
                     topP: mergedSettings.modelTopP,
                     frequencyPenalty: mergedSettings.modelFrequencyPenalty,  // 新增
                     maxTokens: session.model?.maxOutputTokens,  // 新增：从模型配置获取
                     modelConfig: session.model,  // 传递模型配置（包含供应商信息）
                     stream: true, // 显式开启流式
-                    thinkingEnabled: mergedSettings.thinkingEnabled || false, // 显式传递思考模式开关
+                    thinkingEnabled: canThinking, // 显式传递思考模式开关
                     abortSignal,  // 传递中断信号
                 });
 

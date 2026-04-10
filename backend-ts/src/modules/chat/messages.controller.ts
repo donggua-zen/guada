@@ -26,7 +26,7 @@ export class MessagesController {
             content: string;
             role?: string;
             files?: any[];
-            replaceMessageId?: string;  // ✅ 驼峰式
+            replaceMessageId?: string;  // 驼峰式
             knowledgeBaseIds?: string[]
         },
         @CurrentUser() user: any,
@@ -36,7 +36,7 @@ export class MessagesController {
             body.role || 'user',
             body.content,
             body.files || [],
-            body.replaceMessageId,  // ✅ 驼峰式
+            body.replaceMessageId,  // 驼峰式
             body.knowledgeBaseIds
         );
     }

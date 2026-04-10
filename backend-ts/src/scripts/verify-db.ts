@@ -74,7 +74,7 @@ async function verifyData() {
       });
     }
 
-    console.log('\n✅ 验证完成！\n');
+    console.log('\n验证完成！\n');
   } catch (error) {
     console.error('\n❌ 验证失败:', error instanceof Error ? error.message : error);
     process.exit(1);

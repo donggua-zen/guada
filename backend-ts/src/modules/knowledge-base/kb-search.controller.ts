@@ -73,10 +73,10 @@ export class KbSearchController {
       searchRequest.semanticWeight || 0.3,  // 默认语义权重 30%
       searchRequest.keywordWeight || 0.7,   // 默认关键词权重 70%
       filterOptions,
-      searchRequest.enableBM25Rerank ?? true,  // ✅ 新增：是否启用 BM25 重排，默认 true
+      searchRequest.enableBM25Rerank ?? true,  // 新增：是否启用 BM25 重排，默认 true
     );
 
-    // ✅ 调试日志：检查底层返回的分数
+    // 调试日志：检查底层返回的分数
     console.log('Raw Vector DB Results:', results.map(r => ({ id: r.id, score: r.score, sem: r.semanticScore, bm25: r.bm25Score })));
 
     // 格式化结果

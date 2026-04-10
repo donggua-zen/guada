@@ -147,7 +147,7 @@ async function main() {
     const createdUserSetting = await prisma.userSetting.create({
       data: {
         userId: 'test-user-1',
-        settings: testSettings, // ✅ 直接传入对象，无需 JSON.stringify
+        settings: testSettings, // 直接传入对象，无需 JSON.stringify
       },
     });
 
@@ -181,7 +181,7 @@ async function main() {
     const updatedUserSetting = await prisma.userSetting.update({
       where: { id: createdUserSetting.id },
       data: {
-        settings: updatedSettings, // ✅ 直接传入新对象
+        settings: updatedSettings, // 直接传入新对象
       },
     });
 
@@ -193,7 +193,7 @@ async function main() {
     const nullSetting = await prisma.userSetting.create({
       data: {
         userId: 'test-user-2',
-        settings: null, // ✅ 可以设置为 null
+        settings: null, // 可以设置为 null
       },
     });
 
@@ -212,7 +212,7 @@ async function main() {
       data: {
         title: 'Test Session',
         userId: 'test-user-1',
-        settings: sessionSettings, // ✅ Json? 类型，可以为对象或 null
+        settings: sessionSettings, // Json? 类型，可以为对象或 null
       },
     });
 
@@ -239,16 +239,16 @@ async function main() {
     await prisma.$disconnect();
 
     console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-    console.log('✅ 所有测试通过！');
+    console.log('所有测试通过！');
     console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
 
     console.log('📊 测试结论：');
-    console.log('  1. ✅ Prisma 7.6.0 完全支持 SQLite 的 Json 类型');
-    console.log('  2. ✅ 写入时自动序列化（无需 JSON.stringify）');
-    console.log('  3. ✅ 读取时自动反序列化（无需 JSON.parse）');
-    console.log('  4. ✅ 支持复杂嵌套对象和数组');
-    console.log('  5. ✅ 正确处理 null 值');
-    console.log('  6. ✅ 类型安全（TypeScript 自动推断为 object 类型）\n');
+    console.log('  1. Prisma 7.6.0 完全支持 SQLite 的 Json 类型');
+    console.log('  2. 写入时自动序列化（无需 JSON.stringify）');
+    console.log('  3. 读取时自动反序列化（无需 JSON.parse）');
+    console.log('  4. 支持复杂嵌套对象和数组');
+    console.log('  5. 正确处理 null 值');
+    console.log('  6. 类型安全（TypeScript 自动推断为 object 类型）\n');
 
     console.log('🎯 迁移建议：');
     console.log('  可以安全地将项目中的所有 String 类型 JSON 字段迁移为 Json 类型');

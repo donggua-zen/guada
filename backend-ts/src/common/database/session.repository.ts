@@ -12,7 +12,7 @@ export class SessionRepository {
                 character: true,
                 model: {
                     include: {
-                        provider: true  // ✅ 包含供应商信息
+                        provider: true  // 包含供应商信息
                     }
                 }
             },

@@ -106,7 +106,7 @@ export class KbFileService implements OnModuleInit {
       knowledgeBaseId: kbId,
       fileName: uniqueFilename,
       displayName: file.originalname,
-      fileSize: fileSize,  // ✅ 使用 number 类型（避免 BigInt 序列化问题）
+      fileSize: fileSize,  // 使用 number 类型（避免 BigInt 序列化问题）
       fileType: fileType,
       fileExtension: fileExtension.replace(/^\./, ''),
       contentHash: contentHash,
@@ -256,7 +256,7 @@ export class KbFileService implements OnModuleInit {
       const tableId = `kb_${knowledgeBaseId}`;
       const documents = chunks.map((content, idx) => ({
         id: `chunk_${idx}_${fileId}`,
-        documentId: fileId, // ✅ 使用独立顶层字段
+        documentId: fileId, // 使用独立顶层字段
         content,
         embedding: allEmbeddings[idx],
         metadata: {

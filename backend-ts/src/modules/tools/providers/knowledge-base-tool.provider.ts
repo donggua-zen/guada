@@ -6,7 +6,7 @@ import { KBChunkRepository } from '../../../common/database/kb-chunk.repository'
 import { VectorDbService } from '../../../common/vector-db/vector-db.service';
 import { EmbeddingService } from '../../knowledge-base/embedding.service';
 import { IToolProvider, ToolCallRequest, ToolCallResponse } from '../interfaces/tool-provider.interface';
-import { buildOpenAITool, SimpleToolDef } from '../utils/tool-builder';
+import { InternalToolDefinition } from '../../chat/types/llm.types';
 
 @Injectable()
 export class KnowledgeBaseToolProvider implements IToolProvider {
@@ -22,9 +22,9 @@ export class KnowledgeBaseToolProvider implements IToolProvider {
         private embeddingService: EmbeddingService,
     ) { }
 
-    private readonly toolsConfig: SimpleToolDef[] = [
+    private readonly toolsConfig: InternalToolDefinition[] = [
         {
-            name: 'search',
+            name: 'knowledge_base__search',
             description: '在知识库中搜索相关内容',
             parameters: {
                 type: 'object',
@@ -51,7 +51,7 @@ export class KnowledgeBaseToolProvider implements IToolProvider {
             },
         },
         {
-            name: 'list_files',
+            name: 'knowledge_base__list_files',
             description: '列出知识库中的所有文件',
             parameters: {
                 type: 'object',
@@ -75,7 +75,7 @@ export class KnowledgeBaseToolProvider implements IToolProvider {
             },
         },
         {
-            name: 'get_chunks',
+            name: 'knowledge_base__get_chunks',
             description: '获取文件的分块内容',
             parameters: {
                 type: 'object',
@@ -101,7 +101,8 @@ export class KnowledgeBaseToolProvider implements IToolProvider {
     ];
 
     async getToolsNamespaced(enabledTools: Record<string, any> | boolean, injectParams: Record<string, any>): Promise<any[]> {
-        return this.toolsConfig.map(tool => buildOpenAITool(this.namespace, tool));
+        // 直接返回扁平化的工具定义，由 adapter 进行转换
+        return this.toolsConfig;
     }
 
     async executeWithNamespace(request: ToolCallRequest, injectParams: any): Promise<ToolCallResponse> {
