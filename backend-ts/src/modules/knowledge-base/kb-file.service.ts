@@ -26,7 +26,7 @@ export class KbFileService implements OnModuleInit {
     private embeddingService: EmbeddingService,
     private chunkingService: ChunkingService,
     @Inject('VECTOR_DB') private vectorDb: VectorDatabase,
-  ) {}
+  ) { }
 
   async onModuleInit() {
     await this.resumePendingFileTasks();
@@ -38,7 +38,7 @@ export class KbFileService implements OnModuleInit {
   private async resumePendingFileTasks() {
     try {
       this.logger.log('🔄 开始扫描未完成的知识库文件任务...');
-      
+
       const pendingFiles = await this.fileRepo.findByStatus(['pending', 'processing']);
       this.logger.log(`📋 发现 ${pendingFiles.length} 个未完成任务`);
 
@@ -65,6 +65,22 @@ export class KbFileService implements OnModuleInit {
   }
 
   /**
+   * 修复中文文件名乱码 (Windows + Node.js 常见兼容性问题)
+   */
+  private fixFilenameEncoding(fileName: string): string {
+    if (/[\u0080-\uffff]/.test(fileName)) {
+      try {
+        // 尝试将 latin1 编码的字符串还原为 utf-8
+        const fixedName = Buffer.from(fileName, 'latin1').toString('utf-8');
+        return fixedName;
+      } catch (e) {
+        this.logger.warn(`Failed to fix filename encoding for: ${fileName}`);
+      }
+    }
+    return fileName;
+  }
+
+  /**
    * 上传文件到知识库
    */
   async uploadFile(
@@ -81,8 +97,11 @@ export class KbFileService implements OnModuleInit {
       throw new Error('无权访问该知识库');
     }
 
+    // 修复原始文件名编码
+    const originalName = this.fixFilenameEncoding(file.originalname);
+
     // 生成唯一文件名
-    const fileExtension = path.extname(file.originalname).toLowerCase();
+    const fileExtension = path.extname(originalName).toLowerCase();
     const uniqueFilename = `${crypto.randomUUID()}${fileExtension}`;
 
     // 保存文件到临时目录
@@ -105,7 +124,7 @@ export class KbFileService implements OnModuleInit {
     const fileRecord = await this.fileRepo.create({
       knowledgeBaseId: kbId,
       fileName: uniqueFilename,
-      displayName: file.originalname,
+      displayName: originalName,
       fileSize: fileSize,  // 使用 number 类型（避免 BigInt 序列化问题）
       fileType: fileType,
       fileExtension: fileExtension.replace(/^\./, ''),
@@ -116,7 +135,7 @@ export class KbFileService implements OnModuleInit {
       currentStep: '等待处理...',
     });
 
-    this.logger.log(`文件记录已创建：${file.originalname}, KB=${kbId}, File ID=${fileRecord.id}`);
+    this.logger.log(`文件记录已创建：${originalName}, KB=${kbId}, File ID=${fileRecord.id}`);
 
     // 启动后台处理任务
     this.processFileInBackground(fileRecord.id);
@@ -187,7 +206,7 @@ export class KbFileService implements OnModuleInit {
         chunkSize: kb.chunkMaxSize,
         overlapSize: kb.chunkOverlapSize,
       });
-      
+
       const chunks = chunksData.map(chunk => chunk.content);
       const totalChunks = chunks.length;
 
