@@ -18,7 +18,7 @@ export type StreamEvent =
     | StreamCreateEvent
     | StreamThinkEvent
     | StreamToolCallEvent
-    | StreamToolCallsResponseEvent  // ✅ 新增
+    | StreamToolCallsResponseEvent  // 新增
     | StreamTextEvent
     | StreamFinishEvent
 
@@ -46,7 +46,7 @@ export interface StreamThinkEvent {
  */
 export interface StreamToolCallEvent {
     type: 'tool_call'
-    toolCalls: ToolCall[]  // ✅ 驼峰式
+    toolCalls: ToolCall[]  // 驼峰式
 }
 
 /**
@@ -54,7 +54,7 @@ export interface StreamToolCallEvent {
  */
 export interface StreamToolCallsResponseEvent {
     type: 'tool_calls_response'
-    toolCallsResponse: any[]  // ✅ 驼峰式
+    toolCallsResponse: any[]  // 驼峰式
     usage?: TokenUsage
 }
 
@@ -83,7 +83,7 @@ export interface StreamTextEvent {
 export interface StreamFinishEvent {
     type: 'finish'
     usage?: TokenUsage
-    finishReason: string  // ✅ 驼峰式
+    finishReason: string  // 驼峰式
     error?: string
 }
 
