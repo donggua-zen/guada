@@ -1,7 +1,7 @@
 <!-- ScrollContainer.vue -->
 <template>
     <!-- @ts-ignore - attrs.style 类型不兼容 -->
-    <simple-bar class="ScrollContainer" :auto-hide="true" :timeout="6000" ref="simpleBarRef" @scroll="handleScroll">
+    <simple-bar class="ScrollContainer" :auto-hide="true" ref="simpleBarRef" @scroll="handleScroll">
         <div ref="contentElement" :class="mergredClasses" :style="attrs.style">
             <slot></slot>
         </div>
@@ -189,5 +189,17 @@ defineExpose({
 
 :deep(.simplebar-content-wrapper) {
     outline: none;
+}
+
+/* 自定义滚动条隐藏延迟为 6000ms (6秒) */
+:deep(.simplebar-scrollbar)::before {
+    transition: opacity 0.2s linear, background-color 0.2s linear;
+    transition-delay: 6s;
+}
+
+/* 当鼠标悬停或滚动时,立即显示滚动条(无延迟) */
+:deep(.simplebar-hover) .simplebar-scrollbar::before,
+:deep(.simplebar-scrolling) .simplebar-scrollbar::before {
+    transition-delay: 0s;
 }
 </style>
