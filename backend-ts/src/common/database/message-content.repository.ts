@@ -6,6 +6,13 @@ export class MessageContentRepository {
   constructor(private prisma: PrismaService) { }
 
   /**
+   * 获取 Prisma 客户端实例（用于事务操作）
+   */
+  getPrismaClient() {
+    return this.prisma;
+  }
+
+  /**
    * 根据 ID 获取消息内容
    */
   async findById(contentId: string) {
