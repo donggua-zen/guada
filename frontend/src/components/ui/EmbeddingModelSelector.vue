@@ -201,7 +201,7 @@ const confirmSelection = () => {
     
     const selectedModel = models.value.find(m => m.id === tempSelectedModelId.value)
     if (selectedModel) {
-        // ✅ 直接返回模型的 ID，而不是 model_name
+        // 直接返回模型的 ID，而不是 model_name
         emit('update:modelId', selectedModel.id)
         ElMessage.success(`已选择：${selectedModel.model_name}`)
     }

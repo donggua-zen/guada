@@ -145,7 +145,7 @@ export const useFileUploadStore = defineStore('fileUpload', () => {
         onProgressUpdate?: (status: UploadTask) => void
     ) {
         try {
-            // ✅ 从文件名提取扩展名
+            // 从文件名提取扩展名
             const fileName = file.name
             const fileExtension = fileName.includes('.') ? fileName.split('.').pop()! : ''
 
@@ -156,7 +156,7 @@ export const useFileUploadStore = defineStore('fileUpload', () => {
                 fileName: fileName,
                 fileSize: file.size,
                 fileType: file.type || 'unknown',
-                fileExtension: fileExtension,  // ✅ 添加扩展名
+                fileExtension: fileExtension,  // 添加扩展名
                 uploadedAt: new Date().toISOString(),
                 processedAt: null,
                 knowledgeBaseId: kbId
@@ -210,13 +210,13 @@ export const useFileUploadStore = defineStore('fileUpload', () => {
                         taskToUpdate.currentStep = '上传完成，等待处理...'
                         onProgressUpdate?.(taskToUpdate)
 
-                        // ✅ 关键修复：上传成功后立即清除临时任务
+                        // 关键修复：上传成功后立即清除临时任务
                         // 避免 mergeFilesWithTasks 重复加载
                         // 数据库记录会在 refreshFileList 时自动加载
                         clearUploadTask(task.id)
                     }
 
-                    // ✅ 注意：不再在这里启动轮询
+                    // 注意：不再在这里启动轮询
                     // 轮询逻辑已移至 knowledgeBase store
                     // knowledgeBase store 会在 refreshFileList 时自动检测 processing 状态并启动轮询
                 } catch (error) {
@@ -311,7 +311,7 @@ export const useFileUploadStore = defineStore('fileUpload', () => {
     function mergeFilesWithTasks(dbFiles: any[], kbId: string, extraTempTasks?: UploadTask[]): UnifiedFileRecord[] {
         const result: UnifiedFileRecord[] = []
 
-        // ✅ 1. 先添加临时上传任务（让它们显示在前面）
+        // 1. 先添加临时上传任务（让它们显示在前面）
         let tasks = extraTempTasks || getTasksByKB(kbId)
         if (tasks.length > 0) {
             console.log(`[DEBUG] mergeFilesWithTasks: 添加了 ${tasks.length} 个临时任务到列表前面`)
@@ -320,7 +320,7 @@ export const useFileUploadStore = defineStore('fileUpload', () => {
             })
         }
 
-        // ✅ 2. 后添加数据库记录
+        // 2. 后添加数据库记录
         dbFiles.forEach((file: any) => {
             result.push({
                 id: file.id,

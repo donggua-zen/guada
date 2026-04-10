@@ -243,7 +243,7 @@ app.mount('#app')
         success: true
       })
       
-      console.log(`✅ 构建成功 - 耗时: ${duration}ms, 内存峰值: ${memoryUsageMB.toFixed(2)}MB`)
+      console.log(`构建成功 - 耗时: ${duration}ms, 内存峰值: ${memoryUsageMB.toFixed(2)}MB`)
       
       if (result.includes('warning') || result.includes('WARN')) {
         console.log(`  警告信息: ${result.match(/(warning|WARN).*/gi)?.slice(0, 3).join(', ') || '无'}`)
@@ -422,7 +422,7 @@ async function main() {
     analyzeResults()
     generateRecommendations()
     
-    console.log('\n✅ 排查完成')
+    console.log('\n排查完成')
     
   } catch (error) {
     console.error('❌ 脚本执行失败:', error.message)

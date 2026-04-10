@@ -142,7 +142,7 @@ const lastThinkingEnabled = useStorage<boolean>('lastThinkingEnabled', false);
 // 用户手动选择的模型 ID（刷新页面后从 localStorage 恢复）
 const userSelectedModelId = useStorage<string | null>('userSelectedModelId', null);
 
-// 🔥 新增：用户选择的知识库 ID 列表（刷新页面后从 localStorage 恢复）
+// 新增：用户选择的知识库 ID 列表（刷新页面后从 localStorage 恢复）
 const userSelectedKnowledgeBaseIds = useStorage<string[]>('userSelectedKnowledgeBaseIds', []);
 
 const inputMessage = ref({
@@ -158,7 +158,7 @@ const currentSession = ref<any>({
   title: "新建对话",
   settings: {
     thinkingEnabled: lastThinkingEnabled.value, // 从本地存储加载
-    referencedKbs: userSelectedKnowledgeBaseIds.value, // 🔥 新增：从 localStorage 加载知识库选择
+    referencedKbs: userSelectedKnowledgeBaseIds.value, // 新增：从 localStorage 加载知识库选择
     modelName: null,
   }
 })
@@ -201,7 +201,7 @@ watch(() => currentSession.value.characterId, (newCharId, oldCharId) => {
       // 切换角色时，思考模型状态重置为上次用户选择的状态（而非角色默认值）
       currentSession.value.settings = {
         ...(currentSession.value.settings || {}),
-        thinking_enabled: lastThinkingEnabled.value,
+        thinkingEnabled: lastThinkingEnabled.value,
         maxMemoryLength: newCharacter.settings?.maxMemoryLength
       };
       // 清空用户手动选择的模型 ID（这样 currentModelId 就会使用角色默认模型）
@@ -246,10 +246,10 @@ const emit = defineEmits<{
 
 const thinkingEnabled = computed({
   get() {
-    return currentSession.value.settings?.thinking_enabled;
+    return currentSession.value.settings?.thinkingEnabled;
   },
   set(value) {
-    currentSession.value.settings["thinking_enabled"] = value;
+    currentSession.value.settings["thinkingEnabled"] = value;
     // 保存到本地存储
     lastThinkingEnabled.value = value;
   }
@@ -324,7 +324,7 @@ const selectCharacter = (character: any): void => {
   // 思考模型状态保持用户上次选择的状态
   currentSession.value.settings = {
     ...(currentSession.value.settings || {}),
-    thinking_enabled: lastThinkingEnabled.value,
+    thinkingEnabled: lastThinkingEnabled.value,
     maxMemoryLength: character.settings?.maxMemoryLength
   };
   // 清空用户手动选择的模型 ID（这样 currentModelId 就会使用角色默认模型）
@@ -350,10 +350,10 @@ const handleConfigChange = (config: any): void => {
     // 保存到本地存储
     lastModelConfig.value = { ...lastModelConfig.value, maxMemoryLength: config.maxMemoryLength };
   }
-  // 🔥 新增：保存知识库选择到会话设置和本地存储
+  // 新增：保存知识库选择到会话设置和本地存储
   if (typeof config.knowledgeBaseIds !== 'undefined') {
     currentSession.value.settings = { ...(currentSession.value.settings || {}), referencedKbs: config.knowledgeBaseIds };
-    // 🔥 保存到 localStorage，实现持久化
+    // 保存到 localStorage，实现持久化
     userSelectedKnowledgeBaseIds.value = config.knowledgeBaseIds;
     console.log('保存知识库选择到本地存储:', config.knowledgeBaseIds);
   }
@@ -383,16 +383,16 @@ const sendMessage = (): void => {
     notify.error("创建失败", '请先选择一个角色模板');
     return;
   }
-  // 🔥 修复：传递完整的 payload，包含 knowledgeBaseIds
+  // 修复：传递完整的 payload，包含 knowledgeBaseIds
   emit("create-session", {
     characterId: currentSession.value.characterId,
-    model_id: currentModelId.value,
+    modelId: currentModelId.value,
     title: autoTitle(),
     settings: currentSession.value.settings
   }, {
-    content: inputMessage.value.content,      // ✅ 使用 content 字段
-    files: inputMessage.value.files || [],    // ✅ 使用 files 字段
-    knowledgeBaseIds: currentSession.value.settings?.referencedKbs  || []  // 🔥 新增：传递知识库 ID
+    content: inputMessage.value.content,      // 使用 content 字段
+    files: inputMessage.value.files || [],    // 使用 files 字段
+    knowledgeBaseIds: currentSession.value.settings?.referencedKbs || []  // 新增：传递知识库 ID
   });
 }
 
@@ -403,7 +403,7 @@ const handleCreateSessionClick = (): void => {
   }
   emit("create-session" as any, {
     characterId: currentSession.value.characterId,
-    model_id: currentModelId.value,
+    modelId: currentModelId.value,
     title: autoTitle(),
     settings: currentSession.value.settings
   })

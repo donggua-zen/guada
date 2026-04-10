@@ -444,7 +444,7 @@ async function handleCreate() {
         // 刷新列表
         await store.fetchKnowledgeBases()
         
-        // ✅ 关键修改：创建成功后自动选中新建的知识库
+        // 关键修改：创建成功后自动选中新建的知识库
         const createdKb = store.knowledgeBases.find(kb => kb.id === newKb.id)
         if (createdKb) {
             await handleSelectKB(createdKb)
@@ -603,15 +603,15 @@ async function handleFileChange(file: any) {
     }
 
     try {
-        // ✅ 关键修复：先创建临时任务，确保能被 mergeFilesWithTasks 捕获
+        // 关键修复：先创建临时任务，确保能被 mergeFilesWithTasks 捕获
         const task = await uploadStore.uploadToKnowledgeBase(
             store.activeKnowledgeBaseId!,
             rawFile,
             (updatedTask: UploadTask) => {
-                // ✅ 每次状态变化都触发响应式更新
+                // 每次状态变化都触发响应式更新
                 console.log(`[DEBUG] 上传进度更新：${updatedTask.fileName} - ${updatedTask.status} - ${updatedTask.progress}%`)
 
-                // ✅ 关键修复 1: 找到对应的文件索引
+                // 关键修复 1: 找到对应的文件索引
                 // 注意：updatedTask.fileId 可能是 'pending' 或真实 ID，都要匹配
                 const index = files.value.findIndex(f => {
                     // 匹配临时任务（fileId 可能是 'pending' 或时间戳）
@@ -627,7 +627,7 @@ async function handleFileChange(file: any) {
                 if (index !== -1) {
                     console.log(`[DEBUG] 找到匹配项：files[${index}].id=${files.value[index].id}, files[${index}].file_id=${files.value[index].fileId}`)
 
-                    // ✅ 关键修复 2: 使用 Vue 的响应式方式更新整个对象
+                    // 关键修复 2: 使用 Vue 的响应式方式更新整个对象
                     // 不要直接修改属性，而是替换整个对象
                     files.value[index] = {
                         ...files.value[index],
@@ -639,13 +639,13 @@ async function handleFileChange(file: any) {
 
                     console.log(`[DEBUG] 更新了文件 ${updatedTask.fileName} 的状态：${updatedTask.status}`)
 
-                    // ✅ 关键修复 3: 如果是完成或失败，延迟刷新整个列表确保数据一致
+                    // 关键修复 3: 如果是完成或失败，延迟刷新整个列表确保数据一致
                     if (updatedTask.status === 'uploaded' || updatedTask.status === 'failed') {
                         console.log(`[DEBUG] 文件处理完成，刷新列表：${updatedTask.fileName}`)
                         setTimeout(() => refreshFileList(), 500)
                     }
                 } else {
-                    // ✅ 关键修复 4: 如果不在列表中，说明还没被 mergeFilesWithTasks 合并
+                    // 关键修复 4: 如果不在列表中，说明还没被 mergeFilesWithTasks 合并
                     // 此时不应该手动添加，因为 refreshFileList 会自动合并
                     // 只需要记录日志即可
                     console.log(`[DEBUG] 任务 ${updatedTask.fileName} 不在列表中，等待 refreshFileList 合并`)
@@ -653,7 +653,7 @@ async function handleFileChange(file: any) {
             }
         )
 
-        // ✅ 上传开始后，立即刷新列表显示临时任务（mergeFilesWithTasks 会自动合并）
+        // 上传开始后，立即刷新列表显示临时任务（mergeFilesWithTasks 会自动合并）
         console.log(`[DEBUG] 上传开始，刷新列表显示临时任务：${task.fileName}`)
         await refreshFileList()
 
@@ -853,7 +853,7 @@ onMounted(async () => {
         const kb = store.knowledgeBases.find(k => k.id === kbIdFromRoute)
         if (kb) {
             await handleSelectKB(kb)
-            // ✅ refreshFileList 已在 handleSelectKB 中调用，无需重复
+            // refreshFileList 已在 handleSelectKB 中调用，无需重复
         } else {
             // 如果 ID 无效，选择第一个
             await handleSelectKB(store.knowledgeBases[0])
@@ -864,7 +864,7 @@ onMounted(async () => {
     }
 })
 
-// ✅ 关键修复：组件销毁时清理轮询定时器和滚动定时器，防止内存泄漏
+// 关键修复：组件销毁时清理轮询定时器和滚动定时器，防止内存泄漏
 onUnmounted(() => {
     console.log('[DEBUG] KnowledgeBasePage 组件销毁，清理定时器')
     store.stopAllFileProcessingPolling()
@@ -899,7 +899,7 @@ async function refreshFileList() {
         files.value = uploadStore.mergeFilesWithTasks(dbFiles, store.activeKnowledgeBaseId)
         console.log(`[DEBUG] refreshFileList: 合并后的文件列表：${files.value.length} 个文件`)
 
-        // 3. ✅ 关键修复：对每个 processing/failed 状态的文件启动轮询（使用 knowledgeBase store 的轮询）
+        // 3. 关键修复：对每个 processing/failed 状态的文件启动轮询（使用 knowledgeBase store 的轮询）
         // 收集所有需要轮询的文件 ID
         const processingFileIds = files.value
             .filter(f => f.processingStatus === 'processing' || f.processingStatus === 'pending')

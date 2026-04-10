@@ -96,17 +96,17 @@ const sessions = computed({
 });
 
 // 获取按最后活跃时间降序排序的会话列表，最新的对话排在前面
-// ✅ 修复：使用 last_active_at 优先排序，与后端数据库排序逻辑一致
+// 修复：使用 last_active_at 优先排序，与后端数据库排序逻辑一致
 const sortedSessions = computed(() => {
   const sessions_ = [...sessions.value];
   return sessions_.sort((a, b) => {
-    // ✅ 主要排序：last_active_at（最后活跃时间）
-    const timeA: number = a.last_active_at
-      ? new Date(a.last_active_at).getTime()
-      : (a.updated_at ? new Date(a.updated_at).getTime() : new Date(a.created_at || 0).getTime());
-    const timeB: number = b.last_active_at
-      ? new Date(b.last_active_at).getTime()
-      : (b.updated_at ? new Date(b.updated_at).getTime() : new Date(b.created_at || 0).getTime());
+    // 主要排序：last_active_at（最后活跃时间）
+    const timeA: number = a.lastActiveAt
+      ? new Date(a.lastActiveAt).getTime()
+      : (a.updatedAt ? new Date(a.updatedAt).getTime() : new Date(a.createdAt || 0).getTime());
+    const timeB: number = b.lastActiveAt
+      ? new Date(b.lastActiveAt).getTime()
+      : (b.updatedAt ? new Date(b.updatedAt).getTime() : new Date(b.createdAt || 0).getTime());
     return timeB - timeA; // 降序排列，最新的在前面
   });
 });
@@ -323,7 +323,7 @@ const handleSaveSessionSettings = async () => {
   try {
     if (currentSession.value) {
       await apiService.updateSession(currentSession.value.id, {
-        model_id: currentSession.value.model_id,
+        modelId: currentSession.value.modelId,
         settings: currentSession.value.settings
       });
     }

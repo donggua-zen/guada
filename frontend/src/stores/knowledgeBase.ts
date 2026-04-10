@@ -277,7 +277,7 @@ export const useKnowledgeBaseStore = defineStore('knowledgeBase', () => {
             return
         }
 
-        // ✅ 关键：先停止之前的轮询
+        // 关键：先停止之前的轮询
         stopAllFileProcessingPolling()
 
         // 为每个文件注册回调函数
@@ -382,8 +382,8 @@ export const useKnowledgeBaseStore = defineStore('knowledgeBase', () => {
         searchInKB,
 
         // Actions - 文件处理轮询
-        startFileProcessingPolling,  // ✅ 已重构为批量模式
-        stopFileProcessingPolling,   // ✅ 已适配批量模式（兼容旧调用）
+        startFileProcessingPolling,  // 已重构为批量模式
+        stopFileProcessingPolling,   // 已适配批量模式（兼容旧调用）
         stopAllFileProcessingPolling
     }
 })

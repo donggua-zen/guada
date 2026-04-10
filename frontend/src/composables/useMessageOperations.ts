@@ -79,8 +79,9 @@ export function useMessageOperations(
             }
         })
 
+        const fileIds = uploadResults.map((result) => result.id)
         const response = await apiService.createMessage(
-            currentSessionId.value, text, updatedFiles, replaceMessageId, knowledgeBaseIds
+            currentSessionId.value, text, fileIds, replaceMessageId, knowledgeBaseIds
         )
         const message = { ...response, files: updatedFiles }
 

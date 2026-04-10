@@ -142,7 +142,7 @@
           {{ metadata.error }}
         </el-alert>
 
-        <!-- ✅ 新增：Token 消耗显示区域 -->
+        <!-- 新增：Token 消耗显示区域 -->
         <div v-if="isAssistant && tokenUsage && !streamingState.isStreaming" class="token-usage-section mt-2">
           <div class="flex items-center gap-3 text-xs text-gray-400">
             <el-icon size="13" class="text-gray-400">
@@ -495,7 +495,7 @@ const currentContentTime = computed(() => {
   };
 })
 
-// ✅ 新增：获取 token usage 的计算属性
+// 新增：获取 token usage 的计算属性
 const tokenUsage = computed(() => {
   if (!isAssistant.value || !turns.value || turns.value.length === 0) {
     return null;
@@ -670,7 +670,7 @@ const formatDuration = (ms: number | null): string => {
   return `${minutes}分${remainingSeconds}秒`;
 };
 
-// ✅ 格式化 token 数字：1600 -> 1.6K
+// 格式化 token 数字：1600 -> 1.6K
 const formatTokenNumber = (num: number | null): string => {
   if (!num && num !== 0) return '0';
 
@@ -973,7 +973,7 @@ defineExpose({
   }
 }
 
-/* ✅ Token 消耗显示样式 - 简约风格 */
+/* Token 消耗显示样式 - 简约风格 */
 .token-usage-section {
   padding: 4px 0;
   animation: fadeIn 0.3s ease;
