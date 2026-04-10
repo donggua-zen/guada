@@ -1,5 +1,5 @@
 <template>
-    <div class="h-full flex flex-col md:max-w-[1180px] md:mx-auto">
+    <div class="h-full flex flex-col md:max-w-295 md:mx-auto">
         <SidebarLayout v-model:sidebar-visible="sidebarVisible" :show-toggle-button="false"
             :sidebar-width="sidebarWidth" :z-index="51" class="flex-1 overflow-hidden">
             <template #sidebar>
@@ -12,11 +12,11 @@
                         </div>
                         <div class="flex flex-col w-full rounded-lg bg-white md:bg-transparent px-4 md:px-0">
                             <div class="flex items-center justify-centertransition-colors duration-200" :class="{
-                                'bg-[var(--color-primary-100)] text-[var(--color-primary)]': !isMobile && currentTabValue === item.path,
+                                'bg-(--color-primary-100) text-(--color-primary)': !isMobile && currentTabValue === item.path,
                                 'border-b border-gray-200 py-3 px-1 last:border-b-0': isMobile,
                                 'rounded-lg mx-1 mb-2 mt-1 py-1 px-2 cursor-pointer': !isMobile,
-                                'active:bg-[var(--color-primary-100)]': isMobile,
-                                'hover:text-[var(--color-primary)] hover:bg-[var(--color-primary-100)]': !isMobile,
+                                'active:bg-(--color-primary-100)': isMobile,
+                                'hover:text-(--color-primary) hover:bg-(--color-primary-100)': !isMobile,
                             }" v-for="item in group.items" @click="handleItemClick(item)">
                                 <div class="flex-1 w-full flex items-center gap-x-2">
                                     <component :is="item.icon" class="w-5 h-5"></component>
@@ -31,7 +31,7 @@
             <template #content>
                 <div class="h-full flex flex-col" v-if="currentItem">
                     <div
-                        class="relative flex items-center justify-center md:justify-start py-2 border-b-1 border-gray-100 mb-2 mx-0 md:mx-3">
+                        class="relative flex items-center justify-center md:justify-start py-2 border-b border-gray-100 mb-2 mx-0 md:mx-3">
                         <el-button v-if="isMobile" class="absolute block left-1" text style="font-size: 24px"
                             @click="router.back()">
                             <template #icon>

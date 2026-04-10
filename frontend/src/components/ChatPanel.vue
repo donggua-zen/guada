@@ -62,7 +62,7 @@
     <!-- 输入区域 -->
     <div class="px-5 pb-2.5 pt-2 w-full flex flex-col items-center" style="position: absolute; bottom: 0;">
       <!-- 编辑模式提示条 -->
-      <div v-if="editMode" class="w-full max-w-[960px] mb-[-0.6rem]">
+      <div v-if="editMode" class="w-full max-w-240 mb-[-0.6rem]">
         <div class="edit-mode-banner">
           <span class="edit-mode-icon">📝</span>
           <span class="edit-mode-text">正在编辑消息</span>
@@ -72,7 +72,7 @@
         </div>
       </div>
 
-      <div class="w-full flex items-center max-w-[960px]">
+      <div class="w-full flex items-center max-w-240">
         <ChatInput v-model:value="inputMessage.content" v-model:thinking-enabled="thinkingEnabled" :config="{
           modelId: currentModelId,
           maxMemoryLength: currentSession?.settings?.maxMemoryLength || null,
@@ -154,7 +154,6 @@ const {
 
 // 响应式数据
 const scrollContainerRef = ref<any>(null);
-const showTokenModal = ref(false);
 
 // 使用 useMessageOperations composable
 const {
@@ -623,9 +622,6 @@ const toggleDeepThinking = () => {
   debouncedSaveSession();
 };
 
-function handleTokensStatistic() {
-  showTokenModal.value = true;
-}
 
 defineExpose({ sendMessage: handleSendMessage })
 

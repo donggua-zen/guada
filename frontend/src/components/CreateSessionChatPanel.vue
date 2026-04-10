@@ -13,21 +13,21 @@
 
       <!-- 已选角色显示 -->
       <div
-        class="w-full max-w-[800px] mb-[-0.7rem] flex items-center gap-3 p-2 pb-4 bg-gray-50 border border-gray-100 rounded-lg cursor-pointer hover:bg-gray-100 transition-colors"
+        class="w-full max-w-200 mb-[-0.7rem] flex items-center gap-3 p-2 pb-4 bg-gray-50 border border-gray-100 rounded-lg cursor-pointer hover:bg-gray-100 transition-colors"
         @click="showCharacterSelector = true">
-        <div class="w-10 h-10 flex-shrink-0 overflow-hidden rounded">
+        <div class="w-10 h-10 shrink-0 overflow-hidden rounded">
           <Avatar :src="currentCharacter?.avatar_url" type="assistant" class="w-full h-full object-cover" />
         </div>
         <div class="flex-1 min-w-0">
           <p class="text-sm font-medium text-gray-700 truncate">{{ currentCharacter?.title || '未命名角色' }}</p>
           <p class="text-xs text-gray-500 truncate">{{ currentCharacter?.description || '暂无描述' }}</p>
         </div>
-        <el-icon class="text-gray-400 flex-shrink-0">
+        <el-icon class="text-gray-400 shrink-0">
           <ArrowRightTwotone />
         </el-icon>
       </div>
 
-      <div class="w-full  max-w-[800px]">
+      <div class="w-full  max-w-200">
         <ChatInput v-model:value="inputMessage.content" v-model:thinking-enabled="thinkingEnabled" :config="{
           modelId: currentModelId,
           maxMemoryLength: (lastModelConfig.value as any)?.maxMemoryLength || currentCharacter?.settings?.maxMemoryLength,
@@ -63,14 +63,14 @@
           class="character-item flex items-center gap-3 p-3 rounded-lg cursor-pointer hover:bg-gray-50 transition-colors border border-transparent"
           :class="{ 'bg-blue-50 border-blue-200': currentSession.characterId === character.id }"
           @click="selectCharacter(character)">
-          <div class="w-12 h-12 flex-shrink-0 overflow-hidden rounded">
+          <div class="w-12 h-12 shrink-0 overflow-hidden rounded">
             <Avatar :src="character.avatar_url" type="assistant" class="w-full h-full object-cover" />
           </div>
           <div class="flex-1 min-w-0">
             <p class="text-sm font-medium text-gray-700 truncate">{{ character.title }}</p>
             <p class="text-xs text-gray-500 truncate mt-1">{{ character.description || '暂无描述' }}</p>
           </div>
-          <el-icon v-if="currentSession.characterId === character.id" class="text-blue-500 flex-shrink-0" size="20">
+          <el-icon v-if="currentSession.characterId === character.id" class="text-blue-500 shrink-0" size="20">
             <CheckCircleFilled />
           </el-icon>
         </div>

@@ -5,7 +5,6 @@
 
 import axios, { type AxiosInstance, type AxiosRequestConfig, type AxiosResponse } from 'axios'
 import { useStorage } from '@vueuse/core'
-import { apiServiceDummy } from './ApiServiceDummy'
 import type {
     IApiService,
     StreamEvent,
@@ -19,7 +18,7 @@ import type {
     GlobalSettings,
     UploadResponse
 } from '@/types/service'
-import type { Model, McpServer } from '@/types/api'
+import type { Model, McpServer, ModelProvider } from '@/types/api'
 import type { Character, CharacterListResponse } from '@/types/character'
 import type { Session, SessionListResponse } from '@/types/session'
 import type { Message } from '@/types/message'
@@ -29,7 +28,6 @@ import type { KnowledgeBase, KBFile } from '@/stores/knowledgeBase'
 class ApiService implements IApiService {
     baseURL: string
     tokenStore: any
-    dummy: typeof apiServiceDummy
     axiosInstance: AxiosInstance
     currentAbortController: AbortController | null
     abortControllerMap: Map<string, AbortController>
@@ -37,7 +35,6 @@ class ApiService implements IApiService {
     constructor(baseURL: string = '/api/v1') {
         this.baseURL = baseURL
         this.tokenStore = useStorage('token', '')
-        this.dummy = apiServiceDummy
 
         // 创建 Axios 实例
         this.axiosInstance = axios.create({
@@ -102,7 +99,7 @@ class ApiService implements IApiService {
     }
 
     // ========== 模型管理 ==========
-    async fetchModels(): Promise<PaginatedResponse<Model>> {
+    async fetchModels(): Promise<PaginatedResponse<ModelProvider>> {
         return await this._request('/models')
     }
 
@@ -209,9 +206,6 @@ class ApiService implements IApiService {
         })
     }
 
-    async fetchTokenStatistics(sessionId: string): Promise<any> {
-        return await this._request(`/sessions/${sessionId}/tokens`)
-    }
 
     async clearSessionMessages(sessionId: string): Promise<boolean> {
         return await this._request(`/sessions/${sessionId}/messages`, { method: 'DELETE' })
@@ -509,7 +503,7 @@ class ApiService implements IApiService {
         chunkMinSize?: number
         isPublic?: boolean
     }): Promise<KnowledgeBase> {
-      
+
         return await this._request('/knowledge-bases', { method: 'POST', data: data })
     }
 
@@ -546,10 +540,10 @@ class ApiService implements IApiService {
         const params = new URLSearchParams()
         if (skip !== undefined) params.append('skip', skip.toString())
         if (limit !== undefined) params.append('limit', limit.toString())
-        
+
         const queryString = params.toString()
         const url = queryString ? `/knowledge-bases/${kbId}/files?${queryString}` : `/knowledge-bases/${kbId}/files`
-        
+
         return await this._request(url)
     }
 
