@@ -17,10 +17,10 @@
         <div class="section-title text-sm font-medium text-gray-500 mb-3">已添加的供应商</div>
         <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-8">
           <div v-for="provider in items" :key="provider.id"
-            class="provider-card group relative bg-white border border-gray-200 rounded-lg p-4 cursor-default hover:border-[var(--color-primary)] transition-all duration-200">
+            class="provider-card group relative bg-white border border-gray-200 rounded-lg p-4 cursor-default hover:border-(--color-primary) transition-all duration-200">
             <div class="flex items-start gap-3">
               <div
-                class="w-11 h-11 flex-shrink-0 flex items-center justify-center text-[var(--color-primary)] bg-gray-50 rounded-md">
+                class="w-11 h-11 shrink-0 flex items-center justify-center text-(--color-primary) bg-gray-50 rounded-md">
                 <img v-if="provider.avatarUrl" 
                      :src="provider.avatarUrl" 
                      class="w-6 h-6 object-contain" 
@@ -48,7 +48,7 @@
 
             <!-- 悬停显示的渐变遮罩和按钮 -->
             <div
-              class="absolute inset-x-0 bottom-0 h-16 bg-gradient-to-t from-white via-white/90 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none rounded-b-lg">
+              class="absolute inset-x-0 bottom-0 h-16 bg-linear-to-t from-white via-white/90 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none rounded-b-lg">
             </div>
             <div
               class="absolute inset-x-2 bottom-2 flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-auto">
@@ -70,9 +70,9 @@
         <div class="section-title text-sm font-medium text-gray-500 mb-3">可添加的供应商</div>
         <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
           <div v-for="template in templates" :key="template.id"
-            class="provider-card template-card relative border border-gray-200 bg-transparent rounded-lg p-4 cursor-pointer hover:border-[var(--color-primary)] transition-all duration-200 group">
+            class="provider-card template-card relative border border-gray-200 bg-transparent rounded-lg p-4 cursor-pointer hover:border-(--color-primary) transition-all duration-200 group">
             <div class="flex items-start gap-3">
-              <div class="w-11 h-11 flex-shrink-0 flex items-center justify-center text-gray-400 bg-gray-50 rounded-md">
+              <div class="w-11 h-11 shrink-0 flex items-center justify-center text-gray-400 bg-gray-50 rounded-md">
                 <img v-if="typeof getTemplateIcon(template) === 'string'" 
                      :src="getTemplateIcon(template)" 
                      class="w-6 h-6 object-contain" 
@@ -91,7 +91,7 @@
 
             <!-- 悬停显示的渐变遮罩和按钮 -->
             <div
-              class="absolute inset-x-0 bottom-0 h-16 bg-gradient-to-t from-white via-white/90 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none rounded-b-lg">
+              class="absolute inset-x-0 bottom-0 h-16 bg-linear-to-t from-white via-white/90 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none rounded-b-lg">
             </div>
             <div
               class="absolute inset-x-2 bottom-2 opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-auto">
