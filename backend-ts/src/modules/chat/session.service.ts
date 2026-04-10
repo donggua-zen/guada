@@ -67,6 +67,18 @@ export class SessionService {
     // 合并设置
     const mergedSettings = this.mergeSettings(character.settings, settings);
 
+    // 确定使用的模型 ID：优先使用传入的 modelId，其次使用角色的 modelId，最后使用默认对话模型
+    let finalModelId = modelId || character.modelId;
+    
+    // 如果角色和会话均未设置模型，尝试使用默认对话模型
+    if (!finalModelId) {
+      const defaultChatModelSetting = await this.globalSettingRepo.findByKey('default_chat_model_id', userId);
+      if (defaultChatModelSetting && defaultChatModelSetting.value) {
+        finalModelId = defaultChatModelSetting.value;
+      }
+      // 如果默认对话模型也未设置或已失效，则 finalModelId 保持为 null/undefined
+    }
+
     // 继承角色配置
     const sessionData = {
       userId,
@@ -74,7 +86,7 @@ export class SessionService {
       title: title || character.title,
       avatarUrl: character.avatarUrl,
       description: character.description,
-      modelId: modelId || character.modelId,
+      modelId: finalModelId,
       settings: mergedSettings,
     };
 
