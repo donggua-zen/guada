@@ -11,13 +11,16 @@ import { EmbeddingService } from './embedding.service';
 import { ChunkingService } from './chunking.service';
 import { VectorDatabase } from '../../common/vector-db/interfaces/vector-database.interface';
 import { createPaginatedResponse } from '../../common/types/pagination';
+import { UploadPathService } from '../../common/services/upload-path.service';
 
 @Injectable()
 export class KbFileService implements OnModuleInit {
   private readonly logger = new Logger(KbFileService.name);
   private static processingSemaphore: Promise<void> = Promise.resolve();
+  private kbUploadDir: string;
 
   constructor(
+    private uploadPathService: UploadPathService,
     private prisma: PrismaService,
     private kbRepo: KnowledgeBaseRepository,
     private fileRepo: KBFileRepository,
@@ -26,7 +29,10 @@ export class KbFileService implements OnModuleInit {
     private embeddingService: EmbeddingService,
     private chunkingService: ChunkingService,
     @Inject('VECTOR_DB') private vectorDb: VectorDatabase,
-  ) { }
+  ) {
+    // 获取物理路径（自动创建目录）
+    this.kbUploadDir = this.uploadPathService.getPhysicalPath('knowledge-base');
+  }
 
   async onModuleInit() {
     await this.resumePendingFileTasks();
@@ -99,17 +105,13 @@ export class KbFileService implements OnModuleInit {
 
     // 修复原始文件名编码
     const originalName = this.fixFilenameEncoding(file.originalname);
-
+    
     // 生成唯一文件名
     const fileExtension = path.extname(originalName).toLowerCase();
     const uniqueFilename = `${crypto.randomUUID()}${fileExtension}`;
-
+    
     // 保存文件到临时目录
-    const uploadDir = path.join(process.cwd(), 'data', 'uploads', 'knowledge-base');
-    if (!fs.existsSync(uploadDir)) {
-      fs.mkdirSync(uploadDir, { recursive: true });
-    }
-    const filePath = path.join(uploadDir, uniqueFilename);
+    const filePath = path.join(this.kbUploadDir, uniqueFilename);
     fs.writeFileSync(filePath, file.buffer);
 
     const fileSize = file.buffer.length;
