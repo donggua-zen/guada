@@ -15,3 +15,5 @@ backend/experiment/**
 backend/tests/verification/**
 backend/build/**
 backend/dist/**
+backend-ts/data/uploads/**
+backend-ts/data/avatars/**
