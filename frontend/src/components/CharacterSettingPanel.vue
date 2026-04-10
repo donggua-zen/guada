@@ -85,12 +85,13 @@
                             <el-form-item label="模型选择" prop="modelId">
                                 <el-select v-model="characterForm.modelId" :options="modelOptions" placeholder="请选择模型"
                                     clearable>
+
                                 </el-select>
                             </el-form-item>
 
                             <!-- 温度设置 -->
                             <el-form-item label="温度" prop="modelTemperature">
-                                <el-slider-optional v-model="characterForm.modelTemperature" :min="0" :max="1.9" 
+                                <el-slider-optional v-model="characterForm.modelTemperature" :min="0" :max="1.9"
                                     :step="0.1" show-input optional-direction="max" optional-text="Auto" />
                             </el-form-item>
 
@@ -119,26 +120,23 @@
                                 <el-slider-optional v-model="characterForm.maxMemoryLength" :min="2" :max="500"
                                     :step="1" show-input optional-direction="max" optional-text="No Limit" />
                             </el-form-item>
-                            
+
                             <!-- 禁用工具调用结果 -->
                             <el-form-item label="禁用工具调用结果" prop="skipToolCalls">
                                 <div class="flex items-center justify-between w-full">
                                     <div class="flex-1 mr-4">
                                         <div class="text-sm font-medium mb-1">工具调用结果</div>
-                                        <div class="text-xs text-gray-500">启用后，模型将跳过工具调用的执行，直接返回最终答案，节省 tokens 和响应时间</div>
+                                        <div class="text-xs text-gray-500">启用后，模型将跳过工具调用的执行，直接返回最终答案，节省 tokens 和响应时间
+                                        </div>
                                     </div>
-                                    <el-switch
-                                        v-model="characterForm.skipToolCalls"
-                                        inline-prompt
-                                        active-text="开"
-                                        inactive-text="关"
-                                    />
+                                    <el-switch v-model="characterForm.skipToolCalls" inline-prompt active-text="开"
+                                        inactive-text="关" />
                                 </div>
                             </el-form-item>
                         </el-form>
                     </div>
                 </el-tab-pane>
-                
+
                 <!-- 本地工具 -->
                 <el-tab-pane name="local_tools" label="本地工具">
                     <div class="p-3">
@@ -161,30 +159,25 @@
                         </el-form>
                     </div>
                 </el-tab-pane>
-                
+
                 <!-- MCP 工具 -->
                 <el-tab-pane name="mcp_tools" label="MCP 工具">
                     <div class="p-3">
                         <el-form label-position="top" size="large">
-                            <el-alert
-                                title="MCP 服务说明"
-                                type="info"
-                                :closable="false"
-                                class="mb-4"
-                                show-icon>
+                            <el-alert title="MCP 服务说明" type="info" :closable="false" class="mb-4" show-icon>
                                 <p class="text-sm">启用表示此角色可以使用该 MCP 服务，禁用不会影响其他角色或全局 MCP 服务</p>
                             </el-alert>
-                
+
                             <div v-if="mcpServers.length === 0" class="text-center text-gray-500 py-8">
                                 <el-icon size="48" class="mb-2">
                                     <InfoCircleOutlined />
                                 </el-icon>
                                 <div>暂无已启动的 MCP 服务器</div>
                             </div>
-                
+
                             <div v-else>
-                                <div v-for="server in mcpServers" :key="server.id" 
-                                     class="mcp-server-item p-3 border rounded mb-3">
+                                <div v-for="server in mcpServers" :key="server.id"
+                                    class="mcp-server-item p-3 border rounded mb-3">
                                     <div class="flex items-start justify-between">
                                         <div class="flex-1 mr-4">
                                             <div class="font-medium text-base mb-1">
@@ -200,18 +193,16 @@
                                             <div v-if="server.description" class="text-sm text-gray-600">
                                                 {{ server.description }}
                                             </div>
-                                            <div v-if="server.tools && Object.keys(server.tools).length > 0" 
-                                                 class="text-sm text-gray-500 mt-2">
+                                            <div v-if="server.tools && Object.keys(server.tools).length > 0"
+                                                class="text-sm text-gray-500 mt-2">
                                                 可用工具：{{ Object.keys(server.tools).length }} 个
                                             </div>
                                         </div>
-                                                        
+
                                         <!-- 启用/禁用开关 -->
-                                        <el-switch
-                                            :model-value="characterForm.enabledMcpServers.includes(server.id)"
+                                        <el-switch :model-value="characterForm.enabledMcpServers.includes(server.id)"
                                             @update:model-value="handleMcpServerToggle(server.id, $event)"
-                                            :disabled="!server.enabled"
-                                        />
+                                            :disabled="!server.enabled" />
                                     </div>
                                 </div>
                             </div>
@@ -325,7 +316,7 @@ const characterForm = reactive({
     assistantName: '',
     assistantIdentity: '',
     systemPrompt: '',
-    modelId: '',
+    modelId: null,
     memoryType: '',
     modelTemperature: null,
     modelTopP: null,
@@ -352,19 +343,7 @@ const promptRules = {
 }
 
 const modelRules = {
-    modelId: [
-        {
-            required: true, message: '请选择模型', trigger: ['change'], validator: (rule, value, callback) => {
-                // 明确检查空值情况
-                if (value !== null && value !== '' && value !== undefined) {
-                    callback();
-                } else {
-                    callback(new Error('请选择模型'));
-                }
-            }
-        },
-    ],
-
+    // 模型改为可选项，移除必填验证
 }
 
 const memoryRules = {
@@ -394,6 +373,13 @@ const modelOptions = computed(() => {
     if (!models.value.length || !providers.value.length) return []
 
     const options = []
+
+    // 添加"使用默认模型"选项
+    options.push({
+        label: '使用默认模型',
+        value: null,
+        key: 'default'
+    })
 
     providers.value?.forEach(provider => {
         // 获取该供应商下的text类型模型
@@ -439,7 +425,7 @@ watch(() => props.data, (newVal) => {
     characterForm.title = newVal.title || '';
     characterForm.description = newVal.description || '';
     characterForm.avatarUrl = newVal.avatarUrl || '';
-    characterForm.modelId = newVal.modelId || '';
+    characterForm.modelId = newVal.modelId || null;
 
     characterForm.assistantName = newVal.settings?.assistantName || '';
     characterForm.assistantIdentity = newVal.settings?.assistantIdentity || '';
@@ -585,7 +571,6 @@ const handleSave = async () => {
                 'maxMemoryLength': characterForm.maxMemoryLength,
                 'skipToolCalls': characterForm.skipToolCalls,  // 新增字段
                 // 模型
-                'modelName': findModelById(characterForm.modelId).modelName || '请选择模型',
                 'modelTemperature': characterForm.modelTemperature,
                 'modelTopP': characterForm.modelTopP,
                 'modelFrequencyPenalty': characterForm.modelFrequencyPenalty,

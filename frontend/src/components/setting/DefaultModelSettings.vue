@@ -3,6 +3,33 @@
         <div class="flex-1 overflow-hidden">
             <ScrollContainer class="h-full">
                 <div class="px-4 space-y-8">
+                    <!-- 对话设置 -->
+                    <div class="mb-8">
+                        <h3 class="text-lg mb-4 pb-2 text-gray-500">默认对话</h3>
+                        <el-form ref="chatFormRef" :model="settingsForm"
+                            label-position="left" label-width="120px" size="large">
+                            <el-form-item label="默认对话模型" prop="defaultChatModelId">
+                                <div class="flex items-center gap-2">
+                                    <el-input v-model="chatModelName" readonly placeholder="请选择模型"
+                                        style="flex: 1; cursor: pointer" @click="openModelDialog('chat')">
+                                        <template #prefix>
+                                            <OpenAI class="w-4 h-4" />
+                                        </template>
+                                    </el-input>
+                                    <el-button @click="openModelDialog('chat')" plain type="primary">
+                                        选择
+                                    </el-button>
+                                    <el-button v-if="settingsForm.defaultChatModelId"
+                                        @click="clearModelSelection('chat')" circle>
+                                        <template #icon>
+                                            <CloseOutlined />
+                                        </template>
+                                    </el-button>
+                                </div>
+                            </el-form-item>
+                        </el-form>
+                    </div>
+
                     <!-- 标题总结设置 -->
                     <div class="mb-8">
                         <h3 class="text-lg mb-4 pb-2 text-gray-500">标题总结</h3>
@@ -217,6 +244,7 @@ const isMobile = breakpoints.smaller('md') // md = 768px
 const { notify } = usePopup()
 
 // 表单引用
+const chatFormRef = ref(null)
 const titleSummaryFormRef = ref(null)
 const translationFormRef = ref(null)
 const historyCompressionFormRef = ref(null)
@@ -225,7 +253,7 @@ const historyCompressionFormRef = ref(null)
 const models = ref([])
 const providers = ref([])
 
-// 当前打开的对话框类型 ('title' | 'translation' | 'compression')
+// 当前打开的对话框类型 ('chat' | 'title' | 'translation' | 'compression')
 const currentDialogType = ref('')
 
 // 模型选择对话框相关
@@ -235,6 +263,7 @@ const tempModelId = ref(null) // 临时选中的模型 ID
 
 // 表单数据
 const settingsForm = reactive({
+    defaultChatModelId: null,
     defaultTitleSummaryModelId: null,
     defaultTitleSummaryPrompt: '',
     defaultTranslationModelId: null,
@@ -270,6 +299,10 @@ const getModelNameById = (modelId) => {
 }
 
 // 计算各个模型输入框的显示值
+const chatModelName = computed(() => 
+    getModelNameById(settingsForm.defaultChatModelId)
+)
+
 const titleSummaryModelName = computed(() => 
     getModelNameById(settingsForm.defaultTitleSummaryModelId)
 )
@@ -289,6 +322,9 @@ const openModelDialog = (type) => {
     
     // 根据类型设置当前选中的模型
     switch (type) {
+        case 'chat':
+            tempModelId.value = settingsForm.defaultChatModelId
+            break
         case 'title':
             tempModelId.value = settingsForm.defaultTitleSummaryModelId
             break
@@ -317,6 +353,9 @@ const applyModelSelection = () => {
     
     // 根据类型更新对应的模型 ID
     switch (currentDialogType.value) {
+        case 'chat':
+            settingsForm.defaultChatModelId = tempModelId.value
+            break
         case 'title':
             settingsForm.defaultTitleSummaryModelId = tempModelId.value
             break
@@ -335,6 +374,9 @@ const applyModelSelection = () => {
 // 清除模型选择
 const clearModelSelection = (type) => {
     switch (type) {
+        case 'chat':
+            settingsForm.defaultChatModelId = null
+            break
         case 'title':
             settingsForm.defaultTitleSummaryModelId = null
             break
@@ -396,6 +438,7 @@ const loadGlobalSettings = async () => {
     try {
         const response = await apiService.fetchSettings()
 
+        settingsForm.defaultChatModelId = response.defaultChatModelId
         settingsForm.defaultTitleSummaryModelId = response.defaultTitleSummaryModelId
         settingsForm.defaultTitleSummaryPrompt = response.defaultTitleSummaryPrompt
         settingsForm.defaultTranslationModelId = response.defaultTranslationModelId
@@ -413,6 +456,7 @@ const handleSave = async () => {
     try {
         // 并行验证所有表单
         const formValidates = [
+            chatFormRef.value?.validate(),
             titleSummaryFormRef.value?.validate(),
             translationFormRef.value?.validate(),
             historyCompressionFormRef.value?.validate(),
