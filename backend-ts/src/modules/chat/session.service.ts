@@ -69,7 +69,7 @@ export class SessionService {
 
     // 确定使用的模型 ID：优先使用传入的 modelId，其次使用角色的 modelId，最后使用默认对话模型
     let finalModelId = modelId || character.modelId;
-    
+
     // 如果角色和会话均未设置模型，尝试使用默认对话模型
     if (!finalModelId) {
       const defaultChatModelSetting = await this.globalSettingRepo.findByKey('default_chat_model_id', userId);
@@ -227,15 +227,15 @@ export class SessionService {
       // 调用 LLM 生成标题
       // 注意：使用 model.id 或 model.code 作为 API 请求的模型标识，而非 name
       const response = await this.llmService.completions({
-        model: model.modelName, 
+        model: model.modelName,
         messages: [{ role: 'user', content: prompt }],
         temperature: 0.3, // 较低的温度使输出更稳定
-        max_tokens: 50, // 限制输出长度
-        thinking: false,
+        maxTokens: 50, // 限制输出长度
+        thinkingEnabled: false,
         stream: false,
         modelConfig: model,
       });
-      
+
       this.logger.log(`Title generation response for session ${sessionId}:`, JSON.stringify(response));
 
       // 提取生成的标题
