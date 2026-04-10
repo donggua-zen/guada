@@ -47,6 +47,7 @@ export class MessageService {
 
     /**
      * 添加新消息（支持多版本）
+     * 使用事务确保所有数据库操作的原子性
      */
     async addMessage(
         sessionId: string,
@@ -77,19 +78,46 @@ export class MessageService {
                 throw new HttpException('Message does not belong to this session', HttpStatus.FORBIDDEN);
             }
 
-            // 完全删除旧消息及其所有内容版本
-            await this.deleteMessageInternal(replaceMessageId);
+            // 生成新的轮次 ID
+            turnsId = uuidv4();
 
-            // 创建全新的消息（而不是创建新版本）
-            turnsId = uuidv4();  // 生成新的轮次 ID
-            const newMessage = await this.messageRepo.create({
-                sessionId,
-                role,
-                parentId: existingMessage.parentId,  // 继承原消息的 parent_id
-                currentTurnsId: turnsId,  // 设置当前轮次 ID
-            });
+            // 使用事务确保删除和创建的原子性
+            try {
+                const prisma = this.contentRepo.getPrismaClient();
+                await prisma.$transaction(async (tx) => {
+                    // 1. 解绑旧消息关联的文件（将 messageId 设置为 null）
+                    await tx.file.updateMany({
+                        where: { messageId: replaceMessageId },
+                        data: { messageId: null },
+                    });
 
-            messageId = newMessage.id;
+                    // 2. 删除旧消息的所有内容版本
+                    await tx.messageContent.deleteMany({
+                        where: { messageId: replaceMessageId },
+                    });
+
+                    // 3. 删除旧消息本身
+                    await tx.message.delete({
+                        where: { id: replaceMessageId },
+                    });
+
+                    // 4. 创建全新的消息（而不是创建新版本）
+                    const newMessage = await tx.message.create({
+                        data: {
+                            sessionId,
+                            role,
+                            parentId: existingMessage.parentId,  // 继承原消息的 parent_id
+                            currentTurnsId: turnsId,  // 设置当前轮次 ID
+                        },
+                    });
+
+                    messageId = newMessage.id;
+                });
+            } catch (error) {
+                const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+                this.logger.error(`Transaction failed when replacing message: ${errorMessage}`);
+                throw new HttpException('Failed to replace message', HttpStatus.INTERNAL_SERVER_ERROR);
+            }
         } else {
             // 创建新消息
             turnsId = uuidv4();  // 生成轮次 ID
@@ -105,28 +133,51 @@ export class MessageService {
         // 处理知识库引用逻辑
         let additionalKwargs: any = null;
         if (knowledgeBaseIds && knowledgeBaseIds.length > 0) {
-            const kbs = await Promise.all(
-                knowledgeBaseIds.map(id => this.kbRepo.findById(id))
-            );
-            const kbMetadata = kbs.filter(kb => kb).map(kb => ({
-                id: kb!.id,
-                name: kb!.name,
-                description: kb!.description,
+            // 使用批量查询提升效率（替代多次单独查询）
+            const kbs = await this.kbRepo.findByIds(knowledgeBaseIds);
+            const kbMetadata = kbs.map(kb => ({
+                id: kb.id,
+                name: kb.name,
+                description: kb.description,
             }));
             additionalKwargs = { referencedKbs: kbMetadata };
         }
 
-        // 创建消息内容
-        await this.contentRepo.create({
-            messageId,
-            turnsId,  // 使用相同的 turnsId
-            role,  // 添加 role
-            content,
-            additionalKwargs, // 存储知识库引用信息
-        });
+        // 使用事务确保消息内容和文件更新的原子性
+        try {
+            const prisma = this.contentRepo.getPrismaClient();
+            await prisma.$transaction(async (tx) => {
+                // 1. 创建消息内容
+                await tx.messageContent.create({
+                    data: {
+                        messageId,
+                        turnsId,  // 使用相同的 turnsId
+                        role,  // 添加 role
+                        content,
+                        additionalKwargs, // 存储知识库引用信息
+                    },
+                });
 
-        // 修改文件
-        await this.fileRepo.updateMany(files, { messageId });
+                // 2. 更新文件关联（如果有文件）
+                if (files && files.length > 0) {
+                    await tx.file.updateMany({
+                        where: { id: { in: files } },
+                        data: { messageId },
+                    });
+                }
+            });
+        } catch (error) {
+            const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+            this.logger.error(`Transaction failed when creating message content: ${errorMessage}`);
+            // 如果事务失败，需要清理已创建的消息记录
+            try {
+                await this.messageRepo.delete(messageId);
+            } catch (cleanupError) {
+                const cleanupErrorMessage = cleanupError instanceof Error ? cleanupError.message : 'Unknown error';
+                this.logger.error(`Failed to cleanup message after transaction failure: ${cleanupErrorMessage}`);
+            }
+            throw new HttpException('Failed to create message content', HttpStatus.INTERNAL_SERVER_ERROR);
+        }
 
         return await this.messageRepo.findById(messageId);
     }

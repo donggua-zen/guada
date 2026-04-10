@@ -12,6 +12,19 @@ export class KnowledgeBaseRepository {
     });
   }
 
+  /**
+   * 批量查询知识库（使用 in 查询提升效率）
+   */
+  async findByIds(ids: string[]) {
+    if (!ids || ids.length === 0) {
+      return [];
+    }
+    return this.prisma.knowledgeBase.findMany({
+      where: { id: { in: ids } },
+      include: { embeddingModel: true },
+    });
+  }
+
   async findByUserId(userId: string, skip: number = 0, limit: number = 20) {
     const [items, total] = await Promise.all([
       this.prisma.knowledgeBase.findMany({
