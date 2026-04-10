@@ -12,7 +12,7 @@
 
 | 模块 | 接口数 | 缺失AuthGuard | 硬编码UserID | 缺少归属权验证 | 风险等级 |
 |------|--------|--------------|-------------|--------------|---------|
-| ✅ Knowledge Base | 15 | 0 | 0 | 0 | 安全 |
+| Knowledge Base | 15 | 0 | 0 | 0 | 安全 |
 | ❌ Models | 7 | 7 | 7 | 0 | 🔴 高危 |
 | ❌ Characters | 6 | 6 | 6 | 0* | 🔴 高危 |
 | ❌ Sessions | 6 | 6 | 6 | 1 | 🔴 高危 |
@@ -26,7 +26,7 @@
 
 ## 🔧 已完成的修复
 
-### 1. ✅ Models Module（模型管理模块）
+### 1. Models Module（模型管理模块）
 
 **修复文件**:
 - `src/modules/models/models.controller.ts`
@@ -77,14 +77,14 @@ async updateModel(modelId: string, data: any, userId: string) {
 ```
 
 **修复的接口** (7个):
-- ✅ `GET /api/v1/models`
-- ✅ `POST /api/v1/models`
-- ✅ `PUT /api/v1/models/:id`
-- ✅ `DELETE /api/v1/models/:id`
-- ✅ `POST /api/v1/providers`
-- ✅ `PUT /api/v1/providers/:id`
-- ✅ `DELETE /api/v1/providers/:id`
-- ✅ `GET /api/v1/providers/:id/remote_models`
+- `GET /api/v1/models`
+- `POST /api/v1/models`
+- `PUT /api/v1/models/:id`
+- `DELETE /api/v1/models/:id`
+- `POST /api/v1/providers`
+- `PUT /api/v1/providers/:id`
+- `DELETE /api/v1/providers/:id`
+- `GET /api/v1/providers/:id/remote_models`
 
 ---
 
@@ -417,7 +417,7 @@ export class CreateUserDto {
 ## 📋 修复优先级
 
 ### P0 - 立即修复（严重安全漏洞）
-1. ✅ Models Module - 已完成
+1. Models Module - 已完成
 2. ❌ Users Module - 密码重置漏洞
 3. ❌ Sessions Module - 会话泄露风险
 
@@ -430,7 +430,7 @@ export class CreateUserDto {
 
 ---
 
-## ✅ 验证清单
+## 验证清单
 
 修复完成后，请执行以下测试：
 
@@ -446,8 +446,8 @@ export class CreateUserDto {
 ## 📝 总结
 
 ### 已完成
-- ✅ Knowledge Base Module（15个接口）- 完全合规
-- ✅ Models Module（7个接口）- 已修复
+- Knowledge Base Module（15个接口）- 完全合规
+- Models Module（7个接口）- 已修复
 
 ### 待修复
 - ❌ Characters Module（6个接口）- 需要应用 AuthGuard

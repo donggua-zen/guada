@@ -3,6 +3,7 @@ import { IToolProvider, ToolCallRequest, ToolCallResponse } from './interfaces/t
 import { KnowledgeBaseToolProvider } from './providers/knowledge-base-tool.provider'; // 暂时禁用
 import { MemoryToolProvider } from './providers/memory-tool.provider';
 import { MCPToolProvider } from './providers/mcp-tool.provider';
+import { TimeToolProvider } from './providers/time-tool.provider';
 
 @Injectable()
 export class ToolOrchestrator {
@@ -10,13 +11,15 @@ export class ToolOrchestrator {
     private providers = new Map<string, IToolProvider>();
 
     constructor(
-        kbProvider: KnowledgeBaseToolProvider, // 暂时禁用
+        kbProvider: KnowledgeBaseToolProvider,
         memoryProvider: MemoryToolProvider,
         mcpProvider: MCPToolProvider,
+        timeProvider: TimeToolProvider,
     ) {
-        this.addProvider(kbProvider); // 暂时禁用
+        this.addProvider(kbProvider);
         this.addProvider(memoryProvider);
         this.addProvider(mcpProvider);
+        this.addProvider(timeProvider);
     }
 
     addProvider(provider: IToolProvider) {

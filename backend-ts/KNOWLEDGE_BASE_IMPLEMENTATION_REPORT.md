@@ -108,7 +108,7 @@
 
 ### 2.1 已补齐的功能模块
 
-#### ✅ 数据模型层 (Prisma Schema)
+#### 数据模型层 (Prisma Schema)
 - **KBFile 模型**
   - 文件基本信息（名称、大小、类型、扩展名）
   - 内容哈希（去重检测）
@@ -127,7 +127,7 @@
 - **KnowledgeBase 模型扩展**
   - 添加 files 关联关系
 
-#### ✅ Repository 层
+#### Repository 层
 - **KnowledgeBaseRepository**（扩展）
   - `findById()` - 查询详情
   - `findByUserId()` - 分页查询用户知识库
@@ -155,7 +155,7 @@
 - **ModelRepository**（扩展）
   - `findById()` - 查询模型详情（含 provider）
 
-#### ✅ Service 层
+#### Service 层
 - **FileParserService**（完善）
   - `parseFileFromPath()` - 根据文件路径自动识别格式并解析
   - 支持格式：PDF, DOCX, TXT, MD, 代码文件等
@@ -192,7 +192,7 @@
   - `deleteFileAndChunks()` - 删除文件及所有分块
   - **并发控制**：使用信号量确保文件依次处理
 
-#### ✅ Controller 层
+#### Controller 层
 - **KnowledgeBasesController**（新增）
   - `POST /api/v1/knowledge-bases` - 创建知识库
   - `GET /api/v1/knowledge-bases` - 查询列表（分页）
@@ -214,12 +214,12 @@
   - `POST /api/v1/knowledge-bases/:kbId/search` - 混合搜索
   - `GET /api/v1/knowledge-bases/:kbId/search/test` - 测试搜索
 
-#### ✅ DTOs（数据传输对象）
+#### DTOs（数据传输对象）
 - **CreateKnowledgeBaseDto** - 创建知识库请求验证
 - **UpdateKnowledgeBaseDto** - 更新知识库请求验证
 - **KnowledgeSearchDto** - 搜索请求验证
 
-#### ✅ Module 整合
+#### Module 整合
 - **KnowledgeBaseModule**
   - 注册所有 Controllers
   - 注册所有 Providers
@@ -234,19 +234,19 @@
 
 | 功能模块 | Python 后端 | TypeScript 后端 | 状态 |
 |---------|------------|----------------|------|
-| **知识库 CRUD** | ✅ | ✅ | 完整实现 |
-| **文件上传** | ✅ | ✅ | 完整实现 |
-| **异步后台处理** | ✅ | ✅ | 完整实现 |
-| **进度追踪** | ✅ | ✅ | 完整实现 |
-| **批量状态查询** | ✅ | ✅ | 完整实现 |
-| **文件删除** | ✅ | ✅ | 完整实现 |
-| **重新处理** | ✅ | ✅ | 完整实现 |
-| **查看分块** | ✅ | ✅ | 完整实现 |
-| **混合搜索** | ✅ | ✅ | 完整实现 |
-| **权限验证** | ✅ | ⚠️ | 待集成 Auth Guard |
-| **并发控制** | ✅ | ✅ | 完整实现 |
-| **服务重启恢复** | ✅ | ✅ | 完整实现 |
-| **向量库清理** | ✅ | ✅ | 完整实现 |
+| **知识库 CRUD** | | | 完整实现 |
+| **文件上传** | | | 完整实现 |
+| **异步后台处理** | | | 完整实现 |
+| **进度追踪** | | | 完整实现 |
+| **批量状态查询** | | | 完整实现 |
+| **文件删除** | | | 完整实现 |
+| **重新处理** | | | 完整实现 |
+| **查看分块** | | | 完整实现 |
+| **混合搜索** | | | 完整实现 |
+| **权限验证** | | ⚠️ | 待集成 Auth Guard |
+| **并发控制** | | | 完整实现 |
+| **服务重启恢复** | | | 完整实现 |
+| **向量库清理** | | | 完整实现 |
 
 ---
 
@@ -383,7 +383,7 @@ curl -X POST http://localhost:3000/api/v1/knowledge-bases/kb-123/search \
 
 ## 七、总结
 
-✅ **完整性**：TypeScript 后端已完整实现了 Python 后端的所有核心功能，包括：
+**完整性**：TypeScript 后端已完整实现了 Python 后端的所有核心功能，包括：
 - 知识库 CRUD
 - 文件上传与异步处理
 - 进度追踪与状态管理
@@ -392,9 +392,9 @@ curl -X POST http://localhost:3000/api/v1/knowledge-bases/kb-123/search \
 - 并发控制
 - 服务重启恢复
 
-✅ **一致性**：API 接口、数据模型、业务逻辑与 Python 后端保持高度一致，前端可以无缝切换。
+**一致性**：API 接口、数据模型、业务逻辑与 Python 后端保持高度一致，前端可以无缝切换。
 
-✅ **可扩展性**：模块化设计便于后续功能扩展和维护。
+**可扩展性**：模块化设计便于后续功能扩展和维护。
 
 ⚠️ **下一步工作**：
 1. 集成 JWT 认证（替换硬编码的用户 ID）

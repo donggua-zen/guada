@@ -56,6 +56,7 @@ export interface ToolParameterProperty {
     properties?: Record<string, ToolParameterProperty>;
     required?: string[];
     items?: ToolParameterProperty;
+    default?: any;
 }
 
 /**

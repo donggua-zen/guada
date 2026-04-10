@@ -5,6 +5,7 @@ import { SessionRepository } from '../../common/database/session.repository';
 import { KnowledgeBaseRepository } from '../../common/database/knowledge-base.repository';
 import { createPaginatedResponse } from '../../common/types/pagination';
 import { v4 as uuidv4 } from 'uuid';
+import { FileRepository } from '../../common/database/file.repository';
 
 @Injectable()
 export class MessageService {
@@ -15,6 +16,7 @@ export class MessageService {
         private contentRepo: MessageContentRepository,
         private sessionRepo: SessionRepository,
         private kbRepo: KnowledgeBaseRepository,
+        private fileRepo: FileRepository,
     ) { }
 
     /**
@@ -27,7 +29,7 @@ export class MessageService {
             throw new HttpException('Session not found', HttpStatus.NOT_FOUND);
         }
 
-        const messages = await this.messageRepo.findBySessionId(sessionId);
+        const messages = await this.messageRepo.findBySessionId(sessionId, { withContents: true, withFiles: true });
 
         // 格式化返回数据
         const formattedMessages = messages.map(msg => ({
@@ -63,7 +65,7 @@ export class MessageService {
         let messageId: string;
         let turnsId: string;
 
-        // ✅ 如果是替换模式：完全删除旧消息，然后创建新消息（与 Python 后端保持一致）
+        // 如果是替换模式：完全删除旧消息，然后创建新消息（与 Python 后端保持一致）
         if (replaceMessageId) {
             const existingMessage = await this.messageRepo.findById(replaceMessageId);
             if (!existingMessage) {
@@ -75,27 +77,27 @@ export class MessageService {
                 throw new HttpException('Message does not belong to this session', HttpStatus.FORBIDDEN);
             }
 
-            // ✅ 完全删除旧消息及其所有内容版本
+            // 完全删除旧消息及其所有内容版本
             await this.deleteMessageInternal(replaceMessageId);
 
-            // ✅ 创建全新的消息（而不是创建新版本）
-            turnsId = uuidv4();  // ✅ 生成新的轮次 ID
+            // 创建全新的消息（而不是创建新版本）
+            turnsId = uuidv4();  // 生成新的轮次 ID
             const newMessage = await this.messageRepo.create({
                 sessionId,
                 role,
                 parentId: existingMessage.parentId,  // 继承原消息的 parent_id
-                currentTurnsId: turnsId,  // ✅ 设置当前轮次 ID
+                currentTurnsId: turnsId,  // 设置当前轮次 ID
             });
 
             messageId = newMessage.id;
         } else {
             // 创建新消息
-            turnsId = uuidv4();  // ✅ 生成轮次 ID
+            turnsId = uuidv4();  // 生成轮次 ID
             const message = await this.messageRepo.create({
                 sessionId,
                 role,
                 parentId: undefined,
-                currentTurnsId: turnsId,  // ✅ 设置当前轮次 ID
+                currentTurnsId: turnsId,  // 设置当前轮次 ID
             });
             messageId = message.id;
         }
@@ -117,19 +119,16 @@ export class MessageService {
         // 创建消息内容
         await this.contentRepo.create({
             messageId,
-            turnsId,  // ✅ 使用相同的 turnsId
-            role,  // ✅ 添加 role
+            turnsId,  // 使用相同的 turnsId
+            role,  // 添加 role
             content,
-            additionalKwargs, // ✅ 存储知识库引用信息
+            additionalKwargs, // 存储知识库引用信息
         });
 
-        let message = await this.messageRepo.findById(messageId);
-        this.logger.log(message);
-        message.contents.forEach(content => {
-            content.metaData = content.metaData || null;
-            content.additionalKwargs = content.additionalKwargs || null;
-        });
-        return message;
+        // 修改文件
+        await this.fileRepo.updateMany(files, { messageId });
+
+        return await this.messageRepo.findById(messageId);
     }
 
     /**
@@ -156,7 +155,7 @@ export class MessageService {
 
         // 定义 Message 表的字段
         const messageTableFields = ['role', 'currentTurnsId'];
-        
+
         // 定义 MessageContent 表的字段
         const contentTableFields = ['content', 'reasoningContent', 'metaData', 'additionalKwargs'];
 
@@ -181,8 +180,8 @@ export class MessageService {
         // 更新 MessageContent 表字段（更新当前内容版本）
         if (Object.keys(contentFields).length > 0) {
             // 获取当前内容版本（与 Python 后端 message.contents[-1] 一致）
-            const currentContent = message.contents && message.contents.length > 0 
-                ? message.contents[message.contents.length - 1] 
+            const currentContent = message.contents && message.contents.length > 0
+                ? message.contents[message.contents.length - 1]
                 : null;
 
             if (!currentContent) {
@@ -233,7 +232,7 @@ export class MessageService {
         // 执行删除
         await this.deleteMessageInternal(messageId);
 
-        // ✅ 级联删除：如果删除的是用户消息，同步删除其关联的 AI 回复（与 Python 后端一致）
+        // 级联删除：如果删除的是用户消息，同步删除其关联的 AI 回复（与 Python 后端一致）
         if (message.role === 'user') {
             await this.messageRepo.deleteByParentId(messageId);
         }
@@ -275,7 +274,7 @@ export class MessageService {
             throw new HttpException('Content does not belong to this message', HttpStatus.FORBIDDEN);
         }
 
-        // ✅ Python 后端通过查询最后一个 content 来获取当前内容，不需要单独设置
+        // Python 后端通过查询最后一个 content 来获取当前内容，不需要单独设置
         return { success: true };
     }
 

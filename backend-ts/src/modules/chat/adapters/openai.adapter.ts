@@ -80,17 +80,37 @@ export class OpenAIAdapter implements LLMAdapter {
         // 合并基础参数与 extraBody
         Object.assign(requestParams, params.extraBody || {});
 
-        // 确保标准参数优先级最高
-        if (params.temperature !== undefined) requestParams.temperature = params.temperature;
-        if (params.topP !== undefined) requestParams.top_p = params.topP;
-        if (params.frequencyPenalty !== undefined) requestParams.frequency_penalty = params.frequencyPenalty;
-        if (params.maxTokens !== undefined) requestParams.max_tokens = params.maxTokens;
+        // 确保标准参数优先级最高（只添加非 undefined 的值）
+        if (params.temperature !== undefined && params.temperature !== null) {
+            requestParams.temperature = params.temperature;
+        }
+        if (params.topP !== undefined && params.topP !== null) {
+            requestParams.top_p = params.topP;
+        }
+        if (params.frequencyPenalty !== undefined && params.frequencyPenalty !== null) {
+            requestParams.frequency_penalty = params.frequencyPenalty;
+        }
+        if (params.maxTokens !== undefined && params.maxTokens !== null) {
+            requestParams.max_tokens = params.maxTokens;
+        }
 
         // 转换并添加工具定义
         if (params.tools?.length) {
             requestParams.tools = this.convertTools(params.tools);
             requestParams.tool_choice = 'auto';
         }
+
+        // 调试日志：记录最终请求参数（隐藏敏感信息）
+        this.logger.debug(`LLM Request params for model ${params.model}:`, {
+            model: requestParams.model,
+            messages_count: requestParams.messages.length,
+            stream: requestParams.stream,
+            temperature: requestParams.temperature,
+            top_p: requestParams.top_p,
+            max_tokens: requestParams.max_tokens,
+            tools_count: requestParams.tools?.length || 0,
+            has_thinking_enabled: 'thinking_enabled' in requestParams || 'thinking' in requestParams || 'enable_thinking' in requestParams || 'reasoning_effort' in requestParams,
+        });
 
         return requestParams;
     }
@@ -183,7 +203,17 @@ export class OpenAIAdapter implements LLMAdapter {
 
     private handleError(error: any, isStream: boolean) {
         this.logger.error(`LLM API error (${isStream ? 'stream' : 'non-stream'}):`, error);
+
+        // 记录详细的错误信息
         if (error instanceof APIError) {
+            this.logger.error(`API Error Details:`, {
+                status: error.status,
+                message: error.message,
+                code: error.code,
+                param: error.param,
+                type: error.type,
+                headers: error.headers,
+            });
             throw new Error(`LLM API Error: ${error.status} - ${error.message}`);
         }
         if (error.name === 'AbortError') throw new Error('LLM request aborted');
