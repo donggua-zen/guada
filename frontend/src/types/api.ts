@@ -13,6 +13,7 @@ import type { Message } from './message'
 export interface Model {
     id: string
     modelName: string
+    modelType: string
     providerId: string
     providerName?: string
     isActive: boolean
@@ -40,6 +41,7 @@ export interface ModelProvider {
     attributes?: any
     createdAt?: string
     updatedAt?: string
+    models?: Model[]
 }
 
 /**

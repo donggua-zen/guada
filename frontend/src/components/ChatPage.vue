@@ -8,7 +8,7 @@
       </template>
       <template v-else>
         <div
-          class="h-full w-full flex-1 flex items-center justify-center bg-[var(--color-conversation-bg)] border-r border-[var(--color-conversation-border)]">
+          class="h-full w-full flex-1 flex items-center justify-center bg-(--color-conversation-bg) border-r border-(--color-conversation-border)">
           <el-empty description="请先登录" />
         </div>
       </template>
@@ -17,14 +17,7 @@
       <!-- 主体内容 -->
       <template v-if="sessions.length > 0 && currentSession">
         <ChatPanel ref="chatPanelRef" v-model:session="currentSession" v-model:sidebar-visible="sidebarVisible"
-          @openSettings="handleOpenSettings" @save-settings="handleSaveSessionSettings" />
-        <el-dialog v-model="sessionSettingsModalVisible" :append-to-body="true" style="width: 600px;max-width: 90vw;"
-          title="对话设置">
-          <div class="max-h-[80vh] overflow-y-auto">
-            <session-setting-panel :data="currentSession" @update:data="updateSession" :simple="true"
-              :tab="currentTabValue" />
-          </div>
-        </el-dialog>
+          @save-settings="handleSaveSessionSettings" />
       </template>
       <template v-else>
         <div class="h-full flex-1 flex items-center justify-center">
@@ -56,7 +49,6 @@ import { useBreakpoints, breakpointsTailwind } from '@vueuse/core'
 const breakpoints = useBreakpoints(breakpointsTailwind)
 const isMobile = breakpoints.smaller('md') // md = 768px
 
-const SessionSettingPanel = defineAsyncComponent(() => import("@/components/SessionSettingPanel.vue"));
 const ChatPanel = defineAsyncComponent(() => import("@/components/ChatPanel.vue"));
 const CreateSessionChatPanel = defineAsyncComponent(() => import("@/components/CreateSessionChatPanel.vue"));
 
@@ -218,10 +210,10 @@ const loadSessions = async () => {
 /**
  * 打开设置面板，设置为基本设置标签页
  */
-const handleOpenSettings = () => {
-  currentTabValue.value = 'basic';
-  sessionSettingsModalVisible.value = true;
-};
+// const handleOpenSettings = () => {
+//   currentTabValue.value = 'basic';
+//   sessionSettingsModalVisible.value = true;
+// };
 
 /**
  * 创建新会话

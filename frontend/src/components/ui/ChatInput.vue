@@ -1,6 +1,6 @@
 <template>
     <div class="w-full flex flex-col items-center">
-        <div class="p-[16px_12px_10px_12px] transition-all duration-300 min-h-[60px] w-full bg-white dark:bg-[#1e1e1e]"
+        <div class="p-[16px_12px_10px_12px] transition-all duration-300 min-h-15 w-full bg-white dark:bg-[#1e1e1e]"
             :class="styleClass">
             <!-- 文件列表显示区域 -->
             <div class="file-list flex flex-wrap gap-2 mb-3" v-if="uploadFiles.length > 0">
@@ -51,7 +51,7 @@
                     <el-button @click="openModelDialog" plain type="primary"
                         class="model-selector-btn overflow-hidden flex items-center justify-center">
                         <div class="flex items-center gap-1.5" style="height:24px">
-                            <OpenAI class="w-4 h-4 flex-shrink-0 text-[var(--color-primary)]" />
+                            <OpenAI class="w-4 h-4 shrink-0 text-(--color-primary)" />
                             <span class="whitespace-nowrap text-sm font-medium"
                                 :style="{ display: isMobile ? 'none' : 'inline-flex' }">{{ currentModelName }}</span>
                             <el-icon class="text-xs opacity-60">
@@ -117,7 +117,7 @@
                                             <div class="flex items-center gap-2 mb-1">
                                                 <div class="font-medium text-sm truncate">{{ model.modelName }}</div>
                                                 <!-- 特性标签 -->
-                                                <div class="flex-shrink-0 flex gap-1">
+                                                <div class="shrink-0 flex gap-1">
                                                     <el-tag v-if="model.features?.includes('tools')" size="small"
                                                         type="info" class="h-4 text-[10px] px-1">
                                                         工具
@@ -136,7 +136,7 @@
                                                 {{ model.description }}
                                             </div>
                                         </div>
-                                        <el-icon v-if="tempModelId === model.id" class="text-blue-500 flex-shrink-0"
+                                        <el-icon v-if="tempModelId === model.id" class="text-blue-500 shrink-0"
                                             size="20">
                                             <CheckCircleFilled />
                                         </el-icon>
@@ -959,7 +959,6 @@ onMounted(() => {
     transition: all 0.2s;
 }
 
-.left-tools .tool-btn {}
 
 .right-tools .tool-btn {
     padding: 0 5px;

@@ -4,7 +4,7 @@
         <!-- 触发按钮 -->
         <el-button @click="openDialog" plain type="primary" class="w-full flex items-center justify-between">
             <div class="flex items-center gap-2">
-                <el-icon class="text-[var(--color-primary)]">
+                <el-icon class="text-(--color-primary)">
                     <ScienceOutlined />
                 </el-icon>
                 <span class="text-sm">{{ selectedModelName || '请选择嵌入模型' }}</span>
@@ -44,13 +44,14 @@
                                 <div class="flex items-start justify-between gap-2">
                                     <div class="flex-1 min-w-0">
                                         <div class="font-medium text-sm truncate text-gray-800 dark:text-gray-200">
-                                            {{ model.model_name }}
+                                            {{ model.modelName }}
                                         </div>
-                                        <div v-if="model.description" class="text-xs text-gray-500 dark:text-gray-400 truncate mt-0.5">
+                                        <div v-if="model.description"
+                                            class="text-xs text-gray-500 dark:text-gray-400 truncate mt-0.5">
                                             {{ model.description }}
                                         </div>
                                     </div>
-                                    <el-icon v-if="tempSelectedModelId === model.id" class="text-blue-500 flex-shrink-0"
+                                    <el-icon v-if="tempSelectedModelId === model.id" class="text-blue-500 shrink-0"
                                         size="20">
                                         <CheckCircleFilled />
                                     </el-icon>
@@ -88,10 +89,10 @@ import { useBreakpoints, breakpointsTailwind } from '@vueuse/core'
 
 interface Model {
     id: string
-    model_name: string
+    modelName: string
     description?: string
-    provider_id: string
-    model_type?: string
+    providerId: string
+    modelType?: string
     features?: string[]
 }
 
@@ -125,14 +126,14 @@ const loadModels = async () => {
     try {
         const { apiService } = await import('@/services/ApiService')
         const response = await apiService.fetchModels()
-        
+
         // 只保留 embedding 类型的模型
         response.items.forEach(provider => {
-            const embeddingModels = provider.models.filter(
-                (m: Model) => m.model_type === 'embedding'
+            const embeddingModels = provider.models && provider.models.filter(
+                (m) => m.modelType === 'embedding'
             )
-            
-            if (embeddingModels.length > 0) {
+
+            if (embeddingModels && embeddingModels.length > 0) {
                 providers.value.push({
                     id: provider.id,
                     name: provider.name
@@ -140,7 +141,7 @@ const loadModels = async () => {
                 models.value.push(...embeddingModels)
             }
         })
-        
+
         // 初始化选中状态
         if (props.modelId) {
             tempSelectedModelId.value = props.modelId
@@ -154,23 +155,23 @@ const loadModels = async () => {
 // 过滤后的模型列表（支持搜索）
 const filteredModels = computed(() => {
     if (!searchText.value) return models.value
-    
+
     const search = searchText.value.toLowerCase()
     return models.value.filter(model =>
-        model.model_name?.toLowerCase().includes(search) ||
+        model.modelName?.toLowerCase().includes(search) ||
         model.description?.toLowerCase().includes(search) ||
-        providers.value.find(p => p.id === model.provider_id)?.name.toLowerCase().includes(search)
+        providers.value.find(p => p.id === model.providerId)?.name.toLowerCase().includes(search)
     )
 })
 
 // 按供应商分组的过滤后模型列表
 const filteredProviders = computed(() => {
     if (!models.value.length || !providers.value.length) return []
-    
+
     const filtered = filteredModels.value
     return providers.value.map(provider => ({
         ...provider,
-        models: filtered.filter(model => model.provider_id === provider.id)
+        models: filtered.filter(model => model.providerId === provider.id)
     })).filter(provider => provider.models.length > 0)
 })
 
@@ -198,22 +199,22 @@ const confirmSelection = () => {
         ElMessage.warning('请选择一个模型')
         return
     }
-    
+
     const selectedModel = models.value.find(m => m.id === tempSelectedModelId.value)
     if (selectedModel) {
         // 直接返回模型的 ID，而不是 model_name
         emit('update:modelId', selectedModel.id)
-        ElMessage.success(`已选择：${selectedModel.model_name}`)
+        ElMessage.success(`已选择：${selectedModel.modelName}`)
     }
-    
+
     dialogVisible.value = false
 }
 
 // 当前选中的模型名称
 const selectedModelName = computed(() => {
     if (!props.modelId) return ''
-    const model = models.value.find(m => m.model_name === props.modelId)
-    return model ? model.model_name.split('/').pop() : props.modelId
+    const model = models.value.find(m => m.modelName === props.modelId)
+    return model ? model.modelName.split('/').pop() : props.modelId
 })
 
 // 生命周期

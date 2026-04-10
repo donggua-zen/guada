@@ -201,7 +201,7 @@ export interface ResetPasswordRequest {
  */
 export interface IApiService {
     // 模型管理
-    fetchModels(): Promise<PaginatedResponse<Model>>
+    fetchModels(): Promise<PaginatedResponse<ModelProvider>>
     fetchRemoteModels(providerId: string): Promise<PaginatedResponse<Model>>
     createModel(data: any): Promise<Model>
     updateModel(modelId: string, data: any): Promise<Model>
@@ -232,7 +232,6 @@ export interface IApiService {
         files?: any[],
         replaceMessageId?: string | null
     ): Promise<Message>
-    fetchTokenStatistics(sessionId: string): Promise<any>
     clearSessionMessages(sessionId: string): Promise<boolean>
     updateSession(sessionId: string, data: any): Promise<Session>
     generateSessionTitle(sessionId: string): Promise<{ title: string; skipped?: boolean }>
