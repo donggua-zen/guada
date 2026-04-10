@@ -16,19 +16,19 @@ import { PrismaService } from '../../common/database/prisma.service';
 import { AuthModule } from '../auth/auth.module';
 
 @Module({
-  imports: [HttpModule, AuthModule, VectorDbModule],
-  controllers: [KnowledgeBasesController, KbFilesController, KbSearchController],
-  providers: [
-    KnowledgeBaseService,
-    KbFileService,
-    FileParserService,
-    EmbeddingService,
-    ChunkingService,
-    KnowledgeBaseRepository,
-    KBFileRepository,
-    KBChunkRepository,
-    PrismaService,
-  ],
-  exports: [EmbeddingService],
+    imports: [HttpModule, AuthModule, VectorDbModule],
+    controllers: [KnowledgeBasesController, KbFilesController, KbSearchController],
+    providers: [
+        KnowledgeBaseService,
+        KbFileService,
+        FileParserService,
+        EmbeddingService,
+        ChunkingService,
+        KnowledgeBaseRepository,
+        KBFileRepository,
+        KBChunkRepository,
+        PrismaService,
+    ],
+    exports: [EmbeddingService],
 })
-export class KnowledgeBaseModule {}
+export class KnowledgeBaseModule { }

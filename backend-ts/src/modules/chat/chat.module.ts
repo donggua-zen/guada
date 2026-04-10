@@ -23,34 +23,34 @@ import { AuthModule } from '../auth/auth.module';
 import { ToolsModule } from '../tools/tools.module';
 
 @Module({
-  imports: [AuthModule, ToolsModule],
-  controllers: [ChatController, MessagesController, SessionsController],
-  providers: [
-    AgentService, 
-    LLMService,
-    OpenAIAdapter,
-    GeminiAdapter,
-    MemoryManagerService,
-    MessageService,
-    SessionService,
-    SessionRepository, 
-    MessageRepository,
-    MessageContentRepository, 
-    CharacterRepository,
-    KnowledgeBaseRepository,
-    ModelRepository,
-    GlobalSettingRepository,
-    FileRepository,
-    PrismaService
-  ],
-  exports: [AgentService],
+    imports: [AuthModule, ToolsModule],
+    controllers: [ChatController, MessagesController, SessionsController],
+    providers: [
+        AgentService,
+        LLMService,
+        OpenAIAdapter,
+        GeminiAdapter,
+        MemoryManagerService,
+        MessageService,
+        SessionService,
+        SessionRepository,
+        MessageRepository,
+        MessageContentRepository,
+        CharacterRepository,
+        KnowledgeBaseRepository,
+        ModelRepository,
+        GlobalSettingRepository,
+        FileRepository,
+        PrismaService
+    ],
+    exports: [AgentService],
 })
 export class ChatModule implements OnModuleInit {
-  constructor(
-    private toolOrchestrator: ToolOrchestrator, // 从 ToolsModule 注入
-  ) {}
+    constructor(
+        private toolOrchestrator: ToolOrchestrator, // 从 ToolsModule 注入
+    ) { }
 
-  onModuleInit() {
-    // KnowledgeBaseToolProvider 已在 ToolsModule 中注册，无需再次添加
-  }
+    onModuleInit() {
+        // KnowledgeBaseToolProvider 已在 ToolsModule 中注册，无需再次添加
+    }
 }
