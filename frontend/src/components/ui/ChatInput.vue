@@ -216,7 +216,8 @@
                 <template v-if="tempKnowledgeBaseIds.length !== tempValidKnowledgeBasesCount">
                     <span class="text-gray-400">•</span>
                     <span class="text-xs text-gray-500">
-                        （<span class="text-orange-600">{{ tempKnowledgeBaseIds.length - tempValidKnowledgeBasesCount }}</span> 个无效ID将被自动清理）
+                        （<span class="text-orange-600">{{ tempKnowledgeBaseIds.length - tempValidKnowledgeBasesCount
+                            }}</span> 个无效ID将被自动清理）
                     </span>
                 </template>
             </div>
@@ -408,21 +409,21 @@ const selectedKnowledgeBases = computed(() => {
     return knowledgeBases.value.filter(kb => kbIds.includes(kb.id));
 });
 
-// 🔥 新增：有效的已选择知识库数量（只统计实际存在的知识库）
+//  新增：有效的已选择知识库数量（只统计实际存在的知识库）
 const selectedKnowledgeBasesCount = computed(() => {
     return selectedKnowledgeBases.value.length;
 });
 
-// 🔥 新增：本地存储中的知识库ID总数（包含已删除的无效ID）
+//  新增：本地存储中的知识库ID总数（包含已删除的无效ID）
 const totalKnowledgeBasesCount = computed(() => {
     return props.config?.knowledgeBaseIds?.length || 0;
 });
 
-// 🔥 新增：临时选择的有效知识库数量（用于对话框显示）
+//  新增：临时选择的有效知识库数量（用于对话框显示）
 const tempValidKnowledgeBasesCount = computed(() => {
     if (!tempKnowledgeBaseIds.value.length) return 0;
     // 从所有知识库中过滤出临时选择的且实际存在的知识库
-    return knowledgeBases.value.filter(kb => 
+    return knowledgeBases.value.filter(kb =>
         tempKnowledgeBaseIds.value.includes(kb.id)
     ).length;
 });
@@ -587,7 +588,7 @@ const applyKnowledgeBaseSelection = () => {
     // 构建配置变更对象
     const configChanges = {};
 
-    // 🔥 改进：过滤掉无效的知识库ID（那些在实际知识库列表中不存在的ID）
+    //  改进：过滤掉无效的知识库ID（那些在实际知识库列表中不存在的ID）
     const validTempKbIds = tempKnowledgeBaseIds.value.filter(id =>
         knowledgeBases.value.some(kb => kb.id === id)
     );
@@ -600,7 +601,7 @@ const applyKnowledgeBaseSelection = () => {
 
     // 只有当有配置变更时才发送事件
     if (Object.keys(configChanges).length > 0) {
-        console.log('🔥 应用知识库选择:', {
+        console.log(' 应用知识库选择:', {
             临时选择: tempKnowledgeBaseIds.value,
             有效选择: validTempKbIds,
             当前选择: currentKbIds,
@@ -617,7 +618,7 @@ const removeKnowledgeBase = (kbId: string) => {
     const currentKbIds = props.config?.knowledgeBaseIds || [];
     const newKbIds = currentKbIds.filter(id => id !== kbId);
 
-    // 🔥 修复：同时触发两个事件
+    //  修复：同时触发两个事件
     emit('update:knowledgeBaseIds', newKbIds);  // 更新本地状态
     emit('config-change', { knowledgeBaseIds: newKbIds });  // 通知父组件保存配置
 };
@@ -652,23 +653,23 @@ const loadKnowledgeBases = async () => {
         const { apiService } = await import('@/services/ApiService');
         const response = await apiService.fetchKnowledgeBases();
         knowledgeBases.value = response.items || [];
-        
-        // 🔥 新增：自动清理本地存储中的无效知识库ID
+
+        //  新增：自动清理本地存储中的无效知识库ID
         const localKbIds = props.config?.knowledgeBaseIds || [];
         if (localKbIds.length > 0 && knowledgeBases.value.length > 0) {
             // 过滤出有效的知识库ID
-            const validKbIds = localKbIds.filter(id => 
+            const validKbIds = localKbIds.filter(id =>
                 knowledgeBases.value.some(kb => kb.id === id)
             );
-            
+
             // 如果本地存储中有无效的ID，自动清理它们
             if (validKbIds.length !== localKbIds.length) {
-                console.log('🔥 自动清理无效知识库ID', {
+                console.log(' 自动清理无效知识库ID', {
                     原数量: localKbIds.length,
                     有效数量: validKbIds.length,
                     清理数量: localKbIds.length - validKbIds.length
                 });
-                
+
                 // 通知父组件更新配置，清除无效的知识库ID
                 emit('config-change', { knowledgeBaseIds: validKbIds });
             }
