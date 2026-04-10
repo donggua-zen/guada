@@ -2,7 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { IToolProvider, ToolCallRequest, ToolCallResponse } from '../interfaces/tool-provider.interface';
 import { PrismaService } from '../../../common/database/prisma.service';
 import { McpClientService } from '../../../common/mcp/mcp-client.service';
-import { buildOpenAITool, SimpleToolDef } from '../utils/tool-builder';
+import { InternalToolDefinition } from '../../chat/types/llm.types';
 
 @Injectable()
 export class MCPToolProvider implements IToolProvider {
@@ -27,7 +27,7 @@ export class MCPToolProvider implements IToolProvider {
         }
 
         const servers = await this.prisma.mcpServer.findMany({ where: whereClause });
-        const allTools: SimpleToolDef[] = [];
+        const allTools: InternalToolDefinition[] = [];
 
         for (const server of servers) {
             if (!server.tools) continue;
@@ -36,15 +36,15 @@ export class MCPToolProvider implements IToolProvider {
             const tools = server.tools as Record<string, any>;
             for (const [toolName, toolSchema] of Object.entries(tools)) {
                 allTools.push({
-                    name: toolName,
+                    name: `${this.namespace}__${toolName}`,
                     description: (toolSchema as any).description || `Execute ${toolName}`,
                     parameters: (toolSchema as any).inputSchema || { type: 'object', properties: {} },
                 });
             }
         }
 
-        // 统一使用助手函数生成最终的 OpenAI 格式
-        return allTools.map(tool => buildOpenAITool(this.namespace, tool));
+        // 直接返回扁平化的工具定义，由 adapter 进行转换
+        return allTools;
     }
 
     async executeWithNamespace(request: ToolCallRequest, injectParams?: Record<string, any>): Promise<ToolCallResponse> {

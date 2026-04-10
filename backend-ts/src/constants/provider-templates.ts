@@ -22,7 +22,7 @@ export const PROVIDER_TEMPLATES: ProviderTemplate[] = [
       openai: {
         // 硅基流动开启思考需要传递 thinking_enabled: true
         thinkingEnabled: {
-          thinking_enabled: true,
+          enable_thinking: true,
         },
       },
     },
@@ -38,7 +38,7 @@ export const PROVIDER_TEMPLATES: ProviderTemplate[] = [
       openai: {
         // 阿里云百炼开启思考需要传递 thinking_enabled: true
         thinkingEnabled: {
-          thinking_enabled: true,
+          enable_thinking: true,
         },
       },
     },

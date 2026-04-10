@@ -51,7 +51,7 @@ async function migrateProviderField() {
         console.log(`   📝 ${provider.name}: provider 为空 → "${newProviderValue}"`);
       } else if (Object.values(PROVIDER_NAME_TO_ID).includes(currentProvider)) {
         // provider 已经是正确的标识符，跳过
-        console.log(`   ✅ ${provider.name}: provider 已正确 ("${currentProvider}")`);
+        console.log(`   ${provider.name}: provider 已正确 ("${currentProvider}")`);
         skippedCount++;
         continue;
       } else if (PROVIDER_NAME_TO_ID[currentProvider]) {
@@ -81,7 +81,7 @@ async function migrateProviderField() {
 
     // 3. 输出统计信息
     console.log('\n📊 迁移统计:');
-    console.log(`   ✅ 成功更新: ${updatedCount} 个`);
+    console.log(`   成功更新: ${updatedCount} 个`);
     console.log(`   ⏭️  跳过（已正确）: ${skippedCount} 个`);
     console.log(`   ❌ 更新失败: ${errorCount} 个`);
     console.log(`   📈 总计处理: ${providers.length} 个`);
@@ -89,7 +89,7 @@ async function migrateProviderField() {
     if (errorCount > 0) {
       console.log('\n⚠️  有记录更新失败，请检查日志并手动修复');
     } else {
-      console.log('\n✅ 迁移完成！所有供应商的 provider 字段已正确设置\n');
+      console.log('\n迁移完成！所有供应商的 provider 字段已正确设置\n');
     }
   } catch (error) {
     console.error('❌ 迁移失败:', error);

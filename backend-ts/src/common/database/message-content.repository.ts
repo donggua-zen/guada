@@ -29,8 +29,8 @@ export class MessageContentRepository {
    */
   async create(data: {
     messageId: string;
-    turnsId: string;  // ✅ 添加 turnsId（与 Python 后端一致）
-    role?: string;    // ✅ 添加 role（与 Python 后端一致）
+    turnsId: string;  // 添加 turnsId（与 Python 后端一致）
+    role?: string;    // 添加 role（与 Python 后端一致）
     content: string;
     reasoningContent?: string;
     metaData?: Record<string, any>;

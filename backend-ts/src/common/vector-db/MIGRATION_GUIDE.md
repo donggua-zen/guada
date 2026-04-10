@@ -21,7 +21,7 @@ src/modules/knowledge-base/
 └── ... (其他业务文件)
 ```
 
-#### ✅ 新结构
+#### 新结构
 ```
 src/common/vector-db/                      # 新的通用模块
 ├── interfaces/
@@ -158,7 +158,7 @@ interface VectorDatabase {
 
 ---
 
-## ✅ 验证清单
+## 验证清单
 
 - [ ] 所有导入路径已更新
 - [ ] 模块配置已更新（依赖注入）
@@ -180,10 +180,10 @@ npx ts-node test-lancedb.ts
 === LanceDB 向量数据库测试 ===
 
 1. 初始化 LanceDB...
-✅ 初始化成功
+初始化成功
 
 2. 创建集合：test_lancedb_collection...
-✅ 集合创建成功
+集合创建成功
 
 ...
 
@@ -284,7 +284,7 @@ export { QdrantVectorDB } from './qdrant-vector-db';
 
 ## 🎯 下一步
 
-1. ✅ 完成重构
+1. 完成重构
 2. ⏳ 更新知识库模块使用新的依赖注入
 3. ⏳ 编写单元测试
 4. ⏳ 集成到其他需要向量搜索的模块
@@ -292,4 +292,4 @@ export { QdrantVectorDB } from './qdrant-vector-db';
 ---
 
 **迁移日期**: 2026-04-06  
-**状态**: ✅ 完成
+**状态**: 完成

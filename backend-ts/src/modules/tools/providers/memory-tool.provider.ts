@@ -1,7 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { IToolProvider, ToolCallRequest, ToolCallResponse } from '../interfaces/tool-provider.interface';
 import { PrismaService } from '../../../common/database/prisma.service';
-import { buildOpenAITool, SimpleToolDef } from '../utils/tool-builder';
+import { InternalToolDefinition } from '../../chat/types/llm.types';
 
 @Injectable()
 export class MemoryToolProvider implements IToolProvider {
@@ -10,24 +10,24 @@ export class MemoryToolProvider implements IToolProvider {
 
     constructor(private prisma: PrismaService) { }
 
-    private readonly toolsConfig: SimpleToolDef[] = [
+    private readonly toolsConfig: InternalToolDefinition[] = [
+        // {
+        //     name: 'long_term__view',
+        //     description: '查看长期记忆（支持按类型筛选：factual 或 soul）',
+        //     parameters: {
+        //         type: 'object',
+        //         properties: {
+        //             memory_type: {
+        //                 type: 'string',
+        //                 enum: ['factual', 'soul'],
+        //                 description: '长期记忆类型'
+        //             },
+        //         },
+        //         required: ['memory_type'],
+        //     },
+        // },
         {
-            name: 'long_term__view',
-            description: '查看长期记忆（支持按类型筛选：factual 或 soul）',
-            parameters: {
-                type: 'object',
-                properties: {
-                    memory_type: {
-                        type: 'string',
-                        enum: ['factual', 'soul'],
-                        description: '长期记忆类型'
-                    },
-                },
-                required: ['memory_type'],
-            },
-        },
-        {
-            name: 'long_term__edit',
+            name: 'memory__long_term__edit',
             description: 'Upsert 长期记忆（按类型编辑或自动创建）',
             parameters: {
                 type: 'object',
@@ -51,7 +51,8 @@ export class MemoryToolProvider implements IToolProvider {
 
     async getToolsNamespaced(enabledTools: Record<string, any> | boolean, injectParams: Record<string, any>): Promise<any[]> {
         if (enabledTools === false) return [];
-        return this.toolsConfig.map(tool => buildOpenAITool(this.namespace, tool));
+        // 直接返回扁平化的工具定义，由 adapter 进行转换
+        return this.toolsConfig;
     }
 
     async executeWithNamespace(request: ToolCallRequest, injectParams?: Record<string, any>): Promise<ToolCallResponse> {
@@ -133,20 +134,9 @@ export class MemoryToolProvider implements IToolProvider {
             // ========== 第二部分：工具使用说明 ==========
             promptParts.push('\n【记忆工具使用说明】');
             const toolInstructions = `
-你拥有以下记忆管理工具，可以主动调用它们来查看和编辑长期记忆：
+你拥有以下记忆管理工具，可以主动调用它们来编辑长期记忆：
 
-### 1. 查看长期记忆 (memory__long_term__view)
-**用途**: 查看指定类型的长期记忆内容
-
-**何时使用**:
-- 需要了解用户的历史偏好或背景信息时
-- 需要确认之前记录的重要事实时
-- 需要了解当前的人格设定或行为规则时
-
-**参数**:
-- \`memory_type\`: 记忆类型（'factual' 或 'soul'）
-
-### 2. 编辑长期记忆 (memory__long_term__edit)
+### 1. 编辑长期记忆 (memory__long_term__edit)
 **用途**: 添加、更新或删除长期记忆
 
 **何时使用**:
@@ -154,16 +144,11 @@ export class MemoryToolProvider implements IToolProvider {
 - 需要更新过时的事实信息时
 - 需要调整 AI 的行为规则或角色设定时
 
-**参数**:
-- \`memory_type\`: 记忆类型（'factual' 或 'soul'）
-- \`content\`: 记忆内容
-- \`write_mode\`: 写入模式（'append' 追加 或 'overwrite' 覆盖，默认为 'append'）
-
 **使用建议**:
-1. **先查看再编辑**: 在修改记忆前，建议先查看现有内容以避免重复或冲突
-2. **选择合适的写入模式**: 如果需要保留原有信息，使用 'append'；如果需要完全替换，使用 'overwrite'
-3. **保持记忆简洁**: 记忆内容应该简洁明了，便于后续检索和使用
-4. **及时更新**: 当发现记忆内容过时或不准确时，应及时更新
+1. **选择合适的写入模式**: 如果需要保留原有信息，使用 'append'；如果需要完全替换，使用 'overwrite'
+2. **保持记忆简洁**: 记忆内容应该简洁明了，便于后续检索和使用
+3. **及时更新**: 当发现记忆内容过时或不准确时，应及时更新
+4. **结构化保存**: 记忆内容应该结构化保存
 `;
             promptParts.push(toolInstructions);
 
