@@ -33,26 +33,69 @@
             <div class="mt-4 rounded border px-3 py-1 border-gray-200 dark:border-gray-700">
                 <ul>
                     <li v-for="model in currentModels" :key="model.id"
-                        class="flex items-center py-2 border-b border-gray-200 dark:border-gray-700 last:border-b-0">
-                        <div class="font-bold dark:font-normal">{{ model.modelName }}</div>
-                        &nbsp;
-                        &nbsp;
-                        <el-space>
-                            <el-tag type="success">{{ model.modelType }}</el-tag>
-                            <el-tag v-for="feature in model.features" type="info">{{
-                                getLableName(feature) }}</el-tag>
-                        </el-space>
-                        <div class="flex flex-1 justify-end items-center">
-                            <el-button link style="font-size: 24px" @click="handleEditClick(model)">
-                                <el-icon>
-                                    <SettingsOutlined />
-                                </el-icon>
+                        class="flex items-center justify-between py-3 border-b border-gray-100 dark:border-gray-700 last:border-b-0 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors rounded px-3 -mx-3">
+                        <div class="flex-1 min-w-0 mr-4">
+                            <div class="font-medium text-gray-800 dark:text-gray-200 truncate mb-1">{{ model.modelName }}</div>
+                            <div class="flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400">
+                                <!-- 模型类型文本 -->
+                                <span class="px-1.5 py-0.5 rounded bg-gray-100 dark:bg-gray-700 font-medium">
+                                    {{ model.modelType === 'text' ? '对话' : '嵌入' }}
+                                </span>
+
+                                <!-- 能力配置组（带底纹和箭头） -->
+                                <div v-if="model.modelType === 'text'" class="flex items-center gap-1 px-2 py-0.5 rounded-md bg-gray-50 dark:bg-gray-800 border border-gray-100 dark:border-gray-700">
+                                    <!-- 输入能力 -->
+                                    <div class="flex items-center gap-0.5">
+                                        <template v-for="cap in (model.config?.inputCapabilities || [])" :key="'in-' + cap">
+                                            <el-tooltip :content="'输入: ' + (cap === 'text' ? '文本' : '图像')" placement="top">
+                                                <el-icon class="hover:text-primary transition-colors" :size="16">
+                                                    <TextT24Regular v-if="cap === 'text'" />
+                                                    <Image24Regular v-else-if="cap === 'image'" />
+                                                </el-icon>
+                                            </el-tooltip>
+                                        </template>
+                                    </div>
+
+                                    <!-- 分隔箭头 -->
+                                    <el-icon class="text-gray-300 dark:text-gray-600 mx-0.5" :size="12">
+                                        <ArrowRight24Regular />
+                                    </el-icon>
+
+                                    <!-- 输出能力 -->
+                                    <div class="flex items-center gap-0.5">
+                                        <template v-for="cap in (model.config?.outputCapabilities || [])" :key="'out-' + cap">
+                                            <el-tooltip :content="'输出: ' + (cap === 'text' ? '文本' : '图像')" placement="top">
+                                                <el-icon class="hover:text-primary transition-colors" :size="16">
+                                                    <TextT24Regular v-if="cap === 'text'" />
+                                                    <Image24Regular v-else-if="cap === 'image'" />
+                                                </el-icon>
+                                            </el-tooltip>
+                                        </template>
+                                    </div>
+
+                                    <!-- 高级功能（如果有） -->
+                                    <template v-if="(model.config?.features || []).length > 0">
+                                        <span class="w-px h-3 bg-gray-200 dark:bg-gray-700 mx-1"></span>
+                                        <template v-for="feature in (model.config?.features || [])" :key="feature">
+                                            <el-tooltip :content="getLableName(feature)" placement="top">
+                                                <el-icon class="hover:text-primary transition-colors" :size="16">
+                                                    <WrenchScrewdriver24Regular v-if="feature === 'tools'" />
+                                                    <LightbulbFilament24Regular v-else-if="feature === 'thinking'" />
+                                                    <ScienceOutlined v-else />
+                                                </el-icon>
+                                            </el-tooltip>
+                                        </template>
+                                    </template>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="flex items-center gap-1 opacity-80 hover:opacity-100 transition-opacity shrink-0">
+                            <el-button link style="font-size: 18px; color: var(--el-text-color-secondary)" @click="handleEditClick(model)">
+                                <el-icon><SettingsOutlined /></el-icon>
                             </el-button>
-                            &nbsp;
-                            <el-button type="danger" link style="font-size: 24px" @click="handleDeleteClick(model)">
-                                <el-icon>
-                                    <RemoveCircleOutlineRound />
-                                </el-icon>
+                            <el-button type="danger" link style="font-size: 18px" @click="handleDeleteClick(model)">
+                                <el-icon><RemoveCircleOutlineRound /></el-icon>
                             </el-button>
                         </div>
                     </li>
@@ -95,45 +138,97 @@
     </el-dialog>
 
     <!-- 编辑/新增模型信息的模态框 -->
-    <el-dialog v-model="showEditModal" :title="isEditMode ? '编辑模型信息' : '新增模型'" width="30%" align-center>
+    <el-dialog v-model="showEditModal" :title="isEditMode ? '编辑模型信息' : '新增模型'" width="600px" align-center
+        class="model-edit-dialog">
         <el-form ref="editFormRef" :model="editModelForm" :rules="editModelRules" label-position="left"
-            label-width="120px" size="large">
-            <el-form-item label="模型名字" prop="modelName">
-                <el-input v-model="editModelForm.modelName" placeholder="请输入模型名字" />
-            </el-form-item>
+            label-width="120px" size="default">
+            
+            <div class="form-section">
+                <el-form-item label="模型名称" prop="modelName">
+                    <el-input v-model="editModelForm.modelName" placeholder="例如：gpt-4o, qwen-max" clearable />
+                </el-form-item>
 
-            <el-form-item label="模型类型" prop="modelType">
-                <el-select v-model="editModelForm.modelType" placeholder="请选择模型类型" style="width: 100%">
-                    <el-option v-for="option in modelTypeOptions" :key="option.value" :label="option.label"
-                        :value="option.value" />
-                </el-select>
-            </el-form-item>
+                <el-form-item label="模型类型" prop="modelType">
+                    <el-radio-group v-model="editModelForm.modelType">
+                        <el-radio-button value="text">
+                            <span class="flex items-center"><el-icon class="mr-1 align-middle"><TextT24Regular /></el-icon> 对话 (Chat)</span>
+                        </el-radio-button>
+                        <el-radio-button value="embedding">
+                            <span class="flex items-center"><el-icon class="mr-1 align-middle"><Group24Regular /></el-icon> 嵌入 (Embedding)</span>
+                        </el-radio-button>
+                    </el-radio-group>
+                </el-form-item>
+            </div>
 
-            <el-form-item label="模型能力" prop="features">
-                <el-checkbox-group v-model="editModelForm.features">
-                    <el-space>
-                        <el-checkbox label="visual" value="visual">视觉</el-checkbox>
-                        <el-checkbox label="tools" value="tools">工具</el-checkbox>
-                        <el-checkbox label="thinking" value="thinking">混合思考</el-checkbox>
-                    </el-space>
-                </el-checkbox-group>
-            </el-form-item>
+            <!-- 对话模型配置 -->
+            <div v-if="editModelForm.modelType === 'text'" class="transition-all">
+                <el-form-item label="输入能力" prop="config.inputCapabilities" class="mb-3">
+                    <el-checkbox-group v-model="editModelForm.config.inputCapabilities">
+                        <el-checkbox-button value="text" disabled>
+                            <span class="flex items-center"><el-icon class="mr-1 align-middle"><TextT24Regular /></el-icon> 文本</span>
+                        </el-checkbox-button>
+                        <el-checkbox-button value="image">
+                            <span class="flex items-center"><el-icon class="mr-1 align-middle"><Image24Regular /></el-icon> 图像</span>
+                        </el-checkbox-button>
+                    </el-checkbox-group>
+                </el-form-item>
 
-            <el-form-item label="最大上下文" prop="maxTokens">
-                <el-input-number v-model="editModelForm.maxTokens" placeholder="请输入最大上下文长度" style="width: 100%" :min="1"
-                    controls-position="right" />
-            </el-form-item>
+                <el-form-item label="输出能力" prop="config.outputCapabilities" class="mb-3">
+                    <el-checkbox-group v-model="editModelForm.config.outputCapabilities">
+                        <el-checkbox-button value="text" disabled>
+                            <span class="flex items-center"><el-icon class="mr-1 align-middle"><TextT24Regular /></el-icon> 文本</span>
+                        </el-checkbox-button>
+                        <el-checkbox-button value="image">
+                            <span class="flex items-center"><el-icon class="mr-1 align-middle"><Image24Regular /></el-icon> 图像</span>
+                        </el-checkbox-button>
+                    </el-checkbox-group>
+                </el-form-item>
 
-            <el-form-item label="最大输出长度" prop="maxOutputTokens">
-                <el-input-number v-model="editModelForm.maxOutputTokens" placeholder="请输入最大输出长度" style="width: 100%"
-                    :min="1" controls-position="right" />
-            </el-form-item>
+                <el-form-item label="高级功能" prop="config.features" class="mb-4">
+                    <el-checkbox-group v-model="editModelForm.config.features">
+                        <el-checkbox-button value="tools">
+                            <span class="flex items-center"><el-icon class="mr-1 align-middle"><WrenchScrewdriver24Regular /></el-icon> 工具调用</span>
+                        </el-checkbox-button>
+                        <el-checkbox-button value="thinking">
+                            <span class="flex items-center"><el-icon class="mr-1 align-middle"><LightbulbFilament24Regular /></el-icon> 混合思考</span>
+                        </el-checkbox-button>
+                    </el-checkbox-group>
+                </el-form-item>
+
+                <el-form-item label="上下文窗口" prop="config.contextWindow">
+                    <el-input-number v-model="editModelForm.config.contextWindow" placeholder="128000" 
+                        controls-position="right" style="width: 240px;">
+                        <template #suffix><span class="text-gray-400 text-xs ml-1">Tokens</span></template>
+                    </el-input-number>
+                </el-form-item>
+
+                <el-form-item label="最大输出长度" prop="config.maxOutputTokens">
+                    <el-input-number v-model="editModelForm.config.maxOutputTokens" placeholder="4096" 
+                        controls-position="right" style="width: 240px;">
+                        <template #suffix><span class="text-gray-400 text-xs ml-1">Tokens</span></template>
+                    </el-input-number>
+                </el-form-item>
+
+                <el-form-item label="自定义参数 (JSON)" prop="config.customParameters">
+                    <el-input v-model="customParamsStr" type="textarea" :rows="3" 
+                        placeholder='{ "temperature": 0.7, "top_p": 1 }' class="font-mono text-xs" />
+                </el-form-item>
+            </div>
+
+            <!-- 嵌入模型配置 -->
+            <div v-else-if="editModelForm.modelType === 'embedding'" class="transition-all">
+                <el-form-item label="向量维度 (Dimensions)" prop="config.vectorDimensions">
+                    <el-input-number v-model="editModelForm.config.vectorDimensions" placeholder="例如：768, 1536, 3072" 
+                        style="width: 240px;" controls-position="right" />
+                    <div class="text-xs text-gray-400 mt-1">该模型生成的向量特征数量</div>
+                </el-form-item>
+            </div>
         </el-form>
         <template #footer>
-            <span class="dialog-footer">
+            <div class="dialog-footer flex justify-end gap-3">
                 <el-button @click="showEditModal = false">取消</el-button>
-                <el-button type="primary" @click="handleSaveModel">保存</el-button>
-            </span>
+                <el-button type="primary" @click="handleSaveModel" :loading="saving">保存更改</el-button>
+            </div>
         </template>
     </el-dialog>
 
@@ -167,7 +262,7 @@
                                 <div class="flex items-center mt-2">
                                     <el-tag type="success">{{ model.modelType }}</el-tag>
                                     <el-space class="ml-2">
-                                        <el-tag v-for="feature in model.features" type="info">
+                                        <el-tag v-for="feature in (model.config?.features || [])" type="info">
                                             {{ getLableName(feature) }}
                                         </el-tag>
                                     </el-space>
@@ -194,7 +289,7 @@
                                 <div class="flex items-center mt-2">
                                     <el-tag type="success">{{ model.modelType }}</el-tag>
                                     <el-space class="ml-2">
-                                        <el-tag v-for="feature in model.features" type="info">
+                                        <el-tag v-for="feature in (model.config?.features || [])" type="info">
                                             {{ getLableName(feature) }}
                                         </el-tag>
                                     </el-space>
@@ -226,6 +321,9 @@ import {
     SettingsOutlined, RemoveCircleOutlineRound, DeleteTwotone, AddCircleTwotone,
     RemoveCircleTwotone, SearchOutlined, ArrowBackIosFilled
 } from '@vicons/material'
+import {
+    TextT24Regular, LightbulbFilament24Regular, Image24Regular, WrenchScrewdriver24Regular, Group24Regular, ArrowRight24Regular
+} from '@vicons/fluent'
 import { apiService } from '../../services/ApiService'
 import { usePopup } from '../../composables/usePopup'
 import { useStorage } from '@vueuse/core'
@@ -345,10 +443,38 @@ const currentEditModelId = ref(null);
 
 const editModelForm = ref({
     modelName: '',
-    type: 'text',
-    features: [],
-    maxTokens: null,
-    maxOutputTokens: null
+    modelType: 'text',
+    config: {
+        inputCapabilities: ['text'],
+        outputCapabilities: ['text'],
+        features: [],
+        contextWindow: null,
+        maxOutputTokens: null,
+        customParameters: {},
+        vectorDimensions: null
+    }
+});
+
+// 用于双向绑定自定义参数字符串
+const customParamsStr = computed({
+    get() {
+        try {
+            return JSON.stringify(editModelForm.value.config.customParameters, null, 2);
+        } catch (e) {
+            return '';
+        }
+    },
+    set(val) {
+        try {
+            if (val.trim() === '') {
+                editModelForm.value.config.customParameters = {};
+            } else {
+                editModelForm.value.config.customParameters = JSON.parse(val);
+            }
+        } catch (e) {
+            // 解析失败时不更新，避免报错
+        }
+    }
 });
 
 const modelTypeOptions = [
@@ -358,18 +484,18 @@ const modelTypeOptions = [
 
 const editModelRules = {
     modelName: { required: true, message: '请输入模型名字', trigger: 'blur' },
-    type: { required: true, message: '请选择模型类型', trigger: 'change' },
-    maxTokens: {
+    modelType: { required: true, message: '请选择模型类型', trigger: 'change' },
+    'config.contextWindow': {
         required: false,
         type: 'number',
-        validator: (rule, value) => value > 0 || value === null,
-        message: '请输入有效的最大上下文长度',
+        validator: (rule, value) => !value || value > 0,
+        message: '请输入有效的上下文窗口长度',
         trigger: 'blur'
     },
-    maxOutputTokens: {
+    'config.maxOutputTokens': {
         required: false,
         type: 'number',
-        validator: (rule, value) => value > 0 || value === null,
+        validator: (rule, value) => !value || value > 0,
         message: '请输入有效的最大输出长度',
         trigger: 'blur'
     }
@@ -463,7 +589,7 @@ const handleSaveProvider = async () => {
                     provider.protocol = currentProviderEdit.value.protocol;
                 }
             }
-            
+
             // 关闭弹窗
             showProviderModal.value = false;
         } else {
@@ -478,7 +604,7 @@ const handleSaveProvider = async () => {
             const provider = await apiService.createProvider(payload);
             providers.value.push(provider);
             notify.success('创建成功', '分组创建成功', { duration: 2000 });
-            
+
             // 关闭弹窗
             showProviderModal.value = false;
         }
@@ -502,7 +628,7 @@ const handleFetchModels = async () => {
         // 直接调用大语言模型API获取模型列表
         const apiModels = await fetchModelsFromAPI();
 
-        // 从已添加的模型中继承features和type参数
+        // 从已添加的模型中继承config参数
         const enrichedModels = apiModels.map(apiModel => {
             // 查找当前供应商下是否已添加该模型
             const existingModel = currentModels.value.find(
@@ -510,19 +636,17 @@ const handleFetchModels = async () => {
             );
 
             if (existingModel) {
-                // 如果已添加，则继承features和type
+                // 如果已添加，则继承config
                 return {
                     ...apiModel,
                     id: existingModel.id,
-                    modelType: existingModel.modelType,
-                    features: [...existingModel.features]
+                    config: { ...existingModel.config }
                 };
             } else {
                 // 如果未添加，使用默认值或从API返回的数据
                 return {
                     ...apiModel,
-                    modelType: apiModel.modelType || 'text', // 使用API返回的类型或默认text
-                    features: apiModel.features || [] // 使用API返回的features或空数组
+                    config: apiModel.config || { features: [] }
                 };
             }
         });
@@ -597,9 +721,15 @@ const handleAddModel = () => {
     editModelForm.value = {
         modelName: '',
         modelType: 'text',
-        features: [],
-        maxTokens: null,
-        maxOutputTokens: null
+        config: {
+            inputCapabilities: ['text'],
+            outputCapabilities: ['text'],
+            features: [],
+            contextWindow: null,
+            maxOutputTokens: null,
+            customParameters: {},
+            vectorDimensions: null
+        }
     };
 
     showEditModal.value = true;
@@ -684,12 +814,19 @@ const handleEditClick = (model) => {
     isEditMode.value = true;
     currentEditModelId.value = model.id;
     // 填充表单数据
+    const config = model.config || {};
     editModelForm.value = {
         modelName: model.modelName || '',
         modelType: model.modelType || 'text',
-        features: model.features ? [...model.features] : [],
-        maxTokens: model.maxTokens || null,
-        maxOutputTokens: model.maxOutputTokens || null
+        config: {
+            inputCapabilities: config.inputCapabilities || ['text'],
+            outputCapabilities: config.outputCapabilities || ['text'],
+            features: config.features || [],
+            contextWindow: config.contextWindow || null,
+            maxOutputTokens: config.maxOutputTokens || null,
+            customParameters: config.customParameters || {},
+            vectorDimensions: config.vectorDimensions || null
+        }
     };
     showEditModal.value = true;
 };
@@ -826,7 +963,14 @@ const handleTemplateClick = async (template) => {
 
         const provider = await apiService.createProvider(payload);
         providers.value.push(provider);
-        notify.success('添加成功', `已添加 ${template.name}`, { duration: 2000 });
+
+        // 如果返回的供应商包含模型，添加到模型列表
+        if (provider.models && provider.models.length > 0) {
+            models.value.push(...provider.models);
+            notify.success('添加成功', `已添加 ${template.name}，自动创建 ${provider.models.length} 个模型`, { duration: 2000 });
+        } else {
+            notify.success('添加成功', `已添加 ${template.name}`, { duration: 2000 });
+        }
     } catch (error) {
         console.error('添加分组失败:', error);
         notify.error('添加失败', '添加分组时发生错误', { duration: 2000 });
@@ -863,4 +1007,21 @@ const handleDeleteProviderFromList = async (provider) => {
 
 </script>
 
-<style scoped></style>
+<style scoped>
+/* 统一输入框内容左对齐 */
+:deep(.el-input__inner), :deep(.el-textarea__inner), :deep(.el-input-number__decrease), :deep(.el-input-number__increase) {
+    text-align: left !important;
+}
+
+/* 优化 Button 组样式，使其更简约 */
+:deep(.el-checkbox-button__inner), :deep(.el-radio-button__inner) {
+    padding: 6px 12px;
+    border-radius: 4px !important; /* 保持微圆角 */
+}
+
+/* 调整相邻按钮的间距，避免边框重叠导致的视觉过粗 */
+:deep(.el-checkbox-button + .el-checkbox-button), 
+:deep(.el-radio-button + .el-radio-button) {
+    margin-left: 8px;
+}
+</style>

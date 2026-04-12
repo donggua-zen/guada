@@ -38,6 +38,7 @@ export class ModelService {
                         name: template.name, // 确保名称同步
                         avatarUrl: template.avatarUrl,
                         protocol: template.protocol,
+                        description: template.description,
                     };
                 }
             }
@@ -60,6 +61,7 @@ export class ModelService {
 
     /**
      * 添加新的模型提供商
+     * 如果模板中定义了 models，则自动创建对应的模型记录
      */
     async addProvider(userId: string, name: string, apiKey: string, apiUrl: string, provider?: string, protocol?: string, avatarUrl?: string, attributes?: any) {
         let finalName = name;
@@ -68,6 +70,8 @@ export class ModelService {
         let finalAvatarUrl = avatarUrl;
         let finalAttributes = attributes;
         let finalProviderType = provider;
+        let templateModels: any[] | undefined;
+        let finalDescription = undefined;
 
         const template = provider ? PROVIDER_TEMPLATES.find(t => t.id === provider) : undefined;
 
@@ -76,22 +80,51 @@ export class ModelService {
             finalApiUrl = template.defaultApiUrl;
             finalProtocol = template.protocol;
             finalAvatarUrl = template.avatarUrl;
+            finalDescription = template.description;
             finalAttributes = undefined; // 预定义供应商不存储 attributes，运行时动态查询
             finalProviderType = provider;
+            templateModels = template.models; // 保存模板中的模型定义
         } else {
             // 自定义供应商，providerType 为 'custom'
             finalProviderType = 'custom';
         }
 
-        return this.modelRepo.createProvider({
-            userId,
-            name: finalName,
-            provider: finalProviderType,  // 使用 providerType 作为供应商标识符
-            protocol: finalProtocol,
-            apiKey,
-            apiUrl: finalApiUrl,
-            avatarUrl: finalAvatarUrl,
-            attributes: finalAttributes,
+        // 使用事务确保供应商和模型的原子性创建
+        return this.modelRepo.getPrismaClient().$transaction(async (tx) => {
+            // 1. 创建供应商
+            const createdProvider = await tx.modelProvider.create({
+                data: {
+                    userId,
+                    name: finalName,
+                    provider: finalProviderType,
+                    protocol: finalProtocol,
+                    apiKey,
+                    apiUrl: finalApiUrl,
+                    avatarUrl: finalAvatarUrl,
+                    attributes: finalAttributes,
+                },
+            });
+
+            // 2. 如果模板中有预定义模型，批量创建
+            if (templateModels && templateModels.length > 0) {
+                const modelsData = templateModels.map(templateModel => ({
+                    providerId: createdProvider.id,
+                    modelName: templateModel.modelName,
+                    modelType: templateModel.modeType || templateModel.modelType || 'text',
+                    config: templateModel.config || {},
+                }));
+
+                await this.modelRepo.createModelsInTransaction(tx, modelsData);
+                this.logger.log(`Created ${modelsData.length} models for provider ${createdProvider.id}`);
+            }
+
+            // 3. 返回创建的供应商（包含模型列表）
+            let provider = await tx.modelProvider.findUnique({
+                where: { id: createdProvider.id },
+                include: { models: true },
+            });
+            if (finalDescription) return { ...provider, description: finalDescription }
+            return provider;
         });
     }
 
@@ -201,7 +234,9 @@ export class ModelService {
             const models = response.data.map((model: any) => ({
                 modelName: model.id,
                 modelType: 'text',
-                features: [],
+                config: {
+                    features: [],
+                },
             }));
 
             // 返回分页格式，与其他列表接口保持一致

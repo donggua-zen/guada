@@ -5,6 +5,13 @@ import { PrismaService } from './prisma.service';
 export class ModelRepository {
   constructor(private prisma: PrismaService) {}
 
+  /**
+   * 获取 Prisma 客户端实例（用于事务操作）
+   */
+  getPrismaClient() {
+    return this.prisma;
+  }
+
   async getProvidersWithModels(userId: string) {
     return this.prisma.modelProvider.findMany({
       where: { userId },
@@ -59,5 +66,17 @@ export class ModelRepository {
       where: { id },
       include: { provider: true },
     });
+  }
+
+  /**
+   * 批量创建模型（用于事务中）
+   */
+  async createModelsInTransaction(tx: any, modelsData: any[]) {
+    const createdModels = [];
+    for (const modelData of modelsData) {
+      const model = await tx.model.create({ data: modelData });
+      createdModels.push(model);
+    }
+    return createdModels;
   }
 }

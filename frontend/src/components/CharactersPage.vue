@@ -66,79 +66,59 @@
             <template v-else>
               <!-- 助手卡片 -->
               <div v-for="character in characters" :key="character.id"
-                class="rounded-xl border border-gray-200 dark:border-gray-700 hover:border-gray-300 transition-all duration-300 flex flex-col min-h-[180px]">
-                <div class="flex p-4 flex-1 flex-col">
-                  <!-- 头像区域 -->
-                  <div class="flex flex-rows">
-                    <div class="shrink-0 mr-4">
-                      <div class="w-16 h-16 overflow-hidden rounded-full">
-                        <Avatar :src="character.avatarUrl" />
-                      </div>
+                class="provider-card group relative bg-white border border-gray-200 rounded-lg p-4 cursor-default hover:border-(--color-primary) transition-all duration-200 overflow-hidden">
+                <!-- 毛玻璃背景层 -->
+                <div v-if="character.avatarUrl" 
+                  class="absolute inset-0 z-0"
+                  :style="{
+                    backgroundImage: `url(${character.avatarUrl})`,
+                    backgroundSize: 'cover',
+                    backgroundPosition: 'center',
+                    filter: 'blur(30px)',
+                    opacity: 0.04,
+                    transform: 'scale(1.5)'
+                  }">
+                </div>
+                
+                <!-- 内容区域 -->
+                <div class="relative z-10 flex flex-col h-full">
+                  <div class="flex items-start gap-3">
+                    <div
+                      class="w-11 h-11 shrink-0 flex items-center justify-center text-(--color-primary) bg-gray-50 rounded-md overflow-hidden">
+                      <Avatar :src="character.avatarUrl" />
                     </div>
-
-                    <!-- 内容区域 -->
-                    <div class="flex-1 min-w-0 flex flex-col">
-                      <!-- 标题和描述 -->
-                      <h3 class="text-lg font-semibold text-gray-800 dark:text-gray-200 truncate mb-2">{{ character.title }}
-                      </h3>
-                      <div class="h-15 overflow-hidden">
-                        <el-tooltip effect="dark" :content="character.description || '暂无描述'" placement="top">
-                          <p class="text-sm text-gray-600 dark:text-gray-400 line-clamp-3 leading-5 cursor-help">
-                            {{ character.description || '暂无描述' }}
-                          </p>
-                        </el-tooltip>
-                      </div>
-                    </div>
-                  </div>
-                  <!-- 操作按钮 -->
-                  <div class="flex justify-between items-center mt-4 pt-3 border-t border-gray-100 dark:border-gray-700">
-                    <el-button type="primary" round size="small" @click="startNewChat(character)"
-                      class="flex items-center gap-1">
-                      <template #icon>
-                        <ChatbubbleEllipses />
-                      </template>
-                      使用
-                    </el-button>
-
-                    <div v-if="charactersType == 'private'" class="flex gap-1">
-                      <el-button size="small" link @click="shareCharacter(character)"
-                        class="text-gray-500 hover:text-gray-600" :class="{ 'text-yellow-500!': character.isPublic }">
-                        <template #icon>
-                          <ShareTwotone />
-                        </template>
-                      </el-button>
-
-                      <!-- 更多按钮下拉菜单 -->
-                      <el-dropdown trigger="click" @command="handleMoreAction($event, character)">
-                        <el-button size="small" link>
+                    <div class="flex-1 min-w-0">
+                      <div class="flex items-start justify-between">
+                        <div class="font-medium text-base text-gray-900 truncate" :title="character.title">{{ character.title }}</div>
+                        <!-- 删除按钮 - 悬停显示 -->
+                        <el-button v-if="charactersType == 'private'" link size="small" type="danger"
+                          class="opacity-0 group-hover:opacity-100 transition-all duration-200 delete-btn"
+                          @click.stop="deleteCharacter(character)">
                           <el-icon :size="18">
-                            <MoreVertOutlined />
+                            <DeleteOutlineOutlined />
                           </el-icon>
                         </el-button>
-                        <template #dropdown>
-                          <el-dropdown-menu>
-                            <el-dropdown-item command="edit">
-                              <div class="flex items-center">
-                                <el-icon class="mr-2">
-                                  <EditTwotone />
-                                </el-icon>
-                                <span>编辑助手</span>
-                              </div>
-                            </el-dropdown-item>
-                            <el-dropdown-item command="delete" divided>
-                              <div class="flex items-center">
-                                <el-icon class="mr-2">
-                                  <DeleteTwotone />
-                                </el-icon>
-                                <span>删除助手</span>
-                              </div>
-                            </el-dropdown-item>
-                          </el-dropdown-menu>
-                        </template>
-                      </el-dropdown>
+                      </div>
+                      <div class="text-xs text-gray-500 mt-1.5">{{ character.isPublic ? '共享模板' : '我的模板' }}</div>
                     </div>
                   </div>
+                  <div class="text-xs text-gray-400 mt-2 line-clamp-2 leading-relaxed">{{ character.description || '暂无描述' }}
+                  </div>
+                </div>
 
+                <!-- 悬停显示的渐变遮罩和按钮 -->
+                <div
+                  class="absolute inset-x-0 bottom-0 h-16 bg-linear-to-t from-white via-white/90 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none rounded-b-lg">
+                </div>
+                <div
+                  class="absolute inset-x-2 bottom-2 flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-auto z-20">
+                  <el-button type="primary" size="small" class="flex-1 shadow-sm"
+                    @click.stop="startNewChat(character)">
+                    使用此角色
+                  </el-button>
+                  <el-button v-if="charactersType == 'private'" size="small" class="flex-1 shadow-sm" @click.stop="editCharacter(character)">
+                    角色设置
+                  </el-button>
                 </div>
               </div>
             </template>
@@ -176,16 +156,12 @@ import {
 } from 'element-plus'
 // @ts-ignore - icons 类型缺失
 import {
-  ChatbubbleEllipses,
   People
 } from '@vicons/ionicons5'
 
 import {
   PlusOutlined,
-  EditTwotone,
-  ShareTwotone,
-  DeleteTwotone,
-  MoreVertOutlined,
+  DeleteOutlineOutlined
 } from '@vicons/material'
 
 import { useTitle } from '../composables/useTitle'
@@ -242,14 +218,6 @@ const editCharacter = (character: any): void => {
   showModal.value = true
 }
 
-const handleMoreAction = (key: string, character: any): void => {
-  if (key === 'edit') {
-    editCharacter(character)
-  } else if (key === 'delete') {
-    deleteCharacter(character)
-  }
-};
-
 // 删除助手 - 类型化
 const deleteCharacter = async (character: any): Promise<void> => {
   try {
@@ -282,17 +250,6 @@ const startNewChat = async (character: any): Promise<void> => {
   }
 }
 
-const shareCharacter = async (character: any): Promise<void> => {
-  try {
-    await apiService.updateCharacter(character.id, { isPublic: !character.isPublic })
-    character.isPublic = !character.isPublic
-    toast.success(character.isPublic ? '助手已公开' : '助手已私密')
-  } catch (error: any) {
-    console.error('更新助手失败:', error)
-    toast.error('更新助手失败')
-  }
-}
-
 // 处理保存后的回调 - 类型化
 const handleSaved = (characterData: any): void => {
   const index = characters.value.findIndex(c => c.id === characterData.id)
@@ -315,45 +272,26 @@ onMounted(async (): Promise<void> => {
 </script>
 
 <style scoped>
-.line-clamp-3 {
+.line-clamp-2 {
   display: -webkit-box;
-  -webkit-line-clamp: 3;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
   -webkit-box-orient: vertical;
   overflow: hidden;
 }
 
-/* Segmented Control 样式优化 */
-:deep(.segmented-control .el-segmented) {
-  background-color: var(--color-surface);
-  padding: 0.25rem;
-  border-radius: 0.5rem;
+.provider-card {
+  min-height: 140px;
 }
 
-:deep(.segmented-control .el-segmented__item) {
-  font-size: 13px;
-  font-weight: 500;
-  padding: 0.375rem 0.75rem;
-  border-radius: 0.375rem;
-  transition: all 0.2s ease;
+/* 删除按钮悬停底纹效果 */
+.delete-btn {
+  border-radius: 4px;
 }
 
-:deep(.segmented-control .el-segmented__item--selected) {
-  background-color: var(--color-bg);
-  color: var(--color-primary);
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+.delete-btn:hover {
+  background-color: rgba(239, 68, 68, 0.1);
 }
 
-/* 助手卡片样式优化 */
-.rounded-xl {
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-}
 
-.rounded-xl:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 8px 16px rgba(0, 0, 0, 0.08);
-}
-
-.dark .rounded-xl:hover {
-  box-shadow: 0 8px 16px rgba(0, 0, 0, 0.2);
-}
 </style>

@@ -26,7 +26,8 @@
                 </div>
                 <p class="text-xs text-gray-500 dark:text-gray-400">
                     {{ formatSize(file.fileSize) }} · {{ file.fileExtension ? file.fileExtension.toUpperCase() : 'UNKNOWN' }}
-                    <span v-if="isTempTask" class="ml-2 px-1.5 py-0.5 bg-yellow-100 text-yellow-700 rounded text-xs">上传中</span>
+                    <span v-if="isTempTask && file.processingStatus === 'queued'" class="ml-2 px-1.5 py-0.5 bg-gray-100 text-gray-600 rounded text-xs">待上传</span>
+                    <span v-if="isTempTask && file.processingStatus === 'uploading'" class="ml-2 px-1.5 py-0.5 bg-blue-100 text-blue-700 rounded text-xs">上传中</span>
                 </p>
             </div>
         </div>
@@ -40,6 +41,13 @@
             />
             <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">
                 {{ file.currentStep || '处理中...' }}
+            </p>
+        </div>
+
+        <!-- 排队状态提示 -->
+        <div v-if="file.processingStatus === 'queued'" class="mt-2">
+            <p class="text-xs text-gray-500 dark:text-gray-400">
+                {{ file.currentStep || '等待上传...' }}
             </p>
         </div>
 
@@ -225,8 +233,9 @@ function formatSize(bytes: number): string {
  */
 const statusType = computed(() => {
     const types: Record<string, string> = {
+        'queued': 'info',
         'uploading': 'warning',
-        'uploaded': 'info',
+        'uploaded': 'success', // 上传完成显示绿色
         'pending': 'info',
         'processing': 'warning',
         'completed': 'success',
@@ -240,8 +249,9 @@ const statusType = computed(() => {
  */
 const statusText = computed(() => {
     const texts: Record<string, string> = {
+        'queued': '待上传',
         'uploading': '上传中',
-        'uploaded': '等待处理',
+        'uploaded': '上传完成', // 修改为"上传完成"
         'pending': '等待处理',
         'processing': '处理中',
         'completed': '已完成',
