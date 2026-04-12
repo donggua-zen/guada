@@ -23,10 +23,10 @@ export class SessionRepository {
         const [items, total] = await Promise.all([
             this.prisma.session.findMany({
                 where: { userId },
-                orderBy: [{ lastActiveAt: 'desc' }, { createdAt: 'desc' }],
+                orderBy: [{ lastActiveAt: 'desc' }],
                 skip,
                 take: limit,
-                include: { character: true, model: true },
+                include: { character: true },
             }),
             this.prisma.session.count({ where: { userId } }),
         ]);
@@ -34,6 +34,7 @@ export class SessionRepository {
     }
 
     async create(data: any) {
+        data.lastActiveAt = new Date();
         return this.prisma.session.create({
             data,
         });

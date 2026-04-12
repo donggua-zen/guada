@@ -103,40 +103,43 @@ export class MemoryToolProvider implements IToolProvider {
             const promptParts: string[] = [];
 
             // ========== 第一部分：长期记忆注入 ==========
-            if (longTermMemories.length > 0) {
-                promptParts.push('【重要记忆】');
 
-                // 按类型分组展示
-                const factualMemories = longTermMemories.filter(m => m.memoryType === 'factual');
-                const soulMemories = longTermMemories.filter(m => m.memoryType === 'soul');
+            promptParts.push('【重要记忆】');
 
-                promptParts.push('\n### 事实性记忆 (FACTUAL)');
-                promptParts.push('这些是核心事实知识库，包括用户偏好、重要决策、项目状态等关键信息：');
-                if (factualMemories.length > 0) {
-                    factualMemories.forEach((memory, index) => {
-                        promptParts.push(`${index + 1}. ${memory.content}`);
-                    });
-                } else {
-                    promptParts.push('目前没有事实性记忆');
-                }
+            // 按类型分组展示
+            const factualMemories = longTermMemories.filter(m => m.memoryType === 'factual');
+            const soulMemories = longTermMemories.filter(m => m.memoryType === 'soul');
 
-                promptParts.push('\n### 人格定义 (SOUL)');
-                promptParts.push('这些定义了 AI 的角色定位、语言风格和行为规则：');
-                if (soulMemories.length > 0) {
-                    soulMemories.forEach((memory, index) => {
-                        promptParts.push(`${index + 1}. ${memory.content}`);
-                    });
-                } else {
-                    promptParts.push('目前没有人格定义记忆');
-                }
+            promptParts.push('\n### 事实性记忆 (FACTUAL)');
+            promptParts.push('这些是核心事实知识库，包括用户偏好、重要决策、项目状态等关键信息：');
+            promptParts.push('<factual-memory>');
+            if (factualMemories.length > 0) {
+                factualMemories.forEach((memory, index) => {
+                    promptParts.push(`${index + 1}. ${memory.content}`);
+                });
+            } else {
+                promptParts.push('目前没有事实性记忆');
             }
+            promptParts.push('</factual-memory>');
+
+            promptParts.push('\n### 人格定义 (SOUL)');
+            promptParts.push('这些定义了 AI 的角色定位、语言风格和行为规则：');
+            promptParts.push('<soul-memory>');
+            if (soulMemories.length > 0) {
+                soulMemories.forEach((memory, index) => {
+                    promptParts.push(`${index + 1}. ${memory.content}`);
+                });
+            } else {
+                promptParts.push('目前没有人格定义记忆');
+            }
+            promptParts.push('</soul-memory>');
 
             // ========== 第二部分：工具使用说明 ==========
             promptParts.push('\n【记忆工具使用说明】');
             const toolInstructions = `
-你拥有以下记忆管理工具，可以主动调用它们来编辑长期记忆：
+你拥有以下记忆管理工具，可以主动调用它们来编辑长期记忆,保存的记忆会自动注入<factual-memory/>和<soul-memory/>中：
 
-### 1. 编辑长期记忆 (memory__long_term__edit)
+### 编辑长期记忆 (memory__long_term__edit)
 **用途**: 添加、更新或删除长期记忆
 
 **何时使用**:
@@ -145,10 +148,10 @@ export class MemoryToolProvider implements IToolProvider {
 - 需要调整 AI 的行为规则或角色设定时
 
 **使用建议**:
-1. **选择合适的写入模式**: 如果需要保留原有信息，使用 'append'；如果需要完全替换，使用 'overwrite'
-2. **保持记忆简洁**: 记忆内容应该简洁明了，便于后续检索和使用
-3. **及时更新**: 当发现记忆内容过时或不准确时，应及时更新
-4. **结构化保存**: 记忆内容应该结构化保存
+1. **选择合适的写入模式**: 如果需要保留原有信息，使用 'append'；如果需要完全替换或者整理原记忆，使用 'overwrite'
+2. **保持记忆简洁**: 记忆内容应该简洁明了并使用结构化保存，如：
+- 用户偏好：用户的具体偏好设置，如语言、主题、兴趣等
+3. **及时更新**: 当发现记忆内容过时或不准确时，应及时更新，如果已有相同类别，则应该编辑合并
 `;
             promptParts.push(toolInstructions);
 
