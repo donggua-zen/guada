@@ -7,6 +7,7 @@
     "moduleResolution": "bundler",
     "resolveJsonModule": true,
     "allowImportingTsExtensions": true,
+    "noEmit": true,
     
     /* 类型检查 - 初期宽松模式 */
     "strict": false,
@@ -51,10 +52,7 @@
     },
     
     /* 类型根目录 */
-    "typeRoots": ["./node_modules/@types", "./src/types"],
-    
-    /* 弃用警告处理 */
-    "ignoreDeprecations": "6.0"
+    "typeRoots": ["./node_modules/@types", "./src/types"]
   },
   
   "include": [

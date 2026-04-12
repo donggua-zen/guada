@@ -107,7 +107,7 @@ export class AgentService {
         }
 
         // 3. 多轮工具调用循环
-        let needToContinue = true;
+        let needToContinue = false;
         const chatTurns: MessageRecord[] = [];
         const llm = this.llmService;
 
@@ -120,8 +120,9 @@ export class AgentService {
 
 
 
-        while (needToContinue) {
+        do {
             iterationCount++;
+            needToContinue = false;
 
             // 安全检查：超过最大迭代次数
             if (iterationCount > MAX_ITERATIONS) {
@@ -165,8 +166,14 @@ export class AgentService {
             let streamError: Error | null = null;  // 记录流式过程中的错误
 
             try {
-                const canThinking = mergedSettings.thinkingEnabled && (session.model?.features as any[]).includes('thinking');
-                const canUseTools = (session.model?.features as any[]).includes('tools');
+                const config = session.model?.config as any || {};
+                const features = config.features || [];
+
+                const canThinking = mergedSettings.thinkingEnabled && features.includes('thinking');
+                const canUseTools = features.includes('tools');
+
+                // 检查模型是否支持图像输入（用于决定是否传递图片内容给 LLM）
+                const supportsImageInput = (config.inputCapabilities || []).includes('image');
 
                 const stream = llm.completions({
                     model: session.model?.modelName || 'gpt-3.5-turbo',
@@ -174,9 +181,9 @@ export class AgentService {
                     tools: canUseTools ? tools : undefined,
                     temperature: mergedSettings.modelTemperature,
                     topP: mergedSettings.modelTopP,
-                    frequencyPenalty: mergedSettings.modelFrequencyPenalty,  // 新增
-                    maxTokens: session.model?.maxOutputTokens,  // 新增：从模型配置获取
-                    modelConfig: session.model,  // 传递模型配置（包含供应商信息）
+                    frequencyPenalty: mergedSettings.modelFrequencyPenalty,
+                    maxTokens: config.maxOutputTokens, // 从 config 获取最大输出长度
+                    modelConfig: session.model, // 传递模型配置（包含供应商信息）
                     stream: true, // 显式开启流式
                     thinkingEnabled: canThinking, // 显式传递思考模式开关
                     abortSignal,  // 传递中断信号
@@ -300,9 +307,7 @@ export class AgentService {
                             content: tr.content,
                             toolCallId: tr.toolCallId,
                         }));
-
-                    } else if (chunk.finishReason) {
-                        needToContinue = false;
+                        needToContinue = true;
                     }
                 }
             } catch (error) {
@@ -367,7 +372,7 @@ export class AgentService {
             if (!needToContinue) {
                 chatTurns.push(currentChunk);
             }
-        }
+        } while (needToContinue);
     }
 
     /**

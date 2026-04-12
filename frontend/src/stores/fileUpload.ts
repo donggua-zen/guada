@@ -6,13 +6,13 @@ import { ref, type Ref } from 'vue'
  * 文件上传任务
  */
 export interface UploadTask {
-    id: string // 临时 ID（用于前端追踪）
-    fileId: string // 数据库文件 ID（上传完成后更新）
+    id: string // 临时 ID(用于前端追踪)
+    fileId: string // 数据库文件 ID(上传完成后更新)
     fileName: string
     fileSize: number
     fileType: string
     fileExtension?: string
-    status: 'uploading' | 'uploaded' | 'pending' | 'processing' | 'completed' | 'failed'
+    status: 'queued' | 'uploading' | 'uploaded' | 'pending' | 'processing' | 'completed' | 'failed'
     progress: number
     currentStep: string | null
     errorMessage: string | null
@@ -20,22 +20,23 @@ export interface UploadTask {
     processedAt: string | null
     knowledgeBaseId: string
     timerId?: NodeJS.Timeout
+    rawFile?: File // 原始文件对象(用于延迟上传)
 }
 
 /**
- * 统一的文件记录类型（兼容数据库记录和上传任务）
+ * 统一的文件记录类型(兼容数据库记录和上传任务)
  */
 export interface UnifiedFileRecord {
     id: string
     fileId: string // 数据库文件 ID
-    knowledgeBaseId?: string // 知识库 ID（可选，用于兼容）
+    knowledgeBaseId?: string // 知识库 ID(可选,用于兼容)
     fileName: string
     displayName: string
     fileSize: number
     fileType: string
     fileExtension: string
-    contentHash?: string // 内容哈希（可选，临时任务没有）
-    processingStatus: 'uploading' | 'uploaded' | 'pending' | 'processing' | 'completed' | 'failed'
+    contentHash?: string // 内容哈希(可选,临时任务没有)
+    processingStatus: 'queued' | 'uploading' | 'uploaded' | 'pending' | 'processing' | 'completed' | 'failed'
     progressPercentage: number
     currentStep: string | null
     errorMessage: string | null
@@ -57,18 +58,24 @@ export const useFileUploadStore = defineStore('fileUpload', () => {
     /** 所有上传任务 */
     const uploadTasks: Ref<Map<string, UploadTask>> = ref(new Map())
 
+    /** 最大并发上传数 */
+    const MAX_CONCURRENT_UPLOADS = 3
+
+    /** 上传队列定时器 */
+    let queueProcessorTimer: NodeJS.Timeout | null = null
+
 
     // ========== Actions ==========
 
     /**
      * 添加上传任务
      */
-    function addUploadTask(task: Omit<UploadTask, 'status' | 'progress' | 'currentStep' | 'errorMessage'>) {
+    function addUploadTask(task: Omit<UploadTask, 'status' | 'progress' | 'currentStep' | 'errorMessage'> & { rawFile?: File }) {
         const newTask: UploadTask = {
             ...task,
-            status: 'pending',
+            status: 'queued', // 初始状态为排队中
             progress: 0,
-            currentStep: '等待处理...',
+            currentStep: '等待上传...',
             errorMessage: null
         }
 
@@ -137,7 +144,137 @@ export const useFileUploadStore = defineStore('fileUpload', () => {
 
 
     /**
-     * 上传文件到知识库
+     * 获取当前正在上传的任务数量
+     */
+    function getUploadingCount(): number {
+        return Array.from(uploadTasks.value.values()).filter(
+            task => task.status === 'uploading'
+        ).length
+    }
+
+    /**
+     * 获取待上传队列中的任务
+     */
+    function getQueuedTasks(): UploadTask[] {
+        return Array.from(uploadTasks.value.values()).filter(
+            task => task.status === 'queued'
+        ).sort((a, b) => {
+            // 按创建时间排序(通过 ID 判断,ID 是时间戳)
+            return parseInt(a.id) - parseInt(b.id)
+        })
+    }
+
+    /**
+     * 处理上传队列,自动启动待上传的任务
+     */
+    function processUploadQueue() {
+        const uploadingCount = getUploadingCount()
+        const availableSlots = MAX_CONCURRENT_UPLOADS - uploadingCount
+
+        if (availableSlots <= 0) {
+            return // 没有可用槽位
+        }
+
+        const queuedTasks = getQueuedTasks()
+        const tasksToStart = queuedTasks.slice(0, availableSlots)
+
+        console.log(`[DEBUG] 处理上传队列: 当前上传 ${uploadingCount}/${MAX_CONCURRENT_UPLOADS}, 待上传 ${queuedTasks.length}, 准备启动 ${tasksToStart.length} 个`)
+
+        // 启动待上传的任务
+        tasksToStart.forEach(task => {
+            if (task.rawFile) {
+                console.log(`[DEBUG] 从队列启动上传: ${task.fileName}`)
+                executeUpload(task, task.rawFile)
+            }
+        })
+    }
+
+    /**
+     * 执行实际的上传操作
+     */
+    async function executeUpload(task: UploadTask, file: File, onProgressUpdate?: (status: UploadTask) => void) {
+        try {
+            // 更新状态为上传中
+            updateUploadStatus(task.id, {
+                status: 'uploading',
+                progress: 0,
+                currentStep: '准备上传...'
+            })
+            onProgressUpdate?.(task)
+
+            // 使用 axios 直接调用以获取上传进度
+            const { default: axios } = await import('axios')
+            const formData = new FormData()
+            formData.append('file', file)
+
+            // 从 auth store 获取 token
+            const { useAuthStore } = await import('@/stores/auth')
+            const authStore = useAuthStore()
+            const token = authStore.token
+
+            try {
+                const response = await axios.post(
+                    `/api/v1/knowledge-bases/${task.knowledgeBaseId}/files/upload`,
+                    formData,
+                    {
+                        headers: {
+                            'Content-Type': 'multipart/form-data',
+                            'Authorization': `Bearer ${token}`
+                        },
+                        onUploadProgress: (progressEvent) => {
+                            if (!progressEvent.total) return
+
+                            const percentCompleted = Math.round(
+                                (progressEvent.loaded * 100) / progressEvent.total
+                            )
+
+                            // 更新上传进度
+                            updateUploadStatus(task.id, {
+                                status: 'uploading',
+                                progress: percentCompleted,
+                                currentStep: `上传中... ${percentCompleted}%`
+                            })
+                            onProgressUpdate?.(task)
+                        }
+                    }
+                )
+
+                // 上传成功,更新为真实 ID 和状态
+                const taskToUpdate = uploadTasks.value.get(task.id)
+                if (taskToUpdate) {
+                    taskToUpdate.fileId = response.data.id
+                    taskToUpdate.status = 'uploaded'
+                    taskToUpdate.progress = 100
+                    taskToUpdate.currentStep = '上传完成,等待处理...'
+                    onProgressUpdate?.(taskToUpdate)
+
+                    // 注意:不再在这里清除任务,由轮询机制自动清理
+                    // clearUploadTask(task.id)
+                }
+
+                // 关键:上传完成后,处理队列中的下一个任务
+                console.log(`[DEBUG] 上传完成: ${task.fileName}, 检查队列...`)
+                setTimeout(() => processUploadQueue(), 100)
+            } catch (error) {
+                console.error('上传失败:', error)
+                updateUploadStatus(task.id, {
+                    status: 'failed',
+                    errorMessage: (error as any).response?.data?.detail || '上传失败'
+                })
+                onProgressUpdate?.(task)
+
+                // 失败后也要处理队列
+                setTimeout(() => processUploadQueue(), 100)
+                throw error
+            }
+        } catch (error) {
+            console.error('执行上传失败:', error)
+            throw error
+        }
+    }
+
+    /**
+     * 上传文件到知识库(支持并发控制)
      */
     async function uploadToKnowledgeBase(
         kbId: string,
@@ -149,90 +286,28 @@ export const useFileUploadStore = defineStore('fileUpload', () => {
             const fileName = file.name
             const fileExtension = fileName.includes('.') ? fileName.split('.').pop()! : ''
 
-            // 创建初始任务（pending 状态）
+            // 创建初始任务(queued 状态)
             const task = addUploadTask({
-                id: Date.now().toString(),
+                id: Date.now().toString() + Math.random().toString(36).substr(2, 9),
                 fileId: 'pending',
                 fileName: fileName,
                 fileSize: file.size,
                 fileType: file.type || 'unknown',
-                fileExtension: fileExtension,  // 添加扩展名
+                fileExtension: fileExtension,
                 uploadedAt: new Date().toISOString(),
                 processedAt: null,
-                knowledgeBaseId: kbId
+                knowledgeBaseId: kbId,
+                rawFile: file // 保存原始文件用于后续上传
             })
 
-            // 使用 axios 直接调用以获取上传进度
-            import('axios').then(async ({ default: axios }) => {
-                const formData = new FormData()
-                formData.append('file', file)
+            console.log(`[DEBUG] 添加上传任务: ${fileName}, 当前队列长度: ${uploadTasks.value.size}`)
 
-                // 从 auth store 获取 token
-                const { useAuthStore } = await import('@/stores/auth')
-                const authStore = useAuthStore()
-                const token = authStore.token
-
-                try {
-                    const response = await axios.post(
-                        `/api/v1/knowledge-bases/${kbId}/files/upload`,
-                        formData,
-                        {
-                            headers: {
-                                'Content-Type': 'multipart/form-data',
-                                'Authorization': `Bearer ${token}`
-                            },
-                            onUploadProgress: (progressEvent) => {
-                                if (!progressEvent.total) return
-
-                                const percentCompleted = Math.round(
-                                    (progressEvent.loaded * 100) / progressEvent.total
-                                )
-
-                                // 更新上传进度
-                                updateUploadStatus(task.id, {
-                                    status: 'uploading',
-                                    progress: percentCompleted,
-                                    currentStep: `上传中... ${percentCompleted}%`
-                                })
-                                onProgressUpdate?.(task)
-
-
-                            }
-                        }
-                    )
-
-                    // 上传成功，更新为真实 ID 和状态
-                    const taskToUpdate = uploadTasks.value.get(task.id)
-                    if (taskToUpdate) {
-                        taskToUpdate.fileId = response.data.id
-                        taskToUpdate.status = 'uploaded'
-                        taskToUpdate.progress = 100
-                        taskToUpdate.currentStep = '上传完成，等待处理...'
-                        onProgressUpdate?.(taskToUpdate)
-
-                        // 关键修复：上传成功后立即清除临时任务
-                        // 避免 mergeFilesWithTasks 重复加载
-                        // 数据库记录会在 refreshFileList 时自动加载
-                        clearUploadTask(task.id)
-                    }
-
-                    // 注意：不再在这里启动轮询
-                    // 轮询逻辑已移至 knowledgeBase store
-                    // knowledgeBase store 会在 refreshFileList 时自动检测 processing 状态并启动轮询
-                } catch (error) {
-                    console.error('上传失败:', error)
-                    updateUploadStatus(task.id, {
-                        status: 'failed',
-                        errorMessage: (error as any).response?.data?.detail || '上传失败'
-                    })
-                    onProgressUpdate?.(task)
-                    throw error
-                }
-            })
+            // 立即尝试处理队列(如果还有可用槽位,会立即开始上传)
+            processUploadQueue()
 
             return task
         } catch (error) {
-            console.error('上传文件失败:', error)
+            console.error('添加上传任务失败:', error)
             throw error
         }
     }
@@ -272,7 +347,8 @@ export const useFileUploadStore = defineStore('fileUpload', () => {
 
         return {
             total: allTasks.length,
-            uploading: allTasks.length,
+            queued: allTasks.filter(t => t.status === 'queued').length,
+            uploading: allTasks.filter(t => t.status === 'uploading').length,
             completed: allTasks.filter(t => t.status === 'completed').length,
             failed: allTasks.filter(t => t.status === 'failed').length,
             pending: allTasks.filter(t => t.status === 'pending' || t.status === 'uploaded').length,

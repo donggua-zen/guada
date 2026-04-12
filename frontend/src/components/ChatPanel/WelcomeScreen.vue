@@ -6,7 +6,7 @@
         <div
           class="w-24 h-24 rounded-full flex items-center justify-center mx-auto relative overflow-hidden p-0 animate-bounce-in"
         >
-          <Avatar v-if="session" :src="session.character.avatar_url" round />
+          <Avatar v-if="session" :src="session.character.avatarUrl" round />
           <div v-else class="text-4xl text-white">?</div>
         </div>
         <div

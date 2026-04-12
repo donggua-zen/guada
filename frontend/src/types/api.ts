@@ -18,7 +18,7 @@ export interface Model {
     providerName?: string
     isActive: boolean
     contextWindow?: number
-    maxTokens?: number
+    maxOutputTokens?: number
     description?: string
     createdAt?: string
     updatedAt?: string
