@@ -10,10 +10,8 @@
                             <span class="text-md text-gray-400">系统设置</span>
                         </div>
                         <div class="flex flex-col w-full rounded-lg bg-white md:bg-transparent px-4 md:px-0">
-                            <div v-for="item in sidebarItems" 
-                                @click="handleItemClick(item)"
-                                class="flex items-center justify-center transition-colors duration-200" 
-                                :class="{
+                            <div v-for="item in sidebarItems" @click="handleItemClick(item)"
+                                class="flex items-center justify-center transition-colors duration-200" :class="{
                                     'bg-(--color-primary-100) text-(--color-primary)': !isMobile && currentTabValue === item.path,
                                     'border-b border-gray-200 py-3 px-1 last:border-b-0': isMobile,
                                     'rounded-lg mx-1 mb-2 mt-1 py-1 px-2 cursor-pointer': !isMobile,
@@ -38,10 +36,10 @@
                             <template #icon>
                                 <ArrowBackIosFilled />
                             </template>
-                        </el-button>
-                        <div class="text-lg">{{ currentItem.label }}</div>
-                        <div class="flex items-center"></div>
-                    </div> -->
+</el-button>
+<div class="text-lg">{{ currentItem.label }}</div>
+<div class="flex items-center"></div>
+</div> -->
                     <div class="p-3 md:p-3 md:w-full flex flex-col flex-1 overflow-hidden min-h-0">
                         <template v-if="currentTabValue === 'models'">
                             <ModelsSettings />
@@ -68,10 +66,14 @@ import DefaultModelSettings from './DefaultModelSettings.vue'
 import MCPServers from './MCPServers.vue'
 
 import {
-    CloudDownloadOutlined,
     ArrowBackIosFilled,
-    DnsOutlined,
 } from '@vicons/material'
+
+import {
+    CloudLink16Regular,
+    Grid16Regular,
+    Dumbbell16Regular
+} from '@vicons/fluent'
 
 import { useAuthStore } from '../../stores/auth'
 import { useRouter, useRoute } from 'vue-router'
@@ -94,19 +96,19 @@ const sidebarItems = [
     {
         label: '模型管理',
         path: 'models',
-        icon: CloudDownloadOutlined,
+        icon: CloudLink16Regular,
         roles: ['primary'],
-    }, 
+    },
     {
         label: '默认模型',
         path: 'default-models',
-        icon: DnsOutlined,
+        icon: Grid16Regular,
         roles: ['primary'],
     },
     {
         label: 'MCP 服务器',
         path: 'mcp',
-        icon: DnsOutlined,
+        icon: Dumbbell16Regular,
         roles: ['primary'],
     },
 ]

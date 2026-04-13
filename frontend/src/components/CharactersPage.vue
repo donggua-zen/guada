@@ -1,73 +1,35 @@
 <template>
-  <SidebarLayout v-model:sidebar-visible="sidebarVisible" :sidebar-position="'left'" :z-index="50"
-    :show-toggle-button="false">
-    <template #sidebar>
-      <!-- 左侧二级侧边栏 - 助手分类 -->
-      <div class="h-full w-56 bg-(--color-conversation-bg) border-r border-(--color-conversation-border) flex flex-col">
-        <div class="px-4 py-4 border-b border-(--color-conversation-border)">
-          <div class="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">助手分类</div>
-          <el-segmented v-model="charactersType" :options="[
-            { label: '我的模板', value: 'private' },
-            { label: '共享模板', value: 'shared' }
-          ]" block class="segmented-control" />
+  <div class="h-full flex flex-col md:max-w-295 md:mx-auto">
+    <SidebarLayout v-model:sidebar-visible="sidebarVisible" :sidebar-position="'left'" :z-index="50"
+      :show-toggle-button="false" :sidebar-width="200">
+      <template #sidebar>
+        <!-- 左侧二级侧边栏 - 助手分类 -->
+        <div class="h-full bg-(--color-conversation-bg) border-r border-(--color-conversation-border) flex flex-col">
+          <div class="px-4 py-4 border-b border-(--color-conversation-border)">
+            <div class="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">助手分类</div>
+            <el-segmented v-model="charactersType" :options="[
+              { label: '我的模板', value: 'private' },
+              { label: '共享模板', value: 'shared' }
+            ]" block class="segmented-control" />
+          </div>
         </div>
-      </div>
-    </template>
-    <template #content>
-      <div class="flex flex-col h-full">
-        <!-- 头部 -->
-        <div class="flex justify-between items-center px-6 py-4 border-b border-gray-100 dark:border-gray-800">
-          <span class="text-lg font-semibold text-gray-800 dark:text-gray-200">助手列表</span>
-          <el-button type="primary" @click="createCharacter" class="flex items-center">
-            <template #icon>
-              <PlusOutlined />
-            </template>
-            新建助手
-          </el-button>
-        </div>
+      </template>
+      <template #content>
+        <div class="flex flex-col h-full p-3">
+          <!-- 头部 -->
+          <div class="flex justify-between items-center py-4">
+            <span class="text-lg font-semibold text-gray-800 dark:text-gray-200">助手列表</span>
+            <el-button type="primary" @click="createCharacter" class="flex items-center">
+              <template #icon>
+                <PlusOutlined />
+              </template>
+              新建助手
+            </el-button>
+          </div>
 
-        <!-- 助手列表 -->
-        <div class="flex-1 overflow-y-auto p-6">
-          <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-6 w-full">
-            <!-- 骨架屏加载效果 -->
-            <template v-if="loading">
-              <div v-for="i in skeletonCount" :key="i"
-                class="rounded-xl border border-gray-200 dark:border-gray-700 flex flex-col min-h-45 animate-pulse">
-                <div class="flex p-4 flex-1 flex-col">
-                  <!-- 头像区域 -->
-                  <div class="flex flex-rows">
-                    <div class="shrink-0 mr-4">
-                      <div class="w-16 h-16 bg-surface rounded-full"></div>
-                    </div>
-
-                    <!-- 内容区域 -->
-                    <div class="flex-1 min-w-0 flex flex-col">
-                      <!-- 标题 -->
-                      <h3
-                        class="text-lg bg-surface rounded font-semibold text-gray-800 dark:text-gray-200 truncate mb-2">
-                        &nbsp;
-                      </h3>
-                      <!-- 描述 -->
-                      <div class="h-15 space-y-2">
-                        <div class="h-3 bg-surface rounded"></div>
-                        <div class="h-3 bg-surface rounded w-4/5"></div>
-                        <div class="h-3 bg-surface rounded w-3/5"></div>
-                      </div>
-                    </div>
-                  </div>
-                  <!-- 操作按钮 -->
-                  <div
-                    class="flex justify-between items-center mt-4 pt-3 border-t border-gray-100 dark:border-gray-700">
-                    <div class="h-7 w-20 bg-surface rounded-full"></div>
-                    <div class="flex gap-1">
-                      <div class="w-8 h-8 rounded-full bg-surface"></div>
-                      <div class="w-8 h-8 rounded-full bg-surface"></div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </template>
-            <template v-else>
+          <!-- 助手列表 -->
+          <div class="flex-1 overflow-y-auto">
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 w-full">
               <!-- 助手卡片 -->
               <div v-for="character in characters" :key="character.id"
                 class="provider-card group relative bg-white border border-gray-200 rounded-lg p-4 cursor-default hover:border-(--color-primary) transition-all duration-200 overflow-hidden">
@@ -125,30 +87,27 @@
                   </el-button>
                 </div>
               </div>
-            </template>
-            <!-- 空状态 -->
-            <div v-if="!loading && characters.length === 0" class="col-span-full text-center py-12 text-gray-500">
-              <el-icon size="48" class="text-gray-300 mb-3">
-                <People />
-              </el-icon>
-              <p class="text-lg">暂无助手</p>
-              <p class="text-sm mt-1">点击上方按钮创建第一个助手</p>
+              <!-- 空状态 -->
+              <div v-if="!loading && characters.length === 0" class="col-span-full text-center py-12 text-gray-500">
+                <el-icon size="48" class="text-gray-300 mb-3">
+                  <People />
+                </el-icon>
+                <p class="text-lg">暂无助手</p>
+                <p class="text-sm mt-1">点击上方按钮创建第一个助手</p>
+              </div>
             </div>
           </div>
         </div>
-      </div>
-    </template>
-  </SidebarLayout>
-
-  <!-- 助手弹窗 -->
-  <CharacterModal v-model:show="showModal" v-model:characterId="currentCharacterId" @saved="handleSaved" />
+      </template>
+    </SidebarLayout>
+    <!-- 助手弹窗 -->
+    <CharacterModal v-model:show="showModal" v-model:characterId="currentCharacterId" @saved="handleSaved" />
+  </div>
 </template>
 
-<!-- @ts-ignore - UI 组件和 Element Plus 尚未完全迁移到 TypeScript -->
 <script setup lang="ts">
 import { ref, onMounted, reactive, watch } from 'vue'
 import { useRouter } from 'vue-router'
-// @ts-ignore - Element Plus 类型缺失
 import {
   ElIcon,
   ElTooltip,
@@ -158,7 +117,6 @@ import {
   ElDropdownItem,
   ElButton
 } from 'element-plus'
-// @ts-ignore - icons 类型缺失
 import {
   People
 } from '@vicons/ionicons5'
@@ -170,12 +128,9 @@ import {
 
 import { useTitle } from '../composables/useTitle'
 import { useStorage } from '@vueuse/core'
-// @ts-ignore - UI 组件类型缺失
 import { SidebarLayout } from './ui'
-// @ts-ignore - UI 组件类型缺失
 import { Avatar } from './ui'
 import CharacterModal from './CharacterModal.vue'
-// @ts-ignore - ApiService 尚未迁移到 TypeScript
 import { apiService } from '../services/ApiService'
 import { usePopup } from '../composables/usePopup'
 
@@ -188,19 +143,14 @@ const characters = ref<any[]>([])
 const showModal = ref(false)
 const currentCharacterId = ref('')
 const charactersType = useStorage<'private' | 'public'>('charactersType', 'private')
-const loading = ref(true)
-const skeletonCount = ref(10)
-const sidebarVisible = useStorage<boolean>('sidebarVisible', true)
+const loading = ref(false)
+const sidebarVisible = useStorage<boolean>('CharacterSidebarVisible', true)
 
 // 加载角色列表 - 类型化
 const loadCharacters = async (type: 'private' | 'public'): Promise<void> => {
   loading.value = true
   try {
-    // 确保至少显示 500ms 的加载动画，避免闪烁
-    const [data] = await Promise.all([
-      apiService.fetchCharacters(type),
-      new Promise(resolve => setTimeout(resolve, 500))
-    ])
+    const data = await apiService.fetchCharacters(type)
     characters.value = data.items
   } catch (error: any) {
     console.error('获取助手列表失败:', error)

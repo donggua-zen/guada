@@ -73,6 +73,7 @@ const firstChar = computed((): string => {
     background-color: #f5f5f5;
     color: #666;
     overflow: hidden;
+    container-type: size;
 }
 
 .dark .avatar-placeholder {
@@ -86,9 +87,10 @@ const firstChar = computed((): string => {
 }
 
 .avatar-text {
-    font-size: 2em;
+    font-size: 60cqw;
     font-weight: 600;
-    color: #333;
+    color: #444;
+    line-height: 1;
 }
 
 .dark .avatar-text {

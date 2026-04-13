@@ -14,8 +14,7 @@
                             <el-form-item label="头像设置" :show-label="false">
                                 <div class="avatar-upload-container ">
                                     <AvatarPreview :src="characterForm.avatarUrl" type="assistant"
-                                        :name="characterForm.title"
-                                        @avatar-changed="handleAvatarChanged">
+                                        :name="characterForm.title" @avatar-changed="handleAvatarChanged">
                                     </AvatarPreview>
                                 </div>
                             </el-form-item>
@@ -60,17 +59,7 @@
                             <!-- 详细设定 -->
                             <el-form-item prop="systemPrompt" :show-label="false">
                                 <el-input v-model="characterForm.systemPrompt" type="textarea" placeholder="请输入详细设定"
-                                    :autosize="{ minRows: 5, maxRows: 8 }" />
-                            </el-form-item>
-
-                            <!-- 角色名称 -->
-                            <el-form-item label="角色名称">
-                                <el-input v-model="characterForm.assistantName" placeholder="请输入角色名称" clearable />
-                            </el-form-item>
-
-                            <!-- 职业设定 -->
-                            <el-form-item label="职业设定">
-                                <el-input v-model="characterForm.assistantIdentity" placeholder="请输入职业设定" clearable />
+                                    :autosize="{ minRows: 8, maxRows: 12 }" />
                             </el-form-item>
 
                         </el-form>
