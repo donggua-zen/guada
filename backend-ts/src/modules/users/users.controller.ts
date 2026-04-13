@@ -1,81 +1,115 @@
-import { Controller, Get, Put, Post, Delete, Param, Body, UseInterceptors, UploadedFile, UseGuards } from '@nestjs/common';
-import { AuthGuard } from '../auth/auth.guard';
-import { CurrentUser } from '../auth/current-user.decorator';
-import { UserService } from './user.service';
-import { FileInterceptor } from '@nestjs/platform-express';
+import {
+  Controller,
+  Get,
+  Put,
+  Post,
+  Delete,
+  Param,
+  Body,
+  UseInterceptors,
+  UploadedFile,
+  UseGuards,
+} from "@nestjs/common";
+import { AuthGuard } from "../auth/auth.guard";
+import { CurrentUser } from "../auth/current-user.decorator";
+import { UserService } from "./user.service";
+import { FileInterceptor } from "@nestjs/platform-express";
 
 @Controller()
 @UseGuards(AuthGuard)
 export class UsersController {
   constructor(private readonly userService: UserService) {}
 
-  @Get('user/profile')
+  @Get("user/profile")
   async getProfile(@CurrentUser() user: any) {
     return this.userService.getProfile(user.sub);
   }
 
-  @Put('user/profile')
+  @Put("user/profile")
   async updateProfile(@Body() data: any, @CurrentUser() user: any) {
     return this.userService.updateProfile(user.sub, data);
   }
 
-  @Put('user/password')
-  async updatePassword(@Body() body: { old_password: string; new_password: string }, @CurrentUser() user: any) {
-    return this.userService.changePassword(user.sub, body.old_password, body.new_password);
+  @Put("user/password")
+  async updatePassword(
+    @Body() body: { old_password: string; new_password: string },
+    @CurrentUser() user: any,
+  ) {
+    return this.userService.changePassword(
+      user.sub,
+      body.old_password,
+      body.new_password,
+    );
   }
 
-  @Post('subaccounts')
+  @Post("subaccounts")
   async createSubAccount(@Body() data: any, @CurrentUser() user: any) {
     return this.userService.createSubAccount(user.sub, data);
   }
 
-  @Get('subaccounts')
+  @Get("subaccounts")
   async getSubAccounts(@CurrentUser() user: any) {
     return this.userService.getSubAccounts(user.sub);
   }
 
-  @Delete('subaccounts/:id')
-  async deleteSubAccount(@Param('id') id: string, @CurrentUser() user: any) {
+  @Delete("subaccounts/:id")
+  async deleteSubAccount(@Param("id") id: string, @CurrentUser() user: any) {
     await this.userService.deleteSubAccount(id, user.sub);
     return { success: true };
   }
 
-  @Put('subaccounts/:id')
-  async updateSubAccount(@Param('id') id: string, @Body() data: any, @CurrentUser() user: any) {
+  @Put("subaccounts/:id")
+  async updateSubAccount(
+    @Param("id") id: string,
+    @Body() data: any,
+    @CurrentUser() user: any,
+  ) {
     // 验证：仅主账户或本人可更新
     const targetUser = await this.userService.getProfile(id);
     if (!targetUser) {
-      throw new Error('用户不存在');
+      throw new Error("用户不存在");
     }
-    
+
     // 检查权限：必须是主账户或者账户本人
     if (targetUser.parentId !== user.sub && targetUser.id !== user.sub) {
-      throw new Error('无权更新该账户');
+      throw new Error("无权更新该账户");
     }
-    
+
     return this.userService.updateProfile(id, data);
   }
 
-  @Post('user/avatars')
-  @UseInterceptors(FileInterceptor('avatar'))
+  @Post("user/avatars")
+  @UseInterceptors(FileInterceptor("avatar"))
   async uploadAvatar(@UploadedFile() file: any, @CurrentUser() user: any) {
     return this.userService.uploadAvatar(user.sub, file);
   }
 
-  @Get('user/reset-password')
+  @Get("user/reset-password")
   checkResetPassword() {
     if (!this.userService.isPasswordResetAllowed()) {
-      throw new Error('密码已设置，无法重置');
+      throw new Error("密码已设置，无法重置");
     }
   }
 
-  @Post('user/reset-password')
-  async resetPassword(@Body() body: { type: string; password: string; phone?: string; email?: string }) {
+  @Post("user/reset-password")
+  async resetPassword(
+    @Body()
+    body: {
+      type: string;
+      password: string;
+      phone?: string;
+      email?: string;
+    },
+  ) {
     if (!this.userService.isPasswordResetAllowed()) {
-      throw new Error('密码已设置，无法重置');
+      throw new Error("密码已设置，无法重置");
     }
-    
-    await this.userService.resetPrimaryPassword(body.password, body.phone, body.email);
+
+    await this.userService.resetPrimaryPassword(
+      body.password,
+      body.phone,
+      body.email,
+    );
     this.userService.markPasswordAsSet();
     return { success: true };
   }

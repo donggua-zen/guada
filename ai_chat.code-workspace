@@ -1,41 +1,42 @@
 {
-	"folders_": [
-		{
-			"name": "Frontend",
-			"path": "frontend"
-		},
-		{
-			"name": "Backend",
-			"path": "backend"
-		},
-		{
-			"name": "Backend_Ts",
-			"path": "backend-ts"
-		}
-
-  	],
-	"folders": [
-		{
-			"path": "."
-		}
-	],
-	"settings": {
-        "python.analysis.memory.limit": 8192,
-        "python.analysis.exclude": [
-            "**/__pycache__",
-            "**/.pytest_cache",
-            "**/.venv",
-            "**/node_modules",
-            "**/.git",
-            "**/data",
-            "**/logs",
-            "**/dist",
-            "**/build"
-        ],
-		"python.terminal.executeInFileDir": true,
-		"python.terminal.activateEnvInCurrentTerminal": false,
-		"python.terminal.activateEnvironment": true,
-		"css.lint.unknownAtRules": "ignore",
-		"python.languageServer": "None"
-  	}
+  "folders_": [
+    {
+      "name": "Frontend",
+      "path": "frontend",
+    },
+    {
+      "name": "Backend",
+      "path": "backend",
+    },
+    {
+      "name": "Backend_Ts",
+      "path": "backend-ts",
+    },
+  ],
+  "folders": [
+    {
+      "path": ".",
+    },
+  ],
+  "settings": {
+    "python.analysis.memory.limit": 8192,
+    "python.analysis.exclude": [
+      "**/__pycache__",
+      "**/.pytest_cache",
+      "**/.venv",
+      "**/node_modules",
+      "**/.git",
+      "**/data",
+      "**/logs",
+      "**/dist",
+      "**/build",
+    ],
+    "python.terminal.executeInFileDir": true,
+    "python.terminal.activateEnvInCurrentTerminal": false,
+    "python.terminal.activateEnvironment": true,
+    "css.lint.unknownAtRules": "ignore",
+    "python.languageServer": "None",
+    "editor.tabSize": 2,
+    "editor.formatOnSave": true,
+  },
 }

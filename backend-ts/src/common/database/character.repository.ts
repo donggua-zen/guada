@@ -1,5 +1,5 @@
-import { Injectable } from '@nestjs/common';
-import { PrismaService } from '../../common/database/prisma.service';
+import { Injectable } from "@nestjs/common";
+import { PrismaService } from "../../common/database/prisma.service";
 
 @Injectable()
 export class CharacterRepository {
@@ -16,7 +16,7 @@ export class CharacterRepository {
     const [items, total] = await Promise.all([
       this.prisma.character.findMany({
         where: { userId },
-        orderBy: { createdAt: 'desc' },
+        orderBy: { createdAt: "desc" },
         skip,
         take: limit,
         include: { model: true },
@@ -32,7 +32,7 @@ export class CharacterRepository {
     const [items, total] = await Promise.all([
       this.prisma.character.findMany({
         where: { isPublic: true },
-        orderBy: { createdAt: 'desc' },
+        orderBy: { createdAt: "desc" },
         skip,
         take: limit,
         include: { model: true, user: { select: { nickname: true } } },

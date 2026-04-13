@@ -1,9 +1,9 @@
-import { Injectable } from '@nestjs/common';
-import { PrismaService } from './prisma.service';
+import { Injectable } from "@nestjs/common";
+import { PrismaService } from "./prisma.service";
 
 @Injectable()
 export class MessageRepository {
-  constructor(private prisma: PrismaService) { }
+  constructor(private prisma: PrismaService) {}
 
   /**
    * 获取会话的消息列表（按创建时间排序）
@@ -14,9 +14,13 @@ export class MessageRepository {
       withFiles?: boolean;
       withContents?: boolean;
       onlyCurrentContent?: boolean;
-    }
+    },
   ) {
-    const { withFiles = false, withContents = true, onlyCurrentContent = false } = options || {};
+    const {
+      withFiles = false,
+      withContents = true,
+      onlyCurrentContent = false,
+    } = options || {};
 
     return this.prisma.message.findMany({
       where: { sessionId },
@@ -24,13 +28,13 @@ export class MessageRepository {
         ...(withFiles && { files: true }),
         ...(withContents && {
           contents: {
-            orderBy: { createdAt: 'asc' },
+            orderBy: { createdAt: "asc" },
             // Prisma 不支持在 include 中直接过滤关联数据
             // 如果需要 onlyCurrentContent，需要在查询后过滤
           },
         }),
       },
-      orderBy: { createdAt: 'asc' },
+      orderBy: { createdAt: "asc" },
     });
   }
 
@@ -46,26 +50,30 @@ export class MessageRepository {
       withFiles?: boolean;
       withContents?: boolean;
       onlyCurrentContent?: boolean;
-    }
+    },
   ) {
-    const { withFiles = false, withContents = true, onlyCurrentContent = false } = options || {};
+    const {
+      withFiles = false,
+      withContents = true,
+      onlyCurrentContent = false,
+    } = options || {};
     const where: any = { sessionId };
 
     // 如果指定了截止消息 ID，获取包括该消息在内的历史消息（与 Python 后端保持一致）
     // CUID 具有时间单调性，可以安全地用于排序和比较
     if (beforeMessageId) {
-      where.id = { lte: beforeMessageId };  // 使用 lte（小于等于），包含用户消息
+      where.id = { lte: beforeMessageId }; // 使用 lte（小于等于），包含用户消息
     }
 
     const messages = await this.prisma.message.findMany({
       where,
       take: limit,
-      orderBy: { id: 'desc' }, // 基于 ID 倒序（CUID 时间有序）
+      orderBy: { id: "desc" }, // 基于 ID 倒序（CUID 时间有序）
       include: {
         ...(withFiles && { files: true }),
         ...(withContents && {
           contents: {
-            orderBy: { createdAt: 'asc' },
+            orderBy: { createdAt: "asc" },
           },
         }),
       },
@@ -78,7 +86,7 @@ export class MessageRepository {
           return {
             ...message,
             contents: message.contents.filter(
-              (content) => content.turnsId === message.currentTurnsId
+              (content) => content.turnsId === message.currentTurnsId,
             ),
           };
         }
@@ -98,9 +106,13 @@ export class MessageRepository {
       withFiles?: boolean;
       withContents?: boolean;
       onlyCurrentContent?: boolean;
-    }
+    },
   ) {
-    const { withFiles = false, withContents = true, onlyCurrentContent = false } = options || {};
+    const {
+      withFiles = false,
+      withContents = true,
+      onlyCurrentContent = false,
+    } = options || {};
 
     const message = await this.prisma.message.findUnique({
       where: { id: messageId },
@@ -108,7 +120,7 @@ export class MessageRepository {
         ...(withFiles && { files: true }),
         ...(withContents && {
           contents: {
-            orderBy: { createdAt: 'asc' },
+            orderBy: { createdAt: "asc" },
           },
         }),
         session: true,
@@ -116,11 +128,16 @@ export class MessageRepository {
     });
 
     // 如果需要仅当前轮次内容，在应用层过滤
-    if (message && onlyCurrentContent && message.contents && message.currentTurnsId) {
+    if (
+      message &&
+      onlyCurrentContent &&
+      message.contents &&
+      message.currentTurnsId
+    ) {
       return {
         ...message,
         contents: message.contents.filter(
-          (content) => content.turnsId === message.currentTurnsId
+          (content) => content.turnsId === message.currentTurnsId,
         ),
       };
     }
@@ -147,7 +164,7 @@ export class MessageRepository {
     sessionId: string;
     role: string;
     parentId?: string;
-    currentTurnsId?: string;  // 添加 currentTurnsId（与 Python 后端一致）
+    currentTurnsId?: string; // 添加 currentTurnsId（与 Python 后端一致）
   }) {
     return this.prisma.message.create({
       data,

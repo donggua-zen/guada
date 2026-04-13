@@ -1,11 +1,11 @@
 /**
  * 向量数据库服务使用示例
- * 
+ *
  * 展示如何在 NestJS 服务中使用 VectorDbService
  */
 
-import { Injectable } from '@nestjs/common';
-import { VectorDbService } from './vector-db.service';
+import { Injectable } from "@nestjs/common";
+import { VectorDbService } from "./vector-db.service";
 
 @Injectable()
 export class ExampleKnowledgeService {
@@ -16,7 +16,11 @@ export class ExampleKnowledgeService {
    */
   async addKnowledgeChunks(
     knowledgeBaseId: string,
-    chunks: Array<{ id: string; content: string; metadata?: Record<string, any> }>,
+    chunks: Array<{
+      id: string;
+      content: string;
+      metadata?: Record<string, any>;
+    }>,
     embeddings: number[][],
   ): Promise<string[]> {
     const tableId = `kb_${knowledgeBaseId}`;

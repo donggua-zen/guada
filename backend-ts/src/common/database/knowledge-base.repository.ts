@@ -1,5 +1,5 @@
-import { Injectable } from '@nestjs/common';
-import { PrismaService } from '../../common/database/prisma.service';
+import { Injectable } from "@nestjs/common";
+import { PrismaService } from "../../common/database/prisma.service";
 
 @Injectable()
 export class KnowledgeBaseRepository {
@@ -29,7 +29,7 @@ export class KnowledgeBaseRepository {
     const [items, total] = await Promise.all([
       this.prisma.knowledgeBase.findMany({
         where: { userId, isActive: true },
-        orderBy: { createdAt: 'desc' },
+        orderBy: { createdAt: "desc" },
         skip,
         take: limit,
         include: { embeddingModel: true },

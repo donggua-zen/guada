@@ -14,6 +14,7 @@
                             <el-form-item label="头像设置" :show-label="false">
                                 <div class="avatar-upload-container ">
                                     <AvatarPreview :src="characterForm.avatarUrl" type="assistant"
+                                        :name="characterForm.title"
                                         @avatar-changed="handleAvatarChanged">
                                     </AvatarPreview>
                                 </div>

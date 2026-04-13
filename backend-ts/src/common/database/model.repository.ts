@@ -1,5 +1,5 @@
-import { Injectable } from '@nestjs/common';
-import { PrismaService } from './prisma.service';
+import { Injectable } from "@nestjs/common";
+import { PrismaService } from "./prisma.service";
 
 @Injectable()
 export class ModelRepository {
@@ -16,7 +16,7 @@ export class ModelRepository {
     return this.prisma.modelProvider.findMany({
       where: { userId },
       include: { models: true },
-      orderBy: { createdAt: 'desc' },
+      orderBy: { createdAt: "desc" },
     });
   }
 

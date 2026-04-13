@@ -1,22 +1,22 @@
-import { Injectable } from '@nestjs/common';
-import { GlobalSettingRepository } from '../../common/database/global-setting.repository';
+import { Injectable } from "@nestjs/common";
+import { GlobalSettingRepository } from "../../common/database/global-setting.repository";
 
 @Injectable()
 export class SettingsService {
   private readonly DEFAULT_KEYS = [
-    'defaultChatModelId',
-    'defaultSearchModelId',
-    'defaultSummaryModelId',
-    'searchPromptContextLength',
-    'searchApiKey',
-    'summaryModelId',
-    'summaryPrompt',
-    'defaultTitleSummaryModelId',
-    'defaultTitleSummaryPrompt',
-    'defaultTranslationModelId',
-    'defaultTranslationPrompt',
-    'defaultHistoryCompressionModelId',
-    'defaultHistoryCompressionPrompt',
+    "defaultChatModelId",
+    "defaultSearchModelId",
+    "defaultSummaryModelId",
+    "searchPromptContextLength",
+    "searchApiKey",
+    "summaryModelId",
+    "summaryPrompt",
+    "defaultTitleSummaryModelId",
+    "defaultTitleSummaryPrompt",
+    "defaultTranslationModelId",
+    "defaultTranslationPrompt",
+    "defaultHistoryCompressionModelId",
+    "defaultHistoryCompressionPrompt",
   ];
 
   constructor(private settingRepo: GlobalSettingRepository) {}
@@ -24,14 +24,14 @@ export class SettingsService {
   async getSettings(userId: string) {
     const allSettings = await this.settingRepo.findAll(userId);
     const settingsMap: Record<string, any> = {};
-    
+
     // 初始化默认值
-    this.DEFAULT_KEYS.forEach(key => {
+    this.DEFAULT_KEYS.forEach((key) => {
       settingsMap[key] = null;
     });
 
     // 覆盖数据库中的值（将 snake_case 转换为 camelCase）
-    allSettings.forEach(item => {
+    allSettings.forEach((item) => {
       const camelKey = this.snakeToCamel(item.key);
       settingsMap[camelKey] = item.value;
     });
@@ -46,7 +46,7 @@ export class SettingsService {
       value,
       userId,
     }));
-    
+
     await this.settingRepo.saveBatch(updates);
     return this.getSettings(userId);
   }
@@ -62,6 +62,6 @@ export class SettingsService {
    * 将 camelCase 转换为 snake_case
    */
   private camelToSnake(str: string): string {
-    return str.replace(/[A-Z]/g, letter => `_${letter.toLowerCase()}`);
+    return str.replace(/[A-Z]/g, (letter) => `_${letter.toLowerCase()}`);
   }
 }
