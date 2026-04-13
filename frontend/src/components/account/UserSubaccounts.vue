@@ -4,7 +4,7 @@
       class="border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow cursor-pointer relative">
       <div class="flex flex-col items-center text-center pt-4">
         <div class="w-16 h-16 mb-3 flex items-center justify-center">
-          <Avatar :src="account.avatarUrl" type="user" round />
+          <Avatar :src="account.avatarUrl" type="user" :name="account.nickname" round />
         </div>
         <h3 class="font-medium text-gray-900 truncate w-full">{{ account.nickname }}</h3>
         <p class="text-sm text-gray-500 truncate w-full mt-1">{{ account.email }}</p>

@@ -60,12 +60,12 @@ await vectorDb.close();
 
 ```typescript
 const results = await vectorDb.semanticSearch(
-  'my_kb',
-  queryEmbedding,  // 查询向量
-  5,               // topK
+  "my_kb",
+  queryEmbedding, // 查询向量
+  5, // topK
 );
 
-console.log(results[0].content);      // 文档内容
+console.log(results[0].content); // 文档内容
 console.log(results[0].semantic_score); // 相似度分数
 ```
 
@@ -75,13 +75,13 @@ console.log(results[0].semantic_score); // 相似度分数
 
 ```typescript
 const results = await vectorDb.keywordSearch(
-  'my_kb',
-  '向量数据库',  // 查询文本
-  5,             // topK
+  "my_kb",
+  "向量数据库", // 查询文本
+  5, // topK
 );
 
-console.log(results[0].content);     // 文档内容
-console.log(results[0].bm25_score);  // BM25 分数
+console.log(results[0].content); // 文档内容
+console.log(results[0].bm25_score); // BM25 分数
 ```
 
 ### 混合搜索
@@ -90,16 +90,16 @@ console.log(results[0].bm25_score);  // BM25 分数
 
 ```typescript
 const results = await vectorDb.hybridSearch(
-  'my_kb',
-  queryEmbedding,  // 查询向量
-  '向量数据库',    // 查询文本
-  5,               // topK
-  0.6,             // 语义权重
-  0.4,             // 关键词权重
+  "my_kb",
+  queryEmbedding, // 查询向量
+  "向量数据库", // 查询文本
+  5, // topK
+  0.6, // 语义权重
+  0.4, // 关键词权重
 );
 
-console.log(results[0].content);  // 文档内容
-console.log(results[0].score);    // 最终融合分数
+console.log(results[0].content); // 文档内容
+console.log(results[0].score); // 最终融合分数
 ```
 
 ---
@@ -110,18 +110,18 @@ console.log(results[0].score);    // 最终融合分数
 
 ```typescript
 // knowledge-base.module.ts
-import { Module } from '@nestjs/common';
-import { VectorDatabase, LanceDBVectorDB } from '@/common/vector-db';
+import { Module } from "@nestjs/common";
+import { VectorDatabase, LanceDBVectorDB } from "@/common/vector-db";
 
 @Module({
   providers: [
     {
-      provide: 'VECTOR_DB',
+      provide: "VECTOR_DB",
       useClass: LanceDBVectorDB,
     },
     KnowledgeBaseService,
   ],
-  exports: ['VECTOR_DB'],
+  exports: ["VECTOR_DB"],
 })
 export class KnowledgeBaseModule {}
 ```
@@ -130,20 +130,18 @@ export class KnowledgeBaseModule {}
 
 ```typescript
 // knowledge-base.service.ts
-import { Injectable, Inject } from '@nestjs/common';
-import { VectorDatabase } from '@/common/vector-db';
+import { Injectable, Inject } from "@nestjs/common";
+import { VectorDatabase } from "@/common/vector-db";
 
 @Injectable()
 export class KnowledgeBaseService {
-  constructor(
-    @Inject('VECTOR_DB') private vectorDb: VectorDatabase,
-  ) {}
+  constructor(@Inject("VECTOR_DB") private vectorDb: VectorDatabase) {}
 
   async searchKnowledgeBase(query: string) {
     const embedding = await this.getEmbedding(query);
-    
+
     return await this.vectorDb.hybridSearch(
-      'knowledge_base',
+      "knowledge_base",
       embedding,
       query,
       10,
@@ -179,14 +177,14 @@ interface VectorDatabase {
   createCollection(name: string, vectorSize: number): Promise<void>;
   deleteCollection(name: string): Promise<boolean>;
   collectionExists(name: string): Promise<boolean>;
-  
+
   addDocuments(collection: string, docs: VectorDocument[]): Promise<string[]>;
   deleteDocuments(collection: string, ids: string[]): Promise<number>;
-  
+
   semanticSearch(collection: string, embedding: number[], topK?: number): Promise<SearchResult[]>;
   keywordSearch(collection: string, query: string, topK?: number): Promise<SearchResult[]>;
   hybridSearch(collection: string, embedding: number[], query: string, ...): Promise<SearchResult[]>;
-  
+
   getCollectionStats(collection: string): Promise<CollectionStats>;
   close(): Promise<void>;
 }
@@ -223,8 +221,8 @@ export class QdrantVectorDB implements VectorDatabase {
 
 ```typescript
 // src/common/vector-db/implementations/index.ts
-export { LanceDBVectorDB } from './lancedb-vector-db';
-export { QdrantVectorDB } from './qdrant-vector-db'; // 新增
+export { LanceDBVectorDB } from "./lancedb-vector-db";
+export { QdrantVectorDB } from "./qdrant-vector-db"; // 新增
 ```
 
 ### 3. 在模块中配置
@@ -240,11 +238,11 @@ export { QdrantVectorDB } from './qdrant-vector-db'; // 新增
 
 ## 📊 支持的向量数据库
 
-| 数据库 | 模式 | 中文支持 | BM25 | 状态 |
-|--------|------|---------|------|------|
-| **LanceDB** | 本地文件 | jieba | FTS | 已实现 |
-| ChromaDB | 需要服务器 | ⚠️ 需配置 | ❌ 外部计算 | ⚠️ 部分实现 |
-| Qdrant | 需要服务器 | ⚠️ 需配置 | 内置 | ⏳ 待实现 |
+| 数据库      | 模式       | 中文支持  | BM25        | 状态        |
+| ----------- | ---------- | --------- | ----------- | ----------- |
+| **LanceDB** | 本地文件   | jieba     | FTS         | 已实现      |
+| ChromaDB    | 需要服务器 | ⚠️ 需配置 | ❌ 外部计算 | ⚠️ 部分实现 |
+| Qdrant      | 需要服务器 | ⚠️ 需配置 | 内置        | ⏳ 待实现   |
 
 ---
 
@@ -263,9 +261,9 @@ constructor(@Inject('VECTOR_DB') private vectorDb: VectorDatabase) {}
 
 ```typescript
 try {
-  const results = await vectorDb.semanticSearch('collection', embedding);
+  const results = await vectorDb.semanticSearch("collection", embedding);
   if (results.length === 0) {
-    console.log('未找到相关文档');
+    console.log("未找到相关文档");
   }
 } catch (error) {
   logger.error(`搜索失败: ${error.message}`);
@@ -281,10 +279,10 @@ try {
 // main.ts
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
-  
+
   // 注册优雅关闭
   app.enableShutdownHooks();
-  
+
   await app.listen(3000);
 }
 ```
@@ -308,7 +306,7 @@ const documents: VectorDocument[] = chunks.map((chunk, i) => ({
   metadata: { file_id: fileId },
 }));
 
-await vectorDb.addDocuments('collection', documents);
+await vectorDb.addDocuments("collection", documents);
 ```
 
 ---
@@ -322,6 +320,7 @@ npx ts-node test-lancedb.ts
 ```
 
 测试覆盖：
+
 - 初始化和连接
 - 集合管理（创建、删除、存在性检查）
 - 文档操作（添加、删除）
@@ -346,6 +345,7 @@ npx ts-node test-lancedb.ts
 ```
 
 **优势**：
+
 - 搜索结果返回原文，用户体验好
 - 搜索时使用分词结果，准确性高
 - 利用 LanceDB FTS 的高性能
@@ -362,6 +362,7 @@ const finalScore = α * semanticNorm + β * keywordNorm;
 ```
 
 **参数建议**：
+
 - 通用场景：α=0.6, β=0.4
 - 精确匹配：α=0.4, β=0.6
 - 语义理解：α=0.8, β=0.2

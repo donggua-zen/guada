@@ -16,7 +16,7 @@
         class="w-full max-w-200 mb-[-0.7rem] flex items-center gap-3 p-2 pb-4 bg-gray-50 border border-gray-100 rounded-lg cursor-pointer hover:bg-gray-100 transition-colors"
         @click="showCharacterSelector = true">
         <div class="w-10 h-10 shrink-0 overflow-hidden rounded">
-          <Avatar :src="currentCharacter?.avatarUrl" type="assistant" class="w-full h-full object-cover" />
+          <Avatar :src="currentCharacter?.avatarUrl" type="assistant" :name="currentCharacter?.title" class="w-full h-full object-cover" />
         </div>
         <div class="flex-1 min-w-0">
           <p class="text-sm font-medium text-gray-700 truncate">{{ currentCharacter?.title || '未命名角色' }}</p>
@@ -64,7 +64,7 @@
           :class="{ 'bg-blue-50 border-blue-200': currentSession.characterId === character.id }"
           @click="selectCharacter(character)">
           <div class="w-12 h-12 shrink-0 overflow-hidden rounded">
-            <Avatar :src="character.avatarUrl" type="assistant" class="w-full h-full object-cover" />
+            <Avatar :src="character.avatarUrl" type="assistant" :name="character.title" class="w-full h-full object-cover" />
           </div>
           <div class="flex-1 min-w-0">
             <p class="text-sm font-medium text-gray-700 truncate">{{ character.title }}</p>

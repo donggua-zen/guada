@@ -87,7 +87,7 @@
                   <div class="flex items-start gap-3">
                     <div
                       class="w-11 h-11 shrink-0 flex items-center justify-center text-(--color-primary) bg-gray-50 rounded-md overflow-hidden">
-                      <Avatar :src="character.avatarUrl" />
+                      <Avatar :src="character.avatarUrl" :name="character.title" type="assistant" />
                     </div>
                     <div class="flex-1 min-w-0">
                       <div class="flex items-start justify-between">

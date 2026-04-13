@@ -1,17 +1,23 @@
-import { Injectable, Logger, NotFoundException, Inject, OnModuleInit } from '@nestjs/common';
-import * as crypto from 'crypto';
-import * as fs from 'fs';
-import * as path from 'path';
-import { PrismaService } from '../../common/database/prisma.service';
-import { KnowledgeBaseRepository } from '../../common/database/knowledge-base.repository';
-import { KBFileRepository } from '../../common/database/kb-file.repository';
-import { KBChunkRepository } from '../../common/database/kb-chunk.repository';
-import { FileParserService } from './file-parser.service';
-import { EmbeddingService } from './embedding.service';
-import { ChunkingService } from './chunking.service';
-import { VectorDatabase } from '../../common/vector-db/interfaces/vector-database.interface';
-import { createPaginatedResponse } from '../../common/types/pagination';
-import { UploadPathService } from '../../common/services/upload-path.service';
+import {
+  Injectable,
+  Logger,
+  NotFoundException,
+  Inject,
+  OnModuleInit,
+} from "@nestjs/common";
+import * as crypto from "crypto";
+import * as fs from "fs";
+import * as path from "path";
+import { PrismaService } from "../../common/database/prisma.service";
+import { KnowledgeBaseRepository } from "../../common/database/knowledge-base.repository";
+import { KBFileRepository } from "../../common/database/kb-file.repository";
+import { KBChunkRepository } from "../../common/database/kb-chunk.repository";
+import { FileParserService } from "./file-parser.service";
+import { EmbeddingService } from "./embedding.service";
+import { ChunkingService } from "./chunking.service";
+import { VectorDatabase } from "../../common/vector-db/interfaces/vector-database.interface";
+import { createPaginatedResponse } from "../../common/types/pagination";
+import { UploadPathService } from "../../common/services/upload-path.service";
 
 @Injectable()
 export class KbFileService implements OnModuleInit {
@@ -28,10 +34,10 @@ export class KbFileService implements OnModuleInit {
     private parserService: FileParserService,
     private embeddingService: EmbeddingService,
     private chunkingService: ChunkingService,
-    @Inject('VECTOR_DB') private vectorDb: VectorDatabase,
+    @Inject("VECTOR_DB") private vectorDb: VectorDatabase,
   ) {
     // 获取物理路径（自动创建目录）
-    this.kbUploadDir = this.uploadPathService.getPhysicalPath('knowledge-base');
+    this.kbUploadDir = this.uploadPathService.getPhysicalPath("knowledge-base");
   }
 
   async onModuleInit() {
@@ -43,21 +49,26 @@ export class KbFileService implements OnModuleInit {
    */
   private async resumePendingFileTasks() {
     try {
-      this.logger.log('🔄 开始扫描未完成的知识库文件任务...');
+      this.logger.log("🔄 开始扫描未完成的知识库文件任务...");
 
-      const pendingFiles = await this.fileRepo.findByStatus(['pending', 'processing']);
+      const pendingFiles = await this.fileRepo.findByStatus([
+        "pending",
+        "processing",
+      ]);
       this.logger.log(`📋 发现 ${pendingFiles.length} 个未完成任务`);
 
       for (const file of pendingFiles) {
         // 检查物理文件是否存在
         if (!file.filePath || !fs.existsSync(file.filePath)) {
-          this.logger.error(`❌ 文件不存在，标记为失败：${file.displayName} (${file.filePath})`);
+          this.logger.error(
+            `❌ 文件不存在，标记为失败：${file.displayName} (${file.filePath})`,
+          );
           await this.fileRepo.updateProcessingStatus(
             file.id,
-            'failed',
+            "failed",
             undefined,
             undefined,
-            '文件丢失，无法恢复',
+            "文件丢失，无法恢复",
           );
           continue;
         }
@@ -77,7 +88,7 @@ export class KbFileService implements OnModuleInit {
     if (/[\u0080-\uffff]/.test(fileName)) {
       try {
         // 尝试将 latin1 编码的字符串还原为 utf-8
-        const fixedName = Buffer.from(fileName, 'latin1').toString('utf-8');
+        const fixedName = Buffer.from(fileName, "latin1").toString("utf-8");
         return fixedName;
       } catch (e) {
         this.logger.warn(`Failed to fix filename encoding for: ${fileName}`);
@@ -97,19 +108,19 @@ export class KbFileService implements OnModuleInit {
     // 验证知识库存在且有权限
     const kb = await this.kbRepo.findById(kbId);
     if (!kb) {
-      throw new NotFoundException('知识库不存在');
+      throw new NotFoundException("知识库不存在");
     }
     if (kb.userId !== userId) {
-      throw new Error('无权访问该知识库');
+      throw new Error("无权访问该知识库");
     }
 
     // 修复原始文件名编码
     const originalName = this.fixFilenameEncoding(file.originalname);
-    
+
     // 生成唯一文件名
     const fileExtension = path.extname(originalName).toLowerCase();
     const uniqueFilename = `${crypto.randomUUID()}${fileExtension}`;
-    
+
     // 保存文件到临时目录
     const filePath = path.join(this.kbUploadDir, uniqueFilename);
     fs.writeFileSync(filePath, file.buffer);
@@ -117,27 +128,34 @@ export class KbFileService implements OnModuleInit {
     const fileSize = file.buffer.length;
 
     // 检测文件类型
-    const fileType = await this.parserService.detectFileType(fileExtension.replace(/^\./, ''));
+    const fileType = await this.parserService.detectFileType(
+      fileExtension.replace(/^\./, ""),
+    );
 
     // 计算文件哈希
-    const contentHash = crypto.createHash('md5').update(file.buffer).digest('hex');
+    const contentHash = crypto
+      .createHash("md5")
+      .update(file.buffer)
+      .digest("hex");
 
     // 创建文件记录
     const fileRecord = await this.fileRepo.create({
       knowledgeBaseId: kbId,
       fileName: uniqueFilename,
       displayName: originalName,
-      fileSize: fileSize,  // 使用 number 类型（避免 BigInt 序列化问题）
+      fileSize: fileSize, // 使用 number 类型（避免 BigInt 序列化问题）
       fileType: fileType,
-      fileExtension: fileExtension.replace(/^\./, ''),
+      fileExtension: fileExtension.replace(/^\./, ""),
       contentHash: contentHash,
       filePath: filePath,
-      processingStatus: 'pending',
+      processingStatus: "pending",
       progressPercentage: 0,
-      currentStep: '等待处理...',
+      currentStep: "等待处理...",
     });
 
-    this.logger.log(`文件记录已创建：${originalName}, KB=${kbId}, File ID=${fileRecord.id}`);
+    this.logger.log(
+      `文件记录已创建：${originalName}, KB=${kbId}, File ID=${fileRecord.id}`,
+    );
 
     // 启动后台处理任务
     this.processFileInBackground(fileRecord.id);
@@ -150,11 +168,15 @@ export class KbFileService implements OnModuleInit {
    */
   private async processFileInBackground(fileId: string): Promise<void> {
     // 使用信号量控制并发（依次处理）
-    KbFileService.processingSemaphore = KbFileService.processingSemaphore.then(async () => {
-      await this.processFile(fileId);
-    }).catch((error) => {
-      this.logger.error(`后台任务执行失败：fileId=${fileId}, error=${error.message}`);
-    });
+    KbFileService.processingSemaphore = KbFileService.processingSemaphore
+      .then(async () => {
+        await this.processFile(fileId);
+      })
+      .catch((error) => {
+        this.logger.error(
+          `后台任务执行失败：fileId=${fileId}, error=${error.message}`,
+        );
+      });
   }
 
   /**
@@ -173,7 +195,9 @@ export class KbFileService implements OnModuleInit {
       const displayName = fileRecord.displayName;
       const filePath = fileRecord.filePath;
 
-      this.logger.log(`开始处理文件：${displayName} (KB: ${knowledgeBaseId}, ID: ${fileId})`);
+      this.logger.log(
+        `开始处理文件：${displayName} (KB: ${knowledgeBaseId}, ID: ${fileId})`,
+      );
 
       // 2. 获取知识库配置
       const kb = await this.kbRepo.findById(knowledgeBaseId);
@@ -184,9 +208,9 @@ export class KbFileService implements OnModuleInit {
       // 3. 更新状态为处理中
       await this.fileRepo.updateProcessingStatus(
         fileId,
-        'processing',
+        "processing",
         10,
-        '正在解析文件...',
+        "正在解析文件...",
       );
 
       // 4. 解析文件内容
@@ -197,9 +221,9 @@ export class KbFileService implements OnModuleInit {
 
       await this.fileRepo.updateProcessingStatus(
         fileId,
-        'processing',
+        "processing",
         30,
-        '文件解析完成，正在分块...',
+        "文件解析完成，正在分块...",
       );
 
       // 5. 文本分块（使用智能分块服务）
@@ -209,14 +233,14 @@ export class KbFileService implements OnModuleInit {
         overlapSize: kb.chunkOverlapSize,
       });
 
-      const chunks = chunksData.map(chunk => chunk.content);
+      const chunks = chunksData.map((chunk) => chunk.content);
       const totalChunks = chunks.length;
 
       this.logger.log(`文本分块完成：共${totalChunks}个分块`);
 
       await this.fileRepo.updateProcessingStatus(
         fileId,
-        'processing',
+        "processing",
         50,
         `分块完成（${totalChunks}个），正在向量化...`,
       );
@@ -227,10 +251,7 @@ export class KbFileService implements OnModuleInit {
 
         // 从向量库删除旧向量
         const tableId = `kb_${knowledgeBaseId}`;
-        await this.vectorDb.deleteDocuments(
-          tableId,
-          { documentId: fileId },
-        );
+        await this.vectorDb.deleteDocuments(tableId, { documentId: fileId });
 
         // 从数据库删除旧分块记录
         const deletedCount = await this.chunkRepo.deleteByFileId(fileId);
@@ -238,7 +259,9 @@ export class KbFileService implements OnModuleInit {
           this.logger.log(`删除 ${deletedCount} 个旧分块记录`);
         }
       } catch (error: any) {
-        this.logger.warn(`清理旧数据失败，但继续执行后续流程：${error.message}`);
+        this.logger.warn(
+          `清理旧数据失败，但继续执行后续流程：${error.message}`,
+        );
       }
 
       // 7. 批量向量化
@@ -254,23 +277,23 @@ export class KbFileService implements OnModuleInit {
       this.logger.log(`开始批量向量化 ${chunks.length} 个分块...`);
       await this.fileRepo.updateProcessingStatus(
         fileId,
-        'processing',
+        "processing",
         50,
         `正在批量向量化 (${chunks.length} 个分块)...`,
       );
 
       const allEmbeddings = await this.embeddingService.getEmbeddings(
         chunks,
-        modelWithProvider.provider.apiUrl || '',
-        modelWithProvider.provider.apiKey || '',
+        modelWithProvider.provider.apiUrl || "",
+        modelWithProvider.provider.apiKey || "",
         modelWithProvider.modelName,
       );
 
       await this.fileRepo.updateProcessingStatus(
         fileId,
-        'processing',
+        "processing",
         90,
-        '向量化完成，正在存储...',
+        "向量化完成，正在存储...",
       );
 
       // 8. 准备向量文档数据
@@ -293,9 +316,9 @@ export class KbFileService implements OnModuleInit {
 
       await this.fileRepo.updateProcessingStatus(
         fileId,
-        'processing',
+        "processing",
         95,
-        '正在保存分块到数据库...',
+        "正在保存分块到数据库...",
       );
 
       // 9. 保存到数据库
@@ -320,12 +343,15 @@ export class KbFileService implements OnModuleInit {
       }
 
       // 10. 标记为完成
-      const totalTokens = chunksData.reduce((sum, chunk) => sum + chunk.metadata.tokenCount, 0);
+      const totalTokens = chunksData.reduce(
+        (sum, chunk) => sum + chunk.metadata.tokenCount,
+        0,
+      );
       await this.fileRepo.updateProcessingStatus(
         fileId,
-        'completed',
+        "completed",
         100,
-        '处理完成',
+        "处理完成",
         undefined,
         totalChunks,
         totalTokens,
@@ -338,9 +364,9 @@ export class KbFileService implements OnModuleInit {
       // 更新状态为失败
       await this.fileRepo.updateProcessingStatus(
         fileId,
-        'failed',
+        "failed",
         0,
-        '处理失败',
+        "处理失败",
         error.message,
       );
     }
@@ -349,17 +375,26 @@ export class KbFileService implements OnModuleInit {
   /**
    * 列出知识库中的所有文件
    */
-  async listFiles(kbId: string, userId: string, skip: number = 0, limit: number = 50) {
+  async listFiles(
+    kbId: string,
+    userId: string,
+    skip: number = 0,
+    limit: number = 50,
+  ) {
     // 验证知识库权限
     const kb = await this.kbRepo.findById(kbId);
     if (!kb) {
-      throw new NotFoundException('知识库不存在');
+      throw new NotFoundException("知识库不存在");
     }
     if (kb.userId !== userId) {
-      throw new Error('无权访问该知识库');
+      throw new Error("无权访问该知识库");
     }
 
-    const { items, total } = await this.fileRepo.findByKnowledgeBaseId(kbId, skip, limit);
+    const { items, total } = await this.fileRepo.findByKnowledgeBaseId(
+      kbId,
+      skip,
+      limit,
+    );
     return createPaginatedResponse(items, total, { skip, limit });
   }
 
@@ -370,15 +405,15 @@ export class KbFileService implements OnModuleInit {
     // 验证知识库权限
     const kb = await this.kbRepo.findById(kbId);
     if (!kb) {
-      throw new NotFoundException('知识库不存在');
+      throw new NotFoundException("知识库不存在");
     }
     if (kb.userId !== userId) {
-      throw new Error('无权访问该知识库');
+      throw new Error("无权访问该知识库");
     }
 
     const file = await this.fileRepo.findById(fileId);
     if (!file) {
-      throw new NotFoundException('文件不存在');
+      throw new NotFoundException("文件不存在");
     }
 
     return file;
@@ -410,10 +445,10 @@ export class KbFileService implements OnModuleInit {
     // 验证知识库权限
     const kb = await this.kbRepo.findById(kbId);
     if (!kb) {
-      throw new NotFoundException('知识库不存在');
+      throw new NotFoundException("知识库不存在");
     }
     if (kb.userId !== userId) {
-      throw new Error('无权访问该知识库');
+      throw new Error("无权访问该知识库");
     }
 
     const files = await this.fileRepo.findByIds(fileIds);
@@ -433,14 +468,18 @@ export class KbFileService implements OnModuleInit {
   /**
    * 删除文件及其所有分块
    */
-  async deleteFileAndChunks(fileId: string, kbId: string, userId: string): Promise<boolean> {
+  async deleteFileAndChunks(
+    fileId: string,
+    kbId: string,
+    userId: string,
+  ): Promise<boolean> {
     // 验证知识库权限
     const kb = await this.kbRepo.findById(kbId);
     if (!kb) {
-      throw new NotFoundException('知识库不存在');
+      throw new NotFoundException("知识库不存在");
     }
     if (kb.userId !== userId) {
-      throw new Error('无权访问该知识库');
+      throw new Error("无权访问该知识库");
     }
 
     const file = await this.fileRepo.findById(fileId);
@@ -477,58 +516,66 @@ export class KbFileService implements OnModuleInit {
     // 验证知识库权限
     const kb = await this.kbRepo.findById(kbId);
     if (!kb) {
-      throw new NotFoundException('知识库不存在');
+      throw new NotFoundException("知识库不存在");
     }
     if (kb.userId !== userId) {
-      throw new Error('无权访问该知识库');
+      throw new Error("无权访问该知识库");
     }
 
     const file = await this.fileRepo.findById(fileId);
     if (!file) {
-      throw new NotFoundException('文件不存在');
+      throw new NotFoundException("文件不存在");
     }
 
     // 检查文件状态，只允许 failed 或 completed 状态的文件重新处理
-    if (!['failed', 'completed'].includes(file.processingStatus)) {
-      throw new Error(`当前状态不允许重新处理（当前状态：${file.processingStatus}）`);
+    if (!["failed", "completed"].includes(file.processingStatus)) {
+      throw new Error(
+        `当前状态不允许重新处理（当前状态：${file.processingStatus}）`,
+      );
     }
 
     // 重置文件状态为 pending
     await this.fileRepo.updateProcessingStatus(
       fileId,
-      'pending',
+      "pending",
       0,
-      '等待重新处理...',
+      "等待重新处理...",
     );
 
     // 启动后台处理任务
     this.processFileInBackground(fileId);
 
     this.logger.log(`重新开始处理文件：${file.displayName}, KB=${kbId}`);
-    return { message: '文件已开始重新处理', success: true };
+    return { message: "文件已开始重新处理", success: true };
   }
 
   /**
    * 获取文件的分块内容
    */
-  async getFileChunks(fileId: string, kbId: string, userId: string, skip: number = 0, limit: number = 10) {
+  async getFileChunks(
+    fileId: string,
+    kbId: string,
+    userId: string,
+    skip: number = 0,
+    limit: number = 10,
+  ) {
     // 验证知识库权限
     const kb = await this.kbRepo.findById(kbId);
     if (!kb) {
-      throw new NotFoundException('知识库不存在');
+      throw new NotFoundException("知识库不存在");
     }
     if (kb.userId !== userId) {
-      throw new Error('无权访问该知识库');
+      throw new Error("无权访问该知识库");
     }
 
     // 验证文件是否存在
     const file = await this.fileRepo.findById(fileId);
     if (!file) {
-      throw new NotFoundException('文件不存在');
+      throw new NotFoundException("文件不存在");
     }
 
     // 检查文件处理状态，只允许 completed 状态的文件查看分块
-    if (file.processingStatus !== 'completed') {
+    if (file.processingStatus !== "completed") {
       throw new Error(`文件尚未处理完成，当前状态：${file.processingStatus}`);
     }
 

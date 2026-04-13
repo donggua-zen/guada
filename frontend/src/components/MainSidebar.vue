@@ -75,7 +75,7 @@
 
       <div class="user-profile" @click="handleUserProfileClick">
         <div class="user-avatar">
-          <Avatar type="user" :round="true" :src="authStore.user?.avatarUrl" />
+          <Avatar type="user" :round="true" :src="authStore.user?.avatarUrl" :name="authStore.user?.nickname || authStore.user?.username" />
         </div>
         <span class="user-name">{{ authStore.user?.username || '用户' }}</span>
       </div>

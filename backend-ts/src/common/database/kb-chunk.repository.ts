@@ -1,5 +1,5 @@
-import { Injectable } from '@nestjs/common';
-import { PrismaService } from '../../common/database/prisma.service';
+import { Injectable } from "@nestjs/common";
+import { PrismaService } from "../../common/database/prisma.service";
 
 @Injectable()
 export class KBChunkRepository {
@@ -8,7 +8,7 @@ export class KBChunkRepository {
   async findByFileId(fileId: string, skip: number = 0, limit: number = 10) {
     return this.prisma.kBChunk.findMany({
       where: { fileId },
-      orderBy: { chunkIndex: 'asc' },
+      orderBy: { chunkIndex: "asc" },
       skip,
       take: limit,
     });
