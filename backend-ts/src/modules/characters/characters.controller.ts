@@ -19,30 +19,46 @@ import { FileInterceptor } from "@nestjs/platform-express";
 @Controller()
 @UseGuards(AuthGuard)
 export class CharactersController {
-  constructor(private readonly characterService: CharacterService) {}
+  constructor(private readonly characterService: CharacterService) { }
 
   @Get("characters")
   async getCharacters(
-    @Query("skip") skip = 0,
-    @Query("limit") limit = 20,
+    @Query() query: any,
     @CurrentUser() user: any,
   ) {
+    const { groupId, skip = 0, limit = 20 } = query;
     return this.characterService.getCharactersByUser(
       user.sub,
       Number(skip),
       Number(limit),
+      groupId,
     );
   }
 
-  @Get("shared/characters")
-  async getSharedCharacters(
-    @Query("skip") skip = 0,
-    @Query("limit") limit = 20,
+  // --- Character Group Endpoints ---
+  @Get("character-groups")
+  async getCharacterGroups(@CurrentUser() user: any) {
+    return this.characterService.getGroupsByUser(user.sub);
+  }
+
+  @Post("character-groups")
+  async createCharacterGroup(@Body() data: any, @CurrentUser() user: any) {
+    return this.characterService.createGroup(user.sub, data);
+  }
+
+  @Put("character-groups/:id")
+  async updateCharacterGroup(
+    @Param("id") id: string,
+    @Body() data: any,
+    @CurrentUser() user: any,
   ) {
-    return this.characterService.getSharedCharacters(
-      Number(skip),
-      Number(limit),
-    );
+    return this.characterService.updateGroup(id, user.sub, data);
+  }
+
+  @Delete("character-groups/:id")
+  async deleteCharacterGroup(@Param("id") id: string, @CurrentUser() user: any) {
+    await this.characterService.deleteGroup(id, user.sub);
+    return { success: true };
   }
 
   @Get("characters/:id")

@@ -2,7 +2,8 @@
   <div
     class="flex flex-col w-full h-full bg-(--color-conversation-bg) border-r border-(--color-conversation-border) transition-all duration-300">
     <!-- 会话头部 -->
-    <div class="sessions-header px-4 pt-3.5 pb-3.5 flex justify-between items-center border-b border-(--color-conversation-border)">
+    <div
+      class="sessions-header px-4 pt-3.5 pb-3.5 flex justify-between items-center border-b border-(--color-conversation-border)">
       <span class="font-semibold text-base text-(--color-text)">聊天对话</span>
       <el-button type="primary" @click="handleButtonClick('create')" :icon="ChatNew" class="new-chat-btn">
         新建会话
@@ -36,22 +37,20 @@
           </div>
         </template>
         <template v-else>
-          <div v-for="session in filteredSessions" :key="session.id"
-            class="session-item group"
-            :class="{
-              'session-item-active': session.id === currentSessionId,
-              'session-item-inactive': session.id !== currentSessionId
-            }" @click="selectSession(session)">
+          <div v-for="session in filteredSessions" :key="session.id" class="session-item group" :class="{
+            'session-item-active': session.id === currentSessionId,
+            'session-item-inactive': session.id !== currentSessionId
+          }" @click="selectSession(session)">
             <div class="session-avatar">
-              <Avatar :src="session.character?.avatarUrl || session.avatarUrl" :name="session.character?.title || session.title" type="assistant" round />
+              <Avatar :src="session.character?.avatarUrl || session.avatarUrl"
+                :name="session.character?.title || session.title" type="assistant" round />
             </div>
             <div class="session-info flex-1 min-w-0 flex items-center">
               <div class="session-title truncate text-sm font-medium w-full">
                 {{ session.title }}
               </div>
             </div>
-            <div
-              class="session-actions flex items-center opacity-0 group-hover:opacity-100"
+            <div class="session-actions flex items-center opacity-0 group-hover:opacity-100"
               :class="{ 'opacity-100': session.id === currentSessionId }">
               <el-dropdown trigger="click" @command="(command) => handleDropdownSelect(command, session)">
                 <template #dropdown>
@@ -100,7 +99,7 @@ import { MoreFilled } from '@element-plus/icons-vue'
 // @ts-ignore - icons 组件类型缺失
 import {
   ChatNew
-// @ts-ignore - ChatNew 图标类型缺失
+  // @ts-ignore - ChatNew 图标类型缺失
 } from '@/components/icons'
 
 // Element Plus 组件导入
@@ -189,7 +188,6 @@ const selectSession = (session: any): void => {
 </script>
 
 <style scoped>
-
 /* 搜索框样式 */
 .search-input :deep(.el-input__wrapper) {
   background-color: var(--color-surface);

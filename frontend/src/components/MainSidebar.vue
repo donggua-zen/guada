@@ -1,11 +1,11 @@
 <template>
   <div
-    class="flex flex-col h-full bg-[var(--color-conversation-bg)] border-r border-[var(--color-conversation-border)] transition-all duration-300"
+    class="flex flex-col h-full bg-(--color-conversation-bg) border-r border-(--color-conversation-border) transition-all duration-300"
     :style="{ width: sidebarWidth, minWidth: sidebarWidth, maxWidth: sidebarWidth }">
     <!-- 顶部 Logo/标题 -->
     <div class="px-2.5 py-4 flex items-center justify-center">
       <div
-        class="w-9 h-9 rounded-xl bg-gradient-to-br from-[var(--color-primary)] to-[var(--color-primary-600)] flex items-center justify-center shadow-md">
+        class="w-9 h-9 rounded-xl bg-linear-to-br from-(--color-primary) to-(--color-primary-600) flex items-center justify-center shadow-md">
         <span class="text-white font-semibold text-sm">AI</span>
       </div>
     </div>
@@ -62,10 +62,10 @@
     </div>
 
     <!-- 底部用户信息 -->
-    <div class="px-2.5 py-3.5 border-t border-[var(--color-conversation-border)]">
+    <div class="px-2.5 py-3.5 border-t border-(--color-conversation-border)">
       <!-- 主题切换按钮 -->
       <div @click="toggleDark"
-        class="nav-item nav-item-inactive mb-1 cursor-pointer hover:bg-[var(--color-conversation-bg-hover)]">
+        class="nav-item nav-item-inactive mb-1 cursor-pointer hover:bg-(--color-conversation-bg-hover)">
         <div class="nav-icon">
           <WbSunnyTwotone v-if="isDark" class="w-5 h-5" />
           <NightlightRound v-else class="w-5 h-5" />
@@ -75,7 +75,8 @@
 
       <div class="user-profile" @click="handleUserProfileClick">
         <div class="user-avatar">
-          <Avatar type="user" :round="true" :src="authStore.user?.avatarUrl" :name="authStore.user?.nickname || authStore.user?.username" />
+          <Avatar type="user" :round="true" :src="authStore.user?.avatarUrl"
+            :name="authStore.user?.nickname || authStore.user?.username" />
         </div>
         <span class="user-name">{{ authStore.user?.username || '用户' }}</span>
       </div>
