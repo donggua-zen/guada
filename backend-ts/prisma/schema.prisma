@@ -1,296 +1,310 @@
 generator client {
-    provider = "prisma-client-js"
+  provider = "prisma-client-js"
 }
 
 datasource db {
-    provider = "sqlite"
+  provider = "sqlite"
 }
 
 model Session {
-    id           String     @id @default(cuid())
-    title        String?
-    userId       String     @map("user_id")
-    avatarUrl    String?    @map("avatar_url")
-    description  String?
-    modelId      String?    @map("model_id")
-    characterId  String?    @map("character_id")
-    settings     Json?
-    createdAt    DateTime   @default(now()) @map("created_at")
-    updatedAt    DateTime   @updatedAt @map("updated_at")
-    lastActiveAt DateTime?  @map("last_active_at")
-    memories     Memory[]
-    messages     Message[]
-    character    Character? @relation(fields: [characterId], references: [id])
-    user         User       @relation(fields: [userId], references: [id])
-    model        Model?     @relation(fields: [modelId], references: [id])
+  id           String     @id @default(cuid())
+  title        String?
+  userId       String     @map("user_id")
+  avatarUrl    String?    @map("avatar_url")
+  description  String?
+  modelId      String?    @map("model_id")
+  characterId  String?    @map("character_id")
+  settings     Json?
+  createdAt    DateTime   @default(now()) @map("created_at")
+  updatedAt    DateTime   @updatedAt @map("updated_at")
+  lastActiveAt DateTime?  @map("last_active_at")
+  memories     Memory[]
+  messages     Message[]
+  character    Character? @relation(fields: [characterId], references: [id])
+  user         User       @relation(fields: [userId], references: [id])
+  model        Model?     @relation(fields: [modelId], references: [id])
 
-    @@map("session")
+  @@map("session")
 }
 
 model Message {
-    id             String           @id @default(cuid())
-    sessionId      String           @map("session_id")
-    role           String
-    parentId       String?          @map("parent_id")
-    currentTurnsId String?          @map("current_turns_id")
-    createdAt      DateTime         @default(now()) @map("created_at")
-    updatedAt      DateTime         @updatedAt @map("updated_at")
-    parent         Message?         @relation("MessageThread", fields: [parentId], references: [id])
-    children       Message[]        @relation("MessageThread")
-    session        Session          @relation(fields: [sessionId], references: [id], onDelete: Cascade)
-    contents       MessageContent[]
-    files          File[]
+  id             String           @id @default(cuid())
+  sessionId      String           @map("session_id")
+  role           String
+  parentId       String?          @map("parent_id")
+  currentTurnsId String?          @map("current_turns_id")
+  createdAt      DateTime         @default(now()) @map("created_at")
+  updatedAt      DateTime         @updatedAt @map("updated_at")
+  parent         Message?         @relation("MessageThread", fields: [parentId], references: [id])
+  children       Message[]        @relation("MessageThread")
+  session        Session          @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  contents       MessageContent[]
+  files          File[]
 
-    @@index([sessionId])
-    @@index([parentId])
-    @@index([currentTurnsId])
-    @@map("message")
+  @@index([sessionId])
+  @@index([parentId])
+  @@index([currentTurnsId])
+  @@map("message")
 }
 
 model MessageContent {
-    id               String   @id @default(cuid())
-    messageId        String   @map("message_id")
-    turnsId          String   @map("turns_id")
-    role             String?
-    content          String
-    reasoningContent String?  @map("reasoning_content")
-    additionalKwargs Json?    @map("additional_kwargs")
-    metaData         Json?    @map("meta_data")
-    createdAt        DateTime @default(now()) @map("created_at")
-    updatedAt        DateTime @updatedAt @map("updated_at")
-    message          Message  @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  id               String   @id @default(cuid())
+  messageId        String   @map("message_id")
+  turnsId          String   @map("turns_id")
+  role             String?
+  content          String
+  reasoningContent String?  @map("reasoning_content")
+  additionalKwargs Json?    @map("additional_kwargs")
+  metaData         Json?    @map("meta_data")
+  createdAt        DateTime @default(now()) @map("created_at")
+  updatedAt        DateTime @updatedAt @map("updated_at")
+  message          Message  @relation(fields: [messageId], references: [id], onDelete: Cascade)
 
-    @@index([messageId])
-    @@index([turnsId])
-    @@map("message_content")
+  @@index([messageId])
+  @@index([turnsId])
+  @@map("message_content")
 }
 
 model ModelProvider {
-    id         String   @id @default(cuid())
-    userId     String   @map("user_id")
-    name       String
-    provider   String
-    protocol   String?
-    apiUrl     String   @map("api_url")
-    apiKey     String?  @map("api_key")
-    avatarUrl  String?  @map("avatar_url")
-    attributes Json?
-    createdAt  DateTime @default(now()) @map("created_at")
-    updatedAt  DateTime @updatedAt @map("updated_at")
-    models     Model[]
+  id         String   @id @default(cuid())
+  userId     String   @map("user_id")
+  name       String
+  provider   String
+  protocol   String?
+  apiUrl     String   @map("api_url")
+  apiKey     String?  @map("api_key")
+  avatarUrl  String?  @map("avatar_url")
+  attributes Json?
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+  models     Model[]
 
-    @@map("model_provider")
+  @@map("model_provider")
 }
 
 model Model {
-    id              String          @id @default(cuid())
-    name            String?
-    providerId      String          @map("provider_id")
-    modelName       String          @map("model_name")
-    modelType       String          @map("model_type")
-    config            Json?           @map("config")
-    createdAt       DateTime        @default(now()) @map("created_at")
-    updatedAt       DateTime        @updatedAt @map("updated_at")
-    characters      Character[]
-    knowledgeBases  KnowledgeBase[]
-    provider        ModelProvider   @relation(fields: [providerId], references: [id], onDelete: Cascade)
-    sessions        Session[]
+  id             String          @id @default(cuid())
+  name           String?
+  providerId     String          @map("provider_id")
+  modelName      String          @map("model_name")
+  modelType      String          @map("model_type")
+  config         Json?           @map("config")
+  createdAt      DateTime        @default(now()) @map("created_at")
+  updatedAt      DateTime        @updatedAt @map("updated_at")
+  characters     Character[]
+  knowledgeBases KnowledgeBase[]
+  provider       ModelProvider   @relation(fields: [providerId], references: [id], onDelete: Cascade)
+  sessions       Session[]
 
-    @@map("model")
+  @@map("model")
 }
 
 model User {
-    id             String          @id @default(cuid())
-    role           String?
-    avatarUrl      String?         @map("avatar_url")
-    parentId       String?         @map("parent_id")
-    nickname       String?
-    phone          String?         @unique
-    email          String?         @unique
-    passwordHash   String          @map("password_hash")
-    createdAt      DateTime        @default(now()) @map("created_at")
-    updatedAt      DateTime        @updatedAt @map("updated_at")
-    characters     Character[]
-    knowledgeBases KnowledgeBase[]
-    sessions       Session[]
-    settings       UserSetting?
-    mcpServers     McpServer[]
+  id             String          @id @default(cuid())
+  role           String?
+  avatarUrl      String?         @map("avatar_url")
+  parentId       String?         @map("parent_id")
+  nickname       String?
+  phone          String?         @unique
+  email          String?         @unique
+  passwordHash   String          @map("password_hash")
+  createdAt      DateTime        @default(now()) @map("created_at")
+  updatedAt      DateTime        @updatedAt @map("updated_at")
+  characters     Character[]
+  knowledgeBases KnowledgeBase[]
+  sessions       Session[]
+  settings       UserSetting?
+  mcpServers     McpServer[]
 
-    @@map("user")
+  @@map("user")
+}
+
+model CharacterGroup {
+  id         String      @id @default(cuid())
+  name       String
+  userId     String      @map("user_id")
+  sortOrder  Int         @default(0) @map("sort_order")
+  createdAt  DateTime    @default(now()) @map("created_at")
+  updatedAt  DateTime    @updatedAt @map("updated_at")
+  characters Character[]
+
+  @@map("character_group")
 }
 
 model Character {
-    id          String    @id @default(cuid())
-    userId      String    @map("user_id")
-    title       String
-    description String?
-    avatarUrl   String?   @map("avatar_url")
-    isPublic    Boolean   @default(false) @map("is_public")
-    modelId     String?   @map("model_id")
-    settings    Json?
-    createdAt   DateTime  @default(now()) @map("created_at")
-    updatedAt   DateTime  @updatedAt @map("updated_at")
-    model       Model?    @relation(fields: [modelId], references: [id])
-    user        User      @relation(fields: [userId], references: [id])
-    sessions    Session[]
+  id          String          @id @default(cuid())
+  userId      String          @map("user_id")
+  title       String
+  description String?
+  avatarUrl   String?         @map("avatar_url")
+  isPublic    Boolean         @default(false) @map("is_public")
+  modelId     String?         @map("model_id")
+  groupId     String?         @map("group_id")
+  settings    Json?
+  createdAt   DateTime        @default(now()) @map("created_at")
+  updatedAt   DateTime        @updatedAt @map("updated_at")
+  group       CharacterGroup? @relation(fields: [groupId], references: [id])
+  model       Model?          @relation(fields: [modelId], references: [id])
+  user        User            @relation(fields: [userId], references: [id])
+  sessions    Session[]
 
-    @@map("character")
+  @@map("character")
 }
 
 model KnowledgeBase {
-    id               String   @id @default(cuid())
-    name             String
-    description      String?
-    userId           String   @map("user_id")
-    embeddingModelId String   @map("embedding_model_id")
-    chunkMaxSize     Int      @default(1000) @map("chunk_max_size")
-    chunkOverlapSize Int      @default(100) @map("chunk_overlap_size")
-    chunkMinSize     Int      @default(50) @map("chunk_min_size")
-    isActive         Boolean  @default(true) @map("is_active")
-    isPublic         Boolean  @default(false) @map("is_public")
-    metadataConfig   Json?    @map("metadata_config")
-    createdAt        DateTime @default(now()) @map("created_at")
-    updatedAt        DateTime @updatedAt @map("updated_at")
-    files            KBFile[]
-    embeddingModel   Model    @relation(fields: [embeddingModelId], references: [id])
-    user             User     @relation(fields: [userId], references: [id])
+  id               String   @id @default(cuid())
+  name             String
+  description      String?
+  userId           String   @map("user_id")
+  embeddingModelId String   @map("embedding_model_id")
+  chunkMaxSize     Int      @default(1000) @map("chunk_max_size")
+  chunkOverlapSize Int      @default(100) @map("chunk_overlap_size")
+  chunkMinSize     Int      @default(50) @map("chunk_min_size")
+  isActive         Boolean  @default(true) @map("is_active")
+  isPublic         Boolean  @default(false) @map("is_public")
+  metadataConfig   Json?    @map("metadata_config")
+  createdAt        DateTime @default(now()) @map("created_at")
+  updatedAt        DateTime @updatedAt @map("updated_at")
+  files            KBFile[]
+  embeddingModel   Model    @relation(fields: [embeddingModelId], references: [id])
+  user             User     @relation(fields: [userId], references: [id])
 
-    @@map("knowledge_base")
+  @@map("knowledge_base")
 }
 
 model KBFile {
-    id                 String        @id @default(cuid())
-    knowledgeBaseId    String        @map("knowledge_base_id")
-    fileName           String        @map("file_name")
-    displayName        String        @map("display_name")
-    fileSize           Int           @map("file_size")
-    fileType           String        @map("file_type")
-    fileExtension      String        @map("file_extension")
-    contentHash        String        @map("content_hash")
-    filePath           String?       @map("file_path")
-    content            String?
-    processingStatus   String        @default("pending") @map("processing_status")
-    progressPercentage Int           @default(0) @map("progress_percentage")
-    currentStep        String?       @map("current_step")
-    errorMessage       String?       @map("error_message")
-    totalChunks        Int           @default(0) @map("total_chunks")
-    totalTokens        Int           @default(0) @map("total_tokens")
-    uploadedAt         DateTime      @default(now()) @map("uploaded_at")
-    processedAt        DateTime?     @map("processed_at")
-    chunks             KBChunk[]
-    knowledgeBase      KnowledgeBase @relation(fields: [knowledgeBaseId], references: [id], onDelete: Cascade)
+  id                 String        @id @default(cuid())
+  knowledgeBaseId    String        @map("knowledge_base_id")
+  fileName           String        @map("file_name")
+  displayName        String        @map("display_name")
+  fileSize           Int           @map("file_size")
+  fileType           String        @map("file_type")
+  fileExtension      String        @map("file_extension")
+  contentHash        String        @map("content_hash")
+  filePath           String?       @map("file_path")
+  content            String?
+  processingStatus   String        @default("pending") @map("processing_status")
+  progressPercentage Int           @default(0) @map("progress_percentage")
+  currentStep        String?       @map("current_step")
+  errorMessage       String?       @map("error_message")
+  totalChunks        Int           @default(0) @map("total_chunks")
+  totalTokens        Int           @default(0) @map("total_tokens")
+  uploadedAt         DateTime      @default(now()) @map("uploaded_at")
+  processedAt        DateTime?     @map("processed_at")
+  chunks             KBChunk[]
+  knowledgeBase      KnowledgeBase @relation(fields: [knowledgeBaseId], references: [id], onDelete: Cascade)
 
-    @@index([knowledgeBaseId])
-    @@index([contentHash])
-    @@index([processingStatus])
-    @@map("kb_file")
+  @@index([knowledgeBaseId])
+  @@index([contentHash])
+  @@index([processingStatus])
+  @@map("kb_file")
 }
 
 model KBChunk {
-    id                  String   @id @default(cuid())
-    fileId              String   @map("file_id")
-    knowledgeBaseId     String   @map("knowledge_base_id")
-    content             String
-    chunkIndex          Int      @map("chunk_index")
-    vectorId            String?  @map("vector_id")
-    embeddingDimensions Int?     @map("embedding_dimensions")
-    tokenCount          Int      @default(0) @map("token_count")
-    metadata            Json?
-    createdAt           DateTime @default(now()) @map("created_at")
-    file                KBFile   @relation(fields: [fileId], references: [id], onDelete: Cascade)
+  id                  String   @id @default(cuid())
+  fileId              String   @map("file_id")
+  knowledgeBaseId     String   @map("knowledge_base_id")
+  content             String
+  chunkIndex          Int      @map("chunk_index")
+  vectorId            String?  @map("vector_id")
+  embeddingDimensions Int?     @map("embedding_dimensions")
+  tokenCount          Int      @default(0) @map("token_count")
+  metadata            Json?
+  createdAt           DateTime @default(now()) @map("created_at")
+  file                KBFile   @relation(fields: [fileId], references: [id], onDelete: Cascade)
 
-    @@index([fileId])
-    @@index([knowledgeBaseId])
-    @@index([vectorId])
-    @@map("kb_chunk")
+  @@index([fileId])
+  @@index([knowledgeBaseId])
+  @@index([vectorId])
+  @@map("kb_chunk")
 }
 
 model Memory {
-    id         String    @id @default(cuid())
-    sessionId  String    @map("session_id")
-    content    String
-    category   String    @default("long_term")
-    memoryType String    @default("factual") @map("memory_type")
-    importance Int       @default(5)
-    tags       String?
-    metadata   Json?
-    expiresAt  DateTime? @map("expires_at")
-    createdAt  DateTime  @default(now()) @map("created_at")
-    updatedAt  DateTime  @updatedAt @map("updated_at")
-    session    Session   @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  id         String    @id @default(cuid())
+  sessionId  String    @map("session_id")
+  content    String
+  category   String    @default("long_term")
+  memoryType String    @default("factual") @map("memory_type")
+  importance Int       @default(5)
+  tags       String?
+  metadata   Json?
+  expiresAt  DateTime? @map("expires_at")
+  createdAt  DateTime  @default(now()) @map("created_at")
+  updatedAt  DateTime  @updatedAt @map("updated_at")
+  session    Session   @relation(fields: [sessionId], references: [id], onDelete: Cascade)
 
-    @@index([sessionId])
-    @@index([category])
-    @@index([memoryType])
-    @@map("memory")
+  @@index([sessionId])
+  @@index([category])
+  @@index([memoryType])
+  @@map("memory")
 }
 
 model File {
-    id            String   @id @default(cuid())
-    fileName      String   @map("file_name")
-    displayName   String   @map("display_name")
-    fileSize      Int      @map("file_size")
-    fileType      String   @map("file_type")
-    fileExtension String   @map("file_extension")
-    content       String?
-    url           String?
-    previewUrl    String?  @map("preview_url")
-    contentHash   String   @map("content_hash")
-    uploadUserId  String?  @map("upload_user_id")
-    sessionId     String?  @map("session_id")
-    messageId     String?  @map("message_id")
-    isPublic      Boolean  @default(false) @map("is_public")
-    fileMetadata  Json?    @map("file_metadata")
-    createdAt     DateTime @default(now()) @map("created_at")
-    updatedAt     DateTime @updatedAt @map("updated_at")
-    message       Message? @relation(fields: [messageId], references: [id], onDelete: SetNull)
+  id            String   @id @default(cuid())
+  fileName      String   @map("file_name")
+  displayName   String   @map("display_name")
+  fileSize      Int      @map("file_size")
+  fileType      String   @map("file_type")
+  fileExtension String   @map("file_extension")
+  content       String?
+  url           String?
+  previewUrl    String?  @map("preview_url")
+  contentHash   String   @map("content_hash")
+  uploadUserId  String?  @map("upload_user_id")
+  sessionId     String?  @map("session_id")
+  messageId     String?  @map("message_id")
+  isPublic      Boolean  @default(false) @map("is_public")
+  fileMetadata  Json?    @map("file_metadata")
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+  message       Message? @relation(fields: [messageId], references: [id], onDelete: SetNull)
 
-    @@index([contentHash])
-    @@index([uploadUserId])
-    @@index([sessionId])
-    @@index([messageId])
-    @@map("file")
+  @@index([contentHash])
+  @@index([uploadUserId])
+  @@index([sessionId])
+  @@index([messageId])
+  @@map("file")
 }
 
 model GlobalSetting {
-    id          Int      @id @default(autoincrement())
-    key         String
-    userId      String?  @map("user_id")
-    value       String?
-    valueType   String   @default("str") @map("value_type")
-    description String?
-    category    String   @default("general")
-    createdAt   DateTime @default(now()) @map("created_at")
-    updatedAt   DateTime @updatedAt @map("updated_at")
+  id          Int      @id @default(autoincrement())
+  key         String
+  userId      String?  @map("user_id")
+  value       String?
+  valueType   String   @default("str") @map("value_type")
+  description String?
+  category    String   @default("general")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
 
-    @@unique([key, userId])
-    @@index([userId])
-    @@map("global_settings")
+  @@unique([key, userId])
+  @@index([userId])
+  @@map("global_settings")
 }
 
 model McpServer {
-    id          String   @id @default(cuid())
-    name        String
-    url         String
-    description String?
-    headers     Json?
-    tools       Json?
-    enabled     Boolean  @default(true)
-    userId      String   @map("user_id")
-    createdAt   DateTime @default(now()) @map("created_at")
-    updatedAt   DateTime @updatedAt @map("updated_at")
-    user        User     @relation(fields: [userId], references: [id])
+  id          String   @id @default(cuid())
+  name        String
+  url         String
+  description String?
+  headers     Json?
+  tools       Json?
+  enabled     Boolean  @default(true)
+  userId      String   @map("user_id")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+  user        User     @relation(fields: [userId], references: [id])
 
-    @@map("mcp_server")
+  @@map("mcp_server")
 }
 
 model UserSetting {
-    id        String   @id @default(cuid())
-    userId    String   @unique @map("user_id")
-    settings  Json
-    createdAt DateTime @default(now()) @map("created_at")
-    updatedAt DateTime @updatedAt @map("updated_at")
-    user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id        String   @id @default(cuid())
+  userId    String   @unique @map("user_id")
+  settings  Json
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-    @@map("user_setting")
+  @@map("user_setting")
 }

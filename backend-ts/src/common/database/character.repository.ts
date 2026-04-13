@@ -3,7 +3,7 @@ import { PrismaService } from "../../common/database/prisma.service";
 
 @Injectable()
 export class CharacterRepository {
-  constructor(private prisma: PrismaService) {}
+  constructor(private prisma: PrismaService) { }
 
   async findById(id: string) {
     return this.prisma.character.findUnique({
@@ -12,17 +12,22 @@ export class CharacterRepository {
     });
   }
 
-  async findByUserId(userId: string, skip: number = 0, limit: number = 20) {
+  async findByUserId(userId: string, skip: number = 0, limit: number = 20, groupId?: string) {
+    const where: any = { userId };
+    if (groupId) {
+      where.groupId = groupId;
+    }
+
     const [items, total] = await Promise.all([
       this.prisma.character.findMany({
-        where: { userId },
+        where,
         orderBy: { createdAt: "desc" },
         skip,
         take: limit,
-        include: { model: true },
+        include: { model: true, group: true },
       }),
       this.prisma.character.count({
-        where: { userId },
+        where,
       }),
     ]);
     return { items, total };
@@ -58,6 +63,13 @@ export class CharacterRepository {
   async delete(id: string) {
     return this.prisma.character.delete({
       where: { id },
+    });
+  }
+
+  async updateManyByGroupId(groupId: string, newGroupId: string | null) {
+    return this.prisma.character.updateMany({
+      where: { groupId },
+      data: { groupId: newGroupId },
     });
   }
 }

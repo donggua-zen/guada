@@ -22,6 +22,8 @@ import { SessionService } from "./session.service";
 import { AuthModule } from "../auth/auth.module";
 import { ToolsModule } from "../tools/tools.module";
 
+import { SessionLockService } from "./session-lock.service";
+
 @Module({
   imports: [AuthModule, ToolsModule],
   controllers: [ChatController, MessagesController, SessionsController],
@@ -42,13 +44,14 @@ import { ToolsModule } from "../tools/tools.module";
     GlobalSettingRepository,
     FileRepository,
     PrismaService,
+    SessionLockService,
   ],
   exports: [AgentService],
 })
 export class ChatModule implements OnModuleInit {
   constructor(
     private toolOrchestrator: ToolOrchestrator, // 从 ToolsModule 注入
-  ) {}
+  ) { }
 
   onModuleInit() {
     // KnowledgeBaseToolProvider 已在 ToolsModule 中注册，无需再次添加

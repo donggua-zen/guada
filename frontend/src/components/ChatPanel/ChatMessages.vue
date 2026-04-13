@@ -4,44 +4,26 @@
       <WelcomeScreen :session="session" />
     </template>
     <template v-else-if="authStore.isAuthenticated">
-      <ScrollContainer
-        ref="scrollContainerRef"
-        :auto-scroll="autoScroll"
-        @scroll="handleScroll"
-        @is-at-bottom-change="handleIsAtBottomChange"
-      >
-        <div class="flex flex-col items-center px-[20px] max-w-[1000px] mx-auto pb-35">
+      <ScrollContainer ref="scrollContainerRef" :auto-scroll="autoScroll" @scroll="handleScroll"
+        @is-at-bottom-change="handleIsAtBottomChange">
+        <div class="flex flex-col items-center px-5 max-w-250 mx-auto pb-35">
           <div class="w-full" v-for="(pair, index) in messagePairs" :key="pair[0].id">
-            <MessageItem
-              v-for="message in pair"
-              :key="message.id"
-              :message="message"
-              :avatar="getAvatar(message)"
-              :is-last="message.index == messages.length - 1"
-              :allow-generate="canRegenerate(message)"
-              @delete="onDelete"
-              @edit="onEdit"
-              @copy="onCopy"
-              @generate="onGenerate"
-              @regenerate="onRegenerate"
-              @render-complete="onRenderComplete"
-              @switch="onSwitch"
-            />
+            <MessageItem v-for="message in pair" :key="message.id" :message="message" :avatar="getAvatar(message)"
+              :is-last="message.index == messages.length - 1" :allow-generate="canRegenerate(message)"
+              @delete="onDelete" @edit="onEdit" @copy="onCopy" @generate="onGenerate" @regenerate="onRegenerate"
+              @render-complete="onRenderComplete" @switch="onSwitch" />
           </div>
         </div>
       </ScrollContainer>
 
-      <ScrollToBottomButton
-        :show="showScrollToBottomBtn"
-        :is-streaming="shouldButtonBreathe"
-        @click="onScrollToBottomClick"
-      />
+      <ScrollToBottomButton :show="showScrollToBottomBtn" :is-streaming="shouldButtonBreathe"
+        @click="onScrollToBottomClick" />
     </template>
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed, defineEmits, defineProps, ref } from 'vue'
+import { computed, ref } from 'vue'
 import { useAuthStore } from '@/stores/auth'
 import { pairMessages, allowReSendMessage } from '@/utils/messageUtils'
 import MessageItem from '../MessageItem.vue'

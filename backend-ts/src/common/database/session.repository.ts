@@ -3,7 +3,7 @@ import { PrismaService } from "./prisma.service";
 
 @Injectable()
 export class SessionRepository {
-  constructor(private prisma: PrismaService) {}
+  constructor(private prisma: PrismaService) { }
 
   async findById(id: string) {
     return this.prisma.session.findUnique({

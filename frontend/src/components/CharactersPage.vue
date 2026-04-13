@@ -3,14 +3,49 @@
     <SidebarLayout v-model:sidebar-visible="sidebarVisible" :sidebar-position="'left'" :z-index="50"
       :show-toggle-button="false" :sidebar-width="200">
       <template #sidebar>
-        <!-- 左侧二级侧边栏 - 助手分类 -->
+        <!-- 左侧二级侧边栏 - 助手分组 -->
         <div class="h-full bg-(--color-conversation-bg) border-r border-(--color-conversation-border) flex flex-col">
-          <div class="px-4 py-4 border-b border-(--color-conversation-border)">
-            <div class="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">助手分类</div>
-            <el-segmented v-model="charactersType" :options="[
-              { label: '我的模板', value: 'private' },
-              { label: '共享模板', value: 'shared' }
-            ]" block class="segmented-control" />
+          <div class="px-1 py-4">
+            <div class="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">助手分组</div>
+            <div class="space-y-1">
+              <div class="px-2 py-1.5 text-sm rounded cursor-pointer transition-colors duration-200"
+                :class="currentGroupId === null ? 'bg-(--color-primary-100) text-(--color-primary)' : 'hover:text-(--color-primary) hover:bg-(--color-primary-100)'"
+                @click="selectGroup(null)">
+                全部助手
+              </div>
+              <div v-for="group in groups" :key="group.id"
+                class="group-item px-2 py-1.5 text-sm rounded cursor-pointer transition-colors duration-200 flex justify-between items-center group"
+                :class="currentGroupId === group.id ? 'bg-(--color-primary-100) text-(--color-primary)' : 'hover:text-(--color-primary) hover:bg-(--color-primary-100)'">
+                <span class="truncate flex-1" @click="selectGroup(group.id)">{{ group.name }}</span>
+                <el-dropdown trigger="click" @command="(cmd) => handleGroupCommand(cmd, group)" @click.stop>
+                  <template #dropdown>
+                    <el-dropdown-menu>
+                      <el-dropdown-item command="rename">
+                        <EditOutlined class="w-4 h-4 mr-2 inline-block" />
+                        重命名
+                      </el-dropdown-item>
+                      <el-dropdown-item command="delete">
+                        <DeleteOutlineOutlined class="w-4 h-4 mr-2 inline-block" />
+                        <span style="color: red;">删除</span>
+                      </el-dropdown-item>
+                    </el-dropdown-menu>
+                  </template>
+                  <div @click.stop class="group-action-trigger">
+                    <el-icon class="w-4 h-4">
+                      <MoreHorizOutlined />
+                    </el-icon>
+                  </div>
+                </el-dropdown>
+              </div>
+              <div class="pt-2 mt-2">
+                <el-button size="small" class="w-full justify-start group-btn" @click="showCreateGroupDialog">
+                  <el-icon class="mr-1">
+                    <PlusOutlined />
+                  </el-icon>
+                  新建分组
+                </el-button>
+              </div>
+            </div>
           </div>
         </div>
       </template>
@@ -56,7 +91,7 @@
                         <div class="font-medium text-base text-gray-900 truncate" :title="character.title">{{
                           character.title }}</div>
                         <!-- 删除按钮 - 悬停显示 -->
-                        <el-button v-if="charactersType == 'private'" link size="small" type="danger"
+                        <el-button link size="small" type="danger"
                           class="opacity-0 group-hover:opacity-100 transition-all duration-200 delete-btn"
                           @click.stop="deleteCharacter(character)">
                           <el-icon :size="18">
@@ -81,8 +116,7 @@
                   <el-button type="primary" size="small" class="flex-1 shadow-sm" @click.stop="startNewChat(character)">
                     使用此角色
                   </el-button>
-                  <el-button v-if="charactersType == 'private'" size="small" class="flex-1 shadow-sm"
-                    @click.stop="editCharacter(character)">
+                  <el-button size="small" class="flex-1 shadow-sm" @click.stop="editCharacter(character)">
                     角色设置
                   </el-button>
                 </div>
@@ -106,16 +140,16 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, reactive, watch } from 'vue'
+import { ref, onMounted, reactive } from 'vue'
 import { useRouter } from 'vue-router'
 import {
   ElIcon,
   ElTooltip,
-  ElSegmented,
   ElDropdown,
   ElDropdownMenu,
   ElDropdownItem,
-  ElButton
+  ElButton,
+  ElMessageBox
 } from 'element-plus'
 import {
   People
@@ -123,8 +157,13 @@ import {
 
 import {
   PlusOutlined,
-  DeleteOutlineOutlined
+  DeleteOutlineOutlined,
+  EditOutlined
 } from '@vicons/material'
+
+import {
+  EllipsisHorizontal as MoreHorizOutlined
+} from '@vicons/ionicons5'
 
 import { useTitle } from '../composables/useTitle'
 import { useStorage } from '@vueuse/core'
@@ -133,30 +172,100 @@ import { Avatar } from './ui'
 import CharacterModal from './CharacterModal.vue'
 import { apiService } from '../services/ApiService'
 import { usePopup } from '../composables/usePopup'
+import type { CharacterGroup } from '@/types/character'
 
 const { confirm, toast } = usePopup()
 const router = useRouter()
 const title = useTitle('助手')
 
-// 响应式数据 - 类型化
+// 响应式数据
 const characters = ref<any[]>([])
+const groups = ref<CharacterGroup[]>([])
+const currentGroupId = ref<string | null>(null)
 const showModal = ref(false)
 const currentCharacterId = ref('')
-const charactersType = useStorage<'private' | 'public'>('charactersType', 'private')
 const loading = ref(false)
 const sidebarVisible = useStorage<boolean>('CharacterSidebarVisible', true)
 
-// 加载角色列表 - 类型化
-const loadCharacters = async (type: 'private' | 'public'): Promise<void> => {
+// 加载分组列表
+const loadGroups = async (): Promise<void> => {
+  try {
+    groups.value = await apiService.fetchCharacterGroups()
+  } catch (error: any) {
+    console.error('获取分组列表失败:', error)
+  }
+}
+
+// 加载角色列表
+const loadCharacters = async (groupId?: string): Promise<void> => {
   loading.value = true
   try {
-    const data = await apiService.fetchCharacters(type)
+    const data = await apiService.fetchCharacters(groupId)
     characters.value = data.items
   } catch (error: any) {
     console.error('获取助手列表失败:', error)
     toast.error('获取助手列表失败')
   } finally {
     loading.value = false
+  }
+}
+
+// 选择分组
+const selectGroup = (groupId: string | null): void => {
+  currentGroupId.value = groupId
+  loadCharacters(groupId || undefined)
+}
+
+// 处理分组命令
+const handleGroupCommand = async (command: string, group: CharacterGroup): Promise<void> => {
+  if (command === 'rename') {
+    try {
+      const { value } = await ElMessageBox.prompt('请输入新的分组名称', '重命名分组', {
+        inputValue: group.name,
+        inputPattern: /\S+/,
+        inputErrorMessage: '分组名称不能为空',
+        confirmButtonText: '确定',
+        cancelButtonText: '取消'
+      })
+      await apiService.updateCharacterGroup(group.id, { name: value })
+      await loadGroups()
+      toast.success('重命名成功')
+    } catch (e) {
+      // 取消操作
+    }
+  } else if (command === 'delete') {
+    try {
+      const result = await confirm('确认删除', `确定要删除分组「${group.name}」吗？该分组下的助手将变为未分组状态。`)
+      if (result) {
+        await apiService.deleteCharacterGroup(group.id)
+        if (currentGroupId.value === group.id) {
+          currentGroupId.value = null
+        }
+        await loadGroups()
+        await loadCharacters(currentGroupId.value || undefined)
+        toast.success('分组删除成功')
+      }
+    } catch (error: any) {
+      console.error('删除分组失败:', error)
+      toast.error(error.message || '删除失败')
+    }
+  }
+}
+
+// 显示新建分组对话框
+const showCreateGroupDialog = async (): Promise<void> => {
+  try {
+    const { value } = await ElMessageBox.prompt('请输入分组名称', '新建分组', {
+      inputPattern: /\S+/,
+      inputErrorMessage: '分组名称不能为空',
+      confirmButtonText: '确定',
+      cancelButtonText: '取消'
+    })
+    await apiService.createCharacterGroup({ name: value })
+    await loadGroups()
+    toast.success('分组创建成功')
+  } catch (e) {
+    // 取消操作
   }
 }
 
@@ -180,7 +289,7 @@ const deleteCharacter = async (character: any): Promise<void> => {
       return
     }
     await apiService.deleteCharacter(character.id)
-    await loadCharacters(charactersType.value)
+    await loadCharacters(currentGroupId.value || undefined)
     toast.success('助手删除成功')
   } catch (error: any) {
     toast.error('删除失败')
@@ -204,7 +313,7 @@ const startNewChat = async (character: any): Promise<void> => {
   }
 }
 
-// 处理保存后的回调 - 类型化
+// 处理保存后的回调
 const handleSaved = (characterData: any): void => {
   const index = characters.value.findIndex(c => c.id === characterData.id)
   if (index !== -1) {
@@ -214,14 +323,10 @@ const handleSaved = (characterData: any): void => {
   }
 }
 
-// Watch 监听器 - 类型化
-watch(() => charactersType.value, async () => {
-  loadCharacters(charactersType.value)
-})
-
-// 生命周期 - 类型化
+// 生命周期
 onMounted(async (): Promise<void> => {
-  loadCharacters(charactersType.value)
+  await loadGroups()
+  loadCharacters()
 })
 </script>
 
@@ -245,5 +350,41 @@ onMounted(async (): Promise<void> => {
 
 .delete-btn:hover {
   background-color: rgba(239, 68, 68, 0.1);
+}
+
+/* 分组按钮样式 */
+.group-btn {
+  background-color: #f5f7fa;
+  border: none;
+  color: #606266;
+  transition: all 0.2s ease;
+}
+
+.group-btn:hover {
+  background-color: #e4e7ed;
+}
+
+/* 分组操作按钮样式 */
+.group-action-trigger {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.25rem;
+  border-radius: 0.25rem;
+  cursor: pointer;
+  transition: background-color 0.2s ease;
+  opacity: 0;
+}
+
+.group-item:hover .group-action-trigger {
+  opacity: 1;
+}
+
+.group-action-trigger:hover {
+  background-color: rgba(0, 0, 0, 0.05);
+}
+
+.dark .group-action-trigger:hover {
+  background-color: rgba(255, 255, 255, 0.1);
 }
 </style>

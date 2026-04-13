@@ -421,6 +421,10 @@ async function handleStreamResponse(
     )
   } catch (error) {
     // 错误已在 composable 中处理，这里只负责显示通知
+    if ((error as Error).message.includes('SessionBusyError')) {
+      notify.warning("会话忙碌", "当前会话正在回复中，请稍后再试")
+      return
+    }
     if (error.name !== 'AbortError') {
       notify.error("请求错误", error.message)
     }

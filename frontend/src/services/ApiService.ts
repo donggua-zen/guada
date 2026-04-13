@@ -19,7 +19,7 @@ import type {
     UploadResponse
 } from '@/types/service'
 import type { Model, McpServer, ModelProvider } from '@/types/api'
-import type { Character, CharacterListResponse } from '@/types/character'
+import type { Character, CharacterListResponse, CharacterGroup } from '@/types/character'
 import type { Session, SessionListResponse } from '@/types/session'
 import type { Message } from '@/types/message'
 import type { PaginatedResponse } from '@/types/common'
@@ -137,11 +137,25 @@ class ApiService implements IApiService {
     }
 
     // ========== 角色相关 ==========
-    async fetchCharacters(type: 'private' | 'public' = 'private'): Promise<CharacterListResponse> {
-        if (type === 'private') {
-            return await this._request('/characters')
-        }
-        return await this._request('/shared/characters')
+    async fetchCharacters(groupId?: string): Promise<CharacterListResponse> {
+        const params = groupId ? `?groupId=${groupId}` : ''
+        return await this._request(`/characters${params}`)
+    }
+
+    async fetchCharacterGroups(): Promise<CharacterGroup[]> {
+        return await this._request('/character-groups')
+    }
+
+    async createCharacterGroup(data: { name: string }): Promise<CharacterGroup> {
+        return await this._request('/character-groups', { method: 'POST', data })
+    }
+
+    async updateCharacterGroup(groupId: string, data: { name: string }): Promise<CharacterGroup> {
+        return await this._request(`/character-groups/${groupId}`, { method: 'PUT', data })
+    }
+
+    async deleteCharacterGroup(groupId: string): Promise<{ success: boolean }> {
+        return await this._request(`/character-groups/${groupId}`, { method: 'DELETE' })
     }
 
     async fetchCharacter(characterId: string): Promise<Character> {
@@ -269,6 +283,9 @@ class ApiService implements IApiService {
 
             if (contentType && contentType.includes('application/json')) {
                 const errorData = await response.json()
+                if (response.status === 409) {
+                    throw new Error('SessionBusyError: ' + (errorData.error || 'Session is busy'))
+                }
                 throw new Error(errorData.error || `获取响应失败：${response.status}`)
             }
 

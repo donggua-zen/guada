@@ -10,6 +10,18 @@ import type { ISODateString } from './common'
 export type CharacterType = 'private' | 'public' | 'system'
 
 /**
+ * 角色分组对象
+ */
+export interface CharacterGroup {
+    id: string
+    name: string
+    userId: string
+    sortOrder: number
+    createdAt: ISODateString
+    updatedAt: ISODateString
+}
+
+/**
  * 角色对象
  */
 export interface Character {
@@ -21,6 +33,8 @@ export interface Character {
     userId: string
     type: CharacterType
     isActive: boolean
+    groupId?: string | null
+    group?: CharacterGroup | null
     createdAt: ISODateString
     updatedAt: ISODateString
     settings?: CharacterSettings
