@@ -493,7 +493,7 @@ export const PROVIDER_TEMPLATES: ProviderTemplate[] = [
     name: "Moonshot AI",
     protocol: "openai",
     defaultApiUrl: "https://api.moonshot.cn/v1/",
-    avatarUrl: "/static/images/providers/moonshot.svg",
+    avatarUrl: "/static/images/providers/moonshotai_new.png",
     description:
       "月之暗面科技，Kimi 智能助手背后的技术提供方，擅长长文本处理。",
     attributes: {
