@@ -1,58 +1,50 @@
 <template>
-    <div class="flex flex-col h-full">
+    <div class="flex-1 overflow-hidden">
+        <!-- 头部区域 -->
+        <div class="sessions-header py-1 text-lg font-semibold flex justify-between items-center mb-6">
+            <span>默认模型设置</span>
+            <el-button type="primary" @click="handleSave" :disabled="!hasChanges">
+                <template #icon>
+                    <SaveOutlined />
+                </template>
+                保存设置
+            </el-button>
+        </div>
+
         <div class="flex-1 overflow-hidden">
             <ScrollContainer class="h-full">
-                <div class="px-4 space-y-8">
+                <div class="px-6 py-6 space-y-8">
                     <!-- 对话设置 -->
                     <div class="mb-8">
-                        <h3 class="text-lg mb-4 pb-2 text-gray-500">默认对话</h3>
-                        <el-form ref="chatFormRef" :model="settingsForm"
-                            label-position="left" label-width="120px" size="large">
+                        <el-form ref="chatFormRef" :model="settingsForm" label-position="left" label-width="120px"
+                            size="large">
                             <el-form-item label="默认对话模型" prop="defaultChatModelId">
-                                <div class="flex items-center gap-2">
-                                    <el-input v-model="chatModelName" readonly placeholder="请选择模型"
-                                        style="flex: 1; cursor: pointer" @click="openModelDialog('chat')">
-                                        <template #prefix>
-                                            <OpenAI class="w-4 h-4" />
-                                        </template>
-                                    </el-input>
-                                    <el-button @click="openModelDialog('chat')" plain type="primary">
-                                        选择
-                                    </el-button>
-                                    <el-button v-if="settingsForm.defaultChatModelId"
-                                        @click="clearModelSelection('chat')" circle>
-                                        <template #icon>
-                                            <CloseOutlined />
-                                        </template>
-                                    </el-button>
-                                </div>
+                                <el-select v-model="settingsForm.defaultChatModelId" placeholder="请选择模型" clearable
+                                    @click="openModelDialog('chat')" style="width: fit-content; min-width: 240px;">
+                                    <template #prefix>
+                                        <OpenAI class="w-4 h-4" />
+                                    </template>
+                                    <el-option :value="settingsForm.defaultChatModelId" :label="chatModelName"
+                                        v-if="chatModelName" />
+                                </el-select>
                             </el-form-item>
                         </el-form>
                     </div>
 
                     <!-- 标题总结设置 -->
                     <div class="mb-8">
-                        <h3 class="text-lg mb-4 pb-2 text-gray-500">标题总结</h3>
                         <el-form ref="titleSummaryFormRef" :model="settingsForm" :rules="titleSummaryRules"
                             label-position="left" label-width="120px" size="large">
                             <el-form-item label="标题总结模型" prop="defaultTitleSummaryModelId">
-                                <div class="flex items-center gap-2">
-                                    <el-input v-model="titleSummaryModelName" readonly placeholder="请选择模型"
-                                        style="flex: 1; cursor: pointer" @click="openModelDialog('title')">
-                                        <template #prefix>
-                                            <OpenAI class="w-4 h-4" />
-                                        </template>
-                                    </el-input>
-                                    <el-button @click="openModelDialog('title')" plain type="primary">
-                                        选择
-                                    </el-button>
-                                    <el-button v-if="settingsForm.defaultTitleSummaryModelId"
-                                        @click="clearModelSelection('title')" circle>
-                                        <template #icon>
-                                            <CloseOutlined />
-                                        </template>
-                                    </el-button>
-                                </div>
+                                <el-select v-model="settingsForm.defaultTitleSummaryModelId" placeholder="请选择模型"
+                                    clearable @click="openModelDialog('title')"
+                                    style="width: fit-content; min-width: 240px;">
+                                    <template #prefix>
+                                        <OpenAI class="w-4 h-4" />
+                                    </template>
+                                    <el-option :value="settingsForm.defaultTitleSummaryModelId"
+                                        :label="titleSummaryModelName" v-if="titleSummaryModelName" />
+                                </el-select>
                             </el-form-item>
                             <el-form-item label="标题总结提示词" prop="defaultTitleSummaryPrompt">
                                 <el-input v-model="settingsForm.defaultTitleSummaryPrompt" type="textarea"
@@ -63,27 +55,18 @@
 
                     <!-- 翻译设置 -->
                     <div class="mb-8">
-                        <h3 class="text-lg mb-4 pb-2 text-gray-500">文本翻译</h3>
                         <el-form ref="translationFormRef" :model="settingsForm" :rules="translationRules"
                             label-position="left" label-width="120px" size="large">
                             <el-form-item label="翻译模型" prop="defaultTranslationModelId">
-                                <div class="flex items-center gap-2">
-                                    <el-input v-model="translationModelName" readonly placeholder="请选择模型"
-                                        style="flex: 1; cursor: pointer" @click="openModelDialog('translation')">
-                                        <template #prefix>
-                                            <OpenAI class="w-4 h-4" />
-                                        </template>
-                                    </el-input>
-                                    <el-button @click="openModelDialog('translation')" plain type="primary">
-                                        选择
-                                    </el-button>
-                                    <el-button v-if="settingsForm.defaultTranslationModelId"
-                                        @click="clearModelSelection('translation')" circle>
-                                        <template #icon>
-                                            <CloseOutlined />
-                                        </template>
-                                    </el-button>
-                                </div>
+                                <el-select v-model="settingsForm.defaultTranslationModelId" placeholder="请选择模型"
+                                    clearable @click="openModelDialog('translation')"
+                                    style="width: fit-content; min-width: 240px;">
+                                    <template #prefix>
+                                        <OpenAI class="w-4 h-4" />
+                                    </template>
+                                    <el-option :value="settingsForm.defaultTranslationModelId"
+                                        :label="translationModelName" v-if="translationModelName" />
+                                </el-select>
                             </el-form-item>
                             <el-form-item label="翻译提示词" prop="defaultTranslationPrompt">
                                 <el-input v-model="settingsForm.defaultTranslationPrompt" type="textarea"
@@ -94,27 +77,18 @@
 
                     <!-- 历史压缩设置 -->
                     <div class="mb-8">
-                        <h3 class="text-lg mb-4 pb-2 text-gray-500">历史压缩</h3>
                         <el-form ref="historyCompressionFormRef" :model="settingsForm" :rules="historyCompressionRules"
                             label-position="left" label-width="120px" size="large">
                             <el-form-item label="历史压缩模型" prop="defaultHistoryCompressionModelId">
-                                <div class="flex items-center gap-2">
-                                    <el-input v-model="historyCompressionModelName" readonly placeholder="请选择模型"
-                                        style="flex: 1; cursor: pointer" @click="openModelDialog('compression')">
-                                        <template #prefix>
-                                            <OpenAI class="w-4 h-4" />
-                                        </template>
-                                    </el-input>
-                                    <el-button @click="openModelDialog('compression')" plain type="primary">
-                                        选择
-                                    </el-button>
-                                    <el-button v-if="settingsForm.defaultHistoryCompressionModelId"
-                                        @click="clearModelSelection('compression')" circle>
-                                        <template #icon>
-                                            <CloseOutlined />
-                                        </template>
-                                    </el-button>
-                                </div>
+                                <el-select v-model="settingsForm.defaultHistoryCompressionModelId" placeholder="请选择模型"
+                                    clearable @click="openModelDialog('compression')"
+                                    style="width: fit-content; min-width: 240px;">
+                                    <template #prefix>
+                                        <OpenAI class="w-4 h-4" />
+                                    </template>
+                                    <el-option :value="settingsForm.defaultHistoryCompressionModelId"
+                                        :label="historyCompressionModelName" v-if="historyCompressionModelName" />
+                                </el-select>
                             </el-form-item>
                             <el-form-item label="历史压缩提示词" prop="defaultHistoryCompressionPrompt">
                                 <el-input v-model="settingsForm.defaultHistoryCompressionPrompt" type="textarea"
@@ -125,18 +99,10 @@
                 </div>
             </ScrollContainer>
         </div>
-        <div class="footer pt-3 px-4 flex justify-start">
-            <el-button type="primary" @click="handleSave">
-                <template #icon>
-                    <SaveOutlined />
-                </template>
-                保存全部设置
-            </el-button>
-        </div>
 
         <!-- 模型选择对话框 -->
-        <el-dialog v-model="modelDialogVisible" title="选择模型" :width="isMobile ? '90%' : '600px'"
-            :append-to-body="true" destroy-on-close>
+        <el-dialog v-model="modelDialogVisible" title="选择模型" :width="isMobile ? '90%' : '600px'" :append-to-body="true"
+            destroy-on-close>
             <div class="mb-4">
                 <el-input v-model="modelSearchText" placeholder="搜索模型..." clearable>
                     <template #prefix>
@@ -154,36 +120,58 @@
                         </div>
                         <div class="provider-models space-y-1">
                             <div v-for="model in getProviderModels(provider.id)" :key="model.id"
-                                class="model-item p-3 rounded-lg cursor-pointer border transition-all" :class="{
-                                    'bg-blue-50 border-blue-300': tempModelId === model.id,
-                                    'border-gray-200 hover:bg-gray-50': tempModelId !== model.id
-                                }" @click="selectModel(model.id)">
+                                class="model-item p-3 rounded-lg cursor-pointer border transition-all mb-2 last:mb-0"
+                                :class="{
+                                    'bg-pink-50 dark:bg-pink-900/20 border-pink-300 dark:border-pink-700': tempModelId === model.id,
+                                    'border-gray-100 dark:border-gray-700 hover:bg-pink-50/50 dark:hover:bg-pink-900/10': tempModelId !== model.id
+                                }" @click="selectAndClose(model.id)">
                                 <div class="flex items-start justify-between gap-2">
                                     <div class="flex-1 min-w-0">
-                                        <div class="flex items-center gap-2 mb-1">
-                                            <div class="font-medium text-sm truncate">{{ model.modelName }}</div>
-                                            <!-- 特性标签 -->
-                                            <div class="shrink-0 flex gap-1">
-                                                <el-tag v-if="model.features?.includes('tools')" size="small"
-                                                    type="info" class="h-4 text-[10px] px-1">
-                                                    工具
-                                                </el-tag>
-                                                <el-tag v-if="model.features?.includes('thinking')" size="small"
-                                                    type="warning" class="h-4 text-[10px] px-1">
-                                                    混思
-                                                </el-tag>
-                                                <el-tag v-if="model.features?.includes('visual')" size="small"
-                                                    type="success" class="h-4 text-[10px] px-1">
-                                                    视觉
-                                                </el-tag>
+                                        <div class="font-medium text-sm text-gray-800 dark:text-gray-200 truncate mb-1">
+                                            {{ model.modelName }}</div>
+                                        <!-- 特性图标组 -->
+                                        <div class="flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400">
+                                            <span
+                                                class="px-1.5 py-0.5 rounded bg-gray-100 dark:bg-gray-700 font-medium text-[10px]">
+                                                {{ model.modelType === 'text' ? '对话' : '嵌入' }}
+                                            </span>
+
+                                            <!-- 输入/输出能力箭头组 -->
+                                            <div v-if="model.modelType === 'text' && (model.config?.inputCapabilities || model.config?.outputCapabilities)"
+                                                class="flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-gray-50 dark:bg-gray-800 border border-gray-100 dark:border-gray-700">
+                                                <template v-for="cap in (model.config?.inputCapabilities || ['text'])"
+                                                    :key="'in-' + cap">
+                                                    <el-icon :size="14">
+                                                        <TextT24Regular v-if="cap === 'text'" />
+                                                        <Image24Regular v-else />
+                                                    </el-icon>
+                                                </template>
+                                                <el-icon :size="10" class="text-gray-300">
+                                                    <ArrowRightTwotone />
+                                                </el-icon>
+                                                <template v-for="cap in (model.config?.outputCapabilities || ['text'])"
+                                                    :key="'out-' + cap">
+                                                    <el-icon :size="14">
+                                                        <TextT24Regular v-if="cap === 'text'" />
+                                                        <Image24Regular v-else />
+                                                    </el-icon>
+                                                </template>
                                             </div>
-                                        </div>
-                                        <div v-if="model.description" class="text-xs text-gray-500 truncate mt-0.5">
-                                            {{ model.description }}
+
+                                            <!-- 高级功能图标 -->
+                                            <template v-for="feature in (model.config?.features || [])" :key="feature">
+                                                <el-tooltip :content="getFeatureLabel(feature)" placement="top">
+                                                    <el-icon class="hover:text-primary transition-colors" :size="14">
+                                                        <WrenchScrewdriver24Regular v-if="feature === 'tools'" />
+                                                        <LightbulbFilament24Regular
+                                                            v-else-if="feature === 'thinking'" />
+                                                    </el-icon>
+                                                </el-tooltip>
+                                            </template>
                                         </div>
                                     </div>
-                                    <el-icon v-if="tempModelId === model.id" class="text-blue-500 shrink-0"
-                                        size="20">
+                                    <el-icon v-if="tempModelId === model.id" class="text-primary shrink-0 mt-1"
+                                        size="18">
                                         <CheckCircleFilled />
                                     </el-icon>
                                 </div>
@@ -198,13 +186,6 @@
                     <p>未找到匹配的模型</p>
                 </div>
             </div>
-
-            <template #footer>
-                <div class="flex justify-end gap-3">
-                    <el-button @click="modelDialogVisible = false">取消</el-button>
-                    <el-button type="primary" @click="applyModelSelection">确定</el-button>
-                </div>
-            </template>
         </el-dialog>
     </div>
 </template>
@@ -218,8 +199,12 @@ import {
 import { OpenAI } from "@/components/icons";
 import {
     SearchFilled,
-    CheckCircleFilled
+    CheckCircleFilled,
+    ArrowRightTwotone
 } from "@vicons/material";
+import {
+    TextT24Regular, LightbulbFilament24Regular, WrenchScrewdriver24Regular, Image24Regular
+} from '@vicons/fluent'
 
 import { apiService } from '@/services/ApiService'
 import { ScrollContainer } from '@/components/ui'
@@ -299,19 +284,19 @@ const getModelNameById = (modelId) => {
 }
 
 // 计算各个模型输入框的显示值
-const chatModelName = computed(() => 
+const chatModelName = computed(() =>
     getModelNameById(settingsForm.defaultChatModelId)
 )
 
-const titleSummaryModelName = computed(() => 
+const titleSummaryModelName = computed(() =>
     getModelNameById(settingsForm.defaultTitleSummaryModelId)
 )
 
-const translationModelName = computed(() => 
+const translationModelName = computed(() =>
     getModelNameById(settingsForm.defaultTranslationModelId)
 )
 
-const historyCompressionModelName = computed(() => 
+const historyCompressionModelName = computed(() =>
     getModelNameById(settingsForm.defaultHistoryCompressionModelId)
 )
 
@@ -319,7 +304,7 @@ const historyCompressionModelName = computed(() =>
 const openModelDialog = (type) => {
     currentDialogType.value = type
     modelSearchText.value = ''
-    
+
     // 根据类型设置当前选中的模型
     switch (type) {
         case 'chat':
@@ -335,40 +320,31 @@ const openModelDialog = (type) => {
             tempModelId.value = settingsForm.defaultHistoryCompressionModelId
             break
     }
-    
+
     modelDialogVisible.value = true
 }
 
-// 选择模型（仅更新临时状态）
-const selectModel = (modelId) => {
-    tempModelId.value = modelId
-}
-
-// 应用模型选择
-const applyModelSelection = () => {
-    if (!tempModelId.value) {
-        notify.error('请选择模型')
-        return
-    }
+// 选择并自动关闭对话框
+const selectAndClose = (modelId) => {
+    if (!modelId) return
     
     // 根据类型更新对应的模型 ID
     switch (currentDialogType.value) {
         case 'chat':
-            settingsForm.defaultChatModelId = tempModelId.value
+            settingsForm.defaultChatModelId = modelId
             break
         case 'title':
-            settingsForm.defaultTitleSummaryModelId = tempModelId.value
+            settingsForm.defaultTitleSummaryModelId = modelId
             break
         case 'translation':
-            settingsForm.defaultTranslationModelId = tempModelId.value
+            settingsForm.defaultTranslationModelId = modelId
             break
         case 'compression':
-            settingsForm.defaultHistoryCompressionModelId = tempModelId.value
+            settingsForm.defaultHistoryCompressionModelId = modelId
             break
     }
     
     modelDialogVisible.value = false
-    notify.success('已选择模型', `模型已更新`)
 }
 
 // 清除模型选择
@@ -386,6 +362,15 @@ const clearModelSelection = (type) => {
         case 'compression':
             settingsForm.defaultHistoryCompressionModelId = null
             break
+    }
+}
+
+// 获取特性标签名称
+const getFeatureLabel = (type) => {
+    switch (type) {
+        case 'tools': return '工具调用';
+        case 'thinking': return '混合思考';
+        default: return type;
     }
 }
 
@@ -422,9 +407,14 @@ const loadModels = async () => {
         const response = await apiService.fetchModels()
 
         response.items.forEach(provider => {
-            models.value.push(...provider.models)
+            // 过滤只保留 modelType 为 'text' 的模型
+            const textModels = provider.models.filter(model => model.modelType === "text")
+            models.value.push(...textModels)
             delete provider.models
-            providers.value.push(provider)
+            // 只有当该供应商有符合条件的模型时才加入列表
+            if (textModels.length > 0) {
+                providers.value.push(provider)
+            }
         })
 
     } catch (error) {
@@ -433,11 +423,21 @@ const loadModels = async () => {
     }
 }
 
+// 原始设置备份，用于对比是否有改动
+const originalSettings = ref(null)
+
+// 计算是否有改动
+const hasChanges = computed(() => {
+    if (!originalSettings.value) return false
+    return JSON.stringify(settingsForm) !== JSON.stringify(originalSettings.value)
+})
+
 // 加载全局设置
 const loadGlobalSettings = async () => {
     try {
         const response = await apiService.fetchSettings()
 
+        // 填充表单
         settingsForm.defaultChatModelId = response.defaultChatModelId
         settingsForm.defaultTitleSummaryModelId = response.defaultTitleSummaryModelId
         settingsForm.defaultTitleSummaryPrompt = response.defaultTitleSummaryPrompt
@@ -445,6 +445,9 @@ const loadGlobalSettings = async () => {
         settingsForm.defaultTranslationPrompt = response.defaultTranslationPrompt
         settingsForm.defaultHistoryCompressionModelId = response.defaultHistoryCompressionModelId
         settingsForm.defaultHistoryCompressionPrompt = response.defaultHistoryCompressionPrompt
+
+        // 备份原始数据
+        originalSettings.value = JSON.parse(JSON.stringify(settingsForm))
     } catch (error) {
         console.error('获取全局设置失败:', error)
         notify.error('获取全局设置失败', error)
@@ -481,6 +484,9 @@ const handleSave = async () => {
         }
 
         await apiService.updateSettings(settingsForm)
+
+        // 保存成功后更新原始数据备份
+        originalSettings.value = JSON.parse(JSON.stringify(settingsForm))
 
         notify.success('保存成功', '默认模型设置已更新')
     } catch (error) {

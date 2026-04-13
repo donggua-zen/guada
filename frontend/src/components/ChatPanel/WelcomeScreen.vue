@@ -1,6 +1,6 @@
 <template>
-  <div class="flex items-center justify-center h-full min-h-[500px] py-10 px-5">
-    <div class="max-w-[600px] w-full text-center p-10 rounded-2xl animate-fade-in-up">
+  <div class="flex items-center justify-center h-full min-h-125 py-10 px-5">
+    <div class="max-w-150 w-full text-center p-10 rounded-2xl animate-fade-in-up">
       <!-- 头像区域 -->
       <div class="relative inline-block mb-5">
         <div
@@ -16,7 +16,7 @@
 
       <!-- 标题和描述 -->
       <div class="mb-8">
-        <h1 class="text-3xl font-bold mb-4 text-[var(--color-primary)]">
+        <h1 class="text-3xl font-bold mb-4 text-(--color-primary)">
           {{ session?.character.title || '' }}
         </h1>
         <h2 class="text-lg font-normal text-gray-600 leading-relaxed">
@@ -26,7 +26,7 @@
         <!-- 角色设定 -->
         <div
           v-if="session?.settings?.systemPrompt"
-          class="mt-6 p-5 bg-gray-50 rounded-xl border-l-4 border-[var(--color-primary)] text-left"
+          class="mt-6 p-5 bg-gray-50 rounded-xl border-l-4 border-(--color-primary) text-left"
         >
           <h3 class="text-base font-semibold text-gray-800 mb-2">角色设定</h3>
           <p class="text-sm text-gray-600 leading-6">
@@ -39,7 +39,6 @@
 </template>
 
 <script setup lang="ts">
-import { defineProps } from 'vue'
 import Avatar from '../ui/Avatar.vue'
 
 defineProps<{

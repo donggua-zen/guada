@@ -25,7 +25,6 @@ defineOptions({
 })
 const attrs = useAttrs()
 
-const needScrollToBottom = ref(false);
 
 // Props 类型化
 const props = defineProps<{
@@ -34,6 +33,9 @@ const props = defineProps<{
     smoothScroll?: boolean;
     enableScrollButton?: boolean;
 }>();
+
+const needScrollToBottom = ref(props.autoScroll || false);
+
 
 const mergredClasses = computed((): string => {
     let mergredClass: string | string[] = [];

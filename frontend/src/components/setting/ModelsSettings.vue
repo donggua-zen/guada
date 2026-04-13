@@ -7,35 +7,41 @@
             </ModelsProviderList>
         </template>
         <template v-else>
-
-            <div class="flex items-center mb-6">
-                <el-button link style="font-size: 24px" @click="showDetail = false">
-                    <el-icon>
+            <!-- 头部区域 -->
+            <div class="sessions-header py-1 text-lg font-semibold flex justify-between items-center mb-6">
+                <el-button link @click="showDetail = false" class="flex items-center gap-2">
+                    <el-icon :size="16">
                         <ArrowBackIosFilled />
                     </el-icon>
-                    <span class="font-bold text-lg mr-2">{{ currentProvider.name }}</span>
+                    <span class="text-xl">{{ currentProvider.name }}</span>
                 </el-button>
-
-                <el-button link style="font-size: 24px" @click="handleEditProvider(currentProvider)">
-                    <el-icon>
-                        <SettingsOutlined />
-                    </el-icon>
-                </el-button>
-            </div>
-            <div class="flex w-full">
-                <div class="flex flex-1 justify-start items-center">
-                    <el-space>
-                        <el-button @click="handleAddModel">手动添加</el-button>
-                        <el-button @click="handleFetchModels">获取模型列表</el-button>
-                    </el-space>
-                </div>
+                <el-space>
+                    <el-button @click="handleEditProvider(currentProvider)">
+                        <template #icon>
+                            <SettingsOutlined />
+                        </template>
+                        供应商设置
+                    </el-button>
+                    <el-button @click="handleAddModel">
+                        <template #icon>
+                            <PlusOutlined />
+                        </template>
+                        手动添加
+                    </el-button>
+                    <el-button type="primary" @click="handleFetchModels">
+                        <template #icon>
+                            <CloudDownloadOutlined />
+                        </template>
+                        获取模型列表
+                    </el-button>
+                </el-space>
             </div>
             <div class="mt-4 rounded border px-3 py-1 border-gray-200 dark:border-gray-700">
                 <ul>
                     <li v-for="model in currentModels" :key="model.id"
-                        class="flex items-center justify-between py-3 border-b border-gray-100 dark:border-gray-700 last:border-b-0 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors rounded px-3 -mx-3">
+                        class="flex items-center justify-between py-2 border-b border-gray-100 dark:border-gray-700 last:border-b-0 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors rounded px-3 -mx-3">
                         <div class="flex-1 min-w-0 mr-4">
-                            <div class="font-medium text-gray-800 dark:text-gray-200 truncate mb-1">{{ model.modelName }}</div>
+                            <div class="font-bold text-gray-800 dark:text-gray-200 truncate mb-2">{{ model.modelName }}</div>
                             <div class="flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400">
                                 <!-- 模型类型文本 -->
                                 <span class="px-1.5 py-0.5 rounded bg-gray-100 dark:bg-gray-700 font-medium">
@@ -233,46 +239,45 @@
     </el-dialog>
 
     <!-- 获取模型列表的模态框 -->
-    <el-dialog v-model="showFetchModal" title="获取模型列表" width="50%" align-center>
-        <div class="max-h-[60vh] overflow-y-auto">
-            <div class="p-4">
+    <el-dialog v-model="showFetchModal" title="获取模型列表" width="600px" align-center class="model-edit-dialog">
+        <div class="max-h-[60vh] overflow-y-auto px-1">
+            <div class="p-2 mb-2 sticky top-0 bg-white dark:bg-gray-900 z-10">
                 <el-input v-model="searchModelName" placeholder="搜索模型名称" clearable @input="handleSearchModel">
                     <template #prefix>
-                        <el-icon>
-                            <SearchOutlined />
-                        </el-icon>
+                        <el-icon><SearchOutlined /></el-icon>
                     </template>
                 </el-input>
             </div>
 
-            <div v-if="fetchingModels" class="flex justify-center items-center py-8">
-                <el-icon class="is-loading" style="font-size: 24px;">
-                    <!-- <Loading /> -->
-                </el-icon>
+            <div v-if="fetchingModels" class="flex justify-center items-center py-12">
+                <el-icon class="is-loading text-primary" style="font-size: 32px;"><Loading /></el-icon>
             </div>
             <div v-else>
                 <!-- 已添加的模型 -->
-                <div v-if="filteredAddedModels.length > 0">
-                    <h3 class="font-bold text-lg mb-3 text-green-600">已添加的模型</h3>
-                    <ul>
+                <div v-if="filteredAddedModels.length > 0" class="mb-6">
+                    <h3 class="text-xs font-bold text-green-600 uppercase tracking-wider mb-3 ml-1">已添加的模型</h3>
+                    <ul class="rounded-lg border border-gray-100 dark:border-gray-700 divide-y divide-gray-100 dark:divide-gray-700">
                         <li v-for="model in filteredAddedModels" :key="model.id"
-                            class="flex items-center py-3 border-b border-gray-200 last:border-b-0">
-                            <div class="flex-1">
-                                <div class="font-bold text-base">{{ model.modelName }}</div>
-                                <div class="flex items-center mt-2">
-                                    <el-tag type="success">{{ model.modelType }}</el-tag>
-                                    <el-space class="ml-2">
-                                        <el-tag v-for="feature in (model.config?.features || [])" type="info">
-                                            {{ getLableName(feature) }}
-                                        </el-tag>
-                                    </el-space>
+                            class="flex items-center justify-between py-3 px-4 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors">
+                            <div class="flex-1 min-w-0 mr-4">
+                                <div class="font-medium text-gray-800 dark:text-gray-200 truncate">{{ model.modelName }}</div>
+                                <div class="flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400 mt-1">
+                                    <span class="px-1.5 py-0.5 rounded bg-green-50 dark:bg-green-900/30 text-green-600 dark:text-green-400 font-medium">
+                                        {{ model.modelType === 'text' ? '对话' : '嵌入' }}
+                                    </span>
+                                    <template v-for="feature in (model.config?.features || [])" :key="feature">
+                                        <el-tooltip :content="getLableName(feature)" placement="top">
+                                            <el-icon class="hover:text-primary transition-colors" :size="14">
+                                                <WrenchScrewdriver24Regular v-if="feature === 'tools'" />
+                                                <LightbulbFilament24Regular v-else-if="feature === 'thinking'" />
+                                                <ScienceOutlined v-else />
+                                            </el-icon>
+                                        </el-tooltip>
+                                    </template>
                                 </div>
                             </div>
-                            <el-button type="danger" link @click="handleRemoveFromFetch(model)">
-                                <el-icon>
-                                    <RemoveCircleTwotone />
-                                </el-icon>
-                                <span class="ml-1">移除</span>
+                            <el-button type="danger" link size="small" @click="handleRemoveFromFetch(model)">
+                                <el-icon><RemoveCircleTwotone /></el-icon>
                             </el-button>
                         </li>
                     </ul>
@@ -280,32 +285,35 @@
 
                 <!-- 可添加的模型 -->
                 <div v-if="filteredAvailableModels.length > 0">
-                    <h3 class="font-bold text-lg mb-3 mt-6 text-blue-600">可添加的模型</h3>
-                    <ul>
-                        <li v-for="model in filteredAvailableModels" :key="model.id"
-                            class="flex items-center py-3 border-b border-gray-200 last:border-b-0">
-                            <div class="flex-1">
-                                <div class="font-bold text-base">{{ model.modelName }}</div>
-                                <div class="flex items-center mt-2">
-                                    <el-tag type="success">{{ model.modelType }}</el-tag>
-                                    <el-space class="ml-2">
-                                        <el-tag v-for="feature in (model.config?.features || [])" type="info">
-                                            {{ getLableName(feature) }}
-                                        </el-tag>
-                                    </el-space>
+                    <h3 class="text-xs font-bold text-blue-600 uppercase tracking-wider mb-3 ml-1">可添加的模型</h3>
+                    <ul class="rounded-lg border border-gray-100 dark:border-gray-700 divide-y divide-gray-100 dark:divide-gray-700">
+                        <li v-for="model in filteredAvailableModels" :key="model.modelName"
+                            class="flex items-center justify-between py-3 px-4 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors">
+                            <div class="flex-1 min-w-0 mr-4">
+                                <div class="font-medium text-gray-800 dark:text-gray-200 truncate">{{ model.modelName }}</div>
+                                <div class="flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400 mt-1">
+                                    <span class="px-1.5 py-0.5 rounded bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 font-medium">
+                                        {{ model.modelType === 'text' ? '对话' : '嵌入' }}
+                                    </span>
+                                    <template v-for="feature in (model.config?.features || [])" :key="feature">
+                                        <el-tooltip :content="getLableName(feature)" placement="top">
+                                            <el-icon class="hover:text-primary transition-colors" :size="14">
+                                                <WrenchScrewdriver24Regular v-if="feature === 'tools'" />
+                                                <LightbulbFilament24Regular v-else-if="feature === 'thinking'" />
+                                                <ScienceOutlined v-else />
+                                            </el-icon>
+                                        </el-tooltip>
+                                    </template>
                                 </div>
                             </div>
-                            <el-button link type="primary" @click="handleAddFromFetch(model)" size="small">
-                                <el-icon>
-                                    <AddCircleTwotone />
-                                </el-icon>
-                                <span class="ml-1">添加</span>
+                            <el-button link type="primary" size="small" @click="handleAddFromFetch(model)">
+                                <el-icon><AddCircleTwotone /></el-icon>
                             </el-button>
                         </li>
                     </ul>
                 </div>
 
-                <div v-if="filteredFetchedModels.length === 0" class="text-center py-8 text-gray-500">
+                <div v-if="filteredFetchedModels.length === 0" class="text-center py-12 text-gray-400 text-sm">
                     暂无匹配的模型数据
                 </div>
             </div>
@@ -319,7 +327,7 @@ import { useDebounceFn } from '@vueuse/core' // 导入防抖函数'
 import ModelsProviderList from './ModelsProviderList.vue'
 import {
     SettingsOutlined, RemoveCircleOutlineRound, DeleteTwotone, AddCircleTwotone,
-    RemoveCircleTwotone, SearchOutlined, ArrowBackIosFilled
+    RemoveCircleTwotone, SearchOutlined, ArrowBackIosFilled, PlusOutlined, CloudDownloadOutlined
 } from '@vicons/material'
 import {
     TextT24Regular, LightbulbFilament24Regular, Image24Regular, WrenchScrewdriver24Regular, Group24Regular, ArrowRight24Regular
@@ -345,6 +353,7 @@ import {
     ElInputNumber,
     ElAlert
 } from 'element-plus'
+import { Loading } from '@element-plus/icons-vue'
 
 const { notify, confirm, prompt } = usePopup()
 const currentProviderId = ref("");
