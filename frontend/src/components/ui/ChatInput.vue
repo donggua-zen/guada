@@ -63,13 +63,13 @@
                         <el-button v-if="showButtons.filesButton" class="tool-btn" title="上传文件"
                             @click="triggerFileInput" text>
                             <el-icon size="22">
-                                <InsertDriveFileTwotone />
+                                <Attach24Regular />
                             </el-icon>
                         </el-button>
                         <el-button v-if="showButtons.imagesButton" class="tool-btn" title="添加图片"
                             @click="triggerImageInput" text>
                             <el-icon size="22">
-                                <ImageTwotone />
+                                <Image24Regular />
                             </el-icon>
                         </el-button>
                     </div>
@@ -108,36 +108,64 @@
                             </div>
                             <div class="provider-models space-y-1">
                                 <div v-for="model in getProviderModels(provider.id)" :key="model.id"
-                                    class="model-item p-3 rounded-lg cursor-pointer border transition-all" :class="{
-                                        'bg-blue-50 border-blue-300': tempModelId === model.id,
-                                        'border-gray-200 hover:bg-gray-50': tempModelId !== model.id
+                                    class="model-item p-3 rounded-lg cursor-pointer border transition-all mb-2 last:mb-0"
+                                    :class="{
+                                        'bg-pink-50 dark:bg-pink-900/20 border-pink-300 dark:border-pink-700': tempModelId === model.id,
+                                        'border-gray-100 dark:border-gray-700 hover:bg-pink-50/50 dark:hover:bg-pink-900/10': tempModelId !== model.id
                                     }" @click="selectModel(model.id)">
                                     <div class="flex items-start justify-between gap-2">
                                         <div class="flex-1 min-w-0">
-                                            <div class="flex items-center gap-2 mb-1">
-                                                <div class="font-medium text-sm truncate">{{ model.modelName }}</div>
-                                                <!-- 特性标签 -->
-                                                <div class="shrink-0 flex gap-1">
-                                                    <el-tag v-if="model.features?.includes('tools')" size="small"
-                                                        type="info" class="h-4 text-[10px] px-1">
-                                                        工具
-                                                    </el-tag>
-                                                    <el-tag v-if="model.features?.includes('thinking')" size="small"
-                                                        type="warning" class="h-4 text-[10px] px-1">
-                                                        混思
-                                                    </el-tag>
-                                                    <el-tag v-if="model.features?.includes('visual')" size="small"
-                                                        type="success" class="h-4 text-[10px] px-1">
-                                                        视觉
-                                                    </el-tag>
+                                            <div
+                                                class="font-medium text-sm text-gray-800 dark:text-gray-200 truncate mb-1">
+                                                {{ model.modelName }}</div>
+                                            <!-- 特性图标组 -->
+                                            <div
+                                                class="flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400">
+                                                <span
+                                                    class="px-1.5 py-0.5 rounded bg-gray-100 dark:bg-gray-700 font-medium text-[10px]">
+                                                    {{ model.modelType === 'text' ? '对话' : '嵌入' }}
+                                                </span>
+
+                                                <!-- 输入/输出能力箭头组 -->
+                                                <div v-if="model.modelType === 'text' && (model.config?.inputCapabilities || model.config?.outputCapabilities)"
+                                                    class="flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-gray-50 dark:bg-gray-800 border border-gray-100 dark:border-gray-700">
+                                                    <template
+                                                        v-for="cap in (model.config?.inputCapabilities || ['text'])"
+                                                        :key="'in-' + cap">
+                                                        <el-icon :size="14">
+                                                            <TextT24Regular v-if="cap === 'text'" />
+                                                            <Image24Regular v-else />
+                                                        </el-icon>
+                                                    </template>
+                                                    <el-icon :size="10" class="text-gray-300">
+                                                        <ArrowRightTwotone />
+                                                    </el-icon>
+                                                    <template
+                                                        v-for="cap in (model.config?.outputCapabilities || ['text'])"
+                                                        :key="'out-' + cap">
+                                                        <el-icon :size="14">
+                                                            <TextT24Regular v-if="cap === 'text'" />
+                                                            <Image24Regular v-else />
+                                                        </el-icon>
+                                                    </template>
                                                 </div>
-                                            </div>
-                                            <div v-if="model.description" class="text-xs text-gray-500 truncate mt-0.5">
-                                                {{ model.description }}
+
+                                                <!-- 高级功能图标 -->
+                                                <template v-for="feature in (model.config?.features || [])"
+                                                    :key="feature">
+                                                    <el-tooltip :content="getFeatureLabel(feature)" placement="top">
+                                                        <el-icon class="hover:text-primary transition-colors"
+                                                            :size="14">
+                                                            <WrenchScrewdriver24Regular v-if="feature === 'tools'" />
+                                                            <LightbulbFilament24Regular
+                                                                v-else-if="feature === 'thinking'" />
+                                                        </el-icon>
+                                                    </el-tooltip>
+                                                </template>
                                             </div>
                                         </div>
-                                        <el-icon v-if="tempModelId === model.id" class="text-blue-500 shrink-0"
-                                            size="20">
+                                        <el-icon v-if="tempModelId === model.id" class="text-primary shrink-0 mt-1"
+                                            size="18">
                                             <CheckCircleFilled />
                                         </el-icon>
                                     </div>
@@ -217,7 +245,7 @@
                     <span class="text-gray-400">•</span>
                     <span class="text-xs text-gray-500">
                         （<span class="text-orange-600">{{ tempKnowledgeBaseIds.length - tempValidKnowledgeBasesCount
-                            }}</span> 个无效ID将被自动清理）
+                        }}</span> 个无效ID将被自动清理）
                     </span>
                 </template>
             </div>
@@ -243,14 +271,16 @@ import { ElIcon, ElButton, ElDialog, ElTabs, ElTabPane, ElInput, ElForm, ElFormI
 import FileItem from './FileItem.vue';
 import { OpenAI } from "@/components/icons";
 import {
-    InsertDriveFileTwotone,
-    ImageTwotone,
     ArrowDropDownTwotone,
     SearchFilled,
     CheckCircleFilled,
-    MenuBookOutlined
+    MenuBookOutlined,
+    ArrowRightTwotone
 } from "@vicons/material";
 import { Thinking2, ArrowSend, Stop } from "@/components/icons";
+import {
+    TextT24Regular, LightbulbFilament24Regular, WrenchScrewdriver24Regular, Image24Regular, Attach24Regular
+} from '@vicons/fluent'
 import { usePopup } from '@/composables/usePopup';
 import { useBreakpoints, breakpointsTailwind } from '@vueuse/core'
 
@@ -391,11 +421,11 @@ const currentModel = computed(() => {
 });
 
 // 根据模型特性动态控制按钮显示
-watch(() => currentModel.value?.features, (features) => {
+watch(() => currentModel.value?.config, (config) => {
     // 思考按钮：当模型支持 thinking 时显示
-    showButtons.thinkingButton = features?.includes('thinking') || false;
-    // 图像按钮：当模型支持 visual 时显示
-    showButtons.imagesButton = features?.includes('visual') || false;
+    showButtons.thinkingButton = config?.features?.includes('thinking') || false;
+    // 图像按钮：当模型输入能力支持 image 时显示
+    showButtons.imagesButton = config?.inputCapabilities?.includes('image') || false;
 }, { immediate: true });
 
 const currentModelName = computed(() => {
@@ -437,6 +467,14 @@ const filteredKnowledgeBases = computed(() => {
         kb.description?.toLowerCase().includes(searchText)
     );
 });
+
+const getFeatureLabel = (type) => {
+    switch (type) {
+        case 'tools': return '工具调用';
+        case 'thinking': return '混合思考';
+        default: return type;
+    }
+}
 
 // 过滤后的模型列表（支持搜索）
 const filteredModels = computed(() => {

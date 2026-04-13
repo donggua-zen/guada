@@ -1,9 +1,10 @@
 <template>
-  <SidebarLayout v-model:sidebar-visible="sidebarVisible" :sidebar-position="'left'" :z-index="50" :show-toggle-button="false">
+  <SidebarLayout v-model:sidebar-visible="sidebarVisible" :sidebar-position="'left'" :z-index="50"
+    :show-toggle-button="false">
     <template #sidebar>
       <!-- 左侧二级侧边栏 - 助手分类 -->
-      <div class="h-full w-56 bg-[var(--color-conversation-bg)] border-r border-[var(--color-conversation-border)] flex flex-col">
-        <div class="px-4 py-4 border-b border-[var(--color-conversation-border)]">
+      <div class="h-full w-56 bg-(--color-conversation-bg) border-r border-(--color-conversation-border) flex flex-col">
+        <div class="px-4 py-4 border-b border-(--color-conversation-border)">
           <div class="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">助手分类</div>
           <el-segmented v-model="charactersType" :options="[
             { label: '我的模板', value: 'private' },
@@ -31,7 +32,7 @@
             <!-- 骨架屏加载效果 -->
             <template v-if="loading">
               <div v-for="i in skeletonCount" :key="i"
-                class="rounded-xl border border-gray-200 dark:border-gray-700 flex flex-col min-h-[180px] animate-pulse">
+                class="rounded-xl border border-gray-200 dark:border-gray-700 flex flex-col min-h-45 animate-pulse">
                 <div class="flex p-4 flex-1 flex-col">
                   <!-- 头像区域 -->
                   <div class="flex flex-rows">
@@ -42,7 +43,9 @@
                     <!-- 内容区域 -->
                     <div class="flex-1 min-w-0 flex flex-col">
                       <!-- 标题 -->
-                      <h3 class="text-lg bg-surface rounded font-semibold text-gray-800 dark:text-gray-200 truncate mb-2">&nbsp;
+                      <h3
+                        class="text-lg bg-surface rounded font-semibold text-gray-800 dark:text-gray-200 truncate mb-2">
+                        &nbsp;
                       </h3>
                       <!-- 描述 -->
                       <div class="h-15 space-y-2">
@@ -53,7 +56,8 @@
                     </div>
                   </div>
                   <!-- 操作按钮 -->
-                  <div class="flex justify-between items-center mt-4 pt-3 border-t border-gray-100 dark:border-gray-700">
+                  <div
+                    class="flex justify-between items-center mt-4 pt-3 border-t border-gray-100 dark:border-gray-700">
                     <div class="h-7 w-20 bg-surface rounded-full"></div>
                     <div class="flex gap-1">
                       <div class="w-8 h-8 rounded-full bg-surface"></div>
@@ -68,18 +72,16 @@
               <div v-for="character in characters" :key="character.id"
                 class="provider-card group relative bg-white border border-gray-200 rounded-lg p-4 cursor-default hover:border-(--color-primary) transition-all duration-200 overflow-hidden">
                 <!-- 毛玻璃背景层 -->
-                <div v-if="character.avatarUrl" 
-                  class="absolute inset-0 z-0"
-                  :style="{
-                    backgroundImage: `url(${character.avatarUrl})`,
-                    backgroundSize: 'cover',
-                    backgroundPosition: 'center',
-                    filter: 'blur(30px)',
-                    opacity: 0.04,
-                    transform: 'scale(1.5)'
-                  }">
+                <div v-if="character.avatarUrl" class="absolute inset-0 z-0" :style="{
+                  backgroundImage: `url(${character.avatarUrl})`,
+                  backgroundSize: 'cover',
+                  backgroundPosition: 'center',
+                  filter: 'blur(30px)',
+                  opacity: 0.04,
+                  transform: 'scale(1.5)'
+                }">
                 </div>
-                
+
                 <!-- 内容区域 -->
                 <div class="relative z-10 flex flex-col h-full">
                   <div class="flex items-start gap-3">
@@ -89,7 +91,8 @@
                     </div>
                     <div class="flex-1 min-w-0">
                       <div class="flex items-start justify-between">
-                        <div class="font-medium text-base text-gray-900 truncate" :title="character.title">{{ character.title }}</div>
+                        <div class="font-medium text-base text-gray-900 truncate" :title="character.title">{{
+                          character.title }}</div>
                         <!-- 删除按钮 - 悬停显示 -->
                         <el-button v-if="charactersType == 'private'" link size="small" type="danger"
                           class="opacity-0 group-hover:opacity-100 transition-all duration-200 delete-btn"
@@ -102,7 +105,8 @@
                       <div class="text-xs text-gray-500 mt-1.5">{{ character.isPublic ? '共享模板' : '我的模板' }}</div>
                     </div>
                   </div>
-                  <div class="text-xs text-gray-400 mt-2 line-clamp-2 leading-relaxed">{{ character.description || '暂无描述' }}
+                  <div class="text-xs text-gray-400 mt-2 line-clamp-2 leading-relaxed">{{ character.description ||
+                    '暂无描述' }}
                   </div>
                 </div>
 
@@ -112,11 +116,11 @@
                 </div>
                 <div
                   class="absolute inset-x-2 bottom-2 flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-auto z-20">
-                  <el-button type="primary" size="small" class="flex-1 shadow-sm"
-                    @click.stop="startNewChat(character)">
+                  <el-button type="primary" size="small" class="flex-1 shadow-sm" @click.stop="startNewChat(character)">
                     使用此角色
                   </el-button>
-                  <el-button v-if="charactersType == 'private'" size="small" class="flex-1 shadow-sm" @click.stop="editCharacter(character)">
+                  <el-button v-if="charactersType == 'private'" size="small" class="flex-1 shadow-sm"
+                    @click.stop="editCharacter(character)">
                     角色设置
                   </el-button>
                 </div>
@@ -292,6 +296,4 @@ onMounted(async (): Promise<void> => {
 .delete-btn:hover {
   background-color: rgba(239, 68, 68, 0.1);
 }
-
-
 </style>

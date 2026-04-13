@@ -1,17 +1,21 @@
 <template>
-    <div class="flex-1">
-        <div class="flex items-center justify-between mb-6">
-            <div class="text-lg font-bold">MCP 服务器列表</div>
-            <div class="flex gap-2">
+    <div class="flex-1 overflow-hidden">
+        <div class="sessions-header py-1 text-lg font-semibold flex justify-between items-center mb-6">
+            <span>MCP 服务器列表</span>
+            <el-space>
                 <el-button @click="handleImport">
-                    <el-icon class="mr-1"><UploadOutlined /></el-icon>
+                    <template #icon>
+                        <UploadOutlined />
+                    </template>
                     导入配置
                 </el-button>
                 <el-button type="primary" @click="handleAddServer">
-                    <el-icon class="mr-1"><AddOutlined /></el-icon>
+                    <template #icon>
+                        <AddOutlined />
+                    </template>
                     添加服务器
                 </el-button>
-            </div>
+            </el-space>
         </div>
 
         <!-- MCP 服务器列表 -->
@@ -219,7 +223,7 @@
 
 <script setup>
 import { ref, onMounted } from 'vue'
-import { ElButton, ElDialog, ElForm, ElFormItem, ElInput, ElSelect, ElOption, ElTag, ElSwitch, ElMessage, ElTabs, ElTabPane } from 'element-plus'
+import { ElButton, ElDialog, ElForm, ElFormItem, ElInput, ElSelect, ElOption, ElTag, ElSwitch, ElMessage, ElTabs, ElTabPane, ElSpace } from 'element-plus'
 import { RefreshRight } from '@element-plus/icons-vue'
 import {
     AddOutlined,

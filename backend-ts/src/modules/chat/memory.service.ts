@@ -1,12 +1,18 @@
 import { Injectable, Logger } from '@nestjs/common';
+import * as fs from 'fs';
+import * as path from 'path';
 import { MessageRepository } from '../../common/database/message.repository';
+import { UploadPathService } from '../../common/services/upload-path.service';
 import { MessageRecord, MessagePart } from './types/llm.types';
 
 @Injectable()
 export class MemoryManagerService {
     private readonly logger = new Logger(MemoryManagerService.name);
 
-    constructor(private messageRepo: MessageRepository) { }
+    constructor(
+        private messageRepo: MessageRepository,
+        private uploadPathService: UploadPathService,
+    ) { }
 
     /**
      * 获取对话历史消息
@@ -187,11 +193,52 @@ export class MemoryManagerService {
      */
     private transformImageFile(file: any): any | null {
         if (!file.url) return null;
-        // 简化实现：假设 URL 已经是可用的格式
-        return {
-            type: 'image_url',
-            image_url: { url: file.url },
-        };
+
+        try {
+            // 1. 从 URL 还原物理路径
+            const physicalPath = this.uploadPathService.getPathFromWebUrl(file.url);
+            if (!physicalPath || !fs.existsSync(physicalPath)) {
+                this.logger.warn(`Image file not found at path: ${physicalPath}`);
+                return null;
+            }
+
+            // 2. 读取文件内容并转换为 Base64
+            const imageBuffer = fs.readFileSync(physicalPath);
+            const base64Data = imageBuffer.toString('base64');
+
+            // 3. 推断 MIME 类型
+            const ext = path.extname(physicalPath).toLowerCase();
+            let mimeType = 'image/jpeg'; // 默认类型
+            switch (ext) {
+                case '.png':
+                    mimeType = 'image/png';
+                    break;
+                case '.gif':
+                    mimeType = 'image/gif';
+                    break;
+                case '.webp':
+                    mimeType = 'image/webp';
+                    break;
+                case '.bmp':
+                    mimeType = 'image/bmp';
+                    break;
+                case '.tiff':
+                case '.tif':
+                    mimeType = 'image/tiff';
+                    break;
+            }
+
+            // 4. 构造 Data URI
+            const dataUri = `data:${mimeType};base64,${base64Data}`;
+
+            return {
+                type: 'image_url',
+                image_url: { url: dataUri },
+            };
+        } catch (error: any) {
+            this.logger.error(`Failed to transform image file: ${error.message}`);
+            return null;
+        }
     }
 
     /**
