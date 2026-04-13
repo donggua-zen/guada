@@ -1,9 +1,9 @@
-import { Injectable } from '@nestjs/common';
-import { PrismaService } from './prisma.service';
+import { Injectable } from "@nestjs/common";
+import { PrismaService } from "./prisma.service";
 
 @Injectable()
 export class MessageContentRepository {
-  constructor(private prisma: PrismaService) { }
+  constructor(private prisma: PrismaService) {}
 
   /**
    * 获取 Prisma 客户端实例（用于事务操作）
@@ -27,7 +27,7 @@ export class MessageContentRepository {
   async findByMessageId(messageId: string) {
     return this.prisma.messageContent.findMany({
       where: { messageId },
-      orderBy: { createdAt: 'asc' },
+      orderBy: { createdAt: "asc" },
     });
   }
 
@@ -36,8 +36,8 @@ export class MessageContentRepository {
    */
   async create(data: {
     messageId: string;
-    turnsId: string;  // 添加 turnsId（与 Python 后端一致）
-    role?: string;    // 添加 role（与 Python 后端一致）
+    turnsId: string; // 添加 turnsId（与 Python 后端一致）
+    role?: string; // 添加 role（与 Python 后端一致）
     content: string;
     reasoningContent?: string;
     metaData?: Record<string, any>;

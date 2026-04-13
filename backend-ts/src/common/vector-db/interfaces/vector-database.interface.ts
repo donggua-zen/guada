@@ -1,12 +1,12 @@
 /**
  * 向量数据库抽象接口定义
- * 
+ *
  * 提供统一的向量数据库操作接口，支持多种后端实现：
  * - LanceDB (本地文件模式)
  * - ChromaDB
  * - Qdrant
  * - 其他向量数据库
- * 
+ *
  * Metadata 过滤规范：
  * - 支持 document_id 字段作为标准过滤字段
  * - 不支持的 metadata 字段可以使用 __metadata_xxxx 形式作为独立列
@@ -52,7 +52,7 @@ export interface CollectionStats {
 
 /**
  * 向量数据库抽象接口
- * 
+ *
  * 所有向量数据库实现必须实现此接口
  */
 export interface VectorDatabase {
@@ -144,12 +144,12 @@ export interface VectorDatabase {
 
   /**
    * 混合搜索（语义 + 关键词加权融合）
-   * 
+   *
    * 实现参考 Python 后端 vector_service.py：
    * - 扩大召回：两个搜索引擎都召回 top_k * 4 个结果
    * - Min-Max 归一化：将分数缩放到 [0, 1]
    * - 加权融合：final_score = semantic_weight * semantic_norm + keyword_weight * keyword_norm
-   * 
+   *
    * @param collectionName 集合名称
    * @param queryEmbedding 查询向量
    * @param queryText 查询文本

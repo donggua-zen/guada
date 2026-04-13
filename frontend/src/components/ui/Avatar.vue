@@ -5,7 +5,11 @@
         'rounded-full': props.round,
         'rounded-lg': !props.round, 'avatar-user': props.type === 'user'
     }">
-        <UserOutlined v-if="props.type === 'user'" class="w-[65%] h-[65%]" />
+        <!-- 如果有名称且是 assistant 类型，显示首字 -->
+        <span v-if="name && props.type === 'assistant'" class="avatar-text">
+            {{ firstChar }}
+        </span>
+        <UserOutlined v-else-if="props.type === 'user'" class="w-[65%] h-[65%]" />
         <OpenAI v-else />
     </div>
 
@@ -25,6 +29,7 @@ const props = defineProps<{
     round?: boolean;
     type?: 'user' | 'assistant';
     full?: boolean;
+    name?: string;  // 用于生成首字头像的名称
 }>();
 // 添加时间戳避免缓存 - 类型化
 const avatarSrc = computed((): string => {
@@ -40,6 +45,14 @@ const avatarSrc = computed((): string => {
 
     return '/' + props.src
     // return props.src
+});
+
+// 获取名称的第一个字符 - 类型化
+const firstChar = computed((): string => {
+    if (!props.name) return ''
+    // 去除空格后取第一个字符
+    const trimmed = props.name.trim()
+    return trimmed ? trimmed.charAt(0) : ''
 });
 
 </script>
@@ -58,12 +71,27 @@ const avatarSrc = computed((): string => {
     align-items: center;
     justify-content: center;
     background-color: #f5f5f5;
-    color: #999;
+    color: #666;
     overflow: hidden;
+}
+
+.dark .avatar-placeholder {
+    background-color: #374151;
+    color: #d1d5db;
 }
 
 .avatar-placeholder.avatar-user {
     background-color: #999;
     color: #fff;
+}
+
+.avatar-text {
+    font-size: 2em;
+    font-weight: 600;
+    color: #333;
+}
+
+.dark .avatar-text {
+    color: #e5e7eb;
 }
 </style>

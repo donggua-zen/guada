@@ -5,7 +5,7 @@
                 <div class="flex items-center">
                     <div class="mr-5 flex items-center">
                         <div class="w-5.5 h-5.5 mr-2 relative top-0">
-                            <Avatar :src="avatar" :round="false" type="assistant"></Avatar>
+                            <Avatar :src="avatar" :round="false" type="assistant" :name="currentModelName"></Avatar>
                         </div>
                         <span class="text-[1.3em] text-gray-500 font-">{{
                             currentModelName

@@ -8,36 +8,7 @@
     <div class="flex-1 overflow-hidden w-full items-center" ref="messagesContainerRef">
       <template v-if="!isLoading && activeMessages.length === 0">
         <!-- 欢迎页 -->
-        <div class="flex items-center justify-center h-full min-h-125 py-10 px-5">
-          <div class="max-w-150 w-full text-center p-10 rounded-2xl animate-fade-in-up">
-            <!-- 头像区域 -->
-            <div class="relative inline-block mb-5">
-              <div
-                class="w-24 h-24 rounded-full  flex items-center justify-center mx-auto relative overflow-hidden p-0 animate-bounce-in">
-                <Avatar v-if="currentSession" :src="currentSession.character.avatarUrl" round />
-                <div v-else class="text-4xl text-white">?</div>
-              </div>
-              <div class="absolute bottom-1 right-1 w-5 h-5 bg-green-500 border-2 border-white rounded-full"></div>
-            </div>
-
-            <!-- 标题和描述 -->
-            <div class="mb-8">
-              <h1 class="text-3xl font-bold mb-4 text-(--color-primary)">
-                {{ currentSession?.character.title || '' }}
-              </h1>
-              <h2 class="text-lg font-normal text-gray-600 leading-relaxed">
-                {{ currentSession?.character.description || '' }}
-              </h2>
-
-              <!-- 角色设定 -->
-              <div v-if="currentSession?.settings?.systemPrompt"
-                class="mt-6 p-5 bg-gray-50 rounded-xl border-l-4 border-(--color-primary) text-left">
-                <h3 class="text-base font-semibold text-gray-800 mb-2">角色设定</h3>
-                <p class="text-sm text-gray-600 leading-6">{{ currentSession?.settings.systemPrompt }}</p>
-              </div>
-            </div>
-          </div>
-        </div>
+        <WelcomeScreen :session="currentSession" />
       </template>
       <template v-else-if="authStore.isAuthenticated">
         <ScrollContainer ref="scrollContainerRef" :auto-scroll="true" @scroll="handleScroll">
@@ -105,8 +76,7 @@ import { useMessageOperations } from '@/composables/useMessageOperations'
 import MessageItem from "./MessageItem.vue";
 import ChatHeader from "./ChatHeader.vue";
 import { Avatar, ChatInput, ScrollContainer, ScrollToBottomButton } from "./ui";
-import ChatMessages from './ChatMessages.vue'
-import ChatInputArea from './ChatInputArea.vue'
+import WelcomeScreen from './ChatPanel/WelcomeScreen.vue';
 
 
 // 常量定义
@@ -628,64 +598,6 @@ defineExpose({ sendMessage: handleSendMessage })
 </script>
 
 <style scoped>
-/* 动画定义 */
-@keyframes fadeInUp {
-  from {
-    opacity: 0;
-    transform: translateY(30px);
-  }
-
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-@keyframes bounceIn {
-  0% {
-    opacity: 0;
-    transform: scale(0.3);
-  }
-
-  50% {
-    opacity: 1;
-    transform: scale(1.05);
-  }
-
-  70% {
-    transform: scale(0.9);
-  }
-
-  100% {
-    opacity: 1;
-    transform: scale(1);
-  }
-}
-
-@keyframes fadeInDown {
-  from {
-    opacity: 0;
-    transform: translateY(-10px);
-  }
-
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-.animate-fade-in-up {
-  animation: fadeInUp 0.8s ease-out;
-}
-
-.animate-bounce-in {
-  animation: bounceIn 1s ease-out;
-}
-
-.animate-fade-in-down {
-  animation: fadeInDown 0.3s ease-out;
-}
-
 /* 编辑模式提示条样式 */
 .edit-mode-banner {
   display: flex;

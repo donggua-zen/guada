@@ -11,7 +11,7 @@ export interface SimpleToolDef {
   name: string;
   description: string;
   parameters: {
-    type: 'object';
+    type: "object";
     properties: Record<string, ToolParamSchema>;
     required?: string[];
   };
@@ -24,7 +24,7 @@ export interface SimpleToolDef {
  */
 export function buildOpenAITool(namespace: string, tool: SimpleToolDef): any {
   return {
-    type: 'function',
+    type: "function",
     function: {
       name: `${namespace}__${tool.name}`,
       description: tool.description,

@@ -1,29 +1,27 @@
 /**
  * 向量数据库服务
- * 
+ *
  * 提供简化且规范化的向量数据库操作接口
  * 支持多种后端实现（LanceDB、Qdrant 等）
  */
 
-import { Injectable, Logger } from '@nestjs/common';
-import { Inject } from '@nestjs/common';
+import { Injectable, Logger } from "@nestjs/common";
+import { Inject } from "@nestjs/common";
 import {
   VectorDatabase,
   VectorChunk,
   SearchResult,
-} from './interfaces/vector-database.interface';
+} from "./interfaces/vector-database.interface";
 
 @Injectable()
 export class VectorDbService {
   private readonly logger = new Logger(VectorDbService.name);
 
-  constructor(
-    @Inject('VECTOR_DB') private readonly vectorDb: VectorDatabase,
-  ) {}
+  constructor(@Inject("VECTOR_DB") private readonly vectorDb: VectorDatabase) {}
 
   /**
    * 添加 chunks 到指定表
-   * 
+   *
    * @param tableId 表 ID（集合名称）
    * @param chunks Chunk 列表（必须包含 documentId）
    * @param embeddings 对应的向量列表
@@ -59,7 +57,7 @@ export class VectorDbService {
 
   /**
    * 删除 chunks（支持 IDs 或 documentId 过滤）
-   * 
+   *
    * @param tableId 表 ID
    * @param options 删除选项（ids 和 documentId 至少提供一个）
    * @returns 删除的数量
@@ -73,7 +71,7 @@ export class VectorDbService {
   ): Promise<number> {
     // 验证参数：至少提供一个
     if (!options || (!options.ids && !options.documentId)) {
-      throw new Error('必须提供 ids 或 documentId 至少一个参数');
+      throw new Error("必须提供 ids 或 documentId 至少一个参数");
     }
 
     this.logger.log(`从表 ${tableId} 删除 chunks`);
@@ -82,7 +80,7 @@ export class VectorDbService {
 
   /**
    * 删除整个表
-   * 
+   *
    * @param tableId 表 ID
    * @returns 是否删除成功
    */
@@ -93,7 +91,7 @@ export class VectorDbService {
 
   /**
    * 混合搜索（语义 + 关键词）
-   * 
+   *
    * @param tableId 表 ID（必选）
    * @param queryEmbedding 查询向量
    * @param queryText 查询文本
@@ -112,7 +110,7 @@ export class VectorDbService {
     semanticWeight: number = 0.6,
     keywordWeight: number = 0.4,
     filterOptions?: { documentId?: string; metadata?: Record<string, any> },
-    enableBM25Rerank: boolean = true,  // 新增：是否启用 BM25 重排
+    enableBM25Rerank: boolean = true, // 新增：是否启用 BM25 重排
   ): Promise<SearchResult[]> {
     this.logger.debug(
       `混合搜索表 ${tableId}，topK=${topK}，filter=${JSON.stringify(filterOptions)}，BM25重排=${enableBM25Rerank}`,
@@ -132,7 +130,7 @@ export class VectorDbService {
 
   /**
    * 语义搜索
-   * 
+   *
    * @param tableId 表 ID
    * @param queryEmbedding 查询向量
    * @param topK 返回结果数量
@@ -155,7 +153,7 @@ export class VectorDbService {
 
   /**
    * 关键词搜索
-   * 
+   *
    * @param tableId 表 ID
    * @param queryText 查询文本
    * @param topK 返回结果数量
@@ -178,7 +176,7 @@ export class VectorDbService {
 
   /**
    * 检查表是否存在
-   * 
+   *
    * @param tableId 表 ID
    * @returns 是否存在
    */
@@ -188,7 +186,7 @@ export class VectorDbService {
 
   /**
    * 获取表的统计信息
-   * 
+   *
    * @param tableId 表 ID
    * @returns 统计信息
    */

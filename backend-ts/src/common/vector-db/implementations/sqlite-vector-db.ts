@@ -1,6 +1,6 @@
 /**
  * SQLite 向量数据库实现（基于 better-sqlite3 + sqlite-vec）
- * 
+ *
  * 特性：
  * - 独立存储：使用独立的 vector_db.sqlite 文件，避免与主业务库锁竞争。
  * - 向量搜索：集成 sqlite-vec 扩展，支持高效的向量相似度计算。
@@ -8,20 +8,20 @@
  * - 混合搜索：语义与关键词加权融合。
  */
 
-import { Injectable, Logger } from '@nestjs/common';
-import Database from 'better-sqlite3';
-import * as path from 'path';
-import * as fs from 'fs';
-import { Jieba } from '@node-rs/jieba';
+import { Injectable, Logger } from "@nestjs/common";
+import Database from "better-sqlite3";
+import * as path from "path";
+import * as fs from "fs";
+import { Jieba } from "@node-rs/jieba";
 import {
   VectorDatabase,
   SearchResult,
   VectorDocument,
   CollectionStats,
-} from '../interfaces/vector-database.interface';
+} from "../interfaces/vector-database.interface";
 
 // 引入 sqlite-vec 扩展加载器
-const sqliteVec = require('sqlite-vec');
+const sqliteVec = require("sqlite-vec");
 
 @Injectable()
 export class SqliteVectorDB implements VectorDatabase {
@@ -31,7 +31,7 @@ export class SqliteVectorDB implements VectorDatabase {
   private persistPath: string;
 
   constructor() {
-    this.persistPath = path.join(process.cwd(), 'data', 'vector_db.sqlite');
+    this.persistPath = path.join(process.cwd(), "data", "vector_db.sqlite");
     // 确保目录存在
     const dir = path.dirname(this.persistPath);
     if (!fs.existsSync(dir)) {
@@ -47,21 +47,21 @@ export class SqliteVectorDB implements VectorDatabase {
 
     try {
       this.db = new Database(this.persistPath);
-      
+
       // 加载 sqlite-vec 扩展
       sqliteVec.load(this.db);
-      this.logger.log('sqlite-vec 扩展加载成功');
+      this.logger.log("sqlite-vec 扩展加载成功");
 
       // 初始化中文分词器
       try {
         this.jieba = new Jieba();
-        this.logger.log('中文分词器初始化成功');
+        this.logger.log("中文分词器初始化成功");
       } catch (error: any) {
         this.logger.warn(`中文分词器初始化失败：${error.message}`);
       }
 
       // 启用 WAL 模式以提高并发性能
-      this.db.pragma('journal_mode = WAL');
+      this.db.pragma("journal_mode = WAL");
       this.logger.log(`SQLite 向量数据库初始化完成：${this.persistPath}`);
     } catch (error: any) {
       this.logger.error(`SQLite 向量数据库初始化失败：${error.message}`);
@@ -78,12 +78,14 @@ export class SqliteVectorDB implements VectorDatabase {
     metadata?: Record<string, any>,
   ): Promise<void> {
     await this.ensureInitialized();
-    
+
     const tableName = this.sanitizeTableName(collectionName);
     const ftsTableName = `${tableName}_fts`;
 
     // 检查表是否已存在
-    const exists = this.db!.prepare(`SELECT name FROM sqlite_master WHERE type='table' AND name=?`).get(tableName);
+    const exists = this.db!.prepare(
+      `SELECT name FROM sqlite_master WHERE type='table' AND name=?`,
+    ).get(tableName);
     if (exists) return;
 
     const transaction = this.db!.transaction(() => {
@@ -140,7 +142,9 @@ export class SqliteVectorDB implements VectorDatabase {
   async collectionExists(collectionName: string): Promise<boolean> {
     await this.ensureInitialized();
     const tableName = this.sanitizeTableName(collectionName);
-    const row = this.db!.prepare(`SELECT name FROM sqlite_master WHERE type='table' AND name=?`).get(tableName);
+    const row = this.db!.prepare(
+      `SELECT name FROM sqlite_master WHERE type='table' AND name=?`,
+    ).get(tableName);
     return !!row;
   }
 
@@ -159,22 +163,25 @@ export class SqliteVectorDB implements VectorDatabase {
 
     // 自动检测并创建表
     if (!(await this.collectionExists(collectionName))) {
-      await this.createCollection(collectionName, documents[0].embedding.length);
+      await this.createCollection(
+        collectionName,
+        documents[0].embedding.length,
+      );
     }
 
     const insertMain = this.db!.prepare(
-      `INSERT OR REPLACE INTO "${tableName}" (id, document_id, content, embedding, metadata_json) VALUES (?, ?, ?, ?, ?)`
+      `INSERT OR REPLACE INTO "${tableName}" (id, document_id, content, embedding, metadata_json) VALUES (?, ?, ?, ?, ?)`,
     );
     // FTS5 虚拟表插入：rowid 必须对应主表的 rowid
     const insertFts = this.db!.prepare(
-      `INSERT INTO "${ftsTableName}" (rowid, content) VALUES (?, ?)`
+      `INSERT INTO "${ftsTableName}" (rowid, content) VALUES (?, ?)`,
     );
     const deleteFts = this.db!.prepare(
-      `DELETE FROM "${ftsTableName}" WHERE rowid = ?`
+      `DELETE FROM "${ftsTableName}" WHERE rowid = ?`,
     );
     // 获取指定记录的 rowid
     const getRowid = this.db!.prepare(
-      `SELECT rowid FROM "${tableName}" WHERE id = ?`
+      `SELECT rowid FROM "${tableName}" WHERE id = ?`,
     );
 
     const transaction = this.db!.transaction((docs) => {
@@ -186,14 +193,24 @@ export class SqliteVectorDB implements VectorDatabase {
         }
 
         // 2. 插入或更新主表
-        const embeddingBuffer = Buffer.from(new Float32Array(doc.embedding).buffer);
+        const embeddingBuffer = Buffer.from(
+          new Float32Array(doc.embedding).buffer,
+        );
         const metadataJson = JSON.stringify(doc.metadata || {});
-        const docId = doc.documentId || ''; // 使用顶层字段
+        const docId = doc.documentId || ""; // 使用顶层字段
 
-        insertMain.run(doc.id, docId, doc.content, embeddingBuffer, metadataJson);
+        insertMain.run(
+          doc.id,
+          docId,
+          doc.content,
+          embeddingBuffer,
+          metadataJson,
+        );
 
         // 3. 重新查询 rowid（INSERT OR REPLACE 可能改变 rowid）
-        const currentRow = getRowid.get(doc.id) as { rowid: number } | undefined;
+        const currentRow = getRowid.get(doc.id) as
+          | { rowid: number }
+          | undefined;
         const ftsContent = this.tokenizeForSearch(doc.content);
         if (currentRow) {
           insertFts.run(currentRow.rowid, ftsContent);
@@ -203,7 +220,7 @@ export class SqliteVectorDB implements VectorDatabase {
 
     transaction(documents);
     this.logger.log(`添加 ${documents.length} 个文档到集合 ${collectionName}`);
-    return documents.map(d => d.id);
+    return documents.map((d) => d.id);
   }
 
   /**
@@ -215,16 +232,16 @@ export class SqliteVectorDB implements VectorDatabase {
   ): Promise<number> {
     await this.ensureInitialized();
     if (!options || (!options.ids && !options.documentId)) {
-      throw new Error('必须提供 ids 或 documentId 至少一个参数');
+      throw new Error("必须提供 ids 或 documentId 至少一个参数");
     }
 
     const tableName = this.sanitizeTableName(collectionName);
     const ftsTableName = `${tableName}_fts`;
-    let condition = '';
+    let condition = "";
     const params: any[] = [];
 
     if (options.ids && options.ids.length > 0) {
-      condition = `id IN (${options.ids.map(() => '?').join(',')})`;
+      condition = `id IN (${options.ids.map(() => "?").join(",")})`;
       params.push(...options.ids);
     } else if (options.documentId) {
       condition = `document_id = ?`;
@@ -234,14 +251,20 @@ export class SqliteVectorDB implements VectorDatabase {
     }
 
     // 先获取要删除的行 ID 以同步删除 FTS
-    const rows = this.db!.prepare(`SELECT rowid FROM "${tableName}" WHERE ${condition}`).all(...params);
+    const rows = this.db!.prepare(
+      `SELECT rowid FROM "${tableName}" WHERE ${condition}`,
+    ).all(...params);
     if (rows.length === 0) return 0;
 
     const rowIds = rows.map((r: any) => r.rowid);
-    
+
     const transaction = this.db!.transaction(() => {
-      this.db!.prepare(`DELETE FROM "${tableName}" WHERE ${condition}`).run(...params);
-      this.db!.prepare(`DELETE FROM "${ftsTableName}" WHERE rowid IN (${rowIds.map(() => '?').join(',')})`).run(...rowIds);
+      this.db!.prepare(`DELETE FROM "${tableName}" WHERE ${condition}`).run(
+        ...params,
+      );
+      this.db!.prepare(
+        `DELETE FROM "${ftsTableName}" WHERE rowid IN (${rowIds.map(() => "?").join(",")})`,
+      ).run(...rowIds);
     });
 
     transaction();
@@ -281,7 +304,7 @@ export class SqliteVectorDB implements VectorDatabase {
     return rows.map((row: any) => ({
       id: row.id,
       content: row.content,
-      metadata: JSON.parse(row.metadata_json || '{}'),
+      metadata: JSON.parse(row.metadata_json || "{}"),
       score: 1 - row.distance,
       semanticScore: 1 - row.distance,
     }));
@@ -300,7 +323,7 @@ export class SqliteVectorDB implements VectorDatabase {
 
     // 防御：空查询直接返回
     if (!queryText || !queryText.trim()) {
-      this.logger.debug('关键词搜索：查询文本为空，返回空结果');
+      this.logger.debug("关键词搜索：查询文本为空，返回空结果");
       return [];
     }
 
@@ -310,7 +333,7 @@ export class SqliteVectorDB implements VectorDatabase {
     // 对查询文本进行分词和转义处理
     const processedQuery = this.escapeFtsQuery(queryText);
     if (!processedQuery.trim()) {
-      this.logger.debug('FTS 查询处理后为空，返回空结果');
+      this.logger.debug("FTS 查询处理后为空，返回空结果");
       return [];
     }
     this.logger.debug(`FTS 查询词：'${queryText}' -> '${processedQuery}'`);
@@ -338,12 +361,14 @@ export class SqliteVectorDB implements VectorDatabase {
       const rows = this.db!.prepare(sql).all(...params) as any[];
       this.logger.debug(`FTS 原始查询结果数量: ${rows.length}`);
       if (rows.length > 0) {
-        this.logger.debug(`FTS 第一条结果 ID: ${rows[0].id}, Score: ${rows[0].score}`);
+        this.logger.debug(
+          `FTS 第一条结果 ID: ${rows[0].id}, Score: ${rows[0].score}`,
+        );
       }
       return rows.map((row: any) => ({
         id: row.id,
         content: row.content,
-        metadata: JSON.parse(row.metadata_json || '{}'),
+        metadata: JSON.parse(row.metadata_json || "{}"),
         // 取绝对值以便后续融合时语义直观（正值越高越相关）
         score: Math.abs(row.score || 0),
         bm25Score: Math.abs(row.score || 0),
@@ -400,7 +425,10 @@ export class SqliteVectorDB implements VectorDatabase {
 
     // Step 2.5: BM25 重排（可选）
     if (enableBM25Rerank) {
-      keywordResultsRaw = await this.rerankWithBM25(keywordResultsRaw, queryText);
+      keywordResultsRaw = await this.rerankWithBM25(
+        keywordResultsRaw,
+        queryText,
+      );
       this.logger.debug(`BM25 重排完成：${keywordResultsRaw.length} 个结果`);
     }
 
@@ -415,7 +443,7 @@ export class SqliteVectorDB implements VectorDatabase {
     keywordWeight = adjustedWeights.keyword;
 
     this.logger.debug(
-      `混合搜索召回：语义=${semanticResults.length}, 关键词=${keywordResultsRaw.length}, 权重=${semanticWeight.toFixed(1)}/${keywordWeight.toFixed(1)}`
+      `混合搜索召回：语义=${semanticResults.length}, 关键词=${keywordResultsRaw.length}, 权重=${semanticWeight.toFixed(1)}/${keywordWeight.toFixed(1)}`,
     );
 
     // Step 3: RRF 融合与重排序
@@ -434,7 +462,9 @@ export class SqliteVectorDB implements VectorDatabase {
   async getCollectionStats(collectionName: string): Promise<CollectionStats> {
     await this.ensureInitialized();
     const tableName = this.sanitizeTableName(collectionName);
-    const row = this.db!.prepare(`SELECT COUNT(*) as count FROM "${tableName}"`).get();
+    const row = this.db!.prepare(
+      `SELECT COUNT(*) as count FROM "${tableName}"`,
+    ).get();
     return { total_count: (row as any).count };
   }
 
@@ -446,7 +476,7 @@ export class SqliteVectorDB implements VectorDatabase {
       this.db.close();
       this.db = null;
       this.jieba = null;
-      this.logger.log('SQLite 向量数据库连接已关闭');
+      this.logger.log("SQLite 向量数据库连接已关闭");
     }
   }
 
@@ -458,7 +488,7 @@ export class SqliteVectorDB implements VectorDatabase {
 
   private sanitizeTableName(name: string): string {
     // 简单的安全处理，防止 SQL 注入
-    return name.replace(/[^a-zA-Z0-9_]/g, '_');
+    return name.replace(/[^a-zA-Z0-9_]/g, "_");
   }
 
   private hasChinese(text: string): boolean {
@@ -469,7 +499,7 @@ export class SqliteVectorDB implements VectorDatabase {
     if (!this.hasChinese(text)) return text;
     if (!this.jieba) return text;
     try {
-      return this.jieba.cut(text, true).join(' ');
+      return this.jieba.cut(text, true).join(" ");
     } catch {
       return text;
     }
@@ -480,35 +510,38 @@ export class SqliteVectorDB implements VectorDatabase {
    */
   private escapeFtsQuery(text: string): string {
     // 1. 统一分词逻辑（与存储时保持一致）
-    let tokens = this.hasChinese(text) && this.jieba 
-      ? this.jieba.cut(text, true) 
-      : text.split(/\s+/).filter(t => t); // 英文按空格分词
+    let tokens =
+      this.hasChinese(text) && this.jieba
+        ? this.jieba.cut(text, true)
+        : text.split(/\s+/).filter((t) => t); // 英文按空格分词
 
     // 2. 对每个 token 进行转义处理
-    const escapedTokens = tokens.map(token => {
-      token = token.trim();
-      if (!token) return '';
+    const escapedTokens = tokens
+      .map((token) => {
+        token = token.trim();
+        if (!token) return "";
 
-      // 如果包含连字符，同时保留原始精确匹配 + 拆分匹配
-      // 例如：DV430FBM-N20 -> "DV430FBM-N20" OR "DV430FBM" OR "N20"
-      if (/-/.test(token)) {
-        const parts = token.split('-').filter(p => p);
-        const escapedParts = parts.map(p => `"${p.replace(/"/g, '""')}"`);
-        const originalEscaped = `"${token.replace(/"/g, '""')}"`;
-        return [originalEscaped, ...escapedParts].join(' OR ');
-      }
-      
-      // 纯英文/数字词使用精确匹配（移除通配符以提高准确性）
-      if (/^[a-zA-Z0-9]+$/.test(token)) {
-        return `"${token}"`;
-      }
+        // 如果包含连字符，同时保留原始精确匹配 + 拆分匹配
+        // 例如：DV430FBM-N20 -> "DV430FBM-N20" OR "DV430FBM" OR "N20"
+        if (/-/.test(token)) {
+          const parts = token.split("-").filter((p) => p);
+          const escapedParts = parts.map((p) => `"${p.replace(/"/g, '""')}"`);
+          const originalEscaped = `"${token.replace(/"/g, '""')}"`;
+          return [originalEscaped, ...escapedParts].join(" OR ");
+        }
 
-      // 其他情况用双引号包裹
-      return `"${token.replace(/"/g, '""')}"`;
-    }).filter(t => t);
+        // 纯英文/数字词使用精确匹配（移除通配符以提高准确性）
+        if (/^[a-zA-Z0-9]+$/.test(token)) {
+          return `"${token}"`;
+        }
+
+        // 其他情况用双引号包裹
+        return `"${token.replace(/"/g, '""')}"`;
+      })
+      .filter((t) => t);
 
     // 使用 OR 连接所有 token，提高召回率
-    return escapedTokens.join(' OR ');
+    return escapedTokens.join(" OR ");
   }
 
   /**
@@ -532,16 +565,17 @@ export class SqliteVectorDB implements VectorDatabase {
       // 1. 统一分词逻辑：必须与存储到 FTS5 时的 tokenizeForSearch 一致
       // 关键：对含连字符的词做拆分（与 escapeFtsQuery 保持一致）
       const tokenize = (text: string): string[] => {
-        const rawTokens = this.hasChinese(text) && this.jieba
-          ? this.jieba.cut(text, true)
-          : text.split(/\s+/).filter(t => t);
+        const rawTokens =
+          this.hasChinese(text) && this.jieba
+            ? this.jieba.cut(text, true)
+            : text.split(/\s+/).filter((t) => t);
 
         const tokens: string[] = [];
         for (const token of rawTokens) {
           if (/-/.test(token)) {
             // 连字符拆分为子词 + 原始词
             tokens.push(token.toLowerCase());
-            const parts = token.split('-').filter(p => p);
+            const parts = token.split("-").filter((p) => p);
             for (const part of parts) {
               tokens.push(part.toLowerCase());
             }
@@ -553,11 +587,11 @@ export class SqliteVectorDB implements VectorDatabase {
       };
 
       // 2. 构建语料库
-      const corpus = results.map(r => tokenize(r.content));
+      const corpus = results.map((r) => tokenize(r.content));
       const queryTokens = tokenize(queryText);
 
       if (queryTokens.length === 0) {
-        this.logger.debug('BM25 重排：查询分词为空，保留原始排序');
+        this.logger.debug("BM25 重排：查询分词为空，保留原始排序");
         return results;
       }
 
@@ -604,7 +638,7 @@ export class SqliteVectorDB implements VectorDatabase {
 
           // BM25 项得分 = IDF * (tf * (k1 + 1)) / (tf + k1 * (1 - b + b * docLen / avgDocLen))
           const numerator = tf * (k1 + 1);
-          const denominator = tf + k1 * (1 - b + b * docLen / avgDocLen);
+          const denominator = tf + k1 * (1 - b + (b * docLen) / avgDocLen);
           score += idf * (numerator / denominator);
         }
         return score;
@@ -620,7 +654,10 @@ export class SqliteVectorDB implements VectorDatabase {
       reranked.sort((a, b) => b.bm25Score - a.bm25Score);
 
       this.logger.debug(
-        `BM25 重排：Top-1 分数=${reranked[0]?.bm25Score?.toFixed(4)}, Top-3 分数=[${reranked.slice(0, 3).map(r => r.bm25Score?.toFixed(4)).join(', ')}]`
+        `BM25 重排：Top-1 分数=${reranked[0]?.bm25Score?.toFixed(4)}, Top-3 分数=[${reranked
+          .slice(0, 3)
+          .map((r) => r.bm25Score?.toFixed(4))
+          .join(", ")}]`,
       );
 
       return reranked;
@@ -647,9 +684,12 @@ export class SqliteVectorDB implements VectorDatabase {
     }
 
     // 计算 BM25 分数的变异系数（标准差 / 均值）
-    const scores = keywordResults.map(r => Math.abs(r.bm25Score || r.score || 0));
+    const scores = keywordResults.map((r) =>
+      Math.abs(r.bm25Score || r.score || 0),
+    );
     const mean = scores.reduce((s, v) => s + v, 0) / scores.length;
-    const variance = scores.reduce((s, v) => s + (v - mean) ** 2, 0) / scores.length;
+    const variance =
+      scores.reduce((s, v) => s + (v - mean) ** 2, 0) / scores.length;
     const stdDev = Math.sqrt(variance);
 
     // 变异系数 < 0.1 说明分数差异极小，BM25 无法区分文档
@@ -659,7 +699,7 @@ export class SqliteVectorDB implements VectorDatabase {
 
     if (isBm25Ineffective) {
       this.logger.debug(
-        `BM25 判别力不足：cv=${cv.toFixed(4)}, mean=${mean.toFixed(6)}，自动降低关键词权重`
+        `BM25 判别力不足：cv=${cv.toFixed(4)}, mean=${mean.toFixed(6)}，自动降低关键词权重`,
       );
       // 将 keywordWeight 降至原来的 1/3，最低 0.1
       const newKeyword = Math.max(0.1, keywordWeight / 3);
@@ -718,13 +758,17 @@ export class SqliteVectorDB implements VectorDatabase {
 
     // Step 2: 计算 RRF 分数（带权重）
     // 语义排名
-    const semanticRanked = [...semanticResults].sort((a, b) => b.score - a.score);
+    const semanticRanked = [...semanticResults].sort(
+      (a, b) => b.score - a.score,
+    );
     // 关键词排名（已按 BM25 分数排序）
-    const keywordRanked = [...keywordResults].sort((a, b) => b.bm25Score - a.bm25Score);
+    const keywordRanked = [...keywordResults].sort(
+      (a, b) => b.bm25Score - a.bm25Score,
+    );
 
     for (const doc of docMap.values()) {
-      const semRank = semanticRanked.findIndex(r => r.id === doc.id);
-      const kwRank = keywordRanked.findIndex(r => r.id === doc.id);
+      const semRank = semanticRanked.findIndex((r) => r.id === doc.id);
+      const kwRank = keywordRanked.findIndex((r) => r.id === doc.id);
 
       const semRRF = semRank >= 0 ? 1 / (K + semRank + 1) : 0;
       const kwRRF = kwRank >= 0 ? 1 / (K + kwRank + 1) : 0;
@@ -737,7 +781,13 @@ export class SqliteVectorDB implements VectorDatabase {
     fused.sort((a, b) => b.rrfScore - a.rrfScore);
 
     this.logger.debug(
-      `RRF 融合 Top-5：[${fused.slice(0, 5).map((f: any) => `id=${f.id} rrf=${f.rrfScore.toFixed(6)} sem=${f.semanticScore?.toFixed(4)} bm25=${f.bm25Score?.toFixed(6)}`).join(', ')}]`
+      `RRF 融合 Top-5：[${fused
+        .slice(0, 5)
+        .map(
+          (f: any) =>
+            `id=${f.id} rrf=${f.rrfScore.toFixed(6)} sem=${f.semanticScore?.toFixed(4)} bm25=${f.bm25Score?.toFixed(6)}`,
+        )
+        .join(", ")}]`,
     );
 
     // Step 4: 将 RRF 分数映射到 0~1 可读范围（保持相对顺序）
@@ -748,9 +798,8 @@ export class SqliteVectorDB implements VectorDatabase {
 
     return fused.slice(0, topK).map((doc: any) => {
       // Min-Max 归一化 RRF 到 [0, 1]
-      let displayScore = rrfRange > 0
-        ? (doc.rrfScore - rrfMin) / rrfRange
-        : 0.5;
+      let displayScore =
+        rrfRange > 0 ? (doc.rrfScore - rrfMin) / rrfRange : 0.5;
 
       return {
         ...doc,

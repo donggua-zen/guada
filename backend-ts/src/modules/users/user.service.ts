@@ -1,21 +1,29 @@
-import { Injectable } from '@nestjs/common';
-import * as bcrypt from 'bcrypt';
-import * as fs from 'fs';
-import * as path from 'path';
-import sharp from 'sharp';
-import * as crypto from 'crypto';
-import { UserRepository } from '../../common/database/user.repository';
-import { UploadPathService } from '../../common/services/upload-path.service';
+import { Injectable } from "@nestjs/common";
+import * as bcrypt from "bcrypt";
+import * as fs from "fs";
+import * as path from "path";
+import sharp from "sharp";
+import * as crypto from "crypto";
+import { UserRepository } from "../../common/database/user.repository";
+import { UploadPathService } from "../../common/services/upload-path.service";
 
 @Injectable()
 export class UserService {
-  private resetPasswordFlagPath = path.join(process.cwd(), 'password_is_set.txt');
-  private readonly ALLOWED_MIME_TYPES = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
+  private resetPasswordFlagPath = path.join(
+    process.cwd(),
+    "password_is_set.txt",
+  );
+  private readonly ALLOWED_MIME_TYPES = [
+    "image/jpeg",
+    "image/png",
+    "image/gif",
+    "image/webp",
+  ];
 
   constructor(
     private uploadPathService: UploadPathService,
     private userRepo: UserRepository,
-  ) { }
+  ) {}
 
   async getProfile(userId: string) {
     return this.userRepo.findById(userId);
@@ -25,10 +33,14 @@ export class UserService {
     return this.userRepo.update(userId, data);
   }
 
-  async changePassword(userId: string, oldPassword: string, newPassword: string) {
+  async changePassword(
+    userId: string,
+    oldPassword: string,
+    newPassword: string,
+  ) {
     const user = await this.userRepo.findById(userId);
     if (!user || !(await bcrypt.compare(oldPassword, user.passwordHash))) {
-      throw new Error('旧密码不正确');
+      throw new Error("旧密码不正确");
     }
     const hashedPassword = await bcrypt.hash(newPassword, 10);
     return this.userRepo.update(userId, { passwordHash: hashedPassword });
@@ -39,7 +51,7 @@ export class UserService {
     return this.userRepo.create({
       ...data,
       parentId,
-      role: 'subaccount',
+      role: "subaccount",
       passwordHash: hashedPassword,
     });
   }
@@ -51,7 +63,7 @@ export class UserService {
   async deleteSubAccount(accountId: string, parentId: string) {
     const account = await this.userRepo.findById(accountId);
     if (!account || account.parentId !== parentId) {
-      throw new Error('无权删除该子账户');
+      throw new Error("无权删除该子账户");
     }
     return this.userRepo.update(accountId, { deletedAt: new Date() }); // 软删除或根据需求物理删除
   }
@@ -62,16 +74,18 @@ export class UserService {
   async uploadAvatar(userId: string, file: any) {
     const user = await this.userRepo.findById(userId);
     if (!user) {
-      throw new Error('用户不存在');
+      throw new Error("用户不存在");
     }
 
     // 1. 验证文件类型
     if (!file || !this.ALLOWED_MIME_TYPES.includes(file.mimetype)) {
-      throw new Error(`不支持的文件类型。允许的类型: ${this.ALLOWED_MIME_TYPES.join(', ')}`);
+      throw new Error(
+        `不支持的文件类型。允许的类型: ${this.ALLOWED_MIME_TYPES.join(", ")}`,
+      );
     }
 
     // 2. 获取物理路径（自动创建目录）
-    const avatarDir = this.uploadPathService.getPhysicalPath('avatars');
+    const avatarDir = this.uploadPathService.getPhysicalPath("avatars");
 
     // 3. 生成唯一文件名
     const uniqueFilename = `${crypto.randomUUID()}.jpg`;
@@ -80,20 +94,25 @@ export class UserService {
     try {
       // 4. 使用 sharp 缩放并转换为 JPEG
       await sharp(file.buffer)
-        .resize(128, 128, { fit: 'cover' })
+        .resize(128, 128, { fit: "cover" })
         .jpeg({ quality: 95 })
         .toFile(filePath);
 
       // 5. 清理旧头像
       if (user.avatarUrl) {
-        const oldFilePath = this.uploadPathService.getPathFromWebUrl(user.avatarUrl);
+        const oldFilePath = this.uploadPathService.getPathFromWebUrl(
+          user.avatarUrl,
+        );
         if (oldFilePath && fs.existsSync(oldFilePath)) {
           fs.unlinkSync(oldFilePath);
         }
       }
 
       // 6. 更新数据库（直接获取 Web URL）
-      const webUrl = this.uploadPathService.getWebUrl('avatars', uniqueFilename);
+      const webUrl = this.uploadPathService.getWebUrl(
+        "avatars",
+        uniqueFilename,
+      );
       await this.userRepo.update(userId, { avatarUrl: webUrl });
 
       return { url: webUrl };
@@ -111,7 +130,7 @@ export class UserService {
   }
 
   markPasswordAsSet() {
-    fs.writeFileSync(this.resetPasswordFlagPath, 'password has been set');
+    fs.writeFileSync(this.resetPasswordFlagPath, "password has been set");
   }
 
   async resetPrimaryPassword(password: string, phone?: string, email?: string) {
@@ -123,7 +142,7 @@ export class UserService {
     }
 
     if (!user) {
-      throw new Error('用户不存在');
+      throw new Error("用户不存在");
     }
 
     const hashedPassword = await bcrypt.hash(password, 10);

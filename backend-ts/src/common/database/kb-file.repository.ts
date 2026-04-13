@@ -1,5 +1,5 @@
-import { Injectable } from '@nestjs/common';
-import { PrismaService } from '../../common/database/prisma.service';
+import { Injectable } from "@nestjs/common";
+import { PrismaService } from "../../common/database/prisma.service";
 
 @Injectable()
 export class KBFileRepository {
@@ -11,11 +11,15 @@ export class KBFileRepository {
     });
   }
 
-  async findByKnowledgeBaseId(kbId: string, skip: number = 0, limit: number = 50) {
+  async findByKnowledgeBaseId(
+    kbId: string,
+    skip: number = 0,
+    limit: number = 50,
+  ) {
     const [items, total] = await Promise.all([
       this.prisma.kBFile.findMany({
         where: { knowledgeBaseId: kbId },
-        orderBy: { uploadedAt: 'desc' },
+        orderBy: { uploadedAt: "desc" },
         skip,
         take: limit,
       }),
@@ -58,7 +62,7 @@ export class KBFileRepository {
     if (totalChunks !== undefined) updateData.totalChunks = totalChunks;
     if (totalTokens !== undefined) updateData.totalTokens = totalTokens;
 
-    if (status === 'completed') {
+    if (status === "completed") {
       updateData.processedAt = new Date();
     }
 

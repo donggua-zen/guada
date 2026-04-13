@@ -11,6 +11,7 @@
 ### 1. 目录结构变化
 
 #### ❌ 旧结构
+
 ```
 src/modules/knowledge-base/
 ├── vector-database.interface.ts          # 接口定义
@@ -22,6 +23,7 @@ src/modules/knowledge-base/
 ```
 
 #### 新结构
+
 ```
 src/common/vector-db/                      # 新的通用模块
 ├── interfaces/
@@ -42,16 +44,18 @@ src/common/vector-db/                      # 新的通用模块
 #### 在知识库模块中
 
 **之前**：
+
 ```typescript
-import { VectorDatabase } from './vector-database.interface';
-import { LanceDBVectorDB } from './implementations/lancedb-vector-db';
+import { VectorDatabase } from "./vector-database.interface";
+import { LanceDBVectorDB } from "./implementations/lancedb-vector-db";
 ```
 
 **之后**：
+
 ```typescript
-import { VectorDatabase, LanceDBVectorDB } from '@/common/vector-db';
+import { VectorDatabase, LanceDBVectorDB } from "@/common/vector-db";
 // 或者
-import { VectorDatabase, LanceDBVectorDB } from '../../common/vector-db';
+import { VectorDatabase, LanceDBVectorDB } from "../../common/vector-db";
 ```
 
 #### 在其他模块中
@@ -59,7 +63,7 @@ import { VectorDatabase, LanceDBVectorDB } from '../../common/vector-db';
 任何需要使用向量数据库的模块都可以直接导入：
 
 ```typescript
-import { VectorDatabase, LanceDBVectorDB } from '@/common/vector-db';
+import { VectorDatabase, LanceDBVectorDB } from "@/common/vector-db";
 ```
 
 ---
@@ -70,19 +74,19 @@ import { VectorDatabase, LanceDBVectorDB } from '@/common/vector-db';
 
 ```typescript
 // src/modules/knowledge-base/knowledge-base.module.ts
-import { Module } from '@nestjs/common';
-import { VectorDatabase, LanceDBVectorDB } from '@/common/vector-db';
-import { KnowledgeBaseService } from './knowledge-base.service';
+import { Module } from "@nestjs/common";
+import { VectorDatabase, LanceDBVectorDB } from "@/common/vector-db";
+import { KnowledgeBaseService } from "./knowledge-base.service";
 
 @Module({
   providers: [
     {
-      provide: 'VECTOR_DB',
+      provide: "VECTOR_DB",
       useClass: LanceDBVectorDB,
     },
     KnowledgeBaseService,
   ],
-  exports: ['VECTOR_DB'], // 如果需要被其他模块使用
+  exports: ["VECTOR_DB"], // 如果需要被其他模块使用
 })
 export class KnowledgeBaseModule {}
 ```
@@ -95,20 +99,18 @@ export class KnowledgeBaseModule {}
 
 ```typescript
 // src/modules/knowledge-base/knowledge-base.service.ts
-import { Injectable, Inject } from '@nestjs/common';
-import { VectorDatabase } from '@/common/vector-db';
+import { Injectable, Inject } from "@nestjs/common";
+import { VectorDatabase } from "@/common/vector-db";
 
 @Injectable()
 export class KnowledgeBaseService {
-  constructor(
-    @Inject('VECTOR_DB') private vectorDb: VectorDatabase,
-  ) {}
+  constructor(@Inject("VECTOR_DB") private vectorDb: VectorDatabase) {}
 
   async searchKnowledgeBase(query: string) {
     const embedding = await this.getEmbedding(query);
-    
+
     return await this.vectorDb.hybridSearch(
-      'knowledge_base',
+      "knowledge_base",
       embedding,
       query,
       10,
@@ -127,12 +129,12 @@ export class KnowledgeBaseService {
 
 ```typescript
 import {
-  VectorDatabase,        // 主接口
-  SearchResult,          // 搜索结果类型
-  VectorDocument,        // 向量文档类型
-  CollectionStats,       // 集合统计类型
-  LanceDBVectorDB,       // LanceDB 实现类
-} from '@/common/vector-db';
+  VectorDatabase, // 主接口
+  SearchResult, // 搜索结果类型
+  VectorDocument, // 向量文档类型
+  CollectionStats, // 集合统计类型
+  LanceDBVectorDB, // LanceDB 实现类
+} from "@/common/vector-db";
 ```
 
 ### 核心方法
@@ -143,14 +145,14 @@ interface VectorDatabase {
   createCollection(name: string, vectorSize: number): Promise<void>;
   deleteCollection(name: string): Promise<boolean>;
   collectionExists(name: string): Promise<boolean>;
-  
+
   addDocuments(collection: string, docs: VectorDocument[]): Promise<string[]>;
   deleteDocuments(collection: string, ids: string[]): Promise<number>;
-  
+
   semanticSearch(collection: string, embedding: number[], topK?: number): Promise<SearchResult[]>;
   keywordSearch(collection: string, query: string, topK?: number): Promise<SearchResult[]>;
   hybridSearch(collection: string, embedding: number[], query: string, ...): Promise<SearchResult[]>;
-  
+
   getCollectionStats(collection: string): Promise<CollectionStats>;
   close(): Promise<void>;
 }
@@ -176,6 +178,7 @@ npx ts-node test-lancedb.ts
 ```
 
 预期输出：
+
 ```
 === LanceDB 向量数据库测试 ===
 
@@ -200,13 +203,13 @@ npx ts-node test-lancedb.ts
 
 ```typescript
 // 在聊天模块中使用
-import { VectorDatabase } from '@/common/vector-db';
+import { VectorDatabase } from "@/common/vector-db";
 
 // 在搜索模块中使用
-import { VectorDatabase } from '@/common/vector-db';
+import { VectorDatabase } from "@/common/vector-db";
 
 // 在推荐模块中使用
-import { VectorDatabase } from '@/common/vector-db';
+import { VectorDatabase } from "@/common/vector-db";
 ```
 
 ### 2. 易于扩展
@@ -215,7 +218,7 @@ import { VectorDatabase } from '@/common/vector-db';
 
 ```typescript
 // src/common/vector-db/implementations/qdrant-vector-db.ts
-import { VectorDatabase } from '../interfaces/vector-database.interface';
+import { VectorDatabase } from "../interfaces/vector-database.interface";
 
 export class QdrantVectorDB implements VectorDatabase {
   // 实现所有方法
@@ -225,7 +228,7 @@ export class QdrantVectorDB implements VectorDatabase {
 然后在 `implementations/index.ts` 中导出：
 
 ```typescript
-export { QdrantVectorDB } from './qdrant-vector-db';
+export { QdrantVectorDB } from "./qdrant-vector-db";
 ```
 
 ### 3. 清晰的职责分离
@@ -240,7 +243,8 @@ export { QdrantVectorDB } from './qdrant-vector-db';
 
 ### Q1: 为什么要把向量数据库独立出来？
 
-**A**: 
+**A**:
+
 - 提高代码复用性（多个模块可能需要向量搜索）
 - 清晰的职责分离（向量数据库 ≠ 知识库业务逻辑）
 - 易于测试和维护

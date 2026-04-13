@@ -1,7 +1,7 @@
 <template>
     <div class="avatar-upload-container flex flex-col items-center justify-center">
         <div class="avatar-preview w-25 h-25 cursor-pointer" @click="triggerAvatarUpload">
-            <Avatar :src="previewUrl" :type="type"></Avatar>
+            <Avatar :src="previewUrl" :type="type" :name="name"></Avatar>
         </div>
         <div class="avatar-upload-actions mt-3">
             <el-button @click="triggerAvatarUpload" round :border="false" plain type="primary" size="small">
@@ -60,6 +60,7 @@ const emits = defineEmits<{
 const props = defineProps<{
     src?: string;
     type?: 'user' | 'assistant';
+    name?: string;  // 用于生成首字头像的名称
 }>()
 
 // 监听 src 变化 - 类型化

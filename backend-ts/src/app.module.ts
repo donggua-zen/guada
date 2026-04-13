@@ -1,30 +1,30 @@
-import { Module } from '@nestjs/common';
-import { ConfigModule } from '@nestjs/config';
-import uploadConfig from './common/config/upload.config';
-import { UploadModule } from './common/upload/upload.module';
-import { ChatModule } from './modules/chat/chat.module';
-import { ModelsModule } from './modules/models/models.module';
-import { AuthModule } from './modules/auth/auth.module';
-import { CharactersModule } from './modules/characters/characters.module';
-import { FilesModule } from './modules/files/files.module';
-import { McpServersModule } from './modules/mcp-servers/mcp-servers.module';
-import { SettingsModule } from './modules/settings/settings.module';
-import { UsersModule } from './modules/users/users.module';
-import { ToolsModule } from './modules/tools/tools.module';
-import { KnowledgeBaseModule } from './modules/knowledge-base/knowledge-base.module';
-import { VectorDbModule } from './common/vector-db';
-import { McpClientModule } from './common/mcp/mcp-client.module';
+import { Module } from "@nestjs/common";
+import { ConfigModule } from "@nestjs/config";
+import uploadConfig from "./common/config/upload.config";
+import { UploadModule } from "./common/upload/upload.module";
+import { ChatModule } from "./modules/chat/chat.module";
+import { ModelsModule } from "./modules/models/models.module";
+import { AuthModule } from "./modules/auth/auth.module";
+import { CharactersModule } from "./modules/characters/characters.module";
+import { FilesModule } from "./modules/files/files.module";
+import { McpServersModule } from "./modules/mcp-servers/mcp-servers.module";
+import { SettingsModule } from "./modules/settings/settings.module";
+import { UsersModule } from "./modules/users/users.module";
+import { ToolsModule } from "./modules/tools/tools.module";
+import { KnowledgeBaseModule } from "./modules/knowledge-base/knowledge-base.module";
+import { VectorDbModule } from "./common/vector-db";
+import { McpClientModule } from "./common/mcp/mcp-client.module";
 
 @Module({
   imports: [
-    ConfigModule.forRoot({ 
+    ConfigModule.forRoot({
       isGlobal: true,
       load: [uploadConfig],
     }),
     UploadModule, // 全局上传路径模块
     VectorDbModule, // 向量数据库模块
     McpClientModule, // MCP 客户端模块（全局）
-    ChatModule, 
+    ChatModule,
     ModelsModule,
     AuthModule,
     CharactersModule,

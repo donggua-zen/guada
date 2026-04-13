@@ -1,5 +1,5 @@
-import { Injectable } from '@nestjs/common';
-import { PrismaService } from '../../common/database/prisma.service';
+import { Injectable } from "@nestjs/common";
+import { PrismaService } from "../../common/database/prisma.service";
 
 @Injectable()
 export class GlobalSettingRepository {
@@ -25,25 +25,27 @@ export class GlobalSettingRepository {
 
   async upsert(data: { key: string; value: any; userId?: string | null }) {
     return this.prisma.globalSetting.upsert({
-      where: { 
-        key_userId: { 
-          key: data.key, 
-          userId: data.userId || null 
-        } 
+      where: {
+        key_userId: {
+          key: data.key,
+          userId: data.userId || null,
+        },
       },
       update: { value: data.value },
       create: { ...data, userId: data.userId || null },
     });
   }
 
-  async saveBatch(settings: Array<{ key: string; value: any; userId?: string | null }>) {
+  async saveBatch(
+    settings: Array<{ key: string; value: any; userId?: string | null }>,
+  ) {
     const transaction = settings.map((item) =>
       this.prisma.globalSetting.upsert({
-        where: { 
-          key_userId: { 
-            key: item.key, 
-            userId: item.userId || null 
-          } 
+        where: {
+          key_userId: {
+            key: item.key,
+            userId: item.userId || null,
+          },
         },
         update: { value: item.value },
         create: { ...item, userId: item.userId || null },

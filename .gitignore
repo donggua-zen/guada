@@ -17,3 +17,4 @@ backend/build/**
 backend/dist/**
 backend-ts/data/uploads/**
 backend-ts/data/avatars/**
+backend-ts/static/file_stores/**
