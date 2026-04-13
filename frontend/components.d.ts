@@ -84,7 +84,6 @@ declare module 'vue' {
     ScrollContainer: typeof import('./src/components/ui/ScrollContainer.vue')['default']
     ScrollToBottomButton: typeof import('./src/components/ui/ScrollToBottomButton.vue')['default']
     SectionsAlt: typeof import('./src/components/icons/SectionsAlt.vue')['default']
-    SettingsMainPage: typeof import('./src/components/setting/SettingsMainPage.vue')['default']
     SidebarLayout: typeof import('./src/components/ui/SidebarLayout.vue')['default']
     Stop: typeof import('./src/components/icons/Stop.vue')['default']
     SystemSettings: typeof import('./src/components/setting/SystemSettings.vue')['default']
