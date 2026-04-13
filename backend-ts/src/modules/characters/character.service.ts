@@ -1,5 +1,6 @@
 import { Injectable } from "@nestjs/common";
 import { CharacterRepository } from "../../common/database/character.repository";
+import { CharacterGroupRepository } from "../../common/database/character-group.repository";
 import {
   createPaginatedResponse,
   PaginatedResponse,
@@ -7,27 +8,51 @@ import {
 
 @Injectable()
 export class CharacterService {
-  constructor(private characterRepo: CharacterRepository) {}
+  constructor(
+    private characterRepo: CharacterRepository,
+    private groupRepo: CharacterGroupRepository,
+  ) { }
 
+  // --- Group Management ---
+  async getGroupsByUser(userId: string) {
+    return this.groupRepo.findByUserId(userId);
+  }
+
+  async createGroup(userId: string, data: any) {
+    return this.groupRepo.create({ ...data, userId });
+  }
+
+  async updateGroup(groupId: string, userId: string, data: any) {
+    const group = await this.groupRepo.findById(groupId);
+    if (!group || group.userId !== userId) {
+      throw new Error("Group not found or unauthorized");
+    }
+    return this.groupRepo.update(groupId, data);
+  }
+
+  async deleteGroup(groupId: string, userId: string) {
+    const group = await this.groupRepo.findById(groupId);
+    if (!group || group.userId !== userId) {
+      throw new Error("Group not found or unauthorized");
+    }
+    // 自动将该分组下的所有助手 groupId 置为 null
+    await this.characterRepo.updateManyByGroupId(groupId, null);
+    return this.groupRepo.delete(groupId);
+  }
+
+  // --- Character Management ---
   async getCharactersByUser(
     userId: string,
     skip: number = 0,
     limit: number = 20,
+    groupId?: string,
   ): Promise<PaginatedResponse<any>> {
     const { items, total } = await this.characterRepo.findByUserId(
       userId,
       skip,
       limit,
+      groupId,
     );
-
-    return createPaginatedResponse(items, total, { skip, limit });
-  }
-
-  async getSharedCharacters(
-    skip: number = 0,
-    limit: number = 20,
-  ): Promise<PaginatedResponse<any>> {
-    const { items, total } = await this.characterRepo.findPublic(skip, limit);
 
     return createPaginatedResponse(items, total, { skip, limit });
   }

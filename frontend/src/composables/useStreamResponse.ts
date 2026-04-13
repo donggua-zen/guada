@@ -421,6 +421,10 @@ export function useStreamResponse(sessionStore: any, apiService: any) {
       }
     } catch (error) {
       handleStreamCatchError(error as Error, message, contentIndex, assistantMessageIdResult)
+      // 如果是会话忙碌错误，不抛出异常，由调用者处理通知
+      if ((error as Error).message.includes('SessionBusyError')) {
+        return
+      }
       throw error // 重新抛出错误，由调用者处理
     } finally {
       cleanupStreaming(streamingSessionId, message, contentIndex)
