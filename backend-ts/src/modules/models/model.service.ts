@@ -224,20 +224,37 @@ export class ModelService {
         try {
             // 直接使用数据库中的 apiUrl，不做任何修改
             // OpenAI SDK 会在 baseURL 后面拼接 /models 等路径
+
             const client = new OpenAI({
-                apiKey: provider.apiKey,
                 baseURL: provider.apiUrl,
+                apiKey: provider.apiKey,
             });
+
+            this.logger.log(`Fetching remote models for provider ${provider.apiKey} url ${provider.apiUrl}`);
 
             const response = await client.models.list();
 
-            const models = response.data.map((model: any) => ({
-                modelName: model.id,
-                modelType: 'text',
-                config: {
-                    features: [],
-                },
-            }));
+            // 查找对应的供应商模板
+            const template = PROVIDER_TEMPLATES.find(t => t.id === provider.provider);
+
+            const models = response.data.map((model: any) => {
+                // 尝试从模板中匹配模型配置
+                const templateModel = template?.models?.find(
+                    m => m.modelName === model.id
+                );
+
+                // 如果找到匹配的模板模型，使用其配置；否则使用默认值
+                return {
+                    modelName: model.id,
+                    modelType: templateModel?.modeType || templateModel?.modelType || 'text',
+                    config: templateModel?.config || {
+                        inputCapabilities: ['text'],
+                        outputCapabilities: ['text'],
+                        features: [],
+                        contextWindow: 128000,
+                    },
+                };
+            });
 
             // 返回分页格式，与其他列表接口保持一致
             return createPaginatedResponse(models, models.length);

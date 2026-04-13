@@ -405,6 +405,85 @@ export const PROVIDER_TEMPLATES: ProviderTemplate[] = [
                 },
             },
         },
+        models: [
+            {
+                modelName: 'GLM-5',
+                modeType: 'text',
+                config: {
+                    inputCapabilities: ['text'],
+                    outputCapabilities: ['text'],
+                    features: ['tools', 'thinking'],
+                    contextWindow: 200000,
+                    maxOutputTokens: 128000,
+                },
+            },
+            {
+                modelName: 'GLM-5-Turbo',
+                modeType: 'text',
+                config: {
+                    inputCapabilities: ['text'],
+                    outputCapabilities: ['text'],
+                    features: ['tools', 'thinking'],
+                    contextWindow: 200000,
+                    maxOutputTokens: 128000,
+                },
+            },
+            {
+                modelName: 'GLM-4-Plus',
+                modeType: 'text',
+                config: {
+                    inputCapabilities: ['text'],
+                    outputCapabilities: ['text'],
+                    features: ['tools', 'thinking'],
+                    contextWindow: 200000,
+                    maxOutputTokens: 128000,
+                },
+            },
+            {
+                modelName: 'GLM-4.7',
+                modeType: 'text',
+                config: {
+                    inputCapabilities: ['text'],
+                    outputCapabilities: ['text'],
+                    features: ['tools', 'thinking'],
+                    contextWindow: 200000,
+                    maxOutputTokens: 128000,
+                },
+            },
+            {
+                modelName: 'GLM-4.7-FlashX',
+                modeType: 'text',
+                config: {
+                    inputCapabilities: ['text'],
+                    outputCapabilities: ['text'],
+                    features: ['tools', 'thinking'],
+                    contextWindow: 200000,
+                    maxOutputTokens: 128000,
+                },
+            },
+            {
+                modelName: 'GLM-4.6',
+                modeType: 'text',
+                config: {
+                    inputCapabilities: ['text'],
+                    outputCapabilities: ['text'],
+                    features: ['tools', 'thinking'],
+                    contextWindow: 200000,
+                    maxOutputTokens: 128000,
+                },
+            },
+            {
+                modelName: 'GLM-4.5',
+                modeType: 'text',
+                config: {
+                    inputCapabilities: ['text'],
+                    outputCapabilities: ['text'],
+                    features: ['tools', 'thinking'],
+                    contextWindow: 128000,
+                    maxOutputTokens: 96000,
+                },
+            },
+        ]
     },
     {
         id: 'moonshot',
@@ -415,14 +494,31 @@ export const PROVIDER_TEMPLATES: ProviderTemplate[] = [
         description: '月之暗面科技，Kimi 智能助手背后的技术提供方，擅长长文本处理。',
         attributes: {
             openai: {
-                // Kimi K2 等模型支持 thinking 参数
+                // 智谱 GLM-4-Plus 等模型支持 thinking 对象
                 thinkingEnabled: {
                     thinking: {
-                        enabled: true
+                        type: "enabled"
+                    }
+                },
+                thinkingDisabled: {
+                    thinking: {
+                        type: "disabled"
                     }
                 },
             },
         },
+        models: [
+            {
+                modelName: 'kimi-k2.5',
+                modeType: 'text',
+                config: {
+                    inputCapabilities: ['text', 'image'],
+                    outputCapabilities: ['text'],
+                    features: ['tools', 'thinking'],
+                    contextWindow: 256000,
+                },
+            },
+        ]
     },
     {
         id: 'minimax',
@@ -441,6 +537,52 @@ export const PROVIDER_TEMPLATES: ProviderTemplate[] = [
                 },
             },
         },
+        models: [
+            {
+                modelName: 'MiniMax-M2.5',
+                modeType: 'text',
+                config: {
+                    inputCapabilities: ['text'],
+                    outputCapabilities: ['text'],
+                    features: ['tools', 'thinking'],
+                    contextWindow: 205000,
+                    maxOutputTokens: 131000,
+                },
+            },
+            {
+                modelName: 'MiniMax-M2.5-highspeed',
+                modeType: 'text',
+                config: {
+                    inputCapabilities: ['text'],
+                    outputCapabilities: ['text'],
+                    features: ['tools', 'thinking'],
+                    contextWindow: 205000,
+                    maxOutputTokens: 131000,
+                },
+            },
+            {
+                modelName: 'MiniMax-M2.1',
+                modeType: 'text',
+                config: {
+                    inputCapabilities: ['text'],
+                    outputCapabilities: ['text'],
+                    features: ['tools', 'thinking'],
+                    contextWindow: 205000,
+                    maxOutputTokens: 131000,
+                },
+            },
+            {
+                modelName: 'MiniMax-M2',
+                modeType: 'text',
+                config: {
+                    inputCapabilities: ['text'],
+                    outputCapabilities: ['text'],
+                    features: ['tools', 'thinking'],
+                    contextWindow: 197000,
+                    maxOutputTokens: 128000,
+                },
+            },
+        ]
     },
     {
         id: 'deepseek',
@@ -489,6 +631,86 @@ export const PROVIDER_TEMPLATES: ProviderTemplate[] = [
                 },
             },
         },
+        models: [
+            {
+                modelName: 'gpt-5.4',
+                modeType: 'text',
+                config: {
+                    inputCapabilities: ['text', 'image'],
+                    outputCapabilities: ['text'],
+                    features: ['tools', 'thinking'],
+                    contextWindow: 1100000,
+                },
+            },
+            {
+                modelName: 'gpt-5-mini',
+                modeType: 'text',
+                config: {
+                    inputCapabilities: ['text', 'image'],
+                    outputCapabilities: ['text'],
+                    features: ['tools', 'thinking'],
+                    contextWindow: 400000,
+                },
+            },
+            {
+                modelName: 'gpt-4o',
+                modeType: 'text',
+                config: {
+                    inputCapabilities: ['text', 'image'],
+                    outputCapabilities: ['text'],
+                    features: ['tools'],
+                    contextWindow: 128000,
+                },
+            },
+            {
+                modelName: 'gpt-4o-mini',
+                modeType: 'text',
+                config: {
+                    inputCapabilities: ['text', 'image'],
+                    outputCapabilities: ['text'],
+                    features: ['tools'],
+                    contextWindow: 128000,
+                },
+            },
+            {
+                modelName: 'o4-mini',
+                modeType: 'text',
+                config: {
+                    inputCapabilities: ['text', 'image'],
+                    outputCapabilities: ['text'],
+                    features: ['tools', 'thinking'],
+                    contextWindow: 200000,
+                },
+            },
+            {
+                modelName: 'o3-pro',
+                modeType: 'text',
+                config: {
+                    inputCapabilities: ['text', 'image'],
+                    outputCapabilities: ['text'],
+                    features: ['tools', 'thinking'],
+                    contextWindow: 200000,
+                },
+            },
+            {
+                modelName: 'o3-mini',
+                modeType: 'text',
+                config: {
+                    inputCapabilities: ['text', 'image'],
+                    outputCapabilities: ['text'],
+                    features: ['tools', 'thinking'],
+                    contextWindow: 200000,
+                },
+            },
+            {
+                modelName: 'text-embedding-3-small',
+                modeType: 'embedding',
+                config: {
+                    contextWindow: 8000,
+                    vectorDimensions: 2000,
+                },
+            },
+        ]
     },
     {
         id: 'anthropic',
@@ -507,6 +729,63 @@ export const PROVIDER_TEMPLATES: ProviderTemplate[] = [
         avatarUrl: '/static/images/providers/google.svg',
         description: '谷歌提供的 Gemini 大模型服务，具备强大的多模态理解与生成能力。',
         attributes: {},
+        models: [
+            {
+                modelName: 'gemini-3.1-pro-preview',
+                modeType: 'text',
+                config: {
+                    inputCapabilities: ['text', 'image'],
+                    outputCapabilities: ['text'],
+                    features: ['tools', 'thinking'],
+                    contextWindow: 1000000,
+                    maxOutputTokens: 66000,
+                },
+            },
+            {
+                modelName: 'gemini-3-flash-preview',
+                modeType: 'text',
+                config: {
+                    inputCapabilities: ['text', 'image'],
+                    outputCapabilities: ['text'],
+                    features: ['tools', 'thinking'],
+                    contextWindow: 1000000,
+                    maxOutputTokens: 66000,
+                },
+            },
+            {
+                modelName: 'gemini-2.5-flash',
+                modeType: 'text',
+                config: {
+                    inputCapabilities: ['text', 'image'],
+                    outputCapabilities: ['text'],
+                    features: ['tools', 'thinking'],
+                    contextWindow: 1000000,
+                    maxOutputTokens: 66000,
+                },
+            },
+            {
+                modelName: 'gemini-2.5-pro',
+                modeType: 'text',
+                config: {
+                    inputCapabilities: ['text', 'image'],
+                    outputCapabilities: ['text'],
+                    features: ['tools', 'thinking'],
+                    contextWindow: 1000000,
+                    maxOutputTokens: 66000,
+                },
+            },
+            {
+                modelName: 'gemini-2.5-flash-image',
+                modeType: 'text',
+                config: {
+                    inputCapabilities: ['text', 'image'],
+                    outputCapabilities: ['text', 'image'],
+                    features: ['tools', 'thinking'],
+                    contextWindow: 33000,
+                    maxOutputTokens: 33000,
+                },
+            },
+        ]
     },
     {
         id: 'azure-openai',

@@ -1,14 +1,16 @@
 .markdown-text p {
-    margin-top: 10px;
+    margin-bottom: 10px;
+    margin-top: 0;
+}
+
+.markdown-text>:last-child {
+    margin-top: 0;
     margin-bottom: 0;
 }
 
-.markdown-text>:first-child {
+.markdown-text>div>:last-child {
     margin-top: 0;
-}
-
-.markdown-text>div>:first-child {
-    margin-top: 0;
+    margin-bottom: 0;
 }
 
 .markdown-text h1,
@@ -49,13 +51,13 @@
 .markdown-text ol {
     list-style: none;
     counter-reset: item;
-    margin-top: 8px;
+    margin-bottom: 8px;
 }
 
 .markdown-text ul {
     list-style: none;
     padding-left: 0;
-    margin-top: 8px;
+    margin-bottom: 8px;
 }
 
 .markdown-text ol>li,
