@@ -6,6 +6,7 @@ import sharp from "sharp";
 import { FileRepository } from "../../common/database/file.repository";
 import { PrismaService } from "../../common/database/prisma.service";
 import { UploadPathService } from "../../common/services/upload-path.service";
+import { FileParserService } from "../knowledge-base/file-parser.service";
 
 @Injectable()
 export class FileService {
@@ -41,7 +42,8 @@ export class FileService {
     private uploadPathService: UploadPathService,
     private fileRepo: FileRepository,
     private prisma: PrismaService,
-  ) {}
+    private fileParserService: FileParserService,
+  ) { }
 
   /**
    * 上传文件的统一入口方法
@@ -209,9 +211,21 @@ export class FileService {
       // 保存 PDF 文件
       const url = await this.saveFile(file, fileInfo.fileExt);
 
-      // TODO: 解析 PDF 内容（需要安装 pdf-parse 或类似库）
-      // const fileContent = await this.parsePdfFile(filePath);
-      const fileContent = null; // 暂时不提取文本
+      // 解析 PDF 内容
+      let fileContent: string | null = null;
+      try {
+        const fileType = await this.fileParserService.detectFileType(fileInfo.fileExt);
+        fileContent = await this.fileParserService.parseFile(
+          file.buffer,
+          fileType,
+          fileInfo.fileExt,
+          fileInfo.fileSize,
+        );
+        this.logger.debug(`PDF 内容提取成功，长度: ${fileContent.length}`);
+      } catch (error: any) {
+        this.logger.warn(`PDF 内容提取失败: ${error.message}，将保存文件但不存储内容`);
+        fileContent = null;
+      }
 
       // 计算哈希
       const contentHash = this.calculateContentHash(file.buffer);
