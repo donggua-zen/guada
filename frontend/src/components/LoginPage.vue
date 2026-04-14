@@ -1,8 +1,8 @@
 <template>
-    <div class="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 to-blue-50 p-4">
+    <div class="min-h-screen flex items-center justify-center bg-linear-to-br from-slate-50 to-blue-50 p-4">
         <div class="w-full max-w-md bg-white rounded-2xl shadow-xl overflow-hidden">
             <!-- 顶部装饰 -->
-            <div class="h-2 bg-gradient-to-r from-(--color-primary) to-(--color-primary-600)"></div>
+            <div class="h-2 bg-linear-to-r from-(--color-primary) to-(--color-primary-600)"></div>
 
             <!-- 登录表单区域 -->
             <div class="p-8">

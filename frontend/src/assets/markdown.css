@@ -19,8 +19,8 @@
 .markdown-text h4,
 .markdown-text h5,
 .markdown-text h6 {
-    margin-top: 1.2em;
-    margin-bottom: 0.8em;
+    margin-top: 0.8em;
+    margin-bottom: 0.5em;
     font-weight: 600;
     font-size: var(--size-text-base);
     color: inherit;
@@ -68,7 +68,7 @@
 }
 
 .markdown-text ul>li {
-    padding-left: 14px;
+    padding-left: 18px;
 }
 
 .markdown-text ol>li {
@@ -98,10 +98,10 @@ ol>*:not(li) {
 .markdown-text ul>li::before {
     content: "";
     position: absolute;
-    left: 2px;
+    left: 3px;
     top: 0.7em;
-    width: 4px;
-    height: 4px;
+    width: 5px;
+    height: 5px;
     background-color: #555;
     border-radius: 50%;
 }
@@ -160,7 +160,7 @@ ol>*:not(li) {
     border-collapse: separate;
     border-spacing: 0;
     border: 1px solid #dfe2e5;
-    border-radius: 14px;
+    border-radius: 8px;
     overflow: hidden;
 }
 
@@ -169,7 +169,7 @@ ol>*:not(li) {
     border-right: 1px solid #dfe2e5;
     border-top: 1px solid #dfe2e5;
     vertical-align: top;
-    padding: 0.5em;
+    padding: 0.3em 0.5em;
     min-width: 100px;
 }
 
