@@ -88,7 +88,9 @@ export interface McpServer {
 export interface User {
     id: string
     username: string
+    nickname?: string
     email?: string
+    phone?: string
     avatarUrl?: string
     role?: 'primary' | 'subaccount'  // 用户角色：主账户或子账户
     isActive: boolean
@@ -130,33 +132,33 @@ export interface ApiResponses {
     // 模型相关
     fetchModels: PaginatedResponse<Model>
     fetchRemoteModels: Model[]
-    
+
     // 角色相关
     fetchCharacters: CharacterListResponse
     fetchCharacter: Character
     createCharacter: Character
     updateCharacter: Character
     deleteCharacter: { success: boolean }
-    
+
     // 会话相关
     fetchSessions: SessionListResponse
     fetchSession: Session
     createSession: Session
     updateSession: Session
     deleteSession: { success: boolean }
-    
+
     // 消息相关
     fetchSessionMessages: PaginatedResponse<Message>
     createMessage: Message
     updateMessage: Message
     deleteMessage: { success: boolean }
-    
+
     // 认证相关
     login: { accessToken: string; user: User }
     register: { accessToken?: string; user?: User }
     getProfile: User
     updateProfile: User
-    
+
     // MCP 服务器相关
     fetchMcpServers: PaginatedResponse<McpServer>
     fetchMcpServer: McpServer

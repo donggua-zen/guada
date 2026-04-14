@@ -1,5 +1,5 @@
 <template>
-  <div class="max-w-128">
+  <div class="max-w-lg">
     <el-form ref="basicFormRef" :model="userForm" :rules="basicRules" label-position="left" label-width="80px"
       size="large">
       <!-- 头像设置 -->
@@ -146,7 +146,14 @@ defineExpose({
 })
 
 onMounted(() => {
-  userForm.value = { ...authStore.user }
-  originalUserForm.value = { ...authStore.user }
+  // 只复制需要的字段到表单
+  userForm.value = {
+    nickname: authStore.user?.nickname || '',
+    phone: authStore.user?.phone || '',
+    email: authStore.user?.email || '',
+    avatarUrl: authStore.user?.avatarUrl || '',
+  }
+  originalUserForm.value = { ...userForm.value }
+  console.log('UserProfile mounted, user data:', authStore.user)
 })
 </script>
