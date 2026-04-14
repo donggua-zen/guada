@@ -16,7 +16,7 @@ import { SessionService } from "./session.service";
 @Controller()
 @UseGuards(AuthGuard)
 export class SessionsController {
-  constructor(private readonly sessionService: SessionService) {}
+  constructor(private readonly sessionService: SessionService) { }
 
   @Get("sessions")
   async getSessions(
@@ -59,5 +59,21 @@ export class SessionsController {
   @Post("sessions/:id/generate-title")
   async generateTitle(@Param("id") id: string, @CurrentUser() user: any) {
     return this.sessionService.generateTitle(id, user.sub);
+  }
+
+  @Post("sessions/:id/compress-history")
+  async compressHistory(
+    @Param("id") id: string,
+    @Body()
+    body: { compressionRatio?: number; minRetainedTurns?: number },
+    @CurrentUser() user: any,
+  ) {
+    const { compressionRatio = 50, minRetainedTurns = 3 } = body;
+    return this.sessionService.compressHistory(
+      id,
+      user.sub,
+      Number(compressionRatio),
+      Number(minRetainedTurns),
+    );
   }
 }

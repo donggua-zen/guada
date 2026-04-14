@@ -233,6 +233,17 @@ class ApiService implements IApiService {
         return await this._request(`/sessions/${sessionId}/generate-title`, { method: 'POST' })
     }
 
+    async compressSessionHistory(
+        sessionId: string,
+        compressionRatio: number = 50,
+        minRetainedTurns: number = 3
+    ): Promise<any> {
+        return await this._request(`/sessions/${sessionId}/compress-history`, {
+            method: 'POST',
+            data: { compressionRatio, minRetainedTurns },
+        })
+    }
+
     // ========== 消息管理 ==========
     async deleteMessage(messageId: string): Promise<{ success: boolean }> {
         return await this._request(`/messages/${messageId}`, { method: 'DELETE' })

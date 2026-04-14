@@ -80,6 +80,7 @@ export interface UsePopupReturn {
     confirmError: (title: string, content: string, options?: ConfirmOptions) => Promise<boolean>
     prompt: (title: string, options?: PromptOptions) => Promise<string | null>
     editText: (options?: EditTextOptions) => Promise<string | null>
+    dialog: (options: { title: string; content: VNode | string; confirmText?: string; cancelText?: string }) => Promise<boolean>
     toast: ToastApi
     notify: NotifyApi
     loading: LoadingApi
@@ -251,6 +252,26 @@ export function usePopup(): UsePopupReturn {
     }
 
     /**
+     * 通用自定义对话框
+     */
+    const dialog = (options: { title: string; content: VNode | string; confirmText?: string; cancelText?: string }): Promise<boolean> => {
+        return new Promise((resolve) => {
+            ElMessageBox({
+                title: options.title,
+                message: options.content,
+                confirmButtonText: options.confirmText || '确认',
+                cancelButtonText: options.cancelText || '取消',
+                showCancelButton: true,
+                distinguishCancelAndClose: true,
+            }).then(() => {
+                resolve(true)
+            }).catch(() => {
+                resolve(false)
+            })
+        })
+    }
+
+    /**
      * Toast 消息提示
      */
     const toast: ToastApi = {
@@ -375,6 +396,7 @@ export function usePopup(): UsePopupReturn {
         // 输入弹窗
         prompt,
         editText,
+        dialog,
 
         // 消息提示
         toast,

@@ -317,13 +317,11 @@ const startNewChat = async (character: any): Promise<void> => {
 }
 
 // 处理保存后的回调
-const handleSaved = (characterData: any): void => {
-  const index = characters.value.findIndex(c => c.id === characterData.id)
-  if (index !== -1) {
-    characters.value[index] = reactive(characterData)
-  } else {
-    characters.value.push(reactive(characterData))
-  }
+const handleSaved = async (characterData: any): Promise<void> => {
+  // 刷新分组列表（以防分组有变化）
+  await loadGroups()
+  // 刷新当前分组的角色列表
+  await loadCharacters(currentGroupId.value || undefined)
 }
 
 // 生命周期

@@ -12,7 +12,7 @@
       </template>
       <template v-else-if="authStore.isAuthenticated">
         <ScrollContainer ref="scrollContainerRef" :auto-scroll="true" @scroll="handleScroll">
-          <div class="flex flex-col items-center px-5 max-w-250 mx-auto pb-35">
+          <div class="flex flex-col items-center px-5 max-w-230 mx-auto pb-35">
             <div class="w-full last:min-h-60" v-for="(pair, index) in messagePairs" :key="pair[0].id">
               <MessageItem v-for="message in pair" :key="message.id" :message="message"
                 :avatar="message.role == 'user' ? userAvater : currentSession?.avatarUrl"
@@ -33,7 +33,7 @@
     <!-- 输入区域 -->
     <div class="px-5 pb-2.5 pt-2 w-full flex flex-col items-center" style="position: absolute; bottom: 0;">
       <!-- 编辑模式提示条 -->
-      <div v-if="editMode" class="w-full max-w-240 mb-[-0.6rem]">
+      <div v-if="editMode" class="w-full max-w-220 mb-[-0.6rem]">
         <div class="edit-mode-banner">
           <span class="edit-mode-icon">📝</span>
           <span class="edit-mode-text">正在编辑消息</span>
@@ -43,7 +43,7 @@
         </div>
       </div>
 
-      <div class="w-full flex items-center max-w-240">
+      <div class="w-full flex items-center max-w-220">
         <ChatInput v-model:value="inputMessage.content" v-model:thinking-enabled="thinkingEnabled" :config="{
           modelId: currentModelId,
           maxMemoryLength: currentSession?.settings?.maxMemoryLength || null,
@@ -54,11 +54,34 @@
       <!-- <div class="ai-disclaimer text-xs text-gray-400 text-center mt-2">内容由 AI 生成，仅供参考</div> -->
 
     </div>
+
+    <!-- 压缩历史配置弹窗 -->
+    <el-dialog v-model="compressDialogVisible" title="压缩历史记录" width="450px">
+      <div class="space-y-4">
+        <p class="text-sm text-gray-600">压缩历史记录可以节省上下文长度并提高响应速度。</p>
+        <div class="flex items-center gap-4">
+          <label class="text-sm font-medium w-28 text-right">压缩比例 (%)</label>
+          <el-input-number v-model="compressionRatio" :min="10" :max="90" :step="5" controls-position="right"
+            style="width: 100%" />
+        </div>
+        <div class="flex items-center gap-4">
+          <label class="text-sm font-medium w-28 text-right">保留最近轮数</label>
+          <el-input-number v-model="minRetainedTurns" :min="1" :max="10" :step="1" controls-position="right"
+            style="width: 100%" />
+        </div>
+      </div>
+      <template #footer>
+        <span class="dialog-footer">
+          <el-button @click="compressDialogVisible = false">取消</el-button>
+          <el-button type="primary" @click="executeCompression">开始压缩</el-button>
+        </span>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, nextTick, onMounted, type Ref } from "vue";
+import { ref, computed, watch, nextTick, onMounted, type Ref, h } from "vue";
 import { apiService } from "../services/ApiService";
 import { usePopup } from "@/composables/usePopup";
 import { useDebounceFn } from "@vueuse/core";
@@ -83,7 +106,7 @@ import WelcomeScreen from './ChatPanel/WelcomeScreen.vue';
 const MAX_REGENERATE_VERSIONS = 5
 
 // 弹出层工具
-const { confirm, editText, toast, notify } = usePopup();
+const { confirm, editText, toast, notify, dialog } = usePopup();
 const authStore = useAuthStore()
 const sessionStore = useSessionStore();
 
@@ -124,6 +147,9 @@ const {
 
 // 响应式数据
 const scrollContainerRef = ref<any>(null);
+const compressionRatio = ref(50);
+const minRetainedTurns = ref(3);
+const compressDialogVisible = ref(false);
 
 // 使用 useMessageOperations composable
 const {
@@ -299,6 +325,9 @@ function handleMoreSelect(key: string) {
     case "import":
       importChat();
       break;
+    case "compress":
+      compressHistory();
+      break;
   }
 }
 
@@ -370,6 +399,34 @@ async function importChat() {
   };
 
   input.click();
+}
+
+async function compressHistory() {
+  if (!currentSession.value) return;
+  compressDialogVisible.value = true;
+}
+
+async function executeCompression() {
+  if (!currentSession.value) return;
+
+  try {
+    compressDialogVisible.value = false;
+    notify.info("正在处理", "正在生成历史摘要，请稍候...");
+    const res = await sessionStore.compressSessionHistory(currentSession.value.id, {
+      compressionRatio: compressionRatio.value,
+      minRetainedTurns: minRetainedTurns.value
+    });
+
+    if (res.success) {
+      toast.success(`成功压缩 ${res.compressedTokens || 0} Tokens`);
+      // 重新加载消息以反映摘要变化
+      loadMessages(currentSession.value.id);
+    } else {
+      toast.warning(res.message || "压缩未执行");
+    }
+  } catch (error: any) {
+    notify.error("压缩失败", error.message);
+  }
 }
 
 /**

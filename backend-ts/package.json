@@ -17,7 +17,8 @@
     "test:coverage": "jest --coverage",
     "db:seed": "ts-node src/scripts/seed.ts",
     "db:seed:force": "ts-node src/scripts/seed.ts --force",
-    "db:verify": "ts-node src/scripts/verify-db.ts"
+    "db:verify": "ts-node src/scripts/verify-db.ts",
+    "test:pdf-extract": "ts-node src/scripts/test-pdf-extract.ts"
   },
   "keywords": [],
   "author": "",
@@ -52,7 +53,7 @@
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.2",
     "sharp": "^0.34.5",
-    "tiktoken": "^1.0.10",
+    "tiktoken": "^1.0.22",
     "uuid": "^13.0.0"
   },
   "devDependencies": {

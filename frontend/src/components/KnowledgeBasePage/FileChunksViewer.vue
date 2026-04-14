@@ -2,7 +2,7 @@
 <template>
     <el-dialog 
         v-model="showModal" 
-        :title="`文件分块内容 - ${selectedFile?.display_name}`" 
+        :title="`文件分块内容 - ${selectedFile?.displayName}`" 
         width="800px" 
         :close-on-click-modal="true"
         @close="handleClose"
@@ -30,7 +30,7 @@
                         #{{ (currentPage - 1) * pageSize + index + 1 }}
                     </span>
                     <span class="chunk-meta text-xs text-gray-400 dark:text-gray-500">
-                        索引: {{ chunk.chunk_index }}, Token数: {{ chunk.token_count }}
+                        索引: {{ chunk.chunkIndex }}, Token数: {{ chunk.tokenCount }}
                     </span>
                 </div>
                 <div class="chunk-content text-sm text-gray-800 dark:text-gray-200 whitespace-pre-wrap font-mono">
@@ -132,7 +132,7 @@ async function loadChunks() {
         
         chunks.value = data
         
-        // 使用文件记录中的total_chunks字段作为总分块数
+        // 使用文件记录中的totalChunks字段作为总分块数
         totalChunks.value = props.selectedFile.totalChunks || 0
     } catch (error: any) {
         console.error('获取文件分块失败:', error)
