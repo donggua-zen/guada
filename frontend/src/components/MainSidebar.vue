@@ -14,7 +14,7 @@
     <div class="flex-1 py-5 px-2 space-y-1">
       <!-- 对话 -->
       <div @click="handleNavClick('chat')"
-        class="flex flex-col items-center justify-center px-2 py-2.5 my-0.5 rounded-xl cursor-pointer transition-all duration-250 ease-[cubic-bezier(0.4,0,0.2,1)] group"
+        class="flex flex-col items-center justify-center px-2 py-2.5 my-0.5 rounded-xl cursor-pointer transition-all duration-250 ease-in-out group"
         :class="activeTab === 'chat' ? 'bg-(--color-conversation-bg-active) text-(--color-conversation-text-active)' : 'text-(--color-text-gray) hover:bg-(--color-conversation-bg-hover) hover:text-(--color-conversation-text-hover)'">
         <div
           class="w-5 h-5 mb-1 flex items-center justify-center transition-transform duration-200 ease-in-out group-hover:scale-110">
@@ -26,7 +26,7 @@
 
       <!-- 助手 -->
       <div @click="handleNavClick('characters')"
-        class="flex flex-col items-center justify-center px-2 py-2.5 my-0.5 rounded-xl cursor-pointer transition-all duration-250 ease-[cubic-bezier(0.4,0,0.2,1)] group"
+        class="flex flex-col items-center justify-center px-2 py-2.5 my-0.5 rounded-xl cursor-pointer transition-all duration-250 ease-in-out group"
         :class="activeTab === 'characters' ? 'bg-(--color-conversation-bg-active) text-(--color-conversation-text-active)' : 'text-(--color-text-gray) hover:bg-(--color-conversation-bg-hover) hover:text-(--color-conversation-text-hover)'">
         <div
           class="w-5 h-5 mb-1 flex items-center justify-center transition-transform duration-200 ease-in-out group-hover:scale-110">
@@ -38,7 +38,7 @@
 
       <!-- 系统设置 -->
       <div @click="handleNavClick('setting')"
-        class="flex flex-col items-center justify-center px-2 py-2.5 my-0.5 rounded-xl cursor-pointer transition-all duration-250 ease-[cubic-bezier(0.4,0,0.2,1)] group"
+        class="flex flex-col items-center justify-center px-2 py-2.5 my-0.5 rounded-xl cursor-pointer transition-all duration-250 ease-in-out group"
         :class="currentActiveTab === 'setting' ? 'bg-(--color-conversation-bg-active) text-(--color-conversation-text-active)' : 'text-(--color-text-gray) hover:bg-(--color-conversation-bg-hover) hover:text-(--color-conversation-text-hover)'">
         <div
           class="w-5 h-5 mb-1 flex items-center justify-center transition-transform duration-200 ease-in-out group-hover:scale-110">
@@ -50,7 +50,7 @@
 
       <!-- 知识库 -->
       <div @click="handleNavClick('knowledge-base')"
-        class="flex flex-col items-center justify-center px-2 py-2.5 my-0.5 rounded-xl cursor-pointer transition-all duration-250 ease-[cubic-bezier(0.4,0,0.2,1)] group"
+        class="flex flex-col items-center justify-center px-2 py-2.5 my-0.5 rounded-xl cursor-pointer transition-all duration-250 ease-in-out group"
         :class="currentActiveTab === 'knowledge-base' ? 'bg-(--color-conversation-bg-active) text-(--color-conversation-text-active)' : 'text-(--color-text-gray) hover:bg-(--color-conversation-bg-hover) hover:text-(--color-conversation-text-hover)'">
         <div
           class="w-5 h-5 mb-1 flex items-center justify-center transition-transform duration-200 ease-in-out group-hover:scale-110">
@@ -65,7 +65,7 @@
     <div class="px-2.5 py-3.5 border-t border-(--color-conversation-border)">
       <!-- 主题切换按钮 -->
       <div @click="toggleDark"
-        class="flex flex-col items-center justify-center px-2 py-2.5 my-0.5 rounded-xl cursor-pointer transition-all duration-250 ease-[cubic-bezier(0.4,0,0.2,1)] text-(--color-text-gray) hover:bg-(--color-conversation-bg-hover) hover:text-(--color-conversation-text-hover) mb-1">
+        class="flex flex-col items-center justify-center px-2 py-2.5 my-0.5 rounded-xl cursor-pointer transition-all duration-250 ease-in-out text-(--color-text-gray) hover:bg-(--color-conversation-bg-hover) hover:text-(--color-conversation-text-hover) mb-1">
         <div
           class="w-5 h-5 mb-1 flex items-center justify-center transition-transform duration-200 ease-in-out hover:scale-110">
           <WbSunnyTwotone v-if="isDark" class="w-5 h-5" />
