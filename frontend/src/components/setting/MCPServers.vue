@@ -37,20 +37,17 @@
                         </div>
                     </div>
                     <div class="flex items-center gap-3">
-                        <el-switch
-                            v-model="server.enabled"
-                            :active-value="true"
-                            :inactive-value="false"
-                            @change="handleToggleServer(server)"
-                            active-text="启用"
-                            inactive-text="禁用"
-                            size="default"
-                        />
+                        <el-switch v-model="server.enabled" :active-value="true" :inactive-value="false"
+                            @change="handleToggleServer(server)" active-text="启用" inactive-text="禁用" size="default" />
                         <el-button link style="font-size: 20px" @click="handleEditServer(server)">
-                            <el-icon><SettingsOutlined /></el-icon>
+                            <el-icon>
+                                <SettingsOutlined />
+                            </el-icon>
                         </el-button>
                         <el-button type="danger" link style="font-size: 20px" @click="handleDeleteServer(server)">
-                            <el-icon><RemoveCircleOutlineRound /></el-icon>
+                            <el-icon>
+                                <RemoveCircleOutlineRound />
+                            </el-icon>
                         </el-button>
                     </div>
                 </li>
@@ -65,13 +62,13 @@
         </div>
 
         <!-- 添加/编辑服务器对话框 -->
-        <el-dialog v-model="showModal" :title="isEditMode ? '编辑 MCP 服务器' : '添加 MCP 服务器'" width="40%"
-            align-center destroy-on-close>
+        <el-dialog v-model="showModal" :title="isEditMode ? '编辑 MCP 服务器' : '添加 MCP 服务器'" width="40%" align-center
+            destroy-on-close>
             <!-- Tab 切换 -->
             <el-tabs v-model="activeTab" class="mb-4">
                 <el-tab-pane label="基本配置" name="config">
-                    <el-form ref="formRef" :model="serverForm" :rules="formRules" label-position="left" label-width="100px"
-                        size="large">
+                    <el-form ref="formRef" :model="serverForm" :rules="formRules" label-position="left"
+                        label-width="100px" size="large">
                         <el-form-item label="服务器名称" prop="name">
                             <el-input v-model="serverForm.name" placeholder="请输入服务器名称" />
                         </el-form-item>
@@ -86,12 +83,8 @@
                         </el-form-item>
 
                         <el-form-item label="HTTP 请求头" prop="headers">
-                            <el-input 
-                                v-model="serverForm.headers" 
-                                type="textarea" 
-                                :rows="5"
-                                placeholder="请输入自定义 HTTP 请求头，一行一个，格式：Header-Name: value&#10;例如:&#10;Authorization: Bearer your_token&#10;X-API-Key: your_api_key" 
-                            />
+                            <el-input v-model="serverForm.headers" type="textarea" :rows="5"
+                                placeholder="请输入自定义 HTTP 请求头，一行一个，格式：Header-Name: value&#10;例如:&#10;Authorization: Bearer your_token&#10;X-API-Key: your_api_key" />
                             <div class="text-xs text-gray-400 mt-1">
                                 每行一个请求头，格式为 "Header-Name: value"
                             </div>
@@ -102,7 +95,7 @@
                         </el-form-item>
                     </el-form>
                 </el-tab-pane>
-                
+
                 <el-tab-pane label="工具列表" name="tools">
                     <div v-if="!isEditMode" class="py-12 text-center">
                         <el-icon size="48" class="mb-3 opacity-50 text-gray-400">
@@ -111,7 +104,7 @@
                         <div class="text-gray-500">新增后才能查看工具</div>
                         <div class="text-sm text-gray-400 mt-2">请先填写基本信息并保存</div>
                     </div>
-                    
+
                     <div v-else class="tools-panel">
                         <div class="flex items-center justify-between mb-3">
                             <div class="text-sm text-gray-600 dark:text-gray-400">
@@ -124,10 +117,10 @@
                                 刷新工具
                             </el-button>
                         </div>
-                        
+
                         <div v-if="toolsList.length > 0" class="tools-list">
-                            <div v-for="(tool, index) in toolsList" :key="index" 
-                                 class="tool-item p-3 mb-2 rounded border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50">
+                            <div v-for="(tool, index) in toolsList" :key="index"
+                                class="tool-item p-3 mb-2 rounded border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50">
                                 <div class="font-semibold text-sm mb-2">{{ tool.name }}</div>
                                 <div class="text-xs text-gray-500 dark:text-gray-400 mb-2 line-clamp-2">
                                     {{ tool.description || '暂无描述' }}
@@ -135,30 +128,32 @@
                                 <div v-if="tool.inputSchema" class="text-xs">
                                     <div class="text-gray-400 mb-1">参数：</div>
                                     <div class="text-gray-600 dark:text-gray-300">
-                                        <span v-if="!tool.inputSchema.properties || Object.keys(tool.inputSchema.properties).length === 0" 
-                                              class="text-gray-400">
+                                        <span
+                                            v-if="!tool.inputSchema.properties || Object.keys(tool.inputSchema.properties).length === 0"
+                                            class="text-gray-400">
                                             无参数
                                         </span>
                                         <div v-else class="space-y-1">
-                                            <div v-for="(paramInfo, paramName) in tool.inputSchema.properties" 
-                                                 :key="paramName"
-                                                 class="flex items-start gap-2">
-                                                <span class="font-mono text-blue-600 dark:text-blue-400">{{ paramName }}</span>
+                                            <div v-for="(paramInfo, paramName) in tool.inputSchema.properties"
+                                                :key="paramName" class="flex items-start gap-2">
+                                                <span class="font-mono text-blue-600 dark:text-blue-400">{{ paramName
+                                                    }}</span>
                                                 <span class="text-gray-400">:</span>
                                                 <span class="text-gray-600 dark:text-gray-300 flex-1">
                                                     {{ paramInfo.description || paramInfo.type || '' }}
                                                 </span>
-                                                <el-tag v-if="tool.inputSchema.required && tool.inputSchema.required.includes(paramName)" 
-                                                        type="danger" size="small">必填</el-tag>
-                                                <el-tag v-else-if="paramInfo.default !== undefined" 
-                                                        type="info" size="small">默认：{{ paramInfo.default }}</el-tag>
+                                                <el-tag
+                                                    v-if="tool.inputSchema.required && tool.inputSchema.required.includes(paramName)"
+                                                    type="danger" size="small">必填</el-tag>
+                                                <el-tag v-else-if="paramInfo.default !== undefined" type="info"
+                                                    size="small">默认：{{ paramInfo.default }}</el-tag>
                                             </div>
                                         </div>
                                     </div>
                                 </div>
                             </div>
                         </div>
-                        
+
                         <div v-else class="py-8 text-center text-gray-400">
                             <el-icon size="36" class="mb-2 opacity-50">
                                 <InboxOutlined />
@@ -186,15 +181,12 @@
                 </div>
                 <ul class="text-xs text-gray-500 dark:text-gray-500 list-disc list-inside space-y-1">
                     <li>标准格式：<code class="bg-gray-100 dark:bg-gray-800 px-1 rounded">{"mcpServers": {...}}</code></li>
-                    <li>单个服务器对象格式：<code class="bg-gray-100 dark:bg-gray-800 px-1 rounded">{"name": "...", "baseUrl": "..."}</code></li>
+                    <li>单个服务器对象格式：<code class="bg-gray-100 dark:bg-gray-800 px-1 rounded">{"name": "...", "baseUrl":
+                    "..."}</code></li>
                 </ul>
             </div>
-            
-            <el-input
-                v-model="importJsonText"
-                type="textarea"
-                :rows="15"
-                placeholder='请粘贴 JSON 配置，例如：
+
+            <el-input v-model="importJsonText" type="textarea" :rows="15" placeholder='请粘贴 JSON 配置，例如：
 {
   "mcpServers": {
     "WebSearch": {
@@ -208,9 +200,8 @@
       }
     }
   }
-}'
-            />
-            
+}' />
+
             <template #footer>
                 <span class="dialog-footer">
                     <el-button @click="showImportModal = false">取消</el-button>
@@ -292,7 +283,7 @@ const loadServers = async () => {
         const response = await apiService.fetchMcpServers()
         // 后端返回的数据格式：{ items: [...], total: null, page: null, size: N }
         console.log('MCP 服务器响应:', response)
-        
+
         if (response && Array.isArray(response.items)) {
             servers.value = response.items
         } else {
@@ -310,7 +301,7 @@ const handleAddServer = () => {
     isEditMode.value = false
     activeTab.value = 'config' // 默认显示配置页
     toolsList.value = [] // 清空工具列表
-    
+
     serverForm.value = {
         id: null,
         name: '',
@@ -320,7 +311,7 @@ const handleAddServer = () => {
         enabled: true
     }
     showModal.value = true
-    
+
     // 重置表单验证
     setTimeout(() => {
         formRef.value?.clearValidate()
@@ -331,22 +322,22 @@ const handleAddServer = () => {
 const handleEditServer = (server) => {
     isEditMode.value = true
     activeTab.value = 'config' // 默认显示配置页
-    
+
     // 将 headers 对象转换为多行文本
     const headersText = server.headers ? Object.entries(server.headers)
         .map(([key, value]) => `${key}: ${value}`)
         .join('\n') : ''
-    
+
     serverForm.value = {
         ...server,
         headers: headersText
     }
-    
+
     // 加载工具列表
     loadTools(server.id)
-    
+
     showModal.value = true
-    
+
     // 重置表单验证
     setTimeout(() => {
         formRef.value?.clearValidate()
@@ -357,15 +348,15 @@ const handleEditServer = (server) => {
 const handleDeleteServer = async (server) => {
     try {
         const confirmed = await confirm('删除服务器', `确定要删除服务器 "${server.name}" 吗？`)
-        
+
         // 如果用户取消，则不执行删除
         if (!confirmed) {
             return
         }
-        
+
         // 调用实际 API
         await apiService.deleteMcpServer(server.id)
-        
+
         // 从列表中移除
         servers.value = servers.value.filter(s => s.id !== server.id)
         toast.success('删除成功')
@@ -382,10 +373,10 @@ const handleSaveServer = async () => {
     try {
         await formRef.value.validate()
         saving.value = true
-        
+
         // 解析 HTTP 请求头文本为对象
         const headersObj = parseHeaders(serverForm.value.headers)
-        
+
         // 准备提交的数据
         const submitData = {
             name: serverForm.value.name,
@@ -394,11 +385,11 @@ const handleSaveServer = async () => {
             headers: headersObj,
             enabled: serverForm.value.enabled
         }
-        
+
         if (isEditMode.value) {
             // 更新现有服务器
             const response = await apiService.updateMcpServer(serverForm.value.id, submitData)
-            
+
             // 更新列表中的数据
             const index = servers.value.findIndex(s => s.id === serverForm.value.id)
             if (index !== -1) {
@@ -411,7 +402,7 @@ const handleSaveServer = async () => {
             servers.value.unshift(response || response.data)
             toast.success('添加成功')
         }
-        
+
         showModal.value = false
     } catch (error) {
         if (error !== 'cancelled') {
@@ -428,25 +419,25 @@ const parseHeaders = (text) => {
     if (!text || typeof text !== 'string') {
         return {}
     }
-    
+
     const headers = {}
     const lines = text.split('\n')
-    
+
     for (const line of lines) {
         const trimmedLine = line.trim()
         if (!trimmedLine) continue
-        
+
         const colonIndex = trimmedLine.indexOf(':')
         if (colonIndex === -1) continue
-        
+
         const key = trimmedLine.substring(0, colonIndex).trim()
         const value = trimmedLine.substring(colonIndex + 1).trim()
-        
+
         if (key && value) {
             headers[key] = value
         }
     }
-    
+
     return headers
 }
 
@@ -459,7 +450,7 @@ const loadTools = async (serverId) => {
         toolsList.value = []
         return
     }
-    
+
     try {
         const response = await apiService.fetchMcpServerById(serverId)
         if (response && response.tools) {
@@ -487,16 +478,16 @@ const handleImport = () => {
 const handleImportJson = async () => {
     try {
         importing.value = true
-        
+
         // 解析 JSON
         const jsonData = JSON.parse(importJsonText.value)
-        
+
         if (!jsonData || typeof jsonData !== 'object') {
             throw new Error('无效的 JSON 格式')
         }
-        
+
         let serversToImport = []
-        
+
         // 判断是标准格式还是单个服务器对象
         if (jsonData.mcpServers && typeof jsonData.mcpServers === 'object') {
             // 标准格式：{ "mcpServers": { "ServerName": {...}, ... } }
@@ -510,17 +501,17 @@ const handleImportJson = async () => {
         } else {
             throw new Error('无法识别的 JSON 格式，请确保包含 mcpServers 字段或有效的服务器对象')
         }
-        
+
         if (serversToImport.length === 0) {
             toast.warning('未找到可导入的服务器配置')
             return
         }
-        
+
         // 批量导入服务器
         let successCount = 0
         let failCount = 0
         const errors = []
-        
+
         for (const serverData of serversToImport) {
             try {
                 // 转换数据格式
@@ -531,12 +522,12 @@ const handleImportJson = async () => {
                     headers: serverData.headers || {},
                     enabled: serverData.isActive !== undefined ? serverData.isActive : true
                 }
-                
+
                 // 验证必填字段
                 if (!submitData.name || !submitData.url) {
                     throw new Error(`缺少必填字段：name 或 url`)
                 }
-                
+
                 // 调用 API 创建
                 await apiService.createMcpServer(submitData)
                 successCount++
@@ -545,7 +536,7 @@ const handleImportJson = async () => {
                 errors.push(`"${serverData.name || serverData.key}": ${error.message}`)
             }
         }
-        
+
         // 显示导入结果
         if (successCount > 0) {
             toast.success(`成功导入 ${successCount} 个服务器`)
@@ -553,11 +544,11 @@ const handleImportJson = async () => {
             await loadServers()
             showImportModal.value = false
         }
-        
+
         if (failCount > 0) {
             toast.error(`导入失败：${failCount} 个\n${errors.join('\n')}`)
         }
-        
+
     } catch (error) {
         console.error('导入失败:', error)
         if (error instanceof SyntaxError) {
@@ -576,22 +567,22 @@ const handleRefreshTools = async () => {
         toast.warning('请先保存服务器')
         return
     }
-    
+
     try {
         refreshingTools.value = true
-        
+
         // 调用刷新工具的 API
         const response = await apiService.refreshMcpTools(serverForm.value.id)
-        
+
         if (response && response.tools) {
             // 更新工具列表
             toolsList.value = Object.entries(response.tools).map(([name, tool]) => ({
                 name,
                 ...tool
             }))
-            
+
             toast.success(`成功刷新 ${toolsList.value.length} 个工具`)
-            
+
             // 同时更新当前编辑的服务器数据
             const serverIndex = servers.value.findIndex(s => s.id === serverForm.value.id)
             if (serverIndex !== -1) {
@@ -612,19 +603,19 @@ const handleRefreshTools = async () => {
 const handleToggleServer = async (server) => {
     try {
         const response = await apiService.toggleMcpServer(server.id, server.enabled)
-        
+
         // 更新列表中的状态
         const index = servers.value.findIndex(s => s.id === server.id)
         if (index !== -1) {
             const responseData = response || response.data
             servers.value[index].enabled = responseData.enabled
         }
-        
+
         toast.success(server.enabled ? '已启用' : '已禁用')
     } catch (error) {
         console.error('切换状态失败:', error)
         toast.error(error.message || '切换失败')
-        
+
         // 恢复原来的状态
         server.enabled = !server.enabled
     }
@@ -665,6 +656,7 @@ onMounted(() => {
 .line-clamp-2 {
     display: -webkit-box;
     -webkit-line-clamp: 2;
+    line-clamp: 2;
     -webkit-box-orient: vertical;
     overflow: hidden;
 }
