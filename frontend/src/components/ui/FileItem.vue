@@ -2,6 +2,18 @@
     <!-- @ts-ignore - fileIcon 类型推断问题 -->
     <div class="file-item flex items-center relative" :class="{ 'cursor-pointer': clickable }"
         @mouseenter="close_button_visible = true" @click="handleClick" @mouseleave="close_button_visible = false">
+        <!-- 上传进度遮罩层 -->
+        <div v-if="showProgressOverlay"
+            class="upload-progress-overlay absolute inset-0 bg-black/60 rounded-lg flex items-center justify-center z-10">
+            <div class="text-white text-center">
+                <div class="text-sm font-medium mb-1">{{ progressText }}</div>
+                <div class="w-24 h-1.5 bg-white/30 rounded-full overflow-hidden">
+                    <div class="h-full bg-white transition-all duration-300 ease-out"
+                        :style="{ width: progressPercentage + '%' }"></div>
+                </div>
+            </div>
+        </div>
+
         <template v-if="type === 'image'">
             <div class="image-preview w-15 h-15 rounded-lg overflow-hidden">
                 <img :src="previewUrl" class="w-full h-full object-cover"></img>
@@ -20,7 +32,7 @@
                 </div>
             </div>
         </template>
-        <div v-if="closable"
+        <div v-if="closable && !isUploading"
             class="file-remove absolute -top-1 -right-1 w-4 h-4 rounded-full bg-red-500 text-white flex items-center justify-center cursor-pointer transition-all duration-200 hover:bg-red-600 hover:scale-110"
             v-show="close_button_visible" @click="removeFile">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
@@ -54,6 +66,8 @@ const props = defineProps<{
     previewUrl?: string;
     closable?: boolean;
     clickable?: boolean;
+    uploadProgress?: number; // 上传进度 0-100
+    uploadStatus?: 'queued' | 'uploading' | 'uploaded' | 'failed'; // 上传状态
 }>()
 
 // Emits 类型化
@@ -62,6 +76,29 @@ const emit = defineEmits<{
     click: []
 }>()
 const close_button_visible = ref(false)
+
+// 计算属性：是否正在上传
+const isUploading = computed(() => {
+    return props.uploadStatus === 'uploading' || props.uploadStatus === 'queued'
+})
+
+// 计算属性：是否显示进度遮罩
+const showProgressOverlay = computed(() => {
+    return isUploading.value && props.uploadProgress !== undefined
+})
+
+// 计算属性：进度百分比
+const progressPercentage = computed(() => {
+    return props.uploadProgress ?? 0
+})
+
+// 计算属性：进度文本
+const progressText = computed(() => {
+    if (props.uploadStatus === 'queued') {
+        return '等待上传...'
+    }
+    return `上传中 ${progressPercentage.value}%`
+})
 
 // 文件类型到图标的映射
 const fileIconMap = {
@@ -141,3 +178,20 @@ const handleClick = (): void => {
     emit('click')
 }
 </script>
+
+<style scoped>
+.upload-progress-overlay {
+    backdrop-filter: blur(2px);
+    animation: fadeIn 0.2s ease-in;
+}
+
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+    }
+
+    to {
+        opacity: 1;
+    }
+}
+</style>

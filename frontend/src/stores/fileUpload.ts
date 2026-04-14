@@ -357,6 +357,153 @@ export const useFileUploadStore = defineStore('fileUpload', () => {
     }
 
     /**
+     * 上传文件到会话(用于聊天消息中的文件,支持进度反馈)
+     */
+    async function uploadToSession(
+        sessionId: string,
+        file: File,
+        onProgressUpdate?: (status: UploadTask) => void
+    ) {
+        try {
+            // 从文件名提取扩展名
+            const fileName = file.name
+            const fileExtension = fileName.includes('.') ? fileName.split('.').pop()! : ''
+
+            // 创建初始任务(queued 状态)
+            const task = addUploadTask({
+                id: Date.now().toString() + Math.random().toString(36).substr(2, 9),
+                fileId: 'pending',
+                fileName: fileName,
+                fileSize: file.size,
+                fileType: file.type || 'unknown',
+                fileExtension: fileExtension,
+                uploadedAt: new Date().toISOString(),
+                processedAt: null,
+                knowledgeBaseId: sessionId, // 这里复用字段存储 sessionId
+                rawFile: file // 保存原始文件用于后续上传
+            })
+
+            console.log(`[DEBUG] 添加会话文件上传任务: ${fileName}`)
+
+            // 立即执行上传(会话文件不需要队列控制,直接上传)
+            await executeSessionUpload(task, file, onProgressUpdate)
+
+            return task
+        } catch (error) {
+            console.error('添加会话文件上传任务失败:', error)
+            throw error
+        }
+    }
+
+    /**
+     * 执行会话文件上传(带进度反馈)
+     */
+    async function executeSessionUpload(
+        task: UploadTask,
+        file: File,
+        onProgressUpdate?: (status: UploadTask) => void
+    ) {
+        try {
+            // 更新状态为上传中
+            updateUploadStatus(task.id, {
+                status: 'uploading',
+                progress: 0,
+                currentStep: '准备上传...'
+            })
+            onProgressUpdate?.(task)
+
+            // 使用 axios 直接调用以获取上传进度
+            const { default: axios } = await import('axios')
+            const formData = new FormData()
+            formData.append('file', file, file.name)
+
+            // 从 auth store 获取 token
+            const { useAuthStore } = await import('@/stores/auth')
+            const authStore = useAuthStore()
+            const token = authStore.token
+
+            const response = await axios.post(
+                `/api/v1/sessions/${task.knowledgeBaseId}/files`,
+                formData,
+                {
+                    headers: {
+                        'Content-Type': 'multipart/form-data',
+                        'Authorization': `Bearer ${token}`
+                    },
+                    onUploadProgress: (progressEvent) => {
+                        if (!progressEvent.total) return
+
+                        const percentCompleted = Math.round(
+                            (progressEvent.loaded * 100) / progressEvent.total
+                        )
+
+                        // 更新上传进度
+                        updateUploadStatus(task.id, {
+                            status: 'uploading',
+                            progress: percentCompleted,
+                            currentStep: `上传中... ${percentCompleted}%`
+                        })
+                        onProgressUpdate?.(task)
+                    }
+                }
+            )
+
+            // 上传成功,更新为真实 ID 和状态
+            const taskToUpdate = uploadTasks.value.get(task.id)
+            if (taskToUpdate) {
+                taskToUpdate.fileId = response.data.id
+                taskToUpdate.status = 'uploaded'
+                taskToUpdate.progress = 100
+                taskToUpdate.currentStep = '上传完成'
+                taskToUpdate.processedAt = new Date().toISOString()
+                onProgressUpdate?.(taskToUpdate)
+
+                // 延迟清除任务(让用户看到完成状态)
+                setTimeout(() => {
+                    clearUploadTask(task.id)
+                }, 2000)
+            }
+
+            return response.data
+        } catch (error) {
+            console.error('会话文件上传失败:', error)
+            updateUploadStatus(task.id, {
+                status: 'failed',
+                errorMessage: (error as any).response?.data?.detail || '上传失败'
+            })
+            onProgressUpdate?.(task)
+            throw error
+        }
+    }
+
+    /**
+     * 批量上传文件到会话
+     */
+    async function uploadMultipleFilesToSession(
+        sessionId: string,
+        files: File[],
+        onProgressUpdate?: (fileId: string, status: UploadTask) => void
+    ) {
+        const tasks: UploadTask[] = []
+
+        for (const file of files) {
+            try {
+                const task = await uploadToSession(
+                    sessionId,
+                    file,
+                    (status) => onProgressUpdate?.(task.fileId, status)
+                )
+                tasks.push(task)
+            } catch (error) {
+                console.error(`上传文件 ${file.name} 失败:`, error)
+                // 继续上传其他文件
+            }
+        }
+
+        return tasks
+    }
+
+    /**
      * 将上传任务转换为统一文件记录
      */
     function taskToFileRecord(task: UploadTask): UnifiedFileRecord {
@@ -440,6 +587,8 @@ export const useFileUploadStore = defineStore('fileUpload', () => {
         clearCompletedTasks,
         uploadToKnowledgeBase,
         uploadMultipleFiles,
+        uploadToSession,
+        uploadMultipleFilesToSession,
         getUploadStats,
         taskToFileRecord,
         mergeFilesWithTasks
