@@ -5,6 +5,7 @@ import { FileService } from "./file.service";
 import { FileRepository } from "../../common/database/file.repository";
 import { PrismaService } from "../../common/database/prisma.service";
 import { AuthModule } from "../auth/auth.module";
+import { FileParserService } from "../knowledge-base/file-parser.service";
 import * as multer from "multer";
 
 @Module({
@@ -26,6 +27,6 @@ import * as multer from "multer";
     }),
   ],
   controllers: [FilesController],
-  providers: [FileService, FileRepository, PrismaService],
+  providers: [FileService, FileRepository, PrismaService, FileParserService],
 })
-export class FilesModule {}
+export class FilesModule { }
