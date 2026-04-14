@@ -3,7 +3,7 @@
         <div class="w-full max-w-md bg-white rounded-2xl shadow-xl overflow-hidden">
             <!-- 顶部装饰 -->
             <div class="h-2 bg-gradient-to-r from-(--color-primary) to-(--color-primary-600)"></div>
-            
+
             <!-- 登录表单区域 -->
             <div class="p-8">
                 <div class="text-center mb-8">
