@@ -43,6 +43,12 @@
                                 <span>导入记录</span>
                             </span>
                         </el-dropdown-item>
+                        <el-dropdown-item command="compress">
+                            <span class="flex items-center gap-2">
+                                <CompressIcon class="w-4 h-4" />
+                                <span>压缩历史</span>
+                            </span>
+                        </el-dropdown-item>
                     </el-dropdown-menu>
                 </template>
             </el-dropdown>
@@ -58,6 +64,7 @@ import {
     FileDownloadOutlined,
     FileUploadOutlined
 } from "@vicons/material";
+import CompressIcon from './icons/CompressIcon.vue';
 
 // Element Plus 组件导入
 import {

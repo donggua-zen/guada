@@ -1,6 +1,6 @@
 <template>
     <div class="avatar-upload-container flex flex-col items-center justify-center">
-        <div class="avatar-preview w-25 h-25 cursor-pointer" @click="triggerAvatarUpload">
+        <div class="avatar-preview w-20 h-20 cursor-pointer" @click="triggerAvatarUpload">
             <Avatar :src="previewUrl" :type="type" :name="name"></Avatar>
         </div>
         <div class="avatar-upload-actions mt-3">
@@ -91,7 +91,7 @@ const cropAvatar = (): void => {
 
     canvas.toBlob((blob: Blob | null) => {
         if (!blob) return
-        
+
         // 创建新文件对象 - 使用非空断言
         const croppedFile = new File([blob], cropFile.value!.name, {
             type: cropFile.value!.type,

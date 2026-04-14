@@ -65,9 +65,15 @@ export class AgentService {
       const toolContext = {
         inject_params: { session_id: sessionId, user_id: session.userId },
         provider_configs: {
-          mcp: { enabled_tools: true },
-          time: { enabled_tools: true },
-          memory: { enabled_tools: true },
+          mcp: {
+            enabled_tools: mergedSettings.mcpServers ?? true  // 支持 boolean 或 array，默认启用所有
+          },
+          time: {
+            enabled_tools: mergedSettings.tools?.includes('get_current_time') ?? true  // 默认启用时间工具
+          },
+          memory: {
+            enabled_tools: mergedSettings.tools?.includes('memory') ?? false  // 默认禁用记忆工具
+          },
           knowledge_base: {
             enabled_tools: historyMessages[historyMessages.length - 1]?.metadata
               ?.referencedKbs
@@ -85,12 +91,23 @@ export class AgentService {
         mergedSettings,
         toolContext,
       );
-      const finalSystemPrompt = this.replaceVariables(
+      let finalSystemPrompt = this.replaceVariables(
         systemPrompt || "You are a helpful assistant.",
       );
+
+      // 过滤出历史消息中的 system 内容并合并，避免多条 system 消息
+      const nonSystemMessages: MessageRecord[] = [];
+      historyMessages.forEach((msg) => {
+        if (msg.role === "system") {
+          finalSystemPrompt += `\n\n${msg.content}`;
+        } else {
+          nonSystemMessages.push(msg);
+        }
+      });
+
       const messages = [
         { role: "system", content: finalSystemPrompt } as MessageRecord,
-        ...historyMessages,
+        ...nonSystemMessages,
       ];
       const tools = await this.toolOrchestrator.getAllTools(toolContext);
 

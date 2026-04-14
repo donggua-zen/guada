@@ -57,6 +57,7 @@ export interface ToolParameterProperty {
   required?: string[];
   items?: ToolParameterProperty;
   default?: any;
+  maxLength?: number; // 字符串最大长度限制
 }
 
 /**

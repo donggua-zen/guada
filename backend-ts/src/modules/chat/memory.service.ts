@@ -1,7 +1,9 @@
 import { Injectable, Logger } from "@nestjs/common";
 import * as fs from "fs";
 import * as path from "path";
+import { get_encoding } from "tiktoken";
 import { MessageRepository } from "../../common/database/message.repository";
+import { SessionSummaryRepository } from "../../common/database/session-summary.repository";
 import { UploadPathService } from "../../common/services/upload-path.service";
 import { MessageRecord, MessagePart } from "./types/llm.types";
 
@@ -11,8 +13,9 @@ export class MemoryManagerService {
 
   constructor(
     private messageRepo: MessageRepository,
+    private summaryRepo: SessionSummaryRepository,
     private uploadPathService: UploadPathService,
-  ) {}
+  ) { }
 
   /**
    * 获取对话历史消息
@@ -27,15 +30,26 @@ export class MemoryManagerService {
     maxMessages: number = 200,
     skipToolCalls: boolean = false,
   ): Promise<MessageRecord[]> {
-    // 1. 数据库层直接获取最近的 N 条消息（多取一些以补偿过滤损失）
+    // 1. 检查是否存在摘要记录
+    const latestSummary = await this.summaryRepo.findLatestBySessionId(sessionId);
+    let startAfterMessageId: string | undefined;
+    const summaryRecord: MessageRecord | null = latestSummary
+      ? { role: "system", content: `[历史对话摘要]\n${latestSummary.summaryContent}` }
+      : null;
+
+    if (latestSummary?.lastCompressedMessageId) {
+      startAfterMessageId = latestSummary.lastCompressedMessageId;
+    }
+
+    // 2. 数据库层直接获取最近的 N 条消息（多取一些以补偿过滤损失）
     const messages = await this.messageRepo.findRecentBySessionId(
       sessionId,
       maxMessages,
-      userMessageId,
+      userMessageId || startAfterMessageId,
       { withFiles: true, withContents: true, onlyCurrentContent: true },
     );
 
-    // 2. 内存中处理复杂的结构转换和过滤
+    // 3. 内存中处理复杂的结构转换和过滤
     const context: MessageRecord[] = [];
     let isFirstUserMessage = true;
 
@@ -53,7 +67,86 @@ export class MemoryManagerService {
       }
     }
 
+    // 4. 如果存在摘要，将其插入到上下文的最前端
+    if (summaryRecord) {
+      context.unshift(summaryRecord);
+    }
+
     return context;
+  }
+
+  /**
+   * 获取用于压缩的消息片段
+   * @param sessionId 会话 ID
+   * @param lastCompressedMessageId 上次压缩的最后一条消息 ID（可选）
+   * @param maxMessages 限制最大消息数量以防内存溢出
+   */
+  async getMessagesForCompression(
+    sessionId: string,
+    lastCompressedMessageId?: string,
+    maxMessages: number = 500,
+  ): Promise<{ messages: MessageRecord[]; lastMessageId: string | null }> {
+    // 1. 使用 Repository 方法获取消息（复用现有逻辑）
+    // 注意：findRecentBySessionId 默认是倒序返回，我们需要在后续处理中反转
+    const rawMessages = await this.messageRepo.findRecentBySessionId(
+      sessionId,
+      maxMessages,
+      lastCompressedMessageId, // 利用其 beforeMessageId 参数实现增量获取
+      { withFiles: true, withContents: true, onlyCurrentContent: true },
+    );
+
+    if (rawMessages.length === 0) {
+      return { messages: [], lastMessageId: null };
+    }
+
+    // 2. 转换格式并确定最后一条消息 ID
+    const formattedMessages: MessageRecord[] = [];
+    let lastId: string | null = null;
+
+    // 数据库返回的是倒序，先反转回正序以便正确处理上下文顺序
+    for (const msg of rawMessages.reverse()) {
+      if (msg.role === 'system') continue; // 压缩时通常不需要系统提示
+
+      const transformed = this.transformContentStructure(msg, false, false);
+      if (transformed.length > 0) {
+        formattedMessages.push(...transformed);
+        lastId = msg.id;
+      }
+    }
+
+    return { messages: formattedMessages, lastMessageId: lastId };
+  }
+
+  /**
+   * 计算消息列表的 Token 总数
+   */
+  countTokens(messages: MessageRecord[]): number {
+    try {
+      const encoder = get_encoding("cl100k_base"); // GPT-3.5/4 通用编码
+      let totalTokens = 0;
+
+      messages.forEach((msg) => {
+        // 角色占用约 4 tokens
+        totalTokens += 4;
+
+        if (typeof msg.content === 'string') {
+          totalTokens += encoder.encode(msg.content).length;
+        } else if (Array.isArray(msg.content)) {
+          msg.content.forEach((part) => {
+            if (part.type === 'text' && part.text) {
+              totalTokens += encoder.encode(part.text).length;
+            }
+            // 图片等二进制内容暂按固定值估算或忽略，因为压缩主要针对文本摘要
+          });
+        }
+      });
+
+      encoder.free();
+      return totalTokens;
+    } catch (error) {
+      this.logger.error("Token counting failed", error);
+      return 0;
+    }
   }
 
   /**

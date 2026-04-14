@@ -7,22 +7,23 @@ datasource db {
 }
 
 model Session {
-  id           String     @id @default(cuid())
-  title        String?
-  userId       String     @map("user_id")
-  avatarUrl    String?    @map("avatar_url")
-  description  String?
-  modelId      String?    @map("model_id")
-  characterId  String?    @map("character_id")
-  settings     Json?
-  createdAt    DateTime   @default(now()) @map("created_at")
-  updatedAt    DateTime   @updatedAt @map("updated_at")
-  lastActiveAt DateTime?  @map("last_active_at")
-  memories     Memory[]
-  messages     Message[]
-  character    Character? @relation(fields: [characterId], references: [id])
-  user         User       @relation(fields: [userId], references: [id])
-  model        Model?     @relation(fields: [modelId], references: [id])
+  id               String           @id @default(cuid())
+  title            String?
+  userId           String           @map("user_id")
+  avatarUrl        String?          @map("avatar_url")
+  description      String?
+  modelId          String?          @map("model_id")
+  characterId      String?          @map("character_id")
+  settings         Json?
+  createdAt        DateTime         @default(now()) @map("created_at")
+  updatedAt        DateTime         @updatedAt @map("updated_at")
+  lastActiveAt     DateTime?        @map("last_active_at")
+  memories         Memory[]
+  messages         Message[]
+  character        Character?       @relation(fields: [characterId], references: [id])
+  user             User             @relation(fields: [userId], references: [id])
+  model            Model?           @relation(fields: [modelId], references: [id])
+  sessionSummaries SessionSummary[]
 
   @@map("session")
 }
@@ -296,6 +297,19 @@ model McpServer {
   user        User     @relation(fields: [userId], references: [id])
 
   @@map("mcp_server")
+}
+
+model SessionSummary {
+  id                      String   @id @default(cuid())
+  sessionId               String   @map("session_id")
+  summaryContent          String   @map("summary_content")
+  lastCompressedMessageId String?  @map("last_compressed_message_id")
+  createdAt               DateTime @default(now()) @map("created_at")
+  updatedAt               DateTime @updatedAt @map("updated_at")
+  session                 Session  @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@index([sessionId])
+  @@map("session_summary")
 }
 
 model UserSetting {
