@@ -27,6 +27,7 @@ declare module 'vue' {
     ChatPage: typeof import('./src/components/ChatPage.vue')['default']
     ChatPanel: typeof import('./src/components/ChatPanel.vue')['default']
     ChatSidebar: typeof import('./src/components/ChatSidebar.vue')['default']
+    CompressIcon: typeof import('./src/components/icons/CompressIcon.vue')['default']
     CreateSessionChatPanel: typeof import('./src/components/CreateSessionChatPanel.vue')['default']
     DefaultModelSettings: typeof import('./src/components/setting/DefaultModelSettings.vue')['default']
     ElAlert: typeof import('element-plus/es')['ElAlert']

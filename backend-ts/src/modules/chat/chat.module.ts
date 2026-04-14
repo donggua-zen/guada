@@ -3,6 +3,7 @@ import { PrismaService } from "../../common/database/prisma.service";
 import { SessionRepository } from "../../common/database/session.repository";
 import { MessageRepository } from "../../common/database/message.repository";
 import { MessageContentRepository } from "../../common/database/message-content.repository";
+import { SessionSummaryRepository } from "../../common/database/session-summary.repository";
 import { CharacterRepository } from "../../common/database/character.repository";
 import { KnowledgeBaseRepository } from "../../common/database/knowledge-base.repository";
 import { ModelRepository } from "../../common/database/model.repository";
@@ -36,6 +37,7 @@ import { SessionLockService } from "./session-lock.service";
     MessageService,
     SessionService,
     SessionRepository,
+    SessionSummaryRepository,
     MessageRepository,
     MessageContentRepository,
     CharacterRepository,
