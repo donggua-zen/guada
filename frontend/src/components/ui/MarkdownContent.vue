@@ -7,7 +7,7 @@
 <script setup lang="ts">
 import { watch, ref, onMounted, onBeforeUnmount, nextTick, type Ref } from 'vue';
 import { useDebounceFn } from '@vueuse/core';
-import { useMarkdown } from "../composables/useMarkdown";
+import { useMarkdown } from "../../composables/useMarkdown";
 import { DiffDOM } from 'diff-dom';
 
 const { marked } = useMarkdown()
@@ -15,20 +15,20 @@ const emit = defineEmits<{
     'render-complete': []
 }>();
 
-// 🔹 定义 Props - 类型化
+// 定义 Props - 类型化
 const props = defineProps<{
     content: string;
     debounced?: boolean;
 }>();
 
 // ============================================
-// 🔹 DOM 节点级增量更新（使用 diff-dom）
+// DOM 节点级增量更新（使用 diff-dom）
 // ============================================
 const markdownContainerRef = ref<HTMLElement | null>(null);
 let lastRenderedHTML = ''; // 保存上一次渲染的完整 HTML
 let diffEngine: DiffDOM | null = null; // diff-dom 实例
 
-// 🔹 生命周期：初始化 diff-dom
+// 生命周期：初始化 diff-dom
 onMounted(() => {
     diffEngine = new DiffDOM({
         debug: true,
@@ -115,9 +115,9 @@ const renderWithDiffDOM = async () => {
 const debouncedRenderWithDiffDOM = useDebounceFn(() => {
     // console.log('[Markdown-Debounce] Executing debounced render');
     renderWithDiffDOM();
-}, 50); // 50ms 延迟，可根据需要调整
+}, 50, { maxWait: 100 }); // 50ms 延迟，可根据需要调整
 
-// 🔹 监听 content 变化，根据 debounced 属性决定渲染策略
+// 监听 content 变化，根据 debounced 属性决定渲染策略
 watch(
     () => props.content,
     (newContent, oldContent) => {
@@ -143,7 +143,7 @@ watch(
     //{ immediate: true }
 );
 
-// 🔹 生命周期：清理资源
+// 生命周期：清理资源
 onBeforeUnmount(() => {
     // useDebounceFn 返回的函数不需要手动清理
     // VueUse 会自动处理

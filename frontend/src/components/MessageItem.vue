@@ -20,71 +20,25 @@
       </div>
       <div class="message-card">
         <template v-for="(turn, index) in turns" :key="turn.id">
-          <!-- 优化后的思考框部分 -->
-          <div v-if="turn.reasoningContent" class="thinking-section mb-3"
-            :class="{ 'expanded': isTurnExpanded(turn.id, 'thinking') }">
-            <div
-              class="collapsible-header  inline-block justify-center items-center text-sm text-gray-700 cursor-pointer font-medium my-1 py-1 transition-colors duration-200  hover:bg-gray-100 rounded"
-              @click.stop="toggleExpand(turn.id, 'thinking')">
-              <div class="items-center flex">
-                <div class="w-1.5 h-1.5 rounded-full bg-gray-500 mx-1.5"></div>
-                <span class="text-gray-500 ml-2">{{ turn.state?.isThinking ? '思考中...' : '已深度思考' }}</span>
-                <!-- 思考时长显示：优先使用 thinkingDurationMs，如果没有则从 metaData 读取 -->
-                <span v-if="getThinkingDuration(turn)" class="text-xs text-gray-400 ml-2">
-                  <template v-if="turn.state?.isThinking">
-                    已思考 {{ formatDuration(getThinkingDuration(turn)) }}
-                  </template>
-                  <template v-else>
-                    思考耗时 {{ formatDuration(getThinkingDuration(turn)) }}
-                  </template>
-                </span>
+          <!-- 使用拆分后的思考框组件 -->
+          <MessageThinkingSection v-if="turn.reasoningContent" :reasoning-content="turn.reasoningContent"
+            :is-thinking="turn.state?.isThinking || false" :is-streaming="turn.state?.isStreaming || false"
+            :thinking-duration-ms="turn.thinkingDurationMs" :meta-data="turn.metaData" @click="handleThinkingClick"
+            @render-complete="handleRenderComplete" />
 
-                <el-icon
-                  :class="['transition-transform duration-300 ml-2', isTurnExpanded(turn.id, 'thinking') ? 'rotate-90' : 'rotate-0']"
-                  size="14">
-                  <ArrowRightTwotone />
-                </el-icon>
-              </div>
-            </div>
-
-            <div class="thinking-container" :class="{ expanded: isTurnExpanded(turn.id, 'thinking') }">
-              <div class="thinking-content-wrapper flex">
-                <div class="w-4 min-h-0 flex justify-center mr-2.5">
-                  <div class="w-[1px] bg-gray-200 dark:bg-gray-700"></div>
-                </div>
-                <MarkdownContent @click.stop="handleClick"
-                  class="thinking-content flex-1 markdown-text text-gray-500 dark:text-gray-400"
-                  :content="turn.reasoningContent" :debounced="turn.state?.isStreaming"
-                  @render-complete="handleRenderComplete" />
-              </div>
-            </div>
-          </div>
           <MarkdownContent v-if="turn.content" class="message-text markdown-text" @click="handleClick"
             @render-complete="handleRenderComplete" :content="turn.content" :debounced="turn.state?.isStreaming" />
-          <!-- 优化工具调用显示 -->
-          <div v-if="turn.additionalKwargs && turn.additionalKwargs.toolCalls" class="tool-calls-section">
-            <div
-              class="inline-block justify-center items-center text-sm text-gray-700 cursor-pointer font-medium my-1 py-1 transition-colors duration-200 hover:bg-gray-100 rounded px-1"
-              @click.stop="openToolDialog(turn)">
-              <div class="flex items-center">
-                <el-icon class="" size="14">
-                  <BuildTwotone />
-                </el-icon>
-                <span class="text-gray-500 ml-2">{{ getToolCallText(turn) }}</span>
-                <span class="ml-2 text-xs text-gray-500 bg-gray-100 dark:bg-gray-700 px-2 py-0.5 rounded-full">
-                  {{ turn.additionalKwargs.toolCalls.length }} 个工具
-                </span>
-              </div>
-            </div>
-          </div>
 
-
+          <!-- 使用拆分后的工具调用组件 -->
+          <MessageToolCalls v-if="turn.additionalKwargs && turn.additionalKwargs.toolCalls"
+            :tool-calls="turn.additionalKwargs.toolCalls" :tool-responses="turn.additionalKwargs.toolCallsResponse"
+            :is-streaming="turn.state?.isStreaming || false" />
         </template>
         <el-alert v-if="metadata && metadata.finishReason == 'error'" title="API 请求错误" type="error" :closable="false">
           {{ metadata.error }}
         </el-alert>
 
-        <!-- 新增：Token 消耗显示区域 -->
+        <!-- Token 消耗显示区域 -->
         <div v-if="isAssistant && tokenUsage && !streamingState.isStreaming" class="token-usage-section mt-2">
           <div class="flex items-center gap-3 text-xs text-gray-400">
             <el-icon size="13" class="text-gray-400">
@@ -130,182 +84,45 @@
         </div>
       </div>
       <!-- 文件列表显示区域 -->
-
       <div class="file-list flex flex-wrap gap-2 mt-3 ml-auto" v-if="message.files && message.files.length > 0">
         <FileItem v-for="file, index in message.files" :key="file.id" :name="file.displayName" :type="file.fileType"
           :ext="file.fileExtension" :size="file.fileSize" :preview-url="file.previewUrl"
           :clickable="file.fileType === 'image'" @click="handleImageClick(index as number)"></FileItem>
       </div>
-      <div class="message-actions flex gap-0 text-sm w-full mt-3 text-gray-500 items-center"
-        v-if="!streamingState.isStreaming"
-        :class="[isAssistant ? 'justify-start' : 'justify-end', message.isStreaming ? 'opacity-0' : 'opacity-100']">
 
-
-        <div class="message-action-button" @click="handleAction('copy')">
-          <el-icon :size="16">
-            <Copy24Filled />
-          </el-icon>
-        </div>
-
-        <template v-if="!isAssistant && props.allowGenerate">
-          <div class="message-action-button" @click="handleAction('generate')">
-            <el-icon :size="16">
-              <ArrowDownwardTwotone />
-            </el-icon>
-          </div>
-        </template>
-
-        <template v-if="isAssistant && props.isLast">
-          <div class="message-action-button" @click="handleAction('regenerate')">
-            <el-icon :size="16">
-              <ArrowCounterclockwise24Filled />
-            </el-icon>
-          </div>
-        </template>
-
-        <!-- 内容切换按钮（如果需要） -->
-        <template v-if="isLast && message.contents.length > 1">
-          <div class="message-action-button" @click="switchContent('prev')" :disabled="!hasPrevContent">
-            <el-icon :size="16">
-              <ChevronLeft24Filled />
-            </el-icon>
-          </div>
-          <div class="text-gray-700 transition-colors duration-200 flex items-center py-1">
-            {{ getCurrentVersionIndex(message.contents) + 1 }} / {{ contentVersions.length }}
-          </div>
-          <div class="message-action-button" @click="switchContent('next')" :disabled="!hasNextContent">
-            <el-icon :size="16">
-              <ChevronRight24Filled />
-            </el-icon>
-          </div>
-        </template>
-
-        <!-- 更多按钮下拉菜单 -->
-        <el-dropdown trigger="click" @command="handleMoreAction">
-          <div class="message-action-button">
-            <el-icon :size="16">
-              <MoreVertical24Filled />
-            </el-icon>
-          </div>
-          <template #dropdown>
-            <el-dropdown-menu>
-              <el-dropdown-item command="edit">
-                <div class="flex items-center">
-                  <el-icon class="mr-2">
-                    <EditTwotone />
-                  </el-icon>
-                  编辑内容
-                </div>
-              </el-dropdown-item>
-              <el-dropdown-item command="delete">
-                <div class="flex items-center">
-                  <el-icon class="mr-2">
-                    <DeleteTwotone />
-                  </el-icon>
-                  删除消息
-                </div>
-              </el-dropdown-item>
-            </el-dropdown-menu>
-          </template>
-        </el-dropdown>
-
-      </div>
+      <!-- 使用拆分后的操作按钮组件 -->
+      <MessageActions v-if="!streamingState.isStreaming" :is-assistant="isAssistant" :is-last="isLast"
+        :allow-generate="allowGenerate" :content-versions="contentVersions" :current-version-index="currentVersionIndex"
+        @copy="handleCopy" @generate="handleGenerate" @regenerate="handleRegenerate" @switch-version="switchContent"
+        @edit="handleEdit" @delete="handleDelete" />
     </div>
   </div>
   <el-image-viewer v-if="showImageViewer" v-model:visible="showImageViewer" :url-list="previewList"
     :initial-index="currentPreViewIndex" @close="showImageViewer = false" :teleported="true" />
-
-  <!-- 工具调用详情弹窗 -->
-  <ElDialog v-model="showToolDialog" title="工具调用详情" width="700px" :close-on-click-modal="true" destroy-on-close
-    :append-to-body="true" class="tool-dialog">
-    <div v-if="currentToolTurn" class="tool-dialog-content max-h-[60vh] overflow-y-auto">
-      <div v-for="(tool, toolIndex) in currentToolTurn.additionalKwargs.toolCalls" :key="toolIndex"
-        class="tool-call-detail mb-6 last:mb-0">
-
-        <!-- 工具标题 -->
-        <div class="flex items-center gap-2 mb-3 pb-2 border-b border-gray-200 dark:border-gray-700">
-          <el-icon size="18" class="text-blue-500">
-            <BuildTwotone />
-          </el-icon>
-          <span class="text-base font-semibold text-gray-800 dark:text-gray-200">
-            {{ tool.name || 'Unknown Tool' }}
-          </span>
-          <span class="text-xs text-gray-400 ml-auto">
-            调用 #{{ (toolIndex as number) + 1 }}
-          </span>
-        </div>
-
-        <!-- 工具参数 -->
-        <div v-if="tool.arguments || tool.args" class="mb-4">
-          <div class="text-sm font-medium text-gray-600 dark:text-gray-400 mb-2 flex items-center">
-            <el-icon size="14" class="mr-1">
-              <SettingsOutlined />
-            </el-icon>
-            调用参数
-          </div>
-          <pre
-            class="bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg p-3 text-sm overflow-x-auto text-gray-700 dark:text-gray-300">
-          <code>{{ formatToolArgs(tool.arguments || tool.args) }}</code>
-        </pre>
-        </div>
-
-        <!-- 工具响应结果 -->
-        <div v-if="currentToolTurn.additionalKwargs.toolCallsResponse" class="mt-4">
-          <div class="text-sm font-medium text-gray-600 dark:text-gray-400 mb-2 flex items-center">
-            <el-icon size="14" class="mr-1 text-green-500">
-              <CheckCircleOutlined />
-            </el-icon>
-            执行结果
-          </div>
-          <div class="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg p-3">
-            <pre class="text-sm overflow-x-auto text-green-800 dark:text-green-300">{{
-              formatToolResponse(currentToolTurn.additionalKwargs.toolCallsResponse[toolIndex])
-            }}</pre>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <template #footer>
-      <span class="dialog-footer">
-        <el-button @click="closeToolDialog">关闭</el-button>
-      </span>
-    </template>
-  </ElDialog>
 </template>
 
 <script setup lang="ts">
-import { computed, ref, watch, onUnmounted, onMounted, onBeforeUnmount, h, nextTick, type Ref } from "vue";
-import { ElAlert, ElIcon, ElImageViewer, ElDropdown, ElDropdownMenu, ElDropdownItem, ElDialog } from "element-plus";
+import { computed, ref, watch, onBeforeUnmount, nextTick } from "vue";
+import { ElAlert, ElIcon, ElImageViewer } from "element-plus";
 import { useDebounceFn } from "@vueuse/core";
 import {
-  EditTwotone,
-  DeleteTwotone,
-  ArrowDownwardTwotone,
   AccessTimeTwotone,
-  BuildTwotone,
-  SettingsOutlined,
-  CheckCircleOutlined,
-  PsychologyOutlined,
-  InsightsTwotone, // Token 消耗显示图标
+  InsightsTwotone,
   MenuBookOutlined,
-  ArrowRightTwotone,
 } from "@vicons/material";
-import {
-  Copy24Filled,
-  ArrowCounterclockwise24Filled,
-  MoreVertical24Filled,
-  ChevronLeft24Filled,
-  ChevronRight24Filled
-} from '@vicons/fluent'
 
 // @ts-ignore - icons 组件尚未迁移到 TypeScript
 import { Loading } from "./icons";
 // @ts-ignore - UI 组件尚未迁移到 TypeScript
 import { FileItem, Avatar } from "./ui";
 import { usePopup } from "../composables/usePopup";
-import { formatTime } from '../utils'
-import { getCurrentTurns, getContentVersions } from '@/utils/messageUtils'
+import { formatTime } from '../utils';
+import { getCurrentTurns, getContentVersions } from '@/utils/messageUtils';
+
+// 导入拆分后的子组件
+import MessageThinkingSection from './MessageItem/MessageThinkingSection.vue';
+import MessageToolCalls from './MessageItem/MessageToolCalls.vue';
+import MessageActions from './MessageItem/MessageActions.vue';
 
 
 const { toast } = usePopup();
@@ -342,50 +159,33 @@ const emit = defineEmits<{
 // ============================================
 const showImageViewer = ref(false);
 const currentPreViewIndex = ref(0);
-const expandedStates = ref<Map<string, boolean>>(new Map()); // 使用 Map 存储思考框的展开状态：{ [turnId_thinking]: boolean }
 const rootRef = ref<HTMLElement | null>(null);
-
-// 工具调用弹窗相关状态
-const showToolDialog = ref(false);
-const currentToolTurn = ref<any>(null);
 
 // ============================================
 // 🔹 ResizeObserver + 图片加载监听机制
 // ============================================
 let resizeObserver: ResizeObserver | null = null;
 
-/**
- * 防抖触发 render-complete 事件
- * 避免频繁触发滚动逻辑，延迟 200ms
- * 使用 VueUse 的 useDebounceFn 官方实现
- */
 const debouncedEmitRenderComplete = useDebounceFn(() => {
-  // console.log('[MessageItem] Render complete triggered by ResizeObserver or image load');
   emit('render-complete', props.message);
-}, 200); // 200ms 防抖延迟
+}, 200);
 
-/**
- * 等待图片加载完成
- * 确保所有可见图片都加载完成后才触发滚动
- */
 const waitForImagesLoaded = async (): Promise<void> => {
   if (!rootRef.value) return;
 
   const images = Array.from(rootRef.value.querySelectorAll('img'));
 
   if (images.length === 0) {
-    return; // 没有图片，直接返回
+    return;
   }
 
   console.log(`[MessageItem] Waiting for ${images.length} image(s) to load`);
 
   const promises = images.map(img => {
     if (img.complete) {
-      // 已经加载完成
       return Promise.resolve();
     }
 
-    // 等待加载完成或失败
     return new Promise<void>(resolve => {
       const onLoad = () => {
         console.log('[MessageItem] Image loaded:', img.src);
@@ -395,7 +195,7 @@ const waitForImagesLoaded = async (): Promise<void> => {
       img.addEventListener('load', onLoad, { once: true });
       img.addEventListener('error', () => {
         console.warn('[MessageItem] Image failed to load:', img.src);
-        resolve(); // 即使失败也继续，避免阻塞
+        resolve();
       }, { once: true });
     });
   });
@@ -404,46 +204,13 @@ const waitForImagesLoaded = async (): Promise<void> => {
   console.log('[MessageItem] All images loaded');
 };
 
-/**
- * 初始化 ResizeObserver 监听 DOM 尺寸变化
- * 捕获所有导致高度变化的情况（图片加载、内容展开、动画等）
- */
-// const initResizeObserver = () => {
-//   if (!rootRef.value) return;
 
-//   const targetElement = rootRef.value.querySelector('.message-card');
-//   if (!targetElement) return;
 
-//   resizeObserver = new ResizeObserver((entries) => {
-//     for (const entry of entries) {
-//       // 只有当高度发生变化时才触发
-//       if (entry.contentRect.height > 0) {
-//         // console.log('[MessageItem] Content height changed:', entry.contentRect.height);
-//         // debouncedEmitRenderComplete();
-//         emit('render-complete', props.message);
-//       }
-//     }
-//   });
-
-//   resizeObserver.observe(targetElement);
-//   // console.log('[MessageItem] ResizeObserver initialized');
-// };
-
-/**
- * 监听文件列表变化，处理图片加载
- */
 watch(
   () => props.message.files,
   async (newFiles) => {
     if (newFiles && newFiles.length > 0) {
-      // 等待下一帧，确保 DOM 已经更新
       await nextTick();
-
-      // 等待图片加载完成
-      //await waitForImagesLoaded();
-
-      // 图片加载完成后触发渲染完成事件
-      //debouncedEmitRenderComplete();
     }
   },
   { immediate: true }
@@ -463,9 +230,8 @@ const messageClass = computed(() =>
 // );
 
 const turns = computed(() => {
-  // 使用工具函数获取当前版本的内容
-  return getCurrentTurns(props.message as any)
-})
+  return getCurrentTurns(props.message as any);
+});
 
 // const hasThinking = computed(
 //   () => isAssistant.value && getCurrentContent(props.message.contents).reasoningContent
@@ -476,8 +242,6 @@ const metadata = computed(() => {
   return content.metaData;
 });
 
-
-// 优化：使用更精确的依赖
 const state = computed(() =>
   isAssistant.value ? props.message.state : null
 );
@@ -502,141 +266,81 @@ const currentContentTime = computed(() => {
     firendly: formatTime(content.createdAt || '', 'friendly'),
     full: formatTime(content.createdAt || '', 'full')
   };
-})
+});
 
-// 新增：获取 token usage 的计算属性
 const tokenUsage = computed(() => {
   if (!isAssistant.value || !turns.value || turns.value.length === 0) {
     return null;
   }
 
-  // 获取最后一个 turn 的 metaData.usage
   const lastTurn = turns.value[turns.value.length - 1];
   return lastTurn?.metaData?.usage || null;
 });
 
-// 计算是否有上一个/下一个内容
-const hasPrevContent = computed(() => {
-  const currentIndex = getCurrentVersionIndex()
-  return currentIndex > 0
-})
+const contentVersions = computed(() => {
+  return getContentVersions(props.message as any);
+});
 
-const hasNextContent = computed(() => {
-  const currentIndex = getCurrentVersionIndex() + 1
-  return currentIndex < contentVersions.value.length
-})
+const currentVersionIndex = computed(() => {
+  if (!props.message.currentTurnsId) return 0;
+  return contentVersions.value.findIndex(version => version === props.message.currentTurnsId);
+});
 
-// 获取当前索引（本地实现，不再依赖废弃的函数）
-const getCurrentVersionIndex = (contents?: any): number => {
-  if (!contents) {
-    return contentVersions.value.findIndex(version => version === props.message.currentTurnsId)
-  }
-  return contentVersions.value.findIndex(version => version === props.message.currentTurnsId)
-}
-
-
-// 🔹 生命周期：初始化 ResizeObserver（延迟到 DOM 完全渲染后）
-// onMounted(() => {
-//   nextTick(() => {
-//     initResizeObserver();
-//   });
-// });
-
-
-// moreOptions 计算属性已废弃，不再使用
-
-/**
- * Markdown 渲染完成处理
- * 保留原有逻辑，与 ResizeObserver 协同工作
- */
 const handleRenderComplete = () => {
-  // console.log('[MessageItem] Markdown render complete event received');
-  // Markdown 渲染完成后立即触发，不需要等待防抖
-  // emit('render-complete', props.message);
+  // Markdown 渲染完成后立即触发
 };
 
-const toggleExpand = (turnId: string, type: 'thinking') => {
-  const key = `${turnId}_${type}`;
-  // 思考框默认展开
-  const defaultState = true;
-  const currentState = expandedStates.value.get(key) ?? defaultState;
-  expandedStates.value.set(key, !currentState);
-  // 触发响应式更新
-  expandedStates.value = new Map(expandedStates.value);
-};
 
-const isTurnExpanded = (turnId: string, type: 'thinking'): boolean => {
-  const key = `${turnId}_${type}`;
-  // 思考框默认展开
-  const defaultState = true;
-  return expandedStates.value.get(key) ?? defaultState;
-};
 
-/**
- * 打开工具调用详情弹窗
- */
-const openToolDialog = (turn: any) => {
-  currentToolTurn.value = turn;
-  showToolDialog.value = true;
-};
 
-/**
- * 关闭工具调用详情弹窗
- */
-const closeToolDialog = () => {
-  showToolDialog.value = false;
-  currentToolTurn.value = null;
-};
 
 const handleAction = (action: 'switch' | 'delete' | 'edit' | 'copy' | 'generate' | 'regenerate') => {
   emit(action as any, props.message);
 };
 
-const handleMoreAction = (key: 'edit' | 'delete') => {
-  emit(key as any, props.message);
+// 具体的事件处理函数
+const handleCopy = () => handleAction('copy');
+const handleGenerate = () => handleAction('generate');
+const handleRegenerate = () => handleAction('regenerate');
+const handleEdit = () => handleAction('edit');
+const handleDelete = () => handleAction('delete');
+
+// 思考框点击处理（无参数）
+const handleThinkingClick = () => {
+  // 创建一个模拟的 MouseEvent 对象，或者调用 handleClick 的逻辑
+  // 由于 handleClick 主要是处理代码复制，这里可以不做任何操作
+  // 如果需要，可以在这里添加思考框特定的点击逻辑
 };
 
-const contentVersions = computed(() => {
-  // 使用工具函数获取所有版本号
-  return getContentVersions(props.message as any)
-})
-
-// @ts-ignore - getCurrentVersionIndex 参数类型兼容
 const switchContent = (direction: 'prev' | 'next') => {
-  const currentIndex = getCurrentVersionIndex()
+  const currentIndex = currentVersionIndex.value;
 
-  if (currentIndex === -1) return
+  if (currentIndex === -1) return;
 
-  let newIndex
+  let newIndex;
   if (direction === 'prev' && currentIndex > 0) {
-    newIndex = currentIndex - 1
+    newIndex = currentIndex - 1;
   } else if (direction === 'next' && currentIndex < contentVersions.value.length - 1) {
-    newIndex = currentIndex + 1
+    newIndex = currentIndex + 1;
   } else {
-    return
+    return;
   }
 
-  // 通过事件通知父组件切换内容
-  emit('switch', props.message, contentVersions.value[newIndex])
-}
+  emit('switch', props.message, contentVersions.value[newIndex]);
+};
 
-// isExpanded 变量已废弃，使用 expandedStates Map 替代
+
 
 const handleImageClick = (index: number) => {
   currentPreViewIndex.value = index;
   showImageViewer.value = true;
 };
 
-// 🔹 生命周期：清理资源
 onBeforeUnmount(() => {
-  // 清理 ResizeObserver
   if (resizeObserver) {
     resizeObserver.disconnect();
     resizeObserver = null;
-    // console.log('[MessageItem] ResizeObserver disconnected');
   }
-
-  // useDebounceFn 会自动清理，不需要手动处理
 
   console.log('[MessageItem] Component unmounted, cleanup completed');
 });
@@ -650,92 +354,27 @@ const handleClick = (event: MouseEvent) => {
 
     if (codeElement) {
       navigator.clipboard.writeText(codeElement.textContent).then(() => {
-        toast.success("代码已复制到剪贴板")
+        toast.success("代码已复制到剪贴板");
       }).catch(err => {
-        console.error('复制失败:', err)
-        toast.error("复制失败")
-      })
+        console.error('复制失败:', err);
+        toast.error("复制失败");
+      });
     }
   }
-}
-
-const formatToolArgs = (args: any): string => {
-  if (!args) return '{}';
-  try {
-    // 如果是字符串，尝试解析为 JSON
-    const parsed = typeof args === 'string' ? JSON.parse(args) : args;
-    return JSON.stringify(parsed, null, 2);
-  } catch (e) {
-    // 如果解析失败，直接返回字符串
-    return String(args);
-  }
 };
 
-const formatToolResponse = (response: any): string => {
-  if (!response) return '无响应';
-  try {
-    // 如果是字符串，尝试解析为 JSON
-    const parsed = typeof response === 'string' ? JSON.parse(response) : response;
-    return JSON.stringify(parsed['content'], null, 2);
-  } catch (e) {
-    // 如果解析失败，直接返回字符串
-    return String(response);
-  }
-};
-
-// 格式化思考时长
-const formatDuration = (ms: number | null): string => {
-  if (!ms) return '';
-  const seconds = ms / 1000;
-  if (seconds < 60) {
-    return `${seconds.toFixed(1)}s`;
-  }
-  const minutes = Math.floor(seconds / 60);
-  const remainingSeconds = (seconds % 60).toFixed(1);
-  return `${minutes}分${remainingSeconds}秒`;
-};
-
-// 格式化 token 数字：1600 -> 1.6K
 const formatTokenNumber = (num: number | null): string => {
   if (!num && num !== 0) return '0';
 
   if (num >= 1000000) {
-    // 大于 100 万，显示为 M
     return (num / 1000000).toFixed(1).replace(/\.0$/, '') + 'M';
   } else if (num >= 1000) {
-    // 大于 1000，显示为 K
     return (num / 1000).toFixed(1).replace(/\.0$/, '') + 'K';
   } else {
-    // 小于 1000，直接显示
     return num.toString();
   }
 };
 
-// 获取思考时长：优先使用 metaData 中的值（后端保存的），如果没有则使用 thinkingDurationMs
-const getThinkingDuration = (turn: any): number | null => {
-  // 如果正在思考中，使用实时计算的 thinkingDurationMs
-  if (turn.state?.isThinking) {
-    return turn.thinkingDurationMs;
-  }
-  // 思考完成后，优先使用 metaData 中的值（后端保存的准确值）
-  return turn.metaData?.thinkingDurationMs || turn.thinkingDurationMs;
-};
-
-// 获取工具调用文案：根据调用状态显示不同文本
-const getToolCallText = (turn: any): string => {
-  const toolCount = turn.additionalKwargs?.toolCalls?.length || 0;
-
-  // 如果正在流式传输中，显示"正在调用"
-  if (turn.state?.isStreaming) {
-    return `正在调用${toolCount}个工具`;
-  }
-
-  // 完成后显示"已调用"
-  return `已调用${toolCount}个工具`;
-};
-
-// defineExpose 已移除，相关方法通过事件传递
-// 暴露 rootRef 以便父组件可以访问 DOM 元素
 defineExpose({
   el: rootRef
 });
@@ -823,88 +462,22 @@ defineExpose({
   margin-top: 8px;
 }
 
-/* 重用的消息操作按钮样式 */
-.message-action-button {
-  @apply cursor-pointer flex items-center gap-1 py-1 px-1 rounded mr-1 hover:bg-(--color-surface) disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-gray-100 disabled:hover:text-gray-400 transition-transform duration-100;
-}
-
-/* 统一的折叠框样式 */
-.collapsible-section {
+/* Token 消耗显示样式 - 简约风格 */
+.token-usage-section {
+  padding: 4px 0;
   animation: fadeIn 0.3s ease;
 }
 
-/* 折叠框头部样式 */
-.collapsible-header {
-  user-select: none;
+.token-item {
+  display: inline-flex;
+  align-items: center;
+  font-size: 12px;
+  white-space: nowrap;
 }
 
-/* 折叠框容器样式 */
-.collapsible-container {
-  display: grid;
-  grid-template-rows: 0fr;
-  transition: grid-template-rows 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-  will-change: grid-template-rows;
-  overflow: hidden;
-  border-radius: 0 0 8px 8px;
-}
-
-.collapsible-container.expanded {
-  grid-template-rows: 1fr;
-}
-
-.collapsible-content {
-  min-height: 0;
-  opacity: 0;
-  transform: translateY(-8px);
-  transition: opacity 0.25s ease, transform 0.25s ease;
-}
-
-.collapsible-container.expanded .collapsible-content {
-  opacity: 1;
-  transform: translateY(0);
-}
-
-/* 思考框特定样式 */
-.thinking-section {
-  border-radius: 8px;
-  overflow: hidden;
-}
-
-.thinking-container {
-  display: grid;
-  grid-template-rows: 0fr;
-  transition: grid-template-rows 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-  overflow: hidden;
-}
-
-.thinking-container.expanded {
-  grid-template-rows: 1fr;
-}
-
-.thinking-content-wrapper {
-  min-height: 0;
-  opacity: 0;
-  transform: translateY(-8px);
-  transition: opacity 0.25s ease, transform 0.25s ease;
-  overflow: hidden;
-}
-
-.thinking-container.expanded .thinking-content-wrapper {
-  opacity: 1;
-  transform: translateY(0);
-}
-
-/* 工具调用特定样式 - 简化版（仅保留基础样式） */
-.tool-calls-section {
-  display: inline-block;
-}
-
-
-
-.tool-arguments pre,
-.tool-response pre {
-  white-space: pre-wrap;
-  word-break: break-word;
+.token-item strong {
+  font-weight: 600;
+  color: inherit;
 }
 
 @keyframes fadeIn {
@@ -917,44 +490,6 @@ defineExpose({
     opacity: 1;
     transform: translateY(0);
   }
-}
-
-/* Token 消耗显示样式 - 简约风格 */
-.token-usage-section {
-  padding: 4px 0;
-  animation: fadeIn 0.3s ease;
-}
-
-.token-item {
-  display: inline-flex;
-  align-items: center;
-  font-size: 12px;
-  white-space: nowrap;
-  /* 防止换行 */
-}
-
-.token-item strong {
-  font-weight: 600;
-  color: inherit;
-}
-
-/* 工具调用弹窗样式 */
-.tool-dialog-content {
-  line-height: 1.6;
-}
-
-.tool-call-detail {
-  animation: fadeIn 0.3s ease;
-}
-
-.tool-call-detail pre {
-  white-space: pre-wrap;
-  word-break: break-word;
-  font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
-}
-
-.tool-call-detail code {
-  font-size: 13px;
 }
 </style>
 <style>

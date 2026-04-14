@@ -11,6 +11,7 @@ export { default as AvatarPreview } from './AvatarPreview.vue'
 export { default as Avatar } from './Avatar.vue'
 export { default as UiButton } from './UiButton.vue'
 export { default as ElSliderOptional } from './ElSliderOptional.vue'
+export { default as MarkdownContent } from './MarkdownContent.vue'
 
 // 异步组件版本，用于路由级别或条件渲染
 // import { defineAsyncComponent, DefineComponent } from 'vue'
