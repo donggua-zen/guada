@@ -63,23 +63,46 @@ export function useMessageOperations(
             throw new Error('当前没有活动的会话')
         }
 
-        const filesWithContent = files.filter((file) => file.file)
+        // 分离已上传的文件和未上传的文件
+        const uploadedFiles = files.filter(file => file.id && typeof file.id === 'string' && file.id.length > 10)
+        const filesWithContent = files.filter(file => file.file && !uploadedFiles.includes(file))
+
+        // 只上传还未上传的文件
         const uploadPromises = filesWithContent.map((file) =>
             apiService.uploadFile(currentSessionId.value, file.file)
         )
         const uploadResults = await Promise.all(uploadPromises)
 
         const updatedFiles = [...files]
+
+        // 更新新上传的文件信息
         uploadResults.forEach((response, index) => {
             const fileIndex = files.indexOf(filesWithContent[index])
             if (fileIndex !== -1) {
                 updatedFiles[fileIndex] = { ...updatedFiles[fileIndex], ...response }
                 delete updatedFiles[fileIndex].file
                 delete updatedFiles[fileIndex].content
+                delete updatedFiles[fileIndex].uploadProgress
+                delete updatedFiles[fileIndex].uploadStatus
             }
         })
 
-        const fileIds = uploadResults.map((result) => result.id)
+        // 清理已上传文件的临时字段
+        uploadedFiles.forEach(file => {
+            const fileIndex = files.indexOf(file)
+            if (fileIndex !== -1) {
+                updatedFiles[fileIndex] = { ...updatedFiles[fileIndex] }
+                delete updatedFiles[fileIndex].file
+                delete updatedFiles[fileIndex].uploadProgress
+                delete updatedFiles[fileIndex].uploadStatus
+            }
+        })
+
+        const fileIds = [
+            ...uploadedFiles.map(f => f.id),
+            ...uploadResults.map((result) => result.id)
+        ]
+
         const response = await apiService.createMessage(
             currentSessionId.value, text, fileIds, replaceMessageId, knowledgeBaseIds
         )

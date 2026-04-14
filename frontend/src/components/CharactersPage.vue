@@ -4,10 +4,13 @@
       :show-toggle-button="false" :sidebar-width="200">
       <template #sidebar>
         <!-- 左侧二级侧边栏 - 助手分组 -->
-        <div class="h-full bg-(--color-conversation-bg) border-r border-(--color-conversation-border) flex flex-col">
-          <div class="px-1 py-4">
-            <div class="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">助手分组</div>
-            <div class="space-y-1">
+        <div
+          class="flex flex-col w-full h-full border-r border-gray-200 dark:border-gray-700 items-center relative px-3 md:px-0 py-2 pr-3 bg-gray-100 md:bg-white dark:bg-transparent">
+          <div class="lex flex-col w-full">
+            <div class="flex-1 flex items-center justify-start mx-2 my-3">
+              <span class="text-md text-gray-400">助手列表</span>
+            </div>
+            <div class="space-y-1 px-2">
               <div class="px-2 py-1.5 text-sm rounded cursor-pointer transition-colors duration-200"
                 :class="currentGroupId === null ? 'bg-(--color-primary-100) text-(--color-primary)' : 'hover:text-(--color-primary) hover:bg-(--color-primary-100)'"
                 @click="selectGroup(null)">
