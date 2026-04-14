@@ -132,7 +132,9 @@ export interface LoginResponse {
 export interface User {
     id: string
     username: string
+    nickname?: string
     email?: string
+    phone?: string
     avatarUrl?: string
     isActive: boolean
     createdAt?: string

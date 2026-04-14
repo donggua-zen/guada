@@ -13,51 +13,51 @@
     <!-- 导航菜单 -->
     <div class="flex-1 py-5 px-2 space-y-1">
       <!-- 对话 -->
-      <div @click="handleNavClick('chat')" :class="[
-        'nav-item group',
-        activeTab === 'chat' ? 'nav-item-active' : 'nav-item-inactive'
-      ]">
-        <div class="nav-icon">
+      <div @click="handleNavClick('chat')"
+        class="flex flex-col items-center justify-center px-2 py-2.5 my-0.5 rounded-xl cursor-pointer transition-all duration-250 ease-[cubic-bezier(0.4,0,0.2,1)] group"
+        :class="activeTab === 'chat' ? 'bg-(--color-conversation-bg-active) text-(--color-conversation-text-active)' : 'text-(--color-text-gray) hover:bg-(--color-conversation-bg-hover) hover:text-(--color-conversation-text-hover)'">
+        <div
+          class="w-5 h-5 mb-1 flex items-center justify-center transition-transform duration-200 ease-in-out group-hover:scale-110">
           <ChatbubbleEllipses v-if="activeTab === 'chat'" class="w-5 h-5" />
           <ChatbubbleEllipsesOutline v-else class="w-5 h-5" />
         </div>
-        <span class="nav-label">对话</span>
+        <span class="text-[0.6875rem] font-medium tracking-wide">对话</span>
       </div>
 
       <!-- 助手 -->
-      <div @click="handleNavClick('characters')" :class="[
-        'nav-item group',
-        activeTab === 'characters' ? 'nav-item-active' : 'nav-item-inactive'
-      ]">
-        <div class="nav-icon">
+      <div @click="handleNavClick('characters')"
+        class="flex flex-col items-center justify-center px-2 py-2.5 my-0.5 rounded-xl cursor-pointer transition-all duration-250 ease-[cubic-bezier(0.4,0,0.2,1)] group"
+        :class="activeTab === 'characters' ? 'bg-(--color-conversation-bg-active) text-(--color-conversation-text-active)' : 'text-(--color-text-gray) hover:bg-(--color-conversation-bg-hover) hover:text-(--color-conversation-text-hover)'">
+        <div
+          class="w-5 h-5 mb-1 flex items-center justify-center transition-transform duration-200 ease-in-out group-hover:scale-110">
           <AlternateEmailTwotone v-if="activeTab === 'characters'" class="w-5 h-5" />
           <PeopleOutline v-else class="w-5 h-5" />
         </div>
-        <span class="nav-label">助手</span>
+        <span class="text-[0.6875rem] font-medium tracking-wide">助手</span>
       </div>
 
       <!-- 系统设置 -->
-      <div @click="handleNavClick('setting')" :class="[
-        'nav-item group',
-        currentActiveTab === 'setting' ? 'nav-item-active' : 'nav-item-inactive'
-      ]">
-        <div class="nav-icon">
+      <div @click="handleNavClick('setting')"
+        class="flex flex-col items-center justify-center px-2 py-2.5 my-0.5 rounded-xl cursor-pointer transition-all duration-250 ease-[cubic-bezier(0.4,0,0.2,1)] group"
+        :class="currentActiveTab === 'setting' ? 'bg-(--color-conversation-bg-active) text-(--color-conversation-text-active)' : 'text-(--color-text-gray) hover:bg-(--color-conversation-bg-hover) hover:text-(--color-conversation-text-hover)'">
+        <div
+          class="w-5 h-5 mb-1 flex items-center justify-center transition-transform duration-200 ease-in-out group-hover:scale-110">
           <SettingsTwotone v-if="currentActiveTab === 'setting'" class="w-5 h-5" />
           <SettingsOutlined v-else class="w-5 h-5" />
         </div>
-        <span class="nav-label">设置</span>
+        <span class="text-[0.6875rem] font-medium tracking-wide">设置</span>
       </div>
 
       <!-- 知识库 -->
-      <div @click="handleNavClick('knowledge-base')" :class="[
-        'nav-item group',
-        currentActiveTab === 'knowledge-base' ? 'nav-item-active' : 'nav-item-inactive'
-      ]">
-        <div class="nav-icon">
+      <div @click="handleNavClick('knowledge-base')"
+        class="flex flex-col items-center justify-center px-2 py-2.5 my-0.5 rounded-xl cursor-pointer transition-all duration-250 ease-[cubic-bezier(0.4,0,0.2,1)] group"
+        :class="currentActiveTab === 'knowledge-base' ? 'bg-(--color-conversation-bg-active) text-(--color-conversation-text-active)' : 'text-(--color-text-gray) hover:bg-(--color-conversation-bg-hover) hover:text-(--color-conversation-text-hover)'">
+        <div
+          class="w-5 h-5 mb-1 flex items-center justify-center transition-transform duration-200 ease-in-out group-hover:scale-110">
           <MenuBookOutlined v-if="currentActiveTab === 'knowledge-base'" class="w-5 h-5" />
           <MenuBookOutlined v-else class="w-5 h-5" />
         </div>
-        <span class="nav-label">知识</span>
+        <span class="text-[0.6875rem] font-medium tracking-wide">知识</span>
       </div>
     </div>
 
@@ -65,21 +65,37 @@
     <div class="px-2.5 py-3.5 border-t border-(--color-conversation-border)">
       <!-- 主题切换按钮 -->
       <div @click="toggleDark"
-        class="nav-item nav-item-inactive mb-1 cursor-pointer hover:bg-(--color-conversation-bg-hover)">
-        <div class="nav-icon">
+        class="flex flex-col items-center justify-center px-2 py-2.5 my-0.5 rounded-xl cursor-pointer transition-all duration-250 ease-[cubic-bezier(0.4,0,0.2,1)] text-(--color-text-gray) hover:bg-(--color-conversation-bg-hover) hover:text-(--color-conversation-text-hover) mb-1">
+        <div
+          class="w-5 h-5 mb-1 flex items-center justify-center transition-transform duration-200 ease-in-out hover:scale-110">
           <WbSunnyTwotone v-if="isDark" class="w-5 h-5" />
           <NightlightRound v-else class="w-5 h-5" />
         </div>
-        <span class="nav-label">{{ isDark ? '亮色' : '暗色' }}</span>
+        <span class="text-[0.6875rem] font-medium tracking-wide">{{ isDark ? '亮色' : '暗色' }}</span>
       </div>
 
-      <div class="user-profile" @click="handleUserProfileClick">
-        <div class="user-avatar">
-          <Avatar type="user" :round="true" :src="authStore.user?.avatarUrl"
-            :name="authStore.user?.nickname || authStore.user?.username" />
+      <!-- 用户头像下拉菜单 -->
+      <el-dropdown trigger="hover" placement="top-end" @command="handleUserMenuCommand">
+        <div
+          class="flex items-center justify-center p-2 rounded-lg cursor-pointer transition-all duration-200 ease-in-out hover:bg-(--color-surface)">
+          <div class="w-8 h-8">
+            <Avatar type="user" :round="true" :src="authStore.user?.avatarUrl"
+              :name="authStore.user?.nickname || authStore.user?.username" />
+          </div>
         </div>
-        <span class="user-name">{{ authStore.user?.username || '用户' }}</span>
-      </div>
+        <template #dropdown>
+          <el-dropdown-menu>
+            <el-dropdown-item command="profile">
+              <PersonOutline class="w-4 h-4 mr-2" />
+              个人中心
+            </el-dropdown-item>
+            <el-dropdown-item command="logout" divided>
+              <LogOutOutline class="w-4 h-4 mr-2" />
+              退出登录
+            </el-dropdown-item>
+          </el-dropdown-menu>
+        </template>
+      </el-dropdown>
     </div>
   </div>
 </template>
@@ -91,16 +107,20 @@ import { useAuthStore } from '../stores/auth'
 import { Avatar } from './ui'
 import { useTheme } from "../composables/useTheme";
 import { useSessionStore } from '../stores/session'
+import { usePopup } from '../composables/usePopup'
 
 // 主题
 const { isDark, toggleDark } = useTheme()
 const sessionStore = useSessionStore()
+const { confirm } = usePopup()
 
 // 图标
 import {
   ChatbubbleEllipses,
   ChatbubbleEllipsesOutline,
-  PeopleOutline
+  PeopleOutline,
+  PersonOutline,
+  LogOutOutline
 } from '@vicons/ionicons5'
 import {
   AlternateEmailTwotone,
@@ -162,92 +182,22 @@ const handleNavClick = (tab: string): void => {
   }
 }
 
-// 处理用户头像点击 - 跳转到账户中心
-const handleUserProfileClick = (): void => {
-  router.replace({ name: 'AccountCenter' })
+// 处理用户菜单命令
+const handleUserMenuCommand = (command: string): void => {
+  if (command === 'profile') {
+    router.replace({ name: 'AccountCenter' })
+  } else if (command === 'logout') {
+    // 二次确认退出登录
+    confirm('提示', '确定要退出登录吗？', {
+      type: 'warning',
+      confirmText: '确定',
+      cancelText: '取消'
+    }).then((confirmed) => {
+      if (confirmed) {
+        authStore.logout()
+        router.replace({ name: 'Login' })
+      }
+    })
+  }
 }
 </script>
-
-<style scoped>
-/* 导航项样式 */
-.nav-item {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  padding: 0.625rem 0.5rem;
-  margin: 0.125rem 0;
-  border-radius: 0.75rem;
-  cursor: pointer;
-  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
-}
-
-.nav-item-inactive {
-  color: var(--color-text-gray);
-}
-
-.nav-item-inactive:hover {
-  background-color: var(--color-conversation-bg-hover);
-  color: var(--color-conversation-text-hover);
-}
-
-.nav-item-active {
-  background-color: var(--color-conversation-bg-active);
-  color: var(--color-conversation-text-active);
-}
-
-.nav-icon {
-  width: 1.25rem;
-  height: 1.25rem;
-  margin-bottom: 0.25rem;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: transform 0.2s ease;
-}
-
-.nav-item:hover .nav-icon {
-  transform: scale(1.1);
-}
-
-.nav-label {
-  font-size: 0.6875rem;
-  font-weight: 500;
-  letter-spacing: 0.02em;
-}
-
-/* 用户信息样式 */
-.user-profile {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  padding: 0.5rem;
-  border-radius: 0.5rem;
-  cursor: pointer;
-  transition: all 0.2s ease;
-}
-
-.user-profile:hover {
-  background-color: var(--color-surface);
-}
-
-.user-avatar {
-  width: 2rem;
-  height: 2rem;
-  margin-bottom: 0.375rem;
-}
-
-.user-name {
-  font-size: 0.6875rem;
-  color: var(--color-text-gray);
-  max-width: 100%;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.dark .user-name {
-  color: var(--color-text-disabled);
-}
-</style>
