@@ -120,7 +120,7 @@ export function useMessageOperations(
 
         sessionStore.addMessage(currentSessionId.value, message)
         // 清空输入框
-        inputMessage.value = { content: "", files: [], knowledgeBaseIds: [], isWaiting: false };
+        inputMessage.value = { content: "", files: [], knowledgeBaseIds: undefined, isWaiting: false };
         return message
     }
 

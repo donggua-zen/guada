@@ -55,6 +55,7 @@ hljs.registerLanguage('go', go)
 hljs.registerLanguage('rust', rust)
 hljs.registerLanguage('sql', sql)
 hljs.registerLanguage('html', html)
+hljs.registerLanguage('vue', html)
 hljs.registerLanguage('css', css)
 hljs.registerLanguage('scss', scss)
 hljs.registerLanguage('json', json)
@@ -133,9 +134,11 @@ function createMarkedInstance(): Marked {
             const lang = code.lang || 'text'
             return `
         <div class="custom-code-block">
-          <div class="code-header" style="position: sticky; top: 0;">
-            <span class="code-language">${lang}</span>
-            <button class="copy-code-button"><i role="img">${coypysvg}</i></button>
+          <div style="position: sticky; top: 0;background-color: var(--color-bubble-assitant-bg)">
+            <div class="code-header">
+                <span class="code-language">${lang}</span>
+                <button class="copy-code-button"><i role="img">${coypysvg}</i></button>
+            </div>
           </div>
           <pre class="hljs language-${lang}"><code class="hljs language-${lang}">${code.text}</code></pre>
         </div>
@@ -151,7 +154,7 @@ function createMarkedInstance(): Marked {
 /**
  * Markdown 解析缓存
  */
-interface MarkdownCache extends Map<string, string> {}
+interface MarkdownCache extends Map<string, string> { }
 
 /**
  * useMarkdown 返回值类型
@@ -187,8 +190,8 @@ export function useMarkdown(): UseMarkdownReturn {
     const parseWithCache = (content: string): string => {
         if (!content) return ""
 
-        const cacheKey = content.length < 1000 
-            ? content 
+        const cacheKey = content.length < 1000
+            ? content
             : content.substring(0, 1000) + content.length.toString()
 
         if (cache.has(cacheKey)) {
