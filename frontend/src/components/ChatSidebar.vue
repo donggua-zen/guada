@@ -3,7 +3,7 @@
     class="flex flex-col w-full h-full bg-(--color-conversation-bg) border-r border-(--color-conversation-border) transition-all duration-300">
     <!-- 会话头部 -->
     <div
-      class="sessions-header px-4 pt-3.5 pb-3.5 flex justify-between items-center border-b border-(--color-conversation-border)">
+      class="sessions-header px-4 h-15 flex justify-between items-center border-b border-(--color-conversation-border)">
       <span class="font-semibold text-base text-(--color-text)">聊天对话</span>
       <el-button type="primary" @click="handleButtonClick('create')" :icon="ChatNew" class="new-chat-btn">
         新建会话

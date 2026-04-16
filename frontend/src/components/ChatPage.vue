@@ -1,32 +1,43 @@
 <template>
-  <SidebarLayout v-model:sidebar-visible="sidebarVisible" :sidebar-position="'left'" :z-index="50">
-    <template #sidebar>
-      <template v-if="authStore.isAuthenticated">
-        <chat-sidebar ref="chatSidebarRef" :sessions="sortedSessions" :current="currentSession"
-          @select="goChatRoute($event)" @delete="handleDeleteSession" @rename="handleRenameSession"
-          @create="handleCreateSession" />
+  <div class="flex h-full">
+    <!-- 左侧边栏 -->
+    <SidebarLayout v-model:sidebar-visible="sidebarVisible" :sidebar-position="'left'" :z-index="50">
+      <template #sidebar>
+        <template v-if="authStore.isAuthenticated">
+          <chat-sidebar ref="chatSidebarRef" :sessions="sortedSessions" :current="currentSession"
+            @select="goChatRoute($event)" @delete="handleDeleteSession" @rename="handleRenameSession"
+            @create="handleCreateSession" />
+        </template>
+        <template v-else>
+          <div
+            class="h-full w-full flex-1 flex items-center justify-center bg-(--color-conversation-bg) border-r border-(--color-conversation-border)">
+            <el-empty description="请先登录" />
+          </div>
+        </template>
       </template>
-      <template v-else>
-        <div
-          class="h-full w-full flex-1 flex items-center justify-center bg-(--color-conversation-bg) border-r border-(--color-conversation-border)">
-          <el-empty description="请先登录" />
-        </div>
+      <template v-if="!isLoading" #content>
+        <!-- 主体内容 -->
+        <template v-if="sessions.length > 0 && currentSession">
+          <ChatPanel ref="chatPanelRef" v-model:session="currentSession" v-model:sidebar-visible="sidebarVisible"
+            @save-settings="handleSaveSessionSettings" @toggle-memo="memoPanelVisible = !memoPanelVisible" />
+        </template>
+        <template v-else>
+          <div class="h-full flex-1 flex items-center justify-center">
+            <CreateSessionChatPanel v-model:sidebar-visible="sidebarVisible"
+              @create-session="handleCreateSessionWithMessage" />
+          </div>
+        </template>
       </template>
-    </template>
-    <template v-if="!isLoading" #content>
-      <!-- 主体内容 -->
-      <template v-if="sessions.length > 0 && currentSession">
-        <ChatPanel ref="chatPanelRef" v-model:session="currentSession" v-model:sidebar-visible="sidebarVisible"
-          @save-settings="handleSaveSessionSettings" />
-      </template>
-      <template v-else>
-        <div class="h-full flex-1 flex items-center justify-center">
-          <CreateSessionChatPanel v-model:sidebar-visible="sidebarVisible"
-            @create-session="handleCreateSessionWithMessage" />
-        </div>
-      </template>
-    </template>
-  </SidebarLayout>
+    </SidebarLayout>
+
+    <!-- 右侧记忆管理窗格 -->
+    <transition name="slide-right">
+      <div v-if="memoPanelVisible && currentSession" class="border-l border-gray-200 bg-white w-96 shrink-0"
+        style="z-index: 40;">
+        <MemoPanel :session-id="currentSession.id" @close="memoPanelVisible = false" />
+      </div>
+    </transition>
+  </div>
 </template>
 <script setup lang="ts">
 import { ref, onMounted, watch, computed, defineAsyncComponent, type Ref, nextTick } from "vue";
@@ -51,6 +62,7 @@ const isMobile = breakpoints.smaller('md') // md = 768px
 
 const ChatPanel = defineAsyncComponent(() => import("@/components/ChatPanel.vue"));
 const CreateSessionChatPanel = defineAsyncComponent(() => import("@/components/CreateSessionChatPanel.vue"));
+const MemoPanel = defineAsyncComponent(() => import("@/components/MemoPanel.vue"));
 
 // 组合式函数
 const { confirm, toast, prompt } = usePopup();
@@ -69,6 +81,8 @@ const currentTabValue = ref<'basic' | string>('basic');
 const sessionSettingsModalVisible = ref(false);
 // 控制侧边栏的显示状态，使用本地存储保持用户偏好
 const sidebarVisible = useStorage('sidebarVisible', true);
+// 控制记忆管理窗格的显示状态，调试阶段默认打开
+const memoPanelVisible = useStorage('memoPanelVisible', true);
 
 const isLoading = ref(true);
 
@@ -378,3 +392,20 @@ onMounted(async () => {
   isLoading.value = false;
 });
 </script>
+
+<style scoped>
+.slide-right-enter-active,
+.slide-right-leave-active {
+  transition: all 0.3s ease;
+}
+
+.slide-right-enter-from {
+  transform: translateX(100%);
+  opacity: 0;
+}
+
+.slide-right-leave-to {
+  transform: translateX(100%);
+  opacity: 0;
+}
+</style>

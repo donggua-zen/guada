@@ -238,7 +238,7 @@ const turns = computed(() => {
 // );
 
 const metadata = computed(() => {
-  const content = turns.value[0];
+  const content = turns.value[turns.value.length - 1];
   return content.metaData;
 });
 
@@ -390,7 +390,6 @@ defineExpose({
   width: 100%;
   margin-top: 20px;
   margin-bottom: 25px;
-  animation: fadeInUp 0.3s ease;
 }
 
 /* 新增卡片式设计 */
@@ -450,10 +449,11 @@ defineExpose({
 
 /* 消息文本格式化 */
 .message-text {
-  line-height: 1.7;
+  line-height: 1.8;
   color: inherit;
   max-width: 100%;
   vertical-align: middle;
+  font-size: var(--size-text-base);
 }
 
 /* 加载动画 */
