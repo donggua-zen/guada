@@ -6,6 +6,7 @@ import { MessageRepository } from "../../common/database/message.repository";
 import { SessionSummaryRepository } from "../../common/database/session-summary.repository";
 import { UploadPathService } from "../../common/services/upload-path.service";
 import { ToolOrchestrator } from "../tools/tool-orchestrator.service";
+import { ToolContextFactory, ToolContext } from "../tools/tool-context";
 import { MessageRecord, MessagePart } from "./types/llm.types";
 
 @Injectable()
@@ -17,6 +18,7 @@ export class ContextManagerService {
     private summaryRepo: SessionSummaryRepository,
     private uploadPathService: UploadPathService,
     private toolOrchestrator: ToolOrchestrator,
+    private toolContextFactory: ToolContextFactory,
   ) { }
 
   /**
@@ -31,41 +33,28 @@ export class ContextManagerService {
     skipToolCalls: boolean = false,
   ): Promise<{
     messages: MessageRecord[];
-    tools?: any[];
     systemPrompt: string;
+    toolContext: ToolContext;
   }> {
-    // 1. 获取基础对话历史
+    // 获取基础对话历史
     const historyMessages = await this.getConversationMessages(
       sessionId,
       userMessageId,
       maxMessages,
       skipToolCalls,
     );
-
-    // 2. 构建工具执行上下文
-    const toolContext = {
-      inject_params: { session_id: sessionId, user_id: userId },
-      provider_configs: {
-        mcp: {
-          enabled_tools: mergedSettings?.mcpServers ?? true,
-        },
-        time: {
-          enabled_tools: mergedSettings?.tools?.includes('get_current_time') ?? true,
-        },
-        memory: {
-          enabled_tools: mergedSettings?.tools?.includes('memory') ?? false,
-        },
-        knowledge_base: {
-          enabled_tools: historyMessages[historyMessages.length - 1]?.metadata
-            ?.referencedKbs
-            ? true
-            : false,
-        },
-      },
-      getProviderConfig: (ns: string) => {
-        return toolContext.provider_configs[ns];
-      },
-    };
+    // 检查是否包含知识库
+    let containsKnowledgeBase = false;
+    if (historyMessages[historyMessages.length - 1]?.metadata?.referencedKbs?.length > 0) {
+      containsKnowledgeBase = true;
+    }
+    // 构建工具执行上下文
+    const toolContext = this.toolContextFactory.createContext(
+      sessionId,
+      userId,
+      mergedSettings,
+      containsKnowledgeBase,
+    );
 
     // 3. 构建系统提示词（包含工具注入）
     let systemPrompt = await this.buildSystemPromptWithTools(mergedSettings, toolContext);
@@ -81,10 +70,7 @@ export class ContextManagerService {
       }
     }
 
-    // 5. 获取工具定义
-    const tools = await this.toolOrchestrator.getAllTools(toolContext);
-
-    // 6. 组装最终消息数组
+    // 5. 组装最终消息数组
     const messages: MessageRecord[] = [
       { role: "system", content: systemPrompt },
       ...nonSystemMessages,
@@ -92,8 +78,8 @@ export class ContextManagerService {
 
     return {
       messages,
-      tools: tools && tools.length > 0 ? tools : undefined,
       systemPrompt,
+      toolContext,
     };
   }
 
@@ -111,7 +97,7 @@ export class ContextManagerService {
     systemPrompt: string;
   }> {
     // 1. 复用 LLM 推理上下文的构建逻辑
-    const { messages, tools, systemPrompt } = await this.getContextForLLMInference(
+    const { messages, toolContext, systemPrompt } = await this.getContextForLLMInference(
       sessionId,
       userId,
       undefined,
@@ -120,7 +106,8 @@ export class ContextManagerService {
       false,
     );
 
-    // 2. 序列化工具定义
+    // 2. 获取工具定义并序列化
+    const tools = await this.toolOrchestrator.getAllTools(toolContext);
     const toolsJsonStr = tools && tools.length > 0 ? JSON.stringify(tools) : "";
 
     // 3. 如果存在工具定义，将其作为一条 system 消息插入到主 system prompt 之后

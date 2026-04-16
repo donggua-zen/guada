@@ -4,10 +4,11 @@ import {
   ToolCallRequest,
   ToolCallResponse,
 } from "./interfaces/tool-provider.interface";
-import { KnowledgeBaseToolProvider } from "./providers/knowledge-base-tool.provider"; // 暂时禁用
+import { KnowledgeBaseToolProvider } from "./providers/knowledge-base-tool.provider";
 import { MemoryToolProvider } from "./providers/memory-tool.provider";
 import { MCPToolProvider } from "./providers/mcp-tool.provider";
 import { TimeToolProvider } from "./providers/time-tool.provider";
+import { ToolContext } from "./tool-context";
 
 @Injectable()
 export class ToolOrchestrator {
@@ -33,34 +34,32 @@ export class ToolOrchestrator {
     }
   }
 
-  async getAllTools(context: any): Promise<any[]> {
+  async getAllTools(context: ToolContext): Promise<any[]> {
     const allTools: any[] = [];
     for (const [namespace, provider] of this.providers.entries()) {
       const config = context.getProviderConfig(namespace);
       if (!config) continue;
-      if (config.enabled_tools === false) continue;
+      if (config.enabledTools === false) continue;
       const tools = await provider.getToolsNamespaced(
-        config.enabled_tools,
-        context.inject_params,
+        config.enabledTools,
+        context.injectParams,
       );
       allTools.push(...tools);
     }
-    this.logger.debug(`Collected ${allTools} tools`);
-    this.logger.debug(allTools);
+    this.logger.debug(`Collected ${allTools.length} tools`);
     return allTools;
   }
 
-  async getAllToolPrompts(context: any): Promise<string> {
+  async getAllToolPrompts(context: ToolContext): Promise<string> {
     const prompts: string[] = [];
 
     for (const [namespace, provider] of this.providers.entries()) {
       try {
         const providerConfig = context.getProviderConfig(namespace);
         if (!providerConfig) continue;
-        if (providerConfig.enabled_tools === false) continue;
+        if (providerConfig.enabledTools === false) continue;
 
-        const injectParams = context.inject_params || {};
-        const prompt = await provider.getPrompt(injectParams);
+        const prompt = await provider.getPrompt(context.injectParams);
         if (prompt) {
           prompts.push(prompt);
         }
@@ -77,7 +76,7 @@ export class ToolOrchestrator {
 
   async executeBatch(
     requests: ToolCallRequest[],
-    context: any,
+    context: ToolContext,
   ): Promise<ToolCallResponse[]> {
     const responses: ToolCallResponse[] = [];
     for (const req of requests) {
@@ -100,7 +99,7 @@ export class ToolOrchestrator {
 
   private async execute(
     request: ToolCallRequest,
-    context: any,
+    context: ToolContext,
   ): Promise<ToolCallResponse> {
     const namespace = request.name.split("__")[0];
     const provider = this.providers.get(namespace);
@@ -111,6 +110,10 @@ export class ToolOrchestrator {
       );
     }
 
-    return provider.executeWithNamespace(request, context.inject_params);
+    if (!context.isToolEnabled(namespace)) {
+      throw new Error(`${request.name} Tool provider ${namespace} is disabled`);
+    }
+
+    return provider.executeWithNamespace(request, context.injectParams);
   }
 }
