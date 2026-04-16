@@ -75,7 +75,7 @@
     --color-bubble-user-bg: #efefef;
     --color-bubble-user-text: #1F2937;
     --color-bubble-user-border: #efefef;
-    --color-bubble-assitant-bg: none;
+    --color-bubble-assitant-bg: var(--color-bg);
     --color-bubble-assitant-text: #1F2937;
     --color-bubble-assitant-border: none;
     /* 聊天对话样式 */

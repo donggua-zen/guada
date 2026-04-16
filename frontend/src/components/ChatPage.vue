@@ -18,13 +18,21 @@
       <template v-if="!isLoading" #content>
         <!-- 主体内容 -->
         <template v-if="sessions.length > 0 && currentSession">
-          <ChatPanel ref="chatPanelRef" v-model:session="currentSession" v-model:sidebar-visible="sidebarVisible"
-            @save-settings="handleSaveSessionSettings" @toggle-memo="memoPanelVisible = !memoPanelVisible" />
+          <!-- 聊天头部 -->
+          <div class="flex flex-col h-full">
+            <ChatHeader :sidebar-visible="sidebarVisible" :title="currentSession?.title || ''" :has-more-options="true"
+              :show-memo-button="true" @toggle-sidebar="sidebarVisible = !sidebarVisible"
+              @select-more-option="handleMoreSelect" @toggle-memo="memoPanelVisible = !memoPanelVisible" />
+            <ChatPanel ref="chatPanelRef" v-model:session="currentSession" v-model:sidebar-visible="sidebarVisible"
+              @save-settings="handleSaveSessionSettings" />
+          </div>
         </template>
         <template v-else>
-          <div class="h-full flex-1 flex items-center justify-center">
-            <CreateSessionChatPanel v-model:sidebar-visible="sidebarVisible"
-              @create-session="handleCreateSessionWithMessage" />
+          <!-- 新建对话头部 -->
+          <div class="flex flex-col h-full">
+            <ChatHeader :sidebar-visible="sidebarVisible" :has-more-options="false" title="新建对话"
+              @toggle-sidebar="sidebarVisible = !sidebarVisible" />
+            <CreateSessionChatPanel @create-session="handleCreateSessionWithMessage" />
           </div>
         </template>
       </template>
@@ -54,6 +62,7 @@ import type { Session } from '@/types/session';
 // @ts-ignore - UI 组件尚未迁移到 TypeScript
 import { SidebarLayout } from "./ui";
 import ChatSidebar from "@/components/ChatSidebar.vue";
+import ChatHeader from "@/components/ChatHeader.vue";
 import { ElDialog, ElEmpty } from "element-plus";
 import { useBreakpoints, breakpointsTailwind } from '@vueuse/core'
 
@@ -75,6 +84,8 @@ const currentSession: Ref<Session | null> = ref(null);
 
 // 会话列表组件引用，用于调用组件内部方法
 const chatSidebarRef = ref<InstanceType<typeof ChatSidebar> | null>(null);
+// ChatPanel 组件引用，用于调用组件内部方法
+const chatPanelRef = ref<InstanceType<typeof ChatPanel> | null>(null);
 // 设置面板当前激活的标签页
 const currentTabValue = ref<'basic' | string>('basic');
 // 控制设置模态框的显示与隐藏
@@ -171,24 +182,24 @@ const updateSessionById = async (sessionId: string, data: any) => {
  * 更新当前会话的设置
  * 合并现有设置与新设置，并关闭设置模态框
  */
-const updateSession = async (data: any) => {
-  let session = null;
-  try {
-    if (currentSession.value && currentSession.value.id) {
-      // 合并设置
-      data.character = currentSession.value.character;
-      data.settings = { ...currentSession.value.settings, ...data.settings };
-      await apiService.updateSession(currentSession.value.id, data);
-      session = { id: currentSession.value.id, ...data, updated_at: new Date().toISOString() };
-      currentSession.value = session;
-    }
-    toast.success("设置成功");
-  } catch (error) {
-    console.error('更新对话失败:', error);
-    toast.error("设置失败");
-  }
-  sessionSettingsModalVisible.value = false;
-};
+// const updateSession = async (data: any) => {
+//   let session = null;
+//   try {
+//     if (currentSession.value && currentSession.value.id) {
+//       // 合并设置
+//       data.character = currentSession.value.character;
+//       data.settings = { ...currentSession.value.settings, ...data.settings };
+//       await apiService.updateSession(currentSession.value.id, data);
+//       session = { id: currentSession.value.id, ...data, updated_at: new Date().toISOString() };
+//       currentSession.value = session;
+//     }
+//     toast.success("设置成功");
+//   } catch (error) {
+//     console.error('更新对话失败:', error);
+//     toast.error("设置失败");
+//   }
+//   sessionSettingsModalVisible.value = false;
+// };
 
 const updateSelectedSession = async (sessionId: string) => {
   if (sortedSessions.value.length === 0 || !authStore.isAuthenticated || !sessionId) {
@@ -337,6 +348,134 @@ const handleSaveSessionSettings = async () => {
     console.error('保存对话设置失败:', error);
   }
 };
+
+/**
+ * 更多操作菜单选择处理
+ */
+async function handleMoreSelect(key: string) {
+  switch (key) {
+    case "clear":
+      await clearChat();
+      break;
+    case "export":
+      exportChat();
+      break;
+    case "import":
+      await importChat();
+      break;
+  }
+}
+
+/**
+ * 清空聊天记录
+ */
+async function clearChat() {
+  if (!currentSession.value) {
+    toast.error("当前没有活动的会话");
+    return;
+  }
+
+  if (await confirm("清空聊天记录", "确定要删除所有聊天记录吗？此操作不可撤销。")) {
+    try {
+      await apiService.clearSessionMessages(currentSession.value.id);
+      sessionStore.clearSessionState(currentSession.value.id);
+      // 重新加载消息列表
+      const chatPanel = chatPanelRef.value as any;
+      if (chatPanel && chatPanel.loadMessages) {
+        chatPanel.loadMessages(currentSession.value.id);
+      }
+      toast.success("聊天记录已清空");
+    } catch (error) {
+      console.error('清空聊天记录失败:', error);
+      toast.error("清空失败");
+    }
+  }
+}
+
+/**
+ * 导出聊天记录
+ */
+function exportChat() {
+  try {
+    if (!currentSession.value) {
+      toast.error("当前没有活动的会话");
+      return;
+    }
+
+    // 直接从 sessionStore 获取消息列表
+    const messages = sessionStore.getMessages(currentSession.value.id) || [];
+
+    const chatData = {
+      session: currentSession.value,
+      messages: messages,
+      exportTime: new Date().toISOString()
+    };
+
+    const dataStr = JSON.stringify(chatData, null, 2);
+    const dataBlob = new Blob([dataStr], { type: "application/json" });
+
+    const link = document.createElement("a");
+    link.href = URL.createObjectURL(dataBlob);
+    link.download = `chat-export-${currentSession.value.title || "session"
+      }-${new Date().getTime()}.json`;
+    link.click();
+    URL.revokeObjectURL(link.href);
+
+    toast.success("聊天记录导出成功");
+  } catch (error) {
+    console.error("导出聊天记录失败:", error);
+    toast.error("导出失败");
+  }
+}
+
+/**
+ * 导入聊天记录
+ */
+async function importChat() {
+  if (!currentSession.value) {
+    toast.error("当前没有活动的会话");
+    return;
+  }
+
+  if (!(await confirm("导入聊天记录", "确定要导入聊天记录吗？这将替换当前的聊天记录。"))) {
+    return;
+  }
+
+  const input = document.createElement("input");
+  input.type = "file";
+  input.accept = ".json";
+
+  input.onchange = async (e: Event) => {
+    const target = e.target as HTMLInputElement;
+    if (!target) return;
+    const file = target.files?.[0];
+    if (!file) return;
+
+    try {
+      const text = await file.text();
+      const chatData = JSON.parse(text);
+
+      if (!currentSession.value) {
+        toast.error("当前没有活动的会话");
+        return;
+      }
+
+      await apiService.importMessages(currentSession.value.id, chatData.messages);
+      toast.success("聊天记录导入成功");
+
+      // 重新加载消息列表
+      const chatPanel = chatPanelRef.value as any;
+      if (chatPanel && chatPanel.loadMessages) {
+        chatPanel.loadMessages(currentSession.value.id);
+      }
+    } catch (error) {
+      console.error("导入聊天记录失败:", error);
+      toast.error("文件格式错误或读取失败");
+    }
+  };
+
+  input.click();
+}
 
 // 监听器
 

@@ -51,7 +51,7 @@
                     </div>
 
                     <!-- 统一文件列表(包含上传任务和数据库记录) -->
-                    <div class="flex-1 flex flex-col">
+                    <div class="flex-1 flex flex-col overflow-hidden">
                         <!-- Tab 切换栏 -->
                         <div class="px-4 py-2 border-b border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900">
                             <el-tabs v-model="activeTab" @tab-click="handleTabClick">
@@ -69,7 +69,7 @@
                         </div>
                     
                         <!-- 文件列表内容区 -->
-                        <div ref="fileListContainer" class="flex-1 overflow-y-auto p-4" @scroll="handleScroll">
+                        <ScrollContainer ref="fileListContainer" class="flex-1 p-4" @scroll="handleScroll">
                             <!-- 上传区域(仅在文件列表 Tab 显示) -->
                             <div v-if="activeTab === 'files'" class="mb-6">
                                 <el-upload ref="uploadRef" drag :auto-upload="false" :on-change="handleFileChange"
@@ -173,7 +173,7 @@
                                     </div>
                                 </div>
                             </div>
-                        </div>
+                        </ScrollContainer>
                     </div>
                 </template>
 
