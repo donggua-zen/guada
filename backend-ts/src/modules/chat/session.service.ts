@@ -616,7 +616,7 @@ export class SessionService {
       remainingTokens,
       percentage: parseFloat(percentage.toFixed(2)),
       modelName,
-      messageCount: messages.length - 1, // 减去 system 消息
+      messageCount: messages.filter(m => m.role === 'user').length, // 仅统计用户消息数（对话轮次）
     };
   }
 

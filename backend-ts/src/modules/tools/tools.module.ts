@@ -1,6 +1,7 @@
 import { Module } from "@nestjs/common";
 import { VectorDbModule } from "../../common/vector-db/vector-db.module";
 import { ToolOrchestrator } from "./tool-orchestrator.service";
+import { ToolContextFactory } from "./tool-context";
 import { KnowledgeBaseToolProvider } from "./providers/knowledge-base-tool.provider";
 import { MemoryToolProvider } from "./providers/memory-tool.provider";
 import { MCPToolProvider } from "./providers/mcp-tool.provider";
@@ -15,6 +16,7 @@ import { PrismaService } from "../../common/database/prisma.service";
   imports: [VectorDbModule],
   providers: [
     ToolOrchestrator,
+    ToolContextFactory,
     KnowledgeBaseToolProvider,
     MemoryToolProvider,
     MCPToolProvider,
@@ -25,6 +27,6 @@ import { PrismaService } from "../../common/database/prisma.service";
     KBChunkRepository,
     PrismaService,
   ],
-  exports: [ToolOrchestrator],
+  exports: [ToolOrchestrator, ToolContextFactory],
 })
 export class ToolsModule {}
