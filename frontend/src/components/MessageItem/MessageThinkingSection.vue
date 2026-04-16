@@ -98,7 +98,7 @@ const formattedDuration = computed(() => {
 .thinking-content-wrapper {
   min-height: 0;
   opacity: 0;
-  transform: translateY(-8px);
+  /* transform: translateY(-8px); */
   transition: opacity 0.25s ease, transform 0.25s ease;
   overflow: hidden;
 }
@@ -110,13 +110,13 @@ const formattedDuration = computed(() => {
 
 @keyframes fadeIn {
   from {
-    opacity: 0;
-    transform: translateY(-5px);
+    /* opacity: 0; */
+    /* transform: translateY(-5px); */
   }
 
   to {
-    opacity: 1;
-    transform: translateY(0);
+    /* opacity: 1; */
+    /* transform: translateY(0); */
   }
 }
 </style>

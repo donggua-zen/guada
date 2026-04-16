@@ -2,7 +2,8 @@
   <div class="flex flex-col h-full" style="position: relative;">
     <!-- 聊天头部 -->
     <ChatHeader :sidebar-visible="sidebarVisible" :title="currentSession?.title || ''" :has-more-options="true"
-      @toggle-sidebar="emit('update:sidebarVisible', !sidebarVisible)" @select-more-option="handleMoreSelect" />
+      :show-memo-button="false" @toggle-sidebar="emit('update:sidebarVisible', !sidebarVisible)"
+      @select-more-option="handleMoreSelect" />
 
     <!-- 消息内容区域 -->
     <div class="flex-1 overflow-hidden w-full items-center" ref="messagesContainerRef">
@@ -11,8 +12,8 @@
         <WelcomeScreen :session="currentSession" />
       </template>
       <template v-else-if="authStore.isAuthenticated">
-        <ScrollContainer ref="scrollContainerRef" :auto-scroll="true" @scroll="handleScroll">
-          <div class="flex flex-col items-center px-5 max-w-230 mx-auto pb-35">
+        <ScrollContainer ref="scrollContainerRef" :auto-scroll="needScrollToBottom" @scroll="handleScroll">
+          <div class="flex flex-col items-center px-5 max-w-210 mx-auto">
             <div class="w-full last:min-h-60" v-for="(pair, index) in messagePairs" :key="pair[0].id">
               <MessageItem v-for="message in pair" :key="message.id" :message="message"
                 :avatar="message.role == 'user' ? userAvater : currentSession?.avatarUrl"
@@ -31,10 +32,11 @@
     </div>
 
     <!-- 输入区域 -->
-    <div class="px-5 pb-2.5 pt-2 w-full flex flex-col items-center" style="position: absolute; bottom: 0;">
+    <div class="pb-2.5 w-full max-w-200 flex flex-col items-center mx-auto"
+      _style="position: absolute; left: 50%; transform: translateX(-50%);bottom: 0;">
       <!-- 编辑模式提示条 -->
-      <div v-if="editMode" class="w-full max-w-220 mb-[-0.6rem]">
-        <div class="edit-mode-banner">
+      <div v-if="editMode" class="w-full mb-[-0.2rem]">
+        <div class="edit-mode-banner pt-1 pb-3.5 px-2 bg-gray-50 border border-gray-300 rounded-lg">
           <span class="edit-mode-icon">📝</span>
           <span class="edit-mode-text">正在编辑消息</span>
           <el-button size="small" @click="exitEditMode" class="cancel-edit-btn">
@@ -43,7 +45,7 @@
         </div>
       </div>
 
-      <div class="w-full flex items-center max-w-220">
+      <div class="w-full flex items-center" style="margin-top: -10px;z-index: 9;">
         <ChatInput v-model:value="inputMessage.content" v-model:thinking-enabled="thinkingEnabled" :config="{
           modelId: currentModelId,
           maxMemoryLength: currentSession?.settings?.maxMemoryLength || null,
@@ -150,6 +152,8 @@ const scrollContainerRef = ref<any>(null);
 const compressionRatio = ref(50);
 const minRetainedTurns = ref(3);
 const compressDialogVisible = ref(false);
+const needScrollToBottom = ref(true);
+const lastScrollTop = ref(0);
 
 // 使用 useMessageOperations composable
 const {
@@ -195,7 +199,9 @@ const updateScrollButtonVisibility = useDebounceFn(() => {
  * 平滑滚动到底部
  */
 function scrollToBottom() {
+
   if (scrollContainerRef.value) {
+    needScrollToBottom.value = true;
     scrollContainerRef.value.smoothScrollToBottom()
   }
 }
@@ -204,6 +210,7 @@ function scrollToBottom() {
  * 立即滚动到底部
  */
 function immediateScrollToBottom() {
+  needScrollToBottom.value = true;
   scrollContainerRef.value?.immediateScrollToBottom()
 }
 
@@ -211,7 +218,17 @@ function immediateScrollToBottom() {
  * 处理滚动事件
  */
 function handleScroll(event: any) {
+  // 只有向上滚动时才将需要自动滚动到底部的标志置为 false
+  const isAtBottom = scrollContainerRef.value?.isAtBottom
+
+  if (needScrollToBottom.value && lastScrollTop.value - event.target.scrollTop > 10) {
+    needScrollToBottom.value = false;
+  } else if (!needScrollToBottom.value && isAtBottom) {
+    needScrollToBottom.value = true;
+  }
+  lastScrollTop.value = event.target.scrollTop;
   updateScrollButtonVisibility()
+
 }
 
 /**
@@ -325,9 +342,6 @@ function handleMoreSelect(key: string) {
     case "import":
       importChat();
       break;
-    case "compress":
-      compressHistory();
-      break;
   }
 }
 
@@ -411,6 +425,7 @@ async function executeCompression() {
 
   try {
     compressDialogVisible.value = false;
+    sessionStore.setSessionIsCompressing(currentSession.value.id, true);
     notify.info("正在处理", "正在生成历史摘要，请稍候...");
     const res = await sessionStore.compressSessionHistory(currentSession.value.id, {
       compressionRatio: compressionRatio.value,
@@ -425,7 +440,14 @@ async function executeCompression() {
       toast.warning(res.message || "压缩未执行");
     }
   } catch (error: any) {
-    notify.error("压缩失败", error.message);
+    // 处理 409 冲突错误（会话繁忙）
+    if (error.status === 409 || error.message?.includes('busy')) {
+      toast.warning('当前会话正在处理其他任务（如对话或压缩），请稍后再试。');
+    } else {
+      notify.error("压缩失败", error.message);
+    }
+  } finally {
+    sessionStore.setSessionIsCompressing(currentSession.value.id, false);
   }
 }
 
@@ -439,6 +461,7 @@ async function handleSessionChange(newSessionId: string | null, oldSessionId: st
   currentSessionId.value = newSessionId;
   if (newSessionId) {
     try {
+      lastScrollTop.value = 0;
       const sessionData = await loadSession(newSessionId);
       currentSession.value = sessionData;
       immediateScrollToBottom();
@@ -664,10 +687,6 @@ defineExpose({ sendMessage: handleSendMessage })
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: 10px 12px 15px 12px;
-  background: #fff7e6;
-  border: 1px solid #e6a23c;
-  border-radius: 6px;
   box-shadow: 0 2px 8px rgba(230, 162, 60, 0.1);
   transition: all 0.3s ease;
 }

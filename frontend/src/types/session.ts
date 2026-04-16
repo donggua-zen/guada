@@ -33,6 +33,7 @@ export interface InputMessageState {
 export interface SessionState {
     messages: any[]  // 使用 any 避免循环导入
     isStreaming: boolean
+    isCompressing: boolean
     inputMessage: InputMessageState
     scrollPosition: number
     lastUpdated: number

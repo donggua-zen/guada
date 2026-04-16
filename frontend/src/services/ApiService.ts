@@ -244,6 +244,32 @@ class ApiService implements IApiService {
         })
     }
 
+    async fetchSessionSummaries(sessionId: string): Promise<any[]> {
+        return await this._request(`/sessions/${sessionId}/summaries`, { method: 'GET' })
+    }
+
+    async updateSummary(summaryId: string, data: { summaryContent?: string }): Promise<any> {
+        return await this._request(`/sessions/summaries/${summaryId}`, {
+            method: 'PUT',
+            data,
+        })
+    }
+
+    async deleteSummary(summaryId: string): Promise<{ success: boolean }> {
+        return await this._request(`/sessions/summaries/${summaryId}`, { method: 'DELETE' })
+    }
+
+    async fetchSessionTokenStats(sessionId: string): Promise<{
+        usedTokens: number
+        totalTokens: number
+        remainingTokens: number
+        percentage: number
+        modelName: string
+        messageCount: number
+    }> {
+        return await this._request(`/sessions/${sessionId}/token-stats`)
+    }
+
     // ========== 消息管理 ==========
     async deleteMessage(messageId: string): Promise<{ success: boolean }> {
         return await this._request(`/messages/${messageId}`, { method: 'DELETE' })
