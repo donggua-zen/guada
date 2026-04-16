@@ -57,7 +57,7 @@ export class AgentService {
       const mergedSettings = this.mergeSettings(session);
 
       // 2. 使用 ContextManager 获取完整的 LLM 上下文（包含系统提示词、工具注入等）
-      const { messages, tools } = await this.contextManager.getContextForLLMInference(
+      const { messages, toolContext } = await this.contextManager.getContextForLLMInference(
         sessionId,
         session.userId,
         messageId,
@@ -65,6 +65,12 @@ export class AgentService {
         mergedSettings,
         false,
       );
+
+      // 3. 获取工具定义
+      const config = (session.model?.config as any) || {};
+      const features = config.features || [];
+      const canUseTools = features.includes("tools");
+      const tools = canUseTools ? await this.toolOrchestrator.getAllTools(toolContext) : undefined;
 
       this.logger.log(`Retrieved ${messages.length} messages for LLM inference`);
 
@@ -171,7 +177,6 @@ export class AgentService {
 
           const canThinking =
             mergedSettings.thinkingEnabled && features.includes("thinking");
-          const canUseTools = features.includes("tools");
 
           // 检查模型是否支持图像输入（用于决定是否传递图片内容给 LLM）
           const supportsImageInput = (config.inputCapabilities || []).includes(
@@ -181,7 +186,7 @@ export class AgentService {
           const stream = llm.completions({
             model: session.model?.modelName || "gpt-3.5-turbo",
             messages: [...messages, ...chatTurns],
-            tools: canUseTools ? tools : undefined,
+            tools, // 直接使用前面已获取的 tools
             temperature: mergedSettings.modelTemperature,
             topP: mergedSettings.modelTopP,
             frequencyPenalty: mergedSettings.modelFrequencyPenalty,
@@ -282,37 +287,14 @@ export class AgentService {
               );
 
               this.logger.log("Tool calls:", currentChunk.toolCalls);
+
               const toolResponses = await this.toolOrchestrator.executeBatch(
                 currentChunk.toolCalls.map((tc: any) => ({
                   id: tc.id,
                   name: tc.name,
                   arguments: JSON.parse(tc.arguments) || {},
                 })),
-                {
-                  inject_params: { session_id: sessionId, user_id: session.userId },
-                  provider_configs: {
-                    mcp: {
-                      enabled_tools: mergedSettings.mcpServers ?? true,
-                    },
-                    time: {
-                      enabled_tools: mergedSettings.tools?.includes('get_current_time') ?? true,
-                    },
-                    memory: {
-                      enabled_tools: mergedSettings.tools?.includes('memory') ?? false,
-                    },
-                    knowledge_base: {
-                      enabled_tools: messages[messages.length - 1]?.metadata
-                        ?.referencedKbs
-                        ? true
-                        : false,
-                    },
-                  },
-                  getProviderConfig: (ns: string) => {
-                    return {
-                      enabled_tools: mergedSettings.mcpServers ?? true,
-                    };
-                  },
-                } as any,
+                toolContext,
               );
 
               // Yield tool_calls_response 事件（与 Python 后端保持一致）
