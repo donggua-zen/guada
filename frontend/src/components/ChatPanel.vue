@@ -1,85 +1,56 @@
 <template>
-  <div class="flex flex-col h-full" style="position: relative;">
-    <!-- 聊天头部 -->
-    <ChatHeader :sidebar-visible="sidebarVisible" :title="currentSession?.title || ''" :has-more-options="true"
-      :show-memo-button="false" @toggle-sidebar="emit('update:sidebarVisible', !sidebarVisible)"
-      @select-more-option="handleMoreSelect" />
-
-    <!-- 消息内容区域 -->
-    <div class="flex-1 overflow-hidden w-full items-center" ref="messagesContainerRef">
-      <template v-if="!isLoading && activeMessages.length === 0">
-        <!-- 欢迎页 -->
-        <WelcomeScreen :session="currentSession" />
-      </template>
-      <template v-else-if="authStore.isAuthenticated">
-        <ScrollContainer ref="scrollContainerRef" :auto-scroll="needScrollToBottom" @scroll="handleScroll">
-          <div class="flex flex-col items-center px-5 max-w-210 mx-auto">
-            <div class="w-full last:min-h-60" v-for="(pair, index) in messagePairs" :key="pair[0].id">
-              <MessageItem v-for="message in pair" :key="message.id" :message="message"
-                :avatar="message.role == 'user' ? userAvater : currentSession?.avatarUrl"
-                :is-last="message.index == activeMessages.length - 1"
-                :allow-generate="!isStreaming && allowReSendMessage(message, message.index ?? 0, activeMessages)"
-                @delete="deleteMessage" @edit="editMessage" @copy="copyMessage" @generate="generateResponse"
-                @regenerate="regenerateResponse" @switch="switchContent" />
-            </div>
+  <!-- 消息内容区域 -->
+  <div class="flex-1 overflow-hidden w-full items-center" ref="messagesContainerRef">
+    <template v-if="!isLoading && activeMessages.length === 0">
+      <!-- 欢迎页 -->
+      <WelcomeScreen :session="currentSession" />
+    </template>
+    <template v-else-if="authStore.isAuthenticated">
+      <ScrollContainer ref="scrollContainerRef" :auto-scroll="needScrollToBottom" @scroll="handleScroll">
+        <div class="flex flex-col items-center px-5 max-w-210 mx-auto">
+          <div class="w-full last:min-h-60" v-for="(pair, index) in messagePairs" :key="pair[0].id">
+            <MessageItem v-for="message in pair" :key="message.id" :message="message"
+              :avatar="message.role == 'user' ? userAvater : currentSession?.avatarUrl"
+              :is-last="message.index == activeMessages.length - 1"
+              :allow-generate="!isStreaming && allowReSendMessage(message, message.index ?? 0, activeMessages)"
+              @delete="deleteMessage" @edit="editMessage" @copy="copyMessage" @generate="generateResponse"
+              @regenerate="regenerateResponse" @switch="switchContent" />
           </div>
-        </ScrollContainer>
-
-        <!-- 回到底部悬浮按钮 -->
-        <ScrollToBottomButton :show="showScrollToBottomBtn" :is-streaming="shouldButtonBreathe"
-          @click="handleScrollToBottomClick" />
-      </template>
-    </div>
-
-    <!-- 输入区域 -->
-    <div class="pb-2.5 w-full max-w-200 flex flex-col items-center mx-auto"
-      _style="position: absolute; left: 50%; transform: translateX(-50%);bottom: 0;">
-      <!-- 编辑模式提示条 -->
-      <div v-if="editMode" class="w-full mb-[-0.2rem]">
-        <div class="edit-mode-banner pt-1 pb-3.5 px-2 bg-gray-50 border border-gray-300 rounded-lg">
-          <span class="edit-mode-icon">📝</span>
-          <span class="edit-mode-text">正在编辑消息</span>
-          <el-button size="small" @click="exitEditMode" class="cancel-edit-btn">
-            取消
-          </el-button>
         </div>
-      </div>
+      </ScrollContainer>
 
-      <div class="w-full flex items-center" style="margin-top: -10px;z-index: 9;">
-        <ChatInput v-model:value="inputMessage.content" v-model:thinking-enabled="thinkingEnabled" :config="{
-          modelId: currentModelId,
-          maxMemoryLength: currentSession?.settings?.maxMemoryLength || null,
-          knowledgeBaseIds: inputMessage?.knowledgeBaseIds || currentSession?.settings?.referencedKbs || []
-        }" :files="inputMessage.files" :streaming="isStreaming" @config-change="handleConfigChange"
-          @send="handleSendMessage" @abort="abortResponse" @toggle-thinking="toggleDeepThinking" />
-      </div>
-      <!-- <div class="ai-disclaimer text-xs text-gray-400 text-center mt-2">内容由 AI 生成，仅供参考</div> -->
-
-    </div>
-
-    <!-- 压缩历史配置弹窗 -->
-    <el-dialog v-model="compressDialogVisible" title="压缩历史记录" width="450px">
-      <div class="space-y-4">
-        <p class="text-sm text-gray-600">压缩历史记录可以节省上下文长度并提高响应速度。</p>
-        <div class="flex items-center gap-4">
-          <label class="text-sm font-medium w-28 text-right">压缩比例 (%)</label>
-          <el-input-number v-model="compressionRatio" :min="10" :max="90" :step="5" controls-position="right"
-            style="width: 100%" />
-        </div>
-        <div class="flex items-center gap-4">
-          <label class="text-sm font-medium w-28 text-right">保留最近轮数</label>
-          <el-input-number v-model="minRetainedTurns" :min="1" :max="10" :step="1" controls-position="right"
-            style="width: 100%" />
-        </div>
-      </div>
-      <template #footer>
-        <span class="dialog-footer">
-          <el-button @click="compressDialogVisible = false">取消</el-button>
-          <el-button type="primary" @click="executeCompression">开始压缩</el-button>
-        </span>
-      </template>
-    </el-dialog>
+      <!-- 回到底部悬浮按钮 -->
+      <ScrollToBottomButton :show="showScrollToBottomBtn" :is-streaming="shouldButtonBreathe"
+        @click="handleScrollToBottomClick" />
+    </template>
   </div>
+
+  <!-- 输入区域 -->
+  <div class="pb-2.5 w-full max-w-200 flex flex-col items-center mx-auto"
+    _style="position: absolute; left: 50%; transform: translateX(-50%);bottom: 0;">
+    <!-- 编辑模式提示条 -->
+    <div v-if="editMode" class="w-full mb-[-0.2rem]">
+      <div class="edit-mode-banner pt-1 pb-3.5 px-2 bg-gray-50 border border-gray-300 rounded-lg">
+        <span class="edit-mode-icon">📝</span>
+        <span class="edit-mode-text">正在编辑消息</span>
+        <el-button size="small" @click="exitEditMode" class="cancel-edit-btn">
+          取消
+        </el-button>
+      </div>
+    </div>
+
+    <div class="w-full flex items-center" style="margin-top: -10px;z-index: 9;">
+      <ChatInput v-model:value="inputMessage.content" v-model:thinking-enabled="thinkingEnabled" :config="{
+        modelId: currentModelId,
+        maxMemoryLength: currentSession?.settings?.maxMemoryLength || null,
+        knowledgeBaseIds: inputMessage?.knowledgeBaseIds || currentSession?.settings?.referencedKbs || []
+      }" :files="inputMessage.files" :streaming="isStreaming" @config-change="handleConfigChange"
+        @send="handleSendMessage" @abort="abortResponse" @toggle-thinking="toggleDeepThinking" />
+    </div>
+    <!-- <div class="ai-disclaimer text-xs text-gray-400 text-center mt-2">内容由 AI 生成，仅供参考</div> -->
+
+  </div>
+
 </template>
 
 <script setup lang="ts">
@@ -99,7 +70,6 @@ import { useMessageOperations } from '@/composables/useMessageOperations'
 
 // 组件导入
 import MessageItem from "./MessageItem.vue";
-import ChatHeader from "./ChatHeader.vue";
 import { Avatar, ChatInput, ScrollContainer, ScrollToBottomButton } from "./ui";
 import WelcomeScreen from './ChatPanel/WelcomeScreen.vue';
 
@@ -331,127 +301,6 @@ onMounted(() => {
   // 初始化相关逻辑
 });
 
-// 更多操作菜单选择处理
-function handleMoreSelect(key: string) {
-  switch (key) {
-    case "clear":
-      clearChat();
-      break;
-    case "export":
-      exportChat();
-      break;
-    case "import":
-      importChat();
-      break;
-  }
-}
-
-// 聊天记录导入导出
-function exportChat() {
-  try {
-    if (!currentSession.value) {
-      toast.error("当前没有活动的会话");
-      return;
-    }
-
-    const chatData = {
-      session: currentSession.value,
-      messages: activeMessages.value,
-      exportTime: new Date().toISOString()
-    };
-
-    const dataStr = JSON.stringify(chatData, null, 2);
-    const dataBlob = new Blob([dataStr], { type: "application/json" });
-
-    const link = document.createElement("a");
-    link.href = URL.createObjectURL(dataBlob);
-    link.download = `chat-export-${currentSession.value.title || "session"
-      }-${new Date().getTime()}.json`;
-    link.click();
-    URL.revokeObjectURL(link.href);
-
-    toast.success("聊天记录导出成功");
-  } catch (error) {
-    console.error("导出聊天记录失败:", error);
-    toast.error("导出失败");
-  }
-}
-
-async function importChat() {
-  if (!currentSession.value) {
-    toast.error("当前没有活动的会话");
-    return;
-  }
-
-  if (!(await confirm("导入聊天记录", "确定要导入聊天记录吗？这将替换当前的聊天记录。"))) {
-    return;
-  }
-  const input = document.createElement("input");
-  input.type = "file";
-  input.accept = ".json";
-
-  input.onchange = async (e: Event) => {
-    const target = e.target as HTMLInputElement;
-    if (!target) return;
-    const file = target.files?.[0];
-    if (!file) return;
-
-    try {
-      const text = await file.text();
-      const chatData = JSON.parse(text);
-      // 这里可以添加数据验证逻辑
-      if (!currentSession.value) {
-        toast.error("当前没有活动的会话");
-        return;
-      }
-      await apiService.importMessages(currentSession.value.id, chatData.messages);
-      toast.success("聊天记录导入成功");
-      loadMessages(currentSession.value.id);
-    } catch (error) {
-      console.error("导入聊天记录失败:", error);
-      toast.error("文件格式错误或读取失败");
-    }
-  };
-
-  input.click();
-}
-
-async function compressHistory() {
-  if (!currentSession.value) return;
-  compressDialogVisible.value = true;
-}
-
-async function executeCompression() {
-  if (!currentSession.value) return;
-
-  try {
-    compressDialogVisible.value = false;
-    sessionStore.setSessionIsCompressing(currentSession.value.id, true);
-    notify.info("正在处理", "正在生成历史摘要，请稍候...");
-    const res = await sessionStore.compressSessionHistory(currentSession.value.id, {
-      compressionRatio: compressionRatio.value,
-      minRetainedTurns: minRetainedTurns.value
-    });
-
-    if (res.success) {
-      toast.success(`成功压缩 ${res.compressedTokens || 0} Tokens`);
-      // 重新加载消息以反映摘要变化
-      loadMessages(currentSession.value.id);
-    } else {
-      toast.warning(res.message || "压缩未执行");
-    }
-  } catch (error: any) {
-    // 处理 409 冲突错误（会话繁忙）
-    if (error.status === 409 || error.message?.includes('busy')) {
-      toast.warning('当前会话正在处理其他任务（如对话或压缩），请稍后再试。');
-    } else {
-      notify.error("压缩失败", error.message);
-    }
-  } finally {
-    sessionStore.setSessionIsCompressing(currentSession.value.id, false);
-  }
-}
-
 /**
  * 处理会话切换
  */
@@ -516,16 +365,6 @@ async function handleStreamResponse(
 function abortResponse() {
   if (currentSessionId.value) {
     apiService.cancelResponse(currentSessionId.value);
-  }
-}
-
-async function clearChat() {
-  if (await confirm("清空聊天记录", "确定要删除所有聊天记录吗？此操作不可撤销。")) {
-    if (currentSessionId.value) {
-      await apiService.clearSessionMessages(currentSessionId.value);
-      sessionStore.clearSessionState(currentSessionId.value);
-    }
-    toast.success("聊天记录已清空");
   }
 }
 
@@ -677,8 +516,12 @@ const toggleDeepThinking = () => {
   debouncedSaveSession();
 };
 
-
-defineExpose({ sendMessage: handleSendMessage })
+// 将方法暴露给父组件
+defineExpose({
+  sendMessage: handleSendMessage,
+  loadMessages,
+  activeMessages
+})
 
 </script>
 

@@ -1,105 +1,101 @@
 <template>
-  <div class="flex flex-col h-full w-full">
-    <!-- 聊天头部 -->
-    <ChatHeader :sidebar-visible="localSidebarVisible" :has-more-options="false" title="新建对话"
-      @toggle-sidebar="emit('update:sidebarVisible', !localSidebarVisible)" />
 
-    <!-- 输入区域 -->
-    <div class="px-5 pb-2.5 w-full flex-1 flex flex-col items-center justify-center mb-40">
-      <div class="banner max-w-full mx-auto w-80 mb-4">
-        <img src="/images/chat_banner.webp" alt=""></img>
+  <!-- 输入区域 -->
+  <div class="px-5 pb-2.5 w-full flex-1 flex flex-col items-center justify-center mb-40">
+    <div class="banner max-w-full mx-auto w-80 mb-4">
+      <img src="/images/chat_banner.webp" alt=""></img>
+    </div>
+    <h1 class="text-3xl mb-6 text-gray-600">Hi，想聊些什么？</h1>
+
+    <!-- 已选角色显示 -->
+    <div
+      class="w-full max-w-200 mb-[-0.7rem] flex items-center gap-3 p-2 pb-4 bg-gray-50 border border-gray-100 rounded-lg cursor-pointer hover:bg-gray-100 transition-colors"
+      @click="showCharacterSelector = true">
+      <div class="w-10 h-10 shrink-0 overflow-hidden rounded">
+        <Avatar :src="currentCharacter?.avatarUrl" type="assistant" :name="currentCharacter?.title"
+          class="w-full h-full object-cover" />
       </div>
-      <h1 class="text-3xl mb-6 text-gray-600">Hi，想聊些什么？</h1>
+      <div class="flex-1 min-w-0">
+        <p class="text-sm font-medium text-gray-700 truncate">{{ currentCharacter?.title || '未命名角色' }}</p>
+        <p class="text-xs text-gray-500 truncate">{{ currentCharacter?.description || '暂无描述' }}</p>
+      </div>
+      <el-icon class="text-gray-400 shrink-0">
+        <ArrowRightTwotone />
+      </el-icon>
+    </div>
 
-      <!-- 已选角色显示 -->
-      <div
-        class="w-full max-w-200 mb-[-0.7rem] flex items-center gap-3 p-2 pb-4 bg-gray-50 border border-gray-100 rounded-lg cursor-pointer hover:bg-gray-100 transition-colors"
-        @click="showCharacterSelector = true">
-        <div class="w-10 h-10 shrink-0 overflow-hidden rounded">
-          <Avatar :src="currentCharacter?.avatarUrl" type="assistant" :name="currentCharacter?.title"
+    <div class="w-full  max-w-200">
+      <ChatInput v-model:value="inputMessage.content" v-model:thinking-enabled="thinkingEnabled" :config="{
+        modelId: currentModelId,
+        maxMemoryLength: (lastModelConfig.value as any)?.maxMemoryLength || currentCharacter?.settings?.maxMemoryLength,
+        knowledgeBaseIds: currentSession?.settings?.referencedKbs || []
+      }" @config-change="handleConfigChange" :buttons="chatInputButtons" :files="inputMessage.files"
+        :streaming="false" @send="sendMessage" @toggle-thinking="toggleDeepThinking" />
+    </div>
+    <div>
+      <div class="flex items-center justify-center mt-6">
+        您也可以<span class="w-1"></span>
+        <el-button type="primary" plain round size="small" @click="handleCreateSessionClick">直接创建会话
+        </el-button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 角色选择器弹窗 -->
+  <el-dialog v-model="showCharacterSelector" title="选择角色" :width="isMobile ? '90%' : '450px'" :append-to-body="true">
+    <!-- 搜索框 -->
+    <div class="mb-4">
+      <el-input v-model="characterSearchText" placeholder="搜索角色..." clearable>
+        <template #prefix>
+          <el-icon>
+            <SearchFilled />
+          </el-icon>
+        </template>
+      </el-input>
+    </div>
+
+    <!-- 角色列表 -->
+    <div class="character-list max-h-96 overflow-y-auto">
+      <div v-for="character in filteredCharacters" :key="character.id"
+        class="character-item flex items-center gap-3 p-3 rounded-lg cursor-pointer hover:bg-gray-50 transition-colors border border-transparent"
+        :class="{ 'bg-blue-50 border-blue-200': currentSession.characterId === character.id }"
+        @click="selectCharacter(character)">
+        <div class="w-12 h-12 shrink-0 overflow-hidden rounded">
+          <Avatar :src="character.avatarUrl" type="assistant" :name="character.title"
             class="w-full h-full object-cover" />
         </div>
         <div class="flex-1 min-w-0">
-          <p class="text-sm font-medium text-gray-700 truncate">{{ currentCharacter?.title || '未命名角色' }}</p>
-          <p class="text-xs text-gray-500 truncate">{{ currentCharacter?.description || '暂无描述' }}</p>
+          <p class="text-sm font-medium text-gray-700 truncate">{{ character.title }}</p>
+          <p class="text-xs text-gray-500 truncate mt-1">{{ character.description || '暂无描述' }}</p>
         </div>
-        <el-icon class="text-gray-400 shrink-0">
-          <ArrowRightTwotone />
+        <el-icon v-if="currentSession.characterId === character.id" class="text-blue-500 shrink-0" size="20">
+          <CheckCircleFilled />
         </el-icon>
       </div>
 
-      <div class="w-full  max-w-200">
-        <ChatInput v-model:value="inputMessage.content" v-model:thinking-enabled="thinkingEnabled" :config="{
-          modelId: currentModelId,
-          maxMemoryLength: (lastModelConfig.value as any)?.maxMemoryLength || currentCharacter?.settings?.maxMemoryLength,
-          knowledgeBaseIds: currentSession?.settings?.referencedKbs || []
-        }" @config-change="handleConfigChange" :buttons="chatInputButtons" :files="inputMessage.files"
-          :streaming="false" @send="sendMessage" @toggle-thinking="toggleDeepThinking" />
-      </div>
-      <div>
-        <div class="flex items-center justify-center mt-6">
-          您也可以<span class="w-1"></span>
-          <el-button type="primary" plain round size="small" @click="handleCreateSessionClick">直接创建会话
-          </el-button>
-        </div>
+      <!-- 空状态 -->
+      <div v-if="filteredCharacters.length === 0" class="text-center py-8 text-gray-400">
+        <el-icon :size="48" color="rgb(156 163 175)" class="mb-2">
+          <SearchFilled />
+        </el-icon>
+        <p>未找到匹配的角色</p>
       </div>
     </div>
 
-    <!-- 角色选择器弹窗 -->
-    <el-dialog v-model="showCharacterSelector" title="选择角色" :width="isMobile ? '90%' : '450px'" :append-to-body="true">
-      <!-- 搜索框 -->
-      <div class="mb-4">
-        <el-input v-model="characterSearchText" placeholder="搜索角色..." clearable>
-          <template #prefix>
-            <el-icon>
-              <SearchFilled />
-            </el-icon>
-          </template>
-        </el-input>
-      </div>
-
-      <!-- 角色列表 -->
-      <div class="character-list max-h-96 overflow-y-auto">
-        <div v-for="character in filteredCharacters" :key="character.id"
-          class="character-item flex items-center gap-3 p-3 rounded-lg cursor-pointer hover:bg-gray-50 transition-colors border border-transparent"
-          :class="{ 'bg-blue-50 border-blue-200': currentSession.characterId === character.id }"
-          @click="selectCharacter(character)">
-          <div class="w-12 h-12 shrink-0 overflow-hidden rounded">
-            <Avatar :src="character.avatarUrl" type="assistant" :name="character.title"
-              class="w-full h-full object-cover" />
-          </div>
-          <div class="flex-1 min-w-0">
-            <p class="text-sm font-medium text-gray-700 truncate">{{ character.title }}</p>
-            <p class="text-xs text-gray-500 truncate mt-1">{{ character.description || '暂无描述' }}</p>
-          </div>
-          <el-icon v-if="currentSession.characterId === character.id" class="text-blue-500 shrink-0" size="20">
-            <CheckCircleFilled />
+    <!-- 底部按钮 -->
+    <template #footer>
+      <div class="flex justify-between items-center">
+        <el-button @click="goToCharactersPage" plain>
+          <el-icon class="mr-1">
+            <AppsFilled />
           </el-icon>
-        </div>
-
-        <!-- 空状态 -->
-        <div v-if="filteredCharacters.length === 0" class="text-center py-8 text-gray-400">
-          <el-icon :size="48" color="rgb(156 163 175)" class="mb-2">
-            <SearchFilled />
-          </el-icon>
-          <p>未找到匹配的角色</p>
-        </div>
+          管理角色
+        </el-button>
+        <el-button @click="showCharacterSelector = false">取消</el-button>
       </div>
+    </template>
+  </el-dialog>
 
-      <!-- 底部按钮 -->
-      <template #footer>
-        <div class="flex justify-between items-center">
-          <el-button @click="goToCharactersPage" plain>
-            <el-icon class="mr-1">
-              <AppsFilled />
-            </el-icon>
-            管理角色
-          </el-button>
-          <el-button @click="showCharacterSelector = false">取消</el-button>
-        </div>
-      </template>
-    </el-dialog>
-  </div>
 </template>
 
 <script setup lang="ts">
@@ -111,7 +107,6 @@ import { useTitle } from "../composables/useTitle";
 import { useRouter } from 'vue-router';
 // 组件导入
 import { ChatInput } from "./ui";
-import ChatHeader from "./ChatHeader.vue";
 
 import { ArrowRightTwotone, CheckCircleFilled, AppsFilled, SearchFilled } from '@vicons/material'
 
@@ -262,16 +257,6 @@ const chatInputButtons = computed(() => {
     tokensButton: false,
   }
 })
-
-const localSidebarVisible = computed({
-  get() {
-    return props.sidebarVisible;
-  },
-  set(value) {
-    emit("update:sidebarVisible", value);
-  }
-});
-
 
 // 加载角色列表
 const loadCharacters = async (): Promise<void> => {

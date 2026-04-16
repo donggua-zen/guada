@@ -312,7 +312,6 @@ ol>*:not(li) {
 
 /* 代码块容器样式 */
 .custom-code-block {
-    /* position: relative; */
     margin-bottom: 1em;
     /* overflow: hidden; */
 }
