@@ -60,8 +60,8 @@ const renderWithDiffDOM = async () => {
 
     // 2. 与上一次渲染的 HTML 进行比较
     if (newHTML === lastRenderedHTML) {
-        console.log('oldHtml', lastRenderedHTML)
-        console.log('newHtml', newHTML)
+        // console.log('oldHtml', lastRenderedHTML)
+        // console.log('newHtml', newHTML)
         return;
     }
 
@@ -155,14 +155,14 @@ onBeforeUnmount(() => {
 <style scoped>
 @reference "tailwindcss";
 
-.markdown-content {
+/* .markdown-content {
     position: relative;
-}
+} */
 
 /* 新增内容的淡入动画 */
-.markdown-content>* {
-    /* animation: fadeIn 0.3s ease; */
-}
+/* .markdown-content>* {
+    animation: fadeIn 0.3s ease;
+} */
 
 @keyframes fadeIn {
     from {

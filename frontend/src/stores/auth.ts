@@ -1,9 +1,7 @@
 // stores/auth.ts
 import { defineStore } from 'pinia'
 import { ref, computed, type Ref, type ComputedRef } from 'vue'
-// @ts-ignore - ApiService 尚未迁移到 TypeScript
 import { apiService } from '@/services/ApiService'
-import { useStorage } from '@vueuse/core'
 import type { User, LoginRequest, RegisterRequest } from '@/types/api'
 
 /**

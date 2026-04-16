@@ -10,116 +10,111 @@
       </el-button>
     </div>
 
-    <!-- Tabs 标签页 -->
-    <el-tabs v-model="activeTab" class="flex-1 flex flex-col px-4">
-      <!-- Token 统计与记忆摘要合并标签页 -->
-      <el-tab-pane label="上下文管理" name="tokens" class="flex-1 overflow-hidden">
-        <div class="h-full flex flex-col overflow-y-auto pb-4">
-          <!-- Token 统计部分 -->
-          <template v-if="tokenStats">
-            <!-- 使用率进度条 -->
-            <div class="mb-6">
-              <div class="flex items-center justify-between mb-2">
-                <span class="text-sm font-medium text-gray-700">上下文使用率</span>
-                <span class="text-sm font-semibold" :class="usageColorClass">
-                  {{ tokenStats.percentage }}%
-                </span>
-              </div>
-              <el-progress :percentage="tokenStats.percentage" :color="progressColor" :stroke-width="20"
-                :show-text="false" />
+    <!-- 内容区域 -->
+    <div class="flex-1 flex flex-col px-4 overflow-y-auto pb-4">
+      <!-- Token 统计部分 -->
+      <template v-if="tokenStats">
+        <!-- 使用率进度条 -->
+        <div class="mb-6 pt-4">
+          <div class="flex items-center justify-between mb-2">
+            <span class="text-sm font-medium text-gray-700">上下文使用率</span>
+            <span class="text-sm font-semibold" :class="usageColorClass">
+              {{ tokenStats.percentage }}%
+            </span>
+          </div>
+          <el-progress :percentage="tokenStats.percentage" :color="progressColor" :stroke-width="20"
+            :show-text="false" />
+        </div>
+
+        <!-- 详细统计卡片 -->
+        <div class="grid grid-cols-3 gap-4 mb-8">
+          <div class="text-center">
+            <div class="text-xs text-gray-500 mb-1">已用 Tokens</div>
+            <div class="text-lg font-semibold text-gray-800">
+              {{ tokenStats.usedTokens.toLocaleString() }}
             </div>
+          </div>
 
-            <!-- 详细统计卡片 -->
-            <div class="grid grid-cols-3 gap-4 mb-8">
-              <div class="text-center">
-                <div class="text-xs text-gray-500 mb-1">已用 Tokens</div>
-                <div class="text-lg font-semibold text-gray-800">
-                  {{ tokenStats.usedTokens.toLocaleString() }}
-                </div>
-              </div>
-
-              <div class="text-center border-l border-r border-gray-100">
-                <div class="text-xs text-gray-500 mb-1">剩余可用</div>
-                <div class="text-lg font-semibold text-gray-800">
-                  {{ tokenStats.remainingTokens.toLocaleString() }}
-                </div>
-              </div>
-
-              <div class="text-center">
-                <div class="text-xs text-gray-500 mb-1">总容量</div>
-                <div class="text-lg font-semibold text-gray-800">
-                  {{ tokenStats.totalTokens.toLocaleString() }}
-                </div>
-              </div>
+          <div class="text-center border-l border-r border-gray-100">
+            <div class="text-xs text-gray-500 mb-1">对话数量</div>
+            <div class="text-lg font-semibold text-gray-800">
+              {{ tokenStats.messageCount }}
             </div>
-
-            <!-- 操作按钮 -->
-            <div class="flex gap-2 mb-8">
-              <el-button @click="loadTokenStats" :loading="loadingStats" class="flex-1">
-                <el-icon class="mr-1">
-                  <Refresh />
-                </el-icon>
-                刷新
-              </el-button>
-              <el-button @click="handleCompress" :loading="isCompressing" class="flex-1">
-                <el-icon class="mr-1">
-                  <MagicStick />
-                </el-icon>
-                {{ isCompressing ? '压缩中...' : '压缩' }}
-              </el-button>
+          </div>
+          
+          <div class="text-center">
+            <div class="text-xs text-gray-500 mb-1">总容量</div>
+            <div class="text-lg font-semibold text-gray-800">
+              {{ tokenStats.totalTokens.toLocaleString() }}
             </div>
-          </template>
-          <template v-else>
-            <el-empty description="加载中..." :image-size="80" class="mb-8" />
-          </template>
-
-          <!-- 记忆摘要部分 -->
-          <div class="border-t border-gray-100 pt-6">
-            <div class="flex items-center justify-between mb-4">
-              <h4 class="text-sm font-semibold text-gray-700">历史记忆摘要</h4>
-              <span class="text-xs text-gray-400">共 {{ summaries.length }} 条</span>
-            </div>
-            
-            <template v-if="summaries.length > 0">
-              <div v-for="(summary, index) in summaries" :key="summary.id" class="mb-4">
-                <div class="bg-gray-50 rounded-lg p-3 border border-gray-200 hover:border-blue-300 transition-colors">
-                  <!-- 摘要头部信息 -->
-                  <div class="flex items-center justify-between mb-2">
-                    <span class="text-xs text-gray-500">#{{ summaries.length - index }}</span>
-                    <div class="flex gap-1">
-                      <el-button size="small" text @click="handleEdit(summary)">
-                        <el-icon>
-                          <Edit />
-                        </el-icon>
-                      </el-button>
-                      <el-button size="small" text @click="handleDelete(summary)"
-                        class="text-red-500 hover:text-red-600">
-                        <el-icon>
-                          <Delete />
-                        </el-icon>
-                      </el-button>
-                    </div>
-                  </div>
-
-                  <!-- 摘要内容 -->
-                  <div class="text-sm text-gray-700 whitespace-pre-wrap">
-                    {{ summary.summaryContent }}
-                  </div>
-
-                  <!-- 时间戳 -->
-                  <div class="mt-2 text-xs text-gray-400">
-                    {{ formatTime(summary.createdAt) }}
-                  </div>
-                </div>
-              </div>
-            </template>
-            <template v-else>
-              <el-empty description="暂无记忆摘要" :image-size="60" />
-            </template>
           </div>
         </div>
-      </el-tab-pane>
-    </el-tabs>
+
+        <!-- 操作按钮 -->
+        <div class="flex gap-2 mb-8">
+          <el-button @click="loadTokenStats" :loading="loadingStats" class="flex-1">
+            <el-icon class="mr-1">
+              <Refresh />
+            </el-icon>
+            刷新
+          </el-button>
+          <el-button @click="handleCompress" :loading="isCompressing" class="flex-1">
+            <el-icon class="mr-1">
+              <MagicStick />
+            </el-icon>
+            {{ isCompressing ? '压缩中...' : '压缩' }}
+          </el-button>
+        </div>
+      </template>
+      <template v-else>
+        <el-empty description="加载中..." :image-size="80" class="mb-8" />
+      </template>
+
+      <!-- 记忆摘要部分 -->
+      <div class="border-t border-gray-100 pt-6">
+        <div class="flex items-center justify-between mb-4">
+          <h4 class="text-sm font-semibold text-gray-700">历史记忆摘要</h4>
+          <span class="text-xs text-gray-400">共 {{ summaries.length }} 条</span>
+        </div>
+        
+        <template v-if="summaries.length > 0">
+          <div v-for="(summary, index) in summaries" :key="summary.id" class="mb-4">
+            <div class="bg-gray-50 rounded-lg p-3 border border-gray-200 hover:border-blue-300 transition-colors">
+              <!-- 摘要头部信息 -->
+              <div class="flex items-center justify-between mb-2">
+                <span class="text-xs text-gray-500">#{{ summaries.length - index }}</span>
+                <div class="flex gap-1">
+                  <el-button size="small" text @click="handleEdit(summary)">
+                    <el-icon>
+                      <Edit />
+                    </el-icon>
+                  </el-button>
+                  <el-button size="small" text @click="handleDelete(summary)"
+                    class="text-red-500 hover:text-red-600">
+                    <el-icon>
+                      <Delete />
+                    </el-icon>
+                  </el-button>
+                </div>
+              </div>
+
+              <!-- 摘要内容 -->
+              <div class="text-sm text-gray-700 whitespace-pre-wrap">
+                {{ summary.summaryContent }}
+              </div>
+
+              <!-- 时间戳 -->
+              <div class="mt-2 text-xs text-gray-400">
+                {{ formatTime(summary.createdAt) }}
+              </div>
+            </div>
+          </div>
+        </template>
+        <template v-else>
+          <el-empty description="暂无记忆摘要" :image-size="60" />
+        </template>
+      </div>
+    </div>
 
     <!-- 编辑摘要对话框 -->
     <el-dialog v-model="editDialogVisible" title="编辑摘要" width="600px" append-to-body>
@@ -169,15 +164,14 @@ import dayjs from 'dayjs';
 const { confirm, toast } = usePopup();
 const sessionStore = useSessionStore();
 
-const props = defineProps<{
-  sessionId: string | null;
-}>();
-
 const emit = defineEmits<{
   close: [];
 }>();
 
-const activeTab = ref('tokens');
+const props = defineProps<{
+  sessionId: string | null;
+}>();
+
 const summaries = ref<any[]>([]);
 const editDialogVisible = ref(false);
 const editingSummary = ref({ id: '', content: '' });
@@ -310,11 +304,8 @@ watch(
 const debouncedRefresh = useDebounceFn(() => {
   if (!props.sessionId || !sessionStore.activeSessionId) return;
   
-  // 由于现在合并了，只要标签页激活就同时刷新
-  if (activeTab.value === 'tokens') {
-    loadTokenStats();
-    loadSummaries();
-  }
+  loadTokenStats();
+  loadSummaries();
 }, 1000); // 1秒防抖
 
 watch(
@@ -363,12 +354,8 @@ async function executeCompression() {
   }
 }
 
-// 监听标签页切换，切换到 Token 统计时刷新数据
-watch(activeTab, (newTab) => {
-  if (newTab === 'tokens' && props.sessionId) {
-    loadTokenStats();
-  }
-});
+// 监听标签页切换逻辑已移除，因为不再使用 Tab 组件
+// 监听会话 ID 变化时已经完成了数据加载
 </script>
 
 <style scoped></style>

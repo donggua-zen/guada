@@ -37,6 +37,6 @@
     "css.lint.unknownAtRules": "ignore",
     "python.languageServer": "None",
     "editor.tabSize": 2,
-    "editor.formatOnSave": true,
+    "editor.formatOnSave": false,
   },
 }
