@@ -17,7 +17,7 @@ export class MessageService {
     private sessionRepo: SessionRepository,
     private kbRepo: KnowledgeBaseRepository,
     private fileRepo: FileRepository,
-  ) {}
+  ) { }
 
   /**
    * 获取会话的消息列表
@@ -98,6 +98,11 @@ export class MessageService {
           });
 
           // 2. 删除旧消息的所有内容版本
+
+          await tx.message.deleteMany({
+            where: { parentId: replaceMessageId },
+          });
+
           await tx.messageContent.deleteMany({
             where: { messageId: replaceMessageId },
           });

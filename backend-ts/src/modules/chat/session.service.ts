@@ -1,4 +1,4 @@
-import { Injectable, Logger } from "@nestjs/common";
+import { Injectable, Logger, ConflictException } from "@nestjs/common";
 import { SessionRepository } from "../../common/database/session.repository";
 import { CharacterRepository } from "../../common/database/character.repository";
 import { MessageRepository } from "../../common/database/message.repository";
@@ -6,7 +6,10 @@ import { ModelRepository } from "../../common/database/model.repository";
 import { GlobalSettingRepository } from "../../common/database/global-setting.repository";
 import { SessionSummaryRepository } from "../../common/database/session-summary.repository";
 import { LLMService } from "./llm.service";
-import { MemoryManagerService } from "./memory.service";
+import { ContextManagerService } from "./context-manager.service";
+import { TokenizerService } from "../../common/utils/tokenizer.service";
+import { ToolOrchestrator } from "../tools/tool-orchestrator.service";
+import { SessionLockService } from "./session-lock.service";
 import {
   createPaginatedResponse,
   PaginatedResponse,
@@ -24,7 +27,10 @@ export class SessionService {
     private globalSettingRepo: GlobalSettingRepository,
     private summaryRepo: SessionSummaryRepository,
     private llmService: LLMService,
-    private memoryManager: MemoryManagerService,
+    private contextManager: ContextManagerService,
+    private tokenizerService: TokenizerService,
+    private toolOrchestrator: ToolOrchestrator,
+    private sessionLockService: SessionLockService,
   ) { }
 
   /**
@@ -59,6 +65,53 @@ export class SessionService {
   }
 
   /**
+   * 获取会话的所有摘要记录
+   */
+  async getSessionSummaries(sessionId: string, userId: string) {
+    // 验证会话归属权
+    const session = await this.getSessionById(sessionId, userId);
+    if (!session) {
+      throw new Error("Session not found or unauthorized");
+    }
+
+    return this.summaryRepo.findBySessionId(sessionId);
+  }
+
+  /**
+   * 更新摘要内容
+   */
+  async updateSummary(
+    summaryId: string,
+    userId: string,
+    data: { summaryContent?: string },
+  ) {
+    const summary = await this.summaryRepo.findById(summaryId);
+    if (!summary) {
+      throw new Error("Summary not found");
+    }
+
+    // 验证会话归属权
+    await this.getSessionById(summary.sessionId, userId);
+
+    return this.summaryRepo.update(summaryId, data);
+  }
+
+  /**
+   * 删除单个摘要记录
+   */
+  async deleteSummary(summaryId: string, userId: string) {
+    const summary = await this.summaryRepo.findById(summaryId);
+    if (!summary) {
+      throw new Error("Summary not found");
+    }
+
+    // 验证会话归属权
+    await this.getSessionById(summary.sessionId, userId);
+
+    return this.summaryRepo.delete(summaryId);
+  }
+
+  /**
    * 创建新会话，支持从角色继承配置
    */
   async createSession(userId: string, data: any) {
@@ -78,7 +131,15 @@ export class SessionService {
     }
 
     // 合并设置
-    const mergedSettings = this.mergeSettings(character.settings, settings);
+    const mergedSettings = this.mergeSessionSettings({ settings: settings, character: { settings: character.settings } });
+
+    // 过滤允许继承的值
+    const allowedInheritedValues = ["maxMemoryLength", "thinkingEnabled"];
+    const filteredSettings = Object.fromEntries(
+      Object.entries(mergedSettings).filter(([key]) =>
+        allowedInheritedValues.includes(key),
+      ),
+    );
 
     // 确定使用的模型 ID：优先使用传入的 modelId，其次使用角色的 modelId，最后使用默认对话模型
     let finalModelId = modelId || character.modelId;
@@ -103,7 +164,7 @@ export class SessionService {
       avatarUrl: character.avatarUrl,
       description: character.description,
       modelId: finalModelId,
-      settings: mergedSettings,
+      settings: filteredSettings,
     };
 
     const session = await this.sessionRepo.create(sessionData);
@@ -114,12 +175,23 @@ export class SessionService {
   /**
    * 合并设置：角色设置为基准，用户传入的设置优先
    */
-  private mergeSettings(characterSettings: any, userSettings: any): any {
-    const base = characterSettings || {};
-    const override = userSettings || {};
+  private mergeSessionSettings(session: any) {
+    const sessionSettings = session.settings || {};
+    const characterSettings = session.character?.settings || {};
 
-    // 深度合并逻辑（此处简化为浅层合并，实际可根据需求扩展）
-    return { ...base, ...override };
+    return {
+      ...characterSettings,
+      ...sessionSettings,
+      maxMemoryLength:
+        sessionSettings.maxMemoryLength ??
+        characterSettings.maxMemoryLength ??
+        20,
+      systemPrompt:
+        sessionSettings.systemPrompt ?? characterSettings.systemPrompt,
+      modelTemperature:
+        sessionSettings.modelTemperature ?? characterSettings.modelTemperature,
+      modelTopP: sessionSettings.modelTopP ?? characterSettings.modelTopP,
+    };
   }
 
   /**
@@ -188,9 +260,9 @@ export class SessionService {
         };
       }
 
-      // 使用 MemoryManagerService 获取最近的 3 条消息（已过滤系统消息，正序排列）
+      // 使用 ContextManagerService 获取最近的 3 条消息（已过滤系统消息，正序排列）
       const recentMessages =
-        await this.memoryManager.getRecentMessagesForSummary(
+        await this.contextManager.getRecentMessagesForSummary(
           sessionId,
           true, // skip_tool_calls
         );
@@ -314,118 +386,139 @@ export class SessionService {
     compressionRatio: number = 50,
     minRetainedTurns: number = 3,
   ) {
-    // 1. 验证会话归属权
-    const session = await this.sessionRepo.findById(sessionId);
-    if (!session || session.userId !== userId) {
-      throw new Error("Session not found or unauthorized");
+    // 0. 尝试获取会话锁，防止并发压缩
+    if (!this.sessionLockService.tryLock(sessionId)) {
+      throw new ConflictException("Session is busy with another operation (e.g., chatting or compressing)");
     }
 
-    // 2. 获取全局设置中的历史压缩模型
-    const compressionModelId = await this.getGlobalSetting(
-      "default_history_compression_model_id",
-      userId,
-    );
+    try {
+      // 1. 验证会话归属权
+      const session = await this.sessionRepo.findById(sessionId);
+      if (!session || session.userId !== userId) {
+        throw new Error("Session not found or unauthorized");
+      }
 
-    if (!compressionModelId) {
-      throw new Error("No default history compression model configured in settings");
-    }
+      // 2. 获取全局设置中的历史压缩模型
+      const compressionModelId = await this.getGlobalSetting(
+        "default_history_compression_model_id",
+        userId,
+      );
 
-    const model = await this.modelRepo.findById(compressionModelId);
-    if (!model) {
-      throw new Error(`Compression model ${compressionModelId} not found`);
-    }
+      if (!compressionModelId) {
+        throw new Error("No default history compression model configured in settings");
+      }
 
-    // 3. 获取上一次生成的摘要（如果存在）
-    const lastSummary = await this.summaryRepo.findLatestBySessionId(sessionId);
+      const model = await this.modelRepo.findById(compressionModelId);
+      if (!model) {
+        throw new Error(`Compression model ${compressionModelId} not found`);
+      }
 
-    // 4. 使用 MemoryManagerService 获取待处理的消息片段
-    const { messages: allNewMessages, lastMessageId } =
-      await this.memoryManager.getMessagesForCompression(
+      // 3. 获取上一次生成的摘要（如果存在）
+      const lastSummary = await this.summaryRepo.findLatestBySessionId(sessionId);
+
+      // 4. 使用 ContextManagerService 获取待处理的消息片段
+      const allNewMessages = await this.contextManager.getMessagesForCompression(
         sessionId,
         lastSummary?.lastCompressedMessageId,
       );
 
-    if (allNewMessages.length === 0) {
-      return {
-        success: false,
-        reason: "no_new_messages",
-        message: "自上次压缩以来没有新的对话内容。",
-      };
-    }
-
-    // 5. 确定保留范围（基于用户消息数量，确保上下文连贯性）
-    // 统计新增片段中的用户消息数量
-    const newUserMessageCount = allNewMessages.filter((m) => m.role === "user").length;
-
-    if (newUserMessageCount <= minRetainedTurns) {
-      return {
-        success: false,
-        reason: "insufficient_messages",
-        message: `新增对话中的用户提问数 (${newUserMessageCount}) 小于或等于保留下限 (${minRetainedTurns})，无需压缩。`,
-      };
-    }
-
-    // 6. 计算 Token 并确定压缩目标
-    const totalTokens = this.memoryManager.countTokens(allNewMessages);
-    const targetTokenCount = Math.floor(totalTokens * (compressionRatio / 100));
-
-    // 逐步累加消息直到达到目标 Token 数，同时确保不压缩掉最后 N 个用户提问对应的内容
-    let currentTokens = 0;
-    let splitIndex = 0;
-
-    for (let i = 0; i < allNewMessages.length; i++) {
-      const msg = allNewMessages[i];
-
-      // 1. 检查剩余部分是否包含足够的用户消息（保留下限约束）
-      const remainingUserCount = allNewMessages.slice(i).filter((m) => m.role === "user").length;
-      if (remainingUserCount <= minRetainedTurns) {
-        break; // 剩余的用户提问数已达到下限，停止向前压缩
+      if (allNewMessages.length === 0) {
+        return {
+          success: false,
+          reason: "no_new_messages",
+          message: "自上次压缩以来没有新的对话内容。",
+        };
       }
 
-      // 2. 确定当前轮次的完整范围（从 User 开始到下一个 User 之前）
-      let turnEndIndex = i;
-      if (msg.role === "user") {
-        // 寻找下一个 User 消息的位置
-        const nextUserIndex = allNewMessages.findIndex((m, idx) => idx > i && m.role === "user");
-        turnEndIndex = nextUserIndex !== -1 ? nextUserIndex - 1 : allNewMessages.length - 1;
+      // 5. 确定保留范围（基于用户消息数量，确保上下文连贯性）
+      // 统计新增片段中的用户消息数量
+      const newUserMessageCount = allNewMessages.filter((m) => m.role === "user").length;
+
+      if (newUserMessageCount <= minRetainedTurns) {
+        return {
+          success: false,
+          reason: "insufficient_messages",
+          message: `新增对话中的用户提问数 (${newUserMessageCount}) 小于或等于保留下限 (${minRetainedTurns})，无需压缩。`,
+        };
       }
 
-      // 3. 计算这一整轮次（User + 所有后续非 User 消息）的 Token 总数
-      let turnTokens = 0;
-      for (let j = i; j <= turnEndIndex; j++) {
-        turnTokens += this.memoryManager.countTokens([allNewMessages[j]]);
+      // 6. 计算 Token 并确定压缩目标（使用通用模型 gpt4 进行估算，满足比例压缩的精度要求）
+      const totalTokens = this.tokenizerService.countTokens("gpt4", allNewMessages);
+      const targetTokenCount = Math.floor(totalTokens * (compressionRatio / 100));
+
+      // 逐步累加消息直到达到目标 Token 数，同时确保不压缩掉最后 N 个用户提问对应的内容
+      let currentTokens = 0;
+      let splitIndex = 0;
+
+      for (let i = 0; i < allNewMessages.length; i++) {
+        const msg = allNewMessages[i];
+
+        // 1. 检查剩余部分是否包含足够的用户消息（保留下限约束）
+        const remainingUserCount = allNewMessages.slice(i).filter((m) => m.role === "user").length;
+        if (remainingUserCount <= minRetainedTurns) {
+          break; // 剩余的用户提问数已达到下限，停止向前压缩
+        }
+
+        // 2. 确定当前轮次的完整范围（从 User 开始到下一个 User 之前）
+        let turnEndIndex = i;
+        if (msg.role === "user") {
+          // 寻找下一个 User 消息的位置
+          const nextUserIndex = allNewMessages.findIndex((m, idx) => idx > i && m.role === "user");
+          turnEndIndex = nextUserIndex !== -1 ? nextUserIndex - 1 : allNewMessages.length - 1;
+        }
+
+        // 3. 计算这一整轮次（User + 所有后续非 User 消息）的 Token 总数
+        let turnTokens = 0;
+        for (let j = i; j <= turnEndIndex; j++) {
+          turnTokens += this.tokenizerService.countTokens("gpt4", [allNewMessages[j]]);
+        }
+
+        // 4. 检查加入这一整轮次是否会超过目标阈值
+        if (currentTokens + turnTokens > targetTokenCount) {
+          break;
+        }
+
+        currentTokens += turnTokens;
+        splitIndex = turnEndIndex + 1; // 更新切分点到这一轮次的末尾
+        i = turnEndIndex; // 跳过已处理的轮次内部消息
       }
 
-      // 4. 检查加入这一整轮次是否会超过目标阈值
-      if (currentTokens + turnTokens > targetTokenCount) {
-        break;
+      const toCompress = allNewMessages.slice(0, splitIndex);
+      const retainedMessages = allNewMessages.slice(splitIndex);
+
+      // 确定本次压缩的最后一条消息 ID（toCompress 中 ID 最大的那条）
+      const compressedLastMessageId = toCompress[toCompress.length - 1].id;
+
+      // 7. 构造 Prompt 并调用 LLM
+      const promptParts = [];
+      if (lastSummary) {
+        promptParts.push(`【历史对话摘要】\n${lastSummary.summaryContent}\n`);
       }
 
-      currentTokens += turnTokens;
-      splitIndex = turnEndIndex + 1; // 更新切分点到这一轮次的末尾
-      i = turnEndIndex; // 跳过已处理的轮次内部消息
-    }
+      promptParts.push("【待压缩的新增对话内容】");
+      toCompress.forEach((msg) => {
+        let contentStr = '';
+        if (typeof msg.content === 'string') {
+          contentStr = msg.content;
+        } else if (Array.isArray(msg.content)) {
+          // 处理多模态或复杂结构，提取文本部分
+          const textParts = msg.content.filter((part: any) => part.type === 'text').map((part: any) => part.text);
+          contentStr = textParts.join('\n');
+        } else {
+          contentStr = JSON.stringify(msg.content);
+        }
 
-    const toCompress = allNewMessages.slice(0, splitIndex);
-    const retainedMessages = allNewMessages.slice(splitIndex);
+        if (msg.role === "tool") {
+          promptParts.push(`工具调用结果: ${contentStr}`);
+        } else {
+          promptParts.push(`${msg.role === "user" ? "用户" : "助手"}: ${contentStr}`);
+        }
+      });
 
-    // 7. 构造 Prompt 并调用 LLM
-    const promptParts = [];
-    if (lastSummary) {
-      promptParts.push(`【历史对话摘要】\n${lastSummary.summaryContent}\n`);
-    }
+      promptParts.push(
+        "\n任务：请将上述【历史对话摘要】(若有)与【待压缩的新增对话内容】合并为一个简洁、连贯的新的会话摘要。直接输出摘要内容，不要包含额外的解释或描述或者标题。",
+      );
 
-    promptParts.push("【待压缩的新增对话内容】");
-    toCompress.forEach((msg) => {
-      const content = typeof msg.content === 'string' ? msg.content : JSON.stringify(msg.content);
-      promptParts.push(`${msg.role === "user" ? "用户" : "助手"}: ${content}`);
-    });
-
-    promptParts.push(
-      "\n任务：请将上述【历史对话摘要】与【待压缩的新增对话内容】合并为一个简洁、连贯的新的会话摘要。直接输出摘要内容，不要包含额外的解释或描述。",
-    );
-
-    try {
       const response = await this.llmService.completions({
         model: model.modelName,
         messages: [{ role: "user", content: promptParts.join("\n") }],
@@ -442,32 +535,92 @@ export class SessionService {
       }
 
       // 8. 持久化新摘要
-      // 注意：lastCompressedMessageId 应该是原始 Message 表的 ID
-      // 由于 getMessagesForCompression 返回的是转换后的格式，我们需要通过 rawMessages 映射
-      // 这里简化处理：假设 lastMessageId 是有效的分界点
       await this.summaryRepo.create({
         sessionId,
         summaryContent: newSummaryContent,
-        lastCompressedMessageId: lastMessageId || undefined,
+        lastCompressedMessageId: compressedLastMessageId || undefined,
       });
 
       this.logger.log(
-        `Successfully compressed history for session ${sessionId}. Tokens processed: ${this.memoryManager.countTokens(toCompress)}.`,
+        `Successfully compressed history for session ${sessionId}. Tokens processed: ${this.tokenizerService.countTokens("gpt4", toCompress)}.`,
       );
 
       return {
         success: true,
-        compressedTokens: this.memoryManager.countTokens(toCompress),
-        retainedTokens: this.memoryManager.countTokens(retainedMessages),
+        compressedTokens: this.tokenizerService.countTokens("gpt4", toCompress),
+        retainedTokens: this.tokenizerService.countTokens("gpt4", retainedMessages),
         summary: newSummaryContent,
       };
-    } catch (error: any) {
-      this.logger.error(
-        `Failed to compress history for session ${sessionId}: ${error.message}`,
-      );
-      throw new Error(`Compression failed: ${error.message}`);
+    } finally {
+      // 统一在最外层释放锁
+      this.sessionLockService.unlock(sessionId);
     }
   }
+
+  /**
+   * 获取会话的 Token 使用统计
+   */
+  async getTokenStats(sessionId: string, userId: string) {
+    // 1. 验证会话归属权并获取会话信息
+    const session = await this.sessionRepo.findById(sessionId);
+    if (!session || session.userId !== userId) {
+      throw new Error("Session not found or unauthorized");
+    }
+
+    // 2. 确定使用的模型（优先使用会话绑定的模型，否则使用默认模型）
+    let modelId = session.modelId;
+    if (!modelId) {
+      const defaultModelSetting = await this.globalSettingRepo.findByKey(
+        "default_chat_model_id",
+        userId,
+      );
+      if (defaultModelSetting && defaultModelSetting.value) {
+        modelId = defaultModelSetting.value;
+      }
+    }
+
+    // 3. 获取模型配置以确定上下文窗口大小
+    let contextWindow = 128000; // 默认值（GPT-4）
+    let modelName = "gpt-4";
+
+    if (modelId) {
+      const model = await this.modelRepo.findById(modelId);
+      if (model) {
+        // contextWindow 存储在 config JSON 字段中
+        const config = model.config as any;
+        contextWindow = config?.contextWindow || 128000;
+        modelName = model.modelName || model.name || "gpt-4";
+      }
+    }
+
+    // 4. 合并设置
+    const mergedSettings = this.mergeSessionSettings(session);
+
+    // 5. 使用 ContextManager 获取用于统计的完整上下文
+    const { messages } = await this.contextManager.getContextForTokenStats(
+      sessionId,
+      userId,
+      mergedSettings,
+    );
+
+    // 6. 计算 Token 总数
+    const usedTokens = this.tokenizerService.countTokens(modelName, messages);
+
+    // 7. 计算使用率
+    const percentage = Math.min((usedTokens / contextWindow) * 100, 100);
+    const remainingTokens = Math.max(contextWindow - usedTokens, 0);
+
+    return {
+      usedTokens,
+      totalTokens: contextWindow,
+      remainingTokens,
+      percentage: parseFloat(percentage.toFixed(2)),
+      modelName,
+      messageCount: messages.length - 1, // 减去 system 消息
+    };
+  }
+
+
 
   /**
    * 获取全局设置值（优先用户设置，回退到全局默认）
