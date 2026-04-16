@@ -1,6 +1,6 @@
 <!-- subcomponents/ChatHeader.vue -->
 <template>
-    <div class="flex items-center justify-between gap-4 px-3 py-4 border-b border-gray-200/60">
+    <div class="flex items-center justify-between gap-4 px-3 h-15 border-b border-gray-200/60">
         <!-- 左侧：侧边栏切换按钮 -->
         <div class="flex items-center justify-start min-w-10 ">
             <div v-if="sidebarVisible !== undefined"
@@ -16,10 +16,19 @@
         </div>
 
         <!-- 右侧：更多操作下拉菜单 -->
-        <div class="flex items-center justify-end min-w-10">
+        <div class="flex items-center justify-end min-w-10 gap-2">
+            <!-- 记忆管理按钮 -->
+            <div v-if="showMemoButton"
+                class="cursor-pointer p-1 rounded-lg text-gray-600 transition-all duration-200 hover:bg-gray-100 hover:text-gray-900 flex items-center justify-center"
+                @click="$emit('toggle-memo')" title="记忆管理">
+                <el-icon class="w-5 h-5">
+                    <Reading />
+                </el-icon>
+            </div>
+
             <el-dropdown v-if="hasMoreOptions" trigger="hover" @command="handleSelect"
                 popper-class="chat-header-dropdown">
-                <div class="cursor-pointer p-1 rounded-lg text-gray-600 transition-all duration-200 hover:bg-gray-100 hover:text-gray-900 active:rotate-0"
+                <div class="cursor-pointer p-1 rounded-lg text-gray-600 transition-all duration-200 hover:bg-gray-100 hover:text-gray-900 active:rotate-0 flex items-center justify-center"
                     text title="更多操作">
                     <MoreVertOutlined class="w-5 h-5" />
                 </div>
@@ -43,12 +52,6 @@
                                 <span>导入记录</span>
                             </span>
                         </el-dropdown-item>
-                        <el-dropdown-item command="compress">
-                            <span class="flex items-center gap-2">
-                                <CompressIcon class="w-4 h-4" />
-                                <span>压缩历史</span>
-                            </span>
-                        </el-dropdown-item>
                     </el-dropdown-menu>
                 </template>
             </el-dropdown>
@@ -64,7 +67,6 @@ import {
     FileDownloadOutlined,
     FileUploadOutlined
 } from "@vicons/material";
-import CompressIcon from './icons/CompressIcon.vue';
 
 // Element Plus 组件导入
 import {
@@ -79,12 +81,14 @@ import LeftBarIcon from './icons/LeftBarIcon.vue';
 const props = defineProps<{
     sidebarVisible?: boolean;
     hasMoreOptions?: boolean;
+    showMemoButton?: boolean;
     title?: string;
 }>();
 
 // Emits - 类型化
 const emit = defineEmits<{
     'toggle-sidebar': []
+    'toggle-memo': []
     'select-more-option': [command: string]
 }>();
 

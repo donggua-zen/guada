@@ -34,8 +34,6 @@ const props = defineProps<{
     enableScrollButton?: boolean;
 }>();
 
-const needScrollToBottom = ref(props.autoScroll || false);
-
 
 const mergredClasses = computed((): string => {
     let mergredClass: string | string[] = [];
@@ -61,7 +59,8 @@ const emit = defineEmits<{
 // 响应式数据 - 类型化
 const simpleBarRef = ref<any>(null);
 const isAtBottom = ref(true);
-const scrollObserver = ref<any>(null);
+const mutationObserver = ref<MutationObserver | null>(null);
+const resizeObserver = ref<ResizeObserver | null>(null);
 const lastScrollHeight = ref(0);
 const lastScrollTop = ref(0);
 
@@ -85,19 +84,6 @@ function checkIsAtBottom(): boolean {
 function handleScroll(event: Event): void {
     const wasAtBottom = isAtBottom.value;
     isAtBottom.value = checkIsAtBottom();
-    if (wasAtBottom !== isAtBottom.value) {
-        emit('is-at-bottom-change', isAtBottom.value);
-    }
-    if (props.autoScroll) {
-        if (isAtBottom.value) {
-            needScrollToBottom.value = true;
-        }
-        // 只有向上滚动时才将需要自动滚动到底部的标志置为 false
-        if (lastScrollTop.value > scrollElement.value.scrollTop) {
-            needScrollToBottom.value = false;
-        }
-    }
-    lastScrollTop.value = scrollElement.value.scrollTop;
     emit('scroll', event);
 }
 
@@ -131,32 +117,58 @@ function scrollToBottom(options: { immediate?: boolean } = {}): void {
     emit('scroll-to-bottom');
 }
 
-function initScrollObserver() {
-    if (scrollObserver.value) {
-        scrollObserver.value.disconnect();
+function initScrollObservers() {
+    // 清理旧的观察者
+    if (mutationObserver.value) {
+        mutationObserver.value.disconnect();
     }
-    const wrapper = contentWrapper.value;
-    if (!wrapper) return;
+    if (resizeObserver.value) {
+        resizeObserver.value.disconnect();
+    }
 
-    scrollObserver.value = new ResizeObserver((entries) => {
-        const entry = entries[0];
-        const { width, height } = entry.contentRect;
-        const currentScrollHeight = scrollElement.value.scrollHeight;
-        if (needScrollToBottom.value) {
+    const contentEl = contentElement.value;
+    const wrapper = contentWrapper.value;
+
+    if (!contentEl || !wrapper) return;
+
+    // 使用 MutationObserver 监听 DOM 结构变化（更快响应）
+    mutationObserver.value = new MutationObserver(() => {
+        if (props.autoScroll) {
+            ///requestAnimationFrame(() => {
             immediateScrollToBottom();
+            //});
         }
-    })
-    scrollObserver.value.observe(wrapper);
+    });
+
+    mutationObserver.value.observe(contentEl, {
+        childList: true,
+        subtree: true,
+        characterData: true
+    });
+
+    // 使用 ResizeObserver 作为兜底（处理图片加载等异步尺寸变化）
+    resizeObserver.value = new ResizeObserver(() => {
+        if (props.autoScroll) {
+            requestAnimationFrame(() => {
+                immediateScrollToBottom();
+            });
+        }
+    });
+
+    resizeObserver.value.observe(wrapper);
 }
 
 // 生命周期
 onMounted(() => {
-    initScrollObserver();
+    initScrollObservers();
 });
 
 onUnmounted(() => {
-    if (scrollObserver.value) {
-        scrollObserver.value.disconnect();
+    if (mutationObserver.value) {
+        mutationObserver.value.disconnect();
+    }
+    if (resizeObserver.value) {
+        resizeObserver.value.disconnect();
     }
 });
 

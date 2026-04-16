@@ -22,6 +22,7 @@ export const useSessionStore = defineStore('session', () => {
             sessions.value.set(sessionId, {
                 messages: [],
                 isStreaming: false,
+                isCompressing: false,
                 inputMessage: {
                     content: '',
                     files: [],
@@ -125,6 +126,23 @@ export const useSessionStore = defineStore('session', () => {
      */
     const setSessionIsStreaming = (sessionId: string, isStreaming: boolean): void => {
         getSessionState(sessionId).isStreaming = isStreaming
+    }
+
+    /**
+     * 检查会话是否正在压缩历史
+     * @param sessionId - 会话 ID
+     */
+    const sessionIsCompressing = (sessionId: string): boolean => {
+        return getSessionState(sessionId).isCompressing
+    }
+
+    /**
+     * 设置会话压缩状态
+     * @param sessionId - 会话 ID
+     * @param isCompressing - 是否正在压缩
+     */
+    const setSessionIsCompressing = (sessionId: string, isCompressing: boolean): void => {
+        getSessionState(sessionId).isCompressing = isCompressing
     }
 
     /**
@@ -242,6 +260,8 @@ export const useSessionStore = defineStore('session', () => {
         updateMessage,
         sessionIsStreaming,
         setSessionIsStreaming,
+        sessionIsCompressing,
+        setSessionIsCompressing,
         getInputMessage,
         setInputMessage,
         setScrollPosition,
