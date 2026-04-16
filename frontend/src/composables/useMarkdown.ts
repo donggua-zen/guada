@@ -133,7 +133,7 @@ function createMarkedInstance(): Marked {
             const lang = code.lang || 'text'
             return `
         <div class="custom-code-block">
-          <div class="code-header">
+          <div class="code-header" style="position: sticky; top: 0;">
             <span class="code-language">${lang}</span>
             <button class="copy-code-button"><i role="img">${coypysvg}</i></button>
           </div>

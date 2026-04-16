@@ -422,12 +422,12 @@ defineExpose({
   border: none;
 }
 
-.message-content {
+/* .message-content {
   display: flex;
   flex-direction: column;
   position: relative;
   min-width: 0;
-}
+} */
 
 /* 修复用户消息对齐问题 */
 .message.user-message-container {

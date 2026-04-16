@@ -220,8 +220,9 @@ function immediateScrollToBottom() {
 function handleScroll(event: any) {
   // 只有向上滚动时才将需要自动滚动到底部的标志置为 false
   const isAtBottom = scrollContainerRef.value?.isAtBottom
-
-  if (needScrollToBottom.value && lastScrollTop.value - event.target.scrollTop > 10) {
+  // console.log("offset", event.target.scrollTop)
+  if (needScrollToBottom.value && lastScrollTop.value - event.target.scrollTop > 10 && !isAtBottom) {
+    // console.log("scrolling up", event.target.scrollTop, event.target.scrollHeight - event.target.clientHeight)
     needScrollToBottom.value = false;
   } else if (!needScrollToBottom.value && isAtBottom) {
     needScrollToBottom.value = true;
