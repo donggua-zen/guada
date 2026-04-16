@@ -29,13 +29,13 @@ async function testPdfExtraction() {
 
   for (const pdfFile of pdfFiles) {
     console.log(`📄 测试文件: ${pdfFile}`);
-    
+
     try {
       // 读取文件
       const filePath = path.join(testDataDir, pdfFile);
       const fileBuffer = fs.readFileSync(filePath);
       const fileSize = fileBuffer.length;
-      
+
       console.log(`   文件大小: ${(fileSize / 1024).toFixed(2)} KB`);
 
       // 检测文件类型
@@ -54,7 +54,7 @@ async function testPdfExtraction() {
 
       console.log(`   解析耗时: ${elapsed}ms`);
       console.log(`   内容长度: ${content.length} 字符`);
-      
+
       if (content.length > 0) {
         console.log(`   ✅ 提取成功`);
         console.log(`   预览内容 (前200字符):\n   ${content.substring(0, 200).replace(/\n/g, '\\n')}...\n`);
