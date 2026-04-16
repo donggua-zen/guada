@@ -3,7 +3,7 @@ import { PrismaService } from "./prisma.service";
 
 @Injectable()
 export class MessageRepository {
-  constructor(private prisma: PrismaService) {}
+  constructor(private prisma: PrismaService) { }
 
   /**
    * 获取会话的消息列表（按创建时间排序）
@@ -46,6 +46,7 @@ export class MessageRepository {
     sessionId: string,
     limit: number,
     beforeMessageId?: string,
+    afterMessageId?: string,
     options?: {
       withFiles?: boolean;
       withContents?: boolean;
@@ -59,10 +60,15 @@ export class MessageRepository {
     } = options || {};
     const where: any = { sessionId };
 
-    // 如果指定了截止消息 ID，获取包括该消息在内的历史消息（与 Python 后端保持一致）
-    // CUID 具有时间单调性，可以安全地用于排序和比较
+    // 增量过滤：获取比 afterMessageId 更新的消息
+    if (afterMessageId) {
+      where.id = { gt: afterMessageId };
+    }
+
+    // 游标分页：获取比 beforeMessageId 更早的消息
     if (beforeMessageId) {
-      where.id = { lte: beforeMessageId }; // 使用 lte（小于等于），包含用户消息
+      // 如果同时存在 afterMessageId，则组合查询；否则仅限制上限
+      where.id = { ...where.id, lte: beforeMessageId } as any;
     }
 
     const messages = await this.prisma.message.findMany({

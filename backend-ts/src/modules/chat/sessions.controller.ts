@@ -76,4 +76,32 @@ export class SessionsController {
       Number(minRetainedTurns),
     );
   }
+
+  @Get("sessions/:id/summaries")
+  async getSessionSummaries(@Param("id") id: string, @CurrentUser() user: any) {
+    return this.sessionService.getSessionSummaries(id, user.sub);
+  }
+
+  @Put("sessions/summaries/:summaryId")
+  async updateSummary(
+    @Param("summaryId") summaryId: string,
+    @Body() body: { summaryContent?: string },
+    @CurrentUser() user: any,
+  ) {
+    return this.sessionService.updateSummary(summaryId, user.sub, body);
+  }
+
+  @Delete("sessions/summaries/:summaryId")
+  async deleteSummary(
+    @Param("summaryId") summaryId: string,
+    @CurrentUser() user: any,
+  ) {
+    await this.sessionService.deleteSummary(summaryId, user.sub);
+    return { success: true };
+  }
+
+  @Get("sessions/:id/token-stats")
+  async getTokenStats(@Param("id") id: string, @CurrentUser() user: any) {
+    return this.sessionService.getTokenStats(id, user.sub);
+  }
 }

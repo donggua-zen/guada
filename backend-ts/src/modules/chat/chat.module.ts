@@ -13,8 +13,9 @@ import { AgentService } from "./agent.service";
 import { LLMService } from "./llm.service";
 import { OpenAIAdapter } from "./adapters/openai.adapter";
 import { GeminiAdapter } from "./adapters/gemini.adapter";
-import { MemoryManagerService } from "./memory.service";
+import { ContextManagerService } from "./context-manager.service";
 import { ToolOrchestrator } from "../tools/tool-orchestrator.service";
+import { TokenizerService } from "../../common/utils/tokenizer.service";
 import { ChatController } from "./chat.controller";
 import { MessagesController } from "./messages.controller";
 import { SessionsController } from "./sessions.controller";
@@ -33,7 +34,7 @@ import { SessionLockService } from "./session-lock.service";
     LLMService,
     OpenAIAdapter,
     GeminiAdapter,
-    MemoryManagerService,
+    ContextManagerService,
     MessageService,
     SessionService,
     SessionRepository,
@@ -47,6 +48,7 @@ import { SessionLockService } from "./session-lock.service";
     FileRepository,
     PrismaService,
     SessionLockService,
+    TokenizerService,
   ],
   exports: [AgentService],
 })

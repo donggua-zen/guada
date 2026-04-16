@@ -21,7 +21,7 @@ import {
 } from "../interfaces/vector-database.interface";
 
 // 引入 sqlite-vec 扩展加载器
-const sqliteVec = require("sqlite-vec");
+import sqliteVec from "sqlite-vec";
 
 @Injectable()
 export class SqliteVectorDB implements VectorDatabase {

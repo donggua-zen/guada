@@ -31,6 +31,7 @@ export interface ToolCallItem {
  * 统一的对话消息记录
  */
 export interface MessageRecord {
+  id?: string; // 原始消息 ID，用于追踪压缩分界点
   role: "system" | "user" | "assistant" | "tool";
   content: string | MessagePart[];
   reasoningContent?: string;

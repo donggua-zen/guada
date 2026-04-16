@@ -6,7 +6,7 @@ import { MessageContentRepository } from "../../common/database/message-content.
 import { CharacterRepository } from "../../common/database/character.repository";
 import { LLMService } from "./llm.service";
 import { ToolOrchestrator } from "../tools/tool-orchestrator.service";
-import { MemoryManagerService } from "./memory.service";
+import { ContextManagerService } from "./context-manager.service";
 import { SessionLockService } from "./session-lock.service";
 import { MessageRecord, LLMResponseChunk } from "./types/llm.types";
 
@@ -31,7 +31,7 @@ export class AgentService {
     private contentRepo: MessageContentRepository,
     private characterRepo: CharacterRepository,
     private toolOrchestrator: ToolOrchestrator,
-    private memoryManager: MemoryManagerService,
+    private contextManager: ContextManagerService,
     private llmService: LLMService,
     private sessionLockService: SessionLockService,
   ) { }
@@ -53,63 +53,20 @@ export class AgentService {
 
       await this.sessionRepo.updateLastActiveAt(sessionId);
 
-      // 1. 合并设置与构建上下文
+      // 1. 合并设置
       const mergedSettings = this.mergeSettings(session);
-      const historyMessages = await this.memoryManager.getConversationMessages(
+
+      // 2. 使用 ContextManager 获取完整的 LLM 上下文（包含系统提示词、工具注入等）
+      const { messages, tools } = await this.contextManager.getContextForLLMInference(
         sessionId,
+        session.userId,
         messageId,
         mergedSettings.maxMemoryLength || 20,
-      );
-      this.logger.log(historyMessages);
-      // 2. 构建工具执行上下文（与 Python 后端保持一致）
-      const toolContext = {
-        inject_params: { session_id: sessionId, user_id: session.userId },
-        provider_configs: {
-          mcp: {
-            enabled_tools: mergedSettings.mcpServers ?? true  // 支持 boolean 或 array，默认启用所有
-          },
-          time: {
-            enabled_tools: mergedSettings.tools?.includes('get_current_time') ?? true  // 默认启用时间工具
-          },
-          memory: {
-            enabled_tools: mergedSettings.tools?.includes('memory') ?? false  // 默认禁用记忆工具
-          },
-          knowledge_base: {
-            enabled_tools: historyMessages[historyMessages.length - 1]?.metadata
-              ?.referencedKbs
-              ? true
-              : false,
-          },
-        },
-        getProviderConfig: (ns: string) => {
-          return toolContext.provider_configs[ns];
-        },
-      };
-
-      // 3. 准备提示词和工具
-      const systemPrompt = await this._buildSystemPrompt(
         mergedSettings,
-        toolContext,
-      );
-      let finalSystemPrompt = this.replaceVariables(
-        systemPrompt || "You are a helpful assistant.",
+        false,
       );
 
-      // 过滤出历史消息中的 system 内容并合并，避免多条 system 消息
-      const nonSystemMessages: MessageRecord[] = [];
-      historyMessages.forEach((msg) => {
-        if (msg.role === "system") {
-          finalSystemPrompt += `\n\n${msg.content}`;
-        } else {
-          nonSystemMessages.push(msg);
-        }
-      });
-
-      const messages = [
-        { role: "system", content: finalSystemPrompt } as MessageRecord,
-        ...nonSystemMessages,
-      ];
-      const tools = await this.toolOrchestrator.getAllTools(toolContext);
+      this.logger.log(`Retrieved ${messages.length} messages for LLM inference`);
 
       // 3. 处理再生模式（与 Python 后端保持一致）
       let assistantMessage: any;
@@ -331,7 +288,31 @@ export class AgentService {
                   name: tc.name,
                   arguments: JSON.parse(tc.arguments) || {},
                 })),
-                toolContext, // 传递完整的工具执行上下文
+                {
+                  inject_params: { session_id: sessionId, user_id: session.userId },
+                  provider_configs: {
+                    mcp: {
+                      enabled_tools: mergedSettings.mcpServers ?? true,
+                    },
+                    time: {
+                      enabled_tools: mergedSettings.tools?.includes('get_current_time') ?? true,
+                    },
+                    memory: {
+                      enabled_tools: mergedSettings.tools?.includes('memory') ?? false,
+                    },
+                    knowledge_base: {
+                      enabled_tools: messages[messages.length - 1]?.metadata
+                        ?.referencedKbs
+                        ? true
+                        : false,
+                    },
+                  },
+                  getProviderConfig: (ns: string) => {
+                    return {
+                      enabled_tools: mergedSettings.mcpServers ?? true,
+                    };
+                  },
+                } as any,
               );
 
               // Yield tool_calls_response 事件（与 Python 后端保持一致）
@@ -472,46 +453,7 @@ export class AgentService {
     }
   }
 
-  /**
-   * 构建完整的系统提示词（包含工具注入）
-   *
-   * @param mergedSettings 合并后的设置
-   * @param context 工具执行上下文
-   * @returns 完整的系统提示词
-   */
-  private async _buildSystemPrompt(
-    mergedSettings: any,
-    context: any,
-  ): Promise<string> {
-    // 1. 基础系统提示词
-    let systemPrompt = mergedSettings.systemPrompt || "";
 
-    // 2. 获取所有工具的提示词注入
-    const toolPrompts: string[] = [];
-
-    // 从 ToolOrchestrator 获取所有 Provider 的提示词
-    const prompts = await this.toolOrchestrator.getAllToolPrompts(context);
-    if (prompts) {
-      toolPrompts.push(prompts);
-    }
-
-    // 3. 合并提示词
-    if (toolPrompts.length > 0) {
-      systemPrompt += "\n\n" + toolPrompts.join("\n\n");
-    }
-
-    this.logger.debug(
-      `Built system prompt with ${toolPrompts.length} tool injections`,
-    );
-    return systemPrompt;
-  }
-
-  /**
-   * 替换系统提示词中的变量
-   */
-  private replaceVariables(prompt: string): string {
-    return prompt.replace("{time}", new Date().toISOString());
-  }
 
   /**
    * 记录思考结束时间
