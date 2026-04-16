@@ -147,7 +147,7 @@ ol>*:not(li) {
 }
 
 .markdown-text .custom-table-block {
-    margin-bottom: 8px;
+    margin-bottom: 1em;
     overflow-x: auto;
     max-width: 100%;
     display: flex;
@@ -297,9 +297,10 @@ ol>*:not(li) {
 /* 确保 hljs 样式正常工作 */
 .custom-code-block pre.hljs {
     margin: 0;
-    border-radius: 0;
-    border: none;
+    border-radius: 0 0 8px 8px;
     background: #fafafb !important;
+    border: 1px solid #e3e3e7;
+    border-top: 0;
 }
 
 .custom-code-block code.hljs {
@@ -311,12 +312,9 @@ ol>*:not(li) {
 
 /* 代码块容器样式 */
 .custom-code-block {
-    position: relative;
-    margin: 1em 0;
-    border-radius: 8px;
-    overflow: hidden;
-    background: #f3f4f6;
-    border: 1px solid #e3e3e7;
+    /* position: relative; */
+    margin-bottom: 1em;
+    /* overflow: hidden; */
 }
 
 
@@ -324,10 +322,13 @@ ol>*:not(li) {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    padding: 5px 12px;
+    padding: 7px 12px;
     background: #f3f3f5;
     color: #222;
     font-size: 0.8em;
+    border-radius: 8px 8px 0 0;
+    border: 1px solid #e3e3e7;
+    border-bottom: 0;
 }
 
 .code-language {

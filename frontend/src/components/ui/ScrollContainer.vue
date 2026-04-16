@@ -90,7 +90,8 @@ function handleScroll(event: Event): void {
 function immediateScrollToBottom(): void {
     const element = scrollElement.value;
     if (element) {
-        element.scrollTop = element.scrollHeight;
+        // 滚动到底部的两倍位置，因为可能内容高度会动态变化
+        element.scrollTop = element.scrollHeight * 2;
     }
 }
 
