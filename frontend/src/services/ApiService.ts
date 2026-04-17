@@ -187,8 +187,15 @@ class ApiService implements IApiService {
     return await this._request(`/sessions/${sessionId}`)
   }
 
-  async fetchSessions(): Promise<SessionListResponse> {
-    return await this._request('/sessions')
+  async fetchSessions(skip?: number, limit?: number): Promise<SessionListResponse> {
+    const params = new URLSearchParams()
+    if (skip !== undefined) params.append('skip', skip.toString())
+    if (limit !== undefined) params.append('limit', limit.toString())
+
+    const queryString = params.toString()
+    const url = queryString ? `/sessions?${queryString}` : '/sessions'
+
+    return await this._request(url)
   }
 
   async fetchSessionMessages(sessionId: string): Promise<PaginatedResponse<Message>> {

@@ -1,12 +1,12 @@
 <template>
   <div class="flex h-full">
     <!-- 左侧边栏 -->
-    <SidebarLayout v-model:sidebar-visible="sidebarVisible" :sidebar-position="'left'" :z-index="50">
+    <SidebarLayout v-model:sidebar-visible="sidebarVisible" sidebar-position="left" :show-toggle-button="true" :z-index="50">
       <template #sidebar>
         <template v-if="authStore.isAuthenticated">
-          <chat-sidebar ref="chatSidebarRef" :sessions="sortedSessions" :current="currentSession"
-            @select="goChatRoute($event)" @delete="handleDeleteSession" @rename="handleRenameSession"
-            @create="handleCreateSession" />
+          <chat-sidebar ref="chatSidebarRef" :sessions="sortedSessions" :total-sessions="totalSessionsCount"
+            :current="currentSession" @select="goChatRoute($event)" @delete="handleDeleteSession"
+            @rename="handleRenameSession" @create="handleCreateSession" @load-more="handleLoadMoreSessions" />
         </template>
         <template v-else>
           <div
@@ -96,6 +96,19 @@ const sidebarVisible = useStorage('sidebarVisible', true);
 const memoPanelVisible = useStorage('memoPanelVisible', true);
 
 const isLoading = ref(true);
+
+// 无限滚动相关状态
+const currentPage = ref(1) // 当前页码
+const pageSize = ref(calculatePageSize()) // 每页数量（根据屏幕高度动态计算）
+const totalSessionsCount = ref(0) // 总会话数
+
+/**
+ * 根据屏幕高度计算合适的每页加载数量
+ */
+function calculatePageSize(): number {
+  const screenHeight = window.innerHeight
+  return screenHeight > 1080 ? 40 : 20
+}
 
 // 登录信息
 const authStore = useAuthStore();
@@ -218,15 +231,35 @@ const updateSelectedSession = async (sessionId: string) => {
 };
 
 /**
- * 加载会话列表
- * 从 API 获取会话列表，更新本地数据
+ * 加载会话列表（首次加载）
  */
 const loadSessions = async () => {
   try {
-    const data = await apiService.fetchSessions();
+    const data = await apiService.fetchSessions(0, pageSize.value);
     sessions.value = data.items;
+    totalSessionsCount.value = data.total || 0;
+    currentPage.value = 1;
   } catch (error) {
     console.error('获取对话列表失败:', error);
+  }
+};
+
+/**
+ * 加载更多会话（无限滚动）
+ */
+const handleLoadMoreSessions = async () => {
+  try {
+    const skip = sessions.value.length;
+    const data = await apiService.fetchSessions(skip, pageSize.value);
+    
+    if (data.items && data.items.length > 0) {
+      // 追加新会话到列表
+      sessions.value = [...sessions.value, ...data.items];
+      totalSessionsCount.value = data.total || 0;
+      currentPage.value++;
+    }
+  } catch (error) {
+    console.error('加载更多会话失败:', error);
   }
 };
 
@@ -253,7 +286,7 @@ const handleCreateSessionWithMessage = async (session: any, inputMessage: any) =
     return;
   try {
     const response = await apiService.createSession(session)
-    // 刷新对话列表
+    // 刷新对话列表（重新加载第一页）
     await loadSessions();
     console.log('Created session:', session, inputMessage);
     if (inputMessage) {
@@ -324,6 +357,7 @@ const handleDeleteSession = async (session: any) => {
         }
       }
       sessions.value = sessions.value.filter(s => s.id !== session.id);
+      totalSessionsCount.value--; // 更新总数
       toast.success("对话删除成功");
     }
   } catch (error) {

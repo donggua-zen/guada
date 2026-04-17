@@ -19,7 +19,7 @@
 
     <!-- 会话列表区域 -->
     <div class="sessions-list flex-1 overflow-hidden py-2">
-      <ScrollContainer class="h-full">
+      <ScrollContainer ref="scrollContainer" class="h-full" @scroll="handleScroll">
         <div class="px-5 py-2.5 text-xs font-medium text-gray-400 uppercase tracking-wider">对话记录</div>
         <template v-if="!filteredSessions || filteredSessions.length === 0">
           <div class="empty-state text-center text-gray-500 flex flex-col items-center justify-center h-full py-12">
@@ -73,6 +73,24 @@
               </el-dropdown>
             </div>
           </div>
+          
+          <!-- 加载更多提示 -->
+          <div v-if="filteredSessions.length > 0" class="py-3 px-5 text-center">
+            <div v-if="isLoadingMore" class="flex items-center justify-center gap-2 text-sm text-gray-500">
+              <el-icon class="animate-spin" size="16">
+                <Loading />
+              </el-icon>
+              <span>加载中...</span>
+            </div>
+            <div v-else-if="hasMoreSessions" 
+                 class="text-sm text-gray-400 cursor-pointer hover:text-blue-500 transition-colors"
+                 @click="loadMoreSessions">
+              点击加载更多 (剩余 {{ totalSessionsCount - filteredSessions.length }} 个)
+            </div>
+            <div v-else-if="totalSessionsCount > 0" class="text-sm text-gray-400">
+              已加载全部 {{ totalSessionsCount }} 个会话
+            </div>
+          </div>
         </template>
       </ScrollContainer>
     </div>
@@ -81,7 +99,7 @@
 
 <!-- @ts-ignore - UI 组件尚未完全迁移到 TypeScript -->
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, watch } from 'vue'
 import { useRouter } from 'vue-router'
 // @ts-ignore - UI 组件类型缺失
 import { ScrollContainer, Avatar } from './ui'
@@ -94,7 +112,7 @@ import {
   SearchOutlined,
 } from '@vicons/material'
 
-import { MoreFilled } from '@element-plus/icons-vue'
+import { MoreFilled, Loading } from '@element-plus/icons-vue'
 
 // @ts-ignore - icons 组件类型缺失
 import {
@@ -111,12 +129,33 @@ import {
   ElDropdownItem
 } from 'element-plus'
 
+// API 服务导入（暂时保留，未来可能需要）
+// import { apiService } from '../services/ApiService'
+
 const authStore = useAuthStore()
 const router = useRouter()
 
 // 响应式数据 - 类型化
 const currentSessionId = computed(() => props.current?.id)
 const searchKeyword = ref('')
+const scrollContainer = ref<any>(null)
+
+// 无限滚动相关状态
+const currentPage = ref(1) // 当前页码
+const pageSize = ref(calculatePageSize()) // 每页数量（根据屏幕高度动态计算）
+const isLoadingMore = ref(false) // 是否正在加载更多
+const scrollThreshold = 50 // 滚动触发阈值(像素)
+let scrollTimer: number | null = null // 滚动防抖定时器
+
+/**
+ * 根据屏幕高度计算合适的每页加载数量
+ * @returns 每页数量
+ */
+function calculatePageSize(): number {
+  const screenHeight = window.innerHeight
+  // 大于 1080px 加载 40 个，否则加载 20 个
+  return screenHeight > 1080 ? 40 : 20
+}
 
 // 事件定义 - 类型化
 const emit = defineEmits<{
@@ -124,18 +163,32 @@ const emit = defineEmits<{
   rename: [session: any]
   delete: [session: any]
   create: []
+  loadMore: [] // 请求加载更多会话
 }>()
 
 // Props 定义 - 类型化
 const props = defineProps<{
   sessions?: any[];
+  totalSessions?: number; // 总会话数（从父组件传入）
   btnActive?: string;
   current?: any;
 }>()
 
 // 计算属性 - 类型化
-// 排序后的会话列表
+// 排序后的会话列表（使用父组件传入的 sessions）
 const sortedSessions = computed((): any[] => props.sessions || [])
+
+// 是否还有更多会话可加载（基于父组件传入的总数）
+const hasMoreSessions = computed(() => {
+  // 如果父组件传入了 totalSessions，则使用它；否则根据当前加载数量判断
+  const total = props.totalSessions || sortedSessions.value.length
+  return filteredSessions.value.length < total
+})
+
+// 总会话数（从父组件获取）
+const totalSessionsCount = computed(() => {
+  return props.totalSessions ?? sortedSessions.value.length
+})
 
 // 过滤后的会话列表
 const filteredSessions = computed((): any[] => {
@@ -182,6 +235,58 @@ const handleButtonClick = (key: string): void => {
 
 const selectSession = (session: any): void => {
   emit('select', session.id)  // 修复：传递 session.id 而不是整个 session 对象
+}
+
+/**
+ * 处理滚动事件（带防抖）
+ */
+const handleScroll = (event: Event): void => {
+  // 清除之前的定时器
+  if (scrollTimer !== null) {
+    clearTimeout(scrollTimer)
+  }
+
+  // 设置防抖，300ms 后执行
+  scrollTimer = window.setTimeout(() => {
+    checkScrollPosition()
+  }, 300)
+}
+
+/**
+ * 检查滚动位置，判断是否需要加载更多
+ */
+const checkScrollPosition = (): void => {
+  if (!scrollContainer.value || isLoadingMore.value || !hasMoreSessions.value) {
+    return
+  }
+
+  const element = scrollContainer.value.getScrollElement?.() || scrollContainer.value
+  const { scrollTop, scrollHeight, clientHeight } = element
+  const distanceToBottom = scrollHeight - scrollTop - clientHeight
+
+  // 如果距离底部小于阈值，则加载更多
+  if (distanceToBottom <= scrollThreshold) {
+    loadMoreSessions()
+  }
+}
+
+/**
+ * 加载更多会话（通知父组件）
+ */
+const loadMoreSessions = async (): Promise<void> => {
+  if (isLoadingMore.value || !hasMoreSessions.value) {
+    return
+  }
+
+  isLoadingMore.value = true
+  
+  // 通知父组件加载更多
+  emit('loadMore')
+  
+  // 等待一段时间后重置加载状态（实际由父组件控制）
+  setTimeout(() => {
+    isLoadingMore.value = false
+  }, 500)
 }
 
 
