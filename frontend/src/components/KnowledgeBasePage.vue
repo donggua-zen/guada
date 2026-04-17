@@ -4,15 +4,9 @@
         :show-toggle-button="true">
         <!-- 左侧侧边栏：知识库列表 -->
         <template #sidebar>
-            <KBSidebar
-                :knowledge-bases="store.knowledgeBases"
-                :active-id="store.activeKnowledgeBaseId"
-                v-model:search-keyword="searchKeyword"
-                @select="handleSelectKB"
-                @create="showCreateModal = true"
-                @edit="handleEdit"
-                @delete="handleDelete"
-            />
+            <KBSidebar :knowledge-bases="store.knowledgeBases" :active-id="store.activeKnowledgeBaseId"
+                v-model:search-keyword="searchKeyword" @select="handleSelectKB" @create="showCreateModal = true"
+                @edit="handleEdit" @delete="handleDelete" />
         </template>
 
         <!-- 右侧主区域：文件列表和管理 -->
@@ -37,7 +31,9 @@
                             <div class="flex items-center gap-2">
                                 <!-- 搜索按钮 -->
                                 <el-button @click="showSearchDialog = true">
-                                    <el-icon><Search /></el-icon>
+                                    <el-icon>
+                                        <Search />
+                                    </el-icon>
                                     搜索
                                 </el-button>
                                 <el-button type="primary" @click="showUploadModal = true">
@@ -61,17 +57,16 @@
                                     <template #label>
                                         <span class="flex items-center gap-1">
                                             <span>上传任务</span>
-                                            <el-badge :value="uploadTasksList.length" :hidden="uploadTasksList.length === 0" type="warning" class="ml-1" />
+                                            <el-badge :value="uploadTasksList.length"
+                                                :hidden="uploadTasksList.length === 0" type="warning" class="ml-1" />
                                         </span>
                                     </template>
                                 </el-tab-pane>
                             </el-tabs>
                         </div>
-                    
-                        <!-- 文件列表内容区 -->
-                        <ScrollContainer ref="fileListContainer" class="flex-1 p-4" @scroll="handleScroll">
-                            <!-- 上传区域(仅在文件列表 Tab 显示) -->
-                            <div v-if="activeTab === 'files'" class="mb-6">
+                        <!-- 上传区域(仅在文件列表 Tab 显示) -->
+                        <div class="p-4">
+                            <div v-if="activeTab === 'files'" class="mb-2">
                                 <el-upload ref="uploadRef" drag :auto-upload="false" :on-change="handleFileChange"
                                     :limit="1000" :show-file-list="false" multiple
                                     accept=".txt,.md,.pdf,.docx,.py,.js,.ts,.java,.cpp,.c,.go,.rs,.json,.xml,.yaml,.yml,.csv,.html,.css"
@@ -87,93 +82,121 @@
                                     </template>
                                 </el-upload>
                             </div>
-                    
-                            <!-- 文件列表 Tab 内容 -->
-                            <div v-if="activeTab === 'files'">
-                                <!-- 文件列表 -->
-                                <div v-if="files.length > 0" class="grid gap-3">
-                                    <KBFileItem 
-                                        v-for="file in files" 
-                                        :key="file.id"
-                                        :file="file"
-                                        :is-temp-task="false"
-                                        @view="handleViewFile"
-                                        @retry="handleRetryFile"
-                                        @delete="handleDeleteFile"
-                                    />
-                                </div>
-                    
-                                <!-- 加载更多提示 -->
-                                <div v-if="files.length > 0" class="mt-4 text-center">
-                                    <div v-if="isLoadingMore" class="text-sm text-gray-500 dark:text-gray-400 py-2">
-                                        <el-icon class="animate-spin mr-2">
+                        </div>
+
+                        <!-- 文件列表内容区 -->
+                        <div class="flex-1 p-4 overflow-hidden">
+                            <ScrollContainer ref="fileListContainer"  @scroll="handleScroll">
+                                <!-- 文件列表 Tab 内容 -->
+                                <div v-if="activeTab === 'files'">
+                                    <!-- 文件列表 -->
+                                    <div v-if="files.length > 0" class="grid gap-3">
+                                        <KBFileItem v-for="file in files" :key="file.id" :file="file"
+                                            :is-temp-task="false" @view="handleViewFile" @retry="handleRetryFile"
+                                            @delete="handleDeleteFile" />
+                                    </div>
+
+                                    <!-- 加载更多提示 -->
+                                    <div v-if="files.length > 0" class="mt-4 text-center">
+                                        <!-- 加载中状态 -->
+                                        <div v-if="isLoadingMore"
+                                            class="flex items-center justify-center py-3 px-4 bg-gray-50 dark:bg-gray-800/50 rounded-lg border border-gray-200 dark:border-gray-700">
+                                            <el-icon class="animate-spin text-blue-500 mr-2" size="18">
+                                                <Loading />
+                                            </el-icon>
+                                            <span class="text-sm text-gray-600 dark:text-gray-400">
+                                                正在加载更多文件... ({{ files.length }}/{{ totalFiles }})
+                                            </span>
+                                        </div>
+
+                                        <!-- 有更多可加载 -->
+                                        <div v-else-if="hasMoreFiles"
+                                            class="py-3 px-4 cursor-pointer group transition-all duration-200"
+                                            @click="loadMoreFiles">
+                                            <div class="inline-flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400 
+                                                    group-hover:text-blue-600 dark:group-hover:text-blue-400 
+                                                    group-hover:bg-blue-50 dark:group-hover:bg-blue-900/20 
+                                                    px-4 py-2 rounded-full transition-all duration-200">
+                                                <span>点击加载更多</span>
+                                                <span class="text-xs opacity-60">(剩余 {{ totalFiles - files.length }}
+                                                    个文件)</span>
+                                                <el-icon class="group-hover:translate-y-0.5 transition-transform"
+                                                    size="14">
+                                                    <ArrowDown />
+                                                </el-icon>
+                                            </div>
+                                        </div>
+
+                                        <!-- 已全部加载 -->
+                                        <div v-else-if="totalFiles > 0" class="py-3 px-4">
+                                            <div
+                                                class="inline-flex items-center gap-2 text-sm text-gray-400 dark:text-gray-500">
+                                                <el-icon size="16">
+                                                    <CircleCheck />
+                                                </el-icon>
+                                                <span>已加载全部 {{ totalFiles }} 个文件</span>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <!-- 空状态 -->
+                                    <div v-else-if="!store.loading && !isLoadingMore" class="mt-6">
+                                        <div
+                                            class="empty-state text-center text-gray-500 flex flex-col items-center justify-center py-12">
+                                            <div class="empty-state-icon mb-3 text-gray-300">
+                                                <el-icon size="48">
+                                                    <Upload />
+                                                </el-icon>
+                                            </div>
+                                            <div class="empty-state-title text-sm font-medium mb-1">
+                                                暂无文件
+                                            </div>
+                                            <div class="empty-state-description text-xs text-gray-400 mb-3">
+                                                点击上方按钮或拖拽文件上传
+                                            </div>
+                                            <el-button type="primary"
+                                                @click="showUploadModal = true">上传第一个文件</el-button>
+                                        </div>
+                                    </div>
+
+                                    <!-- 加载中状态 -->
+                                    <div v-else-if="isLoadingMore" class="mt-6 flex items-center justify-center py-12">
+                                        <el-icon class="animate-spin text-gray-400" size="32">
                                             <Loading />
                                         </el-icon>
-                                        加载中...
-                                    </div>
-                                    <div v-else-if="hasMoreFiles" class="text-sm text-gray-400 dark:text-gray-500 py-2 cursor-pointer hover:text-gray-600 dark:hover:text-gray-300"
-                                        @click="loadMoreFiles">
-                                        点击加载更多
-                                    </div>
-                                    <div v-else-if="totalFiles > pageSize" class="text-sm text-gray-400 dark:text-gray-500 py-2">
-                                        没有更多了
+                                        <span class="ml-3 text-gray-500">正在加载文件...</span>
                                     </div>
                                 </div>
-                    
-                                <!-- 空状态 -->
-                                <div v-else-if="!store.loading" class="mt-6">
-                                    <div
-                                        class="empty-state text-center text-gray-500 flex flex-col items-center justify-center py-12">
-                                        <div class="empty-state-icon mb-3 text-gray-300">
-                                            <el-icon size="48">
-                                                <Upload />
-                                            </el-icon>
-                                        </div>
-                                        <div class="empty-state-title text-sm font-medium mb-1">
-                                            暂无文件
-                                        </div>
-                                        <div class="empty-state-description text-xs text-gray-400 mb-3">
-                                            点击上方按钮或拖拽文件上传
-                                        </div>
-                                        <el-button type="primary" @click="showUploadModal = true">上传第一个文件</el-button>
+
+                                <!-- 上传任务 Tab 内容 -->
+                                <div v-if="activeTab === 'uploads'">
+                                    <!-- 上传任务列表 -->
+                                    <div v-if="uploadTasksList.length > 0" class="grid gap-3">
+                                        <KBFileItem v-for="task in uploadTasksList" :key="task.id" :file="task"
+                                            :is-temp-task="true" @view="handleViewFile" @retry="handleRetryFile"
+                                            @delete="handleDeleteFile" />
                                     </div>
-                                </div>
-                            </div>
-                    
-                            <!-- 上传任务 Tab 内容 -->
-                            <div v-if="activeTab === 'uploads'">
-                                <!-- 上传任务列表 -->
-                                <div v-if="uploadTasksList.length > 0" class="grid gap-3">
-                                    <KBFileItem 
-                                        v-for="task in uploadTasksList" 
-                                        :key="task.id"
-                                        :file="task"
-                                        :is-temp-task="true"
-                                        @view="handleViewFile"
-                                        @retry="handleRetryFile"
-                                        @delete="handleDeleteFile"
-                                    />
-                                </div>
-                    
-                                <!-- 空状态 -->
-                                <div v-else class="mt-6">
-                                    <div
-                                        class="empty-state text-center text-gray-500 flex flex-col items-center justify-center py-12">
-                                        <div class="empty-state-icon mb-3 text-gray-300">
-                                            <el-icon size="48">
-                                                <Upload />
-                                            </el-icon>
-                                        </div>
-                                        <div class="empty-state-title text-sm font-medium mb-1">
-                                            暂无进行中的上传任务
-                                        </div>
-                                        <div class="empty-state-description text-xs text-gray-400 mb-3">
-                                            上传文件后会在此处显示进度
+
+                                    <!-- 空状态 -->
+                                    <div v-else class="mt-6">
+                                        <div
+                                            class="empty-state text-center text-gray-500 flex flex-col items-center justify-center py-12">
+                                            <div class="empty-state-icon mb-3 text-gray-300">
+                                                <el-icon size="48">
+                                                    <Upload />
+                                                </el-icon>
+                                            </div>
+                                            <div class="empty-state-title text-sm font-medium mb-1">
+                                                暂无进行中的上传任务
+                                            </div>
+                                            <div class="empty-state-description text-xs text-gray-400 mb-3">
+                                                上传文件后会在此处显示进度
+                                            </div>
                                         </div>
                                     </div>
                                 </div>
-                            </div>
-                        </ScrollContainer>
+                            </ScrollContainer>
+                        </div>
                     </div>
                 </template>
 
@@ -232,16 +255,14 @@
                 <template #label>
                     <span class="font-medium text-gray-700 dark:text-gray-300">最大分块大小</span>
                 </template>
-                <el-input-number v-model="createForm.chunkMaxSize" :min="100" :max="5000" :step="100"
-                    class="w-full" />
+                <el-input-number v-model="createForm.chunkMaxSize" :min="100" :max="5000" :step="100" class="w-full" />
             </el-form-item>
 
             <el-form-item>
                 <template #label>
                     <span class="font-medium text-gray-700 dark:text-gray-300">重叠大小</span>
                 </template>
-                <el-input-number v-model="createForm.chunkOverlapSize" :min="0" :max="500" :step="10"
-                    class="w-full" />
+                <el-input-number v-model="createForm.chunkOverlapSize" :min="0" :max="500" :step="10" class="w-full" />
             </el-form-item>
 
             <el-form-item>
@@ -320,23 +341,17 @@
     </el-dialog>
 
     <!-- 文件分块查看弹窗 -->
-    <FileChunksViewer 
-        v-model="showFileChunksModal" 
-        :selected-file="selectedFile"
-    />
+    <FileChunksViewer v-model="showFileChunksModal" :selected-file="selectedFile" />
 
     <!-- 知识库搜索对话框 -->
-    <KBSearchDialog
-        v-model="showSearchDialog"
-        :knowledge-bases="store.knowledgeBases"
-        :default-kb-id="store.activeKnowledgeBaseId"
-    />
+    <KBSearchDialog v-model="showSearchDialog" :knowledge-bases="store.knowledgeBases"
+        :default-kb-id="store.activeKnowledgeBaseId" />
 </template>
 
 <script setup lang="ts">
 import { ref, reactive, onMounted, onUnmounted, computed, watch } from 'vue'
 import { ElDropdown, ElDropdownMenu, ElDropdownItem, ElTabs, ElTabPane, ElBadge } from 'element-plus'
-import { Plus, Edit, Delete, Upload, MoreFilled, RefreshRight, Loading, Search } from '@element-plus/icons-vue'
+import { Plus, Edit, Delete, Upload, MoreFilled, RefreshRight, Loading, Search, ArrowDown, CircleCheck } from '@element-plus/icons-vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useKnowledgeBaseStore } from '@/stores/knowledgeBase'
 import { useFileUploadStore } from '@/stores/fileUpload'
@@ -373,7 +388,7 @@ const embeddingProviders = ref<any[]>([]) // 嵌入模型供应商列表
 const activeTab = ref<'files' | 'uploads'>('files') // 当前激活的 Tab
 
 // 无限滚动相关状态
-const fileListContainer = ref<HTMLElement | null>(null) // 文件列表容器引用
+const fileListContainer = ref<any>(null) // 文件列表容器引用（ScrollContainer 组件）
 const currentPage = ref(1) // 当前页码
 const pageSize = ref(30) // 每页数量
 const totalFiles = ref(0) // 文件总数
@@ -464,7 +479,8 @@ async function handleSelectKB(kb: KnowledgeBase) {
     router.replace({ name: 'KnowledgeBase', params: { id: kb.id } })
 
     try {
-        await refreshFileList()
+        // 选择新知识库时重置分页
+        await refreshFileList(true)
         // toast.success(`已选择：${kb.name}`)
     } catch (error) {
         console.error('加载文件列表失败:', error)
@@ -506,7 +522,7 @@ async function handleCreate() {
 
         // 刷新列表
         await store.fetchKnowledgeBases()
-        
+
         // 关键修改：创建成功后自动选中新建的知识库
         const createdKb = store.knowledgeBases.find(kb => kb.id === newKb.id)
         if (createdKb) {
@@ -580,11 +596,11 @@ async function handleDelete(kb: KnowledgeBase) {
         // 记录当前删除的知识库 ID 和索引
         const deletedKbId = kb.id
         const currentIndex = store.knowledgeBases.findIndex(k => k.id === deletedKbId)
-        
+
         // 执行删除
         await store.deleteKnowledgeBase(kb.id)
         toast.success('删除成功')
-        
+
         // 删除后处理：自动选中下一个知识库
         handleAfterDelete(deletedKbId, currentIndex)
     } catch (error: any) {
@@ -601,27 +617,27 @@ async function handleDelete(kb: KnowledgeBase) {
 function handleAfterDelete(deletedKbId: string, currentIndex: number) {
     // 获取删除后的列表（从 store 中获取最新列表）
     const remainingKBs = store.knowledgeBases.filter(kb => kb.id !== deletedKbId)
-    
+
     if (remainingKBs.length === 0) {
         // 如果列表为空，清空选中状态
         store.setActiveKnowledgeBase(null)
         router.replace({ name: 'KnowledgeBase' })
         return
     }
-    
+
     // 计算应该选中的索引
     let nextIndex = currentIndex
-    
+
     // 如果删除的是最后一个元素，则选中前一个
     if (currentIndex >= remainingKBs.length) {
         nextIndex = remainingKBs.length - 1
     }
-    
+
     // 确保索引有效
     if (nextIndex < 0) {
         nextIndex = 0
     }
-    
+
     // 选中下一个知识库
     const nextKb = remainingKBs[nextIndex]
     if (nextKb) {
@@ -670,7 +686,7 @@ async function handleFileChange(file: any, fileList: any[]) {
         const completedTaskIds = uploadTasksList.value
             .filter(task => task.processingStatus === 'uploaded')
             .map(task => task.id)
-        
+
         if (completedTaskIds.length > 0) {
             console.log(`[DEBUG] 清空 ${completedTaskIds.length} 个已完成的上传任务`)
             completedTaskIds.forEach(id => uploadStore.clearUploadTask(id))
@@ -755,7 +771,8 @@ function checkScrollPosition() {
         return
     }
 
-    const { scrollTop, scrollHeight, clientHeight } = fileListContainer.value
+    const element = fileListContainer.value.getScrollElement?.() || fileListContainer.value
+    const { scrollTop, scrollHeight, clientHeight } = element
     const distanceToBottom = scrollHeight - scrollTop - clientHeight
 
     // 如果距离底部小于阈值，则加载更多
@@ -812,8 +829,6 @@ async function loadMoreFiles() {
 
             // 页码递增
             currentPage.value++
-
-            console.log(`[DEBUG] 加载更多文件:${newDbFiles.length} 个,当前总共 ${files.value.length} 个`)
         }
     } catch (error) {
         console.error('加载更多文件失败:', error)
@@ -826,10 +841,11 @@ async function loadMoreFiles() {
 /**
  * 重置分页状态
  */
-function resetPagination() {
+function resetPaginationState() {
     currentPage.value = 1
     totalFiles.value = 0
     isLoadingMore.value = false
+    files.value = [] // 清空文件列表
 }
 
 /**
@@ -839,7 +855,7 @@ async function handleRetryFile(file: UnifiedFileRecord) {
     try {
         const confirmed = await confirm(
             '警告',
-            `确定要重新处理文件"${file.displayName}"吗？这将重新启动后台处理任务。`,
+            `确定要重新处理文件“${file.displayName}”吗？这将重新启动后台处理任务。`,
             { type: 'warning' }
         )
 
@@ -853,8 +869,17 @@ async function handleRetryFile(file: UnifiedFileRecord) {
 
         toast.success('已开始重新处理文件')
 
-        // 刷新文件列表
-        await refreshFileList()
+        // 关键修改：仅更新该文件的状态，不刷新整个列表
+        const index = files.value.findIndex(f => f.id === file.id)
+        if (index !== -1) {
+            files.value[index].processingStatus = 'pending'
+            files.value[index].progressPercentage = 0
+            files.value[index].currentStep = '等待重新处理...'
+            files.value[index].errorMessage = null
+        }
+
+        // 启动对该文件的轮询
+        startPollingForProcessingFiles()
     } catch (error: any) {
         if (error !== 'cancel') {
             console.error('重新处理失败:', error)
@@ -887,7 +912,7 @@ function handleViewFile(file: UnifiedFileRecord) {
         toast.warning('文件尚未处理完成，无法查看分块内容')
         return
     }
-    
+
     // 打开分块查看弹窗
     showFileChunksModal.value = true
     selectedFile.value = file
@@ -900,7 +925,7 @@ async function handleDeleteFile(file: UnifiedFileRecord) {
     try {
         const confirmed = await confirm(
             '警告',
-            `确定要删除文件"${file.displayName}"吗？此操作不可恢复。`,
+            `确定要删除文件“${file.displayName}”吗？此操作不可恢复。`,
             { type: 'warning' }
         )
 
@@ -911,13 +936,64 @@ async function handleDeleteFile(file: UnifiedFileRecord) {
         await store.deleteFile(store.activeKnowledgeBaseId, file.id)
         toast.success('删除成功')
 
-        // 刷新列表
-        await refreshFileList()
+        // 关键修改：从本地列表中移除，而不是完全刷新
+        const index = files.value.findIndex(f => f.id === file.id)
+        if (index !== -1) {
+            files.value.splice(index, 1)
+            totalFiles.value--
+
+            // 如果当前页为空且不是第一页，加载上一页的数据
+            if (files.value.length === 0 && currentPage.value > 1) {
+                currentPage.value--
+                await loadPreviousPage()
+            }
+        }
     } catch (error: any) {
         if (error !== 'cancel') {
             console.error('删除失败:', error)
             toast.error(error.response?.data?.detail || '删除失败')
         }
+    }
+}
+
+/**
+ * 加载上一页数据（用于删除文件后保持分页连续性）
+ */
+async function loadPreviousPage() {
+    if (currentPage.value <= 1) return
+
+    try {
+        const skip = (currentPage.value - 1) * pageSize.value
+        const response = await store.fetchFiles(store.activeKnowledgeBaseId!, skip, pageSize.value)
+        const dbFiles = (response.items || []) as KBFile[]
+
+        if (dbFiles.length > 0) {
+            const prevFiles = dbFiles.map((file: any) => ({
+                id: file.id,
+                fileId: file.id,
+                knowledgeBaseId: file.knowledgeBaseId,
+                fileName: file.fileName,
+                displayName: file.displayName,
+                fileSize: file.fileSize,
+                fileType: file.fileType,
+                fileExtension: file.fileExtension,
+                contentHash: file.contentHash,
+                processingStatus: file.processingStatus,
+                progressPercentage: file.progressPercentage,
+                currentStep: file.currentStep,
+                errorMessage: file.errorMessage,
+                uploadedAt: file.uploadedAt,
+                processedAt: file.processedAt,
+                totalChunks: file.totalChunks,
+                totalTokens: file.totalTokens,
+                isTempTask: false
+            }))
+            files.value = prevFiles
+        }
+    } catch (error) {
+        console.error('加载上一页失败:', error)
+        // 失败时回退到第一页
+        await refreshFileList(true)
     }
 }
 
@@ -953,7 +1029,7 @@ onUnmounted(() => {
     console.log('[DEBUG] KnowledgeBasePage 组件销毁,清理定时器')
     store.stopAllFileProcessingPolling()
     stopUploadTaskPolling() // 停止上传任务轮询
-    
+
     // 清理滚动防抖定时器
     if (scrollTimer !== null) {
         clearTimeout(scrollTimer)
@@ -966,6 +1042,11 @@ onUnmounted(() => {
  */
 function handleTabClick(tab: any) {
     console.log(`[DEBUG] 用户切换到 Tab: ${tab.props.name}`)
+
+    // 如果切换到上传任务 Tab，确保上传任务列表是最新的
+    if (tab.props.name === 'uploads') {
+        refreshUploadTasksList()
+    }
 }
 
 /**
@@ -1004,23 +1085,23 @@ function refreshUploadTasksList() {
 
     // 从 fileUpload store 获取当前知识库的上传任务
     const tasks = uploadStore.getTasksByKB(store.activeKnowledgeBaseId)
-    
+
     // 转换为统一文件记录格式
     const newTasksList = tasks.map(task => uploadStore.taskToFileRecord(task))
-    
+
     // 关键修复:保留已完成(uploaded)的任务,显示"上传完成"状态
     // 只过滤掉真正完成处理(completed)的任务
-    const displayTasks = newTasksList.filter(task => 
+    const displayTasks = newTasksList.filter(task =>
         task.processingStatus !== 'completed'
     )
-    
+
     // 如果任务数量发生变化,说明有任务完成了,需要刷新文件列表
     // 检查是否有任务从 uploading/queued 变为 uploaded
-    const hasNewlyCompleted = displayTasks.some(task => 
-        task.processingStatus === 'uploaded' && 
+    const hasNewlyCompleted = displayTasks.some(task =>
+        task.processingStatus === 'uploaded' &&
         !uploadTasksList.value.find(t => t.id === task.id && t.processingStatus === 'uploaded')
     )
-    
+
     if (hasNewlyCompleted) {
         console.log('[DEBUG] 检测到上传任务完成,刷新文件列表')
         // 延迟刷新,确保后端已经创建了数据库记录
@@ -1028,29 +1109,69 @@ function refreshUploadTasksList() {
             refreshFileList()
         }, 500)
     }
-    
+
     uploadTasksList.value = displayTasks
-    
+
     console.log(`[DEBUG] 刷新上传任务列表: ${uploadTasksList.value.length} 个任务`)
 }
 
 /**
- * 刷新文件列表并启动未完成文件的轮询
+ * 启动文件处理轮询
  */
-async function refreshFileList() {
+function startPollingForProcessingFiles() {
+    if (!store.activeKnowledgeBaseId) return
+
+    // 对每个 processing/pending 状态的文件启动轮询
+    const processingFileIds = files.value
+        .filter(f => f.processingStatus === 'processing' || f.processingStatus === 'pending')
+        .map(f => f.fileId)
+
+    // 批量启动轮询(多个文件共享一个定时器)
+    if (processingFileIds.length > 0) {
+        console.log(`[DEBUG] 批量启动轮询:${processingFileIds.length} 个文件`)
+        store.startFileProcessingPolling(
+            store.activeKnowledgeBaseId,
+            processingFileIds,
+            (updatedFile: KBFile) => {
+                // 更新本地列表中的文件状态（响应式更新）
+                const index = files.value.findIndex((f) => f.id === updatedFile.id)
+                if (index !== -1) {
+                    // 使用 Vue 的响应式方式更新整个对象
+                    const fileToUpdate = files.value[index]
+                    fileToUpdate.processingStatus = updatedFile.processingStatus
+                    fileToUpdate.progressPercentage = updatedFile.progressPercentage
+                    fileToUpdate.currentStep = updatedFile.currentStep
+                    fileToUpdate.errorMessage = updatedFile.errorMessage
+                    fileToUpdate.totalChunks = updatedFile.totalChunks || undefined
+                    fileToUpdate.totalTokens = updatedFile.totalTokens || undefined
+
+                    console.log(`[DEBUG] 文件状态更新: ${fileToUpdate.displayName} -> ${updatedFile.processingStatus}`)
+                }
+            }
+        )
+    }
+}
+
+/**
+ * 刷新文件列表并启动未完成文件的轮询
+ * @param shouldResetPagination 是否重置分页状态（首次加载时为 true，增量刷新时为 false）
+ */
+async function refreshFileList(shouldResetPagination: boolean = true) {
     if (!store.activeKnowledgeBaseId) return
 
     try {
-        // 重置分页状态
-        resetPagination()
+        // 仅在需要时重置分页状态
+        if (shouldResetPagination) {
+            resetPaginationState()
+        }
 
         // 1. 从数据库加载第一页文件记录
         const response = await store.fetchFiles(store.activeKnowledgeBaseId, 0, pageSize.value)
         const dbFiles = (response.items || []) as KBFile[]
-        
+
         // 更新总数
         totalFiles.value = response.total || 0
-        
+
         console.log(`[DEBUG] refreshFileList: 从数据库加载了 ${dbFiles.length} 个文件,总数:${totalFiles.value}`)
 
         // 2. 仅保存数据库记录(不再合并上传任务)
@@ -1074,39 +1195,14 @@ async function refreshFileList() {
             totalTokens: file.totalTokens,
             isTempTask: false
         }))
-        
+
         console.log(`[DEBUG] refreshFileList: 文件列表共 ${files.value.length} 个文件`)
 
         // 3. 同时刷新上传任务列表
         refreshUploadTasksList()
 
-        // 4. 对每个 processing/failed 状态的文件启动轮询(使用 knowledgeBase store 的轮询)
-        // 收集所有需要轮询的文件 ID
-        const processingFileIds = files.value
-            .filter(f => f.processingStatus === 'processing' || f.processingStatus === 'pending')
-            .map(f => f.fileId)
-
-        // 批量启动轮询(多个文件共享一个定时器)
-        if (processingFileIds.length > 0) {
-            console.log(`[DEBUG] 批量启动轮询:${processingFileIds.length} 个文件`)
-            store.startFileProcessingPolling(
-                store.activeKnowledgeBaseId,
-                processingFileIds,
-                (updatedFile: KBFile) => {
-                    // 更新本地列表中的文件状态
-                    const index = files.value.findIndex((f) => f.id === updatedFile.id)
-                    if (index !== -1) {
-                        const fileToUpdate = files.value[index]
-                        fileToUpdate.processingStatus = updatedFile.processingStatus
-                        fileToUpdate.progressPercentage = updatedFile.progressPercentage
-                        fileToUpdate.currentStep = updatedFile.currentStep
-                        fileToUpdate.errorMessage = updatedFile.errorMessage
-                        fileToUpdate.totalChunks = updatedFile.totalChunks || undefined
-                        fileToUpdate.totalTokens = updatedFile.totalTokens || undefined
-                    }
-                }
-            )
-        }
+        // 4. 启动或更新轮询
+        startPollingForProcessingFiles()
     } catch (error) {
         console.error('加载文件列表失败:', error)
     }
@@ -1121,6 +1217,20 @@ watch(() => route.params.id, async (newKbId: string | string[] | undefined) => {
         const kb = store.knowledgeBases.find(k => k.id === kbId)
         if (kb && store.activeKnowledgeBaseId !== kb.id) {
             await handleSelectKB(kb)
+        }
+    }
+})
+
+// 监听 Tab 切换，保持分页状态
+watch(activeTab, (newTab, oldTab) => {
+    console.log(`[DEBUG] Tab 切换: ${oldTab} -> ${newTab}`)
+
+    // 切换到文件列表 Tab 时，检查是否需要刷新
+    if (newTab === 'files') {
+        // 如果文件列表为空且有文件总数，说明需要重新加载
+        if (files.value.length === 0 && totalFiles.value > 0) {
+            console.log('[DEBUG] 文件列表为空但总数大于0，重新加载')
+            refreshFileList(false) // 不重置分页，尝试恢复
         }
     }
 })

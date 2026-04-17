@@ -327,7 +327,7 @@ import { useDebounceFn } from '@vueuse/core' // 导入防抖函数'
 import ModelsProviderList from './ModelsProviderList.vue'
 import {
     SettingsOutlined, RemoveCircleOutlineRound, DeleteTwotone, AddCircleTwotone,
-    RemoveCircleTwotone, SearchOutlined, ArrowBackIosFilled, PlusOutlined, CloudDownloadOutlined
+    RemoveCircleTwotone, SearchOutlined, ArrowBackIosFilled, PlusOutlined, CloudDownloadOutlined, ScienceOutlined
 } from '@vicons/material'
 import {
     TextT24Regular, LightbulbFilament24Regular, Image24Regular, WrenchScrewdriver24Regular, Group24Regular, ArrowRight24Regular
