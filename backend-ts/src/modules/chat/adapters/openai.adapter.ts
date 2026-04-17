@@ -84,8 +84,11 @@ export class OpenAIAdapter implements LLMAdapter {
       const template = PROVIDER_TEMPLATES.find((t) => t.id === providerId);
       const attrs = template?.attributes?.[this.protocol] || {};
 
-      if (params.thinkingEnabled && attrs.thinkingEnabled) {
+      if (params.thinkingEnabled === true && attrs.thinkingEnabled) {
         Object.assign(requestParams, attrs.thinkingEnabled);
+      }
+      if (params.thinkingEnabled === false && attrs.thinkingDisabled) {
+        Object.assign(requestParams, attrs.thinkingDisabled);
       }
     }
 

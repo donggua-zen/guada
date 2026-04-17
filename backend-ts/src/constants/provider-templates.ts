@@ -26,6 +26,9 @@ export const PROVIDER_TEMPLATES: ProviderTemplate[] = [
         thinkingEnabled: {
           enable_thinking: true,
         },
+        thinkingDisabled: {
+          enable_thinking: false,
+        },
       },
     },
     models: [
@@ -132,6 +135,9 @@ export const PROVIDER_TEMPLATES: ProviderTemplate[] = [
         // 阿里云百炼开启思考需要传递 thinking_enabled: true
         thinkingEnabled: {
           enable_thinking: true,
+        },
+        thinkingDisabled: {
+          enable_thinking: false,
         },
       },
     },
