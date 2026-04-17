@@ -175,8 +175,8 @@ export class AgentService {
           const config = (session.model?.config as any) || {};
           const features = config.features || [];
 
-          const canThinking =
-            mergedSettings.thinkingEnabled && features.includes("thinking");
+          const canThinking: boolean | undefined =
+            features.includes("thinking") ? mergedSettings.thinkingEnabled : undefined;
 
           // 检查模型是否支持图像输入（用于决定是否传递图片内容给 LLM）
           const supportsImageInput = (config.inputCapabilities || []).includes(
