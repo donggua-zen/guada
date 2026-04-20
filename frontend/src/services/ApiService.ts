@@ -243,11 +243,12 @@ class ApiService implements IApiService {
   async compressSessionHistory(
     sessionId: string,
     compressionRatio: number = 50,
-    minRetainedTurns: number = 3
+    minRetainedTurns: number = 3,
+    cleaningStrategy: string = 'moderate'
   ): Promise<any> {
     return await this._request(`/sessions/${sessionId}/compress-history`, {
       method: 'POST',
-      data: { compressionRatio, minRetainedTurns },
+      data: { compressionRatio, minRetainedTurns, cleaningStrategy },
     })
   }
 

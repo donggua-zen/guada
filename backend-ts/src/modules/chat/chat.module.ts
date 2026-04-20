@@ -3,7 +3,7 @@ import { PrismaService } from "../../common/database/prisma.service";
 import { SessionRepository } from "../../common/database/session.repository";
 import { MessageRepository } from "../../common/database/message.repository";
 import { MessageContentRepository } from "../../common/database/message-content.repository";
-import { SessionSummaryRepository } from "../../common/database/session-summary.repository";
+import { SessionContextStateRepository } from "../../common/database/session-context-state.repository";
 import { CharacterRepository } from "../../common/database/character.repository";
 import { KnowledgeBaseRepository } from "../../common/database/knowledge-base.repository";
 import { ModelRepository } from "../../common/database/model.repository";
@@ -25,6 +25,7 @@ import { AuthModule } from "../auth/auth.module";
 import { ToolsModule } from "../tools/tools.module";
 
 import { SessionLockService } from "./session-lock.service";
+import { ToolResultCleaner } from "./tool-result-cleaner.service";
 
 @Module({
   imports: [AuthModule, ToolsModule],
@@ -38,7 +39,7 @@ import { SessionLockService } from "./session-lock.service";
     MessageService,
     SessionService,
     SessionRepository,
-    SessionSummaryRepository,
+    SessionContextStateRepository,
     MessageRepository,
     MessageContentRepository,
     CharacterRepository,
@@ -49,6 +50,7 @@ import { SessionLockService } from "./session-lock.service";
     PrismaService,
     SessionLockService,
     TokenizerService,
+    ToolResultCleaner,
   ],
   exports: [AgentService],
 })

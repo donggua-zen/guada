@@ -236,12 +236,20 @@ export const useSessionStore = defineStore('session', () => {
      * @param sessionId - 会话 ID
      * @param options - 压缩选项
      */
-    const compressSessionHistory = async (sessionId: string, options?: { compressionRatio?: number; minRetainedTurns?: number }): Promise<any> => {
-        return await apiService.compressSessionHistory(
-            sessionId,
-            options?.compressionRatio,
-            options?.minRetainedTurns
-        )
+    const compressSessionHistory = async (
+      sessionId: string,
+      options?: {
+        compressionRatio?: number;
+        minRetainedTurns?: number;
+        cleaningStrategy?: string;
+      }
+    ): Promise<any> => {
+      return await apiService.compressSessionHistory(
+        sessionId,
+        options?.compressionRatio,
+        options?.minRetainedTurns,
+        options?.cleaningStrategy
+      )
     }
 
     return {
