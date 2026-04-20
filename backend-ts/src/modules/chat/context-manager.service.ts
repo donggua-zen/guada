@@ -3,11 +3,13 @@ import * as fs from "fs";
 import * as path from "path";
 import { get_encoding } from "tiktoken";
 import { MessageRepository } from "../../common/database/message.repository";
-import { SessionSummaryRepository } from "../../common/database/session-summary.repository";
+import { SessionContextStateRepository } from "../../common/database/session-context-state.repository";
 import { UploadPathService } from "../../common/services/upload-path.service";
 import { ToolOrchestrator } from "../tools/tool-orchestrator.service";
 import { ToolContextFactory, ToolContext } from "../tools/tool-context";
 import { MessageRecord, MessagePart } from "./types/llm.types";
+import { SemanticTurn } from "./types/semantic-turn.types";
+import { ToolResultCleaner, CleaningStrategy } from "./tool-result-cleaner.service";
 
 @Injectable()
 export class ContextManagerService {
@@ -15,10 +17,11 @@ export class ContextManagerService {
 
   constructor(
     private messageRepo: MessageRepository,
-    private summaryRepo: SessionSummaryRepository,
+    private contextStateRepo: SessionContextStateRepository,
     private uploadPathService: UploadPathService,
     private toolOrchestrator: ToolOrchestrator,
     private toolContextFactory: ToolContextFactory,
+    private toolResultCleaner: ToolResultCleaner,
   ) { }
 
   /**
@@ -138,7 +141,7 @@ export class ContextManagerService {
     skipToolCalls: boolean = false,
   ): Promise<MessageRecord[]> {
     // 1. 检查是否存在摘要记录
-    const latestSummary = await this.summaryRepo.findLatestBySessionId(sessionId);
+    const latestSummary = await this.contextStateRepo.findLatestBySessionId(sessionId);
     let startAfterMessageId: string | undefined;
     const summaryRecord: MessageRecord | null = latestSummary
       ? { role: "system", content: `[历史对话摘要]\n${latestSummary.summaryContent}` }
@@ -177,6 +180,31 @@ export class ContextManagerService {
     // 4. 如果存在摘要，将其插入到上下文的最前端
     if (summaryRecord) {
       context.unshift(summaryRecord);
+    }
+
+    // 5. 运行时动态清理：检查是否存在有效的清理策略
+    if (latestSummary?.cleaningStrategy && latestSummary.lastCleanedMessageId) {
+      const strategy = latestSummary.cleaningStrategy as CleaningStrategy;
+      
+      // 确定需要保护的消息 ID（逻辑轮次的最后一条消息）
+      const protectedIds = new Set<string>();
+      const turns = this.groupMessagesBySemanticTurns(context);
+      turns.forEach(turn => {
+        const lastMsg = context[turn.endIndex];
+        if (lastMsg && lastMsg.id) protectedIds.add(lastMsg.id);
+      });
+
+      // 应用清理策略
+      for (let i = 0; i < context.length; i++) {
+        const msg = context[i];
+        // 仅处理在压缩范围内的消息
+        if (msg.id === latestSummary.lastCleanedMessageId) {
+          break;
+        }
+        if (msg.role === "tool" && !protectedIds.has(msg.id)) {
+          context[i] = this.toolResultCleaner.cleanToolResults([msg], strategy, protectedIds)[0];
+        }
+      }
     }
 
     return context;
@@ -472,5 +500,67 @@ export class ContextManagerService {
       `</ATTACHMENT_FILE>\n`;
 
     return { type: "text", text: fileText };
+  }
+
+  /**
+   * 将消息按语义轮次分组
+   * 
+   * 语义轮次定义: 从用户消息开始,到助手给出最终非工具调用的回复为止
+   * 期间的所有工具交互视为该轮次的内部状态
+   * 
+   * @param messages 正序排列的消息列表
+   * @returns 分组后的轮次数组
+   */
+  groupMessagesBySemanticTurns(messages: MessageRecord[]): SemanticTurn[] {
+    if (messages.length === 0) {
+      return [];
+    }
+
+    const turns: SemanticTurn[] = [];
+    let currentTurnStart = 0;
+
+    for (let i = 0; i < messages.length; i++) {
+      const msg = messages[i];
+
+      // 检测到新的用户消息,结束上一轮次
+      if (msg.role === "user" && i > currentTurnStart) {
+        const turnMessages = messages.slice(currentTurnStart, i);
+        turns.push({
+          startIndex: currentTurnStart,
+          endIndex: i - 1,
+          hasToolCalls: this.turnHasToolCalls(turnMessages),
+          userMessageIndex: currentTurnStart,
+          messageCount: turnMessages.length,
+        });
+        currentTurnStart = i;
+      }
+    }
+
+    // 处理最后一轮
+    if (currentTurnStart < messages.length) {
+      const turnMessages = messages.slice(currentTurnStart);
+      turns.push({
+        startIndex: currentTurnStart,
+        endIndex: messages.length - 1,
+        hasToolCalls: this.turnHasToolCalls(turnMessages),
+        userMessageIndex: currentTurnStart,
+        messageCount: turnMessages.length,
+      });
+    }
+
+    this.logger.debug(
+      `Grouped ${messages.length} messages into ${turns.length} semantic turns`,
+    );
+
+    return turns;
+  }
+
+  /**
+   * 判断轮次内是否包含工具调用
+   */
+  private turnHasToolCalls(turnMessages: MessageRecord[]): boolean {
+    return turnMessages.some(
+      (msg) => msg.role === "assistant" && msg.toolCalls && msg.toolCalls.length > 0,
+    );
   }
 }

@@ -141,6 +141,14 @@
           <el-input-number v-model="minRetainedTurns" :min="1" :max="10" :step="1" controls-position="right"
             style="width: 100%" />
         </div>
+        <div class="flex items-center gap-4">
+          <label class="text-sm font-medium w-28 text-right">清理策略</label>
+          <el-select v-model="cleaningStrategy" placeholder="请选择" style="width: 100%">
+            <el-option label="激进 (仅保留引用)" value="aggressive" />
+            <el-option label="中等 (智能精简)" value="moderate" />
+            <el-option label="保守 (最小化处理)" value="conservative" />
+          </el-select>
+        </div>
       </div>
       <template #footer>
         <span class="dialog-footer">
@@ -193,6 +201,7 @@ const isCompressing = computed(() => {
 // 压缩配置
 const compressionRatio = ref(50);
 const minRetainedTurns = ref(3);
+const cleaningStrategy = ref("moderate");
 const compressDialogVisible = ref(false);
 
 // 计算进度条颜色
@@ -331,7 +340,12 @@ async function executeCompression() {
   try {
     compressDialogVisible.value = false;
     sessionStore.setSessionIsCompressing(props.sessionId, true);
-    const res = await apiService.compressSessionHistory(props.sessionId, compressionRatio.value, minRetainedTurns.value);
+    const res = await apiService.compressSessionHistory(
+      props.sessionId, 
+      compressionRatio.value, 
+      minRetainedTurns.value,
+      cleaningStrategy.value
+    );
     
     if (res.success) {
       toast.success(`成功压缩 ${res.compressedTokens || 0} Tokens`);
