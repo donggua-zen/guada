@@ -65,15 +65,16 @@ export class SessionsController {
   async compressHistory(
     @Param("id") id: string,
     @Body()
-    body: { compressionRatio?: number; minRetainedTurns?: number },
+    body: { compressionRatio?: number; minRetainedTurns?: number; cleaningStrategy?: string },
     @CurrentUser() user: any,
   ) {
-    const { compressionRatio = 50, minRetainedTurns = 3 } = body;
+    const { compressionRatio = 50, minRetainedTurns = 3, cleaningStrategy = "moderate" } = body;
     return this.sessionService.compressHistory(
       id,
       user.sub,
       Number(compressionRatio),
       Number(minRetainedTurns),
+      cleaningStrategy as any,
     );
   }
 

@@ -4,7 +4,7 @@ import { CharacterRepository } from "../../common/database/character.repository"
 import { MessageRepository } from "../../common/database/message.repository";
 import { ModelRepository } from "../../common/database/model.repository";
 import { GlobalSettingRepository } from "../../common/database/global-setting.repository";
-import { SessionSummaryRepository } from "../../common/database/session-summary.repository";
+import { SessionContextStateRepository } from "../../common/database/session-context-state.repository";
 import { LLMService } from "./llm.service";
 import { ContextManagerService } from "./context-manager.service";
 import { TokenizerService } from "../../common/utils/tokenizer.service";
@@ -14,6 +14,7 @@ import {
   createPaginatedResponse,
   PaginatedResponse,
 } from "../../common/types/pagination";
+import { ToolResultCleaner, CleaningStrategy } from "./tool-result-cleaner.service";
 
 @Injectable()
 export class SessionService {
@@ -25,12 +26,13 @@ export class SessionService {
     private messageRepo: MessageRepository,
     private modelRepo: ModelRepository,
     private globalSettingRepo: GlobalSettingRepository,
-    private summaryRepo: SessionSummaryRepository,
+    private contextStateRepo: SessionContextStateRepository,
     private llmService: LLMService,
     private contextManager: ContextManagerService,
     private tokenizerService: TokenizerService,
     private toolOrchestrator: ToolOrchestrator,
     private sessionLockService: SessionLockService,
+    private toolResultCleaner: ToolResultCleaner,
   ) { }
 
   /**
@@ -74,7 +76,7 @@ export class SessionService {
       throw new Error("Session not found or unauthorized");
     }
 
-    return this.summaryRepo.findBySessionId(sessionId);
+    return this.contextStateRepo.findBySessionId(sessionId);
   }
 
   /**
@@ -85,7 +87,7 @@ export class SessionService {
     userId: string,
     data: { summaryContent?: string },
   ) {
-    const summary = await this.summaryRepo.findById(summaryId);
+    const summary = await this.contextStateRepo.findById(summaryId);
     if (!summary) {
       throw new Error("Summary not found");
     }
@@ -93,14 +95,14 @@ export class SessionService {
     // 验证会话归属权
     await this.getSessionById(summary.sessionId, userId);
 
-    return this.summaryRepo.update(summaryId, data);
+    return this.contextStateRepo.update(summaryId, data);
   }
 
   /**
    * 删除单个摘要记录
    */
   async deleteSummary(summaryId: string, userId: string) {
-    const summary = await this.summaryRepo.findById(summaryId);
+    const summary = await this.contextStateRepo.findById(summaryId);
     if (!summary) {
       throw new Error("Summary not found");
     }
@@ -108,7 +110,7 @@ export class SessionService {
     // 验证会话归属权
     await this.getSessionById(summary.sessionId, userId);
 
-    return this.summaryRepo.delete(summaryId);
+    return this.contextStateRepo.delete(summaryId);
   }
 
   /**
@@ -385,6 +387,7 @@ export class SessionService {
     userId: string,
     compressionRatio: number = 50,
     minRetainedTurns: number = 3,
+    cleaningStrategy: CleaningStrategy = "moderate",
   ) {
     // 0. 尝试获取会话锁，防止并发压缩
     if (!this.sessionLockService.tryLock(sessionId)) {
@@ -414,7 +417,7 @@ export class SessionService {
       }
 
       // 3. 获取上一次生成的摘要（如果存在）
-      const lastSummary = await this.summaryRepo.findLatestBySessionId(sessionId);
+      const lastSummary = await this.contextStateRepo.findLatestBySessionId(sessionId);
 
       // 4. 使用 ContextManagerService 获取待处理的消息片段
       const allNewMessages = await this.contextManager.getMessagesForCompression(
@@ -430,126 +433,140 @@ export class SessionService {
         };
       }
 
-      // 5. 确定保留范围（基于用户消息数量，确保上下文连贯性）
-      // 统计新增片段中的用户消息数量
-      const newUserMessageCount = allNewMessages.filter((m) => m.role === "user").length;
+      // 5. 使用语义轮次进行分组和统计
+      const semanticTurns = this.contextManager.groupMessagesBySemanticTurns(
+        allNewMessages,
+      );
+      const semanticTurnCount = semanticTurns.length;
 
-      if (newUserMessageCount <= minRetainedTurns) {
+      if (semanticTurnCount <= minRetainedTurns) {
         return {
           success: false,
           reason: "insufficient_messages",
-          message: `新增对话中的用户提问数 (${newUserMessageCount}) 小于或等于保留下限 (${minRetainedTurns})，无需压缩。`,
+          message: `新增对话中的语义轮次数 (${semanticTurnCount}) 小于或等于保留下限 (${minRetainedTurns})，无需压缩。`,
         };
       }
 
-      // 6. 计算 Token 并确定压缩目标（使用通用模型 gpt4 进行估算，满足比例压缩的精度要求）
+      // 6. 确定保护的消息 ID（每个逻辑轮次的最后一条消息）
+      const protectedMessageIds = new Set<string>();
+      semanticTurns.forEach(turn => {
+        const lastMsg = allNewMessages[turn.endIndex];
+        if (lastMsg && lastMsg.id) {
+          protectedMessageIds.add(lastMsg.id);
+        }
+      });
+
+      // 7. 计算 Token 并确定压缩目标（使用通用模型 gpt4 进行估算，满足比例压缩的精度要求）
       const totalTokens = this.tokenizerService.countTokens("gpt4", allNewMessages);
       const targetTokenCount = Math.floor(totalTokens * (compressionRatio / 100));
 
-      // 逐步累加消息直到达到目标 Token 数，同时确保不压缩掉最后 N 个用户提问对应的内容
-      let currentTokens = 0;
-      let splitIndex = 0;
-
-      for (let i = 0; i < allNewMessages.length; i++) {
-        const msg = allNewMessages[i];
-
-        // 1. 检查剩余部分是否包含足够的用户消息（保留下限约束）
-        const remainingUserCount = allNewMessages.slice(i).filter((m) => m.role === "user").length;
-        if (remainingUserCount <= minRetainedTurns) {
-          break; // 剩余的用户提问数已达到下限，停止向前压缩
-        }
-
-        // 2. 确定当前轮次的完整范围（从 User 开始到下一个 User 之前）
-        let turnEndIndex = i;
-        if (msg.role === "user") {
-          // 寻找下一个 User 消息的位置
-          const nextUserIndex = allNewMessages.findIndex((m, idx) => idx > i && m.role === "user");
-          turnEndIndex = nextUserIndex !== -1 ? nextUserIndex - 1 : allNewMessages.length - 1;
-        }
-
-        // 3. 计算这一整轮次（User + 所有后续非 User 消息）的 Token 总数
-        let turnTokens = 0;
-        for (let j = i; j <= turnEndIndex; j++) {
-          turnTokens += this.tokenizerService.countTokens("gpt4", [allNewMessages[j]]);
-        }
-
-        // 4. 检查加入这一整轮次是否会超过目标阈值
-        if (currentTokens + turnTokens > targetTokenCount) {
-          break;
-        }
-
-        currentTokens += turnTokens;
-        splitIndex = turnEndIndex + 1; // 更新切分点到这一轮次的末尾
-        i = turnEndIndex; // 跳过已处理的轮次内部消息
-      }
-
-      const toCompress = allNewMessages.slice(0, splitIndex);
-      const retainedMessages = allNewMessages.slice(splitIndex);
-
-      // 确定本次压缩的最后一条消息 ID（toCompress 中 ID 最大的那条）
-      const compressedLastMessageId = toCompress[toCompress.length - 1].id;
-
-      // 7. 构造 Prompt 并调用 LLM
-      const promptParts = [];
-      if (lastSummary) {
-        promptParts.push(`【历史对话摘要】\n${lastSummary.summaryContent}\n`);
-      }
-
-      promptParts.push("【待压缩的新增对话内容】");
-      toCompress.forEach((msg) => {
-        let contentStr = '';
-        if (typeof msg.content === 'string') {
-          contentStr = msg.content;
-        } else if (Array.isArray(msg.content)) {
-          // 处理多模态或复杂结构，提取文本部分
-          const textParts = msg.content.filter((part: any) => part.type === 'text').map((part: any) => part.text);
-          contentStr = textParts.join('\n');
-        } else {
-          contentStr = JSON.stringify(msg.content);
-        }
-
-        if (msg.role === "tool") {
-          promptParts.push(`工具调用结果: ${contentStr}`);
-        } else {
-          promptParts.push(`${msg.role === "user" ? "用户" : "助手"}: ${contentStr}`);
-        }
-      });
-
-      promptParts.push(
-        "\n任务：请将上述【历史对话摘要】(若有)与【待压缩的新增对话内容】合并为一个简洁、连贯的新的会话摘要。直接输出摘要内容，不要包含额外的解释或描述或者标题。",
+      // 阶段一：清理与评估
+      const cleanedAllMessages = this.toolResultCleaner.cleanToolResults(
+        allNewMessages,
+        cleaningStrategy,
+        protectedMessageIds,
       );
+      const cleanedTotalTokens = this.tokenizerService.countTokens("gpt4", cleanedAllMessages);
 
-      const response = await this.llmService.completions({
-        model: model.modelName,
-        messages: [{ role: "user", content: promptParts.join("\n") }],
-        temperature: 0.3,
-        maxTokens: 1000,
-        thinkingEnabled: false,
-        stream: false,
-        modelConfig: model,
-      });
+      let summaryContent: string | undefined = lastSummary?.summaryContent;
+      let finalCleaningStrategy: string = "none";
+      let splitIndex = allNewMessages.length; // 默认全部保留
 
-      const newSummaryContent = response.content?.trim();
-      if (!newSummaryContent) {
-        throw new Error("LLM generated empty summary");
+      if (cleanedTotalTokens > targetTokenCount) {
+        // 阶段二：如果清理后仍超限，则进行 LLM 摘要
+        let currentTokens = 0;
+        for (let i = 0; i < semanticTurns.length; i++) {
+          const turn = semanticTurns[i];
+          const turnMessages = cleanedAllMessages.slice(turn.startIndex, turn.endIndex + 1);
+
+          // 检查剩余轮次是否满足保留下限
+          const remainingTurns = semanticTurns.length - i;
+          if (remainingTurns <= minRetainedTurns) {
+            break;
+          }
+
+          const effectiveTurnTokens = this.tokenizerService.countTokens("gpt4", turnMessages);
+          if (currentTokens + effectiveTurnTokens > targetTokenCount) {
+            break;
+          }
+
+          currentTokens += effectiveTurnTokens;
+          splitIndex = turn.endIndex + 1;
+        }
+
+        const toCompress = cleanedAllMessages.slice(0, splitIndex);
+        const retainedMessages = cleanedAllMessages.slice(splitIndex);
+
+        // 构造 Prompt 并调用 LLM
+        const promptParts = [];
+        if (lastSummary) {
+          promptParts.push(`【历史对话摘要】\n${lastSummary.summaryContent}\n`);
+        }
+
+        promptParts.push("【待压缩的新增对话内容】");
+        toCompress.forEach((msg) => {
+          let contentStr = '';
+          if (typeof msg.content === 'string') {
+            contentStr = msg.content;
+          } else if (Array.isArray(msg.content)) {
+            const textParts = msg.content.filter((part: any)   => part.type === 'text').map((part: any) => part.text);
+            contentStr = textParts.join('\n');
+          } else {
+            contentStr = JSON.stringify(msg.content);
+          }
+
+          if (msg.role === "tool") {
+            promptParts.push(`工具调用结果: ${contentStr}`);
+          } else {
+            promptParts.push(`${msg.role === "user" ? "用户" : "助手"}: ${contentStr}`);
+          }
+        });
+
+        promptParts.push(
+          "\n任务：请将上述【历史对话摘要】(若有)与【待压缩的新增对话内容】合并为一个简洁、连贯的新的会话摘要。直接输出摘要内容，不要包含额外的解释或描述或者标题。",
+        );
+
+        const response = await this.llmService.completions({
+          model: model.modelName,
+          messages: [{ role: "user", content: promptParts.join("\n") }],
+          temperature: 0.3,
+          maxTokens: 1000,
+          thinkingEnabled: false,
+          stream: false,
+          modelConfig: model,
+        });
+
+        summaryContent = response.content?.trim();
+        if (!summaryContent) {
+          throw new Error("LLM generated empty summary");
+        }
+        finalCleaningStrategy = "summarized";
+      } else {
+        // 仅清理即可满足要求，跳过 LLM 摘要
+        finalCleaningStrategy = cleaningStrategy;
       }
 
-      // 8. 持久化新摘要
-      await this.summaryRepo.create({
+      // 8. 持久化新状态
+      const compressedLastMessageId = allNewMessages[splitIndex - 1]?.id;
+      
+      await this.contextStateRepo.create({
         sessionId,
-        summaryContent: newSummaryContent,
+        summaryContent: summaryContent || null,
         lastCompressedMessageId: compressedLastMessageId || undefined,
+        cleaningStrategy: finalCleaningStrategy,
+        lastCleanedMessageId: compressedLastMessageId || undefined,
       });
 
       this.logger.log(
-        `Successfully compressed history for session ${sessionId}. Tokens processed: ${this.tokenizerService.countTokens("gpt4", toCompress)}.`,
+        `Successfully compressed history for session ${sessionId}. Tokens processed: ${cleanedTotalTokens}. Cleaning strategy: ${finalCleaningStrategy}.`,
       );
 
       return {
         success: true,
-        compressedTokens: this.tokenizerService.countTokens("gpt4", toCompress),
-        retainedTokens: this.tokenizerService.countTokens("gpt4", retainedMessages),
-        summary: newSummaryContent,
+        compressedTokens: cleanedTotalTokens,
+        retainedTokens: this.tokenizerService.countTokens("gpt4", allNewMessages.slice(splitIndex)),
+        summary: summaryContent,
+        cleaningStrategy: finalCleaningStrategy,
       };
     } finally {
       // 统一在最外层释放锁
