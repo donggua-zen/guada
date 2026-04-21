@@ -1,4 +1,4 @@
-<!-- KnowledgeBasePage/KBFileItem.vue -->
+﻿<!-- KnowledgeBasePage/KBFileItem.vue -->
 <template>
     <div 
         class="file-item group bg-white border border-gray-200 rounded-lg px-3 py-2.5 hover:shadow-md transition-all dark:bg-gray-800 dark:border-gray-700"
@@ -28,6 +28,10 @@
                     {{ formatSize(file.fileSize) }} · {{ file.fileExtension ? file.fileExtension.toUpperCase() : 'UNKNOWN' }}
                     <span v-if="isTempTask && file.processingStatus === 'queued'" class="ml-2 px-1.5 py-0.5 bg-gray-100 text-gray-600 rounded text-xs">待上传</span>
                     <span v-if="isTempTask && file.processingStatus === 'uploading'" class="ml-2 px-1.5 py-0.5 bg-blue-100 text-blue-700 rounded text-xs">上传中</span>
+                </p>
+                <!-- 显示相对路径(如果有) -->
+                <p v-if="file.relativePath && !file.isDirectory" class="text-xs text-blue-600 dark:text-blue-400 mt-0.5 truncate">
+                    📁 {{ file.relativePath }}
                 </p>
             </div>
         </div>
@@ -83,7 +87,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { RefreshRight, Delete } from '@element-plus/icons-vue'
-import type { UnifiedFileRecord } from '@/stores/fileUpload'
+import { KBFile } from '@/stores/knowledgeBase'
 
 // 导入所有文件图标
 import fileCodeIcon from '@/assets/file_code.svg'
@@ -97,16 +101,16 @@ import fileWordIcon from '@/assets/file_word.svg'
 import fileZipIcon from '@/assets/file_zip.svg'
 
 interface Props {
-    file: UnifiedFileRecord
+    file: KBFile
     isTempTask?: boolean
 }
 
 const props = defineProps<Props>()
 
 const emit = defineEmits<{
-    view: [file: UnifiedFileRecord]
-    retry: [file: UnifiedFileRecord]
-    delete: [file: UnifiedFileRecord]
+    view: [file: KBFile]
+    retry: [file: KBFile]
+    delete: [file: KBFile]
 }>()
 
 /**

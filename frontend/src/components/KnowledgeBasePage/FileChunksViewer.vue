@@ -1,4 +1,4 @@
-<!-- KnowledgeBasePage/FileChunksViewer.vue -->
+﻿<!-- KnowledgeBasePage/FileChunksViewer.vue -->
 <template>
     <el-dialog v-model="showModal" :title="`文件分块内容 - ${selectedFile?.displayName}`" width="800px"
         :close-on-click-modal="true" @close="handleClose">
@@ -49,13 +49,13 @@
 <script setup lang="ts">
 import { ref, watch } from 'vue'
 import { Loading, Document } from '@element-plus/icons-vue'
-import type { UnifiedFileRecord } from '@/stores/fileUpload'
+import type { KBFile } from '@/stores/fileUpload'
 import { useKnowledgeBaseStore } from '@/stores/knowledgeBase'
 import { usePopup } from '@/composables/usePopup'
 
 interface Props {
     modelValue: boolean
-    selectedFile: UnifiedFileRecord | null
+    selectedFile: KBFile | null
 }
 
 const props = defineProps<Props>()

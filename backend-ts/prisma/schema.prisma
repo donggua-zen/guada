@@ -7,23 +7,23 @@ datasource db {
 }
 
 model Session {
-  id               String           @id @default(cuid())
+  id               String                 @id @default(cuid())
   title            String?
-  userId           String           @map("user_id")
-  avatarUrl        String?          @map("avatar_url")
+  userId           String                 @map("user_id")
+  avatarUrl        String?                @map("avatar_url")
   description      String?
-  modelId          String?          @map("model_id")
-  characterId      String?          @map("character_id")
+  modelId          String?                @map("model_id")
+  characterId      String?                @map("character_id")
   settings         Json?
-  createdAt        DateTime         @default(now()) @map("created_at")
-  updatedAt        DateTime         @updatedAt @map("updated_at")
-  lastActiveAt     DateTime?        @map("last_active_at")
+  createdAt        DateTime               @default(now()) @map("created_at")
+  updatedAt        DateTime               @updatedAt @map("updated_at")
+  lastActiveAt     DateTime?              @map("last_active_at")
   memories         Memory[]
   messages         Message[]
-  character        Character?       @relation(fields: [characterId], references: [id])
-  user             User             @relation(fields: [userId], references: [id])
-  model            Model?           @relation(fields: [modelId], references: [id])
-  sessionSummaries SessionSummary[]
+  character        Character?             @relation(fields: [characterId], references: [id])
+  user             User                   @relation(fields: [userId], references: [id])
+  model            Model?                 @relation(fields: [modelId], references: [id])
+  contextStates    SessionContextState[]
 
   @@map("session")
 }
@@ -184,6 +184,9 @@ model KBFile {
   contentHash        String        @map("content_hash")
   filePath           String?       @map("file_path")
   content            String?
+  relativePath       String?       @map("relative_path")
+  parentFolderId     String?       @map("parent_folder_id")
+  isDirectory        Boolean       @default(false) @map("is_directory")
   processingStatus   String        @default("pending") @map("processing_status")
   progressPercentage Int           @default(0) @map("progress_percentage")
   currentStep        String?       @map("current_step")
@@ -194,10 +197,13 @@ model KBFile {
   processedAt        DateTime?     @map("processed_at")
   chunks             KBChunk[]
   knowledgeBase      KnowledgeBase @relation(fields: [knowledgeBaseId], references: [id], onDelete: Cascade)
+  parent             KBFile?       @relation("FolderHierarchy", fields: [parentFolderId], references: [id])
+  children           KBFile[]      @relation("FolderHierarchy")
 
   @@index([knowledgeBaseId])
   @@index([contentHash])
   @@index([processingStatus])
+  @@index([parentFolderId])
   @@map("kb_file")
 }
 
@@ -299,17 +305,19 @@ model McpServer {
   @@map("mcp_server")
 }
 
-model SessionSummary {
+model SessionContextState {
   id                      String   @id @default(cuid())
   sessionId               String   @map("session_id")
-  summaryContent          String   @map("summary_content")
+  summaryContent          String?  @map("summary_content")
   lastCompressedMessageId String?  @map("last_compressed_message_id")
+  cleaningStrategy        String?  @map("cleaning_strategy")
+  lastCleanedMessageId    String?  @map("last_cleaned_message_id")
   createdAt               DateTime @default(now()) @map("created_at")
   updatedAt               DateTime @updatedAt @map("updated_at")
   session                 Session  @relation(fields: [sessionId], references: [id], onDelete: Cascade)
 
   @@index([sessionId])
-  @@map("session_summary")
+  @@map("session_context_state")
 }
 
 model UserSetting {
