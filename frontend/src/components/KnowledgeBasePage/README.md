@@ -29,7 +29,7 @@ KnowledgeBasePage/
 | 属性 | 类型 | 必填 | 说明 |
 |------|------|------|------|
 | modelValue | boolean | 是 | 控制弹窗显示/隐藏（v-model） |
-| selectedFile | UnifiedFileRecord \| null | 是 | 选中的文件对象 |
+| selectedFile | KBFile \| null | 是 | 选中的文件对象 |
 
 #### 使用示例
 
@@ -44,13 +44,13 @@ KnowledgeBasePage/
 <script setup lang="ts">
 import { ref } from 'vue'
 import { FileChunksViewer } from '@/components/KnowledgeBasePage'
-import type { UnifiedFileRecord } from '@/stores/fileUpload'
+import type { KBFile } from '@/stores/knowledgeBase'
 
 const showFileChunksModal = ref(false)
-const selectedFile = ref<UnifiedFileRecord | null>(null)
+const selectedFile = ref<KBFile | null>(null)
 
 // 打开弹窗
-function openChunksViewer(file: UnifiedFileRecord) {
+function openChunksViewer(file: KBFile) {
   if (file.processing_status === 'completed') {
     selectedFile.value = file
     showFileChunksModal.value = true

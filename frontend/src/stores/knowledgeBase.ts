@@ -34,7 +34,10 @@ export interface KBFile {
     fileType: string
     fileExtension: string
     contentHash: string
-    processingStatus: 'uploading' | 'uploaded' | 'pending' | 'processing' | 'completed' | 'failed'
+    relativePath?: string | null // 相对路径(例如: "docs/api/readme.md")
+    parentFolderId?: string | null // 父文件夹ID
+    isDirectory?: boolean // 是否为文件夹节点
+    processingStatus: 'queued' | 'uploading' | 'uploaded' | 'pending' | 'processing' | 'completed' | 'failed'
     progressPercentage: number
     currentStep: string | null
     errorMessage: string | null
@@ -42,21 +45,8 @@ export interface KBFile {
     totalTokens: number
     uploadedAt: string
     processedAt: string | null
-    isTempTask?: boolean // 标记是否为临时上传任务
 }
 
-/**
- * 文件上传状态
- */
-export interface UploadStatus {
-    fileId: string
-    fileName: string
-    status: 'pending' | 'processing' | 'completed' | 'failed'
-    progress: number
-    currentStep: string | null
-    errorMessage: string | null
-    uploadedAt: string
-}
 
 /**
  * 知识库 Store
@@ -73,8 +63,6 @@ export const useKnowledgeBaseStore = defineStore('knowledgeBase', () => {
     /** 加载中状态 */
     const loading: Ref<boolean> = ref(false)
 
-    /** 文件上传状态映射表（已废弃，请使用 fileUploadStore） */
-    const uploadStatuses: Ref<Map<string, UploadStatus>> = ref(new Map())
 
     /** 全局轮询间隔（毫秒） */
     const POLL_INTERVAL = 3000 // 3 秒
@@ -223,19 +211,6 @@ export const useKnowledgeBaseStore = defineStore('knowledgeBase', () => {
         }
     }
 
-    /**
-     * 获取文件上传状态
-     */
-    function getUploadStatus(fileId: string): UploadStatus | undefined {
-        return uploadStatuses.value.get(fileId)
-    }
-
-    /**
-     * 清除文件上传状态
-     */
-    function clearUploadStatus(fileId: string) {
-        uploadStatuses.value.delete(fileId)
-    }
 
     // ========== 搜索相关 ==========
 
@@ -293,16 +268,40 @@ export const useKnowledgeBaseStore = defineStore('knowledgeBase', () => {
                 // 批量获取文件状态
                 const responses = await apiService.batchGetFileProcessingStatus(kbId, Array.from(pollingFileIds))
 
+                console.log(`[DEBUG] 轮询收到 ${responses.length} 个文件的状态更新`)
+
                 // 遍历结果并调用对应的回调
-                responses.forEach((response: KBFile) => {
+                responses.forEach((response: any) => {
+                    console.log(`[DEBUG] 文件状态: id=${response.id}, status=${response.processingStatus}`)
+
                     const callback = fileCallbacks.value.get(response.id)
                     if (callback) {
-                        callback(response)
+                        // 将后端返回的字段映射为 KBFile 格式
+                        const mappedFile: KBFile = {
+                            id: response.id,
+                            knowledgeBaseId: kbId,
+                            fileName: response.fileName || response.displayName,
+                            displayName: response.fileName || response.displayName,
+                            fileSize: response.fileSize || 0,
+                            fileType: response.fileType || '',
+                            fileExtension: response.fileExtension || '',
+                            contentHash: response.contentHash || '',
+                            processingStatus: response.processingStatus,
+                            progressPercentage: response.progressPercentage || 0,
+                            currentStep: response.currentStep || null,
+                            errorMessage: response.errorMessage || null,
+                            totalChunks: response.totalChunks || 0,
+                            totalTokens: response.totalTokens || 0,
+                            uploadedAt: response.uploadedAt || new Date().toISOString(),
+                            processedAt: response.processedAt || null
+                        }
+                        callback(mappedFile)
                     }
 
                     // 如果单个文件处理完成或失败，从轮询列表中移除
                     if (response.processingStatus === 'completed' ||
                         response.processingStatus === 'failed') {
+                        console.log(`[DEBUG] 文件 ${response.id} 处理${response.processingStatus === 'completed' ? '完成' : '失败'},停止轮询`)
                         pollingFileIds.delete(response.id)
                         fileCallbacks.value.delete(response.id)
                     }
@@ -310,6 +309,7 @@ export const useKnowledgeBaseStore = defineStore('knowledgeBase', () => {
 
                 // 如果所有文件都处理完成，停止轮询
                 if (pollingFileIds.size === 0) {
+                    console.log('[DEBUG] 所有文件处理完成,停止轮询')
                     stopAllFileProcessingPolling()
                 }
             } catch (error) {
@@ -353,6 +353,13 @@ export const useKnowledgeBaseStore = defineStore('knowledgeBase', () => {
         fileCallbacks.value.clear()
     }
 
+    /**
+     * 检查是否有活跃的轮询
+     */
+    function hasActiveFilePolling(): boolean {
+        return activePollingTimer !== null && pollingFileIds.size > 0
+    }
+
     // ========== 返回公共属性 ==========
 
     return {
@@ -360,7 +367,6 @@ export const useKnowledgeBaseStore = defineStore('knowledgeBase', () => {
         knowledgeBases,
         activeKnowledgeBaseId,
         loading,
-        uploadStatuses,
         POLL_INTERVAL,
         // pollingBatches 已移除，改为简单的 activePollingTimer
 
@@ -375,8 +381,6 @@ export const useKnowledgeBaseStore = defineStore('knowledgeBase', () => {
         // Actions - 文件管理
         fetchFiles,
         deleteFile,
-        getUploadStatus,
-        clearUploadStatus,
 
         // Actions - 搜索
         searchInKB,
@@ -384,6 +388,7 @@ export const useKnowledgeBaseStore = defineStore('knowledgeBase', () => {
         // Actions - 文件处理轮询
         startFileProcessingPolling,  // 已重构为批量模式
         stopFileProcessingPolling,   // 已适配批量模式（兼容旧调用）
-        stopAllFileProcessingPolling
+        stopAllFileProcessingPolling,
+        hasActiveFilePolling  // 检查是否有活跃轮询
     }
 })
