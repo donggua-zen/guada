@@ -610,6 +610,33 @@ class ApiService implements IApiService {
   }
 
   /**
+   * 按父文件夹ID获取文件列表(支持懒加载)
+   */
+  async fetchKBFilesByParent(
+    kbId: string,
+    parentFolderId: string | null,
+    skip?: number,
+    limit?: number
+  ): Promise<PaginatedResponse<KBFile>> {
+    const params = new URLSearchParams()
+    
+    // parentFolderId 为 null 表示根目录
+    if (parentFolderId !== null && parentFolderId !== undefined) {
+      params.append('parentFolderId', parentFolderId)
+    }
+    
+    if (skip !== undefined) params.append('skip', skip.toString())
+    if (limit !== undefined) params.append('limit', limit.toString())
+
+    const queryString = params.toString()
+    const url = queryString 
+      ? `/knowledge-bases/${kbId}/files/by-parent?${queryString}` 
+      : `/knowledge-bases/${kbId}/files/by-parent`
+
+    return await this._request(url)
+  }
+
+  /**
    * 上传文件到知识库
    */
   async uploadKBFile(kbId: string, file: File): Promise<KBFile> {
