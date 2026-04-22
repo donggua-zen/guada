@@ -29,7 +29,7 @@ src/common/vector-db/                      # 新的通用模块
 ├── interfaces/
 │   └── vector-database.interface.ts      # 接口定义
 ├── implementations/
-│   ├── lancedb-vector-db.ts              # LanceDB 实现
+│   ├── sqlite-vector-db.ts               # SQLite 实现
 │   └── index.ts                          # 导出
 ├── index.ts                               # 模块入口
 └── README.md                              # 使用文档
@@ -47,15 +47,15 @@ src/common/vector-db/                      # 新的通用模块
 
 ```typescript
 import { VectorDatabase } from "./vector-database.interface";
-import { LanceDBVectorDB } from "./implementations/lancedb-vector-db";
+import { SqliteVectorDB } from "./implementations/sqlite-vector-db";
 ```
 
 **之后**：
 
 ```typescript
-import { VectorDatabase, LanceDBVectorDB } from "@/common/vector-db";
+import { VectorDatabase, SqliteVectorDB } from "@/common/vector-db";
 // 或者
-import { VectorDatabase, LanceDBVectorDB } from "../../common/vector-db";
+import { VectorDatabase, SqliteVectorDB } from "../../common/vector-db";
 ```
 
 #### 在其他模块中
@@ -63,7 +63,7 @@ import { VectorDatabase, LanceDBVectorDB } from "../../common/vector-db";
 任何需要使用向量数据库的模块都可以直接导入：
 
 ```typescript
-import { VectorDatabase, LanceDBVectorDB } from "@/common/vector-db";
+import { VectorDatabase, SqliteVectorDB } from "@/common/vector-db";
 ```
 
 ---
@@ -75,14 +75,14 @@ import { VectorDatabase, LanceDBVectorDB } from "@/common/vector-db";
 ```typescript
 // src/modules/knowledge-base/knowledge-base.module.ts
 import { Module } from "@nestjs/common";
-import { VectorDatabase, LanceDBVectorDB } from "@/common/vector-db";
+import { VectorDatabase, SqliteVectorDB } from "@/common/vector-db";
 import { KnowledgeBaseService } from "./knowledge-base.service";
 
 @Module({
   providers: [
     {
       provide: "VECTOR_DB",
-      useClass: LanceDBVectorDB,
+      useClass: SqliteVectorDB,
     },
     KnowledgeBaseService,
   ],
@@ -133,7 +133,7 @@ import {
   SearchResult, // 搜索结果类型
   VectorDocument, // 向量文档类型
   CollectionStats, // 集合统计类型
-  LanceDBVectorDB, // LanceDB 实现类
+  SqliteVectorDB, // SQLite 实现类
 } from "@/common/vector-db";
 ```
 
@@ -259,16 +259,16 @@ export { QdrantVectorDB } from "./qdrant-vector-db";
 **A**: 只需修改模块配置：
 
 ```typescript
-// 使用 LanceDB
+// 使用 SQLite（当前）
 {
   provide: 'VECTOR_DB',
-  useClass: LanceDBVectorDB,
+  useClass: SqliteVectorDB,
 }
 
-// 切换到 Qdrant（未来）
+// 切换到其他实现（未来扩展）
 {
   provide: 'VECTOR_DB',
-  useClass: QdrantVectorDB,
+  useClass: OtherVectorDB,
 }
 ```
 
