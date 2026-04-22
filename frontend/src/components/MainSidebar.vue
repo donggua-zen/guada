@@ -36,18 +36,6 @@
         <span class="text-[0.6875rem] font-medium tracking-wide">助手</span>
       </div>
 
-      <!-- 系统设置 -->
-      <div @click="handleNavClick('setting')"
-        class="flex flex-col items-center justify-center px-2 py-2.5 my-0.5 rounded-xl cursor-pointer transition-all duration-250 ease-in-out group"
-        :class="currentActiveTab === 'setting' ? 'bg-(--color-conversation-bg-active) text-(--color-conversation-text-active)' : 'text-(--color-text-gray) hover:bg-(--color-conversation-bg-hover) hover:text-(--color-conversation-text-hover)'">
-        <div
-          class="w-5 h-5 mb-1 flex items-center justify-center transition-transform duration-200 ease-in-out group-hover:scale-110">
-          <SettingsTwotone v-if="currentActiveTab === 'setting'" class="w-5 h-5" />
-          <SettingsOutlined v-else class="w-5 h-5" />
-        </div>
-        <span class="text-[0.6875rem] font-medium tracking-wide">设置</span>
-      </div>
-
       <!-- 知识库 -->
       <div @click="handleNavClick('knowledge-base')"
         class="flex flex-col items-center justify-center px-2 py-2.5 my-0.5 rounded-xl cursor-pointer transition-all duration-250 ease-in-out group"
@@ -58,6 +46,18 @@
           <MenuBookOutlined v-else class="w-5 h-5" />
         </div>
         <span class="text-[0.6875rem] font-medium tracking-wide">知识</span>
+      </div>
+
+      <!-- 系统设置 -->
+      <div @click="handleNavClick('setting')"
+        class="flex flex-col items-center justify-center px-2 py-2.5 my-0.5 rounded-xl cursor-pointer transition-all duration-250 ease-in-out group"
+        :class="currentActiveTab === 'setting' ? 'bg-(--color-conversation-bg-active) text-(--color-conversation-text-active)' : 'text-(--color-text-gray) hover:bg-(--color-conversation-bg-hover) hover:text-(--color-conversation-text-hover)'">
+        <div
+          class="w-5 h-5 mb-1 flex items-center justify-center transition-transform duration-200 ease-in-out group-hover:scale-110">
+          <SettingsTwotone v-if="currentActiveTab === 'setting'" class="w-5 h-5" />
+          <SettingsOutlined v-else class="w-5 h-5" />
+        </div>
+        <span class="text-[0.6875rem] font-medium tracking-wide">设置</span>
       </div>
     </div>
 

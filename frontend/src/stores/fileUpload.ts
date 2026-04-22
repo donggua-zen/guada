@@ -22,6 +22,10 @@ export interface UploadTask {
     knowledgeBaseId: string
     timerId?: NodeJS.Timeout
     rawFile?: File // 原始文件对象(用于延迟上传)
+    relativePath?: string // 相对路径(用于文件夹上传)
+    createdAt: number // 创建时间戳(用于队列排序)
+    serverFileRecord?: any // 后端返回的完整文件记录
+    onProgressUpdate?: (status: UploadTask) => void  // 进度更新回调
 }
 
 /**
@@ -121,8 +125,8 @@ export const useFileUploadStore = defineStore('fileUpload', () => {
         return Array.from(uploadTasks.value.values()).filter(
             task => task.status === 'queued'
         ).sort((a, b) => {
-            // 按创建时间排序(通过 ID 判断,ID 是时间戳)
-            return parseInt(a.id) - parseInt(b.id)
+            // 按创建时间排序
+            return a.createdAt - b.createdAt
         })
     }
 
@@ -146,7 +150,8 @@ export const useFileUploadStore = defineStore('fileUpload', () => {
         tasksToStart.forEach(task => {
             if (task.rawFile) {
                 console.log(`[DEBUG] 从队列启动上传: ${task.fileName}`)
-                executeUpload(task, task.rawFile)
+                // 关键修复:使用任务中保存的回调函数
+                executeUpload(task, task.rawFile, task.onProgressUpdate)
             }
         })
     }
@@ -155,84 +160,8 @@ export const useFileUploadStore = defineStore('fileUpload', () => {
      * 执行实际的上传操作
      */
     async function executeUpload(task: UploadTask, file: File, onProgressUpdate?: (status: UploadTask) => void) {
-        try {
-            // 更新状态为上传中
-            updateUploadStatus(task.id, {
-                status: 'uploading',
-                progress: 0,
-                currentStep: '准备上传...'
-            })
-            onProgressUpdate?.(task)
-
-            // 使用 axios 直接调用以获取上传进度
-            const { default: axios } = await import('axios')
-            const formData = new FormData()
-            formData.append('file', file)
-
-            // 从 auth store 获取 token
-            const { useAuthStore } = await import('@/stores/auth')
-            const authStore = useAuthStore()
-            const token = authStore.token
-
-            try {
-                const response = await axios.post(
-                    `/api/v1/knowledge-bases/${task.knowledgeBaseId}/files/upload`,
-                    formData,
-                    {
-                        headers: {
-                            'Content-Type': 'multipart/form-data',
-                            'Authorization': `Bearer ${token}`
-                        },
-                        onUploadProgress: (progressEvent) => {
-                            if (!progressEvent.total) return
-
-                            const percentCompleted = Math.round(
-                                (progressEvent.loaded * 100) / progressEvent.total
-                            )
-
-                            // 更新上传进度
-                            updateUploadStatus(task.id, {
-                                status: 'uploading',
-                                progress: percentCompleted,
-                                currentStep: `上传中... ${percentCompleted}%`
-                            })
-                            onProgressUpdate?.(task)
-                        }
-                    }
-                )
-
-                // 上传成功,更新为真实 ID 和状态
-                const taskToUpdate = uploadTasks.value.get(task.id)
-                if (taskToUpdate) {
-                    taskToUpdate.fileId = response.data.id
-                    taskToUpdate.status = 'uploaded'
-                    taskToUpdate.progress = 100
-                    taskToUpdate.currentStep = '上传完成,等待处理...'
-                    onProgressUpdate?.(taskToUpdate)
-
-                    // 注意:不再在这里清除任务,由轮询机制自动清理
-                    // clearUploadTask(task.id)
-                }
-
-                // 关键:上传完成后,处理队列中的下一个任务
-                console.log(`[DEBUG] 上传完成: ${task.fileName}, 检查队列...`)
-                setTimeout(() => processUploadQueue(), 100)
-            } catch (error) {
-                console.error('上传失败:', error)
-                updateUploadStatus(task.id, {
-                    status: 'failed',
-                    errorMessage: (error as any).response?.data?.detail || '上传失败'
-                })
-                onProgressUpdate?.(task)
-
-                // 失败后也要处理队列
-                setTimeout(() => processUploadQueue(), 100)
-                throw error
-            }
-        } catch (error) {
-            console.error('执行上传失败:', error)
-            throw error
-        }
+        const relativePath = task.relativePath || task.fileName
+        await executeUploadWithPath(task, file, relativePath, onProgressUpdate)
     }
 
     /**
@@ -298,6 +227,7 @@ export const useFileUploadStore = defineStore('fileUpload', () => {
                     taskToUpdate.status = 'uploaded'
                     taskToUpdate.progress = 100
                     taskToUpdate.currentStep = '上传完成,等待处理...'
+                    taskToUpdate.serverFileRecord = response.data  // 保存后端返回的完整文件记录
                     onProgressUpdate?.(taskToUpdate)
                 }
 
@@ -344,7 +274,8 @@ export const useFileUploadStore = defineStore('fileUpload', () => {
                 uploadedAt: new Date().toISOString(),
                 processedAt: null,
                 knowledgeBaseId: kbId,
-                rawFile: file // 保存原始文件用于后续上传
+                rawFile: file, // 保存原始文件用于后续上传
+                createdAt: Date.now() // 记录创建时间
             })
 
             console.log(`[DEBUG] 添加上传任务: ${fileName}, 当前队列长度: ${uploadTasks.value.size}`)
@@ -360,7 +291,7 @@ export const useFileUploadStore = defineStore('fileUpload', () => {
     }
 
     /**
-     * 上传文件到知识库(带相对路径)
+     * 上传文件到知识库(带相对路径,支持并发控制)
      */
     async function uploadToKnowledgeBaseWithPath(
         kbId: string,
@@ -373,7 +304,7 @@ export const useFileUploadStore = defineStore('fileUpload', () => {
             const fileName = file.name
             const fileExtension = fileName.includes('.') ? fileName.split('.').pop()! : ''
 
-            // 创建初始任务(queued 状态)
+            // 创建初始任务(queued 状态),将 relativePath 绑定到任务上
             const task = addUploadTask({
                 id: Date.now().toString() + Math.random().toString(36).substr(2, 9),
                 fileId: 'pending',
@@ -385,46 +316,22 @@ export const useFileUploadStore = defineStore('fileUpload', () => {
                 processedAt: null,
                 knowledgeBaseId: kbId,
                 rawFile: file,
-                // 注意: UploadTask 类型需要扩展以支持 metadata
+                relativePath: relativePath,  // 关键:将路径绑定到任务
+                createdAt: Date.now(), // 记录创建时间
+                onProgressUpdate  // 关键修复:保存回调函数
             })
 
             console.log(`[DEBUG] 添加上传任务(带路径): ${relativePath}`)
 
-            // 执行上传时需传递 relativePath
-            await executeUploadWithPath(task, file, relativePath, onProgressUpdate)
+            // 关键修复:不再直接调用 executeUploadWithPath,而是加入队列
+            // 立即尝试处理队列(如果还有可用槽位,会立即开始上传)
+            processUploadQueue()
 
             return task
         } catch (error) {
             console.error('添加上传任务失败:', error)
             throw error
         }
-    }
-
-    /**
-     * 批量上传文件
-     */
-    async function uploadMultipleFiles(
-        kbId: string,
-        files: File[],
-        onProgressUpdate?: (fileId: string, status: UploadTask) => void
-    ) {
-        const tasks: UploadTask[] = []
-
-        for (const file of files) {
-            try {
-                const task = await uploadToKnowledgeBase(
-                    kbId,
-                    file,
-                    (status) => onProgressUpdate?.(task.fileId, status)
-                )
-                tasks.push(task)
-            } catch (error) {
-                console.error(`上传文件 ${file.name} 失败:`, error)
-                // 继续上传其他文件
-            }
-        }
-
-        return tasks
     }
 
     /**
@@ -472,7 +379,8 @@ export const useFileUploadStore = defineStore('fileUpload', () => {
                 uploadedAt: new Date().toISOString(),
                 processedAt: null,
                 knowledgeBaseId: sessionId, // 这里复用字段存储 sessionId
-                rawFile: file // 保存原始文件用于后续上传
+                rawFile: file, // 保存原始文件用于后续上传
+                createdAt: Date.now() // 记录创建时间
             })
 
             console.log(`[DEBUG] 添加会话文件上传任务: ${fileName}`)
@@ -568,39 +476,13 @@ export const useFileUploadStore = defineStore('fileUpload', () => {
         }
     }
 
-    /**
-     * 批量上传文件到会话
-     */
-    async function uploadMultipleFilesToSession(
-        sessionId: string,
-        files: File[],
-        onProgressUpdate?: (fileId: string, status: UploadTask) => void
-    ) {
-        const tasks: UploadTask[] = []
-
-        for (const file of files) {
-            try {
-                const task = await uploadToSession(
-                    sessionId,
-                    file,
-                    (status) => onProgressUpdate?.(task.fileId, status)
-                )
-                tasks.push(task)
-            } catch (error) {
-                console.error(`上传文件 ${file.name} 失败:`, error)
-                // 继续上传其他文件
-            }
-        }
-
-        return tasks
-    }
 
     /**
      * 将上传任务转换为 KBFile 格式
      */
     function taskToFileRecord(task: UploadTask): KBFile {
         return {
-            id: task.id,
+            id: task.fileId,  // 关键修复:使用后端返回的真实 ID，而非临时 ID
             knowledgeBaseId: task.knowledgeBaseId,
             fileName: task.fileName,
             displayName: task.fileName,
@@ -608,7 +490,7 @@ export const useFileUploadStore = defineStore('fileUpload', () => {
             fileType: task.fileType,
             fileExtension: task.fileExtension || '',
             contentHash: '',  // 上传任务没有 contentHash
-            relativePath: null,
+            relativePath: task.relativePath || null,  // 关键修复:使用任务的 relativePath
             parentFolderId: null,
             isDirectory: false,
             processingStatus: task.status as KBFile['processingStatus'],
@@ -639,9 +521,7 @@ export const useFileUploadStore = defineStore('fileUpload', () => {
         clearUploadTask,
         uploadToKnowledgeBase,
         uploadToKnowledgeBaseWithPath,
-        uploadMultipleFiles,
         uploadToSession,
-        uploadMultipleFilesToSession,
         getUploadStats,
         taskToFileRecord,
     }

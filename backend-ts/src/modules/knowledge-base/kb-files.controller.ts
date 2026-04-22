@@ -26,8 +26,9 @@ export class KbFilesController {
     @Param("kb_id") kbId: string,
     @UploadedFile() file: any,
     @CurrentUser() user: any,
+    @Body("relativePath") relativePath?: string,
   ) {
-    return await this.kbFileService.uploadFile(kbId, user.sub, file);
+    return await this.kbFileService.uploadFile(kbId, user.sub, file, relativePath);
   }
 
   @Get()
@@ -40,6 +41,46 @@ export class KbFilesController {
     return await this.kbFileService.listFiles(
       kbId,
       user.sub,
+      Number(skip),
+      Number(limit),
+    );
+  }
+
+  @Get("by-parent")
+  async getFilesByParent(
+    @Param("kb_id") kbId: string,
+    @CurrentUser() user: any,
+    @Query("parentFolderId") parentFolderId?: string,  // null或undefined表示根目录
+    @Query("skip") skip = 0,
+    @Query("limit") limit = 50,
+  ) {
+    // 将字符串 'null' 或空字符串转换为真正的 null
+    const parentId = parentFolderId && parentFolderId !== 'null' ? parentFolderId : null;
+    
+    return await this.kbFileService.getFilesByParent(
+      kbId,
+      user.sub,
+      parentId,
+      Number(skip),
+      Number(limit),
+    );
+  }
+
+  @Get("by-path")
+  async getFilesByPath(
+    @Param("kb_id") kbId: string,
+    @CurrentUser() user: any,
+    @Query("path") path?: string,  // 相对路径，为空表示根目录
+    @Query("skip") skip = 0,
+    @Query("limit") limit = 50,
+  ) {
+    // 将空字符串转换为 null
+    const relativePath = path && path !== '' ? path : null;
+    
+    return await this.kbFileService.getFilesByRelativePath(
+      kbId,
+      user.sub,
+      relativePath,
       Number(skip),
       Number(limit),
     );
@@ -66,7 +107,7 @@ export class KbFilesController {
   @Post("status/batch")
   async batchGetFileStatus(
     @Param("kb_id") kbId: string,
-    @Body("file_ids") fileIds: string[],
+    @Body("fileIds") fileIds: string[],
     @CurrentUser() user: any,
   ) {
     return await this.kbFileService.batchGetFileStatus(fileIds, kbId, user.sub);

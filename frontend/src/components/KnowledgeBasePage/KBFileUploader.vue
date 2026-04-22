@@ -26,19 +26,87 @@
                 <el-badge :value="uploadTasks.length" type="warning" class="ml-1" />
             </el-button>
         </div>
+
+        <!-- 冲突处理对话框 -->
+        <el-dialog v-model="showConflictDialog" title="文件冲突" width="600px" :close-on-click-modal="false">
+            <div class="space-y-4">
+                <p class="text-sm text-gray-600 dark:text-gray-400">
+                    以下文件/目录已存在，请选择处理方式：
+                </p>
+
+                <div class="max-h-80 overflow-y-auto space-y-2">
+                    <div v-for="conflict in conflicts" :key="conflict.relativePath"
+                        class="flex items-center gap-3 p-3 bg-gray-50 dark:bg-gray-800 rounded border border-gray-200 dark:border-gray-700">
+                        <el-icon size="20" :class="conflict.type === 'directory' ? 'text-yellow-500' : 'text-blue-500'">
+                            <Folder v-if="conflict.type === 'directory'" />
+                            <Document v-else />
+                        </el-icon>
+                        <div class="flex-1 min-w-0">
+                            <div class="text-sm font-medium text-gray-900 dark:text-gray-100 truncate">
+                                {{ conflict.originalName }}
+                            </div>
+                            <div class="text-xs text-gray-500 dark:text-gray-400">
+                                {{ conflict.type === 'directory' ? '目录' : '文件' }}已存在
+                            </div>
+                            <div v-if="conflictMode === 'keep-both'" class="text-xs text-green-600 dark:text-green-400 mt-1">
+                                将重命名为: {{ conflict.suggestedName }}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="mt-4">
+                    <el-radio-group v-model="conflictMode" class="flex flex-col gap-3">
+                        <el-radio value="overwrite" size="large">
+                            <div class="flex flex-col">
+                                <span class="font-medium">覆盖已有文件</span>
+                                <span class="text-xs text-gray-500">新文件将替换旧文件</span>
+                            </div>
+                        </el-radio>
+                        <el-radio value="keep-both" size="large">
+                            <div class="flex flex-col">
+                                <span class="font-medium">都保留（自动重命名）</span>
+                                <span class="text-xs text-gray-500">在名称后添加时间戳以区分</span>
+                            </div>
+                        </el-radio>
+                    </el-radio-group>
+                </div>
+            </div>
+
+            <template #footer>
+                <div class="flex justify-end gap-3">
+                    <el-button @click="showConflictDialog = false">取消</el-button>
+                    <el-button type="primary" @click="handleConflictConfirm">确定</el-button>
+                </div>
+            </template>
+        </el-dialog>
     </div>
 </template>
 
 <script setup lang="ts">
 import { ref, computed, onUnmounted } from 'vue'
-import { Upload } from '@element-plus/icons-vue'
+import { Upload, Folder, Document } from '@element-plus/icons-vue'
 import { DocumentAdd16Regular, FolderAdd16Regular } from '@vicons/fluent'
 import { ElMessage } from 'element-plus'
 import { useFileUploadStore } from '@/stores/fileUpload'
 import type { UploadTask } from '@/stores/fileUpload'
+import type { KBFile } from '@/stores/knowledgeBase'
+
+/**
+ * 上传冲突信息
+ */
+interface UploadConflict {
+    type: 'file' | 'directory'
+    originalName: string          // 原始名称
+    suggestedName: string         // 建议的新名称（加时间戳）
+    relativePath: string          // 完整相对路径
+    existingItem?: KBFile         // 已存在的文件/目录信息
+}
 
 interface Props {
     kbId: string
+    currentFolderPath?: string | null  // 当前文件夹路径（可选）
+    getCurrentFiles?: () => KBFile[]  // 获取当前目录文件列表的函数（可选）
 }
 
 const props = defineProps<Props>()
@@ -50,6 +118,12 @@ const emit = defineEmits<{
 const uploadStore = useFileUploadStore()
 const fileInputRef = ref<HTMLInputElement>()
 const folderInputRef = ref<HTMLInputElement>()  // 新增: 文件夹输入框引用
+
+// 冲突处理相关状态
+const showConflictDialog = ref(false)
+const conflictMode = ref<'overwrite' | 'keep-both'>('keep-both')
+const pendingFiles = ref<Array<{ file: File, relativePath: string }>>([])
+const conflicts = ref<UploadConflict[]>([])
 
 // 定义允许的文件扩展名(与 ChatInput 保持一致)
 const ALLOWED_EXTENSIONS = [
@@ -71,6 +145,183 @@ const ALLOWED_FILE_EXTENSIONS = ALLOWED_EXTENSIONS.join(',')
 const uploadTasks = computed(() =>
     uploadStore.getTasksByKB(props.kbId)
 )
+
+// ========== 工具函数 ==========
+
+/**
+ * 生成时间戳后缀（格式：YYYYMMDDHHmm）
+ */
+function generateTimestampSuffix(): string {
+    const now = new Date()
+    const year = now.getFullYear()
+    const month = String(now.getMonth() + 1).padStart(2, '0')
+    const day = String(now.getDate()).padStart(2, '0')
+    const hour = String(now.getHours()).padStart(2, '0')
+    const minute = String(now.getMinutes()).padStart(2, '0')
+    return `${year}${month}${day}${hour}${minute}`
+}
+
+/**
+ * 为“都保留”模式生成新名称
+ * @param name 原始名称
+ * @param isDirectory 是否为目录
+ * @returns 重命名后的名称
+ */
+function renameForKeepBoth(name: string, isDirectory: boolean): string {
+    const timestamp = generateTimestampSuffix()
+    
+    if (isDirectory) {
+        return `${name}_${timestamp}`
+    } else {
+        // 文件：在扩展名前插入时间戳
+        const lastDotIndex = name.lastIndexOf('.')
+        if (lastDotIndex === -1) {
+            return `${name}_${timestamp}`
+        }
+        const baseName = name.substring(0, lastDotIndex)
+        const extension = name.substring(lastDotIndex)
+        return `${baseName}_${timestamp}${extension}`
+    }
+}
+
+/**
+ * 检测上传冲突
+ * @param filesToUpload 待上传的文件列表
+ * @param currentItems 当前目录下的文件/目录列表
+ * @returns 冲突列表（已去重）
+ */
+function detectUploadConflicts(
+    filesToUpload: Array<{ file: File, relativePath: string }>,
+    currentItems: KBFile[]
+): UploadConflict[] {
+    const conflicts: UploadConflict[] = []
+    const checkedPaths = new Set<string>()  // 用于去重
+    
+    for (const { file, relativePath } of filesToUpload) {
+        // 提取需要检查的名称和路径
+        let checkName: string
+        let checkPath: string  // 用于去重的键
+        let isDirectory = false
+        
+        if (relativePath.includes('/')) {
+            // 文件夹上传：只检查顶级目录
+            const parts = relativePath.split('/')
+            checkName = parts[0]
+            checkPath = checkName  // 用顶级目录名作为键
+            isDirectory = true
+        } else {
+            // 单文件上传：检查文件名
+            checkName = relativePath
+            checkPath = relativePath  // 用完整路径作为键
+            isDirectory = false
+        }
+        
+        // 跳过已检查的路径
+        if (checkedPaths.has(checkPath)) {
+            continue
+        }
+        checkedPaths.add(checkPath)
+        
+        // 检查当前目录是否存在同名项
+        const existingItem = currentItems.find(item => 
+            item.displayName === checkName && 
+            item.isDirectory === isDirectory
+        )
+        
+        if (existingItem) {
+            conflicts.push({
+                type: isDirectory ? 'directory' : 'file',
+                originalName: checkName,
+                suggestedName: renameForKeepBoth(checkName, isDirectory),
+                relativePath: checkPath,  // 存储检查路径，而非原始文件路径
+                existingItem
+            })
+        }
+    }
+    
+    return conflicts
+}
+
+/**
+ * 应用冲突解决方案（重命名）
+ * @param filesToUpload 待上传的文件列表
+ * @param conflicts 冲突列表
+ * @param mode 冲突处理模式
+ * @returns 处理后的文件列表（包含重命名后的 File 对象）
+ */
+function applyConflictResolution(
+    filesToUpload: Array<{ file: File, relativePath: string }>,
+    conflicts: UploadConflict[],
+    mode: 'overwrite' | 'keep-both'
+): Array<{ file: File, relativePath: string }> {
+    console.log('[DEBUG] applyConflictResolution 被调用')
+    console.log('[DEBUG] mode:', mode)
+    console.log('[DEBUG] conflicts:', conflicts)
+    
+    if (mode === 'overwrite') {
+        console.log('[DEBUG] 覆盖模式，直接返回原文件列表')
+        return filesToUpload
+    }
+    
+    // 构建冲突映射：checkPath → newName
+    const conflictMap = new Map<string, string>()
+    conflicts.forEach(conflict => {
+        conflictMap.set(conflict.relativePath, conflict.suggestedName)
+        console.log(`[DEBUG] 添加冲突映射: ${conflict.relativePath} → ${conflict.suggestedName}`)
+    })
+    
+    console.log('[DEBUG] conflictMap:', Array.from(conflictMap.entries()))
+    
+    const result = filesToUpload.map(({ file, relativePath }) => {
+        console.log(`[DEBUG] 处理文件: ${relativePath}`)
+        
+        // 提取检查路径
+        let checkPath: string
+        let newName: string | null = null
+        
+        if (relativePath.includes('/')) {
+            const parts = relativePath.split('/')
+            checkPath = parts[0]
+            console.log(`[DEBUG]   → 文件夹，checkPath: ${checkPath}`)
+        } else {
+            checkPath = relativePath
+            console.log(`[DEBUG]   → 单文件，checkPath: ${checkPath}`)
+        }
+        
+        if (conflictMap.has(checkPath)) {
+            // 需要重命名
+            newName = conflictMap.get(checkPath)!
+            console.log(`[DEBUG]   → 检测到冲突，重命名为: ${newName}`)
+            
+            if (relativePath.includes('/')) {
+                // 文件夹：替换顶级目录名
+                const parts = relativePath.split('/')
+                const oldTopDir = parts[0]
+                parts[0] = newName  // 只替换第一层
+                const newPath = parts.join('/')
+                console.log(`[DEBUG]   → 新路径: ${newPath}`)
+                
+                // 关键修复:对于文件夹中的文件，不需要修改 File.name
+                // 因为后端会根据 relativePath 创建目录结构
+                // File.name 保持原样即可
+                return { file, relativePath: newPath }
+            } else {
+                // 单文件：直接使用新名称
+                console.log(`[DEBUG]   → 新路径: ${newName}`)
+                
+                // 关键修复:创建新的 File 对象，使用重命名后的文件名
+                const renamedFile = new File([file], newName, { type: file.type })
+                return { file: renamedFile, relativePath: newName }
+            }
+        }
+        
+        console.log(`[DEBUG]   → 无冲突，保持原路径`)
+        return { file, relativePath }
+    })
+    
+    console.log('[DEBUG] applyConflictResolution 完成，返回:', result.map(f => f.relativePath))
+    return result
+}
 
 // ========== Methods ==========
 
@@ -102,10 +353,16 @@ async function handleFileSelect(event: Event) {
             const hasAllowedExtension = ALLOWED_EXTENSIONS.some(ext => fileName.endsWith(ext))
             return hasAllowedExtension
         })
-        .map(file => ({
-            file,
-            relativePath: file.name  // 普通文件没有路径,直接用文件名
-        }))
+        .map(file => {
+            // 关键修复:拼接当前文件夹路径
+            const relativePath = props.currentFolderPath 
+                ? `${props.currentFolderPath}/${file.name}`
+                : file.name
+            return {
+                file,
+                relativePath
+            }
+        })
 
     // 计算被过滤掉的文件数量
     const filteredCount = input.files.length - filesWithPath.length
@@ -155,10 +412,20 @@ async function handleFolderSelect(event: Event) {
             const hasAllowedExtension = ALLOWED_EXTENSIONS.some(ext => fileName.endsWith(ext))
             return hasAllowedExtension
         })
-        .map(file => ({
-            file,
-            relativePath: (file as any).webkitRelativePath || file.name
-        }))
+        .map(file => {
+            // 获取浏览器提供的相对路径
+            const browserRelativePath = (file as any).webkitRelativePath || file.name
+            
+            // 关键修复:拼接当前文件夹路径
+            const relativePath = props.currentFolderPath
+                ? `${props.currentFolderPath}/${browserRelativePath}`
+                : browserRelativePath
+            
+            return {
+                file,
+                relativePath
+            }
+        })
 
     // 计算被过滤掉的文件数量
     const filteredCount = input.files.length - filesWithPath.length
@@ -187,6 +454,34 @@ async function handleFolderSelect(event: Event) {
  * 统一上传逻辑(带相对路径)
  */
 async function uploadFilesWithPaths(filesWithPath: Array<{ file: File, relativePath: string }>) {
+    // 关键修复:上传前检查冲突
+    if (props.getCurrentFiles) {
+        const currentItems = props.getCurrentFiles()
+        const detectedConflicts = detectUploadConflicts(filesWithPath, currentItems)
+        
+        if (detectedConflicts.length > 0) {
+            // 发现冲突，显示对话框让用户选择
+            console.log(`[DEBUG] 检测到 ${detectedConflicts.length} 个冲突`)
+            conflicts.value = detectedConflicts
+            pendingFiles.value = filesWithPath
+            showConflictDialog.value = true
+            return  // 等待用户选择后再继续
+        }
+    }
+    
+    // 没有冲突，直接上传
+    await executeUpload(filesWithPath, 'keep-both')
+}
+
+/**
+ * 执行实际上传
+ * @param filesWithPath 文件列表
+ * @param mode 冲突处理模式
+ */
+async function executeUpload(
+    filesWithPath: Array<{ file: File, relativePath: string }>,
+    mode: 'overwrite' | 'keep-both'
+) {
     let successCount = 0
     let failCount = 0
 
@@ -203,6 +498,7 @@ async function uploadFilesWithPaths(filesWithPath: Array<{ file: File, relativeP
                 continue
             }
 
+            // TODO: 传递 conflictMode 参数到后端
             // 调用上传方法(传递 relativePath)
             await uploadStore.uploadToKnowledgeBaseWithPath(
                 props.kbId,
@@ -226,7 +522,36 @@ async function uploadFilesWithPaths(filesWithPath: Array<{ file: File, relativeP
             failCount++
         }
     }
+}
 
+/**
+ * 处理冲突确认
+ */
+async function handleConflictConfirm() {
+    showConflictDialog.value = false
+    
+    console.log('[DEBUG] ===== 开始处理冲突 =====')
+    console.log('[DEBUG] 冲突列表:', conflicts.value)
+    console.log('[DEBUG] 待处理文件:', pendingFiles.value.map(f => f.relativePath))
+    console.log('[DEBUG] 用户选择的模式:', conflictMode.value)
+    
+    // 应用冲突解决方案
+    const resolvedFiles = applyConflictResolution(
+        pendingFiles.value,
+        conflicts.value,
+        conflictMode.value
+    )
+    
+    console.log('[DEBUG] 重命名后的文件:', resolvedFiles.map(f => f.relativePath))
+    console.log('[DEBUG] 冲突处理模式:', conflictMode.value)
+    console.log('[DEBUG] 重命名后的文件数:', resolvedFiles.length)
+    
+    // 执行上传
+    await executeUpload(resolvedFiles, conflictMode.value)
+    
+    // 清空状态
+    pendingFiles.value = []
+    conflicts.value = []
 }
 
 // ========== Lifecycle ==========

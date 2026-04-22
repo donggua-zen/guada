@@ -45,23 +45,20 @@
                         <!-- 上传区域 -->
                         <div class="px-4 pt-4 pb-1">
                             <KBFileUploader 
-                                :kb-id="store.activeKnowledgeBaseId!"
+                                :kb-id="store.activeKnowledgeBaseId!" 
+                                :current-folder-path="getCurrentFolderPath()"
+                                :get-current-files="getCurrentFiles"
                                 @uploaded="handleUploadComplete"
-                                @show-upload-task="showUploadTaskModal = true"
-                            />
+                                @show-upload-task="showUploadTaskModal = true" />
                         </div>
 
                         <!-- 文件列表内容区 -->
                         <div class="flex-1 px-4 pb-4 overflow-hidden">
-                            <ScrollContainer ref="fileListContainer"  @scroll="handleScroll">
-                                <KBFileTree 
-                                    ref="fileTreeRef"
-                                    :files="files"
-                                    :kb-id="store.activeKnowledgeBaseId!"
-                                    @view="handleViewFile"
-                                    @retry="handleRetryFile"
-                                    @delete="handleDeleteFile"
-                                />
+                            <ScrollContainer ref="fileListContainer" @scroll="handleScroll">
+                                <KBFileTree ref="fileTreeRef" :kb-id="store.activeKnowledgeBaseId!"
+                                    @view="handleViewFile" @retry="handleRetryFile" @delete="handleDeleteFile"
+                                    @folder-change="handleFolderChange"
+                                    @files-loaded="handleFilesLoaded" />
                             </ScrollContainer>
                         </div>
                     </div>
@@ -215,12 +212,8 @@
         :default-kb-id="store.activeKnowledgeBaseId" />
 
     <!-- 上传任务弹窗 -->
-    <UploadTaskModal 
-        v-model="showUploadTaskModal"
-        :upload-tasks="uploadTasksList"
-        @retry="handleRetryFile"
-        @delete="handleDeleteFile"
-    />
+    <UploadTaskModal v-model="showUploadTaskModal" :upload-tasks="uploadTasksList" @retry="handleRetryFile"
+        @delete="handleDeleteFile" />
 </template>
 
 <script setup lang="ts">
@@ -254,7 +247,6 @@ const showSearchDialog = ref(false)  // 搜索对话框
 const showUploadTaskModal = ref(false)  // 上传任务弹窗
 const selectedFile = ref<KBFile | null>(null)  // 选中的文件
 const searchKeyword = ref('')
-const files = ref<KBFile[]>([])
 const kbSidebarVisible = useStorage('kbSidebarVisible', true) // 知识库侧边栏可见状态,持久化到 localStorage
 const embeddingModels = ref<any[]>([]) // 嵌入模型列表
 const embeddingProviders = ref<any[]>([]) // 嵌入模型供应商列表
@@ -268,13 +260,12 @@ let uploadTaskPollingTimer: number | null = null
 // 自动关闭弹窗定时器
 let autoCloseModalTimer: number | null = null
 
-// 无限滚动相关状态
+// 当前目录路径缓存(避免频繁调用API)
+let cachedCurrentFolderPath: string | null = null
+
+// 无限滚动相关状态（已废弃，KBFileTree 内部管理）
 const fileListContainer = ref<any>(null) // 文件列表容器引用（ScrollContainer 组件）
 const fileTreeRef = ref<any>(null) // 文件树组件引用
-const currentPage = ref(1) // 当前页码
-const pageSize = ref(30) // 每页数量
-const totalFiles = ref(0) // 文件总数
-const isLoadingMore = ref(false) // 是否正在加载更多
 const scrollThreshold = 50 // 滚动触发阈值(像素)
 let scrollTimer: number | null = null // 滚动防抖定时器
 
@@ -307,13 +298,6 @@ const editForm = reactive({
 const currentKB = computed(() => {
     if (!store.activeKnowledgeBaseId) return null
     return store.knowledgeBases.find(kb => kb.id === store.activeKnowledgeBaseId) || null
-})
-
-/**
- * 是否还有更多文件可加载
- */
-const hasMoreFiles = computed(() => {
-    return files.value.length < totalFiles.value
 })
 
 // ========== Methods ==========
@@ -356,7 +340,7 @@ async function handleSelectKB(kb: KnowledgeBase) {
 
     try {
         // 选择新知识库时重置分页
-        await refreshFileList(true)
+        await refreshFileList()
         // toast.success(`已选择：${kb.name}`)
     } catch (error) {
         console.error('加载文件列表失败:', error)
@@ -537,114 +521,29 @@ function resetForm() {
 /**
  * 处理上传完成事件
  */
-function handleUploadComplete(task: UploadTask) {
-    console.log('文件上传完成，刷新列表:', task.fileName)
-    // 延迟刷新列表，确保后台任务已创建记录
-    setTimeout(refreshFileList, 500)
+async function handleUploadComplete(task: UploadTask) {
+    console.log('文件上传完成:', task.fileName)
+    console.log('[DEBUG] 任务 relativePath:', task.relativePath)
+    
+    // 关键优化:将上传任务转换为 KBFile 格式
+    const uploadedFile = uploadStore.taskToFileRecord(task)
+    console.log('[DEBUG] 转换后的 KBFile relativePath:', uploadedFile.relativePath)
+    
+    // 智能插入到当前目录（如果需要）
+    if (fileTreeRef.value && fileTreeRef.value.insertUploadedFile) {
+        await fileTreeRef.value.insertUploadedFile(uploadedFile)
+        console.log('[DEBUG] 已尝试智能插入文件')
+    }
+    
+    // 注意:不再调用 refreshFileList,避免全局刷新
 }
 
 
 /**
- * 处理滚动事件（带防抖）
+ * 处理滚动事件（带防抖）- 已废弃，KBFileTree 内部管理
  */
 function handleScroll(event: Event) {
-    // 清除之前的定时器
-    if (scrollTimer !== null) {
-        clearTimeout(scrollTimer)
-    }
-
-    // 设置防抖，300ms 后执行
-    scrollTimer = window.setTimeout(() => {
-        checkScrollPosition()
-    }, 300)
-}
-
-/**
- * 检查滚动位置，判断是否需要加载更多
- */
-function checkScrollPosition() {
-    if (!fileListContainer.value || isLoadingMore.value || !hasMoreFiles.value) {
-        return
-    }
-
-    const element = fileListContainer.value.getScrollElement?.() || fileListContainer.value
-    const { scrollTop, scrollHeight, clientHeight } = element
-    const distanceToBottom = scrollHeight - scrollTop - clientHeight
-
-    // 如果距离底部小于阈值，则加载更多
-    if (distanceToBottom <= scrollThreshold) {
-        loadMoreFiles()
-    }
-}
-
-/**
- * 加载更多文件
- */
-async function loadMoreFiles() {
-    if (!store.activeKnowledgeBaseId || isLoadingMore.value || !hasMoreFiles.value) {
-        return
-    }
-
-    isLoadingMore.value = true
-
-    try {
-        // 计算下一页的 skip 值
-        const skip = files.value.length
-
-        // 从数据库加载下一页文件记录
-        const response = await store.fetchFiles(store.activeKnowledgeBaseId, skip, pageSize.value)
-        const newDbFiles = (response.items || []) as KBFile[]
-
-        // 更新总数
-        totalFiles.value = response.total || 0
-
-        if (newDbFiles.length > 0) {
-            // 将新文件转换为统一格式并添加到列表
-            const newFiles = newDbFiles.map((file: any) => ({
-                id: file.id,
-                fileId: file.id,
-                knowledgeBaseId: file.knowledgeBaseId,
-                fileName: file.fileName,
-                displayName: file.displayName,
-                fileSize: file.fileSize,
-                fileType: file.fileType,
-                fileExtension: file.fileExtension,
-                contentHash: file.contentHash,
-                relativePath: file.relativePath,
-                parentFolderId: file.parentFolderId,
-                isDirectory: file.isDirectory,
-                processingStatus: file.processingStatus,
-                progressPercentage: file.progressPercentage,
-                currentStep: file.currentStep,
-                errorMessage: file.errorMessage,
-                uploadedAt: file.uploadedAt,
-                processedAt: file.processedAt,
-                totalChunks: file.totalChunks,
-                totalTokens: file.totalTokens,
-                isTempTask: false
-            }))
-
-            files.value = [...files.value, ...newFiles]
-
-            // 页码递增
-            currentPage.value++
-        }
-    } catch (error) {
-        console.error('加载更多文件失败:', error)
-        toast.error('加载更多文件失败')
-    } finally {
-        isLoadingMore.value = false
-    }
-}
-
-/**
- * 重置分页状态
- */
-function resetPaginationState() {
-    currentPage.value = 1
-    totalFiles.value = 0
-    isLoadingMore.value = false
-    files.value = [] // 清空文件列表
+    // KBFileTree 现在内部管理文件列表和懒加载，父组件不再需要处理滚动
 }
 
 /**
@@ -668,24 +567,18 @@ async function handleRetryFile(file: KBFile) {
 
         toast.success('已开始重新处理文件')
 
-        // 关键修复：使用响应式方式更新文件状态（替换整个对象）
-        const index = files.value.findIndex(f => f.id === file.id)
-        if (index !== -1) {
-            const updatedFile = {
-                ...files.value[index],
+        // 关键修复：通过 KBFileTree 更新文件状态
+        if (fileTreeRef.value && fileTreeRef.value.updateFileStatus) {
+            fileTreeRef.value.updateFileStatus(file.id, {
                 processingStatus: 'pending',
                 progressPercentage: 0,
                 currentStep: '等待重新处理...',
                 errorMessage: null
-            }
-            // 替换整个对象以触发响应式更新
-            files.value.splice(index, 1, updatedFile)
-            
+            })
             console.log(`[DEBUG] 文件状态已更新为 pending: ${file.displayName}`)
         }
 
-        // 启动对该文件的轮询
-        startPollingForProcessingFiles()
+        // 注意:不需要手动启动轮询,K BFileTree 会在数据加载后触发 files-loaded 事件
     } catch (error: any) {
         if (error !== 'cancel') {
             console.error('重新处理失败:', error)
@@ -727,19 +620,6 @@ async function handleDeleteFile(file: KBFile) {
         await store.deleteFile(store.activeKnowledgeBaseId, file.id)
         toast.success('删除成功')
 
-        // 关键优化：从本地列表中移除，避免重新请求后端数据导致闪烁
-        const index = files.value.findIndex(f => f.id === file.id)
-        if (index !== -1) {
-            files.value.splice(index, 1)
-            totalFiles.value--
-
-            // 如果当前页为空且不是第一页，加载上一页的数据
-            if (files.value.length === 0 && currentPage.value > 1) {
-                currentPage.value--
-                await loadPreviousPage()
-            }
-        }
-        
         // 关键优化:通知 KBFileTree 从本地列表中移除文件,避免重建 DOM 树
         if (fileTreeRef.value && fileTreeRef.value.removeFileLocally) {
             console.log('[DEBUG] 删除文件后本地更新文件树')
@@ -754,48 +634,48 @@ async function handleDeleteFile(file: KBFile) {
 }
 
 /**
- * 加载上一页数据（用于删除文件后保持分页连续性）
+ * 处理目录切换事件
  */
-async function loadPreviousPage() {
-    if (currentPage.value <= 1) return
+async function handleFolderChange(relativePath: string | null) {
+    console.log(`[DEBUG] 目录切换到: ${relativePath || '根目录'}`)
 
-    try {
-        const skip = (currentPage.value - 1) * pageSize.value
-        const response = await store.fetchFiles(store.activeKnowledgeBaseId!, skip, pageSize.value)
-        const dbFiles = (response.items || []) as KBFile[]
+    // 关键修复:更新缓存的当前目录路径
+    cachedCurrentFolderPath = relativePath
+    console.log(`[DEBUG] 更新缓存路径: ${cachedCurrentFolderPath}`)
 
-        if (dbFiles.length > 0) {
-            const prevFiles = dbFiles.map((file: any) => ({
-                id: file.id,
-                fileId: file.id,
-                knowledgeBaseId: file.knowledgeBaseId,
-                fileName: file.fileName,
-                displayName: file.displayName,
-                fileSize: file.fileSize,
-                fileType: file.fileType,
-                fileExtension: file.fileExtension,
-                contentHash: file.contentHash,
-                relativePath: file.relativePath,
-                parentFolderId: file.parentFolderId,
-                isDirectory: file.isDirectory,
-                processingStatus: file.processingStatus,
-                progressPercentage: file.progressPercentage,
-                currentStep: file.currentStep,
-                errorMessage: file.errorMessage,
-                uploadedAt: file.uploadedAt,
-                processedAt: file.processedAt,
-                totalChunks: file.totalChunks,
-                totalTokens: file.totalTokens,
-                isTempTask: false
-            }))
-            files.value = prevFiles
-        }
-    } catch (error) {
-        console.error('加载上一页失败:', error)
-        // 失败时回退到第一页
-        await refreshFileList(true)
-    }
+    // 注意:不再在这里启动轮询,等待 files-loaded 事件触发
 }
+
+/**
+ * 处理文件加载完成事件
+ * 注意：KBFileTree 现在内部管理轮询，父组件无需干预
+ */
+function handleFilesLoaded(files: KBFile[]) {
+    console.log(`[DEBUG] 收到 files-loaded 事件,文件数: ${files.length}`)
+    // KBFileTree 内部已自动启动轮询，父组件无需任何操作
+}
+
+/**
+ * 获取当前文件夹路径（从 KBFileTree 组件）
+ */
+function getCurrentFolderPath(): string | null {
+    if (fileTreeRef.value && fileTreeRef.value.getCurrentFolderPath) {
+        return fileTreeRef.value.getCurrentFolderPath()
+    }
+    return null
+}
+
+/**
+ * 获取当前目录下的文件列表（从 KBFileTree 组件）
+ */
+function getCurrentFiles(): KBFile[] {
+    if (fileTreeRef.value && fileTreeRef.value.getCurrentFiles) {
+        return fileTreeRef.value.getCurrentFiles()
+    }
+    return []
+}
+
+
 
 // ========== Lifecycle ==========
 onMounted(async () => {
@@ -820,14 +700,14 @@ onMounted(async () => {
         await handleSelectKB(store.knowledgeBases[0])
     }
 
-    // 启动上传任务轮询
-    startUploadTaskPolling()
+    // 关键优化:检查是否有上传任务，按需启动轮询
+    checkAndStartUploadTaskPolling()
 })
 
-// 关键修复:组件销毁时清理轮询定时器和滚动定时器,防止内存泄漏
+// 关键修复:组件销毁时清理定时器和滚动定时器,防止内存泄漏
 onUnmounted(() => {
     console.log('[DEBUG] KnowledgeBasePage 组件销毁,清理定时器')
-    store.stopAllFileProcessingPolling()
+    // 注意：文件轮询已由 KBFileTree 内部管理，无需在此清理
     stopUploadTaskPolling() // 停止上传任务轮询
 
     // 清理滚动防抖定时器
@@ -836,6 +716,29 @@ onUnmounted(() => {
         scrollTimer = null
     }
 })
+
+/**
+ * 检查并启动上传任务轮询（如果尚未启动）
+ */
+function checkAndStartUploadTaskPolling() {
+    // 如果已经有轮询定时器，不重复启动
+    if (uploadTaskPollingTimer !== null) {
+        return
+    }
+
+    // 检查是否有活跃的上传任务
+    if (!store.activeKnowledgeBaseId) return
+    
+    const tasks = uploadStore.getTasksByKB(store.activeKnowledgeBaseId)
+    const hasActiveTasks = tasks.some(task => 
+        task.status === 'queued' || 
+        task.status === 'uploading'
+    )
+
+    if (hasActiveTasks) {
+        startUploadTaskPolling()
+    }
+}
 
 /**
  * 启动上传任务轮询
@@ -866,24 +769,6 @@ function stopUploadTaskPolling() {
 }
 
 /**
- * 防抖刷新文件列表(使用 VueUse)
- */
-const debouncedRefreshFileList = useDebounceFn(async () => {
-    console.log('[DEBUG] 检测到上传任务完成,刷新文件列表')
-    try {
-        await refreshFileList()
-        
-        // 关键:通知 KBFileTree 重新加载当前目录
-        if (fileTreeRef.value && fileTreeRef.value.forceReload) {
-            console.log('[DEBUG] 触发 KBFileTree 重新加载')
-            await fileTreeRef.value.forceReload()
-        }
-    } catch (error) {
-        console.error('防抖刷新文件列表失败:', error)
-    }
-}, 500)  // 500ms 防抖延迟
-
-/**
  * 刷新上传任务列表
  */
 function refreshUploadTasksList() {
@@ -906,36 +791,34 @@ function refreshUploadTasksList() {
 
     console.log(`[DEBUG] 过滤后显示 ${displayTasks.length} 个任务`)
 
-    // 如果任务数量发生变化,说明有任务完成了,需要刷新文件列表
-    // 检查是否有任务从 uploading/queued 变为 uploaded
-    const hasNewlyCompleted = tasks.some(task =>
-        task.status === 'uploaded' &&
-        !uploadTasksList.value.find(t => t.id === task.id && t.processingStatus === 'uploaded')
-    )
-
-    // 关键修复:使用 VueUse 的防抖函数,避免频繁刷新文件列表
-    if (hasNewlyCompleted) {
-        debouncedRefreshFileList()
-    }
-
     // 关键修复:只有当任务列表真正变化时才更新,避免不必要的响应式触发
     const oldLength = uploadTasksList.value.length
     const newLength = displayTasks.length
-    const hasContentChange = oldLength !== newLength || 
+    const hasContentChange = oldLength !== newLength ||
         displayTasks.some((task, index) => task.id !== uploadTasksList.value[index]?.id)
-    
+
     if (hasContentChange) {
         // 转换为 KBFile 格式用于显示
         uploadTasksList.value = displayTasks.map(task => uploadStore.taskToFileRecord(task))
         console.log(`[DEBUG] 刷新上传任务列表: ${uploadTasksList.value.length} 个任务`)
     }
-    
+
     // 关键修复:先清除已完成的任务
     autoRemoveCompletedTasks(tasks)
-    
+
     // 关键修复:清除任务后,重新从 store 获取最新列表来判断是否关闭弹窗
     const remainingTasks = uploadStore.getTasksByKB(store.activeKnowledgeBaseId)
     checkAndAutoCloseModal(remainingTasks)
+    
+    // 关键优化:检查是否还有活跃任务，如果没有则停止轮询
+    const hasActiveUploadTasks = remainingTasks.some(task =>
+        task.status === 'queued' || task.status === 'uploading'
+    )
+    
+    if (!hasActiveUploadTasks && uploadTaskPollingTimer !== null) {
+        console.log('[DEBUG] 所有上传任务完成，停止上传任务轮询')
+        stopUploadTaskPolling()
+    }
 }
 
 /**
@@ -946,7 +829,7 @@ function autoRemoveCompletedTasks(allTasks: any[]) {
     const completedTaskIds = allTasks
         .filter(task => task.status === 'uploaded' || task.status === 'failed')
         .map(task => task.id)
-    
+
     // 立即从 uploadStore 中清除上传完成或失败的任务
     completedTaskIds.forEach(taskId => {
         uploadStore.clearUploadTask(taskId)
@@ -961,15 +844,15 @@ function autoRemoveCompletedTasks(allTasks: any[]) {
 function checkAndAutoCloseModal(allTasks: any[]) {
     console.log(`[DEBUG] checkAndAutoCloseModal: 收到 ${allTasks.length} 个任务`)
     console.log(`[DEBUG] 任务状态:`, allTasks.map(t => ({ id: t.id.substring(0, 8), status: t.status })))
-    
+
     // 检查是否有活跃任务（排除 uploaded 和 failed）
-    const hasActiveTasks = allTasks.some(task => 
-        task.status !== 'uploaded' && 
+    const hasActiveTasks = allTasks.some(task =>
+        task.status !== 'uploaded' &&
         task.status !== 'failed'
     )
-    
+
     console.log(`[DEBUG] hasActiveTasks: ${hasActiveTasks}, showUploadTaskModal: ${showUploadTaskModal.value}, autoCloseModalTimer: ${autoCloseModalTimer}`)
-    
+
     // 如果没有活跃任务且弹窗正在显示，则自动关闭
     if (!hasActiveTasks && showUploadTaskModal.value) {
         // 关键修复:只在定时器不存在时才设置,避免被轮询不断重置
@@ -994,121 +877,21 @@ function checkAndAutoCloseModal(allTasks: any[]) {
 }
 
 /**
- * 启动文件处理轮询
+ * 刷新文件列表
+ * 注意：KBFileTree 现在内部管理文件列表和轮询，此函数仅用于触发 KBFileTree 重新加载
  */
-function startPollingForProcessingFiles() {
-    if (!store.activeKnowledgeBaseId) return
-
-    // 先停止所有现有的轮询
-    store.stopAllFileProcessingPolling()
-
-    // 对每个 processing/pending 状态的文件启动轮询
-    const processingFileIds = files.value
-        .filter(f => f.processingStatus === 'processing' || f.processingStatus === 'pending')
-        .map(f => f.fileId)
-
-    console.log(`[DEBUG] 当前文件列表总数: ${files.value.length}`)
-    console.log(`[DEBUG] 需要轮询的文件数: ${processingFileIds.length}`)
-    console.log(`[DEBUG] 需要轮询的文件ID:`, processingFileIds)
-
-    // 批量启动轮询(多个文件共享一个定时器)
-    if (processingFileIds.length > 0) {
-        console.log(`[DEBUG] 批量启动轮询:${processingFileIds.length} 个文件`)
-        store.startFileProcessingPolling(
-            store.activeKnowledgeBaseId,
-            processingFileIds,
-            (updatedFile: KBFile) => {
-                // 更新本地列表中的文件状态（响应式更新）
-                const index = files.value.findIndex((f) => f.id === updatedFile.id)
-                if (index !== -1) {
-                    // 使用 Vue 的响应式方式更新整个对象（替换而非修改属性）
-                    const currentFile = files.value[index]
-                    const updatedFileObj = {
-                        ...currentFile,
-                        processingStatus: updatedFile.processingStatus,
-                        progressPercentage: updatedFile.progressPercentage,
-                        currentStep: updatedFile.currentStep,
-                        errorMessage: updatedFile.errorMessage,
-                        totalChunks: updatedFile.totalChunks || currentFile.totalChunks,
-                        totalTokens: updatedFile.totalTokens || currentFile.totalTokens
-                    }
-                    // 替换整个对象以触发响应式更新
-                    files.value.splice(index, 1, updatedFileObj)
-
-                    console.log(`[DEBUG] 文件状态更新: ${currentFile.displayName} -> ${updatedFile.processingStatus}`)
-                } else {
-                    console.warn(`[DEBUG] 未找到文件 ${updatedFile.id},无法更新状态`)
-                }
-            }
-        )
-    } else {
-        console.log('[DEBUG] 没有需要轮询的文件')
-        console.log('[DEBUG] 当前文件列表状态:', files.value.map(f => ({
-            id: f.id,
-            name: f.displayName,
-            status: f.processingStatus
-        })))
-    }
-}
-
-/**
- * 刷新文件列表并启动未完成文件的轮询
- * @param shouldResetPagination 是否重置分页状态（首次加载时为 true，增量刷新时为 false）
- */
-async function refreshFileList(shouldResetPagination: boolean = true) {
+async function refreshFileList() {
     if (!store.activeKnowledgeBaseId) return
 
     try {
-        // 仅在需要时重置分页状态
-        if (shouldResetPagination) {
-            resetPaginationState()
+        // 通知 KBFileTree 重新加载当前目录
+        if (fileTreeRef.value && fileTreeRef.value.forceReload) {
+            console.log('[DEBUG] 触发 KBFileTree 重新加载')
+            await fileTreeRef.value.forceReload()
+            // 注意:forceReload 内部会触发 files-loaded 事件,自动启动轮询
         }
-
-        // 1. 从数据库加载第一页文件记录
-        const response = await store.fetchFiles(store.activeKnowledgeBaseId, 0, pageSize.value)
-        const dbFiles = (response.items || []) as KBFile[]
-
-        // 更新总数
-        totalFiles.value = response.total || 0
-
-        console.log(`[DEBUG] refreshFileList: 从数据库加载了 ${dbFiles.length} 个文件,总数:${totalFiles.value}`)
-
-        // 2. 仅保存数据库记录(不再合并上传任务)
-        files.value = dbFiles.map((file: any) => ({
-            id: file.id,
-            fileId: file.id,
-            knowledgeBaseId: file.knowledgeBaseId,
-            fileName: file.fileName,
-            displayName: file.displayName,
-            fileSize: file.fileSize,
-            fileType: file.fileType,
-            fileExtension: file.fileExtension,
-            contentHash: file.contentHash,
-            relativePath: file.relativePath,
-            parentFolderId: file.parentFolderId,
-            isDirectory: file.isDirectory,
-            processingStatus: file.processingStatus,
-            progressPercentage: file.progressPercentage,
-            currentStep: file.currentStep,
-            errorMessage: file.errorMessage,
-            uploadedAt: file.uploadedAt,
-            processedAt: file.processedAt,
-            totalChunks: file.totalChunks,
-            totalTokens: file.totalTokens,
-            isTempTask: false
-        }))
-
-        console.log(`[DEBUG] refreshFileList: 文件列表共 ${files.value.length} 个文件`)
-
-        // 3. 关键修复:移除 refreshUploadTasksList() 调用
-        // 上传任务有自己独立的轮询(每500ms),不需要在这里重复调用
-        // 否则会导致: refreshUploadTasksList -> refreshFileList -> refreshUploadTasksList 无限循环
-        // refreshUploadTasksList()  // ❌ 已移除
-
-        // 4. 每次刷新文件列表时,重新启动轮询(确保轮询列表与当前文件列表一致)
-        startPollingForProcessingFiles()
     } catch (error) {
-        console.error('加载文件列表失败:', error)
+        console.error('刷新文件列表失败:', error)
     }
 }
 
@@ -1124,6 +907,20 @@ watch(() => route.params.id, async (newKbId: string | string[] | undefined) => {
         }
     }
 })
+
+// 关键优化:监听 uploadStore 的任务变化，动态启动/停止轮询
+watch(
+    () => uploadStore.getTasksByKB(store.activeKnowledgeBaseId || '').length,
+    (newCount, oldCount) => {
+        console.log(`[DEBUG] 上传任务数量变化: ${oldCount} -> ${newCount}`)
+        
+        // 如果有活跃任务且轮询未启动，则启动
+        if (newCount > 0 && uploadTaskPollingTimer === null) {
+            console.log('[DEBUG] 检测到新的上传任务，启动轮询')
+            checkAndStartUploadTaskPolling()
+        }
+    }
+)
 </script>
 
 <style scoped>

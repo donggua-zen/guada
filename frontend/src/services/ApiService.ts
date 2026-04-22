@@ -637,6 +637,33 @@ class ApiService implements IApiService {
   }
 
   /**
+   * 通过相对路径获取文件夹内容
+   */
+  async fetchKBFilesByPath(
+    kbId: string,
+    relativePath: string | null,
+    skip?: number,
+    limit?: number
+  ): Promise<PaginatedResponse<KBFile>> {
+    const params = new URLSearchParams()
+    
+    // relativePath 为空表示根目录
+    if (relativePath !== null && relativePath !== undefined && relativePath !== '') {
+      params.append('path', relativePath)
+    }
+    
+    if (skip !== undefined) params.append('skip', skip.toString())
+    if (limit !== undefined) params.append('limit', limit.toString())
+
+    const queryString = params.toString()
+    const url = queryString 
+      ? `/knowledge-bases/${kbId}/files/by-path?${queryString}` 
+      : `/knowledge-bases/${kbId}/files/by-path`
+
+    return await this._request(url)
+  }
+
+  /**
    * 上传文件到知识库
    */
   async uploadKBFile(kbId: string, file: File): Promise<KBFile> {

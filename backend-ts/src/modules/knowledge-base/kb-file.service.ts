@@ -98,12 +98,66 @@ export class KbFileService implements OnModuleInit {
   }
 
   /**
+   * 确保文件夹结构存在(递归创建)
+   */
+  private async ensureFolderStructure(
+    kbId: string,
+    folderPath: string,
+  ): Promise<string | null> {
+    if (!folderPath) return null;
+
+    const parts = folderPath.split("/");
+    let currentParentId: string | null = null;
+
+    for (let i = 0; i < parts.length; i++) {
+      const part = parts[i];
+      const currentPath = parts.slice(0, i + 1).join("/");
+
+      // 检查该层级文件夹是否已存在
+      let folder = await this.fileRepo.findByPathAndParent(
+        kbId,
+        part,
+        currentParentId,
+      );
+
+      if (!folder) {
+        // 创建文件夹节点
+        folder = await this.fileRepo.create({
+          knowledgeBaseId: kbId,
+          displayName: part,
+          fileName: crypto.randomUUID(), // 文件夹也用UUID
+          fileSize: 0,
+          fileType: "directory",
+          fileExtension: "",
+          contentHash: "",
+          processingStatus: "completed", // 文件夹无需处理
+          progressPercentage: 100,
+          currentStep: "文件夹节点",
+          totalChunks: 0,
+          totalTokens: 0,
+          // 关键字段
+          relativePath: currentPath,
+          parentFolderId: currentParentId,
+          isDirectory: true,
+        });
+
+        this.logger.log(`创建文件夹节点: ${currentPath}`);
+      }
+
+      currentParentId = folder.id;
+    }
+
+    return currentParentId;
+  }
+
+  /**
    * 上传文件到知识库
    */
   async uploadFile(
     kbId: string,
     userId: string,
     file: any, // Express.Multer.File
+    relativePath?: string, // 可选的相对路径参数
   ) {
     // 验证知识库存在且有权限
     const kb = await this.kbRepo.findById(kbId);
@@ -138,6 +192,18 @@ export class KbFileService implements OnModuleInit {
       .update(file.buffer)
       .digest("hex");
 
+    // 解析相对路径,提取父文件夹信息
+    let parentFolderId: string | null = null;
+    if (relativePath) {
+      const pathParts = relativePath.split("/");
+      const folderPath = pathParts.slice(0, -1).join("/"); // 去掉文件名
+
+      if (folderPath) {
+        // 确保文件夹结构存在(递归创建)
+        parentFolderId = await this.ensureFolderStructure(kbId, folderPath);
+      }
+    }
+
     // 创建文件记录
     const fileRecord = await this.fileRepo.create({
       knowledgeBaseId: kbId,
@@ -151,10 +217,13 @@ export class KbFileService implements OnModuleInit {
       processingStatus: "pending",
       progressPercentage: 0,
       currentStep: "等待处理...",
+      relativePath: relativePath || null,
+      parentFolderId: parentFolderId,
+      isDirectory: false,
     });
 
     this.logger.log(
-      `文件记录已创建：${originalName}, KB=${kbId}, File ID=${fileRecord.id}`,
+      `文件记录已创建：${originalName}, 相对路径:${relativePath || "无"}, KB=${kbId}, File ID=${fileRecord.id}`,
     );
 
     // 启动后台处理任务
@@ -399,6 +468,78 @@ export class KbFileService implements OnModuleInit {
   }
 
   /**
+   * 按父文件夹ID获取文件列表(支持懒加载)
+   */
+  async getFilesByParent(
+    kbId: string,
+    userId: string,
+    parentFolderId: string | null,
+    skip: number = 0,
+    limit: number = 50,
+  ) {
+    // 验证知识库权限
+    const kb = await this.kbRepo.findById(kbId);
+    if (!kb) {
+      throw new NotFoundException("知识库不存在");
+    }
+    if (kb.userId !== userId) {
+      throw new Error("无权访问该知识库");
+    }
+
+    const { items, total } = await this.fileRepo.findByParentFolderId(
+      kbId,
+      parentFolderId,
+      skip,
+      limit,
+    );
+    return createPaginatedResponse(items, total, { skip, limit });
+  }
+
+  /**
+   * 通过相对路径获取文件夹内容
+   */
+  async getFilesByRelativePath(
+    kbId: string,
+    userId: string,
+    relativePath: string | null,
+    skip: number = 0,
+    limit: number = 50,
+  ) {
+    // 验证知识库权限
+    const kb = await this.kbRepo.findById(kbId);
+    if (!kb) {
+      throw new NotFoundException("知识库不存在");
+    }
+    if (kb.userId !== userId) {
+      throw new Error("无权访问该知识库");
+    }
+
+    let parentFolderId: string | null = null;
+
+    if (relativePath) {
+      // 查找该路径对应的目录ID
+      const targetFolder = await this.fileRepo.findByRelativePath(kbId, relativePath, true);
+      
+      if (!targetFolder) {
+        // 路径不存在，返回空列表
+        return createPaginatedResponse([], 0, { skip, limit });
+      }
+      
+      parentFolderId = targetFolder.id;
+    }
+    // else: relativePath 为 null，表示根目录，parentFolderId 保持为 null
+
+    const { items, total } = await this.fileRepo.findByParentFolderId(
+      kbId,
+      parentFolderId,
+      skip,
+      limit,
+    );
+    
+    return createPaginatedResponse(items, total, { skip, limit });
+  }
+
+  /**
    * 获取文件详情
    */
   async getFile(fileId: string, kbId: string, userId: string) {
@@ -466,7 +607,7 @@ export class KbFileService implements OnModuleInit {
   }
 
   /**
-   * 删除文件及其所有分块
+   * 删除文件及其所有分块(支持递归删除文件夹)
    */
   async deleteFileAndChunks(
     fileId: string,
@@ -488,6 +629,12 @@ export class KbFileService implements OnModuleInit {
     }
 
     try {
+      // 如果是文件夹，递归删除所有子文件和子文件夹
+      if (file.isDirectory) {
+        await this.deleteFolderRecursive(fileId, kbId);
+        return true;
+      }
+
       // 1. 从向量库删除向量
       const tableId = `kb_${kbId}`;
       await this.vectorDb.deleteDocuments(tableId, {
@@ -507,6 +654,37 @@ export class KbFileService implements OnModuleInit {
       this.logger.error(`删除文件失败：${error.message}`);
       return false;
     }
+  }
+
+  /**
+   * 递归删除文件夹及其所有内容
+   */
+  private async deleteFolderRecursive(folderId: string, kbId: string): Promise<void> {
+    // 查找该文件夹下的所有子项
+    const { items } = await this.fileRepo.findChildren(folderId, 0, 1000);
+    
+    this.logger.log(`文件夹 ${folderId} 下有 ${items.length} 个子项`);
+
+    // 递归处理每个子项
+    for (const item of items) {
+      if (item.isDirectory) {
+        // 如果是子文件夹，递归删除
+        await this.deleteFolderRecursive(item.id, kbId);
+      } else {
+        // 如果是文件，删除文件及其分块
+        const tableId = `kb_${kbId}`;
+        await this.vectorDb.deleteDocuments(tableId, {
+          documentId: item.id,
+        });
+        await this.chunkRepo.deleteByFileId(item.id);
+        await this.fileRepo.delete(item.id);
+        this.logger.log(`删除子文件: ${item.displayName}`);
+      }
+    }
+
+    // 删除文件夹节点本身
+    await this.fileRepo.delete(folderId);
+    this.logger.log(`删除文件夹节点: ${folderId}`);
   }
 
   /**
