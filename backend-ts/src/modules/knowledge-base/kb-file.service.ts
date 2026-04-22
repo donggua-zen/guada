@@ -251,9 +251,7 @@ export class KbFileService implements OnModuleInit {
     }
 
     // 2. 验证文件夹名称
-    if (!folderName || folderName.trim() === '') {
-      throw new Error('文件夹名称不能为空');
-    }
+    this.validateFileName(folderName, true);
 
     // 3. 冲突检测：检查同父目录下是否已存在同名文件或文件夹
     const existingItem = await this.fileRepo.findByPathAndParent(
@@ -603,12 +601,12 @@ export class KbFileService implements OnModuleInit {
     if (relativePath) {
       // 查找该路径对应的目录ID
       const targetFolder = await this.fileRepo.findByRelativePath(kbId, relativePath, true);
-      
+
       if (!targetFolder) {
         // 路径不存在，返回空列表
         return createPaginatedResponse([], 0, { skip, limit });
       }
-      
+
       parentFolderId = targetFolder.id;
     }
     // else: relativePath 为 null，表示根目录，parentFolderId 保持为 null
@@ -619,7 +617,7 @@ export class KbFileService implements OnModuleInit {
       skip,
       limit,
     );
-    
+
     return createPaginatedResponse(items, total, { skip, limit });
   }
 
@@ -746,7 +744,7 @@ export class KbFileService implements OnModuleInit {
   private async deleteFolderRecursive(folderId: string, kbId: string): Promise<void> {
     // 查找该文件夹下的所有子项
     const { items } = await this.fileRepo.findChildren(folderId, 0, 1000);
-    
+
     this.logger.log(`文件夹 ${folderId} 下有 ${items.length} 个子项`);
 
     // 递归处理每个子项
@@ -812,6 +810,45 @@ export class KbFileService implements OnModuleInit {
   }
 
   /**
+   * 验证文件或文件夹名称
+   */
+  private validateFileName(name: string, isDirectory: boolean = false): void {
+    if (!name || name.trim() === '') {
+      throw new Error('名称不能为空');
+    }
+
+    // 长度限制
+    if (name.length > 255) {
+      throw new Error('名称不能超过 255 个字符');
+    }
+
+    // 不允许的字符：/ \ : * ? " < > | 以及控制字符
+    const invalidChars = /[\\/:*?"<>|\x00-\x1f\x7f]/;
+    if (invalidChars.test(name)) {
+      throw new Error(
+        '名称包含非法字符，不允许使用：\\ / : * ? " < > | 及控制字符',
+      );
+    }
+
+    // Windows 保留名称检查（不区分大小写）
+    const reservedNames = [
+      'CON', 'PRN', 'AUX', 'NUL',
+      'COM1', 'COM2', 'COM3', 'COM4', 'COM5', 'COM6', 'COM7', 'COM8', 'COM9',
+      'LPT1', 'LPT2', 'LPT3', 'LPT4', 'LPT5', 'LPT6', 'LPT7', 'LPT8', 'LPT9',
+    ];
+    const upperName = name.toUpperCase();
+    if (reservedNames.includes(upperName)) {
+      throw new Error(`名称「${name}」是系统保留名称，不能使用`);
+    }
+
+    // 不允许以空格或点号开头/结尾
+    if (name.startsWith(' ') || name.endsWith(' ') || 
+        name.startsWith('.') || name.endsWith('.')) {
+      throw new Error('名称不能以空格或点号开头或结尾');
+    }
+  }
+
+  /**
    * 重命名文件或文件夹
    */
   async renameFile(
@@ -828,6 +865,9 @@ export class KbFileService implements OnModuleInit {
     if (kb.userId !== userId) {
       throw new Error('无权访问该知识库');
     }
+
+    // 2. 验证新名称
+    this.validateFileName(newName);
 
     // 2. 查询文件
     const file = await this.fileRepo.findById(fileId);
@@ -862,12 +902,15 @@ export class KbFileService implements OnModuleInit {
       // 6. 事务：使用原生 SQL 批量更新文件夹及所有子项的路径
       const oldPrefix = file.relativePath + '/';
       const newPrefix = newRelativePath + '/';
-      const likePattern = oldPrefix + '%';
+
+      // 转义 LIKE 子句中的特殊字符（% 和 _）
+      const escapedOldPrefix = oldPrefix.replace(/%/g, '\\%').replace(/_/g, '\\_');
+      const likePattern = escapedOldPrefix + '%';
 
       await this.prisma.$transaction(async (tx) => {
         // 6.1 批量更新所有子项的 relativePath（使用参数化查询防止 SQL 注入）
         const result = await tx.$executeRawUnsafe(
-          `UPDATE kb_file SET relative_path = ? || SUBSTR(relative_path, LENGTH(?) + 1) WHERE knowledge_base_id = ? AND relative_path LIKE ?`,
+          `UPDATE kb_file SET relative_path = ? || SUBSTR(relative_path, LENGTH(?) + 1) WHERE knowledge_base_id = ? AND relative_path LIKE ? ESCAPE '\\'`,
           newPrefix,
           oldPrefix,
           kbId,
@@ -1016,10 +1059,13 @@ export class KbFileService implements OnModuleInit {
       if (file.isDirectory && oldRelativePath) {
         const oldPrefix = oldRelativePath + '/';
         const newPrefix = newRelativePath + '/';
-        const likePattern = oldPrefix + '%';
+        
+        // 转义 LIKE 子句中的特殊字符（% 和 _）
+        const escapedOldPrefix = oldPrefix.replace(/%/g, '\\%').replace(/_/g, '\\_');
+        const likePattern = escapedOldPrefix + '%';
 
         const result = await tx.$executeRawUnsafe(
-          `UPDATE kb_file SET relative_path = ? || SUBSTR(relative_path, LENGTH(?) + 1) WHERE knowledge_base_id = ? AND relative_path LIKE ?`,
+          `UPDATE kb_file SET relative_path = ? || SUBSTR(relative_path, LENGTH(?) + 1) WHERE knowledge_base_id = ? AND relative_path LIKE ? ESCAPE '\\'`,
           newPrefix,
           oldPrefix,
           kbId,
