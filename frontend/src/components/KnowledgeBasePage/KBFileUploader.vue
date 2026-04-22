@@ -590,6 +590,13 @@ async function confirmCreateFolder() {
         return
     }
 
+    // 前端验证
+    const validation = validateFileName(newFolderName.value.trim())
+    if (!validation.valid) {
+        ElMessage.warning(validation.message)
+        return
+    }
+
     createFolderLoading.value = true
     try {
         // 需要将 currentFolderPath 转换为 parentFolderId
@@ -611,6 +618,46 @@ async function confirmCreateFolder() {
     } finally {
         createFolderLoading.value = false
     }
+}
+
+/**
+ * 验证文件或文件夹名称
+ */
+function validateFileName(name: string): { valid: boolean; message?: string } {
+    if (!name || name.trim() === '') {
+        return { valid: false, message: '名称不能为空' }
+    }
+
+    if (name.length > 255) {
+        return { valid: false, message: '名称不能超过 255 个字符' }
+    }
+
+    // 不允许的字符：/ \ : * ? " < > | 以及控制字符
+    const invalidChars = /[\\/:*?"<>|\x00-\x1f\x7f]/
+    if (invalidChars.test(name)) {
+        return { 
+            valid: false, 
+            message: '名称包含非法字符，不允许使用：\\ / : * ? " < > | 及控制字符' 
+        }
+    }
+
+    // Windows 保留名称检查
+    const reservedNames = [
+        'CON', 'PRN', 'AUX', 'NUL',
+        'COM1', 'COM2', 'COM3', 'COM4', 'COM5', 'COM6', 'COM7', 'COM8', 'COM9',
+        'LPT1', 'LPT2', 'LPT3', 'LPT4', 'LPT5', 'LPT6', 'LPT7', 'LPT8', 'LPT9',
+    ]
+    if (reservedNames.includes(name.toUpperCase())) {
+        return { valid: false, message: `名称「${name}」是系统保留名称，不能使用` }
+    }
+
+    // 不允许以空格或点号开头/结尾
+    if (name.startsWith(' ') || name.endsWith(' ') || 
+        name.startsWith('.') || name.endsWith('.')) {
+        return { valid: false, message: '名称不能以空格或点号开头或结尾' }
+    }
+
+    return { valid: true }
 }
 
 // ========== Lifecycle ==========
