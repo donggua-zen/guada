@@ -14,6 +14,9 @@ import { FileInterceptor } from "@nestjs/platform-express";
 import { AuthGuard } from "../auth/auth.guard";
 import { CurrentUser } from "../auth/current-user.decorator";
 import { KbFileService } from "./kb-file.service";
+import { RenameFileDto } from "./dto/rename-file.dto";
+import { MoveFileDto } from "./dto/move-file.dto";
+import { CreateFolderDto } from "./dto/create-folder.dto";
 
 @Controller("knowledge-bases/:kb_id/files")
 @UseGuards(AuthGuard)
@@ -154,6 +157,50 @@ export class KbFilesController {
       user.sub,
       Number(skip),
       Number(limit),
+    );
+  }
+
+  @Post(":file_id/rename")
+  async renameFile(
+    @Param("kb_id") kbId: string,
+    @Param("file_id") fileId: string,
+    @Body() dto: RenameFileDto,
+    @CurrentUser() user: any,
+  ) {
+    return await this.kbFileService.renameFile(
+      fileId,
+      kbId,
+      user.sub,
+      dto.newName,
+    );
+  }
+
+  @Post(":file_id/move")
+  async moveFile(
+    @Param("kb_id") kbId: string,
+    @Param("file_id") fileId: string,
+    @Body() dto: MoveFileDto,
+    @CurrentUser() user: any,
+  ) {
+    return await this.kbFileService.moveFile(
+      fileId,
+      kbId,
+      user.sub,
+      dto.targetParentFolderId,
+    );
+  }
+
+  @Post("folder")
+  async createFolder(
+    @Param("kb_id") kbId: string,
+    @Body() dto: CreateFolderDto,
+    @CurrentUser() user: any,
+  ) {
+    return await this.kbFileService.createFolder(
+      kbId,
+      user.sub,
+      dto.folderName,
+      dto.parentFolderId || null,
     );
   }
 }

@@ -233,6 +233,90 @@ export class KbFileService implements OnModuleInit {
   }
 
   /**
+   * 创建文件夹
+   */
+  async createFolder(
+    kbId: string,
+    userId: string,
+    folderName: string,
+    parentFolderId: string | null = null,
+  ) {
+    // 1. 验证知识库权限
+    const kb = await this.kbRepo.findById(kbId);
+    if (!kb) {
+      throw new NotFoundException('知识库不存在');
+    }
+    if (kb.userId !== userId) {
+      throw new Error('无权访问该知识库');
+    }
+
+    // 2. 验证文件夹名称
+    if (!folderName || folderName.trim() === '') {
+      throw new Error('文件夹名称不能为空');
+    }
+
+    // 3. 冲突检测：检查同父目录下是否已存在同名文件或文件夹
+    const existingItem = await this.fileRepo.findByPathAndParent(
+      kbId,
+      folderName,
+      parentFolderId,
+    );
+
+    if (existingItem) {
+      const existingType = existingItem.isDirectory ? '文件夹' : '文件';
+      throw new Error(`已存在同名${existingType}「${folderName}」`);
+    }
+
+    // 4. 计算 relativePath
+    let relativePath: string;
+    if (parentFolderId) {
+      const parent = await this.fileRepo.findById(parentFolderId);
+      if (!parent) {
+        throw new NotFoundException('父文件夹不存在');
+      }
+      if (!parent.isDirectory) {
+        throw new Error('父节点不是文件夹');
+      }
+      relativePath = parent.relativePath
+        ? `${parent.relativePath}/${folderName}`
+        : folderName;
+    } else {
+      relativePath = folderName;
+    }
+
+    // 5. 创建文件夹记录
+    const folder = await this.fileRepo.create({
+      knowledgeBaseId: kbId,
+      displayName: folderName,
+      fileName: crypto.randomUUID(), // 文件夹也用 UUID
+      fileSize: 0,
+      fileType: 'directory',
+      fileExtension: '',
+      contentHash: '',
+      processingStatus: 'completed', // 文件夹无需处理
+      progressPercentage: 100,
+      currentStep: '文件夹节点',
+      totalChunks: 0,
+      totalTokens: 0,
+      relativePath: relativePath,
+      parentFolderId: parentFolderId,
+      isDirectory: true,
+    });
+
+    this.logger.log(
+      `创建文件夹成功：${folderName}, KB=${kbId}, Parent=${parentFolderId || '根目录'}`,
+    );
+
+    return {
+      id: folder.id,
+      displayName: folder.displayName,
+      relativePath: folder.relativePath,
+      parentFolderId: folder.parentFolderId,
+      isDirectory: folder.isDirectory,
+    };
+  }
+
+  /**
    * 后台异步处理文件
    */
   private async processFileInBackground(fileId: string): Promise<void> {
@@ -725,6 +809,264 @@ export class KbFileService implements OnModuleInit {
 
     this.logger.log(`重新开始处理文件：${file.displayName}, KB=${kbId}`);
     return { message: "文件已开始重新处理", success: true };
+  }
+
+  /**
+   * 重命名文件或文件夹
+   */
+  async renameFile(
+    fileId: string,
+    kbId: string,
+    userId: string,
+    newName: string,
+  ) {
+    // 1. 验证知识库权限
+    const kb = await this.kbRepo.findById(kbId);
+    if (!kb) {
+      throw new NotFoundException('知识库不存在');
+    }
+    if (kb.userId !== userId) {
+      throw new Error('无权访问该知识库');
+    }
+
+    // 2. 查询文件
+    const file = await this.fileRepo.findById(fileId);
+    if (!file) {
+      throw new NotFoundException('文件不存在');
+    }
+
+    // 3. 验证名称合法性
+    if (!newName || newName.trim() === '') {
+      throw new Error('名称不能为空');
+    }
+
+    // 4. 检查同名冲突（在同一父目录下）
+    const existingItem = await this.fileRepo.findByPathAndParent(
+      kbId,
+      newName,
+      file.parentFolderId,
+    );
+    if (existingItem && existingItem.id !== fileId) {
+      throw new Error('该名称已存在');
+    }
+
+    // 5. 计算新的 relativePath
+    let newRelativePath: string;
+    if (file.isDirectory) {
+      // 文件夹：需要级联更新所有子项
+      const parentPath = file.parentFolderId
+        ? (await this.fileRepo.findById(file.parentFolderId))?.relativePath
+        : '';
+      newRelativePath = parentPath ? `${parentPath}/${newName}` : newName;
+
+      // 6. 事务：使用原生 SQL 批量更新文件夹及所有子项的路径
+      const oldPrefix = file.relativePath + '/';
+      const newPrefix = newRelativePath + '/';
+
+      await this.prisma.$transaction(async (tx) => {
+        // 6.1 批量更新所有子项的 relativePath（使用原生 SQL）
+        const result = await tx.$executeRaw`
+          UPDATE kb_file
+          SET relative_path = ${newPrefix} || SUBSTR(relative_path, LENGTH(${oldPrefix}) + 1)
+          WHERE knowledge_base_id = ${kbId}
+            AND relative_path LIKE ${oldPrefix + '%'}
+        `;
+
+        this.logger.log(
+          `文件夹重命名：批量更新了 ${result} 个子项的路径`,
+        );
+
+        // 6.2 更新文件夹本身
+        await tx.kBFile.update({
+          where: { id: fileId },
+          data: {
+            displayName: newName,
+            relativePath: newRelativePath,
+          },
+        });
+      });
+
+      this.logger.log(
+        `文件夹重命名成功：${file.displayName} -> ${newName}`,
+      );
+    } else {
+      // 单文件：简单更新
+      const parentPath = file.parentFolderId
+        ? (await this.fileRepo.findById(file.parentFolderId))?.relativePath
+        : '';
+      newRelativePath = parentPath ? `${parentPath}/${newName}` : newName;
+
+      await this.fileRepo.update(fileId, {
+        displayName: newName,
+        relativePath: newRelativePath,
+      });
+
+      this.logger.log(`文件重命名成功：${file.displayName} -> ${newName}`);
+    }
+
+    return {
+      id: fileId,
+      displayName: newName,
+      relativePath: newRelativePath,
+    };
+  }
+
+  /**
+   * 移动文件或文件夹
+   */
+  async moveFile(
+    fileId: string,
+    kbId: string,
+    userId: string,
+    targetParentFolderId: string | null,
+  ) {
+    // 1. 验证知识库权限
+    const kb = await this.kbRepo.findById(kbId);
+    if (!kb) {
+      throw new NotFoundException('知识库不存在');
+    }
+    if (kb.userId !== userId) {
+      throw new Error('无权访问该知识库');
+    }
+
+    // 2. 查询文件
+    const file = await this.fileRepo.findById(fileId);
+    if (!file) {
+      throw new NotFoundException('文件不存在');
+    }
+
+    // 3. 如果目标位置与当前位置相同，直接返回
+    if (file.parentFolderId === targetParentFolderId) {
+      return {
+        success: true,
+        message: '文件已在目标位置',
+        data: file,
+      };
+    }
+
+    // 4. 循环引用检测（仅针对文件夹）
+    if (file.isDirectory && targetParentFolderId) {
+      const isDescendant = await this.isDescendant(
+        targetParentFolderId,
+        fileId,
+      );
+      if (isDescendant) {
+        throw new Error('不能将文件夹移动到其子目录下');
+      }
+    }
+
+    // 5. 验证目标文件夹存在
+    if (targetParentFolderId) {
+      const targetParent = await this.fileRepo.findById(targetParentFolderId);
+      if (!targetParent) {
+        throw new NotFoundException('目标文件夹不存在');
+      }
+      if (!targetParent.isDirectory) {
+        throw new Error('目标不是文件夹');
+      }
+    }
+
+    // 6. 冲突检测：检查目标位置是否已存在同名文件或文件夹
+    const fileName = file.isDirectory
+      ? file.displayName
+      : file.relativePath?.split('/').pop() || file.displayName;
+
+    const existingItem = await this.fileRepo.findByPathAndParent(
+      kbId,
+      fileName,
+      targetParentFolderId,
+    );
+
+    if (existingItem && existingItem.id !== fileId) {
+      // 检查类型是否一致（文件vs文件夹）
+      const itemType = file.isDirectory ? '文件夹' : '文件';
+      const existingType = existingItem.isDirectory ? '文件夹' : '文件';
+      throw new Error(
+        `目标位置已存在同名${existingType}「${fileName}」，无法移动`,
+      );
+    }
+
+    // 7. 计算新的 relativePath
+    let targetParentPath = '';
+    if (targetParentFolderId) {
+      const targetParent = await this.fileRepo.findById(targetParentFolderId);
+      targetParentPath = targetParent?.relativePath || '';
+    }
+
+    const newRelativePath = targetParentPath
+      ? `${targetParentPath}/${fileName}`
+      : fileName;
+
+    const oldRelativePath = file.relativePath;
+
+    // 7. 事务：更新文件/文件夹及所有子项
+    await this.prisma.$transaction(async (tx) => {
+      // 7.1 更新文件/文件夹本身
+      await tx.kBFile.update({
+        where: { id: fileId },
+        data: {
+          parentFolderId: targetParentFolderId,
+          relativePath: newRelativePath,
+        },
+      });
+
+      // 7.2 如果是文件夹，使用原生 SQL 批量更新所有子项
+      if (file.isDirectory && oldRelativePath) {
+        const oldPrefix = oldRelativePath + '/';
+        const newPrefix = newRelativePath + '/';
+
+        const result = await tx.$executeRaw`
+          UPDATE kb_file
+          SET relative_path = ${newPrefix} || SUBSTR(relative_path, LENGTH(${oldPrefix}) + 1)
+          WHERE knowledge_base_id = ${kbId}
+            AND relative_path LIKE ${oldPrefix + '%'}
+        `;
+
+        this.logger.log(
+          `文件夹移动：批量更新了 ${result} 个子项的路径`,
+        );
+      }
+    });
+
+    this.logger.log(
+      `文件移动成功：${file.displayName}, 新路径: ${newRelativePath}`,
+    );
+
+    return {
+      id: fileId,
+      displayName: file.displayName,
+      relativePath: newRelativePath,
+      parentFolderId: targetParentFolderId,
+    };
+  }
+
+  /**
+   * 检测是否为后代节点（防止循环引用）
+   */
+  private async isDescendant(
+    potentialDescendantId: string,
+    ancestorId: string,
+  ): Promise<boolean> {
+    let currentId = potentialDescendantId;
+    const visited = new Set<string>();
+
+    while (currentId) {
+      if (currentId === ancestorId) {
+        return true;
+      }
+      if (visited.has(currentId)) {
+        break; // 检测到循环
+      }
+      visited.add(currentId);
+
+      const node = await this.fileRepo.findById(currentId);
+      if (!node || !node.parentFolderId) {
+        break;
+      }
+      currentId = node.parentFolderId;
+    }
+
+    return false;
   }
 
   /**
