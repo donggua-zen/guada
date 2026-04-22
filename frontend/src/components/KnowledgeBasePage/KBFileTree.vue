@@ -101,6 +101,22 @@
     <div v-if="contextMenu.visible"
       class="fixed bg-white dark:bg-gray-800 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700 py-1 z-50 min-w-[160px]"
       :style="{ left: contextMenu.x + 'px', top: contextMenu.y + 'px' }" @click.stop>
+      <div
+        class="px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 cursor-pointer flex items-center gap-2"
+        @click="handleRenameFromMenu">
+        <el-icon>
+          <Edit />
+        </el-icon>
+        重命名
+      </div>
+      <div
+        class="px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 cursor-pointer flex items-center gap-2"
+        @click="handleMoveFromMenu">
+        <el-icon>
+          <Position />
+        </el-icon>
+        移动到...
+      </div>
       <div v-if="!contextMenu.item?.isDirectory"
         class="px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 cursor-pointer flex items-center gap-2"
         @click="handleRetryFromMenu">
@@ -118,13 +134,45 @@
         删除
       </div>
     </div>
+
+    <!-- 重命名对话框 -->
+    <el-dialog v-model="showRenameDialog" title="重命名" width="400px" :close-on-click-modal="false" append-to-body>
+      <el-input v-model="renameForm.newName" placeholder="输入新名称" @keyup.enter="confirmRename" />
+      <template #footer>
+        <el-button @click="showRenameDialog = false">取消</el-button>
+        <el-button type="primary" @click="confirmRename" :loading="renameLoading">确定</el-button>
+      </template>
+    </el-dialog>
+
+    <!-- 移动对话框 -->
+    <el-dialog v-model="showMoveDialog" title="移动到" width="500px" :close-on-click-modal="false" append-to-body>
+      <div class="max-h-80 overflow-y-auto">
+        <el-tree :data="folderTreeData" :props="{ label: 'displayName', children: 'children' }" node-key="id"
+          highlight-current @node-click="selectTargetFolder">
+          <template #default="{ node, data }">
+            <span class="flex items-center gap-2">
+              <el-icon>
+                <Folder />
+              </el-icon>
+              {{ node.label }}
+            </span>
+          </template>
+        </el-tree>
+      </div>
+      <template #footer>
+        <el-button @click="showMoveDialog = false">取消</el-button>
+        <el-button type="primary" @click="confirmMove" :loading="moveLoading">确定</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref, watch, onUnmounted } from 'vue'
-import { Folder, View, RefreshRight, Delete, Loading } from '@element-plus/icons-vue'
+import { Folder, View, RefreshRight, Delete, Loading, Edit, Position } from '@element-plus/icons-vue'
+import { ElMessage } from 'element-plus'
 import type { KBFile } from '@/stores/knowledgeBase'
+import { useKnowledgeBaseStore } from '@/stores/knowledgeBase'
 
 // 导入文件图标
 import fileCodeIcon from '@/assets/file_code.svg'
@@ -147,6 +195,8 @@ const emit = defineEmits<{
   folderChange: [folderPath: string | null]  // 目录切换事件
   filesLoaded: [files: KBFile[]]  // 文件加载完成事件
 }>()
+
+const kbStore = useKnowledgeBaseStore()
 
 /**
  * 当前所在的文件夹ID (null表示根目录)
@@ -180,6 +230,23 @@ const contextMenu = ref({
   y: 0,
   item: null as KBFile | null
 })
+
+/**
+ * 重命名表单状态
+ */
+const showRenameDialog = ref(false)
+const renameForm = ref({ newName: '' })
+const renameLoading = ref(false)
+const renamingFileId = ref<string | null>(null) // 保存正在重命名的文件ID
+
+/**
+ * 移动对话框状态
+ */
+const showMoveDialog = ref(false)
+const selectedTargetFolderId = ref<string | null>(null)
+const folderTreeData = ref<any[]>([])
+const moveLoading = ref(false)
+const movingFileId = ref<string | null>(null) // 保存正在移动的文件ID
 
 /**
  * 文件处理轮询相关状态
@@ -462,7 +529,7 @@ async function insertUploadedFile(uploadedFile: KBFile) {
       // 关键修复:智能插入位置 - 文件插入到文件列表顶部，但保持目录在上方
       insertItemAtCorrectPosition(fileToInsert)
       console.log(`[DEBUG] KBFileTree: 已插入文件 ${fileToInsert.displayName}`)
-      
+
       // 关键修复:插入后检查是否需要启动轮询
       if (fileToInsert.processingStatus === 'pending' || fileToInsert.processingStatus === 'processing') {
         console.log('[DEBUG] KBFileTree: 检测到 pending/processing 状态文件，重启轮询')
@@ -586,7 +653,7 @@ function isDirectChildOfCurrentPath(fileRelativePath: string | null | undefined,
  */
 function getFirstLevelSubdir(fileRelativePath: string | null | undefined, currentPath: string | null): string | null {
   if (!fileRelativePath) return null
-  
+
   // 当前在根目录的情况
   if (!currentPath) {
     // 文件路径包含 / ，说明在子目录中
@@ -597,19 +664,19 @@ function getFirstLevelSubdir(fileRelativePath: string | null | undefined, curren
     // 文件在根目录，不需要创建目录
     return null
   }
-  
+
   // 当前在子目录的情况
   const expectedPrefix = currentPath + '/'
   if (!fileRelativePath.startsWith(expectedPrefix)) return null
-  
+
   const remaining = fileRelativePath.substring(expectedPrefix.length)
   const parts = remaining.split('/')
-  
+
   // 如果只有一层，说明是直接子项，不需要创建目录
   if (parts.length <= 1) return null
-  
+
   // 返回第一层目录名
-  return parts[0]  
+  return parts[0]
 }
 
 // 暴露方法给父组件
@@ -710,6 +777,159 @@ function handleContextMenu(event: MouseEvent, item: KBFile) {
     x: event.clientX,
     y: event.clientY,
     item
+  }
+}
+
+/**
+ * 从重命名菜单触发
+ */
+function handleRenameFromMenu() {
+  if (contextMenu.value.item) {
+    renamingFileId.value = contextMenu.value.item.id // 保存文件ID
+    renameForm.value.newName = contextMenu.value.item.displayName
+    showRenameDialog.value = true
+  }
+  closeContextMenu()
+}
+
+/**
+ * 确认重命名
+ */
+async function confirmRename() {
+  console.log('[DEBUG] 确认重命名:', {
+    newName: renameForm.value.newName,
+    fileId: renamingFileId.value,
+  })
+  
+  if (!renameForm.value.newName || !renamingFileId.value) {
+    console.warn('[DEBUG] 重命名参数无效')
+    return
+  }
+
+  renameLoading.value = true
+  try {
+    await kbStore.renameFile(
+      props.kbId,
+      renamingFileId.value,
+      renameForm.value.newName,
+    )
+    ElMessage.success('重命名成功')
+    showRenameDialog.value = false
+    
+    // 刷新当前目录
+    await loadFolderContents(currentRelativePath.value)
+  } catch (error: any) {
+    console.error('[DEBUG] 重命名失败:', error)
+    ElMessage.error(error.message || '重命名失败')
+  } finally {
+    renameLoading.value = false
+  }
+}
+
+/**
+ * 从移动菜单触发
+ */
+async function handleMoveFromMenu() {
+  if (!contextMenu.value.item) {
+    return
+  }
+
+  movingFileId.value = contextMenu.value.item.id // 保存文件ID
+  // 加载文件夹树
+  await loadFolderTree()
+  showMoveDialog.value = true
+  closeContextMenu()
+}
+
+/**
+ * 加载文件夹树（用于移动选择）
+ */
+async function loadFolderTree() {
+  try {
+    const { apiService } = await import('@/services/ApiService')
+
+    // 获取所有文件夹（递归）
+    const response = await apiService.fetchKBFiles(props.kbId, 0, 1000)
+    const allItems = response.items || []
+
+    // 过滤出文件夹，并构建树形结构
+    const folders = allItems.filter((item: any) => item.isDirectory)
+    folderTreeData.value = buildFolderTree(folders)
+  } catch (error) {
+    console.error('加载文件夹树失败:', error)
+    folderTreeData.value = []
+  }
+}
+
+/**
+ * 构建文件夹树
+ */
+function buildFolderTree(folders: any[]): any[] {
+  const folderMap = new Map<string, any>()
+  const rootFolders: any[] = []
+
+  // 创建映射
+  folders.forEach(folder => {
+    folderMap.set(folder.id, {
+      id: folder.id,
+      displayName: folder.displayName,
+      relativePath: folder.relativePath,
+      children: [],
+    })
+  })
+
+  // 构建树
+  folders.forEach(folder => {
+    const node = folderMap.get(folder.id)!
+    if (folder.parentFolderId && folderMap.has(folder.parentFolderId)) {
+      const parent = folderMap.get(folder.parentFolderId)!
+      parent.children.push(node)
+    } else {
+      rootFolders.push(node)
+    }
+  })
+
+  return rootFolders
+}
+
+/**
+ * 选择目标文件夹
+ */
+function selectTargetFolder(data: any) {
+  selectedTargetFolderId.value = data.id
+}
+
+/**
+ * 确认移动
+ */
+async function confirmMove() {
+  console.log('[DEBUG] 确认移动:', {
+    fileId: movingFileId.value,
+    targetParentFolderId: selectedTargetFolderId.value,
+  })
+  
+  if (!movingFileId.value) {
+    console.warn('[DEBUG] 移动参数无效')
+    return
+  }
+
+  moveLoading.value = true
+  try {
+    await kbStore.moveFile(
+      props.kbId,
+      movingFileId.value,
+      selectedTargetFolderId.value,
+    )
+    ElMessage.success('移动成功')
+    showMoveDialog.value = false
+    
+    // 刷新当前目录
+    await loadFolderContents(currentRelativePath.value)
+  } catch (error: any) {
+    console.error('[DEBUG] 移动失败:', error)
+    ElMessage.error(error.message || '移动失败')
+  } finally {
+    moveLoading.value = false
   }
 }
 

@@ -58,6 +58,7 @@ declare module 'vue' {
     ElSwitch: typeof import('element-plus/es')['ElSwitch']
     ElTag: typeof import('element-plus/es')['ElTag']
     ElTooltip: typeof import('element-plus/es')['ElTooltip']
+    ElTree: typeof import('element-plus/es')['ElTree']
     ElUpload: typeof import('element-plus/es')['ElUpload']
     EmbeddingModelSelector: typeof import('./src/components/ui/EmbeddingModelSelector.vue')['default']
     FileChunksViewer: typeof import('./src/components/KnowledgeBasePage/FileChunksViewer.vue')['default']
