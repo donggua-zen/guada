@@ -204,6 +204,7 @@ model KBFile {
   @@index([contentHash])
   @@index([processingStatus])
   @@index([parentFolderId])
+  @@index([knowledgeBaseId, relativePath]) // 优化按路径查询性能
   @@map("kb_file")
 }
 
