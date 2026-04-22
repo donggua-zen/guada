@@ -147,8 +147,19 @@
     <!-- 移动对话框 -->
     <el-dialog v-model="showMoveDialog" title="移动到" width="500px" :close-on-click-modal="false" append-to-body>
       <div class="max-h-80 overflow-y-auto">
+        <!-- 根目录选项 -->
+        <div
+          class="flex items-center gap-2 px-3 py-2 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700 rounded"
+          :class="{ 'bg-blue-50 dark:bg-blue-900/30': selectedTargetFolderId === null }"
+          @click="selectRootDirectory"
+        >
+          <el-icon><Folder /></el-icon>
+          <span>根目录</span>
+        </div>
+
+        <!-- 文件夹树 -->
         <el-tree :data="folderTreeData" :props="{ label: 'displayName', children: 'children' }" node-key="id"
-          highlight-current @node-click="selectTargetFolder">
+          highlight-current @node-click="selectTargetFolder" class="mt-2">
           <template #default="{ node, data }">
             <span class="flex items-center gap-2">
               <el-icon>
@@ -897,6 +908,13 @@ function buildFolderTree(folders: any[]): any[] {
  */
 function selectTargetFolder(data: any) {
   selectedTargetFolderId.value = data.id
+}
+
+/**
+ * 选择根目录
+ */
+function selectRootDirectory() {
+  selectedTargetFolderId.value = null
 }
 
 /**

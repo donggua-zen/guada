@@ -49,7 +49,8 @@
                                 :current-folder-path="getCurrentFolderPath()"
                                 :get-current-files="getCurrentFiles"
                                 @uploaded="handleUploadComplete"
-                                @show-upload-task="showUploadTaskModal = true" />
+                                @show-upload-task="showUploadTaskModal = true"
+                                @folder-created="handleFolderCreated" />
                         </div>
 
                         <!-- 文件列表内容区 -->
@@ -536,6 +537,18 @@ async function handleUploadComplete(task: UploadTask) {
     }
     
     // 注意:不再调用 refreshFileList,避免全局刷新
+}
+
+/**
+ * 处理文件夹创建成功事件
+ */
+async function handleFolderCreated() {
+    console.log('[DEBUG] 文件夹创建成功，刷新当前目录')
+    
+    // 刷新当前目录以显示新创建的文件夹
+    if (fileTreeRef.value && fileTreeRef.value.forceReload) {
+        await fileTreeRef.value.forceReload()
+    }
 }
 
 

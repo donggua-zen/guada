@@ -245,6 +245,27 @@ export const useKnowledgeBaseStore = defineStore('knowledgeBase', () => {
         }
     }
 
+    /**
+     * 创建文件夹
+     */
+    async function createFolder(
+        kbId: string,
+        folderName: string,
+        parentFolderId: string | null = null,
+    ) {
+        try {
+            const response = await apiService.createKBFolder(
+                kbId,
+                folderName,
+                parentFolderId,
+            )
+            return response
+        } catch (error) {
+            console.error('创建文件夹失败:', error)
+            throw error
+        }
+    }
+
 
     // ========== 搜索相关 ==========
 
@@ -417,6 +438,7 @@ export const useKnowledgeBaseStore = defineStore('knowledgeBase', () => {
         deleteFile,
         renameFile,  // 新增
         moveFile,    // 新增
+        createFolder,  // 新增
 
         // Actions - 搜索
         searchInKB,

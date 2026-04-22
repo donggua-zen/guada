@@ -3,6 +3,12 @@
     <div class="">
         <!-- 上传按钮组 -->
         <div class="flex gap-2 items-center">
+            <!-- 新建文件夹按钮 -->
+            <el-button class="upload-btn" @click="showCreateFolderDialog = true">
+                <FolderAdd16Regular class="btn-icon" />
+                新建文件夹
+            </el-button>
+
             <!-- 上传文件按钮 -->
             <input ref="fileInputRef" type="file" multiple :accept="ALLOWED_FILE_EXTENSIONS" @change="handleFileSelect"
                 class="hidden" />
@@ -26,6 +32,19 @@
                 <el-badge :value="uploadTasks.length" type="warning" class="ml-1" />
             </el-button>
         </div>
+
+        <!-- 新建文件夹对话框 -->
+        <el-dialog v-model="showCreateFolderDialog" title="新建文件夹" width="400px" :close-on-click-modal="false" append-to-body>
+            <el-input
+                v-model="newFolderName"
+                placeholder="输入文件夹名称"
+                @keyup.enter="confirmCreateFolder"
+            />
+            <template #footer>
+                <el-button @click="showCreateFolderDialog = false">取消</el-button>
+                <el-button type="primary" @click="confirmCreateFolder" :loading="createFolderLoading">确定</el-button>
+            </template>
+        </el-dialog>
 
         <!-- 冲突处理对话框 -->
         <el-dialog v-model="showConflictDialog" title="文件冲突" width="600px" :close-on-click-modal="false">
@@ -89,6 +108,7 @@ import { Upload, Folder, Document } from '@element-plus/icons-vue'
 import { DocumentAdd16Regular, FolderAdd16Regular } from '@vicons/fluent'
 import { ElMessage } from 'element-plus'
 import { useFileUploadStore } from '@/stores/fileUpload'
+import { useKnowledgeBaseStore } from '@/stores/knowledgeBase'
 import type { UploadTask } from '@/stores/fileUpload'
 import type { KBFile } from '@/stores/knowledgeBase'
 
@@ -113,11 +133,18 @@ const props = defineProps<Props>()
 const emit = defineEmits<{
     (e: 'uploaded', task: UploadTask): void
     (e: 'show-upload-task'): void  // 新增: 触发显示上传任务弹窗
+    (e: 'folder-created'): void  // 新增: 文件夹创建成功事件
 }>()
 
 const uploadStore = useFileUploadStore()
+const kbStore = useKnowledgeBaseStore()
 const fileInputRef = ref<HTMLInputElement>()
 const folderInputRef = ref<HTMLInputElement>()  // 新增: 文件夹输入框引用
+
+// 新建文件夹相关状态
+const showCreateFolderDialog = ref(false)
+const newFolderName = ref('')
+const createFolderLoading = ref(false)
 
 // 冲突处理相关状态
 const showConflictDialog = ref(false)
@@ -552,6 +579,38 @@ async function handleConflictConfirm() {
     // 清空状态
     pendingFiles.value = []
     conflicts.value = []
+}
+
+/**
+ * 确认创建文件夹
+ */
+async function confirmCreateFolder() {
+    if (!newFolderName.value || !newFolderName.value.trim()) {
+        ElMessage.warning('文件夹名称不能为空')
+        return
+    }
+
+    createFolderLoading.value = true
+    try {
+        // 需要将 currentFolderPath 转换为 parentFolderId
+        // 这里暂时传 null，让后端根据 relativePath 计算
+        await kbStore.createFolder(
+            props.kbId,
+            newFolderName.value.trim(),
+            null, // TODO: 需要根据 currentFolderPath 获取 parentFolderId
+        )
+        
+        ElMessage.success('文件夹创建成功')
+        showCreateFolderDialog.value = false
+        newFolderName.value = ''
+        
+        // 通知父组件刷新
+        emit('folder-created')
+    } catch (error: any) {
+        ElMessage.error(error.message || '创建文件夹失败')
+    } finally {
+        createFolderLoading.value = false
+    }
 }
 
 // ========== Lifecycle ==========

@@ -8,7 +8,7 @@
         <!-- 文件信息 -->
         <div class="flex items-center justify-between mb-2">
           <div class="flex items-center gap-2 flex-1 min-w-0">
-            <el-icon size="16" class="text-gray-500 dark:text-gray-400 flex-shrink-0">
+            <el-icon size="16" class="text-gray-500 dark:text-gray-400 shrink-0">
               <Document />
             </el-icon>
             <span class="text-sm text-gray-700 dark:text-gray-300 truncate" :title="task.fileName">
@@ -17,7 +17,7 @@
           </div>
 
           <!-- 状态标签 -->
-          <el-tag :type="getStatusType(task.processingStatus)" size="small" class="ml-2 flex-shrink-0">
+          <el-tag :type="getStatusType(task.processingStatus)" size="small" class="ml-2 shrink-0">
             {{ getStatusText(task.processingStatus) }}
           </el-tag>
         </div>
