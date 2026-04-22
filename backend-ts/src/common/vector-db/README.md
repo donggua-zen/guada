@@ -7,10 +7,10 @@
 ### 核心特性
 
 - **统一的抽象接口** - 所有实现遵循相同的 `VectorDatabase` 接口
-- **多后端支持** - 轻松切换不同的向量数据库（LanceDB, ChromaDB, Qdrant 等）
+- **嵌入式部署** - 基于 SQLite + sqlite-vec，无需外部服务器
 - **混合搜索** - 支持语义搜索、关键词搜索和加权融合
 - **中文友好** - 集成 jieba 分词器，支持中文全文搜索
-- **零依赖部署** - LanceDB 实现为纯嵌入式，无需外部服务器
+- **零依赖部署** - 纯嵌入式实现，开箱即用
 
 ---
 
@@ -25,10 +25,10 @@ npm install @lancedb/lancedb @node-rs/jieba
 ### 2. 基本使用
 
 ```typescript
-import { VectorDatabase, LanceDBVectorDB } from '@/common/vector-db';
+import { VectorDatabase, SqliteVectorDB } from '@/common/vector-db';
 
 // 创建实例
-const vectorDb: VectorDatabase = new LanceDBVectorDB();
+const vectorDb: VectorDatabase = new SqliteVectorDB();
 
 // 初始化
 await vectorDb.initialize();
@@ -111,13 +111,13 @@ console.log(results[0].score); // 最终融合分数
 ```typescript
 // knowledge-base.module.ts
 import { Module } from "@nestjs/common";
-import { VectorDatabase, LanceDBVectorDB } from "@/common/vector-db";
+import { VectorDatabase, SqliteVectorDB } from "@/common/vector-db";
 
 @Module({
   providers: [
     {
       provide: "VECTOR_DB",
-      useClass: LanceDBVectorDB,
+      useClass: SqliteVectorDB,
     },
     KnowledgeBaseService,
   ],
@@ -164,7 +164,7 @@ src/common/vector-db/
 │   └── vector-database.interface.ts    # 抽象接口定义
 ├── implementations/
 │   ├── index.ts                        # 导出所有实现
-│   └── lancedb-vector-db.ts            # LanceDB 实现
+│   └── sqlite-vector-db.ts             # SQLite 实现
 ├── index.ts                            # 模块入口
 └── README.md                           # 本文档
 ```
@@ -194,23 +194,25 @@ interface VectorDatabase {
 
 ## 🔧 扩展新的向量数据库
 
-要添加新的向量数据库实现（如 Qdrant），只需：
+虽然当前项目使用 SQLite + sqlite-vec，但架构设计支持未来扩展其他向量数据库。
+
+要添加新的向量数据库实现，只需：
 
 ### 1. 创建实现类
 
 ```typescript
-// src/common/vector-db/implementations/qdrant-vector-db.ts
+// src/common/vector-db/implementations/other-vector-db.ts
 import { Injectable } from '@nestjs/common';
 import { VectorDatabase, SearchResult, VectorDocument } from '../interfaces/vector-database.interface';
 
 @Injectable()
-export class QdrantVectorDB implements VectorDatabase {
+export class OtherVectorDB implements VectorDatabase {
   async initialize(): Promise<void> {
-    // 实现 Qdrant 初始化逻辑
+    // 实现初始化逻辑
   }
 
   async semanticSearch(...): Promise<SearchResult[]> {
-    // 实现 Qdrant 语义搜索
+    // 实现语义搜索
   }
 
   // ... 实现其他方法
@@ -221,8 +223,8 @@ export class QdrantVectorDB implements VectorDatabase {
 
 ```typescript
 // src/common/vector-db/implementations/index.ts
-export { LanceDBVectorDB } from "./lancedb-vector-db";
-export { QdrantVectorDB } from "./qdrant-vector-db"; // 新增
+export { SqliteVectorDB } from "./sqlite-vector-db";
+// export { OtherVectorDB } from "./other-vector-db"; // 未来扩展
 ```
 
 ### 3. 在模块中配置
@@ -230,7 +232,7 @@ export { QdrantVectorDB } from "./qdrant-vector-db"; // 新增
 ```typescript
 {
   provide: 'VECTOR_DB',
-  useClass: QdrantVectorDB, // 切换到 Qdrant
+  useClass: OtherVectorDB, // 切换到其他实现
 }
 ```
 
@@ -238,11 +240,11 @@ export { QdrantVectorDB } from "./qdrant-vector-db"; // 新增
 
 ## 📊 支持的向量数据库
 
-| 数据库      | 模式       | 中文支持  | BM25        | 状态        |
-| ----------- | ---------- | --------- | ----------- | ----------- |
-| **LanceDB** | 本地文件   | jieba     | FTS         | 已实现      |
-| ChromaDB    | 需要服务器 | ⚠️ 需配置 | ❌ 外部计算 | ⚠️ 部分实现 |
-| Qdrant      | 需要服务器 | ⚠️ 需配置 | 内置        | ⏳ 待实现   |
+| 数据库        | 模式       | 中文支持  | BM25        | 状态     |
+| ------------- | ---------- | --------- | ----------- | -------- |
+| **SQLite**    | 本地文件   | jieba     | FTS5        | ✅ 已实现 |
+
+> 注：当前项目仅使用 SQLite + sqlite-vec 实现，架构设计支持未来扩展其他向量数据库。
 
 ---
 
@@ -366,16 +368,6 @@ const finalScore = α * semanticNorm + β * keywordNorm;
 - 通用场景：α=0.6, β=0.4
 - 精确匹配：α=0.4, β=0.6
 - 语义理解：α=0.8, β=0.2
-
----
-
-## 🔮 未来规划
-
-- [ ] 实现 Qdrant 后端
-- [ ] 添加向量缓存机制
-- [ ] 支持动态权重调整
-- [ ] 添加搜索质量评估工具
-- [ ] 实现分布式部署支持
 
 ---
 

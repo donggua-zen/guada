@@ -2,10 +2,7 @@
  * 向量数据库抽象接口定义
  *
  * 提供统一的向量数据库操作接口，支持多种后端实现：
- * - LanceDB (本地文件模式)
- * - ChromaDB
- * - Qdrant
- * - 其他向量数据库
+ * - SQLite (本地文件模式 + sqlite-vec)
  *
  * Metadata 过滤规范：
  * - 支持 document_id 字段作为标准过滤字段

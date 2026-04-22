@@ -48,4 +48,4 @@ export { VectorDbService } from "./vector-db.service";
 export { VectorDbModule } from "./vector-db.module";
 
 // 未来添加其他实现
-// export { ChromaVectorDB, QdrantVectorDB } from './implementations';
+// export { OtherVectorDB } from './implementations';
