@@ -731,6 +731,20 @@ class ApiService implements IApiService {
   }
 
   /**
+   * 创建知识库文件夹
+   */
+  async createKBFolder(
+    kbId: string,
+    folderName: string,
+    parentFolderId: string | null = null,
+  ): Promise<any> {
+    return await this._request(`/knowledge-bases/${kbId}/files/folder`, {
+      method: 'POST',
+      data: { folderName, parentFolderId },
+    })
+  }
+
+  /**
    * 查询文件处理状态
    */
   async getFileProcessingStatus(kbId: string, fileId: string): Promise<KBFile> {
