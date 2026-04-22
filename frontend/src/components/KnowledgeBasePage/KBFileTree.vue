@@ -4,15 +4,15 @@
     <!-- 面包屑导�?-->
     <div v-if="breadcrumbPath.length > 0" class="mb-3 py-1.5">
       <div class="flex items-center gap-1 text-sm">
-        <button @click="navigateToFolder(null)"
+        <button @click="navigateToFolderByPath(null)"
           class="text-gray-500 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors cursor-pointer">
           知识库
         </button>
 
         <!-- 路径分隔符和各级文件夹-->
-        <template v-for="(folder, index) in breadcrumbPath" :key="folder.id">
+        <template v-for="(folder, index) in breadcrumbPath" :key="folder.path">
           <span class="text-gray-400 mx-0.5">></span>
-          <button v-if="index !== breadcrumbPath.length - 1" @click="navigateToFolder(folder.id)"
+          <button v-if="index !== breadcrumbPath.length - 1" @click="navigateToFolderByPath(folder.path)"
             class="transition-colors cursor-pointer text-gray-500 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400">
             {{ folder.displayName }}
           </button>
@@ -46,9 +46,9 @@
       <div v-for="item in currentItems" :key="item.id"
         class="file-row grid grid-cols-[1fr_100px_100px_120px_160px] gap-4 px-4 py-2.5 hover:bg-gray-50 dark:hover:bg-gray-800/50 cursor-pointer transition-colors border-b border-gray-100 dark:border-gray-800 last:border-b-0"
         @click="handleItemClick(item)" @contextmenu.prevent="handleContextMenu($event, item)">
-        <!-- 名称�?-->
+        <!-- 名称-->
         <div class="flex items-center gap-2 min-w-0">
-          <!-- 文件�?文件图标 -->
+          <!-- 文件图标 -->
           <el-icon v-if="item.isDirectory" class="text-yellow-500 shrink-0" size="18">
             <Folder />
           </el-icon>
@@ -94,7 +94,7 @@
 
     <!-- 空文件夹-->
     <div v-else class="text-center py-8 text-gray-500 dark:text-gray-400">
-      <p>{{ currentFolderId ? '该文件夹为空' : '暂无文件' }}</p>
+      <p>{{ currentRelativePath ? '该文件夹为空' : '暂无文件' }}</p>
     </div>
 
     <!-- 右键菜单 -->
@@ -122,7 +122,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch } from 'vue'
+import { ref, watch, onUnmounted } from 'vue'
 import { Folder, View, RefreshRight, Delete, Loading } from '@element-plus/icons-vue'
 import type { KBFile } from '@/stores/knowledgeBase'
 
@@ -135,7 +135,6 @@ import filePptIcon from '@/assets/file_ppt.svg'
 import filePdfIcon from '@/assets/file_zip.svg'
 
 interface Props {
-  files: KBFile[]
   kbId: string  // 知识库ID
 }
 
@@ -145,12 +144,17 @@ const emit = defineEmits<{
   view: [file: KBFile]
   retry: [file: KBFile]
   delete: [file: KBFile]
+  folderChange: [folderPath: string | null]  // 目录切换事件
+  filesLoaded: [files: KBFile[]]  // 文件加载完成事件
 }>()
 
 /**
  * 当前所在的文件夹ID (null表示根目录)
  */
-const currentFolderId = ref<string | null>(null)
+/**
+ * 当前相对路径（核心状态，替代 currentFolderId）
+ */
+const currentRelativePath = ref<string | null>(null)
 
 /**
  * 当前目录下的文件和文件夹(懒加载)
@@ -163,9 +167,9 @@ const currentItems = ref<KBFile[]>([])
 const isLoading = ref(false)
 
 /**
- * 面包屑路径
+ * 面包屑路径（使用路径而非ID）
  */
-const breadcrumbPath = ref<Array<{ id: string; displayName: string }>>([])
+const breadcrumbPath = ref<Array<{ path: string; displayName: string }>>([])
 
 /**
  * 右键菜单状态
@@ -178,18 +182,27 @@ const contextMenu = ref({
 })
 
 /**
- * 加载指定文件夹的内容
+ * 文件处理轮询相关状态
  */
-async function loadFolderContents(folderId: string | null) {
+const POLL_INTERVAL = 3000 // 3 秒轮询间隔
+let pollingTimer: NodeJS.Timeout | null = null
+let pollingFileIds = new Set<string>()
+
+/**
+ * 加载指定路径的文件夹内容
+ */
+async function loadFolderContents(relativePath: string | null) {
   isLoading.value = true
 
   try {
     const { apiService } = await import('@/services/ApiService')
-    const response = await apiService.fetchKBFilesByParent(
+
+    // 直接使用路径查询接口
+    const response = await apiService.fetchKBFilesByPath(
       props.kbId,
-      folderId,
+      relativePath,
       0,
-      100  // 每页100�?足够显示单层内容
+      100  // 每页100条足够显示单层内容
     )
 
     currentItems.value = (response.items || []).map((file: any) => ({
@@ -216,65 +229,149 @@ async function loadFolderContents(folderId: string | null) {
       isTempTask: false
     }))
 
-    // 更新面包屑路径
-    await updateBreadcrumbPath(folderId)
+    // 更新面包屑路径（直接从 relativePath 解析）
+    updateBreadcrumbPathFromRelativePath(relativePath)
+
+    // 关键修复:数据加载完成后,通知父组件
+    emit('filesLoaded', currentItems.value)
+    console.log(`[DEBUG] KBFileTree 文件加载完成,共 ${currentItems.value.length} 个文件`)
+
+    // 关键优化:数据加载完成后,自动启动轮询
+    await startFileProcessingPolling()
 
   } catch (error) {
     console.error('加载文件夹内容失败', error)
     currentItems.value = []
+    // 即使出错也通知父组件
+    emit('filesLoaded', [])
   } finally {
     isLoading.value = false
   }
 }
 
 /**
- * 更新面包屑路径
+ * 从 relativePath 直接解析面包屑路径（同步方法，无需API调用）
  */
-async function updateBreadcrumbPath(folderId: string | null) {
-  if (!folderId) {
+function updateBreadcrumbPathFromRelativePath(relativePath: string | null) {
+  if (!relativePath) {
     breadcrumbPath.value = []
     return
   }
 
-  const path: Array<{ id: string; displayName: string }> = []
-  let currentId: string | null = folderId
+  // 从 relativePath 解析出每一级目录
+  // 例如: "docs/api/guide" → [
+  //   { path: "docs", displayName: "docs" },
+  //   { path: "docs/api", displayName: "api" },
+  //   { path: "docs/api/guide", displayName: "guide" }
+  // ]
+  const pathParts = relativePath.split('/')
+  const path: Array<{ path: string; displayName: string }> = []
 
-  let depth = 0
-  while (currentId && depth < 10) {
-    const folder = currentItems.value.find(f => f.id === currentId && f.isDirectory)
+  let accumulatedPath = ''
+  for (let i = 0; i < pathParts.length; i++) {
+    const partName = pathParts[i]
+    accumulatedPath = accumulatedPath ? `${accumulatedPath}/${partName}` : partName
 
-    if (folder) {
-      path.unshift({ id: folder.id, displayName: folder.displayName })
-      currentId = folder.parentFolderId || null
-    } else {
-      try {
-        const { apiService } = await import('@/services/ApiService')
-        const fileDetail = await apiService.getKBFile(props.kbId, currentId) as any
-
-        if (fileDetail && fileDetail.isDirectory) {
-          path.unshift({ id: fileDetail.id, displayName: fileDetail.displayName })
-          currentId = fileDetail.parentFolderId || null
-        } else {
-          break
-        }
-      } catch (error) {
-        console.error('获取文件夹信息失�?', error)
-        break
-      }
-    }
-
-    depth++
+    path.push({
+      path: accumulatedPath,
+      displayName: partName
+    })
   }
 
   breadcrumbPath.value = path
 }
 
 /**
- * 导航到指定文件夹
+ * 启动文件处理轮询（组件内部管理）
  */
-async function navigateToFolder(folderId: string | null) {
-  currentFolderId.value = folderId
-  // watch会自动触发loadFolderContents
+async function startFileProcessingPolling() {
+  // 筛选出 processing/pending 状态的文件
+  const processingFiles = currentItems.value.filter(file =>
+    file.processingStatus === 'processing' || file.processingStatus === 'pending'
+  )
+
+  if (processingFiles.length === 0) {
+    console.log('[DEBUG] KBFileTree: 没有需要轮询的文件')
+    stopFileProcessingPolling()
+    return
+  }
+
+  // 停止之前的轮询
+  stopFileProcessingPolling()
+
+  // 添加新的文件 ID
+  processingFiles.forEach(file => pollingFileIds.add(file.id))
+
+  console.log(`[DEBUG] KBFileTree: 开始轮询 ${pollingFileIds.size} 个文件`)
+
+  const poll = async () => {
+    try {
+      const { apiService } = await import('@/services/ApiService')
+
+      // 批量获取文件状态
+      const responses = await apiService.batchGetFileProcessingStatus(
+        props.kbId,
+        Array.from(pollingFileIds)
+      )
+
+      console.log(`[DEBUG] KBFileTree: 轮询收到 ${responses.length} 个文件的状态更新`)
+
+      // 遍历结果并更新本地状态
+      responses.forEach((response: any) => {
+        // 更新本地文件状态
+        updateFileStatus(response.id, {
+          processingStatus: response.processingStatus,
+          progressPercentage: response.progressPercentage || 0,
+          currentStep: response.currentStep || null,
+          errorMessage: response.errorMessage || null,
+          totalChunks: response.totalChunks || 0,
+          totalTokens: response.totalTokens || 0
+        })
+
+        // 如果文件处理完成或失败，从轮询列表中移除
+        if (response.processingStatus === 'completed' ||
+          response.processingStatus === 'failed') {
+          console.log(`[DEBUG] KBFileTree: 文件 ${response.id} 处理${response.processingStatus === 'completed' ? '完成' : '失败'},停止轮询`)
+          pollingFileIds.delete(response.id)
+        }
+      })
+
+      // 如果所有文件都处理完成，停止轮询
+      if (pollingFileIds.size === 0) {
+        console.log('[DEBUG] KBFileTree: 所有文件处理完成,停止轮询')
+        stopFileProcessingPolling()
+      }
+    } catch (error) {
+      console.error(`[DEBUG] KBFileTree: 批量轮询文件状态失败:`, error)
+      // 出错时不停止轮询，继续尝试
+    }
+  }
+
+  // 立即执行一次
+  await poll()
+
+  // 定时轮询
+  pollingTimer = setInterval(poll, POLL_INTERVAL)
+}
+
+/**
+ * 停止文件处理轮询
+ */
+function stopFileProcessingPolling() {
+  if (pollingTimer) {
+    clearInterval(pollingTimer)
+    pollingTimer = null
+    console.log('[DEBUG] KBFileTree: 停止轮询')
+  }
+  pollingFileIds.clear()
+}
+
+/**
+ * 导航到指定文件夹（通过路径）
+ */
+function navigateToFolderByPath(relativePath: string | null) {
+  // 直接设置路径，watch 会自动触发 loadFolderContents
+  currentRelativePath.value = relativePath
 }
 
 /**
@@ -282,7 +379,8 @@ async function navigateToFolder(folderId: string | null) {
  */
 function handleItemClick(item: KBFile) {
   if (item.isDirectory) {
-    currentFolderId.value = item.id
+    // 文件夹: 导航到该路径
+    currentRelativePath.value = item.relativePath || null
   } else if (item.processingStatus === 'completed') {
     // 文件: 触发查看事件
     emit('view', item)
@@ -292,8 +390,11 @@ function handleItemClick(item: KBFile) {
 /**
  * 监听当前文件夹
  */
-watch(currentFolderId, async (newFolderId) => {
-  await loadFolderContents(newFolderId)
+// 监听当前路径变化，自动加载内容
+watch(currentRelativePath, async (newPath) => {
+  await loadFolderContents(newPath)
+  // 关键修复:通知父组件目录已切换,需要重新轮询
+  emit('folderChange', newPath)
 }, { immediate: true })
 
 /**
@@ -301,11 +402,11 @@ watch(currentFolderId, async (newFolderId) => {
  */
 async function forceReload() {
   console.log('[DEBUG] KBFileTree 强制重新加载当前目录')
-  await loadFolderContents(currentFolderId.value)
+  await loadFolderContents(currentRelativePath.value)
 }
 
 /**
- * 从本地列表中移除文件
+ * 从本地列表中移除文件（供父组件调用）
  */
 function removeFileLocally(fileId: string) {
   const index = currentItems.value.findIndex(item => item.id === fileId)
@@ -316,53 +417,209 @@ function removeFileLocally(fileId: string) {
 }
 
 /**
- * 监听父组件传递的 files 变化,同步更新 currentItems
- * 这是轮询状态更新的关键:当父组件通过轮询更新文件状态时,
+ * 更新文件状态（供父组件轮询回调使用）
  */
-watch(
-  () => props.files,
-  (newFiles) => {
-    if (!newFiles || newFiles.length === 0) return
+function updateFileStatus(fileId: string, updates: Partial<KBFile>) {
+  const index = currentItems.value.findIndex(item => item.id === fileId)
+  if (index !== -1) {
+    const updatedItem = { ...currentItems.value[index], ...updates }
+    currentItems.value.splice(index, 1, updatedItem)
+    console.log(`[DEBUG] KBFileTree 更新文件状态: ${updatedItem.displayName} -> ${updates.processingStatus}`)
+  }
+}
 
-    console.log(`[DEBUG] KBFileTree 监听 props.files 变化, 共 ${newFiles.length} 个文件`)
+/**
+ * 获取当前目录的所有文件（供父组件查询）
+ */
+function getCurrentFiles(): KBFile[] {
+  return currentItems.value
+}
 
-    newFiles.forEach(newFile => {
-      const index = currentItems.value.findIndex(item => item.id === newFile.id)
-      if (index !== -1) {
-        const oldFile = currentItems.value[index]
-        currentItems.value.splice(index, 1, {
-          ...newFile,
-          id: newFile.id,
-          knowledgeBaseId: newFile.knowledgeBaseId,
-          fileName: newFile.fileName,
-          displayName: newFile.displayName,
-          fileSize: newFile.fileSize,
-          fileType: newFile.fileType,
-          fileExtension: newFile.fileExtension,
-          contentHash: newFile.contentHash,
-          relativePath: newFile.relativePath,
-          parentFolderId: newFile.parentFolderId,
-          isDirectory: newFile.isDirectory,
-          processingStatus: newFile.processingStatus,
-          progressPercentage: newFile.progressPercentage,
-          currentStep: newFile.currentStep,
-          errorMessage: newFile.errorMessage,
-          uploadedAt: newFile.uploadedAt,
-          processedAt: newFile.processedAt,
-          totalChunks: newFile.totalChunks,
-          totalTokens: newFile.totalTokens,
-        })
-        console.log(`[DEBUG] KBFileTree 同步更新文件状态: ${newFile.displayName} -> ${newFile.processingStatus}`)
+/**
+ * 智能插入上传完成的文件（增量更新）
+ * @param uploadedFile 上传完成的文件信息
+ */
+async function insertUploadedFile(uploadedFile: KBFile) {
+  console.log(`[DEBUG] KBFileTree: 尝试插入文件 ${uploadedFile.displayName}, relativePath: ${uploadedFile.relativePath}`)
+
+  const currentPath = currentRelativePath.value
+
+  // 关键修复:上传完成后状态应为 pending（后端还在处理）
+  const fileToInsert: KBFile = {
+    ...uploadedFile,
+    processingStatus: 'pending',  // 改为 pending
+    progressPercentage: 0,
+    currentStep: '等待处理...'
+  }
+
+  // 情况1: 文件属于当前目录的一级子项
+  if (isDirectChildOfCurrentPath(fileToInsert.relativePath, currentPath)) {
+    console.log('[DEBUG] KBFileTree: 文件是一级子项，直接插入')
+
+    // 检查是否已存在（避免重复）
+    const exists = currentItems.value.some(item => item.id === fileToInsert.id)
+    if (!exists) {
+      // 关键修复:智能插入位置 - 文件插入到文件列表顶部，但保持目录在上方
+      insertItemAtCorrectPosition(fileToInsert)
+      console.log(`[DEBUG] KBFileTree: 已插入文件 ${fileToInsert.displayName}`)
+      
+      // 关键修复:插入后检查是否需要启动轮询
+      if (fileToInsert.processingStatus === 'pending' || fileToInsert.processingStatus === 'processing') {
+        console.log('[DEBUG] KBFileTree: 检测到 pending/processing 状态文件，重启轮询')
+        await startFileProcessingPolling()
       }
-    })
-  },
-  { deep: true }
-)
+    } else {
+      console.log('[DEBUG] KBFileTree: 文件已存在，跳过插入')
+    }
+    return
+  }
+
+  // 情况2: 文件属于当前目录的深层子项，需要创建临时目录
+  const tempDirName = getFirstLevelSubdir(fileToInsert.relativePath, currentPath)
+  if (tempDirName) {
+    console.log(`[DEBUG] KBFileTree: 文件是深层子项，创建临时目录 ${tempDirName}`)
+
+    // 检查临时目录是否已存在
+    const dirExists = currentItems.value.some(item =>
+      item.isDirectory && item.displayName === tempDirName
+    )
+
+    if (!dirExists) {
+      // 创建临时目录对象
+      const tempDir: KBFile = {
+        id: `temp-dir-${tempDirName}-${Date.now()}`,  // 临时ID
+        knowledgeBaseId: fileToInsert.knowledgeBaseId,
+        fileName: tempDirName,
+        displayName: tempDirName,
+        fileSize: 0,
+        fileType: 'directory',
+        fileExtension: '',
+        contentHash: '',
+        relativePath: currentPath ? `${currentPath}/${tempDirName}` : tempDirName,
+        parentFolderId: null,
+        isDirectory: true,
+        processingStatus: 'completed',
+        progressPercentage: 100,
+        currentStep: null,
+        errorMessage: null,
+        uploadedAt: new Date().toISOString(),
+        processedAt: new Date().toISOString(),
+        totalChunks: 0,
+        totalTokens: 0
+      }
+
+      // 关键修复:目录插入到目录列表顶部
+      insertItemAtCorrectPosition(tempDir)
+      console.log(`[DEBUG] KBFileTree: 已创建临时目录 ${tempDirName}`)
+    } else {
+      console.log(`[DEBUG] KBFileTree: 临时目录 ${tempDirName} 已存在，跳过`)
+    }
+    return
+  }
+
+  // 情况3: 文件不属于当前目录，不处理
+  console.log('[DEBUG] KBFileTree: 文件不属于当前目录，跳过插入')
+}
+
+/**
+ * 智能插入项目到正确位置（目录在上方，文件在下方）
+ * @param item 要插入的项目
+ */
+function insertItemAtCorrectPosition(item: KBFile) {
+  if (item.isDirectory) {
+    // 目录：找到第一个非目录项的位置，插入到它前面
+    const firstFileIndex = currentItems.value.findIndex(i => !i.isDirectory)
+    if (firstFileIndex === -1) {
+      // 没有文件，直接添加到最后
+      currentItems.value.push(item)
+    } else {
+      // 插入到第一个文件之前
+      currentItems.value.splice(firstFileIndex, 0, item)
+    }
+  } else {
+    // 文件：找到第一个文件的位置，插入到它前面
+    const firstFileIndex = currentItems.value.findIndex(i => !i.isDirectory)
+    if (firstFileIndex === -1) {
+      // 没有文件，直接添加到最后
+      currentItems.value.push(item)
+    } else {
+      // 插入到第一个文件之前（即文件列表的顶部）
+      currentItems.value.splice(firstFileIndex, 0, item)
+    }
+  }
+}
+
+/**
+ * 判断文件是否是当前路径的直接子项
+ */
+function isDirectChildOfCurrentPath(fileRelativePath: string | null | undefined, currentPath: string | null): boolean {
+  // 当前在根目录
+  if (!currentPath) {
+    // 文件也在根目录（relativePath 为 null、空、或不包含 /）
+    if (!fileRelativePath || fileRelativePath === '') {
+      return true
+    }
+    // 关键修复:根目录下，只要路径不包含 /，就是直接子项
+    return !fileRelativePath.includes('/')
+  }
+
+  // 当前在子目录，文件必须是该目录的直接子项
+  // 例如: currentPath="a", fileRelativePath="a/file.txt" → true
+  //       currentPath="a", fileRelativePath="a/b/file.txt" → false
+  if (fileRelativePath) {
+    const expectedPrefix = currentPath + '/'
+    if (fileRelativePath.startsWith(expectedPrefix)) {
+      const remaining = fileRelativePath.substring(expectedPrefix.length)
+      // 剩余部分不能包含 / ，说明是直接子项
+      return !remaining.includes('/')
+    }
+  }
+
+  return false
+}
+
+/**
+ * 获取第一层子目录名称
+ * @param fileRelativePath 文件的相对路径
+ * @param currentPath 当前目录路径
+ * @returns 第一层子目录名称，如果不是深层子项则返回 null
+ */
+function getFirstLevelSubdir(fileRelativePath: string | null | undefined, currentPath: string | null): string | null {
+  if (!fileRelativePath) return null
+  
+  // 当前在根目录的情况
+  if (!currentPath) {
+    // 文件路径包含 / ，说明在子目录中
+    if (fileRelativePath.includes('/')) {
+      const parts = fileRelativePath.split('/')
+      return parts[0]  // 返回第一层目录名
+    }
+    // 文件在根目录，不需要创建目录
+    return null
+  }
+  
+  // 当前在子目录的情况
+  const expectedPrefix = currentPath + '/'
+  if (!fileRelativePath.startsWith(expectedPrefix)) return null
+  
+  const remaining = fileRelativePath.substring(expectedPrefix.length)
+  const parts = remaining.split('/')
+  
+  // 如果只有一层，说明是直接子项，不需要创建目录
+  if (parts.length <= 1) return null
+  
+  // 返回第一层目录名
+  return parts[0]  
+}
 
 // 暴露方法给父组件
 defineExpose({
   forceReload,
-  removeFileLocally
+  removeFileLocally,
+  updateFileStatus,
+  getCurrentFiles,
+  insertUploadedFile,  // 新增:智能插入上传完成的文件
+  getCurrentFolderPath: () => currentRelativePath.value
 })
 
 /**
@@ -427,26 +684,6 @@ function getStatusText(status: string): string {
   return texts[status] || status
 }
 
-/**
- * 处理查看文件
- */
-function handleViewFile(file: KBFile) {
-  emit('view', file)
-}
-
-/**
- * 处理重新处理
- */
-function handleRetryFile(file: KBFile) {
-  emit('retry', file)
-}
-
-/**
- * 处理删除
- */
-function handleDeleteFile(file: KBFile) {
-  emit('delete', file)
-}
 
 /**
  * 格式化日�?
@@ -508,6 +745,12 @@ function closeContextMenu() {
 if (typeof window !== 'undefined') {
   window.addEventListener('click', closeContextMenu)
 }
+
+// 组件卸载时清理轮询定时器
+onUnmounted(() => {
+  console.log('[DEBUG] KBFileTree 组件销毁,清理轮询定时器')
+  stopFileProcessingPolling()
+})
 </script>
 
 <style scoped>
