@@ -2,7 +2,7 @@
  * 向量数据库服务
  *
  * 提供简化且规范化的向量数据库操作接口
- * 支持多种后端实现（LanceDB、Qdrant 等）
+ * 基于 SQLite + sqlite-vec 实现
  */
 
 import { Injectable, Logger } from "@nestjs/common";
