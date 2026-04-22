@@ -65,7 +65,7 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import { ArrowRight, Folder } from '@element-plus/icons-vue'
-import type { KBFile } from '@/stores/fileUpload'
+import type { KBFile } from '@/stores/knowledgeBase'
 
 // 导入文件图标
 import fileCodeIcon from '@/assets/file_code.svg'

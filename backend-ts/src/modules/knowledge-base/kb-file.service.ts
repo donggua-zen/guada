@@ -862,15 +862,17 @@ export class KbFileService implements OnModuleInit {
       // 6. 事务：使用原生 SQL 批量更新文件夹及所有子项的路径
       const oldPrefix = file.relativePath + '/';
       const newPrefix = newRelativePath + '/';
+      const likePattern = oldPrefix + '%';
 
       await this.prisma.$transaction(async (tx) => {
-        // 6.1 批量更新所有子项的 relativePath（使用原生 SQL）
-        const result = await tx.$executeRaw`
-          UPDATE kb_file
-          SET relative_path = ${newPrefix} || SUBSTR(relative_path, LENGTH(${oldPrefix}) + 1)
-          WHERE knowledge_base_id = ${kbId}
-            AND relative_path LIKE ${oldPrefix + '%'}
-        `;
+        // 6.1 批量更新所有子项的 relativePath（使用参数化查询防止 SQL 注入）
+        const result = await tx.$executeRawUnsafe(
+          `UPDATE kb_file SET relative_path = ? || SUBSTR(relative_path, LENGTH(?) + 1) WHERE knowledge_base_id = ? AND relative_path LIKE ?`,
+          newPrefix,
+          oldPrefix,
+          kbId,
+          likePattern,
+        );
 
         this.logger.log(
           `文件夹重命名：批量更新了 ${result} 个子项的路径`,
@@ -1014,13 +1016,15 @@ export class KbFileService implements OnModuleInit {
       if (file.isDirectory && oldRelativePath) {
         const oldPrefix = oldRelativePath + '/';
         const newPrefix = newRelativePath + '/';
+        const likePattern = oldPrefix + '%';
 
-        const result = await tx.$executeRaw`
-          UPDATE kb_file
-          SET relative_path = ${newPrefix} || SUBSTR(relative_path, LENGTH(${oldPrefix}) + 1)
-          WHERE knowledge_base_id = ${kbId}
-            AND relative_path LIKE ${oldPrefix + '%'}
-        `;
+        const result = await tx.$executeRawUnsafe(
+          `UPDATE kb_file SET relative_path = ? || SUBSTR(relative_path, LENGTH(?) + 1) WHERE knowledge_base_id = ? AND relative_path LIKE ?`,
+          newPrefix,
+          oldPrefix,
+          kbId,
+          likePattern,
+        );
 
         this.logger.log(
           `文件夹移动：批量更新了 ${result} 个子项的路径`,
