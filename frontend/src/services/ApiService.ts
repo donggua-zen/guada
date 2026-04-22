@@ -703,6 +703,34 @@ class ApiService implements IApiService {
   }
 
   /**
+   * 重命名知识库文件
+   */
+  async renameKBFile(
+    kbId: string,
+    fileId: string,
+    newName: string,
+  ): Promise<{ success: boolean; message: string; data: any }> {
+    return await this._request(`/knowledge-bases/${kbId}/files/${fileId}/rename`, {
+      method: 'POST',
+      data: { newName },
+    })
+  }
+
+  /**
+   * 移动知识库文件
+   */
+  async moveKBFile(
+    kbId: string,
+    fileId: string,
+    targetParentFolderId: string | null,
+  ): Promise<{ success: boolean; message: string; data: any }> {
+    return await this._request(`/knowledge-bases/${kbId}/files/${fileId}/move`, {
+      method: 'POST',
+      data: { targetParentFolderId },
+    })
+  }
+
+  /**
    * 查询文件处理状态
    */
   async getFileProcessingStatus(kbId: string, fileId: string): Promise<KBFile> {

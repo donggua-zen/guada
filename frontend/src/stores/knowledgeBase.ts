@@ -211,6 +211,40 @@ export const useKnowledgeBaseStore = defineStore('knowledgeBase', () => {
         }
     }
 
+    /**
+     * 重命名文件
+     */
+    async function renameFile(kbId: string, fileId: string, newName: string) {
+        try {
+            const response = await apiService.renameKBFile(kbId, fileId, newName)
+            return response
+        } catch (error) {
+            console.error('重命名文件失败:', error)
+            throw error
+        }
+    }
+
+    /**
+     * 移动文件
+     */
+    async function moveFile(
+        kbId: string,
+        fileId: string,
+        targetParentFolderId: string | null,
+    ) {
+        try {
+            const response = await apiService.moveKBFile(
+                kbId,
+                fileId,
+                targetParentFolderId,
+            )
+            return response
+        } catch (error) {
+            console.error('移动文件失败:', error)
+            throw error
+        }
+    }
+
 
     // ========== 搜索相关 ==========
 
@@ -381,6 +415,8 @@ export const useKnowledgeBaseStore = defineStore('knowledgeBase', () => {
         // Actions - 文件管理
         fetchFiles,
         deleteFile,
+        renameFile,  // 新增
+        moveFile,    // 新增
 
         // Actions - 搜索
         searchInKB,
