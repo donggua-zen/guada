@@ -553,7 +553,7 @@ class ApiService implements IApiService {
 
   async toggleMcpServer(serverId: string, enabled: boolean): Promise<McpServer> {
     return await this._request(`/mcp-servers/${serverId}/toggle`, {
-      method: 'POST',
+      method: 'PATCH',
       data: { enabled },
     })
   }
