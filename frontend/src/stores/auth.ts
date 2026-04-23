@@ -18,6 +18,9 @@ export const useAuthStore = defineStore('auth', () => {
     
     const token: Ref<string | null> = ref(getStoredToken())
 
+    // 免登录状态
+    const autoLoginEnabled: Ref<boolean> = ref(false)
+
     // 计算属性
     const isAuthenticated: ComputedRef<boolean> = computed(() => !!token.value)
 
@@ -118,15 +121,64 @@ export const useAuthStore = defineStore('auth', () => {
         }
     }
 
+    async function checkAutoLoginStatus(): Promise<boolean> {
+        try {
+            const result = await apiService.getAutoLoginStatus()
+            autoLoginEnabled.value = result.enabled
+            return result.enabled
+        } catch (error) {
+            console.error("获取免登录状态失败:", error)
+            return false
+        }
+    }
+
+    async function setAutoLoginEnabled(enabled: boolean): Promise<void> {
+        try {
+            await apiService.setAutoLoginStatus(enabled)
+            autoLoginEnabled.value = enabled
+        } catch (error) {
+            console.error("设置免登录状态失败:", error)
+            throw error
+        }
+    }
+
+    async function tryAutoLogin(): Promise<boolean> {
+        try {
+            const result = await apiService.autoLogin()
+            
+            if (!result || !result.accessToken) {
+                console.warn('自动登录失败：未获取到 token')
+                return false
+            }
+
+            // 自动登录使用 sessionStorage，不记住
+            sessionStorage.setItem('token', result.accessToken)
+            sessionStorage.setItem('user', JSON.stringify(result.user))
+
+            token.value = result.accessToken
+            user.value = result.user
+
+            console.log('自动登录成功')
+            return true
+        } catch (error) {
+            console.error("自动登录失败:", error)
+            return false
+        }
+    }
+
     return {
         // 状态
         user,
         token,
+        autoLoginEnabled,
         isAuthenticated,
         // Actions
         login,
         register,
         logout,
-        checkAuth
+        checkAuth,
+        checkAutoLoginStatus,
+        setAutoLoginEnabled,
+        tryAutoLogin
     }
 })

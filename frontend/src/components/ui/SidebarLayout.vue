@@ -5,14 +5,14 @@
             @click="$emit('update:sidebarVisible', false)"></div>
         <!-- 侧边栏容器 -->
         <div :class="[
-            'h-full absolute md:relative transform transition-all duration-300 ease-in-out justify-content-end shrink-0'
+            'h-full absolute lg:relative transform transition-all duration-300 ease-in-out justify-content-end shrink-0'
         ]" :style="{
             width: sidebarContainerWidth,
             maxWidth: sidebarContainerWidth,
             minWidth: sidebarContainerWidth,
             zIndex: zIndex
         }">
-            <div class="absolute right-0 h-full" :style="{ width: (sidebarWidth ?? 288) < 0 ? '100vw' : `${sidebarWidth ?? 288}px` }">
+            <div class="absolute right-0 h-full" :style="{ width: (sidebarWidth ?? 278) < 0 ? '100vw' : `${sidebarWidth ?? 278}px` }">
                 <slot name="sidebar" :sidebar-visible="sidebarVisible" />
             </div>
 
@@ -20,7 +20,7 @@
             <button v-if="showToggleButton" @click="$emit('update:sidebarVisible', !sidebarVisible)"
                 class="absolute  top-1/2 right-0 transition-all transform -translate-y-1/2 w-4 h-16 flex items-center justify-center bg-white dark:bg-gray-800 shadow-sm hover:bg-gray-50 focus:outline-none z-10  border-gray-200 dark:border-gray-800 dark:hover:bg-gray-600"
                 :title="sidebarVisible ? '折叠侧边栏' : '展开侧边栏'"
-                :class="sidebarVisible ? 'translate-x-1/2 rounded-lg border' : 'translate-x-full rounded-r-lg border-r'">
+                :class="sidebarVisible ? 'translate-x-1/2 rounded-lg border' : 'translate-x-full rounded-lg border'">
                 <slot name="toggle-icon" :sidebar-visible="sidebarVisible">
                     <component :is="sidebarVisible ? ArrowLeftTwotone : ArrowRightTwotone" class="text-gray-600 dark:text-gray-200" />
                 </slot>
@@ -44,7 +44,7 @@ import {
 import { useBreakpoints, breakpointsTailwind } from '@vueuse/core'
 
 const breakpoints = useBreakpoints(breakpointsTailwind)
-const isMobile = breakpoints.smaller('md') // md = 768px
+const isMobile = breakpoints.smaller('lg') // md = 768px
 // Props 类型化
 const props = defineProps<{
     sidebarVisible?: boolean;
@@ -58,7 +58,7 @@ const props = defineProps<{
 const sidebarContainerWidth = computed((): string => {
     if (props.sidebarVisible === false)
         return '0';
-    return (props.sidebarWidth ?? 288) < 0 ? '100%' : (props.sidebarWidth ?? 288) + 'px';
+    return (props.sidebarWidth ?? 278) < 0 ? '100%' : (props.sidebarWidth ?? 278) + 'px';
 });
 
 // 计算切换按钮位置 - 类型化（此计算属性在模板中未使用，可以保留或删除）

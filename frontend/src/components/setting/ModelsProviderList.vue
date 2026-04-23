@@ -70,7 +70,7 @@
         <div class="section-title text-sm font-medium text-gray-500 mb-3">可添加的供应商</div>
         <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
           <div v-for="template in templates" :key="template.id"
-            class="provider-card template-card relative border border-gray-200 bg-transparent rounded-lg p-4 cursor-pointer hover:border-(--color-primary) transition-all duration-200 group">
+            class="provider-card template-card relative border border-gray-200 bg-white rounded-lg p-4 cursor-pointer hover:border-(--color-primary) transition-all duration-200 group">
             <div class="flex items-start gap-3">
               <div class="w-11 h-11 shrink-0 flex items-center justify-center text-gray-400 bg-gray-50 rounded-md">
                 <img v-if="typeof getTemplateIcon(template) === 'string'" 

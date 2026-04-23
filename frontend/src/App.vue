@@ -1,6 +1,9 @@
 <template>
-    <RouterView></RouterView>
-    
+    <!-- 自定义标题栏（仅在 Electron 环境显示） -->
+    <div class="flex flex-col h-full bg-(--color-surface)">
+        <CustomTitlebar />
+        <RouterView></RouterView>
+    </div>
     <!-- Mock 控制面板（仅开发环境） -->
     <MockControlPanel v-if="isDev" />
 </template>
@@ -11,6 +14,7 @@ import { useRouter, RouterView } from 'vue-router'
 import { useTitle } from './composables/useTitle'
 import { useTheme } from './composables/useTheme'
 import MockControlPanel from './components/dev/MockControlPanel.vue'
+import CustomTitlebar from './components/CustomTitlebar.vue'
 
 const router = useRouter()
 const title = useTitle()

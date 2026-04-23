@@ -2,7 +2,7 @@
 <template>
     <div class="kb-sidebar h-full flex flex-col bg-(--color-conversation-bg) border-r border-gray-200 dark:border-gray-700">
         <!-- 头部 -->
-        <div class="px-4 pt-3.5 pb-3.5 border-b border-gray-200 dark:border-gray-700">
+        <div class="px-4 pt-2.5 pb-2.5 ">
             <div class="flex justify-between items-center">
                 <span class="font-semibold text-base text-(--color-text)">知识库</span>
                 <el-button type="primary" @click="handleCreate" :icon="Plus">
@@ -14,8 +14,7 @@
         <!-- 搜索框 -->
         <div class="search-box px-3.5 py-3">
             <el-input 
-                :model-value="searchKeyword" 
-                @update:model-value="handleSearchUpdate"
+                v-model="searchKeyword"
                 placeholder="搜索知识库" 
                 clearable 
                 class="search-input" 
@@ -85,7 +84,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
+import { ref, computed } from 'vue'
 import { Plus, Edit, Delete, MoreFilled } from '@element-plus/icons-vue'
 import { ElDropdown, ElDropdownMenu, ElDropdownItem } from 'element-plus'
 import ScrollContainer from '@/components/ui/ScrollContainer.vue'
@@ -95,7 +94,6 @@ interface Props {
     visible?: boolean
     knowledgeBases: KnowledgeBase[]
     activeId: string | null
-    searchKeyword: string
 }
 
 const props = defineProps<Props>()
@@ -105,29 +103,24 @@ const emit = defineEmits<{
     create: []
     edit: [kb: KnowledgeBase]
     delete: [kb: KnowledgeBase]
-    'update:searchKeyword': [value: string]
 }>()
+
+// 内部搜索状态
+const searchKeyword = ref('')
 
 /**
  * 过滤后的知识库列表（支持搜索）
  */
 const filteredKnowledgeBases = computed(() => {
-    if (!props.searchKeyword.trim()) {
+    if (!searchKeyword.value || !searchKeyword.value.trim()) {
         return props.knowledgeBases
     }
-    const keyword = props.searchKeyword.toLowerCase().trim()
+    const keyword = searchKeyword.value.toLowerCase().trim()
     return props.knowledgeBases.filter(kb =>
         kb.name?.toLowerCase().includes(keyword) ||
         kb.description?.toLowerCase().includes(keyword)
     )
 })
-
-/**
- * 处理搜索关键词更新
- */
-function handleSearchUpdate(value: string) {
-    emit('update:searchKeyword', value)
-}
 
 /**
  * 处理选中知识库

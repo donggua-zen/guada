@@ -1,72 +1,45 @@
 <template>
-  <div class="min-h-screen flex items-center justify-center bg-gray-50 p-4">
-    <div class="w-full max-w-4xl flex bg-white rounded-lg shadow-2xl overflow-hidden">
-      <!-- 左侧品牌区域 -->
-      <div
-        class="hidden md:flex md:w-1/2 bg-linear-to-br from-blue-500 to-blue-700 text-white p-12 flex-col justify-between">
-        <div>
-          <div class="flex items-center mb-8">
-            <div class="w-12 h-12 rounded-full bg-white bg-opacity-20 flex items-center justify-center mr-4">
-              <el-icon class="text-white text-2xl">
-                <LoginIcon />
+  <div class="login-container">
+    <div class="login-card">
+      <div class="login-header">
+        <div class="logo-area">
+          <el-icon class="logo-icon">
+            <LoginIcon />
+          </el-icon>
+          <h1 class="app-title">AI Chat</h1>
+        </div>
+        <p class="app-subtitle">欢迎回来，请登录您的账户</p>
+      </div>
+
+      <el-form :model="form" :rules="rules" ref="formRef" label-position="top" class="login-form">
+        <el-form-item prop="email">
+          <el-input v-model="form.email" placeholder="邮箱地址" size="large" clearable>
+            <template #prefix>
+              <el-icon class="text-gray-400">
+                <MailIcon />
               </el-icon>
-            </div>
-            <h1 class="text-3xl font-bold">AI Chat</h1>
-          </div>
-          <p class="text-blue-100 text-xl mb-6">智能对话，让思考更高效</p>
-          <p class="text-blue-200 text-base leading-relaxed">
-            开源好用的大语言模型对话平台<br>
-            提供流畅自然的对话体验
-          </p>
-        </div>
-        <div class="text-blue-300 text-sm">
-          &copy; 2026 AI Chat. All rights reserved.
-        </div>
-      </div>
+            </template>
+          </el-input>
+        </el-form-item>
 
-      <!-- 右侧登录表单区域 -->
-      <div class="w-full md:w-1/2 p-12">
-        <div class="mb-10">
-          <h2 class="text-2xl font-semibold text-gray-800">登录</h2>
-          <p class="text-gray-500 text-base mt-2">欢迎回来，请登录您的账户</p>
+        <el-form-item prop="password">
+          <el-input v-model="form.password" type="password" show-password placeholder="密码" size="large">
+            <template #prefix>
+              <el-icon class="text-gray-400">
+                <LockIcon />
+              </el-icon>
+            </template>
+          </el-input>
+        </el-form-item>
+
+        <div class="form-options">
+          <el-checkbox v-model="rememberMe">记住我</el-checkbox>
         </div>
 
-        <!-- 邮箱登录表单 -->
-        <el-form :model="form" :rules="rules" ref="formRef" label-position="top" class="space-y-6">
-          <el-form-item prop="email">
-            <el-input v-model="form.email" placeholder="请输入邮箱地址" size="large" clearable>
-              <template #prefix>
-                <el-icon class="text-gray-400">
-                  <MailIcon />
-                </el-icon>
-              </template>
-            </el-input>
-          </el-form-item>
-
-          <el-form-item prop="password">
-            <el-input v-model="form.password" type="password" show-password placeholder="请输入密码" size="large">
-              <template #prefix>
-                <el-icon class="text-gray-400">
-                  <LockIcon />
-                </el-icon>
-              </template>
-            </el-input>
-          </el-form-item>
-
-          <!-- 记住我与忘记密码 -->
-          <div class="flex items-center justify-between text-base">
-            <el-checkbox v-model="rememberMe" class="text-gray-600">
-              记住我
-            </el-checkbox>
-          </div>
-
-          <!-- 登录按钮 -->
-          <el-button type="primary" size="large" :loading="loading" @click="handleLogin"
-            class="w-full py-4 font-medium rounded-md text-base">
-            {{ loading ? '登录中...' : '登 录' }}
-          </el-button>
-        </el-form>
-      </div>
+        <el-button type="primary" size="large" :loading="loading" @click="handleLogin" class="login-btn">
+          {{ loading ? '登录中...' : '登 录' }}
+        </el-button>
+      </el-form>
     </div>
   </div>
 </template>
@@ -75,7 +48,6 @@
 <script setup lang="ts">
 import { ref, reactive } from 'vue'
 import {
-  PhoneIphoneOutlined as PhoneIcon,
   MailOutlineOutlined as MailIcon,
   LockOutlined as LockIcon,
   LogInOutlined as LoginIcon
@@ -92,11 +64,8 @@ import {
   ElForm,
   ElFormItem,
   ElInput,
-  ElSegmented,
   ElIcon,
   ElCheckbox,
-  ElCarousel,
-  ElCarouselItem,
   ElButton
 } from 'element-plus'
 
@@ -184,11 +153,96 @@ const handleLogin = async (): Promise<void> => {
 </script>
 
 <style scoped>
-/* 自定义样式 */
+.login-container {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-color: var(--color-surface);
+  padding: 20px;
+}
+
+.login-card {
+  width: 100%;
+  max-width: 400px;
+  background: rgba(255, 255, 255, 0.85);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border-radius: 20px;
+  padding: 40px;
+  box-shadow:
+    0 4px 6px -1px rgba(0, 0, 0, 0.05),
+    0 2px 4px -1px rgba(0, 0, 0, 0.03),
+    0 0 0 1px rgba(0, 0, 0, 0.05);
+  transition: all 0.3s ease;
+}
+
+.dark .login-card {
+  background: rgba(30, 30, 30, 0.85);
+  box-shadow:
+    0 4px 6px -1px rgba(0, 0, 0, 0.2),
+    0 2px 4px -1px rgba(0, 0, 0, 0.1),
+    0 0 0 1px rgba(255, 255, 255, 0.05);
+}
+
+.login-header {
+  text-align: center;
+  margin-bottom: 32px;
+}
+
+.logo-area {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.logo-icon {
+  font-size: 28px;
+  color: var(--color-primary);
+}
+
+.app-title {
+  font-size: 24px;
+  font-weight: 600;
+  color: var(--color-text);
+  margin: 0;
+}
+
+.app-subtitle {
+  font-size: 14px;
+  color: var(--color-text-gray);
+  margin: 0;
+}
+
+.login-form {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.form-options {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.login-btn {
+  margin-top: 8px;
+  height: 44px;
+  font-size: 16px;
+  font-weight: 500;
+  border-radius: 10px;
+}
+
+/* Element Plus 深度样式定制 */
 :deep(.el-input__wrapper) {
-  box-shadow: 0 0 0 1px #e5e7eb inset;
-  border-radius: 8px;
+  box-shadow: 0 0 0 1px var(--color-border) inset;
+  border-radius: 10px;
+  background-color: transparent;
   transition: all 0.2s ease;
+  padding: 4px 12px;
 }
 
 :deep(.el-input.is-focus .el-input__wrapper) {
@@ -202,21 +256,17 @@ const handleLogin = async (): Promise<void> => {
   --el-button-hover-border-color: var(--color-primary-hover);
   --el-button-active-bg-color: var(--color-primary-active);
   --el-button-active-border-color: var(--color-primary-active);
-  font-size: 16px;
-}
-
-:deep(.el-button--large) {
-  padding: 16px 20px;
 }
 
 :deep(.el-form-item__label) {
   font-weight: 500;
-  color: #374151;
+  color: var(--color-text);
+  font-size: 14px;
+  padding-bottom: 6px;
 }
 
-/* 复选框样式优化 */
 :deep(.el-checkbox__label) {
   font-size: 14px;
-  color: #6b7280;
+  color: var(--color-text-gray);
 }
 </style>

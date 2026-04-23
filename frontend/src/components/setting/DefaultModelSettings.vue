@@ -11,9 +11,9 @@
             </el-button>
         </div>
 
-        <div class="flex-1 overflow-hidden">
+        <div class="rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-[#1e1e1e] overflow-hidden">
             <ScrollContainer class="h-full">
-                <div class="px-6 py-6 space-y-8">
+                <div class="px-6 py-6 space-y-8"> 
                     <!-- 对话设置 -->
                     <div class="mb-8">
                         <el-form ref="chatFormRef" :model="settingsForm" label-position="left" label-width="120px"
@@ -54,7 +54,7 @@
                     </div>
 
                     <!-- 翻译设置 -->
-                    <div class="mb-8">
+                    <!-- <div class="mb-8">
                         <el-form ref="translationFormRef" :model="settingsForm" :rules="translationRules"
                             label-position="left" label-width="120px" size="large">
                             <el-form-item label="翻译模型" prop="defaultTranslationModelId">
@@ -73,7 +73,7 @@
                                     placeholder="请输入翻译任务的系统提示词" :autosize="{ minRows: 4, maxRows: 6 }" />
                             </el-form-item>
                         </el-form>
-                    </div>
+                    </div> -->
 
                     <!-- 历史压缩设置 -->
                     <div class="mb-8">
@@ -90,10 +90,10 @@
                                         :label="historyCompressionModelName" v-if="historyCompressionModelName" />
                                 </el-select>
                             </el-form-item>
-                            <el-form-item label="历史压缩提示词" prop="defaultHistoryCompressionPrompt">
+                            <!-- <el-form-item label="历史压缩提示词" prop="defaultHistoryCompressionPrompt">
                                 <el-input v-model="settingsForm.defaultHistoryCompressionPrompt" type="textarea"
                                     placeholder="请输入历史压缩任务的系统提示词" :autosize="{ minRows: 4, maxRows: 6 }" />
-                            </el-form-item>
+                            </el-form-item> -->
                         </el-form>
                     </div>
                 </div>

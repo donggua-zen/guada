@@ -1,98 +1,59 @@
 <template>
-    <div class="h-full flex flex-col md:max-w-[1180px] md:mx-auto">
-        <SidebarLayout v-model:sidebar-visible="sidebarVisible" :show-toggle-button="false"
-            :sidebar-width="sidebarWidth" :z-index="51" class="flex-1 overflow-hidden">
-            <template #sidebar>
-                <div
-                    class="flex flex-col w-full h-full border-r border-gray-200 dark:border-gray-700 items-center relative px-3 md:px-0 py-2 pr-3 bg-gray-100 md:bg-white dark:bg-transparent">
-                    <div class="lex flex-col w-full">
-                        <div class="flex-1 flex items-center justify-start mx-2 my-3">
-                            <span class="text-md text-gray-400">账户中心</span>
-                        </div>
-                        <div class="flex flex-col w-full rounded-lg bg-white md:bg-transparent px-4 md:px-0">
-                            <div v-for="item in sidebarItems" 
-                                @click="handleItemClick(item)"
-                                class="flex items-center justify-center transition-colors duration-200" 
-                                :class="{
-                                    'bg-[var(--color-primary-100)] text-[var(--color-primary)]': !isMobile && currentTabValue === item.path,
-                                    'border-b border-gray-200 py-3 px-1 last:border-b-0': isMobile,
-                                    'rounded-lg mx-1 mb-2 mt-1 py-1 px-2 cursor-pointer': !isMobile,
-                                    'active:bg-[var(--color-primary-100)]': isMobile,
-                                    'hover:text-[var(--color-primary)] hover:bg-[var(--color-primary-100)]': !isMobile,
-                                }">
-                                <div class="flex-1 w-full flex items-center gap-x-2">
-                                    <component :is="item.icon" class="w-5 h-5"></component>
-                                    <span class="text-md">{{ item.label }}</span>
+    <div class="bg-(--color-surface) h-full">
+        <div class="h-full flex flex-col md:max-w-200 md:mx-auto p-4">
+            <div class="flex-1 overflow-hidden flex flex-col">
+                <div class="border-gray-200 dark:border-gray-700">
+                    <el-tabs v-model="currentTabValue" @tab-change="handleTabChange" class="account-center-tabs">
+                        <el-tab-pane v-for="item in tabItems" :key="item.path" :label="item.label" :name="item.path">
+                            <template #label>
+                                <div class="flex items-center gap-2">
+                                    <component :is="item.icon" class="w-[17px] h-[17px]"></component>
+                                    <span class="text-[15px]">{{ item.label }}</span>
                                 </div>
-                            </div>
+                            </template>
+                        </el-tab-pane>
+                    </el-tabs>
+                </div>
+                <div class="flex-1 overflow-hidden py-3 md:py-3">
+                    <div class="h-full overflow-y-auto">
+                        <div class="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-4 max-w-4xl mx-auto">
+                            <template v-if="currentTabValue === 'profile'">
+                                <UserProfile ref="userProfileRef" />
+                            </template>
+                            <!-- <template v-else-if="currentTabValue === 'subaccounts'">
+                                <UserSubaccounts ref="userSubaccountsRef" />
+                            </template> -->
+                            <template v-else-if="currentTabValue === 'security'">
+                                <UserSecurity ref="userSecurityRef" />
+                            </template>
                         </div>
                     </div>
                 </div>
-            </template>
-            <template #content>
-                <div class="h-full flex flex-col" v-if="currentItem">
-                    <div
-                        class="relative flex items-center justify-center md:justify-start py-2 border-b-1 border-gray-100 mb-2 mx-0 md:mx-3">
-                        <el-button v-if="isMobile" class="absolute block left-1" text style="font-size: 24px"
-                            @click="router.back()">
-                            <template #icon>
-                                <ArrowBackIosFilled />
-                            </template>
-                        </el-button>
-                        <div class="text-lg">{{ currentItem.label }}</div>
-                        <div class="flex items-center"></div>
-                    </div>
-                    <div class="p-3 md:p-3 md:w-full flex flex-col flex-1 overflow-hidden min-h-0">
-                        <template v-if="currentTabValue === 'profile'">
-                            <UserProfile ref="userProfileRef" />
-                        </template>
-                        <template v-else-if="currentTabValue === 'subaccounts'">
-                            <UserSubaccounts ref="userSubaccountsRef" />
-                        </template>
-                        <template v-else-if="currentTabValue === 'security'">
-                            <UserSecurity ref="userSecurityRef" />
-                        </template>
-                    </div>
-                </div>
-            </template>
-        </SidebarLayout>
+            </div>
+        </div>
     </div>
 </template>
 
 <script setup lang="ts">
 import { ref, onMounted, computed, watch } from 'vue'
-import { SidebarLayout } from "../ui";
-import { ElButton } from 'element-plus';
+import { ElTabs, ElTabPane } from 'element-plus'
 import UserProfile from './UserProfile.vue'
-import UserSubaccounts from './UserSubaccounts.vue'
+// import UserSubaccounts from './UserSubaccounts.vue'
 import UserSecurity from './UserSecurity.vue'
 
 import {
     PersonOutlineOutlined,
-    SupervisedUserCircleOutlined,
     VerifiedUserOutlined,
-    ArrowBackIosFilled,
 } from '@vicons/material'
 
 import { useAuthStore } from '../../stores/auth'
-import { usePopup } from '../../composables/usePopup'
 import { useRouter, useRoute } from 'vue-router'
-import { useBreakpoints, breakpointsTailwind } from '@vueuse/core'
 
-const breakpoints = useBreakpoints(breakpointsTailwind)
-const isMobile = breakpoints.smaller('md')
-
-const { confirm } = usePopup()
 const authStore = useAuthStore()
-const sidebarVisible = ref(true)
 const router = useRouter()
 const route = useRoute()
 
-const sidebarWidth = computed(() => {
-    return isMobile.value ? -1 : 200
-})
-
-// 账户中心侧边栏菜单
+// 账户中心 Tab 菜单（暂时隐藏子账户）
 const sidebarItems = [
     {
         label: '账户概览',
@@ -100,12 +61,12 @@ const sidebarItems = [
         icon: PersonOutlineOutlined,
         roles: ['primary', 'subaccount']
     },
-    {
-        label: '子账户',
-        path: 'subaccounts',
-        icon: SupervisedUserCircleOutlined,
-        roles: ['primary'],
-    },
+    // {
+    //     label: '子账户',
+    //     path: 'subaccounts',
+    //     icon: SupervisedUserCircleOutlined,
+    //     roles: ['primary'],
+    // },
     {
         label: '安全设置',
         path: 'security',
@@ -119,6 +80,9 @@ const filteredSidebarItems = computed(() => {
     const userRole = authStore.user?.role || 'primary'
     return sidebarItems.filter(item => !item.roles || item.roles.includes(userRole))
 })
+
+// Tab 数据（用于模板渲染）
+const tabItems = computed(() => filteredSidebarItems.value)
 
 // 获取默认标签页
 const getDefaultTabPath = () => {
@@ -134,43 +98,22 @@ const getDefaultTabPath = () => {
 
 const currentTabValue = ref(getDefaultTabPath())
 
-const currentItem = computed(() => {
-    return filteredSidebarItems.value.find(item => item.path === currentTabValue.value) || null
-})
-
-const handleItemClick = (item: any) => {
-    if (!item?.path) {
-        return;
-    }
-    if (isMobile.value) {
-        sidebarVisible.value = false
-    }
-    router.replace({ name: 'AccountCenter', params: { tab: item.path } })
+// Tab 切换处理
+const handleTabChange = (tabName: string | number) => {
+    const tabPath = typeof tabName === 'string' ? tabName : String(tabName)
+    router.replace({ name: 'AccountCenter', params: { tab: tabPath } })
 }
 
-watch(() => isMobile.value, (newState) => {
-    if (!newState) {
-        sidebarVisible.value = true
-    } else {
-        sidebarVisible.value = !route.params.tab
-    }
-})
-
+// 监听路由参数变化
 watch(() => route.params.tab, (newPath) => {
-    if (isMobile.value) {
-        sidebarVisible.value = !newPath
-    }
     // 确保 newPath 是字符串类型
     const tabPath = Array.isArray(newPath) ? newPath[0] : (newPath as string)
-    currentTabValue.value = tabPath || getDefaultTabPath()
+    if (tabPath && tabPath !== currentTabValue.value) {
+        currentTabValue.value = tabPath
+    }
 })
 
 onMounted(() => {
-    if (isMobile.value) {
-        sidebarVisible.value = !route.params.tab
-    } else {
-        sidebarVisible.value = true
-    }
     // 如果没有路由参数，则跳转到默认标签页
     if (!route.params.tab) {
         const defaultTab = getDefaultTabPath()
@@ -182,3 +125,20 @@ onMounted(() => {
     }
 })
 </script>
+
+<style scoped>
+.account-center-tabs :deep(.el-tabs__header) {
+    margin-bottom: 0;
+}
+
+.account-center-tabs :deep(.el-tabs__nav-wrap::after) {
+    height: 1px;
+}
+
+.account-center-tabs :deep(.el-tabs__item) {
+    padding: 0 18px;
+    height: 44px;
+    line-height: 44px;
+    font-size: 14px;
+}
+</style>

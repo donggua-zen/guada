@@ -4,18 +4,6 @@
 :root {
     --color-primary-0f: #fb72990f;
 
-    /* --color-primary: oklch(72.566% 0.17069 4.4542);
-    --color-primary-50: oklch(97.435% 0.01346 0.25383);
-    --color-primary-100: oklch(95.25% 0.02411 358.28);
-    --color-primary-200: oklch(91.107% 0.04823 358.6);
-    --color-primary-300: oklch(86.951% 0.0718 359.99);
-    --color-primary-400: oklch(83.232% 0.09601 1.1852);
-    --color-primary-500: oklch(79.406% 0.12101 1.7634);
-    --color-primary-600: oklch(75.894% 0.14668 3.373);
-    --color-primary-700: oklch(72.566% 0.17069 4.4542);
-    --color-primary-800: oklch(69.574% 0.19291 5.8639);
-    --color-primary-900: oklch(67.118% 0.21299 8.1541);
-    --color-primary-950: oklch(66.081% 0.22168 9.2391); */
     --color-primary: oklch(72.118% 0.17434 4.6237);
     --color-primary-50: oklch(98.921% 0.00548 3.3339);
     --color-primary-100: oklch(96.614% 0.01843 356.42);
@@ -25,10 +13,8 @@
     --color-primary-500: oklch(79.406% 0.12101 1.7634);
     --color-primary-600: oklch(75.718% 0.14788 3.5877);
     --color-primary-700: oklch(72.118% 0.17434 4.6237);
-    /* --color-primary-800: oklch(70.529% 0.18714 5.6012); */
     --color-primary-800: oklch(69.574% 0.19291 5.8639);
     --color-primary-900: oklch(68.911% 0.1982 6.5103);
-    /* --color-primary-950: oklch(68.276% 0.20329 7.1683); */
     --color-primary-950: oklch(66.081% 0.22168 9.2391);
 
 
@@ -75,16 +61,26 @@
     --color-bubble-user-bg: #efefef;
     --color-bubble-user-text: #1F2937;
     --color-bubble-user-border: #efefef;
-    --color-bubble-assitant-bg: var(--color-bg);
+    --color-bubble-assitant-bg: none;
     --color-bubble-assitant-text: #1F2937;
     --color-bubble-assitant-border: none;
+
+    --color-sidebar-bg: var(--color-surface);
+    --color-sidebar-border: var(--color-surface);
+    --color-sidebar-bg-active: var(--color-primary-100);
+    --color-sidebar-text-active: var(--color-primary);
+    --color-sidebar-bg-hover: var(--color-primary-100);
+    --color-sidebar-text-hover: var(--color-primary);
+    --color-titlebar-bg: var(--color-surface);
+    --color-titlebar-border: var(--color-surface);
+
     /* 聊天对话样式 */
-    --color-conversation-bg: #fff;
+    --color-conversation-bg: var(--color-bg);
     --color-conversation-text: #333;
-    --color-conversation-border: #efefef;
+    --color-conversation-border: transparent;
     --color-conversation-bg-active: var(--color-primary-100);
     --color-conversation-text-active: var(--color-primary);
-    --color-conversation-bg-hover: var(--color-primary-100);
+    --color-conversation-bg-hover: var(--color-conversation-bg-active);
     --color-conversation-text-hover: var(--color-primary);
 
     --size-text-base: 16px;
@@ -168,6 +164,10 @@ html.dark {
     --el-color-primary-light-3: var(--color-primary-800) !important;
     --el-color-primary-dark-2: var(--color-primary-950) !important;
     --el-color-primary-light-1: var(--color-primary-950) !important;
+    
+    /* 标题栏样式变量 */
+    --titlebar-text-color: #333;
+    --titlebar-hover-bg: rgba(0, 0, 0, 0.06);
 }
 
 html.dark {
@@ -179,6 +179,10 @@ html.dark {
     --el-color-primary-light-3: var(--color-primary-800) !important;
     --el-color-primary-dark-2: var(--color-primary-950) !important;
     --el-color-primary-light-1: var(--color-primary-950) !important;
+    
+    /* 标题栏暗色模式样式变量 */
+    --titlebar-text-color: #999;
+    --titlebar-hover-bg: rgba(255, 255, 255, 0.08);
 }
 
 /* .el-button:not(.el-button--large) {

@@ -1,72 +1,49 @@
 <template>
-  <div class="h-full flex flex-col md:max-w-295 md:mx-auto">
-    <SidebarLayout v-model:sidebar-visible="sidebarVisible" :sidebar-position="'left'" :z-index="50"
-      :show-toggle-button="false" :sidebar-width="200">
-      <template #sidebar>
-        <!-- 左侧二级侧边栏 - 助手分组 -->
-        <div
-          class="flex flex-col w-full h-full border-r border-gray-200 dark:border-gray-700 items-center relative px-3 md:px-0 py-2 pr-3 bg-gray-100 md:bg-white dark:bg-transparent">
-          <div class="lex flex-col w-full">
-            <div class="flex-1 flex items-center justify-start mx-2 my-3">
-              <span class="text-md text-gray-400">助手列表</span>
-            </div>
-            <div class="space-y-1 px-2">
-              <div class="px-2 py-1.5 text-sm rounded cursor-pointer transition-colors duration-200"
-                :class="currentGroupId === null ? 'bg-(--color-primary-100) text-(--color-primary)' : 'hover:text-(--color-primary) hover:bg-(--color-primary-100)'"
-                @click="selectGroup(null)">
-                全部助手
-              </div>
-              <div v-for="group in groups" :key="group.id"
-                class="group-item px-2 py-1.5 text-sm rounded cursor-pointer transition-colors duration-200 flex justify-between items-center group"
-                :class="currentGroupId === group.id ? 'bg-(--color-primary-100) text-(--color-primary)' : 'hover:text-(--color-primary) hover:bg-(--color-primary-100)'">
-                <span class="truncate flex-1" @click="selectGroup(group.id)">{{ group.name }}</span>
-                <el-dropdown trigger="click" @command="(cmd) => handleGroupCommand(cmd, group)" @click.stop>
-                  <template #dropdown>
-                    <el-dropdown-menu>
-                      <el-dropdown-item command="rename">
-                        <EditOutlined class="w-4 h-4 mr-2 inline-block" />
-                        重命名
-                      </el-dropdown-item>
-                      <el-dropdown-item command="delete">
-                        <DeleteOutlineOutlined class="w-4 h-4 mr-2 inline-block" />
-                        <span style="color: red;">删除</span>
-                      </el-dropdown-item>
-                    </el-dropdown-menu>
-                  </template>
-                  <div @click.stop class="group-action-trigger">
-                    <el-icon class="w-4 h-4">
-                      <MoreHorizOutlined />
-                    </el-icon>
-                  </div>
-                </el-dropdown>
-              </div>
-              <div class="pt-2 mt-2">
-                <el-button size="small" class="w-full justify-start group-btn" @click="showCreateGroupDialog">
-                  <el-icon class="mr-1">
-                    <PlusOutlined />
-                  </el-icon>
-                  新建分组
-                </el-button>
-              </div>
-            </div>
+  <div class="h-full flex flex-col md:max-w-260 md:mx-auto">
+    <div class="flex flex-col h-full p-3">
+      <!-- 头部 -->
+      <div class="flex justify-between items-center py-4">
+        <span class="text-lg font-semibold text-gray-800 dark:text-gray-200">助手列表</span>
+        <el-button type="primary" @click="createCharacter" class="flex items-center">
+          <template #icon>
+            <PlusOutlined />
+          </template>
+          新建助手
+        </el-button>
+      </div>
+
+      <!-- 分组筛选标签区域 -->
+      <div class="pb-4 border-b border-gray-200 dark:border-gray-700">
+        <div class="flex flex-wrap gap-2">
+          <!-- 全部助手标签 -->
+          <div
+            class="filter-tag px-4 py-2 rounded-full cursor-pointer transition-all duration-200 select-none"
+            :class="currentGroupId === null ? 'active' : 'inactive'"
+            @click="selectGroup(null)">
+            全部助手
+          </div>
+          
+          <!-- 分组标签 -->
+          <div v-for="group in groups" :key="group.id"
+            class="filter-tag group-tag px-4 py-2 rounded-full cursor-pointer transition-all duration-200 select-none flex items-center gap-2"
+            :class="currentGroupId === group.id ? 'active' : 'inactive'"
+            @click="selectGroup(group.id)"
+            @contextmenu.prevent="handleGroupContextMenu($event, group)">
+            <span>{{ group.name }}</span>
+          </div>
+          
+          <!-- 新建分组按钮 -->
+          <div class="filter-tag new-group-btn px-4 py-2 rounded-full cursor-pointer transition-all duration-200 select-none"
+            @click="showCreateGroupDialog">
+            <el-icon :size="16" class="mr-1">
+              <PlusOutlined />
+            </el-icon>
+            新建分组
           </div>
         </div>
-      </template>
-      <template #content>
-        <div class="flex flex-col h-full p-3">
-          <!-- 头部 -->
-          <div class="flex justify-between items-center py-4">
-            <span class="text-lg font-semibold text-gray-800 dark:text-gray-200">助手列表</span>
-            <el-button type="primary" @click="createCharacter" class="flex items-center">
-              <template #icon>
-                <PlusOutlined />
-              </template>
-              新建助手
-            </el-button>
-          </div>
-
-          <!-- 助手列表 -->
-          <div class="flex-1 overflow-y-auto">
+      </div>
+      <!-- 助手列表 -->
+      <div class="flex-1 overflow-y-auto pt-4">
             <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 w-full">
               <!-- 助手卡片 -->
               <div v-for="character in characters" :key="character.id"
@@ -133,17 +110,38 @@
                 <p class="text-sm mt-1">点击上方按钮创建第一个助手</p>
               </div>
             </div>
-          </div>
-        </div>
-      </template>
-    </SidebarLayout>
+      </div>
+    </div>
+
+    <!-- 右键菜单 -->
+    <div v-if="contextMenu.visible"
+      class="fixed bg-white dark:bg-gray-800 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700 py-1 z-50 min-w-40"
+      :style="{ left: contextMenu.x + 'px', top: contextMenu.y + 'px' }" @click.stop>
+      <div
+        class="px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 cursor-pointer flex items-center gap-2"
+        @click="handleRenameFromMenu">
+        <el-icon>
+          <EditOutlined />
+        </el-icon>
+        重命名
+      </div>
+      <div
+        class="px-4 py-2 text-sm text-red-600 dark:text-red-400 hover:bg-gray-100 dark:hover:bg-gray-700 cursor-pointer flex items-center gap-2"
+        @click="handleDeleteFromMenu">
+        <el-icon>
+          <DeleteOutlineOutlined />
+        </el-icon>
+        删除
+      </div>
+    </div>
+
     <!-- 助手弹窗 -->
     <CharacterModal v-model:show="showModal" v-model:characterId="currentCharacterId" @saved="handleSaved" />
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, reactive } from 'vue'
+import { ref, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import {
   ElIcon,
@@ -169,8 +167,6 @@ import {
 } from '@vicons/ionicons5'
 
 import { useTitle } from '../composables/useTitle'
-import { useStorage } from '@vueuse/core'
-import { SidebarLayout } from './ui'
 import { Avatar } from './ui'
 import CharacterModal from './CharacterModal.vue'
 import { apiService } from '../services/ApiService'
@@ -188,7 +184,14 @@ const currentGroupId = ref<string | null>(null)
 const showModal = ref(false)
 const currentCharacterId = ref('')
 const loading = ref(false)
-const sidebarVisible = useStorage<boolean>('CharacterSidebarVisible', true)
+
+// 右键菜单状态
+const contextMenu = ref({
+  visible: false,
+  x: 0,
+  y: 0,
+  group: null as CharacterGroup | null
+})
 
 // 加载分组列表
 const loadGroups = async (): Promise<void> => {
@@ -219,39 +222,82 @@ const selectGroup = (groupId: string | null): void => {
   loadCharacters(groupId || undefined)
 }
 
-// 处理分组命令
+// 处理分组命令（保留用于兼容）
 const handleGroupCommand = async (command: string, group: CharacterGroup): Promise<void> => {
   if (command === 'rename') {
-    try {
-      const { value } = await ElMessageBox.prompt('请输入新的分组名称', '重命名分组', {
-        inputValue: group.name,
-        inputPattern: /\S+/,
-        inputErrorMessage: '分组名称不能为空',
-        confirmButtonText: '确定',
-        cancelButtonText: '取消'
-      })
-      await apiService.updateCharacterGroup(group.id, { name: value })
-      await loadGroups()
-      toast.success('重命名成功')
-    } catch (e) {
-      // 取消操作
-    }
+    await handleRenameGroup(group)
   } else if (command === 'delete') {
-    try {
-      const result = await confirm('确认删除', `确定要删除分组「${group.name}」吗？该分组下的助手将变为未分组状态。`)
-      if (result) {
-        await apiService.deleteCharacterGroup(group.id)
-        if (currentGroupId.value === group.id) {
-          currentGroupId.value = null
-        }
-        await loadGroups()
-        await loadCharacters(currentGroupId.value || undefined)
-        toast.success('分组删除成功')
+    await handleDeleteGroup(group)
+  }
+}
+
+// 处理分组右键菜单
+const handleGroupContextMenu = (event: MouseEvent, group: CharacterGroup): void => {
+  event.preventDefault()
+  contextMenu.value = {
+    visible: true,
+    x: event.clientX,
+    y: event.clientY,
+    group
+  }
+}
+
+// 从重命名菜单触发
+const handleRenameFromMenu = async (): Promise<void> => {
+  if (contextMenu.value.group) {
+    await handleRenameGroup(contextMenu.value.group)
+  }
+  closeContextMenu()
+}
+
+// 从删除菜单触发
+const handleDeleteFromMenu = async (): Promise<void> => {
+  if (contextMenu.value.group) {
+    await handleDeleteGroup(contextMenu.value.group)
+  }
+  closeContextMenu()
+}
+
+// 关闭右键菜单
+const closeContextMenu = (): void => {
+  contextMenu.value.visible = false
+  contextMenu.value.group = null
+}
+
+// 重命名分组
+const handleRenameGroup = async (group: CharacterGroup): Promise<void> => {
+  try {
+    const { value } = await ElMessageBox.prompt('请输入新的分组名称', '重命名分组', {
+      inputValue: group.name,
+      inputPattern: /\S+/,
+      inputErrorMessage: '分组名称不能为空',
+      confirmButtonText: '确定',
+      cancelButtonText: '取消'
+    })
+    await apiService.updateCharacterGroup(group.id, { name: value })
+    await loadGroups()
+    toast.success('重命名成功')
+  } catch (e) {
+    // 取消操作
+  }
+}
+
+// 删除分组
+const handleDeleteGroup = async (group: CharacterGroup): Promise<void> => {
+  try {
+    const result = await confirm('确认删除', `确定要删除分组「${group.name}」吗？该分组下的助手将变为未分组状态。`)
+    if (result) {
+      await apiService.deleteCharacterGroup(group.id)
+      if (currentGroupId.value === group.id) {
+        currentGroupId.value = null
       }
-    } catch (error: any) {
-      console.error('删除分组失败:', error)
-      toast.error(error.message || '删除失败')
+      await loadGroups()
+      await loadCharacters(currentGroupId.value || undefined)
+      toast.success('分组删除成功')
     }
+  } catch (error: any) {
+    console.error('删除分组失败:', error)
+    toast.error(error.message || '删除失败')
   }
 }
 
@@ -328,6 +374,14 @@ const handleSaved = async (characterData: any): Promise<void> => {
 onMounted(async (): Promise<void> => {
   await loadGroups()
   loadCharacters()
+  
+  // 点击其他地方关闭菜单
+  window.addEventListener('click', closeContextMenu)
+})
+
+// 组件卸载时清理事件监听器
+onUnmounted(() => {
+  window.removeEventListener('click', closeContextMenu)
 })
 </script>
 
@@ -353,39 +407,50 @@ onMounted(async (): Promise<void> => {
   background-color: rgba(239, 68, 68, 0.1);
 }
 
-/* 分组按钮样式 */
-.group-btn {
-  background-color: #f5f7fa;
-  border: none;
-  color: #606266;
-  transition: all 0.2s ease;
-}
-
-.group-btn:hover {
-  background-color: #e4e7ed;
-}
-
-/* 分组操作按钮样式 */
-.group-action-trigger {
-  display: flex;
+/* 筛选标签样式 */
+.filter-tag {
+  font-size: 14px;
+  border: 1px solid transparent;
+  display: inline-flex;
   align-items: center;
-  justify-content: center;
-  padding: 0.25rem;
-  border-radius: 0.25rem;
-  cursor: pointer;
-  transition: background-color 0.2s ease;
-  opacity: 0;
 }
 
-.group-item:hover .group-action-trigger {
-  opacity: 1;
+.filter-tag.inactive {
+  background-color: var(--color-surface);
+  color: var(--color-text-gray);
+  border-color: var(--color-border);
 }
 
-.group-action-trigger:hover {
-  background-color: rgba(0, 0, 0, 0.05);
+.filter-tag.inactive:hover {
+  background-color: var(--color-primary-100);
+  color: var(--color-primary);
+  border-color: var(--color-primary-200);
 }
 
-.dark .group-action-trigger:hover {
-  background-color: rgba(255, 255, 255, 0.1);
+.filter-tag.active {
+  background-color: var(--color-primary);
+  color: white;
+  border-color: var(--color-primary);
+  box-shadow: 0 2px 8px rgba(251, 114, 153, 0.3);
 }
+
+.filter-tag.active:hover {
+  background-color: var(--color-primary-hover);
+  border-color: var(--color-primary-hover);
+}
+
+/* 新建分组按钮特殊样式 */
+.new-group-btn {
+  background-color: transparent;
+  border: 1px dashed var(--color-border);
+  color: var(--color-text-gray);
+}
+
+.new-group-btn:hover {
+  background-color: var(--color-primary-100);
+  border-color: var(--color-primary);
+  color: var(--color-primary);
+}
+
+/* 分组标签中的操作按钮样式已移除，改为右键菜单 */
 </style>

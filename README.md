@@ -1,209 +1,490 @@
 # AI Chat - 智能AI对话系统
 
-> 目前项目还在持续开发中，很多功能仍未实现。
+> 一个功能强大的企业级AI对话平台，支持多模型接入、知识库检索增强(RAG)、MCP工具调用、长上下文管理等高级功能。
 
-AI Chat 是一个功能强大的AI对话系统，支持配置兼容的OpenAI API接口、多角色对话、会话管理、模型配置和多种高级AI功能。该项目采用前后端分离架构，后端基于Python Flask，前端使用Vue 3 + Vite构建。
-
-![Python](https://img.shields.io/badge/Python-3.8+-blue.svg)
+![NestJS](https://img.shields.io/badge/NestJS-11.x-red.svg)
 ![Vue.js](https://img.shields.io/badge/Vue.js-3.x-4FC08D?style=flat&logo=vue.js&logoColor=white)
-![Flask](https://img.shields.io/badge/Flask-2.x-black.svg)
+![TypeScript](https://img.shields.io/badge/TypeScript-6.x-blue.svg)
+![Prisma](https://img.shields.io/badge/Prisma-7.x-2D3748?style=flat&logo=prisma&logoColor=white)
 ![License](https://img.shields.io/badge/license-MIT-blue.svg)
 
-## 功能特点
+## 📋 目录
 
-- 💬 实时AI对话体验
-- 👤 多角色设定与个性化
-- 🧠 高级记忆管理策略（滑动窗口、摘要增强等）
-- 📝 对话历史记录与管理
-- 🤖 多模型支持（兼容OpenAI、阿里云等多种LLM提供商）
-- 🔍 RAG（检索增强生成）支持
-- 🌐 Web搜索集成
-- 📊 Token统计与分析
-- 🔐 用户认证与权限管理
-- 🎨 响应式前端界面
-- 📁 文件上传与管理
+- [项目简介](#项目简介)
+- [核心功能](#核心功能)
+- [技术架构](#技术架构)
+- [快速开始](#快速开始)
+- [项目结构](#项目结构)
+- [API文档](#api文档)
+- [开发指南](#开发指南)
+- [部署说明](#部署说明)
+- [贡献指南](#贡献指南)
 
-![输入图片说明](images/image.png)
+## 🎯 项目简介
 
-![输入图片说明](images/image2.png)
+AI Chat 是一个现代化的全栈AI对话应用，采用前后端分离架构。后端基于 NestJS + TypeScript 构建，前端使用 Vue 3 + Vite。系统支持多种LLM提供商（OpenAI、阿里云、智谱等），集成了RAG知识库、MCP协议工具调用、会话上下文压缩、多轮工具调用等高级特性。
 
-![输入图片说明](images/image3.png)
+### 主要特点
 
-## 技术架构
+- **多模型支持**: 兼容 OpenAI、阿里云、智谱GLM、Google Gemini 等多种LLM提供商
+- **RAG知识库**: 支持PDF、Word、TXT等文档上传，自动分块向量化，实现精准检索增强生成
+- **MCP工具集成**: 支持 Model Context Protocol，可连接外部MCP服务器扩展AI能力
+- **智能上下文管理**: 自动摘要压缩、滑动窗口策略、Token统计与优化
+- **多角色系统**: 支持创建个性化AI角色，分组管理，灵活切换
+- **实时流式响应**: SSE流式输出，支持思考过程展示、工具调用可视化
+- **用户权限管理**: JWT认证，主账户/子账户体系，细粒度权限控制
+- **文件夹层级上传**: 知识库支持完整的文件夹层级结构管理
+
+## ✨ 核心功能
+
+### 💬 智能对话系统
+
+- **流式对话**: 基于SSE的实时流式响应，支持文本、推理内容、工具调用的增量展示
+- **消息再生**: 支持三种再生模式（覆盖、多版本、追加），灵活管理对话历史
+- **会话锁定**: 防止并发请求冲突，确保会话一致性
+- **中断处理**: 客户端断开时自动中止LLM请求，节省资源
+
+### 🧠 上下文管理
+
+- **智能摘要压缩**: 当对话超出上下文窗口时，自动生成历史摘要并压缩旧消息
+- **滑动窗口策略**: 可配置的记忆长度，平衡上下文质量与Token消耗
+- **语义轮次分组**: 按对话轮次组织消息，保持逻辑完整性
+- **Token统计**: 实时监控Token使用情况，显示使用率和剩余容量
+
+### 📚 RAG知识库
+
+- **多格式支持**: PDF、DOCX、TXT等常见文档格式
+- **智能分块**: 可配置的chunk大小、重叠率，支持最小分块过滤
+- **混合检索**: 集成 sqlite-vec 向量搜索 + FTS5全文检索，支持语义+关键词加权融合
+- **中文优化**: 内置 jieba 分词器，精准支持中文关键词搜索
+- **文件夹层级**: 完整的目录树结构，支持批量上传和管理
+- **处理进度追踪**: 实时显示文档处理状态和进度百分比
+
+### 🔧 MCP工具调用
+
+- **MCP协议支持**: 兼容 Model Context Protocol 标准
+- **动态工具发现**: 自动从MCP服务器获取可用工具列表
+- **多轮工具执行**: 支持Agent循环，连续调用多个工具完成任务
+- **工具命名空间**: 清晰的工具分类和组织（mcp、time、memory、knowledge_base）
+
+### 👤 用户与角色系统
+
+- **JWT认证**: 安全的用户认证机制
+- **角色分组**: 将AI角色按用途分组，便于管理
+- **个性化配置**: 每个角色可独立设置系统提示词、温度参数等
+
+### 📊 监控与优化
+
+- **思考时长统计**: 记录模型的推理时间
+- **Token使用分析**: 详细的Token消耗统计
+- **错误处理**: 完善的异常捕获和错误信息返回
+- **性能优化**: 批量SQL操作、索引优化、缓存策略
+
+## 🏗️ 技术架构
 
 ### 后端技术栈
 
-- [Python 3.8+](https://www.python.org/)
-- [Flask](https://flask.palletsprojects.com/) Web框架
-- [SQLAlchemy](https://www.sqlalchemy.org/) ORM
-- [Alembic](https://alembic.sqlalchemy.org/) 数据库迁移工具
-- [SQLite](https://www.sqlite.org/) 默认数据库（支持扩展至MySQL/PostgreSQL）
+| 技术 | 版本 | 用途 |
+|------|------|------|
+| **NestJS** | ^11.1.18 | Node.js Web框架 |
+| **TypeScript** | ^6.0.2 | 类型安全的JavaScript超集 |
+| **Prisma ORM** | ^7.6.0 | 数据库ORM和迁移工具 |
+| **SQLite** | - | 主业务数据库（通过Better-SQLite3） |
+| **sqlite-vec** | ^0.1.9 | SQLite向量搜索扩展 |
+| **@node-rs/jieba** | ^2.0.1 | 中文分词器（用于关键词搜索） |
+| **Passport-JWT** | ^4.0.1 | JWT认证中间件 |
+| **@modelcontextprotocol/sdk** | ^1.29.0 | MCP协议SDK |
+| **tiktoken** | ^1.0.22 | OpenAI Tokenizer |
+| **pdf-parse** | ^2.4.5 | PDF内容提取 |
+| **mammoth** | ^1.12.0 | Word文档解析 |
+| **sharp** | ^0.34.5 | 图片处理 |
 
 ### 前端技术栈
 
-- [Vue 3](https://vuejs.org/) 渐进式JavaScript框架
-- [Vite](https://vitejs.dev/) 构建工具
-- [Pinia](https://pinia.vuejs.org/) 状态管理
-- [Tailwind CSS](https://tailwindcss.com/) 样式框架
-- [Naive UI](https://www.naiveui.com/) Vue 3 组件库
-
-## 核心特性详解
-
-### 多角色对话系统
-系统支持创建和管理多个AI角色，每个角色可以有不同的个性、背景和对话风格设置。
-
-### 高级记忆策略
-AI Chat实现了多种记忆管理策略，确保在长对话中能够有效管理上下文：
-- **无记忆策略**：每次对话独立，不保留历史记录
-- **滑动窗口策略**：只保留最近的几条对话记录
-- **摘要增强滑动窗口策略**：结合对话摘要和关键信息检索，实现更智能的上下文管理  **(开发中...)** 
-
-### 多模型支持
-系统支持接入多种大语言模型提供商：
-- OpenAI
-- 阿里云
-- 硅基流动
-- 可轻松扩展支持更多模型提供商
-
-### RAG（检索增强生成，开发中）
-通过向量数据库集成，实现基于知识库的问答功能，提升AI回答的准确性和专业性。
-
-## 快速开始
-
-### 环境要求
-
-- Python 3.8+
-- Node.js 16+
-- npm/yarn
-
-### 后端部署
-
-1. 进入后端目录：
-```bash
-cd backend
-```
-
-2. 创建虚拟环境并安装依赖：
-```bash
-python -m venv venv
-source venv/bin/activate  # Linux/Mac
-# 或 venv\Scripts\activate  # Windows
-
-pip install -r requirements.txt
-```
-
-3. 初始化数据库：
-```bash
-alembic upgrade head
-```
-
-4. 启动后端服务：
-```bash
-python run.py
-```
-
-### 前端部署
-
-1. 进入前端目录：
-```bash
-cd frontend
-```
-
-2. 安装依赖：
-```bash
-npm install
-```
-
-3. 启动开发服务器：
-```bash
-npm run dev
-```
-
-4. 构建生产版本：
-```bash
-npm run build
-```
-
-## 设置密码
-
-**注意初次访问请访问 http://xxxxx/password设置管理员账户！！！**
-
-## API文档
-
-后端API遵循RESTful设计原则，主要接口包括：
-
-- 用户认证：`/api/v1/auth/*`
-- 会话管理：`/api/v1/sessions/*`
-- 消息管理：`/api/v1/messages/*`
-- 角色管理：`/api/v1/characters/*`
-- 模型管理：`/api/v1/models/*`
-
-详细接口文档可通过Swagger或Postman查看。
-
-## 配置说明
-
-### 环境变量
-
-后端支持通过环境变量进行配置：
-- `SECRET_KEY`：Flask密钥
-- `DATABASE_URL`：数据库连接URL
-- `JWT_SECRET_KEY`：JWT密钥
-
-### 模型提供商配置
-
-系统支持动态配置模型提供商，可以在管理界面中添加不同的模型提供商及其API密钥。
-
-## 开发指南
-
-### 项目结构
-
-```
-.
-├── backend/                 # 后端代码
-│   ├── app/                 # 核心应用代码
-│   │   ├── models/          # 数据模型
-│   │   ├── repositories/    # 数据访问层
-│   │   ├── routes/          # API路由
-│   │   ├── services/        # 业务逻辑层
-│   │   └── utils/           # 工具类
-│   ├── migrations/          # 数据库迁移文件
-│   └── tests/               # 测试代码
-└── frontend/                # 前端代码
-    ├── src/
-    │   ├── components/      # Vue组件
-    │   ├── composables/     # Vue组合式函数
-    │   ├── services/        # API服务
-    │   ├── stores/          # 状态管理
-    │   └── utils/           # 工具函数
-    └── public/              # 静态资源
-```
+| 技术 | 版本 | 用途 |
+|------|------|------|
+| **Vue 3** | ^3.5.21 | 渐进式JavaScript框架 |
+| **Vite** | ^7.3.0 | 下一代前端构建工具 |
+| **Pinia** | ^3.0.4 | Vue状态管理 |
+| **Vue Router** | ^4.6.4 | 官方路由管理器 |
+| **Element Plus** | ^2.13.0 | Vue 3 UI组件库 |
+| **Tailwind CSS** | ^4.1.18 | 实用优先的CSS框架 |
+| **Axios** | ^1.13.2 | HTTP客户端 |
+| **Marked** | ^16.4.2 | Markdown解析器 |
+| **Highlight.js** | ^11.11.1 | 代码语法高亮 |
+| **SimpleBar** | ^2.4.2 | 自定义滚动条 |
 
 ### 数据库设计
 
-系统使用关系型数据库存储用户、会话、消息等数据，通过Alembic进行数据库版本管理。
+系统使用关系型数据库存储核心数据，主要表包括：
 
-### 扩展开发
+- **Session**: 会话管理，关联用户、角色、模型
+- **Message**: 消息记录，支持树形结构（父子关系）
+- **MessageContent**: 消息内容，支持多轮次（turns）
+- **Model & ModelProvider**: 模型和提供商配置
+- **Character & CharacterGroup**: AI角色及分组
+- **KnowledgeBase & KBFile & KBChunk**: 知识库三层结构
+- **Memory**: 长期记忆存储
+- **McpServer**: MCP服务器配置
+- **User & UserSetting**: 用户信息及设置
 
-1. 添加新的记忆策略：继承MemoryStrategy类并实现相应方法
-2. 添加新的模型提供商：实现LLMService接口
-3. 添加新功能模块：按照现有的MVC模式进行扩展
+**向量数据存储**：
+- 使用 **SQLite + sqlite-vec** 扩展实现向量相似度搜索
+- 独立存储文件：`data/vector_db.sqlite`，避免与主业务库锁竞争
+- 集成 **FTS5** 虚拟表实现全文关键词搜索
+- 支持语义搜索、关键词搜索和混合搜索（加权融合）
 
-## 贡献指南
+详细Schema请参考 [prisma/schema.prisma](backend-ts/prisma/schema.prisma)
 
-欢迎提交Issue和Pull Request来改进项目。在贡献代码之前，请确保：
+## 🚀 快速开始
 
-1. Fork项目
+### 环境要求
+
+- **Node.js**: >= 18.x (推荐 20.x LTS)
+- **npm**: >= 9.x (或使用 pnpm/yarn)
+- **Docker**: (可选，用于运行Qdrant向量数据库)
+
+### 安装步骤
+
+#### 1. 克隆项目
+
+```bash
+git clone <repository-url>
+cd ai_chat
+```
+
+#### 2. 后端设置
+
+```bash
+cd backend-ts
+
+# 安装依赖
+npm install
+
+# 复制环境变量模板
+cp .env.example .env  # 如果存在示例文件
+
+# 初始化数据库
+npx prisma migrate dev
+
+# 启动开发服务器
+npm run start:dev
+```
+
+后端服务将在 `http://localhost:3000` 启动
+
+#### 3. 前端设置
+
+```bash
+cd frontend
+
+# 安装依赖
+npm install
+
+# 启动开发服务器
+npm run dev
+```
+
+前端应用将在 `http://localhost:5173` 启动（或Vite分配的端口）
+
+### 首次访问
+
+1. 打开浏览器访问前端地址（如 http://localhost:5173）
+2. 首次访问需要设置管理员密码（访问 `/password` 路径）
+3. 登录后即可开始使用
+
+## 📁 项目结构
+
+```
+ai_chat/
+├── backend-ts/                    # NestJS 后端
+│   ├── src/
+│   │   ├── common/               # 通用模块
+│   │   │   ├── config/           # 配置文件
+│   │   │   ├── database/         # 数据库Repository层
+│   │   │   ├── filters/          # 异常过滤器
+│   │   │   ├── mcp/              # MCP客户端服务
+│   │   │   ├── services/         # 通用服务
+│   │   │   ├── types/            # 通用类型定义
+│   │   │   ├── upload/           # 文件上传模块
+│   │   │   ├── utils/            # 工具函数
+│   │   │   │   └── tokenizer/    # Token计算服务
+│   │   │   └── vector-db/        # 向量数据库抽象层
+│   │   ├── constants/            # 常量定义
+│   │   ├── modules/              # 业务模块
+│   │   │   ├── auth/             # 认证授权
+│   │   │   ├── characters/       # 角色管理
+│   │   │   ├── chat/             # 对话核心
+│   │   │   │   ├── agent.service.ts      # Agent服务（对话引擎）
+│   │   │   │   ├── context-manager.service.ts  # 上下文管理
+│   │   │   │   ├── llm.service.ts        # LLM调用服务
+│   │   │   │   ├── session.service.ts    # 会话管理
+│   │   │   │   └── tool-result-cleaner.service.ts  # 工具结果清理
+│   │   │   ├── files/            # 文件管理
+│   │   │   ├── knowledge-base/   # 知识库管理
+│   │   │   ├── mcp-servers/      # MCP服务器管理
+│   │   │   ├── models/           # 模型管理
+│   │   │   ├── settings/         # 全局设置
+│   │   │   ├── tools/            # 工具系统
+│   │   │   │   ├── providers/    # 工具提供者（MCP、Time、Memory等）
+│   │   │   │   └── tool-orchestrator.service.ts  # 工具编排器
+│   │   │   └── users/            # 用户管理
+│   │   ├── scripts/              # 脚本文件
+│   │   ├── app.module.ts         # 根模块
+│   │   └── main.ts               # 入口文件
+│   ├── prisma/
+│   │   ├── migrations/           # 数据库迁移记录
+│   │   └── schema.prisma         # Prisma Schema
+│   ├── static/                   # 静态文件存储
+│   │   ├── file_stores/          # 用户上传文件
+│   │   └── images/               # 模型/提供商图标
+│   ├── dist/                     # 编译输出
+│   ├── package.json
+│   └── tsconfig.json
+│
+├── frontend/                      # Vue 3 前端
+│   ├── src/
+│   │   ├── assets/               # 静态资源
+│   │   ├── components/           # Vue组件
+│   │   │   ├── ChatPanel/        # 聊天面板相关
+│   │   │   ├── KnowledgeBasePage/ # 知识库页面组件
+│   │   │   ├── MessageItem/      # 消息项组件
+│   │   │   ├── account/          # 账户管理
+│   │   │   ├── icons/            # 图标组件
+│   │   │   ├── setting/          # 设置相关
+│   │   │   │   └── MCPServers.vue  # MCP服务器管理
+│   │   │   └── ui/               # UI组件
+│   │   ├── composables/          # Vue组合式函数
+│   │   ├── services/             # API服务
+│   │   ├── stores/               # Pinia状态管理
+│   │   ├── types/                # TypeScript类型定义
+│   │   ├── utils/                # 工具函数
+│   │   ├── App.vue               # 根组件
+│   │   └── main.js               # 入口文件
+│   ├── public/                   # 公共资源
+│   ├── dist/                     # 构建输出
+│   ├── package.json
+│   └── vite.config.ts
+│
+├── docs/                          # 项目文档
+│   ├── folder-hierarchy-upload.md  # 文件夹上传功能
+│   ├── session-context-compression-optimization.md  # 上下文压缩优化
+│   ├── tool-context-optimization.md  # 工具上下文优化
+│   └── ...                       # 其他功能文档
+│
+└── README.md                      # 本文件
+```
+
+## 📖 API文档
+
+### 认证接口
+
+- `POST /api/v1/auth/login` - 用户登录
+- `POST /api/v1/auth/register` - 用户注册
+- `GET /api/v1/auth/profile` - 获取当前用户信息
+
+### 会话管理
+
+- `GET /api/v1/sessions` - 获取会话列表
+- `POST /api/v1/sessions` - 创建新会话
+- `GET /api/v1/sessions/:id` - 获取会话详情
+- `PUT /api/v1/sessions/:id` - 更新会话
+- `DELETE /api/v1/sessions/:id` - 删除会话
+- `POST /api/v1/sessions/:id/compress` - 压缩会话上下文
+- `GET /api/v1/sessions/:id/token-stats` - 获取Token统计
+
+### 对话接口
+
+- `POST /api/v1/chat/stream` - 流式对话（推荐）
+- `SSE /api/v1/chat/completions` - SSE流式对话
+
+### 知识库管理
+
+- `GET /api/v1/knowledge-bases` - 获取知识库列表
+- `POST /api/v1/knowledge-bases` - 创建知识库
+- `GET /api/v1/knowledge-bases/:id` - 获取知识库详情
+- `PUT /api/v1/knowledge-bases/:id` - 更新知识库
+- `DELETE /api/v1/knowledge-bases/:id` - 删除知识库
+- `POST /api/v1/knowledge-bases/:id/files/upload` - 上传文件到知识库
+- `GET /api/v1/knowledge-bases/:id/files` - 获取知识库文件列表
+
+### MCP服务器
+
+- `GET /api/v1/mcp-servers` - 获取MCP服务器列表
+- `POST /api/v1/mcp-servers` - 添加MCP服务器
+- `PUT /api/v1/mcp-servers/:id` - 更新MCP服务器
+- `DELETE /api/v1/mcp-servers/:id` - 删除MCP服务器
+- `POST /api/v1/mcp-servers/:id/refresh-tools` - 刷新工具列表
+
+### 模型管理
+
+- `GET /api/v1/models` - 获取模型列表
+- `POST /api/v1/models` - 添加模型
+- `GET /api/v1/model-providers` - 获取提供商列表
+
+### 角色管理
+
+- `GET /api/v1/characters` - 获取角色列表
+- `POST /api/v1/characters` - 创建角色
+- `PUT /api/v1/characters/:id` - 更新角色
+- `DELETE /api/v1/characters/:id` - 删除角色
+
+## 🛠️ 开发指南
+
+### 后端开发
+
+#### 添加新的业务模块
+
+1. 在 `src/modules/` 下创建模块目录
+2. 创建Module、Controller、Service文件
+3. 在 `app.module.ts` 中导入新模块
+4. 编写单元测试
+
+#### 数据库迁移
+
+```bash
+# 修改 prisma/schema.prisma 后执行
+npx prisma migrate dev --name <migration_name>
+
+# 生成Prisma Client
+npx prisma generate
+```
+
+#### 添加工具提供者
+
+在 `src/modules/tools/providers/` 下创建新的Provider类，实现 `IToolProvider` 接口：
+
+```typescript
+export class MyToolProvider implements IToolProvider {
+  readonly namespace = 'my_tools';
+  
+  async getToolsNamespaced(...) { ... }
+  async executeWithNamespace(...) { ... }
+}
+```
+
+### 前端开发
+
+#### 添加新页面
+
+1. 在 `src/components/` 下创建页面组件
+2. 在路由配置中添加路由
+3. 如需状态管理，在 `src/stores/` 中添加Store
+
+#### API调用
+
+使用 `src/services/` 中的API服务：
+
+```javascript
+import { sessionApi } from '@/services/api'
+
+const sessions = await sessionApi.getSessions()
+```
+
+### 代码规范
+
+项目遵循统一的代码规范（见 `.lingma/rules/develop.md`）：
+
+- **缩进**: 4个空格
+- **注释**: 使用中文，解释"为什么"而非"做什么"
+- **命名**: 
+  - 变量/函数: camelCase
+  - 类/接口: PascalCase
+  - 常量: UPPER_SNAKE_CASE
+- **TypeScript**: 避免使用any，显式声明类型
+
+## 🌐 部署说明
+
+### 生产环境构建
+
+#### 后端
+
+```bash
+cd backend-ts
+
+# 构建
+npm run build
+
+# 启动生产服务器
+npm run start:prod
+```
+
+#### 前端
+
+```bash
+cd frontend
+
+# 构建
+npm run build
+
+# 生成的文件在 dist/ 目录，可部署到Nginx或其他静态服务器
+```
+
+### 环境变量配置
+
+关键环境变量（`.env`）：
+
+```bash
+# 数据库
+DATABASE_URL="file:./dev.db"
+
+# JWT
+JWT_SECRET="your-secret-key"
+JWT_EXPIRES_IN="7d"
+
+# 文件上传
+UPLOAD_DIR="./static/file_stores"
+MAX_FILE_SIZE=10485760  # 10MB
+
+# 向量数据库路径（可选，默认 data/vector_db.sqlite）
+VECTOR_DB_PATH="./data/vector_db.sqlite"
+```
+
+## 📝 功能文档
+
+更多详细的功能说明和最佳实践，请查看 [docs/](docs/) 目录：
+
+- [文件夹层级上传](docs/folder-hierarchy-upload.md) - 知识库文件夹上传功能详解
+- [会话上下文压缩优化](docs/session-context-compression-optimization.md) - 智能摘要压缩机制
+- [工具上下文优化](docs/tool-context-optimization.md) - ToolContext设计与实现
+- [文件重命名与移动](docs/file-rename-move-feature.md) - 文件管理功能
+- [PDF内容提取修复](docs/pdf-content-extraction-fix.md) - PDF解析优化
+- [Token计算器对比报告](docs/tokenizer-comparison-report.md) - 不同Tokenizer性能对比
+
+## 🤝 贡献指南
+
+欢迎提交Issue和Pull Request来改进项目！
+
+### 贡献流程
+
+1. Fork 本项目
 2. 创建功能分支 (`git checkout -b feature/AmazingFeature`)
 3. 提交更改 (`git commit -m 'Add some AmazingFeature'`)
 4. 推送到分支 (`git push origin feature/AmazingFeature`)
-5. 开启Pull Request
+5. 开启 Pull Request
 
-## 许可证
+### 提交规范
 
-本项目采用MIT许可证，详情请见 [LICENSE](LICENSE) 文件。
+- feat: 新功能
+- fix: 修复bug
+- docs: 文档更新
+- style: 代码格式调整
+- refactor: 重构
+- test: 测试相关
+- chore: 构建过程或辅助工具的变动
 
-## 联系方式
+## 📄 许可证
 
-如有任何问题或建议，请通过以下方式联系我们：
-- 提交Issue
+本项目采用 MIT 许可证 - 详见 [LICENSE](LICENSE) 文件
+
+## 📞 联系方式
+
+如有问题或建议：
+
+- 提交 [Issue](../../issues)
 - 发送邮件至项目维护者
+
+---
+
+**最后更新**: 2026-04-22  
+**当前版本**: v2.0.0 (TypeScript重构版)

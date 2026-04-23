@@ -1,8 +1,8 @@
 <!-- KnowledgeBasePage/KBFileTree.vue -->
 <template>
-  <div class="pt-4">
-    <!-- 面包屑导�?-->
-    <div v-if="breadcrumbPath.length > 0" class="mb-3 py-1.5">
+  <div class="pt-0">
+    <!-- 面包屑导航-->
+    <div v-if="breadcrumbPath.length > 0" class="mb-2 mx-2 py-1.5">
       <div class="flex items-center gap-1 text-sm">
         <button @click="navigateToFolderByPath(null)"
           class="text-gray-500 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors cursor-pointer">
@@ -23,7 +23,7 @@
       </div>
     </div>
 
-    <!-- 文件/文件夹列�?-->
+    <!-- 文件/文件夹列表-->
     <div v-if="isLoading" class="text-center py-8">
       <el-icon class="animate-spin text-blue-500" size="32">
         <Loading />
@@ -34,7 +34,7 @@
     <div v-else-if="currentItems.length > 0">
       <!-- 表头 -->
       <div
-        class="grid grid-cols-[1fr_100px_100px_120px_160px] gap-4 px-4 py-2 border-b border-gray-200 dark:border-gray-700 text-xs font-medium text-gray-500 dark:text-gray-400">
+        class="grid grid-cols-[1fr_100px_80px_120px_160px] gap-4 px-4 py-2 border-b border-gray-200 dark:border-gray-700 text-xs font-medium text-gray-500 dark:text-gray-400">
         <div>名称</div>
         <div>状态</div>
         <div>类型</div>
@@ -44,7 +44,7 @@
 
       <!-- 文件列表 -->
       <div v-for="item in currentItems" :key="item.id"
-        class="file-row grid grid-cols-[1fr_100px_100px_120px_160px] gap-4 px-4 py-2.5 hover:bg-gray-50 dark:hover:bg-gray-800/50 cursor-pointer transition-colors border-b border-gray-100 dark:border-gray-800 last:border-b-0"
+        class="file-row grid grid-cols-[1fr_100px_80px_120px_160px] gap-4 px-4 py-2.5 hover:bg-gray-50 dark:hover:bg-gray-800/50 cursor-pointer transition-colors border-b border-gray-100 dark:border-gray-800 last:border-b-0"
         @click="handleItemClick(item)" @contextmenu.prevent="handleContextMenu($event, item)">
         <!-- 名称-->
         <div class="flex items-center gap-2 min-w-0">

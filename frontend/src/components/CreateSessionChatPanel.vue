@@ -29,8 +29,8 @@
         modelId: currentModelId,
         maxMemoryLength: (lastModelConfig.value as any)?.maxMemoryLength || currentCharacter?.settings?.maxMemoryLength,
         knowledgeBaseIds: currentSession?.settings?.referencedKbs || []
-      }" @config-change="handleConfigChange" :buttons="chatInputButtons" :files="inputMessage.files"
-        :streaming="false" @send="sendMessage" @toggle-thinking="toggleDeepThinking" />
+      }" @config-change="handleConfigChange" :buttons="chatInputButtons" :files="inputMessage.files" :streaming="false"
+        @send="sendMessage" @toggle-thinking="toggleDeepThinking" />
     </div>
     <div>
       <div class="flex items-center justify-center mt-6">
@@ -314,8 +314,10 @@ const selectCharacter = (character: any): void => {
     thinkingEnabled: lastThinkingEnabled.value,
     maxMemoryLength: character.settings?.maxMemoryLength
   };
-  // 清空用户手动选择的模型 ID（这样 currentModelId 就会使用角色默认模型）
-  userSelectedModelId.value = null;
+  if (character.model_id) {
+    // 清空用户手动选择的模型 ID（这样 currentModelId 就会使用角色默认模型）
+    userSelectedModelId.value = null;
+  }
   // 更新本地存储的配置信息
   lastModelConfig.value = {
     ...lastModelConfig.value,

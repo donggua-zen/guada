@@ -1,0 +1,122 @@
+{
+  "name": "ai-chat",
+  "version": "1.0.0",
+  "description": "AI Chat Application with Web and Electron support",
+  "private": true,
+  "main": "electron/dist/main.js",
+  "scripts": {
+    "dev:web": "cd frontend && npm run dev",
+    "dev:backend": "cd backend-ts && npm run start:dev",
+    "dev:electron": "npm run build:electron-ts && concurrently \"cd backend-ts && npm run build\" \"cd frontend && npm run dev\" \"wait-on http://localhost:5173 && cross-env NODE_ENV=development electron .\"",
+    "build:web": "cd frontend && npm run build",
+    "build:backend": "cd backend-ts && npm run build",
+    "build:frontend": "cd frontend && npm run build",
+    "build:electron-ts": "cd electron && tsc",
+    "build:electron": "npm run build:electron-ts && npm run build:backend && npm run build:frontend && cross-env ELECTRON=true electron-builder",
+    "postinstall": "cd backend-ts && npm install && cd ../frontend && npm install"
+  },
+  "keywords": [
+    "ai",
+    "chat",
+    "electron",
+    "vue"
+  ],
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "concurrently": "^9.2.0",
+    "cross-env": "^7.0.3",
+    "electron": "^41.0.0",
+    "electron-builder": "^26.0.0",
+    "electron-builder-squirrel-windows": "^26.0.0",
+    "electron-rebuild": "^3.2.9",
+    "typescript": "^6.0.0",
+    "wait-on": "^9.0.0"
+  },
+  "build": {
+    "appId": "com.aichat.app",
+    "productName": "AI Chat",
+    "directories": {
+      "output": "release",
+      "buildResources": "build"
+    },
+    "files": [
+      "electron/**/*",
+      "backend-ts/dist/**/*",
+      "backend-ts/static/**/*",
+      "backend-ts/node_modules/**/*",
+      "backend-ts/prisma/**/*",
+      "frontend/dist/**/*",
+      "!**/node_modules/*/{CHANGELOG.md,README.md,README,readme.md,readme}",
+      "!**/node_modules/*/{test,__tests__,tests,powered-test,example,examples}",
+      "!**/node_modules/*.d.ts",
+      "!**/node_modules/.bin",
+      "!**/*.{iml,o,hprof,orig,pyc,pyo,rbc,swp,csproj,sln,xproj}",
+      "!.editorconfig",
+      "!**/._*",
+      "!**/{.DS_Store,.git,.hg,.svn,CVS,RCS,SCCS,.gitignore,.gitattributes}",
+      "!**/{__pycache__,thumbs.db,.flowconfig,.idea,.vs,.nyc_output}",
+      "!**/{appveyor.yml,.travis.yml,circle.yml}",
+      "!**/{npm-debug.log,yarn.lock,.yarn-integrity,.yarn-metadata.json}"
+    ],
+    "extraResources": [
+      {
+        "from": "backend-ts/dev.db",
+        "to": "backend-ts/dev.db",
+        "filter": [
+          "**/*"
+        ]
+      }
+    ],
+    "afterPack": "./scripts/after-pack.js",
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "build/icon.ico"
+    },
+    "mac": {
+      "target": [
+        {
+          "target": "dmg",
+          "arch": [
+            "x64",
+            "arm64"
+          ]
+        }
+      ],
+      "icon": "build/icon.icns",
+      "category": "public.app-category.productivity"
+    },
+    "linux": {
+      "target": [
+        {
+          "target": "AppImage",
+          "arch": [
+            "x64"
+          ]
+        },
+        {
+          "target": "deb",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "build/icon.png",
+      "category": "Utility"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "AI Chat"
+    }
+  }
+}

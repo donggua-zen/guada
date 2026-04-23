@@ -1,6 +1,6 @@
 <!-- subcomponents/ChatHeader.vue -->
 <template>
-    <div class="flex items-center justify-between gap-4 px-3 h-15 border-b border-gray-200/60">
+    <div class="flex items-center justify-between gap-4 px-3 h-13  border-gray-200/60">
         <!-- 左侧：侧边栏切换按钮 -->
         <div class="flex items-center justify-start min-w-10 ">
             <div v-if="sidebarVisible !== undefined"
