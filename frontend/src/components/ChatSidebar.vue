@@ -1,98 +1,99 @@
 <template>
-  <div
-    class="flex flex-col w-full h-full bg-(--color-conversation-bg) border-r border-(--color-conversation-border) transition-all duration-300">
-    <!-- 会话头部 -->
+  <div class="w-full h-full flex pb-3">
     <div
-      class="sessions-header px-4 h-15 flex justify-between items-center border-b border-(--color-conversation-border)">
-      <span class="font-semibold text-base text-(--color-text)">聊天对话</span>
-      <el-button type="primary" @click="handleButtonClick('create')" :icon="ChatNew" class="new-chat-btn">
-        新建会话
-      </el-button>
-    </div>
+      class="flex flex-col w-full rounded-lg bg-(--color-conversation-bg) border-r border-(--color-conversation-border) transition-all duration-300">
+      <!-- 会话头部 -->
+      <div class="sessions-header px-4 h-13 flex justify-between items-center">
+        <span class="font-semibold text-base text-(--color-text)">聊天对话</span>
+        <el-button type="primary" @click="handleButtonClick('create')" :icon="ChatNew" class="new-chat-btn">
+          新建会话
+        </el-button>
+      </div>
 
-    <!-- 搜索框 -->
-    <div class="search-box px-3.5 py-3">
-      <el-input v-model="searchKeyword" :prefix-icon="SearchOutlined" placeholder="搜索会话" clearable
-        @input="handleSearchInput" class="search-input">
-      </el-input>
-    </div>
+      <!-- 搜索框 -->
+      <div class="search-box px-3.5 pt-3 pb-1">
+        <el-input v-model="searchKeyword" :prefix-icon="SearchOutlined" placeholder="搜索会话" clearable
+          @input="handleSearchInput" class="search-input">
+        </el-input>
+      </div>
 
-    <!-- 会话列表区域 -->
-    <div class="sessions-list flex-1 overflow-hidden py-2">
-      <ScrollContainer ref="scrollContainer" class="h-full" @scroll="handleScroll">
-        <div class="px-5 py-2.5 text-xs font-medium text-gray-400 uppercase tracking-wider">对话记录</div>
-        <template v-if="!filteredSessions || filteredSessions.length === 0">
-          <div class="empty-state text-center text-gray-500 flex flex-col items-center justify-center h-full py-12">
-            <div class="empty-state-icon mb-3 text-gray-300">
-              <el-icon size="32">
-                <PlusOutlined />
-              </el-icon>
-            </div>
-            <div class="empty-state-title text-sm font-medium mb-1">
-              {{ searchKeyword ? '未找到匹配的会话' : '没有会话' }}
-            </div>
-            <div class="empty-state-description text-xs text-gray-400">
-              {{ searchKeyword ? '尝试调整搜索关键词' : '点击上方按钮创建新的会话' }}
-            </div>
-          </div>
-        </template>
-        <template v-else>
-          <div v-for="session in filteredSessions" :key="session.id" class="session-item group" :class="{
-            'session-item-active': session.id === currentSessionId,
-            'session-item-inactive': session.id !== currentSessionId
-          }" @click="selectSession(session)">
-            <div class="session-avatar">
-              <Avatar :src="session.character?.avatarUrl || session.avatarUrl"
-                :name="session.character?.title || session.title" type="assistant" round />
-            </div>
-            <div class="session-info flex-1 min-w-0 flex items-center">
-              <div class="session-title truncate text-sm font-medium w-full">
-                {{ session.title }}
+      <!-- 会话列表区域 -->
+      <div class="sessions-list flex-1 overflow-hidden py-2">
+        <ScrollContainer ref="scrollContainer" class="h-full" @scroll="handleScroll">
+          <div class="px-5 py-2.5 text-xs font-medium text-gray-400 uppercase tracking-wider">对话记录</div>
+          <template v-if="!filteredSessions || filteredSessions.length === 0">
+            <div class="empty-state text-center text-gray-500 flex flex-col items-center justify-center h-full py-12">
+              <div class="empty-state-icon mb-3 text-gray-300">
+                <el-icon size="32">
+                  <PlusOutlined />
+                </el-icon>
+              </div>
+              <div class="empty-state-title text-sm font-medium mb-1">
+                {{ searchKeyword ? '未找到匹配的会话' : '没有会话' }}
+              </div>
+              <div class="empty-state-description text-xs text-gray-400">
+                {{ searchKeyword ? '尝试调整搜索关键词' : '点击上方按钮创建新的会话' }}
               </div>
             </div>
-            <div class="session-actions flex items-center opacity-0 group-hover:opacity-100"
-              :class="{ 'opacity-100': session.id === currentSessionId }">
-              <el-dropdown trigger="click" @command="(command) => handleDropdownSelect(command, session)">
-                <template #dropdown>
-                  <el-dropdown-menu>
-                    <el-dropdown-item command="rename">
-                      <EditOutlined class="w-4 h-4 mr-2 inline-block" />
-                      重命名
-                    </el-dropdown-item>
-                    <el-dropdown-item command="delete">
-                      <DeleteOutlineOutlined class="w-4 h-4 mr-2 inline-block" />
-                      删除
-                    </el-dropdown-item>
-                  </el-dropdown-menu>
-                </template>
-                <div @click.stop class="session-action-trigger">
-                  <el-icon class="w-4 h-4">
-                    <MoreFilled />
-                  </el-icon>
+          </template>
+          <template v-else>
+            <div v-for="session in filteredSessions" :key="session.id" class="session-item group" :class="{
+              'session-item-active': session.id === currentSessionId,
+              'session-item-inactive': session.id !== currentSessionId
+            }" @click="selectSession(session)">
+              <div class="session-avatar">
+                <Avatar :src="session.character?.avatarUrl || session.avatarUrl"
+                  :name="session.character?.title || session.title" type="assistant" round />
+              </div>
+              <div class="session-info flex-1 min-w-0 flex items-center">
+                <div class="session-title truncate text-sm font-medium w-full">
+                  {{ session.title }}
                 </div>
-              </el-dropdown>
+              </div>
+              <div class="session-actions flex items-center opacity-0 group-hover:opacity-100"
+                :class="{ 'opacity-100': session.id === currentSessionId }">
+                <el-dropdown trigger="hover" @command="(command) => handleDropdownSelect(command, session)">
+                  <template #dropdown>
+                    <el-dropdown-menu>
+                      <el-dropdown-item command="rename">
+                        <EditOutlined class="w-4 h-4 mr-2 inline-block" />
+                        重命名
+                      </el-dropdown-item>
+                      <el-dropdown-item command="delete">
+                        <DeleteOutlineOutlined class="w-4 h-4 mr-2 inline-block" />
+                        删除
+                      </el-dropdown-item>
+                    </el-dropdown-menu>
+                  </template>
+                  <div @click.stop class="session-action-trigger">
+                    <el-icon class="w-4 h-4">
+                      <MoreFilled />
+                    </el-icon>
+                  </div>
+                </el-dropdown>
+              </div>
             </div>
-          </div>
-          
-          <!-- 加载更多提示 -->
-          <div v-if="filteredSessions.length > 0" class="py-3 px-5 text-center">
-            <div v-if="isLoadingMore" class="flex items-center justify-center gap-2 text-sm text-gray-500">
-              <el-icon class="animate-spin" size="16">
-                <Loading />
-              </el-icon>
-              <span>加载中...</span>
+
+            <!-- 加载更多提示 -->
+            <div v-if="filteredSessions.length > 0" class="py-3 px-5 text-center">
+              <div v-if="isLoadingMore" class="flex items-center justify-center gap-2 text-sm text-gray-500">
+                <el-icon class="animate-spin" size="16">
+                  <Loading />
+                </el-icon>
+                <span>加载中...</span>
+              </div>
+              <div v-else-if="hasMoreSessions"
+                class="text-sm text-gray-400 cursor-pointer hover:text-blue-500 transition-colors"
+                @click="loadMoreSessions">
+                点击加载更多 (剩余 {{ totalSessionsCount - filteredSessions.length }} 个)
+              </div>
+              <div v-else-if="totalSessionsCount > 0" class="text-sm text-gray-400">
+                已加载全部 {{ totalSessionsCount }} 个会话
+              </div>
             </div>
-            <div v-else-if="hasMoreSessions" 
-                 class="text-sm text-gray-400 cursor-pointer hover:text-blue-500 transition-colors"
-                 @click="loadMoreSessions">
-              点击加载更多 (剩余 {{ totalSessionsCount - filteredSessions.length }} 个)
-            </div>
-            <div v-else-if="totalSessionsCount > 0" class="text-sm text-gray-400">
-              已加载全部 {{ totalSessionsCount }} 个会话
-            </div>
-          </div>
-        </template>
-      </ScrollContainer>
+          </template>
+        </ScrollContainer>
+      </div>
     </div>
   </div>
 </template>
@@ -279,10 +280,10 @@ const loadMoreSessions = async (): Promise<void> => {
   }
 
   isLoadingMore.value = true
-  
+
   // 通知父组件加载更多
   emit('loadMore')
-  
+
   // 等待一段时间后重置加载状态（实际由父组件控制）
   setTimeout(() => {
     isLoadingMore.value = false
@@ -319,8 +320,8 @@ const loadMoreSessions = async (): Promise<void> => {
   display: flex;
   align-items: center;
   gap: 0.625rem;
-  padding: 0.625rem 0.75rem;
-  margin: 0.125rem 0.625rem;
+  padding: 0.5rem 0.75rem;
+  margin: 0.2rem 0.625rem;
   border-radius: 0.5rem;
   cursor: pointer;
   transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);

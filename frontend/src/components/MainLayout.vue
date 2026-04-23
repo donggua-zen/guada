@@ -1,13 +1,10 @@
 <template>
-  <div class="flex h-screen overflow-hidden">
+  <div class="flex flex-1 overflow-hidden">
     <!-- 左侧统一导航侧边栏 -->
-    <MainSidebar 
-      v-model:active-tab="activeTab"
-      :sidebar-width="sidebarWidth"
-    />
-    
+    <MainSidebar v-model:active-tab="activeTab" :sidebar-width="sidebarWidth" />
+
     <!-- 右侧内容区 -->
-    <div class="flex-1 min-w-0 h-full overflow-hidden">
+    <div class="flex-1 min-w-0 overflow-hidden rounded-tl-lg">
       <RouterView />
     </div>
   </div>

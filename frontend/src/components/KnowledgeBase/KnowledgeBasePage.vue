@@ -1,93 +1,194 @@
 <!-- components/KnowledgeBasePage.vue -->
 <template>
-    <SidebarLayout v-model:sidebar-visible="kbSidebarVisible" :sidebar-position="'left'" :z-index="50"
-        :show-toggle-button="true">
-        <!-- 左侧侧边栏：知识库列表 -->
-        <template #sidebar>
-            <KBSidebar :knowledge-bases="store.knowledgeBases" :active-id="store.activeKnowledgeBaseId"
-                v-model:search-keyword="searchKeyword" @select="handleSelectKB" @create="showCreateModal = true"
-                @edit="handleEdit" @delete="handleDelete" />
-        </template>
+    <div class="h-full w-full flex flex-col bg-(--color-surface) dark:bg-gray-900 min-h-0">
+        <!-- 视图模式：卡片列表 -->
+        <div v-if="viewMode === 'list'" class="flex-1 overflow-hidden flex flex-col">
+            <div class="flex flex-col h-full p-3 max-w-260 mx-auto w-full">
+                <!-- 头部 -->
+                <div class="flex justify-between items-center py-4">
+                    <span class="text-lg font-semibold text-gray-800 dark:text-gray-200">知识库</span>
+                    <el-button type="primary" @click="showCreateModal = true" class="flex items-center">
+                        <template #icon>
+                            <Plus />
+                        </template>
+                        新建知识库
+                    </el-button>
+                </div>
 
-        <!-- 右侧主区域：文件列表和管理 -->
-        <template #content>
-            <div class="kb-main h-full flex flex-col bg-white dark:bg-gray-900">
-                <template v-if="store.activeKnowledgeBaseId">
-                    <!-- 文件列表头部 -->
-                    <div class="px-4 py-3.5 border-b border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900">
-                        <div class="flex justify-between items-center">
-                            <div class="flex items-center gap-3">
-                                <!-- 侧边栏切换按钮 -->
-                                <div v-if="kbSidebarVisible !== undefined"
-                                    class="cursor-pointer p-1 rounded-lg text-gray-600 dark:text-gray-400 transition-all duration-200 hover:bg-gray-100 dark:hover:bg-gray-800 hover:text-gray-900 dark:hover:text-gray-100"
-                                    @click="kbSidebarVisible = !kbSidebarVisible"
-                                    :title="kbSidebarVisible ? '收起知识库列表' : '展开知识库列表'">
-                                    <LeftBarIcon class="w-5 h-5" />
-                                </div>
-                                <h3 class="text-lg font-semibold text-gray-900 dark:text-gray-100">
-                                    {{ currentKB?.name }}
-                                </h3>
+                <!-- 搜索框 -->
+                <div class="pb-4">
+                    <el-input 
+                        v-model="searchKeyword"
+                        placeholder="搜索知识库" 
+                        clearable 
+                        class="w-full"
+                    >
+                        <template #prefix>
+                            <el-icon><Search /></el-icon>
+                        </template>
+                    </el-input>
+                </div>
+
+                <!-- 知识库卡片网格列表 -->
+                <div class="flex-1 overflow-y-auto">
+                    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 pb-4">
+                        <!-- 知识库卡片 -->
+                        <div v-for="kb in filteredKnowledgeBases" :key="kb.id"
+                            class="kb-card group relative bg-white border border-gray-200 rounded-lg p-4 cursor-pointer hover:border-(--color-primary) transition-all duration-200 overflow-hidden"
+                            @click="handleSelectKB(kb)">
+                            <!-- 毛玻璃背景层 -->
+                            <div class="absolute inset-0 z-0 opacity-0 group-hover:opacity-100 transition-opacity duration-200"
+                                :style="{
+                                    background: 'linear-gradient(135deg, rgba(251, 114, 153, 0.05) 0%, rgba(251, 114, 153, 0.02) 100%)'
+                                }">
                             </div>
-                            <div class="flex items-center gap-2">
-                                <!-- 搜索按钮 -->
-                                <el-button @click="showSearchDialog = true">
-                                    <el-icon>
-                                        <Search />
-                                    </el-icon>
-                                    搜索
+
+                            <!-- 内容区域 -->
+                            <div class="relative z-10 flex flex-col h-full">
+                                <div class="flex items-start gap-3">
+                                    <div
+                                        class="w-11 h-11 shrink-0 flex items-center justify-center text-(--color-primary) bg-gray-50 rounded-md overflow-hidden">
+                                        <el-icon size="24">
+                                            <MenuBookOutlined />
+                                        </el-icon>
+                                    </div>
+                                    <div class="flex-1 min-w-0">
+                                        <div class="flex items-start justify-between">
+                                            <div class="font-medium text-base text-gray-900 truncate" :title="kb.name">{{
+                                                kb.name }}</div>
+                                            <!-- 操作按钮 - 悬停显示 -->
+                                            <div class="kb-actions flex items-center opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+                                                <el-dropdown trigger="click" @command="(command: string) => handleDropdownCommand(command, kb)">
+                                                    <template #dropdown>
+                                                        <el-dropdown-menu>
+                                                            <el-dropdown-item command="edit">
+                                                                <Edit class="w-4 h-4 mr-2 inline-block" />
+                                                                编辑
+                                                            </el-dropdown-item>
+                                                            <el-dropdown-item command="delete">
+                                                                <Delete class="w-4 h-4 mr-2 inline-block" />
+                                                                删除
+                                                            </el-dropdown-item>
+                                                        </el-dropdown-menu>
+                                                    </template>
+                                                    <div @click.stop class="p-1 rounded hover:bg-gray-100">
+                                                        <el-icon class="w-4 h-4">
+                                                            <MoreFilled />
+                                                        </el-icon>
+                                                    </div>
+                                                </el-dropdown>
+                                            </div>
+                                        </div>
+                                        <div class="text-xs text-gray-500 mt-1.5">
+                                            {{ kb.isPublic ? '公开' : '私有' }}
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="text-xs text-gray-400 mt-2 line-clamp-2 leading-relaxed">{{ kb.description ||
+                                    '暂无描述' }}
+                                </div>
+                            </div>
+
+                            <!-- 悬停显示的渐变遮罩和按钮 -->
+                            <div
+                                class="absolute inset-x-0 bottom-0 h-16 bg-linear-to-t from-white via-white/90 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none rounded-b-lg">
+                            </div>
+                            <div
+                                class="absolute inset-x-2 bottom-2 flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-auto z-20">
+                                <el-button type="primary" size="small" class="flex-1 shadow-sm" @click.stop="handleSelectKB(kb)">
+                                    进入知识库
                                 </el-button>
                             </div>
                         </div>
-                    </div>
 
-                    <!-- 统一文件列表 -->
-                    <div class="flex-1 flex flex-col overflow-hidden">
+                        <!-- 空状态 -->
+                        <div v-if="!store.loading && filteredKnowledgeBases.length === 0" class="col-span-full text-center py-12 text-gray-500">
+                            <el-icon size="48" class="text-gray-300 mb-3">
+                                <MenuBookOutlined />
+                            </el-icon>
+                            <p class="text-lg">{{ searchKeyword ? '未找到匹配的知识库' : '暂无知识库' }}</p>
+                            <p class="text-sm mt-1">{{ searchKeyword ? '尝试调整搜索关键词' : '点击上方按钮创建第一个知识库' }}</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 视图模式：知识库详情 -->
+        <div v-else class="flex-1 flex flex-col overflow-hidden">
+            <!-- 顶部导航栏 -->
+            <div class="px-2 py-3 flex items-center gap-3 max-w-260 mx-auto w-full">
+                <el-button link @click="backToList" class="flex items-center gap-1 text-gray-900 dark:text-gray-300 hover:text-(--color-primary) font-medium">
+                    <el-icon :size="22">
+                        <ArrowLeft24Filled />
+                    </el-icon>
+                    <span class="text-base">返回知识库列表</span>
+                </el-button>
+                <el-divider direction="vertical" />
+                <span class="font-semibold text-gray-800 dark:text-gray-200 text-base">{{ currentKB?.name }}</span>
+            </div>
+
+            <!-- 详情内容区域 -->
+            <div class="flex-1 flex flex-col overflow-hidden max-w-260 mx-auto w-full min-h-0">
+                <!-- Tab 切换区域 -->
+                <div class="px-4 pt-3 dark:border-gray-700">
+                    <el-tabs v-model="activeTab" class="kb-tabs">
+                        <el-tab-pane label="文件列表" name="files">
+                            <template #label>
+                                <div class="flex items-center gap-2">
+                                    <el-icon :size="17">
+                                        <BookOpen24Regular />
+                                    </el-icon>
+                                    <span class="text-[15px]">文件列表</span>
+                                </div>
+                            </template>
+                        </el-tab-pane>
+                        <el-tab-pane label="搜索" name="search">
+                            <template #label>
+                                <div class="flex items-center gap-2">
+                                    <el-icon :size="17">
+                                        <Search24Regular />
+                                    </el-icon>
+                                    <span class="text-[15px]">搜索</span>
+                                </div>
+                            </template>
+                        </el-tab-pane>
+                    </el-tabs>
+                </div>
+                <!-- 文件列表 Tab -->
+                <div v-show="activeTab === 'files'" class="h-full flex flex-col">
+                    <div class="flex-1 flex flex-col overflow-hidden ">
                         <!-- 上传区域 -->
                         <div class="px-4 pt-4 pb-1">
-                            <KBFileUploader 
-                                :kb-id="store.activeKnowledgeBaseId!" 
+                            <KBFileUploader :kb-id="store.activeKnowledgeBaseId!"
                                 :current-folder-path="getCurrentFolderPath()"
-                                :get-current-files="getCurrentFiles"
-                                @uploaded="handleUploadComplete"
+                                :get-current-files="getCurrentFiles" @uploaded="handleUploadComplete"
                                 @show-upload-task="showUploadTaskModal = true"
                                 @folder-created="handleFolderCreated" />
                         </div>
 
                         <!-- 文件列表内容区 -->
-                        <div class="flex-1 px-4 pb-4 overflow-hidden">
-                            <ScrollContainer ref="fileListContainer" @scroll="handleScroll">
-                                <KBFileTree ref="fileTreeRef" :kb-id="store.activeKnowledgeBaseId!"
-                                    @view="handleViewFile" @retry="handleRetryFile" @delete="handleDeleteFile"
-                                    @folder-change="handleFolderChange"
-                                    @files-loaded="handleFilesLoaded" />
-                            </ScrollContainer>
+                        <div class="flex-1 m-4 overflow-hidden">
+                            <div class="rounded-lg p-2 bg-white dark:bg-gray-900">
+                                <ScrollContainer ref="fileListContainer" @scroll="handleScroll">
+                                    <KBFileTree ref="fileTreeRef" :kb-id="store.activeKnowledgeBaseId!"
+                                        @view="handleViewFile" @retry="handleRetryFile"
+                                        @delete="handleDeleteFile" @folder-change="handleFolderChange"
+                                        @files-loaded="handleFilesLoaded" />
+                                </ScrollContainer>
+                            </div>
                         </div>
                     </div>
-                </template>
+                </div>
 
-                <template v-else>
-                    <!-- 未选择知识库时的空状态 -->
-                    <div class="flex-1 flex items-center justify-center">
-                        <div
-                            class="empty-state text-center text-gray-500 flex flex-col items-center justify-center py-12">
-                            <div class="empty-state-icon mb-3 text-gray-300">
-                                <el-icon size="48">
-                                    <MoreFilled />
-                                </el-icon>
-                            </div>
-                            <div class="empty-state-title text-sm font-medium mb-1">
-                                请选择一个知识库
-                            </div>
-                            <div class="empty-state-description text-xs text-gray-400 mb-3">
-                                从左侧列表选择或创建新的知识库
-                            </div>
-                            <el-button type="primary" @click="showCreateModal = true">创建知识库</el-button>
-                        </div>
-                    </div>
-                </template>
+                <!-- 搜索 Tab -->
+                <div v-show="activeTab === 'search'" class="flex flex-1 overflow-hidden min-h-0 w-full">
+                    <KBSearchPanel :knowledge-bases="store.knowledgeBases"
+                        :default-kb-id="store.activeKnowledgeBaseId" /> 
+                </div>
             </div>
-        </template>
-    </SidebarLayout>
+        </div>
+    </div>
 
     <!-- 创建/编辑知识库对话框 -->
     <el-dialog v-model="showCreateModal" title="创建知识库" width="600px" :close-on-click-modal="false">
@@ -137,10 +238,10 @@
                 <el-input-number v-model="createForm.chunkMinSize" :min="10" :max="500" :step="10" class="w-full" />
             </el-form-item>
 
-            <el-form-item label="可见性">
+            <!-- <el-form-item label="可见性">
                 <el-switch v-model="createForm.isPublic" />
                 <span class="text-sm text-gray-500 dark:text-gray-400 ml-2">公开的知识库可被其他人查看</span>
-            </el-form-item>
+            </el-form-item> -->
         </el-form>
 
         <template #footer>
@@ -208,10 +309,6 @@
     <!-- 文件分块查看弹窗 -->
     <FileChunksViewer v-model="showFileChunksModal" :selected-file="selectedFile" />
 
-    <!-- 知识库搜索对话框 -->
-    <KBSearchDialog v-model="showSearchDialog" :knowledge-bases="store.knowledgeBases"
-        :default-kb-id="store.activeKnowledgeBaseId" />
-
     <!-- 上传任务弹窗 -->
     <UploadTaskModal v-model="showUploadTaskModal" :upload-tasks="uploadTasksList" @retry="handleRetryFile"
         @delete="handleDeleteFile" />
@@ -226,11 +323,11 @@ import { useFileUploadStore } from '@/stores/fileUpload'
 import type { KnowledgeBase, KBFile } from '@/stores/knowledgeBase'
 import type { UploadTask } from '@/stores/fileUpload'
 import ScrollContainer from '@/components/ui/ScrollContainer.vue'
-import SidebarLayout from '@/components/ui/SidebarLayout.vue'
-import LeftBarIcon from './icons/LeftBarIcon.vue'
-import { FileChunksViewer, KBFileItem, KBFileUploader, KBFileTree, KBSidebar, KBSearchDialog, UploadTaskModal } from './KnowledgeBasePage'
+import { FileChunksViewer, KBFileItem, KBFileUploader, KBFileTree, KBSearchPanel, UploadTaskModal } from './index'
 import { useStorage, useDebounceFn } from '@vueuse/core'
 import { usePopup } from '@/composables/usePopup'
+import { BookOpen24Regular, Search24Regular, ArrowLeft24Filled } from '@vicons/fluent'
+import { MenuBookOutlined } from '@vicons/material'
 
 // 初始化组合式函数
 const { confirm, toast } = usePopup()
@@ -244,11 +341,11 @@ const showCreateModal = ref(false)
 const showEditModal = ref(false)
 const showUploadModal = ref(false)
 const showFileChunksModal = ref(false)  // 文件分块查看弹窗
-const showSearchDialog = ref(false)  // 搜索对话框
 const showUploadTaskModal = ref(false)  // 上传任务弹窗
 const selectedFile = ref<KBFile | null>(null)  // 选中的文件
-const searchKeyword = ref('')
-const kbSidebarVisible = useStorage('kbSidebarVisible', true) // 知识库侧边栏可见状态,持久化到 localStorage
+const activeTab = ref('files')  // 当前激活的 Tab: 'files' 或 'search'
+const viewMode = ref<'list' | 'detail'>('list')  // 视图模式：列表或详情
+const searchKeyword = ref('')  // 知识库搜索关键词
 const embeddingModels = ref<any[]>([]) // 嵌入模型列表
 const embeddingProviders = ref<any[]>([]) // 嵌入模型供应商列表
 
@@ -301,6 +398,20 @@ const currentKB = computed(() => {
     return store.knowledgeBases.find(kb => kb.id === store.activeKnowledgeBaseId) || null
 })
 
+/**
+ * 过滤后的知识库列表（支持搜索）
+ */
+const filteredKnowledgeBases = computed(() => {
+    if (!searchKeyword.value || !searchKeyword.value.trim()) {
+        return store.knowledgeBases
+    }
+    const keyword = searchKeyword.value.toLowerCase().trim()
+    return store.knowledgeBases.filter(kb =>
+        kb.name?.toLowerCase().includes(keyword) ||
+        kb.description?.toLowerCase().includes(keyword)
+    )
+})
+
 // ========== Methods ==========
 
 /**
@@ -335,6 +446,7 @@ const loadEmbeddingModels = async () => {
  */
 async function handleSelectKB(kb: KnowledgeBase) {
     store.setActiveKnowledgeBase(kb.id)
+    viewMode.value = 'detail'
 
     // 更新路由（使用 params）
     router.replace({ name: 'KnowledgeBase', params: { id: kb.id } })
@@ -346,6 +458,26 @@ async function handleSelectKB(kb: KnowledgeBase) {
     } catch (error) {
         console.error('加载文件列表失败:', error)
         toast.error('加载文件列表失败')
+    }
+}
+
+/**
+ * 返回列表视图
+ */
+function backToList() {
+    viewMode.value = 'list'
+    store.setActiveKnowledgeBase(null)
+    router.replace({ name: 'KnowledgeBase' })
+}
+
+/**
+ * 处理下拉菜单命令
+ */
+function handleDropdownCommand(command: string, kb: KnowledgeBase) {
+    if (command === 'edit') {
+        handleEdit(kb)
+    } else if (command === 'delete') {
+        handleDelete(kb)
     }
 }
 
@@ -525,17 +657,17 @@ function resetForm() {
 async function handleUploadComplete(task: UploadTask) {
     console.log('文件上传完成:', task.fileName)
     console.log('[DEBUG] 任务 relativePath:', task.relativePath)
-    
+
     // 关键优化:将上传任务转换为 KBFile 格式
     const uploadedFile = uploadStore.taskToFileRecord(task)
     console.log('[DEBUG] 转换后的 KBFile relativePath:', uploadedFile.relativePath)
-    
+
     // 智能插入到当前目录（如果需要）
     if (fileTreeRef.value && fileTreeRef.value.insertUploadedFile) {
         await fileTreeRef.value.insertUploadedFile(uploadedFile)
         console.log('[DEBUG] 已尝试智能插入文件')
     }
-    
+
     // 注意:不再调用 refreshFileList,避免全局刷新
 }
 
@@ -544,7 +676,7 @@ async function handleUploadComplete(task: UploadTask) {
  */
 async function handleFolderCreated() {
     console.log('[DEBUG] 文件夹创建成功，刷新当前目录')
-    
+
     // 刷新当前目录以显示新创建的文件夹
     if (fileTreeRef.value && fileTreeRef.value.forceReload) {
         await fileTreeRef.value.forceReload()
@@ -705,12 +837,12 @@ onMounted(async () => {
             await handleSelectKB(kb)
             // refreshFileList 已在 handleSelectKB 中调用,无需重复
         } else {
-            // 如果 ID 无效,选择第一个
-            await handleSelectKB(store.knowledgeBases[0])
+            // 如果 ID 无效,显示列表视图
+            viewMode.value = 'list'
         }
-    } else if (store.knowledgeBases.length > 0) {
-        // 默认选中第一个知识库
-        await handleSelectKB(store.knowledgeBases[0])
+    } else {
+        // 默认显示列表视图
+        viewMode.value = 'list'
     }
 
     // 关键优化:检查是否有上传任务，按需启动轮询
@@ -741,10 +873,10 @@ function checkAndStartUploadTaskPolling() {
 
     // 检查是否有活跃的上传任务
     if (!store.activeKnowledgeBaseId) return
-    
+
     const tasks = uploadStore.getTasksByKB(store.activeKnowledgeBaseId)
-    const hasActiveTasks = tasks.some(task => 
-        task.status === 'queued' || 
+    const hasActiveTasks = tasks.some(task =>
+        task.status === 'queued' ||
         task.status === 'uploading'
     )
 
@@ -822,12 +954,12 @@ function refreshUploadTasksList() {
     // 关键修复:清除任务后,重新从 store 获取最新列表来判断是否关闭弹窗
     const remainingTasks = uploadStore.getTasksByKB(store.activeKnowledgeBaseId)
     checkAndAutoCloseModal(remainingTasks)
-    
+
     // 关键优化:检查是否还有活跃任务，如果没有则停止轮询
     const hasActiveUploadTasks = remainingTasks.some(task =>
         task.status === 'queued' || task.status === 'uploading'
     )
-    
+
     if (!hasActiveUploadTasks && uploadTaskPollingTimer !== null) {
         console.log('[DEBUG] 所有上传任务完成，停止上传任务轮询')
         stopUploadTaskPolling()
@@ -918,6 +1050,10 @@ watch(() => route.params.id, async (newKbId: string | string[] | undefined) => {
         if (kb && store.activeKnowledgeBaseId !== kb.id) {
             await handleSelectKB(kb)
         }
+    } else {
+        // 如果没有 ID，返回列表视图
+        viewMode.value = 'list'
+        store.setActiveKnowledgeBase(null)
     }
 })
 
@@ -926,7 +1062,7 @@ watch(
     () => uploadStore.getTasksByKB(store.activeKnowledgeBaseId || '').length,
     (newCount, oldCount) => {
         console.log(`[DEBUG] 上传任务数量变化: ${oldCount} -> ${newCount}`)
-        
+
         // 如果有活跃任务且轮询未启动，则启动
         if (newCount > 0 && uploadTaskPollingTimer === null) {
             console.log('[DEBUG] 检测到新的上传任务，启动轮询')
@@ -942,5 +1078,49 @@ watch(
     display: flex;
     align-items: center;
     justify-content: center;
+}
+
+/* Tab 样式优化 */
+.kb-tabs :deep(.el-tabs__header) {
+    margin-bottom: 0;
+}
+
+.kb-tabs :deep(.el-tabs__nav-wrap::after) {
+    height: 1px;
+}
+
+.kb-tabs :deep(.el-tabs__item) {
+    padding: 0 18px;
+    height: 44px;
+    line-height: 44px;
+    font-size: 14px;
+}
+
+/* 知识库卡片样式 */
+.kb-card {
+    min-height: 140px;
+}
+
+.kb-actions {
+    margin-left: auto;
+    transition: opacity 0.2s ease;
+}
+
+/* 滚动条美化 */
+.overflow-y-auto::-webkit-scrollbar {
+    width: 6px;
+}
+
+.overflow-y-auto::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.overflow-y-auto::-webkit-scrollbar-thumb {
+    background-color: rgba(0, 0, 0, 0.2);
+    border-radius: 3px;
+}
+
+.dark .overflow-y-auto::-webkit-scrollbar-thumb {
+    background-color: rgba(255, 255, 255, 0.2);
 }
 </style>

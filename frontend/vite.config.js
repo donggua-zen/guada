@@ -11,6 +11,8 @@ import { ElementPlusResolver } from 'unplugin-vue-components/resolvers'
 
 // https://vite.dev/config/
 export default defineConfig({
+  // Electron 环境使用相对路径，Web 环境使用根路径
+  base: process.env.ELECTRON === 'true' ? './' : '/',
   plugins: [
     vue(),
     tailwindcss(),

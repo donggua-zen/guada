@@ -32,8 +32,11 @@ class ApiService implements IApiService {
   currentAbortController: AbortController | null
   abortControllerMap: Map<string, AbortController>
 
-  constructor(baseURL: string = '/api/v1') {
-    this.baseURL = baseURL
+  constructor(baseURL?: string) {
+    // Electron 环境使用固定后端地址（由主进程确保后端已启动）
+    // Web 环境使用相对路径
+    const isElectron = typeof window !== 'undefined' && window.electronAPI !== undefined
+    this.baseURL = baseURL || (isElectron ? 'http://localhost:3000/api/v1' : '/api/v1')
     this.tokenStore = useStorage('token', '')
 
     // 创建 Axios 实例
@@ -122,6 +125,10 @@ class ApiService implements IApiService {
   // ========== 提供商管理 ==========
   async createProvider(data: any): Promise<any> {
     return await this._request('/providers', { method: 'POST', data })
+  }
+
+  async testProviderConnection(data: any): Promise<{ success: boolean; message: string }> {
+    return await this._request('/providers/test-connection', { method: 'POST', data })
   }
 
   async deleteProvider(providerId: string): Promise<boolean> {
@@ -453,6 +460,21 @@ class ApiService implements IApiService {
 
   async register(data: RegisterRequest): Promise<LoginResponse> {
     return await this._request('/auth/register', { method: 'POST', data })
+  }
+
+  async getAutoLoginStatus(): Promise<{ enabled: boolean }> {
+    return await this._request('/settings/auto-login')
+  }
+
+  async setAutoLoginStatus(enabled: boolean): Promise<void> {
+    return await this._request('/settings/auto-login', { 
+      method: 'POST', 
+      data: { enabled } 
+    })
+  }
+
+  async autoLogin(): Promise<{ accessToken: string; user: User }> {
+    return await this._request('/auth/auto-login', { method: 'POST' })
   }
 
   async getProfile(): Promise<User> {

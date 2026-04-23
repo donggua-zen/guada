@@ -19,3 +19,9 @@ backend-ts/data/uploads/**
 backend-ts/data/avatars/**
 backend-ts/static/file_stores/**
 backend-ts/data/**
+
+# Electron
+release/
+electron/dist/
+build/
+backend-ts/static/knowledge-base/**

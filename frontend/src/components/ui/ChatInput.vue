@@ -36,14 +36,14 @@
         <div class="tools left-tools flex gap-2 items-center">
           <slot name="buttons"></slot>
           <template v-if="showButtons.thinkingButton">
-            <el-button size="small" round :type="localThinkingEnabled ? 'primary' : 'default'" plain
+            <el-button  round :type="localThinkingEnabled ? 'primary' : 'default'" plain
               @click="toggleDeepThinking" :icon="Thinking2">
               思考
             </el-button>
           </template>
           <!-- 知识库选择按钮 -->
           <el-button v-if="showButtons.knowledgeBaseButton" round plain @click="openKnowledgeBaseDialog"
-            :icon="MenuBookOutlined" size="small">
+            :icon="MenuBookOutlined" >
             知识库
           </el-button>
         </div>
@@ -230,17 +230,17 @@
     <div v-if="tempKnowledgeBaseIds.length > 0" class="mt-4 text-sm text-gray-600">
       <div class="flex items-center gap-2">
         <span>已选择 <span class="font-medium text-blue-600">{{ tempValidKnowledgeBasesCount }}</span> 个知识库</span>
-        <template v-if="tempKnowledgeBaseIds.length !== tempValidKnowledgeBasesCount">
+        <!-- <template v-if="tempKnowledgeBaseIds.length !== tempValidKnowledgeBasesCount">
           <span class="text-gray-400">•</span>
           <span class="text-xs text-gray-500">
             （<span class="text-orange-600">{{ tempKnowledgeBaseIds.length - tempValidKnowledgeBasesCount
             }}</span> 个无效ID将被自动清理）
           </span>
-        </template>
+        </template> -->
       </div>
-      <div v-if="tempKnowledgeBaseIds.length !== tempValidKnowledgeBasesCount" class="mt-1 text-xs text-gray-500">
+      <!-- <div v-if="tempKnowledgeBaseIds.length !== tempValidKnowledgeBasesCount" class="mt-1 text-xs text-gray-500">
         注：无效的知识库ID指那些已被删除或不存在的知识库
-      </div>
+      </div> -->
     </div>
 
     <template #footer>
@@ -371,12 +371,12 @@ const styleClass = computed(() => {
     classes.push('expanded');
   }
   if (!props.clean) {
-    if (props.round) classes.push('rounded-[12px]');
+    if (props.round) classes.push('rounded-[22px]');
     if (focused.value) {
       if (props.shadow) classes.push('shadow-[0_2px_32px_rgba(0,0,0,0.11)]');
-      if (props.border) classes.push('border border-gray-200 dark:border-gray-700');
-    } else {
       if (props.border) classes.push('border border-gray-300 dark:border-gray-700');
+    } else {
+      if (props.border) classes.push('border border-gray-400 dark:border-gray-700');
     }
   }
   return classes.join(' ') + ' ' + props.class;

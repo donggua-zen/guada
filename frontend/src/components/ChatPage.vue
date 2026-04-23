@@ -1,10 +1,11 @@
 <template>
-  <div class="flex h-full">
+  <div class="flex h-full ">
     <!-- 左侧边栏 -->
-    <SidebarLayout v-model:sidebar-visible="sidebarVisible" sidebar-position="left" :show-toggle-button="true" :z-index="50">
+    <SidebarLayout v-model:sidebar-visible="sidebarVisible" sidebar-position="left" :show-toggle-button="false"
+      :z-index="50">
       <template #sidebar>
         <template v-if="authStore.isAuthenticated">
-          <chat-sidebar ref="chatSidebarRef" :sessions="sortedSessions" :total-sessions="totalSessionsCount"
+          <ChatSidebar ref="chatSidebarRef" :sessions="sortedSessions" :total-sessions="totalSessionsCount"
             :current="currentSession" @select="goChatRoute($event)" @delete="handleDeleteSession"
             @rename="handleRenameSession" @create="handleCreateSession" @load-more="handleLoadMoreSessions" />
         </template>
@@ -17,24 +18,23 @@
       </template>
       <template v-if="!isLoading" #content>
         <!-- 主体内容 -->
-        <template v-if="sessions.length > 0 && currentSession">
-          <!-- 聊天头部 -->
-          <div class="flex flex-col h-full">
+        <div class="flex flex-col h-full ">
+          <template v-if="sessions.length > 0 && currentSession">
+            <!-- 聊天头部 -->
             <ChatHeader :sidebar-visible="sidebarVisible" :title="currentSession?.title || ''" :has-more-options="true"
               :show-memo-button="true" @toggle-sidebar="sidebarVisible = !sidebarVisible"
               @select-more-option="handleMoreSelect" @toggle-memo="memoPanelVisible = !memoPanelVisible" />
             <ChatPanel ref="chatPanelRef" v-model:session="currentSession" v-model:sidebar-visible="sidebarVisible"
               @save-settings="handleSaveSessionSettings" />
-          </div>
-        </template>
-        <template v-else>
-          <!-- 新建对话头部 -->
-          <div class="flex flex-col h-full">
+          </template>
+          <template v-else>
+            <!-- 新建对话头部 -->
             <ChatHeader :sidebar-visible="sidebarVisible" :has-more-options="false" title="新建对话"
               @toggle-sidebar="sidebarVisible = !sidebarVisible" />
             <CreateSessionChatPanel @create-session="handleCreateSessionWithMessage" />
-          </div>
-        </template>
+
+          </template>
+        </div>
       </template>
     </SidebarLayout>
 
@@ -251,7 +251,7 @@ const handleLoadMoreSessions = async () => {
   try {
     const skip = sessions.value.length;
     const data = await apiService.fetchSessions(skip, pageSize.value);
-    
+
     if (data.items && data.items.length > 0) {
       // 追加新会话到列表
       sessions.value = [...sessions.value, ...data.items];
