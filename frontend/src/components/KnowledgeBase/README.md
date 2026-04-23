@@ -1,10 +1,19 @@
-# KnowledgeBasePage 组件模块
+# KnowledgeBase 组件模块
 
 ## 目录结构
 
 ```
-KnowledgeBasePage/
+KnowledgeBase/
+├── KnowledgeBasePage.vue   # 知识库主页面组件
 ├── FileChunksViewer.vue    # 文件分块查看器组件
+├── KBFileItem.vue          # 文件列表项组件
+├── KBFileTree.vue          # 文件树组件
+├── KBFileUploader.vue      # 文件上传组件
+├── KBSearchDialog.vue      # 搜索对话框组件
+├── KBSearchPanel.vue       # 搜索面板组件
+├── KBSidebar.vue           # 侧边栏组件（已废弃）
+├── TreeNode.vue            # 树节点组件
+├── UploadTaskModal.vue     # 上传任务弹窗组件
 └── index.ts                # 模块导出文件
 ```
 
@@ -43,7 +52,7 @@ KnowledgeBasePage/
 
 <script setup lang="ts">
 import { ref } from 'vue'
-import { FileChunksViewer } from '@/components/KnowledgeBasePage'
+import { FileChunksViewer } from '@/components/KnowledgeBase'
 import type { KBFile } from '@/stores/knowledgeBase'
 
 const showFileChunksModal = ref(false)

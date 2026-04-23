@@ -1,6 +1,6 @@
 <template>
   <div
-    class="flex flex-col h-full bg-(--color-conversation-bg) border-r border-(--color-conversation-border) transition-all duration-300"
+    class="flex flex-col h-full bg-(--color-sidebar-bg) border-r border-(--color-sidebar-border) transition-all duration-300"
     :style="{ width: sidebarWidth, minWidth: sidebarWidth, maxWidth: sidebarWidth }">
     <!-- 顶部 Logo/标题 -->
     <div class="px-2.5 py-4 flex items-center justify-center">
@@ -15,7 +15,7 @@
       <!-- 对话 -->
       <div @click="handleNavClick('chat')"
         class="flex flex-col items-center justify-center px-2 py-2.5 my-0.5 rounded-xl cursor-pointer transition-all duration-250 ease-in-out group"
-        :class="activeTab === 'chat' ? 'bg-(--color-conversation-bg-active) text-(--color-conversation-text-active)' : 'text-(--color-text-gray) hover:bg-(--color-conversation-bg-hover) hover:text-(--color-conversation-text-hover)'">
+        :class="activeTab === 'chat' ? 'bg-(--color-sidebar-bg-active) text-(--color-sidebar-text-active)' : 'text-(--color-text-gray) hover:bg-(--color-sidebar-bg-hover) hover:text-(--color-sidebar-text-hover)'">
         <div
           class="w-5 h-5 mb-1 flex items-center justify-center transition-transform duration-200 ease-in-out group-hover:scale-110">
           <ChatbubbleEllipses v-if="activeTab === 'chat'" class="w-5 h-5" />
@@ -27,7 +27,7 @@
       <!-- 助手 -->
       <div @click="handleNavClick('characters')"
         class="flex flex-col items-center justify-center px-2 py-2.5 my-0.5 rounded-xl cursor-pointer transition-all duration-250 ease-in-out group"
-        :class="activeTab === 'characters' ? 'bg-(--color-conversation-bg-active) text-(--color-conversation-text-active)' : 'text-(--color-text-gray) hover:bg-(--color-conversation-bg-hover) hover:text-(--color-conversation-text-hover)'">
+        :class="activeTab === 'characters' ? 'bg-(--color-sidebar-bg-active) text-(--color-sidebar-text-active)' : 'text-(--color-text-gray) hover:bg-(--color-sidebar-bg-hover) hover:text-(--color-sidebar-text-hover)'">
         <div
           class="w-5 h-5 mb-1 flex items-center justify-center transition-transform duration-200 ease-in-out group-hover:scale-110">
           <AlternateEmailTwotone v-if="activeTab === 'characters'" class="w-5 h-5" />
@@ -39,7 +39,7 @@
       <!-- 知识库 -->
       <div @click="handleNavClick('knowledge-base')"
         class="flex flex-col items-center justify-center px-2 py-2.5 my-0.5 rounded-xl cursor-pointer transition-all duration-250 ease-in-out group"
-        :class="currentActiveTab === 'knowledge-base' ? 'bg-(--color-conversation-bg-active) text-(--color-conversation-text-active)' : 'text-(--color-text-gray) hover:bg-(--color-conversation-bg-hover) hover:text-(--color-conversation-text-hover)'">
+        :class="currentActiveTab === 'knowledge-base' ? 'bg-(--color-sidebar-bg-active) text-(--color-sidebar-text-active)' : 'text-(--color-text-gray) hover:bg-(--color-sidebar-bg-hover) hover:text-(--color-sidebar-text-hover)'">
         <div
           class="w-5 h-5 mb-1 flex items-center justify-center transition-transform duration-200 ease-in-out group-hover:scale-110">
           <MenuBookOutlined v-if="currentActiveTab === 'knowledge-base'" class="w-5 h-5" />
@@ -48,10 +48,22 @@
         <span class="text-[0.6875rem] font-medium tracking-wide">知识</span>
       </div>
 
+      <!-- 插件 -->
+      <div @click="handleNavClick('plugins')"
+        class="flex flex-col items-center justify-center px-2 py-2.5 my-0.5 rounded-xl cursor-pointer transition-all duration-250 ease-in-out group"
+        :class="currentActiveTab === 'plugins' ? 'bg-(--color-sidebar-bg-active) text-(--color-sidebar-text-active)' : 'text-(--color-text-gray) hover:bg-(--color-sidebar-bg-hover) hover:text-(--color-sidebar-text-hover)'">
+        <div
+          class="w-5 h-5 mb-1 flex items-center justify-center transition-transform duration-200 ease-in-out group-hover:scale-110">
+          <ExtensionTwotone v-if="currentActiveTab === 'plugins'" class="w-5 h-5" />
+          <ExtensionOutlined v-else class="w-5 h-5" />
+        </div>
+        <span class="text-[0.6875rem] font-medium tracking-wide">插件</span>
+      </div>
+
       <!-- 系统设置 -->
       <div @click="handleNavClick('setting')"
         class="flex flex-col items-center justify-center px-2 py-2.5 my-0.5 rounded-xl cursor-pointer transition-all duration-250 ease-in-out group"
-        :class="currentActiveTab === 'setting' ? 'bg-(--color-conversation-bg-active) text-(--color-conversation-text-active)' : 'text-(--color-text-gray) hover:bg-(--color-conversation-bg-hover) hover:text-(--color-conversation-text-hover)'">
+        :class="currentActiveTab === 'setting' ? 'bg-(--color-sidebar-bg-active) text-(--color-sidebar-text-active)' : 'text-(--color-text-gray) hover:bg-(--color-sidebar-bg-hover) hover:text-(--color-sidebar-text-hover)'">
         <div
           class="w-5 h-5 mb-1 flex items-center justify-center transition-transform duration-200 ease-in-out group-hover:scale-110">
           <SettingsTwotone v-if="currentActiveTab === 'setting'" class="w-5 h-5" />
@@ -62,10 +74,10 @@
     </div>
 
     <!-- 底部用户信息 -->
-    <div class="px-2.5 py-3.5 border-t border-(--color-conversation-border)">
+    <div class="px-2.5 py-3.5">
       <!-- 主题切换按钮 -->
       <div @click="toggleDark"
-        class="flex flex-col items-center justify-center px-2 py-2.5 my-0.5 rounded-xl cursor-pointer transition-all duration-250 ease-in-out text-(--color-text-gray) hover:bg-(--color-conversation-bg-hover) hover:text-(--color-conversation-text-hover) mb-1">
+        class="flex flex-col items-center justify-center px-2 py-2.5 my-0.5 rounded-xl cursor-pointer transition-all duration-250 ease-in-out text-(--color-text-gray) hover:bg-(--color-sidebar-bg-hover) hover:text-(--color-sidebar-text-hover) mb-1">
         <div
           class="w-5 h-5 mb-1 flex items-center justify-center transition-transform duration-200 ease-in-out hover:scale-110">
           <WbSunnyTwotone v-if="isDark" class="w-5 h-5" />
@@ -128,7 +140,9 @@ import {
   SettingsTwotone,
   WbSunnyTwotone,
   NightlightRound,
-  MenuBookOutlined
+  MenuBookOutlined,
+  ExtensionOutlined,
+  ExtensionTwotone
 } from '@vicons/material'
 
 const router = useRouter()
@@ -154,6 +168,7 @@ const currentActiveTab = computed(() => {
   if (routeName === 'AccountCenter') return 'account'
   if (routeName === 'SystemSettings') return 'setting'
   if (routeName === 'KnowledgeBase') return 'knowledge-base'
+  if (routeName === 'Plugins') return 'plugins'
   return props.activeTab || ''
 })
 
@@ -179,6 +194,9 @@ const handleNavClick = (tab: string): void => {
     router.replace({ name: 'SystemSettings' })
   } else if (tab === 'knowledge-base') {
     router.replace({ name: 'KnowledgeBase' })
+  } else if (tab === 'plugins') {
+    // 跳转到插件页面，默认显示第一个标签页
+    router.replace({ name: 'Plugins' })
   }
 }
 

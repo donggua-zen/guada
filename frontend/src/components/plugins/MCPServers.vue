@@ -19,7 +19,7 @@
         </div>
 
         <!-- MCP 服务器列表 -->
-        <div class="rounded border border-gray-200 dark:border-gray-700 overflow-hidden">
+        <div class="rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-[#1e1e1e] overflow-hidden">
             <ul v-if="servers.length > 0">
                 <li v-for="server in servers" :key="server.id"
                     class="flex items-center py-4 px-4 border-b border-gray-200 dark:border-gray-700 last:border-b-0 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors">
