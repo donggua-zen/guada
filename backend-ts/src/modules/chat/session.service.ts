@@ -149,7 +149,7 @@ export class SessionService {
     // 如果角色和会话均未设置模型，尝试使用默认对话模型
     if (!finalModelId) {
       const defaultChatModelSetting = await this.globalSettingRepo.findByKey(
-        "default_chat_model_id",
+        "defaultChatModelId",
         userId,
       );
       if (defaultChatModelSetting && defaultChatModelSetting.value) {
@@ -247,7 +247,7 @@ export class SessionService {
 
       // 从全局设置中获取标题总结模型
       const titleModelId = await this.getGlobalSetting(
-        "default_title_summary_model_id",
+        "defaultTitleSummaryModelId",
         userId,
       );
 
@@ -282,7 +282,7 @@ export class SessionService {
 
       // 获取全局设置中的标题总结提示词
       const titlePrompt = await this.getGlobalSetting(
-        "default_title_summary_prompt",
+        "defaultTitleSummaryPrompt",
         "请根据以下对话内容，生成一个简洁、准确且具有描述性的会话标题（不超过 20 个字）。直接返回标题即可，不需要其他解释。",
       );
 
@@ -403,7 +403,7 @@ export class SessionService {
 
       // 2. 获取全局设置中的历史压缩模型
       const compressionModelId = await this.getGlobalSetting(
-        "default_history_compression_model_id",
+        "defaultHistoryCompressionModelId",
         userId,
       );
 
@@ -588,7 +588,7 @@ export class SessionService {
     let modelId = session.modelId;
     if (!modelId) {
       const defaultModelSetting = await this.globalSettingRepo.findByKey(
-        "default_chat_model_id",
+        "defaultChatModelId",
         userId,
       );
       if (defaultModelSetting && defaultModelSetting.value) {

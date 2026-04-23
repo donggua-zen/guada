@@ -1,5 +1,6 @@
 import { Body, Controller, Post, BadRequestException } from "@nestjs/common";
 import { AuthService } from "./auth.service";
+import { Public } from "./public.decorator";
 
 @Controller("auth")
 export class AuthController {
@@ -45,5 +46,18 @@ export class AuthController {
     }
 
     return this.authService.register(body.email, body.password, body.nickname);
+  }
+
+  /**
+   * 自动登录接口 - 公开访问，用于前端主动触发自动登录
+   */
+  @Public()
+  @Post("auto-login")
+  async autoLogin() {
+    const result = await this.authService.autoLogin();
+    if (!result) {
+      throw new BadRequestException("自动登录失败，请检查配置或联系管理员");
+    }
+    return result;
   }
 }
