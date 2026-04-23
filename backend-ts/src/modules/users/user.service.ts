@@ -26,7 +26,13 @@ export class UserService {
   ) {}
 
   async getProfile(userId: string) {
-    return this.userRepo.findById(userId);
+    const user = await this.userRepo.findById(userId);
+    if (!user) {
+      throw new Error("用户不存在");
+    }
+
+    const { passwordHash, ...result } = user;
+    return result;
   }
 
   async updateProfile(userId: string, data: any) {

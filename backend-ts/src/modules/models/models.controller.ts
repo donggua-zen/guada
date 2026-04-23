@@ -9,6 +9,7 @@ import {
   UseGuards,
 } from "@nestjs/common";
 import { AuthGuard } from "../auth/auth.guard";
+import { Public } from "../auth/public.decorator";
 import { CurrentUser } from "../auth/current-user.decorator";
 import { ModelService } from "./model.service";
 
@@ -49,9 +50,17 @@ export class ModelsController {
     return { success: true };
   }
 
+  @Public()
   @Get("providers/templates")
   async getProviderTemplates() {
     return this.modelService.getProviderTemplates();
+  }
+
+  @Public()
+  @Post("providers/test-connection")
+  async testConnection(@Body() data: any, @CurrentUser() user: any) {
+    // 如果用户已登录，传入 userId；否则传 null，由 Service 层处理
+    return this.modelService.testProviderConnection(data, user?.sub);
   }
 
   @Post("providers")

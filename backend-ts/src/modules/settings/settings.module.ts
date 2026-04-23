@@ -9,5 +9,6 @@ import { AuthModule } from "../auth/auth.module";
   imports: [AuthModule],
   controllers: [SettingsController],
   providers: [SettingsService, GlobalSettingRepository, PrismaService],
+  exports: [SettingsService],
 })
 export class SettingsModule {}
