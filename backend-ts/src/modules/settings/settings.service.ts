@@ -8,9 +8,6 @@ export class SettingsService {
     "defaultSearchModelId",
     "defaultSummaryModelId",
     "searchPromptContextLength",
-    "searchApiKey",
-    "summaryModelId",
-    "summaryPrompt",
     "defaultTitleSummaryModelId",
     "defaultTitleSummaryPrompt",
     "defaultTranslationModelId",
@@ -30,19 +27,18 @@ export class SettingsService {
       settingsMap[key] = null;
     });
 
-    // 覆盖数据库中的值（将 snake_case 转换为 camelCase）
+    // 覆盖数据库中的值（假设数据库中已统一使用驼峰命名）
     allSettings.forEach((item) => {
-      const camelKey = this.snakeToCamel(item.key);
-      settingsMap[camelKey] = item.value;
+      settingsMap[item.key] = item.value;
     });
 
     return settingsMap;
   }
 
   async updateSettings(userId: string, data: Record<string, any>) {
-    // 将 camelCase 转换为 snake_case 存储到数据库
+    // 直接使用驼峰命名存储到数据库
     const updates = Object.entries(data).map(([key, value]) => ({
-      key: this.camelToSnake(key),
+      key,
       value,
       userId,
     }));
@@ -52,16 +48,34 @@ export class SettingsService {
   }
 
   /**
-   * 将 snake_case 转换为 camelCase
+   * 获取免登录配置状态
    */
-  private snakeToCamel(str: string): string {
-    return str.replace(/_([a-z])/g, (_, letter) => letter.toUpperCase());
+  async getAutoLoginEnabled(): Promise<boolean> {
+    try {
+      const setting = await this.settingRepo.findByKey("autoLoginEnabled", null);
+      if (!setting) {
+        return false;
+      }
+      return setting.value === "true";
+    } catch (error) {
+      console.error("获取免登录配置失败:", error);
+      return false;
+    }
   }
 
   /**
-   * 将 camelCase 转换为 snake_case
+   * 设置免登录配置状态
    */
-  private camelToSnake(str: string): string {
-    return str.replace(/[A-Z]/g, (letter) => `_${letter.toLowerCase()}`);
+  async setAutoLoginEnabled(enabled: boolean): Promise<void> {
+    try {
+      await this.settingRepo.upsert({
+        key: "autoLoginEnabled",
+        value: enabled ? "true" : "false",
+        userId: null,
+      });
+    } catch (error) {
+      console.error("设置免登录配置失败:", error);
+      throw error;
+    }
   }
 }

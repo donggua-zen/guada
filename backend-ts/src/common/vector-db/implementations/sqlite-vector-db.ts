@@ -9,6 +9,7 @@
  */
 
 import { Injectable, Logger } from "@nestjs/common";
+import { ConfigService } from "@nestjs/config";
 import Database from "better-sqlite3";
 import * as path from "path";
 import * as fs from "fs";
@@ -30,8 +31,17 @@ export class SqliteVectorDB implements VectorDatabase {
   private jieba: Jieba | null = null;
   private persistPath: string;
 
-  constructor() {
-    this.persistPath = path.join(process.cwd(), "data", "vector_db.sqlite");
+  constructor(private configService: ConfigService) {
+    // 从环境变量读取向量数据库路径，默认值为 data/vector_db.sqlite
+    const vectorDbPath =
+      this.configService.get<string>("VECTOR_DB_PATH") ||
+      path.join(process.cwd(), "data", "vector_db.sqlite");
+
+    // 如果是相对路径，转换为绝对路径
+    this.persistPath = path.isAbsolute(vectorDbPath)
+      ? vectorDbPath
+      : path.join(process.cwd(), vectorDbPath);
+
     // 确保目录存在
     const dir = path.dirname(this.persistPath);
     if (!fs.existsSync(dir)) {

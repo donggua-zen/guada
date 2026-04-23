@@ -64,6 +64,39 @@ export class ModelService {
   }
 
   /**
+   * 测试供应商连接（不保存到数据库）
+   */
+  async testProviderConnection(data: any, userId?: string) {
+    const { provider, apiKey, apiUrl } = data;
+    const template = PROVIDER_TEMPLATES.find((t) => t.id === provider);
+    
+    if (!template) {
+      throw new Error("未知的供应商类型");
+    }
+
+    const baseUrl = apiUrl || template.defaultApiUrl;
+    
+    try {
+      // 尝试创建一个临时的 OpenAI 客户端进行测试
+      const client = new OpenAI({
+        apiKey: apiKey,
+        baseURL: baseUrl,
+      });
+
+      // 尝试获取模型列表，如果能成功则说明 Key 和 URL 有效
+      await client.models.list();
+      
+      return { success: true, message: "连接成功" };
+    } catch (error: any) {
+      this.logger.error(`Provider connection test failed: ${error.message}`);
+      return { 
+        success: false, 
+        message: error.message?.includes('401') ? 'API Key 无效' : `连接失败: ${error.message}` 
+      };
+    }
+  }
+
+  /**
    * 添加新的模型提供商
    * 如果模板中定义了 models，则自动创建对应的模型记录
    */

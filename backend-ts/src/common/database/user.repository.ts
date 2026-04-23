@@ -34,4 +34,13 @@ export class UserRepository {
       where: { parentId },
     });
   }
+
+  /**
+   * 查找 primary 角色的用户
+   */
+  async findPrimaryUser() {
+    return this.prisma.user.findFirst({
+      where: { role: 'primary' },
+    });
+  }
 }

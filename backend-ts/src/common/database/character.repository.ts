@@ -21,7 +21,7 @@ export class CharacterRepository {
     const [items, total] = await Promise.all([
       this.prisma.character.findMany({
         where,
-        orderBy: { createdAt: "desc" },
+        orderBy: { createdAt: "asc" },
         skip,
         take: limit,
         include: { model: true, group: true },
