@@ -835,3 +835,23 @@ export const PROVIDER_TEMPLATES: ProviderTemplate[] = [
     },
   },
 ];
+
+/**
+ * 转换 Provider Templates 的 URL 为完整 URL
+ * @param baseUrl 基础 URL（如 http://localhost:3000）
+ * @returns 转换后的 templates 数组
+ */
+export function transformProviderTemplateUrls(
+  baseUrl?: string
+): ProviderTemplate[] {
+  if (!baseUrl) {
+    return PROVIDER_TEMPLATES;
+  }
+
+  return PROVIDER_TEMPLATES.map((template) => ({
+    ...template,
+    avatarUrl: template.avatarUrl
+      ? `${baseUrl}${template.avatarUrl}`
+      : undefined,
+  }));
+}

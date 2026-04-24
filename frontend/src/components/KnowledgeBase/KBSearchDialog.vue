@@ -136,6 +136,8 @@ import { ref, computed, watch } from 'vue'
 import { Search, Loading, Document } from '@element-plus/icons-vue'
 import type { KnowledgeBase } from '@/stores/knowledgeBase'
 import { usePopup } from '@/composables/usePopup'
+import { apiService } from '@/services/ApiService'
+
 
 interface SearchResult {
     content: string
@@ -209,7 +211,6 @@ async function handleSearch() {
     searchResults.value = []
 
     try {
-        const { apiService } = await import('@/services/ApiService')
 
         const response = await apiService.searchKnowledgeBase(
             searchForm.value.kbId,

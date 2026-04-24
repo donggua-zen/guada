@@ -1,18 +1,26 @@
 {
   "name": "ai-chat",
-  "version": "1.0.0",
+  "version": "0.0.1",
   "description": "AI Chat Application with Web and Electron support",
   "private": true,
   "main": "electron/dist/main.js",
   "scripts": {
     "dev:web": "cd frontend && npm run dev",
     "dev:backend": "cd backend-ts && npm run start:dev",
-    "dev:electron": "npm run build:electron-ts && concurrently \"cd backend-ts && npm run build\" \"cd frontend && npm run dev\" \"wait-on http://localhost:5173 && cross-env NODE_ENV=development electron .\"",
+    "dev:backend:electron": "cd backend-ts && npm run start:dev:electron",
+    "dev:electron": "npm run build:electron-ts && concurrently \"cd frontend && npm run dev\" \"wait-on http://localhost:5173 && cross-env NODE_ENV=development electron .\"",
+    "dev:electron:prod-frontend": "cross-env ELECTRON=true npm --prefix frontend run build && cross-env USE_STATIC_FRONTEND=true DEBUG_MODE=true NODE_ENV=development electron .",
     "build:web": "cd frontend && npm run build",
     "build:backend": "cd backend-ts && npm run build",
     "build:frontend": "cd frontend && npm run build",
     "build:electron-ts": "cd electron && tsc",
-    "build:electron": "npm run build:electron-ts && npm run build:backend && npm run build:frontend && cross-env ELECTRON=true electron-builder",
+    "rebuild:backend-native": "node scripts/rebuild-native.js",
+    "rebuild:backend-native:electron": "node scripts/rebuild-native-electron.js",
+    "optimize:electron-deps": "node scripts/optimize-electron-deps.js",
+    "compare:deps-size": "node scripts/compare-node-modules-size.js",
+    "analyze:modules": "node scripts/analyze-module-size.js",
+    "verify:electron-setup": "node scripts/verify-electron-setup.js",
+    "build:electron": "npm run build:electron-ts && npm run build:backend && npm run optimize:electron-deps && npm run rebuild:backend-native:electron && cd frontend && cross-env ELECTRON=true npm run build && cd .. && cross-env ELECTRON=true electron-builder",
     "postinstall": "cd backend-ts && npm install && cd ../frontend && npm install"
   },
   "keywords": [
@@ -27,48 +35,64 @@
     "concurrently": "^9.2.0",
     "cross-env": "^7.0.3",
     "electron": "^41.0.0",
-    "electron-builder": "^26.0.0",
-    "electron-builder-squirrel-windows": "^26.0.0",
-    "electron-rebuild": "^3.2.9",
+    "electron-builder": "^24.13.3",
+    "electron-updater": "^6.8.3",
     "typescript": "^6.0.0",
     "wait-on": "^9.0.0"
   },
   "build": {
     "appId": "com.aichat.app",
     "productName": "AI Chat",
+    "npmRebuild": false,
+    "asar": true,
     "directories": {
       "output": "release",
       "buildResources": "build"
     },
     "files": [
-      "electron/**/*",
-      "backend-ts/dist/**/*",
-      "backend-ts/static/**/*",
-      "backend-ts/node_modules/**/*",
-      "backend-ts/prisma/**/*",
+      "electron/dist/**/*",
       "frontend/dist/**/*",
-      "!**/node_modules/*/{CHANGELOG.md,README.md,README,readme.md,readme}",
-      "!**/node_modules/*/{test,__tests__,tests,powered-test,example,examples}",
-      "!**/node_modules/*.d.ts",
-      "!**/node_modules/.bin",
-      "!**/*.{iml,o,hprof,orig,pyc,pyo,rbc,swp,csproj,sln,xproj}",
-      "!.editorconfig",
-      "!**/._*",
-      "!**/{.DS_Store,.git,.hg,.svn,CVS,RCS,SCCS,.gitignore,.gitattributes}",
-      "!**/{__pycache__,thumbs.db,.flowconfig,.idea,.vs,.nyc_output}",
-      "!**/{appveyor.yml,.travis.yml,circle.yml}",
-      "!**/{npm-debug.log,yarn.lock,.yarn-integrity,.yarn-metadata.json}"
+      "!node_modules/**",
+      "!electron/node_modules/**/*"
     ],
     "extraResources": [
       {
-        "from": "backend-ts/dev.db",
-        "to": "backend-ts/dev.db",
+        "from": "backend-ts/dist",
+        "to": "backend-ts/dist",
         "filter": [
-          "**/*"
+          "**/*",
+          "!**/*.map"
+        ]
+      },
+      {
+        "from": "backend-ts/node_modules_production/node_modules",
+        "to": "backend-ts/node_modules",
+        "filter": [
+          "**/*",
+          "!**/.cache/**/*",
+          "!**/__tests__/**/*",
+          "!**/test/**/*",
+          "!**/tests/**/*"
+        ]
+      },
+      {
+        "from": "backend-ts/prisma",
+        "to": "backend-ts/prisma",
+        "filter": [
+          "**/*",
+          "!**/*.db",
+          "!**/*.db-journal"
+        ]
+      },
+      {
+        "from": "backend-ts/static",
+        "to": "backend-ts/static",
+        "filter": [
+          "**/*",
+          "!**/file_stores/**/*"
         ]
       }
     ],
-    "afterPack": "./scripts/after-pack.js",
     "win": {
       "target": [
         {
@@ -78,7 +102,8 @@
           ]
         }
       ],
-      "icon": "build/icon.ico"
+      "icon": "build/icon.ico",
+      "signAndEditExecutable": false
     },
     "mac": {
       "target": [
@@ -116,7 +141,22 @@
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
-      "shortcutName": "AI Chat"
-    }
+      "shortcutName": "AIChat",
+      "differentialPackage": false
+    },
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "your-username",
+        "repo": "ai-chat"
+      },
+      {
+        "provider": "generic",
+        "url": "https://your-oss-domain.com/updates/${os}"
+      }
+    ]
+  },
+  "dependencies": {
+    "@electron/rebuild": "^4.0.4"
   }
 }

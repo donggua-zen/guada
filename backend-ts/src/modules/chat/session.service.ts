@@ -15,6 +15,7 @@ import {
   PaginatedResponse,
 } from "../../common/types/pagination";
 import { ToolResultCleaner, CleaningStrategy } from "./tool-result-cleaner.service";
+import { UrlService } from "../../common/services/url.service";
 
 @Injectable()
 export class SessionService {
@@ -33,6 +34,7 @@ export class SessionService {
     private toolOrchestrator: ToolOrchestrator,
     private sessionLockService: SessionLockService,
     private toolResultCleaner: ToolResultCleaner,
+    private urlService: UrlService,
   ) { }
 
   /**
@@ -49,7 +51,9 @@ export class SessionService {
       limit,
     );
 
-    return createPaginatedResponse(items, total, { skip, limit });
+    // 转换所有 session 的 URL
+    const transformedItems = this.urlService.transformArrayUrls(items);
+    return createPaginatedResponse(transformedItems, total, { skip, limit });
   }
 
   /**
@@ -63,7 +67,8 @@ export class SessionService {
       throw new Error("Session not found or unauthorized");
     }
 
-    return session;
+    // 转换 URL
+    return session ? this.urlService.transformUrls(session) : null;
   }
 
   /**
@@ -171,7 +176,8 @@ export class SessionService {
 
     const session = await this.sessionRepo.create(sessionData);
 
-    return session;
+    // 转换 URL 后返回
+    return this.urlService.transformUrls(session);
   }
 
   /**

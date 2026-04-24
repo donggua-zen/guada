@@ -3,6 +3,13 @@
   "collection": "@nestjs/schematics",
   "sourceRoot": "src",
   "compilerOptions": {
-    "deleteOutDir": false
+    "deleteOutDir": false,
+    "assets": [
+      {
+        "include": "common/utils/tokenizers/**/*",
+        "outDir": "dist"
+      }
+    ],
+    "watchAssets": true
   }
 }

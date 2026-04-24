@@ -148,12 +148,11 @@
     <el-dialog v-model="showMoveDialog" title="移动到" width="500px" :close-on-click-modal="false" append-to-body>
       <div class="max-h-80 overflow-y-auto">
         <!-- 根目录选项 -->
-        <div
-          class="flex items-center gap-2 px-3 py-2 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700 rounded"
-          :class="{ 'bg-blue-50 dark:bg-blue-900/30': selectedTargetFolderId === null }"
-          @click="selectRootDirectory"
-        >
-          <el-icon><Folder /></el-icon>
+        <div class="flex items-center gap-2 px-3 py-2 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700 rounded"
+          :class="{ 'bg-blue-50 dark:bg-blue-900/30': selectedTargetFolderId === null }" @click="selectRootDirectory">
+          <el-icon>
+            <Folder />
+          </el-icon>
           <span>根目录</span>
         </div>
 
@@ -184,6 +183,7 @@ import { Folder, View, RefreshRight, Delete, Loading, Edit, Position } from '@el
 import { ElMessage } from 'element-plus'
 import type { KBFile } from '@/stores/knowledgeBase'
 import { useKnowledgeBaseStore } from '@/stores/knowledgeBase'
+import { apiService } from '@/services/ApiService'
 
 // 导入文件图标
 import fileCodeIcon from '@/assets/file_code.svg'
@@ -273,7 +273,6 @@ async function loadFolderContents(relativePath: string | null) {
   isLoading.value = true
 
   try {
-    const { apiService } = await import('@/services/ApiService')
 
     // 直接使用路径查询接口
     const response = await apiService.fetchKBFilesByPath(
@@ -384,7 +383,6 @@ async function startFileProcessingPolling() {
 
   const poll = async () => {
     try {
-      const { apiService } = await import('@/services/ApiService')
 
       // 批量获取文件状态
       const responses = await apiService.batchGetFileProcessingStatus(
@@ -818,9 +816,9 @@ function validateFileName(name: string): { valid: boolean; message?: string } {
   // 不允许的字符：/ \ : * ? " < > | 以及控制字符
   const invalidChars = /[\\/:*?"<>|\x00-\x1f\x7f]/
   if (invalidChars.test(name)) {
-    return { 
-      valid: false, 
-      message: '名称包含非法字符，不允许使用：\\ / : * ? " < > | 及控制字符' 
+    return {
+      valid: false,
+      message: '名称包含非法字符，不允许使用：\\ / : * ? " < > | 及控制字符'
     }
   }
 
@@ -835,8 +833,8 @@ function validateFileName(name: string): { valid: boolean; message?: string } {
   }
 
   // 不允许以空格或点号开头/结尾
-  if (name.startsWith(' ') || name.endsWith(' ') || 
-      name.startsWith('.') || name.endsWith('.')) {
+  if (name.startsWith(' ') || name.endsWith(' ') ||
+    name.startsWith('.') || name.endsWith('.')) {
     return { valid: false, message: '名称不能以空格或点号开头或结尾' }
   }
 
@@ -851,7 +849,7 @@ async function confirmRename() {
     newName: renameForm.value.newName,
     fileId: renamingFileId.value,
   })
-  
+
   if (!renameForm.value.newName || !renamingFileId.value) {
     console.warn('[DEBUG] 重命名参数无效')
     return
@@ -873,7 +871,7 @@ async function confirmRename() {
     )
     ElMessage.success('重命名成功')
     showRenameDialog.value = false
-    
+
     // 刷新当前目录
     await loadFolderContents(currentRelativePath.value)
   } catch (error: any) {
@@ -904,7 +902,6 @@ async function handleMoveFromMenu() {
  */
 async function loadFolderTree() {
   try {
-    const { apiService } = await import('@/services/ApiService')
 
     // 获取所有文件夹（递归）
     const response = await apiService.fetchKBFiles(props.kbId, 0, 1000)
@@ -972,7 +969,7 @@ async function confirmMove() {
     fileId: movingFileId.value,
     targetParentFolderId: selectedTargetFolderId.value,
   })
-  
+
   if (!movingFileId.value) {
     console.warn('[DEBUG] 移动参数无效')
     return
@@ -987,7 +984,7 @@ async function confirmMove() {
     )
     ElMessage.success('移动成功')
     showMoveDialog.value = false
-    
+
     // 刷新当前目录
     await loadFolderContents(currentRelativePath.value)
   } catch (error: any) {

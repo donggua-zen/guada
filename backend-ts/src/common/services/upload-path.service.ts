@@ -1,5 +1,6 @@
 import { Injectable } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
+import { UrlService } from "./url.service";
 import * as path from "path";
 import * as fs from "fs";
 
@@ -8,7 +9,10 @@ export class UploadPathService {
   private readonly baseDir: string;
   private readonly publicPrefix: string;
 
-  constructor(private configService: ConfigService) {
+  constructor(
+    private configService: ConfigService,
+    private urlService: UrlService
+  ) {
     // 物理基础目录 (例如: /app/static/file_stores)
     this.baseDir =
       this.configService.get<string>("upload.baseDir") ||
@@ -31,13 +35,16 @@ export class UploadPathService {
   }
 
   /**
-   * 根据文件名生成 Web 访问 URL
+   * 根据文件名生成 Web 访问 URL（自动转换为完整 URL）
    */
   getWebUrl(subDir: string, filename: string): string {
     // 确保路径分隔符在 URL 中是正斜杠
     const normalizedSubDir = subDir.replace(/\\/g, "/");
     const normalizedFilename = filename.replace(/\\/g, "/");
-    return `${this.publicPrefix}/${normalizedSubDir}/${normalizedFilename}`;
+    const relativeUrl = `${this.publicPrefix}/${normalizedSubDir}/${normalizedFilename}`;
+    
+    // 使用 UrlService 转换为完整 URL
+    return this.urlService.toAbsoluteUrl(relativeUrl);
   }
 
   /**

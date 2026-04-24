@@ -11,6 +11,7 @@ export {}
 /* prettier-ignore */
 declare module 'vue' {
   export interface GlobalComponents {
+    AboutPanel: typeof import('./src/components/plugins/AboutPanel.vue')['default']
     AccountCenter: typeof import('./src/components/account/AccountCenter.vue')['default']
     ArrowCircleLeft: typeof import('./src/components/icons/ArrowCircleLeft.vue')['default']
     ArrowSend: typeof import('./src/components/icons/ArrowSend.vue')['default']
@@ -55,8 +56,6 @@ declare module 'vue' {
     ElSelect: typeof import('element-plus/es')['ElSelect']
     ElSlider: typeof import('element-plus/es')['ElSlider']
     ElSliderOptional: typeof import('./src/components/ui/ElSliderOptional.vue')['default']
-    ElStep: typeof import('element-plus/es')['ElStep']
-    ElSteps: typeof import('element-plus/es')['ElSteps']
     ElSwitch: typeof import('element-plus/es')['ElSwitch']
     ElTabPane: typeof import('element-plus/es')['ElTabPane']
     ElTabs: typeof import('element-plus/es')['ElTabs']

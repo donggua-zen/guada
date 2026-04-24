@@ -3,7 +3,8 @@ import { ModelRepository } from "../../common/database/model.repository";
 import { UserRepository } from "../../common/database/user.repository";
 import { OpenAI } from "openai";
 import { createPaginatedResponse } from "../../common/types/pagination";
-import { PROVIDER_TEMPLATES } from "../../constants/provider-templates";
+import { PROVIDER_TEMPLATES, transformProviderTemplateUrls } from "../../constants/provider-templates";
+import { UrlService } from "../../common/services/url.service";
 
 @Injectable()
 export class ModelService {
@@ -12,6 +13,7 @@ export class ModelService {
   constructor(
     private modelRepo: ModelRepository,
     private userRepo: UserRepository,
+    private urlService: UrlService,
   ) {}
 
   /**
@@ -40,13 +42,14 @@ export class ModelService {
             ...provider,
             attributes: template.attributes, // 实时从文件获取
             name: template.name, // 确保名称同步
-            avatarUrl: template.avatarUrl,
+            avatarUrl: this.urlService.toAbsoluteUrl(template.avatarUrl || provider.avatarUrl),
             protocol: template.protocol,
             description: template.description,
           };
         }
       }
-      return provider;
+      // 对于自定义 provider，也转换 URL
+      return this.urlService.transformUrls(provider);
     });
 
     // 返回分页响应格式
@@ -60,7 +63,9 @@ export class ModelService {
    * 获取可用的供应商模板列表
    */
   getProviderTemplates() {
-    return PROVIDER_TEMPLATES;
+    // 使用 UrlService 转换所有模板的 avatarUrl
+    const baseUrl = this.urlService["baseUrl"];
+    return transformProviderTemplateUrls(baseUrl);
   }
 
   /**
