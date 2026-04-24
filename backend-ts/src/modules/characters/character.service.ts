@@ -5,12 +5,14 @@ import {
   createPaginatedResponse,
   PaginatedResponse,
 } from "../../common/types/pagination";
+import { UrlService } from "../../common/services/url.service";
 
 @Injectable()
 export class CharacterService {
   constructor(
     private characterRepo: CharacterRepository,
     private groupRepo: CharacterGroupRepository,
+    private urlService: UrlService,
   ) { }
 
   // --- Group Management ---
@@ -54,7 +56,9 @@ export class CharacterService {
       groupId,
     );
 
-    return createPaginatedResponse(items, total, { skip, limit });
+    // 转换所有 character 的 URL
+    const transformedItems = this.urlService.transformArrayUrls(items);
+    return createPaginatedResponse(transformedItems, total, { skip, limit });
   }
 
   async getCharacterById(characterId: string, userId: string) {
@@ -69,7 +73,8 @@ export class CharacterService {
       throw new Error("Character not found or unauthorized");
     }
 
-    return character;
+    // 转换 URL
+    return this.urlService.transformUrls(character);
   }
 
   async createCharacter(userId: string, data: any) {
@@ -84,7 +89,8 @@ export class CharacterService {
 
     const character = await this.characterRepo.create(cleanData);
 
-    return character;
+    // 转换 URL 后返回
+    return this.urlService.transformUrls(character);
   }
 
   async updateCharacter(characterId: string, userId: string, data: any) {
@@ -106,7 +112,8 @@ export class CharacterService {
       cleanData,
     );
 
-    return updatedCharacter;
+    // 转换 URL 后返回
+    return this.urlService.transformUrls(updatedCharacter);
   }
 
   async deleteCharacter(characterId: string, userId: string) {

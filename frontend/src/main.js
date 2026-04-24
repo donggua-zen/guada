@@ -1,7 +1,7 @@
 import { createApp } from 'vue'
 
 import App from './App.vue'
-import { createRouter, createWebHistory } from 'vue-router'
+import { createRouter, createWebHistory, createWebHashHistory } from 'vue-router'
 import { createPinia } from 'pinia'
 import { useAuthStore } from './stores/auth'
 import NProgress from 'nprogress'
@@ -103,8 +103,11 @@ const routes = [
     },
 ]
 
+// 根据环境动态选择路由模式
+// Electron 环境使用 Hash 模式（file:// 协议不支持 History 模式）
+// Web 环境使用 History 模式（URL 更美观）
 const router = createRouter({
-    history: createWebHistory(),
+    history: isElectron ? createWebHashHistory() : createWebHistory(),
     routes
 });
 
@@ -113,7 +116,9 @@ router.beforeEach(async (to, from, next) => {
     if (!isElectron) {
         NProgress.start()
     }
-    
+
+    console.log('Navigating to:', to.path)
+
     const authStore = useAuthStore()
 
     // 1. 检查本地是否已完成过设置向导
@@ -123,7 +128,7 @@ router.beforeEach(async (to, from, next) => {
     if (!hasCompletedSetup && to.path !== '/setup') {
         // 先确保已登录（自动登录逻辑在 AuthGuard 处理）
         const isAuthenticated = await authStore.checkAuth()
-        
+
         if (isAuthenticated) {
             // 检查是否有模型供应商
             try {

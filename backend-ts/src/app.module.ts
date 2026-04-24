@@ -2,6 +2,7 @@ import { Module } from "@nestjs/common";
 import { ConfigModule } from "@nestjs/config";
 import uploadConfig from "./common/config/upload.config";
 import { UploadModule } from "./common/upload/upload.module";
+import { SharedModule } from "./common/services/shared.module";
 import { ChatModule } from "./modules/chat/chat.module";
 import { ModelsModule } from "./modules/models/models.module";
 import { AuthModule } from "./modules/auth/auth.module";
@@ -21,6 +22,7 @@ import { McpClientModule } from "./common/mcp/mcp-client.module";
       isGlobal: true,
       load: [uploadConfig],
     }),
+    SharedModule, // 全局共享服务（UploadPathService, UrlService）
     UploadModule, // 全局上传路径模块
     VectorDbModule, // 向量数据库模块
     McpClientModule, // MCP 客户端模块（全局）

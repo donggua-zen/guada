@@ -16,7 +16,7 @@
               class="provider-card"
               @click="openProviderModal(tpl)"
             >
-              <img :src="tpl.avatarUrl || '/static/images/providers/default.svg'" class="provider-avatar" />
+              <img :src="getProviderAvatar(tpl.avatarUrl)" class="provider-avatar" />
               <div class="provider-info">
                 <h4>{{ tpl.name }}</h4>
                 <p>{{ tpl.description }}</p>
@@ -69,10 +69,11 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, onMounted } from 'vue'
+import { ref, reactive, onMounted, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { apiService } from '@/services/ApiService'
+import { fixStaticUrl } from '@/utils/url'
 
 const router = useRouter()
 
@@ -111,6 +112,11 @@ const adminRules = {
 }
 
 // 步骤二数据
+// 修正图片 URL（Electron 环境下使用完整 HTTP URL）
+const getProviderAvatar = (url: string) => {
+  return fixStaticUrl(url || '/static/images/providers/default.svg')
+}
+
 const providerTemplates = ref<any[]>([])
 
 onMounted(async () => {

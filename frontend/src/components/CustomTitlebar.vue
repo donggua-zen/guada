@@ -7,6 +7,14 @@
 
     <!-- 右侧：窗口控制按钮 -->
     <div class="titlebar-right no-drag">
+      <!-- 更新提示 -->
+      <div v-if="isElectron && updateAvailable" 
+           class="update-badge cursor-pointer flex items-center px-3 text-xs font-medium text-white bg-blue-500 hover:bg-blue-600 transition-colors"
+           @click="handleUpdateClick"
+           title="点击安装更新">
+        <span>有新版本 {{ updateVersion }}</span>
+      </div>
+
       <button class="titlebar-button" @click="minimizeWindow" title="最小化">
         <svg t="1776852968295" class="icon" viewBox="0 0 1024 1024" version="1.1" xmlns="http://www.w3.org/2000/svg"
           p-id="5695" width="48" height="48">
@@ -50,17 +58,40 @@
 
 <script setup lang="ts">
 import { computed, ref, onMounted, onUnmounted } from 'vue'
+import { useRouter } from 'vue-router'
 
+const router = useRouter()
 const isElectron = computed(() => {
   return typeof window !== 'undefined' && window.electronAPI !== undefined
 })
 
 const isMaximized = ref(false)
+const updateAvailable = ref(false)
+const updateVersion = ref('')
 
 // 更新窗口最大化状态
 const updateMaximizedState = async () => {
   if (window.electronAPI) {
     isMaximized.value = await window.electronAPI.isMaximized()
+  }
+}
+
+const handleUpdateStatus = (status: any) => {
+  if (status.status === 'available') {
+    updateAvailable.value = true
+    updateVersion.value = status.info?.version || ''
+  } else if (status.status === 'downloaded') {
+    updateAvailable.value = true
+  } else if (status.status === 'not-available' || status.status === 'error') {
+    updateAvailable.value = false
+  }
+}
+
+const handleUpdateClick = () => {
+  if (window.electronAPI) {
+    // 如果已经下载完成，直接安装；否则跳转到设置页查看进度
+    // 这里简单处理为触发安装或跳转
+    window.electronAPI.installAndRestart()
   }
 }
 
@@ -87,6 +118,10 @@ const handleResize = () => {
 onMounted(() => {
   updateMaximizedState()
   window.addEventListener('resize', handleResize)
+  
+  if (window.electronAPI && typeof window.electronAPI.onUpdateStatus === 'function') {
+    window.electronAPI.onUpdateStatus(handleUpdateStatus)
+  }
 })
 
 // 组件卸载时移除监听器

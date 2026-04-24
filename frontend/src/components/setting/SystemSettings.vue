@@ -24,6 +24,9 @@
                     <template v-else-if="currentTabValue === 'default-models'">
                         <DefaultModelSettings />
                     </template>
+                    <template v-else-if="currentTabValue === 'about'">
+                        <AboutPanel />
+                    </template>
                 </div>
             </div>
         </div>
@@ -36,11 +39,13 @@ import { ElTabs, ElTabPane } from 'element-plus'
 import ModelsSettings from './ModelsSettings.vue'
 import DefaultModelSettings from './DefaultModelSettings.vue'
 import GeneralSettings from './GeneralSettings.vue'
+import AboutPanel from '../plugins/AboutPanel.vue'
 
 import {
     CloudLink16Regular,
     Grid16Regular,
-    Settings16Regular
+    Settings16Regular,
+    Info24Regular
 } from '@vicons/fluent'
 
 import { useAuthStore } from '../../stores/auth'
@@ -68,6 +73,12 @@ const sidebarItems = [
         label: '默认模型',
         path: 'default-models',
         icon: Grid16Regular,
+        roles: ['primary'],
+    },
+    {
+        label: '关于',
+        path: 'about',
+        icon: Info24Regular,
         roles: ['primary'],
     },
 ]

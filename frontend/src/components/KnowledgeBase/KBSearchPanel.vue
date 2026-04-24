@@ -123,6 +123,8 @@ import { ref, computed, watch } from 'vue'
 import { Search, Loading } from '@element-plus/icons-vue'
 import type { KnowledgeBase } from '@/stores/knowledgeBase'
 import { usePopup } from '@/composables/usePopup'
+import { apiService } from '@/services/ApiService'
+
 
 interface SearchResult {
   content: string
@@ -179,7 +181,6 @@ async function handleSearch() {
   searchResults.value = []
 
   try {
-    const { apiService } = await import('@/services/ApiService')
 
     // 使用传入的默认知识库 ID
     if (!props.defaultKbId) {

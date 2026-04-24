@@ -49,9 +49,10 @@
 <script setup lang="ts">
 import { ref, watch } from 'vue'
 import { Loading, Document } from '@element-plus/icons-vue'
-import type { KBFile } from '@/stores/fileUpload'
+import type { KBFile } from '@/stores/knowledgeBase'
 import { useKnowledgeBaseStore } from '@/stores/knowledgeBase'
 import { usePopup } from '@/composables/usePopup'
+import { apiService } from '@/services/ApiService'
 
 interface Props {
     modelValue: boolean
@@ -107,8 +108,6 @@ async function loadChunks() {
     loading.value = true
 
     try {
-        const { apiService } = await import('@/services/ApiService')
-
         // 获取分块数据，计算正确的 skip 值 (currentPage 从 1 开始，所以要减 1)
         const skip = (currentPage.value - 1) * pageSize.value
         const data = await apiService.getKBFileChunks(

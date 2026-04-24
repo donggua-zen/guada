@@ -6,6 +6,7 @@ import sharp from "sharp";
 import * as crypto from "crypto";
 import { UserRepository } from "../../common/database/user.repository";
 import { UploadPathService } from "../../common/services/upload-path.service";
+import { UrlService } from "../../common/services/url.service";
 
 @Injectable()
 export class UserService {
@@ -23,6 +24,7 @@ export class UserService {
   constructor(
     private uploadPathService: UploadPathService,
     private userRepo: UserRepository,
+    private urlService: UrlService,
   ) {}
 
   async getProfile(userId: string) {
@@ -32,7 +34,8 @@ export class UserService {
     }
 
     const { passwordHash, ...result } = user;
-    return result;
+    // 转换 URL
+    return this.urlService.transformUrls(result);
   }
 
   async updateProfile(userId: string, data: any) {

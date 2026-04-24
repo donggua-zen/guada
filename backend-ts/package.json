@@ -7,6 +7,7 @@
     "build": "nest build",
     "start": "nest start",
     "start:dev": "ts-node-dev --respawn --transpile-only src/main.ts",
+    "start:dev:electron": "ts-node-dev --respawn --transpile-only src/main.ts",
     "start:debug": "ts-node-dev --inspect --respawn --transpile-only src/main.ts",
     "start:prod": "node dist/main",
     "test": "jest",
@@ -15,7 +16,8 @@
     "db:seed": "ts-node src/scripts/seed.ts",
     "db:seed:force": "ts-node src/scripts/seed.ts --force",
     "db:verify": "ts-node src/scripts/verify-db.ts",
-    "test:pdf-extract": "ts-node src/scripts/test-pdf-extract.ts"
+    "test:pdf-extract": "ts-node src/scripts/test-pdf-extract.ts",
+    "rebuild:electron": "node ../scripts/rebuild-native-electron.js"
   },
   "keywords": [],
   "author": "",
@@ -35,13 +37,12 @@
     "@node-rs/jieba": "^2.0.1",
     "@prisma/adapter-better-sqlite3": "^7.6.0",
     "@prisma/client": "^7.6.0",
-    "@vicons/fluent": "^0.13.0",
     "axios": "^1.14.0",
     "bcrypt": "^6.0.0",
+    "better-sqlite3": "^12.9.0",
     "class-transformer": "^0.5.1",
     "class-validator": "^0.15.1",
     "mammoth": "^1.12.0",
-    "natural": "^8.1.1",
     "openai": "^4.28.0",
     "passport": "^0.7.0",
     "passport-jwt": "^4.0.1",
@@ -49,6 +50,7 @@
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.2",
     "sharp": "^0.34.5",
+    "sqlite-vec": "^0.1.9",
     "tiktoken": "^1.0.22",
     "uuid": "^13.0.0"
   },
@@ -63,14 +65,16 @@
     "@types/node": "^25.5.2",
     "@types/passport-jwt": "^4.0.1",
     "@types/uuid": "^10.0.0",
-    "better-sqlite3": "^12.8.0",
     "dotenv": "^17.4.1",
     "jest": "^30.3.0",
+    "prebuild-install": "^7.1.2",
     "prisma": "^7.6.0",
-    "sqlite-vec": "^0.1.9",
     "ts-jest": "^29.4.9",
     "ts-node": "^10.9.2",
     "ts-node-dev": "^2.0.0",
     "typescript": "^6.0.2"
+  },
+  "overrides": {
+    "glob": "^11.1.0"
   }
 }

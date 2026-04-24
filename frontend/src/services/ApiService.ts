@@ -1013,7 +1013,8 @@ function shouldEnableMock(): boolean {
  * - 开发环境：根据配置决定是否启用 Mock
  */
 function createApiServiceInstance() {
-  const realService = new ApiService('/api/v1')
+  // 不传 baseURL，让构造函数自动检测环境
+  const realService = new ApiService()
 
   // 生产环境强制使用真实服务
   if (import.meta.env.PROD) {
@@ -1049,7 +1050,7 @@ function createApiServiceInstance() {
 }
 
 // 创建默认实例并导出（同步创建，无竞态条件）
-export let apiService = createApiServiceInstance()
+export let apiService: ApiService = createApiServiceInstance()
 
 /**
  * 重新初始化 API Service（用于动态切换 Mock 模式）

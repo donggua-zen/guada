@@ -59,3 +59,27 @@ interface ImportMetaEnv {
 interface ImportMeta {
   readonly env: ImportMetaEnv
 }
+
+// Electron API 类型声明
+interface ElectronAPI {
+  platform: string
+  versions: {
+    node: string
+    chrome: string
+    electron: string
+  }
+  getAppInfo: () => Promise<any>
+  showNotification: (title: string, body: string) => Promise<void>
+  minimizeWindow: () => void
+  maximizeWindow: () => void
+  closeWindow: () => void
+  isMaximized: () => Promise<boolean>
+  checkForUpdates: () => Promise<{ success: boolean; error?: string }>
+  startDownloadUpdate: () => Promise<void>
+  installAndRestart: () => void
+  onUpdateStatus: (callback: (status: any) => void) => void
+}
+
+interface Window {
+  electronAPI?: ElectronAPI
+}

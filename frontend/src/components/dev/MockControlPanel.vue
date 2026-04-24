@@ -11,11 +11,7 @@
         <label class="switch-label">
           <span>Mock 模式</span>
           <label class="switch">
-            <input 
-              type="checkbox" 
-              :checked="isMockEnabled" 
-              @change="handleToggleMock"
-            />
+            <input type="checkbox" :checked="isMockEnabled" @change="handleToggleMock" />
             <span class="slider"></span>
           </label>
         </label>
@@ -49,18 +45,14 @@
   </div>
 
   <!-- 浮动按钮（面板隐藏时显示） -->
-  <button 
-    v-if="!isVisible && isDev" 
-    class="mock-float-btn"
-    @click="toggleVisibility"
-    title="打开 Mock 测试面板"
-  >
+  <button v-if="!isVisible && isDev" class="mock-float-btn" @click="toggleVisibility" title="打开 Mock 测试面板">
     🎭
   </button>
 </template>
 
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
+import { reinitApiService } from '@/services/ApiService'
 
 const isDev = import.meta.env.DEV
 const isVisible = ref(false)
@@ -72,13 +64,13 @@ const currentConfig = ref<any>(null)
 onMounted(async () => {
   // 从 localStorage 读取运行时配置
   isMockEnabled.value = localStorage.getItem('VITE_ENABLE_MOCK') === 'true'
-  
+
   // 动态导入 Mock 场景（仅开发环境）
   if (isDev) {
     try {
       const { getAvailableScenarios, getScenarioConfig } = await import('@/services/mockStreamService')
       scenarios.value = getAvailableScenarios()
-      
+
       const savedScenario = localStorage.getItem('VITE_MOCK_SCENARIO')
       if (savedScenario && savedScenario in scenarios.value) {
         selectedScenario.value = savedScenario
@@ -97,18 +89,17 @@ function toggleVisibility() {
 async function handleToggleMock(event: Event) {
   const enabled = (event.target as HTMLInputElement).checked
   isMockEnabled.value = enabled
-  
+
   localStorage.setItem('VITE_ENABLE_MOCK', enabled ? 'true' : 'false')
-  
+
   if (enabled && selectedScenario.value) {
     localStorage.setItem('VITE_MOCK_SCENARIO', selectedScenario.value)
   }
-  
+
   console.log(`🎭 Mock 模式已${enabled ? '启用' : '禁用'}`)
-  
+
   // 重新初始化 API Service（同步）
   try {
-    const { reinitApiService } = await import('@/services/ApiService')
     reinitApiService()
     console.log('✅ API Service 已更新，请刷新页面以完全生效')
   } catch (e) {
@@ -122,9 +113,8 @@ async function handleScenarioChange() {
       const { getScenarioConfig } = await import('@/services/mockStreamService')
       currentConfig.value = getScenarioConfig(selectedScenario.value as any)
       localStorage.setItem('VITE_MOCK_SCENARIO', selectedScenario.value)
-      
+
       // 重新初始化 API Service（同步）
-      const { reinitApiService } = await import('@/services/ApiService')
       reinitApiService()
       console.log('✅ 场景已切换，请刷新页面以完全生效')
     } catch (e) {
@@ -138,12 +128,12 @@ async function handleScenarioChange() {
 
 function applyAndReload() {
   console.log('💡 正在刷新页面...')
-  
+
   // 重新初始化 API Service（同步）
   import('@/services/ApiService').then(({ reinitApiService }) => {
     reinitApiService()
   })
-  
+
   setTimeout(() => {
     window.location.reload()
   }, 300)
@@ -278,11 +268,11 @@ function formatScenarioName(name: string): string {
   border-radius: 50%;
 }
 
-input:checked + .slider {
+input:checked+.slider {
   background-color: #3b82f6;
 }
 
-input:checked + .slider:before {
+input:checked+.slider:before {
   transform: translateX(20px);
 }
 

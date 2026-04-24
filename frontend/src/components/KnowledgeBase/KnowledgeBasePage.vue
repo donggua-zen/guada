@@ -328,6 +328,7 @@ import { useStorage, useDebounceFn } from '@vueuse/core'
 import { usePopup } from '@/composables/usePopup'
 import { BookOpen24Regular, Search24Regular, ArrowLeft24Filled } from '@vicons/fluent'
 import { MenuBookOutlined } from '@vicons/material'
+import { apiService } from '@/services/ApiService'
 
 // 初始化组合式函数
 const { confirm, toast } = usePopup()
@@ -419,7 +420,6 @@ const filteredKnowledgeBases = computed(() => {
  */
 const loadEmbeddingModels = async () => {
     try {
-        const { apiService } = await import('@/services/ApiService')
         const response = await apiService.fetchModels()
 
         // 只保留 embedding 类型的模型
@@ -707,7 +707,6 @@ async function handleRetryFile(file: KBFile) {
         if (!store.activeKnowledgeBaseId) return
 
         // 调用后端 API 重新处理文件
-        const { apiService } = await import('@/services/ApiService')
         await apiService.retryKBFile(store.activeKnowledgeBaseId, file.id)
 
         toast.success('已开始重新处理文件')
