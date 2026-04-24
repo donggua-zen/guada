@@ -57,17 +57,20 @@ export class AgentService {
       const mergedSettings = this.mergeSettings(session);
 
       // 2. 使用 ContextManager 获取完整的 LLM 上下文（包含系统提示词、工具注入等）
-      const { messages, toolContext } = await this.contextManager.getContextForLLMInference(
+      const config = (session.model?.config as any) || {};
+      const supportsImageInput = (config.inputCapabilities || []).includes("image");
+
+      const { messages, toolContext } = await this.contextManager.getContextForLLMInference({
         sessionId,
-        session.userId,
-        messageId,
-        mergedSettings.maxMemoryLength || 20,
+        userId: session.userId,
+        userMessageId: messageId,
+        maxMessages: mergedSettings.maxMemoryLength || 20,
         mergedSettings,
-        false,
-      );
+        skipToolCalls: false,
+        supportsImageInput,
+      });
 
       // 3. 获取工具定义
-      const config = (session.model?.config as any) || {};
       const features = config.features || [];
       const canUseTools = features.includes("tools");
       const tools = canUseTools ? await this.toolOrchestrator.getAllTools(toolContext) : undefined;
@@ -566,6 +569,9 @@ export class AgentService {
       modelTemperature:
         sessionSettings.modelTemperature ?? characterSettings.modelTemperature,
       modelTopP: sessionSettings.modelTopP ?? characterSettings.modelTopP,
+      // 工具配置：会话级别优先于角色级别
+      tools: sessionSettings.tools ?? characterSettings.tools,
+      mcpServers: sessionSettings.mcpServers ?? characterSettings.mcpServers,
     };
   }
 }

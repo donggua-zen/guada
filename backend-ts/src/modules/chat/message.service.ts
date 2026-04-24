@@ -6,6 +6,7 @@ import { KnowledgeBaseRepository } from "../../common/database/knowledge-base.re
 import { createPaginatedResponse } from "../../common/types/pagination";
 import { v4 as uuidv4 } from "uuid";
 import { FileRepository } from "../../common/database/file.repository";
+import { UrlService } from "../../common/services/url.service";
 
 @Injectable()
 export class MessageService {
@@ -17,6 +18,7 @@ export class MessageService {
     private sessionRepo: SessionRepository,
     private kbRepo: KnowledgeBaseRepository,
     private fileRepo: FileRepository,
+    private urlService: UrlService,
   ) { }
 
   /**
@@ -35,14 +37,24 @@ export class MessageService {
     });
 
     // 格式化返回数据
-    const formattedMessages = messages.map((msg) => ({
-      ...msg,
-      contents: msg.contents.map((content) => ({
-        ...content,
-        metaData: content.metaData || null,
-        additionalKwargs: content.additionalKwargs || null,
-      })),
-    }));
+    const formattedMessages = messages.map((msg) => {
+      // 转换文件 URL 为绝对路径
+      const filesWithAbsoluteUrls = msg.files?.map((file) => ({
+        ...file,
+        url: this.urlService.toAbsoluteUrl(file.url || ""),
+        previewUrl: this.urlService.toAbsoluteUrl(file.previewUrl || ""),
+      })) || [];
+
+      return {
+        ...msg,
+        files: filesWithAbsoluteUrls,
+        contents: msg.contents.map((content) => ({
+          ...content,
+          metaData: content.metaData || null,
+          additionalKwargs: content.additionalKwargs || null,
+        })),
+      };
+    });
 
     // 返回统一的分页格式
     return createPaginatedResponse(formattedMessages, formattedMessages.length);
@@ -207,7 +219,30 @@ export class MessageService {
       );
     }
 
-    return await this.messageRepo.findById(messageId);
+    // 获取完整的消息对象（包含文件信息）
+    const completeMessage = await this.messageRepo.findById(messageId, {
+      withFiles: true,
+      withContents: true,
+    });
+
+    if (completeMessage) {
+      // 转换文件 URL 为绝对路径
+      if (completeMessage.files && completeMessage.files.length > 0) {
+        completeMessage.files = completeMessage.files.map((file) => ({
+          ...file,
+          url: this.urlService.toAbsoluteUrl(file.url || ""),
+          previewUrl: this.urlService.toAbsoluteUrl(file.previewUrl || ""),
+        }));
+      }
+
+      // 格式化内容字段
+      completeMessage.contents.forEach((content) => {
+        content.metaData = content.metaData || null;
+        content.additionalKwargs = content.additionalKwargs || null;
+      });
+    }
+
+    return completeMessage;
   }
 
   /**
@@ -287,9 +322,22 @@ export class MessageService {
       );
     }
 
-    // 返回更新后的完整消息（包含最新的内容）
-    const updatedMessage = await this.messageRepo.findById(messageId);
+    // 返回更新后的完整消息（包含最新的内容和文件）
+    const updatedMessage = await this.messageRepo.findById(messageId, {
+      withFiles: true,
+      withContents: true,
+    });
+
     if (updatedMessage) {
+      // 转换文件 URL 为绝对路径
+      if (updatedMessage.files && updatedMessage.files.length > 0) {
+        updatedMessage.files = updatedMessage.files.map((file) => ({
+          ...file,
+          url: this.urlService.toAbsoluteUrl(file.url || ""),
+          previewUrl: this.urlService.toAbsoluteUrl(file.previewUrl || ""),
+        }));
+      }
+
       // 格式化返回数据
       updatedMessage.contents.forEach((content) => {
         content.metaData = content.metaData || null;

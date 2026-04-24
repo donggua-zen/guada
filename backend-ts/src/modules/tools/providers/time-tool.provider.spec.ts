@@ -16,25 +16,25 @@ describe("TimeToolProvider", () => {
     expect(provider).toBeDefined();
   });
 
-  it("should return empty array for getToolsNamespaced", async () => {
-    const tools = await provider.getToolsNamespaced(true, {});
+  it("should return empty array for getTools", async () => {
+    const tools = await provider.getTools(true);
     expect(tools).toEqual([]);
   });
 
-  it("should return error response when executeWithNamespace is called", async () => {
+  it("should throw error when execute is called", async () => {
     const request = {
       id: "test-id",
-      name: "time__test",
+      name: "test",
       arguments: {},
     };
 
-    const response = await provider.executeWithNamespace(request, {});
-    expect(response.isError).toBe(true);
-    expect(response.content).toContain("时间工具仅用于提示词注入");
+    await expect(provider.execute(request)).rejects.toThrow(
+      "时间工具仅用于提示词注入，不支持直接调用"
+    );
   });
 
   it("should return current time in prompt", async () => {
-    const prompt = await provider.getPrompt({});
+    const prompt = await provider.getPrompt();
     expect(prompt).toContain("【当前时间信息】");
     expect(prompt).toContain("当前时间是：");
     expect(prompt).toContain(

@@ -18,7 +18,7 @@
       </template>
       <template v-if="!isLoading" #content>
         <!-- 主体内容 -->
-        <div class="flex flex-col h-full ">
+        <div class="flex flex-col h-full bg-white dark:bg-[#1e1e1e]">
           <template v-if="sessions.length > 0 && currentSession">
             <!-- 聊天头部 -->
             <ChatHeader :sidebar-visible="sidebarVisible" :title="currentSession?.title || ''" :has-more-options="true"

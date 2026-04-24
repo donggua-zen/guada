@@ -15,8 +15,8 @@ export class UploadPathService {
   ) {
     // 物理基础目录 (例如: /app/static/file_stores)
     this.baseDir =
-      this.configService.get<string>("upload.baseDir") ||
-      "./static/file_stores";
+      this.configService.get<string>("upload.physicalRoot") ||
+      path.join(process.cwd(), "static", "file_stores");
     // Web 访问前缀 (例如: /static/file_stores)
     this.publicPrefix =
       this.configService.get<string>("upload.publicPrefix") ||
@@ -42,9 +42,9 @@ export class UploadPathService {
     const normalizedSubDir = subDir.replace(/\\/g, "/");
     const normalizedFilename = filename.replace(/\\/g, "/");
     const relativeUrl = `${this.publicPrefix}/${normalizedSubDir}/${normalizedFilename}`;
-    
+
     // 使用 UrlService 转换为完整 URL
-    return this.urlService.toAbsoluteUrl(relativeUrl);
+    return relativeUrl;
   }
 
   /**

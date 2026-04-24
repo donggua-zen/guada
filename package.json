@@ -1,5 +1,5 @@
 {
-  "name": "ai-chat",
+  "name": "askme",
   "version": "0.0.1",
   "description": "AI Chat Application with Web and Electron support",
   "private": true,
@@ -41,8 +41,8 @@
     "wait-on": "^9.0.0"
   },
   "build": {
-    "appId": "com.aichat.app",
-    "productName": "AI Chat",
+    "appId": "com.askme.app",
+    "productName": "AskMe",
     "npmRebuild": false,
     "asar": true,
     "directories": {
@@ -141,7 +141,7 @@
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
-      "shortcutName": "AIChat",
+      "shortcutName": "AskMe",
       "differentialPackage": false
     },
     "publish": [

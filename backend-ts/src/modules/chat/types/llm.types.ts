@@ -90,6 +90,7 @@ export interface LLMCompletionParams {
   providerConfig?: any;
   modelConfig?: any;
   stream?: boolean;
+  timeout?: number;
 }
 
 export interface LLMResponseChunk {

@@ -129,6 +129,9 @@ const characters = ref<any[]>([]);
 const showCharacterSelector = ref(false);
 const characterSearchText = ref('');
 
+// 模型数据
+const models = ref<any[]>([]);
+
 // const lastSelectedModelId = useStorage('lastSelectedModelId', '');
 const lastModelConfig = useStorage<any>('lastModelConfig', {});
 const lastSelectedCharacterId = useStorage('lastSelectedCharacterId', '');
@@ -178,37 +181,78 @@ const currentCharacter = computed(() => {
   return null;
 });
 
-// 当前使用的模型 ID（优先使用用户手动选择的，否则使用角色默认）
+// 当前使用的模型 ID（三级回退逻辑）
 const currentModelId = computed(() => {
-  // 如果用户手动选择过模型，使用用户选择的
+  // 第一优先级：如果用户手动选择过模型，使用用户选择的
   if (userSelectedModelId.value) {
     return userSelectedModelId.value;
   }
-  // 否则使用角色的默认模型
-  return currentCharacter.value?.model_id;
+  
+  // 第二优先级：使用角色的默认模型
+  if (currentCharacter.value?.model_id) {
+    return currentCharacter.value.model_id;
+  }
+  
+  // 第三优先级：使用模型列表的第一个模型
+  if (models.value.length > 0) {
+    return models.value[0].id;
+  }
+  
+  // 兜底：返回 null
+  return null;
 });
+
+// 标记是否正在初始化，避免 watch 重复处理
+const isInitializing = ref(false);
 
 // 监听角色变化，当角色切换时重置为角色默认模型
 watch(() => currentSession.value.characterId, (newCharId, oldCharId) => {
+  // 如果是初始化阶段，跳过处理（由 loadCharacters 直接设置）
+  if (isInitializing.value) {
+    return;
+  }
+
   if (newCharId && newCharId !== oldCharId) {
-    // 角色切换时，重置为角色默认模型
+    // 角色切换时，使用三级回退逻辑选择模型
     const newCharacter = characters.value.find(c => c.id === newCharId);
     if (newCharacter) {
-      currentSession.value.model_id = newCharacter.model_id;
-      // 切换角色时，思考模型状态重置为上次用户选择的状态（而非角色默认值）
+      let selectedModelId: string | null = null;
+      
+      // 第一优先级：角色的默认模型
+      if (newCharacter.model_id) {
+        selectedModelId = newCharacter.model_id;
+        // 清空用户手动选择的模型 ID（因为角色有推荐模型）
+        userSelectedModelId.value = null;
+      }
+      // 第二优先级：用户之前手动选择的模型
+      else if (userSelectedModelId.value) {
+        selectedModelId = userSelectedModelId.value;
+      }
+      // 第三优先级：模型列表的第一个模型
+      else if (models.value.length > 0) {
+        selectedModelId = models.value[0].id;
+      }
+      
+      // 设置模型 ID
+      if (selectedModelId) {
+        currentSession.value.model_id = selectedModelId;
+      }
+      
+      // 切换角色时，思考模型状态重置为上次用户选择的状态
       currentSession.value.settings = {
         ...(currentSession.value.settings || {}),
         thinkingEnabled: lastThinkingEnabled.value,
         maxMemoryLength: newCharacter.settings?.maxMemoryLength
       };
-      // 清空用户手动选择的模型 ID（这样 currentModelId 就会使用角色默认模型）
-      // userSelectedModelId.value = null;
+      
       // 更新本地存储的配置信息
-      lastModelConfig.value = {
-        ...lastModelConfig.value,
-        modelId: newCharacter.model_id,
-        maxMemoryLength: newCharacter.settings?.maxMemoryLength
-      };
+      if (selectedModelId) {
+        lastModelConfig.value = {
+          ...lastModelConfig.value,
+          modelId: selectedModelId,
+          maxMemoryLength: newCharacter.settings?.maxMemoryLength
+        };
+      }
     }
   }
 });
@@ -258,6 +302,21 @@ const chatInputButtons = computed(() => {
   }
 })
 
+// 加载模型列表
+const loadModels = async (): Promise<void> => {
+  try {
+    const response = await apiService.fetchModels();
+    // 提取所有 text 类型的模型
+    response.items.forEach(provider => {
+      const textModels = provider.models?.filter((m: any) => m.modelType === 'text') || [];
+      models.value.push(...textModels);
+    });
+  } catch (error) {
+    console.error('获取模型列表失败:', error);
+    notify.error('获取模型列表失败', error);
+  }
+};
+
 // 加载角色列表
 const loadCharacters = async (): Promise<void> => {
   try {
@@ -266,37 +325,61 @@ const loadCharacters = async (): Promise<void> => {
 
     // 优先使用上次选择的角色
     if (characters.value.length > 0) {
+      // 设置初始化标志，防止 watch 干扰
+      isInitializing.value = true;
+
       const savedCharacter = characters.value.find(c => c.id === lastSelectedCharacterId.value);
-      if (savedCharacter) {
-        currentSession.value.characterId = savedCharacter.id;
-        // 如果有用户手动选择的模型，使用用户的；否则使用角色默认
+      const targetCharacter = savedCharacter || characters.value[0];
+      
+      if (targetCharacter) {
+        currentSession.value.characterId = targetCharacter.id;
+        
+        // 三级回退逻辑确定模型 ID
+        let selectedModelId: string | null = null;
+        
+        // 第一优先级：用户手动选择的模型
         if (userSelectedModelId.value) {
-          currentSession.value.model_id = userSelectedModelId.value;
-          currentSession.value.settings = {
-            ...currentSession.value.settings,
-            maxMemoryLength: lastModelConfig.value.maxMemoryLength
-          };
-        } else {
-          // 没有用户选择，使用角色默认模型
-          currentSession.value.model_id = savedCharacter.model_id;
-          currentSession.value.settings = {
-            ...currentSession.value.settings,
-            maxMemoryLength: savedCharacter.settings?.maxMemoryLength
-          };
+          selectedModelId = userSelectedModelId.value;
         }
-      } else {
-        // 如果没有保存的角色，使用第一个
-        currentSession.value.characterId = characters.value[0].id;
-        currentSession.value.model_id = characters.value[0].model_id;
+        // 第二优先级：角色的默认模型
+        else if (targetCharacter.model_id) {
+          selectedModelId = targetCharacter.model_id;
+        }
+        // 第三优先级：模型列表的第一个模型
+        else if (models.value.length > 0) {
+          selectedModelId = models.value[0].id;
+        }
+        
+        // 设置模型 ID
+        if (selectedModelId) {
+          currentSession.value.model_id = selectedModelId;
+        }
+        
+        // 设置会话配置
         currentSession.value.settings = {
           ...currentSession.value.settings,
-          maxMemoryLength: characters.value[0].settings?.maxMemoryLength
+          thinkingEnabled: lastThinkingEnabled.value,
+          maxMemoryLength: targetCharacter.settings?.maxMemoryLength
         };
+        
+        // 同步更新 lastModelConfig，确保一致性
+        if (selectedModelId) {
+          lastModelConfig.value = {
+            ...lastModelConfig.value,
+            modelId: selectedModelId,
+            maxMemoryLength: targetCharacter.settings?.maxMemoryLength
+          };
+        }
       }
+
+      // 初始化完成，恢复 watch 监听
+      isInitializing.value = false;
     }
   } catch (error) {
     console.error('获取角色列表失败:', error);
     notify.error('获取角色列表失败', error);
+    // 即使出错也要恢复标志
+    isInitializing.value = false;
   }
 };
 
@@ -306,23 +389,44 @@ const selectCharacter = (character: any): void => {
   lastSelectedCharacterId.value = character.id;
   showCharacterSelector.value = false;
   characterSearchText.value = '';
-  // 切换角色时，使用角色的默认模型
-  currentSession.value.model_id = character.model_id;
+  
+  // 切换角色时的模型选择逻辑
+  let selectedModelId: string | null = null;
+  
+  // 第一优先级：角色的默认模型
+  if (character.model_id) {
+    selectedModelId = character.model_id;
+    // 清空用户手动选择的模型 ID（因为角色有推荐模型）
+    userSelectedModelId.value = null;
+  }
+  // 第二优先级：用户之前手动选择的模型（角色没有推荐模型时保留）
+  else if (userSelectedModelId.value) {
+    selectedModelId = userSelectedModelId.value;
+  }
+  // 第三优先级：模型列表的第一个模型
+  else if (models.value.length > 0) {
+    selectedModelId = models.value[0].id;
+  }
+  
+  // 设置模型 ID
+  if (selectedModelId) {
+    currentSession.value.model_id = selectedModelId;
+  }
+  
   // 思考模型状态保持用户上次选择的状态
   currentSession.value.settings = {
     ...(currentSession.value.settings || {}),
     thinkingEnabled: lastThinkingEnabled.value,
     maxMemoryLength: character.settings?.maxMemoryLength
   };
-  if (character.model_id) {
-    // 清空用户手动选择的模型 ID（这样 currentModelId 就会使用角色默认模型）
-    userSelectedModelId.value = null;
-  }
+  
   // 更新本地存储的配置信息
-  lastModelConfig.value = {
-    ...lastModelConfig.value,
-    modelId: character.model_id,
-    maxMemoryLength: character.settings?.maxMemoryLength
+  if (selectedModelId) {
+    lastModelConfig.value = {
+      ...lastModelConfig.value,
+      modelId: selectedModelId,
+      maxMemoryLength: character.settings?.maxMemoryLength
+    };
   }
 };
 
@@ -356,8 +460,10 @@ const goToCharactersPage = (): void => {
 
 onMounted(() => {
   title.value = "你今天想聊点什么";
-  // 初始化相关逻辑
-  loadCharacters();
+  // 先加载模型列表，再加载角色列表（因为角色初始化可能依赖模型列表）
+  Promise.all([loadModels(), loadCharacters()]).catch(error => {
+    console.error('初始化数据失败:', error);
+  });
 });
 
 const autoTitle = (): string => {

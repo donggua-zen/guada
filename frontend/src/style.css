@@ -74,7 +74,7 @@
     --color-titlebar-border: var(--color-surface);
 
     /* 聊天对话样式 */
-    --color-conversation-bg: var(--color-bg);
+    --color-conversation-bg: var(--color-surface);
     --color-conversation-text: #333;
     --color-conversation-border: transparent;
     --color-conversation-bg-active: var(--color-primary-100);
