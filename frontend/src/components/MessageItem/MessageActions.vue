@@ -4,7 +4,7 @@
 
     <div class="message-action-button" @click="$emit('copy')">
       <el-icon :size="16">
-        <Copy24Filled />
+        <Copy20Filled />
       </el-icon>
     </div>
 
@@ -74,7 +74,7 @@
 import { computed } from 'vue';
 import { ElIcon, ElDropdown, ElDropdownMenu, ElDropdownItem } from 'element-plus';
 import {
-  Copy24Filled,
+  Copy20Filled,
   ArrowCounterclockwise24Filled,
   MoreVertical24Filled,
   ChevronLeft24Filled,

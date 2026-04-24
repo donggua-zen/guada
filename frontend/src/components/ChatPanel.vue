@@ -7,7 +7,7 @@
     </template>
     <template v-else-if="authStore.isAuthenticated">
       <ScrollContainer ref="scrollContainerRef" :auto-scroll="needScrollToBottom" @scroll="handleScroll">
-        <div class="flex flex-col items-center px-5 max-w-200 mx-auto">
+        <div class="flex flex-col items-center px-5 max-w-205 mx-auto">
           <div class="w-full last:min-h-60" v-for="(pair, index) in messagePairs" :key="pair[0].id">
             <MessageItem v-for="message in pair" :key="message.id" :message="message"
               :avatar="message.role == 'user' ? userAvater : currentSession?.avatarUrl"
@@ -26,7 +26,7 @@
   </div>
 
   <!-- 输入区域 -->
-  <div class="pb-6 w-full px-5  max-w-200 flex flex-col items-center mx-auto"
+  <div class="pb-6 w-full px-5  max-w-205 flex flex-col items-center mx-auto"
     _style="position: absolute; left: 50%; transform: translateX(-50%);bottom: 0;">
     <!-- 编辑模式提示条 -->
     <div v-if="editMode" class="w-full mb-[-0.2rem]">

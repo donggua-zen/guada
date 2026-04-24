@@ -24,6 +24,11 @@ export class GlobalSettingRepository {
   }
 
   async upsert(data: { key: string; value: any; userId?: string | null }) {
+    // 将值序列化为 JSON 字符串
+    const serializedValue = typeof data.value === 'object' 
+      ? JSON.stringify(data.value) 
+      : String(data.value ?? '');
+    
     return this.prisma.globalSetting.upsert({
       where: {
         key_userId: {
@@ -31,26 +36,39 @@ export class GlobalSettingRepository {
           userId: data.userId || null,
         },
       },
-      update: { value: data.value },
-      create: { ...data, userId: data.userId || null },
+      update: { value: serializedValue },
+      create: { 
+        key: data.key, 
+        value: serializedValue, 
+        userId: data.userId || null 
+      },
     });
   }
 
   async saveBatch(
     settings: Array<{ key: string; value: any; userId?: string | null }>,
   ) {
-    const transaction = settings.map((item) =>
-      this.prisma.globalSetting.upsert({
+    const transaction = settings.map((item) => {
+      // 将值序列化为 JSON 字符串
+      const serializedValue = typeof item.value === 'object' 
+        ? JSON.stringify(item.value) 
+        : String(item.value ?? '');
+      
+      return this.prisma.globalSetting.upsert({
         where: {
           key_userId: {
             key: item.key,
             userId: item.userId || null,
           },
         },
-        update: { value: item.value },
-        create: { ...item, userId: item.userId || null },
-      }),
-    );
+        update: { value: serializedValue },
+        create: { 
+          key: item.key, 
+          value: serializedValue, 
+          userId: item.userId || null 
+        },
+      });
+    });
     return this.prisma.$transaction(transaction);
   }
 }

@@ -8,6 +8,28 @@ let backendProcess: ChildProcess | null = null
 let mainWindow: BrowserWindow | null = null
 let isBackendStarting = false  // 防止重复启动
 
+// 单实例锁：确保同一时间只有一个应用实例运行
+const gotTheLock = app.requestSingleInstanceLock()
+
+if (!gotTheLock) {
+  // 如果获取锁失败，说明已有实例在运行，立即退出当前进程
+  console.log('⚠️  检测到已有应用实例在运行，退出当前实例')
+  app.quit()
+} else {
+  // 如果获取锁成功，监听第二个实例启动事件
+  app.on('second-instance', (event, commandLine, workingDirectory) => {
+    // 当用户尝试启动第二个实例时，激活已存在的主窗口
+    if (mainWindow) {
+      // 如果窗口最小化，则还原窗口
+      if (mainWindow.isMinimized()) {
+        mainWindow.restore()
+      }
+      // 聚焦窗口（将窗口带到前台）
+      mainWindow.focus()
+    }
+  })
+}
+
 // 判断是否为开发模式（根据是否打包，而不是 NODE_ENV）
 const isDev = !app.isPackaged
 
@@ -34,70 +56,78 @@ function getBackendPath(): string {
 async function initializeDatabase(userDataPath: string, backendPath: string): Promise<void> {
   const dbPath = path.join(userDataPath, 'ai_chat.db')
   const vectorDbPath = path.join(userDataPath, 'vector_db.sqlite')
-  
-  // 无论是否首次运行，都尝试执行迁移以确保结构最新
-  try {
-    const { execSync } = require('child_process')
-    
-    // 备份旧数据库
-    if (fs.existsSync(dbPath)) {
-      const backupPath = `${dbPath}.bak`
-      fs.copyFileSync(dbPath, backupPath)
-      console.log('💾 已备份数据库至:', backupPath)
-    }
-    
-    // 设置环境变量
-    const env = {
-      ...process.env,
-      DATABASE_URL: `file:${dbPath}`,
-      VECTOR_DB_PATH: vectorDbPath
-    }
-    
-    // 执行迁移
-    console.log('🔄 检查并执行数据库迁移...')
+  const { execSync } = require('child_process')
+
+  // 设置环境变量
+  const env = {
+    ...process.env,
+    DATABASE_URL: `file:${dbPath}`,
+    VECTOR_DB_PATH: vectorDbPath
+  }
+
+  // 判断是否为首次运行（数据库文件不存在或大小为0）
+  const isFirstRun = !fs.existsSync(dbPath) || fs.statSync(dbPath).size === 0
+
+  if (isFirstRun) {
+    console.log('🔄 检测到首次运行，正在初始化数据库...')
     try {
-      execSync('npx prisma migrate deploy', {
+      // 1. 使用 db push 直接根据 schema 创建表结构（适合无迁移历史的初始化）
+      execSync('npx prisma db push', {
         cwd: backendPath,
         env,
         stdio: 'pipe'
       })
-      console.log('✅ 数据库迁移完成')
-    } catch (migrateError: any) {
-      const errorMsg = migrateError.stderr?.toString() || ''
-      if (errorMsg.includes('P3005')) {
-        console.warn('⚠️  检测到数据库未基线化，正在尝试同步结构...')
-        // 如果 migrate deploy 失败且是因为 schema 不为空，尝试使用 db push 同步
-        execSync('npx prisma db push', {
-          cwd: backendPath,
-          env,
-          stdio: 'pipe'
-        })
-        console.log('✅ 数据库结构已同步 (db push)')
-      } else {
-        throw migrateError
-      }
-    }
-    
-    // 首次运行时执行种子数据
-    const isFirstRun = !fs.existsSync(dbPath) || fs.statSync(dbPath).size === 0
-    if (isFirstRun) {
-      console.log('🌱 初始化种子数据...')
+      console.log('✅ 数据库表结构创建成功')
+
+      // 2. 执行种子数据
+      console.log('🌱 正在初始化种子数据...')
       execSync('npm run db:seed:force', {
         cwd: backendPath,
         env,
         stdio: 'pipe'
       })
       console.log('✅ 种子数据初始化完成')
+    } catch (error: any) {
+      console.error('❌ 数据库初始化失败:', error.message)
+      if (error.stderr) console.error('错误详情:', error.stderr.toString())
     }
-  } catch (error: any) {
-    console.error('❌ 数据库操作失败:', error.message)
-    if (error.stdout) console.log('标准输出:', error.stdout.toString())
-    if (error.stderr) console.error('错误输出:', error.stderr.toString())
-    // 迁移失败时恢复备份
-    const backupPath = `${dbPath}.bak`
-    if (fs.existsSync(backupPath)) {
-      fs.copyFileSync(backupPath, dbPath)
-      console.warn('⚠️  已尝试从备份恢复数据库')
+  } else {
+    // 非首次运行，尝试执行迁移以更新结构
+    console.log('💾 检测到已有数据库，检查结构更新...')
+    try {
+      // 备份旧数据库以防万一
+      const backupPath = `${dbPath}.bak`
+      fs.copyFileSync(dbPath, backupPath)
+      
+      execSync('npx prisma migrate deploy', {
+        cwd: backendPath,
+        env,
+        stdio: 'pipe'
+      })
+      console.log('✅ 数据库迁移检查完成')
+    } catch (migrateError: any) {
+      const errorMsg = migrateError.stderr?.toString() || ''
+      if (errorMsg.includes('P3005')) {
+        console.warn('⚠️  数据库未基线化，尝试同步结构...')
+        try {
+          execSync('npx prisma db push', {
+            cwd: backendPath,
+            env,
+            stdio: 'pipe'
+          })
+          console.log('✅ 数据库结构已同步 (db push)')
+        } catch (pushError: any) {
+          console.error('❌ 结构同步失败:', pushError.message)
+        }
+      } else {
+        console.error('❌ 数据库迁移失败:', migrateError.message)
+        // 迁移失败时尝试恢复备份
+        const backupPath = `${dbPath}.bak`
+        if (fs.existsSync(backupPath)) {
+          fs.copyFileSync(backupPath, dbPath)
+          console.warn('⚠️  已尝试从备份恢复数据库')
+        }
+      }
     }
   }
 }
@@ -149,7 +179,6 @@ async function startBackend(): Promise<void> {
           DATABASE_URL: `file:${dbPath}`,
           VECTOR_DB_PATH: vectorDbPath,
           STATIC_DIR: staticDir,
-          UPLOAD_BASE_DIR: staticDir
         },
         stdio: ['pipe', 'pipe', 'pipe'],
         shell: true

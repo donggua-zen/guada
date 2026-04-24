@@ -9,6 +9,7 @@ import {
   IToolProvider,
   ToolCallRequest,
   ToolCallResponse,
+  ToolProviderMetadata,
 } from "../interfaces/tool-provider.interface";
 import { InternalToolDefinition } from "../../chat/types/llm.types";
 
@@ -24,11 +25,11 @@ export class KnowledgeBaseToolProvider implements IToolProvider {
     private chunkRepo: KBChunkRepository,
     private vectorDbService: VectorDbService,
     private embeddingService: EmbeddingService,
-  ) {}
+  ) { }
 
   private readonly toolsConfig: InternalToolDefinition[] = [
     {
-      name: "knowledge_base__search",
+      name: "search",
       description: "在知识库中搜索相关内容",
       parameters: {
         type: "object",
@@ -55,7 +56,7 @@ export class KnowledgeBaseToolProvider implements IToolProvider {
       },
     },
     {
-      name: "knowledge_base__list_files",
+      name: "list_files",
       description: "列出知识库中的所有文件",
       parameters: {
         type: "object",
@@ -79,7 +80,7 @@ export class KnowledgeBaseToolProvider implements IToolProvider {
       },
     },
     {
-      name: "knowledge_base__get_chunks",
+      name: "get_chunks",
       description: "获取文件的分块内容",
       parameters: {
         type: "object",
@@ -104,50 +105,34 @@ export class KnowledgeBaseToolProvider implements IToolProvider {
     },
   ];
 
-  async getToolsNamespaced(
-    enabledTools: Record<string, any> | boolean,
-    injectParams: Record<string, any>,
-  ): Promise<any[]> {
-    // 直接返回扁平化的工具定义，由 adapter 进行转换
+  async getTools(enabled?: boolean | string[]): Promise<any[]> {
     return this.toolsConfig;
   }
 
-  async executeWithNamespace(
-    request: ToolCallRequest,
-    injectParams: any,
-  ): Promise<ToolCallResponse> {
-    // 1. 统一剥离命名空间前缀，获取核心工具名
-    const coreName = request.name.replace(`${this.namespace}__`, "");
-
-    // 2. 建立工具名到处理函数的映射
+  async execute(request: ToolCallRequest, context?: Record<string, any>): Promise<string> {
     const handlers: Record<
       string,
-      (args: any, params: any) => Promise<ToolCallResponse>
+      (args: any, injectParams?: Record<string, any>) => Promise<string>
     > = {
       search: this.handleSearch.bind(this),
       list_files: this.handleListFiles.bind(this),
       get_chunks: this.handleGetChunks.bind(this),
     };
 
-    const handler = handlers[coreName];
+    const handler = handlers[request.name];
 
     try {
       if (!handler) {
         throw new Error(`未知工具：${request.name}`);
       }
-      return await handler(request.arguments, injectParams);
+      return await handler(request.arguments, context);
     } catch (error: any) {
       this.logger.error(`工具执行失败 [${request.name}]：${error.message}`);
-      return {
-        toolCallId: request.id,
-        role: "tool",
-        name: request.name,
-        content: `工具执行失败：${error.message}`,
-      };
+      throw error; // 抛出异常，由 ToolOrchestrator 捕获
     }
   }
 
-  async getPrompt(injectParams?: Record<string, any>): Promise<string> {
+  async getPrompt(context?: Record<string, any>): Promise<string> {
     try {
       const promptParts: string[] = [];
 
@@ -198,7 +183,7 @@ export class KnowledgeBaseToolProvider implements IToolProvider {
   private async handleSearch(
     args: any,
     injectParams: any,
-  ): Promise<ToolCallResponse> {
+  ): Promise<string> {
     const { knowledge_base_id, query, top_k = 5, filter_file_id } = args;
     const userId = injectParams.user_id;
 
@@ -253,22 +238,17 @@ export class KnowledgeBaseToolProvider implements IToolProvider {
       file_name: result.metadata?.file_name,
     }));
 
-    return {
-      toolCallId: "search_result",
-      role: "tool",
-      name: "knowledge_base__search",
-      content: JSON.stringify({
-        query,
-        results: formattedResults,
-        total: formattedResults.length,
-      }),
-    };
+    return JSON.stringify({
+      query,
+      results: formattedResults,
+      total: formattedResults.length,
+    });
   }
 
   private async handleListFiles(
     args: any,
     injectParams: any,
-  ): Promise<ToolCallResponse> {
+  ): Promise<string> {
     const { knowledge_base_id, skip = 0, limit = 50 } = args;
     const userId = injectParams.user_id;
 
@@ -300,23 +280,18 @@ export class KnowledgeBaseToolProvider implements IToolProvider {
       uploaded_at: file.uploadedAt.toISOString(),
     }));
 
-    return {
-      toolCallId: "list_files_result",
-      role: "tool",
-      name: "knowledge_base__list_files",
-      content: JSON.stringify({
-        files: formattedFiles,
-        total,
-        skip,
-        limit,
-      }),
-    };
+    return JSON.stringify({
+      files: formattedFiles,
+      total,
+      skip,
+      limit,
+    });
   }
 
   private async handleGetChunks(
     args: any,
     injectParams: any,
-  ): Promise<ToolCallResponse> {
+  ): Promise<string> {
     const { file_id, skip = 0, limit = 10 } = args;
 
     // 获取文件
@@ -342,15 +317,19 @@ export class KnowledgeBaseToolProvider implements IToolProvider {
       metadata: chunk.metadata || null,
     }));
 
+    return JSON.stringify({
+      file_id,
+      chunks: formattedChunks,
+      total: chunks.length,
+    });
+  }
+
+  getMetadata(): ToolProviderMetadata {
     return {
-      toolCallId: "get_chunks_result",
-      role: "tool",
-      name: "knowledge_base__get_chunks",
-      content: JSON.stringify({
-        file_id,
-        chunks: formattedChunks,
-        total: chunks.length,
-      }),
+      namespace: this.namespace,
+      displayName: "知识库检索",
+      description: "从知识库中检索相关信息，增强回答的准确性",
+      isMcp: false,
     };
   }
 }

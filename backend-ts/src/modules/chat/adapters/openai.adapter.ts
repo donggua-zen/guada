@@ -75,7 +75,7 @@ export class OpenAIAdapter implements LLMAdapter {
       model: params.model,
       messages: filterMessages,
       stream: params.stream,
-      timeout: 60000,
+      timeout: params.timeout,
     };
 
     // 动态注入供应商私有参数

@@ -14,6 +14,7 @@ export class SettingsService {
     "defaultTranslationPrompt",
     "defaultHistoryCompressionModelId",
     "defaultHistoryCompressionPrompt",
+    "defaultVisualAssistantModelId",
   ];
 
   constructor(private settingRepo: GlobalSettingRepository) {}
@@ -29,7 +30,17 @@ export class SettingsService {
 
     // 覆盖数据库中的值（假设数据库中已统一使用驼峰命名）
     allSettings.forEach((item) => {
-      settingsMap[item.key] = item.value;
+      // 尝试将字符串值反序列化为对象
+      try {
+        if (item.value && typeof item.value === 'string') {
+          settingsMap[item.key] = JSON.parse(item.value);
+        } else {
+          settingsMap[item.key] = item.value;
+        }
+      } catch {
+        // 如果不是有效的 JSON，直接使用原始值
+        settingsMap[item.key] = item.value;
+      }
     });
 
     return settingsMap;

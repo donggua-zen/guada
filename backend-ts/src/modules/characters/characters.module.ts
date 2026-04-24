@@ -10,5 +10,6 @@ import { AuthModule } from "../auth/auth.module";
   imports: [AuthModule],
   controllers: [CharactersController],
   providers: [CharacterService, CharacterRepository, CharacterGroupRepository, PrismaService],
+  exports: [CharacterRepository],
 })
 export class CharactersModule { }

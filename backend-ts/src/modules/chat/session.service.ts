@@ -199,6 +199,9 @@ export class SessionService {
       modelTemperature:
         sessionSettings.modelTemperature ?? characterSettings.modelTemperature,
       modelTopP: sessionSettings.modelTopP ?? characterSettings.modelTopP,
+      // 工具配置：会话级别优先于角色级别
+      tools: sessionSettings.tools ?? characterSettings.tools,
+      mcpServers: sessionSettings.mcpServers ?? characterSettings.mcpServers,
     };
   }
 

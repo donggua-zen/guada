@@ -4,7 +4,6 @@ import { SessionRepository } from "../../common/database/session.repository";
 import { MessageRepository } from "../../common/database/message.repository";
 import { MessageContentRepository } from "../../common/database/message-content.repository";
 import { SessionContextStateRepository } from "../../common/database/session-context-state.repository";
-import { CharacterRepository } from "../../common/database/character.repository";
 import { KnowledgeBaseRepository } from "../../common/database/knowledge-base.repository";
 import { ModelRepository } from "../../common/database/model.repository";
 import { GlobalSettingRepository } from "../../common/database/global-setting.repository";
@@ -23,12 +22,13 @@ import { MessageService } from "./message.service";
 import { SessionService } from "./session.service";
 import { AuthModule } from "../auth/auth.module";
 import { ToolsModule } from "../tools/tools.module";
+import { CharactersModule } from "../characters/characters.module";
 
 import { SessionLockService } from "./session-lock.service";
 import { ToolResultCleaner } from "./tool-result-cleaner.service";
 
 @Module({
-  imports: [AuthModule, ToolsModule],
+  imports: [AuthModule, ToolsModule, CharactersModule],
   controllers: [ChatController, MessagesController, SessionsController],
   providers: [
     AgentService,
@@ -42,7 +42,6 @@ import { ToolResultCleaner } from "./tool-result-cleaner.service";
     SessionContextStateRepository,
     MessageRepository,
     MessageContentRepository,
-    CharacterRepository,
     KnowledgeBaseRepository,
     ModelRepository,
     GlobalSettingRepository,
@@ -52,7 +51,7 @@ import { ToolResultCleaner } from "./tool-result-cleaner.service";
     TokenizerService,
     ToolResultCleaner,
   ],
-  exports: [AgentService],
+  exports: [AgentService, LLMService],
 })
 export class ChatModule implements OnModuleInit {
   constructor(

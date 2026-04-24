@@ -16,8 +16,9 @@ async function bootstrap() {
 
   // 设置静态文件目录（支持环境变量覆盖）
   const staticPath = process.env.STATIC_DIR || path.join(__dirname, "..", "static");
+  const staticPrefix = process.env.STATIC_URL || "/static";
   app.use(
-    "/static",
+    staticPrefix,
     express.static(staticPath, {
       setHeaders: (res, filePath) => {
         // 确保静态资源响应头支持 UTF-8

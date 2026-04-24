@@ -36,14 +36,14 @@
         <div class="tools left-tools flex gap-2 items-center">
           <slot name="buttons"></slot>
           <template v-if="showButtons.thinkingButton">
-            <el-button  round :type="localThinkingEnabled ? 'primary' : 'default'" plain
-              @click="toggleDeepThinking" :icon="Thinking2">
+            <el-button round :type="localThinkingEnabled ? 'primary' : 'default'" plain @click="toggleDeepThinking"
+              :icon="Thinking2">
               思考
             </el-button>
           </template>
           <!-- 知识库选择按钮 -->
           <el-button v-if="showButtons.knowledgeBaseButton" round plain @click="openKnowledgeBaseDialog"
-            :icon="MenuBookOutlined" >
+            :icon="MenuBookOutlined">
             知识库
           </el-button>
         </div>
@@ -62,23 +62,30 @@
             </div>
           </el-button>
           <div class="tools right-tools">
-            <el-button v-if="showButtons.filesButton" class="tool-btn" title="上传文件" @click="triggerFileInput" text>
-              <el-icon size="22">
-                <Attach24Regular />
-              </el-icon>
-            </el-button>
-            <el-button v-if="showButtons.imagesButton" class="tool-btn" title="添加图片" @click="triggerImageInput" text>
-              <el-icon size="22">
-                <Image24Regular />
-              </el-icon>
-            </el-button>
+            <el-tooltip v-if="showButtons.filesButton" content="上传文件" placement="top">
+              <el-button class="tool-btn" @click="triggerFileInput" text>
+                <el-icon size="22">
+                  <Attach24Regular />
+                </el-icon>
+              </el-button>
+            </el-tooltip>
+            <el-tooltip v-if="showButtons.imagesButton" content="添加图片" placement="top">
+              <el-button class="tool-btn" @click="triggerImageInput" text>
+                <el-icon size="22">
+                  <Image24Regular />
+                </el-icon>
+              </el-button>
+            </el-tooltip>
           </div>
           <div>
-            <el-button v-if="!streaming" class="send-btn" type="primary" title="发送" @click="sendMessage" circle
-              :disabled="!inputContent.trim() || !props.config?.modelId" :icon="ArrowSend" />
-            <el-button v-else class="send-btn stop-btn" title="停止生成" @click="abortResponse" circle type="error"
-              :icon="Stop">
-            </el-button>
+            <el-tooltip v-if="!streaming" content="发送" placement="top">
+              <el-button class="send-btn" type="primary" @click="sendMessage" circle
+                :disabled="!inputContent.trim() || !props.config?.modelId" :icon="Send24Filled" />
+            </el-tooltip>
+            <el-tooltip v-else content="停止生成" placement="top">
+              <el-button class="send-btn stop-btn" @click="abortResponse" circle type="error" :icon="Stop24Filled">
+              </el-button>
+            </el-tooltip>
           </div>
         </div>
       </div>
@@ -266,9 +273,10 @@ import {
   MenuBookOutlined,
   ArrowRightTwotone
 } from "@vicons/material";
-import { Thinking2, ArrowSend, Stop } from "@/components/icons";
+import { Thinking2 } from "@/components/icons";
 import {
-  TextT24Regular, LightbulbFilament24Regular, WrenchScrewdriver24Regular, Image24Regular, Attach24Regular
+  TextT24Regular, LightbulbFilament24Regular, WrenchScrewdriver24Regular, Image24Regular, Attach24Regular,
+  Send24Filled, Stop24Filled
 } from '@vicons/fluent'
 import { usePopup } from '@/composables/usePopup';
 import { useBreakpoints, breakpointsTailwind } from '@vueuse/core'
@@ -337,7 +345,7 @@ const showButtons = reactive({
   thinkingButton: false,
   webSearchButton: true,
   filesButton: true,
-  imagesButton: false,
+  imagesButton: true,
   tokensButton: true,
   knowledgeBaseButton: true, // 知识库选择按钮
 });
@@ -377,7 +385,8 @@ const styleClass = computed(() => {
       if (props.shadow) classes.push('shadow-[0_2px_22px_rgba(0,0,0,0.21)]');
       if (props.border) classes.push('border border-gray-400 dark:border-gray-700');
     } else {
-      if (props.border) classes.push('border border-gray-400 dark:border-gray-700');
+      if (props.shadow) classes.push('shadow-[0_2px_22px_rgba(0,0,0,0.11)]');
+      if (props.border) classes.push('border border-gray-300 dark:border-gray-700');
     }
   }
   return classes.join(' ') + ' ' + props.class;
@@ -416,8 +425,7 @@ const currentModel = computed(() => {
 watch(() => currentModel.value?.config, (config) => {
   // 思考按钮：当模型支持 thinking 时显示
   showButtons.thinkingButton = config?.features?.includes('thinking') || false;
-  // 图像按钮：当模型输入能力支持 image 时显示
-  showButtons.imagesButton = config?.inputCapabilities?.includes('image') || false;
+  // 图像按钮：始终显示，不再根据模型输入能力检查
 }, { immediate: true });
 
 const currentModelName = computed(() => {

@@ -179,9 +179,12 @@ export class ModelService {
         where: { id: createdProvider.id },
         include: { models: true },
       });
-      if (finalDescription)
-        return { ...provider, description: finalDescription };
-      return provider;
+      
+      // 转换 URL 后返回
+      const result = finalDescription
+        ? { ...provider, description: finalDescription }
+        : provider;
+      return this.urlService.transformUrls(result);
     });
   }
 
@@ -261,11 +264,15 @@ export class ModelService {
     if (provider.provider !== "custom") {
       const { name, apiUrl, protocol, ...allowedData } = data;
       // 只允许更新 apiKey 等其他字段
-      return this.modelRepo.updateProvider(providerId, allowedData);
+      const updatedProvider = await this.modelRepo.updateProvider(providerId, allowedData);
+      // 转换 URL 后返回
+      return this.urlService.transformUrls(updatedProvider);
     }
 
     // custom 类型可以更新所有字段
-    return this.modelRepo.updateProvider(providerId, data);
+    const updatedProvider = await this.modelRepo.updateProvider(providerId, data);
+    // 转换 URL 后返回
+    return this.urlService.transformUrls(updatedProvider);
   }
 
   /**

@@ -124,7 +124,8 @@ export class UserService {
       );
       await this.userRepo.update(userId, { avatarUrl: webUrl });
 
-      return { url: webUrl };
+      // 转换为绝对 URL 后返回
+      return { url: this.urlService.toAbsoluteUrl(webUrl) };
     } catch (error: any) {
       // 如果处理失败，删除可能已生成的临时文件
       if (fs.existsSync(filePath)) {

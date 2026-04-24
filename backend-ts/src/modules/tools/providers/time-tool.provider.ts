@@ -3,48 +3,25 @@ import {
   IToolProvider,
   ToolCallRequest,
   ToolCallResponse,
+  ToolProviderMetadata,
 } from "../interfaces/tool-provider.interface";
-import { buildOpenAITool, SimpleToolDef } from "../utils/tool-builder";
 
 @Injectable()
 export class TimeToolProvider implements IToolProvider {
   private readonly logger = new Logger(TimeToolProvider.name);
   public readonly namespace = "time";
 
-  constructor() {}
+  constructor() { }
 
-  private readonly toolsConfig: SimpleToolDef[] = [
-    // 时间工具不提供实际的函数调用，只提供提示词注入
-    // 这里定义一个虚拟工具，但不会被实际执行
-  ];
-
-  async getToolsNamespaced(
-    enabledTools: Record<string, any> | boolean,
-    injectParams: Record<string, any>,
-  ): Promise<any[]> {
-    // 时间工具不需要返回任何可调用工具，因为它只是注入提示词
+  async getTools(enabled?: boolean | string[]): Promise<any[]> {
     return [];
   }
 
-  async executeWithNamespace(
-    request: ToolCallRequest,
-    injectParams?: Record<string, any>,
-  ): Promise<ToolCallResponse> {
-    // 时间工具不执行任何实际操作
-    this.logger.warn(
-      `尝试执行时间工具 ${request.name}，但该工具仅提供提示词注入`,
-    );
-
-    return {
-      toolCallId: request.id,
-      role: "tool",
-      name: request.name,
-      content: "时间工具仅用于提示词注入，不支持直接调用",
-      isError: true,
-    };
+  async execute(request: ToolCallRequest, context?: Record<string, any>): Promise<string> {
+    throw new Error("时间工具仅用于提示词注入，不支持直接调用");
   }
 
-  async getPrompt(injectParams?: Record<string, any>): Promise<string> {
+  async getPrompt(context?: Record<string, any>): Promise<string> {
     try {
       const now = new Date();
       const currentTime = now.toLocaleString("zh-CN", {
@@ -72,7 +49,16 @@ export class TimeToolProvider implements IToolProvider {
       return promptParts.join("\n");
     } catch (error: any) {
       this.logger.error(`获取时间提示词失败：${error.message}`);
-      return ""; // 出错时返回空字符串，不影响对话
+      return "";
     }
+  }
+
+  getMetadata(): ToolProviderMetadata {
+    return {
+      namespace: this.namespace,
+      displayName: "时间工具",
+      description: "自动注入当前时间信息，帮助 AI 准确回答时间相关问题",
+      isMcp: false,
+    };
   }
 }

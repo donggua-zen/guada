@@ -8,7 +8,18 @@ import { KnowledgeBaseToolProvider } from "./providers/knowledge-base-tool.provi
 import { MemoryToolProvider } from "./providers/memory-tool.provider";
 import { MCPToolProvider } from "./providers/mcp-tool.provider";
 import { TimeToolProvider } from "./providers/time-tool.provider";
+import { ImageRecognitionToolProvider } from "./providers/image-recognition-tool.provider";
 import { ToolContext } from "./tool-context";
+
+export interface ToolMetadata {
+  namespace: string;
+  name: string;
+  displayName: string;
+  description: string;
+  enabled: boolean;
+  isMcp: boolean;
+  tools?: any[];
+}
 
 @Injectable()
 export class ToolOrchestrator {
@@ -20,11 +31,13 @@ export class ToolOrchestrator {
     memoryProvider: MemoryToolProvider,
     mcpProvider: MCPToolProvider,
     timeProvider: TimeToolProvider,
+    imageRecognitionProvider: ImageRecognitionToolProvider,
   ) {
     this.addProvider(kbProvider);
     this.addProvider(memoryProvider);
     this.addProvider(mcpProvider);
     this.addProvider(timeProvider);
+    this.addProvider(imageRecognitionProvider);
   }
 
   addProvider(provider: IToolProvider) {
@@ -34,18 +47,31 @@ export class ToolOrchestrator {
     }
   }
 
+  /**
+   * 获取所有工具提供者（用于动态配置）
+   */
+  getProviders(): Map<string, IToolProvider> {
+    return this.providers;
+  }
+
   async getAllTools(context: ToolContext): Promise<any[]> {
     const allTools: any[] = [];
+    
     for (const [namespace, provider] of this.providers.entries()) {
       const config = context.getProviderConfig(namespace);
       if (!config) continue;
       if (config.enabledTools === false) continue;
-      const tools = await provider.getToolsNamespaced(
-        config.enabledTools,
-        context.injectParams,
-      );
-      allTools.push(...tools);
+      
+      const tools = await provider.getTools(config.enabledTools);
+      
+      const namespacedTools = tools.map(tool => ({
+        ...tool,
+        name: `${namespace}__${tool.name}`,
+      }));
+      
+      allTools.push(...namespacedTools);
     }
+    
     this.logger.debug(`Collected ${allTools.length} tools`);
     return allTools;
   }
@@ -101,19 +127,94 @@ export class ToolOrchestrator {
     request: ToolCallRequest,
     context: ToolContext,
   ): Promise<ToolCallResponse> {
-    const namespace = request.name.split("__")[0];
+    const parts = request.name.split("__");
+    if (parts.length < 2) {
+      throw new Error(`Invalid tool name format: ${request.name}`);
+    }
+    
+    const namespace = parts[0];
+    const coreName = parts.slice(1).join("__");
+    
     const provider = this.providers.get(namespace);
 
     if (!provider) {
       throw new Error(
-        `${request.name} No provider found for namespace: ${namespace}`,
+        `No provider found for namespace: ${namespace}`,
       );
     }
 
     if (!context.isToolEnabled(namespace)) {
-      throw new Error(`${request.name} Tool provider ${namespace} is disabled`);
+      throw new Error(`Tool provider ${namespace} is disabled`);
     }
 
-    return provider.executeWithNamespace(request, context.injectParams);
+    const strippedRequest: ToolCallRequest = {
+      ...request,
+      name: coreName,
+    };
+
+    try {
+      // 提供者只返回内容字符串，异常由这里捕获
+      const content = await provider.execute(strippedRequest, context.injectParams);
+      
+      return {
+        toolCallId: request.id,
+        role: "tool",
+        name: request.name,
+        content,
+        isError: false,
+      };
+    } catch (error: any) {
+      this.logger.error(`Error executing tool ${request.name}`, error);
+      // 统一封装错误响应
+      return {
+        toolCallId: request.id,
+        role: "tool",
+        name: request.name,
+        content: `Error: ${error.message}`,
+        isError: true,
+      };
+    }
+  }
+
+  async getLocalToolsList(userId: string, settings: any): Promise<ToolMetadata[]> {
+    const toolsList: ToolMetadata[] = [];
+
+    for (const [namespace, provider] of this.providers.entries()) {
+      const metadata = provider.getMetadata();
+      
+      if (metadata.isMcp) {
+        continue;
+      }
+
+      const providerConfig = settings?.tools || {};
+      const isEnabled = providerConfig[namespace] !== false;
+
+      let tools: any[] = [];
+      try {
+        tools = await provider.getTools(true);
+        
+        const namespacedTools = tools.map(tool => ({
+          ...tool,
+          name: `${namespace}__${tool.name}`,
+        }));
+        
+        tools = namespacedTools;
+      } catch (error: any) {
+        this.logger.error(
+          `Error getting tools from provider ${namespace}: ${error.message}`,
+        );
+      }
+
+      const toolMetadata: ToolMetadata = {
+        ...metadata,
+        name: namespace,
+        enabled: isEnabled,
+        tools,
+      };
+
+      toolsList.push(toolMetadata);
+    }
+
+    return toolsList;
   }
 }

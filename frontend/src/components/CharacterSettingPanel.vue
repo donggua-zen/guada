@@ -116,18 +116,6 @@
                 <el-slider-optional v-model="characterForm.maxMemoryLength" :min="2" :max="500" :step="1" show-input
                   optional-direction="max" optional-text="No Limit" />
               </el-form-item>
-
-              <!-- 启用记忆工具 -->
-              <el-form-item label="启用记忆保存" prop="enableMemorySaving">
-                <div class="flex items-center justify-between w-full">
-                  <div class="flex-1 mr-4">
-                    <div class="text-sm font-medium mb-1">记忆保存功能</div>
-                    <div class="text-xs text-gray-500">启用后，系统将自动保存对话内容到长期记忆，帮助AI更好地理解上下文和历史对话</div>
-                  </div>
-                  <el-switch :model-value="characterForm.enabledTools.includes('memory')"
-                    @update:model-value="handleMemoryToolToggle" inline-prompt active-text="开" inactive-text="关" />
-                </div>
-              </el-form-item>
             </el-form>
           </div>
         </el-tab-pane>
@@ -136,21 +124,77 @@
         <el-tab-pane name="local_tools" label="本地工具">
           <div class="p-3">
             <el-form label-position="top" size="large">
-              <el-form-item label="可用工具">
-                <el-checkbox-group v-model="characterForm.enabledTools">
-                  <div class="tool-item p-3 border rounded mb-2">
-                    <el-checkbox value="get_current_time" class="w-full">
-                      <div class="flex items-center justify-between w-full">
-                        <div>
-                          <div class="font-medium">获取当前时间</div>
-                          <div class="text-sm text-gray-500">返回当前的日期和时间信息</div>
-                        </div>
-                        <el-tag type="info" size="small">内置</el-tag>
-                      </div>
-                    </el-checkbox>
-                  </div>
-                </el-checkbox-group>
+              <!-- 全局开关 -->
+              <el-form-item label="自动启用全部工具" label-position="left">
+                <div class="flex items-center gap-2">
+                  <el-tooltip content="开启后，角色将自动使用所有全局启用的工具，无需逐个选择" placement="top">
+                    <el-icon class="cursor-help text-gray-400 hover:text-gray-600" size="16">
+                      <QuestionCircleOutlined />
+                    </el-icon>
+                  </el-tooltip>
+                  <el-switch 
+                    :model-value="allToolsEnabled"
+                    @update:model-value="handleAllToolsToggle"
+                    inline-prompt 
+                    active-text="开" 
+                    inactive-text="关" 
+                  />
+                </div>
               </el-form-item>
+
+              <el-alert title="工具说明" type="info" :closable="false" class="mb-4" show-icon>
+                <p class="text-sm" v-if="allToolsEnabled">
+                  当前已启用所有全局允许的工具，下方列表仅供参考
+                </p>
+                <p class="text-sm" v-else>
+                  只有在全局设置中启用的工具才会显示在这里。您可以进一步选择启用或禁用这些工具。
+                </p>
+              </el-alert>
+
+              <div v-if="loadingTools" class="text-center py-8">
+                <el-icon class="is-loading" size="24">
+                  <LoadingOutlined />
+                </el-icon>
+                <div class="text-sm text-gray-500 mt-2">加载中...</div>
+              </div>
+              
+              <div v-else-if="localTools.length === 0" class="text-center text-gray-500 py-8">
+                <el-icon size="48" class="mb-2">
+                  <InfoCircleOutlined />
+                </el-icon>
+                <div>暂无可用的本地工具</div>
+                <div class="text-sm mt-2">请先到"插件 > 本地工具"中启用工具</div>
+              </div>
+
+              <div v-else>
+                <!-- 网格布局：每行3列 -->
+                <div class="grid grid-cols-3 gap-3">
+                  <div v-for="tool in localTools" :key="tool.namespace" class="tool-item p-3 border rounded">
+                    <div class="flex items-start justify-between gap-2 mb-2">
+                      <div class="font-medium text-sm flex-1 truncate">{{ tool.displayName }}</div>
+                      <el-switch
+                        v-if="!allToolsEnabled"
+                        v-model="characterToolSettings[tool.namespace]"
+                        @change="handleLocalToolToggle(tool.namespace, $event)"
+                        inline-prompt
+                        active-text="启动"
+                        inactive-text="禁用"
+                        size="default"
+                      />
+                      <el-tag v-else type="primary" size="small">已启用</el-tag>
+                    </div>
+                    <p class="text-xs text-gray-500 line-clamp-2 min-h-[2rem] mb-2">{{ tool.description }}</p>
+                    <div v-if="allToolsEnabled" class="text-xs text-blue-500">
+                      ✓ 已自动启用
+                    </div>
+                    <div v-else class="text-xs text-gray-400">
+                      <el-tag size="small" type="info" effect="plain">
+                        {{ tool.tools?.length || 0 }} 个工具
+                      </el-tag>
+                    </div>
+                  </div>
+                </div>
+              </div>
             </el-form>
           </div>
         </el-tab-pane>
@@ -258,7 +302,8 @@ import {
 } from 'element-plus'
 import {
   QuestionCircleOutlined,
-  InfoCircleOutlined
+  InfoCircleOutlined,
+  LoadingOutlined
 } from '@vicons/antd'
 
 import { apiService } from '../services/ApiService'
@@ -430,6 +475,20 @@ const mcpServers = ref([]);
 // 角色分组数据
 const characterGroups = ref([]);
 
+// 本地工具数据
+const localTools = ref([]);
+const loadingTools = ref(false);
+
+// 角色工具设置（namespace -> boolean | 'all'）
+const characterToolSettings = ref({});
+
+// 是否自动启用全部工具
+const allToolsEnabled = computed(() => {
+  // 如果所有工具都设置为 'all'，则认为启用了全部工具
+  if (localTools.value.length === 0) return false;
+  return localTools.value.every(tool => characterToolSettings.value[tool.namespace] === 'all');
+});
+
 // 监听 props.show 变化
 watch(() => props.simple, (newVal) => {
   isSimpleStyle.value = newVal;
@@ -457,6 +516,13 @@ watch(() => props.data, (newVal) => {
   characterForm.useUserPrompt = newVal.settings?.useUserPrompt || false;
   // 加载已启用的工具
   characterForm.enabledTools = newVal.settings?.tools || [];
+  // 加载角色工具设置
+  const toolsConfig = newVal.settings?.tools;
+  if (typeof toolsConfig === 'object' && !Array.isArray(toolsConfig)) {
+    characterToolSettings.value = { ...toolsConfig };
+  } else {
+    characterToolSettings.value = {};
+  }
   // 加载已启用的 MCP 服务器 (支持 boolean 或 array)
   const mcpServersConfig = newVal.settings?.mcpServers;
   if (typeof mcpServersConfig === 'boolean') {
@@ -505,18 +571,54 @@ const handleMcpGlobalToggle = (enabled) => {
   }
 }
 
-// 记忆工具开关切换处理
-const handleMemoryToolToggle = (enabled) => {
-  const toolName = 'memory';
-  const index = characterForm.enabledTools.indexOf(toolName);
-  if (enabled && index === -1) {
-    // 启用：添加到数组
-    characterForm.enabledTools.push(toolName);
-  } else if (!enabled && index !== -1) {
-    // 禁用：从数组移除
-    characterForm.enabledTools.splice(index, 1);
+// 加载本地工具列表
+const loadLocalTools = async () => {
+  if (!props.data?.id) {
+    return;
   }
-  console.log(`记忆工具 ${enabled ? '启用' : '禁用'}, 当前工具列表:`, characterForm.enabledTools);
+  
+  loadingTools.value = true;
+  try {
+    const response = await apiService.fetchCharacterTools(props.data.id);
+    // 只显示全局启用的工具
+    localTools.value = (response.tools || []).filter(tool => tool.enabled);
+    
+    // 初始化角色工具设置
+    const initialSettings = {};
+    localTools.value.forEach(tool => {
+      // 如果已有设置则使用，否则默认为 'all'（继承全局）
+      initialSettings[tool.namespace] = characterToolSettings.value[tool.namespace] || 'all';
+    });
+    characterToolSettings.value = initialSettings;
+  } catch (error) {
+    console.error('加载本地工具失败:', error);
+    toast.error('加载本地工具失败');
+  } finally {
+    loadingTools.value = false;
+  }
+}
+
+// 全部工具开关切换处理
+const handleAllToolsToggle = (enabled) => {
+  if (enabled) {
+    // 开启：将所有工具设置为 'all'（继承全局）
+    localTools.value.forEach(tool => {
+      characterToolSettings.value[tool.namespace] = 'all';
+    });
+    console.log('已启用全部工具');
+  } else {
+    // 关闭：将所有工具设置为 false（禁用）
+    localTools.value.forEach(tool => {
+      characterToolSettings.value[tool.namespace] = false;
+    });
+    console.log('已禁用全部工具，需要手动选择');
+  }
+}
+
+// 本地工具开关切换处理
+const handleLocalToolToggle = (namespace, enabled) => {
+  characterToolSettings.value[namespace] = enabled;
+  console.log(`本地工具 ${namespace} ${enabled ? '启用' : '禁用'}`);
 }
 
 const loadModels = async () => {
@@ -558,12 +660,21 @@ const findModelById = (modelId) => {
   return models.value.find(model => model.id === modelId)
 }
 
+// 监听 props.data.id 变化，重新加载工具列表
+watch(() => props.data?.id, async (newVal, oldVal) => {
+  if (newVal && newVal !== oldVal) {
+    console.log('角色ID变化，重新加载工具列表:', newVal);
+    await loadLocalTools();
+  }
+});
+
 // 生命周期
 onMounted(async () => {
   // if (!isSimpleStyle.value)
   loadModels();
   loadMCPServers();
   loadCharacterGroups();  // 加载分组列表
+  // 注意：不在 onMounted 中加载工具，而是等待 watch 触发
 })
 
 onUnmounted(() => {
@@ -644,7 +755,7 @@ const handleSave = async () => {
         'modelFrequencyPenalty': characterForm.modelFrequencyPenalty,
         'useUserPrompt': characterForm.useUserPrompt,
         // 工具配置
-        'tools': characterForm.enabledTools,  // 包含 'get_current_time', 'memory' 等
+        'tools': characterToolSettings.value,  // 对象格式：{ namespace: boolean | 'all' }
         'mcpServers': characterForm.enabledMcpServers,  // boolean 或 string[]
       }
     }

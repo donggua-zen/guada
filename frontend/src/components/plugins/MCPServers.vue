@@ -38,7 +38,7 @@
                     </div>
                     <div class="flex items-center gap-3">
                         <el-switch v-model="server.enabled" :active-value="true" :inactive-value="false"
-                            @change="handleToggleServer(server)" active-text="启用" inactive-text="禁用" size="default" />
+                            @change="handleToggleServer(server)" inline-prompt active-text="启动" inactive-text="禁用" size="large" />
                         <el-button link style="font-size: 20px" @click="handleEditServer(server)">
                             <el-icon>
                                 <SettingsOutlined />
@@ -91,7 +91,7 @@
                         </el-form-item>
 
                         <el-form-item label="启用状态">
-                            <el-switch v-model="serverForm.enabled" active-text="启用" inactive-text="禁用" />
+                            <el-switch v-model="serverForm.enabled" inline-prompt active-text="启动" inactive-text="禁用" size="large" />
                         </el-form-item>
                     </el-form>
                 </el-tab-pane>

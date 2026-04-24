@@ -3,6 +3,7 @@ import {
   IToolProvider,
   ToolCallRequest,
   ToolCallResponse,
+  ToolProviderMetadata,
 } from "../interfaces/tool-provider.interface";
 import { PrismaService } from "../../../common/database/prisma.service";
 import { InternalToolDefinition } from "../../chat/types/llm.types";
@@ -16,7 +17,7 @@ export class MemoryToolProvider implements IToolProvider {
 
   private readonly toolsConfig: InternalToolDefinition[] = [
     {
-      name: "memory__long_term__edit",
+      name: "long_term__edit",
       description: "Upsert 长期记忆（按类型编辑或自动创建）",
       parameters: {
         type: "object",
@@ -37,7 +38,7 @@ export class MemoryToolProvider implements IToolProvider {
       },
     },
     {
-      name: "memory__memo__create_or_update",
+      name: "memo__create_or_update",
       description:
         "创建或更新备忘录。如果标题已存在则根据 write_mode 决定覆盖或追加，否则创建新备忘录。标题最大64字符。",
       parameters: {
@@ -60,7 +61,7 @@ export class MemoryToolProvider implements IToolProvider {
       },
     },
     {
-      name: "memory__memo__delete",
+      name: "memo__delete",
       description: "通过标题删除指定的备忘录",
       parameters: {
         type: "object",
@@ -75,7 +76,7 @@ export class MemoryToolProvider implements IToolProvider {
       },
     },
     {
-      name: "memory__memo__read",
+      name: "memo__read",
       description: "通过标题阅读指定的备忘录内容",
       parameters: {
         type: "object",
@@ -91,26 +92,15 @@ export class MemoryToolProvider implements IToolProvider {
     },
   ];
 
-  async getToolsNamespaced(
-    enabledTools: Record<string, any> | boolean,
-    injectParams: Record<string, any>,
-  ): Promise<any[]> {
-    if (enabledTools === false) return [];
-    // 直接返回扁平化的工具定义，由 adapter 进行转换
+  async getTools(enabled?: boolean | string[]): Promise<any[]> {
+    if (enabled === false) return [];
     return this.toolsConfig;
   }
 
-  async executeWithNamespace(
-    request: ToolCallRequest,
-    injectParams?: Record<string, any>,
-  ): Promise<ToolCallResponse> {
-    // 1. 统一剥离命名空间前缀
-    const coreName = request.name.replace(`${this.namespace}__`, "");
-
-    // 2. 建立工具名到处理函数的映射
+  async execute(request: ToolCallRequest, context?: Record<string, any>): Promise<string> {
     const handlers: Record<
       string,
-      (args: any, params?: Record<string, any>) => Promise<string>
+      (args: any, ctx?: Record<string, any>) => Promise<string>
     > = {
       long_term__view: this.handleLongTermView.bind(this),
       long_term__edit: this.handleLongTermEdit.bind(this),
@@ -119,37 +109,24 @@ export class MemoryToolProvider implements IToolProvider {
       memo__read: this.handleMemoRead.bind(this),
     };
 
-    const handler = handlers[coreName];
+    const handler = handlers[request.name];
 
-    try {
-      if (!handler) {
-        throw new Error(`未知工具：${request.name}`);
-      }
-      const content = await handler(request.arguments, injectParams);
-
-      return {
-        toolCallId: request.id,
-        role: "tool",
-        name: request.name,
-        content,
-        isError: false,
-      };
-    } catch (error: any) {
-      this.logger.error(`Error executing Memory tool ${coreName}`, error);
-      return {
-        toolCallId: request.id,
-        role: "tool",
-        name: request.name,
-        content: `Error: ${error.message}`,
-        isError: true,
-      };
+    if (!handler) {
+      throw new Error(`未知工具：${request.name}`);
     }
+    
+    // 使用传入的 context 参数
+    return await handler(request.arguments, context);
   }
 
-  async getPrompt(injectParams?: Record<string, any>): Promise<string> {
+  async getPrompt(context?: Record<string, any>): Promise<string> {
     try {
-      // 从注入参数中获取 session_id
-      const sessionId = injectParams?.session_id || "unknown";
+      // 从上下文中获取 session_id
+      const sessionId = context?.session_id;
+      if (!sessionId) {
+        this.logger.warn('getPrompt: 无法获取 session_id，返回空提示词');
+        return "";
+      }
 
       // 获取所有长期记忆（不限制数量）
       const longTermMemories = await this.getLongTermMemories(sessionId);
@@ -300,8 +277,17 @@ export class MemoryToolProvider implements IToolProvider {
       return promptParts.join("\n");
     } catch (error: any) {
       this.logger.error(`获取记忆提示词失败：${error.message}`);
-      return ""; // 出错时返回空字符串，不影响对话
+      return "";
     }
+  }
+
+  getMetadata(): ToolProviderMetadata {
+    return {
+      namespace: this.namespace,
+      displayName: "记忆管理",
+      description: "允许 AI 读写长期记忆和备忘录，实现持久化记忆功能",
+      isMcp: false,
+    };
   }
 
   private async getLongTermMemories(sessionId: string): Promise<any[]> {
@@ -327,12 +313,11 @@ export class MemoryToolProvider implements IToolProvider {
     }
   }
 
-  private async handleLongTermView(
-    args: any,
-    injectParams?: Record<string, any>,
-  ): Promise<string> {
-    const sessionId = injectParams?.session_id;
-    if (!sessionId) return "❌ 错误：缺少 session_id 注入参数";
+  private async handleLongTermView(args: any, context?: Record<string, any>): Promise<string> {
+    const sessionId = context?.session_id;
+    if (!sessionId) {
+      return "❌ 错误：无法获取会话 ID";
+    }
 
     const memories = await this.prisma.memory.findMany({
       where: {
@@ -350,12 +335,11 @@ export class MemoryToolProvider implements IToolProvider {
     return memories.map((m, i) => `${i + 1}. ${m.content}`).join("\n");
   }
 
-  private async handleLongTermEdit(
-    args: any,
-    injectParams?: Record<string, any>,
-  ): Promise<string> {
-    const sessionId = injectParams?.session_id;
-    if (!sessionId) return "❌ 错误：缺少 session_id 注入参数";
+  private async handleLongTermEdit(args: any, context?: Record<string, any>): Promise<string> {
+    const sessionId = context?.session_id;
+    if (!sessionId) {
+      return "❌ 错误：无法获取会话 ID";
+    }
 
     const existing = await this.prisma.memory.findFirst({
       where: {
@@ -433,12 +417,12 @@ export class MemoryToolProvider implements IToolProvider {
   /**
    * 创建或更新备忘录
    */
-  private async handleMemoCreateOrUpdate(
-    args: any,
-    injectParams?: Record<string, any>,
-  ): Promise<string> {
-    const sessionId = injectParams?.session_id;
-    if (!sessionId) return "❌ 错误：缺少 session_id 注入参数";
+  private async handleMemoCreateOrUpdate(args: any, context?: Record<string, any>): Promise<string> {
+    // 从上下文中获取 session_id
+    const sessionId = context?.session_id;
+    if (!sessionId) {
+      return "❌ 错误：无法获取会话 ID";
+    }
 
     const { title, content, write_mode } = args;
 
@@ -507,12 +491,11 @@ export class MemoryToolProvider implements IToolProvider {
   /**
    * 删除备忘录
    */
-  private async handleMemoDelete(
-    args: any,
-    injectParams?: Record<string, any>,
-  ): Promise<string> {
-    const sessionId = injectParams?.session_id;
-    if (!sessionId) return "❌ 错误：缺少 session_id 注入参数";
+  private async handleMemoDelete(args: any, context?: Record<string, any>): Promise<string> {
+    const sessionId = context?.session_id;
+    if (!sessionId) {
+      return "❌ 错误：无法获取会话 ID";
+    }
 
     const { title } = args;
 
@@ -550,12 +533,11 @@ export class MemoryToolProvider implements IToolProvider {
   /**
    * 读取备忘录
    */
-  private async handleMemoRead(
-    args: any,
-    injectParams?: Record<string, any>,
-  ): Promise<string> {
-    const sessionId = injectParams?.session_id;
-    if (!sessionId) return "❌ 错误：缺少 session_id 注入参数";
+  private async handleMemoRead(args: any, context?: Record<string, any>): Promise<string> {
+    const sessionId = context?.session_id;
+    if (!sessionId) {
+      return "❌ 错误：无法获取会话 ID";
+    }
 
     const { title } = args;
 
