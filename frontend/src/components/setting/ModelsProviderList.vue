@@ -3,7 +3,7 @@
     <!-- 头部：标题和新建按钮 -->
     <div class="sessions-header py-1 text-lg font-semibold flex justify-between items-center">
       <span>供应商列表</span>
-      <el-button @click="$emit('create-group')" size="default">
+      <el-button @click="$emit('create-group')" size="default" type="primary">
         <template #icon>
           <PlusOutlined />
         </template>
@@ -136,7 +136,7 @@ defineProps({
 defineEmits(['item-click', 'create-group', 'item-edit', 'item-delete', 'template-click'])
 
 const getTemplateIcon = (item) => {
-  // 优先使用自带的 avatarUrl
+  // 优先使用自带的 avatarUrl（修正 URL）
   if (item.avatarUrl) {
     return item.avatarUrl;
   }

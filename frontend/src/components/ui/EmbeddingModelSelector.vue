@@ -86,6 +86,8 @@ import { ref, computed, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import { ScienceOutlined, SearchFilled, CheckCircleFilled, ArrowDropDownTwotone } from '@vicons/material'
 import { useBreakpoints, breakpointsTailwind } from '@vueuse/core'
+import { apiService } from '@/services/ApiService'
+
 
 interface Model {
     id: string
@@ -124,7 +126,6 @@ const providers = ref<Provider[]>([])
 // 加载所有模型和供应商
 const loadModels = async () => {
     try {
-        const { apiService } = await import('@/services/ApiService')
         const response = await apiService.fetchModels()
 
         // 只保留 embedding 类型的模型

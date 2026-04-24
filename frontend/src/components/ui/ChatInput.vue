@@ -272,6 +272,7 @@ import {
 } from '@vicons/fluent'
 import { usePopup } from '@/composables/usePopup';
 import { useBreakpoints, breakpointsTailwind } from '@vueuse/core'
+import { apiService } from '@/services/ApiService';
 
 const breakpoints = useBreakpoints(breakpointsTailwind)
 const isMobile = breakpoints.smaller('md') // md = 768px
@@ -373,8 +374,8 @@ const styleClass = computed(() => {
   if (!props.clean) {
     if (props.round) classes.push('rounded-[22px]');
     if (focused.value) {
-      if (props.shadow) classes.push('shadow-[0_2px_32px_rgba(0,0,0,0.11)]');
-      if (props.border) classes.push('border border-gray-300 dark:border-gray-700');
+      if (props.shadow) classes.push('shadow-[0_2px_22px_rgba(0,0,0,0.21)]');
+      if (props.border) classes.push('border border-gray-400 dark:border-gray-700');
     } else {
       if (props.border) classes.push('border border-gray-400 dark:border-gray-700');
     }
@@ -658,7 +659,6 @@ const removeKnowledgeBase = (kbId: string) => {
 // 加载模型列表
 const loadModels = async () => {
   try {
-    const { apiService } = await import('@/services/ApiService');
     const response = await apiService.fetchModels();
     response.items.forEach(provider => {
       // 过滤只保留 mode_type 为 'text' 的模型
@@ -682,7 +682,6 @@ const loadModels = async () => {
 // 加载知识库列表
 const loadKnowledgeBases = async () => {
   try {
-    const { apiService } = await import('@/services/ApiService');
     const response = await apiService.fetchKnowledgeBases();
     knowledgeBases.value = response.items || [];
 

@@ -1,12 +1,23 @@
-import { app, BrowserWindow, ipcMain, Menu } from 'electron'
+import { app, BrowserWindow, ipcMain, Menu, shell } from 'electron'
 import * as path from 'path'
-import { spawn, ChildProcess } from 'child_process'
+import { fork, ChildProcess } from 'child_process'
 import * as fs from 'fs'
+import { autoUpdater } from 'electron-updater'
 
 let backendProcess: ChildProcess | null = null
 let mainWindow: BrowserWindow | null = null
+let isBackendStarting = false  // 防止重复启动
 
-const isDev = process.env.NODE_ENV === 'development'
+// 判断是否为开发模式（根据是否打包，而不是 NODE_ENV）
+const isDev = !app.isPackaged
+
+// 配置更新源
+autoUpdater.autoDownload = false
+if (isDev) {
+  autoUpdater.forceDevUpdateConfig = true
+  // 在开发环境下，如果找不到 dev-app-update.yml，我们提供一个默认的占位配置以防止报错
+  // 或者你可以选择在这里直接 return，不执行后续的 checkForUpdates
+}
 
 // 获取后端路径
 function getBackendPath(): string {
@@ -14,7 +25,7 @@ function getBackendPath(): string {
     // 编译后的文件在 electron/dist/，需要向上两级到达项目根目录
     return path.join(__dirname, '..', '..', 'backend-ts')
   } else {
-    // 生产环境：从 resources 目录获取
+    // 生产环境：从 resources/backend-ts 获取（extraResources）
     return path.join(process.resourcesPath, 'backend-ts')
   }
 }
@@ -23,83 +34,133 @@ function getBackendPath(): string {
 async function initializeDatabase(userDataPath: string, backendPath: string): Promise<void> {
   const dbPath = path.join(userDataPath, 'ai_chat.db')
   const vectorDbPath = path.join(userDataPath, 'vector_db.sqlite')
-  const isFirstRun = !fs.existsSync(dbPath)
   
-  // 首次运行时执行数据库迁移和种子数据
-  if (isFirstRun) {
-    console.log('🔄 首次运行，执行数据库初始化...')
+  // 无论是否首次运行，都尝试执行迁移以确保结构最新
+  try {
+    const { execSync } = require('child_process')
+    
+    // 备份旧数据库
+    if (fs.existsSync(dbPath)) {
+      const backupPath = `${dbPath}.bak`
+      fs.copyFileSync(dbPath, backupPath)
+      console.log('💾 已备份数据库至:', backupPath)
+    }
+    
+    // 设置环境变量
+    const env = {
+      ...process.env,
+      DATABASE_URL: `file:${dbPath}`,
+      VECTOR_DB_PATH: vectorDbPath
+    }
+    
+    // 执行迁移
+    console.log('🔄 检查并执行数据库迁移...')
     try {
-      // 使用 Prisma CLI 执行迁移
-      // Prisma 会自动创建 SQLite 数据库文件，无需预先创建
-      const { execSync } = require('child_process')
-      
-      // 设置环境变量
-      const env = {
-        ...process.env,
-        DATABASE_URL: `file:${dbPath}`,
-        VECTOR_DB_PATH: vectorDbPath
-      }
-      
-      // 执行迁移（Prisma 会自动创建数据库文件和表结构）
       execSync('npx prisma migrate deploy', {
         cwd: backendPath,
         env,
-        stdio: 'pipe' // 使用 pipe 而不是 inherit，避免弹出命令框
+        stdio: 'pipe'
       })
-      
       console.log('✅ 数据库迁移完成')
-      
-      // 执行种子数据（使用强制模式，无需确认）
+    } catch (migrateError: any) {
+      const errorMsg = migrateError.stderr?.toString() || ''
+      if (errorMsg.includes('P3005')) {
+        console.warn('⚠️  检测到数据库未基线化，正在尝试同步结构...')
+        // 如果 migrate deploy 失败且是因为 schema 不为空，尝试使用 db push 同步
+        execSync('npx prisma db push', {
+          cwd: backendPath,
+          env,
+          stdio: 'pipe'
+        })
+        console.log('✅ 数据库结构已同步 (db push)')
+      } else {
+        throw migrateError
+      }
+    }
+    
+    // 首次运行时执行种子数据
+    const isFirstRun = !fs.existsSync(dbPath) || fs.statSync(dbPath).size === 0
+    if (isFirstRun) {
       console.log('🌱 初始化种子数据...')
       execSync('npm run db:seed:force', {
         cwd: backendPath,
         env,
-        stdio: 'pipe' // 使用 pipe 而不是 inherit，避免弹出命令框
+        stdio: 'pipe'
       })
-      
       console.log('✅ 种子数据初始化完成')
-    } catch (error: any) {
-      console.error('❌ 数据库初始化失败:', error.message)
-      // 如果有错误输出，也打印出来
-      if (error.stdout) {
-        console.log('标准输出:', error.stdout.toString())
-      }
-      if (error.stderr) {
-        console.error('错误输出:', error.stderr.toString())
-      }
-      console.warn('⚠️  应用将继续启动，但可能需要手动初始化数据库')
     }
-  } else {
-    console.log('💾 检测到已有数据库，跳过初始化')
+  } catch (error: any) {
+    console.error('❌ 数据库操作失败:', error.message)
+    if (error.stdout) console.log('标准输出:', error.stdout.toString())
+    if (error.stderr) console.error('错误输出:', error.stderr.toString())
+    // 迁移失败时恢复备份
+    const backupPath = `${dbPath}.bak`
+    if (fs.existsSync(backupPath)) {
+      fs.copyFileSync(backupPath, dbPath)
+      console.warn('⚠️  已尝试从备份恢复数据库')
+    }
   }
 }
 
 // 启动 NestJS 后端服务
 async function startBackend(): Promise<void> {
+  // 防止重复启动
+  if (isBackendStarting) {
+    console.warn('⚠️  后端已在启动中，跳过重复调用')
+    return Promise.resolve()
+  }
+  
+  // 如果后端已经在运行，直接返回
+  if (backendProcess && !backendProcess.killed) {
+    console.warn('⚠️  后端已在运行，跳过启动')
+    return Promise.resolve()
+  }
+  
+  isBackendStarting = true
+  
   return new Promise(async (resolve, reject) => {
     const backendPath = getBackendPath()
     
-    // 开发模式使用 ts-node-dev 启动，支持热重载
-    // 生产模式使用编译后的 dist/main.js
-    let nodePath: string
-    let scriptPath: string
-    let args: string[]
-    
     if (isDev) {
-      // 开发模式：使用 npx 运行 ts-node-dev
-      nodePath = process.platform === 'win32' ? 'npx.cmd' : 'npx'
-      scriptPath = 'ts-node-dev'
-      args = [
+      // 开发模式：使用 spawn 启动 ts-node-dev
+      const { spawn } = await import('child_process')
+      const nodePath = process.platform === 'win32' ? 'npx.cmd' : 'npx'
+      const scriptPath = 'ts-node-dev'
+      const args = [
         '--respawn',
         '--transpile-only',
         path.join(backendPath, 'src', 'main.ts')
       ]
+      
       console.log('🔧 开发模式：使用 ts-node-dev 启动后端（支持热重载）')
+      
+      const userDataPath = app.getPath('userData')
+      await initializeDatabase(userDataPath, backendPath)
+      
+      const dbPath = path.join(userDataPath, 'ai_chat.db')
+      const vectorDbPath = path.join(userDataPath, 'vector_db.sqlite')
+      const staticDir = path.join(backendPath, 'static')
+      
+      const spawnOptions: any = {
+        cwd: backendPath,
+        env: {
+          ...process.env,
+          NODE_ENV: 'development',
+          DATABASE_URL: `file:${dbPath}`,
+          VECTOR_DB_PATH: vectorDbPath,
+          STATIC_DIR: staticDir,
+          UPLOAD_BASE_DIR: staticDir
+        },
+        stdio: ['pipe', 'pipe', 'pipe'],
+        shell: true
+      }
+      
+      backendProcess = spawn(nodePath, [scriptPath, ...args], spawnOptions)
     } else {
-      // 生产模式：使用编译后的 JavaScript 文件
-      nodePath = process.execPath
-      scriptPath = path.join(backendPath, 'dist', 'main.js')
-      args = []
+      // 生产模式：使用 spawn 从 unpacked 目录启动
+      const { spawn } = await import('child_process')
+      const nodePath = process.execPath
+      const scriptPath = path.join(backendPath, 'dist', 'main.js')
       
       // 检查文件是否存在
       if (!fs.existsSync(scriptPath)) {
@@ -107,66 +168,83 @@ async function startBackend(): Promise<void> {
         reject(new Error('Backend files not found'))
         return
       }
-      console.log('📦 生产模式：使用编译后的后端文件')
-    }
-
-    // 设置数据库路径为 Electron 用户数据目录
-    const userDataPath = app.getPath('userData')
-    
-    // 初始化数据库文件（如果不存在）
-    await initializeDatabase(userDataPath, backendPath)
-    
-    const dbPath = path.join(userDataPath, 'ai_chat.db')
-    const vectorDbPath = path.join(userDataPath, 'vector_db.sqlite')
-    const staticDir = path.join(backendPath, 'static')
-    
-    console.log('数据库路径:', dbPath)
-    console.log('向量数据库路径:', vectorDbPath)
-    console.log('静态文件路径:', staticDir)
-    console.log('后端端口: 3000 (固定)')
-    
-    // 启动后端进程
-    const spawnOptions: any = {
-      cwd: backendPath,
-      env: {
-        ...process.env,
-        NODE_ENV: isDev ? 'development' : 'production',
-        DATABASE_URL: `file:${dbPath}`,
-        VECTOR_DB_PATH: vectorDbPath,
-        STATIC_DIR: staticDir,
-        UPLOAD_BASE_DIR: staticDir
-      },
-      stdio: ['pipe', 'pipe', 'pipe']
-    }
-    
-    // Windows 下使用 shell 模式以支持 .cmd 文件
-    if (process.platform === 'win32' && isDev) {
-      spawnOptions.shell = true
+      
+      console.log('📦 生产模式：从 unpacked 目录启动后端')
+      console.log('后端路径:', backendPath)
+      
+      // 初始化数据库
+      const userDataPath = app.getPath('userData')
+      await initializeDatabase(userDataPath, backendPath)
+      
+      const dbPath = path.join(userDataPath, 'ai_chat.db')
+      const vectorDbPath = path.join(userDataPath, 'vector_db.sqlite')
+      const staticDir = path.join(backendPath, 'static')
+      
+      console.log('数据库路径:', dbPath)
+      console.log('向量数据库路径:', vectorDbPath)
+      console.log('静态文件路径:', staticDir)
+      
+      // 使用 spawn 启动后端
+      const spawnOptions: any = {
+        cwd: backendPath,
+        env: {
+          ...process.env,
+          NODE_ENV: 'production',
+          ELECTRON_RUN_AS_NODE: '1',  // 关键：以纯 Node 模式运行
+          NODE_NO_WARNINGS: '1',  // 抑制 Node.js 警告（如 punycode 弃用警告）
+          DATABASE_URL: `file:${dbPath}`,
+          VECTOR_DB_PATH: vectorDbPath,
+          STATIC_DIR: staticDir,
+          UPLOAD_BASE_DIR: staticDir
+        },
+        stdio: ['pipe', 'pipe', 'pipe']
+      }
+      
+      backendProcess = spawn(nodePath, [scriptPath], spawnOptions)
     }
     
-    backendProcess = spawn(nodePath, [scriptPath, ...args], spawnOptions)
+    if (!backendProcess) {
+      reject(new Error('Failed to create backend process'))
+      return
+    }
     
+    // 处理 stdout
     backendProcess.stdout?.on('data', (data) => {
-      const message = data.toString()
-      console.log(`Backend: ${message}`)
+      const message = data.toString().trim()
+      if (message) {
+        console.log(`[Backend] ${message}`)
+      }
       
       // 检测后端是否启动成功
       if (message.includes('Application is running on')) {
+        isBackendStarting = false  // 重置标志
+        console.log('✅ 后端启动成功')
         resolve()
       }
     })
     
+    // 处理 stderr
     backendProcess.stderr?.on('data', (data) => {
-      console.error(`Backend Error: ${data}`)
+      const errorMessage = data.toString().trim()
+      if (errorMessage) {
+        console.error(`[Backend Error] ${errorMessage}`)
+      }
     })
     
+    // 处理错误
     backendProcess.on('error', (error) => {
       console.error('Failed to start backend:', error)
+      isBackendStarting = false  // 重置标志
       reject(error)
     })
     
+    // 处理退出
     backendProcess.on('exit', (code) => {
       console.log(`Backend exited with code ${code}`)
+      isBackendStarting = false  // 重置标志
+      if (code !== 0 && code !== null) {
+        console.error(`Backend crashed with code ${code}`)
+      }
     })
 
     // 设置超时
@@ -197,18 +275,36 @@ function createWindow() {
   })
   
   // 设置应用菜单
-  setupApplicationMenu()
+  // setupApplicationMenu()
   
   if (isDev) {
-    // 开发环境加载 Vite 开发服务器
-    mainWindow.loadURL('http://localhost:5173')
+    // 开发环境：根据 USE_STATIC_FRONTEND 决定加载方式
+    if (process.env.USE_STATIC_FRONTEND === 'true') {
+      // 使用编译后的静态前端文件
+      const frontendPath = path.join(__dirname, '..', '..', 'frontend', 'dist', 'index.html')
+      mainWindow.loadFile(frontendPath)
+    } else {
+      // 使用 Vite 开发服务器（热重载）
+      mainWindow.loadURL('http://localhost:5173')
+    }
+    
     // 延迟打开开发者工具，避免影响窗口显示
     setTimeout(() => {
       mainWindow?.webContents.openDevTools({ mode: 'detach' })
     }, 1000)
   } else {
     // 生产环境加载打包后的前端文件
-    mainWindow.loadFile(path.join(__dirname, '..', 'frontend', 'dist', 'index.html'))
+    // __dirname 指向 app.asar/electron/dist，需要向上两级到达 app.asar，然后进入 frontend/dist
+    const frontendPath = path.join(__dirname, '..', '..', 'frontend', 'dist', 'index.html')
+    
+    mainWindow.loadFile(frontendPath)
+    
+    // 如果启用了调试模式，自动打开开发者工具
+    if (process.env.DEBUG_MODE === 'true') {
+      setTimeout(() => {
+        mainWindow?.webContents.openDevTools({ mode: 'detach' })
+      }, 1000)
+    }
   }
 
   // 窗口准备好后显示
@@ -293,12 +389,75 @@ function setupIpcHandlers() {
   ipcMain.handle('is-window-maximized', () => {
     return mainWindow?.isMaximized() || false
   })
+
+  // 自动更新相关 IPC
+  ipcMain.handle('check-for-updates', async () => {
+    if (isDev) {
+      console.warn('⚠️  开发环境下请确保根目录存在 dev-app-update.yml 文件')
+      // 开发环境下如果没有配置文件，直接返回不可用，避免抛出 ENOENT 错误
+      try {
+        await autoUpdater.checkForUpdates()
+        return { success: true }
+      } catch (error: any) {
+        if (error.code === 'ENOENT') {
+          return { success: false, error: '开发环境未配置 dev-app-update.yml' }
+        }
+        return { success: false, error: error.message }
+      }
+    }
+    
+    try {
+      await autoUpdater.checkForUpdates()
+      return { success: true }
+    } catch (error: any) {
+      return { success: false, error: error.message }
+    }
+  })
+
+  ipcMain.handle('start-download-update', () => {
+    autoUpdater.downloadUpdate()
+  })
+
+  ipcMain.on('install-and-restart', () => {
+    autoUpdater.quitAndInstall(false, true)
+  })
+}
+
+// 配置更新器事件监听
+function setupAutoUpdater() {
+  autoUpdater.on('checking-for-update', () => {
+    mainWindow?.webContents.send('update-status', { status: 'checking' })
+  })
+
+  autoUpdater.on('update-available', (info) => {
+    mainWindow?.webContents.send('update-status', { status: 'available', info })
+  })
+
+  autoUpdater.on('update-not-available', () => {
+    mainWindow?.webContents.send('update-status', { status: 'not-available' })
+  })
+
+  autoUpdater.on('download-progress', (progressObj) => {
+    mainWindow?.webContents.send('update-status', { 
+      status: 'downloading', 
+      progress: progressObj.percent 
+    })
+  })
+
+  autoUpdater.on('update-downloaded', () => {
+    mainWindow?.webContents.send('update-status', { status: 'downloaded' })
+  })
+
+  autoUpdater.on('error', (err) => {
+    mainWindow?.webContents.send('update-status', { status: 'error', error: err.message })
+  })
 }
 
 // 应用就绪
 app.whenReady().then(async () => {
   try {
     setupIpcHandlers()
+    setupAutoUpdater()
     
     // 启动后端服务
     console.log('Starting backend service...')

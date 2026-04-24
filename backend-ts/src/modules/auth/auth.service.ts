@@ -3,6 +3,7 @@ import { JwtService } from "@nestjs/jwt";
 import * as bcrypt from "bcrypt";
 import { UserRepository } from "../../common/database/user.repository";
 import { GlobalSettingRepository } from "../../common/database/global-setting.repository";
+import { UrlService } from "../../common/services/url.service";
 
 @Injectable()
 export class AuthService {
@@ -12,6 +13,7 @@ export class AuthService {
     private jwtService: JwtService,
     private userRepo: UserRepository,
     private settingRepo: GlobalSettingRepository,
+    private urlService: UrlService,
   ) {}
 
   async validateUserByEmail(email: string, password: string): Promise<any> {
@@ -36,14 +38,14 @@ export class AuthService {
     const payload = { email: user.email, sub: user.id };
     return {
       accessToken: this.jwtService.sign(payload),
-      user: {
+      user: this.urlService.transformUrls({
         id: user.id,
         email: user.email,
         phone: user.phone,
         nickname: user.nickname,
         avatarUrl: user.avatarUrl,
         role: user.role,
-      },
+      }),
     };
   }
 
@@ -90,14 +92,14 @@ export class AuthService {
 
       return {
         accessToken,
-        user: {
+        user: this.urlService.transformUrls({
           id: primaryUser.id,
           email: primaryUser.email,
           phone: primaryUser.phone,
           nickname: primaryUser.nickname,
           avatarUrl: primaryUser.avatarUrl,
           role: primaryUser.role,
-        },
+        }),
       };
     } catch (error) {
       this.logger.error("自动登录失败", error instanceof Error ? error.stack : String(error));
