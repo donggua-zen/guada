@@ -6,6 +6,7 @@ import sharp from "sharp";
 import { FileRepository } from "../../common/database/file.repository";
 import { PrismaService } from "../../common/database/prisma.service";
 import { UploadPathService } from "../../common/services/upload-path.service";
+import { UrlService } from "../../common/services/url.service";
 import { FileParserService } from "../knowledge-base/file-parser.service";
 
 @Injectable()
@@ -43,6 +44,7 @@ export class FileService {
     private fileRepo: FileRepository,
     private prisma: PrismaService,
     private fileParserService: FileParserService,
+    private urlService: UrlService,
   ) { }
 
   /**
@@ -57,13 +59,17 @@ export class FileService {
       const fileInfo = this.extractFileInfo(file);
 
       // 3. 根据文件类型分别处理
+      let result: any;
       if (this.IMAGE_EXTENSIONS.has(fileInfo.fileExt)) {
-        return await this.uploadImageFile(sessionId, file, fileInfo, userId);
+        result = await this.uploadImageFile(sessionId, file, fileInfo, userId);
       } else if (this.PDF_EXTENSIONS.has(fileInfo.fileExt)) {
-        return await this.uploadPdfFile(sessionId, file, fileInfo, userId);
+        result = await this.uploadPdfFile(sessionId, file, fileInfo, userId);
       } else {
-        return await this.uploadTextFile(sessionId, file, fileInfo, userId);
+        result = await this.uploadTextFile(sessionId, file, fileInfo, userId);
       }
+
+      // 4. 转换 URL 为绝对路径后返回
+      return this.urlService.transformUrls(result, ["url", "previewUrl"]);
     } catch (error: any) {
       this.logger.error(`文件上传失败：${error.message}`);
       throw error;
@@ -373,7 +379,7 @@ export class FileService {
     }
 
     // 创建新的文件记录
-    return await this.fileRepo.create({
+    const newFile = await this.fileRepo.create({
       sessionId: message.sessionId,
       messageId,
       fileName: originalFile.fileName,
@@ -388,6 +394,9 @@ export class FileService {
       content: originalFile.content,
       fileMetadata: originalFile.fileMetadata,
     });
+
+    // 转换 URL 为绝对路径后返回
+    return this.urlService.transformUrls(newFile, ["url", "previewUrl"]);
   }
 
   /**

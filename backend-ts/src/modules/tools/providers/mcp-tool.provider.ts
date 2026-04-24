@@ -3,6 +3,7 @@ import {
   IToolProvider,
   ToolCallRequest,
   ToolCallResponse,
+  ToolProviderMetadata,
 } from "../interfaces/tool-provider.interface";
 import { PrismaService } from "../../../common/database/prisma.service";
 import { McpClientService } from "../../../common/mcp/mcp-client.service";
@@ -18,19 +19,12 @@ export class MCPToolProvider implements IToolProvider {
     private prisma: PrismaService,
   ) {}
 
-  async getToolsNamespaced(
-    enabledTools: Record<string, any> | boolean,
-    injectParams: Record<string, any>,
-  ): Promise<any[]> {
-    if (enabledTools === false) return [];
+  async getTools(enabled?: boolean | string[]): Promise<any[]> {
+    if (enabled === false) return [];
 
     const whereClause: any = { enabled: true };
-    if (Array.isArray(enabledTools)) {
-      whereClause.id = { in: enabledTools };
-    }
-
-    if (injectParams.userId) {
-      whereClause.userId = injectParams.userId;
+    if (Array.isArray(enabled)) {
+      whereClause.id = { in: enabled };
     }
 
     const servers = await this.prisma.mcpServer.findMany({
@@ -41,11 +35,10 @@ export class MCPToolProvider implements IToolProvider {
     for (const server of servers) {
       if (!server.tools) continue;
 
-      // 遍历服务器缓存的工具并转换为简化的定义格式
       const tools = server.tools as Record<string, any>;
       for (const [toolName, toolSchema] of Object.entries(tools)) {
         allTools.push({
-          name: `${this.namespace}__${toolName}`,
+          name: toolName,
           description: (toolSchema as any).description || `Execute ${toolName}`,
           parameters: (toolSchema as any).inputSchema || {
             type: "object",
@@ -55,18 +48,13 @@ export class MCPToolProvider implements IToolProvider {
       }
     }
 
-    // 直接返回扁平化的工具定义，由 adapter 进行转换
     return allTools;
   }
 
-  async executeWithNamespace(
-    request: ToolCallRequest,
-    injectParams?: Record<string, any>,
-  ): Promise<ToolCallResponse> {
-    const toolName = request.name.replace(`${this.namespace}__`, "");
+  async execute(request: ToolCallRequest, context?: Record<string, any>): Promise<string> {
+    const toolName = request.name;
 
     try {
-      // 查找包含该工具的服务器
       const servers = await this.prisma.mcpServer.findMany({
         where: { enabled: true },
       });
@@ -86,7 +74,6 @@ export class MCPToolProvider implements IToolProvider {
         throw new Error(`MCP tool '${toolName}' not found or server disabled`);
       }
 
-      // 调用远程 MCP 服务（使用标准化的 MCP 客户端）
       const result = await this.mcpClient.callTool(
         {
           url: targetServer.url,
@@ -97,26 +84,15 @@ export class MCPToolProvider implements IToolProvider {
         request.id,
       );
 
-      return {
-        toolCallId: request.id,
-        role: "tool",
-        name: request.name,
-        content: result.content || "",
-        isError: !result.success,
-      };
+      // 只返回内容，由 ToolOrchestrator 封装响应
+      return result.content || "";
     } catch (error: any) {
       this.logger.error(`Error executing MCP tool ${toolName}`, error);
-      return {
-        toolCallId: request.id,
-        role: "tool",
-        name: request.name,
-        content: `Error: ${error.message}`,
-        isError: true,
-      };
+      throw error; // 抛出异常，由 ToolOrchestrator 捕获
     }
   }
 
-  async getPrompt(injectParams?: Record<string, any>): Promise<string> {
+  async getPrompt(context?: Record<string, any>): Promise<string> {
     try {
       const promptParts: string[] = [];
 
@@ -146,7 +122,16 @@ export class MCPToolProvider implements IToolProvider {
       return promptParts.join("\n");
     } catch (error: any) {
       this.logger.error(`获取 MCP 提示词失败：${error.message}`);
-      return ""; // 出错时返回空字符串，不影响对话
+      return "";
     }
+  }
+
+  getMetadata(): ToolProviderMetadata {
+    return {
+      namespace: this.namespace,
+      displayName: "MCP 工具",
+      description: "通过 Model Context Protocol 连接外部工具和服务",
+      isMcp: true,
+    };
   }
 }

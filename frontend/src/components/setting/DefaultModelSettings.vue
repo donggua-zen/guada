@@ -11,50 +11,65 @@
             </el-button>
         </div>
 
-        <div class="rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-[#1e1e1e] overflow-hidden">
-            <ScrollContainer class="h-full">
-                <div class="px-6 py-6 space-y-8"> 
-                    <!-- 对话设置 -->
-                    <div class="mb-8">
-                        <el-form ref="chatFormRef" :model="settingsForm" label-position="left" label-width="120px"
-                            size="large">
-                            <el-form-item label="默认对话模型" prop="defaultChatModelId">
-                                <el-select v-model="settingsForm.defaultChatModelId" placeholder="请选择模型" clearable
-                                    @click="openModelDialog('chat')" style="width: fit-content; min-width: 240px;">
-                                    <template #prefix>
-                                        <OpenAI class="w-4 h-4" />
-                                    </template>
-                                    <el-option :value="settingsForm.defaultChatModelId" :label="chatModelName"
-                                        v-if="chatModelName" />
-                                </el-select>
-                            </el-form-item>
-                        </el-form>
-                    </div>
 
-                    <!-- 标题总结设置 -->
-                    <div class="mb-8">
-                        <el-form ref="titleSummaryFormRef" :model="settingsForm" :rules="titleSummaryRules"
-                            label-position="left" label-width="120px" size="large">
-                            <el-form-item label="标题总结模型" prop="defaultTitleSummaryModelId">
-                                <el-select v-model="settingsForm.defaultTitleSummaryModelId" placeholder="请选择模型"
-                                    clearable @click="openModelDialog('title')"
-                                    style="width: fit-content; min-width: 240px;">
-                                    <template #prefix>
-                                        <OpenAI class="w-4 h-4" />
-                                    </template>
-                                    <el-option :value="settingsForm.defaultTitleSummaryModelId"
-                                        :label="titleSummaryModelName" v-if="titleSummaryModelName" />
-                                </el-select>
-                            </el-form-item>
-                            <el-form-item label="标题总结提示词" prop="defaultTitleSummaryPrompt">
-                                <el-input v-model="settingsForm.defaultTitleSummaryPrompt" type="textarea"
-                                    placeholder="请输入生成会话标题的系统提示词" :autosize="{ minRows: 4, maxRows: 6 }" />
-                            </el-form-item>
-                        </el-form>
-                    </div>
+        <div class="space-y-6">
+            <!-- 对话设置 -->
+            <div class="px-8 py-8 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-[#1e1e1e]">
+                <el-form ref="chatFormRef" :model="settingsForm" label-position="left" label-width="50%" size="large">
+                    <el-form-item prop="defaultChatModelId" style="margin-bottom: 0;">
+                        <template #label>
+                            <div class="flex flex-col gap-1">
+                                <span class="text-lg text-gray-900 dark:text-gray-100">默认对话模型</span>
+                                <span class="text-xs text-gray-500 dark:text-gray-400 font-normal">用于日常对话生成的默认 AI 模型</span>
+                            </div>
+                        </template>
+                        <el-select v-model="settingsForm.defaultChatModelId" placeholder="请选择模型" clearable
+                            @click="openModelDialog('chat')" class="w-full max-w-md">
+                            <template #prefix>
+                                <OpenAI class="w-4 h-4" />
+                            </template>
+                            <el-option :value="settingsForm.defaultChatModelId" :label="chatModelName"
+                                v-if="chatModelName" />
+                        </el-select>
+                    </el-form-item>
+                </el-form>
+            </div>
+            <!-- 标题总结设置 -->
+            <div class="px-8 py-8 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-[#1e1e1e]">
+                <el-form ref="titleSummaryFormRef" :model="settingsForm" :rules="titleSummaryRules"
+                    label-position="left" label-width="50%" size="large">
+                    <el-form-item prop="defaultTitleSummaryModelId">
+                        <template #label>
+                            <div class="flex flex-col gap-1">
+                                <span class="text-lg text-gray-900 dark:text-gray-100">标题总结模型</span>
+                                <span class="text-xs text-gray-500 dark:text-gray-400 font-normal">用于自动生成会话标题的 AI 模型</span>
+                            </div>
+                        </template>
+                        <el-select v-model="settingsForm.defaultTitleSummaryModelId" placeholder="请选择模型" clearable
+                            @click="openModelDialog('title')" class="w-full max-w-md">
+                            <template #prefix>
+                                <OpenAI class="w-4 h-4" />
+                            </template>
+                            <el-option :value="settingsForm.defaultTitleSummaryModelId" :label="titleSummaryModelName"
+                                v-if="titleSummaryModelName" />
+                        </el-select>
+                    </el-form-item>
+                    <el-form-item prop="defaultTitleSummaryPrompt">
+                        <template #label>
+                            <div class="flex flex-col gap-1">
+                                <span class="text-lg text-gray-900 dark:text-gray-100">标题总结提示词</span>
+                                <span class="text-xs text-gray-500 dark:text-gray-400 font-normal">定义如何生成简洁、准确的会话标题</span>
+                            </div>
+                        </template>
+                        <el-input v-model="settingsForm.defaultTitleSummaryPrompt" type="textarea"
+                            placeholder="请输入生成会话标题的系统提示词" :autosize="{ minRows: 4, maxRows: 6 }" 
+                            class="w-full max-w-md" />
+                    </el-form-item>
+                </el-form>
+            </div>
 
-                    <!-- 翻译设置 -->
-                    <!-- <div class="mb-8">
+            <!-- 翻译设置 -->
+            <!-- <div class="mb-8">
                         <el-form ref="translationFormRef" :model="settingsForm" :rules="translationRules"
                             label-position="left" label-width="120px" size="large">
                             <el-form-item label="翻译模型" prop="defaultTranslationModelId">
@@ -75,29 +90,51 @@
                         </el-form>
                     </div> -->
 
-                    <!-- 历史压缩设置 -->
-                    <div class="mb-8">
-                        <el-form ref="historyCompressionFormRef" :model="settingsForm" :rules="historyCompressionRules"
-                            label-position="left" label-width="120px" size="large">
-                            <el-form-item label="历史压缩模型" prop="defaultHistoryCompressionModelId">
-                                <el-select v-model="settingsForm.defaultHistoryCompressionModelId" placeholder="请选择模型"
-                                    clearable @click="openModelDialog('compression')"
-                                    style="width: fit-content; min-width: 240px;">
-                                    <template #prefix>
-                                        <OpenAI class="w-4 h-4" />
-                                    </template>
-                                    <el-option :value="settingsForm.defaultHistoryCompressionModelId"
-                                        :label="historyCompressionModelName" v-if="historyCompressionModelName" />
-                                </el-select>
-                            </el-form-item>
-                            <!-- <el-form-item label="历史压缩提示词" prop="defaultHistoryCompressionPrompt">
-                                <el-input v-model="settingsForm.defaultHistoryCompressionPrompt" type="textarea"
-                                    placeholder="请输入历史压缩任务的系统提示词" :autosize="{ minRows: 4, maxRows: 6 }" />
-                            </el-form-item> -->
-                        </el-form>
-                    </div>
-                </div>
-            </ScrollContainer>
+            <!-- 视觉辅助设置 -->
+            <div class="px-8 py-8 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-[#1e1e1e]">
+                <el-form ref="visualFormRef" :model="settingsForm" label-position="left" label-width="50%"
+                    size="large">
+                    <el-form-item prop="defaultVisualAssistantModelId" style="margin-bottom: 0;">
+                        <template #label>
+                            <div class="flex flex-col gap-1">
+                                <span class="text-lg text-gray-900 dark:text-gray-100">视觉辅助模型</span>
+                                <span class="text-xs text-gray-500 dark:text-gray-400 font-normal">用于图片识别等视觉任务的 AI 模型（需支持图像输入）</span>
+                            </div>
+                        </template>
+                        <el-select v-model="settingsForm.defaultVisualAssistantModelId" placeholder="请选择支持图像的模型"
+                            clearable @click="openModelDialog('visual')" class="w-full max-w-md">
+                            <template #prefix>
+                                <OpenAI class="w-4 h-4" />
+                            </template>
+                            <el-option :value="settingsForm.defaultVisualAssistantModelId"
+                                :label="visualAssistantModelName" v-if="visualAssistantModelName" />
+                        </el-select>
+                    </el-form-item>
+                </el-form>
+            </div>
+
+            <!-- 历史压缩设置 -->
+            <div class="px-8 py-8 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-[#1e1e1e]">
+                <el-form ref="historyCompressionFormRef" :model="settingsForm" :rules="historyCompressionRules"
+                    label-position="left" label-width="50%" size="large">
+                    <el-form-item prop="defaultHistoryCompressionModelId" style="margin-bottom: 0;">
+                        <template #label>
+                            <div class="flex flex-col gap-1">
+                                <span class="text-lg text-gray-900 dark:text-gray-100">历史压缩模型</span>
+                                <span class="text-xs text-gray-500 dark:text-gray-400 font-normal">用于压缩对话历史以优化上下文长度的 AI 模型</span>
+                            </div>
+                        </template>
+                        <el-select v-model="settingsForm.defaultHistoryCompressionModelId" placeholder="请选择模型" clearable
+                            @click="openModelDialog('compression')" class="w-full max-w-md">
+                            <template #prefix>
+                                <OpenAI class="w-4 h-4" />
+                            </template>
+                            <el-option :value="settingsForm.defaultHistoryCompressionModelId"
+                                :label="historyCompressionModelName" v-if="historyCompressionModelName" />
+                        </el-select>
+                    </el-form-item>
+                </el-form>
+            </div>
         </div>
 
         <!-- 模型选择对话框 -->
@@ -255,6 +292,7 @@ const settingsForm = reactive({
     defaultTranslationPrompt: '',
     defaultHistoryCompressionModelId: null,
     defaultHistoryCompressionPrompt: '',
+    defaultVisualAssistantModelId: null,
 })
 
 // 表单验证规则
@@ -300,6 +338,11 @@ const historyCompressionModelName = computed(() =>
     getModelNameById(settingsForm.defaultHistoryCompressionModelId)
 )
 
+const visualAssistantModelName = computed(() => {
+    const model = models.value.find(m => m.id === settingsForm.defaultVisualAssistantModelId)
+    return model ? model.modelName.split('/').pop() : ''
+})
+
 // 打开模型对话框
 const openModelDialog = (type) => {
     currentDialogType.value = type
@@ -319,6 +362,9 @@ const openModelDialog = (type) => {
         case 'compression':
             tempModelId.value = settingsForm.defaultHistoryCompressionModelId
             break
+        case 'visual':
+            tempModelId.value = settingsForm.defaultVisualAssistantModelId
+            break
     }
 
     modelDialogVisible.value = true
@@ -327,7 +373,7 @@ const openModelDialog = (type) => {
 // 选择并自动关闭对话框
 const selectAndClose = (modelId) => {
     if (!modelId) return
-    
+
     // 根据类型更新对应的模型 ID
     switch (currentDialogType.value) {
         case 'chat':
@@ -342,8 +388,11 @@ const selectAndClose = (modelId) => {
         case 'compression':
             settingsForm.defaultHistoryCompressionModelId = modelId
             break
+        case 'visual':
+            settingsForm.defaultVisualAssistantModelId = modelId
+            break
     }
-    
+
     modelDialogVisible.value = false
 }
 
@@ -361,6 +410,9 @@ const clearModelSelection = (type) => {
             break
         case 'compression':
             settingsForm.defaultHistoryCompressionModelId = null
+            break
+        case 'visual':
+            settingsForm.defaultVisualAssistantModelId = null
             break
     }
 }
@@ -445,6 +497,7 @@ const loadGlobalSettings = async () => {
         settingsForm.defaultTranslationPrompt = response.defaultTranslationPrompt
         settingsForm.defaultHistoryCompressionModelId = response.defaultHistoryCompressionModelId
         settingsForm.defaultHistoryCompressionPrompt = response.defaultHistoryCompressionPrompt
+        settingsForm.defaultVisualAssistantModelId = response.defaultVisualAssistantModelId
 
         // 备份原始数据
         originalSettings.value = JSON.parse(JSON.stringify(settingsForm))

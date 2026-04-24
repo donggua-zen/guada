@@ -526,6 +526,32 @@ class ApiService implements IApiService {
     return await this._request('/settings', { method: 'PUT', data })
   }
 
+  async fetchGlobalTools(): Promise<any> {
+    return await this._request('/settings/tools/global')
+  }
+
+  async updateGlobalToolStatus(namespace: string, enabled: boolean): Promise<{ success: boolean }> {
+    return await this._request('/settings/tools/global', {
+      method: 'PUT',
+      data: { namespace, enabled },
+    })
+  }
+
+  async fetchCharacterTools(characterId: string): Promise<any> {
+    return await this._request(`/settings/tools/character?characterId=${characterId}`)
+  }
+
+  async updateCharacterToolStatus(
+    characterId: string,
+    namespace: string,
+    enabled: boolean | 'all'
+  ): Promise<{ success: boolean }> {
+    return await this._request('/settings/tools/character', {
+      method: 'PUT',
+      data: { characterId, namespace, enabled },
+    })
+  }
+
   // ========== MCP 服务器管理 ==========
   async fetchMcpServers(): Promise<PaginatedResponse<McpServer>> {
     return await this._request('/mcp-servers')

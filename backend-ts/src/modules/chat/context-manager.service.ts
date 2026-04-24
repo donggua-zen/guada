@@ -1,7 +1,6 @@
 import { Injectable, Logger } from "@nestjs/common";
 import * as fs from "fs";
 import * as path from "path";
-import { get_encoding } from "tiktoken";
 import { MessageRepository } from "../../common/database/message.repository";
 import { SessionContextStateRepository } from "../../common/database/session-context-state.repository";
 import { UploadPathService } from "../../common/services/upload-path.service";
@@ -27,24 +26,36 @@ export class ContextManagerService {
   /**
    * 获取用于 LLM 推理的完整上下文（包含系统提示词和工具注入）
    */
-  async getContextForLLMInference(
-    sessionId: string,
-    userId: string,
-    userMessageId?: string,
-    maxMessages: number = 200,
-    mergedSettings?: any,
-    skipToolCalls: boolean = false,
-  ): Promise<{
+  async getContextForLLMInference(params: {
+    sessionId: string;
+    userId: string;
+    userMessageId?: string;
+    maxMessages?: number;
+    mergedSettings?: any;
+    skipToolCalls?: boolean;
+    supportsImageInput?: boolean;
+  }): Promise<{
     messages: MessageRecord[];
     systemPrompt: string;
     toolContext: ToolContext;
   }> {
+    const {
+      sessionId,
+      userId,
+      userMessageId,
+      maxMessages = 200,
+      mergedSettings,
+      skipToolCalls = false,
+      supportsImageInput = true,
+    } = params;
+
     // 获取基础对话历史
     const historyMessages = await this.getConversationMessages(
       sessionId,
       userMessageId,
       maxMessages,
       skipToolCalls,
+      supportsImageInput,
     );
     // 检查是否包含知识库
     let containsKnowledgeBase = false;
@@ -100,14 +111,14 @@ export class ContextManagerService {
     systemPrompt: string;
   }> {
     // 1. 复用 LLM 推理上下文的构建逻辑
-    const { messages, toolContext, systemPrompt } = await this.getContextForLLMInference(
+    const { messages, toolContext, systemPrompt } = await this.getContextForLLMInference({
       sessionId,
       userId,
-      undefined,
-      500,
+      userMessageId: undefined,
+      maxMessages: 500,
       mergedSettings,
-      false,
-    );
+      skipToolCalls: false,
+    });
 
     // 2. 获取工具定义并序列化
     const tools = await this.toolOrchestrator.getAllTools(toolContext);
@@ -139,6 +150,7 @@ export class ContextManagerService {
     userMessageId?: string,
     maxMessages: number = 200,
     skipToolCalls: boolean = false,
+    supportsImageInput: boolean = true,
   ): Promise<MessageRecord[]> {
     // 1. 检查是否存在摘要记录
     const latestSummary = await this.contextStateRepo.findLatestBySessionId(sessionId);
@@ -170,6 +182,7 @@ export class ContextManagerService {
         msg,
         skipToolCalls,
         msg.id === lastMessage.id,
+        supportsImageInput,
       );
       if (transformed.length > 0) {
         context.push(...transformed);
@@ -185,7 +198,7 @@ export class ContextManagerService {
     // 5. 运行时动态清理：检查是否存在有效的清理策略
     if (latestSummary?.cleaningStrategy && latestSummary.lastCleanedMessageId) {
       const strategy = latestSummary.cleaningStrategy as CleaningStrategy;
-      
+
       // 确定需要保护的消息 ID（逻辑轮次的最后一条消息）
       const protectedIds = new Set<string>();
       const turns = this.groupMessagesBySemanticTurns(context);
@@ -237,7 +250,8 @@ export class ContextManagerService {
       if (msg.role === 'system') continue;
 
       // 压缩时需要包含工具调用和结果，所以 skipToolCalls 设为 false
-      const transformed = this.transformContentStructure(msg, false, false);
+      // 压缩时通常不关注图像降级，默认支持或根据需求调整，这里暂且保持默认 true
+      const transformed = this.transformContentStructure(msg, false, false, true);
       if (transformed.length > 0) {
         // 将原始消息的 ID 挂载到转换后的记录上，方便后续追踪
         transformed.forEach(t => t.id = msg.id);
@@ -248,35 +262,7 @@ export class ContextManagerService {
     return formattedMessages;
   }
 
-  /**
-   * 计算消息列表的 Token 总数
-   */
-  countTokens(messages: MessageRecord[]): number {
-    try {
-      const encoder = get_encoding("cl100k_base");
-      let totalTokens = 0;
-
-      messages.forEach((msg) => {
-        totalTokens += 4;
-
-        if (typeof msg.content === 'string') {
-          totalTokens += encoder.encode(msg.content).length;
-        } else if (Array.isArray(msg.content)) {
-          msg.content.forEach((part) => {
-            if (part.type === 'text' && part.text) {
-              totalTokens += encoder.encode(part.text).length;
-            }
-          });
-        }
-      });
-
-      encoder.free();
-      return totalTokens;
-    } catch (error) {
-      this.logger.error("Token counting failed", error);
-      return 0;
-    }
-  }
+  
 
   /**
    * 获取最近的对话消息用于总结任务
@@ -338,6 +324,7 @@ export class ContextManagerService {
     msg: any,
     skipToolCalls: boolean,
     isNewUserMessage: boolean,
+    supportsImageInput: boolean = true,
   ): MessageRecord[] {
     if (msg.role === "assistant") {
       const turns: MessageRecord[] = [];
@@ -387,7 +374,7 @@ export class ContextManagerService {
       if (msg.files && Array.isArray(msg.files)) {
         msg.files.forEach((file: any, index: number) => {
           if (file.fileType === "image") {
-            const imagePart = this.transformImageFile(file);
+            const imagePart = this.transformImageFile(file, supportsImageInput);
             if (imagePart) textParts.push(imagePart);
           } else if (file.fileType === "text") {
             const textPart = this.transformTextFile(file, index);
@@ -440,7 +427,11 @@ export class ContextManagerService {
   /**
    * 转换图片文件
    */
-  private transformImageFile(file: any): any | null {
+  private transformImageFile(file: any, supportsImageInput: boolean): any | null {
+    if (!supportsImageInput) {
+      return { type: "text", text: `[图片ID：${file.id}]` };
+    }
+
     if (!file.url) return null;
 
     try {

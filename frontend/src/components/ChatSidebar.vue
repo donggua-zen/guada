@@ -1,7 +1,7 @@
 <template>
-  <div class="w-full h-full flex pb-3">
+  <div class="w-full h-full flex">
     <div
-      class="flex flex-col w-full rounded-lg bg-(--color-conversation-bg) border-r border-(--color-conversation-border) transition-all duration-300">
+      class="flex flex-col w-full rounded-lt-lg   bg-(--color-conversation-bg) border-r border-(--color-conversation-border) transition-all duration-300">
       <!-- 会话头部 -->
       <div class="sessions-header px-4 h-13 flex justify-between items-center">
         <span class="font-semibold text-base text-(--color-text)">聊天对话</span>

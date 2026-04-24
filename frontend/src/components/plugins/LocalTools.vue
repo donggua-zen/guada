@@ -1,28 +1,82 @@
 <template>
-    <div class="flex-1 overflow-hidden">
-        <!-- 头部区域 -->
-        <div class="sessions-header py-1 text-lg font-semibold flex justify-between items-center mb-6">
-            <span>本地工具</span>
-        </div>
-
-        <!-- 占位内容 -->
-        <div class="rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden bg-white dark:bg-[#1e1e1e]">
-            <div class="p-12 text-center">
-                <el-icon size="64" class="mb-4 opacity-50 text-gray-400">
-                    <ConstructionOutlined />
-                </el-icon>
-                <div class="text-xl font-medium text-gray-600 dark:text-gray-300 mb-2">
-                    正在开发中
-                </div>
-                <div class="text-sm text-gray-500 dark:text-gray-400">
-                    本地工具功能即将上线，敬请期待...
-                </div>
-            </div>
-        </div>
+  <div class="flex-1 overflow-hidden">
+    <div class="sessions-header py-1 text-lg font-semibold flex justify-between items-center mb-6">
+      <span>本地工具</span>
+      <el-button 
+        v-if="loading" 
+        :loading="true" 
+        size="small"
+      >
+        加载中...
+      </el-button>
     </div>
+
+    <GlobalToolsPanel 
+      :tools="globalTools" 
+      :loading="loading" 
+      @update-status="updateGlobalToolStatus"
+    />
+  </div>
 </template>
 
 <script setup lang="ts">
-import { ElIcon } from 'element-plus'
-import { ConstructionOutlined } from '@vicons/material'
+import { ref, onMounted } from 'vue'
+import { ElMessage } from 'element-plus'
+import { apiService } from '@/services/ApiService'
+import GlobalToolsPanel from './GlobalToolsPanel.vue'
+
+interface ToolMetadata {
+  namespace: string
+  name: string
+  displayName: string
+  description: string
+  enabled: boolean
+  isMcp: boolean
+  tools?: any[]
+}
+
+const loading = ref(false)
+const error = ref<string | null>(null)
+
+const globalTools = ref<ToolMetadata[]>([])
+
+async function loadGlobalTools() {
+  loading.value = true
+  error.value = null
+  
+  try {
+    const response = await apiService.fetchGlobalTools()
+    globalTools.value = response.tools
+  } catch (err: any) {
+    console.error('加载全局工具失败:', err)
+    const errorMsg = err.message || '加载全局工具失败'
+    error.value = errorMsg
+    ElMessage.error(errorMsg)
+  } finally {
+    loading.value = false
+  }
+}
+
+async function updateGlobalToolStatus(namespace: string, enabled: boolean) {
+  try {
+    const response = await apiService.updateGlobalToolStatus(namespace, enabled)
+    if (response.success) {
+      const tool = globalTools.value.find(t => t.namespace === namespace)
+      if (tool) {
+        tool.enabled = enabled
+      }
+    }
+  } catch (err: any) {
+    console.error('更新全局工具状态失败:', err)
+    ElMessage.error(err.message || '更新全局工具状态失败')
+  }
+}
+
+onMounted(() => {
+  loadGlobalTools()
+})
 </script>
+
+<style scoped>
+/* 移除底边框以统一风格 */
+</style>

@@ -1,11 +1,23 @@
 import { registerAs } from "@nestjs/config";
+import * as path from "path";
 
-export default registerAs("upload", () => ({
-  baseDir: process.env.UPLOAD_BASE_DIR || "./static/file_stores",
-  publicPrefix: process.env.UPLOAD_PUBLIC_PREFIX || "/static/file_stores",
-  avatarDir: process.env.UPLOAD_AVATAR_DIR || "avatars",
-  imageDir: process.env.UPLOAD_IMAGE_DIR || "images",
-  previewDir: process.env.UPLOAD_PREVIEW_DIR || "previews",
-  fileDir: process.env.UPLOAD_FILE_DIR || "files",
-  kbDir: process.env.UPLOAD_KB_DIR || "knowledge-base",
-}));
+export default registerAs("upload", () => {
+  const staticDir = process.env.STATIC_DIR || "./static";
+  const staticUrl = process.env.STATIC_URL || "/static";
+  const baseSubDir = process.env.UPLOAD_BASE_DIR || "file_stores";
+
+  return {
+    // 物理存储根目录 (例如: ./static/file_stores)
+    physicalRoot: path.join(staticDir, baseSubDir),
+    // Web 访问前缀 (例如: /static/file_stores)
+    publicPrefix: `${staticUrl}/${baseSubDir}`,
+    // 各类文件的子目录配置
+    subDirs: {
+      avatar: process.env.UPLOAD_AVATAR_SUBDIR || "avatars",
+      image: process.env.UPLOAD_IMAGE_SUBDIR || "images",
+      preview: process.env.UPLOAD_PREVIEW_SUBDIR || "previews",
+      file: process.env.UPLOAD_FILE_SUBDIR || "files",
+      kb: process.env.UPLOAD_KB_SUBDIR || "knowledge-base",
+    },
+  };
+});

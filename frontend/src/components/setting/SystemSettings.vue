@@ -1,8 +1,8 @@
 <template>
     <div class="bg-(--color-surface) h-full">
-        <div class="h-full flex flex-col md:max-w-260 md:mx-auto p-4">
-            <div class="flex-1 overflow-hidden flex flex-col">
-                <div class="border-gray-200 dark:border-gray-700">
+        <div class="h-full flex flex-col md:max-w-260 md:mx-auto">
+            <div class="flex-1 overflow-hidden flex flex-col ">
+                <div class="border-gray-200 dark:border-gray-700 p-4">
                     <el-tabs v-model="currentTabValue" @tab-change="handleTabChange" class="system-settings-tabs">
                         <el-tab-pane v-for="item in tabItems" :key="item.path" :label="item.label" :name="item.path">
                             <template #label>
@@ -15,18 +15,20 @@
                     </el-tabs>
                 </div>
                 <div class="flex-1 overflow-hidden py-3 md:py-3">
-                    <template v-if="currentTabValue === 'general'">
-                        <GeneralSettings />
-                    </template>
-                    <template v-else-if="currentTabValue === 'models'">
-                        <ModelsSettings />
-                    </template>
-                    <template v-else-if="currentTabValue === 'default-models'">
-                        <DefaultModelSettings />
-                    </template>
-                    <template v-else-if="currentTabValue === 'about'">
-                        <AboutPanel />
-                    </template>
+                    <ScrollContainer class="h-full  p-4">
+                        <template v-if="currentTabValue === 'general'">
+                            <GeneralSettings />
+                        </template>
+                        <template v-else-if="currentTabValue === 'models'">
+                            <ModelsSettings />
+                        </template>
+                        <template v-else-if="currentTabValue === 'default-models'">
+                            <DefaultModelSettings />
+                        </template>
+                        <template v-else-if="currentTabValue === 'about'">
+                            <AboutPanel />
+                        </template>
+                    </ScrollContainer>
                 </div>
             </div>
         </div>
