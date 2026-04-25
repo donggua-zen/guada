@@ -85,13 +85,31 @@ async function initializeDatabase(userDataPath: string, backendPath: string): Pr
 
       // 2. 执行种子数据
       console.log('🌱 正在初始化种子数据...')
-      execSync('npm run db:seed:force', {
-        cwd: backendPath,
-        env,
-        stdio: 'pipe',
-        encoding: 'utf-8'
-      })
-      console.log('✅ 种子数据初始化完成')
+      
+      // 生产环境：直接执行编译后的种子脚本
+      if (!isDev) {
+        const seedScriptPath = path.join(backendPath, 'dist', 'scripts', 'seed.js')
+        if (fs.existsSync(seedScriptPath)) {
+          execSync(`node "${seedScriptPath}" --force`, {
+            cwd: backendPath,
+            env,
+            stdio: 'pipe',
+            encoding: 'utf-8'
+          })
+          console.log('✅ 种子数据初始化完成')
+        } else {
+          console.warn('⚠️  种子脚本不存在，跳过种子数据初始化')
+        }
+      } else {
+        // 开发环境：使用 npm 命令
+        execSync('npm run db:seed:force', {
+          cwd: backendPath,
+          env,
+          stdio: 'pipe',
+          encoding: 'utf-8'
+        })
+        console.log('✅ 种子数据初始化完成')
+      }
     } catch (error: any) {
       console.error('❌ 数据库初始化失败:', error.message)
       if (error.stderr) console.error('错误详情:', error.stderr.toString())

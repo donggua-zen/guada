@@ -313,8 +313,8 @@ async function seedDatabase(force: boolean = false) {
 
     logSection("数据库种子初始化完成！");
     log("\n🎉 默认登录信息:", colors.green);
-    log("  用户名：admin", colors.green);
-    log("  密码：123456", colors.green);
+    log("  用户名：guada", colors.green);
+    log("  密码：guada", colors.green);
     log("\n" + "=".repeat(60) + "\n", colors.cyan);
   } catch (error) {
     logSection("❌ 种子初始化失败");
