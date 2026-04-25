@@ -6,7 +6,7 @@ import { SessionContextStateRepository } from "../../common/database/session-con
 import { UploadPathService } from "../../common/services/upload-path.service";
 import { ToolOrchestrator } from "../tools/tool-orchestrator.service";
 import { ToolContextFactory, ToolContext } from "../tools/tool-context";
-import { MessageRecord, MessagePart } from "./types/llm.types";
+import { MessageRecord, MessagePart } from "../llm-core/types/llm.types";
 import { SemanticTurn } from "./types/semantic-turn.types";
 import { ToolResultCleaner, CleaningStrategy } from "./tool-result-cleaner.service";
 

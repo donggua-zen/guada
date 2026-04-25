@@ -3,7 +3,7 @@
     class="flex flex-col h-full bg-(--color-sidebar-bg) border-r border-(--color-sidebar-border) transition-all duration-300"
     :style="{ width: sidebarWidth, minWidth: sidebarWidth, maxWidth: sidebarWidth }">
     <!-- 顶部 Logo/标题 -->
-    <div class="px-2.5 py-4 flex items-center justify-center">
+    <div class="px-2.5 py-4 flex items-center justify-center cursor-pointer" @click="openGuide">
       <div
         class="w-9 h-9 rounded-xl bg-linear-to-br from-(--color-primary) to-(--color-primary-600) flex items-center justify-center shadow-md">
         <span class="text-white font-semibold text-sm">AI</span>
@@ -113,13 +113,15 @@
 </template>
 
 <script setup lang="ts">
-import { computed, watch } from 'vue'
+import { computed, watch, inject } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useAuthStore } from '../stores/auth'
 import { Avatar } from './ui'
 import { useTheme } from "../composables/useTheme";
 import { useSessionStore } from '../stores/session'
 import { usePopup } from '../composables/usePopup'
+
+const openGuide = inject('openGuide', () => {})
 
 // 主题
 const { isDark, toggleDark } = useTheme()

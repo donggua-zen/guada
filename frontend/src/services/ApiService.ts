@@ -33,10 +33,19 @@ class ApiService implements IApiService {
   abortControllerMap: Map<string, AbortController>
 
   constructor(baseURL?: string) {
-    // Electron 环境使用固定后端地址（由主进程确保后端已启动）
-    // Web 环境使用相对路径
+    // Electron 环境使用动态获取的后端地址，Web 环境使用相对路径
     const isElectron = typeof window !== 'undefined' && window.electronAPI !== undefined
-    this.baseURL = baseURL || (isElectron ? 'http://localhost:3000/api/v1' : '/api/v1')
+    
+    if (baseURL) {
+      this.baseURL = baseURL
+    } else if (isElectron) {
+      // 在 Electron 环境下，通过 IPC 获取后端端口并构造地址
+      // 注意：这里我们暂时使用一个占位符，实际地址会在 initBackendUrl 中设置
+      this.baseURL = 'http://localhost:3000/api/v1'
+    } else {
+      this.baseURL = '/api/v1'
+    }
+    
     this.tokenStore = useStorage('token', '')
 
     // 创建 Axios 实例
@@ -82,6 +91,29 @@ class ApiService implements IApiService {
 
     this.currentAbortController = null
     this.abortControllerMap = new Map()
+  }
+
+  /**
+   * 初始化后端地址（针对 Electron 环境）
+   */
+  async initBackendUrl(): Promise<void> {
+    const isElectron = typeof window !== 'undefined' && window.electronAPI !== undefined
+    if (isElectron && !this.baseURL.includes('localhost:3000')) {
+      // 如果已经初始化过或者不是默认占位符，则跳过
+      return
+    }
+    
+    try {
+      const info = await window.electronAPI!.getAppInfo()
+      if (info.backendPort) {
+        this.baseURL = `http://localhost:${info.backendPort}/api/v1`
+        // 更新 axios 实例的 baseURL
+        this.axiosInstance.defaults.baseURL = this.baseURL
+        console.log(`🔗 API 服务已连接到后端端口: ${info.backendPort}`)
+      }
+    } catch (error) {
+      console.error('❌ 获取后端端口失败:', error)
+    }
   }
 
   /**
@@ -526,6 +558,20 @@ class ApiService implements IApiService {
     return await this._request('/settings', { method: 'PUT', data })
   }
 
+  /**
+   * 获取指定分组的设置
+   */
+  async fetchGroupSettings(group: string): Promise<any> {
+    return await this._request(`/settings/${group}`)
+  }
+
+  /**
+   * 更新指定分组的设置
+   */
+  async updateGroupSettings(group: string, data: any): Promise<any> {
+    return await this._request(`/settings/${group}`, { method: 'PUT', data })
+  }
+
   async fetchGlobalTools(): Promise<any> {
     return await this._request('/settings/tools/global')
   }
@@ -538,18 +584,7 @@ class ApiService implements IApiService {
   }
 
   async fetchCharacterTools(characterId: string): Promise<any> {
-    return await this._request(`/settings/tools/character?characterId=${characterId}`)
-  }
-
-  async updateCharacterToolStatus(
-    characterId: string,
-    namespace: string,
-    enabled: boolean | 'all'
-  ): Promise<{ success: boolean }> {
-    return await this._request('/settings/tools/character', {
-      method: 'PUT',
-      data: { characterId, namespace, enabled },
-    })
+    return await this._request(`/characters/${characterId}/tools`)
   }
 
   // ========== MCP 服务器管理 ==========

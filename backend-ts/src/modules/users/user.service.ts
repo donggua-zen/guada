@@ -143,13 +143,12 @@ export class UserService {
     fs.writeFileSync(this.resetPasswordFlagPath, "password has been set");
   }
 
-  async resetPrimaryPassword(password: string, phone?: string, email?: string) {
-    let user;
-    if (phone) {
-      user = await this.userRepo.findByPhone(phone);
-    } else if (email) {
-      user = await this.userRepo.findByEmail(email);
+  async resetPrimaryPassword(password: string, username?: string) {
+    if (!username) {
+      throw new Error("用户名不能为空");
     }
+
+    const user = await this.userRepo.findByUsername(username);
 
     if (!user) {
       throw new Error("用户不存在");

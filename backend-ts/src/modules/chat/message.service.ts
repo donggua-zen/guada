@@ -7,6 +7,7 @@ import { createPaginatedResponse } from "../../common/types/pagination";
 import { v4 as uuidv4 } from "uuid";
 import { FileRepository } from "../../common/database/file.repository";
 import { UrlService } from "../../common/services/url.service";
+import { FileService } from "../files/file.service";
 
 @Injectable()
 export class MessageService {
@@ -19,6 +20,7 @@ export class MessageService {
     private kbRepo: KnowledgeBaseRepository,
     private fileRepo: FileRepository,
     private urlService: UrlService,
+    private fileService: FileService,
   ) { }
 
   /**
@@ -136,6 +138,12 @@ export class MessageService {
 
           messageId = newMessage.id;
         });
+
+        // 5. 事务成功后，清理所有 messageId 为 NULL 的孤儿文件（异步执行，不阻塞响应）
+        // 这些文件包括：本次编辑解绑但未重新关联的文件 + 历史遗留的孤儿文件
+        this.cleanupOrphanMessageFiles().catch(error => {
+          this.logger.error(`清理孤儿文件失败: ${error.message}`);
+        });
       } catch (error) {
         const errorMessage =
           error instanceof Error ? error.message : "Unknown error";
@@ -235,11 +243,11 @@ export class MessageService {
         }));
       }
 
-      // 格式化内容字段
-      completeMessage.contents.forEach((content) => {
-        content.metaData = content.metaData || null;
-        content.additionalKwargs = content.additionalKwargs || null;
-      });
+      // // 格式化内容字段
+      // completeMessage.contents.forEach((content) => {
+      //   content.metaData = content.metaData || null;
+      //   content.additionalKwargs = content.additionalKwargs || null;
+      // });
     }
 
     return completeMessage;
@@ -352,11 +360,16 @@ export class MessageService {
    * 删除消息（内部实现）
    */
   private async deleteMessageInternal(messageId: string) {
+    // 1. 先删除该消息关联的所有物理文件
+    await this.fileService.deleteFilesByMessageId(messageId);
+
+    // 2. 删除子消息
     await this.messageRepo.deleteByParentId(messageId);
 
-    // 先删除所有内容版本
+    // 3. 先删除所有内容版本
     await this.contentRepo.deleteByMessageId(messageId);
-    // 再删除消息本身
+    
+    // 4. 再删除消息本身
     await this.messageRepo.delete(messageId);
   }
 
@@ -389,7 +402,19 @@ export class MessageService {
       throw new HttpException("Session not found", HttpStatus.NOT_FOUND);
     }
 
-    // 删除所有消息（级联删除内容）
+    // 1. 先获取该会话下的所有消息 ID
+    const messages = await this.messageRepo.findBySessionId(sessionId, {
+      withFiles: false,
+      withContents: false,
+    });
+
+    // 2. 删除所有消息关联的物理文件（并行执行）
+    const fileDeletePromises = messages.map(msg => 
+      this.fileService.deleteFilesByMessageId(msg.id)
+    );
+    await Promise.all(fileDeletePromises);
+
+    // 3. 删除所有消息（级联删除内容）
     await this.messageRepo.deleteBySessionId(sessionId);
 
     return { success: true };
@@ -446,5 +471,44 @@ export class MessageService {
     const result = await this.messageRepo.importMessages(formattedMessages);
 
     return { success: true, count: result.count };
+  }
+
+  /**
+   * 清理所有 messageId 为 NULL 的孤儿文件
+   * 在编辑消息后调用，异步执行，不阻塞响应
+   */
+  private async cleanupOrphanMessageFiles(): Promise<void> {
+    try {
+      const prisma = this.contentRepo.getPrismaClient();
+      
+      // 查询所有 messageId 为 NULL 的文件
+      const orphanFiles = await prisma.file.findMany({
+        where: {
+          messageId: null,
+        },
+        select: {
+          id: true,
+        },
+      });
+
+      if (orphanFiles.length === 0) {
+        return; // 没有孤儿文件，直接返回
+      }
+
+      this.logger.log(`检测到 ${orphanFiles.length} 个孤儿文件，开始清理...`);
+
+      // 异步并行删除所有孤儿文件
+      const deletePromises = orphanFiles.map(file => 
+        this.fileService.deleteFile(file.id)
+      );
+
+      const results = await Promise.allSettled(deletePromises);
+      const successCount = results.filter(r => r.status === 'fulfilled' && r.value).length;
+      const failCount = results.filter(r => r.status === 'rejected' || (r.status === 'fulfilled' && !r.value)).length;
+
+      this.logger.log(`成功清理 ${successCount}/${orphanFiles.length} 个孤儿文件，${failCount} 个失败`);
+    } catch (error: any) {
+      this.logger.error(`清理孤儿文件失败: ${error.message}`);
+    }
   }
 }

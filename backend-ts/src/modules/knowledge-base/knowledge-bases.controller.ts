@@ -22,9 +22,8 @@ export class KnowledgeBasesController {
   async list(
     @Query("skip") skip = 0,
     @Query("limit") limit = 20,
-    @CurrentUser() user: any,
   ) {
-    return await this.kbService.list(user.sub, Number(skip), Number(limit));
+    return await this.kbService.list(Number(skip), Number(limit));
   }
 
   @Post()
@@ -33,21 +32,20 @@ export class KnowledgeBasesController {
   }
 
   @Get(":id")
-  async getOne(@Param("id") id: string, @CurrentUser() user: any) {
-    return await this.kbService.findOne(id, user.sub);
+  async getOne(@Param("id") id: string) {
+    return await this.kbService.findOne(id);
   }
 
   @Put(":id")
   async update(
     @Param("id") id: string,
     @Body() data: any,
-    @CurrentUser() user: any,
   ) {
-    return await this.kbService.update(id, user.sub, data);
+    return await this.kbService.update(id, data);
   }
 
   @Delete(":id")
-  async delete(@Param("id") id: string, @CurrentUser() user: any) {
-    return await this.kbService.remove(id, user.sub);
+  async delete(@Param("id") id: string) {
+    return await this.kbService.remove(id);
   }
 }

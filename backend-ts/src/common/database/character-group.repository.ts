@@ -5,9 +5,8 @@ import { PrismaService } from "../../common/database/prisma.service";
 export class CharacterGroupRepository {
   constructor(private prisma: PrismaService) { }
 
-  async findByUserId(userId: string) {
+  async findAll() {
     return this.prisma.characterGroup.findMany({
-      where: { userId },
       orderBy: { sortOrder: "asc" },
     });
   }

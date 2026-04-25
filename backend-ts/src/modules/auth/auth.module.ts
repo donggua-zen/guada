@@ -7,7 +7,6 @@ import { AuthService } from "./auth.service";
 import { AuthController } from "./auth.controller";
 import { UserRepository } from "../../common/database/user.repository";
 import { PrismaService } from "../../common/database/prisma.service";
-import { GlobalSettingRepository } from "../../common/database/global-setting.repository";
 
 @Module({
   imports: [
@@ -26,7 +25,7 @@ import { GlobalSettingRepository } from "../../common/database/global-setting.re
       inject: [ConfigService],
     }),
   ],
-  providers: [AuthService, UserRepository, PrismaService, GlobalSettingRepository],
+  providers: [AuthService, UserRepository, PrismaService],
   controllers: [AuthController],
   exports: [AuthService, JwtModule],
 })

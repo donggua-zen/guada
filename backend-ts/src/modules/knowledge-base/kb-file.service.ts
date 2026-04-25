@@ -42,6 +42,7 @@ export class KbFileService implements OnModuleInit {
 
   async onModuleInit() {
     await this.resumePendingFileTasks();
+    await this.cleanupOrphanFiles();
   }
 
   /**
@@ -78,6 +79,74 @@ export class KbFileService implements OnModuleInit {
       }
     } catch (error: any) {
       this.logger.error(`恢复任务失败：${error.message}`);
+    }
+  }
+
+  /**
+   * 清理孤儿文件（启动时执行）
+   * 删除所有关联知识库不存在或 filePath 指向无效位置的记录
+   */
+  private async cleanupOrphanFiles() {
+    try {
+      this.logger.log("🧹 开始扫描孤儿文件...");
+
+      // 1. 查找所有 filePath 不为空的文件
+      const allFiles = await this.prisma.kBFile.findMany({
+        where: {
+          filePath: { not: null },
+        },
+        select: {
+          id: true,
+          filePath: true,
+          knowledgeBaseId: true,
+          displayName: true,
+        },
+      });
+
+      let orphanCount = 0;
+      let cleanedCount = 0;
+
+      for (const file of allFiles) {
+        let isOrphan = false;
+
+        // 检查关联的知识库是否存在
+        const kb = await this.kbRepo.findById(file.knowledgeBaseId);
+        if (!kb) {
+          isOrphan = true;
+          this.logger.log(`发现孤儿文件（知识库已删除）: ${file.displayName}`);
+        }
+
+        // 检查物理文件是否存在
+        if (file.filePath && !fs.existsSync(file.filePath)) {
+          isOrphan = true;
+          this.logger.log(`发现孤儿文件（物理文件不存在）: ${file.displayName}`);
+        }
+
+        // 如果是孤儿，删除数据库记录
+        if (isOrphan) {
+          orphanCount++;
+          try {
+            // 如果物理文件还存在，先删除
+            if (file.filePath && fs.existsSync(file.filePath)) {
+              fs.unlinkSync(file.filePath);
+              this.logger.log(`已删除孤儿物理文件: ${file.filePath}`);
+            }
+            // 删除数据库记录（会级联删除 chunks）
+            await this.fileRepo.delete(file.id);
+            cleanedCount++;
+          } catch (error: any) {
+            this.logger.error(`清理孤儿文件失败: ${file.displayName}, 错误: ${error.message}`);
+          }
+        }
+      }
+
+      if (orphanCount > 0) {
+        this.logger.log(`🧹 孤儿文件清理完成：发现 ${orphanCount} 个，成功清理 ${cleanedCount} 个`);
+      } else {
+        this.logger.log("✅ 未发现孤儿文件");
+      }
+    } catch (error: any) {
+      this.logger.error(`孤儿文件清理失败：${error.message}`);
     }
   }
 
@@ -728,7 +797,13 @@ export class KbFileService implements OnModuleInit {
       const deletedCount = await this.chunkRepo.deleteByFileId(fileId);
       this.logger.log(`删除 ${deletedCount} 个分块`);
 
-      // 3. 删除文件记录
+      // 3. 删除本地物理文件（新增）
+      if (file.filePath && fs.existsSync(file.filePath)) {
+        fs.unlinkSync(file.filePath);
+        this.logger.log(`已删除本地文件: ${file.filePath}`);
+      }
+
+      // 4. 删除文件记录
       await this.fileRepo.delete(fileId);
 
       return true;
@@ -759,6 +834,13 @@ export class KbFileService implements OnModuleInit {
           documentId: item.id,
         });
         await this.chunkRepo.deleteByFileId(item.id);
+        
+        // 删除本地物理文件（新增）
+        if (item.filePath && fs.existsSync(item.filePath)) {
+          fs.unlinkSync(item.filePath);
+          this.logger.log(`已删除本地文件: ${item.filePath}`);
+        }
+        
         await this.fileRepo.delete(item.id);
         this.logger.log(`删除子文件: ${item.displayName}`);
       }

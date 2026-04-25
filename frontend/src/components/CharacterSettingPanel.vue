@@ -1,18 +1,30 @@
 <template>
-  <div class="flex flex-col h-full">
-    <div class="settings-header" v-if="!isSimpleStyle">
-      <h2>智能体设置</h2>
-    </div>
-    <div class="flex-1">
-      <el-tabs ref="tabsInstRef" v-model="tabsValue">
+  <div class="flex flex-col h-full character-setting-panel">
+    <div class="flex-1 overflow-hidden">
+      <el-tabs ref="tabsInstRef" v-model="tabsValue" class="h-full flex flex-col character-tabs">
         <!-- 基础设置 -->
-        <el-tab-pane name="basic" label="基础">
-          <div class="p-3">
-            <el-form ref="basicFormRef" :model="characterForm" :rules="basicRules" label-position="left"
-              label-width="80px" size="large">
+        <el-tab-pane name="basic" class="flex-1 overflow-hidden">
+          <template #label>
+            <div class="tab-label">
+              <el-icon :size="18">
+                <UserOutlined />
+              </el-icon>
+              <span>基础</span>
+            </div>
+          </template>
+          <div class="px-0 py-6 h-full overflow-y-auto">
+            <div class="px-6">
+              <el-form ref="basicFormRef" :model="characterForm" :rules="basicRules" label-position="left"
+                label-width="50%" size="large">
               <!-- 头像设置 -->
-              <el-form-item label="头像设置" :show-label="false">
-                <div class="avatar-upload-container ">
+              <el-form-item prop="avatarUrl">
+                <template #label>
+                  <div class="flex flex-col gap-1">
+                    <span class="text-base text-gray-900 dark:text-gray-100 font-medium">角色头像</span>
+                    <span class="text-xs text-gray-500 dark:text-gray-400 font-normal">点击头像可以更换新的头像，支持上传图片文件</span>
+                  </div>
+                </template>
+                <div class="avatar-upload-container">
                   <AvatarPreview :src="characterForm.avatarUrl" type="assistant" class="w-10"
                     :name="characterForm.title" @avatar-changed="handleAvatarChanged">
                   </AvatarPreview>
@@ -20,33 +32,61 @@
               </el-form-item>
 
               <!-- 角色标题 -->
-              <el-form-item label="角色标题" prop="title">
-                <el-input v-model="characterForm.title" placeholder="请输入角色标题" />
+              <el-form-item prop="title">
+                <template #label>
+                  <div class="flex flex-col gap-1">
+                    <span class="text-base text-gray-900 dark:text-gray-100 font-medium">角色标题</span>
+                    <span class="text-xs text-gray-500 dark:text-gray-400 font-normal">助手的显示名称，在对话列表中展示</span>
+                  </div>
+                </template>
+                <el-input v-model="characterForm.title" placeholder="请输入角色标题" class="w-full max-w-md" />
               </el-form-item>
 
               <!-- 角色描述 -->
-              <el-form-item label="角色描述" prop="description">
+              <el-form-item prop="description">
+                <template #label>
+                  <div class="flex flex-col gap-1">
+                    <span class="text-base text-gray-900 dark:text-gray-100 font-medium">角色描述</span>
+                    <span class="text-xs text-gray-500 dark:text-gray-400 font-normal">简要描述助手的用途、特点或背景信息</span>
+                  </div>
+                </template>
                 <el-input v-model="characterForm.description" type="textarea" placeholder="请输入角色描述"
-                  :autosize="{ minRows: 3, maxRows: 5 }" />
+                  :autosize="{ minRows: 3, maxRows: 5 }" class="w-full max-w-md" />
               </el-form-item>
 
               <!-- 分组设置 -->
-              <el-form-item label="分组设置" prop="groupId">
-                <el-select v-model="characterForm.groupId" placeholder="请选择分组" clearable style="width: 100%;">
+              <el-form-item prop="groupId">
+                <template #label>
+                  <div class="flex flex-col gap-1">
+                    <span class="text-base text-gray-900 dark:text-gray-100 font-medium">分组设置</span>
+                    <span class="text-xs text-gray-500 dark:text-gray-400 font-normal">将助手归类到不同分组，便于管理和查找</span>
+                  </div>
+                </template>
+                <el-select v-model="characterForm.groupId" placeholder="请选择分组" clearable class="w-full max-w-md">
                   <el-option label="未分组" :value="null" />
                   <el-option v-for="group in characterGroups" :key="group.id" :label="group.name" :value="group.id" />
                 </el-select>
               </el-form-item>
             </el-form>
+            </div>
           </div>
         </el-tab-pane>
 
         <!-- 提示词 -->
-        <el-tab-pane name="prompt" label="提示词">
-          <div class="p-3">
-            <el-form ref="promptFormRef" :model="characterForm" :rules="promptRules" label-position="top"
-              label-width="80px" size="large">
-              <el-form-item :show-label="false" :show-feedback="false">
+        <el-tab-pane name="prompt" class="flex-1 overflow-hidden">
+          <template #label>
+            <div class="tab-label">
+              <el-icon :size="18">
+                <MessageOutlined />
+              </el-icon>
+              <span>提示词</span>
+            </div>
+          </template>
+          <div class="px-0 py-6 h-full flex flex-col">
+            <div class="px-6 flex-1 flex flex-col min-h-0">
+              <el-form ref="promptFormRef" :model="characterForm" :rules="promptRules" label-position="top"
+                label-width="80px" size="large" class="flex-1 flex flex-col min-h-0">
+              <el-form-item :show-label="false" :show-feedback="false" style="flex-shrink: 0;" class="no-border-item">
                 <div class="flex items-center w-full justify-between">
                   <span>系统系提示(角色设定)</span>
                   <div class="flex items-center">
@@ -64,66 +104,108 @@
               </el-form-item>
 
               <!-- 详细设定 -->
-              <el-form-item prop="systemPrompt" :show-label="false">
+              <el-form-item prop="systemPrompt" :show-label="false" class="flex-1 min-h-0 prompt-form-item no-border-item">
                 <el-input v-model="characterForm.systemPrompt" type="textarea" placeholder="请输入详细设定"
-                  :autosize="{ minRows: 8, maxRows: 12 }" />
+                  resize="none" />
               </el-form-item>
 
             </el-form>
+            </div>
           </div>
         </el-tab-pane>
 
-        <!-- 模型设置 -->
-        <el-tab-pane name="model" label="模型" v-if="!isSimpleStyle || true">
-          <div class="p-3">
-            <el-form ref="modelFormRef" :model="characterForm" :rules="modelRules" label-position="left"
-              label-width="100px" size="large">
+        <!-- 模型与记忆 -->
+        <el-tab-pane name="model" v-if="!isSimpleStyle || true" class="flex-1 overflow-hidden">
+          <template #label>
+            <div class="tab-label">
+              <el-icon :size="18">
+                <RobotOutlined />
+              </el-icon>
+              <span>模型与记忆</span>
+            </div>
+          </template>
+          <div class="px-0 py-6 h-full overflow-y-auto">
+            <div class="px-6">
+              <el-form ref="modelFormRef" :model="characterForm" :rules="modelRules" label-position="left"
+                label-width="50%" size="large">
               <!-- 模型选择 -->
-              <el-form-item label="模型选择" prop="modelId">
-                <el-select v-model="characterForm.modelId" :options="modelOptions" placeholder="请选择模型" clearable>
-
+              <el-form-item prop="modelId">
+                <template #label>
+                  <div class="flex flex-col gap-1">
+                    <span class="text-base text-gray-900 dark:text-gray-100 font-medium">模型选择</span>
+                    <span class="text-xs text-gray-500 dark:text-gray-400 font-normal">为此助手指定专用的 AI 模型，留空则使用默认模型</span>
+                  </div>
+                </template>
+                <el-select v-model="characterForm.modelId" :options="modelOptions" placeholder="请选择模型" clearable
+                  class="w-full max-w-md">
                 </el-select>
               </el-form-item>
 
               <!-- 温度设置 -->
-              <el-form-item label="温度" prop="modelTemperature">
+              <el-form-item prop="modelTemperature">
+                <template #label>
+                  <div class="flex flex-col gap-1">
+                    <span class="text-base text-gray-900 dark:text-gray-100 font-medium">温度</span>
+                    <span class="text-xs text-gray-500 dark:text-gray-400 font-normal">控制输出的随机性和创造性，值越高越富有创意</span>
+                  </div>
+                </template>
                 <el-slider-optional v-model="characterForm.modelTemperature" :min="0" :max="1.9" :step="0.1" show-input
-                  optional-direction="max" optional-text="Auto" />
+                  optional-direction="max" optional-text="Auto" class="w-full max-w-md" />
               </el-form-item>
 
               <!-- Top P -->
-              <el-form-item label="Top P" prop="modelTopP">
+              <el-form-item prop="modelTopP">
+                <template #label>
+                  <div class="flex flex-col gap-1">
+                    <span class="text-base text-gray-900 dark:text-gray-100 font-medium">Top P</span>
+                    <span class="text-xs text-gray-500 dark:text-gray-400 font-normal">核采样参数，控制输出词汇的多样性范围</span>
+                  </div>
+                </template>
                 <el-slider-optional v-model="characterForm.modelTopP" :min="0" :max="1" :step="0.1" show-input
-                  optional-direction="max" optional-text="Auto" />
+                  optional-direction="max" optional-text="Auto" class="w-full max-w-md" />
               </el-form-item>
 
               <!-- 频率惩罚 -->
-              <el-form-item label="频率惩罚" prop="modelFrequencyPenalty">
+              <el-form-item prop="modelFrequencyPenalty">
+                <template #label>
+                  <div class="flex flex-col gap-1">
+                    <span class="text-base text-gray-900 dark:text-gray-100 font-medium">频率惩罚</span>
+                    <span class="text-xs text-gray-500 dark:text-gray-400 font-normal">降低重复内容的出现概率，正值减少重复，负值鼓励重复</span>
+                  </div>
+                </template>
                 <el-slider-optional v-model="characterForm.modelFrequencyPenalty" :min="-1.9" :max="1.9" :step="0.1"
-                  show-input optional-direction="max" optional-text="Auto" />
+                  show-input optional-direction="max" optional-text="Auto" class="w-full max-w-md" />
               </el-form-item>
-            </el-form>
-          </div>
-        </el-tab-pane>
 
-        <!-- 记忆设置 -->
-        <el-tab-pane name="memory" label="记忆">
-          <div class="p-3">
-            <el-form ref="memoryFormRef" :model="characterForm" :rules="memoryRules" label-position="left"
-              label-width="120px" size="large">
               <!-- 上下文条数 -->
-              <el-form-item label="上下文条数" prop="maxMemoryLength">
+              <el-form-item prop="maxMemoryLength">
+                <template #label>
+                  <div class="flex flex-col gap-1">
+                    <span class="text-base text-gray-900 dark:text-gray-100 font-medium">上下文条数</span>
+                    <span class="text-xs text-gray-500 dark:text-gray-400 font-normal">控制对话历史的最大消息数量，影响模型的长期记忆能力</span>
+                  </div>
+                </template>
                 <el-slider-optional v-model="characterForm.maxMemoryLength" :min="2" :max="500" :step="1" show-input
-                  optional-direction="max" optional-text="No Limit" />
+                  optional-direction="max" optional-text="No Limit" class="w-full max-w-md" />
               </el-form-item>
             </el-form>
+            </div>
           </div>
         </el-tab-pane>
 
         <!-- 本地工具 -->
-        <el-tab-pane name="local_tools" label="本地工具">
-          <div class="p-3">
-            <el-form label-position="top" size="large">
+        <el-tab-pane name="local_tools" class="flex-1 overflow-hidden">
+          <template #label>
+            <div class="tab-label">
+              <el-icon :size="18">
+                <ToolOutlined />
+              </el-icon>
+              <span>本地工具</span>
+            </div>
+          </template>
+          <div class="px-0 py-6 h-full overflow-y-auto">
+            <div class="px-6">
+              <el-form label-position="top" size="large">
               <!-- 全局开关 -->
               <el-form-item label="自动启用全部工具" label-position="left">
                 <div class="flex items-center gap-2">
@@ -196,13 +278,23 @@
                 </div>
               </div>
             </el-form>
+            </div>
           </div>
         </el-tab-pane>
 
         <!-- MCP 工具 -->
-        <el-tab-pane name="mcp_tools" label="MCP 工具">
-          <div class="p-3">
-            <el-form label-position="top" size="large">
+        <el-tab-pane name="mcp_tools" class="flex-1 overflow-hidden">
+          <template #label>
+            <div class="tab-label">
+              <el-icon :size="18">
+                <ApiOutlined />
+              </el-icon>
+              <span>MCP 工具</span>
+            </div>
+          </template>
+          <div class="px-0 py-6 h-full overflow-y-auto">
+            <div class="px-6">
+              <el-form label-position="top" size="large">
               <!-- MCP 全局开关 -->
               <el-form-item label="自动启用全部MCP服务器" label-position="left">
                 <div class="flex items-center gap-2">
@@ -266,12 +358,13 @@
                 </div>
               </div>
             </el-form>
+            </div>
           </div>
         </el-tab-pane>
       </el-tabs>
     </div>
-    <div class="footer pb-5 flex justify-end">
-      <el-button round block type="primary" @click="handleSave" size="large">
+    <div class="footer pb-4 px-3 flex justify-end border-t border-gray-200 dark:border-gray-700">
+      <el-button round block type="primary" @click="handleSave" size="large" :loading="loading">
         应用全部设置
       </el-button>
     </div>
@@ -303,7 +396,12 @@ import {
 import {
   QuestionCircleOutlined,
   InfoCircleOutlined,
-  LoadingOutlined
+  LoadingOutlined,
+  UserOutlined,
+  MessageOutlined,
+  RobotOutlined,
+  ToolOutlined,
+  ApiOutlined
 } from '@vicons/antd'
 
 import { apiService } from '../services/ApiService'
@@ -351,7 +449,7 @@ const props = defineProps({
 const emit = defineEmits(['update:data', 'update:tab', 'saved'])
 
 // 响应式数据
-const isSimpleStyle = ref(false)
+const isSimpleStyle = computed(() => props.simple)
 const loading = ref(false)
 
 // 模型数据
@@ -362,7 +460,6 @@ const providers = ref([]);
 const basicFormRef = ref(null)
 const promptFormRef = ref(null)
 const modelFormRef = ref(null)
-const memoryFormRef = ref(null)
 
 const tabsValue = ref(props.tab)
 
@@ -404,12 +501,6 @@ const promptRules = {
 
 const modelRules = {
   // 模型改为可选项，移除必填验证
-}
-
-const memoryRules = {
-  maxMemoryLength: [
-    { type: 'number', min: 2, max: 500, message: '最大记忆长度在 2-500 之间', trigger: ['input', 'blur'] },
-  ],
 }
 
 // 选项数据
@@ -484,16 +575,11 @@ const characterToolSettings = ref({});
 
 // 是否自动启用全部工具
 const allToolsEnabled = computed(() => {
-  // 如果所有工具都设置为 'all'，则认为启用了全部工具
-  if (localTools.value.length === 0) return false;
-  return localTools.value.every(tool => characterToolSettings.value[tool.namespace] === 'all');
+  // 如果角色工具配置为 true，则认为启用了全部工具
+  return characterToolSettings.value === true;
 });
 
-// 监听 props.show 变化
-watch(() => props.simple, (newVal) => {
-  isSimpleStyle.value = newVal;
-}, { immediate: true })
-
+// 监听 props.data 变化
 watch(() => props.data, (newVal) => {
 
   characterForm.avatarFile = null;
@@ -518,10 +604,15 @@ watch(() => props.data, (newVal) => {
   characterForm.enabledTools = newVal.settings?.tools || [];
   // 加载角色工具设置
   const toolsConfig = newVal.settings?.tools;
-  if (typeof toolsConfig === 'object' && !Array.isArray(toolsConfig)) {
+  if (toolsConfig === true || toolsConfig === false) {
+    // 整体开关模式
+    characterToolSettings.value = toolsConfig;
+  } else if (typeof toolsConfig === 'object' && !Array.isArray(toolsConfig)) {
+    // 单独控制模式
     characterToolSettings.value = { ...toolsConfig };
   } else {
-    characterToolSettings.value = {};
+    // 默认启用全部
+    characterToolSettings.value = true;
   }
   // 加载已启用的 MCP 服务器 (支持 boolean 或 array)
   const mcpServersConfig = newVal.settings?.mcpServers;
@@ -584,12 +675,17 @@ const loadLocalTools = async () => {
     localTools.value = (response.tools || []).filter(tool => tool.enabled);
     
     // 初始化角色工具设置
-    const initialSettings = {};
-    localTools.value.forEach(tool => {
-      // 如果已有设置则使用，否则默认为 'all'（继承全局）
-      initialSettings[tool.namespace] = characterToolSettings.value[tool.namespace] || 'all';
-    });
-    characterToolSettings.value = initialSettings;
+    const toolsConfig = response.characterTools;
+    if (toolsConfig === true || toolsConfig === false) {
+      // 整体开关模式
+      characterToolSettings.value = toolsConfig;
+    } else if (typeof toolsConfig === 'object') {
+      // 单独控制模式
+      characterToolSettings.value = { ...toolsConfig };
+    } else {
+      // 默认启用全部
+      characterToolSettings.value = true;
+    }
   } catch (error) {
     console.error('加载本地工具失败:', error);
     toast.error('加载本地工具失败');
@@ -600,23 +696,18 @@ const loadLocalTools = async () => {
 
 // 全部工具开关切换处理
 const handleAllToolsToggle = (enabled) => {
-  if (enabled) {
-    // 开启：将所有工具设置为 'all'（继承全局）
-    localTools.value.forEach(tool => {
-      characterToolSettings.value[tool.namespace] = 'all';
-    });
-    console.log('已启用全部工具');
-  } else {
-    // 关闭：将所有工具设置为 false（禁用）
-    localTools.value.forEach(tool => {
-      characterToolSettings.value[tool.namespace] = false;
-    });
-    console.log('已禁用全部工具，需要手动选择');
-  }
+  // 只更新本地状态，不立即调用 API
+  characterToolSettings.value = enabled;
+  console.log(`角色工具整体${enabled ? '启用' : '禁用'}`);
 }
 
 // 本地工具开关切换处理
 const handleLocalToolToggle = (namespace, enabled) => {
+  // 只更新本地状态，不立即调用 API
+  if (typeof characterToolSettings.value !== 'object') {
+    // 如果之前是整体开关模式，转换为对象模式
+    characterToolSettings.value = {};
+  }
   characterToolSettings.value[namespace] = enabled;
   console.log(`本地工具 ${namespace} ${enabled ? '启用' : '禁用'}`);
 }
@@ -666,7 +757,7 @@ watch(() => props.data?.id, async (newVal, oldVal) => {
     console.log('角色ID变化，重新加载工具列表:', newVal);
     await loadLocalTools();
   }
-});
+}, { immediate: true });
 
 // 生命周期
 onMounted(async () => {
@@ -674,7 +765,7 @@ onMounted(async () => {
   loadModels();
   loadMCPServers();
   loadCharacterGroups();  // 加载分组列表
-  // 注意：不在 onMounted 中加载工具，而是等待 watch 触发
+  // 注意：工具列表由 watch 自动加载（immediate: true）
 })
 
 onUnmounted(() => {
@@ -692,7 +783,6 @@ const handleSave = async () => {
     var formValidates = [
       basicFormRef.value?.validate(),
       promptFormRef.value?.validate(),
-      memoryFormRef.value?.validate(),
       modelFormRef.value?.validate(),
     ]
     //if (!isSimpleStyle.value) {
@@ -720,7 +810,7 @@ const handleSave = async () => {
         result.status === 'rejected'
       )
       if (firstErrorIndex !== -1) {
-        const tabNames = ['basic', 'prompt', 'memory', 'model',]
+        const tabNames = ['basic', 'prompt', 'model']
         tabsValue.value = tabNames[firstErrorIndex]
       }
 
@@ -783,26 +873,9 @@ function format(value) {
 </script>
 
 <style scoped>
-.settings-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  height: 60px;
-  list-style: 60px;
-  font-size: 18px;
-  font-weight: 600;
-  padding: 0 20px;
-  /* background-color: #ffffff; */
-  border-bottom: 1px solid rgba(21, 23, 28, .1);
-  border-radius: 0;
-
-  /* margin: 0 40px; */
-}
-
 .avatar-upload-container {
   display: flex;
   flex-direction: column;
-  align-items: center;
   gap: 15px;
   width: 100%;
 }
@@ -865,5 +938,153 @@ function format(value) {
   background-color: var(--el-color-primary-light-9);
   color: var(--el-color-primary);
   border: 1px solid var(--el-color-primary);
+}
+
+/* Tab 内容区域优化 */
+:deep(.el-tabs__content) {
+  overflow-y: auto;
+  height: calc(100% - 55px);
+  padding: 0;
+}
+
+:deep(.el-tab-pane) {
+  height: 100%;
+}
+
+/* 表单区域优化 */
+:deep(.el-form) {
+  height: 100%;
+}
+
+/* 滚动条美化 */
+:deep(.el-tabs__content)::-webkit-scrollbar {
+  width: 6px;
+}
+
+:deep(.el-tabs__content)::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+:deep(.el-tabs__content)::-webkit-scrollbar-thumb {
+  background-color: rgba(0, 0, 0, 0.2);
+  border-radius: 3px;
+}
+
+.dark :deep(.el-tabs__content)::-webkit-scrollbar-thumb {
+  background-color: rgba(255, 255, 255, 0.2);
+}
+
+/* 每个 Tab 内容区域的滚动条 */
+.el-tab-pane > div {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(0, 0, 0, 0.2) transparent;
+}
+
+.el-tab-pane > div::-webkit-scrollbar {
+  width: 6px;
+}
+
+.el-tab-pane > div::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.el-tab-pane > div::-webkit-scrollbar-thumb {
+  background-color: rgba(0, 0, 0, 0.2);
+  border-radius: 3px;
+}
+
+.dark .el-tab-pane > div::-webkit-scrollbar-thumb {
+  background-color: rgba(255, 255, 255, 0.2);
+}
+
+/* 确保底部按钮始终可见 */
+.footer {
+  flex-shrink: 0;
+  background-color: var(--el-bg-color);
+}
+
+/* 提示词输入框样式 - 禁止resize并占满flex空间 */
+.prompt-form-item {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.prompt-form-item :deep(.el-form-item__content) {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.prompt-form-item :deep(.el-textarea) {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.prompt-form-item :deep(textarea) {
+  resize: none !important;
+  flex: 1;
+  min-height: 0;
+}
+
+.prompt-form-item :deep(.el-textarea__inner) {
+  resize: none !important;
+  height: 100% !important;
+  min-height: unset !important;
+}
+
+/* 提示词Tab去除表单项分隔线 */
+.el-tab-pane[name="prompt"] .el-form-item {
+  border-bottom: none;
+  padding-bottom: 0;
+  margin-bottom: 16px !important;
+}
+
+/* 无横线表单项(用于提示词Tab) */
+.no-border-item {
+  border-bottom: none !important;
+  padding-bottom: 0 !important;
+}
+
+/* 表单项之间的分隔线 */
+.el-form-item {
+  border-bottom: 1px solid var(--el-border-color-lighter);
+  padding-bottom: 20px;
+  margin-bottom: 20px !important;
+}
+
+/* 最后一个表单项去除底边框 */
+.el-form > .el-form-item:last-child {
+  border-bottom: none;
+  padding-bottom: 0;
+  margin-bottom: 0 !important;
+}
+
+/* Tab 标签样式优化 */
+.tab-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 15px;
+  font-weight: 500;
+}
+
+.character-tabs :deep(.el-tabs__item) {
+  font-size: 15px;
+  padding: 0 20px;
+  height: 48px;
+  line-height: 48px;
+}
+
+.character-tabs :deep(.el-tabs__header) {
+  margin-bottom: 0;
+  border-bottom: 1px solid var(--el-border-color-light);
+}
+
+.character-tabs :deep(.el-tabs__nav-wrap::after) {
+  height: 0;
 }
 </style>

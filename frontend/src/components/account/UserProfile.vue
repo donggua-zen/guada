@@ -9,11 +9,8 @@
       <el-form-item label="昵称" prop="nickname">
         <el-input v-model="userForm.nickname" placeholder="昵称" />
       </el-form-item>
-      <el-form-item label="邮箱" prop="email">
-        <el-input v-model="userForm.email" placeholder="邮箱" />
-      </el-form-item>
-      <el-form-item label="手机号码" prop="phone">
-        <el-input v-model="userForm.phone" placeholder="手机号码" />
+      <el-form-item label="用户名" prop="username">
+        <el-input v-model="userForm.username" placeholder="用户名" disabled />
       </el-form-item>
       <el-form-item>
         <el-button type="primary" @click="handleSaveUserInfo" :disabled="!isFormChanged">保存信息</el-button>
@@ -46,8 +43,7 @@ const originalUserForm = ref({})
 
 const userForm = ref({
   nickname: '',
-  phone: '',
-  email: '',
+  username: '',
   avatarUrl: '',
 })
 
@@ -59,46 +55,11 @@ const basicRules = ref({
       trigger: 'blur',
     },
   ],
-  email: [
+  username: [
     {
       required: true,
-      message: '请输入邮箱',
+      message: '请输入用户名',
       trigger: 'blur',
-    },
-    {
-      validator: (rule, value, callback) => {
-        if (!value) {
-          callback(); // 如果没有值，则由required规则处理
-          return;
-        }
-
-        const isValid = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/.test(value)
-        if (isValid) {
-          callback();
-        } else {
-          callback(new Error('请输入正确的邮箱'));
-        }
-      },
-      trigger: 'blur'
-    }
-  ],
-  phone: [
-    {
-      validator: (rule, value, callback) => {
-        if (!value) {
-          callback(); // 如果没有值，则不需要验证
-
-          return;
-        }
-
-        const isValid = /^1[3-9]\d{9}$/.test(value)
-        if (isValid) {
-          callback();
-        } else {
-          callback(new Error('请输入正确的手机号码'));
-        }
-      },
-      trigger: 'blur'
     },
   ],
 })
@@ -106,8 +67,6 @@ const basicRules = ref({
 const isFormChanged = computed(() => {
   return (
     userForm.value.nickname !== originalUserForm.value.nickname ||
-    userForm.value.phone !== originalUserForm.value.phone ||
-    userForm.value.email !== originalUserForm.value.email ||
     avater_file.value !== null
   )
 })
@@ -121,8 +80,6 @@ const handleSaveUserInfo = async () => {
   try {
     await apiService.updateProfile({
       nickname: userForm.value.nickname,
-      phone: userForm.value.phone,
-      email: userForm.value.email,
     })
 
     if (avater_file.value) {
@@ -149,8 +106,7 @@ onMounted(() => {
   // 只复制需要的字段到表单
   userForm.value = {
     nickname: authStore.user?.nickname || '',
-    phone: authStore.user?.phone || '',
-    email: authStore.user?.email || '',
+    username: authStore.user?.username || '',
     avatarUrl: authStore.user?.avatarUrl || '',
   }
   originalUserForm.value = { ...userForm.value }

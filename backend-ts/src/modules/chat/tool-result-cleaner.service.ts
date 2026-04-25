@@ -1,5 +1,5 @@
 import { Injectable, Logger } from "@nestjs/common";
-import { MessageRecord } from "./types/llm.types";
+import { MessageRecord } from "../llm-core/types/llm.types";
 
 /**
  * 清理策略类型

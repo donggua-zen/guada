@@ -95,10 +95,8 @@ export class UsersController {
   async resetPassword(
     @Body()
     body: {
-      type: string;
+      username?: string;
       password: string;
-      phone?: string;
-      email?: string;
     },
   ) {
     if (!this.userService.isPasswordResetAllowed()) {
@@ -107,8 +105,7 @@ export class UsersController {
 
     await this.userService.resetPrimaryPassword(
       body.password,
-      body.phone,
-      body.email,
+      body.username,
     );
     this.userService.markPasswordAsSet();
     return { success: true };

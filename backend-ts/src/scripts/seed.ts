@@ -66,19 +66,18 @@ function logSection(title: string) {
 async function createDefaultUser() {
   logInfo("正在创建默认管理员用户...");
 
-  const hashedPassword = await bcrypt.hash("123456", 10);
+  const hashedPassword = await bcrypt.hash("guada", 10);
 
   const user = await prisma.user.create({
     data: {
       role: "primary",
       nickname: "管理员",
-      phone: "13800138000",
-      email: "admin@admin.com",
+      username: "guada",
       passwordHash: hashedPassword,
     },
   });
 
-  logSuccess(`已创建管理员用户：${user.email} / 123456`);
+  logSuccess(`已创建管理员用户：${user.username} / guada`);
   return user;
 }
 
@@ -287,6 +286,11 @@ async function seedDatabase(force: boolean = false) {
   }
 
   try {
+    // 步骤 0: 启用外键约束
+    logInfo("正在启用 SQLite 外键约束...");
+    await prisma.$executeRawUnsafe('PRAGMA foreign_keys = ON;');
+    logSuccess("外键约束已启用");
+
     // 步骤 1: 重置数据库
     logSection("步骤 1: 重置数据库");
     logInfo("正在执行 prisma db push --force-reset...");
@@ -309,7 +313,7 @@ async function seedDatabase(force: boolean = false) {
 
     logSection("数据库种子初始化完成！");
     log("\n🎉 默认登录信息:", colors.green);
-    log("  邮箱：admin@admin.com", colors.green);
+    log("  用户名：admin", colors.green);
     log("  密码：123456", colors.green);
     log("\n" + "=".repeat(60) + "\n", colors.cyan);
   } catch (error) {

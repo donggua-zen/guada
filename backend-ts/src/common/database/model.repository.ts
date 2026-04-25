@@ -12,9 +12,8 @@ export class ModelRepository {
     return this.prisma;
   }
 
-  async getProvidersWithModels(userId: string) {
+  async getProvidersWithModels() {
     return this.prisma.modelProvider.findMany({
-      where: { userId },
       include: { models: true },
       orderBy: { createdAt: "desc" },
     });

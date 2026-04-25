@@ -42,7 +42,8 @@ const avatarSrc = computed((): string => {
     // const separator = props.src.includes('?') ? '&' : '?'
     if (props.src.startsWith('/'))
         return props.src
-
+    if (props.src.startsWith('http'))
+        return props.src
     return '/' + props.src
     // return props.src
 });

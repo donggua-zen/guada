@@ -1,7 +1,7 @@
 {
-  "name": "askme",
+  "name": "guada",
   "version": "0.0.1",
-  "description": "AI Chat Application with Web and Electron support",
+  "description": "GuaDa Application with Web and Electron support",
   "private": true,
   "main": "electron/dist/main.js",
   "scripts": {
@@ -21,6 +21,7 @@
     "analyze:modules": "node scripts/analyze-module-size.js",
     "verify:electron-setup": "node scripts/verify-electron-setup.js",
     "build:electron": "npm run build:electron-ts && npm run build:backend && npm run optimize:electron-deps && npm run rebuild:backend-native:electron && cd frontend && cross-env ELECTRON=true npm run build && cd .. && cross-env ELECTRON=true electron-builder",
+    "build:electron:dir": "npm run build:electron-ts && npm run build:backend && npm run optimize:electron-deps && npm run rebuild:backend-native:electron && cd frontend && cross-env ELECTRON=true npm run build && cd .. && cross-env ELECTRON=true electron-builder --dir",
     "postinstall": "cd backend-ts && npm install && cd ../frontend && npm install"
   },
   "keywords": [
@@ -36,13 +37,12 @@
     "cross-env": "^7.0.3",
     "electron": "^41.0.0",
     "electron-builder": "^24.13.3",
-    "electron-updater": "^6.8.3",
     "typescript": "^6.0.0",
     "wait-on": "^9.0.0"
   },
   "build": {
-    "appId": "com.askme.app",
-    "productName": "AskMe",
+    "appId": "com.guada.app",
+    "productName": "GuaDa",
     "npmRebuild": false,
     "asar": true,
     "directories": {
@@ -51,9 +51,7 @@
     },
     "files": [
       "electron/dist/**/*",
-      "frontend/dist/**/*",
-      "!node_modules/**",
-      "!electron/node_modules/**/*"
+      "frontend/dist/**/*"
     ],
     "extraResources": [
       {
@@ -83,6 +81,10 @@
           "!**/*.db",
           "!**/*.db-journal"
         ]
+      },
+      {
+        "from": "backend-ts/prisma.config.js",
+        "to": "backend-ts/prisma.config.js"
       },
       {
         "from": "backend-ts/static",
@@ -141,22 +143,23 @@
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
-      "shortcutName": "AskMe",
+      "shortcutName": "GuaDa",
       "differentialPackage": false
     },
     "publish": [
       {
         "provider": "github",
         "owner": "your-username",
-        "repo": "ai-chat"
+        "repo": "guada"
       },
       {
         "provider": "generic",
-        "url": "https://your-oss-domain.com/updates/${os}"
+        "url": "https://ai.dingd.cn/updates/${os}"
       }
     ]
   },
   "dependencies": {
-    "@electron/rebuild": "^4.0.4"
+    "@electron/rebuild": "^4.0.4",
+    "electron-updater": "^6.8.3"
   }
 }

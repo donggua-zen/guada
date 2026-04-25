@@ -3,7 +3,7 @@
 :root {
     --color-primary-0f: #fb72990f;
 
-    --color-primary: oklch(72.118% 0.17434 4.6237);
+    --color-primary: oklab(72.117% 0.17379 0.01397);
     --color-primary-50: oklch(98.921% 0.00548 3.3339);
     --color-primary-100: oklch(96.614% 0.01843 356.42);
     --color-primary-200: oklch(92.119% 0.04192 359.34);
@@ -57,9 +57,9 @@
     --color-bg: #fff;
     --color-border: #d1d5db;
 
-    --color-bubble-user-bg: #efefef;
+    --color-bubble-user-bg: #ebf5ff;
     --color-bubble-user-text: #1F2937;
-    --color-bubble-user-border: #efefef;
+    --color-bubble-user-border: #ebf5ff;
     --color-bubble-assitant-bg: none;
     --color-bubble-assitant-text: #1F2937;
     --color-bubble-assitant-border: none;

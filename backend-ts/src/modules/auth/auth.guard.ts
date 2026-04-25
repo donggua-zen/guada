@@ -35,7 +35,7 @@ export class AuthGuard implements CanActivate {
       // 尝试自动登录
       const autoLoginResult = await this.authService.autoLogin();
       if (autoLoginResult) {
-        request["user"] = { sub: autoLoginResult.user.id, email: autoLoginResult.user.email };
+        request["user"] = { sub: autoLoginResult.user.id, username: autoLoginResult.user.username };
         return true;
       }
       throw new UnauthorizedException("Missing authentication token");

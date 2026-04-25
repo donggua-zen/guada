@@ -5,7 +5,7 @@ import { SessionContextStateRepository } from "../../common/database/session-con
 import { UploadPathService } from "../../common/services/upload-path.service";
 import { ToolOrchestrator } from "../tools/tool-orchestrator.service";
 import { ToolContextFactory } from "../tools/tool-context";
-import { MessageRecord } from "./types/llm.types";
+import { MessageRecord } from "../llm-core/types/llm.types";
 
 describe("ContextManagerService - Semantic Turns", () => {
   let contextManager: ContextManagerService;

@@ -7,7 +7,7 @@ import {
 } from "../interfaces/tool-provider.interface";
 import { FileRepository } from "../../../common/database/file.repository";
 import { UploadPathService } from "../../../common/services/upload-path.service";
-import { LLMService } from "../../chat/llm.service";
+import { LLMService } from "../../llm-core/llm.service";
 import { PrismaService } from "../../../common/database/prisma.service";
 import * as fs from "fs";
 import * as path from "path";

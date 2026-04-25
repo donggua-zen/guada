@@ -14,7 +14,7 @@
 
         <div class="space-y-6">
             <!-- 对话设置 -->
-            <div class="px-8 py-8 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-[#1e1e1e]">
+            <div class="px-8 py-4 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-[#1e1e1e]">
                 <el-form ref="chatFormRef" :model="settingsForm" label-position="left" label-width="50%" size="large">
                     <el-form-item prop="defaultChatModelId" style="margin-bottom: 0;">
                         <template #label>
@@ -35,7 +35,7 @@
                 </el-form>
             </div>
             <!-- 标题总结设置 -->
-            <div class="px-8 py-8 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-[#1e1e1e]">
+            <div class="px-8 py-4 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-[#1e1e1e]">
                 <el-form ref="titleSummaryFormRef" :model="settingsForm" :rules="titleSummaryRules"
                     label-position="left" label-width="50%" size="large">
                     <el-form-item prop="defaultTitleSummaryModelId">
@@ -54,7 +54,8 @@
                                 v-if="titleSummaryModelName" />
                         </el-select>
                     </el-form-item>
-                    <el-form-item prop="defaultTitleSummaryPrompt">
+                    <!-- 标题总结提示词配置已暂时移除，后端使用固定提示词 -->
+                    <!-- <el-form-item prop="defaultTitleSummaryPrompt">
                         <template #label>
                             <div class="flex flex-col gap-1">
                                 <span class="text-lg text-gray-900 dark:text-gray-100">标题总结提示词</span>
@@ -64,7 +65,7 @@
                         <el-input v-model="settingsForm.defaultTitleSummaryPrompt" type="textarea"
                             placeholder="请输入生成会话标题的系统提示词" :autosize="{ minRows: 4, maxRows: 6 }" 
                             class="w-full max-w-md" />
-                    </el-form-item>
+                    </el-form-item> -->
                 </el-form>
             </div>
 
@@ -91,7 +92,7 @@
                     </div> -->
 
             <!-- 视觉辅助设置 -->
-            <div class="px-8 py-8 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-[#1e1e1e]">
+            <div class="px-8 py-4 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-[#1e1e1e]">
                 <el-form ref="visualFormRef" :model="settingsForm" label-position="left" label-width="50%"
                     size="large">
                     <el-form-item prop="defaultVisualAssistantModelId" style="margin-bottom: 0;">
@@ -114,7 +115,7 @@
             </div>
 
             <!-- 历史压缩设置 -->
-            <div class="px-8 py-8 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-[#1e1e1e]">
+            <div class="px-8 py-4 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-[#1e1e1e]">
                 <el-form ref="historyCompressionFormRef" :model="settingsForm" :rules="historyCompressionRules"
                     label-position="left" label-width="50%" size="large">
                     <el-form-item prop="defaultHistoryCompressionModelId" style="margin-bottom: 0;">
@@ -287,7 +288,7 @@ const tempModelId = ref(null) // 临时选中的模型 ID
 const settingsForm = reactive({
     defaultChatModelId: null,
     defaultTitleSummaryModelId: null,
-    defaultTitleSummaryPrompt: '',
+    // defaultTitleSummaryPrompt: '', // 已暂时移除，后端使用固定提示词
     defaultTranslationModelId: null,
     defaultTranslationPrompt: '',
     defaultHistoryCompressionModelId: null,
@@ -440,7 +441,16 @@ const filteredModels = computed(() => {
 const filteredProviders = computed(() => {
     if (!models.value.length || !providers.value.length) return []
 
-    const filtered = filteredModels.value
+    let filtered = filteredModels.value
+    
+    // 如果是视觉辅助模型选择，仅显示支持图像输入的模型
+    if (currentDialogType.value === 'visual') {
+        filtered = filtered.filter(model => {
+            const inputCapabilities = model.config?.inputCapabilities
+            return Array.isArray(inputCapabilities) && inputCapabilities.includes('image')
+        })
+    }
+    
     return providers.value.map(provider => ({
         ...provider,
         models: filtered.filter(model => model.providerId === provider.id)
@@ -492,7 +502,7 @@ const loadGlobalSettings = async () => {
         // 填充表单
         settingsForm.defaultChatModelId = response.defaultChatModelId
         settingsForm.defaultTitleSummaryModelId = response.defaultTitleSummaryModelId
-        settingsForm.defaultTitleSummaryPrompt = response.defaultTitleSummaryPrompt
+        // settingsForm.defaultTitleSummaryPrompt = response.defaultTitleSummaryPrompt // 已暂时移除，后端使用固定提示词
         settingsForm.defaultTranslationModelId = response.defaultTranslationModelId
         settingsForm.defaultTranslationPrompt = response.defaultTranslationPrompt
         settingsForm.defaultHistoryCompressionModelId = response.defaultHistoryCompressionModelId
@@ -577,6 +587,24 @@ onMounted(async () => {
     color: var(--el-text-color-secondary);
     font-size: 0.875rem;
     margin-bottom: 0.5rem;
+}
+
+/* 修复 label 区域高度不自适应的问题 */
+:deep(.el-form-item__label) {
+    height: auto !important;
+    line-height: 1.5 !important;
+    padding: 8px 12px 8px 0 !important;
+    display: flex !important;
+    align-items: flex-start !important;
+}
+
+:deep(.el-form-item) {
+    margin-bottom: 24px !important;
+}
+
+/* 卡片内最后一个表单项去除底边距,避免底部留白过多 */
+:deep(.el-form > .el-form-item:last-child) {
+    margin-bottom: 0 !important;
 }
 
 /* 移动端特性标签隐藏 */

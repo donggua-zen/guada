@@ -1,92 +1,69 @@
-import { Injectable } from "@nestjs/common";
-import { GlobalSettingRepository } from "../../common/database/global-setting.repository";
+import { Injectable, Logger } from "@nestjs/common";
+import * as path from 'path';
+import { SettingsStorage } from '../../common/utils/settings-storage.util';
+import {
+  SG_SYSTEM,
+  SG_MODELS,
+  SG_TOOLS,
+} from '../../constants/settings.constants';
 
 @Injectable()
 export class SettingsService {
-  private readonly DEFAULT_KEYS = [
-    "defaultChatModelId",
-    "defaultSearchModelId",
-    "defaultSummaryModelId",
-    "searchPromptContextLength",
-    "defaultTitleSummaryModelId",
-    "defaultTitleSummaryPrompt",
-    "defaultTranslationModelId",
-    "defaultTranslationPrompt",
-    "defaultHistoryCompressionModelId",
-    "defaultHistoryCompressionPrompt",
-    "defaultVisualAssistantModelId",
-  ];
+  private readonly logger = new Logger(SettingsService.name);
 
-  constructor(private settingRepo: GlobalSettingRepository) {}
+  constructor(private readonly storage: SettingsStorage) {}
 
-  async getSettings(userId: string) {
-    const allSettings = await this.settingRepo.findAll(userId);
-    const settingsMap: Record<string, any> = {};
-
-    // 初始化默认值
-    this.DEFAULT_KEYS.forEach((key) => {
-      settingsMap[key] = null;
-    });
-
-    // 覆盖数据库中的值（假设数据库中已统一使用驼峰命名）
-    allSettings.forEach((item) => {
-      // 尝试将字符串值反序列化为对象
-      try {
-        if (item.value && typeof item.value === 'string') {
-          settingsMap[item.key] = JSON.parse(item.value);
-        } else {
-          settingsMap[item.key] = item.value;
-        }
-      } catch {
-        // 如果不是有效的 JSON，直接使用原始值
-        settingsMap[item.key] = item.value;
-      }
-    });
-
-    return settingsMap;
+  /**
+   * 获取分组内所有设置
+   */
+  async getGroupSettings(group: string): Promise<any> {
+    return this.storage.getSettings(group);
   }
 
-  async updateSettings(userId: string, data: Record<string, any>) {
-    // 直接使用驼峰命名存储到数据库
-    const updates = Object.entries(data).map(([key, value]) => ({
-      key,
-      value,
-      userId,
-    }));
+  /**
+   * 更新分组内的一个或多个设置项，并自动保存
+   */
+  async updateGroupSettings(group: string, data: Record<string, any>): Promise<void> {
+    this.storage.updateSettings(group, data);
+  }
 
-    await this.settingRepo.saveBatch(updates);
-    return this.getSettings(userId);
+  /**
+   * 获取单个设置项的值
+   */
+  async getSettingValue(group: string, key: string, defaultValue: any = null): Promise<any> {
+    return this.storage.getSettingValue(group, key, defaultValue);
+  }
+
+  /**
+   * 获取所有设置（合并所有分组，仅用于前端初始化）
+   */
+  async getSettings() {
+    const result: Record<string, any> = {};
+    const groups = [SG_SYSTEM, SG_MODELS, SG_TOOLS];
+    
+    for (const group of groups) {
+      const groupData = await this.getGroupSettings(group);
+      if (group === SG_TOOLS) {
+        result['tools'] = groupData;
+      } else {
+        Object.assign(result, groupData);
+      }
+    }
+    return result;
   }
 
   /**
    * 获取免登录配置状态
    */
   async getAutoLoginEnabled(): Promise<boolean> {
-    try {
-      const setting = await this.settingRepo.findByKey("autoLoginEnabled", null);
-      if (!setting) {
-        return false;
-      }
-      return setting.value === "true";
-    } catch (error) {
-      console.error("获取免登录配置失败:", error);
-      return false;
-    }
+    const val = await this.getSettingValue(SG_SYSTEM, 'autoLoginEnabled', false);
+    return val === true || val === 'true';
   }
 
   /**
    * 设置免登录配置状态
    */
   async setAutoLoginEnabled(enabled: boolean): Promise<void> {
-    try {
-      await this.settingRepo.upsert({
-        key: "autoLoginEnabled",
-        value: enabled ? "true" : "false",
-        userId: null,
-      });
-    } catch (error) {
-      console.error("设置免登录配置失败:", error);
-      throw error;
-    }
+    await this.updateGroupSettings(SG_SYSTEM, { autoLoginEnabled: enabled });
   }
 }

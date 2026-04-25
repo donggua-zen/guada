@@ -6,6 +6,7 @@ import {
   PaginatedResponse,
 } from "../../common/types/pagination";
 import { UrlService } from "../../common/services/url.service";
+import { SettingsStorage } from "../../common/utils/settings-storage.util";
 
 @Injectable()
 export class CharacterService {
@@ -13,29 +14,30 @@ export class CharacterService {
     private characterRepo: CharacterRepository,
     private groupRepo: CharacterGroupRepository,
     private urlService: UrlService,
+    private settingsStorage: SettingsStorage,
   ) { }
 
   // --- Group Management ---
-  async getGroupsByUser(userId: string) {
-    return this.groupRepo.findByUserId(userId);
+  async getGroups() {
+    return this.groupRepo.findAll();
   }
 
   async createGroup(userId: string, data: any) {
     return this.groupRepo.create({ ...data, userId });
   }
 
-  async updateGroup(groupId: string, userId: string, data: any) {
+  async updateGroup(groupId: string, data: any) {
     const group = await this.groupRepo.findById(groupId);
-    if (!group || group.userId !== userId) {
-      throw new Error("Group not found or unauthorized");
+    if (!group) {
+      throw new Error("Group not found");
     }
     return this.groupRepo.update(groupId, data);
   }
 
-  async deleteGroup(groupId: string, userId: string) {
+  async deleteGroup(groupId: string) {
     const group = await this.groupRepo.findById(groupId);
-    if (!group || group.userId !== userId) {
-      throw new Error("Group not found or unauthorized");
+    if (!group) {
+      throw new Error("Group not found");
     }
     // 自动将该分组下的所有助手 groupId 置为 null
     await this.characterRepo.updateManyByGroupId(groupId, null);
@@ -43,14 +45,12 @@ export class CharacterService {
   }
 
   // --- Character Management ---
-  async getCharactersByUser(
-    userId: string,
+  async getCharacters(
     skip: number = 0,
     limit: number = 20,
     groupId?: string,
   ): Promise<PaginatedResponse<any>> {
-    const { items, total } = await this.characterRepo.findByUserId(
-      userId,
+    const { items, total } = await this.characterRepo.findAll(
       skip,
       limit,
       groupId,
@@ -61,16 +61,11 @@ export class CharacterService {
     return createPaginatedResponse(transformedItems, total, { skip, limit });
   }
 
-  async getCharacterById(characterId: string, userId: string) {
+  async getCharacterById(characterId: string) {
     const character = await this.characterRepo.findById(characterId);
 
     if (!character) {
       throw new Error("Character not found");
-    }
-
-    // 验证权限：只有所有者或公开角色可以访问
-    if (character.userId !== userId && !character.isPublic) {
-      throw new Error("Character not found or unauthorized");
     }
 
     // 转换 URL
@@ -93,10 +88,10 @@ export class CharacterService {
     return this.urlService.transformUrls(character);
   }
 
-  async updateCharacter(characterId: string, userId: string, data: any) {
+  async updateCharacter(characterId: string, data: any) {
     const character = await this.characterRepo.findById(characterId);
-    if (!character || character.userId !== userId) {
-      throw new Error("Character not found or unauthorized");
+    if (!character) {
+      throw new Error("Character not found");
     }
 
     // 过滤掉嵌套的 model 对象，只保留 modelId
@@ -116,15 +111,22 @@ export class CharacterService {
     return this.urlService.transformUrls(updatedCharacter);
   }
 
-  async deleteCharacter(characterId: string, userId: string) {
+  async deleteCharacter(characterId: string) {
     const character = await this.characterRepo.findById(characterId);
-    if (!character || character.userId !== userId) {
-      throw new Error("Character not found or unauthorized");
+    if (!character) {
+      throw new Error("Character not found");
     }
     return this.characterRepo.delete(characterId);
   }
 
-  async uploadAvatar(characterId: string, userId: string, fileUrl: string) {
-    return this.updateCharacter(characterId, userId, { avatarUrl: fileUrl });
+  async uploadAvatar(characterId: string, fileUrl: string) {
+    return this.updateCharacter(characterId, { avatarUrl: fileUrl });
+  }
+
+  /**
+   * 获取全局工具设置
+   */
+  async getGlobalToolsSettings(): Promise<any> {
+    return this.settingsStorage.getSettings('tools');
   }
 }

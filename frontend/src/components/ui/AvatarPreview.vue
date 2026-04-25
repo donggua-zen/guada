@@ -1,16 +1,10 @@
 <template>
     <div class="avatar-upload-container flex flex-col items-center justify-center">
-        <div class="avatar-preview w-20 h-20 cursor-pointer" @click="triggerAvatarUpload">
-            <Avatar :src="previewUrl" :type="type" :name="name"></Avatar>
-        </div>
-        <div class="avatar-upload-actions mt-3">
-            <el-button @click="triggerAvatarUpload" round :border="false" plain type="primary" size="small">
-                <template #icon>
-                    <FileUploadOutlined />
-                </template>
-                更换头像
-            </el-button>
-        </div>
+        <el-tooltip content="点击可更换头像" placement="top">
+            <div class="avatar-preview w-20 h-20 cursor-pointer hover:opacity-80 transition-opacity" @click="triggerAvatarUpload">
+                <Avatar :src="previewUrl" :type="type" :name="name"></Avatar>
+            </div>
+        </el-tooltip>
         <input ref="avatarInput" type="file" accept="image/*" style="display: none" @change="handleAvatarChanged">
     </div>
     <!-- 头像裁剪模态框 -->
@@ -41,7 +35,6 @@ import { Cropper } from 'vue-advanced-cropper'
 import 'vue-advanced-cropper/dist/style.css'
 // @ts-ignore - icons 类型缺失
 import {
-    FileUploadOutlined,
 } from '@vicons/material'
 
 const showCropModal = ref(false)

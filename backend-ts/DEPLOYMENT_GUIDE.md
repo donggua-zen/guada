@@ -1,4 +1,4 @@
-# AI Chat 项目 - 编译、启动与部署完整指南
+# GuaDa 项目 - 编译、启动与部署完整指南
 
 **最后更新**: 2026-04-05  
 **项目结构**: 前端 (Vue 3 + Vite) + 后端 (NestJS + TypeScript)
@@ -567,7 +567,7 @@ UPLOAD_DIR=./static/uploads
 
 ```env
 VITE_API_BASE_URL=/api/v1
-VITE_APP_TITLE=AI Chat
+VITE_APP_TITLE=GuaDa
 ```
 
 ---
@@ -706,4 +706,4 @@ npm run build
 ---
 
 **最后更新**: 2026-04-05  
-**维护者**: AI Chat Team
+**维护者**: GuaDa Team

@@ -1,5 +1,4 @@
-import { Module, forwardRef } from "@nestjs/common";
-import { ChatModule } from "../chat/chat.module";
+import { Module } from "@nestjs/common";
 import { VectorDbModule } from "../../common/vector-db/vector-db.module";
 import { ToolOrchestrator } from "./tool-orchestrator.service";
 import { ToolContextFactory } from "./tool-context";
@@ -16,7 +15,7 @@ import { FileRepository } from "../../common/database/file.repository";
 import { PrismaService } from "../../common/database/prisma.service";
 
 @Module({
-  imports: [forwardRef(() => ChatModule), VectorDbModule],
+  imports: [VectorDbModule],
   providers: [
     ToolOrchestrator,
     ToolContextFactory,
