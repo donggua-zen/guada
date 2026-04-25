@@ -1,6 +1,6 @@
-# AI Chat Web Application
+# GuaDa Web Application
 
-AI Chat 是一个现代化的聊天应用前端界面，基于 Vue 3 和 Vite 构建，专为与 AI 模型交互而设计。它提供了丰富的功能，包括会话管理、角色设定、模型配置等。
+GuaDa 是一个现代化的聊天应用前端界面，基于 Vue 3 和 Vite 构建，专为与 AI 模型交互而设计。它提供了丰富的功能，包括会话管理、角色设定、模型配置等。
 
 ![Vue.js](https://img.shields.io/badge/Vue.js-3.x-4FC08D?style=flat&logo=vue.js&logoColor=white)
 ![Vite](https://img.shields.io/badge/Vite-7.x-646CFF?style=flat&logo=vite&logoColor=white)

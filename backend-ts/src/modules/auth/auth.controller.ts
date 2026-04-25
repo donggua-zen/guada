@@ -8,26 +8,16 @@ export class AuthController {
 
   @Post("login")
   async login(
-    @Body() body: { type?: string; username?: string; password?: string },
+    @Body() body: { username?: string; password?: string },
   ) {
-    const { type, username, password } = body;
+    const { username, password } = body;
 
     // 验证必填字段
-    if (!type || !username || !password) {
-      throw new BadRequestException("Type, username and password are required");
+    if (!username || !password) {
+      throw new BadRequestException("Username and password are required");
     }
 
-    // 根据 type 选择登录方式
-    let user;
-    if (type === "phone") {
-      user = await this.authService.validateUserByPhone(username, password);
-    } else if (type === "email") {
-      user = await this.authService.validateUserByEmail(username, password);
-    } else {
-      throw new BadRequestException(
-        'Invalid login type. Use "phone" or "email"',
-      );
-    }
+    const user = await this.authService.validateUserByUsername(username, password);
 
     if (!user) {
       throw new BadRequestException("Invalid credentials");
@@ -38,14 +28,14 @@ export class AuthController {
 
   @Post("register")
   async register(
-    @Body() body: { email?: string; password?: string; nickname?: string },
+    @Body() body: { username?: string; password?: string; nickname?: string },
   ) {
     // 验证必填字段
-    if (!body.email || !body.password) {
-      throw new BadRequestException("Email and password are required");
+    if (!body.username || !body.password) {
+      throw new BadRequestException("Username and password are required");
     }
 
-    return this.authService.register(body.email, body.password, body.nickname);
+    return this.authService.register(body.username, body.password, body.nickname);
   }
 
   /**

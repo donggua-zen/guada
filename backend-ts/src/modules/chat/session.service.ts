@@ -3,9 +3,9 @@ import { SessionRepository } from "../../common/database/session.repository";
 import { CharacterRepository } from "../../common/database/character.repository";
 import { MessageRepository } from "../../common/database/message.repository";
 import { ModelRepository } from "../../common/database/model.repository";
-import { GlobalSettingRepository } from "../../common/database/global-setting.repository";
+import { SettingsStorage } from "../../common/utils/settings-storage.util";
 import { SessionContextStateRepository } from "../../common/database/session-context-state.repository";
-import { LLMService } from "./llm.service";
+import { LLMService } from "../llm-core/llm.service";
 import { ContextManagerService } from "./context-manager.service";
 import { TokenizerService } from "../../common/utils/tokenizer.service";
 import { ToolOrchestrator } from "../tools/tool-orchestrator.service";
@@ -16,6 +16,7 @@ import {
 } from "../../common/types/pagination";
 import { ToolResultCleaner, CleaningStrategy } from "./tool-result-cleaner.service";
 import { UrlService } from "../../common/services/url.service";
+import { SG_MODELS, SK_MOD_CHAT, SK_MOD_TITLE_MODEL, SK_MOD_TITLE_PROMPT, SK_MOD_COMPRESS_MODEL } from "../../constants/settings.constants";
 
 @Injectable()
 export class SessionService {
@@ -26,7 +27,7 @@ export class SessionService {
     private characterRepo: CharacterRepository,
     private messageRepo: MessageRepository,
     private modelRepo: ModelRepository,
-    private globalSettingRepo: GlobalSettingRepository,
+    private settingsStorage: SettingsStorage,
     private contextStateRepo: SessionContextStateRepository,
     private llmService: LLMService,
     private contextManager: ContextManagerService,
@@ -153,14 +154,10 @@ export class SessionService {
 
     // 如果角色和会话均未设置模型，尝试使用默认对话模型
     if (!finalModelId) {
-      const defaultChatModelSetting = await this.globalSettingRepo.findByKey(
-        "defaultChatModelId",
-        userId,
+      finalModelId = this.settingsStorage.getSettingValue(
+        SG_MODELS,
+        SK_MOD_CHAT,
       );
-      if (defaultChatModelSetting && defaultChatModelSetting.value) {
-        finalModelId = defaultChatModelSetting.value;
-      }
-      // 如果默认对话模型也未设置或已失效，则 finalModelId 保持为 null/undefined
     }
 
     // 继承角色配置
@@ -255,9 +252,9 @@ export class SessionService {
       }
 
       // 从全局设置中获取标题总结模型
-      const titleModelId = await this.getGlobalSetting(
-        "defaultTitleSummaryModelId",
-        userId,
+      const titleModelId = this.settingsStorage.getSettingValue(
+        SG_MODELS,
+        SK_MOD_TITLE_MODEL,
       );
 
       if (!titleModelId) {
@@ -289,11 +286,13 @@ export class SessionService {
         };
       }
 
-      // 获取全局设置中的标题总结提示词
-      const titlePrompt = await this.getGlobalSetting(
-        "defaultTitleSummaryPrompt",
-        "请根据以下对话内容，生成一个简洁、准确且具有描述性的会话标题（不超过 20 个字）。直接返回标题即可，不需要其他解释。",
-      );
+      // 获取全局设置中的标题总结提示词（已暂时移除用户配置，使用固定提示词）
+      const titlePrompt = "请根据以下对话内容，生成一个简洁、准确且具有描述性的会话标题（不超过 20 个字）。直接返回标题即可，不需要其他解释。";
+      // const titlePrompt = this.settingsStorage.getSettingValue(
+      //   SG_MODELS,
+      //   SK_MOD_TITLE_PROMPT,
+      //   "请根据以下对话内容，生成一个简洁、准确且具有描述性的会话标题（不超过 20 个字）。直接返回标题即可，不需要其他解释。",
+      // );
 
       // 验证模型是否存在
       const model = await this.modelRepo.findById(titleModelId);
@@ -411,9 +410,9 @@ export class SessionService {
       }
 
       // 2. 获取全局设置中的历史压缩模型
-      const compressionModelId = await this.getGlobalSetting(
-        "defaultHistoryCompressionModelId",
-        userId,
+      const compressionModelId = this.settingsStorage.getSettingValue(
+        SG_MODELS,
+        SK_MOD_COMPRESS_MODEL,
       );
 
       if (!compressionModelId) {
@@ -596,13 +595,10 @@ export class SessionService {
     // 2. 确定使用的模型（优先使用会话绑定的模型，否则使用默认模型）
     let modelId = session.modelId;
     if (!modelId) {
-      const defaultModelSetting = await this.globalSettingRepo.findByKey(
-        "defaultChatModelId",
-        userId,
+      modelId = this.settingsStorage.getSettingValue(
+        SG_MODELS,
+        SK_MOD_CHAT,
       );
-      if (defaultModelSetting && defaultModelSetting.value) {
-        modelId = defaultModelSetting.value;
-      }
     }
 
     // 3. 获取模型配置以确定上下文窗口大小
@@ -648,15 +644,4 @@ export class SessionService {
 
 
 
-  /**
-   * 获取全局设置值（优先用户设置，回退到全局默认）
-   */
-  private async getGlobalSetting(
-    key: string,
-    userId: string,
-    defaultValue: any = null,
-  ): Promise<any> {
-    const setting = await this.globalSettingRepo.findByKey(key, userId);
-    return setting ? setting.value : defaultValue;
-  }
 }

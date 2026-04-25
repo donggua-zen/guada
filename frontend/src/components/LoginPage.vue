@@ -1,22 +1,19 @@
 <template>
-  <div class="login-container">
-    <div class="login-card">
-      <div class="login-header">
-        <div class="logo-area">
-          <el-icon class="logo-icon">
-            <LoginIcon />
-          </el-icon>
-          <h1 class="app-title">AI Chat</h1>
+  <div class="flex-1 flex items-center justify-center bg-surface p-5">
+    <div class="w-full max-w-md p-10 transition-all duration-300 ease-in-out">
+      <div class="text-center mb-8">
+        <div class="flex items-center justify-center gap-3 mb-3"> 
+          <h1 class="text-4xl font-semibold text-text m-0">GuaDa</h1>
         </div>
-        <p class="app-subtitle">欢迎回来，请登录您的账户</p>
+        <p class="text-sm text-text-gray m-0">欢迎回来，请登录您的账户</p>
       </div>
 
-      <el-form :model="form" :rules="rules" ref="formRef" label-position="top" class="login-form">
-        <el-form-item prop="email">
-          <el-input v-model="form.email" placeholder="邮箱地址" size="large" clearable>
+      <el-form :model="form" :rules="rules" ref="formRef" label-position="top" class="flex flex-col gap-5" @keyup.enter="handleLogin">
+        <el-form-item prop="username">
+          <el-input v-model="form.username" placeholder="用户名" size="large" clearable>
             <template #prefix>
               <el-icon class="text-gray-400">
-                <MailIcon />
+                <UserIcon />
               </el-icon>
             </template>
           </el-input>
@@ -32,11 +29,11 @@
           </el-input>
         </el-form-item>
 
-        <div class="form-options">
+        <div class="flex justify-between items-center">
           <el-checkbox v-model="rememberMe">记住我</el-checkbox>
         </div>
 
-        <el-button type="primary" size="large" :loading="loading" @click="handleLogin" class="login-btn">
+        <el-button type="primary" size="large" :loading="loading" @click="handleLogin" class="mt-2 h-11 text-base font-medium rounded-xl">
           {{ loading ? '登录中...' : '登 录' }}
         </el-button>
       </el-form>
@@ -48,7 +45,7 @@
 <script setup lang="ts">
 import { ref, reactive } from 'vue'
 import {
-  MailOutlineOutlined as MailIcon,
+  PersonOutlined as UserIcon,
   LockOutlined as LockIcon,
   LogInOutlined as LoginIcon
 } from '@vicons/material'
@@ -80,12 +77,12 @@ const loginType = 'email'
 
 // 表单数据 - 类型化
 interface LoginForm {
-  email: string;
+  username: string;
   password: string;
 }
 
 const form = reactive<LoginForm>({
-  email: '',
+  username: '',
   password: ''
 })
 
@@ -97,17 +94,17 @@ const loading = ref(false)
 
 // 表单验证规则 - 类型化
 const rules = reactive({
-  email: {
+  username: {
     required: true,
     trigger: ['input', 'blur'],
     validator: (rule: any, value: string, callback: any) => {
       if (!value) {
-        callback(new Error('请输入邮箱'))
+        callback(new Error('请输入用户名'))
         return
       }
-      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
-      if (!emailRegex.test(value)) {
-        callback(new Error('请输入正确的邮箱'))
+      const usernameRegex = /^[a-zA-Z0-9_]{3,20}$/
+      if (!usernameRegex.test(value)) {
+        callback(new Error('用户名只能包含字母、数字和下划线，长度为3-20位'))
         return
       }
       callback()
@@ -129,10 +126,10 @@ const handleLogin = async (): Promise<void> => {
     if (valid) {
       loading.value = true
       try {
-        // 构建邮箱登录参数
+        // 构建登录参数
         const loginData = {
           type: 'email' as const,
-          username: form.email,
+          username: form.username,
           password: form.password,
           rememberMe: rememberMe.value  // 传递记住我状态
         }
@@ -153,96 +150,17 @@ const handleLogin = async (): Promise<void> => {
 </script>
 
 <style scoped>
-.login-container {
-  min-height: 100vh;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background-color: var(--color-surface);
-  padding: 20px;
-}
-
-.login-card {
-  width: 100%;
-  max-width: 400px;
-  background: rgba(255, 255, 255, 0.85);
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
-  border-radius: 20px;
-  padding: 40px;
-  box-shadow:
-    0 4px 6px -1px rgba(0, 0, 0, 0.05),
-    0 2px 4px -1px rgba(0, 0, 0, 0.03),
-    0 0 0 1px rgba(0, 0, 0, 0.05);
-  transition: all 0.3s ease;
-}
-
-.dark .login-card {
-  background: rgba(30, 30, 30, 0.85);
-  box-shadow:
-    0 4px 6px -1px rgba(0, 0, 0, 0.2),
-    0 2px 4px -1px rgba(0, 0, 0, 0.1),
-    0 0 0 1px rgba(255, 255, 255, 0.05);
-}
-
-.login-header {
-  text-align: center;
-  margin-bottom: 32px;
-}
-
-.logo-area {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 12px;
-  margin-bottom: 12px;
-}
-
-.logo-icon {
-  font-size: 28px;
-  color: var(--color-primary);
-}
-
-.app-title {
-  font-size: 24px;
-  font-weight: 600;
-  color: var(--color-text);
-  margin: 0;
-}
-
-.app-subtitle {
-  font-size: 14px;
-  color: var(--color-text-gray);
-  margin: 0;
-}
-
-.login-form {
-  display: flex;
-  flex-direction: column;
-  gap: 20px;
-}
-
-.form-options {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
-
-.login-btn {
-  margin-top: 8px;
-  height: 44px;
-  font-size: 16px;
-  font-weight: 500;
-  border-radius: 10px;
-}
-
 /* Element Plus 深度样式定制 */
 :deep(.el-input__wrapper) {
   box-shadow: 0 0 0 1px var(--color-border) inset;
   border-radius: 10px;
-  background-color: transparent;
+  background-color: #ffffff;
   transition: all 0.2s ease;
   padding: 4px 12px;
+}
+
+.dark :deep(.el-input__wrapper) {
+  background-color: #2a2a2a;
 }
 
 :deep(.el-input.is-focus .el-input__wrapper) {

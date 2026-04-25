@@ -7,11 +7,41 @@ import { ConfigService } from "@nestjs/config";
  */
 @Injectable()
 export class UrlService {
-  private readonly baseUrl: string;
+  private baseUrl: string;
+  private autoMode: boolean = false;
 
   constructor(private configService: ConfigService) {
-    // 从环境变量读取基础 URL，如果未设置则使用空字符串（相对路径）
-    this.baseUrl = this.configService.get<string>("BASE_URL") || "";
+    const configuredUrl = this.configService.get<string>("BASE_URL") || "";
+    
+    // 检测是否为自动模式
+    if (configuredUrl === "__auto__") {
+      this.autoMode = true;
+      this.baseUrl = "";
+    } else {
+      this.baseUrl = configuredUrl;
+    }
+  }
+
+  /**
+   * 动态设置基础 URL（用于 Electron 等动态端口场景）
+   * @param url 完整的基础 URL（如 http://localhost:3000）
+   */
+  setBaseUrl(url: string): void {
+    this.baseUrl = url;
+  }
+
+  /**
+   * 获取当前基础 URL
+   */
+  getBaseUrl(): string {
+    return this.baseUrl;
+  }
+
+  /**
+   * 检查是否处于自动模式
+   */
+  isAutoMode(): boolean {
+    return this.autoMode;
   }
 
   /**

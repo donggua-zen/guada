@@ -1,6 +1,7 @@
 import { NestFactory } from "@nestjs/core";
 import { AppModule } from "./app.module";
 import { AllExceptionsFilter } from "./common/filters/all-exceptions.filter";
+import { UrlService } from "./common/services/url.service";
 import * as express from "express";
 import * as path from "path";
 
@@ -30,9 +31,28 @@ async function bootstrap() {
   app.useGlobalFilters(new AllExceptionsFilter());
   app.enableCors(); // Enable CORS for frontend integration
   
-  // Electron 环境下使用固定端口 3000，避免动态端口的竞态问题
-  const port = 3000;
+  // 支持通过环境变量 PORT 指定端口，若未指定则使用 0 让系统自动分配可用端口
+  const port = process.env.PORT ? parseInt(process.env.PORT, 10) : 0;
   await app.listen(port);
-  console.log(`Application is running on: http://localhost:${port}`);
+  const address = app.getHttpServer().address();
+  const actualPort = typeof address === 'string' ? address.split(':').pop() : address.port;
+  
+  // 如果是自动模式，动态设置 BASE_URL
+  const urlService = app.get(UrlService);
+  if (urlService.isAutoMode()) {
+    const baseUrl = `http://localhost:${actualPort}`;
+    urlService.setBaseUrl(baseUrl);
+    console.log(`🔗 BASE_URL 已动态设置为: ${baseUrl}`);
+  }
+  
+  console.log(`Application is running on: http://localhost:${actualPort}`);
+  
+  // 如果是在 fork/child_process 环境中，通过 IPC 向父进程发送端口信息
+  if (process.send) {
+    console.log(`📤 正在通过 IPC 发送端口: ${actualPort}`);
+    process.send({ type: 'PORT_READY', port: actualPort });
+  } else {
+    console.log('⚠️  process.send 不可用，当前不在 IPC 环境中');
+  }
 }
 bootstrap();

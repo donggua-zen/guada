@@ -15,6 +15,13 @@ export class PrismaService extends PrismaClient implements OnModuleInit {
 
   async onModuleInit() {
     await this.$connect();
+    
+    // 启用 SQLite 外键约束（SQLite 默认关闭外键检查）
+    try {
+      await this.$executeRawUnsafe('PRAGMA foreign_keys = ON;');
+    } catch (error) {
+      console.error('启用 SQLite 外键约束失败:', error);
+    }
   }
 
   async onModuleDestroy() {

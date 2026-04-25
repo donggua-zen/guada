@@ -38,6 +38,12 @@
       </template>
     </SidebarLayout>
 
+    <!-- 右侧大纲导航 -->
+    <ChatOutline v-if="currentSession && sessions.length > 0" 
+      :messages="chatPanelRef?.activeMessages || []"
+      :chat-panel-ref="chatPanelRef" 
+      @scroll-to-message="handleScrollToMessage" />
+
     <!-- 右侧记忆管理窗格 -->
     <transition name="slide-right">
       <div v-if="memoPanelVisible && currentSession" class="border-l border-gray-200 bg-white w-96 shrink-0"
@@ -72,6 +78,7 @@ const isMobile = breakpoints.smaller('md') // md = 768px
 const ChatPanel = defineAsyncComponent(() => import("@/components/ChatPanel.vue"));
 const CreateSessionChatPanel = defineAsyncComponent(() => import("@/components/CreateSessionChatPanel.vue"));
 const MemoPanel = defineAsyncComponent(() => import("@/components/MemoPanel.vue"));
+const ChatOutline = defineAsyncComponent(() => import("@/components/ChatOutline.vue"));
 
 // 组合式函数
 const { confirm, toast, prompt } = usePopup();
@@ -93,7 +100,7 @@ const sessionSettingsModalVisible = ref(false);
 // 控制侧边栏的显示状态，使用本地存储保持用户偏好
 const sidebarVisible = useStorage('sidebarVisible', true);
 // 控制记忆管理窗格的显示状态，调试阶段默认打开
-const memoPanelVisible = useStorage('memoPanelVisible', true);
+const memoPanelVisible = useStorage('memoPanelVisible', false);
 
 const isLoading = ref(true);
 
@@ -288,7 +295,6 @@ const handleCreateSessionWithMessage = async (session: any, inputMessage: any) =
     const response = await apiService.createSession(session)
     // 刷新对话列表（重新加载第一页）
     await loadSessions();
-    console.log('Created session:', session, inputMessage);
     if (inputMessage) {
       inputMessage.isWaiting = true
       sessionStore.setInputMessage(response.id, inputMessage)
@@ -459,6 +465,16 @@ function exportChat() {
   } catch (error) {
     console.error("导出聊天记录失败:", error);
     toast.error("导出失败");
+  }
+}
+
+/**
+ * 处理滚动到指定消息
+ */
+function handleScrollToMessage(messageId: string) {
+  const chatPanel = chatPanelRef.value as any;
+  if (chatPanel && chatPanel.scrollToMessage) {
+    chatPanel.scrollToMessage(messageId);
   }
 }
 

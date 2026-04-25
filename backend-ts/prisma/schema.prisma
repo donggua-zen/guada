@@ -106,8 +106,7 @@ model User {
   avatarUrl      String?         @map("avatar_url")
   parentId       String?         @map("parent_id")
   nickname       String?
-  phone          String?         @unique
-  email          String?         @unique
+  username       String          @unique
   passwordHash   String          @map("password_hash")
   createdAt      DateTime        @default(now()) @map("created_at")
   updatedAt      DateTime        @updatedAt @map("updated_at")

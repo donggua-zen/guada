@@ -178,6 +178,7 @@ export class ToolOrchestrator {
 
   async getLocalToolsList(userId: string, settings: any): Promise<ToolMetadata[]> {
     const toolsList: ToolMetadata[] = [];
+    const globalToolsConfig = settings?.tools;
 
     for (const [namespace, provider] of this.providers.entries()) {
       const metadata = provider.getMetadata();
@@ -186,8 +187,21 @@ export class ToolOrchestrator {
         continue;
       }
 
-      const providerConfig = settings?.tools || {};
-      const isEnabled = providerConfig[namespace] !== false;
+      // 判断该工具是否启用
+      let isEnabled = false;
+      if (globalToolsConfig === true) {
+        // 全局启用所有工具
+        isEnabled = true;
+      } else if (globalToolsConfig === false) {
+        // 全局禁用所有工具
+        isEnabled = false;
+      } else if (typeof globalToolsConfig === 'object') {
+        // 单独配置：优先使用 namespace 配置，否则默认为 true
+        isEnabled = globalToolsConfig[namespace] !== false;
+      } else {
+        // 默认启用
+        isEnabled = true;
+      }
 
       let tools: any[] = [];
       try {

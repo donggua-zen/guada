@@ -118,6 +118,7 @@ const {
 } = useSessionChat(sessionStore, apiService)
 
 // 响应式数据
+const messagesContainerRef = ref<HTMLElement | null>(null);
 const scrollContainerRef = ref<any>(null);
 const compressionRatio = ref(50);
 const minRetainedTurns = ref(3);
@@ -520,8 +521,34 @@ const toggleDeepThinking = () => {
 defineExpose({
   sendMessage: handleSendMessage,
   loadMessages,
-  activeMessages
+  activeMessages,
+  scrollToMessage,
+  getScrollElement: () => scrollContainerRef.value?.getScrollElement?.() || null  // 提供获取滚动元素的方法
 })
+
+/**
+ * 滚动到指定消息
+ */
+function scrollToMessage(messageId: string) {
+  // 使用外层容器作为滚动上下文
+  const container = messagesContainerRef.value
+  
+  if (!container) {
+    console.warn('[ChatPanel] 未找到滚动容器')
+    return
+  }
+
+  // 在容器中查找目标消息元素
+  const targetElement = container.querySelector(`[data-message-id="${messageId}"]`)
+  if (targetElement) {
+    targetElement.scrollIntoView({
+      behavior: 'smooth',
+      block: 'start'  // 滚动到视口顶部
+    })
+  } else {
+    console.warn(`[ChatPanel] 未找到消息元素: ${messageId}`)
+  }
+}
 
 </script>
 

@@ -11,7 +11,7 @@ import {
   ToolCallResponse,
   ToolProviderMetadata,
 } from "../interfaces/tool-provider.interface";
-import { InternalToolDefinition } from "../../chat/types/llm.types";
+import { InternalToolDefinition } from "../../llm-core/types/llm.types";
 
 @Injectable()
 export class KnowledgeBaseToolProvider implements IToolProvider {
@@ -168,8 +168,7 @@ export class KnowledgeBaseToolProvider implements IToolProvider {
 **使用建议**:
 1. **先搜索再查看**: 先用 \`search\` 找到相关内容，如有必要再用 \`get_chunks\` 查看完整分块
 2. **注意分页**: 使用 \`get_chunks\` 时，每次最多获取 10 个分块，可通过调整 \`chunk_index\` 实现分页
-3. **权限验证**: 所有工具都会自动验证用户权限，确保只能访问自己的知识库
-4. **错误处理**: 如果返回错误信息，请检查参数是否正确、知识库/文件是否存在
+3. **错误处理**: 如果返回错误信息，请检查参数是否正确、知识库/文件是否存在
 `;
       promptParts.push(toolInstructions);
 
@@ -185,15 +184,11 @@ export class KnowledgeBaseToolProvider implements IToolProvider {
     injectParams: any,
   ): Promise<string> {
     const { knowledge_base_id, query, top_k = 5, filter_file_id } = args;
-    const userId = injectParams.user_id;
 
-    // 验证知识库权限
+    // 验证知识库是否存在
     const kb = await this.kbRepo.findById(knowledge_base_id);
     if (!kb) {
       throw new Error("知识库不存在");
-    }
-    if (kb.userId !== userId) {
-      throw new Error("无权访问该知识库");
     }
 
     // 获取向量模型配置
@@ -250,15 +245,11 @@ export class KnowledgeBaseToolProvider implements IToolProvider {
     injectParams: any,
   ): Promise<string> {
     const { knowledge_base_id, skip = 0, limit = 50 } = args;
-    const userId = injectParams.user_id;
 
-    // 验证知识库权限
+    // 验证知识库是否存在
     const kb = await this.kbRepo.findById(knowledge_base_id);
     if (!kb) {
       throw new Error("知识库不存在");
-    }
-    if (kb.userId !== userId) {
-      throw new Error("无权访问该知识库");
     }
 
     // 获取文件列表

@@ -1,8 +1,24 @@
 <template>
-    <el-dialog v-model="visible" :close-on-click-modal="false" style="width: 600px;max-width: 90vw;"
-        title="角色设置">
-        <div class="max-h-80vh overflow-y-auto">
-            <CharacterSettingPanel :data="currentCharacter" @update:data="handleSave" :simple="true" />
+    <el-dialog 
+        v-model="visible" 
+        :close-on-click-modal="false" 
+        width="800px"
+        :style="{ maxHeight: '75vh' }"
+        class="character-setting-dialog"
+        destroy-on-close
+    >
+        <template #header>
+            <div class="dialog-header">
+                <span class="dialog-title">{{ currentCharacter?.id ? '编辑角色' : '新建角色' }}</span>
+            </div>
+        </template>
+        
+        <div class="dialog-content">
+            <CharacterSettingPanel 
+                :data="currentCharacter" 
+                @update:data="handleSave" 
+                :simple="false" 
+            />
         </div>
     </el-dialog>
 </template>
@@ -37,32 +53,13 @@ const visible = ref(false)
 const loading = ref(false)
 const currentCharacter = ref<any>({})
 
-// 抽屉宽度响应式
-const drawerWidth = ref<number | string>(600)
 
 
 
-// 响应式调整抽屉宽度
-const updateDrawerWidth = (): void => {
-    const width = window.innerWidth
-    if (width < 768) {
-        drawerWidth.value = '90%'
-    } else if (width < 1200) {
-        drawerWidth.value = 400
-    } else {
-        drawerWidth.value = 400
-    }
-}
 
 // 监听props.show变化
 watch(() => props.show, (newVal) => {
     visible.value = newVal
-    if (newVal) {
-        // 重置表单数据
-        // Object.assign(characterForm, props.character)
-        // 更新抽屉宽度
-        updateDrawerWidth()
-    }
 }, { immediate: true })
 
 // 监听visible变化
@@ -85,11 +82,7 @@ watch(() => props.characterId, async (newVal) => {
 
 // 生命周期
 onMounted(() => {
-    window.addEventListener('resize', updateDrawerWidth)
-})
-
-onUnmounted(() => {
-    window.removeEventListener('resize', updateDrawerWidth)
+    // 无需额外初始化
 })
 
 // 方法 - 类型化
@@ -130,34 +123,56 @@ const handleSave = async (data: any): Promise<void> => {
 </script>
 
 <style scoped>
-.drawer-header {
+.dialog-header {
     display: flex;
-    justify-content: space-between;
     align-items: center;
     width: 100%;
 }
 
-.drawer-content {
-    /* height: calc(100vh - 140px); */
+.dialog-title {
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--el-text-color-primary);
+}
+
+.dialog-content {
+    height: calc(75vh - 120px);
     overflow-y: auto;
     padding: 0 4px;
 }
 
-.drawer-footer {
-    display: flex;
-    justify-content: flex-end;
-    gap: 12px;
-    padding-top: 16px;
+/* 优化弹窗样式 */
+.character-setting-dialog :deep(.el-dialog__body) {
+    padding: 0;
+    height: calc(75vh - 60px);
+    overflow: hidden;
 }
 
+.character-setting-dialog :deep(.el-dialog__header) {
+    margin-right: 0;
+    padding: 16px 20px;
+    border-bottom: 1px solid var(--el-border-color-light);
+}
 
+.character-setting-dialog :deep(.el-dialog__footer) {
+    padding: 0;
+}
 
+/* 滚动条美化 */
+.dialog-content::-webkit-scrollbar {
+    width: 6px;
+}
 
-/* 修改 .drawer-content 的高度计算 */
-.drawer-content {
-    /* height: calc(100vh - 180px); */
-    /* 调整这个值 */
-    /* overflow-y: auto; */
-    padding: 0 4px;
+.dialog-content::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.dialog-content::-webkit-scrollbar-thumb {
+    background-color: rgba(0, 0, 0, 0.2);
+    border-radius: 3px;
+}
+
+.dark .dialog-content::-webkit-scrollbar-thumb {
+    background-color: rgba(255, 255, 255, 0.2);
 }
 </style>

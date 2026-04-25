@@ -29,6 +29,11 @@ NProgress.configure({
 
 import { apiService } from '@/services/ApiService'
 
+// 在 Electron 环境下初始化后端地址
+if (isElectron) {
+  apiService.initBackendUrl().catch(err => console.error('Failed to init backend URL:', err))
+}
+
 const routes = [
     {
         path: '/',
@@ -90,12 +95,6 @@ const routes = [
         component: () => import('./components/PasswordPage.vue')
     },
     {
-        path: '/setup',
-        name: 'SetupWizard',
-        meta: { title: '首次运行设置' },
-        component: () => import('./components/SetupWizard.vue')
-    },
-    {
         path: '/test',
         name: 'Test',
         meta: { title: 'UI 测试' },
@@ -109,6 +108,7 @@ const routes = [
 const router = createRouter({
     history: isElectron ? createWebHashHistory() : createWebHistory(),
     routes
+
 });
 
 router.beforeEach(async (to, from, next) => {
@@ -120,34 +120,6 @@ router.beforeEach(async (to, from, next) => {
     console.log('Navigating to:', to.path)
 
     const authStore = useAuthStore()
-
-    // 1. 检查本地是否已完成过设置向导
-    const hasCompletedSetup = localStorage.getItem('hasCompletedSetup') === 'true'
-
-    // 2. 如果未完成且不在向导页，则需要进一步检查
-    if (!hasCompletedSetup && to.path !== '/setup') {
-        // 先确保已登录（自动登录逻辑在 AuthGuard 处理）
-        const isAuthenticated = await authStore.checkAuth()
-
-        if (isAuthenticated) {
-            // 检查是否有模型供应商
-            try {
-                const providers = await apiService.fetchModels()
-                // 如果供应商列表为空，强制进入向导
-                if (!providers.items || providers.items.length === 0) {
-                    return next('/setup')
-                }
-                // 如果有供应商但没标记完成，标记为完成并继续
-                localStorage.setItem('hasCompletedSetup', 'true')
-            } catch (e) {
-                // 获取失败也先进入向导以防万一
-                return next('/setup')
-            }
-        } else {
-            // 未登录且未完成设置，进入向导（向导第一步会处理注册/登录）
-            return next('/setup')
-        }
-    }
 
     // 3. 正常的鉴权逻辑
     if (to.meta.requiresAuth) {

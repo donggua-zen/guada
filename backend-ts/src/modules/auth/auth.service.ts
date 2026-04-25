@@ -2,8 +2,9 @@ import { Injectable, Logger } from "@nestjs/common";
 import { JwtService } from "@nestjs/jwt";
 import * as bcrypt from "bcrypt";
 import { UserRepository } from "../../common/database/user.repository";
-import { GlobalSettingRepository } from "../../common/database/global-setting.repository";
+import { SettingsStorage } from "../../common/utils/settings-storage.util";
 import { UrlService } from "../../common/services/url.service";
+import { SG_SYSTEM, SK_SYS_AUTO_LOGIN } from "../../constants/settings.constants";
 
 @Injectable()
 export class AuthService {
@@ -12,21 +13,12 @@ export class AuthService {
   constructor(
     private jwtService: JwtService,
     private userRepo: UserRepository,
-    private settingRepo: GlobalSettingRepository,
+    private settingsStorage: SettingsStorage,
     private urlService: UrlService,
   ) {}
 
-  async validateUserByEmail(email: string, password: string): Promise<any> {
-    const user = await this.userRepo.findByEmail(email);
-    if (user && (await bcrypt.compare(password, user.passwordHash))) {
-      const { passwordHash, ...result } = user;
-      return result;
-    }
-    return null;
-  }
-
-  async validateUserByPhone(phone: string, password: string): Promise<any> {
-    const user = await this.userRepo.findByPhone(phone);
+  async validateUserByUsername(username: string, password: string): Promise<any> {
+    const user = await this.userRepo.findByUsername(username);
     if (user && (await bcrypt.compare(password, user.passwordHash))) {
       const { passwordHash, ...result } = user;
       return result;
@@ -35,13 +27,12 @@ export class AuthService {
   }
 
   async login(user: any) {
-    const payload = { email: user.email, sub: user.id };
+    const payload = { username: user.username, sub: user.id };
     return {
       accessToken: this.jwtService.sign(payload),
       user: this.urlService.transformUrls({
         id: user.id,
-        email: user.email,
-        phone: user.phone,
+        username: user.username,
         nickname: user.nickname,
         avatarUrl: user.avatarUrl,
         role: user.role,
@@ -49,10 +40,10 @@ export class AuthService {
     };
   }
 
-  async register(email: string, password: string, nickname?: string) {
+  async register(username: string, password: string, nickname?: string) {
     const hashedPassword = await bcrypt.hash(password, 10);
     return this.userRepo.create({
-      email,
+      username,
       passwordHash: hashedPassword,
       nickname,
       role: 'primary', // 默认注册即为主账户
@@ -65,10 +56,13 @@ export class AuthService {
   async autoLogin(): Promise<{ accessToken: string; user: any } | null> {
     try {
       // 检查是否开启免登录模式
-      const setting = await this.settingRepo.findByKey("autoLoginEnabled", null);
-      const autoLoginEnabled = setting?.value === "true";
+      const autoLoginEnabled = this.settingsStorage.getSettingValue(
+        SG_SYSTEM,
+        SK_SYS_AUTO_LOGIN,
+        false,
+      );
       
-      this.logger.debug(`免登录配置: ${autoLoginEnabled}, setting: ${JSON.stringify(setting)}`);
+      this.logger.debug(`免登录配置: ${autoLoginEnabled}`);
       
       if (!autoLoginEnabled) {
         this.logger.log("免登录模式未开启");
@@ -85,17 +79,16 @@ export class AuthService {
       }
 
       // 生成 JWT token
-      const payload = { email: primaryUser.email, sub: primaryUser.id };
+      const payload = { username: primaryUser.username, sub: primaryUser.id };
       const accessToken = this.jwtService.sign(payload);
 
-      this.logger.log(`自动登录成功，用户ID: ${primaryUser.id}, Email: ${primaryUser.email}`);
+      this.logger.log(`自动登录成功，用户ID: ${primaryUser.id}, Username: ${primaryUser.username}`);
 
       return {
         accessToken,
         user: this.urlService.transformUrls({
           id: primaryUser.id,
-          email: primaryUser.email,
-          phone: primaryUser.phone,
+          username: primaryUser.username,
           nickname: primaryUser.nickname,
           avatarUrl: primaryUser.avatarUrl,
           role: primaryUser.role,
