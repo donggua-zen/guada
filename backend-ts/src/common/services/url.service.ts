@@ -1,5 +1,4 @@
 import { Injectable } from "@nestjs/common";
-import { ConfigService } from "@nestjs/config";
 
 /**
  * URL 工具服务
@@ -9,9 +8,11 @@ import { ConfigService } from "@nestjs/config";
 export class UrlService {
   private baseUrl: string;
   private autoMode: boolean = false;
+  private staticPrefix: string;
+  private uploadPrefix: string;
 
-  constructor(private configService: ConfigService) {
-    const configuredUrl = this.configService.get<string>("BASE_URL") || "";
+  constructor() {
+    const configuredUrl = process.env.BASE_URL || "";
     
     // 检测是否为自动模式
     if (configuredUrl === "__auto__") {
@@ -20,6 +21,10 @@ export class UrlService {
     } else {
       this.baseUrl = configuredUrl;
     }
+    
+    // 读取静态资源前缀配置
+    this.staticPrefix = process.env.STATIC_URL || "/static";
+    this.uploadPrefix = process.env.UPLOAD_URL_PREFIX || "/uploads";
   }
 
   /**
@@ -45,71 +50,54 @@ export class UrlService {
   }
 
   /**
-   * 将相对路径转换为完整 URL
-   * @param path 相对路径（如 /static/images/xxx.svg 或 /uploads/xxx.jpg）
-   * @returns 完整 URL（如 http://localhost:3000/static/images/xxx.svg）
-   *          如果 BASE_URL 未配置，则返回原路径
+   * 将静态资源相对路径转换为完整 URL
+   * @param relativePath 相对于 STATIC_DIR 的路径（如 images/models/openai.png）
+   * @returns 完整 URL（如 http://localhost:3000/static/images/models/openai.png）
    */
-  toAbsoluteUrl(path: string): string {
-    if (!path) {
-      return path;
+  toStaticAbsoluteUrl(relativePath: string): string {
+    if (!relativePath) {
+      return relativePath;
     }
 
     // 如果已经是绝对 URL，直接返回
-    if (path.startsWith("http://") || path.startsWith("https://")) {
-      return path;
+    if (relativePath.startsWith("http://") || relativePath.startsWith("https://")) {
+      return relativePath;
     }
 
-    // 如果配置了 BASE_URL，拼接完整 URL
+    // 构建完整的静态资源路径
+    const normalizedPath = relativePath.startsWith("/") ? relativePath : `/${relativePath}`;
+    const fullPath = `${this.staticPrefix}${normalizedPath}`;
+    
+    // 直接拼接 BASE_URL
     if (this.baseUrl) {
-      // 确保路径以 / 开头
-      const normalizedPath = path.startsWith("/") ? path : `/${path}`;
-      return `${this.baseUrl}${normalizedPath}`;
+      return `${this.baseUrl}${fullPath}`;
     }
-
-    // 未配置 BASE_URL，返回原路径（相对路径）
-    return path;
+    return fullPath;
   }
 
   /**
-   * 批量转换对象中的 URL 字段
-   * @param obj 包含 URL 字段的对象
-   * @param urlFields 需要转换的字段名列表
-   * @returns 转换后的对象
+   * 将上传文件相对路径转换为完整 URL
+   * @param relativePath 相对于 UPLOAD_ROOT_DIR 的路径（如 kb/test.pdf 或 avatars/user123.jpg）
+   * @returns 完整 URL（如 http://localhost:3000/uploads/kb/test.pdf）
    */
-  transformUrls<T extends Record<string, any>>(
-    obj: T,
-    urlFields: string[] = ["avatarUrl", "imageUrl", "fileUrl", "url", "logoUrl"]
-  ): T {
-    if (!obj || typeof obj !== "object") {
-      return obj;
+  toUploadAbsoluteUrl(relativePath: string): string {
+    if (!relativePath) {
+      return relativePath;
     }
 
-    const result: any = { ...obj };
-
-    for (const field of urlFields) {
-      if (result[field] && typeof result[field] === "string") {
-        result[field] = this.toAbsoluteUrl(result[field]);
-      }
+    // 如果已经是绝对 URL，直接返回
+    if (relativePath.startsWith("http://") || relativePath.startsWith("https://")) {
+      return relativePath;
     }
 
-    return result as T;
-  }
-
-  /**
-   * 批量转换数组中每个对象的 URL 字段
-   * @param arr 对象数组
-   * @param urlFields 需要转换的字段名列表
-   * @returns 转换后的数组
-   */
-  transformArrayUrls<T extends Record<string, any>>(
-    arr: T[],
-    urlFields?: string[]
-  ): T[] {
-    if (!Array.isArray(arr)) {
-      return arr;
+    // 构建完整的上传文件路径
+    const normalizedPath = relativePath.startsWith("/") ? relativePath : `/${relativePath}`;
+    const fullPath = `${this.uploadPrefix}${normalizedPath}`;
+    
+    // 直接拼接 BASE_URL
+    if (this.baseUrl) {
+      return `${this.baseUrl}${fullPath}`;
     }
-
-    return arr.map((item) => this.transformUrls(item, urlFields));
+    return fullPath;
   }
 }

@@ -1,6 +1,5 @@
 import { Module } from "@nestjs/common";
 import { ConfigModule } from "@nestjs/config";
-import uploadConfig from "./common/config/upload.config";
 import { UploadModule } from "./common/upload/upload.module";
 import { SharedModule } from "./common/services/shared.module";
 import { LlmCoreModule } from "./modules/llm-core/llm-core.module";
@@ -21,7 +20,6 @@ import { McpClientModule } from "./common/mcp/mcp-client.module";
   imports: [
     ConfigModule.forRoot({
       isGlobal: true,
-      load: [uploadConfig],
     }),
     SharedModule, // 全局共享服务（UploadPathService, UrlService）
     UploadModule, // 全局上传路径模块

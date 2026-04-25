@@ -10,6 +10,7 @@ model Session {
   id               String                 @id @default(cuid())
   title            String?
   userId           String                 @map("user_id")
+  // 头像相对路径（如 avatars/session123.jpg），返回前端时转换为完整 URL
   avatarUrl        String?                @map("avatar_url")
   description      String?
   modelId          String?                @map("model_id")
@@ -103,6 +104,7 @@ model Model {
 model User {
   id             String          @id @default(cuid())
   role           String?
+  // 头像相对路径（如 avatars/user123.jpg），返回前端时转换为完整 URL
   avatarUrl      String?         @map("avatar_url")
   parentId       String?         @map("parent_id")
   nickname       String?
@@ -136,6 +138,7 @@ model Character {
   userId      String          @map("user_id")
   title       String
   description String?
+  // 头像相对路径（如 avatars/char123.jpg），返回前端时转换为完整 URL
   avatarUrl   String?         @map("avatar_url")
   isPublic    Boolean         @default(false) @map("is_public")
   modelId     String?         @map("model_id")
@@ -254,7 +257,9 @@ model File {
   fileType      String   @map("file_type")
   fileExtension String   @map("file_extension")
   content       String?
+  // 文件相对路径（如 kb/test.pdf），返回前端时转换为完整 URL
   url           String?
+  // 预览图相对路径（如 previews/test.jpg），返回前端时转换为完整 URL
   previewUrl    String?  @map("preview_url")
   contentHash   String   @map("content_hash")
   uploadUserId  String?  @map("upload_user_id")

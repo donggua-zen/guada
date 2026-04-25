@@ -52,8 +52,13 @@ export class SessionService {
       limit,
     );
 
-    // 转换所有 session 的 URL
-    const transformedItems = this.urlService.transformArrayUrls(items);
+    // 转换所有 session 的 URL（avatarUrl 是上传文件）
+    const transformedItems = items.map((item) => ({
+      ...item,
+      avatarUrl: item.avatarUrl
+        ? this.urlService.toUploadAbsoluteUrl(item.avatarUrl)
+        : null,
+    }));
     return createPaginatedResponse(transformedItems, total, { skip, limit });
   }
 
@@ -68,8 +73,15 @@ export class SessionService {
       throw new Error("Session not found or unauthorized");
     }
 
-    // 转换 URL
-    return session ? this.urlService.transformUrls(session) : null;
+    // 转换 URL（avatarUrl 是上传文件）
+    return session
+      ? {
+          ...session,
+          avatarUrl: session.avatarUrl
+            ? this.urlService.toUploadAbsoluteUrl(session.avatarUrl)
+            : null,
+        }
+      : null;
   }
 
   /**
@@ -173,8 +185,13 @@ export class SessionService {
 
     const session = await this.sessionRepo.create(sessionData);
 
-    // 转换 URL 后返回
-    return this.urlService.transformUrls(session);
+    // 转换 URL 后返回（avatarUrl 是上传文件）
+    return {
+      ...session,
+      avatarUrl: session.avatarUrl
+        ? this.urlService.toUploadAbsoluteUrl(session.avatarUrl)
+        : null,
+    };
   }
 
   /**
