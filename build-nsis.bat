@@ -59,6 +59,6 @@ if errorlevel 1 (
     echo.
     echo ========================================
     echo   ✓ 构建成功！
-    echo   安装包位置: release\AI Chat Setup *.exe
+    echo   安装包位置: release\GuaDa Setup *.exe
     echo ========================================
 )
