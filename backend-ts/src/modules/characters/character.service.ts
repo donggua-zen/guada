@@ -56,8 +56,13 @@ export class CharacterService {
       groupId,
     );
 
-    // 转换所有 character 的 URL
-    const transformedItems = this.urlService.transformArrayUrls(items);
+    // 转换所有 character 的 URL（avatarUrl 是上传文件）
+    const transformedItems = items.map((item) => ({
+      ...item,
+      avatarUrl: item.avatarUrl
+        ? this.urlService.toUploadAbsoluteUrl(item.avatarUrl)
+        : null,
+    }));
     return createPaginatedResponse(transformedItems, total, { skip, limit });
   }
 
@@ -68,8 +73,13 @@ export class CharacterService {
       throw new Error("Character not found");
     }
 
-    // 转换 URL
-    return this.urlService.transformUrls(character);
+    // 转换 URL（avatarUrl 是上传文件）
+    return {
+      ...character,
+      avatarUrl: character.avatarUrl
+        ? this.urlService.toUploadAbsoluteUrl(character.avatarUrl)
+        : null,
+    };
   }
 
   async createCharacter(userId: string, data: any) {
@@ -84,8 +94,13 @@ export class CharacterService {
 
     const character = await this.characterRepo.create(cleanData);
 
-    // 转换 URL 后返回
-    return this.urlService.transformUrls(character);
+    // 转换 URL 后返回（avatarUrl 是上传文件）
+    return {
+      ...character,
+      avatarUrl: character.avatarUrl
+        ? this.urlService.toUploadAbsoluteUrl(character.avatarUrl)
+        : null,
+    };
   }
 
   async updateCharacter(characterId: string, data: any) {
@@ -107,8 +122,13 @@ export class CharacterService {
       cleanData,
     );
 
-    // 转换 URL 后返回
-    return this.urlService.transformUrls(updatedCharacter);
+    // 转换 URL 后返回（avatarUrl 是上传文件）
+    return {
+      ...updatedCharacter,
+      avatarUrl: updatedCharacter.avatarUrl
+        ? this.urlService.toUploadAbsoluteUrl(updatedCharacter.avatarUrl)
+        : null,
+    };
   }
 
   async deleteCharacter(characterId: string) {

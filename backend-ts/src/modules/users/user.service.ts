@@ -34,8 +34,13 @@ export class UserService {
     }
 
     const { passwordHash, ...result } = user;
-    // 转换 URL
-    return this.urlService.transformUrls(result);
+    // 转换 URL（avatarUrl 是上传文件）
+    return {
+      ...result,
+      avatarUrl: result.avatarUrl
+        ? this.urlService.toUploadAbsoluteUrl(result.avatarUrl)
+        : null,
+    };
   }
 
   async updateProfile(userId: string, data: any) {
@@ -109,23 +114,21 @@ export class UserService {
 
       // 5. 清理旧头像
       if (user.avatarUrl) {
-        const oldFilePath = this.uploadPathService.getPathFromWebUrl(
-          user.avatarUrl,
-        );
-        if (oldFilePath && fs.existsSync(oldFilePath)) {
+        const oldFilePath = this.uploadPathService.toPhysicalPath(user.avatarUrl);
+        if (fs.existsSync(oldFilePath)) {
           fs.unlinkSync(oldFilePath);
         }
       }
 
-      // 6. 更新数据库（直接获取 Web URL）
-      const webUrl = this.uploadPathService.getWebUrl(
+      // 6. 更新数据库（存储相对路径）
+      const relativePath = this.uploadPathService.getRelativePath(
         "avatars",
         uniqueFilename,
       );
-      await this.userRepo.update(userId, { avatarUrl: webUrl });
+      await this.userRepo.update(userId, { avatarUrl: relativePath });
 
       // 转换为绝对 URL 后返回
-      return { url: this.urlService.toAbsoluteUrl(webUrl) };
+      return { url: this.urlService.toUploadAbsoluteUrl(relativePath) };
     } catch (error: any) {
       // 如果处理失败，删除可能已生成的临时文件
       if (fs.existsSync(filePath)) {

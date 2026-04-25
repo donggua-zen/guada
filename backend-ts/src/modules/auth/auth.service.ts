@@ -32,13 +32,15 @@ export class AuthService {
     const payload = { username: user.username, sub: user.id };
     return {
       accessToken: this.jwtService.sign(payload),
-      user: this.urlService.transformUrls({
+      user: {
         id: user.id,
         username: user.username,
         nickname: user.nickname,
-        avatarUrl: user.avatarUrl,
+        avatarUrl: user.avatarUrl
+          ? this.urlService.toUploadAbsoluteUrl(user.avatarUrl)
+          : null,
         role: user.role,
-      }),
+      },
     };
   }
 
@@ -90,13 +92,15 @@ export class AuthService {
 
       return {
         accessToken,
-        user: this.urlService.transformUrls({
+        user: {
           id: primaryUser.id,
           username: primaryUser.username,
           nickname: primaryUser.nickname,
-          avatarUrl: primaryUser.avatarUrl,
+          avatarUrl: primaryUser.avatarUrl
+            ? this.urlService.toUploadAbsoluteUrl(primaryUser.avatarUrl)
+            : null,
           role: primaryUser.role,
-        }),
+        },
       };
     } catch (error) {
       this.logger.error("自动登录失败", error instanceof Error ? error.stack : String(error));
