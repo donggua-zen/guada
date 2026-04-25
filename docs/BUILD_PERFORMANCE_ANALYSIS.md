@@ -101,7 +101,7 @@ rebuilt dependencies successfully
 ### 6. **Electron 打包 (~60-180秒)**
 ```
 • packaging       platform=win32 arch=x64 electron=41.3.0
-• building        target=nsis file=release\AI Chat Setup 1.0.0.exe
+• building        target=nsis file=release\GuaDa Setup 1.0.0.exe
 ```
 - 创建 ASAR 归档
 - NSIS 安装包压缩和构建

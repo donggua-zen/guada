@@ -79,6 +79,23 @@ const prismaConfigPath = path.join(backendPath, 'prisma.config.ts')
 if (fs.existsSync(prismaConfigPath)) {
   fs.copyFileSync(prismaConfigPath, path.join(optimizedPath, 'prisma.config.ts'))
   console.log('✓ Copied prisma.config.ts')
+} else {
+  console.warn('⚠️  prisma.config.ts not found, creating default config...')
+  const defaultConfig = `import "dotenv/config";
+import { defineConfig } from "prisma/config";
+
+export default defineConfig({
+  schema: "prisma/schema.prisma",
+  migrations: {
+    path: "prisma/migrations",
+  },
+  datasource: {
+    url: process.env["DATABASE_URL"],
+  },
+});
+`
+  fs.writeFileSync(path.join(optimizedPath, 'prisma.config.ts'), defaultConfig)
+  console.log('✓ Created default prisma.config.ts')
 }
 
 // 先安装 Prisma CLI（临时）
@@ -123,9 +140,6 @@ console.log('Step 4: Cleaning unnecessary files...')
 // 5.1 移除开发工具和不必要的模块
 console.log('Removing development tools and unnecessary modules...')
 const modulesToRemove = [
-  // Prisma Studio (开发工具，生产环境不需要)
-  { path: 'node_modules/@prisma/studio-core', reason: 'Prisma Studio UI' },
-  { path: 'node_modules/@prisma/dev', reason: 'Prisma dev tools' },
   // WordNet 数据库（如果不使用 natural 的同义词功能）
   { path: 'node_modules/wordnet-db', reason: 'WordNet database for NLP' },
   // PGlite（如果只使用 SQLite）

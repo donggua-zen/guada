@@ -182,7 +182,7 @@ curl -H "Authorization: Bearer YOUR_TOKEN" http://localhost:3000/api/v1/user/pro
 cd ..
 npm run build:electron
 cd release/win-unpacked
-.\'AI Chat.exe'
+.\'GuaDa.exe'
 ```
 
 打开开发者工具，检查 Network 面板中的请求，确认所有资源 URL 都是完整的 HTTP URL。
