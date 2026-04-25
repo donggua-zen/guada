@@ -18,7 +18,9 @@ export class AuthService {
   ) {}
 
   async validateUserByUsername(username: string, password: string): Promise<any> {
-    const user = await this.userRepo.findByUsername(username);
+    // 将用户名统一转换为小写，实现不区分大小写的登录
+    const normalizedUsername = username.toLowerCase();
+    const user = await this.userRepo.findByUsername(normalizedUsername);
     if (user && (await bcrypt.compare(password, user.passwordHash))) {
       const { passwordHash, ...result } = user;
       return result;
@@ -41,9 +43,11 @@ export class AuthService {
   }
 
   async register(username: string, password: string, nickname?: string) {
+    // 将用户名统一转换为小写存储，避免重复注册
+    const normalizedUsername = username.toLowerCase();
     const hashedPassword = await bcrypt.hash(password, 10);
     return this.userRepo.create({
-      username,
+      username: normalizedUsername,
       passwordHash: hashedPassword,
       nickname,
       role: 'primary', // 默认注册即为主账户
