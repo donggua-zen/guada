@@ -7,7 +7,7 @@ import {
 } from "../interfaces/tool-provider.interface";
 import { PrismaService } from "../../../common/database/prisma.service";
 import { McpClientService } from "../../../common/mcp/mcp-client.service";
-import { InternalToolDefinition } from "../../chat/types/llm.types";
+import { InternalToolDefinition } from "../../llm-core/types/llm.types";
 
 @Injectable()
 export class MCPToolProvider implements IToolProvider {

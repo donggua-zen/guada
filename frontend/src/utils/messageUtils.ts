@@ -201,3 +201,31 @@ export function formatDuration(ms: number | null | undefined): string {
     const remainingSeconds = (seconds % 60).toFixed(1)
     return `${minutes}分${remainingSeconds}秒`
 }
+
+/**
+ * 从消息内容中提取标题
+ * @param message - 消息对象
+ * @returns 提取的标题文本
+ */
+export function extractMessageTitle(message: Message): string {
+    // 优先使用 metaData 中的 title 字段(如果后端提供)
+    if (message.contents?.[0]?.metaData?.title) {
+        return message.contents[0].metaData.title
+    }
+
+    // 从内容中提取第一行或前50字符
+    const content = message.contents?.[0]?.content || ''
+    if (!content) return '未命名消息'
+
+    // 去除 Markdown 标记和空白
+    const cleanContent = content
+        .replace(/^#+\s+/gm, '')  // 移除标题标记
+        .replace(/\*\*|__|\*|_/g, '')  // 移除加粗/斜体
+        .split('\n')[0]  // 取第一行
+        .trim()
+
+    // 限制长度
+    return cleanContent.length > 50
+        ? cleanContent.substring(0, 47) + '...'
+        : cleanContent || '未命名消息'
+}

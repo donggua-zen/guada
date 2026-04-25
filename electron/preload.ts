@@ -12,6 +12,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   
   // IPC 通信方法
   getAppInfo: () => ipcRenderer.invoke('get-app-info'),
+  getBackendPort: () => ipcRenderer.invoke('get-backend-port'),
   showNotification: (title: string, body: string) => 
     ipcRenderer.invoke('show-notification', { title, body }),
   
@@ -20,6 +21,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   maximizeWindow: () => ipcRenderer.send('window-maximize'),
   closeWindow: () => ipcRenderer.send('window-close'),
   isMaximized: () => ipcRenderer.invoke('is-window-maximized'),
+  toggleDevTools: () => ipcRenderer.send('toggle-devtools'),
 
   // 自动更新相关
   checkForUpdates: () => ipcRenderer.invoke('check-for-updates'),

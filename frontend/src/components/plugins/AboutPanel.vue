@@ -3,8 +3,8 @@
         <div class="flex flex-col items-center justify-center space-y-6 text-center">
             <!-- 应用图标与版本 -->
             <div class="space-y-2">
-                <img src="/images/logo.png" alt="AI Chat Logo" class="w-24 h-24 mx-auto rounded-xl shadow-lg" />
-                <h2 class="text-2xl font-bold text-(--color-text-primary)">AI Chat</h2>
+                <img src="/images/logo.png" alt="GuaDa Logo" class="w-24 h-24 mx-auto rounded-xl shadow-lg" />
+                <h2 class="text-2xl font-bold text-(--color-text-primary)">GuaDa</h2>
                 <p class="text-sm text-(--color-text-secondary)">当前版本: {{ appVersion }}</p>
             </div>
 

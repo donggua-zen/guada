@@ -25,18 +25,15 @@ export class KnowledgeBaseRepository {
     });
   }
 
-  async findByUserId(userId: string, skip: number = 0, limit: number = 20) {
+  async findAll(skip: number = 0, limit: number = 20) {
     const [items, total] = await Promise.all([
       this.prisma.knowledgeBase.findMany({
-        where: { userId, isActive: true },
         orderBy: { createdAt: "desc" },
         skip,
         take: limit,
         include: { embeddingModel: true },
       }),
-      this.prisma.knowledgeBase.count({
-        where: { userId, isActive: true },
-      }),
+      this.prisma.knowledgeBase.count(),
     ]);
     return { items, total };
   }
@@ -57,15 +54,9 @@ export class KnowledgeBaseRepository {
   }
 
   async delete(id: string) {
-    return this.prisma.knowledgeBase.update({
+    return this.prisma.knowledgeBase.delete({
       where: { id },
-      data: { isActive: false },
     });
   }
 
-  async countByUserId(userId: string) {
-    return this.prisma.knowledgeBase.count({
-      where: { userId, isActive: true },
-    });
-  }
 }

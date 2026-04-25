@@ -1,5 +1,6 @@
 <template>
-  <div v-if="!streamingState.isPlaceholder" class="message" :class="messageClass" ref="rootRef">
+  <div v-if="!streamingState.isPlaceholder" class="message" :class="messageClass" ref="rootRef"
+    :data-message-id="message.id">
     <div class="message-content">
       <div v-if="isAssistant" class="text-xs text-gray-400 mb-3">
         <div class="flex items-center">

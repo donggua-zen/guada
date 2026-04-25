@@ -5,16 +5,8 @@ import { PrismaService } from "../../common/database/prisma.service";
 export class UserRepository {
   constructor(private prisma: PrismaService) {}
 
-  async findByEmail(email: string) {
-    return this.prisma.user.findUnique({ where: { email } });
-  }
-
   async findByUsername(username: string) {
-    return this.prisma.user.findFirst({ where: { nickname: username } });
-  }
-
-  async findByPhone(phone: string) {
-    return this.prisma.user.findFirst({ where: { phone } });
+    return this.prisma.user.findUnique({ where: { username } });
   }
 
   async findById(id: string) {

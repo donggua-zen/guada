@@ -12,8 +12,8 @@ export class CharacterRepository {
     });
   }
 
-  async findByUserId(userId: string, skip: number = 0, limit: number = 20, groupId?: string) {
-    const where: any = { userId };
+  async findAll(skip: number = 0, limit: number = 20, groupId?: string) {
+    const where: any = {};
     if (groupId) {
       where.groupId = groupId;
     }

@@ -64,56 +64,14 @@
                     <p class="text-gray-500" v-else>您当前没有权限重置密码</p>
                 </div>
 
-                <!-- 登录方式切换 -->
-                <div class="flex justify-center mb-6 custom-segmented">
-                    <el-segmented v-model="loginType" :options="loginTypeOptions" block v-if="canReset" />
-                </div>
-
-                <!-- 手机账户表单 -->
-                <div v-show="loginType === 'phone'" v-if="canReset">
+                <!-- 用户名表单 -->
+                <div v-if="canReset">
                     <el-form :model="form" :rules="rules" ref="formRef" label-position="top" class="mt-4">
-                        <el-form-item prop="phone" class="mb-4">
-                            <el-input v-model="form.phone" placeholder="请输入手机号" size="large">
+                        <el-form-item prop="username" class="mb-4">
+                            <el-input v-model="form.username" placeholder="请输入用户名" size="large">
                                 <template #prefix>
                                     <el-icon class="text-gray-400">
-                                        <PhoneIcon />
-                                    </el-icon>
-                                </template>
-                            </el-input>
-                        </el-form-item>
-
-                        <el-form-item label="密码" prop="password" class="mb-4">
-                            <el-input v-model="form.password" type="password" show-password placeholder="请输入密码"
-                                size="large">
-                                <template #prefix>
-                                    <el-icon class="text-gray-400">
-                                        <LockIcon />
-                                    </el-icon>
-                                </template>
-                            </el-input>
-                        </el-form-item>
-
-                        <el-form-item label="确认密码" prop="confirmPassword" class="mb-6">
-                            <el-input v-model="form.confirmPassword" type="password" show-password placeholder="请再次输入密码"
-                                size="large">
-                                <template #prefix>
-                                    <el-icon class="text-gray-400">
-                                        <LockIcon />
-                                    </el-icon>
-                                </template>
-                            </el-input>
-                        </el-form-item>
-                    </el-form>
-                </div>
-
-                <!-- 邮箱账户表单 -->
-                <div v-show="loginType === 'email'" v-if="canReset">
-                    <el-form :model="form" :rules="rules" ref="formRef" label-position="top" class="mt-4">
-                        <el-form-item prop="email" class="mb-4">
-                            <el-input v-model="form.email" placeholder="请输入邮箱地址" size="large">
-                                <template #prefix>
-                                    <el-icon class="text-gray-400">
-                                        <MailIcon />
+                                        <UserIcon />
                                     </el-icon>
                                 </template>
                             </el-input>
@@ -245,8 +203,7 @@
 <script setup lang="ts">
 import { ref, reactive, onMounted } from 'vue'
 import {
-    PhoneIphoneOutlined as PhoneIcon,
-    MailOutlineOutlined as MailIcon,
+    PersonOutlined as UserIcon,
     LockOutlined as LockIcon,
     LogInOutlined as LoginIcon
 } from '@vicons/material'
@@ -293,15 +250,13 @@ const canReset = ref(false)
 
 // 表单数据 - 类型化
 interface PasswordForm {
-    phone: string;
-    email: string;
+    username: string;
     password: string;
     confirmPassword: string;
 }
 
 const form = reactive<PasswordForm>({
-    phone: '',
-    email: '',
+    username: '',
     password: '',
     confirmPassword: ''
 })
@@ -311,38 +266,18 @@ const loading = ref(false)
 
 // 表单验证规则 - 类型化
 const rules = reactive({
-    phone: {
+    username: {
         required: true,
         trigger: ['input', 'blur'],
         validator: (rule: any, value: string, callback: any) => {
-            if (loginType.value === 'phone') {
-                if (!value) {
-                    callback(new Error('请输入手机号'))
-                    return
-                }
-                const phoneRegex = /^1[3-9]\d{9}$/
-                if (!phoneRegex.test(value)) {
-                    callback(new Error('请输入正确的手机号'))
-                    return
-                }
+            if (!value) {
+                callback(new Error('请输入用户名'))
+                return
             }
-            callback()
-        }
-    },
-    email: {
-        required: true,
-        trigger: ['input', 'blur'],
-        validator: (rule: any, value: string, callback: any) => {
-            if (loginType.value === 'email') {
-                if (!value) {
-                    callback(new Error('请输入邮箱'))
-                    return
-                }
-                const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
-                if (!emailRegex.test(value)) {
-                    callback(new Error('请输入正确的邮箱'))
-                    return
-                }
+            const usernameRegex = /^[a-zA-Z0-9_]{3,20}$/
+            if (!usernameRegex.test(value)) {
+                callback(new Error('用户名只能包含字母、数字和下划线，长度为3-20位'))
+                return
             }
             callback()
         }
@@ -378,9 +313,9 @@ const handleLogin = async (): Promise<void> => {
         if (valid) {
             loading.value = true
             try {
-                // 根据登录方式构建不同的参数
+                // 构建重置参数
                 const resetData = {
-                    username: loginType.value === 'phone' ? form.phone : form.email,
+                    username: form.username,
                     password: form.password,
                 }
                 

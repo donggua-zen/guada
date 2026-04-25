@@ -4,11 +4,11 @@ import { SessionRepository } from "../../common/database/session.repository";
 import { MessageRepository } from "../../common/database/message.repository";
 import { MessageContentRepository } from "../../common/database/message-content.repository";
 import { CharacterRepository } from "../../common/database/character.repository";
-import { LLMService } from "./llm.service";
+import { LLMService } from "../llm-core/llm.service";
 import { ToolOrchestrator } from "../tools/tool-orchestrator.service";
 import { ContextManagerService } from "./context-manager.service";
 import { SessionLockService } from "./session-lock.service";
-import { MessageRecord, LLMResponseChunk } from "./types/llm.types";
+import { MessageRecord, LLMResponseChunk } from "../llm-core/types/llm.types";
 
 /**
  * 思考时间信息（简单数据容器）

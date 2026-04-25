@@ -7,7 +7,7 @@
           <Avatar :src="account.avatarUrl" type="user" :name="account.nickname" round />
         </div>
         <h3 class="font-medium text-gray-900 truncate w-full">{{ account.nickname }}</h3>
-        <p class="text-sm text-gray-500 truncate w-full mt-1">{{ account.email }}</p>
+        <p class="text-sm text-gray-500 truncate w-full mt-1">{{ account.username }}</p>
       </div>
       <div class="absolute bottom-2 right-2">
         <el-dropdown @command="(command) => handleDropdownSelect(command, account)">
@@ -50,8 +50,8 @@
       <el-form-item label="昵称" prop="nickname">
         <el-input v-model="accountForm.nickname" placeholder="请输入昵称" />
       </el-form-item>
-      <el-form-item label="邮箱" prop="email">
-        <el-input v-model="accountForm.email" placeholder="请输入邮箱" />
+      <el-form-item label="用户名" prop="username">
+        <el-input v-model="accountForm.username" placeholder="请输入用户名" />
       </el-form-item>
       <el-form-item label="密码" prop="password">
         <el-input v-model="accountForm.password" type="password" show-password placeholder="请输入密码" />
@@ -102,7 +102,7 @@ const accountFormRef = ref(null)
 
 const accountForm = ref({
   nickname: '',
-  email: '',
+  username: '',
   password: '',
   confirmPassword: ''
 })
@@ -112,9 +112,14 @@ const accountFormRules = computed(() => {
     nickname: [
       { required: true, message: '请输入昵称', trigger: 'blur' }
     ],
-    email: [
-      { required: true, message: '请输入邮箱', trigger: 'blur' },
-      { type: 'email', message: '请输入正确的邮箱地址', trigger: 'blur' }
+    username: [
+      { required: true, message: '请输入用户名', trigger: 'blur' },
+      {
+        validator: (rule, value) => {
+          return /^[a-zA-Z0-9_]{3,20}$/.test(value) || '用户名只能包含字母、数字和下划线，长度为3-20位'
+        },
+        trigger: 'blur'
+      }
     ],
   }
 
@@ -166,7 +171,7 @@ const handleAddAccount = () => {
   editingAccount.value = null
   accountForm.value = {
     nickname: '',
-    email: '',
+    username: '',
     password: '',
     confirmPassword: ''
   }
@@ -182,7 +187,7 @@ const handleDropdownSelect = (key, account) => {
       editingAccount.value = account
       accountForm.value = {
         nickname: account.nickname,
-        email: account.email,
+        username: account.username,
         password: '',
         confirmPassword: ''
       }
@@ -207,7 +212,7 @@ const saveAccount = () => {
           // 新增账户逻辑
           const newAccount = {
             nickname: accountForm.value.nickname,
-            email: accountForm.value.email,
+            username: accountForm.value.username,
             password: accountForm.value.password
           }
 
@@ -220,11 +225,11 @@ const saveAccount = () => {
           const index = subAccounts.value.findIndex(acc => acc.id === editingAccount.value.id)
           if (index !== -1) {
             subAccounts.value[index].nickname = accountForm.value.nickname
-            subAccounts.value[index].email = accountForm.value.email
+            subAccounts.value[index].username = accountForm.value.username
 
             let data = {
               nickname: accountForm.value.nickname,
-              email: accountForm.value.email,
+              username: accountForm.value.username,
             }
             if (accountForm.value.password) {
               data.password = accountForm.value.password

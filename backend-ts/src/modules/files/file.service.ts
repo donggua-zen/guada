@@ -1,4 +1,4 @@
-import { Injectable, Logger } from "@nestjs/common";
+import { Injectable, Logger, OnModuleInit } from "@nestjs/common";
 import * as crypto from "crypto";
 import * as fs from "fs";
 import * as path from "path";
@@ -10,7 +10,7 @@ import { UrlService } from "../../common/services/url.service";
 import { FileParserService } from "../knowledge-base/file-parser.service";
 
 @Injectable()
-export class FileService {
+export class FileService implements OnModuleInit {
   private readonly logger = new Logger(FileService.name);
 
   // 文件类型定义
@@ -46,6 +46,10 @@ export class FileService {
     private fileParserService: FileParserService,
     private urlService: UrlService,
   ) { }
+
+  async onModuleInit() {
+    await this.cleanupOrphanFiles();
+  }
 
   /**
    * 上传文件的统一入口方法
@@ -404,5 +408,106 @@ export class FileService {
    */
   private calculateContentHash(buffer: Buffer): string {
     return crypto.createHash("md5").update(buffer).digest("hex");
+  }
+
+  /**
+   * 删除文件（物理删除）
+   */
+  async deleteFile(fileId: string): Promise<boolean> {
+    try {
+      const file = await this.fileRepo.findById(fileId);
+      if (!file) {
+        return false;
+      }
+
+      // 删除物理文件（如果有 URL）
+      if (file.url) {
+        const physicalPath = this.uploadPathService.getPathFromWebUrl(file.url);
+        if (physicalPath && fs.existsSync(physicalPath)) {
+          fs.unlinkSync(physicalPath);
+          this.logger.log(`已删除文件: ${physicalPath}`);
+        }
+      }
+
+      // 删除预览图（如果有）
+      if (file.previewUrl) {
+        const previewPath = this.uploadPathService.getPathFromWebUrl(file.previewUrl);
+        if (previewPath && fs.existsSync(previewPath)) {
+          fs.unlinkSync(previewPath);
+          this.logger.log(`已删除预览图: ${previewPath}`);
+        }
+      }
+
+      // 删除数据库记录
+      await this.prisma.file.delete({ where: { id: fileId } });
+      this.logger.log(`已删除文件记录: ${fileId}`);
+
+      return true;
+    } catch (error: any) {
+      this.logger.error(`删除文件失败: ${error.message}`);
+      return false;
+    }
+  }
+
+  /**
+   * 批量删除文件
+   */
+  async deleteFilesByMessageId(messageId: string): Promise<number> {
+    try {
+      // 查找该消息关联的所有文件
+      const files = await this.prisma.file.findMany({
+        where: { messageId },
+      });
+
+      let deletedCount = 0;
+      for (const file of files) {
+        const success = await this.deleteFile(file.id);
+        if (success) {
+          deletedCount++;
+        }
+      }
+
+      this.logger.log(`删除消息 ${messageId} 的 ${deletedCount} 个附件`);
+      return deletedCount;
+    } catch (error: any) {
+      this.logger.error(`批量删除文件失败: ${error.message}`);
+      return 0;
+    }
+  }
+
+  /**
+   * 清理孤儿文件（启动时执行）
+   * 删除所有 messageId 为 NULL 且 sessionId 为 NULL 的文件（即未关联任何消息或会话的文件）
+   */
+  private async cleanupOrphanFiles() {
+    try {
+      this.logger.log("🧹 开始扫描聊天孤儿文件...");
+
+      // 查找所有未关联消息和会话的文件
+      const orphanFiles = await this.prisma.file.findMany({
+        where: {
+          messageId: null,
+          sessionId: null,
+        },
+      });
+
+      let cleanedCount = 0;
+      for (const file of orphanFiles) {
+        try {
+          await this.deleteFile(file.id);
+          cleanedCount++;
+        } catch (error: any) {
+          this.logger.error(`清理孤儿文件失败: ${file.displayName}, 错误: ${error.message}`);
+        }
+      }
+
+      if (cleanedCount > 0) {
+        this.logger.log(`🧹 聊天孤儿文件清理完成：清理 ${cleanedCount} 个`);
+      } else {
+        this.logger.log("✅ 未发现聊天孤儿文件");
+      }
+    } catch (error: any) {
+      this.logger.error(`聊天孤儿文件清理失败：${error.message}`);
+    }
   }
 }

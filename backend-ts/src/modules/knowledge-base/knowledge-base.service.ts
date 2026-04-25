@@ -2,9 +2,9 @@ import {
   Injectable,
   Logger,
   NotFoundException,
-  ForbiddenException,
   Inject,
 } from "@nestjs/common";
+import * as fs from "fs";
 import { PrismaService } from "../../common/database/prisma.service";
 import { KnowledgeBaseRepository } from "../../common/database/knowledge-base.repository";
 import { VectorDatabase } from "../../common/vector-db/interfaces/vector-database.interface";
@@ -54,12 +54,11 @@ export class KnowledgeBaseService {
   }
 
   /**
-   * 列出用户的所有知识库
+   * 列出所有知识库（全局共享）
    */
-  async list(userId: string, skip: number = 0, limit: number = 20) {
+  async list(skip: number = 0, limit: number = 20) {
     try {
-      const { items, total } = await this.kbRepo.findByUserId(
-        userId,
+      const { items, total } = await this.kbRepo.findAll(
         skip,
         limit,
       );
@@ -73,15 +72,11 @@ export class KnowledgeBaseService {
   /**
    * 获取知识库详情
    */
-  async findOne(kbId: string, userId: string) {
+  async findOne(kbId: string) {
     const kb = await this.kbRepo.findById(kbId);
 
     if (!kb) {
       throw new NotFoundException("知识库不存在");
-    }
-
-    if (kb.userId !== userId) {
-      throw new ForbiddenException("无权访问该知识库");
     }
 
     return kb;
@@ -90,15 +85,11 @@ export class KnowledgeBaseService {
   /**
    * 更新知识库
    */
-  async update(kbId: string, userId: string, data: any) {
+  async update(kbId: string, data: any) {
     const kb = await this.kbRepo.findById(kbId);
 
     if (!kb) {
       throw new NotFoundException("知识库不存在");
-    }
-
-    if (kb.userId !== userId) {
-      throw new ForbiddenException("无权访问该知识库");
     }
 
     try {
@@ -129,25 +120,70 @@ export class KnowledgeBaseService {
   }
 
   /**
-   * 删除知识库（软删除）
+   * 删除知识库（物理删除）
    */
-  async remove(kbId: string, userId: string) {
+  async remove(kbId: string) {
     const kb = await this.kbRepo.findById(kbId);
 
     if (!kb) {
       throw new NotFoundException("知识库不存在");
     }
 
-    if (kb.userId !== userId) {
-      throw new ForbiddenException("无权访问该知识库");
-    }
-
     try {
-      // 删除向量集合
+      // 1. 删除向量集合（异步）
       const tableId = `kb_${kbId}`;
-      await this.vectorDb.deleteCollection(tableId);
+      const vectorDeletePromise = this.vectorDb.deleteCollection(tableId)
+        .then(() => {
+          this.logger.log(`已删除向量集合: ${tableId}`);
+        })
+        .catch((error: any) => {
+          this.logger.warn(`删除向量集合失败: ${error.message}`);
+        });
 
-      // 软删除知识库
+      // 2. 获取知识库下的所有文件路径（只查询必要字段）
+      const files = await this.prisma.kBFile.findMany({
+        where: { 
+          knowledgeBaseId: kbId,
+          isDirectory: false,  // 只查询文件，排除文件夹
+        },
+        select: {
+          filePath: true,  // 只选择 filePath 字段，减少数据传输
+        },
+      });
+
+      // 3. 异步并行删除所有本地物理文件
+      const fileDeletePromises = files
+        .filter(file => file.filePath)  // 过滤掉没有 filePath 的记录
+        .map(async (file) => {
+          try {
+            if (fs.existsSync(file.filePath!)) {
+              await fs.promises.unlink(file.filePath!);  // 使用异步删除
+              return { success: true, path: file.filePath };
+            }
+            return { success: true, path: file.filePath, skipped: true };
+          } catch (error: any) {
+            this.logger.warn(`删除本地文件失败: ${file.filePath}, 错误: ${error.message}`);
+            return { success: false, path: file.filePath, error: error.message };
+          }
+        });
+
+      // 并行执行所有删除操作
+      const [vectorResult, fileResults] = await Promise.all([
+        vectorDeletePromise,
+        Promise.allSettled(fileDeletePromises),  // 使用 allSettled 确保单个失败不影响其他
+      ]);
+
+      // 统计删除结果
+      const successCount = fileResults.filter(
+        r => r.status === 'fulfilled' && r.value.success
+      ).length;
+      const failCount = fileResults.filter(
+        r => r.status === 'rejected' || (r.status === 'fulfilled' && !r.value.success)
+      ).length;
+
+      this.logger.log(`共删除 ${successCount} 个本地文件，${failCount} 个失败`);
+
+      // 4. 物理删除知识库（会级联删除所有关联的 KBFile 和 KBChunk）
       const success = await this.kbRepo.delete(kbId);
 
       if (success) {

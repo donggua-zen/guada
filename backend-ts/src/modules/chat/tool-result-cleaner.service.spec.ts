@@ -1,6 +1,6 @@
 import { Test, TestingModule } from "@nestjs/testing";
 import { ToolResultCleaner } from "./tool-result-cleaner.service";
-import { MessageRecord } from "./types/llm.types";
+import { MessageRecord } from "../llm-core/types/llm.types";
 
 describe("ToolResultCleaner", () => {
   let cleaner: ToolResultCleaner;
