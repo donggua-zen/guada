@@ -79,8 +79,8 @@ export class ImageRecognitionToolProvider implements IToolProvider {
       throw new Error(`无效的图片 ID 或文件类型不是图片：${image_id}`);
     }
 
-    const physicalPath = this.uploadPathService.getPathFromWebUrl(file.url);
-    if (!physicalPath || !fs.existsSync(physicalPath)) {
+    const physicalPath = this.uploadPathService.toPhysicalPath(file.url);
+    if (!fs.existsSync(physicalPath)) {
       throw new Error(`图片文件不存在：${physicalPath}`);
     }
 

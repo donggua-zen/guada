@@ -44,7 +44,7 @@ BASE_URL=http://localhost:3000
 
 ```typescript
 // 将相对路径转换为完整 URL
-toAbsoluteUrl(path: string): string
+toUploadAbsoluteUrl(path: string): string
 
 // 转换单个对象中的 URL 字段
 transformUrls<T>(obj: T, urlFields?: string[]): T
@@ -125,7 +125,7 @@ async getList() {
 
 ```typescript
 const relativeUrl = "/static/images/example.svg";
-const absoluteUrl = this.urlService.toAbsoluteUrl(relativeUrl);
+const absoluteUrl = this.urlService.toUploadAbsoluteUrl(relativeUrl);
 // 结果：http://localhost:3000/static/images/example.svg
 ```
 
@@ -249,7 +249,7 @@ this.urlService.transformUrls(item, ['avatarUrl', 'coverUrl'])
 启用详细日志（临时修改 `UrlService`）：
 
 ```typescript
-toAbsoluteUrl(path: string): string {
+toUploadAbsoluteUrl(path: string): string {
   console.log(`[UrlService] Converting: ${path}`);
   // ... 原有逻辑
   console.log(`[UrlService] Result: ${result}`);

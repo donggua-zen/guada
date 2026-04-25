@@ -173,6 +173,12 @@ async function startBackend(): Promise<void> {
       const dbPath = path.join(userDataPath, 'ai_chat.db')
       const vectorDbPath = path.join(userDataPath, 'vector_db.sqlite')
       const staticDir = path.join(backendPath, 'static')
+      const uploadDir = path.join(userDataPath, 'file_stores')
+      
+      console.log('数据库路径:', dbPath)
+      console.log('向量数据库路径:', vectorDbPath)
+      console.log('基础静态目录:', staticDir)
+      console.log('上传文件目录:', uploadDir)
       
       const spawnOptions: any = {
         cwd: backendPath,
@@ -183,6 +189,8 @@ async function startBackend(): Promise<void> {
           DATABASE_URL: `file:${dbPath}`,
           VECTOR_DB_PATH: vectorDbPath,
           STATIC_DIR: staticDir,
+          UPLOAD_ROOT_DIR: uploadDir,
+          UPLOAD_URL_PREFIX: '/uploads',
           SETTINGS_DIR: userDataPath, // 传递设置目录
         },
         stdio: ['pipe', 'pipe', 'pipe'], // 开发模式不需要 IPC
@@ -214,10 +222,12 @@ async function startBackend(): Promise<void> {
       const dbPath = path.join(userDataPath, 'ai_chat.db')
       const vectorDbPath = path.join(userDataPath, 'vector_db.sqlite')
       const staticDir = path.join(backendPath, 'static')
+      const uploadDir = path.join(userDataPath, 'file_stores')
       
       console.log('数据库路径:', dbPath)
       console.log('向量数据库路径:', vectorDbPath)
-      console.log('静态文件路径:', staticDir)
+      console.log('基础静态目录:', staticDir)
+      console.log('上传文件目录:', uploadDir)
       
       // 使用 spawn 启动后端
       const spawnOptions: any = {
@@ -232,7 +242,8 @@ async function startBackend(): Promise<void> {
           DATABASE_URL: `file:${dbPath}`,
           VECTOR_DB_PATH: vectorDbPath,
           STATIC_DIR: staticDir,
-          // UPLOAD_BASE_DIR: staticDir,
+          UPLOAD_ROOT_DIR: uploadDir,
+          UPLOAD_URL_PREFIX: '/uploads',
           SETTINGS_DIR: userDataPath, // 传递设置目录
         },
         stdio: ['pipe', 'pipe', 'pipe', 'ipc'] // 增加 'ipc' 以支持 process.send

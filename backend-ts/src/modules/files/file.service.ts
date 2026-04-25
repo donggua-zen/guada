@@ -73,7 +73,14 @@ export class FileService implements OnModuleInit {
       }
 
       // 4. 转换 URL 为绝对路径后返回
-      return this.urlService.transformUrls(result, ["url", "previewUrl"]);
+      const transformedResult = {
+        ...result,
+        url: this.urlService.toUploadAbsoluteUrl(result.url),
+        previewUrl: result.previewUrl
+          ? this.urlService.toUploadAbsoluteUrl(result.previewUrl)
+          : null,
+      };
+      return transformedResult;
     } catch (error: any) {
       this.logger.error(`文件上传失败：${error.message}`);
       throw error;
@@ -335,8 +342,8 @@ export class FileService implements OnModuleInit {
         .jpeg({ quality: 75 })
         .toFile(previewPath);
 
-      const url = this.uploadPathService.getWebUrl("images", uniqueFilename);
-      const previewUrl = this.uploadPathService.getWebUrl(
+      const url = this.uploadPathService.getRelativePath("images", uniqueFilename);
+      const previewUrl = this.uploadPathService.getRelativePath(
         "previews",
         uniqueFilename,
       );
@@ -361,7 +368,8 @@ export class FileService implements OnModuleInit {
     // 保存文件
     fs.writeFileSync(filePath, file.buffer);
 
-    return this.uploadPathService.getWebUrl("files", uniqueFilename);
+    // 返回相对路径（不转换为 URL）
+    return this.uploadPathService.getRelativePath("files", uniqueFilename);
   }
 
   /**
@@ -400,7 +408,13 @@ export class FileService implements OnModuleInit {
     });
 
     // 转换 URL 为绝对路径后返回
-    return this.urlService.transformUrls(newFile, ["url", "previewUrl"]);
+    return {
+      ...newFile,
+      url: this.urlService.toUploadAbsoluteUrl(newFile.url),
+      previewUrl: newFile.previewUrl
+        ? this.urlService.toUploadAbsoluteUrl(newFile.previewUrl)
+        : null,
+    };
   }
 
   /**
@@ -422,8 +436,8 @@ export class FileService implements OnModuleInit {
 
       // 删除物理文件（如果有 URL）
       if (file.url) {
-        const physicalPath = this.uploadPathService.getPathFromWebUrl(file.url);
-        if (physicalPath && fs.existsSync(physicalPath)) {
+        const physicalPath = this.uploadPathService.toPhysicalPath(file.url);
+        if (fs.existsSync(physicalPath)) {
           fs.unlinkSync(physicalPath);
           this.logger.log(`已删除文件: ${physicalPath}`);
         }
@@ -431,8 +445,8 @@ export class FileService implements OnModuleInit {
 
       // 删除预览图（如果有）
       if (file.previewUrl) {
-        const previewPath = this.uploadPathService.getPathFromWebUrl(file.previewUrl);
-        if (previewPath && fs.existsSync(previewPath)) {
+        const previewPath = this.uploadPathService.toPhysicalPath(file.previewUrl);
+        if (fs.existsSync(previewPath)) {
           fs.unlinkSync(previewPath);
           this.logger.log(`已删除预览图: ${previewPath}`);
         }

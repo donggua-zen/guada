@@ -435,8 +435,8 @@ export class ContextManagerService {
     if (!file.url) return null;
 
     try {
-      const physicalPath = this.uploadPathService.getPathFromWebUrl(file.url);
-      if (!physicalPath || !fs.existsSync(physicalPath)) {
+      const physicalPath = this.uploadPathService.toPhysicalPath(file.url);
+      if (!fs.existsSync(physicalPath)) {
         this.logger.warn(`Image file not found at path: ${physicalPath}`);
         return null;
       }

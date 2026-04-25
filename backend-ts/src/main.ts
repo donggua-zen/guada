@@ -4,6 +4,7 @@ import { AllExceptionsFilter } from "./common/filters/all-exceptions.filter";
 import { UrlService } from "./common/services/url.service";
 import * as express from "express";
 import * as path from "path";
+import * as fs from "fs";
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
@@ -14,10 +15,12 @@ async function bootstrap() {
   // 增强对中文文件名的支持
   app.use(express.urlencoded({ extended: true, limit: "50mb" }));
   app.use(express.json({ limit: "50mb" }));
-
-  // 设置静态文件目录（支持环境变量覆盖）
+  
+  // 基础静态文件目录（程序自带资源，如图片、模型等）
   const staticPath = process.env.STATIC_DIR || path.join(__dirname, "..", "static");
   const staticPrefix = process.env.STATIC_URL || "/static";
+  
+  console.log(`📁 基础静态目录: ${staticPath} -> ${staticPrefix}`);
   app.use(
     staticPrefix,
     express.static(staticPath, {
@@ -27,6 +30,32 @@ async function bootstrap() {
       },
     }),
   );
+  
+  // 上传文件目录（用户数据，持久化存储）
+  const uploadPhysicalRoot = process.env.UPLOAD_ROOT_DIR;
+  const uploadPublicPrefix = process.env.UPLOAD_URL_PREFIX;
+  
+  if (uploadPhysicalRoot && uploadPublicPrefix) {
+    const resolvedPath = path.resolve(uploadPhysicalRoot);
+    
+    // 确保上传目录存在
+    if (!fs.existsSync(resolvedPath)) {
+      fs.mkdirSync(resolvedPath, { recursive: true });
+      console.log(`✅ 创建上传目录: ${resolvedPath}`);
+    }
+    
+    console.log(`📁 上传文件目录: ${resolvedPath} -> ${uploadPublicPrefix}`);
+    app.use(
+      uploadPublicPrefix,
+      express.static(resolvedPath, {
+        setHeaders: (res, filePath) => {
+          res.setHeader("Content-Disposition", "inline; charset=utf-8");
+        },
+      }),
+    );
+  } else {
+    console.warn("⚠️  上传目录配置未设置（UPLOAD_ROOT_DIR 或 UPLOAD_URL_PREFIX），跳过挂载");
+  }
 
   app.useGlobalFilters(new AllExceptionsFilter());
   app.enableCors(); // Enable CORS for frontend integration

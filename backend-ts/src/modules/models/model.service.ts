@@ -31,14 +31,19 @@ export class ModelService {
             ...provider,
             attributes: template.attributes, // 实时从文件获取
             name: template.name, // 确保名称同步
-            avatarUrl: this.urlService.toAbsoluteUrl(template.avatarUrl || provider.avatarUrl),
+            avatarUrl: this.urlService.toStaticAbsoluteUrl(template.avatarUrl || provider.avatarUrl),
             protocol: template.protocol,
             description: template.description,
           };
         }
       }
-      // 对于自定义 provider，也转换 URL
-      return this.urlService.transformUrls(provider);
+      // 对于自定义 provider，转换 URL（avatarUrl 是静态资源）
+      return {
+        ...provider,
+        avatarUrl: provider.avatarUrl
+          ? this.urlService.toStaticAbsoluteUrl(provider.avatarUrl)
+          : null,
+      };
     });
 
     // 返回分页响应格式
@@ -55,7 +60,7 @@ export class ModelService {
     // 使用 UrlService 转换所有模板的 avatarUrl
     return PROVIDER_TEMPLATES.map((template) => ({
       ...template,
-      avatarUrl: this.urlService.toAbsoluteUrl(template.avatarUrl),
+      avatarUrl: this.urlService.toStaticAbsoluteUrl(template.avatarUrl),
     }));
   }
 
@@ -170,11 +175,16 @@ export class ModelService {
         include: { models: true },
       });
 
-      // 转换 URL 后返回
+      // 转换 URL 后返回（avatarUrl 是静态资源）
       const result = finalDescription
         ? { ...provider, description: finalDescription }
         : provider;
-      return this.urlService.transformUrls(result);
+      return {
+        ...result,
+        avatarUrl: result.avatarUrl
+          ? this.urlService.toStaticAbsoluteUrl(result.avatarUrl)
+          : null,
+      };
     });
   }
 
@@ -235,14 +245,24 @@ export class ModelService {
       const { name, apiUrl, protocol, ...allowedData } = data;
       // 只允许更新 apiKey 等其他字段
       const updatedProvider = await this.modelRepo.updateProvider(providerId, allowedData);
-      // 转换 URL 后返回
-      return this.urlService.transformUrls(updatedProvider);
+      // 转换 URL 后返回（avatarUrl 是静态资源）
+      return {
+        ...updatedProvider,
+        avatarUrl: updatedProvider.avatarUrl
+          ? this.urlService.toStaticAbsoluteUrl(updatedProvider.avatarUrl)
+          : null,
+      };
     }
 
     // custom 类型可以更新所有字段
     const updatedProvider = await this.modelRepo.updateProvider(providerId, data);
-    // 转换 URL 后返回
-    return this.urlService.transformUrls(updatedProvider);
+    // 转换 URL 后返回（avatarUrl 是静态资源）
+    return {
+      ...updatedProvider,
+      avatarUrl: updatedProvider.avatarUrl
+        ? this.urlService.toStaticAbsoluteUrl(updatedProvider.avatarUrl)
+        : null,
+    };
   }
 
   /**
