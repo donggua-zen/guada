@@ -603,6 +603,30 @@ export const PROVIDER_TEMPLATES: ProviderTemplate[] = [
     description:
       "深度求索，以高性价比和强大的代码生成能力著称，支持深度思考模式。",
     models: [
+      //DeepSeek-V4-Flash
+      {
+        modelName: "deepseek-v4-flash",
+        modeType: "text",
+        config: {
+          inputCapabilities: ["text"],
+          outputCapabilities: ["text"],
+          features: ["tools", "thinking"],
+          contextWindow: 1000000,
+          maxOutputTokens: 3840000,//384K
+        },
+      },
+      //DeepSeek-V4-Pro
+      {
+        modelName: "deepseek-v4-pro",
+        modeType: "text",
+        config: {
+          inputCapabilities: ["text"],
+          outputCapabilities: ["text"],
+          features: ["tools", "thinking"],
+          contextWindow: 1000000,
+          maxOutputTokens: 3840000,//384K
+        },
+      },
       {
         modelName: "deepseek-chat",
         modeType: "text",

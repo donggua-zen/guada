@@ -34,6 +34,7 @@ export class ContextManagerService {
     mergedSettings?: any;
     skipToolCalls?: boolean;
     supportsImageInput?: boolean;
+    keepReasoningContent?: boolean;
   }): Promise<{
     messages: MessageRecord[];
     systemPrompt: string;
@@ -47,6 +48,7 @@ export class ContextManagerService {
       mergedSettings,
       skipToolCalls = false,
       supportsImageInput = true,
+      keepReasoningContent = false,
     } = params;
 
     // 获取基础对话历史
@@ -56,6 +58,7 @@ export class ContextManagerService {
       maxMessages,
       skipToolCalls,
       supportsImageInput,
+      keepReasoningContent,
     );
     // 检查是否包含知识库
     let containsKnowledgeBase = false;
@@ -118,6 +121,7 @@ export class ContextManagerService {
       maxMessages: 500,
       mergedSettings,
       skipToolCalls: false,
+      keepReasoningContent: true, // Token 统计时需要完整内容
     });
 
     // 2. 获取工具定义并序列化
@@ -151,6 +155,7 @@ export class ContextManagerService {
     maxMessages: number = 200,
     skipToolCalls: boolean = false,
     supportsImageInput: boolean = true,
+    keepReasoningContent: boolean = false,
   ): Promise<MessageRecord[]> {
     // 1. 检查是否存在摘要记录
     const latestSummary = await this.contextStateRepo.findLatestBySessionId(sessionId);
@@ -183,6 +188,7 @@ export class ContextManagerService {
         skipToolCalls,
         msg.id === lastMessage.id,
         supportsImageInput,
+        keepReasoningContent,
       );
       if (transformed.length > 0) {
         context.push(...transformed);
@@ -251,7 +257,8 @@ export class ContextManagerService {
 
       // 压缩时需要包含工具调用和结果，所以 skipToolCalls 设为 false
       // 压缩时通常不关注图像降级，默认支持或根据需求调整，这里暂且保持默认 true
-      const transformed = this.transformContentStructure(msg, false, false, true);
+      // 压缩场景始终不携带思维链，节省 Token
+      const transformed = this.transformContentStructure(msg, false, false, true, false);
       if (transformed.length > 0) {
         // 将原始消息的 ID 挂载到转换后的记录上，方便后续追踪
         transformed.forEach(t => t.id = msg.id);
@@ -280,6 +287,8 @@ export class ContextManagerService {
       undefined,
       3,
       skipToolCalls,
+      true, // supportsImageInput
+      true, // keepReasoningContent - 总结任务需要完整上下文
     );
 
     const nonSystemMessages = allMessages.filter(
@@ -325,6 +334,7 @@ export class ContextManagerService {
     skipToolCalls: boolean,
     isNewUserMessage: boolean,
     supportsImageInput: boolean = true,
+    keepReasoningContent: boolean = false,
   ): MessageRecord[] {
     if (msg.role === "assistant") {
       const turns: MessageRecord[] = [];
@@ -339,6 +349,11 @@ export class ContextManagerService {
           role: "assistant",
           content: content.content || "",
         };
+
+        // 根据参数决定是否保留 reasoningContent
+        if (keepReasoningContent) {
+          baseMsg.reasoningContent = content.reasoningContent;
+        }
 
         baseMsg.toolCalls = toolCalls;
 
