@@ -8,6 +8,7 @@ import { LLMService } from "../llm-core/llm.service";
 import { ToolOrchestrator } from "../tools/tool-orchestrator.service";
 import { ContextManagerService } from "./context-manager.service";
 import { SessionLockService } from "./session-lock.service";
+import { ToolContextFactory } from "../tools/tool-context";
 import { MessageRecord, LLMResponseChunk } from "../llm-core/types/llm.types";
 
 /**
@@ -34,6 +35,7 @@ export class AgentService {
     private contextManager: ContextManagerService,
     private llmService: LLMService,
     private sessionLockService: SessionLockService,
+    private toolContextFactory: ToolContextFactory,
   ) { }
 
   async *completions(
@@ -59,6 +61,17 @@ export class AgentService {
       // 2. 使用 ContextManager 获取完整的 LLM 上下文（包含系统提示词、工具注入等）
       const config = (session.model?.config as any) || {};
       const supportsImageInput = (config.inputCapabilities || []).includes("image");
+      const features = config.features || [];
+
+      // 判断是否为 DeepSeek V4 模型
+      const modelName = session.model?.modelName;
+      const isDeepSeekV4 = modelName && modelName.toLowerCase().includes("deepseek") && modelName.toLowerCase().includes("v4");
+
+      // 判断是否开启思考模式
+      const thinkingEnabled = features.includes("thinking") ? mergedSettings.thinkingEnabled : false;
+
+      // 仅 DeepSeek V4 且开启思考模式时才携带思维链
+      const keepReasoningContent = isDeepSeekV4 && thinkingEnabled;
 
       const { messages, toolContext } = await this.contextManager.getContextForLLMInference({
         sessionId,
@@ -68,10 +81,35 @@ export class AgentService {
         mergedSettings,
         skipToolCalls: false,
         supportsImageInput,
+        keepReasoningContent,
       });
 
+      // 如果是 DeepSeek V4 且开启了思考模式,根据工具调用情况进行二次过滤
+      if (isDeepSeekV4 && thinkingEnabled) {
+        // 检查是否存在工具调用
+        const hasToolCalls = messages.some(
+          (msg) => msg.role === "assistant" && msg.toolCalls && msg.toolCalls.length > 0,
+        );
+
+        // 只有存在工具调用时才保留思维链
+        if (!hasToolCalls) {
+          // 过滤掉所有 assistant 消息的 reasoningContent
+          messages.forEach(msg => {
+            if (msg.role === "assistant") {
+              delete msg.reasoningContent;
+            }
+          });
+        } else {
+          // 确保字段存在性(避免 undefined)
+          messages.forEach(msg => {
+            if (msg.role === "assistant" && msg.reasoningContent === undefined) {
+              msg.reasoningContent = "";
+            }
+          });
+        }
+      }
+
       // 3. 获取工具定义
-      const features = config.features || [];
       const canUseTools = features.includes("tools");
       const tools = canUseTools ? await this.toolOrchestrator.getAllTools(toolContext) : undefined;
 
