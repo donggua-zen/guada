@@ -194,8 +194,12 @@ export const useFileUploadStore = defineStore('fileUpload', () => {
             const token = authStore.token
 
             try {
+                // 使用 apiService 的 baseURL 构造完整 URL
+                const { apiService } = await import('@/services/ApiService')
+                const uploadUrl = `${apiService.baseURL}/knowledge-bases/${task.knowledgeBaseId}/files/upload`
+                
                 const response = await axios.post(
-                    `/api/v1/knowledge-bases/${task.knowledgeBaseId}/files/upload`,
+                    uploadUrl,
                     formData,
                     {
                         headers: {
@@ -422,8 +426,12 @@ export const useFileUploadStore = defineStore('fileUpload', () => {
             const authStore = useAuthStore()
             const token = authStore.token
 
+            // 使用 apiService 的 baseURL 构造完整 URL
+            const { apiService } = await import('@/services/ApiService')
+            const uploadUrl = `${apiService.baseURL}/sessions/${task.knowledgeBaseId}/files`
+
             const response = await axios.post(
-                `/api/v1/sessions/${task.knowledgeBaseId}/files`,
+                uploadUrl,
                 formData,
                 {
                     headers: {

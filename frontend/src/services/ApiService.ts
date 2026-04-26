@@ -63,10 +63,20 @@ class ApiService implements IApiService {
       },
       (error) => {
         console.error('API 请求失败:', error)
-        if (error.status === 401) {
+        
+        // 区分连接错误和认证错误
+        if (error.code === 'ECONNREFUSED' || error.code === 'ERR_CONNECTION_REFUSED' || !error.response) {
+          // 网络连接错误，不跳转到登录页
+          console.warn('后端服务连接失败，请稍后重试')
+          throw new Error('无法连接到后端服务，请确保应用已完全启动')
+        }
+        
+        // 只有真正的401认证错误才跳转登录
+        if (error.response?.status === 401) {
           window.location.href = '/login'
           return Promise.reject(error)
         }
+        
         if (error.response?.data?.error) {
           throw new Error(error.response.data.error || '请求失败')
         }

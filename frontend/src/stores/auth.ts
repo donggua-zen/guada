@@ -114,10 +114,25 @@ export const useAuthStore = defineStore('auth', () => {
             }
             
             return true
-        } catch (error) {
-            console.error(error)
-            logout()
-            return false
+        } catch (error: any) {
+            console.error('认证检查失败:', error)
+            
+            // 如果是连接错误，不要清除token，保留登录状态
+            if (error.message?.includes('无法连接到后端服务') || 
+                error.message?.includes('API服务初始化中')) {
+                console.warn('后端服务未就绪，保留登录状态')
+                // 保留token和用户信息，等待后端就绪
+                return true
+            }
+            
+            // 只有真正的认证失败才清除登录状态
+            if (error.response?.status === 401 || error.message?.includes('Invalid token')) {
+                logout()
+                return false
+            }
+            
+            // 其他错误也保留登录状态
+            return true
         }
     }
 
