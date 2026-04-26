@@ -70,6 +70,11 @@ async function initializeDatabase(userDataPath: string, backendPath: string): Pr
 
   // 判断是否为首次运行（数据库文件不存在或大小为0）
   const isFirstRun = !fs.existsSync(dbPath) || fs.statSync(dbPath).size === 0
+  console.log('🔍 数据库状态:', {
+    exists: fs.existsSync(dbPath),
+    size: fs.existsSync(dbPath) ? fs.statSync(dbPath).size : 0,
+    isFirstRun
+  })
 
   if (isFirstRun) {
     console.log('🔄 检测到首次运行，正在初始化数据库...')
@@ -90,13 +95,57 @@ async function initializeDatabase(userDataPath: string, backendPath: string): Pr
       if (!isDev) {
         const seedScriptPath = path.join(backendPath, 'dist', 'scripts', 'seed.js')
         if (fs.existsSync(seedScriptPath)) {
-          execSync(`node "${seedScriptPath}" --force`, {
+          // 关键：使用 process.execPath（Electron 内置的 Node.js）而不是系统 node
+          const nodePath = process.execPath
+          const modulesPath = path.join(backendPath, 'node_modules')
+          
+          console.log('📝 种子脚本路径:', seedScriptPath)
+          console.log('📝 Node.js 路径:', nodePath)
+          
+          // 使用 spawn 而不是 execSync，以便更好地处理输出
+          const { spawn } = require('child_process')
+          const seedProcess = spawn(nodePath, [seedScriptPath, '--force'], {
             cwd: backendPath,
-            env,
-            stdio: 'pipe',
-            encoding: 'utf-8'
+            env: {
+              ...env,
+              NODE_MODULES_PATH: modulesPath,
+              ELECTRON_RUN_AS_NODE: '1'
+            },
+            stdio: ['pipe', 'pipe', 'pipe']  // 捕获所有输出
           })
-          console.log('✅ 种子数据初始化完成')
+          
+          let stdout = ''
+          let stderr = ''
+          
+          seedProcess.stdout.on('data', (data: Buffer) => {
+            const text = data.toString()
+            stdout += text
+            process.stdout.write(text)  // 实时输出到控制台
+          })
+          
+          seedProcess.stderr.on('data', (data: Buffer) => {
+            const text = data.toString()
+            stderr += text
+            process.stderr.write(text)  // 实时输出错误
+          })
+          
+          // 等待种子脚本执行完成
+          await new Promise<void>((resolve, reject) => {
+            seedProcess.on('close', (code: number) => {
+              if (code === 0) {
+                console.log('\n✅ 种子数据初始化完成')
+                resolve()
+              } else {
+                console.error(`\n❌ 种子脚本退出码: ${code}`)
+                reject(new Error(`种子脚本执行失败，退出码: ${code}`))
+              }
+            })
+            
+            seedProcess.on('error', (error: Error) => {
+              console.error('\n❌ 种子脚本启动失败:', error.message)
+              reject(error)
+            })
+          })
         } else {
           console.warn('⚠️  种子脚本不存在，跳过种子数据初始化')
         }
