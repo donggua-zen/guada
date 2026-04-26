@@ -31,7 +31,7 @@ import { apiService } from '@/services/ApiService'
 
 // 在 Electron 环境下初始化后端地址
 if (isElectron) {
-  apiService.initBackendUrl().catch(err => console.error('Failed to init backend URL:', err))
+  await apiService.initBackendUrl().catch(err => console.error('Failed to init backend URL:', err))
 }
 
 const routes = [
@@ -131,6 +131,21 @@ router.beforeEach(async (to, from, next) => {
                 if (success) {
                     return next()
                 }
+            }
+        }
+
+        // 检查是否有存储的token（记住我功能）
+        const hasStoredToken = localStorage.getItem('token') || sessionStorage.getItem('token')
+        if (hasStoredToken && !authStore.isAuthenticated) {
+            // 有token但store中未设置，尝试恢复
+            const storedToken = localStorage.getItem('token') || sessionStorage.getItem('token')
+            const storedUser = localStorage.getItem('user') || sessionStorage.getItem('user')
+            
+            if (storedToken && storedUser) {
+                authStore.token = storedToken
+                authStore.user = JSON.parse(storedUser)
+                console.log('从存储中恢复登录状态')
+                return next()
             }
         }
 

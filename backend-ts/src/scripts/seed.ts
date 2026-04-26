@@ -12,6 +12,12 @@
  *   npm run db:seed --force   # 强制模式，无需确认
  */
 
+// 在 Electron 生产环境中，确保加载正确的原生模块
+if (process.env.NODE_MODULES_PATH) {
+  const Module = require('module');
+  Module.globalPaths.unshift(process.env.NODE_MODULES_PATH);
+}
+
 import { PrismaClient } from "@prisma/client";
 import { PrismaBetterSqlite3 } from "@prisma/adapter-better-sqlite3";
 import * as bcrypt from "bcrypt";
@@ -291,21 +297,28 @@ async function seedDatabase(force: boolean = false) {
     await prisma.$executeRawUnsafe('PRAGMA foreign_keys = ON;');
     logSuccess("外键约束已启用");
 
-    // 步骤 1: 重置数据库
-    logSection("步骤 1: 重置数据库");
-    logInfo("正在执行 prisma db push --force-reset...");
+    // 步骤 1: 重置数据库（仅开发环境）
+    // 生产环境：数据库已由 Electron 主进程通过 prisma db push 创建，直接跳过重置
+    const isProduction = process.env.NODE_ENV === 'production';
+    
+    if (!isProduction) {
+      logSection("步骤 1: 重置数据库");
+      logInfo("正在执行 prisma db push --force-reset...");
 
-    // 使用 Prisma CLI 重置数据库
-    const { execSync } = require("child_process");
-    try {
-      execSync("npx prisma db push --force-reset --accept-data-loss", {
-        stdio: "inherit",
-        cwd: resolve(__dirname, "../.."),
-      });
-      logSuccess("数据库重置成功");
-    } catch (error) {
-      logError("数据库重置失败，请确保 Prisma schema 正确");
-      throw error;
+      // 使用 Prisma CLI 重置数据库
+      const { execSync } = require("child_process");
+      try {
+        execSync("npx prisma db push --force-reset --accept-data-loss", {
+          stdio: "inherit",
+          cwd: resolve(__dirname, "../.."),
+        });
+        logSuccess("数据库重置成功");
+      } catch (error) {
+        logError("数据库重置失败，请确保 Prisma schema 正确");
+        throw error;
+      }
+    } else {
+      logInfo("生产环境：跳过数据库重置（已由主进程创建表结构）");
     }
 
     // 步骤 2: 导入默认数据
