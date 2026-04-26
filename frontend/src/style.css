@@ -53,6 +53,7 @@
     --color-text-gray: #666;
     --color-text-disabled: #9ca3af;
     --color-surface: rgb(247, 247, 250);
+    --color-surface: #efefef;
     --color-surface-border: #efefef;
     --color-bg: #fff;
     --color-border: #d1d5db;
@@ -74,7 +75,7 @@
     --color-titlebar-border: var(--color-surface);
 
     /* 聊天对话样式 */
-    --color-conversation-bg: var(--color-surface);
+    --color-conversation-bg: rgb(247, 247, 250);
     --color-conversation-text: #333;
     --color-conversation-border: transparent;
     --color-conversation-bg-active: var(--color-primary-100);
