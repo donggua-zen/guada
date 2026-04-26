@@ -110,15 +110,15 @@
         </template>
     </div>
 
-    <el-dialog v-model="showProviderModal" :title="isProviderEditMode ? '编辑供应商' : '新建分组'" width="30%" align-center>
+    <el-dialog v-model="showProviderModal" :title="getProviderModalTitle" width="30%" align-center append-to-body>
         <el-form ref="formRef" :label-width="80" :model="currentProviderEdit" :rules="providerRules" size="large"
-            label-position="left">
+            label-position="left" hide-required-asterisk>
             <el-form-item label="名字" prop="name">
-                <el-input v-model="currentProviderEdit.name" placeholder="输入分组名字" :disabled="!isCustomProvider" />
+                <el-input v-model="currentProviderEdit.name" placeholder="输入分组名字" :disabled="!isNameEditable" />
             </el-form-item>
             <el-form-item label="协议类型" prop="protocol">
                 <el-select v-model="currentProviderEdit.protocol" placeholder="请选择协议类型" style="width: 100%"
-                    :disabled="!isCustomProvider">
+                    :disabled="!isProtocolEditable">
                     <el-option label="OpenAI" value="openai" />
                     <el-option label="OpenAI-Response" value="openai-response" />
                     <el-option label="Gemini" value="gemini" />
@@ -126,14 +126,21 @@
                 </el-select>
             </el-form-item>
             <el-form-item label="API地址" prop="apiUrl">
-                <el-input v-model="currentProviderEdit.apiUrl" placeholder="api_url" :disabled="!isCustomProvider" />
+                <el-input v-model="currentProviderEdit.apiUrl" placeholder="api_url" />
             </el-form-item>
             <el-form-item label="API KEY" prop="apiKey">
-                <el-input v-model="currentProviderEdit.apiKey" placeholder="api_key" type="password" show-password />
+                <div class="api-key-input-wrapper">
+                    <el-input v-model="currentProviderEdit.apiKey" placeholder="api_key" type="password" show-password />
+                    <el-button type="primary" @click="handleTestConnection" :loading="testingConnection" 
+                        :disabled="!currentProviderEdit.apiUrl || !currentProviderEdit.apiKey">
+                        测试连通性
+                    </el-button>
+                </div>
             </el-form-item>
             <!-- 提示：非自定义供应商的限制 -->
-            <el-alert v-if="!isCustomProvider && isProviderEditMode" title="提示：从模板添加的供应商，名称、协议和API地址不可修改" type="info"
-                :closable="false" show-icon class="mb-2" />
+            <el-alert v-if="!isNameEditable" 
+                title="提示：从模板添加的供应商，名称和协议类型不可修改，仅可配置 API 地址和 API Key" 
+                type="info" :closable="false" show-icon class="mb-2" />
         </el-form>
         <template #footer>
             <span class="dialog-footer">
@@ -145,7 +152,7 @@
 
     <!-- 编辑/新增模型信息的模态框 -->
     <el-dialog v-model="showEditModal" :title="isEditMode ? '编辑模型信息' : '新增模型'" width="600px" align-center
-        class="model-edit-dialog">
+        class="model-edit-dialog" append-to-body>
         <el-form ref="editFormRef" :model="editModelForm" :rules="editModelRules" label-position="left"
             label-width="120px" size="default">
             
@@ -239,7 +246,7 @@
     </el-dialog>
 
     <!-- 获取模型列表的模态框 -->
-    <el-dialog v-model="showFetchModal" title="获取模型列表" width="600px" align-center class="model-edit-dialog">
+    <el-dialog v-model="showFetchModal" title="获取模型列表" width="600px" align-center class="model-edit-dialog" append-to-body>
         <div class="max-h-[60vh] overflow-y-auto px-1">
             <div class="p-2 mb-2 sticky top-0 bg-white dark:bg-gray-900 z-10">
                 <el-input v-model="searchModelName" placeholder="搜索模型名称" clearable @input="handleSearchModel">
@@ -383,8 +390,34 @@ const currentProviderEdit = ref({
 });
 
 // 判断是否为自定义供应商（只有 custom 类型才可编辑 name、protocol、apiUrl）
+// 在新建模式下，允许编辑所有字段；在编辑模式下，只有 custom 类型可编辑
 const isCustomProvider = computed(() => {
+    // 新建模式下，始终允许编辑
+    if (!isProviderEditMode.value) {
+        return true;
+    }
+    // 编辑模式下，只有 custom 类型可编辑
     return currentProviderEdit.value.provider === 'custom';
+});
+
+// 名称字段是否可编辑：仅自定义供应商可编辑
+const isNameEditable = computed(() => {
+    return currentProviderEdit.value.provider === 'custom';
+});
+
+// 协议字段是否可编辑：仅自定义供应商可编辑
+const isProtocolEditable = computed(() => {
+    return currentProviderEdit.value.provider === 'custom';
+});
+
+// 动态获取弹窗标题
+const getProviderModalTitle = computed(() => {
+    if (isProviderEditMode.value) {
+        return '编辑供应商';
+    }
+    // 新建模式下，根据 provider 类型显示不同标题
+    const isFromTemplate = currentProviderEdit.value.provider !== 'custom';
+    return isFromTemplate ? `添加 ${currentProviderEdit.value.name || '供应商'}` : '新建分组';
 });
 
 // 删除原来的防抖计时器
@@ -399,6 +432,7 @@ const showProviderModal = ref(false);
 const showFetchModal = ref(false);
 const fetchingModels = ref(false);
 const fetchedModels = ref([]);
+const testingConnection = ref(false);  // 测试连通性加载状态
 
 
 // 供应商表单验证规则
@@ -408,13 +442,18 @@ const providerRules = {
         message: '请输入供应商名字',
         trigger: ['blur', 'input']
     },
+    protocol: {
+        required: true,
+        message: '请选择协议类型',
+        trigger: ['change', 'blur']
+    },
     apiUrl: {
         required: true,
         message: '请输入API地址',
         trigger: ['blur', 'input']
     },
     apiKey: {
-        required: false,
+        required: true,
         message: '请输入API密钥',
         trigger: ['blur']
     }
@@ -571,17 +610,14 @@ const handleSaveProvider = async () => {
         if (isProviderEditMode.value) {
             // 编辑模式
             const updateData = {
-                name: currentProviderEdit.value.name,
                 apiKey: currentProviderEdit.value.apiKey,
-                apiUrl: currentProviderEdit.value.apiUrl,
-                protocol: currentProviderEdit.value.protocol
+                apiUrl: currentProviderEdit.value.apiUrl
             };
 
-            // 只有自定义供应商才能修改 name、apiUrl、protocol
-            if (!isCustomProvider.value) {
-                delete updateData.name;
-                delete updateData.apiUrl;
-                delete updateData.protocol;
+            // 只有自定义供应商才能修改 name 和 protocol
+            if (isNameEditable.value) {
+                updateData.name = currentProviderEdit.value.name;
+                updateData.protocol = currentProviderEdit.value.protocol;
             }
 
             await apiService.updateProvider(currentProviderId.value, updateData);
@@ -591,10 +627,10 @@ const handleSaveProvider = async () => {
             const provider = providers.value.find(p => p.id === currentProviderId.value);
             if (provider) {
                 provider.apiKey = currentProviderEdit.value.apiKey;
+                provider.apiUrl = currentProviderEdit.value.apiUrl;
                 // 只有自定义供应商才更新这些字段
-                if (isCustomProvider.value) {
+                if (isNameEditable.value) {
                     provider.name = currentProviderEdit.value.name;
-                    provider.apiUrl = currentProviderEdit.value.apiUrl;
                     provider.protocol = currentProviderEdit.value.protocol;
                 }
             }
@@ -612,7 +648,14 @@ const handleSaveProvider = async () => {
 
             const provider = await apiService.createProvider(payload);
             providers.value.push(provider);
-            notify.success('创建成功', '分组创建成功', { duration: 2000 });
+            
+            // 根据是否为模板添加，显示不同的提示信息
+            const isFromTemplate = currentProviderEdit.value.provider !== 'custom';
+            if (isFromTemplate) {
+                notify.success('添加成功', `已添加 ${currentProviderEdit.value.name}，您可以点击“获取模型列表”来同步模型`, { duration: 3000 });
+            } else {
+                notify.success('创建成功', '分组创建成功', { duration: 2000 });
+            }
 
             // 关闭弹窗
             showProviderModal.value = false;
@@ -622,6 +665,39 @@ const handleSaveProvider = async () => {
         notify.error('编辑失败', '分组编辑失败', { duration: 2000 });
     }
 }
+
+// 测试供应商连通性
+const handleTestConnection = async () => {
+    // 验证必填字段
+    if (!currentProviderEdit.value.apiUrl) {
+        notify.error('配置错误', '请先填写 API 地址', { duration: 2000 });
+        return;
+    }
+    if (!currentProviderEdit.value.apiKey) {
+        notify.error('配置错误', '请先填写 API Key', { duration: 2000 });
+        return;
+    }
+
+    testingConnection.value = true;
+    try {
+        const result = await apiService.testProviderConnection({
+            apiUrl: currentProviderEdit.value.apiUrl,
+            apiKey: currentProviderEdit.value.apiKey,
+            protocol: currentProviderEdit.value.protocol || 'openai'
+        });
+
+        if (result.success) {
+            notify.success('连接成功', result.message || 'API 连接测试成功', { duration: 3000 });
+        } else {
+            notify.error('连接失败', result.message || 'API 连接测试失败', { duration: 3000 });
+        }
+    } catch (error) {
+        console.error('测试连通性失败:', error);
+        notify.error('连接失败', '测试连通性时发生错误', { duration: 3000 });
+    } finally {
+        testingConnection.value = false;
+    }
+};
 
 // 获取模型列表
 const handleFetchModels = async () => {
@@ -956,34 +1032,23 @@ const handleEditProvider = (provider) => {
 };
 
 // 处理模板点击（从网格中添加）
-const handleTemplateClick = async (template) => {
-    const result = await confirm("添加供应商", `确定要添加供应商模板 "${template.name}" 吗？`);
-    if (!result) return;
-
-    try {
-        const payload = {
-            template_id: template.id,
-            name: template.name,
-            apiUrl: template.defaultApiUrl || "",
-            apiKey: "",
-            provider: template.id,  // 使用模板 id 作为 provider 标识符
-            protocol: template.protocol || 'openai'  // 使用模板的协议或默认 openai
-        };
-
-        const provider = await apiService.createProvider(payload);
-        providers.value.push(provider);
-
-        // 如果返回的供应商包含模型，添加到模型列表
-        if (provider.models && provider.models.length > 0) {
-            models.value.push(...provider.models);
-            notify.success('添加成功', `已添加 ${template.name}，自动创建 ${provider.models.length} 个模型`, { duration: 2000 });
-        } else {
-            notify.success('添加成功', `已添加 ${template.name}`, { duration: 2000 });
-        }
-    } catch (error) {
-        console.error('添加分组失败:', error);
-        notify.error('添加失败', '添加分组时发生错误', { duration: 2000 });
-    }
+const handleTemplateClick = (template) => {
+    // 直接打开编辑弹窗，预填充模板信息
+    currentProviderId.value = null;
+    isProviderEditMode.value = false;
+    
+    // 根据模板信息预填充表单数据
+    currentProviderEdit.value = {
+        name: template.name || "",
+        apiUrl: template.defaultApiUrl || "",
+        apiKey: "",
+        provider: template.id,  // 使用模板 id 作为 provider 标识符
+        protocol: template.protocol || 'openai'  // 使用模板的协议或默认 openai
+    };
+    
+    // 重置表单验证状态并打开编辑弹窗
+    formRef.value?.clearValidate();
+    showProviderModal.value = true;
 };
 
 // 添加从列表中删除供应商的方法
@@ -1032,5 +1097,17 @@ const handleDeleteProviderFromList = async (provider) => {
 :deep(.el-checkbox-button + .el-checkbox-button), 
 :deep(.el-radio-button + .el-radio-button) {
     margin-left: 8px;
+}
+
+/* API Key 输入框和按钮布局 */
+.api-key-input-wrapper {
+    display: flex;
+    gap: 8px;
+    width: 100%;
+}
+
+.api-key-input-wrapper :deep(.el-input) {
+    flex: 1;
+    min-width: 0;
 }
 </style>
