@@ -75,9 +75,9 @@ export class FileService implements OnModuleInit {
       // 4. 转换 URL 为绝对路径后返回
       const transformedResult = {
         ...result,
-        url: this.urlService.toUploadAbsoluteUrl(result.url),
+        url: this.urlService.toResourceAbsoluteUrl(result.url),
         previewUrl: result.previewUrl
-          ? this.urlService.toUploadAbsoluteUrl(result.previewUrl)
+          ? this.urlService.toResourceAbsoluteUrl(result.previewUrl)
           : null,
       };
       return transformedResult;
@@ -342,8 +342,8 @@ export class FileService implements OnModuleInit {
         .jpeg({ quality: 75 })
         .toFile(previewPath);
 
-      const url = this.uploadPathService.getRelativePath("images", uniqueFilename);
-      const previewUrl = this.uploadPathService.getRelativePath(
+      const url = this.uploadPathService.getStoragePath("images", uniqueFilename);
+      const previewUrl = this.uploadPathService.getStoragePath(
         "previews",
         uniqueFilename,
       );
@@ -369,7 +369,7 @@ export class FileService implements OnModuleInit {
     fs.writeFileSync(filePath, file.buffer);
 
     // 返回相对路径（不转换为 URL）
-    return this.uploadPathService.getRelativePath("files", uniqueFilename);
+    return this.uploadPathService.getStoragePath("files", uniqueFilename);
   }
 
   /**
@@ -410,9 +410,9 @@ export class FileService implements OnModuleInit {
     // 转换 URL 为绝对路径后返回
     return {
       ...newFile,
-      url: this.urlService.toUploadAbsoluteUrl(newFile.url),
+      url: this.urlService.toResourceAbsoluteUrl(newFile.url),
       previewUrl: newFile.previewUrl
-        ? this.urlService.toUploadAbsoluteUrl(newFile.previewUrl)
+        ? this.urlService.toResourceAbsoluteUrl(newFile.previewUrl)
         : null,
     };
   }

@@ -81,9 +81,11 @@ export class ToolContextFactory {
     };
 
     // 从合并设置中提取工具配置
-    // mergedSettings.tools 是角色级别的配置（对象格式：{ namespace: boolean | 'all' }）
+    // mergedSettings.tools 可能是：
+    // - boolean: true(全部启用) / false(全部禁用)
+    // - 对象: { namespace: boolean } 指定具体工具的启用状态
     // mergedSettings.mcpServers 是 MCP 服务器的配置（boolean 或 string[]）
-    const characterTools = mergedSettings?.tools || {};
+    const toolsConfig = mergedSettings?.tools;
     const mcpServersConfig = mergedSettings?.mcpServers;
 
     // 动态遍历所有工具提供者，避免硬编码
@@ -92,21 +94,15 @@ export class ToolContextFactory {
     for (const [namespace, provider] of this.toolOrchestrator.getProviders()) {
       const metadata = provider.getMetadata();
       
-      // 获取角色级别的配置
-      const characterValue = characterTools[namespace];
-      
-      // 计算默认值（所有工具默认为启用）
-      const defaultEnabled = true;
-      
       // 特殊处理：MCP 工具
       if (metadata.isMcp) {
         // MCP 的配置可能是 boolean 或 array
-        let enabled = true;
+        let enabled: boolean | string[] = true;
         if (typeof mcpServersConfig === 'boolean') {
           enabled = mcpServersConfig;
         } else if (Array.isArray(mcpServersConfig)) {
-          // 如果是指定服务器列表，则启用 MCP 提供者
-          enabled = mcpServersConfig.length > 0;
+          // 如果是指定服务器列表，直接传递数组以实现精细控制
+          enabled = mcpServersConfig;
         }
         
         providerConfigs[namespace] = {
@@ -115,20 +111,13 @@ export class ToolContextFactory {
         continue;
       }
       
+      // 对于其他工具，根据 toolsConfig 的类型判断是否启用
+      let enabled = this.resolveToolEnabled(toolsConfig, namespace);
+      
       // 特殊处理：知识库工具需要检查是否包含知识库
-      let enabled = true;
       if (namespace === 'knowledge_base') {
-        enabled = containsKnowledgeBase && 
-          this.mergeToolConfig(
-            defaultEnabled,
-            characterValue ?? defaultEnabled,
-          );
-      } else {
-        // 对于其他工具，使用角色配置（如果没有配置则默认为启用）
-        enabled = this.mergeToolConfig(
-          defaultEnabled,
-          characterValue ?? defaultEnabled,
-        );
+        // 知识库必须同时满足：配置启用 && 包含知识库内容
+        enabled = enabled && containsKnowledgeBase;
       }
       
       providerConfigs[namespace] = {
@@ -140,23 +129,28 @@ export class ToolContextFactory {
   }
 
   /**
-   * 合并全局和角色级别的工具配置
+   * 解析工具配置，判断指定命名空间的工具是否启用
    * 规则：
-   * 1. 如果角色设置为 "all"，则使用全局设置
-   * 2. 否则取全局和角色的交集（两者都为 true 才启用）
+   * 1. 如果 toolsConfig 是 boolean：
+   *    - true: 全部启用
+   *    - false: 全部禁用
+   * 2. 如果 toolsConfig 是对象 { namespace: boolean }：
+   *    - 优先使用 namespace 对应的值，未配置默认为 true
+   * 3. 如果 toolsConfig 未定义或为其他类型：默认启用
    */
-  private mergeToolConfig(globalValue: any, characterValue: any): boolean {
-    // 角色设置为 "all" 表示启用所有全局允许的工具
-    if (characterValue === "all") {
-      return globalValue === true;
+  private resolveToolEnabled(toolsConfig: any, namespace: string): boolean {
+    // 情况1：boolean 类型
+    if (typeof toolsConfig === 'boolean') {
+      return toolsConfig;
     }
 
-    // 角色设置为布尔值，取交集
-    if (typeof characterValue === "boolean") {
-      return globalValue === true && characterValue === true;
+    // 情况2：对象类型 { namespace: boolean }
+    if (typeof toolsConfig === 'object' && toolsConfig !== null) {
+      // 优先使用 namespace 配置，未配置时默认为 true
+      return toolsConfig[namespace] !== false;
     }
 
-    // 默认使用全局设置
-    return globalValue === true;
+    // 情况3：未定义或其他类型，默认启用
+    return true;
   }
 }

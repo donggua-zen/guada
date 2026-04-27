@@ -1,18 +1,31 @@
 import { Injectable } from "@nestjs/common";
+import * as fs from "fs";
+import * as path from "path";
+import * as crypto from "crypto";
+import sharp from "sharp";
 import { CharacterRepository } from "../../common/database/character.repository";
 import { CharacterGroupRepository } from "../../common/database/character-group.repository";
 import {
   createPaginatedResponse,
   PaginatedResponse,
 } from "../../common/types/pagination";
+import { UploadPathService } from "../../common/services/upload-path.service";
 import { UrlService } from "../../common/services/url.service";
 import { SettingsStorage } from "../../common/utils/settings-storage.util";
 
 @Injectable()
 export class CharacterService {
+  private readonly ALLOWED_MIME_TYPES = [
+    "image/jpeg",
+    "image/png",
+    "image/gif",
+    "image/webp",
+  ];
+
   constructor(
     private characterRepo: CharacterRepository,
     private groupRepo: CharacterGroupRepository,
+    private uploadPathService: UploadPathService,
     private urlService: UrlService,
     private settingsStorage: SettingsStorage,
   ) { }
@@ -60,7 +73,7 @@ export class CharacterService {
     const transformedItems = items.map((item) => ({
       ...item,
       avatarUrl: item.avatarUrl
-        ? this.urlService.toUploadAbsoluteUrl(item.avatarUrl)
+        ? this.urlService.toResourceAbsoluteUrl(item.avatarUrl)
         : null,
     }));
     return createPaginatedResponse(transformedItems, total, { skip, limit });
@@ -77,7 +90,7 @@ export class CharacterService {
     return {
       ...character,
       avatarUrl: character.avatarUrl
-        ? this.urlService.toUploadAbsoluteUrl(character.avatarUrl)
+        ? this.urlService.toResourceAbsoluteUrl(character.avatarUrl)
         : null,
     };
   }
@@ -98,7 +111,7 @@ export class CharacterService {
     return {
       ...character,
       avatarUrl: character.avatarUrl
-        ? this.urlService.toUploadAbsoluteUrl(character.avatarUrl)
+        ? this.urlService.toResourceAbsoluteUrl(character.avatarUrl)
         : null,
     };
   }
@@ -126,7 +139,7 @@ export class CharacterService {
     return {
       ...updatedCharacter,
       avatarUrl: updatedCharacter.avatarUrl
-        ? this.urlService.toUploadAbsoluteUrl(updatedCharacter.avatarUrl)
+        ? this.urlService.toResourceAbsoluteUrl(updatedCharacter.avatarUrl)
         : null,
     };
   }
@@ -139,8 +152,60 @@ export class CharacterService {
     return this.characterRepo.delete(characterId);
   }
 
-  async uploadAvatar(characterId: string, fileUrl: string) {
-    return this.updateCharacter(characterId, { avatarUrl: fileUrl });
+  /**
+   * 上传并处理角色头像
+   */
+  async uploadAvatar(characterId: string, file: any) {
+    const character = await this.characterRepo.findById(characterId);
+    if (!character) {
+      throw new Error("角色不存在");
+    }
+
+    // 1. 验证文件类型
+    if (!file || !this.ALLOWED_MIME_TYPES.includes(file.mimetype)) {
+      throw new Error(
+        `不支持的文件类型。允许的类型: ${this.ALLOWED_MIME_TYPES.join(", ")}`,
+      );
+    }
+
+    // 2. 获取物理路径（自动创建目录）
+    const avatarDir = this.uploadPathService.getPhysicalPath("avatars");
+
+    // 3. 生成唯一文件名
+    const uniqueFilename = `${crypto.randomUUID()}.jpg`;
+    const filePath = path.join(avatarDir, uniqueFilename);
+
+    try {
+      // 4. 使用 sharp 缩放并转换为 JPEG
+      await sharp(file.buffer)
+        .resize(128, 128, { fit: "cover" })
+        .jpeg({ quality: 95 })
+        .toFile(filePath);
+
+      // 5. 清理旧头像
+      if (character.avatarUrl) {
+        const oldFilePath = this.uploadPathService.toPhysicalPath(character.avatarUrl);
+        if (fs.existsSync(oldFilePath)) {
+          fs.unlinkSync(oldFilePath);
+        }
+      }
+
+      // 6. 更新数据库（存储相对路径）
+      const relativePath = this.uploadPathService.getStoragePath(
+        "avatars",
+        uniqueFilename,
+      );
+      await this.characterRepo.update(characterId, { avatarUrl: relativePath });
+
+      // 转换为绝对 URL 后返回
+      return { url: this.urlService.toResourceAbsoluteUrl(relativePath) };
+    } catch (error: any) {
+      // 如果处理失败，删除可能已生成的临时文件
+      if (fs.existsSync(filePath)) {
+        fs.unlinkSync(filePath);
+      }
+      throw new Error(`头像上传失败: ${error.message}`);
+    }
   }
 
   /**
