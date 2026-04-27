@@ -57,6 +57,12 @@ const routes = [
                 component: () => import('./components/CharactersPage.vue')
             },
             {
+                path: 'bots',
+                name: 'Bots',
+                meta: { title: 'Bots', requiresAuth: true },
+                component: () => import('./components/BotManagementPage.vue')
+            },
+            {
                 path: 'account/:tab?',
                 name: 'AccountCenter',
                 meta: { title: '账户中心', requiresAuth: true },

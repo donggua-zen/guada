@@ -9,6 +9,8 @@ import { FileRepository } from "../../../common/database/file.repository";
 import { UploadPathService } from "../../../common/services/upload-path.service";
 import { LLMService } from "../../llm-core/llm.service";
 import { PrismaService } from "../../../common/database/prisma.service";
+import { SettingsStorage } from "../../../common/utils/settings-storage.util";
+import { SK_MOD_VISUAL } from "../../../constants/settings.constants";
 import * as fs from "fs";
 import * as path from "path";
 
@@ -22,6 +24,7 @@ export class ImageRecognitionToolProvider implements IToolProvider {
     private uploadPathService: UploadPathService,
     private llmService: LLMService,
     private prisma: PrismaService,
+    private settingsStorage: SettingsStorage,
   ) { }
 
   async getTools(enabled?: boolean | string[]): Promise<any[]> {
@@ -94,21 +97,19 @@ export class ImageRecognitionToolProvider implements IToolProvider {
 
     const dataUri = `data:${mimeType};base64,${base64Data}`;
 
-    const setting = await this.prisma.globalSetting.findFirst({
-      where: { key: "defaultVisualAssistantModelId" },
-    });
+    const visualModelId = await this.settingsStorage.getSettingValue('models', SK_MOD_VISUAL);
 
-    if (!setting || !setting.value) {
+    if (!visualModelId) {
       throw new Error("请在系统设置中配置视觉辅助模型 (defaultVisualAssistantModelId)");
     }
 
     const visualModelConfig = await this.prisma.model.findUnique({
-      where: { id: setting.value },
+      where: { id: visualModelId },
       include: { provider: true },
     });
 
     if (!visualModelConfig) {
-      throw new Error(`配置的视觉辅助模型 (ID: ${setting.value}) 不存在，请检查系统设置`);
+      throw new Error(`配置的视觉辅助模型 (ID: ${visualModelId}) 不存在，请检查系统设置`);
     }
 
     const messages = [

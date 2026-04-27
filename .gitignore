@@ -27,3 +27,4 @@ electron/dist/
 build/
 backend-ts/static/knowledge-base/**
 backend-ts/static/previews/**
+backend-ts/.config/**
