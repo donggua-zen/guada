@@ -31,6 +31,7 @@ const props = defineProps<{
     full?: boolean;
     name?: string;  // 用于生成首字头像的名称
 }>();
+
 // 添加时间戳避免缓存 - 类型化
 const avatarSrc = computed((): string => {
     if (!props.src) return ''

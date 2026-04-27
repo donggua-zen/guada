@@ -56,27 +56,60 @@ export class UploadPathService {
   }
 
   /**
-   * 获取上传文件的相对路径（用于存储到数据库）
+   * 获取文件的数据库存储路径（带 uploads/ 前缀）
    * @param subDir 子目录（如 kb, avatars, images）
    * @param filename 文件名
-   * @returns 相对路径（如 kb/test.pdf 或 avatars/user123.jpg）
-   * @note 数据库中存储的是相对路径，不包含 UPLOAD_URL_PREFIX
-   * @note 返回给前端时，通过 UrlService.toUploadAbsoluteUrl() 转换为完整 URL
+   * @returns 带前缀的存储路径（如 uploads/kb/test.pdf 或 uploads/avatars/user123.jpg）
+   * @note 数据库中存储的是带 uploads/ 前缀的路径，便于区分资源类型
+   * @note 返回给前端时，通过 UrlService.toResourceAbsoluteUrl() 转换为完整 URL
    */
-  getRelativePath(subDir: string, filename: string): string {
+  getStoragePath(subDir: string, filename: string): string {
     // 确保路径分隔符在 URL 中是正斜杠
     const normalizedSubDir = subDir.replace(/\\/g, "/");
     const normalizedFilename = filename.replace(/\\/g, "/");
-    return `${normalizedSubDir}/${normalizedFilename}`;
+    // 添加 uploads/ 前缀，统一存储格式
+    return `uploads/${normalizedSubDir}/${normalizedFilename}`;
+  }
+
+
+  /**
+   * 将存储路径转换为物理路径
+   * @param storagePath 存储路径（如 uploads/kb/test.pdf 或 http://localhost:3000/uploads/avatars/xxx.jpg）
+   * @returns 物理路径（如 ./data/uploads/kb/test.pdf）
+   * @note 用于从数据库读取路径后，定位磁盘上的实际文件
+   */
+  toPhysicalPath(storagePath: string): string {
+    let actualPath = storagePath;
+    
+    // 如果是完整 URL，提取路径部分
+    if (storagePath.startsWith("http://") || storagePath.startsWith("https://")) {
+      try {
+        const url = new URL(storagePath);
+        const pathname = url.pathname; // 如 /uploads/avatars/xxx.jpg
+        // 去除开头的 /
+        actualPath = pathname.startsWith("/") ? pathname.substring(1) : pathname;
+      } catch (error) {
+        // URL 解析失败，使用原值
+        console.warn(`[UploadPathService] 无法解析 URL: ${storagePath}`);
+      }
+    }
+    
+    // 去除 uploads/ 前缀
+    if (actualPath.startsWith("uploads/")) {
+      actualPath = actualPath.substring("uploads/".length);
+    }
+    
+    return path.join(this.baseDir, actualPath);
   }
 
   /**
-   * 将相对路径转换为物理路径
-   * @param relativePath 相对路径（如 kb/test.pdf 或 avatars/user123.jpg）
-   * @returns 物理路径（如 ./data/uploads/kb/test.pdf）
-   * @note 用于从数据库读取相对路径后，定位磁盘上的实际文件
+   * 获取存储路径并直接转换为完整 URL（便捷方法）
+   * @param subDir 子目录（如 kb, avatars, images）
+   * @param filename 文件名
+   * @returns 完整 URL（如 http://localhost:3000/uploads/avatars/uuid.jpg）
    */
-  toPhysicalPath(relativePath: string): string {
-    return path.join(this.baseDir, relativePath);
+  getStorageUrl(subDir: string, filename: string): string {
+    const storagePath = this.getStoragePath(subDir, filename);
+    return this.urlService.toResourceAbsoluteUrl(storagePath);
   }
 }

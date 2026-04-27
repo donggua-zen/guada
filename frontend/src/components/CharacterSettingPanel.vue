@@ -63,7 +63,7 @@
                   </div>
                 </template>
                 <el-select v-model="characterForm.groupId" placeholder="请选择分组" clearable class="w-full max-w-md">
-                  <el-option label="未分组" :value="null" />
+                  <el-option label="未分组" value="" />
                   <el-option v-for="group in characterGroups" :key="group.id" :label="group.name" :value="group.id" />
                 </el-select>
               </el-form-item>
@@ -581,14 +581,19 @@ const allToolsEnabled = computed(() => {
 
 // 监听 props.data 变化
 watch(() => props.data, (newVal) => {
-
-  characterForm.avatarFile = null;
+  // 检测是否是角色切换（id 变化）或初始化
+  const isCharacterSwitch = !characterForm.id || (newVal.id && newVal.id !== characterForm.id);
+  
+  if (isCharacterSwitch) {
+    characterForm.avatarFile = null;
+  }
 
   characterForm.id = newVal.id || '';
   characterForm.title = newVal.title || '';
   characterForm.description = newVal.description || '';
   characterForm.avatarUrl = newVal.avatarUrl || '';
-  characterForm.groupId = newVal.groupId || null;  // 加载分组 ID
+  // groupId: null 或 undefined 转换为空字符串，以便 el-select 正确显示
+  characterForm.groupId = newVal.groupId || '';  // 加载分组 ID
   characterForm.modelId = newVal.modelId || null;
 
   characterForm.assistantName = newVal.settings?.assistantName || '';
@@ -611,8 +616,8 @@ watch(() => props.data, (newVal) => {
     // 单独控制模式
     characterToolSettings.value = { ...toolsConfig };
   } else {
-    // 默认启用全部
-    characterToolSettings.value = true;
+    // 默认关闭全部
+    characterToolSettings.value = false;
   }
   // 加载已启用的 MCP 服务器 (支持 boolean 或 array)
   const mcpServersConfig = newVal.settings?.mcpServers;
@@ -684,7 +689,7 @@ const loadLocalTools = async () => {
       characterToolSettings.value = { ...toolsConfig };
     } else {
       // 默认启用全部
-      characterToolSettings.value = true;
+      characterToolSettings.value = false;
     }
   } catch (error) {
     console.error('加载本地工具失败:', error);
@@ -830,7 +835,7 @@ const handleSave = async () => {
       'name': characterForm.name,
       'avatarUrl': characterForm.avatarUrl,
       'avatarFile': characterForm.avatarFile,
-      'groupId': characterForm.groupId,  // 新增：分组 ID
+      'groupId': characterForm.groupId === '' ? null : characterForm.groupId,  // 将空字符串转换为 null
       'identity': characterForm.identity,
       'modelId': characterForm.modelId,
       'settings': {
@@ -845,7 +850,7 @@ const handleSave = async () => {
         'modelFrequencyPenalty': characterForm.modelFrequencyPenalty,
         'useUserPrompt': characterForm.useUserPrompt,
         // 工具配置
-        'tools': characterToolSettings.value,  // 对象格式：{ namespace: boolean | 'all' }
+        'tools': characterToolSettings.value,  // boolean 或 { namespace: boolean }
         'mcpServers': characterForm.enabledMcpServers,  // boolean 或 string[]
       }
     }
@@ -868,6 +873,16 @@ function format(value) {
     return "不限制";
   return value.toLocaleString("en-US");
 }
+
+// 清除头像文件（上传成功后由父组件调用）
+const clearAvatarFile = () => {
+  characterForm.avatarFile = null;
+}
+
+// 暴露方法给父组件
+defineExpose({
+  clearAvatarFile
+})
 
 // 移除不再需要的 parse 和 format 方法（已删除 max_memory_tokens 和 short_term_memory_tokens）
 </script>

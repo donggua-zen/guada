@@ -13,7 +13,7 @@ export class UrlService {
 
   constructor() {
     const configuredUrl = process.env.BASE_URL || "";
-    
+
     // 检测是否为自动模式
     if (configuredUrl === "__auto__") {
       this.autoMode = true;
@@ -21,7 +21,7 @@ export class UrlService {
     } else {
       this.baseUrl = configuredUrl;
     }
-    
+
     // 读取静态资源前缀配置
     this.staticPrefix = process.env.STATIC_URL || "/static";
     this.uploadPrefix = process.env.UPLOAD_URL_PREFIX || "/uploads";
@@ -50,54 +50,66 @@ export class UrlService {
   }
 
   /**
-   * 将静态资源相对路径转换为完整 URL
-   * @param relativePath 相对于 STATIC_DIR 的路径（如 images/models/openai.png）
-   * @returns 完整 URL（如 http://localhost:3000/static/images/models/openai.png）
+   * 判断是否为静态资源路径
+   * @param resourcePath 资源路径
+   * @returns 是否为静态资源
    */
-  toStaticAbsoluteUrl(relativePath: string): string {
-    if (!relativePath) {
-      return relativePath;
+  isStaticResource(resourcePath: string): boolean {
+    if (!resourcePath) {
+      return false;
     }
 
-    // 如果已经是绝对 URL，直接返回
-    if (relativePath.startsWith("http://") || relativePath.startsWith("https://")) {
-      return relativePath;
+    // 如果是完整 URL，提取路径部分
+    if (resourcePath.startsWith("http://") || resourcePath.startsWith("https://")) {
+      try {
+        const url = new URL(resourcePath);
+        const pathname = url.pathname;
+        const normalizedPath = pathname.startsWith("/") ? pathname.substring(1) : pathname;
+        return normalizedPath.startsWith("static/");
+      } catch (error) {
+        return false;
+      }
     }
 
-    // 构建完整的静态资源路径
-    const normalizedPath = relativePath.startsWith("/") ? relativePath : `/${relativePath}`;
-    const fullPath = `${this.staticPrefix}${normalizedPath}`;
-    
-    // 直接拼接 BASE_URL
-    if (this.baseUrl) {
-      return `${this.baseUrl}${fullPath}`;
-    }
-    return fullPath;
+    // 相对路径判断
+    const normalizedPath = resourcePath.startsWith("/") ? resourcePath.substring(1) : resourcePath;
+    return normalizedPath.startsWith("static/");
   }
 
   /**
-   * 将上传文件相对路径转换为完整 URL
-   * @param relativePath 相对于 UPLOAD_ROOT_DIR 的路径（如 kb/test.pdf 或 avatars/user123.jpg）
-   * @returns 完整 URL（如 http://localhost:3000/uploads/kb/test.pdf）
+   * 将资源路径转换为完整 URL（智能识别资源类型）
+   * @param resourcePath 资源路径，支持三种格式：
+   *   - 外部 URL: "https://example.com/xxx.jpg" → 直接返回
+   *   - 静态资源: "static/images/xxx.jpg" → 使用 staticPrefix
+   *   - 上传文件: "uploads/avatars/uuid.jpg" → 使用 uploadPrefix
+   * @returns 完整 URL
    */
-  toUploadAbsoluteUrl(relativePath: string): string {
-    if (!relativePath) {
-      return relativePath;
+  toResourceAbsoluteUrl(resourcePath: string): string {
+    if (!resourcePath) {
+      return resourcePath;
     }
 
     // 如果已经是绝对 URL，直接返回
-    if (relativePath.startsWith("http://") || relativePath.startsWith("https://")) {
-      return relativePath;
+    if (resourcePath.startsWith("http://") || resourcePath.startsWith("https://")) {
+      return resourcePath;
     }
 
-    // 构建完整的上传文件路径
-    const normalizedPath = relativePath.startsWith("/") ? relativePath : `/${relativePath}`;
-    const fullPath = `${this.uploadPrefix}${normalizedPath}`;
-    
-    // 直接拼接 BASE_URL
-    if (this.baseUrl) {
-      return `${this.baseUrl}${fullPath}`;
+    // 规范化：去除开头的 /
+    const normalizedPath = resourcePath.startsWith("/") ? resourcePath.substring(1) : resourcePath;
+
+    // 根据前缀判断类型
+    if (normalizedPath.startsWith("static/")) {
+      // 静态资源
+      const fullPath = `${this.staticPrefix}/${normalizedPath.substring("static/".length)}`;
+      return this.baseUrl ? `${this.baseUrl}${fullPath}` : fullPath;
+    } else if (normalizedPath.startsWith("uploads/")) {
+      // 上传文件
+      const fullPath = `${this.uploadPrefix}/${normalizedPath.substring("uploads/".length)}`;
+      return this.baseUrl ? `${this.baseUrl}${fullPath}` : fullPath;
+    } else {
+      // 兼容旧数据：默认当作上传文件处理
+      const fullPath = `${this.uploadPrefix}/${normalizedPath}`;
+      return this.baseUrl ? `${this.baseUrl}${fullPath}` : fullPath;
     }
-    return fullPath;
   }
 }
