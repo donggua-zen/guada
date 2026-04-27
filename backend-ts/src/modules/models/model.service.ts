@@ -31,7 +31,7 @@ export class ModelService {
             ...provider,
             attributes: template.attributes, // 实时从文件获取
             name: template.name, // 确保名称同步
-            avatarUrl: this.urlService.toStaticAbsoluteUrl(template.avatarUrl || provider.avatarUrl),
+            avatarUrl: this.urlService.toResourceAbsoluteUrl(template.avatarUrl || provider.avatarUrl),
             protocol: template.protocol,
             description: template.description,
           };
@@ -41,7 +41,7 @@ export class ModelService {
       return {
         ...provider,
         avatarUrl: provider.avatarUrl
-          ? this.urlService.toStaticAbsoluteUrl(provider.avatarUrl)
+          ? this.urlService.toResourceAbsoluteUrl(provider.avatarUrl)
           : null,
       };
     });
@@ -60,7 +60,7 @@ export class ModelService {
     // 使用 UrlService 转换所有模板的 avatarUrl
     return PROVIDER_TEMPLATES.map((template) => ({
       ...template,
-      avatarUrl: this.urlService.toStaticAbsoluteUrl(template.avatarUrl),
+      avatarUrl: this.urlService.toResourceAbsoluteUrl(template.avatarUrl),
     }));
   }
 
@@ -182,7 +182,7 @@ export class ModelService {
       return {
         ...result,
         avatarUrl: result.avatarUrl
-          ? this.urlService.toStaticAbsoluteUrl(result.avatarUrl)
+          ? this.urlService.toResourceAbsoluteUrl(result.avatarUrl)
           : null,
       };
     });
@@ -249,7 +249,7 @@ export class ModelService {
       return {
         ...updatedProvider,
         avatarUrl: updatedProvider.avatarUrl
-          ? this.urlService.toStaticAbsoluteUrl(updatedProvider.avatarUrl)
+          ? this.urlService.toResourceAbsoluteUrl(updatedProvider.avatarUrl)
           : null,
       };
     }
@@ -260,7 +260,7 @@ export class ModelService {
     return {
       ...updatedProvider,
       avatarUrl: updatedProvider.avatarUrl
-        ? this.urlService.toStaticAbsoluteUrl(updatedProvider.avatarUrl)
+        ? this.urlService.toResourceAbsoluteUrl(updatedProvider.avatarUrl)
         : null,
     };
   }

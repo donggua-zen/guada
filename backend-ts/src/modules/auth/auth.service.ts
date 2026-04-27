@@ -37,7 +37,7 @@ export class AuthService {
         username: user.username,
         nickname: user.nickname,
         avatarUrl: user.avatarUrl
-          ? this.urlService.toUploadAbsoluteUrl(user.avatarUrl)
+          ? this.urlService.toResourceAbsoluteUrl(user.avatarUrl)
           : null,
         role: user.role,
       },
@@ -97,7 +97,7 @@ export class AuthService {
           username: primaryUser.username,
           nickname: primaryUser.nickname,
           avatarUrl: primaryUser.avatarUrl
-            ? this.urlService.toUploadAbsoluteUrl(primaryUser.avatarUrl)
+            ? this.urlService.toResourceAbsoluteUrl(primaryUser.avatarUrl)
             : null,
           role: primaryUser.role,
         },

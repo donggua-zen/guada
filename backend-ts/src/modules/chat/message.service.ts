@@ -43,8 +43,8 @@ export class MessageService {
       // 转换文件 URL 为绝对路径
       const filesWithAbsoluteUrls = msg.files?.map((file) => ({
         ...file,
-        url: this.urlService.toUploadAbsoluteUrl(file.url || ""),
-        previewUrl: this.urlService.toUploadAbsoluteUrl(file.previewUrl || ""),
+        url: this.urlService.toResourceAbsoluteUrl(file.url || ""),
+        previewUrl: this.urlService.toResourceAbsoluteUrl(file.previewUrl || ""),
       })) || [];
 
       return {
@@ -238,8 +238,8 @@ export class MessageService {
       if (completeMessage.files && completeMessage.files.length > 0) {
         completeMessage.files = completeMessage.files.map((file) => ({
           ...file,
-          url: this.urlService.toUploadAbsoluteUrl(file.url || ""),
-          previewUrl: this.urlService.toUploadAbsoluteUrl(file.previewUrl || ""),
+          url: this.urlService.toResourceAbsoluteUrl(file.url || ""),
+          previewUrl: this.urlService.toResourceAbsoluteUrl(file.previewUrl || ""),
         }));
       }
 
@@ -341,8 +341,8 @@ export class MessageService {
       if (updatedMessage.files && updatedMessage.files.length > 0) {
         updatedMessage.files = updatedMessage.files.map((file) => ({
           ...file,
-          url: this.urlService.toUploadAbsoluteUrl(file.url || ""),
-          previewUrl: this.urlService.toUploadAbsoluteUrl(file.previewUrl || ""),
+          url: this.urlService.toResourceAbsoluteUrl(file.url || ""),
+          previewUrl: this.urlService.toResourceAbsoluteUrl(file.previewUrl || ""),
         }));
       }
 

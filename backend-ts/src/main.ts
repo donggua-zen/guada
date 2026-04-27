@@ -15,11 +15,11 @@ async function bootstrap() {
   // 增强对中文文件名的支持
   app.use(express.urlencoded({ extended: true, limit: "50mb" }));
   app.use(express.json({ limit: "50mb" }));
-  
+
   // 基础静态文件目录（程序自带资源，如图片、模型等）
   const staticPath = process.env.STATIC_DIR || path.join(__dirname, "..", "static");
   const staticPrefix = process.env.STATIC_URL || "/static";
-  
+
   console.log(`📁 基础静态目录: ${staticPath} -> ${staticPrefix}`);
   app.use(
     staticPrefix,
@@ -30,20 +30,20 @@ async function bootstrap() {
       },
     }),
   );
-  
+
   // 上传文件目录（用户数据，持久化存储）
   const uploadPhysicalRoot = process.env.UPLOAD_ROOT_DIR;
-  const uploadPublicPrefix = process.env.UPLOAD_URL_PREFIX;
-  
+  const uploadPublicPrefix = process.env.UPLOAD_URL_PREFIX || "/uploads";
+
   if (uploadPhysicalRoot && uploadPublicPrefix) {
     const resolvedPath = path.resolve(uploadPhysicalRoot);
-    
+
     // 确保上传目录存在
     if (!fs.existsSync(resolvedPath)) {
       fs.mkdirSync(resolvedPath, { recursive: true });
       console.log(`✅ 创建上传目录: ${resolvedPath}`);
     }
-    
+
     console.log(`📁 上传文件目录: ${resolvedPath} -> ${uploadPublicPrefix}`);
     app.use(
       uploadPublicPrefix,
@@ -59,13 +59,13 @@ async function bootstrap() {
 
   app.useGlobalFilters(new AllExceptionsFilter());
   app.enableCors(); // Enable CORS for frontend integration
-  
+
   // 支持通过环境变量 PORT 指定端口，若未指定则使用 0 让系统自动分配可用端口
   const port = process.env.PORT ? parseInt(process.env.PORT, 10) : 0;
   await app.listen(port);
   const address = app.getHttpServer().address();
   const actualPort = typeof address === 'string' ? address.split(':').pop() : address.port;
-  
+
   // 如果是自动模式，动态设置 BASE_URL
   const urlService = app.get(UrlService);
   if (urlService.isAutoMode()) {
@@ -73,9 +73,9 @@ async function bootstrap() {
     urlService.setBaseUrl(baseUrl);
     console.log(`🔗 BASE_URL 已动态设置为: ${baseUrl}`);
   }
-  
+
   console.log(`Application is running on: http://localhost:${actualPort}`);
-  
+
   // 如果是在 fork/child_process 环境中，通过 IPC 向父进程发送端口信息
   if (process.send) {
     console.log(`📤 正在通过 IPC 发送端口: ${actualPort}`);

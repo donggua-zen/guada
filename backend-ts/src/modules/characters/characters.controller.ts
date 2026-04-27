@@ -90,8 +90,7 @@ export class CharactersController {
     @Param("id") id: string,
     @UploadedFile() file: any,
   ) {
-    const fileUrl = `/uploads/${file.originalname}`;
-    return this.characterService.uploadAvatar(id, fileUrl);
+    return this.characterService.uploadAvatar(id, file);
   }
 
   /**

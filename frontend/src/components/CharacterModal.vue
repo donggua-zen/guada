@@ -15,6 +15,7 @@
         
         <div class="dialog-content">
             <CharacterSettingPanel 
+                ref="settingPanelRef"
                 :data="currentCharacter" 
                 @update:data="handleSave" 
                 :simple="false" 
@@ -52,6 +53,7 @@ const emit = defineEmits<{
 const visible = ref(false)
 const loading = ref(false)
 const currentCharacter = ref<any>({})
+const settingPanelRef = ref<any>(null)
 
 
 
@@ -70,10 +72,13 @@ watch(visible, (newVal) => {
 })
 
 watch(() => props.characterId, async (newVal) => {
-    console.log("watching characterId");
-    console.log(newVal);
     if (newVal) {
-        currentCharacter.value = await apiService.fetchCharacter(newVal);
+        try {
+            currentCharacter.value = await apiService.fetchCharacter(newVal);
+        } catch (error) {
+            console.error("[CharacterModal] Failed to fetch character:", error);
+            currentCharacter.value = {};
+        }
     }
     else {
         currentCharacter.value = {};
@@ -91,13 +96,15 @@ const handleClose = (): void => {
 }
 
 const handleSave = async (data: any): Promise<void> => {
-    console.log("handleSave called");
-    console.log(data);
     let character: any = null;
-    let characterData = data;
-    delete characterData.avatarFile; // Remove avatarFile from data
+    let characterData = { ...data };
+    const avatarFile = data.avatarFile; // 先缓存引用
+    
+    // 从提交数据中移除 avatarFile，避免后端报错
+    delete characterData.avatarFile;
+    delete characterData.avatarUrl; // 修改不应该携带头像数据
+    
     try {
-        // console.log(characterForm);
         if (currentCharacter.value && currentCharacter.value.id) {
             const response = await apiService.updateCharacter(currentCharacter.value.id, characterData);
             character = response;
@@ -105,16 +112,21 @@ const handleSave = async (data: any): Promise<void> => {
             const response = await apiService.createCharacter(characterData);
             character = response;
         }
-        if (character && data.avatarFile) {
-            const response = await apiService.uploadAvatar(character['id'], data.avatarFile);
-            character.avatarUrl = response.url + "?v=" + new Date().getTime();
-            character.avatarFile = null;
+        if (character && avatarFile) {
+            const response = await apiService.uploadAvatar(character['id'], avatarFile);
+            character.avatarUrl = response.url;
+            
+            // 上传成功后清除子组件的 avatarFile，避免重复上传
+            if (settingPanelRef.value) {
+                settingPanelRef.value.clearAvatarFile();
+            }
         }
         if (character) {
             currentCharacter.value = character;
         }
         toast.success("角色更新成功");
     } catch (error) {
+        console.error("角色保存失败:", error);
         toast.error("角色保存失败");
     }
     emit('saved', currentCharacter.value);

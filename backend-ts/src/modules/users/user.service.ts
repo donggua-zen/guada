@@ -38,7 +38,7 @@ export class UserService {
     return {
       ...result,
       avatarUrl: result.avatarUrl
-        ? this.urlService.toUploadAbsoluteUrl(result.avatarUrl)
+        ? this.urlService.toResourceAbsoluteUrl(result.avatarUrl)
         : null,
     };
   }
@@ -121,14 +121,14 @@ export class UserService {
       }
 
       // 6. 更新数据库（存储相对路径）
-      const relativePath = this.uploadPathService.getRelativePath(
+      const relativePath = this.uploadPathService.getStoragePath(
         "avatars",
         uniqueFilename,
       );
       await this.userRepo.update(userId, { avatarUrl: relativePath });
 
       // 转换为绝对 URL 后返回
-      return { url: this.urlService.toUploadAbsoluteUrl(relativePath) };
+      return { url: this.urlService.toResourceAbsoluteUrl(relativePath) };
     } catch (error: any) {
       // 如果处理失败，删除可能已生成的临时文件
       if (fs.existsSync(filePath)) {

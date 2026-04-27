@@ -37,6 +37,11 @@ import 'vue-advanced-cropper/dist/style.css'
 import {
 } from '@vicons/material'
 
+// 禁用属性继承，避免警告
+defineOptions({
+  inheritAttrs: false
+})
+
 const showCropModal = ref(false)
 const cropImageSrc = ref('')
 const cropFile = ref<File | null>(null)
@@ -61,8 +66,8 @@ watch(() => props.src, (newValue: string | undefined) => {
     if (previewUrl.value && previewUrl.value.startsWith('blob:')) {
         URL.revokeObjectURL(previewUrl.value);
     }
-    previewUrl.value = newValue || ''
-})
+    previewUrl.value = newValue || '';
+}, { immediate: true })
 
 // 触发头像上传 - 类型化
 const triggerAvatarUpload = (): void => {
