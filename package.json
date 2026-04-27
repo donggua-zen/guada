@@ -20,7 +20,7 @@
     "compare:deps-size": "node scripts/compare-node-modules-size.js",
     "analyze:modules": "node scripts/analyze-module-size.js",
     "verify:electron-setup": "node scripts/verify-electron-setup.js",
-    "build:electron": "npm run build:electron-ts && npm run build:backend && npm run optimize:electron-deps && npm run rebuild:backend-native:electron && cd frontend && cross-env ELECTRON=true npm run build && cd .. && cross-env ELECTRON=true electron-builder",
+    "build:electron": "if exist release rd /s /q release && npm run build:electron-ts && npm run build:backend && npm run optimize:electron-deps && npm run rebuild:backend-native:electron && cd frontend && cross-env ELECTRON=true npm run build && cd .. && cross-env ELECTRON=true electron-builder",
     "build:electron:dir": "npm run build:electron-ts && npm run build:backend && npm run optimize:electron-deps && npm run rebuild:backend-native:electron && cd frontend && cross-env ELECTRON=true npm run build && cd .. && cross-env ELECTRON=true electron-builder --dir",
     "postinstall": "cd backend-ts && npm install && cd ../frontend && npm install"
   },
@@ -45,6 +45,7 @@
     "productName": "GuaDa",
     "npmRebuild": false,
     "asar": true,
+    "afterPack": "scripts/cleanup-locales.js",
     "directories": {
       "output": "release",
       "buildResources": "build"
@@ -144,7 +145,8 @@
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
       "shortcutName": "GuaDa",
-      "differentialPackage": false
+      "differentialPackage": false,
+      "include": "build/uninstaller.nsh"
     },
     "publish": [
       {
