@@ -36,7 +36,7 @@
                     </el-button>
                 </el-space>
             </div>
-            <div class="mt-4 rounded border px-3 py-1 border-gray-200 dark:border-gray-700">
+            <div class="mt-4 rounded border px-3 py-1 border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800">
                 <ul>
                     <li v-for="model in currentModels" :key="model.id"
                         class="flex items-center justify-between py-2 border-b border-gray-100 dark:border-gray-700 last:border-b-0 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors rounded px-3 -mx-3">
@@ -469,6 +469,23 @@ const initData = async () => {
     })
 };
 
+// 重新加载供应商和模型数据
+const reloadProvidersAndModels = async () => {
+    // 清空现有数据
+    providers.value = [];
+    models.value = [];
+    
+    // 重新加载
+    const response = await apiService.fetchModels();
+    response.items.forEach(provider => {
+        if (provider.models && provider.models.length > 0) {
+            models.value.push(...provider.models);
+        }
+        delete provider.models;
+        providers.value.push(provider);
+    });
+};
+
 const currentProvider = computed(() => {
     const provider = providers.value.find(p => p.id === currentProviderId.value);
     if (!provider) {
@@ -647,7 +664,15 @@ const handleSaveProvider = async () => {
             };
 
             const provider = await apiService.createProvider(payload);
-            providers.value.push(provider);
+            
+            // 重新加载完整的供应商和模型数据
+            await reloadProvidersAndModels();
+            
+            // 自动选中新添加的供应商
+            const newProvider = providers.value.find(p => p.id === provider.id);
+            if (newProvider) {
+                currentProviderId.value = newProvider.id;
+            }
             
             // 根据是否为模板添加，显示不同的提示信息
             const isFromTemplate = currentProviderEdit.value.provider !== 'custom';
