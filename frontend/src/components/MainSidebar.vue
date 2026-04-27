@@ -36,6 +36,18 @@
         <span class="text-[0.6875rem] font-medium tracking-wide">助手</span>
       </div>
 
+      <!-- Bots -->
+      <div @click="handleNavClick('bots')"
+        class="flex flex-col items-center justify-center px-2 py-2.5 my-0.5 rounded-xl cursor-pointer transition-all duration-250 ease-in-out group"
+        :class="currentActiveTab === 'bots' ? 'bg-(--color-sidebar-bg-active) text-(--color-sidebar-text-active)' : 'text-(--color-text-gray) hover:bg-(--color-sidebar-bg-hover) hover:text-(--color-sidebar-text-hover)'">
+        <div
+          class="w-5 h-5 mb-1 flex items-center justify-center transition-transform duration-200 ease-in-out group-hover:scale-110">
+          <PrecisionManufacturingTwotone v-if="currentActiveTab === 'bots'" class="w-5 h-5" />
+          <PrecisionManufacturingOutlined v-else class="w-5 h-5" />
+        </div>
+        <span class="text-[0.6875rem] font-medium tracking-wide">Bots</span>
+      </div>
+
       <!-- 知识库 -->
       <div @click="handleNavClick('knowledge-base')"
         class="flex flex-col items-center justify-center px-2 py-2.5 my-0.5 rounded-xl cursor-pointer transition-all duration-250 ease-in-out group"
@@ -144,7 +156,9 @@ import {
   NightlightRound,
   MenuBookOutlined,
   ExtensionOutlined,
-  ExtensionTwotone
+  ExtensionTwotone,
+  PrecisionManufacturingTwotone,
+  PrecisionManufacturingOutlined
 } from '@vicons/material'
 
 const router = useRouter()
@@ -167,6 +181,7 @@ const currentActiveTab = computed(() => {
   const routeName = route.name as string
   if (routeName === 'Chat') return 'chat'
   if (routeName === 'Characters') return 'characters'
+  if (routeName === 'Bots') return 'bots'
   if (routeName === 'AccountCenter') return 'account'
   if (routeName === 'SystemSettings') return 'setting'
   if (routeName === 'KnowledgeBase') return 'knowledge-base'
@@ -191,6 +206,8 @@ const handleNavClick = (tab: string): void => {
     }
   } else if (tab === 'characters') {
     router.replace({ name: 'Characters' })
+  } else if (tab === 'bots') {
+    router.replace({ name: 'Bots' })
   } else if (tab === 'setting') {
     // 跳转到系统设置，默认显示第一个标签页
     router.replace({ name: 'SystemSettings' })

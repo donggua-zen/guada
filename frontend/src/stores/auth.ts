@@ -10,12 +10,12 @@ import type { User, LoginRequest, RegisterRequest } from '@/types/api'
 export const useAuthStore = defineStore('auth', () => {
     // 状态
     const user: Ref<User | null> = ref(null)
-    
+
     // Token 存储：优先从 localStorage 读取（记住我），否则使用 sessionStorage
     const getStoredToken = (): string | null => {
         return localStorage.getItem('token') || sessionStorage.getItem('token')
     }
-    
+
     const token: Ref<string | null> = ref(getStoredToken())
 
     // 免登录状态
@@ -29,11 +29,11 @@ export const useAuthStore = defineStore('auth', () => {
         try {
             const result = await apiService.login(credentials)
             console.log('登录响应:', result)
-            
+
             // 处理可能的响应格式
             const accessToken = (result as any).accessToken || (result as any).data?.accessToken
             const userData = (result as any).user || (result as any).data?.user
-            
+
             if (!accessToken) {
                 throw new Error('登录失败：未获取到 token')
             }
@@ -62,11 +62,11 @@ export const useAuthStore = defineStore('auth', () => {
         try {
             const result = await apiService.register(userData)
             console.log('注册响应:', result)
-            
+
             // 处理可能的响应格式
             const accessToken = (result as any).accessToken || (result as any).data?.accessToken
             const newUser = (result as any).user || (result as any).data?.user
-            
+
             if (!accessToken) {
                 throw new Error('注册失败：未获取到 token')
             }
@@ -91,7 +91,7 @@ export const useAuthStore = defineStore('auth', () => {
         localStorage.removeItem('user')
         sessionStorage.removeItem('token')
         sessionStorage.removeItem('user')
-        
+
         token.value = null
         user.value = null
     }
@@ -99,12 +99,12 @@ export const useAuthStore = defineStore('auth', () => {
     async function checkAuth(): Promise<boolean> {
         const storedToken = getStoredToken()
         if (!storedToken) return false
-        
+
         try {
             const userData = await apiService.getProfile()
             user.value = userData
             token.value = storedToken
-            
+
             // 同步用户信息到存储
             const storedUser = localStorage.getItem('user') || sessionStorage.getItem('user')
             if (storedUser) {
@@ -112,25 +112,25 @@ export const useAuthStore = defineStore('auth', () => {
             } else {
                 sessionStorage.setItem('user', JSON.stringify(userData))
             }
-            
+
             return true
         } catch (error: any) {
             console.error('认证检查失败:', error)
-            
+
             // 如果是连接错误，不要清除token，保留登录状态
-            if (error.message?.includes('无法连接到后端服务') || 
+            if (error.message?.includes('无法连接到后端服务') ||
                 error.message?.includes('API服务初始化中')) {
                 console.warn('后端服务未就绪，保留登录状态')
                 // 保留token和用户信息，等待后端就绪
                 return true
             }
-            
+
             // 只有真正的认证失败才清除登录状态
             if (error.response?.status === 401 || error.message?.includes('Invalid token')) {
                 logout()
                 return false
             }
-            
+
             // 其他错误也保留登录状态
             return true
         }
@@ -138,9 +138,10 @@ export const useAuthStore = defineStore('auth', () => {
 
     async function checkAutoLoginStatus(): Promise<boolean> {
         try {
-            const result = await apiService.getAutoLoginStatus()
-            autoLoginEnabled.value = result.enabled
-            return result.enabled
+            // 使用新的分组设置接口
+            const result = await apiService.fetchGroupSettings('system')
+            autoLoginEnabled.value = result.autoLoginEnabled || false
+            return autoLoginEnabled.value
         } catch (error) {
             console.error("获取免登录状态失败:", error)
             return false
@@ -149,7 +150,8 @@ export const useAuthStore = defineStore('auth', () => {
 
     async function setAutoLoginEnabled(enabled: boolean): Promise<void> {
         try {
-            await apiService.setAutoLoginStatus(enabled)
+            // 使用新的分组设置接口
+            await apiService.updateGroupSettings('system', { autoLoginEnabled: enabled })
             autoLoginEnabled.value = enabled
         } catch (error) {
             console.error("设置免登录状态失败:", error)
@@ -160,7 +162,7 @@ export const useAuthStore = defineStore('auth', () => {
     async function tryAutoLogin(): Promise<boolean> {
         try {
             const result = await apiService.autoLogin()
-            
+
             if (!result || !result.accessToken) {
                 console.warn('自动登录失败：未获取到 token')
                 return false
