@@ -54,13 +54,13 @@ export default defineConfig({
     proxy: {
       // 代理 API 请求
       '/api/v1': {
-        target: 'http://localhost:8800', // 后端地址（run.py 启动的端口）
+        target: 'http://localhost:3000', // 后端地址（run.py 启动的端口）
         changeOrigin: true,
         // rewrite: (path) => path.replace(/^\/api/, '')
       },
       // 代理静态资源请求
       '/static': {
-        target: 'http://localhost:8800',
+        target: 'http://localhost:3000',
         changeOrigin: true
       }
     }
