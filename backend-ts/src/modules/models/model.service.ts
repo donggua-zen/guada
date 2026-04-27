@@ -69,13 +69,13 @@ export class ModelService {
    */
   async testProviderConnection(data: any) {
     const { provider, apiKey, apiUrl } = data;
-    const template = PROVIDER_TEMPLATES.find((t) => t.id === provider);
+    // const template = PROVIDER_TEMPLATES.find((t) => t.id === provider);
 
-    if (!template) {
-      throw new Error("未知的供应商类型");
-    }
+    // if (!template) {
+    //   throw new Error("未知的供应商类型");
+    // }
 
-    const baseUrl = apiUrl || template.defaultApiUrl;
+    const baseUrl = apiUrl || "";
 
     try {
       // 尝试创建一个临时的 OpenAI 客户端进行测试
