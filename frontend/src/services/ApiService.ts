@@ -24,6 +24,7 @@ import type { Session, SessionListResponse } from '@/types/session'
 import type { Message } from '@/types/message'
 import type { PaginatedResponse } from '@/types/common'
 import type { KnowledgeBase, KBFile } from '@/stores/knowledgeBase'
+import type { BotInstance, PlatformMetadata, CreateBotRequest, UpdateBotRequest } from '@/types/bot'
 
 class ApiService implements IApiService {
   baseURL: string
@@ -905,6 +906,71 @@ class ApiService implements IApiService {
         filterFileId: filterFileId,
       },
     })
+  }
+
+  // ========== 机器人管理 ==========
+
+  /**
+   * 获取所有支持的平台列表(包含配置字段定义)
+   */
+  async fetchBotPlatforms(): Promise<PlatformMetadata[]> {
+    return await this._request('/bot-admin/platforms')
+  }
+
+  /**
+   * 获取当前用户的所有机器人实例列表
+   */
+  async fetchBotInstances(): Promise<BotInstance[]> {
+    return await this._request('/bot-admin/instances')
+  }
+
+  /**
+   * 获取单个机器人详情
+   */
+  async fetchBotInstance(id: string): Promise<BotInstance> {
+    return await this._request(`/bot-admin/instances/${id}`)
+  }
+
+  /**
+   * 创建新机器人
+   */
+  async createBotInstance(data: CreateBotRequest): Promise<BotInstance> {
+    return await this._request('/bot-admin/instances', { method: 'POST', data })
+  }
+
+  /**
+   * 更新机器人配置
+   */
+  async updateBotInstance(id: string, data: UpdateBotRequest): Promise<BotInstance> {
+    return await this._request(`/bot-admin/instances/${id}`, { method: 'PUT', data })
+  }
+
+  /**
+   * 启动机器人
+   */
+  async startBotInstance(id: string): Promise<{ success: boolean }> {
+    return await this._request(`/bot-admin/instances/${id}/start`, { method: 'POST' })
+  }
+
+  /**
+   * 停止机器人
+   */
+  async stopBotInstance(id: string): Promise<{ success: boolean }> {
+    return await this._request(`/bot-admin/instances/${id}/stop`, { method: 'POST' })
+  }
+
+  /**
+   * 重启机器人
+   */
+  async restartBotInstance(id: string): Promise<{ success: boolean }> {
+    return await this._request(`/bot-admin/instances/${id}/restart`, { method: 'POST' })
+  }
+
+  /**
+   * 删除机器人
+   */
+  async deleteBotInstance(id: string): Promise<{ success: boolean }> {
+    return await this._request(`/bot-admin/instances/${id}`, { method: 'DELETE' })
   }
 
   // ========== 工具方法 ============

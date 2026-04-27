@@ -68,7 +68,7 @@ export class AgentService {
       const isDeepSeekV4 = modelName && modelName.toLowerCase().includes("deepseek") && modelName.toLowerCase().includes("v4");
 
       // 判断是否开启思考模式
-      const thinkingEnabled = features.includes("thinking") ? mergedSettings.thinkingEnabled : false;
+      const thinkingEnabled = features.includes("thinking") ? mergedSettings.thinkingEnabled || false : false;
 
       // 仅 DeepSeek V4 且开启思考模式时才携带思维链
       const keepReasoningContent = isDeepSeekV4 && thinkingEnabled;

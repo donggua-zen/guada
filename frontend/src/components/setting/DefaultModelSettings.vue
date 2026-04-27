@@ -497,17 +497,18 @@ const hasChanges = computed(() => {
 // 加载全局设置
 const loadGlobalSettings = async () => {
     try {
-        const response = await apiService.fetchSettings()
+        // 使用新的分组设置接口获取 models 分组的设置
+        const response = await apiService.fetchGroupSettings('models')
 
         // 填充表单
-        settingsForm.defaultChatModelId = response.defaultChatModelId
-        settingsForm.defaultTitleSummaryModelId = response.defaultTitleSummaryModelId
+        settingsForm.defaultChatModelId = response.defaultChatModelId || null
+        settingsForm.defaultTitleSummaryModelId = response.defaultTitleSummaryModelId || null
         // settingsForm.defaultTitleSummaryPrompt = response.defaultTitleSummaryPrompt // 已暂时移除，后端使用固定提示词
-        settingsForm.defaultTranslationModelId = response.defaultTranslationModelId
-        settingsForm.defaultTranslationPrompt = response.defaultTranslationPrompt
-        settingsForm.defaultHistoryCompressionModelId = response.defaultHistoryCompressionModelId
-        settingsForm.defaultHistoryCompressionPrompt = response.defaultHistoryCompressionPrompt
-        settingsForm.defaultVisualAssistantModelId = response.defaultVisualAssistantModelId
+        settingsForm.defaultTranslationModelId = response.defaultTranslationModelId || null
+        settingsForm.defaultTranslationPrompt = response.defaultTranslationPrompt || ''
+        settingsForm.defaultHistoryCompressionModelId = response.defaultHistoryCompressionModelId || null
+        settingsForm.defaultHistoryCompressionPrompt = response.defaultHistoryCompressionPrompt || ''
+        settingsForm.defaultVisualAssistantModelId = response.defaultVisualAssistantModelId || null
 
         // 备份原始数据
         originalSettings.value = JSON.parse(JSON.stringify(settingsForm))
@@ -546,7 +547,8 @@ const handleSave = async () => {
             return
         }
 
-        await apiService.updateSettings(settingsForm)
+        // 使用新的分组设置接口更新 models 分组的设置
+        await apiService.updateGroupSettings('models', settingsForm)
 
         // 保存成功后更新原始数据备份
         originalSettings.value = JSON.parse(JSON.stringify(settingsForm))

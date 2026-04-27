@@ -15,6 +15,7 @@ import { ToolsModule } from "./modules/tools/tools.module";
 import { KnowledgeBaseModule } from "./modules/knowledge-base/knowledge-base.module";
 import { VectorDbModule } from "./common/vector-db";
 import { McpClientModule } from "./common/mcp/mcp-client.module";
+import { BotGatewayModule } from "./modules/bot-gateway/bot-gateway.module";
 
 @Module({
   imports: [
@@ -36,6 +37,7 @@ import { McpClientModule } from "./common/mcp/mcp-client.module";
     UsersModule,
     ToolsModule,
     KnowledgeBaseModule,
+    BotGatewayModule, // 机器人网关模块
   ],
 })
 export class AppModule {}

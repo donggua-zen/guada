@@ -1,0 +1,346 @@
+<template>
+  <el-dialog v-model="dialogVisible" :title="isEdit ? '编辑机器人' : '创建机器人'" width="600px" :close-on-click-modal="false"
+    @close="handleClose">
+    <el-form ref="formRef" :model="formData" :rules="formRules" label-width="120px" class="bot-form">
+
+      <!-- 平台选择（仅创建时显示） -->
+      <el-form-item v-if="!isEdit" label="选择平台" prop="platform">
+        <el-select v-model="formData.platform" placeholder="请选择平台" style="width: 100%" @change="handlePlatformChange">
+          <el-option v-for="platform in botStore.platforms" :key="platform.platform" :label="platform.displayName"
+            :value="platform.platform">
+            <span>{{ platform.displayName }}</span>
+            <span class="text-gray-400 text-xs ml-2">{{ platform.description }}</span>
+          </el-option>
+        </el-select>
+      </el-form-item>
+
+      <!-- 机器人名称 -->
+      <el-form-item label="机器人名称" prop="name">
+        <el-input v-model="formData.name" placeholder="请输入机器人名称" maxlength="50" show-word-limit />
+      </el-form-item>
+
+      <!-- 默认角色选择（必填） -->
+      <el-form-item label="默认角色" prop="defaultCharacterId">
+        <el-select v-model="formData.defaultCharacterId" placeholder="请选择默认角色" style="width: 100%" filterable>
+          <el-option 
+            v-for="character in characters" 
+            :key="character.id" 
+            :label="character.title" 
+            :value="character.id">
+            <div class="flex items-center gap-2">
+              <img 
+                v-if="character.avatarUrl" 
+                :src="character.avatarUrl" 
+                class="w-6 h-6 rounded object-cover" 
+              />
+              <span>{{ character.title }}</span>
+            </div>
+          </el-option>
+        </el-select>
+        <div class="text-xs text-gray-500 mt-1">
+          机器人接收消息后使用该角色进行对话
+        </div>
+      </el-form-item>
+
+      <!-- 动态平台配置字段 -->
+      <template v-if="selectedPlatform">
+        <el-divider content-position="left">平台配置</el-divider>
+
+        <!-- 编辑模式下的提示 -->
+        <el-alert
+          v-if="isEdit"
+          title="敏感字段已清空，如需修改请重新输入"
+          type="info"
+          :closable="false"
+          show-icon
+          class="mb-4" />
+
+        <el-form-item v-for="field in selectedPlatform.fields" :key="field.key" :label="field.label"
+          :prop="`platformConfig.${field.key}`" :required="field.required">
+
+          <!-- 文本输入 -->
+          <el-input v-if="field.type === 'text'" v-model="formData.platformConfig[field.key]"
+            :placeholder="field.placeholder" />
+
+          <!-- 密码输入 -->
+          <el-input v-else-if="field.type === 'password'" v-model="formData.platformConfig[field.key]" type="password"
+            :placeholder="field.placeholder" show-password />
+
+          <!-- 数字输入 -->
+          <el-input-number v-else-if="field.type === 'number'" v-model="formData.platformConfig[field.key]"
+            :placeholder="field.placeholder" style="width: 100%" />
+
+          <!-- 下拉选择 -->
+          <el-select v-else-if="field.type === 'select'" v-model="formData.platformConfig[field.key]"
+            :placeholder="field.placeholder" style="width: 100%">
+            <el-option v-for="option in field.options" :key="option.value" :label="option.label"
+              :value="option.value" />
+          </el-select>
+
+          <!-- 开关 -->
+          <el-switch v-else-if="field.type === 'boolean'" v-model="formData.platformConfig[field.key]" />
+
+          <!-- 字段描述 -->
+          <div v-if="field.description" class="text-xs text-gray-500 mt-1">
+            {{ field.description }}
+          </div>
+        </el-form-item>
+      </template>
+
+      <!-- 重连配置 -->
+      <el-divider content-position="left">重连配置</el-divider>
+
+      <el-form-item label="启用重连">
+        <el-switch v-model="formData.reconnectConfig.enabled" />
+      </el-form-item>
+
+      <template v-if="formData.reconnectConfig.enabled">
+        <el-form-item label="最大重试次数">
+          <el-input-number v-model="formData.reconnectConfig.maxRetries" :min="1" :max="20" style="width: 100%" />
+        </el-form-item>
+
+        <el-form-item label="重试间隔(ms)">
+          <el-input-number v-model="formData.reconnectConfig.retryInterval" :min="1000" :max="60000" :step="1000"
+            style="width: 100%" />
+        </el-form-item>
+      </template>
+
+      <!-- 自动启动（仅创建时） -->
+      <el-form-item v-if="!isEdit" label="自动启动">
+        <el-switch v-model="formData.autoStart" />
+        <div class="text-xs text-gray-500 mt-1">
+          创建后立即启动机器人
+        </div>
+      </el-form-item>
+    </el-form>
+
+    <template #footer>
+      <el-button @click="handleClose">取消</el-button>
+      <el-button type="primary" :loading="submitting" @click="handleSubmit">
+        {{ isEdit ? '保存' : '创建' }}
+      </el-button>
+    </template>
+  </el-dialog>
+</template>
+
+<script setup lang="ts">
+import { ref, computed, watch, onMounted } from 'vue'
+import { ElMessage } from 'element-plus'
+import type { FormInstance, FormRules } from 'element-plus'
+import { useBotStore } from '@/stores/bot'
+import { apiService } from '@/services/ApiService'
+import type { BotInstance, PlatformMetadata } from '@/types/bot'
+
+const props = defineProps<{
+  modelValue: boolean
+  bot?: BotInstance | null
+}>()
+
+const emit = defineEmits<{
+  'update:modelValue': [value: boolean]
+  saved: []
+}>()
+
+const botStore = useBotStore()
+const formRef = ref<FormInstance>()
+const submitting = ref(false)
+
+// 角色列表
+const characters = ref<any[]>([])
+
+// 对话框可见性
+const dialogVisible = computed({
+  get: () => props.modelValue,
+  set: (value) => emit('update:modelValue', value)
+})
+
+// 是否编辑模式
+const isEdit = computed(() => !!props.bot)
+
+// 选中的平台元数据
+const selectedPlatform = computed<PlatformMetadata | undefined>(() => {
+  if (!formData.value.platform) return undefined
+  return botStore.platforms.find(p => p.platform === formData.value.platform)
+})
+
+// 表单数据
+const formData = ref({
+  platform: '',
+  name: '',
+  defaultCharacterId: '',
+  platformConfig: {} as Record<string, any>,
+  reconnectConfig: {
+    enabled: true,
+    maxRetries: 5,
+    retryInterval: 5000
+  },
+  autoStart: false
+})
+
+// 表单验证规则
+const formRules = computed<FormRules>(() => {
+  const rules: FormRules = {
+    name: [
+      { required: true, message: '请输入机器人名称', trigger: 'blur' },
+      { min: 2, max: 50, message: '长度在 2 到 50 个字符', trigger: 'blur' }
+    ],
+    defaultCharacterId: [
+      { required: true, message: '请选择默认角色', trigger: 'change' }
+    ]
+  }
+
+  // 添加平台字段的验证规则
+  if (selectedPlatform.value) {
+    selectedPlatform.value.fields.forEach(field => {
+      if (field.required) {
+        rules[`platformConfig.${field.key}`] = [
+          { required: true, message: `请输入${field.label}`, trigger: 'blur' }
+        ]
+      }
+    })
+  }
+
+  if (!isEdit.value) {
+    rules.platform = [
+      { required: true, message: '请选择平台', trigger: 'change' }
+    ]
+  }
+
+  return rules
+})
+
+// 监听对话框打开，初始化表单
+watch(dialogVisible, (visible) => {
+  if (visible) {
+    if (isEdit.value && props.bot) {
+      // 编辑模式：填充现有数据
+      const platformConfig = { ...props.bot.platformConfig }
+      
+      // 清空脱敏的敏感字段（后端返回 *** 表示已脱敏）
+      const sensitiveFields = ['appSecret', 'secret', 'token', 'encodingAESKey']
+      sensitiveFields.forEach(field => {
+        if (platformConfig[field] === '***') {
+          platformConfig[field] = ''
+        }
+      })
+      
+      formData.value = {
+        platform: props.bot.platform,
+        name: props.bot.name,
+        defaultCharacterId: props.bot.defaultCharacterId || '',
+        platformConfig: platformConfig,
+        reconnectConfig: {
+          enabled: props.bot.reconnectEnabled,
+          maxRetries: props.bot.maxRetries,
+          retryInterval: props.bot.retryInterval
+        },
+        autoStart: false
+      }
+    } else {
+      // 创建模式：重置表单
+      resetForm()
+    }
+  }
+})
+
+// 平台改变时，初始化默认配置
+const handlePlatformChange = (platform: string) => {
+  const metadata = botStore.platforms.find(p => p.platform === platform)
+  if (metadata) {
+    formData.value.platformConfig = {}
+    // 设置默认值
+    metadata.fields.forEach(field => {
+      if (field.defaultValue !== undefined) {
+        formData.value.platformConfig[field.key] = field.defaultValue
+      }
+    })
+  }
+}
+
+// 重置表单
+const resetForm = () => {
+  formData.value = {
+    platform: '',
+    name: '',
+    defaultCharacterId: '',
+    platformConfig: {},
+    reconnectConfig: {
+      enabled: true,
+      maxRetries: 5,
+      retryInterval: 5000
+    },
+    autoStart: false
+  }
+  formRef.value?.clearValidate()
+}
+
+// 关闭对话框
+const handleClose = () => {
+  dialogVisible.value = false
+  resetForm()
+}
+
+// 加载角色列表
+const loadCharacters = async () => {
+  try {
+    const response = await apiService.fetchCharacters()
+    characters.value = response.items || []
+  } catch (error) {
+    console.error('获取角色列表失败:', error)
+    ElMessage.error('获取角色列表失败')
+  }
+}
+
+// 组件挂载时加载角色列表
+onMounted(() => {
+  loadCharacters()
+})
+
+// 提交表单
+const handleSubmit = async () => {
+  if (!formRef.value) return
+
+  await formRef.value.validate(async (valid) => {
+    if (!valid) return
+
+    submitting.value = true
+    try {
+      if (isEdit.value && props.bot) {
+        // 编辑模式
+        const updateData = {
+          name: formData.value.name,
+          defaultCharacterId: formData.value.defaultCharacterId,
+          platformConfig: formData.value.platformConfig,
+          reconnectConfig: formData.value.reconnectConfig
+        }
+        await botStore.updateBot(props.bot.id, updateData)
+      } else {
+        // 创建模式
+        const createData = {
+          platform: formData.value.platform,
+          name: formData.value.name,
+          defaultCharacterId: formData.value.defaultCharacterId,
+          platformConfig: formData.value.platformConfig,
+          reconnectConfig: formData.value.reconnectConfig,
+          autoStart: formData.value.autoStart
+        }
+        await botStore.createBot(createData)
+      }
+
+      emit('saved')
+      handleClose()
+    } catch (error) {
+      console.error('提交失败:', error)
+    } finally {
+      submitting.value = false
+    }
+  })
+}
+</script>
+
+<style scoped>
+.bot-form {
+  max-height: 60vh;
+  overflow-y: auto;
+}
+</style>
