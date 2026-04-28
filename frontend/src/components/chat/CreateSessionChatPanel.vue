@@ -102,11 +102,11 @@
 import { ref, computed, watch, onMounted } from "vue";
 import { useStorage } from "@vueuse/core"
 import { apiService } from '@/services/ApiService';
-import { usePopup } from "../composables/usePopup";
-import { useTitle } from "../composables/useTitle";
+import { usePopup } from "../../composables/usePopup";
+import { useTitle } from "../../composables/useTitle";
 import { useRouter } from 'vue-router';
 // 组件导入
-import { ChatInput } from "./ui";
+import { ChatInput } from "../ui";
 
 import { ArrowRightTwotone, CheckCircleFilled, AppsFilled, SearchFilled } from '@vicons/material'
 

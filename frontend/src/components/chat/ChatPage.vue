@@ -66,19 +66,19 @@ import type { Session } from '@/types/session';
 
 // 引入组件
 // @ts-ignore - UI 组件尚未迁移到 TypeScript
-import { SidebarLayout } from "./ui";
-import ChatSidebar from "@/components/ChatSidebar.vue";
-import ChatHeader from "@/components/ChatHeader.vue";
+import { SidebarLayout } from "../ui";
+import ChatSidebar from "./ChatSidebar.vue";
+import ChatHeader from "./ChatHeader.vue";
 import { ElDialog, ElEmpty } from "element-plus";
 import { useBreakpoints, breakpointsTailwind } from '@vueuse/core'
 
 const breakpoints = useBreakpoints(breakpointsTailwind)
 const isMobile = breakpoints.smaller('md') // md = 768px
 
-const ChatPanel = defineAsyncComponent(() => import("@/components/ChatPanel.vue"));
-const CreateSessionChatPanel = defineAsyncComponent(() => import("@/components/CreateSessionChatPanel.vue"));
-const MemoPanel = defineAsyncComponent(() => import("@/components/MemoPanel.vue"));
-const ChatOutline = defineAsyncComponent(() => import("@/components/ChatOutline.vue"));
+const ChatPanel = defineAsyncComponent(() => import("./ChatPanel.vue"));
+const CreateSessionChatPanel = defineAsyncComponent(() => import("./CreateSessionChatPanel.vue"));
+const MemoPanel = defineAsyncComponent(() => import("./MemoPanel.vue"));
+const ChatOutline = defineAsyncComponent(() => import("./ChatOutline.vue"));
 
 // 组合式函数
 const { confirm, toast, prompt } = usePopup();

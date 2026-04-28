@@ -55,11 +55,11 @@
 
 <script setup lang="ts">
 import { ref, computed, watch, nextTick, onMounted, type Ref, h } from "vue";
-import { apiService } from "../services/ApiService";
+import { apiService } from "../../services/ApiService";
 import { usePopup } from "@/composables/usePopup";
 import { useDebounceFn } from "@vueuse/core";
-import { useSessionStore } from "../stores/session";
-import { useAuthStore } from "../stores/auth"
+import { useSessionStore } from "../../stores/session";
+import { useAuthStore } from "../../stores/auth"
 import { pairMessages, getCurrentTurns, allowReSendMessage } from "@/utils/messageUtils"
 import { useStreamResponse } from "@/composables/useStreamResponse"
 import type { InputMessageState, Session } from '@/types/session';
@@ -70,8 +70,8 @@ import { useMessageOperations } from '@/composables/useMessageOperations'
 
 // 组件导入
 import MessageItem from "./MessageItem.vue";
-import { Avatar, ChatInput, ScrollContainer, ScrollToBottomButton } from "./ui";
-import WelcomeScreen from './ChatPanel/WelcomeScreen.vue';
+import { Avatar, ChatInput, ScrollContainer, ScrollToBottomButton } from "../ui";
+import WelcomeScreen from './WelcomeScreen.vue';
 
 
 // 常量定义
