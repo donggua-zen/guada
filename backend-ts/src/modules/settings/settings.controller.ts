@@ -33,7 +33,7 @@ export class SettingsController {
     return { success: true };
   }
 
-  @UseGuards(AuthGuard)
+  @Public()
   @Get("settings/:group")
   async getGroupSettings(@Param('group') group: string) {
     return this.settingsService.getGroupSettings(group);
@@ -50,7 +50,7 @@ export class SettingsController {
    * 获取所有设置（合并所有分组，仅用于初始化）
    * @deprecated 建议使用 getGroupSettings 按分组获取
    */
-  @UseGuards(AuthGuard)
+  @Public()
   @Get("settings")
   async getSettings() {
     return this.settingsService.getSettings();
@@ -77,7 +77,7 @@ export class SettingsController {
   /**
    * 获取全局工具列表
    */
-  @UseGuards(AuthGuard)
+  @Public()
   @Get("settings/tools/global")
   async getGlobalTools() {
     // 直接获取 tools 分组的配置，效率更高
