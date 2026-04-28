@@ -26,7 +26,7 @@
 import { computed, ref } from 'vue'
 import { useAuthStore } from '@/stores/auth'
 import { pairMessages, allowReSendMessage } from '@/utils/messageUtils'
-import MessageItem from '../MessageItem.vue'
+import MessageItem from './MessageItem.vue'
 import ScrollContainer from '../ui/ScrollContainer.vue'
 import ScrollToBottomButton from '../ui/ScrollToBottomButton.vue'
 import WelcomeScreen from './WelcomeScreen.vue'

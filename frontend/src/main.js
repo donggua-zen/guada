@@ -48,7 +48,7 @@ const routes = [
                 path: 'chat/:sessionId?',
                 name: 'Chat',
                 meta: { title: '对话', requiresAuth: true },
-                component: () => import('./components/ChatPage.vue')
+                component: () => import('./components/chat/ChatPage.vue')
             },
             {
                 path: 'characters',
@@ -60,7 +60,7 @@ const routes = [
                 path: 'bots',
                 name: 'Bots',
                 meta: { title: 'Bots', requiresAuth: true },
-                component: () => import('./components/BotManagementPage.vue')
+                component: () => import('./components/bot/BotManagementPage.vue')
             },
             {
                 path: 'account/:tab?',
@@ -84,7 +84,7 @@ const routes = [
                 path: 'knowledge-base/:id?',
                 name: 'KnowledgeBase',
                 meta: { title: '知识库', requiresAuth: true },
-                component: () => import('./components/KnowledgeBase/KnowledgeBasePage.vue')
+                component: () => import('./components/knowledge-base/KnowledgeBasePage.vue')
             }
         ]
     },

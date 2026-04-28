@@ -78,7 +78,7 @@ import {
 // Element Plus 图标导入
 import { Reading } from '@element-plus/icons-vue';
 
-import LeftBarIcon from './icons/LeftBarIcon.vue';
+import LeftBarIcon from '../icons/LeftBarIcon.vue';
 
 // Props - 类型化
 const props = defineProps<{

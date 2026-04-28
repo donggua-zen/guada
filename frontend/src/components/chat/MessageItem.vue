@@ -113,17 +113,17 @@ import {
 } from "@vicons/material";
 
 // @ts-ignore - icons 组件尚未迁移到 TypeScript
-import { Loading } from "./icons";
+import { Loading } from "../icons";
 // @ts-ignore - UI 组件尚未迁移到 TypeScript
-import { FileItem, Avatar } from "./ui";
-import { usePopup } from "../composables/usePopup";
-import { formatTime } from '../utils';
+import { FileItem, Avatar } from "../ui";
+import { usePopup } from "../../composables/usePopup";
+import { formatTime } from '../../utils';
 import { getCurrentTurns, getContentVersions } from '@/utils/messageUtils';
 
 // 导入拆分后的子组件
-import MessageThinkingSection from './MessageItem/MessageThinkingSection.vue';
-import MessageToolCalls from './MessageItem/MessageToolCalls.vue';
-import MessageActions from './MessageItem/MessageActions.vue';
+import MessageThinkingSection from './message-item/MessageThinkingSection.vue';
+import MessageToolCalls from './message-item/MessageToolCalls.vue';
+import MessageActions from './message-item/MessageActions.vue';
 
 
 const { toast } = usePopup();

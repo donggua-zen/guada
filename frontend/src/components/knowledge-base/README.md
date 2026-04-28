@@ -52,7 +52,7 @@ KnowledgeBase/
 
 <script setup lang="ts">
 import { ref } from 'vue'
-import { FileChunksViewer } from '@/components/KnowledgeBase'
+import { FileChunksViewer } from '@/components/knowledge-base'
 import type { KBFile } from '@/stores/knowledgeBase'
 
 const showFileChunksModal = ref(false)
