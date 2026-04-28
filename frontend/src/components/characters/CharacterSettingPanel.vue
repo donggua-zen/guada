@@ -404,11 +404,11 @@ import {
   ApiOutlined
 } from '@vicons/antd'
 
-import { apiService } from '../services/ApiService'
+import { apiService } from '../../services/ApiService'
 
 
-import { usePopup } from '../composables/usePopup'
-import { AvatarPreview, ElSliderOptional } from './ui/'
+import { usePopup } from '../../composables/usePopup'
+import { AvatarPreview, ElSliderOptional } from '../ui/'
 
 const { toast, notify } = usePopup()
 

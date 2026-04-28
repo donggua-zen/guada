@@ -17,14 +17,11 @@
 
                 <!-- 搜索框 -->
                 <div class="pb-4">
-                    <el-input 
-                        v-model="searchKeyword"
-                        placeholder="搜索知识库" 
-                        clearable 
-                        class="w-full"
-                    >
+                    <el-input v-model="searchKeyword" placeholder="搜索知识库" clearable class="w-full">
                         <template #prefix>
-                            <el-icon><Search /></el-icon>
+                            <el-icon>
+                                <Search />
+                            </el-icon>
                         </template>
                     </el-input>
                 </div>
@@ -54,11 +51,14 @@
                                     </div>
                                     <div class="flex-1 min-w-0">
                                         <div class="flex items-start justify-between">
-                                            <div class="font-medium text-base text-gray-900 truncate" :title="kb.name">{{
-                                                kb.name }}</div>
+                                            <div class="font-medium text-base text-gray-900 truncate" :title="kb.name">
+                                                {{
+                                                    kb.name }}</div>
                                             <!-- 操作按钮 - 悬停显示 -->
-                                            <div class="kb-actions flex items-center opacity-0 group-hover:opacity-100 transition-opacity duration-200">
-                                                <el-dropdown trigger="click" @command="(command: string) => handleDropdownCommand(command, kb)">
+                                            <div
+                                                class="kb-actions flex items-center opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+                                                <el-dropdown trigger="click"
+                                                    @command="(command: string) => handleDropdownCommand(command, kb)">
                                                     <template #dropdown>
                                                         <el-dropdown-menu>
                                                             <el-dropdown-item command="edit">
@@ -84,7 +84,8 @@
                                         </div>
                                     </div>
                                 </div>
-                                <div class="text-xs text-gray-400 mt-2 line-clamp-2 leading-relaxed">{{ kb.description ||
+                                <div class="text-xs text-gray-400 mt-2 line-clamp-2 leading-relaxed">{{ kb.description
+                                    ||
                                     '暂无描述' }}
                                 </div>
                             </div>
@@ -95,14 +96,16 @@
                             </div>
                             <div
                                 class="absolute inset-x-2 bottom-2 flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-auto z-20">
-                                <el-button type="primary" size="small" class="flex-1 shadow-sm" @click.stop="handleSelectKB(kb)">
+                                <el-button type="primary" size="small" class="flex-1 shadow-sm"
+                                    @click.stop="handleSelectKB(kb)">
                                     进入知识库
                                 </el-button>
                             </div>
                         </div>
 
                         <!-- 空状态 -->
-                        <div v-if="!store.loading && filteredKnowledgeBases.length === 0" class="col-span-full text-center py-12 text-gray-500">
+                        <div v-if="!store.loading && filteredKnowledgeBases.length === 0"
+                            class="col-span-full text-center py-12 text-gray-500">
                             <el-icon size="48" class="text-gray-300 mb-3">
                                 <MenuBookOutlined />
                             </el-icon>
@@ -118,7 +121,8 @@
         <div v-else class="flex-1 flex flex-col overflow-hidden">
             <!-- 顶部导航栏 -->
             <div class="px-2 py-3 flex items-center gap-3 max-w-260 mx-auto w-full">
-                <el-button link @click="backToList" class="flex items-center gap-1 text-gray-900 dark:text-gray-300 hover:text-(--color-primary) font-medium">
+                <el-button link @click="backToList"
+                    class="flex items-center gap-1 text-gray-900 dark:text-gray-300 hover:text-(--color-primary) font-medium">
                     <el-icon :size="22">
                         <ArrowLeft24Filled />
                     </el-icon>
@@ -156,35 +160,33 @@
                     </el-tabs>
                 </div>
                 <!-- 文件列表 Tab -->
-                <div v-show="activeTab === 'files'" class="h-full flex flex-col">
-                    <div class="flex-1 flex flex-col overflow-hidden ">
-                        <!-- 上传区域 -->
-                        <div class="px-4 pt-4 pb-1">
-                            <KBFileUploader :kb-id="store.activeKnowledgeBaseId!"
-                                :current-folder-path="getCurrentFolderPath()"
-                                :get-current-files="getCurrentFiles" @uploaded="handleUploadComplete"
-                                @show-upload-task="showUploadTaskModal = true"
-                                @folder-created="handleFolderCreated" />
-                        </div>
+                <div v-show="activeTab === 'files'" class="flex-1 flex flex-col min-h-0">
 
-                        <!-- 文件列表内容区 -->
-                        <div class="flex-1 m-4 overflow-hidden">
-                            <div class="rounded-lg p-2 bg-white dark:bg-gray-900">
-                                <ScrollContainer ref="fileListContainer" @scroll="handleScroll">
-                                    <KBFileTree ref="fileTreeRef" :kb-id="store.activeKnowledgeBaseId!"
-                                        @view="handleViewFile" @retry="handleRetryFile"
-                                        @delete="handleDeleteFile" @folder-change="handleFolderChange"
-                                        @files-loaded="handleFilesLoaded" />
-                                </ScrollContainer>
-                            </div>
-                        </div>
+                    <!-- 上传区域 -->
+                    <div class="px-4 pt-4 pb-1">
+                        <KBFileUploader :kb-id="store.activeKnowledgeBaseId!"
+                            :current-folder-path="getCurrentFolderPath()" :get-current-files="getCurrentFiles"
+                            @uploaded="handleUploadComplete" @show-upload-task="showUploadTaskModal = true"
+                            @folder-created="handleFolderCreated" />
                     </div>
+
+                    <!-- 文件列表内容区 -->
+                    <div class="flex-1 m-4 overflow-hidden flex min-h-0 rounded-lg">
+                        <ScrollContainer ref="fileListContainer" @scroll="handleScroll">
+                            <div class="rounded-lg p-2 bg-white dark:bg-gray-900">
+                                <KBFileTree ref="fileTreeRef" :kb-id="store.activeKnowledgeBaseId!"
+                                    @view="handleViewFile" @retry="handleRetryFile" @delete="handleDeleteFile"
+                                    @folder-change="handleFolderChange" @files-loaded="handleFilesLoaded" />
+                            </div>
+                        </ScrollContainer>
+                    </div>
+
                 </div>
 
                 <!-- 搜索 Tab -->
                 <div v-show="activeTab === 'search'" class="flex flex-1 overflow-hidden min-h-0 w-full">
                     <KBSearchPanel :knowledge-bases="store.knowledgeBases"
-                        :default-kb-id="store.activeKnowledgeBaseId" /> 
+                        :default-kb-id="store.activeKnowledgeBaseId" />
                 </div>
             </div>
         </div>
@@ -362,11 +364,10 @@ let autoCloseModalTimer: number | null = null
 // 当前目录路径缓存(避免频繁调用API)
 let cachedCurrentFolderPath: string | null = null
 
-// 无限滚动相关状态（已废弃，KBFileTree 内部管理）
+// 无限滚动相关状态
 const fileListContainer = ref<any>(null) // 文件列表容器引用（ScrollContainer 组件）
 const fileTreeRef = ref<any>(null) // 文件树组件引用
 const scrollThreshold = 50 // 滚动触发阈值(像素)
-let scrollTimer: number | null = null // 滚动防抖定时器
 
 // ========== 创建表单 ==========
 const createForm = reactive({
@@ -685,10 +686,24 @@ async function handleFolderCreated() {
 
 
 /**
- * 处理滚动事件（带防抖）- 已废弃，KBFileTree 内部管理
+ * 处理滚动事件（带防抖）
  */
 function handleScroll(event: Event) {
-    // KBFileTree 现在内部管理文件列表和懒加载，父组件不再需要处理滚动
+    if (!fileListContainer.value || !fileTreeRef.value) return
+
+    const container = fileListContainer.value.getScrollElement?.() || fileListContainer.value.$el
+    if (!container) return
+
+    const { scrollTop, scrollHeight, clientHeight } = container
+
+    // 计算距离底部的距离
+    const distanceToBottom = scrollHeight - scrollTop - clientHeight
+
+    // 如果距离底部小于阈值，且没有正在加载，则加载更多
+    if (distanceToBottom <= scrollThreshold && fileTreeRef.value.loadMoreFiles) {
+        console.log('[DEBUG] 触发无限滚动加载')
+        fileTreeRef.value.loadMoreFiles()
+    }
 }
 
 /**
@@ -848,17 +863,11 @@ onMounted(async () => {
     checkAndStartUploadTaskPolling()
 })
 
-// 关键修复:组件销毁时清理定时器和滚动定时器,防止内存泄漏
+// 关键修复:组件销毁时清理定时器,防止内存泄漏
 onUnmounted(() => {
     console.log('[DEBUG] KnowledgeBasePage 组件销毁,清理定时器')
     // 注意：文件轮询已由 KBFileTree 内部管理，无需在此清理
     stopUploadTaskPolling() // 停止上传任务轮询
-
-    // 清理滚动防抖定时器
-    if (scrollTimer !== null) {
-        clearTimeout(scrollTimer)
-        scrollTimer = null
-    }
 })
 
 /**

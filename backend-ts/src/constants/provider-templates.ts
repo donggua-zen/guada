@@ -11,6 +11,85 @@ export interface ProviderTemplate {
   models?: any[];
 }
 
+// ==================== Thinking 配置接口 ====================
+
+/**
+ * Thinking 配置生成器接口
+ * 统一规范：所有配置生成器必须接受布尔值参数
+ */
+export interface ThinkingConfigGenerator {
+  thinking: {
+    get: (enabled: boolean) => Record<string, any>;
+  };
+}
+
+// ==================== Thinking 配置生成器 ====================
+
+/**
+ * enable_thinking 模式（硅基流动、阿里云、百度等）
+ */
+const ENABLE_THINKING_CONFIG: ThinkingConfigGenerator = {
+  thinking: {
+    get: (enabled: boolean) => ({ enable_thinking: enabled }),
+  },
+};
+
+/**
+ * thinking.type 模式（火山引擎、智谱、Moonshot、DeepSeek等）
+ */
+const THINKING_TYPE_CONFIG: ThinkingConfigGenerator = {
+  thinking: {
+    get: (enabled: boolean) => ({
+      thinking: {
+        type: enabled ? "enabled" : "disabled",
+      },
+    }),
+  },
+};
+
+/**
+ * MiniMax 风格配置
+ */
+const MINIMAX_THINKING_CONFIG: ThinkingConfigGenerator = {
+  thinking: {
+    get: (enabled: boolean) => ({
+      thinking: {
+        enabled: enabled,
+      },
+    }),
+  },
+};
+
+/**
+ * OpenAI reasoning_effort 配置
+ * 开启时使用 high，关闭时返回空对象
+ */
+const OPENAI_REASONING_CONFIG: ThinkingConfigGenerator = {
+  thinking: {
+    get: (enabled: boolean) => (enabled ? { reasoning_effort: "high" } : {}),
+  },
+};
+
+/**
+ * Azure OpenAI reasoning_effort 配置
+ * 开启时使用 medium，关闭时返回空对象
+ */
+const AZURE_REASONING_CONFIG: ThinkingConfigGenerator = {
+  thinking: {
+    get: (enabled: boolean) => (enabled ? { reasoning_effort: "medium" } : {}),
+  },
+};
+
+/**
+ * Groq reasoning_format 配置
+ * 开启时使用 parsed，关闭时返回空对象
+ */
+const GROQ_REASONING_CONFIG: ThinkingConfigGenerator = {
+  thinking: {
+    get: (enabled: boolean) => (enabled ? { reasoning_format: "parsed" } : {}),
+  },
+};
+
 export const PROVIDER_TEMPLATES: ProviderTemplate[] = [
   // ==================== 国内平台 ====================
   {
@@ -22,13 +101,7 @@ export const PROVIDER_TEMPLATES: ProviderTemplate[] = [
     description: "提供高性价比的开源模型 API 服务，支持多种主流大语言模型。",
     attributes: {
       openai: {
-        // 硅基流动开启思考需要传递 thinking_enabled: true
-        thinkingEnabled: {
-          enable_thinking: true,
-        },
-        thinkingDisabled: {
-          enable_thinking: false,
-        },
+        ...ENABLE_THINKING_CONFIG,
       },
     },
     models: [
@@ -132,13 +205,7 @@ export const PROVIDER_TEMPLATES: ProviderTemplate[] = [
       "阿里云推出的大模型服务平台，提供通义千问等自研模型及第三方模型接入。",
     attributes: {
       openai: {
-        // 阿里云百炼开启思考需要传递 thinking_enabled: true
-        thinkingEnabled: {
-          enable_thinking: true,
-        },
-        thinkingDisabled: {
-          enable_thinking: false,
-        },
+        ...ENABLE_THINKING_CONFIG,
       },
     },
     models: [
@@ -303,19 +370,7 @@ export const PROVIDER_TEMPLATES: ProviderTemplate[] = [
     description: "字节跳动旗下云平台，提供豆包大模型及企业级 AI 解决方案。",
     attributes: {
       openai: {
-        // 火山引擎开启思考需要传递 thinking: { type: "enabled" }
-        thinkingEnabled: {
-          thinking: {
-            type: "enabled",
-          },
-        },
-        // 火山引擎关闭思考需要传递 thinking: { type: "disabled" }
-        thinkingDisabled: {
-          thinking: {
-            type: "disabled",
-          },
-        },
-        //
+        ...THINKING_TYPE_CONFIG,
         thinkingEffort: ["low", "medium", "high", "minimal"],
       },
     },
@@ -384,10 +439,7 @@ export const PROVIDER_TEMPLATES: ProviderTemplate[] = [
       "百度千帆大模型平台，提供文心一言系列模型及完整的 AI 开发生态。",
     attributes: {
       openai: {
-        // 百度部分模型支持 enable_thinking 参数
-        thinkingEnabled: {
-          enable_thinking: true,
-        },
+        ...ENABLE_THINKING_CONFIG,
       },
     },
   },
@@ -401,17 +453,7 @@ export const PROVIDER_TEMPLATES: ProviderTemplate[] = [
       "源自清华技术背景，提供 GLM 系列大语言模型，支持强大的推理与代码能力。",
     attributes: {
       openai: {
-        // 智谱 GLM-4-Plus 等模型支持 thinking 对象
-        thinkingEnabled: {
-          thinking: {
-            type: "enabled",
-          },
-        },
-        thinkingDisabled: {
-          thinking: {
-            type: "disabled",
-          },
-        },
+        ...THINKING_TYPE_CONFIG,
       },
     },
     models: [
@@ -504,17 +546,7 @@ export const PROVIDER_TEMPLATES: ProviderTemplate[] = [
       "月之暗面科技，Kimi 智能助手背后的技术提供方，擅长长文本处理。",
     attributes: {
       openai: {
-        // 智谱 GLM-4-Plus 等模型支持 thinking 对象
-        thinkingEnabled: {
-          thinking: {
-            type: "enabled",
-          },
-        },
-        thinkingDisabled: {
-          thinking: {
-            type: "disabled",
-          },
-        },
+        ...THINKING_TYPE_CONFIG,
       },
     },
     models: [
@@ -539,12 +571,7 @@ export const PROVIDER_TEMPLATES: ProviderTemplate[] = [
     description: "专注于通用人工智能，提供高质量的语言模型和语音合成服务。",
     attributes: {
       openai: {
-        // MiniMax 模型支持 thinking 参数
-        thinkingEnabled: {
-          thinking: {
-            enabled: true,
-          },
-        },
+        ...MINIMAX_THINKING_CONFIG,
       },
     },
     models: [
@@ -604,16 +631,7 @@ export const PROVIDER_TEMPLATES: ProviderTemplate[] = [
       "深度求索，以高性价比和强大的代码生成能力著称，支持深度思考模式。",
     attributes: {
       openai: {
-        thinkingEnabled: {
-          thinking: {
-            type: "enabled",
-          },
-        },
-        thinkingDisabled: {
-          thinking: {
-            type: "disabled",
-          },
-        },
+        ...THINKING_TYPE_CONFIG,
       },
     },
     models: [
@@ -654,10 +672,7 @@ export const PROVIDER_TEMPLATES: ProviderTemplate[] = [
     description: "全球领先的 AI 研究机构，ChatGPT 和 GPT 系列模型的创造者。",
     attributes: {
       openai: {
-        // OpenAI o1/o3 系列模型通过 reasoning_effort 控制思考强度
-        thinkingEnabled: {
-          reasoning_effort: "high",
-        },
+        ...OPENAI_REASONING_CONFIG,
       },
     },
     models: [
@@ -829,10 +844,7 @@ export const PROVIDER_TEMPLATES: ProviderTemplate[] = [
       "微软 Azure 云平台提供的企业级 OpenAI 服务，具备更高的安全性和合规性。",
     attributes: {
       openai: {
-        // Azure OpenAI o1/o3 系列模型支持 reasoning_effort
-        thinkingEnabled: {
-          reasoning_effort: "medium",
-        },
+        ...AZURE_REASONING_CONFIG,
       },
     },
   },
@@ -845,10 +857,7 @@ export const PROVIDER_TEMPLATES: ProviderTemplate[] = [
     description: "以极致的推理速度著称，提供低延迟的大语言模型 API 服务。",
     attributes: {
       openai: {
-        // Groq 部分模型支持 reasoning_format
-        thinkingEnabled: {
-          reasoning_format: "parsed",
-        },
+        ...GROQ_REASONING_CONFIG,
       },
     },
   },

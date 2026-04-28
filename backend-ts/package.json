@@ -26,6 +26,7 @@
   "dependencies": {
     "@google/generative-ai": "^0.24.1",
     "@huggingface/tokenizers": "^0.1.3",
+    "@larksuiteoapi/node-sdk": "^1.62.0",
     "@modelcontextprotocol/sdk": "^1.29.0",
     "@nestjs/axios": "^4.0.1",
     "@nestjs/common": "^11.1.18",
@@ -36,13 +37,16 @@
     "@nestjs/platform-express": "^11.1.18",
     "@node-rs/jieba": "^2.0.1",
     "@onebots/adapter-qq": "^1.0.7",
+    "@onebots/adapter-wechat": "^1.0.7",
     "@prisma/adapter-better-sqlite3": "^7.6.0",
     "@prisma/client": "^7.6.0",
-    "axios": "^1.14.0",
+    "@tencent-weixin/openclaw-weixin": "^2.1.10",
+    "axios": "^1.15.2",
     "bcrypt": "^6.0.0",
     "better-sqlite3": "^12.9.0",
     "class-transformer": "^0.5.1",
     "class-validator": "^0.15.1",
+    "crypto-js": "^4.2.0",
     "mammoth": "^1.12.0",
     "openai": "^4.28.0",
     "passport": "^0.7.0",
@@ -53,7 +57,8 @@
     "sharp": "^0.34.5",
     "sqlite-vec": "^0.1.9",
     "tiktoken": "^1.0.22",
-    "uuid": "^13.0.0"
+    "uuid": "^13.0.0",
+    "web-wechat": "^1.0.1"
   },
   "devDependencies": {
     "@nestjs/cli": "^11.0.17",

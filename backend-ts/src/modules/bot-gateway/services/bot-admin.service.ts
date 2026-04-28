@@ -107,6 +107,7 @@ export class BotAdminService {
         retryInterval: dto.reconnectConfig?.retryInterval ?? 5000,
         defaultCharacterId: dto.defaultCharacterId,
         defaultModelId: dto.defaultModelId,
+        additionalKwargs: dto.additionalKwargs || null,
         enabled: true,
         status: 'stopped',
       },
@@ -139,6 +140,7 @@ export class BotAdminService {
     if (dto.enabled !== undefined) updateData.enabled = dto.enabled;
     if (dto.defaultCharacterId !== undefined) updateData.defaultCharacterId = dto.defaultCharacterId;
     if (dto.defaultModelId !== undefined) updateData.defaultModelId = dto.defaultModelId;
+    if (dto.additionalKwargs !== undefined) updateData.additionalKwargs = dto.additionalKwargs;
     
     if (dto.reconnectConfig) {
       if (dto.reconnectConfig.enabled !== undefined) {
@@ -157,8 +159,8 @@ export class BotAdminService {
       data: updateData,
     });
 
-    // 如果更新了平台配置或启用状态,可能需要重启
-    if (dto.platformConfig || dto.enabled) {
+    // 如果更新了平台配置、启用状态或扩展配置,需要重启以加载新配置
+    if (dto.platformConfig || dto.enabled !== undefined || dto.additionalKwargs) {
       try {
         await this.restartInstance(id);
       } catch (error: any) {
@@ -199,6 +201,8 @@ export class BotAdminService {
       },
       defaultCharacterId: instance.defaultCharacterId || undefined,
       defaultModelId: instance.defaultModelId || undefined,
+      // 从 additionalKwargs 中提取知识库ID列表
+      knowledgeBaseIds: (instance.additionalKwargs as any)?.knowledgeBaseIds || [],
     };
 
     // 启动机器人

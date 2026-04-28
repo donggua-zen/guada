@@ -192,6 +192,9 @@ GET /instances
     "retryInterval": 5000,
     "defaultCharacterId": "char-cuid-123",
     "defaultModelId": null,
+    "additionalKwargs": {
+      "knowledgeBaseIds": ["kb-cuid-1", "kb-cuid-2"]
+    },
     "status": "running",
     "lastStartedAt": "2026-04-27T15:30:00Z",
     "lastError": null,
@@ -246,6 +249,9 @@ GET /instances/:id
   "retryInterval": 5000,
   "defaultCharacterId": "char-cuid-456",
   "defaultModelId": null,
+  "additionalKwargs": {
+    "knowledgeBaseIds": ["kb-cuid-3"]
+  },
   "status": "running",
   "lastStartedAt": "2026-04-27T15:30:00Z",
   "lastError": null,
@@ -288,6 +294,9 @@ POST /instances
   },
   "defaultCharacterId": "char-cuid-123",
   "defaultModelId": "model-cuid-456",
+  "additionalKwargs": {
+    "knowledgeBaseIds": ["kb-cuid-1", "kb-cuid-2"]
+  },
   "autoStart": true
 }
 ```
@@ -299,6 +308,8 @@ POST /instances
 - `reconnectConfig`: 可选,重连配置
 - `defaultCharacterId`: **必填**,默认关联的角色ID(用于对话流程)
 - `defaultModelId`: 可选,默认关联的模型ID
+- `additionalKwargs`: 可选,扩展配置对象
+  - `knowledgeBaseIds`: 字符串数组,引用的知识库ID列表,AI回复时会引用这些知识库的内容
 - `autoStart`: 可选,是否创建后立即启动(默认 false)
 
 **成功响应** (201):
@@ -354,7 +365,10 @@ PUT /instances/:id
     "mode": "websocket"
   },
   "enabled": true,
-  "defaultCharacterId": "char-cuid-789"
+  "defaultCharacterId": "char-cuid-789",
+  "additionalKwargs": {
+    "knowledgeBaseIds": ["kb-cuid-1", "kb-cuid-4"]
+  }
 }
 ```
 
@@ -362,6 +376,7 @@ PUT /instances/:id
 - 只传递需要更新的字段
 - 如果更新了 `platformConfig`,会自动重启机器人
 - 如果更新了 `enabled` 从 false → true,会自动启动
+- 如果更新了 `additionalKwargs.knowledgeBaseIds`,后续对话会引用新的知识库
 
 **成功响应**:
 ```json
@@ -573,6 +588,10 @@ await fetch('/api/v1/bot-admin/instances', {
       appSecret: 'woTv98yay96pKbeS',
       mode: 'websocket'
     },
+    defaultCharacterId: 'char-cuid-123',
+    additionalKwargs: {
+      knowledgeBaseIds: ['kb-cuid-1', 'kb-cuid-2']  // 引用知识库
+    },
     autoStart: true
   })
 });
@@ -624,6 +643,9 @@ await fetch(`/api/v1/bot-admin/instances/${botId}`, {
       appId: bot.platformConfig.appId,  // 保持原值
       appSecret: 'new-secret-value',  // 新值
       mode: bot.platformConfig.mode
+    },
+    additionalKwargs: {
+      knowledgeBaseIds: ['kb-cuid-5']  // 更新知识库引用
     }
   })
 });

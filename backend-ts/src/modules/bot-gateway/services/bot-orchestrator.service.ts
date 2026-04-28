@@ -86,12 +86,14 @@ export class BotOrchestrator {
         ? message.conversationId  // 群聊使用群ID
         : message.senderId;        // 私聊使用用户ID
 
-      // 2. 获取或创建会话
+      // 2. 组装 externalId(由调用者决定隔离策略)
+      const externalId = buildExternalId(platform, type, nativeId);
+
+      // 3. 获取或创建会话
       const session = await this.sessionMapper.getOrCreateBotSession(
         botId,
+        externalId,
         platform,
-        type,
-        nativeId,
         config.defaultCharacterId,
         config.defaultModelId,
       );
@@ -100,8 +102,8 @@ export class BotOrchestrator {
         `Using session: ${session.id}, externalId: ${session.externalId}`
       );
 
-      // 3. 调用 AgentService 生成回复(内部会创建消息记录)
-      const reply = await this.generateReply(session, message);
+      // 4. 调用 AgentService 生成回复(内部会创建消息记录)
+      const reply = await this.generateReply(session, message, config);
 
       // 4. 发送回复
       const adapter = this.instanceManager.getAdapter(botId);
@@ -140,12 +142,17 @@ export class BotOrchestrator {
   /**
    * 调用 AgentService 生成回复
    */
-  private async generateReply(session: any, message: BotMessage): Promise<string> {
+  private async generateReply(session: any, message: BotMessage, config: BotConfig): Promise<string> {
     try {
-      // 1. 创建用户消息记录
+      this.logger.log(
+        `Creating user message with knowledgeBaseIds: ${JSON.stringify(config.knowledgeBaseIds)}`
+      );
+      
+      // 1. 创建用户消息记录(附带知识库ID列表)
       const userMessage = await this.sessionMapper.createUserMessage(
         session.id,
         message.content,
+        config.knowledgeBaseIds,
       );
 
       // 2. 调用 AgentService (Bot场景不需要assistantMessageId)

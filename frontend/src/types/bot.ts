@@ -38,6 +38,9 @@ export interface BotInstance {
   retryInterval: number;
   defaultCharacterId: string | null;
   defaultModelId: string | null;
+  additionalKwargs?: {
+    knowledgeBaseIds?: string[];
+  };
   status: 'stopped' | 'running' | 'error' | 'connecting';
   runtimeStatus: 'CONNECTED' | 'DISCONNECTED' | 'CONNECTING' | 'ERROR' | null;
   lastStartedAt: string | null;
@@ -60,6 +63,9 @@ export interface CreateBotRequest {
   };
   defaultCharacterId?: string;
   defaultModelId?: string;
+  additionalKwargs?: {
+    knowledgeBaseIds?: string[];
+  };
   autoStart?: boolean;
 }
 
@@ -72,4 +78,7 @@ export interface UpdateBotRequest {
   enabled?: boolean;
   defaultCharacterId?: string;
   defaultModelId?: string;
+  additionalKwargs?: {
+    knowledgeBaseIds?: string[];
+  };
 }

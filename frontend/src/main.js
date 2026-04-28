@@ -54,7 +54,7 @@ const routes = [
                 path: 'characters',
                 name: 'Characters',
                 meta: { title: '助手', requiresAuth: true },
-                component: () => import('./components/CharactersPage.vue')
+                component: () => import('./components/characters/CharactersPage.vue')
             },
             {
                 path: 'bots',

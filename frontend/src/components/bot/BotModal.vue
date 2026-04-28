@@ -42,6 +42,30 @@
         </div>
       </el-form-item>
 
+      <!-- 引用知识库选择（多选） -->
+      <el-form-item label="引用知识库">
+        <el-select 
+          v-model="formData.knowledgeBaseIds" 
+          placeholder="请选择知识库（可多选）" 
+          style="width: 100%" 
+          multiple
+          filterable>
+          <el-option 
+            v-for="kb in knowledgeBases" 
+            :key="kb.id" 
+            :label="kb.name" 
+            :value="kb.id">
+            <div class="flex items-center gap-2">
+              <span>{{ kb.name }}</span>
+              <span v-if="kb.description" class="text-gray-400 text-xs">{{ kb.description }}</span>
+            </div>
+          </el-option>
+        </el-select>
+        <div class="text-xs text-gray-500 mt-1">
+          AI回复时会引用这些知识库的内容
+        </div>
+      </el-form-item>
+
       <!-- 动态平台配置字段 -->
       <template v-if="selectedPlatform">
         <el-divider content-position="left">平台配置</el-divider>
@@ -87,23 +111,33 @@
         </el-form-item>
       </template>
 
-      <!-- 重连配置 -->
-      <el-divider content-position="left">重连配置</el-divider>
+      <!-- 高级配置（可折叠） -->
+      <el-collapse v-model="activeCollapse">
+        <el-collapse-item name="advanced">
+          <template #title>
+            <div class="flex items-center gap-2">
+              <span>高级配置</span>
+              <el-tag size="small" type="info">可选</el-tag>
+            </div>
+          </template>
 
-      <el-form-item label="启用重连">
-        <el-switch v-model="formData.reconnectConfig.enabled" />
-      </el-form-item>
+          <!-- 重连配置 -->
+          <el-form-item label="启用重连">
+            <el-switch v-model="formData.reconnectConfig.enabled" />
+          </el-form-item>
 
-      <template v-if="formData.reconnectConfig.enabled">
-        <el-form-item label="最大重试次数">
-          <el-input-number v-model="formData.reconnectConfig.maxRetries" :min="1" :max="20" style="width: 100%" />
-        </el-form-item>
+          <template v-if="formData.reconnectConfig.enabled">
+            <el-form-item label="最大重试次数">
+              <el-input-number v-model="formData.reconnectConfig.maxRetries" :min="1" :max="20" style="width: 100%" />
+            </el-form-item>
 
-        <el-form-item label="重试间隔(ms)">
-          <el-input-number v-model="formData.reconnectConfig.retryInterval" :min="1000" :max="60000" :step="1000"
-            style="width: 100%" />
-        </el-form-item>
-      </template>
+            <el-form-item label="重试间隔(ms)">
+              <el-input-number v-model="formData.reconnectConfig.retryInterval" :min="1000" :max="60000" :step="1000"
+                style="width: 100%" />
+            </el-form-item>
+          </template>
+        </el-collapse-item>
+      </el-collapse>
 
       <!-- 自动启动（仅创建时） -->
       <el-form-item v-if="!isEdit" label="自动启动">
@@ -128,8 +162,10 @@ import { ref, computed, watch, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import type { FormInstance, FormRules } from 'element-plus'
 import { useBotStore } from '@/stores/bot'
+import { useKnowledgeBaseStore } from '@/stores/knowledgeBase'
 import { apiService } from '@/services/ApiService'
 import type { BotInstance, PlatformMetadata } from '@/types/bot'
+import type { KnowledgeBase } from '@/stores/knowledgeBase'
 
 const props = defineProps<{
   modelValue: boolean
@@ -142,11 +178,18 @@ const emit = defineEmits<{
 }>()
 
 const botStore = useBotStore()
+const knowledgeBaseStore = useKnowledgeBaseStore()
 const formRef = ref<FormInstance>()
 const submitting = ref(false)
 
+// 折叠面板激活项（空数组表示默认全部折叠）
+const activeCollapse = ref<string[]>([])
+
 // 角色列表
 const characters = ref<any[]>([])
+
+// 知识库列表
+const knowledgeBases = ref<KnowledgeBase[]>([])
 
 // 对话框可见性
 const dialogVisible = computed({
@@ -168,6 +211,7 @@ const formData = ref({
   platform: '',
   name: '',
   defaultCharacterId: '',
+  knowledgeBaseIds: [] as string[],
   platformConfig: {} as Record<string, any>,
   reconnectConfig: {
     enabled: true,
@@ -214,7 +258,8 @@ watch(dialogVisible, (visible) => {
   if (visible) {
     if (isEdit.value && props.bot) {
       // 编辑模式：填充现有数据
-      const platformConfig = { ...props.bot.platformConfig }
+      const bot = props.bot // 创建局部变量以进行类型收窄
+      const platformConfig = { ...bot.platformConfig }
       
       // 清空脱敏的敏感字段（后端返回 *** 表示已脱敏）
       const sensitiveFields = ['appSecret', 'secret', 'token', 'encodingAESKey']
@@ -224,15 +269,32 @@ watch(dialogVisible, (visible) => {
         }
       })
       
+      // 对于未设置的字段，使用平台元数据中的默认值
+      const metadata = botStore.platforms.find(p => p.platform === bot.platform)
+      if (metadata) {
+        metadata.fields.forEach(field => {
+          // 如果字段值为 undefined、null 或空字符串，且有默认值，则使用默认值
+          if (
+            (platformConfig[field.key] === undefined || 
+             platformConfig[field.key] === null || 
+             platformConfig[field.key] === '') &&
+            field.defaultValue !== undefined
+          ) {
+            platformConfig[field.key] = field.defaultValue
+          }
+        })
+      }
+      
       formData.value = {
-        platform: props.bot.platform,
-        name: props.bot.name,
-        defaultCharacterId: props.bot.defaultCharacterId || '',
+        platform: bot.platform,
+        name: bot.name,
+        defaultCharacterId: bot.defaultCharacterId || '',
+        knowledgeBaseIds: bot.additionalKwargs?.knowledgeBaseIds || [],
         platformConfig: platformConfig,
         reconnectConfig: {
-          enabled: props.bot.reconnectEnabled,
-          maxRetries: props.bot.maxRetries,
-          retryInterval: props.bot.retryInterval
+          enabled: bot.reconnectEnabled,
+          maxRetries: bot.maxRetries,
+          retryInterval: bot.retryInterval
         },
         autoStart: false
       }
@@ -263,6 +325,7 @@ const resetForm = () => {
     platform: '',
     name: '',
     defaultCharacterId: '',
+    knowledgeBaseIds: [],
     platformConfig: {},
     reconnectConfig: {
       enabled: true,
@@ -291,9 +354,21 @@ const loadCharacters = async () => {
   }
 }
 
-// 组件挂载时加载角色列表
+// 加载知识库列表
+const loadKnowledgeBases = async () => {
+  try {
+    await knowledgeBaseStore.fetchKnowledgeBases()
+    knowledgeBases.value = knowledgeBaseStore.knowledgeBases
+  } catch (error) {
+    console.error('获取知识库列表失败:', error)
+    ElMessage.error('获取知识库列表失败')
+  }
+}
+
+// 组件挂载时加载角色列表和知识库列表
 onMounted(() => {
   loadCharacters()
+  loadKnowledgeBases()
 })
 
 // 提交表单
@@ -311,7 +386,10 @@ const handleSubmit = async () => {
           name: formData.value.name,
           defaultCharacterId: formData.value.defaultCharacterId,
           platformConfig: formData.value.platformConfig,
-          reconnectConfig: formData.value.reconnectConfig
+          reconnectConfig: formData.value.reconnectConfig,
+          additionalKwargs: {
+            knowledgeBaseIds: formData.value.knowledgeBaseIds.length > 0 ? formData.value.knowledgeBaseIds : undefined
+          }
         }
         await botStore.updateBot(props.bot.id, updateData)
       } else {
@@ -322,7 +400,10 @@ const handleSubmit = async () => {
           defaultCharacterId: formData.value.defaultCharacterId,
           platformConfig: formData.value.platformConfig,
           reconnectConfig: formData.value.reconnectConfig,
-          autoStart: formData.value.autoStart
+          autoStart: formData.value.autoStart,
+          additionalKwargs: {
+            knowledgeBaseIds: formData.value.knowledgeBaseIds.length > 0 ? formData.value.knowledgeBaseIds : undefined
+          }
         }
         await botStore.createBot(createData)
       }

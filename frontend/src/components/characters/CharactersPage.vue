@@ -166,11 +166,11 @@ import {
   EllipsisHorizontal as MoreHorizOutlined
 } from '@vicons/ionicons5'
 
-import { useTitle } from '../composables/useTitle'
-import { Avatar } from './ui'
+import { useTitle } from '../../composables/useTitle'
+import { Avatar } from '../ui'
 import CharacterModal from './CharacterModal.vue'
-import { apiService } from '../services/ApiService'
-import { usePopup } from '../composables/usePopup'
+import { apiService } from '../../services/ApiService'
+import { usePopup } from '../../composables/usePopup'
 import type { CharacterGroup } from '@/types/character'
 
 const { confirm, toast } = usePopup()

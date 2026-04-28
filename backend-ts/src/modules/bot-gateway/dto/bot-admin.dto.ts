@@ -12,6 +12,7 @@ export class CreateBotDto {
   };
   defaultCharacterId: string;   // 默认关联的角色ID(必填)
   defaultModelId?: string;
+  additionalKwargs?: any;       // 扩展配置(如 knowledgeBaseIds)
   autoStart?: boolean;        // 是否自动启动
 }
 
@@ -29,4 +30,5 @@ export class UpdateBotDto {
   };
   defaultCharacterId?: string;  // 更新时可选
   defaultModelId?: string;
+  additionalKwargs?: any;       // 扩展配置(如 knowledgeBaseIds)
 }

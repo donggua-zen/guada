@@ -30,7 +30,7 @@ import {
     ElDialog
 } from 'element-plus'
 import CharacterSettingPanel from './CharacterSettingPanel.vue'
-import { apiService } from '../services/ApiService'
+import { apiService } from '../../services/ApiService'
 import { usePopup } from '@/composables/usePopup'
 
 const { toast } = usePopup()
