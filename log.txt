@@ -1,0 +1,971 @@
+[CharacterModal] watching characterId changed: cmoek3y020001y0kzpn9vnezr
+CharacterModal.vue:77 [CharacterModal] Fetching character from API...
+CharacterSettingPanel.vue:584 [CharacterSettingPanel] props.data changed
+CharacterSettingPanel.vue:585 [CharacterSettingPanel] newVal: Proxy(Object) {}
+CharacterSettingPanel.vue:586 [CharacterSettingPanel] newVal.avatarUrl: undefined
+CharacterSettingPanel.vue:587 [CharacterSettingPanel] characterForm.id before: 
+CharacterSettingPanel.vue:588 [CharacterSettingPanel] newVal.id: undefined
+CharacterSettingPanel.vue:592 [CharacterSettingPanel] isCharacterSwitch: true
+CharacterSettingPanel.vue:595 [CharacterSettingPanel] Clearing avatarFile due to character switch
+CharacterSettingPanel.vue:603 [CharacterSettingPanel] characterForm.avatarUrl set to: 
+CharacterSettingPanel.vue:604 [CharacterSettingPanel] characterForm.avatarUrl type: string
+AvatarPreview.vue:65 [AvatarPreview] Component created
+AvatarPreview.vue:66 [AvatarPreview] props.src: 
+AvatarPreview.vue:67 [AvatarPreview] props.type: assistant
+AvatarPreview.vue:68 [AvatarPreview] props.name: 
+Avatar.vue:36 [Avatar] Component mounted/updated
+Avatar.vue:37 [Avatar] props.src: 
+Avatar.vue:38 [Avatar] props.type: assistant
+Avatar.vue:39 [Avatar] props.name: 
+ElSliderOptional.vue:80 sliderValue 2
+ElSliderOptional.vue:80 sliderValue 1.1
+ElSliderOptional.vue:80 sliderValue 2
+ElSliderOptional.vue:80 sliderValue 501
+CharacterModal.vue:80 [CharacterModal] Fetched character: {id: 'cmoek3y020001y0kzpn9vnezr', userId: 'cmoek3xxc0000y0kzlw89w9h5', title: '智能助手', description: '一个友好、专业的 AI 助手，可以帮助你解答各种问题。', avatarUrl: 'http://localhost:3000/uploads/avatars/afdae2d2-259d-4ec3-91a1-eac009bade6b.jpg', …}
+CharacterModal.vue:81 [CharacterModal] Fetched character.avatarUrl: http://localhost:3000/uploads/avatars/afdae2d2-259d-4ec3-91a1-eac009bade6b.jpg
+CharacterSettingPanel.vue:584 [CharacterSettingPanel] props.data changed
+CharacterSettingPanel.vue:585 [CharacterSettingPanel] newVal: Proxy(Object) {id: 'cmoek3y020001y0kzpn9vnezr', userId: 'cmoek3xxc0000y0kzlw89w9h5', title: '智能助手', description: '一个友好、专业的 AI 助手，可以帮助你解答各种问题。', avatarUrl: 'http://localhost:3000/uploads/avatars/afdae2d2-259d-4ec3-91a1-eac009bade6b.jpg', …}
+CharacterSettingPanel.vue:586 [CharacterSettingPanel] newVal.avatarUrl: http://localhost:3000/uploads/avatars/afdae2d2-259d-4ec3-91a1-eac009bade6b.jpg
+CharacterSettingPanel.vue:587 [CharacterSettingPanel] characterForm.id before: 
+CharacterSettingPanel.vue:588 [CharacterSettingPanel] newVal.id: cmoek3y020001y0kzpn9vnezr
+CharacterSettingPanel.vue:592 [CharacterSettingPanel] isCharacterSwitch: true
+CharacterSettingPanel.vue:595 [CharacterSettingPanel] Clearing avatarFile due to character switch
+CharacterSettingPanel.vue:603 [CharacterSettingPanel] characterForm.avatarUrl set to: http://localhost:3000/uploads/avatars/afdae2d2-259d-4ec3-91a1-eac009bade6b.jpg
+CharacterSettingPanel.vue:604 [CharacterSettingPanel] characterForm.avatarUrl type: string
+CharacterSettingPanel.vue:772 角色ID变化，重新加载工具列表: cmoek3y020001y0kzpn9vnezr
+AvatarPreview.vue:72 [AvatarPreview] props.src changed
+AvatarPreview.vue:73 [AvatarPreview] newValue: http://localhost:3000/uploads/avatars/afdae2d2-259d-4ec3-91a1-eac009bade6b.jpg
+AvatarPreview.vue:74 [AvatarPreview] previewUrl before: 
+AvatarPreview.vue:81 [AvatarPreview] previewUrl after: http://localhost:3000/uploads/avatars/afdae2d2-259d-4ec3-91a1-eac009bade6b.jpg
+Avatar.vue:43 [Avatar] avatarSrc computed, props.src: http://localhost:3000/uploads/avatars/afdae2d2-259d-4ec3-91a1-eac009bade6b.jpg
+Avatar.vue:60 [Avatar] Starts with http, returning as is
+CharacterSettingPanel.vue:735 Invalid prop: type check failed for prop "value". Expected String | Number | Boolean | Object, got Null  null at <ElOption>
+at <ElOptions>
+at <ElScrollbar>
+at <ElSelectDropdown>
+at <ElFocusTrap>
+at <ElPopperContent>
+at <BaseTransition>
+at <Transition>
+at <Teleport>
+at <ElTooltipContent>
+at <ElPopper>
+at <ElTooltip>
+at <ElSelect>
+at <ElFormItem>
+at <ElForm>
+at <ElTabPane>
+at <ElTabs>
+at <CharacterSettingPanel>
+at <ElDialogContent>
+at <ElFocusTrap>
+at <ElOverlay>
+at <BaseTransition>
+at <Transition>
+at <Teleport>
+at <ElDialog>
+at <CharacterModal>
+at <CharactersPage>
+at <RouterView>
+at <MainLayout>
+at <RouterView>
+at <App> (31) [{…}, {…}, {…}, {…}, {…}, {…}, {…}, {…}, {…}, {…}, {…}, {…}, {…}, {…}, {…}, {…}, {…}, {…}, {…}, {…}, {…}, {…}, {…}, {…}, {…}, {…}, {…}, {…}, {…}, {…}, {…}]
+（匿名） @ chunk-FYZVDDRB.js?v=b9e185ce:41484
+callWithErrorHandling @ chunk-AQOAFTHJ.js?v=b9e185ce:2342
+warn$1 @ chunk-AQOAFTHJ.js?v=b9e185ce:2171
+validateProp @ chunk-AQOAFTHJ.js?v=b9e185ce:7250
+validateProps @ chunk-AQOAFTHJ.js?v=b9e185ce:7222
+initProps @ chunk-AQOAFTHJ.js?v=b9e185ce:6911
+setupComponent @ chunk-AQOAFTHJ.js?v=b9e185ce:10158
+mountComponent @ chunk-AQOAFTHJ.js?v=b9e185ce:8100
+processComponent @ chunk-AQOAFTHJ.js?v=b9e185ce:8066
+patch @ chunk-AQOAFTHJ.js?v=b9e185ce:7562
+mountChildren @ chunk-AQOAFTHJ.js?v=b9e185ce:7814
+processFragment @ chunk-AQOAFTHJ.js?v=b9e185ce:7996
+patch @ chunk-AQOAFTHJ.js?v=b9e185ce:7536
+patchKeyedChildren @ chunk-AQOAFTHJ.js?v=b9e185ce:8525
+patchChildren @ chunk-AQOAFTHJ.js?v=b9e185ce:8360
+processFragment @ chunk-AQOAFTHJ.js?v=b9e185ce:8040
+patch @ chunk-AQOAFTHJ.js?v=b9e185ce:7536
+patchKeyedChildren @ chunk-AQOAFTHJ.js?v=b9e185ce:8483
+patchChildren @ chunk-AQOAFTHJ.js?v=b9e185ce:8397
+processFragment @ chunk-AQOAFTHJ.js?v=b9e185ce:8040
+patch @ chunk-AQOAFTHJ.js?v=b9e185ce:7536
+patchKeyedChildren @ chunk-AQOAFTHJ.js?v=b9e185ce:8483
+patchChildren @ chunk-AQOAFTHJ.js?v=b9e185ce:8397
+processFragment @ chunk-AQOAFTHJ.js?v=b9e185ce:8040
+patch @ chunk-AQOAFTHJ.js?v=b9e185ce:7536
+componentUpdateFn @ chunk-AQOAFTHJ.js?v=b9e185ce:8292
+run @ chunk-AQOAFTHJ.js?v=b9e185ce:505
+updateComponent @ chunk-AQOAFTHJ.js?v=b9e185ce:8143
+processComponent @ chunk-AQOAFTHJ.js?v=b9e185ce:8077
+patch @ chunk-AQOAFTHJ.js?v=b9e185ce:7562
+patchKeyedChildren @ chunk-AQOAFTHJ.js?v=b9e185ce:8483
+patchChildren @ chunk-AQOAFTHJ.js?v=b9e185ce:8397
+processFragment @ chunk-AQOAFTHJ.js?v=b9e185ce:8040
+patch @ chunk-AQOAFTHJ.js?v=b9e185ce:7536
+patchBlockChildren @ chunk-AQOAFTHJ.js?v=b9e185ce:7936
+patchElement @ chunk-AQOAFTHJ.js?v=b9e185ce:7854
+processElement @ chunk-AQOAFTHJ.js?v=b9e185ce:7708
+patch @ chunk-AQOAFTHJ.js?v=b9e185ce:7550
+patchBlockChildren @ chunk-AQOAFTHJ.js?v=b9e185ce:7936
+patchElement @ chunk-AQOAFTHJ.js?v=b9e185ce:7854
+processElement @ chunk-AQOAFTHJ.js?v=b9e185ce:7708
+patch @ chunk-AQOAFTHJ.js?v=b9e185ce:7550
+componentUpdateFn @ chunk-AQOAFTHJ.js?v=b9e185ce:8292
+run @ chunk-AQOAFTHJ.js?v=b9e185ce:505
+updateComponent @ chunk-AQOAFTHJ.js?v=b9e185ce:8143
+processComponent @ chunk-AQOAFTHJ.js?v=b9e185ce:8077
+patch @ chunk-AQOAFTHJ.js?v=b9e185ce:7562
+patchKeyedChildren @ chunk-AQOAFTHJ.js?v=b9e185ce:8483
+patchChildren @ chunk-AQOAFTHJ.js?v=b9e185ce:8397
+processFragment @ chunk-AQOAFTHJ.js?v=b9e185ce:8040
+patch @ chunk-AQOAFTHJ.js?v=b9e185ce:7536
+patchBlockChildren @ chunk-AQOAFTHJ.js?v=b9e185ce:7936
+patchElement @ chunk-AQOAFTHJ.js?v=b9e185ce:7854
+processElement @ chunk-AQOAFTHJ.js?v=b9e185ce:7708
+patch @ chunk-AQOAFTHJ.js?v=b9e185ce:7550
+componentUpdateFn @ chunk-AQOAFTHJ.js?v=b9e185ce:8292
+run @ chunk-AQOAFTHJ.js?v=b9e185ce:505
+updateComponent @ chunk-AQOAFTHJ.js?v=b9e185ce:8143
+processComponent @ chunk-AQOAFTHJ.js?v=b9e185ce:8077
+patch @ chunk-AQOAFTHJ.js?v=b9e185ce:7562
+patchKeyedChildren @ chunk-AQOAFTHJ.js?v=b9e185ce:8483
+patchChildren @ chunk-AQOAFTHJ.js?v=b9e185ce:8397
+processFragment @ chunk-AQOAFTHJ.js?v=b9e185ce:8040
+patch @ chunk-AQOAFTHJ.js?v=b9e185ce:7536
+patchKeyedChildren @ chunk-AQOAFTHJ.js?v=b9e185ce:8483
+patchChildren @ chunk-AQOAFTHJ.js?v=b9e185ce:8397
+processFragment @ chunk-AQOAFTHJ.js?v=b9e185ce:8040
+patch @ chunk-AQOAFTHJ.js?v=b9e185ce:7536
+patchKeyedChildren @ chunk-AQOAFTHJ.js?v=b9e185ce:8483
+patchChildren @ chunk-AQOAFTHJ.js?v=b9e185ce:8397
+processFragment @ chunk-AQOAFTHJ.js?v=b9e185ce:8040
+patch @ chunk-AQOAFTHJ.js?v=b9e185ce:7536
+patchKeyedChildren @ chunk-AQOAFTHJ.js?v=b9e185ce:8483
+patchChildren @ chunk-AQOAFTHJ.js?v=b9e185ce:8397
+processFragment @ chunk-AQOAFTHJ.js?v=b9e185ce:8040
+patch @ chunk-AQOAFTHJ.js?v=b9e185ce:7536
+componentUpdateFn @ chunk-AQOAFTHJ.js?v=b9e185ce:8292
+run @ chunk-AQOAFTHJ.js?v=b9e185ce:505
+updateComponent @ chunk-AQOAFTHJ.js?v=b9e185ce:8143
+processComponent @ chunk-AQOAFTHJ.js?v=b9e185ce:8077
+patch @ chunk-AQOAFTHJ.js?v=b9e185ce:7562
+patchBlockChildren @ chunk-AQOAFTHJ.js?v=b9e185ce:7936
+patchElement @ chunk-AQOAFTHJ.js?v=b9e185ce:7854
+processElement @ chunk-AQOAFTHJ.js?v=b9e185ce:7708
+patch @ chunk-AQOAFTHJ.js?v=b9e185ce:7550
+componentUpdateFn @ chunk-AQOAFTHJ.js?v=b9e185ce:8292
+run @ chunk-AQOAFTHJ.js?v=b9e185ce:505
+updateComponent @ chunk-AQOAFTHJ.js?v=b9e185ce:8143
+processComponent @ chunk-AQOAFTHJ.js?v=b9e185ce:8077
+patch @ chunk-AQOAFTHJ.js?v=b9e185ce:7562
+componentUpdateFn @ chunk-AQOAFTHJ.js?v=b9e185ce:8292
+run @ chunk-AQOAFTHJ.js?v=b9e185ce:505
+updateComponent @ chunk-AQOAFTHJ.js?v=b9e185ce:8143
+processComponent @ chunk-AQOAFTHJ.js?v=b9e185ce:8077
+patch @ chunk-AQOAFTHJ.js?v=b9e185ce:7562
+componentUpdateFn @ chunk-AQOAFTHJ.js?v=b9e185ce:8292
+run @ chunk-AQOAFTHJ.js?v=b9e185ce:505
+updateComponent @ chunk-AQOAFTHJ.js?v=b9e185ce:8143
+processComponent @ chunk-AQOAFTHJ.js?v=b9e185ce:8077
+patch @ chunk-AQOAFTHJ.js?v=b9e185ce:7562
+patchKeyedChildren @ chunk-AQOAFTHJ.js?v=b9e185ce:8483
+patchChildren @ chunk-AQOAFTHJ.js?v=b9e185ce:8397
+processFragment @ chunk-AQOAFTHJ.js?v=b9e185ce:8040
+patch @ chunk-AQOAFTHJ.js?v=b9e185ce:7536
+patchBlockChildren @ chunk-AQOAFTHJ.js?v=b9e185ce:7936
+process @ chunk-AQOAFTHJ.js?v=b9e185ce:3224
+patch @ chunk-AQOAFTHJ.js?v=b9e185ce:7574
+componentUpdateFn @ chunk-AQOAFTHJ.js?v=b9e185ce:8292
+run @ chunk-AQOAFTHJ.js?v=b9e185ce:505
+updateComponent @ chunk-AQOAFTHJ.js?v=b9e185ce:8143
+processComponent @ chunk-AQOAFTHJ.js?v=b9e185ce:8077
+patch @ chunk-AQOAFTHJ.js?v=b9e185ce:7562
+componentUpdateFn @ chunk-AQOAFTHJ.js?v=b9e185ce:8292
+run @ chunk-AQOAFTHJ.js?v=b9e185ce:505
+updateComponent @ chunk-AQOAFTHJ.js?v=b9e185ce:8143
+processComponent @ chunk-AQOAFTHJ.js?v=b9e185ce:8077
+patch @ chunk-AQOAFTHJ.js?v=b9e185ce:7562
+patchKeyedChildren @ chunk-AQOAFTHJ.js?v=b9e185ce:8483
+patchChildren @ chunk-AQOAFTHJ.js?v=b9e185ce:8397
+processFragment @ chunk-AQOAFTHJ.js?v=b9e185ce:8040
+patch @ chunk-AQOAFTHJ.js?v=b9e185ce:7536
+componentUpdateFn @ chunk-AQOAFTHJ.js?v=b9e185ce:8292
+run @ chunk-AQOAFTHJ.js?v=b9e185ce:505
+updateComponent @ chunk-AQOAFTHJ.js?v=b9e185ce:8143
+processComponent @ chunk-AQOAFTHJ.js?v=b9e185ce:8077
+patch @ chunk-AQOAFTHJ.js?v=b9e185ce:7562
+componentUpdateFn @ chunk-AQOAFTHJ.js?v=b9e185ce:8292
+run @ chunk-AQOAFTHJ.js?v=b9e185ce:505
+updateComponent @ chunk-AQOAFTHJ.js?v=b9e185ce:8143
+processComponent @ chunk-AQOAFTHJ.js?v=b9e185ce:8077
+patch @ chunk-AQOAFTHJ.js?v=b9e185ce:7562
+patchBlockChildren @ chunk-AQOAFTHJ.js?v=b9e185ce:7936
+patchElement @ chunk-AQOAFTHJ.js?v=b9e185ce:7854
+processElement @ chunk-AQOAFTHJ.js?v=b9e185ce:7708
+patch @ chunk-AQOAFTHJ.js?v=b9e185ce:7550
+componentUpdateFn @ chunk-AQOAFTHJ.js?v=b9e185ce:8292
+run @ chunk-AQOAFTHJ.js?v=b9e185ce:505
+updateComponent @ chunk-AQOAFTHJ.js?v=b9e185ce:8143
+processComponent @ chunk-AQOAFTHJ.js?v=b9e185ce:8077
+patch @ chunk-AQOAFTHJ.js?v=b9e185ce:7562
+patchKeyedChildren @ chunk-AQOAFTHJ.js?v=b9e185ce:8483
+patchChildren @ chunk-AQOAFTHJ.js?v=b9e185ce:8397
+processFragment @ chunk-AQOAFTHJ.js?v=b9e185ce:8040
+patch @ chunk-AQOAFTHJ.js?v=b9e185ce:7536
+patchBlockChildren @ chunk-AQOAFTHJ.js?v=b9e185ce:7936
+patchElement @ chunk-AQOAFTHJ.js?v=b9e185ce:7854
+processElement @ chunk-AQOAFTHJ.js?v=b9e185ce:7708
+patch @ chunk-AQOAFTHJ.js?v=b9e185ce:7550
+componentUpdateFn @ chunk-AQOAFTHJ.js?v=b9e185ce:8292
+run @ chunk-AQOAFTHJ.js?v=b9e185ce:505
+runIfDirty @ chunk-AQOAFTHJ.js?v=b9e185ce:543
+callWithErrorHandling @ chunk-AQOAFTHJ.js?v=b9e185ce:2342
+flushJobs @ chunk-AQOAFTHJ.js?v=b9e185ce:2550
+Promise.then
+queueFlush @ chunk-AQOAFTHJ.js?v=b9e185ce:2464
+queueJob @ chunk-AQOAFTHJ.js?v=b9e185ce:2459
+effect2.scheduler @ chunk-AQOAFTHJ.js?v=b9e185ce:8334
+trigger @ chunk-AQOAFTHJ.js?v=b9e185ce:533
+endBatch @ chunk-AQOAFTHJ.js?v=b9e185ce:591
+noTracking @ chunk-AQOAFTHJ.js?v=b9e185ce:1184
+push @ chunk-AQOAFTHJ.js?v=b9e185ce:1081
+（匿名） @ CharacterSettingPanel.vue:735
+loadModels @ CharacterSettingPanel.vue:734
+await in loadModels
+（匿名） @ CharacterSettingPanel.vue:780
+（匿名） @ chunk-AQOAFTHJ.js?v=b9e185ce:5221
+callWithErrorHandling @ chunk-AQOAFTHJ.js?v=b9e185ce:2342
+callWithAsyncErrorHandling @ chunk-AQOAFTHJ.js?v=b9e185ce:2349
+hook.__weh.hook.__weh @ chunk-AQOAFTHJ.js?v=b9e185ce:5201
+flushPostFlushCbs @ chunk-AQOAFTHJ.js?v=b9e185ce:2527
+flushJobs @ chunk-AQOAFTHJ.js?v=b9e185ce:2569
+Promise.then
+queueFlush @ chunk-AQOAFTHJ.js?v=b9e185ce:2464
+queueJob @ chunk-AQOAFTHJ.js?v=b9e185ce:2459
+effect2.scheduler @ chunk-AQOAFTHJ.js?v=b9e185ce:8334
+trigger @ chunk-AQOAFTHJ.js?v=b9e185ce:533
+endBatch @ chunk-AQOAFTHJ.js?v=b9e185ce:591
+notify @ chunk-AQOAFTHJ.js?v=b9e185ce:853
+trigger @ chunk-AQOAFTHJ.js?v=b9e185ce:827
+set value @ chunk-AQOAFTHJ.js?v=b9e185ce:1734
+editCharacter @ CharactersPage.vue:329
+（匿名） @ CharactersPage.vue:99
+（匿名） @ chunk-AQOAFTHJ.js?v=b9e185ce:12443
+callWithErrorHandling @ chunk-AQOAFTHJ.js?v=b9e185ce:2342
+callWithAsyncErrorHandling @ chunk-AQOAFTHJ.js?v=b9e185ce:2349
+emit @ chunk-AQOAFTHJ.js?v=b9e185ce:6534
+（匿名） @ chunk-AQOAFTHJ.js?v=b9e185ce:10390
+handleClick @ chunk-FYZVDDRB.js?v=b9e185ce:16339
+callWithErrorHandling @ chunk-AQOAFTHJ.js?v=b9e185ce:2342
+callWithAsyncErrorHandling @ chunk-AQOAFTHJ.js?v=b9e185ce:2349
+invoker @ chunk-AQOAFTHJ.js?v=b9e185ce:11425
+CharacterSettingPanel.vue:735 Invalid prop: type check failed for prop "value". Expected String | Number | Boolean | Object, got Undefined  null at <ElOption>
+at <ElOptions>
+at <ElScrollbar>
+at <ElSelectDropdown>
+at <ElFocusTrap>
+at <ElPopperContent>
+at <BaseTransition>
+at <Transition>
+at <Teleport>
+at <ElTooltipContent>
+at <ElPopper>
+at <ElTooltip>
+at <ElSelect>
+at <ElFormItem>
+at <ElForm>
+at <ElTabPane>
+at <ElTabs>
+at <CharacterSettingPanel>
+at <ElDialogContent>
+at <ElFocusTrap>
+at <ElOverlay>
+at <BaseTransition>
+at <Transition>
+at <Teleport>
+at <ElDialog>
+at <CharacterModal>
+at <CharactersPage>
+at <RouterView>
+at <MainLayout>
+at <RouterView>
+at <App> (31) [{…}, {…}, {…}, {…}, {…}, {…}, {…}, {…}, {…}, {…}, {…}, {…}, {…}, {…}, {…}, {…}, {…}, {…}, {…}, {…}, {…}, {…}, {…}, {…}, {…}, {…}, {…}, {…}, {…}, {…}, {…}]
+（匿名） @ chunk-FYZVDDRB.js?v=b9e185ce:41484
+callWithErrorHandling @ chunk-AQOAFTHJ.js?v=b9e185ce:2342
+warn$1 @ chunk-AQOAFTHJ.js?v=b9e185ce:2171
+validateProp @ chunk-AQOAFTHJ.js?v=b9e185ce:7250
+validateProps @ chunk-AQOAFTHJ.js?v=b9e185ce:7222
+initProps @ chunk-AQOAFTHJ.js?v=b9e185ce:6911
+setupComponent @ chunk-AQOAFTHJ.js?v=b9e185ce:10158
+mountComponent @ chunk-AQOAFTHJ.js?v=b9e185ce:8100
+processComponent @ chunk-AQOAFTHJ.js?v=b9e185ce:8066
+patch @ chunk-AQOAFTHJ.js?v=b9e185ce:7562
+mountChildren @ chunk-AQOAFTHJ.js?v=b9e185ce:7814
+processFragment @ chunk-AQOAFTHJ.js?v=b9e185ce:7996
+patch @ chunk-AQOAFTHJ.js?v=b9e185ce:7536
+patchKeyedChildren @ chunk-AQOAFTHJ.js?v=b9e185ce:8525
+patchChildren @ chunk-AQOAFTHJ.js?v=b9e185ce:8360
+processFragment @ chunk-AQOAFTHJ.js?v=b9e185ce:8040
+patch @ chunk-AQOAFTHJ.js?v=b9e185ce:7536
+patchKeyedChildren @ chunk-AQOAFTHJ.js?v=b9e185ce:8483
+patchChildren @ chunk-AQOAFTHJ.js?v=b9e185ce:8397
+processFragment @ chunk-AQOAFTHJ.js?v=b9e185ce:8040
+patch @ chunk-AQOAFTHJ.js?v=b9e185ce:7536
+patchKeyedChildren @ chunk-AQOAFTHJ.js?v=b9e185ce:8483
+patchChildren @ chunk-AQOAFTHJ.js?v=b9e185ce:8397
+processFragment @ chunk-AQOAFTHJ.js?v=b9e185ce:8040
+patch @ chunk-AQOAFTHJ.js?v=b9e185ce:7536
+componentUpdateFn @ chunk-AQOAFTHJ.js?v=b9e185ce:8292
+run @ chunk-AQOAFTHJ.js?v=b9e185ce:505
+updateComponent @ chunk-AQOAFTHJ.js?v=b9e185ce:8143
+processComponent @ chunk-AQOAFTHJ.js?v=b9e185ce:8077
+patch @ chunk-AQOAFTHJ.js?v=b9e185ce:7562
+patchKeyedChildren @ chunk-AQOAFTHJ.js?v=b9e185ce:8483
+patchChildren @ chunk-AQOAFTHJ.js?v=b9e185ce:8397
+processFragment @ chunk-AQOAFTHJ.js?v=b9e185ce:8040
+patch @ chunk-AQOAFTHJ.js?v=b9e185ce:7536
+patchBlockChildren @ chunk-AQOAFTHJ.js?v=b9e185ce:7936
+patchElement @ chunk-AQOAFTHJ.js?v=b9e185ce:7854
+processElement @ chunk-AQOAFTHJ.js?v=b9e185ce:7708
+patch @ chunk-AQOAFTHJ.js?v=b9e185ce:7550
+patchBlockChildren @ chunk-AQOAFTHJ.js?v=b9e185ce:7936
+patchElement @ chunk-AQOAFTHJ.js?v=b9e185ce:7854
+processElement @ chunk-AQOAFTHJ.js?v=b9e185ce:7708
+patch @ chunk-AQOAFTHJ.js?v=b9e185ce:7550
+componentUpdateFn @ chunk-AQOAFTHJ.js?v=b9e185ce:8292
+run @ chunk-AQOAFTHJ.js?v=b9e185ce:505
+updateComponent @ chunk-AQOAFTHJ.js?v=b9e185ce:8143
+processComponent @ chunk-AQOAFTHJ.js?v=b9e185ce:8077
+patch @ chunk-AQOAFTHJ.js?v=b9e185ce:7562
+patchKeyedChildren @ chunk-AQOAFTHJ.js?v=b9e185ce:8483
+patchChildren @ chunk-AQOAFTHJ.js?v=b9e185ce:8397
+processFragment @ chunk-AQOAFTHJ.js?v=b9e185ce:8040
+patch @ chunk-AQOAFTHJ.js?v=b9e185ce:7536
+patchBlockChildren @ chunk-AQOAFTHJ.js?v=b9e185ce:7936
+patchElement @ chunk-AQOAFTHJ.js?v=b9e185ce:7854
+processElement @ chunk-AQOAFTHJ.js?v=b9e185ce:7708
+patch @ chunk-AQOAFTHJ.js?v=b9e185ce:7550
+componentUpdateFn @ chunk-AQOAFTHJ.js?v=b9e185ce:8292
+run @ chunk-AQOAFTHJ.js?v=b9e185ce:505
+updateComponent @ chunk-AQOAFTHJ.js?v=b9e185ce:8143
+processComponent @ chunk-AQOAFTHJ.js?v=b9e185ce:8077
+patch @ chunk-AQOAFTHJ.js?v=b9e185ce:7562
+patchKeyedChildren @ chunk-AQOAFTHJ.js?v=b9e185ce:8483
+patchChildren @ chunk-AQOAFTHJ.js?v=b9e185ce:8397
+processFragment @ chunk-AQOAFTHJ.js?v=b9e185ce:8040
+patch @ chunk-AQOAFTHJ.js?v=b9e185ce:7536
+patchKeyedChildren @ chunk-AQOAFTHJ.js?v=b9e185ce:8483
+patchChildren @ chunk-AQOAFTHJ.js?v=b9e185ce:8397
+processFragment @ chunk-AQOAFTHJ.js?v=b9e185ce:8040
+patch @ chunk-AQOAFTHJ.js?v=b9e185ce:7536
+patchKeyedChildren @ chunk-AQOAFTHJ.js?v=b9e185ce:8483
+patchChildren @ chunk-AQOAFTHJ.js?v=b9e185ce:8397
+processFragment @ chunk-AQOAFTHJ.js?v=b9e185ce:8040
+patch @ chunk-AQOAFTHJ.js?v=b9e185ce:7536
+patchKeyedChildren @ chunk-AQOAFTHJ.js?v=b9e185ce:8483
+patchChildren @ chunk-AQOAFTHJ.js?v=b9e185ce:8397
+processFragment @ chunk-AQOAFTHJ.js?v=b9e185ce:8040
+patch @ chunk-AQOAFTHJ.js?v=b9e185ce:7536
+componentUpdateFn @ chunk-AQOAFTHJ.js?v=b9e185ce:8292
+run @ chunk-AQOAFTHJ.js?v=b9e185ce:505
+updateComponent @ chunk-AQOAFTHJ.js?v=b9e185ce:8143
+processComponent @ chunk-AQOAFTHJ.js?v=b9e185ce:8077
+patch @ chunk-AQOAFTHJ.js?v=b9e185ce:7562
+patchBlockChildren @ chunk-AQOAFTHJ.js?v=b9e185ce:7936
+patchElement @ chunk-AQOAFTHJ.js?v=b9e185ce:7854
+processElement @ chunk-AQOAFTHJ.js?v=b9e185ce:7708
+patch @ chunk-AQOAFTHJ.js?v=b9e185ce:7550
+componentUpdateFn @ chunk-AQOAFTHJ.js?v=b9e185ce:8292
+run @ chunk-AQOAFTHJ.js?v=b9e185ce:505
+updateComponent @ chunk-AQOAFTHJ.js?v=b9e185ce:8143
+processComponent @ chunk-AQOAFTHJ.js?v=b9e185ce:8077
+patch @ chunk-AQOAFTHJ.js?v=b9e185ce:7562
+componentUpdateFn @ chunk-AQOAFTHJ.js?v=b9e185ce:8292
+run @ chunk-AQOAFTHJ.js?v=b9e185ce:505
+updateComponent @ chunk-AQOAFTHJ.js?v=b9e185ce:8143
+processComponent @ chunk-AQOAFTHJ.js?v=b9e185ce:8077
+patch @ chunk-AQOAFTHJ.js?v=b9e185ce:7562
+componentUpdateFn @ chunk-AQOAFTHJ.js?v=b9e185ce:8292
+run @ chunk-AQOAFTHJ.js?v=b9e185ce:505
+updateComponent @ chunk-AQOAFTHJ.js?v=b9e185ce:8143
+processComponent @ chunk-AQOAFTHJ.js?v=b9e185ce:8077
+patch @ chunk-AQOAFTHJ.js?v=b9e185ce:7562
+patchKeyedChildren @ chunk-AQOAFTHJ.js?v=b9e185ce:8483
+patchChildren @ chunk-AQOAFTHJ.js?v=b9e185ce:8397
+processFragment @ chunk-AQOAFTHJ.js?v=b9e185ce:8040
+patch @ chunk-AQOAFTHJ.js?v=b9e185ce:7536
+patchBlockChildren @ chunk-AQOAFTHJ.js?v=b9e185ce:7936
+process @ chunk-AQOAFTHJ.js?v=b9e185ce:3224
+patch @ chunk-AQOAFTHJ.js?v=b9e185ce:7574
+componentUpdateFn @ chunk-AQOAFTHJ.js?v=b9e185ce:8292
+run @ chunk-AQOAFTHJ.js?v=b9e185ce:505
+updateComponent @ chunk-AQOAFTHJ.js?v=b9e185ce:8143
+processComponent @ chunk-AQOAFTHJ.js?v=b9e185ce:8077
+patch @ chunk-AQOAFTHJ.js?v=b9e185ce:7562
+componentUpdateFn @ chunk-AQOAFTHJ.js?v=b9e185ce:8292
+run @ chunk-AQOAFTHJ.js?v=b9e185ce:505
+updateComponent @ chunk-AQOAFTHJ.js?v=b9e185ce:8143
+processComponent @ chunk-AQOAFTHJ.js?v=b9e185ce:8077
+patch @ chunk-AQOAFTHJ.js?v=b9e185ce:7562
+patchKeyedChildren @ chunk-AQOAFTHJ.js?v=b9e185ce:8483
+patchChildren @ chunk-AQOAFTHJ.js?v=b9e185ce:8397
+processFragment @ chunk-AQOAFTHJ.js?v=b9e185ce:8040
+patch @ chunk-AQOAFTHJ.js?v=b9e185ce:7536
+componentUpdateFn @ chunk-AQOAFTHJ.js?v=b9e185ce:8292
+run @ chunk-AQOAFTHJ.js?v=b9e185ce:505
+updateComponent @ chunk-AQOAFTHJ.js?v=b9e185ce:8143
+processComponent @ chunk-AQOAFTHJ.js?v=b9e185ce:8077
+patch @ chunk-AQOAFTHJ.js?v=b9e185ce:7562
+componentUpdateFn @ chunk-AQOAFTHJ.js?v=b9e185ce:8292
+run @ chunk-AQOAFTHJ.js?v=b9e185ce:505
+updateComponent @ chunk-AQOAFTHJ.js?v=b9e185ce:8143
+processComponent @ chunk-AQOAFTHJ.js?v=b9e185ce:8077
+patch @ chunk-AQOAFTHJ.js?v=b9e185ce:7562
+patchBlockChildren @ chunk-AQOAFTHJ.js?v=b9e185ce:7936
+patchElement @ chunk-AQOAFTHJ.js?v=b9e185ce:7854
+processElement @ chunk-AQOAFTHJ.js?v=b9e185ce:7708
+patch @ chunk-AQOAFTHJ.js?v=b9e185ce:7550
+componentUpdateFn @ chunk-AQOAFTHJ.js?v=b9e185ce:8292
+run @ chunk-AQOAFTHJ.js?v=b9e185ce:505
+updateComponent @ chunk-AQOAFTHJ.js?v=b9e185ce:8143
+processComponent @ chunk-AQOAFTHJ.js?v=b9e185ce:8077
+patch @ chunk-AQOAFTHJ.js?v=b9e185ce:7562
+patchKeyedChildren @ chunk-AQOAFTHJ.js?v=b9e185ce:8483
+patchChildren @ chunk-AQOAFTHJ.js?v=b9e185ce:8397
+processFragment @ chunk-AQOAFTHJ.js?v=b9e185ce:8040
+patch @ chunk-AQOAFTHJ.js?v=b9e185ce:7536
+patchBlockChildren @ chunk-AQOAFTHJ.js?v=b9e185ce:7936
+patchElement @ chunk-AQOAFTHJ.js?v=b9e185ce:7854
+processElement @ chunk-AQOAFTHJ.js?v=b9e185ce:7708
+patch @ chunk-AQOAFTHJ.js?v=b9e185ce:7550
+componentUpdateFn @ chunk-AQOAFTHJ.js?v=b9e185ce:8292
+run @ chunk-AQOAFTHJ.js?v=b9e185ce:505
+runIfDirty @ chunk-AQOAFTHJ.js?v=b9e185ce:543
+callWithErrorHandling @ chunk-AQOAFTHJ.js?v=b9e185ce:2342
+flushJobs @ chunk-AQOAFTHJ.js?v=b9e185ce:2550
+Promise.then
+queueFlush @ chunk-AQOAFTHJ.js?v=b9e185ce:2464
+queueJob @ chunk-AQOAFTHJ.js?v=b9e185ce:2459
+effect2.scheduler @ chunk-AQOAFTHJ.js?v=b9e185ce:8334
+trigger @ chunk-AQOAFTHJ.js?v=b9e185ce:533
+endBatch @ chunk-AQOAFTHJ.js?v=b9e185ce:591
+noTracking @ chunk-AQOAFTHJ.js?v=b9e185ce:1184
+push @ chunk-AQOAFTHJ.js?v=b9e185ce:1081
+（匿名） @ CharacterSettingPanel.vue:735
+loadModels @ CharacterSettingPanel.vue:734
+await in loadModels
+（匿名） @ CharacterSettingPanel.vue:780
+（匿名） @ chunk-AQOAFTHJ.js?v=b9e185ce:5221
+callWithErrorHandling @ chunk-AQOAFTHJ.js?v=b9e185ce:2342
+callWithAsyncErrorHandling @ chunk-AQOAFTHJ.js?v=b9e185ce:2349
+hook.__weh.hook.__weh @ chunk-AQOAFTHJ.js?v=b9e185ce:5201
+flushPostFlushCbs @ chunk-AQOAFTHJ.js?v=b9e185ce:2527
+flushJobs @ chunk-AQOAFTHJ.js?v=b9e185ce:2569
+Promise.then
+queueFlush @ chunk-AQOAFTHJ.js?v=b9e185ce:2464
+queueJob @ chunk-AQOAFTHJ.js?v=b9e185ce:2459
+effect2.scheduler @ chunk-AQOAFTHJ.js?v=b9e185ce:8334
+trigger @ chunk-AQOAFTHJ.js?v=b9e185ce:533
+endBatch @ chunk-AQOAFTHJ.js?v=b9e185ce:591
+notify @ chunk-AQOAFTHJ.js?v=b9e185ce:853
+trigger @ chunk-AQOAFTHJ.js?v=b9e185ce:827
+set value @ chunk-AQOAFTHJ.js?v=b9e185ce:1734
+editCharacter @ CharactersPage.vue:329
+（匿名） @ CharactersPage.vue:99
+（匿名） @ chunk-AQOAFTHJ.js?v=b9e185ce:12443
+callWithErrorHandling @ chunk-AQOAFTHJ.js?v=b9e185ce:2342
+callWithAsyncErrorHandling @ chunk-AQOAFTHJ.js?v=b9e185ce:2349
+emit @ chunk-AQOAFTHJ.js?v=b9e185ce:6534
+（匿名） @ chunk-AQOAFTHJ.js?v=b9e185ce:10390
+handleClick @ chunk-FYZVDDRB.js?v=b9e185ce:16339
+callWithErrorHandling @ chunk-AQOAFTHJ.js?v=b9e185ce:2342
+callWithAsyncErrorHandling @ chunk-AQOAFTHJ.js?v=b9e185ce:2349
+invoker @ chunk-AQOAFTHJ.js?v=b9e185ce:11425
+CharacterModal.vue:105 [CharacterModal] handleSave called
+CharacterModal.vue:106 [CharacterModal] data: {title: '智能助手', description: '一个友好、专业的 AI 助手，可以帮助你解答各种问题。', name: undefined, avatarUrl: 'http://localhost:3000/uploads/avatars/afdae2d2-259d-4ec3-91a1-eac009bade6b.jpg', avatarFile: null, …}
+CharacterModal.vue:107 [CharacterModal] data.avatarUrl: http://localhost:3000/uploads/avatars/afdae2d2-259d-4ec3-91a1-eac009bade6b.jpg
+CharacterModal.vue:108 [CharacterModal] data.avatarFile: 无文件
+CharacterModal.vue:118 [CharacterModal] characterData after delete: {title: '智能助手', description: '一个友好、专业的 AI 助手，可以帮助你解答各种问题。', name: undefined, groupId: null, identity: undefined, …}
+CharacterModal.vue:119 [CharacterModal] currentCharacter before update: Proxy(Object) {id: 'cmoek3y020001y0kzpn9vnezr', userId: 'cmoek3xxc0000y0kzlw89w9h5', title: '智能助手', description: '一个友好、专业的 AI 助手，可以帮助你解答各种问题。', avatarUrl: 'http://localhost:3000/uploads/avatars/afdae2d2-259d-4ec3-91a1-eac009bade6b.jpg', …}
+CharacterModal.vue:123 [CharacterModal] Calling updateCharacter with id: cmoek3y020001y0kzpn9vnezr
+CharacterModal.vue:125 [CharacterModal] updateCharacter response: {id: 'cmoek3y020001y0kzpn9vnezr', userId: 'cmoek3xxc0000y0kzlw89w9h5', title: '智能助手', description: '一个友好、专业的 AI 助手，可以帮助你解答各种问题。', avatarUrl: 'http://localhost:3000/uploads/avatars/afdae2d2-259d-4ec3-91a1-eac009bade6b.jpg', …}
+CharacterModal.vue:126 [CharacterModal] response.avatarUrl: http://localhost:3000/uploads/avatars/afdae2d2-259d-4ec3-91a1-eac009bade6b.jpg
+CharacterModal.vue:149 [CharacterModal] Final character object: {id: 'cmoek3y020001y0kzpn9vnezr', userId: 'cmoek3xxc0000y0kzlw89w9h5', title: '智能助手', description: '一个友好、专业的 AI 助手，可以帮助你解答各种问题。', avatarUrl: 'http://localhost:3000/uploads/avatars/afdae2d2-259d-4ec3-91a1-eac009bade6b.jpg', …}
+CharacterModal.vue:150 [CharacterModal] Final character.avatarUrl: http://localhost:3000/uploads/avatars/afdae2d2-259d-4ec3-91a1-eac009bade6b.jpg
+CharacterModal.vue:152 [CharacterModal] currentCharacter.value updated: Proxy(Object) {id: 'cmoek3y020001y0kzpn9vnezr', userId: 'cmoek3xxc0000y0kzlw89w9h5', title: '智能助手', description: '一个友好、专业的 AI 助手，可以帮助你解答各种问题。', avatarUrl: 'http://localhost:3000/uploads/avatars/afdae2d2-259d-4ec3-91a1-eac009bade6b.jpg', …}
+CharacterSettingPanel.vue:584 [CharacterSettingPanel] props.data changed
+CharacterSettingPanel.vue:585 [CharacterSettingPanel] newVal: Proxy(Object) {id: 'cmoek3y020001y0kzpn9vnezr', userId: 'cmoek3xxc0000y0kzlw89w9h5', title: '智能助手', description: '一个友好、专业的 AI 助手，可以帮助你解答各种问题。', avatarUrl: 'http://localhost:3000/uploads/avatars/afdae2d2-259d-4ec3-91a1-eac009bade6b.jpg', …}
+CharacterSettingPanel.vue:586 [CharacterSettingPanel] newVal.avatarUrl: http://localhost:3000/uploads/avatars/afdae2d2-259d-4ec3-91a1-eac009bade6b.jpg
+CharacterSettingPanel.vue:587 [CharacterSettingPanel] characterForm.id before: cmoek3y020001y0kzpn9vnezr
+CharacterSettingPanel.vue:588 [CharacterSettingPanel] newVal.id: cmoek3y020001y0kzpn9vnezr
+CharacterSettingPanel.vue:592 [CharacterSettingPanel] isCharacterSwitch: false
+CharacterSettingPanel.vue:603 [CharacterSettingPanel] characterForm.avatarUrl set to: http://localhost:3000/uploads/avatars/afdae2d2-259d-4ec3-91a1-eac009bade6b.jpg
+CharacterSettingPanel.vue:604 [CharacterSettingPanel] characterForm.avatarUrl type: string
+CharacterSettingPanel.vue:584 [CharacterSettingPanel] props.data changed
+CharacterSettingPanel.vue:585 [CharacterSettingPanel] newVal: Proxy(Object) {id: 'cmoek3y020001y0kzpn9vnezr', userId: 'cmoek3xxc0000y0kzlw89w9h5', title: '智能助手', description: '一个友好、专业的 AI 助手，可以帮助你解答各种问题。', avatarUrl: 'http://localhost:3000/uploads/avatars/afdae2d2-259d-4ec3-91a1-eac009bade6b.jpg', …}
+CharacterSettingPanel.vue:586 [CharacterSettingPanel] newVal.avatarUrl: http://localhost:3000/uploads/avatars/afdae2d2-259d-4ec3-91a1-eac009bade6b.jpg
+CharacterSettingPanel.vue:587 [CharacterSettingPanel] characterForm.id before: 
+CharacterSettingPanel.vue:588 [CharacterSettingPanel] newVal.id: cmoek3y020001y0kzpn9vnezr
+CharacterSettingPanel.vue:592 [CharacterSettingPanel] isCharacterSwitch: true
+CharacterSettingPanel.vue:595 [CharacterSettingPanel] Clearing avatarFile due to character switch
+CharacterSettingPanel.vue:603 [CharacterSettingPanel] characterForm.avatarUrl set to: http://localhost:3000/uploads/avatars/afdae2d2-259d-4ec3-91a1-eac009bade6b.jpg
+CharacterSettingPanel.vue:604 [CharacterSettingPanel] characterForm.avatarUrl type: string
+CharacterSettingPanel.vue:772 角色ID变化，重新加载工具列表: cmoek3y020001y0kzpn9vnezr
+AvatarPreview.vue:65 [AvatarPreview] Component created
+AvatarPreview.vue:66 [AvatarPreview] props.src: http://localhost:3000/uploads/avatars/afdae2d2-259d-4ec3-91a1-eac009bade6b.jpg
+AvatarPreview.vue:67 [AvatarPreview] props.type: assistant
+AvatarPreview.vue:68 [AvatarPreview] props.name: 智能助手
+Avatar.vue:36 [Avatar] Component mounted/updated
+Avatar.vue:37 [Avatar] props.src: 
+Avatar.vue:38 [Avatar] props.type: assistant
+Avatar.vue:39 [Avatar] props.name: 智能助手
+ElSliderOptional.vue:80 sliderValue 2
+ElSliderOptional.vue:80 sliderValue 1.1
+ElSliderOptional.vue:80 sliderValue 2
+ElSliderOptional.vue:80 sliderValue 501
+CharacterSettingPanel.vue:735 Invalid prop: type check failed for prop "value". Expected String | Number | Boolean | Object, got Null  null at <ElOption>
+at <ElOptions>
+at <ElScrollbar>
+at <ElSelectDropdown>
+at <ElFocusTrap>
+at <ElPopperContent>
+at <BaseTransition>
+at <Transition>
+at <Teleport>
+at <ElTooltipContent>
+at <ElPopper>
+at <ElTooltip>
+at <ElSelect>
+at <ElFormItem>
+at <ElForm>
+at <ElTabPane>
+at <ElTabs>
+at <CharacterSettingPanel>
+at <ElDialogContent>
+at <ElFocusTrap>
+at <ElOverlay>
+at <BaseTransition>
+at <Transition>
+at <Teleport>
+at <ElDialog>
+at <CharacterModal>
+at <CharactersPage>
+at <RouterView>
+at <MainLayout>
+at <RouterView>
+at <App> (31) [{…}, {…}, {…}, {…}, {…}, {…}, {…}, {…}, {…}, {…}, {…}, {…}, {…}, {…}, {…}, {…}, {…}, {…}, {…}, {…}, {…}, {…}, {…}, {…}, {…}, {…}, {…}, {…}, {…}, {…}, {…}]
+（匿名） @ chunk-FYZVDDRB.js?v=b9e185ce:41484
+callWithErrorHandling @ chunk-AQOAFTHJ.js?v=b9e185ce:2342
+warn$1 @ chunk-AQOAFTHJ.js?v=b9e185ce:2171
+validateProp @ chunk-AQOAFTHJ.js?v=b9e185ce:7250
+validateProps @ chunk-AQOAFTHJ.js?v=b9e185ce:7222
+initProps @ chunk-AQOAFTHJ.js?v=b9e185ce:6911
+setupComponent @ chunk-AQOAFTHJ.js?v=b9e185ce:10158
+mountComponent @ chunk-AQOAFTHJ.js?v=b9e185ce:8100
+processComponent @ chunk-AQOAFTHJ.js?v=b9e185ce:8066
+patch @ chunk-AQOAFTHJ.js?v=b9e185ce:7562
+mountChildren @ chunk-AQOAFTHJ.js?v=b9e185ce:7814
+processFragment @ chunk-AQOAFTHJ.js?v=b9e185ce:7996
+patch @ chunk-AQOAFTHJ.js?v=b9e185ce:7536
+patchKeyedChildren @ chunk-AQOAFTHJ.js?v=b9e185ce:8525
+patchChildren @ chunk-AQOAFTHJ.js?v=b9e185ce:8360
+processFragment @ chunk-AQOAFTHJ.js?v=b9e185ce:8040
+patch @ chunk-AQOAFTHJ.js?v=b9e185ce:7536
+patchKeyedChildren @ chunk-AQOAFTHJ.js?v=b9e185ce:8483
+patchChildren @ chunk-AQOAFTHJ.js?v=b9e185ce:8397
+processFragment @ chunk-AQOAFTHJ.js?v=b9e185ce:8040
+patch @ chunk-AQOAFTHJ.js?v=b9e185ce:7536
+patchKeyedChildren @ chunk-AQOAFTHJ.js?v=b9e185ce:8483
+patchChildren @ chunk-AQOAFTHJ.js?v=b9e185ce:8397
+processFragment @ chunk-AQOAFTHJ.js?v=b9e185ce:8040
+patch @ chunk-AQOAFTHJ.js?v=b9e185ce:7536
+componentUpdateFn @ chunk-AQOAFTHJ.js?v=b9e185ce:8292
+run @ chunk-AQOAFTHJ.js?v=b9e185ce:505
+updateComponent @ chunk-AQOAFTHJ.js?v=b9e185ce:8143
+processComponent @ chunk-AQOAFTHJ.js?v=b9e185ce:8077
+patch @ chunk-AQOAFTHJ.js?v=b9e185ce:7562
+patchKeyedChildren @ chunk-AQOAFTHJ.js?v=b9e185ce:8483
+patchChildren @ chunk-AQOAFTHJ.js?v=b9e185ce:8397
+processFragment @ chunk-AQOAFTHJ.js?v=b9e185ce:8040
+patch @ chunk-AQOAFTHJ.js?v=b9e185ce:7536
+patchBlockChildren @ chunk-AQOAFTHJ.js?v=b9e185ce:7936
+patchElement @ chunk-AQOAFTHJ.js?v=b9e185ce:7854
+processElement @ chunk-AQOAFTHJ.js?v=b9e185ce:7708
+patch @ chunk-AQOAFTHJ.js?v=b9e185ce:7550
+patchBlockChildren @ chunk-AQOAFTHJ.js?v=b9e185ce:7936
+patchElement @ chunk-AQOAFTHJ.js?v=b9e185ce:7854
+processElement @ chunk-AQOAFTHJ.js?v=b9e185ce:7708
+patch @ chunk-AQOAFTHJ.js?v=b9e185ce:7550
+componentUpdateFn @ chunk-AQOAFTHJ.js?v=b9e185ce:8292
+run @ chunk-AQOAFTHJ.js?v=b9e185ce:505
+updateComponent @ chunk-AQOAFTHJ.js?v=b9e185ce:8143
+processComponent @ chunk-AQOAFTHJ.js?v=b9e185ce:8077
+patch @ chunk-AQOAFTHJ.js?v=b9e185ce:7562
+patchKeyedChildren @ chunk-AQOAFTHJ.js?v=b9e185ce:8483
+patchChildren @ chunk-AQOAFTHJ.js?v=b9e185ce:8397
+processFragment @ chunk-AQOAFTHJ.js?v=b9e185ce:8040
+patch @ chunk-AQOAFTHJ.js?v=b9e185ce:7536
+patchBlockChildren @ chunk-AQOAFTHJ.js?v=b9e185ce:7936
+patchElement @ chunk-AQOAFTHJ.js?v=b9e185ce:7854
+processElement @ chunk-AQOAFTHJ.js?v=b9e185ce:7708
+patch @ chunk-AQOAFTHJ.js?v=b9e185ce:7550
+componentUpdateFn @ chunk-AQOAFTHJ.js?v=b9e185ce:8292
+run @ chunk-AQOAFTHJ.js?v=b9e185ce:505
+updateComponent @ chunk-AQOAFTHJ.js?v=b9e185ce:8143
+processComponent @ chunk-AQOAFTHJ.js?v=b9e185ce:8077
+patch @ chunk-AQOAFTHJ.js?v=b9e185ce:7562
+patchKeyedChildren @ chunk-AQOAFTHJ.js?v=b9e185ce:8483
+patchChildren @ chunk-AQOAFTHJ.js?v=b9e185ce:8397
+processFragment @ chunk-AQOAFTHJ.js?v=b9e185ce:8040
+patch @ chunk-AQOAFTHJ.js?v=b9e185ce:7536
+patchKeyedChildren @ chunk-AQOAFTHJ.js?v=b9e185ce:8483
+patchChildren @ chunk-AQOAFTHJ.js?v=b9e185ce:8397
+processFragment @ chunk-AQOAFTHJ.js?v=b9e185ce:8040
+patch @ chunk-AQOAFTHJ.js?v=b9e185ce:7536
+patchKeyedChildren @ chunk-AQOAFTHJ.js?v=b9e185ce:8483
+patchChildren @ chunk-AQOAFTHJ.js?v=b9e185ce:8397
+processFragment @ chunk-AQOAFTHJ.js?v=b9e185ce:8040
+patch @ chunk-AQOAFTHJ.js?v=b9e185ce:7536
+patchKeyedChildren @ chunk-AQOAFTHJ.js?v=b9e185ce:8483
+patchChildren @ chunk-AQOAFTHJ.js?v=b9e185ce:8397
+processFragment @ chunk-AQOAFTHJ.js?v=b9e185ce:8040
+patch @ chunk-AQOAFTHJ.js?v=b9e185ce:7536
+componentUpdateFn @ chunk-AQOAFTHJ.js?v=b9e185ce:8292
+run @ chunk-AQOAFTHJ.js?v=b9e185ce:505
+updateComponent @ chunk-AQOAFTHJ.js?v=b9e185ce:8143
+processComponent @ chunk-AQOAFTHJ.js?v=b9e185ce:8077
+patch @ chunk-AQOAFTHJ.js?v=b9e185ce:7562
+patchBlockChildren @ chunk-AQOAFTHJ.js?v=b9e185ce:7936
+patchElement @ chunk-AQOAFTHJ.js?v=b9e185ce:7854
+processElement @ chunk-AQOAFTHJ.js?v=b9e185ce:7708
+patch @ chunk-AQOAFTHJ.js?v=b9e185ce:7550
+componentUpdateFn @ chunk-AQOAFTHJ.js?v=b9e185ce:8292
+run @ chunk-AQOAFTHJ.js?v=b9e185ce:505
+updateComponent @ chunk-AQOAFTHJ.js?v=b9e185ce:8143
+processComponent @ chunk-AQOAFTHJ.js?v=b9e185ce:8077
+patch @ chunk-AQOAFTHJ.js?v=b9e185ce:7562
+componentUpdateFn @ chunk-AQOAFTHJ.js?v=b9e185ce:8292
+run @ chunk-AQOAFTHJ.js?v=b9e185ce:505
+updateComponent @ chunk-AQOAFTHJ.js?v=b9e185ce:8143
+processComponent @ chunk-AQOAFTHJ.js?v=b9e185ce:8077
+patch @ chunk-AQOAFTHJ.js?v=b9e185ce:7562
+componentUpdateFn @ chunk-AQOAFTHJ.js?v=b9e185ce:8292
+run @ chunk-AQOAFTHJ.js?v=b9e185ce:505
+updateComponent @ chunk-AQOAFTHJ.js?v=b9e185ce:8143
+processComponent @ chunk-AQOAFTHJ.js?v=b9e185ce:8077
+patch @ chunk-AQOAFTHJ.js?v=b9e185ce:7562
+patchKeyedChildren @ chunk-AQOAFTHJ.js?v=b9e185ce:8483
+patchChildren @ chunk-AQOAFTHJ.js?v=b9e185ce:8397
+processFragment @ chunk-AQOAFTHJ.js?v=b9e185ce:8040
+patch @ chunk-AQOAFTHJ.js?v=b9e185ce:7536
+patchBlockChildren @ chunk-AQOAFTHJ.js?v=b9e185ce:7936
+process @ chunk-AQOAFTHJ.js?v=b9e185ce:3224
+patch @ chunk-AQOAFTHJ.js?v=b9e185ce:7574
+componentUpdateFn @ chunk-AQOAFTHJ.js?v=b9e185ce:8292
+run @ chunk-AQOAFTHJ.js?v=b9e185ce:505
+updateComponent @ chunk-AQOAFTHJ.js?v=b9e185ce:8143
+processComponent @ chunk-AQOAFTHJ.js?v=b9e185ce:8077
+patch @ chunk-AQOAFTHJ.js?v=b9e185ce:7562
+componentUpdateFn @ chunk-AQOAFTHJ.js?v=b9e185ce:8292
+run @ chunk-AQOAFTHJ.js?v=b9e185ce:505
+updateComponent @ chunk-AQOAFTHJ.js?v=b9e185ce:8143
+processComponent @ chunk-AQOAFTHJ.js?v=b9e185ce:8077
+patch @ chunk-AQOAFTHJ.js?v=b9e185ce:7562
+patchKeyedChildren @ chunk-AQOAFTHJ.js?v=b9e185ce:8483
+patchChildren @ chunk-AQOAFTHJ.js?v=b9e185ce:8397
+processFragment @ chunk-AQOAFTHJ.js?v=b9e185ce:8040
+patch @ chunk-AQOAFTHJ.js?v=b9e185ce:7536
+componentUpdateFn @ chunk-AQOAFTHJ.js?v=b9e185ce:8292
+run @ chunk-AQOAFTHJ.js?v=b9e185ce:505
+updateComponent @ chunk-AQOAFTHJ.js?v=b9e185ce:8143
+processComponent @ chunk-AQOAFTHJ.js?v=b9e185ce:8077
+patch @ chunk-AQOAFTHJ.js?v=b9e185ce:7562
+componentUpdateFn @ chunk-AQOAFTHJ.js?v=b9e185ce:8292
+run @ chunk-AQOAFTHJ.js?v=b9e185ce:505
+updateComponent @ chunk-AQOAFTHJ.js?v=b9e185ce:8143
+processComponent @ chunk-AQOAFTHJ.js?v=b9e185ce:8077
+patch @ chunk-AQOAFTHJ.js?v=b9e185ce:7562
+patchBlockChildren @ chunk-AQOAFTHJ.js?v=b9e185ce:7936
+patchElement @ chunk-AQOAFTHJ.js?v=b9e185ce:7854
+processElement @ chunk-AQOAFTHJ.js?v=b9e185ce:7708
+patch @ chunk-AQOAFTHJ.js?v=b9e185ce:7550
+componentUpdateFn @ chunk-AQOAFTHJ.js?v=b9e185ce:8292
+run @ chunk-AQOAFTHJ.js?v=b9e185ce:505
+updateComponent @ chunk-AQOAFTHJ.js?v=b9e185ce:8143
+processComponent @ chunk-AQOAFTHJ.js?v=b9e185ce:8077
+patch @ chunk-AQOAFTHJ.js?v=b9e185ce:7562
+patchKeyedChildren @ chunk-AQOAFTHJ.js?v=b9e185ce:8483
+patchChildren @ chunk-AQOAFTHJ.js?v=b9e185ce:8397
+processFragment @ chunk-AQOAFTHJ.js?v=b9e185ce:8040
+patch @ chunk-AQOAFTHJ.js?v=b9e185ce:7536
+patchBlockChildren @ chunk-AQOAFTHJ.js?v=b9e185ce:7936
+patchElement @ chunk-AQOAFTHJ.js?v=b9e185ce:7854
+processElement @ chunk-AQOAFTHJ.js?v=b9e185ce:7708
+patch @ chunk-AQOAFTHJ.js?v=b9e185ce:7550
+componentUpdateFn @ chunk-AQOAFTHJ.js?v=b9e185ce:8292
+run @ chunk-AQOAFTHJ.js?v=b9e185ce:505
+runIfDirty @ chunk-AQOAFTHJ.js?v=b9e185ce:543
+callWithErrorHandling @ chunk-AQOAFTHJ.js?v=b9e185ce:2342
+flushJobs @ chunk-AQOAFTHJ.js?v=b9e185ce:2550
+Promise.then
+queueFlush @ chunk-AQOAFTHJ.js?v=b9e185ce:2464
+queueJob @ chunk-AQOAFTHJ.js?v=b9e185ce:2459
+effect2.scheduler @ chunk-AQOAFTHJ.js?v=b9e185ce:8334
+trigger @ chunk-AQOAFTHJ.js?v=b9e185ce:533
+endBatch @ chunk-AQOAFTHJ.js?v=b9e185ce:591
+noTracking @ chunk-AQOAFTHJ.js?v=b9e185ce:1184
+push @ chunk-AQOAFTHJ.js?v=b9e185ce:1081
+（匿名） @ CharacterSettingPanel.vue:735
+loadModels @ CharacterSettingPanel.vue:734
+await in loadModels
+（匿名） @ CharacterSettingPanel.vue:780
+（匿名） @ chunk-AQOAFTHJ.js?v=b9e185ce:5221
+callWithErrorHandling @ chunk-AQOAFTHJ.js?v=b9e185ce:2342
+callWithAsyncErrorHandling @ chunk-AQOAFTHJ.js?v=b9e185ce:2349
+hook.__weh.hook.__weh @ chunk-AQOAFTHJ.js?v=b9e185ce:5201
+flushPostFlushCbs @ chunk-AQOAFTHJ.js?v=b9e185ce:2527
+flushJobs @ chunk-AQOAFTHJ.js?v=b9e185ce:2569
+Promise.then
+queueFlush @ chunk-AQOAFTHJ.js?v=b9e185ce:2464
+queueJob @ chunk-AQOAFTHJ.js?v=b9e185ce:2459
+effect2.scheduler @ chunk-AQOAFTHJ.js?v=b9e185ce:8334
+trigger @ chunk-AQOAFTHJ.js?v=b9e185ce:533
+endBatch @ chunk-AQOAFTHJ.js?v=b9e185ce:591
+notify @ chunk-AQOAFTHJ.js?v=b9e185ce:853
+trigger @ chunk-AQOAFTHJ.js?v=b9e185ce:827
+set value @ chunk-AQOAFTHJ.js?v=b9e185ce:1734
+editCharacter @ CharactersPage.vue:330
+（匿名） @ CharactersPage.vue:99
+（匿名） @ chunk-AQOAFTHJ.js?v=b9e185ce:12443
+callWithErrorHandling @ chunk-AQOAFTHJ.js?v=b9e185ce:2342
+callWithAsyncErrorHandling @ chunk-AQOAFTHJ.js?v=b9e185ce:2349
+emit @ chunk-AQOAFTHJ.js?v=b9e185ce:6534
+（匿名） @ chunk-AQOAFTHJ.js?v=b9e185ce:10390
+handleClick @ chunk-FYZVDDRB.js?v=b9e185ce:16339
+callWithErrorHandling @ chunk-AQOAFTHJ.js?v=b9e185ce:2342
+callWithAsyncErrorHandling @ chunk-AQOAFTHJ.js?v=b9e185ce:2349
+invoker @ chunk-AQOAFTHJ.js?v=b9e185ce:11425
+CharacterSettingPanel.vue:735 Invalid prop: type check failed for prop "value". Expected String | Number | Boolean | Object, got Undefined  null at <ElOption>
+at <ElOptions>
+at <ElScrollbar>
+at <ElSelectDropdown>
+at <ElFocusTrap>
+at <ElPopperContent>
+at <BaseTransition>
+at <Transition>
+at <Teleport>
+at <ElTooltipContent>
+at <ElPopper>
+at <ElTooltip>
+at <ElSelect>
+at <ElFormItem>
+at <ElForm>
+at <ElTabPane>
+at <ElTabs>
+at <CharacterSettingPanel>
+at <ElDialogContent>
+at <ElFocusTrap>
+at <ElOverlay>
+at <BaseTransition>
+at <Transition>
+at <Teleport>
+at <ElDialog>
+at <CharacterModal>
+at <CharactersPage>
+at <RouterView>
+at <MainLayout>
+at <RouterView>
+at <App> (31) [{…}, {…}, {…}, {…}, {…}, {…}, {…}, {…}, {…}, {…}, {…}, {…}, {…}, {…}, {…}, {…}, {…}, {…}, {…}, {…}, {…}, {…}, {…}, {…}, {…}, {…}, {…}, {…}, {…}, {…}, {…}]
+（匿名） @ chunk-FYZVDDRB.js?v=b9e185ce:41484
+callWithErrorHandling @ chunk-AQOAFTHJ.js?v=b9e185ce:2342
+warn$1 @ chunk-AQOAFTHJ.js?v=b9e185ce:2171
+validateProp @ chunk-AQOAFTHJ.js?v=b9e185ce:7250
+validateProps @ chunk-AQOAFTHJ.js?v=b9e185ce:7222
+initProps @ chunk-AQOAFTHJ.js?v=b9e185ce:6911
+setupComponent @ chunk-AQOAFTHJ.js?v=b9e185ce:10158
+mountComponent @ chunk-AQOAFTHJ.js?v=b9e185ce:8100
+processComponent @ chunk-AQOAFTHJ.js?v=b9e185ce:8066
+patch @ chunk-AQOAFTHJ.js?v=b9e185ce:7562
+mountChildren @ chunk-AQOAFTHJ.js?v=b9e185ce:7814
+processFragment @ chunk-AQOAFTHJ.js?v=b9e185ce:7996
+patch @ chunk-AQOAFTHJ.js?v=b9e185ce:7536
+patchKeyedChildren @ chunk-AQOAFTHJ.js?v=b9e185ce:8525
+patchChildren @ chunk-AQOAFTHJ.js?v=b9e185ce:8360
+processFragment @ chunk-AQOAFTHJ.js?v=b9e185ce:8040
+patch @ chunk-AQOAFTHJ.js?v=b9e185ce:7536
+patchKeyedChildren @ chunk-AQOAFTHJ.js?v=b9e185ce:8483
+patchChildren @ chunk-AQOAFTHJ.js?v=b9e185ce:8397
+processFragment @ chunk-AQOAFTHJ.js?v=b9e185ce:8040
+patch @ chunk-AQOAFTHJ.js?v=b9e185ce:7536
+patchKeyedChildren @ chunk-AQOAFTHJ.js?v=b9e185ce:8483
+patchChildren @ chunk-AQOAFTHJ.js?v=b9e185ce:8397
+processFragment @ chunk-AQOAFTHJ.js?v=b9e185ce:8040
+patch @ chunk-AQOAFTHJ.js?v=b9e185ce:7536
+componentUpdateFn @ chunk-AQOAFTHJ.js?v=b9e185ce:8292
+run @ chunk-AQOAFTHJ.js?v=b9e185ce:505
+updateComponent @ chunk-AQOAFTHJ.js?v=b9e185ce:8143
+processComponent @ chunk-AQOAFTHJ.js?v=b9e185ce:8077
+patch @ chunk-AQOAFTHJ.js?v=b9e185ce:7562
+patchKeyedChildren @ chunk-AQOAFTHJ.js?v=b9e185ce:8483
+patchChildren @ chunk-AQOAFTHJ.js?v=b9e185ce:8397
+processFragment @ chunk-AQOAFTHJ.js?v=b9e185ce:8040
+patch @ chunk-AQOAFTHJ.js?v=b9e185ce:7536
+patchBlockChildren @ chunk-AQOAFTHJ.js?v=b9e185ce:7936
+patchElement @ chunk-AQOAFTHJ.js?v=b9e185ce:7854
+processElement @ chunk-AQOAFTHJ.js?v=b9e185ce:7708
+patch @ chunk-AQOAFTHJ.js?v=b9e185ce:7550
+patchBlockChildren @ chunk-AQOAFTHJ.js?v=b9e185ce:7936
+patchElement @ chunk-AQOAFTHJ.js?v=b9e185ce:7854
+processElement @ chunk-AQOAFTHJ.js?v=b9e185ce:7708
+patch @ chunk-AQOAFTHJ.js?v=b9e185ce:7550
+componentUpdateFn @ chunk-AQOAFTHJ.js?v=b9e185ce:8292
+run @ chunk-AQOAFTHJ.js?v=b9e185ce:505
+updateComponent @ chunk-AQOAFTHJ.js?v=b9e185ce:8143
+processComponent @ chunk-AQOAFTHJ.js?v=b9e185ce:8077
+patch @ chunk-AQOAFTHJ.js?v=b9e185ce:7562
+patchKeyedChildren @ chunk-AQOAFTHJ.js?v=b9e185ce:8483
+patchChildren @ chunk-AQOAFTHJ.js?v=b9e185ce:8397
+processFragment @ chunk-AQOAFTHJ.js?v=b9e185ce:8040
+patch @ chunk-AQOAFTHJ.js?v=b9e185ce:7536
+patchBlockChildren @ chunk-AQOAFTHJ.js?v=b9e185ce:7936
+patchElement @ chunk-AQOAFTHJ.js?v=b9e185ce:7854
+processElement @ chunk-AQOAFTHJ.js?v=b9e185ce:7708
+patch @ chunk-AQOAFTHJ.js?v=b9e185ce:7550
+componentUpdateFn @ chunk-AQOAFTHJ.js?v=b9e185ce:8292
+run @ chunk-AQOAFTHJ.js?v=b9e185ce:505
+updateComponent @ chunk-AQOAFTHJ.js?v=b9e185ce:8143
+processComponent @ chunk-AQOAFTHJ.js?v=b9e185ce:8077
+patch @ chunk-AQOAFTHJ.js?v=b9e185ce:7562
+patchKeyedChildren @ chunk-AQOAFTHJ.js?v=b9e185ce:8483
+patchChildren @ chunk-AQOAFTHJ.js?v=b9e185ce:8397
+processFragment @ chunk-AQOAFTHJ.js?v=b9e185ce:8040
+patch @ chunk-AQOAFTHJ.js?v=b9e185ce:7536
+patchKeyedChildren @ chunk-AQOAFTHJ.js?v=b9e185ce:8483
+patchChildren @ chunk-AQOAFTHJ.js?v=b9e185ce:8397
+processFragment @ chunk-AQOAFTHJ.js?v=b9e185ce:8040
+patch @ chunk-AQOAFTHJ.js?v=b9e185ce:7536
+patchKeyedChildren @ chunk-AQOAFTHJ.js?v=b9e185ce:8483
+patchChildren @ chunk-AQOAFTHJ.js?v=b9e185ce:8397
+processFragment @ chunk-AQOAFTHJ.js?v=b9e185ce:8040
+patch @ chunk-AQOAFTHJ.js?v=b9e185ce:7536
+patchKeyedChildren @ chunk-AQOAFTHJ.js?v=b9e185ce:8483
+patchChildren @ chunk-AQOAFTHJ.js?v=b9e185ce:8397
+processFragment @ chunk-AQOAFTHJ.js?v=b9e185ce:8040
+patch @ chunk-AQOAFTHJ.js?v=b9e185ce:7536
+componentUpdateFn @ chunk-AQOAFTHJ.js?v=b9e185ce:8292
+run @ chunk-AQOAFTHJ.js?v=b9e185ce:505
+updateComponent @ chunk-AQOAFTHJ.js?v=b9e185ce:8143
+processComponent @ chunk-AQOAFTHJ.js?v=b9e185ce:8077
+patch @ chunk-AQOAFTHJ.js?v=b9e185ce:7562
+patchBlockChildren @ chunk-AQOAFTHJ.js?v=b9e185ce:7936
+patchElement @ chunk-AQOAFTHJ.js?v=b9e185ce:7854
+processElement @ chunk-AQOAFTHJ.js?v=b9e185ce:7708
+patch @ chunk-AQOAFTHJ.js?v=b9e185ce:7550
+componentUpdateFn @ chunk-AQOAFTHJ.js?v=b9e185ce:8292
+run @ chunk-AQOAFTHJ.js?v=b9e185ce:505
+updateComponent @ chunk-AQOAFTHJ.js?v=b9e185ce:8143
+processComponent @ chunk-AQOAFTHJ.js?v=b9e185ce:8077
+patch @ chunk-AQOAFTHJ.js?v=b9e185ce:7562
+componentUpdateFn @ chunk-AQOAFTHJ.js?v=b9e185ce:8292
+run @ chunk-AQOAFTHJ.js?v=b9e185ce:505
+updateComponent @ chunk-AQOAFTHJ.js?v=b9e185ce:8143
+processComponent @ chunk-AQOAFTHJ.js?v=b9e185ce:8077
+patch @ chunk-AQOAFTHJ.js?v=b9e185ce:7562
+componentUpdateFn @ chunk-AQOAFTHJ.js?v=b9e185ce:8292
+run @ chunk-AQOAFTHJ.js?v=b9e185ce:505
+updateComponent @ chunk-AQOAFTHJ.js?v=b9e185ce:8143
+processComponent @ chunk-AQOAFTHJ.js?v=b9e185ce:8077
+patch @ chunk-AQOAFTHJ.js?v=b9e185ce:7562
+patchKeyedChildren @ chunk-AQOAFTHJ.js?v=b9e185ce:8483
+patchChildren @ chunk-AQOAFTHJ.js?v=b9e185ce:8397
+processFragment @ chunk-AQOAFTHJ.js?v=b9e185ce:8040
+patch @ chunk-AQOAFTHJ.js?v=b9e185ce:7536
+patchBlockChildren @ chunk-AQOAFTHJ.js?v=b9e185ce:7936
+process @ chunk-AQOAFTHJ.js?v=b9e185ce:3224
+patch @ chunk-AQOAFTHJ.js?v=b9e185ce:7574
+componentUpdateFn @ chunk-AQOAFTHJ.js?v=b9e185ce:8292
+run @ chunk-AQOAFTHJ.js?v=b9e185ce:505
+updateComponent @ chunk-AQOAFTHJ.js?v=b9e185ce:8143
+processComponent @ chunk-AQOAFTHJ.js?v=b9e185ce:8077
+patch @ chunk-AQOAFTHJ.js?v=b9e185ce:7562
+componentUpdateFn @ chunk-AQOAFTHJ.js?v=b9e185ce:8292
+run @ chunk-AQOAFTHJ.js?v=b9e185ce:505
+updateComponent @ chunk-AQOAFTHJ.js?v=b9e185ce:8143
+processComponent @ chunk-AQOAFTHJ.js?v=b9e185ce:8077
+patch @ chunk-AQOAFTHJ.js?v=b9e185ce:7562
+patchKeyedChildren @ chunk-AQOAFTHJ.js?v=b9e185ce:8483
+patchChildren @ chunk-AQOAFTHJ.js?v=b9e185ce:8397
+processFragment @ chunk-AQOAFTHJ.js?v=b9e185ce:8040
+patch @ chunk-AQOAFTHJ.js?v=b9e185ce:7536
+componentUpdateFn @ chunk-AQOAFTHJ.js?v=b9e185ce:8292
+run @ chunk-AQOAFTHJ.js?v=b9e185ce:505
+updateComponent @ chunk-AQOAFTHJ.js?v=b9e185ce:8143
+processComponent @ chunk-AQOAFTHJ.js?v=b9e185ce:8077
+patch @ chunk-AQOAFTHJ.js?v=b9e185ce:7562
+componentUpdateFn @ chunk-AQOAFTHJ.js?v=b9e185ce:8292
+run @ chunk-AQOAFTHJ.js?v=b9e185ce:505
+updateComponent @ chunk-AQOAFTHJ.js?v=b9e185ce:8143
+processComponent @ chunk-AQOAFTHJ.js?v=b9e185ce:8077
+patch @ chunk-AQOAFTHJ.js?v=b9e185ce:7562
+patchBlockChildren @ chunk-AQOAFTHJ.js?v=b9e185ce:7936
+patchElement @ chunk-AQOAFTHJ.js?v=b9e185ce:7854
+processElement @ chunk-AQOAFTHJ.js?v=b9e185ce:7708
+patch @ chunk-AQOAFTHJ.js?v=b9e185ce:7550
+componentUpdateFn @ chunk-AQOAFTHJ.js?v=b9e185ce:8292
+run @ chunk-AQOAFTHJ.js?v=b9e185ce:505
+updateComponent @ chunk-AQOAFTHJ.js?v=b9e185ce:8143
+processComponent @ chunk-AQOAFTHJ.js?v=b9e185ce:8077
+patch @ chunk-AQOAFTHJ.js?v=b9e185ce:7562
+patchKeyedChildren @ chunk-AQOAFTHJ.js?v=b9e185ce:8483
+patchChildren @ chunk-AQOAFTHJ.js?v=b9e185ce:8397
+processFragment @ chunk-AQOAFTHJ.js?v=b9e185ce:8040
+patch @ chunk-AQOAFTHJ.js?v=b9e185ce:7536
+patchBlockChildren @ chunk-AQOAFTHJ.js?v=b9e185ce:7936
+patchElement @ chunk-AQOAFTHJ.js?v=b9e185ce:7854
+processElement @ chunk-AQOAFTHJ.js?v=b9e185ce:7708
+patch @ chunk-AQOAFTHJ.js?v=b9e185ce:7550
+componentUpdateFn @ chunk-AQOAFTHJ.js?v=b9e185ce:8292
+run @ chunk-AQOAFTHJ.js?v=b9e185ce:505
+runIfDirty @ chunk-AQOAFTHJ.js?v=b9e185ce:543
+callWithErrorHandling @ chunk-AQOAFTHJ.js?v=b9e185ce:2342
+flushJobs @ chunk-AQOAFTHJ.js?v=b9e185ce:2550
+Promise.then
+queueFlush @ chunk-AQOAFTHJ.js?v=b9e185ce:2464
+queueJob @ chunk-AQOAFTHJ.js?v=b9e185ce:2459
+effect2.scheduler @ chunk-AQOAFTHJ.js?v=b9e185ce:8334
+trigger @ chunk-AQOAFTHJ.js?v=b9e185ce:533
+endBatch @ chunk-AQOAFTHJ.js?v=b9e185ce:591
+noTracking @ chunk-AQOAFTHJ.js?v=b9e185ce:1184
+push @ chunk-AQOAFTHJ.js?v=b9e185ce:1081
+（匿名） @ CharacterSettingPanel.vue:735
+loadModels @ CharacterSettingPanel.vue:734
+await in loadModels
+（匿名） @ CharacterSettingPanel.vue:780
+（匿名） @ chunk-AQOAFTHJ.js?v=b9e185ce:5221
+callWithErrorHandling @ chunk-AQOAFTHJ.js?v=b9e185ce:2342
+callWithAsyncErrorHandling @ chunk-AQOAFTHJ.js?v=b9e185ce:2349
+hook.__weh.hook.__weh @ chunk-AQOAFTHJ.js?v=b9e185ce:5201
+flushPostFlushCbs @ chunk-AQOAFTHJ.js?v=b9e185ce:2527
+flushJobs @ chunk-AQOAFTHJ.js?v=b9e185ce:2569
+Promise.then
+queueFlush @ chunk-AQOAFTHJ.js?v=b9e185ce:2464
+queueJob @ chunk-AQOAFTHJ.js?v=b9e185ce:2459
+effect2.scheduler @ chunk-AQOAFTHJ.js?v=b9e185ce:8334
+trigger @ chunk-AQOAFTHJ.js?v=b9e185ce:533
+endBatch @ chunk-AQOAFTHJ.js?v=b9e185ce:591
+notify @ chunk-AQOAFTHJ.js?v=b9e185ce:853
+trigger @ chunk-AQOAFTHJ.js?v=b9e185ce:827
+set value @ chunk-AQOAFTHJ.js?v=b9e185ce:1734
+editCharacter @ CharactersPage.vue:330
+（匿名） @ CharactersPage.vue:99
+（匿名） @ chunk-AQOAFTHJ.js?v=b9e185ce:12443
+callWithErrorHandling @ chunk-AQOAFTHJ.js?v=b9e185ce:2342
+callWithAsyncErrorHandling @ chunk-AQOAFTHJ.js?v=b9e185ce:2349
+emit @ chunk-AQOAFTHJ.js?v=b9e185ce:6534
+（匿名） @ chunk-AQOAFTHJ.js?v=b9e185ce:10390
+handleClick @ chunk-FYZVDDRB.js?v=b9e185ce:16339
+callWithErrorHandling @ chunk-AQOAFTHJ.js?v=b9e185ce:2342
+callWithAsyncErrorHandling @ chunk-AQOAFTHJ.js?v=b9e185ce:2349
+invoker @ chunk-AQOAFTHJ.js?v=b9e185ce:11425
