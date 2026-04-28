@@ -1,14 +1,13 @@
 <template>
   <div class="h-full flex flex-col md:max-w-260 md:mx-auto">
-    <div class="flex flex-col h-full p-3">
+    <div class="flex flex-col h-full">
       <!-- 头部 -->
-      <div class="flex justify-between items-center py-4">
-        <span class="text-lg font-semibold text-gray-800 dark:text-gray-200">Bots</span>
+      <div class="flex justify-between items-center pb-4">
         <el-button type="primary" @click="showCreateDialog" class="flex items-center">
           <template #icon>
             <Plus />
           </template>
-          New Bot
+          新建机器人
         </el-button>
       </div>
 
@@ -24,19 +23,12 @@
 
         <!-- 机器人卡片网格 -->
         <div v-else class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 w-full">
-          <BotCard
-            v-for="bot in botStore.botInstances"
-            :key="bot.id"
-            :bot="bot"
-            @edit="handleEdit"
-            @delete="handleDelete"
-            @start="handleStart"
-            @stop="handleStop"
-            @chat-data="handleChatData" />
-          
+          <BotCard v-for="bot in botStore.botInstances" :key="bot.id" :bot="bot" @edit="handleEdit"
+            @delete="handleDelete" @start="handleStart" @stop="handleStop" />
+
           <!-- 空状态 -->
-          <div v-if="!botStore.loading && botStore.botInstances.length === 0" 
-               class="col-span-full text-center py-12 text-gray-500">
+          <div v-if="!botStore.loading && botStore.botInstances.length === 0"
+            class="col-span-full text-center py-12 text-gray-500">
             <el-icon size="48" class="text-gray-300 mb-3">
               <Cpu />
             </el-icon>
@@ -48,10 +40,7 @@
     </div>
 
     <!-- 创建/编辑对话框 -->
-    <BotModal
-      v-model="dialogVisible"
-      :bot="currentBot"
-      @saved="handleSaved" />
+    <BotModal v-model="dialogVisible" :bot="currentBot" @saved="handleSaved" />
   </div>
 </template>
 
@@ -107,7 +96,7 @@ const handleDelete = async (bot: BotInstance) => {
         type: 'warning'
       }
     )
-    
+
     await botStore.deleteBot(bot.id)
   } catch (error) {
     // 用户取消或删除失败
@@ -137,13 +126,6 @@ const handleStop = async (id: string) => {
   } catch (error) {
     console.error('停止失败:', error)
   }
-}
-
-// 查看对话数据
-const handleChatData = (bot: BotInstance) => {
-  // TODO: 实现查看对话数据功能
-  console.log('查看对话数据:', bot.name)
-  ElMessage.info(`查看 ${bot.name} 的对话数据功能待实现`)
 }
 
 // 保存成功后的回调

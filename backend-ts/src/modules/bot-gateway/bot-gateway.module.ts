@@ -8,6 +8,9 @@ import { BotAdminController } from './controllers/bot-admin.controller';
 import { QQBotAdapter } from './adapters/qq-bot.adapter';
 import { LarkBotAdapter } from './adapters/lark-bot.adapter';
 import { WeChatBotAdapter } from './adapters/wechat-bot.adapter';
+import { WeComAiBotAdapter } from './adapters/wecom-aibot.adapter';
+// TODO: 企业微信应用消息适配器（已隐藏，使用智能机器人长连接模式）
+// import { WeComAppBotAdapter } from './adapters/wecom-app-bot.adapter';
 // TODO: 待实现微信个人号适配器
 // import { WeChatPersonalBotAdapter } from './adapters/wechat-personal-bot.adapter';
 import { ChatModule } from '../chat/chat.module';
@@ -35,6 +38,8 @@ import { PrismaService } from '../../common/database/prisma.service';
     QQBotAdapter, // 注册QQ适配器
     LarkBotAdapter, // 注册飞书适配器
     WeChatBotAdapter, // 注册微信公众号适配器
+    WeComAiBotAdapter, // 注册企业微信智能机器人适配器（WebSocket 长连接）
+    // WeComAppBotAdapter, // 企业微信应用消息适配器（已隐藏）
     // TODO: 待实现微信个人号适配器
     // WeChatPersonalBotAdapter, // 注册微信个人号适配器
     MessageRepository, // 提供 MessageRepository

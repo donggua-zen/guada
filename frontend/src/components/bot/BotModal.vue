@@ -70,15 +70,6 @@
       <template v-if="selectedPlatform">
         <el-divider content-position="left">平台配置</el-divider>
 
-        <!-- 编辑模式下的提示 -->
-        <el-alert
-          v-if="isEdit"
-          title="敏感字段已清空，如需修改请重新输入"
-          type="info"
-          :closable="false"
-          show-icon
-          class="mb-4" />
-
         <el-form-item v-for="field in selectedPlatform.fields" :key="field.key" :label="field.label"
           :prop="`platformConfig.${field.key}`" :required="field.required">
 
@@ -158,7 +149,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, onMounted } from 'vue'
+import { ref, computed, watch, onMounted, nextTick } from 'vue'
 import { ElMessage } from 'element-plus'
 import type { FormInstance, FormRules } from 'element-plus'
 import { useBotStore } from '@/stores/bot'
@@ -261,14 +252,6 @@ watch(dialogVisible, (visible) => {
       const bot = props.bot // 创建局部变量以进行类型收窄
       const platformConfig = { ...bot.platformConfig }
       
-      // 清空脱敏的敏感字段（后端返回 *** 表示已脱敏）
-      const sensitiveFields = ['appSecret', 'secret', 'token', 'encodingAESKey']
-      sensitiveFields.forEach(field => {
-        if (platformConfig[field] === '***') {
-          platformConfig[field] = ''
-        }
-      })
-      
       // 对于未设置的字段，使用平台元数据中的默认值
       const metadata = botStore.platforms.find(p => p.platform === bot.platform)
       if (metadata) {
@@ -299,14 +282,20 @@ watch(dialogVisible, (visible) => {
         autoStart: false
       }
     } else {
-      // 创建模式：重置表单
+      // 创建模式：重置表单（resetForm 内部会清除验证）
       resetForm()
+      return
     }
+    
+    // 编辑模式填充数据后，等待 DOM 更新再清除验证
+    nextTick(() => {
+      formRef.value?.clearValidate()
+    })
   }
 })
 
 // 平台改变时，初始化默认配置
-const handlePlatformChange = (platform: string) => {
+const handlePlatformChange = async (platform: string) => {
   const metadata = botStore.platforms.find(p => p.platform === platform)
   if (metadata) {
     formData.value.platformConfig = {}
@@ -316,11 +305,18 @@ const handlePlatformChange = (platform: string) => {
         formData.value.platformConfig[field.key] = field.defaultValue
       }
     })
+    
+    // 等待 DOM 更新后清除验证状态，避免切换平台时爆红
+    await nextTick()
+    formRef.value?.clearValidate()
   }
 }
 
 // 重置表单
 const resetForm = () => {
+  // 先清除验证状态，再重置数据，避免触发验证
+  formRef.value?.clearValidate()
+  
   formData.value = {
     platform: '',
     name: '',
@@ -334,7 +330,6 @@ const resetForm = () => {
     },
     autoStart: false
   }
-  formRef.value?.clearValidate()
 }
 
 // 关闭对话框

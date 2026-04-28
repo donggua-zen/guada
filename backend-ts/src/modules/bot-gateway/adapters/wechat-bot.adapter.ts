@@ -6,6 +6,7 @@ import {
   BotMessage,
   BotResponse,
   BotStatus,
+  PlatformCapabilities,
 } from '../interfaces/bot-platform.interface';
 
 // 导入 onebots 微信适配器
@@ -33,6 +34,15 @@ export class WeChatBotAdapter implements IBotPlatform {
 
   getPlatform(): string {
     return 'wechat';
+  }
+
+  getCapabilities(): PlatformCapabilities {
+    return {
+      supportsStreaming: false,       // 微信公众号不支持流式回复
+      supportsPushMessage: true,      // 支持主动推送
+      supportsTemplateCard: true,     // 支持模板消息
+      supportsMultimedia: true,       // 支持多媒体消息
+    };
   }
 
   async initialize(config: BotConfig): Promise<void> {

@@ -51,6 +51,8 @@ export interface BotResponse {
   replyToMessageId?: string;
   /** 消息来源类型(从BotMessage传递过来) */
   sourceType?: 'private' | 'group' | 'channel';
+  /** 原始消息帧(用于企业微信等需要上下文的平台) */
+  rawFrame?: any;
 }
 
 /**
@@ -71,7 +73,7 @@ export interface BotConfig {
   /** 机器人ID */
   id: string;
   /** 平台类型 */
-  platform: 'qq' | 'wechat' | 'discord' | 'lark'; // TODO: 待添加 'wechat-personal'
+  platform: 'qq' | 'wechat' | 'discord' | 'lark' | 'wecom'; // TODO: 待添加 'wechat-personal'
   /** 机器人名称 */
   name: string;
   /** 平台特定配置(包含认证信息和其他平台相关配置) */
@@ -93,6 +95,30 @@ export interface BotConfig {
 }
 
 /**
+ * 流式回复选项
+ */
+export interface StreamReplyOptions {
+  /** 是否为最终回复 */
+  finish?: boolean;
+  /** 流ID(用于关联同一流式回复的多个片段) */
+  streamId?: string;
+}
+
+/**
+ * 平台能力声明
+ */
+export interface PlatformCapabilities {
+  /** 是否支持流式回复 */
+  supportsStreaming: boolean;
+  /** 是否支持主动推送(无需消息上下文) */
+  supportsPushMessage: boolean;
+  /** 是否支持模板卡片 */
+  supportsTemplateCard: boolean;
+  /** 是否支持多媒体消息 */
+  supportsMultimedia: boolean;
+}
+
+/**
  * 统一机器人平台接口
  *
  * 所有平台适配器必须实现此接口,屏蔽底层差异
@@ -102,6 +128,11 @@ export interface IBotPlatform {
    * 获取平台标识
    */
   getPlatform(): string;
+
+  /**
+   * 获取平台能力声明
+   */
+  getCapabilities(): PlatformCapabilities;
 
   /**
    * 初始化机器人(建立连接、注册事件监听器等)
@@ -114,6 +145,14 @@ export interface IBotPlatform {
    * @param response 响应消息
    */
   sendMessage(response: BotResponse): Promise<void>;
+
+  /**
+   * 发送流式回复(如果平台支持)
+   * @param response 响应消息
+   * @param options 流式回复选项
+   * @returns 是否成功发送
+   */
+  sendStreamReply?(response: BotResponse, options?: StreamReplyOptions): Promise<boolean>;
 
   /**
    * 监听 incoming 消息流
