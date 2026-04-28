@@ -103,9 +103,9 @@
 import { ref, computed, watch } from 'vue'
 import { useRouter } from 'vue-router'
 // @ts-ignore - UI 组件类型缺失
-import { ScrollContainer, Avatar } from './ui'
+import { ScrollContainer, Avatar } from '../ui'
 import { useDebounceFn } from '@vueuse/core'
-import { useAuthStore } from '../stores/auth'
+import { useAuthStore } from '../../stores/auth'
 import {
   PlusOutlined,
   EditOutlined,
