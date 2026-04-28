@@ -80,7 +80,7 @@ async function initializeDatabase(userDataPath: string, backendPath: string): Pr
     console.log('🔄 检测到首次运行，正在初始化数据库...')
     try {
       // 1. 使用 db push 直接根据 schema 创建表结构（适合无迁移历史的初始化）
-      execSync('npx prisma db push --config=prisma.config.js', {
+      execSync('npx prisma db push --config=prisma.config.js --accept-data-loss', {
         cwd: backendPath,
         env,
         stdio: 'pipe',
@@ -175,7 +175,7 @@ async function initializeDatabase(userDataPath: string, backendPath: string): Pr
       
       // 使用 db push 同步结构（适合 Electron 应用场景）
       // 注意：仅在 schema 添加新字段/表时安全，删除字段会导致数据丢失
-      execSync('npx prisma db push --config=prisma.config.js', {
+      execSync('npx prisma db push --config=prisma.config.js --accept-data-loss', {
         cwd: backendPath,
         env,
         stdio: 'pipe',
