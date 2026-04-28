@@ -6,6 +6,7 @@ import {
   BotMessage,
   BotResponse,
   BotStatus,
+  PlatformCapabilities,
 } from '../interfaces/bot-platform.interface';
 
 // 导入飞书官方 SDK
@@ -34,6 +35,15 @@ export class LarkBotAdapter implements IBotPlatform {
 
   getPlatform(): string {
     return 'lark';
+  }
+
+  getCapabilities(): PlatformCapabilities {
+    return {
+      supportsStreaming: false,       // 飞书暂不支持流式回复
+      supportsPushMessage: true,      // 支持主动推送
+      supportsTemplateCard: false,    // 暂不支持模板卡片
+      supportsMultimedia: true,       // 支持多媒体消息
+    };
   }
 
   async initialize(config: BotConfig): Promise<void> {

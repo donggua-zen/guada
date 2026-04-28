@@ -66,6 +66,13 @@ export interface Session {
     updatedAt: ISODateString
     lastActiveAt?: ISODateString
     avatarUrl?: string
+    
+    // === Bot 会话专用字段 ===
+    sessionType?: string      // "web" | "bot"
+    botId?: string            // Bot 实例ID
+    platform?: string         // 来源平台: 'qq', 'wechat'
+    externalId?: string       // 外部会话标识,格式: "platform:type:nativeId"
+    // ==================================
 }
 
 /**

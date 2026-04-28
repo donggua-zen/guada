@@ -125,25 +125,53 @@ export class BotInstanceManager implements OnModuleInit, OnApplicationShutdown {
    * 启动单个机器人实例
    */
   async startBot(config: BotConfig): Promise<void> {
+    // 如果已存在，先停止旧的实例
     if (this.botInstances.has(config.id)) {
-      throw new Error(`Bot already running: ${config.id}`);
+      this.logger.warn(`Bot ${config.id} is already running, stopping it first...`);
+      try {
+        await this.stopBot(config.id);
+      } catch (error: any) {
+        this.logger.error(`Failed to stop existing bot: ${error.message}`);
+        // 强制删除
+        this.botInstances.delete(config.id);
+      }
     }
 
     this.logger.log(`Starting bot: ${config.name} (${config.platform})`);
 
-    // 创建适配器
-    const adapter = this.adapterFactory.createAdapter(config.platform, config);
+    try {
+      // 创建适配器
+      const adapter = this.adapterFactory.createAdapter(config.platform, config);
 
-    // 初始化适配器
-    await adapter.initialize(config);
+      // 初始化适配器
+      await adapter.initialize(config);
 
-    // 保存实例
-    this.botInstances.set(config.id, { adapter, config });
+      // 保存实例（只在成功后保存）
+      this.botInstances.set(config.id, { adapter, config });
 
-    // 启动消息监听
-    await this.orchestrator.startBotListener(config.id, adapter, config);
+      // 启动消息监听
+      await this.orchestrator.startBotListener(config.id, adapter, config);
 
-    this.logger.log(`Bot started successfully: ${config.id}`);
+      this.logger.log(`Bot started successfully: ${config.id}`);
+    } catch (error: any) {
+      // 如果初始化失败，确保清理资源
+      this.logger.error(`Failed to start bot ${config.id}: ${error.message}`);
+      
+      // 清理可能残留的实例
+      if (this.botInstances.has(config.id)) {
+        try {
+          const instance = this.botInstances.get(config.id);
+          if (instance) {
+            await instance.adapter.shutdown();
+          }
+        } catch (cleanupError: any) {
+          this.logger.error(`Error during cleanup: ${cleanupError.message}`);
+        }
+        this.botInstances.delete(config.id);
+      }
+      
+      throw error;
+    }
   }
 
   /**

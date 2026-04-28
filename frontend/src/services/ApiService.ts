@@ -973,6 +973,20 @@ class ApiService implements IApiService {
     return await this._request(`/bot-admin/instances/${id}`, { method: 'DELETE' })
   }
 
+  /**
+   * 获取 Bot 专属会话列表（sessionType='bot'）
+   */
+  async fetchBotSessions(skip?: number, limit?: number): Promise<PaginatedResponse<Session>> {
+    const params = new URLSearchParams()
+    if (skip !== undefined) params.append('skip', skip.toString())
+    if (limit !== undefined) params.append('limit', limit.toString())
+
+    const queryString = params.toString()
+    const url = queryString ? `/bot-admin/sessions?${queryString}` : '/bot-admin/sessions'
+
+    return await this._request(url)
+  }
+
   // ========== 工具方法 ============
   debounce<T extends (...args: any[]) => any>(func: T, delay: number): T {
     let timer: number | undefined

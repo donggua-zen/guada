@@ -38,12 +38,6 @@
           <span>编辑</span>
         </el-button>
 
-        <!-- 对话数据按钮 -->
-        <el-button size="small" @click="$emit('chat-data', bot)">
-          <el-icon><ChatDotRound /></el-icon>
-          <span>对话数据</span>
-        </el-button>
-
         <!-- 删除按钮 -->
         <el-button size="small" type="danger" @click="$emit('delete', bot)">
           <el-icon><Delete /></el-icon>
@@ -56,7 +50,7 @@
 
 <script setup lang="ts">
 import { computed } from 'vue'
-import { Edit, Delete, ChatDotRound } from '@element-plus/icons-vue'
+import { Edit, Delete } from '@element-plus/icons-vue'
 import type { BotInstance } from '@/types/bot'
 
 const props = defineProps<{
@@ -68,7 +62,6 @@ const emit = defineEmits<{
   delete: [bot: BotInstance]
   start: [id: string]
   stop: [id: string]
-  'chat-data': [bot: BotInstance]
 }>()
 
 // 判断是否正在操作中
@@ -92,7 +85,8 @@ const getPlatformAvatar = (platform: string) => {
     wechat: '/images/bots/wechat.png',
     discord: '/images/bots/discord.svg',
     dingtalk: '/images/bots/dingtalk.svg',
-    lark: '/images/bots/lark.png'
+    lark: '/images/bots/lark.png',
+    wecom: '/images/bots/wecom-bot.png'
   }
   return avatarMap[platform] || '/images/bots/qq.png' // 默认使用 QQ 头像
 }
@@ -113,7 +107,8 @@ const getPlatformName = (platform: string) => {
   const nameMap: Record<string, string> = {
     qq: 'QQ 机器人',
     wechat: '微信机器人',
-    discord: 'Discord Bot'
+    discord: 'Discord Bot',
+    wecom: '企业微信智能机器人'
   }
   return nameMap[platform] || platform
 }

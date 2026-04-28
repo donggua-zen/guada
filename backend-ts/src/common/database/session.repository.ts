@@ -22,13 +22,21 @@ export class SessionRepository {
   async findByUserId(userId: string, skip: number = 0, limit: number = 20) {
     const [items, total] = await Promise.all([
       this.prisma.session.findMany({
-        where: { userId },
+        where: {
+          userId,
+          sessionType: { not: 'bot' }
+        },
         orderBy: [{ lastActiveAt: "desc" }],
         skip,
         take: limit,
         include: { character: true },
       }),
-      this.prisma.session.count({ where: { userId } }),
+      this.prisma.session.count({
+        where: {
+          userId,
+          sessionType: { not: 'bot' }
+        }
+      }),
     ]);
     return { items, total };
   }
@@ -58,5 +66,37 @@ export class SessionRepository {
       where: { id },
       data: { lastActiveAt: new Date() },
     });
+  }
+
+  /**
+   * 查询 Bot 专属会话列表（sessionType='bot'）
+   */
+  async findBotSessions(userId: string, skip: number = 0, limit: number = 20) {
+    const [items, total] = await Promise.all([
+      this.prisma.session.findMany({
+        where: {
+          userId,
+          sessionType: 'bot'
+        },
+        orderBy: [{ lastActiveAt: "desc" }],
+        skip,
+        take: limit,
+        include: {
+          character: true,
+          model: {
+            include: {
+              provider: true,
+            },
+          },
+        },
+      }),
+      this.prisma.session.count({
+        where: {
+          userId,
+          sessionType: 'bot'
+        }
+      }),
+    ]);
+    return { items, total };
   }
 }
