@@ -19,12 +19,7 @@
       >
         <el-table-column prop="title" label="会话标题" min-width="200">
           <template #default="{ row }">
-            <div class="flex items-center gap-2">
-              <el-avatar :size="32" :src="row.character?.avatarUrl">
-                <el-icon><User /></el-icon>
-              </el-avatar>
-              <span class="truncate">{{ row.title || '未命名会话' }}</span>
-            </div>
+            <span class="truncate">{{ row.title || '未命名会话' }}</span>
           </template>
         </el-table-column>
 
@@ -52,16 +47,34 @@
           </template>
         </el-table-column>
 
-        <el-table-column label="操作" width="120" fixed="right">
+        <el-table-column label="操作" width="240" fixed="right">
           <template #default="{ row }">
-            <el-button
-              link
-              type="primary"
-              size="small"
-              @click.stop="handleViewChat(row)"
-            >
-              查看对话
-            </el-button>
+            <div class="flex gap-2">
+              <el-button
+                link
+                type="primary"
+                size="small"
+                @click.stop="handleViewChat(row)"
+              >
+                查看对话
+              </el-button>
+              <el-button
+                link
+                type="warning"
+                size="small"
+                @click.stop="handleClearMessages(row)"
+              >
+                清空记录
+              </el-button>
+              <el-button
+                link
+                type="danger"
+                size="small"
+                @click.stop="handleDeleteSession(row)"
+              >
+                删除
+              </el-button>
+            </div>
           </template>
         </el-table-column>
       </el-table>
@@ -99,8 +112,8 @@
 
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
-import { ElMessage } from 'element-plus'
-import { Loading, User, ChatDotRound } from '@element-plus/icons-vue'
+import { ElMessage, ElMessageBox } from 'element-plus'
+import { Loading, ChatDotRound } from '@element-plus/icons-vue'
 import { apiService } from '@/services/ApiService'
 import { useBotStore } from '@/stores/bot'
 import BotSessionDialog from './BotSessionDialog.vue'
@@ -191,6 +204,61 @@ const handleRowClick = (row: Session) => {
 const handleViewChat = (session: Session) => {
   selectedSession.value = session
   dialogVisible.value = true
+}
+
+// 清空聊天记录
+const handleClearMessages = async (session: Session) => {
+  try {
+    await ElMessageBox.confirm(
+      `确定要清空会话 "${session.title || '未命名会话'}" 的所有聊天记录吗？会话本身将保留，但所有消息将被永久删除，且不可恢复。`,
+      '清空确认',
+      {
+        confirmButtonText: '确定',
+        cancelButtonText: '取消',
+        type: 'warning'
+      }
+    )
+    
+    await apiService.clearSessionMessages(session.id)
+    ElMessage.success('聊天记录已清空')
+    
+    // 如果对话框打开，关闭它
+    if (dialogVisible.value && selectedSession.value?.id === session.id) {
+      dialogVisible.value = false
+      selectedSession.value = null
+    }
+  } catch (error) {
+    if (error !== 'cancel') {
+      console.error('清空聊天记录失败:', error)
+      ElMessage.error('清空失败')
+    }
+  }
+}
+
+// 删除会话
+const handleDeleteSession = async (session: Session) => {
+  try {
+    await ElMessageBox.confirm(
+      `确定要删除会话 "${session.title || '未命名会话'}" 吗？此操作将删除该会话的所有消息记录，且不可恢复。`,
+      '删除确认',
+      {
+        confirmButtonText: '确定',
+        cancelButtonText: '取消',
+        type: 'warning'
+      }
+    )
+    
+    await apiService.deleteSession(session.id)
+    ElMessage.success('会话已删除')
+    
+    // 重新加载列表
+    await loadSessions()
+  } catch (error) {
+    if (error !== 'cancel') {
+      console.error('删除会话失败:', error)
+      ElMessage.error('删除失败')
+    }
+  }
 }
 
 // 分页变化
