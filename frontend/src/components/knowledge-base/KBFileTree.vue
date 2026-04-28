@@ -97,6 +97,19 @@
       <p>{{ currentRelativePath ? '该文件夹为空' : '暂无文件' }}</p>
     </div>
 
+    <!-- 加载更多指示器 -->
+    <div v-if="isLoadingMore" class="text-center py-4">
+      <el-icon class="animate-spin text-blue-500" size="24">
+        <Loading />
+      </el-icon>
+      <p class="mt-2 text-sm text-gray-500">加载中...</p>
+    </div>
+
+    <!-- 没有更多数据提示 -->
+    <div v-else-if="!hasMore && currentItems.length > 0" class="text-center py-3 text-gray-400 text-sm">
+      <p>已加载全部文件</p>
+    </div>
+
     <!-- 右键菜单 -->
     <div v-if="contextMenu.visible"
       class="fixed bg-white dark:bg-gray-800 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700 py-1 z-50 min-w-[160px]"
@@ -228,6 +241,14 @@ const currentItems = ref<KBFile[]>([])
 const isLoading = ref(false)
 
 /**
+ * 无限滚动相关状态
+ */
+const currentPage = ref(0) // 当前页码（从0开始）
+const pageSize = ref(50) // 每页数量
+const hasMore = ref(true) // 是否还有更多数据
+const isLoadingMore = ref(false) // 是否正在加载更多
+
+/**
  * 面包屑路径（使用路径而非ID）
  */
 const breadcrumbPath = ref<Array<{ path: string; displayName: string }>>([])
@@ -268,21 +289,31 @@ let pollingFileIds = new Set<string>()
 
 /**
  * 加载指定路径的文件夹内容
+ * @param relativePath 相对路径
+ * @param isLoadMore 是否为加载更多（追加模式）
  */
-async function loadFolderContents(relativePath: string | null) {
-  isLoading.value = true
+async function loadFolderContents(relativePath: string | null, isLoadMore: boolean = false) {
+  if (isLoadMore) {
+    isLoadingMore.value = true
+  } else {
+    isLoading.value = true
+    // 重置分页状态
+    currentPage.value = 0
+    hasMore.value = true
+  }
 
   try {
+    const skip = currentPage.value * pageSize.value
 
     // 直接使用路径查询接口
     const response = await apiService.fetchKBFilesByPath(
       props.kbId,
       relativePath,
-      0,
-      100  // 每页100条足够显示单层内容
+      skip,
+      pageSize.value
     )
 
-    currentItems.value = (response.items || []).map((file: any) => ({
+    const newItems = (response.items || []).map((file: any) => ({
       id: file.id,
       fileId: file.id,
       knowledgeBaseId: file.knowledgeBaseId,
@@ -306,6 +337,17 @@ async function loadFolderContents(relativePath: string | null) {
       isTempTask: false
     }))
 
+    // 判断是否还有更多数据
+    hasMore.value = newItems.length === pageSize.value
+
+    if (isLoadMore) {
+      // 追加模式：将新数据添加到现有列表
+      currentItems.value.push(...newItems)
+    } else {
+      // 初始加载模式：替换整个列表
+      currentItems.value = newItems
+    }
+
     // 更新面包屑路径（直接从 relativePath 解析）
     updateBreadcrumbPathFromRelativePath(relativePath)
 
@@ -318,11 +360,14 @@ async function loadFolderContents(relativePath: string | null) {
 
   } catch (error) {
     console.error('加载文件夹内容失败', error)
-    currentItems.value = []
+    if (!isLoadMore) {
+      currentItems.value = []
+    }
     // 即使出错也通知父组件
-    emit('filesLoaded', [])
+    emit('filesLoaded', currentItems.value)
   } finally {
     isLoading.value = false
+    isLoadingMore.value = false
   }
 }
 
@@ -373,61 +418,71 @@ async function startFileProcessingPolling() {
     return
   }
 
-  // 停止之前的轮询
-  stopFileProcessingPolling()
+  // 关键优化:如果是追加加载,需要将新文件的 ID 添加到现有轮询列表
+  // 而不是完全停止并重启轮询
+  const newProcessingFileIds = processingFiles
+    .filter(file => !pollingFileIds.has(file.id))
+    .map(file => file.id)
 
-  // 添加新的文件 ID
-  processingFiles.forEach(file => pollingFileIds.add(file.id))
-
-  console.log(`[DEBUG] KBFileTree: 开始轮询 ${pollingFileIds.size} 个文件`)
-
-  const poll = async () => {
-    try {
-
-      // 批量获取文件状态
-      const responses = await apiService.batchGetFileProcessingStatus(
-        props.kbId,
-        Array.from(pollingFileIds)
-      )
-
-      console.log(`[DEBUG] KBFileTree: 轮询收到 ${responses.length} 个文件的状态更新`)
-
-      // 遍历结果并更新本地状态
-      responses.forEach((response: any) => {
-        // 更新本地文件状态
-        updateFileStatus(response.id, {
-          processingStatus: response.processingStatus,
-          progressPercentage: response.progressPercentage || 0,
-          currentStep: response.currentStep || null,
-          errorMessage: response.errorMessage || null,
-          totalChunks: response.totalChunks || 0,
-          totalTokens: response.totalTokens || 0
-        })
-
-        // 如果文件处理完成或失败，从轮询列表中移除
-        if (response.processingStatus === 'completed' ||
-          response.processingStatus === 'failed') {
-          console.log(`[DEBUG] KBFileTree: 文件 ${response.id} 处理${response.processingStatus === 'completed' ? '完成' : '失败'},停止轮询`)
-          pollingFileIds.delete(response.id)
-        }
-      })
-
-      // 如果所有文件都处理完成，停止轮询
-      if (pollingFileIds.size === 0) {
-        console.log('[DEBUG] KBFileTree: 所有文件处理完成,停止轮询')
-        stopFileProcessingPolling()
-      }
-    } catch (error) {
-      console.error(`[DEBUG] KBFileTree: 批量轮询文件状态失败:`, error)
-      // 出错时不停止轮询，继续尝试
-    }
+  if (newProcessingFileIds.length > 0) {
+    console.log(`[DEBUG] KBFileTree: 发现 ${newProcessingFileIds.length} 个新文件需要轮询`)
+    newProcessingFileIds.forEach(fileId => pollingFileIds.add(fileId))
   }
 
-  // 立即执行一次
-  await poll()
+  // 如果轮询定时器不存在，则启动新的轮询
+  if (!pollingTimer && pollingFileIds.size > 0) {
+    console.log(`[DEBUG] KBFileTree: 开始轮询 ${pollingFileIds.size} 个文件`)
 
-  // 定时轮询
-  pollingTimer = setInterval(poll, POLL_INTERVAL)
+    const poll = async () => {
+      try {
+
+        // 批量获取文件状态
+        const responses = await apiService.batchGetFileProcessingStatus(
+          props.kbId,
+          Array.from(pollingFileIds)
+        )
+
+        console.log(`[DEBUG] KBFileTree: 轮询收到 ${responses.length} 个文件的状态更新`)
+
+        // 遍历结果并更新本地状态
+        responses.forEach((response: any) => {
+          // 更新本地文件状态
+          updateFileStatus(response.id, {
+            processingStatus: response.processingStatus,
+            progressPercentage: response.progressPercentage || 0,
+            currentStep: response.currentStep || null,
+            errorMessage: response.errorMessage || null,
+            totalChunks: response.totalChunks || 0,
+            totalTokens: response.totalTokens || 0
+          })
+
+          // 如果文件处理完成或失败，从轮询列表中移除
+          if (response.processingStatus === 'completed' ||
+            response.processingStatus === 'failed') {
+            console.log(`[DEBUG] KBFileTree: 文件 ${response.id} 处理${response.processingStatus === 'completed' ? '完成' : '失败'},停止轮询`)
+            pollingFileIds.delete(response.id)
+          }
+        })
+
+        // 如果所有文件都处理完成，停止轮询
+        if (pollingFileIds.size === 0) {
+          console.log('[DEBUG] KBFileTree: 所有文件处理完成,停止轮询')
+          stopFileProcessingPolling()
+        }
+      } catch (error) {
+        console.error(`[DEBUG] KBFileTree: 批量轮询文件状态失败:`, error)
+        // 出错时不停止轮询，继续尝试
+      }
+    }
+
+    // 立即执行一次
+    await poll()
+
+    // 定时轮询
+    pollingTimer = setInterval(poll, POLL_INTERVAL)
+  } else {
+    console.log(`[DEBUG] KBFileTree: 轮询已在运行,当前监控 ${pollingFileIds.size} 个文件`)
+  }
 }
 
 /**
@@ -474,11 +529,29 @@ watch(currentRelativePath, async (newPath) => {
 }, { immediate: true })
 
 /**
+ * 加载更多文件（无限滚动触发）
+ */
+async function loadMoreFiles() {
+  // 如果没有更多数据或正在加载，则不执行
+  if (!hasMore.value || isLoadingMore.value || isLoading.value) {
+    return
+  }
+
+  console.log('[DEBUG] KBFileTree: 加载更多文件')
+
+  // 增加页码
+  currentPage.value++
+
+  // 加载下一页数据（追加模式）
+  await loadFolderContents(currentRelativePath.value, true)
+}
+
+/**
  * 强制重新加载当前目录
  */
 async function forceReload() {
   console.log('[DEBUG] KBFileTree 强制重新加载当前目录')
-  await loadFolderContents(currentRelativePath.value)
+  await loadFolderContents(currentRelativePath.value, false)
 }
 
 /**
@@ -488,6 +561,8 @@ function removeFileLocally(fileId: string) {
   const index = currentItems.value.findIndex(item => item.id === fileId)
   if (index !== -1) {
     currentItems.value.splice(index, 1)
+    // 关键修复:同时从轮询列表中移除
+    pollingFileIds.delete(fileId)
     console.log(`[DEBUG] KBFileTree 本地移除文件: ${fileId}`)
   }
 }
@@ -695,7 +770,8 @@ defineExpose({
   updateFileStatus,
   getCurrentFiles,
   insertUploadedFile,  // 新增:智能插入上传完成的文件
-  getCurrentFolderPath: () => currentRelativePath.value
+  getCurrentFolderPath: () => currentRelativePath.value,
+  loadMoreFiles  // 新增:加载更多文件（用于无限滚动）
 })
 
 /**

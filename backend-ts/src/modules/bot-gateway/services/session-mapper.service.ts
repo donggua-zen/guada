@@ -1,9 +1,9 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../../../common/database/prisma.service';
 import { MessageRepository } from '../../../common/database/message.repository';
-import { buildExternalId } from '../utils/external-id';
 import { SettingsStorage } from '../../../common/utils/settings-storage.util';
 import { SG_MODELS, SK_MOD_CHAT } from '../../../constants/settings.constants';
+import { KnowledgeBaseRepository } from '../../../common/database/knowledge-base.repository';
 
 /**
  * 会话映射服务
@@ -18,22 +18,27 @@ export class SessionMapperService {
     private prisma: PrismaService,
     private messageRepo: MessageRepository,
     private settingsStorage: SettingsStorage,
+    private kbRepo: KnowledgeBaseRepository,
   ) {}
 
   /**
    * 为 Bot 消息获取或创建会话
+   * 
+   * @param botId Bot 实例 ID
+   * @param externalId 外部会话标识(由调用者根据平台策略组装)
+   * @param platform 来源平台
+   * @param defaultCharacterId 默认角色 ID
+   * @param defaultModelId 默认模型 ID
+   * @param title 会话标题(可选,不提供则自动生成)
    */
   async getOrCreateBotSession(
     botId: string,
+    externalId: string,
     platform: string,
-    type: 'private' | 'group',
-    nativeId: string,        // 私聊=用户ID, 群聊=群ID
-    defaultCharacterId?: string,
+    defaultCharacterId: string,
     defaultModelId?: string,
+    title?: string,
   ): Promise<any> {
-    // 构建唯一的外部会话标识
-    const externalId = buildExternalId(platform, type, nativeId);
-
     // 尝试查找已存在的会话
     let session = await this.prisma.session.findFirst({
       where: {
@@ -98,7 +103,7 @@ export class SessionMapperService {
           externalId,
           characterId: defaultCharacterId,
           modelId: finalModelId,  // 使用解析后的模型ID
-          title: this.generateBotSessionTitle(platform, type, nativeId),
+          title: title || this.generateBotSessionTitleFromExternalId(externalId),
           settings: {},
         },
       });
@@ -112,13 +117,9 @@ export class SessionMapperService {
    */
   async findByExternalId(
     botId: string,
-    platform: string,
-    type: 'private' | 'group',
-    nativeId: string,
+    externalId: string,
     characterId?: string,
   ): Promise<any | null> {
-    const externalId = buildExternalId(platform, type, nativeId);
-    
     return this.prisma.session.findFirst({
       where: {
         botId,
@@ -148,12 +149,8 @@ export class SessionMapperService {
    * 查询某个外部会话标识的所有会话(跨Bot)
    */
   async findByExternalIdOnly(
-    platform: string,
-    type: 'private' | 'group',
-    nativeId: string,
+    externalId: string,
   ): Promise<any[]> {
-    const externalId = buildExternalId(platform, type, nativeId);
-    
     return this.prisma.session.findMany({
       where: {
         externalId,
@@ -166,27 +163,30 @@ export class SessionMapperService {
   }
 
   /**
-   * 生成 Bot 会话标题
+   * 从 externalId 生成会话标题(简化版)
    */
-  private generateBotSessionTitle(
-    platform: string,
-    type: 'private' | 'group',
-    nativeId: string,
-  ): string {
-    const platformName = platform.toUpperCase();
-    const typeName = type === 'private' ? '私聊' : '群聊';
-    const shortId = nativeId.slice(0, 8);
-    
-    return `${platformName} ${typeName} ${shortId}`;
+  private generateBotSessionTitleFromExternalId(externalId: string): string {
+    // externalId 格式: "platform:type:nativeId"
+    const parts = externalId.split(':');
+    if (parts.length >= 3) {
+      const platform = parts[0].toUpperCase();
+      const type = parts[1] === 'group' ? '群聊' : '私聊';
+      const nativeId = parts[2].slice(0, 8);
+      return `${platform} ${type} ${nativeId}`;
+    }
+    return `Bot Session ${externalId.slice(0, 8)}`;
   }
 
   /**
    * 创建用户消息
+   * @param sessionId 会话 ID
+   * @param content 消息内容
+   * @param knowledgeBaseIds 引用的知识库 ID 列表(可选)
    */
   async createUserMessage(
     sessionId: string,
     content: string,
-    attachments?: any[],
+    knowledgeBaseIds?: string[],
   ): Promise<any> {
     const message = await this.messageRepo.create({
       sessionId,
@@ -194,7 +194,18 @@ export class SessionMapperService {
       parentId: null,
     });
 
-    // TODO: 如果有附件,创建 File 记录并关联
+    // 处理知识库引用逻辑
+    let additionalKwargs: any = null;
+    if (knowledgeBaseIds && knowledgeBaseIds.length > 0) {
+      // 使用批量查询提升效率
+      const kbs = await this.kbRepo.findByIds(knowledgeBaseIds);
+      const kbMetadata = kbs.map((kb) => ({
+        id: kb.id,
+        name: kb.name,
+        description: kb.description,
+      }));
+      additionalKwargs = { referencedKbs: kbMetadata };
+    }
 
     await this.prisma.messageContent.create({
       data: {
@@ -202,6 +213,7 @@ export class SessionMapperService {
         turnsId: this.generateTurnsId(),
         role: 'user',
         content,
+        additionalKwargs,
       },
     });
 

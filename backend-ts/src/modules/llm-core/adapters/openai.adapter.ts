@@ -84,11 +84,10 @@ export class OpenAIAdapter implements LLMAdapter {
       const template = PROVIDER_TEMPLATES.find((t) => t.id === providerId);
       const attrs = template?.attributes?.[this.protocol] || {};
 
-      if (params.thinkingEnabled === true && attrs.thinkingEnabled) {
-        Object.assign(requestParams, attrs.thinkingEnabled);
-      }
-      if (params.thinkingEnabled === false && attrs.thinkingDisabled) {
-        Object.assign(requestParams, attrs.thinkingDisabled);
+      // 统一处理 thinking 配置（所有提供商都使用相同的接口）
+      if (attrs.thinking?.get && params.thinkingEnabled !== undefined) {
+        const thinkingConfig = attrs.thinking.get(params.thinkingEnabled);
+        Object.assign(requestParams, thinkingConfig);
       }
     }
 
@@ -127,11 +126,7 @@ export class OpenAIAdapter implements LLMAdapter {
       top_p: requestParams.top_p,
       max_tokens: requestParams.max_tokens,
       tools_count: requestParams.tools?.length || 0,
-      has_thinking_enabled:
-        "thinking_enabled" in requestParams ||
-        "thinking" in requestParams ||
-        "enable_thinking" in requestParams ||
-        "reasoning_effort" in requestParams,
+      has_thinking_enabled: params.thinkingEnabled,
     });
 
     return requestParams;

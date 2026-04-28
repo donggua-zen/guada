@@ -68,7 +68,7 @@ export class AgentService {
       const isDeepSeekV4 = modelName && modelName.toLowerCase().includes("deepseek") && modelName.toLowerCase().includes("v4");
 
       // 判断是否开启思考模式
-      const thinkingEnabled = features.includes("thinking") ? mergedSettings.thinkingEnabled || false : false;
+      const thinkingEnabled = !!(features.includes("thinking") && mergedSettings.thinkingEnabled);
 
       // 仅 DeepSeek V4 且开启思考模式时才携带思维链
       const keepReasoningContent = isDeepSeekV4 && thinkingEnabled;
@@ -214,15 +214,6 @@ export class AgentService {
 
         try {
           const config = (session.model?.config as any) || {};
-          const features = config.features || [];
-
-          const canThinking: boolean | undefined =
-            features.includes("thinking") ? mergedSettings.thinkingEnabled : undefined;
-
-          // 检查模型是否支持图像输入（用于决定是否传递图片内容给 LLM）
-          const supportsImageInput = (config.inputCapabilities || []).includes(
-            "image",
-          );
 
           const stream = llm.completions({
             model: session.model?.modelName || "gpt-3.5-turbo",
@@ -234,7 +225,7 @@ export class AgentService {
             maxTokens: config.maxOutputTokens, // 从 config 获取最大输出长度
             modelConfig: session.model, // 传递模型配置（包含供应商信息）
             stream: true, // 显式开启流式
-            thinkingEnabled: canThinking, // 显式传递思考模式开关
+            thinkingEnabled: features.includes("thinking") ? thinkingEnabled : undefined, // 显式传递思考模式开关
             abortSignal, // 传递中断信号
           });
 
