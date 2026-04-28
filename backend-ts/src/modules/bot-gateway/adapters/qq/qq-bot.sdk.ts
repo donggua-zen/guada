@@ -121,12 +121,16 @@ export interface QQDirectMessageEvent {
  * 发送消息参数
  */
 export interface SendMessageParams {
-  /** 消息类型：0=文本 */
+  /** 消息类型：0=文本, 1=图文混排, 2=markdown, 3=模板, 4=ark, 7=富媒体 */
   msg_type?: number;
   /** 文本内容 */
   content?: string;
-  /** 图片URL */
+  /** 图片URL（已废弃，使用 media 代替） */
   image?: string;
+  /** 富媒体信息 */
+  media?: {
+    file_info: string;  // 媒体文件ID
+  };
   /** 消息引用 */
   message_reference?: {
     message_id: string;
@@ -242,7 +246,7 @@ export class QQBot extends EventEmitter {
       }
 
       const data = await response.json();
-      
+
       if (!data.access_token) {
         throw new Error(`Invalid token response: ${JSON.stringify(data)}`);
       }
@@ -628,6 +632,49 @@ export class QQBot extends EventEmitter {
   // ============================================
   // 消息发送API
   // ============================================
+
+  /**
+   * 上传媒体文件（图片、视频等）
+   * QQ官方要求先上传媒体获取file_info，然后在发送消息时引用
+   */
+  async uploadMedia(
+    filePath: string,
+    fileType: 'image' | 'video' = 'image',
+  ): Promise<{ file_info: string }> {
+    const token = await this.getAccessToken();
+
+    // 读取文件
+    const fs = await import('fs');
+    const path = await import('path');
+    const fileBuffer = fs.readFileSync(filePath);
+    const fileName = path.basename(filePath);
+
+    // 构建 FormData
+    const formData = new FormData();
+    const blob = new Blob([fileBuffer], {
+      type: fileType === 'image' ? 'image/jpeg' : 'video/mp4'
+    });
+    formData.append('media', blob, fileName);
+    formData.append('srv_send_msg', 'false');  // 不立即发送
+
+    // 上传到QQ服务器
+    const response = await fetch(`${this.baseURL}/v2/groups/0/files`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `QQBot ${token}`,
+        'X-Union-Appid': this.config.appId,
+      },
+      body: formData,
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`Failed to upload media: ${response.status} ${response.statusText} - ${errorText}`);
+    }
+
+    const data = await response.json();
+    return { file_info: data.file_info };
+  }
 
   /**
    * 发送群消息

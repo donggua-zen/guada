@@ -19,6 +19,10 @@ import { buildExternalId } from '../utils/external-id';
 export class BotOrchestrator {
   private readonly logger = new Logger(BotOrchestrator.name);
   private activeSubscriptions: Map<string, Subscription> = new Map();
+  private messageQueues: Map<string, { messages: BotMessage[]; timer?: NodeJS.Timeout }> = new Map();
+  private processingSessions: Set<string> = new Set();
+  private readonly MERGE_WINDOW_MS = 1500; // 1.5秒合并窗口
+  private readonly MAX_QUEUE_LENGTH = 10; // 最大缓冲消息数
 
   constructor(
     private agentService: AgentService,
@@ -39,7 +43,7 @@ export class BotOrchestrator {
 
     const subscription = adapter.onMessage().subscribe({
       next: async (message: BotMessage) => {
-        await this.handleIncomingMessage(botId, message, config);
+        await this.enqueueMessage(botId, message, config);
       },
       error: (error: Error) => {
         this.logger.error(
@@ -49,6 +53,97 @@ export class BotOrchestrator {
     });
 
     this.activeSubscriptions.set(botId, subscription);
+  }
+
+  /**
+   * 将消息加入缓冲队列
+   */
+  private async enqueueMessage(
+    botId: string,
+    message: BotMessage,
+    config: BotConfig,
+  ): Promise<void> {
+    // 使用 externalId 作为队列 Key，确保同一会话的消息被合并
+    const platform = config.platform || 'qq';
+    const isGroupChat = message.sourceType === 'group';
+    const type = isGroupChat ? 'group' : 'private';
+    const nativeId = isGroupChat ? message.conversationId : message.senderId;
+    const externalId = buildExternalId(platform, type, nativeId);
+    const queueKey = `${botId}:${externalId}`;
+
+    if (!this.messageQueues.has(queueKey)) {
+      this.messageQueues.set(queueKey, { messages: [] });
+    }
+
+    const queue = this.messageQueues.get(queueKey)!;
+    
+    // 队列长度保护：如果超过上限，丢弃最旧的消息
+    if (queue.messages.length >= this.MAX_QUEUE_LENGTH) {
+      const droppedMsg = queue.messages.shift();
+      this.logger.warn(`Queue overflow for ${queueKey}, dropped oldest message: ${droppedMsg?.messageId}`);
+    }
+    
+    queue.messages.push(message);
+
+    // 如果当前会话正在处理中，仅将消息加入队列等待
+    if (this.processingSessions.has(queueKey)) {
+      this.logger.debug(`Message buffered for busy session: ${queueKey}`);
+      return;
+    }
+
+    // 如果会话空闲，设置合并窗口
+    if (!queue.timer) {
+      queue.timer = setTimeout(async () => {
+        await this.flushQueue(queueKey, botId, config);
+      }, this.MERGE_WINDOW_MS);
+    }
+  }
+
+  /**
+   * 刷新队列，合并并处理消息
+   */
+  private async flushQueue(queueKey: string, botId: string, config: BotConfig): Promise<void> {
+    const queue = this.messageQueues.get(queueKey);
+    if (!queue || queue.messages.length === 0) return;
+
+    // 标记为处理中
+    this.processingSessions.add(queueKey);
+    
+    // 取出所有待处理消息并清空队列
+    const messagesToProcess = [...queue.messages];
+    queue.messages = [];
+    if (queue.timer) clearTimeout(queue.timer);
+    queue.timer = undefined;
+
+    try {
+      // 合并消息内容
+      const mergedContent = messagesToProcess.map(m => m.content).join('\n\n');
+      const firstMessage = messagesToProcess[0];
+      
+      // 合并附件
+      const allAttachments = messagesToProcess.flatMap(m => m.attachments || []);
+
+      // 创建合并后的虚拟消息对象用于后续处理
+      const mergedMessage: BotMessage = {
+        ...firstMessage,
+        content: mergedContent,
+        attachments: allAttachments.length > 0 ? allAttachments : undefined,
+        messageId: firstMessage.messageId, // 使用第一条消息的 ID 作为引用
+      };
+
+      await this.handleIncomingMessage(botId, mergedMessage, config);
+    } catch (error: any) {
+      this.logger.error(`Failed to process merged messages: ${error.message}`);
+    } finally {
+      // 处理完毕，移除标记并检查是否有积压消息
+      this.processingSessions.delete(queueKey);
+      if (queue.messages.length > 0) {
+        // 如果在处理期间又有新消息进来，立即触发下一轮
+        this.flushQueue(queueKey, botId, config);
+      } else {
+        this.messageQueues.delete(queueKey);
+      }
+    }
   }
 
   /**
@@ -120,6 +215,7 @@ export class BotOrchestrator {
         session.id,
         message.content,
         config.knowledgeBaseIds,
+        message.attachments,  // 传递附件信息
       );
 
       // 2. 调用 AgentService 获取流式迭代器

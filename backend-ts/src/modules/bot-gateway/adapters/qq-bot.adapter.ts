@@ -86,7 +86,7 @@ export class QQBotAdapter implements IBotPlatform {
 
       // 启动连接（使用 start 方法）
       await this.client.start();
-      
+
       this.status = BotStatus.CONNECTED;
       this.reconnectAttempts = 0;
       this.logger.log(`QQ bot connected: ${config.name}`);
@@ -102,49 +102,46 @@ export class QQBotAdapter implements IBotPlatform {
     if (!this.client) {
       throw new Error('QQ bot is not initialized');
     }
-
+  
     try {
       // 根据消息来源类型调用对应的发送方法
       // sourceType 在接收消息时已经确定(private/group)
-      
+        
       this.logger.log(`Sending message: sourceType=${response.sourceType}, conversationId=${response.conversationId}, content=${response.content}`);
-      
+        
+      // 构建消息参数
+      const params: any = {
+        msg_type: 0,  // 0=文本消息
+        content: response.content,
+      };
+        
+      // 如果有附件，需要特殊处理
+      if (response.rawFrame?.attachments && response.rawFrame.attachments.length > 0) {
+        // TODO: 实现附件发送逻辑
+        // QQ官方API要求先上传媒体获取file_info，然后使用msg_type=7发送富媒体消息
+        this.logger.warn('Attachment sending not fully implemented yet');
+      }
+        
       if (response.sourceType === 'private') {
         // 私聊消息
         this.logger.log(`Calling sendC2CMessage with userOpenId: ${response.conversationId}`);
-        
-        // QQ C2C 消息需要 msg_type 和 content 对象
-        const params = {
-          msg_type: 0,  // 0=文本消息
-          content: response.content,
-        };
-        
         this.logger.log(`Params:`, JSON.stringify(params));
-        
+          
         const result = await this.client.sendC2CMessage(response.conversationId, params);
         this.logger.log(`sendC2CMessage result:`, JSON.stringify(result));
         this.logger.log(`Reply sent to private chat: ${response.conversationId}`);
       } else if (response.sourceType === 'group') {
         // 群聊消息
         this.logger.log(`Calling sendGroupMessage with groupOpenId: ${response.conversationId}`);
-        
-        // QQ 群消息也需要 msg_type
-        const params = {
-          msg_type: 0,  // 0=文本消息
-          content: response.content,
-        };
-        
         this.logger.log(`Params:`, JSON.stringify(params));
-        
+          
         const result = await this.client.sendGroupMessage(response.conversationId, params);
         this.logger.log(`sendGroupMessage result:`, JSON.stringify(result));
         this.logger.log(`Reply sent to group: ${response.conversationId}`);
       } else {
         // 未知类型,尝试私聊
         this.logger.warn(`Unknown source type, defaulting to private chat`);
-        await this.client.sendC2CMessage(response.conversationId, {
-          content: response.content,
-        });
+        await this.client.sendC2CMessage(response.conversationId, params);
       }
     } catch (error: any) {
       this.logger.error(`Failed to send message: ${error.message}`);
@@ -198,7 +195,7 @@ export class QQBotAdapter implements IBotPlatform {
   private transformToBotMessage(rawEvent: any, sourceType?: 'private' | 'group'): BotMessage {
     // 调试:打印事件结构
     this.logger.debug('Raw event:', JSON.stringify(rawEvent, null, 2));
-    
+
     // 根据 QQ 官方 API 的事件结构调整
     return {
       messageId: rawEvent.id || rawEvent.msg_id,
@@ -237,17 +234,32 @@ export class QQBotAdapter implements IBotPlatform {
    * 提取附件信息
    */
   private extractAttachments(rawEvent: any): BotMessage['attachments'] {
-    if (!rawEvent.attachments) {
+    if (!rawEvent.attachments || rawEvent.attachments.length === 0) {
       return undefined;
     }
 
-    return rawEvent.attachments.map((att: any) => ({
-      type: att.type === 'image' ? 'image' : 'file',
-      url: att.url,
-      fileId: att.id,
-      fileName: att.filename,
-      fileSize: att.size,
-    }));
+    const attachments = rawEvent.attachments.map((att: any) => {
+      // QQ官方API的附件类型映射
+      let type: 'image' | 'file' | 'voice' | 'video' = 'file';
+
+      if (att.content_type?.startsWith('image/')) {
+        type = 'image';
+      } else if (att.content_type?.startsWith('audio/')) {
+        type = 'voice';
+      } else if (att.content_type?.startsWith('video/')) {
+        type = 'video';
+      }
+
+      return {
+        type,
+        url: att.url,
+        fileId: att.id || att.file_id,
+        fileName: att.filename || att.file_name,
+        fileSize: att.size || att.file_size,
+      };
+    });
+
+    return attachments.length > 0 ? attachments : undefined;
   }
 
   /**
