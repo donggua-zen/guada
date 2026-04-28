@@ -17,6 +17,7 @@
     "db:seed:force": "ts-node src/scripts/seed.ts --force",
     "db:verify": "ts-node src/scripts/verify-db.ts",
     "test:pdf-extract": "ts-node src/scripts/test-pdf-extract.ts",
+    "test:wecom-adapter": "ts-node scripts/test-wecom-adapter.ts",
     "rebuild:electron": "node ../scripts/rebuild-native-electron.js"
   },
   "keywords": [],
@@ -36,11 +37,12 @@
     "@nestjs/passport": "^11.0.5",
     "@nestjs/platform-express": "^11.1.18",
     "@node-rs/jieba": "^2.0.1",
-    "@onebots/adapter-qq": "^1.0.7",
     "@onebots/adapter-wechat": "^1.0.7",
+    "@onebots/adapter-wecom": "^1.0.7",
     "@prisma/adapter-better-sqlite3": "^7.6.0",
     "@prisma/client": "^7.6.0",
     "@tencent-weixin/openclaw-weixin": "^2.1.10",
+    "@wecom/aibot-node-sdk": "^1.0.6",
     "axios": "^1.15.2",
     "bcrypt": "^6.0.0",
     "better-sqlite3": "^12.9.0",
@@ -58,7 +60,8 @@
     "sqlite-vec": "^0.1.9",
     "tiktoken": "^1.0.22",
     "uuid": "^13.0.0",
-    "web-wechat": "^1.0.1"
+    "web-wechat": "^1.0.1",
+    "ws": "^8.20.0"
   },
   "devDependencies": {
     "@nestjs/cli": "^11.0.17",

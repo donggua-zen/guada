@@ -57,10 +57,10 @@ const routes = [
                 component: () => import('./components/characters/CharactersPage.vue')
             },
             {
-                path: 'bots',
+                path: 'bots/:tab?',
                 name: 'Bots',
                 meta: { title: 'Bots', requiresAuth: true },
-                component: () => import('./components/bot/BotManagementPage.vue')
+                component: () => import('./components/bot/BotCenterPage.vue')
             },
             {
                 path: 'account/:tab?',

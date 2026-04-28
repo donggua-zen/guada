@@ -6,10 +6,11 @@ import {
   BotMessage,
   BotResponse,
   BotStatus,
+  PlatformCapabilities,
 } from '../interfaces/bot-platform.interface';
 
-// 导入真实 QQ SDK
-import { QQBot } from '@onebots/adapter-qq';
+// 导入自研 QQ SDK
+import { QQBot } from './qq/qq-bot.sdk';
 
 /**
  * QQ机器人适配器
@@ -34,6 +35,15 @@ export class QQBotAdapter implements IBotPlatform {
     return 'qq';
   }
 
+  getCapabilities(): PlatformCapabilities {
+    return {
+      supportsStreaming: false,       // QQ 不支持流式回复
+      supportsPushMessage: true,      // 支持主动推送
+      supportsTemplateCard: false,    // 暂不支持模板卡片
+      supportsMultimedia: true,       // 支持多媒体消息
+    };
+  }
+
   async initialize(config: BotConfig): Promise<void> {
     this.logger.log(`Initializing QQ bot: ${config.name}`);
     this.config = config;
@@ -42,7 +52,6 @@ export class QQBotAdapter implements IBotPlatform {
     try {
       // 创建真实 QQ Bot 实例
       this.client = new QQBot({
-        account_id: config.id,
         appId: config.platformConfig.appId,
         secret: config.platformConfig.appSecret,
         token: config.platformConfig.token,
@@ -75,8 +84,8 @@ export class QQBotAdapter implements IBotPlatform {
         this.handleReconnect();
       });
 
-      // 启动连接
-      await this.client.connect();
+      // 启动连接（使用 start 方法）
+      await this.client.start();
       
       this.status = BotStatus.CONNECTED;
       this.reconnectAttempts = 0;
@@ -164,7 +173,7 @@ export class QQBotAdapter implements IBotPlatform {
     // 关闭客户端连接
     if (this.client) {
       try {
-        // await this.client.stop();
+        await this.client.stop();
         this.logger.log('QQ bot disconnected gracefully');
       } catch (error: any) {
         this.logger.error(`Error during shutdown: ${error.message}`);
