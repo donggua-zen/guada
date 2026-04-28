@@ -4,6 +4,7 @@ import { MessageRepository } from '../../../common/database/message.repository';
 import { SettingsStorage } from '../../../common/utils/settings-storage.util';
 import { SG_MODELS, SK_MOD_CHAT } from '../../../constants/settings.constants';
 import { KnowledgeBaseRepository } from '../../../common/database/knowledge-base.repository';
+import { UploadPathService } from '../../../common/services/upload-path.service';
 
 /**
  * 会话映射服务
@@ -19,7 +20,8 @@ export class SessionMapperService {
     private messageRepo: MessageRepository,
     private settingsStorage: SettingsStorage,
     private kbRepo: KnowledgeBaseRepository,
-  ) {}
+    private uploadPathService: UploadPathService,
+  ) { }
 
   /**
    * 为 Bot 消息获取或创建会话
@@ -187,6 +189,13 @@ export class SessionMapperService {
     sessionId: string,
     content: string,
     knowledgeBaseIds?: string[],
+    attachments?: Array<{
+      type: 'image' | 'file' | 'voice' | 'video';
+      url?: string;
+      fileId?: string;
+      fileName?: string;
+      fileSize?: number;
+    }>,
   ): Promise<any> {
     const message = await this.messageRepo.create({
       sessionId,
@@ -217,7 +226,181 @@ export class SessionMapperService {
       },
     });
 
+    // 处理附件：将外部平台的附件转换为内部 File 记录
+    if (attachments && attachments.length > 0) {
+      await this.saveAttachments(message.id, sessionId, attachments);
+    }
+
     return message;
+  }
+
+  /**
+   * 保存附件到数据库
+   */
+  private async saveAttachments(
+    messageId: string,
+    sessionId: string,
+    attachments: Array<{
+      type: 'image' | 'file' | 'voice' | 'video';
+      url?: string;
+      fileId?: string;
+      fileName?: string;
+      fileSize?: number;
+    }>,
+  ): Promise<void> {
+    for (const att of attachments) {
+      try {
+        // 确定文件类型
+        let fileType = 'text';
+        if (att.type === 'image') {
+          fileType = 'image';
+        } else if (att.type === 'voice' || att.type === 'video') {
+          fileType = 'binary';
+        }
+
+        // 提取文件扩展名
+        const fileExt = att.fileName ? att.fileName.split('.').pop()?.toLowerCase() || '' : '';
+
+        // 如果有外部 URL，先下载到本地
+        let localUrl = att.url;
+        let previewUrl: string | undefined;
+        let contentHash = att.fileId || '';
+
+        if (att.url && (att.type === 'image' || att.type === 'file')) {
+          try {
+            const downloadResult = await this.downloadAndSaveFile(
+              att.url,
+              sessionId,
+              messageId,
+              att.fileName || `${att.fileId || 'attachment'}.${fileExt}`,
+              fileType,
+            );
+            localUrl = downloadResult.url;
+            previewUrl = downloadResult.previewUrl;
+            contentHash = downloadResult.contentHash;
+            this.logger.log(`Downloaded attachment from ${att.url} to ${localUrl}`);
+          } catch (downloadError: any) {
+            this.logger.error(`Failed to download attachment: ${downloadError.message}. Using original URL.`);
+            // 下载失败时继续使用原始 URL
+          }
+        }
+
+        // 创建 File 记录
+        await this.prisma.file.create({
+          data: {
+            fileName: att.fileName || `${att.fileId || 'unknown'}.${fileExt}`,
+            displayName: att.fileName || 'Attachment',
+            fileSize: att.fileSize || 0,
+            fileType,
+            fileExtension: fileExt,
+            url: localUrl,  // 使用本地路径
+            previewUrl,     // 预览图路径（仅图片）
+            contentHash,
+            sessionId,
+            messageId,
+            isPublic: false,
+            fileMetadata: {
+              source: 'qq-bot',
+              originalFileId: att.fileId,
+              originalUrl: att.url,
+            },
+          },
+        });
+
+        this.logger.log(`Saved attachment: ${att.fileName || att.fileId}`);
+      } catch (error: any) {
+        this.logger.error(`Failed to save attachment: ${error.message}`);
+      }
+    }
+  }
+
+  /**
+   * 下载并保存文件到本地存储
+   */
+  private async downloadAndSaveFile(
+    url: string,
+    sessionId: string,
+    messageId: string,
+    fileName: string,
+    fileType: string,
+  ): Promise<{ url: string; previewUrl?: string; contentHash: string }> {
+    const crypto = await import('crypto');
+    const fs = await import('fs');
+    const path = await import('path');
+
+    // 下载文件
+    const response = await fetch(url);
+    if (!response.ok) {
+      throw new Error(`Failed to download file: ${response.status} ${response.statusText}`);
+    }
+
+    const arrayBuffer = await response.arrayBuffer();
+    const buffer = Buffer.from(arrayBuffer);
+
+    // 计算内容哈希
+    const contentHash = crypto.createHash('md5').update(buffer).digest('hex');
+
+    // 生成安全的文件名
+    const safeFileName = `${messageId}_${contentHash}${path.extname(fileName)}`;
+
+    // 根据文件类型选择子目录（参考 file.service.ts）
+    let subDir: string;
+    if (fileType === 'image') {
+      subDir = 'images';  // 图片存到 images/
+    } else {
+      subDir = 'files';   // 其他文件存到 files/
+    }
+
+    // 使用 UploadPathService 获取存储路径（带 uploads/ 前缀）
+    const storagePath = this.uploadPathService.getStoragePath(subDir, safeFileName);
+
+    // 获取物理路径并保存文件
+    const physicalPath = this.uploadPathService.toPhysicalPath(storagePath);
+    const uploadDir = path.dirname(physicalPath);
+
+    // 确保目录存在
+    if (!fs.existsSync(uploadDir)) {
+      fs.mkdirSync(uploadDir, { recursive: true });
+    }
+
+    // 保存文件
+    fs.writeFileSync(physicalPath, buffer);
+
+    // 如果是图片，生成预览图（参考 file.service.ts）
+    let previewUrl: string | undefined;
+    if (fileType === 'image') {
+      try {
+        const sharp = (await import('sharp')).default;
+        const previewSubDir = 'previews';
+        const previewStoragePath = this.uploadPathService.getStoragePath(previewSubDir, safeFileName);
+        const previewPhysicalPath = this.uploadPathService.toPhysicalPath(previewStoragePath);
+        const previewDir = path.dirname(previewPhysicalPath);
+
+        // 确保预览图目录存在
+        if (!fs.existsSync(previewDir)) {
+          fs.mkdirSync(previewDir, { recursive: true });
+        }
+
+        // 生成缩略图（最大边长 256px）
+        await sharp(buffer)
+          .resize(256, 256, { fit: 'inside', withoutEnlargement: true })
+          .jpeg({ quality: 75 })
+          .toFile(previewPhysicalPath);
+
+        previewUrl = previewStoragePath;
+        this.logger.log(`Generated preview for image: ${safeFileName}`);
+      } catch (previewError: any) {
+        this.logger.error(`Failed to generate preview: ${previewError.message}`);
+        // 预览图生成失败不影响主流程
+      }
+    }
+
+    // 返回存储路径（带 uploads/ 前缀）
+    return {
+      url: storagePath,
+      previewUrl,
+      contentHash,
+    };
   }
 
   /**
