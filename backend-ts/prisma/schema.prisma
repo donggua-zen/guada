@@ -19,6 +19,14 @@ model Session {
   createdAt        DateTime               @default(now()) @map("created_at")
   updatedAt        DateTime               @updatedAt @map("updated_at")
   lastActiveAt     DateTime?              @map("last_active_at")
+  
+  // === Bot 会话专用字段 ===
+  sessionType      String?                @default("web") @map("session_type")  // "web" | "bot"
+  botId            String?                @map("bot_id")                        // Bot 实例ID
+  platform         String?                                       // 来源平台: 'qq', 'wechat'
+  externalId       String?                @map("external_id")   // 外部会话标识,格式: "platform:type:nativeId"
+  // ==================================
+  
   memories         Memory[]
   messages         Message[]
   character        Character?             @relation(fields: [characterId], references: [id])
@@ -26,6 +34,12 @@ model Session {
   model            Model?                 @relation(fields: [modelId], references: [id])
   contextStates    SessionContextState[]
 
+  @@index([userId])
+  @@index([sessionType])
+  @@index([botId])
+  @@index([platform])
+  @@index([externalId])
+  @@index([botId, externalId])
   @@map("session")
 }
 
@@ -56,6 +70,7 @@ model MessageContent {
   role             String?
   content          String
   reasoningContent String?  @map("reasoning_content")
+  // 预留字段:存储额外的关键字参数(如工具调用信息、元数据等)
   additionalKwargs Json?    @map("additional_kwargs")
   metaData         Json?    @map("meta_data")
   createdAt        DateTime @default(now()) @map("created_at")
@@ -117,6 +132,7 @@ model User {
   sessions       Session[]
   settings       UserSetting?
   mcpServers     McpServer[]
+  botInstances   BotInstance[]
 
   @@map("user")
 }
@@ -278,22 +294,6 @@ model File {
   @@map("file")
 }
 
-model GlobalSetting {
-  id          Int      @id @default(autoincrement())
-  key         String
-  userId      String?  @map("user_id")
-  value       String?
-  valueType   String   @default("str") @map("value_type")
-  description String?
-  category    String   @default("general")
-  createdAt   DateTime @default(now()) @map("created_at")
-  updatedAt   DateTime @updatedAt @map("updated_at")
-
-  @@unique([key, userId])
-  @@index([userId])
-  @@map("global_settings")
-}
-
 model McpServer {
   id          String   @id @default(cuid())
   name        String
@@ -334,4 +334,43 @@ model UserSetting {
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@map("user_setting")
+}
+
+model BotInstance {
+  id               String   @id @default(cuid())
+  userId           String   @map("user_id")  // 创建者ID
+  platform         String                    // 平台类型: 'qq', 'wechat', 'discord'
+  name             String                    // 机器人显示名称
+  enabled          Boolean  @default(true)   // 是否启用
+  
+  // 平台特定配置(JSON格式)
+  // 包含认证信息(appId, appSecret, token等)和其他平台相关配置(mode, sandbox等)
+  platformConfig   Json                      @map("platform_config")
+  
+  // 预留扩展字段:存储额外的平台特定参数(如webhook URL、回调地址等)
+  additionalKwargs Json?                     @map("additional_kwargs")
+  
+  // 重连配置
+  reconnectEnabled Boolean  @default(true)   @map("reconnect_enabled")
+  maxRetries       Int      @default(5)      @map("max_retries")
+  retryInterval    Int      @default(5000)   @map("retry_interval")  // 毫秒
+  
+  // 关联的默认角色和模型
+  defaultCharacterId String   @map("default_character_id")  // 默认角色ID(必填,用于对话流程)
+  defaultModelId     String? @map("default_model_id")
+  
+  // 状态信息
+  status           String   @default("stopped")  // stopped, running, error
+  lastStartedAt    DateTime? @map("last_started_at")
+  lastError        String?  @map("last_error")
+  
+  createdAt        DateTime @default(now()) @map("created_at")
+  updatedAt        DateTime @updatedAt @map("updated_at")
+  
+  user             User     @relation(fields: [userId], references: [id])
+  
+  @@index([userId])
+  @@index([platform])
+  @@index([status])
+  @@map("bot_instance")
 }

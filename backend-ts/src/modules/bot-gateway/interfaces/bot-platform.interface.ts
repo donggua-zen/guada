@@ -71,7 +71,7 @@ export interface BotConfig {
   /** 机器人ID */
   id: string;
   /** 平台类型 */
-  platform: 'qq' | 'wechat' | 'discord';
+  platform: 'qq' | 'wechat' | 'discord' | 'lark'; // TODO: 待添加 'wechat-personal'
   /** 机器人名称 */
   name: string;
   /** 平台特定配置(包含认证信息和其他平台相关配置) */
@@ -88,6 +88,8 @@ export interface BotConfig {
   defaultCharacterId: string;
   /** 关联的默认模型ID(可选) */
   defaultModelId?: string;
+  /** 关联的知识库ID列表(从 additionalKwargs 中读取) */
+  knowledgeBaseIds?: string[];
 }
 
 /**

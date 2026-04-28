@@ -6,11 +6,16 @@ import { SessionMapperService } from './services/session-mapper.service';
 import { BotAdminService } from './services/bot-admin.service';
 import { BotAdminController } from './controllers/bot-admin.controller';
 import { QQBotAdapter } from './adapters/qq-bot.adapter';
+import { LarkBotAdapter } from './adapters/lark-bot.adapter';
+import { WeChatBotAdapter } from './adapters/wechat-bot.adapter';
+// TODO: 待实现微信个人号适配器
+// import { WeChatPersonalBotAdapter } from './adapters/wechat-personal-bot.adapter';
 import { ChatModule } from '../chat/chat.module';
 import { AuthModule } from '../auth/auth.module';
 import { DatabaseModule } from '../../common/database/database.module';
 import { SharedModule } from '../../common/services/shared.module';
 import { MessageRepository } from '../../common/database/message.repository';
+import { KnowledgeBaseRepository } from '../../common/database/knowledge-base.repository';
 import { PrismaService } from '../../common/database/prisma.service';
 
 @Module({
@@ -28,7 +33,12 @@ import { PrismaService } from '../../common/database/prisma.service';
     SessionMapperService,
     BotAdminService, // 新增
     QQBotAdapter, // 注册QQ适配器
+    LarkBotAdapter, // 注册飞书适配器
+    WeChatBotAdapter, // 注册微信公众号适配器
+    // TODO: 待实现微信个人号适配器
+    // WeChatPersonalBotAdapter, // 注册微信个人号适配器
     MessageRepository, // 提供 MessageRepository
+    KnowledgeBaseRepository, // 提供 KnowledgeBaseRepository
     PrismaService, // 提供 PrismaService
     // 未来扩展: WeChatBotAdapter, DiscordBotAdapter
   ],

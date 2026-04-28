@@ -37,8 +37,8 @@
 import { computed, ref } from 'vue';
 import { ElIcon } from 'element-plus';
 import { ArrowRightTwotone } from '@vicons/material';
-import MarkdownContent from '../ui/MarkdownContent.vue';
-import { formatDuration } from '../../utils/messageUtils';
+import MarkdownContent from '../../ui/MarkdownContent.vue';
+import { formatDuration } from '../../../utils/messageUtils';
 
 const props = defineProps<{
   reasoningContent: string;

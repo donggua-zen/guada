@@ -71,6 +71,13 @@ export class BotInstanceManager implements OnModuleInit, OnApplicationShutdown {
 
       // 逐个启动机器人
       for (const bot of bots) {
+        // 从 additionalKwargs 中提取知识库ID列表
+        const knowledgeBaseIds = (bot.additionalKwargs as any)?.knowledgeBaseIds || [];
+        
+        this.logger.log(
+          `Bot ${bot.name} (${bot.id}): additionalKwargs=${JSON.stringify(bot.additionalKwargs)}, knowledgeBaseIds=${JSON.stringify(knowledgeBaseIds)}`
+        );
+        
         const config: BotConfig = {
           id: bot.id,
           platform: bot.platform as any,
@@ -84,6 +91,7 @@ export class BotInstanceManager implements OnModuleInit, OnApplicationShutdown {
           },
           defaultCharacterId: bot.defaultCharacterId,  // 必填字段
           defaultModelId: bot.defaultModelId || undefined,
+          knowledgeBaseIds,
         };
 
         try {

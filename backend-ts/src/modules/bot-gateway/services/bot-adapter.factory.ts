@@ -5,6 +5,10 @@ import {
   BotConfig,
 } from '../interfaces/bot-platform.interface';
 import { QQBotAdapter } from '../adapters/qq-bot.adapter';
+import { LarkBotAdapter } from '../adapters/lark-bot.adapter';
+import { WeChatBotAdapter } from '../adapters/wechat-bot.adapter';
+// TODO: 待实现微信个人号适配器（基于 iLink Bot API）
+// import { WeChatPersonalBotAdapter } from '../adapters/wechat-personal-bot.adapter';
 
 /**
  * 机器人适配器工厂
@@ -19,7 +23,10 @@ export class BotAdapterFactory implements IBotAdapterFactory {
   constructor() {
     // 注册内置适配器
     this.registerAdapter('qq', QQBotAdapter);
-    // 未来扩展: this.registerAdapter('wechat', WeChatBotAdapter);
+    this.registerAdapter('lark', LarkBotAdapter);
+    this.registerAdapter('wechat', WeChatBotAdapter);
+    // TODO: 待实现微信个人号适配器
+    // this.registerAdapter('wechat-personal', WeChatPersonalBotAdapter);
     // 未来扩展: this.registerAdapter('discord', DiscordBotAdapter);
   }
 
