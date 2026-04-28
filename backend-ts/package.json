@@ -37,8 +37,6 @@
     "@nestjs/passport": "^11.0.5",
     "@nestjs/platform-express": "^11.1.18",
     "@node-rs/jieba": "^2.0.1",
-    "@onebots/adapter-wechat": "^1.0.7",
-    "@onebots/adapter-wecom": "^1.0.7",
     "@prisma/adapter-better-sqlite3": "^7.6.0",
     "@prisma/client": "^7.6.0",
     "@tencent-weixin/openclaw-weixin": "^2.1.10",

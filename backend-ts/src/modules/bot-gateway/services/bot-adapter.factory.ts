@@ -6,7 +6,8 @@ import {
 } from '../interfaces/bot-platform.interface';
 import { QQBotAdapter } from '../adapters/qq-bot.adapter';
 import { LarkBotAdapter } from '../adapters/lark-bot.adapter';
-import { WeChatBotAdapter } from '../adapters/wechat-bot.adapter';
+// TODO: 微信公众号适配器（已注释，使用 OneBots）
+// import { WeChatBotAdapter } from '../adapters/wechat-bot.adapter';
 import { WeComAiBotAdapter } from '../adapters/wecom-aibot.adapter';
 // TODO: 企业微信应用消息适配器（已隐藏，使用智能机器人长连接模式）
 // import { WeComAppBotAdapter } from '../adapters/wecom-app-bot.adapter';
@@ -27,7 +28,8 @@ export class BotAdapterFactory implements IBotAdapterFactory {
     // 注册内置适配器
     this.registerAdapter('qq', QQBotAdapter);
     this.registerAdapter('lark', LarkBotAdapter);
-    this.registerAdapter('wechat', WeChatBotAdapter);
+    // TODO: 微信公众号适配器（已注释，使用 OneBots）
+    // this.registerAdapter('wechat', WeChatBotAdapter);
     this.registerAdapter('wecom', WeComAiBotAdapter); // 企业微信智能机器人（WebSocket 长连接）
     // this.registerAdapter('wecom', WeComAppBotAdapter); // 企业微信应用消息适配器（已隐藏）
     // TODO: 待实现微信个人号适配器
