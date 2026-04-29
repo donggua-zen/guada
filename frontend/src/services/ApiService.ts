@@ -165,6 +165,10 @@ class ApiService implements IApiService {
     return await this._request(`/models/${modelId}`, { method: 'DELETE' })
   }
 
+  async toggleModelFavorite(modelId: string): Promise<any> {
+    return await this._request(`/models/${modelId}/favorite`, { method: 'PUT' })
+  }
+
   // ========== 提供商管理 ==========
   async createProvider(data: any): Promise<any> {
     return await this._request('/providers', { method: 'POST', data })

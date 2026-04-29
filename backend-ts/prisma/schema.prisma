@@ -106,6 +106,7 @@ model Model {
   modelName      String          @map("model_name")
   modelType      String          @map("model_type")
   config         Json?           @map("config")
+  isFavorite     Boolean         @default(false) @map("is_favorite")
   createdAt      DateTime        @default(now()) @map("created_at")
   updatedAt      DateTime        @updatedAt @map("updated_at")
   characters     Character[]

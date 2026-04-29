@@ -1,4 +1,4 @@
-import { contextBridge, ipcRenderer } from 'electron'
+import { contextBridge, ipcRenderer, clipboard } from 'electron'
 
 // 暴露安全的 API 到渲染进程
 contextBridge.exposeInMainWorld('electronAPI', {
@@ -29,5 +29,24 @@ contextBridge.exposeInMainWorld('electronAPI', {
   installAndRestart: () => ipcRenderer.send('install-and-restart'),
   onUpdateStatus: (callback: (status: any) => void) => {
     ipcRenderer.on('update-status', (_, status) => callback(status))
+  },
+
+  // 原生剪贴板操作（无需用户授权）
+  clipboard: {
+    readText: () => clipboard.readText(),
+    writeText: (text: string) => clipboard.writeText(text),
+    readHTML: () => clipboard.readHTML(),
+    writeHTML: (html: string) => clipboard.writeHTML(html),
+    clear: () => clipboard.clear()
+  },
+
+  // 显示动态上下文菜单
+  showContextMenu: (items: Array<{
+    label: string
+    type?: 'normal' | 'separator' | 'submenu' | 'checkbox' | 'radio'
+    enabled?: boolean
+    visible?: boolean
+  }>) => {
+    return ipcRenderer.invoke('show-context-menu', items)
   }
 })

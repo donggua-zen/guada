@@ -20,6 +20,7 @@ export interface Model {
     contextWindow?: number
     maxOutputTokens?: number
     description?: string
+    isFavorite?: boolean
     createdAt?: string
     updatedAt?: string
 }

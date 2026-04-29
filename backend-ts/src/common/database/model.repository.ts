@@ -78,4 +78,14 @@ export class ModelRepository {
     }
     return createdModels;
   }
+
+  /**
+   * 切换模型收藏状态
+   */
+  async toggleFavorite(id: string, isFavorite: boolean) {
+    return this.prisma.model.update({
+      where: { id },
+      data: { isFavorite },
+    });
+  }
 }

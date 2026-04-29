@@ -325,4 +325,17 @@ export class ModelService {
       throw new Error("Failed to fetch remote models");
     }
   }
+
+  /**
+   * 切换模型收藏状态
+   */
+  async toggleModelFavorite(modelId: string) {
+    const model = await this.modelRepo.findById(modelId);
+    if (!model) {
+      throw new Error("Model not found");
+    }
+
+    const newFavoriteStatus = !model.isFavorite;
+    return this.modelRepo.toggleFavorite(modelId, newFavoriteStatus);
+  }
 }

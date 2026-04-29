@@ -10,19 +10,25 @@
 </template>
 
 <script setup>
-import { ref, provide } from 'vue'
+import { ref, provide, onMounted } from 'vue'
 import { useRouter, RouterView } from 'vue-router'
 import { useTitle } from './composables/useTitle'
 import { useTheme } from './composables/useTheme'
 import MockControlPanel from './components/dev/MockControlPanel.vue'
 import CustomTitlebar from './components/CustomTitlebar.vue'
 import SetupGuide from './components/SetupGuide.vue'
+import ContextMenuManager from './utils/ContextMenuManager'
 
 const router = useRouter()
 const title = useTitle()
 const theme = useTheme() //不要删除，这里会执行dark模式设置
 const isDev = import.meta.env.DEV
 const guideRef = ref(null)
+
+// 初始化全局右键菜单管理器
+onMounted(() => {
+  ContextMenuManager.getInstance().init()
+})
 
 // 提供打开引导的方法给全局使用
 const openGuide = () => {

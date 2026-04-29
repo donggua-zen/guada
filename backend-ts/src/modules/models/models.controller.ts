@@ -89,4 +89,9 @@ export class ModelsController {
   async getRemoteModels(@Param("id") id: string) {
     return this.modelService.getRemoteModels(id);
   }
+
+  @Put("models/:id/favorite")
+  async toggleFavorite(@Param("id") id: string) {
+    return this.modelService.toggleModelFavorite(id);
+  }
 }

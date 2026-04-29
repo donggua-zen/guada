@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, Menu, shell } from 'electron'
+import { app, BrowserWindow, ipcMain, Menu, shell, MenuItemConstructorOptions } from 'electron'
 import * as path from 'path'
 import { fork, ChildProcess } from 'child_process'
 import * as fs from 'fs'
@@ -561,6 +561,33 @@ function setupIpcHandlers() {
 
   ipcMain.on('install-and-restart', () => {
     autoUpdater.quitAndInstall(false, true)
+  })
+
+  // 显示动态上下文菜单
+  ipcMain.handle('show-context-menu', async (event, items: any[]) => {
+    const win = BrowserWindow.fromWebContents(event.sender)
+    if (!win) return
+
+    // 将前端传递的菜单项转换为 Electron MenuItem
+    const menuItems: MenuItemConstructorOptions[] = items.map(item => {
+      if (item.type === 'separator') {
+        return { type: 'separator' as const }
+      }
+      
+      return {
+        label: item.label,
+        type: (item.type || 'normal') as any,
+        enabled: item.enabled !== false,
+        visible: item.visible !== false,
+        click: () => {
+          // 通过 webContents 发送点击事件到渲染进程
+          win.webContents.send('context-menu-clicked', item.label)
+        }
+      }
+    })
+
+    const menu = Menu.buildFromTemplate(menuItems)
+    menu.popup({ window: win })
   })
 }
 
