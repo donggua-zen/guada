@@ -30,3 +30,5 @@ backend-ts/static/previews/**
 backend-ts/.config/**
 onebots-temp/
 .lingma/
+.vscode/
+log.txt
