@@ -217,7 +217,7 @@ export class SessionService {
       maxMemoryLength:
         sessionSettings.maxMemoryLength ??
         characterSettings.maxMemoryLength ??
-        20,
+        null,
       systemPrompt:
         sessionSettings.systemPrompt ?? characterSettings.systemPrompt,
       modelTemperature:

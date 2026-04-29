@@ -259,17 +259,21 @@
                 <div class="text-sm font-medium text-gray-800 dark:text-gray-200 mb-3">会话设置</div>
                 <el-form label-position="top" size="small">
                   <el-form-item label="上下文条数">
-                    <el-input-number 
+                    <template #label>
+                      <div class="flex flex-col gap-1">
+                        <span class="text-sm font-medium text-gray-800 dark:text-gray-200">上下文条数</span>
+                        <span class="text-xs text-gray-500 dark:text-gray-400 font-normal">控制 AI 记住的历史消息数量</span>
+                      </div>
+                    </template>
+                    <el-slider-optional 
                       v-model="tempMaxMemoryLength" 
-                      :min="0" 
+                      :min="2" 
                       :max="100" 
-                      :step="5"
-                      controls-position="right"
-                      class="w-full"
-                      placeholder="留空使用默认值" />
-                    <div class="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                      控制 AI 记住的历史消息数量，0 表示不限制
-                    </div>
+                      :step="1" 
+                      show-input
+                      optional-direction="max" 
+                      optional-text="No Limit" 
+                      class="w-full" />
                   </el-form-item>
                 </el-form>
               </div>
@@ -292,6 +296,7 @@ import { ref, watch, computed, nextTick, onUnmounted, onMounted, reactive } from
 import { ElIcon, ElButton, ElDialog, ElTabs, ElTabPane, ElInput, ElForm, ElFormItem, ElTag } from 'element-plus';
 import FileItem from './FileItem.vue';
 import ScrollContainer from './ScrollContainer.vue';
+import { ElSliderOptional } from '../ui/';
 import { OpenAI } from "@/components/icons";
 import {
   ArrowDropDownTwotone,
@@ -714,8 +719,8 @@ const openSettingsPanel = () => {
   }
 
   closeAllPanels()
-  // 使用当前配置值，如果为 null/undefined 则使用默认值 10
-  tempMaxMemoryLength.value = props.config?.maxMemoryLength ?? 10
+  // null/undefined 表示不限制，显示为空；否则显示实际值
+  tempMaxMemoryLength.value = props.config?.maxMemoryLength ?? null
   settingsPanelVisible.value = true
 
   // 计算弹窗位置
