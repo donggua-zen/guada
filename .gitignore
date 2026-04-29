@@ -11,6 +11,7 @@ backend/app/static/uploads/*
 backend/static/*
 .env
 frontend/stats.html
+frontend/components.d.ts
 backend/experiment/**
 backend/tests/verification/**
 backend/build/**
