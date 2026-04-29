@@ -152,7 +152,7 @@ export class ContextManagerService {
   async getConversationMessages(
     sessionId: string,
     userMessageId?: string,
-    maxMessages: number = 200,
+    maxMessages?: number,
     skipToolCalls: boolean = false,
     supportsImageInput: boolean = true,
     keepReasoningContent: boolean = false,
@@ -235,7 +235,7 @@ export class ContextManagerService {
   async getMessagesForCompression(
     sessionId: string,
     lastCompressedMessageId?: string,
-    maxMessages: number = 500,
+    maxMessages?: number,
   ): Promise<MessageRecord[]> {
     const rawMessages = await this.messageRepo.findRecentBySessionId(
       sessionId,

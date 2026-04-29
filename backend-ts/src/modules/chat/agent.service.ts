@@ -4,12 +4,14 @@ import { SessionRepository } from "../../common/database/session.repository";
 import { MessageRepository } from "../../common/database/message.repository";
 import { MessageContentRepository } from "../../common/database/message-content.repository";
 import { CharacterRepository } from "../../common/database/character.repository";
+import { ModelRepository } from "../../common/database/model.repository";
 import { LLMService } from "../llm-core/llm.service";
 import { ToolOrchestrator } from "../tools/tool-orchestrator.service";
 import { ContextManagerService } from "./context-manager.service";
 import { SessionLockService } from "./session-lock.service";
 import { ToolContextFactory } from "../tools/tool-context";
 import { MessageRecord, LLMResponseChunk } from "../llm-core/types/llm.types";
+import { SessionService } from "./session.service";
 
 /**
  * 思考时间信息（简单数据容器）
@@ -31,11 +33,13 @@ export class AgentService {
     private messageRepo: MessageRepository,
     private contentRepo: MessageContentRepository,
     private characterRepo: CharacterRepository,
+    private modelRepo: ModelRepository,
     private toolOrchestrator: ToolOrchestrator,
     private contextManager: ContextManagerService,
     private llmService: LLMService,
     private sessionLockService: SessionLockService,
     private toolContextFactory: ToolContextFactory,
+    private sessionService: SessionService,
   ) { }
 
   async *completions(
@@ -77,7 +81,7 @@ export class AgentService {
         sessionId,
         userId: session.userId,
         userMessageId: messageId,
-        maxMessages: mergedSettings.maxMemoryLength || 20,
+        maxMessages: mergedSettings.maxMemoryLength,
         mergedSettings,
         skipToolCalls: false,
         supportsImageInput,
@@ -160,7 +164,7 @@ export class AgentService {
 
       // 防止无限循环的安全机制
       let iterationCount = 0;
-      const MAX_ITERATIONS = 10; // 最多 10 次迭代
+      const MAX_ITERATIONS = 40; // 最多 40 次迭代
 
       // 生成 turns_id（与 Python 后端保持一致）
       const turnsId = this.generateTurnsId();
@@ -324,7 +328,7 @@ export class AgentService {
                 currentChunk.toolCalls.map((tc: any) => ({
                   id: tc.id,
                   name: tc.name,
-                  arguments: JSON.parse(tc.arguments) || {},
+                  arguments: this.safeJsonParse(tc.arguments),
                 })),
                 toolContext,
               );
@@ -426,6 +430,11 @@ export class AgentService {
             thinkingDurationMs, // 传入思考时长
           );
 
+          // 触发自动压缩检查（同步执行）
+          if (!streamError && currentChunk.usage) {
+            yield* this.handleAutoCompression(sessionId, mergedSettings, currentChunk.usage);
+          }
+
           this.logger.debug(
             `Iteration ${iterationCount} cleanup completed. Finish reason: ${currentChunk.finishReason}`,
           );
@@ -445,6 +454,127 @@ export class AgentService {
    */
   private generateTurnsId(): string {
     return uuidv4();
+  }
+
+  /**
+   * 处理自动压缩逻辑（同步执行并发送 SSE 事件）
+   */
+  private async *handleAutoCompression(
+    sessionId: string,
+    mergedSettings: any,
+    usage: any,
+  ): AsyncGenerator<any> {
+    const strategy = mergedSettings.contextManagementStrategy;
+    if (strategy !== 'summary_compression') return;
+
+    const triggerRatio = mergedSettings.compressionTriggerRatio ?? 0.8;
+    const totalTokens = usage.totalTokens;
+
+    if (!totalTokens) return;
+
+    // 获取会话绑定的模型信息以获取上下文窗口
+    const session = await this.sessionRepo.findById(sessionId);
+    if (!session || !session.modelId) return;
+
+    const model = await this.modelRepo.findById(session.modelId);
+    if (!model) return;
+
+    const contextWindow = (model.config as any)?.contextWindow;
+    if (!contextWindow) return;
+
+    const currentRatio = totalTokens / contextWindow;
+    this.logger.log(`Session ${sessionId} token usage ratio: ${currentRatio.toFixed(2)} (threshold: ${triggerRatio})`);
+
+    if (currentRatio >= triggerRatio) {
+      this.logger.log(`Starting auto-compression for session ${sessionId}`);
+
+      // 1. 发送开始事件给前端
+      yield {
+        type: 'compression_start',
+        msg: '正在优化对话历史...',
+      };
+
+      try {
+        // 2. 同步执行压缩
+        const targetRatio = mergedSettings.compressionTargetRatio ?? 0.5;
+        const compressionRatio = Math.round(targetRatio * 100);
+        await this.sessionService.compressHistory(sessionId, session.userId, compressionRatio);
+
+        this.logger.log(`Auto-compression completed for session ${sessionId}`);
+      } catch (error) {
+        this.logger.error(`Auto-compression failed for session ${sessionId}:`, error);
+        yield {
+          type: 'compression_error',
+          msg: '自动压缩失败',
+        };
+      }
+    }
+  }
+
+  /**
+   * 安全地解析JSON字符串，处理无效JSON的情况
+   * @param jsonString 要解析的JSON字符串
+   * @returns 解析后的对象，如果解析失败则返回空对象
+   */
+  private safeJsonParse(jsonString: string): any {
+    if (!jsonString || typeof jsonString !== 'string') {
+      return {};
+    }
+
+    try {
+      const parsed = JSON.parse(jsonString);
+      return parsed || {};
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      this.logger.warn(`Failed to parse JSON arguments: ${jsonString.substring(0, 100)}... Error: ${errorMessage}`);
+
+      // 尝试修复常见的JSON格式问题
+      try {
+        let fixedString = jsonString.trim();
+
+        // 修复1: 检测并提取第一个完整的JSON对象（处理重复输出的情况）
+        // 例如: {"a":1}{"a":1} -> {"a":1}
+        const firstBraceIndex = fixedString.indexOf('{');
+        if (firstBraceIndex >= 0) {
+          let braceCount = 0;
+          let endIndex = -1;
+
+          for (let i = firstBraceIndex; i < fixedString.length; i++) {
+            if (fixedString[i] === '{') {
+              braceCount++;
+            } else if (fixedString[i] === '}') {
+              braceCount--;
+              if (braceCount === 0) {
+                endIndex = i + 1;
+                break;
+              }
+            }
+          }
+
+          if (endIndex > 0) {
+            fixedString = fixedString.substring(firstBraceIndex, endIndex);
+            this.logger.debug(`Extracted first complete JSON object: ${fixedString}`);
+          }
+        }
+
+        // 修复2: 检查是否是未加引号的键值对格式
+        if (fixedString.includes(':') && !fixedString.startsWith('{')) {
+          fixedString = `{${fixedString}}`;
+        }
+
+        // 修复3: 替换单引号为双引号（简单的修复）
+        fixedString = fixedString.replace(/'/g, '"');
+
+        // 尝试再次解析
+        const parsed = JSON.parse(fixedString);
+        return parsed || {};
+      } catch (secondError) {
+        const secondErrorMessage = secondError instanceof Error ? secondError.message : String(secondError);
+        this.logger.error(`Failed to fix and parse JSON arguments: ${secondErrorMessage}`);
+        // 如果仍然失败，返回一个包含原始字符串的对象，以便工具可以处理
+        return { _raw_arguments: jsonString };
+      }
+    }
   }
 
   /**
@@ -591,8 +721,7 @@ export class AgentService {
       ...sessionSettings,
       maxMemoryLength:
         sessionSettings.maxMemoryLength ??
-        characterSettings.maxMemoryLength ??
-        20,
+        characterSettings.maxMemoryLength,
       systemPrompt:
         sessionSettings.systemPrompt ?? characterSettings.systemPrompt,
       modelTemperature:
