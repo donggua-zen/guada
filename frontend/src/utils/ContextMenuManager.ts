@@ -127,7 +127,11 @@ class ContextMenuManager {
         
         menuItem.addEventListener('click', () => {
           if (item.action) {
-            item.action()
+            try {
+              item.action()
+            } catch (error) {
+              console.error('[ContextMenu] 动作执行异常:', error)
+            }
           }
           this.hideMenu()
         })
@@ -176,15 +180,64 @@ class ContextMenuManager {
   }
 
   /**
-   * 安全写入剪贴板文本
+   * 安全写入剪贴板文本（使用 IPC 方式，更可靠）
    */
-  private writeClipboardText(text: string): void {
-    if ((window as any).electronAPI?.clipboard?.writeText) {
+  private async writeClipboardText(text: string): Promise<void> {
+    if (!text || text.trim() === '') {
+      console.warn('[ContextMenu] 警告：尝试写入空文本到剪贴板')
+      return
+    }
+
+    const win = window as any
+    
+    // 优先使用 IPC 方式（更可靠）
+    if (win.electronAPI?.clipboardIPC?.writeText) {
       try {
-        ;(window as any).electronAPI.clipboard.writeText(text)
+        const result = await win.electronAPI.clipboardIPC.writeText(text)
+        
+        if (!result.success) {
+          console.error('[ContextMenu] IPC 写入失败:', result.error)
+          this.fallbackWriteToClipboard(text)
+        }
       } catch (error) {
-        console.error('[ContextMenu] 写入剪贴板失败:', error)
+        console.error('[ContextMenu] IPC 调用异常:', error)
+        this.fallbackWriteToClipboard(text)
       }
+    } else if (win.electronAPI?.clipboard?.writeText) {
+      this.fallbackWriteToClipboard(text)
+    } else {
+      console.error('[ContextMenu] 所有剪贴板 API 都不可用')
+    }
+  }
+
+  /**
+   * 回退方案：直接调用 preload 暴露的 clipboard API
+   */
+  private fallbackWriteToClipboard(text: string): void {
+    const win = window as any
+    
+    if (win.electronAPI?.clipboard?.writeText) {
+      try {
+        win.electronAPI.clipboard.writeText(text)
+      } catch (error) {
+        console.error('[ContextMenu] 直接调用失败:', error)
+        this.webAPIFallback(text)
+      }
+    } else {
+      this.webAPIFallback(text)
+    }
+  }
+
+  /**
+   * 最后的回退：使用 Web Clipboard API
+   */
+  private webAPIFallback(text: string): void {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).catch(error => {
+        console.error('[ContextMenu] Web API 写入失败:', error)
+      })
+    } else {
+      console.error('[ContextMenu] Web Clipboard API 不可用')
     }
   }
 
@@ -195,11 +248,15 @@ class ContextMenuManager {
     const items: MenuItem[] = []
 
     // 场景1：选中文本
-    const selectedText = window.getSelection()?.toString().trim()
+    const selection = window.getSelection()
+    const selectedText = selection?.toString().trim()
+    
     if (selectedText) {
       items.push({ 
         label: '复制', 
-        action: () => this.writeClipboardText(selectedText)
+        action: () => {
+          this.writeClipboardText(selectedText)
+        }
       })
     }
 
