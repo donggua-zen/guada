@@ -43,7 +43,7 @@ export class CharactersController {
 
   @Post("character-groups")
   async createCharacterGroup(@Body() data: any, @CurrentUser() user: any) {
-    return this.characterService.createGroup(user.sub, data);
+    return this.characterService.createGroup(user.id, data);
   }
 
   @Put("character-groups/:id")
@@ -67,7 +67,7 @@ export class CharactersController {
 
   @Post("characters")
   async createCharacter(@Body() data: any, @CurrentUser() user: any) {
-    return this.characterService.createCharacter(user.sub, data);
+    return this.characterService.createCharacter(user.id, data);
   }
 
   @Put("characters/:id")

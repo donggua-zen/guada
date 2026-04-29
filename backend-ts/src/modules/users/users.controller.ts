@@ -23,12 +23,12 @@ export class UsersController {
   @Get("user/profile")
   async getProfile(@CurrentUser() user: any) {
     // 直接传递完整的用户对象，避免重复查询数据库
-    return this.userService.getProfile(user.sub, user);
+    return this.userService.getProfile(user.id, user);
   }
 
   @Put("user/profile")
   async updateProfile(@Body() data: any, @CurrentUser() user: any) {
-    return this.userService.updateProfile(user.sub, data);
+    return this.userService.updateProfile(user.id, data);
   }
 
   @Put("user/password")
@@ -37,7 +37,7 @@ export class UsersController {
     @CurrentUser() user: any,
   ) {
     return this.userService.changePassword(
-      user.sub,
+      user.id,
       body.old_password,
       body.new_password,
     );
@@ -45,17 +45,17 @@ export class UsersController {
 
   @Post("subaccounts")
   async createSubAccount(@Body() data: any, @CurrentUser() user: any) {
-    return this.userService.createSubAccount(user.sub, data);
+    return this.userService.createSubAccount(user.id, data);
   }
 
   @Get("subaccounts")
   async getSubAccounts(@CurrentUser() user: any) {
-    return this.userService.getSubAccounts(user.sub);
+    return this.userService.getSubAccounts(user.id);
   }
 
   @Delete("subaccounts/:id")
   async deleteSubAccount(@Param("id") id: string, @CurrentUser() user: any) {
-    await this.userService.deleteSubAccount(id, user.sub);
+    await this.userService.deleteSubAccount(id, user.id);
     return { success: true };
   }
 
@@ -83,7 +83,7 @@ export class UsersController {
   @Post("user/avatars")
   @UseInterceptors(FileInterceptor("avatar"))
   async uploadAvatar(@UploadedFile() file: any, @CurrentUser() user: any) {
-    return this.userService.uploadAvatar(user.sub, file);
+    return this.userService.uploadAvatar(user.id, file);
   }
 
   @Get("user/reset-password")

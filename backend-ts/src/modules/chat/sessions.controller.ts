@@ -25,7 +25,7 @@ export class SessionsController {
     @CurrentUser() user: any,
   ) {
     return this.sessionService.getSessionsByUser(
-      user.sub,
+      user.id,
       Number(skip),
       Number(limit),
     );
@@ -33,12 +33,12 @@ export class SessionsController {
 
   @Post("sessions")
   async createSession(@Body() data: any, @CurrentUser() user: any) {
-    return this.sessionService.createSession(user.sub, data);
+    return this.sessionService.createSession(user.id, data);
   }
 
   @Get("sessions/:id")
   async getSession(@Param("id") id: string, @CurrentUser() user: any) {
-    return this.sessionService.getSessionById(id, user.sub);
+    return this.sessionService.getSessionById(id, user.id);
   }
 
   @Put("sessions/:id")
@@ -47,18 +47,18 @@ export class SessionsController {
     @Body() data: any,
     @CurrentUser() user: any,
   ) {
-    return this.sessionService.updateSession(id, user.sub, data);
+    return this.sessionService.updateSession(id, user.id, data);
   }
 
   @Delete("sessions/:id")
   async deleteSession(@Param("id") id: string, @CurrentUser() user: any) {
-    await this.sessionService.deleteSession(id, user.sub);
+    await this.sessionService.deleteSession(id, user.id);
     return { success: true };
   }
 
   @Post("sessions/:id/generate-title")
   async generateTitle(@Param("id") id: string, @CurrentUser() user: any) {
-    return this.sessionService.generateTitle(id, user.sub);
+    return this.sessionService.generateTitle(id, user.id);
   }
 
   @Post("sessions/:id/compress-history")
@@ -71,7 +71,7 @@ export class SessionsController {
     const { compressionRatio = 50, minRetainedTurns = 3, cleaningStrategy = "moderate" } = body;
     return this.sessionService.compressHistory(
       id,
-      user.sub,
+      user.id,
       Number(compressionRatio),
       Number(minRetainedTurns),
       cleaningStrategy as any,
@@ -80,7 +80,7 @@ export class SessionsController {
 
   @Get("sessions/:id/summaries")
   async getSessionSummaries(@Param("id") id: string, @CurrentUser() user: any) {
-    return this.sessionService.getSessionSummaries(id, user.sub);
+    return this.sessionService.getSessionSummaries(id, user.id);
   }
 
   @Put("sessions/summaries/:summaryId")
@@ -89,7 +89,7 @@ export class SessionsController {
     @Body() body: { summaryContent?: string },
     @CurrentUser() user: any,
   ) {
-    return this.sessionService.updateSummary(summaryId, user.sub, body);
+    return this.sessionService.updateSummary(summaryId, user.id, body);
   }
 
   @Delete("sessions/summaries/:summaryId")
@@ -97,12 +97,12 @@ export class SessionsController {
     @Param("summaryId") summaryId: string,
     @CurrentUser() user: any,
   ) {
-    await this.sessionService.deleteSummary(summaryId, user.sub);
+    await this.sessionService.deleteSummary(summaryId, user.id);
     return { success: true };
   }
 
   @Get("sessions/:id/token-stats")
   async getTokenStats(@Param("id") id: string, @CurrentUser() user: any) {
-    return this.sessionService.getTokenStats(id, user.sub);
+    return this.sessionService.getTokenStats(id, user.id);
   }
 }

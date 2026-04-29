@@ -42,12 +42,12 @@ export class ModelsController {
   
   @Get('models')
   async getModels(@CurrentUser() user: any) {  // ← 提取用户
-    return this.modelService.getModelsAndProviders(user.sub);  // ← 使用真实 UserID
+    return this.modelService.getModelsAndProviders(user.id);  // ← 使用真实 UserID
   }
   
   @Post('providers')
   async createProvider(@Body() body: any, @CurrentUser() user: any) {
-    return this.modelService.addProvider(user.sub, body.name, body.api_key, body.api_url);
+    return this.modelService.addProvider(user.id, body.name, body.api_key, body.api_url);
   }
   
   // ... 其他方法类似修复
@@ -114,7 +114,7 @@ export class CharactersController {
   
   @Get('characters')
   async getCharacters(@CurrentUser() user: any) {  // ← 添加参数
-    return this.characterService.getCharactersByUser(user.sub);  // ← 替换
+    return this.characterService.getCharactersByUser(user.id);  // ← 替换
   }
   
   @Get('shared/characters')
@@ -125,17 +125,17 @@ export class CharactersController {
   
   @Post('characters')
   async createCharacter(@Body() data: any, @CurrentUser() user: any) {
-    return this.characterService.createCharacter(user.sub, data);
+    return this.characterService.createCharacter(user.id, data);
   }
   
   @Put('characters/:id')
   async updateCharacter(@Param('id') id: string, @Body() data: any, @CurrentUser() user: any) {
-    return this.characterService.updateCharacter(id, user.sub, data);
+    return this.characterService.updateCharacter(id, user.id, data);
   }
   
   @Delete('characters/:id')
   async deleteCharacter(@Param('id') id: string, @CurrentUser() user: any) {
-    await this.characterService.deleteCharacter(id, user.sub);
+    await this.characterService.deleteCharacter(id, user.id);
     return { success: true };
   }
   
@@ -143,7 +143,7 @@ export class CharactersController {
   @UseInterceptors(FileInterceptor('avatar'))
   async uploadAvatar(@Param('id') id: string, @UploadedFile() file: any, @CurrentUser() user: any) {
     const fileUrl = `/uploads/${file.originalname}`;
-    return this.characterService.uploadAvatar(id, user.sub, fileUrl);
+    return this.characterService.uploadAvatar(id, user.id, fileUrl);
   }
 }
 ```
@@ -175,33 +175,33 @@ export class SessionsController {
   
   @Get('sessions')
   async getSessions(@CurrentUser() user: any) {
-    return this.sessionService.getSessionsByUser(user.sub);
+    return this.sessionService.getSessionsByUser(user.id);
   }
   
   @Post('sessions')
   async createSession(@Body() data: any, @CurrentUser() user: any) {
-    return this.sessionService.createSession(user.sub, data);
+    return this.sessionService.createSession(user.id, data);
   }
   
   @Get('sessions/:id')
   async getSession(@Param('id') id: string, @CurrentUser() user: any) {
-    return this.sessionService.getSessionById(id, user.sub);  // ← 传递 userId
+    return this.sessionService.getSessionById(id, user.id);  // ← 传递 userId
   }
   
   @Put('sessions/:id')
   async updateSession(@Param('id') id: string, @Body() data: any, @CurrentUser() user: any) {
-    return this.sessionService.updateSession(id, user.sub, data);
+    return this.sessionService.updateSession(id, user.id, data);
   }
   
   @Delete('sessions/:id')
   async deleteSession(@Param('id') id: string, @CurrentUser() user: any) {
-    await this.sessionService.deleteSession(id, user.sub);
+    await this.sessionService.deleteSession(id, user.id);
     return { success: true };
   }
   
   @Post('sessions/:id/generate-title')
   async generateTitle(@Param('id') id: string, @CurrentUser() user: any) {
-    return this.sessionService.generateTitle(id, user.sub);
+    return this.sessionService.generateTitle(id, user.id);
   }
 }
 ```
@@ -256,32 +256,32 @@ export class UsersController {
   
   @Get('user/profile')
   async getProfile(@CurrentUser() user: any) {
-    return this.userService.getProfile(user.sub);
+    return this.userService.getProfile(user.id);
   }
   
   @Put('user/profile')
   async updateProfile(@Body() data: any, @CurrentUser() user: any) {
-    return this.userService.updateProfile(user.sub, data);
+    return this.userService.updateProfile(user.id, data);
   }
   
   @Put('user/password')
   async updatePassword(@Body() body: { old_password: string; new_password: string }, @CurrentUser() user: any) {
-    return this.userService.changePassword(user.sub, body.old_password, body.new_password);
+    return this.userService.changePassword(user.id, body.old_password, body.new_password);
   }
   
   @Post('subaccounts')
   async createSubAccount(@Body() data: any, @CurrentUser() user: any) {
-    return this.userService.createSubAccount(user.sub, data);
+    return this.userService.createSubAccount(user.id, data);
   }
   
   @Get('subaccounts')
   async getSubAccounts(@CurrentUser() user: any) {
-    return this.userService.getSubAccounts(user.sub);
+    return this.userService.getSubAccounts(user.id);
   }
   
   @Delete('subaccounts/:id')
   async deleteSubAccount(@Param('id') id: string, @CurrentUser() user: any) {
-    await this.userService.deleteSubAccount(id, user.sub);
+    await this.userService.deleteSubAccount(id, user.id);
     return { success: true };
   }
   
@@ -289,7 +289,7 @@ export class UsersController {
   async updateSubAccount(@Param('id') id: string, @Body() data: any, @CurrentUser() user: any) {
     // 验证：仅主账户或本人可更新
     const targetUser = await this.userService.getProfile(id);
-    if (targetUser.parentId !== user.sub && targetUser.id !== user.sub) {
+    if (targetUser.parentId !== user.id && targetUser.id !== user.id) {
       throw new Error('无权更新该账户');
     }
     return this.userService.updateProfile(id, data);
@@ -299,7 +299,7 @@ export class UsersController {
   @UseInterceptors(FileInterceptor('avatar'))
   async uploadAvatar(@UploadedFile() file: any, @CurrentUser() user: any) {
     const fileUrl = `/uploads/${file.originalname}`;
-    return this.userService.uploadAvatar(user.sub, fileUrl);
+    return this.userService.uploadAvatar(user.id, fileUrl);
   }
   
   // 密码重置接口应该移除或严格限制

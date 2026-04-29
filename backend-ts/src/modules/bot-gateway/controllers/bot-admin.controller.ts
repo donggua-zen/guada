@@ -47,7 +47,7 @@ export class BotAdminController {
    */
   @Get('instances')
   async getInstances(@Request() req) {
-    const userId = req.user.sub;  // JWT payload 中用户ID在 sub 字段
+    const userId = req.user.id;  // JWT payload 中用户ID在 sub 字段
     return this.botService.getAllInstances(userId);
   }
 
@@ -56,7 +56,7 @@ export class BotAdminController {
    */
   @Get('instances/:id')
   async getInstance(@Param('id') id: string, @Request() req) {
-    const userId = req.user.sub;  // JWT payload 中用户ID在 sub 字段
+    const userId = req.user.id;  // JWT payload 中用户ID在 sub 字段
     const bot = await this.botService.getInstance(id);
     
     // 验证是否属于当前用户
@@ -75,7 +75,7 @@ export class BotAdminController {
     @Body() dto: CreateBotDto,
     @Request() req,
   ) {
-    const userId = req.user.sub;  // JWT payload 中用户ID在 sub 字段
+    const userId = req.user.id;  // JWT payload 中用户ID在 sub 字段
     this.logger.log(`Creating bot instance for user: ${userId}`);
     return this.botService.createInstance(userId, dto);
   }
@@ -89,7 +89,7 @@ export class BotAdminController {
     @Body() dto: UpdateBotDto,
     @Request() req,
   ) {
-    const userId = req.user.sub;  // JWT payload 中用户ID在 sub 字段
+    const userId = req.user.id;  // JWT payload 中用户ID在 sub 字段
     
     // 验证是否属于当前用户
     const bot = await this.botService.getInstance(id);
@@ -105,7 +105,7 @@ export class BotAdminController {
    */
   @Post('instances/:id/start')
   async startInstance(@Param('id') id: string, @Request() req) {
-    const userId = req.user.sub;  // JWT payload 中用户ID在 sub 字段
+    const userId = req.user.id;  // JWT payload 中用户ID在 sub 字段
     
     // 验证是否属于当前用户
     const bot = await this.botService.getInstance(id);
@@ -121,7 +121,7 @@ export class BotAdminController {
    */
   @Post('instances/:id/stop')
   async stopInstance(@Param('id') id: string, @Request() req) {
-    const userId = req.user.sub;  // JWT payload 中用户ID在 sub 字段
+    const userId = req.user.id;  // JWT payload 中用户ID在 sub 字段
     
     // 验证是否属于当前用户
     const bot = await this.botService.getInstance(id);
@@ -137,7 +137,7 @@ export class BotAdminController {
    */
   @Post('instances/:id/restart')
   async restartInstance(@Param('id') id: string, @Request() req) {
-    const userId = req.user.sub;  // JWT payload 中用户ID在 sub 字段
+    const userId = req.user.id;  // JWT payload 中用户ID在 sub 字段
     
     // 验证是否属于当前用户
     const bot = await this.botService.getInstance(id);
@@ -153,7 +153,7 @@ export class BotAdminController {
    */
   @Delete('instances/:id')
   async deleteInstance(@Param('id') id: string, @Request() req) {
-    const userId = req.user.sub;  // JWT payload 中用户ID在 sub 字段
+    const userId = req.user.id;  // JWT payload 中用户ID在 sub 字段
     
     // 验证是否属于当前用户
     const bot = await this.botService.getInstance(id);
@@ -173,7 +173,7 @@ export class BotAdminController {
     @Query('limit') limit = 20,
     @Request() req,
   ) {
-    const userId = req.user.sub;
+    const userId = req.user.id;
     
     const [items, total] = await Promise.all([
       this.prisma.session.findMany({

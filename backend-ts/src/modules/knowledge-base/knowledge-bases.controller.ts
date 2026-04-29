@@ -28,7 +28,7 @@ export class KnowledgeBasesController {
 
   @Post()
   async create(@Body() data: any, @CurrentUser() user: any) {
-    return await this.kbService.create(user.sub, data);
+    return await this.kbService.create(user.id, data);
   }
 
   @Get(":id")

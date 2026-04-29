@@ -31,7 +31,7 @@ export class FilesController {
     if (!file) {
       throw new Error("No file provided");
     }
-    return this.fileService.uploadFile(sessionId, file, user.sub);
+    return this.fileService.uploadFile(sessionId, file, user.id);
   }
 
   /**
@@ -48,7 +48,7 @@ export class FilesController {
         throw new Error("message_id is required for copy operation");
       }
       // 从消息中获取目标会话 ID
-      return this.fileService.copyFile(fileId, body.message_id, user.sub);
+      return this.fileService.copyFile(fileId, body.message_id, user.id);
     }
     throw new Error("Unsupported operation type");
   }

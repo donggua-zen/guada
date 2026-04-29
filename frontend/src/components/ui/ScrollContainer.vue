@@ -1,7 +1,9 @@
 <!-- ScrollContainer.vue -->
 <template>
-    <SimpleBar ref="contentElement" >
-        <slot></slot>
+    <SimpleBar>
+        <div ref="contentElement">
+            <slot></slot>
+        </div>
     </SimpleBar>
 </template>
 

@@ -20,17 +20,17 @@ export class McpServersController {
 
   @Get()
   async getAllServers(@CurrentUser() user: any) {
-    return this.mcpService.getAllServers(user.sub);
+    return this.mcpService.getAllServers(user.id);
   }
 
   @Get(":id")
   async getServer(@Param("id") id: string, @CurrentUser() user: any) {
-    return this.mcpService.getServerById(id, user.sub);
+    return this.mcpService.getServerById(id, user.id);
   }
 
   @Post()
   async createServer(@Body() data: any, @CurrentUser() user: any) {
-    return this.mcpService.createServer(data, user.sub);
+    return this.mcpService.createServer(data, user.id);
   }
 
   @Put(":id")
@@ -39,12 +39,12 @@ export class McpServersController {
     @Body() data: any,
     @CurrentUser() user: any,
   ) {
-    return this.mcpService.updateServer(id, data, user.sub);
+    return this.mcpService.updateServer(id, data, user.id);
   }
 
   @Delete(":id")
   async deleteServer(@Param("id") id: string, @CurrentUser() user: any) {
-    await this.mcpService.deleteServer(id, user.sub);
+    await this.mcpService.deleteServer(id, user.id);
     return { success: true };
   }
 
@@ -54,11 +54,11 @@ export class McpServersController {
     @Body() body: { enabled: boolean },
     @CurrentUser() user: any,
   ) {
-    return this.mcpService.toggleServerStatus(id, body.enabled, user.sub);
+    return this.mcpService.toggleServerStatus(id, body.enabled, user.id);
   }
 
   @Post(":id/refresh-tools")
   async refreshTools(@Param("id") id: string, @CurrentUser() user: any) {
-    return this.mcpService.refreshTools(id, user.sub);
+    return this.mcpService.refreshTools(id, user.id);
   }
 }

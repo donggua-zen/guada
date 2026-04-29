@@ -36,7 +36,7 @@ export class KbSearchController {
     if (!kb) {
       throw new Error("知识库不存在");
     }
-    if (kb.userId !== user.sub) {
+    if (kb.userId !== user.id) {
       throw new Error("无权访问该知识库");
     }
 
@@ -122,7 +122,7 @@ export class KbSearchController {
     if (!kb) {
       throw new Error("知识库不存在");
     }
-    if (kb.userId !== user.sub) {
+    if (kb.userId !== user.id) {
       throw new Error("无权访问");
     }
 
