@@ -6,7 +6,7 @@
         <div class="flex items-center">
           <div class="mr-5 flex items-center">
             <div class="w-5.5 h-5.5 mr-2 relative top-0">
-              <Avatar :src="avatar" :round="false" type="assistant" :name="currentModelName"></Avatar>
+              <Avatar :src="modelAvatarPath" :round="false" type="assistant" :name="currentModelName"></Avatar>
             </div>
             <span class="text-[1.3em] text-gray-500 font-">{{
               currentModelName
@@ -119,6 +119,7 @@ import { FileItem, Avatar } from "../ui";
 import { usePopup } from "../../composables/usePopup";
 import { formatTime } from '../../utils';
 import { getCurrentTurns, getContentVersions } from '@/utils/messageUtils';
+import { getModelDisplayName, getModelAvatarPath } from '@/utils/modelUtils';
 
 // 导入拆分后的子组件
 import MessageThinkingSection from './message-item/MessageThinkingSection.vue';
@@ -256,9 +257,20 @@ const streamingState = computed(() => ({
 
 const currentModelName = computed(() => {
   const modelName = metadata.value?.modelName;
-  return modelName
-    ? modelName.split("/").pop()
-    : "unknown"
+  return modelName ? getModelDisplayName(modelName) : "unknown";
+});
+
+// 模型头像路径
+const modelAvatarPath = computed(() => {
+  const modelName = metadata.value?.modelName;
+  if (!modelName) return undefined;
+  
+  // 尝试从 modelName 中提取 provider 信息
+  // 如果 modelName 包含 "/"，则前半部分可能是 provider
+  const parts = modelName.split("/");
+  const providerName = parts.length > 1 ? parts[0] : undefined;
+  
+  return getModelAvatarPath(modelName, providerName) || undefined;
 });
 
 const currentContentTime = computed(() => {

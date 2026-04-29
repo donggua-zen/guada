@@ -128,16 +128,25 @@
                         </div>
                         <div class="provider-models space-y-1">
                           <div v-for="model in getProviderModels(provider.id)" :key="model.id"
-                            class="model-item-compact p-2 rounded cursor-pointer transition-all" :class="{
+                            class="model-item-compact p-2 rounded cursor-pointer transition-all flex items-center gap-2" :class="{
                               'bg-pink-50 dark:bg-pink-900/20': tempModelId === model.id,
                               'hover:bg-gray-50 dark:hover:bg-gray-800/50': tempModelId !== model.id
                             }" @click="selectAndCloseModel(model.id)">
-                            <div class="flex items-start justify-between gap-2">
-                              <div class="flex-1 min-w-0">
-                                <div class="font-medium text-sm text-gray-800 dark:text-gray-200 truncate mb-1">
-                                  {{ model.modelName }}</div>
-                                <!-- 特性图标组 -->
-                                <div class="flex items-center gap-1.5 text-xs text-gray-500 dark:text-gray-400">
+                            <!-- 模型头像 -->
+                            <div class="w-8 h-8 shrink-0">
+                              <Avatar 
+                                :src="getModelAvatarPath(model.modelName, provider.name) || undefined" 
+                                :name="getModelDisplayName(model.modelName)"
+                                type="assistant"
+                                :round="false"
+                                class="w-full h-full" />
+                            </div>
+                            <div class="flex-1 min-w-0">
+                              <div class="font-medium text-sm text-gray-800 dark:text-gray-200 truncate mb-1">
+                                {{ getModelDisplayName(model.modelName) }}
+                              </div>
+                              <!-- 特性图标组 -->
+                              <div class="flex items-center gap-1.5 text-xs text-gray-500 dark:text-gray-400">
                                   <span
                                     class="px-1.5 py-0.5 rounded bg-gray-100 dark:bg-gray-700 font-medium text-[10px]">
                                     {{ model.modelType === 'text' ? '对话' : '嵌入' }}
@@ -176,15 +185,14 @@
                                     </el-tooltip>
                                   </template>
                                 </div>
-                              </div>
-                              <div class="flex items-center gap-1.5 shrink-0 mt-0.5">
-                                <!-- 收藏按钮 -->
-                                <el-icon class="favorite-icon cursor-pointer transition-all" :size="16"
-                                  @click.stop="toggleFavorite(model.id)">
-                                  <Star24Filled v-if="isModelFavorited(model.id)" class="text-yellow-500" />
-                                  <Star24Regular v-else class="text-gray-400 hover:text-yellow-500" />
-                                </el-icon>
-                              </div>
+                            </div>
+                            <div class="flex items-center gap-1.5 shrink-0 mt-0.5">
+                              <!-- 收藏按钮 -->
+                              <el-icon class="favorite-icon cursor-pointer transition-all" :size="16"
+                                @click.stop="toggleFavorite(model.id)">
+                                <Star24Filled v-if="isModelFavorited(model.id)" class="text-yellow-500" />
+                                <Star24Regular v-else class="text-gray-400 hover:text-yellow-500" />
+                              </el-icon>
                             </div>
                           </div>
                         </div>
@@ -296,7 +304,9 @@ import { ref, watch, computed, nextTick, onUnmounted, onMounted, reactive } from
 import { ElIcon, ElButton, ElDialog, ElTabs, ElTabPane, ElInput, ElForm, ElFormItem, ElTag } from 'element-plus';
 import FileItem from './FileItem.vue';
 import ScrollContainer from './ScrollContainer.vue';
+import Avatar from './Avatar.vue';
 import { ElSliderOptional } from '../ui/';
+import { getModelDisplayName, getModelAvatarPath } from '@/utils/modelUtils';
 import { OpenAI } from "@/components/icons";
 import {
   ArrowDropDownTwotone,

@@ -40,58 +40,69 @@
                 <ul>
                     <li v-for="model in currentModels" :key="model.id"
                         class="flex items-center justify-between py-2 border-b border-gray-100 dark:border-gray-700 last:border-b-0 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors rounded px-3 -mx-3">
-                        <div class="flex-1 min-w-0 mr-4">
-                            <div class="font-bold text-gray-800 dark:text-gray-200 truncate mb-2">{{ model.modelName }}</div>
-                            <div class="flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400">
-                                <!-- 模型类型文本 -->
-                                <span class="px-1.5 py-0.5 rounded bg-gray-100 dark:bg-gray-700 font-medium">
-                                    {{ model.modelType === 'text' ? '对话' : '嵌入' }}
-                                </span>
+                        <div class="flex items-center flex-1 min-w-0 mr-4">
+                            <!-- 模型头像 -->
+                            <div class="w-10 h-10 shrink-0 mr-3">
+                                <Avatar 
+                                    :src="getModelAvatarForSetting(model)" 
+                                    :name="getModelDisplayName(model.modelName)"
+                                    type="assistant"
+                                    :round="false"
+                                    class="w-full h-full" />
+                            </div>
+                            <div class="flex-1 min-w-0">
+                                <div class="font-bold text-gray-800 dark:text-gray-200 truncate mb-2">{{ getModelDisplayName(model.modelName) }}</div>
+                                <div class="flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400">
+                                    <!-- 模型类型文本 -->
+                                    <span class="px-1.5 py-0.5 rounded bg-gray-100 dark:bg-gray-700 font-medium">
+                                        {{ model.modelType === 'text' ? '对话' : '嵌入' }}
+                                    </span>
 
-                                <!-- 能力配置组（带底纹和箭头） -->
-                                <div v-if="model.modelType === 'text'" class="flex items-center gap-1 px-2 py-0.5 rounded-md bg-gray-50 dark:bg-gray-800 border border-gray-100 dark:border-gray-700">
-                                    <!-- 输入能力 -->
-                                    <div class="flex items-center gap-0.5">
-                                        <template v-for="cap in (model.config?.inputCapabilities || [])" :key="'in-' + cap">
-                                            <el-tooltip :content="'输入: ' + (cap === 'text' ? '文本' : '图像')" placement="top">
-                                                <el-icon class="hover:text-primary transition-colors" :size="16">
-                                                    <TextT24Regular v-if="cap === 'text'" />
-                                                    <Image24Regular v-else-if="cap === 'image'" />
-                                                </el-icon>
-                                            </el-tooltip>
+                                    <!-- 能力配置组（带底纹和箭头） -->
+                                    <div v-if="model.modelType === 'text'" class="flex items-center gap-1 px-2 py-0.5 rounded-md bg-gray-50 dark:bg-gray-800 border border-gray-100 dark:border-gray-700">
+                                        <!-- 输入能力 -->
+                                        <div class="flex items-center gap-0.5">
+                                            <template v-for="cap in (model.config?.inputCapabilities || [])" :key="'in-' + cap">
+                                                <el-tooltip :content="'输入: ' + (cap === 'text' ? '文本' : '图像')" placement="top">
+                                                    <el-icon class="hover:text-primary transition-colors" :size="16">
+                                                        <TextT24Regular v-if="cap === 'text'" />
+                                                        <Image24Regular v-else-if="cap === 'image'" />
+                                                    </el-icon>
+                                                </el-tooltip>
+                                            </template>
+                                        </div>
+
+                                        <!-- 分隔箭头 -->
+                                        <el-icon class="text-gray-300 dark:text-gray-600 mx-0.5" :size="12">
+                                            <ArrowRight24Regular />
+                                        </el-icon>
+
+                                        <!-- 输出能力 -->
+                                        <div class="flex items-center gap-0.5">
+                                            <template v-for="cap in (model.config?.outputCapabilities || [])" :key="'out-' + cap">
+                                                <el-tooltip :content="'输出: ' + (cap === 'text' ? '文本' : '图像')" placement="top">
+                                                    <el-icon class="hover:text-primary transition-colors" :size="16">
+                                                        <TextT24Regular v-if="cap === 'text'" />
+                                                        <Image24Regular v-else-if="cap === 'image'" />
+                                                    </el-icon>
+                                                </el-tooltip>
+                                            </template>
+                                        </div>
+
+                                        <!-- 高级功能（如果有） -->
+                                        <template v-if="(model.config?.features || []).length > 0">
+                                            <span class="w-px h-3 bg-gray-200 dark:bg-gray-700 mx-1"></span>
+                                            <template v-for="feature in (model.config?.features || [])" :key="feature">
+                                                <el-tooltip :content="getLableName(feature)" placement="top">
+                                                    <el-icon class="hover:text-primary transition-colors" :size="16">
+                                                        <WrenchScrewdriver24Regular v-if="feature === 'tools'" />
+                                                        <LightbulbFilament24Regular v-else-if="feature === 'thinking'" />
+                                                        <ScienceOutlined v-else />
+                                                    </el-icon>
+                                                </el-tooltip>
+                                            </template>
                                         </template>
                                     </div>
-
-                                    <!-- 分隔箭头 -->
-                                    <el-icon class="text-gray-300 dark:text-gray-600 mx-0.5" :size="12">
-                                        <ArrowRight24Regular />
-                                    </el-icon>
-
-                                    <!-- 输出能力 -->
-                                    <div class="flex items-center gap-0.5">
-                                        <template v-for="cap in (model.config?.outputCapabilities || [])" :key="'out-' + cap">
-                                            <el-tooltip :content="'输出: ' + (cap === 'text' ? '文本' : '图像')" placement="top">
-                                                <el-icon class="hover:text-primary transition-colors" :size="16">
-                                                    <TextT24Regular v-if="cap === 'text'" />
-                                                    <Image24Regular v-else-if="cap === 'image'" />
-                                                </el-icon>
-                                            </el-tooltip>
-                                        </template>
-                                    </div>
-
-                                    <!-- 高级功能（如果有） -->
-                                    <template v-if="(model.config?.features || []).length > 0">
-                                        <span class="w-px h-3 bg-gray-200 dark:bg-gray-700 mx-1"></span>
-                                        <template v-for="feature in (model.config?.features || [])" :key="feature">
-                                            <el-tooltip :content="getLableName(feature)" placement="top">
-                                                <el-icon class="hover:text-primary transition-colors" :size="16">
-                                                    <WrenchScrewdriver24Regular v-if="feature === 'tools'" />
-                                                    <LightbulbFilament24Regular v-else-if="feature === 'thinking'" />
-                                                    <ScienceOutlined v-else />
-                                                </el-icon>
-                                            </el-tooltip>
-                                        </template>
-                                    </template>
                                 </div>
                             </div>
                         </div>
@@ -342,6 +353,8 @@ import {
 import { apiService } from '../../services/ApiService'
 import { usePopup } from '../../composables/usePopup'
 import { useStorage } from '@vueuse/core'
+import { getModelDisplayName, getModelAvatarPath } from '@/utils/modelUtils'
+import Avatar from '../ui/Avatar.vue'
 
 // Element Plus 组件导入
 import {
@@ -578,6 +591,18 @@ const getLableName = (type) => {
             return type;
     }
 }
+
+// 获取模型头像路径
+const getModelAvatarForSetting = (model) => {
+    if (!model || !model.modelName) return undefined;
+    
+    // 获取当前供应商的名称
+    const provider = currentProvider.value;
+    const providerName = provider?.name || undefined;
+    
+    const avatarPath = getModelAvatarPath(model.modelName, providerName);
+    return avatarPath || undefined;
+};
 
 // 使用 useDebounceFn 创建防抖函数
 const debouncedProviderChange = useDebounceFn(async () => {
