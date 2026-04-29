@@ -1,6 +1,6 @@
 <!-- ScrollContainer.vue -->
 <template>
-    <SimpleBar>
+    <SimpleBar ref="simpleBarRef">
         <div ref="contentElement">
             <slot></slot>
         </div>
@@ -65,8 +65,8 @@ const lastScrollTop = ref(0);
 
 const contentElement = ref<HTMLElement | null>(null);
 const scrollElement = computed((): HTMLElement | undefined => getSimpleBarInstance()?.getScrollElement());
-const scrollContentElement = computed((): HTMLElement | undefined => getSimpleBarInstance()?.getContentElement());
-const contentWrapper = computed((): HTMLElement | undefined => getSimpleBarInstance()?.getContentElement());
+// const scrollContentElement = computed((): HTMLElement | undefined => getSimpleBarInstance()?.getContentElement());
+// const contentWrapper = computed((): HTMLElement | undefined => getSimpleBarInstance()?.getContentElement());
 
 function getSimpleBarInstance(): any {
     return simpleBarRef.value?.SimpleBar;
@@ -127,9 +127,8 @@ function initScrollObservers() {
     }
 
     const contentEl = contentElement.value;
-    const wrapper = contentWrapper.value;
-
-    if (!contentEl || !wrapper) return;
+    // const wrapper = contentWrapper.value;
+    if (!contentEl) return;
 
     // 使用 MutationObserver 监听 DOM 结构变化（更快响应）
     mutationObserver.value = new MutationObserver(() => {
@@ -155,7 +154,7 @@ function initScrollObservers() {
         }
     });
 
-    resizeObserver.value.observe(wrapper);
+    resizeObserver.value.observe(contentEl);
 }
 
 // 生命周期
@@ -175,7 +174,6 @@ onUnmounted(() => {
 // 暴露给父组件的方法
 defineExpose({
     contentElement,
-    scrollContentElement,
     scrollToBottom,
     immediateScrollToBottom,
     smoothScrollToBottom,
