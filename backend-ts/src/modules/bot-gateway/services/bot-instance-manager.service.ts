@@ -18,17 +18,24 @@ import { PrismaService } from '../../../common/database/prisma.service';
 /**
  * 机器人实例管理器
  *
- * 负责:
+ * 职责:
  * 1. 从数据库加载机器人配置
  * 2. 创建和管理适配器实例
- * 3. 提供 CRUD API 供前端调用
+ * 3. 统一管理重连策略
+ * 4. 同步状态到数据库
+ * 5. 提供 CRUD API 供前端调用
  */
 @Injectable()
 export class BotInstanceManager implements OnModuleInit, OnApplicationShutdown {
   private readonly logger = new Logger(BotInstanceManager.name);
   private botInstances: Map<
     string,
-    { adapter: IBotPlatform; config: BotConfig }
+    {
+      adapter: IBotPlatform;
+      config: BotConfig;
+      reconnectAttempts: number;
+      reconnectTimer?: NodeJS.Timeout;
+    }
   > = new Map();
 
   constructor(
@@ -112,6 +119,11 @@ export class BotInstanceManager implements OnModuleInit, OnApplicationShutdown {
               lastError: error.message,
             },
           });
+          
+          // 检查是否需要重连
+          if (bot.reconnectEnabled) {
+            this.scheduleReconnect(bot.id, config, error.message);
+          }
         }
       }
 
@@ -132,44 +144,57 @@ export class BotInstanceManager implements OnModuleInit, OnApplicationShutdown {
         await this.stopBot(config.id);
       } catch (error: any) {
         this.logger.error(`Failed to stop existing bot: ${error.message}`);
-        // 强制删除
         this.botInstances.delete(config.id);
       }
     }
 
     this.logger.log(`Starting bot: ${config.name} (${config.platform})`);
 
-    try {
-      // 创建适配器
-      const adapter = this.adapterFactory.createAdapter(config.platform, config);
+    // 创建适配器实例
+    const adapter = this.adapterFactory.createAdapter(config.platform, config);
 
-      // 初始化适配器
+    // 立即保存实例到 Map（状态为 CONNECTING）
+    const instance = {
+      adapter,
+      config,
+      reconnectAttempts: 0,
+    };
+    this.botInstances.set(config.id, instance);
+
+    try {
+      // 初始化适配器（建立连接）
       await adapter.initialize(config);
 
-      // 保存实例（只在成功后保存）
-      this.botInstances.set(config.id, { adapter, config });
-
-      // 启动消息监听
+      // 初始化成功，启动消息监听
       await this.orchestrator.startBotListener(config.id, adapter, config);
 
       this.logger.log(`Bot started successfully: ${config.id}`);
     } catch (error: any) {
-      // 如果初始化失败，确保清理资源
-      this.logger.error(`Failed to start bot ${config.id}: ${error.message}`);
+      // 初始化失败
+      this.logger.error(`Failed to initialize bot ${config.id}: ${error.message}`);
       
-      // 清理可能残留的实例
-      if (this.botInstances.has(config.id)) {
-        try {
-          const instance = this.botInstances.get(config.id);
-          if (instance) {
-            await instance.adapter.shutdown();
-          }
-        } catch (cleanupError: any) {
-          this.logger.error(`Error during cleanup: ${cleanupError.message}`);
-        }
+      // 更新数据库状态为错误
+      await this.prisma.botInstance.update({
+        where: { id: config.id },
+        data: {
+          status: 'error',
+          lastError: error.message,
+        },
+      }).catch((dbError) => {
+        this.logger.error(`Failed to update bot status in database: ${dbError.message}`);
+      });
+
+      // 检查是否需要重连
+      if (config.reconnectConfig?.enabled) {
+        this.logger.log(`Scheduling reconnect for bot ${config.id}`);
+        this.scheduleReconnect(config.id, config, error.message);
+      } else {
+        // 不重连，移除实例
+        this.logger.log(`Reconnect disabled, removing bot instance ${config.id}`);
         this.botInstances.delete(config.id);
       }
-      
+
+      // 抛出异常，让调用者知道启动失败
       throw error;
     }
   }
@@ -180,16 +205,27 @@ export class BotInstanceManager implements OnModuleInit, OnApplicationShutdown {
   async stopBot(botId: string): Promise<void> {
     const instance = this.botInstances.get(botId);
     if (!instance) {
-      throw new Error(`Bot not found: ${botId}`);
+      this.logger.warn(`Bot not found: ${botId}, may already be stopped`);
+      return;
     }
 
     this.logger.log(`Stopping bot: ${botId}`);
+
+    // 清除重连定时器
+    if (instance.reconnectTimer) {
+      clearTimeout(instance.reconnectTimer);
+      instance.reconnectTimer = undefined;
+    }
 
     // 停止消息监听
     this.orchestrator.stopBotListener(botId);
 
     // 关闭适配器
-    await instance.adapter.shutdown();
+    try {
+      await instance.adapter.shutdown();
+    } catch (error: any) {
+      this.logger.error(`Error during bot shutdown: ${error.message}`);
+    }
 
     // 移除实例
     this.botInstances.delete(botId);
@@ -259,5 +295,107 @@ export class BotInstanceManager implements OnModuleInit, OnApplicationShutdown {
         status: adapter.getStatus(),
       }),
     );
+  }
+
+  /**
+   * 调度重连任务
+   */
+  private scheduleReconnect(botId: string, config: BotConfig, lastError: string): void {
+    const instance = this.botInstances.get(botId);
+    if (!instance) {
+      this.logger.error(`Cannot schedule reconnect: bot instance not found for ${botId}`);
+      return;
+    }
+
+    // 检查是否启用重连
+    if (!config.reconnectConfig?.enabled) {
+      this.logger.log(`Reconnect disabled for bot ${botId}`);
+      this.botInstances.delete(botId);
+      return;
+    }
+
+    const maxRetries = config.reconnectConfig.maxRetries || 5;
+    const retryInterval = config.reconnectConfig.retryInterval || 5000;
+
+    // 检查是否达到最大重试次数
+    if (instance.reconnectAttempts >= maxRetries) {
+      this.logger.error(
+        `Max reconnection attempts reached for bot ${botId} (${maxRetries}). Disabling bot.`,
+      );
+      
+      // 禁用机器人
+      this.disableBot(botId, lastError).catch((err) => {
+        this.logger.error(`Failed to disable bot ${botId}: ${err.message}`);
+      });
+      
+      // 清理实例
+      this.botInstances.delete(botId);
+      return;
+    }
+
+    // 增加重试计数
+    instance.reconnectAttempts++;
+
+    this.logger.log(
+      `Scheduling reconnect for bot ${botId} in ${retryInterval}ms (attempt ${instance.reconnectAttempts}/${maxRetries})`,
+    );
+
+    // 设置重连定时器
+    instance.reconnectTimer = setTimeout(async () => {
+      try {
+        this.logger.log(`Attempting to reconnect bot ${botId}...`);
+        
+        // 先关闭旧的连接
+        try {
+          await instance.adapter.shutdown();
+        } catch (shutdownError: any) {
+          this.logger.warn(`Error during shutdown before reconnect: ${shutdownError.message}`);
+        }
+        
+        // 重新启动
+        await instance.adapter.initialize(config);
+        await this.orchestrator.startBotListener(botId, instance.adapter, config);
+        
+        // 重连成功，重置计数器
+        instance.reconnectAttempts = 0;
+        this.logger.log(`Bot ${botId} reconnected successfully`);
+      } catch (error: any) {
+        this.logger.error(`Reconnection failed for bot ${botId}: ${error.message}`);
+        
+        // 更新数据库状态
+        await this.prisma.botInstance.update({
+          where: { id: botId },
+          data: {
+            status: 'error',
+            lastError: error.message,
+          },
+        }).catch((dbError) => {
+          this.logger.error(`Failed to update bot status: ${dbError.message}`);
+        });
+        
+        // 继续调度下一次重连
+        this.scheduleReconnect(botId, config, error.message);
+      }
+    }, retryInterval);
+  }
+
+  /**
+   * 禁用机器人并更新数据库
+   */
+  private async disableBot(botId: string, errorMessage: string): Promise<void> {
+    try {
+      await this.prisma.botInstance.update({
+        where: { id: botId },
+        data: {
+          enabled: false,
+          status: 'error',
+          lastError: errorMessage,
+        },
+      });
+      this.logger.log(`Bot ${botId} has been disabled in database`);
+    } catch (error: any) {
+      this.logger.error(`Failed to disable bot ${botId} in database: ${error.message}`);
+      throw error;
+    }
   }
 }

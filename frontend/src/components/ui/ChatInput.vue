@@ -1,192 +1,10 @@
 <template>
   <div class="w-full flex flex-col items-center">
-    <!-- 抽屉容器 - 放在输入框之前 -->
-    <div class="drawer-container relative" ref="drawerContainerRef">
-      <!-- 模型选择器抽屉 -->
-      <transition name="drawer-slide">
-        <div v-if="modelPanelVisible" 
-             class="drawer-panel model-drawer"
-             @click.stop>
-          <div class="drawer-header">
-            <h3 class="drawer-title">选择模型</h3>
-            <el-button text @click="closeAllPanels">
-              <el-icon><CloseOutlined /></el-icon>
-            </el-button>
-          </div>
-          <div class="drawer-content">
-            <div class="mb-4">
-              <el-input v-model="modelSearchText" placeholder="搜索模型..." clearable>
-                <template #prefix>
-                  <el-icon>
-                    <SearchFilled />
-                  </el-icon>
-                </template>
-              </el-input>
-            </div>
-            <div class="model-list">
-              <template v-for="provider in filteredProviders" :key="provider.id">
-                <div class="provider-group mb-4">
-                  <div class="provider-name text-sm font-medium text-gray-700 mb-2">
-                    {{ provider.name }}
-                  </div>
-                  <div class="provider-models space-y-1">
-                    <div v-for="model in getProviderModels(provider.id)" :key="model.id"
-                      class="model-item p-3 rounded-lg cursor-pointer border transition-all mb-2 last:mb-0" :class="{
-                        'bg-pink-50 dark:bg-pink-900/20 border-pink-300 dark:border-pink-700': tempModelId === model.id,
-                        'border-gray-100 dark:border-gray-700 hover:bg-pink-50/50 dark:hover:bg-pink-900/10': tempModelId !== model.id
-                      }" @click="selectAndCloseModel(model.id)">
-                      <div class="flex items-start justify-between gap-2">
-                        <div class="flex-1 min-w-0">
-                          <div class="font-medium text-sm text-gray-800 dark:text-gray-200 truncate mb-1">
-                            {{ model.modelName }}</div>
-                          <!-- 特性图标组 -->
-                          <div class="flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400">
-                            <span class="px-1.5 py-0.5 rounded bg-gray-100 dark:bg-gray-700 font-medium text-[10px]">
-                              {{ model.modelType === 'text' ? '对话' : '嵌入' }}
-                            </span>
 
-                            <!-- 输入/输出能力箭头组 -->
-                            <div
-                              v-if="model.modelType === 'text' && (model.config?.inputCapabilities || model.config?.outputCapabilities)"
-                              class="flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-gray-50 dark:bg-gray-800 border border-gray-100 dark:border-gray-700">
-                              <template v-for="cap in (model.config?.inputCapabilities || ['text'])" :key="'in-' + cap">
-                                <el-icon :size="14">
-                                  <TextT24Regular v-if="cap === 'text'" />
-                                  <Image24Regular v-else />
-                                </el-icon>
-                              </template>
-                              <el-icon :size="10" class="text-gray-300">
-                                <ArrowRightTwotone />
-                              </el-icon>
-                              <template v-for="cap in (model.config?.outputCapabilities || ['text'])" :key="'out-' + cap">
-                                <el-icon :size="14">
-                                  <TextT24Regular v-if="cap === 'text'" />
-                                  <Image24Regular v-else />
-                                </el-icon>
-                              </template>
-                            </div>
-
-                            <!-- 高级功能图标 -->
-                            <template v-for="feature in (model.config?.features || [])" :key="feature">
-                              <el-tooltip :content="getFeatureLabel(feature)" placement="top">
-                                <el-icon class="hover:text-primary transition-colors" :size="14">
-                                  <WrenchScrewdriver24Regular v-if="feature === 'tools'" />
-                                  <LightbulbFilament24Regular v-else-if="feature === 'thinking'" />
-                                </el-icon>
-                              </el-tooltip>
-                            </template>
-                          </div>
-                        </div>
-                        <div class="flex items-center gap-2 shrink-0 mt-1">
-                          <!-- 收藏按钮 -->
-                          <el-icon 
-                            class="favorite-icon cursor-pointer transition-all" 
-                            :size="18"
-                            @click.stop="toggleFavorite(model.id)"
-                          >
-                            <Star24Filled v-if="isModelFavorited(model.id)" class="text-yellow-500" />
-                            <Star24Regular v-else class="text-gray-400 hover:text-yellow-500" />
-                          </el-icon>
-                          <!-- 选中标记 -->
-                          <el-icon v-if="tempModelId === model.id" class="text-primary shrink-0" size="18">
-                            <CheckCircleFilled />
-                          </el-icon>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </template>
-              <div v-if="filteredModels.length === 0" class="text-center py-8 text-gray-400">
-                <el-icon size="48" class="mb-2">
-                  <SearchFilled />
-                </el-icon>
-                <p>未找到匹配的模型</p>
-              </div>
-            </div>
-          </div>
-        </div>
-      </transition>
-
-      <!-- 会话设置抽屉 -->
-      <transition name="drawer-slide">
-        <div v-if="settingsPanelVisible" 
-             class="drawer-panel settings-drawer"
-             @click.stop>
-          <div class="drawer-header">
-            <h3 class="drawer-title">会话设置</h3>
-            <el-button text @click="closeAllPanels">
-              <el-icon><CloseOutlined /></el-icon>
-            </el-button>
-          </div>
-          <div class="drawer-content">
-            <el-form label-position="top" size="large">
-              <el-form-item label="上下文条数">
-                <el-slider-optional v-model="tempMaxMemoryLength" :min="2" :max="500" :step="1" show-input
-                  optional-direction="max" optional-text="No Limit" />
-                <div class="text-xs text-gray-500 mt-2">
-                  控制保留的历史消息条数，影响对话的连贯性和上下文理解能力
-                </div>
-              </el-form-item>
-            </el-form>
-            <div class="flex justify-end gap-3 mt-4">
-              <el-button @click="closeAllPanels">取消</el-button>
-              <el-button type="primary" @click="applySessionSettings">应用</el-button>
-            </div>
-          </div>
-        </div>
-      </transition>
-
-      <!-- 知识库选择抽屉 -->
-      <transition name="drawer-slide">
-        <div v-if="kbPanelVisible" 
-             class="drawer-panel kb-drawer"
-             @click.stop>
-          <div class="drawer-header">
-            <h3 class="drawer-title">选择知识库</h3>
-            <el-button text @click="closeAllPanels">
-              <el-icon><CloseOutlined /></el-icon>
-            </el-button>
-          </div>
-          <div class="drawer-content">
-            <div class="mb-4">
-              <el-input v-model="kbSearchText" placeholder="搜索知识库..." clearable>
-                <template #prefix>
-                  <el-icon>
-                    <SearchFilled />
-                  </el-icon>
-                </template>
-              </el-input>
-            </div>
-            <div class="kb-list-container max-h-80 overflow-y-auto">
-              <div v-if="filteredKnowledgeBases.length === 0" class="text-center py-8 text-gray-400">
-                <el-icon size="48" class="mb-2">
-                  <SearchFilled />
-                </el-icon>
-                <p>未找到匹配的知识库</p>
-              </div>
-              <div v-else class="space-y-2">
-                <div v-for="kb in filteredKnowledgeBases" :key="kb.id"
-                  class="kb-item p-2.5 rounded-lg cursor-pointer border transition-all flex items-center gap-3" :class="{
-                    'bg-blue-50 border-blue-300 dark:bg-blue-900/20 dark:border-blue-700': (props.config?.knowledgeBaseIds || []).includes(kb.id),
-                    'border-gray-200 hover:bg-gray-50 dark:border-gray-700 dark:hover:bg-gray-800/50': !(props.config?.knowledgeBaseIds || []).includes(kb.id)
-                  }" @click="toggleKnowledgeBaseSelection(kb.id)">
-                  <el-checkbox :model-value="(props.config?.knowledgeBaseIds || []).includes(kb.id)" @click.stop
-                    @change="toggleKnowledgeBaseSelection(kb.id)" />
-                  <div class="flex-1 min-w-0 flex items-center gap-2">
-                    <div class="font-medium text-sm truncate flex-shrink">{{ kb.name }}</div>
-                    <div v-if="kb.description" class="text-xs text-gray-500 dark:text-gray-400 truncate flex-1">{{ kb.description }}</div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </transition>
-    </div>
 
     <!-- 输入框区域 -->
-    <div class="input-area p-[16px_12px_10px_12px] transition-all duration-300 min-h-15 w-full bg-white dark:bg-[#1e1e1e]"
+    <div
+      class="input-area p-[16px_12px_10px_12px] transition-all duration-300 min-h-15 w-full bg-white dark:bg-[#1e1e1e]"
       :class="styleClass">
       <!-- 文件列表显示区域 -->
       <div class="file-list flex flex-wrap gap-2 mb-3" v-if="uploadFiles.length > 0">
@@ -283,6 +101,186 @@
           </div>
         </div>
       </div>
+
+      <!-- 上下文弹窗容器 - 放在 input-actions 之后，作为兄弟元素 -->
+      <div class="popover-container" ref="popoverContainerRef">
+        <!-- 模型选择器弹窗 -->
+        <transition name="popover-fade">
+          <div v-if="modelPanelVisible" class="context-popover model-popover compact-popover" :style="modelPopoverStyle"
+            @click.stop>
+            <div class="popover-content no-padding">
+              <div class="mb-3 px-4 pt-3">
+                <el-input v-model="modelSearchText" placeholder="搜索模型..." clearable size="small">
+                  <template #prefix>
+                    <el-icon>
+                      <SearchFilled />
+                    </el-icon>
+                  </template>
+                </el-input>
+              </div>
+              <div class="model-list min-h-0 overflow-hidden" >
+                <ScrollContainer class="w-full h-full min-h-0 px-3" style="max-height: 320px;">
+                  <div class="space-y-2 pb-4 w-full">
+                    <template v-for="provider in filteredProviders" :key="provider.id">
+                      <div class="provider-group">
+                        <div class="provider-name text-xs font-medium text-gray-500 dark:text-gray-400 mb-1 px-1">
+                          {{ provider.name }}
+                        </div>
+                        <div class="provider-models space-y-1">
+                          <div v-for="model in getProviderModels(provider.id)" :key="model.id"
+                            class="model-item-compact p-2 rounded cursor-pointer transition-all" :class="{
+                              'bg-pink-50 dark:bg-pink-900/20': tempModelId === model.id,
+                              'hover:bg-gray-50 dark:hover:bg-gray-800/50': tempModelId !== model.id
+                            }" @click="selectAndCloseModel(model.id)">
+                            <div class="flex items-start justify-between gap-2">
+                              <div class="flex-1 min-w-0">
+                                <div class="font-medium text-sm text-gray-800 dark:text-gray-200 truncate mb-1">
+                                  {{ model.modelName }}</div>
+                                <!-- 特性图标组 -->
+                                <div class="flex items-center gap-1.5 text-xs text-gray-500 dark:text-gray-400">
+                                  <span
+                                    class="px-1.5 py-0.5 rounded bg-gray-100 dark:bg-gray-700 font-medium text-[10px]">
+                                    {{ model.modelType === 'text' ? '对话' : '嵌入' }}
+                                  </span>
+
+                                  <!-- 输入/输出能力箭头组 -->
+                                  <div
+                                    v-if="model.modelType === 'text' && (model.config?.inputCapabilities || model.config?.outputCapabilities)"
+                                    class="flex items-center gap-0.5 px-1.5 py-0.5 rounded bg-gray-50 dark:bg-gray-800 border border-gray-100 dark:border-gray-700">
+                                    <template v-for="cap in (model.config?.inputCapabilities || ['text'])"
+                                      :key="'in-' + cap">
+                                      <el-icon :size="13">
+                                        <TextT24Regular v-if="cap === 'text'" />
+                                        <Image24Regular v-else />
+                                      </el-icon>
+                                    </template>
+                                    <el-icon :size="9" class="text-gray-300">
+                                      <ArrowRightTwotone />
+                                    </el-icon>
+                                    <template v-for="cap in (model.config?.outputCapabilities || ['text'])"
+                                      :key="'out-' + cap">
+                                      <el-icon :size="13">
+                                        <TextT24Regular v-if="cap === 'text'" />
+                                        <Image24Regular v-else />
+                                      </el-icon>
+                                    </template>
+                                  </div>
+
+                                  <!-- 高级功能图标 -->
+                                  <template v-for="feature in (model.config?.features || [])" :key="feature">
+                                    <el-tooltip :content="getFeatureLabel(feature)" placement="top">
+                                      <el-icon class="hover:text-primary transition-colors" :size="13">
+                                        <WrenchScrewdriver24Regular v-if="feature === 'tools'" />
+                                        <LightbulbFilament24Regular v-else-if="feature === 'thinking'" />
+                                      </el-icon>
+                                    </el-tooltip>
+                                  </template>
+                                </div>
+                              </div>
+                              <div class="flex items-center gap-1.5 shrink-0 mt-0.5">
+                                <!-- 收藏按钮 -->
+                                <el-icon class="favorite-icon cursor-pointer transition-all" :size="16"
+                                  @click.stop="toggleFavorite(model.id)">
+                                  <Star24Filled v-if="isModelFavorited(model.id)" class="text-yellow-500" />
+                                  <Star24Regular v-else class="text-gray-400 hover:text-yellow-500" />
+                                </el-icon>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </template>
+                    <div v-if="filteredModels.length === 0" class="text-center py-6 text-gray-400">
+                      <el-icon size="32" class="mb-1">
+                        <SearchFilled />
+                      </el-icon>
+                      <p class="text-xs">未找到匹配的模型</p>
+                    </div>
+                  </div>
+                </ScrollContainer>
+              </div>
+            </div>
+          </div>
+        </transition>
+
+        <!-- 知识库选择弹窗 -->
+        <transition name="popover-fade">
+          <div v-if="kbPanelVisible" class="context-popover kb-popover compact-popover" :style="kbPopoverStyle"
+            @click.stop>
+            <div class="popover-content no-padding">
+              <div class="mb-3 px-4 pt-3">
+                <el-input v-model="kbSearchText" placeholder="搜索知识库..." clearable size="small">
+                  <template #prefix>
+                    <el-icon>
+                      <SearchFilled />
+                    </el-icon>
+                  </template>
+                </el-input>
+              </div>
+              <div class="kb-list-container min-h-0 overflow-hidden">
+                <ScrollContainer class="w-full h-full min-h-0 px-3" style="max-height: 256px;">
+                  <div class="space-y-1 pb-4 w-full">
+                    <div v-if="filteredKnowledgeBases.length === 0" class="text-center py-6 text-gray-400">
+                      <el-icon size="32" class="mb-1">
+                        <SearchFilled />
+                      </el-icon>
+                      <p class="text-xs">未找到匹配的知识库</p>
+                    </div>
+                    <div v-else class="space-y-1">
+                      <div v-for="kb in filteredKnowledgeBases" :key="kb.id"
+                        class="kb-item-compact p-2 rounded cursor-pointer transition-all flex items-center gap-2"
+                        :class="{
+                          'bg-pink-50 dark:bg-pink-900/20': (props.config?.knowledgeBaseIds || []).includes(kb.id),
+                          'hover:bg-gray-50 dark:hover:bg-gray-800/50': !(props.config?.knowledgeBaseIds || []).includes(kb.id)
+                        }" @click="toggleKnowledgeBaseSelection(kb.id)">
+                        <el-checkbox :model-value="(props.config?.knowledgeBaseIds || []).includes(kb.id)" @click.stop
+                          @change="toggleKnowledgeBaseSelection(kb.id)" size="small" />
+                        <div class="flex-1 min-w-0 flex items-center gap-2">
+                          <div class="font-medium text-sm truncate flex-shrink">{{ kb.name }}</div>
+                          <div v-if="kb.description"
+                            class="text-xs text-gray-500 dark:text-gray-400 truncate flex-1">{{
+                              kb.description }}</div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </ScrollContainer>
+              </div>
+            </div>
+          </div>
+        </transition>
+
+        <!-- 会话设置弹窗 -->
+        <transition name="popover-fade">
+          <div v-if="settingsPanelVisible" class="context-popover settings-popover compact-popover" :style="settingsPopoverStyle"
+            @click.stop>
+            <div class="popover-content no-padding">
+              <div class="px-4 pt-3 pb-2">
+                <div class="text-sm font-medium text-gray-800 dark:text-gray-200 mb-3">会话设置</div>
+                <el-form label-position="top" size="small">
+                  <el-form-item label="上下文条数">
+                    <el-input-number 
+                      v-model="tempMaxMemoryLength" 
+                      :min="0" 
+                      :max="100" 
+                      :step="5"
+                      controls-position="right"
+                      class="w-full"
+                      placeholder="留空使用默认值" />
+                    <div class="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                      控制 AI 记住的历史消息数量，0 表示不限制
+                    </div>
+                  </el-form-item>
+                </el-form>
+              </div>
+              <div class="px-4 py-3 border-t border-gray-200 dark:border-gray-700 flex gap-2">
+                <el-button type="primary" @click="applySessionSettings" class="flex-1">确定</el-button>
+                <el-button @click="closeAllPanels" class="flex-1">取消</el-button>
+              </div>
+            </div>
+          </div>
+        </transition>
+      </div>
     </div>
   </div>
 </template>
@@ -293,6 +291,7 @@
 import { ref, watch, computed, nextTick, onUnmounted, onMounted, reactive } from 'vue'
 import { ElIcon, ElButton, ElDialog, ElTabs, ElTabPane, ElInput, ElForm, ElFormItem, ElTag } from 'element-plus';
 import FileItem from './FileItem.vue';
+import ScrollContainer from './ScrollContainer.vue';
 import { OpenAI } from "@/components/icons";
 import {
   ArrowDropDownTwotone,
@@ -339,14 +338,20 @@ const kbDialogVisible = ref(false);
 const kbSearchText = ref('');
 const knowledgeBases = ref<any[]>([]); // 知识库列表
 
-// 抽屉面板状态
-const modelPanelVisible = ref(false)
+// 抽屉面板状态（会话设置保持抽屉样式）
 const settingsPanelVisible = ref(false)
+// 弹窗面板状态（模型和知识库使用弹窗样式）
+const modelPanelVisible = ref(false)
 const kbPanelVisible = ref(false)
-const drawerContainerRef = ref<HTMLElement | null>(null)
+const popoverContainerRef = ref<HTMLElement | null>(null)
+
+// 弹窗位置计算
+const modelPopoverStyle = ref({})
+const kbPopoverStyle = ref({})
+const settingsPopoverStyle = ref({})
 
 // 计算是否有任意面板打开
-const anyPanelVisible = computed(() => 
+const anyPanelVisible = computed(() =>
   modelPanelVisible.value || settingsPanelVisible.value || kbPanelVisible.value
 )
 // 常量定义
@@ -525,12 +530,12 @@ const filteredProviders = computed(() => {
   if (!models.value.length || !providers.value.length) return [];
 
   const filtered = filteredModels.value;
-  
+
   // 分离收藏和未收藏的模型
   const favoritedModels = filtered.filter((model: any) => tempFavoriteIds.value.has(model.id));
-  
+
   const result = [];
-  
+
   // 如果有收藏的模型,按供应商分组添加到"收藏"大分组
   if (favoritedModels.length > 0) {
     // 按供应商ID分组收藏的模型
@@ -541,7 +546,7 @@ const filteredProviders = computed(() => {
       }
       favoritedByProvider[model.providerId].push(model);
     });
-    
+
     // 为每个有收藏模型的供应商创建子分组
     Object.entries(favoritedByProvider).forEach(([providerId, models]) => {
       const provider = providers.value.find((p: any) => p.id === providerId);
@@ -555,16 +560,16 @@ const filteredProviders = computed(() => {
       }
     });
   }
-  
+
   // 所有模型都按供应商分组显示(包括收藏的)
   const providerGroups = providers.value.map(provider => ({
     ...provider,
     models: filtered.filter((model: any) => model.providerId === provider.id),
     isFavoriteGroup: false
   })).filter((provider: any) => provider.models.length > 0);
-  
+
   result.push(...providerGroups);
-  
+
   return result;
 });
 
@@ -639,18 +644,23 @@ const openModelPanel = () => {
     closeAllPanels()
     return
   }
-  
+
   closeAllPanels() // 先关闭其他面板
   modelSearchText.value = ''
   // 初始化临时值为当前值
   tempModelId.value = props.config?.modelId || null
-  
+
   // 初始化临时收藏状态
   tempFavoriteIds.value = new Set(
     models.value.filter((m: any) => m.isFavorite).map((m: any) => m.id)
   )
-  
+
   modelPanelVisible.value = true
+
+  // 计算弹窗位置
+  nextTick(() => {
+    calculatePopoverPosition('model')
+  })
 };
 
 // 选择模型并立即关闭面板
@@ -659,10 +669,10 @@ const selectAndCloseModel = (modelId: string) => {
   const configChanges = {
     modelId: modelId
   };
-  
+
   console.log('Applying model selection:', configChanges);
   emit('config-change', configChanges);
-  
+
   closeAllPanels()
 };
 
@@ -675,7 +685,7 @@ const isModelFavorited = (modelId: string) => {
 const toggleFavorite = async (modelId: string) => {
   try {
     await apiService.toggleModelFavorite(modelId);
-    
+
     // 只更新临时状态,不重新加载列表
     if (tempFavoriteIds.value.has(modelId)) {
       tempFavoriteIds.value.delete(modelId);
@@ -702,10 +712,16 @@ const openSettingsPanel = () => {
     closeAllPanels()
     return
   }
-  
+
   closeAllPanels()
-  tempMaxMemoryLength.value = props.config?.maxMemoryLength || null
+  // 使用当前配置值，如果为 null/undefined 则使用默认值 10
+  tempMaxMemoryLength.value = props.config?.maxMemoryLength ?? 10
   settingsPanelVisible.value = true
+
+  // 计算弹窗位置
+  nextTick(() => {
+    calculatePopoverPosition('settings')
+  })
 };
 
 // 应用会话设置
@@ -713,8 +729,8 @@ const applySessionSettings = () => {
   // 构建配置变更对象
   const configChanges = {};
 
-  // 检查上下文条数是否有变化
-  if (tempMaxMemoryLength.value !== props.config?.maxMemoryLength && tempMaxMemoryLength.value !== null) {
+  // 检查上下文条数是否有变化（允许设置为 0，表示不限制）
+  if (tempMaxMemoryLength.value !== props.config?.maxMemoryLength) {
     configChanges.maxMemoryLength = tempMaxMemoryLength.value;
   }
 
@@ -734,7 +750,7 @@ const openKnowledgeBasePanel = async () => {
     closeAllPanels()
     return
   }
-  
+
   closeAllPanels()
   kbSearchText.value = ''
   // 重新加载知识库列表，确保数据是最新的
@@ -744,6 +760,11 @@ const openKnowledgeBasePanel = async () => {
     console.error('加载知识库列表失败:', error);
   }
   kbPanelVisible.value = true
+
+  // 计算弹窗位置
+  nextTick(() => {
+    calculatePopoverPosition('kb')
+  })
 };
 
 // 切换知识库选中状态 - 立即同步到父组件
@@ -751,7 +772,7 @@ const toggleKnowledgeBaseSelection = (kbId: string) => {
   const currentKbIds = props.config?.knowledgeBaseIds || [];
   const newKbIds = [...currentKbIds];
   const index = newKbIds.indexOf(kbId);
-  
+
   if (index === -1) {
     // 添加知识库
     newKbIds.push(kbId);
@@ -759,7 +780,7 @@ const toggleKnowledgeBaseSelection = (kbId: string) => {
     // 移除知识库
     newKbIds.splice(index, 1);
   }
-  
+
   // 立即触发配置变更事件
   emit('config-change', { knowledgeBaseIds: newKbIds });
 };
@@ -1116,18 +1137,111 @@ const handleEscKey = (e: KeyboardEvent) => {
   }
 }
 
+// 计算弹窗位置
+const calculatePopoverPosition = (type: 'model' | 'kb' | 'settings') => {
+  const popoverContainer = popoverContainerRef.value
+  if (!popoverContainer) return
+
+  // 获取对应的触发按钮
+  let triggerButton: HTMLElement | null = null
+  if (type === 'model') {
+    triggerButton = document.querySelector('.model-selector-btn') as HTMLElement
+  } else if (type === 'kb') {
+    // 知识库按钮
+    const buttons = document.querySelectorAll('.left-tools .el-button')
+    for (let i = 0; i < buttons.length; i++) {
+      if ((buttons[i] as HTMLElement).textContent?.includes('知识库')) {
+        triggerButton = buttons[i] as HTMLElement
+        break
+      }
+    }
+  } else {
+    // 会话设置按钮
+    triggerButton = document.querySelector('.right-tools .tool-btn') as HTMLElement
+  }
+
+  if (!triggerButton) return
+
+  const buttonRect = triggerButton.getBoundingClientRect()
+  const popoverWidth = 320 // 弹窗宽度
+  const spacing = 8 // 间距
+
+  // 获取弹窗元素以测量实际高度
+  const popoverElement = type === 'model'
+    ? document.querySelector('.model-popover') as HTMLElement
+    : type === 'kb'
+      ? document.querySelector('.kb-popover') as HTMLElement
+      : document.querySelector('.settings-popover') as HTMLElement
+
+  // 使用实际高度，如果还未渲染则使用默认值
+  const popoverHeight = popoverElement ? popoverElement.offsetHeight : 400
+
+  // 计算水平位置：以按钮为中心对齐
+  let left = buttonRect.left + (buttonRect.width / 2) - (popoverWidth / 2)
+
+  // 边界检查：确保不超出视口左右边界
+  const viewportWidth = window.innerWidth
+  if (left < 10) {
+    left = 10
+  } else if (left + popoverWidth > viewportWidth - 10) {
+    left = viewportWidth - popoverWidth - 10
+  }
+
+  // 计算垂直位置：优先显示在按钮上方
+  const spaceAbove = buttonRect.top // 按钮上方的可用空间
+  const spaceBelow = window.innerHeight - buttonRect.bottom // 按钮下方的可用空间
+
+  let top: number
+
+  // 如果上方空间足够，显示在上方；否则显示在下方
+  if (spaceAbove >= popoverHeight + spacing) {
+    // 显示在按钮上方
+    top = buttonRect.top - popoverHeight - spacing
+  } else if (spaceBelow >= popoverHeight + spacing) {
+    // 显示在按钮下方
+    top = buttonRect.bottom + spacing
+  } else {
+    // 上下空间都不够，选择空间较大的一侧
+    if (spaceAbove > spaceBelow) {
+      top = buttonRect.top - popoverHeight - spacing
+    } else {
+      top = buttonRect.bottom + spacing
+    }
+  }
+
+  // 确保不超出视口上下边界
+  if (top < 10) {
+    top = 10
+  } else if (top + popoverHeight > window.innerHeight - 10) {
+    top = window.innerHeight - popoverHeight - 10
+  }
+
+  const style = {
+    left: `${left}px`,
+    top: `${top}px`
+  }
+
+  if (type === 'model') {
+    modelPopoverStyle.value = style
+  } else if (type === 'kb') {
+    kbPopoverStyle.value = style
+  } else {
+    settingsPopoverStyle.value = style
+  }
+}
+
 // 全局点击关闭面板
 const handleGlobalClick = (e: MouseEvent) => {
   if (!anyPanelVisible.value) return
-  
+
   const target = e.target as HTMLElement
-  const drawerContainer = drawerContainerRef.value
-  
-  // 如果点击的是抽屉容器内部，不关闭
-  if (drawerContainer && drawerContainer.contains(target)) {
+  const popoverContainer = popoverContainerRef.value
+
+  // 如果点击的是弹窗容器内部，不关闭
+  if (popoverContainer && popoverContainer.contains(target)) {
     return
   }
-  
+
   // 否则关闭所有面板
   closeAllPanels()
 }
@@ -1182,111 +1296,111 @@ onUnmounted(() => {
 });
 </script>
 <style scoped>
-/* 抽屉容器基础样式 */
-.drawer-container {
-  position: relative;
-  width: 100%; /* 恢复全宽 */
+/* 弹窗容器基础样式 */
+.popover-container {
+  position: absolute;
+  bottom: 100%;
+  /* 在 input-area 顶部外侧 */
+  left: 0;
+  right: 0;
+  pointer-events: none;
+  /* 让点击穿透到下层 */
 }
 
-/* 抽屉面板通用样式 */
-.drawer-panel {
-  position: absolute;
-  bottom: 100%; /* 从容器顶部开始（输入框上方） */
-  left: 1px; /* 左右各收窄1像素 */
-  right: 1px;
-  max-height: 400px; /* 限制最大高度 */
-  background: #f5f5f5; /* 浅灰色背景 */
-  border-radius: 12px 12px 0 0; /* 仅上方有圆角，下方无圆角 */
-  border: 1px solid #e0e0e0; /* 添加外边框 */
-  border-bottom: none; /* 底部无边框，与输入框融合 */
-  overflow: hidden;
+/* 上下文弹窗通用样式 */
+.context-popover {
+  position: fixed;
+  /* 使用 fixed 定位，相对于视口 */
+  width: 320px;
+  max-height: 400px;
+  background: white;
+  border-radius: 16px;
+  border: 1px solid #e0e0e0;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.15), 0 4px 8px rgba(0, 0, 0, 0.1);
+  overflow: visible;
+  /* 允许内容超出，让内部滚动容器处理滚动 */
   display: flex;
   flex-direction: column;
-  margin-bottom: -16px; /* 负边距，让抽屉延伸到输入框圆角外 */
-  z-index: 1; /* 降低层级，让输入框遮挡抽屉 */
+  z-index: 1000;
+  pointer-events: auto;
+  /* 恢复弹窗的点击事件 */
 }
 
-.dark .drawer-panel {
-  background: #2a2a2a; /* 深色模式使用深灰色 */
-  border: 1px solid #404040; /* 深色模式边框 */
-  border-bottom: none;
+/* 模型选择弹窗特定位置 */
+.model-popover {
+  /* 位置由 :style 动态计算 */
 }
 
-/* 抽屉头部样式 */
-.drawer-header {
+/* 知识库选择弹窗特定位置 */
+.kb-popover {
+  /* 位置由 :style 动态计算 */
+}
+
+.dark .context-popover {
+  background: #2a2a2a;
+  border: 1px solid #404040;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.5), 0 4px 8px rgba(0, 0, 0, 0.3);
+}
+
+/* 弹窗头部样式 */
+.popover-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 12px 16px;
-  /* border-bottom: 1px solid var(--el-border-color-light, #e4e7ed); */ /* 取消底部边框，更紧凑 */
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--el-border-color-light, #e4e7ed);
   flex-shrink: 0;
 }
 
-.drawer-title {
+.popover-title {
   margin: 0;
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 600;
   color: var(--el-text-color-primary, #303133);
 }
 
-.dark .drawer-title {
+.dark .popover-title {
   color: var(--el-text-color-primary, #e5eaf3);
 }
 
-/* 抽屉内容区域样式 */
-.drawer-content {
+/* 弹窗内容区域样式 */
+.popover-content {
   flex: 1;
-  overflow-y: auto;
-  padding: 12px 16px 40px 16px; /* 增加底部内边距，确保最后一个item不被遮挡 */
+  padding: 10px 12px;
 }
 
-/* 自定义滚动条 */
-.drawer-content::-webkit-scrollbar {
-  width: 6px;
+/* 弹窗淡入动画 */
+.popover-fade-enter-active,
+.popover-fade-leave-active {
+  transition: all 0.2s ease-out;
 }
 
-.drawer-content::-webkit-scrollbar-thumb {
-  background: var(--el-border-color, #dcdfe6);
-  border-radius: 3px;
-}
-
-.drawer-content::-webkit-scrollbar-thumb:hover {
-  background: var(--el-border-color-dark, #c0c4cc);
-}
-
-/* 抽屉滑入动画 */
-.drawer-slide-enter-active,
-.drawer-slide-leave-active {
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-}
-
-.drawer-slide-enter-from {
+.popover-fade-enter-from {
   opacity: 0;
-  transform: translateY(20px) scale(0.95);
+  transform: translateY(8px) scale(0.98);
 }
 
-.drawer-slide-leave-to {
+.popover-fade-leave-to {
   opacity: 0;
-  transform: translateY(10px) scale(0.98);
+  transform: translateY(4px) scale(0.99);
 }
-
-
 
 /* 移动端适配 */
 @media (max-width: 768px) {
-  .drawer-panel {
-    max-height: 60vh; /* 移动端使用视口高度比例 */
+  .context-popover {
+    width: 280px;
+    max-height: 50vh;
   }
-  
-  .drawer-content {
-    max-height: calc(60vh - 60px);
+
+  .popover-content {
+    max-height: calc(50vh - 50px);
   }
 }
 
 /* 输入框区域样式 */
 .input-area {
   position: relative;
-  z-index: 10; /* 高于抽屉，确保输入框遮挡抽屉 */
+  z-index: 10;
 }
 
 .message-input {
@@ -1458,5 +1572,48 @@ onUnmounted(() => {
 
 .kb-list-container {
   padding: 0 2px;
+}
+
+/* 紧凑型弹窗样式（知识库专用） */
+.compact-popover {
+  border-radius: 8px;
+}
+
+.compact-popover .popover-content.no-padding {
+  padding: 0;
+}
+
+/* 滚动容器底部间距 */
+.model-list,
+.kb-list-container {
+  padding-bottom: 0;
+}
+
+/* 模型列表项 - 无边框紧凑样式 */
+.model-item-compact {
+  transition: all 0.15s ease;
+}
+
+/* 未选中状态的 hover 效果 */
+.model-item-compact:not(.bg-pink-50):hover,
+.model-item-compact:not(.dark\:bg-pink-900\/20):hover {
+  background-color: var(--el-fill-color-light, #f5f7fa);
+}
+
+.dark .model-item-compact:not(.bg-pink-50):hover {
+  background-color: rgba(255, 255, 255, 0.05);
+}
+
+/* 知识库列表项 - 无边框紧凑样式 */
+.kb-item-compact {
+  transition: all 0.15s ease;
+}
+
+.kb-item-compact:hover {
+  background-color: var(--el-fill-color-light, #f5f7fa);
+}
+
+.dark .kb-item-compact:hover {
+  background-color: rgba(255, 255, 255, 0.05);
 }
 </style>

@@ -1,11 +1,8 @@
 <!-- ScrollContainer.vue -->
 <template>
-    <!-- @ts-ignore - attrs.style 类型不兼容 -->
-    <simple-bar class="ScrollContainer" :auto-hide="true" ref="simpleBarRef" @scroll="handleScroll">
-        <div ref="contentElement" :class="mergredClasses" :style="attrs.style">
-            <slot></slot>
-        </div>
-    </simple-bar>
+    <SimpleBar ref="contentElement" >
+        <slot></slot>
+    </SimpleBar>
 </template>
 
 <script setup lang="ts">
@@ -18,12 +15,12 @@ import 'simplebar-vue/dist/simplebar.min.css'
 
 // 常量定义
 const SCROLL_THRESHOLD = 10;
-import { useAttrs } from 'vue'
+// import { useAttrs } from 'vue'
 
-defineOptions({
-    inheritAttrs: false // 禁用自动继承
-})
-const attrs = useAttrs()
+// defineOptions({
+//     inheritAttrs: false // 禁用自动继承
+// })
+// const attrs = useAttrs()
 
 
 // Props 类型化
@@ -35,18 +32,18 @@ const props = defineProps<{
 }>();
 
 
-const mergredClasses = computed((): string => {
-    let mergredClass: string | string[] = [];
-    const classes: (string | undefined)[] = [attrs.class as string];
-    if (mergredClass) {
-        if (Array.isArray(mergredClass)) {
-            classes.push(...mergredClass);
-        } else {
-            classes.push(mergredClass);
-        }
-    }
-    return classes.filter(Boolean).join(' ');
-})
+// const mergredClasses = computed((): string => {
+//     let mergredClass: string | string[] = [];
+//     const classes: (string | undefined)[] = [attrs.class as string];
+//     if (mergredClass) {
+//         if (Array.isArray(mergredClass)) {
+//             classes.push(...mergredClass);
+//         } else {
+//             classes.push(mergredClass);
+//         }
+//     }
+//     return classes.filter(Boolean).join(' ');
+// })
 
 // Emits 类型化
 const emit = defineEmits<{
@@ -188,11 +185,6 @@ defineExpose({
 </script>
 
 <style scoped>
-.ScrollContainer {
-    width: 100%;
-    height: 100%;
-}
-
 /* SimpleBar 滚动条样式 */
 :deep(.simplebar-scrollbar::before) {
     background-color: #999;

@@ -172,7 +172,7 @@
 
                     <!-- 文件列表内容区 -->
                     <div class="flex-1 m-4 overflow-hidden flex min-h-0 rounded-lg">
-                        <ScrollContainer ref="fileListContainer" @scroll="handleScroll">
+                        <ScrollContainer class="max-h-full w-full" ref="fileListContainer" @scroll="handleScroll">
                             <div class="rounded-lg p-2 bg-white dark:bg-gray-900">
                                 <KBFileTree ref="fileTreeRef" :kb-id="store.activeKnowledgeBaseId!"
                                     @view="handleViewFile" @retry="handleRetryFile" @delete="handleDeleteFile"

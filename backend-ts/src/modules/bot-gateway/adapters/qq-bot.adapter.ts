@@ -15,17 +15,20 @@ import { QQBot } from './qq/qq-bot.sdk';
 /**
  * QQ机器人适配器
  *
- * 第一阶段:实现基础消息收发,自动回复"你好"
+ * 职责:
+ * - 封装 QQ 官方 API
+ * - 转换消息格式
+ * - 管理 WebSocket 连接
+ * 
+ * 注意: 不负责重连逻辑,重连由 BotInstanceManager 统一管理
  */
 @Injectable()
 export class QQBotAdapter implements IBotPlatform {
   private readonly logger = new Logger(QQBotAdapter.name);
-  private client: any; // QQBotClient 实例(待实现)
+  private client: any;
   private messageSubject: Subject<BotMessage>;
   private status: BotStatus = BotStatus.STOPPED;
   private config: BotConfig | null = null;
-  private reconnectTimer: NodeJS.Timeout | null = null;
-  private reconnectAttempts: number = 0;
 
   constructor() {
     this.messageSubject = new Subject<BotMessage>();
@@ -62,7 +65,7 @@ export class QQBotAdapter implements IBotPlatform {
           'C2C_MESSAGE_CREATE',       // 私聊消息
         ],
         removeAt: true,  // 自动移除@机器人内容
-        maxRetry: config.reconnectConfig?.maxRetries || 5,
+        maxRetry: 0, // 禁用 SDK 内部的重试,由上层统一管理
       });
 
       // 注册消息监听器
@@ -78,22 +81,21 @@ export class QQBotAdapter implements IBotPlatform {
         this.messageSubject.next(botMessage);
       });
 
-      // 注册错误处理
+      // 注册错误处理 - 只记录日志,不处理重连
       this.client.on('error', (error: Error) => {
         this.logger.error(`QQ bot error: ${error.message}`);
-        this.handleReconnect();
+        this.status = BotStatus.ERROR;
       });
 
       // 启动连接（使用 start 方法）
       await this.client.start();
 
       this.status = BotStatus.CONNECTED;
-      this.reconnectAttempts = 0;
       this.logger.log(`QQ bot connected: ${config.name}`);
     } catch (error: any) {
       this.logger.error(`Failed to initialize QQ bot: ${error.message}`);
       this.status = BotStatus.ERROR;
-      this.handleReconnect();
+      // 直接抛出异常,由 BotInstanceManager 决定如何处理
       throw error;
     }
   }
@@ -160,12 +162,6 @@ export class QQBotAdapter implements IBotPlatform {
 
   async shutdown(): Promise<void> {
     this.logger.log(`Shutting down QQ bot: ${this.config?.name}`);
-
-    // 清除重连定时器
-    if (this.reconnectTimer) {
-      clearTimeout(this.reconnectTimer);
-      this.reconnectTimer = null;
-    }
 
     // 关闭客户端连接
     if (this.client) {
@@ -260,40 +256,5 @@ export class QQBotAdapter implements IBotPlatform {
     });
 
     return attachments.length > 0 ? attachments : undefined;
-  }
-
-  /**
-   * 处理断线重连
-   */
-  private handleReconnect(): void {
-    if (!this.config?.reconnectConfig?.enabled) {
-      return;
-    }
-
-    const maxRetries = this.config.reconnectConfig.maxRetries || 5;
-    const retryInterval = this.config.reconnectConfig.retryInterval || 5000;
-
-    if (this.reconnectAttempts >= maxRetries) {
-      this.logger.error(
-        `Max reconnection attempts reached (${maxRetries})`,
-      );
-      this.status = BotStatus.ERROR;
-      return;
-    }
-
-    this.reconnectAttempts++;
-    this.status = BotStatus.DISCONNECTED;
-
-    this.logger.log(
-      `Reconnecting in ${retryInterval}ms (attempt ${this.reconnectAttempts}/${maxRetries})`,
-    );
-
-    this.reconnectTimer = setTimeout(async () => {
-      try {
-        await this.reconnect();
-      } catch (error: any) {
-        this.logger.error(`Reconnection failed: ${error.message}`);
-      }
-    }, retryInterval);
   }
 }

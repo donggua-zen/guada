@@ -137,8 +137,29 @@ const handleLogin = async (): Promise<void> => {
         await authStore.login(loginData)
         router.replace('/')
       } catch (error: any) {
-        console.error(error)
-        toast.error(error.message || error.toString())
+        console.error('登录失败:', error)
+        
+        // 根据错误类型显示友好的提示信息
+        let errorMessage = '登录失败，请稍后重试'
+        
+        // 网络错误
+        if (error.isNetworkError || error.message?.includes('无法连接到后端服务')) {
+          errorMessage = '无法连接到服务器，请检查网络连接或稍后重试'
+        }
+        // 用户名或密码错误（401）
+        else if (error.statusCode === 401 || error.message?.includes('用户名或密码错误')) {
+          errorMessage = '用户名或密码错误，请检查后重试'
+        }
+        // 必填字段缺失（400）
+        else if (error.statusCode === 400 || error.message?.includes('不能为空')) {
+          errorMessage = '请输入用户名和密码'
+        }
+        // 其他已知错误
+        else if (error.message) {
+          errorMessage = error.message
+        }
+        
+        toast.error(errorMessage)
       } finally {
         loading.value = false
       }

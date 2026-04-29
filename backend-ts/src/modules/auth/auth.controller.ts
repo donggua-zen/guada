@@ -1,4 +1,4 @@
-import { Body, Controller, Post, BadRequestException } from "@nestjs/common";
+import { Body, Controller, Post, BadRequestException, UnauthorizedException } from "@nestjs/common";
 import { AuthService } from "./auth.service";
 import { Public } from "./public.decorator";
 
@@ -14,28 +14,17 @@ export class AuthController {
 
     // 验证必填字段
     if (!username || !password) {
-      throw new BadRequestException("Username and password are required");
+      throw new BadRequestException("用户名和密码不能为空");
     }
 
     const user = await this.authService.validateUserByUsername(username, password);
 
     if (!user) {
-      throw new BadRequestException("Invalid credentials");
+      // 统一返回 401，不区分用户不存在或密码错误，避免信息泄露
+      throw new UnauthorizedException("用户名或密码错误");
     }
 
     return this.authService.login(user);
-  }
-
-  @Post("register")
-  async register(
-    @Body() body: { username?: string; password?: string; nickname?: string },
-  ) {
-    // 验证必填字段
-    if (!body.username || !body.password) {
-      throw new BadRequestException("Username and password are required");
-    }
-
-    return this.authService.register(body.username, body.password, body.nickname);
   }
 
   /**

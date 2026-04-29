@@ -13,7 +13,6 @@ import type {
   User,
   ResetPasswordCheckResponse,
   ResetPasswordRequest,
-  RegisterRequest,
   Subaccount,
   GlobalSettings,
   UploadResponse
@@ -36,7 +35,7 @@ class ApiService implements IApiService {
   constructor(baseURL?: string) {
     // Electron 环境使用动态获取的后端地址，Web 环境使用相对路径
     const isElectron = typeof window !== 'undefined' && window.electronAPI !== undefined
-    
+
     if (baseURL) {
       this.baseURL = baseURL
     } else if (isElectron) {
@@ -46,7 +45,7 @@ class ApiService implements IApiService {
     } else {
       this.baseURL = '/api/v1'
     }
-    
+
     this.tokenStore = useStorage('token', '')
 
     // 创建 Axios 实例
@@ -64,24 +63,39 @@ class ApiService implements IApiService {
       },
       (error) => {
         console.error('API 请求失败:', error)
-        
+
         // 区分连接错误和认证错误
         if (error.code === 'ECONNREFUSED' || error.code === 'ERR_CONNECTION_REFUSED' || !error.response) {
           // 网络连接错误，不跳转到登录页
           console.warn('后端服务连接失败，请稍后重试')
-          throw new Error('无法连接到后端服务，请确保应用已完全启动')
+          const networkError = new Error('无法连接到后端服务，请确保应用已完全启动')
+            ; (networkError as any).isNetworkError = true
+          throw networkError
         }
-        
-        // 只有真正的401认证错误才跳转登录
-        if (error.response?.status === 401) {
+
+        // 只有真正的401认证错误才跳转登录（排除登录接口本身的401）
+        if (error.response?.status === 401 && !error.config?.url?.includes('/auth/login')) {
           window.location.href = '/login'
           return Promise.reject(error)
         }
-        
-        if (error.response?.data?.error) {
-          throw new Error(error.response.data.error || '请求失败')
+
+        // 提取友好的错误消息
+        let errorMessage = '请求失败'
+        if (error.response?.data) {
+          const responseData = error.response.data
+          // 优先使用 message 字段
+          if (responseData.message) {
+            errorMessage = typeof responseData.message === 'string'
+              ? responseData.message
+              : responseData.message.error || '请求失败'
+          } else if (responseData.error) {
+            errorMessage = responseData.error
+          }
         }
-        return Promise.reject(error)
+
+        const friendlyError = new Error(errorMessage)
+          ; (friendlyError as any).statusCode = error.response?.status
+        throw friendlyError
       }
     )
 
@@ -113,7 +127,7 @@ class ApiService implements IApiService {
       // 如果已经初始化过或者不是默认占位符，则跳过
       return
     }
-    
+
     try {
       const info = await window.electronAPI!.getAppInfo()
       if (info.backendPort) {
@@ -505,18 +519,14 @@ class ApiService implements IApiService {
     return await this._request('/auth/login', { method: 'POST', data: credentials })
   }
 
-  async register(data: RegisterRequest): Promise<LoginResponse> {
-    return await this._request('/auth/register', { method: 'POST', data })
-  }
-
   async getAutoLoginStatus(): Promise<{ enabled: boolean }> {
     return await this._request('/settings/auto-login')
   }
 
   async setAutoLoginStatus(enabled: boolean): Promise<void> {
-    return await this._request('/settings/auto-login', { 
-      method: 'POST', 
-      data: { enabled } 
+    return await this._request('/settings/auto-login', {
+      method: 'POST',
+      data: { enabled }
     })
   }
 
@@ -717,18 +727,18 @@ class ApiService implements IApiService {
     limit?: number
   ): Promise<PaginatedResponse<KBFile>> {
     const params = new URLSearchParams()
-    
+
     // parentFolderId 为 null 表示根目录
     if (parentFolderId !== null && parentFolderId !== undefined) {
       params.append('parentFolderId', parentFolderId)
     }
-    
+
     if (skip !== undefined) params.append('skip', skip.toString())
     if (limit !== undefined) params.append('limit', limit.toString())
 
     const queryString = params.toString()
-    const url = queryString 
-      ? `/knowledge-bases/${kbId}/files/by-parent?${queryString}` 
+    const url = queryString
+      ? `/knowledge-bases/${kbId}/files/by-parent?${queryString}`
       : `/knowledge-bases/${kbId}/files/by-parent`
 
     return await this._request(url)
@@ -744,18 +754,18 @@ class ApiService implements IApiService {
     limit?: number
   ): Promise<PaginatedResponse<KBFile>> {
     const params = new URLSearchParams()
-    
+
     // relativePath 为空表示根目录
     if (relativePath !== null && relativePath !== undefined && relativePath !== '') {
       params.append('path', relativePath)
     }
-    
+
     if (skip !== undefined) params.append('skip', skip.toString())
     if (limit !== undefined) params.append('limit', limit.toString())
 
     const queryString = params.toString()
-    const url = queryString 
-      ? `/knowledge-bases/${kbId}/files/by-path?${queryString}` 
+    const url = queryString
+      ? `/knowledge-bases/${kbId}/files/by-path?${queryString}`
       : `/knowledge-bases/${kbId}/files/by-path`
 
     return await this._request(url)

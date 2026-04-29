@@ -2,7 +2,7 @@
 import { defineStore } from 'pinia'
 import { ref, computed, type Ref, type ComputedRef } from 'vue'
 import { apiService } from '@/services/ApiService'
-import type { User, LoginRequest, RegisterRequest } from '@/types/api'
+import type { User, LoginRequest } from '@/types/api'
 
 /**
  * 认证状态 Store
@@ -54,34 +54,8 @@ export const useAuthStore = defineStore('auth', () => {
             return true
         } catch (error: any) {
             console.error("登录失败:", error)
-            throw new Error(error.message || '登录失败')
-        }
-    }
-
-    async function register(userData: RegisterRequest): Promise<boolean> {
-        try {
-            const result = await apiService.register(userData)
-            console.log('注册响应:', result)
-
-            // 处理可能的响应格式
-            const accessToken = (result as any).accessToken || (result as any).data?.accessToken
-            const newUser = (result as any).user || (result as any).data?.user
-
-            if (!accessToken) {
-                throw new Error('注册失败：未获取到 token')
-            }
-
-            // 注册后默认不记住，使用 sessionStorage
-            sessionStorage.setItem('token', accessToken)
-            sessionStorage.setItem('user', JSON.stringify(newUser))
-
-            token.value = accessToken
-            user.value = newUser
-
-            return true
-        } catch (error: any) {
-            console.error("注册失败:", error)
-            throw new Error(error.message || '注册失败')
+            // 直接抛出原始错误，保留 statusCode 等信息
+            throw error
         }
     }
 
@@ -191,7 +165,6 @@ export const useAuthStore = defineStore('auth', () => {
         isAuthenticated,
         // Actions
         login,
-        register,
         logout,
         checkAuth,
         checkAutoLoginStatus,

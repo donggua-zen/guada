@@ -17,6 +17,8 @@ import * as Lark from '@larksuiteoapi/node-sdk';
  *
  * 实现飞书开放平台机器人的消息收发功能
  * 使用 @larksuiteoapi/node-sdk 进行集成
+ * 
+ * 注意: 不负责重连逻辑,重连由 BotInstanceManager 统一管理
  */
 @Injectable()
 export class LarkBotAdapter implements IBotPlatform {
@@ -26,8 +28,6 @@ export class LarkBotAdapter implements IBotPlatform {
   private messageSubject: Subject<BotMessage>;
   private status: BotStatus = BotStatus.STOPPED;
   private config: BotConfig | null = null;
-  private reconnectTimer: NodeJS.Timeout | null = null;
-  private reconnectAttempts: number = 0;
 
   constructor() {
     this.messageSubject = new Subject<BotMessage>();
@@ -97,11 +97,10 @@ export class LarkBotAdapter implements IBotPlatform {
       
       this.logger.log('Lark bot initialized successfully');
       this.status = BotStatus.CONNECTED;
-      this.reconnectAttempts = 0;
     } catch (error: any) {
       this.logger.error(`Failed to initialize Lark bot: ${error.message}`);
       this.status = BotStatus.ERROR;
-      this.handleReconnect();
+      // 直接抛出异常,由 BotInstanceManager 决定如何处理
       throw error;
     }
   }
@@ -170,12 +169,6 @@ export class LarkBotAdapter implements IBotPlatform {
 
   async shutdown(): Promise<void> {
     this.logger.log(`Shutting down Lark bot: ${this.config?.name}`);
-
-    // 清除重连定时器
-    if (this.reconnectTimer) {
-      clearTimeout(this.reconnectTimer);
-      this.reconnectTimer = null;
-    }
 
     // 关闭 WebSocket 连接
     if (this.wsClient) {
@@ -256,40 +249,5 @@ export class LarkBotAdapter implements IBotPlatform {
   private detectSourceType(message: any): 'private' | 'group' | 'channel' {
     // p2p = 私聊, group = 群聊
     return message.chat_type === 'group' ? 'group' : 'private';
-  }
-
-  /**
-   * 处理断线重连
-   */
-  private handleReconnect(): void {
-    if (!this.config?.reconnectConfig?.enabled) {
-      return;
-    }
-
-    const maxRetries = this.config.reconnectConfig.maxRetries || 5;
-    const retryInterval = this.config.reconnectConfig.retryInterval || 5000;
-
-    if (this.reconnectAttempts >= maxRetries) {
-      this.logger.error(
-        `Max reconnection attempts reached (${maxRetries})`,
-      );
-      this.status = BotStatus.ERROR;
-      return;
-    }
-
-    this.reconnectAttempts++;
-    this.status = BotStatus.DISCONNECTED;
-
-    this.logger.log(
-      `Reconnecting in ${retryInterval}ms (attempt ${this.reconnectAttempts}/${maxRetries})`,
-    );
-
-    this.reconnectTimer = setTimeout(async () => {
-      try {
-        await this.reconnect();
-      } catch (error: any) {
-        this.logger.error(`Reconnection failed: ${error.message}`);
-      }
-    }, retryInterval);
   }
 }

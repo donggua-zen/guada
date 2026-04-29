@@ -48,5 +48,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
     visible?: boolean
   }>) => {
     return ipcRenderer.invoke('show-context-menu', items)
-  }
+  },
+
+  // 打开目录
+  openUserDataFolder: () => ipcRenderer.send('open-user-data-folder'),
+  openInstallFolder: () => ipcRenderer.send('open-install-folder')
 })

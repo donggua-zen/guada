@@ -118,15 +118,6 @@ export interface LoginRequest {
 }
 
 /**
- * 注册请求
- */
-export interface RegisterRequest {
-    username: string
-    password: string
-    email?: string
-}
-
-/**
  * API 响应类型集合
  */
 export interface ApiResponses {
@@ -156,7 +147,6 @@ export interface ApiResponses {
 
     // 认证相关
     login: { accessToken: string; user: User }
-    register: { accessToken?: string; user?: User }
     getProfile: User
     updateProfile: User
 

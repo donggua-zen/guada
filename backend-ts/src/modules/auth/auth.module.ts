@@ -5,7 +5,6 @@ import { ConfigModule, ConfigService } from "@nestjs/config";
 import type { StringValue } from "ms";
 import { AuthService } from "./auth.service";
 import { AuthController } from "./auth.controller";
-import { UserRepository } from "../../common/database/user.repository";
 import { PrismaService } from "../../common/database/prisma.service";
 
 @Module({
@@ -25,7 +24,7 @@ import { PrismaService } from "../../common/database/prisma.service";
       inject: [ConfigService],
     }),
   ],
-  providers: [AuthService, UserRepository, PrismaService],
+  providers: [AuthService, PrismaService],
   controllers: [AuthController],
   exports: [AuthService, JwtModule],
 })

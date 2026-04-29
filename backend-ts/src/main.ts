@@ -1,13 +1,26 @@
 import { NestFactory } from "@nestjs/core";
+import { WinstonModule } from 'nest-winston';
 import { AppModule } from "./app.module";
 import { AllExceptionsFilter } from "./common/filters/all-exceptions.filter";
 import { UrlService } from "./common/services/url.service";
+import { createWinstonConfig } from './common/logger/winston.config';
 import * as express from "express";
 import * as path from "path";
 import * as fs from "fs";
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
+  // 确定日志目录（优先使用环境变量 LOGS_DIR）
+  const logsDir = process.env.LOGS_DIR || path.join(process.cwd(), 'logs');
+  
+  // 确保日志目录存在
+  if (!fs.existsSync(logsDir)) {
+    fs.mkdirSync(logsDir, { recursive: true });
+  }
+
+  // 创建应用实例并配置 Winston 日志
+  const app = await NestFactory.create(AppModule, {
+    logger: WinstonModule.createLogger(createWinstonConfig(logsDir)),
+  });
 
   // 设置全局 API 前缀
   app.setGlobalPrefix("api/v1");

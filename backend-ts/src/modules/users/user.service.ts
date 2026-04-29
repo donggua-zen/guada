@@ -25,10 +25,12 @@ export class UserService {
     private uploadPathService: UploadPathService,
     private userRepo: UserRepository,
     private urlService: UrlService,
-  ) {}
+  ) { }
 
-  async getProfile(userId: string) {
-    const user = await this.userRepo.findById(userId);
+  async getProfile(userId: string, cachedUser?: any) {
+    // 如果提供了缓存的用户对象，直接使用；否则从数据库查询
+    const user = cachedUser || (await this.userRepo.findById(userId));
+
     if (!user) {
       throw new Error("用户不存在");
     }
@@ -56,12 +58,14 @@ export class UserService {
     if (!user || !(await bcrypt.compare(oldPassword, user.passwordHash))) {
       throw new Error("旧密码不正确");
     }
-    const hashedPassword = await bcrypt.hash(newPassword, 10);
+    const normalizedNewPassword = newPassword.toLowerCase();
+    const hashedPassword = await bcrypt.hash(normalizedNewPassword, 10);
     return this.userRepo.update(userId, { passwordHash: hashedPassword });
   }
 
   async createSubAccount(parentId: string, data: any) {
-    const hashedPassword = await bcrypt.hash(data.password, 10);
+    const normalizedPassword = data.password.toLowerCase();
+    const hashedPassword = await bcrypt.hash(normalizedPassword, 10);
     return this.userRepo.create({
       ...data,
       parentId,

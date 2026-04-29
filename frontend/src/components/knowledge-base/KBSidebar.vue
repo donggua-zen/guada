@@ -23,7 +23,7 @@
 
         <!-- 知识库列表 -->
         <div class="flex-1 overflow-y-auto py-2">
-            <ScrollContainer>
+            <ScrollContainer class="max-h-full">
                 <template v-if="filteredKnowledgeBases.length === 0">
                     <div class="empty-state text-center text-gray-500 flex flex-col items-center justify-center h-full py-12">
                         <div class="empty-state-icon mb-3 text-gray-300">

@@ -18,7 +18,7 @@
 
         <!-- Tab 内容区 -->
         <div class="flex-1 overflow-hidden py-2 md:py-2">
-          <ScrollContainer class="h-full px-4">
+          <ScrollContainer class="h-full px-4 max-h-full">
             <template v-if="currentTabValue === 'management'">
               <BotManagementPage />
             </template>

@@ -1,5 +1,6 @@
 import { Module } from "@nestjs/common";
 import { ConfigModule } from "@nestjs/config";
+import { DatabaseModule } from "./common/database/database.module";
 import { UploadModule } from "./common/upload/upload.module";
 import { SharedModule } from "./common/services/shared.module";
 import { LlmCoreModule } from "./modules/llm-core/llm-core.module";
@@ -22,6 +23,7 @@ import { BotGatewayModule } from "./modules/bot-gateway/bot-gateway.module";
     ConfigModule.forRoot({
       isGlobal: true,
     }),
+    DatabaseModule, // 全局数据库模块（包含 PrismaService 和 Repositories）
     SharedModule, // 全局共享服务（UploadPathService, UrlService）
     UploadModule, // 全局上传路径模块
     VectorDbModule, // 向量数据库模块

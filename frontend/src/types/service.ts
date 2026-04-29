@@ -109,15 +109,6 @@ export interface LoginRequest {
 }
 
 /**
- * 注册请求
- */
-export interface RegisterRequest {
-    username: string
-    password: string
-    email?: string
-}
-
-/**
  * 登录响应
  */
 export interface LoginResponse {
@@ -261,7 +252,6 @@ export interface IApiService {
 
     // 认证
     login(credentials: LoginRequest): Promise<LoginResponse>
-    register(data: RegisterRequest): Promise<LoginResponse>
     getProfile(): Promise<User>
     updateProfile(data: any): Promise<User>
     changePassword(oldPassword: string, newPassword: string): Promise<any>

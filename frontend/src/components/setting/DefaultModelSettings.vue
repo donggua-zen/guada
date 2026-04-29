@@ -245,7 +245,6 @@ import {
 } from '@vicons/fluent'
 
 import { apiService } from '@/services/ApiService'
-import { ScrollContainer } from '@/components/ui'
 
 import { usePopup } from '@/composables/usePopup'
 import { useBreakpoints, breakpointsTailwind } from '@vueuse/core'

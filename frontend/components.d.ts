@@ -109,6 +109,7 @@ declare module 'vue' {
     RouterLink: typeof import('vue-router')['RouterLink']
     RouterView: typeof import('vue-router')['RouterView']
     ScrollContainer: typeof import('./src/components/ui/ScrollContainer.vue')['default']
+    'ScrollContainer.native': typeof import('./src/components/ui/ScrollContainer.native.vue')['default']
     ScrollToBottomButton: typeof import('./src/components/ui/ScrollToBottomButton.vue')['default']
     SectionsAlt: typeof import('./src/components/icons/SectionsAlt.vue')['default']
     SetupGuide: typeof import('./src/components/SetupGuide.vue')['default']

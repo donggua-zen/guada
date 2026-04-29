@@ -3,9 +3,7 @@
  *
  * 用于初始化默认测试数据，包括：
  * - 默认管理员用户
- * - 默认模型提供商和模型
  * - 默认角色（Character）
- * - 全局设置
  *
  * 使用方法:
  *   npm run db:seed           # 交互式，需要确认
@@ -87,37 +85,6 @@ async function createDefaultUser() {
   return user;
 }
 
-/**
- * 创建默认模型提供商
- */
-async function createModelProvider(userId: string) {
-  logInfo("正在创建模型提供商...");
-
-  // 从环境变量读取 API Key，如果未设置则使用默认值
-  const apiKey =
-    process.env.SILICONFLOW_API_KEY ||
-    "sk-ccdjtlfjhfrkyhcsiijmwahhxaqnfplyaesoqigjvbizbmsy";
-
-  // 调试日志
-  logInfo(`API Key length: ${apiKey.length}`);
-  logInfo(
-    `API Key preview: ${apiKey.substring(0, 10)}...${apiKey.substring(apiKey.length - 4)}`,
-  );
-
-  const provider = await prisma.modelProvider.create({
-    data: {
-      userId,
-      name: "硅基流动",
-      provider: "siliconflow",
-      apiUrl: "https://api.siliconflow.cn/v1/",
-      apiKey: apiKey,
-    },
-  });
-
-  logSuccess(`已创建模型提供商：${provider.name}`);
-  return provider;
-}
-
 
 /**
  * 创建默认角色列表
@@ -186,18 +153,6 @@ async function createDefaultCharacters(userId: string, modelId: string) {
 }
 
 /**
- * 创建全局设置
- */
-async function createGlobalSettings(chatModelId: string) {
-  logInfo("正在初始化全局设置文件...");
-
-  // 由于全局设置已迁移至文件系统，此处不再通过 Prisma 写入数据库。
-  // 如果需要预设默认值，应直接操作 .config/ 目录下的 JSON 文件或使用 SettingsStorage 服务。
-  
-  logSuccess("全局设置文件已就绪");
-}
-
-/**
  * 导入所有默认测试数据
  */
 async function importDefaultData() {
@@ -222,9 +177,6 @@ async function importDefaultData() {
     // 4. 创建默认角色列表
     await createDefaultCharacters(adminUser.id, null);
 
-    // 5. 创建全局设置
-    await createGlobalSettings(null);
-
     logSuccess("所有默认数据导入完成");
   } catch (error) {
     logError(
@@ -242,8 +194,9 @@ async function seedDatabase(force: boolean = false) {
   logInfo(`时间：${new Date().toISOString()}`);
   logSection("");
 
-  // 警告提示
-  if (!force) {
+  // 警告提示（仅开发环境且非强制模式下）
+  const isProduction = process.env.NODE_ENV === 'production';
+  if (!force && !isProduction) {
     console.log("\n⚠️  警告：此操作将执行以下动作：");
     console.log("   1. 清空数据库中所有现有数据（不可恢复！）");
     console.log("   2. 重新创建所有表结构");
@@ -271,33 +224,20 @@ async function seedDatabase(force: boolean = false) {
   }
 
   try {
-    // 步骤 0: 启用外键约束
-    logInfo("正在启用 SQLite 外键约束...");
-    await prisma.$executeRawUnsafe('PRAGMA foreign_keys = ON;');
-    logSuccess("外键约束已启用");
+    // 步骤 1: 重置并同步数据库结构 (始终执行)
+    logSection("步骤 1: 重置并同步数据库结构");
+    logInfo("正在执行 prisma db push --force-reset --accept-data-loss...");
 
-    // 步骤 1: 重置数据库（仅开发环境）
-    // 生产环境：数据库已由 Electron 主进程通过 prisma db push 创建，直接跳过重置
-    const isProduction = process.env.NODE_ENV === 'production';
-
-    if (!isProduction) {
-      logSection("步骤 1: 重置数据库");
-      logInfo("正在执行 prisma db push --force-reset...");
-
-      // 使用 Prisma CLI 重置数据库
-      const { execSync } = require("child_process");
-      try {
-        execSync("npx prisma db push --force-reset --accept-data-loss", {
-          stdio: "inherit",
-          cwd: resolve(__dirname, "../.."),
-        });
-        logSuccess("数据库重置成功");
-      } catch (error) {
-        logError("数据库重置失败，请确保 Prisma schema 正确");
-        throw error;
-      }
-    } else {
-      logInfo("生产环境：跳过数据库重置（已由主进程创建表结构）");
+    const { execSync } = require("child_process");
+    try {
+      execSync("npx prisma db push --force-reset --accept-data-loss", {
+        stdio: "inherit",
+        cwd: resolve(__dirname, "../.."),
+      });
+      logSuccess("数据库已重置并同步成功");
+    } catch (error) {
+      logError("数据库重置失败，请确保 Prisma schema 正确");
+      throw error;
     }
 
     // 步骤 2: 导入默认数据

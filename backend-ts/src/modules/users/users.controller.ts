@@ -22,7 +22,8 @@ export class UsersController {
 
   @Get("user/profile")
   async getProfile(@CurrentUser() user: any) {
-    return this.userService.getProfile(user.sub);
+    // 直接传递完整的用户对象，避免重复查询数据库
+    return this.userService.getProfile(user.sub, user);
   }
 
   @Put("user/profile")
@@ -71,7 +72,8 @@ export class UsersController {
     }
 
     // 检查权限：必须是主账户或者账户本人
-    if (targetUser.parentId !== user.sub && targetUser.id !== user.sub) {
+    // user已经是完整用户对象，直接使用id字段
+    if (targetUser.parentId !== user.id && targetUser.id !== user.id) {
       throw new Error("无权更新该账户");
     }
 

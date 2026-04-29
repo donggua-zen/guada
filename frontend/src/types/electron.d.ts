@@ -15,6 +15,9 @@ export interface ElectronAPI {
   maximizeWindow: () => void
   closeWindow: () => void
   isMaximized: () => Promise<boolean>
+  toggleDevTools: () => void
+  openUserDataFolder: () => void
+  openInstallFolder: () => void
 }
 
 declare global {

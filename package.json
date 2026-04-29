@@ -8,7 +8,7 @@
     "dev:web": "cd frontend && npm run dev",
     "dev:backend": "cd backend-ts && npm run start:dev",
     "dev:backend:electron": "cd backend-ts && npm run start:dev:electron",
-    "dev:electron": "npm run build:electron-ts && concurrently \"cd frontend && npm run dev\" \"wait-on http://localhost:5173 && cross-env NODE_ENV=development electron .\"",
+    "dev:electron": "npm run build:seed-template && npm run build:electron-ts && concurrently \"cd frontend && npm run dev\" \"wait-on http://localhost:5173 && cross-env NODE_ENV=development electron .\"",
     "dev:electron:prod-frontend": "cross-env ELECTRON=true npm --prefix frontend run build && cross-env USE_STATIC_FRONTEND=true DEBUG_MODE=true NODE_ENV=development electron .",
     "build:web": "cd frontend && npm run build",
     "build:backend": "cd backend-ts && npm run build",
@@ -20,7 +20,8 @@
     "compare:deps-size": "node scripts/compare-node-modules-size.js",
     "analyze:modules": "node scripts/analyze-module-size.js",
     "verify:electron-setup": "node scripts/verify-electron-setup.js",
-    "build:electron": "node -e \"const fs=require('fs');const path=require('path');const dir=path.join(__dirname,'release');if(fs.existsSync(dir)){fs.rmSync(dir,{recursive:true,force:true});console.log('Cleaned release directory');}\" && npm run build:electron-ts && npm run build:backend && npm run optimize:electron-deps && npm run rebuild:backend-native:electron && cd frontend && cross-env ELECTRON=true npm run build && cd .. && cross-env ELECTRON=true electron-builder",
+    "build:seed-template": "cd backend-ts && cross-env NODE_ENV=production DATABASE_URL=file:../data/seed_template.db npm run db:seed --force",
+    "build:electron": "npm run build:seed-template && node -e \"const fs=require('fs');const path=require('path');const dir=path.join(__dirname,'release');if(fs.existsSync(dir)){fs.rmSync(dir,{recursive:true,force:true});console.log('Cleaned release directory');}\" && npm run build:electron-ts && npm run build:backend && npm run optimize:electron-deps && npm run rebuild:backend-native:electron && cd frontend && cross-env ELECTRON=true npm run build && cd .. && cross-env ELECTRON=true electron-builder",
     "build:electron:dir": "npm run build:electron-ts && npm run build:backend && npm run optimize:electron-deps && npm run rebuild:backend-native:electron && cd frontend && cross-env ELECTRON=true npm run build && cd .. && cross-env ELECTRON=true electron-builder --dir",
     "postinstall": "cd backend-ts && npm install && cd ../frontend && npm install"
   },
@@ -72,6 +73,13 @@
           "!**/__tests__/**/*",
           "!**/test/**/*",
           "!**/tests/**/*"
+        ]
+      },
+      {
+        "from": "data",
+        "to": "data",
+        "filter": [
+          "seed_template.db"
         ]
       },
       {
@@ -162,6 +170,7 @@
   },
   "dependencies": {
     "@electron/rebuild": "^4.0.4",
+    "electron-log": "^5.4.3",
     "electron-updater": "^6.8.3"
   }
 }

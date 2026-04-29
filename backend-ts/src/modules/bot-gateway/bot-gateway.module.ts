@@ -16,7 +16,6 @@ import { WeComAiBotAdapter } from './adapters/wecom-aibot.adapter';
 // import { WeChatPersonalBotAdapter } from './adapters/wechat-personal-bot.adapter';
 import { ChatModule } from '../chat/chat.module';
 import { AuthModule } from '../auth/auth.module';
-import { DatabaseModule } from '../../common/database/database.module';
 import { SharedModule } from '../../common/services/shared.module';
 import { MessageRepository } from '../../common/database/message.repository';
 import { KnowledgeBaseRepository } from '../../common/database/knowledge-base.repository';
@@ -26,7 +25,6 @@ import { PrismaService } from '../../common/database/prisma.service';
   imports: [
     ChatModule, // 引入 AgentService
     AuthModule, // 引入 AuthGuard (需要 JwtService)
-    DatabaseModule, // 引入数据库访问(包含 PrismaService 和 Repositories)
     SharedModule, // 引入 SettingsStorage
   ],
   controllers: [BotAdminController],

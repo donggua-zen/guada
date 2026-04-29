@@ -19,7 +19,7 @@
 
       <!-- 会话列表区域 -->
       <div class="sessions-list flex-1 overflow-hidden py-2">
-        <ScrollContainer ref="scrollContainer" class="h-full" @scroll="handleScroll">
+        <ScrollContainer class="h-full max-h-full" @scroll="handleScroll">
           <div class="px-5 py-2.5 text-xs font-medium text-gray-400 uppercase tracking-wider">对话记录</div>
           <template v-if="!filteredSessions || filteredSessions.length === 0">
             <div class="empty-state text-center text-gray-500 flex flex-col items-center justify-center h-full py-12">

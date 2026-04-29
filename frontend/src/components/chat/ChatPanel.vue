@@ -6,7 +6,7 @@
       <WelcomeScreen :session="currentSession" />
     </template>
     <template v-else-if="authStore.isAuthenticated">
-      <ScrollContainer ref="scrollContainerRef" :auto-scroll="needScrollToBottom" @scroll="handleScroll">
+      <ScrollContainer ref="scrollContainerRef" class="max-h-full" :auto-scroll="needScrollToBottom" @scroll="handleScroll">
         <div class="flex flex-col items-center px-5 max-w-205 mx-auto">
           <div class="w-full last:min-h-60" v-for="(pair, index) in messagePairs" :key="pair[0].id">
             <MessageItem v-for="message in pair" :key="message.id" :message="message"

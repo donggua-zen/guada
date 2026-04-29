@@ -1,21 +1,30 @@
-import { app, BrowserWindow, ipcMain, Menu, shell, MenuItemConstructorOptions } from 'electron'
+import { app, BrowserWindow, ipcMain, Menu, shell, MenuItemConstructorOptions, dialog } from 'electron'
 import * as path from 'path'
 import { fork, ChildProcess } from 'child_process'
 import * as fs from 'fs'
 import { autoUpdater } from 'electron-updater'
 import * as net from 'net'
+import log from 'electron-log'
 
 let backendProcess: ChildProcess | null = null
 let mainWindow: BrowserWindow | null = null
 let isBackendStarting = false  // 防止重复启动
 let backendPort: number | null = null  // 记录后端端口
 
+// 配置 electron-log
+log.transports.file.level = 'info'
+log.transports.file.maxSize = 50 * 1024 * 1024 // 50MB
+log.transports.file.format = '[{y}-{m}-{d} {h}:{i}:{s}.{ms}] [{level}] {text}'
+
+// 将 console 输出重定向到日志文件（可选，生产环境建议启用）
+// Object.assign(console, log.functions)
+
 // 单实例锁：确保同一时间只有一个应用实例运行
 const gotTheLock = app.requestSingleInstanceLock()
 
 if (!gotTheLock) {
   // 如果获取锁失败，说明已有实例在运行，立即退出当前进程
-  console.log('⚠️  检测到已有应用实例在运行，退出当前实例')
+  log.warn('检测到已有应用实例在运行，退出当前实例')
   app.quit()
 } else {
   // 如果获取锁成功，监听第二个实例启动事件
@@ -54,10 +63,21 @@ function getBackendPath(): string {
   }
 }
 
+// 计算 Schema 版本的哈希值（基于 schema.prisma 内容）
+function getSchemaVersion(backendPath: string): string {
+  const crypto = require('crypto')
+  const schemaPath = path.join(backendPath, 'prisma', 'schema.prisma')
+  if (!fs.existsSync(schemaPath)) return 'unknown'
+  
+  const content = fs.readFileSync(schemaPath, 'utf-8')
+  return crypto.createHash('md5').update(content).digest('hex').substring(0, 12)
+}
+
 // 初始化数据库文件
 async function initializeDatabase(userDataPath: string, backendPath: string): Promise<void> {
   const dbPath = path.join(userDataPath, 'ai_chat.db')
   const vectorDbPath = path.join(userDataPath, 'vector_db.sqlite')
+  const versionFilePath = path.join(userDataPath, 'db_version.json')
   const { execSync } = require('child_process')
 
   // 设置环境变量
@@ -68,134 +88,120 @@ async function initializeDatabase(userDataPath: string, backendPath: string): Pr
     NODE_ENV: process.env.NODE_ENV || 'production'
   }
 
-  // 判断是否为首次运行（数据库文件不存在或大小为0）
-  const isFirstRun = !fs.existsSync(dbPath) || fs.statSync(dbPath).size === 0
-  console.log('🔍 数据库状态:', {
-    exists: fs.existsSync(dbPath),
-    size: fs.existsSync(dbPath) ? fs.statSync(dbPath).size : 0,
-    isFirstRun
-  })
-
-  if (isFirstRun) {
-    console.log('🔄 检测到首次运行，正在初始化数据库...')
-    try {
-      // 1. 使用 db push 直接根据 schema 创建表结构（适合无迁移历史的初始化）
-      execSync('npx prisma db push --config=prisma.config.js --accept-data-loss', {
-        cwd: backendPath,
-        env,
-        stdio: 'pipe',
-        encoding: 'utf-8'
-      })
-      console.log('✅ 数据库表结构创建成功')
-
-      // 2. 执行种子数据
-      console.log('🌱 正在初始化种子数据...')
-      
-      // 生产环境：直接执行编译后的种子脚本
-      if (!isDev) {
-        const seedScriptPath = path.join(backendPath, 'dist', 'scripts', 'seed.js')
-        if (fs.existsSync(seedScriptPath)) {
-          // 关键：使用 process.execPath（Electron 内置的 Node.js）而不是系统 node
-          const nodePath = process.execPath
-          const modulesPath = path.join(backendPath, 'node_modules')
-          
-          console.log('📝 种子脚本路径:', seedScriptPath)
-          console.log('📝 Node.js 路径:', nodePath)
-          
-          // 使用 spawn 而不是 execSync，以便更好地处理输出
-          const { spawn } = require('child_process')
-          const seedProcess = spawn(nodePath, [seedScriptPath, '--force'], {
-            cwd: backendPath,
-            env: {
-              ...env,
-              NODE_MODULES_PATH: modulesPath,
-              ELECTRON_RUN_AS_NODE: '1'
-            },
-            stdio: ['pipe', 'pipe', 'pipe']  // 捕获所有输出
-          })
-          
-          let stdout = ''
-          let stderr = ''
-          
-          seedProcess.stdout.on('data', (data: Buffer) => {
-            const text = data.toString()
-            stdout += text
-            process.stdout.write(text)  // 实时输出到控制台
-          })
-          
-          seedProcess.stderr.on('data', (data: Buffer) => {
-            const text = data.toString()
-            stderr += text
-            process.stderr.write(text)  // 实时输出错误
-          })
-          
-          // 等待种子脚本执行完成
-          await new Promise<void>((resolve, reject) => {
-            seedProcess.on('close', (code: number) => {
-              if (code === 0) {
-                console.log('\n✅ 种子数据初始化完成')
-                resolve()
-              } else {
-                console.error(`\n❌ 种子脚本退出码: ${code}`)
-                reject(new Error(`种子脚本执行失败，退出码: ${code}`))
-              }
-            })
-            
-            seedProcess.on('error', (error: Error) => {
-              console.error('\n❌ 种子脚本启动失败:', error.message)
-              reject(error)
-            })
-          })
-        } else {
-          console.warn('⚠️  种子脚本不存在，跳过种子数据初始化')
-        }
-      } else {
-        // 开发环境：使用 npm 命令
-        execSync('npm run db:seed:force', {
-          cwd: backendPath,
-          env,
-          stdio: 'pipe',
-          encoding: 'utf-8'
-        })
-        console.log('✅ 种子数据初始化完成')
-      }
-    } catch (error: any) {
-      console.error('❌ 数据库初始化失败:', error.message)
-      if (error.stderr) console.error('错误详情:', error.stderr.toString())
+  const currentSchemaVersion = getSchemaVersion(backendPath)
+  let storedVersion: any = null
+  try {
+    if (fs.existsSync(versionFilePath)) {
+      storedVersion = JSON.parse(fs.readFileSync(versionFilePath, 'utf-8'))
     }
-  } else {
-    // 非首次运行，尝试执行迁移以更新结构
-    console.log('💾 检测到已有数据库，检查结构更新...')
-    try {
-      // 备份旧数据库以防万一（带时间戳避免覆盖）
+  } catch (e) {
+    console.warn('⚠️  读取版本标记文件失败，将重新同步')
+  }
+
+  // 智能跳过同步：如果版本一致且数据库存在，则跳过
+  if (storedVersion && storedVersion.schemaVersion === currentSchemaVersion && fs.existsSync(dbPath) && fs.statSync(dbPath).size > 0) {
+    console.log(`✅ 数据库版本已同步 (${currentSchemaVersion})，跳过初始化`)
+    return
+  }
+
+  console.log('🔄 检测到数据库需要同步或初始化...')
+  try {
+    // 1. 首次运行：从模板拷贝数据库
+    const isFirstRun = !fs.existsSync(dbPath) || fs.statSync(dbPath).size === 0
+    if (isFirstRun) {
+      let templatePath: string | null = null
+      
+      if (isDev) {
+        // 开发环境：直接指向项目根目录下的 data 文件夹
+        const devPath = path.join(__dirname, '..', '..', 'data', 'seed_template.db')
+        if (fs.existsSync(devPath)) templatePath = devPath
+      } else {
+        // 生产环境：指向打包后的 resources 目录
+        const prodPath = path.join(process.resourcesPath, 'data', 'seed_template.db')
+        if (fs.existsSync(prodPath)) templatePath = prodPath
+      }
+
+      if (templatePath) {
+        console.log(`📦 发现种子模板: ${templatePath}`)
+        fs.copyFileSync(templatePath, dbPath)
+        console.log('✅ 已从模板初始化数据库')
+      } else {
+        console.warn('⚠️  未找到种子模板，将执行动态同步')
+      }
+    }
+
+    // 2. 备份逻辑优化：仅在非首次运行且结构变更时备份
+    if (!isFirstRun) {
       const timestamp = new Date().toISOString().replace(/[:.]/g, '-')
       const backupPath = `${dbPath}.bak.${timestamp}`
       fs.copyFileSync(dbPath, backupPath)
-      console.log(`📦 数据库已备份至: ${backupPath}`)
+      console.log(`📦 数据库结构变更，已备份至: ${backupPath}`)
       
-      // 使用 db push 同步结构（适合 Electron 应用场景）
-      // 注意：仅在 schema 添加新字段/表时安全，删除字段会导致数据丢失
-      execSync('npx prisma db push --config=prisma.config.js --accept-data-loss', {
-        cwd: backendPath,
-        env,
-        stdio: 'pipe',
-        encoding: 'utf-8'
-      })
-      console.log('✅ 数据库结构已同步 (db push)')
-    } catch (pushError: any) {
-      console.error('❌ 数据库结构同步失败:', pushError.message)
-      // 迁移失败时尝试恢复最新备份
+      // 清理旧备份（保留最近 3 个）
       const backups = fs.readdirSync(path.dirname(dbPath))
         .filter(f => f.startsWith(path.basename(dbPath) + '.bak.'))
         .sort()
         .reverse()
-      
-      if (backups.length > 0) {
-        const latestBackup = path.join(path.dirname(dbPath), backups[0])
-        fs.copyFileSync(latestBackup, dbPath)
-        console.warn(`⚠️  已从最新备份恢复数据库: ${latestBackup}`)
+      if (backups.length > 3) {
+        for (let i = 3; i < backups.length; i++) {
+          fs.unlinkSync(path.join(path.dirname(dbPath), backups[i]))
+        }
       }
     }
+
+    // 3. 使用 db push 同步结构（确保结构与当前代码完全一致）
+    execSync('npx prisma db push --config=prisma.config.js --accept-data-loss', {
+      cwd: backendPath,
+      env,
+      stdio: 'pipe',
+      encoding: 'utf-8'
+    })
+    console.log('✅ 数据库表结构同步成功')
+
+    // 4. 更新版本标记
+    fs.writeFileSync(versionFilePath, JSON.stringify({
+      schemaVersion: currentSchemaVersion,
+      seedCompleted: true,
+      updatedAt: new Date().toISOString()
+    }, null, 2))
+    console.log('💾 数据库版本标记已更新')
+
+  } catch (error: any) {
+    console.error('❌ 数据库同步失败:', error.message)
+    handleDatabaseError(error, dbPath, userDataPath)
+    throw error // 抛出错误以便主进程捕获并提示用户
+  }
+}
+
+// 处理数据库错误并弹出模态框
+async function handleDatabaseError(error: any, dbPath: string, userDataPath: string) {
+  if (!mainWindow) return
+
+  const options: Electron.MessageBoxOptions = {
+    type: 'error',
+    title: '数据库同步失败',
+    message: '应用启动时无法同步数据库结构。',
+    detail: `错误信息: ${error.message}\n\n您可以尝试点击“重试”或手动打开日志目录排查问题。`,
+    buttons: ['重试', '打开日志目录', '退出'],
+    defaultId: 0,
+    cancelId: 2
+  }
+
+  try {
+    const response = await dialog.showMessageBox(mainWindow, options)
+    if (response.response === 0) {
+      // 重试：重新调用初始化
+      console.log('用户选择重试数据库同步...')
+      await initializeDatabase(userDataPath, getBackendPath())
+    } else if (response.response === 1) {
+      shell.openPath(userDataPath)
+      app.quit()
+    } else {
+      app.quit()
+    }
+  } catch (e) {
+    console.error('显示错误对话框失败:', e)
+    app.quit()
   }
 }
 
@@ -241,11 +247,13 @@ async function startBackend(): Promise<void> {
       const vectorDbPath = path.join(userDataPath, 'vector_db.sqlite')
       const staticDir = path.join(backendPath, 'static')
       const uploadDir = path.join(userDataPath, 'file_stores')
+      const logsDir = path.join(userDataPath, 'logs') // 后端日志目录
       
       console.log('数据库路径:', dbPath)
       console.log('向量数据库路径:', vectorDbPath)
       console.log('基础静态目录:', staticDir)
       console.log('上传文件目录:', uploadDir)
+      console.log('后端日志目录:', logsDir)
       
       const spawnOptions: any = {
         cwd: backendPath,
@@ -259,6 +267,7 @@ async function startBackend(): Promise<void> {
           UPLOAD_ROOT_DIR: uploadDir,
           UPLOAD_URL_PREFIX: '/uploads',
           SETTINGS_DIR: userDataPath, // 传递设置目录
+          LOGS_DIR: logsDir, // 传递后端日志目录到用户数据区
         },
         stdio: ['pipe', 'pipe', 'pipe'], // 开发模式不需要 IPC
         shell: true
@@ -290,11 +299,13 @@ async function startBackend(): Promise<void> {
       const vectorDbPath = path.join(userDataPath, 'vector_db.sqlite')
       const staticDir = path.join(backendPath, 'static')
       const uploadDir = path.join(userDataPath, 'file_stores')
+      const logsDir = path.join(userDataPath, 'logs') // 后端日志目录
       
       console.log('数据库路径:', dbPath)
       console.log('向量数据库路径:', vectorDbPath)
       console.log('基础静态目录:', staticDir)
       console.log('上传文件目录:', uploadDir)
+      console.log('后端日志目录:', logsDir)
       
       // 使用 spawn 启动后端
       const spawnOptions: any = {
@@ -312,6 +323,7 @@ async function startBackend(): Promise<void> {
           UPLOAD_ROOT_DIR: uploadDir,
           UPLOAD_URL_PREFIX: '/uploads',
           SETTINGS_DIR: userDataPath, // 传递设置目录
+          LOGS_DIR: logsDir, // 传递后端日志目录到用户数据区
         },
         stdio: ['pipe', 'pipe', 'pipe', 'ipc'] // 增加 'ipc' 以支持 process.send
       }
@@ -362,17 +374,17 @@ async function startBackend(): Promise<void> {
     
     // 处理错误
     backendProcess.on('error', (error) => {
-      console.error('Failed to start backend:', error)
+      log.error('后端进程启动失败:', error)
       isBackendStarting = false  // 重置标志
       reject(error)
     })
     
     // 处理退出
     backendProcess.on('exit', (code) => {
-      console.log(`Backend exited with code ${code}`)
+      log.info(`后端进程退出，退出码: ${code}`)
       isBackendStarting = false  // 重置标志
       if (code !== 0 && code !== null) {
-        console.error(`Backend crashed with code ${code}`)
+        log.error(`后端进程异常退出，退出码: ${code}`)
       }
     })
 
@@ -589,6 +601,33 @@ function setupIpcHandlers() {
     const menu = Menu.buildFromTemplate(menuItems)
     menu.popup({ window: win })
   })
+
+  // 打开用户数据目录
+  ipcMain.on('open-user-data-folder', () => {
+    const userDataPath = app.getPath('userData')
+    shell.openPath(userDataPath).then(error => {
+      if (error) {
+        console.error('Failed to open user data folder:', error)
+      }
+    })
+  })
+
+  // 打开安装目录
+  ipcMain.on('open-install-folder', () => {
+    let installPath: string
+    if (isDev) {
+      // 开发环境：打开项目根目录
+      installPath = path.join(__dirname, '..', '..')
+    } else {
+      // 生产环境：打开应用安装目录
+      installPath = path.dirname(app.getPath('exe'))
+    }
+    shell.openPath(installPath).then(error => {
+      if (error) {
+        console.error('Failed to open install folder:', error)
+      }
+    })
+  })
 }
 
 // 配置更新器事件监听
@@ -624,18 +663,20 @@ function setupAutoUpdater() {
 // 应用就绪
 app.whenReady().then(async () => {
   try {
+    log.info('应用启动中...')
     setupIpcHandlers()
     setupAutoUpdater()
     
     // 启动后端服务
-    console.log('Starting backend service...')
+    log.info('正在启动后端服务...')
     await startBackend()
-    console.log('Backend service started successfully')
+    log.info('后端服务启动成功')
     
     // 创建窗口
     createWindow()
-  } catch (error) {
-    console.error('Failed to initialize app:', error)
+    log.info('应用初始化完成')
+  } catch (error: any) {
+    log.error('应用初始化失败:', error)
     app.quit()
   }
 })
