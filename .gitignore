@@ -29,3 +29,4 @@ backend-ts/static/knowledge-base/**
 backend-ts/static/previews/**
 backend-ts/.config/**
 onebots-temp/
+.lingma/
