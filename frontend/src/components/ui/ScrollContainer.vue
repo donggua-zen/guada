@@ -1,6 +1,6 @@
 <!-- ScrollContainer.vue -->
 <template>
-    <SimpleBar ref="simpleBarRef">
+    <SimpleBar ref="simpleBarRef" @scroll="handleScroll">
         <div ref="contentElement">
             <slot></slot>
         </div>
