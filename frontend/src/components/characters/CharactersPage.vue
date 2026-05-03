@@ -16,24 +16,22 @@
       <div class="pb-4 border-b border-gray-200 dark:border-gray-700">
         <div class="flex flex-wrap gap-2">
           <!-- 全部助手标签 -->
-          <div
-            class="filter-tag px-4 py-2 rounded-full cursor-pointer transition-all duration-200 select-none"
-            :class="currentGroupId === null ? 'active' : 'inactive'"
-            @click="selectGroup(null)">
+          <div class="filter-tag px-4 py-2 rounded-full cursor-pointer transition-all duration-200 select-none"
+            :class="currentGroupId === null ? 'active' : 'inactive'" @click="selectGroup(null)">
             全部助手
           </div>
-          
+
           <!-- 分组标签 -->
           <div v-for="group in groups" :key="group.id"
             class="filter-tag group-tag px-4 py-2 rounded-full cursor-pointer transition-all duration-200 select-none flex items-center gap-2"
-            :class="currentGroupId === group.id ? 'active' : 'inactive'"
-            @click="selectGroup(group.id)"
+            :class="currentGroupId === group.id ? 'active' : 'inactive'" @click="selectGroup(group.id)"
             @contextmenu.prevent="handleGroupContextMenu($event, group)">
             <span>{{ group.name }}</span>
           </div>
-          
+
           <!-- 新建分组按钮 -->
-          <div class="filter-tag new-group-btn px-4 py-2 rounded-full cursor-pointer transition-all duration-200 select-none"
+          <div
+            class="filter-tag new-group-btn px-4 py-2 rounded-full cursor-pointer transition-all duration-200 select-none"
             @click="showCreateGroupDialog">
             <el-icon :size="16" class="mr-1">
               <PlusOutlined />
@@ -44,72 +42,69 @@
       </div>
       <!-- 助手列表 -->
       <div class="flex-1 overflow-y-auto pt-4">
-            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 w-full">
-              <!-- 助手卡片 -->
-              <div v-for="character in characters" :key="character.id"
-                class="provider-card group relative bg-white border border-gray-200 rounded-lg p-4 cursor-default hover:border-(--color-primary) transition-all duration-200 overflow-hidden">
-                <!-- 毛玻璃背景层 -->
-                <div v-if="character.avatarUrl" class="absolute inset-0 z-0" :style="{
-                  backgroundImage: `url(${character.avatarUrl})`,
-                  backgroundSize: 'cover',
-                  backgroundPosition: 'center',
-                  filter: 'blur(30px)',
-                  opacity: 0.04,
-                  transform: 'scale(1.5)'
-                }">
-                </div>
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 w-full">
+          <!-- 助手卡片 -->
+          <div v-for="character in characters" :key="character.id"
+            class="provider-card group relative bg-white border border-gray-200 rounded-lg p-4 cursor-default hover:border-(--color-primary) transition-all duration-200 overflow-hidden">
+            <!-- 毛玻璃背景层 -->
+            <div v-if="character.avatarUrl" class="absolute inset-0 z-0" :style="{
+              backgroundImage: `url(${character.avatarUrl})`,
+              backgroundSize: 'cover',
+              backgroundPosition: 'center',
+              filter: 'blur(30px)',
+              opacity: 0.04,
+              transform: 'scale(1.5)'
+            }">
+            </div>
 
-                <!-- 内容区域 -->
-                <div class="relative z-10 flex flex-col h-full">
-                  <div class="flex items-start gap-3">
-                    <div
-                      class="w-11 h-11 shrink-0 flex items-center justify-center text-(--color-primary) bg-gray-50 rounded-md overflow-hidden">
-                      <Avatar :src="character.avatarUrl" :name="character.title" type="assistant" />
-                    </div>
-                    <div class="flex-1 min-w-0">
-                      <div class="flex items-start justify-between">
-                        <div class="font-medium text-base text-gray-900 truncate" :title="character.title">{{
-                          character.title }}</div>
-                        <!-- 删除按钮 - 悬停显示 -->
-                        <el-button link size="small" type="danger"
-                          class="opacity-0 group-hover:opacity-100 transition-all duration-200 delete-btn"
-                          @click.stop="deleteCharacter(character)">
-                          <el-icon :size="18">
-                            <DeleteOutlineOutlined />
-                          </el-icon>
-                        </el-button>
-                      </div>
-                      <div class="text-xs text-gray-500 mt-1.5">{{ character.isPublic ? '共享模板' : '我的模板' }}</div>
-                    </div>
+            <!-- 内容区域 -->
+            <div class="relative z-10 flex flex-col h-full">
+              <div class="flex items-start gap-3">
+                <Avatar class="w-11 h-11" :src="character.avatarUrl" :name="character.title" type="assistant" />
+                <div class="flex-1 min-w-0">
+                  <div class="flex items-start justify-between">
+                    <div class="font-medium text-base text-gray-900 truncate" :title="character.title">{{
+                      character.title }}</div>
+                    <!-- 删除按钮 - 悬停显示 -->
+                    <el-button link size="small" type="danger"
+                      class="opacity-0 group-hover:opacity-100 transition-all duration-200 delete-btn"
+                      @click.stop="deleteCharacter(character)">
+                      <el-icon :size="18">
+                        <DeleteOutlineOutlined />
+                      </el-icon>
+                    </el-button>
                   </div>
-                  <div class="text-xs text-gray-400 mt-2 line-clamp-2 leading-relaxed">{{ character.description ||
-                    '暂无描述' }}
-                  </div>
-                </div>
-
-                <!-- 悬停显示的渐变遮罩和按钮 -->
-                <div
-                  class="absolute inset-x-0 bottom-0 h-16 bg-linear-to-t from-white via-white/90 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none rounded-b-lg">
-                </div>
-                <div
-                  class="absolute inset-x-2 bottom-2 flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-auto z-20">
-                  <el-button type="primary" size="small" class="flex-1 shadow-sm" @click.stop="startNewChat(character)">
-                    使用此角色
-                  </el-button>
-                  <el-button size="small" class="flex-1 shadow-sm" @click.stop="editCharacter(character)">
-                    角色设置
-                  </el-button>
+                  <div class="text-xs text-gray-500 mt-1.5">{{ character.isPublic ? '共享模板' : '我的模板' }}</div>
                 </div>
               </div>
-              <!-- 空状态 -->
-              <div v-if="!loading && characters.length === 0" class="col-span-full text-center py-12 text-gray-500">
-                <el-icon size="48" class="text-gray-300 mb-3">
-                  <People />
-                </el-icon>
-                <p class="text-lg">暂无助手</p>
-                <p class="text-sm mt-1">点击上方按钮创建第一个助手</p>
+              <div class="text-xs text-gray-400 mt-2 line-clamp-2 leading-relaxed">{{ character.description ||
+                '暂无描述' }}
               </div>
             </div>
+
+            <!-- 悬停显示的渐变遮罩和按钮 -->
+            <div
+              class="absolute inset-x-0 bottom-0 h-16 bg-linear-to-t from-white via-white/90 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none rounded-b-lg">
+            </div>
+            <div
+              class="absolute inset-x-2 bottom-2 flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-auto z-20">
+              <el-button type="primary" size="small" class="flex-1 shadow-sm" @click.stop="startNewChat(character)">
+                使用此角色
+              </el-button>
+              <el-button size="small" class="flex-1 shadow-sm" @click.stop="editCharacter(character)">
+                角色设置
+              </el-button>
+            </div>
+          </div>
+          <!-- 空状态 -->
+          <div v-if="!loading && characters.length === 0" class="col-span-full text-center py-12 text-gray-500">
+            <el-icon size="48" class="text-gray-300 mb-3">
+              <People />
+            </el-icon>
+            <p class="text-lg">暂无助手</p>
+            <p class="text-sm mt-1">点击上方按钮创建第一个助手</p>
+          </div>
+        </div>
       </div>
     </div>
 
@@ -374,7 +369,7 @@ const handleSaved = async (characterData: any): Promise<void> => {
 onMounted(async (): Promise<void> => {
   await loadGroups()
   loadCharacters()
-  
+
   // 点击其他地方关闭菜单
   window.addEventListener('click', closeContextMenu)
 })
