@@ -172,7 +172,7 @@ const currentSession = ref<any>({
       maxMemoryLength: null,
       compressionTriggerRatio: 0.8,
       compressionTargetRatio: 0.5,
-      enableSummaryCompression: true,
+      summaryMode: 'fast', // 默认快速模式
       maxTokensLimit: null
     }
   }
@@ -262,7 +262,7 @@ watch(() => currentSession.value.characterId, (newCharId, oldCharId) => {
           maxMemoryLength: newCharacter.settings?.memory?.maxMemoryLength || newCharacter.settings?.maxMemoryLength,
           compressionTriggerRatio: newCharacter.settings?.memory?.compressionTriggerRatio || 0.8,
           compressionTargetRatio: newCharacter.settings?.memory?.compressionTargetRatio || 0.5,
-          enableSummaryCompression: newCharacter.settings?.memory?.enableSummaryCompression ?? true,
+          summaryMode: newCharacter.settings?.memory?.summaryMode || 'fast',
           maxTokensLimit: newCharacter.settings?.memory?.maxTokensLimit || null
         }
       };
@@ -386,7 +386,7 @@ const loadCharacters = async (): Promise<void> => {
             maxMemoryLength: targetCharacter.settings?.memory?.maxMemoryLength || targetCharacter.settings?.maxMemoryLength,
             compressionTriggerRatio: targetCharacter.settings?.memory?.compressionTriggerRatio || 0.8,
             compressionTargetRatio: targetCharacter.settings?.memory?.compressionTargetRatio || 0.5,
-            enableSummaryCompression: targetCharacter.settings?.memory?.enableSummaryCompression ?? true,
+            summaryMode: targetCharacter.settings?.memory?.summaryMode || 'fast',
             maxTokensLimit: targetCharacter.settings?.memory?.maxTokensLimit || null
           }
         };
@@ -451,7 +451,7 @@ const selectCharacter = (character: any): void => {
       maxMemoryLength: character.settings?.memory?.maxMemoryLength || character.settings?.maxMemoryLength,
       compressionTriggerRatio: character.settings?.memory?.compressionTriggerRatio || 0.8,
       compressionTargetRatio: character.settings?.memory?.compressionTargetRatio || 0.5,
-      enableSummaryCompression: character.settings?.memory?.enableSummaryCompression ?? true,
+      summaryMode: character.settings?.memory?.summaryMode || 'fast',
       maxTokensLimit: character.settings?.memory?.maxTokensLimit || null
     }
   };

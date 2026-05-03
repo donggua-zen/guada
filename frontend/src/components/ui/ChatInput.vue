@@ -56,12 +56,9 @@
           <el-button @click.stop="openModelPanel" plain
             class="model-selector-btn overflow-hidden flex items-center justify-center">
             <div class="flex items-center gap-1.5" style="height:24px">
-              <Avatar 
-                v-if="currentModel"
-                :src="getModelAvatarPath(currentModel.modelName, currentModel.provider?.name) || undefined" 
-                :name="getModelDisplayName(currentModel.modelName)"
-                type="assistant"
-                :round="false"
+              <Avatar v-if="currentModel"
+                :src="getModelAvatarPath(currentModel.modelName, currentModel.provider?.name) || undefined"
+                :name="getModelDisplayName(currentModel.modelName)" type="assistant" :round="false"
                 class="w-4 h-4 shrink-0" />
               <OpenAI v-else class="w-4 h-4 shrink-0" />
               <span class="whitespace-nowrap text-sm font-medium"
@@ -125,7 +122,7 @@
                   </template>
                 </el-input>
               </div>
-              <div class="model-list min-h-0 overflow-hidden" >
+              <div class="model-list min-h-0 overflow-hidden">
                 <ScrollContainer class="w-full h-full min-h-0 px-3" style="max-height: 320px;">
                   <div class="space-y-2 pb-4 w-full">
                     <template v-for="provider in filteredProviders" :key="provider.id">
@@ -135,17 +132,15 @@
                         </div>
                         <div class="provider-models space-y-1">
                           <div v-for="model in getProviderModels(provider.id)" :key="model.id"
-                            class="model-item-compact p-2 rounded cursor-pointer transition-all flex items-center gap-2" :class="{
+                            class="model-item-compact p-2 rounded cursor-pointer transition-all flex items-center gap-2"
+                            :class="{
                               'bg-pink-50 dark:bg-pink-900/20': tempModelId === model.id,
                               'hover:bg-gray-50 dark:hover:bg-gray-800/50': tempModelId !== model.id
                             }" @click="selectAndCloseModel(model.id)">
                             <!-- 模型头像 -->
                             <div class="w-8 h-8 shrink-0">
-                              <Avatar 
-                                :src="getModelAvatarPath(model.modelName, provider.name) || undefined" 
-                                :name="getModelDisplayName(model.modelName)"
-                                type="assistant"
-                                :round="false"
+                              <Avatar :src="getModelAvatarPath(model.modelName, provider.name) || undefined"
+                                :name="getModelDisplayName(model.modelName)" type="assistant" :round="false"
                                 class="w-full h-full" />
                             </div>
                             <div class="flex-1 min-w-0">
@@ -154,44 +149,44 @@
                               </div>
                               <!-- 特性图标组 -->
                               <div class="flex items-center gap-1.5 text-xs text-gray-500 dark:text-gray-400">
-                                  <span
-                                    class="px-1.5 py-0.5 rounded bg-gray-100 dark:bg-gray-700 font-medium text-[10px]">
-                                    {{ model.modelType === 'text' ? '对话' : '嵌入' }}
-                                  </span>
+                                <span
+                                  class="px-1.5 py-0.5 rounded bg-gray-100 dark:bg-gray-700 font-medium text-[10px]">
+                                  {{ model.modelType === 'text' ? '对话' : '嵌入' }}
+                                </span>
 
-                                  <!-- 输入/输出能力箭头组 -->
-                                  <div
-                                    v-if="model.modelType === 'text' && (model.config?.inputCapabilities || model.config?.outputCapabilities)"
-                                    class="flex items-center gap-0.5 px-1.5 py-0.5 rounded bg-gray-50 dark:bg-gray-800 border border-gray-100 dark:border-gray-700">
-                                    <template v-for="cap in (model.config?.inputCapabilities || ['text'])"
-                                      :key="'in-' + cap">
-                                      <el-icon :size="13">
-                                        <TextT24Regular v-if="cap === 'text'" />
-                                        <Image24Regular v-else />
-                                      </el-icon>
-                                    </template>
-                                    <el-icon :size="9" class="text-gray-300">
-                                      <ArrowRightTwotone />
+                                <!-- 输入/输出能力箭头组 -->
+                                <div
+                                  v-if="model.modelType === 'text' && (model.config?.inputCapabilities || model.config?.outputCapabilities)"
+                                  class="flex items-center gap-0.5 px-1.5 py-0.5 rounded bg-gray-50 dark:bg-gray-800 border border-gray-100 dark:border-gray-700">
+                                  <template v-for="cap in (model.config?.inputCapabilities || ['text'])"
+                                    :key="'in-' + cap">
+                                    <el-icon :size="13">
+                                      <TextT24Regular v-if="cap === 'text'" />
+                                      <Image24Regular v-else />
                                     </el-icon>
-                                    <template v-for="cap in (model.config?.outputCapabilities || ['text'])"
-                                      :key="'out-' + cap">
-                                      <el-icon :size="13">
-                                        <TextT24Regular v-if="cap === 'text'" />
-                                        <Image24Regular v-else />
-                                      </el-icon>
-                                    </template>
-                                  </div>
-
-                                  <!-- 高级功能图标 -->
-                                  <template v-for="feature in (model.config?.features || [])" :key="feature">
-                                    <el-tooltip :content="getFeatureLabel(feature)" placement="top">
-                                      <el-icon class="hover:text-primary transition-colors" :size="13">
-                                        <WrenchScrewdriver24Regular v-if="feature === 'tools'" />
-                                        <LightbulbFilament24Regular v-else-if="feature === 'thinking'" />
-                                      </el-icon>
-                                    </el-tooltip>
+                                  </template>
+                                  <el-icon :size="9" class="text-gray-300">
+                                    <ArrowRightTwotone />
+                                  </el-icon>
+                                  <template v-for="cap in (model.config?.outputCapabilities || ['text'])"
+                                    :key="'out-' + cap">
+                                    <el-icon :size="13">
+                                      <TextT24Regular v-if="cap === 'text'" />
+                                      <Image24Regular v-else />
+                                    </el-icon>
                                   </template>
                                 </div>
+
+                                <!-- 高级功能图标 -->
+                                <template v-for="feature in (model.config?.features || [])" :key="feature">
+                                  <el-tooltip :content="getFeatureLabel(feature)" placement="top">
+                                    <el-icon class="hover:text-primary transition-colors" :size="13">
+                                      <WrenchScrewdriver24Regular v-if="feature === 'tools'" />
+                                      <LightbulbFilament24Regular v-else-if="feature === 'thinking'" />
+                                    </el-icon>
+                                  </el-tooltip>
+                                </template>
+                              </div>
                             </div>
                             <div class="flex items-center gap-1.5 shrink-0 mt-0.5">
                               <!-- 收藏按钮 -->
@@ -252,9 +247,8 @@
                           @change="toggleKnowledgeBaseSelection(kb.id)" size="small" />
                         <div class="flex-1 min-w-0 flex items-center gap-2">
                           <div class="font-medium text-sm truncate flex-shrink">{{ kb.name }}</div>
-                          <div v-if="kb.description"
-                            class="text-xs text-gray-500 dark:text-gray-400 truncate flex-1">{{
-                              kb.description }}</div>
+                          <div v-if="kb.description" class="text-xs text-gray-500 dark:text-gray-400 truncate flex-1">{{
+                            kb.description }}</div>
                         </div>
                       </div>
                     </div>
@@ -266,14 +260,8 @@
         </transition>
 
         <!-- 会话设置模态框 -->
-        <el-dialog 
-          v-model="settingsDialogVisible" 
-          title="会话记忆与压缩配置" 
-          width="600px"
-          append-to-body
-          :close-on-click-modal="false"
-          class="session-settings-dialog"
-        >
+        <el-dialog v-model="settingsDialogVisible" title="会话记忆与压缩配置" width="600px" append-to-body
+          :close-on-click-modal="false" class="session-settings-dialog">
           <ScrollContainer class="w-full h-full min-h-0 px-2 py-4" style="max-height: 500px;">
             <el-form label-position="left" label-width="50%" size="large">
               <!-- 自定义配置开关 -->
@@ -285,12 +273,7 @@
                   </div>
                 </template>
                 <div class="w-full max-w-md">
-                  <el-switch 
-                    v-model="tempMemoryConfig.useCustom" 
-                    inline-prompt
-                    active-text="开启"
-                    inactive-text="关闭"
-                  />
+                  <el-switch v-model="tempMemoryConfig.useCustom" inline-prompt active-text="开启" inactive-text="关闭" />
                 </div>
               </el-form-item>
 
@@ -301,16 +284,12 @@
                   <template #label>
                     <div class="flex flex-col gap-1">
                       <span class="text-base text-gray-900 dark:text-gray-100 font-medium">上下文条数</span>
-                      <span class="text-xs text-gray-500 dark:text-gray-400 font-normal">控制对话历史的最大消息数量，影响模型的长期记忆能力</span>
+                      <span
+                        class="text-xs text-gray-500 dark:text-gray-400 font-normal">控制对话历史的最大消息数量，影响模型的长期记忆能力</span>
                     </div>
                   </template>
-                  <el-slider-optional 
-                    v-model="tempMemoryConfig.maxMemoryLength" 
-                    :min="2" :max="100" :step="1" 
-                    show-input
-                    optional-direction="max" 
-                    optional-text="No Limit" 
-                    class="w-full max-w-md" />
+                  <el-slider-optional v-model="tempMemoryConfig.maxMemoryLength" :min="2" :max="100" :step="1"
+                    show-input optional-direction="max" optional-text="No Limit" class="w-full max-w-md" />
                 </el-form-item>
 
                 <!-- Token 上限 -->
@@ -318,17 +297,13 @@
                   <template #label>
                     <div class="flex flex-col gap-1">
                       <span class="text-base text-gray-900 dark:text-gray-100 font-medium">Token 上限</span>
-                      <span class="text-xs text-gray-500 dark:text-gray-400 font-normal">设置 Token 使用上限，与模型上下文窗口取最小值作为压缩判断基准</span>
+                      <span class="text-xs text-gray-500 dark:text-gray-400 font-normal">设置 Token
+                        使用上限，与模型上下文窗口取最小值作为压缩判断基准</span>
                     </div>
                   </template>
                   <div class="w-full max-w-md">
-                    <el-input 
-                      v-model="tempDisplayMaxTokens" 
-                      placeholder="不限制"
-                      clearable
-                      @input="handleTempMaxTokensInput"
-                      @blur="formatTempMaxTokensDisplay"
-                    >
+                    <el-input v-model="tempDisplayMaxTokens" placeholder="不限制" clearable
+                      @input="handleTempMaxTokensInput" @blur="formatTempMaxTokensDisplay">
                       <template #suffix>
                         <span class="text-gray-400 text-sm">Tokens</span>
                       </template>
@@ -342,15 +317,12 @@
                   <template #label>
                     <div style="display: flex; flex-direction: column; gap: 8px;">
                       <span class="text-base text-gray-900 dark:text-gray-100 font-medium">触发阈值</span>
-                      <span class="text-xs text-gray-500 dark:text-gray-400 font-normal">当已用 Token 达到最大窗口的此比例时触发压缩</span>
+                      <span class="text-xs text-gray-500 dark:text-gray-400 font-normal">当已用 Token
+                        达到最大窗口的此比例时触发压缩</span>
                     </div>
                   </template>
-                  <el-slider 
-                    v-model="tempMemoryConfig.triggerRatio" 
-                    :min="0.5" :max="0.95" :step="0.05" 
-                    show-input 
-                    format-tooltip="(val) => `${Math.round(val * 100)}%`" 
-                    class="w-full max-w-md" />
+                  <el-slider v-model="tempMemoryConfig.triggerRatio" :min="0.5" :max="0.95" :step="0.05" show-input
+                    format-tooltip="(val) => `${Math.round(val * 100)}%`" class="w-full max-w-md" />
                 </el-form-item>
 
                 <!-- 保留目标 -->
@@ -361,36 +333,52 @@
                       <span class="text-xs text-gray-500 dark:text-gray-400 font-normal">压缩后保留至最大窗口的此比例</span>
                     </div>
                   </template>
-                  <el-slider 
-                    v-model="tempMemoryConfig.targetRatio" 
-                    :min="0.2" :max="0.8" :step="0.05" 
-                    show-input 
-                    format-tooltip="(val) => `${Math.round(val * 100)}%`" 
-                    class="w-full max-w-md" />
+                  <el-slider v-model="tempMemoryConfig.targetRatio" :min="0.2" :max="0.8" :step="0.05" show-input
+                    format-tooltip="(val) => `${Math.round(val * 100)}%`" class="w-full max-w-md" />
                 </el-form-item>
 
-                <!-- 启用摘要生成 -->
+                <!-- 摘要模式 -->
                 <el-form-item>
                   <template #label>
-                    <div style="display: flex; flex-direction: column; gap: 8px;">
-                      <span class="text-base text-gray-900 dark:text-gray-100 font-medium">启用摘要生成</span>
-                      <span class="text-xs text-gray-500 dark:text-gray-400 font-normal">开启后会调用 LLM 生成历史对话摘要，关闭则仅进行裁剪</span>
+                    <div class="flex flex-col gap-1">
+                      <span class="text-base text-gray-900 dark:text-gray-100 font-medium">摘要模式</span>
+                      <span class="text-xs text-gray-500 dark:text-gray-400 font-normal">选择摘要生成方式：关闭、快速或迭代优化</span>
                     </div>
                   </template>
                   <div class="w-full max-w-md">
-                    <el-switch 
-                      v-model="tempMemoryConfig.enableSummary" 
-                      inline-prompt
-                      active-text="开启"
-                      inactive-text="关闭"
-                    />
+                    <el-select v-model="tempMemoryConfig.summaryMode" placeholder="请选择摘要模式" class="w-full">
+                      <el-option label="关闭摘要" value="disabled">
+                        <span class="flex items-center gap-2">
+                          <el-icon>
+                            <CloseOutlined />
+                          </el-icon>
+                          <span>关闭摘要 - 仅裁剪工具结果</span>
+                        </span>
+                      </el-option>
+                      <el-option label="快速摘要" value="fast">
+                        <span class="flex items-center gap-2">
+                          <el-icon>
+                            <ThunderboltOutlined />
+                          </el-icon>
+                          <span>快速摘要 - 单次调用生成</span>
+                        </span>
+                      </el-option>
+                      <el-option label="迭代摘要" value="iterative">
+                        <span class="flex items-center gap-2">
+                          <el-icon>
+                            <SyncOutlined />
+                          </el-icon>
+                          <span>迭代摘要 - 多轮优化，质量最高</span>
+                        </span>
+                      </el-option>
+                    </el-select>
                   </div>
                 </el-form-item>
 
                 <el-alert title="提示" type="info" :closable="false" show-icon class="mb-6">
                   <p class="text-sm">• 触发阈值：控制何时启动压缩（建议 70%-85%）</p>
                   <p class="text-sm">• 保留目标：控制压缩后的 Token 占用（建议 40%-60%）</p>
-                  <p class="text-sm">• 启用摘要：关闭后将仅裁剪工具结果，不生成语义摘要</p>
+                  <p class="text-sm">• 摘要模式：关闭仅裁剪工具结果，快速适合日常使用，迭代质量最高但耗时较长</p>
                 </el-alert>
               </template>
             </el-form>
@@ -431,6 +419,10 @@ import {
   TextT24Regular, LightbulbFilament24Regular, WrenchScrewdriver24Regular, Image24Regular, Attach24Regular,
   Send24Filled, Stop24Filled, Star24Regular, Star24Filled, Settings24Regular
 } from '@vicons/fluent'
+import {
+  ThunderboltOutlined,
+  SyncOutlined
+} from '@vicons/antd'
 import { usePopup } from '@/composables/usePopup';
 import { useBreakpoints, breakpointsTailwind } from '@vueuse/core'
 import { apiService } from '@/services/ApiService';
@@ -464,7 +456,7 @@ const tempMemoryConfig = reactive({
   maxMemoryLength: null,
   triggerRatio: 0.8,
   targetRatio: 0.5,
-  enableSummary: true,
+  summaryMode: 'fast', // 摘要模式：'disabled' | 'fast' | 'iterative'
   maxTokensLimit: null,
 });
 // Token 上限显示值（用于格式化显示）
@@ -497,7 +489,7 @@ function formatTokenValue(value) {
   if (!value) return '';
   const num = Number(value);
   if (isNaN(num)) return '';
-  
+
   // 如果大于等于 1,000,000 且是整百万，使用 M 后缀
   if (num >= 1000000 && num % 1000000 === 0) {
     return (num / 1000000) + 'M';
@@ -515,10 +507,10 @@ function formatTokenValue(value) {
  */
 function parseTokenValue(input) {
   if (!input || input.trim() === '') return null;
-  
+
   const trimmed = input.trim();
   const lowerTrimmed = trimmed.toLowerCase();
-  
+
   // 支持 M/m 后缀（百万）
   if (lowerTrimmed.endsWith('m')) {
     const numStr = trimmed.slice(0, -1).replace(/,/g, '');
@@ -526,7 +518,7 @@ function parseTokenValue(input) {
     if (isNaN(num)) return null;
     return Math.round(num * 1000000);
   }
-  
+
   // 支持 K/k 后缀（千）
   if (lowerTrimmed.endsWith('k')) {
     const numStr = trimmed.slice(0, -1).replace(/,/g, '');
@@ -534,7 +526,7 @@ function parseTokenValue(input) {
     if (isNaN(num)) return null;
     return Math.round(num * 1000);
   }
-  
+
   // 普通数字（可能带逗号）
   const cleanStr = trimmed.replace(/,/g, '');
   const num = Number(cleanStr);
@@ -621,10 +613,10 @@ const props = defineProps({
         maxMemoryLength: null,
         compressionTriggerRatio: 0.8,
         compressionTargetRatio: 0.5,
-        enableSummaryCompression: true,
+        summaryMode: 'fast', // 默认快速模式
         maxTokensLimit: null,
       },
-      knowledgeBaseIds: [], 
+      knowledgeBaseIds: [],
       // 会话特有开关
       thinkingEnabled: false,
     })
@@ -917,13 +909,13 @@ const openSettingsPanel = () => {
   // 初始化临时值（从 memory 分组或顶层字段读取）
   const settings = props.config || {};
   const mem = settings.memory || {};
-  
+
   // 优先从 memoryEnabled 读取，兼容旧的 useCustom
   tempMemoryConfig.useCustom = settings.memoryEnabled ?? mem.useCustom ?? true;
   tempMemoryConfig.maxMemoryLength = mem.maxMemoryLength ?? null;
   tempMemoryConfig.triggerRatio = mem.compressionTriggerRatio ?? 0.8;
   tempMemoryConfig.targetRatio = mem.compressionTargetRatio ?? 0.5;
-  tempMemoryConfig.enableSummary = mem.enableSummaryCompression ?? true;
+  tempMemoryConfig.summaryMode = mem.summaryMode ?? 'fast'; // 默认快速模式
   tempMemoryConfig.maxTokensLimit = mem.maxTokensLimit || null;
   // 同步更新显示值
   tempDisplayMaxTokens.value = formatTokenValue(tempMemoryConfig.maxTokensLimit);
@@ -944,7 +936,7 @@ const applySessionSettings = () => {
       maxMemoryLength: tempMemoryConfig.maxMemoryLength,
       compressionTriggerRatio: tempMemoryConfig.triggerRatio,
       compressionTargetRatio: tempMemoryConfig.targetRatio,
-      enableSummaryCompression: tempMemoryConfig.enableSummary,
+      summaryMode: tempMemoryConfig.summaryMode,
       maxTokensLimit: tempMemoryConfig.maxTokensLimit,
     };
   }

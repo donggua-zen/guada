@@ -90,14 +90,14 @@ export class ConversationContext implements IConversationContext {
       }
     }
 
-    // 读取是否启用摘要压缩的配置，优先使用角色级别配置，其次使用全局配置
+    // 读取摘要模式配置，优先使用角色级别配置，其次使用全局配置
     const memoryConfig = config.memory || {};
-    let enableSummary = true; // 默认值
+    let summaryMode: string = 'fast'; // 默认快速模式
     
-    if (memoryConfig.enableSummaryCompression !== undefined) {
-      // 优先使用角色级别的配置
-      enableSummary = memoryConfig.enableSummaryCompression;
-      this.logger.debug(`Using role-level enableSummaryCompression: ${enableSummary}`);
+    if (memoryConfig.summaryMode) {
+      // 优先使用角色级别的 summaryMode 配置
+      summaryMode = memoryConfig.summaryMode;
+      this.logger.debug(`Using role-level summaryMode: ${summaryMode}`);
     } else {
       // 回退到全局配置
       const globalEnableSummary = this.settingsStorage.getSettingValue(
@@ -105,8 +105,9 @@ export class ConversationContext implements IConversationContext {
         SK_MOD_COMPRESS_ENABLE_SUMMARY,
         true,
       );
-      enableSummary = globalEnableSummary === true || globalEnableSummary === 'true' || globalEnableSummary === 1;
-      this.logger.debug(`Using global enableSummary setting: ${enableSummary}`);
+      const enabled = globalEnableSummary === true || globalEnableSummary === 'true' || globalEnableSummary === 1;
+      summaryMode = enabled ? 'fast' : 'disabled';
+      this.logger.debug(`Using global enableSummary setting, converted to summaryMode: ${summaryMode}`);
     }
 
     this.compressionConfig = {
@@ -114,7 +115,7 @@ export class ConversationContext implements IConversationContext {
       triggerRatio: memoryConfig.compressionTriggerRatio ?? 0.8,
       targetRatio: memoryConfig.compressionTargetRatio ?? 0.5,
       model: compressionModel,
-      enableSummary: enableSummary,
+      summaryMode: summaryMode as any, // 传递摘要模式
       chatModelName: this.chatModelName, // 传递对话模型名称用于 Token 计算
     };
 

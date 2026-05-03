@@ -1,4 +1,5 @@
 import { MessageRecord } from "../llm-core/types/llm.types";
+import { SummaryMode } from "./compression-engine";
 
 // ============================================================================
 // 参数类型定义
@@ -20,7 +21,7 @@ export interface CompressionConfig {
   triggerRatio: number;
   targetRatio: number;
   model?: any;
-  enableSummary?: boolean; // 是否启用摘要压缩，默认 true
+  summaryMode?: SummaryMode; // 摘要生成模式，默认为 ITERATIVE(迭代优化)
   chatModelName?: string; // 对话模型名称，用于 Token 计算
 }
 
@@ -28,7 +29,7 @@ export interface MemoryConfig {
   maxMemoryLength?: number;
   compressionTriggerRatio?: number;
   compressionTargetRatio?: number;
-  enableSummaryCompression?: boolean;
+  summaryMode?: string; // 摘要模式：'disabled' | 'fast' | 'iterative'
   maxTokensLimit?: number;
 }
 

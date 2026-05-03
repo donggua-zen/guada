@@ -265,20 +265,34 @@
                   show-input format-tooltip="(val) => `${Math.round(val * 100)}%`" class="w-full max-w-md" />
               </el-form-item>
 
-              <el-form-item label="启用摘要生成" prop="enableSummaryCompression">
+              <el-form-item label="启用摘要生成" prop="summaryMode">
                 <template #label>
                   <div class="flex flex-col gap-1">
-                    <span class="text-base text-gray-900 dark:text-gray-100 font-medium">启用摘要生成</span>
-                    <span class="text-xs text-gray-500 dark:text-gray-400 font-normal">开启后会调用 LLM 生成历史对话摘要，关闭则仅进行裁剪</span>
+                    <span class="text-base text-gray-900 dark:text-gray-100 font-medium">摘要模式</span>
+                    <span class="text-xs text-gray-500 dark:text-gray-400 font-normal">选择摘要生成方式：关闭、快速或迭代优化</span>
                   </div>
                 </template>
                 <div class="w-full max-w-md">
-                  <el-switch 
-                    v-model="characterForm.enableSummaryCompression" 
-                    inline-prompt
-                    active-text="开启"
-                    inactive-text="关闭"
-                  />
+                  <el-select v-model="characterForm.summaryMode" placeholder="请选择摘要模式" class="w-full">
+                    <el-option label="关闭摘要" value="disabled">
+                      <span class="flex items-center gap-2">
+                        <el-icon><CloseOutlined /></el-icon>
+                        <span>关闭摘要 - 仅裁剪工具结果，不生成语义摘要</span>
+                      </span>
+                    </el-option>
+                    <el-option label="快速摘要" value="fast">
+                      <span class="flex items-center gap-2">
+                        <el-icon><ThunderboltOutlined /></el-icon>
+                        <span>快速摘要 - 单次调用生成，速度快</span>
+                      </span>
+                    </el-option>
+                    <el-option label="迭代摘要" value="iterative">
+                      <span class="flex items-center gap-2">
+                        <el-icon><SyncOutlined /></el-icon>
+                        <span>迭代摘要 - 多轮优化，质量最高但耗时较长</span>
+                      </span>
+                    </el-option>
+                  </el-select>
                 </div>
               </el-form-item>
 
@@ -497,7 +511,10 @@ import {
   DatabaseOutlined,
   ToolOutlined,
   ApiOutlined,
-  SettingOutlined
+  SettingOutlined,
+  CloseOutlined,
+  ThunderboltOutlined,
+  SyncOutlined
 } from '@vicons/antd'
 
 import { apiService } from '../../services/ApiService'
@@ -583,7 +600,7 @@ const characterForm = reactive({
   enabledMcpServers: [],  // 启用的 MCP 服务器 ID 数组
   compressionTriggerRatio: 0.8, // 触发阈值
   compressionTargetRatio: 0.5, // 保留目标
-  enableSummaryCompression: true, // 是否启用摘要生成
+  summaryMode: 'fast', // 摘要模式：'disabled' | 'fast' | 'iterative'
   maxTokensLimit: null, // Token 上限（null 表示不限制）
 })
 
@@ -710,12 +727,12 @@ watch(() => props.data, (newVal) => {
   characterForm.modelFrequencyPenalty = newVal.settings?.modelFrequencyPenalty || null;
   characterForm.useUserPrompt = newVal.settings?.useUserPrompt || false;
   
-  // 从 memory 分组加载记忆与压缩配置（兼容旧的扁平化结构）
+  // 从 memory 分组加载记忆与压缩配置
   const memoryConfig = newVal.settings?.memory || {};
   characterForm.maxMemoryLength = memoryConfig.maxMemoryLength ?? newVal.settings?.maxMemoryLength ?? null;
   characterForm.compressionTriggerRatio = memoryConfig.compressionTriggerRatio ?? newVal.settings?.compressionTriggerRatio ?? 0.8;
   characterForm.compressionTargetRatio = memoryConfig.compressionTargetRatio ?? newVal.settings?.compressionTargetRatio ?? 0.5;
-  characterForm.enableSummaryCompression = memoryConfig.enableSummaryCompression ?? newVal.settings?.enableSummaryCompression ?? true;
+  characterForm.summaryMode = memoryConfig.summaryMode ?? 'fast'; // 默认快速模式
   characterForm.maxTokensLimit = memoryConfig.maxTokensLimit ?? newVal.settings?.maxTokensLimit ?? null;
   // 同步更新显示值
   maxTokensLimitDisplay.value = formatTokenValue(characterForm.maxTokensLimit);
@@ -927,7 +944,7 @@ const getFormData = () => {
         'maxMemoryLength': characterForm.maxMemoryLength,
         'compressionTriggerRatio': characterForm.compressionTriggerRatio,
         'compressionTargetRatio': characterForm.compressionTargetRatio,
-        'enableSummaryCompression': characterForm.enableSummaryCompression,
+        'summaryMode': characterForm.summaryMode,
         'maxTokensLimit': characterForm.maxTokensLimit,
       },
       'tools': characterToolSettings.value,

@@ -195,17 +195,17 @@ export class OpenAIAdapter implements LLMAdapter {
     }
   }
 
-  private handleNonStreamResponse(response: any) {
+  private handleNonStreamResponse(response: any): LLMResponseChunk {
     const choice = response.choices?.[0];
     if (!choice || !choice.message)
       throw new Error("Invalid response from LLM API");
 
     const message = choice.message;
-    const result: any = {
+    const result: LLMResponseChunk = {
       content: message.content || null,
       reasoningContent: (message as any).reasoning_content || null,
       finishReason: choice.finish_reason || null,
-      additionalKwargs: {},
+      toolCalls: undefined,
       usage: null,
     };
 
@@ -217,14 +217,17 @@ export class OpenAIAdapter implements LLMAdapter {
       };
     }
 
+    // 正确映射工具调用到 toolCalls 字段
     if (message.tool_calls) {
-      result.additionalKwargs.toolCalls = message.tool_calls.map((tc: any) => ({
+      this.logger.debug(`非流式响应检测到 ${message.tool_calls.length} 个工具调用`);
+      result.toolCalls = message.tool_calls.map((tc: any): ToolCallItem => ({
         id: tc.id,
         index: tc.index,
         type: tc.type || "function",
         name: tc.function?.name,
         arguments: tc.function?.arguments,
-      })) as ToolCallItem[];
+      }));
+      this.logger.debug(`工具调用详情: ${JSON.stringify(result.toolCalls.map(tc => ({ name: tc.name, hasArgs: !!tc.arguments })))}`);
     }
 
     return result;

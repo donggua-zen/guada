@@ -228,11 +228,12 @@ export class SessionService {
     } else if (filteredSettings.memory) {
       // 开启了自定义配置，使用客户端传递的值并确保结构完整
       const sessionMemory = filteredSettings.memory;
+      
       filteredSettings.memory = {
         maxMemoryLength: sessionMemory.maxMemoryLength ?? null,
         compressionTriggerRatio: sessionMemory.compressionTriggerRatio ?? 0.8,
         compressionTargetRatio: sessionMemory.compressionTargetRatio ?? 0.5,
-        enableSummaryCompression: sessionMemory.enableSummaryCompression ?? true,
+        summaryMode: sessionMemory.summaryMode ?? 'fast', // 默认快速模式
         maxTokensLimit: sessionMemory.maxTokensLimit ?? null,
       };
     }
@@ -579,7 +580,7 @@ export class SessionService {
       modelName,
       appliedConfig: {
         compressionTargetRatio: finalMemoryConfig.compressionTargetRatio,
-        enableSummaryCompression: finalMemoryConfig.enableSummaryCompression,
+        summaryMode: finalMemoryConfig.summaryMode,
       },
     };
   }
