@@ -90,6 +90,149 @@ const GROQ_REASONING_CONFIG: ThinkingConfigGenerator = {
   },
 };
 
+// ==================== 模型配置片段类型 ====================
+
+type ModelConfigFragment = Partial<{
+  inputCapabilities: string[];
+  outputCapabilities: string[];
+  features: string[];
+  contextWindow: number;
+  maxOutputTokens: number;
+  vectorDimensions: number;
+}>;
+
+/**
+ * 预定义的配置片段 - 可组合使用
+ */
+const ConfigFragments = {
+  // 输入能力
+  TextOnly: { inputCapabilities: ["text"] },
+  Multimodal: { inputCapabilities: ["text", "image"] },
+  
+  // 输出能力
+  TextOutput: { outputCapabilities: ["text"] },
+  ImageOutput: { outputCapabilities: ["text", "image"] },
+  
+  // 功能特性
+  WithTools: { features: ["tools"] },
+  WithThinking: { features: ["thinking"] },
+  WithToolsAndThinking: { features: ["tools", "thinking"] },
+  
+  // 上下文窗口预设（单位：K）
+  ContextWindow: {
+    _8K: { contextWindow: 8000 },
+    _32K: { contextWindow: 32000 },
+    _33K: { contextWindow: 33000 },
+    _64K: { contextWindow: 64000 },
+    _128K: { contextWindow: 128000 },
+    _160K: { contextWindow: 160000 },
+    _197K: { contextWindow: 197000 },
+    _198K: { contextWindow: 198000 },
+    _200K: { contextWindow: 200000 },
+    _205K: { contextWindow: 205000 },
+    _256K: { contextWindow: 256000 },
+    _400K: { contextWindow: 400000 },
+    _1M: { contextWindow: 1000000 },
+    _1_1M: { contextWindow: 1100000 },
+  },
+  
+  // 最大输出token预设
+  MaxOutput: {
+    _33K: { maxOutputTokens: 33000 },
+    _66K: { maxOutputTokens: 66000 },
+    _96K: { maxOutputTokens: 96000 },
+    _128K: { maxOutputTokens: 128000 },
+    _131K: { maxOutputTokens: 131000 },
+    _384K: { maxOutputTokens: 384000 },
+  },
+  
+  // Embedding 向量维度
+  VectorDim: {
+    _1024: { vectorDimensions: 1024 },
+    _1536: { vectorDimensions: 1536 },
+    _2000: { vectorDimensions: 2000 },
+    _4096: { vectorDimensions: 4096 },
+  },
+};
+
+/**
+ * 合并多个配置片段，后面的覆盖前面的
+ */
+function mergeConfig(...fragments: ModelConfigFragment[]): ModelConfigFragment {
+  return Object.assign({}, ...fragments);
+}
+
+/**
+ * 创建文本模型配置的辅助函数
+ * 支持多个配置片段的自动合并
+ */
+function createTextModel(
+  modelName: string,
+  ...fragments: ModelConfigFragment[]
+) {
+  const config = mergeConfig(
+    // 默认配置
+    ConfigFragments.TextOnly,
+    ConfigFragments.TextOutput,
+    ConfigFragments.WithToolsAndThinking,
+    ConfigFragments.ContextWindow._128K,
+    // 用户提供的配置片段（覆盖默认值）
+    ...fragments
+  );
+  
+  return {
+    modelName,
+    modeType: "text" as const,
+    config,
+  };
+}
+
+/**
+ * 创建多模态模型配置的辅助函数
+ */
+function createMultimodalModel(
+  modelName: string,
+  ...fragments: ModelConfigFragment[]
+) {
+  const config = mergeConfig(
+    // 默认配置
+    ConfigFragments.Multimodal,
+    ConfigFragments.TextOutput,
+    ConfigFragments.WithToolsAndThinking,
+    ConfigFragments.ContextWindow._128K,
+    // 用户提供的配置片段
+    ...fragments
+  );
+  
+  return {
+    modelName,
+    modeType: "text" as const,
+    config,
+  };
+}
+
+/**
+ * 创建 Embedding 模型配置的辅助函数
+ */
+function createEmbeddingModel(
+  modelName: string,
+  ...fragments: ModelConfigFragment[]
+) {
+  const config = mergeConfig(
+    // 默认配置
+    ConfigFragments.ContextWindow._8K,
+    ConfigFragments.VectorDim._1536,
+    // 用户提供的配置片段
+    ...fragments
+  );
+  
+  return {
+    modelName,
+    modeType: "embedding" as const,
+    config,
+  };
+}
+
 export const PROVIDER_TEMPLATES: ProviderTemplate[] = [
   // ==================== 国内平台 ====================
   {
@@ -105,94 +248,46 @@ export const PROVIDER_TEMPLATES: ProviderTemplate[] = [
       },
     },
     models: [
-      {
-        modelName: "deepseek-ai/DeepSeek-V3.2",
-        modeType: "text",
-        config: {
-          inputCapabilities: ["text"],
-          outputCapabilities: ["text"],
-          features: ["tools", "thinking"],
-          contextWindow: 160000,
-        },
-      },
-      {
-        modelName: "deepseek-ai/DeepSeek-V3.1-Terminus",
-        modeType: "text",
-        config: {
-          inputCapabilities: ["text"],
-          outputCapabilities: ["text"],
-          features: ["tools", "thinking"],
-          contextWindow: 160000,
-        },
-      },
-      {
-        modelName: "deepseek-ai/DeepSeek-R1",
-        modeType: "text",
-        config: {
-          inputCapabilities: ["text"],
-          outputCapabilities: ["text"],
-          features: ["tools"],
-          contextWindow: 160000,
-        },
-      },
-      {
-        modelName: "Qwen/Qwen3.5-397B-A17B",
-        modeType: "text",
-        config: {
-          inputCapabilities: ["text", "image"],
-          outputCapabilities: ["text"],
-          features: ["tools", "thinking"],
-          contextWindow: 256000,
-        },
-      },
-      {
-        modelName: "Qwen/Qwen3.5-122B-A10B",
-        modeType: "text",
-        config: {
-          inputCapabilities: ["text", "image"],
-          outputCapabilities: ["text"],
-          features: ["tools", "thinking"],
-          contextWindow: 256000,
-        },
-      },
-      {
-        modelName: "Qwen/Qwen3-VL-32B-Instruct",
-        modeType: "text",
-        config: {
-          inputCapabilities: ["text", "image"],
-          outputCapabilities: ["text"],
-          features: ["tools"],
-          contextWindow: 128000,
-        },
-      },
-      {
-        modelName: "Qwen/Qwen3-VL-235B-A22B-Thinking",
-        modeType: "text",
-        config: {
-          inputCapabilities: ["text", "image"],
-          outputCapabilities: ["text"],
-          features: ["tools", "thinking"],
-          contextWindow: 256000,
-        },
-      },
-      {
-        modelName: "moonshotai/Kimi-K2-Thinking",
-        modeType: "text",
-        config: {
-          inputCapabilities: ["text"],
-          outputCapabilities: ["text"],
-          features: ["tools"],
-          contextWindow: 200000,
-        },
-      },
-      {
-        modelName: "Qwen/Qwen3-Embedding-8B",
-        modeType: "embedding",
-        config: {
-          contextWindow: 32000,
-          vectorDimensions: 4096,
-        },
-      },
+      createTextModel(
+        "deepseek-ai/DeepSeek-V3.2",
+        ConfigFragments.ContextWindow._160K
+      ),
+      createTextModel(
+        "deepseek-ai/DeepSeek-V3.1-Terminus",
+        ConfigFragments.ContextWindow._160K
+      ),
+      createTextModel(
+        "deepseek-ai/DeepSeek-R1",
+        ConfigFragments.ContextWindow._160K,
+        ConfigFragments.WithTools
+      ),
+      createMultimodalModel(
+        "Qwen/Qwen3.5-397B-A17B",
+        ConfigFragments.ContextWindow._256K
+      ),
+      createMultimodalModel(
+        "Qwen/Qwen3.5-122B-A10B",
+        ConfigFragments.ContextWindow._256K
+      ),
+      createMultimodalModel(
+        "Qwen/Qwen3-VL-32B-Instruct",
+        ConfigFragments.ContextWindow._128K,
+        ConfigFragments.WithTools
+      ),
+      createMultimodalModel(
+        "Qwen/Qwen3-VL-235B-A22B-Thinking",
+        ConfigFragments.ContextWindow._256K
+      ),
+      createTextModel(
+        "moonshotai/Kimi-K2-Thinking",
+        ConfigFragments.ContextWindow._200K,
+        ConfigFragments.WithTools
+      ),
+      createEmbeddingModel(
+        "Qwen/Qwen3-Embedding-8B",
+        ConfigFragments.ContextWindow._32K,
+        ConfigFragments.VectorDim._4096
+      ),
     ],
   },
   {
@@ -209,156 +304,28 @@ export const PROVIDER_TEMPLATES: ProviderTemplate[] = [
       },
     },
     models: [
-      {
-        modelName: "qwen3.6-plus",
-        modeType: "text",
-        config: {
-          inputCapabilities: ["text", "image"],
-          outputCapabilities: ["text"],
-          features: ["tools", "thinking"],
-          contextWindow: 1000000,
-        },
-      },
-      {
-        modelName: "qwen3.6-plus-2026-04-02",
-        modeType: "text",
-        config: {
-          inputCapabilities: ["text", "image"],
-          outputCapabilities: ["text"],
-          features: ["tools", "thinking"],
-          contextWindow: 1000000,
-        },
-      },
-      //qwen3.5-397b-a17b
-      {
-        modelName: "qwen3.5-397b-a17b",
-        modeType: "text",
-        config: {
-          inputCapabilities: ["text", "image"],
-          outputCapabilities: ["text"],
-          features: ["tools", "thinking"],
-          contextWindow: 256000,
-        },
-      },
-      //qwen3.5-122b-a10b
-      {
-        modelName: "qwen3.5-122b-a10b",
-        modeType: "text",
-        config: {
-          inputCapabilities: ["text", "image"],
-          outputCapabilities: ["text"],
-          features: ["tools", "thinking"],
-          contextWindow: 256000,
-        },
-      },
-      //qwen3.5-27b
-      {
-        modelName: "qwen3.5-27b",
-        modeType: "text",
-        config: {
-          inputCapabilities: ["text", "image"],
-          outputCapabilities: ["text"],
-          features: ["tools", "thinking"],
-          contextWindow: 256000,
-        },
-      },
-      //qwen3.5-35b-a3b
-      {
-        modelName: "qwen3.5-35b-a3b",
-        modeType: "text",
-        config: {
-          inputCapabilities: ["text", "image"],
-          outputCapabilities: ["text"],
-          features: ["tools", "thinking"],
-          contextWindow: 256000,
-        },
-      },
-      //deepseek-v3.2 128K
-      {
-        modelName: "deepseek-v3.2",
-        modeType: "text",
-        config: {
-          inputCapabilities: ["text"],
-          outputCapabilities: ["text"],
-          features: ["tools", "thinking"],
-          contextWindow: 128000,
-        },
-      },
-      //deepseek-v3.1 128K
-      {
-        modelName: "deepseek-v3.1",
-        modeType: "text",
-        config: {
-          inputCapabilities: ["text"],
-          outputCapabilities: ["text"],
-          features: ["tools", "thinking"],
-          contextWindow: 128000,
-        },
-      },
-      //deepseek-r1-0528
-      {
-        modelName: "deepseek-r1-0528",
-        modeType: "text",
-        config: {
-          inputCapabilities: ["text"],
-          outputCapabilities: ["text"],
-          features: ["tools", "thinking"],
-          contextWindow: 128000,
-        },
-      },
-      //deepseek-v3 64K
-      {
-        modelName: "deepseek-v3",
-        modeType: "text",
-        config: {
-          inputCapabilities: ["text"],
-          outputCapabilities: ["text"],
-          features: ["tools", "thinking"],
-          contextWindow: 64000,
-        },
-      },
-      //kimi-k2.5 256K
-      {
-        modelName: "kimi-k2.5",
-        modeType: "text",
-        config: {
-          inputCapabilities: ["text", "image"],
-          outputCapabilities: ["text"],
-          features: ["tools", "thinking"],
-          contextWindow: 256000,
-        },
-      },
-      //glm-5 198K
-      {
-        modelName: "glm-5",
-        modeType: "text",
-        config: {
-          inputCapabilities: ["text"],
-          outputCapabilities: ["text"],
-          features: ["tools", "thinking"],
-          contextWindow: 198000,
-        },
-      },
-      //MiniMax-M2.5 200K
-      {
-        modelName: "minimax-m2.5",
-        modeType: "text",
-        config: {
-          inputCapabilities: ["text"],
-          outputCapabilities: ["text"],
-          features: ["tools"],
-          contextWindow: 200000,
-        },
-      },
-      //text-embedding-v4
-      {
-        modelName: "text-embedding-v4",
-        modeType: "embedding",
-        config: {
-          contextWindow: 32000,
-          vectorDimensions: 1024,
-        },
-      },
+      createMultimodalModel("qwen3.6-plus", ConfigFragments.ContextWindow._1M),
+      createMultimodalModel("qwen3.6-plus-2026-04-02", ConfigFragments.ContextWindow._1M),
+      createMultimodalModel("qwen3.5-397b-a17b", ConfigFragments.ContextWindow._256K),
+      createMultimodalModel("qwen3.5-122b-a10b", ConfigFragments.ContextWindow._256K),
+      createMultimodalModel("qwen3.5-27b", ConfigFragments.ContextWindow._256K),
+      createMultimodalModel("qwen3.5-35b-a3b", ConfigFragments.ContextWindow._256K),
+      createTextModel("deepseek-v3.2", ConfigFragments.ContextWindow._128K),
+      createTextModel("deepseek-v3.1", ConfigFragments.ContextWindow._128K),
+      createTextModel("deepseek-r1-0528", ConfigFragments.ContextWindow._128K),
+      createTextModel("deepseek-v3", ConfigFragments.ContextWindow._64K),
+      createMultimodalModel("kimi-k2.5", ConfigFragments.ContextWindow._256K),
+      createTextModel("glm-5", ConfigFragments.ContextWindow._198K),
+      createTextModel(
+        "minimax-m2.5",
+        ConfigFragments.ContextWindow._200K,
+        ConfigFragments.WithTools
+      ),
+      createEmbeddingModel(
+        "text-embedding-v4",
+        ConfigFragments.ContextWindow._32K,
+        ConfigFragments.VectorDim._1024
+      ),
     ],
   },
   {
@@ -375,58 +342,11 @@ export const PROVIDER_TEMPLATES: ProviderTemplate[] = [
       },
     },
     models: [
-      {
-        modelName: "doubao-seed-2-0-pro-260215",
-        modeType: "text",
-        config: {
-          inputCapabilities: ["text", "image"],
-          outputCapabilities: ["text"],
-          features: ["tools", "thinking"],
-          contextWindow: 256000,
-        },
-      },
-      {
-        modelName: "doubao-seed-2-0-lite-260215",
-        modeType: "text",
-        config: {
-          inputCapabilities: ["text", "image"],
-          outputCapabilities: ["text"],
-          features: ["tools", "thinking"],
-          contextWindow: 256000,
-        },
-      },
-      {
-        modelName: "doubao-seed-2-0-mini-260215",
-        modeType: "text",
-        config: {
-          inputCapabilities: ["text", "image"],
-          outputCapabilities: ["text"],
-          features: ["tools", "thinking"],
-          contextWindow: 256000,
-        },
-      },
-      //doubao-seed-2-0-code-preview-260215
-      {
-        modelName: "doubao-seed-2-0-code-preview-260215",
-        modeType: "text",
-        config: {
-          inputCapabilities: ["text", "image"],
-          outputCapabilities: ["text"],
-          features: ["tools", "thinking"],
-          contextWindow: 256000,
-        },
-      },
-      //deepseek-v3-2-251201 128K (注意不支持thinkingEffort)
-      {
-        modelName: "deepseek-v3-2-251201",
-        modeType: "text",
-        config: {
-          inputCapabilities: ["text"],
-          outputCapabilities: ["text"],
-          features: ["tools", "thinking"],
-          contextWindow: 128000,
-        },
-      },
+      createMultimodalModel("doubao-seed-2-0-pro-260215", ConfigFragments.ContextWindow._256K),
+      createMultimodalModel("doubao-seed-2-0-lite-260215", ConfigFragments.ContextWindow._256K),
+      createMultimodalModel("doubao-seed-2-0-mini-260215", ConfigFragments.ContextWindow._256K),
+      createMultimodalModel("doubao-seed-2-0-code-preview-260215", ConfigFragments.ContextWindow._256K),
+      createTextModel("deepseek-v3-2-251201", ConfigFragments.ContextWindow._128K),
     ],
   },
   {
@@ -457,83 +377,13 @@ export const PROVIDER_TEMPLATES: ProviderTemplate[] = [
       },
     },
     models: [
-      {
-        modelName: "GLM-5",
-        modeType: "text",
-        config: {
-          inputCapabilities: ["text"],
-          outputCapabilities: ["text"],
-          features: ["tools", "thinking"],
-          contextWindow: 200000,
-          maxOutputTokens: 128000,
-        },
-      },
-      {
-        modelName: "GLM-5-Turbo",
-        modeType: "text",
-        config: {
-          inputCapabilities: ["text"],
-          outputCapabilities: ["text"],
-          features: ["tools", "thinking"],
-          contextWindow: 200000,
-          maxOutputTokens: 128000,
-        },
-      },
-      {
-        modelName: "GLM-4-Plus",
-        modeType: "text",
-        config: {
-          inputCapabilities: ["text"],
-          outputCapabilities: ["text"],
-          features: ["tools", "thinking"],
-          contextWindow: 200000,
-          maxOutputTokens: 128000,
-        },
-      },
-      {
-        modelName: "GLM-4.7",
-        modeType: "text",
-        config: {
-          inputCapabilities: ["text"],
-          outputCapabilities: ["text"],
-          features: ["tools", "thinking"],
-          contextWindow: 200000,
-          maxOutputTokens: 128000,
-        },
-      },
-      {
-        modelName: "GLM-4.7-FlashX",
-        modeType: "text",
-        config: {
-          inputCapabilities: ["text"],
-          outputCapabilities: ["text"],
-          features: ["tools", "thinking"],
-          contextWindow: 200000,
-          maxOutputTokens: 128000,
-        },
-      },
-      {
-        modelName: "GLM-4.6",
-        modeType: "text",
-        config: {
-          inputCapabilities: ["text"],
-          outputCapabilities: ["text"],
-          features: ["tools", "thinking"],
-          contextWindow: 200000,
-          maxOutputTokens: 128000,
-        },
-      },
-      {
-        modelName: "GLM-4.5",
-        modeType: "text",
-        config: {
-          inputCapabilities: ["text"],
-          outputCapabilities: ["text"],
-          features: ["tools", "thinking"],
-          contextWindow: 128000,
-          maxOutputTokens: 96000,
-        },
-      },
+      createTextModel("GLM-5", ConfigFragments.ContextWindow._200K, ConfigFragments.MaxOutput._128K),
+      createTextModel("GLM-5-Turbo", ConfigFragments.ContextWindow._200K, ConfigFragments.MaxOutput._128K),
+      createTextModel("GLM-4-Plus", ConfigFragments.ContextWindow._200K, ConfigFragments.MaxOutput._128K),
+      createTextModel("GLM-4.7", ConfigFragments.ContextWindow._200K, ConfigFragments.MaxOutput._128K),
+      createTextModel("GLM-4.7-FlashX", ConfigFragments.ContextWindow._200K, ConfigFragments.MaxOutput._128K),
+      createTextModel("GLM-4.6", ConfigFragments.ContextWindow._200K, ConfigFragments.MaxOutput._128K),
+      createTextModel("GLM-4.5", ConfigFragments.ContextWindow._128K, ConfigFragments.MaxOutput._96K),
     ],
   },
   {
@@ -550,16 +400,7 @@ export const PROVIDER_TEMPLATES: ProviderTemplate[] = [
       },
     },
     models: [
-      {
-        modelName: "kimi-k2.5",
-        modeType: "text",
-        config: {
-          inputCapabilities: ["text", "image"],
-          outputCapabilities: ["text"],
-          features: ["tools", "thinking"],
-          contextWindow: 256000,
-        },
-      },
+      createMultimodalModel("kimi-k2.5", ConfigFragments.ContextWindow._256K),
     ],
   },
   {
@@ -575,50 +416,10 @@ export const PROVIDER_TEMPLATES: ProviderTemplate[] = [
       },
     },
     models: [
-      {
-        modelName: "MiniMax-M2.5",
-        modeType: "text",
-        config: {
-          inputCapabilities: ["text"],
-          outputCapabilities: ["text"],
-          features: ["tools", "thinking"],
-          contextWindow: 205000,
-          maxOutputTokens: 131000,
-        },
-      },
-      {
-        modelName: "MiniMax-M2.5-highspeed",
-        modeType: "text",
-        config: {
-          inputCapabilities: ["text"],
-          outputCapabilities: ["text"],
-          features: ["tools", "thinking"],
-          contextWindow: 205000,
-          maxOutputTokens: 131000,
-        },
-      },
-      {
-        modelName: "MiniMax-M2.1",
-        modeType: "text",
-        config: {
-          inputCapabilities: ["text"],
-          outputCapabilities: ["text"],
-          features: ["tools", "thinking"],
-          contextWindow: 205000,
-          maxOutputTokens: 131000,
-        },
-      },
-      {
-        modelName: "MiniMax-M2",
-        modeType: "text",
-        config: {
-          inputCapabilities: ["text"],
-          outputCapabilities: ["text"],
-          features: ["tools", "thinking"],
-          contextWindow: 197000,
-          maxOutputTokens: 128000,
-        },
-      },
+      createTextModel("MiniMax-M2.5", ConfigFragments.ContextWindow._205K, ConfigFragments.MaxOutput._131K),
+      createTextModel("MiniMax-M2.5-highspeed", ConfigFragments.ContextWindow._205K, ConfigFragments.MaxOutput._131K),
+      createTextModel("MiniMax-M2.1", ConfigFragments.ContextWindow._205K, ConfigFragments.MaxOutput._131K),
+      createTextModel("MiniMax-M2", ConfigFragments.ContextWindow._197K, ConfigFragments.MaxOutput._128K),
     ],
   },
   {
@@ -635,30 +436,8 @@ export const PROVIDER_TEMPLATES: ProviderTemplate[] = [
       },
     },
     models: [
-      //DeepSeek-V4-Flash
-      {
-        modelName: "deepseek-v4-flash",
-        modeType: "text",
-        config: {
-          inputCapabilities: ["text"],
-          outputCapabilities: ["text"],
-          features: ["tools", "thinking"],
-          contextWindow: 1000000,
-          maxOutputTokens: 384000,//384K
-        },
-      },
-      //DeepSeek-V4-Pro
-      {
-        modelName: "deepseek-v4-pro",
-        modeType: "text",
-        config: {
-          inputCapabilities: ["text"],
-          outputCapabilities: ["text"],
-          features: ["tools", "thinking"],
-          contextWindow: 1000000,
-          maxOutputTokens: 384000,//384K
-        },
-      }
+      createTextModel("deepseek-v4-flash", ConfigFragments.ContextWindow._1M, ConfigFragments.MaxOutput._384K),
+      createTextModel("deepseek-v4-pro", ConfigFragments.ContextWindow._1M, ConfigFragments.MaxOutput._384K),
     ],
   },
 
@@ -676,84 +455,14 @@ export const PROVIDER_TEMPLATES: ProviderTemplate[] = [
       },
     },
     models: [
-      {
-        modelName: "gpt-5.4",
-        modeType: "text",
-        config: {
-          inputCapabilities: ["text", "image"],
-          outputCapabilities: ["text"],
-          features: ["tools", "thinking"],
-          contextWindow: 1100000,
-        },
-      },
-      {
-        modelName: "gpt-5-mini",
-        modeType: "text",
-        config: {
-          inputCapabilities: ["text", "image"],
-          outputCapabilities: ["text"],
-          features: ["tools", "thinking"],
-          contextWindow: 400000,
-        },
-      },
-      {
-        modelName: "gpt-4o",
-        modeType: "text",
-        config: {
-          inputCapabilities: ["text", "image"],
-          outputCapabilities: ["text"],
-          features: ["tools"],
-          contextWindow: 128000,
-        },
-      },
-      {
-        modelName: "gpt-4o-mini",
-        modeType: "text",
-        config: {
-          inputCapabilities: ["text", "image"],
-          outputCapabilities: ["text"],
-          features: ["tools"],
-          contextWindow: 128000,
-        },
-      },
-      {
-        modelName: "o4-mini",
-        modeType: "text",
-        config: {
-          inputCapabilities: ["text", "image"],
-          outputCapabilities: ["text"],
-          features: ["tools", "thinking"],
-          contextWindow: 200000,
-        },
-      },
-      {
-        modelName: "o3-pro",
-        modeType: "text",
-        config: {
-          inputCapabilities: ["text", "image"],
-          outputCapabilities: ["text"],
-          features: ["tools", "thinking"],
-          contextWindow: 200000,
-        },
-      },
-      {
-        modelName: "o3-mini",
-        modeType: "text",
-        config: {
-          inputCapabilities: ["text", "image"],
-          outputCapabilities: ["text"],
-          features: ["tools", "thinking"],
-          contextWindow: 200000,
-        },
-      },
-      {
-        modelName: "text-embedding-3-small",
-        modeType: "embedding",
-        config: {
-          contextWindow: 8000,
-          vectorDimensions: 2000,
-        },
-      },
+      createMultimodalModel("gpt-5.4", ConfigFragments.ContextWindow._1_1M),
+      createMultimodalModel("gpt-5-mini", ConfigFragments.ContextWindow._400K),
+      createMultimodalModel("gpt-4o", ConfigFragments.ContextWindow._128K, ConfigFragments.WithTools),
+      createMultimodalModel("gpt-4o-mini", ConfigFragments.ContextWindow._128K, ConfigFragments.WithTools),
+      createMultimodalModel("o4-mini", ConfigFragments.ContextWindow._200K),
+      createMultimodalModel("o3-pro", ConfigFragments.ContextWindow._200K),
+      createMultimodalModel("o3-mini", ConfigFragments.ContextWindow._200K),
+      createEmbeddingModel("text-embedding-3-small", ConfigFragments.ContextWindow._8K, ConfigFragments.VectorDim._2000),
     ],
   },
   {
@@ -776,61 +485,16 @@ export const PROVIDER_TEMPLATES: ProviderTemplate[] = [
       "谷歌提供的 Gemini 大模型服务，具备强大的多模态理解与生成能力。",
     attributes: {},
     models: [
-      {
-        modelName: "gemini-3.1-pro-preview",
-        modeType: "text",
-        config: {
-          inputCapabilities: ["text", "image"],
-          outputCapabilities: ["text"],
-          features: ["tools", "thinking"],
-          contextWindow: 1000000,
-          maxOutputTokens: 66000,
-        },
-      },
-      {
-        modelName: "gemini-3-flash-preview",
-        modeType: "text",
-        config: {
-          inputCapabilities: ["text", "image"],
-          outputCapabilities: ["text"],
-          features: ["tools", "thinking"],
-          contextWindow: 1000000,
-          maxOutputTokens: 66000,
-        },
-      },
-      {
-        modelName: "gemini-2.5-flash",
-        modeType: "text",
-        config: {
-          inputCapabilities: ["text", "image"],
-          outputCapabilities: ["text"],
-          features: ["tools", "thinking"],
-          contextWindow: 1000000,
-          maxOutputTokens: 66000,
-        },
-      },
-      {
-        modelName: "gemini-2.5-pro",
-        modeType: "text",
-        config: {
-          inputCapabilities: ["text", "image"],
-          outputCapabilities: ["text"],
-          features: ["tools", "thinking"],
-          contextWindow: 1000000,
-          maxOutputTokens: 66000,
-        },
-      },
-      {
-        modelName: "gemini-2.5-flash-image",
-        modeType: "text",
-        config: {
-          inputCapabilities: ["text", "image"],
-          outputCapabilities: ["text", "image"],
-          features: ["tools", "thinking"],
-          contextWindow: 33000,
-          maxOutputTokens: 33000,
-        },
-      },
+      createMultimodalModel("gemini-3.1-pro-preview", ConfigFragments.ContextWindow._1M, ConfigFragments.MaxOutput._66K),
+      createMultimodalModel("gemini-3-flash-preview", ConfigFragments.ContextWindow._1M, ConfigFragments.MaxOutput._66K),
+      createMultimodalModel("gemini-2.5-flash", ConfigFragments.ContextWindow._1M, ConfigFragments.MaxOutput._66K),
+      createMultimodalModel("gemini-2.5-pro", ConfigFragments.ContextWindow._1M, ConfigFragments.MaxOutput._66K),
+      createMultimodalModel(
+        "gemini-2.5-flash-image",
+        ConfigFragments.ContextWindow._33K,
+        ConfigFragments.MaxOutput._33K,
+        ConfigFragments.ImageOutput
+      ),
     ],
   },
   {
