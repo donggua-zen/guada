@@ -1,6 +1,6 @@
 <template>
   <div
-    class="flex flex-col h-full bg-(--color-sidebar-bg) border-r border-(--color-sidebar-border) transition-all duration-300"
+    class="flex flex-col h-full bg-(--color-sidebar-bg) border-r border-(--color-sidebar-border)"
     :style="{ width: sidebarWidth, minWidth: sidebarWidth, maxWidth: sidebarWidth }">
     <!-- 顶部 Logo/标题 -->
     <div class="px-2.5 py-4 flex items-center justify-center cursor-pointer" @click="openGuide">

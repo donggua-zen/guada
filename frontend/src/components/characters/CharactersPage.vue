@@ -1,5 +1,5 @@
 <template>
-  <div class="h-full flex flex-col md:max-w-260 md:mx-auto">
+  <div class="h-full flex flex-col md:max-w-260 md:mx-auto bg-(--color-sidebar-bg)">
     <div class="flex flex-col h-full p-3">
       <!-- 头部 -->
       <div class="flex justify-between items-center py-4">
@@ -13,7 +13,7 @@
       </div>
 
       <!-- 分组筛选标签区域 -->
-      <div class="pb-4 border-b border-gray-200 dark:border-gray-700">
+      <div class="pb-4">
         <div class="flex flex-wrap gap-2">
           <!-- 全部助手标签 -->
           <div class="filter-tag px-4 py-2 rounded-full cursor-pointer transition-all duration-200 select-none"
@@ -45,7 +45,7 @@
         <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 w-full">
           <!-- 助手卡片 -->
           <div v-for="character in characters" :key="character.id"
-            class="provider-card group relative bg-white border border-gray-200 rounded-lg p-4 cursor-default hover:border-(--color-primary) transition-all duration-200 overflow-hidden">
+            class="provider-card group relative bg-white dark:bg-[#232428] border border-gray-200 dark:border-[#232428] rounded-lg p-4 cursor-default hover:border-(--color-primary) transition-all duration-200 overflow-hidden">
             <!-- 毛玻璃背景层 -->
             <div v-if="character.avatarUrl" class="absolute inset-0 z-0" :style="{
               backgroundImage: `url(${character.avatarUrl})`,
@@ -63,7 +63,7 @@
                 <Avatar class="w-11 h-11" :src="character.avatarUrl" :name="character.title" type="assistant" />
                 <div class="flex-1 min-w-0">
                   <div class="flex items-start justify-between">
-                    <div class="font-medium text-base text-gray-900 truncate" :title="character.title">{{
+                    <div class="font-medium text-base text-gray-900 dark:text-[#e8e9ed] truncate" :title="character.title">{{
                       character.title }}</div>
                     <!-- 删除按钮 - 悬停显示 -->
                     <el-button link size="small" type="danger"
@@ -74,17 +74,17 @@
                       </el-icon>
                     </el-button>
                   </div>
-                  <div class="text-xs text-gray-500 mt-1.5">{{ character.isPublic ? '共享模板' : '我的模板' }}</div>
+                  <div class="text-xs text-gray-500 dark:text-[#8b8d95] mt-1.5">{{ character.isPublic ? '共享模板' : '我的模板' }}</div>
                 </div>
               </div>
-              <div class="text-xs text-gray-400 mt-2 line-clamp-2 leading-relaxed">{{ character.description ||
+              <div class="text-xs text-gray-400 dark:text-[#6b6d75] mt-2 line-clamp-2 leading-relaxed">{{ character.description ||
                 '暂无描述' }}
               </div>
             </div>
 
             <!-- 悬停显示的渐变遮罩和按钮 -->
             <div
-              class="absolute inset-x-0 bottom-0 h-16 bg-linear-to-t from-white via-white/90 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none rounded-b-lg">
+              class="absolute inset-x-0 bottom-0 h-16 bg-linear-to-t from-white dark:from-[#232428] via-white/90 dark:via-[#232428]/90 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none rounded-b-lg">
             </div>
             <div
               class="absolute inset-x-2 bottom-2 flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-auto z-20">
@@ -97,8 +97,8 @@
             </div>
           </div>
           <!-- 空状态 -->
-          <div v-if="!loading && characters.length === 0" class="col-span-full text-center py-12 text-gray-500">
-            <el-icon size="48" class="text-gray-300 mb-3">
+          <div v-if="!loading && characters.length === 0" class="col-span-full text-center py-12 text-gray-500 dark:text-[#8b8d95]">
+            <el-icon size="48" class="text-gray-300 dark:text-[#5a5c63] mb-3">
               <People />
             </el-icon>
             <p class="text-lg">暂无助手</p>
@@ -110,10 +110,10 @@
 
     <!-- 右键菜单 -->
     <div v-if="contextMenu.visible"
-      class="fixed bg-white dark:bg-gray-800 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700 py-1 z-50 min-w-40"
+      class="fixed bg-white dark:bg-[#232428] rounded-lg shadow-lg border border-gray-200 dark:border-[#383a40] py-1 z-50 min-w-40"
       :style="{ left: contextMenu.x + 'px', top: contextMenu.y + 'px' }" @click.stop>
       <div
-        class="px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 cursor-pointer flex items-center gap-2"
+        class="px-4 py-2 text-sm text-gray-700 dark:text-[#e8e9ed] hover:bg-gray-100 dark:hover:bg-[#2a2c30] cursor-pointer flex items-center gap-2"
         @click="handleRenameFromMenu">
         <el-icon>
           <EditOutlined />
@@ -121,7 +121,7 @@
         重命名
       </div>
       <div
-        class="px-4 py-2 text-sm text-red-600 dark:text-red-400 hover:bg-gray-100 dark:hover:bg-gray-700 cursor-pointer flex items-center gap-2"
+        class="px-4 py-2 text-sm text-red-600 dark:text-red-400 hover:bg-gray-100 dark:hover:bg-[#2a2c30] cursor-pointer flex items-center gap-2"
         @click="handleDeleteFromMenu">
         <el-icon>
           <DeleteOutlineOutlined />

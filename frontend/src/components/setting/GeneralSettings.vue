@@ -6,7 +6,7 @@
         </div>
 
         <!-- 设置内容 -->
-        <div class="rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden bg-white dark:bg-[#1e1e1e]">
+        <div class="rounded-lg border border-gray-200 dark:border-[#2e3035] overflow-hidden bg-white dark:bg-[#232428]">
             <div class="p-6">
                 <div class="flex items-start justify-between">
                     <div class="flex-1">
@@ -21,7 +21,7 @@
                                 </el-icon>
                             </el-tooltip>
                         </div>
-                        <div class="text-sm text-gray-500 dark:text-gray-400 mb-3">
+                        <div class="text-sm text-gray-500 dark:text-[#8b8d95] mb-3">
                             开启后，刷新页面或访问应用时会自动使用主账户登录，无需手动输入用户名和密码。
                         </div>
                         <div class="text-xs text-orange-500 dark:text-orange-400 bg-orange-50 dark:bg-orange-900/20 px-3 py-2 rounded border border-orange-200 dark:border-orange-800">

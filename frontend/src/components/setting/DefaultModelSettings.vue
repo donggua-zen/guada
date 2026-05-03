@@ -14,13 +14,13 @@
 
         <div class="space-y-6">
             <!-- 对话设置 -->
-            <div class="px-8 py-4 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-[#1e1e1e]">
+            <div class="px-8 py-4 rounded-xl border border-gray-200 dark:border-[#2e3035] bg-white dark:bg-[#232428]">
                 <el-form ref="chatFormRef" :model="settingsForm" label-position="left" label-width="50%" size="large">
                     <el-form-item prop="defaultChatModelId" style="margin-bottom: 0;">
                         <template #label>
                             <div class="flex flex-col gap-1">
-                                <span class="text-lg text-gray-900 dark:text-gray-100">默认对话模型</span>
-                                <span class="text-xs text-gray-500 dark:text-gray-400 font-normal">用于日常对话生成的默认 AI 模型</span>
+                                <span class="text-lg text-gray-900 dark:text-[#e8e9ed]">默认对话模型</span>
+                                <span class="text-xs text-gray-500 dark:text-[#8b8d95] font-normal">用于日常对话生成的默认 AI 模型</span>
                             </div>
                         </template>
                         <el-select v-model="settingsForm.defaultChatModelId" placeholder="请选择模型" clearable
@@ -35,14 +35,14 @@
                 </el-form>
             </div>
             <!-- 标题总结设置 -->
-            <div class="px-8 py-4 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-[#1e1e1e]">
+            <div class="px-8 py-4 rounded-xl border border-gray-200 dark:border-[#2e3035] bg-white dark:bg-[#232428]">
                 <el-form ref="titleSummaryFormRef" :model="settingsForm" :rules="titleSummaryRules"
                     label-position="left" label-width="50%" size="large">
                     <el-form-item prop="defaultTitleSummaryModelId">
                         <template #label>
                             <div class="flex flex-col gap-1">
-                                <span class="text-lg text-gray-900 dark:text-gray-100">标题总结模型</span>
-                                <span class="text-xs text-gray-500 dark:text-gray-400 font-normal">用于自动生成会话标题的 AI 模型</span>
+                                <span class="text-lg text-gray-900 dark:text-[#e8e9ed]">标题总结模型</span>
+                                <span class="text-xs text-gray-500 dark:text-[#8b8d95] font-normal">用于自动生成会话标题的 AI 模型</span>
                             </div>
                         </template>
                         <el-select v-model="settingsForm.defaultTitleSummaryModelId" placeholder="请选择模型" clearable
@@ -59,7 +59,7 @@
                         <template #label>
                             <div class="flex flex-col gap-1">
                                 <span class="text-lg text-gray-900 dark:text-gray-100">标题总结提示词</span>
-                                <span class="text-xs text-gray-500 dark:text-gray-400 font-normal">定义如何生成简洁、准确的会话标题</span>
+                                <span class="text-xs text-gray-500 dark:text-[#8b8d95] font-normal">定义如何生成简洁、准确的会话标题</span>
                             </div>
                         </template>
                         <el-input v-model="settingsForm.defaultTitleSummaryPrompt" type="textarea"
@@ -92,14 +92,14 @@
                     </div> -->
 
             <!-- 视觉辅助设置 -->
-            <div class="px-8 py-4 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-[#1e1e1e]">
+            <div class="px-8 py-4 rounded-xl border border-gray-200 dark:border-[#2e3035] bg-white dark:bg-[#232428]">
                 <el-form ref="visualFormRef" :model="settingsForm" label-position="left" label-width="50%"
                     size="large">
                     <el-form-item prop="defaultVisualAssistantModelId" style="margin-bottom: 0;">
                         <template #label>
                             <div class="flex flex-col gap-1">
                                 <span class="text-lg text-gray-900 dark:text-gray-100">视觉辅助模型</span>
-                                <span class="text-xs text-gray-500 dark:text-gray-400 font-normal">用于图片识别等视觉任务的 AI 模型（需支持图像输入）</span>
+                                <span class="text-xs text-gray-500 dark:text-[#8b8d95] font-normal">用于图片识别等视觉任务的 AI 模型（需支持图像输入）</span>
                             </div>
                         </template>
                         <el-select v-model="settingsForm.defaultVisualAssistantModelId" placeholder="请选择支持图像的模型"
@@ -115,14 +115,14 @@
             </div>
 
             <!-- 历史压缩设置 -->
-            <div class="px-8 py-4 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-[#1e1e1e]">
+            <div class="px-8 py-4 rounded-xl border border-gray-200 dark:border-[#2e3035] bg-white dark:bg-[#232428]">
                 <el-form ref="historyCompressionFormRef" :model="settingsForm" :rules="historyCompressionRules"
                     label-position="left" label-width="50%" size="large">
                     <el-form-item prop="defaultHistoryCompressionModelId" style="margin-bottom: 0;">
                         <template #label>
                             <div class="flex flex-col gap-1">
-                                <span class="text-lg text-gray-900 dark:text-gray-100">历史压缩模型</span>
-                                <span class="text-xs text-gray-500 dark:text-gray-400 font-normal">用于压缩对话历史以优化上下文长度的 AI 模型</span>
+                                <span class="text-lg text-gray-900 dark:text-[#e8e9ed]">历史压缩模型</span>
+                                <span class="text-xs text-gray-500 dark:text-[#8b8d95] font-normal">用于压缩对话历史以优化上下文长度的 AI 模型</span>
                             </div>
                         </template>
                         <el-select v-model="settingsForm.defaultHistoryCompressionModelId" placeholder="请选择模型" clearable
@@ -161,22 +161,22 @@
                                 class="model-item p-3 rounded-lg cursor-pointer border transition-all mb-2 last:mb-0"
                                 :class="{
                                     'bg-pink-50 dark:bg-pink-900/20 border-pink-300 dark:border-pink-700': tempModelId === model.id,
-                                    'border-gray-100 dark:border-gray-700 hover:bg-pink-50/50 dark:hover:bg-pink-900/10': tempModelId !== model.id
+                                    'border-gray-100 dark:border-[#2e3035] hover:bg-pink-50/50 dark:hover:bg-pink-900/10': tempModelId !== model.id
                                 }" @click="selectAndClose(model.id)">
                                 <div class="flex items-start justify-between gap-2">
                                     <div class="flex-1 min-w-0">
-                                        <div class="font-medium text-sm text-gray-800 dark:text-gray-200 truncate mb-1">
+                                        <div class="font-medium text-sm text-gray-800 dark:text-[#e8e9ed] truncate mb-1">
                                             {{ model.modelName }}</div>
                                         <!-- 特性图标组 -->
-                                        <div class="flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400">
+                                        <div class="flex items-center gap-2 text-xs text-gray-500 dark:text-[#8b8d95]">
                                             <span
-                                                class="px-1.5 py-0.5 rounded bg-gray-100 dark:bg-gray-700 font-medium text-[10px]">
+                                                class="px-1.5 py-0.5 rounded bg-gray-100 dark:bg-[#2a2c30] font-medium text-[10px]">
                                                 {{ model.modelType === 'text' ? '对话' : '嵌入' }}
                                             </span>
 
                                             <!-- 输入/输出能力箭头组 -->
                                             <div v-if="model.modelType === 'text' && (model.config?.inputCapabilities || model.config?.outputCapabilities)"
-                                                class="flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-gray-50 dark:bg-gray-800 border border-gray-100 dark:border-gray-700">
+                                                class="flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-gray-50 dark:bg-[#2a2c30] border border-gray-100 dark:border-[#2e3035]">
                                                 <template v-for="cap in (model.config?.inputCapabilities || ['text'])"
                                                     :key="'in-' + cap">
                                                     <el-icon :size="14">

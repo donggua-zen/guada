@@ -18,7 +18,7 @@
           <el-icon class="is-loading" :size="32">
             <Loading />
           </el-icon>
-          <span class="ml-2 text-gray-500">加载中...</span>
+          <span class="ml-2 text-gray-500 dark:text-[#8b8d95]">加载中...</span>
         </div>
 
         <!-- 机器人卡片网格 -->
@@ -28,12 +28,12 @@
 
           <!-- 空状态 -->
           <div v-if="!botStore.loading && botStore.botInstances.length === 0"
-            class="col-span-full text-center py-12 text-gray-500">
-            <el-icon size="48" class="text-gray-300 mb-3">
+            class="col-span-full text-center py-12">
+            <el-icon size="48" class="text-gray-300 dark:text-[#3e4046] mb-3">
               <Cpu />
             </el-icon>
-            <p class="text-lg">暂无机器人</p>
-            <p class="text-sm mt-1">点击上方按钮创建第一个机器人</p>
+            <p class="text-lg text-gray-500 dark:text-[#8b8d95]">暂无机器人</p>
+            <p class="text-sm mt-1 text-gray-400 dark:text-[#6b6d75]">点击上方按钮创建第一个机器人</p>
           </div>
         </div>
       </div>

@@ -1,7 +1,7 @@
 <template>
   <div class="thinking-section mb-2" :class="{ 'expanded': isExpanded }">
     <div
-      class="collapsible-header inline-block justify-center items-center text-sm text-gray-700 cursor-pointer font-medium my-1 py-1 transition-colors duration-200 hover:bg-gray-100 rounded"
+      class="collapsible-header inline-block justify-center items-center text-sm text-gray-700 dark:text-[#8b8d95] cursor-pointer font-medium my-1 py-1 transition-colors duration-200 hover:bg-gray-100 dark:hover:bg-[#2a2c30] rounded"
       @click.stop="handleToggle">
       <div class="items-center flex">
         <div class="w-1.5 h-1.5 rounded-full bg-gray-500 mx-1.5"></div>

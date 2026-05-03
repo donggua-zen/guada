@@ -1,7 +1,7 @@
 <template>
   <div class="w-full h-full flex">
     <div
-      class="flex flex-col w-full rounded-lt-lg bg-(--color-conversation-bg) border-r border-(--color-conversation-border) transition-all duration-300">
+      class="flex flex-col w-full rounded-lt-lg bg-(--color-conversation-bg) border-r border-(--color-conversation-border)">
       <!-- 会话头部 -->
       <div class="sessions-header px-4 h-13 flex justify-between items-center">
         <span class="font-semibold text-base text-(--color-text)">聊天对话</span>
@@ -377,7 +377,7 @@ const loadMoreSessions = async (): Promise<void> => {
 }
 
 .dark .session-action-trigger:hover {
-  background-color: rgba(255, 255, 255, 0.1);
+  background-color: oklch(35% 0.03 250); /* 更柔和的悬停效果 */
 }
 
 /* 空状态 */

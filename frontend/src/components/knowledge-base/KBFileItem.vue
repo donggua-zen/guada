@@ -1,7 +1,7 @@
 ﻿<!-- KnowledgeBasePage/KBFileItem.vue -->
 <template>
     <div 
-        class="file-item group bg-white border border-gray-200 rounded-lg px-3 py-2.5 hover:shadow-md transition-all dark:bg-gray-800 dark:border-gray-700"
+        class="file-item group bg-white dark:bg-[#232428] border border-gray-200 dark:border-[#2e3035] rounded-lg px-3 py-2.5 hover:shadow-md transition-all"
         :class="{
             'cursor-pointer': file.processingStatus === 'completed',
             'cursor-not-allowed': file.processingStatus !== 'completed'
@@ -17,17 +17,17 @@
             <!-- 文件信息 -->
             <div class="flex-1 min-w-0">
                 <div class="flex items-center justify-between mb-0.5">
-                    <h4 class="text-sm font-medium text-gray-900 truncate pr-2 dark:text-gray-100">
+                    <h4 class="text-sm font-medium text-gray-900 dark:text-[#e8e9ed] truncate pr-2">
                         {{ file.displayName }}
                     </h4>
                     <el-tag size="small" :type="statusType">
                         {{ statusText }}
                     </el-tag>
                 </div>
-                <p class="text-xs text-gray-500 dark:text-gray-400">
+                <p class="text-xs text-gray-500 dark:text-[#8b8d95]">
                     {{ formatSize(file.fileSize) }} · {{ file.fileExtension ? file.fileExtension.toUpperCase() : 'UNKNOWN' }}
-                    <span v-if="isTempTask && file.processingStatus === 'queued'" class="ml-2 px-1.5 py-0.5 bg-gray-100 text-gray-600 rounded text-xs">待上传</span>
-                    <span v-if="isTempTask && file.processingStatus === 'uploading'" class="ml-2 px-1.5 py-0.5 bg-blue-100 text-blue-700 rounded text-xs">上传中</span>
+                    <span v-if="isTempTask && file.processingStatus === 'queued'" class="ml-2 px-1.5 py-0.5 bg-gray-100 dark:bg-[#2a2c30] text-gray-600 dark:text-[#8b8d95] rounded text-xs">待上传</span>
+                    <span v-if="isTempTask && file.processingStatus === 'uploading'" class="ml-2 px-1.5 py-0.5 bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400 rounded text-xs">上传中</span>
                 </p>
                 <!-- 显示相对路径(如果有) -->
                 <p v-if="file.relativePath && !file.isDirectory" class="text-xs text-blue-600 dark:text-blue-400 mt-0.5 truncate">
@@ -43,14 +43,14 @@
                 :percentage="file.progressPercentage" 
                 :stroke-width="3" 
             />
-            <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">
+            <p class="text-xs text-gray-500 dark:text-[#8b8d95] mt-1">
                 {{ file.currentStep || '处理中...' }}
             </p>
         </div>
 
         <!-- 排队状态提示 -->
         <div v-if="file.processingStatus === 'queued'" class="mt-2">
-            <p class="text-xs text-gray-500 dark:text-gray-400">
+            <p class="text-xs text-gray-500 dark:text-[#8b8d95]">
                 {{ file.currentStep || '等待上传...' }}
             </p>
         </div>
@@ -63,8 +63,8 @@
 
         <!-- 详细信息 (可选展开) -->
         <div v-if="file.processingStatus === 'completed' || file.processingStatus === 'failed'" 
-            class="mt-2 pt-2 border-t border-gray-100 dark:border-gray-700">
-            <div class="flex items-center justify-between gap-3 text-xs text-gray-500 dark:text-gray-400">
+            class="mt-2 pt-2 border-t border-gray-100 dark:border-[#2e3035]">
+            <div class="flex items-center justify-between gap-3 text-xs text-gray-500 dark:text-[#8b8d95]">
                 <div class="flex gap-3">
                     <span v-if="file.totalChunks">{{ file.totalChunks }} 分块</span>
                 </div>

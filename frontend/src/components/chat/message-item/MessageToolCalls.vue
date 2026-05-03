@@ -1,7 +1,7 @@
 <template>
   <div class="tool-calls-section">
     <div
-      class="inline-block justify-center items-center text-sm text-gray-700 cursor-pointer font-medium my-1 py-1 transition-colors duration-200 hover:bg-gray-100 rounded px-1"
+      class="inline-block justify-center items-center text-sm text-gray-700 dark:text-[#8b8d95] cursor-pointer font-medium my-1 py-1 transition-colors duration-200 hover:bg-gray-100 dark:hover:bg-[#2a2c30] rounded px-1"
       @click.stop="openDialog">
       <div class="flex items-center">
         <el-icon class="" size="14">

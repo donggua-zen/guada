@@ -1,8 +1,8 @@
 <template>
-    <div class="bg-(--color-surface) h-full">
+    <div class="bg-(--color-sidebar-bg) h-full">
         <div class="h-full flex flex-col md:max-w-260 md:mx-auto">
             <div class="flex-1 overflow-hidden flex flex-col ">
-                <div class="border-gray-200 dark:border-gray-700 p-4">
+                <div class="p-4">
                     <el-tabs v-model="currentTabValue" @tab-change="handleTabChange" class="system-settings-tabs">
                         <el-tab-pane v-for="item in tabItems" :key="item.path" :label="item.label" :name="item.path">
                             <template #label>

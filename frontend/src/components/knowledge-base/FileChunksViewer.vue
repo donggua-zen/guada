@@ -3,29 +3,29 @@
     <el-dialog v-model="showModal" :title="`文件分块内容 - ${selectedFile?.displayName}`" width="800px"
         :close-on-click-modal="true" @close="handleClose">
         <div v-if="loading" class="loading-container text-center py-8">
-            <el-icon class="text-2xl text-gray-400">
+            <el-icon class="text-2xl text-gray-400 dark:text-[#6b6d75]">
                 <Loading />
             </el-icon>
-            <p class="mt-2 text-gray-500">正在加载分块内容...</p>
+            <p class="mt-2 text-gray-500 dark:text-[#8b8d95]">正在加载分块内容...</p>
         </div>
         <div v-else-if="chunks.length === 0" class="no-chunks-container text-center py-8">
-            <el-icon class="text-2xl text-gray-400">
+            <el-icon class="text-2xl text-gray-400 dark:text-[#6b6d75]">
                 <Document />
             </el-icon>
-            <p class="mt-2 text-gray-500">暂无分块内容</p>
+            <p class="mt-2 text-gray-500 dark:text-[#8b8d95]">暂无分块内容</p>
         </div>
         <div v-else class="chunks-container max-h-96 overflow-y-auto">
             <div v-for="(chunk, index) in chunks" :key="chunk.id"
-                class="chunk-item mb-4 p-4 bg-gray-50 dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700">
+                class="chunk-item mb-4 p-4 bg-gray-50 dark:bg-[#2a2c30] rounded-lg border border-gray-200 dark:border-[#2e3035]">
                 <div class="chunk-header flex justify-between items-center mb-2">
-                    <span class="chunk-index text-sm font-mono text-gray-500 dark:text-gray-400">
+                    <span class="chunk-index text-sm font-mono text-gray-500 dark:text-[#8b8d95]">
                         #{{ (currentPage - 1) * pageSize + index + 1 }}
                     </span>
-                    <span class="chunk-meta text-xs text-gray-400 dark:text-gray-500">
+                    <span class="chunk-meta text-xs text-gray-400 dark:text-[#6b6d75]">
                         索引: {{ chunk.chunkIndex }}, Token数: {{ chunk.tokenCount }}
                     </span>
                 </div>
-                <div class="chunk-content text-sm text-gray-800 dark:text-gray-200 whitespace-pre-wrap font-mono">
+                <div class="chunk-content text-sm text-gray-800 dark:text-[#e8e9ed] whitespace-pre-wrap font-mono">
                     {{ chunk.content }}
                 </div>
             </div>
@@ -34,7 +34,7 @@
         <!-- 分页控件 -->
         <template #footer v-if="chunks.length > 0">
             <div class="flex justify-between items-center">
-                <div class="text-sm text-gray-500 dark:text-gray-400">
+                <div class="text-sm text-gray-500 dark:text-[#8b8d95]">
                     共 {{ totalChunks }} 个分块，当前显示 {{ Math.min(totalChunks, (currentPage - 1) * pageSize + 1) }} - {{
                         Math.min(totalChunks, currentPage * pageSize) }}
                 </div>

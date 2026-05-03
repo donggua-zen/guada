@@ -15,7 +15,7 @@
         <el-icon class="is-loading" :size="32">
           <Loading />
         </el-icon>
-        <span class="ml-2 text-gray-500">加载中...</span>
+        <span class="ml-2 text-gray-500 dark:text-[#8b8d95]">加载中...</span>
       </div>
 
       <!-- 消息列表 -->
@@ -34,11 +34,11 @@
       </div>
 
       <!-- 空状态 -->
-      <div v-else class="text-center py-12 text-gray-500">
-        <el-icon size="48" class="text-gray-300 mb-3">
+      <div v-else class="text-center py-12">
+        <el-icon size="48" class="text-gray-300 dark:text-[#3e4046] mb-3">
           <ChatDotRound />
         </el-icon>
-        <p class="text-lg">暂无消息</p>
+        <p class="text-lg text-gray-500 dark:text-[#8b8d95]">暂无消息</p>
       </div>
     </div>
   </el-dialog>

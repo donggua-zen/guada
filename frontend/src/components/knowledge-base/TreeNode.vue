@@ -3,7 +3,7 @@
     <div class="tree-node">
         <!-- 节点内容 -->
         <div 
-            class="node-content flex items-center gap-2 px-2 py-1.5 rounded hover:bg-gray-100 dark:hover:bg-gray-800 cursor-pointer transition-colors"
+            class="node-content flex items-center gap-2 px-2 py-1.5 rounded hover:bg-gray-100 dark:hover:bg-[#2a2c30] cursor-pointer transition-colors"
             :class="{ 'bg-blue-50 dark:bg-blue-900/20': node.isDirectory && isExpanded }"
             @click="handleNodeClick"
         >
@@ -25,12 +25,12 @@
             <img v-else :src="getFileIcon(node)" class="w-5 h-5 object-contain" alt="file icon" />
             
             <!-- 名称 -->
-            <span class="text-sm text-gray-700 dark:text-gray-300 truncate flex-1">
+            <span class="text-sm text-gray-700 dark:text-[#e8e9ed] truncate flex-1">
                 {{ node.displayName }}
             </span>
             
             <!-- 文件信息(仅文件显示) -->
-            <span v-if="!node.isDirectory" class="text-xs text-gray-500 dark:text-gray-400 shrink-0">
+            <span v-if="!node.isDirectory" class="text-xs text-gray-500 dark:text-[#8b8d95] shrink-0">
                 {{ formatSize(node.fileSize) }}
             </span>
             
@@ -42,7 +42,7 @@
         
         <!-- 子节点(递归渲染) -->
         <div v-if="node.isDirectory && isExpanded && node.children.length > 0" 
-             class="ml-5 mt-1 space-y-1 border-l-2 border-gray-200 dark:border-gray-700 pl-2">
+             class="ml-5 mt-1 space-y-1 border-l-2 border-gray-200 dark:border-[#2e3035] pl-2">
             <TreeNode
                 v-for="child in node.children"
                 :key="child.id"
@@ -56,7 +56,7 @@
         
         <!-- 空文件夹提示 -->
         <div v-if="node.isDirectory && isExpanded && node.children.length === 0" 
-             class="ml-7 py-1 text-xs text-gray-400 dark:text-gray-500 italic">
+             class="ml-7 py-1 text-xs text-gray-400 dark:text-[#6b6d75] italic">
             (空文件夹)
         </div>
     </div>

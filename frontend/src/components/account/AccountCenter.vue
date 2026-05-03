@@ -1,5 +1,5 @@
 <template>
-    <div class="bg-(--color-surface) h-full">
+    <div class="bg-(--color-sidebar-bg) h-full">
         <div class="h-full flex flex-col md:max-w-200 md:mx-auto p-4">
             <div class="flex-1 overflow-hidden flex flex-col">
                 <div class="border-gray-200 dark:border-gray-700">

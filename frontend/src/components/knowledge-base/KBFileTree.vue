@@ -5,7 +5,7 @@
     <div v-if="breadcrumbPath.length > 0" class="mb-2 mx-2 py-1.5">
       <div class="flex items-center gap-1 text-sm">
         <button @click="navigateToFolderByPath(null)"
-          class="text-gray-500 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors cursor-pointer">
+          class="text-gray-500 dark:text-[#8b8d95] hover:text-blue-600 dark:hover:text-blue-400 transition-colors cursor-pointer">
           知识库
         </button>
 
@@ -13,10 +13,10 @@
         <template v-for="(folder, index) in breadcrumbPath" :key="folder.path">
           <span class="text-gray-400 mx-0.5">></span>
           <button v-if="index !== breadcrumbPath.length - 1" @click="navigateToFolderByPath(folder.path)"
-            class="transition-colors cursor-pointer text-gray-500 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400">
+            class="transition-colors cursor-pointer text-gray-500 dark:text-[#8b8d95] hover:text-blue-600 dark:hover:text-blue-400">
             {{ folder.displayName }}
           </button>
-          <span v-else class="text-gray-900 dark:text-gray-100 font-semibold">
+          <span v-else class="text-gray-900 dark:text-[#e8e9ed] font-semibold">
             {{ folder.displayName }}
           </span>
         </template>
@@ -28,13 +28,13 @@
       <el-icon class="animate-spin text-blue-500" size="32">
         <Loading />
       </el-icon>
-      <p class="mt-2 text-sm text-gray-500">加载中..</p>
+      <p class="mt-2 text-sm text-gray-500 dark:text-[#8b8d95]">加载中..</p>
     </div>
 
     <div v-else-if="currentItems.length > 0">
       <!-- 表头 -->
       <div
-        class="grid grid-cols-[1fr_100px_80px_120px_160px] gap-4 px-4 py-2 border-b border-gray-200 dark:border-gray-700 text-xs font-medium text-gray-500 dark:text-gray-400">
+        class="grid grid-cols-[1fr_100px_80px_120px_160px] gap-4 px-4 py-2 border-b border-gray-200 dark:border-[#2e3035] text-xs font-medium text-gray-500 dark:text-[#8b8d95]">
         <div>名称</div>
         <div>状态</div>
         <div>类型</div>
@@ -44,7 +44,7 @@
 
       <!-- 文件列表 -->
       <div v-for="item in currentItems" :key="item.id"
-        class="file-row grid grid-cols-[1fr_100px_80px_120px_160px] gap-4 px-4 py-2.5 hover:bg-gray-50 dark:hover:bg-gray-800/50 cursor-pointer transition-colors border-b border-gray-100 dark:border-gray-800 last:border-b-0"
+        class="file-row grid grid-cols-[1fr_100px_80px_120px_160px] gap-4 px-4 py-2.5 hover:bg-gray-50 dark:hover:bg-[#2a2c30]/50 cursor-pointer transition-colors border-b border-gray-100 dark:border-[#2e3035] last:border-b-0"
         @click="handleItemClick(item)" @contextmenu.prevent="handleContextMenu($event, item)">
         <!-- 名称-->
         <div class="flex items-center gap-2 min-w-0">
@@ -55,7 +55,7 @@
           <img v-else :src="getFileIcon(item)" class="w-5 h-5 object-contain shrink-0" alt="file icon" />
 
           <!-- 名称 -->
-          <span class="text-sm text-gray-700 dark:text-gray-300 truncate" :title="item.displayName">
+          <span class="text-sm text-gray-700 dark:text-[#e8e9ed] truncate" :title="item.displayName">
             {{ item.displayName }}
           </span>
         </div>
@@ -70,14 +70,14 @@
 
         <!-- 类型-->
         <div class="flex items-center">
-          <span class="text-xs text-gray-500 dark:text-gray-400">
+          <span class="text-xs text-gray-500 dark:text-[#8b8d95]">
             {{ item.isDirectory ? '文件夹' : (item.fileExtension?.toUpperCase() || '-') }}
           </span>
         </div>
 
         <!-- 大小-->
         <div class="flex items-center">
-          <span v-if="!item.isDirectory" class="text-xs text-gray-500 dark:text-gray-400">
+          <span v-if="!item.isDirectory" class="text-xs text-gray-500 dark:text-[#8b8d95]">
             {{ formatSize(item.fileSize) }}
           </span>
           <span v-else class="text-xs text-gray-400">-</span>
@@ -85,7 +85,7 @@
 
         <!-- 修改时间-->
         <div class="flex items-center">
-          <span class="text-xs text-gray-500 dark:text-gray-400">
+          <span class="text-xs text-gray-500 dark:text-[#8b8d95]">
             {{ formatDate(item.uploadedAt) }}
           </span>
         </div>
@@ -93,7 +93,7 @@
     </div>
 
     <!-- 空文件夹-->
-    <div v-else class="text-center py-8 text-gray-500 dark:text-gray-400">
+    <div v-else class="text-center py-8 text-gray-500 dark:text-[#8b8d95]">
       <p>{{ currentRelativePath ? '该文件夹为空' : '暂无文件' }}</p>
     </div>
 
@@ -106,16 +106,16 @@
     </div>
 
     <!-- 没有更多数据提示 -->
-    <div v-else-if="!hasMore && currentItems.length > 0" class="text-center py-3 text-gray-400 text-sm">
+    <div v-else-if="!hasMore && currentItems.length > 0" class="text-center py-3 text-gray-400 dark:text-[#6b6d75] text-sm">
       <p>已加载全部文件</p>
     </div>
 
     <!-- 右键菜单 -->
     <div v-if="contextMenu.visible"
-      class="fixed bg-white dark:bg-gray-800 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700 py-1 z-50 min-w-[160px]"
+      class="fixed bg-white dark:bg-[#232428] rounded-lg shadow-lg border border-gray-200 dark:border-[#2e3035] py-1 z-50 min-w-[160px]"
       :style="{ left: contextMenu.x + 'px', top: contextMenu.y + 'px' }" @click.stop>
       <div
-        class="px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 cursor-pointer flex items-center gap-2"
+        class="px-4 py-2 text-sm text-gray-700 dark:text-[#e8e9ed] hover:bg-gray-100 dark:hover:bg-[#2a2c30] cursor-pointer flex items-center gap-2"
         @click="handleRenameFromMenu">
         <el-icon>
           <Edit />
@@ -123,7 +123,7 @@
         重命名
       </div>
       <div
-        class="px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 cursor-pointer flex items-center gap-2"
+        class="px-4 py-2 text-sm text-gray-700 dark:text-[#e8e9ed] hover:bg-gray-100 dark:hover:bg-[#2a2c30] cursor-pointer flex items-center gap-2"
         @click="handleMoveFromMenu">
         <el-icon>
           <Position />
@@ -131,7 +131,7 @@
         移动到...
       </div>
       <div v-if="!contextMenu.item?.isDirectory"
-        class="px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 cursor-pointer flex items-center gap-2"
+        class="px-4 py-2 text-sm text-gray-700 dark:text-[#e8e9ed] hover:bg-gray-100 dark:hover:bg-[#2a2c30] cursor-pointer flex items-center gap-2"
         @click="handleRetryFromMenu">
         <el-icon>
           <RefreshRight />
@@ -139,7 +139,7 @@
         重新处理
       </div>
       <div
-        class="px-4 py-2 text-sm text-red-600 dark:text-red-400 hover:bg-gray-100 dark:hover:bg-gray-700 cursor-pointer flex items-center gap-2"
+        class="px-4 py-2 text-sm text-red-600 dark:text-red-400 hover:bg-gray-100 dark:hover:bg-[#2a2c30] cursor-pointer flex items-center gap-2"
         @click="handleDeleteFromMenu">
         <el-icon>
           <Delete />

@@ -4,7 +4,7 @@
 
     <!-- 输入框区域 -->
     <div
-      class="input-area p-[16px_12px_10px_12px] transition-all duration-300 min-h-15 w-full bg-white dark:bg-[#1e1e1e]"
+      class="input-area p-[16px_12px_10px_12px] min-h-15 w-full bg-white dark:bg-[#232428]"
       :class="styleClass">
       <!-- 文件列表显示区域 -->
       <div class="file-list flex flex-wrap gap-2 mb-3" v-if="uploadFiles.length > 0">
@@ -1536,9 +1536,9 @@ onUnmounted(() => {
 }
 
 .dark .context-popover {
-  background: #2a2a2a;
-  border: 1px solid #404040;
-  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.5), 0 4px 8px rgba(0, 0, 0, 0.3);
+  background: var(--color-surface); /* 使用表面色 */
+  border: 1px solid var(--color-border);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.4), 0 4px 8px rgba(0, 0, 0, 0.2);
 }
 
 /* 弹窗头部样式 */
@@ -1801,7 +1801,7 @@ onUnmounted(() => {
 }
 
 .dark .model-item-compact:not(.bg-pink-50):hover {
-  background-color: rgba(255, 255, 255, 0.05);
+  background-color: oklch(30% 0.03 250); /* 柔和的悬停背景 */
 }
 
 /* 知识库列表项 - 无边框紧凑样式 */
@@ -1814,7 +1814,7 @@ onUnmounted(() => {
 }
 
 .dark .kb-item-compact:hover {
-  background-color: rgba(255, 255, 255, 0.05);
+  background-color: oklch(30% 0.03 250); /* 与模型列表保持一致 */
 }
 
 /* 会话设置模态框 - 强制Label区域高度自适应 */

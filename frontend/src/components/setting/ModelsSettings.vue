@@ -36,26 +36,26 @@
                     </el-button>
                 </el-space>
             </div>
-            <div class="mt-4 rounded border px-3 py-1 border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800">
+            <div class="mt-4 rounded border px-3 py-1 border-gray-200 dark:border-[#2e3035] bg-white dark:bg-[#232428]">
                 <ul>
                     <li v-for="model in currentModels" :key="model.id"
-                        class="flex items-center justify-between py-2 border-b border-gray-100 dark:border-gray-700 last:border-b-0 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors rounded px-3 -mx-3">
+                        class="flex items-center justify-between py-2 border-b border-gray-100 dark:border-[#2e3035] last:border-b-0 hover:bg-gray-50 dark:hover:bg-[#2a2c30]/50 transition-colors rounded px-3 -mx-3">
                         <div class="flex items-center flex-1 min-w-0 mr-4">
                             <!-- 模型头像 -->
                             <Avatar class="w-10 h-10 shrink-0 mr-3" :src="getModelAvatarForSetting(model)"
                                 :name="getModelDisplayName(model.modelName)" type="assistant" :round="false" />
                             <div class="flex-1 min-w-0">
-                                <div class="font-bold text-gray-800 dark:text-gray-200 truncate mb-2">{{
+                                <div class="font-bold text-gray-800 dark:text-[#e8e9ed] truncate mb-2">{{
                                     getModelDisplayName(model.modelName) }}</div>
-                                <div class="flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400">
+                                <div class="flex items-center gap-2 text-xs text-gray-500 dark:text-[#8b8d95]">
                                     <!-- 模型类型文本 -->
-                                    <span class="px-1.5 py-0.5 rounded bg-gray-100 dark:bg-gray-700 font-medium">
+                                    <span class="px-1.5 py-0.5 rounded bg-gray-100 dark:bg-[#2a2c30] font-medium">
                                         {{ model.modelType === 'text' ? '对话' : '嵌入' }}
                                     </span>
 
                                     <!-- 能力配置组（带底纹和箭头） -->
                                     <div v-if="model.modelType === 'text'"
-                                        class="flex items-center gap-1 px-2 py-0.5 rounded-md bg-gray-50 dark:bg-gray-800 border border-gray-100 dark:border-gray-700">
+                                        class="flex items-center gap-1 px-2 py-0.5 rounded-md bg-gray-50 dark:bg-[#2a2c30] border border-gray-100 dark:border-[#2e3035]">
                                         <!-- 输入能力 -->
                                         <div class="flex items-center gap-0.5">
                                             <template v-for="cap in (model.config?.inputCapabilities || [])"
@@ -71,7 +71,7 @@
                                         </div>
 
                                         <!-- 分隔箭头 -->
-                                        <el-icon class="text-gray-300 dark:text-gray-600 mx-0.5" :size="12">
+                                        <el-icon class="text-gray-300 dark:text-[#3e4046] mx-0.5" :size="12">
                                             <ArrowRight24Regular />
                                         </el-icon>
 
@@ -91,7 +91,7 @@
 
                                         <!-- 高级功能（如果有） -->
                                         <template v-if="(model.config?.features || []).length > 0">
-                                            <span class="w-px h-3 bg-gray-200 dark:bg-gray-700 mx-1"></span>
+                                            <span class="w-px h-3 bg-gray-200 dark:bg-[#2e3035] mx-1"></span>
                                             <template v-for="feature in (model.config?.features || [])" :key="feature">
                                                 <el-tooltip :content="getLableName(feature)" placement="top">
                                                     <el-icon class="hover:text-primary transition-colors" :size="16">
@@ -286,7 +286,7 @@
     <el-dialog v-model="showFetchModal" title="获取模型列表" width="600px" align-center class="model-edit-dialog"
         append-to-body>
         <div class="max-h-[60vh] overflow-y-auto px-1">
-            <div class="p-2 mb-2 sticky top-0 bg-white dark:bg-gray-900 z-10">
+            <div class="p-2 mb-2 sticky top-0 bg-white dark:bg-[#232428] z-10">
                 <el-input v-model="searchModelName" placeholder="搜索模型名称" clearable @input="handleSearchModel">
                     <template #prefix>
                         <el-icon>
@@ -306,13 +306,13 @@
                 <div v-if="filteredAddedModels.length > 0" class="mb-6">
                     <h3 class="text-xs font-bold text-green-600 uppercase tracking-wider mb-3 ml-1">已添加的模型</h3>
                     <ul
-                        class="rounded-lg border border-gray-100 dark:border-gray-700 divide-y divide-gray-100 dark:divide-gray-700">
+                        class="rounded-lg border border-gray-100 dark:border-[#2e3035] divide-y divide-gray-100 dark:divide-[#2e3035]">
                         <li v-for="model in filteredAddedModels" :key="model.id"
-                            class="flex items-center justify-between py-3 px-4 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors">
+                            class="flex items-center justify-between py-3 px-4 hover:bg-gray-50 dark:hover:bg-[#2a2c30]/50 transition-colors">
                             <div class="flex-1 min-w-0 mr-4">
-                                <div class="font-medium text-gray-800 dark:text-gray-200 truncate">{{ model.modelName }}
+                                <div class="font-medium text-gray-800 dark:text-[#e8e9ed] truncate">{{ model.modelName }}
                                 </div>
-                                <div class="flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400 mt-1">
+                                <div class="flex items-center gap-2 text-xs text-gray-500 dark:text-[#8b8d95] mt-1">
                                     <span
                                         class="px-1.5 py-0.5 rounded bg-green-50 dark:bg-green-900/30 text-green-600 dark:text-green-400 font-medium">
                                         {{ model.modelType === 'text' ? '对话' : '嵌入' }}
@@ -341,13 +341,13 @@
                 <div v-if="filteredAvailableModels.length > 0">
                     <h3 class="text-xs font-bold text-blue-600 uppercase tracking-wider mb-3 ml-1">可添加的模型</h3>
                     <ul
-                        class="rounded-lg border border-gray-100 dark:border-gray-700 divide-y divide-gray-100 dark:divide-gray-700">
+                        class="rounded-lg border border-gray-100 dark:border-[#2e3035] divide-y divide-gray-100 dark:divide-[#2e3035]">
                         <li v-for="model in filteredAvailableModels" :key="model.modelName"
-                            class="flex items-center justify-between py-3 px-4 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors">
+                            class="flex items-center justify-between py-3 px-4 hover:bg-gray-50 dark:hover:bg-[#2a2c30]/50 transition-colors">
                             <div class="flex-1 min-w-0 mr-4">
-                                <div class="font-medium text-gray-800 dark:text-gray-200 truncate">{{ model.modelName }}
+                                <div class="font-medium text-gray-800 dark:text-[#e8e9ed] truncate">{{ model.modelName }}
                                 </div>
-                                <div class="flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400 mt-1">
+                                <div class="flex items-center gap-2 text-xs text-gray-500 dark:text-[#8b8d95] mt-1">
                                     <span
                                         class="px-1.5 py-0.5 rounded bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 font-medium">
                                         {{ model.modelType === 'text' ? '对话' : '嵌入' }}

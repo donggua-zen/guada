@@ -38,7 +38,7 @@
     _style="position: absolute; left: 50%; transform: translateX(-50%);bottom: 0;">
     <!-- 编辑模式提示条 -->
     <div v-if="editMode" class="w-full mb-[-0.2rem]">
-      <div class="edit-mode-banner pt-1 pb-3.5 px-2 bg-gray-50 border border-gray-300 rounded-lg">
+      <div class="edit-mode-banner pt-1 pb-3.5 px-2 bg-gray-50 dark:bg-[#2a2c30] border border-gray-300 dark:border-[#383a40] rounded-lg">
         <span class="edit-mode-icon">📝</span>
         <span class="edit-mode-text">正在编辑消息</span>
         <el-button size="small" @click="exitEditMode" class="cancel-edit-btn">
@@ -636,6 +636,10 @@ function scrollToMessage(messageId: string) {
   color: #606266;
   font-size: 14px;
   font-weight: 500;
+}
+
+.dark .edit-mode-text {
+  color: oklch(80% 0.02 250); /* 暗色模式下的文本颜色 */
 }
 
 /* 取消编辑按钮样式 */

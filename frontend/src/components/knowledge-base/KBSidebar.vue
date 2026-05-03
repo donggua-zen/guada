@@ -1,6 +1,6 @@
 <!-- KnowledgeBasePage/KBSidebar.vue -->
 <template>
-    <div class="kb-sidebar h-full flex flex-col bg-(--color-conversation-bg) border-r border-gray-200 dark:border-gray-700">
+    <div class="kb-sidebar h-full flex flex-col bg-(--color-conversation-bg)">
         <!-- 头部 -->
         <div class="px-4 pt-2.5 pb-2.5 ">
             <div class="flex justify-between items-center">

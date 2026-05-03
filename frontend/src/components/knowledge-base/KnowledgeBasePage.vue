@@ -1,12 +1,12 @@
 <!-- components/KnowledgeBasePage.vue -->
 <template>
-    <div class="h-full w-full flex flex-col bg-(--color-surface) dark:bg-gray-900 min-h-0">
+    <div class="h-full w-full flex flex-col bg-(--color-sidebar-bg) min-h-0">
         <!-- 视图模式：卡片列表 -->
         <div v-if="viewMode === 'list'" class="flex-1 overflow-hidden flex flex-col">
             <div class="flex flex-col h-full p-3 max-w-260 mx-auto w-full">
                 <!-- 头部 -->
                 <div class="flex justify-between items-center py-4">
-                    <span class="text-lg font-semibold text-gray-800 dark:text-gray-200">知识库</span>
+                    <span class="text-lg font-semibold text-gray-800 dark:text-[#e8e9ed]">知识库</span>
                     <el-button type="primary" @click="showCreateModal = true" class="flex items-center">
                         <template #icon>
                             <Plus />
@@ -31,7 +31,7 @@
                     <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 pb-4">
                         <!-- 知识库卡片 -->
                         <div v-for="kb in filteredKnowledgeBases" :key="kb.id"
-                            class="kb-card group relative bg-white border border-gray-200 rounded-lg p-4 cursor-pointer hover:border-(--color-primary) transition-all duration-200 overflow-hidden"
+                            class="kb-card group relative bg-white dark:bg-[#232428] border border-gray-200 dark:border-[#232428] rounded-lg p-4 cursor-pointer hover:border-(--color-primary) transition-all duration-200 overflow-hidden"
                             @click="handleSelectKB(kb)">
                             <!-- 毛玻璃背景层 -->
                             <div class="absolute inset-0 z-0 opacity-0 group-hover:opacity-100 transition-opacity duration-200"
@@ -44,14 +44,14 @@
                             <div class="relative z-10 flex flex-col h-full">
                                 <div class="flex items-start gap-3">
                                     <div
-                                        class="w-11 h-11 shrink-0 flex items-center justify-center text-(--color-primary) bg-gray-50 rounded-md overflow-hidden">
+                                        class="w-11 h-11 shrink-0 flex items-center justify-center text-(--color-primary) bg-gray-50 dark:bg-[#2a2c30] rounded-md overflow-hidden">
                                         <el-icon size="24">
                                             <MenuBookOutlined />
                                         </el-icon>
                                     </div>
                                     <div class="flex-1 min-w-0">
                                         <div class="flex items-start justify-between">
-                                            <div class="font-medium text-base text-gray-900 truncate" :title="kb.name">
+                                            <div class="font-medium text-base text-gray-900 dark:text-[#e8e9ed] truncate" :title="kb.name">
                                                 {{
                                                     kb.name }}</div>
                                             <!-- 操作按钮 - 悬停显示 -->
@@ -71,7 +71,7 @@
                                                             </el-dropdown-item>
                                                         </el-dropdown-menu>
                                                     </template>
-                                                    <div @click.stop class="p-1 rounded hover:bg-gray-100">
+                                                    <div @click.stop class="p-1 rounded hover:bg-gray-100 dark:hover:bg-[#2a2c30]">
                                                         <el-icon class="w-4 h-4">
                                                             <MoreFilled />
                                                         </el-icon>
@@ -79,12 +79,12 @@
                                                 </el-dropdown>
                                             </div>
                                         </div>
-                                        <div class="text-xs text-gray-500 mt-1.5">
+                                        <div class="text-xs text-gray-500 dark:text-[#8b8d95] mt-1.5">
                                             {{ kb.isPublic ? '公开' : '私有' }}
                                         </div>
                                     </div>
                                 </div>
-                                <div class="text-xs text-gray-400 mt-2 line-clamp-2 leading-relaxed">{{ kb.description
+                                <div class="text-xs text-gray-400 dark:text-[#6b6d75] mt-2 line-clamp-2 leading-relaxed">{{ kb.description
                                     ||
                                     '暂无描述' }}
                                 </div>
@@ -92,7 +92,7 @@
 
                             <!-- 悬停显示的渐变遮罩和按钮 -->
                             <div
-                                class="absolute inset-x-0 bottom-0 h-16 bg-linear-to-t from-white via-white/90 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none rounded-b-lg">
+                                class="absolute inset-x-0 bottom-0 h-16 bg-linear-to-t from-white via-white/90 to-transparent dark:from-[#232428] dark:via-[#232428]/90 dark:to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none rounded-b-lg">
                             </div>
                             <div
                                 class="absolute inset-x-2 bottom-2 flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-auto z-20">
@@ -105,12 +105,12 @@
 
                         <!-- 空状态 -->
                         <div v-if="!store.loading && filteredKnowledgeBases.length === 0"
-                            class="col-span-full text-center py-12 text-gray-500">
-                            <el-icon size="48" class="text-gray-300 mb-3">
+                            class="col-span-full text-center py-12">
+                            <el-icon size="48" class="text-gray-300 dark:text-[#3e4046] mb-3">
                                 <MenuBookOutlined />
                             </el-icon>
-                            <p class="text-lg">{{ searchKeyword ? '未找到匹配的知识库' : '暂无知识库' }}</p>
-                            <p class="text-sm mt-1">{{ searchKeyword ? '尝试调整搜索关键词' : '点击上方按钮创建第一个知识库' }}</p>
+                            <p class="text-lg text-gray-500 dark:text-[#8b8d95]">{{ searchKeyword ? '未找到匹配的知识库' : '暂无知识库' }}</p>
+                            <p class="text-sm mt-1 text-gray-400 dark:text-[#6b6d75]">{{ searchKeyword ? '尝试调整搜索关键词' : '点击上方按钮创建第一个知识库' }}</p>
                         </div>
                     </div>
                 </div>
@@ -122,20 +122,20 @@
             <!-- 顶部导航栏 -->
             <div class="px-2 py-3 flex items-center gap-3 max-w-260 mx-auto w-full">
                 <el-button link @click="backToList"
-                    class="flex items-center gap-1 text-gray-900 dark:text-gray-300 hover:text-(--color-primary) font-medium">
+                    class="flex items-center gap-1 text-gray-900 dark:text-[#e8e9ed] hover:text-(--color-primary) font-medium">
                     <el-icon :size="22">
                         <ArrowLeft24Filled />
                     </el-icon>
                     <span class="text-base">返回知识库列表</span>
                 </el-button>
                 <el-divider direction="vertical" />
-                <span class="font-semibold text-gray-800 dark:text-gray-200 text-base">{{ currentKB?.name }}</span>
+                <span class="font-semibold text-gray-800 dark:text-[#e8e9ed] text-base">{{ currentKB?.name }}</span>
             </div>
 
             <!-- 详情内容区域 -->
             <div class="flex-1 flex flex-col overflow-hidden max-w-260 mx-auto w-full min-h-0">
                 <!-- Tab 切换区域 -->
-                <div class="px-4 pt-3 dark:border-gray-700">
+                <div class="px-4 pt-3">
                     <el-tabs v-model="activeTab" class="kb-tabs">
                         <el-tab-pane label="文件列表" name="files">
                             <template #label>
@@ -173,7 +173,7 @@
                     <!-- 文件列表内容区 -->
                     <div class="flex-1 m-4 overflow-hidden flex min-h-0 rounded-lg">
                         <ScrollContainer class="max-h-full w-full" ref="fileListContainer" @scroll="handleScroll">
-                            <div class="rounded-lg p-2 bg-white dark:bg-gray-900">
+                            <div class="rounded-lg p-2 bg-white dark:bg-[#232428]">
                                 <KBFileTree ref="fileTreeRef" :kb-id="store.activeKnowledgeBaseId!"
                                     @view="handleViewFile" @retry="handleRetryFile" @delete="handleDeleteFile"
                                     @folder-change="handleFolderChange" @files-loaded="handleFilesLoaded" />

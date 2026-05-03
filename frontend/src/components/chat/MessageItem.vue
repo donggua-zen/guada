@@ -492,6 +492,10 @@ defineExpose({
   animation: fadeIn 0.3s ease;
 }
 
+.dark .token-usage-section {
+  opacity: 0.8; /* 暗色模式下稍微降低透明度 */
+}
+
 .token-item {
   display: inline-flex;
   align-items: center;

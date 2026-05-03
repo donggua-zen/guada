@@ -1,17 +1,17 @@
 <template>
   <div
-    class="bot-card group relative bg-white border border-gray-200 rounded-lg p-4 cursor-default hover:border-(--color-primary) transition-all duration-200 overflow-hidden">
+    class="bot-card group relative bg-white dark:bg-[#232428] border border-gray-200 dark:border-[#232428] rounded-lg p-4 cursor-default hover:border-(--color-primary) transition-all duration-200 overflow-hidden">
     <!-- 内容区域 -->
     <div class="relative z-10 flex flex-col h-full">
       <!-- 头部：平台图标 + 名称 + 开关 -->
       <div class="flex items-start gap-3">
-        <div class="w-11 h-11 shrink-0 flex items-center justify-center bg-gray-50 rounded-md overflow-hidden">
+        <div class="w-11 h-11 shrink-0 flex items-center justify-center bg-gray-50 dark:bg-[#2a2c30] rounded-md overflow-hidden">
           <img :src="getPlatformAvatar(bot.platform)" :alt="getPlatformName(bot.platform)"
             class="w-full h-full object-contain p-1" @error="handleImageError" />
         </div>
         <div class="flex-1 min-w-0">
-          <div class="font-medium text-base text-gray-900 truncate" :title="bot.name">{{ bot.name }}</div>
-          <div class="text-xs text-gray-500 mt-1">{{ getPlatformName(bot.platform) }}</div>
+          <div class="font-medium text-base text-gray-900 dark:text-[#e8e9ed] truncate" :title="bot.name">{{ bot.name }}</div>
+          <div class="text-xs text-gray-500 dark:text-[#8b8d95] mt-1">{{ getPlatformName(bot.platform) }}</div>
         </div>
         <!-- 启用开关 -->
         <el-switch :model-value="bot.status === 'running'" :loading="isOperating" @update:model-value="handleToggle"

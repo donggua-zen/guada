@@ -39,9 +39,17 @@
     color: #6a737d;
 }
 
+.dark .markdown-text h6 {
+    color: oklch(65% 0.02 250); /* 次要文本色 */
+}
+
 .markdown-text a {
     color: #0366d6;
     text-decoration: none;
+}
+
+.dark .markdown-text a {
+    color: oklch(65% 0.12 240); /* 柔和的蓝色链接 */
 }
 
 .markdown-text a:hover {
@@ -89,6 +97,10 @@
     left: 0;
 }
 
+.dark .markdown-text ol>li:before {
+    color: oklch(65% 0.02 250); /* 次要文本色 */
+}
+
 /* 其他子元素保持正常流 */
 ol>*:not(li) {
     display: block;
@@ -104,6 +116,10 @@ ol>*:not(li) {
     height: 5px;
     background-color: #555;
     border-radius: 50%;
+}
+
+.dark .markdown-text ul>li::before {
+    background-color: oklch(65% 0.02 250); /* 次要文本色 */
 }
 
 .markdown-text ul>li:last-child {
@@ -128,6 +144,11 @@ ol>*:not(li) {
 
 }
 
+.dark .markdown-text code {
+    background-color: oklch(28% 0.02 250); /* 柔和的代码背景 */
+    color: oklch(90% 0.01 250); /* 柔和白文本 */
+}
+
 .markdown-text pre {
     background-color: #fff;
     border-radius: 5px;
@@ -140,10 +161,19 @@ ol>*:not(li) {
     font-size: var(--size-text-base) !important;
 }
 
+.dark .markdown-text pre {
+    background-color: oklch(22% 0.02 250); /* 表面色 */
+    border-color: oklch(32% 0.02 250); /* 边框色 */
+}
+
 .markdown-text blockquote {
     border-left: 4px solid #dfe2e5;
     margin: 1em 0 0;
     padding-left: 1em;
+}
+
+.dark .markdown-text blockquote {
+    border-left-color: oklch(35% 0.02 250); /* 柔和的引用边框 */
 }
 
 .markdown-text .custom-table-block {
@@ -173,6 +203,12 @@ ol>*:not(li) {
     min-width: 100px;
 }
 
+.dark .markdown-text table,
+.dark .markdown-text table th,
+.dark .markdown-text table td {
+    border-color: oklch(32% 0.02 250); /* 边框色 */
+}
+
 .markdown-text table th:last-child,
 .markdown-text table td:last-child {
     border-right: none;
@@ -190,10 +226,24 @@ ol>*:not(li) {
     z-index: 1;
 }
 
+.dark .markdown-text table th {
+    background-color: oklch(28% 0.02 250); /* 表头背景 */
+    color: oklch(90% 0.01 250); /* 表头文本 */
+}
+
+.dark .markdown-text table td {
+    background-color: oklch(24% 0.02 250); /* 单元格背景 */
+    color: oklch(90% 0.01 250); /* 单元格文本 */
+}
+
 .markdown-text hr {
     height: 0px;
     border-top: 2px dotted #efefef;
     margin: 1.2em 0;
+}
+
+.dark .markdown-text hr {
+    border-top-color: oklch(32% 0.02 250); /* 分隔线颜色 */
 }
 
 .markdown-text img {
@@ -220,59 +270,7 @@ ol>*:not(li) {
 
 
 /* 暗色模式下的 Markdown 文本样式 */
-.dark .markdown-text h6 {
-    color: #8b949e;
-}
-
-.dark .markdown-text a {
-    color: #58a6ff;
-}
-
-.dark .markdown-text a:hover {
-    color: #79c0ff;
-}
-
-.dark .markdown-text ol>li:before {
-    color: #8b949e;
-}
-
-.dark .markdown-text ul>li::before {
-    background-color: #8b949e;
-}
-
-.dark .markdown-text code {
-    background-color: #252526;
-    color: #d4d4d4;
-}
-
-.dark .markdown-text pre {
-    background-color: #1e1e1e;
-    border-color: #333;
-}
-
-.dark .markdown-text blockquote {
-    border-left-color: #333;
-}
-
-.dark .markdown-text table,
-.dark .markdown-text table th,
-.dark .markdown-text table td {
-    border-color: #333;
-}
-
-.dark .markdown-text table th {
-    background-color: #2d333b;
-    color: #d4d4d4;
-}
-
-.dark .markdown-text table td {
-    background-color: #252526;
-    color: #d4d4d4;
-}
-
-.dark .markdown-text hr {
-    border-top-color: #333;
-}
+/* 已迁移到各个元素的选择器中，保持代码组织清晰 */
 
 /* 添加第一列居中对齐的样式 */
 .markdown-text table td:first-child,
@@ -303,6 +301,12 @@ ol>*:not(li) {
     border-top: 0;
 }
 
+.dark .custom-code-block pre.hljs {
+    background: oklch(25% 0.02 250) !important; /* 暗色模式代码背景 */
+    border-color: oklch(32% 0.02 250);
+    color: oklch(90% 0.01 250); /* 代码文本颜色 */
+}
+
 .custom-code-block code.hljs {
     background: transparent !important;
     display: block;
@@ -314,6 +318,12 @@ ol>*:not(li) {
 .custom-code-block {
     margin-bottom: 1em;
     /* overflow: hidden; */
+}
+
+.dark .custom-code-block {
+    background: oklch(22% 0.02 250); /* 表面色 */
+    border-color: oklch(32% 0.02 250); /* 边框色 */
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3); /* 柔和阴影 */
 }
 
 
@@ -330,10 +340,21 @@ ol>*:not(li) {
     border-bottom: 0;
 }
 
+.dark .code-header {
+    background: oklch(28% 0.02 250); /* 代码头背景 */
+    color: oklch(85% 0.02 250); /* 代码头文本 */
+    border-color: oklch(32% 0.02 250); /* 边框色 */
+}
+
 .code-language {
     font-weight: 600;
     text-transform: uppercase;
     color: #666;
+}
+
+.dark .code-language {
+    color: oklch(65% 0.02 250); /* 次要文本色 */
+    font-weight: 500;
 }
 
 .copy-code-button {
@@ -343,8 +364,18 @@ ol>*:not(li) {
     font-size: 15px;
 }
 
+.dark .copy-code-button {
+    color: oklch(65% 0.02 250); /* 次要文本色 */
+    background: transparent;
+}
+
 .copy-code-button:hover {
     color: #333;
+}
+
+.dark .copy-code-button:hover {
+    color: oklch(90% 0.01 250); /* 悬停时变亮 */
+    background: rgba(255, 255, 255, 0.08); /* 柔和的悬停背景 */
 }
 
 .copy-code-button svg {
@@ -352,51 +383,11 @@ ol>*:not(li) {
     height: 15px;
 }
 
-.copy-code-button:hover {
-    background: rgba(255, 255, 255, 0.2);
-}
+/* 暗色模式样式 - 已整合到各元素选择器中 */
 
-/* 暗色模式样式 */
-.dark .custom-code-block {
-    background: #1e1e1e;
-    border-color: #333;
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
-}
-
-.dark .custom-code-block pre.hljs {
-    background: #252526 !important;
-    color: #d4d4d4;
-}
-
-.dark .custom-code-block code.hljs {
-    color: #d4d4d4;
-    background: transparent !important;
-}
-
-.dark .code-header {
-    background: #252526;
-    color: #cccccc;
-    border-bottom: 1px solid #333;
-}
-
-.dark .code-language {
-    color: #858585;
-    font-weight: 500;
-}
-
-.dark .copy-code-button {
-    color: #858585;
-    background: transparent;
-}
-
-.dark .copy-code-button:hover {
-    color: #d4d4d4;
-    background: rgba(255, 255, 255, 0.1);
-}
-
-/* HLJS 语法高亮暗色主题覆盖 */
+/* HLJS 语法高亮暗色主题 - 使用 VS Code Dark+ 配色 */
 .dark pre.hljs {
-    color: #d4d4d4;
+    color: oklch(90% 0.01 250); /* 主文本色 */
 }
 
 .dark .hljs-keyword,
@@ -406,26 +397,23 @@ ol>*:not(li) {
 .dark .hljs-doctag,
 .dark .hljs-name,
 .dark .hljs-strong {
-    color: #569cd6;
+    color: oklch(70% 0.12 260); /* 蓝色 - 关键字 */
 }
 
 .dark .hljs-comment {
-    color: #6a9955;
+    color: oklch(60% 0.08 140); /* 绿色 - 注释 */
 }
 
 .dark .hljs-string,
-.dark .hljs-title,
-.dark .hljs-section,
 .dark .hljs-built_in,
 .dark .hljs-literal,
 .dark .hljs-type,
 .dark .hljs-addition,
 .dark .hljs-tag,
 .dark .hljs-quote,
-.dark .hljs-name,
 .dark .hljs-selector-id,
 .dark .hljs-selector-class {
-    color: #ce9178;
+    color: oklch(75% 0.15 45); /* 橙色 - 字符串 */
 }
 
 .dark .hljs-meta,
@@ -438,7 +426,7 @@ ol>*:not(li) {
 .dark .hljs-template-variable,
 .dark .hljs-link,
 .dark .hljs-bullet {
-    color: #b5cea8;
+    color: oklch(75% 0.12 130); /* 浅绿 - 变量 */
 }
 
 .dark .hljs-emphasis {
@@ -451,9 +439,9 @@ ol>*:not(li) {
 
 /* 行号样式（如果有的话） */
 .dark .custom-code-block .line-numbers {
-    background: #252526;
-    color: #858585;
-    border-right: 1px solid #333;
+    background: oklch(25% 0.02 250); /* 行号背景 */
+    color: oklch(65% 0.02 250); /* 行号文本 */
+    border-right: 1px solid oklch(32% 0.02 250); /* 行号边框 */
 }
 
 /* 代码块内部滚动条样式 */
@@ -463,25 +451,25 @@ ol>*:not(li) {
 }
 
 .dark .custom-code-block ::-webkit-scrollbar-track {
-    background: #252526;
+    background: oklch(25% 0.02 250); /* 滚动条轨道 */
 }
 
 .dark .custom-code-block ::-webkit-scrollbar-thumb {
-    background: #424242;
+    background: oklch(35% 0.02 250); /* 滚动条滑块 */
     border-radius: 4px;
 }
 
 .dark .custom-code-block ::-webkit-scrollbar-thumb:hover {
-    background: #535353;
+    background: oklch(40% 0.02 250); /* 悬停时变亮 */
 }
 
 /* 代码块高亮行（如果有高亮功能） */
 .dark .custom-code-block .highlighted-line {
-    background: rgba(86, 156, 214, 0.1);
+    background: rgba(86, 156, 214, 0.08); /* 柔和的高亮背景 */
 }
 
 /* 代码块行号高亮 */
 .dark .custom-code-block .highlighted-line-number {
-    color: #569cd6;
-    background: rgba(86, 156, 214, 0.1);
+    color: oklch(70% 0.12 260); /* 蓝色高亮 */
+    background: rgba(86, 156, 214, 0.08);
 }

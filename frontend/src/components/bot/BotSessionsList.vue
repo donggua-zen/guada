@@ -5,7 +5,7 @@
       <el-icon class="is-loading" :size="32">
         <Loading />
       </el-icon>
-      <span class="ml-2 text-gray-500">加载中...</span>
+      <span class="ml-2 text-gray-500 dark:text-[#8b8d95]">加载中...</span>
     </div>
 
     <!-- 会话列表 -->
@@ -33,7 +33,7 @@
 
         <el-table-column prop="botId" label="关联 Bot" min-width="150">
           <template #default="{ row }">
-            <span class="text-sm text-gray-600">
+            <span class="text-sm text-gray-600 dark:text-[#8b8d95]">
               {{ getBotName(row.botId) || '未知 Bot' }}
             </span>
           </template>
@@ -41,7 +41,7 @@
 
         <el-table-column prop="lastActiveAt" label="最后活跃" width="180">
           <template #default="{ row }">
-            <span class="text-sm text-gray-500">
+            <span class="text-sm text-gray-500 dark:text-[#8b8d95]">
               {{ formatTime(row.lastActiveAt) }}
             </span>
           </template>
@@ -80,12 +80,12 @@
       </el-table>
 
       <!-- 空状态 -->
-      <div v-else class="text-center py-12 text-gray-500">
-        <el-icon size="48" class="text-gray-300 mb-3">
+      <div v-else class="text-center py-12">
+        <el-icon size="48" class="text-gray-300 dark:text-[#3e4046] mb-3">
           <ChatDotRound />
         </el-icon>
-        <p class="text-lg">暂无 Bot 会话</p>
-        <p class="text-sm mt-1">启动机器人后，与机器人的对话将显示在这里</p>
+        <p class="text-lg text-gray-500 dark:text-[#8b8d95]">暂无 Bot 会话</p>
+        <p class="text-sm mt-1 text-gray-400 dark:text-[#6b6d75]">启动机器人后，与机器人的对话将显示在这里</p>
       </div>
 
       <!-- 分页 -->

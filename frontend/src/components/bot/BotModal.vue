@@ -9,7 +9,7 @@
           <el-option v-for="platform in botStore.platforms" :key="platform.platform" :label="platform.displayName"
             :value="platform.platform">
             <span>{{ platform.displayName }}</span>
-            <span class="text-gray-400 text-xs ml-2">{{ platform.description }}</span>
+            <span class="text-gray-400 dark:text-[#6b6d75] text-xs ml-2">{{ platform.description }}</span>
           </el-option>
         </el-select>
       </el-form-item>
@@ -37,7 +37,7 @@
             </div>
           </el-option>
         </el-select>
-        <div class="text-xs text-gray-500 mt-1">
+        <div class="text-xs text-gray-500 dark:text-[#8b8d95] mt-1">
           机器人接收消息后使用该角色进行对话
         </div>
       </el-form-item>
