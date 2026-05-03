@@ -211,6 +211,7 @@ export interface ResetPasswordRequest {
 export interface IApiService {
     // 模型管理
     fetchModels(): Promise<PaginatedResponse<ModelProvider>>
+    fetchAllModels(): Promise<PaginatedResponse<ModelProvider>>
     fetchRemoteModels(providerId: string): Promise<PaginatedResponse<Model>>
     createModel(data: any): Promise<Model>
     updateModel(modelId: string, data: any): Promise<Model>

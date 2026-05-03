@@ -108,7 +108,11 @@
                             </div>
                         </div>
 
-                        <div class="flex items-center gap-1 opacity-80 hover:opacity-100 transition-opacity shrink-0">
+                        <div class="flex items-center gap-2 opacity-80 hover:opacity-100 transition-opacity shrink-0">
+                            <!-- 启用/关闭开关 -->
+                            <el-switch v-model="model.isActive" active-text="启用" inactive-text="禁用"
+                                @change="handleToggleModelActive(model)" inline-prompt size="small" />
+                            
                             <el-button link style="font-size: 18px; color: var(--el-text-color-secondary)"
                                 @click="handleEditClick(model)">
                                 <el-icon>
@@ -127,7 +131,7 @@
         </template>
     </div>
 
-    <el-dialog v-model="showProviderModal" :title="getProviderModalTitle" width="30%" align-center append-to-body>
+    <el-dialog v-model="showProviderModal" :title="getProviderModalTitle" width="500px" align-center append-to-body>
         <el-form ref="formRef" :label-width="80" :model="currentProviderEdit" :rules="providerRules" size="large"
             label-position="left" hide-required-asterisk>
             <el-form-item label="名字" prop="name">
@@ -151,7 +155,7 @@
                         show-password />
                     <el-button type="primary" @click="handleTestConnection" :loading="testingConnection"
                         :disabled="!currentProviderEdit.apiUrl || !currentProviderEdit.apiKey">
-                        测试连通性
+                        测试
                     </el-button>
                 </div>
             </el-form-item>
@@ -511,9 +515,12 @@ const providerRules = {
 
 // 初始化数据函数 - 模拟网络请求
 const initData = async () => {
-    const response = await apiService.fetchModels();
+    const response = await apiService.fetchAllModels();
     response.items.forEach(provider => {
-        models.value.push(...provider.models)
+        models.value.push(...provider.models.map(model => ({
+            ...model,
+            isActive: model.isActive !== undefined ? model.isActive : true
+        })))
         delete provider.models
         providers.value.push(provider)
     })
@@ -526,10 +533,13 @@ const reloadProvidersAndModels = async () => {
     models.value = [];
 
     // 重新加载
-    const response = await apiService.fetchModels();
+    const response = await apiService.fetchAllModels();
     response.items.forEach(provider => {
         if (provider.models && provider.models.length > 0) {
-            models.value.push(...provider.models);
+            models.value.push(...provider.models.map(model => ({
+                ...model,
+                isActive: model.isActive !== undefined ? model.isActive : true
+            })));
         }
         delete provider.models;
         providers.value.push(provider);
@@ -1053,6 +1063,33 @@ const handleDeleteClick = async (model) => {
         notify.success('删除成功', '模型已删除');
     }
 }
+
+// 切换模型启用状态
+const handleToggleModelActive = async (model) => {
+    try {
+        const result = await apiService.toggleModelActive(model.id);
+        
+        // 更新本地数据
+        const localModel = models.value.find(m => m.id === model.id);
+        if (localModel) {
+            localModel.isActive = result.isActive;
+            models.value = [...models.value];
+        }
+        
+        const statusText = result.isActive ? '启用' : '禁用';
+        notify.success('操作成功', `模型已${statusText}`, { duration: 2000 });
+    } catch (error) {
+        console.error('切换模型状态失败:', error);
+        notify.error('操作失败', '切换模型状态时发生错误', { duration: 2000 });
+        
+        // 恢复原状态
+        const localModel = models.value.find(m => m.id === model.id);
+        if (localModel) {
+            localModel.isActive = !localModel.isActive;
+            models.value = [...models.value];
+        }
+    }
+};
 
 // 组件卸载时清除计时器（现在由 useDebounceFn 自动处理）
 onMounted(() => {

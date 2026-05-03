@@ -163,6 +163,10 @@ class ApiService implements IApiService {
     return await this._request('/models')
   }
 
+  async fetchAllModels(): Promise<PaginatedResponse<ModelProvider>> {
+    return await this._request('/models/all')
+  }
+
   async fetchRemoteModels(providerId: string): Promise<PaginatedResponse<Model>> {
     return await this._request(`/providers/${providerId}/remote_models`)
   }
@@ -181,6 +185,10 @@ class ApiService implements IApiService {
 
   async toggleModelFavorite(modelId: string): Promise<any> {
     return await this._request(`/models/${modelId}/favorite`, { method: 'PUT' })
+  }
+
+  async toggleModelActive(modelId: string): Promise<any> {
+    return await this._request(`/models/${modelId}/toggle-active`, { method: 'PUT' })
   }
 
   // ========== 提供商管理 ==========

@@ -16,12 +16,18 @@ export class ModelService {
 
   /**
    * 获取所有模型提供商及其关联的模型（全局共享）
+   * 默认只返回启用的模型（isActive = true）
    */
-  async getModelsAndProviders() {
+  async getModelsAndProviders(includeInactive: boolean = false) {
     const providers = await this.modelRepo.getProvidersWithModels();
 
     // 动态合并模板 attributes
     const mergedProviders = providers.map((provider) => {
+      // 过滤模型：根据 includeInactive 参数决定是否包含禁用的模型
+      const filteredModels = includeInactive
+        ? provider.models
+        : provider.models.filter(model => model.isActive !== false);
+
       if (provider.provider && provider.provider !== "custom") {
         const template = PROVIDER_TEMPLATES.find(
           (t) => t.id === provider.provider,
@@ -29,6 +35,7 @@ export class ModelService {
         if (template) {
           return {
             ...provider,
+            models: filteredModels,
             attributes: template.attributes, // 实时从文件获取
             name: template.name, // 确保名称同步
             avatarUrl: this.urlService.toResourceAbsoluteUrl(template.avatarUrl || provider.avatarUrl),
@@ -40,6 +47,7 @@ export class ModelService {
       // 对于自定义 provider，转换 URL（avatarUrl 是静态资源）
       return {
         ...provider,
+        models: filteredModels,
         avatarUrl: provider.avatarUrl
           ? this.urlService.toResourceAbsoluteUrl(provider.avatarUrl)
           : null,
@@ -51,6 +59,14 @@ export class ModelService {
       items: mergedProviders,
       size: mergedProviders.length,
     };
+  }
+
+  /**
+   * 获取所有模型提供商及其关联的模型（包含禁用的模型）
+   * 专用于模型设置页面
+   */
+  async getAllModelsAndProviders() {
+    return this.getModelsAndProviders(true);
   }
 
   /**
@@ -337,5 +353,18 @@ export class ModelService {
 
     const newFavoriteStatus = !model.isFavorite;
     return this.modelRepo.toggleFavorite(modelId, newFavoriteStatus);
+  }
+
+  /**
+   * 切换模型启用状态
+   */
+  async toggleModelActive(modelId: string) {
+    const model = await this.modelRepo.findById(modelId);
+    if (!model) {
+      throw new Error("Model not found");
+    }
+
+    const newActiveStatus = !model.isActive;
+    return this.modelRepo.toggleActive(modelId, newActiveStatus);
   }
 }

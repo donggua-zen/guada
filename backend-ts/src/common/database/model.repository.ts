@@ -88,4 +88,14 @@ export class ModelRepository {
       data: { isFavorite },
     });
   }
+
+  /**
+   * 切换模型启用状态
+   */
+  async toggleActive(id: string, isActive: boolean) {
+    return this.prisma.model.update({
+      where: { id },
+      data: { isActive },
+    });
+  }
 }

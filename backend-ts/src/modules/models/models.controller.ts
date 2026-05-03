@@ -27,6 +27,11 @@ export class ModelsController {
     return this.modelService.getModelsAndProviders();
   }
 
+  @Get("models/all")
+  async getAllModels() {
+    return this.modelService.getAllModelsAndProviders();
+  }
+
   @Post("models")
   async createModel(@Body() data: any) {
     return this.modelService.addModel(data);
@@ -93,5 +98,10 @@ export class ModelsController {
   @Put("models/:id/favorite")
   async toggleFavorite(@Param("id") id: string) {
     return this.modelService.toggleModelFavorite(id);
+  }
+
+  @Put("models/:id/toggle-active")
+  async toggleActive(@Param("id") id: string) {
+    return this.modelService.toggleModelActive(id);
   }
 }
