@@ -102,10 +102,10 @@
       <el-dropdown trigger="hover" placement="top-end" @command="handleUserMenuCommand">
         <div
           class="flex items-center justify-center p-2 rounded-lg cursor-pointer transition-all duration-200 ease-in-out hover:bg-(--color-surface)">
-          <div class="w-8 h-8">
-            <Avatar type="user" :round="true" :src="authStore.user?.avatarUrl"
-              :name="authStore.user?.nickname || authStore.user?.username" />
-          </div>
+
+          <Avatar class="w-8 h-8" type="user" :round="true" :src="authStore.user?.avatarUrl"
+            :name="authStore.user?.nickname || authStore.user?.username" />
+
         </div>
         <template #dropdown>
           <el-dropdown-menu>
@@ -133,7 +133,7 @@ import { useTheme } from "../composables/useTheme";
 import { useSessionStore } from '../stores/session'
 import { usePopup } from '../composables/usePopup'
 
-const openGuide = inject('openGuide', () => {})
+const openGuide = inject('openGuide', () => { })
 
 // 主题
 const { isDark, toggleDark } = useTheme()

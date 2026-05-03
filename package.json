@@ -49,7 +49,7 @@
     "afterPack": "scripts/cleanup-locales.js",
     "directories": {
       "output": "release",
-      "buildResources": "build"
+      "buildResources": "build-resources"
     },
     "files": [
       "electron/dist/**/*",
@@ -113,7 +113,7 @@
           ]
         }
       ],
-      "icon": "build/icon.ico",
+      "icon": "build-resources/icon.ico",
       "signAndEditExecutable": false
     },
     "mac": {
@@ -126,7 +126,7 @@
           ]
         }
       ],
-      "icon": "build/icon.icns",
+      "icon": "build-resources/icon.icns",
       "category": "public.app-category.productivity"
     },
     "linux": {
@@ -144,7 +144,7 @@
           ]
         }
       ],
-      "icon": "build/icon.png",
+      "icon": "build-resources/icon.png",
       "category": "Utility"
     },
     "nsis": {
@@ -154,7 +154,7 @@
       "createStartMenuShortcut": true,
       "shortcutName": "GuaDa",
       "differentialPackage": false,
-      "include": "build/uninstaller.nsh"
+      "include": "build-resources/uninstaller.nsh"
     },
     "publish": [
       {

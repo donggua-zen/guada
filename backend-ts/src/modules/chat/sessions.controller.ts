@@ -61,22 +61,23 @@ export class SessionsController {
     return this.sessionService.generateTitle(id, user.id);
   }
 
-  @Post("sessions/:id/compress-history")
-  async compressHistory(
-    @Param("id") id: string,
-    @Body()
-    body: { compressionRatio?: number; minRetainedTurns?: number; cleaningStrategy?: string },
-    @CurrentUser() user: any,
-  ) {
-    const { compressionRatio = 50, minRetainedTurns = 3, cleaningStrategy = "moderate" } = body;
-    return this.sessionService.compressHistory(
-      id,
-      user.id,
-      Number(compressionRatio),
-      Number(minRetainedTurns),
-      cleaningStrategy as any,
-    );
-  }
+  // TODO: compressHistory 方法尚未实现,暂时注释
+  // @Post("sessions/:id/compress-history")
+  // async compressHistory(
+  //   @Param("id") id: string,
+  //   @Body()
+  //   body: { compressionRatio?: number; minRetainedTurns?: number; cleaningStrategy?: string },
+  //   @CurrentUser() user: any,
+  // ) {
+  //   const { compressionRatio = 50, minRetainedTurns = 3, cleaningStrategy = "moderate" } = body;
+  //   return this.sessionService.compressHistory(
+  //     id,
+  //     user.id,
+  //     Number(compressionRatio),
+  //     Number(minRetainedTurns),
+  //     cleaningStrategy as any,
+  //   );
+  // }
 
   @Get("sessions/:id/summaries")
   async getSessionSummaries(@Param("id") id: string, @CurrentUser() user: any) {
@@ -104,5 +105,13 @@ export class SessionsController {
   @Get("sessions/:id/token-stats")
   async getTokenStats(@Param("id") id: string, @CurrentUser() user: any) {
     return this.sessionService.getTokenStats(id, user.id);
+  }
+
+  @Post("sessions/:id/compress")
+  async compressSession(
+    @Param("id") id: string,
+    @CurrentUser() user: any,
+  ) {
+    return this.sessionService.compressSession(id, user.id);
   }
 }

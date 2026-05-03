@@ -25,12 +25,17 @@
     </div>
 
     <div class="w-full  max-w-200">
-      <ChatInput v-model:value="inputMessage.content" v-model:thinking-enabled="thinkingEnabled" :config="{
-        modelId: currentModelId,
-        maxMemoryLength: (lastModelConfig.value as any)?.maxMemoryLength || currentCharacter?.settings?.maxMemoryLength,
-        knowledgeBaseIds: currentSession?.settings?.referencedKbs || []
-      }" @config-change="handleConfigChange" :buttons="chatInputButtons" :files="inputMessage.files" :streaming="false"
-        @send="sendMessage" @toggle-thinking="toggleDeepThinking" />
+      <ChatInput 
+        v-model:value="inputMessage.content" 
+        v-model:thinking-enabled="thinkingEnabled" 
+        :config="chatInputConfig"
+        @config-change="handleConfigChange" 
+        :buttons="chatInputButtons" 
+        :files="inputMessage.files" 
+        :streaming="false"
+        @send="sendMessage" 
+        @toggle-thinking="toggleDeepThinking" 
+      />
     </div>
     <div>
       <div class="flex items-center justify-center mt-6">
@@ -160,6 +165,16 @@ const currentSession = ref<any>({
     thinkingEnabled: lastThinkingEnabled.value, // 从本地存储加载
     referencedKbs: userSelectedKnowledgeBaseIds.value, // 新增：从 localStorage 加载知识库选择
     modelName: null,
+    // 新增：memoryEnabled 控制是否启用自定义配置
+    memoryEnabled: false,  // 默认使用角色配置
+    // 新增：memory 分组配置（压缩与记忆配置）
+    memory: {
+      maxMemoryLength: null,
+      compressionTriggerRatio: 0.8,
+      compressionTargetRatio: 0.5,
+      enableSummaryCompression: true,
+      maxTokensLimit: null
+    }
   }
 })
 
@@ -242,7 +257,14 @@ watch(() => currentSession.value.characterId, (newCharId, oldCharId) => {
       currentSession.value.settings = {
         ...(currentSession.value.settings || {}),
         thinkingEnabled: lastThinkingEnabled.value,
-        maxMemoryLength: newCharacter.settings?.maxMemoryLength
+        memoryEnabled: false,  // 默认使用角色配置
+        memory: {
+          maxMemoryLength: newCharacter.settings?.memory?.maxMemoryLength || newCharacter.settings?.maxMemoryLength,
+          compressionTriggerRatio: newCharacter.settings?.memory?.compressionTriggerRatio || 0.8,
+          compressionTargetRatio: newCharacter.settings?.memory?.compressionTargetRatio || 0.5,
+          enableSummaryCompression: newCharacter.settings?.memory?.enableSummaryCompression ?? true,
+          maxTokensLimit: newCharacter.settings?.memory?.maxTokensLimit || null
+        }
       };
       
       // 更新本地存储的配置信息
@@ -359,7 +381,14 @@ const loadCharacters = async (): Promise<void> => {
         currentSession.value.settings = {
           ...currentSession.value.settings,
           thinkingEnabled: lastThinkingEnabled.value,
-          maxMemoryLength: targetCharacter.settings?.maxMemoryLength
+          memoryEnabled: false,  // 默认使用角色配置
+          memory: {
+            maxMemoryLength: targetCharacter.settings?.memory?.maxMemoryLength || targetCharacter.settings?.maxMemoryLength,
+            compressionTriggerRatio: targetCharacter.settings?.memory?.compressionTriggerRatio || 0.8,
+            compressionTargetRatio: targetCharacter.settings?.memory?.compressionTargetRatio || 0.5,
+            enableSummaryCompression: targetCharacter.settings?.memory?.enableSummaryCompression ?? true,
+            maxTokensLimit: targetCharacter.settings?.memory?.maxTokensLimit || null
+          }
         };
         
         // 同步更新 lastModelConfig，确保一致性
@@ -417,7 +446,14 @@ const selectCharacter = (character: any): void => {
   currentSession.value.settings = {
     ...(currentSession.value.settings || {}),
     thinkingEnabled: lastThinkingEnabled.value,
-    maxMemoryLength: character.settings?.maxMemoryLength
+    memoryEnabled: false,  // 默认使用角色配置
+    memory: {
+      maxMemoryLength: character.settings?.memory?.maxMemoryLength || character.settings?.maxMemoryLength,
+      compressionTriggerRatio: character.settings?.memory?.compressionTriggerRatio || 0.8,
+      compressionTargetRatio: character.settings?.memory?.compressionTargetRatio || 0.5,
+      enableSummaryCompression: character.settings?.memory?.enableSummaryCompression ?? true,
+      maxTokensLimit: character.settings?.memory?.maxTokensLimit || null
+    }
   };
   
   // 更新本地存储的配置信息
@@ -430,20 +466,58 @@ const selectCharacter = (character: any): void => {
   }
 };
 
+// ========== ChatInput 配置管理 ==========
+
+/**
+ * ChatInput 组件的配置对象（计算属性）
+ * 与 handleConfigChange 中的处理逻辑一一对应，方便对照维护
+ */
+const chatInputConfig = computed(() => ({
+  // 模型 ID - 对应 handleConfigChange 中的 config.modelId
+  modelId: currentModelId.value,
+  
+  // 记忆配置开关 - 对应 handleConfigChange 中的 config.memoryEnabled
+  memoryEnabled: currentSession.value?.settings?.memoryEnabled,
+  
+  // 记忆配置详情 - 对应 handleConfigChange 中的 config.memory
+  memory: currentSession.value?.settings?.memory || null,
+  
+  // 知识库 IDs - 对应 handleConfigChange 中的 config.knowledgeBaseIds
+  knowledgeBaseIds: currentSession.value?.settings?.referencedKbs || []
+}));
+
+/**
+ * 处理 ChatInput 配置变更
+ * 与 chatInputConfig 计算属性中的字段一一对应
+ */
 const handleConfigChange = (config: any): void => {
+  // 处理模型 ID 变更
   if (typeof config.modelId !== 'undefined') {
     currentSession.value.model_id = config.modelId;
     // 用户手动切换模型，保存到本地存储
     console.log('保存用户手动切换的模型:', config.modelId);
     userSelectedModelId.value = config.modelId;
   }
-  if (typeof config.maxMemoryLength !== 'undefined') {
-    // @ts-ignore - settings 类型需要更精确的定义
-    currentSession.value.settings = { ...(currentSession.value.settings || {}), maxMemoryLength: config.maxMemoryLength };
-    // 保存到本地存储
-    lastModelConfig.value = { ...lastModelConfig.value, maxMemoryLength: config.maxMemoryLength };
+  
+  // 处理记忆配置开关
+  if (typeof config.memoryEnabled !== 'undefined') {
+    currentSession.value.settings.memoryEnabled = config.memoryEnabled;
+    console.log('保存 memoryEnabled 到会话:', config.memoryEnabled);
   }
-  // 新增：保存知识库选择到会话设置和本地存储
+  
+  // 处理记忆配置详情
+  if (typeof config.memory !== 'undefined') {
+    currentSession.value.settings = { 
+      ...(currentSession.value.settings || {}), 
+      memory: { 
+        ...(currentSession.value.settings?.memory || {}), 
+        ...config.memory 
+      } 
+    };
+    console.log('保存 memory 配置到会话:', config.memory);
+  }
+  
+  // 处理知识库选择
   if (typeof config.knowledgeBaseIds !== 'undefined') {
     currentSession.value.settings = { ...(currentSession.value.settings || {}), referencedKbs: config.knowledgeBaseIds };
     // 保存到 localStorage，实现持久化

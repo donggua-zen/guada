@@ -2,7 +2,7 @@
     <el-dialog 
         v-model="visible" 
         :close-on-click-modal="false" 
-        width="800px"
+        width="700px"
         :style="{ maxHeight: '75vh' }"
         class="character-setting-dialog"
         destroy-on-close
@@ -17,60 +17,58 @@
             <CharacterSettingPanel 
                 ref="settingPanelRef"
                 :data="currentCharacter" 
-                @update:data="handleSave" 
                 :simple="false" 
             />
         </div>
+
+        <template #footer>
+            <div class="dialog-footer">
+                <el-button @click="handleClose">取消</el-button>
+                <el-button type="primary" @click="handleSave" :loading="saving">应用全部设置</el-button>
+            </div>
+        </template>
     </el-dialog>
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, watch, computed, onMounted, onUnmounted } from 'vue'
-import {
-    ElDialog
-} from 'element-plus'
+import { ref, watch } from 'vue'
+import { ElDialog, ElButton } from 'element-plus'
 import CharacterSettingPanel from './CharacterSettingPanel.vue'
 import { apiService } from '../../services/ApiService'
 import { usePopup } from '@/composables/usePopup'
 
 const { toast } = usePopup()
 
-// Props - 类型化
+// Props
 const props = defineProps<{
     show?: boolean;
-    mode?: string;
     characterId?: string;
 }>()
 
-// Emits - 类型化
+// Emits
 const emit = defineEmits<{
-    'update:data': [data: any]
     'saved': [character: any]
     'update:show': [show: boolean]
 }>()
 
-// 响应式数据 - 类型化
+// 响应式数据
 const visible = ref(false)
-const loading = ref(false)
+const saving = ref(false)
 const currentCharacter = ref<any>({})
 const settingPanelRef = ref<any>(null)
 
-
-
-
-
-// 监听props.show变化
+// 监听显示状态
 watch(() => props.show, (newVal) => {
     visible.value = newVal
 }, { immediate: true })
 
-// 监听visible变化
 watch(visible, (newVal) => {
     if (!newVal) {
         emit('update:show', false)
     }
 })
 
+// 监听角色 ID 变化并加载数据
 watch(() => props.characterId, async (newVal) => {
     if (newVal) {
         try {
@@ -79,32 +77,34 @@ watch(() => props.characterId, async (newVal) => {
             console.error("[CharacterModal] Failed to fetch character:", error);
             currentCharacter.value = {};
         }
-    }
-    else {
+    } else {
         currentCharacter.value = {};
     }
 }, { immediate: true })
 
-// 生命周期
-onMounted(() => {
-    // 无需额外初始化
-})
-
-// 方法 - 类型化
+// 关闭弹窗
 const handleClose = (): void => {
     visible.value = false
 }
 
-const handleSave = async (data: any): Promise<void> => {
-    let character: any = null;
-    let characterData = { ...data };
-    const avatarFile = data.avatarFile; // 先缓存引用
+// 保存逻辑
+const handleSave = async (): Promise<void> => {
+    // 触发子组件的验证与数据获取
+    if (!settingPanelRef.value) return;
     
-    // 从提交数据中移除 avatarFile，避免后端报错
-    delete characterData.avatarFile;
-    delete characterData.avatarUrl; // 修改不应该携带头像数据
-    
+    const isValid = await settingPanelRef.value.validate();
+    if (!isValid) return;
+
+    saving.value = true;
     try {
+        const data = settingPanelRef.value.getFormData();
+        let character: any = null;
+        let characterData = { ...data };
+        const avatarFile = data.avatarFile; 
+        
+        delete characterData.avatarFile;
+        delete characterData.avatarUrl; 
+        
         if (currentCharacter.value && currentCharacter.value.id) {
             const response = await apiService.updateCharacter(currentCharacter.value.id, characterData);
             character = response;
@@ -112,25 +112,26 @@ const handleSave = async (data: any): Promise<void> => {
             const response = await apiService.createCharacter(characterData);
             character = response;
         }
+
         if (character && avatarFile) {
             const response = await apiService.uploadAvatar(character['id'], avatarFile);
             character.avatarUrl = response.url;
-            
-            // 上传成功后清除子组件的 avatarFile，避免重复上传
-            if (settingPanelRef.value) {
-                settingPanelRef.value.clearAvatarFile();
-            }
+            settingPanelRef.value.clearAvatarFile();
         }
+
         if (character) {
             currentCharacter.value = character;
         }
+        
         toast.success("角色更新成功");
+        emit('saved', currentCharacter.value);
+        visible.value = false;
     } catch (error) {
         console.error("角色保存失败:", error);
         toast.error("角色保存失败");
+    } finally {
+        saving.value = false;
     }
-    emit('saved', currentCharacter.value);
-    visible.value = false;
 }
 </script>
 
@@ -148,15 +149,20 @@ const handleSave = async (data: any): Promise<void> => {
 }
 
 .dialog-content {
-    height: calc(75vh - 120px);
+    height: calc(75vh - 140px); /* 预留 header 和 footer 高度 */
     overflow-y: auto;
     padding: 0 4px;
+}
+
+.dialog-footer {
+    display: flex;
+    justify-content: flex-end;
+    gap: 12px;
 }
 
 /* 优化弹窗样式 */
 .character-setting-dialog :deep(.el-dialog__body) {
     padding: 0;
-    height: calc(75vh - 60px);
     overflow: hidden;
 }
 
@@ -167,7 +173,8 @@ const handleSave = async (data: any): Promise<void> => {
 }
 
 .character-setting-dialog :deep(.el-dialog__footer) {
-    padding: 0;
+    padding: 12px 20px;
+    border-top: 1px solid var(--el-border-color-light);
 }
 
 /* 滚动条美化 */

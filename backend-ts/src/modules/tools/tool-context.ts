@@ -63,37 +63,34 @@ export class ToolContext {
  */
 @Injectable()
 export class ToolContextFactory {
-  constructor(private readonly toolOrchestrator: ToolOrchestrator) {}
+  constructor(private readonly toolOrchestrator: ToolOrchestrator) { }
 
   /**
-   * 从合并的设置中创建工具上下文
-   * 支持全局设置和角色设置的两级管理
+   * 从工具配置中创建工具上下文
+   * @param sessionId 会话 ID
+   * @param userId 用户 ID
+   * @param toolsConfig 工具配置（boolean | string[] | Record<string, boolean>）
+   * @param mcpServersConfig MCP 服务器配置（boolean | string[]）
+   * @param excludeTools 需要排除的工具命名空间列表（如 ['knowledge_base']）
    */
   createContext(
     sessionId: string,
     userId: string,
-    mergedSettings: any,
-    containsKnowledgeBase: boolean = false,
+    toolsConfig: any,
+    mcpServersConfig: any,
+    excludeTools: string[] = [],
   ): ToolContext {
     const injectParams = {
       session_id: sessionId,
       user_id: userId,
     };
 
-    // 从合并设置中提取工具配置
-    // mergedSettings.tools 可能是：
-    // - boolean: true(全部启用) / false(全部禁用)
-    // - 对象: { namespace: boolean } 指定具体工具的启用状态
-    // mergedSettings.mcpServers 是 MCP 服务器的配置（boolean 或 string[]）
-    const toolsConfig = mergedSettings?.tools;
-    const mcpServersConfig = mergedSettings?.mcpServers;
-
     // 动态遍历所有工具提供者，避免硬编码
     const providerConfigs: Record<string, ProviderConfig> = {};
-    
+
     for (const [namespace, provider] of this.toolOrchestrator.getProviders()) {
       const metadata = provider.getMetadata();
-      
+
       // 特殊处理：MCP 工具
       if (metadata.isMcp) {
         // MCP 的配置可能是 boolean 或 array
@@ -104,22 +101,17 @@ export class ToolContextFactory {
           // 如果是指定服务器列表，直接传递数组以实现精细控制
           enabled = mcpServersConfig;
         }
-        
+
         providerConfigs[namespace] = {
           enabledTools: enabled,
         };
         continue;
       }
-      
+
       // 对于其他工具，根据 toolsConfig 的类型判断是否启用
-      let enabled = this.resolveToolEnabled(toolsConfig, namespace);
-      
-      // 特殊处理：知识库工具需要检查是否包含知识库
-      if (namespace === 'knowledge_base') {
-        // 知识库必须同时满足：配置启用 && 包含知识库内容
-        enabled = enabled && containsKnowledgeBase;
-      }
-      
+      // 如果该工具在排除列表中，强制禁用
+      const enabled = !excludeTools.includes(namespace) && this.resolveToolEnabled(toolsConfig, namespace);
+
       providerConfigs[namespace] = {
         enabledTools: enabled,
       };

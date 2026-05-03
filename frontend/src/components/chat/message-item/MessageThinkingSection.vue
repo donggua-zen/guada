@@ -45,7 +45,7 @@ const props = defineProps<{
   isThinking: boolean;
   isStreaming: boolean;
   thinkingDurationMs: number | null | undefined;
-  metaData?: Record<string, any>;
+  metadata?: Record<string, any>;
 }>();
 
 const emit = defineEmits<{
@@ -63,7 +63,7 @@ const thinkingDuration = computed(() => {
   if (props.isThinking) {
     return props.thinkingDurationMs;
   }
-  return props.metaData?.thinkingDurationMs || props.thinkingDurationMs;
+  return props.metadata?.thinkingDurationMs || props.thinkingDurationMs;
 });
 
 const formattedDuration = computed(() => {

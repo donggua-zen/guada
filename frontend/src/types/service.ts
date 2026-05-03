@@ -21,6 +21,8 @@ export type StreamEvent =
     | StreamToolCallsResponseEvent  // 新增
     | StreamTextEvent
     | StreamFinishEvent
+    | StreamCompressionStartEvent
+    | StreamCompressionErrorEvent
 
 /**
  * 创建消息事件
@@ -85,6 +87,22 @@ export interface StreamFinishEvent {
     usage?: TokenUsage
     finishReason: string  // 驼峰式
     error?: string
+}
+
+/**
+ * 压缩开始事件
+ */
+export interface StreamCompressionStartEvent {
+    type: 'compression_start'
+    msg: string
+}
+
+/**
+ * 压缩错误事件
+ */
+export interface StreamCompressionErrorEvent {
+    type: 'compression_error'
+    msg: string
 }
 
 /**

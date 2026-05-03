@@ -39,7 +39,7 @@ export interface MessageContent {
     reasoningContent?: string | null
     turnsId?: string
     additionalKwargs?: Record<string, any>
-    metaData?: Record<string, any>
+    metadata?: Record<string, any>
     createdAt?: ISODateString
     updatedAt?: ISODateString
     thinkingStartedAt?: number | null

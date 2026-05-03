@@ -52,5 +52,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   // 打开目录
   openUserDataFolder: () => ipcRenderer.send('open-user-data-folder'),
-  openInstallFolder: () => ipcRenderer.send('open-install-folder')
+  openInstallFolder: () => ipcRenderer.send('open-install-folder'),
+  
+  // 剪贴板操作（通过 IPC，更可靠）
+  clipboardIPC: {
+    writeText: (text: string) => ipcRenderer.invoke('clipboard-write-text', text),
+    readText: () => ipcRenderer.invoke('clipboard-read-text')
+  }
 })

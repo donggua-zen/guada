@@ -7,6 +7,7 @@ import { MemoryToolProvider } from "./providers/memory-tool.provider";
 import { MCPToolProvider } from "./providers/mcp-tool.provider";
 import { TimeToolProvider } from "./providers/time-tool.provider";
 import { ImageRecognitionToolProvider } from "./providers/image-recognition-tool.provider";
+import { ShellToolProvider } from "./providers/shell-tool.provider";
 import { EmbeddingService } from "../knowledge-base/embedding.service";
 import { KnowledgeBaseRepository } from "../../common/database/knowledge-base.repository";
 import { KBFileRepository } from "../../common/database/kb-file.repository";
@@ -24,6 +25,7 @@ import { PrismaService } from "../../common/database/prisma.service";
     MCPToolProvider,
     TimeToolProvider,
     ImageRecognitionToolProvider,
+    ShellToolProvider,
     EmbeddingService,
     KnowledgeBaseRepository,
     KBFileRepository,

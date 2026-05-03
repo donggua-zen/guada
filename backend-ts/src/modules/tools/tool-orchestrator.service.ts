@@ -9,6 +9,7 @@ import { MemoryToolProvider } from "./providers/memory-tool.provider";
 import { MCPToolProvider } from "./providers/mcp-tool.provider";
 import { TimeToolProvider } from "./providers/time-tool.provider";
 import { ImageRecognitionToolProvider } from "./providers/image-recognition-tool.provider";
+import { ShellToolProvider } from "./providers/shell-tool.provider";
 import { ToolContext } from "./tool-context";
 
 export interface ToolMetadata {
@@ -32,12 +33,14 @@ export class ToolOrchestrator {
     mcpProvider: MCPToolProvider,
     timeProvider: TimeToolProvider,
     imageRecognitionProvider: ImageRecognitionToolProvider,
+    shellProvider: ShellToolProvider,
   ) {
     this.addProvider(kbProvider);
     this.addProvider(memoryProvider);
     this.addProvider(mcpProvider);
     this.addProvider(timeProvider);
     this.addProvider(imageRecognitionProvider);
+    this.addProvider(shellProvider);
   }
 
   addProvider(provider: IToolProvider) {
@@ -113,7 +116,6 @@ export class ToolOrchestrator {
         this.logger.error(`Error executing tool ${req.name}`, error);
         responses.push({
           toolCallId: req.id,
-          role: "tool",
           name: req.name,
           content: `Error: ${error.message}`,
           isError: true,
@@ -158,7 +160,6 @@ export class ToolOrchestrator {
       
       return {
         toolCallId: request.id,
-        role: "tool",
         name: request.name,
         content,
         isError: false,
@@ -168,7 +169,6 @@ export class ToolOrchestrator {
       // 统一封装错误响应
       return {
         toolCallId: request.id,
-        role: "tool",
         name: request.name,
         content: `Error: ${error.message}`,
         isError: true,

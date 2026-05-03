@@ -16,6 +16,14 @@
               @delete="deleteMessage" @edit="editMessage" @copy="copyMessage" @generate="generateResponse"
               @regenerate="regenerateResponse" @switch="switchContent" />
           </div>
+
+          <!-- 压缩中状态显示 -->
+          <div v-if="sessionStore.sessionIsCompressing(currentSession?.id || '')" class="w-full py-8 flex flex-col items-center justify-center text-gray-500">
+            <el-icon class="is-loading mb-2" size="24">
+              <LoadingOutlined />
+            </el-icon>
+            <span class="text-sm">正在优化对话历史，请稍候...</span>
+          </div>
         </div>
       </ScrollContainer>
 
@@ -40,12 +48,17 @@
     </div>
 
     <div class="w-full flex items-center" style="margin-top: -10px;z-index: 9;">
-      <ChatInput v-model:value="inputMessage.content" v-model:thinking-enabled="thinkingEnabled" :config="{
-        modelId: currentModelId,
-        maxMemoryLength: currentSession?.settings?.maxMemoryLength || null,
-        knowledgeBaseIds: inputMessage?.knowledgeBaseIds || currentSession?.settings?.referencedKbs || []
-      }" :files="inputMessage.files" :streaming="isStreaming" @config-change="handleConfigChange"
-        @send="handleSendMessage" @abort="abortResponse" @toggle-thinking="toggleDeepThinking" />
+      <ChatInput 
+        v-model:value="inputMessage.content" 
+        v-model:thinking-enabled="thinkingEnabled" 
+        :config="chatInputConfig"
+        :files="inputMessage.files" 
+        :streaming="isStreaming" 
+        @config-change="handleConfigChange"
+        @send="handleSendMessage" 
+        @abort="abortResponse" 
+        @toggle-thinking="toggleDeepThinking" 
+      />
     </div>
     <!-- <div class="ai-disclaimer text-xs text-gray-400 text-center mt-2">内容由 AI 生成，仅供参考</div> -->
 
@@ -72,6 +85,7 @@ import { useMessageOperations } from '@/composables/useMessageOperations'
 import MessageItem from "./MessageItem.vue";
 import { Avatar, ChatInput, ScrollContainer, ScrollToBottomButton } from "../ui";
 import WelcomeScreen from './WelcomeScreen.vue';
+import { LoadingOutlined } from '@vicons/antd'
 
 
 // 常量定义
@@ -257,18 +271,64 @@ const currentModelId = computed({
 });
 
 
+// ========== ChatInput 配置管理 ==========
+
+/**
+ * ChatInput 组件的配置对象（计算属性）
+ * 与 handleConfigChange 中的处理逻辑一一对应，方便对照维护
+ */
+const chatInputConfig = computed(() => ({
+  // 模型 ID - 对应 handleConfigChange 中的 config.modelId
+  modelId: currentModelId.value,
+  
+  // 记忆配置开关 - 对应 handleConfigChange 中的 config.memoryEnabled
+  memoryEnabled: currentSession.value?.settings?.memoryEnabled,
+  
+  // 记忆配置详情 - 对应 handleConfigChange 中的 config.memory
+  memory: currentSession.value?.settings?.memory || null,
+  
+  // 知识库 IDs - 对应 handleConfigChange 中的 config.knowledgeBaseIds
+  knowledgeBaseIds: inputMessage.value?.knowledgeBaseIds || currentSession.value?.settings?.referencedKbs || []
+}));
+
+/**
+ * 处理 ChatInput 配置变更
+ * 与 chatInputConfig 计算属性中的字段一一对应
+ */
 const handleConfigChange = (config: any) => {
   if (!currentSession.value) return;
-  if (typeof config.modelId !== 'undefined')
+  
+  // 处理模型 ID 变更
+  if (typeof config.modelId !== 'undefined') {
     currentSession.value.modelId = config.modelId;
-  if (typeof config.maxMemoryLength !== 'undefined')
-    currentSession.value.settings.maxMemoryLength = config.maxMemoryLength;
+  }
+  
+  // 处理记忆配置开关
+  if (typeof config.memoryEnabled !== 'undefined') {
+    currentSession.value.settings.memoryEnabled = config.memoryEnabled;
+    console.log('保存 memoryEnabled 到会话:', config.memoryEnabled);
+  }
+  
+  // 处理记忆配置详情
+  if (typeof config.memory !== 'undefined') {
+    if (!currentSession.value.settings.memory) {
+      currentSession.value.settings.memory = {};
+    }
+    currentSession.value.settings.memory = { 
+      ...currentSession.value.settings.memory, 
+      ...config.memory 
+    };
+    console.log('保存 memory 配置到会话:', config.memory);
+  }
+  
+  // 处理知识库选择
   if (typeof config.knowledgeBaseIds !== 'undefined') {
     inputMessage.value.knowledgeBaseIds = config.knowledgeBaseIds;
     if (!editMode.value) {
       currentSession.value.settings.referencedKbs = config.knowledgeBaseIds;
     }
   }
+  
   debouncedSaveSession();
 };
 

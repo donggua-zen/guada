@@ -6,7 +6,6 @@ export interface ToolCallRequest {
 
 export interface ToolCallResponse {
   toolCallId: string;
-  role: "tool";
   name: string;
   content: string;
   isError?: boolean;

@@ -44,7 +44,7 @@ export class MessageRepository {
    */
   async findRecentBySessionId(
     sessionId: string,
-    limit: number,
+    limit?: number,
     beforeMessageId?: string,
     afterMessageId?: string,
     options?: {
@@ -73,7 +73,7 @@ export class MessageRepository {
 
     const messages = await this.prisma.message.findMany({
       where,
-      take: limit,
+      ...(limit != null && { take: limit }),
       orderBy: { id: "desc" }, // 基于 ID 倒序（CUID 时间有序）
       include: {
         ...(withFiles && { files: true }),

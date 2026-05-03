@@ -156,7 +156,7 @@ export function useMessageOperations(
      */
     function enterEditMode(message: any) {
         let knowledgeBaseIds = []
-        const referencedKbs = message.contents[0].additionalKwargs?.referencedKbs || []
+        const referencedKbs = message.contents[0].metadata?.referencedKbs || []
         for (let i = 0; i < referencedKbs.length; i++) {
             knowledgeBaseIds.push(referencedKbs[i].id)
         }

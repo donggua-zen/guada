@@ -31,18 +31,20 @@ export interface ToolCallItem {
  * 统一的对话消息记录
  */
 export interface MessageRecord {
-  id?: string; // 原始消息 ID，用于追踪压缩分界点
+  messageId?: string; // 原始消息 ID，用于追踪压缩分界点
+  contentId?: string; // 内容 ID
+  turnsId?: string;
   role: "system" | "user" | "assistant" | "tool";
   content: string | MessagePart[];
   reasoningContent?: string;
   toolCalls?: ToolCallItem[];
   toolCallId?: string; // 当 role 为 'tool' 时使用
   name?: string; // 当 role 为 'tool' 时使用，对应调用的函数名
-  metadata?: Record<string, any>;
-  usage?: any;
-  finishReason?: string;
-  error?: string;
-  toolCallsResponse?: any;
+  metadata?: Partial<Record<"referencedKbs" | "thinkingDurationMs" | "modelName" | "usage" | "finishReason" | "error", any>> | undefined;
+  // usage?: any;
+  // finishReason?: string;
+  // error?: string;
+  // toolCallsResponse?: { toolCallId: string; name: string; content: string }[];
 }
 
 // ==================== 工具定义结构 ====================
@@ -88,7 +90,6 @@ export interface LLMCompletionParams {
   extraBody?: Record<string, any>;
   abortSignal?: AbortSignal;
   providerConfig?: any;
-  modelConfig?: any;
   stream?: boolean;
   timeout?: number;
 }

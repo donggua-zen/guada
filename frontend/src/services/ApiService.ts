@@ -308,15 +308,12 @@ class ApiService implements IApiService {
     return await this._request(`/sessions/${sessionId}/generate-title`, { method: 'POST' })
   }
 
-  async compressSessionHistory(
-    sessionId: string,
-    compressionRatio: number = 50,
-    minRetainedTurns: number = 3,
-    cleaningStrategy: string = 'moderate'
-  ): Promise<any> {
-    return await this._request(`/sessions/${sessionId}/compress-history`, {
+  /**
+   * 手动触发会话压缩（强制压缩，不受阈值限制）
+   */
+  async compressSession(sessionId: string): Promise<any> {
+    return await this._request(`/sessions/${sessionId}/compress`, {
       method: 'POST',
-      data: { compressionRatio, minRetainedTurns, cleaningStrategy },
     })
   }
 

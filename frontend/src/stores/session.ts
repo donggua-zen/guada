@@ -231,27 +231,6 @@ export const useSessionStore = defineStore('session', () => {
         sessions.value.delete(sessionId)
     }
 
-    /**
-     * 压缩会话历史记录
-     * @param sessionId - 会话 ID
-     * @param options - 压缩选项
-     */
-    const compressSessionHistory = async (
-      sessionId: string,
-      options?: {
-        compressionRatio?: number;
-        minRetainedTurns?: number;
-        cleaningStrategy?: string;
-      }
-    ): Promise<any> => {
-      return await apiService.compressSessionHistory(
-        sessionId,
-        options?.compressionRatio,
-        options?.minRetainedTurns,
-        options?.cleaningStrategy
-      )
-    }
-
     return {
         // 状态
         activeSessionId,
@@ -278,7 +257,6 @@ export const useSessionStore = defineStore('session', () => {
         setSessionSetting,
         updateSessionTitle,
         updateSessionLastActiveTime,
-        clearSessionState,
-        compressSessionHistory
+        clearSessionState
     }
 })

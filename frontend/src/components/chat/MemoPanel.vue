@@ -1,64 +1,59 @@
 <template>
-  <div class="h-full flex flex-col bg-white">
-    <!-- 头部 -->
-    <div class="flex items-center justify-between px-4 h-15 border-b border-gray-200">
-      <h3 class="text-base font-semibold text-gray-800">记忆管理</h3>
-      <el-button text @click="$emit('close')" class="hover:bg-gray-100">
-        <el-icon>
-          <Close />
-        </el-icon>
-      </el-button>
-    </div>
-
-    <!-- 内容区域 -->
-    <div class="flex-1 flex flex-col px-4 overflow-y-auto pb-4">
-      <!-- Token 统计部分 -->
-      <template v-if="tokenStats">
+  <div class="flex flex-col">
+    <!-- Token 统计部分 -->
+    <template v-if="tokenStats">
         <!-- 使用率进度条 -->
-        <div class="mb-6 pt-4">
+        <div class="mb-4 pt-2">
           <div class="flex items-center justify-between mb-2">
-            <span class="text-sm font-medium text-gray-700">上下文使用率</span>
+            <div class="flex items-center gap-1.5">
+              <span class="text-sm font-medium text-gray-700">上下文使用率</span>
+              <el-tooltip content="上下文为估算值，仅供参考，与实际值可能存在差异" placement="top">
+                <el-icon class="text-gray-400 hover:text-gray-600 cursor-help transition-colors" :size="14">
+                  <QuestionFilled />
+                </el-icon>
+              </el-tooltip>
+            </div>
             <span class="text-sm font-semibold" :class="usageColorClass">
               {{ tokenStats.percentage }}%
             </span>
           </div>
-          <el-progress :percentage="tokenStats.percentage" :color="progressColor" :stroke-width="20"
+          <el-progress :percentage="tokenStats.percentage" :color="progressColor" :stroke-width="16"
             :show-text="false" />
         </div>
 
         <!-- 详细统计卡片 -->
-        <div class="grid grid-cols-3 gap-4 mb-8">
+        <div class="grid grid-cols-3 gap-2 mb-4">
           <div class="text-center">
-            <div class="text-xs text-gray-500 mb-1">已用 Tokens</div>
-            <div class="text-lg font-semibold text-gray-800">
+            <div class="text-xs text-gray-500 mb-0.5">已用</div>
+            <div class="text-sm font-semibold text-gray-800">
               {{ tokenStats.usedTokens.toLocaleString() }}
             </div>
           </div>
 
           <div class="text-center border-l border-r border-gray-100">
-            <div class="text-xs text-gray-500 mb-1">对话数量</div>
-            <div class="text-lg font-semibold text-gray-800">
+            <div class="text-xs text-gray-500 mb-0.5">对话</div>
+            <div class="text-sm font-semibold text-gray-800">
               {{ tokenStats.messageCount }}
             </div>
           </div>
           
           <div class="text-center">
-            <div class="text-xs text-gray-500 mb-1">总容量</div>
-            <div class="text-lg font-semibold text-gray-800">
+            <div class="text-xs text-gray-500 mb-0.5">总量</div>
+            <div class="text-sm font-semibold text-gray-800">
               {{ tokenStats.totalTokens.toLocaleString() }}
             </div>
           </div>
         </div>
 
         <!-- 操作按钮 -->
-        <div class="flex gap-2 mb-8">
-          <el-button @click="loadTokenStats" :loading="loadingStats" class="flex-1">
+        <div class="flex gap-2 mb-5">
+          <el-button size="small" @click="loadTokenStats" :loading="loadingStats" class="flex-1">
             <el-icon class="mr-1">
               <Refresh />
             </el-icon>
             刷新
           </el-button>
-          <el-button @click="handleCompress" :loading="isCompressing" class="flex-1">
+          <el-button size="small" @click="handleCompress" :loading="isCompressing" class="flex-1">
             <el-icon class="mr-1">
               <MagicStick />
             </el-icon>
@@ -67,54 +62,81 @@
         </div>
       </template>
       <template v-else>
-        <el-empty description="加载中..." :image-size="80" class="mb-8" />
+        <el-empty description="加载中..." :image-size="60" class="mb-5" />
       </template>
 
-      <!-- 记忆摘要部分 -->
-      <div class="border-t border-gray-100 pt-6">
-        <div class="flex items-center justify-between mb-4">
-          <h4 class="text-sm font-semibold text-gray-700">历史记忆摘要</h4>
-          <span class="text-xs text-gray-400">共 {{ summaries.length }} 条</span>
+      <!-- 最新压缩状态 -->
+      <div class="border-t border-gray-100 pt-4">
+        <div class="flex items-center justify-between mb-3">
+          <h4 class="text-sm font-semibold text-gray-700">最新压缩状态</h4>
+          <span class="text-xs text-gray-400">已压缩 {{ summaries.length }} 次</span>
         </div>
         
         <template v-if="summaries.length > 0">
-          <div v-for="(summary, index) in summaries" :key="summary.id" class="mb-4">
-            <div class="bg-gray-50 rounded-lg p-3 border border-gray-200 hover:border-blue-300 transition-colors">
-              <!-- 摘要头部信息 -->
-              <div class="flex items-center justify-between mb-2">
-                <span class="text-xs text-gray-500">#{{ summaries.length - index }}</span>
-                <div class="flex gap-1">
-                  <el-button size="small" text @click="handleEdit(summary)">
-                    <el-icon>
-                      <Edit />
-                    </el-icon>
-                  </el-button>
-                  <el-button size="small" text @click="handleDelete(summary)"
-                    class="text-red-500 hover:text-red-600">
-                    <el-icon>
-                      <Delete />
-                    </el-icon>
-                  </el-button>
+          <!-- 只显示最新一条 -->
+          <div :key="summaries[0].id" class="mb-2.5">
+            <div class="rounded-lg py-2">
+              <!-- 摘要内容或裁剪信息 -->
+              <div v-if="summaries[0].summaryContent" class="text-xs text-gray-700 whitespace-pre-wrap leading-relaxed mb-2">
+                {{ summaries[0].summaryContent }}
+              </div>
+              <div v-else-if="summaries[0].pruningMetadata" class="space-y-1.5 mb-2">
+                <!-- 显示总体统计 -->
+                <div class="bg-white rounded p-2 border border-gray-100 space-y-1.5">
+                  <div v-if="summaries[0].compressionStats?.beforeTokenCount && summaries[0].compressionStats?.afterTokenCount" class="flex justify-between items-center text-xs">
+                    <span class="text-gray-600">Token:</span>
+                    <span class="font-medium">
+                      {{ formatNumber(summaries[0].compressionStats.beforeTokenCount) }} → {{ formatNumber(summaries[0].compressionStats.afterTokenCount) }}
+                      <span class="text-green-600 ml-1">(-{{ formatNumber(summaries[0].compressionStats.beforeTokenCount - summaries[0].compressionStats.afterTokenCount) }})</span>
+                    </span>
+                  </div>
+                  <div v-if="summaries[0].compressionStats?.beforeMessageCount && summaries[0].compressionStats?.afterMessageCount" class="flex justify-between items-center text-xs">
+                    <span class="text-gray-600">消息:</span>
+                    <span class="font-medium">
+                      {{ summaries[0].compressionStats.beforeMessageCount }} → {{ summaries[0].compressionStats.afterMessageCount }}
+                    </span>
+                  </div>
+                  <div class="flex items-center gap-1.5 text-xs pt-1">
+                    <el-tag size="small" type="warning">仅裁剪</el-tag>
+                    <span class="text-gray-500">{{ Object.keys(summaries[0].pruningMetadata).length }} 条</span>
+                  </div>
                 </div>
               </div>
-
-              <!-- 摘要内容 -->
-              <div class="text-sm text-gray-700 whitespace-pre-wrap">
-                {{ summary.summaryContent }}
+              <div v-else class="text-xs text-gray-400 italic mb-2">
+                无摘要内容
               </div>
 
-              <!-- 时间戳 -->
-              <div class="mt-2 text-xs text-gray-400">
-                {{ formatTime(summary.createdAt) }}
+              <!-- 底部信息：时间戳和操作按钮 -->
+              <div class="flex items-center justify-between text-xs">
+                <span class="text-gray-400 truncate" :title="formatTime(summaries[0].createdAt)">{{ formatTime(summaries[0].createdAt) }}</span>
+                <div class="flex gap-1">
+                  <el-button 
+                    size="small" 
+                    text 
+                    @click="handleEdit(summaries[0])"
+                    class="text-blue-500 hover:text-blue-600 hover:bg-blue-50"
+                  >
+                    <el-icon><Edit /></el-icon>
+                    <span class="ml-1">编辑</span>
+                  </el-button>
+                  <el-button 
+                    size="small" 
+                    text 
+                    @click="handleDelete(summaries[0])"
+                    class="text-red-500 hover:text-red-600 hover:bg-red-50"
+                  >
+                    <el-icon><Delete /></el-icon>
+                    <span class="ml-1">删除</span>
+                  </el-button>
+                </div>
               </div>
             </div>
           </div>
         </template>
         <template v-else>
-          <el-empty description="暂无记忆摘要" :image-size="60" />
+          <el-empty description="暂无压缩记录" :image-size="60" />
         </template>
       </div>
-    </div>
 
     <!-- 编辑摘要对话框 -->
     <el-dialog v-model="editDialogVisible" title="编辑摘要" width="600px" append-to-body>
@@ -123,37 +145,6 @@
         <span class="dialog-footer">
           <el-button @click="editDialogVisible = false">取消</el-button>
           <el-button type="primary" @click="saveEdit">保存</el-button>
-        </span>
-      </template>
-    </el-dialog>
-
-    <!-- 压缩历史配置弹窗 -->
-    <el-dialog v-model="compressDialogVisible" title="压缩历史记录" width="450px" append-to-body>
-      <div class="space-y-4">
-        <p class="text-sm text-gray-600">压缩历史记录可以节省上下文长度并提高响应速度。</p>
-        <div class="flex items-center gap-4">
-          <label class="text-sm font-medium w-28 text-right">压缩比例 (%)</label>
-          <el-input-number v-model="compressionRatio" :min="10" :max="90" :step="5" controls-position="right"
-            style="width: 100%" />
-        </div>
-        <div class="flex items-center gap-4">
-          <label class="text-sm font-medium w-28 text-right">保留最近轮数</label>
-          <el-input-number v-model="minRetainedTurns" :min="1" :max="10" :step="1" controls-position="right"
-            style="width: 100%" />
-        </div>
-        <div class="flex items-center gap-4">
-          <label class="text-sm font-medium w-28 text-right">清理策略</label>
-          <el-select v-model="cleaningStrategy" placeholder="请选择" style="width: 100%">
-            <el-option label="激进 (仅保留引用)" value="aggressive" />
-            <el-option label="中等 (智能精简)" value="moderate" />
-            <el-option label="保守 (最小化处理)" value="conservative" />
-          </el-select>
-        </div>
-      </div>
-      <template #footer>
-        <span class="dialog-footer">
-          <el-button @click="compressDialogVisible = false">取消</el-button>
-          <el-button type="primary" @click="executeCompression">开始压缩</el-button>
         </span>
       </template>
     </el-dialog>
@@ -166,7 +157,7 @@ import { useDebounceFn } from '@vueuse/core';
 import { useSessionStore } from '@/stores/session';
 import { apiService } from '@/services/ApiService';
 import { usePopup } from '@/composables/usePopup';
-import { Close, Edit, Delete, Refresh, MagicStick } from '@element-plus/icons-vue';
+import { Close, Edit, Delete, Refresh, MagicStick, QuestionFilled } from '@element-plus/icons-vue';
 import dayjs from 'dayjs';
 
 const { confirm, toast } = usePopup();
@@ -197,12 +188,6 @@ const loadingStats = ref(false);
 const isCompressing = computed(() => {
   return props.sessionId ? sessionStore.sessionIsCompressing(props.sessionId) : false;
 });
-
-// 压缩配置
-const compressionRatio = ref(50);
-const minRetainedTurns = ref(3);
-const cleaningStrategy = ref("moderate");
-const compressDialogVisible = ref(false);
 
 // 计算进度条颜色
 const progressColor = computed(() => {
@@ -294,6 +279,29 @@ function formatTime(dateString: string) {
   return dayjs(dateString).format('YYYY-MM-DD HH:mm:ss');
 }
 
+// 格式化数字（添加千位分隔符）
+function formatNumber(num: number) {
+  return num.toLocaleString();
+}
+
+// 获取策略标签类型
+function getStrategyTagType(strategy: string) {
+  const typeMap: Record<string, 'success' | 'warning' | 'info'> = {
+    'pruned_only': 'warning',
+    'summarized': 'success',
+  };
+  return typeMap[strategy] || 'info';
+}
+
+// 获取策略显示名称
+function getStrategyLabel(strategy: string) {
+  const labelMap: Record<string, string> = {
+    'pruned_only': '仅裁剪',
+    'summarized': '摘要压缩',
+  };
+  return labelMap[strategy] || strategy;
+}
+
 // 监听会话 ID 变化
 watch(
   () => props.sessionId,
@@ -327,28 +335,20 @@ watch(
   }
 );
 
-// 处理压缩历史（打开配置弹窗）
-function handleCompress() {
+// 处理压缩历史（弹出确认框）
+async function handleCompress() {
   if (!props.sessionId) return;
-  compressDialogVisible.value = true;
-}
-
-// 执行压缩
-async function executeCompression() {
-  if (!props.sessionId) return;
+  
+  if (!(await confirm('确认压缩', '确定要压缩当前会话的历史记录吗？此操作将根据会话和角色的配置自动执行压缩。'))) {
+    return;
+  }
 
   try {
-    compressDialogVisible.value = false;
     sessionStore.setSessionIsCompressing(props.sessionId, true);
-    const res = await apiService.compressSessionHistory(
-      props.sessionId, 
-      compressionRatio.value, 
-      minRetainedTurns.value,
-      cleaningStrategy.value
-    );
+    const res = await apiService.compressSession(props.sessionId);
     
     if (res.success) {
-      toast.success(`成功压缩 ${res.compressedTokens || 0} Tokens`);
+      toast.success(`压缩成功！压缩比例: ${res.after?.compressionRatio || 'N/A'}`);
       // 压缩后重新加载统计数据和摘要列表
       await loadTokenStats();
       await loadSummaries();

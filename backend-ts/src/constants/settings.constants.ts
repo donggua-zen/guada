@@ -24,6 +24,7 @@ export const SK_MOD_TRANS_MODEL = 'defaultTranslationModelId';
 export const SK_MOD_TRANS_PROMPT = 'defaultTranslationPrompt';
 export const SK_MOD_COMPRESS_MODEL = 'defaultHistoryCompressionModelId';
 export const SK_MOD_COMPRESS_PROMPT = 'defaultHistoryCompressionPrompt';
+export const SK_MOD_COMPRESS_ENABLE_SUMMARY = 'enableHistoryCompressionSummary'; // 是否启用历史压缩摘要功能
 export const SK_MOD_VISUAL = 'defaultVisualAssistantModelId';
 
 /**

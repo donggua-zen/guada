@@ -43,15 +43,19 @@
       :messages="chatPanelRef?.activeMessages || []"
       :chat-panel-ref="chatPanelRef" 
       @scroll-to-message="handleScrollToMessage" />
-
-    <!-- 右侧记忆管理窗格 -->
-    <transition name="slide-right">
-      <div v-if="memoPanelVisible && currentSession" class="border-l border-gray-200 bg-white w-96 shrink-0"
-        style="z-index: 40;">
-        <MemoPanel :session-id="currentSession.id" @close="memoPanelVisible = false" />
-      </div>
-    </transition>
   </div>
+
+  <!-- 记忆管理弹窗 -->
+  <el-dialog
+    v-model="memoPanelVisible"
+    title="记忆管理"
+    width="390px"
+    :close-on-click-modal="false"
+    destroy-on-close
+    class="memo-panel-dialog"
+  >
+    <MemoPanel v-if="currentSession" :session-id="currentSession.id" />
+  </el-dialog>
 </template>
 <script setup lang="ts">
 import { ref, onMounted, watch, computed, defineAsyncComponent, type Ref, nextTick } from "vue";
@@ -596,5 +600,25 @@ onMounted(async () => {
 .slide-right-leave-to {
   transform: translateX(100%);
   opacity: 0;
+}
+</style>
+
+<style>
+/* 记忆管理弹窗样式（非scoped，用于覆盖el-dialog默认样式） */
+.memo-panel-dialog .el-dialog__body {
+  padding: 16px 8px;          /* 更紧凑的内边距 */
+  max-height: 65vh;           /* 稍微减小最大高度 */
+  overflow-y: auto;
+}
+
+/* 优化弹窗标题栏 */
+.memo-panel-dialog .el-dialog__header {
+  padding: 12px 16px;         /* 减小标题栏内边距 */
+  margin: 0;
+}
+
+/* 优化弹窗底部 */
+.memo-panel-dialog .el-dialog__footer {
+  padding: 8px 16px;          /* 如果有footer，也减小内边距 */
 }
 </style>

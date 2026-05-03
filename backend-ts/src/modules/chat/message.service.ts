@@ -52,8 +52,6 @@ export class MessageService {
         files: filesWithAbsoluteUrls,
         contents: msg.contents.map((content) => ({
           ...content,
-          metaData: content.metaData || null,
-          additionalKwargs: content.additionalKwargs || null,
         })),
       };
     });
@@ -168,7 +166,7 @@ export class MessageService {
     }
 
     // 处理知识库引用逻辑
-    let additionalKwargs: any = null;
+    let metadata: any = null;
     if (knowledgeBaseIds && knowledgeBaseIds.length > 0) {
       // 使用批量查询提升效率（替代多次单独查询）
       const kbs = await this.kbRepo.findByIds(knowledgeBaseIds);
@@ -177,7 +175,7 @@ export class MessageService {
         name: kb.name,
         description: kb.description,
       }));
-      additionalKwargs = { referencedKbs: kbMetadata };
+      metadata = { referencedKbs: kbMetadata };
     }
 
     // 使用事务确保消息内容和文件更新的原子性
@@ -191,7 +189,7 @@ export class MessageService {
             turnsId, // 使用相同的 turnsId
             role, // 添加 role
             content,
-            additionalKwargs, // 存储知识库引用信息
+            metadata, // 存储知识库引用信息
           },
         });
 
@@ -245,7 +243,7 @@ export class MessageService {
 
       // // 格式化内容字段
       // completeMessage.contents.forEach((content) => {
-      //   content.metaData = content.metaData || null;
+      //   content.metadata = content.metadata || null;
       //   content.additionalKwargs = content.additionalKwargs || null;
       // });
     }
@@ -258,7 +256,7 @@ export class MessageService {
    *
    * 支持更新两类字段：
    * 1. Message 表字段：role, currentTurnsId
-   * 2. MessageContent 表字段：content, reasoningContent, metaData, additionalKwargs
+   * 2. MessageContent 表字段：content, reasoningContent, metadata, additionalKwargs
    *
    * @param messageId 消息 ID
    * @param data 包含要更新的字段的对象
@@ -283,7 +281,7 @@ export class MessageService {
     const contentTableFields = [
       "content",
       "reasoningContent",
-      "metaData",
+      "metadata",
       "additionalKwargs",
     ];
 
@@ -348,7 +346,7 @@ export class MessageService {
 
       // 格式化返回数据
       updatedMessage.contents.forEach((content) => {
-        content.metaData = content.metaData || null;
+        content.metadata = content.metadata || null;
         content.additionalKwargs = content.additionalKwargs || null;
       });
     }

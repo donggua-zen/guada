@@ -4,6 +4,7 @@
  */
 
 import { reactive, shallowReactive } from 'vue'
+import { usePopup } from '@/composables/usePopup'
 
 // 类型定义
 interface StreamingState {
@@ -23,7 +24,7 @@ interface MessageContent {
   reasoningContent: string | null
   turnsId: string
   additionalKwargs: any
-  metaData: Record<string, any>
+  metadata: Record<string, any>
   createdAt: string
   updatedAt: string
   thinkingStartedAt: number | null
@@ -58,6 +59,7 @@ interface StreamResponse {
 }
 
 export function useStreamResponse(sessionStore: any, apiService: any) {
+  const { toast } = usePopup()
   // 流式响应状态
   const streamingState = reactive<StreamingState>({
     isStreaming: false,
@@ -108,7 +110,7 @@ export function useStreamResponse(sessionStore: any, apiService: any) {
       reasoningContent: null,
       turnsId: turnsId!,
       additionalKwargs: [],
-      metaData: { modelName },
+      metadata: { modelName },
       createdAt: time,
       updatedAt: time,
       thinkingStartedAt: null,
@@ -241,18 +243,18 @@ export function useStreamResponse(sessionStore: any, apiService: any) {
 
     const content = message.contents[contentIndex]
 
-    // 保存 usage 信息到 metaData.usage
+    // 保存 usage 信息到 metadata.usage
     if (response.usage) {
-      content.metaData = {
-        ...content.metaData,
+      content.metadata = {
+        ...content.metadata,
         usage: response.usage
       }
     }
 
     // 保存 finishReason
     if (response.finishReason) {
-      content.metaData = {
-        ...content.metaData,
+      content.metadata = {
+        ...content.metadata,
         finishReason: response.finishReason
       }
     }
@@ -260,8 +262,8 @@ export function useStreamResponse(sessionStore: any, apiService: any) {
     // 处理错误情况
     if (response.finishReason === 'error') {
       console.error('Error in stream:', response.error)
-      content.metaData = {
-        ...content.metaData,
+      content.metadata = {
+        ...content.metadata,
         error: response.error,
         finishReason: response.finishReason
       }
@@ -361,8 +363,8 @@ export function useStreamResponse(sessionStore: any, apiService: any) {
         // 这样即使被取消或发生异常，已接收到的 usage 也不会丢失
         if (response.usage && message && contentIndex !== undefined) {
           const content = message.contents[contentIndex]
-          content.metaData = {
-            ...content.metaData,
+          content.metadata = {
+            ...content.metadata,
             usage: response.usage
           }
         }
@@ -416,6 +418,20 @@ export function useStreamResponse(sessionStore: any, apiService: any) {
         if (response.type === 'text') {
           responseContent = responseContent + response.msg
           handleText(message!.contents[contentIndex], responseContent)
+          continue
+        }
+
+        // 处理压缩开始事件
+        if (response.type === 'compression_start') {
+          sessionStore.setSessionIsCompressing(streamingSessionId, true)
+          toast.info(response.msg || '正在优化对话历史...')
+          continue
+        }
+
+        // 处理压缩错误事件
+        if (response.type === 'compression_error') {
+          sessionStore.setSessionIsCompressing(streamingSessionId, false)
+          toast.error(response.msg || '自动压缩失败')
           continue
         }
       }

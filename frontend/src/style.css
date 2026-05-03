@@ -309,3 +309,106 @@ html,
     /* scrollbar-color: transparent transparent; */
     /* Firefox */
 }
+
+/* ==========================================
+   Element Plus Dialog 现代化定制方案 (最终修复版)
+   ========================================== */
+
+/* 1. 核心遮罩层样式 - 强制覆盖 */
+.el-overlay {
+    background-color: transparent !important; /* 先清空背景，防止全白 */
+}
+
+/* 2. 实际显示背景的伪元素或内部层 */
+.el-overlay::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    
+    /* 亮色模式：极淡的白色微覆盖 (0.15 透明度) */
+    background-color: rgba(255, 255, 255, 0.8) !important;
+    z-index: -1;
+}
+
+html.dark .el-overlay::before {
+    /* 暗色模式：深色微覆盖 (0.3 透明度) */
+    background-color: rgba(0, 0, 0, 0.3) !important;
+}
+
+/* 3. 确保弹窗容器居中 */
+.el-overlay-dialog {
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    position: fixed !important;
+    top: 0 !important;
+    left: 0 !important;
+    right: 0 !important;
+    bottom: 0 !important;
+}
+
+/* 4. 弹窗主体样式 */
+.el-dialog {
+    margin: 0 auto !important;
+    max-height: 85vh !important;
+    border-radius: 16px !important;
+    background-color: var(--color-bg) !important;
+    box-shadow: 0 0 20px rgba(0, 0, 0, 0.2) !important; /* 加深阴影 */
+    border: 1px solid #ccc;
+}
+
+html.dark .el-dialog {
+    background-color: #252526 !important;
+    border-color: var(--color-gray-700);
+    box-shadow: 0 0 20px rgba(0, 0, 0, 0.5) !important; /* 加深阴影 */
+}
+
+/* 5. 紧凑内边距 */
+.el-dialog__header { padding: 4px 8px 8px !important; }
+.el-dialog__body { padding: 8px 4px !important; }
+.el-dialog__footer { padding: 8px 12px 4px !important; }
+
+/* ==========================================
+   Element Plus MessageBox (确认框) 样式定制
+   ========================================== */
+.el-message-box {
+    border-radius: 16px !important;
+    background-color: var(--color-bg) !important;
+    border: 1px solid #ccc !important;
+    box-shadow: 0 0 20px rgba(0, 0, 0, 0.2) !important;
+    padding: 0 !important; /* 移除默认 padding，由内部元素控制 */
+}
+
+html.dark .el-message-box {
+    background-color: #252526 !important;
+    border-color: var(--color-gray-700) !important;
+    box-shadow: 0 0 20px rgba(0, 0, 0, 0.5) !important;
+}
+
+.el-message-box__header {
+    padding: 12px 16px 8px !important;
+    border-bottom: none !important;
+}
+
+.el-message-box__title {
+    font-weight: 600;
+    color: var(--color-text);
+    font-size: 16px;
+}
+
+.el-message-box__content {
+    padding: 8px 16px !important;
+    color: var(--color-text);
+}
+
+.el-message-box__message p {
+    margin: 0;
+    line-height: 1.5;
+}
+
+.el-message-box__btns {
+    padding: 8px 16px 12px !important;
+}

@@ -30,6 +30,7 @@ export const createWinstonConfig = (logsDir?: string) => {
     transports: [
       // 控制台输出 - 使用 NestJS 风格格式化
       new winston.transports.Console({
+        level: 'debug', // 显式设置控制台最低日志级别为 debug
         format: winston.format.combine(
           winston.format.timestamp(),
           winston.format.ms(),

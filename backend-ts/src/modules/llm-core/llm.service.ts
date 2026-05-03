@@ -25,7 +25,7 @@ export class LLMService {
   completions(
     params: LLMCompletionParams,
   ): Promise<any> | AsyncGenerator<any, void, unknown> {
-    const protocol = params.modelConfig?.provider?.protocol || "openai";
+    const protocol = params.providerConfig?.protocol || "openai";
     const adapter = this.adapters.get(protocol);
 
     if (!adapter) {
@@ -34,8 +34,7 @@ export class LLMService {
 
     const isStream = params.stream === true;
     const iterator = adapter.chatCompletion({
-      ...params,
-      providerConfig: params.modelConfig?.provider,
+      ...params
     });
 
     if (isStream) {

@@ -125,7 +125,7 @@ export class ImageRecognitionToolProvider implements IToolProvider {
     const stream = this.llmService.completions({
       model: visualModelConfig.modelName,
       messages,
-      modelConfig: visualModelConfig,
+      providerConfig: visualModelConfig.provider,
       stream: false,
       thinkingEnabled: false,
       timeout: 60,

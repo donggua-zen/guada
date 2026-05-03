@@ -27,11 +27,22 @@ export interface Message {
  */
 export interface MessageContent {
     id: string
+    role?: 'user' | 'assistant' | 'tool'
     content: string | null
     reasoningContent?: string | null
     turnsId?: string
     additionalKwargs?: Record<string, any>
-    metaData?: Record<string, any>
+    metadata?: {
+        toolCalls?: Array<{
+            id?: string
+            name?: string
+            arguments?: any
+            args?: any
+            [key: string]: any
+        }>
+        toolCallId?: string
+        [key: string]: any
+    }
     createdAt?: string
     updatedAt?: string
     thinkingStartedAt?: number | null
@@ -117,6 +128,98 @@ export function getCurrentIndex(messageContents: MessageContent[]): number {
 }
 
 /**
+ * 预处理消息内容：聚合工具调用和响应
+ * 
+ * 后端数据结构变更适配：
+ * - 工具调用信息位于 assistant 消息的 metadata.toolCalls
+ * - 工具响应作为独立的 tool 角色消息存在，通过 metadata.toolCallId 关联
+ * 
+ * 此函数将 tool 消息的响应内容聚合到对应的 assistant 消息的 additionalKwargs.toolCallsResponse 中
+ * 
+ * @param contents - 原始消息内容数组
+ * @returns 经过预处理的消息内容数组（过滤掉 tool 角色，聚合到 assistant）
+ */
+function preprocessToolCalls(contents: MessageContent[]): MessageContent[] {
+    if (!contents || contents.length === 0) {
+        return contents
+    }
+
+    // 过滤掉无效的 content（null/undefined）
+    const validContents = contents.filter(content => content != null)
+    if (validContents.length === 0) {
+        return []
+    }
+
+    // 分离 assistant 和 tool 消息
+    const assistantContents: MessageContent[] = []
+    const toolContents: MessageContent[] = []
+
+    validContents.forEach(content => {
+        if (content.role === 'tool') {
+            toolContents.push(content)
+        } else {
+            assistantContents.push(content)
+        }
+    })
+
+    // 如果没有 tool 消息，直接返回
+    if (toolContents.length === 0) {
+        return validContents
+    }
+
+    // 构建 toolCallId -> toolContent 的映射
+    const toolResponseMap = new Map<string, MessageContent>()
+    toolContents.forEach(toolContent => {
+        const toolCallId = toolContent.metadata?.toolCallId
+        if (toolCallId) {
+            toolResponseMap.set(toolCallId, toolContent)
+        }
+    })
+
+    // 处理每个 assistant 消息，聚合工具响应
+    const processedContents = assistantContents.map(assistantContent => {
+        // 从 metadata.toolCalls 获取工具调用列表
+        const toolCalls = assistantContent.metadata?.toolCalls
+
+        if (!toolCalls || !Array.isArray(toolCalls) || toolCalls.length === 0) {
+            return assistantContent
+        }
+
+        // 确保 additionalKwargs 存在
+        if (!assistantContent.additionalKwargs) {
+            assistantContent.additionalKwargs = {}
+        }
+
+        // 将 metadata.toolCalls 映射到 additionalKwargs.toolCalls（保持兼容性）
+        assistantContent.additionalKwargs.toolCalls = toolCalls
+
+        // 根据 toolCallId 聚合同步的工具响应
+        const toolResponses: any[] = []
+        toolCalls.forEach((toolCall: any) => {
+            const toolCallId = toolCall.id
+            if (toolCallId && toolResponseMap.has(toolCallId)) {
+                const toolContent = toolResponseMap.get(toolCallId)!
+                // 将 tool 消息的内容作为响应
+                toolResponses.push({
+                    content: toolContent.content,
+                    ...toolContent.metadata
+                })
+            } else {
+                // 没有对应的响应
+                toolResponses.push(null)
+            }
+        })
+
+        // 存储聚合后的工具响应
+        assistantContent.additionalKwargs.toolCallsResponse = toolResponses
+
+        return assistantContent
+    })
+
+    return processedContents
+}
+
+/**
  * 获取当前版本的内容数组
  * @param message - 消息对象
  * @returns 当前版本的内容数组（过滤后的 turns）
@@ -124,17 +227,22 @@ export function getCurrentIndex(messageContents: MessageContent[]): number {
 export function getCurrentTurns(message: Message): MessageContent[] {
     if (!message?.contents) return []
 
+    // 过滤掉无效的 content
+    const validContents = message.contents.filter(content => content != null)
+    if (validContents.length === 0) return []
+
     // 如果是 assistant 消息，根据 currentTurnsId 过滤
     if (message.role === 'assistant' && message.currentTurnsId) {
-        const matchedContents = message.contents.filter(
+        const matchedContents = validContents.filter(
             content => content.turnsId === message.currentTurnsId
         )
 
-        return matchedContents
+        // 对过滤后的内容进行工具调用预处理
+        return preprocessToolCalls(matchedContents)
     }
 
     // User 消息或没有 currentTurnsId 的情况：返回所有内容
-    return message.contents
+    return preprocessToolCalls(validContents)
 }
 
 /**
@@ -208,9 +316,9 @@ export function formatDuration(ms: number | null | undefined): string {
  * @returns 提取的标题文本
  */
 export function extractMessageTitle(message: Message): string {
-    // 优先使用 metaData 中的 title 字段(如果后端提供)
-    if (message.contents?.[0]?.metaData?.title) {
-        return message.contents[0].metaData.title
+    // 优先使用 metadata 中的 title 字段(如果后端提供)
+    if (message.contents?.[0]?.metadata?.title) {
+        return message.contents[0].metadata.title
     }
 
     // 从内容中提取第一行或前50字符

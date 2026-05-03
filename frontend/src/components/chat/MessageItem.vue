@@ -1,13 +1,16 @@
 <template>
   <div v-if="!streamingState.isPlaceholder" class="message" :class="messageClass" ref="rootRef"
     :data-message-id="message.id">
-    <div class="message-content">
+    <!-- 如果消息内容为空，显示提示信息 -->
+    <div v-if="turns.length === 0" class="message-content">
+      <div class="text-gray-400 text-sm italic">消息内容为空（数据异常）</div>
+    </div>
+    <div v-else class="message-content">
       <div v-if="isAssistant" class="text-xs text-gray-400 mb-3">
         <div class="flex items-center">
           <div class="mr-5 flex items-center">
-            <div class="w-5.5 h-5.5 mr-2 relative top-0">
-              <Avatar :src="modelAvatarPath" :round="false" type="assistant" :name="currentModelName"></Avatar>
-            </div>
+            <Avatar class="w-5.5 h-5.5 mr-2 relative top-0" :src="modelAvatarPath" :round="false" type="assistant"
+              :name="currentModelName"></Avatar>
             <span class="text-[1.3em] text-gray-500 font-">{{
               currentModelName
             }}</span>
@@ -24,7 +27,7 @@
           <!-- 使用拆分后的思考框组件 -->
           <MessageThinkingSection v-if="turn.reasoningContent" :reasoning-content="turn.reasoningContent"
             :is-thinking="turn.state?.isThinking || false" :is-streaming="turn.state?.isStreaming || false"
-            :thinking-duration-ms="turn.thinkingDurationMs" :meta-data="turn.metaData" @click="handleThinkingClick"
+            :thinking-duration-ms="turn.thinkingDurationMs" :meta-data="turn.metadata" @click="handleThinkingClick"
             @render-complete="handleRenderComplete" />
 
           <MarkdownContent v-if="turn.content" class="message-text markdown-text" @click="handleClick"
@@ -75,8 +78,8 @@
       </div>
       <!--知识库-->
       <div class="knowledge-base flex flex-wrap gap-2 mt-3 ml-auto"
-        v-if="message.role === 'user' && turns[0].additionalKwargs?.referencedKbs && turns[0].additionalKwargs?.referencedKbs.length > 0">
-        <div v-for="kb, index in turns[0].additionalKwargs?.referencedKbs" :key="kb.id">
+        v-if="message.role === 'user' && turns.length > 0 && turns[0].metadata?.referencedKbs && turns[0].metadata?.referencedKbs.length > 0">
+        <div v-for="kb, index in turns[0].metadata?.referencedKbs" :key="kb.id">
           <div
             class="knowledge-base-item rounded-md px-2 py-1 bg-gray-100 dark:bg-gray-800/50 text-gray-500 dark:text-gray-400 text-xs flex items-center gap-1">
             <MenuBookOutlined class="w-4 h-4" />
@@ -241,7 +244,8 @@ const turns = computed(() => {
 
 const metadata = computed(() => {
   const content = turns.value[turns.value.length - 1];
-  return content.metaData;
+  // 确保返回一个对象，即使 metadata 为 null/undefined
+  return content?.metadata || {};
 });
 
 const state = computed(() =>
@@ -264,17 +268,24 @@ const currentModelName = computed(() => {
 const modelAvatarPath = computed(() => {
   const modelName = metadata.value?.modelName;
   if (!modelName) return undefined;
-  
+
   // 尝试从 modelName 中提取 provider 信息
   // 如果 modelName 包含 "/"，则前半部分可能是 provider
   const parts = modelName.split("/");
   const providerName = parts.length > 1 ? parts[0] : undefined;
-  
+
   return getModelAvatarPath(modelName, providerName) || undefined;
 });
 
 const currentContentTime = computed(() => {
   const content = turns.value[0];
+  // 如果 turns 为空，返回默认时间
+  if (!content) {
+    return {
+      firendly: '',
+      full: ''
+    };
+  }
   return {
     firendly: formatTime(content.createdAt || '', 'friendly'),
     full: formatTime(content.createdAt || '', 'full')
@@ -287,7 +298,7 @@ const tokenUsage = computed(() => {
   }
 
   const lastTurn = turns.value[turns.value.length - 1];
-  return lastTurn?.metaData?.usage || null;
+  return lastTurn?.metadata?.usage || null;
 });
 
 const contentVersions = computed(() => {

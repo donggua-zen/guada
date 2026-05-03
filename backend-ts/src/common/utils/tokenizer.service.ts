@@ -122,57 +122,68 @@ export class TokenizerService {
   }
 
   /**
-   * 计算文本的 Token 数量
+   * 计算纯文本的 Token 数量（核心实现）
    * @param modelName 模型名称
-   * @param text 待计算的文本或消息数组
+   * @param text 待计算的纯文本字符串
+   * @param useTiktoken 是否强制使用 Tiktoken
+   */
+  countTextTokens(modelName: string, text: string, useTiktoken?: boolean): number {
+    // 自动选择方案：如果模型在 HF 映射中（支持模糊匹配）且未强制使用 Tiktoken，则优先使用 HF
+    const matchedKey = this.findMatchingKey(modelName);
+    const shouldUseHF = !useTiktoken && (this.hfTokenizerMapping[modelName] || matchedKey);
+
+    if (shouldUseHF) {
+      const tokenizer = this.getHFTokenizer(modelName);
+      const encoded = tokenizer.encode(text);
+      return encoded.ids.length;
+    } else {
+      // 默认使用 cl100k_base，也可以根据 modelName 扩展映射
+      const encoding = this.ttEncodingMapping[modelName] || this.ttEncodingMapping.default;
+      const enc = this.getTTEncoder(encoding);
+      return enc.encode(text).length;
+    }
+  }
+
+  /**
+   * 计算消息数组的 Token 数量（支持工具调用和复杂内容结构）
+   * @param modelName 模型名称
+   * @param messages 待计算的消息数组
    * @param useTiktoken 是否强制使用 Tiktoken（默认根据模型自动选择）
    */
-  countTokens(modelName: string, text: string | any[], useTiktoken?: boolean): number {
+  countTokens(modelName: string, messages: any[], useTiktoken?: boolean): number {
     let totalTokens = 0;
 
-    if (Array.isArray(text)) {
-      for (const item of text) {
-        if (typeof item === "object" && item !== null) {
-          // 1. 处理工具调用 (toolCalls)
-          if (item.toolCalls && Array.isArray(item.toolCalls)) {
-            for (const tc of item.toolCalls) {
-              if (tc.function) {
-                if (tc.function.name) {
-                  totalTokens += this.countTokens(modelName, tc.function.name, useTiktoken);
-                }
-                if (tc.function.arguments) {
-                  totalTokens += this.countTokens(modelName, tc.function.arguments, useTiktoken);
-                }
+    for (const item of messages) {
+      if (typeof item === "object" && item !== null) {
+        // 1. 处理工具调用 (toolCalls)
+        if (item.toolCalls && Array.isArray(item.toolCalls)) {
+          for (const tc of item.toolCalls) {
+            if (tc.function) {
+              if (tc.function.name) {
+                totalTokens += this.countTextTokens(modelName, tc.function.name, useTiktoken);
+              }
+              if (tc.function.arguments) {
+                totalTokens += this.countTextTokens(modelName, tc.function.arguments, useTiktoken);
               }
             }
-          }
-
-          // 2. 处理内容 (content)
-          if (Array.isArray(item.content)) {
-            for (const part of item.content) {
-              if (part.text) {
-                totalTokens += this.countTokens(modelName, part.text, useTiktoken);
-              }
-            }
-          } else if (item.content) {
-            totalTokens += this.countTokens(modelName, item.content, useTiktoken);
           }
         }
-      }
-    } else if (typeof text === "string") {
-      // 自动选择方案：如果模型在 HF 映射中（支持模糊匹配）且未强制使用 Tiktoken，则优先使用 HF
-      const matchedKey = this.findMatchingKey(modelName);
-      const shouldUseHF = !useTiktoken && (this.hfTokenizerMapping[modelName] || matchedKey);
 
-      if (shouldUseHF) {
-        const tokenizer = this.getHFTokenizer(modelName);
-        const encoded = tokenizer.encode(text);
-        totalTokens += encoded.ids.length;
-      } else {
-        // 默认使用 cl100k_base，也可以根据 modelName 扩展映射
-        const encoding = this.ttEncodingMapping[modelName] || this.ttEncodingMapping.default;
-        const enc = this.getTTEncoder(encoding);
-        totalTokens += enc.encode(text).length;
+        // 2. 处理思维链 (reasoning_content)
+        if (item.reasoning_content) {
+          totalTokens += this.countTextTokens(modelName, item.reasoning_content, useTiktoken);
+        }
+
+        // 3. 处理内容 (content)
+        if (Array.isArray(item.content)) {
+          for (const part of item.content) {
+            if (part.text) {
+              totalTokens += this.countTextTokens(modelName, part.text, useTiktoken);
+            }
+          }
+        } else if (item.content) {
+          totalTokens += this.countTextTokens(modelName, item.content, useTiktoken);
+        }
       }
     }
 
@@ -185,7 +196,7 @@ export class TokenizerService {
   countBatchTokens(modelName: string, texts: string[], useTiktoken?: boolean): number {
     let total = 0;
     for (const text of texts) {
-      total += this.countTokens(modelName, text, useTiktoken);
+      total += this.countTextTokens(modelName, text, useTiktoken);
     }
     return total;
   }

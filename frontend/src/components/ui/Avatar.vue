@@ -1,18 +1,19 @@
 <template>
-    <img v-if="src" :src="avatarSrc" alt="Avatar" class="avatar-image w-full h-full"
-        :class="{ 'rounded-full': props.round, 'rounded-lg': !props.round }"></img>
-    <div v-else class="avatar-placeholder" :class="{
-        'rounded-full': props.round,
-        'rounded-lg': !props.round, 'avatar-user': props.type === 'user'
-    }">
-        <!-- 如果有名称且是 assistant 类型，显示首字 -->
-        <span v-if="name && props.type === 'assistant'" class="avatar-text">
-            {{ firstChar }}
-        </span>
-        <UserOutlined v-else-if="props.type === 'user'" class="w-[65%] h-[65%]" />
-        <OpenAI v-else />
+    <div>
+        <img v-if="src" :src="avatarSrc" alt="Avatar" class="avatar-image w-full h-full"
+            :class="{ 'rounded-full': props.round, 'rounded-lg': !props.round }"></img>
+        <div v-else class="avatar-placeholder" :class="{
+            'rounded-full': props.round,
+            'rounded-lg': !props.round, 'avatar-user': props.type === 'user'
+        }">
+            <!-- 如果有名称且是 assistant 类型，显示首字 -->
+            <span v-if="name && props.type === 'assistant'" class="avatar-text">
+                {{ firstChar }}
+            </span>
+            <UserOutlined v-else-if="props.type === 'user'" class="w-[65%] h-[65%]" />
+            <OpenAI v-else />
+        </div>
     </div>
-
 </template>
 <script setup lang="ts">
 import { computed } from 'vue'

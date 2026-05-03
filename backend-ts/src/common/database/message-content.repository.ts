@@ -31,16 +31,18 @@ export class MessageContentRepository {
     });
   }
 
+
   /**
    * 创建新的消息内容版本
    */
   async create(data: {
+    id?: string; // 支持预生成 ID
     messageId: string;
     turnsId: string; // 添加 turnsId（与 Python 后端一致）
     role?: string; // 添加 role（与 Python 后端一致）
     content: string;
     reasoningContent?: string;
-    metaData?: Record<string, any>;
+    metadata?: Record<string, any>;
     additionalKwargs?: Record<string, any>;
   }) {
     return this.prisma.messageContent.create({

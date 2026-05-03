@@ -8,7 +8,6 @@ import { KnowledgeBaseRepository } from "../../common/database/knowledge-base.re
 import { ModelRepository } from "../../common/database/model.repository";
 import { FileRepository } from "../../common/database/file.repository";
 import { AgentService } from "./agent.service";
-import { ContextManagerService } from "./context-manager.service";
 import { ToolOrchestrator } from "../tools/tool-orchestrator.service";
 import { TokenizerService } from "../../common/utils/tokenizer.service";
 import { ChatController } from "./chat.controller";
@@ -20,16 +19,25 @@ import { AuthModule } from "../auth/auth.module";
 import { ToolsModule } from "../tools/tools.module";
 import { CharactersModule } from "../characters/characters.module";
 import { FilesModule } from "../files/files.module";
+import { LlmCoreModule } from "../llm-core/llm-core.module";
 
 import { SessionLockService } from "./session-lock.service";
-import { ToolResultCleaner } from "./tool-result-cleaner.service";
+import { UploadPathService } from "../../common/services/upload-path.service";
+
+import { MessageStoreService } from "./message-store.service";
+import { CompressionEngine } from "./compression-engine";
+import { ConversationContextFactory, MESSAGE_STORE_TOKEN, COMPRESSION_STRATEGY_TOKEN } from "./conversation-context.factory";
 
 @Module({
-  imports: [AuthModule, ToolsModule, CharactersModule, FilesModule],
+  imports: [AuthModule, ToolsModule, CharactersModule, FilesModule, LlmCoreModule],
   controllers: [ChatController, MessagesController, SessionsController],
   providers: [
     AgentService,
-    ContextManagerService,
+    MessageStoreService,
+    CompressionEngine,
+    ConversationContextFactory,
+    { provide: MESSAGE_STORE_TOKEN, useExisting: MessageStoreService },
+    { provide: COMPRESSION_STRATEGY_TOKEN, useExisting: CompressionEngine },
     MessageService,
     SessionService,
     SessionRepository,
@@ -42,9 +50,7 @@ import { ToolResultCleaner } from "./tool-result-cleaner.service";
     PrismaService,
     SessionLockService,
     TokenizerService,
-    ToolResultCleaner,
-    // SettingsStorage 由 SharedModule 全局提供，无需在此声明
-    // LLMService 由 LlmCoreModule 全局提供，无需在此声明
+    UploadPathService,
   ],
   exports: [AgentService],
 })

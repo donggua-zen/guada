@@ -13,7 +13,7 @@
             </div>
           </template>
           <div class="px-0 py-6 h-full overflow-y-auto">
-            <div class="px-6">
+            <div class="px-0">
               <el-form ref="basicFormRef" :model="characterForm" :rules="basicRules" label-position="left"
                 label-width="50%" size="large">
               <!-- 头像设置 -->
@@ -83,7 +83,7 @@
             </div>
           </template>
           <div class="px-0 py-6 h-full flex flex-col">
-            <div class="px-6 flex-1 flex flex-col min-h-0">
+            <div class="px-0 flex-1 flex flex-col min-h-0">
               <el-form ref="promptFormRef" :model="characterForm" :rules="promptRules" label-position="top"
                 label-width="80px" size="large" class="flex-1 flex flex-col min-h-0">
               <el-form-item :show-label="false" :show-feedback="false" style="flex-shrink: 0;" class="no-border-item">
@@ -114,18 +114,18 @@
           </div>
         </el-tab-pane>
 
-        <!-- 模型与记忆 -->
+        <!-- 模型设置 -->
         <el-tab-pane name="model" v-if="!isSimpleStyle || true" class="flex-1 overflow-hidden">
           <template #label>
             <div class="tab-label">
               <el-icon :size="18">
                 <RobotOutlined />
               </el-icon>
-              <span>模型与记忆</span>
+              <span>模型</span>
             </div>
           </template>
           <div class="px-0 py-6 h-full overflow-y-auto">
-            <div class="px-6">
+            <div class="px-0">
               <el-form ref="modelFormRef" :model="characterForm" :rules="modelRules" label-position="left"
                 label-width="50%" size="large">
               <!-- 模型选择 -->
@@ -141,42 +141,71 @@
                 </el-select>
               </el-form-item>
 
-              <!-- 温度设置 -->
-              <el-form-item prop="modelTemperature">
-                <template #label>
-                  <div class="flex flex-col gap-1">
-                    <span class="text-base text-gray-900 dark:text-gray-100 font-medium">温度</span>
-                    <span class="text-xs text-gray-500 dark:text-gray-400 font-normal">控制输出的随机性和创造性，值越高越富有创意</span>
-                  </div>
-                </template>
-                <el-slider-optional v-model="characterForm.modelTemperature" :min="0" :max="1.9" :step="0.1" show-input
-                  optional-direction="max" optional-text="Auto" class="w-full max-w-md" />
-              </el-form-item>
+              <!-- 模型参数设置 (折叠面板) -->
+              <el-collapse v-model="activeModelParams" class="mb-6">
+                <el-collapse-item name="params">
+                  <template #title>
+                    <div class="flex items-center gap-2 text-base font-medium">
+                      <el-icon><SettingOutlined /></el-icon>
+                      <span>模型参数设置</span>
+                    </div>
+                  </template>
+                  <!-- 温度设置 -->
+                  <el-form-item prop="modelTemperature">
+                    <template #label>
+                      <div class="flex flex-col gap-1">
+                        <span class="text-base text-gray-900 dark:text-gray-100 font-medium">温度</span>
+                        <span class="text-xs text-gray-500 dark:text-gray-400 font-normal">控制输出的随机性和创造性，值越高越富有创意</span>
+                      </div>
+                    </template>
+                    <el-slider-optional v-model="characterForm.modelTemperature" :min="0" :max="1.9" :step="0.1" show-input
+                      optional-direction="max" optional-text="Auto" class="w-full max-w-md" />
+                  </el-form-item>
 
-              <!-- Top P -->
-              <el-form-item prop="modelTopP">
-                <template #label>
-                  <div class="flex flex-col gap-1">
-                    <span class="text-base text-gray-900 dark:text-gray-100 font-medium">Top P</span>
-                    <span class="text-xs text-gray-500 dark:text-gray-400 font-normal">核采样参数，控制输出词汇的多样性范围</span>
-                  </div>
-                </template>
-                <el-slider-optional v-model="characterForm.modelTopP" :min="0" :max="1" :step="0.1" show-input
-                  optional-direction="max" optional-text="Auto" class="w-full max-w-md" />
-              </el-form-item>
+                  <!-- Top P -->
+                  <el-form-item prop="modelTopP">
+                    <template #label>
+                      <div class="flex flex-col gap-1">
+                        <span class="text-base text-gray-900 dark:text-gray-100 font-medium">Top P</span>
+                        <span class="text-xs text-gray-500 dark:text-gray-400 font-normal">核采样参数，控制输出词汇的多样性范围</span>
+                      </div>
+                    </template>
+                    <el-slider-optional v-model="characterForm.modelTopP" :min="0" :max="1" :step="0.1" show-input
+                      optional-direction="max" optional-text="Auto" class="w-full max-w-md" />
+                  </el-form-item>
 
-              <!-- 频率惩罚 -->
-              <el-form-item prop="modelFrequencyPenalty">
-                <template #label>
-                  <div class="flex flex-col gap-1">
-                    <span class="text-base text-gray-900 dark:text-gray-100 font-medium">频率惩罚</span>
-                    <span class="text-xs text-gray-500 dark:text-gray-400 font-normal">降低重复内容的出现概率，正值减少重复，负值鼓励重复</span>
-                  </div>
-                </template>
-                <el-slider-optional v-model="characterForm.modelFrequencyPenalty" :min="-1.9" :max="1.9" :step="0.1"
-                  show-input optional-direction="max" optional-text="Auto" class="w-full max-w-md" />
-              </el-form-item>
+                  <!-- 频率惩罚 -->
+                  <el-form-item prop="modelFrequencyPenalty">
+                    <template #label>
+                      <div class="flex flex-col gap-1">
+                        <span class="text-base text-gray-900 dark:text-gray-100 font-medium">频率惩罚</span>
+                        <span class="text-xs text-gray-500 dark:text-gray-400 font-normal">降低重复内容的出现概率，正值减少重复，负值鼓励重复</span>
+                      </div>
+                    </template>
+                    <el-slider-optional v-model="characterForm.modelFrequencyPenalty" :min="-1.9" :max="1.9" :step="0.1"
+                      show-input optional-direction="max" optional-text="Auto" class="w-full max-w-md" />
+                  </el-form-item>
+                </el-collapse-item>
+              </el-collapse>
+            </el-form>
+            </div>
+          </div>
+        </el-tab-pane>
 
+        <!-- 记忆与压缩 -->
+        <el-tab-pane name="memory" v-if="!isSimpleStyle || true" class="flex-1 overflow-hidden">
+          <template #label>
+            <div class="tab-label">
+              <el-icon :size="18">
+                <DatabaseOutlined />
+              </el-icon>
+              <span>记忆</span>
+            </div>
+          </template>
+          <div class="px-0 py-6 h-full overflow-y-auto">
+            <div class="px-0">
+              <el-form ref="memoryFormRef" :model="characterForm" label-position="left"
+                label-width="50%" size="large">
               <!-- 上下文条数 -->
               <el-form-item prop="maxMemoryLength">
                 <template #label>
@@ -188,6 +217,76 @@
                 <el-slider-optional v-model="characterForm.maxMemoryLength" :min="2" :max="500" :step="1" show-input
                   optional-direction="max" optional-text="No Limit" class="w-full max-w-md" />
               </el-form-item>
+
+              <!-- Token 上限 -->
+              <el-form-item prop="maxTokensLimit">
+                <template #label>
+                  <div class="flex flex-col gap-1">
+                    <span class="text-base text-gray-900 dark:text-gray-100 font-medium">Token 上限</span>
+                    <span class="text-xs text-gray-500 dark:text-gray-400 font-normal">设置 Token 使用上限，与模型上下文窗口取最小值作为压缩判断基准</span>
+                  </div>
+                </template>
+                <div class="w-full max-w-md">
+                  <el-input 
+                    v-model="maxTokensLimitDisplay" 
+                    placeholder="不限制"
+                    clearable
+                    @input="handleMaxTokensInput"
+                    @blur="formatMaxTokensDisplay"
+                  >
+                    <template #suffix>
+                      <span class="text-gray-400 text-sm">Tokens</span>
+                    </template>
+                  </el-input>
+                  <div class="text-xs text-gray-400 mt-1">支持输入数字或带K/M后缀（如 128K、1M），留空表示不限制</div>
+                </div>
+              </el-form-item>
+
+              <!-- 压缩配置 -->
+              <el-form-item label="触发阈值" prop="compressionTriggerRatio">
+                <template #label>
+                  <div class="flex flex-col gap-1">
+                    <span class="text-base text-gray-900 dark:text-gray-100 font-medium">触发阈值</span>
+                    <span class="text-xs text-gray-500 dark:text-gray-400 font-normal">当已用 Token 达到最大窗口的此比例时触发压缩</span>
+                  </div>
+                </template>
+                <el-slider v-model="characterForm.compressionTriggerRatio" :min="0.5" :max="0.95" :step="0.05" 
+                  show-input format-tooltip="(val) => `${Math.round(val * 100)}%`" class="w-full max-w-md" />
+              </el-form-item>
+
+              <el-form-item label="保留目标" prop="compressionTargetRatio">
+                <template #label>
+                  <div class="flex flex-col gap-1">
+                    <span class="text-base text-gray-900 dark:text-gray-100 font-medium">保留目标</span>
+                    <span class="text-xs text-gray-500 dark:text-gray-400 font-normal">压缩后保留至最大窗口的此比例</span>
+                  </div>
+                </template>
+                <el-slider v-model="characterForm.compressionTargetRatio" :min="0.2" :max="0.8" :step="0.05" 
+                  show-input format-tooltip="(val) => `${Math.round(val * 100)}%`" class="w-full max-w-md" />
+              </el-form-item>
+
+              <el-form-item label="启用摘要生成" prop="enableSummaryCompression">
+                <template #label>
+                  <div class="flex flex-col gap-1">
+                    <span class="text-base text-gray-900 dark:text-gray-100 font-medium">启用摘要生成</span>
+                    <span class="text-xs text-gray-500 dark:text-gray-400 font-normal">开启后会调用 LLM 生成历史对话摘要，关闭则仅进行裁剪</span>
+                  </div>
+                </template>
+                <div class="w-full max-w-md">
+                  <el-switch 
+                    v-model="characterForm.enableSummaryCompression" 
+                    inline-prompt
+                    active-text="开启"
+                    inactive-text="关闭"
+                  />
+                </div>
+              </el-form-item>
+
+              <el-alert title="提示" type="info" :closable="false" show-icon class="mb-6">
+                <p class="text-sm">• 触发阈值：控制何时启动压缩（建议 70%-85%）</p>
+                <p class="text-sm">• 保留目标：控制压缩后的 Token 占用（建议 40%-60%）</p>
+                <p class="text-sm">• 启用摘要：关闭后将仅裁剪工具结果，不生成语义摘要</p>
+              </el-alert>
             </el-form>
             </div>
           </div>
@@ -204,7 +303,7 @@
             </div>
           </template>
           <div class="px-0 py-6 h-full overflow-y-auto">
-            <div class="px-6">
+            <div class="px-0">
               <el-form label-position="top" size="large">
               <!-- 全局开关 -->
               <el-form-item label="自动启用全部工具" label-position="left">
@@ -293,7 +392,7 @@
             </div>
           </template>
           <div class="px-0 py-6 h-full overflow-y-auto">
-            <div class="px-6">
+            <div class="px-0">
               <el-form label-position="top" size="large">
               <!-- MCP 全局开关 -->
               <el-form-item label="自动启用全部MCP服务器" label-position="left">
@@ -363,11 +462,6 @@
         </el-tab-pane>
       </el-tabs>
     </div>
-    <div class="footer pb-4 px-3 flex justify-end border-t border-gray-200 dark:border-gray-700">
-      <el-button round block type="primary" @click="handleSave" size="large" :loading="loading">
-        应用全部设置
-      </el-button>
-    </div>
   </div>
 
 </template>
@@ -400,8 +494,10 @@ import {
   UserOutlined,
   MessageOutlined,
   RobotOutlined,
+  DatabaseOutlined,
   ToolOutlined,
-  ApiOutlined
+  ApiOutlined,
+  SettingOutlined
 } from '@vicons/antd'
 
 import { apiService } from '../../services/ApiService'
@@ -460,8 +556,10 @@ const providers = ref([]);
 const basicFormRef = ref(null)
 const promptFormRef = ref(null)
 const modelFormRef = ref(null)
+const memoryFormRef = ref(null)
 
 const tabsValue = ref(props.tab)
+const activeModelParams = ref([]) // 默认折叠模型参数
 
 // 表单数据
 const characterForm = reactive({
@@ -482,7 +580,11 @@ const characterForm = reactive({
   maxMemoryLength: null,
   useUserPrompt: false,
   enabledTools: [],  // 启用的本地工具
-  enabledMcpServers: []  // 启用的 MCP 服务器 ID 数组
+  enabledMcpServers: [],  // 启用的 MCP 服务器 ID 数组
+  compressionTriggerRatio: 0.8, // 触发阈值
+  compressionTargetRatio: 0.5, // 保留目标
+  enableSummaryCompression: true, // 是否启用摘要生成
+  maxTokensLimit: null, // Token 上限（null 表示不限制）
 })
 
 // 验证规则
@@ -573,6 +675,9 @@ const loadingTools = ref(false);
 // 角色工具设置（namespace -> boolean | 'all'）
 const characterToolSettings = ref({});
 
+// Token 上限显示值（用于格式化显示）
+const maxTokensLimitDisplay = ref('');
+
 // 是否自动启用全部工具
 const allToolsEnabled = computed(() => {
   // 如果角色工具配置为 true，则认为启用了全部工具
@@ -603,8 +708,17 @@ watch(() => props.data, (newVal) => {
   characterForm.modelTemperature = newVal.settings?.modelTemperature || null;
   characterForm.modelTopP = newVal.settings?.modelTopP || null;
   characterForm.modelFrequencyPenalty = newVal.settings?.modelFrequencyPenalty || null;
-  characterForm.maxMemoryLength = newVal.settings?.maxMemoryLength || null;
   characterForm.useUserPrompt = newVal.settings?.useUserPrompt || false;
+  
+  // 从 memory 分组加载记忆与压缩配置（兼容旧的扁平化结构）
+  const memoryConfig = newVal.settings?.memory || {};
+  characterForm.maxMemoryLength = memoryConfig.maxMemoryLength ?? newVal.settings?.maxMemoryLength ?? null;
+  characterForm.compressionTriggerRatio = memoryConfig.compressionTriggerRatio ?? newVal.settings?.compressionTriggerRatio ?? 0.8;
+  characterForm.compressionTargetRatio = memoryConfig.compressionTargetRatio ?? newVal.settings?.compressionTargetRatio ?? 0.5;
+  characterForm.enableSummaryCompression = memoryConfig.enableSummaryCompression ?? newVal.settings?.enableSummaryCompression ?? true;
+  characterForm.maxTokensLimit = memoryConfig.maxTokensLimit ?? newVal.settings?.maxTokensLimit ?? null;
+  // 同步更新显示值
+  maxTokensLimitDisplay.value = formatTokenValue(characterForm.maxTokensLimit);
   // 加载已启用的工具
   characterForm.enabledTools = newVal.settings?.tools || [];
   // 加载角色工具设置
@@ -783,88 +897,70 @@ onUnmounted(() => {
 
 
 const handleSave = async () => {
+  // 验证逻辑已移至父组件调用 validate() 时执行
+  // 此方法现在仅用于返回最终数据
+  return getFormData();
+}
+
+// 获取表单数据
+const getFormData = () => {
+  let finalData = {
+    'title': characterForm.title,
+    'description': characterForm.description,
+    'name': characterForm.name,
+    'avatarUrl': characterForm.avatarUrl,
+    'avatarFile': characterForm.avatarFile,
+    'groupId': characterForm.groupId === '' ? null : characterForm.groupId,
+    'identity': characterForm.identity,
+    'modelId': characterForm.modelId,
+    'settings': {
+      'assistantName': characterForm.assistantName,
+      'assistantIdentity': characterForm.assistantIdentity,
+      'systemPrompt': characterForm.systemPrompt,
+      'memoryType': characterForm.memoryType,
+      'modelTemperature': characterForm.modelTemperature,
+      'modelTopP': characterForm.modelTopP,
+      'modelFrequencyPenalty': characterForm.modelFrequencyPenalty,
+      'useUserPrompt': characterForm.useUserPrompt,
+      // 记忆与压缩配置分组
+      'memory': {
+        'maxMemoryLength': characterForm.maxMemoryLength,
+        'compressionTriggerRatio': characterForm.compressionTriggerRatio,
+        'compressionTargetRatio': characterForm.compressionTargetRatio,
+        'enableSummaryCompression': characterForm.enableSummaryCompression,
+        'maxTokensLimit': characterForm.maxTokensLimit,
+      },
+      'tools': characterToolSettings.value,
+      'mcpServers': characterForm.enabledMcpServers,
+    }
+  }
+  return finalData;
+}
+
+// 验证所有表单
+const validate = async () => {
   try {
-    // 并行验证所有表单
     var formValidates = [
       basicFormRef.value?.validate(),
       promptFormRef.value?.validate(),
       modelFormRef.value?.validate(),
+      memoryFormRef.value?.validate(),
     ]
-    //if (!isSimpleStyle.value) {
-    // formValidates.push(modelFormRef.value?.validate())
-    //}
     const validationResults = await Promise.allSettled(formValidates)
-
-    // 检查是否有验证失败的表单
-    const hasError = validationResults.some(result =>
-      result.status === 'rejected'
-    )
+    const hasError = validationResults.some(result => result.status === 'rejected')
 
     if (hasError) {
-      // 收集所有错误信息
-      const errors = validationResults
-        .filter(result => result.status === 'rejected')
-        .map(result => result.reason)
-        .flat()
-
-      console.error('表单验证失败:', errors)
-      // toast.error('请检查表单填写是否正确')
-
-      // 自动切换到第一个有错误的tab
-      const firstErrorIndex = validationResults.findIndex(result =>
-        result.status === 'rejected'
-      )
+      const firstErrorIndex = validationResults.findIndex(result => result.status === 'rejected')
       if (firstErrorIndex !== -1) {
-        const tabNames = ['basic', 'prompt', 'model']
+        const tabNames = ['basic', 'prompt', 'model', 'memory']
         tabsValue.value = tabNames[firstErrorIndex]
       }
-
-      return
+      return false;
     }
-
-
-    loading.value = true
-
-    // 模拟保存操作 
-    // await new Promise(resolve => setTimeout(resolve, 1000))
-
-    // 触发保存事件
-    let finalData = {
-      'title': characterForm.title,
-      'description': characterForm.description,
-      'name': characterForm.name,
-      'avatarUrl': characterForm.avatarUrl,
-      'avatarFile': characterForm.avatarFile,
-      'groupId': characterForm.groupId === '' ? null : characterForm.groupId,  // 将空字符串转换为 null
-      'identity': characterForm.identity,
-      'modelId': characterForm.modelId,
-      'settings': {
-        'assistantName': characterForm.assistantName,
-        'assistantIdentity': characterForm.assistantIdentity,
-        'systemPrompt': characterForm.systemPrompt,
-        'memoryType': characterForm.memoryType,
-        'maxMemoryLength': characterForm.maxMemoryLength,
-        // 模型
-        'modelTemperature': characterForm.modelTemperature,
-        'modelTopP': characterForm.modelTopP,
-        'modelFrequencyPenalty': characterForm.modelFrequencyPenalty,
-        'useUserPrompt': characterForm.useUserPrompt,
-        // 工具配置
-        'tools': characterToolSettings.value,  // boolean 或 { namespace: boolean }
-        'mcpServers': characterForm.enabledMcpServers,  // boolean 或 string[]
-      }
-    }
-    emit('update:data', finalData)
-    // toast.success('保存成功')
-    // handleClose()
+    return true;
   } catch (errors) {
-    if (errors) {
-      toast.error('请检查表单填写是否正确' + errors.toString())
-    } else {
-      toast.error('保存失败')
-    }
-  } finally {
-    loading.value = false
+    console.error('Validation error:', errors);
+    return false;
   }
 }
 
@@ -874,6 +970,76 @@ function format(value) {
   return value.toLocaleString("en-US");
 }
 
+/**
+ * 格式化 Token 值为显示字符串
+ * @param value - Token 数值或 null
+ * @returns 格式化后的字符串（如 "128K"、"1M" 或 "50,000"）
+ */
+function formatTokenValue(value) {
+  if (!value) return '';
+  const num = Number(value);
+  if (isNaN(num)) return '';
+  
+  // 如果大于等于 1,000,000 且是整百万，使用 M 后缀
+  if (num >= 1000000 && num % 1000000 === 0) {
+    return (num / 1000000) + 'M';
+  }
+  // 如果大于等于 1000 且是整千，使用 K 后缀
+  if (num >= 1000 && num % 1000 === 0) {
+    return (num / 1000) + 'K';
+  }
+  // 否则使用千位分隔符
+  return num.toLocaleString();
+}
+
+/**
+ * 解析用户输入的 Token 值
+ * @param input - 用户输入的字符串
+ * @returns 解析后的数字或 null
+ */
+function parseTokenValue(input) {
+  if (!input || input.trim() === '') return null;
+  
+  const trimmed = input.trim();
+  const lowerTrimmed = trimmed.toLowerCase();
+  
+  // 支持 M/m 后缀（百万）
+  if (lowerTrimmed.endsWith('m')) {
+    const numStr = trimmed.slice(0, -1).replace(/,/g, '');
+    const num = Number(numStr);
+    if (isNaN(num)) return null;
+    return Math.round(num * 1000000);
+  }
+  
+  // 支持 K/k 后缀（千）
+  if (lowerTrimmed.endsWith('k')) {
+    const numStr = trimmed.slice(0, -1).replace(/,/g, '');
+    const num = Number(numStr);
+    if (isNaN(num)) return null;
+    return Math.round(num * 1000);
+  }
+  
+  // 普通数字（可能带逗号）
+  const cleanStr = trimmed.replace(/,/g, '');
+  const num = Number(cleanStr);
+  return isNaN(num) ? null : num;
+}
+
+/**
+ * 处理 Token 上限输入
+ */
+function handleMaxTokensInput(value) {
+  const parsed = parseTokenValue(value);
+  characterForm.maxTokensLimit = parsed;
+}
+
+/**
+ * 失焦时格式化显示
+ */
+function formatMaxTokensDisplay() {
+  maxTokensLimitDisplay.value = formatTokenValue(characterForm.maxTokensLimit);
+}
+
 // 清除头像文件（上传成功后由父组件调用）
 const clearAvatarFile = () => {
   characterForm.avatarFile = null;
@@ -881,7 +1047,9 @@ const clearAvatarFile = () => {
 
 // 暴露方法给父组件
 defineExpose({
-  clearAvatarFile
+  clearAvatarFile,
+  validate,
+  getFormData
 })
 
 // 移除不再需要的 parse 和 format 方法（已删除 max_memory_tokens 和 short_term_memory_tokens）

@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, Menu, shell, MenuItemConstructorOptions, dialog } from 'electron'
+import { app, BrowserWindow, ipcMain, Menu, shell, MenuItemConstructorOptions, dialog, clipboard } from 'electron'
 import * as path from 'path'
 import { fork, ChildProcess } from 'child_process'
 import * as fs from 'fs'
@@ -627,6 +627,27 @@ function setupIpcHandlers() {
         console.error('Failed to open install folder:', error)
       }
     })
+  })
+
+  // 剪贴板操作（通过 IPC）
+  ipcMain.handle('clipboard-write-text', (_, text: string) => {
+    try {
+      clipboard.writeText(text)
+      return { success: true }
+    } catch (error) {
+      console.error('[Main] 剪贴板写入失败:', error)
+      return { success: false, error: (error as Error).message }
+    }
+  })
+
+  ipcMain.handle('clipboard-read-text', () => {
+    try {
+      const text = clipboard.readText()
+      return { success: true, text }
+    } catch (error) {
+      console.error('[Main] 剪贴板读取失败:', error)
+      return { success: false, error: (error as Error).message }
+    }
   })
 }
 

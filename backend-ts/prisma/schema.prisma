@@ -7,32 +7,27 @@ datasource db {
 }
 
 model Session {
-  id               String                 @id @default(cuid())
-  title            String?
-  userId           String                 @map("user_id")
-  // 头像相对路径（如 avatars/session123.jpg），返回前端时转换为完整 URL
-  avatarUrl        String?                @map("avatar_url")
-  description      String?
-  modelId          String?                @map("model_id")
-  characterId      String?                @map("character_id")
-  settings         Json?
-  createdAt        DateTime               @default(now()) @map("created_at")
-  updatedAt        DateTime               @updatedAt @map("updated_at")
-  lastActiveAt     DateTime?              @map("last_active_at")
-  
-  // === Bot 会话专用字段 ===
-  sessionType      String?                @default("web") @map("session_type")  // "web" | "bot"
-  botId            String?                @map("bot_id")                        // Bot 实例ID
-  platform         String?                                       // 来源平台: 'qq', 'wechat'
-  externalId       String?                @map("external_id")   // 外部会话标识,格式: "platform:type:nativeId"
-  // ==================================
-  
-  memories         Memory[]
-  messages         Message[]
-  character        Character?             @relation(fields: [characterId], references: [id])
-  user             User                   @relation(fields: [userId], references: [id])
-  model            Model?                 @relation(fields: [modelId], references: [id])
-  contextStates    SessionContextState[]
+  id            String                @id @default(cuid())
+  title         String?
+  userId        String                @map("user_id")
+  avatarUrl     String?               @map("avatar_url")
+  description   String?
+  modelId       String?               @map("model_id")
+  characterId   String?               @map("character_id")
+  settings      Json?
+  createdAt     DateTime              @default(now()) @map("created_at")
+  updatedAt     DateTime              @updatedAt @map("updated_at")
+  lastActiveAt  DateTime?             @map("last_active_at")
+  sessionType   String?               @default("web") @map("session_type")
+  botId         String?               @map("bot_id")
+  platform      String?
+  externalId    String?               @map("external_id")
+  memories      Memory[]
+  messages      Message[]
+  model         Model?                @relation(fields: [modelId], references: [id])
+  user          User                  @relation(fields: [userId], references: [id])
+  character     Character?            @relation(fields: [characterId], references: [id])
+  contextStates SessionContextState[]
 
   @@index([userId])
   @@index([sessionType])
@@ -51,11 +46,11 @@ model Message {
   currentTurnsId String?          @map("current_turns_id")
   createdAt      DateTime         @default(now()) @map("created_at")
   updatedAt      DateTime         @updatedAt @map("updated_at")
+  files          File[]
+  session        Session          @relation(fields: [sessionId], references: [id], onDelete: Cascade)
   parent         Message?         @relation("MessageThread", fields: [parentId], references: [id])
   children       Message[]        @relation("MessageThread")
-  session        Session          @relation(fields: [sessionId], references: [id], onDelete: Cascade)
   contents       MessageContent[]
-  files          File[]
 
   @@index([sessionId])
   @@index([parentId])
@@ -70,9 +65,8 @@ model MessageContent {
   role             String?
   content          String
   reasoningContent String?  @map("reasoning_content")
-  // 预留字段:存储额外的关键字参数(如工具调用信息、元数据等)
   additionalKwargs Json?    @map("additional_kwargs")
-  metaData         Json?    @map("meta_data")
+  metadata         Json?    @map("meta_data")
   createdAt        DateTime @default(now()) @map("created_at")
   updatedAt        DateTime @updatedAt @map("updated_at")
   message          Message  @relation(fields: [messageId], references: [id], onDelete: Cascade)
@@ -120,7 +114,6 @@ model Model {
 model User {
   id             String          @id @default(cuid())
   role           String?
-  // 头像相对路径（如 avatars/user123.jpg），返回前端时转换为完整 URL
   avatarUrl      String?         @map("avatar_url")
   parentId       String?         @map("parent_id")
   nickname       String?
@@ -128,12 +121,12 @@ model User {
   passwordHash   String          @map("password_hash")
   createdAt      DateTime        @default(now()) @map("created_at")
   updatedAt      DateTime        @updatedAt @map("updated_at")
+  botInstances   BotInstance[]
   characters     Character[]
   knowledgeBases KnowledgeBase[]
+  mcpServers     McpServer[]
   sessions       Session[]
   settings       UserSetting?
-  mcpServers     McpServer[]
-  botInstances   BotInstance[]
 
   @@map("user")
 }
@@ -155,7 +148,6 @@ model Character {
   userId      String          @map("user_id")
   title       String
   description String?
-  // 头像相对路径（如 avatars/char123.jpg），返回前端时转换为完整 URL
   avatarUrl   String?         @map("avatar_url")
   isPublic    Boolean         @default(false) @map("is_public")
   modelId     String?         @map("model_id")
@@ -163,9 +155,9 @@ model Character {
   settings    Json?
   createdAt   DateTime        @default(now()) @map("created_at")
   updatedAt   DateTime        @updatedAt @map("updated_at")
-  group       CharacterGroup? @relation(fields: [groupId], references: [id])
-  model       Model?          @relation(fields: [modelId], references: [id])
   user        User            @relation(fields: [userId], references: [id])
+  model       Model?          @relation(fields: [modelId], references: [id])
+  group       CharacterGroup? @relation(fields: [groupId], references: [id])
   sessions    Session[]
 
   @@map("character")
@@ -186,8 +178,8 @@ model KnowledgeBase {
   createdAt        DateTime @default(now()) @map("created_at")
   updatedAt        DateTime @updatedAt @map("updated_at")
   files            KBFile[]
-  embeddingModel   Model    @relation(fields: [embeddingModelId], references: [id])
   user             User     @relation(fields: [userId], references: [id])
+  embeddingModel   Model    @relation(fields: [embeddingModelId], references: [id])
 
   @@map("knowledge_base")
 }
@@ -215,15 +207,15 @@ model KBFile {
   uploadedAt         DateTime      @default(now()) @map("uploaded_at")
   processedAt        DateTime?     @map("processed_at")
   chunks             KBChunk[]
-  knowledgeBase      KnowledgeBase @relation(fields: [knowledgeBaseId], references: [id], onDelete: Cascade)
   parent             KBFile?       @relation("FolderHierarchy", fields: [parentFolderId], references: [id])
   children           KBFile[]      @relation("FolderHierarchy")
+  knowledgeBase      KnowledgeBase @relation(fields: [knowledgeBaseId], references: [id], onDelete: Cascade)
 
   @@index([knowledgeBaseId])
   @@index([contentHash])
   @@index([processingStatus])
   @@index([parentFolderId])
-  @@index([knowledgeBaseId, relativePath]) // 优化按路径查询性能
+  @@index([knowledgeBaseId, relativePath])
   @@map("kb_file")
 }
 
@@ -274,9 +266,7 @@ model File {
   fileType      String   @map("file_type")
   fileExtension String   @map("file_extension")
   content       String?
-  // 文件相对路径（如 kb/test.pdf），返回前端时转换为完整 URL
   url           String?
-  // 预览图相对路径（如 previews/test.jpg），返回前端时转换为完整 URL
   previewUrl    String?  @map("preview_url")
   contentHash   String   @map("content_hash")
   uploadUserId  String?  @map("upload_user_id")
@@ -286,7 +276,7 @@ model File {
   fileMetadata  Json?    @map("file_metadata")
   createdAt     DateTime @default(now()) @map("created_at")
   updatedAt     DateTime @updatedAt @map("updated_at")
-  message       Message? @relation(fields: [messageId], references: [id], onDelete: SetNull)
+  message       Message? @relation(fields: [messageId], references: [id])
 
   @@index([contentHash])
   @@index([uploadUserId])
@@ -312,17 +302,23 @@ model McpServer {
 }
 
 model SessionContextState {
-  id                      String   @id @default(cuid())
-  sessionId               String   @map("session_id")
-  summaryContent          String?  @map("summary_content")
-  lastCompressedMessageId String?  @map("last_compressed_message_id")
-  cleaningStrategy        String?  @map("cleaning_strategy")
-  lastCleanedMessageId    String?  @map("last_cleaned_message_id")
-  createdAt               DateTime @default(now()) @map("created_at")
-  updatedAt               DateTime @updatedAt @map("updated_at")
-  session                 Session  @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  id                     String   @id @default(cuid())
+  sessionId              String   @map("session_id")
+  summaryContent         String?  @map("summary_content")
+  lastCompactedMessageId String?  @map("last_compacted_message_id")
+  lastCompactedContentId String?  @map("last_compacted_content_id")
+  lastPrunedContentId    String?  @map("last_pruned_content_id")
+  cleaningStrategy       String?  @map("cleaning_strategy")
+  createdAt              DateTime @default(now()) @map("created_at")
+  updatedAt              DateTime @updatedAt @map("updated_at")
+  pruningMetadata        Json?    @map("pruning_metadata")
+  
+  // 压缩统计信息（JSON格式，便于扩展）
+  compressionStats       Json?    @map("compression_stats")  // { beforeTokenCount, afterTokenCount, beforeMessageCount, afterMessageCount, ... }
+  
+  session                Session  @relation(fields: [sessionId], references: [id], onDelete: Cascade)
 
-  @@index([sessionId])
+  @@index([sessionId, createdAt])
   @@map("session_context_state")
 }
 
@@ -338,38 +334,25 @@ model UserSetting {
 }
 
 model BotInstance {
-  id               String   @id @default(cuid())
-  userId           String   @map("user_id")  // 创建者ID
-  platform         String                    // 平台类型: 'qq', 'wechat', 'discord'
-  name             String                    // 机器人显示名称
-  enabled          Boolean  @default(true)   // 是否启用
-  
-  // 平台特定配置(JSON格式)
-  // 包含认证信息(appId, appSecret, token等)和其他平台相关配置(mode, sandbox等)
-  platformConfig   Json                      @map("platform_config")
-  
-  // 预留扩展字段:存储额外的平台特定参数(如webhook URL、回调地址等)
-  additionalKwargs Json?                     @map("additional_kwargs")
-  
-  // 重连配置
-  reconnectEnabled Boolean  @default(true)   @map("reconnect_enabled")
-  maxRetries       Int      @default(5)      @map("max_retries")
-  retryInterval    Int      @default(5000)   @map("retry_interval")  // 毫秒
-  
-  // 关联的默认角色和模型
-  defaultCharacterId String   @map("default_character_id")  // 默认角色ID(必填,用于对话流程)
-  defaultModelId     String? @map("default_model_id")
-  
-  // 状态信息
-  status           String   @default("stopped")  // stopped, running, error
-  lastStartedAt    DateTime? @map("last_started_at")
-  lastError        String?  @map("last_error")
-  
-  createdAt        DateTime @default(now()) @map("created_at")
-  updatedAt        DateTime @updatedAt @map("updated_at")
-  
-  user             User     @relation(fields: [userId], references: [id])
-  
+  id                 String    @id @default(cuid())
+  userId             String    @map("user_id")
+  platform           String
+  name               String
+  enabled            Boolean   @default(true)
+  platformConfig     Json      @map("platform_config")
+  reconnectEnabled   Boolean   @default(true) @map("reconnect_enabled")
+  maxRetries         Int       @default(5) @map("max_retries")
+  retryInterval      Int       @default(5000) @map("retry_interval")
+  defaultCharacterId String    @map("default_character_id")
+  defaultModelId     String?   @map("default_model_id")
+  status             String    @default("stopped")
+  lastStartedAt      DateTime? @map("last_started_at")
+  lastError          String?   @map("last_error")
+  createdAt          DateTime  @default(now()) @map("created_at")
+  updatedAt          DateTime  @updatedAt @map("updated_at")
+  additionalKwargs   Json?     @map("additional_kwargs")
+  user               User      @relation(fields: [userId], references: [id])
+
   @@index([userId])
   @@index([platform])
   @@index([status])

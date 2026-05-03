@@ -204,7 +204,7 @@ export class SessionMapperService {
     });
 
     // 处理知识库引用逻辑
-    let additionalKwargs: any = null;
+    let metadata: any = null;
     if (knowledgeBaseIds && knowledgeBaseIds.length > 0) {
       // 使用批量查询提升效率
       const kbs = await this.kbRepo.findByIds(knowledgeBaseIds);
@@ -213,7 +213,7 @@ export class SessionMapperService {
         name: kb.name,
         description: kb.description,
       }));
-      additionalKwargs = { referencedKbs: kbMetadata };
+      metadata = { referencedKbs: kbMetadata };
     }
 
     await this.prisma.messageContent.create({
@@ -222,7 +222,7 @@ export class SessionMapperService {
         turnsId: this.generateTurnsId(),
         role: 'user',
         content,
-        additionalKwargs,
+        metadata,
       },
     });
 

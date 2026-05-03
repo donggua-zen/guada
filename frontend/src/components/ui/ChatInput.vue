@@ -53,14 +53,21 @@
         </div>
         <div class="right-actions">
           <!-- 模型选择按钮 -->
-          <el-button @click.stop="openModelPanel" plain type="primary"
+          <el-button @click.stop="openModelPanel" plain
             class="model-selector-btn overflow-hidden flex items-center justify-center">
             <div class="flex items-center gap-1.5" style="height:24px">
-              <OpenAI class="w-4 h-4 shrink-0 text-(--color-primary)" />
+              <Avatar 
+                v-if="currentModel"
+                :src="getModelAvatarPath(currentModel.modelName, currentModel.provider?.name) || undefined" 
+                :name="getModelDisplayName(currentModel.modelName)"
+                type="assistant"
+                :round="false"
+                class="w-4 h-4 shrink-0" />
+              <OpenAI v-else class="w-4 h-4 shrink-0" />
               <span class="whitespace-nowrap text-sm font-medium"
                 :style="{ display: isMobile ? 'none' : 'inline-flex' }">{{
                   currentModelName }}</span>
-              <el-icon class="text-xs opacity-60">
+              <el-icon class="text-xs opacity-60" v-if="!isMobile">
                 <ArrowDropDownTwotone />
               </el-icon>
             </div>
@@ -258,40 +265,143 @@
           </div>
         </transition>
 
-        <!-- 会话设置弹窗 -->
-        <transition name="popover-fade">
-          <div v-if="settingsPanelVisible" class="context-popover settings-popover compact-popover" :style="settingsPopoverStyle"
-            @click.stop>
-            <div class="popover-content no-padding">
-              <div class="px-4 pt-3 pb-2">
-                <div class="text-sm font-medium text-gray-800 dark:text-gray-200 mb-3">会话设置</div>
-                <el-form label-position="top" size="small">
-                  <el-form-item label="上下文条数">
-                    <template #label>
-                      <div class="flex flex-col gap-1">
-                        <span class="text-sm font-medium text-gray-800 dark:text-gray-200">上下文条数</span>
-                        <span class="text-xs text-gray-500 dark:text-gray-400 font-normal">控制 AI 记住的历史消息数量</span>
-                      </div>
-                    </template>
-                    <el-slider-optional 
-                      v-model="tempMaxMemoryLength" 
-                      :min="2" 
-                      :max="100" 
-                      :step="1" 
-                      show-input
-                      optional-direction="max" 
-                      optional-text="No Limit" 
-                      class="w-full" />
-                  </el-form-item>
-                </el-form>
-              </div>
-              <div class="px-4 py-3 border-t border-gray-200 dark:border-gray-700 flex gap-2">
-                <el-button type="primary" @click="applySessionSettings" class="flex-1">确定</el-button>
-                <el-button @click="closeAllPanels" class="flex-1">取消</el-button>
-              </div>
-            </div>
-          </div>
-        </transition>
+        <!-- 会话设置模态框 -->
+        <el-dialog 
+          v-model="settingsDialogVisible" 
+          title="会话记忆与压缩配置" 
+          width="600px"
+          append-to-body
+          :close-on-click-modal="false"
+          class="session-settings-dialog"
+        >
+          <ScrollContainer class="w-full h-full min-h-0 px-2 py-4" style="max-height: 500px;">
+            <el-form label-position="left" label-width="50%" size="large">
+              <!-- 自定义配置开关 -->
+              <el-form-item>
+                <template #label>
+                  <div style="display: flex; flex-direction: column; gap: 8px;">
+                    <span class="text-base text-gray-900 dark:text-gray-100 font-medium">自定义记忆配置</span>
+                    <span class="text-xs text-gray-500 dark:text-gray-400 font-normal">开启后将覆盖角色默认的记忆与压缩设置</span>
+                  </div>
+                </template>
+                <div class="w-full max-w-md">
+                  <el-switch 
+                    v-model="tempMemoryConfig.useCustom" 
+                    inline-prompt
+                    active-text="开启"
+                    inactive-text="关闭"
+                  />
+                </div>
+              </el-form-item>
+
+              <!-- 仅在开启自定义时显示详细配置 -->
+              <template v-if="tempMemoryConfig.useCustom">
+                <!-- 上下文条数 -->
+                <el-form-item>
+                  <template #label>
+                    <div class="flex flex-col gap-1">
+                      <span class="text-base text-gray-900 dark:text-gray-100 font-medium">上下文条数</span>
+                      <span class="text-xs text-gray-500 dark:text-gray-400 font-normal">控制对话历史的最大消息数量，影响模型的长期记忆能力</span>
+                    </div>
+                  </template>
+                  <el-slider-optional 
+                    v-model="tempMemoryConfig.maxMemoryLength" 
+                    :min="2" :max="100" :step="1" 
+                    show-input
+                    optional-direction="max" 
+                    optional-text="No Limit" 
+                    class="w-full max-w-md" />
+                </el-form-item>
+
+                <!-- Token 上限 -->
+                <el-form-item>
+                  <template #label>
+                    <div class="flex flex-col gap-1">
+                      <span class="text-base text-gray-900 dark:text-gray-100 font-medium">Token 上限</span>
+                      <span class="text-xs text-gray-500 dark:text-gray-400 font-normal">设置 Token 使用上限，与模型上下文窗口取最小值作为压缩判断基准</span>
+                    </div>
+                  </template>
+                  <div class="w-full max-w-md">
+                    <el-input 
+                      v-model="tempDisplayMaxTokens" 
+                      placeholder="不限制"
+                      clearable
+                      @input="handleTempMaxTokensInput"
+                      @blur="formatTempMaxTokensDisplay"
+                    >
+                      <template #suffix>
+                        <span class="text-gray-400 text-sm">Tokens</span>
+                      </template>
+                    </el-input>
+                    <div class="text-xs text-gray-400 mt-1">支持输入数字或带K/M后缀（如 128K、1M），留空表示不限制</div>
+                  </div>
+                </el-form-item>
+
+                <!-- 触发阈值 -->
+                <el-form-item>
+                  <template #label>
+                    <div style="display: flex; flex-direction: column; gap: 8px;">
+                      <span class="text-base text-gray-900 dark:text-gray-100 font-medium">触发阈值</span>
+                      <span class="text-xs text-gray-500 dark:text-gray-400 font-normal">当已用 Token 达到最大窗口的此比例时触发压缩</span>
+                    </div>
+                  </template>
+                  <el-slider 
+                    v-model="tempMemoryConfig.triggerRatio" 
+                    :min="0.5" :max="0.95" :step="0.05" 
+                    show-input 
+                    format-tooltip="(val) => `${Math.round(val * 100)}%`" 
+                    class="w-full max-w-md" />
+                </el-form-item>
+
+                <!-- 保留目标 -->
+                <el-form-item>
+                  <template #label>
+                    <div style="display: flex; flex-direction: column; gap: 8px;">
+                      <span class="text-base text-gray-900 dark:text-gray-100 font-medium">保留目标</span>
+                      <span class="text-xs text-gray-500 dark:text-gray-400 font-normal">压缩后保留至最大窗口的此比例</span>
+                    </div>
+                  </template>
+                  <el-slider 
+                    v-model="tempMemoryConfig.targetRatio" 
+                    :min="0.2" :max="0.8" :step="0.05" 
+                    show-input 
+                    format-tooltip="(val) => `${Math.round(val * 100)}%`" 
+                    class="w-full max-w-md" />
+                </el-form-item>
+
+                <!-- 启用摘要生成 -->
+                <el-form-item>
+                  <template #label>
+                    <div style="display: flex; flex-direction: column; gap: 8px;">
+                      <span class="text-base text-gray-900 dark:text-gray-100 font-medium">启用摘要生成</span>
+                      <span class="text-xs text-gray-500 dark:text-gray-400 font-normal">开启后会调用 LLM 生成历史对话摘要，关闭则仅进行裁剪</span>
+                    </div>
+                  </template>
+                  <div class="w-full max-w-md">
+                    <el-switch 
+                      v-model="tempMemoryConfig.enableSummary" 
+                      inline-prompt
+                      active-text="开启"
+                      inactive-text="关闭"
+                    />
+                  </div>
+                </el-form-item>
+
+                <el-alert title="提示" type="info" :closable="false" show-icon class="mb-6">
+                  <p class="text-sm">• 触发阈值：控制何时启动压缩（建议 70%-85%）</p>
+                  <p class="text-sm">• 保留目标：控制压缩后的 Token 占用（建议 40%-60%）</p>
+                  <p class="text-sm">• 启用摘要：关闭后将仅裁剪工具结果，不生成语义摘要</p>
+                </el-alert>
+              </template>
+            </el-form>
+          </ScrollContainer>
+          <template #footer>
+            <span class="dialog-footer flex justify-end gap-2">
+              <el-button @click="settingsDialogVisible = false">取消</el-button>
+              <el-button type="primary" @click="applySessionSettings">确定</el-button>
+            </span>
+          </template>
+        </el-dialog>
       </div>
     </div>
   </div>
@@ -301,7 +411,7 @@
 <script setup lang="ts">
 // @ts-nocheck - ChatInput 组件复杂度高，临时使用@ts-nocheck
 import { ref, watch, computed, nextTick, onUnmounted, onMounted, reactive } from 'vue'
-import { ElIcon, ElButton, ElDialog, ElTabs, ElTabPane, ElInput, ElForm, ElFormItem, ElTag } from 'element-plus';
+import { ElIcon, ElButton, ElDialog, ElTabs, ElTabPane, ElInput, ElForm, ElFormItem, ElTag, ElMessage } from 'element-plus';
 import FileItem from './FileItem.vue';
 import ScrollContainer from './ScrollContainer.vue';
 import Avatar from './Avatar.vue';
@@ -326,7 +436,7 @@ import { useBreakpoints, breakpointsTailwind } from '@vueuse/core'
 import { apiService } from '@/services/ApiService';
 
 const breakpoints = useBreakpoints(breakpointsTailwind)
-const isMobile = breakpoints.smaller('md') // md = 768px
+const isMobile = breakpoints.smaller('lg') // md = 768px
 
 const { confirm } = usePopup();
 
@@ -348,12 +458,23 @@ const sessionId = ref(null);
 // 会话设置对话框相关
 const settingsDialogVisible = ref(false);
 const tempMaxMemoryLength = ref(null);
+// 临时压缩配置（对应后端的 memory 分组）
+const tempMemoryConfig = reactive({
+  useCustom: true,
+  maxMemoryLength: null,
+  triggerRatio: 0.8,
+  targetRatio: 0.5,
+  enableSummary: true,
+  maxTokensLimit: null,
+});
+// Token 上限显示值（用于格式化显示）
+const tempDisplayMaxTokens = ref('');
 // 知识库选择器相关
 const kbDialogVisible = ref(false);
 const kbSearchText = ref('');
 const knowledgeBases = ref<any[]>([]); // 知识库列表
 
-// 抽屉面板状态（会话设置保持抽屉样式）
+// 抽屉面板状态（会话设置保持抽屉样式 - 已废弃，改用模态框）
 const settingsPanelVisible = ref(false)
 // 弹窗面板状态（模型和知识库使用弹窗样式）
 const modelPanelVisible = ref(false)
@@ -369,6 +490,72 @@ const settingsPopoverStyle = ref({})
 const anyPanelVisible = computed(() =>
   modelPanelVisible.value || settingsPanelVisible.value || kbPanelVisible.value
 )
+/**
+ * 格式化 Token 值为显示字符串
+ */
+function formatTokenValue(value) {
+  if (!value) return '';
+  const num = Number(value);
+  if (isNaN(num)) return '';
+  
+  // 如果大于等于 1,000,000 且是整百万，使用 M 后缀
+  if (num >= 1000000 && num % 1000000 === 0) {
+    return (num / 1000000) + 'M';
+  }
+  // 如果大于等于 1000 且是整千，使用 K 后缀
+  if (num >= 1000 && num % 1000 === 0) {
+    return (num / 1000) + 'K';
+  }
+  // 否则使用千位分隔符
+  return num.toLocaleString();
+}
+
+/**
+ * 解析用户输入的 Token 值
+ */
+function parseTokenValue(input) {
+  if (!input || input.trim() === '') return null;
+  
+  const trimmed = input.trim();
+  const lowerTrimmed = trimmed.toLowerCase();
+  
+  // 支持 M/m 后缀（百万）
+  if (lowerTrimmed.endsWith('m')) {
+    const numStr = trimmed.slice(0, -1).replace(/,/g, '');
+    const num = Number(numStr);
+    if (isNaN(num)) return null;
+    return Math.round(num * 1000000);
+  }
+  
+  // 支持 K/k 后缀（千）
+  if (lowerTrimmed.endsWith('k')) {
+    const numStr = trimmed.slice(0, -1).replace(/,/g, '');
+    const num = Number(numStr);
+    if (isNaN(num)) return null;
+    return Math.round(num * 1000);
+  }
+  
+  // 普通数字（可能带逗号）
+  const cleanStr = trimmed.replace(/,/g, '');
+  const num = Number(cleanStr);
+  return isNaN(num) ? null : num;
+}
+
+/**
+ * 处理 Token 上限输入
+ */
+function handleTempMaxTokensInput(val) {
+  const parsed = parseTokenValue(val);
+  tempMemoryConfig.maxTokensLimit = parsed;
+}
+
+/**
+ * 格式化 Token 上限显示
+ */
+function formatTempMaxTokensDisplay() {
+  tempDisplayMaxTokens.value = formatTokenValue(tempMemoryConfig.maxTokensLimit);
+}
+
 // 常量定义
 const FILE_TYPES = {
   TEXT: {
@@ -428,8 +615,18 @@ const props = defineProps({
     type: Object,
     default: () => ({
       modelId: null,
-      maxMemoryLength: null,
-      knowledgeBaseIds: [] // 新增：知识库 ID 列表
+      // 新增：记忆与压缩配置分组
+      memory: {
+        useCustom: true, // 默认开启自定义，方便用户直接看到设置
+        maxMemoryLength: null,
+        compressionTriggerRatio: 0.8,
+        compressionTargetRatio: 0.5,
+        enableSummaryCompression: true,
+        maxTokensLimit: null,
+      },
+      knowledgeBaseIds: [], 
+      // 会话特有开关
+      thinkingEnabled: false,
     })
   },
 });
@@ -451,11 +648,6 @@ const styleClass = computed(() => {
     }
   }
   return classes.join(' ') + ' ' + props.class;
-});
-
-const localWebSearchEnabled = computed({
-  get: () => props.webSearchEnabled,
-  set: (value) => emit('update:webSearchEnabled', value)
 });
 
 const localThinkingEnabled = computed({
@@ -595,9 +787,9 @@ const getProviderModels = (providerId) => {
 };
 
 const emit = defineEmits([
-  'update:value', 'update:webSearchEnabled', 'update:thinkingEnabled',
+  'update:value', 'update:thinkingEnabled',
   'send', 'abort', 'tokens-statistic', 'files-change',
-  'toggle-web-search', 'toggle-thinking', 'focus', 'blur',
+  'toggle-thinking', 'focus', 'blur',
   'update:modelId', 'config-change', 'update:knowledgeBaseIds'
 ]);
 
@@ -720,42 +912,47 @@ const reloadModels = async () => {
   await loadModels();
 };
 
-// 打开会话设置面板
+// 打开会话设置模态框
 const openSettingsPanel = () => {
-  // 如果面板已经打开，则关闭它（实现切换效果）
-  if (settingsPanelVisible.value) {
-    closeAllPanels()
-    return
-  }
+  // 初始化临时值（从 memory 分组或顶层字段读取）
+  const settings = props.config || {};
+  const mem = settings.memory || {};
+  
+  // 优先从 memoryEnabled 读取，兼容旧的 useCustom
+  tempMemoryConfig.useCustom = settings.memoryEnabled ?? mem.useCustom ?? true;
+  tempMemoryConfig.maxMemoryLength = mem.maxMemoryLength ?? null;
+  tempMemoryConfig.triggerRatio = mem.compressionTriggerRatio ?? 0.8;
+  tempMemoryConfig.targetRatio = mem.compressionTargetRatio ?? 0.5;
+  tempMemoryConfig.enableSummary = mem.enableSummaryCompression ?? true;
+  tempMemoryConfig.maxTokensLimit = mem.maxTokensLimit || null;
+  // 同步更新显示值
+  tempDisplayMaxTokens.value = formatTokenValue(tempMemoryConfig.maxTokensLimit);
 
-  closeAllPanels()
-  // null/undefined 表示不限制，显示为空；否则显示实际值
-  tempMaxMemoryLength.value = props.config?.maxMemoryLength ?? null
-  settingsPanelVisible.value = true
-
-  // 计算弹窗位置
-  nextTick(() => {
-    calculatePopoverPosition('settings')
-  })
+  settingsDialogVisible.value = true
 };
 
-// 应用会话设置
+// 应用会话设置（模态框确认）
 const applySessionSettings = () => {
-  // 构建配置变更对象
-  const configChanges = {};
+  const configChanges: any = {
+    // 修改：使用 memoryEnabled 替代 useCustom
+    memoryEnabled: tempMemoryConfig.useCustom,
+  };
 
-  // 检查上下文条数是否有变化（允许设置为 0，表示不限制）
-  if (tempMaxMemoryLength.value !== props.config?.maxMemoryLength) {
-    configChanges.maxMemoryLength = tempMaxMemoryLength.value;
+  // 只有当开启自定义配置时，才保存具体的数值
+  if (tempMemoryConfig.useCustom) {
+    configChanges.memory = {
+      maxMemoryLength: tempMemoryConfig.maxMemoryLength,
+      compressionTriggerRatio: tempMemoryConfig.triggerRatio,
+      compressionTargetRatio: tempMemoryConfig.targetRatio,
+      enableSummaryCompression: tempMemoryConfig.enableSummary,
+      maxTokensLimit: tempMemoryConfig.maxTokensLimit,
+    };
   }
 
-  // 只有当有配置变更时才发送事件
-  if (Object.keys(configChanges).length > 0) {
-    console.log('Applying session settings:', configChanges);
-    emit('config-change', configChanges);
-  }
-
-  closeAllPanels()
+  console.log('Applying session settings:', configChanges);
+  emit('config-change', configChanges);
+  ElMessage.success('会话配置已更新');
+  settingsDialogVisible.value = false
 };
 
 // 打开知识库面板
@@ -1116,11 +1313,6 @@ const adjustTextareaHeight = () => {
   textarea.style.height = height + "px";
   isInputExpanded.value = textarea.scrollHeight > 60;
 };
-
-const handleWebSearch = () => {
-  localWebSearchEnabled.value = !localWebSearchEnabled.value;
-  emit('toggle-web-search')
-}
 
 const handleTokensStatistic = () => {
   emit('tokens-statistic')
@@ -1496,19 +1688,20 @@ onUnmounted(() => {
   padding: 6px 12px;
   border-color: transparent;
   background-color: transparent;
+  color: var(--el-text-color-regular);
   display: flex;
   align-items: center;
   justify-content: center;
 }
 
 .model-selector-btn:hover {
-  background-color: var(--el-color-primary-light-9);
+  background-color: var(--el-fill-color-light, #f5f7fa);
   border-color: transparent;
-  color: var(--el-color-primary);
+  color: var(--el-text-color-primary);
 }
 
 .model-selector-btn:active {
-  background-color: var(--el-color-primary-light-8);
+  background-color: var(--el-fill-color, #e5e9ed);
 }
 
 /* 模型选择器对话框样式 */
@@ -1630,5 +1823,38 @@ onUnmounted(() => {
 
 .dark .kb-item-compact:hover {
   background-color: rgba(255, 255, 255, 0.05);
+}
+
+/* 会话设置模态框 - 强制Label区域高度自适应 */
+.session-settings-dialog :deep(.el-form-item__label-wrap) {
+  height: auto !important;
+  min-height: auto !important;
+  max-height: none !important;
+}
+
+.session-settings-dialog :deep(.el-form-item__label) {
+  height: auto !important;
+  min-height: auto !important;
+  line-height: 1.5 !important;
+  overflow: visible !important;
+}
+</style>
+
+<style>
+/* 会话设置模态框 - 全局样式强制覆盖 Element Plus 默认高度 */
+.session-settings-dialog .el-form-item__label-wrap {
+  height: auto !important;
+  min-height: auto !important;
+  max-height: none !important;
+  display: flex !important;
+  align-items: flex-start !important;
+}
+
+.session-settings-dialog .el-form-item__label {
+  height: auto !important;
+  min-height: auto !important;
+  line-height: 1.5 !important;
+  overflow: visible !important;
+  white-space: normal !important;
 }
 </style>

@@ -35,6 +35,7 @@ export class OpenAIAdapter implements LLMAdapter {
         yield this.handleNonStreamResponse(response);
       }
     } catch (error) {
+      this.logger.error(`LLM API error (${params.stream ? "stream" : "non-stream"}):`, error);
       this.handleError(error, params.stream);
     } finally {
       this.cleanup(response);
@@ -118,7 +119,7 @@ export class OpenAIAdapter implements LLMAdapter {
     }
 
     // 调试日志：记录最终请求参数（隐藏敏感信息）
-    this.logger.debug(`LLM Request params for model ${params.model}:`, {
+    this.logger.debug(`LLM Request params for model ${params.model}: ${JSON.stringify({
       model: requestParams.model,
       messages_count: requestParams.messages.length,
       stream: requestParams.stream,
@@ -127,7 +128,7 @@ export class OpenAIAdapter implements LLMAdapter {
       max_tokens: requestParams.max_tokens,
       tools_count: requestParams.tools?.length || 0,
       has_thinking_enabled: params.thinkingEnabled,
-    });
+    }, null, 2)}`);
 
     return requestParams;
   }

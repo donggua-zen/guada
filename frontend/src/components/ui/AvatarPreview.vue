@@ -1,9 +1,8 @@
 <template>
     <div class="avatar-upload-container flex flex-col items-center justify-center">
         <el-tooltip content="点击可更换头像" placement="top">
-            <div class="avatar-preview w-20 h-20 cursor-pointer hover:opacity-80 transition-opacity" @click="triggerAvatarUpload">
-                <Avatar :src="previewUrl" :type="type" :name="name"></Avatar>
-            </div>
+            <Avatar class="avatar-preview w-20 h-20 cursor-pointer hover:opacity-80 transition-opacity"
+                @click="triggerAvatarUpload" :src="previewUrl" :type="type" :name="name"></Avatar>
         </el-tooltip>
         <input ref="avatarInput" type="file" accept="image/*" style="display: none" @change="handleAvatarChanged">
     </div>
@@ -39,7 +38,7 @@ import {
 
 // 禁用属性继承，避免警告
 defineOptions({
-  inheritAttrs: false
+    inheritAttrs: false
 })
 
 const showCropModal = ref(false)
