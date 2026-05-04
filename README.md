@@ -129,83 +129,6 @@ GuaDa 支持将 AI 对话能力扩展到多个即时通讯平台，通过 Bot Ga
 - **知识库集成**: 支持为不同机器人配置专属知识库，实现领域化问答
 - **实例生命周期管理**: 支持动态启动、停止、重启机器人实例，配置热更新
 
-## 🏗️ 技术架构
-
-### 后端技术栈
-
-| 技术 | 版本 | 用途 |
-|------|------|------|
-| **NestJS** | ^11.1.18 | Node.js Web框架 |
-| **TypeScript** | ^6.0.2 | 类型安全的JavaScript超集 |
-| **Prisma ORM** | ^7.6.0 | 数据库ORM和迁移工具 |
-| **SQLite** | - | 主业务数据库（通过Better-SQLite3） |
-| **sqlite-vec** | ^0.1.9 | SQLite向量搜索扩展 |
-| **@node-rs/jieba** | ^2.0.1 | 中文分词器（用于关键词搜索） |
-| **@modelcontextprotocol/sdk** | ^1.29.0 | MCP协议SDK |
-| **tiktoken** | ^1.0.22 | OpenAI Tokenizer |
-| **@huggingface/tokenizers** | ^0.1.3 | HuggingFace Tokenizer |
-| **pdf-parse** | ^2.4.5 | PDF内容提取 |
-| **mammoth** | ^1.12.0 | Word文档解析 |
-| **sharp** | ^0.34.5 | 图片处理 |
-| **openai** | ^4.28.0 | OpenAI SDK |
-| **@google/generative-ai** | ^0.24.1 | Google Gemini SDK |
-| **@larksuiteoapi/node-sdk** | ^1.62.0 | 飞书/Lark Open API SDK |
-| **@wecom/aibot-node-sdk** | ^1.0.6 | 企业微信智能机器人 SDK |
-| **@tencent-weixin/openclaw-weixin** | ^2.1.10 | 微信公众号 SDK |
-| **ws** | ^8.20.0 | WebSocket 客户端 |
-| **bcrypt** | ^6.0.0 | 密码加密 |
-| **passport-jwt** | ^4.0.1 | JWT认证中间件 |
-| **axios** | ^1.15.2 | HTTP 客户端 |
-| **winston** | ^3.19.0 | 日志系统 |
-| **nest-winston** | ^1.10.2 | NestJS 日志集成 |
-
-### 前端技术栈
-
-| 技术 | 版本 | 用途 |
-|------|------|------|
-| **Vue 3** | ^3.5.21 | 渐进式JavaScript框架 |
-| **Vite** | ^7.3.0 | 下一代前端构建工具 |
-| **Pinia** | ^3.0.4 | Vue状态管理 |
-| **Vue Router** | ^4.6.4 | 官方路由管理器 |
-| **Element Plus** | ^2.13.0 | Vue 3 UI组件库 |
-| **Tailwind CSS** | ^4.1.18 | 实用优先的CSS框架 |
-| **Axios** | ^1.13.2 | HTTP客户端 |
-| **Marked** | ^16.4.2 | Markdown解析器 |
-| **marked-highlight** | ^2.2.3 | Markdown 代码高亮扩展 |
-| **Highlight.js** | ^11.11.1 | 代码语法高亮 |
-| **simplebar-vue** | ^2.4.2 | 自定义滚动条 |
-| **VueUse** | ^14.1.0 | Vue组合式工具集 |
-| **@vuelidate/core** | ^2.0.3 | 表单验证 |
-| **@vuelidate/validators** | ^2.0.4 | 表单验证规则 |
-| **diff-dom** | ^5.2.1 | DOM 差异对比 |
-| **nprogress** | ^0.2.0 | 页面加载进度条 |
-| **vue-advanced-cropper** | ^2.8.9 | 图片裁剪组件 |
-
-### 数据库设计
-
-系统使用关系型数据库存储核心数据，主要表包括：
-
-- **Session**: 会话管理，关联用户、角色、模型
-- **Message**: 消息记录，支持树形结构（父子关系）
-- **MessageContent**: 消息内容，支持多轮次（turns）
-- **Model & ModelProvider**: 模型和提供商配置
-- **Character & CharacterGroup**: AI角色及分组
-- **KnowledgeBase & KBFile & KBChunk**: 知识库三层结构（知识库-文件-分块）
-- **Memory**: 长期记忆存储
-- **McpServer**: MCP服务器配置
-- **User & UserSetting**: 用户信息及设置
-- **BotInstance**: 机器人实例管理
-- **SessionContextState**: 会话上下文状态（摘要压缩、清理策略）
-- **File**: 通用文件管理
-
-**向量数据存储**：
-- 使用 **SQLite + sqlite-vec** 扩展实现向量相似度搜索
-- 独立存储文件：`data/vector_db.sqlite`，避免与主业务库锁竞争
-- 集成 **FTS5** 虚拟表实现全文关键词搜索
-- 支持语义搜索、关键词搜索和混合搜索（加权融合）
-
-详细Schema请参考 [prisma/schema.prisma](backend-ts/prisma/schema.prisma)
-
 ## 🚀 快速开始
 
 ### 环境要求
@@ -282,6 +205,82 @@ Electron 应用启动时会**自动初始化数据库**：
 4. **直接登录**：启动后直接使用默认账户登录即可
 
 > 💡 **提示**：Electron 应用的数据库存储在用户数据目录（`app.getPath('userData')`），应用更新时会保留数据。
+
+## 📁 项目架构
+
+### 系统架构图
+
+```
+ ===================================================================
+                       客户端层
+  ┌─────────────────────────┐  ┌─────────────────────────┐
+  │     Web 浏览器           │  │   Electron 桌面应用      │
+  │     Vue 3 + Vite        │  │                          │
+  └───────────┬─────────────┘  └───────────┬─────────────┘
+              │                            │
+              └──────────────┬─────────────┘
+                             │
+                             ▼
+ ===================================================================
+                     API Gateway (REST + SSE)
+                             │
+              ┌──────────────┼──────────────┐
+              │              │              │
+              ▼              ▼              ▼
+ ===================================================================
+  核心业务模块                           支撑模块
+  ┌─────────────────────┐   ┌─────────────────────────┐
+  │  Chat Module        │   │  Auth Module             │
+  │  对话引擎            │   │  JWT 认证                │
+  ├─────────────────────┤   ├─────────────────────────┤
+  │  Knowledge Base     │   │  LLM Core                │
+  │  RAG 知识库          │   │  多模型适配              │
+  ├─────────────────────┤   ├─────────────────────────┤
+  │  Bot Gateway        │   │  File Service            │
+  │  多平台机器人         │   │  文件管理                │
+  ├─────────────────────┤   ├─────────────────────────┤
+  │  Tools & MCP        │   │  User Management         │
+  │  工具调用            │   │  用户管理                │
+  └─────────────────────┘   └─────────────────────────┘
+              │                            │
+              └──────────────┬─────────────┘
+                             │
+                             ▼
+ ===================================================================
+                         数据层
+  ┌─────────────────────┐  ┌─────────────────────┐  ┌──────────────┐
+  │  SQLite             │  │  Vector DB          │  │ File Storage │
+  │  主业务数据库        │  │  sqlite-vec         │  │ 静态文件      │
+  └─────────────────────┘  └─────────────────────┘  └──────────────┘
+                             │
+                             ▼
+ ===================================================================
+                         外部服务
+  ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌──────────────────┐ ┌────────────┐
+  │ QQ Bot   │ │ 企业微信  │ │ 飞书/Lark│ │ LLM Providers    │ │ MCP        │
+  │ API      │ │          │ │          │ │ OpenAI/Gemini等  │ │ Servers    │
+  └──────────┘ └──────────┘ └──────────┘ └──────────────────┘ └────────────┘
+```
+
+**数据流向说明**：
+1. 客户端（Web/Electron）通过 REST + SSE 请求 API Gateway
+2. API Gateway 路由到各业务模块（对话、知识库、机器人、工具）
+3. 业务模块调用支撑模块（认证、模型适配、文件管理）
+4. 数据持久化到 SQLite / Vector DB / 文件存储
+5. 业务模块通过外部服务对接 LLM 提供商、MCP 服务器、IM 平台
+
+### 核心模块说明
+
+| 模块 | 职责 | 关键技术 |
+|------|------|----------|
+| **Chat Module** | 对话引擎、上下文管理、流式响应 | AgentService, ContextManager, SSE |
+| **Knowledge Base** | 文档解析、向量检索、混合搜索 | sqlite-vec, FTS5, jieba 分词 |
+| **Bot Gateway** | 多平台机器人适配、消息编排 | 策略模式, WebSocket, 消息缓冲 |
+| **Tools & MCP** | 工具发现、执行编排、结果清理 | MCP SDK, ToolOrchestrator |
+| **LLM Core** | 多模型适配、Token 计算 | OpenAI SDK, tiktoken |
+| **File Service** | 文件上传、图片处理、预览生成 | sharp, UploadPathService |
+| **Settings** | 系统设置、免登录配置、工具状态 | SettingsService |
+| **Auth** | JWT 认证、用户鉴权 | passport-jwt, bcrypt |
 
 ## 📖 API文档
 
