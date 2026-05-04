@@ -3,6 +3,7 @@ import { ConfigModule } from '@nestjs/config';
 import { UploadPathService } from "./upload-path.service";
 import { UrlService } from "./url.service";
 import { SettingsStorage } from "../utils/settings-storage.util";
+import { WorkspaceService } from "./workspace.service";
 
 /**
  * 共享服务模块
@@ -11,7 +12,7 @@ import { SettingsStorage } from "../utils/settings-storage.util";
 @Global()
 @Module({
   imports: [ConfigModule],
-  providers: [UploadPathService, UrlService, SettingsStorage],
-  exports: [UploadPathService, UrlService, SettingsStorage],
+  providers: [UploadPathService, UrlService, SettingsStorage, WorkspaceService],
+  exports: [UploadPathService, UrlService, SettingsStorage, WorkspaceService],
 })
 export class SharedModule {}

@@ -136,7 +136,7 @@ export class KnowledgeBaseToolProvider implements IToolProvider {
     try {
       const promptParts: string[] = [];
 
-      promptParts.push("【知识库工具使用说明】");
+      promptParts.push("# 知识库工具使用说明");
 
       const toolInstructions = `
 你拥有以下知识库管理工具，可以主动调用它们来查询和利用知识库内容：

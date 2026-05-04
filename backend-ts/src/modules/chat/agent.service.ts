@@ -1,4 +1,4 @@
-import { Injectable, Logger, ConflictException } from "@nestjs/common";
+﻿import { Injectable, Logger, ConflictException, Optional } from "@nestjs/common";
 import { SessionRepository } from "../../common/database/session.repository";
 import { LLMService } from "../llm-core/llm.service";
 import { ToolOrchestrator } from "../tools/tool-orchestrator.service";
@@ -7,6 +7,7 @@ import { ToolContextFactory } from "../tools/tool-context";
 import { MessageRecord, LLMResponseChunk } from "../llm-core/types/llm.types";
 import { ConversationContextFactory } from "./conversation-context.factory";
 import { IConversationContext } from "./interfaces";
+import { SkillOrchestrator } from "../skills/core/skill-orchestrator.service";
 
 /**
  * 思考时间信息（简单数据容器）
@@ -46,6 +47,7 @@ export class AgentService {
     private sessionLockService: SessionLockService,
     private toolContextFactory: ToolContextFactory,
     private conversationContextFactory: ConversationContextFactory,
+    @Optional() private skillOrchestrator?: SkillOrchestrator,
   ) { }
 
   /**
@@ -183,7 +185,10 @@ export class AgentService {
     // 初始化会话上下文，加载历史消息并应用压缩检查点恢复状态
     await conversationContext.initialize({
       memory: sessionSettings.memory, // 直接传递合并后的 memory 分组
-      systemPrompt: sessionSettings.systemPrompt + "\n" + toolPrompts,
+      systemPrompt: [
+        sessionSettings.systemPrompt,
+        toolPrompts,
+      ].filter(Boolean).join('\n'),
       thinkingEnabled,
       userMessageId,
       contextWindow: effectiveContextWindow,

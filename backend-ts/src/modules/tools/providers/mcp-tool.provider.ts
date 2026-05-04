@@ -101,7 +101,7 @@ export class MCPToolProvider implements IToolProvider {
     try {
       const promptParts: string[] = [];
 
-      promptParts.push("【MCP 工具使用说明】");
+      promptParts.push("# MCP 工具使用说明");
 
       const toolInstructions = `
 你拥有以下 MCP（Model Context Protocol）工具，可以主动调用它们来扩展功能：

@@ -138,7 +138,7 @@ export class MemoryToolProvider implements IToolProvider {
 
       // ========== 第一部分：长期记忆注入 ==========
 
-      promptParts.push("【重要记忆】");
+      promptParts.push("# 重要记忆");
 
       // 按类型分组展示
       const factualMemories = longTermMemories.filter(
@@ -148,7 +148,7 @@ export class MemoryToolProvider implements IToolProvider {
         (m) => m.memoryType === "soul",
       );
 
-      promptParts.push("\n### 事实性记忆 (FACTUAL)");
+      promptParts.push("\n## 事实性记忆 (FACTUAL)");
       promptParts.push(
         "这些是核心事实知识库，包括用户偏好、重要决策、项目状态等关键信息：",
       );
@@ -162,7 +162,7 @@ export class MemoryToolProvider implements IToolProvider {
       }
       promptParts.push("</factual-memory>");
 
-      promptParts.push("\n### 人格定义 (SOUL)");
+      promptParts.push("\n## 人格定义 (SOUL)");
       promptParts.push("这些定义了 AI 的角色定位、语言风格和行为规则：");
       promptParts.push("<soul-memory>");
       if (soulMemories.length > 0) {
@@ -175,7 +175,7 @@ export class MemoryToolProvider implements IToolProvider {
       promptParts.push("</soul-memory>");
 
       // ========== 第二部分：备忘录目录注入 ==========
-      promptParts.push("\n【备忘录目录】");
+      promptParts.push("\n# 备忘录目录");
       promptParts.push("以下是你可访问的备忘录列表，可通过标题读取具体内容：");
       promptParts.push("<memo-list>");
       if (memoList.length > 0) {
@@ -188,7 +188,7 @@ export class MemoryToolProvider implements IToolProvider {
       promptParts.push("</memo-list>");
 
       // ========== 第三部分：工具使用说明 ==========
-      promptParts.push("\n【记忆工具使用说明】");
+      promptParts.push("\n# 记忆工具使用说明");
       const toolInstructions = `
 你拥有以下记忆管理工具，需要根据信息的重要性和使用频率选择合适的存储方式：
 

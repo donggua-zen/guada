@@ -248,12 +248,16 @@ async function startBackend(): Promise<void> {
       const staticDir = path.join(backendPath, 'static')
       const uploadDir = path.join(userDataPath, 'file_stores')
       const logsDir = path.join(userDataPath, 'logs') // 后端日志目录
+      const skillsDir = path.join(userDataPath, 'skills') // 技能目录
+      const workspaceDir = path.join(userDataPath, 'workspace') // 会话工作目录
       
       console.log('数据库路径:', dbPath)
       console.log('向量数据库路径:', vectorDbPath)
       console.log('基础静态目录:', staticDir)
       console.log('上传文件目录:', uploadDir)
       console.log('后端日志目录:', logsDir)
+      console.log('技能目录:', skillsDir)
+      console.log('会话工作目录:', workspaceDir)
       
       const spawnOptions: any = {
         cwd: backendPath,
@@ -268,6 +272,8 @@ async function startBackend(): Promise<void> {
           UPLOAD_URL_PREFIX: '/uploads',
           SETTINGS_DIR: userDataPath, // 传递设置目录
           LOGS_DIR: logsDir, // 传递后端日志目录到用户数据区
+          SKILLS_DIR: skillsDir, // 传递技能目录到用户数据区
+          WORKSPACE_BASE_DIR: workspaceDir, // 传递会话工作目录基础路径
         },
         stdio: ['pipe', 'pipe', 'pipe'], // 开发模式不需要 IPC
         shell: true
@@ -300,12 +306,16 @@ async function startBackend(): Promise<void> {
       const staticDir = path.join(backendPath, 'static')
       const uploadDir = path.join(userDataPath, 'file_stores')
       const logsDir = path.join(userDataPath, 'logs') // 后端日志目录
+      const skillsDir = path.join(userDataPath, 'skills') // 技能目录
+      const workspaceDir = path.join(userDataPath, 'workspace') // 会话工作目录
       
       console.log('数据库路径:', dbPath)
       console.log('向量数据库路径:', vectorDbPath)
       console.log('基础静态目录:', staticDir)
       console.log('上传文件目录:', uploadDir)
       console.log('后端日志目录:', logsDir)
+      console.log('技能目录:', skillsDir)
+      console.log('会话工作目录:', workspaceDir)
       
       // 使用 spawn 启动后端
       const spawnOptions: any = {
@@ -324,6 +334,8 @@ async function startBackend(): Promise<void> {
           UPLOAD_URL_PREFIX: '/uploads',
           SETTINGS_DIR: userDataPath, // 传递设置目录
           LOGS_DIR: logsDir, // 传递后端日志目录到用户数据区
+          SKILLS_DIR: skillsDir, // 传递技能目录到用户数据区
+          WORKSPACE_BASE_DIR: workspaceDir, // 传递会话工作目录基础路径
         },
         stdio: ['pipe', 'pipe', 'pipe', 'ipc'] // 增加 'ipc' 以支持 process.send
       }

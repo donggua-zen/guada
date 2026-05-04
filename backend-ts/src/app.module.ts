@@ -17,6 +17,7 @@ import { KnowledgeBaseModule } from "./modules/knowledge-base/knowledge-base.mod
 import { VectorDbModule } from "./common/vector-db";
 import { McpClientModule } from "./common/mcp/mcp-client.module";
 import { BotGatewayModule } from "./modules/bot-gateway/bot-gateway.module";
+import { SkillsModule } from './modules/skills/skills.module';
 
 @Module({
   imports: [
@@ -29,6 +30,7 @@ import { BotGatewayModule } from "./modules/bot-gateway/bot-gateway.module";
     VectorDbModule, // 向量数据库模块
     McpClientModule, // MCP 客户端模块（全局）
     LlmCoreModule, // LLM 核心模块（全局）
+    SkillsModule, // Skills 集成框架模块
     ChatModule,
     ModelsModule,
     AuthModule,

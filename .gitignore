@@ -21,6 +21,7 @@ backend-ts/data/avatars/**
 backend-ts/static/file_stores/**
 backend-ts/data/**
 backend-ts/node_modules_production/
+backend-ts/skills/**
 
 # Electron
 release/

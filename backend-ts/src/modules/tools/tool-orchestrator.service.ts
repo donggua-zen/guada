@@ -11,6 +11,7 @@ import { TimeToolProvider } from "./providers/time-tool.provider";
 import { ImageRecognitionToolProvider } from "./providers/image-recognition-tool.provider";
 import { ShellToolProvider } from "./providers/shell-tool.provider";
 import { ToolContext } from "./tool-context";
+import { SkillToolBridgeService } from '../skills/integration/skill-tool-bridge.service';
 
 export interface ToolMetadata {
   namespace: string;
@@ -34,6 +35,7 @@ export class ToolOrchestrator {
     timeProvider: TimeToolProvider,
     imageRecognitionProvider: ImageRecognitionToolProvider,
     shellProvider: ShellToolProvider,
+    skillToolBridge: SkillToolBridgeService,
   ) {
     this.addProvider(kbProvider);
     this.addProvider(memoryProvider);
@@ -41,6 +43,7 @@ export class ToolOrchestrator {
     this.addProvider(timeProvider);
     this.addProvider(imageRecognitionProvider);
     this.addProvider(shellProvider);
+    this.addProvider(skillToolBridge);
   }
 
   addProvider(provider: IToolProvider) {
@@ -59,6 +62,7 @@ export class ToolOrchestrator {
 
   async getAllTools(context: ToolContext): Promise<any[]> {
     const allTools: any[] = [];
+    const toolNames = new Set<string>();
     
     for (const [namespace, provider] of this.providers.entries()) {
       const config = context.getProviderConfig(namespace);
@@ -67,15 +71,26 @@ export class ToolOrchestrator {
       
       const tools = await provider.getTools(config.enabledTools);
       
-      const namespacedTools = tools.map(tool => ({
-        ...tool,
-        name: `${namespace}__${tool.name}`,
-      }));
+      const namespacedTools = tools.map(tool => {
+        const fullName = `${namespace}__${tool.name}`;
+        
+        // 检查重复
+        if (toolNames.has(fullName)) {
+          this.logger.warn(`Duplicate tool name detected: ${fullName}`);
+        }
+        toolNames.add(fullName);
+        
+        return {
+          ...tool,
+          name: fullName,
+        };
+      });
       
       allTools.push(...namespacedTools);
     }
     
-    this.logger.debug(`Collected ${allTools.length} tools`);
+    this.logger.debug(`Collected ${allTools.length} tools, unique names: ${toolNames.size}`);
+    this.logger.debug(`Tool names: ${Array.from(toolNames).join(', ')}`);
     return allTools;
   }
 

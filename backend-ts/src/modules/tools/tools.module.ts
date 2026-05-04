@@ -14,9 +14,11 @@ import { KBFileRepository } from "../../common/database/kb-file.repository";
 import { KBChunkRepository } from "../../common/database/kb-chunk.repository";
 import { FileRepository } from "../../common/database/file.repository";
 import { PrismaService } from "../../common/database/prisma.service";
+import { SkillsModule } from '../skills/skills.module';
+import { SkillToolBridgeService } from '../skills/integration/skill-tool-bridge.service';
 
 @Module({
-  imports: [VectorDbModule],
+  imports: [VectorDbModule, SkillsModule],
   providers: [
     ToolOrchestrator,
     ToolContextFactory,
@@ -26,6 +28,7 @@ import { PrismaService } from "../../common/database/prisma.service";
     TimeToolProvider,
     ImageRecognitionToolProvider,
     ShellToolProvider,
+    SkillToolBridgeService,
     EmbeddingService,
     KnowledgeBaseRepository,
     KBFileRepository,

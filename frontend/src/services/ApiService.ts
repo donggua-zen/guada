@@ -657,6 +657,91 @@ class ApiService implements IApiService {
     return this.fetchMcpServers()
   }
 
+  // ========== Skills 管理 ==========
+  /**
+   * 获取所有已加载的 Skills 列表
+   */
+  async fetchSkills(): Promise<PaginatedResponse<any>> {
+    return await this._request('/skills')
+  }
+
+  /**
+   * 获取单个 Skill 详情
+   */
+  async fetchSkillDetail(skillId: string): Promise<any> {
+    return await this._request(`/skills/${skillId}`)
+  }
+
+  /**
+   * 获取 Skill 的文档内容（SKILL.md）
+   */
+  async fetchSkillDocumentation(skillId: string): Promise<{ content: string }> {
+    return await this._request(`/skills/${skillId}/documentation`)
+  }
+
+  /**
+   * 触发手动扫描 Skills
+   */
+  async scanSkills(): Promise<any> {
+    return await this._request('/skills/scan', { method: 'POST' })
+  }
+
+  /**
+   * 热加载指定 Skill
+   */
+  async reloadSkill(skillId: string): Promise<any> {
+    return await this._request(`/skills/${skillId}/reload`, { method: 'POST' })
+  }
+
+  /**
+   * 获取自动扫描状态
+   */
+  async getAutoScanStatus(): Promise<{ enabled: boolean }> {
+    return await this._request('/skills/watcher/status')
+  }
+
+  /**
+   * 切换自动扫描开关
+   */
+  async toggleAutoScan(enabled: boolean): Promise<{ enabled: boolean }> {
+    return await this._request('/skills/watcher/toggle', {
+      method: 'POST',
+      data: { enabled },
+    })
+  }
+
+  /**
+   * 安装 Skill（上传 ZIP 文件）
+   */
+  async installSkill(file: File): Promise<{ success: boolean; skillId?: string; message: string }> {
+    const formData = new FormData()
+    formData.append('file', file)
+
+    try {
+      // 使用 _request 方法确保携带认证信息
+      return await this._request(
+        '/skills/install',
+        {
+          method: 'POST',
+          data: formData,
+          headers: {
+            'Content-Type': 'multipart/form-data',
+          },
+        }
+      )
+    } catch (error) {
+      console.error('安装 Skill 失败:', error)
+      throw error
+    }
+  }
+
+  /**
+   * 卸载 Skill
+   */
+  async uninstallSkill(skillId: string): Promise<{ success: boolean; message: string }> {
+    return await this._request(`/skills/${skillId}/uninstall`, { method: 'POST' })
+  }
+
   // ========== 知识库管理 ==========
 
   /**

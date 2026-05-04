@@ -15,6 +15,7 @@ import {
   PaginatedResponse,
 } from "../../common/types/pagination";
 import { UrlService } from "../../common/services/url.service";
+import { WorkspaceService } from "../../common/services/workspace.service";
 import { SG_MODELS, SK_MOD_CHAT, SK_MOD_TITLE_MODEL } from "../../constants/settings.constants";
 import { ConversationContextFactory } from "./conversation-context.factory";
 
@@ -33,6 +34,7 @@ export class SessionService {
     private tokenizerService: TokenizerService,
     private urlService: UrlService,
     private conversationContextFactory: ConversationContextFactory,
+    private workspaceService: WorkspaceService,
   ) { }
 
   /**
@@ -276,6 +278,11 @@ export class SessionService {
 
     // 级联删除消息（Prisma Schema 中已配置 onDelete: Cascade）
     await this.sessionRepo.deleteById(sessionId);
+
+    // 异步清理会话工作目录
+    this.workspaceService.cleanupWorkspace(sessionId).catch(err =>
+      this.logger.error(`Failed to cleanup workspace for session ${sessionId}: ${err.message}`)
+    );
   }
 
   /**

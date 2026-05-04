@@ -20,6 +20,7 @@ import { ToolsModule } from "../tools/tools.module";
 import { CharactersModule } from "../characters/characters.module";
 import { FilesModule } from "../files/files.module";
 import { LlmCoreModule } from "../llm-core/llm-core.module";
+import { SkillsModule } from "../skills/skills.module";
 
 import { SessionLockService } from "./session-lock.service";
 import { UploadPathService } from "../../common/services/upload-path.service";
@@ -29,7 +30,7 @@ import { CompressionEngine } from "./compression-engine";
 import { ConversationContextFactory, MESSAGE_STORE_TOKEN, COMPRESSION_STRATEGY_TOKEN } from "./conversation-context.factory";
 
 @Module({
-  imports: [AuthModule, ToolsModule, CharactersModule, FilesModule, LlmCoreModule],
+  imports: [AuthModule, ToolsModule, CharactersModule, FilesModule, LlmCoreModule, SkillsModule],
   controllers: [ChatController, MessagesController, SessionsController],
   providers: [
     AgentService,
