@@ -272,7 +272,8 @@ export class AgentService {
       // 构建待保存的消息记录数组，包含助手回复和后续的工具响应
       const parts: MessageRecord[] = [assistantResponse];
       // 处理工具执行：若模型返回了工具调用指令，则批量执行所有工具
-      if (assistantResponse.metadata?.finishReason === "tool_calls" && toolContext) {
+      // 不能使用ssistantResponse.metadata?.finishReason === "tool_calls"判断
+      if (assistantResponse.toolCalls && toolContext) {
         const toolResponses = await this.toolOrchestrator.executeBatch(
           assistantResponse.toolCalls.map((tc: any) => ({
             id: tc.id,

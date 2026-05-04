@@ -1,5 +1,6 @@
 import { Injectable, Logger } from "@nestjs/common";
 import { OpenAIAdapter } from "./adapters/openai.adapter";
+import { OpenAIResponseAdapter } from "./adapters/openai-response.adapter";
 import { GeminiAdapter } from "./adapters/gemini.adapter";
 import { LLMAdapter } from "./adapters/base.adapter";
 import { LLMCompletionParams } from "./types/llm.types";
@@ -11,11 +12,12 @@ export class LLMService {
 
   constructor(
     private openAIAdapter: OpenAIAdapter,
+    private openAIResponseAdapter: OpenAIResponseAdapter,
     private geminiAdapter: GeminiAdapter,
   ) {
     // 注册适配器
     this.adapters.set("openai", openAIAdapter);
-    this.adapters.set("openai-response", openAIAdapter);
+    this.adapters.set("openai-response", openAIResponseAdapter);
     this.adapters.set("gemini", geminiAdapter);
   }
 
@@ -27,7 +29,7 @@ export class LLMService {
   ): Promise<any> | AsyncGenerator<any, void, unknown> {
     const protocol = params.providerConfig?.protocol || "openai";
     const adapter = this.adapters.get(protocol);
-
+    this.logger.log(`Using ${protocol} adapter`);
     if (!adapter) {
       throw new Error(`Unsupported protocol: ${protocol}`);
     }
