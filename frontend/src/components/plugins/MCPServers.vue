@@ -19,20 +19,20 @@
         </div>
 
         <!-- MCP 服务器列表 -->
-        <div class="rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-[#1e1e1e] overflow-hidden">
+        <div class="rounded-lg border border-gray-200 dark:border-[#232428] bg-white dark:bg-[#232428] overflow-hidden">
             <ul v-if="servers.length > 0">
                 <li v-for="server in servers" :key="server.id"
-                    class="flex items-center py-4 px-4 border-b border-gray-200 dark:border-gray-700 last:border-b-0 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors">
+                    class="flex items-center py-4 px-4 border-b border-gray-200 dark:border-[#2e3035] last:border-b-0 hover:bg-gray-50 dark:hover:bg-[#2a2c30]/50 transition-colors">
                     <div class="flex-1">
                         <div class="flex items-center gap-2 mb-1">
                             <div class="font-semibold text-base">{{ server.name }}</div>
                             <el-tag v-if="server.enabled" type="success" size="small">已启用</el-tag>
                             <el-tag v-else type="info" size="small">已禁用</el-tag>
                         </div>
-                        <div class="text-sm text-gray-500 dark:text-gray-400 truncate max-w-md">
+                        <div class="text-sm text-gray-500 dark:text-[#8b8d95] truncate max-w-md">
                             {{ server.url }}
                         </div>
-                        <div v-if="server.description" class="text-sm text-gray-400 dark:text-gray-500 mt-1">
+                        <div v-if="server.description" class="text-sm text-gray-400 dark:text-[#6b6d75] mt-1">
                             {{ server.description }}
                         </div>
                     </div>
@@ -107,7 +107,7 @@
 
                     <div v-else class="tools-panel">
                         <div class="flex items-center justify-between mb-3">
-                            <div class="text-sm text-gray-600 dark:text-gray-400">
+                            <div class="text-sm text-gray-600 dark:text-[#8b8d95]">
                                 已获取到 {{ toolsList.length }} 个工具
                             </div>
                             <el-button size="small" @click="handleRefreshTools" :loading="refreshingTools">
@@ -120,14 +120,14 @@
 
                         <div v-if="toolsList.length > 0" class="tools-list">
                             <div v-for="(tool, index) in toolsList" :key="index"
-                                class="tool-item p-3 mb-2 rounded border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50">
+                                class="tool-item p-3 mb-2 rounded border border-gray-200 dark:border-[#2e3035] bg-gray-50 dark:bg-[#2a2c30]/50">
                                 <div class="font-semibold text-sm mb-2">{{ tool.name }}</div>
-                                <div class="text-xs text-gray-500 dark:text-gray-400 mb-2 line-clamp-2">
+                                <div class="text-xs text-gray-500 dark:text-[#8b8d95] mb-2 line-clamp-2">
                                     {{ tool.description || '暂无描述' }}
                                 </div>
                                 <div v-if="tool.inputSchema" class="text-xs">
                                     <div class="text-gray-400 mb-1">参数：</div>
-                                    <div class="text-gray-600 dark:text-gray-300">
+                                    <div class="text-gray-600 dark:text-[#e8e9ed]">
                                         <span
                                             v-if="!tool.inputSchema.properties || Object.keys(tool.inputSchema.properties).length === 0"
                                             class="text-gray-400">
@@ -139,7 +139,7 @@
                                                 <span class="font-mono text-blue-600 dark:text-blue-400">{{ paramName
                                                     }}</span>
                                                 <span class="text-gray-400">:</span>
-                                                <span class="text-gray-600 dark:text-gray-300 flex-1">
+                                                <span class="text-gray-600 dark:text-[#e8e9ed] flex-1">
                                                     {{ paramInfo.description || paramInfo.type || '' }}
                                                 </span>
                                                 <el-tag
@@ -176,12 +176,12 @@
         <!-- 导入配置对话框 -->
         <el-dialog v-model="showImportModal" title="导入 MCP 服务器配置" width="50%" align-center destroy-on-close>
             <div class="mb-4">
-                <div class="text-sm text-gray-600 dark:text-gray-400 mb-2">
+                <div class="text-sm text-gray-600 dark:text-[#8b8d95] mb-2">
                     请粘贴 MCP 服务器配置 JSON 数据，支持以下格式：
                 </div>
-                <ul class="text-xs text-gray-500 dark:text-gray-500 list-disc list-inside space-y-1">
-                    <li>标准格式：<code class="bg-gray-100 dark:bg-gray-800 px-1 rounded">{"mcpServers": {...}}</code></li>
-                    <li>单个服务器对象格式：<code class="bg-gray-100 dark:bg-gray-800 px-1 rounded">{"name": "...", "baseUrl":
+                <ul class="text-xs text-gray-500 dark:text-[#6b6d75] list-disc list-inside space-y-1">
+                    <li>标准格式：<code class="bg-gray-100 dark:bg-[#2a2c30] px-1 rounded">{"mcpServers": {...}}</code></li>
+                    <li>单个服务器对象格式：<code class="bg-gray-100 dark:bg-[#2a2c30] px-1 rounded">{"name": "...", "baseUrl":
                     "..."}</code></li>
                 </ul>
             </div>

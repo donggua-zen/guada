@@ -12,7 +12,7 @@
     </div>
 
     <div class="space-y-4">
-      <div class="text-sm text-gray-600 dark:text-gray-400 mb-4">
+      <div class="text-sm text-gray-600 dark:text-[#8b8d95] mb-4">
         全局工具设置决定了哪些工具对所有角色可用。角色级别的工具设置会在此基础上进一步限制。
       </div>
 
@@ -21,11 +21,11 @@
         <div
           v-for="tool in globalTools"
           :key="tool.namespace"
-          class="rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden bg-white dark:bg-[#1e1e1e] transition-all hover:shadow-md"
+          class="rounded-lg border border-gray-200 dark:border-[#232428] overflow-hidden bg-white dark:bg-[#232428] transition-all hover:shadow-md"
         >
           <div class="p-4">
             <div class="flex items-start justify-between gap-2 mb-2">
-              <h3 class="text-base font-semibold text-gray-900 dark:text-gray-100 flex-1 truncate">
+              <h3 class="text-base font-semibold text-gray-900 dark:text-[#e8e9ed] flex-1 truncate">
                 {{ tool.displayName }}
               </h3>
               <el-switch
@@ -39,11 +39,11 @@
               />
             </div>
             
-            <p class="text-xs text-gray-600 dark:text-gray-400 mb-2 line-clamp-2 min-h-[2.5rem]">
+            <p class="text-xs text-gray-600 dark:text-[#8b8d95] mb-2 line-clamp-2 min-h-[2.5rem]">
               {{ tool.description }}
             </p>
             
-            <div class="text-xs text-gray-500 dark:text-gray-500">
+            <div class="text-xs text-gray-500 dark:text-[#6b6d75]">
               <el-tag size="small" type="info" effect="plain">
                 {{ tool.tools?.length || 0 }} 个工具
               </el-tag>
