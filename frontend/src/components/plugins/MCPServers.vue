@@ -64,30 +64,73 @@
         <!-- 添加/编辑服务器对话框 -->
         <el-dialog v-model="showModal" :title="isEditMode ? '编辑 MCP 服务器' : '添加 MCP 服务器'" width="40%" align-center
             destroy-on-close>
-            <!-- Tab 切换 -->
-            <el-tabs v-model="activeTab" class="mb-4">
+            <!-- 使用 ScrollContainer 包裹内容以支持滚动 -->
+            <ScrollContainer class="h-[60vh]">
+                <!-- Tab 切换 -->
+                <el-tabs v-model="activeTab" class="mb-4">
                 <el-tab-pane label="基本配置" name="config">
                     <el-form ref="formRef" :model="serverForm" :rules="formRules" label-position="left"
-                        label-width="100px" size="large">
+                        label-width="120px" size="large">
                         <el-form-item label="服务器名称" prop="name">
                             <el-input v-model="serverForm.name" placeholder="请输入服务器名称" />
                         </el-form-item>
 
-                        <el-form-item label="服务地址" prop="url">
-                            <el-input v-model="serverForm.url" placeholder="https://example.com/mcp" />
+                        <!-- HTTP 协议配置 (sse/streamableHttp) -->
+                        <template v-if="serverForm.type !== 'stdio'">
+                            <el-form-item label="服务地址" prop="url">
+                                <el-input v-model="serverForm.url" placeholder="https://example.com/mcp" />
+                            </el-form-item>
+
+                            <el-form-item label="HTTP 请求头" prop="headers">
+                                <el-input v-model="serverForm.headers" type="textarea" :rows="5"
+                                    placeholder="请输入自定义 HTTP 请求头，一行一个，格式：Header-Name: value&#10;例如:&#10;Authorization: Bearer your_token&#10;X-API-Key: your_api_key" />
+                                <div class="text-xs text-gray-400 mt-1">
+                                    每行一个请求头，格式为 "Header-Name: value"
+                                </div>
+                            </el-form-item>
+                        </template>
+
+                        <!-- Stdio 协议配置 -->
+                        <template v-if="serverForm.type === 'stdio'">
+                            <el-form-item label="命令" prop="command">
+                                <el-input v-model="serverForm.command" placeholder="例如: npx, python, node" />
+                                <div class="text-xs text-gray-400 mt-1">
+                                    要执行的命令或可执行文件
+                                </div>
+                            </el-form-item>
+
+                            <el-form-item label="参数" prop="args">
+                                <el-input v-model="serverForm.args" type="textarea" :rows="3"
+                                    placeholder="每行一个参数，例如:&#10;-m&#10;mcp_server&#10;--port&#10;3000" />
+                                <div class="text-xs text-gray-400 mt-1">
+                                    每行一个参数
+                                </div>
+                            </el-form-item>
+
+                            <el-form-item label="环境变量" prop="env">
+                                <el-input v-model="serverForm.env" type="textarea" :rows="5"
+                                    placeholder="请输入环境变量，一行一个，格式：KEY=value&#10;例如:&#10;API_KEY=your_api_key&#10;NODE_ENV=production" />
+                                <div class="text-xs text-gray-400 mt-1">
+                                    每行一个环境变量，格式为 "KEY=value"
+                                </div>
+                            </el-form-item>
+
+                            <el-form-item label="工作目录" prop="cwd">
+                                <el-input v-model="serverForm.cwd" placeholder="可选，例如: /path/to/working/dir" />
+                            </el-form-item>
+                        </template>
+
+                        <el-form-item label="协议类型" prop="type">
+                            <el-select v-model="serverForm.type" placeholder="选择协议类型" clearable style="width: 100%">
+                                <el-option label="标准输入 / 输出 (stdio)" value="stdio" />
+                                <el-option label="服务器发送事件 (sse)" value="sse" />
+                                <el-option label="可流式传输的 HTTP (streamableHttp)" value="streamableHttp" />
+                            </el-select>
                         </el-form-item>
 
                         <el-form-item label="描述信息" prop="description">
                             <el-input v-model="serverForm.description" type="textarea" :rows="3"
                                 placeholder="可选，描述此服务器的用途" />
-                        </el-form-item>
-
-                        <el-form-item label="HTTP 请求头" prop="headers">
-                            <el-input v-model="serverForm.headers" type="textarea" :rows="5"
-                                placeholder="请输入自定义 HTTP 请求头，一行一个，格式：Header-Name: value&#10;例如:&#10;Authorization: Bearer your_token&#10;X-API-Key: your_api_key" />
-                            <div class="text-xs text-gray-400 mt-1">
-                                每行一个请求头，格式为 "Header-Name: value"
-                            </div>
                         </el-form-item>
 
                         <el-form-item label="启用状态">
@@ -164,6 +207,7 @@
                     </div>
                 </el-tab-pane>
             </el-tabs>
+            </ScrollContainer>
 
             <template #footer>
                 <span class="dialog-footer">
@@ -175,18 +219,19 @@
 
         <!-- 导入配置对话框 -->
         <el-dialog v-model="showImportModal" title="导入 MCP 服务器配置" width="50%" align-center destroy-on-close>
-            <div class="mb-4">
-                <div class="text-sm text-gray-600 dark:text-[#8b8d95] mb-2">
-                    请粘贴 MCP 服务器配置 JSON 数据，支持以下格式：
+            <ScrollContainer class="h-[60vh]">
+                <div class="mb-4">
+                    <div class="text-sm text-gray-600 dark:text-[#8b8d95] mb-2">
+                        请粘贴 MCP 服务器配置 JSON 数据，支持以下格式：
+                    </div>
+                    <ul class="text-xs text-gray-500 dark:text-[#6b6d75] list-disc list-inside space-y-1">
+                        <li>标准格式：<code class="bg-gray-100 dark:bg-[#2a2c30] px-1 rounded">{"mcpServers": {...}}</code></li>
+                        <li>单个服务器对象格式：<code class="bg-gray-100 dark:bg-[#2a2c30] px-1 rounded">{"name": "...", "baseUrl":
+                        "..."}</code></li>
+                    </ul>
                 </div>
-                <ul class="text-xs text-gray-500 dark:text-[#6b6d75] list-disc list-inside space-y-1">
-                    <li>标准格式：<code class="bg-gray-100 dark:bg-[#2a2c30] px-1 rounded">{"mcpServers": {...}}</code></li>
-                    <li>单个服务器对象格式：<code class="bg-gray-100 dark:bg-[#2a2c30] px-1 rounded">{"name": "...", "baseUrl":
-                    "..."}</code></li>
-                </ul>
-            </div>
 
-            <el-input v-model="importJsonText" type="textarea" :rows="15" placeholder='请粘贴 JSON 配置，例如：
+                <el-input v-model="importJsonText" type="textarea" :rows="15" placeholder='请粘贴 JSON 配置，例如：
 {
   "mcpServers": {
     "WebSearch": {
@@ -201,6 +246,7 @@
     }
   }
 }' />
+            </ScrollContainer>
 
             <template #footer>
                 <span class="dialog-footer">
@@ -226,6 +272,7 @@ import {
 } from '@vicons/material'
 import { usePopup } from '../../composables/usePopup'
 import { apiService } from '../../services/ApiService'
+import ScrollContainer from '../ui/ScrollContainer.vue'
 
 const { toast } = usePopup()
 
@@ -247,8 +294,13 @@ const serverForm = ref({
     id: null,
     name: '',
     url: '',
+    type: 'streamableHttp', // 协议类型：'stdio' | 'sse' | 'streamableHttp'
     description: '',
     headers: '',
+    command: '',
+    args: '',
+    env: '',
+    cwd: '',
     enabled: true
 })
 
@@ -270,6 +322,18 @@ const formRules = ref({
                     callback()
                 } else {
                     callback(new Error('请输入有效的 URL 地址'))
+                }
+            },
+            trigger: 'blur'
+        }
+    ],
+    command: [
+        {
+            validator: (rule, value, callback) => {
+                if (serverForm.value.type === 'stdio' && !value) {
+                    callback(new Error('请输入命令'))
+                } else {
+                    callback()
                 }
             },
             trigger: 'blur'
@@ -306,8 +370,13 @@ const handleAddServer = () => {
         id: null,
         name: '',
         url: '',
+        type: 'streamableHttp', // 默认使用 streamableHttp
         description: '',
         headers: '',
+        command: '',
+        args: '',
+        env: '',
+        cwd: '',
         enabled: true
     }
     showModal.value = true
@@ -328,9 +397,23 @@ const handleEditServer = (server) => {
         .map(([key, value]) => `${key}: ${value}`)
         .join('\n') : ''
 
+    // 将 args 数组转换为多行文本
+    const argsText = server.args ? (Array.isArray(server.args) ? server.args : JSON.parse(server.args || '[]'))
+        .join('\n') : ''
+
+    // 将 env 对象转换为多行文本
+    const envText = server.env ? Object.entries(server.env)
+        .map(([key, value]) => `${key}=${value}`)
+        .join('\n') : ''
+
     serverForm.value = {
         ...server,
-        headers: headersText
+        type: server.type || 'streamableHttp', // 确保 type 字段存在
+        headers: headersText,
+        command: server.command || '',
+        args: argsText,
+        env: envText,
+        cwd: server.cwd || ''
     }
 
     // 加载工具列表
@@ -377,12 +460,25 @@ const handleSaveServer = async () => {
         // 解析 HTTP 请求头文本为对象
         const headersObj = parseHeaders(serverForm.value.headers)
 
+        // 解析 args 多行文本为数组
+        const argsArray = serverForm.value.args
+            ? serverForm.value.args.split('\n').map(a => a.trim()).filter(a => a)
+            : []
+
+        // 解析 env 多行文本为对象
+        const envObj = parseEnvVariables(serverForm.value.env)
+
         // 准备提交的数据
         const submitData = {
             name: serverForm.value.name,
-            url: serverForm.value.url,
+            url: serverForm.value.type !== 'stdio' ? (serverForm.value.url || null) : null,
+            type: serverForm.value.type || 'streamableHttp', // 传递协议类型
             description: serverForm.value.description,
-            headers: headersObj,
+            headers: serverForm.value.type !== 'stdio' ? headersObj : null,
+            command: serverForm.value.type === 'stdio' ? (serverForm.value.command || null) : null,
+            args: serverForm.value.type === 'stdio' ? argsArray : null,
+            env: serverForm.value.type === 'stdio' ? envObj : null,
+            cwd: serverForm.value.type === 'stdio' ? (serverForm.value.cwd || null) : null,
             enabled: serverForm.value.enabled
         }
 
@@ -439,6 +535,33 @@ const parseHeaders = (text) => {
     }
 
     return headers
+}
+
+// 解析环境变量文本为对象
+const parseEnvVariables = (text) => {
+    if (!text || typeof text !== 'string') {
+        return {}
+    }
+
+    const env = {}
+    const lines = text.split('\n')
+
+    for (const line of lines) {
+        const trimmedLine = line.trim()
+        if (!trimmedLine) continue
+
+        const equalIndex = trimmedLine.indexOf('=')
+        if (equalIndex === -1) continue
+
+        const key = trimmedLine.substring(0, equalIndex).trim()
+        const value = trimmedLine.substring(equalIndex + 1).trim()
+
+        if (key && value !== undefined) {
+            env[key] = value
+        }
+    }
+
+    return env
 }
 
 // 导入 confirm 用于删除确认
@@ -520,7 +643,9 @@ const handleImportJson = async () => {
                     url: serverData.baseUrl || serverData.url || '',
                     description: serverData.description || `导入自配置文件：${serverData.key || 'unknown'}`,
                     headers: serverData.headers || {},
-                    enabled: serverData.isActive !== undefined ? serverData.isActive : true
+                    enabled: serverData.isActive !== undefined ? serverData.isActive : true,
+                    // 传递协议类型（如果存在）
+                    type: serverData.type || undefined
                 }
 
                 // 验证必填字段

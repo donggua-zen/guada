@@ -76,8 +76,13 @@ export class MCPToolProvider implements IToolProvider {
 
       const result = await this.mcpClient.callTool(
         {
-          url: targetServer.url,
-          headers: targetServer.headers || {},
+          url: targetServer.url || undefined,
+          headers: (targetServer.headers as Record<string, any>) || undefined,
+          type: (targetServer.type as "sse" | "streamableHttp" | "stdio") || undefined,
+          command: targetServer.command || undefined,
+          args: targetServer.args || undefined,
+          env: targetServer.env || undefined,
+          cwd: targetServer.cwd || undefined,
         },
         toolName,
         request.arguments,
