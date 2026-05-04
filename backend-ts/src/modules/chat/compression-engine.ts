@@ -88,7 +88,6 @@ export class CompressionEngine implements ICompressionStrategy {
     currentTokenCount?: number, // 当前缓存的 Token 数，避免重复计算
   ): Promise<CompressionResult> {
     const state = await this.contextStateRepo.findBySessionId(sessionId);
-    const previousSummary = state?.summaryContent;
 
     const cleanMessages = messages.filter(msg => msg.role !== 'system');
 
@@ -109,108 +108,93 @@ export class CompressionEngine implements ICompressionStrategy {
 
     this.logger.debug(`After pruning: ${prunedTokens} tokens (target: ${targetTokens})`);
 
+    // 初始化压缩结果变量，将在后续逻辑中更新
+    let resultMessages: MessageRecord[] = prunedMessages;
+    let resultSummary: string | undefined = undefined;
+    let resultTokenCount = prunedTokens;
+    let compressionStats = {
+      beforeTokenCount,
+      afterTokenCount: prunedTokens,
+      beforeMessageCount,
+      afterMessageCount: prunedMessages.length,
+    };
+
+    // 初始化压缩状态（基于数据库中的旧状态，后续会更新为最新状态）
+    const compressionState = {
+      cleaningStrategy: 'pruned_only' as 'pruned_only' | 'summarized',
+      lastCompactedMessageId: state?.lastCompactedMessageId,
+      lastCompactedContentId: state?.lastCompactedContentId,
+      summaryContent: state?.summaryContent,
+      lastPrunedContentId: lastPrunedContentId || state?.lastPrunedContentId,
+      pruningMetadata: { ...state?.pruningMetadata, ...metadata },
+      compressionStats,
+    };
+
     // 若裁剪后已达到目标 Token 数，则跳过耗时的摘要生成步骤，直接返回裁剪结果
     // 这种降级策略显著降低了压缩成本，同时保持了较好的上下文质量
     if (prunedTokens <= targetTokens) {
       this.logger.log('Pruning satisfied the target, skipping compaction.');
+      // 保持默认值不变，直接使用初始化的结果
+    } else {
+      this.logger.log('Pruning insufficient, triggering Stage 2: Compaction');
+      try {
+        // 执行第二阶段：调用 LLM 生成摘要，将超出部分的历史对话浓缩为简洁概要
+        const { summary, retained, lastCompactedContentId, lastCompactedMsgId, retainedTokens } =
+          await this.compactMessages(
+            prunedMessages,
+            prunedTokens,
+            targetTokens,
+            compressionState.summaryContent, // 直接使用压缩状态中的摘要内容
+            config.model,
+            config.summaryMode ?? SummaryMode.ITERATIVE, // 从配置中读取摘要模式，默认迭代优化
+            config.chatModelName, // 传递对话模型名称用于 Token 计算
+          );
 
-      // 构建压缩统计信息
-      const compressionStats = {
-        beforeTokenCount,
-        afterTokenCount: prunedTokens,
-        beforeMessageCount,
-        afterMessageCount: prunedMessages.length,
-      };
+        // 检查是否实际进行了压缩：如果没有返回压缩游标，说明所有消息都在保护范围内
+        // 此时应回退到仅裁剪模式，避免误标记为已压缩导致下次加载时丢失所有消息
+        if (!lastCompactedContentId) {
+          this.logger.log('No messages were compressed (all in protected range), falling back to pruned_only strategy.');
+          // 保持默认的 pruned_only 策略，不更新结果变量
+        } else {
+          // 成功生成摘要，更新结果为摘要模式
+          resultMessages = retained;
+          resultSummary = summary;
+          resultTokenCount = retainedTokens;
+          compressionStats = {
+            beforeTokenCount,
+            afterTokenCount: retainedTokens,
+            beforeMessageCount,
+            afterMessageCount: retained.length,
+          };
 
-      // 更新会话状态：标记为仅裁剪模式，保留之前的摘要游标和内容，记录最新的裁剪游标
-      await this.contextStateRepo.create(sessionId, {
-        cleaningStrategy: 'pruned_only',
-        lastCompactedMessageId: state?.lastCompactedMessageId,  // 保留之前的摘要游标
-        lastCompactedContentId: state?.lastCompactedContentId,  // 保留之前的摘要游标
-        summaryContent: state?.summaryContent,                  // 保留之前的摘要内容
-        lastPrunedContentId: lastPrunedContentId || state?.lastPrunedContentId,
-        pruningMetadata: { ...state?.pruningMetadata, ...metadata },
-        compressionStats, // 保存压缩统计信息
-      });
-
-      return {
-        messages: prunedMessages,
-        didCompress: true,
-        strategy: 'pruned_only',
-        tokenCount: prunedTokens,
-        compressionStats,
-      };
+          // 更新压缩状态为摘要模式
+          compressionState.cleaningStrategy = 'summarized';
+          compressionState.summaryContent = summary;
+          compressionState.lastCompactedMessageId = lastCompactedMsgId;
+          compressionState.lastCompactedContentId = lastCompactedContentId;
+          compressionState.lastPrunedContentId = undefined; // 摘要覆盖裁剪，清除裁剪游标
+          compressionState.pruningMetadata = null; // 摘要后清除裁剪元数据
+          compressionState.compressionStats = compressionStats;
+        }
+      } catch (error) {
+        // 摘要生成失败时的容错处理：回退到仅裁剪模式，确保系统不会因 LLM 调用失败而中断
+        this.logger.error('Compaction failed:', error);
+        // 保持默认的 pruned_only 策略，不更新结果变量
+      }
     }
 
-    this.logger.log('Pruning insufficient, triggering Stage 2: Compaction');
-    try {
-      // 执行第二阶段：调用 LLM 生成摘要，将超出部分的历史对话浓缩为简洁概要
-      const { summary, retained, lastCompactedContentId, lastCompactedMsgId, retainedTokens } =
-        await this.compactMessages(
-          prunedMessages,
-          prunedTokens,
-          targetTokens,
-          previousSummary,
-          config.model,
-          config.summaryMode ?? SummaryMode.ITERATIVE, // 从配置中读取摘要模式，默认迭代优化
-          config.chatModelName, // 传递对话模型名称用于 Token 计算
-        );
+    // 统一更新会话压缩状态到数据库
+    await this.contextStateRepo.create(sessionId, compressionState);
 
-      // 计算压缩后的总 Token 数：摘要本身的 Token + 保留的原始消息 Token
-      // 注意：摘要以 system 消息形式存在，需单独计算其 Token 消耗
-      const modelName = config.chatModelName || "gpt4";
-      // const summaryTokens = this.tokenizerService.countTokens(modelName, [{ role: "system", content: summary }]);
-
-      const totalTokens = retainedTokens;
-
-      // 构建压缩统计信息
-      const compressionStats = {
-        beforeTokenCount,
-        afterTokenCount: totalTokens,
-        beforeMessageCount,
-        afterMessageCount: retained.length,
-      };
-
-      // 更新会话状态：标记为摘要模式，记录摘要内容、压缩游标，清除裁剪元数据（因为已被摘要替代）
-      await this.contextStateRepo.create(sessionId, {
-        summaryContent: summary,
-        cleaningStrategy: 'summarized',
-        lastCompactedMessageId: lastCompactedMsgId,
-        lastCompactedContentId: lastCompactedContentId,
-        lastPrunedContentId: lastCompactedContentId,
-        pruningMetadata: null, // 摘要后清除裁剪元数据
-        compressionStats, // 保存压缩统计信息
-      });
-
-      // 返回分离的摘要和消息，由上层调用者负责组装成最终的消息列表
-      // 这种设计避免了在压缩层硬编码 system prompt 的注入逻辑，保持职责清晰
-      return {
-        messages: retained,
-        summary: summary,
-        didCompress: true,
-        strategy: 'summarized',
-        tokenCount: totalTokens,
-        compressionStats,
-      };
-    } catch (error) {
-      // 摘要生成失败时的容错处理：回退到仅裁剪模式，确保系统不会因 LLM 调用失败而中断
-      this.logger.error('Compaction failed:', error);
-
-      const compressionStats = {
-        beforeTokenCount,
-        afterTokenCount: prunedTokens,
-        beforeMessageCount,
-        afterMessageCount: prunedMessages.length,
-      };
-
-      return {
-        messages: prunedMessages,
-        didCompress: true,
-        strategy: 'pruned_only',
-        tokenCount: prunedTokens,
-        compressionStats,
-      };
-    }
+    // 统一返回结果（strategy 从 compressionState 获取，确保与数据库状态一致）
+    return {
+      messages: resultMessages,
+      summary: resultSummary,
+      didCompress: true,
+      strategy: compressionState.cleaningStrategy,
+      tokenCount: resultTokenCount,
+      compressionStats,
+    };
   }
 
   /**
@@ -344,10 +328,11 @@ export class CompressionEngine implements ICompressionStrategy {
     let iterationCount = 0;
     const maxIterations = 3;
     let currentDraft = "";
-    
+
     // 维护完整的对话历史,让 AI 能看到自己的调用过程
     const conversationHistory: MessageRecord[] = [
-      { role: "system", content: `你正在生成对话摘要。请使用提供的工具来提交摘要:
+      {
+        role: "system", content: `你正在生成对话摘要。请使用提供的工具来提交摘要:
 
 **工作流程:**
 1. 调用 write_summary 写入摘要草稿
@@ -397,14 +382,14 @@ export class CompressionEngine implements ICompressionStrategy {
         // 检查是否有工具调用
         if (response.toolCalls && response.toolCalls.length > 0) {
           const lastToolCall = response.toolCalls[response.toolCalls.length - 1];
-          
+
           // 将 AI 的助手消息添加到对话历史
           conversationHistory.push({
             role: "assistant",
             content: response.content || null,
             toolCalls: response.toolCalls,
           });
-          
+
           try {
             const toolArgs = JSON.parse(lastToolCall.arguments);
 
@@ -412,7 +397,7 @@ export class CompressionEngine implements ICompressionStrategy {
               // 记录草稿
               currentDraft = toolArgs.summary;
               this.logger.log(`第 ${iterationCount} 次迭代 - 草稿已记录`);
-              
+
               // 模拟工具返回成功,添加到对话历史
               conversationHistory.push({
                 role: "tool",
@@ -420,7 +405,7 @@ export class CompressionEngine implements ICompressionStrategy {
                 toolCallId: lastToolCall.id,
                 name: lastToolCall.name,
               });
-              
+
               // 如果不是最后一次迭代,继续循环
               if (iterationCount < maxIterations) {
                 continue;
@@ -434,7 +419,7 @@ export class CompressionEngine implements ICompressionStrategy {
               // 确认提交,结束迭代
               finalSummary = toolArgs.final_summary;
               this.logger.log(`摘要已确认提交(第 ${iterationCount} 次迭代)`);
-              
+
               // 模拟工具返回成功
               conversationHistory.push({
                 role: "tool",
@@ -442,7 +427,7 @@ export class CompressionEngine implements ICompressionStrategy {
                 toolCallId: lastToolCall.id,
                 name: lastToolCall.name,
               });
-              
+
               break;
             }
           } catch (parseError) {
@@ -504,10 +489,11 @@ export class CompressionEngine implements ICompressionStrategy {
     compressionModel?: any,
     summaryMode: SummaryMode = SummaryMode.ITERATIVE,
     chatModelName?: string,
-  ): Promise<{ summary: string; retained: MessageRecord[]; lastCompactedContentId?: string; lastCompactedMsgId?: string; retainedTokens: number }> {
+  ): Promise<{ summary: string; retained: MessageRecord[]; lastCompactedContentId?: string; lastCompactedMsgId?: string; retainedTokens: number } | null> {
     if (messages.length <= MIN_RETAINED_MESSAGES) {
       // 消息数量过少时无需压缩,直接返回原有摘要和全部消息
-      return { summary: previousSummary || "", retained: messages, lastCompactedContentId: messages[messages.length - 1]?.contentId, retainedTokens: prunedTokens };
+      // 返回 undefined 表示没有实际压缩发生，调用方应回退到仅裁剪模式
+      return { summary: previousSummary || "", retained: messages, lastCompactedContentId: undefined, retainedTokens: prunedTokens };
     }
 
     // 从最新消息开始向前累加 Token,确定保留的消息范围
@@ -533,7 +519,8 @@ export class CompressionEngine implements ICompressionStrategy {
 
     if (toCompress.length === 0) {
       // 所有消息都在保留区内,无需调用 LLM 生成摘要
-      return { summary: previousSummary || "", retained: messages, lastCompactedContentId: messages[messages.length - 1]?.contentId, retainedTokens: retainedTokens };
+      // 返回 undefined 表示没有实际压缩发生，调用方应回退到仅裁剪模式
+      return { summary: previousSummary || "", retained: messages, lastCompactedContentId: undefined, retainedTokens: retainedTokens };
     }
 
     // 如果关闭摘要功能,则直接丢弃待压缩内容,仅保留最近的消息
