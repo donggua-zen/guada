@@ -108,16 +108,17 @@ const ConfigFragments = {
   // 输入能力
   TextOnly: { inputCapabilities: ["text"] },
   Multimodal: { inputCapabilities: ["text", "image"] },
-  
+
   // 输出能力
   TextOutput: { outputCapabilities: ["text"] },
   ImageOutput: { outputCapabilities: ["text", "image"] },
-  
+
   // 功能特性
   WithTools: { features: ["tools"] },
   WithThinking: { features: ["thinking"] },
   WithToolsAndThinking: { features: ["tools", "thinking"] },
-  
+  WithoutThinking: { features: ["tools"] }, // 仅支持工具，不支持 thinking（用于覆盖默认值）
+
   // 上下文窗口预设（单位：K）
   ContextWindow: {
     _8K: { contextWindow: 8000 },
@@ -135,7 +136,7 @@ const ConfigFragments = {
     _1M: { contextWindow: 1000000 },
     _1_1M: { contextWindow: 1100000 },
   },
-  
+
   // 最大输出token预设
   MaxOutput: {
     _33K: { maxOutputTokens: 33000 },
@@ -145,7 +146,7 @@ const ConfigFragments = {
     _131K: { maxOutputTokens: 131000 },
     _384K: { maxOutputTokens: 384000 },
   },
-  
+
   // Embedding 向量维度
   VectorDim: {
     _1024: { vectorDimensions: 1024 },
@@ -179,7 +180,7 @@ function createTextModel(
     // 用户提供的配置片段（覆盖默认值）
     ...fragments
   );
-  
+
   return {
     modelName,
     modeType: "text" as const,
@@ -203,7 +204,7 @@ function createMultimodalModel(
     // 用户提供的配置片段
     ...fragments
   );
-  
+
   return {
     modelName,
     modeType: "text" as const,
@@ -225,7 +226,7 @@ function createEmbeddingModel(
     // 用户提供的配置片段
     ...fragments
   );
-  
+
   return {
     modelName,
     modeType: "embedding" as const,
@@ -331,12 +332,16 @@ export const PROVIDER_TEMPLATES: ProviderTemplate[] = [
   {
     id: "volcengine",
     name: "火山引擎",
-    protocol: "openai",
+    protocol: "openai-response", // 使用 Responses API 协议进行测试
     defaultApiUrl: "https://ark.cn-beijing.volces.com/api/v3/",
     avatarUrl: "static/images/providers/volcengine.svg",
     description: "字节跳动旗下云平台，提供豆包大模型及企业级 AI 解决方案。",
     attributes: {
       openai: {
+        ...THINKING_TYPE_CONFIG,
+        thinkingEffort: ["low", "medium", "high", "minimal"],
+      },
+      "openai-response": {
         ...THINKING_TYPE_CONFIG,
         thinkingEffort: ["low", "medium", "high", "minimal"],
       },
@@ -450,19 +455,56 @@ export const PROVIDER_TEMPLATES: ProviderTemplate[] = [
     avatarUrl: "static/images/providers/openai.svg",
     description: "全球领先的 AI 研究机构，ChatGPT 和 GPT 系列模型的创造者。",
     attributes: {
-      openai: {
+      openai: {}, // GPT-4o 不支持 reasoning_effort，只有 o 系列和 GPT-5 支持
+    },
+    models: [
+      // GPT-4o 系列（稳定支持，但不支持 reasoning_effort）
+      createMultimodalModel("gpt-4o", ConfigFragments.ContextWindow._128K, ConfigFragments.WithoutThinking),
+      createMultimodalModel("gpt-4o-mini", ConfigFragments.ContextWindow._128K, ConfigFragments.WithoutThinking),
+      // GPT-5 系列（同时支持两个协议，支持 reasoning_effort）
+      createMultimodalModel("gpt-5.4", ConfigFragments.ContextWindow._1_1M),
+      createMultimodalModel("gpt-5-mini", ConfigFragments.ContextWindow._400K),
+      createMultimodalModel("gpt-5", ConfigFragments.ContextWindow._1_1M),
+      // o 系列推理模型（同时支持两个协议，支持 reasoning_effort）
+      createMultimodalModel("o4-mini", ConfigFragments.ContextWindow._200K),
+      createMultimodalModel("o3-mini", ConfigFragments.ContextWindow._200K),
+      createMultimodalModel("o1", ConfigFragments.ContextWindow._200K),
+      // Embedding 模型
+      createEmbeddingModel("text-embedding-3-small", ConfigFragments.ContextWindow._8K, ConfigFragments.VectorDim._2000),
+    ],
+  },
+  {
+    id: "openai-response",
+    name: "OpenAI (Responses API)",
+    protocol: "openai-response",
+    defaultApiUrl: "https://api.openai.com/v1/",
+    avatarUrl: "static/images/providers/openai.svg",
+    description: "使用 OpenAI 最新 Responses API（beta），专为 o 系列推理模型和高级智能体场景设计。",
+    attributes: {
+      "openai-response": {
         ...OPENAI_REASONING_CONFIG,
       },
     },
     models: [
-      createMultimodalModel("gpt-5.4", ConfigFragments.ContextWindow._1_1M),
-      createMultimodalModel("gpt-5-mini", ConfigFragments.ContextWindow._400K),
-      createMultimodalModel("gpt-4o", ConfigFragments.ContextWindow._128K, ConfigFragments.WithTools),
-      createMultimodalModel("gpt-4o-mini", ConfigFragments.ContextWindow._128K, ConfigFragments.WithTools),
+      // Responses API 独占模型
+      createMultimodalModel("gpt-5-codex", ConfigFragments.ContextWindow._1_1M),
+      createMultimodalModel("computer-use-preview", ConfigFragments.ContextWindow._128K),
+
+      // o 系列推理模型（Responses API 提供更佳体验）
       createMultimodalModel("o4-mini", ConfigFragments.ContextWindow._200K),
       createMultimodalModel("o3-pro", ConfigFragments.ContextWindow._200K),
       createMultimodalModel("o3-mini", ConfigFragments.ContextWindow._200K),
-      createEmbeddingModel("text-embedding-3-small", ConfigFragments.ContextWindow._8K, ConfigFragments.VectorDim._2000),
+      createMultimodalModel("o1", ConfigFragments.ContextWindow._200K),
+
+      // GPT-5 系列（原生支持，功能更完整）
+      createMultimodalModel("gpt-5.4", ConfigFragments.ContextWindow._1_1M),
+      createMultimodalModel("gpt-5-mini", ConfigFragments.ContextWindow._400K),
+      createMultimodalModel("gpt-5-pro", ConfigFragments.ContextWindow._1_1M),
+      createMultimodalModel("gpt-5", ConfigFragments.ContextWindow._1_1M),
+
+      // GPT-4o 系列（兼容支持）
+      createMultimodalModel("gpt-4o", ConfigFragments.ContextWindow._128K, ConfigFragments.WithTools),
+      createMultimodalModel("gpt-4o-mini", ConfigFragments.ContextWindow._128K, ConfigFragments.WithTools),
     ],
   },
   {
