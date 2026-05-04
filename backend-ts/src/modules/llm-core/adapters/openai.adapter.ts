@@ -86,9 +86,18 @@ export class OpenAIAdapter implements LLMAdapter {
       const attrs = template?.attributes?.[this.protocol] || {};
 
       // 统一处理 thinking 配置（所有提供商都使用相同的接口）
+      // 只有当供应商配置了 thinking 且模型声明支持 thinking 特性时才注入
       if (attrs.thinking?.get && params.thinkingEnabled !== undefined) {
-        const thinkingConfig = attrs.thinking.get(params.thinkingEnabled);
-        Object.assign(requestParams, thinkingConfig);
+        // 检查当前模型是否支持 thinking 特性
+        const currentModel = template?.models?.find(
+          (m) => m.modelName === params.model
+        );
+        const supportsThinking = currentModel?.config?.features?.includes("thinking");
+        
+        if (supportsThinking) {
+          const thinkingConfig = attrs.thinking.get(params.thinkingEnabled);
+          Object.assign(requestParams, thinkingConfig);
+        }
       }
     }
 
