@@ -2,7 +2,7 @@
     <div class="bg-(--color-sidebar-bg) h-full">
         <div class="h-full flex flex-col md:max-w-260 md:mx-auto p-4">
             <div class="flex-1 overflow-hidden flex flex-col">
-                <div class="border-gray-200 dark:border-gray-700">
+                <div class="border-gray-200 dark:border-[#232428]">
                     <el-tabs v-model="currentTabValue" @tab-change="handleTabChange" class="plugins-settings-tabs">
                         <el-tab-pane v-for="item in tabItems" :key="item.path" :label="item.label" :name="item.path">
                             <template #label>

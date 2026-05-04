@@ -6,15 +6,15 @@
         </div>
 
         <!-- 占位内容 -->
-        <div class="rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden bg-white dark:bg-[#1e1e1e]">
+        <div class="rounded-lg border border-gray-200 dark:border-[#232428] overflow-hidden bg-white dark:bg-[#232428]">
             <div class="p-12 text-center">
                 <el-icon size="64" class="mb-4 opacity-50 text-gray-400">
                     <ConstructionOutlined />
                 </el-icon>
-                <div class="text-xl font-medium text-gray-600 dark:text-gray-300 mb-2">
+                <div class="text-xl font-medium text-gray-600 dark:text-[#e8e9ed] mb-2">
                     正在开发中
                 </div>
-                <div class="text-sm text-gray-500 dark:text-gray-400">
+                <div class="text-sm text-gray-500 dark:text-[#8b8d95]">
                     Skills 功能即将上线，敬请期待...
                 </div>
             </div>
