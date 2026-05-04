@@ -289,9 +289,14 @@ model File {
 model McpServer {
   id          String   @id @default(cuid())
   name        String
-  url         String
+  url         String?  // HTTP 协议的 URL（sse/streamableHttp 使用）
+  type        String?  // 协议类型: "sse", "streamableHttp", 或 "stdio"
   description String?
-  headers     Json?
+  headers     Json?    // HTTP 请求头
+  command     String?  // stdio 协议的命令
+  args        Json?    // stdio 协议的参数数组
+  env         Json?    // stdio 协议的环境变量
+  cwd         String?  // stdio 协议的工作目录
   tools       Json?
   enabled     Boolean  @default(true)
   userId      String   @map("user_id")

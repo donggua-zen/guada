@@ -1,6 +1,11 @@
 import { Injectable, Logger } from "@nestjs/common";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
+import { SSEClientTransport } from "@modelcontextprotocol/sdk/client/sse.js";
+import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
+import * as process from "process";
+
+
 
 /**
  * MCP 工具调用结果接口
@@ -13,11 +18,26 @@ export interface McpToolCallResult {
 }
 
 /**
+ * Stdio 服务器参数接口
+ */
+export interface StdioServerParams {
+  command: string;
+  args?: string[];
+  env?: Record<string, string>;
+  cwd?: string;
+}
+
+/**
  * MCP 服务器配置接口
  */
 export interface McpServerConfig {
-  url: string;
-  headers?: Record<string, any>;
+  url?: string; // HTTP 协议的 URL
+  headers?: Record<string, any>; // HTTP 请求头
+  type?: "sse" | "streamableHttp" | "stdio"; // 协议类型
+  command?: string; // stdio 协议的命令
+  args?: string[]; // stdio 协议的参数
+  env?: Record<string, string>; // stdio 协议的环境变量
+  cwd?: string; // stdio 协议的工作目录
 }
 
 /**
@@ -71,40 +91,141 @@ export class McpClientService {
     operation: (client: Client) => Promise<T>,
   ): Promise<T> {
     let client: Client | null = null;
+
+    // 根据 type 字段选择传输协议
+    const specifiedType = config.type?.toLowerCase();
+
+    if (specifiedType === "sse") {
+      this.logger.debug(`Using SSE protocol for ${config.url}`);
+    } else if (specifiedType === "streamableHttp") {
+      this.logger.debug(`Using Streamable HTTP protocol for ${config.url}`);
+    } else if (specifiedType === "stdio") {
+      this.logger.debug(
+        `Using Stdio protocol with command: ${config.command}`,
+      );
+    } else {
+      this.logger.debug(
+        `No protocol type specified for ${config.url}, defaulting to Streamable HTTP`,
+      );
+    }
+
     try {
-      // 准备请求头
-      const requestHeaders = { ...(config.headers || {}) };
-      if (!requestHeaders["Content-Type"]) {
-        requestHeaders["Content-Type"] = "application/json";
+      let transport: any;
+
+      // 根据 type 字段创建对应的传输协议
+      if (specifiedType === "stdio") {
+        // 使用 Stdio 协议
+        if (!config.command) {
+          throw new Error(
+            "Stdio protocol requires 'command' parameter in config",
+          );
+        }
+
+        this.logger.debug(
+          `Creating StdioClientTransport with command: ${config.command} ${config.args?.join(" ") || ""}`,
+        );
+
+        transport = new StdioClientTransport({
+          command: config.command,
+          args: config.args || [],
+          env: config.env,
+          cwd: config.cwd,
+        });
+      } else if (specifiedType === "sse") {
+        // 使用 SSE 协议
+        if (!config.url) {
+          throw new Error("SSE protocol requires 'url' parameter in config");
+        }
+
+        // SSE 协议：SDK 会自动处理 Accept 和 Content-Type
+        // 只传递用户自定义的 headers，不添加任何默认头
+        const requestHeaders = config.headers ? { ...config.headers } : undefined;
+
+        this.logger.debug(`Creating SSEClientTransport for ${config.url}`);
+        transport = new SSEClientTransport(new URL(config.url), {
+          requestInit: {
+            headers: requestHeaders,
+          },
+        });
+      } else {
+        // 默认使用 Streamable HTTP 协议
+        if (!config.url) {
+          throw new Error(
+            "Streamable HTTP protocol requires 'url' parameter in config",
+          );
+        }
+
+        const requestHeaders = { ...(config.headers || {}) };
+        if (!requestHeaders["Content-Type"]) {
+          requestHeaders["Content-Type"] = "application/json";
+        }
+        if (!requestHeaders["Accept"]) {
+          requestHeaders["Accept"] = "application/json, text/event-stream";
+        }
+
+        this.logger.debug(
+          `Creating StreamableHTTPClientTransport for ${config.url}`,
+        );
+        transport = new StreamableHTTPClientTransport(new URL(config.url), {
+          requestInit: {
+            headers: requestHeaders,
+          },
+        });
       }
 
-      // 使用 StreamableHTTPClientTransport（官方推荐）
-      const transport = new StreamableHTTPClientTransport(new URL(config.url), {
-        requestInit: {
-          headers: requestHeaders,
-        },
+      client = new Client({ name: "ts-backend", version: "1.0.0" });
+
+      // 添加连接超时保护
+      const connectPromise = client.connect(transport);
+      const timeoutPromise = new Promise<never>((_, reject) => {
+        setTimeout(
+          () => reject(new Error("Connection timeout after 10s")),
+          10000,
+        );
       });
 
-      client = new Client({ name: "ts-backend", version: "1.0.0" });
-      await client.connect(transport);
+      await Promise.race([connectPromise, timeoutPromise]);
+      this.logger.debug(
+        `Connected to MCP server via ${specifiedType || "StreamableHTTP"}: ${config.command || config.url}`,
+      );
 
-      this.logger.debug(`Connected to MCP server: ${config.url}`);
-
-      // 执行操作
+      // 连接成功，执行操作
       const result = await operation(client);
       return result;
     } catch (error: any) {
+      // 提供更详细的错误信息
+      let errorMessage = error.message;
+      let errorDetails = "";
+
+      if (error.response) {
+        errorDetails = `Response status: ${error.response.status}, body: ${JSON.stringify(error.response.data)}`;
+      } else if (error.cause) {
+        errorDetails = `Cause: ${error.cause.message}`;
+      }
+
+      const fullErrorMessage = errorDetails
+        ? `${errorMessage} (${errorDetails})`
+        : errorMessage;
+
       this.logger.error(
-        `MCP client operation failed: ${error.message}`,
+        `MCP client operation failed for ${config.command || config.url}: ${fullErrorMessage}`,
         error.stack,
       );
-      throw error;
+
+      // 包装错误以便上层处理
+      const wrappedError = new Error(
+        `MCP connection failed: ${fullErrorMessage}`,
+      );
+      (wrappedError as any).originalError = error;
+      throw wrappedError;
     } finally {
       // 确保连接被关闭
       if (client) {
         try {
           await client.close();
-          this.logger.debug(`Closed connection to MCP server: ${config.url}`);
+          this.logger.debug(
+            `Closed connection to MCP server: ${config.command || config.url}`,
+          );
         } catch (closeError: any) {
           this.logger.warn(
             `Failed to close MCP connection: ${closeError.message}`,
