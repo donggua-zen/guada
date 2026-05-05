@@ -3,6 +3,7 @@ import { exec } from "child_process";
 import { promisify } from "util";
 import * as fs from "fs/promises";
 import * as path from "path";
+import * as iconv from "iconv-lite";
 import {
   IToolProvider,
   ToolCallRequest,
@@ -33,6 +34,11 @@ export class ShellToolProvider implements IToolProvider {
           working_directory: {
             type: "string",
             description: "可选的工作目录路径，默认为当前目录",
+          },
+          encoding: {
+            type: "string",
+            description: "命令输出的编码格式。Windows 中文环境建议使用 'gbk' 或 'gb2312'；Linux/macOS 通常使用 'utf-8'。如果不指定，系统将自动检测并尝试解码。",
+            enum: ["utf-8", "gbk", "gb2312", "gb18030", "big5", "latin1"],
           },
         },
         required: ["command"],
@@ -182,6 +188,12 @@ export class ShellToolProvider implements IToolProvider {
         }
       }
 
+      // 注入操作系统信息
+      const platform = process.platform;
+      const osName = this.getOSName(platform);
+      promptParts.push(`🖥️ **当前系统**：${osName} (\`${platform}\`)`);
+      promptParts.push("");
+
       promptParts.push("⚠️ **重要提醒**：");
       promptParts.push("1. 这些工具极其危险，如果需要删除或者修改文件务必征得用户同意");
       promptParts.push("2. 执行命令时请注意安全性，避免执行危险操作");
@@ -192,6 +204,22 @@ export class ShellToolProvider implements IToolProvider {
     } catch (error: any) {
       this.logger.error(`获取 Shell 工具提示词失败：${error.message}`);
       return "";
+    }
+  }
+
+  /**
+   * 获取操作系统名称
+   */
+  private getOSName(platform: string): string {
+    switch (platform) {
+      case 'win32':
+        return 'Windows';
+      case 'darwin':
+        return 'macOS';
+      case 'linux':
+        return 'Linux';
+      default:
+        return platform;
     }
   }
 
@@ -208,7 +236,7 @@ export class ShellToolProvider implements IToolProvider {
    * 执行 Shell 命令
    */
   private async handleExecuteCommand(args: any, context?: Record<string, any>): Promise<string> {
-    const { command, working_directory } = args;
+    const { command, working_directory, encoding } = args;
 
     // 验证命令参数
     if (!command || typeof command !== "string") {
@@ -216,11 +244,12 @@ export class ShellToolProvider implements IToolProvider {
     }
 
     try {
-      this.logger.log(`执行命令: ${command}, 工作目录: ${working_directory || "当前目录"}`);
+      this.logger.log(`执行命令: ${command}, 工作目录: ${working_directory || "当前目录"}, 编码: ${encoding || "自动检测"}`);
 
       const options: any = {
         timeout: 60000 * 2, // 2分钟超时
         maxBuffer: 1024 * 1024 * 10, // 10MB 最大输出
+        encoding: "buffer", // 使用 buffer 接收原始字节数据，避免编码问题
       };
 
       if (working_directory) {
@@ -236,10 +265,14 @@ export class ShellToolProvider implements IToolProvider {
 
       const { stdout, stderr } = await execAsync(command, options);
 
+      // 将 Buffer 转换为字符串
+      const stdoutStr = this.decodeBuffer(stdout, encoding);
+      const stderrStr = this.decodeBuffer(stderr, encoding);
+
       // 构建返回结果
       return JSON.stringify({
-        stdout: String(stdout).trim(),
-        stderr: String(stderr).trim(),
+        stdout: stdoutStr.trim(),
+        stderr: stderrStr.trim(),
         exitCode: 0,
       });
     } catch (error: any) {
@@ -248,11 +281,47 @@ export class ShellToolProvider implements IToolProvider {
       // 即使失败也返回 JSON，确保 AI 能获取到 stdout 中的任何潜在信息
       const exitCode = error.code === 'ETIMEDOUT' || error.killed ? -1 : (error.status || 1);
       
+      // 处理错误中的 buffer 数据
+      const stdoutStr = error.stdout ? this.decodeBuffer(error.stdout, encoding) : '';
+      const stderrStr = error.stderr ? this.decodeBuffer(error.stderr, encoding) : error.message;
+      
       return JSON.stringify({
-        stdout: String(error.stdout || '').trim(),
-        stderr: String(error.stderr || error.message).trim(),
+        stdout: stdoutStr.trim(),
+        stderr: String(stderrStr).trim(),
         exitCode: exitCode,
       });
+    }
+  }
+
+  /**
+   * 解码 Buffer 为字符串
+   * @param buffer 原始数据
+   * @param encoding 指定编码（可选），如果不提供则根据操作系统自动选择
+   */
+  private decodeBuffer(buffer: Buffer | string, encoding?: string): string {
+    if (typeof buffer === 'string') {
+      return buffer;
+    }
+
+    if (!buffer || buffer.length === 0) {
+      return '';
+    }
+
+    try {
+      // 如果 AI 指定了编码，直接使用
+      if (encoding) {
+        return iconv.decode(buffer, encoding);
+      }
+
+      // 否则根据操作系统自动选择编码
+      const isWindows = process.platform === 'win32';
+      const defaultEncoding = isWindows ? 'gbk' : 'utf-8';
+      
+      return iconv.decode(buffer, defaultEncoding);
+    } catch (error: any) {
+      this.logger.warn(`解码失败 (${encoding || 'auto'}): ${error.message}，使用 latin1 编码`);
+      // 解码失败时使用 latin1 编码，保证所有字节都能被表示
+      return buffer.toString('latin1');
     }
   }
 
