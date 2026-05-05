@@ -34,6 +34,12 @@ export class WorkspaceService {
       throw new Error(`Invalid session ID: Path traversal detected for '${sessionId}'`);
     }
 
+    // 如果目录不存在，自动创建
+    if (!fs.existsSync(sessionDir)) {
+      fs.mkdirSync(sessionDir, { recursive: true });
+      this.logger.debug(`Created workspace directory for session: ${sessionId}`);
+    }
+
     return sessionDir;
   }
 

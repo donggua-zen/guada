@@ -18,6 +18,7 @@ import { UrlService } from "../../common/services/url.service";
 import { WorkspaceService } from "../../common/services/workspace.service";
 import { SG_MODELS, SK_MOD_CHAT, SK_MOD_TITLE_MODEL } from "../../constants/settings.constants";
 import { ConversationContextFactory } from "./conversation-context.factory";
+import { Model } from "@prisma/client";
 
 @Injectable()
 export class SessionService {
@@ -230,7 +231,7 @@ export class SessionService {
     } else if (filteredSettings.memory) {
       // 开启了自定义配置，使用客户端传递的值并确保结构完整
       const sessionMemory = filteredSettings.memory;
-      
+
       filteredSettings.memory = {
         maxMemoryLength: sessionMemory.maxMemoryLength ?? null,
         compressionTriggerRatio: sessionMemory.compressionTriggerRatio ?? 0.8,
@@ -441,34 +442,35 @@ export class SessionService {
     }
 
     // 2. 确定使用的模型（优先使用会话绑定的模型，否则使用默认模型）
-    let modelId = session.modelId;
-    if (!modelId) {
-      modelId = this.settingsStorage.getSettingValue(
+    let model = session.model;
+    if (!model) {
+      const modelId = this.settingsStorage.getSettingValue(
         SG_MODELS,
         SK_MOD_CHAT,
       );
+
+      model = await this.modelRepo.findById(modelId);
     }
 
     // 3. 获取模型配置以确定上下文窗口大小
     let contextWindow = 128000; // 默认值（GPT-4）
     let modelName = "gpt-4";
 
-    if (modelId) {
-      const model = await this.modelRepo.findById(modelId);
-      if (model) {
-        // contextWindow 存储在 config JSON 字段中
-        const config = model.config as any;
-        contextWindow = config?.contextWindow || 128000;
-        modelName = model.modelName || model.name || "gpt-4";
-      }
+
+    if (model) {
+      // contextWindow 存储在 config JSON 字段中
+      const config = model.config as any;
+      contextWindow = config?.contextWindow || 128000;
+      modelName = model.modelName || model.name || "gpt-4";
     }
+
 
     // 4. 创建并初始化会话上下文
     const conversationContext = await this.initializeConversationContext(
       sessionId,
       userId,
       session,
-      modelId,
+      model,
       contextWindow,
     );
 
@@ -518,26 +520,28 @@ export class SessionService {
     const mergedSettings = this.mergeSessionSettingsForCompression(session);
 
     // 3. 确定使用的模型
-    let modelId = session.modelId;
-    if (!modelId) {
-      modelId = this.settingsStorage.getSettingValue(
+    let model = session.model;
+    if (!model) {
+      const modelId = this.settingsStorage.getSettingValue(
         SG_MODELS,
         SK_MOD_CHAT,
       );
+
+      model = await this.modelRepo.findById(modelId);
     }
 
-    // 4. 获取模型配置
-    let contextWindow = 128000;
+    // 3. 获取模型配置以确定上下文窗口大小
+    let contextWindow = 128000; // 默认值（GPT-4）
     let modelName = "gpt-4";
 
-    if (modelId) {
-      const model = await this.modelRepo.findById(modelId);
-      if (model) {
-        const config = model.config as any;
-        contextWindow = config?.contextWindow || 128000;
-        modelName = model.modelName || model.name || "gpt-4";
-      }
+
+    if (model) {
+      // contextWindow 存储在 config JSON 字段中
+      const config = model.config as any;
+      contextWindow = config?.contextWindow || 128000;
+      modelName = model.modelName || model.name || "gpt-4";
     }
+
 
     // 5. 构建记忆配置（从合并后的设置中获取）
     const finalMemoryConfig = mergedSettings.memory || {};
@@ -547,7 +551,7 @@ export class SessionService {
       sessionId,
       userId,
       session,
-      modelId,
+      model,
       contextWindow,
       finalMemoryConfig,
       mergedSettings.thinkingEnabled,
@@ -601,7 +605,7 @@ export class SessionService {
    * @param sessionId 会话 ID
    * @param userId 用户 ID
    * @param session 会话对象
-   * @param modelId 模型 ID
+   * @param model 模型 ID
    * @param contextWindow 上下文窗口大小
    * @param memoryConfig 记忆配置（可选，默认使用会话设置中的配置）
    * @param thinkingEnabled 是否启用思维链（可选，默认使用会话设置）
@@ -611,7 +615,7 @@ export class SessionService {
     sessionId: string,
     userId: string,
     session: any,
-    modelId: string | null,
+    model: Model | null,
     contextWindow: number,
     memoryConfig?: any,
     thinkingEnabled?: boolean,
@@ -634,7 +638,7 @@ export class SessionService {
       systemPrompt: session.character?.description || "You are a helpful assistant.",
       thinkingEnabled: finalThinkingEnabled,
       contextWindow,
-      model: modelId ? await this.modelRepo.findById(modelId) : undefined,
+      model: model || undefined,
       memory: finalMemoryConfig,
     });
 
@@ -652,7 +656,7 @@ export class SessionService {
   private mergeSessionSettingsForCompression(session: any) {
     const sessionSettings = session.settings || {};
     const characterSettings = session.character?.settings || {};
-    
+
     // 基础合并：以角色设置为基准
     const mergedSettings = { ...characterSettings };
 
@@ -660,7 +664,7 @@ export class SessionService {
     const memoryEnabled = sessionSettings.memoryEnabled;
     const sessionMemory = sessionSettings.memory || {};
     const characterMemory = characterSettings.memory || {};
-    
+
     // 如果会话开启了自定义配置（memoryEnabled !== false），则使用会话的 memory 分组；否则使用角色的 memory 分组
     if (memoryEnabled !== false) {
       mergedSettings.memory = { ...sessionMemory };
