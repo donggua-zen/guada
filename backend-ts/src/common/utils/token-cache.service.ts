@@ -28,7 +28,7 @@ interface TokenCacheOptions {
 const DEFAULT_OPTIONS: TokenCacheOptions = {
   maxEntries: 10000,
   maxMemoryBytes: 50 * 1024 * 1024, // 50MB
-  ttlMs: 30 * 60 * 1000,            // 30分钟
+  ttlMs: 24 * 60 * 60 * 1000,            // 24小时
   cleanupIntervalMs: 5 * 60 * 1000, // 5分钟
 };
 
