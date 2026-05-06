@@ -4,7 +4,7 @@ import path from 'path'
 import tailwindcss from '@tailwindcss/vite'
 import { visualizer } from 'rollup-plugin-visualizer'
 import clean from 'vite-plugin-clean'
-import Inspect from 'vite-plugin-inspect'
+
 import AutoImport from 'unplugin-auto-import/vite'
 import Components from 'unplugin-vue-components/vite'
 import { ElementPlusResolver } from 'unplugin-vue-components/resolvers'
@@ -22,7 +22,7 @@ export default defineConfig({
       filename: 'stats.html' // 报告文件名
     }) as PluginOption,
     clean({ cleanOnceBeforeBuildPatterns: ['**/*', '!some-important-file.txt'] }) as PluginOption,
-    Inspect() as PluginOption,  // 查看模块转换过程
+
     AutoImport({
       resolvers: [ElementPlusResolver()],
       dts: 'src/types/auto-imports.d.ts',  // 生成类型声明
