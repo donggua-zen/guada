@@ -1,10 +1,12 @@
 <template>
-  <div class="thinking-section" :class="{ 'thinking-section--expanded': isExpanded }">
+  <div class="thinking-section mb-2" :class="{ 'thinking-section--expanded': isExpanded }">
     <div
-      class="thinking-section__header inline-block justify-center items-center text-sm text-gray-700 dark:text-[#8b8d95] cursor-pointer font-medium my-1 py-1 transition-colors duration-200 hover:bg-gray-100 dark:hover:bg-[#2a2c30] rounded"
+      class="thinking-section__header h-7 inline-flex justify-center items-center text-sm text-gray-700 dark:text-[#8b8d95] cursor-pointer font-medium my-1 transition-colors duration-200 hover:bg-gray-100 dark:hover:bg-[#2a2c30] rounded px-1"
       @click.stop="handleToggle">
-      <div class="items-center flex">
-        <div class="w-1.5 h-1.5 rounded-full bg-gray-500 mx-1.5"></div>
+      <div class="flex items-center">
+        <el-icon size="15" class="">
+          <Lightbulb24Regular class="text-yellow-500"/>
+        </el-icon>
         <span class="text-gray-500 ml-2">{{ isThinking ? '思考中...' : '已深度思考' }}</span>
         <span v-if="thinkingDuration" class="text-xs text-gray-400 ml-2">
           <template v-if="isThinking">
@@ -22,12 +24,14 @@
 
     <div class="thinking-section__container" :class="{ 'thinking-section__container--expanded': isExpanded }">
       <div class="thinking-section__content-wrapper flex">
-        <div class="w-4 min-h-0 flex justify-center mr-2.5 py-1">
-          <div class="w-px bg-gray-200 dark:bg-gray-700"></div>
+        <div class="pt-1 flex">
+          <div class="w-5.5 min-h-0 flex justify-center mr-1.5">
+            <div class="w-px bg-gray-200 dark:bg-gray-700"></div>
+          </div>
+          <MarkdownContent @click.stop="$emit('click')" class="flex-1 markdown-text text-gray-500 dark:text-gray-400"
+            :content="reasoningContent" :debounced="isStreaming" @render-complete="$emit('renderComplete')" />
         </div>
-        <MarkdownContent @click.stop="$emit('click')"
-          class="flex-1 markdown-text text-gray-500 dark:text-gray-400" :content="reasoningContent"
-          :debounced="isStreaming" @render-complete="$emit('renderComplete')" />
+
       </div>
     </div>
   </div>
@@ -37,6 +41,7 @@
 import { computed, ref } from 'vue';
 import { ElIcon } from 'element-plus';
 import { ArrowRightTwotone } from '@vicons/material';
+import { Lightbulb24Regular } from '@vicons/fluent';
 import MarkdownContent from '../../ui/MarkdownContent.vue';
 import { formatDuration } from '../../../utils/messageUtils';
 
@@ -108,5 +113,4 @@ const formattedDuration = computed(() => {
   opacity: 1;
   transform: translateY(0);
 }
-
 </style>

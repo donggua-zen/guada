@@ -1,14 +1,14 @@
 <template>
   <div class="tool-calls-section my-1">
     <div
-      class="inline-block justify-center items-center text-sm text-gray-700 dark:text-[#8b8d95] cursor-pointer font-medium py-1 transition-colors duration-200 hover:bg-gray-100 dark:hover:bg-[#2a2c30] rounded px-1"
+      class="h-7 inline-flex justify-center items-center text-sm text-gray-700 dark:text-[#8b8d95] cursor-pointer font-medium py-1 transition-colors duration-200 hover:bg-gray-100 dark:hover:bg-[#2a2c30] rounded px-1"
       @click.stop="openDialog">
       <div class="flex items-center">
-        <el-icon class="" size="14">
-          <BuildTwotone />
+        <el-icon class="" size="15">
+          <Wrench24Filled class="text-gray-500" />
         </el-icon>
         <span class="text-gray-500 ml-2">{{ toolCallTextPrefix }}</span>
-        <span v-if="firstToolName" class="tool-name-badge mx-1">{{ firstToolName }}</span>
+        <span v-if="firstToolName" class="mx-1 text-xs text-gray-400">{{ firstToolName }}</span>
         <span v-if="toolCount > 1" class="text-gray-500">等{{ toolCount }}个工具</span>
         <span v-else-if="toolCount === 1 && !isStreaming" class="text-gray-500"></span>
       </div>
@@ -21,7 +21,7 @@
 
           <div class="flex items-center gap-2 mb-3 pb-2 border-b border-gray-200 dark:border-gray-700">
             <el-icon size="18" class="text-blue-500">
-              <BuildTwotone />
+              <Wrench24Filled />
             </el-icon>
             <span class="text-base font-semibold text-gray-800 dark:text-gray-200">
               {{ tool.name || 'Unknown Tool' }}
@@ -85,7 +85,8 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue';
 import { ElIcon, ElDialog, ElButton } from 'element-plus';
-import { BuildTwotone, SettingsOutlined, CheckCircleOutlined } from '@vicons/material';
+import { SettingsOutlined, CheckCircleOutlined } from '@vicons/material';
+import { Wrench24Filled } from '@vicons/fluent';
 
 interface ToolCall {
   name?: string;
@@ -220,21 +221,7 @@ const formatToolResponse = (response: any): string => {
   word-break: break-word;
 }
 
-.tool-name-badge {
-  display: inline-block;
-  padding: 1px 8px;
-  background-color: rgba(59, 130, 246, 0.1);
-  border-radius: 9999px;
-  font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
-  font-size: 13px;
-  font-weight: 500;
-  transition: all 0.2s ease;
-}
 
-.dark .tool-name-badge {
-  background-color: rgba(59, 130, 246, 0.15);
-  color: #60a5fa;
-}
 
 @keyframes fadeIn {
   from {
