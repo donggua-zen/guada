@@ -4,16 +4,6 @@
         <div class="sessions-header py-1 text-lg font-semibold flex justify-between items-center mb-6">
             <span>Skills</span>
             <el-space>
-                <el-tooltip :content="autoScanEnabled ? '已启用自动扫描' : '已禁用自动扫描'" placement="top">
-                    <el-switch
-                        v-model="autoScanEnabled"
-                        @change="handleToggleAutoScan"
-                        inline-prompt
-                        active-text="自动"
-                        inactive-text="手动"
-                        size="default"
-                    />
-                </el-tooltip>
                 <el-button @click="handleShowInstallDialog">
                     <template #icon>
                         <UploadOutlined />
@@ -39,7 +29,7 @@
         <!-- Skills 列表 -->
         <div class="space-y-4">
             <div class="text-sm text-gray-600 dark:text-[#8b8d95] mb-4">
-                Skills 是系统自动发现的本地技能模块。启用“自动”开关后，系统会监控目录变更并自动扫描；也可点击“刷新”按钮手动扫描。
+                Skills 是系统自动发现的本地技能模块。手动添加或者修改技能后点击“刷新”按钮手动扫描目录变更。
             </div>
 
             <!-- 网格布局：每行3列 -->
@@ -252,9 +242,6 @@ const docError = ref<string | null>(null)
 const documentation = ref('')
 const currentSkillName = ref('')
 
-// 自动扫描状态
-const autoScanEnabled = ref(true)
-
 // 安装相关状态
 const showInstallDialog = ref(false)
 const installing = ref(false)
@@ -347,35 +334,6 @@ async function handleViewDocumentation(skillId: string) {
         ElMessage.error(errorMsg)
     } finally {
         loadingDoc.value = false
-    }
-}
-
-/**
- * 加载自动扫描状态
- */
-async function loadAutoScanStatus() {
-    try {
-        const response = await apiService.getAutoScanStatus()
-        autoScanEnabled.value = response.enabled
-    } catch (err: any) {
-        console.error('获取自动扫描状态失败:', err)
-        // 失败时默认启用
-        autoScanEnabled.value = true
-    }
-}
-
-/**
- * 切换自动扫描开关
- */
-async function handleToggleAutoScan(enabled: boolean) {
-    try {
-        await apiService.toggleAutoScan(enabled)
-        ElMessage.success(enabled ? '已启用自动扫描' : '已禁用自动扫描')
-    } catch (err: any) {
-        console.error('切换自动扫描失败:', err)
-        ElMessage.error(err.message || '切换失败')
-        // 恢复原状态
-        autoScanEnabled.value = !enabled
     }
 }
 
@@ -487,6 +445,5 @@ async function handleUninstallSkill(skillId: string) {
 
 onMounted(() => {
     loadSkills()
-    loadAutoScanStatus()
 })
 </script>
