@@ -7,7 +7,7 @@ import { SkillDiscoveryResult } from '../interfaces/index';
 import { createPaginatedResponse, PaginatedResponse } from '../../../common/types/pagination';
 import * as path from 'path';
 import * as fs from 'fs/promises';
-import * as AdmZip from 'adm-zip';
+import AdmZip from 'adm-zip';
 import { exec } from 'child_process';
 import { promisify } from 'util';
 
@@ -184,8 +184,9 @@ export class SkillsController {
         message: `Skill '${skillName}' installed successfully from Git` 
       };
     } catch (error) {
-      this.logger.error(`Failed to install skill from Git: ${error.message}`);
-      return { success: false, message: `Installation failed: ${error.message}` };
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      this.logger.error(`Failed to install skill from Git: ${errorMessage}`);
+      return { success: false, message: `Installation failed: ${errorMessage}` };
     }
   }
 
@@ -222,8 +223,9 @@ export class SkillsController {
       this.logger.log(`Successfully updated skill: ${skillId}`);
       return { success: true, message: `Skill '${skillId}' updated successfully` };
     } catch (error) {
-      this.logger.error(`Failed to update skill: ${error.message}`);
-      return { success: false, message: `Update failed: ${error.message}` };
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      this.logger.error(`Failed to update skill: ${errorMessage}`);
+      return { success: false, message: `Update failed: ${errorMessage}` };
     }
   }
 
@@ -296,8 +298,9 @@ export class SkillsController {
       this.logger.log(`Successfully installed skill: ${skillName}`);
       return { success: true, skillId: skillName, message: `Skill '${skillName}' installed successfully` };
     } catch (error) {
-      this.logger.error(`Failed to install skill: ${error.message}`);
-      return { success: false, message: `Installation failed: ${error.message}` };
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      this.logger.error(`Failed to install skill: ${errorMessage}`);
+      return { success: false, message: `Installation failed: ${errorMessage}` };
     }
   }
 
@@ -321,8 +324,9 @@ export class SkillsController {
       this.logger.log(`Successfully uninstalled skill: ${skillId}`);
       return { success: true, message: `Skill '${skillId}' uninstalled successfully` };
     } catch (error) {
-      this.logger.error(`Failed to uninstall skill: ${error.message}`);
-      return { success: false, message: `Uninstallation failed: ${error.message}` };
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      this.logger.error(`Failed to uninstall skill: ${errorMessage}`);
+      return { success: false, message: `Uninstallation failed: ${errorMessage}` };
     }
   }
 

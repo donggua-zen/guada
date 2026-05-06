@@ -164,7 +164,8 @@ export class SkillOrchestrator implements OnModuleInit, OnModuleDestroy {
         );
       } catch (error) {
         // 如果版本记录不存在，创建初始记录
-        if (error.message.includes('not found in version records')) {
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        if (errorMessage.includes('not found in version records')) {
           await this.versionManager.recordInstall(
             skillId,
             updatedSkill.manifest.version,

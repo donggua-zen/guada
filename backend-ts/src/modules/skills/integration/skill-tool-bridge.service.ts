@@ -82,7 +82,8 @@ export class SkillToolBridgeService implements IToolProvider {
           const result = await this.orchestrator.triggerScan();
           return `Scan completed successfully. Found ${result.added.length} new skills, ${result.updated.length} updated, ${result.removed.length} removed.`;
         } catch (error) {
-          return `Scan failed: ${error.message}`;
+          const errorMessage = error instanceof Error ? error.message : String(error);
+          return `Scan failed: ${errorMessage}`;
         }
 
       case 'list':
@@ -109,7 +110,8 @@ export class SkillToolBridgeService implements IToolProvider {
           const updatedSkill = await this.orchestrator.reloadSkill(normalizedSkillId);
           return `Successfully reloaded skill: ${updatedSkill.manifest.name} (version ${updatedSkill.manifest.version})`;
         } catch (error) {
-          return `Failed to reload skill ${skillId}: ${error.message}`;
+          const errorMessage = error instanceof Error ? error.message : String(error);
+          return `Failed to reload skill ${skillId}: ${errorMessage}`;
         }
 
       case 'call':
@@ -139,7 +141,8 @@ export class SkillToolBridgeService implements IToolProvider {
             content || '(No content available)',
           ].join('\n');
         } catch (error) {
-          return `Failed to get skill info for ${skillName}: ${error.message}`;
+          const errorMessage = error instanceof Error ? error.message : String(error);
+          return `Failed to get skill info for ${skillName}: ${errorMessage}`;
         }
 
       default:
