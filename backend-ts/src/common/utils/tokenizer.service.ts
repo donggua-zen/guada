@@ -4,6 +4,7 @@ import * as tiktoken from "tiktoken";
 import * as path from "path";
 import * as fs from "fs";
 import { MessageRecord } from "../types/message.types";
+import { TokenCacheService } from "./token-cache.service";
 
 interface TokenizerResult {
   tokens: number;
@@ -16,6 +17,8 @@ export class TokenizerService {
   private readonly logger = new Logger(TokenizerService.name);
   private hfTokenizers: Map<string, HFTokenizer> = new Map();
   private ttEncoders: Map<string, tiktoken.Tiktoken> = new Map();
+
+  constructor(private readonly cache: TokenCacheService) {}
 
   // 模型名称到 tokenizer 文件夹路径的映射 (HuggingFace)
   private readonly hfTokenizerMapping: Record<string, string> = {
@@ -129,20 +132,32 @@ export class TokenizerService {
    * @param useTiktoken 是否强制使用 Tiktoken
    */
   countTextTokens(modelName: string, text: string, useTiktoken?: boolean): number {
+    // 生成缓存 Key 并尝试从缓存获取
+    const cacheKey = this.cache.generateKey(modelName, text);
+    const cached = this.cache.get(cacheKey);
+    if (cached !== null) {
+      return cached;
+    }
+
     // 自动选择方案：如果模型在 HF 映射中（支持模糊匹配）且未强制使用 Tiktoken，则优先使用 HF
     const matchedKey = this.findMatchingKey(modelName);
     const shouldUseHF = !useTiktoken && (this.hfTokenizerMapping[modelName] || matchedKey);
 
+    let result: number;
     if (shouldUseHF) {
       const tokenizer = this.getHFTokenizer(modelName);
       const encoded = tokenizer.encode(text);
-      return encoded.ids.length;
+      result = encoded.ids.length;
     } else {
       // 默认使用 cl100k_base，也可以根据 modelName 扩展映射
       const encoding = this.ttEncodingMapping[modelName] || this.ttEncodingMapping.default;
       const enc = this.getTTEncoder(encoding);
-      return enc.encode(text).length;
+      result = enc.encode(text).length;
     }
+
+    // 将结果写入缓存
+    this.cache.set(cacheKey, result, modelName, text);
+    return result;
   }
 
   /**
