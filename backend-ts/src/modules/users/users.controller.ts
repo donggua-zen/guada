@@ -43,6 +43,18 @@ export class UsersController {
     );
   }
 
+  @Post("user/password/change")
+  async changePassword(
+    @Body() body: { oldPassword: string; newPassword: string },
+    @CurrentUser() user: any,
+  ) {
+    return this.userService.changePassword(
+      user.id,
+      body.oldPassword,
+      body.newPassword,
+    );
+  }
+
   @Post("subaccounts")
   async createSubAccount(@Body() data: any, @CurrentUser() user: any) {
     return this.userService.createSubAccount(user.id, data);
