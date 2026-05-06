@@ -47,7 +47,6 @@ export class AgentService {
     private sessionLockService: SessionLockService,
     private toolContextFactory: ToolContextFactory,
     private conversationContextFactory: ConversationContextFactory,
-    @Optional() private skillOrchestrator?: SkillOrchestrator,
   ) { }
 
   /**
@@ -220,8 +219,6 @@ export class AgentService {
     // const lastUserMsg = history.filter(m => m.role === 'user').pop();
     // const containsKnowledgeBase = !!lastUserMsg?.metadata?.referencedKbs?.length;
     // const excludeTools: string[] = containsKnowledgeBase ? [] : ['knowledge_base'];
-
-
 
 
     do {

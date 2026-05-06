@@ -27,9 +27,10 @@ export class ConversationContext implements IConversationContext {
   private readonly logger = new Logger(ConversationContext.name);
 
   private sessionId: string;
-  /** 纯对话历史，不含 system 消息（system prompt 单独存储在 systemPromptCache） */
+  /** 纯对话历史，不含 system 消息（system prompt 单独存储在 systemPrompt） */
   private history: MessageRecord[] = [];
-  private systemPromptCache: string = "";
+  private systemPrompt: string = "";
+  private systemPromptTokenCount: number = 0;
   /** 当前生效的压缩摘要内容，由压缩策略生成并在构建最终消息时注入到 system prompt */
   private currentSummary?: string;
   private compressionConfig: CompressionConfig | null = null;
@@ -61,8 +62,8 @@ export class ConversationContext implements IConversationContext {
   async initialize(config: ContextInitConfig): Promise<void> {
     this.logger.log(`Initializing conversation context for ${this.sessionId}`);
 
-    this.systemPromptCache = config.systemPrompt || "You are a helpful assistant.";
-    this.logger.debug(`Using system prompt: ${this.systemPromptCache}`);
+    this.systemPrompt = config.systemPrompt || "You are a helpful assistant.";
+    this.logger.debug(`Using system prompt: ${this.systemPrompt}`);
     // 保存对话模型名称，用于 Token 计算
     this.chatModelName = config.model?.modelName || config.model?.name || "gpt4";
     this.logger.debug(`Using chat model for tokenization: ${this.chatModelName}`);
@@ -93,7 +94,7 @@ export class ConversationContext implements IConversationContext {
     // 读取摘要模式配置，优先使用角色级别配置，其次使用全局配置
     const memoryConfig = config.memory || {};
     let summaryMode: string = 'fast'; // 默认快速模式
-    
+
     if (memoryConfig.summaryMode) {
       // 优先使用角色级别的 summaryMode 配置
       summaryMode = memoryConfig.summaryMode;
@@ -173,6 +174,11 @@ export class ConversationContext implements IConversationContext {
     }
 
     this.logger.debug(`Loaded ${this.history.length} messages into context`);
+
+    // 计算系统提示词的 Token 数
+    this.systemPromptTokenCount = this.tokenizerService.countTextTokens(this.chatModelName, this.systemPrompt);
+    // 减去系统提示词的 Token 数，确保后续计算的上下文窗口是准确的
+    this.compressionConfig.contextWindow -= this.systemPromptTokenCount;
 
     // 初始化时计算全量 Token 数并缓存，作为后续增量更新的基准值
     this.currentTokenCount = this.tokenizerService.countTokens(this.chatModelName, this.history);
@@ -296,7 +302,7 @@ export class ConversationContext implements IConversationContext {
    * @returns 当前会话的 Token 总数
    */
   getTokenCount(): number {
-    return this.currentTokenCount;
+    return this.currentTokenCount + this.systemPromptTokenCount;
   }
 
   /**
@@ -350,7 +356,7 @@ export class ConversationContext implements IConversationContext {
     // 防御性过滤：确保 messages 中不包含意外的 system 消息，保持数据一致性
     const nonSystemMessages = messages.filter(msg => msg.role !== 'system');
 
-    let finalSystemPrompt = this.systemPromptCache;
+    let finalSystemPrompt = this.systemPrompt;
 
     // 将压缩摘要注入到 system prompt 末尾，这是摘要信息的唯一注入点
     // 摘要帮助模型在有限的上下文窗口内理解更长的历史对话背景

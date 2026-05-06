@@ -3,6 +3,7 @@ import { Tokenizer as HFTokenizer } from "@huggingface/tokenizers";
 import * as tiktoken from "tiktoken";
 import * as path from "path";
 import * as fs from "fs";
+import { MessageRecord } from "../types/message.types";
 
 interface TokenizerResult {
   tokens: number;
@@ -145,12 +146,12 @@ export class TokenizerService {
   }
 
   /**
-   * 计算消息数组的 Token 数量（支持工具调用和复杂内容结构）
+   * 计算消息数组的 Token 数量（支持工具调用、复杂内容结构和图片）
    * @param modelName 模型名称
    * @param messages 待计算的消息数组
    * @param useTiktoken 是否强制使用 Tiktoken（默认根据模型自动选择）
    */
-  countTokens(modelName: string, messages: any[], useTiktoken?: boolean): number {
+  countTokens(modelName: string, messages: MessageRecord[], useTiktoken?: boolean): number {
     let totalTokens = 0;
 
     for (const item of messages) {
@@ -158,20 +159,13 @@ export class TokenizerService {
         // 1. 处理工具调用 (toolCalls)
         if (item.toolCalls && Array.isArray(item.toolCalls)) {
           for (const tc of item.toolCalls) {
-            if (tc.function) {
-              if (tc.function.name) {
-                totalTokens += this.countTextTokens(modelName, tc.function.name, useTiktoken);
-              }
-              if (tc.function.arguments) {
-                totalTokens += this.countTextTokens(modelName, tc.function.arguments, useTiktoken);
-              }
-            }
+            totalTokens += this.countTextTokens(modelName, JSON.stringify(tc), useTiktoken);
           }
         }
 
         // 2. 处理思维链 (reasoning_content)
-        if (item.reasoning_content) {
-          totalTokens += this.countTextTokens(modelName, item.reasoning_content, useTiktoken);
+        if (item.reasoningContent) {
+          totalTokens += this.countTextTokens(modelName, item.reasoningContent, useTiktoken);
         }
 
         // 3. 处理内容 (content)
@@ -179,6 +173,10 @@ export class TokenizerService {
           for (const part of item.content) {
             if (part.text) {
               totalTokens += this.countTextTokens(modelName, part.text, useTiktoken);
+            }
+            // 4. 处理图片 (image_url)
+            if (part.type === "image_url" && part.image_url) {
+              totalTokens += 1500; // 暂时统一按照 1500 计算
             }
           }
         } else if (item.content) {
