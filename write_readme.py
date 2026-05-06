@@ -1,1 +1,0 @@
-import sys\nsys.stdout.reconfigure(encoding="utf-8")\nprint("script ready")
