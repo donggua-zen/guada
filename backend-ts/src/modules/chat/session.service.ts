@@ -18,6 +18,7 @@ import { UrlService } from "../../common/services/url.service";
 import { WorkspaceService } from "../../common/services/workspace.service";
 import { SG_MODELS, SK_MOD_CHAT, SK_MOD_TITLE_MODEL } from "../../constants/settings.constants";
 import { ConversationContextFactory } from "./conversation-context.factory";
+import { SessionContextService } from "./session-context.service";
 import { Model } from "@prisma/client";
 
 @Injectable()
@@ -34,8 +35,8 @@ export class SessionService {
     private contextManager: MessageStoreService,
     private tokenizerService: TokenizerService,
     private urlService: UrlService,
-    private conversationContextFactory: ConversationContextFactory,
     private workspaceService: WorkspaceService,
+    private sessionContextService: SessionContextService,
   ) { }
 
   /**
@@ -433,250 +434,75 @@ export class SessionService {
 
   /**
    * 获取会话的 Token 使用统计
+   * 使用 SessionContextService 确保与 Agent 对话使用完全一致的参数
    */
   async getTokenStats(sessionId: string, userId: string) {
-    // 1. 验证会话归属权并获取会话信息
     const session = await this.sessionRepo.findById(sessionId);
     if (!session || session.userId !== userId) {
       throw new Error("Session not found or unauthorized");
     }
 
-    // 2. 确定使用的模型（优先使用会话绑定的模型，否则使用默认模型）
-    let model = session.model;
-    if (!model) {
-      const modelId = this.settingsStorage.getSettingValue(
-        SG_MODELS,
-        SK_MOD_CHAT,
-      );
-
-      model = await this.modelRepo.findById(modelId);
-    }
-
-    // 3. 获取模型配置以确定上下文窗口大小
-    let contextWindow = 128000; // 默认值（GPT-4）
-    let modelName = "gpt-4";
-
-
-    if (model) {
-      // contextWindow 存储在 config JSON 字段中
-      const config = model.config as any;
-      contextWindow = config?.contextWindow || 128000;
-      modelName = model.modelName || model.name || "gpt-4";
-    }
-
-
-    // 4. 创建并初始化会话上下文
-    const conversationContext = await this.initializeConversationContext(
-      sessionId,
-      userId,
+    const { context, effectiveContextWindow } = await this.sessionContextService.buildContext(
       session,
-      model,
-      contextWindow,
     );
 
-    // 5. 获取纯对话历史（不触发压缩逻辑）
-    // 使用 getHistory() 而非 getMessages()，因为 getMessages() 可能会触发压缩
-    // Token 统计只需要当前状态，不需要主动触发压缩
-    const messages = conversationContext.getHistory();
-
-    // 6. 从 ConversationContext 内部获取缓存的 Token 计数，避免重复计算
-    // currentTokenCount 在 initialize 时已计算一次，通过 getTokenCount() 直接获取
-    const usedTokens = conversationContext.getTokenCount();
-
-    // 7. 计算使用率
-    const percentage = Math.min((usedTokens / contextWindow) * 100, 100);
-    const remainingTokens = Math.max(contextWindow - usedTokens, 0);
+    const messages = context.getHistory();
+    const usedTokens = context.getTokenCount();
+    const percentage = Math.min((usedTokens / effectiveContextWindow) * 100, 100);
+    const remainingTokens = Math.max(effectiveContextWindow - usedTokens, 0);
 
     return {
       usedTokens,
-      totalTokens: contextWindow,
+      totalTokens: effectiveContextWindow,
       remainingTokens,
       percentage: parseFloat(percentage.toFixed(2)),
-      modelName,
-      messageCount: messages.filter(m => m.role === 'user').length, // 仅统计用户消息数（对话轮次）
+      modelName: session.model?.modelName || "gpt-4",
+      messageCount: messages.filter(m => m.role === 'user').length,
     };
   }
 
   /**
    * 手动触发会话压缩
-   * 
-   * 该方法允许用户主动触发会话历史压缩，不受自动压缩阈值限制。
-   * 压缩参数遵循会话与角色的继承规则：
-   * - 若会话开启了自定义记忆配置（memoryEnabled !== false），使用会话级别的压缩参数
-   * - 否则继承角色的压缩参数
-   * 
-   * @param sessionId 会话 ID
-   * @param userId 用户 ID（用于权限验证）
-   * @returns 压缩结果，包含压缩前后的 Token 统计和使用的策略
+   * 使用 SessionContextService 确保与 Agent 对话使用完全一致的参数
    */
   async compressSession(sessionId: string, userId: string) {
-    // 1. 验证会话归属权并获取会话信息
     const session = await this.sessionRepo.findById(sessionId);
     if (!session || session.userId !== userId) {
       throw new Error("Session not found or unauthorized");
     }
-
-    // 2. 合并会话设置与角色配置（复用 agent.service 的继承逻辑）
-    const mergedSettings = this.mergeSessionSettingsForCompression(session);
-
-    // 3. 确定使用的模型
-    let model = session.model;
-    if (!model) {
-      const modelId = this.settingsStorage.getSettingValue(
-        SG_MODELS,
-        SK_MOD_CHAT,
-      );
-
-      model = await this.modelRepo.findById(modelId);
-    }
-
-    // 3. 获取模型配置以确定上下文窗口大小
-    let contextWindow = 128000; // 默认值（GPT-4）
-    let modelName = "gpt-4";
-
-
-    if (model) {
-      // contextWindow 存储在 config JSON 字段中
-      const config = model.config as any;
-      contextWindow = config?.contextWindow || 128000;
-      modelName = model.modelName || model.name || "gpt-4";
-    }
-
-
-    // 5. 构建记忆配置（从合并后的设置中获取）
-    const finalMemoryConfig = mergedSettings.memory || {};
-
-    // 6. 创建并初始化会话上下文
-    const conversationContext = await this.initializeConversationContext(
-      sessionId,
-      userId,
-      session,
-      model,
-      contextWindow,
-      finalMemoryConfig,
-      mergedSettings.thinkingEnabled,
-    );
-
-    // 7. 记录压缩前的状态
-    const beforeTokenCount = conversationContext.getTokenCount();
-    const beforeMessageCount = conversationContext.getHistory().length;
-
-    // 8. 强制触发压缩（使用 forceCompress 确保100%触发）
+  
+    const { context } = await this.sessionContextService.buildContext(session);
+  
+    const beforeTokenCount = context.getTokenCount();
+    const beforeMessageCount = context.getHistory().length;
+  
     this.logger.log(`Manually triggering compression for session ${sessionId}`);
-    await conversationContext.forceCompress();
-
-    // 9. 记录压缩后的状态
-    const afterTokenCount = conversationContext.getTokenCount();
-    const compressedMessages = conversationContext.getHistory();
+    await context.forceCompress();
+  
+    const afterTokenCount = context.getTokenCount();
+    const compressedMessages = context.getHistory();
     const afterMessageCount = compressedMessages.length;
-
-    // 10. 获取压缩策略信息（从压缩引擎的检查点中读取）
+  
     const checkpoint = await this.contextStateRepo.findBySessionId(sessionId);
     const compressionStrategy = checkpoint?.cleaningStrategy || 'none';
-
-    // 11. 返回压缩结果统计
+  
     return {
       success: true,
       before: {
         tokenCount: beforeTokenCount,
         messageCount: beforeMessageCount,
-        contextWindow,
+        contextWindow: (session.model?.config as any)?.contextWindow || 128000,
       },
       after: {
         tokenCount: afterTokenCount,
         messageCount: afterMessageCount,
-        compressionRatio: ((1 - afterTokenCount / beforeTokenCount) * 100).toFixed(2) + '%',
+        compressionRatio: beforeTokenCount > 0
+          ? ((1 - afterTokenCount / beforeTokenCount) * 100).toFixed(2) + '%'
+          : '0%',
       },
       strategy: compressionStrategy,
-      modelName,
-      appliedConfig: {
-        compressionTargetRatio: finalMemoryConfig.compressionTargetRatio,
-        summaryMode: finalMemoryConfig.summaryMode,
-      },
+      modelName: session.model?.modelName || "gpt-4",
     };
   }
-
-  /**
-   * 初始化会话上下文
-   * 
-   * 提取公共逻辑，避免在多个方法中重复相同的初始化代码。
-   * 该方法负责创建 ConversationContext 实例并完成初始化配置。
-   * 
-   * @param sessionId 会话 ID
-   * @param userId 用户 ID
-   * @param session 会话对象
-   * @param model 模型 ID
-   * @param contextWindow 上下文窗口大小
-   * @param memoryConfig 记忆配置（可选，默认使用会话设置中的配置）
-   * @param thinkingEnabled 是否启用思维链（可选，默认使用会话设置）
-   * @returns 初始化完成的 ConversationContext 实例
-   */
-  private async initializeConversationContext(
-    sessionId: string,
-    userId: string,
-    session: any,
-    model: Model | null,
-    contextWindow: number,
-    memoryConfig?: any,
-    thinkingEnabled?: boolean,
-  ) {
-    // 创建 ConversationContext 实例
-    const conversationContext = await this.conversationContextFactory.create(
-      sessionId,
-      userId,
-    );
-
-    // 如果未提供 memoryConfig，则从会话设置中提取
-    const sessionSettings: any = session.settings || {};
-    const finalMemoryConfig = memoryConfig ?? sessionSettings.memory ?? {};
-
-    // 如果未提供 thinkingEnabled，则从会话设置中提取
-    const finalThinkingEnabled = thinkingEnabled ?? sessionSettings.thinkingEnabled ?? false;
-
-    // 初始化上下文（加载历史消息、应用压缩检查点、计算初始 Token 数）
-    await conversationContext.initialize({
-      systemPrompt: session.character?.description || "You are a helpful assistant.",
-      thinkingEnabled: finalThinkingEnabled,
-      contextWindow,
-      model: model || undefined,
-      memory: finalMemoryConfig,
-    });
-
-    return conversationContext;
-  }
-
-  /**
-   * 合并会话与角色的压缩相关配置
-   * 
-   * 此方法复用了 agent.service 中的配置继承逻辑，确保手动压缩与自动压缩使用相同的配置来源。
-   * 
-   * @param session 会话对象
-   * @returns 合并后的设置对象
-   */
-  private mergeSessionSettingsForCompression(session: any) {
-    const sessionSettings = session.settings || {};
-    const characterSettings = session.character?.settings || {};
-
-    // 基础合并：以角色设置为基准
-    const mergedSettings = { ...characterSettings };
-
-    // 处理记忆/压缩配置（支持独立继承）
-    const memoryEnabled = sessionSettings.memoryEnabled;
-    const sessionMemory = sessionSettings.memory || {};
-    const characterMemory = characterSettings.memory || {};
-
-    // 如果会话开启了自定义配置（memoryEnabled !== false），则使用会话的 memory 分组；否则使用角色的 memory 分组
-    if (memoryEnabled !== false) {
-      mergedSettings.memory = { ...sessionMemory };
-    } else {
-      mergedSettings.memory = { ...characterMemory };
-    }
-
-    // 处理会话特有开关
-    mergedSettings.thinkingEnabled = sessionSettings.thinkingEnabled;
-
-    return mergedSettings;
-  }
-
 
 }

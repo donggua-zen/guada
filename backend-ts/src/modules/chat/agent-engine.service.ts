@@ -1,13 +1,11 @@
-﻿import { Injectable, Logger, ConflictException, Optional } from "@nestjs/common";
+import { Injectable, Logger, ConflictException } from "@nestjs/common";
 import { SessionRepository } from "../../common/database/session.repository";
 import { LLMService } from "../llm-core/llm.service";
 import { ToolOrchestrator } from "../tools/tool-orchestrator.service";
 import { SessionLockService } from "./session-lock.service";
-import { ToolContextFactory } from "../tools/tool-context";
+import { SessionContextService } from "./session-context.service";
 import { MessageRecord, LLMResponseChunk } from "../llm-core/types/llm.types";
-import { ConversationContextFactory } from "./conversation-context.factory";
 import { IConversationContext } from "./interfaces";
-import { SkillOrchestrator } from "../skills/core/skill-orchestrator.service";
 
 /**
  * 思考时间信息（简单数据容器）
@@ -21,10 +19,12 @@ class ThinkingTimeInfo {
 }
 
 /**
- * Agent 服务
+ * Agent 推理引擎
  *
- * 负责协调会话级别的 AI 代理执行流程，包括多轮工具调用循环、流式响应管理和会话状态维护。
- * 核心职责包括：
+ * 负责协调会话级别的 AI 代理执行流程，包括多轮工具调用循环、流式响应管理。
+ * 不管理会话生命周期——配置合并、上下文构建等数据准备工作由 SessionContextService 统一提供。
+ *
+ * 核心职责：
  * - 管理会话级别的并发锁，防止同一会话的多次请求冲突
  * - 协调 LLM 流式请求、工具执行和消息持久化的完整生命周期
  * - 处理思维链（Reasoning Content）的时间追踪和时长计算
@@ -37,16 +37,15 @@ class ThinkingTimeInfo {
  * - 防御性编程：多重安全检查（迭代次数限制、JSON 解析容错、空值保护）
  */
 @Injectable()
-export class AgentService {
-  private readonly logger = new Logger(AgentService.name);
+export class AgentEngine {
+  private readonly logger = new Logger(AgentEngine.name);
 
   constructor(
     private sessionRepo: SessionRepository,
     private toolOrchestrator: ToolOrchestrator,
     private llmService: LLMService,
     private sessionLockService: SessionLockService,
-    private toolContextFactory: ToolContextFactory,
-    private conversationContextFactory: ConversationContextFactory,
+    private sessionContextService: SessionContextService,
   ) { }
 
   /**
@@ -58,11 +57,11 @@ export class AgentService {
    * 执行流程：
    * - 获取会话锁，若会话繁忙则抛出冲突异常
    * - 加载会话并更新最后活跃时间
-   * - 合并会话设置与角色默认配置
+   * - 委托 SessionContextService 完成所有数据准备
    * - 进入多轮工具调用循环，逐轮生成响应
    * - 释放会话锁（无论成功或失败）
    *
-   * @param sessionId 会话 ID
+   * @param sessionIdOrSession 会话 ID 或会话对象（传入对象可避免重复查询）
    * @param messageId 触发本次补全的用户消息 ID
    * @param regenerationMode 再生模式（"overwrite" 覆盖旧回复 / "multi_version" 保留多版本）
    * @param assistantMessageId 现有助手消息 ID（仅 multi_version 模式使用）
@@ -70,31 +69,43 @@ export class AgentService {
    * @yields SSE 格式的事件对象（create / text / think / tool_call / finish 等）
    */
   async *completions(
-    sessionId: string,
+    sessionIdOrSession: string | any,
     messageId: string,
     regenerationMode: string = "overwrite", // 再生模式：'overwrite' | 'multi_version'
     assistantMessageId?: string, // 现有助手消息 ID（用于 multi_version 模式）
     abortSignal?: AbortSignal, // 中断信号（用于客户端断开连接时中止 LLM 请求）
   ) {
+    // 判断传入的是 sessionId 还是 session 对象
+    const isSessionObject = typeof sessionIdOrSession !== 'string';
+    const sessionId = isSessionObject ? sessionIdOrSession.id : sessionIdOrSession;
+
     if (!this.sessionLockService.tryLock(sessionId)) {
       throw new ConflictException("Session is busy");
     }
 
     try {
-      const session = await this.sessionRepo.findById(sessionId);
-      if (!session) throw new Error("Session not found");
+
+      const session = isSessionObject ? sessionIdOrSession : await this.sessionRepo.findById(sessionId);
+
+      // 如果未传入 session 对象，则查询数据库
+      if (!session) {
+        throw new Error("Session not found");
+      }
 
       // 更新会话最后活跃时间，用于会话管理和清理策略
       await this.sessionRepo.updateLastActiveAt(sessionId);
 
-      // 合并会话设置与角色默认配置，会话级别的设置优先于角色默认值
-      const sessionSettings = this.mergeSessionSettings(session);
-      session.settings = sessionSettings;
+      // 委托 SessionContextService 完成所有数据准备
+      const { context, toolContext, effectiveContextWindow, thinkingEnabled } =
+        await this.sessionContextService.buildContext(session, messageId);
 
       // 执行多轮工具调用循环，通过生成器逐轮产出响应事件
       yield* this.executeAgentLoop(
+        context,
         session,
         messageId,
+        toolContext,
+        thinkingEnabled,
         regenerationMode,
         assistantMessageId,
         abortSignal,
@@ -117,89 +128,36 @@ export class AgentService {
    * - 最大迭代次数限制（40 次），防止无限循环
    * - 会话锁保护，确保并发安全
    *
+   * @param conversationContext 已初始化的会话上下文管理器
    * @param session 会话对象，包含模型配置和设置
    * @param userMessageId 触发本次循环的用户消息 ID
+   * @param toolContext 工具执行上下文（内部按需获取 tools）
+   * @param thinkingEnabled 是否启用思维链功能
    * @param regenerationMode 再生模式标识
    * @param assistantMessageId 现有助手消息 ID（可选）
    * @param abortSignal 中断信号（可选）
    * @yields SSE 格式的事件对象
    */
   private async *executeAgentLoop(
+    conversationContext: IConversationContext,
     session: any,
     userMessageId: string,
+    toolContext: any,
+    thinkingEnabled: boolean | undefined,
     regenerationMode: string,
     assistantMessageId?: string,
     abortSignal?: AbortSignal,
   ): AsyncGenerator<any> {
-    const sessionId = session.id;
 
-    // 创建会话上下文管理器，负责历史消息加载、压缩状态维护和 Token 计数
-    const conversationContext: IConversationContext = await this.conversationContextFactory.create(
-      sessionId,
-      session.userId,
-    );
-    const sessionSettings = session.settings || {};
-
-    const modelConfig = (session.model?.config as any) || {};
-    const features = modelConfig.features || [];
-
-
-    // 构建工具执行上下文（仅在模型支持 tools 特性时创建）
-    // 工具上下文包含 MCP 服务器连接、可用工具列表等运行时环境信息
-    const toolContext = features.includes("tools")
-      ? this.toolContextFactory.createContext(
-        sessionId,
-        session.userId,
-        sessionSettings.tools,
-        sessionSettings.mcpServers,
-        [],
-      )
-      : undefined;
-
-    // 获取工具定义
+    // 按需获取 tools（仅在需要时查询）
     const tools = toolContext
       ? await this.toolOrchestrator.getAllTools(toolContext)
       : undefined;
 
-    // 获取工具注入提示词，将其附加到 system prompt 中以指导模型正确使用工具
-    const toolPrompts = await this.toolOrchestrator.getAllToolPrompts(toolContext);
-
-    // 根据模型特性决定是否启用思维链功能
-    // 若模型不支持 thinking 特性，则显式设置为 undefined 以避免传递无效参数
-    let thinkingEnabled: boolean | undefined;
-    if (features.includes("thinking")) {
-      thinkingEnabled = !!sessionSettings.thinkingEnabled;
-    } else {
-      thinkingEnabled = undefined;
-    }
-
-    // 计算实际生效的上下文窗口：取模型上下文窗口和用户设置的 Token 上限的最小值
-    const memoryConfig = sessionSettings.memory || {};
-    const modelContextWindow = modelConfig.contextWindow || 128000; // 模型的上下文窗口大小
-    const maxTokensLimit = memoryConfig.maxTokensLimit;
-    const effectiveContextWindow = maxTokensLimit 
-      ? Math.min(modelContextWindow, maxTokensLimit)
-      : modelContextWindow;
-
-    // 初始化会话上下文，加载历史消息并应用压缩检查点恢复状态
-    await conversationContext.initialize({
-      memory: sessionSettings.memory, // 直接传递合并后的 memory 分组
-      systemPrompt: [
-        sessionSettings.systemPrompt,
-        toolPrompts,
-      ].filter(Boolean).join('\n'),
-      thinkingEnabled,
-      userMessageId,
-      contextWindow: effectiveContextWindow,
-      model: session.model,
-    });
-
     // 生成本次对话轮次的唯一 ID，用于关联同一轮中的所有消息和工具调用
-
     const turnsId = conversationContext.generateId();
 
     // 准备助手回复的消息容器，根据再生模式决定是覆盖旧回复还是创建新版本
-
     const responseMessageId =
       await conversationContext.prepareAssistantResponse(
         userMessageId,
@@ -213,13 +171,6 @@ export class AgentService {
     // 防止无限循环的安全机制：设置最大迭代次数上限
     let iterationCount = 0;
     const MAX_ITERATIONS = 40;
-
-    // 检查是否包含知识库（用于决定是否排除 knowledge_base 工具）
-    // const history = context.getHistory();
-    // const lastUserMsg = history.filter(m => m.role === 'user').pop();
-    // const containsKnowledgeBase = !!lastUserMsg?.metadata?.referencedKbs?.length;
-    // const excludeTools: string[] = containsKnowledgeBase ? [] : ['knowledge_base'];
-
 
     do {
       iterationCount++;
@@ -260,13 +211,12 @@ export class AgentService {
           modelName: session.model?.modelName,
         } // 初始化 metadata 以避免后续访问 undefined
       };
-      
+
       yield* this.executeLLMStream(
         session,
         historyMessages, // 直接使用准备好的消息
         tools,
         assistantResponse,
-        sessionSettings,
         thinkingEnabled,
         abortSignal,
       );
@@ -313,8 +263,6 @@ export class AgentService {
       // 将本轮产生的所有消息（助手回复 + 工具响应）追加到会话上下文并持久化存储
       await conversationContext.appendParts(parts);
 
-
-
       this.logger.debug(
         `Iteration ${iterationCount} cleanup completed. Finish reason: ${assistantResponse.metadata?.finishReason}`,
       );
@@ -334,7 +282,6 @@ export class AgentService {
    * @param messages 发送给 LLM 的完整消息列表
    * @param tools 可用工具定义数组（可选）
    * @param incrementMessage 用于累加响应的消息记录对象（会被原地修改）
-   * @param sessionSettings 会话设置，包含温度、topP 等采样参数
    * @param thinkingEnabled 是否启用思维链功能
    * @param abortSignal 中断信号（可选）
    * @yields SSE 格式的事件对象（text / think / tool_call / finish）
@@ -344,18 +291,13 @@ export class AgentService {
     messages: MessageRecord[],
     tools: any[] | undefined,
     incrementMessage: MessageRecord,
-    sessionSettings: any,
     thinkingEnabled: boolean | undefined,
     abortSignal?: AbortSignal,
-  ): AsyncGenerator<any, any
-    , unknown> {
+  ): AsyncGenerator<any, any, unknown> {
     // 为当前轮次创建思考时间信息对象，用于独立追踪本轮的思维链耗时
     const currentTurnThinkingInfo = new ThinkingTimeInfo();
 
-
-
     // 用于跟踪当前轮次的完整数据（包括错误信息）
-    // let incrementMessage: MessageRecord = { role: "assistant", content: "" };
     let streamError: Error | null = null;
 
     try {
@@ -366,9 +308,9 @@ export class AgentService {
         model: session.model?.modelName,
         messages,
         tools,
-        temperature: sessionSettings.modelTemperature, // 控制输出的随机性
-        topP: sessionSettings.modelTopP, // 核采样参数
-        frequencyPenalty: sessionSettings.modelFrequencyPenalty, // 频率惩罚，降低重复内容
+        temperature: session.settings.modelTemperature, // 控制输出的随机性
+        topP: session.settings.modelTopP, // 核采样参数
+        frequencyPenalty: session.settings.modelFrequencyPenalty, // 频率惩罚，降低重复内容
         maxTokens: config.maxOutputTokens, // 最大输出 Token 数限制
         providerConfig: session.model.provider,
         stream: true,
@@ -451,9 +393,7 @@ export class AgentService {
     // 计算并保存思维链耗时（毫秒），用于性能分析和优化
     incrementMessage.metadata.thinkingDurationMs = this.calculateThinkingDuration(
       currentTurnThinkingInfo,
-    );;
-    // return incrementMessage;
-
+    );
   }
 
   /**
@@ -558,46 +498,6 @@ export class AgentService {
       this.recordThinkingFinished(currentTurnThinkingInfo, "api error");
     }
   }
-
-
-
-  /**
-   * 合并会话与角色设置：会话设置优先，未设置的字段从角色继承
-   *
-   * 该策略允许用户在会话级别覆盖角色的默认配置，实现个性化定制。
-   * 例如：角色默认温度为 0.7，但用户可以在会话中设置为 0.9。
-   *
-   * @param session 会话对象，包含 settings 和 character.settings
-   * @returns 合并后的设置对象
-   */
-  private mergeSessionSettings(session: any) {
-    const sessionSettings = session.settings || {};
-    const characterSettings = session.character?.settings || {};
-    
-    // 基础合并：以角色设置为基准
-    const mergedSettings = { ...characterSettings };
-
-    // --- 1. 处理记忆/压缩配置 (支持独立继承) ---
-    const memoryEnabled = sessionSettings.memoryEnabled;
-    const sessionMemory = sessionSettings.memory || {};
-    const characterMemory = characterSettings.memory || {};
-    
-    // 如果会话开启了自定义配置（memoryEnabled !== false），则使用会话的 memory 分组；否则使用角色的 memory 分组
-    if (memoryEnabled !== false) {
-      mergedSettings.memory = { ...sessionMemory };
-    } else {
-      mergedSettings.memory = { ...characterMemory };
-    }
-
-    // --- 2. 处理模型参数 (目前不支持会话级覆盖，直接使用角色默认值) ---
-    // 注：如果未来需要在会话中自定义温度、Top P 等参数，可在此处增加类似 memory 分组的继承逻辑
-
-    // --- 3. 处理会话特有开关 (直接覆盖) ---
-    mergedSettings.thinkingEnabled = sessionSettings.thinkingEnabled;
-
-    return mergedSettings;
-  }
-
 
   /**
    * 安全地解析JSON字符串，处理无效JSON的情况

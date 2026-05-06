@@ -1,7 +1,7 @@
 import { Injectable, Logger, forwardRef, Inject } from '@nestjs/common';
 import { Subscription } from 'rxjs';
 import { IBotPlatform, BotMessage, BotConfig } from '../interfaces/bot-platform.interface';
-import { AgentService } from '../../chat/agent.service';
+import { AgentEngine } from '../../chat/agent-engine.service';
 import { SessionMapperService } from './session-mapper.service';
 import { BotInstanceManager } from './bot-instance-manager.service';
 import { buildExternalId } from '../utils/external-id';
@@ -12,7 +12,7 @@ import { buildExternalId } from '../utils/external-id';
  * 负责:
  * 1. 监听外部平台消息
  * 2. 创建/获取会话
- * 3. 调用 AgentService 生成回复
+ * 3. 调用 AgentEngine 生成回复
  * 4. 发送回复到外部平台
  */
 @Injectable()
@@ -25,7 +25,7 @@ export class BotOrchestrator {
   private readonly MAX_QUEUE_LENGTH = 10; // 最大缓冲消息数
 
   constructor(
-    private agentService: AgentService,
+    private agentEngine: AgentEngine,
     private sessionMapper: SessionMapperService,
     @Inject(forwardRef(() => BotInstanceManager))
     private instanceManager: BotInstanceManager,
@@ -76,13 +76,13 @@ export class BotOrchestrator {
     }
 
     const queue = this.messageQueues.get(queueKey)!;
-    
+
     // 队列长度保护：如果超过上限，丢弃最旧的消息
     if (queue.messages.length >= this.MAX_QUEUE_LENGTH) {
       const droppedMsg = queue.messages.shift();
       this.logger.warn(`Queue overflow for ${queueKey}, dropped oldest message: ${droppedMsg?.messageId}`);
     }
-    
+
     queue.messages.push(message);
 
     // 如果当前会话正在处理中，仅将消息加入队列等待
@@ -108,7 +108,7 @@ export class BotOrchestrator {
 
     // 标记为处理中
     this.processingSessions.add(queueKey);
-    
+
     // 取出所有待处理消息并清空队列
     const messagesToProcess = [...queue.messages];
     queue.messages = [];
@@ -119,7 +119,7 @@ export class BotOrchestrator {
       // 合并消息内容
       const mergedContent = messagesToProcess.map(m => m.content).join('\n\n');
       const firstMessage = messagesToProcess[0];
-      
+
       // 合并附件
       const allAttachments = messagesToProcess.flatMap(m => m.attachments || []);
 
@@ -197,7 +197,7 @@ export class BotOrchestrator {
         `Using session: ${session.id}, externalId: ${session.externalId}`
       );
 
-      // 4. 调用 AgentService 生成回复（流式）
+      // 4. 调用 AgentEngine 生成回复（流式）
       const adapter = this.instanceManager.getAdapter(botId);
       if (!adapter) {
         this.logger.error('Adapter not found');
@@ -218,9 +218,9 @@ export class BotOrchestrator {
         message.attachments,  // 传递附件信息
       );
 
-      // 2. 调用 AgentService 获取流式迭代器
-      const iterator = this.agentService.completions(
-        session.id,
+      // 2. 调用 AgentEngine 获取流式迭代器（直接传入 session 对象，避免重复查询）
+      const iterator = this.agentEngine.completions(
+        session,
         userMessage.id,
         'overwrite',
       );

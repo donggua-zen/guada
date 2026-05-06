@@ -11,14 +11,14 @@ import {
 } from "@nestjs/common";
 import { AuthGuard } from "../auth/auth.guard";
 import { CurrentUser } from "../auth/current-user.decorator";
-import { AgentService } from "./agent.service";
+import { AgentEngine } from "./agent-engine.service";
 import { Observable } from "rxjs";
 import { Response, Request } from "express";
 
 @Controller("chat")
 @UseGuards(AuthGuard)
 export class ChatController {
-  constructor(private agentService: AgentService) {}
+  constructor(private agentEngine: AgentEngine) {}
 
   @Sse("completions")
   async completions(
@@ -55,7 +55,7 @@ export class ChatController {
 
     // 将 AgentService 的 AsyncGenerator 转换为 RxJS Observable
     return new Observable((observer) => {
-      const iterator = this.agentService.completions(
+      const iterator = this.agentEngine.completions(
         sessionId,
         messageId,
         regenerationMode, // 传递再生模式
@@ -149,7 +149,7 @@ export class ChatController {
     res.on("close", handleDisconnect);
 
     try {
-      const iterator = this.agentService.completions(
+      const iterator = this.agentEngine.completions(
         sessionId,
         messageId || "", // 传递 messageId
         regenerationMode, // 传递再生模式

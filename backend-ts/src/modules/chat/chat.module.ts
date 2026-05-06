@@ -7,7 +7,8 @@ import { SessionContextStateRepository } from "../../common/database/session-con
 import { KnowledgeBaseRepository } from "../../common/database/knowledge-base.repository";
 import { ModelRepository } from "../../common/database/model.repository";
 import { FileRepository } from "../../common/database/file.repository";
-import { AgentService } from "./agent.service";
+import { AgentEngine } from "./agent-engine.service";
+import { SessionContextService } from "./session-context.service";
 import { ToolOrchestrator } from "../tools/tool-orchestrator.service";
 import { TokenizerService } from "../../common/utils/tokenizer.service";
 import { ChatController } from "./chat.controller";
@@ -33,7 +34,8 @@ import { ConversationContextFactory, MESSAGE_STORE_TOKEN, COMPRESSION_STRATEGY_T
   imports: [AuthModule, ToolsModule, CharactersModule, FilesModule, LlmCoreModule, SkillsModule],
   controllers: [ChatController, MessagesController, SessionsController],
   providers: [
-    AgentService,
+    AgentEngine,
+    SessionContextService,
     MessageStoreService,
     CompressionEngine,
     ConversationContextFactory,
@@ -53,7 +55,7 @@ import { ConversationContextFactory, MESSAGE_STORE_TOKEN, COMPRESSION_STRATEGY_T
     TokenizerService,
     UploadPathService,
   ],
-  exports: [AgentService],
+  exports: [AgentEngine],
 })
 export class ChatModule implements OnModuleInit {
   constructor(
