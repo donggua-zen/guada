@@ -21,16 +21,15 @@ export class SkillToolBridgeService implements IToolProvider {
   async getTools(enabled?: boolean | string[]): Promise<any[]> {
     // 返回 Skills 系统管理工具（ToolOrchestrator 会自动添加 skill__ 前缀）
     return [
-      // TODO: 暂时屏蔽 scan 工具，技能列表已注入提示词
-      // {
-      //   name: 'scan',
-      //   description: 'Scan the skills directory to discover new or updated skills. Use this when you need to refresh the list of available skills.',
-      //   parameters: {
-      //     type: 'object',
-      //     properties: {},
-      //     required: [],
-      //   },
-      // },
+      {
+        name: 'scan',
+        description: 'Scan the skills directory to discover new or updated skills. Use this when you need to refresh the list of available skills.',
+        parameters: {
+          type: 'object',
+          properties: {},
+          required: [],
+        },
+      },
       // TODO: 暂时屏蔽 list 工具，技能列表已注入提示词
       // {
       //   name: 'list',
@@ -43,7 +42,7 @@ export class SkillToolBridgeService implements IToolProvider {
       // },
       {
         name: 'reload',
-        description: 'Reload a specific skill to apply changes. Use this after modifying a skill\'s SKILL.md file.',
+        description: 'Reload a specific skill to apply changes. Use this after modifying a skill\'s SKILL.md file. If you changed the skill name (directory name), use scan instead.',
         parameters: {
           type: 'object',
           properties: {
@@ -182,10 +181,11 @@ export class SkillToolBridgeService implements IToolProvider {
       '3. Carefully follow all instructions and guidelines in the returned content',
       '4. Apply the skill\'s methodology to complete the task',
       '',
-      '## Skill Management Tools (Optional)',
-      'These tools are available for managing skills when needed:',
+      '## Skill Management Tools',
+      'These tools are available for managing skills:',
+      '- scan: Scan the skills directory to discover new or updated skills (use this after renaming a skill directory)',
       '- call: Call a skill to activate it and get its complete instructions',
-      '- reload: Reload a specific skill after modifying its SKILL.md file',
+      '- reload: Reload a specific skill after modifying its SKILL.md file (not for name changes)',
     ].join('\n');
   }
 

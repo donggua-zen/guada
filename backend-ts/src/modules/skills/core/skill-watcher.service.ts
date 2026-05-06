@@ -25,22 +25,12 @@ export class SkillWatcherService implements OnModuleInit, OnModuleDestroy {
   }
 
   /**
-   * 模块初始化时启动监听
+   * 模块初始化时启动监听（已禁用自动监听）
    */
   async onModuleInit(): Promise<void> {
-    const enableWatch = this.configService.get<boolean>('SKILLS_ENABLE_WATCH', true);
-    
-    if (!enableWatch) {
-      this.logger.log('Skills file watching is disabled by configuration');
-      return;
-    }
-
-    try {
-      await this.startWatching();
-      this.logger.log('Skills file watcher initialized successfully');
-    } catch (error) {
-      this.logger.error(`Failed to initialize Skills watcher: ${error}`);
-    }
+    // 全局自动文件监听已禁用，改为通过工具手动触发扫描
+    this.logger.log('Skills file watching is disabled. Use skill__scan tool to manually refresh skills.');
+    return;
   }
 
   /**
