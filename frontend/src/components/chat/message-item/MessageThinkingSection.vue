@@ -1,7 +1,7 @@
 <template>
-  <div class="thinking-section mb-2" :class="{ 'expanded': isExpanded }">
+  <div class="thinking-section" :class="{ 'thinking-section--expanded': isExpanded }">
     <div
-      class="collapsible-header inline-block justify-center items-center text-sm text-gray-700 dark:text-[#8b8d95] cursor-pointer font-medium my-1 py-1 transition-colors duration-200 hover:bg-gray-100 dark:hover:bg-[#2a2c30] rounded"
+      class="thinking-section__header inline-block justify-center items-center text-sm text-gray-700 dark:text-[#8b8d95] cursor-pointer font-medium my-1 py-1 transition-colors duration-200 hover:bg-gray-100 dark:hover:bg-[#2a2c30] rounded"
       @click.stop="handleToggle">
       <div class="items-center flex">
         <div class="w-1.5 h-1.5 rounded-full bg-gray-500 mx-1.5"></div>
@@ -20,13 +20,13 @@
       </div>
     </div>
 
-    <div class="thinking-container" :class="{ expanded: isExpanded }">
-      <div class="thinking-content-wrapper flex">
-        <div class="w-4 min-h-0 flex justify-center mr-2.5">
+    <div class="thinking-section__container" :class="{ 'thinking-section__container--expanded': isExpanded }">
+      <div class="thinking-section__content-wrapper flex">
+        <div class="w-4 min-h-0 flex justify-center mr-2.5 py-1">
           <div class="w-px bg-gray-200 dark:bg-gray-700"></div>
         </div>
         <MarkdownContent @click.stop="$emit('click')"
-          class="thinking-content flex-1 markdown-text text-gray-500 dark:text-gray-400" :content="reasoningContent"
+          class="flex-1 markdown-text text-gray-500 dark:text-gray-400" :content="reasoningContent"
           :debounced="isStreaming" @render-complete="$emit('renderComplete')" />
       </div>
     </div>
@@ -80,43 +80,33 @@ const formattedDuration = computed(() => {
   animation: fadeIn 0.3s ease;
 }
 
-.collapsible-header {
+.thinking-section__header {
   user-select: none;
 }
 
-.thinking-container {
+.thinking-section__container {
   display: grid;
   grid-template-rows: 0fr;
   transition: grid-template-rows 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   overflow: hidden;
 }
 
-.thinking-container.expanded {
+.thinking-section__container--expanded {
   grid-template-rows: 1fr;
 }
 
-.thinking-content-wrapper {
+.thinking-section__content-wrapper {
   min-height: 0;
   opacity: 0;
   /* transform: translateY(-8px); */
   transition: opacity 0.25s ease, transform 0.25s ease;
   overflow: hidden;
+  /* padding-bottom: 8px; */
 }
 
-.thinking-container.expanded .thinking-content-wrapper {
+.thinking-section__container--expanded .thinking-section__content-wrapper {
   opacity: 1;
   transform: translateY(0);
 }
 
-@keyframes fadeIn {
-  from {
-    /* opacity: 0; */
-    /* transform: translateY(-5px); */
-  }
-
-  to {
-    /* opacity: 1; */
-    /* transform: translateY(0); */
-  }
-}
 </style>

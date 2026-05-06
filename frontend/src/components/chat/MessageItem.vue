@@ -1,11 +1,11 @@
 <template>
-  <div v-if="!streamingState.isPlaceholder" class="message" :class="messageClass" ref="rootRef"
+  <div v-if="!streamingState.isPlaceholder" class="message-item" :class="messageClass" ref="rootRef"
     :data-message-id="message.id">
-    <!-- 如果消息内容为空，显示提示信息 -->
-    <div v-if="turns.length === 0" class="message-content">
-      <div class="text-gray-400 text-sm italic">消息内容为空（数据异常）</div>
+    <!-- 如果消息内容为空,显示提示信息 -->
+    <div v-if="turns.length === 0" class="message-item__wrapper">
+      <div class="text-gray-400 text-sm italic">消息内容为空(数据异常)</div>
     </div>
-    <div v-else class="message-content">
+    <div v-else class="message-item__wrapper">
       <div v-if="isAssistant" class="text-xs text-gray-400 mb-3">
         <div class="flex items-center">
           <div class="mr-5 flex items-center">
@@ -22,15 +22,15 @@
           </div>
         </div>
       </div>
-      <div class="message-card">
+      <div class="message-item__card">
         <template v-for="(turn, index) in turns" :key="turn.id">
           <!-- 使用拆分后的思考框组件 -->
           <MessageThinkingSection v-if="turn.reasoningContent" :reasoning-content="turn.reasoningContent"
             :is-thinking="turn.state?.isThinking || false" :is-streaming="turn.state?.isStreaming || false"
-            :thinking-duration-ms="turn.thinkingDurationMs" :meta-data="turn.metadata" @click="handleThinkingClick"
-            @render-complete="handleRenderComplete" />
+            :thinking-duration-ms="turn.metadata?.thinkingDurationMs" :meta-data="turn.metadata"
+            @click="handleThinkingClick" @render-complete="handleRenderComplete" />
 
-          <MarkdownContent v-if="turn.content" class="message-text markdown-text" @click="handleClick"
+          <MarkdownContent v-if="turn.content" class="message-item__text markdown-text" @click="handleClick"
             @render-complete="handleRenderComplete" :content="turn.content" :debounced="turn.state?.isStreaming" />
 
           <!-- 使用拆分后的工具调用组件 -->
@@ -228,7 +228,7 @@ const previewList = computed(() => {
 
 const isAssistant = computed(() => props.message.role === "assistant");
 const messageClass = computed(() =>
-  isAssistant.value ? "assistant-message-container" : "user-message-container"
+  isAssistant.value ? "message-item--assistant" : "message-item--user"
 );
 // const avatarClass = computed(() =>
 //   isAssistant.value ? "assistant-avatar" : "user-avatar"
@@ -407,8 +407,8 @@ defineExpose({
 <style scoped>
 @reference "tailwindcss";
 
-/* 消息样式 */
-.message {
+/* 消息样式 - BEM Block */
+.message-item {
   display: flex;
   gap: 15px;
   width: 100%;
@@ -416,16 +416,16 @@ defineExpose({
   margin-bottom: 25px;
 }
 
-/* 新增卡片式设计 */
-.message-card {
+/* 消息卡片 - BEM Element */
+.message-item__card {
   font-size: var(--size-text-base);
   letter-spacing: 1px;
   transition: all 0.3s ease;
   max-width: 100%;
 }
 
-/* 用户消息气泡特定样式 */
-.user-message-container .message-card {
+/* 用户消息气泡特定样式 - BEM Modifier */
+.message-item--user .message-item__card {
   background-color: var(--color-bubble-user-bg);
   color: var(--color-bubble-user-text);
   padding: 5px 12px;
@@ -434,8 +434,8 @@ defineExpose({
   margin-left: auto;
 }
 
-/* AI消息气泡特定样式 */
-.assistant-message-container .message-card {
+/* AI消息气泡特定样式 - BEM Modifier */
+.message-item--assistant .message-item__card {
   background: var(--color-bubble-assitant-bg);
   color: var(--color-bubble-assitant-text);
   border: 1px solid var(--assistant-bubble-border-color);
@@ -446,38 +446,41 @@ defineExpose({
   border: none;
 }
 
-/* .message-content {
-  display: flex;
-  flex-direction: column;
-  position: relative;
-  min-width: 0;
-} */
-
-/* 修复用户消息对齐问题 */
-.message.user-message-container {
+/* 修复用户消息对齐问题 - BEM Modifier */
+.message-item.message-item--user {
   flex-direction: row-reverse;
 }
 
-.message.assistant-message-container {
+.message-item.message-item--assistant {
   justify-content: flex-start;
 }
 
-.message.user-message-container .message-content {
+.message-item.message-item--user .message-item__wrapper {
   align-items: flex-start;
 }
 
-.message.assistant-message-container .message-content {
+.message-item.message-item--assistant .message-item__wrapper {
   align-items: flex-start;
   width: 100%;
 }
 
-/* 消息文本格式化 */
-.message-text {
+/* 消息文本格式化 - BEM Element */
+.message-item__text {
   line-height: 1.8;
   color: inherit;
   max-width: 100%;
   vertical-align: middle;
   font-size: var(--size-text-base);
+
+}
+
+.message-item.message-item--user .message-item__text {
+  margin: 0;
+}
+
+.message-item.message-item--assistant .message-item__text {
+  margin-bottom: 8px;
+  margin-top: 8px;
 }
 
 /* 加载动画 */
@@ -493,7 +496,8 @@ defineExpose({
 }
 
 .dark .token-usage-section {
-  opacity: 0.8; /* 暗色模式下稍微降低透明度 */
+  opacity: 0.8;
+  /* 暗色模式下稍微降低透明度 */
 }
 
 .token-item {

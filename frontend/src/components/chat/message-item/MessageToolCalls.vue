@@ -1,13 +1,16 @@
 <template>
-  <div class="tool-calls-section">
+  <div class="tool-calls-section my-1">
     <div
-      class="inline-block justify-center items-center text-sm text-gray-700 dark:text-[#8b8d95] cursor-pointer font-medium my-1 py-1 transition-colors duration-200 hover:bg-gray-100 dark:hover:bg-[#2a2c30] rounded px-1"
+      class="inline-block justify-center items-center text-sm text-gray-700 dark:text-[#8b8d95] cursor-pointer font-medium py-1 transition-colors duration-200 hover:bg-gray-100 dark:hover:bg-[#2a2c30] rounded px-1"
       @click.stop="openDialog">
       <div class="flex items-center">
         <el-icon class="" size="14">
           <BuildTwotone />
         </el-icon>
-        <span class="text-gray-500 ml-2">{{ toolCallText }}</span>
+        <span class="text-gray-500 ml-2">{{ toolCallTextPrefix }}</span>
+        <span v-if="firstToolName" class="tool-name-badge mx-1">{{ firstToolName }}</span>
+        <span v-if="toolCount > 1" class="text-gray-500">等{{ toolCount }}个工具</span>
+        <span v-else-if="toolCount === 1 && !isStreaming" class="text-gray-500"></span>
       </div>
     </div>
 
@@ -35,10 +38,23 @@
               </el-icon>
               调用参数
             </div>
-            <pre
-              class="bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg p-3 text-sm overflow-x-auto text-gray-700 dark:text-gray-300">
-              <code>{{ formatToolArgs(tool.arguments || tool.args) }}</code>
-            </pre>
+            <div class="bg-gray-50 dark:bg-gray-900 rounded-lg p-3">
+              <div v-if="isSimpleParams(tool.arguments || tool.args)" class="params-table">
+                <div class="param-header py-2 border-b border-gray-200 dark:border-gray-700">
+                  <span class="param-key text-sm font-semibold text-gray-800 dark:text-gray-200">参数</span>
+                  <span class="param-value text-sm font-semibold text-gray-800 dark:text-gray-200 ml-4">值</span>
+                </div>
+                <div v-for="(value, key) in parseParams(tool.arguments || tool.args)" :key="key" 
+                     class="param-row py-2 border-b border-gray-100 dark:border-gray-800 last:border-b-0">
+                  <span class="param-key text-sm font-medium text-gray-700 dark:text-gray-300">{{ key }}</span>
+                  <span class="param-value text-sm text-gray-600 dark:text-gray-400 ml-4">{{ formatParamValue(value) }}</span>
+                </div>
+              </div>
+              <pre v-else
+                class="text-sm overflow-x-auto text-gray-700 dark:text-gray-300 whitespace-pre-wrap break-all">
+                <code>{{ formatToolArgs(tool.arguments || tool.args) }}</code>
+              </pre>
+            </div>
           </div>
 
           <div v-if="toolResponses && toolResponses[toolIndex]" class="mt-4">
@@ -48,8 +64,8 @@
               </el-icon>
               执行结果
             </div>
-            <div class="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg p-3">
-              <pre class="text-sm overflow-x-auto text-green-800 dark:text-green-300">{{
+            <div class="bg-gray-50 dark:bg-gray-900 rounded-lg p-3">
+              <pre class="text-sm overflow-x-auto text-gray-700 dark:text-gray-300 whitespace-pre-wrap break-all">{{
                 formatToolResponse(toolResponses[toolIndex])
               }}</pre>
             </div>
@@ -87,11 +103,17 @@ const showDialog = ref(false);
 
 const toolCount = computed(() => props.toolCalls?.length || 0);
 
-const toolCallText = computed(() => {
-  if (props.isStreaming) {
-    return `正在调用${toolCount.value}个工具`;
-  }
-  return `已调用${toolCount.value}个工具`;
+const firstToolName = computed(() => {
+  if (!props.toolCalls || props.toolCalls.length === 0) return '';
+  return props.toolCalls[0].name || '未知工具';
+});
+
+const toolCallTextPrefix = computed(() => {
+  const count = toolCount.value;
+  
+  if (count === 0) return '';
+  
+  return props.isStreaming ? '正在调用' : '已调用';
 });
 
 const openDialog = () => {
@@ -100,6 +122,33 @@ const openDialog = () => {
 
 const closeDialog = () => {
   showDialog.value = false;
+};
+
+const isSimpleParams = (args: any): boolean => {
+  try {
+    const parsed = typeof args === 'string' ? JSON.parse(args) : args;
+    // 如果是对象且层级不深,使用表格展示
+    return typeof parsed === 'object' && parsed !== null && !Array.isArray(parsed) && Object.keys(parsed).length > 0;
+  } catch (e) {
+    return false;
+  }
+};
+
+const parseParams = (args: any): Record<string, any> => {
+  try {
+    return typeof args === 'string' ? JSON.parse(args) : args;
+  } catch (e) {
+    return {};
+  }
+};
+
+const formatParamValue = (value: any): string => {
+  if (value === null) return 'null';
+  if (value === undefined) return 'undefined';
+  if (typeof value === 'object') {
+    return JSON.stringify(value, null, 2);
+  }
+  return String(value);
 };
 
 const formatToolArgs = (args: any): string => {
@@ -116,7 +165,9 @@ const formatToolResponse = (response: any): string => {
   if (!response) return '无响应';
   try {
     const parsed = typeof response === 'string' ? JSON.parse(response) : response;
-    return JSON.stringify(parsed['content'], null, 2);
+    const content = parsed['content'];
+    // 如果 content 是字符串,直接返回;如果是对象,才格式化
+    return typeof content === 'string' ? content : JSON.stringify(content, null, 2);
   } catch (e) {
     return String(response);
   }
@@ -125,10 +176,6 @@ const formatToolResponse = (response: any): string => {
 
 <style scoped>
 @reference "tailwindcss";
-
-.tool-calls-section {
-  display: inline-block;
-}
 
 .tool-dialog-content {
   line-height: 1.6;
@@ -146,6 +193,47 @@ const formatToolResponse = (response: any): string => {
 
 .tool-call-detail code {
   font-size: 13px;
+}
+
+.params-table {
+  display: flex;
+  flex-direction: column;
+}
+
+.param-header {
+  display: flex;
+  align-items: baseline;
+}
+
+.param-row {
+  display: flex;
+  align-items: baseline;
+}
+
+.param-key {
+  min-width: 120px;
+  flex-shrink: 0;
+}
+
+.param-value {
+  flex: 1;
+  word-break: break-word;
+}
+
+.tool-name-badge {
+  display: inline-block;
+  padding: 1px 8px;
+  background-color: rgba(59, 130, 246, 0.1);
+  border-radius: 9999px;
+  font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+  font-size: 13px;
+  font-weight: 500;
+  transition: all 0.2s ease;
+}
+
+.dark .tool-name-badge {
+  background-color: rgba(59, 130, 246, 0.15);
+  color: #60a5fa;
 }
 
 @keyframes fadeIn {
