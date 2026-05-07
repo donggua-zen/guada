@@ -251,13 +251,13 @@ async function startBackend(): Promise<void> {
       const skillsDir = path.join(userDataPath, 'skills') // 技能目录
       const workspaceDir = path.join(userDataPath, 'workspace') // 会话工作目录
       
-      console.log('数据库路径:', dbPath)
-      console.log('向量数据库路径:', vectorDbPath)
-      console.log('基础静态目录:', staticDir)
-      console.log('上传文件目录:', uploadDir)
-      console.log('后端日志目录:', logsDir)
-      console.log('技能目录:', skillsDir)
-      console.log('会话工作目录:', workspaceDir)
+      console.log('Database path:', dbPath)
+      console.log('Vector database path:', vectorDbPath)
+      console.log('Static directory:', staticDir)
+      console.log('Upload directory:', uploadDir)
+      console.log('Backend logs directory:', logsDir)
+      console.log('Skills directory:', skillsDir)
+      console.log('Workspace directory:', workspaceDir)
       
       const spawnOptions: any = {
         cwd: backendPath,
@@ -309,13 +309,13 @@ async function startBackend(): Promise<void> {
       const skillsDir = path.join(userDataPath, 'skills') // 技能目录
       const workspaceDir = path.join(userDataPath, 'workspace') // 会话工作目录
       
-      console.log('数据库路径:', dbPath)
-      console.log('向量数据库路径:', vectorDbPath)
-      console.log('基础静态目录:', staticDir)
-      console.log('上传文件目录:', uploadDir)
-      console.log('后端日志目录:', logsDir)
-      console.log('技能目录:', skillsDir)
-      console.log('会话工作目录:', workspaceDir)
+      console.log('Database path:', dbPath)
+      console.log('Vector database path:', vectorDbPath)
+      console.log('Static directory:', staticDir)
+      console.log('Upload directory:', uploadDir)
+      console.log('Backend logs directory:', logsDir)
+      console.log('Skills directory:', skillsDir)
+      console.log('Workspace directory:', workspaceDir)
       
       // 使用 spawn 启动后端
       const spawnOptions: any = {
@@ -435,6 +435,7 @@ function createWindow() {
     if (process.env.USE_STATIC_FRONTEND === 'true') {
       // 使用编译后的静态前端文件
       const frontendPath = path.join(__dirname, '..', '..', 'frontend', 'dist', 'index.html')
+      console.log('🚀 ~ file: main.ts ~ line 438 ~ frontendPath', frontendPath)
       mainWindow.loadFile(frontendPath)
     } else {
       // 使用 Vite 开发服务器（热重载）
@@ -468,42 +469,6 @@ function createWindow() {
   mainWindow.on('closed', () => {
     mainWindow = null
   })
-}
-
-// 设置应用菜单
-function setupApplicationMenu() {
-  if (isDev) {
-    // 开发环境：提供开发者工具快捷访问
-    const template: Electron.MenuItemConstructorOptions[] = [
-      {
-        label: '视图',
-        submenu: [
-          { role: 'reload', label: '重新加载' },
-          { role: 'forceReload', label: '强制重新加载' },
-          { role: 'toggleDevTools', label: '切换开发者工具' },
-          { type: 'separator' },
-          { role: 'resetZoom', label: '实际大小' },
-          { role: 'zoomIn', label: '放大' },
-          { role: 'zoomOut', label: '缩小' },
-          { type: 'separator' },
-          { role: 'togglefullscreen', label: '全屏' }
-        ]
-      },
-      {
-        label: '窗口',
-        submenu: [
-          { role: 'minimize', label: '最小化' },
-          { role: 'close', label: '关闭' }
-        ]
-      }
-    ]
-    
-    const menu = Menu.buildFromTemplate(template)
-    Menu.setApplicationMenu(menu)
-  } else {
-    // 生产环境：隐藏菜单栏
-    Menu.setApplicationMenu(null)
-  }
 }
 
 // IPC 通信处理
@@ -696,20 +661,20 @@ function setupAutoUpdater() {
 // 应用就绪
 app.whenReady().then(async () => {
   try {
-    log.info('应用启动中...')
+    log.info('Application starting...')
     setupIpcHandlers()
     setupAutoUpdater()
     
     // 启动后端服务
-    log.info('正在启动后端服务...')
+    log.info('Starting backend service...')
     await startBackend()
-    log.info('后端服务启动成功')
+    log.info('Backend service started successfully')
     
     // 创建窗口
     createWindow()
-    log.info('应用初始化完成')
+    log.info('Application initialized')
   } catch (error: any) {
-    log.error('应用初始化失败:', error)
+    log.error('Application initialization failed:', error)
     app.quit()
   }
 })

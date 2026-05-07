@@ -3,7 +3,7 @@
         <div class="flex flex-col items-center justify-center space-y-6 text-center">
             <!-- 应用图标与版本 -->
             <div class="space-y-2">
-                <img src="/images/logo.png" alt="GuaDa Logo" class="w-24 h-24 mx-auto rounded-xl shadow-lg" />
+                <img :src="logoPath" alt="GuaDa Logo" class="w-24 h-24 mx-auto rounded-xl shadow-lg" />
                 <h2 class="text-2xl font-bold text-(--color-text-primary)">GuaDa</h2>
                 <p class="text-sm text-(--color-text-secondary)">当前版本: {{ appVersion }}</p>
             </div>
@@ -56,9 +56,10 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { ElButton, ElIcon } from 'element-plus'
 import { Loading, CircleCheck } from '@element-plus/icons-vue'
+import { fixFrontendAssetUrl } from '@/utils/url'
 
 const isElectron = typeof window !== 'undefined' && !!window.electronAPI
 const appVersion = ref('')
@@ -68,6 +69,9 @@ const downloadProgress = ref(0)
 const isChecking = ref(false)
 const isDownloading = ref(false)
 const errorMessage = ref('')
+
+// 计算属性：自适应 Logo 路径
+const logoPath = computed(() => fixFrontendAssetUrl('/images/logo.png'))
 
 const checkForUpdates = async () => {
     if (!window.electronAPI) return

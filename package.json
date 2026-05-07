@@ -9,7 +9,7 @@
     "dev:backend": "cd backend-ts && npm run start:dev",
     "dev:backend:electron": "cd backend-ts && npm run start:dev:electron",
     "dev:electron": "npm run build:seed-template && npm run build:electron-ts && concurrently \"cd frontend && npm run dev\" \"wait-on http://localhost:5173 && cross-env NODE_ENV=development electron .\"",
-    "dev:electron:prod-frontend": "cross-env ELECTRON=true npm --prefix frontend run build && cross-env USE_STATIC_FRONTEND=true DEBUG_MODE=true NODE_ENV=development electron .",
+    "dev:electron:prod-frontend": "npm run build:electron-ts && cross-env ELECTRON=true npm --prefix frontend run build && cross-env USE_STATIC_FRONTEND=true DEBUG_MODE=true NODE_ENV=development electron .",
     "build:web": "cd frontend && npm run build",
     "build:backend": "cd backend-ts && npm run build",
     "build:frontend": "cd frontend && npm run build",

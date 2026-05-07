@@ -3,7 +3,7 @@
   <!-- 输入区域 -->
   <div class="px-5 pb-2.5 w-full flex-1 flex flex-col items-center justify-center mb-40">
     <div class="banner max-w-full mx-auto w-80 mb-4">
-      <img src="/images/chat_banner.webp" alt=""></img>
+      <img :src="bannerPath" alt=""></img>
     </div>
     <h1 class="text-3xl mb-6 text-gray-600">Hi，想聊些什么？</h1>
 
@@ -110,6 +110,7 @@ import { apiService } from '@/services/ApiService';
 import { usePopup } from "../../composables/usePopup";
 import { useTitle } from "../../composables/useTitle";
 import { useRouter } from 'vue-router';
+import { fixFrontendAssetUrl } from '@/utils/url'
 // 组件导入
 import { ChatInput } from "../ui";
 
@@ -128,6 +129,9 @@ const router = useRouter();
 
 // 响应式数据 - 类型化
 const title = useTitle();
+
+// 计算属性：自适应 Banner 路径
+const bannerPath = computed(() => fixFrontendAssetUrl('/images/chat_banner.webp'))
 
 // 角色数据
 const characters = ref<any[]>([]);

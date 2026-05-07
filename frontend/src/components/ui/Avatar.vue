@@ -40,14 +40,8 @@ const avatarSrc = computed((): string => {
     if (props.src.startsWith('blob:') || props.src.startsWith('data:')) {
         return props.src
     }
-    // 添加时间戳参数避免缓存
-    // const separator = props.src.includes('?') ? '&' : '?'
-    if (props.src.startsWith('/'))
-        return props.src
-    if (props.src.startsWith('http'))
-        return props.src
-    return '/' + props.src
-    // return props.src
+
+    return props.src
 });
 
 // 获取名称的第一个字符 - 类型化

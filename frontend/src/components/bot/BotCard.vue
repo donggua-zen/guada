@@ -52,6 +52,7 @@
 import { computed } from 'vue'
 import { Edit, Delete } from '@element-plus/icons-vue'
 import type { BotInstance } from '@/types/bot'
+import { fixFrontendAssetUrl } from '@/utils/url'
 
 const props = defineProps<{
   bot: BotInstance
@@ -88,7 +89,8 @@ const getPlatformAvatar = (platform: string) => {
     lark: '/images/bots/lark.png',
     wecom: '/images/bots/wecom-bot.png'
   }
-  return avatarMap[platform] || '/images/bots/qq.png' // 默认使用 QQ 头像
+  const path = avatarMap[platform] || '/images/bots/qq.png' // 默认使用 QQ 头像
+  return fixFrontendAssetUrl(path)
 }
 
 // 图片加载失败处理

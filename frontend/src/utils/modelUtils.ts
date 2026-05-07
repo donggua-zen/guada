@@ -4,72 +4,73 @@
  */
 
 import { computed } from 'vue'
+import { fixFrontendAssetUrl } from './url'
 
 // 已知提供商的标识符映射（用于匹配头像文件）
 const PROVIDER_LOGOS: Record<string, string> = {
   // OpenAI
   'openai': 'OpenAI',
   'gpt': 'OpenAI',
-  
+
   // Anthropic
   'anthropic': 'Anthropic',
   'claude': 'Anthropic',
-  
+
   // Google
   'google': 'Google',
   'gemini': 'Google',
-  
+
   // 百度文心一言
   'baidu': 'baidu',
   'ernie': 'baidu',
   'wenxin': 'baidu',
-  
+
   // 阿里通义千问
   'tongyi': 'Tongyi',
   'qwen': 'Tongyi',
   'aliyun': 'Tongyi',
-  
+
   // 腾讯混元
   'hunyuan': 'hunyuan',
   'tencent': 'hunyuan',
-  
+
   // 智谱 AI
   'zhipu': 'zhipu',
   'glm': 'zhipu',
-  
+
   // 月之暗面 Kimi
   'kimi': 'kimi',
   'moonshot': 'kimi',
-  
+
   // DeepSeek
   'deepseek': 'DeepSeek',
-  
+
   // 零一万物
   'yi': 'Yi',
   '01ai': 'Yi',
-  
+
   // MiniMax
   'minimax': 'minimax',
-  
+
   // StepFun
   'stepfun': 'Stepfun',
   'step': 'Stepfun',
-  
+
   // 百川智能
   'baichuan': 'Baichuan',
-  
+
   // BAAI（北京智源）
   'baai': 'BAAI',
   'zhiyuan': 'BAAI',
-  
+
   // 字节跳动
   'bytedance': 'ByteDance',
   'doubao': 'ByteDance',
-  
+
   // 书生·浦语
   'internlm': 'internlm',
   'shusheng': 'internlm',
-  
+
   // 灵犀
   'ling': 'ling',
 }
@@ -84,7 +85,7 @@ const PROVIDER_LOGOS: Record<string, string> = {
  */
 export function getModelDisplayName(modelName: string): string {
   if (!modelName) return ''
-  
+
   // 如果包含 "/"，取最后一部分（去除命名空间）
   const parts = modelName.split('/')
   return parts[parts.length - 1] || modelName
@@ -100,17 +101,17 @@ export function getModelDisplayName(modelName: string): string {
  */
 export function detectModelProvider(modelName: string, providerName?: string): string {
   if (!modelName) return providerName?.toLowerCase() || 'default'
-  
+
   // 获取简化后的模型名称
   const displayName = getModelDisplayName(modelName).toLowerCase()
-  
+
   // 尝试匹配已知提供商
   for (const [key, value] of Object.entries(PROVIDER_LOGOS)) {
     if (displayName.startsWith(key)) {
       return value.toLowerCase()
     }
   }
-  
+
   // 如果没有匹配到，返回提供商名称的小写形式
   return providerName?.toLowerCase() || 'default'
 }
@@ -125,7 +126,7 @@ export function detectModelProvider(modelName: string, providerName?: string): s
  */
 export function getModelAvatarPath(modelName: string, providerName?: string): string | null {
   const providerId = detectModelProvider(modelName, providerName)
-  
+
   // 检查是否有对应的 Logo 文件
   const logoFile = PROVIDER_LOGOS[providerId]
   if (logoFile) {
@@ -133,9 +134,9 @@ export function getModelAvatarPath(modelName: string, providerName?: string): st
     // 注意：这里假设所有 Logo 都是 .svg 格式（除了 kimi.png 和 ling.png）
     const isPng = logoFile === 'kimi' || logoFile === 'ling'
     const ext = isPng ? 'png' : 'svg'
-    return `/images/models/${logoFile}.${ext}`
+    return fixFrontendAssetUrl(`/images/models/${logoFile}.${ext}`)
   }
-  
+
   return null
 }
 
@@ -149,7 +150,7 @@ export function getModelAvatarPath(modelName: string, providerName?: string): st
 export function useModelDisplay(modelName: string, providerName?: string) {
   const displayName = computed(() => getModelDisplayName(modelName))
   const avatarPath = computed(() => getModelAvatarPath(modelName, providerName))
-  
+
   return {
     displayName,
     avatarPath,
