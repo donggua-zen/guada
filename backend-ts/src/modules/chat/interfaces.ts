@@ -62,6 +62,7 @@ export interface CompressionResult {
 export interface CompressionCheckpoint {
   lastCompactedMessageId?: string;
   lastCompactedContentId?: string;
+  lastPrunedContentId?: string; // 物理裁剪边界 ID
   pruningMetadata?: Record<string, any>;
   summaryContent?: string;
   cleaningStrategy?: string;

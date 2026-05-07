@@ -3,7 +3,7 @@ import { LLMService } from "../llm-core/llm.service";
 import { TokenizerService } from "../../common/utils/tokenizer.service";
 import { MessageRecord } from "../llm-core/types/llm.types";
 import { SessionContextStateRepository } from "../../common/database/session-context-state.repository";
-import { ICompressionStrategy, CompressionConfig, CompressionResult } from "./interfaces";
+import { ICompressionStrategy, CompressionConfig, CompressionResult, CompressionCheckpoint } from "./interfaces";
 
 /**
  * 压缩配置常量
@@ -172,8 +172,20 @@ export class CompressionEngine implements ICompressionStrategy {
           compressionState.summaryContent = summary;
           compressionState.lastCompactedMessageId = lastCompactedMsgId;
           compressionState.lastCompactedContentId = lastCompactedContentId;
-          compressionState.lastPrunedContentId = undefined; // 摘要覆盖裁剪，清除裁剪游标
-          compressionState.pruningMetadata = null; // 摘要后清除裁剪元数据
+          // 保留 lastPrunedContentId，因为物理裁剪边界可能与逻辑摘要边界不一致
+          
+          // 清理 pruningMetadata：剔除所有已处理（<= lastCompactedContentId）的元数据，防止无限膨胀
+          if (compressionState.pruningMetadata && lastCompactedContentId) {
+            const cleanedMetadata: Record<string, any> = {};
+            for (const [key, value] of Object.entries(compressionState.pruningMetadata)) {
+              // 只保留 contentId 大于 lastCompactedContentId 的元数据
+              if (key > lastCompactedContentId) {
+                cleanedMetadata[key] = value;
+              }
+            }
+            compressionState.pruningMetadata = Object.keys(cleanedMetadata).length > 0 ? cleanedMetadata : null;
+          }
+          
           compressionState.compressionStats = compressionStats;
         }
       } catch (error) {
@@ -496,26 +508,52 @@ export class CompressionEngine implements ICompressionStrategy {
       return { summary: previousSummary || "", retained: messages, lastCompactedContentId: undefined, retainedTokens: prunedTokens };
     }
 
-    // 从最新消息开始向前累加 Token,确定保留的消息范围
-    // 最后 MIN_RETAINED_MESSAGES 条消息强制保留,从之前的消息开始判断是否可以纳入保留区
+    // 1. 消息分组：将 user 消息分为一组，assistant 及其后续的 tool 消息合并为一组
+    // 这样可以确保工具调用的完整性，避免 assistant 和 tool 被分割到不同区域
+    const messageGroups: MessageRecord[][] = [];
+    let currentGroup: MessageRecord[] = [];
+
+    for (let i = 0; i < messages.length; i++) {
+      const msg = messages[i];
+      if (msg.role === 'user') {
+        if (currentGroup.length > 0) {
+          messageGroups.push(currentGroup);
+          currentGroup = [];
+        }
+        messageGroups.push([msg]); // user 消息独立成组
+      } else {
+        // assistant 或 tool 消息加入当前组
+        currentGroup.push(msg);
+      }
+    }
+    if (currentGroup.length > 0) {
+      messageGroups.push(currentGroup);
+    }
+
+    // 2. 从后往前以“组”为单位累加 Token，确定保留范围
     let retainedTokens = 0;
-    const forcedRetainStart = messages.length - MIN_RETAINED_MESSAGES;
-    let retainStartIndex = forcedRetainStart; // 默认保留最后 N 条
+    // 强制保留最后 MIN_RETAINED_GROUPS 个分组（例如最后 3 组对话）
+    const minRetainGroupIndex = Math.max(0, messageGroups.length - MIN_RETAINED_MESSAGES);
+    let retainGroupIndex = minRetainGroupIndex; // 默认从强制保留区的起点开始
 
-    for (let i = forcedRetainStart - 1; i >= 0; i--) {
-      const msgTokens = this.tokenizerService.countTokens(chatModelName || "gpt4", [messages[i]]);
+    // 从强制保留区的前一组开始向前判断
+    for (let i = minRetainGroupIndex - 1; i >= 0; i--) {
+      const group = messageGroups[i];
+      const groupTokens = this.tokenizerService.countTokens(chatModelName || "gpt4", group);
 
-      if (retainedTokens + msgTokens > targetTokens) {
-        retainStartIndex = i + 1;
+      if (retainedTokens + groupTokens > targetTokens) {
+        retainGroupIndex = i + 1;
         break;
       }
 
-      retainedTokens += msgTokens;
-      retainStartIndex = i;
+      retainedTokens += groupTokens;
+      retainGroupIndex = i;
     }
 
-    const toCompress = messages.slice(0, retainStartIndex);
-    const retained = messages.slice(retainStartIndex);
+    // 3. 根据分组索引直接分割消息列表
+    // retainGroupIndex 是保留区的第一个组的索引
+    const toCompress = messageGroups.slice(0, retainGroupIndex).flat();
+    const retained = messageGroups.slice(retainGroupIndex).flat();
 
     if (toCompress.length === 0) {
       // 所有消息都在保留区内,无需调用 LLM 生成摘要
@@ -529,7 +567,7 @@ export class CompressionEngine implements ICompressionStrategy {
       this.logger.log('Summary generation is disabled, discarding compressed messages directly.');
       // 记录被丢弃部分的最后一条消息 ID,作为压缩游标用于下次增量处理
       const lastCompactedMsgId = toCompress[toCompress.length - 1]?.messageId;
-      return { summary: previousSummary || "", retained, lastCompactedContentId: retained[0]?.contentId, lastCompactedMsgId, retainedTokens };
+      return { summary: previousSummary || "", retained, lastCompactedContentId: toCompress[toCompress.length - 1]?.contentId, lastCompactedMsgId, retainedTokens };
     }
 
     // 记录被压缩部分的最后一条消息 ID,作为压缩游标用于下次增量处理
@@ -610,7 +648,7 @@ export class CompressionEngine implements ICompressionStrategy {
         providerConfig: compressionModel.provider,
       });
       const finalSummary = response.content?.trim() || "";
-      return { summary: finalSummary, retained, lastCompactedContentId: retained[0]?.contentId, lastCompactedMsgId, retainedTokens };
+      return { summary: finalSummary, retained, lastCompactedContentId: toCompress[toCompress.length - 1]?.contentId, lastCompactedMsgId, retainedTokens };
     }
 
     // 迭代模式:执行迭代优化生成摘要
@@ -632,7 +670,7 @@ export class CompressionEngine implements ICompressionStrategy {
       finalSummary = response.content?.trim() || "";
     }
 
-    return { summary: finalSummary, retained, lastCompactedContentId: retained[0]?.contentId, lastCompactedMsgId, retainedTokens };
+    return { summary: finalSummary, retained, lastCompactedContentId: toCompress[toCompress.length - 1]?.contentId, lastCompactedMsgId, retainedTokens };
   }
 
   /**
@@ -672,18 +710,17 @@ export class CompressionEngine implements ICompressionStrategy {
    */
   preprocess(
     rawMessages: MessageRecord[],
-    checkpoint: import("./interfaces").CompressionCheckpoint,
+    checkpoint: CompressionCheckpoint,
   ): { messages: MessageRecord[]; summary?: string } {
     const messages = [...rawMessages];
 
-    // 若处于仅裁剪模式且存在裁剪元数据，则在内存中应用裁剪覆盖层
-    // 这一步恢复了之前裁剪的结果，确保会话状态的连续性
-    if (checkpoint.cleaningStrategy === 'pruned_only' && checkpoint.pruningMetadata) {
-      this.applyPruningOverlay(messages, checkpoint.pruningMetadata);
+    // 若存在裁剪元数据和边界，则在内存中应用裁剪覆盖层
+    // 仅处理边界之前的消息，边界之后的消息保持原始状态，提高处理效率
+    if (checkpoint.pruningMetadata && checkpoint.lastPrunedContentId) {
+      this.applyPruningOverlay(messages, checkpoint.pruningMetadata, checkpoint.lastPrunedContentId);
     }
 
     // 返回分离的摘要和消息，由上层调用者负责组装
-    // 这种设计保持了压缩层的纯粹性，避免在此处硬编码 system prompt 的注入逻辑
     return {
       messages,
       summary: checkpoint.summaryContent,
@@ -693,17 +730,18 @@ export class CompressionEngine implements ICompressionStrategy {
   /**
    * 在内存中应用裁剪结果（不修改数据库原文）
    *
-   * 遍历消息列表，将裁剪元数据中记录的裁剪后内容替换到对应的消息中。
-   * 这是一种"覆盖层"机制：数据库中的原始消息保持不变，仅在内存视图中应用裁剪效果。
-   *
-   * @param messages 待应用裁剪的消息列表（会被原地修改）
-   * @param metadata 裁剪元数据，以 contentId 为键映射到裁剪信息
+   * @param messages 待应用裁剪的消息列表
+   * @param metadata 裁剪元数据
+   * @param boundaryId 裁剪边界 ID，只处理小于等于该 ID 的消息
    */
-  applyPruningOverlay(messages: MessageRecord[], metadata: Record<string, any>) {
-    messages.forEach(msg => {
+  applyPruningOverlay(messages: MessageRecord[], metadata: Record<string, any>, boundaryId: string) {
+    for (const msg of messages) {
+      // 一旦超过边界，后续消息均无需处理（假设 contentId 递增）
+      if (msg.contentId && msg.contentId > boundaryId) break;
+      
       if (msg.contentId && metadata[msg.contentId]) {
         msg.content = metadata[msg.contentId].prunedContent || msg.content;
       }
-    });
+    }
   }
 }

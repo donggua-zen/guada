@@ -60,14 +60,13 @@ export class MessageRepository {
     } = options || {};
     const where: any = { sessionId };
 
-    // 增量过滤：获取比 afterMessageId 更新的消息
+    // 获取晚于afterMessageId的消息(不含)
     if (afterMessageId) {
       where.id = { gt: afterMessageId };
     }
 
-    // 游标分页：获取比 beforeMessageId 更早的消息
     if (beforeMessageId) {
-      // 如果同时存在 afterMessageId，则组合查询；否则仅限制上限
+      // 获取截止到beforeMessageId的消息(含)
       where.id = { ...where.id, lte: beforeMessageId } as any;
     }
 
