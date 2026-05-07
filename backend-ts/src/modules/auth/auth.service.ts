@@ -1,6 +1,6 @@
 import { Injectable, Logger } from "@nestjs/common";
 import { JwtService } from "@nestjs/jwt";
-import * as bcrypt from "bcrypt";
+import * as bcrypt from "bcryptjs";
 import { UserRepository } from "../../common/database/user.repository";
 import { SettingsStorage } from "../../common/utils/settings-storage.util";
 import { UrlService } from "../../common/services/url.service";

@@ -18,7 +18,7 @@ if (process.env.NODE_MODULES_PATH) {
 
 import { PrismaClient } from "@prisma/client";
 import { PrismaBetterSqlite3 } from "@prisma/adapter-better-sqlite3";
-import * as bcrypt from "bcrypt";
+import * as bcrypt from "bcryptjs";
 import { readFileSync } from "fs";
 import { resolve } from "path";
 import "dotenv/config";

@@ -149,8 +149,9 @@ async function initializeDatabase(userDataPath: string, backendPath: string): Pr
       }
     }
 
-    // 3. 使用 db push 同步结构（确保结构与当前代码完全一致）
-    execSync('npx prisma db push --config=prisma.config.js --accept-data-loss', {
+    // 3. 使用 db push 同步结构（直接调用 prisma CLI 入口，无需依赖 npx）
+    const prismaCli = path.join(backendPath, 'node_modules', 'prisma', 'build', 'index.js')
+    execSync(`node "${prismaCli}" db push --config=prisma.config.js --accept-data-loss`, {
       cwd: backendPath,
       env,
       stdio: 'pipe',
