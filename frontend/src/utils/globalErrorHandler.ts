@@ -52,8 +52,9 @@ function handleAuthError() {
   }
   
   // 避免重复跳转
-  const currentPath = window.location.pathname
-  if (currentPath === '/login') {
+  // Hash 模式下使用 hash，History 模式下使用 pathname
+  const currentPath = window.location.hash ? window.location.hash.substring(1) : window.location.pathname
+  if (currentPath === '/login' || currentPath === '') {
     return
   }
   
