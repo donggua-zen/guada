@@ -28,6 +28,7 @@ NProgress.configure({
 })
 
 import { apiService } from '@/services/ApiService'
+import { initGlobalErrorHandler } from '@/utils/globalErrorHandler'
 
 // 在 Electron 环境下初始化后端地址
 if (isElectron) {
@@ -177,5 +178,9 @@ const pinia = createPinia()
 
 app.use(pinia)
 app.use(router)
+
+// 初始化全局错误处理器（在 router 挂载后）
+initGlobalErrorHandler(router)
+
 app.mount('#app')
 

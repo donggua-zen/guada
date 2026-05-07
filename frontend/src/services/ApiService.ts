@@ -74,10 +74,13 @@ class ApiService implements IApiService {
           throw networkError
         }
 
-        // 只有真正的401认证错误才跳转登录（排除登录接口本身的401）
+        // 只有真正的401认证错误才抛出特定异常（排除登录接口本身的401）
         if (error.response?.status === 401 && !error.config?.url?.includes('/auth/login')) {
-          window.location.href = fixFrontendAssetUrl('/login')
-          return Promise.reject(error)
+          // 创建认证错误，携带特殊标记供上层识别
+          const authError = new Error('Authentication required')
+          ;(authError as any).isAuthError = true
+          ;(authError as any).statusCode = 401
+          return Promise.reject(authError)
         }
 
         // 提取友好的错误消息
