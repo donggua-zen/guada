@@ -190,6 +190,15 @@
                         大小: {{ formatFileSize(selectedFile.size) }}
                     </div>
                 </div>
+
+                <div class="mt-4">
+                    <el-checkbox v-model="forceOverwrite">
+                        <span class="text-sm">强制覆盖（如果技能已存在则替换）</span>
+                    </el-checkbox>
+                    <div class="text-xs text-gray-500 dark:text-[#8b8d95] mt-1 ml-6">
+                        注意：此操作会删除旧版本的技能文件
+                    </div>
+                </div>
             </div>
 
             <template #footer>
@@ -247,6 +256,7 @@ const showInstallDialog = ref(false)
 const installing = ref(false)
 const selectedFile = ref<File | null>(null)
 const uploadRef = ref()
+const forceOverwrite = ref(false)
 
 // 卸载相关状态
 const uninstallingSkills = ref<Set<string>>(new Set())
@@ -343,6 +353,7 @@ async function handleViewDocumentation(skillId: string) {
 function handleShowInstallDialog() {
     showInstallDialog.value = true
     selectedFile.value = null
+    forceOverwrite.value = false
 }
 
 /**
@@ -357,6 +368,7 @@ function handleFileChange(file: any) {
  */
 function clearSelectedFile() {
     selectedFile.value = null
+    forceOverwrite.value = false
     if (uploadRef.value) {
         uploadRef.value.clearFiles()
     }
@@ -385,12 +397,13 @@ async function handleInstallSkill() {
     installing.value = true
     
     try {
-        const response = await apiService.installSkill(selectedFile.value)
+        const response = await apiService.installSkill(selectedFile.value, forceOverwrite.value)
         
         if (response.success) {
             ElMessage.success(response.message || '安装成功')
             showInstallDialog.value = false
             selectedFile.value = null
+            forceOverwrite.value = false
             // 重新加载列表
             await loadSkills()
         } else {

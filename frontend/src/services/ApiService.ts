@@ -713,9 +713,12 @@ class ApiService implements IApiService {
   /**
    * 安装 Skill（上传 ZIP 文件）
    */
-  async installSkill(file: File): Promise<{ success: boolean; skillId?: string; message: string }> {
+  async installSkill(file: File, force: boolean = false): Promise<{ success: boolean; skillId?: string; message: string }> {
     const formData = new FormData()
     formData.append('file', file)
+    if (force) {
+      formData.append('force', 'true')
+    }
 
     try {
       // 使用 _request 方法确保携带认证信息

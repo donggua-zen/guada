@@ -6,6 +6,7 @@ import { SkillDefinition } from '../interfaces/skill-manifest.interface';
 import { SkillDiscoveryResult } from '../interfaces/index';
 import { SkillLoaderService } from './skill-loader.service';
 import { SkillRegistry } from './skill-registry.service';
+import { SkillMetadataValidator } from '../common/skill-metadata.validator';
 
 @Injectable()
 export class SkillDiscoveryService {
@@ -55,6 +56,24 @@ export class SkillDiscoveryService {
       const tasks = skillDirs.map(async (dir) => {
         try {
           const skillDef = await this.loader.loadManifest(dir);
+          const dirName = path.basename(dir);
+          
+          // 使用公共验证器验证技能元数据
+          const validationResult = SkillMetadataValidator.validateMetadata(
+            skillDef.manifest.name,
+            skillDef.manifest.description || '',
+            dirName
+          );
+          
+          if (!validationResult.isValid) {
+            return { 
+              error: { 
+                path: dir, 
+                error: validationResult.errors.join('; ') 
+              } 
+            };
+          }
+          
           const existingSkill = this.registry.get(skillDef.id);
           
           // 判断是新增还是更新

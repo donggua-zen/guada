@@ -5,6 +5,8 @@ import { SkillWatcherService } from '../core/skill-watcher.service';
 import { SkillDefinition } from '../interfaces/skill-manifest.interface';
 import { SkillDiscoveryResult } from '../interfaces/index';
 import { createPaginatedResponse, PaginatedResponse } from '../../../common/types/pagination';
+import { SkillMetadataValidator } from '../common/skill-metadata.validator';
+import { ConfigService } from '@nestjs/config';
 import * as path from 'path';
 import * as fs from 'fs/promises';
 import AdmZip from 'adm-zip';
@@ -16,11 +18,16 @@ const execAsync = promisify(exec);
 @Controller('skills')
 export class SkillsController {
   private readonly logger = new Logger(SkillsController.name);
+  private readonly skillsDir: string;
 
   constructor(
     private orchestrator: SkillOrchestrator,
     private watcher: SkillWatcherService,
-  ) {}
+    private configService: ConfigService,
+  ) {
+    this.skillsDir = this.configService.get<string>('SKILLS_DIR') || 
+                     path.join(process.cwd(), 'skills');
+  }
 
   /**
    * 列出所有已加载的 Skills（支持分页）
@@ -108,9 +115,10 @@ export class SkillsController {
     url: string; 
     branch?: string;
     subdirectory?: string;
+    force?: boolean;
   }): Promise<{ success: boolean; skillId?: string; message: string }> {
     try {
-      const { url, branch, subdirectory } = body;
+      const { url, branch, subdirectory, force } = body;
 
       if (!url) {
         return { success: false, message: 'Git URL is required' };
@@ -138,38 +146,71 @@ export class SkillsController {
       // 执行 git clone
       await execAsync(cloneCommand, { timeout: 60000 }); // 60秒超时
 
-      // 确定技能目录
+      // 确定技能源目录
       let skillSourceDir = tempDir;
       if (subdirectory) {
         skillSourceDir = path.join(tempDir, subdirectory);
       }
 
-      // 查找 SKILL.md 文件
-      const entries = await this.findSkillMdFiles(skillSourceDir);
-      if (entries.length === 0) {
+      // 智能查找 SKILL.md 文件（两级目录搜索）
+      const skillInfo = await this.findSkillWithSmartLevel(skillSourceDir);
+      if (!skillInfo) {
         await fs.rm(tempDir, { recursive: true, force: true });
-        return { success: false, message: 'No SKILL.md found in the repository' };
+        return { success: false, message: 'No SKILL.md found in the repository (searched up to 2 levels deep)' };
       }
 
-      // 如果找到多个 SKILL.md，使用第一个
-      const skillMdPath = entries[0];
-      const skillDir = path.dirname(skillMdPath);
-      const skillName = path.basename(skillDir);
+      const { skillMdPath, skillDir, skillName } = skillInfo;
+
+      // 读取 SKILL.md 获取描述信息用于验证
+      const skillMdContent = await fs.readFile(skillMdPath, 'utf-8');
+      const descriptionMatch = skillMdContent.match(/^---\s*\n([\s\S]*?)\n---/);
+      let description = '';
+      if (descriptionMatch) {
+        const yamlContent = descriptionMatch[1];
+        const descMatch = yamlContent.match(/description:\s*(.+)/i);
+        if (descMatch) {
+          description = descMatch[1].trim().replace(/^['"]|['"]$/g, '');
+        }
+      }
+
+      // 使用公共验证器验证技能元数据
+      const validationResult = SkillMetadataValidator.validateMetadata(
+        skillName,
+        description,
+        skillName  // 目录名与技能名应该相同
+      );
+      
+      if (!validationResult.isValid) {
+        await fs.rm(tempDir, { recursive: true, force: true });
+        return { success: false, message: validationResult.errors.join('; ') };
+      }
 
       // 移动到 skills 目录
-      const targetDir = path.join(process.cwd(), 'skills', skillName);
+      const targetDir = path.join(this.skillsDir, skillName);
       
       // 检查是否已存在
       try {
         await fs.access(targetDir);
-        await fs.rm(tempDir, { recursive: true, force: true });
-        return { success: false, message: `Skill '${skillName}' already exists. Please uninstall it first.` };
+        
+        if (!force) {
+          await fs.rm(tempDir, { recursive: true, force: true });
+          return { success: false, message: `Skill '${skillName}' already exists. Use force=true to overwrite.` };
+        }
+        
+        // 强制覆盖：删除旧目录
+        this.logger.log(`Force overwriting existing skill from Git: ${skillName}`);
+        await fs.rm(targetDir, { recursive: true, force: true });
       } catch {
         // 目录不存在，继续
       }
 
-      // 移动目录
-      await fs.rename(skillDir, targetDir);
+      // 确保目标父目录存在
+      await fs.mkdir(path.dirname(targetDir), { recursive: true });
+      
+      // 移动目录（自动转换到正确层级）
+      // 注意：使用 copy + rm 替代 rename，以支持跨磁盘分区移动
+      await this.copyDirectory(skillDir, targetDir);
+      await fs.rm(skillDir, { recursive: true, force: true });
 
       // 清理临时文件
       await fs.rm(tempDir, { recursive: true, force: true });
@@ -177,11 +218,11 @@ export class SkillsController {
       // 触发扫描以加载新 Skill
       await this.orchestrator.triggerScan();
 
-      this.logger.log(`Successfully installed skill from Git: ${skillName}`);
+      this.logger.log(`Successfully installed skill from Git: ${skillName}${force ? ' (forced overwrite)' : ''}`);
       return { 
         success: true, 
         skillId: skillName, 
-        message: `Skill '${skillName}' installed successfully from Git` 
+        message: `Skill '${skillName}' installed successfully from Git${force ? ' (overwritten)' : ''}` 
       };
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
@@ -234,7 +275,10 @@ export class SkillsController {
    */
   @Post('install')
   @UseInterceptors(FileInterceptor('file'))
-  async installSkill(@UploadedFile() file: Express.Multer.File): Promise<{ success: boolean; skillId?: string; message: string }> {
+  async installSkill(
+    @UploadedFile() file: Express.Multer.File,
+    @Body() body?: { force?: boolean }
+  ): Promise<{ success: boolean; skillId?: string; message: string }> {
     try {
       if (!file) {
         return { success: false, message: 'No file uploaded' };
@@ -244,6 +288,8 @@ export class SkillsController {
       if (!file.originalname.endsWith('.zip')) {
         return { success: false, message: 'Only ZIP files are supported' };
       }
+
+      const force = body?.force === true || String(body?.force) === 'true';
 
       // 创建临时目录解压
       const tempDir = path.join(process.cwd(), 'temp', `skill-install-${Date.now()}`);
@@ -257,37 +303,65 @@ export class SkillsController {
       const zip = new AdmZip(zipPath);
       zip.extractAllTo(tempDir, true);
 
-      // 查找 SKILL.md 文件
-      const entries = await this.findSkillMdFiles(tempDir);
-      if (entries.length === 0) {
+      // 智能查找 SKILL.md 文件（两级目录搜索）
+      const skillInfo = await this.findSkillWithSmartLevel(tempDir);
+      if (!skillInfo) {
         await fs.rm(tempDir, { recursive: true, force: true });
-        return { success: false, message: 'No SKILL.md found in the ZIP file' };
+        return { success: false, message: 'No SKILL.md found in the ZIP file (searched up to 2 levels deep)' };
       }
 
-      // 只支持单个 Skill 安装
-      if (entries.length > 1) {
-        await fs.rm(tempDir, { recursive: true, force: true });
-        return { success: false, message: 'ZIP file contains multiple skills. Please upload one skill at a time.' };
+      const { skillMdPath, skillDir, skillName } = skillInfo;
+
+      // 读取 SKILL.md 获取描述信息用于验证
+      const skillMdContent = await fs.readFile(skillMdPath, 'utf-8');
+      const descriptionMatch = skillMdContent.match(/^---\s*\n([\s\S]*?)\n---/);
+      let description = '';
+      if (descriptionMatch) {
+        const yamlContent = descriptionMatch[1];
+        const descMatch = yamlContent.match(/description:\s*(.+)/i);
+        if (descMatch) {
+          description = descMatch[1].trim().replace(/^['"]|['"]$/g, '');
+        }
       }
 
-      const skillMdPath = entries[0];
-      const skillDir = path.dirname(skillMdPath);
-      const skillName = path.basename(skillDir);
+      // 使用公共验证器验证技能元数据
+      const validationResult = SkillMetadataValidator.validateMetadata(
+        skillName,
+        description,
+        skillName  // 目录名与技能名应该相同
+      );
+      
+      if (!validationResult.isValid) {
+        await fs.rm(tempDir, { recursive: true, force: true });
+        return { success: false, message: validationResult.errors.join('; ') };
+      }
 
       // 移动到 skills 目录
-      const targetDir = path.join(process.cwd(), 'skills', skillName);
+      const targetDir = path.join(this.skillsDir, skillName);
       
       // 检查是否已存在
       try {
         await fs.access(targetDir);
-        await fs.rm(tempDir, { recursive: true, force: true });
-        return { success: false, message: `Skill '${skillName}' already exists. Please uninstall it first or use a different name.` };
+        
+        if (!force) {
+          await fs.rm(tempDir, { recursive: true, force: true });
+          return { success: false, message: `Skill '${skillName}' already exists. Use force=true to overwrite.` };
+        }
+        
+        // 强制覆盖：删除旧目录
+        this.logger.log(`Force overwriting existing skill: ${skillName}`);
+        await fs.rm(targetDir, { recursive: true, force: true });
       } catch {
         // 目录不存在，继续
       }
 
-      // 移动目录
-      await fs.rename(skillDir, targetDir);
+      // 确保目标父目录存在
+      await fs.mkdir(path.dirname(targetDir), { recursive: true });
+      
+      // 移动目录（自动转换到正确层级）
+      // 注意：使用 copy + rm 替代 rename，以支持跨磁盘分区移动
+      await this.copyDirectory(skillDir, targetDir);
+      await fs.rm(skillDir, { recursive: true, force: true });
 
       // 清理临时文件
       await fs.rm(tempDir, { recursive: true, force: true });
@@ -295,8 +369,12 @@ export class SkillsController {
       // 触发扫描以加载新 Skill
       await this.orchestrator.triggerScan();
 
-      this.logger.log(`Successfully installed skill: ${skillName}`);
-      return { success: true, skillId: skillName, message: `Skill '${skillName}' installed successfully` };
+      this.logger.log(`Successfully installed skill: ${skillName}${force ? ' (forced overwrite)' : ''}`);
+      return { 
+        success: true, 
+        skillId: skillName, 
+        message: `Skill '${skillName}' installed successfully${force ? ' (overwritten)' : ''}` 
+      };
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
       this.logger.error(`Failed to install skill: ${errorMessage}`);
@@ -331,7 +409,84 @@ export class SkillsController {
   }
 
   /**
-   * 递归查找 SKILL.md 文件
+   * 智能查找 SKILL.md 文件（两级目录搜索）
+   * 优先在当前目录查找，如果没有则在一级子目录中查找
+   * 返回第一个找到的 SKILL.md 及其所在目录信息
+   */
+  private async findSkillWithSmartLevel(dir: string): Promise<{
+    skillMdPath: string;
+    skillDir: string;
+    skillName: string;
+  } | null> {
+    // 第一级：检查当前目录是否有 SKILL.md
+    const currentLevelSkillMd = path.join(dir, 'SKILL.md');
+    try {
+      await fs.access(currentLevelSkillMd);
+      return {
+        skillMdPath: currentLevelSkillMd,
+        skillDir: dir,
+        skillName: path.basename(dir),
+      };
+    } catch {
+      // 当前目录没有 SKILL.md，继续检查子目录
+    }
+
+    // 第二级：检查一级子目录
+    const entries = await fs.readdir(dir, { withFileTypes: true });
+    
+    for (const entry of entries) {
+      if (!entry.isDirectory()) continue;
+      
+      // 跳过隐藏目录和 node_modules
+      if (entry.name.startsWith('.') || entry.name === 'node_modules') continue;
+
+      const subDir = path.join(dir, entry.name);
+      const subSkillMd = path.join(subDir, 'SKILL.md');
+      
+      try {
+        await fs.access(subSkillMd);
+        return {
+          skillMdPath: subSkillMd,
+          skillDir: subDir,
+          skillName: entry.name,
+        };
+      } catch {
+        // 这个子目录没有 SKILL.md，继续下一个
+        continue;
+      }
+    }
+
+    return null;
+  }
+
+  /**
+   * 递归复制目录
+   * @param src 源目录
+   * @param dest 目标目录
+   */
+  private async copyDirectory(src: string, dest: string): Promise<void> {
+    // 创建目标目录
+    await fs.mkdir(dest, { recursive: true });
+    
+    // 读取源目录内容
+    const entries = await fs.readdir(src, { withFileTypes: true });
+    
+    for (const entry of entries) {
+      const srcPath = path.join(src, entry.name);
+      const destPath = path.join(dest, entry.name);
+      
+      if (entry.isDirectory()) {
+        // 递归复制子目录
+        await this.copyDirectory(srcPath, destPath);
+      } else {
+        // 复制文件
+        await fs.copyFile(srcPath, destPath);
+      }
+    }
+  }
+
+  /**
+   * 递归查找 SKILL.md 文件（保留用于其他用途）
    */
   private async findSkillMdFiles(dir: string): Promise<string[]> {
     const results: string[] = [];
