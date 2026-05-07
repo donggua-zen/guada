@@ -18,6 +18,7 @@ import { ChatModule } from '../chat/chat.module';
 import { AuthModule } from '../auth/auth.module';
 import { SharedModule } from '../../common/services/shared.module';
 import { MessageRepository } from '../../common/database/message.repository';
+import { SessionRepository } from '../../common/database/session.repository';
 import { KnowledgeBaseRepository } from '../../common/database/knowledge-base.repository';
 import { PrismaService } from '../../common/database/prisma.service';
 
@@ -43,6 +44,7 @@ import { PrismaService } from '../../common/database/prisma.service';
     // TODO: 待实现微信个人号适配器
     // WeChatPersonalBotAdapter, // 注册微信个人号适配器
     MessageRepository, // 提供 MessageRepository
+    SessionRepository, // 提供 SessionRepository
     KnowledgeBaseRepository, // 提供 KnowledgeBaseRepository
     PrismaService, // 提供 PrismaService
     // 未来扩展: WeChatBotAdapter, DiscordBotAdapter

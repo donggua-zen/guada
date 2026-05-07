@@ -159,8 +159,22 @@ export class BotAdminService {
       data: updateData,
     });
 
-    // 如果更新了平台配置、启用状态或扩展配置,需要重启以加载新配置
-    if (dto.platformConfig || dto.enabled !== undefined || dto.additionalKwargs) {
+    // 处理启用状态变更
+    if (dto.enabled !== undefined) {
+      try {
+        if (dto.enabled) {
+          // 启用机器人，尝试启动
+          await this.startInstance(id);
+        } else {
+          // 禁用机器人，停止运行
+          await this.stopInstance(id);
+        }
+      } catch (error: any) {
+        this.logger.error(`Failed to ${dto.enabled ? 'start' : 'stop'} bot after enabled change: ${error.message}`);
+      }
+    }
+    // 如果更新了平台配置或扩展配置，且机器人处于启用状态，需要重启以加载新配置
+    else if ((dto.platformConfig || dto.additionalKwargs) && updated.enabled) {
       try {
         await this.restartInstance(id);
       } catch (error: any) {
@@ -183,8 +197,13 @@ export class BotAdminService {
       throw new NotFoundException(`Bot instance ${id} not found`);
     }
 
+    // 如果机器人被禁用，先启用它
     if (!instance.enabled) {
-      throw new BadRequestException('Bot is disabled');
+      this.logger.log(`Bot ${id} is disabled, enabling it first...`);
+      await this.prisma.botInstance.update({
+        where: { id },
+        data: { enabled: true },
+      });
     }
 
     // 构建 BotConfig
@@ -241,6 +260,18 @@ export class BotAdminService {
    * 重启机器人
    */
   async restartInstance(id: string) {
+    const instance = await this.prisma.botInstance.findUnique({
+      where: { id },
+    });
+
+    if (!instance) {
+      throw new NotFoundException(`Bot instance ${id} not found`);
+    }
+
+    if (!instance.enabled) {
+      throw new BadRequestException('Bot is disabled');
+    }
+
     await this.stopInstance(id).catch(() => {});
     await this.startInstance(id);
     return { success: true };

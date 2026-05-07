@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../../../common/database/prisma.service';
 import { MessageRepository } from '../../../common/database/message.repository';
+import { SessionRepository } from '../../../common/database/session.repository';
 import { SettingsStorage } from '../../../common/utils/settings-storage.util';
 import { SG_MODELS, SK_MOD_CHAT } from '../../../constants/settings.constants';
 import { KnowledgeBaseRepository } from '../../../common/database/knowledge-base.repository';
@@ -18,6 +19,7 @@ export class SessionMapperService {
   constructor(
     private prisma: PrismaService,
     private messageRepo: MessageRepository,
+    private sessionRepo: SessionRepository,
     private settingsStorage: SettingsStorage,
     private kbRepo: KnowledgeBaseRepository,
     private uploadPathService: UploadPathService,
@@ -42,14 +44,11 @@ export class SessionMapperService {
     title?: string,
   ): Promise<any> {
     // 尝试查找已存在的会话
-    let session = await this.prisma.session.findFirst({
-      where: {
-        botId,
-        externalId,
-        sessionType: 'bot',
-        characterId: defaultCharacterId || null,
-      },
-    });
+    let session = await this.sessionRepo.findByBotAndExternalId(
+      botId,
+      externalId,
+      defaultCharacterId,
+    );
 
     if (!session) {
       // 查询机器人实例,获取创建者 userId
@@ -96,7 +95,7 @@ export class SessionMapperService {
       }
 
       // 创建新会话,使用机器人创建者的 userId
-      session = await this.prisma.session.create({
+      await this.prisma.session.create({
         data: {
           userId: botInstance.userId,  // 使用机器人创建者的用户ID
           sessionType: 'bot',
@@ -109,6 +108,12 @@ export class SessionMapperService {
           settings: {},
         },
       });
+
+      session = await this.sessionRepo.findByBotAndExternalId(
+        botId,
+        externalId,
+        defaultCharacterId,
+      );
     }
 
     return session;
