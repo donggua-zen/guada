@@ -99,4 +99,30 @@ export class SessionRepository {
     ]);
     return { items, total };
   }
+
+  /**
+   * 根据 botId、externalId 和 characterId 查找会话
+   */
+  async findByBotAndExternalId(
+    botId: string,
+    externalId: string,
+    characterId?: string | null,
+  ) {
+    return this.prisma.session.findFirst({
+      where: {
+        botId,
+        externalId,
+        sessionType: 'bot',
+        characterId: characterId || null,
+      },
+      include: {
+        character: true,
+        model: {
+          include: {
+            provider: true,
+          },
+        },
+      },
+    });
+  }
 }
