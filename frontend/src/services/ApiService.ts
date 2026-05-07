@@ -24,6 +24,7 @@ import type { Message } from '@/types/message'
 import type { PaginatedResponse } from '@/types/common'
 import type { KnowledgeBase, KBFile } from '@/stores/knowledgeBase'
 import type { BotInstance, PlatformMetadata, CreateBotRequest, UpdateBotRequest } from '@/types/bot'
+import { fixFrontendAssetUrl } from '@/utils/url'
 
 class ApiService implements IApiService {
   baseURL: string
@@ -75,7 +76,7 @@ class ApiService implements IApiService {
 
         // 只有真正的401认证错误才跳转登录（排除登录接口本身的401）
         if (error.response?.status === 401 && !error.config?.url?.includes('/auth/login')) {
-          window.location.href = '/login'
+          window.location.href = fixFrontendAssetUrl('/login')
           return Promise.reject(error)
         }
 
