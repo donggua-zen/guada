@@ -176,12 +176,12 @@ export class ConversationContext implements IConversationContext {
     this.logger.debug(`Loaded ${this.history.length} messages into context`);
 
     // 计算系统提示词的 Token 数
-    this.systemPromptTokenCount = this.tokenizerService.countTextTokens(this.chatModelName, this.systemPrompt);
+    this.systemPromptTokenCount = await this.tokenizerService.countTextTokens(this.chatModelName, this.systemPrompt);
     // 减去系统提示词的 Token 数，确保后续计算的上下文窗口是准确的
     this.compressionConfig.contextWindow -= this.systemPromptTokenCount;
 
     // 初始化时计算全量 Token 数并缓存，作为后续增量更新的基准值
-    this.currentTokenCount = this.tokenizerService.countTokens(this.chatModelName, this.history);
+    this.currentTokenCount = await this.tokenizerService.countTokens(this.chatModelName, this.history);
     this.logger.debug(`Initial token count: ${this.currentTokenCount}`);
   }
 
@@ -212,7 +212,7 @@ export class ConversationContext implements IConversationContext {
 
     // 基于缓存的 Token 计数判断是否达到压缩阈值，避免每次调用都重新计算全量 Token
     // 触发条件：当前 Token 数 >= 上下文窗口 * 触发比例（如 80%）
-    if (this.compressionStrategy.shouldCompress(messages, this.compressionConfig, this.currentTokenCount)) {
+    if (await this.compressionStrategy.shouldCompress(messages, this.compressionConfig, this.currentTokenCount)) {
       this.logger.log(
         `Compression triggered: ${this.compressionConfig.contextWindow * this.compressionConfig.triggerRatio} tokens threshold exceeded`
       );
@@ -258,7 +258,7 @@ export class ConversationContext implements IConversationContext {
     }
 
     // 增量更新 Token 计数：仅计算新追加消息的 Token 数并累加到总计数中
-    const newTokens = this.tokenizerService.countTokens(this.chatModelName, records);
+    const newTokens = await this.tokenizerService.countTokens(this.chatModelName, records);
     this.currentTokenCount += newTokens;
     this.logger.debug(`Appended ${records.length} messages, added ${newTokens} tokens, total: ${this.currentTokenCount}`);
   }

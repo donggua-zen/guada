@@ -93,7 +93,7 @@ export interface IMessageStore {
 // ============================================================================
 
 export interface ICompressionStrategy {
-  shouldCompress(messages: MessageRecord[], config: CompressionConfig, cachedTokenCount?: number): boolean;
+  shouldCompress(messages: MessageRecord[], config: CompressionConfig, cachedTokenCount?: number): Promise<boolean>;
   execute(
     sessionId: string,
     messages: MessageRecord[],

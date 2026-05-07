@@ -63,7 +63,7 @@ export class TokenizerService {
   /**
    * 获取或初始化 HuggingFace Tokenizer
    */
-  private getHFTokenizer(modelName: string): HFTokenizer {
+  private async getHFTokenizer(modelName: string): Promise<HFTokenizer> {
     // 尝试直接匹配
     let targetKey = this.hfTokenizerMapping[modelName] ? modelName : this.findMatchingKey(modelName);
 
@@ -87,14 +87,15 @@ export class TokenizerService {
     }
 
     try {
-      const tokenizerJson = JSON.parse(fs.readFileSync(tokenizerPath, "utf-8"));
+      // 异步读取大文件，避免阻塞事件循环
+      const tokenizerJson = JSON.parse(await fs.promises.readFile(tokenizerPath, "utf-8"));
 
       // 尝试读取并传入 tokenizer_config.json (如果存在)
       let options: any = {};
       const configPath = path.join(__dirname, "tokenizers", folderPath, "tokenizer_config.json");
       if (fs.existsSync(configPath)) {
         try {
-          options = JSON.parse(fs.readFileSync(configPath, "utf-8"));
+          options = JSON.parse(await fs.promises.readFile(configPath, "utf-8"));
         } catch (e) {
           this.logger.warn(`Failed to parse tokenizer_config.json for ${modelName}, using default options.`);
         }
@@ -131,7 +132,7 @@ export class TokenizerService {
    * @param text 待计算的纯文本字符串
    * @param useTiktoken 是否强制使用 Tiktoken
    */
-  countTextTokens(modelName: string, text: string, useTiktoken?: boolean): number {
+  async countTextTokens(modelName: string, text: string, useTiktoken?: boolean): Promise<number> {
     // 生成缓存 Key 并尝试从缓存获取
     const cacheKey = this.cache.generateKey(modelName, text);
     const cached = this.cache.get(cacheKey);
@@ -145,7 +146,7 @@ export class TokenizerService {
 
     let result: number;
     if (shouldUseHF) {
-      const tokenizer = this.getHFTokenizer(modelName);
+      const tokenizer = await this.getHFTokenizer(modelName);
       const encoded = tokenizer.encode(text);
       result = encoded.ids.length;
     } else {
@@ -166,7 +167,7 @@ export class TokenizerService {
    * @param messages 待计算的消息数组
    * @param useTiktoken 是否强制使用 Tiktoken（默认根据模型自动选择）
    */
-  countTokens(modelName: string, messages: MessageRecord[], useTiktoken?: boolean): number {
+  async countTokens(modelName: string, messages: MessageRecord[], useTiktoken?: boolean): Promise<number> {
     let totalTokens = 0;
 
     for (const item of messages) {
@@ -174,20 +175,20 @@ export class TokenizerService {
         // 1. 处理工具调用 (toolCalls)
         if (item.toolCalls && Array.isArray(item.toolCalls)) {
           for (const tc of item.toolCalls) {
-            totalTokens += this.countTextTokens(modelName, JSON.stringify(tc), useTiktoken);
+            totalTokens += await this.countTextTokens(modelName, JSON.stringify(tc), useTiktoken);
           }
         }
 
         // 2. 处理思维链 (reasoning_content)
         if (item.reasoningContent) {
-          totalTokens += this.countTextTokens(modelName, item.reasoningContent, useTiktoken);
+          totalTokens += await this.countTextTokens(modelName, item.reasoningContent, useTiktoken);
         }
 
         // 3. 处理内容 (content)
         if (Array.isArray(item.content)) {
           for (const part of item.content) {
             if (part.text) {
-              totalTokens += this.countTextTokens(modelName, part.text, useTiktoken);
+              totalTokens += await this.countTextTokens(modelName, part.text, useTiktoken);
             }
             // 4. 处理图片 (image_url)
             if (part.type === "image_url" && part.image_url) {
@@ -195,7 +196,7 @@ export class TokenizerService {
             }
           }
         } else if (item.content) {
-          totalTokens += this.countTextTokens(modelName, item.content, useTiktoken);
+          totalTokens += await this.countTextTokens(modelName, item.content, useTiktoken);
         }
       }
     }
@@ -206,10 +207,10 @@ export class TokenizerService {
   /**
    * 批量计算多个文本片段的 Token 数
    */
-  countBatchTokens(modelName: string, texts: string[], useTiktoken?: boolean): number {
+  async countBatchTokens(modelName: string, texts: string[], useTiktoken?: boolean): Promise<number> {
     let total = 0;
     for (const text of texts) {
-      total += this.countTextTokens(modelName, text, useTiktoken);
+      total += await this.countTextTokens(modelName, text, useTiktoken);
     }
     return total;
   }

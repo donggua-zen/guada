@@ -59,10 +59,10 @@ export class CompressionEngine implements ICompressionStrategy {
    * @param cachedTokenCount 可选的缓存 Token 计数，若提供则直接使用
    * @returns 是否达到压缩触发条件
    */
-  shouldCompress(messages: MessageRecord[], config: CompressionConfig, cachedTokenCount?: number): boolean {
+  async shouldCompress(messages: MessageRecord[], config: CompressionConfig, cachedTokenCount?: number): Promise<boolean> {
     // 优先使用缓存的 Token 计数，避免重复计算
     const modelName = config.chatModelName || "gpt4";
-    const totalTokens = cachedTokenCount ?? this.tokenizerService.countTokens(modelName, messages);
+    const totalTokens = cachedTokenCount ?? await this.tokenizerService.countTokens(modelName, messages);
     const ratio = totalTokens / config.contextWindow;
     this.logger.debug(
       `Token stats: ${totalTokens}/${config.contextWindow} (${(ratio * 100).toFixed(1)}%), trigger at ${config.triggerRatio}${cachedTokenCount ? ' (cached)' : ''}`
@@ -92,7 +92,7 @@ export class CompressionEngine implements ICompressionStrategy {
     const cleanMessages = messages.filter(msg => msg.role !== 'system');
 
     // 记录压缩前的状态：优先使用传入的缓存 Token 数，避免实时计算的开销
-    const beforeTokenCount = currentTokenCount ?? this.tokenizerService.countTokens(config.chatModelName || "gpt4", cleanMessages);
+    const beforeTokenCount = currentTokenCount ?? await this.tokenizerService.countTokens(config.chatModelName || "gpt4", cleanMessages);
     const beforeMessageCount = cleanMessages.length;
 
     this.logger.log('Executing Stage 1: Pruning');
@@ -103,7 +103,7 @@ export class CompressionEngine implements ICompressionStrategy {
         state?.lastPrunedContentId,
       );
 
-    const prunedTokens = this.tokenizerService.countTokens(config.chatModelName || "gpt4", prunedMessages);
+    const prunedTokens = await this.tokenizerService.countTokens(config.chatModelName || "gpt4", prunedMessages);
     const targetTokens = Math.floor(config.contextWindow * config.targetRatio);
 
     this.logger.debug(`After pruning: ${prunedTokens} tokens (target: ${targetTokens})`);
@@ -539,7 +539,7 @@ export class CompressionEngine implements ICompressionStrategy {
     // 从强制保留区的前一组开始向前判断
     for (let i = minRetainGroupIndex - 1; i >= 0; i--) {
       const group = messageGroups[i];
-      const groupTokens = this.tokenizerService.countTokens(chatModelName || "gpt4", group);
+      const groupTokens = await this.tokenizerService.countTokens(chatModelName || "gpt4", group);
 
       if (retainedTokens + groupTokens > targetTokens) {
         retainGroupIndex = i + 1;

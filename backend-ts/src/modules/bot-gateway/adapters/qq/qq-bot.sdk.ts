@@ -646,7 +646,7 @@ export class QQBot extends EventEmitter {
     // 读取文件
     const fs = await import('fs');
     const path = await import('path');
-    const fileBuffer = fs.readFileSync(filePath);
+    const fileBuffer = await fs.promises.readFile(filePath);
     const fileName = path.basename(filePath);
 
     // 构建 FormData

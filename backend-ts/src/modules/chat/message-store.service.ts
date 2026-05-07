@@ -70,7 +70,7 @@ export class MessageStoreService implements IMessageStore {
     const lastMessage = rawMessages[0];
     // 反转消息列表以按时间正序处理，同时保留最后一条消息的标识用于特殊处理
     for (const msg of rawMessages.reverse()) {
-      const transformed = this.transformContentStructure(
+      const transformed = await this.transformContentStructure(
         msg,
         msg.id === lastMessage?.id,
         supportsImageInput,
@@ -305,12 +305,12 @@ export class MessageStoreService implements IMessageStore {
    * @param keepReasoningContent 是否保留思维链内容（针对 DeepSeek-V4 等模型）
    * @returns 转换后的消息记录数组
    */
-  private transformContentStructure(
+  private async transformContentStructure(
     msg: any,
     isNewUserMessage: boolean,
     supportsImageInput: boolean = true,
     keepReasoningContent: boolean = false,
-  ): MessageRecord[] {
+  ): Promise<MessageRecord[]> {
     if (msg.role === "assistant") {
       const transformed: MessageRecord[] = [];
 
@@ -362,15 +362,16 @@ export class MessageStoreService implements IMessageStore {
 
       // 处理附加的文件（图片和文本），转换为 LLM 可识别的格式
       if (msg.files && Array.isArray(msg.files)) {
-        msg.files.forEach((file: any, index: number) => {
+        for (let index = 0; index < msg.files.length; index++) {
+          const file = msg.files[index];
           if (file.fileType === "image") {
-            const imagePart = this.transformImageFile(file, supportsImageInput);
+            const imagePart = await this.transformImageFile(file, supportsImageInput);
             if (imagePart) textParts.push(imagePart);
           } else if (file.fileType === "text") {
             const textPart = this.transformTextFile(file, index);
             if (textPart) textParts.push(textPart);
           }
-        });
+        }
       }
 
       return [
@@ -436,7 +437,7 @@ export class MessageStoreService implements IMessageStore {
    * @param supportsImageInput 是否支持图片输入
    * @returns 转换后的图片部分对象，若失败则返回 null
    */
-  private transformImageFile(file: any, supportsImageInput: boolean): any | null {
+  private async transformImageFile(file: any, supportsImageInput: boolean): Promise<any | null> {
     if (!supportsImageInput) {
       // 降级处理：当模型不支持图片时，用文本占位符替代
       return { type: "text", text: `[图片ID：${file.id}]` };
@@ -452,8 +453,8 @@ export class MessageStoreService implements IMessageStore {
         return null;
       }
 
-      // 读取图片文件并转换为 Base64 编码
-      const imageBuffer = fs.readFileSync(physicalPath);
+      // 异步读取图片文件并转换为 Base64 编码，避免阻塞事件循环
+      const imageBuffer = await fs.promises.readFile(physicalPath);
       const base64Data = imageBuffer.toString("base64");
 
       // 根据文件扩展名确定 MIME 类型，确保正确的图片格式标识

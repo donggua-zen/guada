@@ -87,7 +87,8 @@ export class ImageRecognitionToolProvider implements IToolProvider {
       throw new Error(`图片文件不存在：${physicalPath}`);
     }
 
-    const imageBuffer = fs.readFileSync(physicalPath);
+    // 异步读取图片文件，避免阻塞事件循环（图片可能很大）
+    const imageBuffer = await fs.promises.readFile(physicalPath);
     const base64Data = imageBuffer.toString("base64");
     const ext = path.extname(physicalPath).toLowerCase();
     let mimeType = "image/jpeg";
