@@ -1,5 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { Observable, Subject } from 'rxjs';
+import { EventEmitter } from 'events';
 import {
   IBotPlatform,
   BotConfig,
@@ -23,7 +24,7 @@ import { QQBot } from './qq/qq-bot.sdk';
  * 注意: 不负责重连逻辑,重连由 BotInstanceManager 统一管理
  */
 @Injectable()
-export class QQBotAdapter implements IBotPlatform {
+export class QQBotAdapter extends EventEmitter implements IBotPlatform {
   private readonly logger = new Logger(QQBotAdapter.name);
   private client: any;
   private messageSubject: Subject<BotMessage>;
@@ -31,6 +32,7 @@ export class QQBotAdapter implements IBotPlatform {
   private config: BotConfig | null = null;
 
   constructor() {
+    super();
     this.messageSubject = new Subject<BotMessage>();
   }
 
@@ -53,6 +55,16 @@ export class QQBotAdapter implements IBotPlatform {
     this.status = BotStatus.CONNECTING;
 
     try {
+      // 如果已有 client,先清理
+      if (this.client) {
+        try {
+          await this.client.reset();
+        } catch (error: any) {
+          this.logger.warn(`Error during client reset: ${error.message}`);
+        }
+        this.client = null;
+      }
+      
       // 创建真实 QQ Bot 实例
       this.client = new QQBot({
         appId: config.platformConfig.appId,
@@ -87,7 +99,15 @@ export class QQBotAdapter implements IBotPlatform {
         this.status = BotStatus.ERROR;
       });
 
-      // 启动连接（使用 start 方法）
+      // 监听 WebSocket 关闭事件(来自 SDK 的主动通知)
+      this.client.on('ws_close', (code: number) => {
+        this.logger.warn(`QQ bot WebSocket closed with code: ${code}`);
+        this.status = BotStatus.DISCONNECTED;
+        // 发射断开事件,触发 Manager 重连
+        this.emit('bot_disconnected', { code });
+      });
+
+      // 启动连接(使用 start 方法)
       await this.client.start();
 
       this.status = BotStatus.CONNECTED;
@@ -179,7 +199,18 @@ export class QQBotAdapter implements IBotPlatform {
 
   async reconnect(): Promise<void> {
     this.logger.log(`Attempting to reconnect QQ bot...`);
-    await this.shutdown();
+    
+    // 1. 先彻底关闭旧客户端
+    if (this.client) {
+      try {
+        await this.client.reset();  // 调用新增的 reset 方法
+      } catch (error: any) {
+        this.logger.warn(`Error during client reset: ${error.message}`);
+      }
+      this.client = null;
+    }
+    
+    // 2. 重新初始化(会创建新的 QQBot 实例)
     if (this.config) {
       await this.initialize(this.config);
     }

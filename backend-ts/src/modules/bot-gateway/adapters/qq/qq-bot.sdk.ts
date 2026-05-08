@@ -475,57 +475,48 @@ export class QQBot extends EventEmitter {
   }
 
   /**
-   * 重新连接
+   * 处理WebSocket断开
+   * 
+   * 注意: 内部重连已禁用(由 BotInstanceManager 统一管理)
+   * 这里只负责: 清理资源 + 发射事件通知上层
    */
-  private async handleReconnect(code: number): Promise<void> {
+  private handleReconnect(code: number): void {
     // 清除心跳
     if (this.heartbeatInterval) {
       clearInterval(this.heartbeatInterval);
       this.heartbeatInterval = null;
     }
 
-    // 判断是否需要重连
-    if (code === 1000 || code === 1001) {
-      // 正常关闭，不重连
-      return;
-    }
+    // 不再在 SDK 内部重连,只发射 close 事件让上层处理
+    this.emit('ws_close', code);
+  }
 
-    // 尝试恢复会话
-    if (this.sessionId && this.resumeFailCount < 3) {
-      this.isResuming = true;
-      this.resumeFailCount++;
+  /**
+   * 彻底重置 SDK 内部状态(在重连前调用)
+   * 比 stop() 更彻底,重置所有计数器
+   */
+  async reset(): Promise<void> {
+    await this.stop();
+    
+    // 重置所有计数器状态
+    this.reconnectAttempts = 0;
+    this.resumeFailCount = 0;
+    this.isResuming = false;
+    this.sessionId = '';
+    this.lastSeq = 0;
+    this.accessToken = '';
+    this.tokenExpireTime = 0;
+    this.user = null;
+  }
 
-      setTimeout(async () => {
-        try {
-          await this.connectWebSocket();
-          await this.resume();
-        } catch (error) {
-          console.error('Resume failed:', error);
-          this.handleReconnect(4000);
-        }
-      }, 1000);
-      return;
-    }
-
-    // 重新Identify
-    this.reconnectAttempts++;
-
-    if (this.reconnectAttempts > this.config.maxRetry) {
-      console.error('Max retry attempts reached');
-      return;
-    }
-
-    // 指数退避重连
-    const delay = Math.min(1000 * Math.pow(2, this.reconnectAttempts), 30000);
-
-    setTimeout(async () => {
-      try {
-        await this.connectWebSocket();
-      } catch (error) {
-        console.error('Reconnect failed:', error);
-        this.handleReconnect(4000);
-      }
-    }, delay);
+  /**
+   * 强制刷新 Access Token(重连时使用)
+   * 不管旧 Token 是否过期,都重新获取
+   */
+  async forceRefreshToken(): Promise<string> {
+    this.accessToken = '';          // 清空旧 Token
+    this.tokenExpireTime = 0;       // 强制过期
+    return this.getAccessToken();   // 重新获取
   }
 
   /**
@@ -535,8 +526,6 @@ export class QQBot extends EventEmitter {
     if (this.ws) {
       this.ws.close();
     }
-
-    await this.handleReconnect(4000);
   }
 
   /**
