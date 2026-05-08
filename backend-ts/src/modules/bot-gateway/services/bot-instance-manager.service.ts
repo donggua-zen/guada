@@ -38,6 +38,12 @@ export class BotInstanceManager implements OnModuleInit, OnApplicationShutdown {
     }
   > = new Map();
 
+  // 防重入锁:记录正在重连的机器人ID
+  private reconnectingBots: Set<string> = new Set();
+
+  // 重连超时时间(30秒)
+  private readonly RECONNECT_TIMEOUT_MS = 30000;
+
   constructor(
     private prisma: PrismaService,
     private adapterFactory: BotAdapterFactory,
@@ -307,6 +313,12 @@ export class BotInstanceManager implements OnModuleInit, OnApplicationShutdown {
       return;
     }
 
+    // 防重入检查
+    if (this.reconnectingBots.has(botId)) {
+      this.logger.warn(`Bot ${botId} is already reconnecting, skipping duplicate schedule`);
+      return;
+    }
+
     // 检查是否启用重连
     if (!config.reconnectConfig?.enabled) {
       this.logger.log(`Reconnect disabled for bot ${botId}`);
@@ -340,27 +352,48 @@ export class BotInstanceManager implements OnModuleInit, OnApplicationShutdown {
       `Scheduling reconnect for bot ${botId} in ${retryInterval}ms (attempt ${instance.reconnectAttempts}/${maxRetries})`,
     );
 
+    // 标记为正在重连
+    this.reconnectingBots.add(botId);
+
     // 设置重连定时器
     instance.reconnectTimer = setTimeout(async () => {
       try {
         this.logger.log(`Attempting to reconnect bot ${botId}...`);
         
-        // 先关闭旧的连接
-        try {
-          await instance.adapter.shutdown();
-        } catch (shutdownError: any) {
-          this.logger.warn(`Error during shutdown before reconnect: ${shutdownError.message}`);
-        }
+        // 超时控制
+        const reconnectPromise = instance.adapter.reconnect();
+        const timeoutPromise = new Promise((_, reject) => {
+          setTimeout(() => reject(new Error('Reconnect timed out after 30s')), 
+                     this.RECONNECT_TIMEOUT_MS);
+        });
         
-        // 重新启动
-        await instance.adapter.initialize(config);
+        await Promise.race([reconnectPromise, timeoutPromise]);
+        
+        // 重连成功后重新绑定消息监听
         await this.orchestrator.startBotListener(botId, instance.adapter, config);
         
         // 重连成功，重置计数器
         instance.reconnectAttempts = 0;
         this.logger.log(`Bot ${botId} reconnected successfully`);
+        
+        // 更新数据库状态为已连接
+        await this.prisma.botInstance.update({
+          where: { id: botId },
+          data: { status: 'connected', lastError: null },
+        }).catch((err) => {
+          this.logger.error(`Failed to update bot status: ${err.message}`);
+        });
       } catch (error: any) {
         this.logger.error(`Reconnection failed for bot ${botId}: ${error.message}`);
+        
+        // 如果超时，强制销毁旧客户端
+        if (error.message.includes('timed out')) {
+          this.logger.error(`Reconnect timed out for bot ${botId}, forcing cleanup`);
+          try {
+            await instance.adapter.shutdown();
+          } catch {}
+          this.botInstances.delete(botId);
+        }
         
         // 更新数据库状态
         await this.prisma.botInstance.update({
@@ -375,6 +408,9 @@ export class BotInstanceManager implements OnModuleInit, OnApplicationShutdown {
         
         // 继续调度下一次重连
         this.scheduleReconnect(botId, config, error.message);
+      } finally {
+        // 无论成功还是失败，都移除重连标记
+        this.reconnectingBots.delete(botId);
       }
     }, retryInterval);
   }
