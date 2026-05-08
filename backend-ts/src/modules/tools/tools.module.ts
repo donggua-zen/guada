@@ -1,5 +1,6 @@
 import { Module } from "@nestjs/common";
 import { VectorDbModule } from "../../common/vector-db/vector-db.module";
+import { SharedModule } from "../../common/services/shared.module";
 import { ToolOrchestrator } from "./tool-orchestrator.service";
 import { ToolContextFactory } from "./tool-context";
 import { KnowledgeBaseToolProvider } from "./providers/knowledge-base-tool.provider";
@@ -9,6 +10,9 @@ import { TimeToolProvider } from "./providers/time-tool.provider";
 import { ImageRecognitionToolProvider } from "./providers/image-recognition-tool.provider";
 import { ShellToolProvider } from "./providers/shell-tool.provider";
 import { EmbeddingService } from "../knowledge-base/embedding.service";
+import { KbFileService } from "../knowledge-base/kb-file.service";
+import { FileParserService } from "../knowledge-base/file-parser.service";
+import { ChunkingService } from "../knowledge-base/chunking.service";
 import { KnowledgeBaseRepository } from "../../common/database/knowledge-base.repository";
 import { KBFileRepository } from "../../common/database/kb-file.repository";
 import { KBChunkRepository } from "../../common/database/kb-chunk.repository";
@@ -18,7 +22,7 @@ import { SkillsModule } from '../skills/skills.module';
 import { SkillToolBridgeService } from '../skills/integration/skill-tool-bridge.service';
 
 @Module({
-  imports: [VectorDbModule, SkillsModule],
+  imports: [VectorDbModule, SkillsModule, SharedModule],
   providers: [
     ToolOrchestrator,
     ToolContextFactory,
@@ -30,6 +34,9 @@ import { SkillToolBridgeService } from '../skills/integration/skill-tool-bridge.
     ShellToolProvider,
     SkillToolBridgeService,
     EmbeddingService,
+    KbFileService,
+    FileParserService,
+    ChunkingService,
     KnowledgeBaseRepository,
     KBFileRepository,
     KBChunkRepository,

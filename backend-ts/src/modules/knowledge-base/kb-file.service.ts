@@ -126,9 +126,9 @@ export class KbFileService implements OnModuleInit {
         if (isOrphan) {
           orphanCount++;
           try {
-            // 如果物理文件还存在，先删除
+            // 如果物理文件还存在，先删除（异步）
             if (file.filePath && fs.existsSync(file.filePath)) {
-              fs.unlinkSync(file.filePath);
+              await fs.promises.unlink(file.filePath);
               this.logger.log(`已删除孤儿物理文件: ${file.filePath}`);
             }
             // 删除数据库记录（会级联删除 chunks）
@@ -244,9 +244,9 @@ export class KbFileService implements OnModuleInit {
     const fileExtension = path.extname(originalName).toLowerCase();
     const uniqueFilename = `${crypto.randomUUID()}${fileExtension}`;
 
-    // 保存文件到临时目录
+    // 保存文件到临时目录（异步写入）
     const filePath = path.join(this.kbUploadDir, uniqueFilename);
-    fs.writeFileSync(filePath, file.buffer);
+    await fs.promises.writeFile(filePath, file.buffer);
 
     const fileSize = file.buffer.length;
 
@@ -296,6 +296,89 @@ export class KbFileService implements OnModuleInit {
     );
 
     // 启动后台处理任务
+    this.processFileInBackground(fileRecord.id);
+
+    return fileRecord;
+  }
+
+  /**
+   * 添加文本文档到知识库（供 AI Agent 工具调用）
+   * 
+   * @param kbId 知识库 ID
+   * @param userId 用户 ID
+   * @param sourceFilePath 源文件的绝对路径（包含文件名）
+   * @param targetPath 目标知识库中的相对路径（包含文件名，例如："docs/api/guide.md"）
+   * @returns 创建的文件记录
+   */
+  async addTextDocument(
+    kbId: string,
+    userId: string,
+    sourceFilePath: string,
+    targetPath: string,
+  ) {
+    // 验证知识库存在且有权限
+    const kb = await this.kbRepo.findById(kbId);
+    if (!kb) {
+      throw new NotFoundException("知识库不存在");
+    }
+    if (kb.userId !== userId) {
+      throw new Error("无权访问该知识库");
+    }
+
+    // 检查源文件是否存在
+    if (!fs.existsSync(sourceFilePath)) {
+      throw new Error(`源文件不存在：${sourceFilePath}`);
+    }
+
+    // 读取文件内容（异步）
+    const content = await fs.promises.readFile(sourceFilePath, 'utf-8');
+
+    // 从目标路径提取显示名称和文件夹路径
+    const displayName = path.basename(targetPath);
+    const folderPath = path.dirname(targetPath);
+
+    // 生成唯一文件名
+    const uniqueFilename = `${crypto.randomUUID()}.txt`;
+
+    // 保存文件到临时目录（异步写入）
+    const tempFilePath = path.join(this.kbUploadDir, uniqueFilename);
+    await fs.promises.writeFile(tempFilePath, content, 'utf-8');
+
+    const fileSize = Buffer.byteLength(content, 'utf-8');
+
+    // 计算内容哈希（用于后续可能的去重或统计）
+    const contentHash = crypto.createHash("md5").update(content).digest("hex");
+
+    // 解析目标路径，提取父文件夹信息
+    let parentFolderId: string | null = null;
+    if (folderPath && folderPath !== '.') {
+      // 确保文件夹结构存在（递归创建）
+      parentFolderId = await this.ensureFolderStructure(kbId, folderPath);
+    }
+
+    // 创建文件记录
+    const fileRecord = await this.fileRepo.create({
+      knowledgeBaseId: kbId,
+      fileName: uniqueFilename,
+      displayName: displayName,
+      fileSize: fileSize,
+      fileType: "text",
+      fileExtension: "txt",
+      contentHash: contentHash,
+      filePath: tempFilePath,
+      processingStatus: "pending",
+      progressPercentage: 0,
+      currentStep: "等待处理...",
+      relativePath: targetPath || null,
+      parentFolderId: parentFolderId,
+      isDirectory: false,
+    });
+
+    this.logger.log(
+      `文本文档记录已创建：${displayName}, KB=${kbId}, File ID=${fileRecord.id}`,
+    );
+
+    // 启动后台处理任务（与 uploadFile 保持一致）
     this.processFileInBackground(fileRecord.id);
 
     return fileRecord;
@@ -797,9 +880,9 @@ export class KbFileService implements OnModuleInit {
       const deletedCount = await this.chunkRepo.deleteByFileId(fileId);
       this.logger.log(`删除 ${deletedCount} 个分块`);
 
-      // 3. 删除本地物理文件（新增）
+      // 3. 删除本地物理文件（异步）
       if (file.filePath && fs.existsSync(file.filePath)) {
-        fs.unlinkSync(file.filePath);
+        await fs.promises.unlink(file.filePath);
         this.logger.log(`已删除本地文件: ${file.filePath}`);
       }
 
@@ -835,9 +918,9 @@ export class KbFileService implements OnModuleInit {
         });
         await this.chunkRepo.deleteByFileId(item.id);
         
-        // 删除本地物理文件（新增）
+        // 删除本地物理文件（异步）
         if (item.filePath && fs.existsSync(item.filePath)) {
-          fs.unlinkSync(item.filePath);
+          await fs.promises.unlink(item.filePath);
           this.logger.log(`已删除本地文件: ${item.filePath}`);
         }
         

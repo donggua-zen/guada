@@ -230,4 +230,19 @@ export class KBFileRepository {
       where,
     });
   }
+
+  /**
+   * 根据内容哈希查找文件（用于重复检测）
+   */
+  async findByContentHash(
+    knowledgeBaseId: string,
+    contentHash: string,
+  ): Promise<any | null> {
+    return this.prisma.kBFile.findFirst({
+      where: {
+        knowledgeBaseId,
+        contentHash,
+      },
+    });
+  }
 }

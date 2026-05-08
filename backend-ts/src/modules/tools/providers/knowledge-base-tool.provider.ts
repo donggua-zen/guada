@@ -1,10 +1,13 @@
 import { Injectable, Logger, Inject } from "@nestjs/common";
+import * as fs from "fs";
+import * as path from "path";
 import { PrismaService } from "../../../common/database/prisma.service";
 import { KnowledgeBaseRepository } from "../../../common/database/knowledge-base.repository";
 import { KBFileRepository } from "../../../common/database/kb-file.repository";
 import { KBChunkRepository } from "../../../common/database/kb-chunk.repository";
 import { VectorDbService } from "../../../common/vector-db/vector-db.service";
 import { EmbeddingService } from "../../knowledge-base/embedding.service";
+import { KbFileService } from "../../knowledge-base/kb-file.service";
 import {
   IToolProvider,
   ToolCallRequest,
@@ -25,6 +28,7 @@ export class KnowledgeBaseToolProvider implements IToolProvider {
     private chunkRepo: KBChunkRepository,
     private vectorDbService: VectorDbService,
     private embeddingService: EmbeddingService,
+    private kbFileService: KbFileService,
   ) { }
 
   private readonly toolsConfig: InternalToolDefinition[] = [
@@ -103,6 +107,28 @@ export class KnowledgeBaseToolProvider implements IToolProvider {
         required: ["file_id"],
       },
     },
+    {
+      name: "add_document",
+      description: "将指定路径的文本文件添加到知识库中，自动完成分块、向量化和存储",
+      parameters: {
+        type: "object",
+        properties: {
+          knowledge_base_id: {
+            type: "string",
+            description: "目标知识库 ID（必填）",
+          },
+          source_file_path: {
+            type: "string",
+            description: "源文件的绝对路径或相对路径（必填），包含文件名",
+          },
+          target_path: {
+            type: "string",
+            description: "目标知识库中的相对路径（必填），包含文件名，例如：\"docs/api/guide.md\"",
+          },
+        },
+        required: ["knowledge_base_id", "source_file_path", "target_path"],
+      },
+    },
   ];
 
   async getTools(enabled?: boolean | string[]): Promise<any[]> {
@@ -117,6 +143,7 @@ export class KnowledgeBaseToolProvider implements IToolProvider {
       search: this.handleSearch.bind(this),
       list_files: this.handleListFiles.bind(this),
       get_chunks: this.handleGetChunks.bind(this),
+      add_document: this.handleAddDocument.bind(this),
     };
 
     const handler = handlers[request.name];
@@ -165,10 +192,19 @@ export class KnowledgeBaseToolProvider implements IToolProvider {
 - 需要检查分块质量时
 - 想要深入了解文件细节时
 
+### 4. 添加文档到知识库 (knowledge_base__add_document)
+**用途**: 将指定路径的文本文件添加到知识库中
+
+**何时使用**:
+- 用户提供了文件路径，要求将其内容保存到知识库时
+- 需要将本地文档（如 .txt, .md 文件）添加到知识库时
+- 用户说“把这个文件加入知识库”等意图时
+
 **使用建议**:
 1. **先搜索再查看**: 先用 \`search\` 找到相关内容，如有必要再用 \`get_chunks\` 查看完整分块
 2. **注意分页**: 使用 \`get_chunks\` 时，每次最多获取 10 个分块，可通过调整 \`chunk_index\` 实现分页
 3. **错误处理**: 如果返回错误信息，请检查参数是否正确、知识库/文件是否存在
+4. **路径规范**: target_path 应包含完整的相对路径和文件名，系统会自动创建对应的文件夹结构
 `;
       promptParts.push(toolInstructions);
 
@@ -313,6 +349,60 @@ export class KnowledgeBaseToolProvider implements IToolProvider {
       chunks: formattedChunks,
       total: chunks.length,
     });
+  }
+
+  private async handleAddDocument(
+    args: any,
+    injectParams: any,
+  ): Promise<string> {
+    const { 
+      knowledge_base_id, 
+      source_file_path,
+      target_path
+    } = args;
+
+    // 验证参数
+    if (!knowledge_base_id || !source_file_path || !target_path) {
+      throw new Error("缺少必要参数：knowledge_base_id、source_file_path、target_path");
+    }
+
+    // 从 injectParams 获取 user_id（由 ToolOrchestrator 注入）
+    const user_id = injectParams?.user_id;
+    if (!user_id) {
+      throw new Error("无法获取用户身份，操作被拒绝");
+    }
+
+    try {
+      // 解析源文件路径（支持相对路径和绝对路径）
+      let resolvedSourcePath = source_file_path;
+      if (!path.isAbsolute(source_file_path)) {
+        // 如果是相对路径，相对于当前工作目录
+        resolvedSourcePath = path.resolve(process.cwd(), source_file_path);
+      }
+
+      // 调用 KbFileService 处理文本文档添加
+      const fileRecord = await this.kbFileService.addTextDocument(
+        knowledge_base_id,
+        user_id,
+        resolvedSourcePath,
+        target_path,
+      );
+
+      // 返回成功结果
+      return JSON.stringify({
+        success: true,
+        message: "文档已提交处理，将在后台自动完成分块和向量化",
+        file_id: fileRecord.id,
+        file_name: fileRecord.displayName,
+        knowledge_base_id: knowledge_base_id,
+        target_path: fileRecord.relativePath,
+        status: fileRecord.processingStatus,
+      });
+
+    } catch (error: any) {
+      this.logger.error(`添加文档失败：${error.message}`);
+      throw new Error(`添加文档失败：${error.message}`);
+    }
   }
 
   getMetadata(): ToolProviderMetadata {
