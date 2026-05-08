@@ -1,15 +1,12 @@
-import { Injectable, Logger, ConflictException } from "@nestjs/common";
+import { Injectable, Logger } from "@nestjs/common";
 import { SessionRepository } from "../../common/database/session.repository";
 import { CharacterRepository } from "../../common/database/character.repository";
-import { MessageRepository } from "../../common/database/message.repository";
 import { ModelRepository } from "../../common/database/model.repository";
 import { SettingsStorage } from "../../common/utils/settings-storage.util";
 import { SessionContextStateRepository } from "../../common/database/session-context-state.repository";
 import { LLMService } from "../llm-core/llm.service";
 import { MessageStoreService } from "./message-store.service";
 import { TokenizerService } from "../../common/utils/tokenizer.service";
-import { ToolOrchestrator } from "../tools/tool-orchestrator.service";
-import { SessionLockService } from "./session-lock.service";
 import {
   createPaginatedResponse,
   PaginatedResponse,
@@ -17,9 +14,7 @@ import {
 import { UrlService } from "../../common/services/url.service";
 import { WorkspaceService } from "../../common/services/workspace.service";
 import { SG_MODELS, SK_MOD_CHAT, SK_MOD_TITLE_MODEL } from "../../constants/settings.constants";
-import { ConversationContextFactory } from "./conversation-context.factory";
 import { SessionContextService } from "./session-context.service";
-import { Model } from "@prisma/client";
 
 @Injectable()
 export class SessionService {
@@ -33,7 +28,6 @@ export class SessionService {
     private contextStateRepo: SessionContextStateRepository,
     private llmService: LLMService,
     private contextManager: MessageStoreService,
-    private tokenizerService: TokenizerService,
     private urlService: UrlService,
     private workspaceService: WorkspaceService,
     private sessionContextService: SessionContextService,
@@ -205,6 +199,11 @@ export class SessionService {
    * @returns 过滤后的安全设置
    */
   private filterAndMergeSessionSettings(sessionSettings: any, characterSettings: any) {
+    // 如果 sessionSettings 为空，使用空对象
+    if (!sessionSettings) {
+      sessionSettings = {};
+    }
+
     // 定义允许的顶层字段白名单
     const allowedTopLevelFields = [
       'thinkingEnabled',
