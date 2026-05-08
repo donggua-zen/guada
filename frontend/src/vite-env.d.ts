@@ -78,6 +78,7 @@ interface ElectronAPI {
   startDownloadUpdate: () => Promise<void>
   installAndRestart: () => void
   onUpdateStatus: (callback: (status: any) => void) => void
+  openExternal: (url: string) => Promise<{ success: boolean; error?: string }>
 }
 
 interface Window {

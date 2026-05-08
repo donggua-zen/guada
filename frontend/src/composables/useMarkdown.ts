@@ -89,6 +89,7 @@ let markedInstance: Marked | null = null
 interface CustomRenderer extends Renderer {
     table(token: Tokens.Table): string
     code(token: Tokens.Code): string
+    link(token: Tokens.Link): string
 }
 
 /**
@@ -143,6 +144,22 @@ function createMarkedInstance(): Marked {
           <pre class="hljs language-${lang}"><code class="hljs language-${lang}">${code.text}</code></pre>
         </div>
       `
+        },
+        link(token: Tokens.Link): string {
+            const href = token.href
+            const title = token.title ? ` title="${token.title}"` : ''
+            const text = this.parser?.parseInline(token.tokens) || token.text
+            
+            // 检测是否为 Electron 环境
+            const isElectron = typeof window !== 'undefined' && (window as any).electronAPI !== undefined
+            
+            if (isElectron) {
+                // Electron 环境：添加 data-url 属性和点击事件处理
+                return `<a href="#" data-url="${href}"${title} onclick="event.preventDefault(); window.electronAPI.openExternal('${href}'); return false;">${text}</a>`
+            } else {
+                // Web 环境：使用 target="_blank" 和 rel 属性
+                return `<a href="${href}"${title} target="_blank" rel="noopener noreferrer">${text}</a>`
+            }
         }
     }
 

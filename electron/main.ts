@@ -627,6 +627,17 @@ function setupIpcHandlers() {
       return { success: false, error: (error as Error).message }
     }
   })
+
+  // 打开外部链接
+  ipcMain.handle('open-external', async (_, url: string) => {
+    try {
+      await shell.openExternal(url)
+      return { success: true }
+    } catch (error) {
+      log.error('打开外部链接失败:', error)
+      return { success: false, error: String(error) }
+    }
+  })
 }
 
 // 配置更新器事件监听
