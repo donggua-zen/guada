@@ -68,7 +68,7 @@ function getSchemaVersion(backendPath: string): string {
   const crypto = require('crypto')
   const schemaPath = path.join(backendPath, 'prisma', 'schema.prisma')
   if (!fs.existsSync(schemaPath)) return 'unknown'
-  
+
   const content = fs.readFileSync(schemaPath, 'utf-8')
   return crypto.createHash('md5').update(content).digest('hex').substring(0, 12)
 }
@@ -110,7 +110,7 @@ async function initializeDatabase(userDataPath: string, backendPath: string): Pr
     const isFirstRun = !fs.existsSync(dbPath) || fs.statSync(dbPath).size === 0
     if (isFirstRun) {
       let templatePath: string | null = null
-      
+
       if (isDev) {
         // 开发环境：直接指向项目根目录下的 data 文件夹
         const devPath = path.join(__dirname, '..', '..', 'data', 'seed_template.db')
@@ -136,7 +136,7 @@ async function initializeDatabase(userDataPath: string, backendPath: string): Pr
       const backupPath = `${dbPath}.bak.${timestamp}`
       fs.copyFileSync(dbPath, backupPath)
       console.log(`📦 数据库结构变更，已备份至: ${backupPath}`)
-      
+
       // 清理旧备份（保留最近 3 个）
       const backups = fs.readdirSync(path.dirname(dbPath))
         .filter(f => f.startsWith(path.basename(dbPath) + '.bak.'))
@@ -149,11 +149,18 @@ async function initializeDatabase(userDataPath: string, backendPath: string): Pr
       }
     }
 
-    // 3. 使用 db push 同步结构（直接调用 prisma CLI 入口，无需依赖 npx）
+    // 3. 使用 db push 同步结构（使用 Electron 内置的 Node.js 运行时）
     const prismaCli = path.join(backendPath, 'node_modules', 'prisma', 'build', 'index.js')
-    execSync(`node "${prismaCli}" db push --config=prisma.config.js --accept-data-loss`, {
+        
+    // 使用 process.execPath（Electron 内置的 Node.js），不依赖系统的 node 命令
+    const nodeExecutable = process.execPath
+        
+    // 设置 ELECTRON_RUN_AS_NODE，让 Electron 以纯 Node.js 模式运行
+    const execEnv = { ...env, ELECTRON_RUN_AS_NODE: '1' }
+        
+    execSync(`"${nodeExecutable}" "${prismaCli}" db push --config=prisma.config.js --accept-data-loss`, {
       cwd: backendPath,
-      env,
+      env: execEnv,
       stdio: 'pipe',
       encoding: 'utf-8'
     })
@@ -213,18 +220,18 @@ async function startBackend(): Promise<void> {
     console.warn('⚠️  后端已在启动中，跳过重复调用')
     return Promise.resolve()
   }
-  
+
   // 如果后端已经在运行，直接返回
   if (backendProcess && !backendProcess.killed) {
     console.warn('⚠️  后端已在运行，跳过启动')
     return Promise.resolve()
   }
-  
+
   isBackendStarting = true
-  
+
   return new Promise(async (resolve, reject) => {
     const backendPath = getBackendPath()
-    
+
     if (isDev) {
       // 开发模式：固定端口，通过日志检测启动
       backendPort = 3000
@@ -238,12 +245,12 @@ async function startBackend(): Promise<void> {
         '--transpile-only',
         path.join(backendPath, 'src', 'main.ts')
       ]
-      
+
       console.log('🔧 开发模式：使用 ts-node-dev 启动后端（支持热重载）')
-      
+
       const userDataPath = app.getPath('userData')
       await initializeDatabase(userDataPath, backendPath)
-      
+
       const dbPath = path.join(userDataPath, 'ai_chat.db')
       const vectorDbPath = path.join(userDataPath, 'vector_db.sqlite')
       const staticDir = path.join(backendPath, 'static')
@@ -251,7 +258,7 @@ async function startBackend(): Promise<void> {
       const logsDir = path.join(userDataPath, 'logs') // 后端日志目录
       const skillsDir = path.join(userDataPath, 'skills') // 技能目录
       const workspaceDir = path.join(userDataPath, 'workspace') // 会话工作目录
-      
+
       console.log('Database path:', dbPath)
       console.log('Vector database path:', vectorDbPath)
       console.log('Static directory:', staticDir)
@@ -259,7 +266,7 @@ async function startBackend(): Promise<void> {
       console.log('Backend logs directory:', logsDir)
       console.log('Skills directory:', skillsDir)
       console.log('Workspace directory:', workspaceDir)
-      
+
       const spawnOptions: any = {
         cwd: backendPath,
         env: {
@@ -279,7 +286,7 @@ async function startBackend(): Promise<void> {
         stdio: ['pipe', 'pipe', 'pipe'], // 开发模式不需要 IPC
         shell: true
       }
-      
+
       backendProcess = spawn(nodePath, [scriptPath, ...args], spawnOptions)
     } else {
       // 生产模式：使用 0 让系统自动分配端口，通过 IPC 获取
@@ -287,21 +294,21 @@ async function startBackend(): Promise<void> {
       const { spawn } = await import('child_process')
       const nodePath = process.execPath
       const scriptPath = path.join(backendPath, 'dist', 'main.js')
-      
+
       // 检查文件是否存在
       if (!fs.existsSync(scriptPath)) {
         console.error('后端文件不存在:', scriptPath)
         reject(new Error('Backend files not found'))
         return
       }
-      
+
       console.log('📦 生产模式：从 unpacked 目录启动后端')
       console.log('后端路径:', backendPath)
-      
+
       // 初始化数据库
       const userDataPath = app.getPath('userData')
       await initializeDatabase(userDataPath, backendPath)
-      
+
       const dbPath = path.join(userDataPath, 'ai_chat.db')
       const vectorDbPath = path.join(userDataPath, 'vector_db.sqlite')
       const staticDir = path.join(backendPath, 'static')
@@ -309,7 +316,7 @@ async function startBackend(): Promise<void> {
       const logsDir = path.join(userDataPath, 'logs') // 后端日志目录
       const skillsDir = path.join(userDataPath, 'skills') // 技能目录
       const workspaceDir = path.join(userDataPath, 'workspace') // 会话工作目录
-      
+
       console.log('Database path:', dbPath)
       console.log('Vector database path:', vectorDbPath)
       console.log('Static directory:', staticDir)
@@ -317,7 +324,7 @@ async function startBackend(): Promise<void> {
       console.log('Backend logs directory:', logsDir)
       console.log('Skills directory:', skillsDir)
       console.log('Workspace directory:', workspaceDir)
-      
+
       // 使用 spawn 启动后端
       const spawnOptions: any = {
         cwd: backendPath,
@@ -340,15 +347,15 @@ async function startBackend(): Promise<void> {
         },
         stdio: ['pipe', 'pipe', 'pipe', 'ipc'] // 增加 'ipc' 以支持 process.send
       }
-      
+
       backendProcess = spawn(nodePath, [scriptPath], spawnOptions)
     }
-    
+
     if (!backendProcess) {
       reject(new Error('Failed to create backend process'))
       return
     }
-    
+
     let isResolved = false
     // 监听来自后端的 IPC 消息（仅生产环境有效）
     backendProcess.on('message', (message: any) => {
@@ -360,14 +367,14 @@ async function startBackend(): Promise<void> {
         resolve()
       }
     })
-    
+
     // 处理 stdout
     backendProcess.stdout?.on('data', (data) => {
       const message = data.toString().trim()
       if (message) {
         console.log(`[Backend] ${message}`)
       }
-      
+
       // 开发模式：通过日志检测启动成功
       if (isDev && message.includes('Application is running on') && !isResolved) {
         isBackendStarting = false
@@ -376,7 +383,7 @@ async function startBackend(): Promise<void> {
         resolve()
       }
     })
-    
+
     // 处理 stderr
     backendProcess.stderr?.on('data', (data) => {
       const errorMessage = data.toString().trim()
@@ -384,14 +391,14 @@ async function startBackend(): Promise<void> {
         console.error(`[Backend Error] ${errorMessage}`)
       }
     })
-    
+
     // 处理错误
     backendProcess.on('error', (error) => {
       log.error('后端进程启动失败:', error)
       isBackendStarting = false  // 重置标志
       reject(error)
     })
-    
+
     // 处理退出
     backendProcess.on('exit', (code) => {
       log.info(`后端进程退出，退出码: ${code}`)
@@ -427,10 +434,10 @@ function createWindow() {
     backgroundColor: '#ffffff',
     titleBarStyle: 'hidden' // 隐藏标题栏但保留系统按钮（macOS）
   })
-  
+
   // 设置应用菜单
   // setupApplicationMenu()
-  
+
   if (isDev) {
     // 开发环境：根据 USE_STATIC_FRONTEND 决定加载方式
     if (process.env.USE_STATIC_FRONTEND === 'true') {
@@ -442,7 +449,7 @@ function createWindow() {
       // 使用 Vite 开发服务器（热重载）
       mainWindow.loadURL('http://localhost:5173')
     }
-    
+
     // 延迟打开开发者工具，避免影响窗口显示
     setTimeout(() => {
       mainWindow?.webContents.openDevTools({ mode: 'detach' })
@@ -451,9 +458,9 @@ function createWindow() {
     // 生产环境加载打包后的前端文件
     // __dirname 指向 app.asar/electron/dist，需要向上两级到达 app.asar，然后进入 frontend/dist
     const frontendPath = path.join(__dirname, '..', '..', 'frontend', 'dist', 'index.html')
-    
+
     mainWindow.loadFile(frontendPath)
-    
+
     // 如果启用了调试模式，自动打开开发者工具
     if (process.env.DEBUG_MODE === 'true') {
       setTimeout(() => {
@@ -487,12 +494,12 @@ function setupIpcHandlers() {
     // 可以在这里实现系统通知
     console.log('Notification:', title, body)
   })
-  
+
   // 窗口控制
   ipcMain.on('window-minimize', () => {
     mainWindow?.minimize()
   })
-  
+
   ipcMain.on('window-maximize', () => {
     if (mainWindow?.isMaximized()) {
       mainWindow.unmaximize()
@@ -500,16 +507,16 @@ function setupIpcHandlers() {
       mainWindow?.maximize()
     }
   })
-  
+
   ipcMain.on('window-close', () => {
     mainWindow?.close()
   })
-  
+
   // 获取窗口最大化状态
   ipcMain.handle('is-window-maximized', () => {
     return mainWindow?.isMaximized() || false
   })
-  
+
   // 打开/关闭开发者工具
   ipcMain.on('toggle-devtools', () => {
     if (mainWindow) {
@@ -536,7 +543,7 @@ function setupIpcHandlers() {
         return { success: false, error: error.message }
       }
     }
-    
+
     try {
       await autoUpdater.checkForUpdates()
       return { success: true }
@@ -563,7 +570,7 @@ function setupIpcHandlers() {
       if (item.type === 'separator') {
         return { type: 'separator' as const }
       }
-      
+
       return {
         label: item.label,
         type: (item.type || 'normal') as any,
@@ -655,9 +662,9 @@ function setupAutoUpdater() {
   })
 
   autoUpdater.on('download-progress', (progressObj) => {
-    mainWindow?.webContents.send('update-status', { 
-      status: 'downloading', 
-      progress: progressObj.percent 
+    mainWindow?.webContents.send('update-status', {
+      status: 'downloading',
+      progress: progressObj.percent
     })
   })
 
@@ -676,12 +683,12 @@ app.whenReady().then(async () => {
     log.info('Application starting...')
     setupIpcHandlers()
     setupAutoUpdater()
-    
+
     // 启动后端服务
     log.info('Starting backend service...')
     await startBackend()
     log.info('Backend service started successfully')
-    
+
     // 创建窗口
     createWindow()
     log.info('Application initialized')
@@ -696,7 +703,7 @@ app.on('window-all-closed', () => {
   // 停止后端服务
   if (backendProcess) {
     console.log('Stopping backend service...')
-    
+
     // 根据平台选择适当的终止方式
     if (process.platform === 'win32') {
       // Windows: 使用 taskkill 命令终止进程树
@@ -711,7 +718,7 @@ app.on('window-all-closed', () => {
     } else {
       // Unix-like systems: 发送 SIGTERM 信号
       backendProcess.kill('SIGTERM')
-      
+
       // 设置超时强制关闭
       setTimeout(() => {
         if (!backendProcess?.killed) {
@@ -720,10 +727,10 @@ app.on('window-all-closed', () => {
         }
       }, 3000)
     }
-    
+
     backendProcess = null
   }
-  
+
   if (process.platform !== 'darwin') {
     app.quit()
   }
