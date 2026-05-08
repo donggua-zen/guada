@@ -414,6 +414,12 @@ defineExpose({
   width: 100%;
   margin-top: 20px;
   margin-bottom: 25px;
+  content-visibility: auto;
+  contain-intrinsic-size: auto 200px;
+}
+
+.message-item:last-child {
+ min-height: 260px;
 }
 
 /* 消息卡片 - BEM Element */

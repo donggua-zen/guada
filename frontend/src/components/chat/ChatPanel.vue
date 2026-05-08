@@ -8,14 +8,14 @@
     <template v-else-if="authStore.isAuthenticated">
       <ScrollContainer ref="scrollContainerRef" class="max-h-full" :auto-scroll="needScrollToBottom" @scroll="handleScroll">
         <div class="flex flex-col items-center px-5 max-w-205 mx-auto">
-          <div class="w-full last:min-h-60" v-for="(pair, index) in messagePairs" :key="pair[0].id">
-            <MessageItem v-for="message in pair" :key="message.id" :message="message"
-              :avatar="message.role == 'user' ? userAvater : currentSession?.avatarUrl"
-              :is-last="message.index == activeMessages.length - 1"
-              :allow-generate="!isStreaming && allowReSendMessage(message, message.index ?? 0, activeMessages)"
-              @delete="deleteMessage" @edit="editMessage" @copy="copyMessage" @generate="generateResponse"
-              @regenerate="regenerateResponse" @switch="switchContent" />
-          </div>
+          <MessageItem v-for="(message, index) in activeMessages" :key="message.id" :message="message"
+            v-memo="[message.id, message.contents, message.currentTurnsId, message.state?.isStreaming, message.state?.isThinking]"
+            :avatar="message.role == 'user' ? userAvater : currentSession?.avatarUrl"
+            :is-last="index === activeMessages.length - 1"
+            :allow-generate="!isStreaming && allowReSendMessage(message, index, activeMessages)"
+            @delete="deleteMessage" @edit="editMessage" @copy="copyMessage" @generate="generateResponse"
+            @regenerate="regenerateResponse" @switch="switchContent" />
+          <!-- <div class="min-h-60"></div> -->
 
           <!-- 压缩中状态显示 -->
           <div v-if="sessionStore.sessionIsCompressing(currentSession?.id || '')" class="w-full py-8 flex flex-col items-center justify-center text-gray-500">
@@ -73,7 +73,7 @@ import { usePopup } from "@/composables/usePopup";
 import { useDebounceFn } from "@vueuse/core";
 import { useSessionStore } from "../../stores/session";
 import { useAuthStore } from "../../stores/auth"
-import { pairMessages, getCurrentTurns, allowReSendMessage } from "@/utils/messageUtils"
+import { getCurrentTurns, allowReSendMessage } from "@/utils/messageUtils"
 import { useStreamResponse } from "@/composables/useStreamResponse"
 import type { InputMessageState, Session } from '@/types/session';
 
@@ -92,7 +92,7 @@ import { LoadingOutlined } from '@vicons/antd'
 const MAX_REGENERATE_VERSIONS = 5
 
 // 弹出层工具
-const { confirm, editText, toast, notify, dialog } = usePopup();
+const { confirm, editText, toast, notify } = usePopup();
 const authStore = useAuthStore()
 const sessionStore = useSessionStore();
 
@@ -134,9 +134,6 @@ const {
 // 响应式数据
 const messagesContainerRef = ref<HTMLElement | null>(null);
 const scrollContainerRef = ref<any>(null);
-const compressionRatio = ref(50);
-const minRetainedTurns = ref(3);
-const compressDialogVisible = ref(false);
 const needScrollToBottom = ref(true);
 const lastScrollTop = ref(0);
 
@@ -242,8 +239,6 @@ const activeMessages = computed({
     }
   }
 });
-
-const messagePairs = computed(() => pairMessages(activeMessages.value));
 
 const thinkingEnabled = computed({
   get() {

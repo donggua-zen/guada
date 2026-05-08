@@ -89,8 +89,11 @@ function handleScroll(event: Event): void {
 function immediateScrollToBottom(): void {
     const element = scrollElement.value;
     if (element) {
-        // 滚动到底部的两倍位置，因为可能内容高度会动态变化
-        element.scrollTop = element.scrollHeight * 2;
+        requestAnimationFrame(() => {
+            if (scrollElement.value) {
+                scrollElement.value.scrollTop = scrollElement.value.scrollHeight * 2;
+            }
+        });
     }
 }
 
@@ -133,9 +136,7 @@ function initScrollObservers() {
     // 使用 MutationObserver 监听 DOM 结构变化（更快响应）
     mutationObserver.value = new MutationObserver(() => {
         if (props.autoScroll) {
-            ///requestAnimationFrame(() => {
             immediateScrollToBottom();
-            //});
         }
     });
 
