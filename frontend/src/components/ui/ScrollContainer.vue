@@ -89,11 +89,11 @@ function handleScroll(event: Event): void {
 function immediateScrollToBottom(): void {
     const element = scrollElement.value;
     if (element) {
-        requestAnimationFrame(() => {
-            if (scrollElement.value) {
-                scrollElement.value.scrollTop = scrollElement.value.scrollHeight * 2;
-            }
-        });
+        // requestAnimationFrame(() => {
+        if (scrollElement.value) {
+            scrollElement.value.scrollTop = scrollElement.value.scrollHeight * 2;
+        }
+        // });
     }
 }
 

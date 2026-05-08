@@ -17,7 +17,7 @@ export class MemoryToolProvider implements IToolProvider {
 
   private readonly toolsConfig: InternalToolDefinition[] = [
     {
-      name: "long_term__edit",
+      name: "edit",
       description: "Upsert 长期记忆（按类型编辑或自动创建）",
       parameters: {
         type: "object",
@@ -38,7 +38,7 @@ export class MemoryToolProvider implements IToolProvider {
       },
     },
     {
-      name: "memo__create_or_update",
+      name: "create_or_update",
       description:
         "创建或更新备忘录。如果标题已存在则根据 write_mode 决定覆盖或追加，否则创建新备忘录。标题最大64字符。",
       parameters: {
@@ -61,7 +61,7 @@ export class MemoryToolProvider implements IToolProvider {
       },
     },
     {
-      name: "memo__delete",
+      name: "delete",
       description: "通过标题删除指定的备忘录",
       parameters: {
         type: "object",
@@ -76,7 +76,7 @@ export class MemoryToolProvider implements IToolProvider {
       },
     },
     {
-      name: "memo__read",
+      name: "read",
       description: "通过标题阅读指定的备忘录内容",
       parameters: {
         type: "object",
@@ -94,6 +94,13 @@ export class MemoryToolProvider implements IToolProvider {
 
   async getTools(enabled?: boolean | string[]): Promise<any[]> {
     if (enabled === false) return [];
+    
+    // 如果是数组，只返回数组中指定的工具
+    if (Array.isArray(enabled)) {
+      return this.toolsConfig.filter(tool => enabled.includes(tool.name));
+    }
+    
+    // true 或未指定：返回所有工具
     return this.toolsConfig;
   }
 
@@ -102,11 +109,10 @@ export class MemoryToolProvider implements IToolProvider {
       string,
       (args: any, ctx?: Record<string, any>) => Promise<string>
     > = {
-      long_term__view: this.handleLongTermView.bind(this),
-      long_term__edit: this.handleLongTermEdit.bind(this),
-      memo__create_or_update: this.handleMemoCreateOrUpdate.bind(this),
-      memo__delete: this.handleMemoDelete.bind(this),
-      memo__read: this.handleMemoRead.bind(this),
+      edit: this.handleLongTermEdit.bind(this),
+      create_or_update: this.handleMemoCreateOrUpdate.bind(this),
+      delete: this.handleMemoDelete.bind(this),
+      read: this.handleMemoRead.bind(this),
     };
 
     const handler = handlers[request.name];
@@ -194,7 +200,7 @@ export class MemoryToolProvider implements IToolProvider {
 
 ## 一、长期记忆 vs 备忘录的选择原则
 
-### 长期记忆 (memory__long_term__edit)
+### 长期记忆 (memory__edit)
 **核心特征**: 全局性、高频使用、需要时刻记住的信息
 
 **适用场景**:
@@ -217,7 +223,7 @@ export class MemoryToolProvider implements IToolProvider {
 4. **定期整理**: 合并相似内容，删除过时信息
 5. **⚠️ 覆盖前整合**: 使用覆盖模式修改已有内容时，必须先读取并整合原有内容，避免丢失重要信息。除非确实要清空旧记忆，否则应使用追加模式或先整合再覆盖
 
-### 备忘录 (memory__memo__*)
+### 备忘录 (memory__*)
 **核心特征**: AI 专属记忆空间、详细记录、按需查阅、用户不可见
 
 **重要说明**:

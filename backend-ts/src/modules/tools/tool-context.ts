@@ -126,20 +126,35 @@ export class ToolContextFactory {
    * 1. 如果 toolsConfig 是 boolean：
    *    - true: 全部启用
    *    - false: 全部禁用
-   * 2. 如果 toolsConfig 是对象 { namespace: boolean }：
-   *    - 优先使用 namespace 对应的值，未配置默认为 true
+   * 2. 如果 toolsConfig 是对象 { namespace: boolean | string[] }：
+   *    - namespace 为 true: 全部启用
+   *    - namespace 为 false: 全部禁用
+   *    - namespace 为 string[]: 部分启用（数组中的工具）
+   *    - namespace 未配置: 默认为 true
    * 3. 如果 toolsConfig 未定义或为其他类型：默认启用
    */
-  private resolveToolEnabled(toolsConfig: any, namespace: string): boolean {
+  private resolveToolEnabled(toolsConfig: any, namespace: string): boolean | string[] {
     // 情况1：boolean 类型
     if (typeof toolsConfig === 'boolean') {
       return toolsConfig;
     }
 
-    // 情况2：对象类型 { namespace: boolean }
+    // 情况2：对象类型 { namespace: boolean | string[] }
     if (typeof toolsConfig === 'object' && toolsConfig !== null) {
-      // 优先使用 namespace 配置，未配置时默认为 true
-      return toolsConfig[namespace] !== false;
+      const config = toolsConfig[namespace];
+      
+      // 如果是数组，直接返回数组（表示部分启用）
+      if (Array.isArray(config)) {
+        return config;
+      }
+      
+      // 如果是 boolean，返回 boolean
+      if (typeof config === 'boolean') {
+        return config;
+      }
+      
+      // 未配置时默认为 true
+      return true;
     }
 
     // 情况3：未定义或其他类型，默认启用

@@ -143,6 +143,13 @@ export class ShellToolProvider implements IToolProvider {
 
   async getTools(enabled?: boolean | string[]): Promise<any[]> {
     if (enabled === false) return [];
+    
+    // 如果是数组，只返回数组中指定的工具
+    if (Array.isArray(enabled)) {
+      return this.toolsConfig.filter(tool => enabled.includes(tool.name));
+    }
+    
+    // true 或未指定：返回所有工具
     return this.toolsConfig;
   }
 

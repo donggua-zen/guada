@@ -104,7 +104,7 @@ export class CharactersController {
     }
 
     const characterToolsConfig = (character.settings as any)?.tools;
-    
+
     const globalTools = await this.characterService.getGlobalToolsSettings();
 
     const allTools = await this.toolOrchestrator.getLocalToolsList('local-user', { tools: globalTools });
@@ -132,7 +132,8 @@ export class CharactersController {
    * 2. 如果角色设置为 true，则跟随全局设置（自动适应新增工具）
    * 3. 如果角色设置为 false，则禁用
    * 4. 如果角色设置为对象，则取 namespace 的配置（未设置默认为 true）
-   * 5. 如果角色未设置，则跟随全局设置
+   * 5. 如果角色设置为数组，表示部分启用
+   * 6. 如果角色未设置，则跟随全局设置
    */
   private calculateEffectiveEnabled(globalTools: any, characterTools: any, namespace: string): boolean {
     // 首先检查全局是否启用该工具
@@ -162,9 +163,20 @@ export class CharactersController {
       return false;
     }
 
+    // 角色设置为数组，表示部分启用（至少有一个工具启用就算启用）
+    if (Array.isArray(characterTools)) {
+      return characterTools.length > 0;
+    }
+
     // 角色设置为对象，取 namespace 的配置
     if (typeof characterTools === 'object') {
       const charValue = characterTools[namespace];
+
+      // 如果是数组，至少有一个工具启用就算启用
+      if (Array.isArray(charValue)) {
+        return charValue.length > 0;
+      }
+
       if (charValue === 'all' || charValue === true) {
         return true;
       }

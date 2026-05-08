@@ -364,19 +364,31 @@
               <div v-else>
                 <!-- 网格布局：每行3列 -->
                 <div class="grid grid-cols-3 gap-3">
-                  <div v-for="tool in localTools" :key="tool.namespace" class="tool-item p-3 border rounded">
+                  <div v-for="tool in localTools" :key="tool.namespace" class="tool-item p-3 border rounded relative">
                     <div class="flex items-start justify-between gap-2 mb-2">
                       <div class="font-medium text-sm flex-1 truncate">{{ tool.displayName }}</div>
-                      <el-switch
-                        v-if="!allToolsEnabled"
-                        v-model="characterToolSettings[tool.namespace]"
-                        @change="handleLocalToolToggle(tool.namespace, $event)"
-                        inline-prompt
-                        active-text="启动"
-                        inactive-text="禁用"
-                        size="default"
-                      />
-                      <el-tag v-else type="primary" size="small">已启用</el-tag>
+                      <div class="flex items-center gap-2">
+                        <!-- 设置按钮 -->
+                        <el-tooltip content="配置子工具" placement="top">
+                          <el-icon 
+                            class="cursor-pointer text-gray-400 hover:text-blue-500 transition-colors" 
+                            size="16"
+                            @click="openToolConfig(tool)"
+                          >
+                            <SettingOutlined />
+                          </el-icon>
+                        </el-tooltip>
+                        <el-switch
+                          v-if="!allToolsEnabled"
+                          :model-value="isToolProviderEnabled(tool.namespace)"
+                          @update:model-value="handleLocalToolToggle(tool.namespace, $event)"
+                          inline-prompt
+                          active-text="启动"
+                          inactive-text="禁用"
+                          size="default"
+                        />
+                        <el-tag v-else type="primary" size="small">已启用</el-tag>
+                      </div>
                     </div>
                     <p class="text-xs text-gray-500 line-clamp-2 min-h-[2rem] mb-2">{{ tool.description }}</p>
                     <div v-if="allToolsEnabled" class="text-xs text-blue-500">
@@ -478,6 +490,63 @@
     </div>
   </div>
 
+  <!-- 工具配置对话框 -->
+  <el-dialog
+    v-model="toolConfigDialogVisible"
+    :title="`${currentToolConfig?.displayName || ''} - 子工具配置`"
+    width="600px"
+    destroy-on-close
+    class="tool-config-dialog"
+  >
+    <div v-if="currentToolConfig" class="py-2">
+      <div class="flex items-center justify-between mb-4">
+        <span class="text-sm text-gray-600">启动全部工具</span>
+        <el-switch
+          :model-value="isUsingGlobalToggle"
+          @update:model-value="handleAllSubToolsToggle"
+          inline-prompt
+          active-text="启用"
+          inactive-text="禁用"
+        />
+      </div>
+      
+      <div v-if="!currentToolConfig.tools || currentToolConfig.tools.length === 0" class="text-center text-gray-500 py-8">
+        暂无子工具配置
+      </div>
+      
+      <div v-else class="tool-config-list">
+        <div 
+          v-for="subTool in currentToolConfig.tools" 
+          :key="subTool.name"
+          class="tool-config-item"
+        >
+          <div class="flex items-center justify-between gap-3">
+            <div class="flex flex-col gap-1 flex-1 min-w-0">
+              <span class="font-medium text-sm break-words">{{ getToolDisplayName(subTool.name) }}</span>
+              <span v-if="subTool.description" class="text-xs text-gray-500 break-words whitespace-normal">{{ subTool.description }}</span>
+            </div>
+            <el-switch
+              v-if="!isUsingGlobalToggle"
+              :model-value="selectedSubTools.includes(getToolDisplayName(subTool.name))"
+              @update:model-value="handleSubToolToggle(getToolDisplayName(subTool.name), $event)"
+              inline-prompt
+              active-text="启用"
+              inactive-text="禁用"
+            />
+            <el-tag v-else type="success" size="small">已启用</el-tag>
+          </div>
+        </div>
+      </div>
+    </div>
+    
+    <template #footer>
+      <div class="flex justify-end gap-2">
+        <el-button @click="toolConfigDialogVisible = false">取消</el-button>
+        <el-button type="primary" @click="saveToolConfig">确定</el-button>
+      </div>
+    </template>
+  </el-dialog>
+
 </template>
 
 <script setup lang="ts">
@@ -499,7 +568,8 @@ import {
   ElAlert,
   ElTag,
   ElCheckboxGroup,
-  ElSwitch
+  ElSwitch,
+  ElDialog
 } from 'element-plus'
 import {
   QuestionCircleOutlined,
@@ -695,11 +765,35 @@ const characterToolSettings = ref({});
 // Token 上限显示值（用于格式化显示）
 const maxTokensLimitDisplay = ref('');
 
+// 工具配置对话框
+const toolConfigDialogVisible = ref(false);
+const currentToolConfig = ref<any>(null);
+const selectedSubTools = ref<string[]>([]);
+// 标记是否通过“启动全部”开关启用（用于区分手动选择和全局启用）
+const isUsingGlobalToggle = ref(false);
+
 // 是否自动启用全部工具
 const allToolsEnabled = computed(() => {
   // 如果角色工具配置为 true，则认为启用了全部工具
   return characterToolSettings.value === true;
 });
+
+// 判断某个工具提供者是否启用（用于 Switch 显示）
+const isToolProviderEnabled = (namespace) => {
+  const config = characterToolSettings.value[namespace];
+  
+  // true 表示全部启用
+  if (config === true) return true;
+  
+  // false 表示全部禁用
+  if (config === false) return false;
+  
+  // 数组表示部分启用，数组长度 > 0 表示启用
+  if (Array.isArray(config)) return config.length > 0;
+  
+  // 默认启用
+  return true;
+};
 
 // 监听 props.data 变化
 watch(() => props.data, (newVal) => {
@@ -847,6 +941,142 @@ const handleLocalToolToggle = (namespace, enabled) => {
   characterToolSettings.value[namespace] = enabled;
   console.log(`本地工具 ${namespace} ${enabled ? '启用' : '禁用'}`);
 }
+
+// 打开工具配置对话框
+const openToolConfig = (tool) => {
+  currentToolConfig.value = tool;
+  
+  // 获取当前配置
+  let config;
+  if (typeof characterToolSettings.value === 'boolean') {
+    // 整体开关模式：所有工具都使用同一个配置
+    config = characterToolSettings.value;
+  } else if (typeof characterToolSettings.value === 'object') {
+    // 单独控制模式：取对应 namespace 的配置
+    config = characterToolSettings.value[tool.namespace];
+  } else {
+    // 其他情况：默认为 undefined
+    config = undefined;
+  }
+  
+  // 初始化选中的子工具列表（使用去除前缀后的名称）
+  if (config === true) {
+    // 明确设置为 true：全部启用，标记为使用全局开关
+    selectedSubTools.value = (tool.tools || []).map(t => getToolDisplayName(t.name));
+    isUsingGlobalToggle.value = true;
+  } else if (config === undefined) {
+    // 未配置：默认全部启用，但不标记为使用全局开关（保持灵活性）
+    selectedSubTools.value = (tool.tools || []).map(t => getToolDisplayName(t.name));
+    isUsingGlobalToggle.value = false;
+  } else if (config === false) {
+    // 全部禁用：不选中任何工具
+    selectedSubTools.value = [];
+    isUsingGlobalToggle.value = false;
+  } else if (Array.isArray(config)) {
+    // 数组模式：直接使用数组中的工具名（已经是去除前缀的）
+    selectedSubTools.value = [...config];
+    isUsingGlobalToggle.value = false;
+  } else if (typeof config === 'object') {
+    // 对象模式：提取值为 true 的工具（需要去除前缀）
+    selectedSubTools.value = Object.entries(config)
+      .filter(([_, enabled]) => enabled)
+      .map(([name]) => getToolDisplayName(name));
+    isUsingGlobalToggle.value = false;
+  } else {
+    // 其他情况：默认全部选中
+    selectedSubTools.value = (tool.tools || []).map(t => getToolDisplayName(t.name));
+    isUsingGlobalToggle.value = false;
+  }
+  
+  toolConfigDialogVisible.value = true;
+};
+
+// 保存工具配置
+const saveToolConfig = () => {
+  if (!currentToolConfig.value) return;
+  
+  const namespace = currentToolConfig.value.namespace;
+  const allTools = (currentToolConfig.value.tools || []).map(t => t.name);
+  
+  // 确保是对象模式
+  if (typeof characterToolSettings.value !== 'object' || Array.isArray(characterToolSettings.value)) {
+    characterToolSettings.value = {};
+  }
+  
+  // 判断是否全部选中
+  if (selectedSubTools.value.length === 0) {
+    // 全部未选中：设置为 false
+    characterToolSettings.value[namespace] = false;
+  } else if (selectedSubTools.value.length === allTools.length && selectedSubTools.value.length > 0) {
+    // 全部选中：根据是否使用全局开关决定保存方式
+    if (isUsingGlobalToggle.value) {
+      // 通过"启动全部"开关启用：设置为 true，新增工具自动启用
+      characterToolSettings.value[namespace] = true;
+    } else {
+      // 手动逐个选择全部：保持数组形式，新增工具默认禁用
+      characterToolSettings.value[namespace] = [...selectedSubTools.value];
+    }
+  } else {
+    // 部分选中：保存为数组
+    characterToolSettings.value[namespace] = [...selectedSubTools.value];
+  }
+  
+  toolConfigDialogVisible.value = false;
+};
+
+// 处理单个子工具开关切换
+const handleSubToolToggle = (toolName, enabled) => {
+  const index = selectedSubTools.value.indexOf(toolName);
+  
+  if (enabled && index === -1) {
+    // 启用：添加到数组
+    selectedSubTools.value.push(toolName);
+  } else if (!enabled && index !== -1) {
+    // 禁用：从数组移除
+    selectedSubTools.value.splice(index, 1);
+  }
+  
+  // 如果用户手动调整了单个工具，取消全局开关标记
+  isUsingGlobalToggle.value = false;
+};
+
+// 判断是否所有子工具都被选中
+const isAllSubToolsSelected = computed(() => {
+  if (!currentToolConfig.value || !currentToolConfig.value.tools) return false;
+  const allTools = currentToolConfig.value.tools.map(t => t.name);
+  return selectedSubTools.value.length === allTools.length && allTools.length > 0;
+});
+
+// 处理全部子工具开关切换
+const handleAllSubToolsToggle = (enabled) => {
+  if (!currentToolConfig.value || !currentToolConfig.value.tools) return;
+  
+  // 使用去除前缀后的工具名称
+  const allTools = currentToolConfig.value.tools.map(t => getToolDisplayName(t.name));
+  
+  if (enabled) {
+    // 启用全部：选中所有工具，并标记为使用全局开关
+    selectedSubTools.value = [...allTools];
+    isUsingGlobalToggle.value = true;
+  } else {
+    // 禁用全部：清空选择
+    selectedSubTools.value = [];
+    isUsingGlobalToggle.value = false;
+  }
+};
+
+// 获取工具的显示名称（去除 namespace 前缀）
+const getToolDisplayName = (toolName) => {
+  if (!toolName) return '';
+  // 检查是否包含 __ 前缀（如 shell__execute_command）
+  const parts = toolName.split('__');
+  // 如果有前缀且前缀长度 > 1，返回第二部分
+  if (parts.length > 1 && parts[0].length > 0) {
+    return parts.slice(1).join('__');
+  }
+  // 否则直接返回原名称
+  return toolName;
+};
 
 const loadModels = async () => {
   try {
@@ -1101,6 +1331,57 @@ defineExpose({
 .tool-item:hover {
   border-color: var(--el-color-primary);
   background-color: #f5f7fa;
+}
+
+/* 工具配置对话框样式 */
+.tool-config-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  max-height: 400px;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+.tool-config-item {
+  padding: 12px;
+  border: 1px solid var(--el-border-color-lighter);
+  border-radius: 6px;
+  transition: all 0.2s;
+  overflow: hidden;
+  word-wrap: break-word;
+  overflow-wrap: break-word;
+}
+
+.tool-config-item:hover {
+  border-color: var(--el-color-primary-light-5);
+  background-color: var(--el-fill-color-lighter);
+}
+
+.tool-config-item :deep(.el-checkbox__label) {
+  width: 100%;
+  overflow: hidden;
+}
+
+.tool-config-item :deep(.el-checkbox) {
+  width: 100%;
+}
+
+/* 强制工具描述文本换行 */
+.tool-config-item :deep(*) {
+  word-wrap: break-word !important;
+  overflow-wrap: break-word !important;
+  word-break: break-word !important;
+}
+
+/* 工具配置对话框样式优化 */
+:deep(.tool-config-dialog .el-dialog__body) {
+  max-height: 60vh;
+  overflow-y: auto;
+}
+
+:deep(.tool-config-dialog .el-dialog__header) {
+  padding-right: 40px;
 }
 
 .mcp-server-item {

@@ -28,7 +28,7 @@ export class ImageRecognitionToolProvider implements IToolProvider {
   ) { }
 
   async getTools(enabled?: boolean | string[]): Promise<any[]> {
-    return [
+    const toolsConfig = [
       {
         name: "recognize",
         description: "识别图片内容并返回详细的文本描述。当用户询问关于上传图片的内容时使用此工具。",
@@ -44,6 +44,16 @@ export class ImageRecognitionToolProvider implements IToolProvider {
         },
       },
     ];
+    
+    if (enabled === false) return [];
+    
+    // 如果是数组，只返回数组中指定的工具
+    if (Array.isArray(enabled)) {
+      return toolsConfig.filter(tool => enabled.includes(tool.name));
+    }
+    
+    // true 或未指定：返回所有工具
+    return toolsConfig;
   }
 
   async execute(request: ToolCallRequest, context?: Record<string, any>): Promise<string> {
