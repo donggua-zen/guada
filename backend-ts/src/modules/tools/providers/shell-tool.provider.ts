@@ -175,10 +175,10 @@ export class ShellToolProvider implements IToolProvider {
       if (context?.session_id) {
         try {
           const workspaceDir = this.workspaceService.getWorkspaceDir(context.session_id);
-          promptParts.push("💼 **当前会话工作目录**：");
+          promptParts.push("**当前会话工作目录**：");
           promptParts.push(`\`${workspaceDir}\``);
           promptParts.push("");
-          promptParts.push("📝 **重要说明**：");
+          promptParts.push("**重要说明**：");
           promptParts.push("1. 你编写的所有脚本、临时文件、生成的数据等都应该存放在上述工作目录中。");
           promptParts.push("2. **默认路径规则**：所有文件操作工具（读取、写入、列出目录等）在处理相对路径时，都会自动以该工作目录为基准。除非用户明确指定了其他绝对路径，否则请始终使用相对路径。");
           promptParts.push("3. 在执行命令时，如果没有指定 `working_directory`，系统将自动把工作目录设置为上述路径。");
@@ -191,10 +191,10 @@ export class ShellToolProvider implements IToolProvider {
       // 注入操作系统信息
       const platform = process.platform;
       const osName = this.getOSName(platform);
-      promptParts.push(`🖥️ **当前系统**：${osName} (\`${platform}\`)`);
+      promptParts.push(`**当前系统**：${osName} (\`${platform}\`)`);
       promptParts.push("");
 
-      promptParts.push("⚠️ **重要提醒**：");
+      promptParts.push("**重要提醒**：");
       promptParts.push("1. 这些工具极其危险，如果需要删除或者修改文件务必征得用户同意");
       promptParts.push("2. 执行命令时请注意安全性，避免执行危险操作");
       promptParts.push("3. 读取大文件时可能需要较长时间，建议先确认文件大小");
@@ -560,14 +560,19 @@ export class ShellToolProvider implements IToolProvider {
       // 读取文件内容
       const originalContent = await fs.readFile(resolvedPath, { encoding: encoding as BufferEncoding });
 
-      // 统计匹配次数
+      // 标准化换行符：将 \r\n 和 \r 都转换为 \n，便于跨平台匹配
+      const normalizedOriginal = originalContent.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+      const normalizedSearch = search_text.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+      const normalizedReplace = replace_text.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+
+      // 统计匹配次数（使用标准化后的内容）
       let matchCount = 0;
       let startIndex = 0;
       while (true) {
-        const index = originalContent.indexOf(search_text, startIndex);
+        const index = normalizedOriginal.indexOf(normalizedSearch, startIndex);
         if (index === -1) break;
         matchCount++;
-        startIndex = index + search_text.length;
+        startIndex = index + normalizedSearch.length;
       }
 
       // 验证匹配次数
@@ -580,18 +585,31 @@ export class ShellToolProvider implements IToolProvider {
         throw new Error(`实际匹配 ${matchCount} 次，但预期匹配 ${expected_count} 次`);
       }
 
-      // 执行替换
-      let newContent: string;
+      // 执行替换（使用标准化后的内容）
+      let newNormalizedContent: string;
       if (expected_count === -1 || expected_count === 0) {
         // 替换所有匹配项
-        newContent = originalContent.split(search_text).join(replace_text);
+        newNormalizedContent = normalizedOriginal.split(normalizedSearch).join(normalizedReplace);
       } else {
         // 替换所有匹配项（因为已经验证了匹配次数符合预期）
-        newContent = originalContent.split(search_text).join(replace_text);
+        newNormalizedContent = normalizedOriginal.split(normalizedSearch).join(normalizedReplace);
+      }
+
+      // 保持原始文件的换行符风格
+      // 检测原始文件使用的换行符类型
+      const hasCRLF = originalContent.includes('\r\n');
+      
+      let finalContent: string;
+      if (hasCRLF) {
+        // 如果原文件使用 \r\n，则将结果转换回 \r\n
+        finalContent = newNormalizedContent.replace(/\n/g, '\r\n');
+      } else {
+        // 否则保持 \n
+        finalContent = newNormalizedContent;
       }
 
       // 写回文件
-      await fs.writeFile(resolvedPath, newContent, { encoding: encoding as BufferEncoding });
+      await fs.writeFile(resolvedPath, finalContent, { encoding: encoding as BufferEncoding });
 
       const replacedCount = matchCount;
       return `替换成功：${resolvedPath}\n匹配次数：${matchCount}\n已替换：${replacedCount} 处`;
