@@ -41,7 +41,8 @@ export class BotOrchestrator {
   ): Promise<void> {
     this.logger.log(`Starting message listener for bot: ${botId}`);
 
-    const subscription = adapter.onMessage().subscribe({
+    // 监听消息流
+    const messageSubscription = adapter.onMessage().subscribe({
       next: async (message: BotMessage) => {
         await this.enqueueMessage(botId, message, config);
       },
@@ -52,7 +53,31 @@ export class BotOrchestrator {
       },
     });
 
-    this.activeSubscriptions.set(botId, subscription);
+    this.activeSubscriptions.set(botId, messageSubscription);
+
+    // 监听断开连接事件（如果适配器支持）
+    if (adapter.onDisconnect) {
+      const disconnectSubscription = adapter.onDisconnect().subscribe({
+        next: async (event) => {
+          this.logger.warn(
+            `Bot ${botId} disconnected with code: ${event.code}${event.reason ? ` - ${event.reason}` : ''}, triggering reconnect...`,
+          );
+
+          // 通过 instanceManager 触发重连
+          try {
+            await this.instanceManager.handleBotDisconnect(botId, config, event.code);
+          } catch (error: any) {
+            this.logger.error(`Failed to handle bot disconnect for ${botId}: ${error.message}`);
+          }
+        },
+        error: (error: Error) => {
+          this.logger.error(`Disconnect stream error for bot ${botId}: ${error.message}`);
+        },
+      });
+
+      // 将断开连接订阅也加入管理（使用特殊的 key）
+      this.activeSubscriptions.set(`${botId}:disconnect`, disconnectSubscription);
+    }
   }
 
   /**
@@ -150,12 +175,22 @@ export class BotOrchestrator {
    * 停止机器人实例的消息监听
    */
   stopBotListener(botId: string): void {
-    const subscription = this.activeSubscriptions.get(botId);
-    if (subscription) {
-      subscription.unsubscribe();
+    // 取消消息订阅
+    const messageSubscription = this.activeSubscriptions.get(botId);
+    if (messageSubscription) {
+      messageSubscription.unsubscribe();
       this.activeSubscriptions.delete(botId);
-      this.logger.log(`Stopped message listener for bot: ${botId}`);
     }
+
+    // 取消断开连接订阅
+    const disconnectKey = `${botId}:disconnect`;
+    const disconnectSubscription = this.activeSubscriptions.get(disconnectKey);
+    if (disconnectSubscription) {
+      disconnectSubscription.unsubscribe();
+      this.activeSubscriptions.delete(disconnectKey);
+    }
+
+    this.logger.log(`Stopped all listeners for bot: ${botId}`);
   }
 
   /**

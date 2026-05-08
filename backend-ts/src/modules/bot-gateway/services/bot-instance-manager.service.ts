@@ -110,7 +110,7 @@ export class BotInstanceManager implements OnModuleInit, OnApplicationShutdown {
         try {
           this.logger.log(`Starting bot: ${bot.name} (${bot.platform})`);
           await this.startBot(config);
-          this.logger.log(`Bot started successfully: ${bot.id}`);
+          // 注意: startBot 内部已经记录了成功日志,这里不再重复记录
         } catch (error: any) {
           this.logger.error(
             `Failed to start bot ${bot.name}: ${error.message}`,
@@ -413,6 +413,32 @@ export class BotInstanceManager implements OnModuleInit, OnApplicationShutdown {
         this.reconnectingBots.delete(botId);
       }
     }, retryInterval);
+  }
+
+  /**
+   * 处理机器人断开连接事件
+   */
+  async handleBotDisconnect(botId: string, config: BotConfig, code: number): Promise<void> {
+    this.logger.warn(`Handling bot disconnect for ${botId} with code: ${code}`);
+    
+    // 更新数据库状态为断开连接
+    await this.prisma.botInstance.update({
+      where: { id: botId },
+      data: {
+        status: 'disconnected',
+        lastError: `WebSocket closed with code: ${code}`,
+      },
+    }).catch((err) => {
+      this.logger.error(`Failed to update bot status: ${err.message}`);
+    });
+
+    // 检查是否启用重连
+    if (config.reconnectConfig?.enabled) {
+      this.logger.log(`Scheduling reconnect for disconnected bot ${botId}`);
+      this.scheduleReconnect(botId, config, `WebSocket closed with code: ${code}`);
+    } else {
+      this.logger.log(`Reconnect disabled for bot ${botId}, not attempting to reconnect`);
+    }
   }
 
   /**

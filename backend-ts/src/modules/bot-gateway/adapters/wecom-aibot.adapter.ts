@@ -8,6 +8,7 @@ import {
   BotStatus,
   PlatformCapabilities,
   StreamReplyOptions,
+  BotDisconnectEvent,
 } from '../interfaces/bot-platform.interface';
 
 // 导入企业微信智能机器人官方 SDK
@@ -26,11 +27,13 @@ export class WeComAiBotAdapter implements IBotPlatform {
   private readonly logger = new Logger(WeComAiBotAdapter.name);
   private client: WSClient;
   private messageSubject: Subject<BotMessage>;
+  private disconnectSubject: Subject<BotDisconnectEvent>;
   private status: BotStatus = BotStatus.STOPPED;
   private config: BotConfig | null = null;
 
   constructor() {
     this.messageSubject = new Subject<BotMessage>();
+    this.disconnectSubject = new Subject<BotDisconnectEvent>();
   }
 
   getPlatform(): string {
@@ -78,6 +81,11 @@ export class WeComAiBotAdapter implements IBotPlatform {
       this.client.on('disconnected', () => {
         this.logger.warn('WeCom AI Bot disconnected');
         this.status = BotStatus.DISCONNECTED;
+        // 通过 Subject 发射断开事件
+        this.disconnectSubject.next({
+          code: 0,
+          timestamp: new Date(),
+        });
       });
 
       // 监听错误事件
@@ -227,6 +235,10 @@ export class WeComAiBotAdapter implements IBotPlatform {
     return this.messageSubject.asObservable();
   }
 
+  onDisconnect(): Observable<BotDisconnectEvent> {
+    return this.disconnectSubject.asObservable();
+  }
+
   getStatus(): BotStatus {
     return this.status;
   }
@@ -246,6 +258,7 @@ export class WeComAiBotAdapter implements IBotPlatform {
 
     this.status = BotStatus.STOPPED;
     this.messageSubject.complete();
+    this.disconnectSubject.complete();
   }
 
   async reconnect(): Promise<void> {

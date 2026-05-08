@@ -63,7 +63,7 @@ export class ConversationContext implements IConversationContext {
     this.logger.log(`Initializing conversation context for ${this.sessionId}`);
 
     this.systemPrompt = config.systemPrompt || "You are a helpful assistant.";
-    this.logger.debug(`Using system prompt: ${this.systemPrompt}`);
+    // this.logger.debug(`Using system prompt: ${this.systemPrompt}`);
     // 保存对话模型名称，用于 Token 计算
     this.chatModelName = config.model?.modelName || config.model?.name || "gpt4";
     this.logger.debug(`Using chat model for tokenization: ${this.chatModelName}`);

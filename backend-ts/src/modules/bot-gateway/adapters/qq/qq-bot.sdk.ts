@@ -309,7 +309,8 @@ export class QQBot extends EventEmitter {
       this.ws = new WebSocket(gatewayUrl);
 
       this.ws.on('open', () => {
-        console.log('QQ Bot WebSocket connected');
+        // 发射连接成功事件,由 Adapter 层记录日志
+        this.emit('ws_open');
       });
 
       this.ws.on('message', (data: WebSocket.Data) => {
@@ -318,7 +319,7 @@ export class QQBot extends EventEmitter {
       });
 
       this.ws.on('close', (code: number, reason: string) => {
-        console.log(`QQ Bot WebSocket closed: ${code} - ${reason}`);
+        // 发射关闭事件,由 Adapter 层记录日志
         this.emit('ws_close', code, reason);
         this.handleReconnect(code);
       });

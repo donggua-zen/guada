@@ -1,6 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { Observable, Subject } from 'rxjs';
-import { EventEmitter } from 'events';
 import {
   IBotPlatform,
   BotConfig,
@@ -8,6 +7,7 @@ import {
   BotResponse,
   BotStatus,
   PlatformCapabilities,
+  BotDisconnectEvent,
 } from '../interfaces/bot-platform.interface';
 
 // 导入自研 QQ SDK
@@ -24,16 +24,17 @@ import { QQBot } from './qq/qq-bot.sdk';
  * 注意: 不负责重连逻辑,重连由 BotInstanceManager 统一管理
  */
 @Injectable()
-export class QQBotAdapter extends EventEmitter implements IBotPlatform {
+export class QQBotAdapter implements IBotPlatform {
   private readonly logger = new Logger(QQBotAdapter.name);
   private client: any;
   private messageSubject: Subject<BotMessage>;
+  private disconnectSubject: Subject<BotDisconnectEvent>;
   private status: BotStatus = BotStatus.STOPPED;
   private config: BotConfig | null = null;
 
   constructor() {
-    super();
     this.messageSubject = new Subject<BotMessage>();
+    this.disconnectSubject = new Subject<BotDisconnectEvent>();
   }
 
   getPlatform(): string {
@@ -99,12 +100,21 @@ export class QQBotAdapter extends EventEmitter implements IBotPlatform {
         this.status = BotStatus.ERROR;
       });
 
+      // 监听 WebSocket 连接成功事件
+      this.client.on('ws_open', () => {
+        this.logger.log('QQ bot WebSocket connected');
+      });
+
       // 监听 WebSocket 关闭事件(来自 SDK 的主动通知)
-      this.client.on('ws_close', (code: number) => {
-        this.logger.warn(`QQ bot WebSocket closed with code: ${code}`);
+      this.client.on('ws_close', (code: number, reason: string) => {
+        this.logger.warn(`QQ bot WebSocket closed with code: ${code}${reason ? ` - ${reason}` : ''}`);
         this.status = BotStatus.DISCONNECTED;
-        // 发射断开事件,触发 Manager 重连
-        this.emit('bot_disconnected', { code });
+        // 通过 Subject 发射断开事件
+        this.disconnectSubject.next({
+          code,
+          reason,
+          timestamp: new Date(),
+        });
       });
 
       // 启动连接(使用 start 方法)
@@ -176,6 +186,10 @@ export class QQBotAdapter extends EventEmitter implements IBotPlatform {
     return this.messageSubject.asObservable();
   }
 
+  onDisconnect(): Observable<BotDisconnectEvent> {
+    return this.disconnectSubject.asObservable();
+  }
+
   getStatus(): BotStatus {
     return this.status;
   }
@@ -195,6 +209,7 @@ export class QQBotAdapter extends EventEmitter implements IBotPlatform {
 
     this.status = BotStatus.STOPPED;
     this.messageSubject.complete();
+    this.disconnectSubject.complete();
   }
 
   async reconnect(): Promise<void> {

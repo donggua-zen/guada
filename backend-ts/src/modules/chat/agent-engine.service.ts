@@ -343,7 +343,7 @@ export class AgentEngine {
           );
 
           this.accumulateToolCalls(incrementMessage, chunk.toolCalls);
-          this.logger.log(`Accumulated ${chunk.toolCalls.length} tool calls`);
+          // this.logger.log(`Accumulated ${chunk.toolCalls.length} tool calls`);
         }
 
         if (chunk.content) {

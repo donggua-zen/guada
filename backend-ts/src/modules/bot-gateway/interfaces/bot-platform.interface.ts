@@ -119,6 +119,18 @@ export interface PlatformCapabilities {
 }
 
 /**
+ * 断开连接事件信息
+ */
+export interface BotDisconnectEvent {
+  /** 断开原因码 */
+  code: number;
+  /** 断开原因描述 */
+  reason?: string;
+  /** 时间戳 */
+  timestamp: Date;
+}
+
+/**
  * 统一机器人平台接口
  *
  * 所有平台适配器必须实现此接口,屏蔽底层差异
@@ -159,6 +171,12 @@ export interface IBotPlatform {
    * @returns 消息 observable 流
    */
   onMessage(): Observable<BotMessage>;
+
+  /**
+   * 监听断开连接事件(可选)
+   * @returns 断开连接事件 observable 流
+   */
+  onDisconnect?(): Observable<BotDisconnectEvent>;
 
   /**
    * 获取当前连接状态
