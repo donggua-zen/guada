@@ -30,14 +30,16 @@ function isModuleBuiltForElectron(modulePath, electronVersion, arch) {
     return false
   }
   
-  // 对于 better-sqlite3，检查 .node 文件
+  // 对于 better-sqlite3，检查 .node 文件是否存在
   if (modulePath.includes('better-sqlite3')) {
     const nodeFile = path.join(modulePath, 'build', 'Release', 'better_sqlite3.node')
     if (!fs.existsSync(nodeFile)) {
       return false
     }
     
-    return true
+    // 注意：这里无法直接检查 ABI 版本，只能通过重新编译来确保
+    // 返回 false 强制重新编译
+    return false
   }
   
   // 对于 sqlite-vec 和 @node-rs/jieba，它们是预编译的，不需要重新编译
