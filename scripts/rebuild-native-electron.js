@@ -24,6 +24,33 @@ const productionNodeModulesPath = path.join(backendPath, 'node_modules_productio
 // sharp 使用预编译二进制文件，不需要重新编译
 const nativeModules = ['better-sqlite3', 'sqlite-vec', '@node-rs/jieba']
 
+// 检查原生模块是否已为正确的 Electron 版本编译
+function isModuleBuiltForElectron(modulePath, electronVersion, arch) {
+  if (!fs.existsSync(modulePath)) {
+    return false
+  }
+  
+  // 对于 better-sqlite3，检查 .node 文件
+  if (modulePath.includes('better-sqlite3')) {
+    const nodeFile = path.join(modulePath, 'build', 'Release', 'better_sqlite3.node')
+    if (!fs.existsSync(nodeFile)) {
+      return false
+    }
+    
+    return true
+  }
+  
+  // 对于 sqlite-vec 和 @node-rs/jieba，它们是预编译的，不需要重新编译
+  return true
+}
+
+// 检查是否已经执行过优化（通过检查缓存文件）
+function isOptimizationDone() {
+  const cacheHashPath = path.join(productionNodeModulesPath, '.cache-hash')
+  // 只有当 node_modules 存在且有缓存文件时才跳过
+  return fs.existsSync(productionNodeModulesPath) && fs.existsSync(cacheHashPath)
+}
+
 // 重建函数
 function rebuildNativeModules(targetPath, targetName) {
   if (!fs.existsSync(targetPath)) {
@@ -31,13 +58,44 @@ function rebuildNativeModules(targetPath, targetName) {
     return
   }
   
+  // 检查是否已经执行过优化（有缓存文件说明已处理过）
+  if (isOptimizationDone()) {
+    console.log()
+    console.log('✓ Optimization cache found, skipping native module rebuild')
+    console.log('  (Delete node_modules_production/.cache-hash to force rebuild)')
+    return
+  }
+  
   console.log()
-  console.log(`Rebuilding for ${targetName}...`)
-  console.log(`Target path: ${targetPath}`)
+  console.log(`Checking native modules for ${targetName}...`)
+  console.log(`Target: Electron ${ELECTRON_VERSION} (${TARGET_ARCH})`)
+  
+  // 检查是否所有模块都已正确编译
+  let allModulesBuilt = true
+  const modulesToRebuild = []
+  
+  for (const moduleName of nativeModules) {
+    const modulePath = path.join(targetPath, 'node_modules', moduleName)
+    if (!isModuleBuiltForElectron(modulePath, ELECTRON_VERSION, TARGET_ARCH)) {
+      allModulesBuilt = false
+      modulesToRebuild.push(moduleName)
+      console.log(`  ⚠️  ${moduleName} needs rebuilding`)
+    } else {
+      console.log(`  ✓ ${moduleName} already built`)
+    }
+  }
+  
+  if (allModulesBuilt) {
+    console.log('✓ All native modules are already built')
+    return
+  }
+  
+  console.log()
+  console.log(`Rebuilding modules: ${modulesToRebuild.join(', ')}`)
   
   // 创建临时批处理文件
   const tempBatPath = path.join(backendPath, `_temp_rebuild_${targetName.replace(/\s+/g, '_')}.bat`)
-  const modulesList = nativeModules.join(' ')
+  const modulesList = modulesToRebuild.join(' ')
   const batContent = `@echo off
 call "${vcvarsallPath}" x64
 if errorlevel 1 exit /b 1
@@ -61,6 +119,7 @@ exit /b %errorlevel%
       stdio: 'inherit',
       env: process.env
     })
+    
     console.log(`✓ ${targetName} native modules rebuilt`)
   } catch (error) {
     console.error(`❌ Failed to rebuild ${targetName}:`, error.message)

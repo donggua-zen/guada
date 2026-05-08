@@ -7,6 +7,7 @@ const fs = require('fs')
 const path = require('path')
 const crypto = require('crypto')
 const { execSync } = require('child_process')
+const glob = require('glob')
 
 console.log('========================================')
 console.log('Optimizing node_modules for Electron production')
@@ -446,9 +447,151 @@ if (fs.existsSync(prismaClientRuntimePath)) {
   }
 }
 
-// Step 6: 计算体积
+// Step 5.5: 移除 Prisma Studio Web UI（生产环境不需要）
 console.log()
-console.log('Step 5: Calculating size...')
+console.log('Step 7: Removing Prisma Studio Web UI...')
+const studioUiPath = path.join(optimizedPath, 'node_modules', '@prisma', 'studio-core', 'dist', 'ui')
+if (fs.existsSync(studioUiPath)) {
+  try {
+    const beforeSize = getDirSize(path.dirname(studioUiPath))
+    
+    // 删除整个 ui 目录（Web 界面，CLI 不需要）
+    fs.rmSync(studioUiPath, { recursive: true, force: true })
+    
+    const afterSize = getDirSize(path.dirname(studioUiPath))
+    const savedSize = beforeSize - afterSize
+    
+    console.log(`  ✓ Removed Prisma Studio Web UI: ${(savedSize / (1024 * 1024)).toFixed(2)} MB`)
+    console.log(`  Note: 'npx prisma studio' will not work, but CLI commands remain functional`)
+  } catch (e) {
+    console.warn('⚠️  Could not remove Prisma Studio UI:', e.message)
+  }
+} else {
+  console.log('  ℹ️  Prisma Studio UI not found (already removed or not installed)')
+}
+
+// Step 5.6: 重建原生模块为 Electron 兼容版本（在清理之前）
+console.log()
+console.log('Step 6: Rebuilding native modules for Electron...')
+try {
+  const rebuildScript = path.join(__dirname, 'rebuild-native-electron.js')
+  if (fs.existsSync(rebuildScript)) {
+    console.log('Calling rebuild-native-electron.js...')
+    execSync(`node "${rebuildScript}"`, {
+      cwd: path.join(__dirname, '..'),
+      stdio: 'inherit',
+      env: process.env
+    })
+    console.log('✓ Native modules rebuilt successfully')
+  } else {
+    console.warn('⚠️  rebuild-native-electron.js not found, skipping rebuild')
+    console.log('Please run "npm run rebuild:backend-native:electron" manually')
+  }
+} catch (error) {
+  console.error('❌ Failed to rebuild native modules:', error.message)
+  console.error('You can rebuild manually by running: npm run rebuild:backend-native:electron')
+  // 不中断流程，继续后续步骤
+}
+
+// Step 5.7: 清理 better-sqlite3 编译中间文件（在重建之后）
+console.log()
+console.log('Step 7: Cleaning better-sqlite3 build artifacts...')
+const betterSqlite3Path = path.join(optimizedPath, 'node_modules', 'better-sqlite3')
+if (fs.existsSync(betterSqlite3Path)) {
+  try {
+    let removedSize = 0
+    
+    // 1. 删除 build 目录中的编译中间文件（保留 .node 文件）
+    const buildPath = path.join(betterSqlite3Path, 'build')
+    if (fs.existsSync(buildPath)) {
+      const patternsToRemove = [
+        '**/*.pdb',     // 调试符号
+        '**/*.iobj',    // 增量链接对象
+        '**/*.ipdb',    // 优化数据库
+        '**/*.obj',     // 编译对象
+        '**/*.lib',     // 静态库
+        '**/*.exp',     // 导出文件
+        '**/*.tlog',    // 构建日志
+        '**/*.vcxproj', // Visual Studio 项目文件
+        '**/*.filters', // VS 过滤器文件
+        '**/*.lastbuildstate', // 最后构建状态
+        '**/*.recipe',  // 配方文件
+        '**/*.sln',     // 解决方案文件
+        'sqlite3.c',    // SQLite3 源码副本
+        'sqlite3.h',    // 头文件副本
+        'sqlite3ext.h'  // 扩展头文件
+      ]
+      
+      for (const pattern of patternsToRemove) {
+        const globPath = path.join(buildPath, pattern)
+        const files = glob.sync(globPath, { nodir: true })
+        for (const file of files) {
+          try {
+            const stats = fs.statSync(file)
+            removedSize += stats.size
+            fs.unlinkSync(file)
+          } catch (e) {
+            // 忽略无法删除的文件
+          }
+        }
+      }
+      
+      // 清理空的子目录
+      try {
+        const subdirs = fs.readdirSync(buildPath, { withFileTypes: true })
+          .filter(dirent => dirent.isDirectory())
+          .map(dirent => path.join(buildPath, dirent.name))
+        
+        for (const dir of subdirs) {
+          try {
+            if (fs.readdirSync(dir).length === 0) {
+              fs.rmdirSync(dir)
+            }
+          } catch (e) {
+            // 忽略非空目录
+          }
+        }
+      } catch (e) {
+        // 忽略目录遍历错误
+      }
+    }
+    
+    // 2. 删除 deps 目录（SQLite3 源码，运行时不需要）
+    const depsPath = path.join(betterSqlite3Path, 'deps')
+    if (fs.existsSync(depsPath)) {
+      try {
+        const depsSize = getDirSize(depsPath)
+        removedSize += depsSize
+        fs.rmSync(depsPath, { recursive: true, force: true })
+      } catch (e) {
+        // 忽略删除错误
+      }
+    }
+    
+    // 3. 删除 src 目录（C++ 绑定源码，运行时不需要）
+    const srcPath = path.join(betterSqlite3Path, 'src')
+    if (fs.existsSync(srcPath)) {
+      try {
+        const srcSize = getDirSize(srcPath)
+        removedSize += srcSize
+        fs.rmSync(srcPath, { recursive: true, force: true })
+      } catch (e) {
+        // 忽略删除错误
+      }
+    }
+    
+    console.log(`  ✓ Removed better-sqlite3 build artifacts: ${(removedSize / (1024 * 1024)).toFixed(2)} MB`)
+    console.log(`  Kept: lib/ (JavaScript API) + build/Release/better_sqlite3.node (native module)`)
+  } catch (e) {
+    console.warn('⚠️  Could not clean better-sqlite3 artifacts:', e.message)
+  }
+} else {
+  console.log('  ℹ️  better-sqlite3 not found')
+}
+
+// Step 8: 计算体积
+console.log()
+console.log('Step 8: Calculating size...')
 
 const sizeInMB = (getDirSize(optimizedPath) / (1024 * 1024)).toFixed(2)
 console.log(`✓ Optimized node_modules size: ${sizeInMB} MB`)
@@ -461,9 +604,7 @@ console.log()
 console.log('Output directory:', optimizedPath)
 console.log()
 console.log('Next step:')
-console.log('1. Update package.json extraResources to use "node_modules_production"')
-console.log('2. Run "npm run rebuild:backend-native:electron" to rebuild native modules')
-console.log('3. Run "npm run build:electron" to rebuild')
+console.log('1. Run "npm run build:electron" to package')
 
 // 保存缓存 hash
 try {
