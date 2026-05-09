@@ -71,12 +71,17 @@ export class ImageRecognitionToolProvider implements IToolProvider {
 工具会返回图片的详细文本描述，你可以基于该描述回答用户的问题。`;
   }
 
+  async getBriefDescription(): Promise<string> {
+    return "识别用户上传的图片内容并返回详细描述";
+  }
+
   getMetadata(): ToolProviderMetadata {
     return {
       namespace: this.namespace,
       displayName: "图像识别",
-      description: "识别用户上传的图片内容并返回详细描述",
+      description: "图片内容识别工具",
       isMcp: false,
+      loadMode: "eager",
     };
   }
 

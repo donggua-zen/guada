@@ -50,12 +50,17 @@ export class TimeToolProvider implements IToolProvider {
     }
   }
 
+  async getBriefDescription(): Promise<string> {
+    return "自动注入当前时间信息，帮助 AI 准确回答时间相关问题";
+  }
+
   getMetadata(): ToolProviderMetadata {
     return {
       namespace: this.namespace,
       displayName: "时间工具",
-      description: "自动注入当前时间信息，帮助 AI 准确回答时间相关问题",
+      description: "自动注入当前时间信息",
       isMcp: false,
+      loadMode: "eager",
     };
   }
 }

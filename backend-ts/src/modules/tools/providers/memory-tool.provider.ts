@@ -94,12 +94,12 @@ export class MemoryToolProvider implements IToolProvider {
 
   async getTools(enabled?: boolean | string[]): Promise<any[]> {
     if (enabled === false) return [];
-    
+
     // 如果是数组，只返回数组中指定的工具
     if (Array.isArray(enabled)) {
       return this.toolsConfig.filter(tool => enabled.includes(tool.name));
     }
-    
+
     // true 或未指定：返回所有工具
     return this.toolsConfig;
   }
@@ -120,7 +120,7 @@ export class MemoryToolProvider implements IToolProvider {
     if (!handler) {
       throw new Error(`未知工具：${request.name}`);
     }
-    
+
     // 使用传入的 context 参数
     return await handler(request.arguments, context);
   }
@@ -134,67 +134,10 @@ export class MemoryToolProvider implements IToolProvider {
         return "";
       }
 
-      // 获取所有长期记忆（不限制数量）
-      const longTermMemories = await this.getLongTermMemories(sessionId);
-
-      // 获取所有备忘录目录
-      const memoList = await this.getMemoList(sessionId);
-
       const promptParts: string[] = [];
 
-      // ========== 第一部分：长期记忆注入 ==========
-
-      promptParts.push("# 重要记忆");
-
-      // 按类型分组展示
-      const factualMemories = longTermMemories.filter(
-        (m) => m.memoryType === "factual",
-      );
-      const soulMemories = longTermMemories.filter(
-        (m) => m.memoryType === "soul",
-      );
-
-      promptParts.push("\n## 事实性记忆 (FACTUAL)");
-      promptParts.push(
-        "这些是核心事实知识库，包括用户偏好、重要决策、项目状态等关键信息：",
-      );
-      promptParts.push("<factual-memory>");
-      if (factualMemories.length > 0) {
-        factualMemories.forEach((memory, index) => {
-          promptParts.push(`${index + 1}. ${memory.content}`);
-        });
-      } else {
-        promptParts.push("目前没有事实性记忆");
-      }
-      promptParts.push("</factual-memory>");
-
-      promptParts.push("\n## 人格定义 (SOUL)");
-      promptParts.push("这些定义了 AI 的角色定位、语言风格和行为规则：");
-      promptParts.push("<soul-memory>");
-      if (soulMemories.length > 0) {
-        soulMemories.forEach((memory, index) => {
-          promptParts.push(`${index + 1}. ${memory.content}`);
-        });
-      } else {
-        promptParts.push("目前没有人格定义记忆");
-      }
-      promptParts.push("</soul-memory>");
-
-      // ========== 第二部分：备忘录目录注入 ==========
-      promptParts.push("\n# 备忘录目录");
-      promptParts.push("以下是你可访问的备忘录列表，可通过标题读取具体内容：");
-      promptParts.push("<memo-list>");
-      if (memoList.length > 0) {
-        memoList.forEach((memo, index) => {
-          promptParts.push(`${index + 1}. ${memo.title}`);
-        });
-      } else {
-        promptParts.push("目前没有备忘录");
-      }
-      promptParts.push("</memo-list>");
-
-      // ========== 第三部分：工具使用说明 ==========
-      promptParts.push("\n# 记忆工具使用说明");
+      // ========== 工具使用说明 ==========
+      promptParts.push("# 记忆工具使用说明");
       const toolInstructions = `
 你拥有以下记忆管理工具，需要根据信息的重要性和使用频率选择合适的存储方式：
 
@@ -291,12 +234,90 @@ export class MemoryToolProvider implements IToolProvider {
     }
   }
 
+  async getPersistentPrompt(context?: Record<string, any>): Promise<string> {
+    try {
+      // 从上下文中获取 session_id
+      const sessionId = context?.session_id;
+      if (!sessionId) {
+        return "";
+      }
+
+      // 获取所有长期记忆（不限制数量）
+      const longTermMemories = await this.getLongTermMemories(sessionId);
+
+      // 获取所有备忘录目录
+      const memoList = await this.getMemoList(sessionId);
+
+      const promptParts: string[] = [];
+
+      // ========== 第一部分：长期记忆注入 ==========
+      promptParts.push("# 重要记忆");
+
+      // 按类型分组展示
+      const factualMemories = longTermMemories.filter(
+        (m) => m.memoryType === "factual",
+      );
+      const soulMemories = longTermMemories.filter(
+        (m) => m.memoryType === "soul",
+      );
+
+      promptParts.push("\n## 事实性记忆 (FACTUAL)");
+      promptParts.push(
+        "这些是核心事实知识库，包括用户偏好、重要决策、项目状态等关键信息：",
+      );
+      promptParts.push("<factual-memory>");
+      if (factualMemories.length > 0) {
+        factualMemories.forEach((memory, index) => {
+          promptParts.push(`${index + 1}. ${memory.content}`);
+        });
+      } else {
+        promptParts.push("目前没有事实性记忆");
+      }
+      promptParts.push("</factual-memory>");
+
+      promptParts.push("\n## 人格定义 (SOUL)");
+      promptParts.push("这些定义了 AI 的角色定位、语言风格和行为规则：");
+      promptParts.push("<soul-memory>");
+      if (soulMemories.length > 0) {
+        soulMemories.forEach((memory, index) => {
+          promptParts.push(`${index + 1}. ${memory.content}`);
+        });
+      } else {
+        promptParts.push("目前没有人格定义记忆");
+      }
+      promptParts.push("</soul-memory>");
+
+      // ========== 第二部分：备忘录目录注入 ==========
+      promptParts.push("\n# 备忘录目录");
+      promptParts.push("以下是你可访问的备忘录列表，可通过标题读取具体内容：");
+      promptParts.push("<memo-list>");
+      if (memoList.length > 0) {
+        memoList.forEach((memo, index) => {
+          promptParts.push(`${index + 1}. ${memo.title}`);
+        });
+      } else {
+        promptParts.push("目前没有备忘录");
+      }
+      promptParts.push("</memo-list>");
+
+      return promptParts.join("\n");
+    } catch (error: any) {
+      this.logger.error(`获取持续注入提示词失败：${error.message}`);
+      return "";
+    }
+  }
+
+  async getBriefDescription(): Promise<string> {
+    return "长期记忆和备忘录管理工具，用于存储和检索用户偏好、重要事实和个人笔记";
+  }
+
   getMetadata(): ToolProviderMetadata {
     return {
       namespace: this.namespace,
       displayName: "记忆管理",
-      description: "允许 AI 读写长期记忆和备忘录，实现持久化记忆功能",
+      description: "长期记忆与备忘录管理工具集",
       isMcp: false,
+      loadMode: "lazy", // 工具定义懒加载
     };
   }
 
@@ -326,7 +347,10 @@ export class MemoryToolProvider implements IToolProvider {
   private async handleLongTermView(args: any, context?: Record<string, any>): Promise<string> {
     const sessionId = context?.session_id;
     if (!sessionId) {
-      return "❌ 错误：无法获取会话 ID";
+      return JSON.stringify({
+        success: false,
+        error: "无法获取会话 ID",
+      });
     }
 
     const memories = await this.prisma.memory.findMany({
@@ -339,16 +363,29 @@ export class MemoryToolProvider implements IToolProvider {
     });
 
     if (memories.length === 0) {
-      return `❌ 未找到${args.memory_type}类型的长期记忆`;
+      return JSON.stringify({
+        success: true,
+        data: [],
+        message: `未找到${args.memory_type}类型的长期记忆`,
+      });
     }
 
-    return memories.map((m, i) => `${i + 1}. ${m.content}`).join("\n");
+    return JSON.stringify({
+      success: true,
+      data: memories.map((m, i) => ({
+        index: i + 1,
+        content: m.content,
+      })),
+    });
   }
 
   private async handleLongTermEdit(args: any, context?: Record<string, any>): Promise<string> {
     const sessionId = context?.session_id;
     if (!sessionId) {
-      return "❌ 错误：无法获取会话 ID";
+      return JSON.stringify({
+        success: false,
+        error: "无法获取会话 ID",
+      });
     }
 
     const existing = await this.prisma.memory.findFirst({
@@ -396,7 +433,11 @@ export class MemoryToolProvider implements IToolProvider {
       }
     }
 
-    return `✓ 长期记忆已${writeMode === "append" ? "追加" : "覆盖"}`;
+    return JSON.stringify({
+      success: true,
+      action: writeMode === "append" ? "appended" : "overwritten",
+      message: `长期记忆已${writeMode === "append" ? "追加" : "覆盖"}`,
+    });
   }
 
   /**
@@ -431,22 +472,34 @@ export class MemoryToolProvider implements IToolProvider {
     // 从上下文中获取 session_id
     const sessionId = context?.session_id;
     if (!sessionId) {
-      return "❌ 错误：无法获取会话 ID";
+      return JSON.stringify({
+        success: false,
+        error: "无法获取会话 ID",
+      });
     }
 
     const { title, content, write_mode } = args;
 
     // 验证标题长度
     if (!title || typeof title !== "string") {
-      return "❌ 错误：标题不能为空";
+      return JSON.stringify({
+        success: false,
+        error: "标题不能为空",
+      });
     }
     if (title.length > 64) {
-      return "❌ 错误：标题长度不能超过64字符";
+      return JSON.stringify({
+        success: false,
+        error: "标题长度不能超过64字符",
+      });
     }
 
     // 验证内容
     if (!content || typeof content !== "string") {
-      return "❌ 错误：内容不能为空";
+      return JSON.stringify({
+        success: false,
+        error: "内容不能为空",
+      });
     }
 
     const writeMode = write_mode || "overwrite";
@@ -476,7 +529,12 @@ export class MemoryToolProvider implements IToolProvider {
           },
         });
 
-        return `✓ 备忘录「${title}」已${writeMode === "append" ? "追加" : "更新"}`;
+        return JSON.stringify({
+          success: true,
+          action: writeMode === "append" ? "appended" : "updated",
+          title: title,
+          message: `备忘录「${title}」已${writeMode === "append" ? "追加" : "更新"}`,
+        });
       } else {
         // 不存在，创建新备忘录
         await this.prisma.memory.create({
@@ -490,11 +548,19 @@ export class MemoryToolProvider implements IToolProvider {
           },
         });
 
-        return `✓ 备忘录「${title}」已创建`;
+        return JSON.stringify({
+          success: true,
+          action: "created",
+          title: title,
+          message: `备忘录「${title}」已创建`,
+        });
       }
     } catch (error: any) {
       this.logger.error(`创建/更新备忘录失败：${error.message}`);
-      return `❌ 错误：${error.message}`;
+      return JSON.stringify({
+        success: false,
+        error: error.message,
+      });
     }
   }
 
@@ -504,14 +570,20 @@ export class MemoryToolProvider implements IToolProvider {
   private async handleMemoDelete(args: any, context?: Record<string, any>): Promise<string> {
     const sessionId = context?.session_id;
     if (!sessionId) {
-      return "❌ 错误：无法获取会话 ID";
+      return JSON.stringify({
+        success: false,
+        error: "无法获取会话 ID",
+      });
     }
 
     const { title } = args;
 
     // 验证标题
     if (!title || typeof title !== "string") {
-      return "❌ 错误：标题不能为空";
+      return JSON.stringify({
+        success: false,
+        error: "标题不能为空",
+      });
     }
 
     try {
@@ -525,7 +597,10 @@ export class MemoryToolProvider implements IToolProvider {
       });
 
       if (!existing) {
-        return `❌ 未找到标题为「${title}」的备忘录`;
+        return JSON.stringify({
+          success: false,
+          error: `未找到标题为「${title}」的备忘录`,
+        });
       }
 
       // 删除备忘录
@@ -533,10 +608,18 @@ export class MemoryToolProvider implements IToolProvider {
         where: { id: existing.id },
       });
 
-      return `✓ 备忘录「${title}」已删除`;
+      return JSON.stringify({
+        success: true,
+        action: "deleted",
+        title: title,
+        message: `备忘录「${title}」已删除`,
+      });
     } catch (error: any) {
       this.logger.error(`删除备忘录失败：${error.message}`);
-      return `❌ 错误：${error.message}`;
+      return JSON.stringify({
+        success: false,
+        error: error.message,
+      });
     }
   }
 
@@ -546,14 +629,20 @@ export class MemoryToolProvider implements IToolProvider {
   private async handleMemoRead(args: any, context?: Record<string, any>): Promise<string> {
     const sessionId = context?.session_id;
     if (!sessionId) {
-      return "❌ 错误：无法获取会话 ID";
+      return JSON.stringify({
+        success: false,
+        error: "无法获取会话 ID",
+      });
     }
 
     const { title } = args;
 
     // 验证标题
     if (!title || typeof title !== "string") {
-      return "❌ 错误：标题不能为空";
+      return JSON.stringify({
+        success: false,
+        error: "标题不能为空",
+      });
     }
 
     try {
@@ -567,14 +656,24 @@ export class MemoryToolProvider implements IToolProvider {
       });
 
       if (!memo) {
-        return `❌ 未找到标题为「${title}」的备忘录`;
+        return JSON.stringify({
+          success: false,
+          error: `未找到标题为「${title}」的备忘录`,
+        });
       }
 
       // 返回备忘录内容
-      return `📝 备忘录「${title}」：\n\n${memo.content}`;
+      return JSON.stringify({
+        success: true,
+        title: title,
+        content: memo.content,
+      });
     } catch (error: any) {
       this.logger.error(`读取备忘录失败：${error.message}`);
-      return `❌ 错误：${error.message}`;
+      return JSON.stringify({
+        success: false,
+        error: error.message,
+      });
     }
   }
 }

@@ -413,12 +413,17 @@ export class KnowledgeBaseToolProvider implements IToolProvider {
     }
   }
 
+  async getBriefDescription(): Promise<string> {
+    return "知识库检索与管理工具，支持语义搜索、文件浏览和内容查询。若用户提供了知识库信息，除非明确要求，否则仅限于使用此工具集回答。";
+  }
+
   getMetadata(): ToolProviderMetadata {
     return {
       namespace: this.namespace,
-      displayName: "知识库检索",
-      description: "从知识库中检索相关信息，增强回答的准确性",
+      displayName: "知识库",
+      description: "知识库检索与管理工具集",
       isMcp: false,
+      loadMode: "lazy",
     };
   }
 }

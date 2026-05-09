@@ -143,12 +143,12 @@ export class ShellToolProvider implements IToolProvider {
 
   async getTools(enabled?: boolean | string[]): Promise<any[]> {
     if (enabled === false) return [];
-    
+
     // 如果是数组，只返回数组中指定的工具
     if (Array.isArray(enabled)) {
       return this.toolsConfig.filter(tool => enabled.includes(tool.name));
     }
-    
+
     // true 或未指定：返回所有工具
     return this.toolsConfig;
   }
@@ -177,7 +177,7 @@ export class ShellToolProvider implements IToolProvider {
   async getPrompt(context?: Record<string, any>): Promise<string> {
     try {
       const promptParts: string[] = [];
-
+      promptParts.push("# Shell 工具使用说明");
       // 注入工作目录提示
       if (context?.session_id) {
         try {
@@ -205,7 +205,6 @@ export class ShellToolProvider implements IToolProvider {
       promptParts.push("1. 这些工具极其危险，如果需要删除或者修改文件务必征得用户同意");
       promptParts.push("2. 执行命令时请注意安全性，避免执行危险操作");
       promptParts.push("3. 读取大文件时可能需要较长时间，建议先确认文件大小");
-      promptParts.push("4. 路径可以是绝对路径或相对路径，建议使用绝对路径以避免歧义");
 
       return promptParts.join("\n");
     } catch (error: any) {
@@ -230,12 +229,17 @@ export class ShellToolProvider implements IToolProvider {
     }
   }
 
+  async getBriefDescription(): Promise<string> {
+    return "Shell 命令执行工具，用于运行系统命令、操作文件和目录。仅在明确需要时激活使用";
+  }
+
   getMetadata(): ToolProviderMetadata {
     return {
       namespace: this.namespace,
       displayName: "Shell 工具",
-      description: "允许 AI 执行系统命令、读取文件和列出目录（仅用于本地测试）",
+      description: "系统命令执行与文件操作工具",
       isMcp: false,
+      // loadMode: "lazy",
     };
   }
 
@@ -287,11 +291,11 @@ export class ShellToolProvider implements IToolProvider {
 
       // 即使失败也返回 JSON，确保 AI 能获取到 stdout 中的任何潜在信息
       const exitCode = error.code === 'ETIMEDOUT' || error.killed ? -1 : (error.status || 1);
-      
+
       // 处理错误中的 buffer 数据
       const stdoutStr = error.stdout ? this.decodeBuffer(error.stdout, encoding) : '';
       const stderrStr = error.stderr ? this.decodeBuffer(error.stderr, encoding) : error.message;
-      
+
       return JSON.stringify({
         stdout: stdoutStr.trim(),
         stderr: String(stderrStr).trim(),
@@ -323,7 +327,7 @@ export class ShellToolProvider implements IToolProvider {
       // 否则根据操作系统自动选择编码
       const isWindows = process.platform === 'win32';
       const defaultEncoding = isWindows ? 'gbk' : 'utf-8';
-      
+
       return iconv.decode(buffer, defaultEncoding);
     } catch (error: any) {
       this.logger.warn(`解码失败 (${encoding || 'auto'}): ${error.message}，使用 latin1 编码`);
@@ -605,7 +609,7 @@ export class ShellToolProvider implements IToolProvider {
       // 保持原始文件的换行符风格
       // 检测原始文件使用的换行符类型
       const hasCRLF = originalContent.includes('\r\n');
-      
+
       let finalContent: string;
       if (hasCRLF) {
         // 如果原文件使用 \r\n，则将结果转换回 \r\n
