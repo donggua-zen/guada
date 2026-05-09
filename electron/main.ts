@@ -5,9 +5,13 @@ import * as fs from 'fs'
 import { autoUpdater } from 'electron-updater'
 import * as net from 'net'
 import log from 'electron-log'
+import { startBrowserBridge } from './browser-bridge'
+import { startBrowserBridgeTCP, stopBrowserBridgeTCP } from './browser-bridge-tcp'
+import { BrowserTabManager } from './browser-tab-manager'
 
 let backendProcess: ChildProcess | null = null
 let mainWindow: BrowserWindow | null = null
+let tabManager: BrowserTabManager | null = null  // 标签管理器
 let isBackendStarting = false  // 防止重复启动
 let backendPort: number | null = null  // 记录后端端口
 
@@ -282,6 +286,9 @@ async function startBackend(): Promise<void> {
           LOGS_DIR: logsDir, // 传递后端日志目录到用户数据区
           SKILLS_DIR: skillsDir, // 传递技能目录到用户数据区
           WORKSPACE_BASE_DIR: workspaceDir, // 传递会话工作目录基础路径
+          ELECTRON_APP: 'true', // 标识这是 Electron 环境
+          BROWSER_BRIDGE_MODE: 'tcp', // 开发模式使用 TCP
+          BROWSER_BRIDGE_PORT: process.env.BROWSER_BRIDGE_PORT || '3001', // 传递端口号
         },
         stdio: ['pipe', 'pipe', 'pipe'], // 开发模式不需要 IPC
         shell: true
@@ -475,7 +482,25 @@ function createWindow() {
   })
 
   mainWindow.on('closed', () => {
+    // 清理标签管理器
+    tabManager?.closeAllTabs()
+    tabManager = null
     mainWindow = null
+  })
+
+  // ✅ 初始化标签管理器（默认最多5个标签）
+  tabManager = new BrowserTabManager(mainWindow, 6)
+
+  // 监听窗口大小变化
+  mainWindow.on('resize', () => {
+    tabManager?.handleResize()
+  })
+
+  // 初始化主应用标签
+  tabManager.initializeMainApp().then(() => {
+    log.info('✅ Main app tab initialized successfully')
+  }).catch(err => {
+    log.error('❌ Failed to initialize main app tab:', err)
   })
 }
 
@@ -645,6 +670,37 @@ function setupIpcHandlers() {
       return { success: false, error: String(error) }
     }
   })
+
+  // ✅ 标签管理相关 IPC
+
+  // 创建标签
+  ipcMain.handle('browser:create-tab', async (_, { url }) => {
+    try {
+      const tab = await tabManager!.createTab(url)
+      return { success: true, tab }
+    } catch (error: any) {
+      log.error('创建标签失败:', error.message)
+      return { success: false, error: error.message }
+    }
+  })
+
+  // 激活标签
+  ipcMain.handle('browser:activate-tab', async (_, { tabId }) => {
+    const success = tabManager!.activateTab(tabId)
+    return { success }
+  })
+
+  // 关闭标签
+  ipcMain.handle('browser:close-tab', async (_, { tabId }) => {
+    const success = await tabManager!.closeTab(tabId)
+    return { success }
+  })
+
+  // 获取标签列表
+  ipcMain.handle('browser:get-tabs', () => {
+    const tabs = tabManager!.getTabList()
+    return { success: true, tabs }
+  })
 }
 
 // 配置更新器事件监听
@@ -684,13 +740,43 @@ app.whenReady().then(async () => {
     setupIpcHandlers()
     setupAutoUpdater()
 
+    // 启动 Browser Bridge（根据模式选择）
+    const bridgeMode = process.env.BROWSER_BRIDGE_MODE || (isDev ? 'tcp' : 'ipc')
+    
+    if (bridgeMode === 'tcp') {
+      // TCP 模式（开发环境）
+      const port = parseInt(process.env.BROWSER_BRIDGE_PORT || '3001')
+      log.info(`Starting Browser Bridge in TCP mode on port ${port}...`)
+      await startBrowserBridgeTCP(port, tabManager!)
+      process.env.BROWSER_BRIDGE_PORT = String(port)
+      log.info('Browser Bridge TCP started successfully')
+    } else {
+      // IPC 模式（生产环境）
+      log.info('Starting Browser Bridge in IPC mode...')
+      startBrowserBridge(tabManager!)
+      log.info('Browser Bridge IPC started successfully')
+    }
+
     // 启动后端服务
     log.info('Starting backend service...')
     await startBackend()
     log.info('Backend service started successfully')
 
-    // 创建窗口
+    // 创建窗口（tabManager 在这里面创建）
     createWindow()
+    
+    // 窗口创建后，重新初始化 Browser Bridge（因为 tabManager 现在可用了）
+    if (bridgeMode === 'tcp') {
+      // 停止旧的 TCP server（如果有的话）
+      await stopBrowserBridgeTCP()
+      const port = parseInt(process.env.BROWSER_BRIDGE_PORT || '3001')
+      await startBrowserBridgeTCP(port, tabManager!)
+    } else {
+      // IPC 模式重新初始化
+      startBrowserBridge(tabManager!)
+    }
+    log.info('Browser Bridge re-initialized with TabManager')
+    
     log.info('Application initialized')
   } catch (error: any) {
     log.error('Application initialization failed:', error)
@@ -744,7 +830,12 @@ app.on('activate', () => {
 })
 
 // 应用退出前清理
-app.on('before-quit', () => {
+app.on('before-quit', async () => {
+  // 停止 Browser Bridge TCP Server
+  if (process.env.BROWSER_BRIDGE_MODE === 'tcp') {
+    await stopBrowserBridgeTCP()
+  }
+  
   if (backendProcess) {
     // 根据平台选择适当的终止方式
     if (process.platform === 'win32') {

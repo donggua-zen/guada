@@ -61,5 +61,17 @@ contextBridge.exposeInMainWorld('electronAPI', {
   },
 
   // 打开外部链接（使用系统默认浏览器）
-  openExternal: (url: string) => ipcRenderer.invoke('open-external', url)
+  openExternal: (url: string) => ipcRenderer.invoke('open-external', url),
+
+  // 标签管理
+  createTab: (url?: string) => ipcRenderer.invoke('browser:create-tab', { url }),
+  activateTab: (tabId: string) => ipcRenderer.invoke('browser:activate-tab', { tabId }),
+  closeTab: (tabId: string) => ipcRenderer.invoke('browser:close-tab', { tabId }),
+  getTabs: () => ipcRenderer.invoke('browser:get-tabs'),
+  onTabUpdated: (callback: (event: any, data: any) => void) => {
+    ipcRenderer.on('tab-updated', callback)
+  },
+  onTabClosed: (callback: (event: any, data: any) => void) => {
+    ipcRenderer.on('tab-closed', callback)
+  }
 })

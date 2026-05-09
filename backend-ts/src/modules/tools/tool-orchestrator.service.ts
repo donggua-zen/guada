@@ -10,6 +10,7 @@ import { MCPToolProvider } from "./providers/mcp-tool.provider";
 import { TimeToolProvider } from "./providers/time-tool.provider";
 import { ImageRecognitionToolProvider } from "./providers/image-recognition-tool.provider";
 import { ShellToolProvider } from "./providers/shell-tool.provider";
+import { BrowserToolProvider } from "./providers/browser-tool.provider";
 import { ToolContext } from "./tool-context";
 import { SkillToolBridgeService } from '../skills/integration/skill-tool-bridge.service';
 
@@ -35,6 +36,7 @@ export class ToolOrchestrator {
     timeProvider: TimeToolProvider,
     imageRecognitionProvider: ImageRecognitionToolProvider,
     shellProvider: ShellToolProvider,
+    browserProvider: BrowserToolProvider,
     skillToolBridge: SkillToolBridgeService,
   ) {
     this.addProvider(kbProvider);
@@ -43,6 +45,7 @@ export class ToolOrchestrator {
     this.addProvider(timeProvider);
     this.addProvider(imageRecognitionProvider);
     this.addProvider(shellProvider);
+    this.addProvider(browserProvider);
     this.addProvider(skillToolBridge);
   }
 
@@ -417,7 +420,7 @@ export class ToolOrchestrator {
       let content = await provider.execute(toolRequest, context.injectParams);
 
       // 检查结果长度，如果超过 10000 字符则截断
-      const MAX_CONTENT_LENGTH = 10000;
+      const MAX_CONTENT_LENGTH = 500000;
       if (content && content.length > MAX_CONTENT_LENGTH) {
         const truncatedContent = content.substring(0, MAX_CONTENT_LENGTH);
         const omittedLength = content.length - MAX_CONTENT_LENGTH;

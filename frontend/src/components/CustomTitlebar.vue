@@ -1,8 +1,40 @@
 <template>
   <div v-if="isElectron" class="custom-titlebar" :class="{ 'drag-region': true }">
-    <!-- 左侧：应用标题或 Logo -->
+    <!-- 左侧：应用标题 + 标签栏 -->
     <div class="titlebar-left">
-      <span class="app-title">GuaDa</span>
+      <!-- 主应用标签（不可关闭） -->
+      <div 
+        class="tab-item main-tab"
+        :class="{ active: activeTabId === 'main_app' }"
+        @click="switchTab('main_app')"
+        title="主应用"
+      >
+        <span class="tab-title">GuaDa AI</span>
+      </div>
+
+      <!-- 其他标签页 -->
+      <div 
+        v-for="tab in tabs" 
+        :key="tab.tabId"
+        class="tab-item"
+        :class="{ active: activeTabId === tab.tabId }"
+        @click="switchTab(tab.tabId)"
+      >
+        <span class="tab-title">{{ truncateTitle(tab.title) }}</span>
+        <button 
+          v-if="!tab.isMainApp"
+          class="tab-close" 
+          @click.stop="closeTab(tab.tabId)"
+          title="关闭标签"
+        >
+          ×
+        </button>
+      </div>
+
+      <!-- 新建标签按钮（仅调试模式显示） -->
+      <button v-if="isDebug" class="new-tab-btn" @click="createNewTab" title="新建标签">
+        +
+      </button>
     </div>
 
     <!-- 右侧：窗口控制按钮 -->
@@ -88,6 +120,142 @@ const isElectron = computed(() => {
   return typeof window !== 'undefined' && window.electronAPI !== undefined
 })
 
+// 标签页相关状态
+interface TabInfo {
+  tabId: string
+  title: string
+  url: string
+  isMainApp: boolean
+  isActive?: boolean
+}
+
+const tabs = ref<TabInfo[]>([])
+const activeTabId = ref<string>('main_app')
+
+// 截断标题
+function truncateTitle(title: string, maxLength: number = 15): string {
+  if (title.length <= maxLength) return title
+  return title.substring(0, maxLength) + '...'
+}
+
+const isDebug = ref(import.meta.env.DEV)
+
+// 切换标签
+async function switchTab(tabId: string) {
+  if (!window.electronAPI) return
+  
+  try {
+    await window.electronAPI.activateTab(tabId)
+    activeTabId.value = tabId
+  } catch (error) {
+    console.error('Failed to switch tab:', error)
+  }
+}
+
+// 关闭标签
+async function closeTab(tabId: string) {
+  if (!window.electronAPI) return
+  
+  try {
+    const result = await window.electronAPI.closeTab(tabId)
+    if (result.success) {
+      // 找到被关闭标签的索引
+      const closedIndex = tabs.value.findIndex(t => t.tabId === tabId)
+      // 移除本地列表中的标签
+      tabs.value = tabs.value.filter(t => t.tabId !== tabId)
+      
+      // 如果关闭的是当前标签，切换到上一个标签（或主应用）
+      if (activeTabId.value === tabId) {
+        if (tabs.value.length > 0) {
+          // 切换到上一个标签（如果索引超出范围则切换到最后一个）
+          const newIndex = Math.min(closedIndex - 1, tabs.value.length - 1)
+          const targetTab = tabs.value[Math.max(0, newIndex)]
+          activeTabId.value = targetTab.tabId
+          await window.electronAPI.activateTab(targetTab.tabId)
+        } else {
+          // 没有其他标签了，切换到主应用
+          activeTabId.value = 'main_app'
+          await window.electronAPI.activateTab('main_app')
+        }
+      }
+    }
+  } catch (error) {
+    console.error('Failed to close tab:', error)
+  }
+}
+
+// 创建新标签
+async function createNewTab() {
+  if (!window.electronAPI) return
+  
+  try {
+    const result = await window.electronAPI.createTab('https://www.baidu.com')
+    if (result.success && result.tab) {
+      tabs.value.push(result.tab)
+      activeTabId.value = result.tab.tabId
+    } else {
+      // 友好提示
+      alert('标签数量已达上限（最多5个标签页）')
+    }
+  } catch (error) {
+    console.error('Failed to create tab:', error)
+  }
+}
+
+// 加载标签列表
+async function loadTabs() {
+  if (!window.electronAPI) return
+  
+  try {
+    const result = await window.electronAPI.getTabs()
+    if (result.success) {
+      // 过滤掉主应用标签（已在模板中硬编码）
+      tabs.value = (result.tabs || []).filter(t => t.tabId !== 'main_app')
+      // 找到活跃标签
+      const activeTab = tabs.value.find(t => t.isActive)
+      if (activeTab) {
+        activeTabId.value = activeTab.tabId
+      }
+    }
+  } catch (error) {
+    console.error('Failed to load tabs:', error)
+  }
+}
+
+// 监听标签更新事件
+function handleTabUpdated(event: any, data: any) {
+  const tab = tabs.value.find(t => t.tabId === data.tabId)
+  if (tab) {
+    // 更新现有标签
+    tab.title = data.title
+    tab.url = data.url
+  } else if (!data.isMainApp) {
+    // 如果是新标签（非主应用），添加到列表
+    tabs.value.push({
+      tabId: data.tabId,
+      title: data.title || '新标签页',
+      url: data.url || '',
+      isActive: false,
+      isMainApp: false,
+    })
+  }
+  
+  if (data.isActive) {
+    activeTabId.value = data.tabId
+  }
+}
+
+// 监听标签关闭事件
+function handleTabClosed(event: any, data: any) {
+  // 从列表中移除已关闭的标签
+  tabs.value = tabs.value.filter(t => t.tabId !== data.tabId)
+  
+  // 如果关闭的是当前激活的标签，切换到主应用
+  if (activeTabId.value === data.tabId) {
+    activeTabId.value = 'main_app'
+  }
+}
+
 const isMaximized = ref(false)
 const updateAvailable = ref(false)
 const updateVersion = ref('')
@@ -172,6 +340,19 @@ onMounted(() => {
   if (window.electronAPI && typeof window.electronAPI.onUpdateStatus === 'function') {
     window.electronAPI.onUpdateStatus(handleUpdateStatus)
   }
+  
+  // 加载标签列表
+  if (isElectron.value) {
+    loadTabs()
+    
+    // 监听标签更新事件
+    window.electronAPI?.onTabUpdated?.(handleTabUpdated)
+    
+    // 监听标签关闭事件
+    if (window.electronAPI && 'onTabClosed' in window.electronAPI) {
+      ;(window.electronAPI as any).onTabClosed(handleTabClosed)
+    }
+  }
 })
 
 // 组件卸载时移除监听器
@@ -208,8 +389,89 @@ onUnmounted(() => {
 .titlebar-left {
   display: flex;
   align-items: center;
-  padding-left: 12px;
+  padding-left: 8px;
   flex: 1;
+  gap: 4px;
+  overflow-x: auto;
+}
+
+/* 标签页样式 */
+.tab-item {
+  display: flex;
+  align-items: center;
+  padding: 6px 12px;
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 8px;
+  cursor: pointer;
+  min-width: 80px;
+  max-width: 150px;
+  transition: all 0.2s;
+  user-select: none;
+  -webkit-app-region: no-drag;
+}
+
+.tab-item:hover {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.tab-item.active {
+  background: var(--color-sidebar-bg-active);
+  color: var(--color-sidebar-text-active);
+}
+
+.tab-item.main-tab {
+  background: rgba(99, 102, 241, 0.1);
+  font-weight: 500;
+}
+
+.tab-item.main-tab:hover {
+  background: rgba(99, 102, 241, 0.15);
+}
+
+.tab-title {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+  color: var(--titlebar-text-color);
+}
+
+.tab-close {
+  margin-left: 6px;
+  padding: 0 4px;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  font-size: 14px;
+  color: #999;
+  line-height: 1;
+  border-radius: 3px;
+  transition: all 0.15s;
+}
+
+.tab-close:hover {
+  background: rgba(255, 0, 0, 0.2);
+  color: #ff4444;
+}
+
+.new-tab-btn {
+  padding: 4px 10px;
+  border: 1px dashed rgba(255, 255, 255, 0.2);
+  background: transparent;
+  cursor: pointer;
+  font-size: 16px;
+  color: var(--titlebar-text-color);
+  border-radius: 4px;
+  transition: all 0.2s;
+  -webkit-app-region: no-drag;
+  opacity: 0.7;
+}
+
+.new-tab-btn:hover {
+  background: rgba(255, 255, 255, 0.1);
+  border-color: rgba(255, 255, 255, 0.4);
+  opacity: 1;
 }
 
 .app-title {

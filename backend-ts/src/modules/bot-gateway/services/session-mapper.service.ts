@@ -94,6 +94,14 @@ export class SessionMapperService {
         throw new Error('我还没有配置模型作为大脑，请先在设置中配置默认对话模型');
       }
 
+      // 5. 验证模型是否存在（isActive 只影响前端展示，不影响实际使用）
+      const model = await this.prisma.model.findUnique({
+        where: { id: finalModelId },
+      });
+      if (!model) {
+        throw new Error(`模型不存在：${finalModelId}，请检查 Bot 实例的模型配置`);
+      }
+
       // 创建新会话,使用机器人创建者的 userId
       await this.prisma.session.create({
         data: {

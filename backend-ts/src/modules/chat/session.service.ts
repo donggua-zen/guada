@@ -169,6 +169,14 @@ export class SessionService {
       );
     }
 
+    // 验证模型是否存在（isActive 只影响前端展示，不影响实际使用）
+    if (finalModelId) {
+      const model = await this.modelRepo.findById(finalModelId);
+      if (!model) {
+        throw new Error(`模型不存在：${finalModelId}，请检查模型配置`);
+      }
+    }
+
     // 继承角色配置
     const sessionData = {
       userId,

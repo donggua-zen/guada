@@ -18,6 +18,13 @@ export interface ElectronAPI {
   toggleDevTools: () => void
   openUserDataFolder: () => void
   openInstallFolder: () => void
+  
+  // 标签管理
+  createTab: (url?: string) => Promise<{ success: boolean; tab?: any }>
+  activateTab: (tabId: string) => Promise<{ success: boolean }>
+  closeTab: (tabId: string) => Promise<{ success: boolean }>
+  getTabs: () => Promise<{ success: boolean; tabs?: any[] }>
+  onTabUpdated: (callback: (event: any, data: any) => void) => void
 }
 
 declare global {

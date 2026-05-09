@@ -170,7 +170,7 @@ export class AgentEngine {
 
     // 防止无限循环的安全机制：设置最大迭代次数上限
     let iterationCount = 0;
-    const MAX_ITERATIONS = 40;
+    const MAX_ITERATIONS = 100;
 
     do {
       iterationCount++;

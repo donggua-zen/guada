@@ -79,6 +79,17 @@ interface ElectronAPI {
   installAndRestart: () => void
   onUpdateStatus: (callback: (status: any) => void) => void
   openExternal: (url: string) => Promise<{ success: boolean; error?: string }>
+  toggleDevTools: () => void
+  openUserDataFolder: () => void
+  openInstallFolder: () => void
+  
+  // 标签管理
+  createTab: (url?: string) => Promise<{ success: boolean; tab?: any }>
+  activateTab: (tabId: string) => Promise<{ success: boolean }>
+  closeTab: (tabId: string) => Promise<{ success: boolean }>
+  getTabs: () => Promise<{ success: boolean; tabs?: any[] }>
+  onTabUpdated: (callback: (event: any, data: any) => void) => void
+  onTabClosed: (callback: (event: any, data: any) => void) => void
 }
 
 interface Window {
