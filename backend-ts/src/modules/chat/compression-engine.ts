@@ -10,9 +10,9 @@ import { ICompressionStrategy, CompressionConfig, CompressionResult, Compression
  *
  * 定义消息压缩过程中的关键阈值和保护策略，平衡 Token 优化与上下文完整性。
  */
-const PRUNING_TOOL_RESULT_MAX_LENGTH = 2000; // 工具结果裁剪阈值：超过此长度的工具调用结果将被截断
+const PRUNING_TOOL_RESULT_MAX_LENGTH = 1000; // 工具结果裁剪阈值：超过此长度的工具调用结果将被截断
 const PROTECTED_RECENT_TOOL_RESULTS_COUNT = 3; // 最近受保护的工具调用条数：最近的 N 条工具结果不被裁剪，确保最新上下文完整
-const MIN_RETAINED_MESSAGES = 5; // 最小保留消息数：无论 Token 压力多大，始终保留最新的 N 条原始消息
+const MIN_RETAINED_MESSAGES = 3; // 最小保留消息数：无论 Token 压力多大，始终保留最新的 N 条原始消息
 
 /**
  * 摘要生成模式枚举
@@ -173,7 +173,7 @@ export class CompressionEngine implements ICompressionStrategy {
           compressionState.lastCompactedMessageId = lastCompactedMsgId;
           compressionState.lastCompactedContentId = lastCompactedContentId;
           // 保留 lastPrunedContentId，因为物理裁剪边界可能与逻辑摘要边界不一致
-          
+
           // 清理 pruningMetadata：剔除所有已处理（<= lastCompactedContentId）的元数据，防止无限膨胀
           if (compressionState.pruningMetadata && lastCompactedContentId) {
             const cleanedMetadata: Record<string, any> = {};
@@ -185,7 +185,7 @@ export class CompressionEngine implements ICompressionStrategy {
             }
             compressionState.pruningMetadata = Object.keys(cleanedMetadata).length > 0 ? cleanedMetadata : null;
           }
-          
+
           compressionState.compressionStats = compressionStats;
         }
       } catch (error) {
@@ -502,11 +502,7 @@ export class CompressionEngine implements ICompressionStrategy {
     summaryMode: SummaryMode = SummaryMode.ITERATIVE,
     chatModelName?: string,
   ): Promise<{ summary: string; retained: MessageRecord[]; lastCompactedContentId?: string; lastCompactedMsgId?: string; retainedTokens: number } | null> {
-    if (messages.length <= MIN_RETAINED_MESSAGES) {
-      // 消息数量过少时无需压缩,直接返回原有摘要和全部消息
-      // 返回 undefined 表示没有实际压缩发生，调用方应回退到仅裁剪模式
-      return { summary: previousSummary || "", retained: messages, lastCompactedContentId: undefined, retainedTokens: prunedTokens };
-    }
+
 
     // 1. 消息分组：将 user 消息分为一组，assistant 及其后续的 tool 消息合并为一组
     // 这样可以确保工具调用的完整性，避免 assistant 和 tool 被分割到不同区域
@@ -530,19 +526,27 @@ export class CompressionEngine implements ICompressionStrategy {
       messageGroups.push(currentGroup);
     }
 
+    if (messages.length <= MIN_RETAINED_MESSAGES) {
+      // 消息数量过少时无需压缩,直接返回原有摘要和全部消息
+      // 返回 undefined 表示没有实际压缩发生，调用方应回退到仅裁剪模式
+      this.logger.log("messages is too short, no compression needed, returning original summary and all messages")
+      return { summary: previousSummary || "", retained: messages, lastCompactedContentId: undefined, retainedTokens: prunedTokens };
+    }
+
     // 2. 从后往前以“组”为单位累加 Token，确定保留范围
     let retainedTokens = 0;
     // 强制保留最后 MIN_RETAINED_GROUPS 个分组（例如最后 3 组对话）
     const minRetainGroupIndex = Math.max(0, messageGroups.length - MIN_RETAINED_MESSAGES);
     let retainGroupIndex = minRetainGroupIndex; // 默认从强制保留区的起点开始
-
-    // 从强制保留区的前一组开始向前判断
     for (let i = minRetainGroupIndex - 1; i >= 0; i--) {
+      retainedTokens += await this.tokenizerService.countTokens(chatModelName || "gpt4", messageGroups[i]);
+    }
+    // 从强制保留区的前一组开始向前判断
+    for (let i = messageGroups.length - 1; i >= minRetainGroupIndex; i--) {
       const group = messageGroups[i];
       const groupTokens = await this.tokenizerService.countTokens(chatModelName || "gpt4", group);
 
       if (retainedTokens + groupTokens > targetTokens) {
-        retainGroupIndex = i + 1;
         break;
       }
 
@@ -558,20 +562,21 @@ export class CompressionEngine implements ICompressionStrategy {
     if (toCompress.length === 0) {
       // 所有消息都在保留区内,无需调用 LLM 生成摘要
       // 返回 undefined 表示没有实际压缩发生，调用方应回退到仅裁剪模式
+      this.logger.log("all messages are within the retention range, no compression needed, returning original summary and all messages")
       return { summary: previousSummary || "", retained: messages, lastCompactedContentId: undefined, retainedTokens: retainedTokens };
     }
 
+    // 记录被压缩部分的最后一条消息 ID,作为压缩游标用于下次增量处理
+    const lastCompactedMsgId = toCompress[toCompress.length - 1]?.messageId;
+    const lastCompactedContentId = toCompress[toCompress.length - 1]?.contentId;
     // 如果关闭摘要功能,则直接丢弃待压缩内容,仅保留最近的消息
     // 这种模式适用于希望快速减少 Token 占用但不需要保留历史语义的场景
     if (summaryMode === SummaryMode.DISABLED) {
       this.logger.log('Summary generation is disabled, discarding compressed messages directly.');
       // 记录被丢弃部分的最后一条消息 ID,作为压缩游标用于下次增量处理
-      const lastCompactedMsgId = toCompress[toCompress.length - 1]?.messageId;
-      return { summary: previousSummary || "", retained, lastCompactedContentId: toCompress[toCompress.length - 1]?.contentId, lastCompactedMsgId, retainedTokens };
+      return { summary: previousSummary || "", retained, lastCompactedContentId, lastCompactedMsgId, retainedTokens };
     }
 
-    // 记录被压缩部分的最后一条消息 ID,作为压缩游标用于下次增量处理
-    const lastCompactedMsgId = toCompress[toCompress.length - 1]?.messageId;
 
     // 构造发送给 LLM 的提示词,包含历史摘要(若有)和待压缩的新增对话内容
     // 通过清晰的分区标记帮助模型理解不同部分的作用
@@ -581,7 +586,7 @@ export class CompressionEngine implements ICompressionStrategy {
 ## 压缩原则
 1. **去重合并**:相同主题的信息合并,避免重复。
 2. **保留关键**:保留决策结论、待办事项、用户偏好、重要事实和数据。
-3. **丢弃冗余**:省略寒暄、重复表述、已解决的中间讨论过程。
+3. **丢弃冗余**:省略寒暄、重复表述、已解决的中间讨论过程、具体的讨论/代码细节。
 4. **时间有序**:按对话发生的时间线组织,保持因果和逻辑连贯。
 5. **控制长度**:合并历史摘要时,用更精炼的语言概括旧内容,避免摘要随迭代不断累积变长
 
@@ -635,6 +640,8 @@ export class CompressionEngine implements ICompressionStrategy {
 
     this.logger.debug(promptParts.join("\n"));
 
+    promptParts.push("\n\n开始压缩，不超过2000字");
+
     // 如果是快速模式,使用传统单次调用方式
     if (summaryMode === SummaryMode.FAST) {
       this.logger.log('Using fast summary mode (single call)');
@@ -642,13 +649,13 @@ export class CompressionEngine implements ICompressionStrategy {
         model: compressionModel?.modelName || "gpt-3.5-turbo",
         messages: [{ role: "user", content: promptParts.join("\n") }],
         temperature: 0.4,
-        maxTokens: 1000,
+        maxTokens: 2000,
         thinkingEnabled: false,
         stream: false,
         providerConfig: compressionModel.provider,
       });
       const finalSummary = response.content?.trim() || "";
-      return { summary: finalSummary, retained, lastCompactedContentId: toCompress[toCompress.length - 1]?.contentId, lastCompactedMsgId, retainedTokens };
+      return { summary: finalSummary, retained, lastCompactedContentId, lastCompactedMsgId, retainedTokens };
     }
 
     // 迭代模式:执行迭代优化生成摘要
@@ -662,7 +669,7 @@ export class CompressionEngine implements ICompressionStrategy {
         model: compressionModel?.modelName || "gpt-3.5-turbo",
         messages: [{ role: "user", content: promptParts.join("\n") }],
         temperature: 0.4,
-        maxTokens: 1000,
+        maxTokens: 2000,
         thinkingEnabled: false,
         stream: false,
         providerConfig: compressionModel.provider,
@@ -691,6 +698,7 @@ export class CompressionEngine implements ICompressionStrategy {
     return {
       lastCompactedMessageId: state.lastCompactedMessageId,
       lastCompactedContentId: state.lastCompactedContentId,
+      lastPrunedContentId: state.lastPrunedContentId,
       pruningMetadata: state.pruningMetadata || undefined,
       summaryContent: state.summaryContent || undefined,
       cleaningStrategy: state.cleaningStrategy || undefined,
@@ -737,8 +745,8 @@ export class CompressionEngine implements ICompressionStrategy {
   applyPruningOverlay(messages: MessageRecord[], metadata: Record<string, any>, boundaryId: string) {
     for (const msg of messages) {
       // 一旦超过边界，后续消息均无需处理（假设 contentId 递增）
-      if (msg.contentId && msg.contentId > boundaryId) break;
-      
+      // if (msg.contentId && msg.contentId > boundaryId) break;
+
       if (msg.contentId && metadata[msg.contentId]) {
         msg.content = metadata[msg.contentId].prunedContent || msg.content;
       }

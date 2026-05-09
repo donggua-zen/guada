@@ -6,9 +6,9 @@
         <div class="mb-4 pt-2">
           <div class="flex items-center justify-between mb-2">
             <div class="flex items-center gap-1.5">
-              <span class="text-sm font-medium text-gray-700">上下文使用率</span>
+              <span class="text-sm font-medium text-gray-700 dark:text-[#e8e9ed]">上下文使用率</span>
               <el-tooltip content="上下文为估算值，仅供参考，与实际值可能存在差异" placement="top">
-                <el-icon class="text-gray-400 hover:text-gray-600 cursor-help transition-colors" :size="14">
+                <el-icon class="text-gray-400 dark:text-[#8b8d95] hover:text-gray-600 dark:hover:text-[#a8aab0] cursor-help transition-colors" :size="14">
                   <QuestionFilled />
                 </el-icon>
               </el-tooltip>
@@ -24,22 +24,22 @@
         <!-- 详细统计卡片 -->
         <div class="grid grid-cols-3 gap-2 mb-4">
           <div class="text-center">
-            <div class="text-xs text-gray-500 mb-0.5">已用</div>
-            <div class="text-sm font-semibold text-gray-800">
+            <div class="text-xs text-gray-500 dark:text-[#8b8d95] mb-0.5">已用</div>
+            <div class="text-sm font-semibold text-gray-800 dark:text-[#e8e9ed]">
               {{ tokenStats.usedTokens.toLocaleString() }}
             </div>
           </div>
 
-          <div class="text-center border-l border-r border-gray-100">
-            <div class="text-xs text-gray-500 mb-0.5">对话</div>
-            <div class="text-sm font-semibold text-gray-800">
+          <div class="text-center border-l border-r border-gray-100 dark:border-[#2a2c30]">
+            <div class="text-xs text-gray-500 dark:text-[#8b8d95] mb-0.5">对话</div>
+            <div class="text-sm font-semibold text-gray-800 dark:text-[#e8e9ed]">
               {{ tokenStats.messageCount }}
             </div>
           </div>
           
           <div class="text-center">
-            <div class="text-xs text-gray-500 mb-0.5">总量</div>
-            <div class="text-sm font-semibold text-gray-800">
+            <div class="text-xs text-gray-500 dark:text-[#8b8d95] mb-0.5">总量</div>
+            <div class="text-sm font-semibold text-gray-800 dark:text-[#e8e9ed]">
               {{ tokenStats.totalTokens.toLocaleString() }}
             </div>
           </div>
@@ -66,10 +66,10 @@
       </template>
 
       <!-- 最新压缩状态 -->
-      <div class="border-t border-gray-100 pt-4">
+      <div class="border-t border-gray-100 dark:border-[#2a2c30] pt-4">
         <div class="flex items-center justify-between mb-3">
-          <h4 class="text-sm font-semibold text-gray-700">最新压缩状态</h4>
-          <span class="text-xs text-gray-400">已压缩 {{ summaries.length }} 次</span>
+          <h4 class="text-sm font-semibold text-gray-700 dark:text-[#e8e9ed]">最新压缩状态</h4>
+          <span class="text-xs text-gray-400 dark:text-[#8b8d95]">已压缩 {{ summaries.length }} 次</span>
         </div>
         
         <template v-if="summaries.length > 0">
@@ -77,44 +77,50 @@
           <div :key="summaries[0].id" class="mb-2.5">
             <div class="rounded-lg py-2">
               <!-- 摘要内容或裁剪信息 -->
-              <div v-if="summaries[0].summaryContent" class="text-xs text-gray-700 whitespace-pre-wrap leading-relaxed mb-2">
+              <div v-if="summaries[0].summaryContent" class="text-xs text-gray-700 dark:text-[#c8c9cd] whitespace-pre-wrap leading-relaxed mb-2">
                 {{ summaries[0].summaryContent }}
               </div>
-              <div v-else-if="summaries[0].pruningMetadata" class="space-y-1.5 mb-2">
+              
+              <!-- 统计信息区域：无论是否有摘要都显示 -->
+              <div v-if="summaries[0].compressionStats || summaries[0].pruningMetadata" class="space-y-1.5 mb-2">
                 <!-- 显示总体统计 -->
-                <div class="bg-white rounded p-2 border border-gray-100 space-y-1.5">
+                <div class="bg-white dark:bg-[#232428] rounded p-2 border border-gray-100 dark:border-[#2a2c30] space-y-1.5">
                   <div v-if="summaries[0].compressionStats?.beforeTokenCount && summaries[0].compressionStats?.afterTokenCount" class="flex justify-between items-center text-xs">
-                    <span class="text-gray-600">Token:</span>
-                    <span class="font-medium">
+                    <span class="text-gray-600 dark:text-[#a8aab0]">Token:</span>
+                    <span class="font-medium text-gray-800 dark:text-[#e8e9ed]">
                       {{ formatNumber(summaries[0].compressionStats.beforeTokenCount) }} → {{ formatNumber(summaries[0].compressionStats.afterTokenCount) }}
-                      <span class="text-green-600 ml-1">(-{{ formatNumber(summaries[0].compressionStats.beforeTokenCount - summaries[0].compressionStats.afterTokenCount) }})</span>
+                      <span class="text-green-600 dark:text-green-500 ml-1">(-{{ formatNumber(summaries[0].compressionStats.beforeTokenCount - summaries[0].compressionStats.afterTokenCount) }})</span>
                     </span>
                   </div>
                   <div v-if="summaries[0].compressionStats?.beforeMessageCount && summaries[0].compressionStats?.afterMessageCount" class="flex justify-between items-center text-xs">
-                    <span class="text-gray-600">消息:</span>
-                    <span class="font-medium">
+                    <span class="text-gray-600 dark:text-[#a8aab0]">消息:</span>
+                    <span class="font-medium text-gray-800 dark:text-[#e8e9ed]">
                       {{ summaries[0].compressionStats.beforeMessageCount }} → {{ summaries[0].compressionStats.afterMessageCount }}
                     </span>
                   </div>
-                  <div class="flex items-center gap-1.5 text-xs pt-1">
+                  <div v-if="summaries[0].pruningMetadata" class="flex items-center gap-1.5 text-xs pt-1">
                     <el-tag size="small" type="warning">仅裁剪</el-tag>
-                    <span class="text-gray-500">{{ Object.keys(summaries[0].pruningMetadata).length }} 条</span>
+                    <span class="text-gray-500 dark:text-[#8b8d95]">{{ Object.keys(summaries[0].pruningMetadata).length }} 条</span>
+                  </div>
+                  <div v-else-if="summaries[0].summaryContent" class="flex items-center gap-1.5 text-xs pt-1">
+                    <el-tag size="small" type="success">摘要压缩</el-tag>
                   </div>
                 </div>
               </div>
-              <div v-else class="text-xs text-gray-400 italic mb-2">
+              
+              <div v-else class="text-xs text-gray-400 dark:text-[#8b8d95] italic mb-2">
                 无摘要内容
               </div>
 
               <!-- 底部信息：时间戳和操作按钮 -->
               <div class="flex items-center justify-between text-xs">
-                <span class="text-gray-400 truncate" :title="formatTime(summaries[0].createdAt)">{{ formatTime(summaries[0].createdAt) }}</span>
+                <span class="text-gray-400 dark:text-[#8b8d95] truncate" :title="formatTime(summaries[0].createdAt)">{{ formatTime(summaries[0].createdAt) }}</span>
                 <div class="flex gap-1">
                   <el-button 
                     size="small" 
                     text 
                     @click="handleEdit(summaries[0])"
-                    class="text-blue-500 hover:text-blue-600 hover:bg-blue-50"
+                    class="text-blue-500 dark:text-blue-400 hover:text-blue-600 dark:hover:text-blue-300 hover:bg-blue-50 dark:hover:bg-blue-900/20"
                   >
                     <el-icon><Edit /></el-icon>
                     <span class="ml-1">编辑</span>
@@ -123,7 +129,7 @@
                     size="small" 
                     text 
                     @click="handleDelete(summaries[0])"
-                    class="text-red-500 hover:text-red-600 hover:bg-red-50"
+                    class="text-red-500 dark:text-red-400 hover:text-red-600 dark:hover:text-red-300 hover:bg-red-50 dark:hover:bg-red-900/20"
                   >
                     <el-icon><Delete /></el-icon>
                     <span class="ml-1">删除</span>
@@ -372,4 +378,37 @@ async function handleCompress() {
 // 监听会话 ID 变化时已经完成了数据加载
 </script>
 
-<style scoped></style>
+<style scoped>
+/* 暗色模式下的 el-tag 样式优化 */
+:deep(.el-tag) {
+  --el-tag-bg-color: var(--el-color-warning-light-9);
+  --el-tag-border-color: var(--el-color-warning-light-8);
+  --el-tag-text-color: var(--el-color-warning-dark-2);
+}
+
+.dark :deep(.el-tag--success) {
+  --el-tag-bg-color: rgba(103, 194, 58, 0.1);
+  --el-tag-border-color: rgba(103, 194, 58, 0.2);
+  --el-tag-text-color: #85ce61;
+}
+
+.dark :deep(.el-tag--warning) {
+  --el-tag-bg-color: rgba(230, 162, 60, 0.1);
+  --el-tag-border-color: rgba(230, 162, 60, 0.2);
+  --el-tag-text-color: #ebb563;
+}
+
+/* 暗色模式下的按钮样式优化 */
+.dark :deep(.el-button--small.is-text) {
+  color: var(--el-text-color-regular);
+}
+
+.dark :deep(.el-button--small.is-text:hover) {
+  background-color: var(--el-fill-color-light);
+}
+
+/* 暗色模式下的进度条颜色优化 */
+.dark :deep(.el-progress-bar__inner) {
+  transition: all 0.3s ease;
+}
+</style>

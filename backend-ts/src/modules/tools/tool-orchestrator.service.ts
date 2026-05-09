@@ -260,7 +260,7 @@ export class ToolOrchestrator {
     }
 
     this.logger.debug(`Collected ${prompts.length} tool prompt sections`);
-    this.logger.debug(prompts.join("\n\n"))
+    // this.logger.debug(prompts.join("\n\n"))
     return prompts.join("\n\n");
   }
 
@@ -414,7 +414,18 @@ export class ToolOrchestrator {
 
     try {
       // 提供者只返回内容字符串，异常由这里捕获
-      const content = await provider.execute(toolRequest, context.injectParams);
+      let content = await provider.execute(toolRequest, context.injectParams);
+
+      // 检查结果长度，如果超过 10000 字符则截断
+      const MAX_CONTENT_LENGTH = 10000;
+      if (content && content.length > MAX_CONTENT_LENGTH) {
+        const truncatedContent = content.substring(0, MAX_CONTENT_LENGTH);
+        const omittedLength = content.length - MAX_CONTENT_LENGTH;
+        content = JSON.stringify({ 'warning': `Content truncated. Omitted ${omittedLength} characters. Use other tools or adjust query conditions to view complete content.`, 'tool_truncated': truncatedContent, 'omitted_length': omittedLength });
+        this.logger.warn(
+          `Tool ${originalToolName} output truncated: ${content.length} chars (original: ${content.length + omittedLength} chars)`,
+        );
+      }
 
       return {
         toolCallId,
@@ -428,7 +439,7 @@ export class ToolOrchestrator {
       return {
         toolCallId,
         name: originalToolName,
-        content: `Error: ${error.message}`,
+        content: JSON.stringify({ 'success': false, 'message': error.message }),
         isError: true,
       };
     }

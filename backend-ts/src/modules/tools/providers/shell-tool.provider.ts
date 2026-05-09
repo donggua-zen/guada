@@ -65,7 +65,7 @@ export class ShellToolProvider implements IToolProvider {
     },
     {
       name: "list_directory",
-      description: "列出指定目录下的文件和子目录。recursive=true 时会递归列出所有子目录，可能返回大量信息。",
+      description: "列出指定目录下的文件和子目录。max_depth 控制递归深度（1-3），默认为 1（仅当前目录）。单个目录超过 200 个文件时会显示省略提醒。",
       parameters: {
         type: "object",
         properties: {
@@ -73,10 +73,10 @@ export class ShellToolProvider implements IToolProvider {
             type: "string",
             description: "要列出的目录路径（绝对路径或相对路径）",
           },
-          recursive: {
-            type: "boolean",
-            description: "是否递归列出子目录内容，默认为 false",
-            default: false,
+          max_depth: {
+            type: "number",
+            description: "递归深度，范围 1-3。1=仅当前目录，2=包含一级子目录，3=包含两级子目录",
+            default: 1,
           },
         },
         required: ["directory_path"],
@@ -407,17 +407,20 @@ export class ShellToolProvider implements IToolProvider {
    * 列出目录内容
    */
   private async handleListDirectory(args: any, context?: Record<string, any>): Promise<string> {
-    const { directory_path, recursive = false } = args;
+    const { directory_path, max_depth = 1 } = args;
 
     // 验证目录路径
     if (!directory_path || typeof directory_path !== "string") {
       throw new Error("目录路径不能为空");
     }
 
+    // 验证递归深度
+    const depth = Math.max(1, Math.min(3, max_depth));
+
     try {
       // 解析路径
       const resolvedPath = this.resolvePath(directory_path, context);
-      this.logger.log(`列出目录: ${directory_path} -> ${resolvedPath}, 递归: ${recursive}`);
+      this.logger.log(`列出目录: ${directory_path} -> ${resolvedPath}, 递归深度: ${depth}`);
 
       // 检查是否为目录
       const stats = await fs.stat(resolvedPath);
@@ -426,16 +429,7 @@ export class ShellToolProvider implements IToolProvider {
       }
 
       // 读取目录内容
-      let entries: string[];
-      if (recursive) {
-        entries = await this.readDirectoryRecursive(resolvedPath);
-      } else {
-        const dirents = await fs.readdir(resolvedPath, { withFileTypes: true });
-        entries = dirents.map((entry) => {
-          const prefix = entry.isDirectory() ? "[DIR]" : "[FILE]";
-          return `${prefix} ${entry.name}`;
-        });
-      }
+      const entries = await this.readDirectoryWithDepth(resolvedPath, depth);
 
       if (entries.length === 0) {
         return `目录为空：${resolvedPath}`;
@@ -462,30 +456,61 @@ export class ShellToolProvider implements IToolProvider {
   }
 
   /**
-   * 递归读取目录内容
+   * 根据深度读取目录内容
    */
-  private async readDirectoryRecursive(dirPath: string, prefix: string = ""): Promise<string[]> {
-    const entries = await fs.readdir(dirPath, { withFileTypes: true });
+  private async readDirectoryWithDepth(dirPath: string, maxDepth: number): Promise<string[]> {
     const results: string[] = [];
+    await this.readDirectoryRecursive(dirPath, "", 1, maxDepth, results);
+    return results;
+  }
 
-    for (const entry of entries) {
-      const fullPath = path.join(dirPath, entry.name);
-      const entryPrefix = `${prefix}${entry.isDirectory() ? "📁" : "📄"} ${entry.name}`;
+  /**
+   * 递归读取目录内容（带深度控制和文件数量限制）
+   */
+  private async readDirectoryRecursive(
+    dirPath: string,
+    prefix: string,
+    currentDepth: number,
+    maxDepth: number,
+    results: string[],
+  ): Promise<void> {
+    const entries = await fs.readdir(dirPath, { withFileTypes: true });
+
+    // 检查文件数量是否超过限制
+    const MAX_FILES_PER_DIR = 200;
+    if (entries.length > MAX_FILES_PER_DIR) {
+      const entryPrefix = `${prefix}📁 ${path.basename(dirPath)} (${entries.length} 个条目，显示前 ${MAX_FILES_PER_DIR} 个)`;
+      results.push(entryPrefix);
+    } else {
+      const entryPrefix = `${prefix}📁 ${path.basename(dirPath)}`;
+      results.push(entryPrefix);
+    }
+
+    // 只处理前 200 个条目
+    const limitedEntries = entries.slice(0, 200);
+
+    for (const entry of limitedEntries) {
+      const isDirectory = entry.isDirectory();
+      const entryName = isDirectory ? `[DIR] ${entry.name}` : `[FILE] ${entry.name}`;
+      const entryPrefix = `${prefix}  ${entryName}`;
       results.push(entryPrefix);
 
-      // 如果是目录且不是隐藏目录，递归读取
-      if (entry.isDirectory() && !entry.name.startsWith(".")) {
+      // 如果是目录且未达到最大深度，递归读取
+      if (isDirectory && currentDepth < maxDepth && !entry.name.startsWith(".")) {
         try {
-          const subEntries = await this.readDirectoryRecursive(fullPath, `${prefix}  `);
-          results.push(...subEntries);
+          const fullPath = path.join(dirPath, entry.name);
+          await this.readDirectoryRecursive(fullPath, `${prefix}  `, currentDepth + 1, maxDepth, results);
         } catch (error: any) {
           // 忽略权限错误等，继续处理其他条目
-          this.logger.warn(`无法访问子目录 ${fullPath}: ${error.message}`);
+          this.logger.warn(`无法访问子目录 ${path.join(dirPath, entry.name)}: ${error.message}`);
         }
       }
     }
 
-    return results;
+    // 如果有省略的条目，添加提示
+    if (entries.length > MAX_FILES_PER_DIR) {
+      results.push(`${prefix}  ... 还有 ${entries.length - MAX_FILES_PER_DIR} 个条目未显示`);
+    }
   }
 
   /**
