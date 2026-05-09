@@ -24,7 +24,9 @@ model Session {
   externalId    String?               @map("external_id")
   memories      Memory[]
   messages      Message[]
-  model         Model?                @relation(fields: [modelId], references: [id])
+  // 注意：使用 NoAction 避免删除 Model 时自动置空 modelId
+  // 保留 ORM 层面关联查询能力（include/join）
+  model         Model?                @relation(fields: [modelId], references: [id], onDelete: NoAction, onUpdate: NoAction)
   user          User                  @relation(fields: [userId], references: [id])
   character     Character?            @relation(fields: [characterId], references: [id])
   contextStates SessionContextState[]
@@ -157,7 +159,9 @@ model Character {
   createdAt   DateTime        @default(now()) @map("created_at")
   updatedAt   DateTime        @updatedAt @map("updated_at")
   user        User            @relation(fields: [userId], references: [id])
-  model       Model?          @relation(fields: [modelId], references: [id])
+  // 注意：使用 NoAction 避免删除 Model 时自动置空 modelId
+  // 保留 ORM 层面关联查询能力（include/join）
+  model       Model?          @relation(fields: [modelId], references: [id], onDelete: NoAction, onUpdate: NoAction)
   group       CharacterGroup? @relation(fields: [groupId], references: [id])
   sessions    Session[]
 
@@ -180,7 +184,9 @@ model KnowledgeBase {
   updatedAt        DateTime @updatedAt @map("updated_at")
   files            KBFile[]
   user             User     @relation(fields: [userId], references: [id])
-  embeddingModel   Model    @relation(fields: [embeddingModelId], references: [id])
+  // 注意：使用 NoAction 避免删除 Model 时自动置空 embeddingModelId
+  // 保留 ORM 层面关联查询能力（include/join）
+  embeddingModel   Model    @relation(fields: [embeddingModelId], references: [id], onDelete: NoAction, onUpdate: NoAction)
 
   @@map("knowledge_base")
 }

@@ -114,8 +114,24 @@ export class ModelService {
   }
 
   /**
+   * 生成标准化的模型 ID
+   * 格式: {provider}/{modelName}
+   * @param providerType 供应商类型（如 deepseek, openai）
+   * @param modelName 模型名称
+   * @returns 标准化的模型 ID
+   */
+  private generateModelId(providerType: string, modelName: string): string {
+    // 确保 providerType 只包含安全字符（字母、数字、下划线、连字符）
+    const safeProvider = providerType.replace(/[^a-zA-Z0-9_-]/g, "-");
+    // 确保 modelName 只包含安全字符（字母、数字、下划线、连字符、点号）
+    const safeModel = modelName.replace(/[^a-zA-Z0-9._-]/g, "-");
+    return `${safeProvider}/${safeModel}`;
+  }
+
+  /**
    * 添加新的模型提供商
    * 如果模板中定义了 models，则自动创建对应的模型记录
+   * 非 custom 供应商的模型使用确定性 ID: {provider}/{modelName}
    */
   async addProvider(
     name: string,
@@ -171,15 +187,36 @@ export class ModelService {
 
       // 2. 如果模板中有预定义模型，批量创建
       if (templateModels && templateModels.length > 0) {
-        const modelsData = templateModels.map((templateModel) => ({
-          providerId: createdProvider.id,
-          modelName: templateModel.modelName,
-          modelType:
-            templateModel.modeType || templateModel.modelType || "text",
-          config: templateModel.config || {},
-        }));
+        const modelsData = templateModels.map((templateModel) => {
+          // 为非 custom 供应商生成确定性 ID: {provider}/{modelName}
+          const modelId =
+            finalProviderType !== "custom"
+              ? this.generateModelId(finalProviderType, templateModel.modelName)
+              : undefined; // custom 类型让 Prisma 自动生成 cuid()
 
-        await this.modelRepo.createModelsInTransaction(tx, modelsData);
+          return {
+            id: modelId, // 显式指定 ID（仅非 custom 类型）
+            providerId: createdProvider.id,
+            modelName: templateModel.modelName,
+            modelType:
+              templateModel.modeType || templateModel.modelType || "text",
+            config: templateModel.config || {},
+          };
+        });
+
+        // 使用 upsert 避免重复创建冲突
+        for (const modelData of modelsData) {
+          await tx.model.upsert({
+            where: { id: modelData.id! },
+            update: {
+              // 如果已存在，更新配置信息
+              modelType: modelData.modelType,
+              config: modelData.config,
+            },
+            create: modelData,
+          });
+        }
+
         this.logger.log(
           `Created ${modelsData.length} models for provider ${createdProvider.id}`,
         );
