@@ -450,13 +450,13 @@ export class ToolOrchestrator {
    */
   private async handleActivate(args: any, context: ToolContext): Promise<string> {
     const { namespace } = args;
-
+  
     if (!namespace || typeof namespace !== "string") {
       throw new Error("无效的参数：namespace 必须是字符串");
     }
-
+  
     const provider = this.providers.get(namespace);
-
+  
     if (!provider) {
       const availableNamespaces = Array.from(this.providers.keys()).join(", ");
       throw new Error(
@@ -464,22 +464,31 @@ export class ToolOrchestrator {
       );
     }
 
-    // 获取该命名空间的所有工具
-    const tools = await provider.getTools(true);
-
+    // 获取该命名空间的配置
+    const providerConfig = context.getProviderConfig(namespace);
+    if (!providerConfig) {
+      throw new Error(`未找到命名空间 ${namespace} 的配置`);
+    }
+    if (providerConfig.enabledTools === false) {
+      throw new Error(`工具提供者 ${namespace} 已禁用`);
+    }
+  
+    // 根据配置获取可用的工具
+    const tools = await provider.getTools(providerConfig.enabledTools);
+  
     // 构建详细的工具说明
     const toolDescriptions = tools.map((tool: any) => {
       const fullName = `${namespace}__${tool.name}`;
       const params = tool.parameters?.properties || {};
       const required = tool.parameters?.required || [];
-
+  
       const paramList = Object.entries(params)
         .map(([key, value]: [string, any]) => {
           const isRequired = required.includes(key) ? "（必填）" : "（可选）";
           return `  - ${key}: ${value.description || "无描述"} ${isRequired}`;
         })
         .join("\n");
-
+  
       return [
         `### ${fullName}`,
         `**功能**: ${tool.description}`,
@@ -487,22 +496,38 @@ export class ToolOrchestrator {
         "",
       ].join("\n");
     }).join("\n");
-
-    const response = [
+  
+    // 获取工具使用说明（如果提供者实现了 getPrompt）
+    let toolUsagePrompt = "";
+    try {
+      toolUsagePrompt = await provider.getPrompt(context.injectParams);
+    } catch (error: any) {
+      this.logger.warn(`Failed to get prompt for namespace ${namespace}: ${error.message}`);
+    }
+  
+    const responseParts: string[] = [
       `# ${namespace} 工具集详细说明`,
       "",
       `该命名空间包含以下 ${tools.length} 个工具：`,
       "",
       toolDescriptions,
+    ];
+  
+    // 如果有工具使用说明，添加到响应中
+    if (toolUsagePrompt) {
+      responseParts.push("---", "", toolUsagePrompt);
+    }
+  
+    responseParts.push(
       "---",
       "",
       "**使用方式**:",
-      "直接调用工具，格式为：\`namespace__tool_name\`,或者使用`tool_call`间接调用",
+      "直接调用工具，格式为：`namespace__tool_name`,或者使用`tool_call`间接调用",
       "",
-      "现在你可以根据上述说明调用相应的工具了。",
-    ].join("\n");
-
-    return response;
+      "现在你可以根据上述说明调用相应的工具了。"
+    );
+  
+    return responseParts.join("\n");
   }
 
   async getLocalToolsList(userId: string, settings: any): Promise<ToolMetadata[]> {
