@@ -127,7 +127,8 @@
                   <div class="space-y-2 pb-4 w-full">
                     <template v-for="provider in filteredProviders" :key="provider.id">
                       <div class="provider-group">
-                        <div class="provider-name text-xs font-medium text-gray-500 dark:text-gray-400 mb-1 px-1">
+                        <!-- 非收藏分组才显示供应商名称 -->
+                        <div v-if="!provider.isFavoriteGroup" class="provider-name text-xs font-medium text-gray-500 dark:text-gray-400 mb-1 px-1">
                           {{ provider.name }}
                         </div>
                         <div class="provider-models space-y-1">
@@ -149,9 +150,10 @@
                               </div>
                               <!-- 特性图标组 -->
                               <div class="flex items-center gap-1.5 text-xs text-gray-500 dark:text-gray-400">
-                                <span
-                                  class="px-1.5 py-0.5 rounded bg-gray-100 dark:bg-gray-700 font-medium text-[10px]">
-                                  {{ model.modelType === 'text' ? '对话' : '嵌入' }}
+                                <!-- 收藏分组中显示供应商名称 -->
+                                <span v-if="provider.isFavoriteGroup"
+                                  class="pr-1.5 py-0.5 font-medium text-[10px]">
+                                  {{ getModelProviderName(model) }}
                                 </span>
 
                                 <!-- 输入/输出能力箭头组 -->
@@ -735,28 +737,13 @@ const filteredProviders = computed(() => {
 
   const result = [];
 
-  // 如果有收藏的模型,按供应商分组添加到"收藏"大分组
+  // 如果有收藏的模型,创建一个统一的"收藏"分组
   if (favoritedModels.length > 0) {
-    // 按供应商ID分组收藏的模型
-    const favoritedByProvider: Record<string, any[]> = {};
-    favoritedModels.forEach((model: any) => {
-      if (!favoritedByProvider[model.providerId]) {
-        favoritedByProvider[model.providerId] = [];
-      }
-      favoritedByProvider[model.providerId].push(model);
-    });
-
-    // 为每个有收藏模型的供应商创建子分组
-    Object.entries(favoritedByProvider).forEach(([providerId, models]) => {
-      const provider = providers.value.find((p: any) => p.id === providerId);
-      if (provider && models.length > 0) {
-        result.push({
-          id: `fav-${providerId}`,
-          name: `${provider.name} (收藏)`,
-          models: models,
-          isFavoriteGroup: true
-        });
-      }
+    result.push({
+      id: 'favorites',
+      name: '收藏',
+      models: favoritedModels,
+      isFavoriteGroup: true
     });
   }
 
@@ -776,6 +763,13 @@ const filteredProviders = computed(() => {
 const getProviderModels = (providerId) => {
   const provider = filteredProviders.value.find(p => p.id === providerId);
   return provider ? provider.models : [];
+};
+
+// 获取模型的供应商名称
+const getModelProviderName = (model: any) => {
+  if (!model || !model.providerId) return '';
+  const provider = providers.value.find((p: any) => p.id === model.providerId);
+  return provider ? provider.name : '';
 };
 
 const emit = defineEmits([
