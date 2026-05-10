@@ -33,7 +33,7 @@ async function bootstrap() {
   const staticPath = process.env.STATIC_DIR || path.join(__dirname, "..", "static");
   const staticPrefix = process.env.STATIC_URL || "/static";
 
-  console.log(`📁 基础静态目录: ${staticPath} -> ${staticPrefix}`);
+  console.log(`基础静态目录: ${staticPath} -> ${staticPrefix}`);
   app.use(
     staticPrefix,
     express.static(staticPath, {
@@ -54,10 +54,10 @@ async function bootstrap() {
     // 确保上传目录存在
     if (!fs.existsSync(resolvedPath)) {
       fs.mkdirSync(resolvedPath, { recursive: true });
-      console.log(`✅ 创建上传目录: ${resolvedPath}`);
+      console.log(`创建上传目录: ${resolvedPath}`);
     }
 
-    console.log(`📁 上传文件目录: ${resolvedPath} -> ${uploadPublicPrefix}`);
+    console.log(`上传文件目录: ${resolvedPath} -> ${uploadPublicPrefix}`);
     app.use(
       uploadPublicPrefix,
       express.static(resolvedPath, {
@@ -84,14 +84,14 @@ async function bootstrap() {
   if (urlService.isAutoMode()) {
     const baseUrl = `http://localhost:${actualPort}`;
     urlService.setBaseUrl(baseUrl);
-    console.log(`🔗 BASE_URL 已动态设置为: ${baseUrl}`);
+    console.log(`BASE_URL 已动态设置为: ${baseUrl}`);
   }
 
   console.log(`Application is running on: http://localhost:${actualPort}`);
 
   // 如果是在 fork/child_process 环境中，通过 IPC 向父进程发送端口信息
   if (process.send) {
-    console.log(`📤 正在通过 IPC 发送端口: ${actualPort}`);
+    console.log(`正在通过 IPC 发送端口: ${actualPort}`);
     process.send({ type: 'PORT_READY', port: actualPort });
   } else {
     console.log('⚠️  process.send 不可用，当前不在 IPC 环境中');

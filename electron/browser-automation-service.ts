@@ -152,7 +152,7 @@ export class BrowserAutomationService {
       return
     }
 
-    log.info('🧹 Destroying all browser tabs...')
+    log.info('Destroying all browser tabs...')
 
     const tabs = this.tabManager.getTabList()
     for (const tab of tabs) {
@@ -179,7 +179,7 @@ export class BrowserAutomationService {
       throw new Error('TabManager not initialized')
     }
 
-    log.info(`🔗 Navigating to: ${url} (tab: ${tabId})`)
+    log.info(`Navigating to: ${url} (tab: ${tabId})`)
 
     const webContents = this.tabManager.getWebContents(tabId)
     if (!webContents) {
@@ -222,7 +222,7 @@ export class BrowserAutomationService {
   //     throw new Error('TabManager not initialized')
   //   }
 
-  //   log.info(`📸 Taking screenshot (tab: ${tabId})...`)
+  //   log.info(`Taking screenshot (tab: ${tabId})...`)
 
   //   const webContents = this.tabManager.getWebContents(tabId)
   //   if (!webContents) {
@@ -290,7 +290,7 @@ export class BrowserAutomationService {
       throw new Error('TabManager not initialized')
     }
 
-    log.info(`📄 Getting page HTML (tab: ${tabId})...`)
+    log.info(`Getting page HTML (tab: ${tabId})...`)
 
     const webContents = this.tabManager.getWebContents(tabId)
     if (!webContents) {
@@ -304,7 +304,7 @@ export class BrowserAutomationService {
     const currentUrl = webContents.getURL()
     const pageTitle = webContents.getTitle()
     const isLoading = webContents.isLoading()
-    log.info(`📄 Page status: URL=${currentUrl}, Title=${pageTitle}, Loading=${isLoading}`)
+    log.info(`Page status: URL=${currentUrl}, Title=${pageTitle}, Loading=${isLoading}`)
 
     let html = ''
     try {
@@ -503,7 +503,7 @@ export class BrowserAutomationService {
         `)
         log.debug(`Successfully got HTML via XMLSerializer, length: ${html.length} chars`)
       } catch (fallbackError: any) {
-        log.error(`❌ All methods failed to get page content`)
+        log.error(`All methods failed to get page content`)
         log.error(`   Primary error: ${error.message}`)
         log.error(`   Fallback error: ${fallbackError.message}`)
         log.error(`   Tab ID: ${tabId}`)
@@ -535,7 +535,7 @@ export class BrowserAutomationService {
       throw new Error('TabManager not initialized')
     }
 
-    log.info(`📝 Getting page content (tab: ${tabId})...`)
+    log.info(`Getting page content (tab: ${tabId})...`)
 
     const webContents = this.tabManager.getWebContents(tabId)
     if (!webContents) {
@@ -548,7 +548,7 @@ export class BrowserAutomationService {
     // 记录页面状态信息用于调试
     const currentUrl = webContents.getURL()
     const pageTitle = webContents.getTitle()
-    log.info(`📝 Page status for content: URL=${currentUrl}, Title=${pageTitle}`)
+    log.info(`Page status for content: URL=${currentUrl}, Title=${pageTitle}`)
 
     let text = ''
     try {
@@ -593,7 +593,7 @@ export class BrowserAutomationService {
       `)
       log.debug(`Successfully got plain text, length: ${text.length} chars`)
     } catch (error: any) {
-      log.error(`❌ Failed to get plain text`)
+      log.error(`Failed to get plain text`)
       log.error(`   Error message: ${error.message}`)
       log.error(`   Error name: ${error.name}`)
       log.error(`   Tab ID: ${tabId}`)
@@ -613,7 +613,7 @@ export class BrowserAutomationService {
         `)
         log.debug(`Successfully got plain text via fallback, length: ${text.length} chars`)
       } catch (fallbackError: any) {
-        log.error(`❌ All methods failed to get plain text`)
+        log.error(`All methods failed to get plain text`)
         log.error(`   Primary error: ${error.message}`)
         log.error(`   Fallback error: ${fallbackError.message}`)
         throw new Error(`Failed to get plain text. Primary: ${error.message}, Fallback: ${fallbackError.message}`)
@@ -649,7 +649,7 @@ export class BrowserAutomationService {
       throw new Error('TabManager not initialized')
     }
 
-    log.info(`📝 Getting plain text (tab: ${tabId})...`)
+    log.info(`Getting plain text (tab: ${tabId})...`)
 
     const webContents = this.tabManager.getWebContents(tabId)
     if (!webContents) {
@@ -662,7 +662,7 @@ export class BrowserAutomationService {
     // 记录页面状态信息用于调试
     const currentUrl = webContents.getURL()
     const pageTitle = webContents.getTitle()
-    log.info(`📝 Page status for plain text: URL=${currentUrl}, Title=${pageTitle}`)
+    log.info(`Page status for plain text: URL=${currentUrl}, Title=${pageTitle}`)
 
     let text = ''
     try {
@@ -695,7 +695,7 @@ export class BrowserAutomationService {
     `)
       log.debug(`Successfully got plain text, length: ${text.length} chars`)
     } catch (error: any) {
-      log.error(`❌ Failed to get plain text`)
+      log.error(`Failed to get plain text`)
       log.error(`   Error message: ${error.message}`)
       log.error(`   Error name: ${error.name}`)
       log.error(`   Tab ID: ${tabId}`)
@@ -813,7 +813,7 @@ export class BrowserAutomationService {
 
       log.debug(`Successfully got structure: text=${structure.text?.length || 0} chars, links=${structure.links?.length || 0}, headings=${structure.headings?.length || 0}`)
     } catch (error: any) {
-      log.error(`❌ Failed to get main structure`)
+      log.error(`Failed to get main structure`)
       log.error(`   Error message: ${error.message}`)
       log.error(`   Error name: ${error.name}`)
       log.error(`   Error stack: ${error.stack}`)
@@ -1044,7 +1044,7 @@ export class BrowserAutomationService {
       throw new Error('TabManager not initialized')
     }
 
-    log.info(`🔄 Reloading page (tab: ${tabId})...`)
+    log.info(`Reloading page (tab: ${tabId})...`)
 
     const webContents = this.tabManager.getWebContents(tabId)
     if (!webContents) {

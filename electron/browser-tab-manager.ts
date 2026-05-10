@@ -49,7 +49,7 @@ export class BrowserTabManager {
 
     const tabId = 'main_app'
     
-    log.info(`📑 Initializing main app tab: ${tabId}`)
+    log.info(`Initializing main app tab: ${tabId}`)
 
     // 主应用使用 mainWindow 的 webContents
     const webContents = this.mainWindow.webContents
@@ -82,8 +82,8 @@ export class BrowserTabManager {
     this.tabs.set(tabId, { view: placeholderView, webContents, info: tabInfo })
     this.activeTabId = tabId
 
-    log.info(`✅ Main app tab added to tabs Map. Total tabs: ${this.tabs.size}`)
-    log.info(`✅ Main app tab initialized (using mainWindow.webContents directly)`)
+    log.info(`Main app tab added to tabs Map. Total tabs: ${this.tabs.size}`)
+    log.info(`Main app tab initialized (using mainWindow.webContents directly)`)
     return tabInfo
   }
 
@@ -104,7 +104,7 @@ export class BrowserTabManager {
 
     const tabId = `tab_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
     
-    log.info(`📑 Creating new tab with WebContentsView: ${tabId}`)
+    log.info(`Creating new tab with WebContentsView: ${tabId}`)
 
     // 创建独立的 session
     const sessionId = `persist:tab_${tabId}`
@@ -122,11 +122,11 @@ export class BrowserTabManager {
     // 设置自定义 User Agent，伪装成 Microsoft Edge 浏览器
     const edgeUserAgent = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36 Edg/146.0.0.0'
     wc.setUserAgent(edgeUserAgent)
-    log.info(`🌐 Custom User Agent set to Edge: ${edgeUserAgent}`)
+    log.info(`Custom User Agent set to Edge: ${edgeUserAgent}`)
 
     // 配置 WebContents - 拦截新窗口请求，在当前标签打开
     wc.setWindowOpenHandler(({ url }: { url: string }) => {
-      log.info(`🔗 Intercepting new window request: ${url}, loading in current tab`)
+      log.info(`Intercepting new window request: ${url}, loading in current tab`)
       // 强制在当前标签加载 URL，禁止创建新窗口
       wc.loadURL(url)
       return { action: 'deny' }
@@ -183,10 +183,10 @@ export class BrowserTabManager {
     if (autoActivate) {
       this.activateTab(tabId)
     } else {
-      log.info(`📝 Created tab without activation: ${tabId}`)
+      log.info(`Created tab without activation: ${tabId}`)
     }
 
-    log.info(`✅ Tab created: ${tabId} (total: ${this.tabs.size})`)
+    log.info(`Tab created: ${tabId} (total: ${this.tabs.size})`)
     return tabInfo
   }
 
@@ -195,12 +195,12 @@ export class BrowserTabManager {
    */
   activateTab(tabId: string): boolean {
     if (!this.mainWindow) {
-      log.error(`❌ Cannot activate tab: no main window`)
+      log.error(`Cannot activate tab: no main window`)
       return false
     }
 
     if (!this.tabs.has(tabId)) {
-      log.error(`❌ Cannot activate tab: ${tabId} (not found in tabs Map)`)
+      log.error(`Cannot activate tab: ${tabId} (not found in tabs Map)`)
       log.error(`   Available tabs: ${Array.from(this.tabs.keys()).join(', ')}`)
       return false
     }
@@ -211,7 +211,7 @@ export class BrowserTabManager {
       return true
     }
 
-    log.info(`🔄 Switching to tab: ${tabId}`)
+    log.info(`Switching to tab: ${tabId}`)
 
     // 隐藏当前活跃的 View（如果不是主应用）
     if (this.activeTabId && this.activeTabId !== 'main_app') {
@@ -247,7 +247,7 @@ export class BrowserTabManager {
     // 通知前端更新
     this.notifyTabUpdate(tabId)
 
-    log.info(`✅ Activated tab: ${tabId}`)
+    log.info(`Activated tab: ${tabId}`)
     return true
   }
 
@@ -308,10 +308,10 @@ export class BrowserTabManager {
         }
       }
 
-      log.info(`✅ Tab closed: ${tabId} (remaining: ${this.tabs.size})`)
+      log.info(`Tab closed: ${tabId} (remaining: ${this.tabs.size})`)
       return true
     } catch (error) {
-      log.error(`❌ Error closing tab ${tabId}:`, error)
+      log.error(`Error closing tab ${tabId}:`, error)
       return false
     }
   }

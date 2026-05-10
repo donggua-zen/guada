@@ -55,7 +55,7 @@ function logWarning(message: string) {
 }
 
 function logError(message: string) {
-  log(`❌ ${message}`, colors.red);
+  log(`${message}`, colors.red);
 }
 
 function logSection(title: string) {
@@ -205,7 +205,7 @@ async function seedDatabase(force: boolean = false) {
     console.log("   1. 清空数据库中所有现有数据（不可恢复！）");
     console.log("   2. 重新创建所有表结构");
     console.log("   3. 导入默认测试数据");
-    console.log("\n📌 确保你已经备份了重要数据！\n");
+    console.log("\n确保你已经备份了重要数据！\n");
 
     const readline = require("readline").createInterface({
       input: process.stdin,
@@ -248,12 +248,12 @@ async function seedDatabase(force: boolean = false) {
     await importDefaultData();
 
     logSection("数据库种子初始化完成！");
-    log("\n🎉 默认登录信息:", colors.green);
+    log("\n默认登录信息:", colors.green);
     log("  用户名：guada", colors.green);
     log("  密码：guada", colors.green);
     log("\n" + "=".repeat(60) + "\n", colors.cyan);
   } catch (error) {
-    logSection("❌ 种子初始化失败");
+    logSection("种子初始化失败");
     logError(
       `错误详情：${error instanceof Error ? error.message : String(error)}`,
     );

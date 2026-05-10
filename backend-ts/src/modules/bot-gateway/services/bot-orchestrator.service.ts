@@ -278,10 +278,10 @@ export class BotOrchestrator {
 
       // 3. 根据平台能力选择回复方式
       if (capabilities.supportsStreaming && adapter.sendStreamReply) {
-        // ✅ 支持流式：边生成边发送
+        // 支持流式：边生成边发送
         await this.handleStreamingReply(adapter, message, iterator);
       } else {
-        // ❌ 不支持流式：收集完整回复后发送
+        // 不支持流式：收集完整回复后发送
         await this.handleNormalReply(adapter, message, iterator);
       }
     } catch (error: any) {

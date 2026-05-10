@@ -26,7 +26,7 @@ async function fixBotInstances() {
     });
 
     if (botsWithoutCharacter.length === 0) {
-      console.log("✅ 没有需要修复的记录");
+      console.log("没有需要修复的记录");
       return;
     }
 
@@ -43,7 +43,7 @@ async function fixBotInstances() {
     });
 
     if (!firstCharacter) {
-      console.error("❌ 错误: 数据库中没有任何角色，请先创建至少一个角色");
+      console.error("错误: 数据库中没有任何角色，请先创建至少一个角色");
       process.exit(1);
     }
 
@@ -62,11 +62,11 @@ async function fixBotInstances() {
       console.log(`  ✓ 已更新: ${bot.name}`);
     }
 
-    console.log(`\n✅ 成功更新 ${updatedCount} 条记录`);
+    console.log(`\n成功更新 ${updatedCount} 条记录`);
     console.log(`\n现在可以运行: npx prisma db push`);
 
   } catch (error) {
-    console.error("❌ 修复失败:", error);
+    console.error("修复失败:", error);
     throw error;
   } finally {
     await prisma.$disconnect();

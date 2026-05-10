@@ -479,10 +479,10 @@ export class ShellToolProvider implements IToolProvider {
     // 检查文件数量是否超过限制
     const MAX_FILES_PER_DIR = 200;
     if (entries.length > MAX_FILES_PER_DIR) {
-      const entryPrefix = `${prefix}📁 ${path.basename(dirPath)} (${entries.length} 个条目，显示前 ${MAX_FILES_PER_DIR} 个)`;
+      const entryPrefix = `${prefix}${path.basename(dirPath)} (${entries.length} 个条目，显示前 ${MAX_FILES_PER_DIR} 个)`;
       results.push(entryPrefix);
     } else {
-      const entryPrefix = `${prefix}📁 ${path.basename(dirPath)}`;
+      const entryPrefix = `${prefix}${path.basename(dirPath)}`;
       results.push(entryPrefix);
     }
 

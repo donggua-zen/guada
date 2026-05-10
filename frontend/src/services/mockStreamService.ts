@@ -136,7 +136,7 @@ export const MOCK_SCENARIOS = {
 
 ---
 
-## 📊 智能问答的层次与对应模型规模
+## 智能问答的层次与对应模型规模
 
 | 需求层次 | 典型场景 | 建议参数量级 | 代表模型 | 性能表现（参考基准） |
 |----------|----------|--------------|----------|---------------------|
@@ -157,7 +157,7 @@ export const MOCK_SCENARIOS = {
 
 ---
 
-## 🎯 关键能力对比（基于实测数据）
+## 关键能力对比（基于实测数据）
 
 | 模型参数量 | 逻辑推理（MATH） | 代码生成（HumanEval） | 知识问答（MMLU） | 长文本连贯性 |
 |------------|-----------------|---------------------|-----------------|--------------|
@@ -169,7 +169,7 @@ export const MOCK_SCENARIOS = {
 
 ---
 
-## 🔍 如何选择？按场景匹配
+## 如何选择？按场景匹配
 
 ### 1. **边缘/嵌入式场景**（RK3568/RK3588）
 - **基础客服、语音助手、简单问答** → **1.5B 量化模型**（如 DeepSeek‑R1‑Distill‑Qwen‑1.5B‑INT8）
@@ -184,7 +184,7 @@ export const MOCK_SCENARIOS = {
 
 ---
 
-## 💡 实践建议
+## 实践建议
 
 1. **先量化，再部署**：无论模型大小，都建议使用 INT8/INT4 量化，可减少 50‑75% 的内存占用，对嵌入式设备尤其关键。
 2. **测试验证**：用实际业务问题制作小样本集（100‑200 条），对比不同规模模型在 **正确率、响应速度、稳定性** 上的表现。
@@ -193,7 +193,7 @@ export const MOCK_SCENARIOS = {
 
 ---
 
-## 📝 总结
+## 总结
 - **基础智能问答**：**1.5B‑3B** 参数模型已足够。
 - **中等复杂度推理**：**3B‑7B** 参数模型效果显著提升。
 - **专业深度问答**：建议 **7B+** 参数模型。
@@ -300,7 +300,7 @@ export async function* mockChatStream(
   const turnsId = generateTurnsId()
   const contentId = generateId()
 
-  console.log(`🎭 [Mock] 开始模拟流式响应`, {
+  console.log(`[Mock] 开始模拟流式响应`, {
     regenerationMode,
     assistantMessageId: finalAssistantMessageId,
     isNewMessage: regenerationMode !== 'multi_version'
@@ -411,7 +411,7 @@ export async function* mockChatStream(
     },
   }
 
-  console.log(`🎭 [Mock] 流式响应完成`)
+  console.log(`[Mock] 流式响应完成`)
 }
 
 /**

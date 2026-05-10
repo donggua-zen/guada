@@ -495,7 +495,7 @@ export class FileService implements OnModuleInit {
    */
   private async cleanupOrphanFiles() {
     try {
-      this.logger.log("🧹 开始扫描聊天孤儿文件...");
+      this.logger.log("开始扫描聊天孤儿文件...");
 
       // 查找所有未关联消息和会话的文件
       const orphanFiles = await this.prisma.file.findMany({
@@ -516,9 +516,9 @@ export class FileService implements OnModuleInit {
       }
 
       if (cleanedCount > 0) {
-        this.logger.log(`🧹 聊天孤儿文件清理完成：清理 ${cleanedCount} 个`);
+        this.logger.log(`聊天孤儿文件清理完成：清理 ${cleanedCount} 个`);
       } else {
-        this.logger.log("✅ 未发现聊天孤儿文件");
+        this.logger.log("未发现聊天孤儿文件");
       }
     } catch (error: any) {
       this.logger.error(`聊天孤儿文件清理失败：${error.message}`);

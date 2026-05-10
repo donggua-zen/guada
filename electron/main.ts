@@ -104,11 +104,11 @@ async function initializeDatabase(userDataPath: string, backendPath: string): Pr
 
   // 智能跳过同步：如果版本一致且数据库存在，则跳过
   if (storedVersion && storedVersion.schemaVersion === currentSchemaVersion && fs.existsSync(dbPath) && fs.statSync(dbPath).size > 0) {
-    console.log(`✅ 数据库版本已同步 (${currentSchemaVersion})，跳过初始化`)
+    console.log(`数据库版本已同步 (${currentSchemaVersion})，跳过初始化`)
     return
   }
 
-  console.log('🔄 检测到数据库需要同步或初始化...')
+  console.log('检测到数据库需要同步或初始化...')
   try {
     // 1. 首次运行：从模板拷贝数据库
     const isFirstRun = !fs.existsSync(dbPath) || fs.statSync(dbPath).size === 0
@@ -126,9 +126,9 @@ async function initializeDatabase(userDataPath: string, backendPath: string): Pr
       }
 
       if (templatePath) {
-        console.log(`📦 发现种子模板: ${templatePath}`)
+        console.log(`发现种子模板: ${templatePath}`)
         fs.copyFileSync(templatePath, dbPath)
-        console.log('✅ 已从模板初始化数据库')
+        console.log('已从模板初始化数据库')
       } else {
         console.warn('⚠️  未找到种子模板，将执行动态同步')
       }
@@ -139,7 +139,7 @@ async function initializeDatabase(userDataPath: string, backendPath: string): Pr
       const timestamp = new Date().toISOString().replace(/[:.]/g, '-')
       const backupPath = `${dbPath}.bak.${timestamp}`
       fs.copyFileSync(dbPath, backupPath)
-      console.log(`📦 数据库结构变更，已备份至: ${backupPath}`)
+      console.log(`数据库结构变更，已备份至: ${backupPath}`)
 
       // 清理旧备份（保留最近 3 个）
       const backups = fs.readdirSync(path.dirname(dbPath))
@@ -168,7 +168,7 @@ async function initializeDatabase(userDataPath: string, backendPath: string): Pr
       stdio: 'pipe',
       encoding: 'utf-8'
     })
-    console.log('✅ 数据库表结构同步成功')
+    console.log('数据库表结构同步成功')
 
     // 4. 更新版本标记
     fs.writeFileSync(versionFilePath, JSON.stringify({
@@ -176,10 +176,10 @@ async function initializeDatabase(userDataPath: string, backendPath: string): Pr
       seedCompleted: true,
       updatedAt: new Date().toISOString()
     }, null, 2))
-    console.log('💾 数据库版本标记已更新')
+    console.log('数据库版本标记已更新')
 
   } catch (error: any) {
-    console.error('❌ 数据库同步失败:', error.message)
+    console.error('数据库同步失败:', error.message)
     handleDatabaseError(error, dbPath, userDataPath)
     throw error // 抛出错误以便主进程捕获并提示用户
   }
@@ -239,7 +239,7 @@ async function startBackend(): Promise<void> {
     if (isDev) {
       // 开发模式：固定端口，通过日志检测启动
       backendPort = 3000
-      console.log('🔧 开发模式：使用固定端口 3000')
+      console.log('开发模式：使用固定端口 3000')
       // 开发模式：使用 spawn 启动 ts-node-dev
       const { spawn } = await import('child_process')
       const nodePath = process.platform === 'win32' ? 'npx.cmd' : 'npx'
@@ -250,7 +250,7 @@ async function startBackend(): Promise<void> {
         path.join(backendPath, 'src', 'main.ts')
       ]
 
-      console.log('🔧 开发模式：使用 ts-node-dev 启动后端（支持热重载）')
+      console.log('开发模式：使用 ts-node-dev 启动后端（支持热重载）')
 
       const userDataPath = app.getPath('userData')
       await initializeDatabase(userDataPath, backendPath)
@@ -309,7 +309,7 @@ async function startBackend(): Promise<void> {
         return
       }
 
-      console.log('📦 生产模式：从 unpacked 目录启动后端')
+      console.log('生产模式：从 unpacked 目录启动后端')
       console.log('后端路径:', backendPath)
 
       // 初始化数据库
@@ -368,7 +368,7 @@ async function startBackend(): Promise<void> {
     backendProcess.on('message', (message: any) => {
       if (message && message.type === 'PORT_READY' && !isResolved) {
         backendPort = message.port
-        console.log(`📨 通过 IPC 接收到后端端口: ${backendPort}`)
+        console.log(`通过 IPC 接收到后端端口: ${backendPort}`)
         isBackendStarting = false
         isResolved = true
         resolve()
@@ -386,7 +386,7 @@ async function startBackend(): Promise<void> {
       if (isDev && message.includes('Application is running on') && !isResolved) {
         isBackendStarting = false
         isResolved = true
-        console.log(`✅ 后端启动成功，端口: ${backendPort}`)
+        console.log(`后端启动成功，端口: ${backendPort}`)
         resolve()
       }
     })
@@ -450,7 +450,7 @@ function createWindow() {
     if (process.env.USE_STATIC_FRONTEND === 'true') {
       // 使用编译后的静态前端文件
       const frontendPath = path.join(__dirname, '..', '..', 'frontend', 'dist', 'index.html')
-      console.log('🚀 ~ file: main.ts ~ line 438 ~ frontendPath', frontendPath)
+      console.log('~ file: main.ts ~ line 438 ~ frontendPath', frontendPath)
       mainWindow.loadFile(frontendPath)
     } else {
       // 使用 Vite 开发服务器（热重载）
@@ -488,7 +488,7 @@ function createWindow() {
     mainWindow = null
   })
 
-  // ✅ 初始化标签管理器（默认最多5个标签）
+  // 初始化标签管理器（默认最多5个标签）
   tabManager = new BrowserTabManager(mainWindow, 6)
 
   // 监听窗口大小变化
@@ -498,9 +498,9 @@ function createWindow() {
 
   // 初始化主应用标签
   tabManager.initializeMainApp().then(() => {
-    log.info('✅ Main app tab initialized successfully')
+    log.info('Main app tab initialized successfully')
   }).catch(err => {
-    log.error('❌ Failed to initialize main app tab:', err)
+    log.error('Failed to initialize main app tab:', err)
   })
 }
 
@@ -671,7 +671,7 @@ function setupIpcHandlers() {
     }
   })
 
-  // ✅ 标签管理相关 IPC
+  // 标签管理相关 IPC
 
   // 创建标签
   ipcMain.handle('browser:create-tab', async (_, { url }) => {

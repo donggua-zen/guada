@@ -21,7 +21,7 @@ export function initGlobalErrorHandler(router: ReturnType<typeof useRouter>) {
     
     // 检查是否为认证错误
     if (error?.isAuthError || error?.statusCode === 401) {
-      console.log('🔐 全局捕获到未处理的认证错误，跳转到登录页')
+      console.log('全局捕获到未处理的认证错误，跳转到登录页')
       handleAuthError()
       // 阻止默认的 console 警告
       event.preventDefault()
@@ -34,12 +34,12 @@ export function initGlobalErrorHandler(router: ReturnType<typeof useRouter>) {
     
     // 检查是否为认证错误
     if (error?.isAuthError || error?.statusCode === 401) {
-      console.log('🔐 全局捕获到同步认证错误，跳转到登录页')
+      console.log('全局捕获到同步认证错误，跳转到登录页')
       handleAuthError()
     }
   })
   
-  console.log('✅ 全局错误处理器已初始化')
+  console.log('全局错误处理器已初始化')
 }
 
 /**
@@ -47,7 +47,7 @@ export function initGlobalErrorHandler(router: ReturnType<typeof useRouter>) {
  */
 function handleAuthError() {
   if (!routerInstance) {
-    console.error('❌ Router 实例未初始化，无法执行跳转')
+    console.error('Router 实例未初始化，无法执行跳转')
     return
   }
   
@@ -66,6 +66,6 @@ function handleAuthError() {
  * 可在任何地方调用此函数来触发登录跳转
  */
 export function triggerAuthRedirect() {
-  console.log('🔐 手动触发认证重定向')
+  console.log('手动触发认证重定向')
   handleAuthError()
 }

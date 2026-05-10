@@ -50,19 +50,19 @@ export class KbFileService implements OnModuleInit {
    */
   private async resumePendingFileTasks() {
     try {
-      this.logger.log("🔄 开始扫描未完成的知识库文件任务...");
+      this.logger.log("开始扫描未完成的知识库文件任务...");
 
       const pendingFiles = await this.fileRepo.findByStatus([
         "pending",
         "processing",
       ]);
-      this.logger.log(`📋 发现 ${pendingFiles.length} 个未完成任务`);
+      this.logger.log(`发现 ${pendingFiles.length} 个未完成任务`);
 
       for (const file of pendingFiles) {
         // 检查物理文件是否存在
         if (!file.filePath || !fs.existsSync(file.filePath)) {
           this.logger.error(
-            `❌ 文件不存在，标记为失败：${file.displayName} (${file.filePath})`,
+            `文件不存在，标记为失败：${file.displayName} (${file.filePath})`,
           );
           await this.fileRepo.updateProcessingStatus(
             file.id,
@@ -74,7 +74,7 @@ export class KbFileService implements OnModuleInit {
           continue;
         }
 
-        this.logger.log(`🔄 恢复任务：${file.displayName}`);
+        this.logger.log(`恢复任务：${file.displayName}`);
         this.processFileInBackground(file.id);
       }
     } catch (error: any) {
@@ -88,7 +88,7 @@ export class KbFileService implements OnModuleInit {
    */
   private async cleanupOrphanFiles() {
     try {
-      this.logger.log("🧹 开始扫描孤儿文件...");
+      this.logger.log("开始扫描孤儿文件...");
 
       // 1. 查找所有 filePath 不为空的文件
       const allFiles = await this.prisma.kBFile.findMany({
@@ -141,9 +141,9 @@ export class KbFileService implements OnModuleInit {
       }
 
       if (orphanCount > 0) {
-        this.logger.log(`🧹 孤儿文件清理完成：发现 ${orphanCount} 个，成功清理 ${cleanedCount} 个`);
+        this.logger.log(`孤儿文件清理完成：发现 ${orphanCount} 个，成功清理 ${cleanedCount} 个`);
       } else {
-        this.logger.log("✅ 未发现孤儿文件");
+        this.logger.log("未发现孤儿文件");
       }
     } catch (error: any) {
       this.logger.error(`孤儿文件清理失败：${error.message}`);
@@ -490,7 +490,7 @@ export class KbFileService implements OnModuleInit {
       // 1. 查询文件记录
       const fileRecord = await this.fileRepo.findById(fileId);
       if (!fileRecord) {
-        this.logger.error(`❌ 文件记录不存在：${fileId}`);
+        this.logger.error(`文件记录不存在：${fileId}`);
         return;
       }
 
@@ -550,7 +550,7 @@ export class KbFileService implements OnModuleInit {
 
       // 6. 清理旧数据（重新处理场景）
       try {
-        this.logger.log(`🔄 检测到文件 ${fileId}，开始清理旧数据...`);
+        this.logger.log(`检测到文件 ${fileId}，开始清理旧数据...`);
 
         // 从向量库删除旧向量
         const tableId = `kb_${knowledgeBaseId}`;

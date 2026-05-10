@@ -56,7 +56,7 @@ export class BrowserToolProvider implements IToolProvider {
       const port = process.env.BROWSER_BRIDGE_PORT || '3001'
       this.tcpBaseUrl = `http://127.0.0.1:${port}/browser-tool`
       this.logger.log(`Using TCP communication mode: ${this.tcpBaseUrl}`)
-      this.logger.log('✅ Browser Tool Provider ready (TCP mode)')
+      this.logger.log('Browser Tool Provider ready (TCP mode)')
     } else {
       // IPC 模式（生产环境）
       if (!process.send || !process.on) {
@@ -72,7 +72,7 @@ export class BrowserToolProvider implements IToolProvider {
         }
       })
       
-      this.logger.log('✅ Browser Tool Provider ready (IPC mode)')
+      this.logger.log('Browser Tool Provider ready (IPC mode)')
     }
   }
   

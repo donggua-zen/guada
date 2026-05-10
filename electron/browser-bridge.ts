@@ -15,7 +15,7 @@ let automationService: BrowserAutomationService | null = null
  * 启动 IPC 模式的 Browser Bridge
  */
 export function startBrowserBridge(tabManager: BrowserTabManager): void {
-  log.info('🌉 Starting Browser Bridge in IPC mode...')
+  log.info('Starting Browser Bridge in IPC mode...')
 
   // 初始化浏览器自动化服务
   automationService = new BrowserAutomationService()
@@ -25,7 +25,7 @@ export function startBrowserBridge(tabManager: BrowserTabManager): void {
 
   // 监听来自父进程的消息
   if (process.send) {
-    log.info('✅ Browser Bridge ready, waiting for IPC messages')
+    log.info('Browser Bridge ready, waiting for IPC messages')
 
     process.on('message', async (message: any) => {
       if (!message || message.type !== 'BROWSER_TOOL_CALL') {
@@ -35,7 +35,7 @@ export function startBrowserBridge(tabManager: BrowserTabManager): void {
       const request: ToolRequest = message.data
 
       try {
-        log.debug(`📨 Received IPC request: ${request.method} (id: ${request.id})`)
+        log.debug(`Received IPC request: ${request.method} (id: ${request.id})`)
 
         const result = await automationService!.handleToolCall(request)
 
@@ -49,9 +49,9 @@ export function startBrowserBridge(tabManager: BrowserTabManager): void {
           data: response,
         })
 
-        log.debug(`📤 Sent IPC response for ${request.id}`)
+        log.debug(`Sent IPC response for ${request.id}`)
       } catch (error: any) {
-        log.error(`❌ Error handling IPC request ${request.id}:`, error)
+        log.error(`Error handling IPC request ${request.id}:`, error)
 
         const response: ToolResponse = {
           id: request.id,
@@ -83,6 +83,6 @@ export async function stopBrowserBridge(): Promise<void> {
   if (automationService) {
     await automationService.destroy()
     automationService = null
-    log.info('🛑 Browser Bridge stopped')
+    log.info('Browser Bridge stopped')
   }
 }

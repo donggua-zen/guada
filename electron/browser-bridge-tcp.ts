@@ -20,7 +20,7 @@ let automationService: BrowserAutomationService | null = null
  */
 export function startBrowserBridgeTCP(port: number = 3001, tabManager?: BrowserTabManager): Promise<number> {
   return new Promise((resolve, reject) => {
-    log.info(`🌉 Starting Browser Bridge TCP Server on port ${port}...`)
+    log.info(`Starting Browser Bridge TCP Server on port ${port}...`)
 
     // 初始化浏览器自动化服务
     automationService = new BrowserAutomationService()
@@ -43,7 +43,7 @@ export function startBrowserBridgeTCP(port: number = 3001, tabManager?: BrowserT
         req.on('end', async () => {
           try {
             const request: ToolRequest = JSON.parse(body)
-            log.debug(`📨 Received TCP request: ${request.method} (id: ${request.id})`)
+            log.debug(`Received TCP request: ${request.method} (id: ${request.id})`)
 
             const result = await automationService!.handleToolCall(request)
 
@@ -55,9 +55,9 @@ export function startBrowserBridgeTCP(port: number = 3001, tabManager?: BrowserT
             res.writeHead(200, { 'Content-Type': 'application/json' })
             res.end(JSON.stringify(response))
 
-            log.debug(`📤 Sent TCP response for ${request.id}`)
+            log.debug(`Sent TCP response for ${request.id}`)
           } catch (error: any) {
-            log.error(`❌ Error handling TCP request:`, error)
+            log.error(`Error handling TCP request:`, error)
 
             const response: ToolResponse = {
               id: 'error',
@@ -76,12 +76,12 @@ export function startBrowserBridgeTCP(port: number = 3001, tabManager?: BrowserT
 
     // 监听指定端口，仅允许本地访问
     httpServer.listen(port, '127.0.0.1', () => {
-      log.info(`✅ Browser Bridge TCP Server listening on http://127.0.0.1:${port}/browser-tool`)
+      log.info(`Browser Bridge TCP Server listening on http://127.0.0.1:${port}/browser-tool`)
       resolve(port)
     })
 
     httpServer.on('error', (error: any) => {
-      log.error('❌ Browser Bridge TCP Server error:', error)
+      log.error('Browser Bridge TCP Server error:', error)
       reject(error)
     })
   })
@@ -94,7 +94,7 @@ export async function stopBrowserBridgeTCP(): Promise<void> {
   if (httpServer) {
     return new Promise((resolve) => {
       httpServer!.close(async () => {
-        log.info('🛑 Browser Bridge TCP Server stopped')
+        log.info('Browser Bridge TCP Server stopped')
 
         if (automationService) {
           await automationService.destroy()
