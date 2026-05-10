@@ -156,3 +156,35 @@ export function useModelDisplay(modelName: string, providerName?: string) {
     avatarPath,
   }
 }
+
+/**
+ * 判断是否在 Electron 环境中
+ */
+export function isElectronEnv(): boolean {
+  return !!(window as any).electronAPI
+}
+
+/**
+ * 打开外部链接（根据环境自动选择打开方式）
+ * - Electron 环境：使用 electronAPI.openExternal 在系统默认浏览器中打开
+ * - Web 环境：使用 window.open 在新标签页中打开
+ * 
+ * @param url 要打开的 URL
+ */
+export function openExternalLink(url: string): void {
+  if (!url) return
+
+  if (isElectronEnv()) {
+    // Electron 环境：使用系统默认浏览器打开
+    try {
+      (window as any).electronAPI.openExternal(url)
+    } catch (error) {
+      console.error('Failed to open external link:', error)
+      // 降级处理：在新窗口打开
+      window.open(url, '_blank')
+    }
+  } else {
+    // Web 环境：在新标签页打开
+    window.open(url, '_blank', 'noopener,noreferrer')
+  }
+}

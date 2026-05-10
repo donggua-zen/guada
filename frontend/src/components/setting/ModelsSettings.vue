@@ -158,10 +158,14 @@
                         测试
                     </el-button>
                 </div>
+                <!-- API Key 获取链接（仅非自定义供应商显示） -->
+                <div v-if="currentProviderEdit.provider !== 'custom'" class="mt-2">
+                    <el-link type="primary" :underline="false" @click="handleOpenApiKeyUrl" class="text-xs">
+                        <el-icon class="mr-1"><LinkOutlined /></el-icon>
+                        获取 API Key
+                    </el-link>
+                </div>
             </el-form-item>
-            <!-- 提示：非自定义供应商的限制 -->
-            <el-alert v-if="!isNameEditable" title="提示：从模板添加的供应商，名称和协议类型不可修改，仅可配置 API 地址和 API Key" type="info"
-                :closable="false" show-icon class="mb-2" />
         </el-form>
         <template #footer>
             <span class="dialog-footer">
@@ -386,7 +390,8 @@ import { useDebounceFn } from '@vueuse/core' // 导入防抖函数'
 import ModelsProviderList from './ModelsProviderList.vue'
 import {
     SettingsOutlined, RemoveCircleOutlineRound, DeleteTwotone, AddCircleTwotone,
-    RemoveCircleTwotone, SearchOutlined, ArrowBackIosFilled, PlusOutlined, CloudDownloadOutlined, ScienceOutlined
+    RemoveCircleTwotone, SearchOutlined, ArrowBackIosFilled, PlusOutlined, CloudDownloadOutlined, ScienceOutlined,
+    LinkOutlined
 } from '@vicons/material'
 import {
     TextT24Regular, LightbulbFilament24Regular, Image24Regular, WrenchScrewdriver24Regular, Group24Regular, ArrowRight24Regular
@@ -394,7 +399,7 @@ import {
 import { apiService } from '../../services/ApiService'
 import { usePopup } from '../../composables/usePopup'
 import { useStorage } from '@vueuse/core'
-import { getModelDisplayName, getModelAvatarPath } from '@/utils/modelUtils'
+import { getModelDisplayName, getModelAvatarPath, openExternalLink } from '@/utils/modelUtils'
 import Avatar from '../ui/Avatar.vue'
 
 // Element Plus 组件导入
@@ -1090,6 +1095,20 @@ const handleToggleModelActive = async (model) => {
         }
     }
 };
+
+// 打开 API Key 获取页面
+const handleOpenApiKeyUrl = () => {
+    // 从模板中查找对应的 apiKeyUrl
+    const template = providerTemplates.value.find(
+        t => t.id === currentProviderEdit.value.provider
+    )
+    
+    if (template?.apiKeyUrl) {
+        openExternalLink(template.apiKeyUrl)
+    } else {
+        notify.warning('提示', '该供应商暂未配置 API Key 获取地址', { duration: 2000 })
+    }
+}
 
 // 组件卸载时清除计时器（现在由 useDebounceFn 自动处理）
 onMounted(() => {
