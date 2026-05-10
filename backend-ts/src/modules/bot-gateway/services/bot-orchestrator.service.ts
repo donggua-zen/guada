@@ -41,6 +41,22 @@ export class BotOrchestrator {
   ): Promise<void> {
     this.logger.log(`Starting message listener for bot: ${botId}`);
 
+    // 防止重复绑定：如果已存在订阅，先取消
+    const existingSubscription = this.activeSubscriptions.get(botId);
+    if (existingSubscription) {
+      this.logger.warn(`Existing subscription found for bot ${botId}, unsubscribing first`);
+      existingSubscription.unsubscribe();
+      this.activeSubscriptions.delete(botId);
+    }
+
+    // 同样处理断开连接订阅
+    const existingDisconnectKey = `${botId}:disconnect`;
+    const existingDisconnectSubscription = this.activeSubscriptions.get(existingDisconnectKey);
+    if (existingDisconnectSubscription) {
+      existingDisconnectSubscription.unsubscribe();
+      this.activeSubscriptions.delete(existingDisconnectKey);
+    }
+
     // 监听消息流
     const messageSubscription = adapter.onMessage().subscribe({
       next: async (message: BotMessage) => {

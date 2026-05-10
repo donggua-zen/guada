@@ -117,19 +117,8 @@ export class BotInstanceManager implements OnModuleInit, OnApplicationShutdown {
             error.stack,
           );
           
-          // 更新状态为错误
-          await this.prisma.botInstance.update({
-            where: { id: bot.id },
-            data: {
-              status: 'error',
-              lastError: error.message,
-            },
-          });
-          
-          // 检查是否需要重连
-          if (bot.reconnectEnabled) {
-            this.scheduleReconnect(bot.id, config, error.message);
-          }
+          // 注意：startBot 内部已经处理了重连逻辑，这里不需要再次调度
+          // 只需要确保数据库状态已更新（startBot 内部也会更新）
         }
       }
 
@@ -223,7 +212,7 @@ export class BotInstanceManager implements OnModuleInit, OnApplicationShutdown {
       instance.reconnectTimer = undefined;
     }
 
-    // 停止消息监听
+    // 停止消息监听（确保取消订阅）
     this.orchestrator.stopBotListener(botId);
 
     // 关闭适配器
@@ -392,6 +381,10 @@ export class BotInstanceManager implements OnModuleInit, OnApplicationShutdown {
           try {
             await instance.adapter.shutdown();
           } catch {}
+          
+          // 确保取消所有订阅，防止重复绑定
+          this.orchestrator.stopBotListener(botId);
+          
           this.botInstances.delete(botId);
         }
         
