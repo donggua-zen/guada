@@ -10,6 +10,7 @@ import {
   StreamReplyOptions,
   BotDisconnectEvent,
 } from '../interfaces/bot-platform.interface';
+import { PlatformUtilsService } from '../services/platform-utils.service';
 
 // 导入企业微信智能机器人官方 SDK
 import { WSClient } from '@wecom/aibot-node-sdk';
@@ -31,7 +32,9 @@ export class WeComAiBotAdapter implements IBotPlatform {
   private status: BotStatus = BotStatus.STOPPED;
   private config: BotConfig | null = null;
 
-  constructor() {
+  constructor(
+    private platformUtils: PlatformUtilsService,
+  ) {
     this.messageSubject = new Subject<BotMessage>();
     this.disconnectSubject = new Subject<BotDisconnectEvent>();
   }
@@ -95,12 +98,12 @@ export class WeComAiBotAdapter implements IBotPlatform {
       });
 
       // 监听文本消息
-      this.client.on('message.text', (frame: WsFrame) => {
+      this.client.on('message.text', async (frame: WsFrame) => {
         try {
           const content = frame.body.text?.content || '';
           this.logger.log(`Received text message: ${content.substring(0, 50)}...`);
 
-          const botMessage = this.transformToBotMessage(frame, 'text');
+          const botMessage = await this.transformToBotMessage(frame, 'text');
           
           // 将消息传递给上层处理（不保存帧）
           this.messageSubject.next(botMessage);
@@ -110,10 +113,10 @@ export class WeComAiBotAdapter implements IBotPlatform {
       });
 
       // 监听图片消息
-      this.client.on('message.image', (frame: WsFrame) => {
+      this.client.on('message.image', async (frame: WsFrame) => {
         try {
           this.logger.log('Received image message');
-          const botMessage = this.transformToBotMessage(frame, 'image');
+          const botMessage = await this.transformToBotMessage(frame, 'image');
           this.messageSubject.next(botMessage);
         } catch (error: any) {
           this.logger.error(`Error processing image message: ${error.message}`);
@@ -121,10 +124,10 @@ export class WeComAiBotAdapter implements IBotPlatform {
       });
 
       // 监听语音消息
-      this.client.on('message.voice', (frame: WsFrame) => {
+      this.client.on('message.voice', async (frame: WsFrame) => {
         try {
           this.logger.log('Received voice message');
-          const botMessage = this.transformToBotMessage(frame, 'voice');
+          const botMessage = await this.transformToBotMessage(frame, 'voice');
           this.messageSubject.next(botMessage);
         } catch (error: any) {
           this.logger.error(`Error processing voice message: ${error.message}`);
@@ -132,10 +135,10 @@ export class WeComAiBotAdapter implements IBotPlatform {
       });
 
       // 监听文件消息
-      this.client.on('message.file', (frame: WsFrame) => {
+      this.client.on('message.file', async (frame: WsFrame) => {
         try {
           this.logger.log('Received file message');
-          const botMessage = this.transformToBotMessage(frame, 'file');
+          const botMessage = await this.transformToBotMessage(frame, 'file');
           this.messageSubject.next(botMessage);
         } catch (error: any) {
           this.logger.error(`Error processing file message: ${error.message}`);
@@ -143,10 +146,10 @@ export class WeComAiBotAdapter implements IBotPlatform {
       });
 
       // 监听混合消息
-      this.client.on('message.mixed', (frame: WsFrame) => {
+      this.client.on('message.mixed', async (frame: WsFrame) => {
         try {
           this.logger.log('Received mixed message');
-          const botMessage = this.transformToBotMessage(frame, 'mixed');
+          const botMessage = await this.transformToBotMessage(frame, 'mixed');
           this.messageSubject.next(botMessage);
         } catch (error: any) {
           this.logger.error(`Error processing mixed message: ${error.message}`);
@@ -272,10 +275,10 @@ export class WeComAiBotAdapter implements IBotPlatform {
   /**
    * 将企业微信原始事件转换为标准 BotMessage
    */
-  private transformToBotMessage(
+  private async transformToBotMessage(
     frame: WsFrame,
     messageType: BotMessage['messageType'],
-  ): BotMessage {
+  ): Promise<BotMessage> {
     const body = frame.body;
 
     // 提取发送者信息
@@ -297,6 +300,9 @@ export class WeComAiBotAdapter implements IBotPlatform {
       content = `[文件] ${body.file.filename || ''}`;
     }
 
+    // 异步提取附件（在适配器层完成下载和解密）
+    const attachments = await this.extractAttachments(body);
+
     return {
       messageId: frame.headers?.req_id || Date.now().toString(),
       senderId,
@@ -305,7 +311,7 @@ export class WeComAiBotAdapter implements IBotPlatform {
       content,
       messageType,
       sourceType: this.detectSourceType(body),
-      attachments: this.extractAttachments(body),
+      attachments,
       rawEvent: frame,
       timestamp: new Date(),
     };
@@ -321,40 +327,53 @@ export class WeComAiBotAdapter implements IBotPlatform {
   }
 
   /**
-   * 提取附件信息
+   * 提取附件信息（在适配器层完成下载和解密）
    */
-  private extractAttachments(body: any): BotMessage['attachments'] {
+  private async extractAttachments(body: any): Promise<BotMessage['attachments']> {
     const attachments: BotMessage['attachments'] = [];
 
     if (body.image) {
-      attachments.push({
-        type: 'image',
-        url: body.image.url,
-        fileId: body.image.media_id,
-        fileName: body.image.filename,
-        fileSize: body.image.filesize,
-      });
+      try {
+        // 在适配器层完成下载、解密、保存到临时文件
+        const result = await this.platformUtils.downloadAndProcessImage(
+          body.image.url,
+          {
+            platform: 'wecom',
+            aesKey: body.image.aeskey,
+            ttl: 10 * 60 * 1000, // 10分钟TTL
+          }
+        );
+
+        // 从 URL 中提取文件名
+        let fileName = body.image.filename;
+        if (!fileName && body.image.url) {
+          try {
+            const urlObj = new URL(body.image.url);
+            const pathParts = urlObj.pathname.split('/');
+            const lastPart = pathParts[pathParts.length - 1];
+            if (lastPart) {
+              fileName = `image_${lastPart}.jpg`; // 企业微信图片通常是 JPEG
+            }
+          } catch (e) {
+            // URL 解析失败，使用默认名称
+          }
+        }
+        
+        attachments.push({
+          type: 'image',
+          localPath: result.tempPath, // 传递本地临时文件路径
+          fileName: fileName || `image_${Date.now()}.jpg`,
+          fileSize: result.fileSize,
+        });
+
+        this.logger.log(`Extracted image attachment: ${result.tempPath}`);
+      } catch (error: any) {
+        this.logger.error(`Failed to process image attachment: ${error.message}`);
+        // 继续处理其他附件，不阻断流程
+      }
     }
 
-    if (body.voice) {
-      attachments.push({
-        type: 'voice',
-        url: body.voice.url,
-        fileId: body.voice.media_id,
-        fileName: body.voice.filename,
-        fileSize: body.voice.filesize,
-      });
-    }
-
-    if (body.file) {
-      attachments.push({
-        type: 'file',
-        url: body.file.url,
-        fileId: body.file.media_id,
-        fileName: body.file.filename,
-        fileSize: body.file.filesize,
-      });
-    }
+    // TODO: 处理 voice 和 file 类型的附件
 
     return attachments.length > 0 ? attachments : undefined;
   }

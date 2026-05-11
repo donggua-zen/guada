@@ -4,9 +4,12 @@ import { BotAdapterFactory } from './services/bot-adapter.factory';
 import { BotOrchestrator } from './services/bot-orchestrator.service';
 import { SessionMapperService } from './services/session-mapper.service';
 import { BotAdminService } from './services/bot-admin.service';
+import { TempFileManager } from './services/temp-file-manager.service';
+import { PlatformUtilsService } from './services/platform-utils.service';
 import { BotAdminController } from './controllers/bot-admin.controller';
 import { QQBotAdapter } from './adapters/qq-bot.adapter';
 import { LarkBotAdapter } from './adapters/lark-bot.adapter';
+import { DiscordBotAdapter } from './adapters/discord-bot.adapter';
 // TODO: 微信公众号适配器（已注释，使用 OneBots）
 // import { WeChatBotAdapter } from './adapters/wechat-bot.adapter';
 import { WeComAiBotAdapter } from './adapters/wecom-aibot.adapter';
@@ -35,8 +38,11 @@ import { PrismaService } from '../../common/database/prisma.service';
     BotOrchestrator,
     SessionMapperService,
     BotAdminService, // 新增
+    TempFileManager, // 临时文件管理器
+    PlatformUtilsService, // 平台工具服务
     QQBotAdapter, // 注册QQ适配器
     LarkBotAdapter, // 注册飞书适配器
+    DiscordBotAdapter, // 注册Discord适配器
     // TODO: 微信公众号适配器（已注释，使用 OneBots）
     // WeChatBotAdapter, // 注册微信公众号适配器
     WeComAiBotAdapter, // 注册企业微信智能机器人适配器（WebSocket 长连接）

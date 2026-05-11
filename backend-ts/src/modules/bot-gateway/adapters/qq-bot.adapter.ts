@@ -9,6 +9,7 @@ import {
   PlatformCapabilities,
   BotDisconnectEvent,
 } from '../interfaces/bot-platform.interface';
+import { PlatformUtilsService } from '../services/platform-utils.service';
 
 // 导入自研 QQ SDK
 import { QQBot } from './qq/qq-bot.sdk';
@@ -32,7 +33,9 @@ export class QQBotAdapter implements IBotPlatform {
   private status: BotStatus = BotStatus.STOPPED;
   private config: BotConfig | null = null;
 
-  constructor() {
+  constructor(
+    private platformUtils: PlatformUtilsService,
+  ) {
     this.messageSubject = new Subject<BotMessage>();
     this.disconnectSubject = new Subject<BotDisconnectEvent>();
   }
@@ -82,16 +85,24 @@ export class QQBotAdapter implements IBotPlatform {
       });
 
       // 注册消息监听器
-      this.client.on('message.group', (event: any) => {
-        this.logger.log('Received group message');
-        const botMessage = this.transformToBotMessage(event, 'group');
-        this.messageSubject.next(botMessage);
+      this.client.on('message.group', async (event: any) => {
+        try {
+          this.logger.log('Received group message');
+          const botMessage = await this.transformToBotMessage(event, 'group');
+          this.messageSubject.next(botMessage);
+        } catch (error: any) {
+          this.logger.error(`Error processing group message: ${error.message}`);
+        }
       });
 
-      this.client.on('message.private', (event: any) => {
-        this.logger.log('Received private message');
-        const botMessage = this.transformToBotMessage(event, 'private');
-        this.messageSubject.next(botMessage);
+      this.client.on('message.private', async (event: any) => {
+        try {
+          this.logger.log('Received private message');
+          const botMessage = await this.transformToBotMessage(event, 'private');
+          this.messageSubject.next(botMessage);
+        } catch (error: any) {
+          this.logger.error(`Error processing private message: ${error.message}`);
+        }
       });
 
       // 注册错误处理 - 只记录日志,不处理重连
@@ -234,9 +245,12 @@ export class QQBotAdapter implements IBotPlatform {
   /**
    * 将 QQ 原始事件转换为标准 BotMessage
    */
-  private transformToBotMessage(rawEvent: any, sourceType?: 'private' | 'group'): BotMessage {
+  private async transformToBotMessage(rawEvent: any, sourceType?: 'private' | 'group'): Promise<BotMessage> {
     // 调试:打印事件结构
     this.logger.debug('Raw event:', JSON.stringify(rawEvent, null, 2));
+
+    // 异步提取附件（在适配器层完成下载）
+    const attachments = await this.extractAttachments(rawEvent);
 
     // 根据 QQ 官方 API 的事件结构调整
     return {
@@ -247,7 +261,7 @@ export class QQBotAdapter implements IBotPlatform {
       content: rawEvent.content || rawEvent.text || '',
       messageType: this.detectMessageType(rawEvent),
       sourceType: sourceType,
-      attachments: this.extractAttachments(rawEvent),
+      attachments,
       rawEvent,
       timestamp: new Date(rawEvent.timestamp || Date.now()),
     };
@@ -273,33 +287,59 @@ export class QQBotAdapter implements IBotPlatform {
   }
 
   /**
-   * 提取附件信息
+   * 提取附件信息（在适配器层完成下载）
    */
-  private extractAttachments(rawEvent: any): BotMessage['attachments'] {
+  private async extractAttachments(rawEvent: any): Promise<BotMessage['attachments']> {
     if (!rawEvent.attachments || rawEvent.attachments.length === 0) {
       return undefined;
     }
 
-    const attachments = rawEvent.attachments.map((att: any) => {
-      // QQ官方API的附件类型映射
-      let type: 'image' | 'file' | 'voice' | 'video' = 'file';
+    const attachments: BotMessage['attachments'] = [];
 
-      if (att.content_type?.startsWith('image/')) {
-        type = 'image';
-      } else if (att.content_type?.startsWith('audio/')) {
-        type = 'voice';
-      } else if (att.content_type?.startsWith('video/')) {
-        type = 'video';
+    for (const att of rawEvent.attachments) {
+      try {
+        // QQ官方API的附件类型映射
+        let type: 'image' | 'file' | 'voice' = 'file';
+
+        if (att.content_type?.startsWith('image/')) {
+          type = 'image';
+        } else if (att.content_type?.startsWith('audio/')) {
+          type = 'voice';
+        } else if (att.content_type?.startsWith('video/')) {
+          // 视频暂时作为文件处理
+          type = 'file';
+        }
+
+        // 如果是图片，下载到临时文件
+        if (type === 'image' && att.url) {
+          const result = await this.platformUtils.downloadAndProcessImage(
+            att.url,
+            { ttl: 10 * 60 * 1000 } // 10分钟TTL
+          );
+
+          attachments.push({
+            type,
+            localPath: result.tempPath, // 使用本地临时文件路径
+            fileName: att.filename || att.file_name,
+            fileSize: result.fileSize,
+          });
+
+          this.logger.log(`Extracted image attachment: ${result.tempPath}`);
+        } else {
+          // 其他类型暂不处理，只记录元数据
+          attachments.push({
+            type,
+            url: att.url,
+            fileId: att.id || att.file_id,
+            fileName: att.filename || att.file_name,
+            fileSize: att.size || att.file_size,
+          });
+        }
+      } catch (error: any) {
+        this.logger.error(`Failed to process attachment: ${error.message}`);
+        // 继续处理其他附件
       }
-
-      return {
-        type,
-        url: att.url,
-        fileId: att.id || att.file_id,
-        fileName: att.filename || att.file_name,
-        fileSize: att.size || att.file_size,
-      };
-    });
+    }
 
     return attachments.length > 0 ? attachments : undefined;
   }
