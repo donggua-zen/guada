@@ -35,6 +35,10 @@ export interface BotAttachment {
   fileId?: string;
   fileName?: string;
   fileSize?: number;
+  /** 本地临时文件路径（适配器预处理后使用） */
+  localPath?: string;
+  /** 企业微信图片加密密钥（可选，已废弃，由适配器层处理） */
+  aesKey?: string;
 }
 
 /**
@@ -219,11 +223,4 @@ export interface IBotAdapterFactory {
    * @param config 机器人配置
    */
   createAdapter(platform: string, config: BotConfig): IBotPlatform;
-
-  /**
-   * 注册新的适配器类型
-   * @param platform 平台标识
-   * @param adapterClass 适配器类
-   */
-  registerAdapter(platform: string, adapterClass: new () => IBotPlatform): void;
 }

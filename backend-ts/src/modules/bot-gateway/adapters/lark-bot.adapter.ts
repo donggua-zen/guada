@@ -8,6 +8,7 @@ import {
   BotStatus,
   PlatformCapabilities,
 } from '../interfaces/bot-platform.interface';
+import { PlatformUtilsService } from '../services/platform-utils.service';
 
 // 导入飞书官方 SDK
 import * as Lark from '@larksuiteoapi/node-sdk';
@@ -29,7 +30,9 @@ export class LarkBotAdapter implements IBotPlatform {
   private status: BotStatus = BotStatus.STOPPED;
   private config: BotConfig | null = null;
 
-  constructor() {
+  constructor(
+    private platformUtils: PlatformUtilsService,
+  ) {
     this.messageSubject = new Subject<BotMessage>();
   }
 
@@ -80,7 +83,7 @@ export class LarkBotAdapter implements IBotPlatform {
       const eventDispatcher = new Lark.EventDispatcher({}).register({
         'im.message.receive_v1': async (data: any) => {
           try {
-            const botMessage = this.transformToBotMessage(data);
+            const botMessage = await this.transformToBotMessage(data);
             this.messageSubject.next(botMessage);
           } catch (error: any) {
             this.logger.error(`Error processing message: ${error.message}`);
@@ -196,10 +199,13 @@ export class LarkBotAdapter implements IBotPlatform {
   /**
    * 将飞书原始事件转换为标准 BotMessage
    */
-  private transformToBotMessage(rawEvent: any): BotMessage {
+  private async transformToBotMessage(rawEvent: any): Promise<BotMessage> {
     // WebSocket 模式下，事件结构为: { message: { chat_id, content, message_type, chat_type, message_id }, sender: {...} }
     const message = rawEvent.message || {};
     const sender = rawEvent.sender || {};
+
+    // 异步提取附件（在适配器层完成下载）
+    const attachments = await this.extractAttachments(message);
 
     return {
       messageId: message.message_id,
@@ -209,7 +215,7 @@ export class LarkBotAdapter implements IBotPlatform {
       content: this.extractContent(message),
       messageType: this.detectMessageType(message),
       sourceType: this.detectSourceType(message),
-      attachments: undefined, // TODO: 提取附件
+      attachments,
       rawEvent,
       timestamp: new Date(),
     };
@@ -249,5 +255,44 @@ export class LarkBotAdapter implements IBotPlatform {
   private detectSourceType(message: any): 'private' | 'group' | 'channel' {
     // p2p = 私聊, group = 群聊
     return message.chat_type === 'group' ? 'group' : 'private';
+  }
+
+  /**
+   * 提取附件信息（在适配器层完成下载）
+   */
+  private async extractAttachments(message: any): Promise<BotMessage['attachments']> {
+    // 飞书的消息中，图片有 file_key，需要转换为 URL
+    if (message.message_type === 'image' && message.content) {
+      try {
+        const parsed = JSON.parse(message.content);
+        const fileKey = parsed.image_key || parsed.file_key;
+        
+        if (fileKey) {
+          // 构建飞书图片下载URL
+          const imageUrl = `https://open.feishu.cn/open-apis/im/v1/messages/${message.message_id}/resources/${fileKey}?type=image`;
+          
+          // 下载到临时文件
+          const result = await this.platformUtils.downloadAndProcessImage(
+            imageUrl,
+            { ttl: 10 * 60 * 1000 } // 10分钟TTL
+          );
+
+          this.logger.log(`Extracted image attachment: ${result.tempPath}`);
+
+          return [{
+            type: 'image',
+            localPath: result.tempPath,
+            fileName: `image_${fileKey}.jpg`,
+            fileSize: result.fileSize,
+          }];
+        }
+      } catch (error: any) {
+        this.logger.error(`Failed to process image attachment: ${error.message}`);
+      }
+    }
+
+    // TODO: 处理文件和语音附件
+
+    return undefined;
   }
 }

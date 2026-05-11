@@ -6,6 +6,7 @@ import {
 } from '../interfaces/bot-platform.interface';
 import { QQBotAdapter } from '../adapters/qq-bot.adapter';
 import { LarkBotAdapter } from '../adapters/lark-bot.adapter';
+import { DiscordBotAdapter } from '../adapters/discord-bot.adapter';
 // TODO: 微信公众号适配器（已注释，使用 OneBots）
 // import { WeChatBotAdapter } from '../adapters/wechat-bot.adapter';
 import { WeComAiBotAdapter } from '../adapters/wecom-aibot.adapter';
@@ -22,38 +23,35 @@ import { WeComAiBotAdapter } from '../adapters/wecom-aibot.adapter';
 @Injectable()
 export class BotAdapterFactory implements IBotAdapterFactory {
   private readonly logger = new Logger(BotAdapterFactory.name);
-  private adapterRegistry: Map<string, new () => IBotPlatform> = new Map();
+  private adapterRegistry: Map<string, IBotPlatform> = new Map();
 
-  constructor() {
-    // 注册内置适配器
-    this.registerAdapter('qq', QQBotAdapter);
-    this.registerAdapter('lark', LarkBotAdapter);
+  constructor(
+    private qqAdapter: QQBotAdapter,
+    private larkAdapter: LarkBotAdapter,
+    private discordAdapter: DiscordBotAdapter,
+    private wecomAdapter: WeComAiBotAdapter,
+  ) {
+    // 注册内置适配器（使用注入的实例）
+    this.adapterRegistry.set('qq', qqAdapter);
+    this.adapterRegistry.set('lark', larkAdapter);
+    this.adapterRegistry.set('discord', discordAdapter);
     // TODO: 微信公众号适配器（已注释，使用 OneBots）
-    // this.registerAdapter('wechat', WeChatBotAdapter);
-    this.registerAdapter('wecom', WeComAiBotAdapter); // 企业微信智能机器人（WebSocket 长连接）
-    // this.registerAdapter('wecom', WeComAppBotAdapter); // 企业微信应用消息适配器（已隐藏）
+    // this.adapterRegistry.set('wechat', wechatAdapter);
+    this.adapterRegistry.set('wecom', wecomAdapter); // 企业微信智能机器人（WebSocket 长连接）
+    // this.adapterRegistry.set('wecom-app', wecomAppAdapter); // 企业微信应用消息适配器（已隐藏）
     // TODO: 待实现微信个人号适配器
-    // this.registerAdapter('wechat-personal', WeChatPersonalBotAdapter);
-    // 未来扩展: this.registerAdapter('discord', DiscordBotAdapter);
+    // this.adapterRegistry.set('wechat-personal', wechatPersonalAdapter);
+    // 未来扩展: this.adapterRegistry.set('telegram', telegramAdapter);
   }
 
   createAdapter(platform: string, config: BotConfig): IBotPlatform {
-    const AdapterClass = this.adapterRegistry.get(platform);
+    const adapter = this.adapterRegistry.get(platform);
 
-    if (!AdapterClass) {
+    if (!adapter) {
       throw new Error(`Unsupported bot platform: ${platform}`);
     }
 
     this.logger.log(`Creating adapter for platform: ${platform}`);
-    const adapter = new AdapterClass();
     return adapter;
-  }
-
-  registerAdapter(
-    platform: string,
-    adapterClass: new () => IBotPlatform,
-  ): void {
-    this.adapterRegistry.set(platform, adapterClass);
-    this.logger.log(`Registered adapter for platform: ${platform}`);
   }
 }
