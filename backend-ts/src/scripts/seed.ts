@@ -24,7 +24,7 @@ import { resolve } from "path";
 import "dotenv/config";
 
 // 从环境变量读取数据库 URL
-const databaseUrl = process.env.DATABASE_URL || "file:./dev.db";
+const databaseUrl = process.env.DATABASE_URL || "file:./data/ai_chat.db";
 const adapter = new PrismaBetterSqlite3({ url: databaseUrl });
 const prisma = new PrismaClient({ adapter });
 
