@@ -1,4 +1,4 @@
-﻿import { BrowserWindow } from 'electron'
+import { BrowserWindow } from 'electron'
 import log from 'electron-log/main'
 import { BrowserTabManager, TabInfo } from './browser-tab-manager'
 
@@ -21,35 +21,31 @@ export interface ToolResponse {
 }
 
 /**
- * 标签页信息接口（兼容 WindowInfo�?
+ * 标签页信息接口
  */
 export interface WindowInfo {
   windowId: string
   url: string
   title: string
-  createdAt: number
-  lastActivityAt: number
-  isActive: boolean
 }
 
 /**
- * 浏览器自动化核心服务（基于标签页系统�?
+ * 浏览器自动化核心服务（基于标签页系统)
  * 
- * 职责�?
- * - 管理多个标签页生命周期（基于 BrowserTabManager�?
+ * 职责说明：
+ * - 管理多个标签页生命周期（基于 BrowserTabManager）
  * - 执行浏览器自动化操作（导航、截图、JS执行等）
  * - 清理无痕数据
  * - 超时自动关闭
  * 
- * 与通信协议解耦，可被 IPC、TCP、UDP 等多种协议复�?
+ * 与通信协议解耦，可被 IPC、TCP、UDP 等多种协议复用
  * 
- * 注意：每个标签使用独立的 session，与主窗口隔离，避免影响主窗口认证状�?
+ * 注意：每个标签页使用独立的 session，与主窗口隔离，避免影响主窗口认证状态
  */
 export class BrowserAutomationService {
   private tabManager: BrowserTabManager | null = null
-  private defaultTabId: string | null = null
   private maxTabs: number = 6 // 默认最多6个标签（含主应用，即可创建5个）
-  private inactivityTimeout: number = 300000 // 默认5分钟无操作自动关�?
+  private inactivityTimeout: number = 300000 // 默认5分钟无操作自动关闭
 
   constructor(config: { maxTabs?: number; inactivityTimeout?: number } = {}) {
     this.maxTabs = config.maxTabs || 6
@@ -61,7 +57,7 @@ export class BrowserAutomationService {
    */
   initializeTabManager(tabManager: BrowserTabManager): void {
     this.tabManager = tabManager
-    log.info('�?BrowserAutomationService initialized with TabManager')
+    log.info('BrowserAutomationService initialized with TabManager')
   }
 
   /**
@@ -74,59 +70,19 @@ export class BrowserAutomationService {
       throw new Error('TabManager not initialized. Call initializeTabManager() first.')
     }
 
-    const tabInfo = await this.tabManager.createTab(url, false) // 不自动激�?
+    const tabInfo = await this.tabManager.createTab(url, false) // 不自动激活
 
-    // 如果是第一个标签，设为默认标签
-    if (!this.defaultTabId) {
-      this.defaultTabId = tabInfo.tabId
-    }
-
-    log.info(`�?Browser tab created: ${tabInfo.tabId}`)
+    log.info(`Browser tab created: ${tabInfo.tabId}`)
     return tabInfo.tabId
   }
 
-  /**
-   * 获取或创建默认标签页
-   */
-  private async getOrCreateDefaultTab(): Promise<{ tabId: string; tabInfo: TabInfo }> {
-    if (!this.tabManager) {
-      throw new Error('TabManager not initialized')
-    }
-
-    if (!this.defaultTabId) {
-      const tabId = await this.createWindow()
-      const tabs = this.tabManager.getTabList()
-      const tabInfo = tabs.find((t: TabInfo) => t.tabId === tabId)
-      if (!tabInfo) {
-        throw new Error(`Tab ${tabId} not found`)
-      }
-      return { tabId, tabInfo }
-    }
-
-    const tabs = this.tabManager.getTabList()
-    const tabInfo = tabs.find((t: TabInfo) => t.tabId === this.defaultTabId)
-    if (!tabInfo) {
-      // 默认标签不存在，创建新的
-      const tabId = await this.createWindow()
-      const newTabs = this.tabManager.getTabList()
-      const newTabInfo = newTabs.find((t: TabInfo) => t.tabId === tabId)
-      if (!newTabInfo) {
-        throw new Error(`Tab ${tabId} not found`)
-      }
-      return { tabId, tabInfo: newTabInfo }
-    }
-
-    return { tabId: this.defaultTabId, tabInfo }
-  }
 
   /**
-   * 确保标签页存�?
+   * 确保标签页存在
    */
-  private async ensureTab(tabId?: string): Promise<{ tabId: string; tabInfo: TabInfo }> {
-    const targetTabId = tabId || this.defaultTabId
-
-    if (!targetTabId) {
-      return await this.getOrCreateDefaultTab()
+  private async ensureTab(tabId: string): Promise<{ tabId: string; tabInfo: TabInfo }> {
+    if (!tabId) {
+      throw new Error('window_id is required for all browser operations')
     }
 
     if (!this.tabManager) {
@@ -134,21 +90,21 @@ export class BrowserAutomationService {
     }
 
     const tabs = this.tabManager.getTabList()
-    const tabInfo = tabs.find(t => t.tabId === targetTabId)
+    const tabInfo = tabs.find(t => t.tabId === tabId)
 
     if (!tabInfo) {
-      return await this.getOrCreateDefaultTab()
+      throw new Error(`Window ${tabId} not found. Use get_window_list() to see available windows.`)
     }
 
-    return { tabId: targetTabId, tabInfo }
+    return { tabId, tabInfo }
   }
 
   /**
-   * 销毁所有标签页并清理数�?
+   * 销毁所有标签页并清理数据
    */
   async destroy(): Promise<void> {
     if (!this.tabManager) {
-      log.info('⚠️ No tabs to destroy')
+      log.info('No tabs to destroy')
       return
     }
 
@@ -161,18 +117,18 @@ export class BrowserAutomationService {
         try {
           await this.tabManager.closeTab(tab.tabId)
         } catch (error) {
-          log.error(`�?Error closing tab ${tab.tabId}:`, error)
+          log.error(`Error closing tab ${tab.tabId}:`, error)
         }
       }
     }
 
-    log.info('�?All tabs destroyed')
+    log.info('All tabs destroyed')
   }
 
   /**
-   * 导航到指�?URL
+   * 导航到指定 URL
    */
-  async navigate(url: string, windowId?: string): Promise<any> {
+  async navigate(url: string, windowId: string): Promise<any> {
     const { tabId } = await this.ensureTab(windowId)
 
     if (!this.tabManager) {
@@ -250,14 +206,20 @@ export class BrowserAutomationService {
   /**
    * 执行 JavaScript 代码
    */
-  async executeJavaScript(code: string, windowId?: string): Promise<any> {
+  /**
+   * 执行 JavaScript 代码
+   * @param code JavaScript 代码
+   * @param windowId 窗口 ID（可选）
+   * @param isAsync 是否支持异步代码（默认 false）
+   */
+  async executeJavaScript(code: string, windowId: string, isAsync: boolean = false): Promise<any> {
     const { tabId } = await this.ensureTab(windowId)
 
     if (!this.tabManager) {
       throw new Error('TabManager not initialized')
     }
 
-    log.info(`�?Executing JavaScript (tab: ${tabId})...`)
+    log.info(`Executing JavaScript (tab: ${tabId})...`)
 
     const webContents = this.tabManager.getWebContents(tabId)
     if (!webContents) {
@@ -265,13 +227,98 @@ export class BrowserAutomationService {
     }
 
     try {
-      const result = await webContents.executeJavaScript(code, true)
+      // 如果是异步模式,将代码包装在 async IIFE 中
+      // 关键改进:在渲染进程中包裹 try-catch,返回错误对象而不是抛出异常
+      const wrappedCode = isAsync 
+        ? `(async () => { 
+            try { 
+              const result = ${code};
+              return { __success: true, data: result };
+            } catch (error) {
+              return {
+                __success: false,
+                error: {
+                  name: error.name || 'Error',
+                  message: error.message || String(error),
+                  stack: error.stack || '',
+                  lineNumber: error.lineNumber,
+                  columnNumber: error.columnNumber
+                }
+              };
+            }
+          })()` 
+        : `
+          (function() {
+            try { 
+              const result = ${code};
+              return { __success: true, data: result };
+            } catch (error) {
+              return {
+                __success: false,
+                error: {
+                  name: error.name || 'Error',
+                  message: error.message || String(error),
+                  stack: error.stack || '',
+                  lineNumber: error.lineNumber,
+                  columnNumber: error.columnNumber
+                }
+              };
+            }
+          })()
+        `
+          
+      const result = await webContents.executeJavaScript(wrappedCode, true)
+          
+      // 检查是否是错误响应
+      if (result && typeof result === 'object' && '__success' in result) {
+        if (!result.__success) {
+          // 执行失败,返回详细错误信息
+          const errorInfo = result.error
+          let detailedError = errorInfo.message
+              
+          if (errorInfo.name && errorInfo.name !== 'Error') {
+            detailedError = `${errorInfo.name}: ${errorInfo.message}`
+          }
+              
+          if (errorInfo.stack) {
+            const stackLines = errorInfo.stack.split('\n').slice(0, 3).join('\n')
+            detailedError += `\nStack trace:\n${stackLines}`
+          }
+              
+          if (errorInfo.lineNumber !== undefined || errorInfo.columnNumber !== undefined) {
+            const line = errorInfo.lineNumber ?? '?'
+            const col = errorInfo.columnNumber ?? '?'
+            detailedError += `\nLocation: Line ${line}, Column ${col}`
+          }
+              
+          log.error(`JavaScript execution failed in tab ${tabId}:`, detailedError)
+              
+          return {
+            success: false,
+            windowId: tabId,
+            error: detailedError,
+            details: errorInfo,
+          }
+        }
+            
+        // 执行成功,返回数据
+        return {
+          success: true,
+          windowId: tabId,
+          result: result.data,
+        }
+      }
+          
+      // 兼容旧代码:如果没有 __success 标记,直接返回结果
       return {
         success: true,
         windowId: tabId,
         result,
       }
     } catch (error: any) {
+      // 这里捕获的是主进程级别的错误(如页面未加载等)
+      log.error(`JavaScript execution failed in tab ${tabId}:`, error.message)
+          
       return {
         success: false,
         windowId: tabId,
@@ -281,16 +328,23 @@ export class BrowserAutomationService {
   }
 
   /**
-   * 获取页面 HTML 内容（结构化，移除了脚本和样式）
+   * 获取页面结构化 JSON（选择器风格优化 - 方案 E）
+   * 
+   * 返回格式示例：
+   * {
+   *   "node": "div.class#id",
+   *   "href": "/path",
+   *   "children": ["span", { "node": "a", "text": "Link" }]
+   * }
    */
-  async getPageHtml(windowId?: string): Promise<any> {
+  async getPageStruct(windowId: string): Promise<any> {
     const { tabId } = await this.ensureTab(windowId)
 
     if (!this.tabManager) {
       throw new Error('TabManager not initialized')
     }
 
-    log.info(`Getting page HTML (tab: ${tabId})...`)
+    log.info(`Getting page structure (tab: ${tabId})...`)
 
     const webContents = this.tabManager.getWebContents(tabId)
     if (!webContents) {
@@ -306,211 +360,168 @@ export class BrowserAutomationService {
     const isLoading = webContents.isLoading()
     log.info(`Page status: URL=${currentUrl}, Title=${pageTitle}, Loading=${isLoading}`)
 
-    let html = ''
+    let jsonStructure: any
+    let originalHtmlLength = 0
     try {
-      // 使用 JavaScript 清理 HTML，移除 script、style、css，只保留必要属性
-      log.debug('Executing JavaScript to get cleaned HTML...')
-      html = await webContents.executeJavaScript(`
+      // 先获取原始 HTML 长度用于对比
+      originalHtmlLength = await webContents.executeJavaScript(`
+        (function() {
+          return document.documentElement.outerHTML.length;
+        })()
+      `)
+      log.debug(`Original HTML length: ${originalHtmlLength} chars`)
+
+      log.debug('Executing JavaScript to get page structure...')
+      jsonStructure = await webContents.executeJavaScript(`
         (function() {
           try {
-            // 克隆 document 以避免修改原页面
+            // DOM 转 JSON 的核心函数（选择器风格优化 - 方案 E）
+            function domToSelectorStyle(element, depth) {
+              if (depth > 50) return null;
+              
+              const tag = element.tagName.toLowerCase();
+              const id = element.id;
+              // 仅当 className 为字符串时处理
+              const classes = (typeof element.className === 'string' && element.className) 
+                ? element.className.trim().split(/\\s+/).filter(Boolean) 
+                : [];
+              
+              // 构建选择器字符串: tag.class1.class2#id
+              let selectorStr = tag;
+              if (classes.length > 0) selectorStr += '.' + classes.join('.');
+              if (id) selectorStr += '#' + id;
+              
+              const node = { node: selectorStr };
+              
+              // 获取当前页面域名用于 URL 精简
+              const currentHost = window.location.host;
+              
+              // 处理其他属性（排除 class, id），直接平铺到节点对象中
+              for (let i = 0; i < element.attributes.length; i++) {
+                const attr = element.attributes[i];
+                if (['class', 'id'].includes(attr.name)) continue;
+                
+                let value = attr.value;
+                
+                // 针对 href 进行同源域名精简
+                if (attr.name === 'href' && value) {
+                  const protocolRegex = /^(https?:)?\\/\\//;
+                  if (protocolRegex.test(value)) {
+                    try {
+                      const urlObj = new URL(value, window.location.href);
+                      if (urlObj.host === currentHost) {
+                        value = urlObj.pathname + urlObj.search + urlObj.hash;
+                        if (!value.startsWith('/')) value = '/' + value;
+                      }
+                    } catch (e) {}
+                  }
+                }
+                
+                // 白名单过滤：只保留 href, role 和特定的 data-*
+                if (attr.name === 'href' || attr.name === 'role') {
+                  // 保留
+                } else if (attr.name.startsWith('data-')) {
+                  const suffix = attr.name.substring(5).toLowerCase();
+                  if (!suffix.includes('-id') && !suffix.includes('-url')) {
+                    continue;
+                  }
+                } else {
+                  continue;
+                }
+                
+                // 长度大于 300 截断
+                if (value.length > 300) value = value.substring(0, 300) + '...';
+                node[attr.name] = value;
+              }
+              
+              // 处理文本
+              const text = element.textContent ? element.textContent.trim() : '';
+              if (element.children.length === 0 && text.length > 0) {
+                node.text = text.substring(0, 10000);
+              }
+              
+              // 处理子节点
+              const children = [];
+              for (let i = 0; i < element.children.length; i++) {
+                const childNode = domToSelectorStyle(element.children[i], depth + 1);
+                if (childNode) children.push(childNode);
+              }
+              
+              if (children.length > 0) {
+                // 极简子节点优化：如果子节点只有 node 字段，则转为字符串数组
+                const allSimple = children.every(c => Object.keys(c).length === 1 && c.node);
+                node.children = allSimple ? children.map(c => c.node) : children;
+              }
+              
+              return node;
+            }
+            
+            // 克隆并清理 DOM
             const clone = document.documentElement.cloneNode(true);
-            
-            // 移除所有 script 标签
-            const scripts = clone.querySelectorAll('script');
-            for (let i = 0; i < scripts.length; i++) {
-              if (scripts[i].parentNode) {
-                scripts[i].parentNode.removeChild(scripts[i]);
-              }
+            const unwantedSelectors = 'script, style, link, noscript, meta, iframe';
+            const unwantedElements = clone.querySelectorAll(unwantedSelectors);
+            for (let i = unwantedElements.length - 1; i >= 0; i--) {
+              if (unwantedElements[i].parentNode) unwantedElements[i].parentNode.removeChild(unwantedElements[i]);
             }
             
-            // 移除所有 style 标签
-            const styles = clone.querySelectorAll('style');
-            for (let i = 0; i < styles.length; i++) {
-              if (styles[i].parentNode) {
-                styles[i].parentNode.removeChild(styles[i]);
-              }
-            }
-            
-            // 移除所有 link 标签（通常是 CSS）
-            const links = clone.querySelectorAll('link');
-            for (let i = 0; i < links.length; i++) {
-              if (links[i].parentNode) {
-                links[i].parentNode.removeChild(links[i]);
-              }
-            }
-            
-            // 移除所有 noscript 标签
-            const noscripts = clone.querySelectorAll('noscript');
-            for (let i = 0; i < noscripts.length; i++) {
-              if (noscripts[i].parentNode) {
-                noscripts[i].parentNode.removeChild(noscripts[i]);
-              }
-            }
-            
-            // 移除所有 meta 标签
-            const metas = clone.querySelectorAll('meta');
-            for (let i = 0; i < metas.length; i++) {
-              if (metas[i].parentNode) {
-                metas[i].parentNode.removeChild(metas[i]);
-              }
-            }
-            
-            // 移除所有 iframe 标签（不保留）
-            const iframes = clone.querySelectorAll('iframe');
-            for (let i = 0; i < iframes.length; i++) {
-              if (iframes[i].parentNode) {
-                iframes[i].parentNode.removeChild(iframes[i]);
-              }
-            }
-            
-            // 清空所有 SVG 标签的内容和属性，只保留纯 <svg/> 占位符
             const svgs = clone.querySelectorAll('svg');
             for (let i = 0; i < svgs.length; i++) {
-              // 移除所有属性
-              while (svgs[i].attributes.length > 0) {
-                svgs[i].removeAttribute(svgs[i].attributes[0].name);
-              }
-              // 移除所有子节点
-              while (svgs[i].firstChild) {
-                svgs[i].removeChild(svgs[i].firstChild);
-              }
+              while (svgs[i].attributes.length > 0) svgs[i].removeAttribute(svgs[i].attributes[0].name);
+              while (svgs[i].firstChild) svgs[i].removeChild(svgs[i].firstChild);
             }
             
-            // 移除所有注释节点
             function removeComments(node) {
               if (node.nodeType === Node.COMMENT_NODE) {
-                if (node.parentNode) {
-                  node.parentNode.removeChild(node);
-                }
+                if (node.parentNode) node.parentNode.removeChild(node);
                 return;
               }
-              const children = Array.from(node.childNodes);
-              for (const child of children) {
-                removeComments(child);
-              }
+              Array.from(node.childNodes).forEach(removeComments);
             }
             removeComments(clone);
             
-            // 递归移除空元素（没有文本内容且没有子元素的 div、span、p 等）
             function removeEmptyElements(node) {
-              const children = Array.from(node.childNodes);
-              for (const child of children) {
+              Array.from(node.childNodes).forEach(child => {
                 if (child.nodeType === Node.ELEMENT_NODE) {
                   removeEmptyElements(child);
-                  
-                  // 检查是否是应该移除的空元素
                   const tagName = child.tagName.toLowerCase();
-                  const emptyTags = ['div', 'span', 'p', 'section', 'article', 'aside'];
-                  
-                  if (emptyTags.includes(tagName)) {
+                  if (['div', 'span', 'p', 'section', 'article', 'aside'].includes(tagName)) {
                     const hasText = child.textContent && child.textContent.trim().length > 0;
                     const hasChildren = child.children.length > 0;
-                    const hasImportantAttrs = child.hasAttribute('id') || 
-                                             child.hasAttribute('role') ||
+                    const hasImportantAttrs = child.hasAttribute('id') || child.hasAttribute('role') ||
                                              (child.className && typeof child.className === 'string' && 
-                                              (child.className.includes('nav') || 
-                                               child.className.includes('header') || 
-                                               child.className.includes('footer') ||
-                                               child.className.includes('main') ||
-                                               child.className.includes('content')));
-                    
-                    // 如果没有文本、没有子元素、也没有重要属性，则移除
-                    if (!hasText && !hasChildren && !hasImportantAttrs) {
-                      if (child.parentNode) {
-                        child.parentNode.removeChild(child);
-                      }
+                                              /nav|header|footer|main|content/.test(child.className));
+                    if (!hasText && !hasChildren && !hasImportantAttrs && child.parentNode) {
+                      child.parentNode.removeChild(child);
                     }
                   }
                 }
-              }
+              });
             }
             removeEmptyElements(clone);
             
-            // 清理所有元素的属性，只保留 class、id、role、href 和特定的 data-* 属性
-            const allElements = clone.querySelectorAll('*');
-            for (let i = 0; i < allElements.length; i++) {
-              const el = allElements[i];
-              const attrs = Array.from(el.attributes);
-              
-              for (let j = attrs.length - 1; j >= 0; j--) {
-                const attrName = attrs[j].name;
-                
-                // 判断是否应该保留该属性
-                let shouldKeep = false;
-                
-                // 始终保留的基础属性
-                if (attrName === 'class' || attrName === 'id' || attrName === 'role' || attrName === 'href') {
-                  shouldKeep = true;
-                }
-                // 处理 data-* 属性：采用白名单机制
-                else if (attrName.startsWith('data-')) {
-                  // 排除 Vue 的 data-v-* 属性
-                  if (attrName.startsWith('data-v-')) {
-                    shouldKeep = false;
-                  } else {
-                    // 提取 data- 后面的部分
-                    const dataKey = attrName.substring(5).toLowerCase();
-                    // 白名单关键词：包含这些关键词的 data 属性才保留
-                    const allowedKeywords = ['url', 'id', 'link', 'href', 'src', 'path', 'route', 'target'];
-                    shouldKeep = allowedKeywords.some(keyword => dataKey.includes(keyword));
-                  }
-                }
-                
-                // 移除不应该保留的属性
-                if (!shouldKeep) {
-                  el.removeAttribute(attrName);
-                }
-              }
-            }
-            
-            // 序列化清理后的 DOM
-            const serializer = new XMLSerializer();
-            let html = serializer.serializeToString(clone);
-            
-            // 移除 HTML 格式化产生的换行符，但保留文本块内的换行
-            // 策略：移除标签之间的空白和换行，但保留标签内文本的换行
-            html = html.replace(/\>\s+\</g, '><');  // 移除标签间的空白和换行
-            html = html.replace(/\n\s*/g, '');       // 移除剩余的换行和缩进
-            
-            return html;
+            return domToSelectorStyle(clone, 0);
           } catch (error) {
-            console.error('Error in getPageHtml:', error);
-            // 降级方案：返回原始 outerHTML
-            return document.documentElement.outerHTML;
+            console.error('Error in getPageStruct:', error);
+            return { node: 'error', text: 'Failed to parse DOM: ' + error.toString() };
           }
         })()
       `)
-      log.debug(`Successfully got cleaned HTML, length: ${html.length} chars`)
+      log.debug(`Successfully got page structure, length: ${JSON.stringify(jsonStructure).length} chars`)
+
+      // 计算并记录压缩比例
+      const jsonLength = JSON.stringify(jsonStructure).length
+      const compressionRatio = ((1 - jsonLength / originalHtmlLength) * 100).toFixed(2)
+      log.info(`Page Structure Size Comparison:`)
+      log.info(`   Original HTML:    ${originalHtmlLength.toLocaleString()} chars`)
+      log.info(`   Selector JSON:    ${jsonLength.toLocaleString()} chars (${compressionRatio}% reduction)`)
+      log.info(`   Saved:            ${(originalHtmlLength - jsonLength).toLocaleString()} chars`)
     } catch (error: any) {
-      log.warn(`⚠️ Failed to get cleaned HTML: ${error.message}`)
+      log.warn(`Failed to get page structure: ${error.message}`)
       log.warn(`   Error name: ${error.name}`)
       log.warn(`   Error stack: ${error.stack}`)
-      
-      // 降级方案：通过序列化 DOM 获取
-      log.debug('Trying alternative method: XMLSerializer...')
-      try {
-        html = await webContents.executeJavaScript(`
-          (function() {
-            try {
-              const serializer = new XMLSerializer();
-              return serializer.serializeToString(document.documentElement);
-            } catch (e) {
-              console.error('XMLSerializer failed:', e);
-              return document.body ? document.body.innerHTML : '';
-            }
-          })()
-        `)
-        log.debug(`Successfully got HTML via XMLSerializer, length: ${html.length} chars`)
-      } catch (fallbackError: any) {
-        log.error(`All methods failed to get page content`)
-        log.error(`   Primary error: ${error.message}`)
-        log.error(`   Fallback error: ${fallbackError.message}`)
-        log.error(`   Tab ID: ${tabId}`)
-        log.error(`   URL: ${currentUrl}`)
-        log.error(`   Title: ${pageTitle}`)
-        throw new Error(`Failed to get page content. Primary: ${error.message}, Fallback: ${fallbackError.message}`)
-      }
+
+      // 降级方案：返回错误对象
+      jsonStructure = { node: 'error', text: 'Failed to parse DOM: ' + error.toString() }
     }
 
     const title = webContents.getTitle()
@@ -521,21 +532,21 @@ export class BrowserAutomationService {
       windowId: tabId,
       url,
       title,
-      html,
+      struct: jsonStructure,
     }
   }
 
   /**
    * 获取页面纯文本内容
    */
-  async getPageContent(windowId?: string): Promise<any> {
+  async getPageText(windowId: string): Promise<any> {
     const { tabId } = await this.ensureTab(windowId)
 
     if (!this.tabManager) {
       throw new Error('TabManager not initialized')
     }
 
-    log.info(`Getting page content (tab: ${tabId})...`)
+    log.info(`Getting page text (tab: ${tabId})...`)
 
     const webContents = this.tabManager.getWebContents(tabId)
     if (!webContents) {
@@ -548,7 +559,7 @@ export class BrowserAutomationService {
     // 记录页面状态信息用于调试
     const currentUrl = webContents.getURL()
     const pageTitle = webContents.getTitle()
-    log.info(`Page status for content: URL=${currentUrl}, Title=${pageTitle}`)
+    log.info(`Page status for text: URL=${currentUrl}, Title=${pageTitle}`)
 
     let text = ''
     try {
@@ -556,144 +567,29 @@ export class BrowserAutomationService {
       text = await webContents.executeJavaScript(`
         (function() {
           try {
-            // 直接使用 document.body.innerText 获取纯文本
-            if (!document.body) {
-              return '';
-            }
-            
-            // 创建临时容器来移除不需要的元素
-            const tempDiv = document.createElement('div');
-            tempDiv.innerHTML = document.body.innerHTML;
-            
-            // 移除脚本、样式和 noscript 元素
-            const unwantedElements = tempDiv.querySelectorAll('script, style, noscript, link, meta');
-            for (let i = 0; i < unwantedElements.length; i++) {
-              if (unwantedElements[i].parentNode) {
-                unwantedElements[i].parentNode.removeChild(unwantedElements[i]);
+            const clone = document.cloneNode(true)
+            const scripts = clone.querySelectorAll('script, style, noscript')
+            for (let i = 0; i < scripts.length; i++) {
+              if (scripts[i].parentNode) {
+                scripts[i].parentNode.removeChild(scripts[i])
               }
             }
             
-            // 获取清理后的文本内容
-            let text = tempDiv.innerText || tempDiv.textContent || '';
+            let text = clone.body ? clone.body.innerText : clone.textContent || ''
             
-            // 清理多余空白：合并连续空行，去除首尾空白
             text = text
               .split('\n')
-              .map(function(line) { return line.trim(); })
-              .filter(function(line) { return line.length > 0; })
-              .join('\n');
+              .map(function(line) { return line.trim() })
+              .filter(function(line) { return line.length > 0 })
+              .join('\n')
             
-            return text;
+            return text
           } catch (error) {
-            console.error('Error in getPlainText:', error);
-            // 降级方案：直接返回 body 的 innerText
-            return document.body ? document.body.innerText : '';
+            console.error('Error in getPageText:', error)
+            return ''
           }
         })()
       `)
-      log.debug(`Successfully got plain text, length: ${text.length} chars`)
-    } catch (error: any) {
-      log.error(`Failed to get plain text`)
-      log.error(`   Error message: ${error.message}`)
-      log.error(`   Error name: ${error.name}`)
-      log.error(`   Tab ID: ${tabId}`)
-      log.error(`   URL: ${currentUrl}`)
-      
-      // 降级方案：尝试直接获取文本
-      log.debug('Trying fallback method to get plain text...')
-      try {
-        text = await webContents.executeJavaScript(`
-          (function() {
-            try {
-              return document.body ? document.body.innerText : '';
-            } catch (e) {
-              return '';
-            }
-          })()
-        `)
-        log.debug(`Successfully got plain text via fallback, length: ${text.length} chars`)
-      } catch (fallbackError: any) {
-        log.error(`All methods failed to get plain text`)
-        log.error(`   Primary error: ${error.message}`)
-        log.error(`   Fallback error: ${fallbackError.message}`)
-        throw new Error(`Failed to get plain text. Primary: ${error.message}, Fallback: ${fallbackError.message}`)
-      }
-    }
-
-    const title = webContents.getTitle()
-    const url = webContents.getURL()
-
-    return {
-      success: true,
-      windowId: tabId,
-      url,
-      title,
-      text,
-    }
-  }
-
-  /**
-   * 获取原始 HTML
-   */
-  async getRawHtml(windowId?: string): Promise<any> {
-    return await this.getPageContent(windowId)
-  }
-
-  /**
-   * 获取纯文本内容（移除所有标签和脚本�?
-   */
-  async getPlainText(windowId?: string): Promise<any> {
-    const { tabId } = await this.ensureTab(windowId)
-
-    if (!this.tabManager) {
-      throw new Error('TabManager not initialized')
-    }
-
-    log.info(`Getting plain text (tab: ${tabId})...`)
-
-    const webContents = this.tabManager.getWebContents(tabId)
-    if (!webContents) {
-      throw new Error(`Tab ${tabId} not found`)
-    }
-
-    // 等待页面完全加载
-    await this.waitForPageLoad(webContents)
-
-    // 记录页面状态信息用于调试
-    const currentUrl = webContents.getURL()
-    const pageTitle = webContents.getTitle()
-    log.info(`Page status for plain text: URL=${currentUrl}, Title=${pageTitle}`)
-
-    let text = ''
-    try {
-      log.debug('Executing JavaScript to extract plain text...')
-      text = await webContents.executeJavaScript(`
-      (function() {
-        try {
-          const clone = document.cloneNode(true)
-          const scripts = clone.querySelectorAll('script, style, noscript')
-          for (let i = 0; i < scripts.length; i++) {
-            if (scripts[i].parentNode) {
-              scripts[i].parentNode.removeChild(scripts[i])
-            }
-          }
-          
-          let text = clone.body ? clone.body.innerText : clone.textContent || ''
-          
-          text = text
-            .split('\n')
-            .map(function(line) { return line.trim() })
-            .filter(function(line) { return line.length > 0 })
-            .join('\n')
-          
-          return text
-        } catch (error) {
-          console.error('Error in getPlainText:', error)
-          return ''
-        }
-      })()
-    `)
-      log.debug(`Successfully got plain text, length: ${text.length} chars`)
     } catch (error: any) {
       log.error(`Failed to get plain text`)
       log.error(`   Error message: ${error.message}`)
@@ -716,16 +612,16 @@ export class BrowserAutomationService {
   }
 
   /**
-   * 获取主要内容结构（文字和链接）
+   * 获取页面摘要（文字、链接和标题层级）
    */
-  async getMainStructure(windowId?: string): Promise<any> {
+  async getPageSummary(windowId: string): Promise<any> {
     const { tabId } = await this.ensureTab(windowId)
 
     if (!this.tabManager) {
       throw new Error('TabManager not initialized')
     }
 
-    log.info(`🏗️ Getting main structure (tab: ${tabId})...`)
+    log.info(`Getting main structure (tab: ${tabId})...`)
 
     const webContents = this.tabManager.getWebContents(tabId)
     if (!webContents) {
@@ -738,7 +634,7 @@ export class BrowserAutomationService {
     // 记录页面状态信息用于调试
     const currentUrl = webContents.getURL()
     const pageTitle = webContents.getTitle()
-    log.info(`🏗️ Page status for structure: URL=${currentUrl}, Title=${pageTitle}`)
+    log.info(`Page status for structure: URL=${currentUrl}, Title=${pageTitle}`)
 
     let structure: any
     try {
@@ -795,7 +691,7 @@ export class BrowserAutomationService {
             
             return result;
           } catch (error) {
-            console.error('Outer error in getMainStructure:', error);
+            console.error('Outer error in getPageSummary:', error);
             return {
               text: '',
               links: [],
@@ -808,7 +704,7 @@ export class BrowserAutomationService {
 
       // 检查是否返回了错误信息
       if (structure && structure.error) {
-        log.warn(`⚠️ JavaScript execution returned error: ${structure.error}`)
+        log.warn(`JavaScript execution returned error: ${structure.error}`)
       }
 
       log.debug(`Successfully got structure: text=${structure.text?.length || 0} chars, links=${structure.links?.length || 0}, headings=${structure.headings?.length || 0}`)
@@ -856,7 +752,7 @@ export class BrowserAutomationService {
   /**
    * 等待元素出现
    */
-  async waitForSelector(selector: string, timeout: number = 10000, windowId?: string): Promise<any> {
+  async waitForSelector(selector: string, timeout: number = 10000, windowId: string): Promise<any> {
     const { tabId } = await this.ensureTab(windowId)
 
     if (!this.tabManager) {
@@ -905,14 +801,14 @@ export class BrowserAutomationService {
   /**
    * 点击元素
    */
-  async click(selector: string, windowId?: string): Promise<any> {
+  async click(selector: string, windowId: string): Promise<any> {
     const { tabId } = await this.ensureTab(windowId)
 
     if (!this.tabManager) {
       throw new Error('TabManager not initialized')
     }
 
-    log.info(`🖱️ Clicking element: ${selector} (tab: ${tabId})`)
+    log.info(`Clicking element: ${selector} (tab: ${tabId})`)
 
     const webContents = this.tabManager.getWebContents(tabId)
     if (!webContents) {
@@ -940,14 +836,14 @@ export class BrowserAutomationService {
   /**
    * 填充表单字段
    */
-  async fillForm(selector: string, value: string, windowId?: string): Promise<any> {
+  async fillForm(selector: string, value: string, windowId: string): Promise<any> {
     const { tabId } = await this.ensureTab(windowId)
 
     if (!this.tabManager) {
       throw new Error('TabManager not initialized')
     }
 
-    log.info(`✏️ Filling form field: ${selector} (tab: ${tabId})`)
+    log.info(`Filling form field: ${selector} (tab: ${tabId})`)
 
     const webContents = this.tabManager.getWebContents(tabId)
     if (!webContents) {
@@ -977,14 +873,14 @@ export class BrowserAutomationService {
   /**
    * 后退
    */
-  async goBack(windowId?: string): Promise<any> {
+  async goBack(windowId: string): Promise<any> {
     const { tabId } = await this.ensureTab(windowId)
 
     if (!this.tabManager) {
       throw new Error('TabManager not initialized')
     }
 
-    log.info(`⬅️ Going back (tab: ${tabId})...`)
+    log.info(`Going back (tab: ${tabId})...`)
 
     const webContents = this.tabManager.getWebContents(tabId)
     if (!webContents) {
@@ -1007,14 +903,14 @@ export class BrowserAutomationService {
   /**
    * 前进
    */
-  async goForward(windowId?: string): Promise<any> {
+  async goForward(windowId: string): Promise<any> {
     const { tabId } = await this.ensureTab(windowId)
 
     if (!this.tabManager) {
       throw new Error('TabManager not initialized')
     }
 
-    log.info(`➡️ Going forward (tab: ${tabId})...`)
+    log.info(`Going forward (tab: ${tabId})...`)
 
     const webContents = this.tabManager.getWebContents(tabId)
     if (!webContents) {
@@ -1037,7 +933,7 @@ export class BrowserAutomationService {
   /**
    * 刷新页面
    */
-  async reload(windowId?: string): Promise<any> {
+  async reload(windowId: string): Promise<any> {
     const { tabId } = await this.ensureTab(windowId)
 
     if (!this.tabManager) {
@@ -1076,26 +972,17 @@ export class BrowserAutomationService {
   }
 
   /**
-   * 关闭指定标签�?
+   * 关闭指定标签
    */
-  async closeWindow(windowId?: string): Promise<any> {
-    const targetTabId = windowId || this.defaultTabId
-
-    if (!targetTabId || !this.tabManager) {
+  async closeWindow(windowId: string): Promise<any> {
+    if (!this.tabManager) {
       return {
         success: false,
-        message: 'Tab not found',
+        message: 'TabManager not initialized',
       }
     }
 
-    const success = await this.tabManager.closeTab(targetTabId)
-
-    // 如果关闭的是默认标签，重新选择默认标签
-    if (success && this.defaultTabId === targetTabId) {
-      const tabs = this.tabManager.getTabList()
-      const nonMainAppTab = tabs.find(t => !t.isMainApp)
-      this.defaultTabId = nonMainAppTab ? nonMainAppTab.tabId : 'main_app'
-    }
+    const success = await this.tabManager.closeTab(windowId)
 
     return {
       success,
@@ -1136,13 +1023,13 @@ export class BrowserAutomationService {
   /**
    * 处理工具调用请求
    * 
-   * 这是核心分发逻辑，根�?method 调用对应的功�?
+   * 这是核心分发逻辑，根据 method 调用对应的功能
    * 统一使用 snake_case 命名风格
    */
   async handleToolCall(request: ToolRequest): Promise<any> {
     const { method, params } = request
 
-    log.info(`🛠️ Handling tool call: ${method}`)
+    log.info(`Handling tool call: ${method}`)
 
     try {
       switch (method) {
@@ -1154,16 +1041,16 @@ export class BrowserAutomationService {
         //   return await this.screenshot({ ...params, windowId: params.window_id })
 
         case 'execute_js':
-          return await this.executeJavaScript(params.code, params.window_id)
+          return await this.executeJavaScript(params.code, params.window_id, params.is_async || false)
 
-        case 'get_page_html':
-          return await this.getPageHtml(params.window_id)
+        case 'get_page_struct':
+          return await this.getPageStruct(params.window_id)
 
-        case 'get_page_content':
-          return await this.getPageContent(params.window_id)
+        case 'get_page_text':
+          return await this.getPageText(params.window_id)
 
-        case 'get_main_structure':
-          return await this.getMainStructure(params.window_id)
+        case 'get_page_summary':
+          return await this.getPageSummary(params.window_id)
 
         case 'wait_for_selector':
           return await this.waitForSelector(params.selector, params.timeout, params.window_id)
@@ -1196,23 +1083,17 @@ export class BrowserAutomationService {
             count: this.getWindowCount(),
           }
 
-        case 'set_default_window':
-          return {
-            success: this.setDefaultWindow(params.window_id),
-            windowId: params.window_id,
-          }
-
         default:
           throw new Error(`Unknown method: ${method}`)
       }
     } catch (error: any) {
-      log.error(`�?Error handling tool call ${method}:`, error)
+      log.error(`Error handling tool call ${method}:`, error)
       throw error
     }
   }
 
   /**
-   * 检查服务是否就�?
+   * 检查服务是否就绪
    */
   isReady(): boolean {
     return this.tabManager !== null
@@ -1231,33 +1112,11 @@ export class BrowserAutomationService {
       windowId: tab.tabId,
       url: tab.url,
       title: tab.title,
-      createdAt: tab.createdAt,
-      lastActivityAt: tab.lastActiveAt,
-      isActive: tab.tabId === this.defaultTabId,
     }))
   }
 
   /**
-   * 设置默认标签�?
-   */
-  setDefaultWindow(windowId: string): boolean {
-    if (!this.tabManager) {
-      return false
-    }
-
-    const tabs = this.tabManager.getTabList()
-    const exists = tabs.some(t => t.tabId === windowId)
-
-    if (exists) {
-      this.defaultTabId = windowId
-      return true
-    }
-
-    return false
-  }
-
-  /**
-   * 获取当前标签页数�?
+   * 获取当前标签页数量
    */
   getWindowCount(): number {
     if (!this.tabManager) {
