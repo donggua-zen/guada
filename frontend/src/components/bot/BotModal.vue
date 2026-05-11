@@ -42,6 +42,30 @@
         </div>
       </el-form-item>
 
+      <!-- 模型选择（可选，不选则继承自角色/全局设置） -->
+      <el-form-item label="模型选择">
+        <el-select 
+          v-model="formData.defaultModelId" 
+          placeholder="继承自角色/全局设置" 
+          style="width: 100%" 
+          filterable
+          clearable>
+          <el-option 
+            v-for="model in availableModels" 
+            :key="model.id" 
+            :label="model.modelName" 
+            :value="model.id">
+            <div class="flex items-center gap-2">
+              <span>{{ model.modelName }}</span>
+              <span class="text-gray-400 text-xs">{{ model.providerName }}</span>
+            </div>
+          </el-option>
+        </el-select>
+        <div class="text-xs text-gray-500 dark:text-[#8b8d95] mt-1">
+          不选择则使用角色的默认模型，如果角色未设置则使用全局默认模型
+        </div>
+      </el-form-item>
+
       <!-- 引用知识库选择（多选） -->
       <el-form-item label="引用知识库">
         <el-select 
@@ -157,6 +181,7 @@ import { useKnowledgeBaseStore } from '@/stores/knowledgeBase'
 import { apiService } from '@/services/ApiService'
 import type { BotInstance, PlatformMetadata } from '@/types/bot'
 import type { KnowledgeBase } from '@/stores/knowledgeBase'
+import type { ModelProvider, Model } from '@/types/api'
 
 const props = defineProps<{
   modelValue: boolean
@@ -182,6 +207,10 @@ const characters = ref<any[]>([])
 // 知识库列表
 const knowledgeBases = ref<KnowledgeBase[]>([])
 
+// 模型提供商和模型列表
+const modelProviders = ref<ModelProvider[]>([])
+const allModels = ref<Model[]>([])
+
 // 对话框可见性
 const dialogVisible = computed({
   get: () => props.modelValue,
@@ -191,7 +220,10 @@ const dialogVisible = computed({
 // 是否编辑模式
 const isEdit = computed(() => !!props.bot)
 
-// 选中的平台元数据
+// 可用的模型列表（按提供商分组后的扁平列表）
+const availableModels = computed(() => {
+  return allModels.value.filter(model => model.isActive)
+})
 const selectedPlatform = computed<PlatformMetadata | undefined>(() => {
   if (!formData.value.platform) return undefined
   return botStore.platforms.find(p => p.platform === formData.value.platform)
@@ -202,6 +234,7 @@ const formData = ref({
   platform: '',
   name: '',
   defaultCharacterId: '',
+  defaultModelId: '' as string | null, // null 表示继承自角色/全局设置
   knowledgeBaseIds: [] as string[],
   platformConfig: {} as Record<string, any>,
   reconnectConfig: {
@@ -272,6 +305,7 @@ watch(dialogVisible, (visible) => {
         platform: bot.platform,
         name: bot.name,
         defaultCharacterId: bot.defaultCharacterId || '',
+        defaultModelId: bot.defaultModelId || null, // null 表示继承自角色/全局设置
         knowledgeBaseIds: bot.additionalKwargs?.knowledgeBaseIds || [],
         platformConfig: platformConfig,
         reconnectConfig: {
@@ -321,6 +355,7 @@ const resetForm = () => {
     platform: '',
     name: '',
     defaultCharacterId: '',
+    defaultModelId: null, // null 表示继承自角色/全局设置
     knowledgeBaseIds: [],
     platformConfig: {},
     reconnectConfig: {
@@ -360,10 +395,29 @@ const loadKnowledgeBases = async () => {
   }
 }
 
-// 组件挂载时加载角色列表和知识库列表
+// 加载模型列表
+const loadModels = async () => {
+  try {
+    const response = await apiService.fetchModels()
+    modelProviders.value = response.items || []
+    // 扁平化所有模型
+    allModels.value = modelProviders.value.flatMap(provider => 
+      (provider.models || []).map(model => ({
+        ...model,
+        providerName: provider.name
+      }))
+    )
+  } catch (error) {
+    console.error('获取模型列表失败:', error)
+    ElMessage.error('获取模型列表失败')
+  }
+}
+
+// 组件挂载时加载角色列表、知识库列表和模型列表
 onMounted(() => {
   loadCharacters()
   loadKnowledgeBases()
+  loadModels()
 })
 
 // 提交表单
@@ -380,6 +434,7 @@ const handleSubmit = async () => {
         const updateData = {
           name: formData.value.name,
           defaultCharacterId: formData.value.defaultCharacterId,
+          defaultModelId: formData.value.defaultModelId || undefined, // null 转为 undefined
           platformConfig: formData.value.platformConfig,
           reconnectConfig: formData.value.reconnectConfig,
           additionalKwargs: {
@@ -393,6 +448,7 @@ const handleSubmit = async () => {
           platform: formData.value.platform,
           name: formData.value.name,
           defaultCharacterId: formData.value.defaultCharacterId,
+          defaultModelId: formData.value.defaultModelId || undefined, // null 转为 undefined
           platformConfig: formData.value.platformConfig,
           reconnectConfig: formData.value.reconnectConfig,
           autoStart: formData.value.autoStart,

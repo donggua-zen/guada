@@ -263,6 +263,60 @@ export class BotInstanceManager implements OnModuleInit, OnApplicationShutdown {
   }
 
   /**
+   * 获取 Bot 配置（从内存中读取最新配置）
+   */
+  getBotConfig(botId: string): BotConfig | undefined {
+    return this.botInstances.get(botId)?.config;
+  }
+
+  /**
+   * 重新加载 Bot 配置（从数据库读取并更新内存）
+   * 用于在不重启机器人的情况下更新动态配置
+   */
+  async reloadBotConfig(botId: string): Promise<void> {
+    const instance = this.botInstances.get(botId);
+    if (!instance) {
+      this.logger.warn(`Bot instance not found in memory: ${botId}`);
+      return;
+    }
+
+    // 从数据库读取最新配置
+    const botData = await this.prisma.botInstance.findUnique({
+      where: { id: botId },
+    });
+
+    if (!botData) {
+      this.logger.error(`Bot instance not found in database: ${botId}`);
+      return;
+    }
+
+    // 从 additionalKwargs 中提取知识库ID列表
+    const knowledgeBaseIds = (botData.additionalKwargs as any)?.knowledgeBaseIds || [];
+
+    // 构建新的配置对象
+    const newConfig: BotConfig = {
+      id: botData.id,
+      platform: botData.platform as any,
+      name: botData.name,
+      platformConfig: botData.platformConfig as any,
+      enabled: botData.enabled,
+      reconnectConfig: {
+        enabled: botData.reconnectEnabled,
+        maxRetries: botData.maxRetries,
+        retryInterval: botData.retryInterval,
+      },
+      defaultCharacterId: botData.defaultCharacterId || undefined,
+      defaultModelId: botData.defaultModelId || undefined,
+      knowledgeBaseIds,
+    };
+
+    // 更新内存中的配置（直接修改对象属性，保持引用不变）
+    Object.assign(instance.config, newConfig);
+
+    this.logger.log(`Reloaded config for bot: ${botId}`);
+  }
+
+  /**
    * 获取单个机器人状态
    */
   getStatus(botId: string): BotStatus | null {
@@ -411,8 +465,15 @@ export class BotInstanceManager implements OnModuleInit, OnApplicationShutdown {
   /**
    * 处理机器人断开连接事件
    */
-  async handleBotDisconnect(botId: string, config: BotConfig, code: number): Promise<void> {
+  async handleBotDisconnect(botId: string, code: number): Promise<void> {
     this.logger.warn(`Handling bot disconnect for ${botId} with code: ${code}`);
+    
+    // 从内存获取最新配置
+    const config = this.getBotConfig(botId);
+    if (!config) {
+      this.logger.error(`Bot config not found: ${botId}`);
+      return;
+    }
     
     // 更新数据库状态为断开连接
     await this.prisma.botInstance.update({

@@ -30,7 +30,7 @@ export function parseExternalId(externalId: string): ExternalSessionInfo | null 
   }
 
   const [platform, type, nativeId] = parts;
-  
+
   if (type !== 'private' && type !== 'group') {
     return null;
   }
@@ -43,4 +43,47 @@ export function parseExternalId(externalId: string): ExternalSessionInfo | null 
  */
 export function isExternalId(value: string): boolean {
   return value.includes(':');
+}
+
+/**
+ * 为 externalId 添加重置标记（用于清空会话场景）
+ * @param externalId 原始 externalId
+ * @returns 带时间戳后缀的新 externalId
+ */
+export function appendResetMarker(externalId: string): string {
+  const timestamp = Date.now();
+  return `${externalId}@${timestamp}`;
+}
+
+/**
+ * 从 externalId 中提取基础部分（去除重置标记）
+ * @param externalId 可能包含重置标记的 externalId
+ * @returns 基础 externalId
+ */
+export function extractBaseExternalId(externalId: string): string {
+  const atIndex = externalId.indexOf('@');
+  if (atIndex === -1) {
+    return externalId;
+  }
+  return externalId.substring(0, atIndex);
+}
+
+/**
+ * 检查 externalId 是否包含重置标记
+ */
+export function hasResetMarker(externalId: string): boolean {
+  return externalId.includes('@');
+}
+
+/**
+ * 获取重置时间戳（如果存在）
+ */
+export function getResetTimestamp(externalId: string): number | null {
+  const atIndex = externalId.indexOf('@');
+  if (atIndex === -1) {
+    return null;
+  }
+  const timestampStr = externalId.substring(atIndex + 1);
+  const timestamp = parseInt(timestampStr, 10);
+  return isNaN(timestamp) ? null : timestamp;
 }

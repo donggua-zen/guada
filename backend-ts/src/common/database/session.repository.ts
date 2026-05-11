@@ -101,24 +101,22 @@ export class SessionRepository {
   }
 
   /**
-   * 根据 botId、externalId 和 characterId 查找会话
-   * 注意：Bot 会话的 modelId 为 null，调用方需要自行处理模型解析
+   * 根据 botId 和 externalId 查找 Bot 会话
+   * 
+   * 注意：Bot 会话的 characterId 和 modelId 都为 null，这两个字段由调用方动态挂载
    */
   async findByBotAndExternalId(
     botId: string,
     externalId: string,
-    characterId?: string | null,
   ) {
     return this.prisma.session.findFirst({
       where: {
         botId,
         externalId,
         sessionType: 'bot',
-        characterId: characterId || null,
       },
       include: {
-        character: true,
-        // 不 include model，因为 modelId 为 null
+        // 不 include character 和 model，因为都为 null，由调用方动态挂载
       },
     });
   }
