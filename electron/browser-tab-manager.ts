@@ -270,27 +270,39 @@ export class BrowserTabManager {
 
     try {
       // 从窗口移除（如果有 view）
-      if (this.mainWindow && tab.view) {
-        this.mainWindow.contentView.removeChildView(tab.view)
+      if (this.mainWindow && !this.mainWindow.isDestroyed() && tab.view) {
+        try {
+          this.mainWindow.contentView.removeChildView(tab.view)
+        } catch (error) {
+          log.warn(`Failed to remove child view for tab ${tabId}:`, error)
+        }
       }
 
-      // 清理 session 数据
-      await tab.webContents.session.clearStorageData({
-        storages: [
-          'cookies',
-          'filesystem',
-          'indexdb',
-          'localstorage',
-          'shadercache',
-          'websql',
-          'serviceworkers',
-          'cachestorage',
-        ],
-      })
-      await tab.webContents.session.clearCache()
+      // 清理 session 数据（仅在 webContents 未销毁时）
+      if (!tab.webContents.isDestroyed()) {
+        try {
+          await tab.webContents.session.clearStorageData({
+            storages: [
+              'cookies',
+              'filesystem',
+              'indexdb',
+              'localstorage',
+              'shadercache',
+              'websql',
+              'serviceworkers',
+              'cachestorage',
+            ],
+          })
+          await tab.webContents.session.clearCache()
+        } catch (error) {
+          log.warn(`Failed to clear session data for tab ${tabId}:`, error)
+        }
+      }
 
       // 销毁 WebContents（重要：释放资源）
-      ;(tab.webContents as any).destroy()
+      if (!tab.webContents.isDestroyed()) {
+        ;(tab.webContents as any).destroy()
+      }
 
       // 从映射中移除
       this.tabs.delete(tabId)
@@ -335,11 +347,13 @@ export class BrowserTabManager {
    * 获取所有标签列表
    */
   getTabList(): TabInfo[] {
-    return Array.from(this.tabs.values()).map(({ info, webContents }) => ({
-      ...info,
-      url: webContents.getURL(),
-      title: webContents.getTitle() || info.title,
-    }))
+    return Array.from(this.tabs.values())
+      .filter(({ webContents }) => !webContents.isDestroyed()) // 过滤掉已销毁的
+      .map(({ info, webContents }) => ({
+        ...info,
+        url: webContents.getURL(),
+        title: webContents.getTitle() || info.title,
+      }))
   }
 
   /**
@@ -350,6 +364,12 @@ export class BrowserTabManager {
       return null
     }
     const { info, webContents } = this.tabs.get(this.activeTabId)!
+    
+    // 如果 webContents 已销毁，返回 null
+    if (webContents.isDestroyed()) {
+      return null
+    }
+    
     return {
       ...info,
       url: webContents.getURL(),

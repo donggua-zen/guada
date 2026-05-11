@@ -13,8 +13,10 @@ let automationService: BrowserAutomationService | null = null
 
 /**
  * 启动 IPC 模式的 Browser Bridge
+ * @param tabManager - 标签管理器
+ * @param backendProcess - 后端子进程（可选，用于监听 IPC）
  */
-export function startBrowserBridge(tabManager: BrowserTabManager): void {
+export function startBrowserBridge(tabManager: BrowserTabManager, backendProcess?: any): void {
   log.info('Starting Browser Bridge in IPC mode...')
 
   // 初始化浏览器自动化服务
@@ -23,11 +25,11 @@ export function startBrowserBridge(tabManager: BrowserTabManager): void {
   // 初始化 TabManager
   automationService.initializeTabManager(tabManager)
 
-  // 监听来自父进程的消息
-  if (process.send) {
-    log.info('Browser Bridge ready, waiting for IPC messages')
+  // 如果提供了后端进程，监听它的 IPC 消息
+  if (backendProcess) {
+    log.info('Browser Bridge listening to backend process IPC messages')
 
-    process.on('message', async (message: any) => {
+    backendProcess.on('message', async (message: any) => {
       if (!message || message.type !== 'BROWSER_TOOL_CALL') {
         return
       }
@@ -35,7 +37,8 @@ export function startBrowserBridge(tabManager: BrowserTabManager): void {
       const request: ToolRequest = message.data
 
       try {
-        log.debug(`Received IPC request: ${request.method} (id: ${request.id})`)
+        log.info(`Received IPC request from backend: ${request.method} (id: ${request.id})`)
+        log.debug(`Request params: ${JSON.stringify(request.params).substring(0, 200)}`)
 
         const result = await automationService!.handleToolCall(request)
 
@@ -44,7 +47,8 @@ export function startBrowserBridge(tabManager: BrowserTabManager): void {
           result,
         }
 
-        process.send!({
+        log.info(`Sending IPC response for ${request.id}`)
+        backendProcess.send!({
           type: 'BROWSER_TOOL_RESPONSE',
           data: response,
         })
@@ -58,14 +62,16 @@ export function startBrowserBridge(tabManager: BrowserTabManager): void {
           error: error.message,
         }
 
-        process.send!({
+        backendProcess.send!({
           type: 'BROWSER_TOOL_RESPONSE',
           data: response,
         })
       }
     })
+
+    log.info('Browser Bridge IPC ready (listening to backend process)')
   } else {
-    log.warn('⚠️ No IPC channel available, Browser Bridge disabled')
+    log.warn('⚠️ No backend process provided, Browser Bridge IPC disabled')
   }
 
   // 应用退出时清理

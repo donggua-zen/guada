@@ -1,4 +1,4 @@
-import { BrowserWindow } from 'electron'
+﻿import { BrowserWindow } from 'electron'
 import log from 'electron-log/main'
 import { BrowserTabManager, TabInfo } from './browser-tab-manager'
 
@@ -110,19 +110,23 @@ export class BrowserAutomationService {
 
     log.info('Destroying all browser tabs...')
 
-    const tabs = this.tabManager.getTabList()
-    for (const tab of tabs) {
-      // 不关闭主应用标签
-      if (!tab.isMainApp) {
-        try {
-          await this.tabManager.closeTab(tab.tabId)
-        } catch (error) {
-          log.error(`Error closing tab ${tab.tabId}:`, error)
+    try {
+      const tabs = this.tabManager.getTabList()
+      for (const tab of tabs) {
+        // 不关闭主应用标签
+        if (!tab.isMainApp) {
+          try {
+            await this.tabManager.closeTab(tab.tabId)
+          } catch (error) {
+            log.error(`Error closing tab ${tab.tabId}:`, error)
+          }
         }
       }
-    }
 
-    log.info('All tabs destroyed')
+      log.info('All tabs destroyed')
+    } catch (error) {
+      log.error('Error during tab destruction:', error)
+    }
   }
 
   /**

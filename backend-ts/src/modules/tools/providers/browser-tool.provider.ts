@@ -40,16 +40,11 @@ export class BrowserToolProvider implements IToolProvider {
   async onModuleInit() {
     this.logger.log('Initializing Browser Tool Provider...')
 
-    // 检查是否在 Electron 环境中
-    const isElectronEnv = process.env.ELECTRON_APP === 'true'
-
-    if (!isElectronEnv) {
-      this.logger.warn('Not in Electron environment, browser tools disabled')
-      return
-    }
-
     // 判断使用哪种通信方式
     this.bridgeMode = (process.env.BROWSER_BRIDGE_MODE as any) || 'ipc'
+    this.logger.log(`BROWSER_BRIDGE_MODE: ${this.bridgeMode}`)
+    this.logger.log(`ELECTRON_APP: ${process.env.ELECTRON_APP}`)
+    this.logger.log(`process.send available: ${!!process.send}`)
 
     if (this.bridgeMode === 'tcp') {
       // TCP 模式（开发环境）
@@ -60,13 +55,15 @@ export class BrowserToolProvider implements IToolProvider {
     } else {
       // IPC 模式（生产环境）
       if (!process.send || !process.on) {
-        this.logger.warn('No IPC channel available, browser tools disabled')
+        this.logger.error('No IPC channel available, browser tools disabled')
+        this.logger.error(`process.send: ${process.send}, process.on: ${!!process.on}`)
         return
       }
 
       this.logger.log('Using IPC communication mode')
 
       process.on('message', (message: any) => {
+        this.logger.debug(`Received IPC message: ${JSON.stringify(message).substring(0, 200)}`)
         if (message && message.type === 'BROWSER_TOOL_RESPONSE') {
           this.handleResponse(message.data)
         }
@@ -167,8 +164,12 @@ export class BrowserToolProvider implements IToolProvider {
     return new Promise((resolve, reject) => {
       const id = `req_${Date.now()}_${++this.requestIdCounter}`
 
+      this.logger.debug(`Sending IPC request: ${method} (id: ${id})`)
+      this.logger.debug(`Request params: ${JSON.stringify(params).substring(0, 200)}`)
+
       const timeout = setTimeout(() => {
         this.pendingRequests.delete(id)
+        this.logger.error(`IPC request timeout: ${method} (id: ${id})`)
         reject(new Error(`Request timeout: ${method}`))
       }, 60000) // 60秒超时
 
@@ -177,13 +178,22 @@ export class BrowserToolProvider implements IToolProvider {
       const request: IPCRequest = { id, method, params }
 
       if (process.send) {
-        process.send({
-          type: 'BROWSER_TOOL_CALL',
-          data: request,
-        })
+        try {
+          process.send({
+            type: 'BROWSER_TOOL_CALL',
+            data: request,
+          })
+          this.logger.debug(`IPC message sent successfully: ${id}`)
+        } catch (error: any) {
+          clearTimeout(timeout)
+          this.pendingRequests.delete(id)
+          this.logger.error(`Failed to send IPC message: ${error.message}`)
+          reject(new Error(`Failed to send IPC message: ${error.message}`))
+        }
       } else {
         clearTimeout(timeout)
         this.pendingRequests.delete(id)
+        this.logger.error('No IPC channel available for sending')
         reject(new Error('No IPC channel available'))
       }
     })

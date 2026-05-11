@@ -52,7 +52,16 @@ export class ToolOrchestrator {
     this.addProvider(imageRecognitionProvider);
     this.addProvider(shellProvider);
     this.addProvider(fileProvider);
-    this.addProvider(browserProvider);
+
+    // 仅在 Electron 环境下注册 BrowserToolProvider
+    const isElectronEnv = process.env.ELECTRON_APP === 'true';
+    if (isElectronEnv) {
+      this.addProvider(browserProvider);
+      this.logger.log('BrowserToolProvider registered (Electron environment)');
+    } else {
+      this.logger.log('BrowserToolProvider skipped (non-Electron environment)');
+    }
+
     this.addProvider(sessionManagementProvider);
     this.addProvider(skillToolBridge);
 
