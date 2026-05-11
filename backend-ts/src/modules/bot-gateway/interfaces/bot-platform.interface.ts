@@ -88,7 +88,10 @@ export interface BotConfig {
   };
   /** 关联的默认角色ID(必填,用于对话流程) */
   defaultCharacterId: string;
-  /** 关联的默认模型ID(可选) */
+  /** 
+   * 关联的默认模型ID(已废弃)
+   * @deprecated 此字段不再用于会话创建时的模型选择，模型现在通过角色配置或全局设置动态解析
+   */
   defaultModelId?: string;
   /** 关联的知识库ID列表(从 additionalKwargs 中读取) */
   knowledgeBaseIds?: string[];

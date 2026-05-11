@@ -32,7 +32,6 @@ export class SessionMapperService {
    * @param externalId 外部会话标识(由调用者根据平台策略组装)
    * @param platform 来源平台
    * @param defaultCharacterId 默认角色 ID
-   * @param defaultModelId 默认模型 ID
    * @param title 会话标题(可选,不提供则自动生成)
    */
   async getOrCreateBotSession(
@@ -40,7 +39,6 @@ export class SessionMapperService {
     externalId: string,
     platform: string,
     defaultCharacterId: string,
-    defaultModelId?: string,
     title?: string,
   ): Promise<any> {
     // 尝试查找已存在的会话
@@ -61,48 +59,8 @@ export class SessionMapperService {
         throw new Error(`Bot instance not found: ${botId}`);
       }
 
-      // === 模型选择三级回退逻辑 ===
-      let finalModelId: string | null = null;
-
-      // 1. 优先使用传入的 defaultModelId
-      if (defaultModelId) {
-        finalModelId = defaultModelId;
-      }
-      // 2. 如果没有,查询角色是否有默认模型
-      else if (defaultCharacterId) {
-        const character = await this.prisma.character.findUnique({
-          where: { id: defaultCharacterId },
-          select: { modelId: true },
-        });
-        if (character?.modelId) {
-          finalModelId = character.modelId;
-        }
-      }
-
-      // 3. 如果还没有,使用全局默认对话模型
-      if (!finalModelId) {
-        // 从文件配置中获取默认对话模型
-        finalModelId = this.settingsStorage.getSettingValue(
-          SG_MODELS,
-          SK_MOD_CHAT,
-          null
-        );
-      }
-
-      // 4. 如果都没有,抛出错误
-      if (!finalModelId) {
-        throw new Error('我还没有配置模型作为大脑，请先在设置中配置默认对话模型');
-      }
-
-      // 5. 验证模型是否存在（isActive 只影响前端展示，不影响实际使用）
-      const model = await this.prisma.model.findUnique({
-        where: { id: finalModelId },
-      });
-      if (!model) {
-        throw new Error(`模型不存在：${finalModelId}，请检查 Bot 实例的模型配置`);
-      }
-
       // 创建新会话,使用机器人创建者的 userId
+      // 注意：不设置 modelId，让模型配置通过角色/全局设置动态解析
       await this.prisma.session.create({
         data: {
           userId: botInstance.userId,  // 使用机器人创建者的用户ID
@@ -111,7 +69,7 @@ export class SessionMapperService {
           platform,
           externalId,
           characterId: defaultCharacterId,
-          modelId: finalModelId,  // 使用解析后的模型ID
+          // modelId 不设置，保持 null，由下游动态解析
           title: title || this.generateBotSessionTitleFromExternalId(externalId),
           settings: {},
         },
@@ -122,9 +80,59 @@ export class SessionMapperService {
         externalId,
         defaultCharacterId,
       );
+
     }
 
+    // 动态挂载 model（确保与角色配置同步）
+    await this.enrichBotSessionModel(session);
+
     return session;
+  }
+
+  /**
+   * 为 Bot 会话动态解析并挂载 model 信息
+   * 
+   * 优先级链：角色配置 -> 全局默认设置
+   * 这样确保 Bot 会话的模型配置与角色/全局设置实时同步
+   * 
+   * 注意：此方法仅用于 Bot 会话，不影响 Web 会话等其他模块
+   */
+  private async enrichBotSessionModel(session: any): Promise<void> {
+    let modelId: string | null = null;
+
+    // 1. 优先使用角色的 modelId
+    if (session.character?.modelId) {
+      modelId = session.character.modelId;
+    }
+    // 2. 否则使用全局默认对话模型
+    else {
+      modelId = this.settingsStorage.getSettingValue(
+        SG_MODELS,
+        SK_MOD_CHAT,
+        null
+      );
+    }
+
+    // 3. 如果无法解析模型ID，抛出错误
+    if (!modelId) {
+      throw new Error('我还没有配置模型作为大脑，请先在设置中配置默认对话模型');
+    }
+
+    // 4. 查询并验证模型是否存在（isActive 只影响前端展示，不影响实际使用）
+    const model = await this.prisma.model.findUnique({
+      where: { id: modelId },
+      include: {
+        provider: true,
+      },
+    });
+
+    if (!model) {
+      throw new Error(`模型不存在：${modelId}，请检查 Bot 实例的模型配置`);
+    }
+
+    // 5. 将 model 对象挂载到 session，模拟 include 的效果
+    session.model = model;
+    session.modelId = model.id;
   }
 
   /**

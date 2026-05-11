@@ -241,7 +241,6 @@ export class BotOrchestrator {
         externalId,
         platform,
         config.defaultCharacterId,
-        config.defaultModelId,
       );
 
       this.logger.log(

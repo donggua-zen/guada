@@ -102,6 +102,7 @@ export class SessionRepository {
 
   /**
    * 根据 botId、externalId 和 characterId 查找会话
+   * 注意：Bot 会话的 modelId 为 null，调用方需要自行处理模型解析
    */
   async findByBotAndExternalId(
     botId: string,
@@ -117,11 +118,7 @@ export class SessionRepository {
       },
       include: {
         character: true,
-        model: {
-          include: {
-            provider: true,
-          },
-        },
+        // 不 include model，因为 modelId 为 null
       },
     });
   }
