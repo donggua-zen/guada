@@ -14,6 +14,7 @@ let mainWindow: BrowserWindow | null = null
 let tabManager: BrowserTabManager | null = null  // 标签管理器
 let isBackendStarting = false  // 防止重复启动
 let backendPort: number | null = null  // 记录后端端口
+let browserBridgeInitialized = false  // Browser Bridge 是否已初始化
 
 // 配置 electron-log
 log.transports.file.level = 'info'
@@ -155,13 +156,13 @@ async function initializeDatabase(userDataPath: string, backendPath: string): Pr
 
     // 3. 使用 db push 同步结构（使用 Electron 内置的 Node.js 运行时）
     const prismaCli = path.join(backendPath, 'node_modules', 'prisma', 'build', 'index.js')
-        
+
     // 使用 process.execPath（Electron 内置的 Node.js），不依赖系统的 node 命令
     const nodeExecutable = process.execPath
-        
+
     // 设置 ELECTRON_RUN_AS_NODE，让 Electron 以纯 Node.js 模式运行
     const execEnv = { ...env, ELECTRON_RUN_AS_NODE: '1' }
-        
+
     execSync(`"${nodeExecutable}" "${prismaCli}" db push --config=prisma.config.js --accept-data-loss`, {
       cwd: backendPath,
       env: execEnv,
@@ -351,6 +352,8 @@ async function startBackend(): Promise<void> {
           LOGS_DIR: logsDir, // 传递后端日志目录到用户数据区
           SKILLS_DIR: skillsDir, // 传递技能目录到用户数据区
           WORKSPACE_BASE_DIR: workspaceDir, // 传递会话工作目录基础路径
+          ELECTRON_APP: 'true', // 标识这是 Electron 环境
+          BROWSER_BRIDGE_MODE: 'ipc', // 生产模式使用 IPC
         },
         stdio: ['pipe', 'pipe', 'pipe', 'ipc'] // 增加 'ipc' 以支持 process.send
       }
@@ -740,9 +743,17 @@ app.whenReady().then(async () => {
     setupIpcHandlers()
     setupAutoUpdater()
 
-    // 启动 Browser Bridge（根据模式选择）
+    // 启动后端服务
+    log.info('Starting backend service...')
+    await startBackend()
+    log.info('Backend service started successfully')
+
+    // 创建窗口（tabManager 在这里面创建）
+    createWindow()
+
+    // 窗口创建后，初始化 Browser Bridge（此时 tabManager 和 backendProcess 都可用）
     const bridgeMode = process.env.BROWSER_BRIDGE_MODE || (isDev ? 'tcp' : 'ipc')
-    
+
     if (bridgeMode === 'tcp') {
       // TCP 模式（开发环境）
       const port = parseInt(process.env.BROWSER_BRIDGE_PORT || '3001')
@@ -752,31 +763,16 @@ app.whenReady().then(async () => {
       log.info('Browser Bridge TCP started successfully')
     } else {
       // IPC 模式（生产环境）
-      log.info('Starting Browser Bridge in IPC mode...')
-      startBrowserBridge(tabManager!)
-      log.info('Browser Bridge IPC started successfully')
+      if (backendProcess) {
+        log.info('Initializing Browser Bridge with backend process (IPC mode)')
+        startBrowserBridge(tabManager!, backendProcess)
+        browserBridgeInitialized = true
+        log.info('Browser Bridge IPC initialized successfully')
+      } else {
+        log.error('Backend process not available, cannot initialize Browser Bridge')
+      }
     }
 
-    // 启动后端服务
-    log.info('Starting backend service...')
-    await startBackend()
-    log.info('Backend service started successfully')
-
-    // 创建窗口（tabManager 在这里面创建）
-    createWindow()
-    
-    // 窗口创建后，重新初始化 Browser Bridge（因为 tabManager 现在可用了）
-    if (bridgeMode === 'tcp') {
-      // 停止旧的 TCP server（如果有的话）
-      await stopBrowserBridgeTCP()
-      const port = parseInt(process.env.BROWSER_BRIDGE_PORT || '3001')
-      await startBrowserBridgeTCP(port, tabManager!)
-    } else {
-      // IPC 模式重新初始化
-      startBrowserBridge(tabManager!)
-    }
-    log.info('Browser Bridge re-initialized with TabManager')
-    
     log.info('Application initialized')
   } catch (error: any) {
     log.error('Application initialization failed:', error)
@@ -835,7 +831,7 @@ app.on('before-quit', async () => {
   if (process.env.BROWSER_BRIDGE_MODE === 'tcp') {
     await stopBrowserBridgeTCP()
   }
-  
+
   if (backendProcess) {
     // 根据平台选择适当的终止方式
     if (process.platform === 'win32') {
