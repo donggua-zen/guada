@@ -24,12 +24,12 @@
                             </div>
                         </template>
                         <el-select v-model="settingsForm.defaultChatModelId" placeholder="请选择模型" clearable
-                            @click="openModelDialog('chat')" class="w-full max-w-md">
+                            @visible-change="(visible) => visible && openModelDialog('chat')" class="w-full max-w-md">
                             <template #prefix>
                                 <OpenAI class="w-4 h-4" />
                             </template>
                             <el-option :value="settingsForm.defaultChatModelId" :label="chatModelName"
-                                v-if="chatModelName" />
+                                v-if="chatModelName || settingsForm.defaultChatModelId" />
                         </el-select>
                     </el-form-item>
                 </el-form>
@@ -46,12 +46,12 @@
                             </div>
                         </template>
                         <el-select v-model="settingsForm.defaultTitleSummaryModelId" placeholder="请选择模型" clearable
-                            @click="openModelDialog('title')" class="w-full max-w-md">
+                            @visible-change="(visible) => visible && openModelDialog('title')" class="w-full max-w-md">
                             <template #prefix>
                                 <OpenAI class="w-4 h-4" />
                             </template>
                             <el-option :value="settingsForm.defaultTitleSummaryModelId" :label="titleSummaryModelName"
-                                v-if="titleSummaryModelName" />
+                                v-if="titleSummaryModelName || settingsForm.defaultTitleSummaryModelId" />
                         </el-select>
                     </el-form-item>
                     <!-- 标题总结提示词配置已暂时移除，后端使用固定提示词 -->
@@ -103,12 +103,12 @@
                             </div>
                         </template>
                         <el-select v-model="settingsForm.defaultVisualAssistantModelId" placeholder="请选择支持图像的模型"
-                            clearable @click="openModelDialog('visual')" class="w-full max-w-md">
+                            clearable @visible-change="(visible) => visible && openModelDialog('visual')" class="w-full max-w-md">
                             <template #prefix>
                                 <OpenAI class="w-4 h-4" />
                             </template>
                             <el-option :value="settingsForm.defaultVisualAssistantModelId"
-                                :label="visualAssistantModelName" v-if="visualAssistantModelName" />
+                                :label="visualAssistantModelName" v-if="visualAssistantModelName || settingsForm.defaultVisualAssistantModelId" />
                         </el-select>
                     </el-form-item>
                 </el-form>
@@ -126,12 +126,12 @@
                             </div>
                         </template>
                         <el-select v-model="settingsForm.defaultHistoryCompressionModelId" placeholder="请选择模型" clearable
-                            @click="openModelDialog('compression')" class="w-full max-w-md">
+                            @visible-change="(visible) => visible && openModelDialog('compression')" class="w-full max-w-md">
                             <template #prefix>
                                 <OpenAI class="w-4 h-4" />
                             </template>
                             <el-option :value="settingsForm.defaultHistoryCompressionModelId"
-                                :label="historyCompressionModelName" v-if="historyCompressionModelName" />
+                                :label="historyCompressionModelName" v-if="historyCompressionModelName || settingsForm.defaultHistoryCompressionModelId" />
                         </el-select>
                     </el-form-item>
                 </el-form>
@@ -499,15 +499,15 @@ const loadGlobalSettings = async () => {
         // 使用新的分组设置接口获取 models 分组的设置
         const response = await apiService.fetchGroupSettings('models')
 
-        // 填充表单
-        settingsForm.defaultChatModelId = response.defaultChatModelId || null
-        settingsForm.defaultTitleSummaryModelId = response.defaultTitleSummaryModelId || null
+        // 填充表单：使用 ?? 运算符确保 undefined 被转换为 null
+        settingsForm.defaultChatModelId = response.defaultChatModelId ?? null
+        settingsForm.defaultTitleSummaryModelId = response.defaultTitleSummaryModelId ?? null
         // settingsForm.defaultTitleSummaryPrompt = response.defaultTitleSummaryPrompt // 已暂时移除，后端使用固定提示词
-        settingsForm.defaultTranslationModelId = response.defaultTranslationModelId || null
+        settingsForm.defaultTranslationModelId = response.defaultTranslationModelId ?? null
         settingsForm.defaultTranslationPrompt = response.defaultTranslationPrompt || ''
-        settingsForm.defaultHistoryCompressionModelId = response.defaultHistoryCompressionModelId || null
+        settingsForm.defaultHistoryCompressionModelId = response.defaultHistoryCompressionModelId ?? null
         settingsForm.defaultHistoryCompressionPrompt = response.defaultHistoryCompressionPrompt || ''
-        settingsForm.defaultVisualAssistantModelId = response.defaultVisualAssistantModelId || null
+        settingsForm.defaultVisualAssistantModelId = response.defaultVisualAssistantModelId ?? null
 
         // 备份原始数据
         originalSettings.value = JSON.parse(JSON.stringify(settingsForm))
@@ -546,8 +546,19 @@ const handleSave = async () => {
             return
         }
 
+        // 规范化数据：将 undefined 转换为 null，确保 JSON 序列化时不会丢失字段
+        const dataToSave = {
+            defaultChatModelId: settingsForm.defaultChatModelId ?? null,
+            defaultTitleSummaryModelId: settingsForm.defaultTitleSummaryModelId ?? null,
+            defaultTranslationModelId: settingsForm.defaultTranslationModelId ?? null,
+            defaultTranslationPrompt: settingsForm.defaultTranslationPrompt || '',
+            defaultHistoryCompressionModelId: settingsForm.defaultHistoryCompressionModelId ?? null,
+            defaultHistoryCompressionPrompt: settingsForm.defaultHistoryCompressionPrompt || '',
+            defaultVisualAssistantModelId: settingsForm.defaultVisualAssistantModelId ?? null,
+        }
+
         // 使用新的分组设置接口更新 models 分组的设置
-        await apiService.updateGroupSettings('models', settingsForm)
+        await apiService.updateGroupSettings('models', dataToSave)
 
         // 保存成功后更新原始数据备份
         originalSettings.value = JSON.parse(JSON.stringify(settingsForm))

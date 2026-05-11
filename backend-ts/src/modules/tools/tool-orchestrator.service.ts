@@ -10,7 +10,9 @@ import { MCPToolProvider } from "./providers/mcp-tool.provider";
 import { TimeToolProvider } from "./providers/time-tool.provider";
 import { ImageRecognitionToolProvider } from "./providers/image-recognition-tool.provider";
 import { ShellToolProvider } from "./providers/shell-tool.provider";
+import { FileToolProvider } from "./providers/file-tool.provider";
 import { BrowserToolProvider } from "./providers/browser-tool.provider";
+import { SessionManagementToolProvider } from "./providers/session-management-tool.provider";
 import { ToolContext } from "./tool-context";
 import { SkillToolBridgeService } from '../skills/integration/skill-tool-bridge.service';
 import { UniversalToolHandler, UNIVERSAL_TOOLS } from './universal-tool-handler';
@@ -38,7 +40,9 @@ export class ToolOrchestrator {
     timeProvider: TimeToolProvider,
     imageRecognitionProvider: ImageRecognitionToolProvider,
     shellProvider: ShellToolProvider,
+    fileProvider: FileToolProvider,
     browserProvider: BrowserToolProvider,
+    sessionManagementProvider: SessionManagementToolProvider,
     skillToolBridge: SkillToolBridgeService,
   ) {
     this.addProvider(kbProvider);
@@ -47,7 +51,9 @@ export class ToolOrchestrator {
     this.addProvider(timeProvider);
     this.addProvider(imageRecognitionProvider);
     this.addProvider(shellProvider);
+    this.addProvider(fileProvider);
     this.addProvider(browserProvider);
+    this.addProvider(sessionManagementProvider);
     this.addProvider(skillToolBridge);
 
     // 初始化通用工具处理器
@@ -93,6 +99,12 @@ export class ToolOrchestrator {
       const loadMode = metadata.loadMode || 'eager';
 
       // 根据加载模式决定是否包含该工具
+      if (loadMode === 'none') {
+        // none 模式的工具完全不加载
+        this.logger.debug(`Skipping disabled namespace ${namespace} (loadMode: none)`);
+        continue;
+      }
+
       if (loadMode === 'lazy') {
         // lazy 模式的工具不在初始 tools 参数中提供
         this.logger.debug(`Skipping lazy-load namespace ${namespace}`);
@@ -159,6 +171,11 @@ export class ToolOrchestrator {
         const metadata = provider.getMetadata(context.injectParams);
         const loadMode = metadata.loadMode || 'eager';
 
+        // none 模式的工具不收集任何信息
+        if (loadMode === 'none') {
+          continue;
+        }
+
         // lazy 模式的工具只收集元信息
         if (loadMode === 'lazy') {
           const briefDesc = provider.getBriefDescription
@@ -183,6 +200,11 @@ export class ToolOrchestrator {
 
         const metadata = provider.getMetadata(context.injectParams);
         const loadMode = metadata.loadMode || 'eager';
+
+        // none 模式的工具不注入提示词
+        if (loadMode === 'none') {
+          continue;
+        }
 
         // eager 模式的工具直接注入完整提示词
         if (loadMode === 'eager' && namespace !== 'tool_manager') {
@@ -330,6 +352,14 @@ export class ToolOrchestrator {
 
     if (!provider) {
       throw new Error(`未知的命名空间: ${namespace}`);
+    }
+
+    // 检查工具的加载模式
+    const metadata = provider.getMetadata(context.injectParams);
+    const loadMode = metadata.loadMode || 'eager';
+
+    if (loadMode === 'none') {
+      throw new Error(`Tool provider ${namespace} is disabled (loadMode: none)`);
     }
 
     // 检查工具是否启用

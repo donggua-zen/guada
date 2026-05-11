@@ -10,9 +10,9 @@ export class CreateBotDto {
     maxRetries?: number;
     retryInterval?: number;
   };
-  defaultCharacterId: string;   // 默认关联的角色ID(必填)
-  defaultModelId?: string;
-  additionalKwargs?: any;       // 扩展配置(如 knowledgeBaseIds)
+  defaultCharacterId: string;   // 默认角色ID（动态读取，修改后无需重启）
+  defaultModelId?: string;      // 默认模型ID（动态读取，修改后无需重启）
+  additionalKwargs?: any;       // 扩展配置（如 knowledgeBaseIds，动态读取，修改后无需重启）
   autoStart?: boolean;        // 是否自动启动
 }
 
@@ -28,7 +28,7 @@ export class UpdateBotDto {
     maxRetries?: number;
     retryInterval?: number;
   };
-  defaultCharacterId?: string;  // 更新时可选
-  defaultModelId?: string;
-  additionalKwargs?: any;       // 扩展配置(如 knowledgeBaseIds)
+  defaultCharacterId?: string;  // 默认角色ID（动态读取，修改后无需重启）
+  defaultModelId?: string;      // 默认模型ID（动态读取，修改后无需重启）
+  additionalKwargs?: any;       // 扩展配置（如 knowledgeBaseIds，动态读取，修改后无需重启）
 }

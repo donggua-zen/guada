@@ -86,10 +86,25 @@ export interface BotConfig {
     maxRetries: number;
     retryInterval: number;
   };
-  /** 关联的默认角色ID(必填,用于对话流程) */
+  /** 
+   * 关联的默认角色ID
+   * 
+   * 注意：此字段在每次创建会话时动态读取，修改后无需重启机器人
+   */
   defaultCharacterId: string;
-  /** 关联的默认模型ID(可选) */
+  /** 
+   * 关联的默认模型ID
+   * 
+   * 注意：此字段在每次创建会话时动态读取，修改后无需重启机器人
+   * 优先级：Bot实例配置 > 角色配置 > 全局默认设置
+   */
   defaultModelId?: string;
+  /** 
+   * 扩展配置（如知识库ID列表等）
+   * 
+   * 注意：此字段在每次处理消息时动态读取，修改后无需重启机器人
+   */
+  additionalKwargs?: Record<string, any>;
   /** 关联的知识库ID列表(从 additionalKwargs 中读取) */
   knowledgeBaseIds?: string[];
 }
