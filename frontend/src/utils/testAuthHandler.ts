@@ -10,7 +10,7 @@ import { triggerAuthRedirect } from './globalErrorHandler'
  * 模拟 API 调用产生 401 错误
  */
 export function simulateAuthError() {
-  console.log('🧪 模拟认证错误...')
+  console.log('模拟认证错误...')
   
   // 模拟一个被 reject 的 Promise
   const authError = new Error('Authentication required')
@@ -20,14 +20,14 @@ export function simulateAuthError() {
   // 创建一个未捕获的 Promise rejection
   Promise.reject(authError)
   
-  console.log('✅ 已触发模拟错误，请观察是否跳转到登录页')
+  console.log('已触发模拟错误，请观察是否跳转到登录页')
 }
 
 /**
  * 测试手动触发跳转
  */
 export function testManualRedirect() {
-  console.log('🧪 测试手动触发认证重定向...')
+  console.log('测试手动触发认证重定向...')
   triggerAuthRedirect()
 }
 
