@@ -11,7 +11,6 @@ import { KbFileService } from "../../knowledge-base/kb-file.service";
 import {
   IToolProvider,
   ToolCallRequest,
-  ToolCallResponse,
   ToolProviderMetadata,
 } from "../interfaces/tool-provider.interface";
 import { InternalToolDefinition } from "../../llm-core/types/llm.types";
