@@ -173,12 +173,20 @@ export class BotAdminService {
         this.logger.error(`Failed to ${dto.enabled ? 'start' : 'stop'} bot after enabled change: ${error.message}`);
       }
     }
-    // 如果更新了平台配置或扩展配置，且机器人处于启用状态，需要重启以加载新配置
-    else if ((dto.platformConfig || dto.additionalKwargs) && updated.enabled) {
+    // 如果更新了平台配置（认证信息等），且机器人处于启用状态，需要重启以加载新配置
+    else if (dto.platformConfig && updated.enabled) {
       try {
         await this.restartInstance(id);
       } catch (error: any) {
         this.logger.error(`Failed to restart bot after update: ${error.message}`);
+      }
+    }
+    // 其他配置更新（角色、模型、知识库等），重新加载内存中的配置
+    else {
+      try {
+        await this.instanceManager.reloadBotConfig(id);
+      } catch (error: any) {
+        this.logger.error(`Failed to reload bot config: ${error.message}`);
       }
     }
 

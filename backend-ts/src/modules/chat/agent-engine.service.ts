@@ -96,7 +96,7 @@ export class AgentEngine {
       await this.sessionRepo.updateLastActiveAt(sessionId);
 
       // 委托 SessionContextService 完成所有数据准备
-      const { context, toolContext, effectiveContextWindow, thinkingEnabled } =
+      const { context, toolContext, thinkingEnabled } =
         await this.sessionContextService.buildContext(session, messageId);
 
       // 执行多轮工具调用循环，通过生成器逐轮产出响应事件

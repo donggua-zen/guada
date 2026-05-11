@@ -60,7 +60,7 @@ export class BotOrchestrator {
     // 监听消息流
     const messageSubscription = adapter.onMessage().subscribe({
       next: async (message: BotMessage) => {
-        await this.enqueueMessage(botId, message, config);
+        await this.enqueueMessage(botId, message);
       },
       error: (error: Error) => {
         this.logger.error(
@@ -81,7 +81,7 @@ export class BotOrchestrator {
 
           // 通过 instanceManager 触发重连
           try {
-            await this.instanceManager.handleBotDisconnect(botId, config, event.code);
+            await this.instanceManager.handleBotDisconnect(botId, event.code);
           } catch (error: any) {
             this.logger.error(`Failed to handle bot disconnect for ${botId}: ${error.message}`);
           }
@@ -102,8 +102,14 @@ export class BotOrchestrator {
   private async enqueueMessage(
     botId: string,
     message: BotMessage,
-    config: BotConfig,
   ): Promise<void> {
+    // 从内存获取最新配置
+    const config = this.instanceManager.getBotConfig(botId);
+    if (!config) {
+      this.logger.error(`Bot config not found: ${botId}`);
+      return;
+    }
+
     // 使用 externalId 作为队列 Key，确保同一会话的消息被合并
     const platform = config.platform || 'qq';
     const isGroupChat = message.sourceType === 'group';
@@ -172,7 +178,7 @@ export class BotOrchestrator {
         messageId: firstMessage.messageId, // 使用第一条消息的 ID 作为引用
       };
 
-      await this.handleIncomingMessage(botId, mergedMessage, config);
+      await this.handleIncomingMessage(botId, mergedMessage);
     } catch (error: any) {
       this.logger.error(`Failed to process merged messages: ${error.message}`);
     } finally {
@@ -215,9 +221,15 @@ export class BotOrchestrator {
   private async handleIncomingMessage(
     botId: string,
     message: BotMessage,
-    config: BotConfig,
   ): Promise<void> {
     try {
+      // 从内存获取最新配置
+      const config = this.instanceManager.getBotConfig(botId);
+      if (!config) {
+        this.logger.error(`Bot config not found: ${botId}`);
+        return;
+      }
+
       this.logger.log(
         `Received message from ${message.senderId}: ${message.content}`,
       );
@@ -235,20 +247,28 @@ export class BotOrchestrator {
       // 2. 组装 externalId(由调用者决定隔离策略)
       const externalId = buildExternalId(platform, type, nativeId);
 
-      // 3. 获取或创建会话
+      // 3. 从 BotInstanceManager 获取最新配置（内存中已同步更新）
+      const latestConfig = this.instanceManager.getBotConfig(botId);
+      
+      if (!latestConfig || !latestConfig.defaultCharacterId) {
+        this.logger.error(`Bot config or defaultCharacterId not found: ${botId}`);
+        return;
+      }
+
+      // 4. 获取或创建会话（使用最新配置）
       const session = await this.sessionMapper.getOrCreateBotSession(
         botId,
         externalId,
         platform,
-        config.defaultCharacterId,
-        config.defaultModelId,
+        latestConfig.defaultCharacterId,
+        latestConfig.defaultModelId,  // 传递 defaultModelId，避免内部重复查询
       );
 
       this.logger.log(
         `Using session: ${session.id}, externalId: ${session.externalId}`
       );
 
-      // 4. 调用 AgentEngine 生成回复（流式）
+      // 5. 调用 AgentEngine 生成回复（流式）
       const adapter = this.instanceManager.getAdapter(botId);
       if (!adapter) {
         this.logger.error('Adapter not found');
@@ -257,15 +277,15 @@ export class BotOrchestrator {
 
       const capabilities = adapter.getCapabilities();
 
-      // 1. 创建用户消息记录
+      // 1. 创建用户消息记录（使用最新配置）
       this.logger.log(
-        `Creating user message with knowledgeBaseIds: ${JSON.stringify(config.knowledgeBaseIds)}`
+        `Creating user message with knowledgeBaseIds: ${JSON.stringify(latestConfig.knowledgeBaseIds)}`
       );
 
       const userMessage = await this.sessionMapper.createUserMessage(
         session.id,
         message.content,
-        config.knowledgeBaseIds,
+        latestConfig.knowledgeBaseIds,
         message.attachments,  // 传递附件信息
       );
 

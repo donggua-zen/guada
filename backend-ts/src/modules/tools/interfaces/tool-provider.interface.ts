@@ -14,7 +14,7 @@ export interface ToolCallResponse {
 /**
  * 工具加载模式
  */
-export type ToolLoadMode = 'eager' | 'lazy';
+export type ToolLoadMode = 'eager' | 'lazy' | 'none';
 
 export interface ToolProviderMetadata {
   namespace: string;
@@ -25,6 +25,7 @@ export interface ToolProviderMetadata {
    * 工具定义加载模式（控制是否在 LLM 的 tools 参数中提供）
    * - eager: 始终在 tools 参数中提供完整定义（默认）
    * - lazy: 不在 tools 参数中提供，通过 tool_load 获取详细说明后使用 tool_call 调用
+   * - none: 完全不加载，工具在任何情况下都不可用
    */
   loadMode?: ToolLoadMode;
 }
