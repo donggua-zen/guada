@@ -265,7 +265,6 @@ Bot 网关将 AI 对话能力扩展到即时通讯平台，通过统一的适配
 ```bash
 cd backend-ts
 npm install
-npx prisma migrate dev    # 初始化数据库
 npm run db:seed:force     # 初始化种子数据（默认账户 guada / guada）
 npm run start:dev         # 开发模式启动 → http://localhost:3000
 ```
