@@ -31,11 +31,17 @@ export interface ToolProviderMetadata {
 
 export interface IToolProvider {
   namespace: string;
-  getTools(enabled?: boolean | string[]): Promise<any[]>;
+  /**
+   * 获取工具定义列表
+   * @param enabled 启用状态或启用的工具名称列表
+   * @param context 上下文信息（session_id, user_id, session_type 等）
+   * @returns 工具定义数组
+   */
+  getTools(enabled?: boolean | string[], context?: Record<string, any>): Promise<any[]>;
   /**
    * 执行工具调用
    * @param request 工具调用请求
-   * @param context 上下文信息（session_id, user_id 等）
+   * @param context 上下文信息（session_id, user_id, session_type 等）
    * @returns 工具执行结果内容字符串
    * @throws Error 如果执行失败，抛出异常由 ToolOrchestrator 捕获
    */
@@ -53,10 +59,16 @@ export interface IToolProvider {
    * @returns 持续注入的提示词字符串，如不需要则返回空字符串
    */
   getPersistentPrompt?(context?: Record<string, any>): Promise<string>;
-  getMetadata(): ToolProviderMetadata;
+  /**
+   * 获取提供者的元数据信息
+   * @param context 上下文信息
+   * @returns 提供者元数据
+   */
+  getMetadata(context?: Record<string, any>): ToolProviderMetadata;
   /**
    * 获取工具的简要说明（用于 system prompt 中的元信息展示）
+   * @param context 上下文信息
    * @returns 简短的工具类别描述
    */
-  getBriefDescription?(): Promise<string>;
+  getBriefDescription?(context?: Record<string, any>): Promise<string>;
 }

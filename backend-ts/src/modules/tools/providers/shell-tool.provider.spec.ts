@@ -20,7 +20,7 @@ describe("ShellToolProvider", () => {
   });
 
   it("应该返回正确的元数据", () => {
-    const metadata = provider.getMetadata();
+    const metadata = provider.getMetadata({});
     expect(metadata.namespace).toBe("shell");
     expect(metadata.displayName).toBe("Shell 工具");
     expect(metadata.isMcp).toBe(false);

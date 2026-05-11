@@ -141,7 +141,7 @@ export class ShellToolProvider implements IToolProvider {
 
   constructor(private workspaceService: WorkspaceService) { }
 
-  async getTools(enabled?: boolean | string[]): Promise<any[]> {
+  async getTools(enabled?: boolean | string[], context?: Record<string, any>): Promise<any[]> {
     if (enabled === false) return [];
 
     // 如果是数组，只返回数组中指定的工具
@@ -179,9 +179,9 @@ export class ShellToolProvider implements IToolProvider {
       const promptParts: string[] = [];
       promptParts.push("# Shell 工具使用说明");
       // 注入工作目录提示
-      if (context?.session_id) {
+      if (context?.sessionId) {
         try {
-          const workspaceDir = this.workspaceService.getWorkspaceDir(context.session_id);
+          const workspaceDir = this.workspaceService.getWorkspaceDir(context.sessionId);
           promptParts.push("**当前会话工作目录**：");
           promptParts.push(`\`${workspaceDir}\``);
           promptParts.push("");
@@ -229,11 +229,11 @@ export class ShellToolProvider implements IToolProvider {
     }
   }
 
-  async getBriefDescription(): Promise<string> {
+  async getBriefDescription(context?: Record<string, any>): Promise<string> {
     return "Shell 命令执行工具，用于运行系统命令、操作文件和目录。仅在明确需要时激活使用";
   }
 
-  getMetadata(): ToolProviderMetadata {
+  getMetadata(context?: Record<string, any>): ToolProviderMetadata {
     return {
       namespace: this.namespace,
       displayName: "Shell 工具",
@@ -265,12 +265,12 @@ export class ShellToolProvider implements IToolProvider {
 
       if (working_directory) {
         options.cwd = working_directory;
-      } else if (context?.session_id) {
+      } else if (context?.sessionId) {
         // 如果没有指定工作目录但有会话 ID，使用会话工作目录
         try {
-          options.cwd = this.workspaceService.getWorkspaceDir(context.session_id);
+          options.cwd = this.workspaceService.getWorkspaceDir(context.sessionId);
         } catch (error: any) {
-          this.logger.warn(`Failed to set CWD for session ${context.session_id}: ${error.message}`);
+          this.logger.warn(`Failed to set CWD for session ${context.sessionId}: ${error.message}`);
         }
       }
 
@@ -345,12 +345,12 @@ export class ShellToolProvider implements IToolProvider {
     }
 
     // 如果存在 session_id，则相对于会话工作目录解析
-    if (context?.session_id) {
+    if (context?.sessionId) {
       try {
-        const workspaceDir = this.workspaceService.getWorkspaceDir(context.session_id);
+        const workspaceDir = this.workspaceService.getWorkspaceDir(context.sessionId);
         return path.join(workspaceDir, filePath);
       } catch (error: any) {
-        this.logger.warn(`Failed to resolve path for session ${context.session_id}: ${error.message}`);
+        this.logger.warn(`Failed to resolve path for session ${context.sessionId}: ${error.message}`);
       }
     }
 

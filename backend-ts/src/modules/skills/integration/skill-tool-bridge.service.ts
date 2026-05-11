@@ -18,7 +18,7 @@ export class SkillToolBridgeService implements IToolProvider {
                      path.join(process.cwd(), 'skills');
   }
 
-  async getTools(enabled?: boolean | string[]): Promise<any[]> {
+  async getTools(enabled?: boolean | string[], context?: Record<string, any>): Promise<any[]> {
     // 返回 Skills 系统管理工具（ToolOrchestrator 会自动添加 skill__ 前缀）
     return [
       {
@@ -192,7 +192,7 @@ export class SkillToolBridgeService implements IToolProvider {
     ].join('\n');
   }
 
-  getMetadata(): ToolProviderMetadata {
+  getMetadata(context?: Record<string, any>): ToolProviderMetadata {
     return {
       namespace: 'skill',
       displayName: 'Skills 技能',

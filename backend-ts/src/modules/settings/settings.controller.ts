@@ -64,13 +64,13 @@ export class SettingsController {
   @Put("settings")
   async updateSettings(@Body() data: Record<string, Record<string, any>>) {
     const groups = ['system', 'models', 'tools'];
-    
+
     for (const group of groups) {
       if (data[group]) {
         await this.settingsService.updateGroupSettings(group, data[group]);
       }
     }
-    
+
     return this.settingsService.getSettings();
   }
 
@@ -82,9 +82,9 @@ export class SettingsController {
   async getGlobalTools() {
     // 直接获取 tools 分组的配置，效率更高
     const globalToolsConfig = await this.settingsService.getGroupSettings('tools');
-    
-    const allTools = await this.toolOrchestrator.getLocalToolsList('local-user', { tools: globalToolsConfig });
-    
+
+    const allTools = await this.toolOrchestrator.getLocalToolsList({ tools: globalToolsConfig });
+
     return {
       globalTools: globalToolsConfig,
       tools: allTools,
@@ -101,7 +101,7 @@ export class SettingsController {
   @Put("settings/tools/global")
   async updateGlobalToolStatus(@Body() data: { namespace?: string; enabled: boolean }) {
     const { namespace, enabled } = data;
-    
+
     if (namespace) {
       // 单独控制某个工具
       await this.settingsService.updateGroupSettings('tools', {

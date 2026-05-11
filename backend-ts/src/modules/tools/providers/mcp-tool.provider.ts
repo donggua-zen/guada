@@ -19,7 +19,7 @@ export class MCPToolProvider implements IToolProvider {
     private prisma: PrismaService,
   ) {}
 
-  async getTools(enabled?: boolean | string[]): Promise<any[]> {
+  async getTools(enabled?: boolean | string[], context?: Record<string, any>): Promise<any[]> {
     if (enabled === false) return [];
 
     const whereClause: any = { enabled: true };
@@ -131,7 +131,7 @@ export class MCPToolProvider implements IToolProvider {
     }
   }
 
-  getMetadata(): ToolProviderMetadata {
+  getMetadata(context?: Record<string, any>): ToolProviderMetadata {
     return {
       namespace: this.namespace,
       displayName: "MCP 工具",

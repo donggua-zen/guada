@@ -13,7 +13,7 @@ export class TimeToolProvider implements IToolProvider {
 
   constructor() { }
 
-  async getTools(enabled?: boolean | string[]): Promise<any[]> {
+  async getTools(enabled?: boolean | string[], context?: Record<string, any>): Promise<any[]> {
     return [];
   }
 
@@ -50,11 +50,11 @@ export class TimeToolProvider implements IToolProvider {
     }
   }
 
-  async getBriefDescription(): Promise<string> {
+  async getBriefDescription(context?: Record<string, any>): Promise<string> {
     return "自动注入当前时间信息，帮助 AI 准确回答时间相关问题";
   }
 
-  getMetadata(): ToolProviderMetadata {
+  getMetadata(context?: Record<string, any>): ToolProviderMetadata {
     return {
       namespace: this.namespace,
       displayName: "时间工具",

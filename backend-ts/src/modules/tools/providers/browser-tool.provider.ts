@@ -189,7 +189,7 @@ export class BrowserToolProvider implements IToolProvider {
     })
   }
 
-  async getTools(enabled?: boolean | string[]): Promise<any[]> {
+  async getTools(enabled?: boolean | string[], context?: Record<string, any>): Promise<any[]> {
     if (enabled === false) return []
 
     return [
@@ -438,11 +438,11 @@ export class BrowserToolProvider implements IToolProvider {
     ].join('\n')
   }
 
-  async getBriefDescription(): Promise<string> {
+  async getBriefDescription(context?: Record<string, any>): Promise<string> {
     return '通过内置的 Chromium 进行浏览器自动化操作，支持页面导航、JS 执行、DOM 交互等。除非用户明确指定，否则应优先使用其他更高效的工具（如搜索 API、直接 HTTP 请求等），只有必须使用浏览器交互操作时才使用此工具集'
   }
 
-  getMetadata(): ToolProviderMetadata {
+  getMetadata(context?: Record<string, any>): ToolProviderMetadata {
     return {
       namespace: this.namespace,
       displayName: '浏览器控制',

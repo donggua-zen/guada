@@ -131,16 +131,25 @@ export class KnowledgeBaseToolProvider implements IToolProvider {
     },
   ];
 
-  async getTools(enabled?: boolean | string[]): Promise<any[]> {
+  async getTools(enabled?: boolean | string[], context?: Record<string, any>): Promise<any[]> {
     if (enabled === false) return [];
-    
+
+    // 检查 sessionType，非 web 会话时排除 add_document 工具
+    const sessionType = context?.sessionType;
+    let availableTools = this.toolsConfig;
+
+    if (sessionType && sessionType !== 'web') {
+      // 非 web 会话时，移除 add_document 工具
+      availableTools = this.toolsConfig.filter(tool => tool.name !== 'add_document');
+    }
+
     // 如果是数组，只返回数组中指定的工具
     if (Array.isArray(enabled)) {
-      return this.toolsConfig.filter(tool => enabled.includes(tool.name));
+      return availableTools.filter(tool => enabled.includes(tool.name));
     }
-    
-    // true 或未指定：返回所有工具
-    return this.toolsConfig;
+
+    // true 或未指定：返回所有可用工具
+    return availableTools;
   }
 
   async execute(request: ToolCallRequest, context?: Record<string, any>): Promise<string> {
@@ -173,7 +182,15 @@ export class KnowledgeBaseToolProvider implements IToolProvider {
 
       promptParts.push("# 知识库工具使用说明");
 
-      const toolInstructions = `
+      // 检查 sessionType，非 web 会话时不包含添加文档功能
+      const sessionType = context?.sessionType;
+      const isWebSession = !sessionType || sessionType === 'web';
+
+      let toolInstructions: string;
+
+      if (isWebSession) {
+        // Web 会话：包含所有工具
+        toolInstructions = `
 你拥有以下知识库管理工具，可以主动调用它们来查询和利用知识库内容：
 
 ### 1. 知识库语义搜索 (knowledge_base__search)
@@ -214,6 +231,42 @@ export class KnowledgeBaseToolProvider implements IToolProvider {
 3. **错误处理**: 如果返回错误信息，请检查参数是否正确、知识库/文件是否存在
 4. **路径规范**: target_path 应包含完整的相对路径和文件名，系统会自动创建对应的文件夹结构
 `;
+      } else {
+        // 非 Web 会话：仅包含查询工具
+        toolInstructions = `
+你拥有以下知识库管理工具，可以主动调用它们来查询和利用知识库内容：
+
+### 1. 知识库语义搜索 (knowledge_base__search)
+**用途**: 在知识库中进行向量相似度搜索，找到最相关的内容
+
+**何时使用**:
+- 用户询问与知识库相关的问题时
+- 需要查找特定主题的资料时
+- 想要验证知识库中是否有相关信息时
+
+### 2. 知识库文件列表 (knowledge_base__list_files)
+**用途**: 获取知识库下所有已上传文件的元数据列表
+
+**何时使用**:
+- 用户想了解知识库里有哪些文件时
+- 需要查看文件的处理状态时
+- 想要获取文件 ID 以便进一步操作时
+
+### 3. 知识库文件分块详情 (knowledge_base__get_chunks)
+**用途**: 获取指定文件的特定分块内容（支持分页）
+
+**何时使用**:
+- 用户想查看某个文件的具体内容时
+- 需要检查分块质量时
+- 想要深入了解文件细节时
+
+**使用建议**:
+1. **先搜索再查看**: 先用 \`search\` 找到相关内容，如有必要再用 \`get_chunks\` 查看完整分块
+2. **注意分页**: 使用 \`get_chunks\` 时，每次最多获取 10 个分块，可通过调整 \`chunk_index\` 实现分页
+3. **错误处理**: 如果返回错误信息，请检查参数是否正确、知识库/文件是否存在
+`;
+      }
+
       promptParts.push(toolInstructions);
 
       return promptParts.join("\n");
@@ -363,8 +416,8 @@ export class KnowledgeBaseToolProvider implements IToolProvider {
     args: any,
     injectParams: any,
   ): Promise<string> {
-    const { 
-      knowledge_base_id, 
+    const {
+      knowledge_base_id,
       source_file_path,
       target_path
     } = args;
@@ -375,8 +428,8 @@ export class KnowledgeBaseToolProvider implements IToolProvider {
     }
 
     // 从 injectParams 获取 user_id（由 ToolOrchestrator 注入）
-    const user_id = injectParams?.user_id;
-    if (!user_id) {
+    const userId = injectParams?.userId;
+    if (!userId) {
       throw new Error("无法获取用户身份，操作被拒绝");
     }
 
@@ -391,7 +444,7 @@ export class KnowledgeBaseToolProvider implements IToolProvider {
       // 调用 KbFileService 处理文本文档添加
       const fileRecord = await this.kbFileService.addTextDocument(
         knowledge_base_id,
-        user_id,
+        userId,
         resolvedSourcePath,
         target_path,
       );
@@ -413,17 +466,17 @@ export class KnowledgeBaseToolProvider implements IToolProvider {
     }
   }
 
-  async getBriefDescription(): Promise<string> {
+  async getBriefDescription(context?: Record<string, any>): Promise<string> {
     return "知识库检索与管理工具，支持语义搜索、文件浏览和内容查询。若用户提供了知识库信息，除非明确要求，否则仅限于使用此工具集回答。";
   }
 
-  getMetadata(): ToolProviderMetadata {
+  getMetadata(context?: Record<string, any>): ToolProviderMetadata {
     return {
       namespace: this.namespace,
       displayName: "知识库",
       description: "知识库检索与管理工具集",
       isMcp: false,
-      loadMode: "lazy",
+      loadMode: context?.sessionType === "web" ? "lazy" : "eager",
     };
   }
 }

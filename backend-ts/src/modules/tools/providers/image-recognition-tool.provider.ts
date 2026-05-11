@@ -27,7 +27,7 @@ export class ImageRecognitionToolProvider implements IToolProvider {
     private settingsStorage: SettingsStorage,
   ) { }
 
-  async getTools(enabled?: boolean | string[]): Promise<any[]> {
+  async getTools(enabled?: boolean | string[], context?: Record<string, any>): Promise<any[]> {
     const toolsConfig = [
       {
         name: "recognize",
@@ -71,11 +71,11 @@ export class ImageRecognitionToolProvider implements IToolProvider {
 工具会返回图片的详细文本描述，你可以基于该描述回答用户的问题。`;
   }
 
-  async getBriefDescription(): Promise<string> {
+  async getBriefDescription(context?: Record<string, any>): Promise<string> {
     return "识别用户上传的图片内容并返回详细描述";
   }
 
-  getMetadata(): ToolProviderMetadata {
+  getMetadata(context?: Record<string, any>): ToolProviderMetadata {
     return {
       namespace: this.namespace,
       displayName: "图像识别",

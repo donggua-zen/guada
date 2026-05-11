@@ -107,7 +107,7 @@ export class CharactersController {
 
     const globalTools = await this.characterService.getGlobalToolsSettings();
 
-    const allTools = await this.toolOrchestrator.getLocalToolsList('local-user', { tools: globalTools });
+    const allTools = await this.toolOrchestrator.getLocalToolsList({ tools: globalTools });
 
     return {
       characterId,

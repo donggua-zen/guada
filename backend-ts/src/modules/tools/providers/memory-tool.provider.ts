@@ -92,7 +92,7 @@ export class MemoryToolProvider implements IToolProvider {
     },
   ];
 
-  async getTools(enabled?: boolean | string[]): Promise<any[]> {
+  async getTools(enabled?: boolean | string[], context?: Record<string, any>): Promise<any[]> {
     if (enabled === false) return [];
 
     // 如果是数组，只返回数组中指定的工具
@@ -128,7 +128,7 @@ export class MemoryToolProvider implements IToolProvider {
   async getPrompt(context?: Record<string, any>): Promise<string> {
     try {
       // 从上下文中获取 session_id
-      const sessionId = context?.session_id;
+      const sessionId = context?.sessionId;
       if (!sessionId) {
         this.logger.warn('getPrompt: 无法获取 session_id，返回空提示词');
         return "";
@@ -237,7 +237,7 @@ export class MemoryToolProvider implements IToolProvider {
   async getPersistentPrompt(context?: Record<string, any>): Promise<string> {
     try {
       // 从上下文中获取 session_id
-      const sessionId = context?.session_id;
+      const sessionId = context?.sessionId;
       if (!sessionId) {
         return "";
       }
@@ -307,11 +307,11 @@ export class MemoryToolProvider implements IToolProvider {
     }
   }
 
-  async getBriefDescription(): Promise<string> {
+  async getBriefDescription(context?: Record<string, any>): Promise<string> {
     return "长期记忆和备忘录管理工具，用于存储和检索用户偏好、重要事实和个人笔记";
   }
 
-  getMetadata(): ToolProviderMetadata {
+  getMetadata(context?: Record<string, any>): ToolProviderMetadata {
     return {
       namespace: this.namespace,
       displayName: "记忆管理",
@@ -345,7 +345,7 @@ export class MemoryToolProvider implements IToolProvider {
   }
 
   private async handleLongTermView(args: any, context?: Record<string, any>): Promise<string> {
-    const sessionId = context?.session_id;
+    const sessionId = context?.sessionId;
     if (!sessionId) {
       return JSON.stringify({
         success: false,
@@ -380,7 +380,7 @@ export class MemoryToolProvider implements IToolProvider {
   }
 
   private async handleLongTermEdit(args: any, context?: Record<string, any>): Promise<string> {
-    const sessionId = context?.session_id;
+    const sessionId = context?.sessionId;
     if (!sessionId) {
       return JSON.stringify({
         success: false,
@@ -470,7 +470,7 @@ export class MemoryToolProvider implements IToolProvider {
    */
   private async handleMemoCreateOrUpdate(args: any, context?: Record<string, any>): Promise<string> {
     // 从上下文中获取 session_id
-    const sessionId = context?.session_id;
+    const sessionId = context?.sessionId;
     if (!sessionId) {
       return JSON.stringify({
         success: false,
@@ -568,7 +568,7 @@ export class MemoryToolProvider implements IToolProvider {
    * 删除备忘录
    */
   private async handleMemoDelete(args: any, context?: Record<string, any>): Promise<string> {
-    const sessionId = context?.session_id;
+    const sessionId = context?.sessionId;
     if (!sessionId) {
       return JSON.stringify({
         success: false,
@@ -627,7 +627,7 @@ export class MemoryToolProvider implements IToolProvider {
    * 读取备忘录
    */
   private async handleMemoRead(args: any, context?: Record<string, any>): Promise<string> {
-    const sessionId = context?.session_id;
+    const sessionId = context?.sessionId;
     if (!sessionId) {
       return JSON.stringify({
         success: false,

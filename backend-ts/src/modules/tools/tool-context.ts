@@ -69,6 +69,7 @@ export class ToolContextFactory {
    * 从工具配置中创建工具上下文
    * @param sessionId 会话 ID
    * @param userId 用户 ID
+   * @param sessionType 会话类型（如 'chat', 'agent', 'workflow' 等）
    * @param toolsConfig 工具配置（boolean | string[] | Record<string, boolean>）
    * @param mcpServersConfig MCP 服务器配置（boolean | string[]）
    * @param excludeTools 需要排除的工具命名空间列表（如 ['knowledge_base']）
@@ -76,20 +77,22 @@ export class ToolContextFactory {
   createContext(
     sessionId: string,
     userId: string,
+    sessionType: string,
     toolsConfig: any,
     mcpServersConfig: any,
     excludeTools: string[] = [],
   ): ToolContext {
     const injectParams = {
-      session_id: sessionId,
-      user_id: userId,
+      sessionId,
+      userId,
+      sessionType,
     };
 
     // 动态遍历所有工具提供者，避免硬编码
     const providerConfigs: Record<string, ProviderConfig> = {};
 
     for (const [namespace, provider] of this.toolOrchestrator.getProviders()) {
-      const metadata = provider.getMetadata();
+      const metadata = provider.getMetadata(injectParams);
 
       // 特殊处理：MCP 工具
       if (metadata.isMcp) {
@@ -142,17 +145,17 @@ export class ToolContextFactory {
     // 情况2：对象类型 { namespace: boolean | string[] }
     if (typeof toolsConfig === 'object' && toolsConfig !== null) {
       const config = toolsConfig[namespace];
-      
+
       // 如果是数组，直接返回数组（表示部分启用）
       if (Array.isArray(config)) {
         return config;
       }
-      
+
       // 如果是 boolean，返回 boolean
       if (typeof config === 'boolean') {
         return config;
       }
-      
+
       // 未配置时默认为 true
       return true;
     }

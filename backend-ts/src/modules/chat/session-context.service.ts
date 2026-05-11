@@ -184,8 +184,9 @@ export class SessionContextService {
     
     if (supportsTools) {
       // 创建工具上下文
+      const sessionType = session.sessionType || 'web';
       toolContext = this.toolContextFactory.createContext(
-        sessionId, userId, merged.tools, merged.mcpServers, [],
+        sessionId, userId, sessionType, merged.tools, merged.mcpServers, [],
       );
       
       // 获取工具提示词（用于构建 systemPrompt）
