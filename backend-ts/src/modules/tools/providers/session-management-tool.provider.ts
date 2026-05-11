@@ -119,10 +119,6 @@ export class SessionManagementToolProvider implements IToolProvider {
 ## clear_session
 **用途**：清空当前会话的所有消息历史，开始全新的对话
 
-**工作原理**：
-- 将当前会话归档（添加时间戳标记）
-- 后续用户消息会自动创建新的会话
-- 旧会话的消息仍然保存在数据库中，但不再接收新消息
 
 **何时使用**：
 - 用户明确要求"清空聊天"、"重新开始"、"删除所有消息"
@@ -133,6 +129,7 @@ export class SessionManagementToolProvider implements IToolProvider {
 - 此操作不可撤销（虽然数据仍保留，但会话不再活跃）
 - 不会影响其他用户的会话
 - 调用前必须设置 confirm: true
+- 工具返回后你仍可回复消息(如告知用户已经清空会话)，回复内容处于旧会话，会话结束后自动清空，到下次用户提问会创建新的会话
 
 **示例**：
 当用户说"我们换个话题吧，把之前的聊天记录清空"时，你应该调用此工具。
@@ -144,7 +141,7 @@ export class SessionManagementToolProvider implements IToolProvider {
     if (sessionType !== 'bot') {
       return "";
     }
-    return "机器人专属的会话管理工具，支持清空消息历史";
+    return "用户要求清空会话/历史记录/新建会话等请加载此工具集";
   }
 
   getMetadata(context?: Record<string, any>): ToolProviderMetadata {
