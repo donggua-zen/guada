@@ -168,11 +168,13 @@ export class ShellToolProvider implements IToolProvider {
       const stderrStr = this.decodeBuffer(stderr, encoding);
 
       // 构建返回结果
-      return JSON.stringify({
+      const result = {
         stdout: stdoutStr.trim(),
         stderr: stderrStr.trim(),
         exitCode: 0,
-      });
+      };
+
+      return this.truncateOutput(result);
     } catch (error: any) {
       this.logger.error(`执行命令失败：${error.message}`);
 
@@ -183,11 +185,13 @@ export class ShellToolProvider implements IToolProvider {
       const stdoutStr = error.stdout ? this.decodeBuffer(error.stdout, encoding) : '';
       const stderrStr = error.stderr ? this.decodeBuffer(error.stderr, encoding) : error.message;
 
-      return JSON.stringify({
+      const result = {
         stdout: stdoutStr.trim(),
         stderr: String(stderrStr).trim(),
         exitCode: exitCode,
-      });
+      };
+
+      return this.truncateOutput(result);
     }
   }
 
@@ -221,5 +225,37 @@ export class ShellToolProvider implements IToolProvider {
       // 解码失败时使用 latin1 编码，保证所有字节都能被表示
       return buffer.toString('latin1');
     }
+  }
+
+  /**
+   * 截断过长的输出内容
+   * @param result 命令执行结果对象
+   * @returns 截断后的 JSON 字符串
+   */
+  private truncateOutput(result: { stdout: string; stderr: string; exitCode: number }): string {
+    const MAX_LENGTH = 4000;
+    const combinedOutput = result.stdout + result.stderr;
+
+    // 如果总长度不超过限制，直接返回
+    if (combinedOutput.length <= MAX_LENGTH) {
+      return JSON.stringify(result);
+    }
+
+    // 计算需要截断的字符数
+    const truncatedLength = combinedOutput.length - MAX_LENGTH;
+
+    // 保留结尾部分
+    const truncatedCombined = combinedOutput.slice(-MAX_LENGTH);
+
+    // 简单地将截断后的内容分配给 stdout（保持 stderr 不变）
+    const truncatedResult = {
+      stdout: truncatedCombined,
+      stderr: result.stderr,
+      exitCode: result.exitCode,
+      _truncated: true,
+      _truncatedInfo: `输出已被截断，省略了前 ${truncatedLength} 个字符。如需查看完整输出，请调整命令或使用其他工具。`
+    };
+
+    return JSON.stringify(truncatedResult);
   }
 }
