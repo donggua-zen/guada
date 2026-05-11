@@ -188,8 +188,8 @@ export class AgentEngine {
 
       // 从会话上下文中获取准备发送给 LLM 的完整消息列表（含 system prompt、摘要和历史）
       const historyMessages = await conversationContext.getMessages();
-      // 生成本轮助手回复的内容 ID，用于唯一标识该轮次的输出
 
+      // 生成本轮助手回复的内容 ID，用于唯一标识该轮次的输出
       const contentId = conversationContext.generateId();
 
       // Yield create 事件（每轮都发送，通知前端新的 contentId），用于前端初始化消息容器

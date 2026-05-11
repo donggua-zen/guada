@@ -136,7 +136,7 @@ export class ConversationContext implements IConversationContext {
       sessionId: this.sessionId,
       userMessageId: config.userMessageId,
       maxMessages: memoryConfig.maxMemoryLength, // 使用分组后的配置
-      supportsImageInput: true,
+      supportsImageInput: config.model?.config?.inputCapabilities?.includes("image"),
       keepReasoningContent: shouldLoadReasoning,
       lastCompactedMessageId: checkpoint?.lastCompactedMessageId,
       lastCompactedContentId: checkpoint?.lastCompactedContentId,
