@@ -186,11 +186,8 @@ export class KnowledgeBaseToolProvider implements IToolProvider {
       const sessionType = context?.sessionType;
       const isWebSession = !sessionType || sessionType === 'web';
 
-      let toolInstructions: string;
-
-      if (isWebSession) {
-        // Web 会话：包含所有工具
-        toolInstructions = `
+      // 共同部分：基础工具说明
+      promptParts.push(`
 你拥有以下知识库管理工具，可以主动调用它们来查询和利用知识库内容：
 
 ### 1. 知识库语义搜索 (knowledge_base__search)
@@ -215,9 +212,13 @@ export class KnowledgeBaseToolProvider implements IToolProvider {
 **何时使用**:
 - 用户想查看某个文件的具体内容时
 - 需要检查分块质量时
-- 想要深入了解文件细节时
+- 想要深入了解文件细节时`);
 
-### 4. 添加文档到知识库 (knowledge_base__add_document)
+      // 差异部分：根据会话类型动态拼接
+
+      if (isWebSession) {
+        // Web 会话：包含添加文档工具和完整的使用建议
+        promptParts.push(`### 4. 添加文档到知识库 (knowledge_base__add_document)
 **用途**: 将指定路径的文本文件添加到知识库中
 
 **何时使用**:
@@ -229,45 +230,15 @@ export class KnowledgeBaseToolProvider implements IToolProvider {
 1. **先搜索再查看**: 先用 \`search\` 找到相关内容，如有必要再用 \`get_chunks\` 查看完整分块
 2. **注意分页**: 使用 \`get_chunks\` 时，每次最多获取 10 个分块，可通过调整 \`chunk_index\` 实现分页
 3. **错误处理**: 如果返回错误信息，请检查参数是否正确、知识库/文件是否存在
-4. **路径规范**: target_path 应包含完整的相对路径和文件名，系统会自动创建对应的文件夹结构
-`;
+4. **路径规范**: target_path 应包含完整的相对路径和文件名，系统会自动创建对应的文件夹结构`);
       } else {
-        // 非 Web 会话：仅包含查询工具
-        toolInstructions = `
-你拥有以下知识库管理工具，可以主动调用它们来查询和利用知识库内容：
-
-### 1. 知识库语义搜索 (knowledge_base__search)
-**用途**: 在知识库中进行向量相似度搜索，找到最相关的内容
-
-**何时使用**:
-- 用户询问与知识库相关的问题时
-- 需要查找特定主题的资料时
-- 想要验证知识库中是否有相关信息时
-
-### 2. 知识库文件列表 (knowledge_base__list_files)
-**用途**: 获取知识库下所有已上传文件的元数据列表
-
-**何时使用**:
-- 用户想了解知识库里有哪些文件时
-- 需要查看文件的处理状态时
-- 想要获取文件 ID 以便进一步操作时
-
-### 3. 知识库文件分块详情 (knowledge_base__get_chunks)
-**用途**: 获取指定文件的特定分块内容（支持分页）
-
-**何时使用**:
-- 用户想查看某个文件的具体内容时
-- 需要检查分块质量时
-- 想要深入了解文件细节时
-
-**使用建议**:
+        // 非 Web 会话：仅包含查询工具的使用建议
+        promptParts.push(`**使用建议**:
 1. **先搜索再查看**: 先用 \`search\` 找到相关内容，如有必要再用 \`get_chunks\` 查看完整分块
 2. **注意分页**: 使用 \`get_chunks\` 时，每次最多获取 10 个分块，可通过调整 \`chunk_index\` 实现分页
-3. **错误处理**: 如果返回错误信息，请检查参数是否正确、知识库/文件是否存在
-`;
+3. **错误处理**: 如果返回错误信息，请检查参数是否正确、知识库/文件是否存在`);
       }
 
-      promptParts.push(toolInstructions);
 
       return promptParts.join("\n");
     } catch (error: any) {

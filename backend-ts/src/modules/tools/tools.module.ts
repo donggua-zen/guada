@@ -9,6 +9,7 @@ import { MCPToolProvider } from "./providers/mcp-tool.provider";
 import { TimeToolProvider } from "./providers/time-tool.provider";
 import { ImageRecognitionToolProvider } from "./providers/image-recognition-tool.provider";
 import { ShellToolProvider } from "./providers/shell-tool.provider";
+import { FileToolProvider } from "./providers/file-tool.provider";
 import { BrowserToolProvider } from "./providers/browser-tool.provider";
 import { EmbeddingService } from "../knowledge-base/embedding.service";
 import { KbFileService } from "../knowledge-base/kb-file.service";
@@ -33,6 +34,7 @@ import { SkillToolBridgeService } from '../skills/integration/skill-tool-bridge.
     TimeToolProvider,
     ImageRecognitionToolProvider,
     ShellToolProvider,
+    FileToolProvider,
     BrowserToolProvider,
     SkillToolBridgeService,
     EmbeddingService,

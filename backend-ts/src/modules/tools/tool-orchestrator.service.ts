@@ -10,6 +10,7 @@ import { MCPToolProvider } from "./providers/mcp-tool.provider";
 import { TimeToolProvider } from "./providers/time-tool.provider";
 import { ImageRecognitionToolProvider } from "./providers/image-recognition-tool.provider";
 import { ShellToolProvider } from "./providers/shell-tool.provider";
+import { FileToolProvider } from "./providers/file-tool.provider";
 import { BrowserToolProvider } from "./providers/browser-tool.provider";
 import { ToolContext } from "./tool-context";
 import { SkillToolBridgeService } from '../skills/integration/skill-tool-bridge.service';
@@ -38,6 +39,7 @@ export class ToolOrchestrator {
     timeProvider: TimeToolProvider,
     imageRecognitionProvider: ImageRecognitionToolProvider,
     shellProvider: ShellToolProvider,
+    fileProvider: FileToolProvider,
     browserProvider: BrowserToolProvider,
     skillToolBridge: SkillToolBridgeService,
   ) {
@@ -47,6 +49,7 @@ export class ToolOrchestrator {
     this.addProvider(timeProvider);
     this.addProvider(imageRecognitionProvider);
     this.addProvider(shellProvider);
+    this.addProvider(fileProvider);
     this.addProvider(browserProvider);
     this.addProvider(skillToolBridge);
 
