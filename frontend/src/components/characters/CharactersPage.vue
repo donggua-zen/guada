@@ -16,22 +16,32 @@
       <div class="pb-4">
         <div class="flex flex-wrap gap-2">
           <!-- 全部助手标签 -->
-          <div class="filter-tag px-4 py-2 rounded-full cursor-pointer transition-all duration-200 select-none"
-            :class="currentGroupId === null ? 'active' : 'inactive'" @click="selectGroup(null)">
+          <div 
+            class="px-4 py-2 rounded-full cursor-pointer transition-all duration-200 select-none text-sm border"
+            :class="currentGroupId === null 
+              ? 'bg-(--color-primary) text-white border-(--color-primary) shadow-[0_2px_8px_rgba(251,114,153,0.3)] hover:bg-(--color-primary-hover) hover:border-(--color-primary-hover)' 
+              : 'bg-(--color-surface) text-(--color-text-gray) border-(--color-border) hover:bg-(--color-primary-100) hover:text-(--color-primary) hover:border-(--color-primary-200)'"
+            @click="selectGroup(null)">
             全部助手
           </div>
 
           <!-- 分组标签 -->
-          <div v-for="group in groups" :key="group.id"
-            class="filter-tag group-tag px-4 py-2 rounded-full cursor-pointer transition-all duration-200 select-none flex items-center gap-2"
-            :class="currentGroupId === group.id ? 'active' : 'inactive'" @click="selectGroup(group.id)"
+          <div 
+            v-for="group in groups" 
+            :key="group.id"
+            class="px-4 py-2 rounded-full cursor-pointer transition-all duration-200 select-none text-sm border flex items-center gap-2"
+            :class="currentGroupId === group.id 
+              ? 'bg-(--color-primary) text-white border-(--color-primary) shadow-[0_2px_8px_rgba(251,114,153,0.3)] hover:bg-(--color-primary-hover) hover:border-(--color-primary-hover)' 
+              : 'bg-(--color-surface) text-(--color-text-gray) border-(--color-border) hover:bg-(--color-primary-100) hover:text-(--color-primary) hover:border-(--color-primary-200)'"
+            @click="selectGroup(group.id)"
             @contextmenu.prevent="handleGroupContextMenu($event, group)">
             <span>{{ group.name }}</span>
           </div>
 
           <!-- 新建分组按钮 -->
           <div
-            class="filter-tag new-group-btn px-4 py-2 rounded-full cursor-pointer transition-all duration-200 select-none"
+            class="px-4 py-2 rounded-full cursor-pointer transition-all duration-200 select-none text-sm border border-dashed flex items-center"
+            :class="'bg-transparent text-(--color-text-gray) border-(--color-border) hover:bg-(--color-primary-100) hover:text-(--color-primary) hover:border-(--color-primary)'"
             @click="showCreateGroupDialog">
             <el-icon :size="16" class="mr-1">
               <PlusOutlined />
@@ -401,51 +411,4 @@ onUnmounted(() => {
 .delete-btn:hover {
   background-color: rgba(239, 68, 68, 0.1);
 }
-
-/* 筛选标签样式 */
-.filter-tag {
-  font-size: 14px;
-  border: 1px solid transparent;
-  display: inline-flex;
-  align-items: center;
-}
-
-.filter-tag.inactive {
-  background-color: var(--color-surface);
-  color: var(--color-text-gray);
-  border-color: var(--color-border);
-}
-
-.filter-tag.inactive:hover {
-  background-color: var(--color-primary-100);
-  color: var(--color-primary);
-  border-color: var(--color-primary-200);
-}
-
-.filter-tag.active {
-  background-color: var(--color-primary);
-  color: white;
-  border-color: var(--color-primary);
-  box-shadow: 0 2px 8px rgba(251, 114, 153, 0.3);
-}
-
-.filter-tag.active:hover {
-  background-color: var(--color-primary-hover);
-  border-color: var(--color-primary-hover);
-}
-
-/* 新建分组按钮特殊样式 */
-.new-group-btn {
-  background-color: transparent;
-  border: 1px dashed var(--color-border);
-  color: var(--color-text-gray);
-}
-
-.new-group-btn:hover {
-  background-color: var(--color-primary-100);
-  border-color: var(--color-primary);
-  color: var(--color-primary);
-}
-
-/* 分组标签中的操作按钮样式已移除，改为右键菜单 */
 </style>
