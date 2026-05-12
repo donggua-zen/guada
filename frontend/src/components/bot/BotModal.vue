@@ -1,6 +1,6 @@
 <template>
   <el-dialog v-model="dialogVisible" :title="isEdit ? '编辑机器人' : '创建机器人'" width="600px" :close-on-click-modal="false"
-    @close="handleClose">
+    @close="handleClose" append-to-body>
     <el-form ref="formRef" :model="formData" :rules="formRules" label-width="120px" class="bot-form">
 
       <!-- 平台选择（仅创建时显示） -->
