@@ -196,6 +196,11 @@ export class CompressionEngine implements ICompressionStrategy {
     }
 
     // 统一更新会话压缩状态到数据库
+    this.logger.log(`Saving compression state for session ${sessionId}:`);
+    this.logger.log(`  cleaningStrategy: ${compressionState.cleaningStrategy}`);
+    this.logger.log(`  lastCompactedMessageId: ${compressionState.lastCompactedMessageId || 'NULL'}`);
+    this.logger.log(`  lastCompactedContentId: ${compressionState.lastCompactedContentId || 'NULL'}`);
+    this.logger.log(`  lastPrunedContentId: ${compressionState.lastPrunedContentId || 'NULL'}`);
     await this.contextStateRepo.create(sessionId, compressionState);
 
     // 统一返回结果（strategy 从 compressionState 获取，确保与数据库状态一致）
@@ -533,23 +538,26 @@ export class CompressionEngine implements ICompressionStrategy {
       return { summary: previousSummary || "", retained: messages, lastCompactedContentId: undefined, retainedTokens: prunedTokens };
     }
 
-    // 2. 从后往前以“组”为单位累加 Token，确定保留范围
+    // 2. 从后往前以"组"为单位累加 Token，确定保留范围
     let retainedTokens = 0;
     // 强制保留最后 MIN_RETAINED_GROUPS 个分组（例如最后 3 组对话）
     const minRetainGroupIndex = Math.max(0, messageGroups.length - MIN_RETAINED_MESSAGES);
-    let retainGroupIndex = minRetainGroupIndex; // 默认从强制保留区的起点开始
-    for (let i = minRetainGroupIndex - 1; i >= 0; i--) {
+        
+    // 首先计算强制保留区的 Token 数
+    for (let i = messageGroups.length - 1; i >= minRetainGroupIndex; i--) {
       retainedTokens += await this.tokenizerService.countTokens(chatModelName || "gpt4", messageGroups[i]);
     }
+        
+    let retainGroupIndex = minRetainGroupIndex; // 默认从强制保留区的起点开始
     // 从强制保留区的前一组开始向前判断
-    for (let i = messageGroups.length - 1; i >= minRetainGroupIndex; i--) {
+    for (let i = minRetainGroupIndex - 1; i >= 0; i--) {
       const group = messageGroups[i];
       const groupTokens = await this.tokenizerService.countTokens(chatModelName || "gpt4", group);
-
+    
       if (retainedTokens + groupTokens > targetTokens) {
         break;
       }
-
+    
       retainedTokens += groupTokens;
       retainGroupIndex = i;
     }
