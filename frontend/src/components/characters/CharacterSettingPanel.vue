@@ -1,21 +1,20 @@
 <template>
-  <div class="flex flex-col h-full character-setting-panel">
-    <div class="flex-1 overflow-hidden">
-      <el-tabs ref="tabsInstRef" v-model="tabsValue" class="h-full flex flex-col character-tabs">
-        <!-- 基础设置 -->
-        <el-tab-pane name="basic" class="flex-1 overflow-hidden">
-          <template #label>
-            <div class="tab-label">
-              <el-icon :size="18">
-                <UserOutlined />
-              </el-icon>
-              <span>基础</span>
-            </div>
-          </template>
-          <div class="px-0 py-6 h-full overflow-y-auto">
-            <div class="px-0">
-              <el-form ref="basicFormRef" :model="characterForm" :rules="basicRules" label-position="left"
-                label-width="50%" size="large">
+  <div class="flex flex-col flex-1 character-setting-panel">
+    <el-tabs ref="tabsInstRef" v-model="tabsValue" class="flex-1 flex flex-col character-tabs">
+      <!-- 基础设置 -->
+      <el-tab-pane name="basic" class="flex-1 overflow-hidden">
+        <template #label>
+          <div class="tab-label">
+            <el-icon :size="18">
+              <UserOutlined />
+            </el-icon>
+            <span>基础</span>
+          </div>
+        </template>
+        <div class="px-0 py-6 h-full overflow-y-auto">
+          <div class="px-0">
+            <el-form ref="basicFormRef" :model="characterForm" :rules="basicRules" label-position="left"
+              label-width="50%" size="large">
               <!-- 头像设置 -->
               <el-form-item prop="avatarUrl">
                 <template #label>
@@ -68,24 +67,24 @@
                 </el-select>
               </el-form-item>
             </el-form>
-            </div>
           </div>
-        </el-tab-pane>
+        </div>
+      </el-tab-pane>
 
-        <!-- 提示词 -->
-        <el-tab-pane name="prompt" class="flex-1 overflow-hidden">
-          <template #label>
-            <div class="tab-label">
-              <el-icon :size="18">
-                <MessageOutlined />
-              </el-icon>
-              <span>提示词</span>
-            </div>
-          </template>
-          <div class="px-0 py-6 h-full flex flex-col">
-            <div class="px-0 flex-1 flex flex-col min-h-0">
-              <el-form ref="promptFormRef" :model="characterForm" :rules="promptRules" label-position="top"
-                label-width="80px" size="large" class="flex-1 flex flex-col min-h-0">
+      <!-- 提示词 -->
+      <el-tab-pane name="prompt" class="flex-1 overflow-hidden">
+        <template #label>
+          <div class="tab-label">
+            <el-icon :size="18">
+              <MessageOutlined />
+            </el-icon>
+            <span>提示词</span>
+          </div>
+        </template>
+        <div class="px-0 py-6 h-full flex flex-col flex-1">
+          <div class="px-0 flex-1 flex flex-col min-h-0">
+            <el-form ref="promptFormRef" :model="characterForm" :rules="promptRules" label-position="top"
+              label-width="80px" size="large" class="flex-1 flex flex-col min-h-0">
               <el-form-item :show-label="false" :show-feedback="false" style="flex-shrink: 0;" class="no-border-item">
                 <div class="flex items-center w-full justify-between">
                   <span>系统系提示(角色设定)</span>
@@ -104,30 +103,30 @@
               </el-form-item>
 
               <!-- 详细设定 -->
-              <el-form-item prop="systemPrompt" :show-label="false" class="flex-1 min-h-0 prompt-form-item no-border-item">
-                <el-input v-model="characterForm.systemPrompt" type="textarea" placeholder="请输入详细设定"
-                  resize="none" />
+              <el-form-item prop="systemPrompt" :show-label="false"
+                class="flex-1 min-h-40 prompt-form-item no-border-item">
+                <el-input v-model="characterForm.systemPrompt" type="textarea" placeholder="请输入详细设定" resize="none" />
               </el-form-item>
 
             </el-form>
-            </div>
           </div>
-        </el-tab-pane>
+        </div>
+      </el-tab-pane>
 
-        <!-- 模型设置 -->
-        <el-tab-pane name="model" v-if="!isSimpleStyle || true" class="flex-1 overflow-hidden">
-          <template #label>
-            <div class="tab-label">
-              <el-icon :size="18">
-                <RobotOutlined />
-              </el-icon>
-              <span>模型</span>
-            </div>
-          </template>
-          <div class="px-0 py-6 h-full overflow-y-auto">
-            <div class="px-0">
-              <el-form ref="modelFormRef" :model="characterForm" :rules="modelRules" label-position="left"
-                label-width="50%" size="large">
+      <!-- 模型设置 -->
+      <el-tab-pane name="model" v-if="!isSimpleStyle || true" class="flex-1 overflow-hidden">
+        <template #label>
+          <div class="tab-label">
+            <el-icon :size="18">
+              <RobotOutlined />
+            </el-icon>
+            <span>模型</span>
+          </div>
+        </template>
+        <div class="px-0 py-6 h-full overflow-y-auto">
+          <div class="px-0">
+            <el-form ref="modelFormRef" :model="characterForm" :rules="modelRules" label-position="left"
+              label-width="50%" size="large">
               <!-- 模型选择 -->
               <el-form-item prop="modelId">
                 <template #label>
@@ -146,7 +145,9 @@
                 <el-collapse-item name="params">
                   <template #title>
                     <div class="flex items-center gap-2 text-base font-medium">
-                      <el-icon><SettingOutlined /></el-icon>
+                      <el-icon>
+                        <SettingOutlined />
+                      </el-icon>
                       <span>模型参数设置</span>
                     </div>
                   </template>
@@ -158,8 +159,8 @@
                         <span class="text-xs text-gray-500 dark:text-gray-400 font-normal">控制输出的随机性和创造性，值越高越富有创意</span>
                       </div>
                     </template>
-                    <el-slider-optional v-model="characterForm.modelTemperature" :min="0" :max="1.9" :step="0.1" show-input
-                      optional-direction="max" optional-text="Auto" class="w-full max-w-md" />
+                    <el-slider-optional v-model="characterForm.modelTemperature" :min="0" :max="1.9" :step="0.1"
+                      show-input optional-direction="max" optional-text="Auto" class="w-full max-w-md" />
                   </el-form-item>
 
                   <!-- Top P -->
@@ -179,7 +180,8 @@
                     <template #label>
                       <div class="flex flex-col gap-1">
                         <span class="text-base text-gray-900 dark:text-gray-100 font-medium">频率惩罚</span>
-                        <span class="text-xs text-gray-500 dark:text-gray-400 font-normal">降低重复内容的出现概率，正值减少重复，负值鼓励重复</span>
+                        <span
+                          class="text-xs text-gray-500 dark:text-gray-400 font-normal">降低重复内容的出现概率，正值减少重复，负值鼓励重复</span>
                       </div>
                     </template>
                     <el-slider-optional v-model="characterForm.modelFrequencyPenalty" :min="-1.9" :max="1.9" :step="0.1"
@@ -188,24 +190,23 @@
                 </el-collapse-item>
               </el-collapse>
             </el-form>
-            </div>
           </div>
-        </el-tab-pane>
+        </div>
+      </el-tab-pane>
 
-        <!-- 记忆与压缩 -->
-        <el-tab-pane name="memory" v-if="!isSimpleStyle || true" class="flex-1 overflow-hidden">
-          <template #label>
-            <div class="tab-label">
-              <el-icon :size="18">
-                <DatabaseOutlined />
-              </el-icon>
-              <span>记忆</span>
-            </div>
-          </template>
-          <div class="px-0 py-6 h-full overflow-y-auto">
-            <div class="px-0">
-              <el-form ref="memoryFormRef" :model="characterForm" label-position="left"
-                label-width="50%" size="large">
+      <!-- 记忆与压缩 -->
+      <el-tab-pane name="memory" v-if="!isSimpleStyle || true" class="flex-1 overflow-hidden">
+        <template #label>
+          <div class="tab-label">
+            <el-icon :size="18">
+              <DatabaseOutlined />
+            </el-icon>
+            <span>记忆</span>
+          </div>
+        </template>
+        <div class="px-0 py-6 h-full overflow-y-auto">
+          <div class="px-0">
+            <el-form ref="memoryFormRef" :model="characterForm" label-position="left" label-width="50%" size="large">
               <!-- 上下文条数 -->
               <el-form-item prop="maxMemoryLength">
                 <template #label>
@@ -223,17 +224,13 @@
                 <template #label>
                   <div class="flex flex-col gap-1">
                     <span class="text-base text-gray-900 dark:text-gray-100 font-medium">Token 上限</span>
-                    <span class="text-xs text-gray-500 dark:text-gray-400 font-normal">设置 Token 使用上限，与模型上下文窗口取最小值作为压缩判断基准</span>
+                    <span class="text-xs text-gray-500 dark:text-gray-400 font-normal">设置 Token
+                      使用上限，与模型上下文窗口取最小值作为压缩判断基准</span>
                   </div>
                 </template>
                 <div class="w-full max-w-md">
-                  <el-input 
-                    v-model="maxTokensLimitDisplay" 
-                    placeholder="不限制"
-                    clearable
-                    @input="handleMaxTokensInput"
-                    @blur="formatMaxTokensDisplay"
-                  >
+                  <el-input v-model="maxTokensLimitDisplay" placeholder="不限制" clearable @input="handleMaxTokensInput"
+                    @blur="formatMaxTokensDisplay">
                     <template #suffix>
                       <span class="text-gray-400 text-sm">Tokens</span>
                     </template>
@@ -250,7 +247,7 @@
                     <span class="text-xs text-gray-500 dark:text-gray-400 font-normal">当已用 Token 达到最大窗口的此比例时触发压缩</span>
                   </div>
                 </template>
-                <el-slider v-model="characterForm.compressionTriggerRatio" :min="0.5" :max="0.95" :step="0.05" 
+                <el-slider v-model="characterForm.compressionTriggerRatio" :min="0.5" :max="0.95" :step="0.05"
                   show-input format-tooltip="(val) => `${Math.round(val * 100)}%`" class="w-full max-w-md" />
               </el-form-item>
 
@@ -261,8 +258,8 @@
                     <span class="text-xs text-gray-500 dark:text-gray-400 font-normal">压缩后保留至最大窗口的此比例</span>
                   </div>
                 </template>
-                <el-slider v-model="characterForm.compressionTargetRatio" :min="0.2" :max="0.8" :step="0.05" 
-                  show-input format-tooltip="(val) => `${Math.round(val * 100)}%`" class="w-full max-w-md" />
+                <el-slider v-model="characterForm.compressionTargetRatio" :min="0.2" :max="0.8" :step="0.05" show-input
+                  format-tooltip="(val) => `${Math.round(val * 100)}%`" class="w-full max-w-md" />
               </el-form-item>
 
               <el-form-item label="启用摘要生成" prop="summaryMode">
@@ -276,19 +273,25 @@
                   <el-select v-model="characterForm.summaryMode" placeholder="请选择摘要模式" class="w-full">
                     <el-option label="关闭摘要" value="disabled">
                       <span class="flex items-center gap-2">
-                        <el-icon><CloseOutlined /></el-icon>
+                        <el-icon>
+                          <CloseOutlined />
+                        </el-icon>
                         <span>关闭摘要 - 仅裁剪工具结果，不生成语义摘要</span>
                       </span>
                     </el-option>
                     <el-option label="快速摘要" value="fast">
                       <span class="flex items-center gap-2">
-                        <el-icon><ThunderboltOutlined /></el-icon>
+                        <el-icon>
+                          <ThunderboltOutlined />
+                        </el-icon>
                         <span>快速摘要 - 单次调用生成，速度快</span>
                       </span>
                     </el-option>
                     <el-option label="迭代摘要" value="iterative">
                       <span class="flex items-center gap-2">
-                        <el-icon><SyncOutlined /></el-icon>
+                        <el-icon>
+                          <SyncOutlined />
+                        </el-icon>
                         <span>迭代摘要 - 多轮优化，质量最高但耗时较长</span>
                       </span>
                     </el-option>
@@ -302,23 +305,23 @@
                 <p class="text-sm">• 启用摘要：关闭后将仅裁剪工具结果，不生成语义摘要</p>
               </el-alert>
             </el-form>
-            </div>
           </div>
-        </el-tab-pane>
+        </div>
+      </el-tab-pane>
 
-        <!-- 本地工具 -->
-        <el-tab-pane name="local_tools" class="flex-1 overflow-hidden">
-          <template #label>
-            <div class="tab-label">
-              <el-icon :size="18">
-                <ToolOutlined />
-              </el-icon>
-              <span>本地工具</span>
-            </div>
-          </template>
-          <div class="px-0 py-6 h-full overflow-y-auto">
-            <div class="px-0">
-              <el-form label-position="top" size="large">
+      <!-- 本地工具 -->
+      <el-tab-pane name="local_tools" class="flex-1 overflow-hidden">
+        <template #label>
+          <div class="tab-label">
+            <el-icon :size="18">
+              <ToolOutlined />
+            </el-icon>
+            <span>本地工具</span>
+          </div>
+        </template>
+        <div class="px-0 py-6 h-full overflow-y-auto">
+          <div class="px-0">
+            <el-form label-position="top" size="large">
               <!-- 全局开关 -->
               <el-form-item label="自动启用全部工具" label-position="left">
                 <div class="flex items-center gap-2">
@@ -327,13 +330,8 @@
                       <QuestionCircleOutlined />
                     </el-icon>
                   </el-tooltip>
-                  <el-switch 
-                    :model-value="allToolsEnabled"
-                    @update:model-value="handleAllToolsToggle"
-                    inline-prompt 
-                    active-text="开" 
-                    inactive-text="关" 
-                  />
+                  <el-switch :model-value="allToolsEnabled" @update:model-value="handleAllToolsToggle" inline-prompt
+                    active-text="开" inactive-text="关" />
                 </div>
               </el-form-item>
 
@@ -352,7 +350,7 @@
                 </el-icon>
                 <div class="text-sm text-gray-500 mt-2">加载中...</div>
               </div>
-              
+
               <div v-else-if="localTools.length === 0" class="text-center text-gray-500 py-8">
                 <el-icon size="48" class="mb-2">
                   <InfoCircleOutlined />
@@ -370,23 +368,14 @@
                       <div class="flex items-center gap-2">
                         <!-- 设置按钮 -->
                         <el-tooltip content="配置子工具" placement="top">
-                          <el-icon 
-                            class="cursor-pointer text-gray-400 hover:text-blue-500 transition-colors" 
-                            size="16"
-                            @click="openToolConfig(tool)"
-                          >
+                          <el-icon class="cursor-pointer text-gray-400 hover:text-blue-500 transition-colors" size="16"
+                            @click="openToolConfig(tool)">
                             <SettingOutlined />
                           </el-icon>
                         </el-tooltip>
-                        <el-switch
-                          v-if="!allToolsEnabled"
-                          :model-value="isToolProviderEnabled(tool.namespace)"
-                          @update:model-value="handleLocalToolToggle(tool.namespace, $event)"
-                          inline-prompt
-                          active-text="启动"
-                          inactive-text="禁用"
-                          size="default"
-                        />
+                        <el-switch v-if="!allToolsEnabled" :model-value="isToolProviderEnabled(tool.namespace)"
+                          @update:model-value="handleLocalToolToggle(tool.namespace, $event)" inline-prompt
+                          active-text="启动" inactive-text="禁用" size="default" />
                         <el-tag v-else type="primary" size="small">已启用</el-tag>
                       </div>
                     </div>
@@ -403,23 +392,23 @@
                 </div>
               </div>
             </el-form>
-            </div>
           </div>
-        </el-tab-pane>
+        </div>
+      </el-tab-pane>
 
-        <!-- MCP 工具 -->
-        <el-tab-pane name="mcp_tools" class="flex-1 overflow-hidden">
-          <template #label>
-            <div class="tab-label">
-              <el-icon :size="18">
-                <ApiOutlined />
-              </el-icon>
-              <span>MCP 工具</span>
-            </div>
-          </template>
-          <div class="px-0 py-6 h-full overflow-y-auto">
-            <div class="px-0">
-              <el-form label-position="top" size="large">
+      <!-- MCP 工具 -->
+      <el-tab-pane name="mcp_tools" class="flex-1 overflow-hidden">
+        <template #label>
+          <div class="tab-label">
+            <el-icon :size="18">
+              <ApiOutlined />
+            </el-icon>
+            <span>MCP 工具</span>
+          </div>
+        </template>
+        <div class="px-0 py-6 h-full overflow-y-auto">
+          <div class="px-0">
+            <el-form label-position="top" size="large">
               <!-- MCP 全局开关 -->
               <el-form-item label="自动启用全部MCP服务器" label-position="left">
                 <div class="flex items-center gap-2">
@@ -483,62 +472,45 @@
                 </div>
               </div>
             </el-form>
-            </div>
           </div>
-        </el-tab-pane>
-      </el-tabs>
-    </div>
+        </div>
+      </el-tab-pane>
+    </el-tabs>
   </div>
 
   <!-- 工具配置对话框 -->
-  <el-dialog
-    v-model="toolConfigDialogVisible"
-    :title="`${currentToolConfig?.displayName || ''} - 子工具配置`"
-    width="600px"
-    destroy-on-close
-    class="tool-config-dialog"
-  >
+  <el-dialog v-model="toolConfigDialogVisible" :title="`${currentToolConfig?.displayName || ''} - 子工具配置`" width="600px"
+    destroy-on-close class="tool-config-dialog">
     <div v-if="currentToolConfig" class="py-2">
       <div class="flex items-center justify-between mb-4">
         <span class="text-sm text-gray-600">启动全部工具</span>
-        <el-switch
-          :model-value="isUsingGlobalToggle"
-          @update:model-value="handleAllSubToolsToggle"
-          inline-prompt
-          active-text="启用"
-          inactive-text="禁用"
-        />
+        <el-switch :model-value="isUsingGlobalToggle" @update:model-value="handleAllSubToolsToggle" inline-prompt
+          active-text="启用" inactive-text="禁用" />
       </div>
-      
-      <div v-if="!currentToolConfig.tools || currentToolConfig.tools.length === 0" class="text-center text-gray-500 py-8">
+
+      <div v-if="!currentToolConfig.tools || currentToolConfig.tools.length === 0"
+        class="text-center text-gray-500 py-8">
         暂无子工具配置
       </div>
-      
+
       <div v-else class="tool-config-list">
-        <div 
-          v-for="subTool in currentToolConfig.tools" 
-          :key="subTool.name"
-          class="tool-config-item"
-        >
+        <div v-for="subTool in currentToolConfig.tools" :key="subTool.name" class="tool-config-item">
           <div class="flex items-center justify-between gap-3">
             <div class="flex flex-col gap-1 flex-1 min-w-0">
               <span class="font-medium text-sm break-words">{{ getToolDisplayName(subTool.name) }}</span>
-              <span v-if="subTool.description" class="text-xs text-gray-500 break-words whitespace-normal">{{ subTool.description }}</span>
+              <span v-if="subTool.description" class="text-xs text-gray-500 break-words whitespace-normal">{{
+                subTool.description }}</span>
             </div>
-            <el-switch
-              v-if="!isUsingGlobalToggle"
+            <el-switch v-if="!isUsingGlobalToggle"
               :model-value="selectedSubTools.includes(getToolDisplayName(subTool.name))"
-              @update:model-value="handleSubToolToggle(getToolDisplayName(subTool.name), $event)"
-              inline-prompt
-              active-text="启用"
-              inactive-text="禁用"
-            />
+              @update:model-value="handleSubToolToggle(getToolDisplayName(subTool.name), $event)" inline-prompt
+              active-text="启用" inactive-text="禁用" />
             <el-tag v-else type="success" size="small">已启用</el-tag>
           </div>
         </div>
       </div>
     </div>
-    
+
     <template #footer>
       <div class="flex justify-end gap-2">
         <el-button @click="toolConfigDialogVisible = false">取消</el-button>
@@ -784,18 +756,18 @@ const isToolProviderEnabled = (namespace) => {
   if (typeof characterToolSettings.value === 'boolean') {
     return characterToolSettings.value;
   }
-  
+
   const config = characterToolSettings.value[namespace];
-  
+
   // true 表示全部启用
   if (config === true) return true;
-  
+
   // false 表示全部禁用
   if (config === false) return false;
-  
+
   // 数组表示部分启用，数组长度 > 0 表示启用
   if (Array.isArray(config)) return config.length > 0;
-  
+
   // 默认禁用（当配置为对象但某个 namespace 未配置时）
   return false;
 };
@@ -804,7 +776,7 @@ const isToolProviderEnabled = (namespace) => {
 watch(() => props.data, (newVal) => {
   // 检测是否是角色切换（id 变化）或初始化
   const isCharacterSwitch = !characterForm.id || (newVal.id && newVal.id !== characterForm.id);
-  
+
   if (isCharacterSwitch) {
     characterForm.avatarFile = null;
   }
@@ -825,7 +797,7 @@ watch(() => props.data, (newVal) => {
   characterForm.modelTopP = newVal.settings?.modelTopP || null;
   characterForm.modelFrequencyPenalty = newVal.settings?.modelFrequencyPenalty || null;
   characterForm.useUserPrompt = newVal.settings?.useUserPrompt || false;
-  
+
   // 从 memory 分组加载记忆与压缩配置
   const memoryConfig = newVal.settings?.memory || {};
   characterForm.maxMemoryLength = memoryConfig.maxMemoryLength ?? newVal.settings?.maxMemoryLength ?? null;
@@ -902,13 +874,13 @@ const loadLocalTools = async () => {
   if (!props.data?.id) {
     return;
   }
-  
+
   loadingTools.value = true;
   try {
     const response = await apiService.fetchCharacterTools(props.data.id);
     // 只显示全局启用的工具
     localTools.value = (response.tools || []).filter(tool => tool.enabled);
-    
+
     // 初始化角色工具设置
     const toolsConfig = response.characterTools;
     if (toolsConfig === true || toolsConfig === false) {
@@ -950,7 +922,7 @@ const handleLocalToolToggle = (namespace, enabled) => {
 // 打开工具配置对话框
 const openToolConfig = (tool) => {
   currentToolConfig.value = tool;
-  
+
   // 获取当前配置
   let config;
   if (typeof characterToolSettings.value === 'boolean') {
@@ -963,7 +935,7 @@ const openToolConfig = (tool) => {
     // 其他情况：默认为 undefined
     config = undefined;
   }
-  
+
   // 初始化选中的子工具列表（使用去除前缀后的名称）
   if (config === true) {
     // 明确设置为 true：全部启用，标记为使用全局开关
@@ -992,22 +964,22 @@ const openToolConfig = (tool) => {
     selectedSubTools.value = (tool.tools || []).map(t => getToolDisplayName(t.name));
     isUsingGlobalToggle.value = false;
   }
-  
+
   toolConfigDialogVisible.value = true;
 };
 
 // 保存工具配置
 const saveToolConfig = () => {
   if (!currentToolConfig.value) return;
-  
+
   const namespace = currentToolConfig.value.namespace;
   const allTools = (currentToolConfig.value.tools || []).map(t => t.name);
-  
+
   // 确保是对象模式
   if (typeof characterToolSettings.value !== 'object' || Array.isArray(characterToolSettings.value)) {
     characterToolSettings.value = {};
   }
-  
+
   // 判断是否全部选中
   if (selectedSubTools.value.length === 0) {
     // 全部未选中：设置为 false
@@ -1025,14 +997,14 @@ const saveToolConfig = () => {
     // 部分选中：保存为数组
     characterToolSettings.value[namespace] = [...selectedSubTools.value];
   }
-  
+
   toolConfigDialogVisible.value = false;
 };
 
 // 处理单个子工具开关切换
 const handleSubToolToggle = (toolName, enabled) => {
   const index = selectedSubTools.value.indexOf(toolName);
-  
+
   if (enabled && index === -1) {
     // 启用：添加到数组
     selectedSubTools.value.push(toolName);
@@ -1040,7 +1012,7 @@ const handleSubToolToggle = (toolName, enabled) => {
     // 禁用：从数组移除
     selectedSubTools.value.splice(index, 1);
   }
-  
+
   // 如果用户手动调整了单个工具，取消全局开关标记
   isUsingGlobalToggle.value = false;
 };
@@ -1055,10 +1027,10 @@ const isAllSubToolsSelected = computed(() => {
 // 处理全部子工具开关切换
 const handleAllSubToolsToggle = (enabled) => {
   if (!currentToolConfig.value || !currentToolConfig.value.tools) return;
-  
+
   // 使用去除前缀后的工具名称
   const allTools = currentToolConfig.value.tools.map(t => getToolDisplayName(t.name));
-  
+
   if (enabled) {
     // 启用全部：选中所有工具，并标记为使用全局开关
     selectedSubTools.value = [...allTools];
@@ -1231,7 +1203,7 @@ function formatTokenValue(value) {
   if (!value) return '';
   const num = Number(value);
   if (isNaN(num)) return '';
-  
+
   // 如果大于等于 1,000,000 且是整百万，使用 M 后缀
   if (num >= 1000000 && num % 1000000 === 0) {
     return (num / 1000000) + 'M';
@@ -1251,10 +1223,10 @@ function formatTokenValue(value) {
  */
 function parseTokenValue(input) {
   if (!input || input.trim() === '') return null;
-  
+
   const trimmed = input.trim();
   const lowerTrimmed = trimmed.toLowerCase();
-  
+
   // 支持 M/m 后缀（百万）
   if (lowerTrimmed.endsWith('m')) {
     const numStr = trimmed.slice(0, -1).replace(/,/g, '');
@@ -1262,7 +1234,7 @@ function parseTokenValue(input) {
     if (isNaN(num)) return null;
     return Math.round(num * 1000000);
   }
-  
+
   // 支持 K/k 后缀（千）
   if (lowerTrimmed.endsWith('k')) {
     const numStr = trimmed.slice(0, -1).replace(/,/g, '');
@@ -1270,7 +1242,7 @@ function parseTokenValue(input) {
     if (isNaN(num)) return null;
     return Math.round(num * 1000);
   }
-  
+
   // 普通数字（可能带逗号）
   const cleanStr = trimmed.replace(/,/g, '');
   const num = Number(cleanStr);
@@ -1426,15 +1398,21 @@ defineExpose({
   border: 1px solid var(--el-color-primary);
 }
 
-/* Tab 内容区域优化 */
+/* Tab 内容区域优化 - 使用 flex 布局而不是固定高度 */
 :deep(.el-tabs__content) {
+  flex: 1;
+  min-height: 0;
+  /* 关键：允许 flex 子项正确收缩 */
   overflow-y: auto;
-  height: calc(100% - 55px);
   padding: 0;
+  display: flex;
+  flex-direction: column;
 }
 
 :deep(.el-tab-pane) {
   height: 100%;
+  display: flex;
+  flex-direction: column;
 }
 
 /* 表单区域优化 */
@@ -1442,58 +1420,12 @@ defineExpose({
   height: 100%;
 }
 
-/* 滚动条美化 */
-:deep(.el-tabs__content)::-webkit-scrollbar {
-  width: 6px;
-}
-
-:deep(.el-tabs__content)::-webkit-scrollbar-track {
-  background: transparent;
-}
-
-:deep(.el-tabs__content)::-webkit-scrollbar-thumb {
-  background-color: rgba(0, 0, 0, 0.2);
-  border-radius: 3px;
-}
-
-.dark :deep(.el-tabs__content)::-webkit-scrollbar-thumb {
-  background-color: rgba(255, 255, 255, 0.2);
-}
-
-/* 每个 Tab 内容区域的滚动条 */
-.el-tab-pane > div {
-  scrollbar-width: thin;
-  scrollbar-color: rgba(0, 0, 0, 0.2) transparent;
-}
-
-.el-tab-pane > div::-webkit-scrollbar {
-  width: 6px;
-}
-
-.el-tab-pane > div::-webkit-scrollbar-track {
-  background: transparent;
-}
-
-.el-tab-pane > div::-webkit-scrollbar-thumb {
-  background-color: rgba(0, 0, 0, 0.2);
-  border-radius: 3px;
-}
-
-.dark .el-tab-pane > div::-webkit-scrollbar-thumb {
-  background-color: rgba(255, 255, 255, 0.2);
-}
-
-/* 确保底部按钮始终可见 */
-.footer {
-  flex-shrink: 0;
-  background-color: var(--el-bg-color);
-}
 
 /* 提示词输入框样式 - 禁止resize并占满flex空间 */
 .prompt-form-item {
   display: flex;
   flex-direction: column;
-  min-height: 0;
+  min-height: 400px;
 }
 
 .prompt-form-item :deep(.el-form-item__content) {
@@ -1543,7 +1475,7 @@ defineExpose({
 }
 
 /* 最后一个表单项去除底边框 */
-.el-form > .el-form-item:last-child {
+.el-form>.el-form-item:last-child {
   border-bottom: none;
   padding-bottom: 0;
   margin-bottom: 0 !important;

@@ -469,10 +469,3 @@ const handleSubmit = async () => {
   })
 }
 </script>
-
-<style scoped>
-.bot-form {
-  max-height: 60vh;
-  overflow-y: auto;
-}
-</style>

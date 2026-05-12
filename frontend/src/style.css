@@ -104,24 +104,33 @@ html.dark {
        现代化暗色模式配色方案
        设计理念：护眼舒适、层次分明、柔和对比
        ==================== */
-    
+
     /* 主色调 - 在暗色模式下稍微降低饱和度，提升可读性 */
-    --color-primary: oklch(70% 0.14 355); /* 柔和的粉红色 */
+    --color-primary: oklch(70% 0.14 355);
+    /* 柔和的粉红色 */
     --color-primary-hover: oklch(75% 0.16 355);
     --color-primary-active: oklch(65% 0.12 355);
     --color-primary-disabled: oklch(45% 0.08 355);
     --color-primary-text: #ffffff;
     --color-primary-text-disabled: rgba(255, 255, 255, 0.5);
-    
+
     /* 主色调渐变系列 - 用于背景和状态 */
-    --color-primary-50: oklch(25% 0.03 355);   /* 极淡粉 - 最浅背景 */
-    --color-primary-100: oklch(30% 0.05 355);  /* 淡粉 - 悬停/选中背景 */
-    --color-primary-200: oklch(35% 0.07 355);  /* 浅粉 - 边框/分隔线 */
-    --color-primary-300: oklch(40% 0.09 355);  /* 中粉 - 强调元素 */
-    --color-primary-500: oklch(55% 0.11 355);  /* 标准粉 - 主要交互 */
-    --color-primary-700: oklch(65% 0.13 355);  /* 深粉 - 激活状态 */
-    --color-primary-900: oklch(70% 0.14 355);  /* 最深粉 - 重点强调 */
-    --color-primary-950: oklch(72% 0.15 355);  /* 最深变体 */
+    --color-primary-50: oklch(25% 0.03 355);
+    /* 极淡粉 - 最浅背景 */
+    --color-primary-100: oklch(30% 0.05 355);
+    /* 淡粉 - 悬停/选中背景 */
+    --color-primary-200: oklch(35% 0.07 355);
+    /* 浅粉 - 边框/分隔线 */
+    --color-primary-300: oklch(40% 0.09 355);
+    /* 中粉 - 强调元素 */
+    --color-primary-500: oklch(55% 0.11 355);
+    /* 标准粉 - 主要交互 */
+    --color-primary-700: oklch(65% 0.13 355);
+    /* 深粉 - 激活状态 */
+    --color-primary-900: oklch(70% 0.14 355);
+    /* 最深粉 - 重点强调 */
+    --color-primary-950: oklch(72% 0.15 355);
+    /* 最深变体 */
 
     /* 次要颜色 - 蓝灰色调，与主色形成互补 */
     --color-secondary: oklch(55% 0.08 240);
@@ -135,33 +144,45 @@ html.dark {
        核心背景色系统
        采用深蓝灰色系，避免纯黑，降低视觉刺激
        ==================== */
-    
+
     /* 页面主背景 - 深邃但不沉闷的蓝灰色 */
-    --color-bg: oklch(18% 0.02 250); /* #1a1b1e 左右 */
-    
+    --color-bg: oklch(18% 0.02 250);
+    /* #1a1b1e 左右 */
+
     /* 表面层背景 - 用于卡片、面板等 */
-    --color-surface: oklch(22% 0.02 250); /* #232428 左右 */
-    --color-surface-border: oklch(28% 0.02 250); /* #2e3035 左右 */
-    
+    --color-surface: oklch(22% 0.02 250);
+    /* #232428 左右 */
+    --color-surface-border: oklch(28% 0.02 250);
+    /* #2e3035 左右 */
+
     /* 文本颜色 - 确保在深色背景下的可读性 */
-    --color-text: oklch(92% 0.01 250); /* #e8e9ed - 主文本，非纯白 */
-    --color-text-gray: oklch(65% 0.02 250); /* #8b8d95 - 次要文本 */
-    --color-text-disabled: oklch(45% 0.02 250); /* #5a5c63 - 禁用文本 */
-    
+    --color-text: oklch(92% 0.01 250);
+    /* #e8e9ed - 主文本，非纯白 */
+    --color-text-gray: oklch(65% 0.02 250);
+    /* #8b8d95 - 次要文本 */
+    --color-text-disabled: oklch(45% 0.02 250);
+    /* #5a5c63 - 禁用文本 */
+
     /* 边框和分隔线 */
-    --color-border: oklch(32% 0.02 250); /* #383a40 - 细边框 */
+    --color-border: oklch(32% 0.02 250);
+    /* #383a40 - 细边框 */
 
     /* ====================
        侧边栏专用配色
        比主背景稍深，营造层次感
        ==================== */
-    --color-sidebar-bg: oklch(20% 0.02 250); /* #1e1f22 */
-    --color-sidebar-border: var(--color-sidebar-bg); /* 与背景色一致，实现无边框效果 */
-    --color-sidebar-bg-active: oklch(28% 0.05 355); /* 带粉色调的激活背景 */
+    --color-sidebar-bg: oklch(20% 0.02 250);
+    /* #1e1f22 */
+    --color-sidebar-border: var(--color-sidebar-bg);
+    /* 与背景色一致，实现无边框效果 */
+    --color-sidebar-bg-active: oklch(28% 0.05 355);
+    /* 带粉色调的激活背景 */
     --color-sidebar-text-active: var(--color-primary);
-    --color-sidebar-bg-hover: oklch(25% 0.03 250); /* 悬停背景 */
-    --color-sidebar-text-hover: oklch(85% 0.02 250); /* 悬停文本 */
-    
+    --color-sidebar-bg-hover: oklch(25% 0.03 250);
+    /* 悬停背景 */
+    --color-sidebar-text-hover: oklch(85% 0.02 250);
+    /* 悬停文本 */
+
     /* 标题栏配色 */
     --color-titlebar-bg: var(--color-sidebar-bg);
     --color-titlebar-border: var(--color-sidebar-border);
@@ -169,24 +190,30 @@ html.dark {
     /* ====================
        聊天对话区域配色
        ==================== */
-    --color-conversation-bg: var(--color-surface); /* 使用表面色作为对话列表背景 */
+    --color-conversation-bg: var(--color-surface);
+    /* 使用表面色作为对话列表背景 */
     --color-conversation-text: var(--color-text);
     --color-conversation-border: var(--color-surface-border);
-    --color-conversation-bg-active: var(--color-sidebar-bg-active); /* 与侧边栏保持一致 */
+    --color-conversation-bg-active: var(--color-sidebar-bg-active);
+    /* 与侧边栏保持一致 */
     --color-conversation-text-active: var(--color-sidebar-text-active);
-    --color-conversation-bg-hover: oklch(26% 0.03 250); /* 悬停时略亮 */
+    --color-conversation-bg-hover: oklch(26% 0.03 250);
+    /* 悬停时略亮 */
     --color-conversation-text-hover: oklch(88% 0.02 250);
 
     /* ====================
        消息气泡配色
        优化对比度，保护视力
        ==================== */
-    
+
     /* 用户消息气泡 - 柔和的蓝灰色，不使用高饱和度色彩 */
-    --color-bubble-user-bg: oklch(30% 0.04 240); /* #353842 - 柔和蓝灰 */
-    --color-bubble-user-text: oklch(90% 0.01 250); /* #e0e1e6 - 柔和白 */
-    --color-bubble-user-border: oklch(35% 0.04 240); /* #3f424d - 边框略亮 */
-    
+    --color-bubble-user-bg: oklch(30% 0.04 240);
+    /* #353842 - 柔和蓝灰 */
+    --color-bubble-user-text: oklch(90% 0.01 250);
+    /* #e0e1e6 - 柔和白 */
+    --color-bubble-user-border: oklch(35% 0.04 240);
+    /* #3f424d - 边框略亮 */
+
     /* AI助手消息气泡 - 透明背景，融入整体 */
     --color-bubble-assitant-bg: transparent;
     --color-bubble-assitant-text: var(--color-text);
@@ -214,7 +241,7 @@ html.dark {
     --el-color-primary-light-3: var(--color-primary-800) !important;
     --el-color-primary-dark-2: var(--color-primary-950) !important;
     --el-color-primary-light-1: var(--color-primary-950) !important;
-    
+
     /* 标题栏样式变量 */
     --titlebar-text-color: #333;
     --titlebar-hover-bg: rgba(0, 0, 0, 0.06);
@@ -229,10 +256,12 @@ html.dark {
     --el-color-primary-light-3: var(--color-primary-800) !important;
     --el-color-primary-dark-2: var(--color-primary-950) !important;
     --el-color-primary-light-1: var(--color-primary-950) !important;
-    
+
     /* 标题栏暗色模式样式变量 */
-    --titlebar-text-color: oklch(75% 0.02 250); /* #a8aab3 - 柔和的灰白色 */
-    --titlebar-hover-bg: rgba(255, 255, 255, 0.06); /* 更柔和的悬停效果 */
+    --titlebar-text-color: oklch(75% 0.02 250);
+    /* #a8aab3 - 柔和的灰白色 */
+    --titlebar-hover-bg: rgba(255, 255, 255, 0.06);
+    /* 更柔和的悬停效果 */
 }
 
 /* .el-button:not(.el-button--large) {
@@ -366,7 +395,8 @@ html,
 
 /* 1. 核心遮罩层样式 - 强制覆盖 */
 .el-overlay {
-    background-color: transparent !important; /* 先清空背景，防止全白 */
+    background-color: transparent !important;
+    /* 先清空背景，防止全白 */
 }
 
 /* 2. 实际显示背景的伪元素或内部层 */
@@ -377,7 +407,7 @@ html,
     left: 0;
     width: 100%;
     height: 100%;
-    
+
     /* 亮色模式：极淡的白色微覆盖 (0.15 透明度) */
     background-color: rgba(255, 255, 255, 0.8) !important;
     z-index: -1;
@@ -385,7 +415,8 @@ html,
 
 html.dark .el-overlay::before {
     /* 暗色模式：深色微覆盖，使用深蓝灰色而非纯黑 */
-    background-color: rgba(10, 11, 14, 0.75) !important; /* 75% 透明度的深色遮罩 */
+    background-color: rgba(10, 11, 14, 0.75) !important;
+    /* 75% 透明度的深色遮罩 */
 }
 
 /* 3. 确保弹窗容器居中 */
@@ -406,20 +437,56 @@ html.dark .el-overlay::before {
     max-height: 85vh !important;
     border-radius: 16px !important;
     background-color: var(--color-bg) !important;
-    box-shadow: 0 0 20px rgba(0, 0, 0, 0.2) !important; /* 加深阴影 */
+    box-shadow: 0 0 20px rgba(0, 0, 0, 0.2) !important;
+    /* 加深阴影 */
     border: 1px solid #ccc;
+    display: flex;
+    flex-direction: column;
+    padding: 8px !important;
+}
+
+.el-dialog__headerbtn{
+    margin-top: 8px;
+    margin-right: 8px;
 }
 
 html.dark .el-dialog {
-    background-color: var(--color-surface) !important; /* 使用表面色 */
+    background-color: var(--color-surface) !important;
+    /* 使用表面色 */
     border-color: var(--color-border);
-    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4) !important; /* 柔和的阴影 */
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4) !important;
+    /* 柔和的阴影 */
+}
+
+/* 滚动条美化 */
+.el-dialog .el-dialog__body::-webkit-scrollbar {
+    width: 6px;
+}
+
+.el-dialog .el-dialog__body::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.el-dialog .el-dialog__body::-webkit-scrollbar-thumb {
+    background-color: rgba(0, 0, 0, 0.2);
+    border-radius: 3px;
 }
 
 /* 5. 紧凑内边距 */
-.el-dialog__header { padding: 4px 8px 8px !important; }
-.el-dialog__body { padding: 8px 4px !important; }
-.el-dialog__footer { padding: 8px 12px 4px !important; }
+.el-dialog__header {
+    padding: 12px 16px 8px !important;
+}
+
+.el-dialog__body {
+    flex: 1 !important;
+    padding: 8px 10px !important;
+    overflow-y: auto;
+    scrollbar-gutter: stable both-edges !important;
+}
+
+.el-dialog__footer {
+    padding: 8px 12px 4px !important;
+}
 
 /* ==========================================
    Element Plus MessageBox (确认框) 样式定制
@@ -429,7 +496,8 @@ html.dark .el-dialog {
     background-color: var(--color-bg) !important;
     border: 1px solid #ccc !important;
     box-shadow: 0 0 20px rgba(0, 0, 0, 0.2) !important;
-    padding: 0 !important; /* 移除默认 padding，由内部元素控制 */
+    padding: 0 !important;
+    /* 移除默认 padding，由内部元素控制 */
 }
 
 html.dark .el-message-box {
