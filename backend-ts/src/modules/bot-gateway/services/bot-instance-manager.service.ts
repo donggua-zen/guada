@@ -38,18 +38,15 @@ export class BotInstanceManager implements OnModuleInit, OnApplicationShutdown {
     }
   > = new Map();
 
-  // 防重入锁:记录正在重连的机器人ID
-  private reconnectingBots: Set<string> = new Set();
-
-  // 重连超时时间(30秒)
-  private readonly RECONNECT_TIMEOUT_MS = 30000;
+  // 重连超时时间(60秒) - 考虑到可能需要重新获取 token 和建立 WebSocket
+  private readonly RECONNECT_TIMEOUT_MS = 60000;
 
   constructor(
     private prisma: PrismaService,
     private adapterFactory: BotAdapterFactory,
     @Inject(forwardRef(() => BotOrchestrator))
     private orchestrator: BotOrchestrator,
-  ) {}
+  ) { }
 
   /**
    * 模块初始化时自动启动已启用的机器人
@@ -86,11 +83,11 @@ export class BotInstanceManager implements OnModuleInit, OnApplicationShutdown {
       for (const bot of bots) {
         // 从 additionalKwargs 中提取知识库ID列表
         const knowledgeBaseIds = (bot.additionalKwargs as any)?.knowledgeBaseIds || [];
-        
+
         this.logger.log(
           `Bot ${bot.name} (${bot.id}): additionalKwargs=${JSON.stringify(bot.additionalKwargs)}, knowledgeBaseIds=${JSON.stringify(knowledgeBaseIds)}`
         );
-        
+
         const config: BotConfig = {
           id: bot.id,
           platform: bot.platform as any,
@@ -116,7 +113,7 @@ export class BotInstanceManager implements OnModuleInit, OnApplicationShutdown {
             `Failed to start bot ${bot.name}: ${error.message}`,
             error.stack,
           );
-          
+
           // 注意：startBot 内部已经处理了重连逻辑，这里不需要再次调度
           // 只需要确保数据库状态已更新（startBot 内部也会更新）
         }
@@ -139,7 +136,8 @@ export class BotInstanceManager implements OnModuleInit, OnApplicationShutdown {
         await this.stopBot(config.id);
       } catch (error: any) {
         this.logger.error(`Failed to stop existing bot: ${error.message}`);
-        this.botInstances.delete(config.id);
+        // 确保清理实例(即使 stopBot 失败)
+        await this.cleanupBotInstance(config.id, 'startBot-fallback');
       }
     }
 
@@ -167,26 +165,15 @@ export class BotInstanceManager implements OnModuleInit, OnApplicationShutdown {
     } catch (error: any) {
       // 初始化失败
       this.logger.error(`Failed to initialize bot ${config.id}: ${error.message}`);
-      
-      // 更新数据库状态为错误
-      await this.prisma.botInstance.update({
-        where: { id: config.id },
-        data: {
-          status: 'error',
-          lastError: error.message,
-        },
-      }).catch((dbError) => {
-        this.logger.error(`Failed to update bot status in database: ${dbError.message}`);
-      });
 
       // 检查是否需要重连
       if (config.reconnectConfig?.enabled) {
         this.logger.log(`Scheduling reconnect for bot ${config.id}`);
         this.scheduleReconnect(config.id, config, error.message);
       } else {
-        // 不重连，移除实例
+        // 不重连，清理实例
         this.logger.log(`Reconnect disabled, removing bot instance ${config.id}`);
-        this.botInstances.delete(config.id);
+        await this.cleanupBotInstance(config.id, 'reconnect-disabled');
       }
 
       // 抛出异常，让调用者知道启动失败
@@ -198,33 +185,8 @@ export class BotInstanceManager implements OnModuleInit, OnApplicationShutdown {
    * 停止单个机器人实例
    */
   async stopBot(botId: string): Promise<void> {
-    const instance = this.botInstances.get(botId);
-    if (!instance) {
-      this.logger.warn(`Bot not found: ${botId}, may already be stopped`);
-      return;
-    }
-
     this.logger.log(`Stopping bot: ${botId}`);
-
-    // 清除重连定时器
-    if (instance.reconnectTimer) {
-      clearTimeout(instance.reconnectTimer);
-      instance.reconnectTimer = undefined;
-    }
-
-    // 停止消息监听（确保取消订阅）
-    this.orchestrator.stopBotListener(botId);
-
-    // 关闭适配器
-    try {
-      await instance.adapter.shutdown();
-    } catch (error: any) {
-      this.logger.error(`Error during bot shutdown: ${error.message}`);
-    }
-
-    // 移除实例
-    this.botInstances.delete(botId);
-
+    await this.cleanupBotInstance(botId, 'manual-stop');
     this.logger.log(`Bot stopped: ${botId}`);
   }
 
@@ -356,16 +318,19 @@ export class BotInstanceManager implements OnModuleInit, OnApplicationShutdown {
       return;
     }
 
-    // 防重入检查
-    if (this.reconnectingBots.has(botId)) {
-      this.logger.warn(`Bot ${botId} is already reconnecting, skipping duplicate schedule`);
+    // 防重入检查：如果适配器状态为 CONNECTING，说明正在连接中，跳过
+    const currentStatus = instance.adapter.getStatus();
+    if (currentStatus === BotStatus.CONNECTING) {
+      this.logger.warn(`Bot ${botId} is already connecting (status: ${currentStatus}), skipping duplicate schedule`);
       return;
     }
 
     // 检查是否启用重连
     if (!config.reconnectConfig?.enabled) {
-      this.logger.log(`Reconnect disabled for bot ${botId}`);
-      this.botInstances.delete(botId);
+      this.logger.log(`Reconnect disabled for bot ${botId}, cleaning up...`);
+      this.cleanupBotInstance(botId, 'reconnect-disabled').catch((err) => {
+        this.logger.error(`Failed to cleanup bot ${botId}: ${err.message}`);
+      });
       return;
     }
 
@@ -377,14 +342,16 @@ export class BotInstanceManager implements OnModuleInit, OnApplicationShutdown {
       this.logger.error(
         `Max reconnection attempts reached for bot ${botId} (${maxRetries}). Disabling bot.`,
       );
-      
-      // 禁用机器人
+
+      // 清理实例(异步执行)
+      this.cleanupBotInstance(botId, 'max-retries-reached').catch((err) => {
+        this.logger.error(`Failed to cleanup bot ${botId}: ${err.message}`);
+      });
+
+      // 禁用机器人(异步执行,不阻塞)
       this.disableBot(botId, lastError).catch((err) => {
         this.logger.error(`Failed to disable bot ${botId}: ${err.message}`);
       });
-      
-      // 清理实例
-      this.botInstances.delete(botId);
       return;
     }
 
@@ -395,69 +362,41 @@ export class BotInstanceManager implements OnModuleInit, OnApplicationShutdown {
       `Scheduling reconnect for bot ${botId} in ${retryInterval}ms (attempt ${instance.reconnectAttempts}/${maxRetries})`,
     );
 
-    // 标记为正在重连
-    this.reconnectingBots.add(botId);
-
     // 设置重连定时器
     instance.reconnectTimer = setTimeout(async () => {
+      // 立即清除定时器标记，允许下次断开时重新调度
+      instance.reconnectTimer = undefined;
+
       try {
         this.logger.log(`Attempting to reconnect bot ${botId}...`);
-        
+
         // 超时控制
         const reconnectPromise = instance.adapter.reconnect();
         const timeoutPromise = new Promise((_, reject) => {
-          setTimeout(() => reject(new Error('Reconnect timed out after 30s')), 
-                     this.RECONNECT_TIMEOUT_MS);
+          setTimeout(() => reject(new Error('Reconnect timed out after 30s')),
+            this.RECONNECT_TIMEOUT_MS);
         });
-        
+
         await Promise.race([reconnectPromise, timeoutPromise]);
-        
+
         // 重连成功后重新绑定消息监听
         await this.orchestrator.startBotListener(botId, instance.adapter, config);
-        
+
         // 重连成功，重置计数器
         instance.reconnectAttempts = 0;
         this.logger.log(`Bot ${botId} reconnected successfully`);
-        
-        // 更新数据库状态为已连接
-        await this.prisma.botInstance.update({
-          where: { id: botId },
-          data: { status: 'connected', lastError: null },
-        }).catch((err) => {
-          this.logger.error(`Failed to update bot status: ${err.message}`);
-        });
       } catch (error: any) {
         this.logger.error(`Reconnection failed for bot ${botId}: ${error.message}`);
-        
-        // 如果超时，强制销毁旧客户端
+
+        // 如果超时，记录错误但不清理实例（由适配器负责状态管理）
         if (error.message.includes('timed out')) {
-          this.logger.error(`Reconnect timed out for bot ${botId}, forcing cleanup`);
-          try {
-            await instance.adapter.shutdown();
-          } catch {}
-          
-          // 确保取消所有订阅，防止重复绑定
-          this.orchestrator.stopBotListener(botId);
-          
-          this.botInstances.delete(botId);
+          this.logger.warn(
+            `Reconnect timed out for bot ${botId}. Adapter should handle cleanup. Will retry...`,
+          );
         }
-        
-        // 更新数据库状态
-        await this.prisma.botInstance.update({
-          where: { id: botId },
-          data: {
-            status: 'error',
-            lastError: error.message,
-          },
-        }).catch((dbError) => {
-          this.logger.error(`Failed to update bot status: ${dbError.message}`);
-        });
-        
-        // 继续调度下一次重连
+
+        // 继续调度下一次重连（包括超时情况）
         this.scheduleReconnect(botId, config, error.message);
-      } finally {
-        // 无论成功还是失败，都移除重连标记
-        this.reconnectingBots.delete(botId);
       }
     }, retryInterval);
   }
@@ -467,24 +406,13 @@ export class BotInstanceManager implements OnModuleInit, OnApplicationShutdown {
    */
   async handleBotDisconnect(botId: string, code: number): Promise<void> {
     this.logger.warn(`Handling bot disconnect for ${botId} with code: ${code}`);
-    
+
     // 从内存获取最新配置
     const config = this.getBotConfig(botId);
     if (!config) {
-      this.logger.error(`Bot config not found: ${botId}`);
+      this.logger.error(`Bot config not found: ${botId}, may already be removed`);
       return;
     }
-    
-    // 更新数据库状态为断开连接
-    await this.prisma.botInstance.update({
-      where: { id: botId },
-      data: {
-        status: 'disconnected',
-        lastError: `WebSocket closed with code: ${code}`,
-      },
-    }).catch((err) => {
-      this.logger.error(`Failed to update bot status: ${err.message}`);
-    });
 
     // 检查是否启用重连
     if (config.reconnectConfig?.enabled) {
@@ -513,5 +441,40 @@ export class BotInstanceManager implements OnModuleInit, OnApplicationShutdown {
       this.logger.error(`Failed to disable bot ${botId} in database: ${error.message}`);
       throw error;
     }
+  }
+
+  /**
+   * 清理机器人实例（关闭连接、取消订阅、删除内存实例）
+   */
+  private async cleanupBotInstance(botId: string, reason: string = 'cleanup'): Promise<void> {
+    const instance = this.botInstances.get(botId);
+    if (!instance) {
+      this.logger.warn(`Bot ${botId} not found, skip cleanup`);
+      return;
+    }
+
+    this.logger.log(`Cleaning up bot instance: ${botId} (${reason})`);
+
+    // 清除重连定时器
+    if (instance.reconnectTimer) {
+      clearTimeout(instance.reconnectTimer);
+      instance.reconnectTimer = undefined;
+    }
+
+    // 关闭适配器连接
+    try {
+      await instance.adapter.shutdown();
+      this.logger.log(`Bot ${botId} adapter shutdown completed`);
+    } catch (error: any) {
+      this.logger.error(`Error during bot ${botId} shutdown: ${error.message}`);
+    }
+
+    // 取消消息监听订阅
+    this.orchestrator.stopBotListener(botId);
+
+    // 从内存中删除实例
+    this.botInstances.delete(botId);
+
+    this.logger.log(`Bot ${botId} cleanup completed`);
   }
 }
