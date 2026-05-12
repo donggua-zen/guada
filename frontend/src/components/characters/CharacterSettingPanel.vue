@@ -780,6 +780,11 @@ const allToolsEnabled = computed(() => {
 
 // 判断某个工具提供者是否启用（用于 Switch 显示）
 const isToolProviderEnabled = (namespace) => {
+  // 如果 characterToolSettings 是布尔值，直接返回
+  if (typeof characterToolSettings.value === 'boolean') {
+    return characterToolSettings.value;
+  }
+  
   const config = characterToolSettings.value[namespace];
   
   // true 表示全部启用
@@ -791,8 +796,8 @@ const isToolProviderEnabled = (namespace) => {
   // 数组表示部分启用，数组长度 > 0 表示启用
   if (Array.isArray(config)) return config.length > 0;
   
-  // 默认启用
-  return true;
+  // 默认禁用（当配置为对象但某个 namespace 未配置时）
+  return false;
 };
 
 // 监听 props.data 变化
@@ -926,7 +931,7 @@ const loadLocalTools = async () => {
 
 // 全部工具开关切换处理
 const handleAllToolsToggle = (enabled) => {
-  // 只更新本地状态，不立即调用 API
+  // 直接设置为布尔值，保存到数据库时也是布尔值
   characterToolSettings.value = enabled;
   console.log(`角色工具整体${enabled ? '启用' : '禁用'}`);
 }
