@@ -18,6 +18,7 @@ import { ChunkingService } from "./chunking.service";
 import { VectorDatabase } from "../../common/vector-db/interfaces/vector-database.interface";
 import { createPaginatedResponse } from "../../common/types/pagination";
 import { UploadPathService } from "../../common/services/upload-path.service";
+import { FileNamingService } from "../../common/services/file-naming.service";
 
 @Injectable()
 export class KbFileService implements OnModuleInit {
@@ -27,6 +28,7 @@ export class KbFileService implements OnModuleInit {
 
   constructor(
     private uploadPathService: UploadPathService,
+    private fileNamingService: FileNamingService,
     private prisma: PrismaService,
     private kbRepo: KnowledgeBaseRepository,
     private fileRepo: KBFileRepository,
@@ -130,6 +132,13 @@ export class KbFileService implements OnModuleInit {
             if (file.filePath && fs.existsSync(file.filePath)) {
               await fs.promises.unlink(file.filePath);
               this.logger.log(`已删除孤儿物理文件: ${file.filePath}`);
+              
+              // 尝试清理空日期目录（向上递归最多2层）
+              await this.fileNamingService.cleanupEmptyDirectories(
+                path.dirname(file.filePath),
+                this.kbUploadDir,
+                2,
+              );
             }
             // 删除数据库记录（会级联删除 chunks）
             await this.fileRepo.delete(file.id);
@@ -240,15 +249,15 @@ export class KbFileService implements OnModuleInit {
     // 修复原始文件名编码
     const originalName = this.fixFilenameEncoding(file.originalname);
 
-    // 生成唯一文件名
+    // 保存文件到带日期结构的目录（异步写入）
+    const pathResult = await this.fileNamingService.generateFilePathWithDate(
+      this.kbUploadDir,
+      originalName,
+    );
+    await fs.promises.writeFile(pathResult.filePath, file.buffer);
+
+    // 提取文件扩展名
     const fileExtension = path.extname(originalName).toLowerCase();
-    const uniqueFilename = `${crypto.randomUUID()}${fileExtension}`;
-
-    // 保存文件到临时目录（异步写入）
-    const filePath = path.join(this.kbUploadDir, uniqueFilename);
-    await fs.promises.writeFile(filePath, file.buffer);
-
-    const fileSize = file.buffer.length;
 
     // 检测文件类型
     const fileType = await this.parserService.detectFileType(
@@ -260,6 +269,8 @@ export class KbFileService implements OnModuleInit {
       .createHash("md5")
       .update(file.buffer)
       .digest("hex");
+
+    const fileSize = file.buffer.length;
 
     // 解析相对路径,提取父文件夹信息
     let parentFolderId: string | null = null;
@@ -276,13 +287,13 @@ export class KbFileService implements OnModuleInit {
     // 创建文件记录
     const fileRecord = await this.fileRepo.create({
       knowledgeBaseId: kbId,
-      fileName: uniqueFilename,
+      fileName: pathResult.fileName,
       displayName: originalName,
       fileSize: fileSize, // 使用 number 类型（避免 BigInt 序列化问题）
       fileType: fileType,
       fileExtension: fileExtension.replace(/^\./, ""),
       contentHash: contentHash,
-      filePath: filePath,
+      filePath: pathResult.filePath,
       processingStatus: "pending",
       progressPercentage: 0,
       currentStep: "等待处理...",
@@ -333,16 +344,15 @@ export class KbFileService implements OnModuleInit {
     // 读取文件内容（异步）
     const content = await fs.promises.readFile(sourceFilePath, 'utf-8');
 
-    // 从目标路径提取显示名称和文件夹路径
+    // 从目标路径提取显示名称
     const displayName = path.basename(targetPath);
-    const folderPath = path.dirname(targetPath);
 
-    // 生成唯一文件名
-    const uniqueFilename = `${crypto.randomUUID()}.txt`;
-
-    // 保存文件到临时目录（异步写入）
-    const tempFilePath = path.join(this.kbUploadDir, uniqueFilename);
-    await fs.promises.writeFile(tempFilePath, content, 'utf-8');
+    // 保存文件到带日期结构的目录（异步写入）
+    const pathResult = await this.fileNamingService.generateFilePathWithDate(
+      this.kbUploadDir,
+      displayName + '.txt', // addTextDocument 始终保存为 .txt
+    );
+    await fs.promises.writeFile(pathResult.filePath, content, 'utf-8');
 
     const fileSize = Buffer.byteLength(content, 'utf-8');
 
@@ -351,6 +361,7 @@ export class KbFileService implements OnModuleInit {
 
     // 解析目标路径，提取父文件夹信息
     let parentFolderId: string | null = null;
+    const folderPath = path.dirname(targetPath);
     if (folderPath && folderPath !== '.') {
       // 确保文件夹结构存在（递归创建）
       parentFolderId = await this.ensureFolderStructure(kbId, folderPath);
@@ -359,13 +370,13 @@ export class KbFileService implements OnModuleInit {
     // 创建文件记录
     const fileRecord = await this.fileRepo.create({
       knowledgeBaseId: kbId,
-      fileName: uniqueFilename,
+      fileName: pathResult.fileName,
       displayName: displayName,
       fileSize: fileSize,
       fileType: "text",
       fileExtension: "txt",
       contentHash: contentHash,
-      filePath: tempFilePath,
+      filePath: pathResult.filePath,
       processingStatus: "pending",
       progressPercentage: 0,
       currentStep: "等待处理...",

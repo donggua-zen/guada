@@ -5,6 +5,7 @@ import { UrlService } from "./url.service";
 import { SettingsStorage } from "../utils/settings-storage.util";
 import { WorkspaceService } from "./workspace.service";
 import { TokenCacheService } from "../utils/token-cache.service";
+import { FileNamingService } from "./file-naming.service";
 
 /**
  * 共享服务模块
@@ -13,7 +14,7 @@ import { TokenCacheService } from "../utils/token-cache.service";
 @Global()
 @Module({
   imports: [ConfigModule],
-  providers: [UploadPathService, UrlService, SettingsStorage, WorkspaceService, TokenCacheService],
-  exports: [UploadPathService, UrlService, SettingsStorage, WorkspaceService, TokenCacheService],
+  providers: [UploadPathService, UrlService, SettingsStorage, WorkspaceService, TokenCacheService, FileNamingService],
+  exports: [UploadPathService, UrlService, SettingsStorage, WorkspaceService, TokenCacheService, FileNamingService],
 })
 export class SharedModule {}

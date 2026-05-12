@@ -8,6 +8,7 @@ import { PrismaService } from "../../common/database/prisma.service";
 import { UploadPathService } from "../../common/services/upload-path.service";
 import { UrlService } from "../../common/services/url.service";
 import { FileParserService } from "../knowledge-base/file-parser.service";
+import { FileNamingService } from "../../common/services/file-naming.service";
 
 @Injectable()
 export class FileService implements OnModuleInit {
@@ -41,6 +42,7 @@ export class FileService implements OnModuleInit {
 
   constructor(
     private uploadPathService: UploadPathService,
+    private fileNamingService: FileNamingService,
     private fileRepo: FileRepository,
     private prisma: PrismaService,
     private fileParserService: FileParserService,
@@ -189,9 +191,9 @@ export class FileService implements OnModuleInit {
     userId: string,
   ) {
     try {
-      // 保存图片
+      // 保存图片（传入已修复编码的文件名）
       const { url, previewUrl, metadata } =
-        await this.saveImageWithMetadata(file);
+        await this.saveImageWithMetadata(file, fileInfo.fileName);
 
       // 计算哈希
       const contentHash = this.calculateContentHash(file.buffer);
@@ -304,20 +306,11 @@ export class FileService implements OnModuleInit {
   /**
    * 保存图片并提取元数据
    */
-  private async saveImageWithMetadata(file: any): Promise<{
+  private async saveImageWithMetadata(file: any, originalName: string): Promise<{
     url: string;
     previewUrl: string | null;
     metadata: any;
   }> {
-    // 获取物理路径（自动创建目录）
-    const imageDir = this.uploadPathService.getPhysicalPath("images");
-    const previewDir = this.uploadPathService.getPhysicalPath("previews");
-
-    // 生成唯一文件名
-    const uniqueFilename = `${crypto.randomUUID()}.jpg`;
-    const filePath = path.join(imageDir, uniqueFilename);
-    const previewPath = path.join(previewDir, uniqueFilename);
-
     try {
       // 使用 sharp 处理图片：缩放并转换为 JPEG
       const imageProcessor = sharp(file.buffer);
@@ -329,23 +322,33 @@ export class FileService implements OnModuleInit {
         height: originalMetadata.height || 0,
       };
 
+      // 生成带日期的文件路径（使用已修复编码的文件名）
+      const imagePathResult = await this.fileNamingService.generateFilePathWithDate(
+        this.uploadPathService.getPhysicalPath('images'),
+        originalName,
+      );
+      const previewPathResult = await this.fileNamingService.generateFilePathWithDate(
+        this.uploadPathService.getPhysicalPath('previews'),
+        originalName,
+      );
+
       // 1. 保存原图（最大边长 1024px）
       await imageProcessor
         .clone()
         .resize(1024, 1024, { fit: "inside", withoutEnlargement: true })
         .jpeg({ quality: 85 })
-        .toFile(filePath);
+        .toFile(imagePathResult.filePath);
 
       // 2. 生成缩略图（最大边长 256px）
       await sharp(file.buffer)
         .resize(256, 256, { fit: "inside", withoutEnlargement: true })
         .jpeg({ quality: 75 })
-        .toFile(previewPath);
+        .toFile(previewPathResult.filePath);
 
-      const url = this.uploadPathService.getStoragePath("images", uniqueFilename);
+      const url = this.uploadPathService.getStoragePath("images", imagePathResult.relativePath);
       const previewUrl = this.uploadPathService.getStoragePath(
         "previews",
-        uniqueFilename,
+        previewPathResult.relativePath,
       );
 
       return { url, previewUrl, metadata };
@@ -358,18 +361,18 @@ export class FileService implements OnModuleInit {
    * 保存文件
    */
   private async saveFile(file: any, fileExt: string): Promise<string> {
-    // 获取物理路径（自动创建目录）
-    const fileDir = this.uploadPathService.getPhysicalPath("files");
-
-    // 生成唯一文件名
-    const uniqueFilename = `${crypto.randomUUID()}.${fileExt}`;
-    const filePath = path.join(fileDir, uniqueFilename);
+    // 生成带日期的文件路径
+    const originalName = file.originalname || `file.${fileExt}`;
+    const pathResult = await this.fileNamingService.generateFilePathWithDate(
+      this.uploadPathService.getPhysicalPath('files'),
+      originalName,
+    );
 
     // 保存文件
-    fs.writeFileSync(filePath, file.buffer);
+    fs.writeFileSync(pathResult.filePath, file.buffer);
 
     // 返回相对路径（不转换为 URL）
-    return this.uploadPathService.getStoragePath("files", uniqueFilename);
+    return this.uploadPathService.getStoragePath("files", pathResult.relativePath);
   }
 
   /**
