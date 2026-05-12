@@ -191,7 +191,7 @@ export class ToolOrchestrator {
             ? await provider.getBriefDescription(context.injectParams)
             : metadata.description;
 
-          metaInfos.push(`- **${metadata.displayName}** (\`${namespace}\`): ${briefDesc}`);
+          metaInfos.push(`- ${namespace}:${metadata.displayName},${briefDesc}`);
         }
       } catch (error: any) {
         this.logger.error(
@@ -232,9 +232,8 @@ export class ToolOrchestrator {
     // 第四部分：添加 lazy 模式工具的元信息章节
     if (metaInfos.length > 0) {
       const metaSection = [
-        "# 可用工具类别",
-        "",
-        "以下工具需要先调用 `tool_load` 加载详细说明后才能使用。",
+        "# 可用工具集",
+        "你可以使用以下工具集。当用户请求或任务与工具集的能力相匹配时，您应该主动使用`tool_load`阅读并应用工具集：",
         "",
         ...metaInfos,
         "",
@@ -245,33 +244,18 @@ export class ToolOrchestrator {
       prompts.push(metaSection);
 
       // 第五部分：添加工具使用指南（针对 lazy 模式）
-      const toolGuidePrompt = `# Lazy 模式工具使用指南
-
-## 使用原则
-
-1. **按需加载**：仅在需要实际调用某类工具时才 \`tool_load\`加载详细说明
-2. **避免重复**：已了解用法的工具无需重复加载
-3. **仅描述不加载**：如用户仅询问能力或功能介绍，无需加载工具说明
-4. **执行调用**：加载后根据说明使用 \`tool_call\` 执行具体操作
-
-## 快速示例
-
-\`\`\`json
-// 1. 加载工具说明
-{ "namespace": "knowledge_base" }
-
-// 2. 执行工具调用
-{
-  "tool_name": "knowledge_base__search",
-  "arguments": { "query": "API文档" }
-}
-\`\`\``;
+      const toolGuidePrompt = `## 使用原则
+      
+1. **避免重复**：已了解用法的工具无需重复加载
+2. **仅描述不加载**：如用户仅询问能力或功能介绍，无需加载工具说明
+3. **执行调用**：加载后根据说明使用 \`tool_call\` 执行具体操作
+`;
 
       prompts.push(toolGuidePrompt);
     }
 
     this.logger.debug(`Collected ${prompts.length} tool prompt sections`);
-    // this.logger.debug(prompts.join("\n\n"))
+    this.logger.debug(prompts.join("\n\n"))
     return prompts.join("\n\n");
   }
 
