@@ -202,7 +202,12 @@ watch(currentPage, () => {
 
 // 加载会话列表
 const loadSessions = async () => {
-  loading.value = true
+  // 如果不是首次加载，不显示 loading 状态，避免闪烁
+  const isFirstLoad = sessions.value.length === 0
+  if (isFirstLoad) {
+    loading.value = true
+  }
+  
   try {
     const skip = (currentPage.value - 1) * pageSize.value
     const response = await apiService.fetchBotSessions(skip, pageSize.value, selectedBotId.value || undefined)
@@ -353,7 +358,8 @@ onMounted(async () => {
   // 从URL恢复筛选状态
   restoreFilterState()
 
-  loadSessions()
+  // 加载会话列表
+  await loadSessions()
 })
 </script>
 

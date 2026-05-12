@@ -24,7 +24,7 @@ export class BotAdminController {
   constructor(
     private botService: BotAdminService,
     private prisma: PrismaService,
-  ) {}
+  ) { }
 
   /**
    * 获取所有支持的平台列表
@@ -58,12 +58,12 @@ export class BotAdminController {
   async getInstance(@Param('id') id: string, @Request() req) {
     const userId = req.user.id;  // JWT payload 中用户ID在 sub 字段
     const bot = await this.botService.getInstance(id);
-    
+
     // 验证是否属于当前用户
     if (bot.userId !== userId) {
       throw new Error('无权访问此机器人');
     }
-    
+
     return bot;
   }
 
@@ -90,13 +90,13 @@ export class BotAdminController {
     @Request() req,
   ) {
     const userId = req.user.id;  // JWT payload 中用户ID在 sub 字段
-    
+
     // 验证是否属于当前用户
     const bot = await this.botService.getInstance(id);
     if (bot.userId !== userId) {
       throw new Error('无权修改此机器人');
     }
-    
+
     return this.botService.updateInstance(id, dto);
   }
 
@@ -106,13 +106,13 @@ export class BotAdminController {
   @Post('instances/:id/start')
   async startInstance(@Param('id') id: string, @Request() req) {
     const userId = req.user.id;  // JWT payload 中用户ID在 sub 字段
-    
+
     // 验证是否属于当前用户
     const bot = await this.botService.getInstance(id);
     if (bot.userId !== userId) {
       throw new Error('无权操作此机器人');
     }
-    
+
     return this.botService.startInstance(id);
   }
 
@@ -122,13 +122,13 @@ export class BotAdminController {
   @Post('instances/:id/stop')
   async stopInstance(@Param('id') id: string, @Request() req) {
     const userId = req.user.id;  // JWT payload 中用户ID在 sub 字段
-    
+
     // 验证是否属于当前用户
     const bot = await this.botService.getInstance(id);
     if (bot.userId !== userId) {
       throw new Error('无权操作此机器人');
     }
-    
+
     return this.botService.stopInstance(id);
   }
 
@@ -138,13 +138,13 @@ export class BotAdminController {
   @Post('instances/:id/restart')
   async restartInstance(@Param('id') id: string, @Request() req) {
     const userId = req.user.id;  // JWT payload 中用户ID在 sub 字段
-    
+
     // 验证是否属于当前用户
     const bot = await this.botService.getInstance(id);
     if (bot.userId !== userId) {
       throw new Error('无权操作此机器人');
     }
-    
+
     return this.botService.restartInstance(id);
   }
 
@@ -154,13 +154,13 @@ export class BotAdminController {
   @Delete('instances/:id')
   async deleteInstance(@Param('id') id: string, @Request() req) {
     const userId = req.user.id;  // JWT payload 中用户ID在 sub 字段
-    
+
     // 验证是否属于当前用户
     const bot = await this.botService.getInstance(id);
     if (bot.userId !== userId) {
       throw new Error('无权删除此机器人');
     }
-    
+
     return this.botService.deleteInstance(id);
   }
 
@@ -175,33 +175,33 @@ export class BotAdminController {
     @Query('botId') botId?: string,
   ) {
     const userId = req.user.id;
-    
+
     // 构建查询条件
-    const whereCondition: any = { 
+    const whereCondition: any = {
       userId,
       sessionType: 'bot'
     };
-    
+
     // 如果指定了botId，则添加过滤条件
     if (botId) {
       whereCondition.botId = botId;
     }
-    
+
     const [items, total] = await Promise.all([
       this.prisma.session.findMany({
         where: whereCondition,
         orderBy: [{ lastActiveAt: "desc" }],
         skip: Number(skip),
         take: Number(limit),
-        include: { 
+        include: {
           character: true,
         },
       }),
-      this.prisma.session.count({ 
+      this.prisma.session.count({
         where: whereCondition
       }),
     ]);
-    
+
     return {
       items,
       total,
