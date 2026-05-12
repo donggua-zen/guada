@@ -3,9 +3,7 @@
 
 
     <!-- 输入框区域 -->
-    <div
-      class="input-area p-[16px_12px_10px_12px] min-h-15 w-full bg-white dark:bg-[#232428]"
-      :class="styleClass">
+    <div class="input-area p-[16px_12px_10px_12px] min-h-15 w-full bg-white dark:bg-[#232428]" :class="styleClass">
       <!-- 文件列表显示区域 -->
       <div class="file-list flex flex-wrap gap-2 mb-3" v-if="uploadFiles.length > 0">
         <FileItem v-for="file in uploadFiles" :key="file.id" :name="file.displayName" :type="file.fileType"
@@ -128,7 +126,8 @@
                     <template v-for="provider in filteredProviders" :key="provider.id">
                       <div class="provider-group">
                         <!-- 非收藏分组才显示供应商名称 -->
-                        <div v-if="!provider.isFavoriteGroup" class="provider-name text-xs font-medium text-gray-500 dark:text-gray-400 mb-1 px-1">
+                        <div v-if="!provider.isFavoriteGroup"
+                          class="provider-name text-xs font-medium text-gray-500 dark:text-gray-400 mb-1 px-1">
                           {{ provider.name }}
                         </div>
                         <div class="provider-models space-y-1">
@@ -151,8 +150,7 @@
                               <!-- 特性图标组 -->
                               <div class="flex items-center gap-1.5 text-xs text-gray-500 dark:text-gray-400">
                                 <!-- 收藏分组中显示供应商名称 -->
-                                <span v-if="provider.isFavoriteGroup"
-                                  class="pr-1.5 py-0.5 font-medium text-[10px]">
+                                <span v-if="provider.isFavoriteGroup" class="pr-1.5 py-0.5 font-medium text-[10px]">
                                   {{ getModelProviderName(model) }}
                                 </span>
 
@@ -262,129 +260,126 @@
         </transition>
 
         <!-- 会话设置模态框 -->
-        <el-dialog v-model="settingsDialogVisible" title="会话记忆与压缩配置" width="600px" append-to-body
+        <el-dialog v-model="settingsDialogVisible" title="会话记忆与压缩配置" width="600px" max-width="80vw" append-to-body
           :close-on-click-modal="false" class="session-settings-dialog">
-          <ScrollContainer class="w-full h-full min-h-0 px-2 py-4" style="max-height: 500px;">
-            <el-form label-position="left" label-width="50%" size="large">
-              <!-- 自定义配置开关 -->
+          <el-form label-position="left" label-width="50%" size="large">
+            <!-- 自定义配置开关 -->
+            <el-form-item>
+              <template #label>
+                <div style="display: flex; flex-direction: column; gap: 8px;">
+                  <span class="text-base text-gray-900 dark:text-gray-100 font-medium">自定义记忆配置</span>
+                  <span class="text-xs text-gray-500 dark:text-gray-400 font-normal">开启后将覆盖角色默认的记忆与压缩设置</span>
+                </div>
+              </template>
+              <div class="w-full max-w-md">
+                <el-switch v-model="tempMemoryConfig.useCustom" inline-prompt active-text="开启" inactive-text="关闭" />
+              </div>
+            </el-form-item>
+
+            <!-- 仅在开启自定义时显示详细配置 -->
+            <template v-if="tempMemoryConfig.useCustom">
+              <!-- 上下文条数 -->
               <el-form-item>
                 <template #label>
-                  <div style="display: flex; flex-direction: column; gap: 8px;">
-                    <span class="text-base text-gray-900 dark:text-gray-100 font-medium">自定义记忆配置</span>
-                    <span class="text-xs text-gray-500 dark:text-gray-400 font-normal">开启后将覆盖角色默认的记忆与压缩设置</span>
+                  <div class="flex flex-col gap-1">
+                    <span class="text-base text-gray-900 dark:text-gray-100 font-medium">上下文条数</span>
+                    <span class="text-xs text-gray-500 dark:text-gray-400 font-normal">控制对话历史的最大消息数量，影响模型的长期记忆能力</span>
+                  </div>
+                </template>
+                <el-slider-optional v-model="tempMemoryConfig.maxMemoryLength" :min="2" :max="100" :step="1" show-input
+                  optional-direction="max" optional-text="No Limit" class="w-full max-w-md" />
+              </el-form-item>
+
+              <!-- Token 上限 -->
+              <el-form-item>
+                <template #label>
+                  <div class="flex flex-col gap-1">
+                    <span class="text-base text-gray-900 dark:text-gray-100 font-medium">Token 上限</span>
+                    <span class="text-xs text-gray-500 dark:text-gray-400 font-normal">设置 Token
+                      使用上限，与模型上下文窗口取最小值作为压缩判断基准</span>
                   </div>
                 </template>
                 <div class="w-full max-w-md">
-                  <el-switch v-model="tempMemoryConfig.useCustom" inline-prompt active-text="开启" inactive-text="关闭" />
+                  <el-input v-model="tempDisplayMaxTokens" placeholder="不限制" clearable @input="handleTempMaxTokensInput"
+                    @blur="formatTempMaxTokensDisplay">
+                    <template #suffix>
+                      <span class="text-gray-400 text-sm">Tokens</span>
+                    </template>
+                  </el-input>
+                  <div class="text-xs text-gray-400 mt-1">支持输入数字或带K/M后缀（如 128K、1M），留空表示不限制</div>
                 </div>
               </el-form-item>
 
-              <!-- 仅在开启自定义时显示详细配置 -->
-              <template v-if="tempMemoryConfig.useCustom">
-                <!-- 上下文条数 -->
-                <el-form-item>
-                  <template #label>
-                    <div class="flex flex-col gap-1">
-                      <span class="text-base text-gray-900 dark:text-gray-100 font-medium">上下文条数</span>
-                      <span
-                        class="text-xs text-gray-500 dark:text-gray-400 font-normal">控制对话历史的最大消息数量，影响模型的长期记忆能力</span>
-                    </div>
-                  </template>
-                  <el-slider-optional v-model="tempMemoryConfig.maxMemoryLength" :min="2" :max="100" :step="1"
-                    show-input optional-direction="max" optional-text="No Limit" class="w-full max-w-md" />
-                </el-form-item>
-
-                <!-- Token 上限 -->
-                <el-form-item>
-                  <template #label>
-                    <div class="flex flex-col gap-1">
-                      <span class="text-base text-gray-900 dark:text-gray-100 font-medium">Token 上限</span>
-                      <span class="text-xs text-gray-500 dark:text-gray-400 font-normal">设置 Token
-                        使用上限，与模型上下文窗口取最小值作为压缩判断基准</span>
-                    </div>
-                  </template>
-                  <div class="w-full max-w-md">
-                    <el-input v-model="tempDisplayMaxTokens" placeholder="不限制" clearable
-                      @input="handleTempMaxTokensInput" @blur="formatTempMaxTokensDisplay">
-                      <template #suffix>
-                        <span class="text-gray-400 text-sm">Tokens</span>
-                      </template>
-                    </el-input>
-                    <div class="text-xs text-gray-400 mt-1">支持输入数字或带K/M后缀（如 128K、1M），留空表示不限制</div>
+              <!-- 触发阈值 -->
+              <el-form-item>
+                <template #label>
+                  <div style="display: flex; flex-direction: column; gap: 8px;">
+                    <span class="text-base text-gray-900 dark:text-gray-100 font-medium">触发阈值</span>
+                    <span class="text-xs text-gray-500 dark:text-gray-400 font-normal">当已用 Token
+                      达到最大窗口的此比例时触发压缩</span>
                   </div>
-                </el-form-item>
+                </template>
+                <el-slider v-model="tempMemoryConfig.triggerRatio" :min="0.5" :max="0.95" :step="0.05" show-input
+                  format-tooltip="(val) => `${Math.round(val * 100)}%`" class="w-full max-w-md" />
+              </el-form-item>
 
-                <!-- 触发阈值 -->
-                <el-form-item>
-                  <template #label>
-                    <div style="display: flex; flex-direction: column; gap: 8px;">
-                      <span class="text-base text-gray-900 dark:text-gray-100 font-medium">触发阈值</span>
-                      <span class="text-xs text-gray-500 dark:text-gray-400 font-normal">当已用 Token
-                        达到最大窗口的此比例时触发压缩</span>
-                    </div>
-                  </template>
-                  <el-slider v-model="tempMemoryConfig.triggerRatio" :min="0.5" :max="0.95" :step="0.05" show-input
-                    format-tooltip="(val) => `${Math.round(val * 100)}%`" class="w-full max-w-md" />
-                </el-form-item>
-
-                <!-- 保留目标 -->
-                <el-form-item>
-                  <template #label>
-                    <div style="display: flex; flex-direction: column; gap: 8px;">
-                      <span class="text-base text-gray-900 dark:text-gray-100 font-medium">保留目标</span>
-                      <span class="text-xs text-gray-500 dark:text-gray-400 font-normal">压缩后保留至最大窗口的此比例</span>
-                    </div>
-                  </template>
-                  <el-slider v-model="tempMemoryConfig.targetRatio" :min="0.2" :max="0.8" :step="0.05" show-input
-                    format-tooltip="(val) => `${Math.round(val * 100)}%`" class="w-full max-w-md" />
-                </el-form-item>
-
-                <!-- 摘要模式 -->
-                <el-form-item>
-                  <template #label>
-                    <div class="flex flex-col gap-1">
-                      <span class="text-base text-gray-900 dark:text-gray-100 font-medium">摘要模式</span>
-                      <span class="text-xs text-gray-500 dark:text-gray-400 font-normal">选择摘要生成方式：关闭、快速或迭代优化</span>
-                    </div>
-                  </template>
-                  <div class="w-full max-w-md">
-                    <el-select v-model="tempMemoryConfig.summaryMode" placeholder="请选择摘要模式" class="w-full">
-                      <el-option label="关闭摘要" value="disabled">
-                        <span class="flex items-center gap-2">
-                          <el-icon>
-                            <CloseOutlined />
-                          </el-icon>
-                          <span>关闭摘要 - 仅裁剪工具结果</span>
-                        </span>
-                      </el-option>
-                      <el-option label="快速摘要" value="fast">
-                        <span class="flex items-center gap-2">
-                          <el-icon>
-                            <ThunderboltOutlined />
-                          </el-icon>
-                          <span>快速摘要 - 单次调用生成</span>
-                        </span>
-                      </el-option>
-                      <el-option label="迭代摘要" value="iterative">
-                        <span class="flex items-center gap-2">
-                          <el-icon>
-                            <SyncOutlined />
-                          </el-icon>
-                          <span>迭代摘要 - 多轮优化，质量最高</span>
-                        </span>
-                      </el-option>
-                    </el-select>
+              <!-- 保留目标 -->
+              <el-form-item>
+                <template #label>
+                  <div style="display: flex; flex-direction: column; gap: 8px;">
+                    <span class="text-base text-gray-900 dark:text-gray-100 font-medium">保留目标</span>
+                    <span class="text-xs text-gray-500 dark:text-gray-400 font-normal">压缩后保留至最大窗口的此比例</span>
                   </div>
-                </el-form-item>
+                </template>
+                <el-slider v-model="tempMemoryConfig.targetRatio" :min="0.2" :max="0.8" :step="0.05" show-input
+                  format-tooltip="(val) => `${Math.round(val * 100)}%`" class="w-full max-w-md" />
+              </el-form-item>
 
-                <el-alert title="提示" type="info" :closable="false" show-icon class="mb-6">
-                  <p class="text-sm">• 触发阈值：控制何时启动压缩（建议 70%-85%）</p>
-                  <p class="text-sm">• 保留目标：控制压缩后的 Token 占用（建议 40%-60%）</p>
-                  <p class="text-sm">• 摘要模式：关闭仅裁剪工具结果，快速适合日常使用，迭代质量最高但耗时较长</p>
-                </el-alert>
-              </template>
-            </el-form>
-          </ScrollContainer>
+              <!-- 摘要模式 -->
+              <el-form-item>
+                <template #label>
+                  <div class="flex flex-col gap-1">
+                    <span class="text-base text-gray-900 dark:text-gray-100 font-medium">摘要模式</span>
+                    <span class="text-xs text-gray-500 dark:text-gray-400 font-normal">选择摘要生成方式：关闭、快速或迭代优化</span>
+                  </div>
+                </template>
+                <div class="w-full max-w-md">
+                  <el-select v-model="tempMemoryConfig.summaryMode" placeholder="请选择摘要模式" class="w-full">
+                    <el-option label="关闭摘要" value="disabled">
+                      <span class="flex items-center gap-2">
+                        <el-icon>
+                          <CloseOutlined />
+                        </el-icon>
+                        <span>关闭摘要 - 仅裁剪工具结果</span>
+                      </span>
+                    </el-option>
+                    <el-option label="快速摘要" value="fast">
+                      <span class="flex items-center gap-2">
+                        <el-icon>
+                          <ThunderboltOutlined />
+                        </el-icon>
+                        <span>快速摘要 - 单次调用生成</span>
+                      </span>
+                    </el-option>
+                    <el-option label="迭代摘要" value="iterative">
+                      <span class="flex items-center gap-2">
+                        <el-icon>
+                          <SyncOutlined />
+                        </el-icon>
+                        <span>迭代摘要 - 多轮优化，质量最高</span>
+                      </span>
+                    </el-option>
+                  </el-select>
+                </div>
+              </el-form-item>
+
+              <el-alert title="提示" type="info" :closable="false" show-icon class="mb-6">
+                <p class="text-sm">• 触发阈值：控制何时启动压缩（建议 70%-85%）</p>
+                <p class="text-sm">• 保留目标：控制压缩后的 Token 占用（建议 40%-60%）</p>
+                <p class="text-sm">• 摘要模式：关闭仅裁剪工具结果，快速适合日常使用，迭代质量最高但耗时较长</p>
+              </el-alert>
+            </template>
+          </el-form>
           <template #footer>
             <span class="dialog-footer flex justify-end gap-2">
               <el-button @click="settingsDialogVisible = false">取消</el-button>
@@ -1530,7 +1525,8 @@ onUnmounted(() => {
 }
 
 .dark .context-popover {
-  background: var(--color-surface); /* 使用表面色 */
+  background: var(--color-surface);
+  /* 使用表面色 */
   border: 1px solid var(--color-border);
   box-shadow: 0 12px 32px rgba(0, 0, 0, 0.4), 0 4px 8px rgba(0, 0, 0, 0.2);
 }
@@ -1795,7 +1791,8 @@ onUnmounted(() => {
 }
 
 .dark .model-item-compact:not(.bg-pink-50):hover {
-  background-color: oklch(30% 0.03 250); /* 柔和的悬停背景 */
+  background-color: oklch(30% 0.03 250);
+  /* 柔和的悬停背景 */
 }
 
 /* 知识库列表项 - 无边框紧凑样式 */
@@ -1808,7 +1805,8 @@ onUnmounted(() => {
 }
 
 .dark .kb-item-compact:hover {
-  background-color: oklch(30% 0.03 250); /* 与模型列表保持一致 */
+  background-color: oklch(30% 0.03 250);
+  /* 与模型列表保持一致 */
 }
 
 /* 会话设置模态框 - 强制Label区域高度自适应 */

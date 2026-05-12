@@ -1,31 +1,19 @@
 <template>
-    <el-dialog 
-        v-model="visible" 
-        :close-on-click-modal="false" 
-        width="700px"
-        :style="{ maxHeight: '75vh' }"
-        class="character-setting-dialog"
-        destroy-on-close
-    >
+    <el-dialog v-model="visible" :close-on-click-modal="false" width="700px"
+        :style="{ minHeight: '65vh', maxHeight: '85vh', maxWidth: '85vw' }" class="character-setting-dialog" destroy-on-close>
         <template #header>
             <div class="dialog-header">
                 <span class="dialog-title">{{ currentCharacter?.id ? '编辑角色' : '新建角色' }}</span>
             </div>
         </template>
-        
+
         <div class="dialog-content">
-            <CharacterSettingPanel 
-                ref="settingPanelRef"
-                :data="currentCharacter" 
-                :simple="false" 
-            />
+            <CharacterSettingPanel ref="settingPanelRef" :data="currentCharacter" :simple="false" class="flex-1" />
         </div>
 
         <template #footer>
-            <div class="dialog-footer">
-                <el-button @click="handleClose">取消</el-button>
-                <el-button type="primary" @click="handleSave" :loading="saving">应用全部设置</el-button>
-            </div>
+            <el-button @click="handleClose">取消</el-button>
+            <el-button type="primary" @click="handleSave" :loading="saving">应用全部设置</el-button>
         </template>
     </el-dialog>
 </template>
@@ -91,7 +79,7 @@ const handleClose = (): void => {
 const handleSave = async (): Promise<void> => {
     // 触发子组件的验证与数据获取
     if (!settingPanelRef.value) return;
-    
+
     const isValid = await settingPanelRef.value.validate();
     if (!isValid) return;
 
@@ -100,11 +88,11 @@ const handleSave = async (): Promise<void> => {
         const data = settingPanelRef.value.getFormData();
         let character: any = null;
         let characterData = { ...data };
-        const avatarFile = data.avatarFile; 
-        
+        const avatarFile = data.avatarFile;
+
         delete characterData.avatarFile;
-        delete characterData.avatarUrl; 
-        
+        delete characterData.avatarUrl;
+
         if (currentCharacter.value && currentCharacter.value.id) {
             const response = await apiService.updateCharacter(currentCharacter.value.id, characterData);
             character = response;
@@ -122,7 +110,7 @@ const handleSave = async (): Promise<void> => {
         if (character) {
             currentCharacter.value = character;
         }
-        
+
         toast.success("角色更新成功");
         emit('saved', currentCharacter.value);
         visible.value = false;
@@ -149,49 +137,18 @@ const handleSave = async (): Promise<void> => {
 }
 
 .dialog-content {
-    height: calc(75vh - 140px); /* 预留 header 和 footer 高度 */
-    overflow-y: auto;
-    padding: 0 4px;
-}
-
-.dialog-footer {
     display: flex;
-    justify-content: flex-end;
-    gap: 12px;
+    flex-direction: column;
+    flex: 1;
+    min-height: 0;
 }
+</style>
 
-/* 优化弹窗样式 */
-.character-setting-dialog :deep(.el-dialog__body) {
-    padding: 0;
-    overflow: hidden;
-}
-
-.character-setting-dialog :deep(.el-dialog__header) {
-    margin-right: 0;
-    padding: 16px 20px;
-    border-bottom: 1px solid var(--el-border-color-light);
-}
-
-.character-setting-dialog :deep(.el-dialog__footer) {
-    padding: 12px 20px;
-    border-top: 1px solid var(--el-border-color-light);
-}
-
-/* 滚动条美化 */
-.dialog-content::-webkit-scrollbar {
-    width: 6px;
-}
-
-.dialog-content::-webkit-scrollbar-track {
-    background: transparent;
-}
-
-.dialog-content::-webkit-scrollbar-thumb {
-    background-color: rgba(0, 0, 0, 0.2);
-    border-radius: 3px;
-}
-
-.dark .dialog-content::-webkit-scrollbar-thumb {
-    background-color: rgba(255, 255, 255, 0.2);
+<style>
+/* 非 scoped 样式，直接作用于 el-dialog__body */
+.character-setting-dialog .el-dialog__body {
+    display: flex !important;
+    flex-direction: column !important;
+    height: 100%; /* 确保有明确高度，让子组件的 flex: 1 生效 */
 }
 </style>

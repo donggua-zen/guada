@@ -131,9 +131,12 @@
         </template>
     </div>
 
-    <el-dialog v-model="showProviderModal" :title="getProviderModalTitle" width="500px" align-center append-to-body>
-        <el-form ref="formRef" :label-width="80" :model="currentProviderEdit" :rules="providerRules" size="large"
-            label-position="left" hide-required-asterisk>
+    <!-- 供应商编辑弹窗 -->
+    <el-dialog v-model="showProviderModal" :title="getProviderModalTitle" width="500px" align-center append-to-body
+        class="provider-modal dialog-with-scroll">
+        <div class="dialog-content">
+            <el-form ref="formRef" :label-width="80" :model="currentProviderEdit" :rules="providerRules" size="large"
+                label-position="left" hide-required-asterisk>
             <el-form-item label="名字" prop="name">
                 <el-input v-model="currentProviderEdit.name" placeholder="输入分组名字" :disabled="!isNameEditable" />
             </el-form-item>
@@ -166,7 +169,8 @@
                     </el-link>
                 </div>
             </el-form-item>
-        </el-form>
+            </el-form>
+        </div>
         <template #footer>
             <span class="dialog-footer">
                 <el-button @click="showProviderModal = false">取消</el-button>
@@ -177,107 +181,109 @@
 
     <!-- 编辑/新增模型信息的模态框 -->
     <el-dialog v-model="showEditModal" :title="isEditMode ? '编辑模型信息' : '新增模型'" width="600px" align-center
-        class="model-edit-dialog" append-to-body>
-        <el-form ref="editFormRef" :model="editModelForm" :rules="editModelRules" label-position="left"
-            label-width="120px" size="default">
+        class="model-edit-dialog dialog-with-scroll" append-to-body>
+        <div class="dialog-content">
+            <el-form ref="editFormRef" :model="editModelForm" :rules="editModelRules" label-position="left"
+                label-width="120px" size="default">
 
-            <div class="form-section">
-                <el-form-item label="模型名称" prop="modelName">
-                    <el-input v-model="editModelForm.modelName" placeholder="例如：gpt-4o, qwen-max" clearable />
-                </el-form-item>
+                <div class="form-section">
+                    <el-form-item label="模型名称" prop="modelName">
+                        <el-input v-model="editModelForm.modelName" placeholder="例如：gpt-4o, qwen-max" clearable />
+                    </el-form-item>
 
-                <el-form-item label="模型类型" prop="modelType">
-                    <el-radio-group v-model="editModelForm.modelType">
-                        <el-radio-button value="text">
-                            <span class="flex items-center"><el-icon class="mr-1 align-middle">
-                                    <TextT24Regular />
-                                </el-icon> 对话 (Chat)</span>
-                        </el-radio-button>
-                        <el-radio-button value="embedding">
-                            <span class="flex items-center"><el-icon class="mr-1 align-middle">
-                                    <Group24Regular />
-                                </el-icon> 嵌入 (Embedding)</span>
-                        </el-radio-button>
-                    </el-radio-group>
-                </el-form-item>
-            </div>
+                    <el-form-item label="模型类型" prop="modelType">
+                        <el-radio-group v-model="editModelForm.modelType">
+                            <el-radio-button value="text">
+                                <span class="flex items-center"><el-icon class="mr-1 align-middle">
+                                        <TextT24Regular />
+                                    </el-icon> 对话 (Chat)</span>
+                            </el-radio-button>
+                            <el-radio-button value="embedding">
+                                <span class="flex items-center"><el-icon class="mr-1 align-middle">
+                                        <Group24Regular />
+                                    </el-icon> 嵌入 (Embedding)</span>
+                            </el-radio-button>
+                        </el-radio-group>
+                    </el-form-item>
+                </div>
 
-            <!-- 对话模型配置 -->
-            <div v-if="editModelForm.modelType === 'text'" class="transition-all">
-                <el-form-item label="输入能力" prop="config.inputCapabilities" class="mb-3">
-                    <el-checkbox-group v-model="editModelForm.config.inputCapabilities">
-                        <el-checkbox-button value="text" disabled>
-                            <span class="flex items-center"><el-icon class="mr-1 align-middle">
-                                    <TextT24Regular />
-                                </el-icon> 文本</span>
-                        </el-checkbox-button>
-                        <el-checkbox-button value="image">
-                            <span class="flex items-center"><el-icon class="mr-1 align-middle">
-                                    <Image24Regular />
-                                </el-icon> 图像</span>
-                        </el-checkbox-button>
-                    </el-checkbox-group>
-                </el-form-item>
+                <!-- 对话模型配置 -->
+                <div v-if="editModelForm.modelType === 'text'" class="transition-all">
+                    <el-form-item label="输入能力" prop="config.inputCapabilities" class="mb-3">
+                        <el-checkbox-group v-model="editModelForm.config.inputCapabilities">
+                            <el-checkbox-button value="text" disabled>
+                                <span class="flex items-center"><el-icon class="mr-1 align-middle">
+                                        <TextT24Regular />
+                                    </el-icon> 文本</span>
+                            </el-checkbox-button>
+                            <el-checkbox-button value="image">
+                                <span class="flex items-center"><el-icon class="mr-1 align-middle">
+                                        <Image24Regular />
+                                    </el-icon> 图像</span>
+                            </el-checkbox-button>
+                        </el-checkbox-group>
+                    </el-form-item>
 
-                <el-form-item label="输出能力" prop="config.outputCapabilities" class="mb-3">
-                    <el-checkbox-group v-model="editModelForm.config.outputCapabilities">
-                        <el-checkbox-button value="text" disabled>
-                            <span class="flex items-center"><el-icon class="mr-1 align-middle">
-                                    <TextT24Regular />
-                                </el-icon> 文本</span>
-                        </el-checkbox-button>
-                        <el-checkbox-button value="image">
-                            <span class="flex items-center"><el-icon class="mr-1 align-middle">
-                                    <Image24Regular />
-                                </el-icon> 图像</span>
-                        </el-checkbox-button>
-                    </el-checkbox-group>
-                </el-form-item>
+                    <el-form-item label="输出能力" prop="config.outputCapabilities" class="mb-3">
+                        <el-checkbox-group v-model="editModelForm.config.outputCapabilities">
+                            <el-checkbox-button value="text" disabled>
+                                <span class="flex items-center"><el-icon class="mr-1 align-middle">
+                                        <TextT24Regular />
+                                    </el-icon> 文本</span>
+                            </el-checkbox-button>
+                            <el-checkbox-button value="image">
+                                <span class="flex items-center"><el-icon class="mr-1 align-middle">
+                                        <Image24Regular />
+                                    </el-icon> 图像</span>
+                            </el-checkbox-button>
+                        </el-checkbox-group>
+                    </el-form-item>
 
-                <el-form-item label="高级功能" prop="config.features" class="mb-4">
-                    <el-checkbox-group v-model="editModelForm.config.features">
-                        <el-checkbox-button value="tools">
-                            <span class="flex items-center"><el-icon class="mr-1 align-middle">
-                                    <WrenchScrewdriver24Regular />
-                                </el-icon> 工具调用</span>
-                        </el-checkbox-button>
-                        <el-checkbox-button value="thinking">
-                            <span class="flex items-center"><el-icon class="mr-1 align-middle">
-                                    <LightbulbFilament24Regular />
-                                </el-icon> 混合思考</span>
-                        </el-checkbox-button>
-                    </el-checkbox-group>
-                </el-form-item>
+                    <el-form-item label="高级功能" prop="config.features" class="mb-4">
+                        <el-checkbox-group v-model="editModelForm.config.features">
+                            <el-checkbox-button value="tools">
+                                <span class="flex items-center"><el-icon class="mr-1 align-middle">
+                                        <WrenchScrewdriver24Regular />
+                                    </el-icon> 工具调用</span>
+                            </el-checkbox-button>
+                            <el-checkbox-button value="thinking">
+                                <span class="flex items-center"><el-icon class="mr-1 align-middle">
+                                        <LightbulbFilament24Regular />
+                                    </el-icon> 混合思考</span>
+                            </el-checkbox-button>
+                        </el-checkbox-group>
+                    </el-form-item>
 
-                <el-form-item label="上下文窗口" prop="config.contextWindow">
-                    <el-input-number v-model="editModelForm.config.contextWindow" placeholder="128000"
-                        controls-position="right" style="width: 240px;">
-                        <template #suffix><span class="text-gray-400 text-xs ml-1">Tokens</span></template>
-                    </el-input-number>
-                </el-form-item>
+                    <el-form-item label="上下文窗口" prop="config.contextWindow">
+                        <el-input-number v-model="editModelForm.config.contextWindow" placeholder="128000"
+                            controls-position="right" style="width: 240px;">
+                            <template #suffix><span class="text-gray-400 text-xs ml-1">Tokens</span></template>
+                        </el-input-number>
+                    </el-form-item>
 
-                <el-form-item label="最大输出长度" prop="config.maxOutputTokens">
-                    <el-input-number v-model="editModelForm.config.maxOutputTokens" placeholder="4096"
-                        controls-position="right" style="width: 240px;">
-                        <template #suffix><span class="text-gray-400 text-xs ml-1">Tokens</span></template>
-                    </el-input-number>
-                </el-form-item>
+                    <el-form-item label="最大输出长度" prop="config.maxOutputTokens">
+                        <el-input-number v-model="editModelForm.config.maxOutputTokens" placeholder="4096"
+                            controls-position="right" style="width: 240px;">
+                            <template #suffix><span class="text-gray-400 text-xs ml-1">Tokens</span></template>
+                        </el-input-number>
+                    </el-form-item>
 
-                <el-form-item label="自定义参数 (JSON)" prop="config.customParameters">
-                    <el-input v-model="customParamsStr" type="textarea" :rows="3"
-                        placeholder='{ "temperature": 0.7, "top_p": 1 }' class="font-mono text-xs" />
-                </el-form-item>
-            </div>
+                    <el-form-item label="自定义参数 (JSON)" prop="config.customParameters">
+                        <el-input v-model="customParamsStr" type="textarea" :rows="3"
+                            placeholder='{ "temperature": 0.7, "top_p": 1 }' class="font-mono text-xs" />
+                    </el-form-item>
+                </div>
 
-            <!-- 嵌入模型配置 -->
-            <div v-else-if="editModelForm.modelType === 'embedding'" class="transition-all">
-                <el-form-item label="向量维度 (Dimensions)" prop="config.vectorDimensions">
-                    <el-input-number v-model="editModelForm.config.vectorDimensions" placeholder="例如：768, 1536, 3072"
-                        style="width: 240px;" controls-position="right" />
-                    <div class="text-xs text-gray-400 mt-1">该模型生成的向量特征数量</div>
-                </el-form-item>
-            </div>
-        </el-form>
+                <!-- 嵌入模型配置 -->
+                <div v-else-if="editModelForm.modelType === 'embedding'" class="transition-all">
+                    <el-form-item label="向量维度 (Dimensions)" prop="config.vectorDimensions">
+                        <el-input-number v-model="editModelForm.config.vectorDimensions" placeholder="例如：768, 1536, 3072"
+                            style="width: 240px;" controls-position="right" />
+                        <div class="text-xs text-gray-400 mt-1">该模型生成的向量特征数量</div>
+                    </el-form-item>
+                </div>
+            </el-form>
+        </div>
         <template #footer>
             <div class="dialog-footer flex justify-end gap-3">
                 <el-button @click="showEditModal = false">取消</el-button>
@@ -287,10 +293,10 @@
     </el-dialog>
 
     <!-- 获取模型列表的模态框 -->
-    <el-dialog v-model="showFetchModal" title="获取模型列表" width="600px" align-center class="model-edit-dialog"
+    <el-dialog v-model="showFetchModal" title="获取模型列表" width="600px" align-center class="model-fetch-dialog dialog-with-scroll"
         append-to-body>
-        <div class="max-h-[60vh] overflow-y-auto px-1">
-            <div class="p-2 mb-2 sticky top-0 bg-white dark:bg-[#232428] z-10">
+        <div class="dialog-content">
+            <div class="mb-2 sticky top-0 bg-white dark:bg-[#232428] z-10">
                 <el-input v-model="searchModelName" placeholder="搜索模型名称" clearable @input="handleSearchModel">
                     <template #prefix>
                         <el-icon>
@@ -305,7 +311,7 @@
                     <Loading />
                 </el-icon>
             </div>
-            <div v-else>
+            <div v-else class="pb-4">
                 <!-- 已添加的模型 -->
                 <div v-if="filteredAddedModels.length > 0" class="mb-6">
                     <h3 class="text-xs font-bold text-green-600 uppercase tracking-wider mb-3 ml-1">已添加的模型</h3>
@@ -1258,4 +1264,11 @@ const handleDeleteProviderFromList = async (provider) => {
     flex: 1;
     min-width: 0;
 }
+
+/* Dialog 滚动样式 */
+/* .dialog-with-scroll :deep(.el-dialog) {
+    max-height: 80vh;
+} */
+
+
 </style>
