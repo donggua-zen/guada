@@ -464,7 +464,7 @@ export class SessionService {
       remainingTokens,
       percentage: parseFloat(percentage.toFixed(2)),
       modelName: session.model?.modelName || "gpt-4",
-      messageCount: messages.filter(m => m.role === 'user').length,
+      messageCount: messages.length,
     };
   }
 

@@ -190,13 +190,11 @@ async function createNewTab() {
   
   try {
     const result = await window.electronAPI.createTab('https://www.baidu.com')
-    if (result.success && result.tab) {
-      tabs.value.push(result.tab)
-      activeTabId.value = result.tab.tabId
-    } else {
+    if (!result.success) {
       // 友好提示
       alert('标签数量已达上限（最多5个标签页）')
     }
+    // 注意：不手动添加到 tabs.value，等待 tab-updated 事件自动添加
   } catch (error) {
     console.error('Failed to create tab:', error)
   }
@@ -224,11 +222,12 @@ async function loadTabs() {
 
 // 监听标签更新事件
 function handleTabUpdated(event: any, data: any) {
-  const tab = tabs.value.find(t => t.tabId === data.tabId)
-  if (tab) {
+  const existingIndex = tabs.value.findIndex(t => t.tabId === data.tabId)
+  
+  if (existingIndex !== -1) {
     // 更新现有标签
-    tab.title = data.title
-    tab.url = data.url
+    tabs.value[existingIndex].title = data.title
+    tabs.value[existingIndex].url = data.url
   } else if (!data.isMainApp) {
     // 如果是新标签（非主应用），添加到列表
     tabs.value.push({
