@@ -169,35 +169,36 @@ export class BotAdminController {
    */
   @Get('sessions')
   async getBotSessions(
+    @Request() req,
     @Query('skip') skip = 0,
     @Query('limit') limit = 20,
-    @Request() req,
+    @Query('botId') botId?: string,
   ) {
     const userId = req.user.id;
     
+    // 构建查询条件
+    const whereCondition: any = { 
+      userId,
+      sessionType: 'bot'
+    };
+    
+    // 如果指定了botId，则添加过滤条件
+    if (botId) {
+      whereCondition.botId = botId;
+    }
+    
     const [items, total] = await Promise.all([
       this.prisma.session.findMany({
-        where: { 
-          userId,
-          sessionType: 'bot'
-        },
+        where: whereCondition,
         orderBy: [{ lastActiveAt: "desc" }],
         skip: Number(skip),
         take: Number(limit),
         include: { 
           character: true,
-          model: {
-            include: {
-              provider: true,
-            },
-          },
         },
       }),
       this.prisma.session.count({ 
-        where: { 
-          userId,
-          sessionType: 'bot'
-        } 
+        where: whereCondition
       }),
     ]);
     

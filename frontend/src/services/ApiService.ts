@@ -1087,10 +1087,11 @@ class ApiService implements IApiService {
   /**
    * 获取 Bot 专属会话列表（sessionType='bot'）
    */
-  async fetchBotSessions(skip?: number, limit?: number): Promise<PaginatedResponse<Session>> {
+  async fetchBotSessions(skip?: number, limit?: number, botId?: string): Promise<PaginatedResponse<Session>> {
     const params = new URLSearchParams()
     if (skip !== undefined) params.append('skip', skip.toString())
     if (limit !== undefined) params.append('limit', limit.toString())
+    if (botId) params.append('botId', botId)
 
     const queryString = params.toString()
     const url = queryString ? `/bot-admin/sessions?${queryString}` : '/bot-admin/sessions'
