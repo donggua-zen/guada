@@ -1,5 +1,32 @@
 <template>
   <div class="h-full flex flex-col">
+    <!-- 机器人筛选标签 -->
+    <div v-if="!loading" class="pb-4">
+      <div class="flex flex-wrap gap-2">
+        <!-- 全部会话标签 -->
+        <div 
+          class="px-4 py-2 rounded-full cursor-pointer transition-all duration-200 select-none text-sm border"
+          :class="selectedBotId === null 
+            ? 'bg-(--color-primary) text-white border-(--color-primary) shadow-[0_2px_8px_rgba(251,114,153,0.3)] hover:bg-(--color-primary-hover) hover:border-(--color-primary-hover)'
+            : 'bg-(--color-surface) text-(--color-text-gray) border-(--color-border) hover:bg-(--color-primary-100) hover:text-(--color-primary) hover:border-(--color-primary-200)'"
+          @click="selectBot(null)">
+          全部会话
+        </div>
+
+        <!-- 机器人标签 -->
+        <div 
+          v-for="bot in botStore.botInstances" 
+          :key="bot.id"
+          class="px-4 py-2 rounded-full cursor-pointer transition-all duration-200 select-none text-sm border"
+          :class="selectedBotId === bot.id 
+            ? 'bg-(--color-primary) text-white border-(--color-primary) shadow-[0_2px_8px_rgba(251,114,153,0.3)] hover:bg-(--color-primary-hover) hover:border-(--color-primary-hover)'
+            : 'bg-(--color-surface) text-(--color-text-gray) border-(--color-border) hover:bg-(--color-primary-100) hover:text-(--color-primary) hover:border-(--color-primary-200)'"
+          @click="selectBot(bot.id)">
+          {{ bot.name }}
+        </div>
+      </div>
+    </div>
+
     <!-- 加载状态 -->
     <div v-if="loading" class="flex justify-center items-center py-12">
       <el-icon class="is-loading" :size="32">
@@ -10,13 +37,7 @@
 
     <!-- 会话列表 -->
     <div v-else class="flex-1 overflow-y-auto">
-      <el-table
-        v-if="sessions.length > 0"
-        :data="sessions"
-        style="width: 100%"
-        stripe
-        @row-click="handleRowClick"
-      >
+      <el-table v-if="sessions.length > 0" :data="sessions" style="width: 100%" stripe @row-click="handleRowClick">
         <el-table-column prop="title" label="会话标题" min-width="200">
           <template #default="{ row }">
             <span class="truncate">{{ row.title || '未命名会话' }}</span>
@@ -50,28 +71,13 @@
         <el-table-column label="操作" width="240" fixed="right">
           <template #default="{ row }">
             <div class="flex gap-2">
-              <el-button
-                link
-                type="primary"
-                size="small"
-                @click.stop="handleViewChat(row)"
-              >
+              <el-button link type="primary" size="small" @click.stop="handleViewChat(row)">
                 查看对话
               </el-button>
-              <el-button
-                link
-                type="warning"
-                size="small"
-                @click.stop="handleClearMessages(row)"
-              >
+              <el-button link type="warning" size="small" @click.stop="handleClearMessages(row)">
                 清空记录
               </el-button>
-              <el-button
-                link
-                type="danger"
-                size="small"
-                @click.stop="handleDeleteSession(row)"
-              >
+              <el-button link type="danger" size="small" @click.stop="handleDeleteSession(row)">
                 删除
               </el-button>
             </div>
@@ -90,53 +96,116 @@
 
       <!-- 分页 -->
       <div v-if="total > 0" class="flex justify-center py-4">
-        <el-pagination
-          v-model:current-page="currentPage"
-          v-model:page-size="pageSize"
-          :total="total"
-          :page-sizes="[20, 50, 80]"
-          layout="total, sizes, prev, pager, next"
-          @current-change="handlePageChange"
-          @size-change="handleSizeChange"
-        />
+        <el-pagination v-model:current-page="currentPage" v-model:page-size="pageSize" :total="total"
+          :page-sizes="[20, 50, 80]" layout="total, sizes, prev, pager, next" @current-change="handlePageChange"
+          @size-change="handleSizeChange" />
       </div>
     </div>
 
     <!-- 对话详情对话框 -->
-    <BotSessionDialog
-      v-model="dialogVisible"
-      :session="selectedSession"
-    />
+    <BotSessionDialog v-model="dialogVisible" :session="selectedSession" />
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Loading, ChatDotRound } from '@element-plus/icons-vue'
 import { apiService } from '@/services/ApiService'
 import { useBotStore } from '@/stores/bot'
 import BotSessionDialog from './BotSessionDialog.vue'
 import type { Session } from '@/types/session'
+import { useRoute, useRouter } from 'vue-router'
 
 const botStore = useBotStore()
+const route = useRoute()
+const router = useRouter()
 
 const loading = ref(false)
 const sessions = ref<Session[]>([])
 const total = ref(0)
 const currentPage = ref(1)
 const pageSize = ref(20)
+const selectedBotId = ref<string | null>(null) // 当前选中的机器人ID，null表示全部
 
 // 对话框相关
 const dialogVisible = ref(false)
 const selectedSession = ref<Session | null>(null)
+
+// 从URL查询参数恢复筛选状态
+const restoreFilterState = () => {
+  const botId = route.query.botId as string | undefined
+  const page = route.query.page as string | undefined
+  const size = route.query.size as string | undefined
+  
+  if (botId) {
+    selectedBotId.value = botId
+  }
+  
+  if (page) {
+    currentPage.value = parseInt(page, 10) || 1
+  }
+  
+  if (size) {
+    pageSize.value = parseInt(size, 10) || 20
+  }
+}
+
+// 更新URL查询参数以维持状态
+const updateUrlParams = () => {
+  const query: any = { ...route.query }
+  
+  if (selectedBotId.value) {
+    query.botId = selectedBotId.value
+  } else {
+    delete query.botId
+  }
+  
+  if (currentPage.value > 1) {
+    query.page = currentPage.value.toString()
+  } else {
+    delete query.page
+  }
+  
+  if (pageSize.value !== 20) { // 20是默认值
+    query.size = pageSize.value.toString()
+  } else {
+    delete query.size
+  }
+  
+  router.replace({ query })
+}
+
+// 选择机器人筛选
+const selectBot = (botId: string | null) => {
+  selectedBotId.value = botId
+  currentPage.value = 1 // 重置到第一页
+  updateUrlParams() // 更新URL参数
+  loadSessions()
+}
+
+// 监听机器人列表变化，重新加载会话
+watch(() => botStore.botInstances.length, () => {
+  if (selectedBotId.value && !botStore.botInstances.find(b => b.id === selectedBotId.value)) {
+    // 如果当前选中的机器人被删除了，重置为全部
+    selectedBotId.value = null
+    currentPage.value = 1
+    updateUrlParams() // 更新URL参数
+    loadSessions()
+  }
+})
+
+// 监听页码变化，更新URL
+watch(currentPage, () => {
+  updateUrlParams()
+})
 
 // 加载会话列表
 const loadSessions = async () => {
   loading.value = true
   try {
     const skip = (currentPage.value - 1) * pageSize.value
-    const response = await apiService.fetchBotSessions(skip, pageSize.value)
+    const response = await apiService.fetchBotSessions(skip, pageSize.value, selectedBotId.value || undefined)
     sessions.value = response.items || []
     total.value = response.total || 0
   } catch (error) {
@@ -172,7 +241,7 @@ const formatTime = (time?: string): string => {
   const date = new Date(time)
   const now = new Date()
   const diff = now.getTime() - date.getTime()
-  
+
   // 小于1分钟
   if (diff < 60 * 1000) {
     return '刚刚'
@@ -218,10 +287,10 @@ const handleClearMessages = async (session: Session) => {
         type: 'warning'
       }
     )
-    
+
     await apiService.clearSessionMessages(session.id)
     ElMessage.success('聊天记录已清空')
-    
+
     // 如果对话框打开，关闭它
     if (dialogVisible.value && selectedSession.value?.id === session.id) {
       dialogVisible.value = false
@@ -247,10 +316,10 @@ const handleDeleteSession = async (session: Session) => {
         type: 'warning'
       }
     )
-    
+
     await apiService.deleteSession(session.id)
     ElMessage.success('会话已删除')
-    
+
     // 重新加载列表
     await loadSessions()
   } catch (error) {
@@ -264,20 +333,30 @@ const handleDeleteSession = async (session: Session) => {
 // 分页变化
 const handlePageChange = (page: number) => {
   currentPage.value = page
+  updateUrlParams() // 更新URL参数
   loadSessions()
 }
 
 const handleSizeChange = (size: number) => {
   pageSize.value = size
   currentPage.value = 1
+  updateUrlParams() // 更新URL参数
   loadSessions()
 }
 
-onMounted(() => {
+onMounted(async () => {
+  // 先加载机器人列表，以便显示筛选标签
+  if (botStore.botInstances.length === 0) {
+    await botStore.loadBotInstances()
+  }
+
+  // 从URL恢复筛选状态
+  restoreFilterState()
+
   loadSessions()
 })
 </script>
 
 <style scoped>
-/* 样式由 Element Plus 和 Tailwind 处理 */
+/* 样式由 Tailwind CSS 处理 */
 </style>
