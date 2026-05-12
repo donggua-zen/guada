@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Logger } from '@nestjs/common';
 import { Observable, Subject } from 'rxjs';
 import {
   IBotPlatform,
@@ -21,7 +21,6 @@ import * as Lark from '@larksuiteoapi/node-sdk';
  * 
  * 注意: 不负责重连逻辑,重连由 BotInstanceManager 统一管理
  */
-@Injectable()
 export class LarkBotAdapter implements IBotPlatform {
   private readonly logger = new Logger(LarkBotAdapter.name);
   private client: any; // Lark SDK Client 实例（用于 API 调用）

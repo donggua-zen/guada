@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Logger } from '@nestjs/common';
 import { Observable, Subject } from 'rxjs';
 import {
   IBotPlatform,
@@ -23,7 +23,6 @@ import { generateReqId } from '@wecom/aibot-node-sdk';
  * 使用 @wecom/aibot-node-sdk 官方 SDK
  * 基于 WebSocket 长连接通道，支持消息收发、流式回复等功能
  */
-@Injectable()
 export class WeComAiBotAdapter implements IBotPlatform {
   private readonly logger = new Logger(WeComAiBotAdapter.name);
   private client: WSClient;
@@ -104,7 +103,7 @@ export class WeComAiBotAdapter implements IBotPlatform {
           this.logger.log(`Received text message: ${content.substring(0, 50)}...`);
 
           const botMessage = await this.transformToBotMessage(frame, 'text');
-          
+
           // 将消息传递给上层处理（不保存帧）
           this.messageSubject.next(botMessage);
         } catch (error: any) {
@@ -187,11 +186,11 @@ export class WeComAiBotAdapter implements IBotPlatform {
       // 企业微信智能机器人需要使用流式回复
       // 调用 sendStreamReply 方法
       const success = await this.sendStreamReply(response, { finish: true });
-      
+
       if (!success) {
         throw new Error('Failed to send stream reply');
       }
-      
+
       this.logger.log(`Message sent successfully to: ${response.conversationId}`);
     } catch (error: any) {
       this.logger.error(`Failed to send message: ${error.message}`);
@@ -214,7 +213,7 @@ export class WeComAiBotAdapter implements IBotPlatform {
     try {
       // 直接从 response.rawFrame 获取原始消息帧
       const frame = response.rawFrame;
-      
+
       if (!frame) {
         this.logger.error('rawFrame is required for WeCom AI Bot streaming reply');
         return false;
@@ -224,9 +223,9 @@ export class WeComAiBotAdapter implements IBotPlatform {
       const finish = options?.finish ?? true;
 
       await this.client.replyStream(frame, streamId, response.content, finish);
-      
+
       this.logger.log(`Stream reply sent (finish: ${finish}, streamId: ${streamId})`);
-      
+
       return true;
     } catch (error: any) {
       this.logger.error(`Failed to send stream reply: ${error.message}`);
@@ -334,39 +333,48 @@ export class WeComAiBotAdapter implements IBotPlatform {
 
     if (body.image) {
       try {
-        // 在适配器层完成下载、解密、保存到临时文件
-        const result = await this.platformUtils.downloadAndProcessImage(
-          body.image.url,
-          {
-            platform: 'wecom',
-            aesKey: body.image.aeskey,
-            ttl: 10 * 60 * 1000, // 10分钟TTL
-          }
-        );
+        // 获取 AES 密钥
+        const aesKey = body.image.aeskey;
 
-        // 从 URL 中提取文件名
-        let fileName = body.image.filename;
-        if (!fileName && body.image.url) {
-          try {
-            const urlObj = new URL(body.image.url);
-            const pathParts = urlObj.pathname.split('/');
-            const lastPart = pathParts[pathParts.length - 1];
-            if (lastPart) {
-              fileName = `image_${lastPart}.jpg`; // 企业微信图片通常是 JPEG
+        if (!aesKey) {
+          this.logger.warn('Image aeskey not provided, skipping decryption');
+          // 如果没有 aeskey，直接下载不处理
+          const result = await this.platformUtils.downloadAndProcessImage(
+            body.image.url,
+            {
+              ttl: 10 * 60 * 1000, // 10分钟TTL
+              filename: body.image.filename,
             }
-          } catch (e) {
-            // URL 解析失败，使用默认名称
-          }
-        }
-        
-        attachments.push({
-          type: 'image',
-          localPath: result.tempPath, // 传递本地临时文件路径
-          fileName: fileName || `image_${Date.now()}.jpg`,
-          fileSize: result.fileSize,
-        });
+          );
 
-        this.logger.log(`Extracted image attachment: ${result.tempPath}`);
+          attachments.push({
+            type: 'image',
+            localPath: result.tempPath,
+            fileName: body.image.filename || `image_${Date.now()}.jpg`,
+            fileSize: result.fileSize,
+          });
+        } else {
+          // 有 aeskey，进行解密处理
+          const result = await this.platformUtils.downloadAndProcessImage(
+            body.image.url,
+            {
+              postProcessor: async (buffer) => {
+                return await this.decryptWeComImage(buffer, aesKey);
+              },
+              ttl: 10 * 60 * 1000, // 10分钟TTL
+              filename: body.image.filename,
+            }
+          );
+
+          attachments.push({
+            type: 'image',
+            localPath: result.tempPath,
+            fileName: body.image.filename || `image_${Date.now()}.jpg`,
+            fileSize: result.fileSize,
+          });
+        }
+
+        this.logger.log(`Extracted image attachment: ${attachments[0].localPath}`);
       } catch (error: any) {
         this.logger.error(`Failed to process image attachment: ${error.message}`);
         // 继续处理其他附件，不阻断流程
@@ -376,6 +384,57 @@ export class WeComAiBotAdapter implements IBotPlatform {
     // TODO: 处理 voice 和 file 类型的附件
 
     return attachments.length > 0 ? attachments : undefined;
+  }
+
+  /**
+   * 解密企业微信加密的图片
+   * @param encryptedBuffer 加密的buffer
+   * @param aesKey AES密钥（Base64编码的32字节密钥）
+   * @returns 解密后的buffer
+   */
+  private async decryptWeComImage(encryptedBuffer: Buffer, aesKey: string): Promise<Buffer> {
+    const crypto = await import('crypto');
+
+    // AES密钥是Base64编码的，需要先解码
+    let paddedAesKey = aesKey;
+    const paddingNeeded = (-aesKey.length % 4);
+    if (paddingNeeded > 0) {
+      paddedAesKey += '='.repeat(paddingNeeded);
+    }
+
+    const keyBuffer = Buffer.from(paddedAesKey, 'base64');
+
+    if (keyBuffer.length !== 32) {
+      throw new Error(`Invalid AES key length after Base64 decode: expected 32 bytes, got ${keyBuffer.length} bytes`);
+    }
+
+    // IV取AESKey前16字节
+    const iv = keyBuffer.slice(0, 16);
+    const key = keyBuffer;
+
+    // 使用手动 PKCS#7 填充处理（参考 AstrBot）
+    const decipher = crypto.createDecipheriv('aes-256-cbc', key, iv);
+    decipher.setAutoPadding(false);
+
+    let decrypted = decipher.update(encryptedBuffer);
+    decrypted = Buffer.concat([decrypted, decipher.final()]);
+
+    // 手动去除 PKCS#7 填充
+    const padLen = decrypted[decrypted.length - 1];
+    if (padLen < 1 || padLen > 32) {
+      throw new Error(`Invalid PKCS#7 padding length: ${padLen}`);
+    }
+
+    // 验证填充是否正确
+    for (let i = 0; i < padLen; i++) {
+      if (decrypted[decrypted.length - 1 - i] !== padLen) {
+        throw new Error(`Invalid PKCS#7 padding at position ${i}`);
+      }
+    }
+
+    decrypted = decrypted.slice(0, decrypted.length - padLen);
+
+    return decrypted;
   }
 
   /**
@@ -390,7 +449,7 @@ export class WeComAiBotAdapter implements IBotPlatform {
     try {
       // 从 platformConfig 中读取欢迎语配置
       const welcomeConfig = this.config?.platformConfig.welcomeMessage;
-      
+
       // 如果未配置或禁用，则不发送
       if (!welcomeConfig || welcomeConfig.enabled === false) {
         this.logger.debug('Welcome message is disabled');
@@ -398,7 +457,7 @@ export class WeComAiBotAdapter implements IBotPlatform {
       }
 
       const welcomeContent = welcomeConfig.content || '您好！我是智能助手，有什么可以帮您的吗？';
-      
+
       // 使用 replyWelcome 方法发送欢迎语
       await this.client.replyWelcome(frame, {
         msgtype: 'text',
@@ -406,7 +465,7 @@ export class WeComAiBotAdapter implements IBotPlatform {
           content: welcomeContent,
         },
       });
-      
+
       this.logger.log('Welcome message sent successfully');
     } catch (error: any) {
       this.logger.error(`Failed to send welcome message: ${error.message}`);

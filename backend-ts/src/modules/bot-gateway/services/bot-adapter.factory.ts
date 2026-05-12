@@ -14,6 +14,8 @@ import { WeComAiBotAdapter } from '../adapters/wecom-aibot.adapter';
 // import { WeComAppBotAdapter } from '../adapters/wecom-app-bot.adapter';
 // TODO: 待实现微信个人号适配器（基于 iLink Bot API）
 // import { WeChatPersonalBotAdapter } from '../adapters/wechat-personal-bot.adapter';
+import { MockBotAdapter } from '../adapters/mock-bot.adapter';
+import { PlatformUtilsService } from './platform-utils.service';
 
 /**
  * 机器人适配器工厂
@@ -23,35 +25,37 @@ import { WeComAiBotAdapter } from '../adapters/wecom-aibot.adapter';
 @Injectable()
 export class BotAdapterFactory implements IBotAdapterFactory {
   private readonly logger = new Logger(BotAdapterFactory.name);
-  private adapterRegistry: Map<string, IBotPlatform> = new Map();
 
   constructor(
-    private qqAdapter: QQBotAdapter,
-    private larkAdapter: LarkBotAdapter,
-    private discordAdapter: DiscordBotAdapter,
-    private wecomAdapter: WeComAiBotAdapter,
-  ) {
-    // 注册内置适配器（使用注入的实例）
-    this.adapterRegistry.set('qq', qqAdapter);
-    this.adapterRegistry.set('lark', larkAdapter);
-    this.adapterRegistry.set('discord', discordAdapter);
-    // TODO: 微信公众号适配器（已注释，使用 OneBots）
-    // this.adapterRegistry.set('wechat', wechatAdapter);
-    this.adapterRegistry.set('wecom', wecomAdapter); // 企业微信智能机器人（WebSocket 长连接）
-    // this.adapterRegistry.set('wecom-app', wecomAppAdapter); // 企业微信应用消息适配器（已隐藏）
-    // TODO: 待实现微信个人号适配器
-    // this.adapterRegistry.set('wechat-personal', wechatPersonalAdapter);
-    // 未来扩展: this.adapterRegistry.set('telegram', telegramAdapter);
-  }
+    private platformUtils: PlatformUtilsService,
+  ) {}
 
   createAdapter(platform: string, config: BotConfig): IBotPlatform {
-    const adapter = this.adapterRegistry.get(platform);
-
-    if (!adapter) {
-      throw new Error(`Unsupported bot platform: ${platform}`);
+    this.logger.log(`Creating adapter instance for platform: ${platform}, bot: ${config.name}`);
+    
+    // 每次调用都创建新的适配器实例，支持同一平台多个机器人
+    switch (platform) {
+      case 'qq':
+        return new QQBotAdapter(this.platformUtils);
+      case 'lark':
+        return new LarkBotAdapter(this.platformUtils);
+      case 'discord':
+        return new DiscordBotAdapter(this.platformUtils);
+      case 'wecom':
+        return new WeComAiBotAdapter(this.platformUtils);
+      case 'mock':
+        return new MockBotAdapter();
+      // TODO: 微信公众号适配器（已注释，使用 OneBots）
+      // case 'wechat':
+      //   return new WeChatBotAdapter(this.platformUtils);
+      // TODO: 企业微信应用消息适配器（已隐藏）
+      // case 'wecom-app':
+      //   return new WeComAppBotAdapter(this.platformUtils);
+      // TODO: 待实现微信个人号适配器
+      // case 'wechat-personal':
+      //   return new WeChatPersonalBotAdapter(this.platformUtils);
+      default:
+        throw new Error(`Unsupported bot platform: ${platform}`);
     }
-
-    this.logger.log(`Creating adapter for platform: ${platform}`);
-    return adapter;
   }
 }

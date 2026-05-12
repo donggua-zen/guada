@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Logger } from '@nestjs/common';
 import { Observable, Subject } from 'rxjs';
 import {
   IBotPlatform,
@@ -24,7 +24,6 @@ import { Client, GatewayIntentBits, Message, Partials } from 'discord.js';
  * 
  * 注意: 不负责重连逻辑,重连由 BotInstanceManager 统一管理
  */
-@Injectable()
 export class DiscordBotAdapter implements IBotPlatform {
   private readonly logger = new Logger(DiscordBotAdapter.name);
   private client: Client;
