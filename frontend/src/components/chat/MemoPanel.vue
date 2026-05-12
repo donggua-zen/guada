@@ -31,7 +31,7 @@
           </div>
 
           <div class="text-center border-l border-r border-gray-100 dark:border-[#2a2c30]">
-            <div class="text-xs text-gray-500 dark:text-[#8b8d95] mb-0.5">对话</div>
+            <div class="text-xs text-gray-500 dark:text-[#8b8d95] mb-0.5">消息</div>
             <div class="text-sm font-semibold text-gray-800 dark:text-[#e8e9ed]">
               {{ tokenStats.messageCount }}
             </div>
