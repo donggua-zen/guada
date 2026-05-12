@@ -438,36 +438,63 @@ pm2 start dist/main.js --name guada-backend --node-args="--max-old-space-size=40
 **症状**：
 - AI 回复到一半突然停止
 - 前端显示 "连接断开"
+- 浏览器控制台显示 `504 Gateway Time-out`
 
 **原因**：
-- Nginx 缓冲导致超时
-- 代理超时设置过短
-- LLM API 响应缓慢
+- Nginx 代理超时设置过短
+- LLM API 响应缓慢或生成时间长
+- 复杂任务需要多轮工具调用，总时长超过超时限制
 
 **解决方案**：
 
-**Nginx 配置**：
+**1. 检查 Nginx 错误日志**：
+```bash
+# 查看是否有超时错误
+grep "upstream timed out" /var/log/nginx/guada-error.log
+
+# 查看最近的错误
+tail -n 50 /var/log/nginx/guada-error.log
+```
+
+**2. 调整 Nginx 流式 API 超时时间**：
+
+编辑 `/etc/nginx/sites-available/guada-ai`，找到流式 API 配置：
+
 ```nginx
-location /api/v1/ {
-    proxy_pass http://localhost:3000/api/v1/;
+location /api/v1/chat/completions {
+    proxy_pass http://localhost:3000/api/v1/chat/completions;
     
-    # 关键配置
-    proxy_buffering off;           # 禁用缓冲
-    proxy_cache_bypass $http_upgrade;
-    proxy_read_timeout 300s;       # 增加超时时间
-    proxy_send_timeout 300s;
+    # 根据实际需求调整超时时间
+    proxy_send_timeout 3600s;    # 1 小时
+    proxy_read_timeout 3600s;    # 1 小时
     
-    # WebSocket 支持
-    proxy_set_header Upgrade $http_upgrade;
-    proxy_set_header Connection "upgrade";
+    # 确保禁用缓冲
+    proxy_buffering off;
 }
 ```
 
-**后端配置**：
-```typescript
-// main.ts 中已启用 CORS
-app.enableCors();
+**3. 常见超时场景及建议配置**：
+
+| 场景 | 预计时长 | 建议超时 |
+|------|---------|----------|
+| 简单问答 | < 1 分钟 | 120s |
+| 中等长度对话 | 5-15 分钟 | 1800s (30分钟) |
+| 长文本生成 | 15-30 分钟 | 3600s (1小时) |
+| 复杂多轮工具调用 | 30-60 分钟 | 3600s (1小时) |
+| 超长对话/分析 | 1-2 小时 | 7200s (2小时) |
+
+**4. 重新加载 Nginx 配置**：
+```bash
+sudo nginx -t                    # 测试配置
+sudo systemctl reload nginx      # 重新加载
 ```
+
+**5. 如果仍然超时，考虑优化策略**：
+- 使用更快的 LLM 模型
+- 优化 Prompt，减少不必要的上下文
+- 启用上下文压缩功能
+- 将长任务拆分为多个短任务
+- 检查后端日志，确认是否有其他瓶颈
 
 ---
 

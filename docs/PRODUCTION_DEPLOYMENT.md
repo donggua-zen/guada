@@ -213,7 +213,7 @@ server {
         }
     }
 
-    # 后端 API 代理
+    # 后端 API 代理（普通 API）
     location /api/v1/ {
         proxy_pass http://localhost:3000/api/v1/;
         proxy_http_version 1.1;
@@ -228,14 +228,44 @@ server {
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $scheme;
         
-        # 超时设置（LLM 响应可能较慢）
+        # 超时设置（普通 API 请求）
         proxy_connect_timeout 60s;
-        proxy_send_timeout 300s;
-        proxy_read_timeout 300s;
+        proxy_send_timeout 120s;
+        proxy_read_timeout 120s;
         
         # 缓冲设置
         proxy_buffering off;
         proxy_cache_bypass $http_upgrade;
+    }
+
+    # 流式 API 代理（Agent 对话、SSE 流式输出）
+    # 为长时间运行的 LLM 对话设置更长的超时时间
+    location /api/v1/chat/completions {
+        proxy_pass http://localhost:3000/api/v1/chat/completions;
+        proxy_http_version 1.1;
+        
+        # WebSocket 支持（SSE 流式传输必需）
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+        
+        # 请求头转发
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        
+        # 超时设置（流式对话可能需要数分钟甚至数小时）
+        proxy_connect_timeout 60s;
+        proxy_send_timeout 3600s;    # 1 小时发送超时
+        proxy_read_timeout 3600s;    # 1 小时读取超时
+        
+        # 关键：禁用缓冲，确保实时流式传输
+        proxy_buffering off;
+        proxy_cache_bypass $http_upgrade;
+        
+        # 可选：针对超长对话可设置为更长时间
+        # proxy_send_timeout 7200s;  # 2 小时
+        # proxy_read_timeout 7200s;  # 2 小时
     }
 
     # 静态资源代理（上传文件）
@@ -255,6 +285,59 @@ server {
     }
 }
 ```
+
+### Nginx 超时配置说明
+
+**为什么要区分普通 API 和流式 API 的超时时间？**
+
+1. **普通 API 请求**（如登录、查询列表等）
+   - 通常响应时间在几秒内
+   - 设置较短的超时（120s）可以快速发现并处理异常
+   - 避免长时间占用连接资源
+
+2. **流式 API 请求**（Agent 对话、SSE 流式输出）
+   - LLM 生成可能需要数分钟甚至数小时
+   - 特别是复杂任务、多轮工具调用、长文本生成等场景
+   - 需要设置更长的超时时间（默认 1 小时，可根据需要调整）
+
+**超时参数说明**：
+
+- `proxy_connect_timeout`: 与后端建立连接的超时时间（60s 足够）
+- `proxy_send_timeout`: 向后端发送请求的超时时间
+- `proxy_read_timeout`: 从后端读取响应的超时时间（最关键）
+
+**如何根据实际需求调整超时时间？**
+
+```nginx
+# 示例 1: 中等长度对话（10-30 分钟）
+proxy_send_timeout 1800s;   # 30 分钟
+proxy_read_timeout 1800s;
+
+# 示例 2: 长时间对话（1-2 小时）
+proxy_send_timeout 3600s;   # 1 小时
+proxy_read_timeout 3600s;
+
+# 示例 3: 超长对话或复杂任务（2-4 小时）
+proxy_send_timeout 7200s;   # 2 小时
+proxy_read_timeout 7200s;
+
+# 示例 4: 极长时间任务（不推荐，建议优化业务逻辑）
+proxy_send_timeout 14400s;  # 4 小时
+proxy_read_timeout 14400s;
+```
+
+**注意事项**：
+
+1. **过长的超时时间会占用服务器资源**，建议根据实际业务需求合理设置
+2. **如果经常遇到超时**，考虑优化以下方面：
+   - 使用更快的 LLM 模型
+   - 优化 Prompt，减少不必要的上下文
+   - 启用上下文压缩功能
+   - 将长任务拆分为多个短任务
+3. **监控超时情况**：定期检查 Nginx 错误日志，分析超时原因
+   ```bash
+   grep "upstream timed out" /var/log/nginx/guada-error.log
+   ```
 
 ### 3. 启用配置并重启 Nginx
 

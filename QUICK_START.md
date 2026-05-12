@@ -51,6 +51,8 @@ npm run build:electron
 
 构建完成后，安装包位于 `release/` 目录。
 
+详细的 Electron 部署指南请查看：[Electron 部署文档](docs/ELECTRON_DEPLOYMENT.md)
+
 ## 常用命令
 
 | 命令 | 说明 |

@@ -240,6 +240,7 @@ npm run dev              # 开发模式启动 → http://localhost:5173
 
 ### 生产环境部署
 
+#### Web 版本
 详细的生产环境部署指南请查看：[生产环境部署文档](docs/PRODUCTION_DEPLOYMENT.md)
 
 主要步骤包括：
@@ -248,6 +249,16 @@ npm run dev              # 开发模式启动 → http://localhost:5173
 3. 使用 PM2 进程守护
 4. 配置 Nginx 反向代理
 5. 设置 HTTPS 证书
+
+#### Electron 版本
+详细的 Electron 部署指南请查看：[Electron 部署文档](docs/ELECTRON_DEPLOYMENT.md)
+
+主要内容包括：
+1. 开发环境搭建
+2. 生产构建与打包
+3. 数据持久化与备份
+4. 故障排查与日志查看
+5. 更新与升级
 
 ### 常见问题
 
