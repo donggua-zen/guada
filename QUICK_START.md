@@ -6,10 +6,13 @@
 ```bash
 # 终端 1: 启动后端
 cd backend-ts
+npm install              # 自动执行 prisma generate
+npm run db:seed:force    # 首次运行需要初始化数据库
 npm run start:dev
 
 # 终端 2: 启动前端
 cd frontend
+npm install
 npm run dev
 ```
 
@@ -17,9 +20,16 @@ npm run dev
 
 ### 生产构建
 ```bash
+# 后端
+cd backend-ts
+npm run build
+
+# 前端
 cd frontend
 npm run build
 ```
+
+**注意**: 生产环境需要配置 Nginx 反向代理，详见 [生产环境部署文档](docs/PRODUCTION_DEPLOYMENT.md)
 
 ## Electron 版本
 

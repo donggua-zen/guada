@@ -19,7 +19,8 @@
     "test:pdf-extract": "ts-node src/scripts/test-pdf-extract.ts",
     "test:wecom-adapter": "ts-node scripts/test-wecom-adapter.ts",
     "test:mock-bot": "ts-node scripts/test-mock-bot.ts",
-    "rebuild:electron": "node ../scripts/rebuild-native-electron.js"
+    "rebuild:electron": "node ../scripts/rebuild-native-electron.js",
+    "postinstall": "prisma generate"
   },
   "keywords": [],
   "author": "",

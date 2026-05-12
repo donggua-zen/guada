@@ -7,8 +7,10 @@ dist/
 *.tsbuildinfo
 
 # Environment variables
+.env
 .env.local
 .env.*.local
+# 注意：.env.example 应该提交到版本控制
 
 # Database
 data/qdrant_db/
