@@ -73,8 +73,8 @@ async function bootstrap() {
   app.useGlobalFilters(new AllExceptionsFilter());
   app.enableCors(); // Enable CORS for frontend integration
 
-  // 支持通过环境变量 PORT 指定端口，若未指定则使用 0 让系统自动分配可用端口
-  const port = process.env.PORT ? parseInt(process.env.PORT, 10) : 0;
+  // 支持通过环境变量 PORT 指定端口，若未指定则使用 3000
+  const port = process.env.PORT ? parseInt(process.env.PORT, 10) : 3000;
   await app.listen(port);
   const address = app.getHttpServer().address();
   const actualPort = typeof address === 'string' ? address.split(':').pop() : address.port;
