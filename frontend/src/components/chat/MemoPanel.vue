@@ -119,6 +119,15 @@
                   <el-button 
                     size="small" 
                     text 
+                    @click="handleViewHistory"
+                    class="text-blue-500 dark:text-blue-400 hover:text-blue-600 dark:hover:text-blue-300 hover:bg-blue-50 dark:hover:bg-blue-900/20"
+                  >
+                    <el-icon><List /></el-icon>
+                    <span class="ml-1">历史</span>
+                  </el-button>
+                  <el-button 
+                    size="small" 
+                    text 
                     @click="handleEdit(summaries[0])"
                     class="text-blue-500 dark:text-blue-400 hover:text-blue-600 dark:hover:text-blue-300 hover:bg-blue-50 dark:hover:bg-blue-900/20"
                   >
@@ -154,6 +163,103 @@
         </span>
       </template>
     </el-dialog>
+
+    <!-- 压缩历史记录对话框 -->
+    <el-dialog v-model="historyDialogVisible" title="压缩历史记录" width="800px" append-to-body>
+      <div class="max-h-[600px] overflow-y-auto">
+        <template v-if="summaries.length > 0">
+          <div v-for="(summary, index) in summaries" :key="summary.id" class="mb-4 last:mb-0">
+            <div class="rounded-lg border border-gray-200 dark:border-[#2a2c30] bg-white dark:bg-[#232428] p-4">
+              <!-- 头部：序号和时间 -->
+              <div class="flex items-center justify-between mb-3 pb-2 border-b border-gray-100 dark:border-[#2a2c30]">
+                <div class="flex items-center gap-2">
+                  <span class="text-sm font-semibold text-gray-700 dark:text-[#e8e9ed]">第 {{ summaries.length - index }} 次压缩</span>
+                  <el-tag size="small" :type="getStrategyTagType(summary.cleaningStrategy || 'unknown')">
+                    {{ getStrategyLabel(summary.cleaningStrategy || 'unknown') }}
+                  </el-tag>
+                </div>
+                <span class="text-xs text-gray-400 dark:text-[#8b8d95]">{{ formatTime(summary.createdAt) }}</span>
+              </div>
+
+              <!-- 摘要内容 -->
+              <div v-if="summary.summaryContent" class="mb-3">
+                <div class="text-xs text-gray-500 dark:text-[#8b8d95] mb-1">摘要内容：</div>
+                <div class="text-xs text-gray-700 dark:text-[#c8c9cd] whitespace-pre-wrap leading-relaxed bg-gray-50 dark:bg-[#1e1f23] rounded p-3 max-h-40 overflow-y-auto">
+                  {{ summary.summaryContent }}
+                </div>
+              </div>
+
+              <!-- 统计信息 -->
+              <div v-if="summary.compressionStats || summary.pruningMetadata" class="space-y-2">
+                <div class="text-xs text-gray-500 dark:text-[#8b8d95]">压缩统计：</div>
+                <div class="bg-gray-50 dark:bg-[#1e1f23] rounded p-3 space-y-2">
+                  <!-- Token 统计 -->
+                  <div v-if="summary.compressionStats?.beforeTokenCount && summary.compressionStats?.afterTokenCount" class="flex justify-between items-center text-xs">
+                    <span class="text-gray-600 dark:text-[#a8aab0]">Token 数量：</span>
+                    <span class="font-medium text-gray-800 dark:text-[#e8e9ed]">
+                      {{ formatNumber(summary.compressionStats.beforeTokenCount) }} → {{ formatNumber(summary.compressionStats.afterTokenCount) }}
+                      <span class="text-green-600 dark:text-green-500 ml-1">(-{{ formatNumber(summary.compressionStats.beforeTokenCount - summary.compressionStats.afterTokenCount) }})</span>
+                    </span>
+                  </div>
+                  
+                  <!-- 消息数量统计 -->
+                  <div v-if="summary.compressionStats?.beforeMessageCount && summary.compressionStats?.afterMessageCount" class="flex justify-between items-center text-xs">
+                    <span class="text-gray-600 dark:text-[#a8aab0]">消息数量：</span>
+                    <span class="font-medium text-gray-800 dark:text-[#e8e9ed]">
+                      {{ summary.compressionStats.beforeMessageCount }} → {{ summary.compressionStats.afterMessageCount }}
+                    </span>
+                  </div>
+
+                  <!-- 压缩率 -->
+                  <div v-if="summary.compressionStats?.beforeTokenCount && summary.compressionStats?.afterTokenCount" class="flex justify-between items-center text-xs">
+                    <span class="text-gray-600 dark:text-[#a8aab0]">压缩率：</span>
+                    <span class="font-medium text-green-600 dark:text-green-500">
+                      {{ ((1 - summary.compressionStats.afterTokenCount / summary.compressionStats.beforeTokenCount) * 100).toFixed(2) }}%
+                    </span>
+                  </div>
+
+                  <!-- 仅裁剪标记 -->
+                  <div v-if="summary.pruningMetadata" class="flex items-center gap-2 text-xs pt-1">
+                    <el-tag size="small" type="warning">仅裁剪模式</el-tag>
+                    <span class="text-gray-500 dark:text-[#8b8d95]">裁剪了 {{ Object.keys(summary.pruningMetadata).length }} 条消息</span>
+                  </div>
+                </div>
+              </div>
+
+              <!-- 操作按钮 -->
+              <div v-if="summary.summaryContent" class="flex justify-end gap-2 mt-3 pt-2 border-t border-gray-100 dark:border-[#2a2c30]">
+                <el-button 
+                  size="small" 
+                  text 
+                  @click="handleEditFromHistory(summary)"
+                  class="text-blue-500 dark:text-blue-400 hover:text-blue-600 dark:hover:text-blue-300"
+                >
+                  <el-icon><Edit /></el-icon>
+                  <span class="ml-1">编辑</span>
+                </el-button>
+                <el-button 
+                  size="small" 
+                  text 
+                  @click="handleDeleteFromHistory(summary)"
+                  class="text-red-500 dark:text-red-400 hover:text-red-600 dark:hover:text-red-300"
+                >
+                  <el-icon><Delete /></el-icon>
+                  <span class="ml-1">删除</span>
+                </el-button>
+              </div>
+            </div>
+          </div>
+        </template>
+        <template v-else>
+          <el-empty description="暂无压缩记录" :image-size="80" />
+        </template>
+      </div>
+      <template #footer>
+        <span class="dialog-footer">
+          <el-button @click="historyDialogVisible = false">关闭</el-button>
+        </span>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -163,7 +269,7 @@ import { useDebounceFn } from '@vueuse/core';
 import { useSessionStore } from '@/stores/session';
 import { apiService } from '@/services/ApiService';
 import { usePopup } from '@/composables/usePopup';
-import { Close, Edit, Delete, Refresh, MagicStick, QuestionFilled } from '@element-plus/icons-vue';
+import { Close, Edit, Delete, Refresh, MagicStick, QuestionFilled, List } from '@element-plus/icons-vue';
 import dayjs from 'dayjs';
 
 const { confirm, toast } = usePopup();
@@ -179,6 +285,7 @@ const props = defineProps<{
 
 const summaries = ref<any[]>([]);
 const editDialogVisible = ref(false);
+const historyDialogVisible = ref(false);
 const editingSummary = ref({ id: '', content: '' });
 const tokenStats = ref<{
   usedTokens: number
@@ -371,6 +478,38 @@ async function handleCompress() {
     }
   } finally {
     sessionStore.setSessionIsCompressing(props.sessionId, false);
+  }
+}
+
+// 查看压缩历史
+function handleViewHistory() {
+  historyDialogVisible.value = true;
+}
+
+// 从历史记录中编辑摘要
+function handleEditFromHistory(summary: any) {
+  editingSummary.value = {
+    id: summary.id,
+    content: summary.summaryContent,
+  };
+  editDialogVisible.value = true;
+}
+
+// 从历史记录中删除摘要
+async function handleDeleteFromHistory(summary: any) {
+  if (!(await confirm('确认删除', '确定要删除这条记忆摘要吗？此操作不可撤销。'))) {
+    return;
+  }
+
+  try {
+    await apiService.deleteSummary(summary.id);
+    toast.success('摘要删除成功');
+    await loadSummaries();
+    // 删除摘要后，上下文窗口会释放空间，需要同步刷新 Token 统计
+    await loadTokenStats();
+  } catch (error: any) {
+    console.error('删除摘要失败:', error);
+    toast.error('删除摘要失败');
   }
 }
 
