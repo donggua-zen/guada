@@ -1,4 +1,10 @@
-import { Injectable, Logger, OnModuleInit } from "@nestjs/common";
+import {
+  HttpException,
+  HttpStatus,
+  Injectable,
+  Logger,
+  OnModuleInit,
+} from "@nestjs/common";
 import * as crypto from "crypto";
 import * as fs from "fs";
 import * as path from "path";
@@ -49,6 +55,30 @@ export class FileService implements OnModuleInit {
     private urlService: UrlService,
   ) { }
 
+  private async assertSessionOwner(sessionId: string, userId: string) {
+    const session = await this.prisma.session.findFirst({
+      where: { id: sessionId, userId },
+      select: { id: true },
+    });
+    if (!session) {
+      throw new HttpException("Session not found", HttpStatus.NOT_FOUND);
+    }
+  }
+
+  private async assertFileOwner(file: any, userId: string) {
+    if (file.uploadUserId === userId) return;
+
+    if (file.sessionId) {
+      const session = await this.prisma.session.findFirst({
+        where: { id: file.sessionId, userId },
+        select: { id: true },
+      });
+      if (session) return;
+    }
+
+    throw new HttpException("File not found", HttpStatus.NOT_FOUND);
+  }
+
   async onModuleInit() {
     await this.cleanupOrphanFiles();
   }
@@ -58,6 +88,8 @@ export class FileService implements OnModuleInit {
    */
   async uploadFile(sessionId: string, file: any, userId: string) {
     try {
+      await this.assertSessionOwner(sessionId, userId);
+
       // 1. 验证文件
       this.validateFile(file);
 
@@ -382,16 +414,18 @@ export class FileService implements OnModuleInit {
     // 从消息中获取目标会话 ID
     const message = await this.prisma.message.findUnique({
       where: { id: messageId },
+      include: { session: { select: { userId: true } } },
     });
 
-    if (!message) {
-      throw new Error("Message not found");
+    if (!message || message.session.userId !== userId) {
+      throw new HttpException("Message not found", HttpStatus.NOT_FOUND);
     }
 
     const originalFile = await this.fileRepo.findById(fileId);
     if (!originalFile) {
-      throw new Error("File not found");
+      throw new HttpException("File not found", HttpStatus.NOT_FOUND);
     }
+    await this.assertFileOwner(originalFile, userId);
 
     // 创建新的文件记录
     const newFile = await this.fileRepo.create({
