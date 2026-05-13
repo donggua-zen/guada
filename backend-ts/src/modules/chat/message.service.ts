@@ -23,15 +23,48 @@ export class MessageService {
     private fileService: FileService,
   ) { }
 
+  private async assertSessionOwner(sessionId: string, userId: string) {
+    const session = await this.sessionRepo.findById(sessionId);
+    if (!session || session.userId !== userId) {
+      throw new HttpException("Session not found", HttpStatus.NOT_FOUND);
+    }
+    return session;
+  }
+
+  private assertMessageOwner(message: any, userId: string) {
+    if (!message || message.session?.userId !== userId) {
+      throw new HttpException("Message not found", HttpStatus.NOT_FOUND);
+    }
+  }
+
+  private async assertFilesBelongToSession(
+    fileIds: string[],
+    sessionId: string,
+    userId: string,
+  ) {
+    const ids = [...new Set(fileIds.filter(Boolean))];
+    if (ids.length === 0) return;
+
+    const files = await this.contentRepo.getPrismaClient().file.findMany({
+      where: { id: { in: ids } },
+      select: { id: true, sessionId: true, uploadUserId: true },
+    });
+
+    const allowed = files.filter(
+      (file) =>
+        file.sessionId === sessionId &&
+        (!file.uploadUserId || file.uploadUserId === userId),
+    );
+    if (allowed.length !== ids.length) {
+      throw new HttpException("File not found", HttpStatus.NOT_FOUND);
+    }
+  }
+
   /**
    * 获取会话的消息列表
    */
-  async getMessages(sessionId: string) {
-    // 验证会话存在
-    const session = await this.sessionRepo.findById(sessionId);
-    if (!session) {
-      throw new HttpException("Session not found", HttpStatus.NOT_FOUND);
-    }
+  async getMessages(sessionId: string, userId: string) {
+    await this.assertSessionOwner(sessionId, userId);
 
     const messages = await this.messageRepo.findBySessionId(sessionId, {
       withContents: true,
@@ -69,14 +102,15 @@ export class MessageService {
     role: string,
     content: string,
     files: any[] = [],
-    replaceMessageId?: string,
-    knowledgeBaseIds?: string[],
+    replaceMessageId: string | undefined,
+    knowledgeBaseIds: string[] | undefined,
+    userId: string,
   ) {
-    // 验证会话存在
-    const session = await this.sessionRepo.findById(sessionId);
-    if (!session) {
-      throw new HttpException("Session not found", HttpStatus.NOT_FOUND);
+    if (!userId) {
+      throw new HttpException("Unauthorized", HttpStatus.UNAUTHORIZED);
     }
+    await this.assertSessionOwner(sessionId, userId);
+    await this.assertFilesBelongToSession(files, sessionId, userId);
 
     let messageId: string;
     let turnsId: string;
@@ -262,13 +296,11 @@ export class MessageService {
    * @param data 包含要更新的字段的对象
    * @returns 更新后的消息对象
    */
-  async updateMessage(messageId: string, data: any) {
+  async updateMessage(messageId: string, data: any, userId: string) {
     // 获取消息及其当前内容版本（与 Python 后端一致）
     const message =
       await this.messageRepo.findByIdWithCurrentContent(messageId);
-    if (!message) {
-      throw new HttpException("Message not found", HttpStatus.NOT_FOUND);
-    }
+    this.assertMessageOwner(message, userId);
 
     // 分离消息字段和内容字段（与 Python 后端逻辑一致）
     const messageFields: any = {};
@@ -374,11 +406,9 @@ export class MessageService {
   /**
    * 删除消息
    */
-  async deleteMessage(messageId: string) {
+  async deleteMessage(messageId: string, userId: string) {
     const message = await this.messageRepo.findById(messageId);
-    if (!message) {
-      throw new HttpException("Message not found", HttpStatus.NOT_FOUND);
-    }
+    this.assertMessageOwner(message, userId);
 
     // 执行删除
     await this.deleteMessageInternal(messageId);
@@ -394,11 +424,8 @@ export class MessageService {
   /**
    * 清空会话的所有消息
    */
-  async deleteMessagesBySessionId(sessionId: string) {
-    const session = await this.sessionRepo.findById(sessionId);
-    if (!session) {
-      throw new HttpException("Session not found", HttpStatus.NOT_FOUND);
-    }
+  async deleteMessagesBySessionId(sessionId: string, userId: string) {
+    await this.assertSessionOwner(sessionId, userId);
 
     // 1. 先获取该会话下的所有消息 ID
     const messages = await this.messageRepo.findBySessionId(sessionId, {
@@ -421,11 +448,13 @@ export class MessageService {
   /**
    * 设置消息的当前活动内容版本
    */
-  async setMessageCurrentContent(messageId: string, contentId: string) {
+  async setMessageCurrentContent(
+    messageId: string,
+    contentId: string,
+    userId: string,
+  ) {
     const message = await this.messageRepo.findById(messageId);
-    if (!message) {
-      throw new HttpException("Message not found", HttpStatus.NOT_FOUND);
-    }
+    this.assertMessageOwner(message, userId);
 
     const content = await this.contentRepo.findById(contentId);
     if (!content) {
@@ -450,11 +479,8 @@ export class MessageService {
   /**
    * 批量导入消息
    */
-  async importMessages(sessionId: string, messages: any[]) {
-    const session = await this.sessionRepo.findById(sessionId);
-    if (!session) {
-      throw new HttpException("Session not found", HttpStatus.NOT_FOUND);
-    }
+  async importMessages(sessionId: string, messages: any[], userId: string) {
+    await this.assertSessionOwner(sessionId, userId);
 
     // 验证消息格式并转换
     const formattedMessages = messages.map((msg) => ({

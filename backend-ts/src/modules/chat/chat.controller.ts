@@ -5,20 +5,23 @@ import {
   Sse,
   MessageEvent,
   UseGuards,
-  Param,
   Res,
   Req,
 } from "@nestjs/common";
 import { AuthGuard } from "../auth/auth.guard";
 import { CurrentUser } from "../auth/current-user.decorator";
 import { AgentEngine } from "./agent-engine.service";
+import { SessionService } from "./session.service";
 import { Observable } from "rxjs";
 import { Response, Request } from "express";
 
 @Controller("chat")
 @UseGuards(AuthGuard)
 export class ChatController {
-  constructor(private agentEngine: AgentEngine) {}
+  constructor(
+    private agentEngine: AgentEngine,
+    private sessionService: SessionService,
+  ) {}
 
   @Sse("completions")
   async completions(
@@ -38,9 +41,7 @@ export class ChatController {
       regenerationMode = "overwrite", // 默认 overwrite 模式
       assistantMessageId,
     } = body;
-
-    // 验证会话归属权
-    // TODO: 添加会话归属权验证逻辑
+    await this.sessionService.getSessionById(sessionId, user.id);
 
     // 创建 AbortController 用于中断 LLM 请求
     const abortController = new AbortController();
@@ -124,6 +125,8 @@ export class ChatController {
       assistantMessageId,
       regenerationMode = "overwrite", // 默认 overwrite 模式
     } = body;
+
+    await this.sessionService.getSessionById(sessionId, user.id);
 
     // 设置 SSE 响应头
     res.setHeader("Content-Type", "text/event-stream");
