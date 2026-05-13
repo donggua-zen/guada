@@ -84,8 +84,7 @@ export class AgentEngine {
     }
 
     try {
-
-      const session = isSessionObject ? sessionIdOrSession : await this.sessionRepo.findById(sessionId);
+      let session = isSessionObject ? sessionIdOrSession : await this.sessionRepo.findById(sessionId);
 
       // 如果未传入 session 对象，则查询数据库
       if (!session) {
