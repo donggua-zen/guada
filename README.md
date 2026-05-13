@@ -10,6 +10,13 @@
 
 ---
 
+## 项目仓库
+
+- **GitHub**: https://github.com/donggua-zen/guada
+- **Gitee**: https://gitee.com/zhendongdong/guada_ai
+
+---
+
 遇到问题、意见建议、技术交流请加QQ群：1047993501
 
 ## 目录
