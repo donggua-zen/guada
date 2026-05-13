@@ -1,4 +1,4 @@
-import { Injectable, Logger } from "@nestjs/common";
+import { HttpException, HttpStatus, Injectable, Logger } from "@nestjs/common";
 import { SessionRepository } from "../../common/database/session.repository";
 import { CharacterRepository } from "../../common/database/character.repository";
 import { ModelRepository } from "../../common/database/model.repository";
@@ -70,7 +70,7 @@ export class SessionService {
 
     // 如果提供了 userId，验证归属权
     if (userId && (!session || session.userId !== userId)) {
-      throw new Error("Session not found or unauthorized");
+      throw new HttpException("Session not found", HttpStatus.NOT_FOUND);
     }
 
     // 转换 URL（使用 character 的 avatarUrl）

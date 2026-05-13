@@ -26,7 +26,7 @@ export class MessagesController {
     @Param("sessionId") sessionId: string,
     @CurrentUser() user: any,
   ) {
-    return this.messageService.getMessages(sessionId);
+    return this.messageService.getMessages(sessionId, user.id);
   }
 
   /**
@@ -52,6 +52,7 @@ export class MessagesController {
       body.files || [],
       body.replaceMessageId, // 驼峰式
       body.knowledgeBaseIds,
+      user.id,
     );
   }
 
@@ -64,7 +65,7 @@ export class MessagesController {
     @Body() body: any,
     @CurrentUser() user: any,
   ) {
-    return this.messageService.updateMessage(messageId, body);
+    return this.messageService.updateMessage(messageId, body, user.id);
   }
 
   /**
@@ -75,7 +76,7 @@ export class MessagesController {
     @Param("messageId") messageId: string,
     @CurrentUser() user: any,
   ) {
-    return this.messageService.deleteMessage(messageId);
+    return this.messageService.deleteMessage(messageId, user.id);
   }
 
   /**
@@ -86,7 +87,7 @@ export class MessagesController {
     @Param("sessionId") sessionId: string,
     @CurrentUser() user: any,
   ) {
-    return this.messageService.deleteMessagesBySessionId(sessionId);
+    return this.messageService.deleteMessagesBySessionId(sessionId, user.id);
   }
 
   /**
@@ -101,6 +102,7 @@ export class MessagesController {
     return this.messageService.setMessageCurrentContent(
       body.message_id,
       contentId,
+      user.id,
     );
   }
 
@@ -113,6 +115,6 @@ export class MessagesController {
     @Body() messages: any[],
     @CurrentUser() user: any,
   ) {
-    return this.messageService.importMessages(sessionId, messages);
+    return this.messageService.importMessages(sessionId, messages, user.id);
   }
 }

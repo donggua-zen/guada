@@ -5,20 +5,23 @@ import {
   Sse,
   MessageEvent,
   UseGuards,
-  Param,
   Res,
   Req,
 } from "@nestjs/common";
 import { AuthGuard } from "../auth/auth.guard";
 import { CurrentUser } from "../auth/current-user.decorator";
 import { AgentEngine } from "./agent-engine.service";
+import { SessionService } from "./session.service";
 import { Observable } from "rxjs";
 import { Response, Request } from "express";
 
 @Controller("chat")
 @UseGuards(AuthGuard)
 export class ChatController {
-  constructor(private agentEngine: AgentEngine) {}
+  constructor(
+    private agentEngine: AgentEngine,
+    private sessionService: SessionService,
+  ) {}
 
   @Sse("completions")
   async completions(
@@ -38,9 +41,7 @@ export class ChatController {
       regenerationMode = "overwrite", // 默认 overwrite 模式
       assistantMessageId,
     } = body;
-
-    // 验证会话归属权
-    // TODO: 添加会话归属权验证逻辑
+    const session = await this.sessionService.getSessionById(sessionId, user.id);
 
     // 创建 AbortController 用于中断 LLM 请求
     const abortController = new AbortController();
@@ -56,7 +57,7 @@ export class ChatController {
     // 将 AgentService 的 AsyncGenerator 转换为 RxJS Observable
     return new Observable((observer) => {
       const iterator = this.agentEngine.completions(
-        sessionId,
+        session,
         messageId,
         regenerationMode, // 传递再生模式
         assistantMessageId, // 传递现有助手消息 ID
@@ -125,6 +126,8 @@ export class ChatController {
       regenerationMode = "overwrite", // 默认 overwrite 模式
     } = body;
 
+    const session = await this.sessionService.getSessionById(sessionId, user.id);
+
     // 设置 SSE 响应头
     res.setHeader("Content-Type", "text/event-stream");
     res.setHeader("Cache-Control", "no-cache");
@@ -150,7 +153,7 @@ export class ChatController {
 
     try {
       const iterator = this.agentEngine.completions(
-        sessionId,
+        session,
         messageId || "", // 传递 messageId
         regenerationMode, // 传递再生模式
         assistantMessageId, // 传递现有助手消息 ID
