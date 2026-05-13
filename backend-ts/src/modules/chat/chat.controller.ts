@@ -41,7 +41,7 @@ export class ChatController {
       regenerationMode = "overwrite", // 默认 overwrite 模式
       assistantMessageId,
     } = body;
-    await this.sessionService.getSessionById(sessionId, user.id);
+    const session = await this.sessionService.getSessionById(sessionId, user.id);
 
     // 创建 AbortController 用于中断 LLM 请求
     const abortController = new AbortController();
@@ -57,7 +57,7 @@ export class ChatController {
     // 将 AgentService 的 AsyncGenerator 转换为 RxJS Observable
     return new Observable((observer) => {
       const iterator = this.agentEngine.completions(
-        sessionId,
+        session,
         messageId,
         regenerationMode, // 传递再生模式
         assistantMessageId, // 传递现有助手消息 ID
@@ -126,7 +126,7 @@ export class ChatController {
       regenerationMode = "overwrite", // 默认 overwrite 模式
     } = body;
 
-    await this.sessionService.getSessionById(sessionId, user.id);
+    const session = await this.sessionService.getSessionById(sessionId, user.id);
 
     // 设置 SSE 响应头
     res.setHeader("Content-Type", "text/event-stream");
@@ -153,7 +153,7 @@ export class ChatController {
 
     try {
       const iterator = this.agentEngine.completions(
-        sessionId,
+        session,
         messageId || "", // 传递 messageId
         regenerationMode, // 传递再生模式
         assistantMessageId, // 传递现有助手消息 ID

@@ -425,7 +425,11 @@ export class FileService implements OnModuleInit {
     if (!originalFile) {
       throw new HttpException("File not found", HttpStatus.NOT_FOUND);
     }
-    await this.assertFileOwner(originalFile, userId);
+
+    // 简化校验：只要文件属于该消息所在的会话，即视为拥有操作权限
+    if (originalFile.sessionId !== message.sessionId) {
+      throw new HttpException("File does not belong to this session", HttpStatus.FORBIDDEN);
+    }
 
     // 创建新的文件记录
     const newFile = await this.fileRepo.create({
