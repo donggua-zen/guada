@@ -7,6 +7,7 @@ import { SkillDiscoveryResult } from '../interfaces/index';
 import { SkillLoaderService } from './skill-loader.service';
 import { SkillRegistry } from './skill-registry.service';
 import { SkillMetadataValidator } from '../common/skill-metadata.validator';
+import { WorkspaceService } from '../../../common/services/workspace.service';
 
 @Injectable()
 export class SkillDiscoveryService {
@@ -17,9 +18,13 @@ export class SkillDiscoveryService {
     private configService: ConfigService,
     private loader: SkillLoaderService,
     private registry: SkillRegistry,
+    private workspaceService: WorkspaceService,
   ) {
     this.skillsDir = this.configService.get<string>('SKILLS_DIR') || 
                      path.join(process.cwd(), 'skills');
+    
+    // 注册 Skills 目录为安全写入路径
+    this.workspaceService.registerSafeWritePath(this.skillsDir);
   }
 
   /**

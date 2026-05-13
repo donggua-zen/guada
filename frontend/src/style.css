@@ -434,7 +434,7 @@ html.dark .el-overlay::before {
 /* 4. 弹窗主体样式 */
 .el-dialog {
     margin: 0 auto !important;
-    max-height: 85vh !important;
+    max-height: 85vh;
     border-radius: 16px !important;
     background-color: var(--color-bg) !important;
     box-shadow: 0 0 20px rgba(0, 0, 0, 0.2) !important;
@@ -470,6 +470,11 @@ html.dark .el-dialog {
 .el-dialog .el-dialog__body::-webkit-scrollbar-thumb {
     background-color: rgba(0, 0, 0, 0.2);
     border-radius: 3px;
+}
+
+.el-dialog .el-dialog__body::-webkit-scrollbar-thumb:hover {
+    background-color: rgba(0, 0, 0, 0.3);
+    cursor: pointer;
 }
 
 /* 5. 紧凑内边距 */
