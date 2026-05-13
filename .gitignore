@@ -34,3 +34,4 @@ onebots-temp/
 .lingma/
 .vscode/
 log.txt
+*.code-workspace
