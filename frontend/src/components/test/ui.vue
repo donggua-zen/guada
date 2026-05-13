@@ -67,7 +67,7 @@ import ElSliderOptional from '../ui/ElSliderOptional.vue'
 const value1 = ref(50);
 const value2 = ref(50);
 
-import { UiButton } from '../ui';
+import UiButton from '../ui/UiButton.vue';
 // 图标导入
 import {
     SettingsTwotone,
