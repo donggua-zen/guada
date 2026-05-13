@@ -165,10 +165,9 @@
     </el-dialog>
 
     <!-- 压缩历史记录对话框 -->
-    <el-dialog v-model="historyDialogVisible" title="压缩历史记录" width="800px" append-to-body>
-      <div class="max-h-[600px] overflow-y-auto">
-        <template v-if="summaries.length > 0">
-          <div v-for="(summary, index) in summaries" :key="summary.id" class="mb-4 last:mb-0">
+    <el-dialog v-model="historyDialogVisible" title="压缩历史记录" width="800px" max-height="600px" append-to-body>
+      <template v-if="summaries.length > 0">
+        <div v-for="(summary, index) in summaries" :key="summary.id" class="mb-4 last:mb-0">
             <div class="rounded-lg border border-gray-200 dark:border-[#2a2c30] bg-white dark:bg-[#232428] p-4">
               <!-- 头部：序号和时间 -->
               <div class="flex items-center justify-between mb-3 pb-2 border-b border-gray-100 dark:border-[#2a2c30]">
@@ -218,10 +217,10 @@
                     </span>
                   </div>
 
-                  <!-- 仅裁剪标记 -->
-                  <div v-if="summary.pruningMetadata" class="flex items-center gap-2 text-xs pt-1">
-                    <el-tag size="small" type="warning">仅裁剪模式</el-tag>
-                    <span class="text-gray-500 dark:text-[#8b8d95]">裁剪了 {{ Object.keys(summary.pruningMetadata).length }} 条消息</span>
+                  <!-- 裁剪数量（只在没有摘要时显示） -->
+                  <div v-if="summary.pruningMetadata" class="flex justify-between items-center gap-2 text-xs pt-1">
+                    <span class="text-gray-600 dark:text-[#a8aab0]">裁剪数量：</span>
+                    <span class="text-gray-500 dark:text-[#8b8d95]">{{ Object.keys(summary.pruningMetadata).length }} 条</span>
                   </div>
                 </div>
               </div>
@@ -253,7 +252,6 @@
         <template v-else>
           <el-empty description="暂无压缩记录" :image-size="80" />
         </template>
-      </div>
       <template #footer>
         <span class="dialog-footer">
           <el-button @click="historyDialogVisible = false">关闭</el-button>

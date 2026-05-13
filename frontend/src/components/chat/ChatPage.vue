@@ -22,7 +22,7 @@
           <template v-if="sessions.length > 0 && currentSession">
             <!-- 聊天头部 -->
             <ChatHeader :sidebar-visible="sidebarVisible" :title="currentSession?.title || ''" :has-more-options="true"
-              :show-memo-button="true" @toggle-sidebar="sidebarVisible = !sidebarVisible"
+              :show-memo-button="true" :session-id="currentSession?.id" @toggle-sidebar="sidebarVisible = !sidebarVisible"
               @select-more-option="handleMoreSelect" @toggle-memo="memoPanelVisible = !memoPanelVisible" />
             <ChatPanel ref="chatPanelRef" v-model:session="currentSession" v-model:sidebar-visible="sidebarVisible"
               @save-settings="handleSaveSessionSettings" />

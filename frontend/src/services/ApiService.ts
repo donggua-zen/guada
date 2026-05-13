@@ -355,6 +355,13 @@ class ApiService implements IApiService {
     return await this._request(`/sessions/${sessionId}/token-stats`)
   }
 
+  /**
+   * 获取会话的工作目录路径
+   */
+  async getWorkspacePath(sessionId: string): Promise<{ workspacePath: string }> {
+    return await this._request(`/sessions/${sessionId}/workspace-path`)
+  }
+
   // ========== 消息管理 ==========
   async deleteMessage(messageId: string): Promise<{ success: boolean }> {
     return await this._request(`/messages/${messageId}`, { method: 'DELETE' })

@@ -12,11 +12,15 @@ import {
 import { AuthGuard } from "../auth/auth.guard";
 import { CurrentUser } from "../auth/current-user.decorator";
 import { SessionService } from "./session.service";
+import { WorkspaceService } from "../../common/services/workspace.service";
 
 @Controller()
 @UseGuards(AuthGuard)
 export class SessionsController {
-  constructor(private readonly sessionService: SessionService) { }
+  constructor(
+    private readonly sessionService: SessionService,
+    private readonly workspaceService: WorkspaceService
+  ) { }
 
   @Get("sessions")
   async getSessions(
@@ -113,5 +117,18 @@ export class SessionsController {
     @CurrentUser() user: any,
   ) {
     return this.sessionService.compressSession(id, user.id);
+  }
+
+  @Get("sessions/:id/workspace-path")
+  async getWorkspacePath(@Param("id") id: string, @CurrentUser() user: any) {
+    // 验证会话归属权
+    const session = await this.sessionService.getSessionById(id, user.id);
+    if (!session) {
+      throw new Error("Session not found or unauthorized");
+    }
+
+    // 获取工作目录路径
+    const workspacePath = this.workspaceService.getWorkspaceDir(id);
+    return { workspacePath };
   }
 }

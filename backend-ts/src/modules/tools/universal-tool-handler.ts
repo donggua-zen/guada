@@ -112,7 +112,8 @@ export class UniversalToolHandler {
         const paramList = Object.entries(params)
           .map(([key, value]: [string, any]) => {
             const isRequired = required.includes(key) ? "（必填）" : "（可选）";
-            return `  - ${key}: ${value.description || "无描述"} ${isRequired}`;
+            const defaultValue = value.default !== undefined ? ` 默认值: ${value.default}` : "";
+            return `  - ${key}: ${value.description || "无描述"} ${isRequired}${defaultValue}`;
           })
           .join("\n");
     
