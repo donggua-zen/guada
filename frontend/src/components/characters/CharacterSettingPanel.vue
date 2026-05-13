@@ -563,7 +563,8 @@ import { apiService } from '../../services/ApiService'
 
 
 import { usePopup } from '../../composables/usePopup'
-import { AvatarPreview, ElSliderOptional } from '../ui/'
+import AvatarPreview from '../ui/AvatarPreview.vue'
+import ElSliderOptional from '../ui/ElSliderOptional.vue'
 
 const { toast, notify } = usePopup()
 

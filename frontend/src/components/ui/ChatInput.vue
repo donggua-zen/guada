@@ -400,7 +400,7 @@ import { ElIcon, ElButton, ElDialog, ElTabs, ElTabPane, ElInput, ElForm, ElFormI
 import FileItem from './FileItem.vue';
 import ScrollContainer from './ScrollContainer.vue';
 import Avatar from './Avatar.vue';
-import { ElSliderOptional } from '../ui/';
+import ElSliderOptional from './ElSliderOptional.vue';
 import { getModelDisplayName, getModelAvatarPath } from '@/utils/modelUtils';
 import { OpenAI } from "@/components/icons";
 import {
