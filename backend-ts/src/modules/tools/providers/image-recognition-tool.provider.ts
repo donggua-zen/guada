@@ -43,15 +43,29 @@ export class ImageRecognitionToolProvider implements IToolProvider {
           required: ["image_id"],
         },
       },
+      {
+        name: "recognize_by_path",
+        description: "根据图片文件路径识别图片内容并返回详细的文本描述。当用户提供图片的绝对路径或相对路径时使用此工具。",
+        parameters: {
+          type: "object",
+          properties: {
+            image_path: {
+              type: "string",
+              description: "要识别的图片文件路径（绝对路径或相对于项目根目录的相对路径）",
+            },
+          },
+          required: ["image_path"],
+        },
+      },
     ];
-    
+
     if (enabled === false) return [];
-    
+
     // 如果是数组，只返回数组中指定的工具
     if (Array.isArray(enabled)) {
       return toolsConfig.filter(tool => enabled.includes(tool.name));
     }
-    
+
     // true 或未指定：返回所有工具
     return toolsConfig;
   }
@@ -60,19 +74,25 @@ export class ImageRecognitionToolProvider implements IToolProvider {
     if (request.name === "recognize") {
       return this.handleRecognize(request);
     }
+    if (request.name === "recognize_by_path") {
+      return this.handleRecognizeByPath(request);
+    }
 
     throw new Error(`未知工具：${request.name}`);
   }
 
   async getPrompt(context?: Record<string, any>): Promise<string> {
-    return `【图片识别工具使用说明】
-你可以使用 \`recognize\` 工具来识别用户上传的图片内容。
-当用户提到“这张图”、“图片里有什么”或上传了图片并询问相关内容时，请调用此工具。
-工具会返回图片的详细文本描述，你可以基于该描述回答用户的问题。`;
+    return `# 图片识别工具使用说明\n
+你可以使用以下工具来识别图片内容：
+
+1. \`recognize\` - 通过图片文件 ID 识别图片。当用户提到"这张图"、"图片里有什么"或上传了图片并询问相关内容时，请调用此工具。
+2. \`recognize_by_path\` - 通过图片文件路径识别图片。当用户提供图片的绝对路径或相对路径时使用此工具。
+
+工具会返回图片的详细文本描述，你可以基于该描述回答用户的问题。如果你能看到图片而不是图片ID或路径，忽略此工具。`;
   }
 
   async getBriefDescription(context?: Record<string, any>): Promise<string> {
-    return "识别用户上传的图片内容并返回详细描述";
+    return "根据图片ID或图片路径识别图片内容并返回详细描述。如果能直接看到图片而不是图片ID或路径，请忽略此工具。";
   }
 
   getMetadata(context?: Record<string, any>): ToolProviderMetadata {
@@ -81,7 +101,7 @@ export class ImageRecognitionToolProvider implements IToolProvider {
       displayName: "图像识别",
       description: "图片内容识别工具",
       isMcp: false,
-      loadMode: "eager",
+      loadMode: "lazy",
     };
   }
 
@@ -98,6 +118,38 @@ export class ImageRecognitionToolProvider implements IToolProvider {
     }
 
     const physicalPath = this.uploadPathService.toPhysicalPath(file.url);
+    return this.recognizeImage(physicalPath);
+  }
+
+  private async handleRecognizeByPath(request: ToolCallRequest): Promise<string> {
+    const args = request.arguments;
+    const { image_path } = args;
+    if (!image_path) {
+      throw new Error("缺少参数：image_path");
+    }
+
+    // 判断是绝对路径还是相对路径
+    let physicalPath = image_path;
+    if (!path.isAbsolute(image_path)) {
+      // 如果是相对路径，转换为绝对路径（相对于项目根目录）
+      physicalPath = path.resolve(process.cwd(), image_path);
+    }
+
+    if (!fs.existsSync(physicalPath)) {
+      throw new Error(`图片文件不存在：${physicalPath}`);
+    }
+
+    // 验证文件类型是否为图片
+    const ext = path.extname(physicalPath).toLowerCase();
+    const imageExts = ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.bmp', '.svg'];
+    if (!imageExts.includes(ext)) {
+      throw new Error(`不支持的图片格式：${ext}，支持的格式：${imageExts.join(', ')}`);
+    }
+
+    return this.recognizeImage(physicalPath);
+  }
+
+  private async recognizeImage(physicalPath: string): Promise<string> {
     if (!fs.existsSync(physicalPath)) {
       throw new Error(`图片文件不存在：${physicalPath}`);
     }
@@ -110,6 +162,8 @@ export class ImageRecognitionToolProvider implements IToolProvider {
     if (ext === ".png") mimeType = "image/png";
     else if (ext === ".gif") mimeType = "image/gif";
     else if (ext === ".webp") mimeType = "image/webp";
+    else if (ext === ".bmp") mimeType = "image/bmp";
+    else if (ext === ".svg") mimeType = "image/svg+xml";
 
     const dataUri = `data:${mimeType};base64,${base64Data}`;
 
