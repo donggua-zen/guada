@@ -302,8 +302,8 @@ export class QQBot extends EventEmitter {
    */
   private async connectWebSocket(): Promise<void> {
     try {
-      // 获取Gateway URL
-      const gatewayUrl = await this.getGatewayUrl();
+      // 获取Gateway URL(带重试机制)
+      const gatewayUrl = await this.getGatewayUrlWithRetry();
 
       // 创建WebSocket连接
       this.ws = new WebSocket(gatewayUrl);
@@ -333,6 +333,33 @@ export class QQBot extends EventEmitter {
       this.emit('error', error);
       throw error;
     }
+  }
+
+  /**
+   * 获取Gateway URL(带重试机制)
+   * 最多重试3次,每次间隔递增
+   */
+  private async getGatewayUrlWithRetry(maxRetries: number = 3): Promise<string> {
+    let lastError: Error | null = null;
+    
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
+        return await this.getGatewayUrl();
+      } catch (error: any) {
+        lastError = error;
+        
+        if (attempt < maxRetries) {
+          // 指数退避: 1s, 2s, 4s
+          const delay = Math.pow(2, attempt - 1) * 1000;
+          console.warn(
+            `Get gateway URL failed (attempt ${attempt}/${maxRetries}): ${error.message}. Retrying in ${delay}ms...`
+          );
+          await new Promise(resolve => setTimeout(resolve, delay));
+        }
+      }
+    }
+    
+    throw lastError || new Error('Failed to get gateway URL after retries');
   }
 
   /**
@@ -533,7 +560,8 @@ export class QQBot extends EventEmitter {
    * 获取Gateway URL
    */
   private async getGatewayUrl(): Promise<string> {
-    const token = await this.getAccessToken();
+    // 强制刷新 Token,确保使用最新的凭证
+    const token = await this.forceRefreshToken();
 
     const response = await fetch(`${this.baseURL}/gateway`, {
       headers: {
@@ -543,7 +571,24 @@ export class QQBot extends EventEmitter {
     });
 
     if (!response.ok) {
-      throw new Error(`Failed to get gateway URL: ${response.status} ${response.statusText}`);
+      // 读取详细错误信息用于调试
+      let errorBody = '';
+      try {
+        errorBody = await response.text();
+      } catch (e) {
+        // 忽略读取错误
+      }
+      
+      console.error(
+        `Failed to get gateway URL: ${response.status} ${response.statusText}\n` +
+        `Response body: ${errorBody}\n` +
+        `AppId: ${this.config.appId}\n` +
+        `BaseURL: ${this.baseURL}`
+      );
+      
+      throw new Error(
+        `Failed to get gateway URL: ${response.status} ${response.statusText}${errorBody ? ' - ' + errorBody : ''}`
+      );
     }
 
     const data: GatewayResponse = await response.json();
