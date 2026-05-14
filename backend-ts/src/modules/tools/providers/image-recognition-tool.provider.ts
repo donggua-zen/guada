@@ -10,6 +10,7 @@ import { UploadPathService } from "../../../common/services/upload-path.service"
 import { LLMService } from "../../llm-core/llm.service";
 import { PrismaService } from "../../../common/database/prisma.service";
 import { SettingsStorage } from "../../../common/utils/settings-storage.util";
+import { WorkspaceService } from "../../../common/services/workspace.service";
 import { SK_MOD_VISUAL } from "../../../constants/settings.constants";
 import * as fs from "fs";
 import * as path from "path";
@@ -25,6 +26,7 @@ export class ImageRecognitionToolProvider implements IToolProvider {
     private llmService: LLMService,
     private prisma: PrismaService,
     private settingsStorage: SettingsStorage,
+    private workspaceService: WorkspaceService,
   ) { }
 
   async getTools(enabled?: boolean | string[], context?: Record<string, any>): Promise<any[]> {
@@ -121,18 +123,19 @@ export class ImageRecognitionToolProvider implements IToolProvider {
     return this.recognizeImage(physicalPath);
   }
 
-  private async handleRecognizeByPath(request: ToolCallRequest): Promise<string> {
+  private async handleRecognizeByPath(request: ToolCallRequest, context?: Record<string, any>): Promise<string> {
     const args = request.arguments;
     const { image_path } = args;
     if (!image_path) {
       throw new Error("缺少参数：image_path");
     }
 
-    // 判断是绝对路径还是相对路径
-    let physicalPath = image_path;
-    if (!path.isAbsolute(image_path)) {
-      // 如果是相对路径，转换为绝对路径（相对于项目根目录）
-      physicalPath = path.resolve(process.cwd(), image_path);
+    // 使用 WorkspaceService 解析路径（自动处理相对路径和绝对路径）
+    let physicalPath: string;
+    try {
+      physicalPath = this.workspaceService.resolveFilePath(image_path, context?.sessionId);
+    } catch (error: any) {
+      throw new Error(`路径解析失败：${error.message}`);
     }
 
     if (!fs.existsSync(physicalPath)) {
