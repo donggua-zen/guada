@@ -74,7 +74,14 @@ export class ShellToolProvider implements IToolProvider {
       throw new Error(`未知工具：${request.name}`);
     }
 
-    return await handler(request.arguments, context);
+    const result = await handler(request.arguments, context);
+    
+    // 通知工作目录变更（Shell 命令可能会修改文件系统）
+    if (context?.sessionId) {
+      this.workspaceService.notifyWorkspaceChange(context.sessionId);
+    }
+    
+    return result;
   }
 
   async getPrompt(context?: Record<string, any>): Promise<string> {
