@@ -57,6 +57,12 @@ class ContextMenuManager {
         return
       }
 
+      // 排除标题栏区域（CustomTitlebar 组件）
+      if (target.closest('.custom-titlebar')) {
+        console.log('[ContextMenu] 检测到标题栏区域，跳过全局菜单')
+        return
+      }
+
       // 如果没有子组件处理，显示全局智能菜单
       event.preventDefault()
       this.showGlobalMenu(event, target)

@@ -7,23 +7,23 @@
 
 import log from 'electron-log'
 import { BrowserAutomationService, ToolRequest, ToolResponse } from './browser-automation-service'
-import { BrowserTabManager } from './browser-tab-manager'
+import { BrowserWindowManager } from './browser-tab-manager'
 
 let automationService: BrowserAutomationService | null = null
 
 /**
  * 启动 IPC 模式的 Browser Bridge
- * @param tabManager - 标签管理器
+ * @param windowManager - 窗口管理器
  * @param backendProcess - 后端子进程（可选，用于监听 IPC）
  */
-export function startBrowserBridge(tabManager: BrowserTabManager, backendProcess?: any): void {
+export function startBrowserBridge(windowManager: BrowserWindowManager, backendProcess?: any): void {
   log.info('Starting Browser Bridge in IPC mode...')
 
   // 初始化浏览器自动化服务
   automationService = new BrowserAutomationService()
   
-  // 初始化 TabManager
-  automationService.initializeTabManager(tabManager)
+  // 初始化 WindowManager
+  automationService.initializeWindowManager(windowManager)
 
   // 如果提供了后端进程，监听它的 IPC 消息
   if (backendProcess) {

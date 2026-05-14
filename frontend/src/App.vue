@@ -1,12 +1,8 @@
 <template>
     <!-- 主题切换遮罩层 -->
-    <div 
-        v-if="showThemeTransition" 
-        class="theme-transition-overlay"
-        :class="{ 'theme-transition-active': isTransitioning }"
-        :style="{ backgroundColor: transitionColor }"
-    ></div>
-    
+    <div v-if="showThemeTransition" class="theme-transition-overlay"
+        :class="{ 'theme-transition-active': isTransitioning }" :style="{ backgroundColor: transitionColor }"></div>
+
     <!-- 自定义标题栏（仅在 Electron 环境显示） -->
     <div class="flex flex-col h-full bg-(--color-sidebar-bg)">
         <CustomTitlebar @open-guide="openGuide" />
@@ -46,12 +42,12 @@ watch(
             // 开始过渡动画
             showThemeTransition.value = true
             isTransitioning.value = true
-            
+
             // 800ms 后开始淡出
             setTimeout(() => {
                 isTransitioning.value = false
             }, 800)
-            
+
             // 1000ms 后完全移除遮罩
             setTimeout(() => {
                 showThemeTransition.value = false
@@ -62,14 +58,14 @@ watch(
 
 // 初始化全局右键菜单管理器
 onMounted(() => {
-  ContextMenuManager.getInstance().init()
+    ContextMenuManager.getInstance().init()
 })
 
 // 提供打开引导的方法给全局使用
 const openGuide = () => {
-  if (guideRef.value) {
-    guideRef.value.openGuide()
-  }
+    if (guideRef.value) {
+        guideRef.value.openGuide()
+    }
 }
 provide('openGuide', openGuide)
 

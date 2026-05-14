@@ -8,7 +8,7 @@
 import { createServer, IncomingMessage, ServerResponse } from 'http'
 import log from 'electron-log'
 import { BrowserAutomationService, ToolRequest, ToolResponse } from './browser-automation-service'
-import { BrowserTabManager } from './browser-tab-manager'
+import { BrowserWindowManager } from './browser-tab-manager'
 
 let httpServer: ReturnType<typeof createServer> | null = null
 let automationService: BrowserAutomationService | null = null
@@ -16,18 +16,18 @@ let automationService: BrowserAutomationService | null = null
 /**
  * 启动 TCP 模式的 Browser Bridge
  * @param port 监听端口，默认 3001
- * @param tabManager 标签管理器实例
+ * @param windowManager 窗口管理器实例
  */
-export function startBrowserBridgeTCP(port: number = 3001, tabManager?: BrowserTabManager): Promise<number> {
+export function startBrowserBridgeTCP(port: number = 3001, windowManager?: BrowserWindowManager): Promise<number> {
   return new Promise((resolve, reject) => {
     log.info(`Starting Browser Bridge TCP Server on port ${port}...`)
 
     // 初始化浏览器自动化服务
     automationService = new BrowserAutomationService()
     
-    // 如果提供了 TabManager，则初始化
-    if (tabManager) {
-      automationService.initializeTabManager(tabManager)
+    // 如果提供了 WindowManager，则初始化
+    if (windowManager) {
+      automationService.initializeWindowManager(windowManager)
     }
 
     // 创建 HTTP Server

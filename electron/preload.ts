@@ -40,19 +40,20 @@ contextBridge.exposeInMainWorld('electronAPI', {
     clear: () => clipboard.clear()
   },
 
-  // 显示动态上下文菜单
-  showContextMenu: (items: Array<{
-    label: string
-    type?: 'normal' | 'separator' | 'submenu' | 'checkbox' | 'radio'
-    enabled?: boolean
-    visible?: boolean
-  }>) => {
-    return ipcRenderer.invoke('show-context-menu', items)
+  // 显示调试菜单
+  showDebugMenu: () => ipcRenderer.invoke('show-debug-menu'),
+  
+  // 显示标签页右键菜单
+  showTabContextMenu: (params: { tabId: string; isSplitMode: boolean }) => 
+    ipcRenderer.invoke('show-tab-context-menu', params),
+  onTabMenuAction: (callback: (event: any, data: any) => void) => {
+    ipcRenderer.on('tab-menu-action', callback)
   },
 
   // 打开目录
   openUserDataFolder: () => ipcRenderer.send('open-user-data-folder'),
   openInstallFolder: () => ipcRenderer.send('open-install-folder'),
+  openFolder: (folderPath: string) => ipcRenderer.invoke('open-folder', folderPath),
   
   // 剪贴板操作（通过 IPC，更可靠）
   clipboardIPC: {
@@ -63,15 +64,28 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // 打开外部链接（使用系统默认浏览器）
   openExternal: (url: string) => ipcRenderer.invoke('open-external', url),
 
-  // 标签管理
-  createTab: (url?: string) => ipcRenderer.invoke('browser:create-tab', { url }),
-  activateTab: (tabId: string) => ipcRenderer.invoke('browser:activate-tab', { tabId }),
-  closeTab: (tabId: string) => ipcRenderer.invoke('browser:close-tab', { tabId }),
-  getTabs: () => ipcRenderer.invoke('browser:get-tabs'),
-  onTabUpdated: (callback: (event: any, data: any) => void) => {
-    ipcRenderer.on('tab-updated', callback)
+  // 窗口管理（新 API - 浏览器自动化窗口）
+  createBrowserWindow: (url?: string, metadata?: Record<string, any>) => 
+    ipcRenderer.invoke('browser:create-window', { url, metadata }),
+  activateBrowserWindow: (windowId: string) => 
+    ipcRenderer.invoke('browser:activate-window', { windowId }),
+  closeBrowserWindow: (windowId: string) => 
+    ipcRenderer.invoke('browser:close-window', { windowId }),
+  getBrowserWindows: () => ipcRenderer.invoke('browser:get-windows'),
+  onBrowserWindowUpdated: (callback: (event: any, data: any) => void) => {
+    ipcRenderer.on('window-updated', callback)
   },
-  onTabClosed: (callback: (event: any, data: any) => void) => {
-    ipcRenderer.on('tab-closed', callback)
-  }
+  onBrowserWindowClosed: (callback: (event: any, data: any) => void) => {
+    ipcRenderer.on('window-closed', callback)
+  },
+
+  // 浏览器窗口后台/前台模式控制
+  hideBrowserWindow: (windowId: string) => 
+    ipcRenderer.invoke('browser:hide-window', { windowId }),
+  showBrowserWindow: (windowId: string) => 
+    ipcRenderer.invoke('browser:show-window', { windowId }),
+  toggleBrowserWindowVisibility: (windowId: string) => 
+    ipcRenderer.invoke('browser:toggle-window-visibility', { windowId }),
+  getBrowserWindowVisibility: (windowId: string) => 
+    ipcRenderer.invoke('browser:get-window-visibility', { windowId })
 })

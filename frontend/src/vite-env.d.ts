@@ -83,13 +83,25 @@ interface ElectronAPI {
   openUserDataFolder: () => void
   openInstallFolder: () => void
   
-  // 标签管理
-  createTab: (url?: string) => Promise<{ success: boolean; tab?: any }>
-  activateTab: (tabId: string) => Promise<{ success: boolean }>
-  closeTab: (tabId: string) => Promise<{ success: boolean }>
-  getTabs: () => Promise<{ success: boolean; tabs?: any[] }>
-  onTabUpdated: (callback: (event: any, data: any) => void) => void
-  onTabClosed: (callback: (event: any, data: any) => void) => void
+  // 窗口管理（新 API - 浏览器自动化窗口）
+  createBrowserWindow: (url?: string, metadata?: Record<string, any>) => Promise<{ success: boolean; window?: any }>
+  activateBrowserWindow: (windowId: string) => Promise<{ success: boolean }>
+  closeBrowserWindow: (windowId: string) => Promise<{ success: boolean }>
+  getBrowserWindows: () => Promise<{ success: boolean; windows?: any[] }>
+  onBrowserWindowUpdated: (callback: (event: any, data: any) => void) => void
+  onBrowserWindowClosed: (callback: (event: any, data: any) => void) => void
+  
+  // 浏览器窗口后台/前台模式控制
+  hideBrowserWindow: (windowId: string) => Promise<{ success: boolean }>
+  showBrowserWindow: (windowId: string) => Promise<{ success: boolean }>
+  toggleBrowserWindowVisibility: (windowId: string) => Promise<{ success: boolean; isVisible?: boolean }>
+  getBrowserWindowVisibility: (windowId: string) => Promise<{ success: boolean; isVisible?: boolean }>
+  
+  // 调试菜单
+  showDebugMenu: () => Promise<void>
+  
+  // 右键菜单
+  showTabContextMenu: (params: { tabId: string; isSplitMode: boolean }) => Promise<void>
 }
 
 interface Window {

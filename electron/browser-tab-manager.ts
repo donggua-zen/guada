@@ -1,287 +1,192 @@
-import { BrowserWindow, WebContents, WebContentsView, session, webContents } from 'electron'
+import { BrowserWindow, WebContents, session, Menu, MenuItem } from 'electron'
 import log from 'electron-log/main'
 
 /**
- * 标签页信息
+ * 窗口信息接口
  */
-export interface TabInfo {
-  tabId: string
+export interface WindowInfo {
+  windowId: string
   title: string
   url: string
   favicon?: string
   createdAt: number
   lastActiveAt: number
   isActive: boolean
-  isMainApp: boolean // 是否为主应用标签（不可关闭）
+  isMainApp: boolean
+  isVisible: boolean // 窗口是否可见（前台/后台模式）
+  metadata?: Record<string, any> // 元数据支持（用于 session 隔离和作用域标识）
 }
 
 /**
- * 标签页管理器（基于 WebContentsView）
+ * 浏览器窗口管理器（基于独立 BrowserWindow）
  * 
- * 使用 Electron 推荐的 WebContentsView API
- * 每个标签页有独立的 WebContents 和 Session
- * 
- * 注意：第一个标签是主应用，不可关闭
+ * 每个自动化窗口都是独立的 BrowserWindow，与主窗口完全隔离
+ * 支持元数据传递、Session 隔离、悬浮窗格等功能
  */
-export class BrowserTabManager {
+export class BrowserWindowManager {
   private mainWindow: BrowserWindow | null = null
-  private tabs = new Map<string, {
-    view: WebContentsView
+  private windows = new Map<string, {
+    window: BrowserWindow
     webContents: WebContents
-    info: TabInfo
+    info: WindowInfo
   }>()
-  private activeTabId: string | null = null
-  private maxTabs: number = 6 // 默认最多6个标签（含主应用）
-  private tabBarHeight: number = 40 // 标签栏高度
+  private maxWindows: number = 6 // 默认最多6个窗口
+  private defaultWindowOptions: Electron.BrowserWindowConstructorOptions = {
+    width: 1024,
+    height: 768,
+    minWidth: 800,
+    minHeight: 600,
+    frame: true, // 保留系统标题栏
+    show: false,
+    webPreferences: {
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: true,
+    },
+  }
 
-  constructor(mainWindow: BrowserWindow, maxTabs: number = 6) {
+  constructor(mainWindow: BrowserWindow, maxWindows: number = 6) {
     this.mainWindow = mainWindow
-    this.maxTabs = maxTabs
+    this.maxWindows = maxWindows
   }
 
   /**
-   * 初始化主应用标签（第一个标签，不可关闭）
-   */
-  async initializeMainApp(): Promise<TabInfo> {
-    if (!this.mainWindow) {
-      throw new Error('Main window not initialized')
-    }
-
-    const tabId = 'main_app'
-    
-    log.info(`Initializing main app tab: ${tabId}`)
-
-    // 主应用使用 mainWindow 的 webContents
-    const webContents = this.mainWindow.webContents
-
-    // 注意：不能为 mainWindow.webContents 创建 WebContentsView，因为它已经附加到窗口上了
-    // 我们创建一个空的占位符（不会被使用）
-    const placeholderView = null as any
-
-    // 监听页面标题变化
-    webContents.on('page-title-updated', (_, title) => {
-      const tab = this.tabs.get(tabId)
-      if (tab) {
-        tab.info.title = title
-        this.notifyTabUpdate(tabId)
-      }
-    })
-
-    const now = Date.now()
-    const tabInfo: TabInfo = {
-      tabId,
-      title: '主应用',
-      url: '',
-      createdAt: now,
-      lastActiveAt: now,
-      isActive: true,
-      isMainApp: true, // 标记为主应用
-    }
-
-    // 存储引用（view 字段为 null，表示这是主应用）
-    this.tabs.set(tabId, { view: placeholderView, webContents, info: tabInfo })
-    this.activeTabId = tabId
-
-    log.info(`Main app tab added to tabs Map. Total tabs: ${this.tabs.size}`)
-    log.info(`Main app tab initialized (using mainWindow.webContents directly)`)
-    return tabInfo
-  }
-
-  /**
-   * 创建新标签页
+   * 创建新的独立窗口
    * @param url - 初始 URL
-   * @param autoActivate - 是否自动激活（默认 true，Agent 调用时传 false）
+   * @param metadata - 元数据（可选，用于 session 隔离和作用域标识）
    */
-  async createTab(url?: string, autoActivate: boolean = true): Promise<TabInfo> {
+  async createWindow(
+    url?: string, 
+    metadata?: Record<string, any>
+  ): Promise<WindowInfo> {
     if (!this.mainWindow) {
       throw new Error('Main window not initialized')
     }
 
-    // 检查标签数限制
-    if (this.tabs.size >= this.maxTabs) {
-      throw new Error(`标签数量已达上限（最多 ${this.maxTabs} 个，包含主应用）`)
+    // 检查窗口数限制
+    if (this.windows.size >= this.maxWindows) {
+      throw new Error(`窗口数量已达上限（最多 ${this.maxWindows} 个）`)
     }
 
-    const tabId = `tab_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
+    const windowId = `win_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
     
-    log.info(`Creating new tab with WebContentsView: ${tabId}`)
+    log.info(`Creating new independent window: ${windowId}`)
 
-    // 创建独立的 session
-    const sessionId = `persist:tab_${tabId}`
-    const tabSession = session.fromPartition(sessionId, { cache: true })
+    // 创建独立的 session（基于 metadata.scope 或默认）
+    const scope = metadata?.scope || 'default'
+    const sessionId = `persist:window_${scope}_${windowId}`
+    const windowSession = session.fromPartition(sessionId, { cache: true })
 
-    // 创建 WebContentsView（会自动创建内部的 WebContents）
-    const view = new WebContentsView({
+    // 合并窗口选项
+    const windowOptions: Electron.BrowserWindowConstructorOptions = {
+      ...this.defaultWindowOptions,
       webPreferences: {
-        session: tabSession,
+        ...this.defaultWindowOptions.webPreferences,
+        session: windowSession,
       },
-    })
+    }
 
-    const wc = view.webContents
+    // 创建独立窗口
+    const newWindow = new BrowserWindow(windowOptions)
 
-    // 设置自定义 User Agent，伪装成 Microsoft Edge 浏览器
+    const wc = newWindow.webContents
+
+    // 设置 Edge User Agent
     const edgeUserAgent = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36 Edg/146.0.0.0'
     wc.setUserAgent(edgeUserAgent)
-    log.info(`Custom User Agent set to Edge: ${edgeUserAgent}`)
+    log.info(`Custom User Agent set to Edge for window ${windowId}`)
 
-    // 配置 WebContents - 拦截新窗口请求，在当前标签打开
+    // 拦截新窗口请求，在当前窗口打开
     wc.setWindowOpenHandler(({ url }: { url: string }) => {
-      log.info(`Intercepting new window request: ${url}, loading in current tab`)
-      // 强制在当前标签加载 URL，禁止创建新窗口
+      log.info(`Intercepting new window request: ${url}, loading in current window`)
       wc.loadURL(url)
       return { action: 'deny' }
     })
 
-    // 设置位置和大小
-    this.updateViewBounds(view)
-
     // 监听页面标题变化
     wc.on('page-title-updated', (_event: Electron.Event, title: string) => {
-      const tab = this.tabs.get(tabId)
-      if (tab) {
-        tab.info.title = title
-        this.notifyTabUpdate(tabId)
+      const win = this.windows.get(windowId)
+      if (win) {
+        win.info.title = title
+        this.notifyWindowUpdate(windowId)
       }
     })
 
     // 监听导航完成
     wc.on('did-finish-load', () => {
-      const tab = this.tabs.get(tabId)
-      if (tab) {
-        tab.info.url = wc.getURL()
-        this.notifyTabUpdate(tabId)
+      const win = this.windows.get(windowId)
+      if (win) {
+        win.info.url = wc.getURL()
+        this.notifyWindowUpdate(windowId)
       }
     })
 
-    // 监听页面加载失败
+    // 监听加载失败
     wc.on('did-fail-load', (_event: Electron.Event, errorCode: number, errorDescription: string) => {
-      log.error(`Tab ${tabId} failed to load: ${errorCode} - ${errorDescription}`)
+      log.error(`Window ${windowId} failed to load: ${errorCode} - ${errorDescription}`)
+    })
+
+    // 为窗口设置右键菜单
+    this.setupContextMenu(wc, windowId)
+
+    // 窗口关闭时自动清理
+    newWindow.on('closed', () => {
+      log.info(`Window closed: ${windowId}`)
+      this.windows.delete(windowId)
+      this.notifyWindowClosed(windowId)
     })
 
     const now = Date.now()
-    const tabInfo: TabInfo = {
-      tabId,
-      title: url || 'New Tab',
+    const windowInfo: WindowInfo = {
+      windowId,
+      title: url || 'New Window',
       url: url || 'about:blank',
       createdAt: now,
       lastActiveAt: now,
       isActive: false,
       isMainApp: false,
+      isVisible: false, // 默认隐藏（后台模式）
+      metadata, // 保存元数据
     }
 
-    // 存储引用
-    this.tabs.set(tabId, { view, webContents: wc, info: tabInfo })
+    this.windows.set(windowId, { 
+      window: newWindow, 
+      webContents: wc, 
+      info: windowInfo 
+    })
 
-    // 异步加载 URL（不阻塞返回）
+    // 异步加载 URL
     if (url && url !== 'about:blank') {
       wc.loadURL(url).catch(err => {
-        log.error(`Failed to load URL in tab ${tabId}:`, err)
+        log.error(`Failed to load URL in window ${windowId}:`, err)
       })
     }
 
-    // 根据参数决定是否激活新创建的标签
-    if (autoActivate) {
-      this.activateTab(tabId)
-    } else {
-      log.info(`Created tab without activation: ${tabId}`)
-    }
+    // 不自动显示窗口，保持后台模式
+    // newWindow.show() 已移除
 
-    log.info(`Tab created: ${tabId} (total: ${this.tabs.size})`)
-    return tabInfo
+    log.info(`Window created: ${windowId} (total: ${this.windows.size})`)
+    return windowInfo
   }
 
-  /**
-   * 激活指定标签页
-   */
-  activateTab(tabId: string): boolean {
-    if (!this.mainWindow) {
-      log.error(`Cannot activate tab: no main window`)
-      return false
-    }
 
-    if (!this.tabs.has(tabId)) {
-      log.error(`Cannot activate tab: ${tabId} (not found in tabs Map)`)
-      log.error(`   Available tabs: ${Array.from(this.tabs.keys()).join(', ')}`)
-      return false
-    }
-
-    // 如果已经是当前活跃标签，不需要切换
-    if (this.activeTabId === tabId) {
-      log.debug(`Tab ${tabId} is already active`)
-      return true
-    }
-
-    log.info(`Switching to tab: ${tabId}`)
-
-    // 隐藏当前活跃的 View（如果不是主应用）
-    if (this.activeTabId && this.activeTabId !== 'main_app') {
-      const currentTab = this.tabs.get(this.activeTabId)
-      if (currentTab && currentTab.view) {
-        this.mainWindow.contentView.removeChildView(currentTab.view)
-        currentTab.info.isActive = false
-        log.debug(`Removed view for tab: ${this.activeTabId}`)
-      }
-    }
-
-    // 显示新的 View
-    const newTab = this.tabs.get(tabId)!
-    
-    // 如果是切换到主应用标签，只需移除其他 view，主应用会自动显示
-    if (tabId === 'main_app') {
-      // 主应用是 mainWindow 的内容，不需要 addChildView
-      // 只需确保没有其他 view 覆盖它
-      log.debug('Switched to main app tab (mainWindow.webContents)')
-    } else {
-      // 其他标签页，添加 view 覆盖在主应用上
-      if (newTab.view) {
-        this.mainWindow.contentView.addChildView(newTab.view)
-        newTab.webContents.focus()
-        log.debug(`Added view for tab: ${tabId}`)
-      }
-    }
-    
-    newTab.info.isActive = true
-    newTab.info.lastActiveAt = Date.now()
-    this.activeTabId = tabId
-
-    // 通知前端更新
-    this.notifyTabUpdate(tabId)
-
-    log.info(`Activated tab: ${tabId}`)
-    return true
-  }
 
   /**
-   * 关闭标签页（主应用标签不可关闭）
+   * 关闭窗口
    */
-  async closeTab(tabId: string): Promise<boolean> {
-    const tab = this.tabs.get(tabId)
-    if (!tab) {
+  async closeWindow(windowId: string): Promise<boolean> {
+    const win = this.windows.get(windowId)
+    if (!win) {
       return false
     }
 
-    // 主应用标签不可关闭
-    if (tab.info.isMainApp) {
-      log.warn(`⚠️ Cannot close main app tab: ${tabId}`)
-      return false
-    }
-
-    log.info(`🗑️ Closing tab: ${tabId}`)
+    log.info(`🗑️ Closing window: ${windowId}`)
 
     try {
-      // 从窗口移除（如果有 view）
-      if (this.mainWindow && !this.mainWindow.isDestroyed() && tab.view) {
+      // 清理 session 数据
+      if (!win.webContents.isDestroyed()) {
         try {
-          this.mainWindow.contentView.removeChildView(tab.view)
-        } catch (error) {
-          log.warn(`Failed to remove child view for tab ${tabId}:`, error)
-        }
-      }
-
-      // 清理 session 数据（仅在 webContents 未销毁时）
-      if (!tab.webContents.isDestroyed()) {
-        try {
-          await tab.webContents.session.clearStorageData({
+          await win.webContents.session.clearStorageData({
             storages: [
               'cookies',
               'filesystem',
@@ -293,62 +198,30 @@ export class BrowserTabManager {
               'cachestorage',
             ],
           })
-          await tab.webContents.session.clearCache()
+          await win.webContents.session.clearCache()
         } catch (error) {
-          log.warn(`Failed to clear session data for tab ${tabId}:`, error)
+          log.warn(`Failed to clear session data for window ${windowId}:`, error)
         }
       }
 
-      // 销毁 WebContents（重要：释放资源）
-      if (!tab.webContents.isDestroyed()) {
-        ;(tab.webContents as any).destroy()
+      // 关闭窗口（会触发 closed 事件）
+      if (!win.window.isDestroyed()) {
+        win.window.close()
       }
 
-      // 从映射中移除
-      this.tabs.delete(tabId)
-
-      // 通知前端标签已关闭
-      this.notifyTabClosed(tabId)
-
-      // 如果关闭的是活跃标签，切换到主应用标签
-      if (this.activeTabId === tabId) {
-        const mainAppTab = Array.from(this.tabs.values()).find(t => t.info.isMainApp)
-        if (mainAppTab) {
-          this.activateTab(mainAppTab.info.tabId)
-        } else {
-          this.activeTabId = null
-        }
-      }
-
-      log.info(`Tab closed: ${tabId} (remaining: ${this.tabs.size})`)
       return true
     } catch (error) {
-      log.error(`Error closing tab ${tabId}:`, error)
+      log.error(`Error closing window ${windowId}:`, error)
       return false
     }
   }
 
   /**
-   * 在指定标签页执行操作
+   * 获取所有窗口列表
    */
-  async executeInTab(tabId: string, operation: (webContents: WebContents) => Promise<any>): Promise<any> {
-    const tab = this.tabs.get(tabId)
-    if (!tab) {
-      throw new Error(`Tab not found: ${tabId}`)
-    }
-
-    // 先激活该标签
-    this.activateTab(tabId)
-
-    return await operation(tab.webContents)
-  }
-
-  /**
-   * 获取所有标签列表
-   */
-  getTabList(): TabInfo[] {
-    return Array.from(this.tabs.values())
-      .filter(({ webContents }) => !webContents.isDestroyed()) // 过滤掉已销毁的
+  getWindowList(): WindowInfo[] {
+    return Array.from(this.windows.values())
+      .filter(({ webContents }) => !webContents.isDestroyed())
       .map(({ info, webContents }) => ({
         ...info,
         url: webContents.getURL(),
@@ -357,117 +230,219 @@ export class BrowserTabManager {
   }
 
   /**
-   * 获取活跃标签
+   * 获取指定窗口的 WebContents
    */
-  getActiveTab(): TabInfo | null {
-    if (!this.activeTabId || !this.tabs.has(this.activeTabId)) {
-      return null
-    }
-    const { info, webContents } = this.tabs.get(this.activeTabId)!
+  getWebContents(windowId: string): WebContents | null {
+    const win = this.windows.get(windowId)
+    return win ? win.webContents : null
+  }
+
+  /**
+   * 关闭所有窗口
+   */
+  async closeAllWindows(): Promise<void> {
+    const windowIds = Array.from(this.windows.keys())
     
-    // 如果 webContents 已销毁，返回 null
-    if (webContents.isDestroyed()) {
-      return null
-    }
-    
-    return {
-      ...info,
-      url: webContents.getURL(),
-      title: webContents.getTitle() || info.title,
+    for (const windowId of windowIds) {
+      await this.closeWindow(windowId)
     }
   }
 
   /**
-   * 获取标签数量
+   * 设置窗口为置顶悬浮模式（可选功能）
    */
-  getTabCount(): number {
-    return this.tabs.size
-  }
-
-  /**
-   * 关闭所有标签（除了主应用）
-   */
-  async closeAllTabs(): Promise<void> {
-    const tabIds = Array.from(this.tabs.keys()).filter(id => {
-      const tab = this.tabs.get(id)
-      return tab && !tab.info.isMainApp
-    })
-    
-    for (const tabId of tabIds) {
-      await this.closeTab(tabId)
+  setAlwaysOnTop(windowId: string, alwaysOnTop: boolean): void {
+    const win = this.windows.get(windowId)
+    if (win && !win.window.isDestroyed()) {
+      win.window.setAlwaysOnTop(alwaysOnTop, 'floating')
+      win.window.setSkipTaskbar(alwaysOnTop)
+      log.info(`Window ${windowId} alwaysOnTop set to: ${alwaysOnTop}`)
     }
   }
 
   /**
-   * 处理窗口大小变化
+   * 隐藏窗口（后台模式）
    */
-  handleResize(): void {
-    if (!this.mainWindow) return
+  hideWindow(windowId: string): void {
+    const win = this.windows.get(windowId)
+    if (win && !win.window.isDestroyed()) {
+      win.window.hide()
+      win.info.isVisible = false
+      this.notifyWindowUpdate(windowId)
+      log.info(`Window ${windowId} hidden (background mode)`)
+    }
+  }
 
-    this.tabs.forEach(({ view }) => {
-      if (view) {
-        this.updateViewBounds(view)
+  /**
+   * 显示窗口（前台模式）
+   */
+  showWindow(windowId: string): void {
+    const win = this.windows.get(windowId)
+    if (win && !win.window.isDestroyed()) {
+      if (win.window.isMinimized()) {
+        win.window.restore()
       }
-    })
+      win.window.show()
+      win.window.focus()
+      win.info.isVisible = true
+      this.notifyWindowUpdate(windowId)
+      log.info(`Window ${windowId} shown (foreground mode)`)
+    }
   }
 
   /**
-   * 更新 View 的边界
+   * 切换窗口显示状态
    */
-  private updateViewBounds(view: WebContentsView): void {
-    if (!this.mainWindow) return
-
-    const bounds = this.mainWindow.getContentBounds()
-    view.setBounds({
-      x: 0,
-      y: this.tabBarHeight,
-      width: bounds.width,
-      height: bounds.height - this.tabBarHeight,
-    })
+  toggleWindowVisibility(windowId: string): boolean {
+    const win = this.windows.get(windowId)
+    if (win && !win.window.isDestroyed()) {
+      if (win.info.isVisible) {
+        this.hideWindow(windowId)
+        return false
+      } else {
+        this.showWindow(windowId)
+        return true
+      }
+    }
+    return false
   }
 
   /**
-   * 通知前端标签更新
+   * 获取窗口可见性状态
    */
-  private notifyTabUpdate(tabId: string): void {
+  isWindowVisible(windowId: string): boolean {
+    const win = this.windows.get(windowId)
+    if (win && !win.window.isDestroyed()) {
+      return win.window.isVisible()
+    }
+    return false
+  }
+
+  /**
+   * 通知前端窗口更新
+   */
+  private notifyWindowUpdate(windowId: string): void {
     if (this.mainWindow && !this.mainWindow.isDestroyed()) {
-      const tab = this.tabs.get(tabId)
-      if (tab) {
-        this.mainWindow.webContents.send('tab-updated', {
-          tabId,
-          title: tab.webContents.getTitle() || tab.info.title,
-          url: tab.webContents.getURL() || tab.info.url,
-          isActive: tab.info.isActive,
-          isMainApp: tab.info.isMainApp,
+      const win = this.windows.get(windowId)
+      if (win) {
+        this.mainWindow.webContents.send('window-updated', {
+          windowId,
+          title: win.webContents.getTitle() || win.info.title,
+          url: win.webContents.getURL() || win.info.url,
+          isActive: win.info.isActive,
+          isVisible: win.window.isVisible(), // 使用实际窗口状态
+          metadata: win.info.metadata,
         })
       }
     }
   }
 
   /**
-   * 通知前端标签已关闭
+   * 通知前端窗口已关闭
    */
-  private notifyTabClosed(tabId: string): void {
+  private notifyWindowClosed(windowId: string): void {
     if (this.mainWindow && !this.mainWindow.isDestroyed()) {
-      this.mainWindow.webContents.send('tab-closed', {
-        tabId,
+      this.mainWindow.webContents.send('window-closed', {
+        windowId,
       })
     }
   }
 
   /**
-   * 获取指定标签的 WebContents
+   * 为窗口设置右键菜单
    */
-  getWebContents(tabId: string): WebContents | null {
-    const tab = this.tabs.get(tabId)
-    return tab ? tab.webContents : null
-  }
+  private setupContextMenu(webContents: WebContents, windowId: string): void {
+    webContents.on('context-menu', (_event, params) => {
+      // 创建右键菜单
+      const menu = new Menu()
 
-  /**
-   * 检查是否为主应用标签
-   */
-  isMainAppTab(tabId: string): boolean {
-    const tab = this.tabs.get(tabId)
-    return tab ? tab.info.isMainApp : false
+      // 后退
+      menu.append(
+        new MenuItem({
+          label: '后退',
+          enabled: webContents.canGoBack(),
+          click: () => {
+            if (webContents.canGoBack()) {
+              webContents.goBack()
+            }
+          },
+        })
+      )
+
+      // 前进
+      menu.append(
+        new MenuItem({
+          label: '前进',
+          enabled: webContents.canGoForward(),
+          click: () => {
+            if (webContents.canGoForward()) {
+              webContents.goForward()
+            }
+          },
+        })
+      )
+
+      // 刷新
+      menu.append(
+        new MenuItem({
+          label: '刷新',
+          click: () => {
+            webContents.reload()
+          },
+        })
+      )
+
+      menu.append(new MenuItem({ type: 'separator' }))
+
+      // 打开开发者工具
+      menu.append(
+        new MenuItem({
+          label: '打开开发者工具',
+          click: () => {
+            webContents.openDevTools({ mode: 'right' })
+          },
+        })
+      )
+
+      menu.append(new MenuItem({ type: 'separator' }))
+
+      // 设为悬浮窗口
+      const windowInfo = this.windows.get(windowId)
+      const isAlwaysOnTop = windowInfo ? windowInfo.window.isAlwaysOnTop() : false
+      menu.append(
+        new MenuItem({
+          label: isAlwaysOnTop ? '取消悬浮' : '设为悬浮窗口',
+          type: 'checkbox',
+          checked: isAlwaysOnTop,
+          click: (item) => {
+            this.setAlwaysOnTop(windowId, item.checked)
+          },
+        })
+      )
+
+      // 隐藏/显示窗口（后台/前台模式）
+      if (windowInfo) {
+        const isVisible = windowInfo.window.isVisible()
+        menu.append(
+          new MenuItem({
+            label: isVisible ? '隐藏窗口（后台模式）' : '显示窗口（前台模式）',
+            click: () => {
+              if (isVisible) {
+                this.hideWindow(windowId)
+              } else {
+                this.showWindow(windowId)
+              }
+            },
+          })
+        )
+      }
+
+      // 显示菜单
+      menu.popup({ window: this.windows.get(windowId)?.window })
+    })
   }
 }
+
+// 保持向后兼容的导出
+export { BrowserWindowManager as BrowserTabManager }
+export type { WindowInfo as TabInfo }
