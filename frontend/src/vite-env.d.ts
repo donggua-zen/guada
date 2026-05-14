@@ -23,6 +23,12 @@ declare module 'simplebar-vue' {
   export default component
 }
 
+declare module 'splitpanes' {
+  import type { DefineComponent } from 'vue'
+  export const Splitpanes: DefineComponent<{}, {}, any>
+  export const Pane: DefineComponent<{}, {}, any>
+}
+
 // 图片资源声明
 declare module '*.png' {
   const src: string

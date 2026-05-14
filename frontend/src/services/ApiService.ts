@@ -362,6 +362,27 @@ class ApiService implements IApiService {
     return await this._request(`/sessions/${sessionId}/workspace-path`)
   }
 
+  /**
+   * 获取工作目录树结构
+   */
+  async getWorkspaceTree(sessionId: string): Promise<{ tree: any[] }> {
+    return await this._request(`/sessions/${sessionId}/workspace/tree`)
+  }
+
+  /**
+   * 获取工作目录中的文件内容
+   */
+  async getWorkspaceFile(sessionId: string, filePath: string): Promise<{
+    path: string;
+    name: string;
+    extension: string;
+    size: number;
+    content: string;
+    mimeType: string;
+  }> {
+    return await this._request(`/sessions/${sessionId}/workspace/file?path=${encodeURIComponent(filePath)}`)
+  }
+
   // ========== 消息管理 ==========
   async deleteMessage(messageId: string): Promise<{ success: boolean }> {
     return await this._request(`/messages/${messageId}`, { method: 'DELETE' })

@@ -20,12 +20,30 @@
         <!-- 主体内容 -->
         <div class="flex flex-col h-full bg-white dark:bg-[#1a1b1e]">
           <template v-if="sessions.length > 0 && currentSession">
-            <!-- 聊天头部 -->
-            <ChatHeader :sidebar-visible="sidebarVisible" :title="currentSession?.title || ''" :has-more-options="true"
-              :show-memo-button="true" :session-id="currentSession?.id" @toggle-sidebar="sidebarVisible = !sidebarVisible"
-              @select-more-option="handleMoreSelect" @toggle-memo="memoPanelVisible = !memoPanelVisible" />
-            <ChatPanel ref="chatPanelRef" v-model:session="currentSession" v-model:sidebar-visible="sidebarVisible"
-              @save-settings="handleSaveSessionSettings" />
+            <!-- 可拖拽分割区域 -->
+            <div class="flex-1 overflow-hidden">
+              <Splitpanes class="default-theme" style="height: 100%;">
+                <Pane :size="workspaceVisible ? 75 : 100" :min-size="40">
+                  <div style="height: 100%; display: flex; flex-direction: column;">
+                    <!-- 聊天头部 -->
+                    <ChatHeader :sidebar-visible="sidebarVisible" :title="currentSession?.title || ''" :has-more-options="true"
+                      :show-memo-button="true" :session-id="currentSession?.id" 
+                      :workspace-visible="workspaceVisible"
+                      @toggle-sidebar="sidebarVisible = !sidebarVisible"
+                      @select-more-option="handleMoreSelect" 
+                      @toggle-memo="memoPanelVisible = !memoPanelVisible"
+                      @toggle-workspace="toggleWorkspace" />
+                    
+                    <ChatPanel ref="chatPanelRef" v-model:session="currentSession" v-model:sidebar-visible="sidebarVisible"
+                      @save-settings="handleSaveSessionSettings" />
+                  </div>
+                </Pane>
+                
+                <Pane v-if="workspaceVisible && currentSession && isElectron" :size="25" :min-size="15" :max-size="60">
+                  <WorkspaceSidebar :session-id="currentSession.id" />
+                </Pane>
+              </Splitpanes>
+            </div>
           </template>
           <template v-else>
             <!-- 新建对话头部 -->
@@ -67,6 +85,8 @@ import { useSessionStore } from "@/stores/session";
 import { useAuthStore } from "@/stores/auth";
 import { useTitle } from '@/composables/useTitle';
 import type { Session } from '@/types/session';
+import { Splitpanes, Pane } from 'splitpanes';
+import 'splitpanes/dist/splitpanes.css';
 
 // 引入组件
 // @ts-ignore - UI 组件尚未迁移到 TypeScript
@@ -83,6 +103,7 @@ const ChatPanel = defineAsyncComponent(() => import("./ChatPanel.vue"));
 const CreateSessionChatPanel = defineAsyncComponent(() => import("./CreateSessionChatPanel.vue"));
 const MemoPanel = defineAsyncComponent(() => import("./MemoPanel.vue"));
 const ChatOutline = defineAsyncComponent(() => import("./ChatOutline.vue"));
+const WorkspaceSidebar = defineAsyncComponent(() => import("./WorkspaceSidebar.vue"));
 
 // 组合式函数
 const { confirm, toast, prompt } = usePopup();
@@ -92,6 +113,9 @@ const title = useTitle();
 
 // 当前会话对象，包含会话的基本信息和设置
 const currentSession: Ref<Session | null> = ref(null);
+
+// 判断是否为 Electron 环境
+const isElectron = typeof window !== 'undefined' && !!(window as any).electronAPI;
 
 // 会话列表组件引用，用于调用组件内部方法
 const chatSidebarRef = ref<InstanceType<typeof ChatSidebar> | null>(null);
@@ -105,6 +129,8 @@ const sessionSettingsModalVisible = ref(false);
 const sidebarVisible = useStorage('sidebarVisible', true);
 // 控制记忆管理窗格的显示状态，调试阶段默认打开
 const memoPanelVisible = useStorage('memoPanelVisible', false);
+// 控制工作目录窗格的显示状态
+const workspaceVisible = useStorage('workspaceVisible', false);
 
 const isLoading = ref(true);
 
@@ -178,6 +204,13 @@ const goChatRoute = async (sessionId: string | null) => {
     currentSession.value = null;
   }
 };
+
+/**
+ * 切换工作目录窗格显示/隐藏
+ */
+function toggleWorkspace() {
+  workspaceVisible.value = !workspaceVisible.value;
+}
 
 /**
  * 根据会话 ID 更新会话信息
@@ -600,6 +633,44 @@ onMounted(async () => {
 .slide-right-leave-to {
   transform: translateX(100%);
   opacity: 0;
+}
+
+/* Splitpanes 自定义样式 - 适配暗色模式 */
+:deep(.splitpanes.default-theme .splitpanes__pane) {
+  background-color: transparent;
+}
+
+:deep(.splitpanes.default-theme .splitpanes__splitter) {
+  background-color: var(--color-surface, #f5f5f5);
+  position: relative;
+  transition: background-color 0.2s ease;
+}
+
+:deep(.dark .splitpanes.default-theme .splitpanes__splitter) {
+  background-color: #25262a;
+}
+
+/* 悬停时显示主题色（中等浅色） */
+:deep(.splitpanes.default-theme .splitpanes__splitter:hover) {
+  background-color: var(--el-color-primary-light-8, #d9ecff) !important;
+}
+
+/* 移除 Pane 的边框，避免与分割线重叠 */
+:deep(.splitpanes.default-theme .splitpanes__pane) {
+  background-color: transparent;
+  border: none !important;
+}
+
+/* 隐藏悬停指示器 */
+:deep(.splitpanes.default-theme .splitpanes__splitter:before),
+:deep(.splitpanes.default-theme .splitpanes__splitter:after) {
+  display: none !important;
+}
+
+:deep(.splitpanes.default-theme.splitpanes--vertical .splitpanes__splitter) {
+  border-top: 0;
+  border-bottom: 0;
+  width: 4px !important;
 }
 </style>
 

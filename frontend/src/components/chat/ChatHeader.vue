@@ -20,7 +20,8 @@
             <!-- 工作目录按钮（仅 Electron 环境且有会话时显示） -->
             <div v-if="isElectron && sessionId"
                 class="cursor-pointer p-1 rounded-lg text-gray-600 dark:text-[#8b8d95] transition-all duration-200 hover:bg-gray-100 dark:hover:bg-[#2a2c30] hover:text-gray-900 dark:hover:text-[#e8e9ed] flex items-center justify-center"
-                @click="handleOpenWorkspace" title="打开工作目录">
+                @click="$emit('toggle-workspace')" 
+                :title="workspaceVisible ? '关闭工作目录' : '打开工作目录'">
                 <el-icon class="w-5 h-5">
                     <FolderOpened />
                 </el-icon>
@@ -81,15 +82,13 @@ import {
 import {
     ElDropdown,
     ElDropdownMenu,
-    ElDropdownItem,
-    ElMessage
+    ElDropdownItem
 } from 'element-plus';
 
 // Element Plus 图标导入
 import { Reading, FolderOpened } from '@element-plus/icons-vue';
 
 import LeftBarIcon from '../icons/LeftBarIcon.vue';
-import { apiService } from '@/services/ApiService';
 
 // Props - 类型化
 const props = defineProps<{
@@ -97,13 +96,15 @@ const props = defineProps<{
     hasMoreOptions?: boolean;
     showMemoButton?: boolean;
     title?: string;
-    sessionId?: string; // 新增：会话 ID
+    sessionId?: string;
+    workspaceVisible?: boolean; // 新增：工作目录可见性状态
 }>();
 
 // Emits - 类型化
 const emit = defineEmits<{
     'toggle-sidebar': []
     'toggle-memo': []
+    'toggle-workspace': [] // 新增：切换工作目录
     'select-more-option': [command: string]
 }>();
 
@@ -112,34 +113,5 @@ const isElectron = typeof window !== 'undefined' && !!(window as any).electronAP
 
 const handleSelect = (command: string): void => {
     emit('select-more-option', command);
-};
-
-/**
- * 打开工作目录
- */
-const handleOpenWorkspace = async (): Promise<void> => {
-    if (!props.sessionId) {
-        ElMessage.warning('当前没有活动的会话');
-        return;
-    }
-
-    try {
-        // 1. 从后端获取工作目录路径
-        const response = await apiService.getWorkspacePath(props.sessionId);
-        const workspacePath = response.workspacePath;
-
-        // 2. 调用 Electron 接口打开文件夹
-        if ((window as any).electronAPI?.openFolder) {
-            const result = await (window as any).electronAPI.openFolder(workspacePath);
-            if (!result.success) {
-                ElMessage.error(`打开工作目录失败: ${result.error}`);
-            }
-        } else {
-            ElMessage.error('当前环境不支持打开文件夹');
-        }
-    } catch (error: any) {
-        console.error('获取工作目录失败:', error);
-        ElMessage.error(error.message || '获取工作目录失败');
-    }
 };
 </script>
