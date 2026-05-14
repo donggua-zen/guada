@@ -337,11 +337,19 @@ export class BrowserToolProvider implements IToolProvider {
       },
       {
         name: 'open_new_window',
-        description: '打开新的自动化窗口，返回 window_id',
+        description: '打开新的独立窗口，返回 window_id。支持传递元数据用于 session 隔离和作用域标识',
         parameters: {
           type: 'object',
           properties: {
             url: { type: 'string', description: '要打开的 URL' },
+            metadata: { 
+              type: 'object', 
+              description: '可选元数据，如 { scope: "session_123", purpose: "research" }',
+              properties: {
+                scope: { type: 'string', description: '作用域标识，用于 session 隔离' },
+                purpose: { type: 'string', description: '窗口用途描述' },
+              },
+            },
           },
           required: ['url'],
         },

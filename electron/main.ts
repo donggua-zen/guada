@@ -7,11 +7,11 @@ import * as net from 'net'
 import log from 'electron-log'
 import { startBrowserBridge } from './browser-bridge'
 import { startBrowserBridgeTCP, stopBrowserBridgeTCP } from './browser-bridge-tcp'
-import { BrowserTabManager } from './browser-tab-manager'
+import { BrowserWindowManager } from './browser-tab-manager'
 
 let backendProcess: ChildProcess | null = null
 let mainWindow: BrowserWindow | null = null
-let tabManager: BrowserTabManager | null = null  // 标签管理器
+let windowManager: BrowserWindowManager | null = null  // 窗口管理器
 let isBackendStarting = false  // 防止重复启动
 let backendPort: number | null = null  // 记录后端端口
 let browserBridgeInitialized = false  // Browser Bridge 是否已初始化
@@ -28,7 +28,7 @@ log.transports.file.format = '[{y}-{m}-{d} {h}:{i}:{s}.{ms}] [{level}] {text}'
 const gotTheLock = app.requestSingleInstanceLock()
 
 if (!gotTheLock) {
-  // 如果获取锁失败，说明已有实例在运行，立即退出当前进程
+  // 如果获取锁失败，说明已有实例在运行，立即退出当前实例
   log.warn('检测到已有应用实例在运行，退出当前实例')
   app.quit()
 } else {
@@ -49,12 +49,12 @@ if (!gotTheLock) {
 // 判断是否为开发模式（根据是否打包，而不是 NODE_ENV）
 const isDev = !app.isPackaged
 
-// 配置更新源
+// 配置更新
 autoUpdater.autoDownload = false
 if (isDev) {
   autoUpdater.forceDevUpdateConfig = true
   // 在开发环境下，如果找不到 dev-app-update.yml，我们提供一个默认的占位配置以防止报错
-  // 或者你可以选择在这里直接 return，不执行后续的 checkForUpdates
+  // 或者你可以选择在这里直接 return，不执行后续的 checkForUpdate
 }
 
 // 获取后端路径
@@ -63,12 +63,12 @@ function getBackendPath(): string {
     // 编译后的文件在 electron/dist/，需要向上两级到达项目根目录
     return path.join(__dirname, '..', '..', 'backend-ts')
   } else {
-    // 生产环境：从 resources/backend-ts 获取（extraResources）
+    // 生产环境：从 resources 目录获取（extraResources）
     return path.join(process.resourcesPath, 'backend-ts')
   }
 }
 
-// 计算 Schema 版本的哈希值（基于 schema.prisma 内容）
+// 计算 Schema 版本的哈希值（基于 schema.prisma 文件内容）
 function getSchemaVersion(backendPath: string): string {
   const crypto = require('crypto')
   const schemaPath = path.join(backendPath, 'prisma', 'schema.prisma')
@@ -103,7 +103,7 @@ async function initializeDatabase(userDataPath: string, backendPath: string): Pr
     console.warn('⚠️  读取版本标记文件失败，将重新同步')
   }
 
-  // 智能跳过同步：如果版本一致且数据库存在，则跳过
+  // 智能跳过同步：如果版本一致且数据库存在，则跳过初始化
   if (storedVersion && storedVersion.schemaVersion === currentSchemaVersion && fs.existsSync(dbPath) && fs.statSync(dbPath).size > 0) {
     console.log(`数据库版本已同步 (${currentSchemaVersion})，跳过初始化`)
     return
@@ -111,7 +111,7 @@ async function initializeDatabase(userDataPath: string, backendPath: string): Pr
 
   console.log('检测到数据库需要同步或初始化...')
   try {
-    // 1. 首次运行：从模板拷贝数据库
+    // 1. 首次运行：从模板拷贝数据库文件
     const isFirstRun = !fs.existsSync(dbPath) || fs.statSync(dbPath).size === 0
     if (isFirstRun) {
       let templatePath: string | null = null
@@ -142,7 +142,7 @@ async function initializeDatabase(userDataPath: string, backendPath: string): Pr
       fs.copyFileSync(dbPath, backupPath)
       console.log(`数据库结构变更，已备份至: ${backupPath}`)
 
-      // 清理旧备份（保留最近 3 个）
+      // 清理旧备份（保留最多 3 个）
       const backups = fs.readdirSync(path.dirname(dbPath))
         .filter(f => f.startsWith(path.basename(dbPath) + '.bak.'))
         .sort()
@@ -193,7 +193,7 @@ async function handleDatabaseError(error: any, dbPath: string, userDataPath: str
   const options: Electron.MessageBoxOptions = {
     type: 'error',
     title: '数据库同步失败',
-    message: '应用启动时无法同步数据库结构。',
+    message: '应用启动时无法同步数据库结构',
     detail: `错误信息: ${error.message}\n\n您可以尝试点击“重试”或手动打开日志目录排查问题。`,
     buttons: ['重试', '打开日志目录', '退出'],
     defaultId: 0,
@@ -204,7 +204,7 @@ async function handleDatabaseError(error: any, dbPath: string, userDataPath: str
     const response = await dialog.showMessageBox(mainWindow, options)
     if (response.response === 0) {
       // 重试：重新调用初始化
-      console.log('用户选择重试数据库同步...')
+      console.log('用户选择重试数据库初始化...')
       await initializeDatabase(userDataPath, getBackendPath())
     } else if (response.response === 1) {
       shell.openPath(userDataPath)
@@ -228,7 +228,7 @@ async function startBackend(): Promise<void> {
 
   // 如果后端已经在运行，直接返回
   if (backendProcess && !backendProcess.killed) {
-    console.warn('⚠️  后端已在运行，跳过启动')
+    console.warn('⚠️  后端已在运行，跳过重复调用')
     return Promise.resolve()
   }
 
@@ -238,7 +238,7 @@ async function startBackend(): Promise<void> {
     const backendPath = getBackendPath()
 
     if (isDev) {
-      // 开发模式：固定端口，通过日志检测启动
+      // 开发模式：固定端口
       backendPort = 3000
       console.log('开发模式：使用固定端口 3000')
       // 开发模式：使用 spawn 启动 ts-node-dev
@@ -284,14 +284,14 @@ async function startBackend(): Promise<void> {
           UPLOAD_ROOT_DIR: uploadDir,
           UPLOAD_URL_PREFIX: '/uploads',
           SETTINGS_DIR: userDataPath, // 传递设置目录
-          LOGS_DIR: logsDir, // 传递后端日志目录到用户数据区
-          SKILLS_DIR: skillsDir, // 传递技能目录到用户数据区
+          LOGS_DIR: logsDir, // 传递后端日志目录到用户数据目录
+          SKILLS_DIR: skillsDir, // 传递技能目录到用户数据目录
           WORKSPACE_BASE_DIR: workspaceDir, // 传递会话工作目录基础路径
           ELECTRON_APP: 'true', // 标识这是 Electron 环境
           BROWSER_BRIDGE_MODE: 'tcp', // 开发模式使用 TCP
           BROWSER_BRIDGE_PORT: process.env.BROWSER_BRIDGE_PORT || '3001', // 传递端口号
         },
-        stdio: ['pipe', 'pipe', 'pipe'], // 开发模式不需要 IPC
+        stdio: ['pipe', 'pipe', 'pipe'], // 开发模式不需�?IPC
         shell: true
       }
 
@@ -349,13 +349,13 @@ async function startBackend(): Promise<void> {
           UPLOAD_ROOT_DIR: uploadDir,
           UPLOAD_URL_PREFIX: '/uploads',
           SETTINGS_DIR: userDataPath, // 传递设置目录
-          LOGS_DIR: logsDir, // 传递后端日志目录到用户数据区
-          SKILLS_DIR: skillsDir, // 传递技能目录到用户数据区
+          LOGS_DIR: logsDir, // 传递后端日志目录到用户数据目录
+          SKILLS_DIR: skillsDir, // 传递技能目录到用户数据目录
           WORKSPACE_BASE_DIR: workspaceDir, // 传递会话工作目录基础路径
           ELECTRON_APP: 'true', // 标识这是 Electron 环境
           BROWSER_BRIDGE_MODE: 'ipc', // 生产模式使用 IPC
         },
-        stdio: ['pipe', 'pipe', 'pipe', 'ipc'] // 增加 'ipc' 以支持 process.send
+        stdio: ['pipe', 'pipe', 'pipe', 'ipc'] // 增加 'ipc' 以支�?process.send
       }
 
       backendProcess = spawn(nodePath, [scriptPath], spawnOptions)
@@ -371,7 +371,7 @@ async function startBackend(): Promise<void> {
     backendProcess.on('message', (message: any) => {
       if (message && message.type === 'PORT_READY' && !isResolved) {
         backendPort = message.port
-        console.log(`通过 IPC 接收到后端端口: ${backendPort}`)
+        console.log(`通过 IPC 接收到后端端�? ${backendPort}`)
         isBackendStarting = false
         isResolved = true
         resolve()
@@ -389,7 +389,7 @@ async function startBackend(): Promise<void> {
       if (isDev && message.includes('Application is running on') && !isResolved) {
         isBackendStarting = false
         isResolved = true
-        console.log(`后端启动成功，端口: ${backendPort}`)
+        console.log(`[Backend] Application is running on port ${backendPort}`)
         resolve()
       }
     })
@@ -460,23 +460,23 @@ function createWindow() {
       mainWindow.loadURL('http://localhost:5173')
     }
 
-    // 延迟打开开发者工具，避免影响窗口显示
-    setTimeout(() => {
-      mainWindow?.webContents.openDevTools({ mode: 'detach' })
-    }, 1000)
+    // 不再自动打开开发者工具，用户可以通过 Debug 菜单手动打开
+    // setTimeout(() => {
+    //   mainWindow?.webContents.openDevTools({ mode: 'right' })
+    // }, 1000)
   } else {
     // 生产环境加载打包后的前端文件
-    // __dirname 指向 app.asar/electron/dist，需要向上两级到达 app.asar，然后进入 frontend/dist
+    // __dirname 指向 app.asar/electron/dist，需要向上两级到 app.asar，然后进入 frontend/dist
     const frontendPath = path.join(__dirname, '..', '..', 'frontend', 'dist', 'index.html')
 
     mainWindow.loadFile(frontendPath)
 
-    // 如果启用了调试模式，自动打开开发者工具
-    if (process.env.DEBUG_MODE === 'true') {
-      setTimeout(() => {
-        mainWindow?.webContents.openDevTools({ mode: 'detach' })
-      }, 1000)
-    }
+    // 生产环境也不自动打开开发者工具
+    // if (process.env.DEBUG_MODE === 'true') {
+    //   setTimeout(() => {
+    //     mainWindow?.webContents.openDevTools({ mode: 'right' })
+    //   }, 1000)
+    // }
   }
 
   // 窗口准备好后显示
@@ -485,26 +485,19 @@ function createWindow() {
   })
 
   mainWindow.on('closed', () => {
-    // 清理标签管理器
-    tabManager?.closeAllTabs()
-    tabManager = null
+    // 清理窗口管理器
+    windowManager?.closeAllWindows()
+    windowManager = null
     mainWindow = null
   })
 
-  // 初始化标签管理器（默认最多5个标签）
-  tabManager = new BrowserTabManager(mainWindow, 6)
+  // 初始化窗口管理器
+  windowManager = new BrowserWindowManager(mainWindow, 6)
 
-  // 监听窗口大小变化
-  mainWindow.on('resize', () => {
-    tabManager?.handleResize()
-  })
-
-  // 初始化主应用标签
-  tabManager.initializeMainApp().then(() => {
-    log.info('Main app tab initialized successfully')
-  }).catch(err => {
-    log.error('Failed to initialize main app tab:', err)
-  })
+  // 监听窗口大小变化（独立窗口不需要）
+  // mainWindow.on('resize', () => {
+  //   windowManager?.handleResize()
+  // })
 }
 
 // IPC 通信处理
@@ -551,7 +544,7 @@ function setupIpcHandlers() {
       if (mainWindow.webContents.isDevToolsOpened()) {
         mainWindow.webContents.closeDevTools()
       } else {
-        mainWindow.webContents.openDevTools({ mode: 'detach' })
+        mainWindow.webContents.openDevTools({ mode: 'right' })
       }
     }
   })
@@ -588,26 +581,108 @@ function setupIpcHandlers() {
     autoUpdater.quitAndInstall(false, true)
   })
 
-  // 显示动态上下文菜单
-  ipcMain.handle('show-context-menu', async (event, items: any[]) => {
+  // 显示调试菜单（固定菜单项）
+  ipcMain.handle('show-debug-menu', async (event) => {
+    log.debug('[DebugMenu] Showing debug menu')
     const win = BrowserWindow.fromWebContents(event.sender)
-    if (!win) return
+    if (!win) {
+      log.error('[DebugMenu] No window found')
+      return
+    }
 
-    // 将前端传递的菜单项转换为 Electron MenuItem
-    const menuItems: MenuItemConstructorOptions[] = items.map(item => {
-      if (item.type === 'separator') {
-        return { type: 'separator' as const }
-      }
-
-      return {
-        label: item.label,
-        type: (item.type || 'normal') as any,
-        enabled: item.enabled !== false,
-        visible: item.visible !== false,
+    const menuItems: MenuItemConstructorOptions[] = [
+      {
+        label: 'Open DevTools',
         click: () => {
-          // 通过 webContents 发送点击事件到渲染进程
-          win.webContents.send('context-menu-clicked', item.label)
+          log.debug('[DebugMenu] Opening dev tools')
+          win.webContents.openDevTools()
         }
+      },
+      { type: 'separator' },
+      {
+        label: 'Open Data Directory',
+        click: () => {
+          log.debug('[DebugMenu] Opening user data folder')
+          shell.openPath(app.getPath('userData'))
+        }
+      },
+      {
+        label: 'Open Install Directory',
+        click: () => {
+          log.debug('[DebugMenu] Opening install folder')
+          const installPath = isDev ? path.join(__dirname, '..', '..') : path.dirname(app.getPath('exe'))
+          shell.openPath(installPath)
+        }
+      }
+    ]
+
+    const menu = Menu.buildFromTemplate(menuItems)
+    menu.popup({ window: win })
+  })
+
+  // 显示标签页右键菜单
+  ipcMain.handle('show-tab-context-menu', async (event, { tabId, isSplitMode }: { tabId: string; isSplitMode: boolean }) => {
+    log.debug('[TabMenu] Showing context menu for tab:', tabId)
+    const win = BrowserWindow.fromWebContents(event.sender)
+    if (!win) {
+      log.error('[TabMenu] No window found')
+      return
+    }
+
+    // 获取目标窗口的 WebContents
+    const targetWin = windowManager?.getWebContents(tabId)
+    if (!targetWin) {
+      log.error('[TabMenu] Target window not found:', tabId)
+      return
+    }
+
+    const menuItems: MenuItemConstructorOptions[] = []
+
+    // 打开开发者工具（内联模式）
+    menuItems.push({
+      label: '打开开发者工具',
+      click: () => {
+        targetWin.openDevTools({ mode: 'right' })
+      }
+    })
+
+    menuItems.push({ type: 'separator' })
+
+    // 设为悬浮窗口
+    const browserWindow = BrowserWindow.fromWebContents(targetWin)
+    if (browserWindow) {
+      const isAlwaysOnTop = browserWindow.isAlwaysOnTop()
+      menuItems.push({
+        label: isAlwaysOnTop ? '取消悬浮' : '设为悬浮窗口',
+        type: 'checkbox',
+        checked: isAlwaysOnTop,
+        click: (item) => {
+          windowManager?.setAlwaysOnTop(tabId, item.checked)
+        }
+      })
+
+      // 隐藏/显示窗口（后台/前台模式）
+      const isVisible = browserWindow.isVisible()
+      menuItems.push({
+        label: isVisible ? '隐藏窗口（后台模式）' : '显示窗口（前台模式）',
+        click: () => {
+          if (isVisible) {
+            windowManager?.hideWindow(tabId)
+          } else {
+            windowManager?.showWindow(tabId)
+          }
+        }
+      })
+    }
+
+    menuItems.push({ type: 'separator' })
+
+    // 关闭窗口
+    menuItems.push({
+      label: '关闭窗口',
+      click: () => {
+        log.debug('[TabMenu] Closing window:', tabId)
+        windowManager?.closeWindow(tabId)
       }
     })
 
@@ -642,13 +717,24 @@ function setupIpcHandlers() {
     })
   })
 
+  // 打开指定文件夹
+  ipcMain.handle('open-folder', async (_, folderPath: string) => {
+    try {
+      await shell.openPath(folderPath)
+      return { success: true }
+    } catch (error) {
+      log.error('打开文件夹失�?', error)
+      return { success: false, error: String(error) }
+    }
+  })
+
   // 剪贴板操作（通过 IPC）
   ipcMain.handle('clipboard-write-text', (_, text: string) => {
     try {
       clipboard.writeText(text)
       return { success: true }
     } catch (error) {
-      console.error('[Main] 剪贴板写入失败:', error)
+      console.error('[Main] 剪贴板写入失�?', error)
       return { success: false, error: (error as Error).message }
     }
   })
@@ -658,7 +744,7 @@ function setupIpcHandlers() {
       const text = clipboard.readText()
       return { success: true, text }
     } catch (error) {
-      console.error('[Main] 剪贴板读取失败:', error)
+      console.error('[Main] 剪贴板读取失�?', error)
       return { success: false, error: (error as Error).message }
     }
   })
@@ -674,36 +760,99 @@ function setupIpcHandlers() {
     }
   })
 
-  // 标签管理相关 IPC
+  // ==================== 浏览器窗口管理 IPC ====================
 
-  // 创建标签
-  ipcMain.handle('browser:create-tab', async (_, { url }) => {
+  // 创建新窗口
+  ipcMain.handle('browser:create-window', async (_, { url, metadata }) => {
     try {
-      const tab = await tabManager!.createTab(url)
-      return { success: true, tab }
+      const windowInfo = await windowManager!.createWindow(url, metadata)
+      return { success: true, window: windowInfo }
     } catch (error: any) {
-      log.error('创建标签失败:', error.message)
+      log.error('创建窗口失败:', error.message)
       return { success: false, error: error.message }
     }
   })
 
-  // 激活标签
-  ipcMain.handle('browser:activate-tab', async (_, { tabId }) => {
-    const success = tabManager!.activateTab(tabId)
-    return { success }
+  // 关闭窗口
+  ipcMain.handle('browser:close-window', async (_, { windowId }) => {
+    try {
+      const success = await windowManager!.closeWindow(windowId)
+      return { success }
+    } catch (error: any) {
+      log.error('关闭窗口失败:', error.message)
+      return { success: false, error: error.message }
+    }
   })
 
-  // 关闭标签
-  ipcMain.handle('browser:close-tab', async (_, { tabId }) => {
-    const success = await tabManager!.closeTab(tabId)
-    return { success }
+  // 获取窗口列表
+  ipcMain.handle('browser:get-windows', () => {
+    try {
+      const windows = windowManager!.getWindowList()
+      return { success: true, windows }
+    } catch (error: any) {
+      log.error('获取窗口列表失败:', error.message)
+      return { success: false, error: error.message }
+    }
   })
 
-  // 获取标签列表
-  ipcMain.handle('browser:get-tabs', () => {
-    const tabs = tabManager!.getTabList()
-    return { success: true, tabs }
+  // 激活/聚焦窗口
+  ipcMain.handle('browser:activate-window', async (_, { windowId }) => {
+    try {
+      // 使用 windowManager 的 showWindow 方法，会自动触发 window-updated 事件
+      windowManager!.showWindow(windowId)
+      return { success: true }
+    } catch (error: any) {
+      log.error('激活窗口失败:', error.message)
+      return { success: false, error: error.message }
+    }
   })
+
+  // ==================== 浏览器窗口后台/前台模式控制 ====================
+
+  // 隐藏窗口（后台模式）
+  ipcMain.handle('browser:hide-window', async (_, { windowId }) => {
+    try {
+      windowManager!.hideWindow(windowId)
+      return { success: true }
+    } catch (error: any) {
+      log.error('隐藏窗口失败:', error.message)
+      return { success: false, error: error.message }
+    }
+  })
+
+  // 显示窗口（前台模式）
+  ipcMain.handle('browser:show-window', async (_, { windowId }) => {
+    try {
+      windowManager!.showWindow(windowId)
+      return { success: true }
+    } catch (error: any) {
+      log.error('显示窗口失败:', error.message)
+      return { success: false, error: error.message }
+    }
+  })
+
+  // 切换窗口可见性
+  ipcMain.handle('browser:toggle-window-visibility', async (_, { windowId }) => {
+    try {
+      const isVisible = windowManager!.toggleWindowVisibility(windowId)
+      return { success: true, isVisible }
+    } catch (error: any) {
+      log.error('切换窗口可见性失败:', error.message)
+      return { success: false, error: error.message }
+    }
+  })
+
+  // 获取窗口可见性状态
+  ipcMain.handle('browser:get-window-visibility', async (_, { windowId }) => {
+    try {
+      const isVisible = windowManager!.isWindowVisible(windowId)
+      return { success: true, isVisible }
+    } catch (error: any) {
+      log.error('获取窗口可见性失败:', error.message)
+      return { success: false, error: error.message }
+    }
+  })
+
 }
 
 // 配置更新器事件监听
@@ -748,24 +897,24 @@ app.whenReady().then(async () => {
     await startBackend()
     log.info('Backend service started successfully')
 
-    // 创建窗口（tabManager 在这里面创建）
+    // 创建窗口（tabManager 在这里面创建�?
     createWindow()
 
-    // 窗口创建后，初始化 Browser Bridge（此时 tabManager 和 backendProcess 都可用）
+    // 窗口创建后，初始�?Browser Bridge（此�?windowManager �?backendProcess 都可用）
     const bridgeMode = process.env.BROWSER_BRIDGE_MODE || (isDev ? 'tcp' : 'ipc')
 
     if (bridgeMode === 'tcp') {
       // TCP 模式（开发环境）
       const port = parseInt(process.env.BROWSER_BRIDGE_PORT || '3001')
       log.info(`Starting Browser Bridge in TCP mode on port ${port}...`)
-      await startBrowserBridgeTCP(port, tabManager!)
+      await startBrowserBridgeTCP(port, windowManager!)
       process.env.BROWSER_BRIDGE_PORT = String(port)
       log.info('Browser Bridge TCP started successfully')
     } else {
       // IPC 模式（生产环境）
       if (backendProcess) {
         log.info('Initializing Browser Bridge with backend process (IPC mode)')
-        startBrowserBridge(tabManager!, backendProcess)
+        startBrowserBridge(windowManager!, backendProcess)
         browserBridgeInitialized = true
         log.info('Browser Bridge IPC initialized successfully')
       } else {
@@ -786,7 +935,7 @@ app.on('window-all-closed', () => {
   if (backendProcess) {
     console.log('Stopping backend service...')
 
-    // 根据平台选择适当的终止方式
+    // 根据平台选择适当的终止方法
     if (process.platform === 'win32') {
       // Windows: 使用 taskkill 命令终止进程树
       const { exec } = require('child_process')
@@ -833,9 +982,9 @@ app.on('before-quit', async () => {
   }
 
   if (backendProcess) {
-    // 根据平台选择适当的终止方式
+    // 根据平台选择适当的终止方法
     if (process.platform === 'win32') {
-      // Windows: 使用 taskkill 命令终止进程树
+      // Windows: 使用 taskkill 命令终止进程
       const { execSync } = require('child_process')
       try {
         execSync(`taskkill /pid ${backendProcess.pid} /T /F`, { stdio: 'ignore' })

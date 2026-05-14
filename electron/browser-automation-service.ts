@@ -1,6 +1,6 @@
-﻿import { BrowserWindow } from 'electron'
+import { BrowserWindow } from 'electron'
 import log from 'electron-log/main'
-import { BrowserTabManager, TabInfo } from './browser-tab-manager'
+import { BrowserWindowManager, WindowInfo } from './browser-tab-manager'
 
 /**
  * 浏览器自动化工具请求接口
@@ -21,111 +21,103 @@ export interface ToolResponse {
 }
 
 /**
- * 标签页信息接口
- */
-export interface WindowInfo {
-  windowId: string
-  url: string
-  title: string
-}
-
-/**
- * 浏览器自动化核心服务（基于标签页系统)
+ * 浏览器自动化核心服务（基于独立窗口系统)
  * 
  * 职责说明：
- * - 管理多个标签页生命周期（基于 BrowserTabManager）
+ * - 管理多个独立窗口生命周期（基于 BrowserWindowManager）
  * - 执行浏览器自动化操作（导航、截图、JS执行等）
  * - 清理无痕数据
  * - 超时自动关闭
  * 
  * 与通信协议解耦，可被 IPC、TCP、UDP 等多种协议复用
  * 
- * 注意：每个标签页使用独立的 session，与主窗口隔离，避免影响主窗口认证状态
+ * 注意：每个窗口使用独立的 session，与主窗口隔离，避免影响主窗口认证状态
  */
 export class BrowserAutomationService {
-  private tabManager: BrowserTabManager | null = null
-  private maxTabs: number = 6 // 默认最多6个标签（含主应用，即可创建5个）
+  private windowManager: BrowserWindowManager | null = null
+  private maxWindows: number = 6 // 默认最多6个窗口（含主应用，即可创建5个）
   private inactivityTimeout: number = 300000 // 默认5分钟无操作自动关闭
 
-  constructor(config: { maxTabs?: number; inactivityTimeout?: number } = {}) {
-    this.maxTabs = config.maxTabs || 6
+  constructor(config: { maxWindows?: number; inactivityTimeout?: number } = {}) {
+    this.maxWindows = config.maxWindows || 6
     this.inactivityTimeout = config.inactivityTimeout || 300000
   }
 
   /**
-   * 初始化标签管理器（必须在应用启动时调用）
+   * 初始化窗口管理器（必须在应用启动时调用）
    */
-  initializeTabManager(tabManager: BrowserTabManager): void {
-    this.tabManager = tabManager
-    log.info('BrowserAutomationService initialized with TabManager')
+  initializeWindowManager(windowManager: BrowserWindowManager): void {
+    this.windowManager = windowManager
+    log.info('BrowserAutomationService initialized with WindowManager')
   }
 
   /**
-   * 创建新的浏览器标签页
+   * 创建新的浏览器窗口
    * @param url - 初始 URL（可选）
-   * @returns 标签页ID
+   * @param metadata - 元数据（可选，用于 session 隔离和作用域标识）
+   * @returns 窗口ID
    */
-  async createWindow(url?: string): Promise<string> {
-    if (!this.tabManager) {
-      throw new Error('TabManager not initialized. Call initializeTabManager() first.')
+  async createWindow(url?: string, metadata?: Record<string, any>): Promise<string> {
+    if (!this.windowManager) {
+      throw new Error('WindowManager not initialized. Call initializeWindowManager() first.')
     }
 
-    const tabInfo = await this.tabManager.createTab(url, false) // 不自动激活
+    const windowInfo = await this.windowManager.createWindow(url, metadata)
 
-    log.info(`Browser tab created: ${tabInfo.tabId}`)
-    return tabInfo.tabId
+    log.info(`Browser window created: ${windowInfo.windowId}`, metadata)
+    return windowInfo.windowId
   }
 
 
   /**
-   * 确保标签页存在
+   * 确保窗口存在
    */
-  private async ensureTab(tabId: string): Promise<{ tabId: string; tabInfo: TabInfo }> {
-    if (!tabId) {
+  private async ensureWindow(windowId: string): Promise<{ windowId: string; windowInfo: WindowInfo }> {
+    if (!windowId) {
       throw new Error('window_id is required for all browser operations')
     }
 
-    if (!this.tabManager) {
-      throw new Error('TabManager not initialized')
+    if (!this.windowManager) {
+      throw new Error('WindowManager not initialized')
     }
 
-    const tabs = this.tabManager.getTabList()
-    const tabInfo = tabs.find(t => t.tabId === tabId)
+    const windows = this.windowManager.getWindowList()
+    const windowInfo = windows.find(w => w.windowId === windowId)
 
-    if (!tabInfo) {
-      throw new Error(`Window ${tabId} not found. Use get_window_list() to see available windows.`)
+    if (!windowInfo) {
+      throw new Error(`Window ${windowId} not found. Use get_window_list() to see available windows.`)
     }
 
-    return { tabId, tabInfo }
+    return { windowId, windowInfo }
   }
 
   /**
-   * 销毁所有标签页并清理数据
+   * 销毁所有窗口并清理数据
    */
   async destroy(): Promise<void> {
-    if (!this.tabManager) {
-      log.info('No tabs to destroy')
+    if (!this.windowManager) {
+      log.info('No windows to destroy')
       return
     }
 
-    log.info('Destroying all browser tabs...')
+    log.info('Destroying all browser windows...')
 
     try {
-      const tabs = this.tabManager.getTabList()
-      for (const tab of tabs) {
-        // 不关闭主应用标签
-        if (!tab.isMainApp) {
+      const windows = this.windowManager.getWindowList()
+      for (const win of windows) {
+        // 不关闭主应用窗口
+        if (!win.isMainApp) {
           try {
-            await this.tabManager.closeTab(tab.tabId)
+            await this.windowManager.closeWindow(win.windowId)
           } catch (error) {
-            log.error(`Error closing tab ${tab.tabId}:`, error)
+            log.error(`Error closing window ${win.windowId}:`, error)
           }
         }
       }
 
-      log.info('All tabs destroyed')
+      log.info('All windows destroyed')
     } catch (error) {
-      log.error('Error during tab destruction:', error)
+      log.error('Error during window destruction:', error)
     }
   }
 
@@ -133,17 +125,17 @@ export class BrowserAutomationService {
    * 导航到指定 URL
    */
   async navigate(url: string, windowId: string): Promise<any> {
-    const { tabId } = await this.ensureTab(windowId)
+    const { windowId: wid } = await this.ensureWindow(windowId)
 
-    if (!this.tabManager) {
-      throw new Error('TabManager not initialized')
+    if (!this.windowManager) {
+      throw new Error('WindowManager not initialized')
     }
 
-    log.info(`Navigating to: ${url} (tab: ${tabId})`)
+    log.info(`Navigating to: ${url} (window: ${wid})`)
 
-    const webContents = this.tabManager.getWebContents(tabId)
+    const webContents = this.windowManager.getWebContents(wid)
     if (!webContents) {
-      throw new Error(`Tab ${tabId} not found`)
+      throw new Error(`Window ${wid} not found`)
     }
 
     return new Promise((resolve, reject) => {
@@ -155,7 +147,7 @@ export class BrowserAutomationService {
         clearTimeout(timeout)
         resolve({
           success: true,
-          windowId: tabId,
+          windowId: wid,
           url: webContents.getURL(),
           title: webContents.getTitle(),
         })
@@ -176,17 +168,17 @@ export class BrowserAutomationService {
    */
   // async screenshot(options: { format?: 'png' | 'jpeg'; quality?: number; windowId?: string } = {}): Promise<any> {
   //   const { windowId, ...screenshotOptions } = options
-  //   const { tabId } = await this.ensureTab(windowId)
+  //   const { wid } = await this.ensureTab(windowId)
 
-  //   if (!this.tabManager) {
+  //   if (!this.windowManager) {
   //     throw new Error('TabManager not initialized')
   //   }
 
-  //   log.info(`Taking screenshot (tab: ${tabId})...`)
+  //   log.info(`Taking screenshot (tab: ${wid})...`)
 
-  //   const webContents = this.tabManager.getWebContents(tabId)
+  //   const webContents = this.windowManager.getWebContents(wid)
   //   if (!webContents) {
-  //     throw new Error(`Tab ${tabId} not found`)
+  //     throw new Error(`Tab ${wid} not found`)
   //   }
 
   //   // 等待页面完全加载
@@ -201,7 +193,7 @@ export class BrowserAutomationService {
 
   //   return {
   //     success: true,
-  //     windowId: tabId,
+  //     windowId: wid,
   //     format: screenshotOptions.format || 'png',
   //     data: base64,
   //   }
@@ -217,27 +209,101 @@ export class BrowserAutomationService {
    * @param isAsync 是否支持异步代码（默认 false）
    */
   async executeJavaScript(code: string, windowId: string, isAsync: boolean = false): Promise<any> {
-    const { tabId } = await this.ensureTab(windowId)
+    const { windowId: wid } = await this.ensureWindow(windowId)
 
-    if (!this.tabManager) {
+    if (!this.windowManager) {
       throw new Error('TabManager not initialized')
     }
 
-    log.info(`Executing JavaScript (tab: ${tabId})...`)
+    log.info(`Executing JavaScript (tab: ${wid})...`)
 
-    const webContents = this.tabManager.getWebContents(tabId)
+    const webContents = this.windowManager.getWebContents(wid)
     if (!webContents) {
-      throw new Error(`Tab ${tabId} not found`)
+      throw new Error(`Tab ${wid} not found`)
     }
+
+    // 设置控制台日志捕获
+    const consoleLogs: Array<{ level: number; message: string }> = []
+    const MAX_CONSOLE_LINES = 200
+    const MAX_CONSOLE_CHARS = 5000
+    
+    const consoleListener = (event: Electron.ConsoleMessageEvent) => {
+      const levelNames: Record<number, string> = { 0: 'verbose', 1: 'info', 2: 'warning', 3: 'error' }
+      const levelName = levelNames[event.level] || 'unknown'
+      log.debug(`[Renderer Console][${levelName}] ${event.message}`)
+      consoleLogs.push({ level: event.level, message: event.message })
+      
+      // 限制行数：超过200行时移除最早的日志
+      if (consoleLogs.length > MAX_CONSOLE_LINES) {
+        consoleLogs.shift()
+      }
+    }
+    // @ts-ignore - console-message is a valid Electron event
+    webContents.on('console-message', consoleListener)
+    log.debug(`Console listener attached for tab ${wid} (max ${MAX_CONSOLE_LINES} lines, ${MAX_CONSOLE_CHARS} chars)`)
 
     try {
       // 如果是异步模式,将代码包装在 async IIFE 中
       // 关键改进:在渲染进程中包裹 try-catch,返回错误对象而不是抛出异常
+      
+      // 定义 safeSerialize 函数，注入到渲染进程中
+      const safeSerializeFunction = `
+        function safeSerialize(value) {
+          if (value === null || value === undefined) {
+            return value;
+          }
+          
+          const type = typeof value;
+          if (type === 'string' || type === 'number' || type === 'boolean') {
+            return value;
+          }
+          
+          // 检测 DOM 元素（使用 duck typing）
+          if (value && value.nodeType === 1 && value.tagName) {
+            const tagName = value.tagName.toLowerCase();
+            const id = value.id ? '#' + value.id : '';
+            const className = value.className && typeof value.className === 'string' 
+              ? '.' + value.className.split(' ').filter(c => c).join('.') 
+              : '';
+            return '[HTMLElement: ' + tagName + id + className + ']';
+          }
+          
+          // 检测 NodeList
+          if (value && typeof value.length === 'number' && value.item) {
+            return '[NodeList: ' + value.length + ' items]';
+          }
+          
+          // 处理函数
+          if (type === 'function') {
+            return '[Function]';
+          }
+          
+          // 对于对象和数组，递归处理其中的不可序列化值
+          if (Array.isArray(value)) {
+            return value.map(item => safeSerialize(item));
+          }
+          
+          if (type === 'object') {
+            const result = {};
+            for (const key in value) {
+              if (value.hasOwnProperty(key)) {
+                result[key] = safeSerialize(value[key]);
+              }
+            }
+            return result;
+          }
+          
+          return value;
+        }
+      `
+      
       const wrappedCode = isAsync 
         ? `(async () => { 
+            ${safeSerializeFunction}
             try { 
-              const result = ${code};
-              return { __success: true, data: result };
+              // 使用 eval 执行多行代码，返回最后一行的值
+              const result = await (async () => { ${code} })();
+              return { __success: true, data: safeSerialize(result) };
             } catch (error) {
               return {
                 __success: false,
@@ -253,9 +319,11 @@ export class BrowserAutomationService {
           })()` 
         : `
           (function() {
+            ${safeSerializeFunction}
             try { 
-              const result = ${code};
-              return { __success: true, data: result };
+              // 使用 eval 执行多行代码，返回最后一行的值
+              const result = (function() { ${code} })();
+              return { __success: true, data: safeSerialize(result) };
             } catch (error) {
               return {
                 __success: false,
@@ -272,6 +340,7 @@ export class BrowserAutomationService {
         `
           
       const result = await webContents.executeJavaScript(wrappedCode, true)
+      log.debug(`JavaScript execution completed, captured ${consoleLogs.length} console messages`)
           
       // 检查是否是错误响应
       if (result && typeof result === 'object' && '__success' in result) {
@@ -295,39 +364,133 @@ export class BrowserAutomationService {
             detailedError += `\nLocation: Line ${line}, Column ${col}`
           }
               
-          log.error(`JavaScript execution failed in tab ${tabId}:`, detailedError)
+          // 附加控制台日志（应用长度限制）
+          if (consoleLogs.length > 0) {
+            detailedError += `\n\nConsole logs:`
+            let totalChars = 0
+            let truncatedCount = 0
+            
+            // 从后往前遍历，保留最近的日志
+            const reversedLogs = [...consoleLogs].reverse()
+            const selectedLogs: Array<{ level: number; message: string }> = []
+            
+            for (const log of reversedLogs) {
+              const levelNames: Record<number, string> = { 0: 'verbose', 1: 'info', 2: 'warning', 3: 'error' }
+              const levelName = levelNames[log.level] || 'unknown'
+              const logLine = `[${levelName}] ${log.message}`
+              
+              if (totalChars + logLine.length <= MAX_CONSOLE_CHARS) {
+                selectedLogs.unshift(log)
+                totalChars += logLine.length + 1 // +1 for newline
+              } else {
+                truncatedCount++
+              }
+            }
+            
+            if (truncatedCount > 0) {
+              detailedError += `\n(Showing last ${selectedLogs.length} logs, ${truncatedCount} older logs omitted due to ${MAX_CONSOLE_CHARS} char limit)`
+            }
+            
+            selectedLogs.forEach(log => {
+              const levelNames: Record<number, string> = { 0: 'verbose', 1: 'info', 2: 'warning', 3: 'error' }
+              const levelName = levelNames[log.level] || 'unknown'
+              detailedError += `\n[${levelName}] ${log.message}`
+            })
+          }
+              
+          log.error(`JavaScript execution failed in tab ${wid}:`, detailedError)
               
           return {
             success: false,
-            windowId: tabId,
+            windowId: wid,
             error: detailedError,
             details: errorInfo,
+            consoleLogs: consoleLogs.length > 0 ? consoleLogs : undefined,
           }
         }
             
         // 执行成功,返回数据
         return {
           success: true,
-          windowId: tabId,
+          windowId: wid,
           result: result.data,
+          consoleLogs: consoleLogs.length > 0 ? this.truncateConsoleLogs(consoleLogs, MAX_CONSOLE_CHARS) : undefined,
         }
       }
           
       // 兼容旧代码:如果没有 __success 标记,直接返回结果
       return {
         success: true,
-        windowId: tabId,
+        windowId: wid,
         result,
+        consoleLogs: consoleLogs.length > 0 ? this.truncateConsoleLogs(consoleLogs, MAX_CONSOLE_CHARS) : undefined,
       }
     } catch (error: any) {
-      // 这里捕获的是主进程级别的错误(如页面未加载等)
-      log.error(`JavaScript execution failed in tab ${tabId}:`, error.message)
+      // 这里捕获的是主进程级别的错误(如页面未加载、通信失败等)
+      log.error(`JavaScript execution failed in tab ${wid}:`, error.message)
+      
+      // 构建详细错误信息
+      let errorMessage = error.message
+      
+      // 如果是通用的脚本执行失败错误，尝试提供更多上下文
+      if (error.message.includes('Script failed to execute')) {
+        errorMessage = `Script execution failed. This usually means a syntax error or runtime exception occurred.\n`
+        errorMessage += `Original error: ${error.message}\n`
+        
+        // 附加控制台日志帮助调试（应用长度限制）
+        if (consoleLogs.length > 0) {
+          errorMessage += `\nConsole logs captured before failure:`
+          let totalChars = 0
+          let truncatedCount = 0
+          
+          // 从后往前遍历，保留最近的日志
+          const reversedLogs = [...consoleLogs].reverse()
+          const selectedLogs: Array<{ level: number; message: string }> = []
+          
+          for (const log of reversedLogs) {
+            const levelNames: Record<number, string> = { 0: 'verbose', 1: 'info', 2: 'warning', 3: 'error' }
+            const levelName = levelNames[log.level] || 'unknown'
+            const logLine = `[${levelName}] ${log.message}`
+            
+            if (totalChars + logLine.length <= MAX_CONSOLE_CHARS) {
+              selectedLogs.unshift(log)
+              totalChars += logLine.length + 1 // +1 for newline
+            } else {
+              truncatedCount++
+            }
+          }
+          
+          if (truncatedCount > 0) {
+            errorMessage += `\n(Showing last ${selectedLogs.length} logs, ${truncatedCount} older logs omitted due to ${MAX_CONSOLE_CHARS} char limit)`
+          }
+          
+          selectedLogs.forEach(log => {
+            const levelNames: Record<number, string> = { 0: 'verbose', 1: 'info', 2: 'warning', 3: 'error' }
+            const levelName = levelNames[log.level] || 'unknown'
+            errorMessage += `\n[${levelName}] ${log.message}`
+          })
+        } else {
+          errorMessage += `\nNo console logs were captured. The error may have occurred during script parsing.`
+        }
+        
+        errorMessage += `\n\nSuggestions:`
+        errorMessage += `\n1. Check for syntax errors in your JavaScript code`
+        errorMessage += `\n2. Ensure all variables and functions are defined`
+        errorMessage += `\n3. Try wrapping your code in a try-catch block`
+        errorMessage += `\n4. Use execute_js with simpler code first to test`
+      }
           
       return {
         success: false,
-        windowId: tabId,
-        error: error.message,
+        windowId: wid,
+        error: errorMessage,
+        consoleLogs: consoleLogs.length > 0 ? this.truncateConsoleLogs(consoleLogs, MAX_CONSOLE_CHARS) : undefined,
       }
+    } finally {
+      // 清理控制台监听器
+      // @ts-ignore - console-message is a valid Electron event
+      webContents.off('console-message', consoleListener)
+      log.debug(`Console listener removed for tab ${wid}, total logs captured: ${consoleLogs.length}`)
     }
   }
 
@@ -342,17 +505,17 @@ export class BrowserAutomationService {
    * }
    */
   async getPageStruct(windowId: string): Promise<any> {
-    const { tabId } = await this.ensureTab(windowId)
+    const { windowId: wid } = await this.ensureWindow(windowId)
 
-    if (!this.tabManager) {
+    if (!this.windowManager) {
       throw new Error('TabManager not initialized')
     }
 
-    log.info(`Getting page structure (tab: ${tabId})...`)
+    log.info(`Getting page structure (tab: ${wid})...`)
 
-    const webContents = this.tabManager.getWebContents(tabId)
+    const webContents = this.windowManager.getWebContents(wid)
     if (!webContents) {
-      throw new Error(`Tab ${tabId} not found`)
+      throw new Error(`Tab ${wid} not found`)
     }
 
     // 等待页面完全加载
@@ -379,13 +542,25 @@ export class BrowserAutomationService {
       jsonStructure = await webContents.executeJavaScript(`
         (function() {
           try {
-            // DOM 转 JSON 的核心函数（选择器风格优化 - 方案 E）
-            function domToSelectorStyle(element, depth) {
-              if (depth > 50) return null;
+            // 配置常量
+            const CONFIG = {
+              MAX_DEPTH: 50,              // 最大递归深度
+              SIMPLE_DEPTH: 15,           // 超过此深度仅显示 node 字段
+              MAX_SIBLINGS: 10,           // 同类型子节点最大数量
+              KEEP_HEAD_COUNT: 5,         // 列表省略时保留的头部数量
+              KEEP_TAIL_COUNT: 3,         // 列表省略时保留的尾部数量
+              MAX_TEXT_LENGTH: 2000,      // 文本最大长度
+              MAX_ATTR_VALUE_LENGTH: 300  // 属性值最大长度
+            };
+
+            // DOM 转 JSON 的核心函数（智能压缩优化 - 方案 F）
+            function domToSmartCompress(element, depth, parentSelector) {
+              if (depth > CONFIG.MAX_DEPTH) {
+                return { node: '...', warning: 'Maximum depth exceeded' };
+              }
               
               const tag = element.tagName.toLowerCase();
               const id = element.id;
-              // 仅当 className 为字符串时处理
               const classes = (typeof element.className === 'string' && element.className) 
                 ? element.className.trim().split(/\\s+/).filter(Boolean) 
                 : [];
@@ -394,6 +569,13 @@ export class BrowserAutomationService {
               let selectorStr = tag;
               if (classes.length > 0) selectorStr += '.' + classes.join('.');
               if (id) selectorStr += '#' + id;
+              
+              const currentSelector = parentSelector ? parentSelector + ' > ' + selectorStr : selectorStr;
+              
+              // 超过 SIMPLE_DEPTH 后，仅返回 node 字段
+              if (depth > CONFIG.SIMPLE_DEPTH) {
+                return { node: selectorStr };
+              }
               
               const node = { node: selectorStr };
               
@@ -434,34 +616,93 @@ export class BrowserAutomationService {
                 }
                 
                 // 长度大于 300 截断
-                if (value.length > 300) value = value.substring(0, 300) + '...';
+                if (value.length > CONFIG.MAX_ATTR_VALUE_LENGTH) {
+                  value = value.substring(0, CONFIG.MAX_ATTR_VALUE_LENGTH) + '...';
+                }
                 node[attr.name] = value;
               }
               
               // 处理文本
               const text = element.textContent ? element.textContent.trim() : '';
               if (element.children.length === 0 && text.length > 0) {
-                node.text = text.substring(0, 10000);
+                node.text = text.substring(0, CONFIG.MAX_TEXT_LENGTH);
               }
               
-              // 处理子节点
+              // 处理子节点（带智能压缩）
               const children = [];
-              for (let i = 0; i < element.children.length; i++) {
-                const childNode = domToSelectorStyle(element.children[i], depth + 1);
-                if (childNode) children.push(childNode);
+              const childElements = Array.from(element.children);
+              
+              // 检测是否需要列表压缩
+              if (childElements.length > CONFIG.MAX_SIBLINGS) {
+                // 按选择器分组统计
+                const groupMap = new Map();
+                childElements.forEach(child => {
+                  const childTag = child.tagName.toLowerCase();
+                  const childClasses = (typeof child.className === 'string' && child.className)
+                    ? child.className.trim().split(/\\s+/).filter(Boolean).join('.')
+                    : '';
+                  const groupKey = childTag + (childClasses ? '.' + childClasses : '');
+                  
+                  if (!groupMap.has(groupKey)) {
+                    groupMap.set(groupKey, []);
+                  }
+                  groupMap.get(groupKey).push(child);
+                });
+                
+                // 对每个组进行处理
+                groupMap.forEach((group, groupKey) => {
+                  if (group.length > CONFIG.MAX_SIBLINGS) {
+                    // 保留头部和尾部，中间插入省略提示
+                    const headCount = Math.min(CONFIG.KEEP_HEAD_COUNT, group.length);
+                    const tailCount = Math.min(CONFIG.KEEP_TAIL_COUNT, group.length - headCount);
+                    
+                    // 添加头部元素
+                    for (let i = 0; i < headCount; i++) {
+                      const childNode = domToSmartCompress(group[i], depth + 1, currentSelector);
+                      if (childNode) children.push(childNode);
+                    }
+                    
+                    // 插入省略提示
+                    const omittedCount = group.length - headCount - tailCount;
+                    children.push({
+                      node: '...',
+                      warning: \`Omitted \${omittedCount} similar \${groupKey} elements. Use querySelector('\${currentSelector} > \${groupKey}:nth-child(n)') to access specific items.\`,
+                      omittedCount: omittedCount,
+                      elementType: groupKey
+                    });
+                    
+                    // 添加尾部元素
+                    for (let i = group.length - tailCount; i < group.length; i++) {
+                      const childNode = domToSmartCompress(group[i], depth + 1, currentSelector);
+                      if (childNode) children.push(childNode);
+                    }
+                  } else {
+                    // 数量不多，全部添加
+                    group.forEach(child => {
+                      const childNode = domToSmartCompress(child, depth + 1, currentSelector);
+                      if (childNode) children.push(childNode);
+                    });
+                  }
+                });
+              } else {
+                // 子节点数量不多，正常处理
+                for (let i = 0; i < childElements.length; i++) {
+                  const childNode = domToSmartCompress(childElements[i], depth + 1, currentSelector);
+                  if (childNode) children.push(childNode);
+                }
               }
               
               if (children.length > 0) {
                 // 极简子节点优化：如果子节点只有 node 字段，则转为字符串数组
                 const allSimple = children.every(c => Object.keys(c).length === 1 && c.node);
-                node.children = allSimple ? children.map(c => c.node) : children;
+                node.child = allSimple ? children.map(c => c.node) : children;
               }
               
               return node;
             }
             
-            // 克隆并清理 DOM
-            const clone = document.documentElement.cloneNode(true);
+            // 克隆并清理 DOM（从 body 开始，避免 html 和 head 层）
+            const clone = document.body.cloneNode(true);
             const unwantedSelectors = 'script, style, link, noscript, meta, iframe';
             const unwantedElements = clone.querySelectorAll(unwantedSelectors);
             for (let i = unwantedElements.length - 1; i >= 0; i--) {
@@ -473,6 +714,25 @@ export class BrowserAutomationService {
               while (svgs[i].attributes.length > 0) svgs[i].removeAttribute(svgs[i].attributes[0].name);
               while (svgs[i].firstChild) svgs[i].removeChild(svgs[i].firstChild);
             }
+            
+            // 清理 blob URL 和 object URL，避免克隆后访问失败
+            function cleanBlobUrls(node) {
+              if (node.nodeType === Node.ELEMENT_NODE) {
+                const attrsToRemove = [];
+                for (let i = 0; i < node.attributes.length; i++) {
+                  const attr = node.attributes[i];
+                  // 检测 blob: 或 object URLs
+                  if (attr.value && (attr.value.startsWith('blob:') || attr.value.startsWith('object:'))) {
+                    attrsToRemove.push(attr.name);
+                  }
+                }
+                attrsToRemove.forEach(attrName => node.removeAttribute(attrName));
+                
+                // 递归处理子节点
+                Array.from(node.childNodes).forEach(cleanBlobUrls);
+              }
+            }
+            cleanBlobUrls(clone);
             
             function removeComments(node) {
               if (node.nodeType === Node.COMMENT_NODE) {
@@ -488,7 +748,11 @@ export class BrowserAutomationService {
                 if (child.nodeType === Node.ELEMENT_NODE) {
                   removeEmptyElements(child);
                   const tagName = child.tagName.toLowerCase();
-                  if (['div', 'span', 'p', 'section', 'article', 'aside'].includes(tagName)) {
+                  // 保留所有表单元素和交互式元素，即使是空的
+                  const isFormElement = ['button', 'input', 'select', 'textarea', 'form'].includes(tagName);
+                  const isInteractive = ['a', 'label'].includes(tagName);
+                  
+                  if (!isFormElement && !isInteractive && ['div', 'span', 'p', 'section', 'article', 'aside'].includes(tagName)) {
                     const hasText = child.textContent && child.textContent.trim().length > 0;
                     const hasChildren = child.children.length > 0;
                     const hasImportantAttrs = child.hasAttribute('id') || child.hasAttribute('role') ||
@@ -503,7 +767,7 @@ export class BrowserAutomationService {
             }
             removeEmptyElements(clone);
             
-            return domToSelectorStyle(clone, 0);
+            return domToSmartCompress(clone, 0, '');
           } catch (error) {
             console.error('Error in getPageStruct:', error);
             return { node: 'error', text: 'Failed to parse DOM: ' + error.toString() };
@@ -533,7 +797,7 @@ export class BrowserAutomationService {
 
     return {
       success: true,
-      windowId: tabId,
+      windowId: wid,
       url,
       title,
       struct: jsonStructure,
@@ -544,17 +808,17 @@ export class BrowserAutomationService {
    * 获取页面纯文本内容
    */
   async getPageText(windowId: string): Promise<any> {
-    const { tabId } = await this.ensureTab(windowId)
+    const { windowId: wid } = await this.ensureWindow(windowId)
 
-    if (!this.tabManager) {
+    if (!this.windowManager) {
       throw new Error('TabManager not initialized')
     }
 
-    log.info(`Getting page text (tab: ${tabId})...`)
+    log.info(`Getting page text (tab: ${wid})...`)
 
-    const webContents = this.tabManager.getWebContents(tabId)
+    const webContents = this.windowManager.getWebContents(wid)
     if (!webContents) {
-      throw new Error(`Tab ${tabId} not found`)
+      throw new Error(`Tab ${wid} not found`)
     }
 
     // 等待页面完全加载
@@ -598,7 +862,7 @@ export class BrowserAutomationService {
       log.error(`Failed to get plain text`)
       log.error(`   Error message: ${error.message}`)
       log.error(`   Error name: ${error.name}`)
-      log.error(`   Tab ID: ${tabId}`)
+      log.error(`   Tab ID: ${wid}`)
       log.error(`   URL: ${currentUrl}`)
       throw new Error(`Failed to get plain text: ${error.message}`)
     }
@@ -608,7 +872,7 @@ export class BrowserAutomationService {
 
     return {
       success: true,
-      windowId: tabId,
+      windowId: wid,
       url,
       title,
       text,
@@ -619,17 +883,17 @@ export class BrowserAutomationService {
    * 获取页面摘要（文字、链接和标题层级）
    */
   async getPageSummary(windowId: string): Promise<any> {
-    const { tabId } = await this.ensureTab(windowId)
+    const { windowId: wid } = await this.ensureWindow(windowId)
 
-    if (!this.tabManager) {
+    if (!this.windowManager) {
       throw new Error('TabManager not initialized')
     }
 
-    log.info(`Getting main structure (tab: ${tabId})...`)
+    log.info(`Getting main structure (tab: ${wid})...`)
 
-    const webContents = this.tabManager.getWebContents(tabId)
+    const webContents = this.windowManager.getWebContents(wid)
     if (!webContents) {
-      throw new Error(`Tab ${tabId} not found`)
+      throw new Error(`Tab ${wid} not found`)
     }
 
     // 等待页面完全加载
@@ -717,7 +981,7 @@ export class BrowserAutomationService {
       log.error(`   Error message: ${error.message}`)
       log.error(`   Error name: ${error.name}`)
       log.error(`   Error stack: ${error.stack}`)
-      log.error(`   Tab ID: ${tabId}`)
+      log.error(`   Tab ID: ${wid}`)
       log.error(`   URL: ${currentUrl}`)
       log.error(`   Title: ${pageTitle}`)
 
@@ -746,7 +1010,7 @@ export class BrowserAutomationService {
 
     return {
       success: true,
-      windowId: tabId,
+      windowId: wid,
       url,
       title,
       ...structure,
@@ -757,17 +1021,17 @@ export class BrowserAutomationService {
    * 等待元素出现
    */
   async waitForSelector(selector: string, timeout: number = 10000, windowId: string): Promise<any> {
-    const { tabId } = await this.ensureTab(windowId)
+    const { windowId: wid } = await this.ensureWindow(windowId)
 
-    if (!this.tabManager) {
+    if (!this.windowManager) {
       throw new Error('TabManager not initialized')
     }
 
-    log.info(`Waiting for selector: ${selector} (tab: ${tabId})`)
+    log.info(`Waiting for selector: ${selector} (tab: ${wid})`)
 
-    const webContents = this.tabManager.getWebContents(tabId)
+    const webContents = this.windowManager.getWebContents(wid)
     if (!webContents) {
-      throw new Error(`Tab ${tabId} not found`)
+      throw new Error(`Tab ${wid} not found`)
     }
 
     const result = await webContents.executeJavaScript(`
@@ -797,7 +1061,7 @@ export class BrowserAutomationService {
 
     return {
       success: true,
-      windowId: tabId,
+      windowId: wid,
       ...result,
     }
   }
@@ -806,17 +1070,17 @@ export class BrowserAutomationService {
    * 点击元素
    */
   async click(selector: string, windowId: string): Promise<any> {
-    const { tabId } = await this.ensureTab(windowId)
+    const { windowId: wid } = await this.ensureWindow(windowId)
 
-    if (!this.tabManager) {
+    if (!this.windowManager) {
       throw new Error('TabManager not initialized')
     }
 
-    log.info(`Clicking element: ${selector} (tab: ${tabId})`)
+    log.info(`Clicking element: ${selector} (tab: ${wid})`)
 
-    const webContents = this.tabManager.getWebContents(tabId)
+    const webContents = this.windowManager.getWebContents(wid)
     if (!webContents) {
-      throw new Error(`Tab ${tabId} not found`)
+      throw new Error(`Tab ${wid} not found`)
     }
 
     const result = await webContents.executeJavaScript(`
@@ -832,7 +1096,7 @@ export class BrowserAutomationService {
     `)
 
     return {
-      windowId: tabId,
+      windowId: wid,
       ...result,
     }
   }
@@ -841,17 +1105,17 @@ export class BrowserAutomationService {
    * 填充表单字段
    */
   async fillForm(selector: string, value: string, windowId: string): Promise<any> {
-    const { tabId } = await this.ensureTab(windowId)
+    const { windowId: wid } = await this.ensureWindow(windowId)
 
-    if (!this.tabManager) {
+    if (!this.windowManager) {
       throw new Error('TabManager not initialized')
     }
 
-    log.info(`Filling form field: ${selector} (tab: ${tabId})`)
+    log.info(`Filling form field: ${selector} (tab: ${wid})`)
 
-    const webContents = this.tabManager.getWebContents(tabId)
+    const webContents = this.windowManager.getWebContents(wid)
     if (!webContents) {
-      throw new Error(`Tab ${tabId} not found`)
+      throw new Error(`Tab ${wid} not found`)
     }
 
     const result = await webContents.executeJavaScript(`
@@ -869,7 +1133,7 @@ export class BrowserAutomationService {
     `)
 
     return {
-      windowId: tabId,
+      windowId: wid,
       ...result,
     }
   }
@@ -878,17 +1142,17 @@ export class BrowserAutomationService {
    * 后退
    */
   async goBack(windowId: string): Promise<any> {
-    const { tabId } = await this.ensureTab(windowId)
+    const { windowId: wid } = await this.ensureWindow(windowId)
 
-    if (!this.tabManager) {
+    if (!this.windowManager) {
       throw new Error('TabManager not initialized')
     }
 
-    log.info(`Going back (tab: ${tabId})...`)
+    log.info(`Going back (tab: ${wid})...`)
 
-    const webContents = this.tabManager.getWebContents(tabId)
+    const webContents = this.windowManager.getWebContents(wid)
     if (!webContents) {
-      throw new Error(`Tab ${tabId} not found`)
+      throw new Error(`Tab ${wid} not found`)
     }
 
     // 使用新的 navigationHistory API
@@ -899,7 +1163,7 @@ export class BrowserAutomationService {
 
     return {
       success: true,
-      windowId: tabId,
+      windowId: wid,
       url: webContents.getURL(),
     }
   }
@@ -908,17 +1172,17 @@ export class BrowserAutomationService {
    * 前进
    */
   async goForward(windowId: string): Promise<any> {
-    const { tabId } = await this.ensureTab(windowId)
+    const { windowId: wid } = await this.ensureWindow(windowId)
 
-    if (!this.tabManager) {
+    if (!this.windowManager) {
       throw new Error('TabManager not initialized')
     }
 
-    log.info(`Going forward (tab: ${tabId})...`)
+    log.info(`Going forward (tab: ${wid})...`)
 
-    const webContents = this.tabManager.getWebContents(tabId)
+    const webContents = this.windowManager.getWebContents(wid)
     if (!webContents) {
-      throw new Error(`Tab ${tabId} not found`)
+      throw new Error(`Tab ${wid} not found`)
     }
 
     // 使用新的 navigationHistory API
@@ -929,7 +1193,7 @@ export class BrowserAutomationService {
 
     return {
       success: true,
-      windowId: tabId,
+      windowId: wid,
       url: webContents.getURL(),
     }
   }
@@ -938,17 +1202,17 @@ export class BrowserAutomationService {
    * 刷新页面
    */
   async reload(windowId: string): Promise<any> {
-    const { tabId } = await this.ensureTab(windowId)
+    const { windowId: wid } = await this.ensureWindow(windowId)
 
-    if (!this.tabManager) {
+    if (!this.windowManager) {
       throw new Error('TabManager not initialized')
     }
 
-    log.info(`Reloading page (tab: ${tabId})...`)
+    log.info(`Reloading page (tab: ${wid})...`)
 
-    const webContents = this.tabManager.getWebContents(tabId)
+    const webContents = this.windowManager.getWebContents(wid)
     if (!webContents) {
-      throw new Error(`Tab ${tabId} not found`)
+      throw new Error(`Tab ${wid} not found`)
     }
 
     webContents.reload()
@@ -956,7 +1220,7 @@ export class BrowserAutomationService {
 
     return {
       success: true,
-      windowId: tabId,
+      windowId: wid,
       url: webContents.getURL(),
     }
   }
@@ -965,11 +1229,11 @@ export class BrowserAutomationService {
    * 打开新标签页
    */
   async openNewWindow(url: string): Promise<any> {
-    const tabId = await this.createWindow(url)
+    const wid = await this.createWindow(url)
 
     return {
       success: true,
-      windowId: tabId,
+      windowId: wid,
       url: url,
       message: 'Tab created in background (not activated)',
     }
@@ -979,14 +1243,14 @@ export class BrowserAutomationService {
    * 关闭指定标签
    */
   async closeWindow(windowId: string): Promise<any> {
-    if (!this.tabManager) {
+    if (!this.windowManager) {
       return {
         success: false,
         message: 'TabManager not initialized',
       }
     }
 
-    const success = await this.tabManager.closeTab(windowId)
+    const success = await this.windowManager.closeWindow(windowId)
 
     return {
       success,
@@ -1100,32 +1364,62 @@ export class BrowserAutomationService {
    * 检查服务是否就绪
    */
   isReady(): boolean {
-    return this.tabManager !== null
+    return this.windowManager !== null
   }
 
   /**
-   * 获取所有标签页列表（不包含主应用标签）
+   * 获取所有窗口列表（不包含主应用窗口）
    */
   getWindowList(): WindowInfo[] {
-    if (!this.tabManager) {
+    if (!this.windowManager) {
       return []
     }
 
-    const tabs = this.tabManager.getTabList().filter(t => t.tabId !== 'main_app')
-    return tabs.map(tab => ({
-      windowId: tab.tabId,
-      url: tab.url,
-      title: tab.title,
-    }))
+    // 直接返回 WindowManager 的窗口列表，过滤掉主应用
+    return this.windowManager.getWindowList().filter(w => w.windowId !== 'main_app')
   }
 
   /**
-   * 获取当前标签页数量
+   * 获取当前窗口数量
    */
   getWindowCount(): number {
-    if (!this.tabManager) {
+    if (!this.windowManager) {
       return 0
     }
-    return this.tabManager.getTabList().filter(t => t.tabId !== 'main_app').length
+    return this.windowManager.getWindowList().filter(w => w.windowId !== 'main_app').length
+  }
+
+  /**
+   * 截断控制台日志，保留最近的日志，总字符数不超过限制
+   * @param logs 原始日志数组
+   * @param maxChars 最大字符数
+   * @returns 截断后的日志数组
+   */
+  private truncateConsoleLogs(
+    logs: Array<{ level: number; message: string }>,
+    maxChars: number
+  ): Array<{ level: number; message: string }> {
+    if (logs.length === 0) return []
+
+    let totalChars = 0
+    const selectedLogs: Array<{ level: number; message: string }> = []
+
+    // 从后往前遍历，保留最近的日志
+    const reversedLogs = [...logs].reverse()
+
+    for (const log of reversedLogs) {
+      const levelNames: Record<number, string> = { 0: 'verbose', 1: 'info', 2: 'warning', 3: 'error' }
+      const levelName = levelNames[log.level] || 'unknown'
+      const logLine = `[${levelName}] ${log.message}`
+
+      if (totalChars + logLine.length <= maxChars) {
+        selectedLogs.unshift(log)
+        totalChars += logLine.length + 1 // +1 for newline
+      } else {
+        break
+      }
+    }
+
+    return selectedLogs
   }
 }
