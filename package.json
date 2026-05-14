@@ -42,10 +42,12 @@
   "author": "",
   "license": "ISC",
   "devDependencies": {
+    "@electron/rebuild": "^4.0.4",
     "concurrently": "^9.2.0",
     "cross-env": "^7.0.3",
     "electron": "^41.0.0",
     "electron-builder": "^24.13.3",
+    "rcedit": "^5.0.1",
     "typescript": "^6.0.0",
     "wait-on": "^9.0.0"
   },
@@ -56,14 +58,15 @@
     "asar": {
       "smartUnpack": true
     },
-    "afterPack": "scripts/cleanup-locales.js",
+    "afterPack": "scripts/after-pack-handler.js",
     "directories": {
       "output": "release",
       "buildResources": "build-resources"
     },
     "files": [
       "electron/dist/**/*",
-      "frontend/dist/**/*"
+      "frontend/dist/**/*",
+      "build-resources/icon.ico"
     ],
     "extraResources": [
       {
@@ -127,6 +130,13 @@
           "**/*",
           "!**/file_stores/**/*"
         ]
+      },
+      {
+        "from": "build-resources",
+        "to": "build-resources",
+        "filter": [
+          "**/*"
+        ]
       }
     ],
     "win": {
@@ -138,8 +148,10 @@
           ]
         }
       ],
-      "icon": "build-resources/icon.ico",
-      "signAndEditExecutable": false
+      "icon": "icon.ico",
+      "sign": null,
+      "signDlls": false,
+      "forceCodeSigning": false
     },
     "mac": {
       "target": [
@@ -194,7 +206,6 @@
     ]
   },
   "dependencies": {
-    "@electron/rebuild": "^4.0.4",
     "electron-log": "^5.4.3",
     "electron-updater": "^6.8.3"
   }

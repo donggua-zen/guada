@@ -434,6 +434,9 @@ function createWindow() {
     minHeight: 600,
     frame: false, // 无边框窗口，去掉默认标题栏
     transparent: false, // 不透明背景
+    icon: isDev
+      ? path.join(__dirname, '..', 'build-resources', 'icon.ico')
+      : path.join(process.resourcesPath, 'build-resources', 'icon.ico'),
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
