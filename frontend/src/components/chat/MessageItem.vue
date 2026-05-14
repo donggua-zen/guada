@@ -365,8 +365,6 @@ onBeforeUnmount(() => {
     resizeObserver.disconnect();
     resizeObserver = null;
   }
-
-  console.log('[MessageItem] Component unmounted, cleanup completed');
 });
 
 const handleClick = (event: MouseEvent) => {

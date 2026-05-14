@@ -4,10 +4,7 @@
     :style="{ width: sidebarWidth, minWidth: sidebarWidth, maxWidth: sidebarWidth }">
     <!-- 顶部 Logo/标题 -->
     <div class="px-2.5 py-4 flex items-center justify-center cursor-pointer" @click="openGuide">
-      <div
-        class="w-9 h-9 rounded-xl bg-linear-to-br from-(--color-primary) to-(--color-primary-600) flex items-center justify-center shadow-md">
-        <span class="text-white font-semibold text-sm">AI</span>
-      </div>
+      <img :src="logoPath" alt="Logo" class="w-9 h-9 rounded-xl object-contain" />
     </div>
 
     <!-- 导航菜单 -->
@@ -132,6 +129,7 @@ import { Avatar } from './ui'
 import { useTheme } from "../composables/useTheme";
 import { useSessionStore } from '../stores/session'
 import { usePopup } from '../composables/usePopup'
+import { fixFrontendAssetUrl } from '../utils/url'
 
 const openGuide = inject('openGuide', () => { })
 
@@ -139,6 +137,9 @@ const openGuide = inject('openGuide', () => { })
 const { isDark, toggleDark } = useTheme()
 const sessionStore = useSessionStore()
 const { confirm } = usePopup()
+
+// Logo 路径（使用 fixFrontendAssetUrl 适配 Electron 环境）
+const logoPath = computed(() => fixFrontendAssetUrl('/images/guada_logo.png'))
 
 // 图标
 import {
