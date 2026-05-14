@@ -10,11 +10,7 @@
                     </template>
                     安装
                 </el-button>
-                <el-button 
-                    v-if="loading" 
-                    :loading="true" 
-                    size="small"
-                >
+                <el-button v-if="loading" :loading="true" size="small">
                     加载中...
                 </el-button>
                 <el-button @click="handleScan" :loading="scanning">
@@ -34,11 +30,8 @@
 
             <!-- 网格布局：每行3列 -->
             <div class="grid grid-cols-3 gap-4">
-                <div
-                    v-for="skill in skills"
-                    :key="skill.id"
-                    class="rounded-lg border border-gray-200 dark:border-[#232428] overflow-hidden bg-white dark:bg-[#232428] transition-all hover:shadow-md"
-                >
+                <div v-for="skill in skills" :key="skill.id"
+                    class="rounded-lg border border-gray-200 dark:border-[#232428] overflow-hidden bg-white dark:bg-[#232428] transition-all hover:shadow-md">
                     <div class="p-4">
                         <div class="flex items-start justify-between gap-2 mb-2">
                             <h3 class="text-base font-semibold text-gray-900 dark:text-[#e8e9ed] flex-1 truncate">
@@ -48,41 +41,28 @@
                                 v{{ skill.manifest.version }}
                             </el-tag>
                         </div>
-                        
+
                         <p class="text-xs text-gray-600 dark:text-[#8b8d95] mb-3 line-clamp-3 min-h-12">
                             {{ skill.manifest.description || '暂无描述' }}
                         </p>
-                        
+
                         <div class="flex items-center justify-end">
                             <div class="flex gap-2">
-                                <el-button 
-                                    link 
-                                    size="small" 
-                                    @click="handleViewDocumentation(skill.id)"
-                                >
+                                <el-button link size="small" @click="handleViewDocumentation(skill.id)">
                                     <template #icon>
                                         <DescriptionOutlined />
                                     </template>
                                     SKILL.md
                                 </el-button>
-                                <el-button 
-                                    link 
-                                    size="small" 
-                                    @click="handleReloadSkill(skill.id)"
-                                    :loading="reloadingSkills.has(skill.id)"
-                                >
+                                <el-button link size="small" @click="handleReloadSkill(skill.id)"
+                                    :loading="reloadingSkills.has(skill.id)">
                                     <template #icon>
                                         <RefreshRight />
                                     </template>
                                     重载
                                 </el-button>
-                                <el-button 
-                                    link 
-                                    size="small" 
-                                    type="danger"
-                                    @click="handleUninstallSkill(skill.id)"
-                                    :loading="uninstallingSkills.has(skill.id)"
-                                >
+                                <el-button link size="small" type="danger" @click="handleUninstallSkill(skill.id)"
+                                    :loading="uninstallingSkills.has(skill.id)">
                                     <template #icon>
                                         <DeleteOutlined />
                                     </template>
@@ -95,7 +75,8 @@
             </div>
 
             <!-- 空状态 -->
-            <div v-if="!loading && skills.length === 0" class="rounded-lg border border-gray-200 dark:border-[#232428] overflow-hidden bg-white dark:bg-[#232428]">
+            <div v-if="!loading && skills.length === 0"
+                class="rounded-lg border border-gray-200 dark:border-[#232428] overflow-hidden bg-white dark:bg-[#232428]">
                 <div class="p-12 text-center">
                     <el-icon size="64" class="mb-4 opacity-50 text-gray-400">
                         <InboxOutlined />
@@ -117,54 +98,36 @@
         </div>
 
         <!-- 查看文档对话框 -->
-        <el-dialog 
-            v-model="showDocDialog" 
-            :title="currentSkillName + ' - SKILL.md'" 
-            width="600px"
-            :style="{ maxWidth: '90vw' }"
-            align-center
-            destroy-on-close
-        >
-            <ScrollContainer class="h-[60vh]">
-                <div v-if="loadingDoc" class="flex justify-center items-center py-12">
-                    <el-icon class="is-loading" size="32">
-                        <Loading />
-                    </el-icon>
-                </div>
-                <div v-else-if="docError" class="py-12 text-center text-red-500">
-                    {{ docError }}
-                </div>
-                <div v-else class="prose dark:prose-invert max-w-none">
-                    <pre class="whitespace-pre-wrap font-mono text-sm bg-gray-50 dark:bg-[#2a2c30] p-4 rounded-lg overflow-x-auto">{{ documentation }}</pre>
-                </div>
-            </ScrollContainer>
+        <el-dialog v-model="showDocDialog" :title="currentSkillName + ' - SKILL.md'" width="600px"
+            :style="{ maxWidth: '90vw' }" align-center destroy-on-close>
+
+            <div v-if="loadingDoc" class="flex justify-center items-center py-12">
+                <el-icon class="is-loading" size="32">
+                    <Loading />
+                </el-icon>
+            </div>
+            <div v-else-if="docError" class="py-12 text-center text-red-500">
+                {{ docError }}
+            </div>
+            <div v-else class="prose dark:prose-invert max-w-none">
+                <pre
+                    class="whitespace-pre-wrap font-mono text-sm bg-gray-50 dark:bg-[#2a2c30] p-4 rounded-lg overflow-x-auto">
+            {{ documentation }}</pre>
+            </div>
             <template #footer>
                 <el-button @click="showDocDialog = false">关闭</el-button>
             </template>
         </el-dialog>
 
         <!-- 安装 Skill 对话框 -->
-        <el-dialog 
-            v-model="showInstallDialog" 
-            title="安装 Skill" 
-            width="500px" 
-            align-center
-            destroy-on-close
-        >
+        <el-dialog v-model="showInstallDialog" title="安装 Skill" width="500px" align-center destroy-on-close>
             <div class="py-4">
                 <div class="text-sm text-gray-600 dark:text-[#8b8d95] mb-4">
                     请上传 ZIP 格式的 Skill 包。ZIP 文件应包含一个 Skill 目录，其中必须有 SKILL.md 文件。
                 </div>
-                
-                <el-upload
-                    ref="uploadRef"
-                    class="upload-demo"
-                    drag
-                    :auto-upload="false"
-                    :on-change="handleFileChange"
-                    :limit="1"
-                    accept=".zip"
-                >
+
+                <el-upload ref="uploadRef" class="upload-demo" drag :auto-upload="false" :on-change="handleFileChange"
+                    :limit="1" accept=".zip">
                     <el-icon class="el-icon--upload"><upload-filled /></el-icon>
                     <div class="el-upload__text">
                         拖拽文件到此处或 <em>点击上传</em>
@@ -179,11 +142,15 @@
                 <div v-if="selectedFile" class="mt-4 p-3 bg-gray-50 dark:bg-[#2a2c30] rounded-lg">
                     <div class="flex items-center justify-between">
                         <div class="flex items-center gap-2">
-                            <el-icon><Document /></el-icon>
+                            <el-icon>
+                                <Document />
+                            </el-icon>
                             <span class="text-sm">{{ selectedFile.name }}</span>
                         </div>
                         <el-button link type="danger" @click="clearSelectedFile">
-                            <el-icon><Close /></el-icon>
+                            <el-icon>
+                                <Close />
+                            </el-icon>
                         </el-button>
                     </div>
                     <div class="text-xs text-gray-500 mt-1">
@@ -203,12 +170,7 @@
 
             <template #footer>
                 <el-button @click="showInstallDialog = false">取消</el-button>
-                <el-button 
-                    type="primary" 
-                    @click="handleInstallSkill"
-                    :loading="installing"
-                    :disabled="!selectedFile"
-                >
+                <el-button type="primary" @click="handleInstallSkill" :loading="installing" :disabled="!selectedFile">
                     安装
                 </el-button>
             </template>
@@ -266,7 +228,7 @@ const uninstallingSkills = ref<Set<string>>(new Set())
  */
 async function loadSkills() {
     loading.value = true
-    
+
     try {
         const response = await apiService.fetchSkills()
         skills.value = Array.isArray(response?.items) ? response.items : []
@@ -285,7 +247,7 @@ async function loadSkills() {
  */
 async function handleScan() {
     scanning.value = true
-    
+
     try {
         await apiService.scanSkills()
         ElMessage.success('扫描完成')
@@ -305,7 +267,7 @@ async function handleScan() {
  */
 async function handleReloadSkill(skillId: string) {
     const previousState = reloadingSkills.value.has(skillId)
-    
+
     try {
         reloadingSkills.value.add(skillId)
         await apiService.reloadSkill(skillId)
@@ -329,11 +291,11 @@ async function handleViewDocumentation(skillId: string) {
     loadingDoc.value = true
     docError.value = null
     documentation.value = ''
-    
+
     // 获取 skill 名称用于标题
     const skill = skills.value.find(s => s.id === skillId)
     currentSkillName.value = skill?.manifest.name || skillId
-    
+
     try {
         const response = await apiService.fetchSkillDocumentation(skillId)
         documentation.value = response.content || '暂无文档内容'
@@ -395,10 +357,10 @@ async function handleInstallSkill() {
     }
 
     installing.value = true
-    
+
     try {
         const response = await apiService.installSkill(selectedFile.value, forceOverwrite.value)
-        
+
         if (response.success) {
             ElMessage.success(response.message || '安装成功')
             showInstallDialog.value = false
@@ -434,11 +396,11 @@ async function handleUninstallSkill(skillId: string) {
                 }
             ).then(() => resolve()).catch(() => reject())
         })
-        
+
         uninstallingSkills.value.add(skillId)
-        
+
         const response = await apiService.uninstallSkill(skillId)
-        
+
         if (response.success) {
             ElMessage.success(response.message || '卸载成功')
             // 重新加载列表

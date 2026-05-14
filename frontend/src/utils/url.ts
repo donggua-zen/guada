@@ -20,7 +20,6 @@ export function fixFrontendAssetUrl(url: string): string {
   if (url.startsWith('http://') || url.startsWith('https://')) {
     return url
   }
-  console.log('fixFrontendAssetUrl', url, isElectron)
   // Electron 环境：去除开头的 /
   if (isElectron && url.startsWith('/')) {
     return url.substring(1)

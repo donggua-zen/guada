@@ -42,7 +42,6 @@ onMounted(() => {
             return false;
         }
     });
-    console.log('[Markdown] DiffDOM engine initialized');
     renderWithDiffDOM(); // 初始渲染
 });
 
@@ -147,8 +146,6 @@ watch(
 onBeforeUnmount(() => {
     // useDebounceFn 返回的函数不需要手动清理
     // VueUse 会自动处理
-
-    console.log('[Markdown] Component unmounted, cleanup completed');
 });
 </script>
 

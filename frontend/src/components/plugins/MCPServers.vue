@@ -786,20 +786,5 @@ onMounted(() => {
     overflow: hidden;
 }
 
-/* 滚动条美化 */
-.tools-panel::-webkit-scrollbar,
-.tools-list::-webkit-scrollbar {
-    width: 6px;
-}
 
-.tools-panel::-webkit-scrollbar-thumb,
-.tools-list::-webkit-scrollbar-thumb {
-    background: #c1c1c1;
-    border-radius: 3px;
-}
-
-.dark .tools-panel::-webkit-scrollbar-thumb,
-.dark .tools-list::-webkit-scrollbar-thumb {
-    background: #4a4a4a;
-}
 </style>

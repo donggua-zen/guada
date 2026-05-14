@@ -292,36 +292,5 @@ watch(() => props.defaultKbId, (newKbId, oldKbId) => {
 </script>
 
 <style scoped>
-/* 滚动条美化 */
-.results-content::-webkit-scrollbar {
-  width: 6px;
-}
 
-.results-content::-webkit-scrollbar-track {
-  background: transparent;
-}
-
-.results-content::-webkit-scrollbar-thumb {
-  background-color: rgba(156, 163, 175, 0.5);
-  border-radius: 3px;
-}
-
-.results-content::-webkit-scrollbar-thumb:hover {
-  background-color: rgba(156, 163, 175, 0.7);
-}
-
-/* 高亮样式 */
-:deep(mark) {
-  padding: 0 2px;
-  border-radius: 2px;
-}
-
-/* 暗黑模式适配 */
-.dark .results-content::-webkit-scrollbar-thumb {
-  background-color: rgba(75, 85, 99, 0.5);
-}
-
-.dark .results-content::-webkit-scrollbar-thumb:hover {
-  background-color: rgba(75, 85, 99, 0.7);
-}
 </style>

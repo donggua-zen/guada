@@ -51,7 +51,8 @@
                                     </div>
                                     <div class="flex-1 min-w-0">
                                         <div class="flex items-start justify-between">
-                                            <div class="font-medium text-base text-gray-900 dark:text-[#e8e9ed] truncate" :title="kb.name">
+                                            <div class="font-medium text-base text-gray-900 dark:text-[#e8e9ed] truncate"
+                                                :title="kb.name">
                                                 {{
                                                     kb.name }}</div>
                                             <!-- 操作按钮 - 悬停显示 -->
@@ -71,7 +72,8 @@
                                                             </el-dropdown-item>
                                                         </el-dropdown-menu>
                                                     </template>
-                                                    <div @click.stop class="p-1 rounded hover:bg-gray-100 dark:hover:bg-[#2a2c30]">
+                                                    <div @click.stop
+                                                        class="p-1 rounded hover:bg-gray-100 dark:hover:bg-[#2a2c30]">
                                                         <el-icon class="w-4 h-4">
                                                             <MoreFilled />
                                                         </el-icon>
@@ -84,8 +86,11 @@
                                         </div>
                                     </div>
                                 </div>
-                                <div class="text-xs text-gray-400 dark:text-[#6b6d75] mt-2 line-clamp-2 leading-relaxed">{{ kb.description
-                                    ||
+                                <div
+                                    class="text-xs text-gray-400 dark:text-[#6b6d75] mt-2 line-clamp-2 leading-relaxed">
+                                    {{
+                                        kb.description
+                                        ||
                                     '暂无描述' }}
                                 </div>
                             </div>
@@ -109,8 +114,11 @@
                             <el-icon size="48" class="text-gray-300 dark:text-[#3e4046] mb-3">
                                 <MenuBookOutlined />
                             </el-icon>
-                            <p class="text-lg text-gray-500 dark:text-[#8b8d95]">{{ searchKeyword ? '未找到匹配的知识库' : '暂无知识库' }}</p>
-                            <p class="text-sm mt-1 text-gray-400 dark:text-[#6b6d75]">{{ searchKeyword ? '尝试调整搜索关键词' : '点击上方按钮创建第一个知识库' }}</p>
+                            <p class="text-lg text-gray-500 dark:text-[#8b8d95]">{{ searchKeyword ? '未找到匹配的知识库' :
+                                '暂无知识库' }}</p>
+                            <p class="text-sm mt-1 text-gray-400 dark:text-[#6b6d75]">{{ searchKeyword ? '尝试调整搜索关键词' :
+                                '点击上方按钮创建第一个知识库'
+                                }}</p>
                         </div>
                     </div>
                 </div>
@@ -1112,23 +1120,5 @@ watch(
 .kb-actions {
     margin-left: auto;
     transition: opacity 0.2s ease;
-}
-
-/* 滚动条美化 */
-.overflow-y-auto::-webkit-scrollbar {
-    width: 6px;
-}
-
-.overflow-y-auto::-webkit-scrollbar-track {
-    background: transparent;
-}
-
-.overflow-y-auto::-webkit-scrollbar-thumb {
-    background-color: rgba(0, 0, 0, 0.2);
-    border-radius: 3px;
-}
-
-.dark .overflow-y-auto::-webkit-scrollbar-thumb {
-    background-color: rgba(255, 255, 255, 0.2);
 }
 </style>
