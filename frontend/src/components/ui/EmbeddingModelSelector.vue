@@ -242,36 +242,4 @@ onMounted(() => {
 .provider-group:last-child {
     margin-bottom: 0;
 }
-
-/* 滚动条美化 */
-.model-list::-webkit-scrollbar {
-    width: 6px;
-}
-
-.model-list::-webkit-scrollbar-track {
-    background: #f1f1f1;
-    border-radius: 3px;
-}
-
-.model-list::-webkit-scrollbar-thumb {
-    background: #888;
-    border-radius: 3px;
-}
-
-.model-list::-webkit-scrollbar-thumb:hover {
-    background: #555;
-}
-
-/* 暗黑模式滚动条 */
-.dark .model-list::-webkit-scrollbar-track {
-    background: #2d2d2d;
-}
-
-.dark .model-list::-webkit-scrollbar-thumb {
-    background: #555;
-}
-
-.dark .model-list::-webkit-scrollbar-thumb:hover {
-    background: #666;
-}
 </style>

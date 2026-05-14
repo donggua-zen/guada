@@ -378,15 +378,39 @@ html,
     }
 }
 
+/* ==========================================
+   全局滚动条美化样式
+   适用于所有可滚动元素
+   ========================================== */
 *::-webkit-scrollbar {
-    /* width: 0; */
-    /* Chrome/Safari */
-    /* background: transparent; */
+    width: 8px;
+    height: 8px;
 }
 
-* {
-    /* scrollbar-color: transparent transparent; */
-    /* Firefox */
+*::-webkit-scrollbar-track {
+    background: transparent;
+    margin: 2px 0;
+}
+
+*::-webkit-scrollbar-thumb {
+    background-color: rgba(0, 0, 0, 0.15);
+    border-radius: 8px;
+    /* border: 1px solid transparent; */
+    background-clip: content-box;
+}
+
+*::-webkit-scrollbar-thumb:hover {
+    background-color: rgba(0, 0, 0, 0.25);
+    cursor: pointer;
+}
+
+/* 暗色模式下的滚动条样式 */
+html.dark *::-webkit-scrollbar-thumb {
+    background-color: rgba(255, 255, 255, 0.15);
+}
+
+html.dark *::-webkit-scrollbar-thumb:hover {
+    background-color: rgba(255, 255, 255, 0.25);
 }
 
 /* ==========================================
@@ -445,7 +469,7 @@ html.dark .el-overlay::before {
     padding: 8px !important;
 }
 
-.el-dialog__headerbtn{
+.el-dialog__headerbtn {
     margin-top: 8px;
     margin-right: 8px;
 }
@@ -458,24 +482,7 @@ html.dark .el-dialog {
     /* 柔和的阴影 */
 }
 
-/* 滚动条美化 */
-.el-dialog .el-dialog__body::-webkit-scrollbar {
-    width: 6px;
-}
 
-.el-dialog .el-dialog__body::-webkit-scrollbar-track {
-    background: transparent;
-}
-
-.el-dialog .el-dialog__body::-webkit-scrollbar-thumb {
-    background-color: rgba(0, 0, 0, 0.2);
-    border-radius: 3px;
-}
-
-.el-dialog .el-dialog__body::-webkit-scrollbar-thumb:hover {
-    background-color: rgba(0, 0, 0, 0.3);
-    cursor: pointer;
-}
 
 /* 5. 紧凑内边距 */
 .el-dialog__header {

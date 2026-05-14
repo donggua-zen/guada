@@ -1,20 +1,20 @@
 <template>
-    <div class="bg-(--color-sidebar-bg) h-full">
+    <div class="bg-(--color-sidebar-bg) h-full overflow-auto mx-2">
         <div class="h-full flex flex-col md:max-w-260 md:mx-auto p-4">
-            <div class="flex-1 overflow-hidden flex flex-col">
-                <div class="border-gray-200 dark:border-[#232428]">
+            <div class="flex-1 flex flex-col">
+                <div class="sticky top-0 z-10 bg-(--color-sidebar-bg)">
                     <el-tabs v-model="currentTabValue" @tab-change="handleTabChange" class="plugins-settings-tabs">
                         <el-tab-pane v-for="item in tabItems" :key="item.path" :label="item.label" :name="item.path">
                             <template #label>
                                 <div class="flex items-center gap-2">
-                                    <component :is="item.icon" class="w-[17px] h-[17px]"></component>
+                                    <component :is="item.icon" class="w-4.25 h-4.25"></component>
                                     <span class="text-[15px]">{{ item.label }}</span>
                                 </div>
                             </template>
                         </el-tab-pane>
                     </el-tabs>
                 </div>
-                <div class="flex-1 overflow-hidden py-3 md:py-3">
+                <div class="flex-1 py-3 md:py-3">
                     <template v-if="currentTabValue === 'mcp'">
                         <MCPServers />
                     </template>
