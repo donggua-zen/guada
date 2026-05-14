@@ -71,7 +71,7 @@ export class FileToolProvider implements IToolProvider {
     },
     {
       name: "write",
-      description: "将内容全量写入指定文件（覆盖模式），如果文件不存在则创建。会清空原有内容，请谨慎使用。",
+      description: "将内容全量写入指定文件，如果文件/目录不存会自动创建。",
       parameters: {
         type: "object",
         properties: {
@@ -201,7 +201,14 @@ export class FileToolProvider implements IToolProvider {
       throw new Error(`未知工具：${request.name}`);
     }
 
-    return await handler(request.arguments, context);
+    const result = await handler(request.arguments, context);
+    
+    // 通知工作目录变更（写操作才需要通知）
+    if (context?.sessionId && ['write', 'replace', 'delete'].includes(request.name)) {
+      this.workspaceService.notifyWorkspaceChange(context.sessionId);
+    }
+    
+    return result;
   }
 
   async getPrompt(context?: Record<string, any>): Promise<string> {
