@@ -228,15 +228,20 @@ export class QQBotAdapter implements IBotPlatform {
     // 1. 先彻底关闭旧客户端
     if (this.client) {
       try {
-        await this.client.reset();  // 调用新增的 reset 方法
+        await this.client.reset();  // 调用新增的 reset 方法,彻底重置所有状态
+        this.logger.log('Old QQ bot client reset successfully');
       } catch (error: any) {
         this.logger.warn(`Error during client reset: ${error.message}`);
       }
       this.client = null;
     }
     
-    // 2. 重新初始化(会创建新的 QQBot 实例)
+    // 2. 等待一小段时间,避免频繁请求被限流
+    await new Promise(resolve => setTimeout(resolve, 1000));
+    
+    // 3. 重新初始化(会创建新的 QQBot 实例并强制刷新 Token)
     if (this.config) {
+      this.logger.log('Re-initializing QQ bot with fresh credentials...');
       await this.initialize(this.config);
     }
   }
