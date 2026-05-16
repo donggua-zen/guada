@@ -402,6 +402,11 @@ function setupAutoRefresh() {
     refreshTimer = window.setInterval(() => {
         if (props.sessionId) {
             throttledLoadTree(); // 使用节流版本，5秒内最多执行一次
+
+            // 如果当前有选中的文件，同步刷新文件内容
+            if (selectedFile.value) {
+                loadFileContent(selectedFile.value.path);
+            }
         }
     }, 10000);
 }
