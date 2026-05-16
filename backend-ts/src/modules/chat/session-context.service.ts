@@ -108,10 +108,7 @@ export class SessionContextService {
     }
 
     // --- thinkingEffort ---
-    console.log('[SessionContextService] mergeSettings - sessionSettings.thinkingEffort:', sessionSettings.thinkingEffort);
-    console.log('[SessionContextService] mergeSettings - full sessionSettings:', JSON.stringify(sessionSettings, null, 2));
     merged.thinkingEffort = sessionSettings.thinkingEffort;
-    console.log('[SessionContextService] mergeSettings - merged.thinkingEffort:', merged.thinkingEffort);
 
     return merged;
   }
@@ -202,14 +199,9 @@ export class SessionContextService {
     ].filter(Boolean).join("\n");
 
     const effectiveContextWindow = this.calcEffectiveContextWindow(model, merged.memory);
-
-    console.log('[SessionContextService] buildContext - merged.thinkingEffort:', merged.thinkingEffort);
-    console.log('[SessionContextService] buildContext - supportsThinking:', supportsThinking);
     
     const context = await this.conversationContextFactory.create(sessionId, userId);
     const thinkingEffort = supportsThinking ? (merged.thinkingEffort || 'off') : undefined;
-    
-    console.log('[SessionContextService] buildContext - final thinkingEffort:', thinkingEffort);
     await context.initialize({
       memory: merged.memory,
       systemPrompt: fullSystemPrompt,

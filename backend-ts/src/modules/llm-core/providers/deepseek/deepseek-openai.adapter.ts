@@ -12,7 +12,7 @@ export class DeepSeekOpenAIAdapter extends OpenAIAdapter {
    */
   protected buildRequestParam(params: any): any {
     const requestParams = super.buildRequestParam(params);
-    console.log('DeepSeekOpenAIAdapter params.thinkingEffort', params.thinkingEffort);
+
     // DeepSeek 特有：将 thinkingEffort 转换为 reasoning_effort（根级别）
     if (params.thinkingEffort !== undefined) {
       const effort = params.thinkingEffort;
