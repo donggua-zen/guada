@@ -53,7 +53,7 @@ const renderWithDiffDOM = async () => {
     if (!markdownContainerRef.value || !props.content) return;
 
     const startTime = performance.now();
-
+    
     // 1. 将最新的 Markdown 解析为 HTML
     const newHTML = await marked.parse(props.content) as string;
 
@@ -63,7 +63,6 @@ const renderWithDiffDOM = async () => {
         // console.log('newHtml', newHTML)
         return;
     }
-
     try {
         // 3. 创建临时容器
         const tempContainer = document.createElement('div') as HTMLElement;

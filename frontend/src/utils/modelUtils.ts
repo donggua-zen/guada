@@ -188,3 +188,57 @@ export function openExternalLink(url: string): void {
     window.open(url, '_blank', 'noopener,noreferrer')
   }
 }
+
+/**
+ * 获取模型的思考强度选项
+ * @param model 模型对象（包含 providerId 和 features）
+ * @param providers 供应商列表（从 API 获取，仅用于备用）
+ * @returns 思考强度选项数组，如 ['off', 'low', 'medium', 'high'] 或 ['minimal', 'low', 'medium', 'high']
+ */
+export function getModelThinkingEfforts(model: any, providers: any[]): string[] {
+  if (!model) {
+    return [];
+  }
+
+  // 直接从模型自身的 thinkingEfforts 字段读取（后端完整控制选项）
+  const efforts = model.thinkingEfforts || [];
+
+  // 如果后端返回了配置，直接返回（后端已决定是否包含 'off'）
+  if (efforts.length > 0) {
+    return efforts;
+  }
+
+  // 备用逻辑：如果模型支持思考功能但没有配置具体强度，提供简化的开关模式
+  const supportsThinking = model.features?.includes('thinking');
+  if (supportsThinking) {
+    // 返回 ['off', 'on']，用 'on' 代表开启状态
+    return ['off', 'on'];
+  }
+
+  return [];
+}
+
+/**
+ * 检查模型是否支持思考功能
+ */
+export function isThinkingSupported(model: any, providers: any[]): boolean {
+  const efforts = getModelThinkingEfforts(model, providers);
+  return efforts.length > 0;
+}
+
+/**
+ * 获取思考强度的显示标签
+ */
+export function getThinkingEffortLabel(effort: string): string {
+  const labels: Record<string, string> = {
+    'off': '不思考',
+    'on': '思考模式',
+    'low': '低强度',
+    'medium': '中等强度',
+    'high': '高强度',
+    'max': '极致',
+    'minimal': '最小',
+  };
+
+  return labels[effort] || effort;
+}

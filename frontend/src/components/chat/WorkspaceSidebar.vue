@@ -2,15 +2,23 @@
     <div
         class="workspace-sidebar h-full flex flex-col bg-white dark:bg-[#1a1b1e] border-l border-gray-200 dark:border-[#2e3035]">
         <!-- 可拖拽分割区域 -->
-        <Splitpanes class="default-theme flex-1" :horizontal="!isHorizontalLayout">
-            <!-- 文件树 -->
-            <Pane :size="selectedFile ? (isHorizontalLayout ? 40 : 60) : 100" :min-size="30" :max-size="100">
+        <LiteSplitpanes
+            class="flex-1"
+            :horizontal="!isHorizontalLayout"
+            :pane1="{ size: selectedFile ? (isHorizontalLayout ? 40 : 60) : 100, minSize: 30, maxSize: 100 }"
+            :pane2="{ size: selectedFile ? (isHorizontalLayout ? 60 : 40) : 0, minSize: 0, maxSize: 100 }"
+        >
+            <template #pane1>
                 <div class="flex flex-col h-full">
                     <!-- 头部（仅在左侧目录树显示） -->
                     <div
                         class="flex-shrink-0 flex items-center justify-between px-4 py-3 border-b border-gray-200 dark:border-[#2e3035]">
                         <h3 class="text-sm font-semibold text-gray-700 dark:text-[#e8e9ed]">工作目录</h3>
                         <div class="flex items-center gap-2">
+                            <!-- 打开文件夹按钮（仅 Electron 环境） -->
+                            <el-tooltip v-if="isElectron" content="在文件管理器中打开" placement="bottom">
+                                <el-button :icon="FolderOpened" circle size="small" @click="openInFileManager" />
+                            </el-tooltip>
                             <!-- 布局切换按钮 -->
                             <el-tooltip :content="isHorizontalLayout ? '切换为上下布局' : '切换为左右布局'" placement="bottom">
                                 <el-button :icon="isHorizontalLayout ? SplitVerticalIcon : SplitHorizontalIcon" circle
@@ -54,11 +62,11 @@
                         </el-tree>
                     </div>
                 </div>
-            </Pane>
+            </template>
 
             <!-- 文件预览面板 -->
-            <Pane v-if="selectedFile" :size="60" :min-size="30">
-                <div class="flex flex-col h-full w-full overflow-hidden">
+            <template #pane2>
+                <div v-if="selectedFile" class="flex flex-col h-full w-full overflow-hidden">
                     <!-- 标题栏 -->
                     <div
                         class="flex-shrink-0 flex items-center justify-between px-4 py-3 bg-gray-50 dark:bg-[#2a2c30] border-b border-gray-200 dark:border-[#2e3035]">
@@ -114,20 +122,19 @@
                         </div>
                     </div>
                 </div>
-            </Pane>
-        </Splitpanes>
+            </template>
+        </LiteSplitpanes>
     </div>
 </template>
 
 <script setup lang="ts">
 import { ref, computed, watch, onUnmounted } from 'vue';
 import { apiService } from '@/services/ApiService';
-import { Refresh, Close, View, Edit } from '@element-plus/icons-vue';
+import { Refresh, Close, View, Edit, FolderOpened } from '@element-plus/icons-vue';
 import { SwapHorizTwotone as SplitVerticalIcon, SwapVertTwotone as SplitHorizontalIcon } from '@vicons/material';
 import { LoadingOutlined } from '@vicons/antd';
 import { Folder, Document } from '@element-plus/icons-vue';
-import { Splitpanes, Pane } from 'splitpanes';
-import 'splitpanes/dist/splitpanes.css';
+import { LiteSplitpanes } from "../ui";
 import { useStorage, useThrottleFn } from '@vueuse/core';
 import { useMarkdown } from '@/composables/useMarkdown';
 import { useHighlight } from '@/composables/useHighlight';
@@ -163,6 +170,9 @@ const previewLoading = ref(false);
 const previewError = ref('');
 const expandedKeys = ref<string[]>([]);
 const treeRef = ref();
+
+// 检测是否为 Electron 环境
+const isElectron = typeof window !== 'undefined' && window.electronAPI !== undefined;
 
 // el-tree 配置
 const treeProps = {
@@ -361,6 +371,22 @@ function closePreview() {
  */
 function toggleLayout() {
     isHorizontalLayout.value = !isHorizontalLayout.value;
+}
+
+/**
+ * 在文件管理器中打开工作目录
+ */
+async function openInFileManager() {
+    if (!props.sessionId || !isElectron) return;
+
+    try {
+        const response = await apiService.getWorkspacePath(props.sessionId);
+        if (response.workspacePath && window.electronAPI) {
+            await window.electronAPI.openFolder(response.workspacePath);
+        }
+    } catch (error: any) {
+        console.error('Failed to open workspace folder:', error);
+    }
 }
 
 /**

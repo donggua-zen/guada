@@ -125,10 +125,11 @@ export class ConversationContext implements IConversationContext {
 
     const modelName = config.model?.modelName || config.model?.name || "";
     const isDeepSeekV4 = modelName.includes("deepseek-v4");
-    const shouldLoadReasoning = isDeepSeekV4 && config.thinkingEnabled === true;
+    // 思考功能开启的判断：thinkingEffort 存在且不为 'off'
+    const shouldLoadReasoning = isDeepSeekV4 && config.thinkingEffort && config.thinkingEffort !== 'off';
 
     if (shouldLoadReasoning) {
-      this.logger.debug(`Model ${modelName} with thinking enabled, will check for tool calls`);
+      this.logger.debug(`Model ${modelName} with thinking enabled (effort: ${config.thinkingEffort}), will check for tool calls`);
     }
 
     // 加载原始消息时传入检查点中的游标，确保只加载未被压缩的历史消息，避免重复加载已压缩部分

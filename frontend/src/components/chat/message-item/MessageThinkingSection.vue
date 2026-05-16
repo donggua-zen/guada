@@ -38,7 +38,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from 'vue';
+import { computed, ref, watch } from 'vue';
 import { ElIcon } from 'element-plus';
 import { ArrowRightTwotone } from '@vicons/material';
 import { Lightbulb24Regular } from '@vicons/fluent';
@@ -58,7 +58,7 @@ const emit = defineEmits<{
   renderComplete: [];
 }>();
 
-const isExpanded = ref(true);
+const isExpanded = ref(false);
 
 const handleToggle = () => {
   isExpanded.value = !isExpanded.value;
@@ -73,6 +73,11 @@ const thinkingDuration = computed(() => {
 
 const formattedDuration = computed(() => {
   return formatDuration(thinkingDuration.value);
+});
+watch(() => props.isThinking, (isThinking: boolean) => {
+  if(!isThinking){
+    isExpanded.value = false;
+  }
 });
 </script>
 

@@ -80,6 +80,14 @@ class ApiService implements IApiService {
           const authError = new Error('Authentication required')
           ;(authError as any).isAuthError = true
           ;(authError as any).statusCode = 401
+          
+          // 延迟触发跳转，避免在拦截器中直接操作路由导致的问题
+          setTimeout(() => {
+            import('@/utils/globalErrorHandler').then(({ triggerAuthRedirect }) => {
+              triggerAuthRedirect()
+            })
+          }, 0)
+          
           return Promise.reject(authError)
         }
 

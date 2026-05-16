@@ -47,7 +47,7 @@ export interface LLMCompletionParams {
   frequencyPenalty?: number; // 原 frequency_penalty
   maxTokens?: number; // 原 max_tokens
   tools?: InternalToolDefinition[];
-  thinkingEnabled?: boolean;
+  thinkingEffort?: string; // 思考强度级别：'off' | 'on' | 'low' | 'medium' | 'high' | 'max' 等
   extraBody?: Record<string, any>;
   abortSignal?: AbortSignal;
   providerConfig?: any;

@@ -3,7 +3,6 @@ import { ConfigModule } from "@nestjs/config";
 import { DatabaseModule } from "./common/database/database.module";
 import { UploadModule } from "./common/upload/upload.module";
 import { SharedModule } from "./common/services/shared.module";
-import { LlmCoreModule } from "./modules/llm-core/llm-core.module";
 import { ChatModule } from "./modules/chat/chat.module";
 import { ModelsModule } from "./modules/models/models.module";
 import { AuthModule } from "./modules/auth/auth.module";
@@ -18,12 +17,14 @@ import { VectorDbModule } from "./common/vector-db";
 import { McpClientModule } from "./common/mcp/mcp-client.module";
 import { BotGatewayModule } from "./modules/bot-gateway/bot-gateway.module";
 import { SkillsModule } from './modules/skills/skills.module';
+import { LlmCoreModule } from './modules/llm-core/providers.module';
 
 @Module({
   imports: [
     ConfigModule.forRoot({
       isGlobal: true,
     }),
+    LlmCoreModule, // LLM 核心模块（全局）
     DatabaseModule, // 全局数据库模块（包含 PrismaService 和 Repositories）
     SharedModule, // 全局共享服务（UploadPathService, UrlService）
     UploadModule, // 全局上传路径模块

@@ -36,7 +36,7 @@ export interface MemoryConfig {
 export interface ContextInitConfig {
   memory?: MemoryConfig; // 记忆与压缩配置分组
   systemPrompt: string;
-  thinkingEnabled?: boolean;
+  thinkingEffort?: string; // 思考强度级别：'off' | 'on' | 'low' | 'medium' | 'high' | 'max' 等
   userMessageId?: string;
   contextWindow: number; // 实际生效的上下文窗口（已在 Agent 层计算好最小值）
   model?: any;

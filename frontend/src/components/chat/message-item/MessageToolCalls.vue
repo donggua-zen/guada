@@ -3,7 +3,6 @@
     <div
       class="h-7 inline-flex justify-center items-center text-sm text-gray-700 dark:text-[#8b8d95] cursor-pointer font-medium py-1 transition-colors duration-200 hover:bg-gray-100 dark:hover:bg-[#2a2c30] rounded px-1"
       @click.stop="openDialog">
-      <div class="flex items-center">
         <el-icon class="" size="15">
           <Wrench24Filled class="text-gray-500" />
         </el-icon>
@@ -11,11 +10,10 @@
         <span v-if="firstToolName" class="mx-1 text-xs text-gray-400">{{ firstToolName }}</span>
         <span v-if="toolCount > 1" class="text-gray-500">等{{ toolCount }}个工具</span>
         <span v-else-if="toolCount === 1 && !isStreaming" class="text-gray-500"></span>
-      </div>
     </div>
 
-    <ElDialog v-model="showDialog" title="工具调用详情" width="700px" :close-on-click-modal="true" destroy-on-close
-      :append-to-body="true" class="tool-dialog">
+    <ElDialog v-if="keepElement" v-model="showDialog" title="工具调用详情" width="700px" :close-on-click-modal="true" destroy-on-close
+      :append-to-body="true" class="tool-dialog" @closed="keepElement = false">
       <div class="tool-dialog-content max-h-[60vh] overflow-y-auto">
         <div v-for="(tool, toolIndex) in toolCalls" :key="toolIndex" class="tool-call-detail mb-6 last:mb-0">
 
@@ -101,6 +99,7 @@ const props = defineProps<{
 }>();
 
 const showDialog = ref(false);
+const keepElement = ref(false);
 
 const toolCount = computed(() => props.toolCalls?.length || 0);
 
@@ -119,6 +118,7 @@ const toolCallTextPrefix = computed(() => {
 
 const openDialog = () => {
   showDialog.value = true;
+  keepElement.value = true;
 };
 
 const closeDialog = () => {

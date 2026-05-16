@@ -1,7 +1,10 @@
-import { Injectable, Logger } from "@nestjs/common";
+import { Logger } from "@nestjs/common";
 import { OpenAI, APIError } from "openai";
-import { LLMAdapter } from "./base.adapter";
-import { PROVIDER_TEMPLATES } from "../../../constants/provider-templates";
+import { IProtocolAdapter } from "./base.adapter";
+import {
+  ProviderConfig,
+  ConnectionTestResult,
+} from "../types/provider.types";
 import {
   MessageRecord,
   InternalToolDefinition,
@@ -10,96 +13,53 @@ import {
   ToolCallItem,
 } from "../types/llm.types";
 
-@Injectable()
-export class OpenAIAdapter implements LLMAdapter {
+export class OpenAIAdapter implements IProtocolAdapter {
   readonly protocol = "openai";
   private readonly logger = new Logger(OpenAIAdapter.name);
 
-  async *chatCompletion(
-    params: LLMCompletionParams,
-  ): AsyncGenerator<LLMResponseChunk> {
-    const client = this.createClient(params.providerConfig);
-    const filterMessages = this.formatMessages(params.messages);
-    const requestParams = this.buildRequestParams(params, filterMessages);
+  /**
+   * 创建 OpenAI API 客户端（可被子类覆盖）
+   */
+  protected createClient(config: ProviderConfig): OpenAI {
+    return new OpenAI({
+      baseURL: config.apiUrl,
+      apiKey: config.apiKey,
+    });
+  }
 
-    let response: any = null;
-
+  /**
+   * 测试 OpenAI API 连接
+   */
+  async testConnection(config: ProviderConfig): Promise<ConnectionTestResult> {
     try {
-      response = await client.chat.completions.create(requestParams, {
-        signal: params.abortSignal,
-      });
-
-      if (params.stream) {
-        yield* this.handleStreamResponse(response);
-      } else {
-        yield this.handleNonStreamResponse(response);
-      }
-    } catch (error) {
-      this.logger.error(`LLM API error (${params.stream ? "stream" : "non-stream"}):`, error);
-      this.handleError(error, params.stream);
-    } finally {
-      this.cleanup(response);
+      const client = this.createClient(config);
+      await client.models.list();
+      return {
+        success: true,
+        message: "连接成功",
+      };
+    } catch (error: any) {
+      return {
+        success: false,
+        message: error.message?.includes("401")
+          ? "API Key 无效"
+          : `连接失败: ${error.message}`,
+        details: error,
+      };
     }
   }
 
-  private createClient(providerConfig: any) {
-    return new OpenAI({
-      baseURL: providerConfig?.apiUrl || process.env.OPENAI_BASE_URL,
-      apiKey:
-        providerConfig?.apiKey ||
-        process.env.OPENAI_API_KEY ||
-        "sk-placeholder",
-    });
-  }
-
-  private formatMessages(messages: MessageRecord[]) {
-    return messages.map((msg) => {
-      const filtered: any = { role: msg.role, content: msg.content || "" };
-      if (msg.reasoningContent !== undefined)
-        filtered.reasoning_content = msg.reasoningContent;
-      if (msg.toolCallId !== undefined) filtered.tool_call_id = msg.toolCallId;
-
-      if (msg.toolCalls) {
-        filtered.tool_calls = msg.toolCalls.map((tc, index) => ({
-          id: tc.id,
-          index,
-          type: "function",
-          function: { name: tc.name, arguments: tc.arguments },
-        }));
-      }
-      return filtered;
-    });
-  }
-
-  private buildRequestParams(params: any, filterMessages: any[]) {
+  /**
+   * 构建最终请求参数（可被子类覆盖）
+   * 处理标准参数转换：temperature, topP, maxTokens 等
+   */
+  protected buildRequestParam(params: any): any {
     const requestParams: any = {
       model: params.model,
-      messages: filterMessages,
+      messages: params.messages,
       stream: params.stream,
       timeout: params.timeout,
     };
-
-    // 动态注入供应商私有参数
-    const providerId = params.providerConfig?.provider;
-    if (providerId && providerId !== "custom") {
-      const template = PROVIDER_TEMPLATES.find((t) => t.id === providerId);
-      const attrs = template?.attributes?.[this.protocol] || {};
-
-      // 统一处理 thinking 配置（所有提供商都使用相同的接口）
-      // 只有当供应商配置了 thinking 且模型声明支持 thinking 特性时才注入
-      if (attrs.thinking?.get && params.thinkingEnabled !== undefined) {
-        // 检查当前模型是否支持 thinking 特性
-        const currentModel = template?.models?.find(
-          (m) => m.modelName === params.model
-        );
-        const supportsThinking = currentModel?.config?.features?.includes("thinking");
-        
-        if (supportsThinking) {
-          const thinkingConfig = attrs.thinking.get(params.thinkingEnabled);
-          Object.assign(requestParams, thinkingConfig);
-        }
-      }
-    }
 
     // 合并基础参数与 extraBody
     Object.assign(requestParams, params.extraBody || {});
@@ -127,20 +87,80 @@ export class OpenAIAdapter implements LLMAdapter {
       requestParams.tool_choice = "auto";
     }
 
-    // 调试日志：记录最终请求参数（隐藏敏感信息）
-    this.logger.debug(`LLM Request params for model ${params.model}: ${JSON.stringify({
-      model: requestParams.model,
-      messages_count: requestParams.messages.length,
-      stream: requestParams.stream,
-      temperature: requestParams.temperature,
-      top_p: requestParams.top_p,
-      max_tokens: requestParams.max_tokens,
-      tools_count: requestParams.tools?.length || 0,
-      has_thinking_enabled: params.thinkingEnabled,
-    }, null, 2)}`);
+    // 处理思考强度（OpenAI o 系列和 GPT-5 使用 reasoning_effort）
+    if (params.thinkingEffort && params.thinkingEffort !== 'off') {
+      // OpenAI 使用 reasoning_effort 参数
+      requestParams.reasoning_effort = params.thinkingEffort;
+    }
 
     return requestParams;
   }
+
+  async *chatCompletion(
+    params: LLMCompletionParams,
+  ): AsyncGenerator<LLMResponseChunk> {
+    const client = this.createClient(params.providerConfig);
+    const filterMessages = this.formatMessages(params.messages);
+    
+    console.log('[OpenAIAdapter] chatCompletion - thinkingEffort:', params.thinkingEffort);
+    
+    // 构建最终请求参数
+    const requestParams = this.buildRequestParam({
+      model: params.model,
+      messages: filterMessages,
+      stream: params.stream,
+      timeout: params.timeout,
+      temperature: params.temperature,
+      topP: params.topP,
+      frequencyPenalty: params.frequencyPenalty,
+      maxTokens: params.maxTokens,
+      tools: params.tools,
+      extraBody: params.extraBody,
+      thinkingEffort: params.thinkingEffort, // 传递 thinkingEffort
+    });
+    
+    console.log('[OpenAIAdapter] buildRequestParams  - reasoning_effort:', requestParams.reasoning_effort);
+
+    let response: any = null;
+
+    try {
+      response = await client.chat.completions.create(requestParams, {
+        signal: params.abortSignal,
+      });
+
+      if (params.stream) {
+        yield* this.handleStreamResponse(response);
+      } else {
+        yield this.handleNonStreamResponse(response);
+      }
+    } catch (error) {
+      this.logger.error(`LLM API error (${params.stream ? "stream" : "non-stream"}):`, error);
+      this.handleError(error, params.stream);
+    } finally {
+      this.cleanup(response);
+    }
+  }
+
+  private formatMessages(messages: MessageRecord[]) {
+    return messages.map((msg) => {
+      const filtered: any = { role: msg.role, content: msg.content || "" };
+      if (msg.reasoningContent !== undefined)
+        filtered.reasoning_content = msg.reasoningContent;
+      if (msg.toolCallId !== undefined) filtered.tool_call_id = msg.toolCallId;
+
+      if (msg.toolCalls) {
+        filtered.tool_calls = msg.toolCalls.map((tc, index) => ({
+          id: tc.id,
+          index,
+          type: "function",
+          function: { name: tc.name, arguments: tc.arguments },
+        }));
+      }
+      return filtered;
+    });
+  }
+
+
 
   /**
    * 将内部扁平化工具定义转换为 OpenAI 格式

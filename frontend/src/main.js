@@ -107,6 +107,18 @@ const routes = [
         meta: { title: 'UI 测试' },
         component: () => import('./components/test/ui.vue')
     },
+    {
+        path: '/splitpanes-test',
+        name: 'SplitpanesTest',
+        meta: { title: 'Splitpanes 性能测试' },
+        component: () => import('./components/test/SplitpanesPerfTest.vue')
+    },
+    {
+        path: '/simple-test',
+        name: 'SimpleTest',
+        meta: { title: '简单测试' },
+        component: () => import('./components/test/SimpleTest.vue')
+    },
 ]
 
 // 根据环境动态选择路由模式

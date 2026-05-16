@@ -27,7 +27,6 @@
     <div class="w-full  max-w-200">
       <ChatInput 
         v-model:value="inputMessage.content" 
-        v-model:thinking-enabled="thinkingEnabled" 
         :config="chatInputConfig"
         @config-change="handleConfigChange" 
         :buttons="chatInputButtons" 
@@ -145,9 +144,6 @@ const models = ref<any[]>([]);
 const lastModelConfig = useStorage<any>('lastModelConfig', {});
 const lastSelectedCharacterId = useStorage('lastSelectedCharacterId', '');
 
-// 思考模型状态本地存储
-const lastThinkingEnabled = useStorage<boolean>('lastThinkingEnabled', false);
-
 // 用户手动选择的模型 ID（刷新页面后从 localStorage 恢复）
 const userSelectedModelId = useStorage<string | null>('userSelectedModelId', null);
 
@@ -166,7 +162,6 @@ const currentSession = ref<any>({
   avatar_url: null,
   title: "新建对话",
   settings: {
-    thinkingEnabled: lastThinkingEnabled.value, // 从本地存储加载
     referencedKbs: userSelectedKnowledgeBaseIds.value, // 新增：从 localStorage 加载知识库选择
     modelName: null,
     // 新增：memoryEnabled 控制是否启用自定义配置
@@ -257,10 +252,9 @@ watch(() => currentSession.value.characterId, (newCharId, oldCharId) => {
         currentSession.value.model_id = selectedModelId;
       }
       
-      // 切换角色时，思考模型状态重置为上次用户选择的状态
+      // 切换角色时，重置会话设置
       currentSession.value.settings = {
         ...(currentSession.value.settings || {}),
-        thinkingEnabled: lastThinkingEnabled.value,
         memoryEnabled: false,  // 默认使用角色配置
         memory: {
           maxMemoryLength: newCharacter.settings?.memory?.maxMemoryLength || newCharacter.settings?.maxMemoryLength,
@@ -310,17 +304,6 @@ const emit = defineEmits<{
   'create-session': [sessionData: any, messageData?: any]
 }>();
 
-
-const thinkingEnabled = computed({
-  get() {
-    return currentSession.value.settings?.thinkingEnabled;
-  },
-  set(value) {
-    currentSession.value.settings["thinkingEnabled"] = value;
-    // 保存到本地存储
-    lastThinkingEnabled.value = value;
-  }
-});
 
 const chatInputButtons = computed(() => {
   return {
@@ -384,7 +367,6 @@ const loadCharacters = async (): Promise<void> => {
         // 设置会话配置
         currentSession.value.settings = {
           ...currentSession.value.settings,
-          thinkingEnabled: lastThinkingEnabled.value,
           memoryEnabled: false,  // 默认使用角色配置
           memory: {
             maxMemoryLength: targetCharacter.settings?.memory?.maxMemoryLength || targetCharacter.settings?.maxMemoryLength,
@@ -449,7 +431,6 @@ const selectCharacter = (character: any): void => {
   // 思考模型状态保持用户上次选择的状态
   currentSession.value.settings = {
     ...(currentSession.value.settings || {}),
-    thinkingEnabled: lastThinkingEnabled.value,
     memoryEnabled: false,  // 默认使用角色配置
     memory: {
       maxMemoryLength: character.settings?.memory?.maxMemoryLength || character.settings?.maxMemoryLength,
@@ -479,6 +460,9 @@ const selectCharacter = (character: any): void => {
 const chatInputConfig = computed(() => ({
   // 模型 ID - 对应 handleConfigChange 中的 config.modelId
   modelId: currentModelId.value,
+  
+  // 思考强度 - 对应 handleConfigChange 中的 config.thinkingEffort
+  thinkingEffort: currentSession.value?.settings?.thinkingEffort || 'off',
   
   // 记忆配置开关 - 对应 handleConfigChange 中的 config.memoryEnabled
   memoryEnabled: currentSession.value?.settings?.memoryEnabled,

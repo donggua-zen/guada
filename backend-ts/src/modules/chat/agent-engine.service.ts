@@ -95,7 +95,7 @@ export class AgentEngine {
       await this.sessionRepo.updateLastActiveAt(sessionId);
 
       // 委托 SessionContextService 完成所有数据准备
-      const { context, toolContext, thinkingEnabled } =
+      const { context, toolContext, thinkingEffort } =
         await this.sessionContextService.buildContext(session, messageId);
 
       // 执行多轮工具调用循环，通过生成器逐轮产出响应事件
@@ -104,7 +104,7 @@ export class AgentEngine {
         session,
         messageId,
         toolContext,
-        thinkingEnabled,
+        thinkingEffort,
         regenerationMode,
         assistantMessageId,
         abortSignal,
@@ -142,7 +142,7 @@ export class AgentEngine {
     session: any,
     userMessageId: string,
     toolContext: any,
-    thinkingEnabled: boolean | undefined,
+    thinkingEffort: string | undefined,
     regenerationMode: string,
     assistantMessageId?: string,
     abortSignal?: AbortSignal,
@@ -216,7 +216,7 @@ export class AgentEngine {
         historyMessages, // 直接使用准备好的消息
         tools,
         assistantResponse,
-        thinkingEnabled,
+        thinkingEffort,
         abortSignal,
       );
 
@@ -281,7 +281,7 @@ export class AgentEngine {
    * @param messages 发送给 LLM 的完整消息列表
    * @param tools 可用工具定义数组（可选）
    * @param incrementMessage 用于累加响应的消息记录对象（会被原地修改）
-   * @param thinkingEnabled 是否启用思维链功能
+   * @param thinkingEffort 思考强度级别：'off' | 'on' | 'low' | 'medium' | 'high' | 'max' 等
    * @param abortSignal 中断信号（可选）
    * @yields SSE 格式的事件对象（text / think / tool_call / finish）
    */
@@ -290,7 +290,7 @@ export class AgentEngine {
     messages: MessageRecord[],
     tools: any[] | undefined,
     incrementMessage: MessageRecord,
-    thinkingEnabled: boolean | undefined,
+    thinkingEffort: string | undefined,
     abortSignal?: AbortSignal,
   ): AsyncGenerator<any, any, unknown> {
     // 为当前轮次创建思考时间信息对象，用于独立追踪本轮的思维链耗时
@@ -313,7 +313,7 @@ export class AgentEngine {
         maxTokens: config.maxOutputTokens, // 最大输出 Token 数限制
         providerConfig: session.model.provider,
         stream: true,
-        thinkingEnabled, // 直接使用已计算的三种状态（true / false / undefined）
+        thinkingEffort, // 传递思考强度
         abortSignal,
       });
 

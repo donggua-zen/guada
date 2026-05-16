@@ -75,13 +75,15 @@
     --color-titlebar-border: var(--color-surface);
 
     /* 聊天对话样式 */
-    --color-conversation-bg: rgb(247, 247, 250);
+    --color-conversation-bg: #f9f9f9;
+    /* --color-conversation-bg: var(--color-surface); */
     --color-conversation-text: #333;
     --color-conversation-border: transparent;
     --color-conversation-bg-active: var(--color-primary-100);
-    --color-conversation-text-active: var(--color-primary);
+    --color-conversation-bg-active: var(--color-surface);
+    --color-conversation-text-active: var(--color-text);
     --color-conversation-bg-hover: var(--color-conversation-bg-active);
-    --color-conversation-text-hover: var(--color-primary);
+    --color-conversation-text-hover: var(--color-text);
 
     --size-text-base: 16px;
     --size-text-sm: 14px;
