@@ -62,11 +62,11 @@ export class ModelService {
         try {
           const supplier = this.providerHub.getProvider(provider.provider);
           const metadata = supplier.getMetadata();
-          
+
           return {
             ...provider,
             models: modelsWithThinkingEfforts,
-            name: metadata.name,
+            name: provider.provider == 'custom' ? provider.name : metadata.name,
             avatarUrl: this.urlService.toResourceAbsoluteUrl(metadata.avatarUrl || provider.avatarUrl),
             protocol: metadata.protocols[0], // 使用第一个协议
             description: metadata.description,
@@ -198,7 +198,7 @@ export class ModelService {
       try {
         const supplier = this.providerHub.getProvider(provider);
         const metadata = supplier.getMetadata();
-        
+
         finalName = metadata.name;
         finalApiUrl = metadata.defaultApiUrl;
         finalProtocol = metadata.protocols[0];
