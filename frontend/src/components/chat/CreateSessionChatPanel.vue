@@ -147,6 +147,9 @@ const lastSelectedCharacterId = useStorage('lastSelectedCharacterId', '');
 // 用户手动选择的模型 ID（刷新页面后从 localStorage 恢复）
 const userSelectedModelId = useStorage<string | null>('userSelectedModelId', null);
 
+// 新增：用户上次选择的思考强度（刷新页面后从 localStorage 恢复）
+const userSelectedThinkingEffort = useStorage<string>('userSelectedThinkingEffort', 'off');
+
 // 新增：用户选择的知识库 ID 列表（刷新页面后从 localStorage 恢复）
 const userSelectedKnowledgeBaseIds = useStorage<string[]>('userSelectedKnowledgeBaseIds', []);
 
@@ -166,6 +169,8 @@ const currentSession = ref<any>({
     modelName: null,
     // 新增：memoryEnabled 控制是否启用自定义配置
     memoryEnabled: false,  // 默认使用角色配置
+    // 思考强度配置 - 从 localStorage 恢复用户上次选择
+    thinkingEffort: userSelectedThinkingEffort.value,
     // 新增：memory 分组配置（压缩与记忆配置）
     memory: {
       maxMemoryLength: null,
@@ -485,6 +490,14 @@ const handleConfigChange = (config: any): void => {
     // 用户手动切换模型，保存到本地存储
     console.log('保存用户手动切换的模型:', config.modelId);
     userSelectedModelId.value = config.modelId;
+  }
+  
+  // 处理思考强度变更
+  if (typeof config.thinkingEffort !== 'undefined') {
+    currentSession.value.settings.thinkingEffort = config.thinkingEffort;
+    // 保存到 localStorage，实现持久化
+    userSelectedThinkingEffort.value = config.thinkingEffort;
+    console.log('保存 thinkingEffort 到会话和本地存储:', config.thinkingEffort);
   }
   
   // 处理记忆配置开关

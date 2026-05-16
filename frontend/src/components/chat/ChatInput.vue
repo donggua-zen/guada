@@ -925,6 +925,13 @@ watch(() => props.config?.modelId, async () => {
   // 移除按钮宽度更新逻辑
 }, { immediate: true });
 
+// 监听思考强度配置变化，同步到本地状态
+watch(() => props.config?.thinkingEffort, (newEffort) => {
+  if (newEffort !== undefined && newEffort !== localThinkingEffort.value) {
+    localThinkingEffort.value = newEffort;
+  }
+}, { immediate: true });
+
 watch(() => props.sessionId, (newSessionId) => {
   sessionId.value = newSessionId;
 }, { immediate: true });
