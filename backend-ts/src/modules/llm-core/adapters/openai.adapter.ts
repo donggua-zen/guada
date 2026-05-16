@@ -102,8 +102,6 @@ export class OpenAIAdapter implements IProtocolAdapter {
     const client = this.createClient(params.providerConfig);
     const filterMessages = this.formatMessages(params.messages);
     
-    console.log('[OpenAIAdapter] chatCompletion - thinkingEffort:', params.thinkingEffort);
-    
     // 构建最终请求参数
     const requestParams = this.buildRequestParam({
       model: params.model,
@@ -116,10 +114,8 @@ export class OpenAIAdapter implements IProtocolAdapter {
       maxTokens: params.maxTokens,
       tools: params.tools,
       extraBody: params.extraBody,
-      thinkingEffort: params.thinkingEffort, // 传递 thinkingEffort
+      thinkingEffort: params.thinkingEffort,
     });
-    
-    console.log('[OpenAIAdapter] buildRequestParams  - reasoning_effort:', requestParams.reasoning_effort);
 
     let response: any = null;
 

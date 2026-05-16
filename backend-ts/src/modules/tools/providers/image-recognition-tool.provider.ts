@@ -12,6 +12,7 @@ import { PrismaService } from "../../../common/database/prisma.service";
 import { SettingsStorage } from "../../../common/utils/settings-storage.util";
 import { WorkspaceService } from "../../../common/services/workspace.service";
 import { SK_MOD_VISUAL } from "../../../constants/settings.constants";
+import { resolveThinkingEffort } from "../../llm-core/utils/model-config.helper";
 import * as fs from "fs";
 import * as path from "path";
 
@@ -200,7 +201,7 @@ export class ImageRecognitionToolProvider implements IToolProvider {
       messages,
       providerConfig: visualModelConfig.provider,
       stream: false,
-      thinkingEffort: 'off', // 禁用思考功能
+      thinkingEffort: resolveThinkingEffort(visualModelConfig, 'off'),
       timeout: 60,
     }) as Promise<any>;
 

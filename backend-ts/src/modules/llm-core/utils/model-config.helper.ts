@@ -142,3 +142,44 @@ export function createEmbeddingModel(
     config: config as any,
   };
 }
+
+/**
+ * 根据模型配置和期望的 thinkingEffort 值，返回实际应使用的值
+ *
+ * 只有当模型配置中包含 'thinking' 特性时，才返回传入的 effort 值。
+ * 否则返回 undefined，让 LLM 服务使用默认的 thinking 行为。
+ *
+ * @param modelConfig - 模型配置对象，包含 config.features 字段
+ * @param effort - 期望的 thinkingEffort 值（如 'off', 'low', 'medium', 'high' 等）
+ * @returns effort 原值（如果模型支持 thinking）或 undefined（如果不支持）
+ *
+ * @example
+ * ```typescript
+ * // 禁用思考功能
+ * const thinkingEffort = resolveThinkingEffort(visualModelConfig, 'off');
+ *
+ * // 设置低强度思考
+ * const thinkingEffort = resolveThinkingEffort(modelConfig, 'low');
+ *
+ * const result = await llmService.completions({
+ *   model: modelConfig.modelName,
+ *   messages,
+ *   thinkingEffort, // 仅在模型支持 thinking 时才生效
+ * });
+ * ```
+ */
+export function resolveThinkingEffort(
+  modelConfig: { config?: any },
+  effort?: string
+): string | undefined {
+  if (!modelConfig.config || typeof modelConfig.config !== 'object' || Array.isArray(modelConfig.config)) {
+    return undefined;
+  }
+
+  const configObj = modelConfig.config as Record<string, any>;
+  if (Array.isArray(configObj.features) && configObj.features.includes('thinking')) {
+    return effort;
+  }
+
+  return undefined;
+}

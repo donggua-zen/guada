@@ -4,6 +4,7 @@ import { TokenizerService } from "../../common/utils/tokenizer.service";
 import { MessageRecord } from "../llm-core/types/llm.types";
 import { SessionContextStateRepository } from "../../common/database/session-context-state.repository";
 import { ICompressionStrategy, CompressionConfig, CompressionResult, CompressionCheckpoint } from "./interfaces";
+import { resolveThinkingEffort } from "../llm-core/utils/model-config.helper";
 
 /**
  * 压缩配置常量
@@ -381,7 +382,7 @@ export class CompressionEngine implements ICompressionStrategy {
           messages: conversationHistory,
           temperature: 0.3,
           maxTokens: 1500,
-          thinkingEffort: 'off', // 禁用思考功能
+          thinkingEffort: resolveThinkingEffort(compressionModel, 'off'),
           stream: false,
           providerConfig: compressionModel.provider,
           tools: summaryTools,
@@ -658,7 +659,7 @@ export class CompressionEngine implements ICompressionStrategy {
         messages: [{ role: "user", content: promptParts.join("\n") }],
         temperature: 0.4,
         maxTokens: 2000,
-        thinkingEffort: 'off', // 禁用思考功能
+        thinkingEffort: resolveThinkingEffort(compressionModel, 'off'),
         stream: false,
         providerConfig: compressionModel.provider,
       });
@@ -678,7 +679,7 @@ export class CompressionEngine implements ICompressionStrategy {
         messages: [{ role: "user", content: promptParts.join("\n") }],
         temperature: 0.4,
         maxTokens: 2000,
-        thinkingEffort: 'off', // 禁用思考功能
+        thinkingEffort: resolveThinkingEffort(compressionModel, 'off'),
         stream: false,
         providerConfig: compressionModel.provider,
       });
