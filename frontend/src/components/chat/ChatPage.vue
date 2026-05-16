@@ -24,8 +24,8 @@
             <div class="flex-1 overflow-hidden">
               <LiteSplitpanes
                 style="height: 100%;"
-                :pane1="{ size: workspaceVisible && isElectron ? 75 : 100, minSize: 40, maxSize: 100 }"
-                :pane2="{ size: workspaceVisible && isElectron ? 25 : 0, minSize: 0, maxSize: 60 }"
+                :pane1="{ size: workspaceVisible && isElectron ? workspaceSplitSize : 100, minSize: 40, maxSize: 100 }"
+                :pane2="{ size: workspaceVisible && isElectron ? (100 - workspaceSplitSize) : 0, minSize: 0, maxSize: 60 }"
                 @resize="onPaneResize"
                 @resized="onPaneResized"
               >
@@ -130,6 +130,8 @@ const sidebarVisible = useStorage('sidebarVisible', true);
 const memoPanelVisible = useStorage('memoPanelVisible', false);
 // 控制工作目录窗格的显示状态（使用 useStorage 持久化）
 const workspaceVisible = useStorage('workspaceVisible', false);
+// 工作目录分割位置（使用 useStorage 持久化，默认 pane1=75%, pane2=25%）
+const workspaceSplitSize = useStorage('workspaceSplitSize', 75);
 
 const isLoading = ref(true);
 
@@ -223,11 +225,16 @@ function onPaneResize() {
   }
 }
 
-function onPaneResized() {
+function onPaneResized(event: { panes: Array<{ size: number }> }) {
   paneSnapWidth = 0;
   const el = paneContentRef.value;
   if (el) {
     el.style.width = '';
+  }
+
+  // 保存工作目录分割位置到 localStorage
+  if (workspaceVisible.value && isElectron && event.panes.length >= 1) {
+    workspaceSplitSize.value = event.panes[0].size;
   }
 }
 

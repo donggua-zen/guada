@@ -106,7 +106,8 @@
                         <div v-else class="w-full min-h-0">
                             <!-- HTML 预览模式 -->
                             <iframe v-if="isHtmlFile && currentPreviewMode === 'rendered'" :srcdoc="fileContent"
-                                class="w-full border-0" style="height: 100%;" sandbox="allow-same-origin" />
+                                class="w-full border-0" style="height: 100%;" 
+                                sandbox="allow-same-origin allow-scripts" />
 
                             <!-- Markdown 渲染模式 -->
                             <div v-else-if="isMarkdownFile && currentPreviewMode === 'rendered'"
@@ -194,6 +195,22 @@ const { parseMarkdown } = useMarkdown();
 const { highlightCode, getLanguageFromExtension, isTextFile } = useHighlight();
 
 let refreshTimer: number | null = null;
+
+// 当前预览文件的内容哈希，用于检测文件是否变化
+const fileContentHash = ref('');
+
+/**
+ * 计算字符串的简单哈希值
+ */
+function hashString(str: string): string {
+    let hash = 0;
+    for (let i = 0; i < str.length; i++) {
+        const char = str.charCodeAt(i);
+        hash = ((hash << 5) - hash) + char;
+        hash = hash & hash;
+    }
+    return hash.toString(16);
+}
 
 const isHtmlFile = computed(() => {
     if (!selectedFile.value) return false;
@@ -331,20 +348,41 @@ async function handleFileSelect(node: WorkspaceNode) {
         mimeType: ''
     };
 
+    // 切换文件时重置哈希值，确保新文件内容能正常加载
+    fileContentHash.value = '';
+
     await loadFileContent(node.path);
 }
 
 /**
  * 加载文件内容
+ * @param filePath 文件路径
+ * @param force 是否强制刷新，忽略哈希对比
+ * @param skipLoading 是否跳过 loading 状态（用于静默刷新）
  */
-async function loadFileContent(filePath: string) {
+async function loadFileContent(filePath: string, force = false, skipLoading = false) {
     if (!props.sessionId) return;
 
-    previewLoading.value = true;
+    // 静默刷新时不显示 loading 状态，避免闪烁
+    if (!skipLoading) {
+        previewLoading.value = true;
+    }
     previewError.value = '';
 
     try {
         const response = await apiService.getWorkspaceFile(props.sessionId, filePath);
+
+        // 计算新内容的哈希值
+        const newHash = hashString(response.content);
+
+        // 如果内容没有变化，不更新（保留滚动位置）
+        if (!force && fileContentHash.value && newHash === fileContentHash.value) {
+            previewLoading.value = false;
+            return;
+        }
+
+        // 更新内容和哈希
+        fileContentHash.value = newHash;
         selectedFile.value!.content = response.content;
         selectedFile.value!.extension = response.extension;
         selectedFile.value!.mimeType = response.mimeType;
@@ -403,9 +441,9 @@ function setupAutoRefresh() {
         if (props.sessionId) {
             throttledLoadTree(); // 使用节流版本，5秒内最多执行一次
 
-            // 如果当前有选中的文件，同步刷新文件内容
+            // 如果当前有选中的文件，同步刷新文件内容（静默刷新，不显示 loading）
             if (selectedFile.value) {
-                loadFileContent(selectedFile.value.path);
+                loadFileContent(selectedFile.value.path, false, true);
             }
         }
     }, 10000);
