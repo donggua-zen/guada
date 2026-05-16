@@ -20,7 +20,7 @@ import { AuthModule } from "../auth/auth.module";
 import { ToolsModule } from "../tools/tools.module";
 import { CharactersModule } from "../characters/characters.module";
 import { FilesModule } from "../files/files.module";
-import { LlmCoreModule } from "../llm-core/llm-core.module";
+import { LlmCoreModule } from "../llm-core/providers.module";
 import { SkillsModule } from "../skills/skills.module";
 
 import { SessionLockService } from "./session-lock.service";

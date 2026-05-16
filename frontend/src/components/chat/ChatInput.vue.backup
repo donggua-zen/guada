@@ -18,7 +18,7 @@
           @close="removeKnowledgeBase(kb.id)" class="text-xs">
           <span class="flex items-center gap-1">
             <el-icon size="14">
-              <MenuBookOutlined />
+              <BookSearch24Regular />
             </el-icon>
             {{ kb.name }}
           </span>
@@ -35,36 +35,80 @@
       <input type="file" ref="imageInputRef" style="display: none" multiple
         :accept="getFileExtensionsFromType('IMAGE').join(',')" @change="handleImageSelect">
       <div class="input-actions w-full flex justify-between">
-        <div class="tools left-tools flex gap-2 items-center">
+        <div class="tools left-tools flex gap-1 items-center">
           <slot name="buttons"></slot>
-          <template v-if="showButtons.thinkingButton">
-            <el-button round :type="localThinkingEnabled ? 'primary' : 'default'" plain @click="toggleDeepThinking"
-              :icon="Thinking2">
-              思考
+          <template v-if="showButtons.thinkingButton && currentModel">
+            <!-- 思考强度按钮 -->
+            <el-button ref="thinkingButtonRef" class="tool-btn" text @click.stop="toggleThinkingPopover">
+              <el-icon size="20" :class="{ 'thinking-active': localThinkingEffort !== 'off' }">
+                <LightbulbFilament24Regular />
+              </el-icon>
+              <span class="text-xs font-medium" :class="{ 'thinking-active-text': localThinkingEffort !== 'off' }">{{
+                getThinkingEffortShortLabel(localThinkingEffort) }}</span>
             </el-button>
+
+            <!-- 思考强度弹窗 -->
+            <CustomPopover v-model:show="thinkingPopoverVisible" :width="180" :anchor-el="thinkingButtonRef?.$el">
+              <template #header>
+                <div class="flex items-center gap-2">
+                  <el-icon size="16" class="text-gray-600 dark:text-gray-400">
+                    <LightbulbFilament24Regular />
+                  </el-icon>
+                  <span class="text-sm font-semibold text-gray-800 dark:text-gray-200">思考强度</span>
+                </div>
+              </template>
+              <div class="popover-content space-y-1">
+                <div v-for="effort in thinkingEffortOptions" :key="effort"
+                  class="flex items-center justify-between px-2 py-1.5 rounded cursor-pointer transition-all text-sm"
+                  :class="{
+                    'bg-pink-50 dark:bg-pink-900/20': localThinkingEffort === effort,
+                    'hover:bg-gray-50 dark:hover:bg-gray-800/50': localThinkingEffort !== effort
+                  }" :data-effort="effort" @click="selectThinkingEffort(effort)">
+                  <span>{{ getThinkingEffortLabel(effort) }}</span>
+                  <span class="text-xs text-gray-400 dark:text-gray-500">{{ effort }}</span>
+                </div>
+              </div>
+            </CustomPopover>
           </template>
+          <el-divider direction="vertical"></el-divider>
+          <!-- 图片按钮（高频使用，放在左侧） -->
+          <el-tooltip content="添加图片" placement="top">
+            <el-button class="tool-btn" @click="triggerImageInput" text>
+              <el-icon size="22">
+                <Image24Regular />
+              </el-icon>
+            </el-button>
+          </el-tooltip>
+          <!-- 附件按钮（高频使用，放在左侧） -->
+          <el-tooltip content="上传文件" placement="top">
+            <el-button class="tool-btn" @click="triggerFileInput" text>
+              <el-icon size="22">
+                <Attach24Regular />
+              </el-icon>
+            </el-button>
+          </el-tooltip>
           <!-- 知识库选择按钮 -->
-          <el-button v-if="showButtons.knowledgeBaseButton" round plain @click.stop="openKnowledgeBasePanel"
-            :icon="MenuBookOutlined">
-            知识库
-          </el-button>
+          <el-tooltip content="知识库" placement="top">
+            <el-button ref="kbButtonRef" class="tool-btn" @click.stop="openKnowledgeBasePanel" text>
+              <el-icon size="22">
+                <BookSearch24Regular />
+              </el-icon>
+            </el-button>
+          </el-tooltip>
         </div>
         <div class="right-actions">
           <!-- 模型选择按钮 -->
-          <el-button @click.stop="openModelPanel" plain
-            class="model-selector-btn overflow-hidden flex items-center justify-center">
+          <el-button ref="modelButtonRef" @click.stop="openModelPanel" plain
+            class="model-selector-btn rounded-full overflow-hidden flex items-center justify-center">
             <div class="flex items-center gap-1.5" style="height:24px">
               <Avatar v-if="currentModel"
                 :src="getModelAvatarPath(currentModel.modelName, currentModel.provider?.name) || undefined"
                 :name="getModelDisplayName(currentModel.modelName)" type="assistant" :round="false"
-                class="w-4 h-4 shrink-0" />
-              <OpenAI v-else class="w-4 h-4 shrink-0" />
+                class="w-5 h-5 shrink-0" />
+              <OpenAI v-else class="w-5 h-5 shrink-0" />
               <span class="whitespace-nowrap text-sm font-medium"
                 :style="{ display: isMobile ? 'none' : 'inline-flex' }">{{
                   currentModelName }}</span>
-              <el-icon class="text-xs opacity-60" v-if="!isMobile">
-                <ArrowDropDownTwotone />
-              </el-icon>
             </div>
           </el-button>
           <div class="tools right-tools">
@@ -73,20 +117,6 @@
               <el-button class="tool-btn" @click.stop="openSettingsPanel" text>
                 <el-icon size="22">
                   <Settings24Regular />
-                </el-icon>
-              </el-button>
-            </el-tooltip>
-            <el-tooltip v-if="showButtons.filesButton" content="上传文件" placement="top">
-              <el-button class="tool-btn" @click="triggerFileInput" text>
-                <el-icon size="22">
-                  <Attach24Regular />
-                </el-icon>
-              </el-button>
-            </el-tooltip>
-            <el-tooltip v-if="showButtons.imagesButton" content="添加图片" placement="top">
-              <el-button class="tool-btn" @click="triggerImageInput" text>
-                <el-icon size="22">
-                  <Image24Regular />
                 </el-icon>
               </el-button>
             </el-tooltip>
@@ -107,157 +137,153 @@
       <!-- 上下文弹窗容器 - 放在 input-actions 之后，作为兄弟元素 -->
       <div class="popover-container" ref="popoverContainerRef">
         <!-- 模型选择器弹窗 -->
-        <transition name="popover-fade">
-          <div v-if="modelPanelVisible" class="context-popover model-popover compact-popover" :style="modelPopoverStyle"
-            @click.stop>
-            <div class="popover-content no-padding">
-              <div class="mb-3 px-4 pt-3">
-                <el-input v-model="modelSearchText" placeholder="搜索模型..." clearable size="small">
-                  <template #prefix>
-                    <el-icon>
-                      <SearchFilled />
-                    </el-icon>
-                  </template>
-                </el-input>
-              </div>
-              <div class="model-list min-h-0 overflow-hidden">
-                <ScrollContainer class="w-full h-full min-h-0 px-3" style="max-height: 320px;">
-                  <div class="space-y-2 pb-4 w-full">
-                    <template v-for="provider in filteredProviders" :key="provider.id">
-                      <div class="provider-group">
-                        <!-- 非收藏分组才显示供应商名称 -->
-                        <div v-if="!provider.isFavoriteGroup"
-                          class="provider-name text-xs font-medium text-gray-500 dark:text-gray-400 mb-1 px-1">
-                          {{ provider.name }}
-                        </div>
-                        <div class="provider-models space-y-1">
-                          <div v-for="model in getProviderModels(provider.id)" :key="model.id"
-                            class="model-item-compact p-2 rounded cursor-pointer transition-all flex items-center gap-2"
-                            :class="{
-                              'bg-pink-50 dark:bg-pink-900/20': tempModelId === model.id,
-                              'hover:bg-gray-50 dark:hover:bg-gray-800/50': tempModelId !== model.id
-                            }" @click="selectAndCloseModel(model.id)">
-                            <!-- 模型头像 -->
-                            <div class="w-8 h-8 shrink-0">
-                              <Avatar :src="getModelAvatarPath(model.modelName, provider.name) || undefined"
-                                :name="getModelDisplayName(model.modelName)" type="assistant" :round="false"
-                                class="w-full h-full" />
+        <CustomPopover v-model:show="modelPanelVisible" :width="320" :max-height="400" :anchor-el="modelButtonRef?.$el"
+          popper-class="model-popover compact-popover">
+          <div class="popover-content">
+            <div class="mb-3">
+              <el-input v-model="modelSearchText" placeholder="搜索模型..." clearable size="small">
+                <template #prefix>
+                  <el-icon>
+                    <SearchFilled />
+                  </el-icon>
+                </template>
+              </el-input>
+            </div>
+            <div class="model-list min-h-0 overflow-hidden">
+              <ScrollContainer class="w-full h-full min-h-0" style="max-height: 320px;">
+                <div class="space-y-2 pb-4 w-full">
+                  <template v-for="provider in filteredProviders" :key="provider.id">
+                    <div class="provider-group">
+                      <!-- 非收藏分组才显示供应商名称 -->
+                      <div v-if="!provider.isFavoriteGroup"
+                        class="provider-name text-xs font-medium text-gray-500 dark:text-gray-400 mb-1 px-1">
+                        {{ provider.name }}
+                      </div>
+                      <div class="provider-models space-y-1">
+                        <div v-for="model in getProviderModels(provider.id)" :key="model.id"
+                          class="model-item-compact p-2 rounded cursor-pointer transition-all flex items-center gap-2"
+                          :class="{
+                            'bg-pink-50 dark:bg-pink-900/20': tempModelId === model.id,
+                            'hover:bg-gray-50 dark:hover:bg-gray-800/50': tempModelId !== model.id
+                          }" @click="selectAndCloseModel(model.id)">
+                          <!-- 模型头像 -->
+                          <div class="w-8 h-8 shrink-0">
+                            <Avatar :src="getModelAvatarPath(model.modelName, provider.name) || undefined"
+                              :name="getModelDisplayName(model.modelName)" type="assistant" :round="false"
+                              class="w-full h-full" />
+                          </div>
+                          <div class="flex-1 min-w-0">
+                            <div class="font-medium text-sm text-gray-800 dark:text-gray-200 truncate mb-1">
+                              {{ getModelDisplayName(model.modelName) }}
                             </div>
-                            <div class="flex-1 min-w-0">
-                              <div class="font-medium text-sm text-gray-800 dark:text-gray-200 truncate mb-1">
-                                {{ getModelDisplayName(model.modelName) }}
-                              </div>
-                              <!-- 特性图标组 -->
-                              <div class="flex items-center gap-1.5 text-xs text-gray-500 dark:text-gray-400">
-                                <!-- 收藏分组中显示供应商名称 -->
-                                <span v-if="provider.isFavoriteGroup" class="pr-1.5 py-0.5 font-medium text-[10px]">
-                                  {{ getModelProviderName(model) }}
-                                </span>
+                            <!-- 特性图标组 -->
+                            <div class="flex items-center gap-1.5 text-xs text-gray-500 dark:text-gray-400">
+                              <!-- 收藏分组中显示供应商名称 -->
+                              <span v-if="provider.isFavoriteGroup" class="pr-1.5 py-0.5 font-medium text-[10px]">
+                                {{ getModelProviderName(model) }}
+                              </span>
 
-                                <!-- 输入/输出能力箭头组 -->
-                                <div
-                                  v-if="model.modelType === 'text' && (model.config?.inputCapabilities || model.config?.outputCapabilities)"
-                                  class="flex items-center gap-0.5 px-1.5 py-0.5 rounded bg-gray-50 dark:bg-gray-800 border border-gray-100 dark:border-gray-700">
-                                  <template v-for="cap in (model.config?.inputCapabilities || ['text'])"
-                                    :key="'in-' + cap">
-                                    <el-icon :size="13">
-                                      <TextT24Regular v-if="cap === 'text'" />
-                                      <Image24Regular v-else />
-                                    </el-icon>
-                                  </template>
-                                  <el-icon :size="9" class="text-gray-300">
-                                    <ArrowRightTwotone />
+                              <!-- 输入/输出能力箭头组 -->
+                              <div
+                                v-if="model.modelType === 'text' && (model.config?.inputCapabilities || model.config?.outputCapabilities)"
+                                class="flex items-center gap-0.5 px-1.5 py-0.5 rounded bg-gray-50 dark:bg-gray-800 border border-gray-100 dark:border-gray-700">
+                                <template v-for="cap in (model.config?.inputCapabilities || ['text'])"
+                                  :key="'in-' + cap">
+                                  <el-icon :size="13">
+                                    <TextT24Regular v-if="cap === 'text'" />
+                                    <Image24Regular v-else />
                                   </el-icon>
-                                  <template v-for="cap in (model.config?.outputCapabilities || ['text'])"
-                                    :key="'out-' + cap">
-                                    <el-icon :size="13">
-                                      <TextT24Regular v-if="cap === 'text'" />
-                                      <Image24Regular v-else />
-                                    </el-icon>
-                                  </template>
-                                </div>
-
-                                <!-- 高级功能图标 -->
-                                <template v-for="feature in (model.config?.features || [])" :key="feature">
-                                  <el-tooltip :content="getFeatureLabel(feature)" placement="top">
-                                    <el-icon class="hover:text-primary transition-colors" :size="13">
-                                      <WrenchScrewdriver24Regular v-if="feature === 'tools'" />
-                                      <LightbulbFilament24Regular v-else-if="feature === 'thinking'" />
-                                    </el-icon>
-                                  </el-tooltip>
+                                </template>
+                                <el-icon :size="9" class="text-gray-300">
+                                  <ArrowRightTwotone />
+                                </el-icon>
+                                <template v-for="cap in (model.config?.outputCapabilities || ['text'])"
+                                  :key="'out-' + cap">
+                                  <el-icon :size="13">
+                                    <TextT24Regular v-if="cap === 'text'" />
+                                    <Image24Regular v-else />
+                                  </el-icon>
                                 </template>
                               </div>
+
+                              <!-- 高级功能图标 -->
+                              <template v-for="feature in (model.config?.features || [])" :key="feature">
+                                <el-tooltip :content="getFeatureLabel(feature)" placement="top">
+                                  <el-icon class="hover:text-primary transition-colors" :size="13">
+                                    <WrenchScrewdriver24Regular v-if="feature === 'tools'" />
+                                    <LightbulbFilament24Regular v-else-if="feature === 'thinking'" />
+                                  </el-icon>
+                                </el-tooltip>
+                              </template>
                             </div>
-                            <div class="flex items-center gap-1.5 shrink-0 mt-0.5">
-                              <!-- 收藏按钮 -->
-                              <el-icon class="favorite-icon cursor-pointer transition-all" :size="16"
-                                @click.stop="toggleFavorite(model.id)">
-                                <Star24Filled v-if="isModelFavorited(model.id)" class="text-yellow-500" />
-                                <Star24Regular v-else class="text-gray-400 hover:text-yellow-500" />
-                              </el-icon>
-                            </div>
+                          </div>
+                          <div class="flex items-center gap-1.5 shrink-0 mt-0.5">
+                            <!-- 收藏按钮 -->
+                            <el-icon class="favorite-icon cursor-pointer transition-all" :size="16"
+                              @click.stop="toggleFavorite(model.id)">
+                              <Star24Filled v-if="isModelFavorited(model.id)" class="text-yellow-500" />
+                              <Star24Regular v-else class="text-gray-400 hover:text-yellow-500" />
+                            </el-icon>
                           </div>
                         </div>
                       </div>
-                    </template>
-                    <div v-if="filteredModels.length === 0" class="text-center py-6 text-gray-400">
-                      <el-icon size="32" class="mb-1">
-                        <SearchFilled />
-                      </el-icon>
-                      <p class="text-xs">未找到匹配的模型</p>
                     </div>
-                  </div>
-                </ScrollContainer>
-              </div>
-            </div>
-          </div>
-        </transition>
-
-        <!-- 知识库选择弹窗 -->
-        <transition name="popover-fade">
-          <div v-if="kbPanelVisible" class="context-popover kb-popover compact-popover" :style="kbPopoverStyle"
-            @click.stop>
-            <div class="popover-content no-padding">
-              <div class="mb-3 px-4 pt-3">
-                <el-input v-model="kbSearchText" placeholder="搜索知识库..." clearable size="small">
-                  <template #prefix>
-                    <el-icon>
+                  </template>
+                  <div v-if="filteredModels.length === 0" class="text-center py-6 text-gray-400">
+                    <el-icon size="32" class="mb-1">
                       <SearchFilled />
                     </el-icon>
-                  </template>
-                </el-input>
-              </div>
-              <div class="kb-list-container min-h-0 overflow-hidden">
-                <ScrollContainer class="w-full h-full min-h-0 px-3" style="max-height: 256px;">
-                  <div class="space-y-1 pb-4 w-full">
-                    <div v-if="filteredKnowledgeBases.length === 0" class="text-center py-6 text-gray-400">
-                      <el-icon size="32" class="mb-1">
-                        <SearchFilled />
-                      </el-icon>
-                      <p class="text-xs">未找到匹配的知识库</p>
-                    </div>
-                    <div v-else class="space-y-1">
-                      <div v-for="kb in filteredKnowledgeBases" :key="kb.id"
-                        class="kb-item-compact p-2 rounded cursor-pointer transition-all flex items-center gap-2"
-                        :class="{
-                          'bg-pink-50 dark:bg-pink-900/20': (props.config?.knowledgeBaseIds || []).includes(kb.id),
-                          'hover:bg-gray-50 dark:hover:bg-gray-800/50': !(props.config?.knowledgeBaseIds || []).includes(kb.id)
-                        }" @click="toggleKnowledgeBaseSelection(kb.id)">
-                        <el-checkbox :model-value="(props.config?.knowledgeBaseIds || []).includes(kb.id)" @click.stop
-                          @change="toggleKnowledgeBaseSelection(kb.id)" size="small" />
-                        <div class="flex-1 min-w-0 flex items-center gap-2">
-                          <div class="font-medium text-sm truncate flex-shrink">{{ kb.name }}</div>
-                          <div v-if="kb.description" class="text-xs text-gray-500 dark:text-gray-400 truncate flex-1">{{
+                    <p class="text-xs">未找到匹配的模型</p>
+                  </div>
+                </div>
+              </ScrollContainer>
+            </div>
+          </div>
+        </CustomPopover>
+
+        <!-- 知识库选择弹窗 -->
+        <CustomPopover v-model:show="kbPanelVisible" :width="320" :max-height="400" :anchor-el="kbButtonRef?.$el"
+          popper-class="kb-popover compact-popover">
+          <div class="popover-content">
+            <div class="mb-3">
+              <el-input v-model="kbSearchText" placeholder="搜索知识库..." clearable size="small">
+                <template #prefix>
+                  <el-icon>
+                    <SearchFilled />
+                  </el-icon>
+                </template>
+              </el-input>
+            </div>
+            <div class="kb-list-container min-h-0 overflow-hidden">
+              <ScrollContainer class="w-full h-full min-h-0" style="max-height: 256px;">
+                <div class="space-y-1 pb-4 w-full">
+                  <div v-if="filteredKnowledgeBases.length === 0" class="text-center py-6 text-gray-400">
+                    <el-icon size="32" class="mb-1">
+                      <SearchFilled />
+                    </el-icon>
+                    <p class="text-xs">未找到匹配的知识库</p>
+                  </div>
+                  <div v-else class="space-y-1">
+                    <div v-for="kb in filteredKnowledgeBases" :key="kb.id"
+                      class="kb-item-compact p-2 rounded cursor-pointer transition-all flex items-center gap-2" :class="{
+                        'bg-pink-50 dark:bg-pink-900/20': (props.config?.knowledgeBaseIds || []).includes(kb.id),
+                        'hover:bg-gray-50 dark:hover:bg-gray-800/50': !(props.config?.knowledgeBaseIds || []).includes(kb.id)
+                      }" @click="toggleKnowledgeBaseSelection(kb.id)">
+                      <el-checkbox :model-value="(props.config?.knowledgeBaseIds || []).includes(kb.id)" @click.stop
+                        @change="toggleKnowledgeBaseSelection(kb.id)" size="small" />
+                      <div class="flex-1 min-w-0 flex items-center gap-2">
+                        <div class="font-medium text-sm truncate flex-shrink">{{ kb.name }}</div>
+                        <div v-if="kb.description" class="text-xs text-gray-500 dark:text-gray-400 truncate flex-1">
+                          {{
                             kb.description }}</div>
-                        </div>
                       </div>
                     </div>
                   </div>
-                </ScrollContainer>
-              </div>
+                </div>
+              </ScrollContainer>
             </div>
           </div>
-        </transition>
+        </CustomPopover>
 
         <!-- 会话设置模态框 -->
         <el-dialog v-model="settingsDialogVisible" title="会话记忆与压缩配置" width="600px" max-width="80vw" append-to-body
@@ -397,24 +423,23 @@
 // @ts-nocheck - ChatInput 组件复杂度高，临时使用@ts-nocheck
 import { ref, watch, computed, nextTick, onUnmounted, onMounted, reactive } from 'vue'
 import { ElIcon, ElButton, ElDialog, ElTabs, ElTabPane, ElInput, ElForm, ElFormItem, ElTag, ElMessage } from 'element-plus';
-import FileItem from './FileItem.vue';
-import ScrollContainer from './ScrollContainer.vue';
-import Avatar from './Avatar.vue';
-import ElSliderOptional from './ElSliderOptional.vue';
-import { getModelDisplayName, getModelAvatarPath } from '@/utils/modelUtils';
+import FileItem from '../ui/FileItem.vue';
+import ScrollContainer from '../ui/ScrollContainer.vue';
+import Avatar from '../ui/Avatar.vue';
+import ElSliderOptional from '../ui/ElSliderOptional.vue';
+import CustomPopover from '../ui/CustomPopover.vue';
+import { getModelDisplayName, getModelAvatarPath, getModelThinkingEfforts, getThinkingEffortLabel } from '@/utils/modelUtils';
 import { OpenAI } from "@/components/icons";
 import {
-  ArrowDropDownTwotone,
   SearchFilled,
   CheckCircleFilled,
-  MenuBookOutlined,
   ArrowRightTwotone,
   CloseOutlined
 } from "@vicons/material";
 import { Thinking2 } from "@/components/icons";
 import {
-  TextT24Regular, LightbulbFilament24Regular, WrenchScrewdriver24Regular, Image24Regular, Attach24Regular,
-  Send24Filled, Stop24Filled, Star24Regular, Star24Filled, Settings24Regular
+  TextT24Regular, LightbulbFilament24Regular, LightbulbFilament24Filled, WrenchScrewdriver24Regular, Image24Regular, Attach24Regular,
+  Send24Filled, Stop24Filled, Star24Regular, Star24Filled, Settings24Regular, BookSearch24Regular
 } from '@vicons/fluent'
 import {
   ThunderboltOutlined,
@@ -444,6 +469,9 @@ const tempFavoriteIds = ref<Set<string>>(new Set()); // 临时收藏的模型 ID
 const models = ref([]);
 const providers = ref([]);
 const sessionId = ref(null);
+// 弹窗触发按钮引用
+const modelButtonRef = ref<any>(null);
+const kbButtonRef = ref<any>(null);
 // 会话设置对话框相关
 const settingsDialogVisible = ref(false);
 const tempMaxMemoryLength = ref(null);
@@ -469,11 +497,6 @@ const settingsPanelVisible = ref(false)
 const modelPanelVisible = ref(false)
 const kbPanelVisible = ref(false)
 const popoverContainerRef = ref<HTMLElement | null>(null)
-
-// 弹窗位置计算
-const modelPopoverStyle = ref({})
-const kbPopoverStyle = ref({})
-const settingsPopoverStyle = ref({})
 
 // 计算是否有任意面板打开
 const anyPanelVisible = computed(() =>
@@ -581,10 +604,7 @@ const MIME_TO_EXT = {
 const showButtons = reactive({
   thinkingButton: false,
   webSearchButton: true,
-  filesButton: true,
-  imagesButton: true,
   tokensButton: true,
-  knowledgeBaseButton: true, // 知识库选择按钮
 });
 
 const props = defineProps({
@@ -592,7 +612,6 @@ const props = defineProps({
   files: { type: Array, default: () => [] },
   streaming: { type: Boolean, default: false },
   webSearchEnabled: { type: Boolean, default: false },
-  thinkingEnabled: { type: Boolean, default: false },
   shadow: { type: Boolean, default: true },
   buttons: { type: Object, default: () => [] },
   clean: { type: Boolean, default: false },
@@ -614,8 +633,6 @@ const props = defineProps({
         maxTokensLimit: null,
       },
       knowledgeBaseIds: [],
-      // 会话特有开关
-      thinkingEnabled: false,
     })
   },
 });
@@ -637,11 +654,6 @@ const styleClass = computed(() => {
     }
   }
   return classes.join(' ') + ' ' + props.class;
-});
-
-const localThinkingEnabled = computed({
-  get: () => props.thinkingEnabled,
-  set: (value) => emit('update:thinkingEnabled', value)
 });
 
 const inputContent = computed({
@@ -667,8 +679,60 @@ const currentModel = computed(() => {
 watch(() => currentModel.value?.config, (config) => {
   // 思考按钮：当模型支持 thinking 时显示
   showButtons.thinkingButton = config?.features?.includes('thinking') || false;
-  // 图像按钮：始终显示，不再根据模型输入能力检查
 }, { immediate: true });
+
+// 思考强度相关
+const localThinkingEffort = ref<string>('off'); // 'off' | 'low' | 'medium' | 'high' | 'max' | ...
+const thinkingButtonRef = ref<any>(null);
+const thinkingPopoverVisible = ref(false);
+
+const thinkingEffortOptions = computed(() => {
+  if (!currentModel.value) return [];
+  return getModelThinkingEfforts(currentModel.value, providers.value);
+});
+
+// 监听当前模型变化，重置思考强度
+watch(() => currentModel.value, (newModel) => {
+  if (newModel) {
+    const options = getModelThinkingEfforts(newModel, providers.value);
+    // 如果当前选择的值不在新选项中，重置为第一个非 'off' 选项或 'off'
+    if (!options.includes(localThinkingEffort.value)) {
+      const nonOffOptions = options.filter(e => e !== 'off');
+      localThinkingEffort.value = nonOffOptions.length > 0 ? nonOffOptions[0] : 'off';
+    }
+  } else {
+    localThinkingEffort.value = 'off';
+  }
+}, { immediate: true });
+
+// 切换思考强度弹窗
+const toggleThinkingPopover = () => {
+  thinkingPopoverVisible.value = !thinkingPopoverVisible.value;
+};
+
+// 选择思考强度
+const selectThinkingEffort = (effort: string) => {
+  localThinkingEffort.value = effort;
+  handleThinkingEffortChange(effort);
+  // 关闭弹窗
+  thinkingPopoverVisible.value = false;
+};
+
+// 获取思考强度的标签（用于按钮和弹窗显示）
+const getThinkingEffortShortLabel = (effort: string) => {
+  return getThinkingEffortLabel(effort);
+};
+
+// 处理思考强度变更
+const handleThinkingEffortChange = (effort: string) => {
+  // 构建配置变更对象
+  const configChanges = {
+    thinkingEffort: effort, // 始终发送 effort 值，包括 'off'
+  };
+
+  console.log('Thinking effort changed:', configChanges);
+  emit('config-change', configChanges);
+};
 
 const currentModelName = computed(() => {
   const model = currentModel.value;
@@ -768,7 +832,7 @@ const getModelProviderName = (model: any) => {
 };
 
 const emit = defineEmits([
-  'update:value', 'update:thinkingEnabled',
+  'update:value',
   'send', 'abort', 'tokens-statistic', 'files-change',
   'toggle-thinking', 'focus', 'blur',
   'update:modelId', 'config-change', 'update:knowledgeBaseIds'
@@ -844,18 +908,32 @@ const openModelPanel = () => {
   )
 
   modelPanelVisible.value = true
-
-  // 计算弹窗位置
-  nextTick(() => {
-    calculatePopoverPosition('model')
-  })
 };
 
 // 选择模型并立即关闭面板
 const selectAndCloseModel = (modelId: string) => {
-  // 构建配置变更对象
+  // 找到选中的模型对象
+  const selectedModel = models.value.find((m: any) => m.id === modelId);
+
+  // 获取该模型的思考强度选项
+  const options = selectedModel ? getModelThinkingEfforts(selectedModel, providers.value) : [];
+
+  // 确定要使用的 thinkingEffort 值
+  let newThinkingEffort = localThinkingEffort.value;
+
+  // 如果当前值不在新模型的选项中，重置为第一个非 'off' 选项或 'off'
+  if (!options.includes(localThinkingEffort.value)) {
+    const nonOffOptions = options.filter(e => e !== 'off');
+    newThinkingEffort = nonOffOptions.length > 0 ? nonOffOptions[0] : 'off';
+
+    // 同步更新本地状态
+    localThinkingEffort.value = newThinkingEffort;
+  }
+
+  // 构建配置变更对象（同时包含 modelId 和 thinkingEffort）
   const configChanges = {
-    modelId: modelId
+    modelId: modelId,
+    thinkingEffort: newThinkingEffort, // 关键：同步发送 thinkingEffort
   };
 
   console.log('Applying model selection:', configChanges);
@@ -953,11 +1031,6 @@ const openKnowledgeBasePanel = async () => {
     console.error('加载知识库列表失败:', error);
   }
   kbPanelVisible.value = true
-
-  // 计算弹窗位置
-  nextTick(() => {
-    calculatePopoverPosition('kb')
-  })
 };
 
 // 切换知识库选中状态 - 立即同步到父组件
@@ -1320,120 +1393,14 @@ const handleBlur = () => {
 
 // Esc 键关闭面板
 const handleEscKey = (e: KeyboardEvent) => {
-  if (e.key === 'Escape' && anyPanelVisible.value) {
-    closeAllPanels()
-  }
-}
-
-// 计算弹窗位置
-const calculatePopoverPosition = (type: 'model' | 'kb' | 'settings') => {
-  const popoverContainer = popoverContainerRef.value
-  if (!popoverContainer) return
-
-  // 获取对应的触发按钮
-  let triggerButton: HTMLElement | null = null
-  if (type === 'model') {
-    triggerButton = document.querySelector('.model-selector-btn') as HTMLElement
-  } else if (type === 'kb') {
-    // 知识库按钮
-    const buttons = document.querySelectorAll('.left-tools .el-button')
-    for (let i = 0; i < buttons.length; i++) {
-      if ((buttons[i] as HTMLElement).textContent?.includes('知识库')) {
-        triggerButton = buttons[i] as HTMLElement
-        break
-      }
+  if (e.key === 'Escape') {
+    if (anyPanelVisible.value) {
+      closeAllPanels()
     }
-  } else {
-    // 会话设置按钮
-    triggerButton = document.querySelector('.right-tools .tool-btn') as HTMLElement
-  }
-
-  if (!triggerButton) return
-
-  const buttonRect = triggerButton.getBoundingClientRect()
-  const popoverWidth = 320 // 弹窗宽度
-  const spacing = 8 // 间距
-
-  // 获取弹窗元素以测量实际高度
-  const popoverElement = type === 'model'
-    ? document.querySelector('.model-popover') as HTMLElement
-    : type === 'kb'
-      ? document.querySelector('.kb-popover') as HTMLElement
-      : document.querySelector('.settings-popover') as HTMLElement
-
-  // 使用实际高度，如果还未渲染则使用默认值
-  const popoverHeight = popoverElement ? popoverElement.offsetHeight : 400
-
-  // 计算水平位置：以按钮为中心对齐
-  let left = buttonRect.left + (buttonRect.width / 2) - (popoverWidth / 2)
-
-  // 边界检查：确保不超出视口左右边界
-  const viewportWidth = window.innerWidth
-  if (left < 10) {
-    left = 10
-  } else if (left + popoverWidth > viewportWidth - 10) {
-    left = viewportWidth - popoverWidth - 10
-  }
-
-  // 计算垂直位置：优先显示在按钮上方
-  const spaceAbove = buttonRect.top // 按钮上方的可用空间
-  const spaceBelow = window.innerHeight - buttonRect.bottom // 按钮下方的可用空间
-
-  let top: number
-
-  // 如果上方空间足够，显示在上方；否则显示在下方
-  if (spaceAbove >= popoverHeight + spacing) {
-    // 显示在按钮上方
-    top = buttonRect.top - popoverHeight - spacing
-  } else if (spaceBelow >= popoverHeight + spacing) {
-    // 显示在按钮下方
-    top = buttonRect.bottom + spacing
-  } else {
-    // 上下空间都不够，选择空间较大的一侧
-    if (spaceAbove > spaceBelow) {
-      top = buttonRect.top - popoverHeight - spacing
-    } else {
-      top = buttonRect.bottom + spacing
-    }
-  }
-
-  // 确保不超出视口上下边界
-  if (top < 10) {
-    top = 10
-  } else if (top + popoverHeight > window.innerHeight - 10) {
-    top = window.innerHeight - popoverHeight - 10
-  }
-
-  const style = {
-    left: `${left}px`,
-    top: `${top}px`
-  }
-
-  if (type === 'model') {
-    modelPopoverStyle.value = style
-  } else if (type === 'kb') {
-    kbPopoverStyle.value = style
-  } else {
-    settingsPopoverStyle.value = style
   }
 }
 
 // 全局点击关闭面板
-const handleGlobalClick = (e: MouseEvent) => {
-  if (!anyPanelVisible.value) return
-
-  const target = e.target as HTMLElement
-  const popoverContainer = popoverContainerRef.value
-
-  // 如果点击的是弹窗容器内部，不关闭
-  if (popoverContainer && popoverContainer.contains(target)) {
-    return
-  }
-
-  // 否则关闭所有面板
-  closeAllPanels()
-}
-
 // 生命周期和监听器
 watch(() => props.config?.modelId, async () => {
   await nextTick();
@@ -1447,8 +1414,7 @@ watch(() => props.sessionId, (newSessionId) => {
 watch(() => props.buttons, (value) => {
   // 外部传入的按钮配置只影响非模型特性控制的按钮
   Object.keys(showButtons).forEach(key => {
-    // thinkingButton 和 imagesButton 由模型特性控制，不受外部 props 影响
-    if (key !== 'thinkingButton' && key !== 'imagesButton' && key in value) {
+    if (key in value) {
       showButtons[key] = value[key];
     }
   });
@@ -1468,8 +1434,7 @@ watch(inputContent, () => {
 
 onMounted(() => {
   document.addEventListener('paste', handlePaste);
-  document.addEventListener('keydown', handleEscKey); // 新增 Esc 键监听
-  document.addEventListener('click', handleGlobalClick); // 新增全局点击监听
+  document.addEventListener('keydown', handleEscKey); // Esc 键监听
   adjustTextareaHeight();
   loadModels();
   loadKnowledgeBases(); // 加载知识库列表
@@ -1479,7 +1444,6 @@ onMounted(() => {
 onUnmounted(() => {
   document.removeEventListener('paste', handlePaste);
   document.removeEventListener('keydown', handleEscKey); // 清理 Esc 键监听
-  document.removeEventListener('click', handleGlobalClick); // 清理全局点击监听
   uploadFiles.value.forEach(revokeImagePreviewUrl);
 });
 </script>
@@ -1496,94 +1460,16 @@ onUnmounted(() => {
 }
 
 /* 上下文弹窗通用样式 */
-.context-popover {
-  position: fixed;
-  /* 使用 fixed 定位，相对于视口 */
-  width: 320px;
-  max-height: 400px;
-  background: white;
-  border-radius: 16px;
-  border: 1px solid #e0e0e0;
-  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.15), 0 4px 8px rgba(0, 0, 0, 0.1);
-  overflow: visible;
-  /* 允许内容超出，让内部滚动容器处理滚动 */
-  display: flex;
-  flex-direction: column;
-  z-index: 1000;
-  pointer-events: auto;
-  /* 恢复弹窗的点击事件 */
+
+/* 思考按钮激活状态 - 灯泡亮起 */
+.thinking-active {
+  color: #10b981 !important;
+  filter: drop-shadow(0 0 4px rgba(16, 185, 129, 0.5));
 }
 
-/* 模型选择弹窗特定位置 */
-.model-popover {
-  /* 位置由 :style 动态计算 */
-}
-
-/* 知识库选择弹窗特定位置 */
-.kb-popover {
-  /* 位置由 :style 动态计算 */
-}
-
-.dark .context-popover {
-  background: var(--color-surface);
-  /* 使用表面色 */
-  border: 1px solid var(--color-border);
-  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.4), 0 4px 8px rgba(0, 0, 0, 0.2);
-}
-
-/* 弹窗头部样式 */
-.popover-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 10px 12px;
-  border-bottom: 1px solid var(--el-border-color-light, #e4e7ed);
-  flex-shrink: 0;
-}
-
-.popover-title {
-  margin: 0;
-  font-size: 13px;
+.thinking-active-text {
+  color: #10b981 !important;
   font-weight: 600;
-  color: var(--el-text-color-primary, #303133);
-}
-
-.dark .popover-title {
-  color: var(--el-text-color-primary, #e5eaf3);
-}
-
-/* 弹窗内容区域样式 */
-.popover-content {
-  flex: 1;
-  padding: 10px 12px;
-}
-
-/* 弹窗淡入动画 */
-.popover-fade-enter-active,
-.popover-fade-leave-active {
-  transition: all 0.2s ease-out;
-}
-
-.popover-fade-enter-from {
-  opacity: 0;
-  transform: translateY(8px) scale(0.98);
-}
-
-.popover-fade-leave-to {
-  opacity: 0;
-  transform: translateY(4px) scale(0.99);
-}
-
-/* 移动端适配 */
-@media (max-width: 768px) {
-  .context-popover {
-    width: 280px;
-    max-height: 50vh;
-  }
-
-  .popover-content {
-    max-height: calc(50vh - 50px);
-  }
 }
 
 /* 输入框区域样式 */
@@ -1643,7 +1529,7 @@ onUnmounted(() => {
   cursor: pointer;
   font-size: 14px;
   height: 28px;
-  padding: 0 8px;
+  padding: 0 3px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1667,7 +1553,7 @@ onUnmounted(() => {
   transition: all 0.3s ease-in-out;
   overflow: hidden;
   height: 32px;
-  padding: 6px 12px;
+  padding: 6px 6px;
   border-color: transparent;
   background-color: transparent;
   color: var(--el-text-color-regular);
@@ -1767,10 +1653,6 @@ onUnmounted(() => {
 /* 紧凑型弹窗样式（知识库专用） */
 .compact-popover {
   border-radius: 8px;
-}
-
-.compact-popover .popover-content.no-padding {
-  padding: 0;
 }
 
 /* 滚动容器底部间距 */

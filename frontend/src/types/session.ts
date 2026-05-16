@@ -11,7 +11,7 @@ import type { Character } from './character'
  */
 export interface SessionSettings {
     isDeepThinking?: boolean
-    thinkingEnabled?: boolean
+    thinkingEffort?: string // 思考强度级别：'off' | 'on' | 'low' | 'medium' | 'high' | 'max' 等
     maxMemoryLength?: number
     systemPrompt?: string
     [key: string]: any

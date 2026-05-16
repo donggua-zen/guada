@@ -381,7 +381,7 @@ export class CompressionEngine implements ICompressionStrategy {
           messages: conversationHistory,
           temperature: 0.3,
           maxTokens: 1500,
-          thinkingEnabled: false,
+          thinkingEffort: 'off', // 禁用思考功能
           stream: false,
           providerConfig: compressionModel.provider,
           tools: summaryTools,
@@ -658,7 +658,7 @@ export class CompressionEngine implements ICompressionStrategy {
         messages: [{ role: "user", content: promptParts.join("\n") }],
         temperature: 0.4,
         maxTokens: 2000,
-        thinkingEnabled: false,
+        thinkingEffort: 'off', // 禁用思考功能
         stream: false,
         providerConfig: compressionModel.provider,
       });
@@ -678,7 +678,7 @@ export class CompressionEngine implements ICompressionStrategy {
         messages: [{ role: "user", content: promptParts.join("\n") }],
         temperature: 0.4,
         maxTokens: 2000,
-        thinkingEnabled: false,
+        thinkingEffort: 'off', // 禁用思考功能
         stream: false,
         providerConfig: compressionModel.provider,
       });

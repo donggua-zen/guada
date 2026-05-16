@@ -27,11 +27,14 @@
           <!-- 使用拆分后的思考框组件 -->
           <MessageThinkingSection v-if="turn.reasoningContent" :reasoning-content="turn.reasoningContent"
             :is-thinking="turn.state?.isThinking || false" :is-streaming="turn.state?.isStreaming || false"
-            :thinking-duration-ms="turn.metadata?.thinkingDurationMs" :meta-data="turn.metadata"
-            @click="handleThinkingClick" @render-complete="handleRenderComplete" />
+            :thinking-duration-ms="turn.thinkingDurationMs ?? turn.metadata?.thinkingDurationMs"
+            :meta-data="turn.metadata" @click="handleThinkingClick" @render-complete="handleRenderComplete" />
+          <template v-if="turn.content">
+            <MarkdownContent v-if="isAssistant" class="message-item__text markdown-text" @click="handleClick"
+              @render-complete="handleRenderComplete" :content="turn.content" :debounced="turn.state?.isStreaming" />
+            <div v-else class="message-item__text">{{ turn.content }}</div>
+          </template>
 
-          <MarkdownContent v-if="turn.content" class="message-item__text markdown-text" @click="handleClick"
-            @render-complete="handleRenderComplete" :content="turn.content" :debounced="turn.state?.isStreaming" />
 
           <!-- 使用拆分后的工具调用组件 -->
           <MessageToolCalls v-if="turn.additionalKwargs && turn.additionalKwargs.toolCalls"
@@ -165,49 +168,6 @@ const emit = defineEmits<{
 const showImageViewer = ref(false);
 const currentPreViewIndex = ref(0);
 const rootRef = ref<HTMLElement | null>(null);
-
-// ============================================
-// 🔹 ResizeObserver + 图片加载监听机制
-// ============================================
-let resizeObserver: ResizeObserver | null = null;
-
-const debouncedEmitRenderComplete = useDebounceFn(() => {
-  emit('render-complete', props.message);
-}, 200);
-
-const waitForImagesLoaded = async (): Promise<void> => {
-  if (!rootRef.value) return;
-
-  const images = Array.from(rootRef.value.querySelectorAll('img'));
-
-  if (images.length === 0) {
-    return;
-  }
-
-  console.log(`[MessageItem] Waiting for ${images.length} image(s) to load`);
-
-  const promises = images.map(img => {
-    if (img.complete) {
-      return Promise.resolve();
-    }
-
-    return new Promise<void>(resolve => {
-      const onLoad = () => {
-        console.log('[MessageItem] Image loaded:', img.src);
-        resolve();
-      };
-
-      img.addEventListener('load', onLoad, { once: true });
-      img.addEventListener('error', () => {
-        console.warn('[MessageItem] Image failed to load:', img.src);
-        resolve();
-      }, { once: true });
-    });
-  });
-
-  await Promise.all(promises);
-  console.log('[MessageItem] All images loaded');
-};
 
 
 
@@ -360,12 +320,6 @@ const handleImageClick = (index: number) => {
   showImageViewer.value = true;
 };
 
-onBeforeUnmount(() => {
-  if (resizeObserver) {
-    resizeObserver.disconnect();
-    resizeObserver = null;
-  }
-});
 
 const handleClick = (event: MouseEvent) => {
   const target = event.target as HTMLElement;
@@ -413,18 +367,17 @@ defineExpose({
   margin-top: 20px;
   margin-bottom: 25px;
   content-visibility: auto;
-  contain-intrinsic-size: auto 200px;
+  contain-intrinsic-size: auto 300px;
+  contain: layout style;
 }
 
 .message-item:last-child {
- min-height: 260px;
+  min-height: 260px;
 }
 
 /* 消息卡片 - BEM Element */
 .message-item__card {
   font-size: var(--size-text-base);
-  letter-spacing: 1px;
-  transition: all 0.3s ease;
   max-width: 100%;
 }
 

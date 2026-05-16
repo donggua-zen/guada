@@ -15,7 +15,7 @@ import { SG_MODELS, SK_MOD_CHAT } from "../../constants/settings.constants";
  */
 export interface MergedSettings {
   systemPrompt: string;
-  thinkingEnabled: boolean | undefined;
+  thinkingEffort?: string; // 思考强度级别：'off' | 'on' | 'low' | 'medium' | 'high' | 'max' 等
   memory: any;
   modelTemperature?: number;
   modelTopP?: number;
@@ -34,7 +34,7 @@ export interface BuildContextResult {
   context: IConversationContext;
   toolContext?: any;
   effectiveContextWindow: number;
-  thinkingEnabled: boolean | undefined;
+  thinkingEffort?: string; // 思考强度级别
 }
 
 /**
@@ -65,7 +65,7 @@ export class SessionContextService {
     private toolContextFactory: ToolContextFactory,
     private modelRepository: ModelRepository,
     private settingsStorage: SettingsStorage,
-  ) {}
+  ) { }
 
   /**
    * 合并会话设置与角色默认配置（唯一来源）
@@ -87,7 +87,7 @@ export class SessionContextService {
 
     const merged: MergedSettings = {
       systemPrompt: sessionSettings.systemPrompt || characterSettings.systemPrompt || "",
-      thinkingEnabled: undefined,
+      thinkingEffort: undefined,
       memory: {},
       modelTemperature: characterSettings.modelTemperature,
       modelTopP: characterSettings.modelTopP,
@@ -107,8 +107,11 @@ export class SessionContextService {
       merged.memory = { ...characterMemory };
     }
 
-    // --- thinkingEnabled ---
-    merged.thinkingEnabled = sessionSettings.thinkingEnabled;
+    // --- thinkingEffort ---
+    console.log('[SessionContextService] mergeSettings - sessionSettings.thinkingEffort:', sessionSettings.thinkingEffort);
+    console.log('[SessionContextService] mergeSettings - full sessionSettings:', JSON.stringify(sessionSettings, null, 2));
+    merged.thinkingEffort = sessionSettings.thinkingEffort;
+    console.log('[SessionContextService] mergeSettings - merged.thinkingEffort:', merged.thinkingEffort);
 
     return merged;
   }
@@ -181,14 +184,14 @@ export class SessionContextService {
     // 注入工具提示词，确保 systemPrompt Token 计数与实际对话一致
     let toolPrompts = "";
     let toolContext: any;
-    
+
     if (supportsTools) {
       // 创建工具上下文
       const sessionType = session.sessionType || 'web';
       toolContext = this.toolContextFactory.createContext(
         sessionId, userId, sessionType, merged.tools, merged.mcpServers, [],
       );
-      
+
       // 获取工具提示词（用于构建 systemPrompt）
       toolPrompts = await this.toolOrchestrator.getAllToolPrompts(toolContext);
     }
@@ -198,17 +201,19 @@ export class SessionContextService {
       toolPrompts,
     ].filter(Boolean).join("\n");
 
-    const thinkingEnabled = supportsThinking
-      ? !!merged.thinkingEnabled
-      : undefined;
-
     const effectiveContextWindow = this.calcEffectiveContextWindow(model, merged.memory);
 
+    console.log('[SessionContextService] buildContext - merged.thinkingEffort:', merged.thinkingEffort);
+    console.log('[SessionContextService] buildContext - supportsThinking:', supportsThinking);
+    
     const context = await this.conversationContextFactory.create(sessionId, userId);
+    const thinkingEffort = supportsThinking ? (merged.thinkingEffort || 'off') : undefined;
+    
+    console.log('[SessionContextService] buildContext - final thinkingEffort:', thinkingEffort);
     await context.initialize({
       memory: merged.memory,
       systemPrompt: fullSystemPrompt,
-      thinkingEnabled,
+      thinkingEffort: thinkingEffort,
       userMessageId, // 可选参数，仅对话场景传入
       contextWindow: effectiveContextWindow,
       model: model || undefined,
@@ -219,7 +224,7 @@ export class SessionContextService {
       context,
       toolContext,
       effectiveContextWindow,
-      thinkingEnabled,
+      thinkingEffort: thinkingEffort,
     };
   }
 

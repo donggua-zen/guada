@@ -149,10 +149,10 @@ function createMarkedInstance(): Marked {
             const href = token.href
             const title = token.title ? ` title="${token.title}"` : ''
             const text = this.parser?.parseInline(token.tokens) || token.text
-            
+
             // 检测是否为 Electron 环境
             const isElectron = typeof window !== 'undefined' && (window as any).electronAPI !== undefined
-            
+
             if (isElectron) {
                 // Electron 环境：添加 data-url 属性和点击事件处理
                 return `<a href="#" data-url="${href}"${title} onclick="event.preventDefault(); window.electronAPI.openExternal('${href}'); return false;">${text}</a>`
@@ -163,7 +163,25 @@ function createMarkedInstance(): Marked {
         }
     }
 
-    marked.use({ renderer, breaks: true })
+    // 配置 marked 选项
+    marked.use({
+        breaks: true,
+        gfm: true,
+        async: false
+    })
+
+    // 禁用 autolink - 通过覆盖 tokenizer
+    marked.use({
+        tokenizer: {
+            url(src: string) {
+                // 返回 undefined 以禁用 URL 自动链接
+                return undefined
+            }
+        }
+    })
+
+    // 设置自定义渲染器
+    marked.use({ renderer })
 
     return marked
 }

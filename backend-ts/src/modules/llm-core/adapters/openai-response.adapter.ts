@@ -1,7 +1,6 @@
-import { Injectable, Logger } from "@nestjs/common";
+import { Logger } from "@nestjs/common";
 import { OpenAI } from "openai";
-import { LLMAdapter } from "./base.adapter";
-import { PROVIDER_TEMPLATES } from "../../../constants/provider-templates";
+import { IProtocolAdapter } from "./base.adapter";
 import {
   MessageRecord,
   InternalToolDefinition,
@@ -9,6 +8,7 @@ import {
   LLMResponseChunk,
   ToolCallItem,
 } from "../types/llm.types";
+import { ProviderConfig, ConnectionTestResult } from "../types/provider.types";
 
 /**
  * OpenAI Responses API 适配器
@@ -17,17 +17,42 @@ import {
  * 与 Chat Completions API 相比，Responses API 使用不同的事件格式和数据结构
  * 支持推理内容流式输出、工具调用增量累积等高级特性
  */
-@Injectable()
-export class OpenAIResponseAdapter implements LLMAdapter {
+export class OpenAIResponseAdapter implements IProtocolAdapter {
   readonly protocol = "openai-response";
   private readonly logger = new Logger(OpenAIResponseAdapter.name);
+
+  /**
+   * 测试 OpenAI Responses API 连接
+   */
+  async testConnection(config: ProviderConfig): Promise<ConnectionTestResult> {
+    try {
+      const client = this.createClient(config);
+      // 使用轻量级请求测试连接
+      await client.responses.create({
+        model: "gpt-4o-mini",
+        input: "test",
+      });
+      return {
+        success: true,
+        message: "连接成功",
+      };
+    } catch (error: any) {
+      return {
+        success: false,
+        message: error.message?.includes("401")
+          ? "API Key 无效"
+          : `连接失败: ${error.message}`,
+        details: error,
+      };
+    }
+  }
 
   async *chatCompletion(
     params: LLMCompletionParams,
   ): AsyncGenerator<LLMResponseChunk> {
     const client = this.createClient(params.providerConfig);
     const formattedInput = this.formatInput(params.messages);
-    const requestParams = this.buildRequestParams(params, formattedInput);
+    const requestParams = this.buildRequestParam(params, formattedInput);
 
     let response: any = null;
 
@@ -129,33 +154,17 @@ export class OpenAIResponseAdapter implements LLMAdapter {
   }
 
   /**
-   * 构建请求参数并注入供应商特定配置
+   * 构建请求参数并注入供应商特定配置（可被子类覆盖）
    *
    * 根据模型特性动态注入 thinking 配置，仅当供应商声明支持且模型配置包含 thinking 特性时才启用
    * Responses API 使用 max_output_tokens 替代 max_tokens，其他参数保持兼容
    */
-  private buildRequestParams(params: any, formattedInput: any[]) {
+  protected buildRequestParam(params: any, formattedInput: any[]) {
     const requestParams: any = {
       model: params.model,
       input: formattedInput,
       stream: params.stream,
     };
-
-    const providerId = params.providerConfig?.provider;
-    if (providerId && providerId !== "custom") {
-      const template = PROVIDER_TEMPLATES.find((t) => t.id === providerId);
-      const attrs = template?.attributes?.[this.protocol] || {};
-
-      // 检查模型是否支持 reasoning_effort 参数，避免向不支持的模型（如 GPT-4o）注入无效配置
-      if (attrs.thinking?.get && params.thinkingEnabled !== undefined) {
-        const currentModel = template?.models?.find((m) => m.modelName === params.model);
-        const supportsThinking = currentModel?.config?.features?.includes("thinking");
-
-        if (supportsThinking) {
-          Object.assign(requestParams, attrs.thinking.get(params.thinkingEnabled));
-        }
-      }
-    }
 
     Object.assign(requestParams, params.extraBody || {});
 
@@ -178,6 +187,14 @@ export class OpenAIResponseAdapter implements LLMAdapter {
     if (params.tools?.length) {
       requestParams.tools = this.convertTools(params.tools);
       requestParams.tool_choice = "auto";
+    }
+
+    // 处理思考强度（OpenAI Responses API 使用 reasoning 对象）
+    if (params.thinkingEffort && !["on", "off"].includes(params.thinkingEffort)) {
+      // OpenAI Responses API 使用 reasoning.effort 参数
+      requestParams.reasoning = {
+        effort: params.thinkingEffort,
+      };
     }
 
     return requestParams;
@@ -375,15 +392,15 @@ export class OpenAIResponseAdapter implements LLMAdapter {
       });
       throw new Error(`LLM Responses API Error: ${error.status} - ${error.message}`);
     }
-    
+
     if (error.name === "AbortError") {
       throw new Error("LLM request aborted");
     }
-    
+
     if (error.message.includes("timeout")) {
       throw new Error("LLM request timed out (60s)");
     }
-    
+
     throw error;
   }
 

@@ -6,19 +6,21 @@
       <WelcomeScreen :session="currentSession" />
     </template>
     <template v-else-if="authStore.isAuthenticated">
-      <ScrollContainer ref="scrollContainerRef" class="max-h-full" :auto-scroll="needScrollToBottom" @scroll="handleScroll">
+      <ScrollContainer ref="scrollContainerRef" class="max-h-full chat-scroll-container"
+        :auto-scroll="needScrollToBottom" @scroll="handleScroll">
         <div class="flex flex-col items-center px-5 max-w-205 mx-auto">
           <MessageItem v-for="(message, index) in activeMessages" :key="message.id" :message="message"
             v-memo="[message.id, message.contents, message.currentTurnsId, message.state?.isStreaming, message.state?.isThinking]"
             :avatar="message.role == 'user' ? userAvater : currentSession?.avatarUrl"
             :is-last="index === activeMessages.length - 1"
-            :allow-generate="!isStreaming && allowReSendMessage(message, index, activeMessages)"
-            @delete="deleteMessage" @edit="editMessage" @copy="copyMessage" @generate="generateResponse"
-            @regenerate="regenerateResponse" @switch="switchContent" />
+            :allow-generate="!isStreaming && allowReSendMessage(message, index, activeMessages)" @delete="deleteMessage"
+            @edit="editMessage" @copy="copyMessage" @generate="generateResponse" @regenerate="regenerateResponse"
+            @switch="switchContent" />
           <!-- <div class="min-h-60"></div> -->
 
           <!-- 压缩中状态显示 -->
-          <div v-if="sessionStore.sessionIsCompressing(currentSession?.id || '')" class="w-full py-8 flex flex-col items-center justify-center text-gray-500">
+          <div v-if="sessionStore.sessionIsCompressing(currentSession?.id || '')"
+            class="w-full py-8 flex flex-col items-center justify-center text-gray-500">
             <el-icon class="is-loading mb-2" size="24">
               <LoadingOutlined />
             </el-icon>
@@ -38,7 +40,8 @@
     _style="position: absolute; left: 50%; transform: translateX(-50%);bottom: 0;">
     <!-- 编辑模式提示条 -->
     <div v-if="editMode" class="w-full mb-[-0.2rem]">
-      <div class="edit-mode-banner pt-1 pb-3.5 px-2 bg-gray-50 dark:bg-[#2a2c30] border border-gray-300 dark:border-[#383a40] rounded-lg">
+      <div
+        class="edit-mode-banner pt-1 pb-3.5 px-2 bg-gray-50 dark:bg-[#2a2c30] border border-gray-300 dark:border-[#383a40] rounded-lg">
         <span class="edit-mode-icon">📝</span>
         <span class="edit-mode-text">正在编辑消息</span>
         <el-button size="small" @click="exitEditMode" class="cancel-edit-btn">
@@ -48,17 +51,10 @@
     </div>
 
     <div class="w-full flex items-center" style="margin-top: -10px;z-index: 9;">
-      <ChatInput 
-        v-model:value="inputMessage.content" 
-        v-model:thinking-enabled="thinkingEnabled" 
-        :config="chatInputConfig"
-        :files="inputMessage.files" 
-        :streaming="isStreaming" 
-        @config-change="handleConfigChange"
-        @send="handleSendMessage" 
-        @abort="abortResponse" 
-        @toggle-thinking="toggleDeepThinking" 
-      />
+      <ChatInput v-model:value="inputMessage.content"
+        :config="chatInputConfig" :files="inputMessage.files" :streaming="isStreaming"
+        @config-change="handleConfigChange" @send="handleSendMessage" @abort="abortResponse"
+        @toggle-thinking="toggleDeepThinking" />
     </div>
     <!-- <div class="ai-disclaimer text-xs text-gray-400 text-center mt-2">内容由 AI 生成，仅供参考</div> -->
 
@@ -135,7 +131,8 @@ const {
 const messagesContainerRef = ref<HTMLElement | null>(null);
 const scrollContainerRef = ref<any>(null);
 const needScrollToBottom = ref(true);
-const lastScrollTop = ref(0);
+let scrollTicking = false;
+let lastScrollTop = 0;
 
 // 使用 useMessageOperations composable
 const {
@@ -200,18 +197,19 @@ function immediateScrollToBottom() {
  * 处理滚动事件
  */
 function handleScroll(event: any) {
-  // 只有向上滚动时才将需要自动滚动到底部的标志置为 false
-  const isAtBottom = scrollContainerRef.value?.isAtBottom
-  // console.log("offset", event.target.scrollTop)
-  if (needScrollToBottom.value && lastScrollTop.value - event.target.scrollTop > 10 && !isAtBottom) {
-    // console.log("scrolling up", event.target.scrollTop, event.target.scrollHeight - event.target.clientHeight)
-    needScrollToBottom.value = false;
-  } else if (!needScrollToBottom.value && isAtBottom) {
-    needScrollToBottom.value = true;
-  }
-  lastScrollTop.value = event.target.scrollTop;
-  updateScrollButtonVisibility()
-
+  if (scrollTicking) return;
+  scrollTicking = true;
+  requestAnimationFrame(() => {
+    const isAtBottom = scrollContainerRef.value?.isAtBottom;
+    if (needScrollToBottom.value && lastScrollTop - event.target.scrollTop > 10 && !isAtBottom) {
+      needScrollToBottom.value = false;
+    } else if (!needScrollToBottom.value && isAtBottom) {
+      needScrollToBottom.value = true;
+    }
+    lastScrollTop = event.target.scrollTop;
+    updateScrollButtonVisibility();
+    scrollTicking = false;
+  });
 }
 
 /**
@@ -240,18 +238,6 @@ const activeMessages = computed({
   }
 });
 
-const thinkingEnabled = computed({
-  get() {
-    return currentSession.value?.settings?.thinkingEnabled;
-  },
-  set(value: boolean) {
-    if (currentSession.value?.settings) {
-      currentSession.value.settings.thinkingEnabled = value;
-      currentSession.value.updatedAt = new Date().toISOString();
-    }
-  }
-});
-
 const currentModelId = computed({
   get() {
     return currentSession.value?.modelId ?? null;
@@ -275,13 +261,16 @@ const currentModelId = computed({
 const chatInputConfig = computed(() => ({
   // 模型 ID - 对应 handleConfigChange 中的 config.modelId
   modelId: currentModelId.value,
-  
+
+  // 思考强度 - 对应 handleConfigChange 中的 config.thinkingEffort
+  thinkingEffort: currentSession.value?.settings?.thinkingEffort || 'off',
+
   // 记忆配置开关 - 对应 handleConfigChange 中的 config.memoryEnabled
   memoryEnabled: currentSession.value?.settings?.memoryEnabled,
-  
+
   // 记忆配置详情 - 对应 handleConfigChange 中的 config.memory
   memory: currentSession.value?.settings?.memory || null,
-  
+
   // 知识库 IDs - 对应 handleConfigChange 中的 config.knowledgeBaseIds
   knowledgeBaseIds: inputMessage.value?.knowledgeBaseIds || currentSession.value?.settings?.referencedKbs || []
 }));
@@ -292,30 +281,35 @@ const chatInputConfig = computed(() => ({
  */
 const handleConfigChange = (config: any) => {
   if (!currentSession.value) return;
-  
+
   // 处理模型 ID 变更
   if (typeof config.modelId !== 'undefined') {
     currentSession.value.modelId = config.modelId;
   }
-  
+
   // 处理记忆配置开关
   if (typeof config.memoryEnabled !== 'undefined') {
     currentSession.value.settings.memoryEnabled = config.memoryEnabled;
     console.log('保存 memoryEnabled 到会话:', config.memoryEnabled);
   }
-  
+
   // 处理记忆配置详情
   if (typeof config.memory !== 'undefined') {
     if (!currentSession.value.settings.memory) {
       currentSession.value.settings.memory = {};
     }
-    currentSession.value.settings.memory = { 
-      ...currentSession.value.settings.memory, 
-      ...config.memory 
+    currentSession.value.settings.memory = {
+      ...currentSession.value.settings.memory,
+      ...config.memory
     };
     console.log('保存 memory 配置到会话:', config.memory);
   }
-  
+
+  // 处理思考强度变更
+  if (typeof config.thinkingEffort !== 'undefined') {
+    currentSession.value.settings.thinkingEffort = config.thinkingEffort;
+  }
+
   // 处理知识库选择
   if (typeof config.knowledgeBaseIds !== 'undefined') {
     inputMessage.value.knowledgeBaseIds = config.knowledgeBaseIds;
@@ -323,7 +317,7 @@ const handleConfigChange = (config: any) => {
       currentSession.value.settings.referencedKbs = config.knowledgeBaseIds;
     }
   }
-  
+
   debouncedSaveSession();
 };
 
@@ -354,7 +348,6 @@ watch(() => activeMessages.value.length, () => {
 
 // 生命周期和初始化
 onMounted(() => {
-  // 初始化相关逻辑
 });
 
 /**
@@ -367,7 +360,7 @@ async function handleSessionChange(newSessionId: string | null, oldSessionId: st
   currentSessionId.value = newSessionId;
   if (newSessionId) {
     try {
-      lastScrollTop.value = 0;
+      lastScrollTop = 0;
       const sessionData = await loadSession(newSessionId);
       currentSession.value = sessionData;
       immediateScrollToBottom();
@@ -587,7 +580,7 @@ defineExpose({
 function scrollToMessage(messageId: string) {
   // 使用外层容器作为滚动上下文
   const container = messagesContainerRef.value
-  
+
   if (!container) {
     console.warn('[ChatPanel] 未找到滚动容器')
     return
@@ -608,6 +601,25 @@ function scrollToMessage(messageId: string) {
 </script>
 
 <style scoped>
+.chat-scroll-container {
+  will-change: transform;
+  transform: translateZ(0);
+  contain: layout style paint;
+  will-change: width;
+
+}
+
+
+/* 为消息列表容器添加更强的隔离 */
+:deep(.simplebar-content-wrapper) {
+  contain: layout style;
+}
+
+/* 确保消息项也使用隔离 */
+:deep(.message-item) {
+  contain: layout style;
+}
+
 /* 编辑模式提示条样式 */
 .edit-mode-banner {
   display: flex;
@@ -634,7 +646,8 @@ function scrollToMessage(messageId: string) {
 }
 
 .dark .edit-mode-text {
-  color: oklch(80% 0.02 250); /* 暗色模式下的文本颜色 */
+  color: oklch(80% 0.02 250);
+  /* 暗色模式下的文本颜色 */
 }
 
 /* 取消编辑按钮样式 */

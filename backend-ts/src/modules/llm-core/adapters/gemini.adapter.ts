@@ -1,4 +1,4 @@
-import { Injectable, Logger } from "@nestjs/common";
+import { Logger } from "@nestjs/common";
 import {
   GoogleGenerativeAI,
   HarmCategory,
@@ -6,8 +6,7 @@ import {
   SchemaType,
   GenerateContentResult,
 } from "@google/generative-ai";
-import { LLMAdapter } from "./base.adapter";
-import { PROVIDER_TEMPLATES } from "../../../constants/provider-templates";
+import { IProtocolAdapter } from "./base.adapter";
 import {
   MessageRecord,
   InternalToolDefinition,
@@ -15,11 +14,44 @@ import {
   LLMResponseChunk,
   ToolCallItem,
 } from "../types/llm.types";
+import { ProviderConfig, ConnectionTestResult } from "../types/provider.types";
 
-@Injectable()
-export class GeminiAdapter implements LLMAdapter {
+export class GeminiAdapter implements IProtocolAdapter {
   readonly protocol = "gemini";
   private readonly logger = new Logger(GeminiAdapter.name);
+
+  /**
+   * 测试 Gemini API 连接
+   */
+  async testConnection(config: ProviderConfig): Promise<ConnectionTestResult> {
+    try {
+      const apiKey = config.apiKey || process.env.GEMINI_API_KEY;
+      if (!apiKey) {
+        return {
+          success: false,
+          message: "API Key 未配置",
+        };
+      }
+
+      const genAI = new GoogleGenerativeAI(apiKey);
+      // 使用一个轻量级模型进行测试
+      const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
+      await model.generateContent("test");
+      
+      return {
+        success: true,
+        message: "连接成功",
+      };
+    } catch (error: any) {
+      return {
+        success: false,
+        message: error.message?.includes("401") || error.message?.includes("API key not valid")
+          ? "API Key 无效"
+          : `连接失败: ${error.message}`,
+        details: error,
+      };
+    }
+  }
 
   async *chatCompletion(
     params: LLMCompletionParams,
@@ -111,15 +143,20 @@ export class GeminiAdapter implements LLMAdapter {
       maxOutputTokens: params.maxTokens,
     };
 
-    // 动态注入供应商私有参数
-    const providerId = params.providerConfig?.provider;
-    if (providerId && providerId !== "custom") {
-      const template = PROVIDER_TEMPLATES.find((t) => t.id === providerId);
-      const attrs = template?.attributes?.[this.protocol] || {};
+    // 动态注入供应商私有参数（已废弃，改为由供应商内部管理）
+    // const providerId = params.providerConfig?.provider;
+    // if (providerId && providerId !== "custom") {
+    //   TODO: 从供应商实例获取私有配置
+    // }
 
-      if (params.thinkingEnabled && attrs.thinkingEnabled) {
-        Object.assign(config, attrs.thinkingEnabled);
-      }
+    // Gemini 思考功能配置
+    // undefined 视为 'off'，禁用思考功能
+    const effort = params.thinkingEffort || 'off';
+    if (effort !== 'off') {
+      // Gemini API 使用 thinkingConfig.thinking_level 参数
+      config.thinkingConfig = {
+        thinkingLevel: effort, // 'minimal', 'low', 'medium', 'high'
+      };
     }
 
     return config;

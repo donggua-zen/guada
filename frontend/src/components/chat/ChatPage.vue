@@ -22,27 +22,33 @@
           <template v-if="sessions.length > 0 && currentSession">
             <!-- 可拖拽分割区域 -->
             <div class="flex-1 overflow-hidden">
-              <Splitpanes class="default-theme" style="height: 100%;">
-                <Pane :size="workspaceVisible ? 75 : 100" :min-size="40">
-                  <div style="height: 100%; display: flex; flex-direction: column;">
+              <LiteSplitpanes
+                style="height: 100%;"
+                :pane1="{ size: workspaceVisible && isElectron ? 75 : 100, minSize: 40, maxSize: 100 }"
+                :pane2="{ size: workspaceVisible && isElectron ? 25 : 0, minSize: 0, maxSize: 60 }"
+                @resize="onPaneResize"
+                @resized="onPaneResized"
+              >
+                <template #pane1>
+                  <div ref="paneContentRef" class="chat-pane-content"
+                    style="height: 100%; display: flex; flex-direction: column;">
                     <!-- 聊天头部 -->
-                    <ChatHeader :sidebar-visible="sidebarVisible" :title="currentSession?.title || ''" :has-more-options="true"
-                      :show-memo-button="true" :session-id="currentSession?.id" 
-                      :workspace-visible="workspaceVisible"
-                      @toggle-sidebar="sidebarVisible = !sidebarVisible"
-                      @select-more-option="handleMoreSelect" 
-                      @toggle-memo="memoPanelVisible = !memoPanelVisible"
+                    <ChatHeader :sidebar-visible="sidebarVisible" :title="currentSession?.title || ''"
+                      :has-more-options="true" :show-memo-button="true" :session-id="currentSession?.id"
+                      :workspace-visible="workspaceVisible" @toggle-sidebar="sidebarVisible = !sidebarVisible"
+                      @select-more-option="handleMoreSelect" @toggle-memo="memoPanelVisible = !memoPanelVisible"
                       @toggle-workspace="toggleWorkspace" />
-                    
-                    <ChatPanel ref="chatPanelRef" v-model:session="currentSession" v-model:sidebar-visible="sidebarVisible"
-                      @save-settings="handleSaveSessionSettings" />
+
+                    <ChatPanel ref="chatPanelRef" v-model:session="currentSession"
+                      v-model:sidebar-visible="sidebarVisible" @save-settings="handleSaveSessionSettings" />
                   </div>
-                </Pane>
-                
-                <Pane v-if="workspaceVisible && currentSession && isElectron" :size="25" :min-size="15" :max-size="60">
-                  <WorkspaceSidebar :session-id="currentSession.id" />
-                </Pane>
-              </Splitpanes>
+                </template>
+
+                <template #pane2>
+                  <WorkspaceSidebar v-if="workspaceVisible && currentSession && isElectron"
+                    :session-id="currentSession.id" />
+                </template>
+              </LiteSplitpanes>
             </div>
           </template>
           <template v-else>
@@ -57,21 +63,13 @@
     </SidebarLayout>
 
     <!-- 右侧大纲导航 -->
-    <ChatOutline v-if="currentSession && sessions.length > 0" 
-      :messages="chatPanelRef?.activeMessages || []"
-      :chat-panel-ref="chatPanelRef" 
-      @scroll-to-message="handleScrollToMessage" />
+    <ChatOutline v-if="currentSession && sessions.length > 0" :messages="chatPanelRef?.activeMessages || []"
+      :chat-panel-ref="chatPanelRef" @scroll-to-message="handleScrollToMessage" />
   </div>
 
   <!-- 记忆管理弹窗 -->
-  <el-dialog
-    v-model="memoPanelVisible"
-    title="记忆管理"
-    width="390px"
-    :close-on-click-modal="false"
-    destroy-on-close
-    class="memo-panel-dialog"
-  >
+  <el-dialog v-model="memoPanelVisible" title="记忆管理" width="390px" :close-on-click-modal="false" destroy-on-close
+    class="memo-panel-dialog">
     <MemoPanel v-if="currentSession" :session-id="currentSession.id" />
   </el-dialog>
 </template>
@@ -85,8 +83,7 @@ import { useSessionStore } from "@/stores/session";
 import { useAuthStore } from "@/stores/auth";
 import { useTitle } from '@/composables/useTitle';
 import type { Session } from '@/types/session';
-import { Splitpanes, Pane } from 'splitpanes';
-import 'splitpanes/dist/splitpanes.css';
+import { LiteSplitpanes } from "../ui";
 
 // 引入组件
 // @ts-ignore - UI 组件尚未迁移到 TypeScript
@@ -121,6 +118,8 @@ const isElectron = typeof window !== 'undefined' && !!(window as any).electronAP
 const chatSidebarRef = ref<InstanceType<typeof ChatSidebar> | null>(null);
 // ChatPanel 组件引用，用于调用组件内部方法
 const chatPanelRef = ref<InstanceType<typeof ChatPanel> | null>(null);
+const paneContentRef = ref<HTMLElement | null>(null);
+let paneSnapWidth = 0;
 // 设置面板当前激活的标签页
 const currentTabValue = ref<'basic' | string>('basic');
 // 控制设置模态框的显示与隐藏
@@ -129,7 +128,7 @@ const sessionSettingsModalVisible = ref(false);
 const sidebarVisible = useStorage('sidebarVisible', true);
 // 控制记忆管理窗格的显示状态，调试阶段默认打开
 const memoPanelVisible = useStorage('memoPanelVisible', false);
-// 控制工作目录窗格的显示状态
+// 控制工作目录窗格的显示状态（使用 useStorage 持久化）
 const workspaceVisible = useStorage('workspaceVisible', false);
 
 const isLoading = ref(true);
@@ -210,6 +209,26 @@ const goChatRoute = async (sessionId: string | null) => {
  */
 function toggleWorkspace() {
   workspaceVisible.value = !workspaceVisible.value;
+}
+
+function onPaneResize() {
+  const el = paneContentRef.value;
+  if (!el) return;
+  if (!paneSnapWidth) {
+    paneSnapWidth = el.offsetWidth;
+    el.style.width = paneSnapWidth + 'px';
+    el.style.flexShrink = '0';
+    el.style.flexGrow = '0';
+    el.style.width = paneSnapWidth + 'px';
+  }
+}
+
+function onPaneResized() {
+  paneSnapWidth = 0;
+  const el = paneContentRef.value;
+  if (el) {
+    el.style.width = '';
+  }
 }
 
 /**
@@ -581,9 +600,7 @@ watch(
 // 监听路由参数中会话 ID 的变化，更新选中的会话
 watch(
   () => route.params.sessionId,
-  async (newSessionId) => {
-    // if (isLoading.value)
-    //   return;
+  async (newSessionId, oldSessionId) => {
     if (!newSessionId) {
       currentSession.value = null;
       return;
@@ -598,6 +615,7 @@ watch(
 // 组件挂载完成后加载会话列表
 onMounted(async () => {
   isLoading.value = true;
+
   if (authStore.isAuthenticated) {
     await loadSessions();
     if (route.params.sessionId) {
@@ -607,13 +625,6 @@ onMounted(async () => {
     } else {
       currentSession.value = null;
     }
-    // if (route.params.sessionId) {
-    //   const sessionId = Array.isArray(route.params.sessionId) ? route.params.sessionId[0] : route.params.sessionId;
-    //   sessionStore.activeSessionId = sessionId;
-    //   await updateSelectedSession(sessionId);
-    // } else {
-    //   sessionStore.activeSessionId = null;
-    // }
   }
   isLoading.value = false;
 });
@@ -672,24 +683,39 @@ onMounted(async () => {
   border-bottom: 0;
   width: 4px !important;
 }
+
+/* Splitpanes 过渡动画 */
+:deep(.splitpanes__pane) {
+  /* transition: width 0.3s ease-out, height 0.3s ease-out; */
+  transition: none !important;
+  will-change: width;
+}
+
+.chat-pane-content {
+  contain: layout style;
+}
 </style>
 
 <style>
 /* 记忆管理弹窗样式（非scoped，用于覆盖el-dialog默认样式） */
 .memo-panel-dialog .el-dialog__body {
-  padding: 16px 8px;          /* 更紧凑的内边距 */
-  max-height: 65vh;           /* 稍微减小最大高度 */
+  padding: 16px 8px;
+  /* 更紧凑的内边距 */
+  max-height: 65vh;
+  /* 稍微减小最大高度 */
   overflow-y: auto;
 }
 
 /* 优化弹窗标题栏 */
 .memo-panel-dialog .el-dialog__header {
-  padding: 12px 16px;         /* 减小标题栏内边距 */
+  padding: 12px 16px;
+  /* 减小标题栏内边距 */
   margin: 0;
 }
 
 /* 优化弹窗底部 */
 .memo-panel-dialog .el-dialog__footer {
-  padding: 8px 16px;          /* 如果有footer，也减小内边距 */
+  padding: 8px 16px;
+  /* 如果有footer，也减小内边距 */
 }
 </style>

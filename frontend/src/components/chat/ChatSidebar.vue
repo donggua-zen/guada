@@ -18,7 +18,7 @@
       </div>
 
       <!-- 会话列表区域 -->
-      <div class="sessions-list flex-1 overflow-hidden py-2">
+      <div class="flex-1 overflow-hidden py-2">
         <ScrollContainer class="h-full max-h-full" @scroll="handleScroll">
           <div class="px-5 py-2.5 text-xs font-medium text-gray-400 uppercase tracking-wider">对话记录</div>
           <template v-if="!filteredSessions || filteredSessions.length === 0">
@@ -319,8 +319,8 @@ const loadMoreSessions = async (): Promise<void> => {
   display: flex;
   align-items: center;
   gap: 0.625rem;
-  padding: 0.5rem 0.75rem;
-  margin: 0.2rem 0.625rem;
+  padding: 0.4rem 0.75rem;
+  margin: 0.2rem 0.5rem;
   border-radius: 0.5rem;
   cursor: pointer;
   transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
@@ -337,7 +337,7 @@ const loadMoreSessions = async (): Promise<void> => {
 
 .session-item-active {
   background-color: var(--color-conversation-bg-active);
-  color: var(--color-conversation-text-active);
+    color: var(--color-conversation-text-active);
   /* box-shadow: 0 0 10px rgba(0, 0, 0, 0.05); */
 }
 
@@ -377,7 +377,8 @@ const loadMoreSessions = async (): Promise<void> => {
 }
 
 .dark .session-action-trigger:hover {
-  background-color: oklch(35% 0.03 250); /* 更柔和的悬停效果 */
+  background-color: oklch(35% 0.03 250);
+  /* 更柔和的悬停效果 */
 }
 
 /* 空状态 */

@@ -2,8 +2,8 @@ import { Injectable, Logger } from "@nestjs/common";
 import { ModelRepository } from "../../common/database/model.repository";
 import { OpenAI } from "openai";
 import { createPaginatedResponse } from "../../common/types/pagination";
-import { PROVIDER_TEMPLATES, transformProviderTemplateUrls } from "../../constants/provider-templates";
 import { UrlService } from "../../common/services/url.service";
+import { ProviderHub } from "../llm-core/provider-hub.service";
 
 @Injectable()
 export class ModelService {
@@ -12,6 +12,7 @@ export class ModelService {
   constructor(
     private modelRepo: ModelRepository,
     private urlService: UrlService,
+    private providerHub: ProviderHub,
   ) { }
 
   /**
@@ -28,26 +29,59 @@ export class ModelService {
         ? provider.models
         : provider.models.filter(model => model.isActive !== false);
 
-      if (provider.provider && provider.provider !== "custom") {
-        const template = PROVIDER_TEMPLATES.find(
-          (t) => t.id === provider.provider,
-        );
-        if (template) {
+      // 为每个模型添加 thinkingEfforts（从供应商获取）
+      const modelsWithThinkingEfforts = filteredModels.map((model: any) => {
+        // 只有支持 thinking 功能的模型才需要获取 thinkingEfforts
+        if (model.config?.features?.includes('thinking')) {
+          try {
+            // 通过 ProviderHub 获取供应商实例
+            const supplier = this.providerHub.getProvider(provider.provider);
+            // 调用供应商的 getModelThinkingEfforts 方法
+            const thinkingEfforts = supplier.getModelThinkingEfforts(model.modelName);
+            return {
+              ...model,
+              thinkingEfforts, // 在模型级别添加 thinkingEfforts
+            };
+          } catch (error) {
+            this.logger.warn(`Failed to get thinking efforts for model ${model.modelName}:`, error);
+            return {
+              ...model,
+              thinkingEfforts: [], // 失败时返回空数组
+            };
+          }
+        }
+        // 不支持 thinking 的模型，thinkingEfforts 为空
+        return {
+          ...model,
+          thinkingEfforts: [],
+        };
+      });
+
+      // 从供应商实例获取元数据
+      if (provider.provider) {
+        try {
+          const supplier = this.providerHub.getProvider(provider.provider);
+          const metadata = supplier.getMetadata();
+          
           return {
             ...provider,
-            models: filteredModels,
-            attributes: template.attributes, // 实时从文件获取
-            name: template.name, // 确保名称同步
-            avatarUrl: this.urlService.toResourceAbsoluteUrl(template.avatarUrl || provider.avatarUrl),
-            protocol: template.protocol,
-            description: template.description,
+            models: modelsWithThinkingEfforts,
+            name: metadata.name,
+            avatarUrl: this.urlService.toResourceAbsoluteUrl(metadata.avatarUrl || provider.avatarUrl),
+            protocol: metadata.protocols[0], // 使用第一个协议
+            description: metadata.description,
+            apiKeyUrl: metadata.apiKeyUrl,
           };
+        } catch (error) {
+          this.logger.warn(`Failed to get metadata for provider ${provider.provider}:`, error);
+          // 降级：使用数据库中的信息
         }
       }
-      // 对于自定义 provider，转换 URL（avatarUrl 是静态资源）
+
+      // 对于没有模板的供应商（如自定义），转换 URL（avatarUrl 是静态资源）
       return {
         ...provider,
-        models: filteredModels,
+        models: modelsWithThinkingEfforts,
         avatarUrl: provider.avatarUrl
           ? this.urlService.toResourceAbsoluteUrl(provider.avatarUrl)
           : null,
@@ -70,14 +104,22 @@ export class ModelService {
   }
 
   /**
-   * 获取可用的供应商模板列表
+   * 获取可用的供应商列表（从 ProviderHub 获取）
    */
   getProviderTemplates() {
-    // 使用 UrlService 转换所有模板的 avatarUrl
-    return PROVIDER_TEMPLATES.map((template) => ({
-      ...template,
-      avatarUrl: this.urlService.toResourceAbsoluteUrl(template.avatarUrl),
-    }));
+    const providers = this.providerHub.getAllProviders();
+    return providers.map((provider) => {
+      const metadata = provider.getMetadata();
+      return {
+        id: metadata.id,
+        name: metadata.name,
+        protocol: metadata.protocols[0],
+        defaultApiUrl: metadata.defaultApiUrl,
+        avatarUrl: this.urlService.toResourceAbsoluteUrl(metadata.avatarUrl),
+        description: metadata.description,
+        apiKeyUrl: metadata.apiKeyUrl,
+      };
+    });
   }
 
   /**
@@ -151,19 +193,23 @@ export class ModelService {
     let templateModels: any[] | undefined;
     let finalDescription = undefined;
 
-    const template = provider
-      ? PROVIDER_TEMPLATES.find((t) => t.id === provider)
-      : undefined;
-
-    if (template) {
-      finalName = template.name;
-      finalApiUrl = template.defaultApiUrl;
-      finalProtocol = template.protocol;
-      finalAvatarUrl = template.avatarUrl;
-      finalDescription = template.description;
-      finalAttributes = undefined; // 预定义供应商不存储 attributes，运行时动态查询
-      finalProviderType = provider;
-      templateModels = template.models; // 保存模板中的模型定义
+    // 从供应商实例获取元数据
+    if (provider && this.providerHub.hasProvider(provider)) {
+      try {
+        const supplier = this.providerHub.getProvider(provider);
+        const metadata = supplier.getMetadata();
+        
+        finalName = metadata.name;
+        finalApiUrl = metadata.defaultApiUrl;
+        finalProtocol = metadata.protocols[0];
+        finalAvatarUrl = metadata.avatarUrl;
+        finalDescription = metadata.description;
+        finalAttributes = undefined; // 预定义供应商不存储 attributes，运行时动态查询
+        finalProviderType = provider;
+        templateModels = supplier.getModels(); // 从供应商获取模型定义
+      } catch (error) {
+        this.logger.warn(`Failed to get metadata for provider ${provider}:`, error);
+      }
     } else {
       // 自定义供应商，providerType 为 'custom'
       finalProviderType = "custom";
@@ -343,23 +389,29 @@ export class ModelService {
 
       const response = await client.models.list();
 
-      // 查找对应的供应商模板
-      const template = PROVIDER_TEMPLATES.find(
-        (t) => t.id === provider.provider,
-      );
+      // 从供应商实例获取模型配置
+      let supplierModels: any[] = [];
+      try {
+        if (this.providerHub.hasProvider(provider.provider)) {
+          const supplier = this.providerHub.getProvider(provider.provider);
+          supplierModels = supplier.getModels();
+        }
+      } catch (error) {
+        this.logger.warn(`Failed to get models for provider ${provider.provider}:`, error);
+      }
 
       const models = response.data.map((model: any) => {
-        // 尝试从模板中匹配模型配置
-        const templateModel = template?.models?.find(
+        // 尝试从供应商模型中匹配配置
+        const supplierModel = supplierModels.find(
           (m) => m.modelName === model.id,
         );
 
-        // 如果找到匹配的模板模型，使用其配置；否则使用默认值
+        // 如果找到匹配的模型，使用其配置；否则使用默认值
         return {
           modelName: model.id,
           modelType:
-            templateModel?.modeType || templateModel?.modelType || "text",
-          config: templateModel?.config || {
+            supplierModel?.modeType || supplierModel?.modelType || "text",
+          config: supplierModel?.config || {
             inputCapabilities: ["text"],
             outputCapabilities: ["text"],
             features: [],

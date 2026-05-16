@@ -214,7 +214,7 @@ export class SessionService {
 
     // 定义允许的顶层字段白名单
     const allowedTopLevelFields = [
-      'thinkingEnabled',
+      'thinkingEffort',
       'referencedKbs',
       'modelName',
       'memoryEnabled',  // 控制是否启用自定义记忆配置
@@ -391,7 +391,7 @@ export class SessionService {
         messages: [{ role: "user", content: prompt }],
         temperature: 0.3, // 较低的温度使输出更稳定
         maxTokens: 50, // 限制输出长度
-        thinkingEnabled: false,
+        thinkingEffort: 'off', // 禁用思考功能
         stream: false,
         providerConfig: model.provider,
       });

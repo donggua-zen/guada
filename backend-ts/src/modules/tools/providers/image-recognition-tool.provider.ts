@@ -200,7 +200,7 @@ export class ImageRecognitionToolProvider implements IToolProvider {
       messages,
       providerConfig: visualModelConfig.provider,
       stream: false,
-      thinkingEnabled: false,
+      thinkingEffort: 'off', // 禁用思考功能
       timeout: 60,
     }) as Promise<any>;
 
