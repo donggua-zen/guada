@@ -83,14 +83,13 @@
           <!-- 模型选择按钮 -->
           <el-button ref="modelButtonRef" @click.stop="openModelPanel" plain
             class="model-selector-btn rounded-full overflow-hidden flex items-center justify-center">
-            <div class="flex items-center gap-1.5" style="height:24px">
+            <div class="flex items-center gap-1.5" style="height:24px; max-width: 200px;">
               <Avatar v-if="currentModel"
                 :src="getModelAvatarPath(currentModel.modelName, currentModel.provider?.name) || undefined"
                 :name="getModelDisplayName(currentModel.modelName)" type="assistant" :round="false"
                 class="w-5 h-5 shrink-0" />
               <OpenAI v-else class="w-5 h-5 shrink-0" />
-              <span class="whitespace-nowrap text-sm font-medium"
-                :style="{ display: isMobile ? 'none' : 'inline-flex' }">{{
+              <span class="text-sm font-medium truncate flex-1 min-w-0" style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">{{
                   currentModelName }}</span>
             </div>
           </el-button>
