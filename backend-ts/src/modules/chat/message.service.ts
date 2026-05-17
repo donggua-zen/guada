@@ -171,10 +171,14 @@ export class MessageService {
           messageId = newMessage.id;
         });
 
-        // 5. 事务成功后，清理所有 messageId 为 NULL 的孤儿文件（异步执行，不阻塞响应）
+        // 5. 事务成功后，在后台异步清理所有 messageId 为 NULL 的孤儿文件
         // 这些文件包括：本次编辑解绑但未重新关联的文件 + 历史遗留的孤儿文件
-        this.cleanupOrphanMessageFiles().catch(error => {
-          this.logger.error(`清理孤儿文件失败: ${error.message}`);
+        // 使用 setImmediate 延迟执行，避免阻塞当前请求响应，同时给数据库一些时间释放锁
+        setImmediate(() => {
+          this.logger.debug('开始后台清理孤儿文件...');
+          this.fileService.cleanupOrphanFiles().catch(error => {
+            this.logger.error(`清理孤儿文件失败: ${error.message}`, error.stack);
+          });
         });
       } catch (error) {
         const errorMessage =
@@ -398,7 +402,7 @@ export class MessageService {
 
     // 3. 先删除所有内容版本
     await this.contentRepo.deleteByMessageId(messageId);
-    
+
     // 4. 再删除消息本身
     await this.messageRepo.delete(messageId);
   }
@@ -434,7 +438,7 @@ export class MessageService {
     });
 
     // 2. 删除所有消息关联的物理文件（并行执行）
-    const fileDeletePromises = messages.map(msg => 
+    const fileDeletePromises = messages.map(msg =>
       this.fileService.deleteFilesByMessageId(msg.id)
     );
     await Promise.all(fileDeletePromises);
@@ -501,38 +505,4 @@ export class MessageService {
    * 清理所有 messageId 为 NULL 的孤儿文件
    * 在编辑消息后调用，异步执行，不阻塞响应
    */
-  private async cleanupOrphanMessageFiles(): Promise<void> {
-    try {
-      const prisma = this.contentRepo.getPrismaClient();
-      
-      // 查询所有 messageId 为 NULL 的文件
-      const orphanFiles = await prisma.file.findMany({
-        where: {
-          messageId: null,
-        },
-        select: {
-          id: true,
-        },
-      });
-
-      if (orphanFiles.length === 0) {
-        return; // 没有孤儿文件，直接返回
-      }
-
-      this.logger.log(`检测到 ${orphanFiles.length} 个孤儿文件，开始清理...`);
-
-      // 异步并行删除所有孤儿文件
-      const deletePromises = orphanFiles.map(file => 
-        this.fileService.deleteFile(file.id)
-      );
-
-      const results = await Promise.allSettled(deletePromises);
-      const successCount = results.filter(r => r.status === 'fulfilled' && r.value).length;
-      const failCount = results.filter(r => r.status === 'rejected' || (r.status === 'fulfilled' && !r.value)).length;
-
-      this.logger.log(`成功清理 ${successCount}/${orphanFiles.length} 个孤儿文件，${failCount} 个失败`);
-    } catch (error: any) {
-      this.logger.error(`清理孤儿文件失败: ${error.message}`);
-    }
-  }
 }
