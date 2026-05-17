@@ -80,6 +80,7 @@ export class FileService implements OnModuleInit {
   }
 
   async onModuleInit() {
+    // 启动时清理所有未关联消息的孤儿文件
     await this.cleanupOrphanFiles();
   }
 
@@ -466,7 +467,7 @@ export class FileService implements OnModuleInit {
   }
 
   /**
-   * 删除文件（物理删除）
+   * 删除文件(物理删除)
    */
   async deleteFile(fileId: string): Promise<boolean> {
     try {
@@ -474,32 +475,54 @@ export class FileService implements OnModuleInit {
       if (!file) {
         return false;
       }
-
-      // 删除物理文件（如果有 URL）
+  
+      // 异步删除物理文件(如果有 URL)
+      const deletePromises: Promise<void>[] = [];
+        
       if (file.url) {
         const physicalPath = this.uploadPathService.toPhysicalPath(file.url);
         if (fs.existsSync(physicalPath)) {
-          fs.unlinkSync(physicalPath);
-          this.logger.log(`已删除文件: ${physicalPath}`);
+          deletePromises.push(
+            fs.promises.unlink(physicalPath).then(() => {
+              this.logger.log(`已删除文件: ${physicalPath}`);
+            }).catch(err => {
+              this.logger.warn(`删除物理文件失败: ${physicalPath}, ${err.message}`);
+            })
+          );
         }
       }
-
-      // 删除预览图（如果有）
+  
+      // 异步删除预览图(如果有)
       if (file.previewUrl) {
         const previewPath = this.uploadPathService.toPhysicalPath(file.previewUrl);
         if (fs.existsSync(previewPath)) {
-          fs.unlinkSync(previewPath);
-          this.logger.log(`已删除预览图: ${previewPath}`);
+          deletePromises.push(
+            fs.promises.unlink(previewPath).then(() => {
+              this.logger.log(`已删除预览图: ${previewPath}`);
+            }).catch(err => {
+              this.logger.warn(`删除预览图失败: ${previewPath}, ${err.message}`);
+            })
+          );
         }
       }
-
+  
+      // 等待所有文件删除完成(最多等待 10 秒)
+      if (deletePromises.length > 0) {
+        await Promise.race([
+          Promise.all(deletePromises),
+          new Promise((_, reject) => 
+            setTimeout(() => reject(new Error('文件删除超时')), 10000)
+          )
+        ]);
+      }
+  
       // 删除数据库记录
       await this.prisma.file.delete({ where: { id: fileId } });
       this.logger.log(`已删除文件记录: ${fileId}`);
-
+  
       return true;
     } catch (error: any) {
-      this.logger.error(`删除文件失败: ${error.message}`);
+      this.logger.error(`删除文件失败: ${error.message}`, error.stack);
       return false;
     }
   }
@@ -531,38 +554,47 @@ export class FileService implements OnModuleInit {
   }
 
   /**
-   * 清理孤儿文件（启动时执行）
-   * 删除所有 messageId 为 NULL 且 sessionId 为 NULL 的文件（即未关联任何消息或会话的文件）
+   * 清理所有未关联消息的孤儿文件
+   * 删除所有 messageId 为 NULL 的文件（不管 sessionId 是否有值）
    */
-  private async cleanupOrphanFiles() {
+  async cleanupOrphanFiles(): Promise<void> {
     try {
-      this.logger.log("开始扫描聊天孤儿文件...");
+      this.logger.log("开始扫描孤儿文件（未关联消息）...");
 
-      // 查找所有未关联消息和会话的文件
+      // 查找所有未关联消息的文件
       const orphanFiles = await this.prisma.file.findMany({
         where: {
           messageId: null,
-          sessionId: null,
         },
       });
 
+      if (orphanFiles.length === 0) {
+        this.logger.log("未发现孤儿文件");
+        return;
+      }
+
+      this.logger.log(`发现 ${orphanFiles.length} 个孤儿文件，开始清理...`);
+
       let cleanedCount = 0;
+      let failedCount = 0;
+      
       for (const file of orphanFiles) {
         try {
-          await this.deleteFile(file.id);
-          cleanedCount++;
+          const success = await this.deleteFile(file.id);
+          if (success) {
+            cleanedCount++;
+          } else {
+            failedCount++;
+          }
         } catch (error: any) {
+          failedCount++;
           this.logger.error(`清理孤儿文件失败: ${file.displayName}, 错误: ${error.message}`);
         }
       }
 
-      if (cleanedCount > 0) {
-        this.logger.log(`聊天孤儿文件清理完成：清理 ${cleanedCount} 个`);
-      } else {
-        this.logger.log("未发现聊天孤儿文件");
-      }
+      this.logger.log(`孤儿文件清理完成：成功 ${cleanedCount} 个，失败 ${failedCount} 个`);
     } catch (error: any) {
-      this.logger.error(`聊天孤儿文件清理失败：${error.message}`);
+      this.logger.error(`孤儿文件清理失败：${error.message}`);
     }
   }
 }

@@ -75,6 +75,6 @@ export class CustomProvider implements IModelProvider {
   getModelThinkingEfforts(modelName: string): string[] {
     // 自定义供应商不提供默认思考强度配置
     // 具体支持哪些强度由用户自行配置
-    return [];
+    return ['off', 'low', 'medium', 'high', 'xhigh'];
   }
 }

@@ -33,7 +33,6 @@
         :files="inputMessage.files" 
         :streaming="false"
         @send="sendMessage" 
-        @toggle-thinking="toggleDeepThinking" 
       />
     </div>
     <div>
@@ -580,7 +579,5 @@ const handleCreateSessionClick = (): void => {
 }
 
 // 设置操作
-
-const toggleDeepThinking = (): void => { };
 
 </script>

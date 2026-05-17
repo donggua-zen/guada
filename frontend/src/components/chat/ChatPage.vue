@@ -22,13 +22,10 @@
           <template v-if="sessions.length > 0 && currentSession">
             <!-- 可拖拽分割区域 -->
             <div class="flex-1 overflow-hidden">
-              <LiteSplitpanes
-                style="height: 100%;"
+              <LiteSplitpanes style="height: 100%;"
                 :pane1="{ size: workspaceVisible && isElectron ? workspaceSplitSize : 100, minSize: 40, maxSize: 100 }"
                 :pane2="{ size: workspaceVisible && isElectron ? (100 - workspaceSplitSize) : 0, minSize: 0, maxSize: 60 }"
-                @resize="onPaneResize"
-                @resized="onPaneResized"
-              >
+                @resize="onPaneResize" @resized="onPaneResized">
                 <template #pane1>
                   <div ref="paneContentRef" class="chat-pane-content"
                     style="height: 100%; display: flex; flex-direction: column;">
@@ -409,7 +406,10 @@ const handleRenameSession = async (session: any) => {
  */
 const handleDeleteSession = async (session: any) => {
   try {
-    if (await confirm("确认删除", "确定要删除这个对话吗？此操作不可撤销。")) {
+    if (await confirm(
+      "确定要删除这个对话吗？",
+      "<b>重要提示：</b><br>• 此操作不可撤销<br>• <span style='color: #f56c6c;'>将删除会话关联的默认工作目录</span><br>• <b>请务必备份重要数据</b>"
+    )) {
       await apiService.deleteSession(session.id);
       sessionStore.clearSessionState(session.id);
       const index = sortedSessions.value.findIndex(s => s.id === session.id);

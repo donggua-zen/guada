@@ -65,14 +65,15 @@ export class MemoryToolProvider implements IToolProvider {
 
     promptParts.push("# 记忆管理指南");
     promptParts.push("");
-    promptParts.push("你应该主动发现并记录你认为有价值的内容，使用文件工具集管理你的记忆。文件位于工作目录的 `memory/` 子目录中。");
+    promptParts.push("你应该主动发现并记录你认为有价值的内容，使用文件工具集管理你的记忆。文件位于工作目录的 `.guada/` 子目录中。");
     promptParts.push("");
     promptParts.push("## 记忆文件结构");
     promptParts.push("");
     promptParts.push("```");
-    promptParts.push("memory/");
-    promptParts.push("├── factual.md          # 事实性记忆（用户偏好、项目状态、待办事项）");
-    promptParts.push("├── soul.md             # 人格定义（角色设定、回复风格）");
+    promptParts.push(".guada/");
+    promptParts.push("├── memory/");
+    promptParts.push("│   ├── factual.md          # 事实性记忆（用户偏好、项目状态、待办事项）");
+    promptParts.push("│   └── soul.md             # 人格定义（角色设定、回复风格）");
     promptParts.push("└── memos/              # 备忘录目录");
     promptParts.push("    ├── 标题1.md");
     promptParts.push("    ├── 标题2.md");
@@ -112,25 +113,25 @@ export class MemoryToolProvider implements IToolProvider {
     promptParts.push("");
     promptParts.push("**场景1 - 用户偏好**：");
     promptParts.push("当用户说\"我喜欢用中文交流，希望回答简洁一些\"时");
-    promptParts.push("应该写入 `memory/factual.md`，内容为：");
+    promptParts.push("应该写入 `.guada/memory/factual.md`，内容为：");
     promptParts.push("```");
     promptParts.push("用户偏好：中文交流，简洁风格");
     promptParts.push("```");
     promptParts.push("");
     promptParts.push("**场景2 - 项目进展**：");
     promptParts.push("当用户说\"我们正在开发一个聊天应用，目前完成了登录功能\"时");
-    promptParts.push("应该写入 `memory/factual.md`，内容为：");
+    promptParts.push("应该写入 `.guada/memory/factual.md`，内容为：");
     promptParts.push("```");
     promptParts.push("当前项目：聊天应用，进度：登录功能已完成");
     promptParts.push("```");
     promptParts.push("");
     promptParts.push("**场景3 - 技术笔记**：");
     promptParts.push("当用户说\"帮我记录一下 Docker 的常用命令\"时");
-    promptParts.push("应该创建备忘录 `memory/memos/Docker常用命令.md`，保存完整的命令列表");
+    promptParts.push("应该创建备忘录 `.guada/memos/Docker常用命令.md`，保存完整的命令列表");
     promptParts.push("");
     promptParts.push("**场景4 - 会议纪要**：");
     promptParts.push("当对话中讨论了项目需求后");
-    promptParts.push("应该创建备忘录 `memory/memos/2024-01-15_项目需求会议.md`，保存详细的会议记录");
+    promptParts.push("应该创建备忘录 `.guada/memos/2024-01-15_项目需求会议.md`，保存详细的会议记录");
     promptParts.push("");
     promptParts.push("### 4. 重要提醒");
     promptParts.push("");
@@ -152,10 +153,12 @@ export class MemoryToolProvider implements IToolProvider {
       }
 
       const workspaceDir = this.workspaceService.getWorkspaceDir(sessionId);
-      const memoryDir = path.join(workspaceDir, 'memory');
+      const guadaDir = path.join(workspaceDir, '.guada');
+      const memoryDir = path.join(guadaDir, 'memory');
+      const memosDir = path.join(guadaDir, 'memos');
 
       // 1. 获取当前磁盘上的文件状态
-      const currentMtimes = await this.getFileMtimes(memoryDir);
+      const currentMtimes = await this.getFileMtimes(memoryDir, memosDir);
 
       // 2. 检查缓存是否需要更新
       const cacheItem = this.cache.get(sessionId);
@@ -192,8 +195,7 @@ export class MemoryToolProvider implements IToolProvider {
       // ========== 第一部分：长期记忆注入 ==========
       promptParts.push("# 记忆");
 
-      promptParts.push("\n## 事实性记忆 (memory/factual.md)");
-      promptParts.push("这些是核心事实知识库，包括用户偏好、重要决策、项目状态等关键信息：");
+      promptParts.push("\n## 事实性记忆 (.guada/memory/factual.md)");
       promptParts.push("<factual-memory>");
       if (index.factual) {
         promptParts.push(index.factual);
@@ -202,8 +204,7 @@ export class MemoryToolProvider implements IToolProvider {
       }
       promptParts.push("</factual-memory>");
 
-      promptParts.push("\n## 人格定义 (memory/soul.md)");
-      promptParts.push("这些定义了 AI 的角色定位、语言风格和行为规则：");
+      promptParts.push("\n## 人格定义 (.guada/memory/soul.md)");
       promptParts.push("<soul-memory>");
       if (index.soul) {
         promptParts.push(index.soul);
@@ -213,8 +214,7 @@ export class MemoryToolProvider implements IToolProvider {
       promptParts.push("</soul-memory>");
 
       // ========== 第二部分：备忘录目录注入 ==========
-      promptParts.push("\n# 备忘录目录 (memory/memos/*.md)");
-      promptParts.push("以下是你可访问的备忘录列表，可通过标题读取具体内容：");
+      promptParts.push("\n# 备忘录目录 (.guada/memos/*.md)");
       promptParts.push("<memo-list>");
       if (index.memos.length > 0) {
         index.memos.forEach((memo, idx) => {
@@ -249,10 +249,10 @@ export class MemoryToolProvider implements IToolProvider {
   /**
    * 获取关键记忆文件的最后修改时间戳
    */
-  private async getFileMtimes(memoryDir: string): Promise<Record<string, number>> {
+  private async getFileMtimes(memoryDir: string, memosDir: string): Promise<Record<string, number>> {
     const mtimes: Record<string, number> = {};
     const filesToCheck = ['factual.md', 'soul.md'];
-      
+
     for (const file of filesToCheck) {
       try {
         const stats = await fs.stat(path.join(memoryDir, file));
@@ -261,25 +261,25 @@ export class MemoryToolProvider implements IToolProvider {
         // 文件不存在则忽略
       }
     }
-  
+
     // 检查 memos 目录的整体状态
     try {
-      const memosDir = path.join(memoryDir, 'memos');
       const stats = await fs.stat(memosDir);
-      mtimes['memos_dir'] = stats.mtimeMs; 
-    } catch (error: any) {}
-  
+      mtimes['memos_dir'] = stats.mtimeMs;
+    } catch (error: any) { }
+
     return mtimes;
   }
-  
+
   /**
    * 为指定会话重建索引（从文件系统读取到内存缓存）
    */
   private async rebuildIndexForSession(sessionId: string, preFetchedMtimes?: Record<string, number>): Promise<void> {
     const workspaceDir = this.workspaceService.getWorkspaceDir(sessionId);
-    const memoryDir = path.join(workspaceDir, 'memory');
-    const memosDir = path.join(memoryDir, 'memos');
-  
+    const guadaDir = path.join(workspaceDir, '.guada');
+    const memoryDir = path.join(guadaDir, 'memory');
+    const memosDir = path.join(guadaDir, 'memos');
+
     const index: MemoryIndex = {
       factual: undefined,
       soul: undefined,
@@ -287,12 +287,12 @@ export class MemoryToolProvider implements IToolProvider {
       lastUpdated: new Date(),
       fileMtimes: preFetchedMtimes || {},
     };
-  
+
     // 如果没传签名，重新获取一次以确保准确性
     if (!preFetchedMtimes) {
-      index.fileMtimes = await this.getFileMtimes(memoryDir);
+      index.fileMtimes = await this.getFileMtimes(memoryDir, memosDir);
     }
-  
+
     // 读取长期记忆
     try {
       const factualPath = path.join(memoryDir, 'factual.md');
@@ -302,7 +302,7 @@ export class MemoryToolProvider implements IToolProvider {
         this.logger.warn(`Failed to read factual.md: ${error.message}`);
       }
     }
-  
+
     try {
       const soulPath = path.join(memoryDir, 'soul.md');
       index.soul = await fs.readFile(soulPath, 'utf-8');
@@ -311,18 +311,18 @@ export class MemoryToolProvider implements IToolProvider {
         this.logger.warn(`Failed to read soul.md: ${error.message}`);
       }
     }
-  
+
     // 读取备忘录
     try {
       await fs.access(memosDir);
       const files = await fs.readdir(memosDir);
       const memoFiles = files.filter(f => f.endsWith('.md'));
-  
+
       for (const file of memoFiles) {
         const title = file.replace('.md', '');
         const filePath = path.join(memosDir, file);
         const content = await fs.readFile(filePath, 'utf-8');
-  
+
         index.memos.push({ title, content });
       }
     } catch (error: any) {
@@ -330,10 +330,10 @@ export class MemoryToolProvider implements IToolProvider {
         this.logger.warn(`Failed to read memos directory: ${error.message}`);
       }
     }
-  
+
     // 更新缓存（LRU 淘汰）
     this.updateCache(sessionId, index);
-  
+
     this.logger.log(`Rebuilt memory index for session ${sessionId}: ${index.memos.length} memos`);
   }
 

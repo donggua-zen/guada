@@ -7,7 +7,8 @@
       <!-- 文件列表显示区域 -->
       <div class="file-list flex flex-wrap gap-2 mb-3" v-if="uploadFiles.length > 0">
         <FileItem v-for="file in uploadFiles" :key="file.id" :name="file.displayName" :type="file.fileType"
-          :ext="file.fileExtension" :size="file.fileSize" :preview-url="file.previewUrl" closable
+          :ext="file.fileExtension" :size="file.fileSize"
+          :preview-url="file.fileType === 'image' ? previewUrls.get(file.id) : undefined" closable
           :upload-progress="file.uploadProgress" :upload-status="file.uploadStatus" @close="removeFile(file.id)">
         </FileItem>
       </div>
@@ -82,14 +83,13 @@
           <!-- 模型选择按钮 -->
           <el-button ref="modelButtonRef" @click.stop="openModelPanel" plain
             class="model-selector-btn rounded-full overflow-hidden flex items-center justify-center">
-            <div class="flex items-center gap-1.5" style="height:24px">
+            <div class="flex items-center gap-1.5" style="height:24px; max-width: 200px;">
               <Avatar v-if="currentModel"
                 :src="getModelAvatarPath(currentModel.modelName, currentModel.provider?.name) || undefined"
                 :name="getModelDisplayName(currentModel.modelName)" type="assistant" :round="false"
                 class="w-5 h-5 shrink-0" />
               <OpenAI v-else class="w-5 h-5 shrink-0" />
-              <span class="whitespace-nowrap text-sm font-medium"
-                :style="{ display: isMobile ? 'none' : 'inline-flex' }">{{
+              <span class="text-sm font-medium truncate flex-1 min-w-0" style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">{{
                   currentModelName }}</span>
             </div>
           </el-button>
@@ -137,7 +137,7 @@
 <script setup lang="ts">
 // @ts-nocheck - ChatInput 组件复杂度高，临时使用@ts-nocheck
 import { ref, watch, computed, nextTick, onUnmounted, onMounted, reactive } from 'vue'
-import { ElIcon, ElButton, ElDialog, ElTabs, ElTabPane, ElInput, ElForm, ElFormItem, ElTag, ElMessage } from 'element-plus';
+import { ElIcon, ElButton, ElDialog, ElTabs, ElTabPane, ElInput, ElForm, ElFormItem, ElTag, ElMessage, ElMessageBox } from 'element-plus';
 import FileItem from '../ui/FileItem.vue';
 import Avatar from '../ui/Avatar.vue';
 import ElSliderOptional from '../ui/ElSliderOptional.vue';
@@ -182,7 +182,6 @@ const focused = ref(false);
 // 模型选择器相关
 const models = ref([]);
 const providers = ref([]);
-const sessionId = ref(null);
 // 弹窗触发按钮引用
 const modelButtonRef = ref<any>(null);
 const kbButtonRef = ref<any>(null);
@@ -196,11 +195,6 @@ const settingsPanelVisible = ref(false)
 // 弹窗面板状态（模型和知识库使用弹窗样式）
 const modelPanelVisible = ref(false)
 const kbPanelVisible = ref(false)
-
-// 计算是否有任意面板打开
-const anyPanelVisible = computed(() =>
-  modelPanelVisible.value || settingsPanelVisible.value || kbPanelVisible.value
-)
 
 // 常量定义
 const FILE_TYPES = {
@@ -241,16 +235,14 @@ const showButtons = reactive({
   tokensButton: true,
 });
 
+// 图片预览 URL 字典（与 file 对象解耦）
+const previewUrls = ref(new Map());
+
 const props = defineProps({
   value: { type: String, default: '' },
   files: { type: Array, default: () => [] },
   streaming: { type: Boolean, default: false },
-  webSearchEnabled: { type: Boolean, default: false },
-  shadow: { type: Boolean, default: true },
   buttons: { type: Object, default: () => [] },
-  clean: { type: Boolean, default: false },
-  border: { type: Boolean, default: true },
-  round: { type: Boolean, default: true },
   class: { type: String, default: '' },
   sessionId: { type: [String, Number], default: null },
   config: {
@@ -278,15 +270,14 @@ const styleClass = computed(() => {
   if (isInputExpanded.value) {
     classes.push('expanded');
   }
-  if (!props.clean) {
-    if (props.round) classes.push('rounded-[22px]');
-    if (focused.value) {
-      if (props.shadow) classes.push('shadow-[0_2px_22px_rgba(0,0,0,0.21)]');
-      if (props.border) classes.push('border border-gray-400 dark:border-gray-700');
-    } else {
-      if (props.shadow) classes.push('shadow-[0_2px_22px_rgba(0,0,0,0.11)]');
-      if (props.border) classes.push('border border-gray-300 dark:border-gray-700');
-    }
+  // 始终应用默认样式 
+  classes.push('rounded-[22px]');
+  if (focused.value) {
+    classes.push('shadow-[0_2px_22px_rgba(0,0,0,0.21)]');
+    classes.push('border border-gray-400 dark:border-gray-700');
+  } else {
+    classes.push('shadow-[0_2px_22px_rgba(0,0,0,0.11)]');
+    classes.push('border border-gray-300 dark:border-gray-700');
   }
   return classes.join(' ') + ' ' + props.class;
 });
@@ -296,9 +287,36 @@ const inputContent = computed({
   set: (value) => emit('update:value', value)
 });
 
+// 管理上传文件列表，自动处理图片预览 URL 的生命周期
 const uploadFiles = computed({
-  get: () => props.files,
-  set: (value) => emit('update:files', value)
+  get: () => {
+    const files = props.files;
+    
+    // 为每个图片文件确保有预览 URL（懒加载）
+    files.forEach(file => {
+      if (file.fileType === 'image' && file.file && !previewUrls.value.has(file.id)) {
+        const previewUrl = URL.createObjectURL(file.file);
+        previewUrls.value.set(file.id, previewUrl);
+      }
+    });
+    
+    // 清理不再存在的文件的预览 URL
+    const currentFileIds = new Set(files.map(f => f.id));
+    previewUrls.value.forEach((url, fileId) => {
+      if (!currentFileIds.has(fileId)) {
+        if (url?.startsWith('blob:')) {
+          URL.revokeObjectURL(url);
+        }
+        previewUrls.value.delete(fileId);
+      }
+    });
+    
+    return files;
+  },
+  set: (newFiles) => {
+    // 直接发射更新事件，让父组件处理
+    emit('update:files', newFiles);
+  }
 });
 
 // 当前选中的模型
@@ -392,8 +410,9 @@ const getFeatureLabel = (type) => {
 
 const emit = defineEmits([
   'update:value',
-  'send', 'abort', 'tokens-statistic', 'files-change',
-  'toggle-thinking', 'focus', 'blur',
+  'update:files',
+  'send', 'abort', 'files-change',
+  'focus', 'blur',
   'update:modelId', 'config-change', 'update:knowledgeBaseIds'
 ]);
 
@@ -422,8 +441,6 @@ const getFileExtensionsFromType = (type) => {
 }
 
 const createFileObject = (file, fileType, isPasted = false) => {
-  const isImage = fileType === 'IMAGE';
-  const previewUrl = isImage ? URL.createObjectURL(file) : '';
   const timestamp = Date.now();
 
   return {
@@ -434,29 +451,20 @@ const createFileObject = (file, fileType, isPasted = false) => {
     fileType: FILE_TYPES[fileType].type,
     displayName: file.name ? getFileNameWithoutExtension(file.name) : `pasted-${fileType.toLowerCase()}-${timestamp}`,
     file: file,
-    previewUrl: previewUrl,
     // 新增：上传进度状态
     uploadProgress: 0,
     uploadStatus: null, // 'queued' | 'uploading' | 'uploaded' | 'failed'
   };
 };
 
-const revokeImagePreviewUrl = (file) => {
-  if (file?.fileType === 'image' && file.previewUrl?.startsWith('blob:')) {
-    URL.revokeObjectURL(file.previewUrl);
-    file.previewUrl = null;
-  }
-};
-
 // 打开模型面板
 const openModelPanel = () => {
   // 如果面板已经打开，则关闭它（实现切换效果）
   if (modelPanelVisible.value) {
-    closeAllPanels()
+    modelPanelVisible.value = false
     return
   }
 
-  closeAllPanels()
   modelPanelVisible.value = true
 };
 
@@ -505,7 +513,7 @@ const handleModelSelect = (modelId: string) => {
 
   emit('config-change', configChanges);
 
-  closeAllPanels()
+  modelPanelVisible.value = false
 };
 
 // 处理收藏状态变化（刷新模型列表）
@@ -537,11 +545,10 @@ const applySessionSettings = (configChanges: any) => {
 const openKnowledgeBasePanel = async () => {
   // 如果面板已经打开，则关闭它（实现切换效果）
   if (kbPanelVisible.value) {
-    closeAllPanels()
+    kbPanelVisible.value = false
     return
   }
 
-  closeAllPanels()
   // 重新加载知识库列表，确保数据是最新的
   try {
     await loadKnowledgeBases();
@@ -580,13 +587,6 @@ const removeKnowledgeBase = (kbId: string) => {
   emit('update:knowledgeBaseIds', newKbIds);  // 更新本地状态
   emit('config-change', { knowledgeBaseIds: newKbIds });  // 通知父组件保存配置
 };
-
-// 关闭所有面板
-const closeAllPanels = () => {
-  modelPanelVisible.value = false
-  settingsPanelVisible.value = false
-  kbPanelVisible.value = false
-}
 
 // 加载模型列表
 const loadModels = async () => {
@@ -651,8 +651,7 @@ const checkFileConflict = async (newFileType) => {
     const confirmed = await confirm(`覆盖${conflictType}`, `暂不支持同时上传图片和文件，是否要覆盖全部${conflictType}？`);
     if (!confirmed) return false;
 
-    uploadFiles.value.forEach(revokeImagePreviewUrl);
-    uploadFiles.value = [];
+    uploadFiles.value = []; // setter 会自动清理预览 URL
   }
   return true;
 };
@@ -666,28 +665,7 @@ const processFiles = async (files, fileType) => {
   for (const file of files) {
     if (isFileType(file, normalizedFileType)) {
       const fileObj = createFileObject(file, normalizedFileType);
-
-      // 如果当前有 sessionId，立即开始上传并跟踪进度
-      if (sessionId.value) {
-        try {
-          const { useFileUploadStore } = await import('@/stores/fileUpload');
-          const uploadStore = useFileUploadStore();
-
-          // 标记为排队中
-          fileObj.uploadStatus = 'queued';
-          uploadFiles.value.push(fileObj);
-
-          // 异步上传，不阻塞用户操作
-          uploadToSessionWithProgress(fileObj, sessionId.value, uploadStore);
-        } catch (error) {
-          console.error('初始化文件上传失败:', error);
-          fileObj.uploadStatus = 'failed';
-          uploadFiles.value.push(fileObj);
-        }
-      } else {
-        // 没有 sessionId，直接添加（稍后在发送消息时上传）
-        uploadFiles.value.push(fileObj);
-      }
+      uploadFiles.value.push(fileObj);
     }
   }
 };
@@ -731,7 +709,7 @@ const handlePaste = async (event) => {
   }
 
   // Step 3: 判断文本长度并决定如何处理
-  const MAX_TEXT_LENGTH = 1000;
+  const MAX_TEXT_LENGTH = 2000;
   if (pastedText && pastedText.length > MAX_TEXT_LENGTH) {
     // 超长文本 → 转为 .txt 文件
     const blob = new Blob([pastedText], { type: 'text/plain' });
@@ -771,35 +749,11 @@ const handlePaste = async (event) => {
   }
 };
 
-// 带进度反馈的会话文件上传
-async function uploadToSessionWithProgress(fileObj, sessionId, uploadStore) {
-  try {
-    const task = await uploadStore.uploadToSession(
-      sessionId,
-      fileObj.file,
-      (status) => {
-        // 更新文件对象的上传状态
-        fileObj.uploadProgress = status.progress;
-        fileObj.uploadStatus = status.status;
-      }
-    );
-
-    // 上传完成后更新文件 ID
-    if (task.fileId && task.fileId !== 'pending') {
-      fileObj.id = task.fileId;
-      fileObj.uploadStatus = 'uploaded';
-    }
-  } catch (error) {
-    console.error('文件上传失败:', error);
-    fileObj.uploadStatus = 'failed';
-  }
-}
 
 const removeFile = (fileId) => {
   const index = uploadFiles.value.findIndex(file => file.id === fileId);
   if (index !== -1) {
-    revokeImagePreviewUrl(uploadFiles.value[index]);
-    uploadFiles.value.splice(index, 1);
+    uploadFiles.value.splice(index, 1); // setter 会自动清理预览 URL
   }
 };
 
@@ -840,32 +794,29 @@ const sendMessage = async () => {
     files: uploadedFiles,
     knowledgeBaseIds: props.config?.knowledgeBaseIds || []
   });
+
+  // 清空文件列表（setter 会自动清理预览 URL）
+  uploadFiles.value = [];
 };
 
 // 显示上传等待对话框
 async function showUploadWaitingDialog(uploadingCount: number): Promise<boolean> {
-  return new Promise((resolve) => {
-    // 使用 Element Plus 的 MessageBox
-    import('element-plus').then(({ ElMessageBox }) => {
-      ElMessageBox.confirm(
-        `当前有 ${uploadingCount} 个文件正在上传中，您可以选择等待上传完成或直接发送消息（仅发送已完成的文件）。`,
-        '文件上传中',
-        {
-          confirmButtonText: '继续等待',
-          cancelButtonText: '直接发送',
-          type: 'warning',
-          distinguishCancelAndClose: true,
-          closeOnClickModal: false,
-        }
-      )
-        .then(() => {
-          resolve(true); // 用户点击"继续等待"
-        })
-        .catch(() => {
-          resolve(false); // 用户点击"直接发送"或关闭弹窗
-        });
-    });
-  });
+  try {
+    await ElMessageBox.confirm(
+      `当前有 ${uploadingCount} 个文件正在上传中，您可以选择等待上传完成或直接发送消息（仅发送已完成的文件）。`,
+      '文件上传中',
+      {
+        confirmButtonText: '继续等待',
+        cancelButtonText: '直接发送',
+        type: 'warning',
+        distinguishCancelAndClose: true,
+        closeOnClickModal: false,
+      }
+    );
+    return true; // 用户点击"继续等待"
+  } catch {
+    return false; // 用户点击"直接发送"或关闭弹窗
+  }
 }
 
 const handleKeydown = (e) => {
@@ -886,17 +837,8 @@ const adjustTextareaHeight = () => {
   isInputExpanded.value = textarea.scrollHeight > 60;
 };
 
-const handleTokensStatistic = () => {
-  emit('tokens-statistic')
-}
-
 const abortResponse = () => {
   emit('abort')
-}
-
-const toggleDeepThinking = () => {
-  localThinkingEnabled.value = !localThinkingEnabled.value;
-  emit('toggle-thinking')
 }
 
 const handleFocus = () => {
@@ -909,31 +851,14 @@ const handleBlur = () => {
   emit('blur');
 };
 
-// Esc 键关闭面板
-const handleEscKey = (e: KeyboardEvent) => {
-  if (e.key === 'Escape') {
-    if (anyPanelVisible.value) {
-      closeAllPanels()
-    }
-  }
-}
-
 // 全局点击关闭面板
 // 生命周期和监听器
-watch(() => props.config?.modelId, async () => {
-  await nextTick();
-  // 移除按钮宽度更新逻辑
-}, { immediate: true });
 
 // 监听思考强度配置变化，同步到本地状态
 watch(() => props.config?.thinkingEffort, (newEffort) => {
   if (newEffort !== undefined && newEffort !== localThinkingEffort.value) {
     localThinkingEffort.value = newEffort;
   }
-}, { immediate: true });
-
-watch(() => props.sessionId, (newSessionId) => {
-  sessionId.value = newSessionId;
 }, { immediate: true });
 
 watch(() => props.buttons, (value) => {
@@ -945,48 +870,32 @@ watch(() => props.buttons, (value) => {
   });
 }, { immediate: true });
 
-watch(() => props.files, (newFiles, oldFiles) => {
-  oldFiles?.forEach(oldFile => {
-    if (!newFiles.some(newFile => newFile.id === oldFile.id)) {
-      revokeImagePreviewUrl(oldFile);
-    }
-  });
-}, { deep: true });
-
 watch(inputContent, () => {
   nextTick(adjustTextareaHeight);
 }, { immediate: true });
 
 onMounted(() => {
   document.addEventListener('paste', handlePaste);
-  document.addEventListener('keydown', handleEscKey); // Esc 键监听
   adjustTextareaHeight();
   loadModels();
   loadKnowledgeBases(); // 加载知识库列表
   initThinkingEffort(); // 初始化思考强度
 });
 
-// 清理事件监听器
+// 清理事件监听器和预览 URL
 onUnmounted(() => {
   document.removeEventListener('paste', handlePaste);
-  document.removeEventListener('keydown', handleEscKey); // 清理 Esc 键监听
-  uploadFiles.value.forEach(revokeImagePreviewUrl);
+
+  // 清理所有预览 URL，防止内存泄漏
+  previewUrls.value.forEach((url, fileId) => {
+    if (url?.startsWith('blob:')) {
+      URL.revokeObjectURL(url);
+    }
+  });
+  previewUrls.value.clear();
 });
 </script>
 <style scoped>
-/* 弹窗容器基础样式 */
-.popover-container {
-  position: absolute;
-  bottom: 100%;
-  /* 在 input-area 顶部外侧 */
-  left: 0;
-  right: 0;
-  pointer-events: none;
-  /* 让点击穿透到下层 */
-}
-
-/* 上下文弹窗通用样式 */
-
 /* 思考按钮激活状态 - 灯泡亮起 */
 .thinking-active {
   color: #10b981 !important;
