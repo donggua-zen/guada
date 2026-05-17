@@ -52,9 +52,10 @@
 
     <div class="w-full flex items-center" style="margin-top: -10px;z-index: 9;">
       <ChatInput v-model:value="inputMessage.content"
-        :config="chatInputConfig" :files="inputMessage.files" :streaming="isStreaming"
-        @config-change="handleConfigChange" @send="handleSendMessage" @abort="abortResponse"
-        @toggle-thinking="toggleDeepThinking" />
+        v-model:files="inputMessage.files"
+        :session-id="currentSession?.id"
+        :config="chatInputConfig" :streaming="isStreaming"
+        @config-change="handleConfigChange" @send="handleSendMessage" @abort="abortResponse" />
     </div>
     <!-- <div class="ai-disclaimer text-xs text-gray-400 text-center mt-2">内容由 AI 生成，仅供参考</div> -->
 
@@ -560,10 +561,6 @@ function switchContent(message: any, turns_id: string) {
     immediateScrollToBottom();
   });
 }
-
-const toggleDeepThinking = () => {
-  debouncedSaveSession();
-};
 
 // 将方法暴露给父组件
 defineExpose({
