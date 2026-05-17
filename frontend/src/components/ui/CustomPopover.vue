@@ -124,6 +124,13 @@ const handleGlobalClick = (e: MouseEvent) => {
     emit('update:show', false)
 }
 
+// 处理 Esc 键关闭弹窗
+const handleEscKey = (e: KeyboardEvent) => {
+    if (e.key === 'Escape' && props.show) {
+        emit('update:show', false)
+    }
+}
+
 // 计算弹窗位置和样式
 const popoverStyle = computed(() => {
     const style: Record<string, any> = {
@@ -152,11 +159,13 @@ watch(() => props.show, async (newVal) => {
         // 延迟添加监听器，避免立即触发关闭
         await nextTick()
         document.addEventListener('click', handleGlobalClick, true)
+        document.addEventListener('keydown', handleEscKey)
         window.addEventListener('resize', handleWindowEvent)
         window.addEventListener('scroll', handleWindowEvent, true)
     } else {
         // 移除所有监听器
         document.removeEventListener('click', handleGlobalClick, true)
+        document.removeEventListener('keydown', handleEscKey)
         window.removeEventListener('resize', handleWindowEvent)
         window.removeEventListener('scroll', handleWindowEvent, true)
     }
@@ -165,6 +174,7 @@ watch(() => props.show, async (newVal) => {
 // 组件卸载时清理监听器
 onUnmounted(() => {
     document.removeEventListener('click', handleGlobalClick, true)
+    document.removeEventListener('keydown', handleEscKey)
     window.removeEventListener('resize', handleWindowEvent)
     window.removeEventListener('scroll', handleWindowEvent, true)
 })
