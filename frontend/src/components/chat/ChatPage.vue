@@ -24,7 +24,7 @@
             <div class="flex-1 overflow-hidden">
               <LiteSplitpanes style="height: 100%;"
                 :pane1="{ size: workspaceVisible && isElectron ? workspaceSplitSize : 100, minSize: 40, maxSize: 100 }"
-                :pane2="{ size: workspaceVisible && isElectron ? (100 - workspaceSplitSize) : 0, minSize: 0, maxSize: 60 }"
+                :pane2="{ size: workspaceVisible && isElectron ? (100 - workspaceSplitSize) : 0, minSize: 20, maxSize: 60 }"
                 @resize="onPaneResize" @resized="onPaneResized">
                 <template #pane1>
                   <div ref="paneContentRef" class="chat-pane-content"
