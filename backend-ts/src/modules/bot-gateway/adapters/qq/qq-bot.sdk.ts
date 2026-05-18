@@ -337,7 +337,7 @@ export class QQBot extends EventEmitter {
 
   /**
    * 获取Gateway URL(带重试机制)
-   * 最多重试3次,每次间隔递增
+   * 针对频率限制错误使用更长的退避策略
    */
   private async getGatewayUrlWithRetry(maxRetries: number = 3): Promise<string> {
     let lastError: Error | null = null;
@@ -348,9 +348,17 @@ export class QQBot extends EventEmitter {
       } catch (error: any) {
         lastError = error;
         
+        // 检查是否为频率限制错误
+        const isRateLimitError = error.message?.includes('接口调用超过频率限制') || 
+                                 error.message?.includes('40023001');
+        
         if (attempt < maxRetries) {
-          // 指数退避: 1s, 2s, 4s
-          const delay = Math.pow(2, attempt - 1) * 1000;
+          // 如果是频率限制错误,使用更长的退避时间: 5s, 15s, 30s
+          // 否则使用标准指数退避: 1s, 2s, 4s
+          const delay = isRateLimitError 
+            ? [5000, 15000, 30000][attempt - 1] || 30000
+            : Math.pow(2, attempt - 1) * 1000;
+          
           console.warn(
             `Get gateway URL failed (attempt ${attempt}/${maxRetries}): ${error.message}. Retrying in ${delay}ms...`
           );

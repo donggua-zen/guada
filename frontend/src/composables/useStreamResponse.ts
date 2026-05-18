@@ -60,6 +60,14 @@ interface StreamResponse {
 
 export function useStreamResponse(sessionStore: any, apiService: any) {
   const { toast } = usePopup()
+  
+  // 性能监控：统计后端推送频率
+  let streamStartTime = 0
+  let chunkCount = 0
+  let totalContentLength = 0
+  let lastChunkTime = 0
+  const chunkIntervals: number[] = []
+  
   // 流式响应状态
   const streamingState = reactive<StreamingState>({
     isStreaming: false,
@@ -175,13 +183,13 @@ export function useStreamResponse(sessionStore: any, apiService: any) {
   /**
    * 处理工具调用（增量更新）
    */
-  function handleToolCall(content: MessageContent, toolCalls: any[]): void {
-    // 初始化 additionalKwargs
-    if (!content.additionalKwargs) {
-      content.additionalKwargs = {}
+  function handleToolCall(content: MessageContent, toolCalls: any[], displayMessages?: any[]): void {
+    // 初始化 metadata
+    if (!content.metadata) {
+      content.metadata = {}
     }
-    if (!content.additionalKwargs.toolCalls) {
-      content.additionalKwargs.toolCalls = []
+    if (!content.metadata.toolCalls) {
+      content.metadata.toolCalls = []
     }
 
     // 累加增量的 toolCalls
@@ -189,23 +197,48 @@ export function useStreamResponse(sessionStore: any, apiService: any) {
       const index = toolCall.index
 
       // 查找是否已存在该索引的工具调用
-      let existingToolCall = content.additionalKwargs.toolCalls.find(
+      let existingToolCall = content.metadata.toolCalls.find(
         (tc: any) => tc.index === index
       )
 
       if (!existingToolCall) {
         // 如果是新的工具调用，添加到列表
-        content.additionalKwargs.toolCalls.push({
+        // 需要找到 toolCall 在 toolCalls 数组中的局部索引
+        const localIndex = toolCalls.findIndex(tc => tc.index === index)
+        const displayMessage = displayMessages?.[localIndex] || null
+
+        content.metadata.toolCalls.push({
           id: toolCall.id,
           index: toolCall.index,
           type: toolCall.type,
           name: toolCall.name,
-          arguments: toolCall.arguments || ''
+          arguments: toolCall.arguments || '',
+          metadata: {
+            displayMessage: displayMessage  // 存储结构化的展示信息到 metadata
+          }
         })
       } else {
         // 如果已存在，累加参数字符串
         if (toolCall.arguments !== null && toolCall.arguments !== undefined) {
           existingToolCall.arguments += toolCall.arguments
+        }
+        // 更新展示文案（如果提供）
+        if (displayMessages?.[index]) {
+          // 确保 metadata 存在
+          if (!existingToolCall.metadata) {
+            existingToolCall.metadata = {}
+          }
+          existingToolCall.metadata.displayMessage = displayMessages[index]
+        } else if (displayMessages) {
+          // displayMessages 数组可能只包含当前 chunk 中的工具
+          // 需要找到 toolCall 在 toolCalls 数组中的局部索引
+          const localIndex = toolCalls.findIndex(tc => tc.index === index)
+          if (localIndex !== -1 && displayMessages[localIndex]) {
+            if (!existingToolCall.metadata) {
+              existingToolCall.metadata = {}
+            }
+            existingToolCall.metadata.displayMessage = displayMessages[localIndex]
+          }
         }
       }
     }
@@ -214,11 +247,24 @@ export function useStreamResponse(sessionStore: any, apiService: any) {
   /**
    * 处理工具调用响应
    */
-  function handleToolCallsResponse(content: MessageContent, toolCallsResponse: any[]): void {
-    if (!content.additionalKwargs) {
-      content.additionalKwargs = {}
+  function handleToolCallsResponse(content: MessageContent, toolCallsResponse: any[], displayMessages?: any[]): void {
+    if (!content.metadata) {
+      content.metadata = {}
     }
-    content.additionalKwargs.toolCallsResponse = toolCallsResponse
+    content.metadata.toolCallsResponse = toolCallsResponse
+
+    // 更新展示文案为完成状态
+    if (displayMessages && content.metadata.toolCalls) {
+      for (let i = 0; i < content.metadata.toolCalls.length; i++) {
+        if (displayMessages[i]) {
+          // 确保 metadata 存在
+          if (!content.metadata.toolCalls[i].metadata) {
+            content.metadata.toolCalls[i].metadata = {}
+          }
+          content.metadata.toolCalls[i].metadata.displayMessage = displayMessages[i]
+        }
+      }
+    }
   }
 
   /**
@@ -339,6 +385,13 @@ export function useStreamResponse(sessionStore: any, apiService: any) {
     regenerationMode: 'regenerate' | null = null,
     assistantMessageId: string | null = null
   ): Promise<void> {
+    // 重置性能监控计数器
+    streamStartTime = Date.now()
+    chunkCount = 0
+    totalContentLength = 0
+    lastChunkTime = streamStartTime
+    chunkIntervals.length = 0
+    
     sessionStore.setSessionIsStreaming(streamingSessionId, true)
     streamingState.isStreaming = true
     streamingState.sessionId = streamingSessionId
@@ -359,6 +412,22 @@ export function useStreamResponse(sessionStore: any, apiService: any) {
         regenerationMode,
         assistantMessageId
       )) {
+        // 性能监控：统计每个 chunk
+        const now = Date.now()
+        chunkCount++
+        const interval = now - lastChunkTime
+        chunkIntervals.push(interval)
+        lastChunkTime = now
+        
+        if (response.type === 'text' && response.msg) {
+          totalContentLength += response.msg.length
+        }
+        
+        // 每 10 个 chunk 输出一次统计信息
+        if (chunkCount % 10 === 0) {
+          console.log(`[性能监控] 已接收 ${chunkCount} 个 chunk, 总内容长度: ${totalContentLength}, 平均间隔: ${(chunkIntervals.reduce((a, b) => a + b, 0) / chunkIntervals.length).toFixed(2)}ms`)
+        }
+        
         // 修复：实时检测并保存 usage，不等待 finish 事件
         // 这样即使被取消或发生异常，已接收到的 usage 也不会丢失
         if (response.usage && message && contentIndex !== undefined) {
@@ -404,13 +473,13 @@ export function useStreamResponse(sessionStore: any, apiService: any) {
 
         // 处理工具调用（增量更新）
         if (response.type === 'tool_call') {
-          handleToolCall(message!.contents[contentIndex], response.toolCalls)  // 驼峰式
+          handleToolCall(message!.contents[contentIndex], response.toolCalls, response.displayMessages)  // 驼峰式
           continue
         }
 
         // 处理工具调用结果（一次性接收）
         if (response.type === 'tool_calls_response') {
-          handleToolCallsResponse(message!.contents[contentIndex], response.toolCallsResponse)  // 驼峰式
+          handleToolCallsResponse(message!.contents[contentIndex], response.toolCallsResponse, response.displayMessages)  // 驼峰式
           continue
         }
 
@@ -443,6 +512,22 @@ export function useStreamResponse(sessionStore: any, apiService: any) {
       }
       throw error // 重新抛出错误，由调用者处理
     } finally {
+      // 输出最终统计信息
+      const totalTime = Date.now() - streamStartTime
+      const avgInterval = chunkIntervals.length > 0 ? chunkIntervals.reduce((a, b) => a + b, 0) / chunkIntervals.length : 0
+      const minInterval = chunkIntervals.length > 0 ? Math.min(...chunkIntervals) : 0
+      const maxInterval = chunkIntervals.length > 0 ? Math.max(...chunkIntervals) : 0
+      
+      console.log(`[性能监控] ========== 流式响应统计 ==========`)
+      console.log(`[性能监控] 总耗时: ${totalTime}ms`)
+      console.log(`[性能监控] Chunk 数量: ${chunkCount}`)
+      console.log(`[性能监控] 总内容长度: ${totalContentLength} 字符`)
+      console.log(`[性能监控] 平均间隔: ${avgInterval.toFixed(2)}ms`)
+      console.log(`[性能监控] 最小间隔: ${minInterval}ms`)
+      console.log(`[性能监控] 最大间隔: ${maxInterval}ms`)
+      console.log(`[性能监控] 推送频率: ${(chunkCount / (totalTime / 1000)).toFixed(2)} chunks/秒`)
+      console.log(`[性能监控] ======================================`)
+      
       cleanupStreaming(streamingSessionId, message, contentIndex)
     }
   }

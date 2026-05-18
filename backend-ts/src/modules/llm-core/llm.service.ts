@@ -2,6 +2,7 @@ import { Injectable, Logger } from "@nestjs/common";
 import { ProviderHub } from "./provider-hub.service";
 import { IProtocolAdapter } from "./adapters/base.adapter";
 import { LLMCompletionParams } from "./types/llm.types";
+import { RequestContext } from "../../common/context/request-context";
 
 @Injectable()
 export class LLMService {
@@ -13,6 +14,9 @@ export class LLMService {
 
   /**
    * 统一的补全执行方法（支持流式和非流式）
+   * 
+   * 如果调用方没有传入 abortSignal，会尝试从 AsyncLocalStorage 上下文中获取。
+   * 这样内部服务调用时无需显式传递 abortSignal，减少代码侵入性。
    */
   completions(
     params: LLMCompletionParams,
@@ -23,6 +27,9 @@ export class LLMService {
     if (!providerId) {
       throw new Error("Provider ID is required in providerConfig");
     }
+    
+    // 如果调用方没有传入 abortSignal，尝试从上下文获取
+    const abortSignal = params.abortSignal || RequestContext.abortSignal();
     
     // 通过 ProviderHub 获取供应商
     let provider = this.providerHub.getProvider(providerId);
@@ -49,7 +56,8 @@ export class LLMService {
 
     const isStream = params.stream === true;
     const iterator = adapter.chatCompletion({
-      ...params
+      ...params,
+      abortSignal, // 使用合并后的信号
     });
 
     if (isStream) {

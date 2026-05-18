@@ -6,6 +6,7 @@ import {
   ToolCallRequest,
   ToolCallResponse,
   ToolProviderMetadata,
+  ToolDisplayInfo,
 } from "../interfaces/tool-provider.interface";
 import { InternalToolDefinition } from "../../llm-core/types/llm.types";
 import { WorkspaceService } from "../../../common/services/workspace.service";
@@ -182,10 +183,10 @@ export class FileToolProvider implements IToolProvider {
     return this.toolsConfig;
   }
 
-  async execute(request: ToolCallRequest, context?: Record<string, any>): Promise<string> {
+  async execute(request: ToolCallRequest, context?: Record<string, any>, abortSignal?: AbortSignal): Promise<string> {
     const handlers: Record<
       string,
-      (args: any, ctx?: Record<string, any>) => Promise<string>
+      (args: any, ctx?: Record<string, any>, signal?: AbortSignal) => Promise<string>
     > = {
       read: this.handleReadFile.bind(this),
       list: this.handleListDirectory.bind(this),
@@ -201,13 +202,13 @@ export class FileToolProvider implements IToolProvider {
       throw new Error(`未知工具：${request.name}`);
     }
 
-    const result = await handler(request.arguments, context);
-    
+    const result = await handler(request.arguments, context, abortSignal);
+
     // 通知工作目录变更（写操作才需要通知）
     if (context?.sessionId && ['write', 'replace', 'delete'].includes(request.name)) {
       this.workspaceService.notifyWorkspaceChange(context.sessionId);
     }
-    
+
     return result;
   }
 
@@ -253,6 +254,59 @@ export class FileToolProvider implements IToolProvider {
   }
 
   /**
+   * 生成文件工具的展示文案
+   */
+  formatDisplayMessage(toolName: string, args: Record<string, any>, isStreaming: boolean): ToolDisplayInfo {
+    const prefix = isStreaming ? '正在' : '已';
+    const fileName = args.file_path || args.path || args.directory_path;
+
+    let action: string;
+    let toolType: string = this.namespace;
+    switch (toolName) {
+      case 'write':
+        action = `${prefix}写入`;
+        toolType = "edit";
+        break;
+
+      case 'read':
+        action = `${prefix}读取`;
+        toolType = "read";
+        break;
+
+      case 'list':
+        action = `${prefix}读取`;
+        toolType = "search";
+        break;
+
+      case 'delete':
+        action = `${prefix}删除`;
+        break;
+
+      case 'replace':
+        action = `${prefix}修改`;
+        toolType = "edit";
+        break;
+
+      case 'grep_file':
+        action = `${prefix}搜索`;
+        toolType = "search";
+        break;
+
+      default:
+        action = `${prefix}操作`;
+    }
+
+    return {
+      action,
+      args: fileName,
+      toolName: `file__${toolName}`,
+      toolType,
+    };
+  }
+
+
+
+  /**
    * 解析文件路径：委托给 WorkspaceService
    */
   private resolvePath(filePath: string, context?: Record<string, any>): string {
@@ -272,12 +326,18 @@ export class FileToolProvider implements IToolProvider {
   /**
    * 读取文件内容（支持按行+字符混合分页读取）
    */
-  private async handleReadFile(args: any, context?: Record<string, any>): Promise<string> {
+  private async handleReadFile(args: any, context?: Record<string, any>, abortSignal?: AbortSignal): Promise<string> {
     const { file_path, encoding = "utf-8", offset = 0, skip_chars = 0, limit = 50000 } = args;
 
     // 验证文件路径
     if (!file_path || typeof file_path !== "string") {
       throw new Error("文件路径不能为空");
+    }
+
+    // 检查是否已中止
+    if (abortSignal?.aborted) {
+      this.logger.warn(`File read aborted before execution: ${file_path}`);
+      throw new Error('Request was aborted');
     }
 
     try {
@@ -299,6 +359,12 @@ export class FileToolProvider implements IToolProvider {
 
       // 读取文件内容
       const content = await fs.readFile(resolvedPath, { encoding: encoding as BufferEncoding });
+
+      // 检查是否在读取后中止
+      if (abortSignal?.aborted) {
+        this.logger.warn(`File read aborted after reading: ${file_path}`);
+        throw new Error('Request was aborted');
+      }
 
       // 按行分割
       const lines = content.split('\n');
@@ -778,7 +844,7 @@ export class FileToolProvider implements IToolProvider {
         // 查找所有匹配位置
         let match;
         const searchPattern = new RegExp(regex, case_sensitive ? 'g' : 'gi');
-        
+
         while ((match = searchPattern.exec(line)) !== null) {
           const matchStart = match.index;
           const matchEnd = matchStart + match[0].length;
@@ -818,7 +884,7 @@ export class FileToolProvider implements IToolProvider {
           // 提取片段内容，确保不超过最大长度
           for (const segment of mergedSegments) {
             let content = line.substring(segment.start, segment.end);
-            
+
             // 如果片段过长，截断
             if (content.length > MAX_SEGMENT_LENGTH) {
               content = content.substring(0, MAX_SEGMENT_LENGTH);

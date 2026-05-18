@@ -17,7 +17,7 @@ export class TimeToolProvider implements IToolProvider {
     return [];
   }
 
-  async execute(request: ToolCallRequest, context?: Record<string, any>): Promise<string> {
+  async execute(request: ToolCallRequest, context?: Record<string, any>, abortSignal?: AbortSignal): Promise<string> {
     throw new Error("时间工具仅用于提示词注入，不支持直接调用");
   }
 

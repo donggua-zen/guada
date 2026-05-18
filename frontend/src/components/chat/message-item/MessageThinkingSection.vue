@@ -1,11 +1,11 @@
 <template>
   <div class="thinking-section mb-2" :class="{ 'thinking-section--expanded': isExpanded }">
     <div
-      class="thinking-section__header h-7 inline-flex justify-center items-center text-sm text-gray-700 dark:text-[#8b8d95] cursor-pointer font-medium my-1 transition-colors duration-200 hover:bg-gray-100 dark:hover:bg-[#2a2c30] rounded px-1"
+      class="thinking-section__header h-7 inline-flex justify-center items-center text-sm text-gray-700 dark:text-[#8b8d95] cursor-pointer font-medium my-1 transition-colors duration-200"
       @click.stop="handleToggle">
       <div class="flex items-center">
         <el-icon size="15" class="">
-          <Lightbulb24Regular class="text-yellow-500"/>
+          <Lightbulb24Regular class="text-yellow-500" />
         </el-icon>
         <span class="text-gray-500 ml-2">{{ isThinking ? '思考中...' : '已深度思考' }}</span>
         <span v-if="thinkingDuration" class="text-xs text-gray-400 ml-2">
@@ -75,7 +75,7 @@ const formattedDuration = computed(() => {
   return formatDuration(thinkingDuration.value);
 });
 watch(() => props.isThinking, (isThinking: boolean) => {
-  if(!isThinking){
+  if (!isThinking) {
     isExpanded.value = false;
   }
 });

@@ -1,5 +1,5 @@
 import { Injectable, Logger } from "@nestjs/common";
-import { exec } from "child_process";
+import { exec, ChildProcess } from "child_process";
 import { promisify } from "util";
 import * as fs from "fs/promises";
 import * as path from "path";
@@ -9,6 +9,7 @@ import {
   ToolCallRequest,
   ToolCallResponse,
   ToolProviderMetadata,
+  ToolDisplayInfo,
 } from "../interfaces/tool-provider.interface";
 import { InternalToolDefinition } from "../../llm-core/types/llm.types";
 import { WorkspaceService } from "../../../common/services/workspace.service";
@@ -60,10 +61,10 @@ export class ShellToolProvider implements IToolProvider {
     return this.toolsConfig;
   }
 
-  async execute(request: ToolCallRequest, context?: Record<string, any>): Promise<string> {
+  async execute(request: ToolCallRequest, context?: Record<string, any>, abortSignal?: AbortSignal): Promise<string> {
     const handlers: Record<
       string,
-      (args: any, ctx?: Record<string, any>) => Promise<string>
+      (args: any, ctx?: Record<string, any>, signal?: AbortSignal) => Promise<string>
     > = {
       execute_command: this.handleExecuteCommand.bind(this),
     };
@@ -74,7 +75,7 @@ export class ShellToolProvider implements IToolProvider {
       throw new Error(`未知工具：${request.name}`);
     }
 
-    const result = await handler(request.arguments, context);
+    const result = await handler(request.arguments, context, abortSignal);
     
     // 通知工作目录变更（Shell 命令可能会修改文件系统）
     if (context?.sessionId) {
@@ -138,9 +139,38 @@ export class ShellToolProvider implements IToolProvider {
   }
 
   /**
+   * 生成 Shell 工具的展示文案
+   */
+  formatDisplayMessage(toolName: string, args: Record<string, any>, isStreaming: boolean): ToolDisplayInfo {
+    const prefix = isStreaming ? '正在' : '已';
+    
+    let action: string;
+    let cmdArgs: string | undefined;
+    
+    if (toolName === 'execute_command') {
+      const cmd = args.command;
+      if (cmd) {
+        action = `${prefix}执行命令`;
+        // 提取命令的前50个字符作为参数摘要
+        cmdArgs = cmd.length > 50 ? cmd.substring(0, 250) + '...' : cmd;
+      } else {
+        action = `${prefix}执行命令`;
+      }
+    } else {
+      action = `${prefix}执行 Shell 操作`;
+    }
+    
+    return {
+      action,
+      args: cmdArgs,
+      toolName: `shell__${toolName}`
+    };
+  }
+
+  /**
    * 执行 Shell 命令
    */
-  private async handleExecuteCommand(args: any, context?: Record<string, any>): Promise<string> {
+  private async handleExecuteCommand(args: any, context?: Record<string, any>, abortSignal?: AbortSignal): Promise<string> {
     const { command, working_directory, encoding } = args;
 
     // 验证命令参数
@@ -148,7 +178,13 @@ export class ShellToolProvider implements IToolProvider {
       throw new Error("命令不能为空");
     }
 
-    try {
+    // 检查是否已中止
+    if (abortSignal?.aborted) {
+      this.logger.warn(`Shell command aborted before execution: ${command}`);
+      throw new Error('Request was aborted');
+    }
+
+    return new Promise((resolve, reject) => {
       this.logger.log(`执行命令: ${command}, 工作目录: ${working_directory || "当前目录"}, 编码: ${encoding || "自动检测"}`);
 
       const options: any = {
@@ -168,38 +204,73 @@ export class ShellToolProvider implements IToolProvider {
         }
       }
 
-      const { stdout, stderr } = await execAsync(command, options);
+      const childProcess: ChildProcess = exec(command, options, async (error, stdout, stderr) => {
+        if (error) {
+          // 如果是被中止的，直接拒绝
+          if (error.killed || error.signal === 'SIGTERM' || error.signal === 'SIGKILL') {
+            this.logger.warn(`Shell command killed due to abort: ${command}`);
+            reject(new Error('Request was aborted'));
+            return;
+          }
 
-      // 将 Buffer 转换为字符串
-      const stdoutStr = this.decodeBuffer(stdout, encoding);
-      const stderrStr = this.decodeBuffer(stderr, encoding);
+          this.logger.error(`执行命令失败：${error.message}`);
 
-      // 构建返回结果
-      const result = {
-        stdout: stdoutStr.trim(),
-        stderr: stderrStr.trim(),
-        exitCode: 0,
-      };
+          // 即使失败也返回 JSON，确保 AI 能获取到 stdout 中的任何潜在信息
+          const exitCode = (error as any).code === 'ETIMEDOUT' || error.killed ? -1 : ((error as any).code || 1);
 
-      return this.truncateOutput(result);
-    } catch (error: any) {
-      this.logger.error(`执行命令失败：${error.message}`);
+          // 处理错误中的 buffer 数据
+          const stdoutStr = error.stdout ? this.decodeBuffer(error.stdout, encoding) : '';
+          const stderrStr = error.stderr ? this.decodeBuffer(error.stderr, encoding) : error.message;
 
-      // 即使失败也返回 JSON，确保 AI 能获取到 stdout 中的任何潜在信息
-      const exitCode = error.code === 'ETIMEDOUT' || error.killed ? -1 : (error.status || 1);
+          const result = {
+            stdout: stdoutStr.trim(),
+            stderr: String(stderrStr).trim(),
+            exitCode: exitCode,
+          };
 
-      // 处理错误中的 buffer 数据
-      const stdoutStr = error.stdout ? this.decodeBuffer(error.stdout, encoding) : '';
-      const stderrStr = error.stderr ? this.decodeBuffer(error.stderr, encoding) : error.message;
+          resolve(this.truncateOutput(result));
+        } else {
+          // 将 Buffer 转换为字符串
+          const stdoutStr = this.decodeBuffer(stdout, encoding);
+          const stderrStr = this.decodeBuffer(stderr, encoding);
 
-      const result = {
-        stdout: stdoutStr.trim(),
-        stderr: String(stderrStr).trim(),
-        exitCode: exitCode,
-      };
+          // 构建返回结果
+          const result = {
+            stdout: stdoutStr.trim(),
+            stderr: stderrStr.trim(),
+            exitCode: 0,
+          };
 
-      return this.truncateOutput(result);
-    }
+          resolve(this.truncateOutput(result));
+        }
+      });
+
+      // 监听 abortSignal
+      if (abortSignal) {
+        const abortHandler = () => {
+          this.logger.warn(`Shell command aborted by signal: ${command}`);
+          
+          // 先尝试温和终止
+          childProcess.kill('SIGTERM');
+          
+          // 如果 SIGTERM 不起作用，2秒后强制杀死
+          setTimeout(() => {
+            if (!childProcess.killed) {
+              this.logger.warn(`Force killing shell process: ${command}`);
+              childProcess.kill('SIGKILL');
+            }
+          }, 2000);
+          
+          reject(new Error('Request was aborted'));
+        };
+
+        if (abortSignal.aborted) {
+          abortHandler();
+        } else {
+          abortSignal.addEventListener('abort', abortHandler, { once: true });
+        }
+      }
+    });
   }
 
   /**
