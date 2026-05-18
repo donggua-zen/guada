@@ -73,7 +73,7 @@ export class ImageRecognitionToolProvider implements IToolProvider {
     return toolsConfig;
   }
 
-  async execute(request: ToolCallRequest, context?: Record<string, any>): Promise<string> {
+  async execute(request: ToolCallRequest, context?: Record<string, any>, abortSignal?: AbortSignal): Promise<string> {
     if (request.name === "recognize") {
       return this.handleRecognize(request);
     }

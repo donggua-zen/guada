@@ -51,7 +51,7 @@ export class MCPToolProvider implements IToolProvider {
     return allTools;
   }
 
-  async execute(request: ToolCallRequest, context?: Record<string, any>): Promise<string> {
+  async execute(request: ToolCallRequest, context?: Record<string, any>, abortSignal?: AbortSignal): Promise<string> {
     const toolName = request.name;
 
     try {

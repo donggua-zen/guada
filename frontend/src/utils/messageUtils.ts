@@ -185,13 +185,13 @@ function preprocessToolCalls(contents: MessageContent[]): MessageContent[] {
             return assistantContent
         }
 
-        // 确保 additionalKwargs 存在
-        if (!assistantContent.additionalKwargs) {
-            assistantContent.additionalKwargs = {}
+        // 确保 metadata 存在
+        if (!assistantContent.metadata) {
+            assistantContent.metadata = {}
         }
 
-        // 将 metadata.toolCalls 映射到 additionalKwargs.toolCalls（保持兼容性）
-        assistantContent.additionalKwargs.toolCalls = toolCalls
+        // 将 toolCalls 存储到 metadata（与后端保持一致）
+        assistantContent.metadata.toolCalls = toolCalls
 
         // 根据 toolCallId 聚合同步的工具响应
         const toolResponses: any[] = []
@@ -211,7 +211,7 @@ function preprocessToolCalls(contents: MessageContent[]): MessageContent[] {
         })
 
         // 存储聚合后的工具响应
-        assistantContent.additionalKwargs.toolCallsResponse = toolResponses
+        assistantContent.metadata.toolCallsResponse = toolResponses
 
         return assistantContent
     })
@@ -290,7 +290,13 @@ export function allowReSendMessage(
     activeMessages: Message[]
 ): boolean {
     if (message.role !== 'user') return false
-    // 最后一条 user 消息允许重新再发送栏中编辑
+    
+    // 只对最后几条消息输出日志，避免刷屏
+    if (index >= activeMessages.length - 5) {
+        console.log(`[性能监控] allowReSendMessage called for message ${message.id}, index: ${index}, total: ${activeMessages.length}`);
+    }
+    
+    // 最后两条 user 消息允许重新再发送栏中编辑
     return index >= activeMessages.length - 2
 }
 

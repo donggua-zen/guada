@@ -4,6 +4,7 @@
 
 // 从公共类型导入消息结构相关类型
 import { MessagePart, ToolCallItem, MessageRecord } from "../../../common/types/message.types";
+import { ToolDisplayInfo } from "../../tools/interfaces/tool-provider.interface";
 
 // 重新导出这些类型以保持向后兼容
 export { MessagePart, ToolCallItem, MessageRecord };
@@ -60,6 +61,7 @@ export interface LLMResponseChunk {
   reasoningContent?: string | null;
   finishReason?: string | null;
   toolCalls?: ToolCallItem[];
+  displayMessages?: (ToolDisplayInfo | string)[]; // 工具调用的展示信息数组（支持结构化数据或字符串）
   usage?: {
     promptTokens: number;
     completionTokens: number;

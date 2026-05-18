@@ -62,6 +62,9 @@ export class MessageService {
 
   /**
    * 获取会话的消息列表
+   *
+   * 注意：为了优化传输性能，返回的消息内容中会清空工具调用的详细参数和结果。
+   * 如需查看完整内容，请使用 getMessageContentToolDetails 接口。
    */
   async getMessages(sessionId: string, userId: string) {
     await this.assertSessionOwner(sessionId, userId);
@@ -83,14 +86,123 @@ export class MessageService {
       return {
         ...msg,
         files: filesWithAbsoluteUrls,
-        contents: msg.contents.map((content) => ({
-          ...content,
-        })),
+        contents: msg.contents.map((content) =>
+          this.stripToolCallDetails(content)
+        ),
       };
     });
 
     // 返回统一的分页格式
     return createPaginatedResponse(formattedMessages, formattedMessages.length);
+  }
+
+  /**
+   * 剥离工具调用的详细参数和结果，减少传输数据量
+   *
+   * 保留展示所需的 metadata.displayMessage 等信息，仅清空大体积数据。
+   *
+   * 处理逻辑：
+   * - assistant 消息：清空 metadata.toolCalls 中的 arguments
+   * - tool 消息：清空 content（工具执行结果），保留 metadata.toolCallId 用于关联
+   */
+  private stripToolCallDetails(content: any): any {
+    const result = { ...content };
+
+    // 处理 assistant 消息的 toolCalls
+    if (content.metadata) {
+      const metadata = { ...content.metadata };
+
+      // 清空 toolCalls 中的 arguments（保留展示信息如 displayMessage）
+      if (metadata.toolCalls && Array.isArray(metadata.toolCalls)) {
+        metadata.toolCalls = metadata.toolCalls.map((tc: any) => ({
+          ...tc,
+          arguments: undefined,
+          args: undefined,
+        }));
+      }
+
+      // 清空 toolCallsResponse 中的 content（如果后端已聚合）
+      if (
+        metadata.toolCallsResponse &&
+        Array.isArray(metadata.toolCallsResponse)
+      ) {
+        metadata.toolCallsResponse = metadata.toolCallsResponse.map(
+          (tr: any) => {
+            if (tr && typeof tr === "object") {
+              return { ...tr, content: undefined };
+            }
+            return tr;
+          }
+        );
+      }
+
+      result.metadata = metadata;
+    }
+
+    // 处理 tool 角色的消息内容（工具执行结果）
+    if (content.role === "tool" && content.content) {
+      result.content = "";
+    }
+
+    return result;
+  }
+
+  /**
+   * 获取消息内容的工具调用详情（完整参数和结果）
+   *
+   * 用于懒加载：前端列表仅展示摘要，点击弹窗时通过此接口获取完整数据。
+   *
+   * 返回数据包括：
+   * - toolCalls: assistant 消息中的工具调用参数
+   * - toolCallsResponse: 聚合后的工具响应结果（从关联的 tool 角色消息中提取）
+   */
+  async getMessageContentToolDetails(
+    contentId: string,
+    userId: string,
+  ): Promise<{ toolCalls: any[]; toolCallsResponse: any[] } | null> {
+    const content = await this.contentRepo.findById(contentId);
+    if (!content) {
+      throw new HttpException(
+        "Content version not found",
+        HttpStatus.NOT_FOUND,
+      );
+    }
+
+    // 验证消息所有权
+    const message = await this.messageRepo.findById(content.messageId);
+    this.assertMessageOwner(message, userId);
+
+    const metadata = (content.metadata || {}) as Record<string, any>;
+    const toolCalls = metadata.toolCalls || [];
+
+    // 从同消息下的 tool 角色内容中提取响应结果
+    const allContents = await this.contentRepo.findByMessageId(
+      content.messageId,
+    );
+    const toolResponseMap = new Map<string, any>();
+    for (const tc of allContents) {
+      const tcMetadata = tc.metadata as Record<string, any>;
+      if (tc.role === "tool" && tcMetadata?.toolCallId) {
+        toolResponseMap.set(tcMetadata.toolCallId, {
+          content: tc.content,
+          ...tcMetadata,
+        });
+      }
+    }
+
+    // 按 toolCalls 顺序聚合同步的响应
+    const toolCallsResponse = toolCalls.map((tc: any) => {
+      const toolCallId = tc.id;
+      if (toolCallId && toolResponseMap.has(toolCallId)) {
+        return toolResponseMap.get(toolCallId);
+      }
+      return null;
+    });
+
+    return {
+      toolCalls,
+      toolCallsResponse,
+    };
   }
 
   /**

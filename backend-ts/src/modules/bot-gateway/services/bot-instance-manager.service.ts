@@ -38,8 +38,8 @@ export class BotInstanceManager implements OnModuleInit, OnApplicationShutdown {
     }
   > = new Map();
 
-  // 重连超时时间(60秒) - 考虑到可能需要重新获取 token 和建立 WebSocket
-  private readonly RECONNECT_TIMEOUT_MS = 60000;
+  // 重连超时时间(90秒) - 考虑到可能需要重新获取 token、处理频率限制和建立 WebSocket
+  private readonly RECONNECT_TIMEOUT_MS = 90000;
 
   constructor(
     private prisma: PrismaService,
@@ -318,10 +318,9 @@ export class BotInstanceManager implements OnModuleInit, OnApplicationShutdown {
       return;
     }
 
-    // 防重入检查：如果适配器状态为 CONNECTING，说明正在连接中，跳过
-    const currentStatus = instance.adapter.getStatus();
-    if (currentStatus === BotStatus.CONNECTING) {
-      this.logger.warn(`Bot ${botId} is already connecting (status: ${currentStatus}), skipping duplicate schedule`);
+    // 防重入检查：如果已经有重连定时器在运行，跳过
+    if (instance.reconnectTimer) {
+      this.logger.warn(`Bot ${botId} already has a reconnect timer scheduled, skipping duplicate schedule`);
       return;
     }
 
@@ -393,6 +392,13 @@ export class BotInstanceManager implements OnModuleInit, OnApplicationShutdown {
           this.logger.warn(
             `Reconnect timed out for bot ${botId}. Adapter should handle cleanup. Will retry...`,
           );
+        }
+
+        // 检查实例是否还存在(可能在重连过程中被其他操作清理)
+        const currentInstance = this.botInstances.get(botId);
+        if (!currentInstance) {
+          this.logger.error(`Bot instance ${botId} was removed during reconnect, cannot schedule next retry`);
+          return;
         }
 
         // 继续调度下一次重连（包括超时情况）
