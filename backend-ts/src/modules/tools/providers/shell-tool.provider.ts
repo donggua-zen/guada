@@ -195,13 +195,9 @@ export class ShellToolProvider implements IToolProvider {
 
       if (working_directory) {
         options.cwd = working_directory;
-      } else if (context?.sessionId) {
-        // 如果没有指定工作目录但有会话 ID，使用会话工作目录
-        try {
-          options.cwd = this.workspaceService.getWorkspaceDir(context.sessionId);
-        } catch (error: any) {
-          this.logger.warn(`Failed to set CWD for session ${context.sessionId}: ${error.message}`);
-        }
+      } else if (context?.workspacePath) {
+        // 使用注入的工作路径
+        options.cwd = context.workspacePath;
       }
 
       const childProcess: ChildProcess = exec(command, options, async (error, stdout, stderr) => {

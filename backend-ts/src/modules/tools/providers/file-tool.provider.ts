@@ -218,10 +218,9 @@ export class FileToolProvider implements IToolProvider {
     promptParts.push("# 文件操作工具使用说明");
 
     // 注入工作目录提示
-    if (context?.sessionId) {
-      const workspaceDir = this.workspaceService.getWorkspaceDir(context.sessionId);
+    if (context?.workspacePath) {
       promptParts.push("**当前会话工作目录**：");
-      promptParts.push(`\`${workspaceDir}\``);
+      promptParts.push(`\`${context.workspacePath}\``);
       promptParts.push("");
       promptParts.push("**重要说明**：");
       promptParts.push("1. 你编写的所有脚本、临时文件、生成的数据等都应该存放在上述工作目录中。");
@@ -310,7 +309,7 @@ export class FileToolProvider implements IToolProvider {
    * 解析文件路径：委托给 WorkspaceService
    */
   private resolvePath(filePath: string, context?: Record<string, any>): string {
-    return this.workspaceService.resolveFilePath(filePath, context?.sessionId);
+    return this.workspaceService.resolveFilePath(filePath, context?.workspacePath);
   }
 
   /**
@@ -319,8 +318,9 @@ export class FileToolProvider implements IToolProvider {
   private validateWritePath(filePath: string, context?: Record<string, any>): void {
     const resolvedPath = this.resolvePath(filePath, context);
 
-    // 检查是否为安全工作路径（需要传入 sessionId）
-    this.workspaceService.validateWritePath(resolvedPath, context?.sessionId);
+    // 检查是否为安全工作路径（传入工作目录作为额外安全路径）
+    const extraSafePaths = context?.workspacePath ? [context.workspacePath] : [];
+    this.workspaceService.validateWritePath(resolvedPath, extraSafePaths);
   }
 
   /**

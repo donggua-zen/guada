@@ -143,7 +143,7 @@ export class SessionService {
     // 兼容 camelCase 和 snake_case
     const characterId = data.characterId || data.character_id;
     const modelId = data.modelId || data.model_id;
-    const { title, settings } = data;
+    const { title, settings, workspacePath } = data;
 
     if (!characterId) {
       throw new Error("characterId is required");
@@ -186,6 +186,7 @@ export class SessionService {
       description: character.description,
       modelId: finalModelId,
       settings: filteredSettings,
+      workspacePath: workspacePath || null,
     };
 
     const session = await this.sessionRepo.create(sessionData);
@@ -262,7 +263,7 @@ export class SessionService {
     }
 
     // 只允许更新特定字段
-    const allowedFields = ["modelId", "settings", "title"];
+    const allowedFields = ["modelId", "settings", "title", "workspacePath"];
     const updateData: any = {};
 
     for (const key of allowedFields) {
@@ -277,9 +278,31 @@ export class SessionService {
   }
 
   /**
-   * 删除会话及其关联的消息
+   * 更新会话的工作目录路径
    */
-  async deleteSession(sessionId: string, userId: string) {
+  async updateSessionWorkspacePath(sessionId: string, userId: string, workspacePath: string | null) {
+    // 验证会话权限
+    const session = await this.sessionRepo.findById(sessionId);
+    if (!session || session.userId !== userId) {
+      throw new Error("Session not found or unauthorized");
+    }
+
+    // 验证路径（如果提供了路径）
+    if (workspacePath) {
+      await this.workspaceService.validateCustomWorkspacePath(workspacePath);
+    }
+
+    // 更新会话配置
+    await this.sessionRepo.update(sessionId, { workspacePath });
+  }
+
+  /**
+   * 删除会话及其关联的消息
+   * @param sessionId 会话 ID
+   * @param userId 用户 ID
+   * @param deleteWorkspace 是否同时删除工作目录（默认 false）
+   */
+  async deleteSession(sessionId: string, userId: string, deleteWorkspace: boolean = false) {
     const session = await this.sessionRepo.findById(sessionId);
     if (!session || session.userId !== userId) {
       throw new Error("Session not found or unauthorized");
@@ -288,10 +311,20 @@ export class SessionService {
     // 级联删除消息（Prisma Schema 中已配置 onDelete: Cascade）
     await this.sessionRepo.deleteById(sessionId);
 
-    // 异步清理会话工作目录
-    this.workspaceService.cleanupWorkspace(sessionId).catch(err =>
-      this.logger.error(`Failed to cleanup workspace for session ${sessionId}: ${err.message}`)
-    );
+    // 根据参数决定是否删除工作目录
+    if (deleteWorkspace) {
+      // 用户勾选了删除工作目录，同步删除默认工作目录
+      try {
+        await this.workspaceService.cleanupDefaultWorkspace(sessionId);
+        this.logger.log(`Default workspace deleted for session ${sessionId}`);
+      } catch (err: any) {
+        this.logger.error(`Failed to delete default workspace for session ${sessionId}: ${err.message}`);
+        // 不抛出错误，避免影响会话删除
+      }
+    } else {
+      // 用户未勾选，保留工作目录，不做任何操作
+      this.logger.log(`Workspace preserved for session ${sessionId}`);
+    }
   }
 
   /**
@@ -477,22 +510,22 @@ export class SessionService {
     if (!session || session.userId !== userId) {
       throw new Error("Session not found or unauthorized");
     }
-  
+
     const { context } = await this.sessionContextService.buildContext(session);
-  
+
     const beforeTokenCount = context.getTokenCount();
     const beforeMessageCount = context.getHistory().length;
-  
+
     this.logger.log(`Manually triggering compression for session ${sessionId}`);
     await context.forceCompress();
-  
+
     const afterTokenCount = context.getTokenCount();
     const compressedMessages = context.getHistory();
     const afterMessageCount = compressedMessages.length;
-  
+
     const checkpoint = await this.contextStateRepo.findBySessionId(sessionId);
     const compressionStrategy = checkpoint?.cleaningStrategy || 'none';
-  
+
     return {
       success: true,
       before: {
