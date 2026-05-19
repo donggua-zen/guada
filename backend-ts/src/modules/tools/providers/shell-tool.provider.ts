@@ -76,12 +76,12 @@ export class ShellToolProvider implements IToolProvider {
     }
 
     const result = await handler(request.arguments, context, abortSignal);
-    
+
     // 通知工作目录变更（Shell 命令可能会修改文件系统）
     if (context?.sessionId) {
       this.workspaceService.notifyWorkspaceChange(context.sessionId);
     }
-    
+
     return result;
   }
 
@@ -143,10 +143,10 @@ export class ShellToolProvider implements IToolProvider {
    */
   formatDisplayMessage(toolName: string, args: Record<string, any>, isStreaming: boolean): ToolDisplayInfo {
     const prefix = isStreaming ? '正在' : '已';
-    
+
     let action: string;
     let cmdArgs: string | undefined;
-    
+
     if (toolName === 'execute_command') {
       const cmd = args.command;
       if (cmd) {
@@ -159,7 +159,7 @@ export class ShellToolProvider implements IToolProvider {
     } else {
       action = `${prefix}执行 Shell 操作`;
     }
-    
+
     return {
       action,
       args: cmdArgs,
@@ -195,19 +195,24 @@ export class ShellToolProvider implements IToolProvider {
 
       if (working_directory) {
         options.cwd = working_directory;
-      } else if (context?.sessionId) {
-        // 如果没有指定工作目录但有会话 ID，使用会话工作目录
-        try {
-          options.cwd = this.workspaceService.getWorkspaceDir(context.sessionId);
-        } catch (error: any) {
-          this.logger.warn(`Failed to set CWD for session ${context.sessionId}: ${error.message}`);
-        }
+      } else if (context?.workspacePath) {
+        // 使用注入的工作路径
+        options.cwd = context.workspacePath;
       }
 
+      let abortHandler: (() => void) | null = null;
+      let wasAborted = false; // 标记是否被主动中止
+
       const childProcess: ChildProcess = exec(command, options, async (error, stdout, stderr) => {
+        // 清理事件监听器，防止命令执行完成后仍响应 abort 信号
+        if (abortSignal && abortHandler) {
+          abortSignal.removeEventListener('abort', abortHandler);
+          abortHandler = null;
+        }
+
         if (error) {
           // 如果是被中止的，直接拒绝
-          if (error.killed || error.signal === 'SIGTERM' || error.signal === 'SIGKILL') {
+          if (wasAborted || error.killed || error.signal === 'SIGTERM' || error.signal === 'SIGKILL') {
             this.logger.warn(`Shell command killed due to abort: ${command}`);
             reject(new Error('Request was aborted'));
             return;
@@ -247,20 +252,44 @@ export class ShellToolProvider implements IToolProvider {
 
       // 监听 abortSignal
       if (abortSignal) {
-        const abortHandler = () => {
+        abortHandler = () => {
           this.logger.warn(`Shell command aborted by signal: ${command}`);
-          
-          // 先尝试温和终止
-          childProcess.kill('SIGTERM');
-          
-          // 如果 SIGTERM 不起作用，2秒后强制杀死
-          setTimeout(() => {
-            if (!childProcess.killed) {
-              this.logger.warn(`Force killing shell process: ${command}`);
-              childProcess.kill('SIGKILL');
+
+          // 设置中止标记，让 exec 回调知道这是主动中止
+          wasAborted = true;
+
+          // 根据操作系统选择终止策略
+          const isWindows = process.platform === 'win32';
+
+          if (isWindows) {
+            // Windows: 使用 taskkill 强制终止进程树
+            try {
+              const pid = childProcess.pid;
+              if (pid) {
+                // 使用 taskkill /F /T 强制终止进程及其子进程
+                exec(`taskkill /F /T /PID ${pid}`, (killError) => {
+                  if (killError) {
+                    this.logger.warn(`Failed to kill process ${pid}: ${killError.message}`);
+                  } else {
+                    this.logger.log(`Successfully killed process tree for PID ${pid}`);
+                  }
+                });
+              }
+            } catch (error: any) {
+              this.logger.error(`Error killing Windows process: ${error.message}`);
             }
-          }, 2000);
-          
+          } else {
+            // Unix-like: 先 SIGTERM，再 SIGKILL
+            childProcess.kill('SIGTERM');
+
+            setTimeout(() => {
+              if (!childProcess.killed) {
+                this.logger.warn(`Force killing shell process: ${command}`);
+                childProcess.kill('SIGKILL');
+              }
+            }, 2000);
+          }
+
           reject(new Error('Request was aborted'));
         };
 

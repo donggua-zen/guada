@@ -152,7 +152,13 @@ export class MemoryToolProvider implements IToolProvider {
         return "";
       }
 
-      const workspaceDir = this.workspaceService.getWorkspaceDir(sessionId);
+      // 使用注入的工作路径
+      const workspaceDir = context?.workspacePath;
+      if (!workspaceDir) {
+        this.logger.warn(`No workspace path provided for session ${sessionId}`);
+        return "";
+      }
+      
       const guadaDir = path.join(workspaceDir, '.guada');
       const memoryDir = path.join(guadaDir, 'memory');
       const memosDir = path.join(guadaDir, 'memos');
@@ -179,7 +185,7 @@ export class MemoryToolProvider implements IToolProvider {
       // 3. 如果需要重建，则自动执行
       if (needsRebuild) {
         this.logger.debug(`Auto-rebuilding memory index for session ${sessionId}`);
-        await this.rebuildIndexForSession(sessionId, currentMtimes);
+        await this.rebuildIndexForSession(sessionId, workspaceDir, currentMtimes);
       } else {
         // 更新访问时间
         cacheItem.lastAccessed = new Date();
@@ -274,8 +280,7 @@ export class MemoryToolProvider implements IToolProvider {
   /**
    * 为指定会话重建索引（从文件系统读取到内存缓存）
    */
-  private async rebuildIndexForSession(sessionId: string, preFetchedMtimes?: Record<string, number>): Promise<void> {
-    const workspaceDir = this.workspaceService.getWorkspaceDir(sessionId);
+  private async rebuildIndexForSession(sessionId: string, workspaceDir: string, preFetchedMtimes?: Record<string, number>): Promise<void> {
     const guadaDir = path.join(workspaceDir, '.guada');
     const memoryDir = path.join(guadaDir, 'memory');
     const memosDir = path.join(guadaDir, 'memos');

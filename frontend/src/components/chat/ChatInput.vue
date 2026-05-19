@@ -36,7 +36,7 @@
       <input type="file" ref="imageInputRef" style="display: none" multiple
         :accept="getFileExtensionsFromType('IMAGE').join(',')" @change="handleImageSelect">
       <div class="input-actions w-full flex justify-between">
-        <div class="tools left-tools flex gap-1 items-center">
+        <div class="tools left-tools flex gap-0.5 items-center">
           <slot name="buttons"></slot>
           <template v-if="showButtons.thinkingButton && currentModel">
             <!-- 思考强度按钮 -->
@@ -54,6 +54,13 @@
               @select="handleThinkingEffortChange" />
             <el-divider direction="vertical"></el-divider>
           </template>
+          <!-- 工作目录按钮 -->
+          <el-button class="tool-btn mr-0.5" @click.stop="openWorkspaceDialog" text>
+            <el-icon size="22">
+              <FolderOpen24Regular />
+            </el-icon>
+            <span class="text-xs font-medium">工作目录</span>
+          </el-button>
           <!-- 图片按钮（高频使用，放在左侧） -->
           <el-tooltip content="添加图片" placement="top">
             <el-button class="tool-btn" @click="triggerImageInput" text>
@@ -89,7 +96,8 @@
                 :name="getModelDisplayName(currentModel.modelName)" type="assistant" :round="false"
                 class="w-5 h-5 shrink-0" />
               <OpenAI v-else class="w-5 h-5 shrink-0" />
-              <span class="text-sm font-medium truncate flex-1 min-w-0" style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">{{
+              <span class="text-sm font-medium truncate flex-1 min-w-0"
+                style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">{{
                   currentModelName }}</span>
             </div>
           </el-button>
@@ -127,8 +135,12 @@
         @toggle="toggleKnowledgeBaseSelection" />
 
       <!-- 会话设置模态框 -->
-      <SessionSettingsDialog v-model:visible="settingsDialogVisible" :config="props.config?.memory"
+      <SessionSettingsDialog v-model:visible="settingsDialogVisible" :config="sessionMemoryConfig"
         @confirm="applySessionSettings" @cancel="settingsDialogVisible = false" />
+
+      <!-- 工作目录设置弹窗 -->
+      <WorkspaceSettingsDialog v-model:visible="workspaceDialogVisible"
+        :current-workspace-path="props.config?.workspacePath || null" @confirm="applyWorkspaceSettings" />
     </div>
   </div>
 </template>
@@ -146,6 +158,7 @@ import KnowledgeBasePanel from './chat-input/KnowledgeBasePanel.vue';
 import SessionSettingsDialog from './chat-input/SessionSettingsDialog.vue';
 import ThinkingEffortPopover from './chat-input/ThinkingEffortPopover.vue';
 import ModelSelectorPanel from './chat-input/ModelSelectorPanel.vue';
+import WorkspaceSettingsDialog from './chat-input/WorkspaceSettingsDialog.vue';
 import { getModelDisplayName, getModelAvatarPath, getModelThinkingEfforts, getThinkingEffortLabel } from '@/utils/modelUtils';
 import { OpenAI } from "@/components/icons";
 import {
@@ -157,7 +170,7 @@ import {
 import { Thinking2 } from "@/components/icons";
 import {
   TextT24Regular, LightbulbFilament24Regular, LightbulbFilament24Filled, WrenchScrewdriver24Regular, Image24Regular, Attach24Regular,
-  Send24Filled, Stop24Filled, Star24Regular, Star24Filled, Settings24Regular, BookSearch24Regular
+  Send24Filled, Stop24Filled, Star24Regular, Star24Filled, Settings24Regular, BookSearch24Regular, FolderOpen24Regular
 } from '@vicons/fluent'
 import {
   ThunderboltOutlined,
@@ -250,6 +263,7 @@ const props = defineProps({
     default: () => ({
       modelId: null,
       thinkingEffort: 'off', // 思考强度配置
+      workspacePath: null, // 工作目录路径
       // 新增：记忆与压缩配置分组
       memory: {
         useCustom: true, // 默认开启自定义，方便用户直接看到设置
@@ -291,7 +305,7 @@ const inputContent = computed({
 const uploadFiles = computed({
   get: () => {
     const files = props.files;
-    
+
     // 为每个图片文件确保有预览 URL（懒加载）
     files.forEach(file => {
       if (file.fileType === 'image' && file.file && !previewUrls.value.has(file.id)) {
@@ -299,7 +313,7 @@ const uploadFiles = computed({
         previewUrls.value.set(file.id, previewUrl);
       }
     });
-    
+
     // 清理不再存在的文件的预览 URL
     const currentFileIds = new Set(files.map(f => f.id));
     previewUrls.value.forEach((url, fileId) => {
@@ -310,7 +324,7 @@ const uploadFiles = computed({
         previewUrls.value.delete(fileId);
       }
     });
-    
+
     return files;
   },
   set: (newFiles) => {
@@ -338,6 +352,9 @@ watch(() => currentModel.value?.config, (config) => {
 const localThinkingEffort = ref<string>('off'); // 'off' | 'low' | 'medium' | 'high' | 'max' | ...
 const thinkingButtonRef = ref<any>(null);
 const thinkingPopoverVisible = ref(false);
+
+// 工作目录设置相关
+const workspaceDialogVisible = ref(false);
 
 const thinkingEffortOptions = computed(() => {
   if (!currentModel.value) return [];
@@ -386,6 +403,18 @@ const currentModelName = computed(() => {
 const selectedKnowledgeBases = computed(() => {
   const kbIds = props.config?.knowledgeBaseIds || [];
   return knowledgeBases.value.filter(kb => kbIds.includes(kb.id));
+});
+
+// 为会话设置对话框构造配置对象（将 memoryEnabled 映射为 useCustom）
+const sessionMemoryConfig = computed(() => {
+  const config = props.config;
+  if (!config) return {};
+
+  return {
+    useCustom: config.memoryEnabled ?? true, // 将 memoryEnabled 映射为 useCustom
+    ...config.memory, // 展开 memory 对象的其他属性
+    workspacePath: config.workspacePath || null, // 工作目录路径
+  };
 });
 
 //  新增：有效的已选择知识库数量（只统计实际存在的知识库）
@@ -539,6 +568,18 @@ const applySessionSettings = (configChanges: any) => {
   emit('config-change', configChanges);
   ElMessage.success('会话配置已更新');
   settingsDialogVisible.value = false
+};
+
+// 打开工作目录设置弹窗
+const openWorkspaceDialog = () => {
+  workspaceDialogVisible.value = true;
+};
+
+// 应用工作目录设置
+const applyWorkspaceSettings = (workspacePath: string | null) => {
+  console.log('Applying workspace path:', workspacePath);
+  emit('config-change', { workspacePath });
+  ElMessage.success('工作目录已更新');
 };
 
 // 打开知识库面板
@@ -967,7 +1008,7 @@ onUnmounted(() => {
 
 
 .right-tools .tool-btn {
-  padding: 0 5px;
+  padding: 0 3px;
 }
 
 /* 深度思考按钮激活状态样式 */

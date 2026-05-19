@@ -13,6 +13,9 @@ import { AuthGuard } from "../auth/auth.guard";
 import { CurrentUser } from "../auth/current-user.decorator";
 import { SessionService } from "./session.service";
 import { WorkspaceService } from "../../common/services/workspace.service";
+import * as path from 'path';
+import * as fs from 'fs';
+import * as fsPromises from 'fs/promises';
 
 @Controller()
 @UseGuards(AuthGuard)
@@ -54,9 +57,24 @@ export class SessionsController {
     return this.sessionService.updateSession(id, user.id, data);
   }
 
+  @Put("sessions/:id/workspace-path")
+  async updateWorkspacePath(
+    @Param("id") id: string,
+    @Body() body: { workspacePath: string | null },
+    @CurrentUser() user: any
+  ) {
+    await this.sessionService.updateSessionWorkspacePath(id, user.id, body.workspacePath);
+    return { success: true };
+  }
+
   @Delete("sessions/:id")
-  async deleteSession(@Param("id") id: string, @CurrentUser() user: any) {
-    await this.sessionService.deleteSession(id, user.id);
+  async deleteSession(
+    @Param("id") id: string,
+    @Query("deleteWorkspace") deleteWorkspace: string,
+    @CurrentUser() user: any
+  ) {
+    const shouldDeleteWorkspace = deleteWorkspace === 'true';
+    await this.sessionService.deleteSession(id, user.id, shouldDeleteWorkspace);
     return { success: true };
   }
 
@@ -64,24 +82,6 @@ export class SessionsController {
   async generateTitle(@Param("id") id: string, @CurrentUser() user: any) {
     return this.sessionService.generateTitle(id, user.id);
   }
-
-  // TODO: compressHistory 方法尚未实现,暂时注释
-  // @Post("sessions/:id/compress-history")
-  // async compressHistory(
-  //   @Param("id") id: string,
-  //   @Body()
-  //   body: { compressionRatio?: number; minRetainedTurns?: number; cleaningStrategy?: string },
-  //   @CurrentUser() user: any,
-  // ) {
-  //   const { compressionRatio = 50, minRetainedTurns = 3, cleaningStrategy = "moderate" } = body;
-  //   return this.sessionService.compressHistory(
-  //     id,
-  //     user.id,
-  //     Number(compressionRatio),
-  //     Number(minRetainedTurns),
-  //     cleaningStrategy as any,
-  //   );
-  // }
 
   @Get("sessions/:id/summaries")
   async getSessionSummaries(@Param("id") id: string, @CurrentUser() user: any) {
@@ -127,8 +127,18 @@ export class SessionsController {
       throw new Error("Session not found or unauthorized");
     }
 
-    // 获取工作目录路径
-    const workspacePath = this.workspaceService.getWorkspaceDir(id);
+    // 从会话配置中获取自定义路径，或使用默认路径
+    let workspacePath: string;
+    if ((session as any).workspacePath) {
+      workspacePath = path.resolve((session as any).workspacePath);
+      // 验证并创建目录
+      await this.workspaceService.validateCustomWorkspacePath(workspacePath);
+      await this.workspaceService.ensureDirectoryExists(workspacePath);
+    } else {
+      workspacePath = this.workspaceService.getDefaultWorkspaceDir(id);
+      await this.workspaceService.ensureDirectoryExists(workspacePath);
+    }
+
     return { workspacePath };
   }
 
@@ -140,8 +150,16 @@ export class SessionsController {
       throw new Error("Session not found or unauthorized");
     }
 
-    // 获取工作目录树（限制最大深度为 3 层，提升性能）
-    const workspacePath = this.workspaceService.getWorkspaceDir(id);
+    let workspacePath: string;
+    if ((session as any).workspacePath) {
+      workspacePath = path.resolve((session as any).workspacePath);
+      await this.workspaceService.validateCustomWorkspacePath(workspacePath);
+      await this.workspaceService.ensureDirectoryExists(workspacePath);
+    } else {
+      workspacePath = this.workspaceService.getDefaultWorkspaceDir(id);
+      await this.workspaceService.ensureDirectoryExists(workspacePath);
+    }
+
     const tree = await this.buildDirectoryTree(workspacePath, '', 0, 3);
     return { tree };
   }
@@ -162,9 +180,19 @@ export class SessionsController {
       throw new Error("File path is required");
     }
 
+    // 确定工作目录路径
+    let workspaceDir: string;
+    if ((session as any).workspacePath) {
+      workspaceDir = path.resolve((session as any).workspacePath);
+      await this.workspaceService.validateCustomWorkspacePath(workspaceDir);
+      await this.workspaceService.ensureDirectoryExists(workspaceDir);
+    } else {
+      workspaceDir = this.workspaceService.getDefaultWorkspaceDir(id);
+      await this.workspaceService.ensureDirectoryExists(workspaceDir);
+    }
+
     // 解析文件路径并安全检查
-    const resolvedPath = this.workspaceService.resolveFilePath(filePath, id);
-    const workspaceDir = this.workspaceService.getWorkspaceDir(id);
+    const resolvedPath = this.workspaceService.resolveFilePath(filePath, workspaceDir);
 
     // 确保文件在工作目录内
     if (!resolvedPath.startsWith(workspaceDir)) {
@@ -172,8 +200,6 @@ export class SessionsController {
     }
 
     // 读取文件内容
-    const fs = require('fs');
-    const path = require('path');
 
     if (!fs.existsSync(resolvedPath)) {
       throw new Error("File not found");
@@ -193,7 +219,7 @@ export class SessionsController {
     }
 
     // 读取文件内容
-    const content = fs.readFileSync(resolvedPath, 'utf-8');
+    const content = await fsPromises.readFile(resolvedPath, 'utf-8');
     const ext = path.extname(filePath).toLowerCase();
 
     return {
@@ -219,11 +245,8 @@ export class SessionsController {
     currentDepth: number = 0,
     maxDepth: number = 3
   ): Promise<any[]> {
-    const fs = require('fs');
-    const path = require('path');
-
     try {
-      const entries = fs.readdirSync(dirPath, { withFileTypes: true });
+      const entries = await fsPromises.readdir(dirPath, { withFileTypes: true });
       const tree: any[] = [];
 
       for (const entry of entries) {
@@ -251,7 +274,7 @@ export class SessionsController {
             node.children = [];
           }
         } else {
-          node.size = fs.statSync(fullPath).size;
+          node.size = (await fsPromises.stat(fullPath)).size;
         }
 
         tree.push(node);

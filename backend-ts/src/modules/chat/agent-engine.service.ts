@@ -161,30 +161,39 @@ class ToolCallDisplayManager {
         const firstKV = this.extractTopLevelKV(accumulatedArgs);
         if (firstKV?.key === 'tool_name') {
           state.toolNameExtracted = true;
-          state.displayInfo = this.buildRequestFromPartialData(
+          const request = this.buildRequestFromPartialData(
             index,
             toolName,
             firstKV,
             accumulatedArgs,
             state
           );
-          return true;
-        }
-      } else if (!state.argsParamExtracted) {
-        const firstKV = this.extractNestedKV(accumulatedArgs);
-        if (firstKV) {
-          state.argsParamExtracted = true;
-          // 重新提取 tool_name
-          const toolNameMatch = accumulatedArgs.match(/"tool_name"\s*:\s*"([^"]+)"/);
-          const actualToolName = toolNameMatch ? toolNameMatch[1] : toolName;
-          extractedParams[firstKV.key] = firstKV.value;
-          const request = {
-            id: '',
-            name: actualToolName,
-            arguments: extractedParams
-          };
           state.displayInfo = this.toolOrchestrator.generateDisplayMessage(request, true);
           return true;
+        }
+      } else {
+        // 提取 arguments 内的所有 KV 对
+        const argsMatch = accumulatedArgs.match(/"arguments"\s*:\s*\{(.*)/s);
+        if (argsMatch) {
+          const argsContent = argsMatch[1];
+          const allKV = this.extractAllTopLevelKV(`{${argsContent}`);
+          for (const kv of allKV) {
+            extractedParams[kv.key] = kv.value;
+          }
+          
+          // 只要有参数就更新
+          if (Object.keys(extractedParams).length > 0) {
+            // 重新提取 tool_name
+            const toolNameMatch = accumulatedArgs.match(/"tool_name"\s*:\s*"([^"]+)"/);
+            const actualToolName = toolNameMatch ? toolNameMatch[1] : toolName;
+            const request = {
+              id: '',
+              name: actualToolName,
+              arguments: extractedParams
+            };
+            state.displayInfo = this.toolOrchestrator.generateDisplayMessage(request, true);
+            return true;
+          }
         }
       }
     } else {

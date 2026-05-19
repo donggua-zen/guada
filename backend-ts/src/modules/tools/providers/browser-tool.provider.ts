@@ -535,7 +535,7 @@ export class BrowserToolProvider implements IToolProvider {
    * 解析 JavaScript 文件路径（复用 WorkspaceService）
    */
   private resolveJsFilePath(filePath: string, context?: Record<string, any>): string {
-    return this.workspaceService.resolveFilePath(filePath, context?.sessionId)
+    return this.workspaceService.resolveFilePath(filePath, context?.workspacePath)
   }
 
   /**
@@ -567,8 +567,12 @@ export class BrowserToolProvider implements IToolProvider {
       const timestamp = Date.now()
       const fileName = `get_page_struct_output_${timestamp}.json`
 
-      // 创建 tools_output 目录
-      const workspaceDir = this.workspaceService.getWorkspaceDir(context.sessionId)
+      // 使用注入的工作路径创建 tools_output 目录
+      const workspaceDir = context?.workspacePath
+      if (!workspaceDir) {
+        throw new Error('工作路径未提供')
+      }
+      
       const outputDir = path.join(workspaceDir, 'tools_output')
 
       // 确保目录存在（异步）

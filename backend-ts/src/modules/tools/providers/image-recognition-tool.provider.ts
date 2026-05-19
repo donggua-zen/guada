@@ -4,6 +4,7 @@ import {
   ToolCallRequest,
   ToolCallResponse,
   ToolProviderMetadata,
+  ToolDisplayInfo,
 } from "../interfaces/tool-provider.interface";
 import { FileRepository } from "../../../common/database/file.repository";
 import { UploadPathService } from "../../../common/services/upload-path.service";
@@ -75,10 +76,10 @@ export class ImageRecognitionToolProvider implements IToolProvider {
 
   async execute(request: ToolCallRequest, context?: Record<string, any>, abortSignal?: AbortSignal): Promise<string> {
     if (request.name === "recognize") {
-      return this.handleRecognize(request);
+      return this.handleRecognize(request, abortSignal);
     }
     if (request.name === "recognize_by_path") {
-      return this.handleRecognizeByPath(request);
+      return this.handleRecognizeByPath(request, context, abortSignal);
     }
 
     throw new Error(`未知工具：${request.name}`);
@@ -108,7 +109,41 @@ export class ImageRecognitionToolProvider implements IToolProvider {
     };
   }
 
-  private async handleRecognize(request: ToolCallRequest): Promise<string> {
+  /**
+   * 生成图片识别工具的展示文案
+   */
+  formatDisplayMessage(toolName: string, args: Record<string, any>, isStreaming: boolean): ToolDisplayInfo {
+    const prefix = isStreaming ? '正在' : '已';
+
+    let action: string;
+    let toolType: string = this.namespace;
+    let target: string;
+
+    switch (toolName) {
+      case 'recognize':
+        action = `${prefix}识别图片`;
+        target = args.image_id || '';
+        break;
+
+      case 'recognize_by_path':
+        action = `${prefix}识别图片`;
+        target = args.image_path || '';
+        break;
+
+      default:
+        action = `${prefix}识别`;
+        target = args.image_id || args.image_path || '';
+    }
+
+    return {
+      action,
+      args: target,
+      toolName: `${this.namespace}__${toolName}`,
+      toolType,
+    };
+  }
+
+  private async handleRecognize(request: ToolCallRequest, abortSignal?: AbortSignal): Promise<string> {
     const args = request.arguments;
     const { image_id } = args;
     if (!image_id) {
@@ -121,10 +156,10 @@ export class ImageRecognitionToolProvider implements IToolProvider {
     }
 
     const physicalPath = this.uploadPathService.toPhysicalPath(file.url);
-    return this.recognizeImage(physicalPath);
+    return this.recognizeImage(physicalPath, abortSignal);
   }
 
-  private async handleRecognizeByPath(request: ToolCallRequest, context?: Record<string, any>): Promise<string> {
+  private async handleRecognizeByPath(request: ToolCallRequest, context?: Record<string, any>, abortSignal?: AbortSignal): Promise<string> {
     const args = request.arguments;
     const { image_path } = args;
     if (!image_path) {
@@ -134,7 +169,7 @@ export class ImageRecognitionToolProvider implements IToolProvider {
     // 使用 WorkspaceService 解析路径（自动处理相对路径和绝对路径）
     let physicalPath: string;
     try {
-      physicalPath = this.workspaceService.resolveFilePath(image_path, context?.sessionId);
+      physicalPath = this.workspaceService.resolveFilePath(image_path, context?.workspacePath);
     } catch (error: any) {
       throw new Error(`路径解析失败：${error.message}`);
     }
@@ -150,10 +185,10 @@ export class ImageRecognitionToolProvider implements IToolProvider {
       throw new Error(`不支持的图片格式：${ext}，支持的格式：${imageExts.join(', ')}`);
     }
 
-    return this.recognizeImage(physicalPath);
+    return this.recognizeImage(physicalPath, abortSignal);
   }
 
-  private async recognizeImage(physicalPath: string): Promise<string> {
+  private async recognizeImage(physicalPath: string, abortSignal: AbortSignal): Promise<string> {
     if (!fs.existsSync(physicalPath)) {
       throw new Error(`图片文件不存在：${physicalPath}`);
     }
@@ -203,6 +238,7 @@ export class ImageRecognitionToolProvider implements IToolProvider {
       stream: false,
       thinkingEffort: resolveThinkingEffort(visualModelConfig, 'off'),
       timeout: 60,
+      abortSignal,
     }) as Promise<any>;
 
     const result = await stream;
