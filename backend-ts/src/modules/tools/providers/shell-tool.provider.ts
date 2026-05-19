@@ -76,12 +76,12 @@ export class ShellToolProvider implements IToolProvider {
     }
 
     const result = await handler(request.arguments, context, abortSignal);
-    
+
     // 通知工作目录变更（Shell 命令可能会修改文件系统）
     if (context?.sessionId) {
       this.workspaceService.notifyWorkspaceChange(context.sessionId);
     }
-    
+
     return result;
   }
 
@@ -143,10 +143,10 @@ export class ShellToolProvider implements IToolProvider {
    */
   formatDisplayMessage(toolName: string, args: Record<string, any>, isStreaming: boolean): ToolDisplayInfo {
     const prefix = isStreaming ? '正在' : '已';
-    
+
     let action: string;
     let cmdArgs: string | undefined;
-    
+
     if (toolName === 'execute_command') {
       const cmd = args.command;
       if (cmd) {
@@ -159,7 +159,7 @@ export class ShellToolProvider implements IToolProvider {
     } else {
       action = `${prefix}执行 Shell 操作`;
     }
-    
+
     return {
       action,
       args: cmdArgs,
@@ -200,7 +200,15 @@ export class ShellToolProvider implements IToolProvider {
         options.cwd = context.workspacePath;
       }
 
+      let abortHandler: (() => void) | null = null;
+
       const childProcess: ChildProcess = exec(command, options, async (error, stdout, stderr) => {
+        // 清理事件监听器，防止命令执行完成后仍响应 abort 信号
+        if (abortSignal && abortHandler) {
+          abortSignal.removeEventListener('abort', abortHandler);
+          abortHandler = null;
+        }
+
         if (error) {
           // 如果是被中止的，直接拒绝
           if (error.killed || error.signal === 'SIGTERM' || error.signal === 'SIGKILL') {
@@ -243,12 +251,12 @@ export class ShellToolProvider implements IToolProvider {
 
       // 监听 abortSignal
       if (abortSignal) {
-        const abortHandler = () => {
+        abortHandler = () => {
           this.logger.warn(`Shell command aborted by signal: ${command}`);
-          
+
           // 先尝试温和终止
           childProcess.kill('SIGTERM');
-          
+
           // 如果 SIGTERM 不起作用，2秒后强制杀死
           setTimeout(() => {
             if (!childProcess.killed) {
@@ -256,7 +264,7 @@ export class ShellToolProvider implements IToolProvider {
               childProcess.kill('SIGKILL');
             }
           }, 2000);
-          
+
           reject(new Error('Request was aborted'));
         };
 
