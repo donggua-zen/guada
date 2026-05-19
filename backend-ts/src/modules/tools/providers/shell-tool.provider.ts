@@ -201,6 +201,7 @@ export class ShellToolProvider implements IToolProvider {
       }
 
       let abortHandler: (() => void) | null = null;
+      let wasAborted = false; // 标记是否被主动中止
 
       const childProcess: ChildProcess = exec(command, options, async (error, stdout, stderr) => {
         // 清理事件监听器，防止命令执行完成后仍响应 abort 信号
@@ -211,7 +212,7 @@ export class ShellToolProvider implements IToolProvider {
 
         if (error) {
           // 如果是被中止的，直接拒绝
-          if (error.killed || error.signal === 'SIGTERM' || error.signal === 'SIGKILL') {
+          if (wasAborted || error.killed || error.signal === 'SIGTERM' || error.signal === 'SIGKILL') {
             this.logger.warn(`Shell command killed due to abort: ${command}`);
             reject(new Error('Request was aborted'));
             return;
@@ -254,16 +255,40 @@ export class ShellToolProvider implements IToolProvider {
         abortHandler = () => {
           this.logger.warn(`Shell command aborted by signal: ${command}`);
 
-          // 先尝试温和终止
-          childProcess.kill('SIGTERM');
+          // 设置中止标记，让 exec 回调知道这是主动中止
+          wasAborted = true;
 
-          // 如果 SIGTERM 不起作用，2秒后强制杀死
-          setTimeout(() => {
-            if (!childProcess.killed) {
-              this.logger.warn(`Force killing shell process: ${command}`);
-              childProcess.kill('SIGKILL');
+          // 根据操作系统选择终止策略
+          const isWindows = process.platform === 'win32';
+
+          if (isWindows) {
+            // Windows: 使用 taskkill 强制终止进程树
+            try {
+              const pid = childProcess.pid;
+              if (pid) {
+                // 使用 taskkill /F /T 强制终止进程及其子进程
+                exec(`taskkill /F /T /PID ${pid}`, (killError) => {
+                  if (killError) {
+                    this.logger.warn(`Failed to kill process ${pid}: ${killError.message}`);
+                  } else {
+                    this.logger.log(`Successfully killed process tree for PID ${pid}`);
+                  }
+                });
+              }
+            } catch (error: any) {
+              this.logger.error(`Error killing Windows process: ${error.message}`);
             }
-          }, 2000);
+          } else {
+            // Unix-like: 先 SIGTERM，再 SIGKILL
+            childProcess.kill('SIGTERM');
+
+            setTimeout(() => {
+              if (!childProcess.killed) {
+                this.logger.warn(`Force killing shell process: ${command}`);
+                childProcess.kill('SIGKILL');
+              }
+            }, 2000);
+          }
 
           reject(new Error('Request was aborted'));
         };
