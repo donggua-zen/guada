@@ -8,6 +8,8 @@ import { SessionContextService } from "./session-context.service";
 import { MessageRecord, LLMResponseChunk } from "../llm-core/types/llm.types";
 import { IConversationContext } from "./interfaces";
 import { RequestContext } from "../../common/context/request-context";
+import * as fs from 'fs';
+import * as path from 'path';
 
 /**
  * 思考时间信息（简单数据容器）
@@ -176,11 +178,12 @@ class ToolCallDisplayManager {
           const toolNameMatch = accumulatedArgs.match(/"tool_name"\s*:\s*"([^"]+)"/);
           const actualToolName = toolNameMatch ? toolNameMatch[1] : toolName;
           extractedParams[firstKV.key] = firstKV.value;
-          state.displayInfo = {
+          const request = {
             id: '',
             name: actualToolName,
             arguments: extractedParams
           };
+          state.displayInfo = this.toolOrchestrator.generateDisplayMessage(request, true);
           return true;
         }
       }
@@ -314,7 +317,7 @@ export class AgentEngine {
   private readonly logger = new Logger(AgentEngine.name);
 
   // 流式输出限流间隔（毫秒）：缓存内的 chunk 会在该时间窗口内合并后统一刷新
-  private readonly THROTTLE_MS = 300;
+  private readonly THROTTLE_MS = 100;
 
   // 文案管理器（替代原来的 currentTurnToolCallStates）
   private displayManager: ToolCallDisplayManager;
@@ -650,6 +653,8 @@ export class AgentEngine {
         abortSignal,
       );
 
+
+
       // 遍历限流后的响应块，处理合并后的 chunk
       for await (const chunk of throttled) {
         // 增量累加逻辑：将每个块的 content 追加到总内容中
@@ -724,6 +729,8 @@ export class AgentEngine {
     incrementMessage.metadata.thinkingDurationMs = this.calculateThinkingDuration(
       currentTurnThinkingInfo,
     );
+
+
   }
 
   /**
@@ -1020,6 +1027,8 @@ export class AgentEngine {
     let streamDone = false;
     // 获取流的异步迭代器
     const iterator = stream[Symbol.asyncIterator]();
+    // 记录开始时间，用于计算相对时间戳
+    const startTime = Date.now();
 
     /**
      * 立即刷新缓存并返回 chunk，同时清除定时器
@@ -1145,6 +1154,9 @@ export class AgentEngine {
     };
 
     try {
+      let chunkPromise: Promise<IteratorResult<LLMResponseChunk>> | undefined = undefined;
+      let chunkPromiseWait: Promise<{ type: "chunk"; value: IteratorResult<LLMResponseChunk> }> | undefined = undefined;
+      
       while (!streamDone) {
         // 检查 abort 信号
         if (abortSignal?.aborted) {
@@ -1156,17 +1168,24 @@ export class AgentEngine {
         }
 
         // 竞争：等待下一个 chunk 或定时器到期
-        const chunkPromise = iterator.next();
+        if (chunkPromise == undefined) {
+          chunkPromise = iterator.next();
+          chunkPromiseWait = chunkPromise.then((r) => ({
+            type: "chunk" as const,
+            value: r
+          }));
+        }
+        // const chunkPromise = iterator.next();
         const timerPromise = scheduleFlush();
 
         const result = await Promise.race([
-          chunkPromise.then((r) => ({ type: "chunk" as const, value: r })),
+          chunkPromiseWait,
           timerPromise.then(() => ({ type: "timer" as const, value: null })),
         ]);
 
         if (result.type === "chunk") {
           const { value, done } = result.value;
-
+          chunkPromise = undefined;
           if (done) {
             streamDone = true;
             // 流结束，刷新剩余缓存
@@ -1178,6 +1197,8 @@ export class AgentEngine {
           }
 
           const chunk = value as LLMResponseChunk;
+
+
 
           // 合并到缓存（包含 finishReason、usage 等）
           // 如果类型冲突，会返回需要立即刷新的旧缓存

@@ -29,7 +29,7 @@
             <div class="w-px bg-gray-200 dark:bg-gray-700"></div>
           </div>
           <MarkdownContent @click.stop="$emit('click')" class="flex-1 markdown-text text-gray-500 dark:text-gray-400"
-            :content="reasoningContent" :debounced="isStreaming" @render-complete="$emit('renderComplete')" />
+            :content="reasoningContent" :debounced="isStreaming" />
         </div>
 
       </div>
@@ -55,7 +55,6 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   click: [];
-  renderComplete: [];
 }>();
 
 const isExpanded = ref(false);

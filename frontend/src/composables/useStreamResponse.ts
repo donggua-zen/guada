@@ -61,13 +61,6 @@ interface StreamResponse {
 export function useStreamResponse(sessionStore: any, apiService: any) {
   const { toast } = usePopup()
   
-  // 性能监控：统计后端推送频率
-  let streamStartTime = 0
-  let chunkCount = 0
-  let totalContentLength = 0
-  let lastChunkTime = 0
-  const chunkIntervals: number[] = []
-  
   // 流式响应状态
   const streamingState = reactive<StreamingState>({
     isStreaming: false,
@@ -385,13 +378,6 @@ export function useStreamResponse(sessionStore: any, apiService: any) {
     regenerationMode: 'regenerate' | null = null,
     assistantMessageId: string | null = null
   ): Promise<void> {
-    // 重置性能监控计数器
-    streamStartTime = Date.now()
-    chunkCount = 0
-    totalContentLength = 0
-    lastChunkTime = streamStartTime
-    chunkIntervals.length = 0
-    
     sessionStore.setSessionIsStreaming(streamingSessionId, true)
     streamingState.isStreaming = true
     streamingState.sessionId = streamingSessionId
@@ -412,22 +398,6 @@ export function useStreamResponse(sessionStore: any, apiService: any) {
         regenerationMode,
         assistantMessageId
       )) {
-        // 性能监控：统计每个 chunk
-        const now = Date.now()
-        chunkCount++
-        const interval = now - lastChunkTime
-        chunkIntervals.push(interval)
-        lastChunkTime = now
-        
-        if (response.type === 'text' && response.msg) {
-          totalContentLength += response.msg.length
-        }
-        
-        // 每 10 个 chunk 输出一次统计信息
-        if (chunkCount % 10 === 0) {
-          console.log(`[性能监控] 已接收 ${chunkCount} 个 chunk, 总内容长度: ${totalContentLength}, 平均间隔: ${(chunkIntervals.reduce((a, b) => a + b, 0) / chunkIntervals.length).toFixed(2)}ms`)
-        }
-        
         // 修复：实时检测并保存 usage，不等待 finish 事件
         // 这样即使被取消或发生异常，已接收到的 usage 也不会丢失
         if (response.usage && message && contentIndex !== undefined) {
@@ -512,22 +482,6 @@ export function useStreamResponse(sessionStore: any, apiService: any) {
       }
       throw error // 重新抛出错误，由调用者处理
     } finally {
-      // 输出最终统计信息
-      const totalTime = Date.now() - streamStartTime
-      const avgInterval = chunkIntervals.length > 0 ? chunkIntervals.reduce((a, b) => a + b, 0) / chunkIntervals.length : 0
-      const minInterval = chunkIntervals.length > 0 ? Math.min(...chunkIntervals) : 0
-      const maxInterval = chunkIntervals.length > 0 ? Math.max(...chunkIntervals) : 0
-      
-      console.log(`[性能监控] ========== 流式响应统计 ==========`)
-      console.log(`[性能监控] 总耗时: ${totalTime}ms`)
-      console.log(`[性能监控] Chunk 数量: ${chunkCount}`)
-      console.log(`[性能监控] 总内容长度: ${totalContentLength} 字符`)
-      console.log(`[性能监控] 平均间隔: ${avgInterval.toFixed(2)}ms`)
-      console.log(`[性能监控] 最小间隔: ${minInterval}ms`)
-      console.log(`[性能监控] 最大间隔: ${maxInterval}ms`)
-      console.log(`[性能监控] 推送频率: ${(chunkCount / (totalTime / 1000)).toFixed(2)} chunks/秒`)
-      console.log(`[性能监控] ======================================`)
-      
       cleanupStreaming(streamingSessionId, message, contentIndex)
     }
   }

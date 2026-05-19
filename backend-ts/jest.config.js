@@ -8,6 +8,9 @@ module.exports = {
       tsconfig: 'tsconfig.test.json'
     }],
   },
+  moduleNameMapper: {
+    '^uuid$': '<rootDir>/test/__mocks__/uuid.ts',
+  },
   collectCoverageFrom: [
     'src/**/*.ts',
     '!src/main.ts',
