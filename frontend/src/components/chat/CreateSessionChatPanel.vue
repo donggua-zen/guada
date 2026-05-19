@@ -163,6 +163,7 @@ const currentSession = ref<any>({
   model_id: null,
   avatar_url: null,
   title: "新建对话",
+  workspacePath: null,  // 工作目录路径，默认为 null 使用系统默认目录
   settings: {
     referencedKbs: userSelectedKnowledgeBaseIds.value, // 新增：从 localStorage 加载知识库选择
     modelName: null,
@@ -475,7 +476,10 @@ const chatInputConfig = computed(() => ({
   memory: currentSession.value?.settings?.memory || null,
   
   // 知识库 IDs - 对应 handleConfigChange 中的 config.knowledgeBaseIds
-  knowledgeBaseIds: currentSession.value?.settings?.referencedKbs || []
+  knowledgeBaseIds: currentSession.value?.settings?.referencedKbs || [],
+
+  // 工作目录路径 - 对应 handleConfigChange 中的 config.workspacePath
+  workspacePath: currentSession.value?.workspacePath || null
 }));
 
 /**
@@ -524,6 +528,12 @@ const handleConfigChange = (config: any): void => {
     userSelectedKnowledgeBaseIds.value = config.knowledgeBaseIds;
     console.log('保存知识库选择到本地存储:', config.knowledgeBaseIds);
   }
+
+  // 处理工作目录路径
+  if (typeof config.workspacePath !== 'undefined') {
+    currentSession.value.workspacePath = config.workspacePath;
+    console.log('保存 workspacePath 到会话:', config.workspacePath);
+  }
 };
 
 // 前往角色管理页面
@@ -557,7 +567,8 @@ const sendMessage = (): void => {
     characterId: currentSession.value.characterId,
     modelId: currentModelId.value,
     title: autoTitle(),
-    settings: currentSession.value.settings
+    settings: currentSession.value.settings,
+    workspacePath: currentSession.value.workspacePath || null
   }, {
     content: inputMessage.value.content,      // 使用 content 字段
     files: inputMessage.value.files || [],    // 使用 files 字段
@@ -574,7 +585,8 @@ const handleCreateSessionClick = (): void => {
     characterId: currentSession.value.characterId,
     modelId: currentModelId.value,
     title: autoTitle(),
-    settings: currentSession.value.settings
+    settings: currentSession.value.settings,
+    workspacePath: currentSession.value.workspacePath || null
   })
 }
 
