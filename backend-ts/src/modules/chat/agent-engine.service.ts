@@ -8,8 +8,7 @@ import { SessionContextService } from "./session-context.service";
 import { MessageRecord, LLMResponseChunk } from "../llm-core/types/llm.types";
 import { IConversationContext } from "./interfaces";
 import { RequestContext } from "../../common/context/request-context";
-import * as fs from 'fs';
-import * as path from 'path';
+import { partialParse } from 'partial-json-parser';
 
 /**
  * 思考时间信息（简单数据容器）
@@ -34,9 +33,6 @@ class ToolCallDisplayManager {
   // 存储每个工具调用的状态（仅用于流式阶段）
   private states = new Map<number, {
     displayInfo: ToolDisplayInfo;  // 结构化的展示信息
-    toolNameExtracted: boolean;
-    argsParamExtracted: boolean;
-    paramExtracted: boolean;
   }>();
 
   constructor(private toolOrchestrator: ToolOrchestrator) { }
@@ -51,10 +47,7 @@ class ToolCallDisplayManager {
     );
 
     this.states.set(index, {
-      displayInfo: displayInfo,
-      toolNameExtracted: false,
-      argsParamExtracted: false,
-      paramExtracted: false
+      displayInfo: displayInfo
     });
 
     this.logger.log(`[ToolCall #${index}] Initialized: ${displayInfo.action}`);
@@ -153,142 +146,51 @@ class ToolCallDisplayManager {
     accumulatedArgs: string,
     state: any
   ): boolean {
-    let extractedParams: Record<string, string> = {};
+    if (!accumulatedArgs || accumulatedArgs.trim().length === 0) {
+      return false;
+    }
 
-    if (toolName === 'tool_call') {
-      // tool_call 特殊处理：先提取 tool_name，再提取 arguments 内的参数
-      if (!state.toolNameExtracted) {
-        const firstKV = this.extractTopLevelKV(accumulatedArgs);
-        if (firstKV?.key === 'tool_name') {
-          state.toolNameExtracted = true;
-          const request = this.buildRequestFromPartialData(
-            index,
-            toolName,
-            firstKV,
-            accumulatedArgs,
-            state
-          );
-          state.displayInfo = this.toolOrchestrator.generateDisplayMessage(request, true);
-          return true;
+    try {
+      // 使用 partial-json-parser 解析不完整的 JSON
+      const parsed = partialParse(accumulatedArgs);
+      
+      if (!parsed || typeof parsed !== 'object') {
+        return false;
+      }
+
+      let actualToolName = toolName;
+      let extractedParams: Record<string, any> = {};
+
+      if (toolName === 'tool_call') {
+        // tool_call 特殊处理：从解析结果中提取 tool_name 和 arguments
+        if (parsed.tool_name) {
+          actualToolName = parsed.tool_name;
+        }
+        
+        if (parsed.arguments && typeof parsed.arguments === 'object') {
+          extractedParams = parsed.arguments;
         }
       } else {
-        // 提取 arguments 内的所有 KV 对
-        const argsMatch = accumulatedArgs.match(/"arguments"\s*:\s*\{(.*)/s);
-        if (argsMatch) {
-          const argsContent = argsMatch[1];
-          const allKV = this.extractAllTopLevelKV(`{${argsContent}`);
-          for (const kv of allKV) {
-            extractedParams[kv.key] = kv.value;
-          }
-          
-          // 只要有参数就更新
-          if (Object.keys(extractedParams).length > 0) {
-            // 重新提取 tool_name
-            const toolNameMatch = accumulatedArgs.match(/"tool_name"\s*:\s*"([^"]+)"/);
-            const actualToolName = toolNameMatch ? toolNameMatch[1] : toolName;
-            const request = {
-              id: '',
-              name: actualToolName,
-              arguments: extractedParams
-            };
-            state.displayInfo = this.toolOrchestrator.generateDisplayMessage(request, true);
-            return true;
-          }
-        }
-      }
-    } else {
-      // 普通工具：提取所有 KV 对
-      const allKV = this.extractAllTopLevelKV(accumulatedArgs);
-      for (const kv of allKV) {
-        extractedParams[kv.key] = kv.value;
+        // 普通工具：直接使用解析后的参数
+        extractedParams = parsed;
       }
 
-      // 只要有参数就更新
-      if (Object.keys(extractedParams).length > 0) {
+      // 只要有有效参数就更新展示文案
+      if (Object.keys(extractedParams).length > 0 || actualToolName !== toolName) {
         const request = {
           id: '',
-          name: toolName,
+          name: actualToolName,
           arguments: extractedParams
         };
         state.displayInfo = this.toolOrchestrator.generateDisplayMessage(request, true);
         return true;
       }
+    } catch (error) {
+      // 解析失败时静默忽略，等待更多数据
+      this.logger.debug(`JSON 解析失败（等待更多数据）: ${error.message}`);
     }
 
     return false;
-  }
-
-  private extractAllTopLevelKV(jsonStr: string): { key: string; value: string }[] {
-    const results: { key: string; value: string }[] = [];
-    let remaining = jsonStr.trim();
-
-    // 移除开头的 {
-    if (remaining.startsWith('{')) {
-      remaining = remaining.slice(1);
-    }
-    // 移除结尾的 }
-    if (remaining.endsWith('}')) {
-      remaining = remaining.slice(0, -1);
-    }
-
-    // 循环提取所有 KV 对
-    while (remaining.length > 0) {
-      const match = remaining.match(/^\s*"([^"]+)"\s*:\s*"((?:[^"\\]|\\.)*)"\s*,?\s*/);
-      if (!match) break;
-
-      results.push({ key: match[1], value: match[2] });
-      remaining = remaining.slice(match[0].length);
-    }
-
-    return results;
-  }
-
-  private extractTopLevelKV(jsonStr: string): { key: string; value: string } | null {
-    // 支持值中包含转义引号（如 \"）的情况，也处理流式传输时末尾反斜杠导致的不完整匹配
-    const match = jsonStr.match(/"([^"]+)"\s*:\s*"((?:[^"\\]|\\.)*)"?/);
-    return match ? { key: match[1], value: match[2] } : null;
-  }
-
-  private extractNestedKV(jsonStr: string): { key: string; value: string } | null {
-    const argsMatch = jsonStr.match(/"arguments"\s*:\s*\{(.*)/s);
-    if (!argsMatch) return null;
-
-    const argsContent = argsMatch[1];
-    // 支持值中包含转义引号（如 \"）的情况，也处理流式传输时末尾反斜杠导致的不完整匹配
-    const kvMatch = argsContent.match(/"([^"]+)"\s*:\s*"((?:[^"\\]|\\.)*)"?/);
-    return kvMatch ? { key: kvMatch[1], value: kvMatch[2] } : null;
-  }
-
-  private buildRequestFromPartialData(
-    index: number,
-    toolName: string,
-    firstKV: { key: string; value: string },
-    accumulatedArgs: string,
-    state: any
-  ): any {
-    if (toolName === 'tool_call') {
-      if (firstKV.key === 'tool_name') {
-        return {
-          id: '',
-          name: firstKV.value,
-          arguments: {}
-        };
-      } else {
-        const toolNameMatch = accumulatedArgs.match(/"tool_name"\s*:\s*"([^"]+)"/);
-        const actualToolName = toolNameMatch ? toolNameMatch[1] : toolName;
-        return {
-          id: '',
-          name: actualToolName,
-          arguments: { [firstKV.key]: firstKV.value }
-        };
-      }
-    }
-
-    return {
-      id: '',
-      name: toolName,
-      arguments: { [firstKV.key]: firstKV.value }
-    };
   }
 
   private safeJsonParse(jsonString: string): any {

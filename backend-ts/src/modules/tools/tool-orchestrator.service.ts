@@ -103,19 +103,28 @@ export class ToolOrchestrator {
   ): ToolDisplayInfo {
     try {
       // 特殊处理 tool_call 工具：从参数中提取实际调用的工具名
-      if (request.name === 'tool_call' && request.arguments?.tool_name) {
-        const actualToolName = request.arguments.tool_name as string;
-        const actualArgs = request.arguments.arguments || {};
+      if (request.name === 'tool_call') {
+        if (request.arguments?.tool_name) {
+          const actualToolName = request.arguments.tool_name as string;
+          const actualArgs = request.arguments.arguments || {};
 
-        // 递归调用，使用实际的工具名和参数
-        return this.generateDisplayMessage(
-          { id: request.id, name: actualToolName, arguments: actualArgs },
-          isStreaming
-        );
+          // 递归调用，使用实际的工具名和参数
+          return this.generateDisplayMessage(
+            { id: request.id, name: actualToolName, arguments: actualArgs },
+            isStreaming
+          );
+        }
+        return {
+          action: isStreaming ? '正在调用工具' : '已调用工具',
+          args: request.arguments?.namespace,
+          toolName: request.name,
+          toolType: 'generic'
+        };
       }
       if (request.name === 'tool_load') {
         return {
           action: isStreaming ? '正在加载工具' : '已加载工具',
+          args: request.arguments?.namespace,
           toolName: request.name,
           toolType: 'generic'
         };
