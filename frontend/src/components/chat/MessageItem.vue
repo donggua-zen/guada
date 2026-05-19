@@ -28,10 +28,10 @@
           <MessageThinkingSection v-if="turn.reasoningContent" :reasoning-content="turn.reasoningContent"
             :is-thinking="turn.state?.isThinking || false" :is-streaming="turn.state?.isStreaming || false"
             :thinking-duration-ms="turn.thinkingDurationMs ?? turn.metadata?.thinkingDurationMs"
-            :meta-data="turn.metadata" @click="handleThinkingClick" @render-complete="handleRenderComplete" />
+            :meta-data="turn.metadata" @click="handleThinkingClick" />
           <template v-if="turn.content">
             <MarkdownContent v-if="isAssistant" class="message-item__text markdown-text" @click="handleClick"
-              @render-complete="handleRenderComplete" :content="turn.content" :debounced="turn.state?.isStreaming" />
+              :content="turn.content" :debounced="turn.state?.isStreaming" />
             <div v-else class="message-item__text">{{ turn.content }}</div>
           </template>
 
@@ -159,7 +159,6 @@ const emit = defineEmits<{
   copy: [message: any]
   generate: [message: any]
   regenerate: [message: any]
-  'render-complete': [message: any]
 }>();
 
 // ============================================
@@ -280,12 +279,6 @@ const currentVersionIndex = computed(() => {
   if (!props.message.currentTurnsId) return 0;
   return contentVersions.value.findIndex(version => version === props.message.currentTurnsId);
 });
-
-const handleRenderComplete = () => {
-  // Markdown 渲染完成后立即触发
-};
-
-
 
 const handleAction = (action: 'switch' | 'delete' | 'edit' | 'copy' | 'generate' | 'regenerate') => {
   emit(action as any, props.message);

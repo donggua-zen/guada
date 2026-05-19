@@ -291,11 +291,6 @@ export function allowReSendMessage(
 ): boolean {
     if (message.role !== 'user') return false
     
-    // 只对最后几条消息输出日志，避免刷屏
-    if (index >= activeMessages.length - 5) {
-        console.log(`[性能监控] allowReSendMessage called for message ${message.id}, index: ${index}, total: ${activeMessages.length}`);
-    }
-    
     // 最后两条 user 消息允许重新再发送栏中编辑
     return index >= activeMessages.length - 2
 }
