@@ -1,0 +1,19 @@
+{"content":null,"reasoningContent":"我需要","finishReason":null,"usage":null}
+{"content":null,"reasoningContent":"先","finishReason":null,"usage":null}
+{"content":null,"reasoningContent":"调用","finishReason":null,"usage":null}
+{"content":null,"reasoningContent":"工具","finishReason":null,"usage":null}
+{"content":null,"reasoningContent":null,"finishReason":null,"toolCalls":[{"id":"call_001","index":0,"type":"function","name":"file__read","arguments":""}],"usage":null}
+{"content":null,"reasoningContent":null,"finishReason":null,"toolCalls":[{"index":0,"type":"function","arguments":"{\""}],"usage":null}
+{"content":null,"reasoningContent":null,"finishReason":null,"toolCalls":[{"index":0,"type":"function","arguments":"file"}],"usage":null}
+{"content":null,"reasoningContent":null,"finishReason":null,"toolCalls":[{"index":0,"type":"function","arguments":"_path"}],"usage":null}
+{"content":null,"reasoningContent":null,"finishReason":null,"toolCalls":[{"index":0,"type":"function","arguments":"\":\""}],"usage":null}
+{"content":null,"reasoningContent":null,"finishReason":null,"toolCalls":[{"index":0,"type":"function","arguments":"test"}],"usage":null}
+{"content":null,"reasoningContent":null,"finishReason":null,"toolCalls":[{"index":0,"type":"function","arguments":".txt\"}"}],"usage":null}
+{"content":null,"reasoningContent":null,"finishReason":"tool_calls","usage":{"promptTokens":200,"completionTokens":30,"totalTokens":230}}
+{"content":"文件","reasoningContent":null,"finishReason":null,"usage":null}
+{"content":"内容","reasoningContent":null,"finishReason":null,"usage":null}
+{"content":"是","reasoningContent":null,"finishReason":null,"usage":null}
+{"content":"：","reasoningContent":null,"finishReason":null,"usage":null}
+{"content":"Hello","reasoningContent":null,"finishReason":null,"usage":null}
+{"content":" World","reasoningContent":null,"finishReason":null,"usage":null}
+{"content":null,"reasoningContent":null,"finishReason":"stop","usage":{"promptTokens":250,"completionTokens":80,"totalTokens":330}}
