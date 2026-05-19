@@ -127,7 +127,7 @@
         @toggle="toggleKnowledgeBaseSelection" />
 
       <!-- 会话设置模态框 -->
-      <SessionSettingsDialog v-model:visible="settingsDialogVisible" :config="props.config?.memory"
+      <SessionSettingsDialog v-model:visible="settingsDialogVisible" :config="sessionMemoryConfig"
         @confirm="applySessionSettings" @cancel="settingsDialogVisible = false" />
     </div>
   </div>
@@ -386,6 +386,17 @@ const currentModelName = computed(() => {
 const selectedKnowledgeBases = computed(() => {
   const kbIds = props.config?.knowledgeBaseIds || [];
   return knowledgeBases.value.filter(kb => kbIds.includes(kb.id));
+});
+
+// 为会话设置对话框构造配置对象（将 memoryEnabled 映射为 useCustom）
+const sessionMemoryConfig = computed(() => {
+  const config = props.config;
+  if (!config) return {};
+  
+  return {
+    useCustom: config.memoryEnabled ?? true, // 将 memoryEnabled 映射为 useCustom
+    ...config.memory, // 展开 memory 对象的其他属性
+  };
 });
 
 //  新增：有效的已选择知识库数量（只统计实际存在的知识库）
