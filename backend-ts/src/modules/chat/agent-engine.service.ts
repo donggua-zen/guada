@@ -187,7 +187,8 @@ class ToolCallDisplayManager {
       }
     } catch (error) {
       // 解析失败时静默忽略，等待更多数据
-      this.logger.debug(`JSON 解析失败（等待更多数据）: ${error.message}`);
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      this.logger.debug(`JSON 解析失败（等待更多数据）: ${errorMessage}`);
     }
 
     return false;
