@@ -69,6 +69,34 @@
     class="memo-panel-dialog">
     <MemoPanel v-if="currentSession" :session-id="currentSession.id" />
   </el-dialog>
+
+  <!-- 删除会话确认对话框 -->
+  <el-dialog v-model="deleteDialogVisible" title="删除会话" width="500px" :close-on-click-modal="false">
+    <div class="space-y-4">
+      <p class="text-gray-700 dark:text-gray-300">
+        确定要删除会话 <strong>“{{ deleteSessionData?.title }}”</strong> 吗？
+      </p>
+      <div class="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-3">
+        <p class="text-sm text-red-600 dark:text-red-400">
+          <strong>注意：</strong>此操作不可撤销，会话中的所有消息将被永久删除。
+        </p>
+      </div>
+      <el-checkbox v-model="deleteWorkspaceChecked" class="w-full">
+        <div class="flex flex-col gap-1" style="white-space: normal; word-wrap: break-word; overflow-wrap: break-word;">
+          <span class="font-medium">同时删除默认工作目录</span>
+          <span class="text-xs text-gray-500 dark:text-gray-400" style="line-height: 1.5;">
+            仅删除系统自动创建的默认工作目录（data/workspace/{sessionId}），自定义工作目录不会被删除。请务必备份重要数据！
+          </span>
+        </div>
+      </el-checkbox>
+    </div>
+    <template #footer>
+      <div class="flex justify-end gap-2">
+        <el-button @click="deleteDialogVisible = false">取消</el-button>
+        <el-button type="danger" @click="confirmDeleteSession">确定删除</el-button>
+      </div>
+    </template>
+  </el-dialog>
 </template>
 <script setup lang="ts">
 import { ref, onMounted, watch, computed, defineAsyncComponent, type Ref, nextTick } from "vue";
@@ -87,7 +115,7 @@ import { LiteSplitpanes } from "../ui";
 import { SidebarLayout } from "../ui";
 import ChatSidebar from "./ChatSidebar.vue";
 import ChatHeader from "./ChatHeader.vue";
-import { ElDialog, ElEmpty } from "element-plus";
+import { ElDialog, ElEmpty, ElMessageBox } from "element-plus";
 import { useBreakpoints, breakpointsTailwind } from '@vueuse/core'
 
 const breakpoints = useBreakpoints(breakpointsTailwind)
@@ -100,10 +128,15 @@ const ChatOutline = defineAsyncComponent(() => import("./ChatOutline.vue"));
 const WorkspaceSidebar = defineAsyncComponent(() => import("./WorkspaceSidebar.vue"));
 
 // 组合式函数
-const { confirm, toast, prompt } = usePopup();
+const { toast, prompt, confirm } = usePopup();
 const router = useRouter();
 const route = useRoute();
 const title = useTitle();
+
+// 删除会话确认对话框状态
+const deleteDialogVisible = ref(false);
+const deleteSessionData = ref<any>(null);
+const deleteWorkspaceChecked = ref(false);
 
 // 当前会话对象，包含会话的基本信息和设置
 const currentSession: Ref<Session | null> = ref(null);
@@ -405,30 +438,65 @@ const handleRenameSession = async (session: any) => {
  * @param {Object} session - 要删除的会话对象
  */
 const handleDeleteSession = async (session: any) => {
+  // 显示自定义删除确认对话框
+  deleteSessionData.value = session;
+  deleteWorkspaceChecked.value = false;
+  deleteDialogVisible.value = true;
+};
+
+/**
+ * 确认删除会话
+ */
+const confirmDeleteSession = async () => {
   try {
-    if (await confirm(
-      "确定要删除这个对话吗？",
-      "<b>重要提示：</b><br>• 此操作不可撤销<br>• <span style='color: #f56c6c;'>将删除会话关联的默认工作目录</span><br>• <b>请务必备份重要数据</b>"
-    )) {
-      await apiService.deleteSession(session.id);
-      sessionStore.clearSessionState(session.id);
-      const index = sortedSessions.value.findIndex(s => s.id === session.id);
-      // 如果删除的是当前会话
-      if (currentSession.value && currentSession.value.id === session.id) {
-        if (index < sortedSessions.value.length - 1) {
-          // 选择下一个会话
-          goChatRoute(sortedSessions.value[index + 1].id);
-        } else if (index > 0) {
-          goChatRoute(sortedSessions.value[index - 1].id);
-        } else {
-          // 没有其他会话了
-          goChatRoute(null);
-        }
+    const session = deleteSessionData.value;
+    if (!session) return;
+
+    // 如果勾选了删除工作目录，进行二次确认
+    if (deleteWorkspaceChecked.value) {
+      const secondConfirm = await ElMessageBox({
+        title: '⚠️ 重要警告',
+        message: '您选择了同时删除默认工作目录，这将永久删除该会话的所有文件数据，且不可恢复！',
+        type: 'error',
+        showCancelButton: true,
+        confirmButtonText: '确定删除',
+        cancelButtonText: '取消',
+        distinguishCancelAndClose: true,
+        customClass: 'workspace-delete-warning'
+      }).then(() => true).catch(() => false);
+
+      if (!secondConfirm) {
+        // 用户取消了二次确认，不执行删除
+        return;
       }
-      sessions.value = sessions.value.filter(s => s.id !== session.id);
-      totalSessionsCount.value--; // 更新总数
-      toast.success("对话删除成功");
     }
+
+    // 传递 deleteWorkspace 参数
+    await apiService.deleteSession(session.id, deleteWorkspaceChecked.value);
+
+    sessionStore.clearSessionState(session.id);
+    const index = sortedSessions.value.findIndex(s => s.id === session.id);
+
+    // 如果删除的是当前会话
+    if (currentSession.value && currentSession.value.id === session.id) {
+      if (index < sortedSessions.value.length - 1) {
+        // 选择下一个会话
+        goChatRoute(sortedSessions.value[index + 1].id);
+      } else if (index > 0) {
+        goChatRoute(sortedSessions.value[index - 1].id);
+      } else {
+        // 没有其他会话了
+        goChatRoute(null);
+      }
+    }
+
+    sessions.value = sessions.value.filter(s => s.id !== session.id);
+    totalSessionsCount.value--;
+    toast.success("对话删除成功");
+
+    // 关闭对话框
+    deleteDialogVisible.value = false;
+    deleteSessionData.value = null;
   } catch (error) {
     console.error('删除对话失败:', error);
     toast.error("对话删除失败");
@@ -444,7 +512,8 @@ const handleSaveSessionSettings = async () => {
     if (currentSession.value) {
       await apiService.updateSession(currentSession.value.id, {
         modelId: currentSession.value.modelId,
-        settings: currentSession.value.settings
+        settings: currentSession.value.settings,
+        workspacePath: currentSession.value.workspacePath
       });
     }
   } catch (error: any) {
@@ -724,5 +793,20 @@ onMounted(async () => {
 .memo-panel-dialog .el-dialog__footer {
   padding: 8px 16px;
   /* 如果有footer，也减小内边距 */
+}
+
+/* 工作目录删除警告弹窗样式 */
+.workspace-delete-warning {
+  max-width: 500px !important;
+}
+
+.workspace-delete-warning .el-message-box__message p,
+.workspace-delete-warning .el-message-box__message {
+  white-space: normal !important;
+  word-wrap: break-word !important;
+  overflow-wrap: break-word !important;
+  line-height: 1.6 !important;
+  text-align: left !important;
+  max-width: 100% !important;
 }
 </style>

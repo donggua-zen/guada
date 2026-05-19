@@ -130,9 +130,9 @@
 
 <script setup lang="ts">
 import { reactive, ref, watch } from 'vue'
-import { ElDialog, ElForm, ElFormItem, ElSwitch, ElInput, ElSlider, ElSelect, ElOption, ElAlert, ElButton, ElIcon } from 'element-plus'
+import { ElDialog, ElForm, ElFormItem, ElSwitch, ElInput, ElSlider, ElSelect, ElOption, ElAlert, ElButton, ElIcon, ElTooltip } from 'element-plus'
 import ElSliderOptional from '../../ui/ElSliderOptional.vue'
-import { CloseOutlined } from '@vicons/material'
+import { CloseOutlined, HelpOutlined } from '@vicons/material'
 import { ThunderboltOutlined, SyncOutlined } from '@vicons/antd'
 
 interface MemoryConfig {

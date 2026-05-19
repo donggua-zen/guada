@@ -731,6 +731,20 @@ function setupIpcHandlers() {
     }
   })
 
+  // 选择文件夹对话框
+  ipcMain.handle('select-folder', async () => {
+    const result = await dialog.showOpenDialog({
+      properties: ['openDirectory'],
+      title: '选择工作目录'
+    })
+    
+    if (result.canceled || result.filePaths.length === 0) {
+      return null
+    }
+    
+    return result.filePaths[0]
+  })
+
   // 剪贴板操作（通过 IPC）
   ipcMain.handle('clipboard-write-text', (_, text: string) => {
     try {

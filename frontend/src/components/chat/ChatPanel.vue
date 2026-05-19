@@ -273,7 +273,10 @@ const chatInputConfig = computed(() => ({
   memory: currentSession.value?.settings?.memory || null,
 
   // 知识库 IDs - 对应 handleConfigChange 中的 config.knowledgeBaseIds
-  knowledgeBaseIds: inputMessage.value?.knowledgeBaseIds || currentSession.value?.settings?.referencedKbs || []
+  knowledgeBaseIds: inputMessage.value?.knowledgeBaseIds || currentSession.value?.settings?.referencedKbs || [],
+
+  // 工作目录路径 - 对应 handleConfigChange 中的 config.workspacePath
+  workspacePath: currentSession.value?.workspacePath || null
 }));
 
 /**
@@ -317,6 +320,12 @@ const handleConfigChange = (config: any) => {
     if (!editMode.value) {
       currentSession.value.settings.referencedKbs = config.knowledgeBaseIds;
     }
+  }
+
+  // 处理工作目录路径
+  if (typeof config.workspacePath !== 'undefined') {
+    currentSession.value.workspacePath = config.workspacePath;
+    console.log('保存 workspacePath 到会话:', config.workspacePath);
   }
 
   debouncedSaveSession();
