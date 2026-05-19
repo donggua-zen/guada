@@ -67,26 +67,17 @@ export class ToolContextFactory {
 
   /**
    * 从工具配置中创建工具上下文
-   * @param sessionId 会话 ID
-   * @param userId 用户 ID
-   * @param sessionType 会话类型（如 'chat', 'agent', 'workflow' 等）
+   * @param injectParams 注入参数对象（包含 sessionId, userId, sessionType, workspacePath 等）
    * @param toolsConfig 工具配置（boolean | string[] | Record<string, boolean>）
    * @param mcpServersConfig MCP 服务器配置（boolean | string[]）
    * @param excludeTools 需要排除的工具命名空间列表（如 ['knowledge_base']）
    */
   createContext(
-    sessionId: string,
-    userId: string,
-    sessionType: string,
+    injectParams: Record<string, any>,
     toolsConfig: any,
     mcpServersConfig: any,
     excludeTools: string[] = [],
   ): ToolContext {
-    const injectParams = {
-      sessionId,
-      userId,
-      sessionType,
-    };
 
     // 动态遍历所有工具提供者，避免硬编码
     const providerConfigs: Record<string, ProviderConfig> = {};
