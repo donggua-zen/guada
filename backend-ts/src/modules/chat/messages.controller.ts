@@ -107,6 +107,22 @@ export class MessagesController {
   }
 
   /**
+   * 获取消息内容的工具调用详情（完整参数和结果）
+   *
+   * 用于懒加载：前端列表仅展示摘要，点击弹窗时通过此接口获取完整数据。
+   */
+  @Get("message-content/:contentId/tool-details")
+  async getMessageContentToolDetails(
+    @Param("contentId") contentId: string,
+    @CurrentUser() user: any,
+  ) {
+    return this.messageService.getMessageContentToolDetails(
+      contentId,
+      user.id,
+    );
+  }
+
+  /**
    * 批量导入消息
    */
   @Post("sessions/:sessionId/messages/import")

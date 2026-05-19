@@ -3,6 +3,7 @@ import {
   IToolProvider,
   ToolCallRequest,
   ToolProviderMetadata,
+  ToolDisplayInfo,
 } from '../interfaces/tool-provider.interface'
 import * as http from 'http'
 import * as path from 'path'
@@ -103,18 +104,18 @@ export class BrowserToolProvider implements IToolProvider {
   /**
    * 发送请求到 Electron 并等待响应
    */
-  private async sendRequest(method: string, params: any): Promise<any> {
+  private async sendRequest(method: string, params: any, abortSignal?: AbortSignal): Promise<any> {
     if (this.bridgeMode === 'tcp') {
-      return this.sendTCPRequest(method, params)
+      return this.sendTCPRequest(method, params, abortSignal)
     } else {
-      return this.sendIPCRequest(method, params)
+      return this.sendIPCRequest(method, params, abortSignal)
     }
   }
 
   /**
    * 通过 TCP 发送请求
    */
-  private sendTCPRequest(method: string, params: any): Promise<any> {
+  private sendTCPRequest(method: string, params: any, abortSignal?: AbortSignal): Promise<any> {
     return new Promise((resolve, reject) => {
       const id = `req_${Date.now()}_${++this.requestIdCounter}`
 
@@ -157,6 +158,21 @@ export class BrowserToolProvider implements IToolProvider {
         reject(new Error(`Request timeout: ${method}`))
       })
 
+      // 监听 abortSignal
+      if (abortSignal) {
+        const abortHandler = () => {
+          this.logger.warn(`TCP browser request aborted: ${method}`);
+          req.destroy();
+          reject(new Error('Request was aborted'));
+        };
+
+        if (abortSignal.aborted) {
+          abortHandler();
+        } else {
+          abortSignal.addEventListener('abort', abortHandler, { once: true });
+        }
+      }
+
       req.write(JSON.stringify(requestData))
       req.end()
     })
@@ -165,7 +181,7 @@ export class BrowserToolProvider implements IToolProvider {
   /**
    * 通过 IPC 发送请求
    */
-  private sendIPCRequest(method: string, params: any): Promise<any> {
+  private sendIPCRequest(method: string, params: any, abortSignal?: AbortSignal): Promise<any> {
     return new Promise((resolve, reject) => {
       const id = `req_${Date.now()}_${++this.requestIdCounter}`
 
@@ -198,8 +214,23 @@ export class BrowserToolProvider implements IToolProvider {
       } else {
         clearTimeout(timeout)
         this.pendingRequests.delete(id)
-        this.logger.error('No IPC channel available for sending')
         reject(new Error('No IPC channel available'))
+      }
+
+      // 监听 abortSignal
+      if (abortSignal) {
+        const abortHandler = () => {
+          this.logger.warn(`IPC browser request aborted: ${method}`);
+          clearTimeout(timeout);
+          this.pendingRequests.delete(id);
+          reject(new Error('Request was aborted'));
+        };
+
+        if (abortSignal.aborted) {
+          abortHandler();
+        } else {
+          abortSignal.addEventListener('abort', abortHandler, { once: true });
+        }
       }
     })
   }
@@ -342,8 +373,8 @@ export class BrowserToolProvider implements IToolProvider {
           type: 'object',
           properties: {
             url: { type: 'string', description: '要打开的 URL' },
-            metadata: { 
-              type: 'object', 
+            metadata: {
+              type: 'object',
               description: '可选元数据，如 { scope: "session_123", purpose: "research" }',
               properties: {
                 scope: { type: 'string', description: '作用域标识，用于 session 隔离' },
@@ -379,16 +410,23 @@ export class BrowserToolProvider implements IToolProvider {
   async execute(
     request: ToolCallRequest,
     context?: Record<string, any>,
+    abortSignal?: AbortSignal,
   ): Promise<string> {
     try {
       this.logger.debug(`Executing browser tool: ${request.name}`)
 
-      // 特殊处理 execute_js，支持文件路径
-      if (request.name === 'execute_js') {
-        return await this.executeJsWithFileSupport(request.arguments, context)
+      // 检查是否已中止
+      if (abortSignal?.aborted) {
+        this.logger.warn(`Browser tool execution aborted before starting: ${request.name}`);
+        throw new Error('Request was aborted');
       }
 
-      const result = await this.sendRequest(request.name, request.arguments)
+      // 特殊处理 execute_js，支持文件路径
+      if (request.name === 'execute_js') {
+        return await this.executeJsWithFileSupport(request.arguments, context, abortSignal)
+      }
+
+      const result = await this.sendRequest(request.name, request.arguments, abortSignal)
 
       // 特殊处理 get_page_struct，如果结果过大则保存到临时文件
       if (request.name === 'get_page_struct') {
@@ -410,7 +448,7 @@ export class BrowserToolProvider implements IToolProvider {
   /**
    * 执行 JavaScript，支持代码字符串或文件路径
    */
-  private async executeJsWithFileSupport(args: any, context?: Record<string, any>): Promise<string> {
+  private async executeJsWithFileSupport(args: any, context?: Record<string, any>, abortSignal?: AbortSignal): Promise<string> {
     const { code, file_path, window_id, is_async } = args
 
     // 验证 window_id
@@ -441,7 +479,7 @@ export class BrowserToolProvider implements IToolProvider {
       code: finalCode,
       window_id,
       is_async: is_async || false,
-    })
+    }, abortSignal)
 
     // 格式化结果为字符串
     if (typeof result === 'string') {
@@ -504,7 +542,7 @@ export class BrowserToolProvider implements IToolProvider {
    * 处理 get_page_struct 的大结果，超过 100KB 时保存到临时文件
    */
   private async handleLargeStructResult(result: any, context?: Record<string, any>): Promise<string> {
-    const MAX_SIZE_BYTES = 100 * 1024 // 100KB
+    const MAX_SIZE_BYTES = 50 * 1024 // 100KB
 
     // 将结果转换为 JSON 字符串
     const jsonString = typeof result === 'string' ? result : JSON.stringify(result)
@@ -628,5 +666,85 @@ export class BrowserToolProvider implements IToolProvider {
       isMcp: false,
       loadMode: 'lazy',
     }
+  }
+
+  /**
+   * 生成浏览器工具的展示文案
+   */
+  formatDisplayMessage(toolName: string, args: Record<string, any>, isStreaming: boolean): ToolDisplayInfo {
+    const prefix = isStreaming ? '正在' : '已';
+
+    let action: string;
+    let toolArgs: string | undefined;
+    let toolType: string = this.namespace;
+
+    switch (toolName) {
+      case 'open_new_window':
+        action = `${prefix}打开新窗口`;
+        toolArgs = args.url;
+        break;
+      case 'close_window':
+        action = `${prefix}关闭窗口`;
+        break;
+      case 'navigate':
+      case 'goto':
+        const url = args.url;
+        if (url) {
+          action = `${prefix}访问网页`;
+          toolArgs = url.length > 40 ? url.substring(0, 40) + '...' : url;
+        } else {
+          action = `${prefix}访问网页`;
+        }
+        break;
+
+      case 'screenshot':
+        action = `${prefix}截图`;
+        break;
+
+      case 'click':
+        const selector = args.selector;
+        action = `${prefix}点击`;
+        toolArgs = selector;
+        break;
+
+      case 'type':
+      case 'input':
+        const inputSelector = args.selector;
+        action = `${prefix}输入文本`;
+        toolArgs = inputSelector;
+        break;
+
+      case 'get_text':
+        action = `${prefix}提取页面文本`;
+        break;
+
+      case 'get_page_struct':
+        action = `${prefix}获取页面结构`;
+        break;
+
+      case 'execute_js':
+        action = `${prefix}执行 JavaScript`;
+        toolType = "code";
+        toolArgs = args.code || args.file_path;
+        break;
+
+      case 'wait_for':
+        action = `${prefix}等待元素`;
+        break;
+
+      case 'scroll':
+        action = `${prefix}滚动页面`;
+        break;
+
+      default:
+        action = `${prefix}操作浏览器`;
+    }
+
+    return {
+      action,
+      args: toolArgs,
+      toolName: `browser__${toolName}`,
+      toolType: toolType  // 返回 toolType，code 类型会使用 Code24Regular，其他使用 browser namespace 映射到 WindowWrench24Regular
+    };
   }
 }

@@ -1,0 +1,41 @@
+{
+  "id": "test-session-001",
+  "userId": "test-user",
+  "model": {
+    "modelName": "gpt-4",
+    "provider": { 
+      "provider": "openai", 
+      "protocol": "openai" 
+    },
+    "config": {
+      "contextWindow": 128000,
+      "features": ["tools", "thinking"],
+      "maxOutputTokens": 4096
+    }
+  },
+  "settings": {
+    "systemPrompt": "You are a helpful assistant.",
+    "thinkingEffort": "medium",
+    "modelTemperature": 0.7,
+    "modelTopP": 1.0,
+    "modelFrequencyPenalty": 0.0,
+    "memory": { 
+      "enabled": true, 
+      "maxTokensLimit": 8000 
+    },
+    "tools": true,
+    "mcpServers": {}
+  },
+  "character": {
+    "settings": {
+      "systemPrompt": "Default system prompt.",
+      "modelTemperature": 0.7,
+      "modelTopP": 1.0,
+      "modelFrequencyPenalty": 0.0,
+      "memory": {
+        "enabled": true,
+        "maxTokensLimit": 8000
+      }
+    }
+  }
+}

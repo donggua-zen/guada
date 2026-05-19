@@ -404,6 +404,18 @@ class ApiService implements IApiService {
     return await this._request(`/messages/${messageId}/content/${contentId}`, { method: 'PUT' })
   }
 
+  /**
+   * 获取消息内容的工具调用详情（完整参数和结果）
+   *
+   * 用于懒加载：前端列表仅展示摘要，点击弹窗时通过此接口获取完整数据。
+   */
+  async fetchMessageContentToolDetails(contentId: string): Promise<{
+    toolCalls: any[]
+    toolCallsResponse: any[]
+  }> {
+    return await this._request(`/message-content/${contentId}/tool-details`)
+  }
+
   // ========== 流式聊天 ==========
   async *chat(
     sessionId: string,

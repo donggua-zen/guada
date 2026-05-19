@@ -236,8 +236,8 @@ export class QQBotAdapter implements IBotPlatform {
       this.client = null;
     }
     
-    // 2. 等待一小段时间,避免频繁请求被限流
-    await new Promise(resolve => setTimeout(resolve, 1000));
+    // 2. 等待更长时间,避免频繁请求被限流(特别是频率限制错误后)
+    await new Promise(resolve => setTimeout(resolve, 3000));
     
     // 3. 重新初始化(会创建新的 QQBot 实例并强制刷新 Token)
     if (this.config) {

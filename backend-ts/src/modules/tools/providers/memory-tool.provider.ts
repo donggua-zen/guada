@@ -56,7 +56,7 @@ export class MemoryToolProvider implements IToolProvider {
     return this.toolsConfig;
   }
 
-  async execute(request: ToolCallRequest, context?: Record<string, any>): Promise<string> {
+  async execute(request: ToolCallRequest, context?: Record<string, any>, abortSignal?: AbortSignal): Promise<string> {
     return JSON.stringify({ success: true, message: "Memory provider is now auto-syncing." });
   }
 

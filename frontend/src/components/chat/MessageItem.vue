@@ -2,7 +2,7 @@
   <div v-if="!streamingState.isPlaceholder" class="message-item" :class="messageClass" ref="rootRef"
     :data-message-id="message.id">
     <!-- 如果消息内容为空,显示提示信息 -->
-    <div v-if="turns.length === 0" class="message-item__wrapper">
+    <div v-if="turnsCache.length === 0" class="message-item__wrapper">
       <div class="text-gray-400 text-sm italic">消息内容为空(数据异常)</div>
     </div>
     <div v-else class="message-item__wrapper">
@@ -23,23 +23,23 @@
         </div>
       </div>
       <div class="message-item__card">
-        <template v-for="(turn, index) in turns" :key="turn.id">
+        <template v-for="(turn, index) in turnsCache" :key="turn.id">
           <!-- 使用拆分后的思考框组件 -->
           <MessageThinkingSection v-if="turn.reasoningContent" :reasoning-content="turn.reasoningContent"
             :is-thinking="turn.state?.isThinking || false" :is-streaming="turn.state?.isStreaming || false"
             :thinking-duration-ms="turn.thinkingDurationMs ?? turn.metadata?.thinkingDurationMs"
-            :meta-data="turn.metadata" @click="handleThinkingClick" @render-complete="handleRenderComplete" />
+            :meta-data="turn.metadata" @click="handleThinkingClick" />
           <template v-if="turn.content">
             <MarkdownContent v-if="isAssistant" class="message-item__text markdown-text" @click="handleClick"
-              @render-complete="handleRenderComplete" :content="turn.content" :debounced="turn.state?.isStreaming" />
+              :content="turn.content" :debounced="turn.state?.isStreaming" />
             <div v-else class="message-item__text">{{ turn.content }}</div>
           </template>
 
 
           <!-- 使用拆分后的工具调用组件 -->
-          <MessageToolCalls v-if="turn.additionalKwargs && turn.additionalKwargs.toolCalls"
-            :tool-calls="turn.additionalKwargs.toolCalls" :tool-responses="turn.additionalKwargs.toolCallsResponse"
-            :is-streaming="turn.state?.isStreaming || false" />
+          <MessageToolCalls v-if="turn.metadata && turn.metadata.toolCalls"
+            :tool-calls="turn.metadata.toolCalls" :tool-responses="turn.metadata.toolCallsResponse"
+            :is-streaming="turn.state?.isStreaming || false" :content-id="turn.id" />
         </template>
         <el-alert v-if="metadata && metadata.finishReason == 'error'" title="API 请求错误" type="error" :closable="false">
           {{ metadata.error }}
@@ -81,8 +81,8 @@
       </div>
       <!--知识库-->
       <div class="knowledge-base flex flex-wrap gap-2 mt-3 ml-auto"
-        v-if="message.role === 'user' && turns.length > 0 && turns[0].metadata?.referencedKbs && turns[0].metadata?.referencedKbs.length > 0">
-        <div v-for="kb, index in turns[0].metadata?.referencedKbs" :key="kb.id">
+        v-if="message.role === 'user' && turnsCache.length > 0 && turnsCache[0].metadata?.referencedKbs && turnsCache[0].metadata?.referencedKbs.length > 0">
+        <div v-for="kb, index in turnsCache[0].metadata?.referencedKbs" :key="kb.id">
           <div
             class="knowledge-base-item rounded-md px-2 py-1 bg-gray-100 dark:bg-gray-800/50 text-gray-500 dark:text-gray-400 text-xs flex items-center gap-1">
             <MenuBookOutlined class="w-4 h-4" />
@@ -159,7 +159,6 @@ const emit = defineEmits<{
   copy: [message: any]
   generate: [message: any]
   regenerate: [message: any]
-  'render-complete': [message: any]
 }>();
 
 // ============================================
@@ -190,20 +189,33 @@ const isAssistant = computed(() => props.message.role === "assistant");
 const messageClass = computed(() =>
   isAssistant.value ? "message-item--assistant" : "message-item--user"
 );
-// const avatarClass = computed(() =>
-//   isAssistant.value ? "assistant-avatar" : "user-avatar"
-// );
 
-const turns = computed(() => {
-  return getCurrentTurns(props.message as any);
-});
+// 缓存 turns 结果，避免每次 contents 变化都重新计算
+const turnsCache = ref(getCurrentTurns(props.message as any));
+
+// 缓存 contentVersions，避免每次 contents 变化都重新计算
+const contentVersionsCache = ref(getContentVersions(props.message as any));
+
+// 使用防抖 watch，减少流式输出时的频繁更新
+const debouncedUpdateCache = useDebounceFn(() => {
+  turnsCache.value = getCurrentTurns(props.message as any);
+  contentVersionsCache.value = getContentVersions(props.message as any);
+}, 50, { maxWait: 100 });
+
+// 监听 contents 和 currentTurnsId 的变化，更新缓存
+watch(
+  () => [props.message.contents?.length, props.message.currentTurnsId],
+  () => {
+    debouncedUpdateCache();
+  }
+);
 
 // const hasThinking = computed(
 //   () => isAssistant.value && getCurrentContent(props.message.contents).reasoningContent
 // );
 
 const metadata = computed(() => {
-  const content = turns.value[turns.value.length - 1];
+  const content = turnsCache.value[turnsCache.value.length - 1];
   // 确保返回一个对象，即使 metadata 为 null/undefined
   return content?.metadata || {};
 });
@@ -227,7 +239,7 @@ const currentModelName = computed(() => {
 // 模型头像路径
 const modelAvatarPath = computed(() => {
   const modelName = metadata.value?.modelName;
-  if (!modelName) return undefined;
+  if (!modelName) return undefined; 
 
   // 尝试从 modelName 中提取 provider 信息
   // 如果 modelName 包含 "/"，则前半部分可能是 provider
@@ -238,7 +250,7 @@ const modelAvatarPath = computed(() => {
 });
 
 const currentContentTime = computed(() => {
-  const content = turns.value[0];
+  const content = turnsCache.value[0];
   // 如果 turns 为空，返回默认时间
   if (!content) {
     return {
@@ -253,30 +265,20 @@ const currentContentTime = computed(() => {
 });
 
 const tokenUsage = computed(() => {
-  if (!isAssistant.value || !turns.value || turns.value.length === 0) {
+  if (!isAssistant.value || !turnsCache.value || turnsCache.value.length === 0) {
     return null;
   }
 
-  const lastTurn = turns.value[turns.value.length - 1];
+  const lastTurn = turnsCache.value[turnsCache.value.length - 1];
   return lastTurn?.metadata?.usage || null;
 });
 
-const contentVersions = computed(() => {
-  return getContentVersions(props.message as any);
-});
+const contentVersions = computed(() => contentVersionsCache.value);
 
 const currentVersionIndex = computed(() => {
   if (!props.message.currentTurnsId) return 0;
   return contentVersions.value.findIndex(version => version === props.message.currentTurnsId);
 });
-
-const handleRenderComplete = () => {
-  // Markdown 渲染完成后立即触发
-};
-
-
-
-
 
 const handleAction = (action: 'switch' | 'delete' | 'edit' | 'copy' | 'generate' | 'regenerate') => {
   emit(action as any, props.message);

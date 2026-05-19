@@ -7,6 +7,7 @@ import { ToolOrchestrator } from "../tools/tool-orchestrator.service";
 import { ToolContextFactory } from "../tools/tool-context";
 import { IConversationContext } from "./interfaces";
 import { SG_MODELS, SK_MOD_CHAT } from "../../constants/settings.constants";
+import { RequestContext } from "../../common/context/request-context";
 
 /**
  * 合并后的会话设置接口
@@ -168,10 +169,17 @@ export class SessionContextService {
     session: any,
     userMessageId?: string,
   ): Promise<BuildContextResult> {
+    // 检查请求是否已中止
+    RequestContext.checkAborted();
+
     const sessionId = session.id;
     const userId = session.userId;
 
     const model = await this.resolveModel(session);
+    
+    // 再次检查（异步操作后）
+    RequestContext.checkAborted();
+    
     const merged = this.mergeSettings(session);
 
     const features = model?.config?.features || [];
