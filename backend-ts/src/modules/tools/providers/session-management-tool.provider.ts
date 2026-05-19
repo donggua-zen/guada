@@ -48,7 +48,7 @@ export class SessionManagementToolProvider implements IToolProvider {
     return toolsConfig;
   }
 
-  async execute(request: ToolCallRequest, context?: Record<string, any>): Promise<string> {
+  async execute(request: ToolCallRequest, context?: Record<string, any>, abortSignal?: AbortSignal): Promise<string> {
     const sessionId = context?.sessionId;
     if (!sessionId) {
       throw new Error("无法获取会话 ID");

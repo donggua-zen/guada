@@ -12,6 +12,7 @@ import {
   IToolProvider,
   ToolCallRequest,
   ToolProviderMetadata,
+  ToolDisplayInfo,
 } from "../interfaces/tool-provider.interface";
 import { InternalToolDefinition } from "../../llm-core/types/llm.types";
 
@@ -151,7 +152,7 @@ export class KnowledgeBaseToolProvider implements IToolProvider {
     return availableTools;
   }
 
-  async execute(request: ToolCallRequest, context?: Record<string, any>): Promise<string> {
+  async execute(request: ToolCallRequest, context?: Record<string, any>, abortSignal?: AbortSignal): Promise<string> {
     const handlers: Record<
       string,
       (args: any, injectParams?: Record<string, any>) => Promise<string>
@@ -438,6 +439,46 @@ export class KnowledgeBaseToolProvider implements IToolProvider {
 
   async getBriefDescription(context?: Record<string, any>): Promise<string> {
     return "知识库检索与管理工具，支持语义搜索、文件浏览和内容查询。若用户提供了知识库信息，除非明确要求，否则仅限于使用此工具集回答。";
+  }
+
+  /**
+   * 生成知识库工具的展示文案
+   */
+  formatDisplayMessage(toolName: string, args: Record<string, any>, isStreaming: boolean): ToolDisplayInfo {
+    const prefix = isStreaming ? '正在' : '已';
+    
+    let action: string;
+    let toolArgs: string | undefined;
+    
+    switch (toolName) {
+      case 'search':
+        action = `${prefix}搜索知识库`;
+        toolArgs = args.query;
+        break;
+      
+      case 'list_files':
+        action = `${prefix}列出文件`;
+        break;
+      
+      case 'get_chunks':
+        action = `${prefix}获取分块内容`;
+        break;
+      
+      case 'add_document':
+        action = `${prefix}添加文档`;
+        toolArgs = args.file_name || args.file_path;
+        break;
+      
+      default:
+        action = `${prefix}操作知识库`;
+    }
+    
+    return {
+      action,
+      args: toolArgs,
+      toolName: `knowledge_base__${toolName}`,
+      toolType: this.namespace // 使用 namespace 作为 toolType，前端会映射到 BookSearch24Regular
+    };
   }
 
   getMetadata(context?: Record<string, any>): ToolProviderMetadata {

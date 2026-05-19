@@ -60,6 +60,7 @@ interface StreamResponse {
 
 export function useStreamResponse(sessionStore: any, apiService: any) {
   const { toast } = usePopup()
+  
   // 流式响应状态
   const streamingState = reactive<StreamingState>({
     isStreaming: false,
@@ -175,13 +176,13 @@ export function useStreamResponse(sessionStore: any, apiService: any) {
   /**
    * 处理工具调用（增量更新）
    */
-  function handleToolCall(content: MessageContent, toolCalls: any[]): void {
-    // 初始化 additionalKwargs
-    if (!content.additionalKwargs) {
-      content.additionalKwargs = {}
+  function handleToolCall(content: MessageContent, toolCalls: any[], displayMessages?: any[]): void {
+    // 初始化 metadata
+    if (!content.metadata) {
+      content.metadata = {}
     }
-    if (!content.additionalKwargs.toolCalls) {
-      content.additionalKwargs.toolCalls = []
+    if (!content.metadata.toolCalls) {
+      content.metadata.toolCalls = []
     }
 
     // 累加增量的 toolCalls
@@ -189,23 +190,48 @@ export function useStreamResponse(sessionStore: any, apiService: any) {
       const index = toolCall.index
 
       // 查找是否已存在该索引的工具调用
-      let existingToolCall = content.additionalKwargs.toolCalls.find(
+      let existingToolCall = content.metadata.toolCalls.find(
         (tc: any) => tc.index === index
       )
 
       if (!existingToolCall) {
         // 如果是新的工具调用，添加到列表
-        content.additionalKwargs.toolCalls.push({
+        // 需要找到 toolCall 在 toolCalls 数组中的局部索引
+        const localIndex = toolCalls.findIndex(tc => tc.index === index)
+        const displayMessage = displayMessages?.[localIndex] || null
+
+        content.metadata.toolCalls.push({
           id: toolCall.id,
           index: toolCall.index,
           type: toolCall.type,
           name: toolCall.name,
-          arguments: toolCall.arguments || ''
+          arguments: toolCall.arguments || '',
+          metadata: {
+            displayMessage: displayMessage  // 存储结构化的展示信息到 metadata
+          }
         })
       } else {
         // 如果已存在，累加参数字符串
         if (toolCall.arguments !== null && toolCall.arguments !== undefined) {
           existingToolCall.arguments += toolCall.arguments
+        }
+        // 更新展示文案（如果提供）
+        if (displayMessages?.[index]) {
+          // 确保 metadata 存在
+          if (!existingToolCall.metadata) {
+            existingToolCall.metadata = {}
+          }
+          existingToolCall.metadata.displayMessage = displayMessages[index]
+        } else if (displayMessages) {
+          // displayMessages 数组可能只包含当前 chunk 中的工具
+          // 需要找到 toolCall 在 toolCalls 数组中的局部索引
+          const localIndex = toolCalls.findIndex(tc => tc.index === index)
+          if (localIndex !== -1 && displayMessages[localIndex]) {
+            if (!existingToolCall.metadata) {
+              existingToolCall.metadata = {}
+            }
+            existingToolCall.metadata.displayMessage = displayMessages[localIndex]
+          }
         }
       }
     }
@@ -214,11 +240,24 @@ export function useStreamResponse(sessionStore: any, apiService: any) {
   /**
    * 处理工具调用响应
    */
-  function handleToolCallsResponse(content: MessageContent, toolCallsResponse: any[]): void {
-    if (!content.additionalKwargs) {
-      content.additionalKwargs = {}
+  function handleToolCallsResponse(content: MessageContent, toolCallsResponse: any[], displayMessages?: any[]): void {
+    if (!content.metadata) {
+      content.metadata = {}
     }
-    content.additionalKwargs.toolCallsResponse = toolCallsResponse
+    content.metadata.toolCallsResponse = toolCallsResponse
+
+    // 更新展示文案为完成状态
+    if (displayMessages && content.metadata.toolCalls) {
+      for (let i = 0; i < content.metadata.toolCalls.length; i++) {
+        if (displayMessages[i]) {
+          // 确保 metadata 存在
+          if (!content.metadata.toolCalls[i].metadata) {
+            content.metadata.toolCalls[i].metadata = {}
+          }
+          content.metadata.toolCalls[i].metadata.displayMessage = displayMessages[i]
+        }
+      }
+    }
   }
 
   /**
@@ -404,13 +443,13 @@ export function useStreamResponse(sessionStore: any, apiService: any) {
 
         // 处理工具调用（增量更新）
         if (response.type === 'tool_call') {
-          handleToolCall(message!.contents[contentIndex], response.toolCalls)  // 驼峰式
+          handleToolCall(message!.contents[contentIndex], response.toolCalls, response.displayMessages)  // 驼峰式
           continue
         }
 
         // 处理工具调用结果（一次性接收）
         if (response.type === 'tool_calls_response') {
-          handleToolCallsResponse(message!.contents[contentIndex], response.toolCallsResponse)  // 驼峰式
+          handleToolCallsResponse(message!.contents[contentIndex], response.toolCallsResponse, response.displayMessages)  // 驼峰式
           continue
         }
 
