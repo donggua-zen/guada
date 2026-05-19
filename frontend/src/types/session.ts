@@ -72,6 +72,7 @@ export interface Session {
     botId?: string            // Bot 实例ID
     platform?: string         // 来源平台: 'qq', 'wechat'
     externalId?: string       // 外部会话标识,格式: "platform:type:nativeId"
+    workspacePath?: string | null  // 自定义工作目录路径
     // ==================================
 }
 

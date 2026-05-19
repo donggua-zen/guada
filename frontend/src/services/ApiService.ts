@@ -267,8 +267,11 @@ class ApiService implements IApiService {
     return await this._request('/sessions', { method: 'POST', data })
   }
 
-  async deleteSession(sessionId: string): Promise<{ success: boolean }> {
-    return await this._request(`/sessions/${sessionId}`, { method: 'DELETE' })
+  async deleteSession(sessionId: string, deleteWorkspace: boolean = false): Promise<{ success: boolean }> {
+    const url = deleteWorkspace 
+      ? `/sessions/${sessionId}?deleteWorkspace=true` 
+      : `/sessions/${sessionId}`;
+    return await this._request(url, { method: 'DELETE' });
   }
 
   async fetchSession(sessionId: string): Promise<Session> {
@@ -389,6 +392,16 @@ class ApiService implements IApiService {
     mimeType: string;
   }> {
     return await this._request(`/sessions/${sessionId}/workspace/file?path=${encodeURIComponent(filePath)}`)
+  }
+
+  /**
+   * 更新会话的工作目录路径
+   */
+  async updateSessionWorkspacePath(sessionId: string, workspacePath: string | null): Promise<{ success: boolean }> {
+    return await this._request(`/sessions/${sessionId}/workspace-path`, {
+      method: 'PUT',
+      data: { workspacePath }
+    })
   }
 
   // ========== 消息管理 ==========

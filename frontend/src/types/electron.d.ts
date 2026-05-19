@@ -18,6 +18,8 @@ export interface ElectronAPI {
   toggleDevTools: () => void
   openUserDataFolder: () => void
   openInstallFolder: () => void
+  openFolder: (folderPath: string) => Promise<{ success: boolean }>
+  selectFolder: () => Promise<string | null>
   
   // 窗口管理（新 API - 浏览器自动化窗口）
   createBrowserWindow: (url?: string, metadata?: Record<string, any>) => Promise<{ success: boolean; window?: any }>

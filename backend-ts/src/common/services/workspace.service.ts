@@ -48,17 +48,65 @@ export class WorkspaceService {
   }
 
   /**
-   * 异步清理会话工作目录
+   * 为会话生成默认工作目录路径（不创建目录）
+   * @param sessionId 会话 ID
+   * @returns 默认工作目录的绝对路径
+   */
+  getDefaultWorkspaceDir(sessionId: string): string {
+    const sessionDir = path.resolve(this.baseDir, sessionId);
+    const resolvedBaseDir = path.resolve(this.baseDir);
+
+    // 路径安全检查：防止路径遍历攻击
+    if (!sessionDir.startsWith(resolvedBaseDir)) {
+      throw new Error(`Invalid session ID: Path traversal detected for '${sessionId}'`);
+    }
+
+    return sessionDir;
+  }
+
+  /**
+   * 确保目录存在（如果不存在则创建）
+   * @param dirPath 目录路径
+   */
+  async ensureDirectoryExists(dirPath: string): Promise<void> {
+    if (!fs.existsSync(dirPath)) {
+      try {
+        fs.mkdirSync(dirPath, { recursive: true });
+        this.logger.debug(`Created directory: ${dirPath}`);
+      } catch (error: any) {
+        this.logger.error(`Failed to create directory ${dirPath}: ${error.message}`);
+        throw new Error(`无法创建目录：${error.message}`);
+      }
+    }
+  }
+
+  /**
+   * 验证自定义工作目录路径的安全性
+   * @param customPath 自定义路径
+   */
+  async validateCustomWorkspacePath(customPath: string): Promise<void> {
+    // 1. 检查路径是否为绝对路径
+    if (!path.isAbsolute(customPath)) {
+      throw new Error('自定义工作目录必须是绝对路径');
+    }
+    
+    // TODO: 后期实现更安全的限制方法（如沙箱、权限控制等）
+    // 当前暂时取消所有限制，允许用户指定任意绝对路径
+  }
+
+  /**
+   * 清理会话的默认工作目录
+   * 注意：只会删除默认工作目录（baseDir/sessionId），不会删除自定义工作目录
    * @param sessionId 会话 ID
    */
-  async cleanupWorkspace(sessionId: string): Promise<void> {
-    const sessionDir = this.getWorkspaceDir(sessionId);
-    if (fs.existsSync(sessionDir)) {
+  async cleanupDefaultWorkspace(sessionId: string): Promise<void> {
+    const defaultWorkspaceDir = this.getDefaultWorkspaceDir(sessionId);
+    if (fs.existsSync(defaultWorkspaceDir)) {
       try {
-        await fs.promises.rm(sessionDir, { recursive: true, force: true });
-        this.logger.log(`Cleaned up workspace for session: ${sessionId}`);
+        await fs.promises.rm(defaultWorkspaceDir, { recursive: true, force: true });
+        this.logger.log(`Cleaned up default workspace for session: ${sessionId}`);
       } catch (error: any) {
-        this.logger.error(`Failed to cleanup workspace for session ${sessionId}: ${error.message}`);
+        this.logger.error(`Failed to cleanup default workspace for session ${sessionId}: ${error.message}`);
       }
     }
   }
@@ -92,35 +140,21 @@ export class WorkspaceService {
   }
 
   /**
-   * 检查路径是否为安全写入路径（需要提供 sessionId）
+   * 检查路径是否为安全写入路径
    * @param targetPath 要检查的目标路径
-   * @param sessionId 会话 ID（必填）
+   * @param extraSafePaths 额外允许的安全路径数组（如工作目录）
    * @returns 是否允许写入
    */
-  isSafeWritePath(targetPath: string, sessionId?: string): boolean {
-    if (!sessionId) {
-      return false;
-    }
-
+  isSafeWritePath(targetPath: string, extraSafePaths: string[] = []): boolean {
     const resolvedTarget = path.resolve(targetPath);
     
-    // 获取会话工作目录
-    try {
-      const sessionWorkspaceDir = this.getWorkspaceDir(sessionId);
-      const resolvedSessionDir = path.resolve(sessionWorkspaceDir);
-      
-      // 检查目标路径是否在会话工作目录之下
-      if (resolvedTarget.startsWith(resolvedSessionDir + path.sep) || resolvedTarget === resolvedSessionDir) {
-        return true;
-      }
-    } catch (error) {
-      // 如果获取会话目录失败，返回 false
-      return false;
-    }
+    // 合并系统注册的安全路径和额外传入的安全路径
+    const allSafePaths = [...this.safeWritePaths, ...extraSafePaths];
     
-    // 检查目标路径是否在其他已注册的安全路径之下
-    for (const safePath of this.safeWritePaths) {
-      if (resolvedTarget.startsWith(safePath + path.sep) || resolvedTarget === safePath) {
+    // 检查目标路径是否在任何安全路径之下
+    for (const safePath of allSafePaths) {
+      const resolvedSafePath = path.resolve(safePath);
+      if (resolvedTarget.startsWith(resolvedSafePath + path.sep) || resolvedTarget === resolvedSafePath) {
         return true;
       }
     }
@@ -129,13 +163,13 @@ export class WorkspaceService {
   }
 
   /**
-   * 验证写入路径是否安全（需要提供 sessionId）
+   * 验证写入路径是否安全
    * @param targetPath 目标写入路径
-   * @param sessionId 会话 ID（必填）
+   * @param extraSafePaths 额外允许的安全路径数组（如工作目录）
    * @throws Error 如果路径不安全
    */
-  validateWritePath(targetPath: string, sessionId?: string): void {
-    if (!this.isSafeWritePath(targetPath, sessionId)) {
+  validateWritePath(targetPath: string, extraSafePaths: string[] = []): void {
+    if (!this.isSafeWritePath(targetPath, extraSafePaths)) {
       throw new Error(
         `不允许写入该路径: ${targetPath}。只能写入当前会话的工作目录或已注册的安全路径。`
       );
@@ -148,23 +182,23 @@ export class WorkspaceService {
    * @param sessionId 会话 ID（可选）
    * @returns 解析后的绝对路径
    */
-  resolveFilePath(filePath: string, sessionId?: string): string {
+  /**
+   * 解析文件路径
+   * 
+   * 将相对路径解析为绝对路径。如果是绝对路径则直接返回。
+   * 相对路径基于提供的工作目录解析。
+   * 
+   * @param filePath 文件路径（相对或绝对）
+   * @param workspaceDir 工作目录路径（必选）
+   * @returns 解析后的绝对路径
+   */
+  resolveFilePath(filePath: string, workspaceDir: string): string {
     if (path.isAbsolute(filePath)) {
       return path.normalize(filePath);
     }
 
-    // 如果存在 session_id，则相对于会话工作目录解析
-    if (sessionId) {
-      try {
-        const workspaceDir = this.getWorkspaceDir(sessionId);
-        return path.join(workspaceDir, filePath);
-      } catch (error: any) {
-        this.logger.warn(`Failed to resolve path for session ${sessionId}: ${error.message}`);
-      }
-    }
-
-    // 否则使用系统默认解析（相对于进程启动目录）
-    return path.resolve(filePath);
+    // 基于工作目录解析相对路径
+    return path.join(workspaceDir, filePath);
   }
 
   /**

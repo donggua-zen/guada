@@ -44,14 +44,10 @@ export class SkillScriptExecutor {
           return;
       }
 
-      // 如果上下文中包含 sessionId，则设置当前工作目录为会话专属目录
+      // 如果上下文中包含 workspacePath，则设置当前工作目录
       let cwd: string | undefined;
-      if (context?.sessionId) {
-        try {
-          cwd = this.workspaceService.getWorkspaceDir(context.sessionId);
-        } catch (error: any) {
-          this.logger.warn(`Failed to set CWD for session ${context.sessionId}: ${error.message}`);
-        }
+      if (context?.workspacePath) {
+        cwd = context.workspacePath;
       }
 
       const child = spawn(command, args, {

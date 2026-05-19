@@ -5,9 +5,11 @@ import { SettingsStorage } from "../../common/utils/settings-storage.util";
 import { ConversationContextFactory } from "./conversation-context.factory";
 import { ToolOrchestrator } from "../tools/tool-orchestrator.service";
 import { ToolContextFactory } from "../tools/tool-context";
+import { WorkspaceService } from "../../common/services/workspace.service";
 import { IConversationContext } from "./interfaces";
 import { SG_MODELS, SK_MOD_CHAT } from "../../constants/settings.constants";
 import { RequestContext } from "../../common/context/request-context";
+import * as path from 'path';
 
 /**
  * 合并后的会话设置接口
@@ -66,6 +68,7 @@ export class SessionContextService {
     private toolContextFactory: ToolContextFactory,
     private modelRepository: ModelRepository,
     private settingsStorage: SettingsStorage,
+    private workspaceService: WorkspaceService,
   ) { }
 
   /**
@@ -176,10 +179,10 @@ export class SessionContextService {
     const userId = session.userId;
 
     const model = await this.resolveModel(session);
-    
+
     // 再次检查（异步操作后）
     RequestContext.checkAborted();
-    
+
     const merged = this.mergeSettings(session);
 
     const features = model?.config?.features || [];
@@ -191,10 +194,32 @@ export class SessionContextService {
     let toolContext: any;
 
     if (supportsTools) {
+      // 确定工作路径
+      let workspacePath: string;
+      if ((session as any).workspacePath) {
+        // 使用自定义路径
+        workspacePath = path.resolve((session as any).workspacePath);
+        // 验证路径安全性
+        await this.workspaceService.validateCustomWorkspacePath(workspacePath);
+      } else {
+        // 使用默认路径
+        workspacePath = this.workspaceService.getDefaultWorkspaceDir(sessionId);
+      }
+
+      // 确保目录存在
+      await this.workspaceService.ensureDirectoryExists(workspacePath);
+
+      // 构建注入参数
+      const injectParams = {
+        sessionId,
+        userId,
+        sessionType: session.sessionType || 'web',
+        workspacePath,
+      };
+
       // 创建工具上下文
-      const sessionType = session.sessionType || 'web';
       toolContext = this.toolContextFactory.createContext(
-        sessionId, userId, sessionType, merged.tools, merged.mcpServers, [],
+        injectParams, merged.tools, merged.mcpServers, [],
       );
 
       // 获取工具提示词（用于构建 systemPrompt）
@@ -207,7 +232,7 @@ export class SessionContextService {
     ].filter(Boolean).join("\n");
 
     const effectiveContextWindow = this.calcEffectiveContextWindow(model, merged.memory);
-    
+
     const context = await this.conversationContextFactory.create(sessionId, userId);
     const thinkingEffort = supportsThinking ? (merged.thinkingEffort || 'off') : undefined;
     await context.initialize({

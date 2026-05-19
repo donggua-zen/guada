@@ -22,6 +22,7 @@ model Session {
   botId         String?               @map("bot_id")
   platform      String?
   externalId    String?               @map("external_id")
+  workspacePath String?               @map("workspace_path")
   memories      Memory[]
   messages      Message[]
   // 注意：使用 NoAction 避免删除 Model 时自动置空 modelId
