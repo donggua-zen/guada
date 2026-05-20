@@ -319,9 +319,7 @@ export class QQBot extends EventEmitter {
       });
 
       this.ws.on('close', (code: number, reason: string) => {
-        // 发射关闭事件,由 Adapter 层记录日志
-        this.emit('ws_close', code, reason);
-        this.handleReconnect(code);
+        this.handleReconnect(code, reason);
       });
 
       this.ws.on('error', (error: Error) => {
@@ -512,11 +510,11 @@ export class QQBot extends EventEmitter {
 
   /**
    * 处理WebSocket断开
-   * 
+   *
    * 注意: 内部重连已禁用(由 BotInstanceManager 统一管理)
    * 这里只负责: 清理资源 + 发射事件通知上层
    */
-  private handleReconnect(code: number): void {
+  private handleReconnect(code: number, reason?: string): void {
     // 清除心跳
     if (this.heartbeatInterval) {
       clearInterval(this.heartbeatInterval);
@@ -524,7 +522,7 @@ export class QQBot extends EventEmitter {
     }
 
     // 不再在 SDK 内部重连,只发射 close 事件让上层处理
-    this.emit('ws_close', code);
+    this.emit('ws_close', code, reason);
   }
 
   /**
