@@ -1,24 +1,23 @@
-import { Injectable, Logger, forwardRef, Inject } from '@nestjs/common';
-import { Subscription } from 'rxjs';
+import { Injectable, Logger } from '@nestjs/common';
 import { IBotPlatform, BotMessage, BotConfig } from '../interfaces/bot-platform.interface';
 import { AgentEngine } from '../../chat/agent-engine.service';
 import { SessionMapperService } from './session-mapper.service';
-import { BotInstanceManager } from './bot-instance-manager.service';
 import { buildExternalId } from '../utils/external-id';
 
 /**
  * 机器人消息编排器
  *
- * 负责:
- * 1. 监听外部平台消息
+ * 职责:
+ * 1. 接收外部传入的消息(通过 enqueueMessage)
  * 2. 创建/获取会话
  * 3. 调用 AgentEngine 生成回复
  * 4. 发送回复到外部平台
+ * 
+ * 注意: 本服务不直接订阅适配器事件,由 BotInstanceManager 负责监听并转发
  */
 @Injectable()
 export class BotOrchestrator {
   private readonly logger = new Logger(BotOrchestrator.name);
-  private activeSubscriptions: Map<string, Subscription> = new Map();
   private messageQueues: Map<string, { messages: BotMessage[]; timer?: NodeJS.Timeout }> = new Map();
   private processingSessions: Set<string> = new Set();
   private readonly MERGE_WINDOW_MS = 1500; // 1.5秒合并窗口
@@ -27,88 +26,22 @@ export class BotOrchestrator {
   constructor(
     private agentEngine: AgentEngine,
     private sessionMapper: SessionMapperService,
-    @Inject(forwardRef(() => BotInstanceManager))
-    private instanceManager: BotInstanceManager,
   ) { }
 
   /**
-   * 启动机器人实例的消息监听
+   * 将消息加入缓冲队列(唯一对外暴露的方法)
+   * 
+   * @param botId 机器人ID
+   * @param message 机器人消息
+   * @param config 机器人配置(由调用者传入,避免反向依赖)
+   * @param adapter 适配器实例(由调用者传入,用于发送回复)
    */
-  async startBotListener(
-    botId: string,
-    adapter: IBotPlatform,
-    config: BotConfig,
-  ): Promise<void> {
-    this.logger.log(`Starting message listener for bot: ${botId}`);
-
-    // 防止重复绑定：如果已存在订阅，先取消
-    const existingSubscription = this.activeSubscriptions.get(botId);
-    if (existingSubscription) {
-      this.logger.warn(`Existing subscription found for bot ${botId}, unsubscribing first`);
-      existingSubscription.unsubscribe();
-      this.activeSubscriptions.delete(botId);
-    }
-
-    // 同样处理断开连接订阅
-    const existingDisconnectKey = `${botId}:disconnect`;
-    const existingDisconnectSubscription = this.activeSubscriptions.get(existingDisconnectKey);
-    if (existingDisconnectSubscription) {
-      existingDisconnectSubscription.unsubscribe();
-      this.activeSubscriptions.delete(existingDisconnectKey);
-    }
-
-    // 监听消息流
-    const messageSubscription = adapter.onMessage().subscribe({
-      next: async (message: BotMessage) => {
-        await this.enqueueMessage(botId, message);
-      },
-      error: (error: Error) => {
-        this.logger.error(
-          `Message stream error for bot ${botId}: ${error.message}`,
-        );
-      },
-    });
-
-    this.activeSubscriptions.set(botId, messageSubscription);
-
-    // 监听断开连接事件（如果适配器支持）
-    if (adapter.onDisconnect) {
-      const disconnectSubscription = adapter.onDisconnect().subscribe({
-        next: async (event) => {
-          this.logger.warn(
-            `Bot ${botId} disconnected with code: ${event.code}${event.reason ? ` - ${event.reason}` : ''}, triggering reconnect...`,
-          );
-
-          // 通过 instanceManager 触发重连
-          try {
-            await this.instanceManager.handleBotDisconnect(botId, event.code);
-          } catch (error: any) {
-            this.logger.error(`Failed to handle bot disconnect for ${botId}: ${error.message}`);
-          }
-        },
-        error: (error: Error) => {
-          this.logger.error(`Disconnect stream error for bot ${botId}: ${error.message}`);
-        },
-      });
-
-      // 将断开连接订阅也加入管理（使用特殊的 key）
-      this.activeSubscriptions.set(`${botId}:disconnect`, disconnectSubscription);
-    }
-  }
-
-  /**
-   * 将消息加入缓冲队列
-   */
-  private async enqueueMessage(
+  async enqueueMessage(
     botId: string,
     message: BotMessage,
+    config: BotConfig,
+    adapter: IBotPlatform,
   ): Promise<void> {
-    // 从内存获取最新配置
-    const config = this.instanceManager.getBotConfig(botId);
-    if (!config) {
-      this.logger.error(`Bot config not found: ${botId}`);
-      return;
-    }
 
     // 使用 externalId 作为队列 Key，确保同一会话的消息被合并
     const platform = config.platform || 'qq';
@@ -141,7 +74,7 @@ export class BotOrchestrator {
     // 如果会话空闲，设置合并窗口
     if (!queue.timer) {
       queue.timer = setTimeout(async () => {
-        await this.flushQueue(queueKey, botId, config);
+        await this.flushQueue(queueKey, botId, config, adapter);
       }, this.MERGE_WINDOW_MS);
     }
   }
@@ -149,7 +82,12 @@ export class BotOrchestrator {
   /**
    * 刷新队列，合并并处理消息
    */
-  private async flushQueue(queueKey: string, botId: string, config: BotConfig): Promise<void> {
+  private async flushQueue(
+    queueKey: string, 
+    botId: string, 
+    config: BotConfig,
+    adapter: IBotPlatform,
+  ): Promise<void> {
     const queue = this.messageQueues.get(queueKey);
     if (!queue || queue.messages.length === 0) return;
 
@@ -178,7 +116,7 @@ export class BotOrchestrator {
         messageId: firstMessage.messageId, // 使用第一条消息的 ID 作为引用
       };
 
-      await this.handleIncomingMessage(botId, mergedMessage);
+      await this.handleIncomingMessage(botId, mergedMessage, config, adapter);
     } catch (error: any) {
       this.logger.error(`Failed to process merged messages: ${error.message}`);
     } finally {
@@ -186,33 +124,11 @@ export class BotOrchestrator {
       this.processingSessions.delete(queueKey);
       if (queue.messages.length > 0) {
         // 如果在处理期间又有新消息进来，立即触发下一轮
-        this.flushQueue(queueKey, botId, config);
+        this.flushQueue(queueKey, botId, config, adapter);
       } else {
         this.messageQueues.delete(queueKey);
       }
     }
-  }
-
-  /**
-   * 停止机器人实例的消息监听
-   */
-  stopBotListener(botId: string): void {
-    // 取消消息订阅
-    const messageSubscription = this.activeSubscriptions.get(botId);
-    if (messageSubscription) {
-      messageSubscription.unsubscribe();
-      this.activeSubscriptions.delete(botId);
-    }
-
-    // 取消断开连接订阅
-    const disconnectKey = `${botId}:disconnect`;
-    const disconnectSubscription = this.activeSubscriptions.get(disconnectKey);
-    if (disconnectSubscription) {
-      disconnectSubscription.unsubscribe();
-      this.activeSubscriptions.delete(disconnectKey);
-    }
-
-    this.logger.log(`Stopped all listeners for bot: ${botId}`);
   }
 
   /**
@@ -221,15 +137,10 @@ export class BotOrchestrator {
   private async handleIncomingMessage(
     botId: string,
     message: BotMessage,
+    config: BotConfig,
+    adapter: IBotPlatform,
   ): Promise<void> {
     try {
-      // 从内存获取最新配置
-      const config = this.instanceManager.getBotConfig(botId);
-      if (!config) {
-        this.logger.error(`Bot config not found: ${botId}`);
-        return;
-      }
-
       this.logger.log(
         `Received message from ${message.senderId}: ${message.content}`,
       );
@@ -247,56 +158,47 @@ export class BotOrchestrator {
       // 2. 组装 externalId(由调用者决定隔离策略)
       const externalId = buildExternalId(platform, type, nativeId);
 
-      // 3. 从 BotInstanceManager 获取最新配置（内存中已同步更新）
-      const latestConfig = this.instanceManager.getBotConfig(botId);
-      
-      if (!latestConfig || !latestConfig.defaultCharacterId) {
+      // 3. 验证配置
+      if (!config.defaultCharacterId) {
         this.logger.error(`Bot config or defaultCharacterId not found: ${botId}`);
         return;
       }
 
-      // 4. 获取或创建会话（使用最新配置）
+      // 4. 获取或创建会话
       const session = await this.sessionMapper.getOrCreateBotSession(
         botId,
         externalId,
         platform,
-        latestConfig.defaultCharacterId,
-        latestConfig.defaultModelId,  // 传递 defaultModelId，避免内部重复查询
+        config.defaultCharacterId,
+        config.defaultModelId,  // 传递 defaultModelId，避免内部重复查询
       );
 
       this.logger.log(
         `Using session: ${session.id}, externalId: ${session.externalId}`
       );
 
-      // 5. 调用 AgentEngine 生成回复（流式）
-      const adapter = this.instanceManager.getAdapter(botId);
-      if (!adapter) {
-        this.logger.error('Adapter not found');
-        return;
-      }
-
       const capabilities = adapter.getCapabilities();
 
-      // 1. 创建用户消息记录（使用最新配置）
+      // 5. 创建用户消息记录
       this.logger.log(
-        `Creating user message with knowledgeBaseIds: ${JSON.stringify(latestConfig.knowledgeBaseIds)}`
+        `Creating user message with knowledgeBaseIds: ${JSON.stringify(config.knowledgeBaseIds)}`
       );
 
       const userMessage = await this.sessionMapper.createUserMessage(
         session.id,
         message.content,
-        latestConfig.knowledgeBaseIds,
+        config.knowledgeBaseIds,
         message.attachments,  // 传递附件信息
       );
 
-      // 2. 调用 AgentEngine 获取流式迭代器（直接传入 session 对象，避免重复查询）
+      // 6. 调用 AgentEngine 获取流式迭代器（直接传入 session 对象，避免重复查询）
       const iterator = this.agentEngine.completions(
         session,
         userMessage.id,
         'overwrite',
       );
 
-      // 3. 根据平台能力选择回复方式
+      // 7. 根据平台能力选择回复方式
       if (capabilities.supportsStreaming && adapter.sendStreamReply) {
         // 支持流式：边生成边发送
         await this.handleStreamingReply(adapter, message, iterator);
@@ -308,10 +210,8 @@ export class BotOrchestrator {
       this.logger.error(`Failed to process message: ${error.message}`, error.stack);
 
       // 向用户发送原始错误消息
-      const adapter = this.instanceManager.getAdapter(botId);
-      if (adapter) {
-        try {
-          const capabilities = adapter.getCapabilities();
+      try {
+        const capabilities = adapter.getCapabilities();
 
           // 优先使用流式回复（如果平台支持）
           if (capabilities.supportsStreaming && adapter.sendStreamReply) {
@@ -332,10 +232,9 @@ export class BotOrchestrator {
             });
           }
 
-          this.logger.log(`Sent error message to ${message.senderId}`);
-        } catch (sendError: any) {
-          this.logger.error(`Failed to send error message: ${sendError.message}`);
-        }
+        this.logger.log(`Sent error message to ${message.senderId}`);
+      } catch (sendError: any) {
+        this.logger.error(`Failed to send error message: ${sendError.message}`);
       }
     }
   }
@@ -428,7 +327,7 @@ export class BotOrchestrator {
 
       this.logger.log(`Replied to ${message.senderId}`);
     } catch (error: any) {
-      this.logger.error(`Failed to send normal reply: ${error.message}`);
+      this.logger.error(`Failed to send normal reply: ${error.message}`); 
       throw error;
     }
   }
@@ -441,13 +340,38 @@ export class BotOrchestrator {
   }
 
   /**
-   * 清理所有订阅
+   * 清理指定机器人的消息队列(在机器人停止时调用)
+   */
+  cleanupBot(botId: string): void {
+    const keysToDelete: string[] = [];
+    this.messageQueues.forEach((queue, key) => {
+      if (key.startsWith(`${botId}:`)) {
+        keysToDelete.push(key);
+        if (queue.timer) {
+          clearTimeout(queue.timer);
+        }
+      }
+    });
+
+    keysToDelete.forEach(key => {
+      this.messageQueues.delete(key);
+      this.processingSessions.delete(key);
+    });
+
+    this.logger.log(`Cleaned up message queues for bot: ${botId}`);
+  }
+
+  /**
+   * 清理所有队列
    */
   cleanup(): void {
-    this.activeSubscriptions.forEach((sub, botId) => {
-      sub.unsubscribe();
-      this.logger.log(`Cleaned up subscription for bot: ${botId}`);
+    this.messageQueues.forEach((queue) => {
+      if (queue.timer) {
+        clearTimeout(queue.timer);
+      }
     });
-    this.activeSubscriptions.clear();
+    this.messageQueues.clear();
+    this.processingSessions.clear();
+    this.logger.log('Bot orchestrator cleaned up');
   }
 }

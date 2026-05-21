@@ -1,17 +1,17 @@
 import { Logger } from '@nestjs/common';
-import { Observable, Subject } from 'rxjs';
 import {
-  IBotPlatform,
   BotConfig,
   BotMessage,
   BotResponse,
   BotStatus,
+  BotDisconnectEvent,
   PlatformCapabilities,
 } from '../interfaces/bot-platform.interface';
 import { PlatformUtilsService } from '../services/platform-utils.service';
 
 // 导入飞书官方 SDK
 import * as Lark from '@larksuiteoapi/node-sdk';
+import { BaseBotAdapter } from './base-bot.adapter';
 
 /**
  * 飞书机器人适配器
@@ -21,18 +21,15 @@ import * as Lark from '@larksuiteoapi/node-sdk';
  * 
  * 注意: 不负责重连逻辑,重连由 BotInstanceManager 统一管理
  */
-export class LarkBotAdapter implements IBotPlatform {
+export class LarkBotAdapter extends BaseBotAdapter {
   private readonly logger = new Logger(LarkBotAdapter.name);
   private client: any; // Lark SDK Client 实例（用于 API 调用）
   private wsClient: any; // Lark SDK WSClient 实例（用于 WebSocket 长连接）
-  private messageSubject: Subject<BotMessage>;
-  private status: BotStatus = BotStatus.STOPPED;
-  private config: BotConfig | null = null;
 
   constructor(
     private platformUtils: PlatformUtilsService,
   ) {
-    this.messageSubject = new Subject<BotMessage>();
+    super();
   }
 
   getPlatform(): string {
@@ -45,11 +42,12 @@ export class LarkBotAdapter implements IBotPlatform {
       supportsPushMessage: true,      // 支持主动推送
       supportsTemplateCard: false,    // 暂不支持模板卡片
       supportsMultimedia: true,       // 支持多媒体消息
+      handlesReconnectInternally: false, // 需要外部 BotInstanceManager 统一管理重连
     };
   }
 
-  async initialize(config: BotConfig): Promise<void> {
-    this.logger.log(`Initializing Lark bot: ${config.name}`);
+  async connect(config: BotConfig): Promise<void> {
+    this.logger.log(`Connecting to Lark bot: ${config.name}`);
     this.config = config;
     this.status = BotStatus.CONNECTING;
 
@@ -83,7 +81,7 @@ export class LarkBotAdapter implements IBotPlatform {
         'im.message.receive_v1': async (data: any) => {
           try {
             const botMessage = await this.transformToBotMessage(data);
-            this.messageSubject.next(botMessage);
+            this.emitMessage(botMessage);
           } catch (error: any) {
             this.logger.error(`Error processing message: ${error.message}`);
           }
@@ -99,6 +97,9 @@ export class LarkBotAdapter implements IBotPlatform {
       
       this.logger.log('Lark bot initialized successfully');
       this.status = BotStatus.CONNECTED;
+      
+      // 发射连接成功事件
+      this.emitConnected();
     } catch (error: any) {
       this.logger.error(`Failed to initialize Lark bot: ${error.message}`);
       this.status = BotStatus.ERROR;
@@ -161,13 +162,7 @@ export class LarkBotAdapter implements IBotPlatform {
     }
   }
 
-  onMessage(): Observable<BotMessage> {
-    return this.messageSubject.asObservable();
-  }
 
-  getStatus(): BotStatus {
-    return this.status;
-  }
 
   async shutdown(): Promise<void> {
     this.logger.log(`Shutting down Lark bot: ${this.config?.name}`);
@@ -184,14 +179,14 @@ export class LarkBotAdapter implements IBotPlatform {
     }
 
     this.status = BotStatus.STOPPED;
-    this.messageSubject.complete();
+    this.completeSubjects();
   }
 
   async reconnect(): Promise<void> {
     this.logger.log(`Attempting to reconnect Lark bot...`);
     await this.shutdown();
     if (this.config) {
-      await this.initialize(this.config);
+      await this.connect(this.config);
     }
   }
 
