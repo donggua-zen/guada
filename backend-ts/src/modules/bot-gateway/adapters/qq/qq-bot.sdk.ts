@@ -405,6 +405,7 @@ export class QQBot extends EventEmitter {
    * 开始心跳
    */
   private startHeartbeat(interval: number): void {
+    console.log(`Starting heartbeat with interval ${interval}ms`);
     if (this.heartbeatInterval) {
       clearInterval(this.heartbeatInterval);
     }

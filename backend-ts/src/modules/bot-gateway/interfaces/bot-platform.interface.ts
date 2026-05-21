@@ -135,6 +135,12 @@ export interface PlatformCapabilities {
   supportsTemplateCard: boolean;
   /** 是否支持多媒体消息 */
   supportsMultimedia: boolean;
+  /** 
+   * SDK 是否自行处理重连
+   * - true: SDK 内部有完善的重连机制,外部管理器不应干预
+   * - false: 需要外部 BotInstanceManager 统一管理重连逻辑
+   */
+  handlesReconnectInternally?: boolean;
 }
 
 /**
@@ -166,10 +172,10 @@ export interface IBotPlatform {
   getCapabilities(): PlatformCapabilities;
 
   /**
-   * 初始化机器人(建立连接、注册事件监听器等)
+   * 连接到机器人平台(建立连接、注册事件监听器等)
    * @param config 机器人配置
    */
-  initialize(config: BotConfig): Promise<void>;
+  connect(config: BotConfig): Promise<void>;
 
   /**
    * 发送消息到指定会话
@@ -192,10 +198,24 @@ export interface IBotPlatform {
   onMessage(): Observable<BotMessage>;
 
   /**
-   * 监听断开连接事件(可选)
+   * 监听连接成功事件(必须实现)
+   * 
+   * 注意: 此事件应在业务层面真正连接成功后触发(如认证成功、会话建立),而非仅 WS 连接
+   * 所有适配器必须实现此方法,即使返回空 Observable 也要提供
+   * 
+   * @returns 连接成功事件 observable 流
+   */
+  onConnect(): Observable<void>;
+
+  /**
+   * 监听断开连接事件(必须实现)
+   * 
+   * 所有适配器必须实现此方法,用于通知上层管理器连接状态变化
+   * 即使平台不支持主动断开检测,也应返回一个空的 Observable
+   * 
    * @returns 断开连接事件 observable 流
    */
-  onDisconnect?(): Observable<BotDisconnectEvent>;
+  onDisconnect(): Observable<BotDisconnectEvent>;
 
   /**
    * 获取当前连接状态

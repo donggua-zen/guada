@@ -1,7 +1,5 @@
 import { Logger } from '@nestjs/common';
-import { Observable, Subject } from 'rxjs';
 import {
-  IBotPlatform,
   BotConfig,
   BotMessage,
   BotResponse,
@@ -13,6 +11,7 @@ import { PlatformUtilsService } from '../services/platform-utils.service';
 
 // 导入 Discord.js SDK
 import { Client, GatewayIntentBits, Message, Partials } from 'discord.js';
+import { BaseBotAdapter } from './base-bot.adapter';
 
 /**
  * Discord机器人适配器
@@ -24,19 +23,14 @@ import { Client, GatewayIntentBits, Message, Partials } from 'discord.js';
  * 
  * 注意: 不负责重连逻辑,重连由 BotInstanceManager 统一管理
  */
-export class DiscordBotAdapter implements IBotPlatform {
+export class DiscordBotAdapter extends BaseBotAdapter {
   private readonly logger = new Logger(DiscordBotAdapter.name);
   private client: Client;
-  private messageSubject: Subject<BotMessage>;
-  private disconnectSubject: Subject<BotDisconnectEvent>;
-  private status: BotStatus = BotStatus.STOPPED;
-  private config: BotConfig | null = null;
 
   constructor(
     private platformUtils: PlatformUtilsService,
   ) {
-    this.messageSubject = new Subject<BotMessage>();
-    this.disconnectSubject = new Subject<BotDisconnectEvent>();
+    super();
   }
 
   getPlatform(): string {
@@ -49,11 +43,12 @@ export class DiscordBotAdapter implements IBotPlatform {
       supportsPushMessage: true,      // 支持主动推送
       supportsTemplateCard: false,    // 暂不支持模板卡片
       supportsMultimedia: true,       // 支持多媒体消息
+      handlesReconnectInternally: false, // 需要外部 BotInstanceManager 统一管理重连
     };
   }
 
-  async initialize(config: BotConfig): Promise<void> {
-    this.logger.log(`Initializing Discord bot: ${config.name}`);
+  async connect(config: BotConfig): Promise<void> {
+    this.logger.log(`Connecting to Discord bot: ${config.name}`);
     this.config = config;
     this.status = BotStatus.CONNECTING;
 
@@ -98,7 +93,7 @@ export class DiscordBotAdapter implements IBotPlatform {
           this.logger.log(`Received message from ${message.author.username}: ${message.content.substring(0, 50)}...`);
           
           const botMessage = await this.transformToBotMessage(message);
-          this.messageSubject.next(botMessage);
+          this.emitMessage(botMessage);
         } catch (error: any) {
           this.logger.error(`Error processing message: ${error.message}`);
         }
@@ -110,7 +105,7 @@ export class DiscordBotAdapter implements IBotPlatform {
         this.status = BotStatus.ERROR;
         
         // 发送断开事件
-        this.disconnectSubject.next({
+        this.emitDisconnected({
           code: 1000,
           reason: error.message,
           timestamp: new Date(),
@@ -121,6 +116,8 @@ export class DiscordBotAdapter implements IBotPlatform {
       this.client.once('ready', () => {
         this.logger.log(`Discord bot logged in as ${this.client.user?.tag}`);
         this.status = BotStatus.CONNECTED;
+        // 发射连接成功事件
+        this.emitConnected();
       });
 
       // 注册断开事件
@@ -128,7 +125,7 @@ export class DiscordBotAdapter implements IBotPlatform {
         this.logger.warn('Discord bot disconnected');
         this.status = BotStatus.DISCONNECTED;
         
-        this.disconnectSubject.next({
+        this.emitDisconnected({
           code: 1000,
           reason: 'WebSocket disconnected',
           timestamp: new Date(),
@@ -164,19 +161,10 @@ export class DiscordBotAdapter implements IBotPlatform {
     }
     
     this.status = BotStatus.STOPPED;
+    this.completeSubjects();
   }
 
-  getStatus(): BotStatus {
-    return this.status;
-  }
 
-  onMessage(): Observable<BotMessage> {
-    return this.messageSubject.asObservable();
-  }
-
-  onDisconnect(): Observable<BotDisconnectEvent> {
-    return this.disconnectSubject.asObservable();
-  }
 
   async sendMessage(response: BotResponse): Promise<void> {
     if (!this.client || !this.client.isReady()) {

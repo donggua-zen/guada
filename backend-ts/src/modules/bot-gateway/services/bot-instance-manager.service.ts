@@ -3,9 +3,8 @@ import {
   Logger,
   OnModuleInit,
   OnApplicationShutdown,
-  forwardRef,
-  Inject,
 } from '@nestjs/common';
+import { Subscription } from 'rxjs';
 import {
   IBotPlatform,
   BotConfig,
@@ -35,6 +34,7 @@ export class BotInstanceManager implements OnModuleInit, OnApplicationShutdown {
       config: BotConfig;
       reconnectAttempts: number;
       reconnectTimer?: NodeJS.Timeout;
+      subscriptions: Subscription[]; // 管理该机器人的所有订阅
     }
   > = new Map();
 
@@ -44,7 +44,6 @@ export class BotInstanceManager implements OnModuleInit, OnApplicationShutdown {
   constructor(
     private prisma: PrismaService,
     private adapterFactory: BotAdapterFactory,
-    @Inject(forwardRef(() => BotOrchestrator))
     private orchestrator: BotOrchestrator,
   ) { }
 
@@ -151,30 +150,63 @@ export class BotInstanceManager implements OnModuleInit, OnApplicationShutdown {
       adapter,
       config,
       reconnectAttempts: 0,
+      subscriptions: [], // 初始化订阅数组
     };
     this.botInstances.set(config.id, instance);
 
     try {
-      // 初始化适配器（建立连接）
-      await adapter.initialize(config);
+      // 重要：先订阅所有事件，再建立连接，避免丢失早期事件
 
-      // 初始化成功，启动消息监听
-      await this.orchestrator.startBotListener(config.id, adapter, config);
+      // 1. 监听消息流并转发给 Orchestrator
+      const messageSubscription = adapter.onMessage().subscribe({
+        next: async (message) => {
+          await this.orchestrator.enqueueMessage(config.id, message, config, adapter);
+        },
+        error: (error: Error) => {
+          this.logger.error(
+            `Message stream error for bot ${config.id}: ${error.message}`,
+          );
+        },
+      });
+      instance.subscriptions.push(messageSubscription);
+
+      // 2. 监听断开连接事件（必须实现）
+      const disconnectSubscription = adapter.onDisconnect().subscribe({
+        next: async (event) => {
+          this.logger.warn(
+            `Bot ${config.id} disconnected with code: ${event.code}${event.reason ? ` - ${event.reason}` : ''}, handling disconnect...`,
+          );
+          await this.handleBotDisconnect(config.id, event.code);
+        },
+        error: (error: Error) => {
+          this.logger.error(`Disconnect stream error for bot ${config.id}: ${error.message}`);
+        },
+      });
+      instance.subscriptions.push(disconnectSubscription);
+
+      // 3. 监听连接成功事件（必须实现）
+      const connectSubscription = adapter.onConnect().subscribe({
+        next: async () => {
+          this.logger.log(`Bot ${config.id} connected successfully, resetting reconnect counter`);
+          await this.handleBotConnect(config.id);
+        },
+        error: (error: Error) => {
+          this.logger.error(`Connect stream error for bot ${config.id}: ${error.message}`);
+        },
+      });
+      instance.subscriptions.push(connectSubscription);
+
+      // 4. 最后才建立连接（确保不会丢失任何事件）
+      await adapter.connect(config);
 
       this.logger.log(`Bot started successfully: ${config.id}`);
     } catch (error: any) {
-      // 初始化失败
+      // 初始化失败（通常是配置问题，如 token 错误、appId 无效等）
       this.logger.error(`Failed to initialize bot ${config.id}: ${error.message}`);
 
-      // 检查是否需要重连
-      if (config.reconnectConfig?.enabled) {
-        this.logger.log(`Scheduling reconnect for bot ${config.id}`);
-        this.scheduleReconnect(config.id, config, error.message);
-      } else {
-        // 不重连，清理实例
-        this.logger.log(`Reconnect disabled, removing bot instance ${config.id}`);
-        await this.cleanupBotInstance(config.id, 'reconnect-disabled');
-      }
+      // 初始化失败不调度重连，直接清理实例
+      this.logger.log(`Initialization failed, removing bot instance ${config.id}`);
+      await this.cleanupBotInstance(config.id, 'init-failed');
 
       // 抛出异常，让调用者知道启动失败
       throw error;
@@ -324,15 +356,6 @@ export class BotInstanceManager implements OnModuleInit, OnApplicationShutdown {
       return;
     }
 
-    // 检查是否启用重连
-    if (!config.reconnectConfig?.enabled) {
-      this.logger.log(`Reconnect disabled for bot ${botId}, cleaning up...`);
-      this.cleanupBotInstance(botId, 'reconnect-disabled').catch((err) => {
-        this.logger.error(`Failed to cleanup bot ${botId}: ${err.message}`);
-      });
-      return;
-    }
-
     const maxRetries = config.reconnectConfig.maxRetries || 5;
     const retryInterval = config.reconnectConfig.retryInterval || 5000;
 
@@ -378,31 +401,21 @@ export class BotInstanceManager implements OnModuleInit, OnApplicationShutdown {
 
         await Promise.race([reconnectPromise, timeoutPromise]);
 
-        // 重连成功后重新绑定消息监听
-        await this.orchestrator.startBotListener(botId, instance.adapter, config);
-
-        // 重连成功，重置计数器
-        instance.reconnectAttempts = 0;
-        this.logger.log(`Bot ${botId} reconnected successfully`);
+        // 重连成功，等待 onConnect 事件触发后重置计数器
+        this.logger.log(`Bot ${botId} reconnect initiated successfully, waiting for connection confirmation...`);
       } catch (error: any) {
         this.logger.error(`Reconnection failed for bot ${botId}: ${error.message}`);
 
         // 如果超时，记录错误但不清理实例（由适配器负责状态管理）
         if (error.message.includes('timed out')) {
           this.logger.warn(
-            `Reconnect timed out for bot ${botId}. Adapter should handle cleanup. Will retry...`,
+            `Reconnect timed out for bot ${botId}. Adapter should handle cleanup.`,
           );
         }
 
-        // 检查实例是否还存在(可能在重连过程中被其他操作清理)
-        const currentInstance = this.botInstances.get(botId);
-        if (!currentInstance) {
-          this.logger.error(`Bot instance ${botId} was removed during reconnect, cannot schedule next retry`);
-          return;
-        }
-
-        // 继续调度下一次重连（包括超时情况）
-        this.scheduleReconnect(botId, config, error.message);
+        // 重连失败后不再主动调度，等待下一次断开事件触发新的重连
+        // 这样可以避免递归调度，让每次重连都由实际的断开事件驱动
+        this.logger.log(`Reconnect failed for bot ${botId}, will retry on next disconnect event`);
       }
     }, retryInterval);
   }
@@ -421,11 +434,47 @@ export class BotInstanceManager implements OnModuleInit, OnApplicationShutdown {
     }
 
     // 检查是否启用重连
-    if (config.reconnectConfig?.enabled) {
-      this.logger.log(`Scheduling reconnect for disconnected bot ${botId}`);
-      this.scheduleReconnect(botId, config, `WebSocket closed with code: ${code}`);
-    } else {
-      this.logger.log(`Reconnect disabled for bot ${botId}, not attempting to reconnect`);
+    if (!config.reconnectConfig?.enabled) {
+      this.logger.log(`Reconnect disabled for bot ${botId}, cleaning up...`);
+      this.cleanupBotInstance(botId, 'reconnect-disabled').catch((err) => {
+        this.logger.error(`Failed to cleanup bot ${botId}: ${err.message}`);
+      });
+      return;
+    }
+
+    // 检查适配器是否自行处理重连
+    const adapter = this.getAdapter(botId);
+    if (adapter) {
+      const capabilities = adapter.getCapabilities();
+      if (capabilities.handlesReconnectInternally) {
+        this.logger.log(`Bot ${botId} handles reconnect internally, skipping external reconnect logic`);
+        return;
+      }
+    }
+
+    // 调度重连
+    this.logger.log(`Scheduling reconnect for disconnected bot ${botId}`);
+    this.scheduleReconnect(botId, config, `WebSocket closed with code: ${code}`);
+  }
+
+  /**
+   * 处理机器人连接成功事件（重置重连计数器）
+   */
+  async handleBotConnect(botId: string): Promise<void> {
+    this.logger.log(`Handling bot connect success for ${botId}`);
+
+    const instance = this.botInstances.get(botId);
+    if (!instance) {
+      this.logger.warn(`Bot instance not found for ${botId}, cannot reset reconnect counter`);
+      return;
+    }
+
+    // 重置重连计数器
+    if (instance.reconnectAttempts > 0) {
+      this.logger.log(
+        `Resetting reconnect counter for bot ${botId} from ${instance.reconnectAttempts} to 0`,
+      );
+      instance.reconnectAttempts = 0;
     }
   }
 
@@ -467,6 +516,13 @@ export class BotInstanceManager implements OnModuleInit, OnApplicationShutdown {
       instance.reconnectTimer = undefined;
     }
 
+    // 取消所有订阅
+    instance.subscriptions.forEach(sub => sub.unsubscribe());
+    instance.subscriptions = [];
+
+    // 清理 Orchestrator 中的消息队列
+    this.orchestrator.cleanupBot(botId);
+
     // 关闭适配器连接
     try {
       await instance.adapter.shutdown();
@@ -474,9 +530,6 @@ export class BotInstanceManager implements OnModuleInit, OnApplicationShutdown {
     } catch (error: any) {
       this.logger.error(`Error during bot ${botId} shutdown: ${error.message}`);
     }
-
-    // 取消消息监听订阅
-    this.orchestrator.stopBotListener(botId);
 
     // 从内存中删除实例
     this.botInstances.delete(botId);

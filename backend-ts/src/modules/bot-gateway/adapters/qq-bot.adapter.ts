@@ -1,7 +1,5 @@
 import { Logger } from '@nestjs/common';
-import { Observable, Subject } from 'rxjs';
 import {
-  IBotPlatform,
   BotConfig,
   BotMessage,
   BotResponse,
@@ -13,6 +11,7 @@ import { PlatformUtilsService } from '../services/platform-utils.service';
 
 // 导入自研 QQ SDK
 import { QQBot } from './qq/qq-bot.sdk';
+import { BaseBotAdapter } from './base-bot.adapter';
 
 /**
  * QQ机器人适配器
@@ -24,19 +23,14 @@ import { QQBot } from './qq/qq-bot.sdk';
  * 
  * 注意: 不负责重连逻辑,重连由 BotInstanceManager 统一管理
  */
-export class QQBotAdapter implements IBotPlatform {
+export class QQBotAdapter extends BaseBotAdapter {
   private readonly logger = new Logger(QQBotAdapter.name);
   private client: any;
-  private messageSubject: Subject<BotMessage>;
-  private disconnectSubject: Subject<BotDisconnectEvent>;
-  private status: BotStatus = BotStatus.STOPPED;
-  private config: BotConfig | null = null;
 
   constructor(
     private platformUtils: PlatformUtilsService,
   ) {
-    this.messageSubject = new Subject<BotMessage>();
-    this.disconnectSubject = new Subject<BotDisconnectEvent>();
+    super();
   }
 
   getPlatform(): string {
@@ -49,11 +43,12 @@ export class QQBotAdapter implements IBotPlatform {
       supportsPushMessage: true,      // 支持主动推送
       supportsTemplateCard: false,    // 暂不支持模板卡片
       supportsMultimedia: true,       // 支持多媒体消息
+      handlesReconnectInternally: false, // 需要外部 BotInstanceManager 统一管理重连
     };
   }
 
-  async initialize(config: BotConfig): Promise<void> {
-    this.logger.log(`Initializing QQ bot: ${config.name}`);
+  async connect(config: BotConfig): Promise<void> {
+    this.logger.log(`Connecting to QQ bot: ${config.name}`);
     this.config = config;
     this.status = BotStatus.CONNECTING;
 
@@ -88,7 +83,7 @@ export class QQBotAdapter implements IBotPlatform {
         try {
           this.logger.log('Received group message');
           const botMessage = await this.transformToBotMessage(event, 'group');
-          this.messageSubject.next(botMessage);
+          this.emitMessage(botMessage);
         } catch (error: any) {
           this.logger.error(`Error processing group message: ${error.message}`);
         }
@@ -98,7 +93,7 @@ export class QQBotAdapter implements IBotPlatform {
         try {
           this.logger.log('Received private message');
           const botMessage = await this.transformToBotMessage(event, 'private');
-          this.messageSubject.next(botMessage);
+          this.emitMessage(botMessage);
         } catch (error: any) {
           this.logger.error(`Error processing private message: ${error.message}`);
         }
@@ -113,6 +108,9 @@ export class QQBotAdapter implements IBotPlatform {
       // 监听 WebSocket 连接成功事件
       this.client.on('ws_open', () => {
         this.logger.log('QQ bot WebSocket connected');
+        this.status = BotStatus.CONNECTED;
+        // 发射连接成功事件
+        this.emitConnected();
       });
 
       // 监听 WebSocket 关闭事件(来自 SDK 的主动通知)
@@ -120,7 +118,7 @@ export class QQBotAdapter implements IBotPlatform {
         this.logger.warn(`QQ bot WebSocket closed with code: ${code}${reason ? ` - ${reason}` : ''}`);
         this.status = BotStatus.DISCONNECTED;
         // 通过 Subject 发射断开事件
-        this.disconnectSubject.next({
+        this.emitDisconnected({
           code,
           reason,
           timestamp: new Date(),
@@ -130,8 +128,7 @@ export class QQBotAdapter implements IBotPlatform {
       // 启动连接(使用 start 方法)
       await this.client.start();
 
-      this.status = BotStatus.CONNECTED;
-      this.logger.log(`QQ bot connected: ${config.name}`);
+      this.logger.log(`QQ bot connection initiated: ${config.name}`);
     } catch (error: any) {
       this.logger.error(`Failed to initialize QQ bot: ${error.message}`);
       this.status = BotStatus.ERROR;
@@ -192,17 +189,7 @@ export class QQBotAdapter implements IBotPlatform {
     }
   }
 
-  onMessage(): Observable<BotMessage> {
-    return this.messageSubject.asObservable();
-  }
 
-  onDisconnect(): Observable<BotDisconnectEvent> {
-    return this.disconnectSubject.asObservable();
-  }
-
-  getStatus(): BotStatus {
-    return this.status;
-  }
 
   async shutdown(): Promise<void> {
     this.logger.log(`Shutting down QQ bot: ${this.config?.name}`);
@@ -218,8 +205,7 @@ export class QQBotAdapter implements IBotPlatform {
     }
 
     this.status = BotStatus.STOPPED;
-    this.messageSubject.complete();
-    this.disconnectSubject.complete();
+    this.completeSubjects();
   }
 
   async reconnect(): Promise<void> {
@@ -239,10 +225,10 @@ export class QQBotAdapter implements IBotPlatform {
     // 2. 等待更长时间,避免频繁请求被限流(特别是频率限制错误后)
     await new Promise(resolve => setTimeout(resolve, 3000));
     
-    // 3. 重新初始化(会创建新的 QQBot 实例并强制刷新 Token)
+    // 3. 重新连接(会创建新的 QQBot 实例并强制刷新 Token)
     if (this.config) {
-      this.logger.log('Re-initializing QQ bot with fresh credentials...');
-      await this.initialize(this.config);
+      this.logger.log('Re-connecting to QQ bot with fresh credentials...');
+      await this.connect(this.config);
     }
   }
 

@@ -1,14 +1,11 @@
 import { Logger } from '@nestjs/common';
-import { Observable, Subject } from 'rxjs';
 import {
-  IBotPlatform,
   BotConfig,
   BotMessage,
   BotResponse,
   BotStatus,
   PlatformCapabilities,
   StreamReplyOptions,
-  BotDisconnectEvent,
 } from '../interfaces/bot-platform.interface';
 import { PlatformUtilsService } from '../services/platform-utils.service';
 
@@ -16,6 +13,7 @@ import { PlatformUtilsService } from '../services/platform-utils.service';
 import { WSClient } from '@wecom/aibot-node-sdk';
 import type { WsFrame } from '@wecom/aibot-node-sdk';
 import { generateReqId } from '@wecom/aibot-node-sdk';
+import { BaseBotAdapter } from './base-bot.adapter';
 
 /**
  * 企业微信智能机器人适配器（WebSocket 长连接模式）
@@ -23,19 +21,14 @@ import { generateReqId } from '@wecom/aibot-node-sdk';
  * 使用 @wecom/aibot-node-sdk 官方 SDK
  * 基于 WebSocket 长连接通道，支持消息收发、流式回复等功能
  */
-export class WeComAiBotAdapter implements IBotPlatform {
+export class WeComAiBotAdapter extends BaseBotAdapter {
   private readonly logger = new Logger(WeComAiBotAdapter.name);
   private client: WSClient;
-  private messageSubject: Subject<BotMessage>;
-  private disconnectSubject: Subject<BotDisconnectEvent>;
-  private status: BotStatus = BotStatus.STOPPED;
-  private config: BotConfig | null = null;
 
   constructor(
     private platformUtils: PlatformUtilsService,
   ) {
-    this.messageSubject = new Subject<BotMessage>();
-    this.disconnectSubject = new Subject<BotDisconnectEvent>();
+    super();
   }
 
   getPlatform(): string {
@@ -48,11 +41,12 @@ export class WeComAiBotAdapter implements IBotPlatform {
       supportsPushMessage: false,     // 暂不支持主动推送（需要额外 API）
       supportsTemplateCard: true,     // 支持模板卡片
       supportsMultimedia: true,       // 支持多媒体消息
+      handlesReconnectInternally: true, // SDK 内部有完善的重连机制
     };
   }
 
-  async initialize(config: BotConfig): Promise<void> {
-    this.logger.log(`Initializing WeCom AI Bot: ${config.name}`);
+  async connect(config: BotConfig): Promise<void> {
+    this.logger.log(`Connecting to WeCom AI Bot: ${config.name}`);
     this.config = config;
     this.status = BotStatus.CONNECTING;
 
@@ -73,10 +67,12 @@ export class WeComAiBotAdapter implements IBotPlatform {
         wsUrl,
       });
 
-      // 监听认证成功事件
+      // 监听认证成功事件 - 这才是真正的连接成功
       this.client.on('authenticated', () => {
         this.logger.log('WeCom AI Bot authenticated successfully');
         this.status = BotStatus.CONNECTED;
+        // 发射连接成功事件
+        this.emitConnected();
       });
 
       // 监听连接断开事件
@@ -84,7 +80,7 @@ export class WeComAiBotAdapter implements IBotPlatform {
         this.logger.warn('WeCom AI Bot disconnected');
         this.status = BotStatus.DISCONNECTED;
         // 通过 Subject 发射断开事件
-        this.disconnectSubject.next({
+        this.emitDisconnected({
           code: 0,
           timestamp: new Date(),
         });
@@ -105,7 +101,7 @@ export class WeComAiBotAdapter implements IBotPlatform {
           const botMessage = await this.transformToBotMessage(frame, 'text');
 
           // 将消息传递给上层处理（不保存帧）
-          this.messageSubject.next(botMessage);
+          this.emitMessage(botMessage);
         } catch (error: any) {
           this.logger.error(`Error processing text message: ${error.message}`);
         }
@@ -116,7 +112,7 @@ export class WeComAiBotAdapter implements IBotPlatform {
         try {
           this.logger.log('Received image message');
           const botMessage = await this.transformToBotMessage(frame, 'image');
-          this.messageSubject.next(botMessage);
+          this.emitMessage(botMessage);
         } catch (error: any) {
           this.logger.error(`Error processing image message: ${error.message}`);
         }
@@ -127,7 +123,7 @@ export class WeComAiBotAdapter implements IBotPlatform {
         try {
           this.logger.log('Received voice message');
           const botMessage = await this.transformToBotMessage(frame, 'voice');
-          this.messageSubject.next(botMessage);
+          this.emitMessage(botMessage);
         } catch (error: any) {
           this.logger.error(`Error processing voice message: ${error.message}`);
         }
@@ -138,7 +134,7 @@ export class WeComAiBotAdapter implements IBotPlatform {
         try {
           this.logger.log('Received file message');
           const botMessage = await this.transformToBotMessage(frame, 'file');
-          this.messageSubject.next(botMessage);
+          this.emitMessage(botMessage);
         } catch (error: any) {
           this.logger.error(`Error processing file message: ${error.message}`);
         }
@@ -149,7 +145,7 @@ export class WeComAiBotAdapter implements IBotPlatform {
         try {
           this.logger.log('Received mixed message');
           const botMessage = await this.transformToBotMessage(frame, 'mixed');
-          this.messageSubject.next(botMessage);
+          this.emitMessage(botMessage);
         } catch (error: any) {
           this.logger.error(`Error processing mixed message: ${error.message}`);
         }
@@ -233,17 +229,7 @@ export class WeComAiBotAdapter implements IBotPlatform {
     }
   }
 
-  onMessage(): Observable<BotMessage> {
-    return this.messageSubject.asObservable();
-  }
 
-  onDisconnect(): Observable<BotDisconnectEvent> {
-    return this.disconnectSubject.asObservable();
-  }
-
-  getStatus(): BotStatus {
-    return this.status;
-  }
 
   async shutdown(): Promise<void> {
     this.logger.log(`Shutting down WeCom AI Bot: ${this.config?.name}`);
@@ -259,16 +245,7 @@ export class WeComAiBotAdapter implements IBotPlatform {
     }
 
     this.status = BotStatus.STOPPED;
-    this.messageSubject.complete();
-    this.disconnectSubject.complete();
-  }
-
-  async reconnect(): Promise<void> {
-    this.logger.log(`Attempting to reconnect WeCom AI Bot...`);
-    await this.shutdown();
-    if (this.config) {
-      await this.initialize(this.config);
-    }
+    this.completeSubjects();
   }
 
   /**
