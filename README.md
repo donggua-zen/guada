@@ -17,7 +17,9 @@
 
 ---
 
-遇到问题、意见建议、技术交流请加QQ群：1047993501
+遇到问题、意见建议、技术交流请加：
+- QQ群：1047993501
+- 公众号：冬瓜编程实验室
 
 ## 目录
 
@@ -247,7 +249,33 @@ npm run dev              # 开发模式启动 → http://localhost:5173
 
 ### 生产环境部署
 
-#### Web 版本
+#### Docker 部署（推荐）
+详细的 Docker 容器化部署指南请查看：[Docker 部署文档](docs/DOCKER_DEPLOYMENT.md)
+
+快速开始：
+```bash
+# 1. 配置环境变量
+cp .env.example .env
+# 编辑 .env 文件，修改 JWT_SECRET
+
+# 2. 一键部署
+chmod +x deploy.sh
+./deploy.sh
+
+# 3. 访问应用
+# 前端: http://localhost:80
+# 后端 API: http://localhost:80/api/v1 （通过 Nginx 代理）
+# 注意：默认配置下后端端口不暴露，如需调试请参考 Docker 部署文档
+```
+
+优势：
+- ✅ 一键部署，无需手动安装依赖
+- ✅ 环境隔离，避免依赖冲突
+- ✅ 自动健康检查和重启
+- ✅ 数据持久化，升级不丢失
+- ✅ 资源限制，防止内存泄漏
+
+#### Web 版本（传统部署）
 详细的生产环境部署指南请查看：[生产环境部署文档](docs/PRODUCTION_DEPLOYMENT.md)
 
 主要步骤包括：
@@ -288,27 +316,17 @@ ai_chat/
 │   ├── prisma/
 │   │   └── schema.prisma        # 数据库 Schema
 │   ├── src/
-│   │   ├── common/              # 基础设施
-│   │   │   ├── database/        # Prisma + Repository 层
-│   │   │   ├── vector-db/       # 向量数据库抽象 + sqlite-vec 实现
-│   │   │   ├── mcp/             # MCP 客户端
-│   │   │   └── utils/           # Tokenizer 等工具
+│   │   ├── common/              # 基础设施 (database, vector-db, mcp, utils 等)
 │   │   ├── modules/
-│   │   │   ├── chat/            # 核心对话模块
-│   │   │   │   ├── agent.service.ts         # Agent 循环引擎
-│   │   │   │   ├── compression-engine.ts    # 两级压缩引擎
-│   │   │   │   ├── conversation-context.ts  # 上下文管理器
-│   │   │   │   └── message-store.service.ts # 消息持久化
+│   │   │   ├── chat/            # 核心对话模块 (Agent引擎、压缩、上下文、消息)
 │   │   │   ├── tools/           # 工具调用系统
-│   │   │   │   └── providers/   # 各工具 Provider 实现
 │   │   │   ├── skills/          # Skills 技能框架
-│   │   │   │   ├── core/        # 核心服务 (发现/加载/注册/调度)
-│   │   │   │   ├── integration/ # Skill-Tool 桥接
-│   │   │   │   └── execution/   # 脚本执行引擎
 │   │   │   ├── knowledge-base/  # 知识库模块 (RAG)
 │   │   │   ├── llm-core/        # LLM 适配层
-│   │   │   │   └── adapters/    # OpenAI / Gemini 适配器
 │   │   │   ├── bot-gateway/     # 多平台机器人网关
+│   │   │   ├── characters/      # 角色管理
+│   │   │   ├── files/           # 文件管理
+│   │   │   ├── mcp-servers/     # MCP 服务器管理
 │   │   │   ├── auth/            # JWT 认证
 │   │   │   ├── models/          # 模型管理
 │   │   │   ├── settings/        # 系统设置
@@ -317,16 +335,15 @@ ai_chat/
 │   └── skills/                  # Skills 技能目录
 ├── frontend/                    # Vue 3 前端
 │   ├── src/
-│   │   ├── components/
-│   │   │   ├── chat/            # 对话界面
-│   │   │   ├── knowledge-base/  # 知识库管理
-│   │   │   ├── plugins/         # 工具/MCP/Skills 管理
-│   │   │   ├── bot/             # 机器人管理
-│   │   │   └── setting/         # 系统设置
+│   │   ├── components/          # 组件 (chat, knowledge-base, plugins, bot, setting 等)
 │   │   ├── composables/         # 组合式函数
 │   │   ├── stores/              # Pinia 状态管理
-│   │   └── services/            # API 服务层
+│   │   ├── services/            # API 服务层
+│   │   ├── types/               # TypeScript 类型定义
+│   │   └── utils/               # 工具函数
 │   └── package.json
+├── electron/                    # Electron 桌面端
+├── docs/                        # 项目文档
 └── LICENSE
 ```
 
