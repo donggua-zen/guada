@@ -167,16 +167,14 @@ export class QQBotAdapter extends BaseBotAdapter {
         this.logger.log(`Params:`, JSON.stringify(params));
           
         const result = await this.client.sendC2CMessage(response.conversationId, params);
-        this.logger.log(`sendC2CMessage result:`, JSON.stringify(result));
-        this.logger.log(`Reply sent to private chat: ${response.conversationId}`);
+        this.logger.debug(`sendC2CMessage result:`, JSON.stringify(result));
       } else if (response.sourceType === 'group') {
         // 群聊消息
         this.logger.log(`Calling sendGroupMessage with groupOpenId: ${response.conversationId}`);
         this.logger.log(`Params:`, JSON.stringify(params));
           
         const result = await this.client.sendGroupMessage(response.conversationId, params);
-        this.logger.log(`sendGroupMessage result:`, JSON.stringify(result));
-        this.logger.log(`Reply sent to group: ${response.conversationId}`);
+        this.logger.debug(`sendGroupMessage result:`, JSON.stringify(result));
       } else {
         // 未知类型,尝试私聊
         this.logger.warn(`Unknown source type, defaulting to private chat`);

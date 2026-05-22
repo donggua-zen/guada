@@ -471,9 +471,9 @@ export class BotInstanceManager implements OnModuleInit, OnApplicationShutdown {
 
     // 重置重连计数器
     if (instance.reconnectAttempts > 0) {
-      this.logger.log(
-        `Resetting reconnect counter for bot ${botId} from ${instance.reconnectAttempts} to 0`,
-      );
+      // this.logger.log(
+      //   `Resetting reconnect counter for bot ${botId} from ${instance.reconnectAttempts} to 0`,
+      // );
       instance.reconnectAttempts = 0;
     }
   }
