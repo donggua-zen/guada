@@ -524,10 +524,20 @@ function updateNodeLocal(event: FileChangeEvent) {
                         break;
                     }
                 }
-                if (insertBeforeNode) {
+                // 如果 treeRef 未初始化（目录为空时 el-tree 未渲染），直接修改 treeData
+                if (!treeRef.value) {
+                    parentNode.children.push(newNode);
+                    parentNode.children.sort((a, b) => {
+                        if (a.isDirectory !== b.isDirectory) {
+                            return a.isDirectory ? -1 : 1;
+                        }
+                        return a.name.localeCompare(b.name);
+                    });
+                } else if (insertBeforeNode) {
                     treeRef.value.insertBefore(newNode, insertBeforeNode);
                 } else {
-                    treeRef.value.append(newNode, parentNode.path || parentNode);
+                    // 根目录的虚拟节点 path 为空字符串，需传入 null 而非节点对象
+                    treeRef.value.append(newNode, parentNode.path || null);
                 }
             }
             break;
