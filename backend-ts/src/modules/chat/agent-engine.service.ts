@@ -490,7 +490,7 @@ export class AgentEngine {
       // 处理工具执行：若模型返回了工具调用指令，则批量执行所有工具
       if (assistantResponse.toolCalls && toolContext) {
         // 【工具轮次限制】检查是否达到最大工具调用轮次
-        const MAX_TOOL_ITERATIONS = 2;
+        const MAX_TOOL_ITERATIONS = 40;
         if (iterationCount >= MAX_TOOL_ITERATIONS) {
           this.logger.warn(
             `工具调用达到最大轮次限制 (${MAX_TOOL_ITERATIONS})，暂停执行等待用户确认`,
