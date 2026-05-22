@@ -5,8 +5,10 @@ import {
   Sse,
   UseGuards,
   MessageEvent,
+  Req,
 } from "@nestjs/common";
 import { Observable, Subject } from "rxjs";
+import { Request } from "express";
 import { AuthGuard } from "../auth/auth.guard";
 import { CurrentUser } from "../auth/current-user.decorator";
 import { SessionService } from "./session.service";
@@ -34,6 +36,7 @@ export class WorkspaceEventsController {
   async subscribeWorkspaceEvents(
     @Param("id") id: string,
     @CurrentUser() user: any,
+    @Req() req: Request,
   ): Promise<Observable<MessageEvent>> {
     // 验证会话归属权
     const session = await this.sessionService.getSessionById(id, user.id);
@@ -75,6 +78,13 @@ export class WorkspaceEventsController {
         unsubscribe();
         this.fileWatcherService.stopWatching(id);
       },
+    });
+
+    // 监听底层 HTTP 连接关闭事件（前端断开、网络中断等）
+    req.on("close", () => {
+      unsubscribe();
+      this.fileWatcherService.stopWatching(id);
+      eventSubject.complete();
     });
 
     // 返回 Observable
