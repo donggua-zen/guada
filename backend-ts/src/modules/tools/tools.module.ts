@@ -1,4 +1,4 @@
-import { Module } from "@nestjs/common";
+import { Module, OnModuleInit } from "@nestjs/common";
 import { VectorDbModule } from "../../common/vector-db/vector-db.module";
 import { SharedModule } from "../../common/services/shared.module";
 import { ToolOrchestrator } from "./tool-orchestrator.service";
@@ -51,4 +51,40 @@ import { SkillToolBridgeService } from '../skills/integration/skill-tool-bridge.
   ],
   exports: [ToolOrchestrator, ToolContextFactory],
 })
-export class ToolsModule {}
+export class ToolsModule implements OnModuleInit {
+  constructor(
+    private readonly toolOrchestrator: ToolOrchestrator,
+    private readonly kbProvider: KnowledgeBaseToolProvider,
+    private readonly memoryProvider: MemoryToolProvider,
+    private readonly mcpProvider: MCPToolProvider,
+    private readonly timeProvider: TimeToolProvider,
+    private readonly imageRecognitionProvider: ImageRecognitionToolProvider,
+    private readonly shellProvider: ShellToolProvider,
+    private readonly fileProvider: FileToolProvider,
+    private readonly browserProvider: BrowserToolProvider,
+    private readonly sessionManagementProvider: SessionManagementToolProvider,
+    private readonly skillToolBridge: SkillToolBridgeService,
+  ) {}
+
+  onModuleInit() {
+    this.toolOrchestrator.addProvider(this.kbProvider);
+    this.toolOrchestrator.addProvider(this.memoryProvider);
+    this.toolOrchestrator.addProvider(this.mcpProvider);
+    this.toolOrchestrator.addProvider(this.timeProvider);
+    this.toolOrchestrator.addProvider(this.imageRecognitionProvider);
+    this.toolOrchestrator.addProvider(this.shellProvider);
+    this.toolOrchestrator.addProvider(this.fileProvider);
+
+    // 仅在 Electron 环境下注册 BrowserToolProvider
+    const isElectronEnv = process.env.ELECTRON_APP === 'true';
+    if (isElectronEnv) {
+      this.toolOrchestrator.addProvider(this.browserProvider);
+      console.log('BrowserToolProvider registered (Electron environment)');
+    } else {
+      console.log('BrowserToolProvider skipped (non-Electron environment)');
+    }
+
+    this.toolOrchestrator.addProvider(this.sessionManagementProvider);
+    this.toolOrchestrator.addProvider(this.skillToolBridge);
+  }
+}
