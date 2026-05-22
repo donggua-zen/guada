@@ -119,8 +119,7 @@
 
 <script setup lang="ts">
 import { ref, computed, watch, onUnmounted, nextTick } from 'vue';
-import { apiService } from '@/services/ApiService';
-import { workspaceWatcher, type FileChangeEvent } from '@/services/WorkspaceWatcher';
+import { apiService, type FileChangeEvent } from '@/services/ApiService';
 import { Refresh, Close, View, Edit, FolderOpened } from '@element-plus/icons-vue';
 import { SwapHorizTwotone as SplitVerticalIcon, SwapVertTwotone as SplitHorizontalIcon } from '@vicons/material';
 import { LoadingOutlined } from '@vicons/antd';
@@ -696,7 +695,7 @@ watch(() => props.sessionId, (newSessionId, oldSessionId) => {
     if (oldSessionId && newSessionId !== oldSessionId) {
         closePreview();
         treeData.value = [];
-        workspaceWatcher.disconnect();
+        apiService.disconnectWorkspaceWatcher();
         if (unsubscribeWatcher) {
             unsubscribeWatcher();
             unsubscribeWatcher = null;
@@ -707,14 +706,13 @@ watch(() => props.sessionId, (newSessionId, oldSessionId) => {
         loadTree(); // 直接调用，不受节流限制
 
         // 连接 WorkspaceWatcher 实时监听文件变化
-        const token = localStorage.getItem('token') || '';
-        workspaceWatcher.connect(newSessionId, token);
+        apiService.connectWorkspaceWatcher(newSessionId);
 
         // 注册文件变化监听器
-        unsubscribeWatcher = workspaceWatcher.onChange(handleFileChange);
+        unsubscribeWatcher = apiService.onWorkspaceChange(handleFileChange);
     } else {
         treeData.value = [];
-        workspaceWatcher.disconnect();
+        apiService.disconnectWorkspaceWatcher();
         if (unsubscribeWatcher) {
             unsubscribeWatcher();
             unsubscribeWatcher = null;
@@ -723,7 +721,7 @@ watch(() => props.sessionId, (newSessionId, oldSessionId) => {
 }, { immediate: true });
 
 onUnmounted(() => {
-    workspaceWatcher.disconnect();
+    apiService.disconnectWorkspaceWatcher();
     if (unsubscribeWatcher) {
         unsubscribeWatcher();
         unsubscribeWatcher = null;

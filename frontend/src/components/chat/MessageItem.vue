@@ -33,7 +33,7 @@
           <template v-if="turn.content">
             <MarkdownContent v-if="isAssistant" class="message-item__text markdown-text" @click="handleClick"
               :content="turn.content" :debounced="turn.state?.isStreaming" />
-            <pre v-else class="message-item__text break-all whitespace-pre-wrap">{{ turn.content }}</pre>
+            <div v-else class="message-item__text break-all whitespace-pre-wrap">{{ turn.content }}</div>
           </template>
 
           <!-- 使用拆分后的工具调用组件 -->
