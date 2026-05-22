@@ -34,7 +34,7 @@
     <div v-else-if="currentItems.length > 0">
       <!-- 表头 -->
       <div
-        class="grid grid-cols-[1fr_100px_80px_120px_160px] gap-4 px-4 py-2 border-b border-gray-200 dark:border-[#2e3035] text-xs font-medium text-gray-500 dark:text-[#8b8d95]">
+        class="grid grid-cols-[1fr_90px_80px_120px_160px] gap-4 px-4 py-2 border-b border-gray-200 dark:border-[#2e3035] text-xs font-medium text-gray-500 dark:text-[#8b8d95]">
         <div>名称</div>
         <div>状态</div>
         <div>类型</div>
@@ -44,7 +44,7 @@
 
       <!-- 文件列表 -->
       <div v-for="item in currentItems" :key="item.id"
-        class="file-row grid grid-cols-[1fr_100px_80px_120px_160px] gap-4 px-4 py-2.5 hover:bg-gray-50 dark:hover:bg-[#2a2c30]/50 cursor-pointer transition-colors border-b border-gray-100 dark:border-[#2e3035] last:border-b-0"
+        class="file-row grid grid-cols-[1fr_90px_80px_120px_160px] gap-4 px-4 py-2.5 hover:bg-gray-50 dark:hover:bg-[#2a2c30]/50 cursor-pointer transition-colors border-b border-gray-100 dark:border-[#2e3035] last:border-b-0"
         @click="handleItemClick(item)" @contextmenu.prevent="handleContextMenu($event, item)">
         <!-- 名称-->
         <div class="flex items-center gap-2 min-w-0">
@@ -61,10 +61,21 @@
         </div>
 
         <!-- 状态列 -->
-        <div class="flex items-center">
-          <el-tag v-if="!item.isDirectory" size="small" :type="getStatusType(item.processingStatus)">
-            {{ getStatusText(item.processingStatus) }}
-          </el-tag>
+        <div class="flex items-center min-w-0">
+          <template v-if="!item.isDirectory">
+            <!-- 处理中或等待处理时显示进度百分比 -->
+            <el-tooltip v-if="(item.processingStatus === 'processing' || item.processingStatus === 'pending') && item.currentStep" 
+              :content="item.currentStep" 
+              placement="top">
+              <el-tag size="small" :type="getStatusType(item.processingStatus)" class="truncate max-w-full">
+                {{ getStatusDisplayText(item) }}
+              </el-tag>
+            </el-tooltip>
+            <!-- 其他状态直接显示 -->
+            <el-tag v-else size="small" :type="getStatusType(item.processingStatus)">
+              {{ getStatusDisplayText(item) }}
+            </el-tag>
+          </template>
           <span v-else class="text-xs text-gray-400">-</span>
         </div>
 
@@ -771,7 +782,8 @@ defineExpose({
   getCurrentFiles,
   insertUploadedFile,  // 新增:智能插入上传完成的文件
   getCurrentFolderPath: () => currentRelativePath.value,
-  loadMoreFiles  // 新增:加载更多文件（用于无限滚动）
+  loadMoreFiles,  // 新增:加载更多文件（用于无限滚动）
+  startFileProcessingPolling  // 新增:手动启动轮询（用于重新处理等场景）
 })
 
 /**
@@ -821,6 +833,20 @@ function getStatusType(status: string): string {
     'failed': 'danger',
   }
   return types[status] || 'info'
+}
+
+/**
+ * 获取状态显示文本（包含详细进度信息）
+ */
+function getStatusDisplayText(item: KBFile): string {
+  // 如果正在处理或等待处理且有进度百分比，显示百分比
+  if ((item.processingStatus === 'processing' || item.processingStatus === 'pending') && 
+      item.progressPercentage !== undefined && item.progressPercentage !== null) {
+    return `${item.progressPercentage}%`
+  }
+  
+  // 否则返回基本状态文本
+  return getStatusText(item.processingStatus)
 }
 
 /**

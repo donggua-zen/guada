@@ -14,7 +14,7 @@
             </el-icon>
             <p class="mt-2 text-gray-500 dark:text-[#8b8d95]">暂无分块内容</p>
         </div>
-        <div v-else class="chunks-container max-h-96 overflow-y-auto">
+        <div v-else class="chunks-container">
             <div v-for="(chunk, index) in chunks" :key="chunk.id"
                 class="chunk-item mb-4 p-4 bg-gray-50 dark:bg-[#2a2c30] rounded-lg border border-gray-200 dark:border-[#2e3035]">
                 <div class="chunk-header flex justify-between items-center mb-2">
@@ -156,16 +156,10 @@ defineExpose({
 </script>
 
 <style scoped>
-/* 文件分块查看弹窗样式 */
-.chunks-container {
-    max-height: 50vh;
-    overflow-y: auto;
-}
 
 .chunk-item {
     border: 1px solid var(--el-border-color);
     border-radius: 8px;
-    background-color: var(--el-fill-color-light);
     transition: all 0.2s ease;
 }
 

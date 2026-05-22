@@ -3,7 +3,7 @@
     <div class="h-full w-full flex flex-col bg-(--color-sidebar-bg) min-h-0">
         <!-- 视图模式：卡片列表 -->
         <div v-if="viewMode === 'list'" class="flex-1 overflow-hidden flex flex-col">
-            <div class="flex flex-col h-full p-3 max-w-260 mx-auto w-full">
+            <div class="flex flex-col p-3 max-w-260 mx-auto w-full">
                 <!-- 头部 -->
                 <div class="flex justify-between items-center py-4">
                     <span class="text-lg font-semibold text-gray-800 dark:text-[#e8e9ed]">知识库</span>
@@ -25,9 +25,10 @@
                         </template>
                     </el-input>
                 </div>
-
+            </div>
+            <div class="flex-1 w-full overflow-y-auto">
                 <!-- 知识库卡片网格列表 -->
-                <div class="flex-1 overflow-y-auto">
+                <div class="flex-1 overflow-y-auto max-w-260 px-3 mx-auto">
                     <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 pb-4">
                         <!-- 知识库卡片 -->
                         <div v-for="kb in filteredKnowledgeBases" :key="kb.id"
@@ -91,7 +92,7 @@
                                     {{
                                         kb.description
                                         ||
-                                    '暂无描述' }}
+                                        '暂无描述' }}
                                 </div>
                             </div>
 
@@ -128,22 +129,20 @@
         <!-- 视图模式：知识库详情 -->
         <div v-else class="flex-1 flex flex-col overflow-hidden">
             <!-- 顶部导航栏 -->
-            <div class="px-2 py-3 flex items-center gap-3 max-w-260 mx-auto w-full">
-                <el-button link @click="backToList"
-                    class="flex items-center gap-1 text-gray-900 dark:text-[#e8e9ed] hover:text-(--color-primary) font-medium">
-                    <el-icon :size="22">
-                        <ArrowLeft24Filled />
-                    </el-icon>
-                    <span class="text-base">返回知识库列表</span>
-                </el-button>
-                <el-divider direction="vertical" />
-                <span class="font-semibold text-gray-800 dark:text-[#e8e9ed] text-base">{{ currentKB?.name }}</span>
-            </div>
-
-            <!-- 详情内容区域 -->
-            <div class="flex-1 flex flex-col overflow-hidden max-w-260 mx-auto w-full min-h-0">
+            <div class="sticky top-0 z-10 flex flex-col max-w-260 mx-auto w-full">
+                <div class="px-2 py-3 flex items-center gap-3 w-full">
+                    <el-button link @click="backToList"
+                        class="flex items-center gap-1 text-gray-900 dark:text-[#e8e9ed] hover:text-(--color-primary) font-medium">
+                        <el-icon :size="22">
+                            <ArrowLeft24Filled />
+                        </el-icon>
+                        <span class="text-base">返回知识库列表</span>
+                    </el-button>
+                    <el-divider direction="vertical" />
+                    <span class="font-semibold text-gray-800 dark:text-[#e8e9ed] text-base">{{ currentKB?.name }}</span>
+                </div>
                 <!-- Tab 切换区域 -->
-                <div class="px-4 pt-3">
+                <div class="px-4 pt-1 pb-2">
                     <el-tabs v-model="activeTab" class="kb-tabs">
                         <el-tab-pane label="文件列表" name="files">
                             <template #label>
@@ -166,42 +165,43 @@
                             </template>
                         </el-tab-pane>
                     </el-tabs>
-                </div>
-                <!-- 文件列表 Tab -->
-                <div v-show="activeTab === 'files'" class="flex-1 flex flex-col min-h-0">
 
-                    <!-- 上传区域 -->
-                    <div class="px-4 pt-4 pb-1">
-                        <KBFileUploader :kb-id="store.activeKnowledgeBaseId!"
-                            :current-folder-path="getCurrentFolderPath()" :get-current-files="getCurrentFiles"
-                            @uploaded="handleUploadComplete" @show-upload-task="showUploadTaskModal = true"
-                            @folder-created="handleFolderCreated" />
-                    </div>
-
-                    <!-- 文件列表内容区 -->
-                    <div class="flex-1 m-4 overflow-hidden flex min-h-0 rounded-lg">
-                        <ScrollContainer class="max-h-full w-full" ref="fileListContainer" @scroll="handleScroll">
-                            <div class="rounded-lg p-2 bg-white dark:bg-[#232428]">
-                                <KBFileTree ref="fileTreeRef" :kb-id="store.activeKnowledgeBaseId!"
-                                    @view="handleViewFile" @retry="handleRetryFile" @delete="handleDeleteFile"
-                                    @folder-change="handleFolderChange" @files-loaded="handleFilesLoaded" />
-                            </div>
-                        </ScrollContainer>
-                    </div>
-
-                </div>
-
-                <!-- 搜索 Tab -->
-                <div v-show="activeTab === 'search'" class="flex flex-1 overflow-hidden min-h-0 w-full">
-                    <KBSearchPanel :knowledge-bases="store.knowledgeBases"
-                        :default-kb-id="store.activeKnowledgeBaseId" />
                 </div>
             </div>
+            <div class="flex-1 overflow-auto min-h-0" @scroll="handleScroll">
+                <div class="max-w-260 mx-auto w-full">
+                    <!-- 文件列表 Tab -->
+                    <div v-show="activeTab === 'files'" class="flex-1 flex flex-col min-h-0">
+                        <!-- 上传区域 -->
+                        <div class="px-4 pt-1 pb-1">
+                            <KBFileUploader :kb-id="store.activeKnowledgeBaseId!"
+                                :current-folder-path="getCurrentFolderPath()" :get-current-files="getCurrentFiles"
+                                @uploaded="handleUploadComplete" @show-upload-task="showUploadTaskModal = true"
+                                @folder-created="handleFolderCreated" />
+                        </div>
+
+                        <!-- 文件列表内容区 -->
+                        <div class="w-full m-4  min-h-0 rounded-lg p-2 bg-white dark:bg-[#232428]">
+                            <KBFileTree ref="fileTreeRef" :kb-id="store.activeKnowledgeBaseId!" @view="handleViewFile"
+                                @retry="handleRetryFile" @delete="handleDeleteFile" @folder-change="handleFolderChange"
+                                @files-loaded="handleFilesLoaded" />
+                        </div>
+
+                    </div>
+
+                    <!-- 搜索 Tab -->
+                    <div v-show="activeTab === 'search'" class="flex flex-1 overflow-hidden min-h-0 w-full">
+                        <KBSearchPanel :knowledge-bases="store.knowledgeBases"
+                            :default-kb-id="store.activeKnowledgeBaseId" />
+                    </div>
+                </div>
+            </div>
+
         </div>
     </div>
 
     <!-- 创建/编辑知识库对话框 -->
-    <el-dialog v-model="showCreateModal" title="创建知识库" width="600px" :close-on-click-modal="false">
+    <el-dialog v-model="showCreateModal" title="创建知识库" width="600px" :close-on-click-modal="false" append-to-body>
         <el-form :model="createForm" label-width="140px" size="large">
             <el-form-item label="知识库名称" required>
                 <el-input v-model="createForm.name" placeholder="请输入知识库名称" maxlength="255" show-word-limit />
@@ -721,7 +721,7 @@ async function handleRetryFile(file: KBFile) {
     try {
         const confirmed = await confirm(
             '警告',
-            `确定要重新处理文件"${file.displayName}"吗？这将重新启动后台处理任务。`,
+            `确定要重新处理文件“${file.displayName}”吗？这将重新启动后台处理任务。`,
             { type: 'warning' }
         )
 
@@ -745,7 +745,12 @@ async function handleRetryFile(file: KBFile) {
             console.log(`[DEBUG] 文件状态已更新为 pending: ${file.displayName}`)
         }
 
-        // 注意:不需要手动启动轮询,K BFileTree 会在数据加载后触发 files-loaded 事件
+        // 关键修复：重新处理后需要手动启动轮询
+        // 因为 updateFileStatus 不会自动触发 startFileProcessingPolling
+        if (fileTreeRef.value && fileTreeRef.value.startFileProcessingPolling) {
+            console.log('[DEBUG] 重新处理后，手动启动轮询')
+            await fileTreeRef.value.startFileProcessingPolling()
+        }
     } catch (error: any) {
         if (error !== 'cancel') {
             console.error('重新处理失败:', error)
