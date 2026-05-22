@@ -1,22 +1,13 @@
-import * as crypto from 'crypto';
+import * as bcrypt from 'bcryptjs';
 
-const SALT_LENGTH = 16;
-const KEY_LENGTH = 64;
-const DIGEST = 'sha256';
+const SALT_ROUNDS = 10;
 
 export class PasswordHashUtil {
   static async hash(password: string): Promise<string> {
-    const salt = crypto.randomBytes(SALT_LENGTH).toString('hex');
-    const hash = crypto.scryptSync(password, salt, KEY_LENGTH).toString('hex');
-    return `${salt}:${hash}`;
+    return bcrypt.hash(password, SALT_ROUNDS);
   }
 
   static async compare(password: string, hash: string): Promise<boolean> {
-    const [salt, storedHash] = hash.split(':');
-    if (!salt || !storedHash) {
-      return false;
-    }
-    const computedHash = crypto.scryptSync(password, salt, KEY_LENGTH).toString('hex');
-    return crypto.timingSafeEqual(Buffer.from(storedHash), Buffer.from(computedHash));
+    return bcrypt.compare(password, hash);
   }
 }
