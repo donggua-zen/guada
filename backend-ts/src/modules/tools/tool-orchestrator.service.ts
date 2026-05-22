@@ -5,17 +5,7 @@ import {
   ToolCallResponse,
   ToolDisplayInfo,
 } from "./interfaces/tool-provider.interface";
-import { KnowledgeBaseToolProvider } from "./providers/knowledge-base-tool.provider";
-import { MemoryToolProvider } from "./providers/memory-tool.provider";
-import { MCPToolProvider } from "./providers/mcp-tool.provider";
-import { TimeToolProvider } from "./providers/time-tool.provider";
-import { ImageRecognitionToolProvider } from "./providers/image-recognition-tool.provider";
-import { ShellToolProvider } from "./providers/shell-tool.provider";
-import { FileToolProvider } from "./providers/file-tool.provider";
-import { BrowserToolProvider } from "./providers/browser-tool.provider";
-import { SessionManagementToolProvider } from "./providers/session-management-tool.provider";
 import { ToolContext } from "./tool-context";
-import { SkillToolBridgeService } from '../skills/integration/skill-tool-bridge.service';
 import { UniversalToolHandler, UNIVERSAL_TOOLS } from './universal-tool-handler';
 
 export interface ToolMetadata {
@@ -34,38 +24,7 @@ export class ToolOrchestrator {
   private providers = new Map<string, IToolProvider>();
   private universalHandler: UniversalToolHandler;
 
-  constructor(
-    kbProvider: KnowledgeBaseToolProvider,
-    memoryProvider: MemoryToolProvider,
-    mcpProvider: MCPToolProvider,
-    timeProvider: TimeToolProvider,
-    imageRecognitionProvider: ImageRecognitionToolProvider,
-    shellProvider: ShellToolProvider,
-    fileProvider: FileToolProvider,
-    browserProvider: BrowserToolProvider,
-    sessionManagementProvider: SessionManagementToolProvider,
-    skillToolBridge: SkillToolBridgeService,
-  ) {
-    this.addProvider(kbProvider);
-    this.addProvider(memoryProvider);
-    this.addProvider(mcpProvider);
-    this.addProvider(timeProvider);
-    this.addProvider(imageRecognitionProvider);
-    this.addProvider(shellProvider);
-    this.addProvider(fileProvider);
-
-    // 仅在 Electron 环境下注册 BrowserToolProvider
-    const isElectronEnv = process.env.ELECTRON_APP === 'true';
-    if (isElectronEnv) {
-      this.addProvider(browserProvider);
-      this.logger.log('BrowserToolProvider registered (Electron environment)');
-    } else {
-      this.logger.log('BrowserToolProvider skipped (non-Electron environment)');
-    }
-
-    this.addProvider(sessionManagementProvider);
-    this.addProvider(skillToolBridge);
-
+  constructor() {
     // 初始化通用工具处理器
     this.universalHandler = new UniversalToolHandler();
   }
@@ -381,7 +340,7 @@ export class ToolOrchestrator {
     }
 
     this.logger.debug(`Collected ${prompts.length} tool prompt sections`);
-    this.logger.debug(prompts.join("\n\n"))
+    // this.logger.debug(prompts.join("\n\n"))
     return prompts.join("\n\n");
   }
 

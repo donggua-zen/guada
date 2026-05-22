@@ -1,21 +1,9 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { ToolOrchestrator } from '../tool-orchestrator.service';
 import { SessionManagementToolProvider } from './session-management-tool.provider';
 import { PrismaService } from '../../../common/database/prisma.service';
-import { KnowledgeBaseToolProvider } from './knowledge-base-tool.provider';
-import { MemoryToolProvider } from './memory-tool.provider';
-import { MCPToolProvider } from './mcp-tool.provider';
-import { TimeToolProvider } from './time-tool.provider';
-import { ImageRecognitionToolProvider } from './image-recognition-tool.provider';
-import { ShellToolProvider } from './shell-tool.provider';
-import { FileToolProvider } from './file-tool.provider';
-import { BrowserToolProvider } from './browser-tool.provider';
-import { SkillToolBridgeService } from '../../skills/integration/skill-tool-bridge.service';
-import { ToolContextFactory } from '../tool-context';
 
 describe('SessionManagementToolProvider Integration', () => {
   let provider: SessionManagementToolProvider;
-  let orchestrator: ToolOrchestrator;
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
