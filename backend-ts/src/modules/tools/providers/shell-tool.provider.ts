@@ -1,20 +1,13 @@
 import { Injectable, Logger } from "@nestjs/common";
 import { exec, ChildProcess } from "child_process";
-import { promisify } from "util";
-import * as fs from "fs/promises";
-import * as path from "path";
 import * as iconv from "iconv-lite";
 import {
   IToolProvider,
   ToolCallRequest,
-  ToolCallResponse,
   ToolProviderMetadata,
   ToolDisplayInfo,
 } from "../interfaces/tool-provider.interface";
 import { InternalToolDefinition } from "../../llm-core/types/llm.types";
-import { WorkspaceService } from "../../../common/services/workspace.service";
-
-const execAsync = promisify(exec);
 
 @Injectable()
 export class ShellToolProvider implements IToolProvider {
@@ -24,7 +17,7 @@ export class ShellToolProvider implements IToolProvider {
   private readonly toolsConfig: InternalToolDefinition[] = [
     {
       name: "execute_command",
-      description: "执行系统 shell 命令并返回输出结果。仅用于本地测试环境，请谨慎使用。命令执行可能耗时较长，请耐心等待结果。",
+      description: "执行系统 shell 命令并返回输出结果。超出2分钟会自动中止。命令执行可能耗时较长，请耐心等待结果。",
       parameters: {
         type: "object",
         properties: {
@@ -47,7 +40,7 @@ export class ShellToolProvider implements IToolProvider {
     },
   ];
 
-  constructor(private workspaceService: WorkspaceService) { }
+  constructor() { }
 
   async getTools(enabled?: boolean | string[], context?: Record<string, any>): Promise<any[]> {
     if (enabled === false) return [];
@@ -75,14 +68,7 @@ export class ShellToolProvider implements IToolProvider {
       throw new Error(`未知工具：${request.name}`);
     }
 
-    const result = await handler(request.arguments, context, abortSignal);
-
-    // 通知工作目录变更（Shell 命令可能会修改文件系统）
-    if (context?.sessionId) {
-      this.workspaceService.notifyWorkspaceChange(context.sessionId);
-    }
-
-    return result;
+    return await handler(request.arguments, context, abortSignal);
   }
 
   async getPrompt(context?: Record<string, any>): Promise<string> {
@@ -184,6 +170,8 @@ export class ShellToolProvider implements IToolProvider {
       throw new Error('Request was aborted');
     }
 
+    const startTime = Date.now();
+
     return new Promise((resolve, reject) => {
       this.logger.log(`执行命令: ${command}, 工作目录: ${working_directory || "当前目录"}, 编码: ${encoding || "自动检测"}`);
 
@@ -214,7 +202,7 @@ export class ShellToolProvider implements IToolProvider {
           // 如果是被中止的，直接拒绝
           if (wasAborted || error.killed || error.signal === 'SIGTERM' || error.signal === 'SIGKILL') {
             this.logger.warn(`Shell command killed due to abort: ${command}`);
-            reject(new Error('Request was aborted'));
+            reject(new Error('Request was aborted (maybe timeout)'));
             return;
           }
 
@@ -227,10 +215,12 @@ export class ShellToolProvider implements IToolProvider {
           const stdoutStr = error.stdout ? this.decodeBuffer(error.stdout, encoding) : '';
           const stderrStr = error.stderr ? this.decodeBuffer(error.stderr, encoding) : error.message;
 
+          const duration = Date.now() - startTime;
           const result = {
             stdout: stdoutStr.trim(),
             stderr: String(stderrStr).trim(),
             exitCode: exitCode,
+            durationMs: duration,
           };
 
           resolve(this.truncateOutput(result));
@@ -240,10 +230,12 @@ export class ShellToolProvider implements IToolProvider {
           const stderrStr = this.decodeBuffer(stderr, encoding);
 
           // 构建返回结果
+          const duration = Date.now() - startTime;
           const result = {
             stdout: stdoutStr.trim(),
             stderr: stderrStr.trim(),
             exitCode: 0,
+            durationMs: duration,
           };
 
           resolve(this.truncateOutput(result));

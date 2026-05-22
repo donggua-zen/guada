@@ -2,19 +2,16 @@ import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import * as path from 'path';
 import * as fs from 'fs';
-import { EventEmitter } from 'events';
 
 @Injectable()
 export class WorkspaceService {
   private readonly logger = new Logger(WorkspaceService.name);
   private readonly baseDir: string;
   private readonly safeWritePaths: Set<string> = new Set();
-  public readonly events: EventEmitter;
 
   constructor(private configService: ConfigService) {
-    this.baseDir = this.configService.get<string>('WORKSPACE_BASE_DIR') || 
+    this.baseDir = this.configService.get<string>('WORKSPACE_BASE_DIR') ||
                    path.join(process.cwd(), 'workspace');
-    this.events = new EventEmitter();
     
     // 确保基础目录存在
     if (!fs.existsSync(this.baseDir)) {
@@ -201,11 +198,4 @@ export class WorkspaceService {
     return path.join(workspaceDir, filePath);
   }
 
-  /**
-   * 通知工作目录变更
-   * @param sessionId 会话 ID
-   */
-  notifyWorkspaceChange(sessionId: string): void {
-    this.events.emit('workspace-changed', sessionId);
-  }
 }

@@ -202,14 +202,7 @@ export class FileToolProvider implements IToolProvider {
       throw new Error(`未知工具：${request.name}`);
     }
 
-    const result = await handler(request.arguments, context, abortSignal);
-
-    // 通知工作目录变更（写操作才需要通知）
-    if (context?.sessionId && ['write', 'replace', 'delete'].includes(request.name)) {
-      this.workspaceService.notifyWorkspaceChange(context.sessionId);
-    }
-
-    return result;
+    return await handler(request.arguments, context, abortSignal);
   }
 
   async getPrompt(context?: Record<string, any>): Promise<string> {

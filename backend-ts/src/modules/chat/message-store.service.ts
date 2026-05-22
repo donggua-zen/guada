@@ -322,6 +322,7 @@ export class MessageStoreService implements IMessageStore {
         const baseMsg: MessageRecord = {
           messageId: msg.id,
           contentId: content.id,
+          turnsId: content.turnsId,
           role: content.role,
           content: content.content || "",
           metadata: { ...metadata } // 复制 metadata 以保留 modelName、finishReason 等信息
@@ -378,6 +379,7 @@ export class MessageStoreService implements IMessageStore {
         {
           messageId: msg.id,
           contentId: msg.contents?.[0].id,
+          turnsId: activeContent.turnsId,
           role: "user",
           content: textParts.length === 1 ? textParts[0].text : textParts,
           metadata: metadata,

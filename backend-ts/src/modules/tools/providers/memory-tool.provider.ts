@@ -8,7 +8,6 @@ import {
   ToolProviderMetadata,
 } from "../interfaces/tool-provider.interface";
 import { InternalToolDefinition } from "../../llm-core/types/llm.types";
-import { WorkspaceService } from "../../../common/services/workspace.service";
 
 /**
  * 记忆索引数据结构
@@ -42,7 +41,7 @@ export class MemoryToolProvider implements IToolProvider {
 
   private readonly toolsConfig: InternalToolDefinition[] = [];
 
-  constructor(private workspaceService: WorkspaceService) { }
+  constructor() { }
 
   async getTools(enabled?: boolean | string[], context?: Record<string, any>): Promise<any[]> {
     if (enabled === false) return [];

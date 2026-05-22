@@ -10,6 +10,24 @@ import { IConversationContext } from "./interfaces";
 import { RequestContext } from "../../common/context/request-context";
 import { partialParse } from 'partial-json-parser';
 
+
+/**
+ * 审批上下文
+ */
+interface ApprovalContext {
+  type: 'approval';
+  status: 'pending' | 'completed';
+  token?: string;  // 用于验证（可选）
+  pendingToolCallIds?: string[];  // pending 状态时保存需要审批的工具 ID 列表
+  decisions?: Array<{  // completed 状态时保存
+    toolCallId: string;
+    decision: 'approve' | 'reject';
+    reason?: string;
+  }>;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
 /**
  * 思考时间信息（简单数据容器）
  *
@@ -153,7 +171,7 @@ class ToolCallDisplayManager {
     try {
       // 使用 partial-json-parser 解析不完整的 JSON
       const parsed = partialParse(accumulatedArgs);
-      
+
       if (!parsed || typeof parsed !== 'object') {
         return false;
       }
@@ -166,7 +184,7 @@ class ToolCallDisplayManager {
         if (parsed.tool_name) {
           actualToolName = parsed.tool_name;
         }
-        
+
         if (parsed.arguments && typeof parsed.arguments === 'object') {
           extractedParams = parsed.arguments;
         }
@@ -260,17 +278,19 @@ export class AgentEngine {
    *
    * @param sessionIdOrSession 会话 ID 或会话对象（传入对象可避免重复查询）
    * @param messageId 触发本次补全的用户消息 ID
-   * @param regenerationMode 再生模式（"overwrite" 覆盖旧回复 / "multi_version" 保留多版本）
+   * @param regenerationMode 再生模式（"overwrite" 覆盖旧回复 / "multi_version" 保留多版本 / "resume" 断点续传）
    * @param assistantMessageId 现有助手消息 ID（仅 multi_version 模式使用）
    * @param abortSignal 中断信号，用于客户端断开连接时中止 LLM 请求
-   * @yi 的事件对象（create / text / think / tool_call / finish 等）
+   * @param resumeData 【新增】断点续传数据（如审批决策、表单数据等）
+   * @yields SSE 的事件对象（create / text / think / tool_call / finish 等）
    */
   async *completions(
     sessionIdOrSession: string | any,
     messageId: string,
-    regenerationMode: string = "overwrite", // 再生模式：'overwrite' | 'multi_version'
+    regenerationMode: string = "overwrite", // 再生模式：'overwrite' | 'multi_version' | 'resume'
     assistantMessageId?: string, // 现有助手消息 ID（用于 multi_version 模式）
     abortSignal?: AbortSignal, // 中断信号（用于客户端断开连接时中止 LLM 请求）
+    resumeData?: any, // 【新增】断点续传数据
   ) {
     // 判断传入的是 sessionId 还是 session 对象
     const isSessionObject = typeof sessionIdOrSession !== 'string';
@@ -321,6 +341,7 @@ export class AgentEngine {
           regenerationMode,
           assistantMessageId,
           abortSignal, // 仍然显式传递给工具层，用于控制外部资源
+          resumeData, // 【新增】传递断点续传数据
         );
       } finally {
         this.sessionLockService.unlock(sessionId);
@@ -357,10 +378,11 @@ export class AgentEngine {
    * @param session 会话对象，包含模型配置和设置
    * @param userMessageId 触发本次循环的用户消息 ID
    * @param toolContext 工具执行上下文（内部按需获取 tools）
-   * @param thinkingEnabled 是否启用思维链功能
-   * @param regenerationMode 再生模式标识
+   * @param thinkingEffort 思考强度级别
+   * @param regenerationMode 再生模式标识（'overwrite' | 'multi_version' | 'resume'）
    * @param assistantMessageId 现有助手消息 ID（可选）
    * @param abortSignal 中断信号（可选）
+   * @param resumeData 断点续传数据（如审批决策、表单数据等）
    * @yields SSE 格式的事件对象
    */
   private async *executeAgentLoop(
@@ -372,134 +394,258 @@ export class AgentEngine {
     regenerationMode: string,
     assistantMessageId?: string,
     abortSignal?: AbortSignal,
+    resumeData?: any,  // 【新增】断点续传数据
   ): AsyncGenerator<any> {
 
     // 清理上一轮的工具调用状态
     this.displayManager.clear();
 
+    // 【新增】判断是否为断点模式
+
+    let isResumeMode = regenerationMode === 'resume';
+    let assistantResponse: MessageRecord | null = null;
+    let turnsId: string;
+    let responseMessageId: string;
+
+    if (!isResumeMode) {
+
+      // 【正常模式】生成新的 turnsId 和 messageId
+
+      // 生成本次对话轮次的唯一 ID，用于关联同一轮中的所有消息和工具调用
+      turnsId = conversationContext.generateId();
+
+      // 准备助手回复的消息容器，根据再生模式决定是覆盖旧回复还是创建新版本
+      responseMessageId =
+        await conversationContext.prepareAssistantResponse(
+          userMessageId,
+          regenerationMode,
+          turnsId,
+          assistantMessageId,
+        );
+    }
     // 按需获取 tools（仅在需要时查询）
     const tools = toolContext
       ? await this.toolOrchestrator.getAllTools(toolContext)
       : undefined;
-
-    // 生成本次对话轮次的唯一 ID，用于关联同一轮中的所有消息和工具调用
-    const turnsId = conversationContext.generateId();
-
-    // 准备助手回复的消息容器，根据再生模式决定是覆盖旧回复还是创建新版本
-    const responseMessageId =
-      await conversationContext.prepareAssistantResponse(
-        userMessageId,
-        regenerationMode,
-        turnsId,
-        assistantMessageId,
-      );
-
     let needToContinue = false;
 
-    // 防止无限循环的安全机制：设置最大迭代次数上限
+    // 工具调用轮次计数器
     let iterationCount = 0;
-    const MAX_ITERATIONS = 100;
 
     do {
       iterationCount++;
       needToContinue = false;
 
-      // 安全检查：超过最大迭代次数时强制终止循环，避免资源耗尽
-      if (iterationCount > MAX_ITERATIONS) {
-        this.logger.warn(
-          `Agent loop exceeded maximum iterations (${MAX_ITERATIONS}), stopping...`,
-        );
-        break;
-      }
-
-      this.logger.debug(`Agent iteration ${iterationCount}/${MAX_ITERATIONS}`);
-
       // 从会话上下文中获取准备发送给 LLM 的完整消息列表（含 system prompt、摘要和历史）
       const historyMessages = await conversationContext.getMessages();
-
       // 生成本轮助手回复的内容 ID，用于唯一标识该轮次的输出
-      const contentId = conversationContext.generateId();
-
-      // Yield create 事件（每轮都发送，通知前端新的 contentId），用于前端初始化消息容器
-      yield {
-        type: "create",
-        messageId: responseMessageId,
-        turnsId: turnsId,
-        contentId,
-        modelName: session.model?.modelName,
-        requestId: RequestContext.current()?.requestId, // 添加 requestId 便于追踪
-      };
-
-      // 执行单次 LLM 流式请求，实时接收并转发模型输出的文本块、思维链和工具调用
-      const assistantResponse: MessageRecord = {
+      let contentId = conversationContext.generateId();
+      assistantResponse = {
         role: "assistant",
         content: "",
-        messageId: responseMessageId, // 设置 messageId 以满足外键约束
-        turnsId: turnsId, // 设置 turnsId
+        messageId: responseMessageId,
+        contentId: contentId,
+        turnsId: turnsId,
         metadata: {
           modelName: session.model?.modelName,
-        } // 初始化 metadata 以避免后续访问 undefined
+        }
+      };
+      if (isResumeMode) {
+        const lastMessage = historyMessages[historyMessages.length - 1];
+        assistantResponse = lastMessage;
+        contentId = lastMessage.contentId;
+        responseMessageId = lastMessage.messageId;
+        turnsId = lastMessage.turnsId;
+        console.log(`lastMessage ${JSON.stringify(lastMessage)}`);
+      }
+
+      // 断点模式：发送 update 事件
+      yield {
+        type: isResumeMode ? "update" : "create",
+        messageId: responseMessageId,
+        turnsId: turnsId,
+        contentId: contentId,
+        modelName: session.model?.modelName,
+        requestId: RequestContext.current()?.requestId,
       };
 
-      yield* this.executeLLMStream(
-        session,
-        historyMessages, // 直接使用准备好的消息
-        tools,
-        assistantResponse,
-        thinkingEffort,
-        abortSignal,
-      );
+      // 构建待保存的消息记录数组
+      const parts: MessageRecord[] = [];
 
-      // 构建待保存的消息记录数组，包含助手回复和后续的工具响应
-      const parts: MessageRecord[] = [assistantResponse];
+      // 【关键】如果不是断点模式，或者需要继续循环，才调用 LLM
+      if (isResumeMode) {
+        isResumeMode = false;
+      } else {
+        yield* this.executeLLMStream(
+          session,
+          historyMessages,
+          tools,
+          assistantResponse,
+          thinkingEffort,
+          abortSignal,
+        );
+        parts.push(assistantResponse);
+      }
+
       // 处理工具执行：若模型返回了工具调用指令，则批量执行所有工具
-      // 不能使用ssistantResponse.metadata?.finishReason === "tool_calls"判断
       if (assistantResponse.toolCalls && toolContext) {
-        // 工具执行完成后，生成"已..."状态的展示文案
+        // 【工具轮次限制】检查是否达到最大工具调用轮次
+        const MAX_TOOL_ITERATIONS = 2;
+        if (iterationCount >= MAX_TOOL_ITERATIONS) {
+          this.logger.warn(
+            `工具调用达到最大轮次限制 (${MAX_TOOL_ITERATIONS})，暂停执行等待用户确认`,
+          );
+
+          // 保存断点标记到 metadata
+          if (!assistantResponse.metadata) {
+            assistantResponse.metadata = {};
+          }
+          assistantResponse.metadata.finishReason = 'max_iterations_reached';
+
+          // 发送特殊 finish 事件，通知前端显示继续按钮
+          yield {
+            type: 'finish',
+            finishReason: 'max_iterations_reached',
+            message: `已达到最大工具调用轮次限制（${MAX_TOOL_ITERATIONS} 轮），是否继续执行？`,
+            progress: {
+              completedIterations: iterationCount,
+              maxIterations: MAX_TOOL_ITERATIONS,
+            },
+            usage: assistantResponse.metadata?.usage,
+          };
+
+          // 在持久化前，将最终的文案注入到 toolCalls 的 metadata 中
+          this.displayManager.injectDisplayMessages(assistantResponse.toolCalls);
+          // 持久化当前消息（包含断点元数据），确保刷新后仍能显示继续按钮
+          await conversationContext.appendParts(parts);
+          return;
+        }
+
+        // 【关键】将工具分为三组
+        const { pendingTools, approvedTools, rejectedTools } = this.classifyToolsByApproval(
+          assistantResponse.toolCalls,
+          assistantResponse.metadata,
+          session
+        );
+
+        // 【原子性审批】只要有需要审批且未审批的工具，就触发审批请求
+        if (pendingTools.length > 0) {
+          const approvalToken = this.generateResumeToken();
+
+          // 保存审批上下文到 metadata
+          if (!assistantResponse.metadata) {
+            assistantResponse.metadata = {};
+          }
+
+          assistantResponse.metadata.approvalContext = {
+            type: 'approval',
+            status: 'pending',
+            token: approvalToken,
+            pendingToolCallIds: pendingTools.map((tc: any) => tc.id),
+            createdAt: new Date().toISOString(),
+          } as ApprovalContext;
+
+          // 提前终止，发送审批请求
+          yield {
+            type: "finish",
+            resumeToken: approvalToken,
+            finishReason: "approval_required",
+            usage: assistantResponse.metadata?.usage,
+          };
+
+          await conversationContext.appendParts(parts);
+
+          return;
+        }
+
+        // 【已处理场景】执行 approved 工具 + 为 rejected 工具生成错误响应
         const completedDisplayMessages = this.displayManager.finalizeAll(
           assistantResponse.toolCalls
         );
 
-        const toolResponses = await this.toolOrchestrator.executeBatch(
-          assistantResponse.toolCalls.map((tc: any) => ({
-            id: tc.id,
-            name: tc.name,
-            arguments: this.safeJsonParse(tc.arguments),
-          })),
-          toolContext,
-          abortSignal,
-        );
+        // 执行 approved 工具（包括已通过审批和不需要审批的）
+        if (approvedTools.length > 0) {
+          const toolResponses = await this.toolOrchestrator.executeBatch(
+            approvedTools.map((tc: any) => ({
+              id: tc.id,
+              name: tc.name,
+              arguments: this.safeJsonParse(tc.arguments),
+            })),
+            toolContext,
+            abortSignal,
+          );
 
-        // Yield tool_calls_response 事件（与 Python 后端保持一致），向前端推送工具执行结果
-        yield {
-          type: "tool_calls_response",
-          toolCallsResponse: toolResponses.map((tr) => ({
-            name: tr.name,
-            content: tr.content,
-            toolCallId: tr.toolCallId,
-          })),
-          displayMessages: completedDisplayMessages,  // 添加完成状态的文案
-          // usage: assistantResponse.metadata?.usage || { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
-        };
+          yield {
+            type: "tool_calls_response",
+            toolCallsResponse: toolResponses.map((tr) => ({
+              name: tr.name,
+              content: tr.content,
+              toolCallId: tr.toolCallId,
+            })),
+            displayMessages: completedDisplayMessages.filter((_, index) => {
+              const tc = assistantResponse.toolCalls[index];
+              return approvedTools.some((at: any) => at.id === tc.id);
+            }),
+          };
 
-        needToContinue = true;
-        // 将每个工具的响应转换为 message record 并添加到待保存数组中
-        for (const res of toolResponses) {
-          parts.push({
-            role: "tool",
-            name: res.name,
-            content: res.content,
-            toolCallId: res.toolCallId,
-            messageId: responseMessageId, // 工具响应与 assistant 消息共享同一个 messageId，保持关联关系
-            turnsId: turnsId, // 使用相同的 turnsId，确保同轮次的所有消息归属于同一对话轮次
-          });
+          for (const res of toolResponses) {
+            parts.push({
+              role: "tool",
+              name: res.name,
+              content: res.content,
+              toolCallId: res.toolCallId,
+              messageId: responseMessageId,
+              turnsId: turnsId,
+            });
+          }
         }
+
+        // 为 rejected 工具生成错误响应
+        if (rejectedTools.length > 0) {
+          for (const rejected of rejectedTools) {
+            // 从 decisions 中获取拒绝原因
+            const decision = assistantResponse.metadata?.approvalContext?.decisions?.find(
+              (d: any) => d.toolCallId === rejected.id
+            );
+
+            // 构建错误消息：固定前缀 + 可选的原因
+            let errorMessage = '用户拒绝了工具执行';
+            if (decision?.reason) {
+              errorMessage += `，原因：${decision.reason}`;
+            }
+
+            const errorResponse = {
+              toolCallId: rejected.id,
+              name: rejected.name,
+              content: JSON.stringify({
+                success: false,
+                message: errorMessage,
+              }),
+              isError: true,
+            };
+
+            yield {
+              type: "tool_calls_response",
+              toolCallsResponse: [errorResponse],
+            };
+
+            parts.push({
+              role: "tool",
+              name: errorResponse.name,
+              content: errorResponse.content,
+              toolCallId: errorResponse.toolCallId,
+              messageId: responseMessageId,
+              turnsId: turnsId,
+            });
+          }
+        }
+
+        // 在持久化前，将最终的文案注入到 toolCalls 的 metadata 中
+        this.displayManager.injectDisplayMessages(assistantResponse.toolCalls);
+        needToContinue = true;
+
       }
 
-      // 在持久化前，将最终的文案注入到 toolCalls 的 metadata 中
-      if (assistantResponse.toolCalls) {
-        this.displayManager.injectDisplayMessages(assistantResponse.toolCalls);
-      }
 
       // 将本轮产生的所有消息（助手回复 + 工具响应）追加到会话上下文并持久化存储
       await conversationContext.appendParts(parts);
@@ -1068,7 +1214,7 @@ export class AgentEngine {
     try {
       let chunkPromise: Promise<IteratorResult<LLMResponseChunk>> | undefined = undefined;
       let chunkPromiseWait: Promise<{ type: "chunk"; value: IteratorResult<LLMResponseChunk> }> | undefined = undefined;
-      
+
       while (!streamDone) {
         // 检查 abort 信号
         if (abortSignal?.aborted) {
@@ -1161,5 +1307,124 @@ export class AgentEngine {
       name: tc.name,
       arguments: tc.arguments,
     }));
+  }
+
+
+  /**
+   * 【新增】检查工具是否需要审批
+   */
+  private needsApproval(toolCalls: any[], session: any): boolean {
+    const settings = session.settings || {};
+    const approvalConfig = settings.toolApproval || {};
+
+    // 如果全局禁用审批，返回 false
+    if (approvalConfig.enabled === false) {
+      return false;
+    }
+
+    const requiresApprovalTools = approvalConfig.requiresApproval || [];
+
+    return toolCalls.some((tc: any) => {
+      const toolName = tc.name;
+
+
+      // 精确匹配
+      if (requiresApprovalTools.includes(toolName)) {
+        return true;
+      }
+
+      // 命名空间匹配（如 file__*）
+      const namespace = toolName.split('__')[0];
+      if (requiresApprovalTools.includes(`${namespace}__*`)) {
+        return true;
+      }
+
+      return false;
+    });
+  }
+
+  /**
+   * 【新增】生成断点令牌
+   */
+  private generateResumeToken(): string {
+    return `resume_${Date.now()}_${Math.random().toString(36).substring(2, 15)}`;
+  }
+
+  /**
+   * 【新增】将工具按审批状态分类
+   * 
+   * @param toolCalls 所有工具调用
+   * @param metadata 消息的 metadata（包含 approvalContext）
+   * @param session 会话对象（用于获取审批配置）
+   * @returns 三类工具：pendingTools（需要审批但未决策）、approvedTools（已通过/不需要审批）、rejectedTools（被拒绝）
+   */
+  private classifyToolsByApproval(
+    toolCalls: any[],
+    metadata?: any,
+    session?: any
+  ): {
+    pendingTools: any[];
+    approvedTools: any[];
+    rejectedTools: any[];
+  } {
+    const pendingTools: any[] = [];
+    const approvedTools: any[] = [];
+    const rejectedTools: any[] = [];
+
+    // 检查是否有审批上下文
+    const approvalContext = metadata?.approvalContext;
+
+    if (approvalContext && approvalContext.status !== 'pending') {
+      // 已审批场景：根据 decisions 分类
+      const decisions = approvalContext.decisions || [];
+
+      for (const tc of toolCalls) {
+        const decision = decisions.find((d: any) => d.toolCallId === tc.id);
+
+        if (!decision) {
+          // 【异常】前端未对该工具做出决策，视为 pending
+          pendingTools.push(tc);
+        } else if (decision.decision === 'approve') {
+          approvedTools.push(tc);
+        } else if (decision.decision === 'reject') {
+          rejectedTools.push(tc);
+        }
+      }
+    } else {
+      // 未审批场景：检查哪些工具需要审批
+      const settings = session?.settings || {};
+      const approvalConfig = settings.toolApproval || {};
+      const requiresApprovalTools = approvalConfig.requiresApproval || [];
+
+      for (const tc of toolCalls) {
+        const needsApproval = this.isToolRequiresApproval(tc.name, requiresApprovalTools);
+
+        if (needsApproval) {
+          pendingTools.push(tc);
+        } else {
+          approvedTools.push(tc);  // 不需要审批的工具归为 approved
+        }
+      }
+    }
+
+    return { pendingTools, approvedTools, rejectedTools };
+  }
+
+  /**
+   * 【辅助】检查单个工具是否需要审批
+   */
+  private isToolRequiresApproval(toolName: string, requiresApprovalTools: string[]): boolean {
+    // 精确匹配
+    if (requiresApprovalTools.includes(toolName)) {
+      return true;
+    }
+
+    // 命名空间匹配（如 file__*）
+    const namespace = toolName.split('__')[0];
+    if (requiresApprovalTools.includes(`${namespace}__*`)) {
+      return true;
+    }
+
+    return false;
   }
 }

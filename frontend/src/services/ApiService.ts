@@ -381,6 +381,13 @@ class ApiService implements IApiService {
   }
 
   /**
+   * 获取指定目录的子节点（用于懒加载）
+   */
+  async getWorkspaceChildren(sessionId: string, dirPath: string): Promise<{ children: any[] }> {
+    return await this._request(`/sessions/${sessionId}/workspace/children?path=${encodeURIComponent(dirPath)}`)
+  }
+
+  /**
    * 获取工作目录中的文件内容
    */
   async getWorkspaceFile(sessionId: string, filePath: string): Promise<{
@@ -435,7 +442,8 @@ class ApiService implements IApiService {
     messageId: string,
     regenerationMode: string | null = null,
     assistantMessageId: string | null = null,
-    enableReasoning: boolean = false
+    enableReasoning: boolean = false,
+    resumeData?: any
   ): AsyncGenerator<StreamEvent, void, unknown> {
     try {
       this.cancelResponse(sessionId)
@@ -457,6 +465,7 @@ class ApiService implements IApiService {
           regenerationMode: regenerationMode,
           stream: true,
           enableReasoning: enableReasoning,
+          resumeData: resumeData,
         }),
         signal: controller.signal,
       })

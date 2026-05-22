@@ -4,7 +4,7 @@ import { MessageContentRepository } from "../../common/database/message-content.
 import { SessionRepository } from "../../common/database/session.repository";
 import { KnowledgeBaseRepository } from "../../common/database/knowledge-base.repository";
 import { createPaginatedResponse } from "../../common/types/pagination";
-import { v4 as uuidv4 } from "uuid";
+import { randomUUID } from "crypto";
 import { FileRepository } from "../../common/database/file.repository";
 import { UrlService } from "../../common/services/url.service";
 import { FileService } from "../files/file.service";
@@ -243,7 +243,7 @@ export class MessageService {
       }
 
       // 生成新的轮次 ID
-      turnsId = uuidv4();
+      turnsId = randomUUID();
 
       // 使用事务确保删除和创建的原子性
       try {
@@ -305,7 +305,7 @@ export class MessageService {
       }
     } else {
       // 创建新消息
-      turnsId = uuidv4(); // 生成轮次 ID
+      turnsId = randomUUID(); // 生成轮次 ID
       const message = await this.messageRepo.create({
         sessionId,
         role,

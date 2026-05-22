@@ -15,6 +15,7 @@ import { UrlService } from "../../common/services/url.service";
 import { WorkspaceService } from "../../common/services/workspace.service";
 import { SG_MODELS, SK_MOD_CHAT, SK_MOD_TITLE_MODEL } from "../../constants/settings.constants";
 import { SessionContextService } from "./session-context.service";
+import { FileWatcherService } from "../../common/services/file-watcher.service";
 
 @Injectable()
 export class SessionService {
@@ -31,6 +32,7 @@ export class SessionService {
     private urlService: UrlService,
     private workspaceService: WorkspaceService,
     private sessionContextService: SessionContextService,
+    private fileWatcherService: FileWatcherService,
   ) { }
 
   /**
@@ -307,6 +309,9 @@ export class SessionService {
     if (!session || session.userId !== userId) {
       throw new Error("Session not found or unauthorized");
     }
+
+    // 停止文件监听
+    this.fileWatcherService.stopWatching(sessionId);
 
     // 级联删除消息（Prisma Schema 中已配置 onDelete: Cascade）
     await this.sessionRepo.deleteById(sessionId);
