@@ -74,7 +74,7 @@ export class FileWatcherService implements OnModuleDestroy {
         workspacePath,
       });
 
-      this.logger.log(`Started watching workspace for session ${sessionId}: ${workspacePath}`);
+      // this.logger.log(`Started watching workspace for session ${sessionId}: ${workspacePath}`);
     } catch (error: any) {
       this.logger.error(`Failed to start watching workspace: ${error.message}`);
     }
@@ -89,7 +89,7 @@ export class FileWatcherService implements OnModuleDestroy {
       watcherInfo.watcher.close();
       this.watchers.delete(sessionId);
       this.listeners.delete(sessionId);
-      this.logger.log(`Stopped watching workspace for session ${sessionId}`);
+      // this.logger.log(`Stopped watching workspace for session ${sessionId}`);
     }
   }
 
