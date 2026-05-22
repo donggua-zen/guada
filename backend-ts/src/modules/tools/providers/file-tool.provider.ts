@@ -19,7 +19,7 @@ export class FileToolProvider implements IToolProvider {
   private readonly toolsConfig: InternalToolDefinition[] = [
     {
       name: "read",
-      description: "读取指定路径的文本文件内容。支持分页读取大文件，通过参数精确控制读取范围。适合查看配置文件、日志或代码。",
+      description: "读取指定路径的文本文件内容。",
       parameters: {
         type: "object",
         properties: {
@@ -53,7 +53,7 @@ export class FileToolProvider implements IToolProvider {
     },
     {
       name: "list",
-      description: "列出指定目录下的文件和子目录。max_depth 控制递归深度（1-3），默认为 1（仅当前目录）。单个目录超过 200 个文件时会显示省略提醒。",
+      description: "列出指定目录下的文件和子目录。",
       parameters: {
         type: "object",
         properties: {
@@ -95,7 +95,7 @@ export class FileToolProvider implements IToolProvider {
     },
     {
       name: "replace",
-      description: "在文件中查找并替换指定文本。expected_count 用于验证匹配次数：设为 -1 或 0 表示替换所有匹配项；设为正整数则必须严格匹配该次数，否则报错。",
+      description: "在文件中查找并替换指定文本",
       parameters: {
         type: "object",
         properties: {
@@ -118,7 +118,7 @@ export class FileToolProvider implements IToolProvider {
           },
           encoding: {
             type: "string",
-            description: "文件编码，默认为 utf-8",
+            description: "文件编码",
             default: "utf-8",
           },
         },
@@ -229,10 +229,8 @@ export class FileToolProvider implements IToolProvider {
     }
 
     promptParts.push("**重要提醒**：");
-    promptParts.push("1. 这些工具极其危险，如果需要删除或者修改文件务必征得用户同意");
-    promptParts.push("2. 写入文件会覆盖原有内容，请谨慎使用");
-    promptParts.push("3. 读取大文件时可能需要较长时间，建议先确认文件大小");
-    promptParts.push("4. 对于超大文件，请使用分页读取功能，避免一次性加载过多内容");
+    promptParts.push("1. 文件读写类操作优先使用文件工具集而不是命令行");
+    promptParts.push("2. 对于超大文件，请使用分页读取功能，避免一次性加载过多内容");
 
     return promptParts.join("\n");
 
