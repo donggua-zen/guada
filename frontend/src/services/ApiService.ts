@@ -17,6 +17,16 @@ import type {
   GlobalSettings,
   UploadResponse
 } from '@/types/service'
+
+/**
+ * 工作目录文件变化事件
+ */
+export interface FileChangeEvent {
+  type: 'add' | 'change' | 'unlink' | 'addDir' | 'unlinkDir'
+  path: string
+  sessionId: string
+  timestamp: number
+}
 import type { Model, McpServer, ModelProvider } from '@/types/api'
 import type { Character, CharacterListResponse, CharacterGroup } from '@/types/character'
 import type { Session, SessionListResponse } from '@/types/session'
@@ -529,6 +539,169 @@ class ApiService implements IApiService {
       this.currentAbortController.abort()
       this.currentAbortController = null
     }
+  }
+
+  // ========== 工作目录实时监听 ==========
+  private workspaceAbortController: AbortController | null = null
+  private workspaceListeners: Set<(event: FileChangeEvent) => void> = new Set()
+  private workspaceReconnectTimer: number | null = null
+  private workspaceReconnectAttempts = 0
+  private workspaceCurrentSessionId: string | null = null
+  private readonly WORKSPACE_MAX_RECONNECT_ATTEMPTS = 5
+  private readonly WORKSPACE_RECONNECT_DELAY = 3000
+
+  /**
+   * 连接到指定会话的工作目录事件流（SSE）
+   * 使用 fetch API 实现，支持自定义 Authorization header
+   */
+  connectWorkspaceWatcher(sessionId: string): void {
+    // 如果已连接同一会话，不做任何操作
+    if (this.workspaceCurrentSessionId === sessionId && this.workspaceAbortController) {
+      return
+    }
+
+    // 断开现有连接
+    this.disconnectWorkspaceWatcher()
+
+    this.workspaceCurrentSessionId = sessionId
+    this.workspaceReconnectAttempts = 0
+
+    const url = `${this.baseURL}/sessions/${sessionId}/workspace/events`
+
+    this.startWorkspaceFetchStream(url)
+  }
+
+  /**
+   * 使用 fetch API 启动 SSE 流
+   */
+  private async startWorkspaceFetchStream(url: string): Promise<void> {
+    this.workspaceAbortController = new AbortController()
+
+    try {
+      // 优先从 localStorage 读取（记住我），否则使用 sessionStorage
+      const token = localStorage.getItem('token') || sessionStorage.getItem('token') || ''
+
+      const response = await fetch(url, {
+        method: 'GET',
+        headers: {
+          'Accept': 'text/event-stream',
+          'Authorization': `Bearer ${token}`,
+        },
+        signal: this.workspaceAbortController.signal,
+      })
+
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`)
+      }
+
+      if (!response.body) {
+        throw new Error('Response body is null')
+      }
+
+      const reader = response.body.getReader()
+      const decoder = new TextDecoder()
+      let buffer = ''
+
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+
+        buffer += decoder.decode(value, { stream: true })
+        const lines = buffer.split('\n')
+        buffer = lines.pop() || ''
+
+        for (const line of lines) {
+          if (line.startsWith('data: ')) {
+            const data = line.slice(6)
+            if (data === '[DONE]') continue
+            try {
+              const event = JSON.parse(data) as FileChangeEvent
+              this.notifyWorkspaceListeners(event)
+            } catch (error) {
+              console.error('[WorkspaceWatcher] Failed to parse event data:', error)
+            }
+          }
+        }
+      }
+    } catch (error: any) {
+      if (error.name === 'AbortError') {
+        // 只有主动断开时才不重连
+        if (!this.workspaceAbortController) {
+          console.log('[WorkspaceWatcher] Connection aborted by user')
+          return
+        }
+        // 非主动断开（如后端重启），触发重连
+        console.log('[WorkspaceWatcher] Connection aborted unexpectedly, will reconnect')
+      } else {
+        console.error('[WorkspaceWatcher] Connection error:', error)
+      }
+      this.handleWorkspaceReconnect(url)
+    }
+  }
+
+  /**
+   * 断开工作目录监听连接
+   */
+  disconnectWorkspaceWatcher(): void {
+    if (this.workspaceReconnectTimer) {
+      clearTimeout(this.workspaceReconnectTimer)
+      this.workspaceReconnectTimer = null
+    }
+
+    if (this.workspaceAbortController) {
+      this.workspaceAbortController.abort()
+      this.workspaceAbortController = null
+    }
+
+    this.workspaceCurrentSessionId = null
+    this.workspaceReconnectAttempts = 0
+  }
+
+  /**
+   * 注册文件变化监听器
+   */
+  onWorkspaceChange(callback: (event: FileChangeEvent) => void): () => void {
+    this.workspaceListeners.add(callback)
+    return () => {
+      this.workspaceListeners.delete(callback)
+    }
+  }
+
+  /**
+   * 获取当前工作目录监听的会话ID
+   */
+  getWorkspaceWatcherSessionId(): string | null {
+    return this.workspaceCurrentSessionId
+  }
+
+  /**
+   * 处理重连
+   */
+  private handleWorkspaceReconnect(url: string): void {
+    if (this.workspaceReconnectAttempts >= this.WORKSPACE_MAX_RECONNECT_ATTEMPTS) {
+      console.error('[WorkspaceWatcher] Max reconnection attempts reached')
+      return
+    }
+
+    this.workspaceReconnectAttempts++
+    console.log(`[WorkspaceWatcher] Reconnecting in ${this.WORKSPACE_RECONNECT_DELAY}ms (attempt ${this.workspaceReconnectAttempts})`)
+
+    this.workspaceReconnectTimer = window.setTimeout(() => {
+      this.startWorkspaceFetchStream(url)
+    }, this.WORKSPACE_RECONNECT_DELAY)
+  }
+
+  /**
+   * 通知所有监听器
+   */
+  private notifyWorkspaceListeners(event: FileChangeEvent): void {
+    this.workspaceListeners.forEach((callback) => {
+      try {
+        callback(event)
+      } catch (error) {
+        console.error('[WorkspaceWatcher] Listener error:', error)
+      }
+    })
   }
 
   // ========== 文件上传 ==========
