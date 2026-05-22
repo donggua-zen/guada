@@ -18,7 +18,7 @@ if (process.env.NODE_MODULES_PATH) {
 
 import { PrismaClient } from "@prisma/client";
 import { PrismaBetterSqlite3 } from "@prisma/adapter-better-sqlite3";
-import * as bcrypt from "bcryptjs";
+import { PasswordHashUtil } from "../common/utils/password-hash.util";
 import { readFileSync } from "fs";
 import { resolve } from "path";
 import "dotenv/config";
@@ -70,7 +70,7 @@ function logSection(title: string) {
 async function createDefaultUser() {
   logInfo("正在创建默认管理员用户...");
 
-  const hashedPassword = await bcrypt.hash("guada", 10);
+  const hashedPassword = await PasswordHashUtil.hash("guada");
 
   const user = await prisma.user.create({
     data: {

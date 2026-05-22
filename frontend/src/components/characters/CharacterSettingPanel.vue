@@ -1316,8 +1316,6 @@ defineExpose({
   display: flex;
   flex-direction: column;
   gap: 12px;
-  max-height: 400px;
-  overflow-y: auto;
   overflow-x: hidden;
 }
 

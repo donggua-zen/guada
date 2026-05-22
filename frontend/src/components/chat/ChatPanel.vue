@@ -15,7 +15,7 @@
             :is-last="index === activeMessages.length - 1"
             :allow-generate="!isStreaming && allowReSendMessage(message, index, activeMessages)" @delete="deleteMessage"
             @edit="editMessage" @copy="copyMessage" @generate="generateResponse" @regenerate="regenerateResponse"
-            @switch="switchContent" />
+            @continue="continueResponse" @switch="switchContent" />
           <!-- <div class="min-h-60"></div> -->
 
           <!-- 压缩中状态显示 -->
@@ -36,25 +36,19 @@
   </div>
 
   <!-- 输入区域 -->
-  <div class="pb-6 w-full px-5  max-w-205 flex flex-col items-center mx-auto"
-    _style="position: absolute; left: 50%; transform: translateX(-50%);bottom: 0;">
+  <div class="pb-6 w-full px-5 max-w-205 flex flex-col items-start mx-auto">
     <!-- 编辑模式提示条 -->
-    <div v-if="editMode" class="w-full mb-[-0.2rem]">
-      <div
-        class="edit-mode-banner pt-1 pb-3.5 px-2 bg-gray-50 dark:bg-[#2a2c30] border border-gray-300 dark:border-[#383a40] rounded-lg">
-        <span class="edit-mode-icon">📝</span>
-        <span class="edit-mode-text">正在编辑消息</span>
-        <el-button size="small" @click="exitEditMode" class="cancel-edit-btn">
-          取消
-        </el-button>
-      </div>
+    <div v-if="editMode"
+      class="mb-5 bg-gray-50 dark:bg-[#2a2c30] flex items-center px-4 py-1 border border-gray-300 dark:border-[#383a40] rounded-xl">
+      <span class="flex-1 text-gray-500 text-sm mr-10">正在编辑消息</span>
+      <el-button size="small" @click="exitEditMode" class="cancel-edit-btn" plain>
+        取消编辑
+      </el-button>
     </div>
 
     <div class="w-full flex items-center" style="margin-top: -10px;z-index: 9;">
-      <ChatInput v-model:value="inputMessage.content"
-        v-model:files="inputMessage.files"
-        :session-id="currentSession?.id"
-        :config="chatInputConfig" :streaming="isStreaming"
+      <ChatInput v-model:value="inputMessage.content" v-model:files="inputMessage.files"
+        :session-id="currentSession?.id" :config="chatInputConfig" :streaming="isStreaming"
         @config-change="handleConfigChange" @send="handleSendMessage" @abort="abortResponse" />
     </div>
     <!-- <div class="ai-disclaimer text-xs text-gray-400 text-center mt-2">内容由 AI 生成，仅供参考</div> -->
@@ -562,6 +556,24 @@ function regenerateResponse(message: any) {
   });
 }
 
+/**
+ * 从断点继续执行（恢复工具调用）
+ */
+function continueResponse(message: any) {
+  const assistantMessage = activeMessages.value.find(m => m.id === message.id);
+  if (assistantMessage) {
+    assistantMessage.state = { isStreaming: true };
+  }
+
+  nextTick(() => {
+    immediateScrollToBottom();
+    if (message.sessionId) {
+      // 注意，恢复模式下userMessageId应该是需要恢复的消息ID，也就是当前消息ID，而不是parentId
+      handleStreamResponse(message.sessionId, message.id, "resume", null);
+    }
+  });
+}
+
 function switchContent(message: any, turns_id: string) {
   const targetMessage = activeMessages.value.find((m) => m.id === message.id);
   targetMessage.currentTurnsId = turns_id
@@ -637,47 +649,5 @@ function scrollToMessage(messageId: string) {
 
 .edit-mode-banner:hover {
   box-shadow: 0 3px 12px rgba(230, 162, 60, 0.15);
-}
-
-.edit-mode-icon {
-  font-size: 18px;
-  flex-shrink: 0;
-}
-
-.edit-mode-text {
-  flex: 1;
-  color: #606266;
-  font-size: 14px;
-  font-weight: 500;
-}
-
-.dark .edit-mode-text {
-  color: oklch(80% 0.02 250);
-  /* 暗色模式下的文本颜色 */
-}
-
-/* 取消编辑按钮样式 */
-.cancel-edit-btn {
-  background: transparent;
-  border: 1px solid #f56c6c;
-  color: #f56c6c;
-  font-size: 13px;
-  padding: 5px 12px;
-  border-radius: 4px;
-  transition: all 0.2s ease;
-  cursor: pointer;
-}
-
-.cancel-edit-btn:hover {
-  background: #f56c6c;
-  color: white;
-  border-color: #f56c6c;
-  transform: translateY(-1px);
-  box-shadow: 0 2px 6px rgba(245, 108, 108, 0.2);
-}
-
-.cancel-edit-btn:active {
-  transform: translateY(0);
-  box-shadow: 0 1px 3px rgba(245, 108, 108, 0.15);
 }
 </style>

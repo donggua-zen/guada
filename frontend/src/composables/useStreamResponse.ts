@@ -60,7 +60,7 @@ interface StreamResponse {
 
 export function useStreamResponse(sessionStore: any, apiService: any) {
   const { toast } = usePopup()
-  
+
   // 流式响应状态
   const streamingState = reactive<StreamingState>({
     isStreaming: false,
@@ -131,6 +131,45 @@ export function useStreamResponse(sessionStore: any, apiService: any) {
     return {
       message: existingMessage,
       contentIndex: existingMessage.contents.length - 1
+    }
+  }
+
+  /**
+   * 处理 update 事件（断点恢复模式）
+   * 复用已有消息和内容块，更新流式状态
+   */
+  function handleUpdateMessage(
+    response: StreamResponse,
+    streamingSessionId: string
+  ): { message: Message; contentIndex: number } | null {
+    const existingMessage = sessionStore.getMessages(streamingSessionId).find(
+      (msg: Message) => msg.id === response.messageId
+    )
+
+    if (!existingMessage) {
+      console.error('Message not found:', response.messageId)
+      throw new Error('Message not found')
+    }
+
+    // 查找对应的内容块
+    const existingContentIndex = existingMessage.contents.findIndex(
+      (c: MessageContent) => c.id === response.contentId
+    )
+
+    if (existingContentIndex < 0) {
+      console.error('Content not found:', response.contentId)
+      throw new Error('Content not found')
+    }
+
+    // 更新消息状态为流式中
+    existingMessage.state = {
+      isStreaming: true,
+      isThinking: false
+    }
+
+    return {
+      message: existingMessage,
+      contentIndex: existingContentIndex
     }
   }
 
@@ -360,6 +399,8 @@ export function useStreamResponse(sessionStore: any, apiService: any) {
         clearInterval(content._thinkingTimer)
         content._thinkingTimer = null
       }
+      content.state.isStreaming = false
+      content.state.isThinking = false
 
       if (content && message) {
         content.updatedAt = new Date().toISOString()
@@ -375,7 +416,7 @@ export function useStreamResponse(sessionStore: any, apiService: any) {
   async function processStream(
     streamingSessionId: string,
     userMessageId: string,
-    regenerationMode: 'regenerate' | null = null,
+    regenerationMode: 'regenerate' | 'resume' | null = null,
     assistantMessageId: string | null = null
   ): Promise<void> {
     sessionStore.setSessionIsStreaming(streamingSessionId, true)
@@ -396,7 +437,9 @@ export function useStreamResponse(sessionStore: any, apiService: any) {
         streamingSessionId,
         userMessageId,
         regenerationMode,
-        assistantMessageId
+        assistantMessageId,
+        false,
+        null
       )) {
         // 修复：实时检测并保存 usage，不等待 finish 事件
         // 这样即使被取消或发生异常，已接收到的 usage 也不会丢失
@@ -419,7 +462,7 @@ export function useStreamResponse(sessionStore: any, apiService: any) {
           const result = handleNewMessage(response, streamingSessionId, userMessageId)
           message = result.message
           contentIndex = result.contentIndex
-          assistantMessageIdResult = response.message_id!
+          assistantMessageIdResult = response.messageId!
 
           // 修复：仅在第一个 create 事件时更新时间戳，避免工具调用多轮次导致重复更新
           if (!hasUpdatedActiveTime) {
@@ -427,6 +470,22 @@ export function useStreamResponse(sessionStore: any, apiService: any) {
             hasUpdatedActiveTime = true
           }
 
+          continue
+        }
+
+        // 【断点恢复】处理 update 事件（resume 模式下更新已有消息）
+        if (response.type === 'update') {
+          const result = handleUpdateMessage(response, streamingSessionId)
+          if (result) {
+            message = result.message
+            contentIndex = result.contentIndex
+            assistantMessageIdResult = response.messageId!
+
+            if (!hasUpdatedActiveTime) {
+              sessionStore.updateSessionLastActiveTime(streamingSessionId, new Date().toISOString())
+              hasUpdatedActiveTime = true
+            }
+          }
           continue
         }
 

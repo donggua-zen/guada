@@ -1,5 +1,4 @@
 import { Injectable } from "@nestjs/common";
-import * as bcrypt from "bcryptjs";
 import * as fs from "fs";
 import * as path from "path";
 import sharp from "sharp";
@@ -7,6 +6,7 @@ import * as crypto from "crypto";
 import { UserRepository } from "../../common/database/user.repository";
 import { UploadPathService } from "../../common/services/upload-path.service";
 import { UrlService } from "../../common/services/url.service";
+import { PasswordHashUtil } from "../../common/utils/password-hash.util";
 
 @Injectable()
 export class UserService {
@@ -55,17 +55,17 @@ export class UserService {
     newPassword: string,
   ) {
     const user = await this.userRepo.findById(userId);
-    if (!user || !(await bcrypt.compare(oldPassword, user.passwordHash))) {
+    if (!user || !(await PasswordHashUtil.compare(oldPassword, user.passwordHash))) {
       throw new Error("旧密码不正确");
     }
     const normalizedNewPassword = newPassword.toLowerCase();
-    const hashedPassword = await bcrypt.hash(normalizedNewPassword, 10);
+    const hashedPassword = await PasswordHashUtil.hash(normalizedNewPassword);
     return this.userRepo.update(userId, { passwordHash: hashedPassword });
   }
 
   async createSubAccount(parentId: string, data: any) {
     const normalizedPassword = data.password.toLowerCase();
-    const hashedPassword = await bcrypt.hash(normalizedPassword, 10);
+    const hashedPassword = await PasswordHashUtil.hash(normalizedPassword);
     return this.userRepo.create({
       ...data,
       parentId,
@@ -161,7 +161,7 @@ export class UserService {
       throw new Error("用户不存在");
     }
 
-    const hashedPassword = await bcrypt.hash(password, 10);
+    const hashedPassword = await PasswordHashUtil.hash(password);
     return this.userRepo.update(user.id, { passwordHash: hashedPassword });
   }
 }

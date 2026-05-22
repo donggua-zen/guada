@@ -1,10 +1,10 @@
 import { Injectable, Logger } from "@nestjs/common";
 import { JwtService } from "@nestjs/jwt";
-import * as bcrypt from "bcryptjs";
 import { UserRepository } from "../../common/database/user.repository";
 import { SettingsStorage } from "../../common/utils/settings-storage.util";
 import { UrlService } from "../../common/services/url.service";
 import { SG_SYSTEM, SK_SYS_AUTO_LOGIN } from "../../constants/settings.constants";
+import { PasswordHashUtil } from "../../common/utils/password-hash.util";
 
 @Injectable()
 export class AuthService {
@@ -28,7 +28,7 @@ export class AuthService {
       return null;
     }
     
-    const isPasswordValid = await bcrypt.compare(normalizedPassword, user.passwordHash);
+    const isPasswordValid = await PasswordHashUtil.compare(normalizedPassword, user.passwordHash);
     if (!isPasswordValid) {
       this.logger.warn(`登录失败：密码错误 - ${username}`);
       return null;

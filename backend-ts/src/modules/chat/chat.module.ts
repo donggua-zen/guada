@@ -14,6 +14,7 @@ import { TokenizerService } from "../../common/utils/tokenizer.service";
 import { ChatController } from "./chat.controller";
 import { MessagesController } from "./messages.controller";
 import { SessionsController } from "./sessions.controller";
+import { WorkspaceEventsController } from "./workspace-events.controller";
 import { MessageService } from "./message.service";
 import { SessionService } from "./session.service";
 import { AuthModule } from "../auth/auth.module";
@@ -25,6 +26,7 @@ import { SkillsModule } from "../skills/skills.module";
 
 import { SessionLockService } from "./session-lock.service";
 import { UploadPathService } from "../../common/services/upload-path.service";
+import { FileWatcherService } from "../../common/services/file-watcher.service";
 
 import { MessageStoreService } from "./message-store.service";
 import { CompressionEngine } from "./compression-engine";
@@ -32,7 +34,7 @@ import { ConversationContextFactory, MESSAGE_STORE_TOKEN, COMPRESSION_STRATEGY_T
 
 @Module({
   imports: [AuthModule, ToolsModule, CharactersModule, FilesModule, LlmCoreModule, SkillsModule],
-  controllers: [ChatController, MessagesController, SessionsController],
+  controllers: [ChatController, MessagesController, SessionsController, WorkspaceEventsController],
   providers: [
     AgentEngine,
     SessionContextService,
@@ -54,6 +56,7 @@ import { ConversationContextFactory, MESSAGE_STORE_TOKEN, COMPRESSION_STRATEGY_T
     SessionLockService,
     TokenizerService,
     UploadPathService,
+    FileWatcherService,
   ],
   exports: [AgentEngine],
 })

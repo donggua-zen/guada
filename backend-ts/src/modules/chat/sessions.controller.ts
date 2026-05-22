@@ -160,7 +160,7 @@ export class SessionsController {
       await this.workspaceService.ensureDirectoryExists(workspacePath);
     }
 
-    const tree = await this.buildDirectoryTree(workspacePath, '', 0, 3);
+    const tree = await this.buildDirectoryTree(workspacePath, '', 0, 0);
     return { tree };
   }
 
@@ -232,6 +232,56 @@ export class SessionsController {
     };
   }
 
+  @Get("sessions/:id/workspace/children")
+  async getWorkspaceChildren(
+    @Param("id") id: string,
+    @Query("path") dirPath: string,
+    @CurrentUser() user: any
+  ) {
+    // 验证会话归属权
+    const session = await this.sessionService.getSessionById(id, user.id);
+    if (!session) {
+      throw new Error("Session not found or unauthorized");
+    }
+
+    if (!dirPath) {
+      throw new Error("Directory path is required");
+    }
+
+    // 确定工作目录路径
+    let workspaceDir: string;
+    if ((session as any).workspacePath) {
+      workspaceDir = path.resolve((session as any).workspacePath);
+      await this.workspaceService.validateCustomWorkspacePath(workspaceDir);
+      await this.workspaceService.ensureDirectoryExists(workspaceDir);
+    } else {
+      workspaceDir = this.workspaceService.getDefaultWorkspaceDir(id);
+      await this.workspaceService.ensureDirectoryExists(workspaceDir);
+    }
+
+    // 解析目录路径并安全检查
+    const resolvedDirPath = this.workspaceService.resolveFilePath(dirPath, workspaceDir);
+
+    // 确保目录在工作目录内
+    if (!resolvedDirPath.startsWith(workspaceDir)) {
+      throw new Error("Access denied: Directory is outside workspace directory");
+    }
+
+    // 检查目录是否存在
+    if (!fs.existsSync(resolvedDirPath)) {
+      throw new Error("Directory not found");
+    }
+
+    const stat = fs.statSync(resolvedDirPath);
+    if (!stat.isDirectory()) {
+      throw new Error("Path is not a directory");
+    }
+
+    // 获取子节点（只加载一层，递归深度为 0）
+    const children = await this.buildDirectoryTree(resolvedDirPath, dirPath, 0, 0);
+    return { children };
+  }
+
   /**
    * 构建目录树（限制深度）
    * @param dirPath 目录路径
@@ -243,7 +293,7 @@ export class SessionsController {
     dirPath: string,
     relativePath: string = '',
     currentDepth: number = 0,
-    maxDepth: number = 3
+    maxDepth: number = 1
   ): Promise<any[]> {
     try {
       const entries = await fsPromises.readdir(dirPath, { withFileTypes: true });
@@ -251,9 +301,9 @@ export class SessionsController {
 
       for (const entry of entries) {
         // 跳过隐藏文件和 node_modules
-        if (entry.name.startsWith('.') || entry.name === 'node_modules') {
-          continue;
-        }
+        // if (entry.name.startsWith('.') || entry.name === 'node_modules') {
+        //   continue;
+        // }
 
         const fullPath = path.join(dirPath, entry.name);
         const relPath = relativePath ? `${relativePath}/${entry.name}` : entry.name;

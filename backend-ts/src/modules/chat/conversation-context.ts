@@ -1,6 +1,6 @@
 import { Logger } from "@nestjs/common";
 import { MessageRecord } from "../llm-core/types/llm.types";
-import { v4 as uuidv4 } from "uuid";
+import { createId } from "@paralleldrive/cuid2";
 import {
   IConversationContext,
   IMessageStore,
@@ -291,7 +291,7 @@ export class ConversationContext implements IConversationContext {
   }
 
   generateId(): string {
-    return uuidv4();
+    return createId();
   }
 
   /**

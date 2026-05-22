@@ -1,7 +1,7 @@
 import { Injectable, Logger } from "@nestjs/common";
 import * as fs from "fs";
 import * as path from "path";
-import { PDFParse } from "pdf-parse";
+import PDFParser from "pdf2json";
 import * as mammoth from "mammoth";
 
 @Injectable()
@@ -152,19 +152,26 @@ export class FileParserService {
    * 解析 PDF 文件
    */
   private async parsePdfFile(content: Buffer): Promise<string> {
-    try {
-      const parser = new PDFParse({ data: content });
-      const result = await parser.getText();
-      // 清理文本：去除多余空白、标准化换行符
-      return result.text
-        .replace(/\r\n/g, "\n")
-        .replace(/\r/g, "\n")
-        .replace(/\n{3,}/g, "\n\n")
-        .trim();
-    } catch (error: any) {
-      this.logger.error(`PDF 解析失败: ${error.message}`);
-      throw new Error(`PDF 文件解析失败: ${error.message}`);
-    }
+    return new Promise((resolve, reject) => {
+      const pdfParser = new PDFParser();
+
+      pdfParser.on("pdfParser_dataReady", (pdfData: any) => {
+        const rawText = pdfParser.getRawTextContent();
+        const cleanedText = rawText
+          .replace(/\r\n/g, "\n")
+          .replace(/\r/g, "\n")
+          .replace(/\n{3,}/g, "\n\n")
+          .trim();
+        resolve(cleanedText);
+      });
+
+      pdfParser.on("pdfParser_dataError", (error: any) => {
+        this.logger.error(`PDF 解析失败: ${error.message}`);
+        reject(new Error(`PDF 文件解析失败: ${error.message}`));
+      });
+
+      pdfParser.parseBuffer(content);
+    });
   }
 
   /**

@@ -12,6 +12,7 @@ import { AuthGuard } from "../auth/auth.guard";
 import { CurrentUser } from "../auth/current-user.decorator";
 import { AgentEngine } from "./agent-engine.service";
 import { SessionService } from "./session.service";
+import { MessageRepository } from "../../common/database/message.repository";
 import { Observable } from "rxjs";
 import { Response, Request } from "express";
 
@@ -21,7 +22,8 @@ export class ChatController {
   constructor(
     private agentEngine: AgentEngine,
     private sessionService: SessionService,
-  ) {}
+    private messageRepo: MessageRepository,
+  ) { }
 
   @Sse("completions")
   async completions(
@@ -29,8 +31,9 @@ export class ChatController {
     body: {
       sessionId: string;
       messageId: string;
-      regenerationMode?: string; // 再生模式
+      regenerationMode?: string; // 再生模式：'overwrite' | 'multi_version' | 'resume'
       assistantMessageId?: string; // 现有助手消息 ID
+      resumeData?: any; // 【新增】断点续传数据（如审批决策）
     },
     @CurrentUser() user: any,
     @Req() req: Request,
@@ -40,6 +43,7 @@ export class ChatController {
       messageId,
       regenerationMode = "overwrite", // 默认 overwrite 模式
       assistantMessageId,
+      resumeData, // 【新增】
     } = body;
     const session = await this.sessionService.getSessionById(sessionId, user.id);
 
@@ -62,6 +66,7 @@ export class ChatController {
         regenerationMode, // 传递再生模式
         assistantMessageId, // 传递现有助手消息 ID
         abortController.signal, // 传递中断信号
+        resumeData, // 【新增】传递断点续传数据
       );
 
       let isCompleted = false;
@@ -112,8 +117,9 @@ export class ChatController {
       sessionId: string;
       messageId?: string;
       assistantMessageId?: string;
-      regenerationMode?: string; // 改为 string 类型：'overwrite' | 'multi_version' | 'append'
+      regenerationMode?: string; // 改为 string 类型：'overwrite' | 'multi_version' | 'resume'
       enableReasoning?: boolean;
+      resumeData?: any; // 【新增】断点续传数据
     },
     @CurrentUser() user: any,
     @Res() res: Response,
@@ -124,6 +130,7 @@ export class ChatController {
       messageId,
       assistantMessageId,
       regenerationMode = "overwrite", // 默认 overwrite 模式
+      resumeData, // 【新增】
     } = body;
 
     const session = await this.sessionService.getSessionById(sessionId, user.id);
@@ -158,6 +165,7 @@ export class ChatController {
         regenerationMode, // 传递再生模式
         assistantMessageId, // 传递现有助手消息 ID
         abortController.signal, // 传递中断信号
+        resumeData, // 【新增】传递断点续传数据
       );
 
       for await (const chunk of iterator) {
@@ -182,5 +190,89 @@ export class ChatController {
         }
       }
     }
+  }
+
+  /**
+   * 【新增】工具审批接口
+   * 
+   * 前端调用此接口批量提交审批决策。
+   * 审批后，前端需要重新发起流式请求，Agent 循环会检测到 approvalContext.decisions
+   * 并根据每个工具的决策执行相应的操作（approved: 执行工具, rejected: 生成错误响应）。
+   */
+  @Post("approve-tools")
+  async approveTools(
+    @Body()
+    body: {
+      messageId: string;  // 助手消息 ID
+      decisions: Array<{  // 所有需要审批的工具的决策
+        toolCallId: string;
+        decision: 'approve' | 'reject';
+        reason?: string;  // 拒绝原因（可选）
+      }>;
+    },
+    @CurrentUser() user: any,
+  ) {
+    const { messageId, decisions } = body;
+
+    // 验证消息存在，并获取当前的 content
+    const message = await this.messageRepo.findById(messageId, {
+      withContents: true,
+      onlyCurrentContent: true,
+    });
+
+    if (!message || !message.contents || message.contents.length === 0) {
+      throw new Error('Message not found');
+    }
+
+    // TODO: 验证消息属于当前用户
+    // const session = await this.sessionService.getSessionById(message.sessionId, user.id);
+    // if (!session) {
+    //   throw new Error('Unauthorized');
+    // }
+
+    // 获取当前 content 的最后一个轮次（ReAct 循环中最新的一轮）
+    const currentContent = message.contents[message.contents.length - 1];
+    const metadata = (currentContent.metadata as any) || {};
+    const approvalContext = metadata.approvalContext;
+
+    if (!approvalContext || approvalContext.type !== 'approval') {
+      throw new Error('No pending approval context found');
+    }
+
+    if (approvalContext.status !== 'pending') {
+      throw new Error(`Approval already ${approvalContext.status}`);
+    }
+
+    // 验证决策数量匹配
+    const pendingToolCallIds = approvalContext.pendingToolCallIds || [];
+    if (decisions.length !== pendingToolCallIds.length) {
+      throw new Error(`Expected ${pendingToolCallIds.length} decisions, got ${decisions.length}`);
+    }
+
+    // 验证所有决策的工具 ID 都在 pendingToolCallIds 中
+    const pendingIds = new Set(pendingToolCallIds);
+    for (const decision of decisions) {
+      if (!pendingIds.has(decision.toolCallId)) {
+        throw new Error(`Invalid toolCallId: ${decision.toolCallId}`);
+      }
+    }
+
+    // 更新审批状态和决策
+    metadata.approvalContext = {
+      ...approvalContext,
+      status: 'completed',  // 标记为已完成
+      decisions: decisions,
+      updatedAt: new Date().toISOString(),
+    };
+
+    // 保存更新后的 content metadata
+    await this.messageRepo.update(currentContent.id, { metadata });
+
+    return {
+      success: true,
+      messageId,
+      contentId: currentContent.id,
+      decisionsCount: decisions.length,
+    };
   }
 }

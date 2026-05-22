@@ -2,12 +2,9 @@
     <div
         class="workspace-sidebar h-full flex flex-col bg-white dark:bg-[#1a1b1e] border-l border-gray-200 dark:border-[#2e3035]">
         <!-- 可拖拽分割区域 -->
-        <LiteSplitpanes
-            class="flex-1"
-            :horizontal="!isHorizontalLayout"
+        <LiteSplitpanes class="flex-1" :horizontal="!isHorizontalLayout"
             :pane1="{ size: selectedFile ? (isHorizontalLayout ? 40 : 60) : 100, minSize: 30, maxSize: 100 }"
-            :pane2="{ size: selectedFile ? (isHorizontalLayout ? 60 : 40) : 0, minSize: 0, maxSize: 100 }"
-        >
+            :pane2="{ size: selectedFile ? (isHorizontalLayout ? 60 : 40) : 0, minSize: 0, maxSize: 100 }">
             <template #pane1>
                 <div class="flex flex-col h-full">
                     <!-- 头部（仅在左侧目录树显示） -->
@@ -34,20 +31,13 @@
 
                     <!-- 目录树内容 -->
                     <div class="flex-1 overflow-y-auto p-2">
-                        <div v-if="isLoading && !treeData.length" class="flex items-center justify-center py-8">
-                            <el-icon class="is-loading" size="24">
-                                <LoadingOutlined />
-                            </el-icon>
-                        </div>
-
-                        <div v-else-if="!treeData.length" class="text-center py-8 text-gray-400 text-sm">
+                        <div v-if="!treeData.length" class="text-center py-8 text-gray-400 text-sm">
                             暂无文件
                         </div>
 
-                        <el-tree v-else ref="treeRef" :data="treeData" :props="treeProps" node-key="path"
-                            :expand-on-click-node="true" :default-expanded-keys="expandedKeys"
-                            @node-click="handleTreeNodeClick" @node-expand="handleNodeExpand"
-                            @node-collapse="handleNodeCollapse" class="workspace-tree">
+                        <el-tree v-else ref="treeRef" :key="treeKey" :data="treeData" :props="treeProps" node-key="path"
+                            :expand-on-click-node="true" :default-expanded-keys="expandedKeys" :lazy="true"
+                            :load="loadNode" @node-click="handleTreeNodeClick" highlight-current class="workspace-tree">
                             <template #default="{ node, data }">
                                 <span class="workspace-tree-node">
                                     <el-icon v-if="data.isDirectory" class="mr-1">
@@ -106,7 +96,7 @@
                         <div v-else class="w-full min-h-0">
                             <!-- HTML 预览模式 -->
                             <iframe v-if="isHtmlFile && currentPreviewMode === 'rendered'" :srcdoc="fileContent"
-                                class="w-full border-0" style="height: 100%;" 
+                                class="w-full border-0" style="height: 100%;"
                                 sandbox="allow-same-origin allow-scripts" />
 
                             <!-- Markdown 渲染模式 -->
@@ -117,9 +107,8 @@
                             <div v-else-if="renderedContent" class="code-preview-container" v-html="renderedContent" />
 
                             <!-- 普通文本预览（不支持高亮的文件） -->
-                            <pre v-else
-                                class="text-xs whitespace-pre-wrap break-all bg-gray-50 dark:bg-[#2a2c30] p-3 m-0 overflow-auto min-h-0">
-                    {{ fileContent }}</pre>
+                            <pre v-else v-text="fileContent"
+                                class="text-sm leading-relaxed whitespace-pre-wrap break-all  dark:bg-[#2a2c30] text-gray-800 dark:text-gray-200 p-4 m-0 overflow-auto min-h-0 font-mono" />
                         </div>
                     </div>
                 </div>
@@ -129,8 +118,9 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, onUnmounted } from 'vue';
+import { ref, computed, watch, onUnmounted, nextTick } from 'vue';
 import { apiService } from '@/services/ApiService';
+import { workspaceWatcher, type FileChangeEvent } from '@/services/WorkspaceWatcher';
 import { Refresh, Close, View, Edit, FolderOpened } from '@element-plus/icons-vue';
 import { SwapHorizTwotone as SplitVerticalIcon, SwapVertTwotone as SplitHorizontalIcon } from '@vicons/material';
 import { LoadingOutlined } from '@vicons/antd';
@@ -146,6 +136,8 @@ interface WorkspaceNode {
     isDirectory: boolean;
     children?: WorkspaceNode[];
     size?: number;
+    hasChildren?: boolean;
+    loaded?: boolean; // 标记是否已加载子节点
 }
 
 interface SelectedFile {
@@ -171,6 +163,7 @@ const previewLoading = ref(false);
 const previewError = ref('');
 const expandedKeys = ref<string[]>([]);
 const treeRef = ref();
+const treeKey = ref(0);
 
 // 检测是否为 Electron 环境
 const isElectron = typeof window !== 'undefined' && window.electronAPI !== undefined;
@@ -181,6 +174,42 @@ const treeProps = {
     children: 'children',
     isLeaf: (data: WorkspaceNode) => !data.isDirectory,
 };
+
+/**
+ * 懒加载节点数据
+ */
+async function loadNode(node: any, resolve: (data: WorkspaceNode[]) => void) {
+    // 根节点（level === 0）已经在 loadTree 中加载
+    if (node.level === 0) {
+        resolve(treeData.value);
+        return;
+    }
+
+    // 子节点懒加载
+    const nodeData = node.data as WorkspaceNode;
+
+    if (!nodeData.isDirectory || !props.sessionId) {
+        resolve([]);
+        return;
+    }
+
+    // 关键：如果节点已经有 children 数据，直接返回，不发起 API 请求
+    if (nodeData.children && nodeData.children.length > 0) {
+        resolve(nodeData.children);
+        return;
+    }
+
+    try {
+        const response = await apiService.getWorkspaceChildren(props.sessionId, nodeData.path);
+        const children = response.children || [];
+        // 保存到 nodeData，以便后续本地更新
+        nodeData.children = children;
+        resolve(children);
+    } catch (error: any) {
+        console.error('[WorkspaceSidebar] Failed to lazy load node:', error);
+        resolve([]);
+    }
+}
 
 // 布局方向：true=左右，false=上下，默认左右
 const isHorizontalLayout = useStorage('workspaceLayoutHorizontal', true);
@@ -193,8 +222,6 @@ const { parseMarkdown } = useMarkdown();
 
 // 初始化代码高亮
 const { highlightCode, getLanguageFromExtension, isTextFile } = useHighlight();
-
-let refreshTimer: number | null = null;
 
 // 当前预览文件的内容哈希，用于检测文件是否变化
 const fileContentHash = ref('');
@@ -266,6 +293,60 @@ const renderedContent = computed(() => {
 });
 
 /**
+ * 检查节点是否在树中
+ */
+function isNodeInTree(nodes: WorkspaceNode[], path: string): boolean {
+    for (const node of nodes) {
+        if (node.path === path) return true;
+        if (node.children && isNodeInTree(node.children, path)) return true;
+    }
+    return false;
+}
+
+/**
+ * 增量更新树数据，保留已加载的子节点和展开状态
+ * 通过就地修改数组元素，避免 el-tree 重新渲染
+ */
+function updateTreeData(oldNodes: WorkspaceNode[], newNodes: WorkspaceNode[]): void {
+    // 创建新节点的映射表
+    const newNodeMap = new Map<string, WorkspaceNode>();
+    newNodes.forEach(node => {
+        newNodeMap.set(node.path, node);
+    });
+
+    // 删除旧数组中不存在的节点（从后往前删，避免索引问题）
+    for (let i = oldNodes.length - 1; i >= 0; i--) {
+        if (!newNodeMap.has(oldNodes[i].path)) {
+            oldNodes.splice(i, 1);
+        }
+    }
+
+    // 更新或添加节点
+    newNodes.forEach((newNode, index) => {
+        const existingIndex = oldNodes.findIndex(n => n.path === newNode.path);
+
+        if (existingIndex !== -1) {
+            // 更新现有节点，保留 children（这是关键！）
+            const oldNode = oldNodes[existingIndex];
+            oldNode.name = newNode.name;
+            oldNode.size = newNode.size;
+            oldNode.hasChildren = newNode.hasChildren;
+            oldNode.isDirectory = newNode.isDirectory;
+            // 不替换 children，保持已加载的子节点和展开状态
+
+            // 如果位置变了，移动到正确位置
+            if (existingIndex !== index) {
+                oldNodes.splice(existingIndex, 1);
+                oldNodes.splice(index, 0, oldNode);
+            }
+        } else {
+            // 添加新节点
+            oldNodes.splice(index, 0, newNode);
+        }
+    });
+}
+
+/**
  * 加载工作目录树（使用官方节流）
  */
 async function loadTree(force = false) {
@@ -277,7 +358,20 @@ async function loadTree(force = false) {
     isLoading.value = true;
     try {
         const response = await apiService.getWorkspaceTree(props.sessionId);
-        treeData.value = response.tree || [];
+
+        // 记录当前的选中状态
+        const currentSelectedKey = treeRef.value?.getCurrentKey();
+
+        // 增量更新树数据，保留已加载的子节点和展开状态
+        updateTreeData(treeData.value, response.tree || []);
+
+        // 等待 DOM 更新
+        await nextTick();
+
+        // 恢复选中状态
+        if (currentSelectedKey) {
+            treeRef.value?.setCurrentKey(currentSelectedKey);
+        }
     } catch (error: any) {
         console.error('Failed to load workspace tree:', error);
     } finally {
@@ -290,29 +384,196 @@ const throttledLoadTree = useThrottleFn(loadTree, 5000);
 
 /**
  * 刷新树（强制立即执行）
+ * 清空数据重新加载，就像新打开会话一样
  */
 function refreshTree() {
-    // 清除节流限制，直接调用原始函数
+    treeData.value = [];
     loadTree();
 }
 
 /**
- * 处理节点展开
+ * 检查路径是否在已展开的目录下
+ * 如果父目录未展开，则该路径下的变化不需要更新展示
  */
-function handleNodeExpand(data: WorkspaceNode) {
-    if (!expandedKeys.value.includes(data.path)) {
-        expandedKeys.value.push(data.path);
+function isPathInExpandedDir(filePath: string): boolean {
+    // 根目录总是展开的（因为根目录数据始终加载）
+    if (!filePath || (filePath.indexOf('/') === -1 && filePath.indexOf('\\') === -1)) {
+        return true;
+    }
+
+    // 获取所有已展开节点的路径
+    const expandedPaths = getExpandedNodePaths();
+
+    // 统一使用 / 分隔符处理路径
+    const normalizedPath = filePath.replace(/\\/g, '/');
+    // 检查文件路径的任何一个父目录是否已展开
+    const parts = normalizedPath.split('/');
+    let currentPath = '';
+    for (let i = 0; i < parts.length - 1; i++) {
+        currentPath = currentPath ? `${currentPath}/${parts[i]}` : parts[i];
+        if (expandedPaths.includes(currentPath)) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+/**
+ * 获取所有已展开节点的路径
+ */
+function getExpandedNodePaths(): string[] {
+    const paths: string[] = [];
+    const tree = treeRef.value;
+
+    // 尝试多种方式获取展开节点
+    if (tree) {
+        // 方式1: 通过 store.nodesMap
+        const nodesMap = tree.store?.nodesMap;
+        if (nodesMap) {
+            Object.values(nodesMap).forEach((node: any) => {
+                if (node.expanded && node.data?.path) {
+                    paths.push(node.data.path);
+                }
+            });
+        }
+
+        // 方式2: 通过 $refs.rootNode
+        if (paths.length === 0 && tree.$refs?.rootNode?.childNodes) {
+            collectExpandedPaths(tree.$refs.rootNode.childNodes, paths);
+        }
+    }
+
+    return paths;
+}
+
+/**
+ * 递归收集已展开节点的路径
+ */
+function collectExpandedPaths(nodes: any[], paths: string[]): void {
+    nodes.forEach((node: any) => {
+        if (node.expanded && node.data?.path) {
+            paths.push(node.data.path);
+        }
+        if (node.childNodes && node.childNodes.length > 0) {
+            collectExpandedPaths(node.childNodes, paths);
+        }
+    });
+}
+
+/**
+ * 处理文件系统变化事件
+ * 直接本地更新节点，不再请求后端 API
+ */
+function handleFileChange(event: FileChangeEvent) {
+    // 判断变化的文件是否在已展开的目录下
+    if (!isPathInExpandedDir(event.path)) {
+        return;
+    }
+
+    // 本地更新节点
+    updateNodeLocal(event);
+}
+
+/**
+ * 根据文件变化事件本地更新节点
+ */
+function updateNodeLocal(event: FileChangeEvent) {
+    const normalizedPath = event.path.replace(/\\/g, '/');
+    const parts = normalizedPath.split('/');
+    const fileName = parts[parts.length - 1];
+    const parentPath = parts.length > 1 ? parts.slice(0, -1).join('/') : '';
+
+    // 查找父节点
+    const parentNode = findNodeByPath(treeData.value, parentPath);
+    if (!parentNode) {
+        return;
+    }
+
+    // 确保父节点有 children 数组
+    if (!parentNode.children) {
+        parentNode.children = [];
+    }
+
+    switch (event.type) {
+        case 'add':
+        case 'addDir':
+            // 检查是否已存在
+            const existingIndex = parentNode.children.findIndex(child => child.name === fileName);
+            if (existingIndex === -1) {
+                // 创建新节点
+                const newNode: WorkspaceNode = {
+                    name: fileName,
+                    path: normalizedPath,
+                    isDirectory: event.type === 'addDir',
+                    hasChildren: event.type === 'addDir',
+                    children: event.type === 'addDir' ? [] : undefined,
+                };
+                // 计算插入位置（保持排序：目录在前，按名称排序）
+                let insertBeforeNode = null;
+                for (const child of parentNode.children) {
+                    const childIsDir = child.isDirectory;
+                    const newIsDir = newNode.isDirectory;
+                    if (newIsDir && !childIsDir) {
+                        // 新节点是目录，当前是文件，插入到当前之前
+                        insertBeforeNode = treeRef.value.getNode(child.path);
+                        break;
+                    }
+                    if (newIsDir === childIsDir && newNode.name.localeCompare(child.name) < 0) {
+                        // 同类型且名称更小，插入到当前之前
+                        insertBeforeNode = treeRef.value.getNode(child.path);
+                        break;
+                    }
+                }
+                if (insertBeforeNode) {
+                    treeRef.value.insertBefore(newNode, insertBeforeNode);
+                } else {
+                    treeRef.value.append(newNode, parentNode.path || parentNode);
+                }
+            }
+            break;
+
+        case 'unlink':
+        case 'unlinkDir':
+            // 使用 el-tree 官方 API 移除节点
+            const node = treeRef.value.getNode(normalizedPath);
+            if (node) {
+                treeRef.value.remove(node);
+            }
+            // 如果删除的是当前预览的文件，自动关闭预览
+            if (selectedFile.value && selectedFile.value.path === normalizedPath) {
+                closePreview();
+            }
+            break;
+
+        case 'change':
+            // 文件内容变化，刷新预览内容（如果是当前选中的文件）
+            if (selectedFile.value && selectedFile.value.path === normalizedPath) {
+                loadFileContent(normalizedPath, false, true);
+            }
+            break;
     }
 }
 
 /**
- * 处理节点折叠
+ * 根据路径查找节点
  */
-function handleNodeCollapse(data: WorkspaceNode) {
-    const index = expandedKeys.value.indexOf(data.path);
-    if (index > -1) {
-        expandedKeys.value.splice(index, 1);
+function findNodeByPath(nodes: WorkspaceNode[], path: string): WorkspaceNode | null {
+    if (!path) {
+        // 返回根节点（虚拟节点，包含所有根级子节点）
+        return { name: '', path: '', isDirectory: true, children: nodes };
     }
+
+    for (const node of nodes) {
+        if (node.path === path) {
+            return node;
+        }
+        if (node.children && node.children.length > 0) {
+            const found = findNodeByPath(node.children, path);
+            if (found) return found;
+        }
+    }
+    return null;
 }
 
 /**
@@ -427,50 +688,45 @@ async function openInFileManager() {
     }
 }
 
-/**
- * 设置自动刷新（降低频率至 10 秒）
- */
-function setupAutoRefresh() {
-    // 清除旧的定时器
-    if (refreshTimer) {
-        clearInterval(refreshTimer);
-    }
 
-    // 每 10 秒刷新一次（从 3 秒改为 10 秒，减少请求频率）
-    refreshTimer = window.setInterval(() => {
-        if (props.sessionId) {
-            throttledLoadTree(); // 使用节流版本，5秒内最多执行一次
-
-            // 如果当前有选中的文件，同步刷新文件内容（静默刷新，不显示 loading）
-            if (selectedFile.value) {
-                loadFileContent(selectedFile.value.path, false, true);
-            }
-        }
-    }, 10000);
-}
+let unsubscribeWatcher: (() => void) | null = null;
 
 watch(() => props.sessionId, (newSessionId, oldSessionId) => {
     // 会话切换时关闭文件预览
     if (oldSessionId && newSessionId !== oldSessionId) {
         closePreview();
         treeData.value = [];
+        workspaceWatcher.disconnect();
+        if (unsubscribeWatcher) {
+            unsubscribeWatcher();
+            unsubscribeWatcher = null;
+        }
     }
 
     if (newSessionId) {
         loadTree(); // 直接调用，不受节流限制
-        setupAutoRefresh();
+
+        // 连接 WorkspaceWatcher 实时监听文件变化
+        const token = localStorage.getItem('token') || '';
+        workspaceWatcher.connect(newSessionId, token);
+
+        // 注册文件变化监听器
+        unsubscribeWatcher = workspaceWatcher.onChange(handleFileChange);
     } else {
         treeData.value = [];
-        if (refreshTimer) {
-            clearInterval(refreshTimer);
-            refreshTimer = null;
+        workspaceWatcher.disconnect();
+        if (unsubscribeWatcher) {
+            unsubscribeWatcher();
+            unsubscribeWatcher = null;
         }
     }
 }, { immediate: true });
 
 onUnmounted(() => {
-    if (refreshTimer) {
-        clearInterval(refreshTimer);
+    workspaceWatcher.disconnect();
+    if (unsubscribeWatcher) {
+        unsubscribeWatcher();
+        unsubscribeWatcher = null;
     }
 });
 </script>

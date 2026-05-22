@@ -29,21 +29,36 @@
             :is-thinking="turn.state?.isThinking || false" :is-streaming="turn.state?.isStreaming || false"
             :thinking-duration-ms="turn.thinkingDurationMs ?? turn.metadata?.thinkingDurationMs"
             :meta-data="turn.metadata" @click="handleThinkingClick" />
+
           <template v-if="turn.content">
             <MarkdownContent v-if="isAssistant" class="message-item__text markdown-text" @click="handleClick"
               :content="turn.content" :debounced="turn.state?.isStreaming" />
             <div v-else class="message-item__text">{{ turn.content }}</div>
           </template>
 
-
           <!-- 使用拆分后的工具调用组件 -->
-          <MessageToolCalls v-if="turn.metadata && turn.metadata.toolCalls"
-            :tool-calls="turn.metadata.toolCalls" :tool-responses="turn.metadata.toolCallsResponse"
-            :is-streaming="turn.state?.isStreaming || false" :content-id="turn.id" />
+          <MessageToolCalls v-if="turn.metadata && turn.metadata.toolCalls" :tool-calls="turn.metadata.toolCalls"
+            :tool-responses="turn.metadata.toolCallsResponse" :is-streaming="turn.state?.isStreaming || false"
+            :content-id="turn.id" />
         </template>
+
         <el-alert v-if="metadata && metadata.finishReason == 'error'" title="API 请求错误" type="error" :closable="false">
           {{ metadata.error }}
         </el-alert>
+
+        <!-- 达到最大工具调用轮次限制，显示继续按钮 -->
+        <div v-if="metadata && metadata.finishReason === 'max_iterations_reached'" class="max-iterations-notice mt-3">
+          <el-alert type="warning" :closable="false">
+            <template #title>
+              <span>已达到最大工具调用轮次限制</span>
+            </template>
+            <div class="flex items-center gap-3 mt-2">
+              <el-button type="primary" size="small" @click="handleContinue">
+                继续执行
+              </el-button>
+            </div>
+          </el-alert>
+        </div>
 
         <!-- Token 消耗显示区域 -->
         <div v-if="isAssistant && tokenUsage && !streamingState.isStreaming" class="token-usage-section mt-2">
@@ -70,8 +85,7 @@
           </div>
         </div>
 
-        <div v-if="streamingState.isStreaming" class="assistant-loading flex items-center text-gray-500"
-          style="position: sticky;top:0;">
+        <div v-if="streamingState.isStreaming" class="assistant-loading flex items-center text-gray-500">
           <el-icon size="16" class="mr-2 relative top-0">
             <Loading />
           </el-icon>
@@ -159,6 +173,7 @@ const emit = defineEmits<{
   copy: [message: any]
   generate: [message: any]
   regenerate: [message: any]
+  continue: [message: any]
 }>();
 
 // ============================================
@@ -239,7 +254,7 @@ const currentModelName = computed(() => {
 // 模型头像路径
 const modelAvatarPath = computed(() => {
   const modelName = metadata.value?.modelName;
-  if (!modelName) return undefined; 
+  if (!modelName) return undefined;
 
   // 尝试从 modelName 中提取 provider 信息
   // 如果 modelName 包含 "/"，则前半部分可能是 provider
@@ -290,6 +305,12 @@ const handleGenerate = () => handleAction('generate');
 const handleRegenerate = () => handleAction('regenerate');
 const handleEdit = () => handleAction('edit');
 const handleDelete = () => handleAction('delete');
+
+// 继续执行（从断点恢复）
+const handleContinue = () => {
+  
+  emit('continue', props.message);
+};
 
 // 思考框点击处理（无参数）
 const handleThinkingClick = () => {
