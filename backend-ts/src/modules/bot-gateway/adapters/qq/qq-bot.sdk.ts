@@ -177,13 +177,11 @@ export class QQBot extends EventEmitter {
   private accessToken: string = '';
   private tokenExpireTime: number = 0;
   private ws: WebSocket | null = null;
-  private sessionId: string = '';
   private lastSeq: number = 0;
   private heartbeatInterval: NodeJS.Timeout | null = null;
-  private reconnectAttempts: number = 0;
-  private isResuming: boolean = false;
-  private resumeFailCount: number = 0;
   private user: QQUser | null = null;
+  private sessionId: string = '';
+  private isResuming: boolean = false;
 
   private readonly baseURL: string;
   private readonly wsURL: string;
@@ -291,10 +289,7 @@ export class QQBot extends EventEmitter {
       this.ws = null;
     }
 
-    this.sessionId = '';
     this.lastSeq = 0;
-    this.isResuming = false;
-    this.resumeFailCount = 0;
   }
 
   /**
@@ -339,24 +334,24 @@ export class QQBot extends EventEmitter {
    */
   private async getGatewayUrlWithRetry(maxRetries: number = 3): Promise<string> {
     let lastError: Error | null = null;
-    
+
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
       try {
         return await this.getGatewayUrl();
       } catch (error: any) {
         lastError = error;
-        
+
         // 检查是否为频率限制错误
-        const isRateLimitError = error.message?.includes('接口调用超过频率限制') || 
-                                 error.message?.includes('40023001');
-        
+        const isRateLimitError = error.message?.includes('接口调用超过频率限制') ||
+          error.message?.includes('40023001');
+
         if (attempt < maxRetries) {
           // 如果是频率限制错误,使用更长的退避时间: 5s, 15s, 30s
           // 否则使用标准指数退避: 1s, 2s, 4s
-          const delay = isRateLimitError 
+          const delay = isRateLimitError
             ? [5000, 15000, 30000][attempt - 1] || 30000
             : Math.pow(2, attempt - 1) * 1000;
-          
+
           console.warn(
             `Get gateway URL failed (attempt ${attempt}/${maxRetries}): ${error.message}. Retrying in ${delay}ms...`
           );
@@ -364,7 +359,7 @@ export class QQBot extends EventEmitter {
         }
       }
     }
-    
+
     throw lastError || new Error('Failed to get gateway URL after retries');
   }
 
@@ -377,7 +372,11 @@ export class QQBot extends EventEmitter {
     switch (payload.op) {
       case 10: // Hello
         this.startHeartbeat(payload.d?.heartbeat_interval);
-        this.identify();
+        if (this.isResuming && this.sessionId) {
+          this.sendResume();
+        } else {
+          this.identify();
+        }
         break;
 
       case 11: // Heartbeat ACK
@@ -391,12 +390,20 @@ export class QQBot extends EventEmitter {
         break;
 
       case 7: // Reconnect
+        this.isResuming = true;
         this.reconnect();
         break;
 
       case 9: // Invalid Session
-        this.sessionId = '';
-        this.identify();
+        if (payload.d === true) {
+          this.isResuming = true;
+          setTimeout(() => this.connectWebSocket(), 1000);
+        } else {
+          this.sessionId = '';
+          this.lastSeq = 0;
+          this.isResuming = false;
+          setTimeout(() => this.connectWebSocket(), 5000);
+        }
         break;
     }
   }
@@ -415,7 +422,7 @@ export class QQBot extends EventEmitter {
         this.ws.send(
           JSON.stringify({
             op: 1,
-            d: this.lastSeq,
+            d: this.lastSeq || null,
           }),
         );
       }
@@ -447,25 +454,6 @@ export class QQBot extends EventEmitter {
     }
   }
 
-  /**
-   * 恢复会话
-   */
-  private async resume(): Promise<void> {
-    const token = await this.getAccessToken();
-
-    const resumePayload = {
-      op: 6,
-      d: {
-        token: `QQBot ${token}`,  // QQ官方要求使用 QQBot
-        session_id: this.sessionId,
-        seq: this.lastSeq,
-      },
-    };
-
-    if (this.ws && this.ws.readyState === WebSocket.OPEN) {
-      this.ws.send(JSON.stringify(resumePayload));
-    }
-  }
 
   /**
    * 处理事件
@@ -474,15 +462,13 @@ export class QQBot extends EventEmitter {
     switch (eventType) {
       case 'READY':
         this.user = data.user;
-        this.sessionId = data.session_id;
-        this.reconnectAttempts = 0;
-        this.resumeFailCount = 0;
+        this.sessionId = data.session_id || '';
+        this.isResuming = false;
         this.emit('ready', { user: this.user });
         break;
 
       case 'RESUMED':
         this.isResuming = false;
-        this.resumeFailCount = 0;
         break;
 
       case 'AT_MESSAGE_CREATE':
@@ -522,6 +508,16 @@ export class QQBot extends EventEmitter {
       this.heartbeatInterval = null;
     }
 
+    // 4902 表示 RESUME 失败，需要清除 session 并使用 IDENTIFY
+    if (code === 4902) {
+      this.sessionId = '';
+      this.lastSeq = 0;
+      this.isResuming = false;
+    } else if (this.sessionId) {
+      // 其他断开情况，如果有 sessionId 则标记尝试恢复
+      this.isResuming = true;
+    }
+
     // 不再在 SDK 内部重连,只发射 close 事件让上层处理
     this.emit('ws_close', code, reason);
   }
@@ -532,16 +528,13 @@ export class QQBot extends EventEmitter {
    */
   async reset(): Promise<void> {
     await this.stop();
-    
-    // 重置所有计数器状态
-    this.reconnectAttempts = 0;
-    this.resumeFailCount = 0;
-    this.isResuming = false;
-    this.sessionId = '';
+
     this.lastSeq = 0;
     this.accessToken = '';
     this.tokenExpireTime = 0;
     this.user = null;
+    this.sessionId = '';
+    this.isResuming = false;
   }
 
   /**
@@ -560,6 +553,24 @@ export class QQBot extends EventEmitter {
   private async reconnect(): Promise<void> {
     if (this.ws) {
       this.ws.close();
+    }
+  }
+
+  /**
+   * 发送恢复连接 (RESUME)
+   */
+  private sendResume(): void {
+    const payload = {
+      op: 6,
+      d: {
+        token: `QQBot ${this.accessToken}`,
+        session_id: this.sessionId,
+        seq: this.lastSeq,
+      },
+    };
+
+    if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+      this.ws.send(JSON.stringify(payload));
     }
   }
 
@@ -585,14 +596,14 @@ export class QQBot extends EventEmitter {
       } catch (e) {
         // 忽略读取错误
       }
-      
+
       console.error(
         `Failed to get gateway URL: ${response.status} ${response.statusText}\n` +
         `Response body: ${errorBody}\n` +
         `AppId: ${this.config.appId}\n` +
         `BaseURL: ${this.baseURL}`
       );
-      
+
       throw new Error(
         `Failed to get gateway URL: ${response.status} ${response.statusText}${errorBody ? ' - ' + errorBody : ''}`
       );

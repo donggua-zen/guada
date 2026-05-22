@@ -220,7 +220,7 @@ export class WeComAiBotAdapter extends BaseBotAdapter {
 
       await this.client.replyStream(frame, streamId, response.content, finish);
 
-      this.logger.log(`Stream reply sent (finish: ${finish}, streamId: ${streamId})`);
+      // this.logger.log(`Stream reply sent (finish: ${finish}, streamId: ${streamId})`);
 
       return true;
     } catch (error: any) {
