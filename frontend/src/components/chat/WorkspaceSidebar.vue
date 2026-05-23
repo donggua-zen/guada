@@ -9,7 +9,7 @@
                 <div class="flex flex-col h-full">
                     <!-- 头部（仅在左侧目录树显示） -->
                     <div
-                        class="flex-shrink-0 flex items-center justify-between px-4 py-3 border-b border-gray-200 dark:border-[#2e3035]">
+                        class="shrink-0 flex items-center justify-between px-4 py-3 border-b border-gray-200 dark:border-[#2e3035]">
                         <h3 class="text-sm font-semibold text-gray-700 dark:text-[#e8e9ed]">工作目录</h3>
                         <div class="flex items-center gap-2">
                             <!-- 打开文件夹按钮（仅 Electron 环境） -->
@@ -59,7 +59,7 @@
                 <div v-if="selectedFile" class="flex flex-col h-full w-full overflow-hidden">
                     <!-- 标题栏 -->
                     <div
-                        class="flex-shrink-0 flex items-center justify-between px-4 py-3 bg-gray-50 dark:bg-[#2a2c30] border-b border-gray-200 dark:border-[#2e3035]">
+                        class="shrink-0 flex items-center justify-between px-4 py-3 bg-gray-50 dark:bg-[#2a2c30] border-b border-gray-200 dark:border-[#2e3035]">
                         <span class="text-xs font-medium text-gray-600 dark:text-[#8b8d95] truncate">
                             {{ selectedFile.name }}
                         </span>
@@ -120,7 +120,7 @@
 <script setup lang="ts">
 import { ref, computed, watch, onUnmounted, nextTick } from 'vue';
 import { apiService, type FileChangeEvent } from '@/services/ApiService';
-import { Refresh, Close, View, Edit, FolderOpened } from '@element-plus/icons-vue';
+import { Refresh, Close, FolderOpened } from '@element-plus/icons-vue';
 import { SwapHorizTwotone as SplitVerticalIcon, SwapVertTwotone as SplitHorizontalIcon } from '@vicons/material';
 import { LoadingOutlined } from '@vicons/antd';
 import { Folder, Document } from '@element-plus/icons-vue';
@@ -192,8 +192,8 @@ async function loadNode(node: any, resolve: (data: WorkspaceNode[]) => void) {
         return;
     }
 
-    // 关键：如果节点已经有 children 数据，直接返回，不发起 API 请求
-    if (nodeData.children && nodeData.children.length > 0) {
+    // 关键：如果节点已经加载过，直接返回缓存数据，不重复发起 API 请求
+    if (nodeData.loaded && nodeData.children) {
         resolve(nodeData.children);
         return;
     }
@@ -203,6 +203,7 @@ async function loadNode(node: any, resolve: (data: WorkspaceNode[]) => void) {
         const children = response.children || [];
         // 保存到 nodeData，以便后续本地更新
         nodeData.children = children;
+        nodeData.loaded = true;
         resolve(children);
     } catch (error: any) {
         console.error('[WorkspaceSidebar] Failed to lazy load node:', error);
@@ -486,6 +487,12 @@ function updateNodeLocal(event: FileChangeEvent) {
     // 查找父节点
     const parentNode = findNodeByPath(treeData.value, parentPath);
     if (!parentNode) {
+        return;
+    }
+
+    // 如果父节点尚未加载（未展开过），忽略此次更新
+    // 根目录（path 为空）始终视为已加载
+    if (!parentNode.loaded && parentNode.path !== '') {
         return;
     }
 
