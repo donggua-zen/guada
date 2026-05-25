@@ -5,10 +5,11 @@
     </div>
 </template>
 <script setup lang="ts">
-import { watch, ref, onMounted, onBeforeUnmount, nextTick, type Ref } from 'vue';
+import { watch, ref, onMounted, onBeforeUnmount } from 'vue';
 import { useDebounceFn } from '@vueuse/core';
 import { useMarkdown } from "../../composables/useMarkdown";
-import { DiffDOM } from 'diff-dom';
+import { useDiffDOM } from "../../composables/useDiffDOM";
+import DiffDOM from 'diff-dom';
 
 const { marked } = useMarkdown()
 
@@ -28,18 +29,7 @@ let diffEngine: DiffDOM | null = null; // diff-dom 实例
 
 // 生命周期：初始化 diff-dom
 onMounted(() => {
-    diffEngine = new DiffDOM({
-        debug: true,
-        // 配置选项
-        valueDiffing: true,  // 比较 input 值
-        preDiffApply: (info: any) => {
-            // 在应用差异前的钩子
-            // if(info.diff.name === 'class')
-            //     return true;
-            // console.log('[DiffDOM] Pre-diff:', info);
-            return false;
-        }
-    });
+    diffEngine = useDiffDOM();
     initialRender(); // 初始渲染，直接使用 innerHTML
 });
 
@@ -113,7 +103,6 @@ const renderWithDiffDOM = async () => {
  * 防抖版本的渲染函数
  * 延迟时间：50ms（适合流式输出场景）
  */
-let lastDebounceCallTime = 0;
 const debouncedRenderWithDiffDOM = useDebounceFn(() => {
     renderWithDiffDOM();
 }, 50, { maxWait: 100 }); // 50ms 延迟，可根据需要调整
@@ -125,8 +114,6 @@ watch(
         // 根据 debounced 属性选择渲染方式
         //nextTick(() => {
         if (props.debounced) {
-            // 消抖模式：延迟渲染，减少流式输出时的频繁更新
-            lastDebounceCallTime = Date.now();
             debouncedRenderWithDiffDOM();
         } else {
             // 即时模式：立即渲染，保持编辑模式的响应性

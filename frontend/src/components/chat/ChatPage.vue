@@ -99,7 +99,7 @@
   </el-dialog>
 </template>
 <script setup lang="ts">
-import { ref, onMounted, watch, computed, defineAsyncComponent, type Ref, nextTick } from "vue";
+import { ref, onMounted, onUnmounted, watch, computed, defineAsyncComponent, type Ref, nextTick } from "vue";
 import { apiService } from "@/services/ApiService";
 import { useRouter, useRoute, type RouteParams } from 'vue-router';
 import { usePopup } from "@/composables/usePopup";
@@ -145,15 +145,12 @@ const currentSession: Ref<Session | null> = ref(null);
 const isElectron = typeof window !== 'undefined' && !!(window as any).electronAPI;
 
 // 会话列表组件引用，用于调用组件内部方法
-const chatSidebarRef = ref<InstanceType<typeof ChatSidebar> | null>(null);
 // ChatPanel 组件引用，用于调用组件内部方法
 const chatPanelRef = ref<InstanceType<typeof ChatPanel> | null>(null);
 const paneContentRef = ref<HTMLElement | null>(null);
 let paneSnapWidth = 0;
 // 设置面板当前激活的标签页
-const currentTabValue = ref<'basic' | string>('basic');
 // 控制设置模态框的显示与隐藏
-const sessionSettingsModalVisible = ref(false);
 // 控制侧边栏的显示状态，使用本地存储保持用户偏好
 const sidebarVisible = useStorage('sidebarVisible', true);
 // 控制记忆管理窗格的显示状态，调试阶段默认打开
@@ -228,8 +225,8 @@ const goChatRoute = async (sessionId: string | null) => {
   }
   if (sessionId) {
     router.replace({ name: 'Chat', params: { sessionId: sessionId } });
-  } else if (sessionStore.activeSessionId) {
-    router.replace({ name: 'Chat', params: { sessionId: sessionStore.activeSessionId } });
+  // } else if (sessionStore.activeSessionId) {
+  //   router.replace({ name: 'Chat', params: { sessionId: sessionStore.activeSessionId } });
   } else {
     router.replace({ name: 'Chat', params: { sessionId: 'new-session' } });
     currentSession.value = null;
@@ -676,7 +673,7 @@ watch(
 // 监听路由参数中会话 ID 的变化，更新选中的会话
 watch(
   () => route.params.sessionId,
-  async (newSessionId, oldSessionId) => {
+  async (newSessionId) => {
     if (!newSessionId) {
       currentSession.value = null;
       return;
@@ -686,6 +683,73 @@ watch(
     await updateSelectedSession(sessionId);
   }
 );
+
+/**
+ * 初始化 SSE 会话事件监听
+ * 用于多窗口同步会话列表和流式状态
+ */
+let unsubscribeSessionEvents: (() => void) | null = null;
+
+function initSessionEventListeners() {
+  // 连接 SSE（如果用户已登录）
+  if (authStore.user?.id) {
+    apiService.connectSessionEvents(authStore.user.id);
+  }
+
+  // 监听会话创建事件
+  apiService.onSessionEvent("session_created", (event) => {
+    const { payload } = event;
+    if (payload?.session) {
+      // 避免重复添加已存在的会话
+      const exists = sessions.value.find(s => s.id === payload.session.id);
+      if (!exists) {
+        sessions.value.unshift(payload.session);
+        totalSessionsCount.value++;
+      }
+    }
+  });
+
+  // 监听会话删除事件
+  apiService.onSessionEvent("session_deleted", (event) => {
+    const { sessionId } = event;
+    const index = sortedSessions.value.findIndex(s => s.id === sessionId);
+
+    sessions.value = sessions.value.filter(s => s.id !== sessionId);
+    totalSessionsCount.value = Math.max(0, totalSessionsCount.value - 1);
+
+    // 如果删除的是当前会话，清理状态并切换到其他会话
+    if (currentSession.value?.id === sessionId) {
+      sessionStore.clearSessionState(sessionId);
+      if (index < sortedSessions.value.length - 1) {
+        goChatRoute(sortedSessions.value[index + 1].id);
+      } else if (index > 0) {
+        goChatRoute(sortedSessions.value[index - 1].id);
+      } else {
+        goChatRoute(null);
+      }
+    }
+  });
+
+  // 监听会话更新事件
+  apiService.onSessionEvent("session_updated", (event) => {
+    const { sessionId, payload } = event;
+    const session = sessions.value.find(s => s.id === sessionId);
+    if (session && payload?.session) {
+      Object.assign(session, payload.session);
+    }
+    // 如果更新的是当前会话，同步更新
+    if (currentSession.value?.id === sessionId && payload?.session) {
+      Object.assign(currentSession.value, payload.session);
+    }
+  });
+}
+
+/**
+ * 清理 SSE 事件监听
+ */
+function cleanupSessionEventListeners() {
+  apiService.disconnectSessionEvents();
+}
 
 // 生命周期
 // 组件挂载完成后加载会话列表
@@ -701,9 +765,17 @@ onMounted(async () => {
     } else {
       currentSession.value = null;
     }
+    // 初始化 SSE 事件监听
+    initSessionEventListeners();
   }
   isLoading.value = false;
 });
+
+onUnmounted(() => {
+  cleanupSessionEventListeners();
+});
+
+
 </script>
 
 <style scoped>

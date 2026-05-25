@@ -707,7 +707,7 @@ async function openInFileManager() {
 
 let unsubscribeWatcher: (() => void) | null = null;
 
-watch(() => props.sessionId, (newSessionId, oldSessionId) => {
+watch(() => props.sessionId, async (newSessionId, oldSessionId) => {
     // 会话切换时关闭文件预览
     if (oldSessionId && newSessionId !== oldSessionId) {
         closePreview();

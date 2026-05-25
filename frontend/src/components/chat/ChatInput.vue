@@ -117,7 +117,7 @@
                 :disabled="!inputContent.trim() || !props.config?.modelId" :icon="Send24Filled" />
             </el-tooltip>
             <el-tooltip v-else content="停止生成" placement="top">
-              <el-button class="send-btn stop-btn" @click="abortResponse" circle type="error" :icon="Stop24Filled">
+              <el-button class="send-btn stop-btn" @click="abortResponse" circle type="danger" :icon="Stop24Filled">
               </el-button>
             </el-tooltip>
           </div>

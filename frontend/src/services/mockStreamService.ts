@@ -264,7 +264,6 @@ function createMockError(errorType: string): Error {
  * Mock 流式聊天生成器（纯函数）
  * 
  * @param sessionId 会话 ID
- * @param messageId 用户消息 ID
  * @param config Mock 配置
  * @param assistantMessageId 现有助手消息 ID（用于 multi_version 模式）
  * @param regenerationMode 再生模式：'overwrite' | 'multi_version' | 'append'
@@ -272,7 +271,6 @@ function createMockError(errorType: string): Error {
  */
 export async function* mockChatStream(
   sessionId: string,
-  messageId: string,
   config: MockConfig = {},
   assistantMessageId?: string | null,
   regenerationMode?: string | null
@@ -294,8 +292,8 @@ export async function* mockChatStream(
 
   // 生成 IDs
   // multi_version 模式下使用传入的 assistantMessageId，否则生成新的
-  const finalAssistantMessageId = (regenerationMode === 'multi_version' && assistantMessageId) 
-    ? assistantMessageId 
+  const finalAssistantMessageId = (regenerationMode === 'multi_version' && assistantMessageId)
+    ? assistantMessageId
     : generateId()
   const turnsId = generateTurnsId()
   const contentId = generateId()

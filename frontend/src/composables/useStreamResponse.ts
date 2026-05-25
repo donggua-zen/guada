@@ -3,70 +3,65 @@
  * 负责处理 SSE 流式响应的所有逻辑
  */
 
-import { reactive, shallowReactive } from 'vue'
-import { usePopup } from '@/composables/usePopup'
+import { reactive, shallowReactive } from "vue";
+import { usePopup } from "@/composables/usePopup";
 
 // 类型定义
 interface StreamingState {
-  isStreaming: boolean
-  sessionId: string | null
-  currentMessageId: string | null
+  isStreaming: boolean;
+  sessionId: string | null;
+  currentMessageId: string | null;
 }
 
 interface ContentState {
-  isStreaming: boolean
-  isThinking: boolean
+  isStreaming: boolean;
+  isThinking: boolean;
 }
 
 interface MessageContent {
-  id: string
-  content: string | null
-  reasoningContent: string | null
-  turnsId: string
-  additionalKwargs: any
-  metadata: Record<string, any>
-  createdAt: string
-  updatedAt: string
-  thinkingStartedAt: number | null
-  thinkingDurationMs: number | null
-  state: ContentState
-  _thinkingTimer?: ReturnType<typeof setInterval> | null
+  id: string;
+  role: string;
+  content: string | null;
+  reasoningContent: string | null;
+  turnsId: string;
+  additionalKwargs: any;
+  metadata: Record<string, any>;
+  createdAt: string;
+  updatedAt: string;
+  thinkingStartedAt: number | null;
+  thinkingDurationMs: number | null;
+  state: ContentState;
+  _thinkingTimer?: ReturnType<typeof setInterval> | null;
 }
 
 interface Message {
-  id: string
-  role: string
-  contents: MessageContent[]
-  parentId: string
-  currentTurnsId: string
-  state: ContentState
-  createdAt: string
-  [key: string]: any
+  id: string;
+  role: string;
+  contents: MessageContent[];
+  parentId: string;
+  currentTurnsId: string;
+  state: ContentState;
+  createdAt: string;
+  [key: string]: any;
 }
 
 interface StreamResponse {
-  type: string
-  messageId?: string
-  turnsId?: string
-  contentId?: string
-  modelName?: string
-  msg?: string
-  toolCalls?: any[]
-  toolCallsResponse?: any[]
-  usage?: any
-  finishReason?: string
-  error?: string
+  type: string;
+  messageId?: string;
+  turnsId?: string;
+  contentId?: string;
+  modelName?: string;
+  msg?: string;
+  toolCalls?: any[];
+  toolCallsResponse?: any[];
+  usage?: any;
+  finishReason?: string;
+  error?: string;
+  parentId?: string;
 }
 
 export function useStreamResponse(sessionStore: any, apiService: any) {
-  const { toast } = usePopup()
-
-  // 流式响应状态
-  const streamingState = reactive<StreamingState>({
-    isStreaming: false,
-    sessionId: null,
-    currentMessageId: null
-  })
+  const { toast } = usePopup();
 
   /**
    * 处理新消息创建
@@ -74,39 +69,14 @@ export function useStreamResponse(sessionStore: any, apiService: any) {
   function handleNewMessage(
     response: StreamResponse,
     sessionId: string,
-    userMessageId: string
   ): { message: Message; contentIndex: number } {
-    const { messageId, turnsId, contentId, modelName } = response
-    const time = new Date().toISOString()
-
-    // 查找是否已存在该消息
-    let existingMessage = sessionStore.getMessages(sessionId).find(
-      (msg: Message) => msg.id === messageId
-    )
-
-    if (!existingMessage) {
-      // 创建新消息 (使用 shallowReactive 减少响应式深度)
-      existingMessage = reactive<Message>({
-        id: messageId!,
-        role: 'assistant',
-        contents: [],
-        parentId: userMessageId,
-        sessionId,
-        currentTurnsId: turnsId!,
-        state: {
-          isStreaming: true,
-          isThinking: false
-        },
-        createdAt: time
-      })
-      sessionStore.getMessages(sessionId).push(existingMessage)
-    }
-
-    existingMessage.currentTurnsId = turnsId!
+    const { messageId, turnsId, contentId, modelName } = response;
+    const time = new Date().toISOString();
 
     // 创建新内容块
     const newContent = reactive<MessageContent>({
       id: contentId!,
+      role: "assistant",
       content: null,
       reasoningContent: null,
       turnsId: turnsId!,
@@ -118,20 +88,44 @@ export function useStreamResponse(sessionStore: any, apiService: any) {
       thinkingDurationMs: null,
       state: {
         isStreaming: true,
-        isThinking: false
-      }
-    })
+        isThinking: false,
+      },
+    });
 
-    existingMessage.contents.push(newContent)
-    existingMessage.state = {
-      isStreaming: true,
-      isThinking: false
+    // 查找是否已存在该消息
+    let existingMessage = sessionStore
+      .getMessages(sessionId)
+      .find((msg: Message) => msg.id === messageId);
+
+    if (!existingMessage) {
+      // 创建新消息 (使用 shallowReactive 减少响应式深度)
+      existingMessage = reactive<Message>({
+        id: messageId!,
+        role: "assistant",
+        contents: [newContent],
+        parentId: response.parentId || "",
+        sessionId,
+        currentTurnsId: turnsId!,
+        state: {
+          isStreaming: true,
+          isThinking: false,
+        },
+        createdAt: time,
+      });
+      sessionStore.getMessages(sessionId).push(existingMessage);
+    } else {
+      existingMessage.contents.push(newContent);
+      existingMessage.currentTurnsId = turnsId!;
+      existingMessage.state = {
+        isStreaming: true,
+        isThinking: false,
+      };
     }
 
     return {
       message: existingMessage,
-      contentIndex: existingMessage.contents.length - 1
-    }
+      contentIndex: existingMessage.contents.length - 1,
+    };
   }
 
   /**
@@ -140,37 +134,37 @@ export function useStreamResponse(sessionStore: any, apiService: any) {
    */
   function handleUpdateMessage(
     response: StreamResponse,
-    streamingSessionId: string
+    streamingSessionId: string,
   ): { message: Message; contentIndex: number } | null {
-    const existingMessage = sessionStore.getMessages(streamingSessionId).find(
-      (msg: Message) => msg.id === response.messageId
-    )
+    const existingMessage = sessionStore
+      .getMessages(streamingSessionId)
+      .find((msg: Message) => msg.id === response.messageId);
 
     if (!existingMessage) {
-      console.error('Message not found:', response.messageId)
-      throw new Error('Message not found')
+      console.error("Message not found:", response.messageId);
+      throw new Error("Message not found");
     }
 
     // 查找对应的内容块
     const existingContentIndex = existingMessage.contents.findIndex(
-      (c: MessageContent) => c.id === response.contentId
-    )
+      (c: MessageContent) => c.id === response.contentId,
+    );
 
     if (existingContentIndex < 0) {
-      console.error('Content not found:', response.contentId)
-      throw new Error('Content not found')
+      console.error("Content not found:", response.contentId);
+      throw new Error("Content not found");
     }
 
     // 更新消息状态为流式中
     existingMessage.state = {
       isStreaming: true,
-      isThinking: false
-    }
+      isThinking: false,
+    };
 
     return {
       message: existingMessage,
-      contentIndex: existingContentIndex
-    }
+      contentIndex: existingContentIndex,
+    };
   }
 
   /**
@@ -179,18 +173,18 @@ export function useStreamResponse(sessionStore: any, apiService: any) {
   function handleThink(content: MessageContent, thinkingContent: string): void {
     // 首次收到 think 事件，记录开始时间并启动计时器
     if (!content.state.isThinking) {
-      content.state.isThinking = true
-      content.thinkingStartedAt = Date.now()
+      content.state.isThinking = true;
+      content.thinkingStartedAt = Date.now();
 
       // 启动实时计时器，每 100ms 更新一次
       content._thinkingTimer = setInterval(() => {
         if (content.thinkingStartedAt) {
-          content.thinkingDurationMs = Date.now() - content.thinkingStartedAt
+          content.thinkingDurationMs = Date.now() - content.thinkingStartedAt;
         }
-      }, 100)
+      }, 100);
     }
 
-    content.reasoningContent = thinkingContent
+    content.reasoningContent = thinkingContent;
   }
 
   /**
@@ -198,16 +192,16 @@ export function useStreamResponse(sessionStore: any, apiService: any) {
    */
   function handleThinkEnd(content: MessageContent): void {
     if (content.state.isThinking) {
-      content.state.isThinking = false
+      content.state.isThinking = false;
 
       // 停止计时器并计算最终时长
       if (content._thinkingTimer) {
-        clearInterval(content._thinkingTimer)
-        content._thinkingTimer = null
+        clearInterval(content._thinkingTimer);
+        content._thinkingTimer = null;
       }
 
       if (content.thinkingStartedAt) {
-        content.thinkingDurationMs = Date.now() - content.thinkingStartedAt
+        content.thinkingDurationMs = Date.now() - content.thinkingStartedAt;
       }
     }
   }
@@ -215,61 +209,66 @@ export function useStreamResponse(sessionStore: any, apiService: any) {
   /**
    * 处理工具调用（增量更新）
    */
-  function handleToolCall(content: MessageContent, toolCalls: any[], displayMessages?: any[]): void {
+  function handleToolCall(
+    content: MessageContent,
+    toolCalls: any[],
+    displayMessages?: any[],
+  ): void {
     // 初始化 metadata
     if (!content.metadata) {
-      content.metadata = {}
+      content.metadata = {};
     }
     if (!content.metadata.toolCalls) {
-      content.metadata.toolCalls = []
+      content.metadata.toolCalls = [];
     }
 
     // 累加增量的 toolCalls
     for (const toolCall of toolCalls) {
-      const index = toolCall.index
+      const index = toolCall.index;
 
       // 查找是否已存在该索引的工具调用
       let existingToolCall = content.metadata.toolCalls.find(
-        (tc: any) => tc.index === index
-      )
+        (tc: any) => tc.index === index,
+      );
 
       if (!existingToolCall) {
         // 如果是新的工具调用，添加到列表
         // 需要找到 toolCall 在 toolCalls 数组中的局部索引
-        const localIndex = toolCalls.findIndex(tc => tc.index === index)
-        const displayMessage = displayMessages?.[localIndex] || null
+        const localIndex = toolCalls.findIndex((tc) => tc.index === index);
+        const displayMessage = displayMessages?.[localIndex] || null;
 
         content.metadata.toolCalls.push({
           id: toolCall.id,
           index: toolCall.index,
           type: toolCall.type,
           name: toolCall.name,
-          arguments: toolCall.arguments || '',
+          arguments: toolCall.arguments || "",
           metadata: {
-            displayMessage: displayMessage  // 存储结构化的展示信息到 metadata
-          }
-        })
+            displayMessage: displayMessage, // 存储结构化的展示信息到 metadata
+          },
+        });
       } else {
         // 如果已存在，累加参数字符串
         if (toolCall.arguments !== null && toolCall.arguments !== undefined) {
-          existingToolCall.arguments += toolCall.arguments
+          existingToolCall.arguments += toolCall.arguments;
         }
         // 更新展示文案（如果提供）
         if (displayMessages?.[index]) {
           // 确保 metadata 存在
           if (!existingToolCall.metadata) {
-            existingToolCall.metadata = {}
+            existingToolCall.metadata = {};
           }
-          existingToolCall.metadata.displayMessage = displayMessages[index]
+          existingToolCall.metadata.displayMessage = displayMessages[index];
         } else if (displayMessages) {
           // displayMessages 数组可能只包含当前 chunk 中的工具
           // 需要找到 toolCall 在 toolCalls 数组中的局部索引
-          const localIndex = toolCalls.findIndex(tc => tc.index === index)
+          const localIndex = toolCalls.findIndex((tc) => tc.index === index);
           if (localIndex !== -1 && displayMessages[localIndex]) {
             if (!existingToolCall.metadata) {
-              existingToolCall.metadata = {}
+              existingToolCall.metadata = {};
             }
-            existingToolCall.metadata.displayMessage = displayMessages[localIndex]
+            existingToolCall.metadata.displayMessage =
+              displayMessages[localIndex];
           }
         }
       }
@@ -279,11 +278,15 @@ export function useStreamResponse(sessionStore: any, apiService: any) {
   /**
    * 处理工具调用响应
    */
-  function handleToolCallsResponse(content: MessageContent, toolCallsResponse: any[], displayMessages?: any[]): void {
+  function handleToolCallsResponse(
+    content: MessageContent,
+    toolCallsResponse: any[],
+    displayMessages?: any[],
+  ): void {
     if (!content.metadata) {
-      content.metadata = {}
+      content.metadata = {};
     }
-    content.metadata.toolCallsResponse = toolCallsResponse
+    content.metadata.toolCallsResponse = toolCallsResponse;
 
     // 更新展示文案为完成状态
     if (displayMessages && content.metadata.toolCalls) {
@@ -291,9 +294,10 @@ export function useStreamResponse(sessionStore: any, apiService: any) {
         if (displayMessages[i]) {
           // 确保 metadata 存在
           if (!content.metadata.toolCalls[i].metadata) {
-            content.metadata.toolCalls[i].metadata = {}
+            content.metadata.toolCalls[i].metadata = {};
           }
-          content.metadata.toolCalls[i].metadata.displayMessage = displayMessages[i]
+          content.metadata.toolCalls[i].metadata.displayMessage =
+            displayMessages[i];
         }
       }
     }
@@ -303,7 +307,7 @@ export function useStreamResponse(sessionStore: any, apiService: any) {
    * 处理文本内容
    */
   function handleText(content: MessageContent, responseContent: string): void {
-    content.content = responseContent
+    content.content = responseContent;
   }
 
   /**
@@ -313,46 +317,46 @@ export function useStreamResponse(sessionStore: any, apiService: any) {
     response: StreamResponse,
     message: Message | null,
     contentIndex: number | undefined,
-    assistantMessageId: string | null
+    assistantMessageId: string | null,
   ): void {
     if (!message || contentIndex === undefined) {
-      return
+      return;
     }
 
-    const content = message.contents[contentIndex]
+    const content = message.contents[contentIndex];
 
     // 保存 usage 信息到 metadata.usage
     if (response.usage) {
       content.metadata = {
         ...content.metadata,
-        usage: response.usage
-      }
+        usage: response.usage,
+      };
     }
 
     // 保存 finishReason
     if (response.finishReason) {
       content.metadata = {
         ...content.metadata,
-        finishReason: response.finishReason
-      }
+        finishReason: response.finishReason,
+      };
     }
 
     // 处理错误情况
-    if (response.finishReason === 'error') {
-      console.error('Error in stream:', response.error)
+    if (response.finishReason === "error") {
+      console.error("Error in stream:", response.error);
       content.metadata = {
         ...content.metadata,
         error: response.error,
-        finishReason: response.finishReason
-      }
-      content.state.isStreaming = false
-      content.state.isThinking = false
-      return
+        finishReason: response.finishReason,
+      };
+      content.state.isStreaming = false;
+      content.state.isThinking = false;
+      return;
     }
 
     // 正常结束，更新状态
-    content.state.isStreaming = false
-    content.state.isThinking = false
+    content.state.isStreaming = false;
+    content.state.isThinking = false;
   }
 
   /**
@@ -362,16 +366,16 @@ export function useStreamResponse(sessionStore: any, apiService: any) {
     error: Error,
     message: Message | null,
     contentIndex: number | undefined,
-    assistantMessageId: string | null
+    assistantMessageId: string | null,
   ): void {
-    if (error.name !== 'AbortError') {
-      console.error('Error during streaming:', error)
+    if (error.name !== "AbortError") {
+      console.error("Error during streaming:", error);
       if (message && contentIndex !== undefined) {
-        message.contents[contentIndex].content = error.message
+        message.contents[contentIndex].content = error.message;
       }
       if (!assistantMessageId) {
         // 这里不直接调用 notify，由调用者处理
-        throw error
+        throw error;
       }
     }
   }
@@ -382,171 +386,252 @@ export function useStreamResponse(sessionStore: any, apiService: any) {
   function cleanupStreaming(
     sessionId: string,
     message: Message | null,
-    contentIndex: number
+    contentIndex: number,
   ): void {
-    streamingState.isStreaming = false
-    streamingState.sessionId = null
-    streamingState.currentMessageId = null
-
     if (message) {
       const msgState = message.state;
-      msgState.isStreaming = false
-      msgState.isThinking = false
+      msgState.isStreaming = false;
+      msgState.isThinking = false;
 
       // 清理计时器，防止内存泄漏
-      const content = message.contents[contentIndex]
+      const content = message.contents[contentIndex];
       if (content?._thinkingTimer) {
-        clearInterval(content._thinkingTimer)
-        content._thinkingTimer = null
+        clearInterval(content._thinkingTimer);
+        content._thinkingTimer = null;
       }
-      content.state.isStreaming = false
-      content.state.isThinking = false
+      content.state.isStreaming = false;
+      content.state.isThinking = false;
 
       if (content && message) {
-        content.updatedAt = new Date().toISOString()
+        content.updatedAt = new Date().toISOString();
       }
     }
 
-    sessionStore.setSessionIsStreaming(sessionId, false)
+    sessionStore.setSessionIsStreaming(sessionId, false);
   }
 
   /**
-   * 处理完整的流式响应
+   * 处理流式事件循环（所有流式场景共用）
    */
-  async function processStream(
+  async function processStreamLoop(
     streamingSessionId: string,
-    userMessageId: string,
-    regenerationMode: 'regenerate' | 'resume' | null = null,
-    assistantMessageId: string | null = null
+    regenerationMode: "regenerate" | "resume" | "subscribe" | null,
+    assistantMessageId: string | null,
+    userMessage?: {
+      id?: string;
+      content?: string;
+      files?: string[];
+      replaceMessageId?: string;
+      knowledgeBaseIds?: string[];
+    },
   ): Promise<void> {
-    sessionStore.setSessionIsStreaming(streamingSessionId, true)
-    streamingState.isStreaming = true
-    streamingState.sessionId = streamingSessionId
+    sessionStore.setSessionIsStreaming(streamingSessionId, true);
 
-    let message: Message | null = null
-    let contentIndex = 0
-    let assistantMessageIdResult: string | null = null
+    let message: Message | null = null;
+    let contentIndex = 0;
+    let assistantMessageIdResult: string | null = null;
     // 修复：添加标志位，确保一次流式会话只更新一次时间戳
-    let hasUpdatedActiveTime = false
+    let hasUpdatedActiveTime = false;
 
     try {
-      let responseContent = ''
-      let thinkingContent = ''
+      let responseContent = "";
+      let thinkingContent = "";
 
-      for await (const response of apiService.chat(
-        streamingSessionId,
-        userMessageId,
+      const chatParams: any = {
+        sessionId: streamingSessionId,
         regenerationMode,
         assistantMessageId,
-        false,
-        null
-      )) {
+      };
+      if (userMessage) {
+        chatParams.userMessage = userMessage;
+      }
+
+      for await (const response of apiService.chat(chatParams)) {
         // 修复：实时检测并保存 usage，不等待 finish 事件
         // 这样即使被取消或发生异常，已接收到的 usage 也不会丢失
         if (response.usage && message && contentIndex !== undefined) {
-          const content = message.contents[contentIndex]
+          const content = message.contents[contentIndex];
           content.metadata = {
             ...content.metadata,
-            usage: response.usage
+            usage: response.usage,
+          };
+        }
+
+        if (response.type === "finish") {
+          handleStreamFinish(
+            response,
+            message,
+            contentIndex,
+            assistantMessageIdResult,
+          );
+          responseContent = "";
+          thinkingContent = "";
+          continue;
+        }
+
+        if (response.type === "user_message") {
+          // 后端广播的用户消息，添加到消息列表
+          const userMsg = response.message;
+          if (userMsg) {
+            sessionStore.addMessage(streamingSessionId, userMsg);
           }
+          continue;
         }
 
-        if (response.type === 'finish') {
-          handleStreamFinish(response, message, contentIndex, assistantMessageIdResult)
-          responseContent = ''
-          thinkingContent = ''
-          continue
-        }
-
-        if (response.type === 'create') {
-          const result = handleNewMessage(response, streamingSessionId, userMessageId)
-          message = result.message
-          contentIndex = result.contentIndex
-          assistantMessageIdResult = response.messageId!
+        if (response.type === "create") {
+          const result = handleNewMessage(response, streamingSessionId);
+          message = result.message;
+          contentIndex = result.contentIndex;
+          assistantMessageIdResult = response.messageId!;
 
           // 修复：仅在第一个 create 事件时更新时间戳，避免工具调用多轮次导致重复更新
           if (!hasUpdatedActiveTime) {
-            sessionStore.updateSessionLastActiveTime(streamingSessionId, new Date().toISOString())
-            hasUpdatedActiveTime = true
+            sessionStore.updateSessionLastActiveTime(
+              streamingSessionId,
+              new Date().toISOString(),
+            );
+            hasUpdatedActiveTime = true;
           }
 
-          continue
+          continue;
         }
 
         // 【断点恢复】处理 update 事件（resume 模式下更新已有消息）
-        if (response.type === 'update') {
-          const result = handleUpdateMessage(response, streamingSessionId)
+        if (response.type === "update") {
+          const result = handleUpdateMessage(response, streamingSessionId);
           if (result) {
-            message = result.message
-            contentIndex = result.contentIndex
-            assistantMessageIdResult = response.messageId!
+            message = result.message;
+            contentIndex = result.contentIndex;
+            assistantMessageIdResult = response.messageId!;
 
             if (!hasUpdatedActiveTime) {
-              sessionStore.updateSessionLastActiveTime(streamingSessionId, new Date().toISOString())
-              hasUpdatedActiveTime = true
+              sessionStore.updateSessionLastActiveTime(
+                streamingSessionId,
+                new Date().toISOString(),
+              );
+              hasUpdatedActiveTime = true;
             }
           }
-          continue
+          continue;
         }
 
-        if (response.type === 'think') {
-          thinkingContent += response.msg
-          if (message) handleThink(message.contents[contentIndex], thinkingContent)
-          continue
+        if (response.type === "think") {
+          thinkingContent += response.msg;
+          if (message)
+            handleThink(message.contents[contentIndex], thinkingContent);
+          continue;
         }
 
         // 思考结束后重置状态
-        if (message?.contents[contentIndex]?.state.isThinking && response.type !== 'think') {
-          handleThinkEnd(message.contents[contentIndex])
+        if (
+          message?.contents[contentIndex]?.state.isThinking &&
+          response.type !== "think"
+        ) {
+          handleThinkEnd(message.contents[contentIndex]);
         }
 
         // 处理工具调用（增量更新）
-        if (response.type === 'tool_call') {
-          handleToolCall(message!.contents[contentIndex], response.toolCalls, response.displayMessages)  // 驼峰式
-          continue
+        if (response.type === "tool_call") {
+          handleToolCall(
+            message!.contents[contentIndex],
+            response.toolCalls,
+            response.displayMessages,
+          ); // 驼峰式
+          continue;
         }
 
         // 处理工具调用结果（一次性接收）
-        if (response.type === 'tool_calls_response') {
-          handleToolCallsResponse(message!.contents[contentIndex], response.toolCallsResponse, response.displayMessages)  // 驼峰式
-          continue
+        if (response.type === "tool_calls_response") {
+          handleToolCallsResponse(
+            message!.contents[contentIndex],
+            response.toolCallsResponse,
+            response.displayMessages,
+          ); // 驼峰式
+          continue;
         }
 
         // 处理文本内容
-        if (response.type === 'text') {
-          responseContent = responseContent + response.msg
-          handleText(message!.contents[contentIndex], responseContent)
-          continue
+        if (response.type === "text") {
+          responseContent = responseContent + response.msg;
+          handleText(message!.contents[contentIndex], responseContent);
+          continue;
         }
 
         // 处理压缩开始事件
-        if (response.type === 'compression_start') {
-          sessionStore.setSessionIsCompressing(streamingSessionId, true)
-          toast.info(response.msg || '正在优化对话历史...')
-          continue
+        if (response.type === "compression_start") {
+          sessionStore.setSessionIsCompressing(streamingSessionId, true);
+          toast.info(response.msg || "正在优化对话历史...");
+          continue;
         }
 
         // 处理压缩错误事件
-        if (response.type === 'compression_error') {
-          sessionStore.setSessionIsCompressing(streamingSessionId, false)
-          toast.error(response.msg || '自动压缩失败')
-          continue
+        if (response.type === "compression_error") {
+          sessionStore.setSessionIsCompressing(streamingSessionId, false);
+          toast.error(response.msg || "自动压缩失败");
+          continue;
         }
       }
     } catch (error) {
-      handleStreamCatchError(error as Error, message, contentIndex, assistantMessageIdResult)
+      handleStreamCatchError(
+        error as Error,
+        message,
+        contentIndex,
+        assistantMessageIdResult,
+      );
       // 如果是会话忙碌错误，不抛出异常，由调用者处理通知
-      if ((error as Error).message.includes('SessionBusyError')) {
-        return
+      if ((error as Error).message.includes("SessionBusyError")) {
+        return;
       }
-      throw error // 重新抛出错误，由调用者处理
+      throw error; // 重新抛出错误，由调用者处理
     } finally {
-      cleanupStreaming(streamingSessionId, message, contentIndex)
+      cleanupStreaming(streamingSessionId, message, contentIndex);
     }
   }
 
-  return {
-    streamingState,
-    processStream,
+  /**
+   * 处理完整的流式响应（用于 regenerate / continue / subscribe 等场景）
+   *
+   * 与 processStreamWithCreate 的区别：
+   * - 不创建新消息，只接收已有流的广播事件
+   * - subscribe 模式下如果无活跃流，后端返回 NO_ACTIVE_STREAM 错误
+   */
+  async function processStream(
+    streamingSessionId: string,
+    regenerationMode: "regenerate" | "resume" | "subscribe" | null = null,
+    assistantMessageId: string | null = null,
+    userMessageId?: string | null,
+  ): Promise<void> {
+    const userMessage = userMessageId ? { id: userMessageId } : undefined;
+    await processStreamLoop(
+      streamingSessionId,
+      regenerationMode,
+      assistantMessageId,
+      userMessage,
+    );
   }
+
+  /**
+   * 处理完整的流式响应（合并消息创建和流式启动）
+   *
+   * 后端会在启动流时自动创建消息，实现原子性。
+   */
+  async function processStreamWithCreate(
+    streamingSessionId: string,
+    content: string,
+    fileIds: string[],
+    replaceMessageId: string | null = null,
+    knowledgeBaseIds?: string[],
+  ): Promise<void> {
+    await processStreamLoop(streamingSessionId, null, null, {
+      content,
+      files: fileIds,
+      replaceMessageId: replaceMessageId || undefined,
+      knowledgeBaseIds,
+    });
+  }
+
+  return {
+    processStream,
+    processStreamWithCreate,
+  };
 }

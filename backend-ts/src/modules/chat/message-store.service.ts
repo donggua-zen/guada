@@ -29,7 +29,7 @@ export class MessageStoreService implements IMessageStore {
     private messageRepo: MessageRepository,
     private contentRepo: MessageContentRepository,
     private uploadPathService: UploadPathService,
-  ) { }
+  ) {}
 
   /**
    * 加载会话历史消息
@@ -85,7 +85,9 @@ export class MessageStoreService implements IMessageStore {
     // 这是一种内存层操作，数据库中的原始消息保持不变，确保数据完整性和可追溯性
     // 未来可考虑将此逻辑下推到数据库查询层以提升性能
     if (lastCompactedContentId) {
-      const idx = context.findIndex(m => m.contentId === lastCompactedContentId);
+      const idx = context.findIndex(
+        (m) => m.contentId === lastCompactedContentId,
+      );
       if (idx !== -1) {
         context.splice(0, idx + 1);
       }
@@ -132,7 +134,10 @@ export class MessageStoreService implements IMessageStore {
         }
 
         // 思维链耗时仅在存在时记录，用于性能分析和优化
-        if (record.metadata?.thinkingDurationMs !== null && record.metadata?.thinkingDurationMs !== undefined) {
+        if (
+          record.metadata?.thinkingDurationMs !== null &&
+          record.metadata?.thinkingDurationMs !== undefined
+        ) {
           metadata.thinkingDurationMs = record.metadata?.thinkingDurationMs;
         }
 
@@ -152,10 +157,10 @@ export class MessageStoreService implements IMessageStore {
 
         await this.contentRepo.create({
           id: record.contentId,
-          messageId: record.messageId || '',
-          turnsId: record.turnsId || '',
+          messageId: record.messageId || "",
+          turnsId: record.turnsId || "",
           role: record.role,
-          content: typeof record.content === 'string' ? record.content : "",
+          content: typeof record.content === "string" ? record.content : "",
           reasoningContent: record.reasoningContent,
           metadata,
         });
@@ -204,8 +209,9 @@ export class MessageStoreService implements IMessageStore {
       });
       targetMessageId = msg.id;
     } else if (targetMessageId) {
-      // 非覆盖模式且未提供现有消息 ID 时，更新或创建消息记录
-      await this.messageRepo.update(targetMessageId, { currentTurnsId: turnsId });
+      await this.messageRepo.update(targetMessageId, {
+        currentTurnsId: turnsId,
+      });
     }
     return targetMessageId;
   }
@@ -287,7 +293,8 @@ export class MessageStoreService implements IMessageStore {
    */
   private turnHasToolCalls(turnMessages: MessageRecord[]): boolean {
     return turnMessages.some(
-      (msg) => msg.role === "assistant" && msg.toolCalls && msg.toolCalls.length > 0,
+      (msg) =>
+        msg.role === "assistant" && msg.toolCalls && msg.toolCalls.length > 0,
     );
   }
 
@@ -325,7 +332,7 @@ export class MessageStoreService implements IMessageStore {
           turnsId: content.turnsId,
           role: content.role,
           content: content.content || "",
-          metadata: { ...metadata } // 复制 metadata 以保留 modelName、finishReason 等信息
+          metadata: { ...metadata }, // 复制 metadata 以保留 modelName、finishReason 等信息
         };
 
         // 根据配置决定是否保留思维链内容，避免不必要的 Token 消耗
@@ -345,7 +352,16 @@ export class MessageStoreService implements IMessageStore {
     } else {
       // 用户消息处理：组装多模态内容（文本 + 图片 + 附件）
       const activeContent = msg.contents?.[0];
-      if (!activeContent) return [{ messageId: msg.id, contentId: undefined, role: "user", content: "", metadata: {} }];
+      if (!activeContent)
+        return [
+          {
+            messageId: msg.id,
+            contentId: undefined,
+            role: "user",
+            content: "",
+            metadata: {},
+          },
+        ];
 
       const textParts: MessagePart[] = [
         { type: "text", text: activeContent.content || "" },
@@ -366,7 +382,10 @@ export class MessageStoreService implements IMessageStore {
         for (let index = 0; index < msg.files.length; index++) {
           const file = msg.files[index];
           if (file.fileType === "image") {
-            const imagePart = await this.transformImageFile(file, supportsImageInput);
+            const imagePart = await this.transformImageFile(
+              file,
+              supportsImageInput,
+            );
             if (imagePart) textParts.push(imagePart);
           } else if (file.fileType === "text") {
             const textPart = this.transformTextFile(file, index);
@@ -439,7 +458,10 @@ export class MessageStoreService implements IMessageStore {
    * @param supportsImageInput 是否支持图片输入
    * @returns 转换后的图片部分对象，若失败则返回 null
    */
-  private async transformImageFile(file: any, supportsImageInput: boolean): Promise<any | null> {
+  private async transformImageFile(
+    file: any,
+    supportsImageInput: boolean,
+  ): Promise<any | null> {
     if (!supportsImageInput) {
       // 降级处理：当模型不支持图片时，用文本占位符替代
       return { type: "text", text: `[图片ID：${file.id}]` };

@@ -3,25 +3,24 @@ import { SessionRepository } from "../../common/database/session.repository";
 import { LLMService } from "../llm-core/llm.service";
 import { ToolOrchestrator } from "../tools/tool-orchestrator.service";
 import { ToolDisplayInfo } from "../tools/interfaces/tool-provider.interface";
-import { SessionLockService } from "./session-lock.service";
 import { SessionContextService } from "./session-context.service";
 import { MessageRecord, LLMResponseChunk } from "../llm-core/types/llm.types";
 import { IConversationContext } from "./interfaces";
 import { RequestContext } from "../../common/context/request-context";
-import { partialParse } from 'partial-json-parser';
-
+import { partialParse } from "partial-json-parser";
 
 /**
  * 审批上下文
  */
 interface ApprovalContext {
-  type: 'approval';
-  status: 'pending' | 'completed';
-  token?: string;  // 用于验证（可选）
-  pendingToolCallIds?: string[];  // pending 状态时保存需要审批的工具 ID 列表
-  decisions?: Array<{  // completed 状态时保存
+  type: "approval";
+  status: "pending" | "completed";
+  token?: string; // 用于验证（可选）
+  pendingToolCallIds?: string[]; // pending 状态时保存需要审批的工具 ID 列表
+  decisions?: Array<{
+    // completed 状态时保存
     toolCallId: string;
-    decision: 'approve' | 'reject';
+    decision: "approve" | "reject";
     reason?: string;
   }>;
   createdAt?: string;
@@ -41,7 +40,7 @@ class ThinkingTimeInfo {
 
 /**
  * 工具调用展示文案管理器
- * 
+ *
  * 负责管理流式工具调用的展示文案生成。
  * 文案会直接注入到 toolCalls 的 metadata 中，随 MessageContent 一起持久化。
  */
@@ -49,11 +48,14 @@ class ToolCallDisplayManager {
   private readonly logger = new Logger(ToolCallDisplayManager.name);
 
   // 存储每个工具调用的状态（仅用于流式阶段）
-  private states = new Map<number, {
-    displayInfo: ToolDisplayInfo;  // 结构化的展示信息
-  }>();
+  private states = new Map<
+    number,
+    {
+      displayInfo: ToolDisplayInfo; // 结构化的展示信息
+    }
+  >();
 
-  constructor(private toolOrchestrator: ToolOrchestrator) { }
+  constructor(private toolOrchestrator: ToolOrchestrator) {}
 
   /**
    * 初始化工具调用状态（收到第一个 chunk 时）
@@ -61,11 +63,11 @@ class ToolCallDisplayManager {
   initialize(index: number, toolId: string, toolName: string): void {
     const displayInfo = this.toolOrchestrator.generateDisplayMessage(
       { id: toolId, name: toolName, arguments: {} },
-      true
+      true,
     );
 
     this.states.set(index, {
-      displayInfo: displayInfo
+      displayInfo: displayInfo,
     });
 
     this.logger.log(`[ToolCall #${index}] Initialized: ${displayInfo.action}`);
@@ -79,15 +81,22 @@ class ToolCallDisplayManager {
   updateFromChunk(
     index: number,
     toolName: string,
-    accumulatedArgs: string
+    accumulatedArgs: string,
   ): boolean {
     const state = this.states.get(index);
     if (!state) return false;
 
-    const updated = this.tryUpdateDisplayMessage(index, toolName, accumulatedArgs, state);
+    const updated = this.tryUpdateDisplayMessage(
+      index,
+      toolName,
+      accumulatedArgs,
+      state,
+    );
 
     if (updated) {
-      this.logger.log(`[ToolCall #${index}] Updated: ${state.displayInfo.action}`);
+      this.logger.log(
+        `[ToolCall #${index}] Updated: ${state.displayInfo.action}`,
+      );
     }
 
     return updated;
@@ -112,7 +121,7 @@ class ToolCallDisplayManager {
       const parsedArgs = this.safeJsonParse(tc.arguments);
       const completedInfo = this.toolOrchestrator.generateDisplayMessage(
         { id: tc.id, name: tc.name, arguments: parsedArgs },
-        false  // isStreaming = false，生成"已..."状态
+        false, // isStreaming = false，生成"已..."状态
       );
 
       // 更新内部状态为完成状态的文案
@@ -144,7 +153,9 @@ class ToolCallDisplayManager {
         // 保存结构化的展示信息到 metadata
         tc.metadata.displayMessage = state.displayInfo;
 
-        this.logger.debug(`[ToolCall #${index}] Saved displayInfo to metadata: ${JSON.stringify(state.displayInfo)}`);
+        this.logger.debug(
+          `[ToolCall #${index}] Saved displayInfo to metadata: ${JSON.stringify(state.displayInfo)}`,
+        );
       }
     });
   }
@@ -162,7 +173,7 @@ class ToolCallDisplayManager {
     index: number,
     toolName: string,
     accumulatedArgs: string,
-    state: any
+    state: any,
   ): boolean {
     if (!accumulatedArgs || accumulatedArgs.trim().length === 0) {
       return false;
@@ -172,20 +183,20 @@ class ToolCallDisplayManager {
       // 使用 partial-json-parser 解析不完整的 JSON
       const parsed = partialParse(accumulatedArgs);
 
-      if (!parsed || typeof parsed !== 'object') {
+      if (!parsed || typeof parsed !== "object") {
         return false;
       }
 
       let actualToolName = toolName;
       let extractedParams: Record<string, any> = {};
 
-      if (toolName === 'tool_call') {
+      if (toolName === "tool_call") {
         // tool_call 特殊处理：从解析结果中提取 tool_name 和 arguments
         if (parsed.tool_name) {
           actualToolName = parsed.tool_name;
         }
 
-        if (parsed.arguments && typeof parsed.arguments === 'object') {
+        if (parsed.arguments && typeof parsed.arguments === "object") {
           extractedParams = parsed.arguments;
         }
       } else {
@@ -194,18 +205,25 @@ class ToolCallDisplayManager {
       }
 
       // 只要有有效参数就更新展示文案
-      if (Object.keys(extractedParams).length > 0 || actualToolName !== toolName) {
+      if (
+        Object.keys(extractedParams).length > 0 ||
+        actualToolName !== toolName
+      ) {
         const request = {
-          id: '',
+          id: "",
           name: actualToolName,
-          arguments: extractedParams
+          arguments: extractedParams,
         };
-        state.displayInfo = this.toolOrchestrator.generateDisplayMessage(request, true);
+        state.displayInfo = this.toolOrchestrator.generateDisplayMessage(
+          request,
+          true,
+        );
         return true;
       }
     } catch (error) {
       // 解析失败时静默忽略，等待更多数据
-      const errorMessage = error instanceof Error ? error.message : String(error);
+      const errorMessage =
+        error instanceof Error ? error.message : String(error);
       this.logger.debug(`JSON 解析失败（等待更多数据）: ${errorMessage}`);
     }
 
@@ -213,7 +231,7 @@ class ToolCallDisplayManager {
   }
 
   private safeJsonParse(jsonString: string): any {
-    if (!jsonString || typeof jsonString !== 'string') {
+    if (!jsonString || typeof jsonString !== "string") {
       return {};
     }
     try {
@@ -256,7 +274,6 @@ export class AgentEngine {
     private sessionRepo: SessionRepository,
     private toolOrchestrator: ToolOrchestrator,
     private llmService: LLMService,
-    private sessionLockService: SessionLockService,
     private sessionContextService: SessionContextService,
   ) {
     // 初始化文案管理器
@@ -270,11 +287,9 @@ export class AgentEngine {
    * 整个流程受会话锁保护，确保同一时刻只有一个请求在处理该会话。
    *
    * 执行流程：
-   * - 获取会话锁，若会话繁忙则抛出冲突异常
    * - 加载会话并更新最后活跃时间
    * - 委托 SessionContextService 完成所有数据准备
    * - 进入多轮工具调用循环，逐轮生成响应
-   * - 释放会话锁（无论成功或失败）
    *
    * @param sessionIdOrSession 会话 ID 或会话对象（传入对象可避免重复查询）
    * @param messageId 触发本次补全的用户消息 ID
@@ -288,35 +303,27 @@ export class AgentEngine {
     sessionIdOrSession: string | any,
     messageId: string,
     regenerationMode: string = "overwrite", // 再生模式：'overwrite' | 'multi_version' | 'resume'
-    assistantMessageId?: string, // 现有助手消息 ID（用于 multi_version 模式）
+    assistantMessageId?: string, // 现有助手消息 ID（用于 multi_version 和 resume 模式）
     abortSignal?: AbortSignal, // 中断信号（用于客户端断开连接时中止 LLM 请求）
     resumeData?: any, // 【新增】断点续传数据
   ) {
     // 判断传入的是 sessionId 还是 session 对象
-    const isSessionObject = typeof sessionIdOrSession !== 'string';
-    const sessionId = isSessionObject ? sessionIdOrSession.id : sessionIdOrSession;
+    const isSessionObject = typeof sessionIdOrSession !== "string";
+    const sessionId = isSessionObject
+      ? sessionIdOrSession.id
+      : sessionIdOrSession;
 
     // 在 AsyncLocalStorage 上下文中执行整个请求
     // 这样内部所有服务都可以自动访问 abortSignal，无需层层透传
     const generatorFn = async function* (this: AgentEngine) {
-      if (!this.sessionLockService.tryLock(sessionId)) {
-        // 获取锁状态信息，提供更友好的错误提示
-        const lockStatus = this.sessionLockService.getLockStatus(sessionId);
-        let errorMessage = "会话正在处理中，请稍后再试";
-
-        if (lockStatus.lockedAt) {
-          const lockedDuration = Math.floor((Date.now() - lockStatus.lockedAt.getTime()) / 1000);
-          errorMessage += `（已持续 ${lockedDuration} 秒）`;
-        }
-
-        errorMessage += "。后台可能有长时间运行的任务（如文件操作、命令执行等），请等待完成后重试。";
-
-        this.logger.warn(`Session ${sessionId} is busy. ${errorMessage}`);
-        throw new ConflictException(errorMessage);
-      }
+      const userId = isSessionObject
+        ? sessionIdOrSession.userId
+        : (await this.sessionRepo.findById(sessionId))?.userId;
 
       try {
-        let session = isSessionObject ? sessionIdOrSession : await this.sessionRepo.findById(sessionId);
+        let session = isSessionObject
+          ? sessionIdOrSession
+          : await this.sessionRepo.findById(sessionId);
 
         // 如果未传入 session 对象，则查询数据库
         if (!session) {
@@ -343,8 +350,8 @@ export class AgentEngine {
           abortSignal, // 仍然显式传递给工具层，用于控制外部资源
           resumeData, // 【新增】传递断点续传数据
         );
-      } finally {
-        this.sessionLockService.unlock(sessionId);
+      } catch (error) {
+        throw error;
       }
     }.bind(this);
 
@@ -355,7 +362,7 @@ export class AgentEngine {
         sessionId,
         requestId: crypto.randomUUID(),
       },
-      () => generatorFn()
+      () => generatorFn(),
     );
 
     yield* wrappedGenerator;
@@ -372,7 +379,7 @@ export class AgentEngine {
    *
    * 安全机制：
    * - 最大迭代次数限制（40 次），防止无限循环
-   * - 会话锁保护，确保并发安全
+   * - SessionStreamManager 确保同一会话不会同时启动多个流
    *
    * @param conversationContext 已初始化的会话上下文管理器
    * @param session 会话对象，包含模型配置和设置
@@ -394,34 +401,31 @@ export class AgentEngine {
     regenerationMode: string,
     assistantMessageId?: string,
     abortSignal?: AbortSignal,
-    resumeData?: any,  // 【新增】断点续传数据
+    resumeData?: any, // 【新增】断点续传数据
   ): AsyncGenerator<any> {
-
     // 清理上一轮的工具调用状态
     this.displayManager.clear();
 
     // 【新增】判断是否为断点模式
 
-    let isResumeMode = regenerationMode === 'resume';
+    let isResumeMode = regenerationMode === "resume";
     let assistantResponse: MessageRecord | null = null;
     let turnsId: string;
     let responseMessageId: string;
 
     if (!isResumeMode) {
-
       // 【正常模式】生成新的 turnsId 和 messageId
 
       // 生成本次对话轮次的唯一 ID，用于关联同一轮中的所有消息和工具调用
       turnsId = conversationContext.generateId();
 
       // 准备助手回复的消息容器，根据再生模式决定是覆盖旧回复还是创建新版本
-      responseMessageId =
-        await conversationContext.prepareAssistantResponse(
-          userMessageId,
-          regenerationMode,
-          turnsId,
-          assistantMessageId,
-        );
+      responseMessageId = await conversationContext.prepareAssistantResponse(
+        userMessageId,
+        regenerationMode,
+        turnsId,
+        assistantMessageId,
+      );
     }
     // 按需获取 tools（仅在需要时查询）
     const tools = toolContext
@@ -448,7 +452,7 @@ export class AgentEngine {
         turnsId: turnsId,
         metadata: {
           modelName: session.model?.modelName,
-        }
+        },
       };
       if (isResumeMode) {
         const lastMessage = historyMessages[historyMessages.length - 1];
@@ -467,6 +471,7 @@ export class AgentEngine {
         contentId: contentId,
         modelName: session.model?.modelName,
         requestId: RequestContext.current()?.requestId,
+        parentId: userMessageId,
       };
 
       // 构建待保存的消息记录数组
@@ -500,12 +505,12 @@ export class AgentEngine {
           if (!assistantResponse.metadata) {
             assistantResponse.metadata = {};
           }
-          assistantResponse.metadata.finishReason = 'max_iterations_reached';
+          assistantResponse.metadata.finishReason = "max_iterations_reached";
 
           // 发送特殊 finish 事件，通知前端显示继续按钮
           yield {
-            type: 'finish',
-            finishReason: 'max_iterations_reached',
+            type: "finish",
+            finishReason: "max_iterations_reached",
             message: `已达到最大工具调用轮次限制（${MAX_TOOL_ITERATIONS} 轮），是否继续执行？`,
             progress: {
               completedIterations: iterationCount,
@@ -515,18 +520,21 @@ export class AgentEngine {
           };
 
           // 在持久化前，将最终的文案注入到 toolCalls 的 metadata 中
-          this.displayManager.injectDisplayMessages(assistantResponse.toolCalls);
+          this.displayManager.injectDisplayMessages(
+            assistantResponse.toolCalls,
+          );
           // 持久化当前消息（包含断点元数据），确保刷新后仍能显示继续按钮
           await conversationContext.appendParts(parts);
-          return;
+          break;
         }
 
         // 【关键】将工具分为三组
-        const { pendingTools, approvedTools, rejectedTools } = this.classifyToolsByApproval(
-          assistantResponse.toolCalls,
-          assistantResponse.metadata,
-          session
-        );
+        const { pendingTools, approvedTools, rejectedTools } =
+          this.classifyToolsByApproval(
+            assistantResponse.toolCalls,
+            assistantResponse.metadata,
+            session,
+          );
 
         // 【原子性审批】只要有需要审批且未审批的工具，就触发审批请求
         if (pendingTools.length > 0) {
@@ -538,8 +546,8 @@ export class AgentEngine {
           }
 
           assistantResponse.metadata.approvalContext = {
-            type: 'approval',
-            status: 'pending',
+            type: "approval",
+            status: "pending",
             token: approvalToken,
             pendingToolCallIds: pendingTools.map((tc: any) => tc.id),
             createdAt: new Date().toISOString(),
@@ -555,12 +563,12 @@ export class AgentEngine {
 
           await conversationContext.appendParts(parts);
 
-          return;
+          break;
         }
 
         // 【已处理场景】执行 approved 工具 + 为 rejected 工具生成错误响应
         const completedDisplayMessages = this.displayManager.finalizeAll(
-          assistantResponse.toolCalls
+          assistantResponse.toolCalls,
         );
 
         // 执行 approved 工具（包括已通过审批和不需要审批的）
@@ -604,12 +612,13 @@ export class AgentEngine {
         if (rejectedTools.length > 0) {
           for (const rejected of rejectedTools) {
             // 从 decisions 中获取拒绝原因
-            const decision = assistantResponse.metadata?.approvalContext?.decisions?.find(
-              (d: any) => d.toolCallId === rejected.id
-            );
+            const decision =
+              assistantResponse.metadata?.approvalContext?.decisions?.find(
+                (d: any) => d.toolCallId === rejected.id,
+              );
 
             // 构建错误消息：固定前缀 + 可选的原因
-            let errorMessage = '用户拒绝了工具执行';
+            let errorMessage = "用户拒绝了工具执行";
             if (decision?.reason) {
               errorMessage += `，原因：${decision.reason}`;
             }
@@ -643,9 +652,7 @@ export class AgentEngine {
         // 在持久化前，将最终的文案注入到 toolCalls 的 metadata 中
         this.displayManager.injectDisplayMessages(assistantResponse.toolCalls);
         needToContinue = true;
-
       }
-
 
       // 将本轮产生的所有消息（助手回复 + 工具响应）追加到会话上下文并持久化存储
       await conversationContext.appendParts(parts);
@@ -654,6 +661,7 @@ export class AgentEngine {
         `Iteration ${iterationCount} cleanup completed. Finish reason: ${assistantResponse.metadata?.finishReason}`,
       );
     } while (needToContinue);
+    await conversationContext.persist();
   }
 
   /**
@@ -711,8 +719,6 @@ export class AgentEngine {
         abortSignal,
       );
 
-
-
       // 遍历限流后的响应块，处理合并后的 chunk
       for await (const chunk of throttled) {
         // 增量累加逻辑：将每个块的 content 追加到总内容中
@@ -764,16 +770,20 @@ export class AgentEngine {
     } catch (error) {
       // 捕获流式过程中的异常，区分不同类型的错误并采取相应的处理策略
       streamError = error instanceof Error ? error : new Error(String(error));
-      this.logger.error(
-        `Stream error in agent loop:`,
+      this.logger.error(`Stream error in agent loop:`, streamError);
+
+      // 根据错误类型设置 finishReason 和 error 信息，便于前端展示和用户理解
+      this.handleStreamError(
+        incrementMessage,
+        currentTurnThinkingInfo,
         streamError,
       );
 
-      // 根据错误类型设置 finishReason 和 error 信息，便于前端展示和用户理解
-      this.handleStreamError(incrementMessage, currentTurnThinkingInfo, streamError);
-
       // 向前端发送错误事件，除非是用户主动中止（避免在用户断开连接时推送额外数据）
-      if (streamError.name !== "AbortError" && !streamError.message.includes("abort")) {
+      if (
+        streamError.name !== "AbortError" &&
+        !streamError.message.includes("abort")
+      ) {
         yield {
           type: "finish",
           finishReason: "error",
@@ -784,11 +794,8 @@ export class AgentEngine {
     }
 
     // 计算并保存思维链耗时（毫秒），用于性能分析和优化
-    incrementMessage.metadata.thinkingDurationMs = this.calculateThinkingDuration(
-      currentTurnThinkingInfo,
-    );
-
-
+    incrementMessage.metadata.thinkingDurationMs =
+      this.calculateThinkingDuration(currentTurnThinkingInfo);
   }
 
   /**
@@ -801,7 +808,6 @@ export class AgentEngine {
    * @returns SSE 事件对象，若 chunk 为空则返回 null
    */
   private buildYieldEvent(chunk: LLMResponseChunk): any {
-
     let eventType: string;
     let msg: string | null = null;
 
@@ -817,7 +823,7 @@ export class AgentEngine {
       eventType = "tool_call";
 
       // 从文案管理器获取展示文案
-      const displayMessages = chunk.toolCalls.map(tc => {
+      const displayMessages = chunk.toolCalls.map((tc) => {
         const message = this.displayManager.getDisplayMessage(tc.index);
         return message;
       });
@@ -906,7 +912,7 @@ export class AgentEngine {
    * @returns 解析后的对象，如果解析失败则返回空对象或包含原始字符串的对象
    */
   private safeJsonParse(jsonString: string): any {
-    if (!jsonString || typeof jsonString !== 'string') {
+    if (!jsonString || typeof jsonString !== "string") {
       return {};
     }
 
@@ -914,8 +920,11 @@ export class AgentEngine {
       const parsed = JSON.parse(jsonString);
       return parsed || {};
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : String(error);
-      this.logger.warn(`Failed to parse JSON arguments: ${jsonString.substring(0, 100)}... Error: ${errorMessage}`);
+      const errorMessage =
+        error instanceof Error ? error.message : String(error);
+      this.logger.warn(
+        `Failed to parse JSON arguments: ${jsonString.substring(0, 100)}... Error: ${errorMessage}`,
+      );
 
       // 尝试修复常见的JSON格式问题，提高对模型输出不完美的容忍度
       try {
@@ -923,15 +932,15 @@ export class AgentEngine {
 
         // 修复1: 检测并提取第一个完整的JSON对象（处理重复输出的情况）
         // 例如：模型可能输出 {"a":1}{"a":1}，我们只取第一个完整对象
-        const firstBraceIndex = fixedString.indexOf('{');
+        const firstBraceIndex = fixedString.indexOf("{");
         if (firstBraceIndex >= 0) {
           let braceCount = 0;
           let endIndex = -1;
 
           for (let i = firstBraceIndex; i < fixedString.length; i++) {
-            if (fixedString[i] === '{') {
+            if (fixedString[i] === "{") {
               braceCount++;
-            } else if (fixedString[i] === '}') {
+            } else if (fixedString[i] === "}") {
               braceCount--;
               if (braceCount === 0) {
                 endIndex = i + 1;
@@ -942,12 +951,14 @@ export class AgentEngine {
 
           if (endIndex > 0) {
             fixedString = fixedString.substring(firstBraceIndex, endIndex);
-            this.logger.debug(`Extracted first complete JSON object: ${fixedString}`);
+            this.logger.debug(
+              `Extracted first complete JSON object: ${fixedString}`,
+            );
           }
         }
 
         // 修复2: 检查是否是未加引号的键值对格式，若是则包裹在花括号中
-        if (fixedString.includes(':') && !fixedString.startsWith('{')) {
+        if (fixedString.includes(":") && !fixedString.startsWith("{")) {
           fixedString = `{${fixedString}}`;
         }
 
@@ -958,8 +969,13 @@ export class AgentEngine {
         const parsed = JSON.parse(fixedString);
         return parsed || {};
       } catch (secondError) {
-        const secondErrorMessage = secondError instanceof Error ? secondError.message : String(secondError);
-        this.logger.error(`Failed to fix and parse JSON arguments: ${secondErrorMessage}`);
+        const secondErrorMessage =
+          secondError instanceof Error
+            ? secondError.message
+            : String(secondError);
+        this.logger.error(
+          `Failed to fix and parse JSON arguments: ${secondErrorMessage}`,
+        );
         // 如果仍然失败，返回一个包含原始字符串的对象，以便工具可以自行解析或报错
         return { _raw_arguments: jsonString };
       }
@@ -993,7 +1009,11 @@ export class AgentEngine {
 
         // 每个工具调用对象创建时都必须初始化状态
         // 如果 name 暂时为空，使用 toolName 字段，后续会在 name 到达时更新
-        this.displayManager.initialize(index, delta.id, delta.name || "tool_call");
+        this.displayManager.initialize(
+          index,
+          delta.id,
+          delta.name || "tool_call",
+        );
       }
 
       const tc = target.toolCalls[index];
@@ -1048,15 +1068,15 @@ export class AgentEngine {
     ) {
       const durationMs = Math.floor(
         currentTurnThinkingInfo.thinkingFinishedAt.getTime() -
-        currentTurnThinkingInfo.thinkingStartedAt.getTime(),
+          currentTurnThinkingInfo.thinkingStartedAt.getTime(),
       );
       this.logger.log(`Thinking duration calculated: ${durationMs}ms`);
       return durationMs;
     } else {
       this.logger.warn(
         `Thinking timestamps incomplete. ` +
-        `Has start: ${currentTurnThinkingInfo.thinkingStartedAt !== null}, ` +
-        `Has finish: ${currentTurnThinkingInfo.thinkingFinishedAt !== null}`,
+          `Has start: ${currentTurnThinkingInfo.thinkingStartedAt !== null}, ` +
+          `Has finish: ${currentTurnThinkingInfo.thinkingFinishedAt !== null}`,
       );
       return null;
     }
@@ -1141,7 +1161,9 @@ export class AgentEngine {
           content: chunk.content || null,
           reasoningContent: chunk.reasoningContent || null,
           finishReason: chunk.finishReason || null,
-          toolCalls: chunk.toolCalls ? this.cloneToolCalls(chunk.toolCalls) : undefined,
+          toolCalls: chunk.toolCalls
+            ? this.cloneToolCalls(chunk.toolCalls)
+            : undefined,
           usage: chunk.usage || null,
         };
         return null;
@@ -1158,7 +1180,9 @@ export class AgentEngine {
           content: chunk.content || null,
           reasoningContent: chunk.reasoningContent || null,
           finishReason: chunk.finishReason || null,
-          toolCalls: chunk.toolCalls ? this.cloneToolCalls(chunk.toolCalls) : undefined,
+          toolCalls: chunk.toolCalls
+            ? this.cloneToolCalls(chunk.toolCalls)
+            : undefined,
           usage: chunk.usage || null,
         };
         return flushedChunk;
@@ -1172,7 +1196,8 @@ export class AgentEngine {
 
       // 累加思考内容
       if (chunk.reasoningContent) {
-        buffer.reasoningContent = (buffer.reasoningContent || "") + chunk.reasoningContent;
+        buffer.reasoningContent =
+          (buffer.reasoningContent || "") + chunk.reasoningContent;
       }
 
       // 累加工具调用（按 index 分组，合并 arguments）
@@ -1212,8 +1237,11 @@ export class AgentEngine {
     };
 
     try {
-      let chunkPromise: Promise<IteratorResult<LLMResponseChunk>> | undefined = undefined;
-      let chunkPromiseWait: Promise<{ type: "chunk"; value: IteratorResult<LLMResponseChunk> }> | undefined = undefined;
+      let chunkPromise: Promise<IteratorResult<LLMResponseChunk>> | undefined =
+        undefined;
+      let chunkPromiseWait:
+        | Promise<{ type: "chunk"; value: IteratorResult<LLMResponseChunk> }>
+        | undefined = undefined;
 
       while (!streamDone) {
         // 检查 abort 信号
@@ -1230,7 +1258,7 @@ export class AgentEngine {
           chunkPromise = iterator.next();
           chunkPromiseWait = chunkPromise.then((r) => ({
             type: "chunk" as const,
-            value: r
+            value: r,
           }));
         }
         // const chunkPromise = iterator.next();
@@ -1255,8 +1283,6 @@ export class AgentEngine {
           }
 
           const chunk = value as LLMResponseChunk;
-
-
 
           // 合并到缓存（包含 finishReason、usage 等）
           // 如果类型冲突，会返回需要立即刷新的旧缓存
@@ -1309,7 +1335,6 @@ export class AgentEngine {
     }));
   }
 
-
   /**
    * 【新增】检查工具是否需要审批
    */
@@ -1327,14 +1352,13 @@ export class AgentEngine {
     return toolCalls.some((tc: any) => {
       const toolName = tc.name;
 
-
       // 精确匹配
       if (requiresApprovalTools.includes(toolName)) {
         return true;
       }
 
       // 命名空间匹配（如 file__*）
-      const namespace = toolName.split('__')[0];
+      const namespace = toolName.split("__")[0];
       if (requiresApprovalTools.includes(`${namespace}__*`)) {
         return true;
       }
@@ -1352,7 +1376,7 @@ export class AgentEngine {
 
   /**
    * 【新增】将工具按审批状态分类
-   * 
+   *
    * @param toolCalls 所有工具调用
    * @param metadata 消息的 metadata（包含 approvalContext）
    * @param session 会话对象（用于获取审批配置）
@@ -1361,7 +1385,7 @@ export class AgentEngine {
   private classifyToolsByApproval(
     toolCalls: any[],
     metadata?: any,
-    session?: any
+    session?: any,
   ): {
     pendingTools: any[];
     approvedTools: any[];
@@ -1374,7 +1398,7 @@ export class AgentEngine {
     // 检查是否有审批上下文
     const approvalContext = metadata?.approvalContext;
 
-    if (approvalContext && approvalContext.status !== 'pending') {
+    if (approvalContext && approvalContext.status !== "pending") {
       // 已审批场景：根据 decisions 分类
       const decisions = approvalContext.decisions || [];
 
@@ -1384,9 +1408,9 @@ export class AgentEngine {
         if (!decision) {
           // 【异常】前端未对该工具做出决策，视为 pending
           pendingTools.push(tc);
-        } else if (decision.decision === 'approve') {
+        } else if (decision.decision === "approve") {
           approvedTools.push(tc);
-        } else if (decision.decision === 'reject') {
+        } else if (decision.decision === "reject") {
           rejectedTools.push(tc);
         }
       }
@@ -1397,12 +1421,15 @@ export class AgentEngine {
       const requiresApprovalTools = approvalConfig.requiresApproval || [];
 
       for (const tc of toolCalls) {
-        const needsApproval = this.isToolRequiresApproval(tc.name, requiresApprovalTools);
+        const needsApproval = this.isToolRequiresApproval(
+          tc.name,
+          requiresApprovalTools,
+        );
 
         if (needsApproval) {
           pendingTools.push(tc);
         } else {
-          approvedTools.push(tc);  // 不需要审批的工具归为 approved
+          approvedTools.push(tc); // 不需要审批的工具归为 approved
         }
       }
     }
@@ -1413,14 +1440,17 @@ export class AgentEngine {
   /**
    * 【辅助】检查单个工具是否需要审批
    */
-  private isToolRequiresApproval(toolName: string, requiresApprovalTools: string[]): boolean {
+  private isToolRequiresApproval(
+    toolName: string,
+    requiresApprovalTools: string[],
+  ): boolean {
     // 精确匹配
     if (requiresApprovalTools.includes(toolName)) {
       return true;
     }
 
     // 命名空间匹配（如 file__*）
-    const namespace = toolName.split('__')[0];
+    const namespace = toolName.split("__")[0];
     if (requiresApprovalTools.includes(`${namespace}__*`)) {
       return true;
     }

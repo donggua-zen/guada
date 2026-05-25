@@ -51,25 +51,23 @@
               </div>
               <div class="session-actions flex items-center opacity-0 group-hover:opacity-100"
                 :class="{ 'opacity-100': session.id === currentSessionId }">
-                <el-dropdown trigger="hover" @command="(command) => handleDropdownSelect(command, session)">
-                  <template #dropdown>
-                    <el-dropdown-menu>
-                      <el-dropdown-item command="rename">
-                        <EditOutlined class="w-4 h-4 mr-2 inline-block" />
-                        重命名
-                      </el-dropdown-item>
-                      <el-dropdown-item command="delete">
-                        <DeleteOutlineOutlined class="w-4 h-4 mr-2 inline-block" />
-                        删除
-                      </el-dropdown-item>
-                    </el-dropdown-menu>
-                  </template>
-                  <div @click.stop class="session-action-trigger">
+                <DropdownMenu @command="(cmd: string) => handleDropdownSelect(cmd, session)">
+                  <div class="session-action-trigger">
                     <el-icon class="w-4 h-4">
                       <MoreFilled />
                     </el-icon>
                   </div>
-                </el-dropdown>
+                  <template #dropdown>
+                    <DropdownMenuItem command="rename">
+                      <EditOutlined class="w-4 h-4 mr-2 inline-block" />
+                      重命名
+                    </DropdownMenuItem>
+                    <DropdownMenuItem command="delete">
+                      <DeleteOutlineOutlined class="w-4 h-4 mr-2 inline-block" />
+                      删除
+                    </DropdownMenuItem>
+                  </template>
+                </DropdownMenu>
               </div>
             </div>
 
@@ -113,6 +111,8 @@ import {
 } from '@vicons/material'
 
 import { MoreFilled, Loading } from '@element-plus/icons-vue'
+import DropdownMenu from '../ui/DropdownMenu.vue'
+import DropdownMenuItem from '../ui/DropdownMenuItem.vue'
 
 // @ts-ignore - icons 组件类型缺失
 import {
@@ -123,10 +123,7 @@ import {
 // Element Plus 组件导入
 import {
   ElInput,
-  ElIcon,
-  ElDropdown,
-  ElDropdownMenu,
-  ElDropdownItem
+  ElIcon
 } from 'element-plus'
 
 // API 服务导入（暂时保留，未来可能需要）

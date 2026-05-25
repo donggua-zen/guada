@@ -10,7 +10,11 @@ import {
 } from "./interfaces";
 import { SettingsStorage } from "../../common/utils/settings-storage.util";
 import { ModelRepository } from "../../common/database/model.repository";
-import { SK_MOD_COMPRESS_MODEL, SK_MOD_COMPRESS_ENABLE_SUMMARY, SG_MODELS } from "../../constants/settings.constants";
+import {
+  SK_MOD_COMPRESS_MODEL,
+  SK_MOD_COMPRESS_ENABLE_SUMMARY,
+  SG_MODELS,
+} from "../../constants/settings.constants";
 import { TokenizerService } from "../../common/utils/tokenizer.service";
 
 /**
@@ -29,6 +33,7 @@ export class ConversationContext implements IConversationContext {
   private sessionId: string;
   /** 纯对话历史，不含 system 消息（system prompt 单独存储在 systemPrompt） */
   private history: MessageRecord[] = [];
+  private pendingPersistRecords: MessageRecord[] = [];
   private systemPrompt: string = "";
   private systemPromptTokenCount: number = 0;
   /** 当前生效的压缩摘要内容，由压缩策略生成并在构建最终消息时注入到 system prompt */
@@ -65,8 +70,11 @@ export class ConversationContext implements IConversationContext {
     this.systemPrompt = config.systemPrompt || "You are a helpful assistant.";
     // this.logger.debug(`Using system prompt: ${this.systemPrompt}`);
     // 保存对话模型名称，用于 Token 计算
-    this.chatModelName = config.model?.modelName || config.model?.name || "gpt4";
-    this.logger.debug(`Using chat model for tokenization: ${this.chatModelName}`);
+    this.chatModelName =
+      config.model?.modelName || config.model?.name || "gpt4";
+    this.logger.debug(
+      `Using chat model for tokenization: ${this.chatModelName}`,
+    );
 
     // 获取压缩模型配置：优先使用专用的压缩模型，若未配置则回退到对话模型
     // 专用压缩模型通常选择成本更低、速度更快的模型，以优化压缩阶段的性能和费用
@@ -82,18 +90,25 @@ export class ConversationContext implements IConversationContext {
         const model = await this.modelRepository.findById(compressionModelId);
         if (model) {
           compressionModel = model;
-          this.logger.debug(`Using dedicated compression model: ${model.modelName}`);
+          this.logger.debug(
+            `Using dedicated compression model: ${model.modelName}`,
+          );
         } else {
-          this.logger.warn(`Compression model ${compressionModelId} not found, falling back to chat model`);
+          this.logger.warn(
+            `Compression model ${compressionModelId} not found, falling back to chat model`,
+          );
         }
       } catch (error) {
-        this.logger.error(`Failed to load compression model ${compressionModelId}:`, error);
+        this.logger.error(
+          `Failed to load compression model ${compressionModelId}:`,
+          error,
+        );
       }
     }
 
     // 读取摘要模式配置，优先使用角色级别配置，其次使用全局配置
     const memoryConfig = config.memory || {};
-    let summaryMode: string = 'fast'; // 默认快速模式
+    let summaryMode: string = "fast"; // 默认快速模式
 
     if (memoryConfig.summaryMode) {
       // 优先使用角色级别的 summaryMode 配置
@@ -106,9 +121,14 @@ export class ConversationContext implements IConversationContext {
         SK_MOD_COMPRESS_ENABLE_SUMMARY,
         true,
       );
-      const enabled = globalEnableSummary === true || globalEnableSummary === 'true' || globalEnableSummary === 1;
-      summaryMode = enabled ? 'fast' : 'disabled';
-      this.logger.debug(`Using global enableSummary setting, converted to summaryMode: ${summaryMode}`);
+      const enabled =
+        globalEnableSummary === true ||
+        globalEnableSummary === "true" ||
+        globalEnableSummary === 1;
+      summaryMode = enabled ? "fast" : "disabled";
+      this.logger.debug(
+        `Using global enableSummary setting, converted to summaryMode: ${summaryMode}`,
+      );
     }
 
     this.compressionConfig = {
@@ -121,15 +141,20 @@ export class ConversationContext implements IConversationContext {
     };
 
     // 从压缩策略中获取检查点状态，用于恢复之前的压缩进度和游标位置
-    const checkpoint = await this.compressionStrategy.getCheckpoint(this.sessionId);
+    const checkpoint = await this.compressionStrategy.getCheckpoint(
+      this.sessionId,
+    );
 
     const modelName = config.model?.modelName || config.model?.name || "";
     const isDeepSeekV4 = modelName.includes("deepseek-v4");
     // 思考功能开启的判断：thinkingEffort 存在且不为 'off'
-    const shouldLoadReasoning = isDeepSeekV4 && config.thinkingEffort && config.thinkingEffort !== 'off';
+    const shouldLoadReasoning =
+      isDeepSeekV4 && config.thinkingEffort && config.thinkingEffort !== "off";
 
     if (shouldLoadReasoning) {
-      this.logger.debug(`Model ${modelName} with thinking enabled (effort: ${config.thinkingEffort}), will check for tool calls`);
+      this.logger.debug(
+        `Model ${modelName} with thinking enabled (effort: ${config.thinkingEffort}), will check for tool calls`,
+      );
     }
 
     // 加载原始消息时传入检查点中的游标，确保只加载未被压缩的历史消息，避免重复加载已压缩部分
@@ -137,7 +162,8 @@ export class ConversationContext implements IConversationContext {
       sessionId: this.sessionId,
       userMessageId: config.userMessageId,
       maxMessages: memoryConfig.maxMemoryLength, // 使用分组后的配置
-      supportsImageInput: config.model?.config?.inputCapabilities?.includes("image"),
+      supportsImageInput:
+        config.model?.config?.inputCapabilities?.includes("image"),
       keepReasoningContent: shouldLoadReasoning,
       lastCompactedMessageId: checkpoint?.lastCompactedMessageId,
       lastCompactedContentId: checkpoint?.lastCompactedContentId,
@@ -155,19 +181,25 @@ export class ConversationContext implements IConversationContext {
     // 针对 DeepSeek-V4 等支持思维链的模型，根据是否存在工具调用来决定是否保留 reasoning content
     // 当存在工具调用时，reasoning content 包含了模型的推理过程，对后续对话有参考价值；否则可以移除以节省 Token
     if (shouldLoadReasoning) {
-      const hasToolCalls = this.history.some(msg => msg.toolCalls && msg.toolCalls.length > 0);
+      const hasToolCalls = this.history.some(
+        (msg) => msg.toolCalls && msg.toolCalls.length > 0,
+      );
 
       if (hasToolCalls) {
-        this.logger.debug(`Found tool calls in history, keeping reasoning content`);
+        this.logger.debug(
+          `Found tool calls in history, keeping reasoning content`,
+        );
         // 显式保留 reasoningContent 字段，确保其值不为 undefined 时被过滤掉
-        this.history = this.history.map(msg => ({
+        this.history = this.history.map((msg) => ({
           ...msg,
           reasoningContent: msg.reasoningContent ?? "",
         }));
       } else {
-        this.logger.debug(`No tool calls found in history, removing reasoning content`);
+        this.logger.debug(
+          `No tool calls found in history, removing reasoning content`,
+        );
         // 通过解构赋值移除 reasoningContent 字段，减少不必要的 Token 消耗
-        this.history = this.history.map(msg => {
+        this.history = this.history.map((msg) => {
           const { reasoningContent, ...rest } = msg as any;
           return rest as MessageRecord;
         });
@@ -177,12 +209,18 @@ export class ConversationContext implements IConversationContext {
     this.logger.debug(`Loaded ${this.history.length} messages into context`);
 
     // 计算系统提示词的 Token 数
-    this.systemPromptTokenCount = await this.tokenizerService.countTextTokens(this.chatModelName, this.systemPrompt);
+    this.systemPromptTokenCount = await this.tokenizerService.countTextTokens(
+      this.chatModelName,
+      this.systemPrompt,
+    );
     // 减去系统提示词的 Token 数，确保后续计算的上下文窗口是准确的
     this.compressionConfig.contextWindow -= this.systemPromptTokenCount;
 
     // 初始化时计算全量 Token 数并缓存，作为后续增量更新的基准值
-    this.currentTokenCount = await this.tokenizerService.countTokens(this.chatModelName, this.history);
+    this.currentTokenCount = await this.tokenizerService.countTokens(
+      this.chatModelName,
+      this.history,
+    );
     this.logger.debug(`Initial token count: ${this.currentTokenCount}`);
   }
 
@@ -213,9 +251,15 @@ export class ConversationContext implements IConversationContext {
 
     // 基于缓存的 Token 计数判断是否达到压缩阈值，避免每次调用都重新计算全量 Token
     // 触发条件：当前 Token 数 >= 上下文窗口 * 触发比例（如 80%）
-    if (await this.compressionStrategy.shouldCompress(messages, this.compressionConfig, this.currentTokenCount)) {
+    if (
+      await this.compressionStrategy.shouldCompress(
+        messages,
+        this.compressionConfig,
+        this.currentTokenCount,
+      )
+    ) {
       this.logger.log(
-        `Compression triggered: ${this.compressionConfig.contextWindow * this.compressionConfig.triggerRatio} tokens threshold exceeded`
+        `Compression triggered: ${this.compressionConfig.contextWindow * this.compressionConfig.triggerRatio} tokens threshold exceeded`,
       );
       const result = await this.compressionStrategy.execute(
         this.sessionId,
@@ -232,9 +276,13 @@ export class ConversationContext implements IConversationContext {
       // 压缩引擎已返回压缩后的 Token 计数，直接使用该值更新缓存，避免重新计算带来的性能开销
       if (result.tokenCount !== undefined) {
         this.currentTokenCount = result.tokenCount;
-        this.logger.log(`Compression completed with strategy: ${result.strategy}, token count: ${result.tokenCount}`);
+        this.logger.log(
+          `Compression completed with strategy: ${result.strategy}, token count: ${result.tokenCount}`,
+        );
       } else {
-        this.logger.log(`Compression completed with strategy: ${result.strategy}`);
+        this.logger.log(
+          `Compression completed with strategy: ${result.strategy}`,
+        );
       }
     }
 
@@ -252,16 +300,22 @@ export class ConversationContext implements IConversationContext {
   async appendParts(records: MessageRecord[]): Promise<void> {
     if (!records || records.length === 0) return;
 
-    await this.messageStore.persistContent(records);
-
-    for (const record of records) {
-      this.history.push(record);
-    }
-
+    this.history.push(...records);
+    this.pendingPersistRecords.push(...records);
     // 增量更新 Token 计数：仅计算新追加消息的 Token 数并累加到总计数中
-    const newTokens = await this.tokenizerService.countTokens(this.chatModelName, records);
+    const newTokens = await this.tokenizerService.countTokens(
+      this.chatModelName,
+      records,
+    );
     this.currentTokenCount += newTokens;
-    this.logger.debug(`Appended ${records.length} messages, added ${newTokens} tokens, total: ${this.currentTokenCount}`);
+    this.logger.debug(
+      `Appended ${records.length} messages, added ${newTokens} tokens, total: ${this.currentTokenCount}`,
+    );
+  }
+
+  async persist(): Promise<void> {
+    await this.messageStore.persistContent(this.pendingPersistRecords);
+    this.pendingPersistRecords = [];
   }
 
   /**
@@ -321,7 +375,9 @@ export class ConversationContext implements IConversationContext {
     }
 
     const currentTokens = this.currentTokenCount;
-    this.logger.log(`Force compressing session ${this.sessionId} with ${currentTokens} tokens`);
+    this.logger.log(
+      `Force compressing session ${this.sessionId} with ${currentTokens} tokens`,
+    );
 
     // 临时保存原始的 contextWindow
     const originalContextWindow = this.compressionConfig.contextWindow;
@@ -355,7 +411,7 @@ export class ConversationContext implements IConversationContext {
    */
   private buildFinalMessages(messages: MessageRecord[]): MessageRecord[] {
     // 防御性过滤：确保 messages 中不包含意外的 system 消息，保持数据一致性
-    const nonSystemMessages = messages.filter(msg => msg.role !== 'system');
+    const nonSystemMessages = messages.filter((msg) => msg.role !== "system");
 
     let finalSystemPrompt = this.systemPrompt;
 
@@ -365,7 +421,10 @@ export class ConversationContext implements IConversationContext {
       finalSystemPrompt += `\n\n[历史对话摘要]\n${this.currentSummary}`;
     }
 
-    finalSystemPrompt = finalSystemPrompt.replace("{time}", new Date().toISOString());
+    finalSystemPrompt = finalSystemPrompt.replace(
+      "{time}",
+      new Date().toISOString(),
+    );
 
     return [
       { role: "system" as const, content: finalSystemPrompt },

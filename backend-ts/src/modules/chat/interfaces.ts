@@ -116,6 +116,7 @@ export interface IConversationContext {
   getMessages(): Promise<MessageRecord[]>;
   getHistory(): MessageRecord[];
   appendParts(records: MessageRecord[]): Promise<void>;
+  persist(): Promise<void>;
   prepareAssistantResponse(
     parentId: string,
     regenerationMode: string,

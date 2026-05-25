@@ -40,39 +40,35 @@
       </div>
     </template>
 
-    <el-dropdown trigger="click" @command="handleMoreAction">
+    <DropdownMenu @command="handleCommand">
       <div class="message-action-button">
-        <el-icon :size="16">
+        <el-icon :size="16" class="pointer-events-none">
           <MoreVertical24Filled />
         </el-icon>
       </div>
       <template #dropdown>
-        <el-dropdown-menu>
-          <el-dropdown-item command="edit">
-            <div class="flex items-center">
-              <el-icon class="mr-2">
-                <EditTwotone />
-              </el-icon>
-              编辑内容
-            </div>
-          </el-dropdown-item>
-          <el-dropdown-item command="delete">
-            <div class="flex items-center">
-              <el-icon class="mr-2">
-                <DeleteTwotone />
-              </el-icon>
-              删除消息
-            </div>
-          </el-dropdown-item>
-        </el-dropdown-menu>
+        <DropdownMenuItem command="edit">
+          <el-icon class="mr-2">
+            <EditTwotone />
+          </el-icon>
+          编辑内容
+        </DropdownMenuItem>
+        <DropdownMenuItem command="delete">
+          <el-icon class="mr-2">
+            <DeleteTwotone />
+          </el-icon>
+          删除消息
+        </DropdownMenuItem>
       </template>
-    </el-dropdown>
+    </DropdownMenu>
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue';
-import { ElIcon, ElDropdown, ElDropdownMenu, ElDropdownItem } from 'element-plus';
+import { computed, ref } from 'vue';
+import { ElIcon } from 'element-plus';
+import DropdownMenu from '../../ui/DropdownMenu.vue';
+import DropdownMenuItem from '../../ui/DropdownMenuItem.vue';
 import {
   Copy20Filled,
   ArrowCounterclockwise24Filled,
@@ -91,20 +87,24 @@ const props = defineProps<{
 }>();
 
 const emit = defineEmits<{
-  copy: [];
-  generate: [];
-  regenerate: [];
-  switchVersion: [direction: 'prev' | 'next'];
-  edit: [];
-  delete: [];
+  (e: 'copy'): void;
+  (e: 'generate'): void;
+  (e: 'regenerate'): void;
+  (e: 'switchVersion', direction: 'prev' | 'next'): void;
+  (e: 'edit'): void;
+  (e: 'delete'): void;
 }>();
 
 const hasPrev = computed(() => props.currentVersionIndex > 0);
 
 const hasNext = computed(() => props.currentVersionIndex < props.contentVersions.length - 1);
 
-const handleMoreAction = (command: 'edit' | 'delete') => {
-  emit(command);
+const handleCommand = (command: string) => {
+  if (command === 'edit') {
+    emit('edit');
+  } else if (command === 'delete') {
+    emit('delete');
+  }
 };
 </script>
 
@@ -114,4 +114,6 @@ const handleMoreAction = (command: 'edit' | 'delete') => {
 .message-action-button {
   @apply cursor-pointer flex items-center gap-1 py-1 px-1 rounded mr-1 hover:bg-(--color-surface) disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-gray-100 disabled:hover:text-gray-400 transition-transform duration-100;
 }
+
+
 </style>
