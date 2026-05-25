@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, Menu, shell, MenuItemConstructorOptions, dialog, clipboard } from 'electron'
+import { app, BrowserWindow, ipcMain, Menu, shell, Tray, MenuItemConstructorOptions, dialog, clipboard } from 'electron'
 import * as path from 'path'
 import { fork, ChildProcess } from 'child_process'
 import * as fs from 'fs'
@@ -15,6 +15,12 @@ let windowManager: BrowserWindowManager | null = null  // 窗口管理器
 let isBackendStarting = false  // 防止重复启动
 let backendPort: number | null = null  // 记录后端端口
 let browserBridgeInitialized = false  // Browser Bridge 是否已初始化
+let tray: Tray | null = null  // 系统托盘图标
+
+// 扩展 App 类型以支持退出标记
+interface AppExtended extends Electron.App {
+  isQuiting?: boolean
+}
 
 // 配置 electron-log
 log.transports.file.level = 'info'
@@ -425,6 +431,63 @@ async function startBackend(): Promise<void> {
   })
 }
 
+// 创建系统托盘图标
+function createTray() {
+  // 开发环境：electron/dist/main.js 在 electron/dist/ 下，向上两级到项目根目录
+  // 生产环境：build-resources 在 resources/ 下
+  const iconName = process.platform === 'win32' ? 'icon.ico' : 'icon.png'
+  const iconPath = isDev
+    ? path.join(__dirname, '..', '..', 'build-resources', iconName)
+    : path.join(process.resourcesPath, 'build-resources', iconName)
+
+  tray = new Tray(iconPath)
+  tray.setToolTip('GuaDa')
+
+  const contextMenu = Menu.buildFromTemplate([
+    {
+      label: '显示主窗口',
+      click: () => {
+        if (mainWindow) {
+          mainWindow.show()
+          mainWindow.focus()
+        } else {
+          createWindow()
+        }
+      }
+    },
+    { type: 'separator' },
+    {
+      label: '退出',
+      click: () => {
+        app.quit()
+      }
+    }
+  ])
+
+  tray.setContextMenu(contextMenu)
+
+  // 左键单击恢复窗口
+  tray.on('click', () => {
+    if (mainWindow) {
+      if (mainWindow.isVisible()) {
+        mainWindow.focus()
+      } else {
+        mainWindow.show()
+      }
+    } else {
+      createWindow()
+    }
+  })
+
+  // macOS 双击行为
+  tray.on('double-click', () => {
+    if (mainWindow) {
+      mainWindow.show()
+      mainWindow.focus()
+    }
+  })
+}
+
 // 创建窗口
 function createWindow() {
   mainWindow = new BrowserWindow({
@@ -485,6 +548,14 @@ function createWindow() {
   // 窗口准备好后显示
   mainWindow.once('ready-to-show', () => {
     mainWindow?.show()
+  })
+
+  // 关闭按钮最小化到托盘
+  mainWindow.on('close', (event) => {
+    if (!(app as AppExtended).isQuiting) {
+      event.preventDefault()
+      mainWindow?.hide()
+    }
   })
 
   mainWindow.on('closed', () => {
@@ -917,7 +988,10 @@ app.whenReady().then(async () => {
     // 创建窗口（tabManager 在这里面创建�?
     createWindow()
 
-    // 窗口创建后，初始�?Browser Bridge（此�?windowManager �?backendProcess 都可用）
+    // 创建系统托盘图标
+    createTray()
+
+    // 窗口创建后，初始化 Browser Bridge（此时 windowManager 和 backendProcess 都可用）
     const bridgeMode = process.env.BROWSER_BRIDGE_MODE || (isDev ? 'tcp' : 'ipc')
 
     if (bridgeMode === 'tcp') {
@@ -993,6 +1067,8 @@ app.on('activate', () => {
 
 // 应用退出前清理
 app.on('before-quit', async () => {
+  (app as AppExtended).isQuiting = true
+
   // 停止 Browser Bridge TCP Server
   if (process.env.BROWSER_BRIDGE_MODE === 'tcp') {
     await stopBrowserBridgeTCP()
