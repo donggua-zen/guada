@@ -13,8 +13,8 @@
             v-memo="[message.id, message.contents, message.currentTurnsId, message.state?.isStreaming, message.state?.isThinking]"
             :avatar="message.role == 'user' ? userAvater : currentSession?.avatarUrl"
             :is-last="index === activeMessages.length - 1"
-            :allow-generate="!isStreaming && allowReSendMessage(message, index, activeMessages)" @delete="deleteMessage"
-            @edit="editMessage" @copy="copyMessage" @generate="generateResponse" @regenerate="regenerateResponse"
+            :allow-generate="!isStreaming && index === lastUserMessageIndex" @delete="deleteMessage" @edit="editMessage"
+            @copy="copyMessage" @generate="generateResponse" @regenerate="regenerateResponse"
             @continue="continueResponse" @switch="switchContent" />
           <!-- <div class="min-h-60"></div> -->
 
@@ -58,13 +58,13 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, nextTick, onMounted, type Ref, h } from "vue";
+import { ref, computed, watch, nextTick, onMounted, onUnmounted, type Ref, h } from "vue";
 import { apiService } from "../../services/ApiService";
 import { usePopup } from "@/composables/usePopup";
 import { useDebounceFn } from "@vueuse/core";
 import { useSessionStore } from "../../stores/session";
 import { useAuthStore } from "../../stores/auth"
-import { getCurrentTurns, allowReSendMessage } from "@/utils/messageUtils"
+import { getCurrentTurns } from "@/utils/messageUtils"
 import { useStreamResponse } from "@/composables/useStreamResponse"
 import type { InputMessageState, Session } from '@/types/session';
 
@@ -129,13 +129,16 @@ const needScrollToBottom = ref(true);
 let scrollTicking = false;
 let lastScrollTop = 0;
 
+// SSE 事件监听取消函数
+let unsubscribeStreamStarted: (() => void) | null = null;
+let unsubscribeStreamFinished: (() => void) | null = null;
+
 // 使用 useMessageOperations composable
 const {
   inputMessage,
   editMode,
   exitEditMode,
-  sendNewMessage,
-  sendEditMessage,
+  prepareNewMessage,
   enterEditMode
 } = useMessageOperations(sessionStore, apiService, currentSessionId)
 
@@ -215,7 +218,7 @@ function handleScrollToBottomClick() {
 }
 
 // 监听流式状态变化
-watch(() => isStreaming.value, (newVal) => {
+watch(() => isStreaming.value, (newVal, oldVal) => {
   shouldButtonBreathe.value = newVal
   updateScrollButtonVisibility()
 }, { immediate: true })
@@ -231,6 +234,17 @@ const activeMessages = computed({
       sessionStore.setMessages(sessionId, value);
     }
   }
+});
+
+// 最后一条 user 消息的索引，避免每轮 v-for 重复计算
+const lastUserMessageIndex = computed(() => {
+  const messages = activeMessages.value;
+  for (let i = messages.length - 1; i >= 0; i--) {
+    if (messages[i].role === 'user') {
+      return i;
+    }
+  }
+  return -1;
 });
 
 const currentModelId = computed({
@@ -332,7 +346,10 @@ const debouncedSaveSession = useDebounceFn(() => {
 
 // 监听器
 watch(() => props.session?.id, async (newSessionId: string | undefined, oldSessionId: string | undefined) => {
+  // setTimeout(() => {
   await handleSessionChange(newSessionId ?? null, oldSessionId ?? null);
+
+  // }, 500);
 }, { immediate: true });
 
 // 监听流式状态变化，在第一次对话完成后生成标题
@@ -350,8 +367,66 @@ watch(() => activeMessages.value.length, () => {
   updateScrollButtonVisibility()
 }, { immediate: true });
 
+/**
+ * 初始化 SSE 事件监听
+ * 接收流开始/结束事件，替代轮询机制
+ */
+function initSessionEventListeners() {
+  // 监听流开始事件（其他客户端发起的流）
+  unsubscribeStreamStarted = apiService.onSessionEvent("stream_started", (event) => {
+    const { sessionId, payload } = event;
+
+    // 忽略自身发起的流（通过 source/clientId 判断）
+    if (payload?.source?.includes(apiService.getClientId())) {
+      console.log("[ChatPanel] 忽略自身发起的流事件");
+      return;
+    }
+
+    // 如果是当前会话，自动订阅流
+    if (sessionId === currentSessionId.value && !isStreaming.value) {
+      console.log("[ChatPanel] 检测到其他客户端的活跃流，自动订阅");
+      // 如果存在 replaceMessageId，先删除本地对应消息避免重复
+      if (payload?.replaceMessageId) {
+        const messages = sessionStore.getMessages(sessionId);
+        const index = messages.findIndex((m: any) => m.id === payload.replaceMessageId);
+        if (index !== -1) {
+          messages.splice(index, 1);
+        }
+      }
+      subscribeToActiveStream();
+    }
+  });
+
+  // 监听流结束事件
+  unsubscribeStreamFinished = apiService.onSessionEvent("stream_finished", (event) => {
+    const { sessionId } = event;
+    if (sessionId === currentSessionId.value) {
+      console.log("[ChatPanel] 流已结束");
+    }
+  });
+}
+
+/**
+ * 清理 SSE 事件监听
+ */
+function cleanupSessionEventListeners() {
+  if (unsubscribeStreamStarted) {
+    unsubscribeStreamStarted();
+    unsubscribeStreamStarted = null;
+  }
+  if (unsubscribeStreamFinished) {
+    unsubscribeStreamFinished();
+    unsubscribeStreamFinished = null;
+  }
+}
+
 // 生命周期和初始化
 onMounted(() => {
+  initSessionEventListeners();
+});
+
+onUnmounted(() => {
+  cleanupSessionEventListeners();
 });
 
 /**
@@ -359,15 +434,20 @@ onMounted(() => {
  */
 async function handleSessionChange(newSessionId: string | null, oldSessionId: string | null) {
   if (newSessionId === oldSessionId) return;
+
   isLoading.value = true;
   resetTitleFlag();
   currentSessionId.value = newSessionId;
+
   if (newSessionId) {
     try {
       lastScrollTop = 0;
       const sessionData = await loadSession(newSessionId);
       currentSession.value = sessionData;
       immediateScrollToBottom();
+
+      // 页面加载时一次性检查活跃流（用于刷新后的初始状态同步）
+      await checkActiveStreamOnLoad(newSessionId);
 
       nextTick(() => {
         if (!currentSession.value)
@@ -388,22 +468,67 @@ async function handleSessionChange(newSessionId: string | null, oldSessionId: st
   }
 }
 
-// 流式响应处理（委托给 composable 处理）
+/**
+ * 页面加载时一次性检查活跃流
+ * 用于刷新后的初始状态同步，后续通过 SSE 事件驱动
+ */
+async function checkActiveStreamOnLoad(sessionId: string) {
+  try {
+    const status = await apiService.getStreamStatus(sessionId);
+    if (status.isRunning) {
+      await subscribeToActiveStream();
+    }
+  } catch (error) {
+    console.error('初始流状态检查失败:', error);
+  }
+}
+
+// 流式响应处理（委托给 composable 处理，用于 regenerate / continue）
 async function handleStreamResponse(
   streamingSessionId: string,
-  userMessageId: string,
   regenerationMode: any = null,
-  assistantMessageId: string | null = null
+  assistantMessageId: string | null = null,
+  userMessageId?: string | null,
 ) {
   try {
     await streamHandler.processStream(
       streamingSessionId,
-      userMessageId,
       regenerationMode,
-      assistantMessageId
+      assistantMessageId,
+      userMessageId,
     )
   } catch (error) {
     // 错误已在 composable 中处理，这里只负责显示通知
+    if ((error as Error).message.includes('SessionBusyError')) {
+      notify.warning("会话忙碌", "当前会话正在回复中，请稍后再试")
+      return
+    }
+    if (error.name !== 'AbortError') {
+      notify.error("请求错误", error.message)
+    }
+  }
+}
+
+/**
+ * 合并消息创建和流式响应处理
+ * 后端会在启动流时自动创建消息
+ */
+async function handleStreamResponseWithCreate(
+  streamingSessionId: string,
+  content: string,
+  fileIds: string[],
+  replaceMessageId: string | null = null,
+  knowledgeBaseIds?: string[],
+) {
+  try {
+    await streamHandler.processStreamWithCreate(
+      streamingSessionId,
+      content,
+      fileIds,
+      replaceMessageId,
+      knowledgeBaseIds,
+    )
+  } catch (error) {
     if ((error as Error).message.includes('SessionBusyError')) {
       notify.warning("会话忙碌", "当前会话正在回复中，请稍后再试")
       return
@@ -492,6 +617,7 @@ async function copyMessage(message: any) {
 
 /**
  * 处理发送消息
+ * 合并消息创建和流式启动为一个原子操作
  */
 async function handleSendMessage(payload?: InputMessageState) {
   const data = payload;
@@ -499,24 +625,44 @@ async function handleSendMessage(payload?: InputMessageState) {
 
   try {
     const { content, files, knowledgeBaseIds } = data;
-    let message: any;
 
-    // 如果是编辑模式，使用重新发送逻辑
-    if (editMode.value && editMode.value.message) {
-      message = await sendEditMessage(content, files, knowledgeBaseIds);
-    } else {
-      // 否则发送新消息
-      message = await sendNewMessage(content, files, null, knowledgeBaseIds);
+    // 准备消息数据（上传文件等）
+    const prepared = await prepareNewMessage(content, files, null, knowledgeBaseIds);
+
+    // 如果是编辑模式，需要处理替换逻辑
+    let replaceMessageId: string | undefined = undefined;
+    if (editMode.value && editMode.value.message && currentSessionId.value) {
+      const rid = editMode.value.message.id;
+      replaceMessageId = rid;
+      const sid = currentSessionId.value;
+      // 删除旧消息及其回答
+      sessionStore.deleteMessage(sid, rid);
+      const assistantMessage = sessionStore
+        .getMessages(sid)
+        .find((msg: any) => msg.parentId === rid);
+      if (assistantMessage) {
+        sessionStore.deleteMessage(sid, assistantMessage.id);
+      }
+      exitEditMode();
     }
 
-    // 统一处理发送后的滚动和流式响应
+    // 统一处理发送后的滚动
     await nextTick();
     immediateScrollToBottom();
-    if (message.sessionId) {
-      handleStreamResponse(message.sessionId, message.id);
+
+    // 发起流式请求（后端会自动创建消息并启动流）
+    if (currentSessionId.value) {
+      handleStreamResponseWithCreate(
+        currentSessionId.value,
+        prepared.content,
+        prepared.fileIds,
+        replaceMessageId,
+        prepared.knowledgeBaseIds,
+      );
     }
   } catch (error: any) {
     notify.error("消息发送失败", error.message);
+    // 发送失败时由 SSE 事件驱动恢复检测
   }
 }
 /**
@@ -551,7 +697,9 @@ function regenerateResponse(message: any) {
   nextTick(() => {
     immediateScrollToBottom();
     if (message.sessionId) {
-      handleStreamResponse(message.sessionId, message.parentId, "multi_version", message.id);
+      // multi_version 模式需要传递 userMessageId（通过 parentId 获取）
+      const userMessageId = message.parentId || null;
+      handleStreamResponse(message.sessionId, "multi_version", message.id, userMessageId);
     }
   });
 }
@@ -568,8 +716,9 @@ function continueResponse(message: any) {
   nextTick(() => {
     immediateScrollToBottom();
     if (message.sessionId) {
-      // 注意，恢复模式下userMessageId应该是需要恢复的消息ID，也就是当前消息ID，而不是parentId
-      handleStreamResponse(message.sessionId, message.id, "resume", null);
+      // resume 模式需要传递 userMessageId（通过 parentId 获取）
+      const userMessageId = message.parentId || null;
+      handleStreamResponse(message.sessionId, "resume", message.id, userMessageId);
     }
   });
 }
@@ -583,14 +732,54 @@ function switchContent(message: any, turns_id: string) {
   });
 }
 
+
+
+/**
+ * 订阅活跃流
+ * 当检测到会话有正在进行的流式输出时调用（如刷新页面后重连或多窗口打开）
+ */
+async function subscribeToActiveStream() {
+  if (!currentSessionId.value || isStreaming.value) return;
+
+  // 设置流式状态
+  sessionStore.setSessionIsStreaming(currentSessionId.value, true);
+
+  // 以订阅模式启动流式响应（用于刷新重连/多窗口观察）
+  handleStreamResponseAsSubscriber(currentSessionId.value);
+}
+
+/**
+ * 以订阅者身份处理流式响应（不发起新聊天，只观察已有流）
+ */
+async function handleStreamResponseAsSubscriber(
+  streamingSessionId: string,
+) {
+  try {
+    await streamHandler.processStream(
+      streamingSessionId,
+      'subscribe',
+    );
+  } catch (error) {
+    // 订阅模式下无活跃流的错误可以静默忽略
+    if ((error as Error).message?.includes("NO_ACTIVE_STREAM")) {
+      sessionStore.setSessionIsStreaming(streamingSessionId, false);
+      return;
+    }
+    if ((error as Error).name !== "AbortError") {
+      console.error("订阅流失败:", error);
+    }
+  }
+}
+
 // 将方法暴露给父组件
 defineExpose({
   sendMessage: handleSendMessage,
   loadMessages,
   activeMessages,
   scrollToMessage,
-  getScrollElement: () => scrollContainerRef.value?.getScrollElement?.() || null  // 提供获取滚动元素的方法
-})
+  subscribeToActiveStream,
+  getScrollElement: () => scrollContainerRef.value?.getScrollElement?.() || null, // 提供获取滚动元素的方法
+});
 
 /**
  * 滚动到指定消息

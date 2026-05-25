@@ -31,7 +31,6 @@ export const useSessionStore = defineStore('session', () => {
                 scrollPosition: 0,
                 lastUpdated: Date.now(),
                 settings: {
-                    isDeepThinking: false
                 }
             })
         }
@@ -163,23 +162,6 @@ export const useSessionStore = defineStore('session', () => {
     }
 
     /**
-     * 设置滚动位置
-     * @param sessionId - 会话 ID
-     * @param position - 滚动位置
-     */
-    const setScrollPosition = (sessionId: string, position: number): void => {
-        getSessionState(sessionId).scrollPosition = position
-    }
-
-    /**
-     * 获取滚动位置
-     * @param sessionId - 会话 ID
-     */
-    const getScrollPosition = (sessionId: string): number => {
-        return getSessionState(sessionId).scrollPosition
-    }
-
-    /**
      * 获取会话设置
      * @param sessionId - 会话 ID
      * @param key - 设置键
@@ -251,8 +233,6 @@ export const useSessionStore = defineStore('session', () => {
         setSessionIsCompressing,
         getInputMessage,
         setInputMessage,
-        setScrollPosition,
-        getScrollPosition,
         getSessionSetting,
         setSessionSetting,
         updateSessionTitle,

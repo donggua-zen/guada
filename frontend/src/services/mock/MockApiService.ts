@@ -55,26 +55,38 @@ export function createMockMethods() {
 
   // Mock 的 chat 方法
   const mockChat = async function* (
-    sessionId: string,
-    messageId: string,
-    regenerationMode?: string | null,
-    assistantMessageId?: string | null,
-    enableReasoning?: boolean,
+    params: {
+      sessionId: string;
+      regenerationMode?: string | null;
+      assistantMessageId?: string | null;
+      resumeData?: any;
+      userMessage?: {
+        id?: string;
+        content?: string;
+        files?: string[];
+        replaceMessageId?: string;
+        knowledgeBaseIds?: string[];
+      };
+    }
   ): AsyncGenerator<any, void, unknown> {
     // 首次调用时加载配置
     const config = await loadMockConfig();
 
-    console.log(`[Mock] 拦截 chat 请求:`, {
+    const {
       sessionId,
-      messageId,
       regenerationMode,
       assistantMessageId,
+      userMessage,
+    } = params;
+
+    console.log(`[Mock] 拦截 chat 请求:`, {
+      sessionId,
+      regenerationMode,
+      assistantMessageId,
+      content: userMessage?.content ? userMessage.content.substring(0, 50) + (userMessage.content.length > 50 ? "..." : "") : undefined,
     });
 
-    // 如果启用了 reasoning，自动启用 thinking
-    if (enableReasoning && !config.enableThinking) {
-      config.enableThinking = true;
-    }
+    // enableReasoning 已废弃，移除相关逻辑
 
     // 动态导入 Mock 服务
     const { mockChatStream } = await import("../mockStreamService");
@@ -82,7 +94,6 @@ export function createMockMethods() {
     try {
       yield* mockChatStream(
         sessionId,
-        messageId,
         config,
         assistantMessageId,
         regenerationMode,

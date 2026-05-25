@@ -24,7 +24,9 @@ import { FilesModule } from "../files/files.module";
 import { LlmCoreModule } from "../llm-core/providers.module";
 import { SkillsModule } from "../skills/skills.module";
 
-import { SessionLockService } from "./session-lock.service";
+import { SessionStreamManager } from "./session-stream.manager";
+import { SessionEventsService } from "./session-events.service";
+import { SessionEventsController } from "./session-events.controller";
 import { UploadPathService } from "../../common/services/upload-path.service";
 import { FileWatcherService } from "../../common/services/file-watcher.service";
 
@@ -34,7 +36,7 @@ import { ConversationContextFactory, MESSAGE_STORE_TOKEN, COMPRESSION_STRATEGY_T
 
 @Module({
   imports: [AuthModule, ToolsModule, CharactersModule, FilesModule, LlmCoreModule, SkillsModule],
-  controllers: [ChatController, MessagesController, SessionsController, WorkspaceEventsController],
+  controllers: [ChatController, MessagesController, SessionsController, WorkspaceEventsController, SessionEventsController],
   providers: [
     AgentEngine,
     SessionContextService,
@@ -53,10 +55,11 @@ import { ConversationContextFactory, MESSAGE_STORE_TOKEN, COMPRESSION_STRATEGY_T
     ModelRepository,
     FileRepository,
     PrismaService,
-    SessionLockService,
+    SessionStreamManager,
     TokenizerService,
     UploadPathService,
     FileWatcherService,
+    SessionEventsService,
   ],
   exports: [AgentEngine],
 })

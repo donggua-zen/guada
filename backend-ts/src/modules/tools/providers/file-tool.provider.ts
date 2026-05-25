@@ -34,7 +34,8 @@ export class FileToolProvider implements IToolProvider {
           },
           offset: {
             type: "number",
-            description: "起始行号（从 0 开始），用于分页读取。默认为 0（从头开始）",
+            description:
+              "起始行号（从 0 开始），用于分页读取。默认为 0（从头开始）",
             default: 0,
           },
           skip_chars: {
@@ -63,7 +64,8 @@ export class FileToolProvider implements IToolProvider {
           },
           max_depth: {
             type: "number",
-            description: "递归深度，范围 1-3。1=仅当前目录，2=包含一级子目录，3=包含两级子目录",
+            description:
+              "递归深度，范围 1-3。1=仅当前目录，2=包含一级子目录，3=包含两级子目录",
             default: 1,
           },
         },
@@ -113,7 +115,8 @@ export class FileToolProvider implements IToolProvider {
           },
           expected_count: {
             type: "number",
-            description: "预期匹配并替换的次数。默认为 1；设为 -1 或 0 表示替换所有匹配项；设为正整数则必须严格匹配该次数",
+            description:
+              "预期匹配并替换的次数。默认为 1；设为 -1 或 0 表示替换所有匹配项；设为正整数则必须严格匹配该次数",
             default: 1,
           },
           encoding: {
@@ -127,7 +130,8 @@ export class FileToolProvider implements IToolProvider {
     },
     {
       name: "delete",
-      description: "删除文件或目录。删除目录时会递归删除所有内容。此操作不可恢复，请谨慎使用！",
+      description:
+        "删除文件或目录。删除目录时会递归删除所有内容。此操作不可恢复，请谨慎使用！",
       parameters: {
         type: "object",
         properties: {
@@ -141,7 +145,8 @@ export class FileToolProvider implements IToolProvider {
     },
     {
       name: "grep_file",
-      description: "使用正则表达式搜索文件内容。返回匹配的行及其行号。适合查找特定模式或关键词。",
+      description:
+        "使用正则表达式搜索文件内容。返回匹配的行及其行号。适合查找特定模式或关键词。",
       parameters: {
         type: "object",
         properties: {
@@ -169,24 +174,35 @@ export class FileToolProvider implements IToolProvider {
     },
   ];
 
-  constructor(private workspaceService: WorkspaceService) { }
+  constructor(private workspaceService: WorkspaceService) {}
 
-  async getTools(enabled?: boolean | string[], context?: Record<string, any>): Promise<any[]> {
+  async getTools(
+    enabled?: boolean | string[],
+    context?: Record<string, any>,
+  ): Promise<any[]> {
     if (enabled === false) return [];
 
     // 如果是数组，只返回数组中指定的工具
     if (Array.isArray(enabled)) {
-      return this.toolsConfig.filter(tool => enabled.includes(tool.name));
+      return this.toolsConfig.filter((tool) => enabled.includes(tool.name));
     }
 
     // true 或未指定：返回所有工具
     return this.toolsConfig;
   }
 
-  async execute(request: ToolCallRequest, context?: Record<string, any>, abortSignal?: AbortSignal): Promise<string> {
+  async execute(
+    request: ToolCallRequest,
+    context?: Record<string, any>,
+    abortSignal?: AbortSignal,
+  ): Promise<string> {
     const handlers: Record<
       string,
-      (args: any, ctx?: Record<string, any>, signal?: AbortSignal) => Promise<string>
+      (
+        args: any,
+        ctx?: Record<string, any>,
+        signal?: AbortSignal,
+      ) => Promise<string>
     > = {
       read: this.handleReadFile.bind(this),
       list: this.handleListDirectory.bind(this),
@@ -205,28 +221,36 @@ export class FileToolProvider implements IToolProvider {
     return await handler(request.arguments, context, abortSignal);
   }
 
-  async getPrompt(context?: Record<string, any>): Promise<string> {
-
+  async getPersistentPrompt(context?: Record<string, any>): Promise<string> {
     const promptParts: string[] = [];
-    promptParts.push("# 文件操作工具使用说明");
-
     // 注入工作目录提示
     if (context?.workspacePath) {
-      promptParts.push("**当前会话工作目录**：");
+      promptParts.push("# 当前会话工作目录");
       promptParts.push(`\`${context.workspacePath}\``);
       promptParts.push("");
       promptParts.push("**重要说明**：");
-      promptParts.push("1. 你编写的所有脚本、临时文件、生成的数据等都应该存放在上述工作目录中。");
-      promptParts.push("2. **默认路径规则**：所有文件操作工具在处理相对路径时，都会自动以该工作目录为基准。除非用户明确指定了其他绝对路径，否则请始终使用相对路径。");
+      promptParts.push(
+        "1. 你编写的所有脚本、临时文件、生成的数据等都应该存放在上述工作目录中。",
+      );
+      promptParts.push(
+        "2. **默认路径规则**：所有文件操作工具在处理相对路径时，都会自动以该工作目录为基准。除非用户明确指定了其他绝对路径，否则请始终使用相对路径。",
+      );
       promptParts.push("");
     }
+    return promptParts.join("\n");
+  }
+
+  async getPrompt(context?: Record<string, any>): Promise<string> {
+    const promptParts: string[] = [];
+    promptParts.push("# 文件操作工具使用说明");
 
     promptParts.push("**重要提醒**：");
     promptParts.push("1. 文件读写类操作优先使用文件工具集而不是命令行");
-    promptParts.push("2. 对于超大文件，请使用分页读取功能，避免一次性加载过多内容");
+    promptParts.push(
+      "2. 对于超大文件，请使用分页读取功能，避免一次性加载过多内容",
+    );
 
     return promptParts.join("\n");
-
   }
 
   async getBriefDescription(context?: Record<string, any>): Promise<string> {
@@ -239,45 +263,49 @@ export class FileToolProvider implements IToolProvider {
       displayName: "文件操作工具",
       description: "文件系统读写与目录浏览工具",
       isMcp: false,
-      loadMode: "lazy",
+      loadMode: "eager",
     };
   }
 
   /**
    * 生成文件工具的展示文案
    */
-  formatDisplayMessage(toolName: string, args: Record<string, any>, isStreaming: boolean): ToolDisplayInfo {
-    const prefix = isStreaming ? '正在' : '已';
+  formatDisplayMessage(
+    toolName: string,
+    args: Record<string, any>,
+    isStreaming: boolean,
+  ): ToolDisplayInfo {
+    const prefix = isStreaming ? "正在" : "已";
     const fileName = args.file_path || args.path || args.directory_path;
 
     let action: string;
     let toolType: string = this.namespace;
     switch (toolName) {
-      case 'write':
+      case "write":
         action = `${prefix}写入`;
         toolType = "edit";
         break;
 
-      case 'read':
+      case "read":
         action = `${prefix}读取`;
         toolType = "read";
         break;
 
-      case 'list':
+      case "list":
         action = `${prefix}读取`;
         toolType = "search";
         break;
 
-      case 'delete':
+      case "delete":
         action = `${prefix}删除`;
         break;
 
-      case 'replace':
+      case "replace":
         action = `${prefix}修改`;
         toolType = "edit";
         break;
 
-      case 'grep_file':
+      case "grep_file":
         action = `${prefix}搜索`;
         toolType = "search";
         break;
@@ -294,31 +322,47 @@ export class FileToolProvider implements IToolProvider {
     };
   }
 
-
-
   /**
    * 解析文件路径：委托给 WorkspaceService
    */
   private resolvePath(filePath: string, context?: Record<string, any>): string {
-    return this.workspaceService.resolveFilePath(filePath, context?.workspacePath);
+    return this.workspaceService.resolveFilePath(
+      filePath,
+      context?.workspacePath,
+    );
   }
 
   /**
    * 验证写入路径是否安全
    */
-  private validateWritePath(filePath: string, context?: Record<string, any>): void {
+  private validateWritePath(
+    filePath: string,
+    context?: Record<string, any>,
+  ): void {
     const resolvedPath = this.resolvePath(filePath, context);
 
     // 检查是否为安全工作路径（传入工作目录作为额外安全路径）
-    const extraSafePaths = context?.workspacePath ? [context.workspacePath] : [];
+    const extraSafePaths = context?.workspacePath
+      ? [context.workspacePath]
+      : [];
     this.workspaceService.validateWritePath(resolvedPath, extraSafePaths);
   }
 
   /**
    * 读取文件内容（支持按行+字符混合分页读取）
    */
-  private async handleReadFile(args: any, context?: Record<string, any>, abortSignal?: AbortSignal): Promise<string> {
-    const { file_path, encoding = "utf-8", offset = 0, skip_chars = 0, limit = 50000 } = args;
+  private async handleReadFile(
+    args: any,
+    context?: Record<string, any>,
+    abortSignal?: AbortSignal,
+  ): Promise<string> {
+    const {
+      file_path,
+      encoding = "utf-8",
+      offset = 0,
+      skip_chars = 0,
+      limit = 50000,
+    } = args;
 
     // 验证文件路径
     if (!file_path || typeof file_path !== "string") {
@@ -328,7 +372,7 @@ export class FileToolProvider implements IToolProvider {
     // 检查是否已中止
     if (abortSignal?.aborted) {
       this.logger.warn(`File read aborted before execution: ${file_path}`);
-      throw new Error('Request was aborted');
+      throw new Error("Request was aborted");
     }
 
     try {
@@ -345,20 +389,24 @@ export class FileToolProvider implements IToolProvider {
       // 检查文件大小（限制为 10MB）
       const maxSize = 10 * 1024 * 1024; // 10MB
       if (stats.size > maxSize) {
-        throw new Error(`文件过大（${(stats.size / 1024 / 1024).toFixed(2)}MB），超过限制（10MB）。请使用 offset 参数分页读取。`);
+        throw new Error(
+          `文件过大（${(stats.size / 1024 / 1024).toFixed(2)}MB），超过限制（10MB）。请使用 offset 参数分页读取。`,
+        );
       }
 
       // 读取文件内容
-      const content = await fs.readFile(resolvedPath, { encoding: encoding as BufferEncoding });
+      const content = await fs.readFile(resolvedPath, {
+        encoding: encoding as BufferEncoding,
+      });
 
       // 检查是否在读取后中止
       if (abortSignal?.aborted) {
         this.logger.warn(`File read aborted after reading: ${file_path}`);
-        throw new Error('Request was aborted');
+        throw new Error("Request was aborted");
       }
 
       // 按行分割
-      const lines = content.split('\n');
+      const lines = content.split("\n");
       const totalLines = lines.length;
 
       // 强制限制最大读取行数为 500
@@ -372,7 +420,7 @@ export class FileToolProvider implements IToolProvider {
       const startLine = Math.max(0, Math.min(offset, totalLines));
 
       // 构建结果
-      let selectedContent = '';
+      let selectedContent = "";
       let currentChars = 0;
       let endLine = startLine;
       let remainingSkipChars = skip_chars;
@@ -393,7 +441,7 @@ export class FileToolProvider implements IToolProvider {
         }
 
         // 计算添加这行后的总字符数（包括换行符）
-        const lineWithNewline = line + (i < totalLines - 1 ? '\n' : '');
+        const lineWithNewline = line + (i < totalLines - 1 ? "\n" : "");
 
         // 如果加上这行会超出字节限制
         if (currentChars + lineWithNewline.length > MAX_BYTES) {
@@ -414,16 +462,20 @@ export class FileToolProvider implements IToolProvider {
       }
 
       // 移除末尾可能的换行符（如果是因为字节限制截断的）
-      if (currentChars >= MAX_BYTES && selectedContent.endsWith('\n')) {
+      if (currentChars >= MAX_BYTES && selectedContent.endsWith("\n")) {
         selectedContent = selectedContent.slice(0, -1);
       }
 
       // 判断是否还有更多内容
-      const hasMoreLines = endLine < totalLines - 1 || (endLine - startLine) >= actualLimit;
-      const hasMoreCharsInCurrentLine = !hasMoreLines &&
+      const hasMoreLines =
+        endLine < totalLines - 1 || endLine - startLine >= actualLimit;
+      const hasMoreCharsInCurrentLine =
+        !hasMoreLines &&
         endLine < totalLines &&
-        lines[endLine].length > (selectedContent.split('\n').pop()?.length || 0);
-      const hasMore = hasMoreLines || hasMoreCharsInCurrentLine || currentChars >= MAX_BYTES;
+        lines[endLine].length >
+          (selectedContent.split("\n").pop()?.length || 0);
+      const hasMore =
+        hasMoreLines || hasMoreCharsInCurrentLine || currentChars >= MAX_BYTES;
 
       // 构建返回结果
       const result = {
@@ -440,8 +492,11 @@ export class FileToolProvider implements IToolProvider {
         },
         has_more: hasMore,
         next_offset: hasMore ? endLine : undefined,
-        next_skip_chars: hasMore && currentChars >= MAX_BYTES ?
-          (lines[endLine]?.length - (selectedContent.split('\n').pop()?.length || 0)) : 0,
+        next_skip_chars:
+          hasMore && currentChars >= MAX_BYTES
+            ? lines[endLine]?.length -
+              (selectedContent.split("\n").pop()?.length || 0)
+            : 0,
       };
 
       return JSON.stringify(result);
@@ -461,7 +516,10 @@ export class FileToolProvider implements IToolProvider {
   /**
    * 列出目录内容
    */
-  private async handleListDirectory(args: any, context?: Record<string, any>): Promise<string> {
+  private async handleListDirectory(
+    args: any,
+    context?: Record<string, any>,
+  ): Promise<string> {
     const { directory_path, max_depth = 1 } = args;
 
     // 验证目录路径
@@ -475,7 +533,9 @@ export class FileToolProvider implements IToolProvider {
     try {
       // 解析路径
       const resolvedPath = this.resolvePath(directory_path, context);
-      this.logger.log(`列出目录: ${directory_path} -> ${resolvedPath}, 递归深度: ${depth}`);
+      this.logger.log(
+        `列出目录: ${directory_path} -> ${resolvedPath}, 递归深度: ${depth}`,
+      );
 
       // 检查是否为目录
       const stats = await fs.stat(resolvedPath);
@@ -513,7 +573,10 @@ export class FileToolProvider implements IToolProvider {
   /**
    * 根据深度读取目录内容
    */
-  private async readDirectoryWithDepth(dirPath: string, maxDepth: number): Promise<string[]> {
+  private async readDirectoryWithDepth(
+    dirPath: string,
+    maxDepth: number,
+  ): Promise<string[]> {
     const results: string[] = [];
     await this.readDirectoryRecursive(dirPath, "", 1, maxDepth, results);
     return results;
@@ -546,32 +609,51 @@ export class FileToolProvider implements IToolProvider {
 
     for (const entry of limitedEntries) {
       const isDirectory = entry.isDirectory();
-      const entryName = isDirectory ? `[DIR] ${entry.name}` : `[FILE] ${entry.name}`;
+      const entryName = isDirectory
+        ? `[DIR] ${entry.name}`
+        : `[FILE] ${entry.name}`;
       const entryPrefix = `${prefix}  ${entryName}`;
       results.push(entryPrefix);
 
       // 如果是目录且未达到最大深度，递归读取
-      if (isDirectory && currentDepth < maxDepth && !entry.name.startsWith(".")) {
+      if (
+        isDirectory &&
+        currentDepth < maxDepth &&
+        !entry.name.startsWith(".")
+      ) {
         try {
           const fullPath = path.join(dirPath, entry.name);
-          await this.readDirectoryRecursive(fullPath, `${prefix}  `, currentDepth + 1, maxDepth, results);
+          await this.readDirectoryRecursive(
+            fullPath,
+            `${prefix}  `,
+            currentDepth + 1,
+            maxDepth,
+            results,
+          );
         } catch (error: any) {
           // 忽略权限错误等，继续处理其他条目
-          this.logger.warn(`无法访问子目录 ${path.join(dirPath, entry.name)}: ${error.message}`);
+          this.logger.warn(
+            `无法访问子目录 ${path.join(dirPath, entry.name)}: ${error.message}`,
+          );
         }
       }
     }
 
     // 如果有省略的条目，添加提示
     if (entries.length > MAX_FILES_PER_DIR) {
-      results.push(`${prefix}  ... 还有 ${entries.length - MAX_FILES_PER_DIR} 个条目未显示`);
+      results.push(
+        `${prefix}  ... 还有 ${entries.length - MAX_FILES_PER_DIR} 个条目未显示`,
+      );
     }
   }
 
   /**
    * 全量写入文件（覆盖模式）
    */
-  private async handleWriteFile(args: any, context?: Record<string, any>): Promise<string> {
+  private async handleWriteFile(
+    args: any,
+    context?: Record<string, any>,
+  ): Promise<string> {
     const { file_path, content, encoding = "utf-8" } = args;
 
     // 验证参数
@@ -579,7 +661,11 @@ export class FileToolProvider implements IToolProvider {
       throw new Error("文件路径不能为空");
     }
 
-    if (content === undefined || content === null || typeof content !== "string") {
+    if (
+      content === undefined ||
+      content === null ||
+      typeof content !== "string"
+    ) {
       throw new Error("文件内容不能为空");
     }
 
@@ -606,7 +692,9 @@ export class FileToolProvider implements IToolProvider {
       }
 
       // 写入文件（覆盖模式）
-      await fs.writeFile(resolvedPath, content, { encoding: encoding as BufferEncoding });
+      await fs.writeFile(resolvedPath, content, {
+        encoding: encoding as BufferEncoding,
+      });
 
       return `文件写入成功：${resolvedPath}\n文件大小：${Buffer.byteLength(content, encoding as BufferEncoding)} 字节`;
     } catch (error: any) {
@@ -625,8 +713,17 @@ export class FileToolProvider implements IToolProvider {
   /**
    * 在文件中查找并替换文本
    */
-  private async handleReplaceInFile(args: any, context?: Record<string, any>): Promise<string> {
-    const { file_path, search_text, replace_text, expected_count = 1, encoding = "utf-8" } = args;
+  private async handleReplaceInFile(
+    args: any,
+    context?: Record<string, any>,
+  ): Promise<string> {
+    const {
+      file_path,
+      search_text,
+      replace_text,
+      expected_count = 1,
+      encoding = "utf-8",
+    } = args;
 
     // 验证参数
     if (!file_path || typeof file_path !== "string") {
@@ -637,7 +734,11 @@ export class FileToolProvider implements IToolProvider {
       throw new Error("搜索文本不能为空");
     }
 
-    if (replace_text === undefined || replace_text === null || typeof replace_text !== "string") {
+    if (
+      replace_text === undefined ||
+      replace_text === null ||
+      typeof replace_text !== "string"
+    ) {
       throw new Error("替换文本不能为空");
     }
 
@@ -648,7 +749,9 @@ export class FileToolProvider implements IToolProvider {
       // 验证写入路径安全性
       this.validateWritePath(file_path, context);
 
-      this.logger.log(`替换文件内容: ${file_path} -> ${resolvedPath}, 搜索: "${search_text}", 替换为: "${replace_text}", 预期次数: ${expected_count}`);
+      this.logger.log(
+        `替换文件内容: ${file_path} -> ${resolvedPath}, 搜索: "${search_text}", 替换为: "${replace_text}", 预期次数: ${expected_count}`,
+      );
 
       // 检查文件是否存在且为文件
       const stats = await fs.stat(resolvedPath);
@@ -657,12 +760,20 @@ export class FileToolProvider implements IToolProvider {
       }
 
       // 读取文件内容
-      const originalContent = await fs.readFile(resolvedPath, { encoding: encoding as BufferEncoding });
+      const originalContent = await fs.readFile(resolvedPath, {
+        encoding: encoding as BufferEncoding,
+      });
 
       // 标准化换行符：将 \r\n 和 \r 都转换为 \n，便于跨平台匹配
-      const normalizedOriginal = originalContent.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
-      const normalizedSearch = search_text.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
-      const normalizedReplace = replace_text.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+      const normalizedOriginal = originalContent
+        .replace(/\r\n/g, "\n")
+        .replace(/\r/g, "\n");
+      const normalizedSearch = search_text
+        .replace(/\r\n/g, "\n")
+        .replace(/\r/g, "\n");
+      const normalizedReplace = replace_text
+        .replace(/\r\n/g, "\n")
+        .replace(/\r/g, "\n");
 
       // 统计匹配次数（使用标准化后的内容）
       let matchCount = 0;
@@ -681,34 +792,42 @@ export class FileToolProvider implements IToolProvider {
 
       // 如果设置了具体的期望次数（非 -1 或 0），则验证是否匹配
       if (expected_count > 0 && matchCount !== expected_count) {
-        throw new Error(`实际匹配 ${matchCount} 次，但预期匹配 ${expected_count} 次`);
+        throw new Error(
+          `实际匹配 ${matchCount} 次，但预期匹配 ${expected_count} 次`,
+        );
       }
 
       // 执行替换（使用标准化后的内容）
       let newNormalizedContent: string;
       if (expected_count === -1 || expected_count === 0) {
         // 替换所有匹配项
-        newNormalizedContent = normalizedOriginal.split(normalizedSearch).join(normalizedReplace);
+        newNormalizedContent = normalizedOriginal
+          .split(normalizedSearch)
+          .join(normalizedReplace);
       } else {
         // 替换所有匹配项（因为已经验证了匹配次数符合预期）
-        newNormalizedContent = normalizedOriginal.split(normalizedSearch).join(normalizedReplace);
+        newNormalizedContent = normalizedOriginal
+          .split(normalizedSearch)
+          .join(normalizedReplace);
       }
 
       // 保持原始文件的换行符风格
       // 检测原始文件使用的换行符类型
-      const hasCRLF = originalContent.includes('\r\n');
+      const hasCRLF = originalContent.includes("\r\n");
 
       let finalContent: string;
       if (hasCRLF) {
         // 如果原文件使用 \r\n，则将结果转换回 \r\n
-        finalContent = newNormalizedContent.replace(/\n/g, '\r\n');
+        finalContent = newNormalizedContent.replace(/\n/g, "\r\n");
       } else {
         // 否则保持 \n
         finalContent = newNormalizedContent;
       }
 
       // 写回文件
-      await fs.writeFile(resolvedPath, finalContent, { encoding: encoding as BufferEncoding });
+      await fs.writeFile(resolvedPath, finalContent, {
+        encoding: encoding as BufferEncoding,
+      });
 
       const replacedCount = matchCount;
       return `替换成功：${resolvedPath}\n匹配次数：${matchCount}\n已替换：${replacedCount} 处`;
@@ -728,7 +847,10 @@ export class FileToolProvider implements IToolProvider {
   /**
    * 删除文件或目录
    */
-  private async handleDelete(args: any, context?: Record<string, any>): Promise<string> {
+  private async handleDelete(
+    args: any,
+    context?: Record<string, any>,
+  ): Promise<string> {
     const { path: targetPath } = args;
 
     // 验证路径参数
@@ -775,8 +897,16 @@ export class FileToolProvider implements IToolProvider {
   /**
    * 使用正则表达式搜索文件内容
    */
-  private async handleGrepFile(args: any, context?: Record<string, any>): Promise<string> {
-    const { regex, path: filePath, case_sensitive = false, max_matches = 100 } = args;
+  private async handleGrepFile(
+    args: any,
+    context?: Record<string, any>,
+  ): Promise<string> {
+    const {
+      regex,
+      path: filePath,
+      case_sensitive = false,
+      max_matches = 100,
+    } = args;
 
     // 验证参数
     if (!regex || typeof regex !== "string") {
@@ -790,7 +920,9 @@ export class FileToolProvider implements IToolProvider {
     try {
       // 解析路径
       const resolvedPath = this.resolvePath(filePath, context);
-      this.logger.log(`搜索文件: ${filePath} -> ${resolvedPath}, 正则: ${regex}`);
+      this.logger.log(
+        `搜索文件: ${filePath} -> ${resolvedPath}, 正则: ${regex}`,
+      );
 
       // 检查文件是否存在
       const stats = await fs.stat(resolvedPath);
@@ -801,15 +933,17 @@ export class FileToolProvider implements IToolProvider {
       // 检查文件大小（限制为 10MB）
       const maxSize = 10 * 1024 * 1024; // 10MB
       if (stats.size > maxSize) {
-        throw new Error(`文件过大（${(stats.size / 1024 / 1024).toFixed(2)}MB），超过限制（10MB）`);
+        throw new Error(
+          `文件过大（${(stats.size / 1024 / 1024).toFixed(2)}MB），超过限制（10MB）`,
+        );
       }
 
       // 读取文件内容
       const content = await fs.readFile(resolvedPath, { encoding: "utf-8" });
-      const lines = content.split('\n');
+      const lines = content.split("\n");
 
       // 创建正则表达式
-      const flags = case_sensitive ? 'g' : 'gi';
+      const flags = case_sensitive ? "g" : "gi";
       let pattern: RegExp;
       try {
         pattern = new RegExp(regex, flags);
@@ -834,7 +968,7 @@ export class FileToolProvider implements IToolProvider {
 
         // 查找所有匹配位置
         let match;
-        const searchPattern = new RegExp(regex, case_sensitive ? 'g' : 'gi');
+        const searchPattern = new RegExp(regex, case_sensitive ? "g" : "gi");
 
         while ((match = searchPattern.exec(line)) !== null) {
           const matchStart = match.index;
@@ -858,7 +992,9 @@ export class FileToolProvider implements IToolProvider {
           lineSegments.sort((a, b) => a.start - b.start);
 
           // 合并重叠片段
-          const mergedSegments: Array<{ start: number; end: number }> = [lineSegments[0]];
+          const mergedSegments: Array<{ start: number; end: number }> = [
+            lineSegments[0],
+          ];
           for (let j = 1; j < lineSegments.length; j++) {
             const current = lineSegments[j];
             const last = mergedSegments[mergedSegments.length - 1];
@@ -882,8 +1018,8 @@ export class FileToolProvider implements IToolProvider {
             }
 
             // 添加省略标记
-            const prefix = segment.start > 0 ? '...' : '';
-            const suffix = segment.end < line.length ? '...' : '';
+            const prefix = segment.start > 0 ? "..." : "";
+            const suffix = segment.end < line.length ? "..." : "";
             const finalContent = `${prefix}${content}${suffix}`;
 
             // 构建匹配项（扁平化）

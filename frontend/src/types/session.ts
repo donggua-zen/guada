@@ -10,7 +10,6 @@ import type { Character } from './character'
  * 会话设置
  */
 export interface SessionSettings {
-    isDeepThinking?: boolean
     thinkingEffort?: string // 思考强度级别：'off' | 'on' | 'low' | 'medium' | 'high' | 'max' 等
     maxMemoryLength?: number
     systemPrompt?: string

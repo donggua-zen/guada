@@ -13,6 +13,7 @@ import { AuthGuard } from "../auth/auth.guard";
 import { CurrentUser } from "../auth/current-user.decorator";
 import { SessionService } from "./session.service";
 import { WorkspaceService } from "../../common/services/workspace.service";
+import { SessionEventsService } from "./session-events.service";
 import * as path from 'path';
 import * as fs from 'fs';
 import * as fsPromises from 'fs/promises';
@@ -22,7 +23,8 @@ import * as fsPromises from 'fs/promises';
 export class SessionsController {
   constructor(
     private readonly sessionService: SessionService,
-    private readonly workspaceService: WorkspaceService
+    private readonly workspaceService: WorkspaceService,
+    private readonly sessionEventsService: SessionEventsService,
   ) { }
 
   @Get("sessions")
@@ -40,7 +42,18 @@ export class SessionsController {
 
   @Post("sessions")
   async createSession(@Body() data: any, @CurrentUser() user: any) {
-    return this.sessionService.createSession(user.id, data);
+    const session = await this.sessionService.createSession(user.id, data);
+
+    // 广播会话创建事件
+    this.sessionEventsService.broadcastToUser(user.id, {
+      type: "session_created",
+      userId: user.id,
+      sessionId: session.id,
+      timestamp: new Date().toISOString(),
+      payload: { session },
+    });
+
+    return session;
   }
 
   @Get("sessions/:id")
@@ -54,7 +67,18 @@ export class SessionsController {
     @Body() data: any,
     @CurrentUser() user: any,
   ) {
-    return this.sessionService.updateSession(id, user.id, data);
+    const session = await this.sessionService.updateSession(id, user.id, data);
+
+    // 广播会话更新事件
+    this.sessionEventsService.broadcastToUser(user.id, {
+      type: "session_updated",
+      userId: user.id,
+      sessionId: id,
+      timestamp: new Date().toISOString(),
+      payload: { session },
+    });
+
+    return session;
   }
 
   @Put("sessions/:id/workspace-path")
@@ -75,6 +99,15 @@ export class SessionsController {
   ) {
     const shouldDeleteWorkspace = deleteWorkspace === 'true';
     await this.sessionService.deleteSession(id, user.id, shouldDeleteWorkspace);
+
+    // 广播会话删除事件
+    this.sessionEventsService.broadcastToUser(user.id, {
+      type: "session_deleted",
+      userId: user.id,
+      sessionId: id,
+      timestamp: new Date().toISOString(),
+    });
+
     return { success: true };
   }
 
@@ -299,12 +332,13 @@ export class SessionsController {
       const entries = await fsPromises.readdir(dirPath, { withFileTypes: true });
       const tree: any[] = [];
 
-      for (const entry of entries) {
-        // 跳过隐藏文件和 node_modules
-        // if (entry.name.startsWith('.') || entry.name === 'node_modules') {
-        //   continue;
-        // }
+      // 只跳过 node_modules，保留隐藏目录（如 .guada）
+      const filteredEntries = entries.filter(entry =>
+        entry.name !== 'node_modules'
+      );
 
+      // 批量构建节点（并行化子目录递归）
+      const nodePromises = filteredEntries.map(async (entry) => {
         const fullPath = path.join(dirPath, entry.name);
         const relPath = relativePath ? `${relativePath}/${entry.name}` : entry.name;
 
@@ -323,12 +357,13 @@ export class SessionsController {
             node.hasChildren = true;
             node.children = [];
           }
-        } else {
-          node.size = (await fsPromises.stat(fullPath)).size;
         }
 
-        tree.push(node);
-      }
+        return node;
+      });
+
+      const nodes = await Promise.all(nodePromises);
+      tree.push(...nodes);
 
       // 按名称排序，目录在前
       return tree.sort((a, b) => {

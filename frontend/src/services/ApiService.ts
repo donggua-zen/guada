@@ -43,9 +43,15 @@ import {
   WorkspaceWatcherService,
   type FileChangeEvent,
 } from "./modules/WorkspaceWatcherService";
+import {
+  SessionEventsService,
+  type SessionEvent,
+  type SessionEventType,
+} from "./modules/SessionEventsService";
 import { createMockMethods, shouldEnableMock } from "./mock/MockApiService";
 
 export type { FileChangeEvent };
+export type { SessionEvent, SessionEventType };
 
 class ApiService {
   baseURL: string;
@@ -53,6 +59,7 @@ class ApiService {
   axiosInstance: AxiosInstance;
   chatStreamService: ChatStreamService;
   workspaceWatcherService: WorkspaceWatcherService;
+  sessionEventsService: SessionEventsService;
 
   constructor(baseURL?: string) {
     // Electron 环境使用动态获取的后端地址，Web 环境使用相对路径
@@ -165,6 +172,7 @@ class ApiService {
     this.workspaceWatcherService = new WorkspaceWatcherService(
       () => this.baseURL,
     );
+    this.sessionEventsService = new SessionEventsService(() => this.baseURL);
   }
 
   /**
@@ -559,26 +567,36 @@ class ApiService {
   }
 
   // ========== 流式聊天 ==========
-  async *chat(
-    sessionId: string,
-    messageId: string,
-    regenerationMode: string | null = null,
-    assistantMessageId: string | null = null,
-    enableReasoning: boolean = false,
-    resumeData?: any,
-  ): AsyncGenerator<StreamEvent, void, unknown> {
-    return yield* this.chatStreamService.chat(
-      sessionId,
-      messageId,
-      regenerationMode,
-      assistantMessageId,
-      enableReasoning,
-      resumeData,
-    );
+  async *chat(params: {
+    sessionId: string;
+    regenerationMode?: string | null;
+    assistantMessageId?: string | null;
+    resumeData?: any;
+    // 用户消息参数
+    userMessage?: {
+      id?: string;
+      content?: string;
+      files?: string[];
+      replaceMessageId?: string;
+      knowledgeBaseIds?: string[];
+    };
+  }): AsyncGenerator<StreamEvent, void, unknown> {
+    return yield* this.chatStreamService.chat(params);
   }
 
   async cancelResponse(sessionId: string): Promise<void> {
     return this.chatStreamService.cancelResponse(sessionId);
+  }
+
+  /**
+   * 查询会话流状态
+   */
+  async getStreamStatus(sessionId: string): Promise<{
+    isRunning: boolean;
+    subscriberCount: number;
+    bufferedEventCount: number;
+  }> {
+    return await this._request(`/chat/stream/${sessionId}/status`);
   }
 
   // ========== 工作目录实时监听 ==========
@@ -596,6 +614,26 @@ class ApiService {
 
   getWorkspaceWatcherSessionId(): string | null {
     return this.workspaceWatcherService.getSessionId();
+  }
+
+  // ========== 会话事件实时推送 ==========
+  connectSessionEvents(userId: string): void {
+    this.sessionEventsService.connect(userId);
+  }
+
+  disconnectSessionEvents(): void {
+    this.sessionEventsService.disconnect();
+  }
+
+  onSessionEvent(
+    eventType: SessionEventType | "*",
+    callback: (event: SessionEvent) => void,
+  ): () => void {
+    return this.sessionEventsService.on(eventType, callback);
+  }
+
+  getClientId(): string {
+    return this.sessionEventsService.getClientId();
   }
 
   // ========== 文件上传 ==========

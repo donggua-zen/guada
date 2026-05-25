@@ -51,14 +51,23 @@ export function useMessageOperations(
     }
 
     /**
-     * 发送新消息
+     * 准备新消息数据（返回给外部用于流式请求）
+     *
+     * 不再直接调用 apiService.createMessage，而是返回消息创建参数，
+     * 由外部在发起流式请求时一并传给后端，实现原子性。
      */
-    async function sendNewMessage(
+    async function prepareNewMessage(
         text: string,
         files: any[],
         replaceMessageId: string | null = null,
         knowledgeBaseIds?: string[]
-    ) {
+    ): Promise<{
+        content: string;
+        fileIds: string[];
+        replaceMessageId: string | null;
+        knowledgeBaseIds?: string[];
+        updatedFiles: any[];
+    }> {
         if (!currentSessionId.value) {
             throw new Error('当前没有活动的会话')
         }
@@ -103,51 +112,15 @@ export function useMessageOperations(
             ...uploadResults.map((result) => result.id)
         ]
 
-        const response = await apiService.createMessage(
-            currentSessionId.value, text, fileIds, replaceMessageId, knowledgeBaseIds
-        )
-        const message = { ...response, files: updatedFiles }
-
-        if (replaceMessageId) {
-            sessionStore.deleteMessage(currentSessionId.value, replaceMessageId)
-            const assistantMessage = sessionStore
-                .getMessages(currentSessionId.value)
-                .find((msg: any) => msg.parentId === replaceMessageId)
-            if (assistantMessage) {
-                sessionStore.deleteMessage(currentSessionId.value, assistantMessage.id)
-            }
-        }
-
-        sessionStore.addMessage(currentSessionId.value, message)
         // 清空输入框
         inputMessage.value = { content: "", files: [], knowledgeBaseIds: undefined, isWaiting: false };
-        return message
-    }
 
-    /**
-     * 发送编辑后的消息
-     */
-    async function sendEditMessage(
-        text: string,
-        files: any[],
-        knowledgeBaseIds?: string[]
-    ) {
-        if (!editMode.value || !currentSessionId.value) return
-
-        try {
-            const message = await sendNewMessage(
-                text,
-                files,
-                editMode.value.message.id,
-                knowledgeBaseIds
-            )
-
-            exitEditMode()
-
-            // 开始流式响应（由外部处理）
-            return message
-        } catch (error: any) {
-            throw error
+        return {
+            content: text,
+            fileIds,
+            replaceMessageId,
+            knowledgeBaseIds,
+            updatedFiles,
         }
     }
 
@@ -181,8 +154,7 @@ export function useMessageOperations(
         editMode,
         inputMessage,
         exitEditMode,
-        sendNewMessage,
-        sendEditMessage,
+        prepareNewMessage,
         enterEditMode
     }
 }

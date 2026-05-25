@@ -185,16 +185,6 @@ const rootRef = ref<HTMLElement | null>(null);
 
 
 
-watch(
-  () => props.message.files,
-  async (newFiles) => {
-    if (newFiles && newFiles.length > 0) {
-      await nextTick();
-    }
-  },
-  { immediate: true }
-);
-
 const previewList = computed(() => {
   const files = props.message.files || [];
   return files.map((file: any) => file.url || file.previewUrl);
@@ -211,18 +201,20 @@ const turnsCache = ref(getCurrentTurns(props.message as any));
 // 缓存 contentVersions，避免每次 contents 变化都重新计算
 const contentVersionsCache = ref(getContentVersions(props.message as any));
 
-// 使用防抖 watch，减少流式输出时的频繁更新
-const debouncedUpdateCache = useDebounceFn(() => {
-  turnsCache.value = getCurrentTurns(props.message as any);
-  contentVersionsCache.value = getContentVersions(props.message as any);
-}, 50, { maxWait: 100 });
+
 
 // 监听 contents 和 currentTurnsId 的变化，更新缓存
 watch(
-  () => [props.message.contents?.length, props.message.currentTurnsId],
-  () => {
-    debouncedUpdateCache();
-  }
+  () => props.message.currentTurnsId,
+  (newVal, oldVal) => {
+    console.log('[MessageItem] currentTurnsId 变化:', {
+      messageId: props.message.id,
+      oldValue: oldVal,
+      newValue: newVal,
+    });
+    turnsCache.value = getCurrentTurns(props.message as any);
+    contentVersionsCache.value = getContentVersions(props.message as any);
+  },
 );
 
 // const hasThinking = computed(
@@ -242,7 +234,6 @@ const state = computed(() =>
 const streamingState = computed(() => ({
   isStreaming: state.value?.isStreaming ?? false,
   isThinking: state.value?.isThinking ?? false,
-  isWebSearching: state.value?.isWebSearching ?? false,
   isPlaceholder: false
 }));
 
@@ -308,7 +299,7 @@ const handleDelete = () => handleAction('delete');
 
 // 继续执行（从断点恢复）
 const handleContinue = () => {
-  
+
   emit('continue', props.message);
 };
 
@@ -380,7 +371,7 @@ defineExpose({
 </script>
 
 <style scoped>
-@reference "tailwindcss";
+/* @reference "tailwindcss"; */
 
 /* 消息样式 - BEM Block */
 .message-item {
