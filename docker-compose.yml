@@ -1,0 +1,111 @@
+services:
+  # ========================================
+  # Backend Service (NestJS)
+  # ========================================
+  backend:
+    build:
+      context: ./backend-ts
+      dockerfile: Dockerfile
+    container_name: guada-backend
+    restart: unless-stopped
+    # 端口配置说明：
+    # - 默认不暴露后端端口（最安全），前端 Nginx 已通过 Docker 内部网络访问后端
+    # - 如需本地调试，取消下面注释：ports: ["127.0.0.1:3000:3000"]
+    # - 如需公开访问，取消下面注释：ports: ["3000:3000"]
+    # ports:
+    #   - "127.0.0.1:3000:3000"
+    environment:
+      - NODE_ENV=production
+      - PORT=3000
+      - DATABASE_URL=file:/app/data/ai_chat.db
+      - VECTOR_DB_PATH=/app/data/vector_db.sqlite
+      - JWT_SECRET=${JWT_SECRET:-change-this-to-a-strong-secret-key-in-production}
+      - JWT_EXPIRES_IN=7d
+      - BASE_URL=
+      # 前端通过 Nginx 反向代理访问后端，BASE_URL 留空表示使用相对路径
+      # 如需外部访问，可设置为 http://localhost:3000 或实际域名
+      - STATIC_DIR=/app/static
+      - STATIC_URL=/static
+      - UPLOAD_ROOT_DIR=/app/data/uploads
+      - UPLOAD_URL_PREFIX=/uploads
+      - LOGS_DIR=/app/logs
+      # Token Cache Configuration
+      - TOKEN_CACHE_MAX_ENTRIES=10000
+      - TOKEN_CACHE_MAX_MEMORY_MB=50
+      - TOKEN_CACHE_TTL_MS=1800000
+      - TOKEN_CACHE_CLEANUP_INTERVAL_MS=300000
+    volumes:
+      # Persistent data
+      - backend-data:/app/data
+      - backend-uploads:/app/data/uploads
+      - backend-logs:/app/logs
+      - backend-static:/app/static
+    networks:
+      - guada-network
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3000/api/v1/settings/auto-login"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 2G
+        reservations:
+          cpus: '0.5'
+          memory: 512M
+
+  # ========================================
+  # Frontend Service (Vue + Nginx with reverse proxy)
+  # ========================================
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        - VITE_API_BASE_URL=/api/v1
+    container_name: guada-frontend
+    restart: unless-stopped
+    ports:
+      - "0.0.0.0:8787:80"
+      - "[::]:8787:80"
+      # 可选：启用 HTTPS
+      # - "0.0.0.0:443:443"
+      # - "[::]:443:443"
+    depends_on:
+      backend:
+        condition: service_healthy
+    networks:
+      - guada-network
+    # volumes:
+    #   - ./nginx/ssl:/etc/nginx/ssl:ro  # Optional: SSL certificates
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:80/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    deploy:
+      resources:
+        limits:
+          cpus: '1'
+          memory: 512M
+        reservations:
+          cpus: '0.25'
+          memory: 128M
+
+volumes:
+  backend-data:
+    driver: local
+  backend-uploads:
+    driver: local
+  backend-logs:
+    driver: local
+  backend-static:
+    driver: local
+
+networks:
+  guada-network:
+    driver: bridge

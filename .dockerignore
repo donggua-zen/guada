@@ -1,0 +1,56 @@
+# Git
+.git
+.gitignore
+
+# Node modules
+node_modules
+**/node_modules
+
+# Build outputs
+dist
+build
+*.tsbuildinfo
+
+# IDE
+.vscode
+.idea
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Documentation
+docs
+*.md
+!README.md
+
+# Tests
+test
+tests
+__tests__
+coverage
+
+# Logs
+logs
+*.log
+
+# Environment
+.env.local
+.env.*.local
+
+# Docker
+Dockerfile
+docker-compose.yml
+.dockerignore
+
+# Temp files
+temp
+tmp
+.cache
+
+# Data (will be mounted as volumes)
+backend-ts/data/*.db
+backend-ts/data/*.sqlite
+backend-ts/data/uploads/*

@@ -234,9 +234,10 @@ async function seedDatabase(force: boolean = false) {
 
     const { execSync } = require("child_process");
     try {
-      execSync("npx prisma db push --force-reset --accept-data-loss", {
+      execSync("npx prisma db push --force-reset --accept-data-loss --config=prisma.config.js", {
         stdio: "inherit",
         cwd: resolve(__dirname, "../.."),
+        env: { ...process.env, DATABASE_URL: databaseUrl },
       });
       logSuccess("数据库已重置并同步成功");
     } catch (error) {

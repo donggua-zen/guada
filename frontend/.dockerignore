@@ -1,0 +1,8 @@
+node_modules
+dist
+.env
+.env.local
+*.md
+.git
+.vscode
+stats.html

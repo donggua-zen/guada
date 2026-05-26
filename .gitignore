@@ -35,3 +35,4 @@ onebots-temp/
 .vscode/
 log.txt
 *.code-workspace
+.workbuddy/**
