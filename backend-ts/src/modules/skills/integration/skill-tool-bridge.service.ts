@@ -33,7 +33,11 @@ export class SkillToolBridgeService implements IToolProvider {
         name: "scan",
         description:
           "Scan the skills directory to discover new or updated skills. Use this when you need to refresh the list of available skills.",
-        parameters: {},
+        parameters: {
+          type: "object",
+          properties: {},
+          required: [],
+        },
       },
       // TODO: 暂时屏蔽 list 工具，技能列表已注入提示词
       // {
