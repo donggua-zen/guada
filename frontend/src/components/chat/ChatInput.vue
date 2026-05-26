@@ -723,6 +723,9 @@ const handleImageSelect = (event) => {
 };
 
 const handlePaste = async (event) => {
+  // 只有输入框被聚焦时才处理粘贴事件
+  if (!focused.value) return;
+
   const clipboardData = event.clipboardData;
   if (!clipboardData?.items) return;
 

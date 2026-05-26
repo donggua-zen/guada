@@ -196,26 +196,26 @@ const messageClass = computed(() =>
 );
 
 // 缓存 turns 结果，避免每次 contents 变化都重新计算
-const turnsCache = ref(getCurrentTurns(props.message as any));
+const turnsCache = computed(() => getCurrentTurns(props.message as any));
 
 // 缓存 contentVersions，避免每次 contents 变化都重新计算
-const contentVersionsCache = ref(getContentVersions(props.message as any));
+const contentVersionsCache = computed(() => getContentVersions(props.message as any));
 
 
 
 // 监听 contents 和 currentTurnsId 的变化，更新缓存
-watch(
-  () => props.message.currentTurnsId,
-  (newVal, oldVal) => {
-    console.log('[MessageItem] currentTurnsId 变化:', {
-      messageId: props.message.id,
-      oldValue: oldVal,
-      newValue: newVal,
-    });
-    turnsCache.value = getCurrentTurns(props.message as any);
-    contentVersionsCache.value = getContentVersions(props.message as any);
-  },
-);
+// watch(
+//   () => props.message.currentTurnsId,
+//   (newVal, oldVal) => {
+//     console.log('[MessageItem] currentTurnsId 变化:', {
+//       messageId: props.message.id,
+//       oldValue: oldVal,
+//       newValue: newVal,
+//     });
+//     turnsCache.value = getCurrentTurns(props.message as any);
+//     contentVersionsCache.value = getContentVersions(props.message as any);
+//   },
+// );
 
 // const hasThinking = computed(
 //   () => isAssistant.value && getCurrentContent(props.message.contents).reasoningContent
