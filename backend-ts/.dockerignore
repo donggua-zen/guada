@@ -1,0 +1,14 @@
+node_modules
+dist
+data/*.db
+data/*.sqlite
+data/uploads/*
+data/temp-attachments/*
+logs/*
+.env
+.env.local
+test-logs
+temp
+*.md
+.git
+.vscode
