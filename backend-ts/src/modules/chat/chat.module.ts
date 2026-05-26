@@ -1,12 +1,5 @@
 import { Module, OnModuleInit } from "@nestjs/common";
-import { PrismaService } from "../../common/database/prisma.service";
-import { SessionRepository } from "../../common/database/session.repository";
-import { MessageRepository } from "../../common/database/message.repository";
-import { MessageContentRepository } from "../../common/database/message-content.repository";
-import { SessionContextStateRepository } from "../../common/database/session-context-state.repository";
-import { KnowledgeBaseRepository } from "../../common/database/knowledge-base.repository";
-import { ModelRepository } from "../../common/database/model.repository";
-import { FileRepository } from "../../common/database/file.repository";
+
 import { AgentEngine } from "./agent-engine.service";
 import { SessionContextService } from "./session-context.service";
 import { ToolOrchestrator } from "../tools/tool-orchestrator.service";
@@ -29,6 +22,7 @@ import { SessionEventsService } from "./session-events.service";
 import { SessionEventsController } from "./session-events.controller";
 import { UploadPathService } from "../../common/services/upload-path.service";
 import { FileWatcherService } from "../../common/services/file-watcher.service";
+import { ChatRunnerService } from "./chat-runner.service";
 
 import { MessageStoreService } from "./message-store.service";
 import { CompressionEngine } from "./compression-engine";
@@ -47,21 +41,15 @@ import { ConversationContextFactory, MESSAGE_STORE_TOKEN, COMPRESSION_STRATEGY_T
     { provide: COMPRESSION_STRATEGY_TOKEN, useExisting: CompressionEngine },
     MessageService,
     SessionService,
-    SessionRepository,
-    SessionContextStateRepository,
-    MessageRepository,
-    MessageContentRepository,
-    KnowledgeBaseRepository,
-    ModelRepository,
-    FileRepository,
-    PrismaService,
+
     SessionStreamManager,
     TokenizerService,
     UploadPathService,
     FileWatcherService,
     SessionEventsService,
+    ChatRunnerService,
   ],
-  exports: [AgentEngine],
+  exports: [AgentEngine, SessionService, MessageService, SessionEventsService, ChatRunnerService],
 })
 export class ChatModule implements OnModuleInit {
   constructor(

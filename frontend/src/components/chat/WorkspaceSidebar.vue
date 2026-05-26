@@ -466,8 +466,13 @@ function collectExpandedPaths(nodes: any[], paths: string[]): void {
  * 直接本地更新节点，不再请求后端 API
  */
 function handleFileChange(event: FileChangeEvent) {
+    // 忽略心跳消息
+    if ((event as any).type === 'heartbeat') {
+        return;
+    }
+
     // 判断变化的文件是否在已展开的目录下
-    if (!isPathInExpandedDir(event.path)) {
+    if (!event.path || !isPathInExpandedDir(event.path)) {
         return;
     }
 

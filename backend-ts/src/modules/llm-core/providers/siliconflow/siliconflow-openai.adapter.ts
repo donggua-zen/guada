@@ -1,4 +1,4 @@
-import { OpenAIAdapter } from '../../adapters/openai.adapter';
+import { OpenAIAdapter } from "../../adapters/openai.adapter";
 
 /**
  * 硅基流动专用 OpenAI 适配器
@@ -15,7 +15,7 @@ export class SiliconFlowOpenAIAdapter extends OpenAIAdapter {
 
     // 硅基流动特有：将 thinkingEffort 转换为 enable_thinking（根级别）
     if (params.thinkingEffort !== undefined) {
-      requestParams.enable_thinking = params.thinkingEffort !== 'off';
+      requestParams.enable_thinking = params.thinkingEffort !== "off";
     }
 
     return requestParams;

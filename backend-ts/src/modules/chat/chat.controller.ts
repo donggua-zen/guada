@@ -10,6 +10,7 @@ import {
   Get,
   Param,
   Logger,
+  HttpException,
 } from "@nestjs/common";
 import { AuthGuard } from "../auth/auth.guard";
 import { CurrentUser } from "../auth/current-user.decorator";
@@ -21,6 +22,7 @@ import { Observable, Subscription } from "rxjs";
 import { Response, Request } from "express";
 import { SessionStreamManager } from "./session-stream.manager";
 import { SessionEventsService } from "./session-events.service";
+import { ChatRunnerService } from "./chat-runner.service";
 
 @Controller("chat")
 @UseGuards(AuthGuard)
@@ -30,10 +32,9 @@ export class ChatController {
   constructor(
     private agentEngine: AgentEngine,
     private sessionService: SessionService,
-    private messageService: MessageService,
     private messageRepo: MessageRepository,
     private streamManager: SessionStreamManager,
-    private sessionEventsService: SessionEventsService,
+    private chatRunner: ChatRunnerService,
   ) {}
 
   @Sse("completions")
@@ -137,9 +138,6 @@ export class ChatController {
       assistantMessageId?: string;
       regenerationMode?: string;
       resumeData?: any;
-      // 用户消息参数
-      // overwrite 模式：按需设置 content/files/replaceMessageId/knowledgeBaseIds，不设置 id
-      // multi_version/resume/subscribe 模式：只需设置 id
       userMessage?: {
         id?: string;
         content?: string;
@@ -152,22 +150,13 @@ export class ChatController {
     @Res() res: Response,
     @Req() req: Request,
   ) {
-    let {
+    const {
       sessionId,
       assistantMessageId,
       regenerationMode = "overwrite",
       resumeData,
       userMessage,
     } = body;
-    let createdUserMessage: any = null;
-
-    // 通过 regenerationMode 区分发起模式和订阅模式
-    const isSubscribeMode = regenerationMode === "subscribe";
-
-    const session = await this.sessionService.getSessionById(
-      sessionId,
-      user.id,
-    );
 
     // 设置 SSE 响应头
     res.setHeader("Content-Type", "text/event-stream");
@@ -175,97 +164,42 @@ export class ChatController {
     res.setHeader("Connection", "keep-alive");
     res.setHeader("X-Accel-Buffering", "no");
 
-    // 生成唯一订阅者 ID
-    const subscriberId = `${user.id}_${Date.now()}_${Math.random().toString(36).slice(2)}`;
-
-    const hasActiveStream = this.streamManager.hasActiveStream(sessionId);
-
-    // 发起模式：如果已有活跃流，直接报错，不允许自动加入订阅
-    if (!isSubscribeMode && hasActiveStream) {
-      if (!res.writableEnded) {
-        res.status(409).json({
-          error: "当前已有任务正在进行，请等待结束",
-          code: "SESSION_BUSY",
-        });
-      }
-      return;
-    }
-
-    // 订阅模式：如果没有活跃流，直接报错（前端可忽略此错误）
-    if (isSubscribeMode && !hasActiveStream) {
-      if (!res.writableEnded) {
-        res.status(409).json({
-          error: "No active stream to subscribe",
-          code: "NO_ACTIVE_STREAM",
-        });
-      }
-      return;
-    }
-
-    // overwrite 模式下自动创建消息
-    if (regenerationMode === "overwrite" || !regenerationMode) {
-      if (!userMessage?.content) {
+    // 定义回调函数，将流事件写入 HTTP 响应
+    const callbacks = {
+      onEvent: (data: string) => {
         if (!res.writableEnded) {
-          res.status(400).json({
-            error: "缺少消息内容",
-            code: "MISSING_CONTENT",
-          });
+          res.write(`data: ${data}\n\n`);
         }
-        return;
-      }
-      try {
-        const message = await this.messageService.addMessage(
+      },
+      onComplete: () => {
+        if (!res.writableEnded) {
+          res.write("data: [DONE]\n\n");
+          res.end();
+        }
+      },
+      onError: (err: any) => {
+        this.logger.error(`Stream error for ${sessionId}:`, err);
+        if (!res.writableEnded) {
+          res.end();
+        }
+      },
+    };
+
+    // 调用 ChatRunnerService 处理全部业务逻辑
+    try {
+      const unsubscribe = await this.chatRunner.startStream(
+        {
           sessionId,
-          "user",
-          userMessage.content,
-          userMessage.files || [],
-          userMessage.replaceMessageId,
-          userMessage.knowledgeBaseIds,
-          user.id,
-        );
-        createdUserMessage = message;
-      } catch (error: any) {
-        this.logger.error(`Failed to create message for stream:`, error);
-        if (!res.writableEnded) {
-          res.status(500).json({
-            error: "创建消息失败: " + (error.message || "Unknown error"),
-            code: "MESSAGE_CREATE_FAILED",
-          });
-        }
-        return;
-      }
-    }
-
-    // 情况 1: 该会话已有活跃流，加入订阅
-    if (hasActiveStream) {
-      const unsubscribe = this.streamManager.subscribe(
-        sessionId,
-        subscriberId,
-        (data) => {
-          if (!res.writableEnded) {
-            res.write(`data: ${data}\n\n`);
-          }
+          userId: user.id,
+          userMessage,
+          regenerationMode,
+          assistantMessageId: assistantMessageId || null,
+          resumeData,
         },
-        () => {
-          if (!res.writableEnded) {
-            res.write("data: [DONE]\n\n");
-            res.end();
-          }
-        },
-        () => {
-          if (!res.writableEnded) {
-            res.end();
-          }
-        },
+        callbacks,
       );
-      if (!unsubscribe) {
-        if (!res.writableEnded) {
-          res.status(409).json({ error: "Stream not available" });
-        }
-        return;
-      }
 
-      // 客户端断开时仅取消订阅，不中止流
+      // 客户端断开时取消订阅
       const handleClose = () => {
         unsubscribe();
         if (!res.writableEnded) {
@@ -274,160 +208,21 @@ export class ChatController {
       };
       req.on("close", handleClose);
       res.on("close", handleClose);
-
-      return;
-    }
-
-    // 情况 2: 该会话没有活跃流，需要启动新流
-    const abortController = new AbortController();
-
-    // 启动流式任务
-    const started = this.streamManager.startStream(
-      sessionId,
-      user.id,
-      abortController,
-      assistantMessageId || null,
-    );
-    if (!started) {
-      if (!res.writableEnded) {
-        res.status(409).json({ error: "Session is busy" });
-      }
-      return;
-    }
-
-    // 将自己作为第一个订阅者
-    const unsubscribe = this.streamManager.subscribe(
-      sessionId,
-      subscriberId,
-      (data) => {
-        if (!res.writableEnded) {
-          res.write(`data: ${data}\n\n`);
-        }
-      },
-      () => {
-        if (!res.writableEnded) {
-          res.write("data: [DONE]\n\n");
-          res.end();
-        }
-      },
-      (err) => {
-        this.logger.error(`Stream error for ${sessionId}:`, err);
-        if (!res.writableEnded) {
-          res.end();
-        }
-      },
-    )!;
-
-    // 客户端断开时仅取消订阅，不中止 Agent 循环
-    const handleClose = () => {
-      unsubscribe();
-      if (!res.writableEnded) {
-        res.end();
-      }
-    };
-    req.on("close", handleClose);
-    res.on("close", handleClose);
-    // 广播流开始事件（带 source 标识，前端可识别是否自身发起）
-    this.sessionEventsService.broadcastToUser(user.id, {
-      type: "stream_started",
-      userId: user.id,
-      sessionId,
-      timestamp: new Date().toISOString(),
-      payload: {
-        messageId: createdUserMessage?.id || userMessage?.id,
-        source: subscriberId,
-        replaceMessageId: userMessage?.replaceMessageId || null,
-      },
-    });
-
-    // 如果有用户消息，广播给所有流订阅者
-    if (createdUserMessage) {
-      this.streamManager.broadcast(sessionId, {
-        type: "user_message",
-        message: createdUserMessage,
-      });
-    }
-    // 在后台启动 Agent 循环
-    this.runAgentEngine(
-      sessionId,
-      session,
-      userMessage.id || createdUserMessage?.id,
-      regenerationMode,
-      assistantMessageId,
-      abortController,
-      user.id,
-      resumeData,
-    ).catch((error) => {
-      this.logger.error(`Agent engine error for ${sessionId}:`, error);
-      this.streamManager.broadcast(sessionId, {
-        type: "error",
-        error: error.message,
-      });
-      this.streamManager.stopStream(sessionId, "error");
-    });
-  }
-
-  /**
-   * 后台运行 Agent Engine，将事件广播到所有订阅者
-   */
-  private async runAgentEngine(
-    sessionId: string,
-    session: any,
-    userMessageId: string,
-    regenerationMode: string,
-    assistantMessageId: string | null,
-    abortController: AbortController,
-    userId: string,
-    resumeData?: any,
-  ): Promise<void> {
-    console.log("userMessageId", userMessageId);
-    try {
-      const iterator = this.agentEngine.completions(
-        session,
-        userMessageId,
-        regenerationMode,
-        assistantMessageId,
-        abortController.signal,
-        resumeData,
-      );
-      for await (const chunk of iterator) {
-        this.streamManager.broadcast(sessionId, chunk);
-      }
-
-      this.streamManager.broadcast(sessionId, { type: "finish" });
-      this.streamManager.stopStream(sessionId, "completed");
-
-      // 广播流结束事件
-      this.sessionEventsService.broadcastToUser(userId, {
-        type: "stream_finished",
-        userId: userId,
-        sessionId,
-        timestamp: new Date().toISOString(),
-        payload: { reason: "completed" },
-      });
     } catch (error: any) {
-      if (error.name === "AbortError") {
-        this.logger.log(`Stream ${sessionId} aborted by user`);
-        this.streamManager.stopStream(sessionId, "user_cancel");
-
-        // 广播流结束事件（用户取消）
-        this.sessionEventsService.broadcastToUser(userId, {
-          type: "stream_finished",
-          userId: userId,
-          sessionId,
-          timestamp: new Date().toISOString(),
-          payload: { reason: "user_cancel" },
-        });
+      if (error instanceof HttpException) {
+        const response = error.getResponse() as any;
+        const status = error.getStatus();
+        if (!res.writableEnded) {
+          res.status(status).json(response);
+        }
       } else {
-        // 广播流结束事件（错误）
-        this.sessionEventsService.broadcastToUser(userId, {
-          type: "stream_finished",
-          userId: userId,
-          sessionId,
-          timestamp: new Date().toISOString(),
-          payload: { reason: "error", error: error.message },
-        });
-        throw error;
+        this.logger.error(`启动流失败:`, error);
+        if (!res.writableEnded) {
+          res.status(500).json({
+            error: error.message || "启动流失败",
+            code: "STREAM_START_FAILED",
+          });
+        }
       }
     }
   }
@@ -438,7 +233,6 @@ export class ChatController {
   @Post("stream/:sessionId/stop")
   async stopStream(
     @Param("sessionId") sessionId: string,
-    @CurrentUser() user: any,
   ) {
     const status = this.streamManager.getStreamStatus(sessionId);
 

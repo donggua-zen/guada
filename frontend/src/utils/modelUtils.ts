@@ -3,189 +3,197 @@
  * 用于处理模型名称显示和头像获取
  */
 
-import { computed } from 'vue'
-import { fixFrontendAssetUrl } from './url'
+import { computed } from "vue";
+import { fixFrontendAssetUrl } from "./url";
 
 // 已知提供商的标识符映射（用于匹配头像文件）
 const PROVIDER_LOGOS: Record<string, string> = {
   // OpenAI
-  'openai': 'OpenAI',
-  'gpt': 'OpenAI',
+  openai: "OpenAI",
+  gpt: "OpenAI",
 
   // Anthropic
-  'anthropic': 'Anthropic',
-  'claude': 'Anthropic',
+  anthropic: "Anthropic",
+  claude: "Anthropic",
 
   // Google
-  'google': 'Google',
-  'gemini': 'Google',
+  google: "Google",
+  gemini: "Google",
 
   // 百度文心一言
-  'baidu': 'baidu',
-  'ernie': 'baidu',
-  'wenxin': 'baidu',
+  baidu: "baidu",
+  ernie: "baidu",
+  wenxin: "baidu",
 
   // 阿里通义千问
-  'tongyi': 'Tongyi',
-  'qwen': 'Tongyi',
-  'aliyun': 'Tongyi',
+  tongyi: "Tongyi",
+  qwen: "Tongyi",
+  aliyun: "Tongyi",
 
   // 腾讯混元
-  'hunyuan': 'hunyuan',
-  'tencent': 'hunyuan',
+  hunyuan: "hunyuan",
+  tencent: "hunyuan",
 
   // 智谱 AI
-  'zhipu': 'zhipu',
-  'glm': 'zhipu',
+  zhipu: "zhipu",
+  glm: "zhipu",
 
   // 月之暗面 Kimi
-  'kimi': 'kimi',
-  'moonshot': 'kimi',
+  kimi: "kimi",
+  moonshot: "kimi",
 
   // DeepSeek
-  'deepseek': 'DeepSeek',
+  deepseek: "DeepSeek",
 
   // 零一万物
-  'yi': 'Yi',
-  '01ai': 'Yi',
+  yi: "Yi",
+  "01ai": "Yi",
 
   // MiniMax
-  'minimax': 'minimax',
+  minimax: "minimax",
 
   // StepFun
-  'stepfun': 'Stepfun',
-  'step': 'Stepfun',
+  stepfun: "Stepfun",
+  step: "Stepfun",
 
   // 百川智能
-  'baichuan': 'Baichuan',
+  baichuan: "Baichuan",
 
   // BAAI（北京智源）
-  'baai': 'BAAI',
-  'zhiyuan': 'BAAI',
+  baai: "BAAI",
+  zhiyuan: "BAAI",
 
   // 字节跳动
-  'bytedance': 'ByteDance',
-  'doubao': 'ByteDance',
+  bytedance: "ByteDance",
+  doubao: "ByteDance",
 
   // 书生·浦语
-  'internlm': 'internlm',
-  'shusheng': 'internlm',
+  internlm: "internlm",
+  shusheng: "internlm",
 
   // 灵犀
-  'ling': 'ling',
-}
+  ling: "ling",
+};
 
 /**
  * 从模型名称中提取简洁的显示名称
  * - 去除命名空间前缀（如 "provider/model-name" -> "model-name"）
  * - 保持原始大小写
- * 
+ *
  * @param modelName 完整的模型名称
  * @returns 简化后的显示名称
  */
 export function getModelDisplayName(modelName: string): string {
-  if (!modelName) return ''
+  if (!modelName) return "";
 
   // 如果包含 "/"，取最后一部分（去除命名空间）
-  const parts = modelName.split('/')
-  return parts[parts.length - 1] || modelName
+  const parts = modelName.split("/");
+  return parts[parts.length - 1] || modelName;
 }
 
 /**
  * 启发式判断模型所属的提供商
  * 通过小写化、去前缀后与已知提供商进行开头匹配
- * 
+ *
  * @param modelName 模型名称
  * @param providerName 提供商名称（可选，作为后备）
  * @returns 提供商标识符
  */
-export function detectModelProvider(modelName: string, providerName?: string): string {
-  if (!modelName) return providerName?.toLowerCase() || 'default'
+export function detectModelProvider(
+  modelName: string,
+  providerName?: string,
+): string {
+  if (!modelName) return providerName?.toLowerCase() || "default";
 
   // 获取简化后的模型名称
-  const displayName = getModelDisplayName(modelName).toLowerCase()
+  const displayName = getModelDisplayName(modelName).toLowerCase();
 
   // 尝试匹配已知提供商
   for (const [key, value] of Object.entries(PROVIDER_LOGOS)) {
     if (displayName.startsWith(key)) {
-      return value.toLowerCase()
+      return value.toLowerCase();
     }
   }
 
   // 如果没有匹配到，返回提供商名称的小写形式
-  return providerName?.toLowerCase() || 'default'
+  return providerName?.toLowerCase() || "default";
 }
 
 /**
  * 获取模型的头像路径
  * 优先使用提供商的 Logo，如果没有则返回 null（由 Avatar 组件显示首字母）
- * 
+ *
  * @param modelName 模型名称
  * @param providerName 提供商名称
  * @returns 头像路径或 null
  */
-export function getModelAvatarPath(modelName: string, providerName?: string): string | null {
-  const providerId = detectModelProvider(modelName, providerName)
+export function getModelAvatarPath(
+  modelName: string,
+  providerName?: string,
+): string | null {
+  const providerId = detectModelProvider(modelName, providerName);
 
   // 检查是否有对应的 Logo 文件
-  const logoFile = PROVIDER_LOGOS[providerId]
+  const logoFile = PROVIDER_LOGOS[providerId];
   if (logoFile) {
     // 根据实际文件存在情况返回路径
     // 注意：这里假设所有 Logo 都是 .svg 格式（除了 kimi.png 和 ling.png）
-    const isPng = logoFile === 'kimi' || logoFile === 'ling'
-    const ext = isPng ? 'png' : 'svg'
-    return fixFrontendAssetUrl(`/images/models/${logoFile}.${ext}`)
+    const isPng = logoFile === "kimi" || logoFile === "ling";
+    const ext = isPng ? "png" : "svg";
+    return fixFrontendAssetUrl(`/images/models/${logoFile}.${ext}`);
   }
 
-  return null
+  return null;
 }
 
 /**
  * Vue Composable: 用于在组件中便捷地获取模型显示信息
- * 
+ *
  * @param modelName 模型名称
  * @param providerName 提供商名称
  * @returns 包含显示名称和头像路径的对象
  */
 export function useModelDisplay(modelName: string, providerName?: string) {
-  const displayName = computed(() => getModelDisplayName(modelName))
-  const avatarPath = computed(() => getModelAvatarPath(modelName, providerName))
+  const displayName = computed(() => getModelDisplayName(modelName));
+  const avatarPath = computed(() =>
+    getModelAvatarPath(modelName, providerName),
+  );
 
   return {
     displayName,
     avatarPath,
-  }
+  };
 }
 
 /**
  * 判断是否在 Electron 环境中
  */
 export function isElectronEnv(): boolean {
-  return !!(window as any).electronAPI
+  return !!(window as any).electronAPI;
 }
 
 /**
  * 打开外部链接（根据环境自动选择打开方式）
  * - Electron 环境：使用 electronAPI.openExternal 在系统默认浏览器中打开
  * - Web 环境：使用 window.open 在新标签页中打开
- * 
+ *
  * @param url 要打开的 URL
  */
 export function openExternalLink(url: string): void {
-  if (!url) return
+  if (!url) return;
 
   if (isElectronEnv()) {
     // Electron 环境：使用系统默认浏览器打开
     try {
-      (window as any).electronAPI.openExternal(url)
+      (window as any).electronAPI.openExternal(url);
     } catch (error) {
-      console.error('Failed to open external link:', error)
+      console.error("Failed to open external link:", error);
       // 降级处理：在新窗口打开
-      window.open(url, '_blank')
+      window.open(url, "_blank");
     }
   } else {
     // Web 环境：在新标签页打开
-    window.open(url, '_blank', 'noopener,noreferrer')
+    window.open(url, "_blank", "noopener,noreferrer");
   }
 }
 
@@ -195,7 +203,10 @@ export function openExternalLink(url: string): void {
  * @param providers 供应商列表（从 API 获取，仅用于备用）
  * @returns 思考强度选项数组，如 ['off', 'low', 'medium', 'high'] 或 ['minimal', 'low', 'medium', 'high']
  */
-export function getModelThinkingEfforts(model: any, providers: any[]): string[] {
+export function getModelThinkingEfforts(
+  model: any,
+  providers: any[],
+): string[] {
   if (!model) {
     return [];
   }
@@ -209,10 +220,10 @@ export function getModelThinkingEfforts(model: any, providers: any[]): string[] 
   }
 
   // 备用逻辑：如果模型支持思考功能但没有配置具体强度，提供简化的开关模式
-  const supportsThinking = model.features?.includes('thinking');
+  const supportsThinking = model.features?.includes("thinking");
   if (supportsThinking) {
     // 返回 ['off', 'on']，用 'on' 代表开启状态
-    return ['off', 'on'];
+    return ["off", "on"];
   }
 
   return [];
@@ -231,13 +242,15 @@ export function isThinkingSupported(model: any, providers: any[]): boolean {
  */
 export function getThinkingEffortLabel(effort: string): string {
   const labels: Record<string, string> = {
-    'off': '不思考',
-    'on': '思考模式',
-    'low': '低强度',
-    'medium': '中等强度',
-    'high': '高强度',
-    'max': '极致',
-    'minimal': '最小',
+    off: "不思考",
+    on: "思考模式",
+    low: "低强度",
+    medium: "中等强度",
+    high: "高强度",
+    max: "极致",
+    xhigh: "极致",
+    minimal: "最小",
+    minimum: "最小",
   };
 
   return labels[effort] || effort;

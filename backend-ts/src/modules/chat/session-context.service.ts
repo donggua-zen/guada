@@ -96,8 +96,8 @@ export class SessionContextService {
       modelTemperature: characterSettings.modelTemperature,
       modelTopP: characterSettings.modelTopP,
       modelFrequencyPenalty: characterSettings.modelFrequencyPenalty,
-      tools: sessionSettings.tools,
-      mcpServers: sessionSettings.mcpServers,
+      tools: characterSettings.tools,
+      mcpServers: characterSettings.mcpServers,
     };
 
     // --- 记忆/压缩配置（独立继承） ---

@@ -66,6 +66,10 @@ export class MessageStoreService implements IMessageStore {
       { withFiles: true, withContents: true, onlyCurrentContent: true },
     );
 
+    // for (const msg of rawMessages) {
+    //   console.log(`message role: ${msg.role}, contents: ${msg.contents.length}`);
+    // }
+
     const context: MessageRecord[] = [];
     const lastMessage = rawMessages[0];
     // 反转消息列表以按时间正序处理，同时保留最后一条消息的标识用于特殊处理

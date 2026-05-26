@@ -1376,6 +1376,59 @@ class ApiService {
     return await this._request(url);
   }
 
+  // ========== 定时任务管理 ==========
+
+  async fetchScheduledTasks(): Promise<PaginatedResponse<any>> {
+    return await this._request("/scheduler/tasks");
+  }
+
+  async fetchScheduledTask(taskId: string): Promise<any> {
+    return await this._request(`/scheduler/tasks/${taskId}`);
+  }
+
+  async createScheduledTask(data: any): Promise<any> {
+    return await this._request("/scheduler/tasks", { method: "POST", data });
+  }
+
+  async updateScheduledTask(taskId: string, data: any): Promise<any> {
+    return await this._request(`/scheduler/tasks/${taskId}`, {
+      method: "PUT",
+      data,
+    });
+  }
+
+  async deleteScheduledTask(taskId: string): Promise<void> {
+    return await this._request(`/scheduler/tasks/${taskId}`, {
+      method: "DELETE",
+    });
+  }
+
+  async toggleScheduledTask(taskId: string): Promise<any> {
+    return await this._request(`/scheduler/tasks/${taskId}/toggle`, {
+      method: "POST",
+    });
+  }
+
+  async runScheduledTask(taskId: string): Promise<{ success: boolean; message: string }> {
+    return await this._request(`/scheduler/tasks/${taskId}/run`, {
+      method: "POST",
+    });
+  }
+
+  async testScheduledTask(taskId: string): Promise<{ success: boolean; message: string }> {
+    return await this._request(`/scheduler/tasks/${taskId}/test`, {
+      method: "POST",
+    });
+  }
+
+  async fetchScheduledTaskLogs(taskId: string): Promise<PaginatedResponse<any>> {
+    return await this._request(`/scheduler/tasks/${taskId}/logs`);
+  }
+
+  async fetchCronPresets(): Promise<{ label: string; value: string }[]> {
+    return await this._request("/scheduler/cron-presets");
+  }
+
   // ========== 工具方法 ============
   debounce<T extends (...args: any[]) => any>(func: T, delay: number): T {
     let timer: number | undefined;

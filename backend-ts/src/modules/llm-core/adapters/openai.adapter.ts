@@ -1,10 +1,7 @@
 import { Logger } from "@nestjs/common";
 import { OpenAI, APIError } from "openai";
 import { IProtocolAdapter } from "./base.adapter";
-import {
-  ProviderConfig,
-  ConnectionTestResult,
-} from "../types/provider.types";
+import { ProviderConfig, ConnectionTestResult } from "../types/provider.types";
 import {
   MessageRecord,
   InternalToolDefinition,
@@ -88,7 +85,12 @@ export class OpenAIAdapter implements IProtocolAdapter {
     }
 
     // 处理思考强度（OpenAI o 系列和 GPT-5 使用 reasoning_effort）
-    if (params.thinkingEffort && params.thinkingEffort !== 'off') {
+    if (
+      params.thinkingEffort &&
+      ["minimum", "low", "medium", "high", "xhigh"].includes(
+        params.thinkingEffort,
+      )
+    ) {
       // OpenAI 使用 reasoning_effort 参数
       requestParams.reasoning_effort = params.thinkingEffort;
     }
@@ -101,7 +103,7 @@ export class OpenAIAdapter implements IProtocolAdapter {
   ): AsyncGenerator<LLMResponseChunk> {
     const client = this.createClient(params.providerConfig);
     const filterMessages = this.formatMessages(params.messages);
-    
+
     // 构建最终请求参数
     const requestParams = this.buildRequestParam({
       model: params.model,
@@ -130,7 +132,10 @@ export class OpenAIAdapter implements IProtocolAdapter {
         yield this.handleNonStreamResponse(response);
       }
     } catch (error) {
-      this.logger.error(`LLM API error (${params.stream ? "stream" : "non-stream"}):`, error);
+      this.logger.error(
+        `LLM API error (${params.stream ? "stream" : "non-stream"}):`,
+        error,
+      );
       this.handleError(error, params.stream);
     } finally {
       this.cleanup(response);
@@ -155,8 +160,6 @@ export class OpenAIAdapter implements IProtocolAdapter {
       return filtered;
     });
   }
-
-
 
   /**
    * 将内部扁平化工具定义转换为 OpenAI 格式
@@ -244,15 +247,21 @@ export class OpenAIAdapter implements IProtocolAdapter {
 
     // 正确映射工具调用到 toolCalls 字段
     if (message.tool_calls) {
-      this.logger.debug(`非流式响应检测到 ${message.tool_calls.length} 个工具调用`);
-      result.toolCalls = message.tool_calls.map((tc: any): ToolCallItem => ({
-        id: tc.id,
-        index: tc.index,
-        type: tc.type || "function",
-        name: tc.function?.name,
-        arguments: tc.function?.arguments,
-      }));
-      this.logger.debug(`工具调用详情: ${JSON.stringify(result.toolCalls.map(tc => ({ name: tc.name, hasArgs: !!tc.arguments })))}`);
+      this.logger.debug(
+        `非流式响应检测到 ${message.tool_calls.length} 个工具调用`,
+      );
+      result.toolCalls = message.tool_calls.map(
+        (tc: any): ToolCallItem => ({
+          id: tc.id,
+          index: tc.index,
+          type: tc.type || "function",
+          name: tc.function?.name,
+          arguments: tc.function?.arguments,
+        }),
+      );
+      this.logger.debug(
+        `工具调用详情: ${JSON.stringify(result.toolCalls.map((tc) => ({ name: tc.name, hasArgs: !!tc.arguments })))}`,
+      );
     }
 
     return result;

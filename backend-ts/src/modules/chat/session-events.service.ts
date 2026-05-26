@@ -68,7 +68,7 @@ export class SessionEventsService implements OnModuleDestroy {
 
     const subscribers = this.userSubscribers.get(userId)!;
 
-    // 每 30 秒发送一次心跳，防止前端超时断开
+    // 每 90 秒发送一次心跳，防止前端超时断开
     const heartbeatSubscription = new Subscription();
     const heartbeatTimer = setInterval(() => {
       try {
@@ -85,7 +85,7 @@ export class SessionEventsService implements OnModuleDestroy {
         // 如果发送失败，说明连接已断开，取消心跳
         clearInterval(heartbeatTimer);
       }
-    }, 30000);
+    }, 90000);
     heartbeatSubscription.add(() => clearInterval(heartbeatTimer));
 
     subscribers.set(clientId, {

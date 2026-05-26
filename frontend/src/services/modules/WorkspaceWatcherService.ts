@@ -43,7 +43,7 @@ export class WorkspaceWatcherService {
       headers: {
         Authorization: `Bearer ${token}`,
       },
-      heartbeatTimeout: 60000,
+      heartbeatTimeout: 180000,
     });
 
     this.eventSource.onopen = () => {

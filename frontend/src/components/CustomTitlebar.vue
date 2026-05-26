@@ -104,6 +104,9 @@ import WindowManager from './WindowManager.vue'
 
 const router = useRouter()
 
+// 声明组件可能发出的事件
+defineEmits(['openGuide'])
+
 const isElectron = computed(() => {
   return typeof window !== 'undefined' && window.electronAPI !== undefined
 })

@@ -86,6 +86,12 @@ const routes = [
                 name: 'KnowledgeBase',
                 meta: { title: '知识库', requiresAuth: true },
                 component: () => import('./components/knowledge-base/KnowledgeBasePage.vue')
+            },
+            {
+                path: 'scheduler',
+                name: 'Scheduler',
+                meta: { title: '定时任务', requiresAuth: true },
+                component: () => import('./components/scheduler/SchedulerPage.vue')
             }
         ]
     },

@@ -23,23 +23,13 @@ export function useSessionChat(
    * 加载会话消息
    */
   async function loadMessages(sessionId: string) {
-    const originalMessages = sessionStore.getMessages(sessionId);
-    const streamingMessage = originalMessages.find(
-      (message) => message.state?.isStreaming,
-    );
+    const sessionState = sessionStore.getSessionState(sessionId);
+    if (sessionState.isStreaming) {
+      sessionStore.getMessages(sessionId);
+      return;
+    }
 
     const sessionMessages = await apiService.fetchSessionMessages(sessionId);
-
-    // 如果有正在流式输出的消息，需要保留本地状态
-    // 避免从 API 重新加载后流式状态被重置导致显示异常
-    if (streamingMessage) {
-      const streamingIndex = sessionMessages.items.findIndex(
-        (msg: any) => msg.id === streamingMessage.id,
-      );
-      if (streamingIndex >= 0) {
-        sessionMessages.items[streamingIndex] = streamingMessage;
-      }
-    }
 
     // 处理历史消息的思考时长回填
     sessionMessages.items.forEach(
