@@ -18,6 +18,7 @@ import { McpClientModule } from "./common/mcp/mcp-client.module";
 import { BotGatewayModule } from "./modules/bot-gateway/bot-gateway.module";
 import { SkillsModule } from './modules/skills/skills.module';
 import { LlmCoreModule } from './modules/llm-core/providers.module';
+import { SchedulerModule } from './modules/scheduler/scheduler.module';
 
 @Module({
   imports: [
@@ -43,6 +44,7 @@ import { LlmCoreModule } from './modules/llm-core/providers.module';
     ToolsModule,
     KnowledgeBaseModule,
     BotGatewayModule, // 机器人网关模块
+    SchedulerModule,  // 定时任务模块
   ],
 })
 export class AppModule {}

@@ -47,9 +47,10 @@
         </el-alert>
 
         <!-- 达到最大工具调用轮次限制，显示继续按钮 -->
-        <div v-if="metadata && metadata.finishReason === 'max_iterations_reached'" class="max-iterations-notice mt-3">
+        <div v-if="metadata && !streamingState.isStreaming && metadata.finishReason === 'max_iterations_reached'"
+          class="max-iterations-notice mt-3">
           <el-alert type="warning" :closable="false">
-            <template #title>
+            <template #title v-if="metadata.finishReason === 'max_iterations_reached'">
               <span>已达到最大工具调用轮次限制</span>
             </template>
             <div class="flex items-center gap-3 mt-2">
@@ -59,7 +60,12 @@
             </div>
           </el-alert>
         </div>
-
+        <div v-if="streamingState.isStreaming" class="mt-5 mb-10 w-full flex items-center text-gray-500">
+          <el-icon size="16" class="mr-2 relative top-0">
+            <Loading />
+          </el-icon>
+          <span class="text-sm">回答中</span>
+        </div>
         <!-- Token 消耗显示区域 -->
         <div v-if="isAssistant && tokenUsage && !streamingState.isStreaming" class="token-usage-section mt-2">
           <div class="flex items-center gap-3 text-xs text-gray-400">
@@ -84,14 +90,6 @@
             </span>
           </div>
         </div>
-
-        <div v-if="streamingState.isStreaming" class="assistant-loading flex items-center text-gray-500">
-          <el-icon size="16" class="mr-2 relative top-0">
-            <Loading />
-          </el-icon>
-          回答中
-        </div>
-
       </div>
       <!--知识库-->
       <div class="knowledge-base flex flex-wrap gap-2 mt-3 ml-auto"

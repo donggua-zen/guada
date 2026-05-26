@@ -114,6 +114,7 @@ export function useStreamResponse(sessionStore: any, apiService: any) {
       });
       sessionStore.getMessages(sessionId).push(existingMessage);
     } else {
+      console.log("Message already exists, pushing new content");
       existingMessage.contents.push(newContent);
       existingMessage.currentTurnsId = turnsId!;
       existingMessage.state = {
@@ -473,7 +474,13 @@ export function useStreamResponse(sessionStore: any, apiService: any) {
           // 后端广播的用户消息，添加到消息列表
           const userMsg = response.message;
           if (userMsg) {
-            sessionStore.addMessage(streamingSessionId, userMsg);
+            // 避免重复添加已存在的消息
+            const exists = sessionStore
+              .getMessages(streamingSessionId)
+              .some((msg: Message) => msg.id === userMsg.id);
+            if (!exists) {
+              sessionStore.addMessage(streamingSessionId, userMsg);
+            }
           }
           continue;
         }

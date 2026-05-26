@@ -527,7 +527,7 @@ const handleModelSelect = (modelId: string) => {
       newThinkingEffort = 'off';
     } else {
       // 原来是非 'off'，优先选择第一个非 'off' 选项
-      newThinkingEffort = nonOffOptions.length > 0 ? nonOffOptions[0] : 'off';
+      newThinkingEffort = nonOffOptions.length > 0 ? nonOffOptions[nonOffOptions.length - 1] : 'off';
     }
   }
 

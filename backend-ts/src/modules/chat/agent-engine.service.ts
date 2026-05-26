@@ -336,7 +336,10 @@ export class AgentEngine {
         // 委托 SessionContextService 完成所有数据准备
         // 现在 buildContext 内部可以通过 RequestContext.abortSignal() 自动获取信号
         const { context, toolContext, thinkingEffort } =
-          await this.sessionContextService.buildContext(session, messageId);
+          await this.sessionContextService.buildContext(
+            session,
+            regenerationMode !== "resume" ? messageId : undefined,
+          );
 
         // 执行多轮工具调用循环，通过生成器逐轮产出响应事件
         yield* this.executeAgentLoop(
@@ -409,6 +412,7 @@ export class AgentEngine {
     // 【新增】判断是否为断点模式
 
     let isResumeMode = regenerationMode === "resume";
+    const isMultiVersionMode = regenerationMode === "multi_version";
     let assistantResponse: MessageRecord | null = null;
     let turnsId: string;
     let responseMessageId: string;
@@ -460,7 +464,19 @@ export class AgentEngine {
         contentId = lastMessage.contentId;
         responseMessageId = lastMessage.messageId;
         turnsId = lastMessage.turnsId;
+        // for (const message of historyMessages) {
+        //   const contentPreview = message.content
+        //     ? message.content.slice(0, 20)
+        //     : "";
+        //   console.log(
+        //     `message role: ${message.role}, content: ${contentPreview}`,
+        //   );
+        // }
         console.log(`lastMessage ${JSON.stringify(lastMessage)}`);
+        if (lastMessage.role === "tool") {
+          isResumeMode = false;
+          continue;
+        }
       }
 
       // 断点模式：发送 update 事件

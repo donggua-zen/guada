@@ -38,6 +38,10 @@
 
                     <ChatPanel ref="chatPanelRef" v-model:session="currentSession"
                       v-model:sidebar-visible="sidebarVisible" @save-settings="handleSaveSessionSettings" />
+                    <!-- 右侧大纲导航 -->
+                    <ChatOutline v-if="currentSession && sessions.length > 0"
+                      :messages="chatPanelRef?.activeMessages || []" :chat-panel-ref="chatPanelRef"
+                      @scroll-to-message="handleScrollToMessage" />
                   </div>
                 </template>
 
@@ -59,9 +63,7 @@
       </template>
     </SidebarLayout>
 
-    <!-- 右侧大纲导航 -->
-    <ChatOutline v-if="currentSession && sessions.length > 0" :messages="chatPanelRef?.activeMessages || []"
-      :chat-panel-ref="chatPanelRef" @scroll-to-message="handleScrollToMessage" />
+
   </div>
 
   <!-- 记忆管理弹窗 -->
@@ -225,8 +227,8 @@ const goChatRoute = async (sessionId: string | null) => {
   }
   if (sessionId) {
     router.replace({ name: 'Chat', params: { sessionId: sessionId } });
-  // } else if (sessionStore.activeSessionId) {
-  //   router.replace({ name: 'Chat', params: { sessionId: sessionStore.activeSessionId } });
+    // } else if (sessionStore.activeSessionId) {
+    //   router.replace({ name: 'Chat', params: { sessionId: sessionStore.activeSessionId } });
   } else {
     router.replace({ name: 'Chat', params: { sessionId: 'new-session' } });
     currentSession.value = null;

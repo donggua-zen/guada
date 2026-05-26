@@ -134,24 +134,24 @@ function initScrollObservers() {
     if (!contentEl) return;
 
     // 使用 MutationObserver 监听 DOM 结构变化（更快响应）
-    mutationObserver.value = new MutationObserver(() => {
-        if (props.autoScroll) {
-            immediateScrollToBottom();
-        }
-    });
+    // mutationObserver.value = new MutationObserver(() => {
+    //     if (props.autoScroll) {
+    //         immediateScrollToBottom();
+    //     }
+    // });
 
-    mutationObserver.value.observe(contentEl, {
-        childList: true,
-        subtree: true,
-        characterData: true
-    });
+    // mutationObserver.value.observe(contentEl, {
+    //     childList: true,
+    //     subtree: true,
+    //     characterData: true
+    // });
 
     // 使用 ResizeObserver 作为兜底（处理图片加载等异步尺寸变化）
     resizeObserver.value = new ResizeObserver(() => {
         if (props.autoScroll) {
-            requestAnimationFrame(() => {
-                immediateScrollToBottom();
-            });
+            // requestAnimationFrame(() => {
+            immediateScrollToBottom();
+            // });
         }
     });
 

@@ -16,8 +16,9 @@ export class AliyunBailianOpenAIAdapter extends OpenAIAdapter {
     // 阿里云特有：将 thinkingEffort 转换为 enable_thinking（根级别）
     if (params.thinkingEffort !== undefined) {
       requestParams.enable_thinking = params.thinkingEffort !== 'off';
+      // delete requestParams.thinkingEffort;
     }
-
+    // console.log('requestParams', requestParams);
     return requestParams;
   }
 }

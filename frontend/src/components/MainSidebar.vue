@@ -69,6 +69,18 @@
         <span class="text-[0.6875rem] font-medium tracking-wide">插件</span>
       </div>
 
+      <!-- 定时任务 -->
+      <div @click="handleNavClick('scheduler')"
+        class="flex flex-col items-center justify-center px-2 py-2.5 my-0.5 rounded-xl cursor-pointer transition-all duration-250 ease-in-out group"
+        :class="currentActiveTab === 'scheduler' ? 'bg-(--color-sidebar-bg-active) text-(--color-sidebar-text-active)' : 'text-(--color-text-gray) hover:bg-(--color-sidebar-bg-hover) hover:text-(--color-sidebar-text-hover)'">
+        <div
+          class="w-5 h-5 mb-1 flex items-center justify-center transition-transform duration-200 ease-in-out group-hover:scale-110">
+          <AlarmTwotone v-if="currentActiveTab === 'scheduler'" class="w-5 h-5" />
+          <AlarmOutlined v-else class="w-5 h-5" />
+        </div>
+        <span class="text-[0.6875rem] font-medium tracking-wide">任务</span>
+      </div>
+
       <!-- 系统设置 -->
       <div @click="handleNavClick('setting')"
         class="flex flex-col items-center justify-center px-2 py-2.5 my-0.5 rounded-xl cursor-pointer transition-all duration-250 ease-in-out group"
@@ -159,7 +171,9 @@ import {
   ExtensionOutlined,
   ExtensionTwotone,
   PrecisionManufacturingTwotone,
-  PrecisionManufacturingOutlined
+  PrecisionManufacturingOutlined,
+  AlarmTwotone,
+  AlarmOutlined
 } from '@vicons/material'
 
 const router = useRouter()
@@ -187,6 +201,7 @@ const currentActiveTab = computed(() => {
   if (routeName === 'SystemSettings') return 'setting'
   if (routeName === 'KnowledgeBase') return 'knowledge-base'
   if (routeName === 'Plugins') return 'plugins'
+  if (routeName === 'Scheduler') return 'scheduler'
   return props.activeTab || ''
 })
 
@@ -217,6 +232,8 @@ const handleNavClick = (tab: string): void => {
   } else if (tab === 'plugins') {
     // 跳转到插件页面，默认显示第一个标签页
     router.replace({ name: 'Plugins' })
+  } else if (tab === 'scheduler') {
+    router.replace({ name: 'Scheduler' })
   }
 }
 

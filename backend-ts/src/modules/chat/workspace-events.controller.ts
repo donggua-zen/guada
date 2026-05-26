@@ -68,13 +68,29 @@ export class WorkspaceEventsController {
       } as MessageEvent);
     });
 
+    // 每 90 秒发送一次心跳，防止前端超时断开
+    const heartbeatTimer = setInterval(() => {
+      try {
+        eventSubject.next({
+          data: JSON.stringify({
+            type: "heartbeat",
+            timestamp: new Date().toISOString(),
+          }),
+        } as MessageEvent);
+      } catch (error) {
+        clearInterval(heartbeatTimer);
+      }
+    }, 90000);
+
     // 当连接关闭时清理资源：停止文件监听
     eventSubject.subscribe({
       complete: () => {
+        clearInterval(heartbeatTimer);
         unsubscribe();
         this.fileWatcherService.stopWatching(id);
       },
       error: () => {
+        clearInterval(heartbeatTimer);
         unsubscribe();
         this.fileWatcherService.stopWatching(id);
       },
@@ -82,6 +98,7 @@ export class WorkspaceEventsController {
 
     // 监听底层 HTTP 连接关闭事件（前端断开、网络中断等）
     req.on("close", () => {
+      clearInterval(heartbeatTimer);
       unsubscribe();
       this.fileWatcherService.stopWatching(id);
       eventSubject.complete();

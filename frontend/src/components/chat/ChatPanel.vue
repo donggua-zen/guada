@@ -812,8 +812,6 @@ function scrollToMessage(messageId: string) {
   will-change: transform;
   transform: translateZ(0);
   contain: layout style paint;
-  will-change: width;
-
 }
 
 

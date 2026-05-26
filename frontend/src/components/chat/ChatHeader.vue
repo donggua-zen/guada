@@ -2,7 +2,7 @@
 <template>
     <div class="flex items-center justify-between gap-4 px-3 h-13">
         <!-- 左侧：侧边栏切换按钮 -->
-        <div class="flex items-center justify-start min-w-10 ">
+        <div class="flex items-center justify-start">
             <div v-if="sidebarVisible !== undefined"
                 class="cursor-pointer p-1 rounded-lg text-gray-600 dark:text-[#8b8d95] transition-all duration-200 hover:bg-gray-100 dark:hover:bg-[#2a2c30] hover:text-gray-900 dark:hover:text-[#e8e9ed] active:translate-x-0"
                 @click="$emit('toggle-sidebar')" :title="sidebarVisible ? '收起侧边栏' : '展开侧边栏'">
@@ -11,7 +11,7 @@
         </div>
 
         <!-- 中间：标题区域（可选） -->
-        <div v-if="title" class="flex items-center  flex-1 min-w-0">
+        <div v-if="title" class="flex items-center flex-1 min-w-0">
             <h2 class="text-base font-semibold text-gray-800 dark:text-[#e8e9ed] m-0 truncate">{{ title }}</h2>
         </div>
 

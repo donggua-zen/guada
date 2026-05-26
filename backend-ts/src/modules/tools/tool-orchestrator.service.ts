@@ -178,16 +178,12 @@ export class ToolOrchestrator {
   async getAllTools(context: ToolContext): Promise<any[]> {
     const allTools: any[] = [];
     const toolNames = new Set<string>();
-
-    // 始终添加两个通用工具
-    allTools.push(...UNIVERSAL_TOOLS);
-    toolNames.add("tool_load");
-    toolNames.add("tool_call");
-
+    let lazyTools: number = 0;
+ 
     for (const [namespace, provider] of this.providers.entries()) {
       const config = context.getProviderConfig(namespace);
       if (!config) continue;
-      if (config.enabledTools === false) continue;
+      if (!config.enabledTools) continue;
 
       const metadata = provider.getMetadata(context.injectParams);
       const loadMode = metadata.loadMode || 'eager';
@@ -202,6 +198,7 @@ export class ToolOrchestrator {
       if (loadMode === 'lazy') {
         // lazy 模式的工具不在初始 tools 参数中提供
         this.logger.debug(`Skipping lazy-load namespace ${namespace}`);
+        lazyTools++;
         continue;
       }
 
@@ -225,6 +222,12 @@ export class ToolOrchestrator {
       allTools.push(...namespacedTools);
     }
 
+    if(lazyTools > 0){
+      // 始终添加两个通用工具
+      allTools.push(...UNIVERSAL_TOOLS);
+      toolNames.add("tool_load");
+      toolNames.add("tool_call");
+    }
     this.logger.debug(`Collected ${allTools.length} tools, unique names: ${toolNames.size}`);
     return allTools;
   }
@@ -237,7 +240,7 @@ export class ToolOrchestrator {
       try {
         const providerConfig = context.getProviderConfig(namespace);
         if (!providerConfig) continue;
-        if (providerConfig.enabledTools === false) continue;
+        if (!providerConfig.enabledTools) continue;
 
         // 如果提供者实现了 getPersistentPrompt，则调用并注入
         if (provider.getPersistentPrompt) {
@@ -260,7 +263,7 @@ export class ToolOrchestrator {
       try {
         const providerConfig = context.getProviderConfig(namespace);
         if (!providerConfig) continue;
-        if (providerConfig.enabledTools === false) continue;
+        if (!providerConfig.enabledTools) continue;
 
         const metadata = provider.getMetadata(context.injectParams);
         const loadMode = metadata.loadMode || 'eager';
@@ -290,7 +293,7 @@ export class ToolOrchestrator {
       try {
         const providerConfig = context.getProviderConfig(namespace);
         if (!providerConfig) continue;
-        if (providerConfig.enabledTools === false) continue;
+        if (!providerConfig.enabledTools) continue;
 
         const metadata = provider.getMetadata(context.injectParams);
         const loadMode = metadata.loadMode || 'eager';
