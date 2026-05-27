@@ -93,6 +93,10 @@ export class BrowserWindowManager {
 
     const wc = newWindow.webContents
 
+    // 默认静音
+    wc.setAudioMuted(true)
+    log.info(`Window ${windowId} audio muted by default`)
+
     // 设置 Edge User Agent
     const edgeUserAgent = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36 Edg/146.0.0.0'
     wc.setUserAgent(edgeUserAgent)
@@ -653,6 +657,22 @@ export class BrowserWindowManager {
               } else {
                 this.showWindow(windowId)
               }
+            },
+          })
+        )
+      }
+
+      // 静音/取消静音
+      if (windowInfo) {
+        const isMuted = windowInfo.webContents.isAudioMuted()
+        menu.append(
+          new MenuItem({
+            label: isMuted ? '取消静音' : '静音',
+            type: 'checkbox',
+            checked: isMuted,
+            click: (item) => {
+              windowInfo.webContents.setAudioMuted(item.checked)
+              log.info(`Window ${windowId} audio muted: ${item.checked}`)
             },
           })
         )
