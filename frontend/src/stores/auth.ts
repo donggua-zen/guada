@@ -38,14 +38,18 @@ export const useAuthStore = defineStore('auth', () => {
                 throw new Error('登录失败：未获取到 token')
             }
 
-            // 根据 rememberMe 决定存储位置
+            // 根据 rememberMe 决定存储位置，并清除另一位置的旧数据避免残留
             const shouldRemember = credentials.rememberMe === true
             if (shouldRemember) {
                 localStorage.setItem('token', accessToken)
                 localStorage.setItem('user', JSON.stringify(userData))
+                sessionStorage.removeItem('token')
+                sessionStorage.removeItem('user')
             } else {
                 sessionStorage.setItem('token', accessToken)
                 sessionStorage.setItem('user', JSON.stringify(userData))
+                localStorage.removeItem('token')
+                localStorage.removeItem('user')
             }
 
             token.value = accessToken
@@ -79,9 +83,9 @@ export const useAuthStore = defineStore('auth', () => {
             user.value = userData
             token.value = storedToken
 
-            // 同步用户信息到存储
-            const storedUser = localStorage.getItem('user') || sessionStorage.getItem('user')
-            if (storedUser) {
+            // 同步用户信息到存储，保持与 token 相同的位置
+            const tokenInLocalStorage = !!localStorage.getItem('token')
+            if (tokenInLocalStorage) {
                 localStorage.setItem('user', JSON.stringify(userData))
             } else {
                 sessionStorage.setItem('user', JSON.stringify(userData))
@@ -99,8 +103,12 @@ export const useAuthStore = defineStore('auth', () => {
                 return true
             }
 
-            // 只有真正的认证失败才清除登录状态
-            if (error.response?.status === 401 || error.message?.includes('Invalid token')) {
+            // 兼容 ApiService 拦截器转换后的 401 错误
+            if (error.response?.status === 401 ||
+                error.statusCode === 401 ||
+                error.isAuthError === true ||
+                error.message?.includes('Invalid token') ||
+                error.message?.includes('Authentication required')) {
                 logout()
                 return false
             }
