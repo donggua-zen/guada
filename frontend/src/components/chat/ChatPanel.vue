@@ -347,7 +347,7 @@ const debouncedSaveSession = useDebounceFn(() => {
 // 监听器
 watch(() => props.session?.id, async (newSessionId: string | undefined, oldSessionId: string | undefined) => {
   // setTimeout(() => {
-  await handleSessionChange(newSessionId ?? null, oldSessionId ?? null);
+  handleSessionChange(newSessionId ?? null, oldSessionId ?? null);
 
   // }, 500);
 }, { immediate: true });
