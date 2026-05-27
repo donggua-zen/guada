@@ -126,8 +126,7 @@
 
       <!-- 模型选择器弹窗 -->
       <ModelSelectorPanel v-model:visible="modelPanelVisible" :anchor-el="modelButtonRef?.$el" :models="models"
-        :providers="providers" :current-model-id="props.config?.modelId || null" @select="handleModelSelect"
-        @favorite-changed="handleFavoriteChanged" />
+        :providers="providers" :current-model-id="props.config?.modelId || null" @select="handleModelSelect" />
 
       <!-- 知识库选择弹窗 -->
       <KnowledgeBasePanel v-model:visible="kbPanelVisible" :anchor-el="kbButtonRef?.$el"
