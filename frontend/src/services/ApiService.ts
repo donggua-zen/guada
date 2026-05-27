@@ -521,6 +521,14 @@ class ApiService {
   }
 
   /**
+   * 获取工作目录中原始文件的访问 URL（用于图片等资源）
+   */
+  getWorkspaceRawFileUrl(sessionId: string, filePath: string): string {
+    const baseUrl = this.baseURL.replace(/\/$/, '');
+    return `${baseUrl}/sessions/${sessionId}/workspace/raw-file?path=${encodeURIComponent(filePath)}`;
+  }
+
+  /**
    * 更新会话的工作目录路径
    */
   async updateSessionWorkspacePath(

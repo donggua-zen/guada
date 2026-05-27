@@ -8,7 +8,9 @@ import {
   Param,
   Query,
   UseGuards,
+  Res,
 } from "@nestjs/common";
+import type { Response } from "express";
 import { AuthGuard } from "../auth/auth.guard";
 import { CurrentUser } from "../auth/current-user.decorator";
 import { SessionService } from "./session.service";
@@ -377,6 +379,68 @@ export class SessionsController {
     }
   }
 
+  @Get("sessions/:id/workspace/raw-file")
+  async getWorkspaceRawFile(
+    @Param("id") id: string,
+    @Query("path") filePath: string,
+    @Res() res: Response,
+    @CurrentUser() user: any
+  ) {
+    // 验证会话归属权
+    const session = await this.sessionService.getSessionById(id, user.id);
+    if (!session) {
+      throw new Error("Session not found or unauthorized");
+    }
+
+    if (!filePath) {
+      throw new Error("File path is required");
+    }
+
+    // 确定工作目录路径
+    let workspaceDir: string;
+    if ((session as any).workspacePath) {
+      workspaceDir = path.resolve((session as any).workspacePath);
+      await this.workspaceService.validateCustomWorkspacePath(workspaceDir);
+      await this.workspaceService.ensureDirectoryExists(workspaceDir);
+    } else {
+      workspaceDir = this.workspaceService.getDefaultWorkspaceDir(id);
+      await this.workspaceService.ensureDirectoryExists(workspaceDir);
+    }
+
+    // 解析文件路径并安全检查
+    const resolvedPath = this.workspaceService.resolveFilePath(filePath, workspaceDir);
+
+    // 确保文件在工作目录内
+    if (!resolvedPath.startsWith(workspaceDir)) {
+      throw new Error("Access denied: File is outside workspace directory");
+    }
+
+    if (!fs.existsSync(resolvedPath)) {
+      throw new Error("File not found");
+    }
+
+    const stat = fs.statSync(resolvedPath);
+    if (stat.isDirectory()) {
+      throw new Error("Cannot read directory as file");
+    }
+
+    // 检查文件大小（限制为 10MB）
+    const MAX_FILE_SIZE = 10 * 1024 * 1024;
+    if (stat.size > MAX_FILE_SIZE) {
+      throw new Error("File too large (max 10MB)");
+    }
+
+    // 根据扩展名设置 Content-Type
+    const ext = path.extname(filePath).toLowerCase();
+    const mimeType = this.getMimeType(ext);
+    res.setHeader('Content-Type', mimeType);
+    res.setHeader('Content-Length', stat.size);
+
+    // 流式返回文件内容
+    const stream = fs.createReadStream(resolvedPath);
+    stream.pipe(res);
+  }
+
   private getMimeType(extension: string): string {
     const mimeTypes: Record<string, string> = {
       '.html': 'text/html',
@@ -395,6 +459,14 @@ export class SessionsController {
       '.yml': 'text/yaml',
       '.csv': 'text/csv',
       '.sql': 'application/sql',
+      '.png': 'image/png',
+      '.jpg': 'image/jpeg',
+      '.jpeg': 'image/jpeg',
+      '.gif': 'image/gif',
+      '.svg': 'image/svg+xml',
+      '.webp': 'image/webp',
+      '.bmp': 'image/bmp',
+      '.ico': 'image/x-icon',
     };
     return mimeTypes[extension] || 'application/octet-stream';
   }

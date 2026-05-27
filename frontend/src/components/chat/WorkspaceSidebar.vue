@@ -217,8 +217,25 @@ const isHorizontalLayout = useStorage('workspaceLayoutHorizontal', true);
 // 预览模式：rendered=预览，source=源码，默认预览
 const currentPreviewMode = useStorage<PreviewMode>('filePreviewMode', 'rendered');
 
-// 初始化 Markdown 解析器
-const { parseMarkdown } = useMarkdown();
+// 初始化 Markdown 解析器，传入图片路径解析函数
+const { parseMarkdown } = useMarkdown({
+  resolveImageUrl: (src: string) => {
+    // 只处理相对路径（不以协议、/、# 开头的路径）
+    if (!src || /^([a-z][a-z0-9+.-]*:|\/|#)/i.test(src)) {
+      return src;
+    }
+    if (!props.sessionId || !selectedFile.value) {
+      return src;
+    }
+    // 计算图片相对于工作目录的路径
+    // Markdown 文件在子目录中时，相对路径基于该子目录
+    const mdFilePath = selectedFile.value.path.replace(/\\/g, '/');
+    const lastSlashIndex = mdFilePath.lastIndexOf('/');
+    const mdFileDir = lastSlashIndex > 0 ? mdFilePath.substring(0, lastSlashIndex) : '';
+    const imagePath = mdFileDir ? `${mdFileDir}/${src}` : src;
+    return apiService.getWorkspaceRawFileUrl(props.sessionId, imagePath);
+  }
+});
 
 // 初始化代码高亮
 const { highlightCode, getLanguageFromExtension, isTextFile } = useHighlight();
