@@ -155,9 +155,10 @@ class ApiService {
     // 添加请求拦截器动态设置 token
     this.axiosInstance.interceptors.request.use(
       (config) => {
-        // 优先从 localStorage 读取（记住我），否则使用 sessionStorage
+        // 优先从 sessionStorage 读取（当前会话登录），降级到 localStorage（记住我）
+        // 避免 localStorage 中的旧过期 token 被优先使用
         const token =
-          localStorage.getItem("token") || sessionStorage.getItem("token");
+          sessionStorage.getItem("token") || localStorage.getItem("token");
         if (token) {
           config.headers.Authorization = `Bearer ${token}`;
         }
