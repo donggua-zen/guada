@@ -21,7 +21,7 @@
             {{ provider.name }}
           </div>
           <div class="provider-models space-y-1">
-            <div v-for="model in getProviderModels(provider.id)" :key="model.id"
+            <div v-for="model in getProviderModels(provider.id)" :key="provider.id + '-' + model.id"
               class="model-item-compact p-2 rounded cursor-pointer transition-all flex items-center gap-2" :class="{
                 'bg-pink-50 dark:bg-pink-900/20': currentModelId === model.id,
                 'hover:bg-gray-50 dark:hover:bg-gray-800/50': currentModelId !== model.id
@@ -102,7 +102,6 @@ import { computed, ref, watch } from 'vue'
 import { ElInput, ElIcon, ElTooltip } from 'element-plus'
 import { Search12Regular, Star24Regular, Star24Filled, TextT24Regular, Image24Regular, WrenchScrewdriver24Regular, LightbulbFilament24Regular } from '@vicons/fluent'
 import { ArrowRightTwotone } from '@vicons/material'
-import ScrollContainer from '../../ui/ScrollContainer.vue'
 import CustomPopover from '../../ui/CustomPopover.vue'
 import Avatar from '../../ui/Avatar.vue'
 import { getModelDisplayName, getModelAvatarPath, getModelThinkingEfforts } from '@/utils/modelUtils'
