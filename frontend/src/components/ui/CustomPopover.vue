@@ -1,22 +1,26 @@
 <template>
     <teleport to="body">
         <transition name="popover-fade">
-            <div v-if="show" ref="popoverRef" 
-                class="fixed bg-white dark:bg-(--color-surface) rounded-lg border border-gray-200 dark:border-(--color-border) shadow-[0_12px_32px_rgba(0,0,0,0.15),0_4px_8px_rgba(0,0,0,0.1)] dark:shadow-[0_12px_32px_rgba(0,0,0,0.4),0_4px_8px_rgba(0,0,0,0.2)] overflow-hidden flex flex-col z-2000 pointer-events-auto p-4"
-                :class="popperClass" 
-                :style="popoverStyle"
-                @click.stop>
+            <div v-if="show" ref="popoverRef"
+                class="fixed bg-white dark:bg-(--color-surface) rounded-lg border border-gray-200 dark:border-(--color-border) shadow-[0_12px_32px_rgba(0,0,0,0.15),0_4px_8px_rgba(0,0,0,0.1)] dark:shadow-[0_12px_32px_rgba(0,0,0,0.4),0_4px_8px_rgba(0,0,0,0.2)] overflow-hidden flex flex-col z-2000 pointer-events-auto px-2 py-4"
+                :class="popperClass" :style="popoverStyle" @click.stop>
                 <!-- Header 槽位 -->
-                <div v-if="$slots.header" class="mb-3">
+                <div v-if="$slots.header" class="px-2">
                     <slot name="header"></slot>
                 </div>
                 <!-- 默认内容 -->
-                <slot></slot>
+                <div class="popover-content px-2">
+                    <slot></slot>
+                </div>
             </div>
         </transition>
     </teleport>
 </template>
-
+<style scoped>
+.popover-content {
+    overflow-y: auto;
+}
+</style>
 <script setup lang="ts">
 import { computed, ref, watch, nextTick, onUnmounted } from 'vue'
 
@@ -143,10 +147,13 @@ const popoverStyle = computed(() => {
 })
 
 // 处理窗口 resize 和 scroll 事件，更新位置
-const handleWindowEvent = () => {
-    if (props.show) {
-        updatePosition()
-    }
+const handleWindowEvent = (e: Event) => {
+    if (!props.show) return
+    // 如果 scroll 事件来自弹窗内部，忽略
+    // scroll 事件不冒泡，但捕获阶段可以拦截
+    const target = e.target as HTMLElement
+    if (popoverRef.value && popoverRef.value.contains(target)) return
+    updatePosition()
 }
 
 // 监听可见性变化，统一管理所有副作用

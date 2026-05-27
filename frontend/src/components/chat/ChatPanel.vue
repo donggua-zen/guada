@@ -8,9 +8,9 @@
     <template v-else-if="authStore.isAuthenticated">
       <ScrollContainer ref="scrollContainerRef" class="max-h-full chat-scroll-container"
         :auto-scroll="needScrollToBottom" @scroll="handleScroll">
-        <div class="flex flex-col items-center px-5 max-w-205 mx-auto">
+        <div class="px-5 max-w-205 mx-auto">
           <MessageItem v-for="(message, index) in activeMessages" :key="message.id" :message="message"
-            v-memo="[message.id, message.contents, message.currentTurnsId, message.state?.isStreaming, message.state?.isThinking]"
+            v-memo="[message.id, message.contents, message.currentTurnsId, message.state?.isStreaming, message.state?.isThinking, lastUserMessageIndex]"
             :avatar="message.role == 'user' ? userAvater : currentSession?.avatarUrl"
             :is-last="index === activeMessages.length - 1"
             :allow-generate="!isStreaming && index === lastUserMessageIndex" @delete="deleteMessage" @edit="editMessage"
@@ -39,8 +39,8 @@
   <div class="pb-6 w-full px-5 max-w-205 flex flex-col items-start mx-auto">
     <!-- 编辑模式提示条 -->
     <div v-if="editMode"
-      class="mb-5 bg-gray-50 dark:bg-[#2a2c30] flex items-center px-4 py-1 border border-gray-300 dark:border-[#383a40] rounded-xl">
-      <span class="flex-1 text-gray-500 text-sm mr-10">正在编辑消息</span>
+      class="bg-gray-200 -mb-1.5 w-full  flex items-center px-4 pt-2 pb-5 rounded-tl-xl rounded-tr-xl">
+      <span class="flex-1 text-sm mr-10">正在编辑消息</span>
       <el-button size="small" @click="exitEditMode" class="cancel-edit-btn" plain>
         取消编辑
       </el-button>
@@ -678,9 +678,9 @@ function generateResponse(message: any) {
 function regenerateResponse(message: any) {
   const versions: string[] = []
   for (let i = 0; i < message.contents.length; i++) {
-    const turns_id = message.contents[i].turns_id
-    if (!versions.includes(turns_id)) {
-      versions.push(turns_id)
+    const turnsId = message.contents[i].turnsId
+    if (!versions.includes(turnsId)) {
+      versions.push(turnsId)
     }
   }
 
