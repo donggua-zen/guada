@@ -211,9 +211,9 @@ export class ShellToolProvider implements IToolProvider {
           // 即使失败也返回 JSON，确保 AI 能获取到 stdout 中的任何潜在信息
           const exitCode = (error as any).code === 'ETIMEDOUT' || error.killed ? -1 : ((error as any).code || 1);
 
-          // 处理错误中的 buffer 数据
-          const stdoutStr = error.stdout ? this.decodeBuffer(error.stdout, encoding) : '';
-          const stderrStr = error.stderr ? this.decodeBuffer(error.stderr, encoding) : error.message;
+          // 处理错误中的 buffer 数据 - 优先使用回调参数中的 stdout/stderr
+          const stdoutStr = stdout ? this.decodeBuffer(stdout, encoding) : '';
+          const stderrStr = stderr ? this.decodeBuffer(stderr, encoding) : (error.message || '');
 
           const duration = Date.now() - startTime;
           const result = {
