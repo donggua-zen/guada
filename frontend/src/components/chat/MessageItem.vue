@@ -33,7 +33,10 @@
           <template v-if="turn.content">
             <MarkdownContent v-if="isAssistant" class="message-item__text markdown-text" @click="handleClick"
               :content="turn.content" :debounced="turn.state?.isStreaming" />
-            <div v-else class="message-item__text break-all whitespace-pre-wrap">{{ turn.content }}</div>
+            <div v-else class="message-item__text break-all whitespace-pre-wrap">
+              <el-tag v-if="messageMetadata.type === 'scheduler'" size="small" type="success" class="mr-1">定时任务</el-tag>
+              {{ turn.content }}
+            </div>
           </template>
 
           <!-- 使用拆分后的工具调用组件 -->
@@ -223,6 +226,10 @@ const metadata = computed(() => {
   const content = turnsCache.value[turnsCache.value.length - 1];
   // 确保返回一个对象，即使 metadata 为 null/undefined
   return content?.metadata || {};
+});
+
+const messageMetadata = computed(() => {
+  return props.message.metadata || {};
 });
 
 const state = computed(() =>

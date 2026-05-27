@@ -25,11 +25,9 @@ model Session {
   workspacePath String?               @map("workspace_path")
   memories      Memory[]
   messages      Message[]
-  // 注意：使用 NoAction 避免删除 Model 时自动置空 modelId
-  // 保留 ORM 层面关联查询能力（include/join）
-  model         Model?                @relation(fields: [modelId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  user          User                  @relation(fields: [userId], references: [id])
   character     Character?            @relation(fields: [characterId], references: [id])
+  user          User                  @relation(fields: [userId], references: [id])
+  model         Model?                @relation(fields: [modelId], references: [id], onDelete: NoAction, onUpdate: NoAction)
   contextStates SessionContextState[]
 
   @@index([userId])
@@ -47,9 +45,12 @@ model Message {
   role           String
   parentId       String?          @map("parent_id")
   currentTurnsId String?          @map("current_turns_id")
+  metadata       Json?            @map("meta_data")
   createdAt      DateTime         @default(now()) @map("created_at")
   updatedAt      DateTime         @updatedAt @map("updated_at")
   files          File[]
+  // 注意：使用 NoAction 避免删除 Model 时自动置空 modelId
+  // 保留 ORM 层面关联查询能力（include/join）
   session        Session          @relation(fields: [sessionId], references: [id], onDelete: Cascade)
   parent         Message?         @relation("MessageThread", fields: [parentId], references: [id])
   children       Message[]        @relation("MessageThread")
@@ -159,11 +160,9 @@ model Character {
   settings    Json?
   createdAt   DateTime        @default(now()) @map("created_at")
   updatedAt   DateTime        @updatedAt @map("updated_at")
-  user        User            @relation(fields: [userId], references: [id])
-  // 注意：使用 NoAction 避免删除 Model 时自动置空 modelId
-  // 保留 ORM 层面关联查询能力（include/join）
-  model       Model?          @relation(fields: [modelId], references: [id], onDelete: NoAction, onUpdate: NoAction)
   group       CharacterGroup? @relation(fields: [groupId], references: [id])
+  model       Model?          @relation(fields: [modelId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  user        User            @relation(fields: [userId], references: [id])
   sessions    Session[]
 
   @@map("character")
@@ -184,10 +183,8 @@ model KnowledgeBase {
   createdAt        DateTime @default(now()) @map("created_at")
   updatedAt        DateTime @updatedAt @map("updated_at")
   files            KBFile[]
-  user             User     @relation(fields: [userId], references: [id])
-  // 注意：使用 NoAction 避免删除 Model 时自动置空 embeddingModelId
-  // 保留 ORM 层面关联查询能力（include/join）
   embeddingModel   Model    @relation(fields: [embeddingModelId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  user             User     @relation(fields: [userId], references: [id])
 
   @@map("knowledge_base")
 }
@@ -215,9 +212,9 @@ model KBFile {
   uploadedAt         DateTime      @default(now()) @map("uploaded_at")
   processedAt        DateTime?     @map("processed_at")
   chunks             KBChunk[]
+  knowledgeBase      KnowledgeBase @relation(fields: [knowledgeBaseId], references: [id], onDelete: Cascade)
   parent             KBFile?       @relation("FolderHierarchy", fields: [parentFolderId], references: [id])
   children           KBFile[]      @relation("FolderHierarchy")
-  knowledgeBase      KnowledgeBase @relation(fields: [knowledgeBaseId], references: [id], onDelete: Cascade)
 
   @@index([knowledgeBaseId])
   @@index([contentHash])
@@ -296,14 +293,14 @@ model File {
 model McpServer {
   id          String   @id @default(cuid())
   name        String
-  url         String?  // HTTP 协议的 URL（sse/streamableHttp 使用）
-  type        String?  // 协议类型: "sse", "streamableHttp", 或 "stdio"
+  url         String?
+  type        String?
   description String?
-  headers     Json?    // HTTP 请求头
-  command     String?  // stdio 协议的命令
-  args        Json?    // stdio 协议的参数数组
-  env         Json?    // stdio 协议的环境变量
-  cwd         String?  // stdio 协议的工作目录
+  headers     Json?
+  command     String?
+  args        Json?
+  env         Json?
+  cwd         String?
   tools       Json?
   enabled     Boolean  @default(true)
   userId      String   @map("user_id")
@@ -325,10 +322,7 @@ model SessionContextState {
   createdAt              DateTime @default(now()) @map("created_at")
   updatedAt              DateTime @updatedAt @map("updated_at")
   pruningMetadata        Json?    @map("pruning_metadata")
-  
-  // 压缩统计信息（JSON格式，便于扩展）
-  compressionStats       Json?    @map("compression_stats")  // { beforeTokenCount, afterTokenCount, beforeMessageCount, afterMessageCount, ... }
-  
+  compressionStats       Json?    @map("compression_stats")
   session                Session  @relation(fields: [sessionId], references: [id], onDelete: Cascade)
 
   @@index([sessionId, createdAt])

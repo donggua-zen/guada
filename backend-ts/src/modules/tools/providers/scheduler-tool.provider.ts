@@ -325,7 +325,7 @@ export class SchedulerToolProvider implements IToolProvider {
     promptParts.push("# 定时任务工具使用说明");
     promptParts.push("");
     promptParts.push(
-      "你可以使用这些工具帮助用户创建和管理定时任务。任务会在指定时间自动将提示词注入到当前会话中执行。",
+      "你可以使用这些工具帮助用户创建和管理定时任务。任务会在指定时间自动将提示词以用户消息的形式发送到当前对话中。定时器本身不会自动获得执行结果，仅仅是发送提示词，你可以理解为其本质是一个“闹钟”。",
     );
     promptParts.push("");
     promptParts.push("## 使用场景示例");
@@ -361,7 +361,7 @@ export class SchedulerToolProvider implements IToolProvider {
   }
 
   async getBriefDescription(context?: Record<string, any>): Promise<string> {
-    return "定时任务管理工具，用于创建、查看、删除定时任务";
+    return "定时任务管理工具，用于创建、查看、删除定时任务，当你需要在指定时间自动执行某项任务时，可以使用此工具。";
   }
 
   getMetadata(context?: Record<string, any>): ToolProviderMetadata {

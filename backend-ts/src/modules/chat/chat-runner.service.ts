@@ -63,7 +63,7 @@ export class ChatRunnerService {
       regenerationMode?: string;
       assistantMessageId?: string | null;
       resumeData?: any;
-      source?: string;
+      source?: Record<string, any>;
     },
     callbacks?: StreamCallbacks,
   ): Promise<() => void> {
@@ -74,7 +74,7 @@ export class ChatRunnerService {
       regenerationMode = "overwrite",
       assistantMessageId = null,
       resumeData,
-      source = "unknown",
+      source,
     } = params;
 
     // 获取会话
@@ -124,6 +124,7 @@ export class ChatRunnerService {
           userMessage.replaceMessageId,
           userMessage.knowledgeBaseIds,
           userId,
+          source,
         );
       } catch (error: any) {
         this.logger.error(`创建消息失败:`, error);
