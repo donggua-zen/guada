@@ -1,4 +1,6 @@
 import { BrowserWindow } from 'electron'
+import * as path from 'path'
+import * as fs from 'fs'
 import log from 'electron-log/main'
 import { BrowserWindowManager, WindowInfo } from './browser-tab-manager'
 
@@ -1087,7 +1089,17 @@ export class BrowserAutomationService {
       new Promise((resolve) => {
         const element = document.querySelector('${selector}')
         if (element) {
-          element.click()
+          // 使用 MouseEvent 触发点击，以支持 Vue/React 等框架的事件绑定
+          const rect = element.getBoundingClientRect()
+          const x = rect.left + rect.width / 2
+          const y = rect.top + rect.height / 2
+          element.dispatchEvent(new MouseEvent('click', {
+            bubbles: true,
+            cancelable: true,
+            view: window,
+            clientX: x,
+            clientY: y,
+          }))
           resolve({ success: true, clicked: true })
         } else {
           resolve({ success: false, clicked: false, error: 'Element not found' })
@@ -1227,9 +1239,11 @@ export class BrowserAutomationService {
 
   /**
    * 打开新标签页
+   * 支持传递会话路径用于文件存储隔离
    */
-  async openNewWindow(url: string): Promise<any> {
-    const wid = await this.createWindow(url)
+  async openNewWindow(url: string, sessionPath?: string): Promise<any> {
+    const metadata = sessionPath ? { sessionPath } : undefined
+    const wid = await this.createWindow(url, metadata)
 
     return {
       success: true,
@@ -1290,7 +1304,7 @@ export class BrowserAutomationService {
 
   /**
    * 处理工具调用请求
-   * 
+   *
    * 这是核心分发逻辑，根据 method 调用对应的功能
    * 统一使用 snake_case 命名风格
    */
@@ -1339,7 +1353,7 @@ export class BrowserAutomationService {
           return await this.reload(params.window_id)
 
         case 'open_new_window':
-          return await this.openNewWindow(params?.url)
+          return await this.openNewWindow(params?.url, params?.session_path)
 
         case 'close_window':
           return await this.closeWindow(params.window_id)

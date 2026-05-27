@@ -1,4 +1,5 @@
 import { BrowserWindow, WebContents, session, Menu, MenuItem } from 'electron'
+import * as path from 'path'
 import log from 'electron-log/main'
 
 /**
@@ -42,6 +43,7 @@ export class BrowserWindowManager {
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: true,
+      preload: path.join(__dirname, 'browser-preload.js'),
     },
   }
 
@@ -119,11 +121,22 @@ export class BrowserWindowManager {
         win.info.url = wc.getURL()
         this.notifyWindowUpdate(windowId)
       }
+      // 每次页面加载完成后重新注入反检测脚本
+      this.injectAntiDetectionScript(wc)
     })
 
     // 监听加载失败
     wc.on('did-fail-load', (_event: Electron.Event, errorCode: number, errorDescription: string) => {
       log.error(`Window ${windowId} failed to load: ${errorCode} - ${errorDescription}`)
+    })
+
+    // 注入反检测脚本
+    this.injectAntiDetectionScript(wc)
+
+    // 设置权限请求处理器
+    windowSession.setPermissionRequestHandler((_webContents, permission, callback) => {
+      const allowedPermissions = ['notifications', 'clipboard-read', 'clipboard-write', 'media']
+      callback(allowedPermissions.includes(permission))
     })
 
     // 为窗口设置右键菜单
@@ -168,8 +181,6 @@ export class BrowserWindowManager {
     log.info(`Window created: ${windowId} (total: ${this.windows.size})`)
     return windowInfo
   }
-
-
 
   /**
    * 关闭窗口
@@ -238,8 +249,25 @@ export class BrowserWindowManager {
   }
 
   /**
-   * 关闭所有窗口
+   * 根据 WebContents ID 查找对应的窗口 ID
+   * 用于 IPC 处理器中通过 event.sender 反查窗口信息
    */
+  getWindowIdByWebContentsId(webContentsId: number): string | null {
+    for (const [windowId, win] of this.windows.entries()) {
+      if (!win.webContents.isDestroyed() && win.webContents.id === webContentsId) {
+        return windowId
+      }
+    }
+    return null
+  }
+
+  /**
+   * 获取指定窗口的元数据
+   */
+  getWindowMetadata(windowId: string): Record<string, any> | undefined {
+    const win = this.windows.get(windowId)
+    return win ? win.info.metadata : undefined
+  }
   async closeAllWindows(): Promise<void> {
     const windowIds = Array.from(this.windows.keys())
     
@@ -346,6 +374,199 @@ export class BrowserWindowManager {
         windowId,
       })
     }
+  }
+
+  /**
+   * 注入反检测脚本，降低被封控识别的可能性
+   */
+  private injectAntiDetectionScript(webContents: WebContents): void {
+    const antiDetectionScript = `
+      (function() {
+        // 1. 移除 webdriver 标志
+        Object.defineProperty(navigator, 'webdriver', {
+          get: () => undefined,
+          configurable: true,
+        });
+
+        // 2. 伪装 plugins
+        const fakePlugins = [
+          {
+            name: 'Chrome PDF Plugin',
+            filename: 'internal-pdf-viewer',
+            description: 'Portable Document Format',
+            version: 'undefined',
+            length: 1,
+            item: () => null,
+            namedItem: () => null,
+          },
+          {
+            name: 'Native Client',
+            filename: 'internal-nacl-plugin',
+            description: '',
+            version: 'undefined',
+            length: 2,
+            item: () => null,
+            namedItem: () => null,
+          },
+        ];
+        Object.defineProperty(navigator, 'plugins', {
+          get: () => fakePlugins,
+          configurable: true,
+        });
+
+        // 3. 伪装 mimeTypes
+        Object.defineProperty(navigator, 'mimeTypes', {
+          get: () => ({
+            length: 4,
+            item: () => null,
+            namedItem: () => null,
+          }),
+          configurable: true,
+        });
+
+        // 4. 伪装硬件信息
+        Object.defineProperty(navigator, 'hardwareConcurrency', {
+          get: () => 8,
+          configurable: true,
+        });
+        Object.defineProperty(navigator, 'deviceMemory', {
+          get: () => 8,
+          configurable: true,
+        });
+        Object.defineProperty(navigator, 'maxTouchPoints', {
+          get: () => 0,
+          configurable: true,
+        });
+
+        // 5. 伪装语言环境
+        Object.defineProperty(navigator, 'languages', {
+          get: () => ['zh-CN', 'zh', 'en'],
+          configurable: true,
+        });
+        Object.defineProperty(navigator, 'language', {
+          get: () => 'zh-CN',
+          configurable: true,
+        });
+
+        // 6. 伪装 platform
+        Object.defineProperty(navigator, 'platform', {
+          get: () => 'Win32',
+          configurable: true,
+        });
+
+        // 7. 伪装 vendor
+        Object.defineProperty(navigator, 'vendor', {
+          get: () => 'Google Inc.',
+          configurable: true,
+        });
+
+        // 8. 覆盖 Permissions API
+        const originalQuery = navigator.permissions.query;
+        navigator.permissions.query = async (permissionDesc) => {
+          const name = typeof permissionDesc === 'string' ? permissionDesc : permissionDesc.name;
+          const allowedPermissions = ['notifications', 'clipboard-read', 'clipboard-write'];
+          if (allowedPermissions.includes(name)) {
+            return { state: 'prompt', onchange: null };
+          }
+          return originalQuery.call(navigator.permissions, permissionDesc);
+        };
+
+        // 9. 覆盖 Chrome 自动化相关属性
+        Object.defineProperty(window, 'chrome', {
+          get: () => ({
+            runtime: {
+              OnInstalledReason: { CHROME_UPDATE: 'chrome_update', INSTALL: 'install', SHARED_MODULE_UPDATE: 'shared_module_update', UPDATE: 'update' },
+              OnRestartRequiredReason: { APP_UPDATE: 'app_update', OS_UPDATE: 'os_update', PERIODIC: 'periodic' },
+              PlatformArch: { ARM: 'arm', ARM64: 'arm64', MIPS: 'mips', MIPS64: 'mips64', MIPS64EL: 'mips64el', MIPSEL: 'mipsel', X86_32: 'x86-32', X86_64: 'x86-64' },
+              PlatformNaclArch: { ARM: 'arm', MIPS: 'mips', MIPS64: 'mips64', MIPS64EL: 'mips64el', MIPSEL: 'mipsel', MIPSEL64: 'mipsel64', X86_32: 'x86-32', X86_64: 'x86-64' },
+              PlatformOs: { ANDROID: 'android', CROS: 'cros', LINUX: 'linux', MAC: 'mac', OPENBSD: 'openbsd', WIN: 'win' },
+              RequestUpdateCheckStatus: { NO_UPDATE: 'no_update', THROTTLED: 'throttled', UPDATE_AVAILABLE: 'update_available' },
+              OnConnectEvent: { addListener: () => {} },
+              OnMessageEvent: { addListener: () => {} },
+            },
+            loadTimes: () => ({
+              commitLoadTime: performance.now() / 1000,
+              connectionInfo: 'h2',
+              finishDocumentLoadTime: performance.now() / 1000,
+              finishLoadTime: performance.now() / 1000,
+              firstPaintAfterLoadTime: 0,
+              firstPaintTime: performance.now() / 1000,
+              navigationStart: performance.now() / 1000,
+              npnNegotiatedProtocol: 'h2',
+              requestTime: performance.now() / 1000,
+              startLoadTime: performance.now() / 1000,
+              wasAlternateProtocolAvailable: false,
+              wasFetchedViaSpdy: true,
+              wasNpnNegotiated: true,
+            }),
+            csi: () => ({ startE: performance.now(), onloadT: performance.now(), pageT: performance.now() }),
+            app: {
+              isInstalled: false,
+              InstallState: { DISABLED: 'disabled', INSTALLED: 'installed', NOT_INSTALLED: 'not_installed' },
+              RunningState: { CANNOT_RUN: 'cannot_run', READY_TO_RUN: 'ready_to_run', RUNNING: 'running' },
+              getDetails: () => null,
+              getIsInstalled: () => false,
+            },
+            webstore: {
+              onInstallStageChanged: { addListener: () => {} },
+              onDownloadProgress: { addListener: () => {} },
+            },
+          }),
+          configurable: true,
+        });
+
+        // 10. 覆盖 Notification 权限
+        const originalNotification = window.Notification;
+        Object.defineProperty(window, 'Notification', {
+          get: () => {
+            return class extends originalNotification {
+              static get permission() { return 'default'; }
+              static requestPermission() { return Promise.resolve('default'); }
+            };
+          },
+          configurable: true,
+        });
+
+        // 11. WebGL 指纹混淆
+        const getParameterProxyHandler = {
+          apply: function(target, thisArg, args) {
+            const param = args[0];
+            if (param === 37445) return 'Intel Inc.';
+            if (param === 37446) return 'Intel Iris Xe Graphics';
+            return target.apply(thisArg, args);
+          }
+        };
+
+        const originalGetContext = HTMLCanvasElement.prototype.getContext;
+        HTMLCanvasElement.prototype.getContext = function(type, ...args) {
+          const context = originalGetContext.call(this, type, ...args);
+          if (context && (type === 'webgl' || type === 'experimental-webgl')) {
+            const originalGetParameter = context.getParameter;
+            context.getParameter = new Proxy(originalGetParameter, getParameterProxyHandler);
+          }
+          return context;
+        };
+
+        // 12. 防止 iframe 中检测
+        try {
+          const iframe = document.createElement('iframe');
+          iframe.srcdoc = '<html></html>';
+          document.body.appendChild(iframe);
+          const iframeNavigator = iframe.contentWindow.navigator;
+          Object.defineProperty(iframeNavigator, 'webdriver', {
+            get: () => undefined,
+            configurable: true,
+          });
+          document.body.removeChild(iframe);
+        } catch (e) {}
+
+
+      })();
+    `;
+
+    webContents.executeJavaScript(antiDetectionScript, true).catch(err => {
+      log.warn('Failed to inject anti-detection script:', err);
+    });
   }
 
   /**

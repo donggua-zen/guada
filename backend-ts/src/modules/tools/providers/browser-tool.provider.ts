@@ -253,7 +253,7 @@ export class BrowserToolProvider implements IToolProvider {
       },
       {
         name: 'execute_js',
-        description: '在指定窗口执行 JavaScript 代码并返回结果。支持直接传入代码字符串或文件路径（相对路径相对于会话工作目录）',
+        description: '在指定窗口执行 JavaScript 代码并返回结果。支持直接传入代码字符串或文件路径（相对路径相对于会话工作目录）。获取返回值需要使用return。',
         parameters: {
           type: 'object',
           properties: {
@@ -404,6 +404,7 @@ export class BrowserToolProvider implements IToolProvider {
           properties: {},
         },
       },
+
     ]
   }
 
@@ -419,6 +420,20 @@ export class BrowserToolProvider implements IToolProvider {
       if (abortSignal?.aborted) {
         this.logger.warn(`Browser tool execution aborted before starting: ${request.name}`);
         throw new Error('Request was aborted');
+      }
+
+      // 特殊处理 open_new_window，注入会话路径
+      if (request.name === 'open_new_window') {
+        const sessionPath = context?.workspacePath as string | undefined
+        const argsWithSession = {
+          ...request.arguments,
+          session_path: sessionPath,
+        }
+        const result = await this.sendRequest(request.name, argsWithSession, abortSignal)
+        if (typeof result === 'string') {
+          return result
+        }
+        return JSON.stringify(result)
       }
 
       // 特殊处理 execute_js，支持文件路径
@@ -623,7 +638,7 @@ export class BrowserToolProvider implements IToolProvider {
       '3. 用 `get_page_struct` 获取结构化 JSON（适合需要分析 DOM 结构或提取特定元素）',
       '4. 如需交互，使用 `click` 和 `fill_input` 操作页面元素',
       '5. 进阶功能，使用 `execute_js` 编写 JavaScript 或使用 `file_path` 参数执行外部 JS 文件',
-      '6. 所有新打开的自动化窗口都是**完全无痕的**，关闭后不留任何数据',
+      '6. 所有新打开的自动化窗口都是**完全无痕的**，关闭后不留任何数据，如果需要保存登录信息，请导出认证相关信息（如cookie）并下次注入',
       '',
       '## execute_js 异步代码使用',
       '当需要执行异步代码时，设置 `is_async: true`：',
@@ -654,6 +669,70 @@ export class BrowserToolProvider implements IToolProvider {
       'new Promise((resolve) => {',
       '  setTimeout(() => resolve("Hello after 1 second"), 1000);',
       '})',
+      '```',
+      '',
+      '## 浏览器内文件存储 API（导出/保存到本地、读取本地文件）',
+      '每个浏览器自动化窗口的渲染进程中都注入了 `window._browserBridge` 对象，支持在页面内部直接保存数据到本地文件或读取本地文件。支持文本、JSON 和二进制数据（通过 base64 编码）。你可以在 `execute_js` 的代码中调用这些方法：',
+      '',
+      '- `window._browserBridge.saveLocalFile(filename, data, options?)` — 保存数据到本地文件（导出/下载）',
+      '  - `filename`: 文件名（字符串,只能导出到工作目录下）',
+      '  - `data`: 要保存的数据（字符串、对象或 base64 编码的二进制数据）',
+      '  - `options.encoding`: 数据编码方式，`"utf8"`（默认，文本/JSON）或 `"base64"`（二进制数据）',
+      '  - 返回: `{ success: boolean, filePath?: string, error?: string }`',
+      '',
+      '- `window._browserBridge.readLocalFile(filename, options?)` — 读取本地文件内容',
+      '  - `filename`: 文件名（字符串）',
+      '  - `options.encoding`: 读取编码方式，`"utf8"`（默认，返回文本）或 `"base64"`（返回 base64 编码字符串，用于二进制数据）',
+      '  - 返回: `{ success: boolean, content?: string, error?: string }`',
+      '',
+      '文件自动保存到当前会话的工作目录中，不同会话之间相互隔离。',
+      '',
+      '```javascript',
+      '// 示例 1: 保存文本/JSON 数据',
+      'const data = { title: document.title, url: location.href, timestamp: Date.now() };',
+      'const result = await window._browserBridge.saveLocalFile("page-data.json", data);',
+      'return result;',
+      '',
+      '// 示例 2: 保存二进制数据（如 canvas 转图片）',
+      'const canvas = document.querySelector("canvas");',
+      'const base64Data = canvas.toDataURL("image/png").replace("data:image/png;base64,", "");',
+      'const result = await window._browserBridge.saveLocalFile("screenshot.png", base64Data, { encoding: "base64" });',
+      'return result;',
+      '',
+      '// 示例 3: 读取文本文件',
+      'const result = await window._browserBridge.readLocalFile("page-data.json");',
+      'return result;',
+      '',
+      '// 示例 4: 读取二进制文件（如图片）',
+      'const result = await window._browserBridge.readLocalFile("screenshot.png", { encoding: "base64" });',
+      'if (result.success) {',
+      '  const img = document.createElement("img");',
+      '  img.src = "data:image/png;base64," + result.content;',
+      '  document.body.appendChild(img);',
+      '}',
+      'return result;',
+      '',
+      '// 示例 5: 获取 Cookie',
+      'const result = await window._browserBridge.getCookies();',
+      'return result.cookies;',
+      '',
+      '// 示例 6: 按 URL 过滤获取 Cookie',
+      'const result = await window._browserBridge.getCookies({ url: "https://example.com" });',
+      'return result.cookies;',
+      '',
+      '// 示例 7: 设置 Cookie',
+      'const result = await window._browserBridge.setCookie({',
+      '  url: "https://example.com",',
+      '  name: "session_id",',
+      '  value: "abc123",',
+      '  expirationDate: Math.floor(Date.now() / 1000) + 86400',
+      '});',
+      'return result;',
+      '',
+      '// 示例 8: 删除 Cookie',
+      'const result = await window._browserBridge.removeCookie("https://example.com", "session_id");',
+      'return result;',
+      '',
       '```',
     ].join('\n')
   }

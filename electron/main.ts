@@ -1,64 +1,76 @@
-import { app, BrowserWindow, ipcMain, Menu, shell, Tray, MenuItemConstructorOptions, dialog, clipboard } from 'electron'
-import * as path from 'path'
-import { fork, ChildProcess } from 'child_process'
-import * as fs from 'fs'
-import { autoUpdater } from 'electron-updater'
-import * as net from 'net'
-import log from 'electron-log'
-import { startBrowserBridge } from './browser-bridge'
-import { startBrowserBridgeTCP, stopBrowserBridgeTCP } from './browser-bridge-tcp'
-import { BrowserWindowManager } from './browser-tab-manager'
+import {
+  app,
+  BrowserWindow,
+  ipcMain,
+  Menu,
+  shell,
+  Tray,
+  MenuItemConstructorOptions,
+  dialog,
+  clipboard,
+} from "electron";
+import * as path from "path";
+import { ChildProcess } from "child_process";
+import * as fs from "fs";
+import { autoUpdater } from "electron-updater";
+import log from "electron-log";
+import { startBrowserBridge } from "./browser-bridge";
+import {
+  startBrowserBridgeTCP,
+  stopBrowserBridgeTCP,
+} from "./browser-bridge-tcp";
+import { BrowserWindowManager } from "./browser-tab-manager";
 
-let backendProcess: ChildProcess | null = null
-let mainWindow: BrowserWindow | null = null
-let windowManager: BrowserWindowManager | null = null  // 窗口管理器
-let isBackendStarting = false  // 防止重复启动
-let backendPort: number | null = null  // 记录后端端口
-let browserBridgeInitialized = false  // Browser Bridge 是否已初始化
-let tray: Tray | null = null  // 系统托盘图标
+let backendProcess: ChildProcess | null = null;
+let mainWindow: BrowserWindow | null = null;
+let windowManager: BrowserWindowManager | null = null; // 窗口管理器
+let isBackendStarting = false; // 防止重复启动
+let backendPort: number | null = null; // 记录后端端口
+let browserBridgeInitialized = false; // Browser Bridge 是否已初始化
+let tray: Tray | null = null; // 系统托盘图标
 
 // 扩展 App 类型以支持退出标记
 interface AppExtended extends Electron.App {
-  isQuiting?: boolean
+  isQuiting?: boolean;
 }
 
 // 配置 electron-log
-log.transports.file.level = 'info'
-log.transports.file.maxSize = 50 * 1024 * 1024 // 50MB
-log.transports.file.format = '[{y}-{m}-{d} {h}:{i}:{s}.{ms}] [{level}] {text}'
+log.transports.file.level = "info";
+log.transports.file.maxSize = 50 * 1024 * 1024; // 50MB
+log.transports.file.format = "[{y}-{m}-{d} {h}:{i}:{s}.{ms}] [{level}] {text}";
 
 // 将 console 输出重定向到日志文件（可选，生产环境建议启用）
 // Object.assign(console, log.functions)
 
 // 单实例锁：确保同一时间只有一个应用实例运行
-const gotTheLock = app.requestSingleInstanceLock()
+const gotTheLock = app.requestSingleInstanceLock();
 
 if (!gotTheLock) {
   // 如果获取锁失败，说明已有实例在运行，立即退出当前实例
-  log.warn('检测到已有应用实例在运行，退出当前实例')
-  app.quit()
+  log.warn("检测到已有应用实例在运行，退出当前实例");
+  app.quit();
 } else {
   // 如果获取锁成功，监听第二个实例启动事件
-  app.on('second-instance', (event, commandLine, workingDirectory) => {
+  app.on("second-instance", (event, commandLine, workingDirectory) => {
     // 当用户尝试启动第二个实例时，激活已存在的主窗口
     if (mainWindow) {
       // 如果窗口最小化，则还原窗口
       if (mainWindow.isMinimized()) {
-        mainWindow.restore()
+        mainWindow.restore();
       }
       // 聚焦窗口（将窗口带到前台）
-      mainWindow.focus()
+      mainWindow.focus();
     }
-  })
+  });
 }
 
 // 判断是否为开发模式（根据是否打包，而不是 NODE_ENV）
-const isDev = !app.isPackaged
+const isDev = !app.isPackaged;
 
 // 配置更新
-autoUpdater.autoDownload = false
+autoUpdater.autoDownload = false;
 if (isDev) {
-  autoUpdater.forceDevUpdateConfig = true
+  autoUpdater.forceDevUpdateConfig = true;
   // 在开发环境下，如果找不到 dev-app-update.yml，我们提供一个默认的占位配置以防止报错
   // 或者你可以选择在这里直接 return，不执行后续的 checkForUpdate
 }
@@ -67,160 +79,202 @@ if (isDev) {
 function getBackendPath(): string {
   if (isDev) {
     // 编译后的文件在 electron/dist/，需要向上两级到达项目根目录
-    return path.join(__dirname, '..', '..', 'backend-ts')
+    return path.join(__dirname, "..", "..", "backend-ts");
   } else {
     // 生产环境：从 resources 目录获取（extraResources）
-    return path.join(process.resourcesPath, 'backend-ts')
+    return path.join(process.resourcesPath, "backend-ts");
   }
 }
 
 // 计算 Schema 版本的哈希值（基于 schema.prisma 文件内容）
 function getSchemaVersion(backendPath: string): string {
-  const crypto = require('crypto')
-  const schemaPath = path.join(backendPath, 'prisma', 'schema.prisma')
-  if (!fs.existsSync(schemaPath)) return 'unknown'
+  const crypto = require("crypto");
+  const schemaPath = path.join(backendPath, "prisma", "schema.prisma");
+  if (!fs.existsSync(schemaPath)) return "unknown";
 
-  const content = fs.readFileSync(schemaPath, 'utf-8')
-  return crypto.createHash('md5').update(content).digest('hex').substring(0, 12)
+  const content = fs.readFileSync(schemaPath, "utf-8");
+  return crypto
+    .createHash("md5")
+    .update(content)
+    .digest("hex")
+    .substring(0, 12);
 }
 
 // 初始化数据库文件
-async function initializeDatabase(userDataPath: string, backendPath: string): Promise<void> {
-  const dbPath = path.join(userDataPath, 'ai_chat.db')
-  const vectorDbPath = path.join(userDataPath, 'vector_db.sqlite')
-  const versionFilePath = path.join(userDataPath, 'db_version.json')
-  const { execSync } = require('child_process')
+async function initializeDatabase(
+  userDataPath: string,
+  backendPath: string,
+): Promise<void> {
+  const dbPath = path.join(userDataPath, "ai_chat.db");
+  const vectorDbPath = path.join(userDataPath, "vector_db.sqlite");
+  const versionFilePath = path.join(userDataPath, "db_version.json");
+  const { execSync } = require("child_process");
 
   // 设置环境变量
   const env = {
     ...process.env,
     DATABASE_URL: `file:${dbPath}`,
     VECTOR_DB_PATH: vectorDbPath,
-    NODE_ENV: process.env.NODE_ENV || 'production'
-  }
+    NODE_ENV: process.env.NODE_ENV || "production",
+  };
 
-  const currentSchemaVersion = getSchemaVersion(backendPath)
-  let storedVersion: any = null
+  const currentSchemaVersion = getSchemaVersion(backendPath);
+  let storedVersion: any = null;
   try {
     if (fs.existsSync(versionFilePath)) {
-      storedVersion = JSON.parse(fs.readFileSync(versionFilePath, 'utf-8'))
+      storedVersion = JSON.parse(fs.readFileSync(versionFilePath, "utf-8"));
     }
   } catch (e) {
-    console.warn('⚠️  读取版本标记文件失败，将重新同步')
+    console.warn("⚠️  读取版本标记文件失败，将重新同步");
   }
 
   // 智能跳过同步：如果版本一致且数据库存在，则跳过初始化
-  if (storedVersion && storedVersion.schemaVersion === currentSchemaVersion && fs.existsSync(dbPath) && fs.statSync(dbPath).size > 0) {
-    console.log(`数据库版本已同步 (${currentSchemaVersion})，跳过初始化`)
-    return
+  if (
+    storedVersion &&
+    storedVersion.schemaVersion === currentSchemaVersion &&
+    fs.existsSync(dbPath) &&
+    fs.statSync(dbPath).size > 0
+  ) {
+    console.log(`数据库版本已同步 (${currentSchemaVersion})，跳过初始化`);
+    return;
   }
 
-  console.log('检测到数据库需要同步或初始化...')
+  console.log("检测到数据库需要同步或初始化...");
   try {
     // 1. 首次运行：从模板拷贝数据库文件
-    const isFirstRun = !fs.existsSync(dbPath) || fs.statSync(dbPath).size === 0
+    const isFirstRun = !fs.existsSync(dbPath) || fs.statSync(dbPath).size === 0;
     if (isFirstRun) {
-      let templatePath: string | null = null
+      let templatePath: string | null = null;
 
       if (isDev) {
         // 开发环境：直接指向项目根目录下的 data 文件夹
-        const devPath = path.join(__dirname, '..', '..', 'data', 'seed_template.db')
-        if (fs.existsSync(devPath)) templatePath = devPath
+        const devPath = path.join(
+          __dirname,
+          "..",
+          "..",
+          "data",
+          "seed_template.db",
+        );
+        if (fs.existsSync(devPath)) templatePath = devPath;
       } else {
         // 生产环境：指向打包后的 resources 目录
-        const prodPath = path.join(process.resourcesPath, 'data', 'seed_template.db')
-        if (fs.existsSync(prodPath)) templatePath = prodPath
+        const prodPath = path.join(
+          process.resourcesPath,
+          "data",
+          "seed_template.db",
+        );
+        if (fs.existsSync(prodPath)) templatePath = prodPath;
       }
 
       if (templatePath) {
-        console.log(`发现种子模板: ${templatePath}`)
-        fs.copyFileSync(templatePath, dbPath)
-        console.log('已从模板初始化数据库')
+        console.log(`发现种子模板: ${templatePath}`);
+        fs.copyFileSync(templatePath, dbPath);
+        console.log("已从模板初始化数据库");
       } else {
-        console.warn('⚠️  未找到种子模板，将执行动态同步')
+        console.warn("⚠️  未找到种子模板，将执行动态同步");
       }
     }
 
     // 2. 备份逻辑优化：仅在非首次运行且结构变更时备份
     if (!isFirstRun) {
-      const timestamp = new Date().toISOString().replace(/[:.]/g, '-')
-      const backupPath = `${dbPath}.bak.${timestamp}`
-      fs.copyFileSync(dbPath, backupPath)
-      console.log(`数据库结构变更，已备份至: ${backupPath}`)
+      const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
+      const backupPath = `${dbPath}.bak.${timestamp}`;
+      fs.copyFileSync(dbPath, backupPath);
+      console.log(`数据库结构变更，已备份至: ${backupPath}`);
 
       // 清理旧备份（保留最多 3 个）
-      const backups = fs.readdirSync(path.dirname(dbPath))
-        .filter(f => f.startsWith(path.basename(dbPath) + '.bak.'))
+      const backups = fs
+        .readdirSync(path.dirname(dbPath))
+        .filter((f) => f.startsWith(path.basename(dbPath) + ".bak."))
         .sort()
-        .reverse()
+        .reverse();
       if (backups.length > 3) {
         for (let i = 3; i < backups.length; i++) {
-          fs.unlinkSync(path.join(path.dirname(dbPath), backups[i]))
+          fs.unlinkSync(path.join(path.dirname(dbPath), backups[i]));
         }
       }
     }
 
     // 3. 使用 db push 同步结构（使用 Electron 内置的 Node.js 运行时）
-    const prismaCli = path.join(backendPath, 'node_modules', 'prisma', 'build', 'index.js')
+    const prismaCli = path.join(
+      backendPath,
+      "node_modules",
+      "prisma",
+      "build",
+      "index.js",
+    );
 
     // 使用 process.execPath（Electron 内置的 Node.js），不依赖系统的 node 命令
-    const nodeExecutable = process.execPath
+    const nodeExecutable = process.execPath;
 
     // 设置 ELECTRON_RUN_AS_NODE，让 Electron 以纯 Node.js 模式运行
-    const execEnv = { ...env, ELECTRON_RUN_AS_NODE: '1' }
+    const execEnv = { ...env, ELECTRON_RUN_AS_NODE: "1" };
 
-    execSync(`"${nodeExecutable}" "${prismaCli}" db push --config=prisma.config.js --accept-data-loss`, {
-      cwd: backendPath,
-      env: execEnv,
-      stdio: 'pipe',
-      encoding: 'utf-8'
-    })
-    console.log('数据库表结构同步成功')
+    execSync(
+      `"${nodeExecutable}" "${prismaCli}" db push --config=prisma.config.js --accept-data-loss`,
+      {
+        cwd: backendPath,
+        env: execEnv,
+        stdio: "pipe",
+        encoding: "utf-8",
+      },
+    );
+    console.log("数据库表结构同步成功");
 
     // 4. 更新版本标记
-    fs.writeFileSync(versionFilePath, JSON.stringify({
-      schemaVersion: currentSchemaVersion,
-      seedCompleted: true,
-      updatedAt: new Date().toISOString()
-    }, null, 2))
-    console.log('数据库版本标记已更新')
-
+    fs.writeFileSync(
+      versionFilePath,
+      JSON.stringify(
+        {
+          schemaVersion: currentSchemaVersion,
+          seedCompleted: true,
+          updatedAt: new Date().toISOString(),
+        },
+        null,
+        2,
+      ),
+    );
+    console.log("数据库版本标记已更新");
   } catch (error: any) {
-    console.error('数据库同步失败:', error.message)
-    handleDatabaseError(error, dbPath, userDataPath)
-    throw error // 抛出错误以便主进程捕获并提示用户
+    console.error("数据库同步失败:", error.message);
+    handleDatabaseError(error, dbPath, userDataPath);
+    throw error; // 抛出错误以便主进程捕获并提示用户
   }
 }
 
 // 处理数据库错误并弹出模态框
-async function handleDatabaseError(error: any, dbPath: string, userDataPath: string) {
-  if (!mainWindow) return
+async function handleDatabaseError(
+  error: any,
+  dbPath: string,
+  userDataPath: string,
+) {
+  if (!mainWindow) return;
 
   const options: Electron.MessageBoxOptions = {
-    type: 'error',
-    title: '数据库同步失败',
-    message: '应用启动时无法同步数据库结构',
+    type: "error",
+    title: "数据库同步失败",
+    message: "应用启动时无法同步数据库结构",
     detail: `错误信息: ${error.message}\n\n您可以尝试点击“重试”或手动打开日志目录排查问题。`,
-    buttons: ['重试', '打开日志目录', '退出'],
+    buttons: ["重试", "打开日志目录", "退出"],
     defaultId: 0,
-    cancelId: 2
-  }
+    cancelId: 2,
+  };
 
   try {
-    const response = await dialog.showMessageBox(mainWindow, options)
+    const response = await dialog.showMessageBox(mainWindow, options);
     if (response.response === 0) {
       // 重试：重新调用初始化
-      console.log('用户选择重试数据库初始化...')
-      await initializeDatabase(userDataPath, getBackendPath())
+      console.log("用户选择重试数据库初始化...");
+      await initializeDatabase(userDataPath, getBackendPath());
     } else if (response.response === 1) {
-      shell.openPath(userDataPath)
-      app.quit()
+      shell.openPath(userDataPath);
+      app.quit();
     } else {
-      app.quit()
+      app.quit();
     }
   } catch (e) {
-    console.error('显示错误对话框失败:', e)
-    app.quit()
+    console.error("显示错误对话框失败:", e);
+    app.quit();
   }
 }
 
@@ -228,264 +282,268 @@ async function handleDatabaseError(error: any, dbPath: string, userDataPath: str
 async function startBackend(): Promise<void> {
   // 防止重复启动
   if (isBackendStarting) {
-    console.warn('⚠️  后端已在启动中，跳过重复调用')
-    return Promise.resolve()
+    console.warn("⚠️  后端已在启动中，跳过重复调用");
+    return Promise.resolve();
   }
 
   // 如果后端已经在运行，直接返回
   if (backendProcess && !backendProcess.killed) {
-    console.warn('⚠️  后端已在运行，跳过重复调用')
-    return Promise.resolve()
+    console.warn("⚠️  后端已在运行，跳过重复调用");
+    return Promise.resolve();
   }
 
-  isBackendStarting = true
+  isBackendStarting = true;
 
   return new Promise(async (resolve, reject) => {
-    const backendPath = getBackendPath()
+    const backendPath = getBackendPath();
 
     if (isDev) {
       // 开发模式：固定端口
-      backendPort = 3000
-      console.log('开发模式：使用固定端口 3000')
+      backendPort = 3000;
+      console.log("开发模式：使用固定端口 3000");
       // 开发模式：使用 spawn 启动 ts-node-dev
-      const { spawn } = await import('child_process')
-      const nodePath = process.platform === 'win32' ? 'npx.cmd' : 'npx'
-      const scriptPath = 'ts-node-dev'
+      const { spawn } = await import("child_process");
+      const nodePath = process.platform === "win32" ? "npx.cmd" : "npx";
+      const scriptPath = "ts-node-dev";
       const args = [
-        '--respawn',
-        '--transpile-only',
-        path.join(backendPath, 'src', 'main.ts')
-      ]
+        "--respawn",
+        "--transpile-only",
+        path.join(backendPath, "src", "main.ts"),
+      ];
 
-      console.log('开发模式：使用 ts-node-dev 启动后端（支持热重载）')
+      console.log("开发模式：使用 ts-node-dev 启动后端（支持热重载）");
 
-      const userDataPath = app.getPath('userData')
-      await initializeDatabase(userDataPath, backendPath)
+      const userDataPath = app.getPath("userData");
+      await initializeDatabase(userDataPath, backendPath);
 
-      const dbPath = path.join(userDataPath, 'ai_chat.db')
-      const vectorDbPath = path.join(userDataPath, 'vector_db.sqlite')
-      const staticDir = path.join(backendPath, 'static')
-      const uploadDir = path.join(userDataPath, 'file_stores')
-      const logsDir = path.join(userDataPath, 'logs') // 后端日志目录
-      const skillsDir = path.join(userDataPath, 'skills') // 技能目录
-      const workspaceDir = path.join(userDataPath, 'workspace') // 会话工作目录
+      const dbPath = path.join(userDataPath, "ai_chat.db");
+      const vectorDbPath = path.join(userDataPath, "vector_db.sqlite");
+      const staticDir = path.join(backendPath, "static");
+      const uploadDir = path.join(userDataPath, "file_stores");
+      const logsDir = path.join(userDataPath, "logs"); // 后端日志目录
+      const skillsDir = path.join(userDataPath, "skills"); // 技能目录
+      const workspaceDir = path.join(userDataPath, "workspace"); // 会话工作目录
 
-      console.log('Database path:', dbPath)
-      console.log('Vector database path:', vectorDbPath)
-      console.log('Static directory:', staticDir)
-      console.log('Upload directory:', uploadDir)
-      console.log('Backend logs directory:', logsDir)
-      console.log('Skills directory:', skillsDir)
-      console.log('Workspace directory:', workspaceDir)
+      console.log("Database path:", dbPath);
+      console.log("Vector database path:", vectorDbPath);
+      console.log("Static directory:", staticDir);
+      console.log("Upload directory:", uploadDir);
+      console.log("Backend logs directory:", logsDir);
+      console.log("Skills directory:", skillsDir);
+      console.log("Workspace directory:", workspaceDir);
 
       const spawnOptions: any = {
         cwd: backendPath,
         env: {
           ...process.env,
-          NODE_ENV: 'development',
-          PORT: '3000',
+          NODE_ENV: "development",
+          PORT: "3000",
           DATABASE_URL: `file:${dbPath}`,
           VECTOR_DB_PATH: vectorDbPath,
           STATIC_DIR: staticDir,
           UPLOAD_ROOT_DIR: uploadDir,
-          UPLOAD_URL_PREFIX: '/uploads',
+          UPLOAD_URL_PREFIX: "/uploads",
           SETTINGS_DIR: userDataPath, // 传递设置目录
           LOGS_DIR: logsDir, // 传递后端日志目录到用户数据目录
           SKILLS_DIR: skillsDir, // 传递技能目录到用户数据目录
           WORKSPACE_BASE_DIR: workspaceDir, // 传递会话工作目录基础路径
-          ELECTRON_APP: 'true', // 标识这是 Electron 环境
-          BROWSER_BRIDGE_MODE: 'tcp', // 开发模式使用 TCP
-          BROWSER_BRIDGE_PORT: process.env.BROWSER_BRIDGE_PORT || '3001', // 传递端口号
+          ELECTRON_APP: "true", // 标识这是 Electron 环境
+          BROWSER_BRIDGE_MODE: "tcp", // 开发模式使用 TCP
+          BROWSER_BRIDGE_PORT: process.env.BROWSER_BRIDGE_PORT || "3001", // 传递端口号
         },
-        stdio: ['pipe', 'pipe', 'pipe'], // 开发模式不需�?IPC
-        shell: true
-      }
+        stdio: ["pipe", "pipe", "pipe"], // 开发模式不需�?IPC
+        shell: true,
+      };
 
-      backendProcess = spawn(nodePath, [scriptPath, ...args], spawnOptions)
+      backendProcess = spawn(nodePath, [scriptPath, ...args], spawnOptions);
     } else {
       // 生产模式：使用 0 让系统自动分配端口，通过 IPC 获取
-      backendPort = 0
-      const { spawn } = await import('child_process')
-      const nodePath = process.execPath
-      const scriptPath = path.join(backendPath, 'dist', 'main.js')
+      backendPort = 0;
+      const { spawn } = await import("child_process");
+      const nodePath = process.execPath;
+      const scriptPath = path.join(backendPath, "dist", "main.js");
 
       // 检查文件是否存在
       if (!fs.existsSync(scriptPath)) {
-        console.error('后端文件不存在:', scriptPath)
-        reject(new Error('Backend files not found'))
-        return
+        console.error("后端文件不存在:", scriptPath);
+        reject(new Error("Backend files not found"));
+        return;
       }
 
-      console.log('生产模式：从 unpacked 目录启动后端')
-      console.log('后端路径:', backendPath)
+      console.log("生产模式：从 unpacked 目录启动后端");
+      console.log("后端路径:", backendPath);
 
       // 初始化数据库
-      const userDataPath = app.getPath('userData')
-      await initializeDatabase(userDataPath, backendPath)
+      const userDataPath = app.getPath("userData");
+      await initializeDatabase(userDataPath, backendPath);
 
-      const dbPath = path.join(userDataPath, 'ai_chat.db')
-      const vectorDbPath = path.join(userDataPath, 'vector_db.sqlite')
-      const staticDir = path.join(backendPath, 'static')
-      const uploadDir = path.join(userDataPath, 'file_stores')
-      const logsDir = path.join(userDataPath, 'logs') // 后端日志目录
-      const skillsDir = path.join(userDataPath, 'skills') // 技能目录
-      const workspaceDir = path.join(userDataPath, 'workspace') // 会话工作目录
+      const dbPath = path.join(userDataPath, "ai_chat.db");
+      const vectorDbPath = path.join(userDataPath, "vector_db.sqlite");
+      const staticDir = path.join(backendPath, "static");
+      const uploadDir = path.join(userDataPath, "file_stores");
+      const logsDir = path.join(userDataPath, "logs"); // 后端日志目录
+      const skillsDir = path.join(userDataPath, "skills"); // 技能目录
+      const workspaceDir = path.join(userDataPath, "workspace"); // 会话工作目录
 
-      console.log('Database path:', dbPath)
-      console.log('Vector database path:', vectorDbPath)
-      console.log('Static directory:', staticDir)
-      console.log('Upload directory:', uploadDir)
-      console.log('Backend logs directory:', logsDir)
-      console.log('Skills directory:', skillsDir)
-      console.log('Workspace directory:', workspaceDir)
+      console.log("Database path:", dbPath);
+      console.log("Vector database path:", vectorDbPath);
+      console.log("Static directory:", staticDir);
+      console.log("Upload directory:", uploadDir);
+      console.log("Backend logs directory:", logsDir);
+      console.log("Skills directory:", skillsDir);
+      console.log("Workspace directory:", workspaceDir);
 
       // 使用 spawn 启动后端
       const spawnOptions: any = {
         cwd: backendPath,
         env: {
           ...process.env,
-          NODE_ENV: 'production',
-          ELECTRON_RUN_AS_NODE: '1',  // 关键：以纯 Node 模式运行
-          NODE_NO_WARNINGS: '1',  // 抑制 Node.js 警告（如 punycode 弃用警告）
+          NODE_ENV: "production",
+          ELECTRON_RUN_AS_NODE: "1", // 关键：以纯 Node 模式运行
+          NODE_NO_WARNINGS: "1", // 抑制 Node.js 警告（如 punycode 弃用警告）
           PORT: backendPort.toString(),
-          BASE_URL: '__auto__',  // Electron 生产环境使用自动模式，动态设置 BASE_URL
+          BASE_URL: "__auto__", // Electron 生产环境使用自动模式，动态设置 BASE_URL
           DATABASE_URL: `file:${dbPath}`,
           VECTOR_DB_PATH: vectorDbPath,
           STATIC_DIR: staticDir,
           UPLOAD_ROOT_DIR: uploadDir,
-          UPLOAD_URL_PREFIX: '/uploads',
+          UPLOAD_URL_PREFIX: "/uploads",
           SETTINGS_DIR: userDataPath, // 传递设置目录
           LOGS_DIR: logsDir, // 传递后端日志目录到用户数据目录
           SKILLS_DIR: skillsDir, // 传递技能目录到用户数据目录
           WORKSPACE_BASE_DIR: workspaceDir, // 传递会话工作目录基础路径
-          ELECTRON_APP: 'true', // 标识这是 Electron 环境
-          BROWSER_BRIDGE_MODE: 'ipc', // 生产模式使用 IPC
+          ELECTRON_APP: "true", // 标识这是 Electron 环境
+          BROWSER_BRIDGE_MODE: "ipc", // 生产模式使用 IPC
         },
-        stdio: ['pipe', 'pipe', 'pipe', 'ipc'] // 增加 'ipc' 以支�?process.send
-      }
+        stdio: ["pipe", "pipe", "pipe", "ipc"], // 增加 'ipc' 以支�?process.send
+      };
 
-      backendProcess = spawn(nodePath, [scriptPath], spawnOptions)
+      backendProcess = spawn(nodePath, [scriptPath], spawnOptions);
     }
 
     if (!backendProcess) {
-      reject(new Error('Failed to create backend process'))
-      return
+      reject(new Error("Failed to create backend process"));
+      return;
     }
 
-    let isResolved = false
+    let isResolved = false;
     // 监听来自后端的 IPC 消息（仅生产环境有效）
-    backendProcess.on('message', (message: any) => {
-      if (message && message.type === 'PORT_READY' && !isResolved) {
-        backendPort = message.port
-        console.log(`通过 IPC 接收到后端端�? ${backendPort}`)
-        isBackendStarting = false
-        isResolved = true
-        resolve()
+    backendProcess.on("message", (message: any) => {
+      if (message && message.type === "PORT_READY" && !isResolved) {
+        backendPort = message.port;
+        console.log(`通过 IPC 接收到后端端�? ${backendPort}`);
+        isBackendStarting = false;
+        isResolved = true;
+        resolve();
       }
-    })
+    });
 
     // 处理 stdout
-    backendProcess.stdout?.on('data', (data) => {
-      const message = data.toString().trim()
+    backendProcess.stdout?.on("data", (data) => {
+      const message = data.toString().trim();
       if (message) {
-        console.log(`[Backend] ${message}`)
+        console.log(`[Backend] ${message}`);
       }
 
       // 开发模式：通过日志检测启动成功
-      if (isDev && message.includes('Application is running on') && !isResolved) {
-        isBackendStarting = false
-        isResolved = true
-        console.log(`[Backend] Application is running on port ${backendPort}`)
-        resolve()
+      if (
+        isDev &&
+        message.includes("Application is running on") &&
+        !isResolved
+      ) {
+        isBackendStarting = false;
+        isResolved = true;
+        console.log(`[Backend] Application is running on port ${backendPort}`);
+        resolve();
       }
-    })
+    });
 
     // 处理 stderr
-    backendProcess.stderr?.on('data', (data) => {
-      const errorMessage = data.toString().trim()
+    backendProcess.stderr?.on("data", (data) => {
+      const errorMessage = data.toString().trim();
       if (errorMessage) {
-        console.error(`[Backend Error] ${errorMessage}`)
+        console.error(`[Backend Error] ${errorMessage}`);
       }
-    })
+    });
 
     // 处理错误
-    backendProcess.on('error', (error) => {
-      log.error('后端进程启动失败:', error)
-      isBackendStarting = false  // 重置标志
-      reject(error)
-    })
+    backendProcess.on("error", (error) => {
+      log.error("后端进程启动失败:", error);
+      isBackendStarting = false; // 重置标志
+      reject(error);
+    });
 
     // 处理退出
-    backendProcess.on('exit', (code) => {
-      log.info(`后端进程退出，退出码: ${code}`)
-      isBackendStarting = false  // 重置标志
+    backendProcess.on("exit", (code) => {
+      log.info(`后端进程退出，退出码: ${code}`);
+      isBackendStarting = false; // 重置标志
       if (code !== 0 && code !== null) {
-        log.error(`后端进程异常退出，退出码: ${code}`)
+        log.error(`后端进程异常退出，退出码: ${code}`);
       }
-    })
+    });
 
     // 设置超时
     setTimeout(() => {
-      reject(new Error('Backend startup timeout'))
-    }, 30000)
-  })
+      reject(new Error("Backend startup timeout"));
+    }, 30000);
+  });
 }
 
 // 创建系统托盘图标
 function createTray() {
   // 开发环境：electron/dist/main.js 在 electron/dist/ 下，向上两级到项目根目录
   // 生产环境：build-resources 在 resources/ 下
-  const iconName = process.platform === 'win32' ? 'icon.ico' : 'icon.png'
+  const iconName = process.platform === "win32" ? "icon.ico" : "icon.png";
   const iconPath = isDev
-    ? path.join(__dirname, '..', '..', 'build-resources', iconName)
-    : path.join(process.resourcesPath, 'build-resources', iconName)
+    ? path.join(__dirname, "..", "..", "build-resources", iconName)
+    : path.join(process.resourcesPath, "build-resources", iconName);
 
-  tray = new Tray(iconPath)
-  tray.setToolTip('GuaDa')
+  tray = new Tray(iconPath);
+  tray.setToolTip("GuaDa");
 
   const contextMenu = Menu.buildFromTemplate([
     {
-      label: '显示主窗口',
+      label: "显示主窗口",
       click: () => {
         if (mainWindow) {
-          mainWindow.show()
-          mainWindow.focus()
+          mainWindow.show();
+          mainWindow.focus();
         } else {
-          createWindow()
+          createWindow();
         }
-      }
+      },
     },
-    { type: 'separator' },
+    { type: "separator" },
     {
-      label: '退出',
+      label: "退出",
       click: () => {
-        app.quit()
-      }
-    }
-  ])
+        app.quit();
+      },
+    },
+  ]);
 
-  tray.setContextMenu(contextMenu)
+  tray.setContextMenu(contextMenu);
 
   // 左键单击恢复窗口
-  tray.on('click', () => {
+  tray.on("click", () => {
     if (mainWindow) {
       if (mainWindow.isVisible()) {
-        mainWindow.focus()
+        mainWindow.focus();
       } else {
-        mainWindow.show()
+        mainWindow.show();
       }
     } else {
-      createWindow()
+      createWindow();
     }
-  })
+  });
 
   // macOS 双击行为
-  tray.on('double-click', () => {
+  tray.on("double-click", () => {
     if (mainWindow) {
-      mainWindow.show()
-      mainWindow.focus()
+      mainWindow.show();
+      mainWindow.focus();
     }
-  })
+  });
 }
 
 // 创建窗口
@@ -498,32 +556,39 @@ function createWindow() {
     frame: false, // 无边框窗口，去掉默认标题栏
     transparent: false, // 不透明背景
     icon: isDev
-      ? path.join(__dirname, '..', 'build-resources', 'icon.ico')
-      : path.join(process.resourcesPath, 'build-resources', 'icon.ico'),
+      ? path.join(__dirname, "..", "build-resources", "icon.ico")
+      : path.join(process.resourcesPath, "build-resources", "icon.ico"),
     webPreferences: {
-      preload: path.join(__dirname, 'preload.js'),
+      preload: path.join(__dirname, "preload.js"),
       contextIsolation: true,
       nodeIntegration: false,
-      sandbox: true
+      sandbox: true,
     },
     show: false,
-    backgroundColor: '#ffffff',
-    titleBarStyle: 'hidden' // 隐藏标题栏但保留系统按钮（macOS）
-  })
+    backgroundColor: "#ffffff",
+    titleBarStyle: "hidden", // 隐藏标题栏但保留系统按钮（macOS）
+  });
 
   // 设置应用菜单
   // setupApplicationMenu()
 
   if (isDev) {
     // 开发环境：根据 USE_STATIC_FRONTEND 决定加载方式
-    if (process.env.USE_STATIC_FRONTEND === 'true') {
+    if (process.env.USE_STATIC_FRONTEND === "true") {
       // 使用编译后的静态前端文件
-      const frontendPath = path.join(__dirname, '..', '..', 'frontend', 'dist', 'index.html')
-      console.log('~ file: main.ts ~ line 438 ~ frontendPath', frontendPath)
-      mainWindow.loadFile(frontendPath)
+      const frontendPath = path.join(
+        __dirname,
+        "..",
+        "..",
+        "frontend",
+        "dist",
+        "index.html",
+      );
+      console.log("~ file: main.ts ~ line 438 ~ frontendPath", frontendPath);
+      mainWindow.loadFile(frontendPath);
     } else {
       // 使用 Vite 开发服务器（热重载）
-      mainWindow.loadURL('http://localhost:5173')
+      mainWindow.loadURL("http://localhost:5173");
     }
 
     // 不再自动打开开发者工具，用户可以通过 Debug 菜单手动打开
@@ -533,9 +598,16 @@ function createWindow() {
   } else {
     // 生产环境加载打包后的前端文件
     // __dirname 指向 app.asar/electron/dist，需要向上两级到 app.asar，然后进入 frontend/dist
-    const frontendPath = path.join(__dirname, '..', '..', 'frontend', 'dist', 'index.html')
+    const frontendPath = path.join(
+      __dirname,
+      "..",
+      "..",
+      "frontend",
+      "dist",
+      "index.html",
+    );
 
-    mainWindow.loadFile(frontendPath)
+    mainWindow.loadFile(frontendPath);
 
     // 生产环境也不自动打开开发者工具
     // if (process.env.DEBUG_MODE === 'true') {
@@ -546,27 +618,27 @@ function createWindow() {
   }
 
   // 窗口准备好后显示
-  mainWindow.once('ready-to-show', () => {
-    mainWindow?.show()
-  })
+  mainWindow.once("ready-to-show", () => {
+    mainWindow?.show();
+  });
 
   // 关闭按钮最小化到托盘
-  mainWindow.on('close', (event) => {
+  mainWindow.on("close", (event) => {
     if (!(app as AppExtended).isQuiting) {
-      event.preventDefault()
-      mainWindow?.hide()
+      event.preventDefault();
+      mainWindow?.hide();
     }
-  })
+  });
 
-  mainWindow.on('closed', () => {
+  mainWindow.on("closed", () => {
     // 清理窗口管理器
-    windowManager?.closeAllWindows()
-    windowManager = null
-    mainWindow = null
-  })
+    windowManager?.closeAllWindows();
+    windowManager = null;
+    mainWindow = null;
+  });
 
   // 初始化窗口管理器
-  windowManager = new BrowserWindowManager(mainWindow, 6)
+  windowManager = new BrowserWindowManager(mainWindow, 6);
 
   // 监听窗口大小变化（独立窗口不需要）
   // mainWindow.on('resize', () => {
@@ -576,517 +648,738 @@ function createWindow() {
 
 // IPC 通信处理
 function setupIpcHandlers() {
-  ipcMain.handle('get-app-info', () => {
+  ipcMain.handle("get-app-info", () => {
     return {
       platform: process.platform,
       version: app.getVersion(),
-      userDataPath: app.getPath('userData'),
-      backendPort: backendPort
-    }
-  })
+      userDataPath: app.getPath("userData"),
+      backendPort: backendPort,
+    };
+  });
 
-  ipcMain.handle('show-notification', (_, { title, body }) => {
+  ipcMain.handle("show-notification", (_, { title, body }) => {
     // 可以在这里实现系统通知
-    console.log('Notification:', title, body)
-  })
+    console.log("Notification:", title, body);
+  });
 
   // 窗口控制
-  ipcMain.on('window-minimize', () => {
-    mainWindow?.minimize()
-  })
+  ipcMain.on("window-minimize", () => {
+    mainWindow?.minimize();
+  });
 
-  ipcMain.on('window-maximize', () => {
+  ipcMain.on("window-maximize", () => {
     if (mainWindow?.isMaximized()) {
-      mainWindow.unmaximize()
+      mainWindow.unmaximize();
     } else {
-      mainWindow?.maximize()
+      mainWindow?.maximize();
     }
-  })
+  });
 
-  ipcMain.on('window-close', () => {
-    mainWindow?.close()
-  })
+  ipcMain.on("window-close", () => {
+    mainWindow?.close();
+  });
 
   // 获取窗口最大化状态
-  ipcMain.handle('is-window-maximized', () => {
-    return mainWindow?.isMaximized() || false
-  })
+  ipcMain.handle("is-window-maximized", () => {
+    return mainWindow?.isMaximized() || false;
+  });
 
   // 打开/关闭开发者工具
-  ipcMain.on('toggle-devtools', () => {
+  ipcMain.on("toggle-devtools", () => {
     if (mainWindow) {
       if (mainWindow.webContents.isDevToolsOpened()) {
-        mainWindow.webContents.closeDevTools()
+        mainWindow.webContents.closeDevTools();
       } else {
-        mainWindow.webContents.openDevTools({ mode: 'right' })
+        mainWindow.webContents.openDevTools({ mode: "right" });
       }
     }
-  })
+  });
 
   // 自动更新相关 IPC
-  ipcMain.handle('check-for-updates', async () => {
+  ipcMain.handle("check-for-updates", async () => {
     if (isDev) {
-      console.warn('⚠️  开发环境下请确保根目录存在 dev-app-update.yml 文件')
+      console.warn("⚠️  开发环境下请确保根目录存在 dev-app-update.yml 文件");
       // 开发环境下如果没有配置文件，直接返回不可用，避免抛出 ENOENT 错误
       try {
-        await autoUpdater.checkForUpdates()
-        return { success: true }
+        await autoUpdater.checkForUpdates();
+        return { success: true };
       } catch (error: any) {
-        if (error.code === 'ENOENT') {
-          return { success: false, error: '开发环境未配置 dev-app-update.yml' }
+        if (error.code === "ENOENT") {
+          return { success: false, error: "开发环境未配置 dev-app-update.yml" };
         }
-        return { success: false, error: error.message }
+        return { success: false, error: error.message };
       }
     }
 
     try {
-      await autoUpdater.checkForUpdates()
-      return { success: true }
+      await autoUpdater.checkForUpdates();
+      return { success: true };
     } catch (error: any) {
-      return { success: false, error: error.message }
+      return { success: false, error: error.message };
     }
-  })
+  });
 
-  ipcMain.handle('start-download-update', () => {
-    autoUpdater.downloadUpdate()
-  })
+  ipcMain.handle("start-download-update", () => {
+    autoUpdater.downloadUpdate();
+  });
 
-  ipcMain.on('install-and-restart', () => {
-    autoUpdater.quitAndInstall(false, true)
-  })
+  ipcMain.on("install-and-restart", () => {
+    autoUpdater.quitAndInstall(false, true);
+  });
 
   // 显示调试菜单（固定菜单项）
-  ipcMain.handle('show-debug-menu', async (event) => {
-    log.debug('[DebugMenu] Showing debug menu')
-    const win = BrowserWindow.fromWebContents(event.sender)
+  ipcMain.handle("show-debug-menu", async (event) => {
+    log.debug("[DebugMenu] Showing debug menu");
+    const win = BrowserWindow.fromWebContents(event.sender);
     if (!win) {
-      log.error('[DebugMenu] No window found')
-      return
+      log.error("[DebugMenu] No window found");
+      return;
     }
 
     const menuItems: MenuItemConstructorOptions[] = [
       {
-        label: 'Open DevTools',
+        label: "Open DevTools",
         click: () => {
-          log.debug('[DebugMenu] Opening dev tools')
-          win.webContents.openDevTools()
-        }
+          log.debug("[DebugMenu] Opening dev tools");
+          win.webContents.openDevTools();
+        },
       },
-      { type: 'separator' },
+      { type: "separator" },
       {
-        label: 'Open Data Directory',
+        label: "Open Data Directory",
         click: () => {
-          log.debug('[DebugMenu] Opening user data folder')
-          shell.openPath(app.getPath('userData'))
-        }
+          log.debug("[DebugMenu] Opening user data folder");
+          shell.openPath(app.getPath("userData"));
+        },
       },
       {
-        label: 'Open Install Directory',
+        label: "Open Install Directory",
         click: () => {
-          log.debug('[DebugMenu] Opening install folder')
-          const installPath = isDev ? path.join(__dirname, '..', '..') : path.dirname(app.getPath('exe'))
-          shell.openPath(installPath)
-        }
-      }
-    ]
+          log.debug("[DebugMenu] Opening install folder");
+          const installPath = isDev
+            ? path.join(__dirname, "..", "..")
+            : path.dirname(app.getPath("exe"));
+          shell.openPath(installPath);
+        },
+      },
+    ];
 
-    const menu = Menu.buildFromTemplate(menuItems)
-    menu.popup({ window: win })
-  })
+    const menu = Menu.buildFromTemplate(menuItems);
+    menu.popup({ window: win });
+  });
 
   // 显示标签页右键菜单
-  ipcMain.handle('show-tab-context-menu', async (event, { tabId, isSplitMode }: { tabId: string; isSplitMode: boolean }) => {
-    log.debug('[TabMenu] Showing context menu for tab:', tabId)
-    const win = BrowserWindow.fromWebContents(event.sender)
-    if (!win) {
-      log.error('[TabMenu] No window found')
-      return
-    }
-
-    // 获取目标窗口的 WebContents
-    const targetWin = windowManager?.getWebContents(tabId)
-    if (!targetWin) {
-      log.error('[TabMenu] Target window not found:', tabId)
-      return
-    }
-
-    const menuItems: MenuItemConstructorOptions[] = []
-
-    // 打开开发者工具（内联模式）
-    menuItems.push({
-      label: '打开开发者工具',
-      click: () => {
-        targetWin.openDevTools({ mode: 'right' })
+  ipcMain.handle(
+    "show-tab-context-menu",
+    async (
+      event,
+      { tabId, isSplitMode }: { tabId: string; isSplitMode: boolean },
+    ) => {
+      log.debug("[TabMenu] Showing context menu for tab:", tabId);
+      const win = BrowserWindow.fromWebContents(event.sender);
+      if (!win) {
+        log.error("[TabMenu] No window found");
+        return;
       }
-    })
 
-    menuItems.push({ type: 'separator' })
+      // 获取目标窗口的 WebContents
+      const targetWin = windowManager?.getWebContents(tabId);
+      if (!targetWin) {
+        log.error("[TabMenu] Target window not found:", tabId);
+        return;
+      }
 
-    // 设为悬浮窗口
-    const browserWindow = BrowserWindow.fromWebContents(targetWin)
-    if (browserWindow) {
-      const isAlwaysOnTop = browserWindow.isAlwaysOnTop()
+      const menuItems: MenuItemConstructorOptions[] = [];
+
+      // 打开开发者工具（内联模式）
       menuItems.push({
-        label: isAlwaysOnTop ? '取消悬浮' : '设为悬浮窗口',
-        type: 'checkbox',
-        checked: isAlwaysOnTop,
-        click: (item) => {
-          windowManager?.setAlwaysOnTop(tabId, item.checked)
-        }
-      })
-
-      // 隐藏/显示窗口（后台/前台模式）
-      const isVisible = browserWindow.isVisible()
-      menuItems.push({
-        label: isVisible ? '隐藏窗口（后台模式）' : '显示窗口（前台模式）',
+        label: "打开开发者工具",
         click: () => {
-          if (isVisible) {
-            windowManager?.hideWindow(tabId)
-          } else {
-            windowManager?.showWindow(tabId)
-          }
-        }
-      })
-    }
+          targetWin.openDevTools({ mode: "right" });
+        },
+      });
 
-    menuItems.push({ type: 'separator' })
+      menuItems.push({ type: "separator" });
 
-    // 关闭窗口
-    menuItems.push({
-      label: '关闭窗口',
-      click: () => {
-        log.debug('[TabMenu] Closing window:', tabId)
-        windowManager?.closeWindow(tabId)
+      // 设为悬浮窗口
+      const browserWindow = BrowserWindow.fromWebContents(targetWin);
+      if (browserWindow) {
+        const isAlwaysOnTop = browserWindow.isAlwaysOnTop();
+        menuItems.push({
+          label: isAlwaysOnTop ? "取消悬浮" : "设为悬浮窗口",
+          type: "checkbox",
+          checked: isAlwaysOnTop,
+          click: (item) => {
+            windowManager?.setAlwaysOnTop(tabId, item.checked);
+          },
+        });
+
+        // 隐藏/显示窗口（后台/前台模式）
+        const isVisible = browserWindow.isVisible();
+        menuItems.push({
+          label: isVisible ? "隐藏窗口（后台模式）" : "显示窗口（前台模式）",
+          click: () => {
+            if (isVisible) {
+              windowManager?.hideWindow(tabId);
+            } else {
+              windowManager?.showWindow(tabId);
+            }
+          },
+        });
       }
-    })
 
-    const menu = Menu.buildFromTemplate(menuItems)
-    menu.popup({ window: win })
-  })
+      menuItems.push({ type: "separator" });
+
+      // 关闭窗口
+      menuItems.push({
+        label: "关闭窗口",
+        click: () => {
+          log.debug("[TabMenu] Closing window:", tabId);
+          windowManager?.closeWindow(tabId);
+        },
+      });
+
+      const menu = Menu.buildFromTemplate(menuItems);
+      menu.popup({ window: win });
+    },
+  );
 
   // 打开用户数据目录
-  ipcMain.on('open-user-data-folder', () => {
-    const userDataPath = app.getPath('userData')
-    shell.openPath(userDataPath).then(error => {
+  ipcMain.on("open-user-data-folder", () => {
+    const userDataPath = app.getPath("userData");
+    shell.openPath(userDataPath).then((error) => {
       if (error) {
-        console.error('Failed to open user data folder:', error)
+        console.error("Failed to open user data folder:", error);
       }
-    })
-  })
+    });
+  });
 
   // 打开安装目录
-  ipcMain.on('open-install-folder', () => {
-    let installPath: string
+  ipcMain.on("open-install-folder", () => {
+    let installPath: string;
     if (isDev) {
       // 开发环境：打开项目根目录
-      installPath = path.join(__dirname, '..', '..')
+      installPath = path.join(__dirname, "..", "..");
     } else {
       // 生产环境：打开应用安装目录
-      installPath = path.dirname(app.getPath('exe'))
+      installPath = path.dirname(app.getPath("exe"));
     }
-    shell.openPath(installPath).then(error => {
+    shell.openPath(installPath).then((error) => {
       if (error) {
-        console.error('Failed to open install folder:', error)
+        console.error("Failed to open install folder:", error);
       }
-    })
-  })
+    });
+  });
 
   // 打开指定文件夹
-  ipcMain.handle('open-folder', async (_, folderPath: string) => {
+  ipcMain.handle("open-folder", async (_, folderPath: string) => {
     try {
-      await shell.openPath(folderPath)
-      return { success: true }
+      await shell.openPath(folderPath);
+      return { success: true };
     } catch (error) {
-      log.error('打开文件夹失�?', error)
-      return { success: false, error: String(error) }
+      log.error("打开文件夹失�?", error);
+      return { success: false, error: String(error) };
     }
-  })
+  });
 
   // 选择文件夹对话框
-  ipcMain.handle('select-folder', async () => {
+  ipcMain.handle("select-folder", async () => {
     const result = await dialog.showOpenDialog({
-      properties: ['openDirectory'],
-      title: '选择工作目录'
-    })
-    
+      properties: ["openDirectory"],
+      title: "选择工作目录",
+    });
+
     if (result.canceled || result.filePaths.length === 0) {
-      return null
+      return null;
     }
-    
-    return result.filePaths[0]
-  })
+
+    return result.filePaths[0];
+  });
 
   // 剪贴板操作（通过 IPC）
-  ipcMain.handle('clipboard-write-text', (_, text: string) => {
+  ipcMain.handle("clipboard-write-text", (_, text: string) => {
     try {
-      clipboard.writeText(text)
-      return { success: true }
+      clipboard.writeText(text);
+      return { success: true };
     } catch (error) {
-      console.error('[Main] 剪贴板写入失�?', error)
-      return { success: false, error: (error as Error).message }
+      console.error("[Main] 剪贴板写入失�?", error);
+      return { success: false, error: (error as Error).message };
     }
-  })
+  });
 
-  ipcMain.handle('clipboard-read-text', () => {
+  ipcMain.handle("clipboard-read-text", () => {
     try {
-      const text = clipboard.readText()
-      return { success: true, text }
+      const text = clipboard.readText();
+      return { success: true, text };
     } catch (error) {
-      console.error('[Main] 剪贴板读取失�?', error)
-      return { success: false, error: (error as Error).message }
+      console.error("[Main] 剪贴板读取失�?", error);
+      return { success: false, error: (error as Error).message };
     }
-  })
+  });
 
   // 打开外部链接
-  ipcMain.handle('open-external', async (_, url: string) => {
+  ipcMain.handle("open-external", async (_, url: string) => {
     try {
-      await shell.openExternal(url)
-      return { success: true }
+      await shell.openExternal(url);
+      return { success: true };
     } catch (error) {
-      log.error('打开外部链接失败:', error)
-      return { success: false, error: String(error) }
+      log.error("打开外部链接失败:", error);
+      return { success: false, error: String(error) };
     }
-  })
+  });
 
   // ==================== 浏览器窗口管理 IPC ====================
 
   // 创建新窗口
-  ipcMain.handle('browser:create-window', async (_, { url, metadata }) => {
+  ipcMain.handle("browser:create-window", async (_, { url, metadata }) => {
     try {
-      const windowInfo = await windowManager!.createWindow(url, metadata)
-      return { success: true, window: windowInfo }
+      const windowInfo = await windowManager!.createWindow(url, metadata);
+      return { success: true, window: windowInfo };
     } catch (error: any) {
-      log.error('创建窗口失败:', error.message)
-      return { success: false, error: error.message }
+      log.error("创建窗口失败:", error.message);
+      return { success: false, error: error.message };
     }
-  })
+  });
 
   // 关闭窗口
-  ipcMain.handle('browser:close-window', async (_, { windowId }) => {
+  ipcMain.handle("browser:close-window", async (_, { windowId }) => {
     try {
-      const success = await windowManager!.closeWindow(windowId)
-      return { success }
+      const success = await windowManager!.closeWindow(windowId);
+      return { success };
     } catch (error: any) {
-      log.error('关闭窗口失败:', error.message)
-      return { success: false, error: error.message }
+      log.error("关闭窗口失败:", error.message);
+      return { success: false, error: error.message };
     }
-  })
+  });
 
   // 获取窗口列表
-  ipcMain.handle('browser:get-windows', () => {
+  ipcMain.handle("browser:get-windows", () => {
     try {
-      const windows = windowManager!.getWindowList()
-      return { success: true, windows }
+      const windows = windowManager!.getWindowList();
+      return { success: true, windows };
     } catch (error: any) {
-      log.error('获取窗口列表失败:', error.message)
-      return { success: false, error: error.message }
+      log.error("获取窗口列表失败:", error.message);
+      return { success: false, error: error.message };
     }
-  })
+  });
 
   // 激活/聚焦窗口
-  ipcMain.handle('browser:activate-window', async (_, { windowId }) => {
+  ipcMain.handle("browser:activate-window", async (_, { windowId }) => {
     try {
       // 使用 windowManager 的 showWindow 方法，会自动触发 window-updated 事件
-      windowManager!.showWindow(windowId)
-      return { success: true }
+      windowManager!.showWindow(windowId);
+      return { success: true };
     } catch (error: any) {
-      log.error('激活窗口失败:', error.message)
-      return { success: false, error: error.message }
+      log.error("激活窗口失败:", error.message);
+      return { success: false, error: error.message };
     }
-  })
+  });
+
+  // ==================== 浏览器窗口文件存储 IPC ====================
+
+  // 获取浏览器窗口数据存储目录
+  function getBrowserDataDir(sessionPath?: string): string {
+    if (!sessionPath) {
+      throw new Error("缺少会话路径，无法确定文件保存位置");
+    }
+
+    // 确保目录存在
+    if (!fs.existsSync(sessionPath)) {
+      fs.mkdirSync(sessionPath, { recursive: true });
+    }
+
+    return sessionPath;
+  }
+
+  // 验证文件名安全性（防止路径穿越）
+  function sanitizeFilename(filename: string): {
+    valid: boolean;
+    sanitized?: string;
+    error?: string;
+  } {
+    if (!filename || typeof filename !== "string") {
+      return { valid: false, error: "文件名不能为空" };
+    }
+
+    // 移除非法字符，仅保留字母、数字、下划线、连字符、点和中文
+    const sanitized = filename.replace(/[<>:"/\\|?*\x00-\x1f]/g, "").trim();
+
+    if (!sanitized) {
+      return { valid: false, error: "文件名无效" };
+    }
+
+    // 禁止路径穿越特征
+    if (
+      sanitized.includes("..") ||
+      sanitized.startsWith("/") ||
+      sanitized.startsWith("\\")
+    ) {
+      return { valid: false, error: "文件名包含非法路径字符" };
+    }
+
+    // 限制文件名长度
+    if (sanitized.length > 255) {
+      return { valid: false, error: "文件名过长（最大255字符）" };
+    }
+
+    return { valid: true, sanitized };
+  }
+
+  // 保存数据到文件
+  ipcMain.handle(
+    "browser:save-to-file",
+    async (event, { filename, data, options }) => {
+      try {
+        const validation = sanitizeFilename(filename);
+        if (!validation.valid) {
+          return { success: false, error: validation.error };
+        }
+
+        // 通过 event.sender 反查窗口元数据，获取会话工作路径
+        const senderId = (event.sender as any).id;
+        const windowId = windowManager!.getWindowIdByWebContentsId(senderId);
+        const metadata = windowId
+          ? windowManager!.getWindowMetadata(windowId)
+          : undefined;
+        const sessionPath = metadata?.sessionPath as string | undefined;
+
+        const targetDir = getBrowserDataDir(sessionPath);
+        const filePath = path.join(targetDir, validation.sanitized!);
+
+        // 根据编码方式处理数据
+        const encoding = options?.encoding || "utf8";
+
+        if (encoding === "base64") {
+          // base64 模式：将 base64 字符串解码为 Buffer 后异步写入
+          const base64Data =
+            typeof data === "string" ? data : JSON.stringify(data);
+          await fs.promises.writeFile(
+            filePath,
+            Buffer.from(base64Data, "base64"),
+          );
+          log.info(`[BrowserData] 二进制文件已保存: ${filePath}`);
+        } else {
+          // utf8 模式：文本或 JSON 数据异步写入
+          await fs.promises.writeFile(
+            filePath,
+            typeof data === "string" ? data : JSON.stringify(data, null, 2),
+            "utf-8",
+          );
+          log.info(`[BrowserData] 文本文件已保存: ${filePath}`);
+        }
+
+        return { success: true, filePath };
+      } catch (error: any) {
+        log.error("[BrowserData] 保存文件失败:", error);
+        return { success: false, error: error.message || "保存文件失败" };
+      }
+    },
+  );
+
+  // 从文件读取数据
+  ipcMain.handle(
+    "browser:read-from-file",
+    async (event, { filename, options }) => {
+      try {
+        const validation = sanitizeFilename(filename);
+        if (!validation.valid) {
+          return { success: false, error: validation.error };
+        }
+
+        // 通过 event.sender 反查窗口元数据，获取会话工作路径
+        const senderId = (event.sender as any).id;
+        const windowId = windowManager!.getWindowIdByWebContentsId(senderId);
+        const metadata = windowId
+          ? windowManager!.getWindowMetadata(windowId)
+          : undefined;
+        const sessionPath = metadata?.sessionPath as string | undefined;
+
+        const targetDir = getBrowserDataDir(sessionPath);
+        const filePath = path.join(targetDir, validation.sanitized!);
+
+        try {
+          await fs.promises.access(filePath);
+        } catch {
+          return { success: false, error: "文件不存在" };
+        }
+
+        // 根据编码方式读取文件
+        const encoding = options?.encoding || "utf8";
+
+        if (encoding === "base64") {
+          // base64 模式：异步读取为 Buffer 后编码为 base64 字符串
+          const buffer = await fs.promises.readFile(filePath);
+          log.info(`[BrowserData] 二进制文件已读取: ${filePath}`);
+          return { success: true, content: buffer.toString("base64") };
+        } else {
+          // utf8 模式：异步读取为文本
+          const content = await fs.promises.readFile(filePath, "utf-8");
+          log.info(`[BrowserData] 文本文件已读取: ${filePath}`);
+          return { success: true, content };
+        }
+      } catch (error: any) {
+        log.error("[BrowserData] 读取文件失败:", error);
+        return { success: false, error: error.message || "读取文件失败" };
+      }
+    },
+  );
+
+  // 获取 Cookie
+  ipcMain.handle(
+    "browser:get-cookies",
+    async (event, filter) => {
+      try {
+        const sender = event.sender;
+        const cookies = await sender.session.cookies.get(filter || {});
+        log.info(`[BrowserCookie] 获取到 ${cookies.length} 个 cookie`);
+        return { success: true, cookies };
+      } catch (error: any) {
+        log.error("[BrowserCookie] 获取 cookie 失败:", error);
+        return { success: false, error: error.message || "获取 cookie 失败" };
+      }
+    },
+  );
+
+  // 设置 Cookie
+  ipcMain.handle(
+    "browser:set-cookie",
+    async (event, cookie) => {
+      try {
+        const sender = event.sender;
+        await sender.session.cookies.set(cookie);
+        log.info(`[BrowserCookie] 设置 cookie: ${cookie.name}`);
+        return { success: true };
+      } catch (error: any) {
+        log.error("[BrowserCookie] 设置 cookie 失败:", error);
+        return { success: false, error: error.message || "设置 cookie 失败" };
+      }
+    },
+  );
+
+  // 删除 Cookie
+  ipcMain.handle(
+    "browser:remove-cookie",
+    async (event, { url, name }) => {
+      try {
+        const sender = event.sender;
+        await sender.session.cookies.remove(url, name);
+        log.info(`[BrowserCookie] 删除 cookie: ${name}`);
+        return { success: true };
+      } catch (error: any) {
+        log.error("[BrowserCookie] 删除 cookie 失败:", error);
+        return { success: false, error: error.message || "删除 cookie 失败" };
+      }
+    },
+  );
 
   // ==================== 浏览器窗口后台/前台模式控制 ====================
 
   // 隐藏窗口（后台模式）
-  ipcMain.handle('browser:hide-window', async (_, { windowId }) => {
+  ipcMain.handle("browser:hide-window", async (_, { windowId }) => {
     try {
-      windowManager!.hideWindow(windowId)
-      return { success: true }
+      windowManager!.hideWindow(windowId);
+      return { success: true };
     } catch (error: any) {
-      log.error('隐藏窗口失败:', error.message)
-      return { success: false, error: error.message }
+      log.error("隐藏窗口失败:", error.message);
+      return { success: false, error: error.message };
     }
-  })
+  });
 
   // 显示窗口（前台模式）
-  ipcMain.handle('browser:show-window', async (_, { windowId }) => {
+  ipcMain.handle("browser:show-window", async (_, { windowId }) => {
     try {
-      windowManager!.showWindow(windowId)
-      return { success: true }
+      windowManager!.showWindow(windowId);
+      return { success: true };
     } catch (error: any) {
-      log.error('显示窗口失败:', error.message)
-      return { success: false, error: error.message }
+      log.error("显示窗口失败:", error.message);
+      return { success: false, error: error.message };
     }
-  })
+  });
 
   // 切换窗口可见性
-  ipcMain.handle('browser:toggle-window-visibility', async (_, { windowId }) => {
-    try {
-      const isVisible = windowManager!.toggleWindowVisibility(windowId)
-      return { success: true, isVisible }
-    } catch (error: any) {
-      log.error('切换窗口可见性失败:', error.message)
-      return { success: false, error: error.message }
-    }
-  })
+  ipcMain.handle(
+    "browser:toggle-window-visibility",
+    async (_, { windowId }) => {
+      try {
+        const isVisible = windowManager!.toggleWindowVisibility(windowId);
+        return { success: true, isVisible };
+      } catch (error: any) {
+        log.error("切换窗口可见性失败:", error.message);
+        return { success: false, error: error.message };
+      }
+    },
+  );
 
   // 获取窗口可见性状态
-  ipcMain.handle('browser:get-window-visibility', async (_, { windowId }) => {
+  ipcMain.handle("browser:get-window-visibility", async (_, { windowId }) => {
     try {
-      const isVisible = windowManager!.isWindowVisible(windowId)
-      return { success: true, isVisible }
+      const isVisible = windowManager!.isWindowVisible(windowId);
+      return { success: true, isVisible };
     } catch (error: any) {
-      log.error('获取窗口可见性失败:', error.message)
-      return { success: false, error: error.message }
+      log.error("获取窗口可见性失败:", error.message);
+      return { success: false, error: error.message };
     }
-  })
-
+  });
 }
 
 // 配置更新器事件监听
 function setupAutoUpdater() {
-  autoUpdater.on('checking-for-update', () => {
-    mainWindow?.webContents.send('update-status', { status: 'checking' })
-  })
+  autoUpdater.on("checking-for-update", () => {
+    mainWindow?.webContents.send("update-status", { status: "checking" });
+  });
 
-  autoUpdater.on('update-available', (info) => {
-    mainWindow?.webContents.send('update-status', { status: 'available', info })
-  })
+  autoUpdater.on("update-available", (info) => {
+    mainWindow?.webContents.send("update-status", {
+      status: "available",
+      info,
+    });
+  });
 
-  autoUpdater.on('update-not-available', () => {
-    mainWindow?.webContents.send('update-status', { status: 'not-available' })
-  })
+  autoUpdater.on("update-not-available", () => {
+    mainWindow?.webContents.send("update-status", { status: "not-available" });
+  });
 
-  autoUpdater.on('download-progress', (progressObj) => {
-    mainWindow?.webContents.send('update-status', {
-      status: 'downloading',
-      progress: progressObj.percent
-    })
-  })
+  autoUpdater.on("download-progress", (progressObj) => {
+    mainWindow?.webContents.send("update-status", {
+      status: "downloading",
+      progress: progressObj.percent,
+    });
+  });
 
-  autoUpdater.on('update-downloaded', () => {
-    mainWindow?.webContents.send('update-status', { status: 'downloaded' })
-  })
+  autoUpdater.on("update-downloaded", () => {
+    mainWindow?.webContents.send("update-status", { status: "downloaded" });
+  });
 
-  autoUpdater.on('error', (err) => {
-    mainWindow?.webContents.send('update-status', { status: 'error', error: err.message })
-  })
+  autoUpdater.on("error", (err) => {
+    mainWindow?.webContents.send("update-status", {
+      status: "error",
+      error: err.message,
+    });
+  });
 }
 
 // 应用就绪
 app.whenReady().then(async () => {
   try {
-    log.info('Application starting...')
-    setupIpcHandlers()
-    setupAutoUpdater()
+    log.info("Application starting...");
+    setupIpcHandlers();
+    setupAutoUpdater();
 
     // 启动后端服务
-    log.info('Starting backend service...')
-    await startBackend()
-    log.info('Backend service started successfully')
+    log.info("Starting backend service...");
+    await startBackend();
+    log.info("Backend service started successfully");
 
-    // 创建窗口（tabManager 在这里面创建�?
-    createWindow()
+    // 创建窗口
+    createWindow();
 
     // 创建系统托盘图标
-    createTray()
+    createTray();
 
     // 窗口创建后，初始化 Browser Bridge（此时 windowManager 和 backendProcess 都可用）
-    const bridgeMode = process.env.BROWSER_BRIDGE_MODE || (isDev ? 'tcp' : 'ipc')
+    const bridgeMode =
+      process.env.BROWSER_BRIDGE_MODE || (isDev ? "tcp" : "ipc");
 
-    if (bridgeMode === 'tcp') {
+    if (bridgeMode === "tcp") {
       // TCP 模式（开发环境）
-      const port = parseInt(process.env.BROWSER_BRIDGE_PORT || '3001')
-      log.info(`Starting Browser Bridge in TCP mode on port ${port}...`)
-      await startBrowserBridgeTCP(port, windowManager!)
-      process.env.BROWSER_BRIDGE_PORT = String(port)
-      log.info('Browser Bridge TCP started successfully')
+      const port = parseInt(process.env.BROWSER_BRIDGE_PORT || "3001");
+      log.info(`Starting Browser Bridge in TCP mode on port ${port}...`);
+      await startBrowserBridgeTCP(port, windowManager!);
+      process.env.BROWSER_BRIDGE_PORT = String(port);
+      log.info("Browser Bridge TCP started successfully");
     } else {
       // IPC 模式（生产环境）
       if (backendProcess) {
-        log.info('Initializing Browser Bridge with backend process (IPC mode)')
-        startBrowserBridge(windowManager!, backendProcess)
-        browserBridgeInitialized = true
-        log.info('Browser Bridge IPC initialized successfully')
+        log.info("Initializing Browser Bridge with backend process (IPC mode)");
+        startBrowserBridge(windowManager!, backendProcess);
+        browserBridgeInitialized = true;
+        log.info("Browser Bridge IPC initialized successfully");
       } else {
-        log.error('Backend process not available, cannot initialize Browser Bridge')
+        log.error(
+          "Backend process not available, cannot initialize Browser Bridge",
+        );
       }
     }
 
-    log.info('Application initialized')
+    log.info("Application initialized");
   } catch (error: any) {
-    log.error('Application initialization failed:', error)
-    app.quit()
+    log.error("Application initialization failed:", error);
+    app.quit();
   }
-})
+});
 
 // 所有窗口关闭时
-app.on('window-all-closed', () => {
+app.on("window-all-closed", () => {
   // 停止后端服务
   if (backendProcess) {
-    console.log('Stopping backend service...')
+    console.log("Stopping backend service...");
 
     // 根据平台选择适当的终止方法
-    if (process.platform === 'win32') {
+    if (process.platform === "win32") {
       // Windows: 使用 taskkill 命令终止进程树
-      const { exec } = require('child_process')
-      exec(`taskkill /pid ${backendProcess.pid} /T /F`, (error: any, stdout: string, stderr: string) => {
-        if (error) {
-          console.error('Failed to kill backend process:', error.message)
-        } else {
-          console.log('Backend process terminated successfully')
-        }
-      })
+      const { exec } = require("child_process");
+      exec(
+        `taskkill /pid ${backendProcess.pid} /T /F`,
+        (error: any, stdout: string, stderr: string) => {
+          if (error) {
+            console.error("Failed to kill backend process:", error.message);
+          } else {
+            console.log("Backend process terminated successfully");
+          }
+        },
+      );
     } else {
       // Unix-like systems: 发送 SIGTERM 信号
-      backendProcess.kill('SIGTERM')
+      backendProcess.kill("SIGTERM");
 
       // 设置超时强制关闭
       setTimeout(() => {
         if (!backendProcess?.killed) {
-          console.log('Force killing backend process...')
-          backendProcess?.kill('SIGKILL')
+          console.log("Force killing backend process...");
+          backendProcess?.kill("SIGKILL");
         }
-      }, 3000)
+      }, 3000);
     }
 
-    backendProcess = null
+    backendProcess = null;
   }
 
-  if (process.platform !== 'darwin') {
-    app.quit()
+  if (process.platform !== "darwin") {
+    app.quit();
   }
-})
+});
 
 // macOS 激活应用
-app.on('activate', () => {
+app.on("activate", () => {
   if (BrowserWindow.getAllWindows().length === 0) {
-    createWindow()
+    createWindow();
   }
-})
+});
 
 // 应用退出前清理
-app.on('before-quit', async () => {
-  (app as AppExtended).isQuiting = true
+app.on("before-quit", async () => {
+  (app as AppExtended).isQuiting = true;
 
   // 停止 Browser Bridge TCP Server
-  if (process.env.BROWSER_BRIDGE_MODE === 'tcp') {
-    await stopBrowserBridgeTCP()
+  if (process.env.BROWSER_BRIDGE_MODE === "tcp") {
+    await stopBrowserBridgeTCP();
   }
 
   if (backendProcess) {
     // 根据平台选择适当的终止方法
-    if (process.platform === 'win32') {
+    if (process.platform === "win32") {
       // Windows: 使用 taskkill 命令终止进程
-      const { execSync } = require('child_process')
+      const { execSync } = require("child_process");
       try {
-        execSync(`taskkill /pid ${backendProcess.pid} /T /F`, { stdio: 'ignore' })
+        execSync(`taskkill /pid ${backendProcess.pid} /T /F`, {
+          stdio: "ignore",
+        });
       } catch (error) {
-        console.error('Failed to kill backend process:', error)
+        console.error("Failed to kill backend process:", error);
       }
     } else {
       // Unix-like systems: 发送 SIGTERM 信号
-      backendProcess.kill('SIGTERM')
+      backendProcess.kill("SIGTERM");
     }
   }
-})
+});
