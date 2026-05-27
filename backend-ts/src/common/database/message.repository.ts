@@ -170,6 +170,7 @@ export class MessageRepository {
     role: string;
     parentId?: string;
     currentTurnsId?: string; // 添加 currentTurnsId（与 Python 后端一致）
+    metadata?: Record<string, any>;
   }) {
     return this.prisma.message.create({
       data,

@@ -169,7 +169,7 @@ export class TaskExecutorService {
           content: task.prompt,
         },
         regenerationMode: "overwrite",
-        source: `scheduler_${task.id}`,
+        source: { type: "scheduler", schedulerId: task.id },
       },
       undefined, // 不传 callbacks，后台执行
     );
@@ -218,7 +218,7 @@ export class TaskExecutorService {
           content: task.prompt,
         },
         regenerationMode: "overwrite",
-        source: `scheduler_test_${task.id}`,
+        source: { type: "scheduler", schedulerId: task.id },
       },
       undefined, // 不传 callbacks，后台执行
     );

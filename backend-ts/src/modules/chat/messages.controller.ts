@@ -42,6 +42,7 @@ export class MessagesController {
       files?: any[];
       replaceMessageId?: string; // 驼峰式
       knowledgeBaseIds?: string[];
+      source?: Record<string, any>;
     },
     @CurrentUser() user: any,
   ) {
@@ -53,6 +54,7 @@ export class MessagesController {
       body.replaceMessageId, // 驼峰式
       body.knowledgeBaseIds,
       user.id,
+      body.source,
     );
   }
 

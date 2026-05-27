@@ -1,4 +1,5 @@
 import { Injectable, Logger, HttpException, HttpStatus } from "@nestjs/common";
+import { Prisma } from "@prisma/client";
 import { MessageRepository } from "../../common/database/message.repository";
 import { MessageContentRepository } from "../../common/database/message-content.repository";
 import { SessionRepository } from "../../common/database/session.repository";
@@ -217,6 +218,7 @@ export class MessageService {
     replaceMessageId: string | undefined,
     knowledgeBaseIds: string[] | undefined,
     userId: string,
+    source?: Record<string, any>,
   ) {
     if (!userId) {
       throw new HttpException("Unauthorized", HttpStatus.UNAUTHORIZED);
@@ -277,7 +279,8 @@ export class MessageService {
               role,
               parentId: existingMessage.parentId, // 继承原消息的 parent_id
               currentTurnsId: turnsId, // 设置当前轮次 ID
-            },
+              metadata: source || undefined,
+            } as any,
           });
 
           messageId = newMessage.id;
@@ -311,6 +314,7 @@ export class MessageService {
         role,
         parentId: undefined,
         currentTurnsId: turnsId, // 设置当前轮次 ID
+        metadata: source || undefined,
       });
       messageId = message.id;
     }
