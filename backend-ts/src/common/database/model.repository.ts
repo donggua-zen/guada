@@ -37,7 +37,9 @@ export class ModelRepository {
   }
 
   async deleteProvider(id: string) {
-    // Prisma Schema 中已配置 onDelete: Cascade，会自动删除关联的 Model
+    // 注意：采用悬空引用设计，删除供应商时保留 Session/Character/KnowledgeBase 中的 modelId 不变
+    // 这些引用ID将变为过期值，关联查询返回 null，业务层需做好空值防护
+    // 未来如需自动清理，可修改 Schema 的 onDelete 策略并重新生成客户端
     return this.prisma.modelProvider.delete({
       where: { id },
     });
