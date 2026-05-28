@@ -23,7 +23,7 @@ export class CharactersController {
   constructor(
     private readonly characterService: CharacterService,
     private readonly toolOrchestrator: ToolOrchestrator,
-  ) { }
+  ) {}
 
   @Get("characters")
   async getCharacters(@Query() query: any) {
@@ -47,10 +47,7 @@ export class CharactersController {
   }
 
   @Put("character-groups/:id")
-  async updateCharacterGroup(
-    @Param("id") id: string,
-    @Body() data: any,
-  ) {
+  async updateCharacterGroup(@Param("id") id: string, @Body() data: any) {
     return this.characterService.updateGroup(id, data);
   }
 
@@ -71,10 +68,7 @@ export class CharactersController {
   }
 
   @Put("characters/:id")
-  async updateCharacter(
-    @Param("id") id: string,
-    @Body() data: any,
-  ) {
+  async updateCharacter(@Param("id") id: string, @Body() data: any) {
     return this.characterService.updateCharacter(id, data);
   }
 
@@ -86,37 +80,45 @@ export class CharactersController {
 
   @Post("characters/:id/avatars")
   @UseInterceptors(FileInterceptor("avatar"))
-  async uploadAvatar(
-    @Param("id") id: string,
-    @UploadedFile() file: any,
-  ) {
+  async uploadAvatar(@Param("id") id: string, @UploadedFile() file: any) {
     return this.characterService.uploadAvatar(id, file);
   }
 
   /**
    * 获取角色工具列表（包含有效状态）
+   * 支持特殊 ID '__new_character__'，用于创建角色时预览全局启用的工具
    */
   @Get("characters/:id/tools")
-  async getCharacterTools(@Param('id') characterId: string) {
-    const character = await this.characterService.getCharacterById(characterId);
-    if (!character) {
-      throw new Error("Character not found");
-    }
+  async getCharacterTools(@Param("id") characterId: string) {
+    const isNewCharacter = characterId === "__new_character__";
 
-    const characterToolsConfig = (character.settings as any)?.tools;
+    let characterToolsConfig: any;
+
+    if (isNewCharacter) {
+      // 创建角色模式：默认禁用所有工具，由用户手动开启
+      characterToolsConfig = false;
+    } else {
+      const character =
+        await this.characterService.getCharacterById(characterId);
+      if (!character) {
+        throw new Error("Character not found");
+      }
+      characterToolsConfig = (character.settings as any)?.tools;
+    }
 
     const globalTools = await this.characterService.getGlobalToolsSettings();
 
-    const allTools = await this.toolOrchestrator.getLocalToolsList({ tools: globalTools });
+    const allTools = await this.toolOrchestrator.getLocalToolsList({
+      tools: globalTools,
+    });
 
     return {
       characterId,
       characterTools: characterToolsConfig,
       globalTools,
-      tools: allTools.map(tool => ({
+      tools: allTools.map((tool) => ({
         ...tool,
         effectiveEnabled: this.calculateEffectiveEnabled(
-          globalTools,
           characterToolsConfig,
           tool.namespace,
         ),
@@ -126,34 +128,22 @@ export class CharactersController {
 
   /**
    * 计算工具有效状态
-   * 
+   *
+   * 说明：getLocalToolsList 已根据 globalTools 过滤，传入的 allTools 仅包含全局启用的工具。
+   * 因此此处只需判断角色级别的配置即可。
+   *
    * 规则：
-   * 1. 如果全局未启用，则无论如何都禁用
-   * 2. 如果角色设置为 true，则跟随全局设置（自动适应新增工具）
-   * 3. 如果角色设置为 false，则禁用
+   * 1. 如果角色设置为 true，则启用（跟随全局，自动适应新增工具）
+   * 2. 如果角色设置为 false，则禁用
+   * 3. 如果角色设置为数组，表示部分启用（至少有一个工具启用就算启用）
    * 4. 如果角色设置为对象，则取 namespace 的配置（未设置默认为 true）
-   * 5. 如果角色设置为数组，表示部分启用
-   * 6. 如果角色未设置，则跟随全局设置
+   * 5. 如果角色未设置，则跟随全局（默认启用）
    */
-  private calculateEffectiveEnabled(globalTools: any, characterTools: any, namespace: string): boolean {
-    // 首先检查全局是否启用该工具
-    let globalEnabled = false;
-    if (globalTools === true) {
-      globalEnabled = true;
-    } else if (globalTools === false) {
-      globalEnabled = false;
-    } else if (typeof globalTools === 'object') {
-      globalEnabled = globalTools[namespace] !== false;
-    } else {
-      globalEnabled = true;
-    }
-
-    // 全局未启用，直接返回 false
-    if (!globalEnabled) {
-      return false;
-    }
-
-    // 角色设置为 true，跟随全局（自动适应）
+  private calculateEffectiveEnabled(
+    characterTools: any,
+    namespace: string,
+  ): boolean {
+    // 角色设置为 true，启用（跟随全局，自动适应新增工具）
     if (characterTools === true) {
       return true;
     }
@@ -169,7 +159,7 @@ export class CharactersController {
     }
 
     // 角色设置为对象，取 namespace 的配置
-    if (typeof characterTools === 'object') {
+    if (typeof characterTools === "object" && characterTools !== null) {
       const charValue = characterTools[namespace];
 
       // 如果是数组，至少有一个工具启用就算启用
@@ -177,17 +167,17 @@ export class CharactersController {
         return charValue.length > 0;
       }
 
-      if (charValue === 'all' || charValue === true) {
+      if (charValue === "all" || charValue === true) {
         return true;
       }
       if (charValue === false) {
         return false;
       }
-      // 未设置，跟随全局
+      // 未设置，跟随全局（默认启用）
       return true;
     }
 
-    // 角色未设置，跟随全局
+    // 角色未设置（undefined / null），跟随全局（默认启用）
     return true;
   }
 }
