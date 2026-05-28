@@ -518,9 +518,9 @@ async function executeUpload(
     for (const { file, relativePath } of filesWithPath) {
         try {
             // 验证文件大小
-            const maxSize = 500 * 1024 * 1024 // 50MB
+            const maxSize = 1024 * 1024 * 1024 // 1GB
             if (file.size > maxSize) {
-                ElMessage.warning(`${relativePath} 文件大小超过限制 (500MB)，已跳过`)
+                ElMessage.warning(`${relativePath} 文件大小超过限制 (1GB)，已跳过`)
                 failCount++
                 continue
             }
