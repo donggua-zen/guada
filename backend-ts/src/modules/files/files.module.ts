@@ -14,7 +14,7 @@ import * as multer from "multer";
     MulterModule.register({
       storage: multer.memoryStorage(),
       limits: {
-        fileSize: 50 * 1024 * 1024, // 50MB
+        fileSize: 1024 * 1024 * 1024, // 1GB
       },
       fileFilter: (req, file, cb) => {
         // 确保文件名编码正确
