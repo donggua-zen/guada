@@ -872,13 +872,11 @@ const handleMcpGlobalToggle = (enabled) => {
 
 // 加载本地工具列表
 const loadLocalTools = async () => {
-  if (!props.data?.id) {
-    return;
-  }
-
   loadingTools.value = true;
   try {
-    const response = await apiService.fetchCharacterTools(props.data.id);
+    // 创建角色时使用特殊 ID，编辑角色时使用真实 ID
+    const characterId = props.data?.id || '__new_character__';
+    const response = await apiService.fetchCharacterTools(characterId);
     // 只显示全局启用的工具
     localTools.value = (response.tools || []).filter(tool => tool.enabled);
 
@@ -1095,10 +1093,10 @@ const findModelById = (modelId) => {
   return models.value.find(model => model.id === modelId)
 }
 
-// 监听 props.data.id 变化，重新加载工具列表
-watch(() => props.data?.id, async (newVal, oldVal) => {
-  if (newVal && newVal !== oldVal) {
-    console.log('角色ID变化，重新加载工具列表:', newVal);
+// 监听 props.data 变化，重新加载工具列表
+watch(() => props.data, async (newVal, oldVal) => {
+  // 角色数据变化时重新加载工具（包括新建角色 id 为空的情况）
+  if (newVal !== oldVal) {
     await loadLocalTools();
   }
 }, { immediate: true });
