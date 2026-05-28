@@ -27,7 +27,8 @@ model Session {
   messages      Message[]
   character     Character?            @relation(fields: [characterId], references: [id])
   user          User                  @relation(fields: [userId], references: [id])
-  model         Model?                @relation(fields: [modelId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  // 注意：不配置 onDelete，允许悬空引用。删除 Model 时需业务层手动处理或保留过期ID
+  model         Model?                @relation(fields: [modelId], references: [id])
   contextStates SessionContextState[]
 
   @@index([userId])
@@ -94,6 +95,7 @@ model ModelProvider {
   updatedAt  DateTime @updatedAt @map("updated_at")
   models     Model[]
 
+  // 注意：删除时关联 Model 被级联删除，但其他表对 Model 的引用ID保留（悬空引用设计）。未来如需自动清理，需修改 Session/Character/KnowledgeBase 的 onDelete 策略
   @@map("model_provider")
 }
 
@@ -110,6 +112,7 @@ model Model {
   updatedAt      DateTime        @updatedAt @map("updated_at")
   characters     Character[]
   knowledgeBases KnowledgeBase[]
+  // 注意：删除 ModelProvider 时，关联的 Model 被级联删除，但 Session/Character/KnowledgeBase 中的引用ID保留（悬空引用设计）
   provider       ModelProvider   @relation(fields: [providerId], references: [id], onDelete: Cascade)
   sessions       Session[]
 
@@ -161,7 +164,8 @@ model Character {
   createdAt   DateTime        @default(now()) @map("created_at")
   updatedAt   DateTime        @updatedAt @map("updated_at")
   group       CharacterGroup? @relation(fields: [groupId], references: [id])
-  model       Model?          @relation(fields: [modelId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  // 注意：不配置 onDelete，允许悬空引用。删除 Model 时需业务层手动处理或保留过期ID
+  model       Model?          @relation(fields: [modelId], references: [id])
   user        User            @relation(fields: [userId], references: [id])
   sessions    Session[]
 
@@ -183,7 +187,8 @@ model KnowledgeBase {
   createdAt        DateTime @default(now()) @map("created_at")
   updatedAt        DateTime @updatedAt @map("updated_at")
   files            KBFile[]
-  embeddingModel   Model    @relation(fields: [embeddingModelId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  // 注意：不配置 onDelete，允许悬空引用。删除 Model 时需业务层手动处理或保留过期ID
+  embeddingModel   Model    @relation(fields: [embeddingModelId], references: [id])
   user             User     @relation(fields: [userId], references: [id])
 
   @@map("knowledge_base")
