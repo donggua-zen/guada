@@ -2,22 +2,53 @@ import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import * as path from 'path';
 import * as fs from 'fs';
+import { SettingsStorage } from '../utils/settings-storage.util';
+import { SG_SYSTEM, SK_SYS_WORKSPACE_BASE_DIR } from '../../constants/settings.constants';
 
 @Injectable()
 export class WorkspaceService {
   private readonly logger = new Logger(WorkspaceService.name);
-  private readonly baseDir: string;
+  private readonly fallbackBaseDir: string;
   private readonly safeWritePaths: Set<string> = new Set();
 
-  constructor(private configService: ConfigService) {
-    this.baseDir = this.configService.get<string>('WORKSPACE_BASE_DIR') ||
-                   path.join(process.cwd(), 'workspace');
-    
+  constructor(
+    private configService: ConfigService,
+    private settingsStorage: SettingsStorage,
+  ) {
+    this.fallbackBaseDir = this.configService.get<string>('WORKSPACE_BASE_DIR') ||
+                           path.join(process.cwd(), 'workspace');
+
     // 确保基础目录存在
-    if (!fs.existsSync(this.baseDir)) {
-      fs.mkdirSync(this.baseDir, { recursive: true });
-      this.logger.log(`Created workspace base directory: ${this.baseDir}`);
+    if (!fs.existsSync(this.fallbackBaseDir)) {
+      fs.mkdirSync(this.fallbackBaseDir, { recursive: true });
+      this.logger.log(`Created workspace base directory: ${this.fallbackBaseDir}`);
     }
+  }
+
+  /**
+   * 获取当前生效的工作目录基路径
+   * 优先级：全局设置 > 环境变量/内置默认值
+   * @returns 生效的基路径绝对路径
+   */
+  getEffectiveBaseDir(): string {
+    const globalBaseDir = this.settingsStorage.getSettingValue(
+      SG_SYSTEM, SK_SYS_WORKSPACE_BASE_DIR, null,
+    );
+    if (globalBaseDir && typeof globalBaseDir === 'string' && path.isAbsolute(globalBaseDir)) {
+      const resolved = path.resolve(globalBaseDir);
+      // 确保目录存在
+      if (!fs.existsSync(resolved)) {
+        try {
+          fs.mkdirSync(resolved, { recursive: true });
+          this.logger.log(`Created global workspace base directory: ${resolved}`);
+        } catch (error: any) {
+          this.logger.error(`Failed to create global workspace base directory ${resolved}: ${error.message}`);
+          return this.fallbackBaseDir;
+        }
+      }
+      return resolved;
+    }
+    return this.fallbackBaseDir;
   }
 
   /**
@@ -26,9 +57,10 @@ export class WorkspaceService {
    * @returns 会话专属工作目录的绝对路径
    */
   getWorkspaceDir(sessionId: string): string {
+    const baseDir = this.getEffectiveBaseDir();
     // 使用 path.resolve 处理相对路径和特殊字符
-    const sessionDir = path.resolve(this.baseDir, sessionId);
-    const resolvedBaseDir = path.resolve(this.baseDir);
+    const sessionDir = path.resolve(baseDir, sessionId);
+    const resolvedBaseDir = path.resolve(baseDir);
 
     // 路径安全检查：防止路径遍历攻击 (Path Traversal)
     if (!sessionDir.startsWith(resolvedBaseDir)) {
@@ -45,17 +77,79 @@ export class WorkspaceService {
   }
 
   /**
-   * 为会话生成默认工作目录路径（不创建目录）
+   * 生成新命名规则的默认工作目录名称
+   * 格式：WORK-YYYY-MM-DD-[四位随机字符]
+   * @returns 工作目录名称
+   */
+  private generateWorkspaceDirName(): string {
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = String(now.getMonth() + 1).padStart(2, '0');
+    const day = String(now.getDate()).padStart(2, '0');
+    // 生成四位随机字符（大小写字母+数字）
+    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+    let randomCode = '';
+    for (let i = 0; i < 4; i++) {
+      randomCode += chars.charAt(Math.floor(Math.random() * chars.length));
+    }
+    return `WORK-${year}-${month}-${day}-${randomCode}`;
+  }
+
+  /**
+   * 生成新的工作目录路径（用于创建新会话时分配默认工作目录）
+   * 命名规则：WORK-YYYY-MM-DD-[四位随机字符防冲突]
+   * 会自动检测目录名冲突并创建目录
+   * @returns 新生成的工作目录绝对路径
+   */
+  generateWorkspaceDir(): string {
+    const baseDir = this.getEffectiveBaseDir();
+    const resolvedBaseDir = path.resolve(baseDir);
+
+    let attempts = 0;
+    const maxAttempts = 100;
+    while (attempts < maxAttempts) {
+      const dirName = this.generateWorkspaceDirName();
+      const sessionDir = path.resolve(baseDir, dirName);
+
+      // 路径安全检查
+      if (!sessionDir.startsWith(resolvedBaseDir)) {
+        throw new Error(`Invalid workspace dir name: Path traversal detected for '${dirName}'`);
+      }
+
+      // 检查目录是否已存在，不存在则创建并返回
+      if (!fs.existsSync(sessionDir)) {
+        fs.mkdirSync(sessionDir, { recursive: true });
+        this.logger.log(`Created workspace directory: ${sessionDir}`);
+        return sessionDir;
+      }
+
+      attempts++;
+      this.logger.warn(`Workspace dir name collision detected: ${dirName}, retrying (${attempts}/${maxAttempts})`);
+    }
+
+    throw new Error(`Failed to generate unique workspace directory name after ${maxAttempts} attempts`);
+  }
+
+  /**
+   * 为会话生成默认工作目录路径
+   * @deprecated 新会话请使用 generateWorkspaceDir()，已有会话兼容保留
    * @param sessionId 会话 ID
    * @returns 默认工作目录的绝对路径
    */
   getDefaultWorkspaceDir(sessionId: string): string {
-    const sessionDir = path.resolve(this.baseDir, sessionId);
-    const resolvedBaseDir = path.resolve(this.baseDir);
+    const baseDir = this.getEffectiveBaseDir();
+    const sessionDir = path.resolve(baseDir, sessionId);
+    const resolvedBaseDir = path.resolve(baseDir);
 
     // 路径安全检查：防止路径遍历攻击
     if (!sessionDir.startsWith(resolvedBaseDir)) {
       throw new Error(`Invalid session ID: Path traversal detected for '${sessionId}'`);
+    }
+
+    // 确保目录存在
+    if (!fs.existsSync(sessionDir)) {
+      fs.mkdirSync(sessionDir, { recursive: true });
+      this.logger.debug(`Created workspace directory for session: ${sessionId}`);
     }
 
     return sessionDir;
@@ -106,6 +200,20 @@ export class WorkspaceService {
         this.logger.error(`Failed to cleanup default workspace for session ${sessionId}: ${error.message}`);
       }
     }
+  }
+
+  /**
+   * 解析会话的工作目录路径
+   * 优先级：会话自定义路径 > 会话记录的默认工作目录
+   * @param session 会话对象
+   * @returns 解析后的工作目录绝对路径
+   */
+  resolveSessionWorkspaceDir(session: any): string {
+    if (session?.workspacePath) {
+      return path.resolve(session.workspacePath);
+    }
+    // 会话未设置工作目录时，使用基于 sessionId 的旧路径（兼容已有会话）
+    return this.getDefaultWorkspaceDir(session.id);
   }
 
   /**

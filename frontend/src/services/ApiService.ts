@@ -534,7 +534,7 @@ class ApiService {
    */
   async updateSessionWorkspacePath(
     sessionId: string,
-    workspacePath: string | null,
+    workspacePath: string,
   ): Promise<{ success: boolean }> {
     return await this._request(`/sessions/${sessionId}/workspace-path`, {
       method: "PUT",
@@ -809,6 +809,25 @@ class ApiService {
    */
   async updateGroupSettings(group: string, data: any): Promise<any> {
     return await this._request(`/settings/${group}`, { method: "PUT", data });
+  }
+
+  /**
+   * 获取全局工作目录基路径
+   */
+  async fetchWorkspaceBaseDir(): Promise<{ workspaceBaseDir: string | null }> {
+    return await this._request("/settings/workspace-base-dir");
+  }
+
+  /**
+   * 设置全局工作目录基路径
+   */
+  async updateWorkspaceBaseDir(
+    workspaceBaseDir: string | null,
+  ): Promise<{ success: boolean }> {
+    return await this._request("/settings/workspace-base-dir", {
+      method: "PUT",
+      data: { workspaceBaseDir },
+    });
   }
 
   async fetchGlobalTools(): Promise<any> {
@@ -1353,6 +1372,13 @@ class ApiService {
     return await this._request(`/bot-admin/instances/${id}/restart`, {
       method: "POST",
     });
+  }
+
+  /**
+   * 获取机器人登录二维码
+   */
+  async fetchBotQrCode(id: string): Promise<{ qrCodeUrl: string }> {
+    return await this._request(`/bot-admin/instances/${id}/qr`);
   }
 
   /**

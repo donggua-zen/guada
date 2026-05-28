@@ -10,6 +10,7 @@ export const SG_TOOLS = 'tools';
  * 系统级设置键名 (SK_SYS = Setting Key System)
  */
 export const SK_SYS_AUTO_LOGIN = 'autoLoginEnabled';
+export const SK_SYS_WORKSPACE_BASE_DIR = 'workspaceBaseDir';
 
 /**
  * 模型偏好设置键名 (SK_MOD = Setting Key Model)

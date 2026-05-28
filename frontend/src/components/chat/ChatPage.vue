@@ -37,7 +37,8 @@
                       @toggle-workspace="toggleWorkspace" />
 
                     <ChatPanel ref="chatPanelRef" v-model:session="currentSession"
-                      v-model:sidebar-visible="sidebarVisible" @save-settings="handleSaveSessionSettings" />
+                      v-model:sidebar-visible="sidebarVisible" @save-settings="handleSaveSessionSettings"
+                      @toggle-workspace-pane="toggleWorkspace" />
                     <!-- 右侧大纲导航 -->
                     <ChatOutline v-if="currentSession && sessions.length > 0"
                       :messages="chatPanelRef?.activeMessages || []" :chat-panel-ref="chatPanelRef"

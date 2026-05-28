@@ -1,4 +1,5 @@
 import { Controller, Get, Put, Body, UseGuards, Post, Query, Param } from "@nestjs/common";
+import * as path from 'path';
 import { SettingsService } from "./settings.service";
 import { AuthGuard } from "../auth/auth.guard";
 import { Public } from "../auth/public.decorator";
@@ -89,6 +90,31 @@ export class SettingsController {
       globalTools: globalToolsConfig,
       tools: allTools,
     };
+  }
+
+  /**
+   * 获取全局工作目录基路径
+   */
+  @UseGuards(AuthGuard)
+  @Get("settings/workspace-base-dir")
+  async getWorkspaceBaseDir() {
+    const dirPath = await this.settingsService.getWorkspaceBaseDir();
+    return { workspaceBaseDir: dirPath };
+  }
+
+  /**
+   * 设置全局工作目录基路径
+   */
+  @UseGuards(AuthGuard)
+  @Put("settings/workspace-base-dir")
+  async setWorkspaceBaseDir(@Body() body: { workspaceBaseDir: string | null }) {
+    if (body.workspaceBaseDir) {
+      if (!path.isAbsolute(body.workspaceBaseDir)) {
+        throw new Error('工作目录基路径必须是绝对路径');
+      }
+    }
+    await this.settingsService.setWorkspaceBaseDir(body.workspaceBaseDir);
+    return { success: true, workspaceBaseDir: body.workspaceBaseDir };
   }
 
   /**

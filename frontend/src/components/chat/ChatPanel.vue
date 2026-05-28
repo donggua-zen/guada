@@ -48,8 +48,9 @@
 
     <div class="w-full flex items-center" style="margin-top: -10px;z-index: 9;">
       <ChatInput v-model:value="inputMessage.content" v-model:files="inputMessage.files"
-        :session-id="currentSession?.id" :config="chatInputConfig" :streaming="isStreaming"
-        @config-change="handleConfigChange" @send="handleSendMessage" @abort="abortResponse" />
+        :session-id="currentSession?.id" :config="chatInputConfig" :streaming="isStreaming" mode="chat"
+        @config-change="handleConfigChange" @send="handleSendMessage" @abort="abortResponse"
+        @toggle-workspace-pane="emit('toggle-workspace-pane')" />
     </div>
     <!-- <div class="ai-disclaimer text-xs text-gray-400 text-center mt-2">内容由 AI 生成，仅供参考</div> -->
 
@@ -101,6 +102,7 @@ const emit = defineEmits<{
   openSettings: []
   'update:sidebarVisible': [visible: boolean]
   'save-settings': []
+  'toggle-workspace-pane': []
 }>();
 
 // 计算属性 - 类型化

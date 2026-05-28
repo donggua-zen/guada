@@ -194,20 +194,8 @@ export class SessionContextService {
     let toolContext: any;
 
     if (supportsTools) {
-      // 确定工作路径
-      let workspacePath: string;
-      if ((session as any).workspacePath) {
-        // 使用自定义路径
-        workspacePath = path.resolve((session as any).workspacePath);
-        // 验证路径安全性
-        await this.workspaceService.validateCustomWorkspacePath(workspacePath);
-      } else {
-        // 使用默认路径
-        workspacePath = this.workspaceService.getDefaultWorkspaceDir(sessionId);
-      }
-
-      // 确保目录存在
-      await this.workspaceService.ensureDirectoryExists(workspacePath);
+      // 确定工作路径（已自动确保目录存在）
+      const workspacePath = this.workspaceService.resolveSessionWorkspaceDir(session);
 
       // 构建注入参数
       const injectParams = {
