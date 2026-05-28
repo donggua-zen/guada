@@ -5,6 +5,7 @@ import {
   SG_SYSTEM,
   SG_MODELS,
   SG_TOOLS,
+  SK_SYS_WORKSPACE_BASE_DIR,
 } from '../../constants/settings.constants';
 
 @Injectable()
@@ -65,5 +66,19 @@ export class SettingsService {
    */
   async setAutoLoginEnabled(enabled: boolean): Promise<void> {
     await this.updateGroupSettings(SG_SYSTEM, { autoLoginEnabled: enabled });
+  }
+
+  /**
+   * 获取全局工作目录基路径
+   */
+  async getWorkspaceBaseDir(): Promise<string | null> {
+    return this.getSettingValue(SG_SYSTEM, SK_SYS_WORKSPACE_BASE_DIR, null);
+  }
+
+  /**
+   * 设置全局工作目录基路径
+   */
+  async setWorkspaceBaseDir(dirPath: string | null): Promise<void> {
+    await this.updateGroupSettings(SG_SYSTEM, { [SK_SYS_WORKSPACE_BASE_DIR]: dirPath });
   }
 }

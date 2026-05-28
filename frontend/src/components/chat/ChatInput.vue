@@ -257,6 +257,8 @@ const props = defineProps({
   buttons: { type: Object, default: () => [] },
   class: { type: String, default: '' },
   sessionId: { type: [String, Number], default: null },
+  // 模式：create 为创建会话模式，chat 为对话模式
+  mode: { type: String, default: 'chat' },
   config: {
     type: Object,
     default: () => ({
@@ -441,7 +443,8 @@ const emit = defineEmits([
   'update:files',
   'send', 'abort', 'files-change',
   'focus', 'blur',
-  'update:modelId', 'config-change', 'update:knowledgeBaseIds'
+  'update:modelId', 'config-change', 'update:knowledgeBaseIds',
+  'toggle-workspace-pane'
 ]);
 
 // 工具函数
@@ -571,6 +574,12 @@ const applySessionSettings = (configChanges: any) => {
 
 // 打开工作目录设置弹窗
 const openWorkspaceDialog = () => {
+  // 对话模式下仅触发窗格切换事件，由父组件控制显隐
+  if (props.mode === 'chat') {
+    emit('toggle-workspace-pane');
+    return;
+  }
+  // 创建模式下打开工作目录设置弹窗
   workspaceDialogVisible.value = true;
 };
 

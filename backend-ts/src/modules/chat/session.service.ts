@@ -179,6 +179,12 @@ export class SessionService {
       }
     }
 
+    // 确定工作目录路径：客户端未传值时生成新的默认工作目录
+    let finalWorkspacePath = workspacePath;
+    if (finalWorkspacePath === undefined || finalWorkspacePath === null) {
+      finalWorkspacePath = this.workspaceService.generateWorkspaceDir();
+    }
+
     // 继承角色配置
     const sessionData = {
       userId,
@@ -188,7 +194,7 @@ export class SessionService {
       description: character.description,
       modelId: finalModelId,
       settings: filteredSettings,
-      workspacePath: workspacePath || null,
+      workspacePath: finalWorkspacePath,
     };
 
     const session = await this.sessionRepo.create(sessionData);
@@ -257,6 +263,7 @@ export class SessionService {
 
   /**
    * 更新会话配置
+   * @param data UpdateSessionDto，仅允许更新白名单字段
    */
   async updateSession(sessionId: string, userId: string, data: any) {
     const session = await this.sessionRepo.findById(sessionId);
@@ -264,8 +271,8 @@ export class SessionService {
       throw new Error("Session not found or unauthorized");
     }
 
-    // 只允许更新特定字段
-    const allowedFields = ["modelId", "settings", "title", "workspacePath"];
+    // 只允许更新特定字段（工作目录路径不允许通过此接口更新）
+    const allowedFields = ["modelId", "settings", "title"];
     const updateData: any = {};
 
     for (const key of allowedFields) {
@@ -281,18 +288,22 @@ export class SessionService {
 
   /**
    * 更新会话的工作目录路径
+   * 不允许设置为空，必须提供有效路径
    */
-  async updateSessionWorkspacePath(sessionId: string, userId: string, workspacePath: string | null) {
+  async updateSessionWorkspacePath(sessionId: string, userId: string, workspacePath: string) {
     // 验证会话权限
     const session = await this.sessionRepo.findById(sessionId);
     if (!session || session.userId !== userId) {
       throw new Error("Session not found or unauthorized");
     }
 
-    // 验证路径（如果提供了路径）
-    if (workspacePath) {
-      await this.workspaceService.validateCustomWorkspacePath(workspacePath);
+    // 不允许设置为空
+    if (!workspacePath || workspacePath.trim() === "") {
+      throw new Error("工作目录路径不能为空，如需恢复默认请删除会话后重新创建");
     }
+
+    // 验证路径
+    await this.workspaceService.validateCustomWorkspacePath(workspacePath);
 
     // 更新会话配置
     await this.sessionRepo.update(sessionId, { workspacePath });

@@ -7,7 +7,7 @@
   >
     <div class="space-y-4">
       <p class="text-sm text-gray-600 dark:text-gray-400">
-        设置当前会话的工作目录路径。留空则使用系统默认目录。
+        {{ allowEmpty ? '设置当前会话的工作目录路径。留空则使用系统默认目录。' : '更换当前会话的工作目录路径。' }}
       </p>
       
       <el-form label-position="top">
@@ -25,7 +25,6 @@
         </el-form-item>
         <div class="-mt-4 mb-2 text-xs text-gray-500 dark:text-gray-400">
           <div>• 必须使用绝对路径</div>
-          <div>• 自定义目录不会被自动删除</div>
           <div>• 请确保该目录有读写权限</div>
         </div>
       </el-form>
@@ -47,6 +46,8 @@ import { ElMessage } from 'element-plus';
 const props = defineProps<{
   visible: boolean;
   currentWorkspacePath?: string | null;
+  // 是否允许设置为空（工作目录窗格不允许为空，创建会话时允许）
+  allowEmpty?: boolean;
 }>();
 
 const emit = defineEmits<{
@@ -73,19 +74,26 @@ const handleCancel = () => {
 };
 
 const handleConfirm = () => {
+  const trimmedPath = workspacePath.value.trim();
+
+  // 不允许为空时，强制要求输入路径
+  if (!props.allowEmpty && !trimmedPath) {
+    ElMessage.error('工作目录路径不能为空');
+    return;
+  }
+
   // 如果输入了路径，验证是否为绝对路径
-  if (workspacePath.value.trim()) {
-    const path = workspacePath.value.trim();
+  if (trimmedPath) {
     // Windows 和 Unix 系统的绝对路径检查
-    const isAbsolute = /^[a-zA-Z]:\\/.test(path) || path.startsWith('/');
-    
+    const isAbsolute = /^[a-zA-Z]:\\/.test(trimmedPath) || trimmedPath.startsWith('/');
+
     if (!isAbsolute) {
       ElMessage.error('工作目录必须是绝对路径');
       return;
     }
   }
-  
-  emit('confirm', workspacePath.value.trim() || null);
+
+  emit('confirm', trimmedPath || null);
   visible.value = false;
 };
 

@@ -44,16 +44,8 @@ export class WorkspaceEventsController {
       throw new Error("Session not found or unauthorized");
     }
 
-    // 确定工作目录路径
-    let workspacePath: string;
-    if ((session as any).workspacePath) {
-      workspacePath = this.workspaceService.resolveFilePath("", (session as any).workspacePath);
-    } else {
-      workspacePath = this.workspaceService.getDefaultWorkspaceDir(id);
-    }
-
-    // 确保目录存在
-    await this.workspaceService.ensureDirectoryExists(workspacePath);
+    // 确定工作目录路径（已自动确保目录存在）
+    const workspacePath = this.workspaceService.resolveSessionWorkspaceDir(session);
 
     // 开始监听工作目录
     this.fileWatcherService.startWatching(id, workspacePath);

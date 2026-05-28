@@ -25,11 +25,12 @@
     </div>
 
     <div class="w-full  max-w-200">
-      <ChatInput 
-        v-model:value="inputMessage.content" 
+      <ChatInput
+        v-model:value="inputMessage.content"
         :config="chatInputConfig"
-        @config-change="handleConfigChange" 
-        :buttons="chatInputButtons" 
+        mode="create"
+        @config-change="handleConfigChange"
+        :buttons="chatInputButtons"
         :files="inputMessage.files" 
         :streaming="false"
         @send="sendMessage" 

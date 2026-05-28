@@ -12,6 +12,10 @@
                         class="shrink-0 flex items-center justify-between px-4 py-3 border-b border-gray-200 dark:border-[#2e3035]">
                         <h3 class="text-sm font-semibold text-gray-700 dark:text-[#e8e9ed]">工作目录</h3>
                         <div class="flex items-center gap-2">
+                            <!-- 更换工作目录按钮 -->
+                            <el-tooltip content="更换工作目录" placement="bottom">
+                                <el-button :icon="Switch" circle size="small" @click="changeWorkspacePath" />
+                            </el-tooltip>
                             <!-- 打开文件夹按钮（仅 Electron 环境） -->
                             <el-tooltip v-if="isElectron" content="在文件管理器中打开" placement="bottom">
                                 <el-button :icon="FolderOpened" circle size="small" @click="openInFileManager" />
@@ -115,12 +119,21 @@
             </template>
         </LiteSplitpanes>
     </div>
+
+    <!-- 更换工作目录弹窗 -->
+    <WorkspaceSettingsDialog
+        v-model:visible="workspaceDialogVisible"
+        :current-workspace-path="currentWorkspacePath"
+        :allow-empty="false"
+        @confirm="handleWorkspaceChange"
+    />
 </template>
 
 <script setup lang="ts">
 import { ref, computed, watch, onUnmounted, nextTick } from 'vue';
+import { ElMessage } from 'element-plus';
 import { apiService, type FileChangeEvent } from '@/services/ApiService';
-import { Refresh, Close, FolderOpened } from '@element-plus/icons-vue';
+import { Refresh, Close, FolderOpened, Switch } from '@element-plus/icons-vue';
 import { SwapHorizTwotone as SplitVerticalIcon, SwapVertTwotone as SplitHorizontalIcon } from '@vicons/material';
 import { LoadingOutlined } from '@vicons/antd';
 import { Folder, Document } from '@element-plus/icons-vue';
@@ -128,6 +141,7 @@ import { LiteSplitpanes } from "../ui";
 import { useStorage, useThrottleFn } from '@vueuse/core';
 import { useMarkdown } from '@/composables/useMarkdown';
 import { useHighlight } from '@/composables/useHighlight';
+import WorkspaceSettingsDialog from './chat-input/WorkspaceSettingsDialog.vue';
 
 interface WorkspaceNode {
     name: string;
@@ -159,6 +173,8 @@ const isLoading = ref(false);
 const selectedFile = ref<SelectedFile | null>(null);
 const fileContent = ref('');
 const previewLoading = ref(false);
+const workspaceDialogVisible = ref(false);
+const currentWorkspacePath = ref<string | null>(null);
 const previewError = ref('');
 const expandedKeys = ref<string[]>([]);
 const treeRef = ref();
@@ -726,6 +742,46 @@ async function openInFileManager() {
     }
 }
 
+/**
+ * 更换工作目录路径
+ * 打开工作目录设置弹窗
+ */
+async function changeWorkspacePath() {
+    if (!props.sessionId) return;
+
+    try {
+        // 获取当前工作目录路径
+        const response = await apiService.getWorkspacePath(props.sessionId);
+        currentWorkspacePath.value = response.workspacePath || null;
+        workspaceDialogVisible.value = true;
+    } catch (error: any) {
+        console.error('Failed to get workspace path:', error);
+        // 获取失败也打开弹窗，路径为空
+        currentWorkspacePath.value = null;
+        workspaceDialogVisible.value = true;
+    }
+}
+
+/**
+ * 处理工作目录变更确认
+ */
+async function handleWorkspaceChange(workspacePath: string | null) {
+    if (!props.sessionId || !workspacePath) return;
+
+    try {
+        // 调用 API 更新工作目录路径
+        await apiService.updateSessionWorkspacePath(props.sessionId, workspacePath);
+        ElMessage.success('工作目录已更换');
+
+        // 清空旧树数据并重新加载，确保显示新的工作目录
+        treeData.value = [];
+        expandedKeys.value = [];
+        await loadTree();
+    } catch (error: any) {
+        console.error('Failed to change workspace path:', error);
+        ElMessage.error(error.message || '更换工作目录失败');
+    }
+}
 
 let unsubscribeWatcher: (() => void) | null = null;
 

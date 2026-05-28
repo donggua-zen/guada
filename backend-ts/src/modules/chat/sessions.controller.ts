@@ -16,6 +16,7 @@ import { CurrentUser } from "../auth/current-user.decorator";
 import { SessionService } from "./session.service";
 import { WorkspaceService } from "../../common/services/workspace.service";
 import { SessionEventsService } from "./session-events.service";
+import { UpdateSessionDto } from "./dto/update-session.dto";
 import * as path from 'path';
 import * as fs from 'fs';
 import * as fsPromises from 'fs/promises';
@@ -66,7 +67,7 @@ export class SessionsController {
   @Put("sessions/:id")
   async updateSession(
     @Param("id") id: string,
-    @Body() data: any,
+    @Body() data: UpdateSessionDto,
     @CurrentUser() user: any,
   ) {
     const session = await this.sessionService.updateSession(id, user.id, data);
@@ -86,7 +87,7 @@ export class SessionsController {
   @Put("sessions/:id/workspace-path")
   async updateWorkspacePath(
     @Param("id") id: string,
-    @Body() body: { workspacePath: string | null },
+    @Body() body: { workspacePath: string },
     @CurrentUser() user: any
   ) {
     await this.sessionService.updateSessionWorkspacePath(id, user.id, body.workspacePath);
@@ -162,17 +163,8 @@ export class SessionsController {
       throw new Error("Session not found or unauthorized");
     }
 
-    // 从会话配置中获取自定义路径，或使用默认路径
-    let workspacePath: string;
-    if ((session as any).workspacePath) {
-      workspacePath = path.resolve((session as any).workspacePath);
-      // 验证并创建目录
-      await this.workspaceService.validateCustomWorkspacePath(workspacePath);
-      await this.workspaceService.ensureDirectoryExists(workspacePath);
-    } else {
-      workspacePath = this.workspaceService.getDefaultWorkspaceDir(id);
-      await this.workspaceService.ensureDirectoryExists(workspacePath);
-    }
+    // 解析会话工作目录路径（已自动确保目录存在）
+    const workspacePath = this.workspaceService.resolveSessionWorkspaceDir(session);
 
     return { workspacePath };
   }
@@ -185,15 +177,7 @@ export class SessionsController {
       throw new Error("Session not found or unauthorized");
     }
 
-    let workspacePath: string;
-    if ((session as any).workspacePath) {
-      workspacePath = path.resolve((session as any).workspacePath);
-      await this.workspaceService.validateCustomWorkspacePath(workspacePath);
-      await this.workspaceService.ensureDirectoryExists(workspacePath);
-    } else {
-      workspacePath = this.workspaceService.getDefaultWorkspaceDir(id);
-      await this.workspaceService.ensureDirectoryExists(workspacePath);
-    }
+    const workspacePath = this.workspaceService.resolveSessionWorkspaceDir(session);
 
     const tree = await this.buildDirectoryTree(workspacePath, '', 0, 0);
     return { tree };
@@ -215,16 +199,8 @@ export class SessionsController {
       throw new Error("File path is required");
     }
 
-    // 确定工作目录路径
-    let workspaceDir: string;
-    if ((session as any).workspacePath) {
-      workspaceDir = path.resolve((session as any).workspacePath);
-      await this.workspaceService.validateCustomWorkspacePath(workspaceDir);
-      await this.workspaceService.ensureDirectoryExists(workspaceDir);
-    } else {
-      workspaceDir = this.workspaceService.getDefaultWorkspaceDir(id);
-      await this.workspaceService.ensureDirectoryExists(workspaceDir);
-    }
+    // 确定工作目录路径（已自动确保目录存在）
+    const workspaceDir = this.workspaceService.resolveSessionWorkspaceDir(session);
 
     // 解析文件路径并安全检查
     const resolvedPath = this.workspaceService.resolveFilePath(filePath, workspaceDir);
@@ -283,16 +259,8 @@ export class SessionsController {
       throw new Error("Directory path is required");
     }
 
-    // 确定工作目录路径
-    let workspaceDir: string;
-    if ((session as any).workspacePath) {
-      workspaceDir = path.resolve((session as any).workspacePath);
-      await this.workspaceService.validateCustomWorkspacePath(workspaceDir);
-      await this.workspaceService.ensureDirectoryExists(workspaceDir);
-    } else {
-      workspaceDir = this.workspaceService.getDefaultWorkspaceDir(id);
-      await this.workspaceService.ensureDirectoryExists(workspaceDir);
-    }
+    // 确定工作目录路径（已自动确保目录存在）
+    const workspaceDir = this.workspaceService.resolveSessionWorkspaceDir(session);
 
     // 解析目录路径并安全检查
     const resolvedDirPath = this.workspaceService.resolveFilePath(dirPath, workspaceDir);
@@ -396,16 +364,8 @@ export class SessionsController {
       throw new Error("File path is required");
     }
 
-    // 确定工作目录路径
-    let workspaceDir: string;
-    if ((session as any).workspacePath) {
-      workspaceDir = path.resolve((session as any).workspacePath);
-      await this.workspaceService.validateCustomWorkspacePath(workspaceDir);
-      await this.workspaceService.ensureDirectoryExists(workspaceDir);
-    } else {
-      workspaceDir = this.workspaceService.getDefaultWorkspaceDir(id);
-      await this.workspaceService.ensureDirectoryExists(workspaceDir);
-    }
+    // 确定工作目录路径（已自动确保目录存在）
+    const workspaceDir = this.workspaceService.resolveSessionWorkspaceDir(session);
 
     // 解析文件路径并安全检查
     const resolvedPath = this.workspaceService.resolveFilePath(filePath, workspaceDir);
