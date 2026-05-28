@@ -42,9 +42,9 @@ export class FileService implements OnModuleInit {
   ]);
 
   // 文件大小限制（字节）
-  private readonly MAX_FILE_SIZE = 50 * 1024 * 1024; // 50MB
-  private readonly MAX_IMAGE_SIZE = 20 * 1024 * 1024; // 20MB
-  private readonly MAX_PDF_SIZE = 50 * 1024 * 1024; // 50MB
+  private readonly MAX_FILE_SIZE = 1024 * 1024 * 1024; // 1GB
+  private readonly MAX_IMAGE_SIZE = 1024 * 1024 * 1024; // 1GB
+  private readonly MAX_PDF_SIZE = 1024 * 1024 * 1024; // 1GB
 
   constructor(
     private uploadPathService: UploadPathService,

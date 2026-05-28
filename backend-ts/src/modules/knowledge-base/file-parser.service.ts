@@ -48,9 +48,9 @@ export class FileParserService {
   private readonly WORD_EXTENSIONS = new Set(["docx"]);
 
   // 文件大小限制（字节）
-  private readonly MAX_TEXT_SIZE = 10 * 1024 * 1024; // 10MB
-  private readonly MAX_PDF_SIZE = 50 * 1024 * 1024; // 50MB
-  private readonly MAX_WORD_SIZE = 20 * 1024 * 1024; // 20MB
+  private readonly MAX_TEXT_SIZE = 1024 * 1024 * 1024; // 1GB
+  private readonly MAX_PDF_SIZE = 1024 * 1024 * 1024; // 1GB
+  private readonly MAX_WORD_SIZE = 1024 * 1024 * 1024; // 1GB
 
   /**
    * 检测文件类型
