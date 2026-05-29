@@ -12,7 +12,7 @@ import {
 import * as path from "path";
 import { ChildProcess } from "child_process";
 import * as fs from "fs";
-import { autoUpdater } from "electron-updater";
+// import { autoUpdater } from "electron-updater";
 import log from "electron-log";
 import { startBrowserBridge } from "./browser-bridge";
 import {
@@ -28,6 +28,39 @@ let isBackendStarting = false; // 防止重复启动
 let backendPort: number | null = null; // 记录后端端口
 let browserBridgeInitialized = false; // Browser Bridge 是否已初始化
 let tray: Tray | null = null; // 系统托盘图标
+
+// 检查更新函数（定义在全局作用域，供 IPC 和自动检查共用）
+async function doCheckForUpdates() {
+  try {
+    const currentVersion = app.getVersion();
+    const platform = process.platform === "win32" ? "win" : process.platform === "darwin" ? "mac" : "linux";
+    const apiUrl = `https://ai.dingd.cn/api/check_update?version=${currentVersion}&platform=${platform}`;
+
+    const response = await fetch(apiUrl);
+    if (!response.ok) {
+      throw new Error(`API 请求失败: ${response.status}`);
+    }
+
+    const data: any = await response.json();
+
+    if (data.hasUpdate) {
+      mainWindow?.webContents.send("update-status", {
+        status: "available",
+        info: data,
+      });
+    } else {
+      mainWindow?.webContents.send("update-status", { status: "not-available" });
+    }
+
+    return { success: true, data };
+  } catch (error: any) {
+    mainWindow?.webContents.send("update-status", {
+      status: "error",
+      error: error.message,
+    });
+    return { success: false, error: error.message };
+  }
+}
 
 // 扩展 App 类型以支持退出标记
 interface AppExtended extends Electron.App {
@@ -67,13 +100,11 @@ if (!gotTheLock) {
 // 判断是否为开发模式（根据是否打包，而不是 NODE_ENV）
 const isDev = !app.isPackaged;
 
-// 配置更新
-autoUpdater.autoDownload = false;
-if (isDev) {
-  autoUpdater.forceDevUpdateConfig = true;
-  // 在开发环境下，如果找不到 dev-app-update.yml，我们提供一个默认的占位配置以防止报错
-  // 或者你可以选择在这里直接 return，不执行后续的 checkForUpdate
-}
+// 配置更新（已改为自定义 API 检测，不再使用 electron-updater）
+// autoUpdater.autoDownload = false;
+// if (isDev) {
+//   autoUpdater.forceDevUpdateConfig = true;
+// }
 
 // 获取后端路径
 function getBackendPath(): string {
@@ -622,6 +653,18 @@ function createWindow() {
     mainWindow?.show();
   });
 
+  // 前端加载完成后检查更新
+  mainWindow.webContents.on("did-finish-load", () => {
+    log.info("Frontend loaded, checking for updates...");
+    doCheckForUpdates();
+
+    // 每 6 小时定期检查更新
+    setInterval(() => {
+      log.info("Periodic update check...");
+      doCheckForUpdates();
+    }, 6 * 60 * 60 * 1000);
+  });
+
   // 关闭按钮最小化到托盘
   mainWindow.on("close", (event) => {
     if (!(app as AppExtended).isQuiting) {
@@ -673,7 +716,7 @@ function setupIpcHandlers() {
     } else {
       mainWindow?.maximize();
     }
-  });
+  }); 
 
   ipcMain.on("window-close", () => {
     mainWindow?.close();
@@ -695,36 +738,9 @@ function setupIpcHandlers() {
     }
   });
 
-  // 自动更新相关 IPC
+  // 自动更新相关 IPC（自定义 API 检测）
   ipcMain.handle("check-for-updates", async () => {
-    if (isDev) {
-      console.warn("⚠️  开发环境下请确保根目录存在 dev-app-update.yml 文件");
-      // 开发环境下如果没有配置文件，直接返回不可用，避免抛出 ENOENT 错误
-      try {
-        await autoUpdater.checkForUpdates();
-        return { success: true };
-      } catch (error: any) {
-        if (error.code === "ENOENT") {
-          return { success: false, error: "开发环境未配置 dev-app-update.yml" };
-        }
-        return { success: false, error: error.message };
-      }
-    }
-
-    try {
-      await autoUpdater.checkForUpdates();
-      return { success: true };
-    } catch (error: any) {
-      return { success: false, error: error.message };
-    }
-  });
-
-  ipcMain.handle("start-download-update", () => {
-    autoUpdater.downloadUpdate();
-  });
-
-  ipcMain.on("install-and-restart", () => {
-    autoUpdater.quitAndInstall(false, true);
+    return doCheckForUpdates();
   });
 
   // 显示调试菜单（固定菜单项）
@@ -1222,48 +1238,11 @@ function setupIpcHandlers() {
   });
 }
 
-// 配置更新器事件监听
-function setupAutoUpdater() {
-  autoUpdater.on("checking-for-update", () => {
-    mainWindow?.webContents.send("update-status", { status: "checking" });
-  });
-
-  autoUpdater.on("update-available", (info) => {
-    mainWindow?.webContents.send("update-status", {
-      status: "available",
-      info,
-    });
-  });
-
-  autoUpdater.on("update-not-available", () => {
-    mainWindow?.webContents.send("update-status", { status: "not-available" });
-  });
-
-  autoUpdater.on("download-progress", (progressObj) => {
-    mainWindow?.webContents.send("update-status", {
-      status: "downloading",
-      progress: progressObj.percent,
-    });
-  });
-
-  autoUpdater.on("update-downloaded", () => {
-    mainWindow?.webContents.send("update-status", { status: "downloaded" });
-  });
-
-  autoUpdater.on("error", (err) => {
-    mainWindow?.webContents.send("update-status", {
-      status: "error",
-      error: err.message,
-    });
-  });
-}
-
 // 应用就绪
 app.whenReady().then(async () => {
   try {
     log.info("Application starting...");
     setupIpcHandlers();
-    setupAutoUpdater();
 
     // 启动后端服务
     log.info("Starting backend service...");

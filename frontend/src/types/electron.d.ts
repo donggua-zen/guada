@@ -40,6 +40,13 @@ export interface ElectronAPI {
   
   // 右键菜单
   showTabContextMenu: (params: { tabId: string; isSplitMode: boolean }) => Promise<void>
+
+  // 自动更新相关
+  checkForUpdates: () => Promise<{ success: boolean; data?: any; error?: string }>
+  onUpdateStatus: (callback: (status: any) => void) => void
+
+  // 打开外部链接
+  openExternal: (url: string) => Promise<{ success: boolean; error?: string }>
 }
 
 declare global {
