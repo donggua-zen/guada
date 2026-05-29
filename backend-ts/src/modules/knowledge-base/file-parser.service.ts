@@ -1,7 +1,7 @@
 import { Injectable, Logger } from "@nestjs/common";
 import * as fs from "fs";
 import * as path from "path";
-import PDFParser from "pdf2json";
+import pdfParse = require("pdf-parse");
 import * as mammoth from "mammoth";
 
 @Injectable()
@@ -152,41 +152,29 @@ export class FileParserService {
    * 解析 PDF 文件
    */
   private async parsePdfFile(content: Buffer): Promise<string> {
-    return new Promise((resolve, reject) => {
-      const pdfParser = new (PDFParser as any)(null, 1);
+    try {
+      const parser = new pdfParse.PDFParse({ data: content });
+      const result = await parser.getText();
 
-      pdfParser.on("pdfParser_dataReady", () => {
-        try {
-          const rawText = pdfParser.getRawTextContent();
-          
-          if (!rawText || rawText.trim().length === 0) {
-            this.logger.warn("PDF 解析结果为空，可能是不支持的文件格式、加密文件或扫描件");
-            resolve("");
-            return;
-          }
+      if (!result.text || result.text.trim().length === 0) {
+        this.logger.warn("PDF 解析结果为空，可能是不支持的文件格式、加密文件或扫描件");
+        return "";
+      }
 
-          const cleanedText = rawText
-            .replace(/\r\n/g, "\n")
-            .replace(/\r/g, "\n")
-            .replace(/\n{3,}/g, "\n\n")
-            .trim();
-          
-          this.logger.debug(`PDF 解析成功，提取文本长度: ${cleanedText.length} 字符`);
-          resolve(cleanedText);
-        } catch (error: any) {
-          this.logger.error(`PDF 文本提取失败: ${error.message}`);
-          reject(new Error(`PDF 文本提取失败: ${error.message}`));
-        }
-      });
+      const cleanedText = result.text
+        .replace(/\r\n/g, "\n")
+        .replace(/\r/g, "\n")
+        .replace(/\n{3,}/g, "\n\n")
+        .trim();
 
-      pdfParser.on("pdfParser_dataError", (error: any) => {
-        const errorMsg = error.parserError ? error.parserError.message : error.message;
-        this.logger.error(`PDF 解析失败: ${errorMsg}`);
-        reject(new Error(`PDF 文件解析失败: ${errorMsg}`));
-      });
-
-      pdfParser.parseBuffer(content);
-    });
+      this.logger.debug(
+        `PDF 解析成功，共 ${result.total} 页，提取文本长度: ${cleanedText.length} 字符`,
+      );
+      return cleanedText;
+    } catch (error: any) {
+      this.logger.error(`PDF 解析失败: ${error.message}`);
+      throw new Error(`PDF 文件解析失败: ${error.message}`);
+    }
   }
 
   /**
