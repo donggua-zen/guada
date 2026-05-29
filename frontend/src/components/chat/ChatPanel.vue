@@ -10,7 +10,7 @@
         :auto-scroll="needScrollToBottom" @scroll="handleScroll">
         <div class="px-5 max-w-205 mx-auto">
           <MessageItem v-for="(message, index) in activeMessages" :key="message.id" :message="message"
-            v-memo="[message.id, message.contents, message.currentTurnsId, message.state?.isStreaming, message.state?.isThinking, lastUserMessageIndex]"
+            v-memo="[message.id, message.contents, message.currentTurnsId, message.state?.isStreaming, message.state?.isThinking, activeMessages.length]"
             :avatar="message.role == 'user' ? userAvater : currentSession?.avatarUrl"
             :is-last="index === activeMessages.length - 1"
             :allow-generate="!isStreaming && index === lastUserMessageIndex" @delete="deleteMessage" @edit="editMessage"
