@@ -341,6 +341,17 @@ export class BotInstanceManager implements OnModuleInit, OnApplicationShutdown {
   }
 
   /**
+   * 获取机器人登录二维码 URL
+   */
+  getQrCodeUrl(botId: string): string | null {
+    const instance = this.botInstances.get(botId);
+    if (!instance) {
+      return null;
+    }
+    return instance.adapter.getQrCodeUrl?.() ?? null;
+  }
+
+  /**
    * 调度重连任务
    */
   private scheduleReconnect(botId: string, config: BotConfig, lastError: string): void {

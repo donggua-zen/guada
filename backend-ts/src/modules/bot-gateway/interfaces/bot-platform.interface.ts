@@ -18,27 +18,10 @@ export interface BotMessage {
   messageType: 'text' | 'image' | 'voice' | 'file' | 'mixed';
   /** 消息来源类型 */
   sourceType?: 'private' | 'group' | 'channel';
-  /** 附件信息(图片/文件等) */
-  attachments?: BotAttachment[];
   /** 原始平台事件对象(用于扩展) */
   rawEvent?: any;
   /** 时间戳 */
   timestamp: Date;
-}
-
-/**
- * 附件信息
- */
-export interface BotAttachment {
-  type: 'image' | 'file' | 'voice';
-  url?: string;
-  fileId?: string;
-  fileName?: string;
-  fileSize?: number;
-  /** 本地临时文件路径（适配器预处理后使用） */
-  localPath?: string;
-  /** 企业微信图片加密密钥（可选，已废弃，由适配器层处理） */
-  aesKey?: string;
 }
 
 /**
@@ -49,8 +32,6 @@ export interface BotResponse {
   conversationId: string;
   /** 回复内容 */
   content: string;
-  /** 附件(可选) */
-  attachments?: BotAttachment[];
   /** 引用消息ID(可选,用于回复特定消息) */
   replyToMessageId?: string;
   /** 消息来源类型(从BotMessage传递过来) */
@@ -77,7 +58,7 @@ export interface BotConfig {
   /** 机器人ID */
   id: string;
   /** 平台类型 */
-  platform: 'qq' | 'wechat' | 'discord' | 'lark' | 'wecom' | 'mock'; // TODO: 待添加 'wechat-personal'
+  platform: 'qq' | 'wechat' | 'discord' | 'lark' | 'wecom' | 'wechat-personal' | 'mock';
   /** 机器人名称 */
   name: string;
   /** 平台特定配置(包含认证信息和其他平台相关配置) */
@@ -221,6 +202,24 @@ export interface IBotPlatform {
    * 获取当前连接状态
    */
   getStatus(): BotStatus;
+
+  /**
+   * 获取登录二维码 URL（仅扫码登录平台实现，如微信个人号）
+   */
+  getQrCodeUrl?(): string | null;
+
+  /**
+   * 退出登录并清除平台会话（仅扫码登录平台实现）
+   */
+  logout?(): Promise<void>;
+
+  /**
+   * 下载消息附件到指定目录
+   * @param message 机器人消息（包含 rawEvent 和 attachments）
+   * @param saveDir 保存目录的绝对路径
+   * @returns 下载后的本地路径列表，失败返回空数组
+   */
+  downloadAttachment?(message: BotMessage, saveDir: string): Promise<string[]>;
 
   /**
    * 优雅关闭(断开连接、清理资源)

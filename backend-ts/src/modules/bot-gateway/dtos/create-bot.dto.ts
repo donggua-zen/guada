@@ -5,7 +5,7 @@ export class CreateBotDto {
   id: string;
 
   @IsString()
-  platform: 'qq' | 'wechat' | 'discord';
+  platform: 'qq' | 'wechat' | 'discord' | 'lark' | 'wecom' | 'wechat-personal';
 
   @IsString()
   name: string;

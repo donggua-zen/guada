@@ -110,6 +110,16 @@ export abstract class BaseBotAdapter implements IBotPlatform {
   }
 
   /**
+   * 下载消息附件到指定目录（可选实现，默认返回空数组）
+   * @param message 机器人消息
+   * @param saveDir 保存目录的绝对路径
+   * @returns 下载后的本地路径列表
+   */
+  async downloadAttachment(_message: BotMessage, _saveDir: string): Promise<string[]> {
+    return [];
+  }
+
+  /**
    * 完成所有 Subject（供子类在 shutdown 时调用）
    */
   protected completeSubjects(): void {

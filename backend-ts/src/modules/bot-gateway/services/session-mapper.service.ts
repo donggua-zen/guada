@@ -1,4 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
+import * as fs from 'fs';
+import * as path from 'path';
 import { PrismaService } from '../../../common/database/prisma.service';
 import { MessageRepository } from '../../../common/database/message.repository';
 import { SessionRepository } from '../../../common/database/session.repository';
@@ -6,6 +8,7 @@ import { SettingsStorage } from '../../../common/utils/settings-storage.util';
 import { SG_MODELS, SK_MOD_CHAT } from '../../../constants/settings.constants';
 import { KnowledgeBaseRepository } from '../../../common/database/knowledge-base.repository';
 import { UploadPathService } from '../../../common/services/upload-path.service';
+import { WorkspaceService } from '../../../common/services/workspace.service';
 import { appendResetMarker } from '../utils/external-id';
 import { TempFileManager } from './temp-file-manager.service';
 
@@ -25,6 +28,7 @@ export class SessionMapperService {
     private settingsStorage: SettingsStorage,
     private kbRepo: KnowledgeBaseRepository,
     private uploadPathService: UploadPathService,
+    private workspaceService: WorkspaceService,
     private tempFileManager: TempFileManager,
   ) { }
 
@@ -247,13 +251,6 @@ export class SessionMapperService {
     sessionId: string,
     content: string,
     knowledgeBaseIds?: string[],
-    attachments?: Array<{
-      type: 'image' | 'file' | 'voice' | 'video';
-      url?: string;
-      fileId?: string;
-      fileName?: string;
-      fileSize?: number;
-    }>,
   ): Promise<any> {
     const message = await this.messageRepo.create({
       sessionId,
@@ -284,157 +281,7 @@ export class SessionMapperService {
       },
     });
 
-    // 处理附件：将外部平台的附件转换为内部 File 记录
-    if (attachments && attachments.length > 0) {
-      await this.saveAttachments(message.id, sessionId, attachments);
-    }
-
     return message;
-  }
-
-  /**
-   * 保存附件到数据库
-   */
-  private async saveAttachments(
-    messageId: string,
-    sessionId: string,
-    attachments: Array<{
-      type: 'image' | 'file' | 'voice' | 'video';
-      localPath?: string; // 本地临时文件路径（适配器预处理后）
-      url?: string; // 保留以兼容旧逻辑
-      fileId?: string;
-      fileName?: string;
-      fileSize?: number;
-    }>,
-  ): Promise<void> {
-    const fs = await import('fs');
-    const path = await import('path');
-    const crypto = await import('crypto');
-
-    for (const att of attachments) {
-      try {
-        let buffer: Buffer;
-        let contentHash: string;
-
-        // 优先使用本地临时文件（适配器已预处理）
-        if (att.localPath) {
-          // 从临时文件读取
-          buffer = await fs.promises.readFile(att.localPath);
-          
-          // 计算哈希
-          contentHash = crypto.createHash('md5').update(buffer).digest('hex');
-          
-          // 注销临时文件（已处理，不再需要自动清理）
-          this.tempFileManager.unregisterTempFile(att.localPath);
-          
-          this.logger.debug(`Read attachment from temp file: ${att.localPath}`);
-        } else if (att.url) {
-          // 兼容旧逻辑：如果只有URL，则跳过（不应该发生）
-          this.logger.warn('Attachment has URL but no localPath, skipping');
-          continue;
-        } else {
-          this.logger.warn('Attachment has neither localPath nor URL, skipping');
-          continue;
-        }
-
-        // 确定文件类型
-        let fileType = 'text';
-        if (att.type === 'image') {
-          fileType = 'image';
-        } else if (att.type === 'voice' || att.type === 'video') {
-          fileType = 'binary';
-        }
-
-        // 提取文件扩展名
-        const fileExt = att.fileName ? att.fileName.split('.').pop()?.toLowerCase() || '' : '';
-
-        // 生成安全的文件名
-        const safeFileName = `${messageId}_${contentHash}${fileExt ? '.' + fileExt : ''}`;
-
-        // 根据文件类型选择子目录
-        let subDir: string;
-        if (fileType === 'image') {
-          subDir = 'images';
-        } else {
-          subDir = 'files';
-        }
-
-        // 使用 UploadPathService 获取存储路径
-        const storagePath = this.uploadPathService.getStoragePath(subDir, safeFileName);
-        const physicalPath = this.uploadPathService.toPhysicalPath(storagePath);
-        const uploadDir = path.dirname(physicalPath);
-
-        // 确保目录存在
-        if (!fs.existsSync(uploadDir)) {
-          fs.mkdirSync(uploadDir, { recursive: true });
-        }
-
-        // 保存到正式目录
-        fs.writeFileSync(physicalPath, buffer);
-
-        // 如果是图片，生成预览图
-        let previewUrl: string | undefined;
-        if (fileType === 'image') {
-          previewUrl = await this.generatePreview(buffer, safeFileName);
-        }
-
-        // 创建 File 记录
-        await this.prisma.file.create({
-          data: {
-            fileName: att.fileName || `unknown${fileExt ? '.' + fileExt : ''}`,
-            displayName: att.fileName || 'Attachment',
-            fileSize: att.fileSize || buffer.length,
-            fileType,
-            fileExtension: fileExt,
-            url: storagePath,
-            previewUrl,
-            contentHash,
-            sessionId,
-            messageId,
-            isPublic: false,
-            fileMetadata: {
-              source: 'bot-attachment',
-              originalFileId: att.fileId,
-            },
-          },
-        });
-
-        this.logger.log(`Saved attachment: ${att.fileName || 'unknown'}`);
-      } catch (error: any) {
-        this.logger.error(`Failed to save attachment: ${error.message}`);
-      }
-    }
-  }
-
-  /**
-   * 生成图片预览
-   */
-  private async generatePreview(buffer: Buffer, fileName: string): Promise<string | undefined> {
-    try {
-      const fs = await import('fs');
-      const path = await import('path');
-      const sharp = (await import('sharp')).default;
-      
-      const previewSubDir = 'previews';
-      const previewStoragePath = this.uploadPathService.getStoragePath(previewSubDir, fileName);
-      const previewPhysicalPath = this.uploadPathService.toPhysicalPath(previewStoragePath);
-      const previewDir = path.dirname(previewPhysicalPath);
-
-      if (!fs.existsSync(previewDir)) {
-        fs.mkdirSync(previewDir, { recursive: true });
-      }
-
-      await sharp(buffer)
-        .resize(256, 256, { fit: 'inside', withoutEnlargement: true })
-        .jpeg({ quality: 75 })
-        .toFile(previewPhysicalPath);
-
-      this.logger.log(`Generated preview for image: ${fileName}`);
-      return previewStoragePath;
-    } catch (error: any) {
-      this.logger.error(`Failed to generate preview: ${error.message}`);
-      return undefined;
-    }
   }
 
   /**

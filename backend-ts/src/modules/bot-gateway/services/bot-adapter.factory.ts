@@ -12,8 +12,7 @@ import { DiscordBotAdapter } from '../adapters/discord-bot.adapter';
 import { WeComAiBotAdapter } from '../adapters/wecom-aibot.adapter';
 // TODO: 企业微信应用消息适配器（已隐藏，使用智能机器人长连接模式）
 // import { WeComAppBotAdapter } from '../adapters/wecom-app-bot.adapter';
-// TODO: 待实现微信个人号适配器（基于 iLink Bot API）
-// import { WeChatPersonalBotAdapter } from '../adapters/wechat-personal-bot.adapter';
+import { WechatPersonalBotAdapter } from '../adapters/wechat-personal-bot.adapter';
 import { MockBotAdapter } from '../adapters/mock-bot.adapter';
 import { PlatformUtilsService } from './platform-utils.service';
 
@@ -51,9 +50,8 @@ export class BotAdapterFactory implements IBotAdapterFactory {
       // TODO: 企业微信应用消息适配器（已隐藏）
       // case 'wecom-app':
       //   return new WeComAppBotAdapter(this.platformUtils);
-      // TODO: 待实现微信个人号适配器
-      // case 'wechat-personal':
-      //   return new WeChatPersonalBotAdapter(this.platformUtils);
+      case 'wechat-personal':
+        return new WechatPersonalBotAdapter(this.platformUtils);
       default:
         throw new Error(`Unsupported bot platform: ${platform}`);
     }

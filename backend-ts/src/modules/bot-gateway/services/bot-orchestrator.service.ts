@@ -1,8 +1,15 @@
-import { Injectable, Logger } from '@nestjs/common';
-import { IBotPlatform, BotMessage, BotConfig } from '../interfaces/bot-platform.interface';
-import { AgentEngine } from '../../chat/agent-engine.service';
-import { SessionMapperService } from './session-mapper.service';
-import { buildExternalId } from '../utils/external-id';
+import { Injectable, Logger } from "@nestjs/common";
+import * as fs from "fs";
+import * as path from "path";
+import {
+  IBotPlatform,
+  BotMessage,
+  BotConfig,
+} from "../interfaces/bot-platform.interface";
+import { AgentEngine } from "../../chat/agent-engine.service";
+import { SessionMapperService } from "./session-mapper.service";
+import { WorkspaceService } from "../../../common/services/workspace.service";
+import { buildExternalId } from "../utils/external-id";
 
 /**
  * 机器人消息编排器
@@ -12,25 +19,29 @@ import { buildExternalId } from '../utils/external-id';
  * 2. 创建/获取会话
  * 3. 调用 AgentEngine 生成回复
  * 4. 发送回复到外部平台
- * 
+ *
  * 注意: 本服务不直接订阅适配器事件,由 BotInstanceManager 负责监听并转发
  */
 @Injectable()
 export class BotOrchestrator {
   private readonly logger = new Logger(BotOrchestrator.name);
-  private messageQueues: Map<string, { messages: BotMessage[]; timer?: NodeJS.Timeout }> = new Map();
+  private messageQueues: Map<
+    string,
+    { messages: BotMessage[]; timer?: NodeJS.Timeout }
+  > = new Map();
   private processingSessions: Set<string> = new Set();
-  private readonly MERGE_WINDOW_MS = 1500; // 1.5秒合并窗口
+  private readonly MERGE_WINDOW_MS = 3000; // 3秒合并窗口
   private readonly MAX_QUEUE_LENGTH = 10; // 最大缓冲消息数
 
   constructor(
     private agentEngine: AgentEngine,
     private sessionMapper: SessionMapperService,
-  ) { }
+    private workspaceService: WorkspaceService,
+  ) {}
 
   /**
    * 将消息加入缓冲队列(唯一对外暴露的方法)
-   * 
+   *
    * @param botId 机器人ID
    * @param message 机器人消息
    * @param config 机器人配置(由调用者传入,避免反向依赖)
@@ -42,11 +53,10 @@ export class BotOrchestrator {
     config: BotConfig,
     adapter: IBotPlatform,
   ): Promise<void> {
-
     // 使用 externalId 作为队列 Key，确保同一会话的消息被合并
-    const platform = config.platform || 'qq';
-    const isGroupChat = message.sourceType === 'group';
-    const type = isGroupChat ? 'group' : 'private';
+    const platform = config.platform || "qq";
+    const isGroupChat = message.sourceType === "group";
+    const type = isGroupChat ? "group" : "private";
     const nativeId = isGroupChat ? message.conversationId : message.senderId;
     const externalId = buildExternalId(platform, type, nativeId);
     const queueKey = `${botId}:${externalId}`;
@@ -60,7 +70,9 @@ export class BotOrchestrator {
     // 队列长度保护：如果超过上限，丢弃最旧的消息
     if (queue.messages.length >= this.MAX_QUEUE_LENGTH) {
       const droppedMsg = queue.messages.shift();
-      this.logger.warn(`Queue overflow for ${queueKey}, dropped oldest message: ${droppedMsg?.messageId}`);
+      this.logger.warn(
+        `Queue overflow for ${queueKey}, dropped oldest message: ${droppedMsg?.messageId}`,
+      );
     }
 
     queue.messages.push(message);
@@ -71,20 +83,21 @@ export class BotOrchestrator {
       return;
     }
 
-    // 如果会话空闲，设置合并窗口
-    if (!queue.timer) {
-      queue.timer = setTimeout(async () => {
-        await this.flushQueue(queueKey, botId, config, adapter);
-      }, this.MERGE_WINDOW_MS);
+    // 防抖：每次收到消息重置定时器，直到指定时间没收到消息才合并
+    if (queue.timer) {
+      clearTimeout(queue.timer);
     }
+    queue.timer = setTimeout(async () => {
+      await this.flushQueue(queueKey, botId, config, adapter);
+    }, this.MERGE_WINDOW_MS);
   }
 
   /**
    * 刷新队列，合并并处理消息
    */
   private async flushQueue(
-    queueKey: string, 
-    botId: string, 
+    queueKey: string,
+    botId: string,
     config: BotConfig,
     adapter: IBotPlatform,
   ): Promise<void> {
@@ -101,22 +114,7 @@ export class BotOrchestrator {
     queue.timer = undefined;
 
     try {
-      // 合并消息内容
-      const mergedContent = messagesToProcess.map(m => m.content).join('\n\n');
-      const firstMessage = messagesToProcess[0];
-
-      // 合并附件
-      const allAttachments = messagesToProcess.flatMap(m => m.attachments || []);
-
-      // 创建合并后的虚拟消息对象用于后续处理
-      const mergedMessage: BotMessage = {
-        ...firstMessage,
-        content: mergedContent,
-        attachments: allAttachments.length > 0 ? allAttachments : undefined,
-        messageId: firstMessage.messageId, // 使用第一条消息的 ID 作为引用
-      };
-
-      await this.handleIncomingMessage(botId, mergedMessage, config, adapter);
+      await this.handleIncomingMessage(botId, messagesToProcess, config, adapter);
     } catch (error: any) {
       this.logger.error(`Failed to process merged messages: ${error.message}`);
     } finally {
@@ -136,31 +134,37 @@ export class BotOrchestrator {
    */
   private async handleIncomingMessage(
     botId: string,
-    message: BotMessage,
+    message: BotMessage | BotMessage[],
     config: BotConfig,
     adapter: IBotPlatform,
   ): Promise<void> {
+    // 统一处理为数组
+    const messages = Array.isArray(message) ? message : [message];
+    const firstMessage = messages[0];
+
     try {
       this.logger.log(
-        `Received message from ${message.senderId}: ${message.content}`,
+        `Received message from ${firstMessage.senderId}: ${firstMessage.content}`,
       );
 
       // 1. 确定会话类型和ID
-      const platform = config.platform || 'qq';
-      const isGroupChat = message.sourceType === 'group';
-      const type = isGroupChat ? 'group' : 'private';
+      const platform = config.platform || "qq";
+      const isGroupChat = firstMessage.sourceType === "group";
+      const type = isGroupChat ? "group" : "private";
 
       // nativeId: 私聊=发送者ID, 群聊=群ID
       const nativeId = isGroupChat
-        ? message.conversationId  // 群聊使用群ID
-        : message.senderId;        // 私聊使用用户ID
+        ? firstMessage.conversationId // 群聊使用群ID
+        : firstMessage.senderId; // 私聊使用用户ID
 
       // 2. 组装 externalId(由调用者决定隔离策略)
       const externalId = buildExternalId(platform, type, nativeId);
 
       // 3. 验证配置
       if (!config.defaultCharacterId) {
-        this.logger.error(`Bot config or defaultCharacterId not found: ${botId}`);
+        this.logger.error(
+          `Bot config or defaultCharacterId not found: ${botId}`,
+        );
         return;
       }
 
@@ -170,69 +174,117 @@ export class BotOrchestrator {
         externalId,
         platform,
         config.defaultCharacterId,
-        config.defaultModelId,  // 传递 defaultModelId，避免内部重复查询
+        config.defaultModelId, // 传递 defaultModelId，避免内部重复查询
       );
 
       this.logger.log(
-        `Using session: ${session.id}, externalId: ${session.externalId}`
+        `Using session: ${session.id}, externalId: ${session.externalId}`,
       );
+
+      // 4.5 下载附件到工作目录（循环处理所有消息的附件）
+      let attachmentText = "";
+      if (adapter.downloadAttachment) {
+        try {
+          // 兼容旧数据：如果会话没有 workspacePath，使用默认工作目录
+          const workspacePath =
+            session.workspacePath ||
+            this.workspaceService.getDefaultWorkspaceDir(session.id);
+          const destDir = path.join(workspacePath, "files");
+          await fs.promises.mkdir(destDir, { recursive: true });
+
+          // 并行下载所有消息的附件
+          const downloadResults = await Promise.all(
+            messages.map(async (msg) => {
+              try {
+                return await adapter.downloadAttachment!(msg, destDir);
+              } catch (error: any) {
+                this.logger.error(
+                  `Failed to download attachment for message ${msg.messageId}: ${error.message}`,
+                );
+                return [];
+              }
+            }),
+          );
+
+          for (const downloadedPaths of downloadResults) {
+            for (const downloadedPath of downloadedPaths) {
+              const relativePath = path
+                .relative(workspacePath, downloadedPath)
+                .replace(/\\/g, "/");
+              attachmentText += `[上传了文件: ${relativePath}]\n`;
+            }
+          }
+        } catch (error: any) {
+          this.logger.error(`Failed to download attachments: ${error.message}`);
+        }
+      }
+
+      // 5. 合并消息内容
+      const mergedContent = messages.map((m) => m.content).join("\n\n");
 
       const capabilities = adapter.getCapabilities();
 
-      // 5. 创建用户消息记录
+      // 6. 创建用户消息记录
       this.logger.log(
-        `Creating user message with knowledgeBaseIds: ${JSON.stringify(config.knowledgeBaseIds)}`
+        `Creating user message with knowledgeBaseIds: ${JSON.stringify(config.knowledgeBaseIds)}`,
       );
 
       const userMessage = await this.sessionMapper.createUserMessage(
         session.id,
-        message.content,
+        attachmentText
+          ? `${mergedContent}\n\n${attachmentText.trim()}`
+          : mergedContent,
         config.knowledgeBaseIds,
-        message.attachments,  // 传递附件信息
       );
 
-      // 6. 调用 AgentEngine 获取流式迭代器（直接传入 session 对象，避免重复查询）
+      // 7. 调用 AgentEngine 获取流式迭代器（直接传入 session 对象，避免重复查询）
       const iterator = this.agentEngine.completions(
         session,
         userMessage.id,
-        'overwrite',
+        "overwrite",
       );
 
-      // 7. 根据平台能力选择回复方式
+      // 8. 根据平台能力选择回复方式
       if (capabilities.supportsStreaming && adapter.sendStreamReply) {
         // 支持流式：边生成边发送
-        await this.handleStreamingReply(adapter, message, iterator);
+        await this.handleStreamingReply(adapter, firstMessage, iterator);
       } else {
         // 不支持流式：收集完整回复后发送
-        await this.handleNormalReply(adapter, message, iterator);
+        await this.handleNormalReply(adapter, firstMessage, iterator);
       }
     } catch (error: any) {
-      this.logger.error(`Failed to process message: ${error.message}`, error.stack);
+      this.logger.error(
+        `Failed to process message: ${error.message}`,
+        error.stack,
+      );
 
       // 向用户发送原始错误消息
       try {
         const capabilities = adapter.getCapabilities();
 
-          // 优先使用流式回复（如果平台支持）
-          if (capabilities.supportsStreaming && adapter.sendStreamReply) {
-            await adapter.sendStreamReply({
-              conversationId: message.conversationId,
+        // 优先使用流式回复（如果平台支持）
+        if (capabilities.supportsStreaming && adapter.sendStreamReply) {
+          await adapter.sendStreamReply(
+            {
+              conversationId: firstMessage.conversationId,
               content: error.message,
-              replyToMessageId: message.messageId,
-              sourceType: message.sourceType,
-              rawFrame: message.rawEvent,
-            }, { finish: true });
-          } else {
-            await adapter.sendMessage({
-              conversationId: message.conversationId,
-              content: error.message,
-              replyToMessageId: message.messageId,
-              sourceType: message.sourceType,
-              rawFrame: message.rawEvent,
-            });
-          }
+              replyToMessageId: firstMessage.messageId,
+              sourceType: firstMessage.sourceType,
+              rawFrame: firstMessage.rawEvent,
+            },
+            { finish: true },
+          );
+        } else {
+          await adapter.sendMessage({
+            conversationId: firstMessage.conversationId,
+            content: error.message,
+            replyToMessageId: firstMessage.messageId,
+            sourceType: firstMessage.sourceType,
+            rawFrame: firstMessage.rawEvent,
+          });
+        }
 
-        this.logger.log(`Sent error message to ${message.senderId}`);
+        this.logger.log(`Sent error message to ${firstMessage.senderId}`);
       } catch (sendError: any) {
         this.logger.error(`Failed to send error message: ${sendError.message}`);
       }
@@ -241,7 +293,7 @@ export class BotOrchestrator {
 
   /**
    * 处理流式回复（边生成边发送）
-   * 
+   *
    * 注意：企业微信智能机器人的流式回复机制是“更新”而非“追加”
    * - 使用相同 streamId 会替换消息内容
    * - 因此我们需要累积内容后，定期更新整条消息
@@ -252,45 +304,51 @@ export class BotOrchestrator {
     iterator: AsyncGenerator<any>,
   ): Promise<void> {
     const streamId = this.generateStreamId();
-    let accumulatedContent = '';
+    let accumulatedContent = "";
     let lastUpdateTime = Date.now();
     const UPDATE_INTERVAL = 500; // 每 500ms 更新一次，避免频繁请求
 
     try {
       for await (const chunk of iterator) {
         // AgentService 返回的 type: "text" | "think" | "finish" | "tool_call" | "tool_calls_response"
-        if (chunk.type === 'text' && chunk.msg) {
+        if (chunk.type === "text" && chunk.msg) {
           accumulatedContent += chunk.msg;
 
           const now = Date.now();
           // 定期更新消息内容（避免过于频繁的网络请求）
           if (now - lastUpdateTime >= UPDATE_INTERVAL) {
-            await adapter.sendStreamReply({
-              conversationId: message.conversationId,
-              content: accumulatedContent,
-              replyToMessageId: message.messageId,
-              sourceType: message.sourceType,
-              rawFrame: message.rawEvent,
-            }, {
-              streamId,
-              finish: false,  // 还未完成
-            });
+            await adapter.sendStreamReply(
+              {
+                conversationId: message.conversationId,
+                content: accumulatedContent,
+                replyToMessageId: message.messageId,
+                sourceType: message.sourceType,
+                rawFrame: message.rawEvent,
+              },
+              {
+                streamId,
+                finish: false, // 还未完成
+              },
+            );
             lastUpdateTime = now;
           }
         }
       }
 
       // 发送最终完整内容（finish=true）
-      await adapter.sendStreamReply({
-        conversationId: message.conversationId,
-        content: accumulatedContent,
-        replyToMessageId: message.messageId,
-        sourceType: message.sourceType,
-        rawFrame: message.rawEvent,
-      }, {
-        streamId,
-        finish: true,  // 完成
-      });
+      await adapter.sendStreamReply(
+        {
+          conversationId: message.conversationId,
+          content: accumulatedContent,
+          replyToMessageId: message.messageId,
+          sourceType: message.sourceType,
+          rawFrame: message.rawEvent,
+        },
+        {
+          streamId,
+          finish: true, // 完成
+        },
+      );
 
       this.logger.log(`Replied to ${message.senderId} via streaming`);
     } catch (error: any) {
@@ -309,9 +367,9 @@ export class BotOrchestrator {
   ): Promise<void> {
     try {
       // 收集完整回复
-      let fullReply = '';
+      let fullReply = "";
       for await (const chunk of iterator) {
-        if (chunk.type === 'text' && chunk.msg) {
+        if (chunk.type === "text" && chunk.msg) {
           fullReply += chunk.msg;
         }
       }
@@ -319,7 +377,7 @@ export class BotOrchestrator {
       // 一次性发送完整回复
       await adapter.sendMessage({
         conversationId: message.conversationId,
-        content: fullReply || '抱歉,我暂时无法回复。',
+        content: fullReply || "抱歉,我暂时无法回复。",
         replyToMessageId: message.messageId,
         sourceType: message.sourceType,
         rawFrame: message.rawEvent,
@@ -327,7 +385,7 @@ export class BotOrchestrator {
 
       this.logger.log(`Replied to ${message.senderId}`);
     } catch (error: any) {
-      this.logger.error(`Failed to send normal reply: ${error.message}`); 
+      this.logger.error(`Failed to send normal reply: ${error.message}`);
       throw error;
     }
   }
@@ -353,7 +411,7 @@ export class BotOrchestrator {
       }
     });
 
-    keysToDelete.forEach(key => {
+    keysToDelete.forEach((key) => {
       this.messageQueues.delete(key);
       this.processingSessions.delete(key);
     });
@@ -372,6 +430,6 @@ export class BotOrchestrator {
     });
     this.messageQueues.clear();
     this.processingSessions.clear();
-    this.logger.log('Bot orchestrator cleaned up');
+    this.logger.log("Bot orchestrator cleaned up");
   }
 }
