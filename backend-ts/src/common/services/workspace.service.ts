@@ -78,10 +78,11 @@ export class WorkspaceService {
 
   /**
    * 生成新命名规则的默认工作目录名称
-   * 格式：WORK-YYYY-MM-DD-[四位随机字符]
+   * 格式：{prefix}-YYYY-MM-DD-[四位随机字符]
+   * @param prefix 前缀，默认为 'WORK'
    * @returns 工作目录名称
    */
-  private generateWorkspaceDirName(): string {
+  private generateWorkspaceDirName(prefix: string = 'WORK'): string {
     const now = new Date();
     const year = now.getFullYear();
     const month = String(now.getMonth() + 1).padStart(2, '0');
@@ -92,23 +93,24 @@ export class WorkspaceService {
     for (let i = 0; i < 4; i++) {
       randomCode += chars.charAt(Math.floor(Math.random() * chars.length));
     }
-    return `WORK-${year}-${month}-${day}-${randomCode}`;
+    return `${prefix}-${year}-${month}-${day}-${randomCode}`;
   }
 
   /**
    * 生成新的工作目录路径（用于创建新会话时分配默认工作目录）
-   * 命名规则：WORK-YYYY-MM-DD-[四位随机字符防冲突]
+   * 命名规则：{prefix}-YYYY-MM-DD-[四位随机字符防冲突]
    * 会自动检测目录名冲突并创建目录
+   * @param prefix 前缀，默认为 'WORK'
    * @returns 新生成的工作目录绝对路径
    */
-  generateWorkspaceDir(): string {
+  generateWorkspaceDir(prefix: string = 'WORK'): string {
     const baseDir = this.getEffectiveBaseDir();
     const resolvedBaseDir = path.resolve(baseDir);
 
     let attempts = 0;
     const maxAttempts = 100;
     while (attempts < maxAttempts) {
-      const dirName = this.generateWorkspaceDirName();
+      const dirName = this.generateWorkspaceDirName(prefix);
       const sessionDir = path.resolve(baseDir, dirName);
 
       // 路径安全检查
@@ -131,8 +133,8 @@ export class WorkspaceService {
   }
 
   /**
-   * 为会话生成默认工作目录路径
-   * @deprecated 新会话请使用 generateWorkspaceDir()，已有会话兼容保留
+   * 获取指定会话的默认工作目录路径
+   * 命名规则：直接使用 sessionId 作为目录名
    * @param sessionId 会话 ID
    * @returns 默认工作目录的绝对路径
    */
