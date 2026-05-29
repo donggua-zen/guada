@@ -1375,10 +1375,23 @@ class ApiService {
   }
 
   /**
-   * 获取机器人登录二维码
+   * 获取机器人登录二维码状态
+   * @returns status: 'logged_in' | 'qr_ready' | 'pending' | 'unavailable'
    */
-  async fetchBotQrCode(id: string): Promise<{ qrCodeUrl: string }> {
+  async fetchBotQrCode(id: string): Promise<
+    | { status: 'qr_ready'; qrCodeUrl: string }
+    | { status: 'logged_in' | 'pending' | 'unavailable'; message: string }
+  > {
     return await this._request(`/bot-admin/instances/${id}/qr`);
+  }
+
+  /**
+   * 退出机器人登录
+   */
+  async logoutBot(id: string): Promise<{ success: boolean; message: string }> {
+    return await this._request(`/bot-admin/instances/${id}/logout`, {
+      method: 'POST',
+    });
   }
 
   /**

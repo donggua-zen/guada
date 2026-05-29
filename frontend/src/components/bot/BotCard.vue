@@ -5,12 +5,14 @@
     <div class="relative z-10 flex flex-col h-full">
       <!-- 头部：平台图标 + 名称 + 开关 -->
       <div class="flex items-start gap-3">
-        <div class="w-11 h-11 shrink-0 flex items-center justify-center bg-gray-50 dark:bg-[#2a2c30] rounded-md overflow-hidden">
+        <div
+          class="w-11 h-11 shrink-0 flex items-center justify-center bg-gray-50 dark:bg-[#2a2c30] rounded-md overflow-hidden">
           <img :src="getPlatformAvatar(bot.platform)" :alt="getPlatformName(bot.platform)"
             class="w-full h-full object-contain p-1" @error="handleImageError" />
         </div>
         <div class="flex-1 min-w-0">
-          <div class="font-medium text-base text-gray-900 dark:text-[#e8e9ed] truncate" :title="bot.name">{{ bot.name }}</div>
+          <div class="font-medium text-base text-gray-900 dark:text-[#e8e9ed] truncate" :title="bot.name">{{ bot.name }}
+          </div>
           <div class="text-xs text-gray-500 dark:text-[#8b8d95] mt-1">{{ getPlatformName(bot.platform) }}</div>
         </div>
         <!-- 启用开关 -->
@@ -32,27 +34,83 @@
 
       <!-- 底部操作按钮 -->
       <div class="mt-4 flex gap-2">
+        <!-- 二维码按钮（仅微信个人号显示） -->
+        <el-button v-if="bot.platform === 'wechat-personal'" size="small" @click="handleShowQrCode">
+          <el-icon>
+            <FullScreen />
+          </el-icon>
+          <span>二维码</span>
+        </el-button>
+
         <!-- 编辑按钮 -->
         <el-button size="small" @click="$emit('edit', bot)">
-          <el-icon><Edit /></el-icon>
+          <el-icon>
+            <Edit />
+          </el-icon>
           <span>编辑</span>
         </el-button>
 
         <!-- 删除按钮 -->
         <el-button size="small" type="danger" @click="$emit('delete', bot)">
-          <el-icon><Delete /></el-icon>
+          <el-icon>
+            <Delete />
+          </el-icon>
           <span>删除</span>
         </el-button>
       </div>
     </div>
   </div>
+
+  <!-- 二维码弹窗 -->
+  <el-dialog v-model="qrDialogVisible" title="微信扫码登录" width="360px" align-center>
+    <div class="flex flex-col items-center py-4">
+      <div v-if="qrLoading" class="py-8">
+        <el-icon class="is-loading" :size="32">
+          <Loading />
+        </el-icon>
+      </div>
+      <!-- 已登录 -->
+      <div v-else-if="qrStatus === 'logged_in'" class="flex flex-col items-center py-4">
+        <el-icon :size="48" class="text-green-500 mb-3">
+          <CircleCheck />
+        </el-icon>
+        <p class="text-sm text-gray-600">{{ qrMessage }}</p>
+        <el-button type="danger" size="small" class="mt-4" @click="handleLogout">
+          <el-icon>
+            <SwitchButton />
+          </el-icon>
+          <span class="ml-1">退出登录</span>
+        </el-button>
+      </div>
+      <!-- 二维码生成中 -->
+      <div v-else-if="qrStatus === 'pending'" class="flex flex-col items-center py-4">
+        <el-icon :size="32" class="text-orange-400 mb-3">
+          <Timer />
+        </el-icon>
+        <p class="text-sm text-gray-600">{{ qrMessage }}</p>
+      </div>
+      <!-- 二维码可用 -->
+      <div v-else-if="qrStatus === 'qr_ready'" class="w-full flex flex-col items-center">
+        <img :src="qrImageUrl" alt="微信登录二维码" class="w-64 h-64" />
+        <p class="text-xs text-gray-400 mt-3 text-center">
+          请使用微信扫描上方二维码完成登录
+        </p>
+      </div>
+      <!-- 不可用 -->
+      <div v-else class="text-sm text-gray-400 py-8">
+        {{ qrMessage || '暂无二维码，请启动机器人后重试' }}
+      </div>
+    </div>
+  </el-dialog>
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
-import { Edit, Delete } from '@element-plus/icons-vue'
+import { computed, ref, watch } from 'vue'
+import { Edit, Delete, FullScreen, CircleCheck, Timer, SwitchButton } from '@element-plus/icons-vue'
+import { ElMessage } from 'element-plus'
 import type { BotInstance } from '@/types/bot'
 import { fixFrontendAssetUrl } from '@/utils/url'
+import { apiService } from '@/services/ApiService'
 
 const props = defineProps<{
   bot: BotInstance
@@ -79,11 +137,80 @@ const handleToggle = (enabled: boolean) => {
   }
 }
 
+// 二维码弹窗状态
+const qrDialogVisible = ref(false)
+const qrStatus = ref<'qr_ready' | 'logged_in' | 'pending' | 'unavailable'>('unavailable')
+const qrCodeUrl = ref('')
+const qrMessage = ref('')
+const qrLoading = ref(false)
+let qrPollTimer: ReturnType<typeof setInterval> | null = null
+
+// 二维码图片 URL（使用 qrserver API 生成）
+const qrImageUrl = computed(() => {
+  if (!qrCodeUrl.value) return ''
+  return `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(qrCodeUrl.value)}`
+})
+
+// 获取二维码状态
+const fetchQrStatus = async () => {
+  try {
+    const result = await apiService.fetchBotQrCode(props.bot.id)
+    qrStatus.value = result.status
+    if (result.status === 'qr_ready') {
+      qrCodeUrl.value = result.qrCodeUrl
+    } else {
+      qrMessage.value = (result as any).message || ''
+    }
+  } catch (error: any) {
+    ElMessage.error(error.response?.data?.message || '获取二维码失败')
+  }
+}
+
+// 显示二维码弹窗
+const handleShowQrCode = async () => {
+  qrDialogVisible.value = true
+  qrLoading.value = true
+  qrStatus.value = 'unavailable'
+  qrCodeUrl.value = ''
+  qrMessage.value = ''
+  await fetchQrStatus()
+  qrLoading.value = false
+}
+
+// 弹窗打开时启动轮询，关闭时停止
+watch(qrDialogVisible, (visible) => {
+  if (visible) {
+    qrPollTimer = setInterval(fetchQrStatus, 30_000)
+  } else if (qrPollTimer) {
+    clearInterval(qrPollTimer)
+    qrPollTimer = null
+  }
+})
+
+// 退出登录
+const handleLogout = async () => {
+  try {
+    const result = await apiService.logoutBot(props.bot.id)
+    if (result.success) {
+      ElMessage.success(result.message)
+      qrDialogVisible.value = false
+      // 退出登录后自动停止机器人
+      await apiService.stopBotInstance(props.bot.id)
+      emit('stop', props.bot.id)
+    } else {
+      ElMessage.warning(result.message)
+    }
+  } catch (error: any) {
+    ElMessage.error(error.response?.data?.message || '退出登录失败')
+  }
+}
+
 // 获取平台头像路径
 const getPlatformAvatar = (platform: string) => {
   const avatarMap: Record<string, string> = {
     qq: '/images/bots/qq.png',
     wechat: '/images/bots/wechat.png',
+    'wechat-personal': '/images/bots/wechat.png',
     discord: '/images/bots/discord.svg',
     dingtalk: '/images/bots/dingtalk.svg',
     lark: '/images/bots/lark.png',
@@ -109,7 +236,9 @@ const getPlatformName = (platform: string) => {
   const nameMap: Record<string, string> = {
     qq: 'QQ 机器人',
     wechat: '微信机器人',
+    'wechat-personal': '微信个人号',
     discord: 'Discord Bot',
+    lark: '飞书机器人',
     wecom: '企业微信智能机器人'
   }
   return nameMap[platform] || platform
