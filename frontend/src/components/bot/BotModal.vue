@@ -1,7 +1,8 @@
 <template>
   <el-dialog v-model="dialogVisible" :title="isEdit ? '编辑机器人' : '创建机器人'" width="600px" :close-on-click-modal="false"
     @close="handleClose" append-to-body>
-    <el-form ref="formRef" :model="formData" :rules="formRules" label-width="120px" class="bot-form">
+    <el-form ref="formRef" :model="formData" :rules="formRules" label-width="120px" class="bot-form"
+      :validate-on-rule-change="false">
 
       <!-- 平台选择（仅创建时显示） -->
       <el-form-item v-if="!isEdit" label="选择平台" prop="platform">
@@ -12,6 +13,11 @@
             <span class="text-gray-400 dark:text-[#6b6d75] text-xs ml-2">{{ platform.description }}</span>
           </el-option>
         </el-select>
+        <div class="mt-2">
+          <el-button link type="primary" size="small" @click="openConfigDoc">
+            {{ configDocButtonText }}
+          </el-button>
+        </div>
       </el-form-item>
 
       <!-- 机器人名称 -->
@@ -22,17 +28,9 @@
       <!-- 默认角色选择（必填） -->
       <el-form-item label="默认角色" prop="defaultCharacterId">
         <el-select v-model="formData.defaultCharacterId" placeholder="请选择默认角色" style="width: 100%" filterable>
-          <el-option 
-            v-for="character in characters" 
-            :key="character.id" 
-            :label="character.title" 
-            :value="character.id">
+          <el-option v-for="character in characters" :key="character.id" :label="character.title" :value="character.id">
             <div class="flex items-center gap-2">
-              <img 
-                v-if="character.avatarUrl" 
-                :src="character.avatarUrl" 
-                class="w-6 h-6 rounded object-cover" 
-              />
+              <img v-if="character.avatarUrl" :src="character.avatarUrl" class="w-6 h-6 rounded object-cover" />
               <span>{{ character.title }}</span>
             </div>
           </el-option>
@@ -44,17 +42,8 @@
 
       <!-- 模型选择（可选，不选则继承自角色/全局设置） -->
       <el-form-item label="模型选择">
-        <el-select 
-          v-model="formData.defaultModelId" 
-          placeholder="继承自角色/全局设置" 
-          style="width: 100%" 
-          filterable
-          clearable>
-          <el-option 
-            v-for="model in availableModels" 
-            :key="model.id" 
-            :label="model.modelName" 
-            :value="model.id">
+        <el-select v-model="formData.defaultModelId" placeholder="继承自角色/全局设置" style="width: 100%" filterable clearable>
+          <el-option v-for="model in availableModels" :key="model.id" :label="model.modelName" :value="model.id">
             <div class="flex items-center gap-2">
               <span>{{ model.modelName }}</span>
               <span class="text-gray-400 text-xs">{{ model.providerName }}</span>
@@ -68,17 +57,9 @@
 
       <!-- 引用知识库选择（多选） -->
       <el-form-item label="引用知识库">
-        <el-select 
-          v-model="formData.knowledgeBaseIds" 
-          placeholder="请选择知识库（可多选）" 
-          style="width: 100%" 
-          multiple
+        <el-select v-model="formData.knowledgeBaseIds" placeholder="请选择知识库（可多选）" style="width: 100%" multiple
           filterable>
-          <el-option 
-            v-for="kb in knowledgeBases" 
-            :key="kb.id" 
-            :label="kb.name" 
-            :value="kb.id">
+          <el-option v-for="kb in knowledgeBases" :key="kb.id" :label="kb.name" :value="kb.id">
             <div class="flex items-center gap-2">
               <span>{{ kb.name }}</span>
               <span v-if="kb.description" class="text-gray-400 text-xs">{{ kb.description }}</span>
@@ -95,7 +76,7 @@
         <el-divider content-position="left">平台配置</el-divider>
 
         <el-form-item v-for="field in selectedPlatform.fields" :key="field.key" :label="field.label"
-          :prop="`platformConfig.${field.key}`" :required="field.required">
+          :prop="`platformConfig.${field.key}`">
 
           <!-- 文本输入 -->
           <el-input v-if="field.type === 'text'" v-model="formData.platformConfig[field.key]"
@@ -179,6 +160,7 @@ import type { FormInstance, FormRules } from 'element-plus'
 import { useBotStore } from '@/stores/bot'
 import { useKnowledgeBaseStore } from '@/stores/knowledgeBase'
 import { apiService } from '@/services/ApiService'
+import { openExternalLink } from '@/utils/modelUtils'
 import type { BotInstance, PlatformMetadata } from '@/types/bot'
 import type { KnowledgeBase } from '@/stores/knowledgeBase'
 import type { ModelProvider, Model } from '@/types/api'
@@ -228,6 +210,27 @@ const selectedPlatform = computed<PlatformMetadata | undefined>(() => {
   if (!formData.value.platform) return undefined
   return botStore.platforms.find(p => p.platform === formData.value.platform)
 })
+
+// 配置教程链接
+const configDocUrl = computed(() => {
+  if (formData.value.platform) {
+    return `https://ai.dingd.cn/docs/bot/${formData.value.platform}`
+  }
+  return 'https://ai.dingd.cn/docs/bot'
+})
+
+// 配置教程按钮文案
+const configDocButtonText = computed(() => {
+  if (formData.value.platform && selectedPlatform.value) {
+    return `查看${selectedPlatform.value.displayName}配置教程`
+  }
+  return '查看配置教程'
+})
+
+// 打开配置教程页面
+const openConfigDoc = () => {
+  openExternalLink(configDocUrl.value)
+}
 
 // 表单数据
 const formData = ref({
@@ -284,23 +287,23 @@ watch(dialogVisible, (visible) => {
       // 编辑模式：填充现有数据
       const bot = props.bot // 创建局部变量以进行类型收窄
       const platformConfig = { ...bot.platformConfig }
-      
+
       // 对于未设置的字段，使用平台元数据中的默认值
       const metadata = botStore.platforms.find(p => p.platform === bot.platform)
       if (metadata) {
         metadata.fields.forEach(field => {
           // 如果字段值为 undefined、null 或空字符串，且有默认值，则使用默认值
           if (
-            (platformConfig[field.key] === undefined || 
-             platformConfig[field.key] === null || 
-             platformConfig[field.key] === '') &&
+            (platformConfig[field.key] === undefined ||
+              platformConfig[field.key] === null ||
+              platformConfig[field.key] === '') &&
             field.defaultValue !== undefined
           ) {
             platformConfig[field.key] = field.defaultValue
           }
         })
       }
-      
+
       formData.value = {
         platform: bot.platform,
         name: bot.name,
@@ -320,7 +323,7 @@ watch(dialogVisible, (visible) => {
       resetForm()
       return
     }
-    
+
     // 编辑模式填充数据后，等待 DOM 更新再清除验证
     nextTick(() => {
       formRef.value?.clearValidate()
@@ -329,7 +332,7 @@ watch(dialogVisible, (visible) => {
 })
 
 // 平台改变时，初始化默认配置
-const handlePlatformChange = async (platform: string) => {
+const handlePlatformChange = (platform: string) => {
   const metadata = botStore.platforms.find(p => p.platform === platform)
   if (metadata) {
     formData.value.platformConfig = {}
@@ -339,10 +342,6 @@ const handlePlatformChange = async (platform: string) => {
         formData.value.platformConfig[field.key] = field.defaultValue
       }
     })
-    
-    // 等待 DOM 更新后清除验证状态，避免切换平台时爆红
-    await nextTick()
-    formRef.value?.clearValidate()
   }
 }
 
@@ -350,7 +349,7 @@ const handlePlatformChange = async (platform: string) => {
 const resetForm = () => {
   // 先清除验证状态，再重置数据，避免触发验证
   formRef.value?.clearValidate()
-  
+
   formData.value = {
     platform: '',
     name: '',
@@ -401,7 +400,7 @@ const loadModels = async () => {
     const response = await apiService.fetchModels()
     modelProviders.value = response.items || []
     // 扁平化所有模型
-    allModels.value = modelProviders.value.flatMap(provider => 
+    allModels.value = modelProviders.value.flatMap(provider =>
       (provider.models || []).map(model => ({
         ...model,
         providerName: provider.name
