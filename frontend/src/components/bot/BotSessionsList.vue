@@ -227,6 +227,7 @@ const getPlatformName = (platform?: string): string => {
   const platformMap: Record<string, string> = {
     qq: 'QQ',
     wechat: '微信',
+    'wechat-personal': '微信个人号',
     lark: '飞书',
     wecom: '企业微信',
   }
