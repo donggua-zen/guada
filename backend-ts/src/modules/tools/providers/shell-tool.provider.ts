@@ -1,5 +1,5 @@
 import { Injectable, Logger } from "@nestjs/common";
-import { exec, ChildProcess } from "child_process";
+import { spawn, ChildProcess, exec } from "child_process";
 import * as iconv from "iconv-lite";
 import {
   IToolProvider,
@@ -8,6 +8,42 @@ import {
   ToolDisplayInfo,
 } from "../interfaces/tool-provider.interface";
 import { InternalToolDefinition } from "../../llm-core/types/llm.types";
+
+/**
+ * 终止 spawn 创建的进程
+ * Windows 使用 taskkill 终止进程树，Unix-like 先 SIGTERM 再 SIGKILL
+ */
+function killProcess(
+  childProcess: ChildProcess,
+  isWindows: boolean,
+  command: string,
+  logger: Logger,
+): void {
+  if (isWindows) {
+    try {
+      const pid = childProcess.pid;
+      if (pid) {
+        exec(`taskkill /F /T /PID ${pid}`, (killError) => {
+          if (killError) {
+            logger.warn(`Failed to kill process ${pid}: ${killError.message}`);
+          } else {
+            logger.log(`Successfully killed process tree for PID ${pid}`);
+          }
+        });
+      }
+    } catch (error: any) {
+      logger.error(`Error killing Windows process: ${error.message}`);
+    }
+  } else {
+    childProcess.kill('SIGTERM');
+    setTimeout(() => {
+      if (!childProcess.killed) {
+        logger.warn(`Force killing shell process: ${command}`);
+        childProcess.kill('SIGKILL');
+      }
+    }, 2000);
+  }
+}
 
 @Injectable()
 export class ShellToolProvider implements IToolProvider {
@@ -154,7 +190,7 @@ export class ShellToolProvider implements IToolProvider {
   }
 
   /**
-   * 执行 Shell 命令
+   * 执行 Shell 命令（使用 spawn 实现，支持大输出和后台任务）
    */
   private async handleExecuteCommand(args: any, context?: Record<string, any>, abortSignal?: AbortSignal): Promise<string> {
     const { command, working_directory, encoding } = args;
@@ -175,113 +211,118 @@ export class ShellToolProvider implements IToolProvider {
     return new Promise((resolve, reject) => {
       this.logger.log(`执行命令: ${command}, 工作目录: ${working_directory || "当前目录"}, 编码: ${encoding || "自动检测"}`);
 
+      // 根据操作系统选择 shell
+      const isWindows = process.platform === 'win32';
+      const shell = isWindows ? 'cmd' : 'sh';
+      const shellFlag = isWindows ? '/c' : '-c';
+
       const options: any = {
-        timeout: 60000 * 2, // 2分钟超时
-        maxBuffer: 1024 * 1024 * 10, // 10MB 最大输出
-        encoding: "buffer", // 使用 buffer 接收原始字节数据，避免编码问题
+        cwd: working_directory || context?.workspacePath || process.cwd(),
+        // 使用 buffer 模式接收原始字节数据，避免编码问题
+        // 注意：spawn 的 encoding 选项控制流输出的数据类型
       };
 
-      if (working_directory) {
-        options.cwd = working_directory;
-      } else if (context?.workspacePath) {
-        // 使用注入的工作路径
-        options.cwd = context.workspacePath;
-      }
-
+      // 收集输出数据
+      let stdoutBuffer = Buffer.alloc(0);
+      let stderrBuffer = Buffer.alloc(0);
+      let wasAborted = false;
       let abortHandler: (() => void) | null = null;
-      let wasAborted = false; // 标记是否被主动中止
+      let timeoutId: NodeJS.Timeout | null = null;
 
-      const childProcess: ChildProcess = exec(command, options, async (error, stdout, stderr) => {
-        // 清理事件监听器，防止命令执行完成后仍响应 abort 信号
+      // 创建 spawn 进程
+      const childProcess: ChildProcess = spawn(shell, [shellFlag, command], options);
+
+      // 手动设置超时（2分钟）
+      timeoutId = setTimeout(() => {
+        this.logger.warn(`Shell command timeout after 2 minutes: ${command}`);
+        wasAborted = true;
+        killProcess(childProcess, isWindows, command, this.logger);
+        reject(new Error('Request was aborted (timeout)'));
+      }, 60000 * 2);
+
+      // 监听 stdout 数据
+      childProcess.stdout?.on('data', (chunk: Buffer) => {
+        stdoutBuffer = Buffer.concat([stdoutBuffer, chunk]);
+      });
+
+      // 监听 stderr 数据
+      childProcess.stderr?.on('data', (chunk: Buffer) => {
+        stderrBuffer = Buffer.concat([stderrBuffer, chunk]);
+      });
+
+      // 进程关闭事件（包含退出码）
+      childProcess.on('close', (code, signal) => {
+        // 清理超时和 abort 监听器
+        if (timeoutId) {
+          clearTimeout(timeoutId);
+          timeoutId = null;
+        }
         if (abortSignal && abortHandler) {
           abortSignal.removeEventListener('abort', abortHandler);
           abortHandler = null;
         }
 
-        if (error) {
-          // 如果是被中止的，直接拒绝
-          if (wasAborted || error.killed || error.signal === 'SIGTERM' || error.signal === 'SIGKILL') {
-            this.logger.warn(`Shell command killed due to abort: ${command}`);
-            reject(new Error('Request was aborted (maybe timeout)'));
-            return;
-          }
-
-          this.logger.error(`执行命令失败：${error.message}`);
-
-          // 即使失败也返回 JSON，确保 AI 能获取到 stdout 中的任何潜在信息
-          const exitCode = (error as any).code === 'ETIMEDOUT' || error.killed ? -1 : ((error as any).code || 1);
-
-          // 处理错误中的 buffer 数据 - 优先使用回调参数中的 stdout/stderr
-          const stdoutStr = stdout ? this.decodeBuffer(stdout, encoding) : '';
-          const stderrStr = stderr ? this.decodeBuffer(stderr, encoding) : (error.message || '');
-
-          const duration = Date.now() - startTime;
-          const result = {
-            stdout: stdoutStr.trim(),
-            stderr: String(stderrStr).trim(),
-            exitCode: exitCode,
-            durationMs: duration,
-          };
-
-          resolve(this.truncateOutput(result));
-        } else {
-          // 将 Buffer 转换为字符串
-          const stdoutStr = this.decodeBuffer(stdout, encoding);
-          const stderrStr = this.decodeBuffer(stderr, encoding);
-
-          // 构建返回结果
-          const duration = Date.now() - startTime;
-          const result = {
-            stdout: stdoutStr.trim(),
-            stderr: stderrStr.trim(),
-            exitCode: 0,
-            durationMs: duration,
-          };
-
-          resolve(this.truncateOutput(result));
+        // 如果被主动中止，直接拒绝
+        if (wasAborted) {
+          this.logger.warn(`Shell command killed due to abort: ${command}`);
+          reject(new Error('Request was aborted'));
+          return;
         }
+
+        const duration = Date.now() - startTime;
+
+        // 解码输出
+        const stdoutStr = this.decodeBuffer(stdoutBuffer, encoding);
+        const stderrStr = this.decodeBuffer(stderrBuffer, encoding);
+
+        // 构建返回结果
+        const result = {
+          stdout: stdoutStr.trim(),
+          stderr: stderrStr.trim(),
+          exitCode: code ?? (signal ? -1 : 0),
+          durationMs: duration,
+        };
+
+        resolve(this.truncateOutput(result));
+      });
+
+      // 进程错误事件（如无法找到命令）
+      childProcess.on('error', (error) => {
+        // 清理超时和 abort 监听器
+        if (timeoutId) {
+          clearTimeout(timeoutId);
+          timeoutId = null;
+        }
+        if (abortSignal && abortHandler) {
+          abortSignal.removeEventListener('abort', abortHandler);
+          abortHandler = null;
+        }
+
+        this.logger.error(`执行命令失败：${error.message}`);
+
+        const duration = Date.now() - startTime;
+        const result = {
+          stdout: this.decodeBuffer(stdoutBuffer, encoding).trim(),
+          stderr: `${this.decodeBuffer(stderrBuffer, encoding).trim()}\n${error.message}`,
+          exitCode: 1,
+          durationMs: duration,
+        };
+
+        resolve(this.truncateOutput(result));
       });
 
       // 监听 abortSignal
       if (abortSignal) {
         abortHandler = () => {
           this.logger.warn(`Shell command aborted by signal: ${command}`);
-
-          // 设置中止标记，让 exec 回调知道这是主动中止
           wasAborted = true;
 
-          // 根据操作系统选择终止策略
-          const isWindows = process.platform === 'win32';
-
-          if (isWindows) {
-            // Windows: 使用 taskkill 强制终止进程树
-            try {
-              const pid = childProcess.pid;
-              if (pid) {
-                // 使用 taskkill /F /T 强制终止进程及其子进程
-                exec(`taskkill /F /T /PID ${pid}`, (killError) => {
-                  if (killError) {
-                    this.logger.warn(`Failed to kill process ${pid}: ${killError.message}`);
-                  } else {
-                    this.logger.log(`Successfully killed process tree for PID ${pid}`);
-                  }
-                });
-              }
-            } catch (error: any) {
-              this.logger.error(`Error killing Windows process: ${error.message}`);
-            }
-          } else {
-            // Unix-like: 先 SIGTERM，再 SIGKILL
-            childProcess.kill('SIGTERM');
-
-            setTimeout(() => {
-              if (!childProcess.killed) {
-                this.logger.warn(`Force killing shell process: ${command}`);
-                childProcess.kill('SIGKILL');
-              }
-            }, 2000);
+          if (timeoutId) {
+            clearTimeout(timeoutId);
+            timeoutId = null;
           }
 
+          killProcess(childProcess, isWindows, command, this.logger);
           reject(new Error('Request was aborted'));
         };
 
