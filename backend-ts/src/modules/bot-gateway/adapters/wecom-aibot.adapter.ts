@@ -268,16 +268,37 @@ export class WeComAiBotAdapter extends BaseBotAdapter {
     let content = '';
     if (body.text) {
       content = body.text.content || '';
-    } else if (body.image) {
-      content = `[图片] ${body.image.filename || ''}`;
     } else if (body.voice) {
-      content = `[语音]`;
-    } else if (body.file) {
-      content = `[文件] ${body.file.filename || ''}`;
+      // 企业微信语音消息已自动转文本，直接使用转文本内容
+      content = body.voice.content || '[语音]';
+    } else if (body.location) {
+      const loc = body.location;
+      content = `[位置] ${loc.name || ''} (${loc.address || ''})`;
+    } else if (body.link) {
+      const link = body.link;
+      content = `[链接] ${link.title || ''} ${link.url || ''}`;
+    } else if (body.mixed?.msg_item?.length) {
+      // 图文混排消息：拼接所有子项的文本内容
+      const parts: string[] = [];
+      for (const item of body.mixed.msg_item) {
+        if (item.msgtype === 'text' && item.text?.content) {
+          parts.push(item.text.content);
+        } else if (item.msgtype === 'voice' && item.voice) {
+          // 语音子项使用转文本内容
+          parts.push(item.voice.content || '[语音]');
+        } else if (item.msgtype === 'location') {
+          const loc = item.location;
+          parts.push(`[位置] ${loc.name || ''} (${loc.address || ''})`);
+        } else if (item.msgtype === 'link') {
+          const link = item.link;
+          parts.push(`[链接] ${link.title || ''} ${link.url || ''}`);
+        }
+      }
+      content = parts.join(' ');
     }
 
-    // 异步提取附件（在适配器层完成下载和解密）
-    const attachments = await this.extractAttachments(body);
+    // 收集附件元数据（不下载，延迟到 downloadAttachment）
+    // 注：downloadAttachment 直接通过 rawEvent 处理，无需在此处提取元数据
 
     return {
       messageId: frame.headers?.req_id || Date.now().toString(),
@@ -287,7 +308,6 @@ export class WeComAiBotAdapter extends BaseBotAdapter {
       content,
       messageType,
       sourceType: this.detectSourceType(body),
-      attachments,
       rawEvent: frame,
       timestamp: new Date(),
     };
@@ -303,64 +323,127 @@ export class WeComAiBotAdapter extends BaseBotAdapter {
   }
 
   /**
-   * 提取附件信息（在适配器层完成下载和解密）
+   * 下载消息附件到指定目录
+   * @param message 机器人消息（包含 rawEvent）
+   * @param saveDir 保存目录的绝对路径
+   * @returns 下载后的本地路径列表
    */
-  private async extractAttachments(body: any): Promise<BotMessage['attachments']> {
-    const attachments: BotMessage['attachments'] = [];
+  async downloadAttachment(message: BotMessage, saveDir: string): Promise<string[]> {
+    const frame = message.rawEvent as WsFrame | undefined;
+    if (!frame) return [];
 
+    const body = frame.body;
+    const results: string[] = [];
+
+    // 下载图片
     if (body.image) {
       try {
-        // 获取 AES 密钥
+        const fileName = `image_${Date.now()}.jpg`;
+        const savePath = await this.platformUtils.ensureUniqueFileName(saveDir, fileName);
         const aesKey = body.image.aeskey;
 
         if (!aesKey) {
-          this.logger.warn('Image aeskey not provided, skipping decryption');
-          // 如果没有 aeskey，直接下载不处理
-          const result = await this.platformUtils.downloadAndProcessImage(
-            body.image.url,
-            {
-              ttl: 10 * 60 * 1000, // 10分钟TTL
-              filename: body.image.filename,
-            }
-          );
-
-          attachments.push({
-            type: 'image',
-            localPath: result.tempPath,
-            fileName: body.image.filename || `image_${Date.now()}.jpg`,
-            fileSize: result.fileSize,
-          });
+          await this.platformUtils.downloadFile(body.image.url, savePath);
         } else {
-          // 有 aeskey，进行解密处理
-          const result = await this.platformUtils.downloadAndProcessImage(
+          await this.platformUtils.downloadFile(
             body.image.url,
+            savePath,
             {
-              postProcessor: async (buffer) => {
-                return await this.decryptWeComImage(buffer, aesKey);
-              },
-              ttl: 10 * 60 * 1000, // 10分钟TTL
-              filename: body.image.filename,
-            }
+              postProcessor: async (b) => this.decryptWeComImage(b, aesKey),
+            },
           );
-
-          attachments.push({
-            type: 'image',
-            localPath: result.tempPath,
-            fileName: body.image.filename || `image_${Date.now()}.jpg`,
-            fileSize: result.fileSize,
-          });
         }
 
-        this.logger.log(`Extracted image attachment: ${attachments[0].localPath}`);
+        this.logger.log(`[wecom] 图片已下载: ${savePath}`);
+        results.push(savePath);
       } catch (error: any) {
-        this.logger.error(`Failed to process image attachment: ${error.message}`);
-        // 继续处理其他附件，不阻断流程
+        this.logger.error(`[wecom] 图片下载失败: ${error.message}`);
       }
     }
 
-    // TODO: 处理 voice 和 file 类型的附件
+    // 下载语音（企业微信语音消息已自动转文本，无URL，跳过下载）
+    // 注：语音内容在 transformToBotMessage 中已提取为 body.voice.content
 
-    return attachments.length > 0 ? attachments : undefined;
+    // 下载视频
+    if (body.video) {
+      try {
+        const fileName = `video_${Date.now()}.mp4`;
+        const savePath = await this.platformUtils.ensureUniqueFileName(saveDir, fileName);
+        await this.platformUtils.downloadFile(body.video.url, savePath);
+        this.logger.log(`[wecom] 视频已下载: ${savePath}`);
+        results.push(savePath);
+      } catch (error: any) {
+        this.logger.error(`[wecom] 视频下载失败: ${error.message}`);
+      }
+    }
+
+    // 下载文件
+    if (body.file) {
+      try {
+        const fileName = `file_${Date.now()}`;
+        const savePath = await this.platformUtils.ensureUniqueFileName(saveDir, fileName);
+        await this.platformUtils.downloadFile(body.file.url, savePath);
+        this.logger.log(`[wecom] 文件已下载: ${savePath}`);
+        results.push(savePath);
+      } catch (error: any) {
+        this.logger.error(`[wecom] 文件下载失败: ${error.message}`);
+      }
+    }
+
+    // 下载图文混排消息中的附件
+    if (body.mixed?.msg_item?.length) {
+      for (const item of body.mixed.msg_item) {
+        if (item.msgtype === 'image' && item.image) {
+          try {
+            const fileName = `image_${Date.now()}.jpg`;
+            const savePath = await this.platformUtils.ensureUniqueFileName(saveDir, fileName);
+            const aesKey = item.image.aeskey;
+
+            if (!aesKey) {
+              await this.platformUtils.downloadFile(item.image.url, savePath);
+            } else {
+              await this.platformUtils.downloadFile(
+                item.image.url,
+                savePath,
+                {
+                  postProcessor: async (b) => this.decryptWeComImage(b, aesKey),
+                },
+              );
+            }
+
+            this.logger.log(`[wecom] 图文混排-图片已下载: ${savePath}`);
+            results.push(savePath);
+          } catch (error: any) {
+            this.logger.error(`[wecom] 图文混排-图片下载失败: ${error.message}`);
+          }
+        } else if (item.msgtype === 'voice' && item.voice) {
+          // 企业微信语音子项已自动转文本，无URL，跳过下载
+          // 注：语音内容在 transformToBotMessage 中已提取为 item.voice.content
+        } else if (item.msgtype === 'video' && item.video) {
+          try {
+            const fileName = `video_${Date.now()}.mp4`;
+            const savePath = await this.platformUtils.ensureUniqueFileName(saveDir, fileName);
+            await this.platformUtils.downloadFile(item.video.url, savePath);
+            this.logger.log(`[wecom] 图文混排-视频已下载: ${savePath}`);
+            results.push(savePath);
+          } catch (error: any) {
+            this.logger.error(`[wecom] 图文混排-视频下载失败: ${error.message}`);
+          }
+        } else if (item.msgtype === 'file' && item.file) {
+          try {
+            const fileName = `file_${Date.now()}`;
+            const savePath = await this.platformUtils.ensureUniqueFileName(saveDir, fileName);
+            await this.platformUtils.downloadFile(item.file.url, savePath);
+            this.logger.log(`[wecom] 图文混排-文件已下载: ${savePath}`);
+            results.push(savePath);
+          } catch (error: any) {
+            this.logger.error(`[wecom] 图文混排-文件下载失败: ${error.message}`);
+          }
+        }
+      }
+    }
+
+    return results;
   }
 
   /**

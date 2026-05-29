@@ -207,8 +207,9 @@ export class DiscordBotAdapter extends BaseBotAdapter {
       content = content.replace(mentionPattern, '').trim();
     }
 
-    // 异步提取附件（在适配器层完成下载）
-    const attachments = await this.extractAttachments(message);
+    // 收集附件元数据（不下载，延迟到 downloadAttachment）
+    // 注：downloadAttachment 直接通过 rawEvent 处理，无需在此处提取元数据
+    const attachments = undefined;
 
     // 检测消息类型
     const messageType = this.detectMessageType(message);
@@ -224,65 +225,38 @@ export class DiscordBotAdapter extends BaseBotAdapter {
       content,
       messageType,
       sourceType,
-      attachments,
       rawEvent: message,
       timestamp: new Date(message.createdTimestamp),
     };
   }
 
   /**
-   * 提取附件信息（在适配器层完成下载）
+   * 下载消息附件到指定目录
+   * @param message 机器人消息（包含 rawEvent）
+   * @param saveDir 保存目录的绝对路径
+   * @returns 下载后的本地路径列表
    */
-  private async extractAttachments(message: Message): Promise<BotMessage['attachments']> {
-    if (message.attachments.size === 0) {
-      return undefined;
-    }
+  async downloadAttachment(message: BotMessage, saveDir: string): Promise<string[]> {
+    const discordMessage = message.rawEvent as Message | undefined;
+    if (!discordMessage?.attachments?.size) return [];
 
-    const attachments: BotMessage['attachments'] = [];
+    const results: string[] = [];
 
-    for (const attachment of message.attachments.values()) {
+    for (const attachment of discordMessage.attachments.values()) {
       try {
-        // 判断附件类型
-        let type: 'image' | 'file' | 'voice' = 'file';
-
         if (attachment.contentType?.startsWith('image/')) {
-          type = 'image';
-        } else if (attachment.contentType?.startsWith('audio/')) {
-          type = 'voice';
-        }
-
-        // 如果是图片，下载到临时文件
-        if (type === 'image') {
-          const result = await this.platformUtils.downloadAndProcessImage(
-            attachment.url,
-            { ttl: 10 * 60 * 1000 } // 10分钟TTL
-          );
-
-          attachments.push({
-            type,
-            localPath: result.tempPath, // 使用本地临时文件路径
-            fileName: attachment.name,
-            fileSize: result.fileSize,
-          });
-
-          this.logger.log(`Extracted image attachment: ${result.tempPath}`);
-        } else {
-          // 其他类型暂不处理，只记录元数据
-          attachments.push({
-            type,
-            url: attachment.url,
-            fileId: attachment.id,
-            fileName: attachment.name,
-            fileSize: attachment.size,
-          });
+          const fileName = attachment.name || `image_${Date.now()}.jpg`;
+          const savePath = await this.platformUtils.ensureUniqueFileName(saveDir, fileName);
+          await this.platformUtils.downloadFile(attachment.url, savePath);
+          this.logger.log(`[discord] 附件已下载: ${savePath}`);
+          results.push(savePath);
         }
       } catch (error: any) {
-        this.logger.error(`Failed to process attachment: ${error.message}`);
-        // 继续处理其他附件
+        this.logger.error(`[discord] 下载附件失败: ${error.message}`);
       }
     }
 
-    return attachments.length > 0 ? attachments : undefined;
+    return results;
   }
 
   /**

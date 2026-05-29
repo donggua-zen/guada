@@ -52,6 +52,38 @@ export class BotAdminController {
   }
 
   /**
+   * 获取机器人登录二维码状态（必须在 instances/:id 之前定义）
+   */
+  @Get('instances/:id/qr')
+  async getQrCode(@Param('id') id: string, @Request() req) {
+    const userId = req.user.id;
+
+    // 验证是否属于当前用户
+    const bot = await this.botService.getInstance(id);
+    if (bot.userId !== userId) {
+      throw new Error('无权操作此机器人');
+    }
+
+    return this.botService.getQrCodeStatus(id);
+  }
+
+  /**
+   * 退出机器人登录
+   */
+  @Post('instances/:id/logout')
+  async logoutBot(@Param('id') id: string, @Request() req) {
+    const userId = req.user.id;
+
+    // 验证是否属于当前用户
+    const bot = await this.botService.getInstance(id);
+    if (bot.userId !== userId) {
+      throw new Error('无权操作此机器人');
+    }
+
+    return this.botService.logout(id);
+  }
+
+  /**
    * 获取单个机器人详情
    */
   @Get('instances/:id')

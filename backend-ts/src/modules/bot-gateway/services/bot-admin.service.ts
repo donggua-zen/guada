@@ -3,7 +3,7 @@ import { PrismaService } from '../../../common/database/prisma.service';
 import { BotInstanceManager } from './bot-instance-manager.service';
 import { PLATFORM_METADATA } from '../constants/platform-metadata';
 import { CreateBotDto, UpdateBotDto } from '../dto/bot-admin.dto';
-import { BotConfig } from '../interfaces/bot-platform.interface';
+import { BotConfig, BotStatus } from '../interfaces/bot-platform.interface';
 
 @Injectable()
 export class BotAdminService {
@@ -298,5 +298,51 @@ export class BotAdminService {
     });
 
     return { success: true };
+  }
+
+  /**
+   * 获取机器人登录二维码状态
+   * @returns status: 'logged_in' | 'qr_ready' | 'pending' | 'unavailable'
+   */
+  getQrCodeStatus(id: string) {
+    const adapter = this.instanceManager.getAdapter(id);
+    if (!adapter) {
+      return { status: 'unavailable', message: '机器人未启动' };
+    }
+
+    const botStatus = adapter.getStatus();
+
+    // 已登录
+    if (botStatus === BotStatus.CONNECTED) {
+      return { status: 'logged_in', message: '已登录' };
+    }
+
+    // 连接中，检查是否有二维码
+    if (botStatus === BotStatus.CONNECTING) {
+      const qrUrl = adapter.getQrCodeUrl?.();
+      if (qrUrl) {
+        return { status: 'qr_ready', qrCodeUrl: qrUrl };
+      }
+      return { status: 'pending', message: '二维码生成中，请稍后再试' };
+    }
+
+    return { status: 'unavailable', message: '机器人未处于登录状态' };
+  }
+
+  /**
+   * 退出机器人登录
+   */
+  async logout(id: string) {
+    const adapter = this.instanceManager.getAdapter(id);
+    if (!adapter) {
+      throw new NotFoundException('机器人未启动');
+    }
+
+    if (adapter.logout) {
+      await adapter.logout();
+      return { success: true, message: '已退出登录' };
+    }
+
+    return { success: false, message: '当前平台不支持退出登录' };
   }
 }

@@ -198,8 +198,9 @@ export class LarkBotAdapter extends BaseBotAdapter {
     const message = rawEvent.message || {};
     const sender = rawEvent.sender || {};
 
-    // 异步提取附件（在适配器层完成下载）
-    const attachments = await this.extractAttachments(message);
+    // 收集附件元数据（不下载，延迟到 downloadAttachment）
+    // 注：downloadAttachment 直接通过 rawEvent 处理，无需在此处提取元数据
+    const attachments = undefined;
 
     return {
       messageId: message.message_id,
@@ -209,7 +210,6 @@ export class LarkBotAdapter extends BaseBotAdapter {
       content: this.extractContent(message),
       messageType: this.detectMessageType(message),
       sourceType: this.detectSourceType(message),
-      attachments,
       rawEvent,
       timestamp: new Date(),
     };
@@ -252,41 +252,38 @@ export class LarkBotAdapter extends BaseBotAdapter {
   }
 
   /**
-   * 提取附件信息（在适配器层完成下载）
+   * 下载消息附件到指定目录
+   * @param message 机器人消息（包含 rawEvent）
+   * @param saveDir 保存目录的绝对路径
+   * @returns 下载后的本地路径列表
    */
-  private async extractAttachments(message: any): Promise<BotMessage['attachments']> {
-    // 飞书的消息中，图片有 file_key，需要转换为 URL
-    if (message.message_type === 'image' && message.content) {
-      try {
-        const parsed = JSON.parse(message.content);
+  async downloadAttachment(message: BotMessage, saveDir: string): Promise<string[]> {
+    const rawEvent = message.rawEvent;
+    if (!rawEvent?.message) return [];
+
+    const msg = rawEvent.message;
+    const results: string[] = [];
+
+    try {
+      if (msg.message_type === 'image' && msg.content) {
+        const parsed = JSON.parse(msg.content);
         const fileKey = parsed.image_key || parsed.file_key;
-        
+
         if (fileKey) {
-          // 构建飞书图片下载URL
-          const imageUrl = `https://open.feishu.cn/open-apis/im/v1/messages/${message.message_id}/resources/${fileKey}?type=image`;
-          
-          // 下载到临时文件
-          const result = await this.platformUtils.downloadAndProcessImage(
-            imageUrl,
-            { ttl: 10 * 60 * 1000 } // 10分钟TTL
-          );
-
-          this.logger.log(`Extracted image attachment: ${result.tempPath}`);
-
-          return [{
-            type: 'image',
-            localPath: result.tempPath,
-            fileName: `image_${fileKey}.jpg`,
-            fileSize: result.fileSize,
-          }];
+          const imageUrl = `https://open.feishu.cn/open-apis/im/v1/messages/${msg.message_id}/resources/${fileKey}?type=image`;
+          const fileName = `image_${fileKey}.jpg`;
+          const savePath = await this.platformUtils.ensureUniqueFileName(saveDir, fileName);
+          await this.platformUtils.downloadFile(imageUrl, savePath);
+          this.logger.log(`[lark] 附件已下载: ${savePath}`);
+          results.push(savePath);
         }
-      } catch (error: any) {
-        this.logger.error(`Failed to process image attachment: ${error.message}`);
       }
+
+      // TODO: 处理文件和语音附件
+    } catch (error: any) {
+      this.logger.error(`[lark] 下载附件失败: ${error.message}`);
     }
 
-    // TODO: 处理文件和语音附件
-
-    return undefined;
+    return results;
   }
 }
