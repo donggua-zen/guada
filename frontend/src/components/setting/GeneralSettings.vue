@@ -1,202 +1,181 @@
 <template>
-    <div class="flex-1 overflow-hidden">
-        <!-- 头部区域 -->
-        <div class="sessions-header py-1 text-lg font-semibold flex justify-between items-center mb-6">
-            <span>通用设置</span>
-        </div>
-
-        <!-- 免登录设置 -->
-        <div class="rounded-lg border border-gray-200 dark:border-[#2e3035] overflow-hidden bg-white dark:bg-[#232428] mb-6">
-            <div class="p-6">
-                <div class="flex items-start justify-between">
-                    <div class="flex-1">
-                        <div class="flex items-center gap-2 mb-2">
-                            <span class="text-base font-medium">免登录模式</span>
-                            <el-tooltip
-                                content="开启后将自动使用主账户登录，无需输入密码。适用于个人本地使用场景。"
-                                placement="top"
-                            >
-                                <el-icon class="text-gray-400 cursor-help" :size="16">
-                                    <HelpOutlineOutlined />
-                                </el-icon>
-                            </el-tooltip>
-                        </div>
-                        <div class="text-sm text-gray-500 dark:text-[#8b8d95] mb-3">
-                            开启后，刷新页面或访问应用时会自动使用主账户登录，无需手动输入用户名和密码。
-                        </div>
-                        <div class="text-xs text-orange-500 dark:text-orange-400 bg-orange-50 dark:bg-orange-900/20 px-3 py-2 rounded border border-orange-200 dark:border-orange-800">
-                            <el-icon class="inline-block mr-1" :size="14">
-                                <WarningOutlined />
-                            </el-icon>
-                            注意：开启此功能后，任何访问此应用的人都将自动获得主账户权限，请谨慎使用。
-                        </div>
-                    </div>
-                    <div class="ml-6">
-                        <el-switch
-                            v-model="autoLoginEnabled"
-                            @change="handleAutoLoginChange"
-                            :loading="saving"
-                            size="large"
-                        />
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- 工作目录基路径设置 -->
-        <div class="rounded-lg border border-gray-200 dark:border-[#2e3035] overflow-hidden bg-white dark:bg-[#232428]">
-            <div class="p-6">
-                <div class="flex items-start justify-between">
-                    <div class="flex-1">
-                        <div class="flex items-center gap-2 mb-2">
-                            <span class="text-base font-medium">工作目录基路径</span>
-                            <el-tooltip
-                                content="设置所有会话默认工作目录的存放位置。留空则使用系统默认路径。"
-                                placement="top"
-                            >
-                                <el-icon class="text-gray-400 cursor-help" :size="16">
-                                    <HelpOutlineOutlined />
-                                </el-icon>
-                            </el-tooltip>
-                        </div>
-                        <div class="text-sm text-gray-500 dark:text-[#8b8d95] mb-3">
-                            所有新会话的默认工作目录将创建在此路径下。会话级自定义路径优先级高于此设置。
-                        </div>
-                        <div class="text-xs text-gray-500 dark:text-gray-400 bg-gray-50 dark:bg-gray-800/50 px-3 py-2 rounded border border-gray-200 dark:border-gray-700">
-                            <div>• 必须使用绝对路径</div>
-                            <div>• 修改后仅影响新创建的会话目录</div>
-                            <div>• 已有会话的默认目录不会自动迁移</div>
-                        </div>
-                    </div>
-                </div>
-
-                <div class="mt-4">
-                    <div class="flex gap-2 w-full">
-                        <el-input
-                            v-model="workspaceBaseDir"
-                            placeholder="例如：D:\AI_Workspaces（留空使用系统默认）"
-                            clearable
-                        />
-                        <el-button @click="selectFolder" type="primary" plain>
-                            选择文件夹
-                        </el-button>
-                    </div>
-                </div>
-
-                <div class="mt-4 flex justify-end">
-                    <el-button type="primary" @click="saveWorkspaceBaseDir" :loading="workspaceSaving">
-                        保存
-                    </el-button>
-                </div>
-            </div>
-        </div>
+  <div class="flex-1 overflow-hidden">
+    <!-- 头部区域 -->
+    <div class="sessions-header py-1 text-lg font-semibold flex justify-between items-center mb-6">
+      <span>通用设置</span>
+      <el-button type="primary" @click="handleSave" :disabled="!hasChanges">
+        <template #icon>
+          <SaveOutlined />
+        </template>
+        保存设置
+      </el-button>
     </div>
+
+    <div class="space-y-6">
+      <!-- 免登录设置 -->
+      <div class="px-8 py-4 rounded-xl border border-gray-200 dark:border-[#2e3035] bg-white dark:bg-[#232428]">
+        <el-form ref="autoLoginFormRef" :model="settingsForm" label-position="left" label-width="50%" size="large">
+          <el-form-item prop="autoLoginEnabled" style="margin-bottom: 0;">
+            <template #label>
+              <div class="flex flex-col gap-1">
+                <span class="text-lg text-gray-900 dark:text-[#e8e9ed]">免登录模式</span>
+                <span class="text-xs text-gray-500 dark:text-[#8b8d95] font-normal">
+                  开启后，刷新页面或访问应用时会自动使用主账户登录
+                </span>
+              </div>
+            </template>
+            <el-switch v-model="settingsForm.autoLoginEnabled" size="large" />
+          </el-form-item>
+        </el-form>
+
+        <!-- 警告提示 -->
+        <div class="mt-4 text-xs text-orange-500 dark:text-orange-400 bg-orange-50 dark:bg-orange-900/20 px-3 py-2 rounded border border-orange-200 dark:border-orange-800">
+          <el-icon class="inline-block mr-1" :size="14">
+            <WarningOutlined />
+          </el-icon>
+          注意：开启此功能后，任何访问此应用的人都将自动获得主账户权限，请谨慎使用。
+        </div>
+      </div>
+
+      <!-- 工作目录基路径设置 -->
+      <div class="px-8 py-4 rounded-xl border border-gray-200 dark:border-[#2e3035] bg-white dark:bg-[#232428]">
+        <el-form ref="workspaceFormRef" :model="settingsForm" label-position="left" label-width="50%" size="large">
+          <el-form-item prop="workspaceBaseDir" style="margin-bottom: 0;">
+            <template #label>
+              <div class="flex flex-col gap-1">
+                <span class="text-lg text-gray-900 dark:text-[#e8e9ed]">工作目录基路径</span>
+                <span class="text-xs text-gray-500 dark:text-[#8b8d95] font-normal">
+                  所有新会话的默认工作目录将创建在此路径下
+                </span>
+              </div>
+            </template>
+            <div class="flex gap-2 w-full max-w-md">
+              <el-input
+                v-model="settingsForm.workspaceBaseDir"
+                placeholder="例如：D:\AI_Workspaces（留空使用系统默认）"
+                clearable
+              />
+              <el-button @click="selectFolder" type="primary" plain>
+                选择文件夹
+              </el-button>
+            </div>
+          </el-form-item>
+        </el-form>
+
+        <!-- 提示信息 -->
+        <div class="mt-4 text-xs text-gray-500 dark:text-gray-400 bg-gray-50 dark:bg-gray-800/50 px-3 py-2 rounded border border-gray-200 dark:border-gray-700">
+          <div>• 必须使用绝对路径</div>
+          <div>• 修改后仅影响新创建的会话目录</div>
+          <div>• 已有会话的默认目录不会自动迁移</div>
+        </div>
+      </div>
+    </div>
+  </div>
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
-import { ElSwitch, ElTooltip, ElIcon, ElMessage } from 'element-plus'
-import { HelpOutlineOutlined, WarningOutlined } from '@vicons/material'
-import { useAuthStore } from '../../stores/auth'
-import { usePopup } from '../../composables/usePopup'
-import { apiService } from '../../services/ApiService'
+import { ref, reactive, computed, onMounted } from 'vue'
+import { SaveOutlined } from '@vicons/antd'
+import { WarningOutlined } from '@vicons/material'
+import { ElMessage } from 'element-plus'
+import { apiService } from '@/services/ApiService'
+import { usePopup } from '@/composables/usePopup'
+import { useAuthStore } from '@/stores/auth'
 
 const authStore = useAuthStore()
-const { toast } = usePopup()
+const { notify } = usePopup()
 
-const autoLoginEnabled = ref(false)
-const saving = ref(false)
-const workspaceBaseDir = ref('')
-const workspaceSaving = ref(false)
+// 表单引用
+const autoLoginFormRef = ref(null)
+const workspaceFormRef = ref(null)
 
-// 加载免登录状态
-const loadAutoLoginStatus = async () => {
-    try {
-        await authStore.checkAutoLoginStatus()
-        autoLoginEnabled.value = authStore.autoLoginEnabled
-    } catch (error) {
-        console.error('加载免登录状态失败:', error)
-        toast.error('加载配置失败')
-    }
-}
+// 表单数据
+const settingsForm = reactive({
+  autoLoginEnabled: false,
+  workspaceBaseDir: '',
+})
 
-// 处理开关变化
-const handleAutoLoginChange = async (value: string | number | boolean) => {
-    const enabled = value === true
-    saving.value = true
-    try {
-        await authStore.setAutoLoginEnabled(enabled)
-        toast.success(enabled ? '已开启免登录模式' : '已关闭免登录模式')
+// 原始设置备份，用于对比是否有改动
+const originalSettings = ref<any>(null)
 
-        // 如果关闭了免登录，且当前没有 token，提示用户重新登录
-        if (!enabled && !authStore.isAuthenticated) {
-            toast.info('请重新登录以继续使用')
-            setTimeout(() => {
-                window.location.href = '/login'
-            }, 1500)
-        }
-    } catch (error: any) {
-        console.error('保存免登录状态失败:', error)
-        toast.error(error.message || '保存配置失败')
-        // 恢复原值
-        autoLoginEnabled.value = !enabled
-    } finally {
-        saving.value = false
-    }
-}
+// 计算是否有改动
+const hasChanges = computed(() => {
+  if (!originalSettings.value) return false
+  return JSON.stringify(settingsForm) !== JSON.stringify(originalSettings.value)
+})
 
-// 加载全局工作目录基路径
-const loadWorkspaceBaseDir = async () => {
-    try {
-        const response = await apiService.fetchWorkspaceBaseDir()
-        workspaceBaseDir.value = response.workspaceBaseDir || ''
-    } catch (error) {
-        console.error('加载工作目录基路径失败:', error)
-    }
+// 加载 system 分组设置
+const loadSettings = async () => {
+  try {
+    const response = await apiService.fetchGroupSettings('system')
+
+    // 填充表单
+    settingsForm.autoLoginEnabled = response.autoLoginEnabled === true || response.autoLoginEnabled === 'true'
+    settingsForm.workspaceBaseDir = response.workspaceBaseDir || ''
+
+    // 备份原始数据
+    originalSettings.value = JSON.parse(JSON.stringify(settingsForm))
+  } catch (error) {
+    console.error('获取通用设置失败:', error)
+    notify.error('获取通用设置失败')
+  }
 }
 
 // 选择文件夹
 const selectFolder = async () => {
-    const isElectron = typeof window !== 'undefined' && !!(window as any).electronAPI
-    if (isElectron && (window as any).electronAPI?.selectFolder) {
-        try {
-            const selectedPath = await (window as any).electronAPI.selectFolder()
-            if (selectedPath) {
-                workspaceBaseDir.value = selectedPath
-                ElMessage.success('已选择文件夹')
-            }
-        } catch (error) {
-            ElMessage.error('选择文件夹失败')
-        }
-    } else {
-        ElMessage.warning('当前环境不支持文件夹选择，请直接输入路径')
-    }
-}
-
-// 保存工作目录基路径
-const saveWorkspaceBaseDir = async () => {
-    const path = workspaceBaseDir.value.trim() || null
-    if (path) {
-        const isAbsolute = /^[a-zA-Z]:\\/.test(path) || path.startsWith('/')
-        if (!isAbsolute) {
-            ElMessage.error('工作目录基路径必须是绝对路径')
-            return
-        }
-    }
-
-    workspaceSaving.value = true
+  const isElectron = typeof window !== 'undefined' && !!(window as any).electronAPI
+  if (isElectron && (window as any).electronAPI?.selectFolder) {
     try {
-        await apiService.updateWorkspaceBaseDir(path)
-        ElMessage.success('工作目录基路径已更新')
-    } catch (error: any) {
-        ElMessage.error(error.message || '保存失败')
-    } finally {
-        workspaceSaving.value = false
+      const selectedPath = await (window as any).electronAPI.selectFolder()
+      if (selectedPath) {
+        settingsForm.workspaceBaseDir = selectedPath
+        ElMessage.success('已选择文件夹')
+      }
+    } catch (error) {
+      ElMessage.error('选择文件夹失败')
     }
+  } else {
+    ElMessage.warning('当前环境不支持文件夹选择，请直接输入路径')
+  }
 }
 
+// 保存设置
+const handleSave = async () => {
+  try {
+    // 验证工作目录基路径
+    const path = settingsForm.workspaceBaseDir.trim()
+    if (path) {
+      const isAbsolute = /^[a-zA-Z]:\\/.test(path) || path.startsWith('/')
+      if (!isAbsolute) {
+        ElMessage.error('工作目录基路径必须是绝对路径')
+        return
+      }
+    }
+
+    // 构造保存数据
+    const dataToSave = {
+      autoLoginEnabled: settingsForm.autoLoginEnabled,
+      workspaceBaseDir: path || null,
+    }
+
+    // 使用分组设置接口更新 system 分组
+    await apiService.updateGroupSettings('system', dataToSave)
+
+    // 保存成功后更新原始数据备份
+    originalSettings.value = JSON.parse(JSON.stringify(settingsForm))
+
+    // 同步更新 authStore 中的免登录状态
+    authStore.autoLoginEnabled = settingsForm.autoLoginEnabled
+
+    notify.success('保存成功', '通用设置已更新')
+  } catch (error: any) {
+    console.error('保存设置失败:', error)
+    notify.error('保存失败', error.message || '未知错误')
+  }
+}
+
+// 生命周期
 onMounted(() => {
-    loadAutoLoginStatus()
-    loadWorkspaceBaseDir()
+  loadSettings()
 })
 </script>
