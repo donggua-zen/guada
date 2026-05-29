@@ -16,6 +16,7 @@
     "noImplicitAny": false,
     "strictBindCallApply": false,
     "forceConsistentCasingInFileNames": false,
+    "typeRoots": ["./node_modules/@types", "./src/types"],
     "types": ["node", "jest"]
   },
   "include": ["src/**/*"],
