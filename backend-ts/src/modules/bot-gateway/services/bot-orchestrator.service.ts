@@ -27,7 +27,7 @@ export class BotOrchestrator {
   private readonly logger = new Logger(BotOrchestrator.name);
   private messageQueues: Map<
     string,
-    { messages: BotMessage[]; timer?: NodeJS.Timeout }
+    { messages: BotMessage[]; timer?: NodeJS.Timeout; session?: any }
   > = new Map();
   private processingSessions: Set<string> = new Set();
   private readonly MERGE_WINDOW_MS = 3000; // 3秒合并窗口
@@ -77,6 +77,49 @@ export class BotOrchestrator {
 
     queue.messages.push(message);
 
+    // 立即创建会话并下载附件（附件有效期短，不能等合并后再下载）
+    // 注意：这段逻辑必须在 processingSessions 检查之前执行，
+    // 否则 AI 处理期间收到的新消息会跳过附件下载
+    if (!queue.session) {
+      try {
+        queue.session = await this.ensureSession(
+          botId,
+          message,
+          config,
+        );
+      } catch (error: any) {
+        this.logger.error(
+          `Failed to ensure session for ${queueKey}: ${error.message}`,
+        );
+      }
+    }
+
+    // 下载当前消息的附件（无论是否新会话都执行）
+    if (queue.session && adapter.downloadAttachment) {
+      try {
+        const workspacePath =
+          queue.session.workspacePath ||
+          this.workspaceService.getDefaultWorkspaceDir(queue.session.id);
+        const destDir = path.join(workspacePath, "files");
+        await fs.promises.mkdir(destDir, { recursive: true });
+        const downloadedPaths = await adapter.downloadAttachment(message, destDir).catch((error: any) => {
+          this.logger.error(
+            `Failed to download attachment for message ${message.messageId}: ${error.message}`,
+          );
+          return [] as string[];
+        });
+        // 将附件引用直接追加到消息内容中
+        for (const downloadedPath of downloadedPaths) {
+          const relativePath = path
+            .relative(workspacePath, downloadedPath)
+            .replace(/\\/g, "/");
+          message.content += `\n[上传了文件: ${relativePath}]`;
+        }
+      } catch (error: any) {
+        this.logger.error(`Failed to download attachment: ${error.message}`);
+      }
+    }
+
     // 如果当前会话正在处理中，仅将消息加入队列等待
     if (this.processingSessions.has(queueKey)) {
       this.logger.debug(`Message buffered for busy session: ${queueKey}`);
@@ -114,7 +157,7 @@ export class BotOrchestrator {
     queue.timer = undefined;
 
     try {
-      await this.handleIncomingMessage(botId, messagesToProcess, config, adapter);
+      await this.handleIncomingMessage(queueKey, botId, messagesToProcess, config, adapter);
     } catch (error: any) {
       this.logger.error(`Failed to process merged messages: ${error.message}`);
     } finally {
@@ -130,126 +173,93 @@ export class BotOrchestrator {
   }
 
   /**
+   * 获取或创建会话
+   */
+  private async ensureSession(
+    botId: string,
+    message: BotMessage,
+    config: BotConfig,
+  ): Promise<any> {
+    const platform = config.platform || "qq";
+    const isGroupChat = message.sourceType === "group";
+    const type = isGroupChat ? "group" : "private";
+    const nativeId = isGroupChat
+      ? message.conversationId
+      : message.senderId;
+    const externalId = buildExternalId(platform, type, nativeId);
+
+    if (!config.defaultCharacterId) {
+      throw new Error(`Bot config or defaultCharacterId not found: ${botId}`);
+    }
+
+    const session = await this.sessionMapper.getOrCreateBotSession(
+      botId,
+      externalId,
+      platform,
+      config.defaultCharacterId,
+      config.defaultModelId,
+    );
+
+    this.logger.log(
+      `Session ensured: ${session.id}, externalId: ${session.externalId}`,
+    );
+
+    return session;
+  }
+
+  /**
    * 处理 incoming 消息
    */
   private async handleIncomingMessage(
+    queueKey: string,
     botId: string,
-    message: BotMessage | BotMessage[],
+    messages: BotMessage[],
     config: BotConfig,
     adapter: IBotPlatform,
   ): Promise<void> {
-    // 统一处理为数组
-    const messages = Array.isArray(message) ? message : [message];
     const firstMessage = messages[0];
 
     try {
       this.logger.log(
-        `Received message from ${firstMessage.senderId}: ${firstMessage.content}`,
+        `Processing merged messages from ${firstMessage.senderId}: ${messages.length} messages`,
       );
 
-      // 1. 确定会话类型和ID
-      const platform = config.platform || "qq";
-      const isGroupChat = firstMessage.sourceType === "group";
-      const type = isGroupChat ? "group" : "private";
+      // 从队列中获取已准备好的会话
+      const queue = this.messageQueues.get(queueKey);
+      const session = queue?.session;
 
-      // nativeId: 私聊=发送者ID, 群聊=群ID
-      const nativeId = isGroupChat
-        ? firstMessage.conversationId // 群聊使用群ID
-        : firstMessage.senderId; // 私聊使用用户ID
-
-      // 2. 组装 externalId(由调用者决定隔离策略)
-      const externalId = buildExternalId(platform, type, nativeId);
-
-      // 3. 验证配置
-      if (!config.defaultCharacterId) {
-        this.logger.error(
-          `Bot config or defaultCharacterId not found: ${botId}`,
-        );
+      if (!session) {
+        this.logger.error(`Session not prepared for ${queueKey}`);
         return;
       }
 
-      // 4. 获取或创建会话
-      const session = await this.sessionMapper.getOrCreateBotSession(
-        botId,
-        externalId,
-        platform,
-        config.defaultCharacterId,
-        config.defaultModelId, // 传递 defaultModelId，避免内部重复查询
-      );
-
-      this.logger.log(
-        `Using session: ${session.id}, externalId: ${session.externalId}`,
-      );
-
-      // 4.5 下载附件到工作目录（循环处理所有消息的附件）
-      let attachmentText = "";
-      if (adapter.downloadAttachment) {
-        try {
-          // 兼容旧数据：如果会话没有 workspacePath，使用默认工作目录
-          const workspacePath =
-            session.workspacePath ||
-            this.workspaceService.getDefaultWorkspaceDir(session.id);
-          const destDir = path.join(workspacePath, "files");
-          await fs.promises.mkdir(destDir, { recursive: true });
-
-          // 并行下载所有消息的附件
-          const downloadResults = await Promise.all(
-            messages.map(async (msg) => {
-              try {
-                return await adapter.downloadAttachment!(msg, destDir);
-              } catch (error: any) {
-                this.logger.error(
-                  `Failed to download attachment for message ${msg.messageId}: ${error.message}`,
-                );
-                return [];
-              }
-            }),
-          );
-
-          for (const downloadedPaths of downloadResults) {
-            for (const downloadedPath of downloadedPaths) {
-              const relativePath = path
-                .relative(workspacePath, downloadedPath)
-                .replace(/\\/g, "/");
-              attachmentText += `[上传了文件: ${relativePath}]\n`;
-            }
-          }
-        } catch (error: any) {
-          this.logger.error(`Failed to download attachments: ${error.message}`);
-        }
-      }
-
-      // 5. 合并消息内容
+      // 合并消息内容（附件引用已在 enqueueMessage 时追加到各消息 content 中）
       const mergedContent = messages.map((m) => m.content).join("\n\n");
 
       const capabilities = adapter.getCapabilities();
 
-      // 6. 创建用户消息记录
+      // 创建用户消息记录
       this.logger.log(
         `Creating user message with knowledgeBaseIds: ${JSON.stringify(config.knowledgeBaseIds)}`,
       );
 
       const userMessage = await this.sessionMapper.createUserMessage(
         session.id,
-        attachmentText
-          ? `${mergedContent}\n\n${attachmentText.trim()}`
-          : mergedContent,
+        mergedContent,
         config.knowledgeBaseIds,
       );
 
-      // 7. 调用 AgentEngine 获取流式迭代器（直接传入 session 对象，避免重复查询）
+      // 调用 AgentEngine 获取流式迭代器
       const iterator = this.agentEngine.completions(
         session,
         userMessage.id,
         "overwrite",
       );
 
-      // 8. 根据平台能力选择回复方式
+      // 根据平台能力选择回复方式
       if (capabilities.supportsStreaming && adapter.sendStreamReply) {
-        // 支持流式：边生成边发送
         await this.handleStreamingReply(adapter, firstMessage, iterator);
       } else {
-        // 不支持流式：收集完整回复后发送
         await this.handleNormalReply(adapter, firstMessage, iterator);
       }
     } catch (error: any) {
@@ -262,7 +272,6 @@ export class BotOrchestrator {
       try {
         const capabilities = adapter.getCapabilities();
 
-        // 优先使用流式回复（如果平台支持）
         if (capabilities.supportsStreaming && adapter.sendStreamReply) {
           await adapter.sendStreamReply(
             {
