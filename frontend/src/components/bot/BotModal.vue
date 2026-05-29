@@ -216,7 +216,7 @@ const configDocUrl = computed(() => {
   if (formData.value.platform) {
     return `https://ai.dingd.cn/docs/bot/${formData.value.platform}`
   }
-  return 'https://ai.dingd.cn/docs/bot'
+  return 'https://ai.dingd.cn/docs/bot/start'
 })
 
 // 配置教程按钮文案
