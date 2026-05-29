@@ -23,17 +23,15 @@
 
                     <div v-else-if="updateStatus === 'available'" class="space-y-3 w-full">
                         <div class="text-orange-500 font-medium">发现新版本: {{ updateInfo?.version }}</div>
-                        <p class="text-xs text-(--color-text-secondary) whitespace-pre-wrap">{{ updateInfo?.releaseNotes || '' }}</p>
-                        <el-button type="primary" @click="handleDownload" :loading="isDownloading" class="w-full">
-                            {{ isDownloading ? `下载中 ${downloadProgress}%` : '立即下载' }}
-                        </el-button>
-                    </div>
-
-                    <div v-else-if="updateStatus === 'downloaded'" class="space-y-3 w-full">
-                        <div class="text-green-600 font-medium">更新包已就绪</div>
-                        <el-button type="success" @click="handleInstall" class="w-full">
-                            立即重启并安装
-                        </el-button>
+                        <p class="text-xs text-(--color-text-secondary) whitespace-pre-wrap">{{ updateInfo?.description || '暂无更新说明' }}</p>
+                        <div class="flex gap-2">
+                            <el-button type="primary" @click="handleDownload" class="flex-1">
+                                下载更新包
+                            </el-button>
+                            <el-button @click="handleViewChangelog" class="flex-1">
+                                查看更新日志
+                            </el-button>
+                        </div>
                     </div>
 
                     <div v-else-if="updateStatus === 'error'" class="text-red-500 text-sm">
@@ -63,11 +61,9 @@ import { fixFrontendAssetUrl } from '@/utils/url'
 
 const isElectron = typeof window !== 'undefined' && !!window.electronAPI
 const appVersion = ref('')
-const updateStatus = ref<'idle' | 'checking' | 'available' | 'downloading' | 'downloaded' | 'not-available' | 'error'>('idle')
+const updateStatus = ref<'idle' | 'checking' | 'available' | 'not-available' | 'error'>('idle')
 const updateInfo = ref<any>(null)
-const downloadProgress = ref(0)
 const isChecking = ref(false)
-const isDownloading = ref(false)
 const errorMessage = ref('')
 
 // 计算属性：自适应 Logo 路径
@@ -87,21 +83,20 @@ const checkForUpdates = async () => {
         }
     } catch (e: any) {
         updateStatus.value = 'error'
-        errorMessage.value = e.message
+        errorMessage.value = e.message || '未知错误'
     } finally {
         isChecking.value = false
     }
 }
 
 const handleDownload = () => {
-    if (!window.electronAPI) return
-    isDownloading.value = true
-    window.electronAPI.startDownloadUpdate()
+    if (!window.electronAPI || !updateInfo.value?.downloadUrl) return
+    window.electronAPI.openExternal(updateInfo.value.downloadUrl)
 }
 
-const handleInstall = () => {
-    if (!window.electronAPI) return
-    window.electronAPI.installAndRestart()
+const handleViewChangelog = () => {
+    if (!window.electronAPI || !updateInfo.value?.releaseNotes) return
+    window.electronAPI.openExternal(updateInfo.value.releaseNotes)
 }
 
 const handleUpdateStatus = (status: any) => {
@@ -116,19 +111,10 @@ const handleUpdateStatus = (status: any) => {
         case 'not-available':
             updateStatus.value = 'not-available'
             break
-        case 'downloading':
-            updateStatus.value = 'downloading'
-            downloadProgress.value = Math.round(status.progress)
-            break
-        case 'downloaded':
-            updateStatus.value = 'downloaded'
-            isDownloading.value = false
-            break
         case 'error':
             updateStatus.value = 'error'
             errorMessage.value = status.error
             isChecking.value = false
-            isDownloading.value = false
             break
     }
 }
