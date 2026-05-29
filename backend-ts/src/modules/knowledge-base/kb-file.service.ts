@@ -880,21 +880,39 @@ export class KbFileService implements OnModuleInit {
         return true;
       }
 
-      // 1. 从向量库删除向量
+      // 1. 从向量库删除向量（容错：向量可能不存在）
       const tableId = `kb_${kbId}`;
-      await this.vectorDb.deleteDocuments(tableId, {
-        documentId: fileId,
-      });
-      this.logger.log(`从向量库删除文件 ${fileId} 的所有向量`);
+      try {
+        await this.vectorDb.deleteDocuments(tableId, {
+          documentId: fileId,
+        });
+        this.logger.log(`从向量库删除文件 ${fileId} 的所有向量`);
+      } catch (vectorError: any) {
+        this.logger.warn(
+          `从向量库删除文件 ${fileId} 向量失败（可能不存在）: ${vectorError.message}`,
+        );
+      }
 
-      // 2. 从数据库删除分块
-      const deletedCount = await this.chunkRepo.deleteByFileId(fileId);
-      this.logger.log(`删除 ${deletedCount} 个分块`);
+      // 2. 从数据库删除分块（容错：分块可能不存在）
+      try {
+        const deletedCount = await this.chunkRepo.deleteByFileId(fileId);
+        this.logger.log(`删除 ${deletedCount} 个分块`);
+      } catch (chunkError: any) {
+        this.logger.warn(
+          `删除文件 ${fileId} 分块失败（可能不存在）: ${chunkError.message}`,
+        );
+      }
 
-      // 3. 删除本地物理文件（异步）
+      // 3. 删除本地物理文件（容错：文件可能不存在）
       if (file.filePath && fs.existsSync(file.filePath)) {
-        await fs.promises.unlink(file.filePath);
-        this.logger.log(`已删除本地文件: ${file.filePath}`);
+        try {
+          await fs.promises.unlink(file.filePath);
+          this.logger.log(`已删除本地文件: ${file.filePath}`);
+        } catch (fileError: any) {
+          this.logger.warn(
+            `删除本地文件 ${file.filePath} 失败: ${fileError.message}`,
+          );
+        }
       }
 
       // 4. 删除文件记录
@@ -924,17 +942,33 @@ export class KbFileService implements OnModuleInit {
       } else {
         // 如果是文件，删除文件及其分块
         const tableId = `kb_${kbId}`;
-        await this.vectorDb.deleteDocuments(tableId, {
-          documentId: item.id,
-        });
-        await this.chunkRepo.deleteByFileId(item.id);
-        
-        // 删除本地物理文件（异步）
-        if (item.filePath && fs.existsSync(item.filePath)) {
-          await fs.promises.unlink(item.filePath);
-          this.logger.log(`已删除本地文件: ${item.filePath}`);
+
+        // 容错删除向量
+        try {
+          await this.vectorDb.deleteDocuments(tableId, {
+            documentId: item.id,
+          });
+        } catch (e: any) {
+          this.logger.warn(`删除子文件向量失败 ${item.id}: ${e.message}`);
         }
-        
+
+        // 容错删除分块
+        try {
+          await this.chunkRepo.deleteByFileId(item.id);
+        } catch (e: any) {
+          this.logger.warn(`删除子文件分块失败 ${item.id}: ${e.message}`);
+        }
+
+        // 容错删除物理文件
+        if (item.filePath && fs.existsSync(item.filePath)) {
+          try {
+            await fs.promises.unlink(item.filePath);
+            this.logger.log(`已删除本地文件: ${item.filePath}`);
+          } catch (e: any) {
+            this.logger.warn(`删除子文件物理文件失败 ${item.filePath}: ${e.message}`);
+          }
+        }
+
         await this.fileRepo.delete(item.id);
         this.logger.log(`删除子文件: ${item.displayName}`);
       }
