@@ -69,6 +69,8 @@ export class SessionMapperService {
 
       // 创建新会话,使用机器人创建者的 userId
       // 注意：不设置 characterId 和 modelId，都由下游动态解析
+      // Bot 会话工作目录使用 BOT 前缀，与 Web 会话的 WORK 前缀区分
+      const workspacePath = this.workspaceService.generateWorkspaceDir('BOT');
       session = await this.prisma.session.create({
         data: {
           userId: botInstance.userId,  // 使用机器人创建者的用户ID
@@ -80,6 +82,7 @@ export class SessionMapperService {
           // modelId 不设置，保持 null，由下游动态解析
           title: title || this.generateBotSessionTitleFromExternalId(externalId),
           settings: {},
+          workspacePath,
         },
       });
 

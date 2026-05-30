@@ -82,11 +82,7 @@ export class BotOrchestrator {
     // 否则 AI 处理期间收到的新消息会跳过附件下载
     if (!queue.session) {
       try {
-        queue.session = await this.ensureSession(
-          botId,
-          message,
-          config,
-        );
+        queue.session = await this.ensureSession(botId, message, config);
       } catch (error: any) {
         this.logger.error(
           `Failed to ensure session for ${queueKey}: ${error.message}`,
@@ -102,12 +98,14 @@ export class BotOrchestrator {
           this.workspaceService.getDefaultWorkspaceDir(queue.session.id);
         const destDir = path.join(workspacePath, "files");
         await fs.promises.mkdir(destDir, { recursive: true });
-        const downloadedPaths = await adapter.downloadAttachment(message, destDir).catch((error: any) => {
-          this.logger.error(
-            `Failed to download attachment for message ${message.messageId}: ${error.message}`,
-          );
-          return [] as string[];
-        });
+        const downloadedPaths = await adapter
+          .downloadAttachment(message, destDir)
+          .catch((error: any) => {
+            this.logger.error(
+              `Failed to download attachment for message ${message.messageId}: ${error.message}`,
+            );
+            return [] as string[];
+          });
         // 将附件引用直接追加到消息内容中
         for (const downloadedPath of downloadedPaths) {
           const relativePath = path
@@ -157,7 +155,13 @@ export class BotOrchestrator {
     queue.timer = undefined;
 
     try {
-      await this.handleIncomingMessage(queueKey, botId, messagesToProcess, config, adapter);
+      await this.handleIncomingMessage(
+        queueKey,
+        botId,
+        messagesToProcess,
+        config,
+        adapter,
+      );
     } catch (error: any) {
       this.logger.error(`Failed to process merged messages: ${error.message}`);
     } finally {
@@ -183,9 +187,7 @@ export class BotOrchestrator {
     const platform = config.platform || "qq";
     const isGroupChat = message.sourceType === "group";
     const type = isGroupChat ? "group" : "private";
-    const nativeId = isGroupChat
-      ? message.conversationId
-      : message.senderId;
+    const nativeId = isGroupChat ? message.conversationId : message.senderId;
     const externalId = buildExternalId(platform, type, nativeId);
 
     if (!config.defaultCharacterId) {
@@ -234,7 +236,11 @@ export class BotOrchestrator {
       }
 
       // 合并消息内容（附件引用已在 enqueueMessage 时追加到各消息 content 中）
-      const mergedContent = messages.map((m) => m.content).join("\n\n");
+      // 过滤掉空白内容，并对非空白内容去除首尾空白字符
+      const mergedContent = messages
+        .map((m) => m.content?.trim())
+        .filter((content) => content && content.length > 0)
+        .join("\n\n");
 
       const capabilities = adapter.getCapabilities();
 
