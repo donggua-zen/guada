@@ -16,16 +16,16 @@
         全局工具设置决定了哪些工具对所有角色可用。角色级别的工具设置会在此基础上进一步限制。
       </div>
 
-      <!-- 网格布局：每行3列 -->
-      <div class="grid grid-cols-3 gap-4">
+      <!-- 工具卡片列表 -->
+      <div class="grid gap-4" style="grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));">
         <div
           v-for="tool in globalTools"
           :key="tool.namespace"
           class="rounded-lg border border-gray-200 dark:border-[#232428] overflow-hidden bg-white dark:bg-[#232428] transition-all hover:shadow-md"
         >
-          <div class="p-4">
+          <div class="p-5 pb-4">
             <div class="flex items-start justify-between gap-2 mb-2">
-              <h3 class="text-base font-semibold text-gray-900 dark:text-[#e8e9ed] flex-1 truncate">
+              <h3 class="text-lg font-semibold text-gray-900 dark:text-[#e8e9ed] flex-1 truncate">
                 {{ tool.displayName }}
               </h3>
               <el-switch
@@ -36,14 +36,15 @@
                 active-text="启动"
                 inactive-text="禁用"
                 size="large"
+                class="-mt-2"
               />
             </div>
             
-            <p class="text-xs text-gray-600 dark:text-[#8b8d95] mb-2 line-clamp-2 min-h-[2.5rem]">
+            <p class="text-sm text-gray-600 dark:text-[#8b8d95] mb-3 line-clamp-3 min-h-[3.75rem]">
               {{ tool.description }}
             </p>
             
-            <div class="text-xs text-gray-500 dark:text-[#6b6d75]">
+            <div class="text-sm text-gray-500 dark:text-[#6b6d75]">
               <el-tag size="small" type="info" effect="plain">
                 {{ tool.tools?.length || 0 }} 个工具
               </el-tag>

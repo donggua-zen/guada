@@ -28,7 +28,7 @@
           <div class="w-5.5 min-h-0 flex justify-center mr-1.5">
             <div class="w-px bg-gray-200 dark:bg-gray-700"></div>
           </div>
-          <MarkdownContent v-if="isExpanded" @click.stop="$emit('click')" class="flex-1 markdown-text text-gray-500 dark:text-gray-400"
+          <MarkdownContent @click.stop="$emit('click')" class="flex-1 markdown-text text-gray-500 dark:text-gray-400"
             :content="reasoningContent" :debounced="isStreaming" />
         </div>
 
