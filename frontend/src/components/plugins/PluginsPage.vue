@@ -1,6 +1,6 @@
 <template>
     <div class="bg-(--color-sidebar-bg) h-full overflow-auto mx-2">
-        <div class="h-full flex flex-col md:max-w-260 md:mx-auto p-4">
+        <div class="h-full flex flex-col p-4">
             <div class="flex-1 flex flex-col">
                 <div class="sticky top-0 z-10 bg-(--color-sidebar-bg)">
                     <el-tabs v-model="currentTabValue" @tab-change="handleTabChange" class="plugins-settings-tabs">
@@ -14,7 +14,7 @@
                         </el-tab-pane>
                     </el-tabs>
                 </div>
-                <div class="flex-1 py-3 md:py-3">
+                <div class="flex-1 py-3">
                     <template v-if="currentTabValue === 'mcp'">
                         <MCPServers />
                     </template>

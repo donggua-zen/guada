@@ -9,7 +9,7 @@
             </div>
 
             <!-- 更新状态区域 -->
-            <div class="w-full max-w-md bg-(--color-surface-elevated) rounded-lg p-6 border border-(--color-border)">
+            <div class="w-full bg-(--color-surface-elevated) rounded-lg p-6 border border-(--color-border)">
                 <div class="flex flex-col items-center space-y-4">
                     <div v-if="updateStatus === 'checking'" class="flex items-center space-x-2 text-blue-500">
                         <el-icon class="is-loading"><Loading /></el-icon>

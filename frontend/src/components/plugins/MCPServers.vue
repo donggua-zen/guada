@@ -19,46 +19,51 @@
         </div>
 
         <!-- MCP 服务器列表 -->
-        <div class="rounded-lg border border-gray-200 dark:border-[#232428] bg-white dark:bg-[#232428] overflow-hidden">
-            <ul v-if="servers.length > 0">
-                <li v-for="server in servers" :key="server.id"
-                    class="flex items-center py-4 px-4 border-b border-gray-200 dark:border-[#2e3035] last:border-b-0 hover:bg-gray-50 dark:hover:bg-[#2a2c30]/50 transition-colors">
-                    <div class="flex-1">
-                        <div class="flex items-center gap-2 mb-1">
-                            <div class="font-semibold text-base">{{ server.name }}</div>
-                            <el-tag v-if="server.enabled" type="success" size="small">已启用</el-tag>
-                            <el-tag v-else type="info" size="small">已禁用</el-tag>
-                        </div>
-                        <div class="text-sm text-gray-500 dark:text-[#8b8d95] truncate max-w-md">
-                            {{ server.url }}
-                        </div>
-                        <div v-if="server.description" class="text-sm text-gray-400 dark:text-[#6b6d75] mt-1">
-                            {{ server.description }}
-                        </div>
-                    </div>
-                    <div class="flex items-center gap-3">
+        <div v-if="servers.length > 0" class="grid gap-4" style="grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));">
+            <div v-for="server in servers" :key="server.id"
+                class="rounded-lg border border-gray-200 dark:border-[#232428] overflow-hidden bg-white dark:bg-[#232428] transition-all hover:shadow-md">
+                <div class="p-5 pb-4">
+                    <div class="flex items-start justify-between gap-2 mb-2">
+                        <h3 class="text-lg font-semibold text-gray-900 dark:text-[#e8e9ed] flex-1 truncate">
+                            {{ server.name }}
+                        </h3>
                         <el-switch v-model="server.enabled" :active-value="true" :inactive-value="false"
-                            @change="handleToggleServer(server)" inline-prompt active-text="启动" inactive-text="禁用" size="large" />
-                        <el-button link style="font-size: 20px" @click="handleEditServer(server)">
-                            <el-icon>
-                                <SettingsOutlined />
-                            </el-icon>
-                        </el-button>
-                        <el-button type="danger" link style="font-size: 20px" @click="handleDeleteServer(server)">
-                            <el-icon>
-                                <RemoveCircleOutlineRound />
-                            </el-icon>
-                        </el-button>
+                            @change="handleToggleServer(server)" inline-prompt active-text="启动" inactive-text="禁用" size="large"
+                            class="-mt-2" />
                     </div>
-                </li>
-            </ul>
-            <div v-else class="py-12 text-center text-gray-400">
-                <el-icon size="48" class="mb-3 opacity-50">
-                    <InboxOutlined />
-                </el-icon>
-                <div>暂无 MCP 服务器</div>
-                <div class="text-sm mt-2">点击"添加服务器"开始配置</div>
+
+                    <p class="text-sm text-gray-600 dark:text-[#8b8d95] mb-3 line-clamp-3 min-h-[3.75rem]">
+                        {{ server.description || '暂无描述' }}
+                    </p>
+
+                    <div class="flex items-center justify-between">
+                        <el-tag size="small" type="info" effect="plain">
+                            {{ server.tools ? Object.keys(server.tools).length : 0 }} 个工具
+                        </el-tag>
+                        <div class="flex items-center gap-2">
+                            <el-button link size="small" @click="handleEditServer(server)">
+                                <template #icon>
+                                    <SettingsOutlined />
+                                </template>
+                                配置
+                            </el-button>
+                            <el-button link size="small" type="danger" @click="handleDeleteServer(server)">
+                                <template #icon>
+                                    <RemoveCircleOutlineRound />
+                                </template>
+                                删除
+                            </el-button>
+                        </div>
+                    </div>
+                </div>
             </div>
+        </div>
+        <div v-else class="rounded-lg border border-gray-200 dark:border-[#232428] bg-white dark:bg-[#232428] p-12 text-center">
+            <el-icon size="48" class="mb-3 opacity-50 text-gray-400">
+                <InboxOutlined />
+            </el-icon>
+            <div class="text-gray-500 dark:text-[#8b8d95]">暂无 MCP 服务器</div>
+            <div class="text-sm text-gray-400 dark:text-[#6b6d75] mt-2">点击"添加服务器"开始配置</div>
         </div>
 
         <!-- 添加/编辑服务器对话框 -->

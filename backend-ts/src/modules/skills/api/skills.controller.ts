@@ -65,8 +65,18 @@ export class SkillsController {
    */
   @Get(':id/documentation')
   async getSkillDocumentation(@Param('id') skillId: string): Promise<{ content: string }> {
-    const content = await this.orchestrator.getSkillDocumentation(skillId);
-    return { content: content || '' };
+    const skill = this.orchestrator.getSkillDetail(skillId);
+    if (!skill) {
+      return { content: '' };
+    }
+
+    // 直接读取原始 SKILL.md 文件内容
+    const fs = await import('fs/promises');
+    const path = await import('path');
+    const skillMdPath = path.join(skill.basePath, 'SKILL.md');
+    const rawContent = await fs.readFile(skillMdPath, 'utf-8');
+
+    return { content: rawContent };
   }
 
   /**
