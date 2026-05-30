@@ -24,6 +24,7 @@ export interface MarketSkill {
   name: string;
   description: string;
   icon: string | null;
+  labels: string[];
   installUrls: InstallUrl[];
   detailUrl?: string;
 }

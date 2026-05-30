@@ -1,5 +1,5 @@
 <template>
-    <div class="flex-1 overflow-hidden">
+    <div class="flex-1">
         <!-- 头部区域 -->
         <div class="sessions-header py-1 text-lg font-semibold flex justify-between items-center mb-6">
             <span>Skills</span>
@@ -145,12 +145,14 @@
                             {{ skill.description || '暂无描述' }}
                         </p>
 
-                        <div class="flex items-center justify-end">
-                            <el-button v-if="skill.detailUrl" size="small" type="primary"
-                                @click="handleOpenDetailUrl(skill)">
-                                <template #icon>
-                                    <ArrowDownload16Regular />
-                                </template>
+                        <div class="flex items-center justify-between">
+                            <div class="flex flex-wrap gap-1.5">
+                                <el-tag v-if="skill.labels && skill.labels.length > 0" v-for="label in skill.labels"
+                                    :key="label" size="small" effect="light">
+                                    {{ label }}
+                                </el-tag>
+                            </div>
+                            <el-button v-if="skill.detailUrl" size="small" @click="handleOpenDetailUrl(skill)">
                                 获取
                             </el-button>
                         </div>
