@@ -9,6 +9,12 @@
           </template>
           新建机器人
         </el-button>
+        <el-button @click="handleOpenDocs">
+          <template #icon>
+            <Document />
+          </template>
+          使用说明
+        </el-button>
       </div>
 
       <!-- 机器人列表 -->
@@ -47,8 +53,9 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
 import { ElMessageBox, ElMessage } from 'element-plus'
-import { Plus, Loading, Cpu } from '@element-plus/icons-vue'
+import { Plus, Loading, Cpu, Document } from '@element-plus/icons-vue'
 import { useBotStore } from '@/stores/bot'
+import { openExternalLink } from '@/utils/modelUtils'
 import BotCard from './BotCard.vue'
 import BotModal from './BotModal.vue'
 import type { BotInstance } from '@/types/bot'
@@ -76,6 +83,11 @@ const loadBots = async () => {
 const showCreateDialog = () => {
   currentBot.value = null
   dialogVisible.value = true
+}
+
+// 打开使用说明文档
+const handleOpenDocs = () => {
+  openExternalLink('https://ai.dingd.cn/docs/bot')
 }
 
 // 编辑机器人
