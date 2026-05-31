@@ -6,47 +6,8 @@ export function useSessionChat(
   sessionStore: ReturnType<typeof useSessionStore>,
   apiService: any,
 ) {
-  const currentSessionId = ref<string | null>(null);
-  const isLoading = ref(false);
+
   const hasGeneratedTitle = ref(false);
-
-  /**
-   * 加载会话配置和消息
-   */
-  async function loadSession(sessionId: string): Promise<Session> {
-    const sessionData = await apiService.fetchSession(sessionId);
-    await loadMessages(sessionId);
-    return sessionData;
-  }
-
-  /**
-   * 加载会话消息
-   */
-  async function loadMessages(sessionId: string) {
-    const sessionState = sessionStore.getSessionState(sessionId);
-    if (sessionState.isStreaming) {
-      sessionStore.getMessages(sessionId);
-      return;
-    }
-
-    const sessionMessages = await apiService.fetchSessionMessages(sessionId);
-
-    // 处理历史消息的思考时长回填
-    sessionMessages.items.forEach(
-      (message: { id: string; contents: any[] }) => {
-        if (message.contents && Array.isArray(message.contents)) {
-          message.contents.forEach((content) => {
-            if (content.meta_data?.thinking_duration_ms) {
-              content.thinking_duration_ms =
-                content.meta_data.thinking_duration_ms;
-            }
-          });
-        }
-      },
-    );
-
-    sessionStore.setMessages(sessionId, sessionMessages.items);
-  }
 
   /**
    * 重置标题生成标记
@@ -79,11 +40,7 @@ export function useSessionChat(
   }
 
   return {
-    currentSessionId,
-    isLoading,
     hasGeneratedTitle,
-    loadSession,
-    loadMessages,
     resetTitleFlag,
     generateTitleIfNeeded,
   };

@@ -29,7 +29,7 @@
             <div class="w-px bg-gray-200 dark:bg-gray-700"></div>
           </div>
           <MarkdownContent @click.stop="$emit('click')" class="flex-1 markdown-text text-gray-500 dark:text-gray-400"
-            :content="reasoningContent" :debounced="isStreaming" />
+            :content="reasoningContent" />
         </div>
 
       </div>
@@ -81,7 +81,6 @@ watch(() => props.isThinking, (isThinking: boolean) => {
 </script>
 
 <style scoped>
-@reference "tailwindcss";
 
 .thinking-section {
   border-radius: 8px;

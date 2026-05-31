@@ -17,8 +17,7 @@
 
         <!-- 右侧：更多操作下拉菜单 -->
         <div class="flex items-center justify-end min-w-10 gap-2">
-            <!-- 工作目录按钮（仅 Electron 环境且有会话时显示） -->
-            <div v-if="isElectron && sessionId"
+            <div v-if="sessionId"
                 class="cursor-pointer p-1 rounded-lg text-gray-600 dark:text-[#8b8d95] transition-all duration-200 hover:bg-gray-100 dark:hover:bg-[#2a2c30] hover:text-gray-900 dark:hover:text-[#e8e9ed] flex items-center justify-center"
                 @click="$emit('toggle-workspace')" :title="workspaceVisible ? '关闭工作目录' : '打开工作目录'">
                 <el-icon class="w-5 h-5">

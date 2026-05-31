@@ -20,7 +20,7 @@
       <!-- 会话列表区域 -->
       <div class="flex-1 overflow-hidden py-2">
         <ScrollContainer class="h-full max-h-full" @scroll="handleScroll">
-          <div class="px-5 py-2.5 text-xs font-medium text-gray-400 uppercase tracking-wider">对话记录</div>
+          <div class="px-3 py-2.5 text-xs font-medium text-gray-400 uppercase tracking-wider">对话记录</div>
           <template v-if="!filteredSessions || filteredSessions.length === 0">
             <div class="empty-state text-center text-gray-500 flex flex-col items-center justify-center h-full py-12">
               <div class="empty-state-icon mb-3 text-gray-300">
@@ -37,10 +37,12 @@
             </div>
           </template>
           <template v-else>
-            <div v-for="session in filteredSessions" :key="session.id" class="session-item group" :class="{
-              'session-item-active': session.id === currentSessionId,
-              'session-item-inactive': session.id !== currentSessionId
-            }" @click="selectSession(session)">
+            <div v-for="session in filteredSessions" :key="session.id"
+              class="session-item flex items-center gap-2.5 py-[0.4rem] px-2 mx-1 my-[0.2rem] rounded-lg cursor-pointer transition-all duration-200 ease-[cubic-bezier(0.4,0,0.2,1)] group"
+              :class="{
+                'session-item-active': session.id === currentSessionId,
+                'session-item-inactive': session.id !== currentSessionId
+              }" @click="selectSession(session)">
               <Avatar class="session-avatar" :src="session.character?.avatarUrl || session.avatarUrl"
                 :name="session.character?.title || session.title" type="assistant" round />
 
@@ -311,17 +313,8 @@ const loadMoreSessions = async (): Promise<void> => {
   font-size: 13px;
 }
 
-/* 会话项样式 */
-.session-item {
-  display: flex;
-  align-items: center;
-  gap: 0.625rem;
-  padding: 0.4rem 0.75rem;
-  margin: 0.2rem 0.5rem;
-  border-radius: 0.5rem;
-  cursor: pointer;
-  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-}
+/* 会话项样式 - 使用 Tailwind CSS 类名实现 */
+/* flex items-center gap-2.5 py-[0.4rem] px-3 mx-2 my-[0.2rem] rounded-lg cursor-pointer transition-all duration-200 ease-[cubic-bezier(0.4,0,0.2,1)] */
 
 .session-item-inactive {
   color: var(--color-text);
@@ -334,7 +327,7 @@ const loadMoreSessions = async (): Promise<void> => {
 
 .session-item-active {
   background-color: var(--color-conversation-bg-active);
-    color: var(--color-conversation-text-active);
+  color: var(--color-conversation-text-active);
   /* box-shadow: 0 0 10px rgba(0, 0, 0, 0.05); */
 }
 

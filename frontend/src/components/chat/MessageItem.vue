@@ -32,7 +32,7 @@
 
           <template v-if="turn.content">
             <MarkdownContent v-if="isAssistant" class="message-item__text markdown-text" @click="handleClick"
-              :content="turn.content" :debounced="turn.state?.isStreaming" />
+              :content="turn.content" />
             <div v-else class="message-item__text break-all whitespace-pre-wrap">
               <el-tag v-if="messageMetadata.type === 'scheduler'" size="small" type="success" class="mr-1">定时任务</el-tag>
               {{ turn.content }}
@@ -124,9 +124,8 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, watch, onBeforeUnmount, nextTick } from "vue";
+import { computed, ref, watch, nextTick } from "vue";
 import { ElAlert, ElIcon, ElImageViewer } from "element-plus";
-import { useDebounceFn } from "@vueuse/core";
 import {
   AccessTimeTwotone,
   InsightsTwotone,
@@ -385,8 +384,6 @@ defineExpose({
   width: 100%;
   margin-top: 20px;
   margin-bottom: 25px;
-  content-visibility: auto;
-  contain-intrinsic-size: auto 300px;
   contain: layout style;
 }
 

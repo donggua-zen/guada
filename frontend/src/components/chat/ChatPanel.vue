@@ -1,16 +1,40 @@
 <template>
   <!-- 消息内容区域 -->
-  <div class="flex-1 overflow-hidden w-full items-center" ref="messagesContainerRef">
-    <template v-if="!isLoading && activeMessages.length === 0">
+  <div class="flex-1 overflow-hidden w-full items-center relative" ref="messagesContainerRef">
+    <template v-if="!isLoading && currentSessionId && activeMessages.length === 0">
       <!-- 欢迎页 -->
       <WelcomeScreen :session="currentSession" />
     </template>
-    <template v-else-if="authStore.isAuthenticated">
+
+    <!-- 初始加载时的骨架屏：仅在消息为空时显示 -->
+    <template v-if="showSkeleton">
+      <div class="absolute inset-0 z-1 bg-white dark:bg-[#1a1a1a] h-full overflow-hidden">
+        <div class="px-5 max-w-205 mx-auto h-full flex flex-col py-10 ">
+          <MessageSkeleton :count="2" />
+        </div>
+      </div>
+    </template>
+
+    <template v-if="!isLoading">
       <ScrollContainer ref="scrollContainerRef" class="max-h-full chat-scroll-container"
-        :auto-scroll="needScrollToBottom" @scroll="handleScroll">
+        :auto-scroll="needScrollToBottom && isStreaming" @scroll="handleScroll">
         <div class="px-5 max-w-205 mx-auto">
+          <!-- 加载更多历史消息指示器 -->
+          <div v-if="isLoadingMore" class="w-full py-4 flex items-center justify-center text-gray-400">
+            <el-icon class="is-loading mr-2" size="16">
+              <LoadingOutlined />
+            </el-icon>
+            <span class="text-xs">加载历史消息...</span>
+          </div>
+
+          <!-- 没有更多消息提示 -->
+          <div v-else-if="!hasMoreMessages && activeMessages.length > MESSAGES_PAGE_SIZE"
+            class="w-full py-4 text-center text-gray-400 text-xs">
+            没有更多消息了
+          </div>
+
           <MessageItem v-for="(message, index) in activeMessages" :key="message.id" :message="message"
-            v-memo="[message.id, message.contents, message.currentTurnsId, message.state?.isStreaming, message.state?.isThinking, activeMessages.length]"
+            v-memo="[message.id, message.contents, message.currentTurnsId, message.state?.isStreaming, message.state?.isThinking, isStreaming]"
             :avatar="message.role == 'user' ? userAvater : currentSession?.avatarUrl"
             :is-last="index === activeMessages.length - 1"
             :allow-generate="!isStreaming && index === lastUserMessageIndex" @delete="deleteMessage" @edit="editMessage"
@@ -59,7 +83,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, nextTick, onMounted, onUnmounted, type Ref, h } from "vue";
+import { ref, computed, watch, nextTick, onMounted, onUnmounted } from "vue";
 import { apiService } from "../../services/ApiService";
 import { usePopup } from "@/composables/usePopup";
 import { useDebounceFn } from "@vueuse/core";
@@ -75,7 +99,8 @@ import { useMessageOperations } from '@/composables/useMessageOperations'
 
 // 组件导入
 import MessageItem from "./MessageItem.vue";
-import { Avatar, ChatInput, ScrollContainer, ScrollToBottomButton } from "../ui";
+import MessageSkeleton from "./MessageSkeleton.vue";
+import { ChatInput, ScrollContainer, ScrollToBottomButton } from "../ui";
 import WelcomeScreen from './WelcomeScreen.vue';
 import { LoadingOutlined } from '@vicons/antd'
 
@@ -112,14 +137,11 @@ const currentSession = computed({
 });
 
 const userAvater = computed(() => authStore.user?.avatarUrl);
-
+const currentSessionId = ref<string | null>(null);
+const isLoading = ref(true);
 // 使用 useSessionChat composable
 const {
-  currentSessionId,
-  isLoading,
   hasGeneratedTitle,
-  loadSession,
-  loadMessages,
   resetTitleFlag,
   generateTitleIfNeeded
 } = useSessionChat(sessionStore, apiService)
@@ -130,6 +152,21 @@ const scrollContainerRef = ref<any>(null);
 const needScrollToBottom = ref(true);
 let scrollTicking = false;
 let lastScrollTop = 0;
+
+// 消息分页加载相关状态
+const INITIAL_PAGE_SIZE = 30 // 首次加载消息数量
+const MESSAGES_PAGE_SIZE = 15 // 后续每次加载消息数量
+const isLoadingMore = ref(false)
+const hasMoreMessages = ref(true)
+const SCROLL_TOP_THRESHOLD = 80 // 距离顶部多少像素触发加载更多
+
+// 骨架屏智能显示控制
+const showSkeleton = ref(false)
+let skeletonTimer: ReturnType<typeof setTimeout> | null = null
+let skeletonMinDisplayTimer: ReturnType<typeof setTimeout> | null = null
+let skeletonShowTime: number = 0 // 记录骨架屏开始显示的时间戳
+const SKELETON_DELAY = 200 // 延迟显示骨架屏的毫秒数
+const SKELETON_MIN_DISPLAY = 500 // 骨架屏最少显示毫秒数
 
 // SSE 事件监听取消函数
 let unsubscribeStreamStarted: (() => void) | null = null;
@@ -201,12 +238,31 @@ function handleScroll(event: any) {
   scrollTicking = true;
   requestAnimationFrame(() => {
     const isAtBottom = scrollContainerRef.value?.isAtBottom;
-    if (needScrollToBottom.value && lastScrollTop - event.target.scrollTop > 10 && !isAtBottom) {
+    // 从 ScrollContainer 的滚动元素获取 scrollTop，确保准确性
+    const scrollElement = scrollContainerRef.value?.getScrollElement?.();
+    const scrollTop = scrollElement?.scrollTop ?? event.target?.scrollTop ?? 0;
+
+    // 检测是否滚动到顶部附近，触发加载更多历史消息
+    if (
+      scrollTop < SCROLL_TOP_THRESHOLD &&
+      hasMoreMessages.value &&
+      !isLoadingMore.value &&
+      currentSessionId.value
+    ) {
+      const earliestId = sessionStore.getEarliestMessageId(currentSessionId.value);
+      if (earliestId) {
+        // 立即设置标记，防止重复触发
+        isLoadingMore.value = true;
+        loadMoreMessages(currentSessionId.value, earliestId);
+      }
+    }
+
+    if (needScrollToBottom.value && lastScrollTop - scrollTop > 10 && !isAtBottom) {
       needScrollToBottom.value = false;
     } else if (!needScrollToBottom.value && isAtBottom) {
       needScrollToBottom.value = true;
     }
-    lastScrollTop = event.target.scrollTop;
+    lastScrollTop = scrollTop;
     updateScrollButtonVisibility();
     scrollTicking = false;
   });
@@ -228,7 +284,7 @@ watch(() => isStreaming.value, (newVal, oldVal) => {
 const activeMessages = computed({
   get: () => {
     const sessionId = currentSessionId.value;
-    return sessionId ? sessionStore.getMessages(sessionId) || [] : [];
+    return sessionId && !isLoading.value ? sessionStore.getMessages(sessionId) || [] : [];
   },
   set: (value: any[]) => {
     const sessionId = currentSessionId.value;
@@ -348,10 +404,7 @@ const debouncedSaveSession = useDebounceFn(() => {
 
 // 监听器
 watch(() => props.session?.id, async (newSessionId: string | undefined, oldSessionId: string | undefined) => {
-  // setTimeout(() => {
-  handleSessionChange(newSessionId ?? null, oldSessionId ?? null);
-
-  // }, 500);
+  await handleSessionChange(newSessionId ?? null, oldSessionId ?? null);
 }, { immediate: true });
 
 // 监听流式状态变化，在第一次对话完成后生成标题
@@ -430,44 +483,210 @@ onMounted(() => {
 onUnmounted(() => {
   cleanupSessionEventListeners();
 });
+/**
+  * 加载会话配置和消息（首次加载，只加载最近 N 条）
+  */
+async function loadSession(sessionId: string) {
+  await loadMessages(sessionId, { isInitial: true });
+}
 
+/**
+ * 加载会话消息
+ * @param sessionId - 会话 ID
+ * @param options - 加载选项
+ *   - isInitial: 是否为首次加载（加载最近 N 条）
+ *   - beforeMessageId: 加载此 ID 之前（更早）的消息
+ */
+async function loadMessages(
+  sessionId: string,
+  options: { isInitial?: boolean; beforeMessageId?: string } = {},
+) {
+  const sessionState = sessionStore.getSessionState(sessionId);
+  if (sessionState.isStreaming) {
+    return;
+  }
+
+  const isInitial = options.isInitial ?? true;
+  if (!isInitial) {
+    isLoadingMore.value = true;
+  }
+
+  try {
+    const requestOptions: any = {};
+    if (isInitial) {
+      // 首次加载：加载最近 INITIAL_PAGE_SIZE 条
+      requestOptions.limit = INITIAL_PAGE_SIZE;
+    } else if (options.beforeMessageId) {
+      // 加载更多：加载指定 ID 之前的更早消息
+      requestOptions.limit = MESSAGES_PAGE_SIZE;
+      requestOptions.beforeMessageId = options.beforeMessageId;
+    }
+
+    const sessionMessages = await apiService.fetchSessionMessages(
+      sessionId,
+      requestOptions,
+    );
+
+    // 处理历史消息的思考时长回填
+    sessionMessages.items.forEach(
+      (message: { id: string; contents: any[] }) => {
+        if (message.contents && Array.isArray(message.contents)) {
+          message.contents.forEach((content) => {
+            if (content.meta_data?.thinking_duration_ms) {
+              content.thinking_duration_ms =
+                content.meta_data.thinking_duration_ms;
+            }
+          });
+        }
+      },
+    );
+
+    if (isInitial) {
+      // 首次加载：替换消息列表
+      activeMessages.value = sessionMessages.items;
+      const pageSize = isInitial ? INITIAL_PAGE_SIZE : MESSAGES_PAGE_SIZE;
+      hasMoreMessages.value = sessionMessages.items.length >= pageSize;
+    } else {
+      // 加载更多：prepend 到列表前部
+      if (sessionMessages.items.length > 0) {
+        // 记录当前滚动位置（内容高度）
+        const scrollElement = scrollContainerRef.value?.getScrollElement?.();
+        const oldScrollHeight = scrollElement?.scrollHeight || 0;
+
+        sessionStore.prependMessages(sessionId, sessionMessages.items);
+
+        // 恢复滚动位置，避免跳到顶部
+        nextTick(() => {
+          const newScrollHeight = scrollElement?.scrollHeight || 0;
+          const heightDiff = newScrollHeight - oldScrollHeight;
+          if (scrollElement && heightDiff > 0) {
+            scrollElement.scrollTop = heightDiff;
+          }
+        });
+      }
+      const pageSize = isInitial ? INITIAL_PAGE_SIZE : MESSAGES_PAGE_SIZE;
+      hasMoreMessages.value = sessionMessages.items.length >= pageSize;
+    }
+  } catch (error: any) {
+    console.error('加载消息失败:', error);
+    notify.error('加载消息失败', error.message);
+  } finally {
+    isLoadingMore.value = false;
+  }
+}
+
+/**
+ * 加载更多历史消息
+ * @param sessionId - 会话 ID
+ * @param beforeMessageId - 从此 ID 之前开始加载
+ */
+async function loadMoreMessages(sessionId: string, beforeMessageId: string) {
+  await loadMessages(sessionId, { isInitial: false, beforeMessageId });
+}
 /**
  * 处理会话切换
  */
+/**
+ * 清理骨架屏定时器
+ */
+function clearSkeletonTimers() {
+  if (skeletonTimer) {
+    clearTimeout(skeletonTimer)
+    skeletonTimer = null
+  }
+  if (skeletonMinDisplayTimer) {
+    clearTimeout(skeletonMinDisplayTimer)
+    skeletonMinDisplayTimer = null
+  }
+}
+
+/**
+ * 启动骨架屏延迟显示逻辑
+ * 200ms 内加载完成则不显示，超过 200ms 则显示且至少保持 500ms
+ */
+function startSkeletonDelay() {
+  clearSkeletonTimers()
+  showSkeleton.value = false
+  skeletonShowTime = 0
+  showSkeleton.value = true
+  skeletonShowTime = Date.now() // 记录开始显示的时间戳
+  // skeletonTimer = setTimeout(() => {
+  //   // 200ms 后如果还在加载，则显示骨架屏
+  //   if (isLoading.value) {
+  //     showSkeleton.value = true
+  //     skeletonShowTime = Date.now() // 记录开始显示的时间戳
+  //   }
+  // }, SKELETON_DELAY)
+}
+
+/**
+ * 结束骨架屏显示（遵守最少显示时长）
+ * 从开始显示时计时，确保至少显示 500ms
+ */
+function stopSkeletonDisplay() {
+  if (skeletonTimer) {
+    clearTimeout(skeletonTimer)
+    skeletonTimer = null
+  }
+
+  if (!showSkeleton.value) {
+    // 骨架屏未显示，直接保持隐藏
+    return
+  }
+
+  const elapsed = Date.now() - skeletonShowTime
+  const remaining = SKELETON_MIN_DISPLAY - elapsed
+  console.log('Skeleton remaining time:', remaining, 'ms')
+  if (remaining <= 0) {
+    // 已经显示了至少 500ms，立即隐藏
+
+    showSkeleton.value = false
+  } else {
+    // 还未满 500ms，延迟剩余时间后再隐藏
+    skeletonMinDisplayTimer = setTimeout(() => {
+      showSkeleton.value = false
+      skeletonMinDisplayTimer = null
+    }, remaining)
+  }
+}
+
 async function handleSessionChange(newSessionId: string | null, oldSessionId: string | null) {
   if (newSessionId === oldSessionId) return;
 
-  isLoading.value = true;
   resetTitleFlag();
-  currentSessionId.value = newSessionId;
-
-  if (newSessionId) {
-    try {
-      lastScrollTop = 0;
-      const sessionData = await loadSession(newSessionId);
-      currentSession.value = sessionData;
-      immediateScrollToBottom();
-
-      // 页面加载时一次性检查活跃流（用于刷新后的初始状态同步）
-      await checkActiveStreamOnLoad(newSessionId);
-
-      nextTick(() => {
-        if (!currentSession.value)
-          return;
-        if (inputMessage.value?.isWaiting) {
-          currentSession.value.settings.referencedKbs = inputMessage.value.knowledgeBaseIds;
-          handleSendMessage(inputMessage.value);
-        }
-      });
-    } catch (error) {
-      console.error('加载会话失败:', error);
-      notify.error('加载会话失败', error.message);
-    } finally {
-      isLoading.value = false;
-    }
-  } else {
-    isLoading.value = false;
+  if (newSessionId === null) {
+    currentSessionId.value = null;
+    return;
   }
+  isLoading.value = true;
+  startSkeletonDelay();
+  try {
+    lastScrollTop = 0;
+    currentSessionId.value = newSessionId;
+    await loadSession(newSessionId);
+    // 页面加载时一次性检查活跃流（用于刷新后的初始状态同步）
+    await checkActiveStreamOnLoad(newSessionId);
+
+    nextTick(() => {
+      if (!currentSession.value)
+        return;
+      if (inputMessage.value?.isWaiting) {
+        currentSession.value.settings.referencedKbs = inputMessage.value.knowledgeBaseIds;
+        handleSendMessage(inputMessage.value);
+      }
+    });
+  } catch (error) {
+    console.error('加载会话失败:', error);
+    notify.error('加载会话失败', error.message);
+  } finally {
+    isLoading.value = false;
+    nextTick(() => {
+      immediateScrollToBottom();
+    });
+    stopSkeletonDisplay();
+
+  }
+
 }
 
 /**

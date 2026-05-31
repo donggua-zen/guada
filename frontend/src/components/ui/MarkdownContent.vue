@@ -6,7 +6,6 @@
 </template>
 <script setup lang="ts">
 import { watch, ref, onMounted, onBeforeUnmount } from 'vue';
-import { useDebounceFn } from '@vueuse/core';
 import { useMarkdown } from "../../composables/useMarkdown";
 import { useDiffDOM } from "../../composables/useDiffDOM";
 import DiffDOM from 'diff-dom';
@@ -17,7 +16,6 @@ const { marked } = useMarkdown()
 // 定义 Props - 类型化
 const props = defineProps<{
     content: string;
-    debounced?: boolean;
 }>();
 
 // ============================================
@@ -99,30 +97,12 @@ const renderWithDiffDOM = async () => {
     }
 };
 
-/**
- * 防抖版本的渲染函数
- * 延迟时间：50ms（适合流式输出场景）
- */
-const debouncedRenderWithDiffDOM = useDebounceFn(() => {
-    renderWithDiffDOM();
-}, 50, { maxWait: 100 }); // 50ms 延迟，可根据需要调整
-
-// 监听 content 变化，根据 debounced 属性决定渲染策略
+// 监听 content 变化，直接渲染
 watch(
     () => props.content,
-    (newContent, oldContent) => {
-        // 根据 debounced 属性选择渲染方式
-        //nextTick(() => {
-        if (props.debounced) {
-            debouncedRenderWithDiffDOM();
-        } else {
-            // 即时模式：立即渲染，保持编辑模式的响应性
-            // console.log('[Markdown-DiffDOM] Using immediate render mode');
-            renderWithDiffDOM();
-        }
-        //});
+    () => {
+        renderWithDiffDOM();
     },
-    //{ immediate: true }
 );
 
 // 生命周期：清理资源
