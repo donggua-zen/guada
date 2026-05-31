@@ -4,6 +4,7 @@
  */
 
 import { reactive, shallowReactive } from "vue";
+import { useDebounceFn } from "@vueuse/core";
 import { usePopup } from "@/composables/usePopup";
 
 // 类型定义
@@ -62,6 +63,58 @@ interface StreamResponse {
 
 export function useStreamResponse(sessionStore: any, apiService: any) {
   const { toast } = usePopup();
+
+  // ============================================
+  // 内容缓冲与防抖 flush 机制
+  // 将消抖从 MarkdownContent 组件迁移到数据层
+  // 注意：content 是顺序出现的，一个完整结束后才会开始下一个，
+  // 因此全局只需一个缓冲区和防抖函数即可
+  // ============================================
+  interface ContentBuffer {
+    content: string;
+    reasoningContent: string;
+  }
+
+  // 当前内容缓冲区（全局只有一个，因为 content 不会交错）
+  let contentBuffer: ContentBuffer | null = null;
+  let currentBufferContentId: string | null = null;
+
+  // 全局防抖 flush 函数
+  const debouncedFlush = useDebounceFn(
+    (message: Message, contentIndex: number) => {
+      flushContent(message, contentIndex);
+    },
+    50,
+  );
+
+  /**
+   * 将缓冲区的内容 flush 到响应式数据中
+   */
+  function flushContent(message: Message, contentIndex: number) {
+    if (!contentBuffer || !message) return;
+
+    const content = message.contents[contentIndex];
+    if (!content) return;
+
+    content.content = contentBuffer.content;
+    content.reasoningContent = contentBuffer.reasoningContent;
+  }
+
+  /**
+   * 强制 flush 并清理缓冲区（流结束时调用）
+   */
+  function forceFlushContent(message: Message, contentIndex: number) {
+    flushContent(message, contentIndex);
+    clearContentBuffer();
+  }
+
+  /**
+   * 清理缓冲区
+   */
+  function clearContentBuffer() {
+    contentBuffer = null;
+    currentBufferContentId = null;
+  }
 
   /**
    * 处理新消息创建
@@ -171,7 +224,12 @@ export function useStreamResponse(sessionStore: any, apiService: any) {
   /**
    * 处理思考事件
    */
-  function handleThink(content: MessageContent, thinkingContent: string): void {
+  function handleThink(
+    content: MessageContent,
+    thinkingContent: string,
+    message: Message,
+    contentIndex: number,
+  ): void {
     // 首次收到 think 事件，记录开始时间并启动计时器
     if (!content.state.isThinking) {
       content.state.isThinking = true;
@@ -185,7 +243,16 @@ export function useStreamResponse(sessionStore: any, apiService: any) {
       }, 100);
     }
 
-    content.reasoningContent = thinkingContent;
+    // 流式期间：写入缓冲区，通过防抖 flush 更新
+    if (!contentBuffer || currentBufferContentId !== content.id) {
+      contentBuffer = {
+        content: content.content || "",
+        reasoningContent: "",
+      };
+      currentBufferContentId = content.id;
+    }
+    contentBuffer.reasoningContent = thinkingContent;
+    debouncedFlush(message, contentIndex);
   }
 
   /**
@@ -307,8 +374,22 @@ export function useStreamResponse(sessionStore: any, apiService: any) {
   /**
    * 处理文本内容
    */
-  function handleText(content: MessageContent, responseContent: string): void {
-    content.content = responseContent;
+  function handleText(
+    content: MessageContent,
+    responseContent: string,
+    message: Message,
+    contentIndex: number,
+  ): void {
+    // 流式期间：写入缓冲区，通过防抖 flush 更新
+    if (!contentBuffer || currentBufferContentId !== content.id) {
+      contentBuffer = {
+        content: "",
+        reasoningContent: content.reasoningContent || "",
+      };
+      currentBufferContentId = content.id;
+    }
+    contentBuffer.content = responseContent;
+    debouncedFlush(message, contentIndex);
   }
 
   /**
@@ -350,12 +431,17 @@ export function useStreamResponse(sessionStore: any, apiService: any) {
         error: response.error,
         finishReason: response.finishReason,
       };
+      // 错误时也要强制 flush，确保内容同步
+      forceFlushContent(message, contentIndex);
       content.state.isStreaming = false;
       content.state.isThinking = false;
       return;
     }
 
-    // 正常结束，更新状态
+    // 正常结束，强制 flush 缓冲区内容并清理
+    forceFlushContent(message, contentIndex);
+
+    // 更新状态
     content.state.isStreaming = false;
     content.state.isThinking = false;
   }
@@ -400,6 +486,12 @@ export function useStreamResponse(sessionStore: any, apiService: any) {
         clearInterval(content._thinkingTimer);
         content._thinkingTimer = null;
       }
+
+      // 强制 flush 并清理缓冲区
+      if (content) {
+        forceFlushContent(message, contentIndex);
+      }
+
       content.state.isStreaming = false;
       content.state.isThinking = false;
 
@@ -525,7 +617,12 @@ export function useStreamResponse(sessionStore: any, apiService: any) {
         if (response.type === "think") {
           thinkingContent += response.msg;
           if (message)
-            handleThink(message.contents[contentIndex], thinkingContent);
+            handleThink(
+              message.contents[contentIndex],
+              thinkingContent,
+              message,
+              contentIndex,
+            );
           continue;
         }
 
@@ -560,7 +657,12 @@ export function useStreamResponse(sessionStore: any, apiService: any) {
         // 处理文本内容
         if (response.type === "text") {
           responseContent = responseContent + response.msg;
-          handleText(message!.contents[contentIndex], responseContent);
+          handleText(
+            message!.contents[contentIndex],
+            responseContent,
+            message!,
+            contentIndex,
+          );
           continue;
         }
 

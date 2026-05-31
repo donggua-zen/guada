@@ -81,6 +81,37 @@ export const useSessionStore = defineStore('session', () => {
     }
 
     /**
+     * 在消息列表前部插入消息（用于加载历史消息）
+     * @param sessionId - 会话 ID
+     * @param newMessages - 要插入的消息列表
+     */
+    const prependMessages = (sessionId: string, newMessages: any[]): void => {
+        const session = getSessionState(sessionId)
+        session.messages.unshift(...newMessages)
+        session.lastUpdated = Date.now()
+    }
+
+    /**
+     * 获取最早的消息 ID（用于分页加载更早消息）
+     * @param sessionId - 会话 ID
+     * @returns 最早消息的 ID，如果没有则返回 null
+     */
+    const getEarliestMessageId = (sessionId: string): string | null => {
+        const messages = getSessionState(sessionId).messages
+        return messages.length > 0 ? messages[0].id : null
+    }
+
+    /**
+     * 获取最新消息 ID
+     * @param sessionId - 会话 ID
+     * @returns 最新消息的 ID，如果没有则返回 null
+     */
+    const getLatestMessageId = (sessionId: string): string | null => {
+        const messages = getSessionState(sessionId).messages
+        return messages.length > 0 ? messages[messages.length - 1].id : null
+    }
+
+    /**
      * 删除消息
      * @param sessionId - 会话 ID
      * @param messageId - 消息 ID
@@ -225,6 +256,9 @@ export const useSessionStore = defineStore('session', () => {
         getMessages,
         addMessage,
         setMessages,
+        prependMessages,
+        getEarliestMessageId,
+        getLatestMessageId,
         deleteMessage,
         updateMessage,
         sessionIsStreaming,

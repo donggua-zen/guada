@@ -159,6 +159,11 @@
                     </div>
                 </div>
             </div>
+
+            <!-- 底部提示 -->
+            <div class="mt-6 text-center text-sm text-gray-500 dark:text-[#8b8d95]">
+                访问<span class="text-blue-500 cursor-pointer hover:underline" @click="openExternalLink('https://ai.dingd.cn/skills')">技能市场</span>获取更多推荐技能
+            </div>
         </div>
 
         <!-- 查看文档对话框 -->
