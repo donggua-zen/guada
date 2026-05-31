@@ -92,7 +92,12 @@ export class MessageService {
         options.limit,
         options.beforeMessageId,
         options.afterMessageId,
-        { withContents: true, withFiles: true },
+        {
+          withContents: true,
+          withFiles: true,
+          // 加载更多历史消息时不包含边界，避免重复
+          includeBoundary: !options.beforeMessageId,
+        },
       );
       // findRecentBySessionId 按 ID 倒序返回（新->旧），需要反转回正序（旧->新）
       messages = messages.reverse();
