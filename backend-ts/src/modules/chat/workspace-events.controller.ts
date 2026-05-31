@@ -1,7 +1,10 @@
 import {
   Controller,
   Get,
+  Post,
+  Body,
   Param,
+  Query,
   Sse,
   UseGuards,
   MessageEvent,
@@ -35,6 +38,7 @@ export class WorkspaceEventsController {
   @Sse("sessions/:id/workspace/events")
   async subscribeWorkspaceEvents(
     @Param("id") id: string,
+    @Query("clientId") clientId: string,
     @CurrentUser() user: any,
     @Req() req: Request,
   ): Promise<Observable<MessageEvent>> {
@@ -47,8 +51,11 @@ export class WorkspaceEventsController {
     // 确定工作目录路径（已自动确保目录存在）
     const workspacePath = this.workspaceService.resolveSessionWorkspaceDir(session);
 
-    // 开始监听工作目录
-    this.fileWatcherService.startWatching(id, workspacePath);
+    // 使用 clientId 区分不同页面，支持多页面共享 watcher
+    const finalClientId = clientId || `default_${Date.now()}`;
+
+    // 开始监听工作目录（初始只监听根目录）
+    this.fileWatcherService.startWatching(id, workspacePath, finalClientId);
 
     // 创建 SSE 事件流
     const eventSubject = new Subject<MessageEvent>();
@@ -74,17 +81,17 @@ export class WorkspaceEventsController {
       }
     }, 90000);
 
-    // 当连接关闭时清理资源：停止文件监听
+    // 当连接关闭时清理资源：减少引用计数
     eventSubject.subscribe({
       complete: () => {
         clearInterval(heartbeatTimer);
         unsubscribe();
-        this.fileWatcherService.stopWatching(id);
+        this.fileWatcherService.stopWatching(id, finalClientId);
       },
       error: () => {
         clearInterval(heartbeatTimer);
         unsubscribe();
-        this.fileWatcherService.stopWatching(id);
+        this.fileWatcherService.stopWatching(id, finalClientId);
       },
     });
 
@@ -92,11 +99,36 @@ export class WorkspaceEventsController {
     req.on("close", () => {
       clearInterval(heartbeatTimer);
       unsubscribe();
-      this.fileWatcherService.stopWatching(id);
+      this.fileWatcherService.stopWatching(id, finalClientId);
       eventSubject.complete();
     });
 
     // 返回 Observable
     return eventSubject.asObservable();
+  }
+
+  /**
+   * 更新工作目录树展开状态
+   * 前端展开/折叠目录时调用，用于动态调整监听范围
+   */
+  @Post("sessions/:id/workspace/expanded-paths")
+  async updateExpandedPaths(
+    @Param("id") id: string,
+    @Query("clientId") clientId: string,
+    @Body() body: { expandedPaths: string[] },
+    @CurrentUser() user: any,
+  ) {
+    // 验证会话归属权
+    const session = await this.sessionService.getSessionById(id, user.id);
+    if (!session) {
+      throw new Error("Session not found or unauthorized");
+    }
+
+    const finalClientId = clientId || "default";
+
+    // 更新该客户端的监听范围
+    this.fileWatcherService.updateExpandedPaths(id, finalClientId, body.expandedPaths || []);
+
+    return { success: true };
   }
 }

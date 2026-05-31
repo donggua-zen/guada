@@ -6,6 +6,7 @@ import {
   Delete,
   Body,
   Param,
+  Query,
   UseGuards,
   Request,
 } from "@nestjs/common";
@@ -19,14 +20,26 @@ export class MessagesController {
   constructor(private readonly messageService: MessageService) {}
 
   /**
-   * 获取会话的消息列表
+   * 获取会话的消息列表（支持分页加载）
+   *
+   * 分页参数：
+   * - limit: 限制返回消息数量
+   * - beforeMessageId: 加载此 ID 之前（更早）的消息
+   * - afterMessageId: 加载此 ID 之后（更新）的消息
    */
   @Get("sessions/:sessionId/messages")
   async getMessages(
     @Param("sessionId") sessionId: string,
     @CurrentUser() user: any,
+    @Query("limit") limit?: string,
+    @Query("beforeMessageId") beforeMessageId?: string,
+    @Query("afterMessageId") afterMessageId?: string,
   ) {
-    return this.messageService.getMessages(sessionId, user.id);
+    return this.messageService.getMessages(sessionId, user.id, {
+      limit: limit ? parseInt(limit, 10) : undefined,
+      beforeMessageId,
+      afterMessageId,
+    });
   }
 
   /**

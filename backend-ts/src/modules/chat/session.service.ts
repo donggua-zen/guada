@@ -321,8 +321,8 @@ export class SessionService {
       throw new Error("Session not found or unauthorized");
     }
 
-    // 停止文件监听
-    this.fileWatcherService.stopWatching(sessionId);
+    // 停止文件监听（强制关闭，不等待引用计数）
+    this.fileWatcherService.stopWatching(sessionId, '__force_close__');
 
     // 级联删除消息（Prisma Schema 中已配置 onDelete: Cascade）
     await this.sessionRepo.deleteById(sessionId);

@@ -4,6 +4,7 @@ import { AppModule } from "./app.module";
 import { AllExceptionsFilter } from "./common/filters/all-exceptions.filter";
 import { UrlService } from "./common/services/url.service";
 import { createWinstonConfig } from './common/logger/winston.config';
+import { RequestTimingInterceptor } from "./common/interceptors/request-timing.interceptor";
 import * as express from "express";
 import * as path from "path";
 import * as fs from "fs";
@@ -71,6 +72,7 @@ async function bootstrap() {
   }
 
   app.useGlobalFilters(new AllExceptionsFilter());
+  app.useGlobalInterceptors(new RequestTimingInterceptor());
   app.enableCors(); // Enable CORS for frontend integration
 
   // 支持通过环境变量 PORT 指定端口，若未指定则使用 0 让系统自动分配可用端口
