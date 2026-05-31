@@ -66,14 +66,43 @@ export class MessageService {
    *
    * 注意：为了优化传输性能，返回的消息内容中会清空工具调用的详细参数和结果。
    * 如需查看完整内容，请使用 getMessageContentToolDetails 接口。
+   *
+   * 支持分页加载：
+   * - limit: 限制返回消息数量（用于首次加载最近 N 条）
+   * - beforeMessageId: 加载此 ID 之前（更早）的消息
+   * - afterMessageId: 加载此 ID 之后（更新）的消息
    */
-  async getMessages(sessionId: string, userId: string) {
+  async getMessages(
+    sessionId: string,
+    userId: string,
+    options?: {
+      limit?: number;
+      beforeMessageId?: string;
+      afterMessageId?: string;
+    },
+  ) {
     await this.assertSessionOwner(sessionId, userId);
 
-    const messages = await this.messageRepo.findBySessionId(sessionId, {
-      withContents: true,
-      withFiles: true,
-    });
+    let messages: any[];
+
+    // 如果有分页参数，使用 findRecentBySessionId（基于 ID 的游标分页）
+    if (options?.limit || options?.beforeMessageId || options?.afterMessageId) {
+      messages = await this.messageRepo.findRecentBySessionId(
+        sessionId,
+        options.limit,
+        options.beforeMessageId,
+        options.afterMessageId,
+        { withContents: true, withFiles: true },
+      );
+      // findRecentBySessionId 按 ID 倒序返回（新->旧），需要反转回正序（旧->新）
+      messages = messages.reverse();
+    } else {
+      // 无分页参数时保持原有行为，返回全部消息
+      messages = await this.messageRepo.findBySessionId(sessionId, {
+        withContents: true,
+        withFiles: true,
+      });
+    }
 
     // 格式化返回数据
     const formattedMessages = messages.map((msg) => {

@@ -66,7 +66,7 @@ export class MessageRepository {
     }
 
     if (beforeMessageId) {
-      // 获取截止到beforeMessageId的消息(含)
+      // 获取早于 beforeMessageId 的消息(含)
       where.id = { ...where.id, lte: beforeMessageId } as any;
     }
 
