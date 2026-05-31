@@ -81,6 +81,7 @@ class ApiService {
     // 创建 Axios 实例
     this.axiosInstance = axios.create({
       baseURL: this.baseURL,
+      timeout: 30000, // 30秒超时
       headers: {
         "Content-Type": "application/json",
       },
@@ -382,8 +383,23 @@ class ApiService {
 
   async fetchSessionMessages(
     sessionId: string,
+    options?: {
+      limit?: number;
+      beforeMessageId?: string;
+      afterMessageId?: string;
+    },
   ): Promise<PaginatedResponse<Message>> {
-    return await this._request(`/sessions/${sessionId}/messages`);
+    const params = new URLSearchParams();
+    if (options?.limit !== undefined) params.append("limit", options.limit.toString());
+    if (options?.beforeMessageId) params.append("beforeMessageId", options.beforeMessageId);
+    if (options?.afterMessageId) params.append("afterMessageId", options.afterMessageId);
+
+    const queryString = params.toString();
+    const url = queryString
+      ? `/sessions/${sessionId}/messages?${queryString}`
+      : `/sessions/${sessionId}/messages`;
+
+    return await this._request(url);
   }
 
   async importMessages(sessionId: string, messages: any[]): Promise<any> {
@@ -623,6 +639,18 @@ class ApiService {
 
   getWorkspaceWatcherSessionId(): string | null {
     return this.workspaceWatcherService.getSessionId();
+  }
+
+  /**
+   * 更新工作目录展开状态
+   * 用于动态调整后端监听范围
+   */
+  async updateWorkspaceExpandedPaths(sessionId: string, expandedPaths: string[]): Promise<void> {
+    const clientId = this.workspaceWatcherService.getClientId();
+    await this._request(`/sessions/${sessionId}/workspace/expanded-paths?clientId=${clientId}`, {
+      method: "POST",
+      data: { expandedPaths },
+    });
   }
 
   // ========== 会话事件实时推送 ==========

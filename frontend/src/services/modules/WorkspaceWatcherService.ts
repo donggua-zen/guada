@@ -19,8 +19,19 @@ export class WorkspaceWatcherService {
   private eventSource: EventSourcePolyfill | null = null;
   private listeners: Set<(event: FileChangeEvent) => void> = new Set();
   private currentSessionId: string | null = null;
+  private currentClientId: string;
 
-  constructor(private getBaseURL: () => string) {}
+  constructor(private getBaseURL: () => string) {
+    // 生成唯一的客户端标识（每次页面加载生成新的）
+    this.currentClientId = `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+  }
+
+  /**
+   * 获取当前客户端 ID
+   */
+  getClientId(): string {
+    return this.currentClientId;
+  }
 
   /**
    * 连接到指定会话的工作目录事件流（SSE）
@@ -37,7 +48,7 @@ export class WorkspaceWatcherService {
     this.currentSessionId = sessionId;
 
     const token = localStorage.getItem("token") || sessionStorage.getItem("token") || "";
-    const url = `${this.getBaseURL()}/sessions/${sessionId}/workspace/events`;
+    const url = `${this.getBaseURL()}/sessions/${sessionId}/workspace/events?clientId=${this.currentClientId}`;
 
     this.eventSource = new EventSourcePolyfill(url, {
       headers: {
