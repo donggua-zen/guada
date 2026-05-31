@@ -51,12 +51,15 @@ export class MessageRepository {
       withFiles?: boolean;
       withContents?: boolean;
       onlyCurrentContent?: boolean;
+      // 是否包含边界消息（beforeMessageId 那条），默认包含以兼容旧逻辑
+      includeBoundary?: boolean;
     },
   ) {
     const {
       withFiles = false,
       withContents = true,
       onlyCurrentContent = false,
+      includeBoundary = true,
     } = options || {};
     const where: any = { sessionId };
 
@@ -66,8 +69,9 @@ export class MessageRepository {
     }
 
     if (beforeMessageId) {
-      // 获取早于 beforeMessageId 的消息(含)
-      where.id = { ...where.id, lte: beforeMessageId } as any;
+      // 获取早于 beforeMessageId 的消息，默认包含边界以兼容旧逻辑
+      const boundaryOp = includeBoundary ? 'lte' : 'lt';
+      where.id = { ...where.id, [boundaryOp]: beforeMessageId } as any;
     }
 
     const messages = await this.prisma.message.findMany({
