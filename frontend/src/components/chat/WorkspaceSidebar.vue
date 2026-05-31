@@ -41,7 +41,10 @@
 
                         <el-tree v-else ref="treeRef" :key="treeKey" :data="treeData" :props="treeProps" node-key="path"
                             :expand-on-click-node="true" :default-expanded-keys="expandedKeys" :lazy="true"
-                            :load="loadNode" @node-click="handleTreeNodeClick" highlight-current class="workspace-tree">
+                            :load="loadNode" @node-click="handleTreeNodeClick"
+                            @node-expand="onNodeExpand"
+                            @node-collapse="onNodeCollapse"
+                            highlight-current class="workspace-tree">
                             <template #default="{ node, data }">
                                 <span class="workspace-tree-node">
                                     <el-icon v-if="data.isDirectory" class="mr-1">
@@ -781,6 +784,51 @@ async function handleWorkspaceChange(workspacePath: string | null) {
         console.error('Failed to change workspace path:', error);
         ElMessage.error(error.message || '更换工作目录失败');
     }
+}
+
+/**
+ * 收集当前所有已展开节点的路径
+ */
+function collectExpandedPathsFromTree(): string[] {
+    const paths: string[] = [];
+    const tree = treeRef.value;
+    if (!tree) return paths;
+
+    const nodesMap = tree.store?.nodesMap;
+    if (nodesMap) {
+        Object.values(nodesMap).forEach((node: any) => {
+            if (node.expanded && node.data?.path) {
+                paths.push(node.data.path);
+            }
+        });
+    }
+    return paths;
+}
+
+// 防抖发送展开状态到后端
+let expandPathsDebounceTimer: ReturnType<typeof setTimeout> | null = null;
+function sendExpandedPathsToBackend() {
+    if (expandPathsDebounceTimer) {
+        clearTimeout(expandPathsDebounceTimer);
+    }
+    expandPathsDebounceTimer = setTimeout(async () => {
+        if (!props.sessionId) return;
+        const paths = collectExpandedPathsFromTree();
+        try {
+            await apiService.updateWorkspaceExpandedPaths(props.sessionId, paths);
+        } catch (error) {
+            console.error('[WorkspaceSidebar] 同步展开状态失败:', error);
+        }
+    }, 300);
+}
+
+// 节点展开/折叠事件处理
+function onNodeExpand() {
+    sendExpandedPathsToBackend();
+}
+
+function onNodeCollapse() {
+    sendExpandedPathsToBackend();
 }
 
 let unsubscribeWatcher: (() => void) | null = null;
