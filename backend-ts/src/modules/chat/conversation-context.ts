@@ -149,7 +149,7 @@ export class ConversationContext implements IConversationContext {
     const isDeepSeekV4 = modelName.includes("deepseek-v4");
     // 思考功能开启的判断：thinkingEffort 存在且不为 'off'
     const shouldLoadReasoning =
-      isDeepSeekV4 && config.thinkingEffort && config.thinkingEffort !== "off";
+      config.thinkingEffort && config.thinkingEffort !== "off";
 
     if (shouldLoadReasoning) {
       this.logger.debug(
@@ -178,31 +178,68 @@ export class ConversationContext implements IConversationContext {
     this.history = preprocessResult.messages;
     this.currentSummary = preprocessResult.summary;
 
-    // 针对 DeepSeek-V4 等支持思维链的模型，根据是否存在工具调用来决定是否保留 reasoning content
+    // 针对开启思考功能的模型，根据是否存在工具调用来决定是否保留 reasoning content
     // 当存在工具调用时，reasoning content 包含了模型的推理过程，对后续对话有参考价值；否则可以移除以节省 Token
     if (shouldLoadReasoning) {
-      const hasToolCalls = this.history.some(
-        (msg) => msg.toolCalls && msg.toolCalls.length > 0,
-      );
+      if (isDeepSeekV4) {
+        // DeepSeek-V4 模式：需要根据是否存在工具调用来决定保留策略
+        const hasToolCalls = this.history.some(
+          (msg) => msg.toolCalls && msg.toolCalls.length > 0,
+        );
 
-      if (hasToolCalls) {
-        this.logger.debug(
-          `Found tool calls in history, keeping reasoning content`,
-        );
-        // 显式保留 reasoningContent 字段，确保其值不为 undefined 时被过滤掉
-        this.history = this.history.map((msg) => ({
-          ...msg,
-          reasoningContent: msg.reasoningContent ?? "",
-        }));
+        if (hasToolCalls) {
+          // 存在工具调用，全部保留 reasoning content
+          this.logger.debug(
+            `Found tool calls in history, keeping all reasoning content (DeepSeek-V4 mode)`,
+          );
+          this.history = this.history.map((msg) => ({
+            ...msg,
+            reasoningContent: msg.reasoningContent ?? "",
+          }));
+        } else {
+          // 无工具调用，移除所有 reasoning content
+          this.logger.debug(
+            `No tool calls found in history, removing reasoning content`,
+          );
+          this.history = this.history.map((msg) => {
+            const { reasoningContent, ...rest } = msg as any;
+            return rest as MessageRecord;
+          });
+        }
       } else {
+        // 非 V4 模式：最后一条消息不是 user 即代表使用了工具
+        // 仅保留最后一条 user 消息之后的 reasoning content
         this.logger.debug(
-          `No tool calls found in history, removing reasoning content`,
+          `Non-V4 mode: keeping reasoning content after last user message`,
         );
-        // 通过解构赋值移除 reasoningContent 字段，减少不必要的 Token 消耗
-        this.history = this.history.map((msg) => {
-          const { reasoningContent, ...rest } = msg as any;
-          return rest as MessageRecord;
+        // 从后往前查找最后一条 user 消息的索引
+        const lastUserIndex = this.history
+          .map((msg) => msg.role)
+          .lastIndexOf("user");
+        const startIndex = lastUserIndex >= 0 ? lastUserIndex : 0;
+        this.history = this.history.map((msg, index) => {
+          if (index >= startIndex) {
+            // 保留当前轮次的 reasoning content
+            return { ...msg, reasoningContent: msg.reasoningContent ?? "" };
+          } else {
+            // 移除历史轮次的 reasoning content
+            const { reasoningContent, ...rest } = msg as any;
+            return rest as MessageRecord;
+          }
         });
+      }
+    }
+
+    // KIMI 特殊处理：若历史记录最后一条消息的 content 为空字符串，则替换为空格
+    // Kimi 模型对空 content 处理不友好，可能导致请求异常，用空格兜底
+    const isKimi = modelName.includes("kimi");
+    if (isKimi && this.history.length > 0) {
+      const lastMsg = this.history[this.history.length - 1];
+      if (lastMsg.content === "") {
+        lastMsg.content = " ";
+        this.logger.debug(
+          `Kimi model: replaced empty content with space for last message`,
+        );
       }
     }
 
