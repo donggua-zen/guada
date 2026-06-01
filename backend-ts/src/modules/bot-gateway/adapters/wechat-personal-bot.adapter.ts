@@ -46,7 +46,9 @@ export class WechatPersonalBotAdapter extends BaseBotAdapter {
 
   private getSessionPath(config: BotConfig): string {
     const safeId = String(config.id).replace(/[^a-zA-Z0-9._-]/g, "_");
-    const sessionDir = path.join(process.cwd(), "data", "wechat-personal");
+    // 优先使用 USERDATA_DIR（Electron 用户数据目录），其次 DATA_DIR，最后回退到 process.cwd()/data
+    const dataDir = process.env.USERDATA_DIR || process.env.DATA_DIR || path.join(process.cwd(), "data");
+    const sessionDir = path.join(dataDir, "wechat-personal");
     return path.join(sessionDir, `${safeId}.json`);
   }
 
