@@ -1,5 +1,4 @@
 import type { IlinkJsonTransport } from "../transport/ilink-json-transport";
-import { coercePlainMarkdown } from "../internal/markdown-lite";
 import { nextOutboundClientMarker } from "../internal/random-tags";
 import { AuthorKind, ItemKind, OutboxPhase } from "../protocol/wire-models";
 import type { OutboundWireEnvelope, WireCompositeItem } from "../protocol/wire-models";
@@ -40,8 +39,7 @@ async function emitFacetChain(
     return last;
 }
 
-export function packLiteralReply(peerKey: string, contextToken: string, markdown: string): OutboundWireEnvelope {
-    const flat = coercePlainMarkdown(markdown);
+export function packLiteralReply(peerKey: string, contextToken: string, text: string): OutboundWireEnvelope {
     return {
         msg: {
             from_user_id: "",
@@ -49,7 +47,7 @@ export function packLiteralReply(peerKey: string, contextToken: string, markdown
             client_id: nextOutboundClientMarker(),
             message_type: AuthorKind.Bot,
             message_state: OutboxPhase.Settled,
-            item_list: flat ? [{ type: ItemKind.Text, text_item: { text: flat } }] : undefined,
+            item_list: text ? [{ type: ItemKind.Text, text_item: { text } }] : undefined,
             context_token: contextToken,
         },
     };
@@ -59,9 +57,9 @@ export async function postLiteralReply(
     transport: IlinkJsonTransport,
     peerKey: string,
     contextToken: string,
-    markdown: string,
+    text: string,
 ): Promise<{ messageId: string }> {
-    const envelope = packLiteralReply(peerKey, contextToken, markdown);
+    const envelope = packLiteralReply(peerKey, contextToken, text);
     await transport.dispatchOutboundEnvelope(envelope);
     return { messageId: envelope.msg?.client_id ?? "" };
 }
@@ -75,7 +73,7 @@ export async function postPhotoBundle(
 ): Promise<string> {
     const chain: WireCompositeItem[] = [];
     if (caption) {
-        chain.push({ type: ItemKind.Text, text_item: { text: coercePlainMarkdown(caption) } });
+        chain.push({ type: ItemKind.Text, text_item: { text: caption } });
     }
     chain.push({
         type: ItemKind.Image,
@@ -100,7 +98,7 @@ export async function postVideoBundle(
 ): Promise<string> {
     const chain: WireCompositeItem[] = [];
     if (caption) {
-        chain.push({ type: ItemKind.Text, text_item: { text: coercePlainMarkdown(caption) } });
+        chain.push({ type: ItemKind.Text, text_item: { text: caption } });
     }
     chain.push({
         type: ItemKind.Video,
@@ -125,7 +123,7 @@ export async function postFileBundle(
 ): Promise<string> {
     const chain: WireCompositeItem[] = [];
     if (caption) {
-        chain.push({ type: ItemKind.Text, text_item: { text: coercePlainMarkdown(caption) } });
+        chain.push({ type: ItemKind.Text, text_item: { text: caption } });
     }
     chain.push({
         type: ItemKind.File,
