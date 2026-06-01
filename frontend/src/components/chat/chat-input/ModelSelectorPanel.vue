@@ -139,7 +139,7 @@ const props = defineProps<{
 const emit = defineEmits<{
   'update:visible': [value: boolean]
   'select': [modelId: string]  // 只传递模型 ID
-  'favorite-changed': []
+  'favorite-changed': [modelId: string, isFavorite: boolean]
 }>()
 
 const searchText = ref('')
@@ -222,14 +222,18 @@ async function handleToggleFavorite(modelId: string) {
   try {
     await apiService.toggleModelFavorite(modelId)
 
+    // 计算新的收藏状态
+    const newIsFavorite = !favoriteIds.value.has(modelId)
+
     // 更新本地收藏状态
-    if (favoriteIds.value.has(modelId)) {
-      favoriteIds.value.delete(modelId)
-    } else {
+    if (newIsFavorite) {
       favoriteIds.value.add(modelId)
+    } else {
+      favoriteIds.value.delete(modelId)
     }
 
-    // 本地状态已更新，不需要通知父组件重新获取数据
+    // 通知父组件具体哪个模型的收藏状态变了
+    emit('favorite-changed', modelId, newIsFavorite)
   } catch (error) {
     console.error('切换收藏状态失败:', error)
   }

@@ -126,7 +126,8 @@
 
       <!-- 模型选择器弹窗 -->
       <ModelSelectorPanel v-model:visible="modelPanelVisible" :anchor-el="modelButtonRef?.$el" :models="models"
-        :providers="providers" :current-model-id="props.config?.modelId || null" @select="handleModelSelect" />
+        :providers="providers" :current-model-id="props.config?.modelId || null" @select="handleModelSelect"
+        @favorite-changed="handleFavoriteChanged" />
 
       <!-- 知识库选择弹窗 -->
       <KnowledgeBasePanel v-model:visible="kbPanelVisible" :anchor-el="kbButtonRef?.$el"
@@ -547,9 +548,12 @@ const handleModelSelect = (modelId: string) => {
   modelPanelVisible.value = false
 };
 
-// 处理收藏状态变化（刷新模型列表）
-const handleFavoriteChanged = async () => {
-  await reloadModels();
+// 处理收藏状态变化（同步更新本地模型数据）
+const handleFavoriteChanged = (modelId: string, isFavorite: boolean) => {
+  const model = models.value.find(m => m.id === modelId);
+  if (model) {
+    model.isFavorite = isFavorite;
+  }
 };
 
 // 重新加载模型列表
