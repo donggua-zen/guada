@@ -6,36 +6,44 @@
             :pane1="{ size: selectedFile ? (isHorizontalLayout ? 40 : 60) : 100, minSize: 30, maxSize: 100 }"
             :pane2="{ size: selectedFile ? (isHorizontalLayout ? 60 : 40) : 0, minSize: 0, maxSize: 100 }">
             <template #pane1>
-                <div class="flex flex-col h-full">
+                <div class="h-full flex flex-col">
                     <!-- 头部（仅在左侧目录树显示） -->
                     <div
-                        class="shrink-0 flex items-center justify-between px-4 py-3 border-b border-gray-200 dark:border-[#2e3035]">
-                        <h3 class="text-sm font-semibold text-gray-700 dark:text-[#e8e9ed]">工作目录</h3>
-                        <div class="flex items-center gap-2">
+                        class="shrink-0 flex items-center justify-between px-2 py-1.5 border-b border-gray-200 dark:border-[#2e3035] bg-white dark:bg-[#1a1b1e]">
+                        <h3 class="text-sm font-semibold text-gray-700 dark:text-[#e8e9ed] whitespace-nowrap mr-1.5">工作目录</h3>
+                        <div class="flex items-center gap-0 shrink-0">
                             <!-- 更换工作目录按钮 -->
                             <el-tooltip content="更换工作目录" placement="bottom">
-                                <el-button :icon="Switch" circle size="small" @click="changeWorkspacePath" />
+                                <el-button class="workspace-tool-btn" text @click="changeWorkspacePath">
+                                    <el-icon size="16"><Switch /></el-icon>
+                                </el-button>
                             </el-tooltip>
                             <!-- 打开文件夹按钮（仅 Electron 环境） -->
                             <el-tooltip v-if="isElectron" content="在文件管理器中打开" placement="bottom">
-                                <el-button :icon="FolderOpened" circle size="small" @click="openInFileManager" />
+                                <el-button class="workspace-tool-btn" text @click="openInFileManager">
+                                    <el-icon size="16"><FolderOpened /></el-icon>
+                                </el-button>
                             </el-tooltip>
                             <!-- 布局切换按钮 -->
                             <el-tooltip :content="isHorizontalLayout ? '切换为上下布局' : '切换为左右布局'" placement="bottom">
-                                <el-button :icon="isHorizontalLayout ? SplitVerticalIcon : SplitHorizontalIcon" circle
-                                    size="small" @click="toggleLayout" />
+                                <el-button class="workspace-tool-btn" text @click="toggleLayout">
+                                    <el-icon size="16">
+                                        <component :is="isHorizontalLayout ? SplitVerticalIcon : SplitHorizontalIcon" />
+                                    </el-icon>
+                                </el-button>
                             </el-tooltip>
                             <!-- 刷新按钮 -->
                             <el-tooltip content="刷新" placement="bottom">
-                                <el-button :icon="Refresh" circle size="small" @click="refreshTree"
-                                    :loading="isLoading" />
+                                <el-button class="workspace-tool-btn" text @click="refreshTree" :loading="isLoading">
+                                    <el-icon size="16"><Refresh /></el-icon>
+                                </el-button>
                             </el-tooltip>
                         </div>
                     </div>
 
                     <!-- 目录树内容 -->
-                    <div class="flex-1 overflow-y-auto p-2">
-                        <div v-if="!treeData.length" class="text-center py-8 text-gray-400 text-sm">
+                    <div class="flex-1 overflow-auto min-w-0">
+                        <div v-if="!treeData.length" class="text-center py-8 text-gray-400 text-sm p-2">
                             暂无文件
                         </div>
 
@@ -44,7 +52,8 @@
                             :load="loadNode" @node-click="handleTreeNodeClick"
                             @node-expand="onNodeExpand"
                             @node-collapse="onNodeCollapse"
-                            highlight-current class="workspace-tree">
+                            @node-contextmenu="handleNodeContextMenu"
+                            highlight-current class="workspace-tree min-w-fit p-2">
                             <template #default="{ node, data }">
                                 <span class="workspace-tree-node">
                                     <el-icon v-if="data.isDirectory" class="mr-1">
@@ -66,7 +75,7 @@
                 <div v-if="selectedFile" class="flex flex-col h-full w-full overflow-hidden">
                     <!-- 标题栏 -->
                     <div
-                        class="shrink-0 flex items-center justify-between px-4 py-3 bg-gray-50 dark:bg-[#2a2c30] border-b border-gray-200 dark:border-[#2e3035]">
+                        class="shrink-0 flex items-center justify-between px-2 py-1.5 bg-gray-50 dark:bg-[#2a2c30] border-b border-gray-200 dark:border-[#2e3035]">
                         <span class="text-xs font-medium text-gray-600 dark:text-[#8b8d95] truncate">
                             {{ selectedFile.name }}
                         </span>
@@ -130,13 +139,43 @@
         :allow-empty="false"
         @confirm="handleWorkspaceChange"
     />
+
+    <!-- 右键菜单 -->
+    <div v-if="contextMenu.visible"
+      class="fixed bg-white dark:bg-[#232428] rounded-lg shadow-lg border border-gray-200 dark:border-[#2e3035] py-1 z-50 min-w-40"
+      :style="{ left: contextMenu.x + 'px', top: contextMenu.y + 'px' }" @click.stop @contextmenu.prevent>
+      <div
+        class="px-4 py-2 text-sm text-gray-700 dark:text-[#e8e9ed] hover:bg-gray-100 dark:hover:bg-[#2a2c30] cursor-pointer flex items-center gap-2"
+        @click="handleCopyFileName">
+        <el-icon>
+          <CopyDocument />
+        </el-icon>
+        复制文件名
+      </div>
+      <div
+        class="px-4 py-2 text-sm text-gray-700 dark:text-[#e8e9ed] hover:bg-gray-100 dark:hover:bg-[#2a2c30] cursor-pointer flex items-center gap-2"
+        @click="handleCopyFilePath">
+        <el-icon>
+          <CopyDocument />
+        </el-icon>
+        复制路径
+      </div>
+      <div v-if="isElectron"
+        class="px-4 py-2 text-sm text-gray-700 dark:text-[#e8e9ed] hover:bg-gray-100 dark:hover:bg-[#2a2c30] cursor-pointer flex items-center gap-2"
+        @click="handleOpenInExplorer">
+        <el-icon>
+          <FolderOpened />
+        </el-icon>
+        在资源管理器中打开
+      </div>
+    </div>
 </template>
 
 <script setup lang="ts">
 import { ref, computed, watch, onUnmounted, nextTick } from 'vue';
 import { ElMessage } from 'element-plus';
 import { apiService, type FileChangeEvent } from '@/services/ApiService';
-import { Refresh, Close, FolderOpened, Switch } from '@element-plus/icons-vue';
+import { Refresh, Close, FolderOpened, Switch, CopyDocument } from '@element-plus/icons-vue';
 import { SwapHorizTwotone as SplitVerticalIcon, SwapVertTwotone as SplitHorizontalIcon } from '@vicons/material';
 import { LoadingOutlined } from '@vicons/antd';
 import { Folder, Document } from '@element-plus/icons-vue';
@@ -182,6 +221,14 @@ const previewError = ref('');
 const expandedKeys = ref<string[]>([]);
 const treeRef = ref();
 const treeKey = ref(0);
+
+// 右键菜单状态
+const contextMenu = ref({
+  visible: false,
+  x: 0,
+  y: 0,
+  node: null as WorkspaceNode | null,
+});
 
 // 检测是否为 Electron 环境
 const isElectron = typeof window !== 'undefined' && window.electronAPI !== undefined;
@@ -641,6 +688,164 @@ function handleTreeNodeClick(data: WorkspaceNode) {
 }
 
 /**
+ * 处理节点右键菜单
+ */
+function handleNodeContextMenu(event: MouseEvent, data: WorkspaceNode) {
+  event.preventDefault();
+  contextMenu.value = {
+    visible: true,
+    x: event.clientX,
+    y: event.clientY,
+    node: data,
+  };
+
+  // 点击其他地方关闭菜单
+  const closeHandler = () => {
+    closeContextMenu();
+    document.removeEventListener('click', closeHandler);
+  };
+  setTimeout(() => {
+    document.addEventListener('click', closeHandler);
+  }, 0);
+}
+
+/**
+ * 关闭右键菜单
+ */
+function closeContextMenu() {
+  contextMenu.value.visible = false;
+  contextMenu.value.node = null;
+}
+
+/**
+ * 安全写入剪贴板
+ */
+async function writeToClipboard(text: string): Promise<void> {
+  if (!text) return;
+
+  const win = window as any;
+
+  // 优先使用 Electron IPC 方式
+  if (win.electronAPI?.clipboardIPC?.writeText) {
+    try {
+      const result = await win.electronAPI.clipboardIPC.writeText(text);
+      if (!result.success) {
+        throw new Error(result.error);
+      }
+      return;
+    } catch (error) {
+      console.warn('[Workspace] IPC 写入失败，尝试其他方式:', error);
+    }
+  }
+
+  // 尝试直接调用 preload 暴露的 clipboard API
+  if (win.electronAPI?.clipboard?.writeText) {
+    try {
+      win.electronAPI.clipboard.writeText(text);
+      return;
+    } catch (error) {
+      console.warn('[Workspace] 直接调用失败，尝试 Web API:', error);
+    }
+  }
+
+  // 回退到 Web Clipboard API
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    try {
+      await navigator.clipboard.writeText(text);
+    } catch (error) {
+      console.error('[Workspace] Web Clipboard API 写入失败:', error);
+      ElMessage.error('复制失败');
+    }
+  } else {
+    console.error('[Workspace] 所有剪贴板 API 都不可用');
+    ElMessage.error('复制失败');
+  }
+}
+
+/**
+ * 复制文件名
+ */
+async function handleCopyFileName() {
+  const node = contextMenu.value.node;
+  if (!node) return;
+
+  await writeToClipboard(node.name);
+  ElMessage.success('文件名已复制');
+  closeContextMenu();
+}
+
+/**
+ * 复制路径（绝对路径）
+ */
+async function handleCopyFilePath() {
+  const node = contextMenu.value.node;
+  if (!node || !props.sessionId) return;
+
+  try {
+    // 获取工作目录绝对路径
+    const response = await apiService.getWorkspacePath(props.sessionId);
+    const workspacePath = response.workspacePath;
+    if (!workspacePath) {
+      ElMessage.error('无法获取工作目录路径');
+      closeContextMenu();
+      return;
+    }
+
+    // 拼接完整绝对路径
+    const relativePath = node.path.replace(/\\/g, '/');
+    const separator = workspacePath.endsWith('/') || workspacePath.endsWith('\\') || relativePath.startsWith('/') ? '' : '/';
+    const fullPath = workspacePath + separator + relativePath;
+
+    await writeToClipboard(fullPath);
+    ElMessage.success('路径已复制');
+  } catch (error: any) {
+    console.error('Failed to get workspace path for copy:', error);
+    ElMessage.error('复制路径失败');
+  }
+  closeContextMenu();
+}
+
+/**
+ * 在资源管理器中打开
+ */
+async function handleOpenInExplorer() {
+  const node = contextMenu.value.node;
+  if (!node || !isElectron || !props.sessionId) return;
+
+  try {
+    // 获取工作目录绝对路径
+    const response = await apiService.getWorkspacePath(props.sessionId);
+    const workspacePath = response.workspacePath;
+    if (!workspacePath) {
+      ElMessage.error('无法获取工作目录路径');
+      closeContextMenu();
+      return;
+    }
+
+    // 拼接完整绝对路径
+    const relativePath = node.path.replace(/\\/g, '/');
+    const separator = workspacePath.endsWith('/') || workspacePath.endsWith('\\') || relativePath.startsWith('/') ? '' : '/';
+    let fullPath = workspacePath + separator + relativePath;
+
+    // 如果是文件，获取其父目录路径
+    if (!node.isDirectory) {
+      const lastSepIndex = Math.max(fullPath.lastIndexOf('/'), fullPath.lastIndexOf('\\'));
+      if (lastSepIndex > 0) {
+        fullPath = fullPath.substring(0, lastSepIndex);
+      }
+    }
+
+    if (window.electronAPI) {
+      await window.electronAPI.openFolder(fullPath);
+    }
+  } catch (error: any) {
+    console.error('Failed to open in explorer:', error);
+    ElMessage.error('打开失败');
+  }
+  closeContextMenu();
+}
+
+/**
  * 处理文件选择
  */
 async function handleFileSelect(node: WorkspaceNode) {
@@ -869,6 +1074,7 @@ onUnmounted(() => {
         unsubscribeWatcher();
         unsubscribeWatcher = null;
     }
+    closeContextMenu();
 });
 </script>
 <style>
@@ -944,10 +1150,39 @@ onUnmounted(() => {
 .workspace-tree-node {
     font-size: 13px;
     color: var(--color-text, #333);
+    display: block;
+    width: 100%;
 }
 
 .dark .workspace-tree-node {
     color: var(--color-text);
+}
+
+/* 工作目录工具按钮 - 纯图标无框样式 */
+.workspace-tool-btn {
+    color: #888;
+    cursor: pointer;
+    font-size: 14px;
+    height: 24px;
+    width: 24px;
+    padding: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s;
+    margin: 0 2px;
+}
+
+.workspace-tool-btn:hover {
+    color: var(--color-primary, #409eff);
+}
+
+.dark .workspace-tool-btn {
+    color: #8b8d95;
+}
+
+.dark .workspace-tool-btn:hover {
+    color: var(--color-primary, #409eff);
 }
 
 /* Splitpanes 自定义样式 - 适配暗色模式 */
@@ -974,6 +1209,35 @@ onUnmounted(() => {
 :deep(.splitpanes.default-theme .splitpanes__pane) {
     background-color: transparent;
     border: none !important;
+}
+
+/* 工作目录 pane 设置最小宽度和滚动 */
+:deep(.lite-splitpanes__pane:first-child) {
+    overflow: hidden !important;
+    min-width: 220px !important;
+}
+
+/* 目录窗格滚动条美化 */
+:deep(.lite-splitpanes__pane:first-child) ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+}
+
+:deep(.lite-splitpanes__pane:first-child) ::-webkit-scrollbar-thumb {
+    background-color: rgba(0, 0, 0, 0.08);
+    border-radius: 6px;
+}
+
+:deep(.lite-splitpanes__pane:first-child) ::-webkit-scrollbar-thumb:hover {
+    background-color: rgba(0, 0, 0, 0.15);
+}
+
+:deep(.dark .lite-splitpanes__pane:first-child) ::-webkit-scrollbar-thumb {
+    background-color: rgba(255, 255, 255, 0.08);
+}
+
+:deep(.dark .lite-splitpanes__pane:first-child) ::-webkit-scrollbar-thumb:hover {
+    background-color: rgba(255, 255, 255, 0.15);
 }
 
 /* 隐藏悬停指示器 */
