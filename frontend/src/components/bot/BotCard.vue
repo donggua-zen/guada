@@ -95,6 +95,10 @@
         <p class="text-xs text-gray-400 mt-3 text-center">
           请使用微信扫描上方二维码完成登录
         </p>
+        <el-button size="small" class="mt-3" @click="handleRefreshQrCode">
+          <el-icon><Refresh /></el-icon>
+          <span class="ml-1">刷新二维码</span>
+        </el-button>
       </div>
       <!-- 不可用 -->
       <div v-else class="text-sm text-gray-400 py-8">
@@ -106,7 +110,7 @@
 
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
-import { Edit, Delete, FullScreen, CircleCheck, Timer, SwitchButton } from '@element-plus/icons-vue'
+import { Edit, Delete, FullScreen, CircleCheck, Timer, SwitchButton, Refresh } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 import type { BotInstance } from '@/types/bot'
 import { fixFrontendAssetUrl } from '@/utils/url'
@@ -180,12 +184,22 @@ const handleShowQrCode = async () => {
 // 弹窗打开时启动轮询，关闭时停止
 watch(qrDialogVisible, (visible) => {
   if (visible) {
-    qrPollTimer = setInterval(fetchQrStatus, 30_000)
+    qrPollTimer = setInterval(fetchQrStatus, 5_000)
   } else if (qrPollTimer) {
     clearInterval(qrPollTimer)
     qrPollTimer = null
   }
 })
+
+// 手动刷新二维码
+const handleRefreshQrCode = async () => {
+  qrLoading.value = true
+  qrStatus.value = 'unavailable'
+  qrCodeUrl.value = ''
+  qrMessage.value = ''
+  await fetchQrStatus()
+  qrLoading.value = false
+}
 
 // 退出登录
 const handleLogout = async () => {

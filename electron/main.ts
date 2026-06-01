@@ -375,6 +375,7 @@ async function startBackend(): Promise<void> {
           UPLOAD_ROOT_DIR: uploadDir,
           UPLOAD_URL_PREFIX: "/uploads",
           SETTINGS_DIR: userDataPath, // 传递设置目录
+          USERDATA_DIR: userDataPath, // 传递用户数据目录
           LOGS_DIR: logsDir, // 传递后端日志目录到用户数据目录
           SKILLS_DIR: skillsDir, // 传递技能目录到用户数据目录
           WORKSPACE_BASE_DIR: workspaceDir, // 传递会话工作目录基础路径
@@ -440,6 +441,7 @@ async function startBackend(): Promise<void> {
           UPLOAD_ROOT_DIR: uploadDir,
           UPLOAD_URL_PREFIX: "/uploads",
           SETTINGS_DIR: userDataPath, // 传递设置目录
+          USERDATA_DIR: userDataPath, // 传递用户数据目录
           LOGS_DIR: logsDir, // 传递后端日志目录到用户数据目录
           SKILLS_DIR: skillsDir, // 传递技能目录到用户数据目录
           WORKSPACE_BASE_DIR: workspaceDir, // 传递会话工作目录基础路径
