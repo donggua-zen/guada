@@ -8,14 +8,25 @@ import type { User, LoginRequest } from '@/types/api'
  * 认证状态 Store
  */
 export const useAuthStore = defineStore('auth', () => {
-    // 状态
-    const user: Ref<User | null> = ref(null)
-
     // Token 存储：优先从 localStorage 读取（记住我），否则使用 sessionStorage
     const getStoredToken = (): string | null => {
         return localStorage.getItem('token') || sessionStorage.getItem('token')
     }
 
+    const getStoredUser = (): User | null => {
+        const storedUser = localStorage.getItem('user') || sessionStorage.getItem('user')
+        if (storedUser) {
+            try {
+                return JSON.parse(storedUser)
+            } catch {
+                return null
+            }
+        }
+        return null
+    }
+
+    // 状态：store 创建时立即从 storage 恢复，确保刷新后数据不丢失
+    const user: Ref<User | null> = ref(getStoredUser())
     const token: Ref<string | null> = ref(getStoredToken())
 
     // 免登录状态
@@ -23,6 +34,10 @@ export const useAuthStore = defineStore('auth', () => {
 
     // 计算属性
     const isAuthenticated: ComputedRef<boolean> = computed(() => !!token.value)
+
+    // 定时验证定时器引用
+    let refreshTimer: number | null = null
+    const REFRESH_INTERVAL = 30 * 60 * 1000 // 30分钟
 
     // Actions
     async function login(credentials: LoginRequest & { rememberMe?: boolean }): Promise<boolean> {
@@ -55,6 +70,9 @@ export const useAuthStore = defineStore('auth', () => {
             token.value = accessToken
             user.value = userData
 
+            // 启动定时验证
+            startAuthRefreshTimer()
+
             return true
         } catch (error: any) {
             console.error("登录失败:", error)
@@ -72,6 +90,40 @@ export const useAuthStore = defineStore('auth', () => {
 
         token.value = null
         user.value = null
+
+        // 停止定时验证
+        stopAuthRefreshTimer()
+    }
+
+    /**
+     * 页面刷新时初始化认证状态
+     * 优先从 storage 恢复 token，然后异步验证 token 有效性并刷新用户信息
+     */
+    async function initializeAuth(): Promise<boolean> {
+        const storedToken = getStoredToken()
+        if (!storedToken) {
+            return false
+        }
+
+        // 先恢复 token，让 isAuthenticated 立即为 true，避免路由守卫拦截
+        token.value = storedToken
+
+        // 尝试从 storage 恢复用户信息（作为临时展示，后续会被验证结果覆盖）
+        const storedUser = localStorage.getItem('user') || sessionStorage.getItem('user')
+        if (storedUser) {
+            try {
+                user.value = JSON.parse(storedUser)
+            } catch {
+                user.value = null
+            }
+        }
+
+        // 同步验证 token 并刷新用户信息
+        const isValid = await checkAuth()
+        if (isValid) {
+            startAuthRefreshTimer()
+        }
+        return isValid
     }
 
     async function checkAuth(): Promise<boolean> {
@@ -118,6 +170,31 @@ export const useAuthStore = defineStore('auth', () => {
         }
     }
 
+    /**
+     * 启动定时验证定时器，每30分钟验证一次token有效性
+     */
+    function startAuthRefreshTimer(): void {
+        stopAuthRefreshTimer()
+        refreshTimer = window.setInterval(() => {
+            console.log('[AuthStore] 执行定时认证验证')
+            checkAuth().then((isValid) => {
+                if (!isValid) {
+                    console.warn('[AuthStore] 定时验证失败，用户已登出')
+                }
+            })
+        }, REFRESH_INTERVAL)
+    }
+
+    /**
+     * 停止定时验证定时器
+     */
+    function stopAuthRefreshTimer(): void {
+        if (refreshTimer !== null) {
+            window.clearInterval(refreshTimer)
+            refreshTimer = null
+        }
+    }
+
     async function checkAutoLoginStatus(): Promise<boolean> {
         try {
             // 使用新的分组设置接口
@@ -157,6 +234,9 @@ export const useAuthStore = defineStore('auth', () => {
             token.value = result.accessToken
             user.value = result.user
 
+            // 启动定时验证
+            startAuthRefreshTimer()
+
             console.log('自动登录成功')
             return true
         } catch (error) {
@@ -174,6 +254,7 @@ export const useAuthStore = defineStore('auth', () => {
         // Actions
         login,
         logout,
+        initializeAuth,
         checkAuth,
         checkAutoLoginStatus,
         setAutoLoginEnabled,

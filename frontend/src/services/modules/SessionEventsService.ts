@@ -40,8 +40,6 @@ export class SessionEventsService {
   private eventSource: EventSourcePolyfill | null = null;
   private listeners: Map<SessionEventType | "*", Set<EventListener>> = new Map();
   private clientId: string;
-  private currentUserId: string | null = null;
-
   constructor(private getBaseURL: () => string) {
     // 生成唯一的客户端标识（每次页面加载生成新的）
     this.clientId = `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
@@ -56,13 +54,13 @@ export class SessionEventsService {
 
   /**
    * 连接到事件流
+   * 后端通过 token 解析 userId，前端无需传递
    */
-  connect(userId: string): void {
+  connect(): void {
     if (this.eventSource?.readyState === EventSource.OPEN) {
       return;
     }
 
-    this.currentUserId = userId;
     this.startConnection();
   }
 
