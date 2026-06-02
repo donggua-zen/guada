@@ -81,7 +81,7 @@ class ApiService {
     // 创建 Axios 实例
     this.axiosInstance = axios.create({
       baseURL: this.baseURL,
-      timeout: 30000, // 30秒超时
+      timeout: 60000, // 30秒超时
       headers: {
         "Content-Type": "application/json",
       },
@@ -654,8 +654,8 @@ class ApiService {
   }
 
   // ========== 会话事件实时推送 ==========
-  connectSessionEvents(userId: string): void {
-    this.sessionEventsService.connect(userId);
+  connectSessionEvents(): void {
+    this.sessionEventsService.connect();
   }
 
   disconnectSessionEvents(): void {

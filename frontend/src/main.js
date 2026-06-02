@@ -159,16 +159,11 @@ router.beforeEach(async (to, from, next) => {
             }
         }
 
-        // 从 storage 恢复登录状态到 store（页面刷新后 store 为空，但 storage 中可能仍有数据）
-        const hasStoredToken = localStorage.getItem('token') || sessionStorage.getItem('token')
-        if (hasStoredToken && !authStore.isAuthenticated) {
-            const storedToken = localStorage.getItem('token') || sessionStorage.getItem('token')
-            const storedUser = localStorage.getItem('user') || sessionStorage.getItem('user')
-
-            if (storedToken && storedUser) {
-                authStore.token = storedToken
-                authStore.user = JSON.parse(storedUser)
-                console.log('从存储中恢复登录状态')
+        // 页面刷新后 store 为空，但 storage 中可能有数据，需要初始化认证状态
+        if (!authStore.isAuthenticated) {
+            const initialized = await authStore.initializeAuth()
+            if (initialized) {
+                return next()
             }
         }
 
