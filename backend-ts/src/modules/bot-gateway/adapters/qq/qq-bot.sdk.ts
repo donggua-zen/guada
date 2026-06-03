@@ -179,6 +179,8 @@ export class QQBot extends EventEmitter {
   private ws: WebSocket | null = null;
   private lastSeq: number = 0;
   private heartbeatInterval: NodeJS.Timeout | null = null;
+  private heartbeatAckTimeout: NodeJS.Timeout | null = null;
+  private readonly HEARTBEAT_ACK_TIMEOUT = 10000; // 心跳 ACK 超时时间 10 秒
   private user: QQUser | null = null;
   private sessionId: string = '';
   private isResuming: boolean = false;
@@ -283,6 +285,10 @@ export class QQBot extends EventEmitter {
       clearInterval(this.heartbeatInterval);
       this.heartbeatInterval = null;
     }
+    if (this.heartbeatAckTimeout) {
+      clearTimeout(this.heartbeatAckTimeout);
+      this.heartbeatAckTimeout = null;
+    }
 
     if (this.ws) {
       this.ws.close();
@@ -380,7 +386,11 @@ export class QQBot extends EventEmitter {
         break;
 
       case 11: // Heartbeat ACK
-        // 心跳响应，无需处理
+        // 收到心跳确认，清除超时检测
+        if (this.heartbeatAckTimeout) {
+          clearTimeout(this.heartbeatAckTimeout);
+          this.heartbeatAckTimeout = null;
+        }
         break;
 
       case 0: // Dispatch
@@ -416,6 +426,10 @@ export class QQBot extends EventEmitter {
     if (this.heartbeatInterval) {
       clearInterval(this.heartbeatInterval);
     }
+    if (this.heartbeatAckTimeout) {
+      clearTimeout(this.heartbeatAckTimeout);
+      this.heartbeatAckTimeout = null;
+    }
 
     this.heartbeatInterval = setInterval(() => {
       if (this.ws && this.ws.readyState === WebSocket.OPEN) {
@@ -425,6 +439,13 @@ export class QQBot extends EventEmitter {
             d: this.lastSeq || null,
           }),
         );
+
+        // 设置心跳 ACK 超时检测
+        this.heartbeatAckTimeout = setTimeout(() => {
+          console.warn('[QQBot] Heartbeat ACK timeout, connection may be dead');
+          // 强制终止连接，触发 on close 事件让上层重连
+          this.ws?.terminate();
+        }, this.HEARTBEAT_ACK_TIMEOUT);
       }
     }, interval);
   }
@@ -507,9 +528,20 @@ export class QQBot extends EventEmitter {
       clearInterval(this.heartbeatInterval);
       this.heartbeatInterval = null;
     }
+    if (this.heartbeatAckTimeout) {
+      clearTimeout(this.heartbeatAckTimeout);
+      this.heartbeatAckTimeout = null;
+    }
 
-    // 4902 表示 RESUME 失败，需要清除 session 并使用 IDENTIFY
-    if (code === 4902) {
+    // 401 鉴权失败：只重置 Token，保留 session 尝试用新 Token RESUME
+    if (code === 401) {
+      console.warn('[QQBot] Authentication failed (401), resetting token only');
+      this.accessToken = '';
+      this.tokenExpireTime = 0;
+      // sessionId 和 lastSeq 保留，尝试用新 Token RESUME
+      this.isResuming = true;
+    } else if (code === 4902) {
+      // 4902 表示 RESUME 失败，需要清除 session 并使用 IDENTIFY
       this.sessionId = '';
       this.lastSeq = 0;
       this.isResuming = false;
@@ -578,8 +610,8 @@ export class QQBot extends EventEmitter {
    * 获取Gateway URL
    */
   private async getGatewayUrl(): Promise<string> {
-    // 强制刷新 Token,确保使用最新的凭证
-    const token = await this.forceRefreshToken();
+    // 使用现有 Token（若过期会自动刷新），避免频繁强制刷新导致频率限制
+    const token = await this.getAccessToken();
 
     const response = await fetch(`${this.baseURL}/gateway`, {
       headers: {
