@@ -115,9 +115,15 @@ export class QQBotAdapter extends BaseBotAdapter {
 
       // 监听 WebSocket 关闭事件(来自 SDK 的主动通知)
       this.client.on("ws_close", (code: number, reason: string) => {
-        this.logger.warn(
-          `QQ bot WebSocket closed with code: ${code}${reason ? ` - ${reason}` : ""}`,
-        );
+        if (code === 401) {
+          this.logger.warn(
+            `QQ bot authentication failed (401)${reason ? ` - ${reason}` : ""}, will retry with fresh token`,
+          );
+        } else {
+          this.logger.warn(
+            `QQ bot WebSocket closed with code: ${code}${reason ? ` - ${reason}` : ""}`,
+          );
+        }
         this.status = BotStatus.DISCONNECTED;
         // 通过 Subject 发射断开事件
         this.emitDisconnected({
