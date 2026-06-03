@@ -3,8 +3,8 @@
     <div 
         class="file-item group bg-white dark:bg-[#232428] border border-gray-200 dark:border-[#2e3035] rounded-lg px-3 py-2.5 hover:shadow-md transition-all"
         :class="{
-            'cursor-pointer': file.processingStatus === 'completed',
-            'cursor-not-allowed': file.processingStatus !== 'completed'
+            'cursor-pointer': file.processingStatus === 'completed' || file.processingStatus === 'failed',
+            'cursor-not-allowed': file.processingStatus !== 'completed' && file.processingStatus !== 'failed'
         }"
         @click="handleClick"
     >
@@ -143,9 +143,7 @@ const fileIconMap: Record<string, string> = {
     'htm': fileHtmlIcon,
 
     // 文档文件
-    'doc': fileWordIcon,
     'docx': fileWordIcon,
-    'xls': fileExcelIcon,
     'xlsx': fileExcelIcon,
     'csv': fileExcelIcon,
     'ppt': filePptIcon,
@@ -186,9 +184,7 @@ const fileIcon = computed(() => {
     if (!ext && props.file.fileType) {
         const mimeMap: Record<string, string> = {
             'application/pdf': 'pdf',
-            'application/msword': 'doc',
             'application/vnd.openxmlformats-officedocument.wordprocessingml.document': 'docx',
-            'application/vnd.ms-excel': 'xls',
             'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': 'xlsx',
             'text/plain': 'txt',
             'text/html': 'html',
@@ -268,7 +264,7 @@ const statusText = computed(() => {
  * 处理点击事件
  */
 function handleClick() {
-    if (props.file.processingStatus === 'completed') {
+    if (props.file.processingStatus === 'completed' || props.file.processingStatus === 'failed') {
         emit('view', props.file)
     }
 }

@@ -32,3 +32,17 @@ export const SK_MOD_VISUAL = 'defaultVisualAssistantModelId';
  * 工具设置键名
  */
 export const SK_TOOLS_CONFIG = 'tools';
+
+/**
+ * OCR 设置分组
+ */
+export const SG_OCR = 'ocr';
+
+/**
+ * OCR 设置键名
+ */
+export const SK_OCR_PROVIDER = 'provider';
+export const SK_OCR_UMI_HOST = 'umiHost';
+export const SK_OCR_UMI_PORT = 'umiPort';
+export const SK_OCR_BAIDU_API_KEY = 'baiduApiKey';
+export const SK_OCR_BAIDU_SECRET_KEY = 'baiduSecretKey';

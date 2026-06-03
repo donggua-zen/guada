@@ -523,8 +523,8 @@ function handleItemClick(item: KBFile) {
   if (item.isDirectory) {
     // 文件夹: 导航到该路径
     currentRelativePath.value = item.relativePath || null
-  } else if (item.processingStatus === 'completed') {
-    // 文件: 触发查看事件
+  } else if (item.processingStatus === 'completed' || item.processingStatus === 'failed') {
+    // 文件: 触发查看事件（已完成或处理失败的文件均可查看）
     emit('view', item)
   }
 }
@@ -794,9 +794,7 @@ function getFileIcon(file: KBFile): string {
 
   const iconMap: Record<string, string> = {
     'pdf': filePdfIcon,
-    'doc': fileWordIcon,
     'docx': fileWordIcon,
-    'xls': fileExcelIcon,
     'xlsx': fileExcelIcon,
     'ppt': filePptIcon,
     'pptx': filePptIcon,

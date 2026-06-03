@@ -745,6 +745,57 @@ function initSessionEventListeners() {
     if (currentSession.value?.id === sessionId && payload?.session) {
       Object.assign(currentSession.value, payload.session);
     }
+    // 更新最后活跃时间，触发会话列表重新排序
+    sessionStore.updateSessionLastActiveTime(sessionId, event.timestamp);
+  });
+
+  // 监听流开始事件（统一处理会话列表排序和会话补全）
+  apiService.onSessionEvent("stream_started", (event) => {
+    const { sessionId, payload } = event;
+
+    // 忽略自身发起的流（通过 source/clientId 判断）
+    if (payload?.source?.includes(apiService.getClientId())) {
+      console.log("[ChatPage] 忽略自身发起的流事件");
+      return;
+    }
+
+    const session = sessions.value.find(s => s.id === sessionId);
+
+    if (!session && payload?.session) {
+      // 会话不在当前列表中（可能是未加载），插入到列表头部
+      sessions.value.unshift(payload.session);
+      totalSessionsCount.value++;
+    } else if (session && payload?.session) {
+      // 同步会话字段（如 title、lastMessage 等可能已更新）
+      Object.assign(session, payload.session);
+    }
+
+    // 更新最后活跃时间，触发会话列表重新排序
+    sessionStore.updateSessionLastActiveTime(sessionId, event.timestamp);
+
+    // 如果是当前会话，通知 ChatPanel 订阅流
+    if (sessionId === currentSession.value?.id) {
+      const chatPanel = chatPanelRef.value as any;
+      if (chatPanel && chatPanel.subscribeToActiveStream) {
+        // 如果存在 replaceMessageId，先删除本地对应消息避免重复
+        if (payload?.replaceMessageId) {
+          const messages = sessionStore.getMessages(sessionId);
+          const index = messages.findIndex((m: any) => m.id === payload.replaceMessageId);
+          if (index !== -1) {
+            messages.splice(index, 1);
+          }
+        }
+        chatPanel.subscribeToActiveStream();
+      }
+    }
+  });
+
+  // 监听流结束事件
+  apiService.onSessionEvent("stream_finished", (event) => {
+    const { sessionId } = event;
+    if (sessionId === currentSession.value?.id) {
+      console.log("[ChatPage] 当前会话流已结束");
+    }
   });
 }
 

@@ -126,9 +126,7 @@ const fileIconMap = {
 
 
     // 文档文件
-    'doc': fileWordIcon,
     'docx': fileWordIcon,
-    'xls': fileExcelIcon,
     'xlsx': fileExcelIcon,
     'ppt': filePptIcon,
     'pptx': filePptIcon,

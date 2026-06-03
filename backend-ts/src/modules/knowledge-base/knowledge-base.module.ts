@@ -9,14 +9,16 @@ import { KbFileService } from "./kb-file.service";
 import { FileParserService } from "./file-parser.service";
 import { EmbeddingService } from "./embedding.service";
 import { ChunkingService } from "./chunking.service";
+import { OcrService } from "./ocr.service";
 import { KnowledgeBaseRepository } from "../../common/database/knowledge-base.repository";
 import { KBFileRepository } from "../../common/database/kb-file.repository";
 import { KBChunkRepository } from "../../common/database/kb-chunk.repository";
 import { PrismaService } from "../../common/database/prisma.service";
 import { AuthModule } from "../auth/auth.module";
+import { SettingsModule } from "../settings/settings.module";
 
 @Module({
-  imports: [HttpModule, AuthModule, VectorDbModule],
+  imports: [HttpModule, AuthModule, VectorDbModule, SettingsModule],
   controllers: [
     KnowledgeBasesController,
     KbFilesController,
@@ -28,6 +30,7 @@ import { AuthModule } from "../auth/auth.module";
     FileParserService,
     EmbeddingService,
     ChunkingService,
+    OcrService,
     KnowledgeBaseRepository,
     KBFileRepository,
     KBChunkRepository,

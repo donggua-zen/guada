@@ -11,8 +11,8 @@ export function getFileTypeFromExtension(extension: string): string {
     // 文档类
     if (['txt', 'md', 'markdown'].includes(ext)) return 'text'
     if (['pdf'].includes(ext)) return 'pdf'
-    if (['doc', 'docx'].includes(ext)) return 'word'
-    if (['xls', 'xlsx', 'csv'].includes(ext)) return 'excel'
+    if (['docx'].includes(ext)) return 'word'
+    if (['xlsx', 'csv'].includes(ext)) return 'excel'
     if (['ppt', 'pptx'].includes(ext)) return 'ppt'
     if (['html', 'htm'].includes(ext)) return 'html'
     

@@ -99,8 +99,8 @@ async function loadChunks() {
         return
     }
 
-    // 仅对已完成处理的文件启用查看功能
-    if (props.selectedFile.processingStatus !== 'completed') {
+    // 已完成或处理失败的文件均可查看分块内容
+    if (props.selectedFile.processingStatus !== 'completed' && props.selectedFile.processingStatus !== 'failed') {
         toast.warning('文件尚未处理完成，无法查看分块内容')
         return
     }

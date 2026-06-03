@@ -121,7 +121,9 @@ export class KbFileService implements OnModuleInit {
         // 检查物理文件是否存在
         if (file.filePath && !fs.existsSync(file.filePath)) {
           isOrphan = true;
-          this.logger.log(`发现孤儿文件（物理文件不存在）: ${file.displayName}`);
+          this.logger.log(
+            `发现孤儿文件（物理文件不存在）: ${file.displayName}`,
+          );
         }
 
         // 如果是孤儿，删除数据库记录
@@ -132,7 +134,7 @@ export class KbFileService implements OnModuleInit {
             if (file.filePath && fs.existsSync(file.filePath)) {
               await fs.promises.unlink(file.filePath);
               this.logger.log(`已删除孤儿物理文件: ${file.filePath}`);
-              
+
               // 尝试清理空日期目录（向上递归最多2层）
               await this.fileNamingService.cleanupEmptyDirectories(
                 path.dirname(file.filePath),
@@ -144,13 +146,17 @@ export class KbFileService implements OnModuleInit {
             await this.fileRepo.delete(file.id);
             cleanedCount++;
           } catch (error: any) {
-            this.logger.error(`清理孤儿文件失败: ${file.displayName}, 错误: ${error.message}`);
+            this.logger.error(
+              `清理孤儿文件失败: ${file.displayName}, 错误: ${error.message}`,
+            );
           }
         }
       }
 
       if (orphanCount > 0) {
-        this.logger.log(`孤儿文件清理完成：发现 ${orphanCount} 个，成功清理 ${cleanedCount} 个`);
+        this.logger.log(
+          `孤儿文件清理完成：发现 ${orphanCount} 个，成功清理 ${cleanedCount} 个`,
+        );
       } else {
         this.logger.log("未发现孤儿文件");
       }
@@ -314,7 +320,7 @@ export class KbFileService implements OnModuleInit {
 
   /**
    * 添加文本文档到知识库（供 AI Agent 工具调用）
-   * 
+   *
    * @param kbId 知识库 ID
    * @param userId 用户 ID
    * @param sourceFilePath 源文件的绝对路径（包含文件名）
@@ -342,7 +348,7 @@ export class KbFileService implements OnModuleInit {
     }
 
     // 读取文件内容（异步）
-    const content = await fs.promises.readFile(sourceFilePath, 'utf-8');
+    const content = await fs.promises.readFile(sourceFilePath, "utf-8");
 
     // 从目标路径提取显示名称
     const displayName = path.basename(targetPath);
@@ -350,11 +356,11 @@ export class KbFileService implements OnModuleInit {
     // 保存文件到带日期结构的目录（异步写入）
     const pathResult = await this.fileNamingService.generateFilePathWithDate(
       this.kbUploadDir,
-      displayName + '.txt', // addTextDocument 始终保存为 .txt
+      displayName + ".txt", // addTextDocument 始终保存为 .txt
     );
-    await fs.promises.writeFile(pathResult.filePath, content, 'utf-8');
+    await fs.promises.writeFile(pathResult.filePath, content, "utf-8");
 
-    const fileSize = Buffer.byteLength(content, 'utf-8');
+    const fileSize = Buffer.byteLength(content, "utf-8");
 
     // 计算内容哈希（用于后续可能的去重或统计）
     const contentHash = crypto.createHash("md5").update(content).digest("hex");
@@ -362,7 +368,7 @@ export class KbFileService implements OnModuleInit {
     // 解析目标路径，提取父文件夹信息
     let parentFolderId: string | null = null;
     const folderPath = path.dirname(targetPath);
-    if (folderPath && folderPath !== '.') {
+    if (folderPath && folderPath !== ".") {
       // 确保文件夹结构存在（递归创建）
       parentFolderId = await this.ensureFolderStructure(kbId, folderPath);
     }
@@ -407,10 +413,10 @@ export class KbFileService implements OnModuleInit {
     // 1. 验证知识库权限
     const kb = await this.kbRepo.findById(kbId);
     if (!kb) {
-      throw new NotFoundException('知识库不存在');
+      throw new NotFoundException("知识库不存在");
     }
     if (kb.userId !== userId) {
-      throw new Error('无权访问该知识库');
+      throw new Error("无权访问该知识库");
     }
 
     // 2. 验证文件夹名称
@@ -424,7 +430,7 @@ export class KbFileService implements OnModuleInit {
     );
 
     if (existingItem) {
-      const existingType = existingItem.isDirectory ? '文件夹' : '文件';
+      const existingType = existingItem.isDirectory ? "文件夹" : "文件";
       throw new Error(`已存在同名${existingType}「${folderName}」`);
     }
 
@@ -433,10 +439,10 @@ export class KbFileService implements OnModuleInit {
     if (parentFolderId) {
       const parent = await this.fileRepo.findById(parentFolderId);
       if (!parent) {
-        throw new NotFoundException('父文件夹不存在');
+        throw new NotFoundException("父文件夹不存在");
       }
       if (!parent.isDirectory) {
-        throw new Error('父节点不是文件夹');
+        throw new Error("父节点不是文件夹");
       }
       relativePath = parent.relativePath
         ? `${parent.relativePath}/${folderName}`
@@ -451,12 +457,12 @@ export class KbFileService implements OnModuleInit {
       displayName: folderName,
       fileName: crypto.randomUUID(), // 文件夹也用 UUID
       fileSize: 0,
-      fileType: 'directory',
-      fileExtension: '',
-      contentHash: '',
-      processingStatus: 'completed', // 文件夹无需处理
+      fileType: "directory",
+      fileExtension: "",
+      contentHash: "",
+      processingStatus: "completed", // 文件夹无需处理
       progressPercentage: 100,
-      currentStep: '文件夹节点',
+      currentStep: "文件夹节点",
       totalChunks: 0,
       totalTokens: 0,
       relativePath: relativePath,
@@ -465,7 +471,7 @@ export class KbFileService implements OnModuleInit {
     });
 
     this.logger.log(
-      `创建文件夹成功：${folderName}, KB=${kbId}, Parent=${parentFolderId || '根目录'}`,
+      `创建文件夹成功：${folderName}, KB=${kbId}, Parent=${parentFolderId || "根目录"}`,
     );
 
     return {
@@ -490,6 +496,7 @@ export class KbFileService implements OnModuleInit {
         this.logger.error(
           `后台任务执行失败：fileId=${fileId}, error=${error.message}`,
         );
+        // processFile 的 catch 块已经处理了状态更新，这里只记录日志
       });
   }
 
@@ -527,11 +534,11 @@ export class KbFileService implements OnModuleInit {
         "正在解析文件...",
       );
 
-      // 4. 解析文件内容
-      let content = fileRecord.content;
-      if (!content && filePath) {
-        content = await this.parserService.parseFileFromPath(filePath);
+      // 4. 解析文件内容（带页码信息）
+      if (!filePath) {
+        throw new Error("文件路径不存在，无法解析");
       }
+      const parseResult = await this.parserService.parseFile(filePath);
 
       await this.fileRepo.updateProcessingStatus(
         fileId,
@@ -540,12 +547,14 @@ export class KbFileService implements OnModuleInit {
         "文件解析完成，正在分块...",
       );
 
-      // 5. 文本分块（使用智能分块服务）
-      // 固定使用 cl100k_base 编码进行 Token 计数
-      const chunksData = await this.chunkingService.chunkText(content, {
-        chunkSize: kb.chunkMaxSize,
-        overlapSize: kb.chunkOverlapSize,
-      });
+      // 5. 文本分块（使用智能分块服务，按页边界分块）
+      const chunksData = await this.chunkingService.chunkPages(
+        parseResult.pages,
+        {
+          chunkSize: kb.chunkMaxSize,
+          overlapSize: kb.chunkOverlapSize,
+        },
+      );
 
       const chunks = chunksData.map((chunk) => chunk.content);
       const totalChunks = chunks.length;
@@ -578,55 +587,61 @@ export class KbFileService implements OnModuleInit {
         );
       }
 
-      // 7. 批量向量化
-      const modelWithProvider = await this.prisma.model.findUnique({
-        where: { id: kb.embeddingModelId },
-        include: { provider: true },
-      });
+      // 7. 批量向量化（暂时跳过，方便调试 OCR 等前置流程）
+      // TODO: 调试完成后将 SKIP_VECTORIZATION 改为 false 恢复向量化
+      const SKIP_VECTORIZATION = false;
+      let allEmbeddings: number[][] = [];
 
-      if (!modelWithProvider) {
-        throw new Error(`向量模型不存在：${kb.embeddingModelId}`);
+      if (!SKIP_VECTORIZATION) {
+        const modelWithProvider = await this.prisma.model.findUnique({
+          where: { id: kb.embeddingModelId },
+          include: { provider: true },
+        });
+
+        if (!modelWithProvider) {
+          throw new Error(`向量模型不存在：${kb.embeddingModelId}`);
+        }
+
+        this.logger.log(`开始批量向量化 ${chunks.length} 个分块...`);
+        await this.fileRepo.updateProcessingStatus(
+          fileId,
+          "processing",
+          50,
+          `正在批量向量化 (${chunks.length} 个分块)...`,
+        );
+
+        allEmbeddings = await this.embeddingService.getEmbeddings(
+          chunks,
+          modelWithProvider.provider.apiUrl || "",
+          modelWithProvider.provider.apiKey || "",
+          modelWithProvider.modelName,
+        );
+
+        await this.fileRepo.updateProcessingStatus(
+          fileId,
+          "processing",
+          90,
+          "向量化完成，正在存储...",
+        );
+
+        // 存储到向量数据库
+        const tableId = `kb_${knowledgeBaseId}`;
+        const documents = chunks.map((content, idx) => ({
+          id: `chunk_${idx}_${fileId}`,
+          documentId: fileId,
+          content,
+          embedding: allEmbeddings[idx],
+          metadata: {
+            knowledgeBaseId: knowledgeBaseId,
+            fileName: displayName,
+            chunkIndex: idx,
+          },
+        }));
+        await this.vectorDb.addDocuments(tableId, documents);
+        this.logger.log(`成功存储 ${documents.length} 个向量文档`);
+      } else {
+        this.logger.warn(`[调试模式] 跳过向量化`);
       }
-
-      this.logger.log(`开始批量向量化 ${chunks.length} 个分块...`);
-      await this.fileRepo.updateProcessingStatus(
-        fileId,
-        "processing",
-        50,
-        `正在批量向量化 (${chunks.length} 个分块)...`,
-      );
-
-      const allEmbeddings = await this.embeddingService.getEmbeddings(
-        chunks,
-        modelWithProvider.provider.apiUrl || "",
-        modelWithProvider.provider.apiKey || "",
-        modelWithProvider.modelName,
-      );
-
-      await this.fileRepo.updateProcessingStatus(
-        fileId,
-        "processing",
-        90,
-        "向量化完成，正在存储...",
-      );
-
-      // 8. 准备向量文档数据
-      const tableId = `kb_${knowledgeBaseId}`;
-      const documents = chunks.map((content, idx) => ({
-        id: `chunk_${idx}_${fileId}`,
-        documentId: fileId, // 使用独立顶层字段
-        content,
-        embedding: allEmbeddings[idx],
-        metadata: {
-          knowledgeBaseId: knowledgeBaseId,
-          fileName: displayName,
-          chunkIndex: idx,
-        },
-      }));
-
-      // 9. 存储到向量数据库
-      await this.vectorDb.addDocuments(tableId, documents);
-      this.logger.log(`成功存储 ${documents.length} 个向量文档`);
 
       await this.fileRepo.updateProcessingStatus(
         fileId,
@@ -635,16 +650,16 @@ export class KbFileService implements OnModuleInit {
         "正在保存分块到数据库...",
       );
 
-      // 9. 保存到数据库
+      // 保存分块到数据库
       for (let idx = 0; idx < chunksData.length; idx++) {
         const chunkData = chunksData[idx];
         await this.chunkRepo.create({
           fileId: fileId,
           knowledgeBaseId: knowledgeBaseId,
-          content: chunkData.cleanContent, // 存储纯净内容
+          content: chunkData.cleanContent,
           chunkIndex: idx,
           vectorId: `chunk_${idx}_${fileId}`,
-          embeddingDimensions: allEmbeddings[idx].length,
+          embeddingDimensions: allEmbeddings[idx]?.length || 0,
           tokenCount: chunkData.metadata.tokenCount,
           metadata: {
             fileId: fileId,
@@ -656,16 +671,19 @@ export class KbFileService implements OnModuleInit {
         });
       }
 
-      // 10. 标记为完成
+      // 标记为完成
       const totalTokens = chunksData.reduce(
         (sum, chunk) => sum + chunk.metadata.tokenCount,
         0,
       );
+      const completeMessage = SKIP_VECTORIZATION
+        ? "处理完成（调试模式：跳过向量化）"
+        : "处理完成";
       await this.fileRepo.updateProcessingStatus(
         fileId,
         "completed",
         100,
-        "处理完成",
+        completeMessage,
         undefined,
         totalChunks,
         totalTokens,
@@ -676,13 +694,18 @@ export class KbFileService implements OnModuleInit {
       this.logger.error(`文件处理失败：${error.message}`);
 
       // 更新状态为失败
-      await this.fileRepo.updateProcessingStatus(
-        fileId,
-        "failed",
-        0,
-        "处理失败",
-        error.message,
-      );
+      try {
+        await this.fileRepo.updateProcessingStatus(
+          fileId,
+          "failed",
+          0,
+          "处理失败",
+          error.message,
+        );
+      } catch (dbError: any) {
+        this.logger.error(`标记文件失败状态失败：${dbError.message}`);
+        // 不抛异常，避免触发外层 catch 重复设置状态
+      }
     }
   }
 
@@ -763,7 +786,11 @@ export class KbFileService implements OnModuleInit {
 
     if (relativePath) {
       // 查找该路径对应的目录ID
-      const targetFolder = await this.fileRepo.findByRelativePath(kbId, relativePath, true);
+      const targetFolder = await this.fileRepo.findByRelativePath(
+        kbId,
+        relativePath,
+        true,
+      );
 
       if (!targetFolder) {
         // 路径不存在，返回空列表
@@ -928,7 +955,10 @@ export class KbFileService implements OnModuleInit {
   /**
    * 递归删除文件夹及其所有内容
    */
-  private async deleteFolderRecursive(folderId: string, kbId: string): Promise<void> {
+  private async deleteFolderRecursive(
+    folderId: string,
+    kbId: string,
+  ): Promise<void> {
     // 查找该文件夹下的所有子项
     const { items } = await this.fileRepo.findChildren(folderId, 0, 1000);
 
@@ -965,7 +995,9 @@ export class KbFileService implements OnModuleInit {
             await fs.promises.unlink(item.filePath);
             this.logger.log(`已删除本地文件: ${item.filePath}`);
           } catch (e: any) {
-            this.logger.warn(`删除子文件物理文件失败 ${item.filePath}: ${e.message}`);
+            this.logger.warn(
+              `删除子文件物理文件失败 ${item.filePath}: ${e.message}`,
+            );
           }
         }
 
@@ -1023,13 +1055,13 @@ export class KbFileService implements OnModuleInit {
    * 验证文件或文件夹名称
    */
   private validateFileName(name: string, isDirectory: boolean = false): void {
-    if (!name || name.trim() === '') {
-      throw new Error('名称不能为空');
+    if (!name || name.trim() === "") {
+      throw new Error("名称不能为空");
     }
 
     // 长度限制
     if (name.length > 255) {
-      throw new Error('名称不能超过 255 个字符');
+      throw new Error("名称不能超过 255 个字符");
     }
 
     // 不允许的字符：/ \ : * ? " < > | 以及控制字符
@@ -1042,9 +1074,28 @@ export class KbFileService implements OnModuleInit {
 
     // Windows 保留名称检查（不区分大小写）
     const reservedNames = [
-      'CON', 'PRN', 'AUX', 'NUL',
-      'COM1', 'COM2', 'COM3', 'COM4', 'COM5', 'COM6', 'COM7', 'COM8', 'COM9',
-      'LPT1', 'LPT2', 'LPT3', 'LPT4', 'LPT5', 'LPT6', 'LPT7', 'LPT8', 'LPT9',
+      "CON",
+      "PRN",
+      "AUX",
+      "NUL",
+      "COM1",
+      "COM2",
+      "COM3",
+      "COM4",
+      "COM5",
+      "COM6",
+      "COM7",
+      "COM8",
+      "COM9",
+      "LPT1",
+      "LPT2",
+      "LPT3",
+      "LPT4",
+      "LPT5",
+      "LPT6",
+      "LPT7",
+      "LPT8",
+      "LPT9",
     ];
     const upperName = name.toUpperCase();
     if (reservedNames.includes(upperName)) {
@@ -1052,9 +1103,13 @@ export class KbFileService implements OnModuleInit {
     }
 
     // 不允许以空格或点号开头/结尾
-    if (name.startsWith(' ') || name.endsWith(' ') || 
-        name.startsWith('.') || name.endsWith('.')) {
-      throw new Error('名称不能以空格或点号开头或结尾');
+    if (
+      name.startsWith(" ") ||
+      name.endsWith(" ") ||
+      name.startsWith(".") ||
+      name.endsWith(".")
+    ) {
+      throw new Error("名称不能以空格或点号开头或结尾");
     }
   }
 
@@ -1070,10 +1125,10 @@ export class KbFileService implements OnModuleInit {
     // 1. 验证知识库权限
     const kb = await this.kbRepo.findById(kbId);
     if (!kb) {
-      throw new NotFoundException('知识库不存在');
+      throw new NotFoundException("知识库不存在");
     }
     if (kb.userId !== userId) {
-      throw new Error('无权访问该知识库');
+      throw new Error("无权访问该知识库");
     }
 
     // 2. 验证新名称
@@ -1082,12 +1137,12 @@ export class KbFileService implements OnModuleInit {
     // 2. 查询文件
     const file = await this.fileRepo.findById(fileId);
     if (!file) {
-      throw new NotFoundException('文件不存在');
+      throw new NotFoundException("文件不存在");
     }
 
     // 3. 验证名称合法性
-    if (!newName || newName.trim() === '') {
-      throw new Error('名称不能为空');
+    if (!newName || newName.trim() === "") {
+      throw new Error("名称不能为空");
     }
 
     // 4. 检查同名冲突（在同一父目录下）
@@ -1097,7 +1152,7 @@ export class KbFileService implements OnModuleInit {
       file.parentFolderId,
     );
     if (existingItem && existingItem.id !== fileId) {
-      throw new Error('该名称已存在');
+      throw new Error("该名称已存在");
     }
 
     // 5. 计算新的 relativePath
@@ -1106,16 +1161,18 @@ export class KbFileService implements OnModuleInit {
       // 文件夹：需要级联更新所有子项
       const parentPath = file.parentFolderId
         ? (await this.fileRepo.findById(file.parentFolderId))?.relativePath
-        : '';
+        : "";
       newRelativePath = parentPath ? `${parentPath}/${newName}` : newName;
 
       // 6. 事务：使用原生 SQL 批量更新文件夹及所有子项的路径
-      const oldPrefix = file.relativePath + '/';
-      const newPrefix = newRelativePath + '/';
+      const oldPrefix = file.relativePath + "/";
+      const newPrefix = newRelativePath + "/";
 
       // 转义 LIKE 子句中的特殊字符（% 和 _）
-      const escapedOldPrefix = oldPrefix.replace(/%/g, '\\%').replace(/_/g, '\\_');
-      const likePattern = escapedOldPrefix + '%';
+      const escapedOldPrefix = oldPrefix
+        .replace(/%/g, "\\%")
+        .replace(/_/g, "\\_");
+      const likePattern = escapedOldPrefix + "%";
 
       await this.prisma.$transaction(async (tx) => {
         // 6.1 批量更新所有子项的 relativePath（使用参数化查询防止 SQL 注入）
@@ -1127,9 +1184,7 @@ export class KbFileService implements OnModuleInit {
           likePattern,
         );
 
-        this.logger.log(
-          `文件夹重命名：批量更新了 ${result} 个子项的路径`,
-        );
+        this.logger.log(`文件夹重命名：批量更新了 ${result} 个子项的路径`);
 
         // 6.2 更新文件夹本身
         await tx.kBFile.update({
@@ -1141,14 +1196,12 @@ export class KbFileService implements OnModuleInit {
         });
       });
 
-      this.logger.log(
-        `文件夹重命名成功：${file.displayName} -> ${newName}`,
-      );
+      this.logger.log(`文件夹重命名成功：${file.displayName} -> ${newName}`);
     } else {
       // 单文件：简单更新
       const parentPath = file.parentFolderId
         ? (await this.fileRepo.findById(file.parentFolderId))?.relativePath
-        : '';
+        : "";
       newRelativePath = parentPath ? `${parentPath}/${newName}` : newName;
 
       await this.fileRepo.update(fileId, {
@@ -1178,23 +1231,23 @@ export class KbFileService implements OnModuleInit {
     // 1. 验证知识库权限
     const kb = await this.kbRepo.findById(kbId);
     if (!kb) {
-      throw new NotFoundException('知识库不存在');
+      throw new NotFoundException("知识库不存在");
     }
     if (kb.userId !== userId) {
-      throw new Error('无权访问该知识库');
+      throw new Error("无权访问该知识库");
     }
 
     // 2. 查询文件
     const file = await this.fileRepo.findById(fileId);
     if (!file) {
-      throw new NotFoundException('文件不存在');
+      throw new NotFoundException("文件不存在");
     }
 
     // 3. 如果目标位置与当前位置相同，直接返回
     if (file.parentFolderId === targetParentFolderId) {
       return {
         success: true,
-        message: '文件已在目标位置',
+        message: "文件已在目标位置",
         data: file,
       };
     }
@@ -1206,7 +1259,7 @@ export class KbFileService implements OnModuleInit {
         fileId,
       );
       if (isDescendant) {
-        throw new Error('不能将文件夹移动到其子目录下');
+        throw new Error("不能将文件夹移动到其子目录下");
       }
     }
 
@@ -1214,17 +1267,17 @@ export class KbFileService implements OnModuleInit {
     if (targetParentFolderId) {
       const targetParent = await this.fileRepo.findById(targetParentFolderId);
       if (!targetParent) {
-        throw new NotFoundException('目标文件夹不存在');
+        throw new NotFoundException("目标文件夹不存在");
       }
       if (!targetParent.isDirectory) {
-        throw new Error('目标不是文件夹');
+        throw new Error("目标不是文件夹");
       }
     }
 
     // 6. 冲突检测：检查目标位置是否已存在同名文件或文件夹
     const fileName = file.isDirectory
       ? file.displayName
-      : file.relativePath?.split('/').pop() || file.displayName;
+      : file.relativePath?.split("/").pop() || file.displayName;
 
     const existingItem = await this.fileRepo.findByPathAndParent(
       kbId,
@@ -1234,18 +1287,18 @@ export class KbFileService implements OnModuleInit {
 
     if (existingItem && existingItem.id !== fileId) {
       // 检查类型是否一致（文件vs文件夹）
-      const itemType = file.isDirectory ? '文件夹' : '文件';
-      const existingType = existingItem.isDirectory ? '文件夹' : '文件';
+      const itemType = file.isDirectory ? "文件夹" : "文件";
+      const existingType = existingItem.isDirectory ? "文件夹" : "文件";
       throw new Error(
         `目标位置已存在同名${existingType}「${fileName}」，无法移动`,
       );
     }
 
     // 7. 计算新的 relativePath
-    let targetParentPath = '';
+    let targetParentPath = "";
     if (targetParentFolderId) {
       const targetParent = await this.fileRepo.findById(targetParentFolderId);
-      targetParentPath = targetParent?.relativePath || '';
+      targetParentPath = targetParent?.relativePath || "";
     }
 
     const newRelativePath = targetParentPath
@@ -1267,12 +1320,14 @@ export class KbFileService implements OnModuleInit {
 
       // 7.2 如果是文件夹，使用原生 SQL 批量更新所有子项
       if (file.isDirectory && oldRelativePath) {
-        const oldPrefix = oldRelativePath + '/';
-        const newPrefix = newRelativePath + '/';
-        
+        const oldPrefix = oldRelativePath + "/";
+        const newPrefix = newRelativePath + "/";
+
         // 转义 LIKE 子句中的特殊字符（% 和 _）
-        const escapedOldPrefix = oldPrefix.replace(/%/g, '\\%').replace(/_/g, '\\_');
-        const likePattern = escapedOldPrefix + '%';
+        const escapedOldPrefix = oldPrefix
+          .replace(/%/g, "\\%")
+          .replace(/_/g, "\\_");
+        const likePattern = escapedOldPrefix + "%";
 
         const result = await tx.$executeRawUnsafe(
           `UPDATE kb_file SET relative_path = ? || SUBSTR(relative_path, LENGTH(?) + 1) WHERE knowledge_base_id = ? AND relative_path LIKE ? ESCAPE '\\'`,
@@ -1282,9 +1337,7 @@ export class KbFileService implements OnModuleInit {
           likePattern,
         );
 
-        this.logger.log(
-          `文件夹移动：批量更新了 ${result} 个子项的路径`,
-        );
+        this.logger.log(`文件夹移动：批量更新了 ${result} 个子项的路径`);
       }
     });
 
@@ -1354,8 +1407,11 @@ export class KbFileService implements OnModuleInit {
       throw new NotFoundException("文件不存在");
     }
 
-    // 检查文件处理状态，只允许 completed 状态的文件查看分块
-    if (file.processingStatus !== "completed") {
+    // 检查文件处理状态，允许 completed 和 failed 状态的文件查看分块
+    if (
+      file.processingStatus !== "completed" &&
+      file.processingStatus !== "failed"
+    ) {
       throw new Error(`文件尚未处理完成，当前状态：${file.processingStatus}`);
     }
 

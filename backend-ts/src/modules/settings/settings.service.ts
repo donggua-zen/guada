@@ -5,6 +5,7 @@ import {
   SG_SYSTEM,
   SG_MODELS,
   SG_TOOLS,
+  SG_OCR,
   SK_SYS_WORKSPACE_BASE_DIR,
 } from '../../constants/settings.constants';
 
@@ -40,12 +41,14 @@ export class SettingsService {
    */
   async getSettings() {
     const result: Record<string, any> = {};
-    const groups = [SG_SYSTEM, SG_MODELS, SG_TOOLS];
-    
+    const groups = [SG_SYSTEM, SG_MODELS, SG_TOOLS, SG_OCR];
+
     for (const group of groups) {
       const groupData = await this.getGroupSettings(group);
       if (group === SG_TOOLS) {
         result['tools'] = groupData;
+      } else if (group === SG_OCR) {
+        result['ocr'] = groupData;
       } else {
         Object.assign(result, groupData);
       }

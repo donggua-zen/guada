@@ -763,8 +763,8 @@ async function handleRetryFile(file: KBFile) {
  * 查看文件详情
  */
 function handleViewFile(file: KBFile) {
-    // 仅对已完成处理的文件启用查看功能
-    if (file.processingStatus !== 'completed') {
+    // 已完成或处理失败的文件均可查看分块内容
+    if (file.processingStatus !== 'completed' && file.processingStatus !== 'failed') {
         toast.warning('文件尚未处理完成，无法查看分块内容')
         return
     }

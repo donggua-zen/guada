@@ -116,9 +116,7 @@ function getFileIcon(file: KBFile): string {
     
     const iconMap: Record<string, string> = {
         'pdf': filePdfIcon,
-        'doc': fileWordIcon,
         'docx': fileWordIcon,
-        'xls': fileExcelIcon,
         'xlsx': fileExcelIcon,
         'ppt': filePptIcon,
         'pptx': filePptIcon,

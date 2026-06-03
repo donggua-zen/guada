@@ -275,14 +275,7 @@ export class OpenAIAdapter implements IProtocolAdapter {
 
     // 记录详细的错误信息
     if (error instanceof APIError) {
-      this.logger.error(`API Error Details:`, {
-        status: error.status,
-        message: error.message,
-        code: error.code,
-        param: error.param,
-        type: error.type,
-        headers: error.headers,
-      });
+      this.logger.error(`API Error Details:`, JSON.stringify(error));
       throw new Error(`LLM API Error: ${error.status} - ${error.message}`);
     }
     if (error.name === "AbortError") throw new Error("LLM request aborted");
