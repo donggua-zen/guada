@@ -204,6 +204,7 @@ export class TimeToolProvider implements IToolProvider {
       description: "自动注入当前时间信息，支持获取详细时间",
       isMcp: false,
       loadMode: "eager",
+      type: "core",
     };
   }
 }

@@ -264,6 +264,7 @@ export class FileToolProvider implements IToolProvider {
       description: "文件系统读写与目录浏览工具",
       isMcp: false,
       loadMode: "eager",
+      type: "core",
     };
   }
 

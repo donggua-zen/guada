@@ -2,8 +2,6 @@ import {
   Controller,
   Post,
   Body,
-  Sse,
-  MessageEvent,
   UseGuards,
   Res,
   Req,
@@ -14,11 +12,10 @@ import {
 } from "@nestjs/common";
 import { AuthGuard } from "../auth/auth.guard";
 import { CurrentUser } from "../auth/current-user.decorator";
-import { AgentEngine } from "./agent-engine.service";
+
 import { SessionService } from "./session.service";
 import { MessageService } from "./message.service";
 import { MessageRepository } from "../../common/database/message.repository";
-import { Observable, Subscription } from "rxjs";
 import { Response, Request } from "express";
 import { SessionStreamManager } from "./session-stream.manager";
 import { SessionEventsService } from "./session-events.service";
@@ -30,97 +27,11 @@ export class ChatController {
   private readonly logger = new Logger(ChatController.name);
 
   constructor(
-    private agentEngine: AgentEngine,
     private sessionService: SessionService,
     private messageRepo: MessageRepository,
     private streamManager: SessionStreamManager,
     private chatRunner: ChatRunnerService,
   ) {}
-
-  @Sse("completions")
-  async completions(
-    @Body()
-    body: {
-      sessionId: string;
-      messageId: string;
-      regenerationMode?: string; // 再生模式：'overwrite' | 'multi_version' | 'resume'
-      assistantMessageId?: string; // 现有助手消息 ID
-      resumeData?: any; // 【新增】断点续传数据（如审批决策）
-    },
-    @CurrentUser() user: any,
-    @Req() req: Request,
-  ): Promise<Observable<MessageEvent>> {
-    const {
-      sessionId,
-      messageId,
-      regenerationMode = "overwrite", // 默认 overwrite 模式
-      assistantMessageId,
-      resumeData, // 【新增】
-    } = body;
-    const session = await this.sessionService.getSessionById(
-      sessionId,
-      user.id,
-    );
-
-    // 创建 AbortController 用于中断 LLM 请求
-    const abortController = new AbortController();
-
-    // 监听客户端断开连接事件
-    req.on("close", () => {
-      if (!req.complete) {
-        console.log("Client disconnected, aborting LLM request");
-        abortController.abort();
-      }
-    });
-
-    // 将 AgentService 的 AsyncGenerator 转换为 RxJS Observable
-    return new Observable((observer) => {
-      const iterator = this.agentEngine.completions(
-        session,
-        messageId,
-        regenerationMode, // 传递再生模式
-        assistantMessageId, // 传递现有助手消息 ID
-        abortController.signal, // 传递中断信号
-        resumeData, // 【新增】传递断点续传数据
-      );
-
-      let isCompleted = false;
-
-      const push = async () => {
-        if (isCompleted) return;
-
-        try {
-          const { value, done } = await iterator.next();
-          if (done) {
-            isCompleted = true;
-            observer.next({ data: "[DONE]" });
-            observer.complete();
-          } else {
-            observer.next({ data: JSON.stringify(value) });
-            push();
-          }
-        } catch (error: any) {
-          isCompleted = true;
-          if (error.name === "AbortError") {
-            console.log("LLM request aborted due to client disconnect");
-            observer.complete();
-          } else {
-            observer.error(error);
-          }
-        }
-      };
-
-      push();
-
-      // 清理函数：当 Observable 被取消订阅时中断请求
-      return () => {
-        if (!isCompleted) {
-          console.log("Observable unsubscribed, aborting LLM request");
-          abortController.abort();
-        }
-      };
-    });
-  }
 
   /**
    * 流式生成消息响应
@@ -138,6 +49,7 @@ export class ChatController {
       assistantMessageId?: string;
       regenerationMode?: string;
       resumeData?: any;
+      lastContentId?: string | null;
       userMessage?: {
         id?: string;
         content?: string;
@@ -155,6 +67,7 @@ export class ChatController {
       assistantMessageId,
       regenerationMode = "overwrite",
       resumeData,
+      lastContentId,
       userMessage,
     } = body;
 
@@ -195,6 +108,7 @@ export class ChatController {
           regenerationMode,
           assistantMessageId: assistantMessageId || null,
           resumeData,
+          lastContentId: lastContentId || null,
         },
         callbacks,
       );

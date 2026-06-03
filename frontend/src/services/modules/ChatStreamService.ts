@@ -17,6 +17,7 @@ export interface ChatStreamParams {
   regenerationMode?: string | null;
   assistantMessageId?: string | null;
   resumeData?: any;
+  lastContentId?: string | null;
   // 用户消息参数
   // overwrite 模式：按需设置 content/files/replaceMessageId/knowledgeBaseIds，不设置 id
   // multi_version/resume/subscribe 模式：只需设置 id
@@ -58,6 +59,7 @@ export class ChatStreamService {
       regenerationMode = null,
       assistantMessageId = null,
       resumeData,
+      lastContentId,
       userMessage,
     } = params;
 
@@ -86,6 +88,7 @@ export class ChatStreamService {
           regenerationMode,
           stream: true,
           resumeData,
+          lastContentId,
           userMessage,
         }),
         signal: controller.signal,

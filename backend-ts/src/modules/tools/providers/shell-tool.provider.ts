@@ -156,6 +156,7 @@ export class ShellToolProvider implements IToolProvider {
       displayName: "Shell 命令行工具",
       description: "系统命令执行工具",
       isMcp: false,
+      type: "core",
       // loadMode: "lazy",
     };
   }

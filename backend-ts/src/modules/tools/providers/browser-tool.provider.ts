@@ -748,6 +748,7 @@ export class BrowserToolProvider implements IToolProvider {
       description: '通过 Electron 内置 Chromium 进行浏览器自动化操作',
       isMcp: false,
       loadMode: 'lazy',
+      type: 'core',
     }
   }
 

@@ -93,8 +93,14 @@ export class SessionStreamManager {
   /**
    * 订阅已存在的流（用于新窗口打开或刷新后重连）
    *
+   * 支持基于 lastContentId 的过滤：
+   * - 扫描 eventBuffer 中已收到 finish 的 contentId
+   * - 已 finish 且 contentId <= lastContentId 的事件跳过（前端数据库已有）
+   * - 未 finish 的 content 按原始 chunk 发送
+   *
    * @param sessionId 会话 ID
    * @param subscriberId 订阅者唯一标识
+   * @param lastContentId 前端最后已完成的 contentId（可选）
    * @returns 可观察的 Subject，如果流不存在或未运行则返回 null
    */
   subscribe(
@@ -103,6 +109,7 @@ export class SessionStreamManager {
     onEvent: (data: string) => void,
     onComplete: () => void,
     onError: (err: any) => void,
+    lastContentId: string | null = null,
   ): (() => void) | null {
     const stream = this.activeStreams.get(sessionId);
     if (!stream || !stream.isRunning) {
@@ -125,10 +132,34 @@ export class SessionStreamManager {
       error: onError,
     });
 
-    // 发送缓冲区中的历史事件，让新客户端追赶上进度
+    // 扫描 eventBuffer 中已收到 finish 的 contentId
+    const finishedContentIds = new Set<string>();
     for (const event of stream.eventBuffer) {
+      if (event.type === "finish" && event.contentId) {
+        finishedContentIds.add(event.contentId);
+      }
+    }
+
+    // 发送缓冲区中的历史事件，过滤掉前端已知的已完成内容
+    let sentCount = 0;
+    let skippedCount = 0;
+    for (const event of stream.eventBuffer) {
+      const contentId = event.contentId;
+
+      // 已 finish 且 <= lastContentId，前端数据库已有，跳过
+      if (
+        contentId &&
+        finishedContentIds.has(contentId) &&
+        lastContentId &&
+        contentId <= lastContentId
+      ) {
+        skippedCount++;
+        continue;
+      }
+
       try {
         subject.next({ data: JSON.stringify(event) });
+        sentCount++;
       } catch (error) {
         this.logger.warn(
           `Failed to send buffered event to subscriber ${subscriberId}`,
@@ -137,7 +168,7 @@ export class SessionStreamManager {
     }
 
     this.logger.debug(
-      `Subscriber ${subscriberId} joined stream ${sessionId}, sent ${stream.eventBuffer.length} buffered events`,
+      `Subscriber ${subscriberId} joined stream ${sessionId}, sent ${sentCount} events, skipped ${skippedCount} events`,
     );
 
     // 返回取消订阅的清理函数
@@ -150,6 +181,9 @@ export class SessionStreamManager {
   /**
    * 广播事件到所有订阅者，并缓存到缓冲区
    *
+   * 收到 finish 事件时，自动聚合该 content 的所有 chunk，
+   * 将连续的 text/think 事件合并为单个事件，减少新订阅者的事件数量。
+   *
    * @param sessionId 会话 ID
    * @param event 流式事件
    */
@@ -157,6 +191,11 @@ export class SessionStreamManager {
     const stream = this.activeStreams.get(sessionId);
     if (!stream || !stream.isRunning) {
       return;
+    }
+
+    // 收到 finish 事件时，聚合该 content 的历史 chunk
+    if (event.type === "finish" && event.contentId) {
+      this.aggregateContentInBuffer(stream, event.contentId);
     }
 
     // 缓存事件
@@ -177,6 +216,152 @@ export class SessionStreamManager {
         stream.subscribers.delete(subscriber.id);
       }
     }
+  }
+
+  /**
+   * 聚合指定 contentId 在 eventBuffer 中的事件
+   *
+   * 将连续的 text/think 事件合并为单个事件，减少事件数量。
+   * 保留 create/update、tool_call、tool_calls_response、finish 等事件。
+   */
+  private aggregateContentInBuffer(
+    stream: ActiveStream,
+    contentId: string,
+  ): void {
+    const contentEvents = stream.eventBuffer.filter(
+      (e) => e.contentId === contentId,
+    );
+    if (contentEvents.length === 0) return;
+
+    // 提取各类事件
+    const textEvents = contentEvents.filter((e) => e.type === "text");
+    const thinkEvents = contentEvents.filter((e) => e.type === "think");
+
+    // 如果没有需要聚合的 text/think 事件，直接返回
+    if (textEvents.length <= 1 && thinkEvents.length <= 1) return;
+
+    // 构建聚合后的事件列表
+    const aggregatedEvents: StreamEvent[] = [];
+
+    // 保留 create/update 事件
+    const createEvent = contentEvents.find(
+      (e) => e.type === "create" || e.type === "update",
+    );
+    if (createEvent) aggregatedEvents.push(createEvent);
+
+    // 聚合 text 事件
+    if (textEvents.length > 0) {
+      const aggregatedText = textEvents.map((e) => e.msg).join("");
+      aggregatedEvents.push({
+        type: "text",
+        msg: aggregatedText,
+        contentId,
+      });
+    }
+
+    // 聚合 think 事件
+    if (thinkEvents.length > 0) {
+      const aggregatedThink = thinkEvents.map((e) => e.msg).join("");
+      aggregatedEvents.push({
+        type: "think",
+        msg: aggregatedThink,
+        contentId,
+      });
+    }
+
+    // 聚合 tool_call 事件（增量参数累加）
+    const toolCallEvents = contentEvents.filter((e) => e.type === "tool_call");
+    if (toolCallEvents.length > 0) {
+      const aggregatedToolCalls = this.aggregateToolCalls(toolCallEvents);
+      aggregatedEvents.push({
+        type: "tool_call",
+        toolCalls: aggregatedToolCalls,
+        contentId,
+      });
+    }
+
+    // 保留 tool_calls_response 事件
+    const toolCallsResponseEvents = contentEvents.filter(
+      (e) => e.type === "tool_calls_response",
+    );
+    if (toolCallsResponseEvents.length > 0) {
+      aggregatedEvents.push(
+        toolCallsResponseEvents[toolCallsResponseEvents.length - 1],
+      );
+    }
+
+    // 保留其他类型事件（如 compression_start 等）
+    const otherEvents = contentEvents.filter(
+      (e) =>
+        e.type !== "create" &&
+        e.type !== "update" &&
+        e.type !== "text" &&
+        e.type !== "think" &&
+        e.type !== "tool_call" &&
+        e.type !== "tool_calls_response" &&
+        e.type !== "finish",
+    );
+    aggregatedEvents.push(...otherEvents);
+
+    // 保留 finish 事件（放在最后，标记 content 完成）
+    const finishEvent = contentEvents.find((e) => e.type === "finish");
+    if (finishEvent) aggregatedEvents.push(finishEvent);
+
+    // 从 eventBuffer 中移除该 content 的所有原始事件
+    stream.eventBuffer = stream.eventBuffer.filter(
+      (e) => e.contentId !== contentId,
+    );
+
+    // 插入聚合后的事件
+    stream.eventBuffer.push(...aggregatedEvents);
+
+    this.logger.debug(
+      `Aggregated content ${contentId}: ${contentEvents.length} events → ${aggregatedEvents.length} events`,
+    );
+  }
+
+  /**
+   * 聚合 tool_call 事件
+   *
+   * tool_call 是增量发送的，每个 chunk 只包含部分参数。
+   * 需要按 index 分组，累加 arguments 字符串，合并为完整的工具调用。
+   */
+  private aggregateToolCalls(toolCallEvents: StreamEvent[]): any[] {
+    const toolCallMap = new Map<
+      number,
+      { id?: string; index: number; type: string; name: string; arguments: string }
+    >();
+
+    for (const event of toolCallEvents) {
+      const toolCalls = event.toolCalls || [];
+      for (const tc of toolCalls) {
+        const index = tc.index;
+        if (!toolCallMap.has(index)) {
+          toolCallMap.set(index, {
+            id: tc.id,
+            index: tc.index,
+            type: tc.type || "function",
+            name: tc.name || "",
+            arguments: "",
+          });
+        }
+        const existing = toolCallMap.get(index)!;
+        // 更新 id（可能从空到具体值）
+        if (tc.id && !existing.id) {
+          existing.id = tc.id;
+        }
+        // 更新 name（可能从空到具体值）
+        if (tc.name) {
+          existing.name = tc.name;
+        }
+        // 累加 arguments
+        if (tc.arguments) {
+          existing.arguments += tc.arguments;
+        }
+      }
+    }
+
+    return Array.from(toolCallMap.values());
   }
 
   /**

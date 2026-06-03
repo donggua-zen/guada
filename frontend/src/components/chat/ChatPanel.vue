@@ -60,7 +60,7 @@
   </div>
 
   <!-- 输入区域 -->
-  <div class="pb-6 w-full px-5 max-w-205 flex flex-col items-start mx-auto">
+  <div class="pb-4 w-full px-5 max-w-205 flex flex-col items-start mx-auto">
     <!-- 编辑模式提示条 -->
     <div v-if="editMode"
       class="bg-gray-200 -mb-1.5 w-full  flex items-center px-4 pt-2 pb-5 rounded-tl-xl rounded-tr-xl">
@@ -70,7 +70,7 @@
       </el-button>
     </div>
 
-    <div class="w-full flex items-center" style="margin-top: -10px;z-index: 9;">
+    <div class="w-full flex items-center" style="margin-top: -16px;z-index: 9;">
       <ChatInput v-model:value="inputMessage.content" v-model:files="inputMessage.files"
         :session-id="currentSession?.id" :config="chatInputConfig" :streaming="isStreaming" mode="chat"
         @config-change="handleConfigChange" @send="handleSendMessage" @abort="abortResponse"
@@ -976,9 +976,21 @@ async function handleStreamResponseAsSubscriber(
   streamingSessionId: string,
 ) {
   try {
+    // 获取当前会话最后一个 contentId，用于后端过滤已完成的 content
+    const messages = sessionStore.getMessages(streamingSessionId);
+    const lastAssistantMessage = messages
+      .filter((m: any) => m.role === 'assistant')
+      .pop();
+    const lastContentId = lastAssistantMessage?.contents?.length > 0
+      ? lastAssistantMessage.contents[lastAssistantMessage.contents.length - 1].id
+      : null;
+
     await streamHandler.processStream(
       streamingSessionId,
       'subscribe',
+      null,
+      null,
+      lastContentId,
     );
   } catch (error) {
     // 订阅模式下无活跃流的错误可以静默忽略

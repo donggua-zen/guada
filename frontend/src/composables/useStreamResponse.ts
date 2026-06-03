@@ -517,6 +517,7 @@ export function useStreamResponse(sessionStore: any, apiService: any) {
       replaceMessageId?: string;
       knowledgeBaseIds?: string[];
     },
+    lastContentId?: string | null,
   ): Promise<void> {
     sessionStore.setSessionIsStreaming(streamingSessionId, true);
 
@@ -534,6 +535,7 @@ export function useStreamResponse(sessionStore: any, apiService: any) {
         sessionId: streamingSessionId,
         regenerationMode,
         assistantMessageId,
+        lastContentId,
       };
       if (userMessage) {
         chatParams.userMessage = userMessage;
@@ -709,6 +711,7 @@ export function useStreamResponse(sessionStore: any, apiService: any) {
     regenerationMode: "regenerate" | "resume" | "subscribe" | null = null,
     assistantMessageId: string | null = null,
     userMessageId?: string | null,
+    lastContentId?: string | null,
   ): Promise<void> {
     const userMessage = userMessageId ? { id: userMessageId } : undefined;
     await processStreamLoop(
@@ -716,6 +719,7 @@ export function useStreamResponse(sessionStore: any, apiService: any) {
       regenerationMode,
       assistantMessageId,
       userMessage,
+      lastContentId,
     );
   }
 

@@ -693,9 +693,11 @@ watch(
 let unsubscribeSessionEvents: (() => void) | null = null;
 
 function initSessionEventListeners() {
-  // 连接 SSE（如果用户已登录）
-  if (authStore.user?.id) {
-    apiService.connectSessionEvents(authStore.user.id);
+  // 连接 SSE（如果用户已认证）
+  // 后端通过 Authorization Header 中的 token 解析 userId，前端无需传递
+  if (authStore.isAuthenticated) {
+    console.log("[ChatPage] 连接 SSE")
+    apiService.connectSessionEvents()
   }
 
   // 监听会话创建事件
@@ -757,6 +759,11 @@ function cleanupSessionEventListeners() {
 // 组件挂载完成后加载会话列表
 onMounted(async () => {
   isLoading.value = true;
+
+  // 等待认证状态初始化完成（页面刷新后 store 可能尚未从 storage 恢复）
+  if (!authStore.isAuthenticated) {
+    await authStore.initializeAuth()
+  }
 
   if (authStore.isAuthenticated) {
     await loadSessions();

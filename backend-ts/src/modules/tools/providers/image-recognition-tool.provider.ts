@@ -106,6 +106,7 @@ export class ImageRecognitionToolProvider implements IToolProvider {
       description: "图片内容识别工具",
       isMcp: false,
       loadMode: "lazy",
+      type: "core",
     };
   }
 

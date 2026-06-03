@@ -1,6 +1,6 @@
 import { Logger } from "@nestjs/common";
 import { MessageRecord } from "../llm-core/types/llm.types";
-import { createId } from "@paralleldrive/cuid2";
+import { cuid } from "../../common/utils/cuid.util";
 import {
   IConversationContext,
   IMessageStore,
@@ -220,7 +220,7 @@ export class ConversationContext implements IConversationContext {
         this.history = this.history.map((msg, index) => {
           if (index >= startIndex) {
             // 保留当前轮次的 reasoning content
-            return { ...msg, reasoningContent: msg.reasoningContent ?? "" };
+            return { ...msg, reasoningContent: msg.reasoningContent ?? " " };
           } else {
             // 移除历史轮次的 reasoning content
             const { reasoningContent, ...rest } = msg as any;
@@ -230,15 +230,20 @@ export class ConversationContext implements IConversationContext {
       }
     }
 
-    // KIMI 特殊处理：若历史记录最后一条消息的 content 为空字符串，则替换为空格
-    // Kimi 模型对空 content 处理不友好，可能导致请求异常，用空格兜底
+    // KIMI 特殊处理：将全部助手消息中的空 content 替换为 "."
+    // Kimi 模型对空 content 处理不友好，可能导致请求异常
     const isKimi = modelName.includes("kimi");
-    if (isKimi && this.history.length > 0) {
-      const lastMsg = this.history[this.history.length - 1];
-      if (lastMsg.content === "") {
-        lastMsg.content = " ";
+    if (isKimi) {
+      let replacedCount = 0;
+      for (const msg of this.history) {
+        if (msg.role === "assistant" && msg.content === "") {
+          msg.content = "\n";
+          replacedCount++;
+        }
+      }
+      if (replacedCount > 0) {
         this.logger.debug(
-          `Kimi model: replaced empty content with space for last message`,
+          `Kimi model: replaced empty content for ${replacedCount} assistant messages`,
         );
       }
     }
@@ -338,12 +343,13 @@ export class ConversationContext implements IConversationContext {
     if (!records || records.length === 0) return;
 
     this.history.push(...records);
-    this.pendingPersistRecords.push(...records);
+    // this.pendingPersistRecords.push(...records);
     // 增量更新 Token 计数：仅计算新追加消息的 Token 数并累加到总计数中
     const newTokens = await this.tokenizerService.countTokens(
       this.chatModelName,
       records,
     );
+    await this.messageStore.persistContent(records);
     this.currentTokenCount += newTokens;
     this.logger.debug(
       `Appended ${records.length} messages, added ${newTokens} tokens, total: ${this.currentTokenCount}`,
@@ -382,7 +388,7 @@ export class ConversationContext implements IConversationContext {
   }
 
   generateId(): string {
-    return createId();
+    return cuid();
   }
 
   /**

@@ -9,7 +9,7 @@ import { WorkspaceService } from "../../common/services/workspace.service";
 import { IConversationContext } from "./interfaces";
 import { SG_MODELS, SK_MOD_CHAT } from "../../constants/settings.constants";
 import { RequestContext } from "../../common/context/request-context";
-import * as path from 'path';
+import * as path from "path";
 
 /**
  * 合并后的会话设置接口
@@ -69,7 +69,7 @@ export class SessionContextService {
     private modelRepository: ModelRepository,
     private settingsStorage: SettingsStorage,
     private workspaceService: WorkspaceService,
-  ) { }
+  ) {}
 
   /**
    * 合并会话设置与角色默认配置（唯一来源）
@@ -89,14 +89,17 @@ export class SessionContextService {
     const sessionSettings = session.settings || {};
     const characterSettings = session.character?.settings || {};
 
+    const mergedTools = characterSettings.tools;
+
     const merged: MergedSettings = {
-      systemPrompt: sessionSettings.systemPrompt || characterSettings.systemPrompt || "",
+      systemPrompt:
+        sessionSettings.systemPrompt || characterSettings.systemPrompt || "",
       thinkingEffort: undefined,
       memory: {},
       modelTemperature: characterSettings.modelTemperature,
       modelTopP: characterSettings.modelTopP,
       modelFrequencyPenalty: characterSettings.modelFrequencyPenalty,
-      tools: characterSettings.tools,
+      tools: mergedTools,
       mcpServers: characterSettings.mcpServers,
     };
 
@@ -143,7 +146,10 @@ export class SessionContextService {
   private async resolveModel(session: any) {
     let model = session.model;
     if (!model) {
-      const modelId = this.settingsStorage.getSettingValue(SG_MODELS, SK_MOD_CHAT);
+      const modelId = this.settingsStorage.getSettingValue(
+        SG_MODELS,
+        SK_MOD_CHAT,
+      );
       if (modelId) {
         model = await this.modelRepository.findById(modelId);
       }
@@ -195,34 +201,45 @@ export class SessionContextService {
 
     if (supportsTools) {
       // 确定工作路径（已自动确保目录存在）
-      const workspacePath = this.workspaceService.resolveSessionWorkspaceDir(session);
+      const workspacePath =
+        this.workspaceService.resolveSessionWorkspaceDir(session);
 
       // 构建注入参数
       const injectParams = {
         sessionId,
         userId,
-        sessionType: session.sessionType || 'web',
+        sessionType: session.sessionType || "web",
         workspacePath,
       };
 
       // 创建工具上下文
-      toolContext = this.toolContextFactory.createContext(
-        injectParams, merged.tools, merged.mcpServers, [],
+      toolContext = await this.toolContextFactory.createContext(
+        injectParams,
+        merged.tools,
+        merged.mcpServers,
+        [],
       );
 
       // 获取工具提示词（用于构建 systemPrompt）
       toolPrompts = await this.toolOrchestrator.getAllToolPrompts(toolContext);
     }
 
-    const fullSystemPrompt = [
-      merged.systemPrompt,
-      toolPrompts,
-    ].filter(Boolean).join("\n");
+    const fullSystemPrompt = [merged.systemPrompt, toolPrompts]
+      .filter(Boolean)
+      .join("\n");
 
-    const effectiveContextWindow = this.calcEffectiveContextWindow(model, merged.memory);
+    const effectiveContextWindow = this.calcEffectiveContextWindow(
+      model,
+      merged.memory,
+    );
 
-    const context = await this.conversationContextFactory.create(sessionId, userId);
-    const thinkingEffort = supportsThinking ? (merged.thinkingEffort || 'off') : undefined;
+    const context = await this.conversationContextFactory.create(
+      sessionId,
+      userId,
+    );
+    const thinkingEffort = supportsThinking
+      ? merged.thinkingEffort || "off"
+      : undefined;
     await context.initialize({
       memory: merged.memory,
       systemPrompt: fullSystemPrompt,
@@ -240,5 +257,4 @@ export class SessionContextService {
       thinkingEffort: thinkingEffort,
     };
   }
-
 }
