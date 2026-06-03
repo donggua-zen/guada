@@ -81,13 +81,10 @@ export class SettingsController {
   @Public()
   @Get("settings/tools/global")
   async getGlobalTools() {
-    // 直接获取 tools 分组的配置，效率更高
-    const globalToolsConfig = await this.settingsService.getGroupSettings('tools');
-
-    const allTools = await this.toolOrchestrator.getLocalToolsList({ tools: globalToolsConfig });
+    const allTools = await this.toolOrchestrator.getLocalToolsList();
 
     return {
-      globalTools: globalToolsConfig,
+      globalTools: await this.settingsService.getGroupSettings('tools'),
       tools: allTools,
     };
   }
@@ -119,26 +116,16 @@ export class SettingsController {
 
   /**
    * 更新全局工具状态
-   * 支持两种模式：
-   * 1. 整体开关：{ enabled: boolean } → tools = true/false
-   * 2. 单独控制：{ namespace: string, enabled: boolean } → tools[namespace] = enabled
+   * 请求体：{ namespace: string, enabled: boolean }
    */
   @UseGuards(AuthGuard)
   @Put("settings/tools/global")
-  async updateGlobalToolStatus(@Body() data: { namespace?: string; enabled: boolean }) {
+  async updateGlobalToolStatus(@Body() data: { namespace: string; enabled: boolean }) {
     const { namespace, enabled } = data;
 
-    if (namespace) {
-      // 单独控制某个工具
-      await this.settingsService.updateGroupSettings('tools', {
-        [namespace]: enabled,
-      });
-    } else {
-      // 整体开关
-      await this.settingsService.updateGroupSettings('tools', {
-        _global: enabled,
-      });
-    }
+    await this.settingsService.updateGroupSettings('tools', {
+      [namespace]: enabled,
+    });
 
     return { success: true, namespace, enabled };
   }

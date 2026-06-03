@@ -488,6 +488,7 @@ export class KnowledgeBaseToolProvider implements IToolProvider {
       description: "知识库检索与管理工具集",
       isMcp: false,
       loadMode: context?.sessionType === "web" ? "lazy" : "eager",
+      type: "core",
     };
   }
 }

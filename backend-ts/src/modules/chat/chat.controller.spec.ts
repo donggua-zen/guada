@@ -1,5 +1,8 @@
-jest.mock("./agent-engine.service", () => ({ AgentEngine: class {} }));
+jest.mock("./chat-runner.service", () => ({ ChatRunnerService: class {} }));
 jest.mock("./session.service", () => ({ SessionService: class {} }));
+jest.mock("../../common/database/message.repository", () => ({ MessageRepository: class {} }));
+jest.mock("./session-stream.manager", () => ({ SessionStreamManager: class {} }));
+jest.mock("./session-events.service", () => ({ SessionEventsService: class {} }));
 
 const { ChatController } = require("./chat.controller");
 
@@ -7,34 +10,19 @@ describe("ChatController", () => {
   const user = { id: "user-1" };
   const body = { sessionId: "session-1", messageId: "message-1" };
 
-  let agentEngine: { completions: jest.Mock };
+  let chatRunner: { startStream: jest.Mock };
   let sessionService: { getSessionById: jest.Mock };
   let controller: any;
 
   beforeEach(() => {
-    agentEngine = { completions: jest.fn() };
+    chatRunner = { startStream: jest.fn() };
     sessionService = { getSessionById: jest.fn() };
-    controller = new ChatController(agentEngine as any, sessionService as any);
-  });
-
-  it("verifies session ownership before creating completions stream", async () => {
-    sessionService.getSessionById.mockResolvedValue({ id: body.sessionId });
-
-    await controller.completions(body, user, { on: jest.fn() } as any);
-
-    expect(sessionService.getSessionById).toHaveBeenCalledWith(
-      body.sessionId,
-      user.id,
+    controller = new ChatController(
+      sessionService as any,
+      {} as any,
+      {} as any,
+      chatRunner as any,
     );
-  });
-
-  it("does not start completions when session is unauthorized", async () => {
-    sessionService.getSessionById.mockRejectedValue(new Error("unauthorized"));
-
-    await expect(
-      controller.completions(body, user, { on: jest.fn() } as any),
-    ).rejects.toThrow("unauthorized");
-    expect(agentEngine.completions).not.toHaveBeenCalled();
   });
 
   it("does not open stream response when session is unauthorized", async () => {
@@ -52,6 +40,6 @@ describe("ChatController", () => {
     ).rejects.toThrow("unauthorized");
 
     expect(res.setHeader).not.toHaveBeenCalled();
-    expect(agentEngine.completions).not.toHaveBeenCalled();
+    expect(chatRunner.startStream).not.toHaveBeenCalled();
   });
 });

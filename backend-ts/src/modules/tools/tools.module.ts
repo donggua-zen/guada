@@ -13,6 +13,7 @@ import { FileToolProvider } from "./providers/file-tool.provider";
 import { BrowserToolProvider } from "./providers/browser-tool.provider";
 import { SessionManagementToolProvider } from "./providers/session-management-tool.provider";
 import { SchedulerToolProvider } from "./providers/scheduler-tool.provider";
+import { DocumentToolProvider } from "./providers/document-tool.provider";
 import { EmbeddingService } from "../knowledge-base/embedding.service";
 import { KbFileService } from "../knowledge-base/kb-file.service";
 import { FileParserService } from "../knowledge-base/file-parser.service";
@@ -37,6 +38,7 @@ import { SchedulerModule } from '../scheduler/scheduler.module';
     BrowserToolProvider,
     SessionManagementToolProvider,
     SchedulerToolProvider,
+    DocumentToolProvider,
     SkillToolBridgeService,
     EmbeddingService,
     KbFileService,
@@ -59,6 +61,7 @@ export class ToolsModule implements OnModuleInit {
     private readonly browserProvider: BrowserToolProvider,
     private readonly sessionManagementProvider: SessionManagementToolProvider,
     private readonly schedulerProvider: SchedulerToolProvider,
+    private readonly documentProvider: DocumentToolProvider,
     private readonly skillToolBridge: SkillToolBridgeService,
   ) {}
 
@@ -82,6 +85,7 @@ export class ToolsModule implements OnModuleInit {
 
     this.toolOrchestrator.addProvider(this.sessionManagementProvider);
     this.toolOrchestrator.addProvider(this.schedulerProvider);
+    this.toolOrchestrator.addProvider(this.documentProvider);
     this.toolOrchestrator.addProvider(this.skillToolBridge);
   }
 }

@@ -5,6 +5,7 @@ import { SessionEventsService } from "./session-events.service";
 import { SessionService } from "./session.service";
 import { MessageService } from "./message.service";
 
+
 /**
  * 流订阅回调
  */
@@ -64,6 +65,7 @@ export class ChatRunnerService {
       assistantMessageId?: string | null;
       resumeData?: any;
       source?: Record<string, any>;
+      lastContentId?: string | null;
     },
     callbacks?: StreamCallbacks,
   ): Promise<() => void> {
@@ -75,6 +77,7 @@ export class ChatRunnerService {
       assistantMessageId = null,
       resumeData,
       source,
+      lastContentId = null,
     } = params;
 
     // 获取会话
@@ -142,7 +145,7 @@ export class ChatRunnerService {
 
     // 情况 1: 该会话已有活跃流，加入订阅
     if (hasActiveStream) {
-      return this.subscribeToStream(sessionId, subscriberId, callbacks);
+      return this.subscribeToStream(sessionId, subscriberId, callbacks, lastContentId);
     }
 
     // 情况 2: 该会话没有活跃流，需要启动新流
@@ -212,6 +215,7 @@ export class ChatRunnerService {
       resumeData,
     ).catch((error) => {
       this.logger.error(`Agent engine error for ${sessionId}:`, error);
+      this.logger.error(`Agent engine error stack:`, error?.stack);
       this.streamManager.broadcast(sessionId, {
         type: "error",
         error: error.message,
@@ -229,6 +233,7 @@ export class ChatRunnerService {
     sessionId: string,
     subscriberId: string,
     callbacks?: StreamCallbacks,
+    lastContentId?: string | null,
   ): (() => void) | null {
     if (!callbacks) {
       // 后台执行不需要订阅
@@ -241,6 +246,7 @@ export class ChatRunnerService {
       callbacks.onEvent,
       callbacks.onComplete,
       callbacks.onError,
+      lastContentId || null,
     );
 
     if (!unsubscribe) {
@@ -261,6 +267,8 @@ export class ChatRunnerService {
   /**
    * 后台运行 Agent Engine
    */
+
+
   private async runAgentEngine(
     sessionId: string,
     session: any,

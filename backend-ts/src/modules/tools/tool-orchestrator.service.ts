@@ -6,7 +6,11 @@ import {
   ToolDisplayInfo,
 } from "./interfaces/tool-provider.interface";
 import { ToolContext } from "./tool-context";
-import { UniversalToolHandler, UNIVERSAL_TOOLS } from './universal-tool-handler';
+import {
+  UniversalToolHandler,
+  UNIVERSAL_TOOLS,
+} from "./universal-tool-handler";
+import { SettingsStorage } from "../../common/utils/settings-storage.util";
 
 export interface ToolMetadata {
   namespace: string;
@@ -24,7 +28,7 @@ export class ToolOrchestrator {
   private providers = new Map<string, IToolProvider>();
   private universalHandler: UniversalToolHandler;
 
-  constructor() {
+  constructor(private readonly settingsStorage: SettingsStorage) {
     // 初始化通用工具处理器
     this.universalHandler = new UniversalToolHandler();
   }
@@ -58,11 +62,11 @@ export class ToolOrchestrator {
    */
   generateDisplayMessage(
     request: ToolCallRequest,
-    isStreaming: boolean = true
+    isStreaming: boolean = true,
   ): ToolDisplayInfo {
     try {
       // 特殊处理 tool_call 工具：从参数中提取实际调用的工具名
-      if (request.name === 'tool_call') {
+      if (request.name === "tool_call") {
         if (request.arguments?.tool_name) {
           const actualToolName = request.arguments.tool_name as string;
           const actualArgs = request.arguments.arguments || {};
@@ -70,45 +74,53 @@ export class ToolOrchestrator {
           // 递归调用，使用实际的工具名和参数
           return this.generateDisplayMessage(
             { id: request.id, name: actualToolName, arguments: actualArgs },
-            isStreaming
+            isStreaming,
           );
         }
         return {
-          action: isStreaming ? '正在调用工具' : '已调用工具',
+          action: isStreaming ? "正在调用工具" : "已调用工具",
           args: request.arguments?.namespace,
           toolName: request.name,
-          toolType: 'generic'
+          toolType: "generic",
         };
       }
-      if (request.name === 'tool_load') {
+      if (request.name === "tool_load") {
         return {
-          action: isStreaming ? '正在加载工具' : '已加载工具',
+          action: isStreaming ? "正在加载工具" : "已加载工具",
           args: request.arguments?.namespace,
           toolName: request.name,
-          toolType: 'generic'
+          toolType: "generic",
         };
       }
 
       // 解析工具名称获取命名空间
-      const parts = request.name.split('__');
+      const parts = request.name.split("__");
       if (parts.length < 2) {
         // 如果不是标准格式，尝试直接查找
-        return this.generateGenericDisplayInfo(request.name, request.arguments, isStreaming);
+        return this.generateGenericDisplayInfo(
+          request.name,
+          request.arguments,
+          isStreaming,
+        );
       }
 
       const namespace = parts[0];
-      const coreName = parts.slice(1).join('__');
+      const coreName = parts.slice(1).join("__");
 
       const provider = this.providers.get(namespace);
 
-      if (provider && typeof provider.formatDisplayMessage === 'function') {
+      if (provider && typeof provider.formatDisplayMessage === "function") {
         // 如果提供者返回的是字符串，转换为结构化数据
-        const result = provider.formatDisplayMessage(coreName, request.arguments, isStreaming);
-        if (typeof result === 'string') {
+        const result = provider.formatDisplayMessage(
+          coreName,
+          request.arguments,
+          isStreaming,
+        );
+        if (typeof result === "string") {
           return {
             action: result,
             toolName: request.name,
-            toolType: namespace
+            toolType: namespace,
           };
         }
 
@@ -121,13 +133,20 @@ export class ToolOrchestrator {
       }
 
       // 降级：使用通用格式化
-      return this.generateGenericDisplayInfo(request.name, request.arguments, isStreaming);
+      return this.generateGenericDisplayInfo(
+        request.name,
+        request.arguments,
+        isStreaming,
+      );
     } catch (error) {
-      this.logger.warn(`Failed to generate display message for ${request.name}:`, error);
+      this.logger.warn(
+        `Failed to generate display message for ${request.name}:`,
+        error,
+      );
       return {
-        action: isStreaming ? '正在调用工具' : '已调用工具',
+        action: isStreaming ? "正在调用工具" : "已调用工具",
         toolName: request.name,
-        toolType: 'generic'
+        toolType: "generic",
       };
     }
   }
@@ -138,40 +157,41 @@ export class ToolOrchestrator {
   private generateGenericDisplayInfo(
     toolName: string,
     args: Record<string, any>,
-    isStreaming: boolean
+    isStreaming: boolean,
   ): ToolDisplayInfo {
-
     // 尝试从工具名推断可读名称
-    const readableName = toolName
-      .split('__')
-      .pop()
-      ?.replace(/_/g, ' ')
-      .replace(/\b\w/g, l => l.toUpperCase()) || toolName;
+    const readableName =
+      toolName
+        .split("__")
+        .pop()
+        ?.replace(/_/g, " ")
+        .replace(/\b\w/g, (l) => l.toUpperCase()) || toolName;
 
     // 提取关键参数作为 args
     let argsSummary: string | undefined;
-    if (args && typeof args === 'object') {
+    if (args && typeof args === "object") {
       // 尝试提取第一个有意义的参数值
       const keys = Object.keys(args);
       for (const key of keys) {
         const value = args[key];
-        if (typeof value === 'string' && value.length > 0) {
+        if (typeof value === "string" && value.length > 0) {
           // 如果是文件路径，只保留文件名
-          argsSummary = value.includes('/') || value.includes('\\')
-            ? value.split(/[\/\\]/).pop() || value
-            : value;
+          argsSummary =
+            value.includes("/") || value.includes("\\")
+              ? value.split(/[\/\\]/).pop() || value
+              : value;
           break;
         }
       }
     }
 
-    const namespace = toolName.split('__')[0] || 'generic';
+    const namespace = toolName.split("__")[0] || "generic";
 
     return {
       action: `${readableName}`,
       args: argsSummary,
       toolName: toolName,
-      toolType: namespace
+      toolType: namespace,
     };
   }
 
@@ -179,32 +199,37 @@ export class ToolOrchestrator {
     const allTools: any[] = [];
     const toolNames = new Set<string>();
     let lazyTools: number = 0;
- 
+
     for (const [namespace, provider] of this.providers.entries()) {
       const config = context.getProviderConfig(namespace);
       if (!config) continue;
       if (!config.enabledTools) continue;
 
       const metadata = provider.getMetadata(context.injectParams);
-      const loadMode = metadata.loadMode || 'eager';
+      const loadMode = metadata.loadMode || "eager";
 
       // 根据加载模式决定是否包含该工具
-      if (loadMode === 'none') {
+      if (loadMode === "none") {
         // none 模式的工具完全不加载
-        this.logger.debug(`Skipping disabled namespace ${namespace} (loadMode: none)`);
+        this.logger.debug(
+          `Skipping disabled namespace ${namespace} (loadMode: none)`,
+        );
         continue;
       }
 
-      if (loadMode === 'lazy') {
+      if (loadMode === "lazy") {
         // lazy 模式的工具不在初始 tools 参数中提供
         this.logger.debug(`Skipping lazy-load namespace ${namespace}`);
         lazyTools++;
         continue;
       }
 
-      const tools = await provider.getTools(config.enabledTools, context.injectParams);
+      const tools = await provider.getTools(
+        config.enabledTools,
+        context.injectParams,
+      );
 
-      const namespacedTools = tools.map(tool => {
+      const namespacedTools = tools.map((tool) => {
         const fullName = `${namespace}__${tool.name}`;
 
         // 检查重复
@@ -222,13 +247,15 @@ export class ToolOrchestrator {
       allTools.push(...namespacedTools);
     }
 
-    if(lazyTools > 0){
+    if (lazyTools > 0) {
       // 始终添加两个通用工具
       allTools.push(...UNIVERSAL_TOOLS);
       toolNames.add("tool_load");
       toolNames.add("tool_call");
     }
-    this.logger.debug(`Collected ${allTools.length} tools, unique names: ${toolNames.size}`);
+    this.logger.debug(
+      `Collected ${allTools.length} tools, unique names: ${toolNames.size}`,
+    );
     return allTools;
   }
 
@@ -244,7 +271,9 @@ export class ToolOrchestrator {
 
         // 如果提供者实现了 getPersistentPrompt，则调用并注入
         if (provider.getPersistentPrompt) {
-          const persistentPrompt = await provider.getPersistentPrompt(context.injectParams);
+          const persistentPrompt = await provider.getPersistentPrompt(
+            context.injectParams,
+          );
           if (persistentPrompt) {
             prompts.push(persistentPrompt);
           }
@@ -266,15 +295,15 @@ export class ToolOrchestrator {
         if (!providerConfig.enabledTools) continue;
 
         const metadata = provider.getMetadata(context.injectParams);
-        const loadMode = metadata.loadMode || 'eager';
+        const loadMode = metadata.loadMode || "eager";
 
         // none 模式的工具不收集任何信息
-        if (loadMode === 'none') {
+        if (loadMode === "none") {
           continue;
         }
 
         // lazy 模式的工具只收集元信息
-        if (loadMode === 'lazy') {
+        if (loadMode === "lazy") {
           const briefDesc = provider.getBriefDescription
             ? await provider.getBriefDescription(context.injectParams)
             : metadata.description;
@@ -296,15 +325,15 @@ export class ToolOrchestrator {
         if (!providerConfig.enabledTools) continue;
 
         const metadata = provider.getMetadata(context.injectParams);
-        const loadMode = metadata.loadMode || 'eager';
+        const loadMode = metadata.loadMode || "eager";
 
         // none 模式的工具不注入提示词
-        if (loadMode === 'none') {
+        if (loadMode === "none") {
           continue;
         }
 
         // eager 模式的工具直接注入完整提示词
-        if (loadMode === 'eager' && namespace !== 'tool_manager') {
+        if (loadMode === "eager" && namespace !== "tool_manager") {
           const prompt = await provider.getPrompt(context.injectParams);
           if (prompt) {
             prompts.push(prompt);
@@ -357,11 +386,13 @@ export class ToolOrchestrator {
       try {
         // 检查是否已中止
         if (abortSignal?.aborted) {
-          this.logger.warn(`Tool execution aborted before starting: ${req.name}`);
+          this.logger.warn(
+            `Tool execution aborted before starting: ${req.name}`,
+          );
           responses.push({
             toolCallId: req.id,
             name: req.name,
-            content: 'Error: Request was aborted',
+            content: "Error: Request was aborted",
             isError: true,
           });
           continue;
@@ -388,18 +419,19 @@ export class ToolOrchestrator {
     abortSignal?: AbortSignal,
   ): Promise<ToolCallResponse> {
     // 特殊处理：拦截通用工具调用
-    if (request.name === 'tool_load') {
+    if (request.name === "tool_load") {
       return await this.universalHandler.handleToolLoad(
         request,
         context,
         (ns) => this.getProvider(ns),
-        (ns) => context.getProviderConfig(ns)
+        (ns) => context.getProviderConfig(ns),
       );
     }
 
-    if (request.name === 'tool_call') {
+    if (request.name === "tool_call") {
       // 解析 tool_call 参数
-      const { namespace, coreName, toolArgs } = this.universalHandler.parseToolCall(request);
+      const { namespace, coreName, toolArgs } =
+        this.universalHandler.parseToolCall(request);
 
       // 由编排器统一执行
       return await this.executeToolByNamespace(
@@ -454,10 +486,12 @@ export class ToolOrchestrator {
 
     // 检查工具的加载模式
     const metadata = provider.getMetadata(context.injectParams);
-    const loadMode = metadata.loadMode || 'eager';
+    const loadMode = metadata.loadMode || "eager";
 
-    if (loadMode === 'none') {
-      throw new Error(`Tool provider ${namespace} is disabled (loadMode: none)`);
+    if (loadMode === "none") {
+      throw new Error(
+        `Tool provider ${namespace} is disabled (loadMode: none)`,
+      );
     }
 
     // 检查工具是否启用
@@ -473,11 +507,18 @@ export class ToolOrchestrator {
 
     // 精细粒度判断：通过 getTools 获取实际可用的工具列表
     // 这样可以处理 MCP 特殊逻辑以及 Provider 内部的动态禁用逻辑
-    const availableTools = await provider.getTools(providerConfig.enabledTools, context.injectParams);
-    const isToolAvailable = availableTools.some(tool => tool.name === coreName);
+    const availableTools = await provider.getTools(
+      providerConfig.enabledTools,
+      context.injectParams,
+    );
+    const isToolAvailable = availableTools.some(
+      (tool) => tool.name === coreName,
+    );
 
     if (!isToolAvailable) {
-      throw new Error(`Tool ${coreName} is not available or disabled in namespace ${namespace}`);
+      throw new Error(
+        `Tool ${coreName} is not available or disabled in namespace ${namespace}`,
+      );
     }
 
     // 构造工具调用请求
@@ -489,14 +530,22 @@ export class ToolOrchestrator {
 
     try {
       // 提供者只返回内容字符串，异常由这里捕获
-      let content = await provider.execute(toolRequest, context.injectParams, abortSignal);
+      let content = await provider.execute(
+        toolRequest,
+        context.injectParams,
+        abortSignal,
+      );
 
       // 检查结果长度，如果超过 10000 字符则截断
       const MAX_CONTENT_LENGTH = 50000;
       if (content && content.length > MAX_CONTENT_LENGTH) {
         const truncatedContent = content.substring(0, MAX_CONTENT_LENGTH);
         const omittedLength = content.length - MAX_CONTENT_LENGTH;
-        content = JSON.stringify({ 'warning': `Content truncated. Omitted ${omittedLength} characters. Use other tools or adjust query conditions to view complete content.`, 'tool_truncated': truncatedContent, 'omitted_length': omittedLength });
+        content = JSON.stringify({
+          warning: `Content truncated. Omitted ${omittedLength} characters. Use other tools or adjust query conditions to view complete content.`,
+          tool_truncated: truncatedContent,
+          omitted_length: omittedLength,
+        });
         this.logger.warn(
           `Tool ${originalToolName} output truncated: ${content.length} chars (original: ${content.length + omittedLength} chars)`,
         );
@@ -514,41 +563,41 @@ export class ToolOrchestrator {
       return {
         toolCallId,
         name: originalToolName,
-        content: JSON.stringify({ 'success': false, 'message': error.message }),
+        content: JSON.stringify({ success: false, message: error.message }),
         isError: true,
       };
     }
   }
 
-  async getLocalToolsList(settings: any): Promise<ToolMetadata[]> {
+  async getLocalToolsList(): Promise<ToolMetadata[]> {
     const toolsList: ToolMetadata[] = [];
-    const globalToolsConfig = settings?.tools;
+    const globalToolsConfig = this.settingsStorage.getSettings("tools");
 
     for (const [namespace, provider] of this.providers.entries()) {
       const metadata = provider.getMetadata({});
 
-      if (metadata.isMcp) {
-        continue;
-      }
-
-      // 判断该工具是否启用
-      let isEnabled = false;
+      // 根据 provider 的 type 字段确定默认值：core 默认启用，extended 默认禁用
+      const defaultEnabled = metadata.type !== "extended";
+      let isEnabled = defaultEnabled;
       if (globalToolsConfig === true) {
-        // 全局启用所有工具
         isEnabled = true;
       } else if (globalToolsConfig === false) {
-        // 全局禁用所有工具
         isEnabled = false;
-      } else if (typeof globalToolsConfig === 'object') {
-        // 单独配置：优先使用 namespace 配置，否则默认为 true
-        isEnabled = globalToolsConfig[namespace] !== false;
+      } else if (typeof globalToolsConfig === "object") {
+        const config = globalToolsConfig[namespace];
+        if (typeof config === "boolean") {
+          isEnabled = config;
+        } else if (Array.isArray(config)) {
+          isEnabled = true;
+        }
+        // 未配置时保持 defaultEnabled
       }
 
       let tools: any[] = [];
       try {
         tools = await provider.getTools(true, {});
 
-        const namespacedTools = tools.map(tool => ({
+        const namespacedTools = tools.map((tool) => ({
           ...tool,
           name: `${namespace}__${tool.name}`,
         }));

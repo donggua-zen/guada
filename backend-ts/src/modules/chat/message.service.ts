@@ -121,9 +121,9 @@ export class MessageService {
       return {
         ...msg,
         files: filesWithAbsoluteUrls,
-        contents: msg.contents.map((content) =>
-          this.stripToolCallDetails(content)
-        ),
+        contents: msg.contents
+          .filter((content) => content.role !== "tool")
+          .map((content) => this.stripToolCallDetails(content)),
       };
     });
 

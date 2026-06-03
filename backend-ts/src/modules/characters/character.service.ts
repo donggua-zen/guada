@@ -208,10 +208,4 @@ export class CharacterService {
     }
   }
 
-  /**
-   * 获取全局工具设置
-   */
-  async getGlobalToolsSettings(): Promise<any> {
-    return this.settingsStorage.getSettings('tools');
-  }
 }

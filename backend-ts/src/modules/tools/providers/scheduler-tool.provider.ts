@@ -371,6 +371,7 @@ export class SchedulerToolProvider implements IToolProvider {
       description: "创建和管理定时任务，让 AI 在指定时间自动执行",
       isMcp: false,
       loadMode: "lazy",
+      type: "core",
     };
   }
 

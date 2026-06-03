@@ -51,11 +51,6 @@ const route = useRoute()
 // 插件设置 Tab 菜单
 const sidebarItems = [
     {
-        label: 'MCP 服务器',
-        path: 'mcp',
-        icon: Dumbbell16Regular,
-    },
-    {
         label: '本地工具',
         path: 'local-tools',
         icon: WrenchScrewdriver24Regular,
@@ -64,6 +59,11 @@ const sidebarItems = [
         label: 'Skills',
         path: 'skills',
         icon: Code24Regular,
+    },
+    {
+        label: 'MCP 服务器',
+        path: 'mcp',
+        icon: Dumbbell16Regular,
     },
 ]
 

@@ -35,6 +35,13 @@ export interface ToolDisplayInfo {
  */
 export type ToolLoadMode = 'eager' | 'lazy' | 'none';
 
+/**
+ * 工具提供者分类
+ * - core: 核心工具，默认启用，提供基础能力
+ * - extended: 扩展工具，默认禁用，提供进阶或特定场景能力
+ */
+export type ToolProviderType = 'core' | 'extended';
+
 export interface ToolProviderMetadata {
   namespace: string;
   displayName: string;
@@ -47,6 +54,13 @@ export interface ToolProviderMetadata {
    * - none: 完全不加载，工具在任何情况下都不可用
    */
   loadMode?: ToolLoadMode;
+  /**
+   * 工具提供者分类，用于控制默认启用状态
+   * - core: 默认启用（兼容已有行为）
+   * - extended: 默认禁用，需用户手动开启
+   * 未配置时默认为 core，保持向后兼容
+   */
+  type?: ToolProviderType;
 }
 
 export interface IToolProvider {

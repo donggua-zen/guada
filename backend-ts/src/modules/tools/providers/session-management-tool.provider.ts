@@ -153,6 +153,7 @@ export class SessionManagementToolProvider implements IToolProvider {
       description: "机器人会话管理工具集,可以根据用户指令清空并新建对话",
       isMcp: false,
       loadMode,
+      type: "core",
     };
   }
 }

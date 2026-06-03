@@ -106,17 +106,15 @@ export class CharactersController {
       characterToolsConfig = (character.settings as any)?.tools;
     }
 
-    const globalTools = await this.characterService.getGlobalToolsSettings();
+    const allTools = await this.toolOrchestrator.getLocalToolsList();
 
-    const allTools = await this.toolOrchestrator.getLocalToolsList({
-      tools: globalTools,
-    });
+    // 过滤掉全局禁用的工具，不显示在角色配置界面
+    const enabledTools = allTools.filter((tool) => tool.enabled);
 
     return {
       characterId,
       characterTools: characterToolsConfig,
-      globalTools,
-      tools: allTools.map((tool) => ({
+      tools: enabledTools.map((tool) => ({
         ...tool,
         effectiveEnabled: this.calculateEffectiveEnabled(
           characterToolsConfig,
@@ -129,15 +127,15 @@ export class CharactersController {
   /**
    * 计算工具有效状态
    *
-   * 说明：getLocalToolsList 已根据 globalTools 过滤，传入的 allTools 仅包含全局启用的工具。
+   * 说明：getLocalToolsList 已根据 globalTools 过滤，传入的工具仅包含全局启用的工具。
    * 因此此处只需判断角色级别的配置即可。
    *
    * 规则：
    * 1. 如果角色设置为 true，则启用（跟随全局，自动适应新增工具）
    * 2. 如果角色设置为 false，则禁用
    * 3. 如果角色设置为数组，表示部分启用（至少有一个工具启用就算启用）
-   * 4. 如果角色设置为对象，则取 namespace 的配置（未设置默认为 true）
-   * 5. 如果角色未设置，则跟随全局（默认启用）
+   * 4. 如果角色设置为对象，则取 namespace 的配置（未设置默认为 false）
+   * 5. 如果角色未设置，则默认禁用
    */
   private calculateEffectiveEnabled(
     characterTools: any,
@@ -170,14 +168,11 @@ export class CharactersController {
       if (charValue === "all" || charValue === true) {
         return true;
       }
-      if (charValue === false) {
-        return false;
-      }
-      // 未设置，跟随全局（默认启用）
-      return true;
+      // 其余情况（false 或未设置）均禁用
+      return false;
     }
 
-    // 角色未设置（undefined / null），跟随全局（默认启用）
-    return true;
+    // 角色未设置（undefined / null），默认禁用
+    return false;
   }
 }

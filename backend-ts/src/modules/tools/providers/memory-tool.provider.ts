@@ -248,6 +248,7 @@ export class MemoryToolProvider implements IToolProvider {
       description: "记忆索引管理与缓存同步工具",
       isMcp: false,
       loadMode: "eager",
+      type: "core",
     };
   }
 
