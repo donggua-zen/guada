@@ -26,13 +26,13 @@ export class DocumentToolProvider implements IToolProvider {
     {
       name: "parse",
       description:
-        "解析 PDF 或 Word 文档，提取其中的纯文本内容。支持 .pdf 和 .docx 格式。当用户需要阅读、分析、总结或提取文档内容时使用此工具。",
+        "解析 PDF、Word 或 Excel 文档，提取其中的纯文本内容。支持 .pdf、.docx、.xlsx 和 .xls 格式。当用户需要阅读、分析、总结或提取文档内容时使用此工具。",
       parameters: {
         type: "object",
         properties: {
           file_path: {
             type: "string",
-            description: "要解析的文档路径（绝对路径或相对路径），支持 .pdf 和 .docx 格式",
+            description: "要解析的文档路径（绝对路径或相对路径），支持 .pdf、.docx、.xlsx 和 .xls 格式",
           },
           max_chars: {
             type: "number",
@@ -53,7 +53,7 @@ export class DocumentToolProvider implements IToolProvider {
           file_paths: {
             type: "array",
             items: { type: "string" },
-            description: "要解析的文档路径列表（绝对路径或相对路径），支持 .pdf 和 .docx 格式",
+            description: "要解析的文档路径列表（绝对路径或相对路径），支持 .pdf、.docx、.xlsx 和 .xls 格式",
           },
           max_chars_per_file: {
             type: "number",
@@ -114,7 +114,7 @@ export class DocumentToolProvider implements IToolProvider {
     const promptParts: string[] = [];
     promptParts.push("# 文档解析工具使用说明");
     promptParts.push("");
-    promptParts.push("**支持格式**：PDF (.pdf)、Word (.docx)");
+    promptParts.push("**支持格式**：PDF (.pdf)、Word (.docx)、Excel (.xlsx, .xls)");
     promptParts.push("");
     promptParts.push("**使用建议**：");
     promptParts.push("1. 当用户上传或提及 PDF/Word 文件时，优先使用此工具提取文本内容");
@@ -220,8 +220,8 @@ export class DocumentToolProvider implements IToolProvider {
 
     // 检查扩展名
     const ext = path.extname(resolvedPath).replace(/^\./, "").toLowerCase();
-    if (!["pdf", "docx"].includes(ext)) {
-      throw new Error(`不支持的文件格式：.${ext}，仅支持 .pdf 和 .docx`);
+    if (!["pdf", "docx", "xlsx", "xls"].includes(ext)) {
+      throw new Error(`不支持的文件格式：.${ext}，仅支持 .pdf、.docx、.xlsx 和 .xls`);
     }
 
     if (abortSignal?.aborted) {
@@ -230,7 +230,8 @@ export class DocumentToolProvider implements IToolProvider {
 
     try {
       // 复用 FileParserService 解析文件
-      const content = await this.fileParserService.parseFileFromPath(resolvedPath);
+      const result = await this.fileParserService.parseFile(resolvedPath);
+      const content = result.text;
 
       if (abortSignal?.aborted) {
         throw new Error("Request was aborted");

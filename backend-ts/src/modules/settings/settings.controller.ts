@@ -59,12 +59,12 @@ export class SettingsController {
 
   /**
    * 批量更新多个分组的设置
-   * 请求体格式: { system: {...}, models: {...}, tools: {...} }
+   * 请求体格式: { system: {...}, models: {...}, tools: {...}, ocr: {...} }
    */
   @UseGuards(AuthGuard)
   @Put("settings")
   async updateSettings(@Body() data: Record<string, Record<string, any>>) {
-    const groups = ['system', 'models', 'tools'];
+    const groups = ['system', 'models', 'tools', 'ocr'];
 
     for (const group of groups) {
       if (data[group]) {

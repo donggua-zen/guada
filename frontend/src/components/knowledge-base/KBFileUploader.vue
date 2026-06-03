@@ -161,7 +161,8 @@ const ALLOWED_EXTENSIONS = [
     '.swift', '.kt', '.scala', '.dart', '.ex', '.r', '.jl', '.ps1', '.vbs', '.fish',
     '.j2', '.ejs', '.hbs', '.lock', '.patch', '.diff', '.ics', '.vcf', '.srt',
     '.proto', '.graphql', '.sol', '.pdf',
-    '.doc', '.docx',  // Word 文档
+    '.docx',  // Word 文档
+    '.xlsx',  // Excel 文档
     '.dts', '.dtsi'   // 设备树源文件
 ]
 
@@ -429,7 +430,9 @@ async function handleFolderSelect(event: Event) {
         '.env', '.cfg', '.config', '.reg', '.pem', '.tex', '.rst', '.adoc', '.org',
         '.swift', '.kt', '.scala', '.dart', '.ex', '.r', '.jl', '.ps1', '.vbs', '.fish',
         '.j2', '.ejs', '.hbs', '.lock', '.patch', '.diff', '.ics', '.vcf', '.srt',
-        '.proto', '.graphql', '.sol', '.pdf'
+        '.proto', '.graphql', '.sol', '.pdf',
+        '.docx',  // Word 文档
+        '.xlsx',  // Excel 文档
     ]
 
     // 过滤文件,只保留允许的格式

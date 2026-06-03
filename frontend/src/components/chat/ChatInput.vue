@@ -220,7 +220,8 @@ const FILE_TYPES = {
       '.swift', '.kt', '.scala', '.dart', '.ex', '.r', '.jl', '.ps1', '.vbs', '.fish',
       '.j2', '.ejs', '.hbs', '.lock', '.patch', '.diff', '.ics', '.vcf', '.srt',
       '.proto', '.graphql', '.sol', '.pdf',
-      '.doc', '.docx',  // Word 文档
+      '.docx',  // Word 文档
+      '.xlsx',  // Excel 文档
       '.dts', '.dtsi'   // 设备树源文件
     ],
     type: 'text'

@@ -168,9 +168,7 @@ let skeletonShowTime: number = 0 // 记录骨架屏开始显示的时间戳
 const SKELETON_DELAY = 200 // 延迟显示骨架屏的毫秒数
 const SKELETON_MIN_DISPLAY = 500 // 骨架屏最少显示毫秒数
 
-// SSE 事件监听取消函数
-let unsubscribeStreamStarted: (() => void) | null = null;
-let unsubscribeStreamFinished: (() => void) | null = null;
+
 
 // 使用 useMessageOperations composable
 const {
@@ -422,67 +420,7 @@ watch(() => activeMessages.value.length, () => {
   updateScrollButtonVisibility()
 }, { immediate: true });
 
-/**
- * 初始化 SSE 事件监听
- * 接收流开始/结束事件，替代轮询机制
- */
-function initSessionEventListeners() {
-  // 监听流开始事件（其他客户端发起的流）
-  unsubscribeStreamStarted = apiService.onSessionEvent("stream_started", (event) => {
-    const { sessionId, payload } = event;
 
-    // 忽略自身发起的流（通过 source/clientId 判断）
-    if (payload?.source?.includes(apiService.getClientId())) {
-      console.log("[ChatPanel] 忽略自身发起的流事件");
-      return;
-    }
-
-    // 如果是当前会话，自动订阅流
-    if (sessionId === currentSessionId.value && !isStreaming.value) {
-      console.log("[ChatPanel] 检测到其他客户端的活跃流，自动订阅");
-      // 如果存在 replaceMessageId，先删除本地对应消息避免重复
-      if (payload?.replaceMessageId) {
-        const messages = sessionStore.getMessages(sessionId);
-        const index = messages.findIndex((m: any) => m.id === payload.replaceMessageId);
-        if (index !== -1) {
-          messages.splice(index, 1);
-        }
-      }
-      subscribeToActiveStream();
-    }
-  });
-
-  // 监听流结束事件
-  unsubscribeStreamFinished = apiService.onSessionEvent("stream_finished", (event) => {
-    const { sessionId } = event;
-    if (sessionId === currentSessionId.value) {
-      console.log("[ChatPanel] 流已结束");
-    }
-  });
-}
-
-/**
- * 清理 SSE 事件监听
- */
-function cleanupSessionEventListeners() {
-  if (unsubscribeStreamStarted) {
-    unsubscribeStreamStarted();
-    unsubscribeStreamStarted = null;
-  }
-  if (unsubscribeStreamFinished) {
-    unsubscribeStreamFinished();
-    unsubscribeStreamFinished = null;
-  }
-}
-
-// 生命周期和初始化
-onMounted(() => {
-  initSessionEventListeners();
-});
-
-onUnmounted(() => {
-  cleanupSessionEventListeners();
-});
 /**
   * 加载会话配置和消息（首次加载，只加载最近 N 条）
   */

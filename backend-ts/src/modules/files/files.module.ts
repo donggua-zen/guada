@@ -1,16 +1,21 @@
 import { Module } from "@nestjs/common";
 import { MulterModule } from "@nestjs/platform-express";
+import { HttpModule } from "@nestjs/axios";
 import { FilesController } from "./files.controller";
 import { FileService } from "./file.service";
 import { FileRepository } from "../../common/database/file.repository";
 import { PrismaService } from "../../common/database/prisma.service";
 import { AuthModule } from "../auth/auth.module";
 import { FileParserService } from "../knowledge-base/file-parser.service";
+import { OcrService } from "../knowledge-base/ocr.service";
+import { SettingsService } from "../settings/settings.service";
+import { SettingsStorage } from "../../common/utils/settings-storage.util";
 import * as multer from "multer";
 
 @Module({
   imports: [
     AuthModule,
+    HttpModule,
     MulterModule.register({
       storage: multer.memoryStorage(),
       limits: {
@@ -27,7 +32,7 @@ import * as multer from "multer";
     }),
   ],
   controllers: [FilesController],
-  providers: [FileService, FileRepository, PrismaService, FileParserService],
+  providers: [FileService, FileRepository, PrismaService, FileParserService, OcrService, SettingsService, SettingsStorage],
   exports: [FileService], // 导出 FileService 供其他模块使用
 })
 export class FilesModule { }

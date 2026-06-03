@@ -266,13 +266,9 @@ export class FileService implements OnModuleInit {
       // 解析 PDF 内容
       let fileContent: string | null = null;
       try {
-        const fileType = await this.fileParserService.detectFileType(fileInfo.fileExt);
-        fileContent = await this.fileParserService.parseFile(
-          file.buffer,
-          fileType,
-          fileInfo.fileExt,
-          fileInfo.fileSize,
-        );
+        const savedFilePath = path.join(this.uploadPathService.getPhysicalPath("files"), url);
+        const parseResult = await this.fileParserService.parseFile(savedFilePath);
+        fileContent = parseResult.text;
         this.logger.debug(`PDF 内容提取成功，长度: ${fileContent.length}`);
       } catch (error: any) {
         this.logger.warn(`PDF 内容提取失败: ${error.message}，将保存文件但不存储内容`);

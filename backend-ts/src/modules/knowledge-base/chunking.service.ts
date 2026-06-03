@@ -10,6 +10,14 @@
 import { Logger } from "@nestjs/common";
 import * as tiktoken from "tiktoken";
 
+/**
+ * 页码文本条目
+ */
+export interface PageEntry {
+  pageNum: number; // 页码（从1开始）
+  text: string; // 该页文本内容
+}
+
 export interface ChunkResult {
   content: string; // 包含重叠的完整内容（用于向量化）
   cleanContent: string; // 纯净内容（不含重叠，用于展示）
@@ -20,6 +28,7 @@ export interface ChunkResult {
     tokenCount: number; // Token 数量
     cleanSize: number; // 纯净内容长度（字符数）
     strategy: string; // 分块策略
+    sourcePages?: number[]; // 来源页码列表（PDF 分块时记录）
   };
 }
 
@@ -112,8 +121,8 @@ export class ChunkingService {
   /**
    * 对文本进行基于 Token 的分块
    *
-   * @param text 待分块的文本
-   * @param options 分块选项（可以覆盖构造函数中的默认值）
+   * @param text 待分块的纯文本（兼容旧接口，不含页码信息）
+   * @param optionsOrMetadata 分块选项或元数据
    * @param metadata 元数据（会添加到每个分块中）
    * @returns 分块结果列表
    */
@@ -122,7 +131,26 @@ export class ChunkingService {
     optionsOrMetadata?: ChunkTextOptions | Record<string, any>,
     metadata?: Record<string, any>,
   ): Promise<ChunkResult[]> {
-    if (!text || text.trim().length === 0) {
+    // 兼容旧接口：纯文本视为单页
+    const pages: PageEntry[] = text ? [{ pageNum: 1, text }] : [];
+    return this.chunkPages(pages, optionsOrMetadata, metadata);
+  }
+
+  /**
+   * 对分页文本进行基于 Token 的分块
+   * 按页边界优先分块，记录每个分块的来源页码
+   *
+   * @param pages 页码文本列表
+   * @param optionsOrMetadata 分块选项或元数据
+   * @param metadata 元数据（会添加到每个分块中）
+   * @returns 分块结果列表
+   */
+  async chunkPages(
+    pages: PageEntry[],
+    optionsOrMetadata?: ChunkTextOptions | Record<string, any>,
+    metadata?: Record<string, any>,
+  ): Promise<ChunkResult[]> {
+    if (!pages || pages.length === 0) {
       return [];
     }
 
@@ -136,90 +164,82 @@ export class ChunkingService {
         "overlapSize" in optionsOrMetadata ||
         "modelName" in optionsOrMetadata
       ) {
-        // 第一个参数是 ChunkTextOptions
         chunkOptions = optionsOrMetadata as ChunkTextOptions;
         chunkMetadata = metadata;
       } else {
-        // 第一个参数是 metadata
         chunkMetadata = optionsOrMetadata as Record<string, any>;
       }
     }
 
-    // 合并选项（modelName 参数已废弃，仅保留兼容性）
     const finalOptions: ChunkingOptions = {
       chunkSize: chunkOptions.chunkSize ?? this.options.chunkSize,
       overlapSize: chunkOptions.overlapSize ?? this.options.overlapSize,
-      modelName: this.options.modelName, // 固定使用构造函数中的默认值
+      modelName: this.options.modelName,
     };
 
-    // 预处理文本
-    const processedText = this.preprocessText(text);
-
-    // 执行基于 Token 的智能分块
-    const chunksData = await this.tokenBasedChunking(
-      processedText,
-      finalOptions,
-    );
-
+    // 按页边界分块：每页独立分块，不跨页
     const result: ChunkResult[] = [];
-    let prevTokensList: number[] | null = null;
+    let globalChunkIndex = 0;
 
-    for (let idx = 0; idx < chunksData.length; idx++) {
-      const content = chunksData[idx];
-
-      // 对当前分块内容进行 Token 编码
-      const currentTokensList = await this.encodeText(content);
-      let tokenCount = currentTokensList.length;
-
-      let overlapLength = 0;
-      let cleanContent = content;
-      let finalContent = content;
-
-      // 处理重叠逻辑
-      if (idx > 0 && this.options.overlapSize! > 0 && prevTokensList) {
-        // 获取前一个分块的末尾 tokens 作为重叠部分
-        const overlapTokenIds =
-          prevTokensList.length >= this.options.overlapSize!
-            ? prevTokensList.slice(-this.options.overlapSize!)
-            : prevTokensList;
-
-        const overlapText = await this.decodeTokens(overlapTokenIds);
-
-        // 检查当前分块是否已经自然包含了这部分重叠
-        if (content.startsWith(overlapText)) {
-          // 如果自然包含，则记录重叠长度但不重复拼接
-          overlapLength = overlapTokenIds.length;
-          finalContent = content;
-        } else {
-          // 如果不包含，将重叠部分拼接到当前分块前面
-          const fullEmbeddingContent = overlapText + content;
-          overlapLength = overlapTokenIds.length;
-
-          // 更新 tokenCount 为包含重叠后的总数
-          tokenCount = await this.countTokens(fullEmbeddingContent);
-          cleanContent = content; // 保持原始内容用于展示
-          finalContent = fullEmbeddingContent; // 更新为包含重叠的内容用于存储/索引
-        }
+    for (const page of pages) {
+      if (!page.text || page.text.trim().length === 0) {
+        continue;
       }
 
-      const chunk: ChunkResult = {
-        content: finalContent,
-        cleanContent: cleanContent,
-        chunkIndex: idx,
-        metadata: {
-          ...(metadata || {}),
-          overlapLength,
-          chunkSize: cleanContent.length,
-          tokenCount,
-          cleanSize: cleanContent.length,
-          strategy: "token",
-        },
-      };
+      const processedText = this.preprocessText(page.text);
+      const pageChunks = await this.tokenBasedChunking(processedText, finalOptions);
 
-      result.push(chunk);
+      let prevTokensList: number[] | null = null;
 
-      // 更新 prevTokensList 供下一次迭代使用
-      prevTokensList = await this.encodeText(finalContent);
+      for (let idx = 0; idx < pageChunks.length; idx++) {
+        const content = pageChunks[idx];
+
+        const currentTokensList = await this.encodeText(content);
+        let tokenCount = currentTokensList.length;
+
+        let overlapLength = 0;
+        let cleanContent = content;
+        let finalContent = content;
+
+        // 处理重叠逻辑（仅在同一页内重叠，不跨页）
+        if (idx > 0 && this.options.overlapSize! > 0 && prevTokensList) {
+          const overlapTokenIds =
+            prevTokensList.length >= this.options.overlapSize!
+              ? prevTokensList.slice(-this.options.overlapSize!)
+              : prevTokensList;
+
+          const overlapText = await this.decodeTokens(overlapTokenIds);
+
+          if (content.startsWith(overlapText)) {
+            overlapLength = overlapTokenIds.length;
+            finalContent = content;
+          } else {
+            const fullEmbeddingContent = overlapText + content;
+            overlapLength = overlapTokenIds.length;
+            tokenCount = await this.countTokens(fullEmbeddingContent);
+            cleanContent = content;
+            finalContent = fullEmbeddingContent;
+          }
+        }
+
+        const chunk: ChunkResult = {
+          content: finalContent,
+          cleanContent: cleanContent,
+          chunkIndex: globalChunkIndex++,
+          metadata: {
+            ...(chunkMetadata || {}),
+            overlapLength,
+            chunkSize: cleanContent.length,
+            tokenCount,
+            cleanSize: cleanContent.length,
+            strategy: "token",
+            sourcePages: [page.pageNum],
+          },
+        };
+
+        result.push(chunk);
+        prevTokensList = await this.encodeText(finalContent);
+      }
     }
 
     this.logger.log(`文本分块完成：共${result.length}个分块，策略=token`);

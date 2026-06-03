@@ -182,7 +182,7 @@ export class ChatRunnerService {
       }
     }
 
-    // 广播流开始事件
+    // 广播流开始事件，携带完整会话信息供前端同步
     this.sessionEventsService.broadcastToUser(userId, {
       type: "stream_started",
       userId,
@@ -192,6 +192,7 @@ export class ChatRunnerService {
         messageId: createdUserMessage?.id || userMessage?.id,
         source: subscriberId,
         replaceMessageId: userMessage?.replaceMessageId || null,
+        session,
       },
     });
 
