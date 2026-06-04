@@ -561,4 +561,11 @@ export class SessionService {
     };
   }
 
+  /**
+   * 更新会话最后活跃时间
+   */
+  async updateLastActiveAt(sessionId: string) {
+    return this.sessionRepo.updateLastActiveAt(sessionId);
+  }
+
 }

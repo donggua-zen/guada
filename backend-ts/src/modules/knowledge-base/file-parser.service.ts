@@ -257,8 +257,7 @@ export class FileParserService {
             pages: [{ pageNum: 1, text: ocrResult.text }],
           };
         }
-        this.logger.warn("OCR 识别失败或结果为空，返回空文本");
-        return { text: "", pages: [] };
+        throw new Error("OCR 识别失败或结果为空");
       }
 
       if (!pdfResult.fullText || pdfResult.fullText.trim().length === 0) {

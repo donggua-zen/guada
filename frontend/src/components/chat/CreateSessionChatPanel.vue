@@ -2,11 +2,12 @@
 
   <!-- 输入区域 -->
   <div class="px-5 pb-2.5 w-full flex-1 flex flex-col items-center justify-center mb-40">
-    <div class="banner max-w-full mx-auto w-80 mb-4">
+    <div class="w-full flex items-center justify-center mb-4">
+    <div class="banner w-30 mb-4">
       <img :src="bannerPath" alt=""></img>
     </div>
-    <h1 class="text-3xl mb-6 text-gray-600">Hi，想聊些什么？</h1>
-
+    <h1 class="text-4xl mb-6 text-gray-600 ml-10">Hi，想聊些什么？</h1>
+</div>
     <!-- 已选角色显示 -->
     <div
       class="w-full max-w-200 mb-[-0.7rem] flex items-center gap-3 p-2 pb-4 bg-gray-50 border border-gray-100 rounded-lg cursor-pointer hover:bg-gray-100 transition-colors"
@@ -130,7 +131,10 @@ const router = useRouter();
 const title = useTitle();
 
 // 计算属性：自适应 Banner 路径
-const bannerPath = computed(() => fixFrontendAssetUrl('/images/chat_banner.webp'))
+// const bannerPath = computed(() => fixFrontendAssetUrl('/images/chat_banner.webp'))
+
+// Logo 路径（使用 fixFrontendAssetUrl 适配 Electron 环境）
+const bannerPath = computed(() => fixFrontendAssetUrl('/images/guada_logo.png'))
 
 // 角色数据
 const characters = ref<any[]>([]);

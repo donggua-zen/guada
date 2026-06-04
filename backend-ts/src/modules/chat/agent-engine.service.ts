@@ -1,14 +1,12 @@
-import { Injectable, Logger, ConflictException } from "@nestjs/common";
-import { SessionRepository } from "../../common/database/session.repository";
+import { Injectable, Logger } from "@nestjs/common";
 import { LLMService } from "../llm-core/llm.service";
 import { ToolOrchestrator } from "../tools/tool-orchestrator.service";
-import { ToolDisplayInfo } from "../tools/interfaces/tool-provider.interface";
 import { SessionContextService } from "./session-context.service";
 import { MessageRecord, LLMResponseChunk } from "../llm-core/types/llm.types";
 import { IConversationContext } from "./interfaces";
 import { RequestContext } from "../../common/context/request-context";
-import { partialParse } from "partial-json-parser";
 import { throttledStream } from "./utils/stream-throttle.util";
+import { ToolCallDisplayUtil } from "./utils/tool-call-display.util";
 
 /**
  * 审批上下文
@@ -40,207 +38,13 @@ class ThinkingTimeInfo {
 }
 
 /**
- * 工具调用展示文案管理器
+ * 扩展的 LLM 响应块（累加器使用）
  *
- * 负责管理流式工具调用的展示文案生成。
- * 文案会直接注入到 toolCalls 的 metadata 中，随 MessageContent 一起持久化。
+ * 在标准 LLMResponseChunk 基础上增加思考时长字段，
+ * 用于 executeLLMStream 返回完整的累加状态。
  */
-class ToolCallDisplayManager {
-  private readonly logger = new Logger(ToolCallDisplayManager.name);
-
-  // 存储每个工具调用的状态（仅用于流式阶段）
-  private states = new Map<
-    number,
-    {
-      displayInfo: ToolDisplayInfo; // 结构化的展示信息
-    }
-  >();
-
-  constructor(private toolOrchestrator: ToolOrchestrator) {}
-
-  /**
-   * 初始化工具调用状态（收到第一个 chunk 时）
-   */
-  initialize(index: number, toolId: string, toolName: string): void {
-    const displayInfo = this.toolOrchestrator.generateDisplayMessage(
-      { id: toolId, name: toolName, arguments: {} },
-      true,
-    );
-
-    this.states.set(index, {
-      displayInfo: displayInfo,
-    });
-
-    this.logger.log(`[ToolCall #${index}] Initialized: ${displayInfo.action}`);
-  }
-
-  /**
-   * 从流式 chunk 更新文案
-   * @param accumulatedArgs 外部已累积的完整参数字符串
-   * @returns 是否需要更新文案
-   */
-  updateFromChunk(
-    index: number,
-    toolName: string,
-    accumulatedArgs: string,
-  ): boolean {
-    const state = this.states.get(index);
-    if (!state) return false;
-
-    const updated = this.tryUpdateDisplayMessage(
-      index,
-      toolName,
-      accumulatedArgs,
-      state,
-    );
-
-    if (updated) {
-      this.logger.log(
-        `[ToolCall #${index}] Updated: ${state.displayInfo.action}`,
-      );
-    }
-
-    return updated;
-  }
-
-  /**
-   * 获取当前展示信息（流式阶段使用）
-   */
-  getDisplayMessage(index: number): ToolDisplayInfo | undefined {
-    return this.states.get(index)?.displayInfo;
-  }
-
-  /**
-   * 获取所有工具调用的完成状态文案（工具执行完成后使用）
-   * 同时更新内部状态为完成状态的文案
-   */
-  finalizeAll(toolCalls: any[]): ToolDisplayInfo[] {
-    return toolCalls.map((tc, index) => {
-      const state = this.states.get(index);
-
-      // 从 arguments 重新生成完成状态的文案（isStreaming = false）
-      const parsedArgs = this.safeJsonParse(tc.arguments);
-      const completedInfo = this.toolOrchestrator.generateDisplayMessage(
-        { id: tc.id, name: tc.name, arguments: parsedArgs },
-        false, // isStreaming = false，生成"已..."状态
-      );
-
-      // 更新内部状态为完成状态的文案
-      if (state) {
-        state.displayInfo = completedInfo;
-      }
-
-      // 同时更新 toolCall 的 metadata（如果存在）
-      if (tc.metadata) {
-        tc.metadata.displayMessage = completedInfo;
-      }
-
-      // 返回完整的 ToolDisplayInfo 对象
-      return completedInfo;
-    });
-  }
-
-  /**
-   * 将文案注入到 toolCalls 的 metadata 中（持久化前调用）
-   */
-  injectDisplayMessages(toolCalls: any[]): void {
-    toolCalls.forEach((tc, index) => {
-      const state = this.states.get(index);
-      if (state && state.displayInfo) {
-        // 确保 metadata 存在
-        if (!tc.metadata) {
-          tc.metadata = {};
-        }
-        // 保存结构化的展示信息到 metadata
-        tc.metadata.displayMessage = state.displayInfo;
-
-        this.logger.debug(
-          `[ToolCall #${index}] Saved displayInfo to metadata: ${JSON.stringify(state.displayInfo)}`,
-        );
-      }
-    });
-  }
-
-  /**
-   * 清理所有状态
-   */
-  clear(): void {
-    this.states.clear();
-  }
-
-  // ==================== 私有方法 ====================
-
-  private tryUpdateDisplayMessage(
-    index: number,
-    toolName: string,
-    accumulatedArgs: string,
-    state: any,
-  ): boolean {
-    if (!accumulatedArgs || accumulatedArgs.trim().length === 0) {
-      return false;
-    }
-
-    try {
-      // 使用 partial-json-parser 解析不完整的 JSON
-      const parsed = partialParse(accumulatedArgs);
-
-      if (!parsed || typeof parsed !== "object") {
-        return false;
-      }
-
-      let actualToolName = toolName;
-      let extractedParams: Record<string, any> = {};
-
-      if (toolName === "tool_call") {
-        // tool_call 特殊处理：从解析结果中提取 tool_name 和 arguments
-        if (parsed.tool_name) {
-          actualToolName = parsed.tool_name;
-        }
-
-        if (parsed.arguments && typeof parsed.arguments === "object") {
-          extractedParams = parsed.arguments;
-        }
-      } else {
-        // 普通工具：直接使用解析后的参数
-        extractedParams = parsed;
-      }
-
-      // 只要有有效参数就更新展示文案
-      if (
-        Object.keys(extractedParams).length > 0 ||
-        actualToolName !== toolName
-      ) {
-        const request = {
-          id: "",
-          name: actualToolName,
-          arguments: extractedParams,
-        };
-        state.displayInfo = this.toolOrchestrator.generateDisplayMessage(
-          request,
-          true,
-        );
-        return true;
-      }
-    } catch (error) {
-      // 解析失败时静默忽略，等待更多数据
-      const errorMessage =
-        error instanceof Error ? error.message : String(error);
-      this.logger.debug(`JSON 解析失败（等待更多数据）: ${errorMessage}`);
-    }
-
-    return false;
-  }
-
-  private safeJsonParse(jsonString: string): any {
-    if (!jsonString || typeof jsonString !== "string") {
-      return {};
-    }
-    try {
-      return JSON.parse(jsonString) || {};
-    } catch {
-      return { _raw_arguments: jsonString };
-    }
-  }
+interface AccumulatedChunk extends LLMResponseChunk {
+  thinkingDurationMs?: number | null;
 }
 
 /**
@@ -268,18 +72,12 @@ export class AgentEngine {
   // 流式输出限流间隔（毫秒）
   private readonly THROTTLE_MS = 100;
 
-  // 文案管理器（替代原来的 currentTurnToolCallStates）
-  private displayManager: ToolCallDisplayManager;
-
   constructor(
-    private sessionRepo: SessionRepository,
     private toolOrchestrator: ToolOrchestrator,
     private llmService: LLMService,
     private sessionContextService: SessionContextService,
-  ) {
-    // 初始化文案管理器
-    this.displayManager = new ToolCallDisplayManager(this.toolOrchestrator);
-  }
+    private displayManager: ToolCallDisplayUtil,
+  ) {}
 
   /**
    * 执行会话补全请求（主入口）
@@ -292,7 +90,7 @@ export class AgentEngine {
    * - 委托 SessionContextService 完成所有数据准备
    * - 进入多轮工具调用循环，逐轮生成响应
    *
-   * @param sessionIdOrSession 会话 ID 或会话对象（传入对象可避免重复查询）
+   * @param session 会话对象
    * @param messageId 触发本次补全的用户消息 ID
    * @param regenerationMode 再生模式（"overwrite" 覆盖旧回复 / "multi_version" 保留多版本 / "resume" 断点续传）
    * @param assistantMessageId 现有助手消息 ID（仅 multi_version 模式使用）
@@ -301,39 +99,19 @@ export class AgentEngine {
    * @yields SSE 的事件对象（create / text / think / tool_call / finish 等）
    */
   async *completions(
-    sessionIdOrSession: string | any,
+    session: any,
     messageId: string,
     regenerationMode: string = "overwrite", // 再生模式：'overwrite' | 'multi_version' | 'resume'
     assistantMessageId?: string, // 现有助手消息 ID（用于 multi_version 和 resume 模式）
     abortSignal?: AbortSignal, // 中断信号（用于客户端断开连接时中止 LLM 请求）
     resumeData?: any, // 【新增】断点续传数据
   ) {
-    // 判断传入的是 sessionId 还是 session 对象
-    const isSessionObject = typeof sessionIdOrSession !== "string";
-    const sessionId = isSessionObject
-      ? sessionIdOrSession.id
-      : sessionIdOrSession;
+    const sessionId = session.id;
 
     // 在 AsyncLocalStorage 上下文中执行整个请求
     // 这样内部所有服务都可以自动访问 abortSignal，无需层层透传
     const generatorFn = async function* (this: AgentEngine) {
-      const userId = isSessionObject
-        ? sessionIdOrSession.userId
-        : (await this.sessionRepo.findById(sessionId))?.userId;
-
       try {
-        let session = isSessionObject
-          ? sessionIdOrSession
-          : await this.sessionRepo.findById(sessionId);
-
-        // 如果未传入 session 对象，则查询数据库
-        if (!session) {
-          throw new Error("Session not found");
-        }
-
-        // 更新会话最后活跃时间，用于会话管理和清理策略
-        await this.sessionRepo.updateLastActiveAt(sessionId);
-
         // 委托 SessionContextService 完成所有数据准备
         // 现在 buildContext 内部可以通过 RequestContext.abortSignal() 自动获取信号
         const { context, toolContext, thinkingEffort } =
@@ -458,21 +236,12 @@ export class AgentEngine {
           modelName: session.model?.modelName,
         },
       };
+      const lastMessage = historyMessages[historyMessages.length - 1];
       if (isResumeMode) {
-        const lastMessage = historyMessages[historyMessages.length - 1];
         assistantResponse = lastMessage;
         contentId = lastMessage.contentId;
         responseMessageId = lastMessage.messageId;
         turnsId = lastMessage.turnsId;
-        // for (const message of historyMessages) {
-        //   const contentPreview = message.content
-        //     ? message.content.slice(0, 20)
-        //     : "";
-        //   console.log(
-        //     `message role: ${message.role}, content: ${contentPreview}`,
-        //   );
-        // }
-        console.log(`lastMessage ${JSON.stringify(lastMessage)}`);
         if (lastMessage.role === "tool") {
           isResumeMode = false;
           continue;
@@ -497,15 +266,88 @@ export class AgentEngine {
       if (isResumeMode) {
         isResumeMode = false;
       } else {
-        yield* this.executeLLMStream(
-          session,
-          historyMessages,
-          tools,
-          assistantResponse,
-          thinkingEffort,
-          contentId,
-          abortSignal,
-        );
+        // 将 accumulated 转换为 MessageRecord 格式用于后续处理
+        const accumulatedChunk: LLMResponseChunk = {};
+        let streamError: Error | null = null;
+        const currentTurnThinkingInfo = new ThinkingTimeInfo();
+
+        try {
+          // 执行 LLM 流式请求，获取原始 chunk 和累加结果
+          const streamResult = this.executeLLMStream(
+            session,
+            historyMessages,
+            tools,
+            thinkingEffort,
+            abortSignal,
+          );
+          for await (const { chunk, accumulated } of streamResult) {
+            // 保存最新累加状态
+            Object.assign(accumulatedChunk, accumulated);
+
+            // 记录思考时间：第一次收到 reasoningContent 时标记思考开始
+            if (
+              accumulated.reasoningContent &&
+              !currentTurnThinkingInfo.thinkingStartedAt
+            ) {
+              currentTurnThinkingInfo.thinkingStartedAt = new Date();
+            }
+            // 记录思考时间：reasoningContent 结束后标记思考结束
+            if (
+              !chunk.reasoningContent &&
+              currentTurnThinkingInfo.thinkingStartedAt &&
+              !currentTurnThinkingInfo.thinkingFinishedAt
+            ) {
+              currentTurnThinkingInfo.thinkingFinishedAt = new Date();
+            }
+            // 将 accumulated 转换为 MessageRecord 保存到 assistantResponse
+            assistantResponse.content = accumulatedChunk.content || "";
+            if (accumulatedChunk.reasoningContent) {
+              assistantResponse.reasoningContent =
+                accumulatedChunk.reasoningContent;
+            }
+            if (accumulatedChunk.toolCalls) {
+              assistantResponse.toolCalls = accumulatedChunk.toolCalls;
+            }
+            if (accumulatedChunk.usage) {
+              assistantResponse.metadata.usage = accumulatedChunk.usage;
+            }
+            // 给每个 chunk 加上 contentId，用于聚合和 lastContentId 过滤
+            const chunkWithId = { ...chunk, contentId };
+            const yieldEvent = this.buildYieldEvent(chunkWithId);
+            if (yieldEvent) {
+              yield yieldEvent;
+            }
+          }
+
+          assistantResponse.metadata = {
+            ...assistantResponse.metadata,
+            finishReason: accumulatedChunk.finishReason,
+            thinkingDurationMs: this.calculateThinkingDuration(
+              currentTurnThinkingInfo,
+            ),
+          };
+        } catch (error) {
+          // 由外部捕获并处理流式异常
+          streamError =
+            error instanceof Error ? error : new Error(String(error));
+          this.logger.error(`Stream error in agent loop:`, streamError);
+          // 使用 handleStreamError 分类处理错误并设置状态
+          this.handleStreamError(
+            assistantResponse,
+            currentTurnThinkingInfo,
+            streamError,
+          );
+          if (!abortSignal || !abortSignal.aborted) {
+            yield {
+              type: "finish",
+              finishReason: 'error',
+              error: streamError.message,
+              usage: accumulatedChunk.usage,
+              contentId,
+            };
+          }
+        }
+
         parts.push(assistantResponse);
       }
 
@@ -555,8 +397,6 @@ export class AgentEngine {
 
         // 【原子性审批】只要有需要审批且未审批的工具，就触发审批请求
         if (pendingTools.length > 0) {
-          const approvalToken = this.generateResumeToken();
-
           // 保存审批上下文到 metadata
           if (!assistantResponse.metadata) {
             assistantResponse.metadata = {};
@@ -565,7 +405,6 @@ export class AgentEngine {
           assistantResponse.metadata.approvalContext = {
             type: "approval",
             status: "pending",
-            token: approvalToken,
             pendingToolCallIds: pendingTools.map((tc: any) => tc.id),
             createdAt: new Date().toISOString(),
           } as ApprovalContext;
@@ -573,7 +412,6 @@ export class AgentEngine {
           // 提前终止，发送审批请求
           yield {
             type: "finish",
-            resumeToken: approvalToken,
             finishReason: "approval_required",
             usage: assistantResponse.metadata?.usage,
           };
@@ -686,138 +524,80 @@ export class AgentEngine {
    * 执行单次 LLM 流式请求
    *
    * 该方法负责调用 LLM API 并实时处理流式响应，包括：
-   * - 累加文本内容、思维链内容和工具调用参数
+   * - 累加文本内容、思维链内容和工具调用参数到 accumulated
    * - 追踪思维链的开始和结束时间，用于计算思考时长
-   * - 捕获并分类处理各类异常（用户中止、超时、API 错误）
-   * - 将每个响应块转换为 SSE 格式并 yield 给前端
+   * - 返回原始 chunk 和累加后的 accumulated（均为 LLMResponseChunk 格式）
+   *
+   * 注意：
+   * - 该方法不直接 yield SSE 事件，由调用方负责转换和 yield
+   * - 该方法不捕获异常，异常由调用方处理
    *
    * @param session 会话对象
    * @param messages 发送给 LLM 的完整消息列表
    * @param tools 可用工具定义数组（可选）
-   * @param incrementMessage 用于累加响应的消息记录对象（会被原地修改）
    * @param thinkingEffort 思考强度级别：'off' | 'on' | 'low' | 'medium' | 'high' | 'max' 等
    * @param abortSignal 中断信号（可选）
-   * @yields SSE 格式的事件对象（text / think / tool_call / finish）
+   * @yields { chunk: LLMResponseChunk; accumulated: LLMResponseChunk } 原始块和累加块
    */
   private async *executeLLMStream(
     session: any,
     messages: MessageRecord[],
     tools: any[] | undefined,
-    incrementMessage: MessageRecord,
     thinkingEffort: string | undefined,
-    contentId: string,
     abortSignal?: AbortSignal,
-  ): AsyncGenerator<any, any, unknown> {
-    // 为当前轮次创建思考时间信息对象，用于独立追踪本轮的思维链耗时
-    const currentTurnThinkingInfo = new ThinkingTimeInfo();
+  ): AsyncGenerator<
+    { chunk: LLMResponseChunk; accumulated: LLMResponseChunk },
+    any,
+    unknown
+  > {
+    // 累加器：使用 LLMResponseChunk 格式保存累积状态
+    const accumulated: LLMResponseChunk = {};
 
-    // 用于跟踪当前轮次的完整数据（包括错误信息）
-    let streamError: Error | null = null;
+    const config = (session.model?.config as any) || {};
 
-    try {
-      const config = (session.model?.config as any) || {};
+    // 调用 LLM 服务发起流式请求，传递所有必要的配置参数
+    const stream = this.llmService.completions({
+      model: session.model?.modelName,
+      messages,
+      tools,
+      temperature: session.settings.modelTemperature, // 控制输出的随机性
+      topP: session.settings.modelTopP, // 核采样参数
+      frequencyPenalty: session.settings.modelFrequencyPenalty, // 频率惩罚，降低重复内容
+      maxTokens: config.maxOutputTokens, // 最大输出 Token 数限制
+      providerConfig: session.model.provider,
+      stream: true,
+      thinkingEffort, // 传递思考强度
+      abortSignal,
+    }) as AsyncGenerator<LLMResponseChunk>;
 
-      // 调用 LLM 服务发起流式请求，传递所有必要的配置参数
-      const stream = this.llmService.completions({
-        model: session.model?.modelName,
-        messages,
-        tools,
-        temperature: session.settings.modelTemperature, // 控制输出的随机性
-        topP: session.settings.modelTopP, // 核采样参数
-        frequencyPenalty: session.settings.modelFrequencyPenalty, // 频率惩罚，降低重复内容
-        maxTokens: config.maxOutputTokens, // 最大输出 Token 数限制
-        providerConfig: session.model.provider,
-        stream: true,
-        thinkingEffort, // 传递思考强度
-        abortSignal,
-      }) as AsyncGenerator<LLMResponseChunk>;
+    // 使用限流包装器合并高频 chunk，降低前端渲染压力
+    const throttled = throttledStream(stream, this.THROTTLE_MS, abortSignal);
 
-      // 使用限流包装器合并高频 chunk，降低前端渲染压力
-      const throttled = throttledStream(
-        stream,
-        this.THROTTLE_MS,
-        abortSignal,
-      );
-
-      // 遍历限流后的响应块
-      for await (const chunk of throttled) {
-        // 增量累加逻辑：将每个块的 content 追加到总内容中
-        if (chunk.content) incrementMessage.content += chunk.content;
-        if (chunk.reasoningContent) {
-          // 记录思考开始时间（第一次收到 reasoning_content 时），用于后续计算思维链耗时
-          if (!currentTurnThinkingInfo.thinkingStartedAt) {
-            currentTurnThinkingInfo.thinkingStartedAt = new Date();
-          }
-
-          if (incrementMessage.reasoningContent === undefined) {
-            incrementMessage.reasoningContent = chunk.reasoningContent;
-          } else {
-            incrementMessage.reasoningContent += chunk.reasoningContent;
-          }
-        }
-        if (chunk.toolCalls) {
-          // 记录思考结束时间（第一次收到 tool_calls 时），标记推理阶段完成、工具调用阶段开始
-          this.recordThinkingFinished(
-            currentTurnThinkingInfo,
-            "first tool_calls chunk",
-          );
-
-          this.accumulateToolCalls(incrementMessage, chunk.toolCalls);
-        }
-
-        if (chunk.content) {
-          // 记录思考结束时间（第一次收到 content 时），标记推理阶段完成、文本生成阶段开始
-          this.recordThinkingFinished(
-            currentTurnThinkingInfo,
-            "first content chunk",
-          );
-        }
-
-        // 累加 usage 统计和 finishReason，这些通常在最后一个块中返回
-        if (chunk.usage) {
-          incrementMessage.metadata.usage = chunk.usage;
-        }
-        if (chunk.finishReason) {
-          incrementMessage.metadata.finishReason = chunk.finishReason;
-        }
-
-        // 实时 Yield 给前端（过滤空 chunk），实现真正的流式体验
-        // 给每个 chunk 加上 contentId，用于聚合和 lastContentId 过滤
-        const chunkWithId = { ...chunk, contentId };
-        const yieldEvent = this.buildYieldEvent(chunkWithId);
-        if (yieldEvent) {
-          yield yieldEvent;
-        }
+    // 遍历限流后的响应块
+    for await (const chunk of throttled) {
+      // 增量累加逻辑：将每个块的 content 追加到总内容中
+      if (chunk.content) {
+        accumulated.content = (accumulated.content || "") + chunk.content;
       }
-    } catch (error) {
-      // 捕获流式过程中的异常，区分不同类型的错误并采取相应的处理策略
-      streamError = error instanceof Error ? error : new Error(String(error));
-      this.logger.error(`Stream error in agent loop:`, streamError);
-
-      // 根据错误类型设置 finishReason 和 error 信息，便于前端展示和用户理解
-      this.handleStreamError(
-        incrementMessage,
-        currentTurnThinkingInfo,
-        streamError,
-      );
-
-      // 向前端发送错误事件，除非是用户主动中止（避免在用户断开连接时推送额外数据）
-      if (
-        streamError.name !== "AbortError" &&
-        !streamError.message.includes("abort")
-      ) {
-        yield {
-          type: "finish",
-          finishReason: "error",
-          error: streamError.message,
-          usage: incrementMessage.metadata.usage,
-        };
+      if (chunk.reasoningContent) {
+        accumulated.reasoningContent =
+          (accumulated.reasoningContent || "") + chunk.reasoningContent;
       }
+      if (chunk.toolCalls) {
+        this.accumulateToolCalls(accumulated, chunk.toolCalls);
+      }
+
+      // 累加 usage 统计和 finishReason，这些通常在最后一个块中返回
+      if (chunk.usage) {
+        accumulated.usage = chunk.usage;
+      }
+      if (chunk.finishReason) {
+        accumulated.finishReason = chunk.finishReason;
+      }
+
+      // 返回原始 chunk 和累加后的 accumulated（由调用方决定如何 yield）
+      yield { chunk, accumulated: { ...accumulated } };
     }
-
-    // 计算并保存思维链耗时（毫秒），用于性能分析和优化
-    incrementMessage.metadata.thinkingDurationMs =
-      this.calculateThinkingDuration(currentTurnThinkingInfo);
   }
 
   /**
@@ -888,6 +668,10 @@ export class AgentEngine {
     currentTurnThinkingInfo: ThinkingTimeInfo,
     streamError: Error,
   ): void {
+    if (!currentChunk.metadata) {
+      currentChunk.metadata = {};
+    }
+
     if (
       streamError.name === "AbortError" ||
       streamError.message.includes("abort")
@@ -895,10 +679,6 @@ export class AgentEngine {
       // 用户主动中止（客户端断开连接），标记为 user_abort 以便前端展示友好提示
       currentChunk.metadata.finishReason = "user_abort";
       currentChunk.metadata.error = "User aborted the request";
-      this.logger.debug("User stopped generation (AbortError)");
-
-      // 记录思考结束时间，确保即使中途中止也能计算已产生的思维链耗时
-      this.recordThinkingFinished(currentTurnThinkingInfo, "user abort");
     } else if (
       streamError.message.includes("timed out") ||
       streamError.message.includes("timeout")
@@ -906,19 +686,12 @@ export class AgentEngine {
       // 超时错误，标记为 timeout 并记录详细错误信息
       currentChunk.metadata.finishReason = "timeout";
       currentChunk.metadata.error = streamError.message;
-      this.logger.warn("LLM request timed out");
-
-      // 记录思考结束时间，便于分析超时前的推理时长
-      this.recordThinkingFinished(currentTurnThinkingInfo, "timeout");
     } else {
       // 其他 API 错误或运行时错误，标记为 error 并记录完整错误消息
       currentChunk.metadata.finishReason = "error";
       currentChunk.metadata.error = streamError.message;
-      this.logger.error(`LLM API error: ${streamError.message}`);
-
-      // 记录思考结束时间，确保错误发生时也能追踪已产生的推理时间
-      this.recordThinkingFinished(currentTurnThinkingInfo, "api error");
     }
+    this.recordThinkingFinished(currentTurnThinkingInfo, "api error");
   }
 
   /**
@@ -1010,12 +783,12 @@ export class AgentEngine {
    *
    * LLM 在流式输出工具调用时，会将参数分成多个块逐步发送。
    * 该方法负责将这些分片按 index 合并为完整的工具调用对象，
-   * 并委托 ToolCallDisplayManager 管理展示文案的更新。
+   * 并委托 ToolCallDisplayUtil 管理展示文案的更新。
    *
-   * @param target 目标消息记录，其 toolCalls 数组会被原地修改
+   * @param target 目标 LLM 响应块，其 toolCalls 数组会被原地修改
    * @param deltaCalls 本次收到的增量工具调用分片数组
    */
-  private accumulateToolCalls(target: MessageRecord, deltaCalls: any[]) {
+  private accumulateToolCalls(target: LLMResponseChunk, deltaCalls: any[]) {
     if (!target.toolCalls) target.toolCalls = [];
 
     for (const delta of deltaCalls) {
@@ -1135,13 +908,6 @@ export class AgentEngine {
 
       return false;
     });
-  }
-
-  /**
-   * 【新增】生成断点令牌
-   */
-  private generateResumeToken(): string {
-    return `resume_${Date.now()}_${Math.random().toString(36).substring(2, 15)}`;
   }
 
   /**
