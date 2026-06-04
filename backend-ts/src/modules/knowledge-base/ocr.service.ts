@@ -206,7 +206,7 @@ export class OcrService {
   // ==================== UMI OCR ====================
 
   /**
-   * 使用 UMI OCR 识别 PDF
+   * 使用 UMI OCR 识别 PDF（分页处理，每批最多5页）
    */
   private async recognizePdfWithUmi(
     filePath: string,
@@ -299,16 +299,17 @@ export class OcrService {
 
   /**
    * 轮询 UMI PDF 识别结果
+   * 只要有进度（拿到新页面）就不会超时，只有 5 分钟没进度才超时
    */
   private async pollUmiPdfResult(
     msnId: string,
     baseUrl: string,
   ): Promise<Array<{ page: number; text: string }>> {
     const allPages: Array<{ page: number; text: string }> = [];
-    const maxRetries = 120; // 最多轮询 120 次，每次 500ms，总计 60 秒
-    let retries = 0;
+    const NO_PROGRESS_TIMEOUT_MS = 5 * 60 * 1000; // 5 分钟无进度超时
+    let lastProgressTime = Date.now();
 
-    while (retries < maxRetries) {
+    while (true) {
       const response = await firstValueFrom(
         this.httpService.post<UmiPdfResultResponse>(
           `${baseUrl}/api/doc/result`,
@@ -320,7 +321,7 @@ export class OcrService {
           },
           {
             headers: { "Content-Type": "application/json" },
-            timeout: 10000,
+            timeout: 30000,
           },
         ),
       );
@@ -338,6 +339,15 @@ export class OcrService {
         });
       }
 
+      // 有进度，更新时间戳
+      if (datas.length > 0) {
+        lastProgressTime = Date.now();
+        this.logger.log(
+          `UMI OCR 进度: ${allPages.length}/${result.pages_count || "?"} 页`,
+        );
+      }
+
+      // 检查是否全部完成
       if (result.is_done) {
         if (result.state === "success") {
           return allPages;
@@ -345,11 +355,17 @@ export class OcrService {
         throw new Error(`UMI PDF OCR 失败: ${result.message || "未知错误"}`);
       }
 
-      await this.sleep(500);
-      retries++;
-    }
+      // 检查是否长时间无进度
+      const elapsedSinceProgress = Date.now() - lastProgressTime;
+      if (elapsedSinceProgress > NO_PROGRESS_TIMEOUT_MS) {
+        throw new Error(
+          `UMI PDF OCR 轮询超时: ${NO_PROGRESS_TIMEOUT_MS / 1000} 秒内无进度`,
+        );
+      }
 
-    throw new Error("UMI PDF OCR 轮询超时");
+      // 等待后继续轮询
+      await this.sleep(500);
+    }
   }
 
   /**

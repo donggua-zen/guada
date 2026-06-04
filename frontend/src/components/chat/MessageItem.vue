@@ -279,8 +279,30 @@ const tokenUsage = computed(() => {
     return null;
   }
 
-  const lastTurn = turnsCache.value[turnsCache.value.length - 1];
-  return lastTurn?.metadata?.usage || null;
+  // 累加当前轮次所有 content 的 token 使用量
+  let totalPromptTokens = 0;
+  let totalCompletionTokens = 0;
+  let totalTokens = 0;
+
+  for (const turn of turnsCache.value) {
+    const usage = turn?.metadata?.usage;
+    if (usage) {
+      totalPromptTokens += usage.promptTokens || 0;
+      totalCompletionTokens += usage.completionTokens || 0;
+      totalTokens += usage.totalTokens || 0;
+    }
+  }
+
+  // 如果没有任何 usage 数据，返回 null
+  if (totalTokens === 0) {
+    return null;
+  }
+
+  return {
+    promptTokens: totalPromptTokens,
+    completionTokens: totalCompletionTokens,
+    totalTokens: totalTokens
+  };
 });
 
 const contentVersions = computed(() => contentVersionsCache.value);

@@ -23,6 +23,7 @@ import { SessionEventsController } from "./session-events.controller";
 import { UploadPathService } from "../../common/services/upload-path.service";
 import { FileWatcherService } from "../../common/services/file-watcher.service";
 import { ChatRunnerService } from "./chat-runner.service";
+import { ToolCallDisplayUtil } from "./utils/tool-call-display.util";
 
 import { MessageStoreService } from "./message-store.service";
 import { CompressionEngine } from "./compression-engine";
@@ -48,6 +49,7 @@ import { ConversationContextFactory, MESSAGE_STORE_TOKEN, COMPRESSION_STRATEGY_T
     FileWatcherService,
     SessionEventsService,
     ChatRunnerService,
+    ToolCallDisplayUtil,
   ],
   exports: [AgentEngine, SessionService, MessageService, SessionEventsService, ChatRunnerService],
 })

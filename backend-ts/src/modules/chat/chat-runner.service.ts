@@ -89,6 +89,9 @@ export class ChatRunnerService {
       );
     }
 
+    // 更新会话最后活跃时间，用于会话管理和清理策略
+    await this.sessionService.updateLastActiveAt(sessionId);
+
     const isSubscribeMode = regenerationMode === "subscribe";
     const hasActiveStream = this.streamManager.hasActiveStream(sessionId);
 
@@ -206,7 +209,6 @@ export class ChatRunnerService {
 
     // 在后台启动 Agent 循环
     this.runAgentEngine(
-      sessionId,
       session,
       userMessage?.id || createdUserMessage?.id,
       abortController,
@@ -215,13 +217,13 @@ export class ChatRunnerService {
       assistantMessageId,
       resumeData,
     ).catch((error) => {
-      this.logger.error(`Agent engine error for ${sessionId}:`, error);
+      this.logger.error(`Agent engine error for ${session.id}:`, error);
       this.logger.error(`Agent engine error stack:`, error?.stack);
-      this.streamManager.broadcast(sessionId, {
+      this.streamManager.broadcast(session.id, {
         type: "error",
         error: error.message,
       });
-      this.streamManager.stopStream(sessionId, "error");
+      this.streamManager.stopStream(session.id, "error");
     });
 
     return unsubscribe || (() => {});
@@ -271,7 +273,6 @@ export class ChatRunnerService {
 
 
   private async runAgentEngine(
-    sessionId: string,
     session: any,
     userMessageId: string,
     abortController: AbortController,
@@ -280,6 +281,7 @@ export class ChatRunnerService {
     assistantMessageId?: string | null,
     resumeData?: any,
   ): Promise<void> {
+    const sessionId = session.id;
     try {
       const iterator = this.agentEngine.completions(
         session,
