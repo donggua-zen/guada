@@ -1,12 +1,14 @@
 <template>
-  <SidebarLayout :sidebarVisible="layoutStore.sidebarVisible" :sidebarWidth="260" :showToggleButton="false"
+  <SidebarLayout :sidebarVisible="layoutStore.sidebarVisible" :sidebarWidth="280" :showToggleButton="false"
     sidebarPosition="left" :z-index="10">
     <template #sidebar>
       <GlobalSidebar />
     </template>
     <template #content>
-      <div class="h-full flex-1 min-w-0 overflow-hidden rounded-tl-xl border-l border-t border-gray-100 dark:border-[#2a2a2a] dark:bg-[#181818]">
-        <RouterView />
+      <div class="h-full flex-1 min-w-0 overflow-hidden bg-(--color-sidebar-bg)">
+        <div class="h-full overflow-hidden rounded-tl-xl border-l border-t border-gray-100 dark:border-[#1f1f1f] bg-(--color-bg)">
+          <RouterView />
+        </div>
       </div>
     </template>
   </SidebarLayout>

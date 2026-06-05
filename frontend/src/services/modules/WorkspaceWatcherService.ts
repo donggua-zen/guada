@@ -4,6 +4,7 @@
  */
 
 import { EventSourcePolyfill } from "event-source-polyfill";
+import { getClientId } from "@/utils/clientId";
 
 /**
  * 工作目录文件变化事件
@@ -22,8 +23,8 @@ export class WorkspaceWatcherService {
   private currentClientId: string;
 
   constructor(private getBaseURL: () => string) {
-    // 生成唯一的客户端标识（每次页面加载生成新的）
-    this.currentClientId = `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+    // 使用全局客户端标识（localStorage 持久化，刷新页面保持不变）
+    this.currentClientId = getClientId();
   }
 
   /**
@@ -48,11 +49,12 @@ export class WorkspaceWatcherService {
     this.currentSessionId = sessionId;
 
     const token = localStorage.getItem("token") || sessionStorage.getItem("token") || "";
-    const url = `${this.getBaseURL()}/sessions/${sessionId}/workspace/events?clientId=${this.currentClientId}`;
+    const url = `${this.getBaseURL()}/sessions/${sessionId}/workspace/events`;
 
     this.eventSource = new EventSourcePolyfill(url, {
       headers: {
         Authorization: `Bearer ${token}`,
+        "X-Client-Id": this.currentClientId,
       },
       heartbeatTimeout: 180000,
     });

@@ -16,9 +16,9 @@
     </template>
 
     <template v-if="!isLoading">
-      <ScrollContainer ref="scrollContainerRef" class="max-h-full chat-scroll-container"
+      <ScrollContainer ref="scrollContainerRef" class="max-h-full chat-scroll-container px-5"
         :auto-scroll="needScrollToBottom && isStreaming" @scroll="handleScroll">
-        <div class="px-5 max-w-205 mx-auto">
+        <div class="max-w-205 mx-auto">
           <!-- 加载更多历史消息指示器 -->
           <div v-if="isLoadingMore" class="w-full py-4 flex items-center justify-center text-gray-400">
             <el-icon class="is-loading mr-2" size="16">
@@ -60,24 +60,27 @@
   </div>
 
   <!-- 输入区域 -->
-  <div class="pb-2 w-full px-5 max-w-205 flex flex-col items-start mx-auto">
-    <!-- 编辑模式提示条 -->
-    <div v-if="editMode"
-      class="bg-gray-200 -mb-1.5 w-full  flex items-center px-4 pt-2 pb-5 rounded-tl-xl rounded-tr-xl">
-      <span class="flex-1 text-sm mr-10">正在编辑消息</span>
-      <el-button size="small" @click="exitEditMode" class="cancel-edit-btn" plain>
-        取消编辑
-      </el-button>
-    </div>
+  <div class="pb-2 w-full px-6 ">
+    <div class="max-w-205 flex flex-col items-start mx-auto">
 
-    <div class="w-full flex items-center" style="margin-top: -16px;z-index: 9;">
-      <ChatInput v-model:value="inputMessage.content" v-model:files="inputMessage.files"
-        :session-id="currentSession?.id" :config="chatInputConfig" :streaming="isStreaming" mode="chat"
-        @config-change="handleConfigChange" @send="handleSendMessage" @abort="abortResponse"
-        @toggle-workspace-pane="emit('toggle-workspace-pane')" />
-    </div>
-    <!-- <div class="ai-disclaimer text-xs text-gray-400 text-center mt-2">内容由 AI 生成，仅供参考</div> -->
 
+      <!-- 编辑模式提示条 -->
+      <div v-if="editMode"
+        class="bg-gray-200 -mb-1.5 w-full  flex items-center px-4 pt-2 pb-5 rounded-tl-xl rounded-tr-xl">
+        <span class="flex-1 text-sm mr-10">正在编辑消息</span>
+        <el-button size="small" @click="exitEditMode" class="cancel-edit-btn" plain>
+          取消编辑
+        </el-button>
+      </div>
+
+      <div class="w-full flex items-center" style="margin-top: -16px;z-index: 9;">
+        <ChatInput v-model:value="inputMessage.content" v-model:files="inputMessage.files"
+          :session-id="currentSession?.id" :config="chatInputConfig" :streaming="isStreaming" mode="chat"
+          @config-change="handleConfigChange" @send="handleSendMessage" @abort="abortResponse"
+          @toggle-workspace-pane="emit('toggle-workspace-pane')" />
+      </div>
+      <!-- <div class="ai-disclaimer text-xs text-gray-400 text-center mt-2">内容由 AI 生成，仅供参考</div> -->
+    </div>
   </div>
 
 </template>

@@ -4,7 +4,7 @@ import {
   MessageEvent,
   UseGuards,
   Req,
-  Query,
+  Headers,
 } from "@nestjs/common";
 import { Observable } from "rxjs";
 import { Request } from "express";
@@ -28,14 +28,16 @@ export class SessionEventsController {
   /**
    * 订阅用户级会话事件流
    *
-   * 前端连接示例：
-   * const es = new EventSource(`/events/sessions?clientId=${tabId}`);
+   * 前端通过 EventSource 连接此端点，在 header 中携带 X-Client-Id：
+   * const es = new EventSourcePolyfill(`/events/sessions`, {
+   *   headers: { "X-Client-Id": clientId }
+   * });
    *
-   * @param clientId 客户端标识（前端生成，如 uuid 或 tabId）
+   * @param clientId 客户端标识（前端从 header 传入）
    */
   @Sse("sessions")
   async subscribeSessionEvents(
-    @Query("clientId") clientId: string,
+    @Headers("x-client-id") clientId: string,
     @CurrentUser() user: any,
     @Req() req: Request,
   ): Promise<Observable<MessageEvent>> {

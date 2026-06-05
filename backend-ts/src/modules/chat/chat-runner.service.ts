@@ -80,6 +80,9 @@ export class ChatRunnerService {
       lastContentId = null,
     } = params;
 
+    // 提取前端传入的 clientId，用于广播事件的 source 字段
+    const clientId = source?.clientId as string | undefined;
+
     // 获取会话
     const session = await this.sessionService.getSessionById(sessionId, userId);
     if (!session) {
@@ -186,14 +189,15 @@ export class ChatRunnerService {
     }
 
     // 广播流开始事件，携带完整会话信息供前端同步
+    // source 使用前端传入的 clientId，使前端能正确识别自身发起的事件
     this.sessionEventsService.broadcastToUser(userId, {
       type: "stream_started",
       userId,
       sessionId,
       timestamp: new Date().toISOString(),
+      source: clientId || subscriberId,
       payload: {
         messageId: createdUserMessage?.id || userMessage?.id,
-        source: subscriberId,
         replaceMessageId: userMessage?.replaceMessageId || null,
         session,
       },
@@ -216,6 +220,7 @@ export class ChatRunnerService {
       regenerationMode,
       assistantMessageId,
       resumeData,
+      clientId,
     ).catch((error) => {
       this.logger.error(`Agent engine error for ${session.id}:`, error);
       this.logger.error(`Agent engine error stack:`, error?.stack);
@@ -280,6 +285,7 @@ export class ChatRunnerService {
     regenerationMode: string = "overwrite",
     assistantMessageId?: string | null,
     resumeData?: any,
+    clientId?: string,
   ): Promise<void> {
     const sessionId = session.id;
     try {
@@ -304,6 +310,7 @@ export class ChatRunnerService {
         userId,
         sessionId,
         timestamp: new Date().toISOString(),
+        source: clientId,
         payload: { reason: "completed" },
       });
     } catch (error: any) {
@@ -316,6 +323,7 @@ export class ChatRunnerService {
           userId,
           sessionId,
           timestamp: new Date().toISOString(),
+          source: clientId,
           payload: { reason: "user_cancel" },
         });
       } else {
@@ -324,6 +332,7 @@ export class ChatRunnerService {
           userId,
           sessionId,
           timestamp: new Date().toISOString(),
+          source: clientId,
           payload: { reason: "error", error: error.message },
         });
         throw error;

@@ -35,14 +35,15 @@ type EventListener = (event: SessionEvent) => void;
  * 支持自动重连、多监听器注册。
  */
 import { EventSourcePolyfill } from "event-source-polyfill";
+import { getClientId } from "@/utils/clientId";
 
 export class SessionEventsService {
   private eventSource: EventSourcePolyfill | null = null;
   private listeners: Map<SessionEventType | "*", Set<EventListener>> = new Map();
   private clientId: string;
   constructor(private getBaseURL: () => string) {
-    // 生成唯一的客户端标识（每次页面加载生成新的）
-    this.clientId = `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+    // 使用全局客户端标识（localStorage 持久化，刷新页面保持不变）
+    this.clientId = getClientId();
   }
 
   /**
@@ -66,11 +67,12 @@ export class SessionEventsService {
 
   private startConnection(): void {
     const token = localStorage.getItem("token") || sessionStorage.getItem("token") || "";
-    const url = `${this.getBaseURL()}/events/sessions?clientId=${this.clientId}`;
+    const url = `${this.getBaseURL()}/events/sessions`;
 
     this.eventSource = new EventSourcePolyfill(url, {
       headers: {
         Authorization: `Bearer ${token}`,
+        "X-Client-Id": this.clientId,
       },
       heartbeatTimeout: 180000,
     });
