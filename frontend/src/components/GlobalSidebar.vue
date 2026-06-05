@@ -1,7 +1,7 @@
 <template>
   <div class="flex flex-col h-full bg-(--color-sidebar-bg) border-r border-(--color-sidebar-border) overflow-hidden">
     <!-- 导航菜单 -->
-    <div class="px-2 py-2 space-y-0.5">
+    <div class="px-3 py-2 space-y-0.5">
       <div v-for="item in navItems" :key="item.key" @click="handleNavClick(item.key)"
         class="flex items-center gap-3 px-2 py-1.5 rounded-lg cursor-pointer transition-all duration-200 ease-in-out"
         :class="currentActiveTab === item.key
@@ -178,6 +178,15 @@ import {
   WbSunnyTwotone,
   NightlightRound
 } from '@vicons/material'
+import {
+  Bot20Regular,
+  BookSearch20Regular,
+  ContactCard20Regular,
+  AddSquare20Regular,
+  ClockAlarm20Regular,
+  Apps20Regular,
+  Cloud20Regular
+} from '@vicons/fluent'
 import { MoreFilled, Loading } from '@element-plus/icons-vue'
 
 const router = useRouter()
@@ -206,32 +215,32 @@ const navItems = [
   {
     key: 'chat',
     label: '新建任务',
-    icon: PlusOutlined
+    icon: AddSquare20Regular
   },
   {
     key: 'characters',
     label: '助手',
-    icon: PeopleOutlined
+    icon: ContactCard20Regular
   },
   {
     key: 'bots',
     label: '机器人',
-    icon: CloudOutlined
+    icon: Bot20Regular
   },
   {
     key: 'knowledge-base',
     label: '知识库',
-    icon: MenuBookOutlined
+    icon: BookSearch20Regular
   },
   {
     key: 'plugins',
     label: '插件市场',
-    icon: ExtensionOutlined
+    icon: Apps20Regular
   },
   {
     key: 'scheduler',
     label: '定时任务',
-    icon: AlarmOutlined
+    icon: ClockAlarm20Regular
   },
   {
     key: 'models',
@@ -529,6 +538,10 @@ function initSessionEventListeners() {
 
   // 监听会话创建事件
   apiService.onSessionEvent('session_created', (event) => {
+    // 忽略自身发起的事件
+    if (event.source === apiService.getClientId()) {
+      return
+    }
     const { payload } = event
     if (payload?.session) {
       // 避免重复添加已存在的会话
@@ -542,6 +555,10 @@ function initSessionEventListeners() {
 
   // 监听会话删除事件
   apiService.onSessionEvent('session_deleted', (event) => {
+    // 忽略自身发起的事件
+    if (event.source === apiService.getClientId()) {
+      return
+    }
     const { sessionId } = event
     const index = sortedSessions.value.findIndex(s => s.id === sessionId)
 
@@ -563,6 +580,10 @@ function initSessionEventListeners() {
 
   // 监听会话更新事件
   apiService.onSessionEvent('session_updated', (event) => {
+    // 忽略自身发起的事件
+    if (event.source === apiService.getClientId()) {
+      return
+    }
     const { sessionId, payload } = event
     const session = sessionStore.sessionsList.find(s => s.id === sessionId)
     if (session && payload?.session) {
@@ -577,7 +598,7 @@ function initSessionEventListeners() {
     const { sessionId, payload } = event
 
     // 忽略自身发起的流（通过 source/clientId 判断）
-    if (payload?.source?.includes(apiService.getClientId())) {
+    if (event.source === apiService.getClientId()) {
       console.log('[GlobalSidebar] 忽略自身发起的流事件')
       return
     }

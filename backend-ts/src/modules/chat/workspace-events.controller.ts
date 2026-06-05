@@ -4,7 +4,7 @@ import {
   Post,
   Body,
   Param,
-  Query,
+  Headers,
   Sse,
   UseGuards,
   MessageEvent,
@@ -38,7 +38,7 @@ export class WorkspaceEventsController {
   @Sse("sessions/:id/workspace/events")
   async subscribeWorkspaceEvents(
     @Param("id") id: string,
-    @Query("clientId") clientId: string,
+    @Headers("x-client-id") clientId: string,
     @CurrentUser() user: any,
     @Req() req: Request,
   ): Promise<Observable<MessageEvent>> {
@@ -114,7 +114,7 @@ export class WorkspaceEventsController {
   @Post("sessions/:id/workspace/expanded-paths")
   async updateExpandedPaths(
     @Param("id") id: string,
-    @Query("clientId") clientId: string,
+    @Headers("x-client-id") clientId: string,
     @Body() body: { expandedPaths: string[] },
     @CurrentUser() user: any,
   ) {

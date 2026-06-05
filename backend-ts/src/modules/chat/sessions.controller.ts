@@ -9,6 +9,7 @@ import {
   Query,
   UseGuards,
   Res,
+  Headers,
 } from "@nestjs/common";
 import type { Response } from "express";
 import { AuthGuard } from "../auth/auth.guard";
@@ -44,15 +45,20 @@ export class SessionsController {
   }
 
   @Post("sessions")
-  async createSession(@Body() data: any, @CurrentUser() user: any) {
+  async createSession(
+    @Body() data: any,
+    @CurrentUser() user: any,
+    @Headers("x-client-id") clientId: string,
+  ) {
     const session = await this.sessionService.createSession(user.id, data);
 
-    // 广播会话创建事件
+    // 广播会话创建事件，携带 source 使前端能过滤自身事件
     this.sessionEventsService.broadcastToUser(user.id, {
       type: "session_created",
       userId: user.id,
       sessionId: session.id,
       timestamp: new Date().toISOString(),
+      source: clientId || undefined,
       payload: { session },
     });
 
@@ -69,15 +75,17 @@ export class SessionsController {
     @Param("id") id: string,
     @Body() data: UpdateSessionDto,
     @CurrentUser() user: any,
+    @Headers("x-client-id") clientId: string,
   ) {
     const session = await this.sessionService.updateSession(id, user.id, data);
 
-    // 广播会话更新事件
+    // 广播会话更新事件，携带 source 使前端能过滤自身事件
     this.sessionEventsService.broadcastToUser(user.id, {
       type: "session_updated",
       userId: user.id,
       sessionId: id,
       timestamp: new Date().toISOString(),
+      source: clientId || undefined,
       payload: { session },
     });
 
@@ -98,17 +106,19 @@ export class SessionsController {
   async deleteSession(
     @Param("id") id: string,
     @Query("deleteWorkspace") deleteWorkspace: string,
-    @CurrentUser() user: any
+    @CurrentUser() user: any,
+    @Headers("x-client-id") clientId: string,
   ) {
     const shouldDeleteWorkspace = deleteWorkspace === 'true';
     await this.sessionService.deleteSession(id, user.id, shouldDeleteWorkspace);
 
-    // 广播会话删除事件
+    // 广播会话删除事件，携带 source 使前端能过滤自身事件
     this.sessionEventsService.broadcastToUser(user.id, {
       type: "session_deleted",
       userId: user.id,
       sessionId: id,
       timestamp: new Date().toISOString(),
+      source: clientId || undefined,
     });
 
     return { success: true };

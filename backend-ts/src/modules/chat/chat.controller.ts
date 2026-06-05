@@ -9,6 +9,7 @@ import {
   Param,
   Logger,
   HttpException,
+  Headers,
 } from "@nestjs/common";
 import { AuthGuard } from "../auth/auth.guard";
 import { CurrentUser } from "../auth/current-user.decorator";
@@ -61,6 +62,7 @@ export class ChatController {
     @CurrentUser() user: any,
     @Res() res: Response,
     @Req() req: Request,
+    @Headers("x-client-id") clientId: string,
   ) {
     const {
       sessionId,
@@ -109,6 +111,7 @@ export class ChatController {
           assistantMessageId: assistantMessageId || null,
           resumeData,
           lastContentId: lastContentId || null,
+          source: { clientId: clientId || null },
         },
         callbacks,
       );

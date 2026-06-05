@@ -91,13 +91,14 @@ class ContextMenuManager {
 
     // 创建菜单容器
     const menu = document.createElement('div')
+    const isDark = document.documentElement.classList.contains('dark')
     menu.className = 'global-context-menu'
     menu.style.cssText = `
       position: fixed;
       left: ${event.clientX}px;
       top: ${event.clientY}px;
-      background: white;
-      border: 1px solid #e4e7ed;
+      background: ${isDark ? '#1f1f1f' : 'white'};
+      border: 1px solid ${isDark ? '#1f1f1f' : '#e4e7ed'};
       border-radius: 4px;
       box-shadow: 0 2px 12px 0 rgba(0, 0, 0, 0.1);
       padding: 4px 0;
@@ -109,7 +110,7 @@ class ContextMenuManager {
     menuItems.forEach(item => {
       if (item.type === 'separator') {
         const separator = document.createElement('div')
-        separator.style.cssText = 'height: 1px; background: #e4e7ed; margin: 4px 0;'
+        separator.style.cssText = `height: 1px; background: ${isDark ? '#383a40' : '#e4e7ed'}; margin: 4px 0;`
         menu.appendChild(separator)
       } else {
         const menuItem = document.createElement('div')
@@ -119,12 +120,12 @@ class ContextMenuManager {
           padding: 8px 16px;
           cursor: pointer;
           font-size: 14px;
-          color: #606266;
+          color: ${isDark ? '#c5c7cc' : '#606266'};
           transition: background 0.2s;
         `
         
         menuItem.addEventListener('mouseenter', () => {
-          menuItem.style.background = '#f5f7fa'
+          menuItem.style.background = isDark ? '#2f3131' : '#f5f7fa'
         })
         
         menuItem.addEventListener('mouseleave', () => {

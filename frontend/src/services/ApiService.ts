@@ -38,6 +38,7 @@ import type {
   UpdateBotRequest,
 } from "@/types/bot";
 import { fixFrontendAssetUrl } from "@/utils/url";
+import { getClientId } from "@/utils/clientId";
 import { ChatStreamService } from "./modules/ChatStreamService";
 import {
   WorkspaceWatcherService,
@@ -153,7 +154,7 @@ class ApiService {
       },
     );
 
-    // 添加请求拦截器动态设置 token
+    // 添加请求拦截器动态设置 token 和 clientId
     this.axiosInstance.interceptors.request.use(
       (config) => {
         // 优先从 sessionStorage 读取（当前会话登录），降级到 localStorage（记住我）
@@ -163,6 +164,8 @@ class ApiService {
         if (token) {
           config.headers.Authorization = `Bearer ${token}`;
         }
+        // 注入全局 clientId，用于后端识别操作来源
+        config.headers["X-Client-Id"] = getClientId();
         return config;
       },
       (error) => {
@@ -646,8 +649,7 @@ class ApiService {
    * 用于动态调整后端监听范围
    */
   async updateWorkspaceExpandedPaths(sessionId: string, expandedPaths: string[]): Promise<void> {
-    const clientId = this.workspaceWatcherService.getClientId();
-    await this._request(`/sessions/${sessionId}/workspace/expanded-paths?clientId=${clientId}`, {
+    await this._request(`/sessions/${sessionId}/workspace/expanded-paths`, {
       method: "POST",
       data: { expandedPaths },
     });
@@ -670,7 +672,7 @@ class ApiService {
   }
 
   getClientId(): string {
-    return this.sessionEventsService.getClientId();
+    return getClientId();
   }
 
   // ========== 文件上传 ==========

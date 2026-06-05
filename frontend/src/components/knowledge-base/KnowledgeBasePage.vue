@@ -1,15 +1,6 @@
 <template>
   <div class="h-full w-full flex flex-col min-h-0">
-    <PageHeader title="知识库">
-      <template #actions>
-        <el-button type="primary" @click="showCreateModal = true" class="flex items-center">
-          <template #icon>
-            <Plus />
-          </template>
-          新建知识库
-        </el-button>
-      </template>
-    </PageHeader>
+    <PageHeader title="知识库" />
     <!-- 视图模式：卡片列表 -->
     <div v-if="viewMode === 'list'" class="flex-1 overflow-hidden flex flex-col">
       <div class="flex flex-col p-3 max-w-260 mx-auto w-full">
@@ -23,6 +14,22 @@
               </el-icon>
             </template>
           </el-input>
+        </div>
+
+        <!-- 新建按钮和使用说明 -->
+        <div class="flex justify-between items-center pb-4">
+          <el-button type="primary" @click="showCreateModal = true" class="flex items-center">
+            <template #icon>
+              <Plus />
+            </template>
+            新建知识库
+          </el-button>
+          <el-button @click="handleOpenDocs">
+            <template #icon>
+              <Document />
+            </template>
+            使用说明
+          </el-button>
         </div>
       </div>
       <div class="flex-1 w-full overflow-y-auto">
@@ -316,7 +323,7 @@
 
 <script setup lang="ts">
 import { ref, reactive, onMounted, onUnmounted, computed, watch } from 'vue'
-import { Plus, Edit, Delete, Upload, MoreFilled, RefreshRight, Loading, Search, CircleCheck } from '@element-plus/icons-vue'
+import { Plus, Edit, Delete, Upload, MoreFilled, RefreshRight, Loading, Search, CircleCheck, Document } from '@element-plus/icons-vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useKnowledgeBaseStore } from '@/stores/knowledgeBase'
 import { useFileUploadStore } from '@/stores/fileUpload'
@@ -330,6 +337,7 @@ import { BookOpen24Regular, Search24Regular, ArrowLeft24Filled } from '@vicons/f
 import { MenuBookOutlined } from '@vicons/material'
 import PageHeader from '@/components/PageHeader.vue'
 import { apiService } from '@/services/ApiService'
+import { openExternalLink } from '@/utils/modelUtils'
 
 // 初始化组合式函数
 const { confirm, toast } = usePopup()
@@ -1031,6 +1039,13 @@ function checkAndAutoCloseModal(allTasks: any[]) {
       console.log('[DEBUG] 检测到新的活跃任务，清除自动关闭定时器')
     }
   }
+}
+
+/**
+ * 打开使用说明文档
+ */
+const handleOpenDocs = () => {
+  openExternalLink('https://ai.dingd.cn/docs/knowledge')
 }
 
 /**
