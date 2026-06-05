@@ -38,7 +38,7 @@
           </template>
           <template v-else>
             <div v-for="session in filteredSessions" :key="session.id"
-              class="session-item flex items-center gap-2.5 py-[0.4rem] px-2 mx-1 my-[0.2rem] rounded-lg cursor-pointer transition-all duration-200 ease-[cubic-bezier(0.4,0,0.2,1)] group"
+              class="flex items-center gap-2.5 px-2 mx-1 my-[0.2rem] rounded-lg cursor-pointer transition-all duration-200 ease-[cubic-bezier(0.4,0,0.2,1)] group"
               :class="{
                 'session-item-active': session.id === currentSessionId,
                 'session-item-inactive': session.id !== currentSessionId

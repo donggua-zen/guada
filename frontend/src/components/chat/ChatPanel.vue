@@ -60,7 +60,7 @@
   </div>
 
   <!-- 输入区域 -->
-  <div class="pb-4 w-full px-5 max-w-205 flex flex-col items-start mx-auto">
+  <div class="pb-2 w-full px-5 max-w-205 flex flex-col items-start mx-auto">
     <!-- 编辑模式提示条 -->
     <div v-if="editMode"
       class="bg-gray-200 -mb-1.5 w-full  flex items-center px-4 pt-2 pb-5 rounded-tl-xl rounded-tr-xl">
@@ -119,13 +119,11 @@ const streamHandler = useStreamResponse(sessionStore, apiService)
 // Props & Emits - 类型化
 const props = defineProps<{
   session: Session | null;
-  sidebarVisible?: boolean;
 }>();
 
 const emit = defineEmits<{
   'update:session': [session: Session]
   openSettings: []
-  'update:sidebarVisible': [visible: boolean]
   'save-settings': []
   'toggle-workspace-pane': []
 }>();

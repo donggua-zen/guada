@@ -170,18 +170,43 @@ class ContextMenuManager {
   }
 
   /**
-   * 安全读取剪贴板文本（优先使用 Electron 原生 API）
+   * 安全读取剪贴板文本（优先使用 IPC 异步 API）
    */
-  private readClipboardText(): string {
-    if ((window as any).electronAPI?.clipboard?.readText) {
+  private async readClipboardText(): Promise<string> {
+    const win = window as any
+
+    // 优先使用 IPC 方式（更可靠）
+    if (win.electronAPI?.clipboardIPC?.readText) {
       try {
-        return (window as any).electronAPI.clipboard.readText()
+        const result = await win.electronAPI.clipboardIPC.readText()
+        if (result.success) {
+          return result.text || ''
+        }
+        console.warn('[ContextMenu] IPC 读取失败:', result.error)
       } catch (error) {
-        console.warn('[ContextMenu] Electron clipboard 失败，降级到 Web API:', error)
+        console.warn('[ContextMenu] IPC 调用异常:', error)
       }
     }
-    
-    // 降级到 Web API
+
+    // 回退：直接调用 preload 暴露的同步 API
+    if (win.electronAPI?.clipboard?.readText) {
+      try {
+        const text = win.electronAPI.clipboard.readText()
+        if (text) return text
+      } catch (error) {
+        console.warn('[ContextMenu] 同步 clipboard 调用失败:', error)
+      }
+    }
+
+    // 最后回退到 Web Clipboard API
+    if (navigator.clipboard && navigator.clipboard.readText) {
+      try {
+        return await navigator.clipboard.readText()
+      } catch (error) {
+        console.warn('[ContextMenu] Web API 读取失败:', error)
+      }
+    }
+
     return ''
   }
 
@@ -277,8 +302,8 @@ class ContextMenuManager {
       // 粘贴
       items.push({ 
         label: '粘贴', 
-        action: () => {
-          const text = this.readClipboardText()
+        action: async () => {
+          const text = await this.readClipboardText()
           if (!text) return
           
           if (isContentEditable) {

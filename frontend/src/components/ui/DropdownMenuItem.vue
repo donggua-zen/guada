@@ -1,5 +1,7 @@
 <template>
-  <div class="dropdown-menu-item" :class="{ 'is-disabled': disabled }" @click="handleClick">
+  <div
+    class="px-4 py-2 text-sm cursor-pointer flex items-center hover:bg-gray-100 dark:hover:bg-(--color-sidebar-bg-hover) dark:bg-(--color-surface) dark:text-(--color-text)"
+    :class="{ 'opacity-50 cursor-not-allowed': disabled }" @click="handleClick">
     <slot></slot>
   </div>
 </template>
@@ -27,15 +29,3 @@ const handleClick = () => {
   emit('click');
 };
 </script>
-
-<style scoped>
-@reference "tailwindcss";
-
-.dropdown-menu-item {
-  @apply px-4 py-2 text-sm cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center text-gray-700 dark:text-gray-200;
-}
-
-.dropdown-menu-item.is-disabled {
-  @apply opacity-50 cursor-not-allowed;
-}
-</style>

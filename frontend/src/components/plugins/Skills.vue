@@ -37,7 +37,7 @@
             <!-- 技能卡片列表 -->
             <div class="grid gap-4" style="grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));">
                 <div v-for="skill in skills" :key="skill.id"
-                    class="rounded-lg border border-gray-200 dark:border-[#232428] overflow-hidden bg-white dark:bg-[#232428] transition-all hover:shadow-md">
+                    class="rounded-lg border border-gray-200 dark:border-[#232428] overflow-hidden bg-white dark:bg-[#232428] transition-all hover:border-(--color-primary)">
                     <div class="p-5 pb-4">
                         <div class="flex items-start justify-between gap-2 mb-2">
                             <h3 class="text-lg font-semibold text-gray-900 dark:text-[#e8e9ed] flex-1 truncate">
@@ -133,7 +133,7 @@
             <div v-else-if="marketSkills.length > 0" class="grid gap-4"
                 style="grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));">
                 <div v-for="skill in marketSkills" :key="skill.id"
-                    class="rounded-lg border border-gray-200 dark:border-[#232428] overflow-hidden bg-white dark:bg-[#232428] transition-all hover:shadow-md">
+                    class="rounded-lg border border-gray-200 dark:border-[#232428] overflow-hidden bg-white dark:bg-[#232428] transition-all hover:border-(--color-primary)">
                     <div class="p-5 pb-4">
                         <div class="flex items-start justify-between gap-2 mb-2">
                             <h3 class="text-lg font-semibold text-gray-900 dark:text-[#e8e9ed] flex-1 truncate">

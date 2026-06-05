@@ -4,7 +4,7 @@
         :class="{ 'theme-transition-active': isTransitioning }" :style="{ backgroundColor: transitionColor }"></div>
 
     <!-- 自定义标题栏（仅在 Electron 环境显示） -->
-    <div class="flex flex-col h-full bg-(--color-sidebar-bg)">
+    <div class="flex flex-col h-full">
         <CustomTitlebar @open-guide="openGuide" />
         <SetupGuide ref="guideRef" />
         <RouterView></RouterView>

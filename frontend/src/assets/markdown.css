@@ -135,7 +135,7 @@ ol>*:not(li) {
 }
 
 .markdown-text code {
-    background-color: #f6f8fa;
+    background-color: #f9f9f9;
     border-radius: 3px;
     padding: 0.2em 0.4em;
     /* font-size: 0.9em; */
@@ -155,7 +155,7 @@ ol>*:not(li) {
     overflow: auto;
     margin-top: 1rem;
     margin-bottom: 1em;
-    border: 1px solid #dfe2e5;
+    /* border: 1px solid #dfe2e5; */
     white-space: pre-wrap;
     word-wrap: break-word;
     font-size: var(--size-text-base) !important;
@@ -206,7 +206,7 @@ ol>*:not(li) {
 .dark .markdown-text table,
 .dark .markdown-text table th,
 .dark .markdown-text table td {
-    border-color: oklch(32% 0.02 250); /* 边框色 */
+    border-color: var(--color-border);
 }
 
 .markdown-text table th:last-child,
@@ -227,13 +227,13 @@ ol>*:not(li) {
 }
 
 .dark .markdown-text table th {
-    background-color: oklch(28% 0.02 250); /* 表头背景 */
-    color: oklch(90% 0.01 250); /* 表头文本 */
+    background-color: var(--color-sidebar-bg-active);
+    color: var(--color-text);
 }
 
 .dark .markdown-text table td {
-    background-color: oklch(24% 0.02 250); /* 单元格背景 */
-    color: oklch(90% 0.01 250); /* 单元格文本 */
+    background-color: var(--color-surface);
+    color: var(--color-text);
 }
 
 .markdown-text hr {
@@ -293,18 +293,22 @@ ol>*:not(li) {
 }
 
 /* 确保 hljs 样式正常工作 */
+.custom-code-block{
+
+}
 .custom-code-block pre.hljs {
     margin: 0;
     border-radius: 0 0 8px 8px;
     background: #fafafb !important;
-    border: 1px solid #e3e3e7;
+    /* border: 1px solid #e3e3e7; */
     border-top: 0;
+        max-height: 500px;
+    overflow: auto;
 }
 
 .dark .custom-code-block pre.hljs {
-    background: oklch(25% 0.02 250) !important; /* 暗色模式代码背景 */
-    border-color: oklch(32% 0.02 250);
-    color: oklch(90% 0.01 250); /* 代码文本颜色 */
+    background: var(--color-bg) !important;
+    color: var(--color-text);
 }
 
 .custom-code-block code.hljs {
@@ -321,9 +325,8 @@ ol>*:not(li) {
 }
 
 .dark .custom-code-block {
-    background: oklch(22% 0.02 250); /* 表面色 */
-    border-color: oklch(32% 0.02 250); /* 边框色 */
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3); /* 柔和阴影 */
+    background: var(--color-surface);
+    border-color: var(--color-border);
 }
 
 
@@ -336,14 +339,13 @@ ol>*:not(li) {
     color: #222;
     font-size: 0.8em;
     border-radius: 8px 8px 0 0;
-    border: 1px solid #e3e3e7;
+    /* border: 1px solid #e3e3e7; */
     border-bottom: 0;
 }
 
 .dark .code-header {
-    background: oklch(28% 0.02 250); /* 代码头背景 */
-    color: oklch(85% 0.02 250); /* 代码头文本 */
-    border-color: oklch(32% 0.02 250); /* 边框色 */
+    background: var(--color-sidebar-bg-active);
+    color: var(--color-text);
 }
 
 .code-language {

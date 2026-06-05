@@ -1,69 +1,91 @@
 <template>
-  <div class="flex h-full ">
-    <!-- 左侧边栏 -->
-    <SidebarLayout v-model:sidebar-visible="sidebarVisible" sidebar-position="left" :show-toggle-button="false"
-      :z-index="50">
-      <template #sidebar>
-        <template v-if="authStore.isAuthenticated">
-          <ChatSidebar ref="chatSidebarRef" :sessions="sortedSessions" :total-sessions="totalSessionsCount"
-            :current="currentSession" @select="goChatRoute($event)" @delete="handleDeleteSession"
-            @rename="handleRenameSession" @create="handleCreateSession" @load-more="handleLoadMoreSessions" />
-        </template>
-        <template v-else>
-          <div
-            class="h-full w-full flex-1 flex items-center justify-center bg-(--color-conversation-bg) border-r border-(--color-conversation-border)">
-            <el-empty description="请先登录" />
-          </div>
-        </template>
-      </template>
-      <template v-if="!isLoading" #content>
-        <!-- 主体内容 -->
-        <div class="flex flex-col h-full bg-white dark:bg-[#1a1b1e]">
-          <template v-if="sessions.length > 0 && currentSession">
-            <!-- 可拖拽分割区域 -->
-            <div class="flex-1 overflow-hidden">
-              <LiteSplitpanes style="height: 100%;"
-                :pane1="{ size: workspaceVisible ? workspaceSplitSize : 100, minSize: 40, maxSize: 100 }"
-                :pane2="{ size: workspaceVisible ? (100 - workspaceSplitSize) : 0, minSize: 20, maxSize: 60 }"
-                @resize="onPaneResize" @resized="onPaneResized">
-                <template #pane1>
-                  <div ref="paneContentRef" class="chat-pane-content"
-                    style="height: 100%; display: flex; flex-direction: column;">
-                    <!-- 聊天头部 -->
-                    <ChatHeader :sidebar-visible="sidebarVisible" :title="currentSession?.title || ''"
-                      :has-more-options="true" :show-memo-button="true" :session-id="currentSession?.id"
-                      :workspace-visible="workspaceVisible" @toggle-sidebar="sidebarVisible = !sidebarVisible"
-                      @select-more-option="handleMoreSelect" @toggle-memo="memoPanelVisible = !memoPanelVisible"
-                      @toggle-workspace="toggleWorkspace" />
+  <div class="flex h-full">
+    <!-- 主体内容（侧边栏已移至 MainLayout） -->
+    <div class="flex flex-col h-full w-full bg-white dark:bg-[#1a1b1e]">
 
-                    <ChatPanel ref="chatPanelRef" v-model:session="currentSession"
-                      v-model:sidebar-visible="sidebarVisible" @save-settings="handleSaveSessionSettings"
-                      @toggle-workspace-pane="toggleWorkspace" />
-                    <!-- 右侧大纲导航 -->
-                    <ChatOutline v-if="currentSession && sessions.length > 0"
-                      :messages="chatPanelRef?.activeMessages || []" :chat-panel-ref="chatPanelRef"
-                      @scroll-to-message="handleScrollToMessage" />
-                  </div>
-                </template>
+      <template v-if="sessionStore.activeSessionId !== 'new-session'">
+        <!-- 可拖拽分割区域 -->
+        <div class="flex-1 overflow-hidden">
+          <LiteSplitpanes style="height: 100%;"
+            :pane1="{ size: layoutStore.workspaceVisible ? layoutStore.workspaceSplitSize : 100, minSize: 40, maxSize: 100 }"
+            :pane2="{ size: layoutStore.workspaceVisible ? (100 - layoutStore.workspaceSplitSize) : 0, minSize: 20, maxSize: 60 }"
+            @resize="onPaneResize" @resized="onPaneResized">
+            <template #pane1>
+              <div ref="paneContentRef" class="chat-pane-content"
+                style="height: 100%; display: flex; flex-direction: column;">
+                <!-- 页面标题栏 -->
+                <PageHeader :title="currentSession?.title || ''">
+                  <template #actions>
+                    <!-- 工作目录切换 -->
+                    <div v-if="currentSession?.id"
+                      class="cursor-pointer p-1 rounded-lg text-gray-600 dark:text-[#8b8d95] transition-all duration-200 hover:bg-gray-100 dark:hover:bg-[#2a2c30] hover:text-gray-900 dark:hover:text-[#e8e9ed] flex items-center justify-center"
+                      @click="layoutStore.toggleWorkspace()"
+                      :title="layoutStore.workspaceVisible ? '关闭工作目录' : '打开工作目录'">
+                      <el-icon class="w-5 h-5">
+                        <FolderOpened />
+                      </el-icon>
+                    </div>
+                    <!-- 记忆管理按钮 -->
+                    <div
+                      class="cursor-pointer p-1 rounded-lg text-gray-600 dark:text-[#8b8d95] transition-all duration-200 hover:bg-gray-100 dark:hover:bg-[#2a2c30] hover:text-gray-900 dark:hover:text-[#e8e9ed] flex items-center justify-center"
+                      @click="memoPanelVisible = !memoPanelVisible" title="记忆管理">
+                      <el-icon class="w-5 h-5">
+                        <Reading />
+                      </el-icon>
+                    </div>
+                    <!-- 更多操作下拉菜单 -->
+                    <el-dropdown trigger="hover" @command="handleMoreSelect" popper-class="chat-header-dropdown">
+                      <div
+                        class="cursor-pointer p-1 rounded-lg text-gray-600 dark:text-[#8b8d95] transition-all duration-200 hover:bg-gray-100 dark:hover:bg-[#2a2c30] hover:text-gray-900 dark:hover:text-[#e8e9ed] active:rotate-0 flex items-center justify-center"
+                        title="更多操作">
+                        <MoreVertOutlined class="w-5 h-5" />
+                      </div>
+                      <template #dropdown>
+                        <el-dropdown-menu>
+                          <el-dropdown-item command="clear">
+                            <span class="flex items-center gap-2">
+                              <DeleteTwotone class="w-4 h-4" />
+                              <span>清空记录</span>
+                            </span>
+                          </el-dropdown-item>
+                          <!-- <el-dropdown-item command="export">
+                            <span class="flex items-center gap-2">
+                              <FileDownloadOutlined class="w-4 h-4" />
+                              <span>导出记录</span>
+                            </span>
+                          </el-dropdown-item>
+                          <el-dropdown-item command="import">
+                            <span class="flex items-center gap-2">
+                              <FileUploadOutlined class="w-4 h-4" />
+                              <span>导入记录</span>
+                            </span>
+                          </el-dropdown-item> -->
+                        </el-dropdown-menu>
+                      </template>
+                    </el-dropdown>
+                  </template>
+                </PageHeader>
 
-                <template #pane2>
-                  <WorkspaceSidebar v-if="workspaceVisible && currentSession" :session-id="currentSession.id" />
-                </template>
-              </LiteSplitpanes>
-            </div>
-          </template>
-          <template v-else>
-            <!-- 新建对话头部 -->
-            <ChatHeader :sidebar-visible="sidebarVisible" :has-more-options="false" title="新建对话"
-              @toggle-sidebar="sidebarVisible = !sidebarVisible" />
-            <CreateSessionChatPanel @create-session="handleCreateSessionWithMessage" />
+                <ChatPanel ref="chatPanelRef" v-model:session="currentSession"
+                  @save-settings="handleSaveSessionSettings" @toggle-workspace-pane="layoutStore.toggleWorkspace" />
+                <!-- 右侧大纲导航 -->
+                <ChatOutline v-if="currentSession && sessions.length > 0" :messages="chatPanelRef?.activeMessages || []"
+                  :chat-panel-ref="chatPanelRef" @scroll-to-message="handleScrollToMessage" />
+              </div>
+            </template>
 
-          </template>
+            <template #pane2>
+              <WorkspaceSidebar v-if="layoutStore.workspaceVisible && currentSession" :session-id="currentSession.id" />
+            </template>
+          </LiteSplitpanes>
         </div>
       </template>
-    </SidebarLayout>
-
-
+      <template v-else>
+        <!-- 新建对话头部 -->
+        <PageHeader title="新建对话" />
+        <CreateSessionChatPanel @create-session="handleCreateSessionWithMessage" />
+      </template>
+    </div>
   </div>
 
   <!-- 记忆管理弹窗 -->
@@ -72,56 +94,34 @@
     <MemoPanel v-if="currentSession" :session-id="currentSession.id" />
   </el-dialog>
 
-  <!-- 删除会话确认对话框 -->
-  <el-dialog v-model="deleteDialogVisible" title="删除会话" width="500px" :close-on-click-modal="false">
-    <div class="space-y-4">
-      <p class="text-gray-700 dark:text-gray-300">
-        确定要删除会话 <strong>“{{ deleteSessionData?.title }}”</strong> 吗？
-      </p>
-      <div class="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-3">
-        <p class="text-sm text-red-600 dark:text-red-400">
-          <strong>注意：</strong>此操作不可撤销，会话中的所有消息将被永久删除。
-        </p>
-      </div>
-      <el-checkbox v-model="deleteWorkspaceChecked" class="w-full">
-        <div class="flex flex-col gap-1" style="white-space: normal; word-wrap: break-word; overflow-wrap: break-word;">
-          <span class="font-medium">同时删除默认工作目录</span>
-          <span class="text-xs text-gray-500 dark:text-gray-400" style="line-height: 1.5;">
-            仅删除系统自动创建的默认工作目录（data/workspace/{sessionId}），自定义工作目录不会被删除。请务必备份重要数据！
-          </span>
-        </div>
-      </el-checkbox>
-    </div>
-    <template #footer>
-      <div class="flex justify-end gap-2">
-        <el-button @click="deleteDialogVisible = false">取消</el-button>
-        <el-button type="danger" @click="confirmDeleteSession">确定删除</el-button>
-      </div>
-    </template>
-  </el-dialog>
+
 </template>
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted, watch, computed, defineAsyncComponent, type Ref, nextTick } from "vue";
+import { ref, onMounted, onUnmounted, watch, computed, defineAsyncComponent, type Ref } from "vue";
 import { apiService } from "@/services/ApiService";
-import { useRouter, useRoute, type RouteParams } from 'vue-router';
+import { useRouter, useRoute } from 'vue-router';
 import { usePopup } from "@/composables/usePopup";
 import { useStorage } from '@vueuse/core';
 import { useSessionStore } from "@/stores/session";
 import { useAuthStore } from "@/stores/auth";
+import { useLayoutStore } from "@/stores/layout";
 import { useTitle } from '@/composables/useTitle';
 import type { Session } from '@/types/session';
 import { LiteSplitpanes } from "../ui";
 
 // 引入组件
-// @ts-ignore - UI 组件尚未迁移到 TypeScript
-import { SidebarLayout } from "../ui";
-import ChatSidebar from "./ChatSidebar.vue";
-import ChatHeader from "./ChatHeader.vue";
-import { ElDialog, ElEmpty, ElMessageBox } from "element-plus";
+import PageHeader from "@/components/PageHeader.vue";
+import { ElDialog, ElMessageBox, ElDropdown, ElDropdownMenu, ElDropdownItem } from "element-plus";
+import { Reading, FolderOpened } from '@element-plus/icons-vue';
+import {
+  MoreVertOutlined,
+  DeleteTwotone,
+  // FileDownloadOutlined,
+  // FileUploadOutlined
+} from "@vicons/material";
 import { useBreakpoints, breakpointsTailwind } from '@vueuse/core'
 
 const breakpoints = useBreakpoints(breakpointsTailwind)
-const isMobile = breakpoints.smaller('md') // md = 768px
 
 const ChatPanel = defineAsyncComponent(() => import("./ChatPanel.vue"));
 const CreateSessionChatPanel = defineAsyncComponent(() => import("./CreateSessionChatPanel.vue"));
@@ -130,18 +130,16 @@ const ChatOutline = defineAsyncComponent(() => import("./ChatOutline.vue"));
 const WorkspaceSidebar = defineAsyncComponent(() => import("./WorkspaceSidebar.vue"));
 
 // 组合式函数
-const { toast, prompt, confirm } = usePopup();
+const { toast, confirm } = usePopup();
 const router = useRouter();
 const route = useRoute();
 const title = useTitle();
 
 // 删除会话确认对话框状态
-const deleteDialogVisible = ref(false);
-const deleteSessionData = ref<any>(null);
-const deleteWorkspaceChecked = ref(false);
 
 // 当前会话对象，包含会话的基本信息和设置
 const currentSession: Ref<Session | null> = ref(null);
+
 
 // 判断是否为 Electron 环境
 const isElectron = typeof window !== 'undefined' && !!(window as any).electronAPI;
@@ -151,31 +149,11 @@ const isElectron = typeof window !== 'undefined' && !!(window as any).electronAP
 const chatPanelRef = ref<InstanceType<typeof ChatPanel> | null>(null);
 const paneContentRef = ref<HTMLElement | null>(null);
 let paneSnapWidth = 0;
-// 设置面板当前激活的标签页
 // 控制设置模态框的显示与隐藏
-// 控制侧边栏的显示状态，使用本地存储保持用户偏好
-const sidebarVisible = useStorage('sidebarVisible', true);
 // 控制记忆管理窗格的显示状态，调试阶段默认打开
 const memoPanelVisible = useStorage('memoPanelVisible', false);
-// 控制工作目录窗格的显示状态（使用 useStorage 持久化）
-const workspaceVisible = useStorage('workspaceVisible', false);
-// 工作目录分割位置（使用 useStorage 持久化，默认 pane1=75%, pane2=25%）
-const workspaceSplitSize = useStorage('workspaceSplitSize', 75);
-
-const isLoading = ref(true);
-
-// 无限滚动相关状态
-const currentPage = ref(1) // 当前页码
-const pageSize = ref(calculatePageSize()) // 每页数量（根据屏幕高度动态计算）
-const totalSessionsCount = ref(0) // 总会话数
-
-/**
- * 根据屏幕高度计算合适的每页加载数量
- */
-function calculatePageSize(): number {
-  const screenHeight = window.innerHeight
-  return screenHeight > 1080 ? 40 : 20
-}
+// 布局状态
+const layoutStore = useLayoutStore();
 
 // 登录信息
 const authStore = useAuthStore();
@@ -192,21 +170,6 @@ const sessions = computed({
   }
 });
 
-// 获取按最后活跃时间降序排序的会话列表，最新的对话排在前面
-// 修复：使用 last_active_at 优先排序，与后端数据库排序逻辑一致
-const sortedSessions = computed(() => {
-  const sessions_ = [...sessions.value];
-  return sessions_.sort((a, b) => {
-    // 主要排序：last_active_at（最后活跃时间）
-    const timeA: number = a.lastActiveAt
-      ? new Date(a.lastActiveAt).getTime()
-      : (a.updatedAt ? new Date(a.updatedAt).getTime() : new Date(a.createdAt || 0).getTime());
-    const timeB: number = b.lastActiveAt
-      ? new Date(b.lastActiveAt).getTime()
-      : (b.updatedAt ? new Date(b.updatedAt).getTime() : new Date(b.createdAt || 0).getTime());
-    return timeB - timeA; // 降序排列，最新的在前面
-  });
-});
 
 // 业务逻辑函数
 
@@ -214,33 +177,29 @@ const sortedSessions = computed(() => {
  * 根据会话 ID 从 API 获取会话详情
  */
 const fetchSession = async (sessionId: string) => {
-  const session = await apiService.fetchSession(sessionId);
-  currentSession.value = session;
+  try {
+    const session = await apiService.fetchSession(sessionId);
+    currentSession.value = session;
+  } catch (error) {
+    console.error('获取会话详情失败:', error);
+    toast.error("获取会话详情失败");
+    goChatRoute(null);
+  }
 };
 
 /**
  * 选择会话，加载会话详情
  */
 const goChatRoute = async (sessionId: string | null) => {
-  if (isMobile.value) {
-    sidebarVisible.value = false;
-  }
   if (sessionId) {
     router.replace({ name: 'Chat', params: { sessionId: sessionId } });
-    // } else if (sessionStore.activeSessionId) {
-    //   router.replace({ name: 'Chat', params: { sessionId: sessionStore.activeSessionId } });
   } else {
     router.replace({ name: 'Chat', params: { sessionId: 'new-session' } });
     currentSession.value = null;
   }
 };
 
-/**
- * 切换工作目录窗格显示/隐藏
- */
-function toggleWorkspace() {
-  workspaceVisible.value = !workspaceVisible.value;
-}
+
 
 function onPaneResize() {
   const el = paneContentRef.value;
@@ -261,9 +220,9 @@ function onPaneResized(event: { panes: Array<{ size: number }> }) {
     el.style.width = '';
   }
 
-  // 保存工作目录分割位置到 localStorage
-  if (workspaceVisible.value && isElectron && event.panes.length >= 1) {
-    workspaceSplitSize.value = event.panes[0].size;
+  // 保存工作目录分割位置
+  if (layoutStore.workspaceVisible && isElectron && event.panes.length >= 1) {
+    layoutStore.setWorkspaceSplitSize(event.panes[0].size);
   }
 }
 
@@ -290,103 +249,21 @@ const updateSessionById = async (sessionId: string, data: any) => {
   }
 };
 
-/**
- * 更新当前会话的设置
- * 合并现有设置与新设置，并关闭设置模态框
- */
-// const updateSession = async (data: any) => {
-//   let session = null;
-//   try {
-//     if (currentSession.value && currentSession.value.id) {
-//       // 合并设置
-//       data.character = currentSession.value.character;
-//       data.settings = { ...currentSession.value.settings, ...data.settings };
-//       await apiService.updateSession(currentSession.value.id, data);
-//       session = { id: currentSession.value.id, ...data, updated_at: new Date().toISOString() };
-//       currentSession.value = session;
-//     }
-//     toast.success("设置成功");
-//   } catch (error) {
-//     console.error('更新对话失败:', error);
-//     toast.error("设置失败");
-//   }
-//   sessionSettingsModalVisible.value = false;
-// };
 
 const updateSelectedSession = async (sessionId: string) => {
-  if (sortedSessions.value.length === 0 || !authStore.isAuthenticated || !sessionId) {
-    currentSession.value = null;
-    return;
-  }
-
-  const session = sortedSessions.value.find(s => s.id === sessionId);
-  if (!session) {
-    currentSession.value = null;
-    return;
-  }
-  if (session.id !== currentSession.value?.id) {
-    await fetchSession(session.id);
+  if (sessionId !== currentSession.value?.id) {
+    await fetchSession(sessionId);
   }
 };
 
-/**
- * 加载会话列表（首次加载）
- */
-const loadSessions = async () => {
-  try {
-    const data = await apiService.fetchSessions(0, pageSize.value);
-    sessions.value = data.items;
-    totalSessionsCount.value = data.total || 0;
-    currentPage.value = 1;
-  } catch (error) {
-    console.error('获取对话列表失败:', error);
-  }
-};
-
-/**
- * 加载更多会话（无限滚动）
- */
-const handleLoadMoreSessions = async () => {
-  try {
-    const skip = sessions.value.length;
-    const data = await apiService.fetchSessions(skip, pageSize.value);
-
-    if (data.items && data.items.length > 0) {
-      // 追加新会话到列表
-      sessions.value = [...sessions.value, ...data.items];
-      totalSessionsCount.value = data.total || 0;
-      currentPage.value++;
-    }
-  } catch (error) {
-    console.error('加载更多会话失败:', error);
-  }
-};
-
-// 事件处理函数
-
-/**
- * 打开设置面板，设置为基本设置标签页
- */
-// const handleOpenSettings = () => {
-//   currentTabValue.value = 'basic';
-//   sessionSettingsModalVisible.value = true;
-// };
-
-/**
- * 创建新会话
- */
-const handleCreateSession = async () => {
-  router.replace({ name: 'Chat', params: { sessionId: 'new-session' } });
-  currentSession.value = null;
-};
 
 const handleCreateSessionWithMessage = async (session: any, inputMessage: any) => {
   if (!authStore.isAuthenticated)
     return;
   try {
     const response = await apiService.createSession(session)
-    // 刷新对话列表（重新加载第一页）
-    await loadSessions();
+    // 直接插入会话列表头部
+    sessionStore.sessionsList.unshift(response)
     if (inputMessage) {
       inputMessage.isWaiting = true
       sessionStore.setInputMessage(response.id, inputMessage)
@@ -397,111 +274,6 @@ const handleCreateSessionWithMessage = async (session: any, inputMessage: any) =
     toast.error("创建对话失败");
   }
 };
-
-/**
- * 重命名会话
- * 显示输入新名称的提示框，更新会话标题
- * @param {Object} session - 要重命名的会话对象
- */
-const handleRenameSession = async (session: any) => {
-  try {
-    const result = await prompt("重命名对话", {
-      placeholder: "请输入对话名称",
-      defaultValue: session.title
-    });
-
-    if (result) {
-      const newTitle = result;
-
-      // 更新对话数据
-      const updatedSession = {
-        title: newTitle
-      };
-
-      // 调用 API 更新对话
-      await apiService.updateSession(session.id, updatedSession);
-
-      currentSession.value = { ...session, title: newTitle };
-
-      toast.success("对话重命名成功");
-    }
-  } catch (error) {
-    console.error('重命名对话失败:', error);
-    toast.error("对话重命名失败");
-  }
-};
-
-/**
- * 删除会话
- * 显示确认删除的提示框，删除会话后从列表中移除
- * @param {Object} session - 要删除的会话对象
- */
-const handleDeleteSession = async (session: any) => {
-  // 显示自定义删除确认对话框
-  deleteSessionData.value = session;
-  deleteWorkspaceChecked.value = false;
-  deleteDialogVisible.value = true;
-};
-
-/**
- * 确认删除会话
- */
-const confirmDeleteSession = async () => {
-  try {
-    const session = deleteSessionData.value;
-    if (!session) return;
-
-    // 如果勾选了删除工作目录，进行二次确认
-    if (deleteWorkspaceChecked.value) {
-      const secondConfirm = await ElMessageBox({
-        title: '⚠️ 重要警告',
-        message: '您选择了同时删除默认工作目录，这将永久删除该会话的所有文件数据，且不可恢复！',
-        type: 'error',
-        showCancelButton: true,
-        confirmButtonText: '确定删除',
-        cancelButtonText: '取消',
-        distinguishCancelAndClose: true,
-        customClass: 'workspace-delete-warning'
-      }).then(() => true).catch(() => false);
-
-      if (!secondConfirm) {
-        // 用户取消了二次确认，不执行删除
-        return;
-      }
-    }
-
-    // 传递 deleteWorkspace 参数
-    await apiService.deleteSession(session.id, deleteWorkspaceChecked.value);
-
-    sessionStore.clearSessionState(session.id);
-    const index = sortedSessions.value.findIndex(s => s.id === session.id);
-
-    // 如果删除的是当前会话
-    if (currentSession.value && currentSession.value.id === session.id) {
-      if (index < sortedSessions.value.length - 1) {
-        // 选择下一个会话
-        goChatRoute(sortedSessions.value[index + 1].id);
-      } else if (index > 0) {
-        goChatRoute(sortedSessions.value[index - 1].id);
-      } else {
-        // 没有其他会话了
-        goChatRoute(null);
-      }
-    }
-
-    sessions.value = sessions.value.filter(s => s.id !== session.id);
-    totalSessionsCount.value--;
-    toast.success("对话删除成功");
-
-    // 关闭对话框
-    deleteDialogVisible.value = false;
-    deleteSessionData.value = null;
-  } catch (error) {
-    console.error('删除对话失败:', error);
-    toast.error("对话删除失败");
-  }
-};
-
 /**
  * 保存会话设置
  * 将当前会话的设置保存到服务器
@@ -528,12 +300,12 @@ async function handleMoreSelect(key: string) {
     case "clear":
       await clearChat();
       break;
-    case "export":
-      exportChat();
-      break;
-    case "import":
-      await importChat();
-      break;
+    // case "export":
+    //   exportChat();
+    //   break;
+    // case "import":
+    //   await importChat();
+    //   break;
   }
 }
 
@@ -563,41 +335,7 @@ async function clearChat() {
   }
 }
 
-/**
- * 导出聊天记录
- */
-function exportChat() {
-  try {
-    if (!currentSession.value) {
-      toast.error("当前没有活动的会话");
-      return;
-    }
 
-    // 直接从 sessionStore 获取消息列表
-    const messages = sessionStore.getMessages(currentSession.value.id) || [];
-
-    const chatData = {
-      session: currentSession.value,
-      messages: messages,
-      exportTime: new Date().toISOString()
-    };
-
-    const dataStr = JSON.stringify(chatData, null, 2);
-    const dataBlob = new Blob([dataStr], { type: "application/json" });
-
-    const link = document.createElement("a");
-    link.href = URL.createObjectURL(dataBlob);
-    link.download = `chat-export-${currentSession.value.title || "session"
-      }-${new Date().getTime()}.json`;
-    link.click();
-    URL.revokeObjectURL(link.href);
-
-    toast.success("聊天记录导出成功");
-  } catch (error) {
-    console.error("导出聊天记录失败:", error);
-    toast.error("导出失败");
-  }
-}
 
 /**
  * 处理滚动到指定消息
@@ -607,55 +345,6 @@ function handleScrollToMessage(messageId: string) {
   if (chatPanel && chatPanel.scrollToMessage) {
     chatPanel.scrollToMessage(messageId);
   }
-}
-
-/**
- * 导入聊天记录
- */
-async function importChat() {
-  if (!currentSession.value) {
-    toast.error("当前没有活动的会话");
-    return;
-  }
-
-  if (!(await confirm("导入聊天记录", "确定要导入聊天记录吗？这将替换当前的聊天记录。"))) {
-    return;
-  }
-
-  const input = document.createElement("input");
-  input.type = "file";
-  input.accept = ".json";
-
-  input.onchange = async (e: Event) => {
-    const target = e.target as HTMLInputElement;
-    if (!target) return;
-    const file = target.files?.[0];
-    if (!file) return;
-
-    try {
-      const text = await file.text();
-      const chatData = JSON.parse(text);
-
-      if (!currentSession.value) {
-        toast.error("当前没有活动的会话");
-        return;
-      }
-
-      await apiService.importMessages(currentSession.value.id, chatData.messages);
-      toast.success("聊天记录导入成功");
-
-      // 重新加载消息列表
-      const chatPanel = chatPanelRef.value as any;
-      if (chatPanel && chatPanel.loadMessages) {
-        chatPanel.loadMessages(currentSession.value.id);
-      }
-    } catch (error) {
-      console.error("导入聊天记录失败:", error);
-      toast.error("文件格式错误或读取失败");
-    }
-  };
-
-  input.click();
 }
 
 // 监听器
@@ -678,109 +367,31 @@ watch(
   async (newSessionId) => {
     if (!newSessionId) {
       currentSession.value = null;
+      goChatRoute(null);
       return;
     }
     const sessionId = Array.isArray(newSessionId) ? newSessionId[0] : newSessionId;
     sessionStore.activeSessionId = sessionId;
-    await updateSelectedSession(sessionId);
+    if (sessionStore.activeSessionId !== 'new-session')
+      await updateSelectedSession(sessionId);
   }
 );
 
-/**
- * 初始化 SSE 会话事件监听
- * 用于多窗口同步会话列表和流式状态
- */
-let unsubscribeSessionEvents: (() => void) | null = null;
-
-function initSessionEventListeners() {
-  // 连接 SSE（如果用户已认证）
-  // 后端通过 Authorization Header 中的 token 解析 userId，前端无需传递
-  if (authStore.isAuthenticated) {
-    console.log("[ChatPage] 连接 SSE")
-    apiService.connectSessionEvents()
-  }
-
-  // 监听会话创建事件
-  apiService.onSessionEvent("session_created", (event) => {
-    const { payload } = event;
-    if (payload?.session) {
-      // 避免重复添加已存在的会话
-      const exists = sessions.value.find(s => s.id === payload.session.id);
-      if (!exists) {
-        sessions.value.unshift(payload.session);
-        totalSessionsCount.value++;
-      }
-    }
-  });
-
-  // 监听会话删除事件
-  apiService.onSessionEvent("session_deleted", (event) => {
-    const { sessionId } = event;
-    const index = sortedSessions.value.findIndex(s => s.id === sessionId);
-
-    sessions.value = sessions.value.filter(s => s.id !== sessionId);
-    totalSessionsCount.value = Math.max(0, totalSessionsCount.value - 1);
-
-    // 如果删除的是当前会话，清理状态并切换到其他会话
-    if (currentSession.value?.id === sessionId) {
-      sessionStore.clearSessionState(sessionId);
-      if (index < sortedSessions.value.length - 1) {
-        goChatRoute(sortedSessions.value[index + 1].id);
-      } else if (index > 0) {
-        goChatRoute(sortedSessions.value[index - 1].id);
-      } else {
-        goChatRoute(null);
-      }
-    }
-  });
-
-  // 监听会话更新事件
-  apiService.onSessionEvent("session_updated", (event) => {
-    const { sessionId, payload } = event;
-    const session = sessions.value.find(s => s.id === sessionId);
-    if (session && payload?.session) {
-      Object.assign(session, payload.session);
-    }
-    // 如果更新的是当前会话，同步更新
-    if (currentSession.value?.id === sessionId && payload?.session) {
-      Object.assign(currentSession.value, payload.session);
-    }
-    // 更新最后活跃时间，触发会话列表重新排序
-    sessionStore.updateSessionLastActiveTime(sessionId, event.timestamp);
-  });
-
-  // 监听流开始事件（统一处理会话列表排序和会话补全）
-  apiService.onSessionEvent("stream_started", (event) => {
-    const { sessionId, payload } = event;
-
-    // 忽略自身发起的流（通过 source/clientId 判断）
-    if (payload?.source?.includes(apiService.getClientId())) {
-      console.log("[ChatPage] 忽略自身发起的流事件");
-      return;
-    }
-
-    const session = sessions.value.find(s => s.id === sessionId);
-
-    if (!session && payload?.session) {
-      // 会话不在当前列表中（可能是未加载），插入到列表头部
-      sessions.value.unshift(payload.session);
-      totalSessionsCount.value++;
-    } else if (session && payload?.session) {
-      // 同步会话字段（如 title、lastMessage 等可能已更新）
-      Object.assign(session, payload.session);
-    }
-
-    // 更新最后活跃时间，触发会话列表重新排序
-    sessionStore.updateSessionLastActiveTime(sessionId, event.timestamp);
+// 监听待处理的流会话，触发 ChatPanel 订阅流
+watch(
+  () => sessionStore.pendingStreamSession,
+  (pending) => {
+    if (!pending) return;
+    const { sessionId, replaceMessageId } = pending;
 
     // 如果是当前会话，通知 ChatPanel 订阅流
     if (sessionId === currentSession.value?.id) {
       const chatPanel = chatPanelRef.value as any;
       if (chatPanel && chatPanel.subscribeToActiveStream) {
         // 如果存在 replaceMessageId，先删除本地对应消息避免重复
-        if (payload?.replaceMessageId) {
+        if (replaceMessageId) {
           const messages = sessionStore.getMessages(sessionId);
-          const index = messages.findIndex((m: any) => m.id === payload.replaceMessageId);
+          const index = messages.findIndex((m: any) => m.id === replaceMessageId);
           if (index !== -1) {
             messages.splice(index, 1);
           }
@@ -788,51 +399,25 @@ function initSessionEventListeners() {
         chatPanel.subscribeToActiveStream();
       }
     }
-  });
 
-  // 监听流结束事件
-  apiService.onSessionEvent("stream_finished", (event) => {
-    const { sessionId } = event;
-    if (sessionId === currentSession.value?.id) {
-      console.log("[ChatPage] 当前会话流已结束");
-    }
-  });
-}
-
-/**
- * 清理 SSE 事件监听
- */
-function cleanupSessionEventListeners() {
-  apiService.disconnectSessionEvents();
-}
+    // 清除待处理状态
+    sessionStore.clearPendingStreamSession();
+  },
+  { immediate: false }
+);
 
 // 生命周期
-// 组件挂载完成后加载会话列表
 onMounted(async () => {
-  isLoading.value = true;
-
-  // 等待认证状态初始化完成（页面刷新后 store 可能尚未从 storage 恢复）
-  if (!authStore.isAuthenticated) {
-    await authStore.initializeAuth()
+  const sessionId = Array.isArray(route.params.sessionId) ? route.params.sessionId[0] : route.params.sessionId;
+  if (sessionId === 'new-session') {
+    sessionStore.activeSessionId = sessionId;
   }
-
-  if (authStore.isAuthenticated) {
-    await loadSessions();
-    if (route.params.sessionId) {
-      const sessionId = Array.isArray(route.params.sessionId) ? route.params.sessionId[0] : route.params.sessionId;
-      sessionStore.activeSessionId = sessionId;
-      await updateSelectedSession(sessionId); isLoading.value = false;
-    } else {
-      currentSession.value = null;
-    }
-    // 初始化 SSE 事件监听
-    initSessionEventListeners();
+  if (sessionId && sessionId !== "new-session") {
+    sessionStore.activeSessionId = sessionId;
+    await updateSelectedSession(sessionId);
+  } else {
+    currentSession.value = null;
   }
-  isLoading.value = false;
-});
-
-onUnmounted(() => {
-  cleanupSessionEventListeners();
 });
 
 

@@ -21,7 +21,7 @@
         <div
           v-for="tool in globalTools"
           :key="tool.namespace"
-          class="rounded-lg border border-gray-200 dark:border-[#232428] overflow-hidden bg-white dark:bg-[#232428] transition-all hover:shadow-md"
+          class="rounded-lg border border-gray-200 dark:border-[#232428] overflow-hidden bg-white dark:bg-[#232428] transition-all hover:border-(--color-primary)"
         >
           <div class="p-5 pb-4">
             <div class="flex items-start justify-between gap-2 mb-2">

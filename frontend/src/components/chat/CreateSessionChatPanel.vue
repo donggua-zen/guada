@@ -10,17 +10,17 @@
 </div>
     <!-- 已选角色显示 -->
     <div
-      class="w-full max-w-200 mb-[-0.7rem] flex items-center gap-3 p-2 pb-4 bg-gray-50 border border-gray-100 rounded-lg cursor-pointer hover:bg-gray-100 transition-colors"
+      class="w-full max-w-200 -mb-6 flex items-center gap-3 p-2 pb-8 bg-gray-50 dark:bg-(--color-surface) border border-gray-100 dark:border-(--color-surface) rounded-lg cursor-pointer hover:bg-gray-100 dark:hover:bg-(--color-sidebar-bg-hover) transition-colors"
       @click="showCharacterSelector = true">
       <div class="w-10 h-10 shrink-0 overflow-hidden rounded">
         <Avatar :src="currentCharacter?.avatarUrl" type="assistant" :name="currentCharacter?.title"
           class="w-full h-full object-cover" />
       </div>
       <div class="flex-1 min-w-0">
-        <p class="text-sm font-medium text-gray-700 truncate">{{ currentCharacter?.title || '未命名角色' }}</p>
-        <p class="text-xs text-gray-500 truncate">{{ currentCharacter?.description || '暂无描述' }}</p>
+        <p class="text-sm font-medium text-gray-700 dark:text-(--color-text) truncate">{{ currentCharacter?.title || '未命名角色' }}</p>
+        <p class="text-xs text-gray-500 dark:text-(--color-text-gray) truncate">{{ currentCharacter?.description || '暂无描述' }}</p>
       </div>
-      <el-icon class="text-gray-400 shrink-0">
+      <el-icon class="text-gray-400 dark:text-(--color-text-gray) shrink-0">
         <ArrowRightTwotone />
       </el-icon>
     </div>
@@ -62,24 +62,24 @@
     <!-- 角色列表 -->
     <div class="character-list max-h-96 overflow-y-auto">
       <div v-for="character in filteredCharacters" :key="character.id"
-        class="character-item flex items-center gap-3 p-3 rounded-lg cursor-pointer hover:bg-gray-50 transition-colors border border-transparent"
-        :class="{ 'bg-blue-50 border-blue-200': currentSession.characterId === character.id }"
+        class="character-item flex items-center gap-3 p-3 rounded-lg cursor-pointer hover:bg-gray-50 dark:hover:bg-[#2f3131] transition-colors border border-transparent dark:border-[#1f1f1f]"
+        :class="{ 'bg-blue-50 dark:bg-[#2f3131] border-blue-200 dark:border-[#2f3131]': currentSession.characterId === character.id }"
         @click="selectCharacter(character)">
         <div class="w-12 h-12 shrink-0 overflow-hidden rounded">
           <Avatar :src="character.avatarUrl" type="assistant" :name="character.title"
             class="w-full h-full object-cover" />
         </div>
         <div class="flex-1 min-w-0">
-          <p class="text-sm font-medium text-gray-700 truncate">{{ character.title }}</p>
-          <p class="text-xs text-gray-500 truncate mt-1">{{ character.description || '暂无描述' }}</p>
+          <p class="text-sm font-medium text-gray-700 dark:text-(--color-text) truncate">{{ character.title }}</p>
+          <p class="text-xs text-gray-500 dark:text-(--color-text-gray) truncate mt-1">{{ character.description || '暂无描述' }}</p>
         </div>
-        <el-icon v-if="currentSession.characterId === character.id" class="text-blue-500 shrink-0" size="20">
+        <el-icon v-if="currentSession.characterId === character.id" class="text-blue-500 dark:text-(--color-primary) shrink-0" size="20">
           <CheckCircleFilled />
         </el-icon>
       </div>
 
       <!-- 空状态 -->
-      <div v-if="filteredCharacters.length === 0" class="text-center py-8 text-gray-400">
+      <div v-if="filteredCharacters.length === 0" class="text-center py-8 text-gray-400 dark:text-(--color-text-gray)">
         <el-icon :size="48" color="rgb(156 163 175)" class="mb-2">
           <SearchFilled />
         </el-icon>
@@ -304,13 +304,11 @@ const filteredCharacters = computed(() => {
 // Props & Emits - 类型化
 const props = defineProps<{
   session?: any;
-  sidebarVisible?: boolean;
 }>();
 
 // @ts-ignore - emit 类型定义
 const emit = defineEmits<{
   'update:session': [session: any]
-  'update:sidebarVisible': [visible: boolean]
   'create-session': [sessionData: any, messageData?: any]
 }>();
 

@@ -2,7 +2,7 @@
     <teleport to="body">
         <transition name="popover-fade">
             <div v-if="show" ref="popoverRef"
-                class="fixed bg-white dark:bg-(--color-surface) rounded-lg border border-gray-200 dark:border-(--color-border) shadow-[0_12px_32px_rgba(0,0,0,0.15),0_4px_8px_rgba(0,0,0,0.1)] dark:shadow-[0_12px_32px_rgba(0,0,0,0.4),0_4px_8px_rgba(0,0,0,0.2)] overflow-hidden flex flex-col z-2000 pointer-events-auto px-2 py-4"
+                class="fixed bg-white dark:bg-(--color-surface) rounded-lg border border-gray-200 dark:border-(--color-surface-border) shadow-[0_12px_32px_rgba(0,0,0,0.15),0_4px_8px_rgba(0,0,0,0.1)] dark:shadow-[0_12px_32px_rgba(0,0,0,0.4),0_4px_8px_rgba(0,0,0,0.2)] overflow-hidden flex flex-col z-2000 pointer-events-auto px-2 py-4"
                 :class="popperClass" :style="popoverStyle" @click.stop>
                 <!-- Header 槽位 -->
                 <div v-if="$slots.header" class="px-2">

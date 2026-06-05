@@ -1,106 +1,73 @@
 <template>
   <div class="flex-1 overflow-hidden">
-    <!-- 头部区域 -->
-    <div class="sessions-header py-1 text-lg font-semibold flex justify-between items-center mb-6">
-      <div class="flex items-center gap-3">
-        <span>OCR 设置</span>
-        <el-link type="info" :underline="'never'" @click="openOcrDocs" class="flex items-center whitespace-nowrap text-sm">
-          <el-icon class="mr-1"><QuestionCircleOutlined /></el-icon>
-          <span>使用说明</span>
-        </el-link>
-      </div>
-      <el-button type="primary" @click="handleSave" :disabled="!hasChanges">
-        <template #icon>
-          <SaveOutlined />
-        </template>
-        保存设置
-      </el-button>
-    </div>
-
-    <div class="space-y-6">
-      <!-- OCR 提供商选择 -->
-      <div class="px-8 py-4 rounded-xl border border-gray-200 dark:border-[#2e3035] bg-white dark:bg-[#232428]">
-        <el-form ref="formRef" :model="settingsForm" label-position="left" label-width="50%" size="large">
-          <el-form-item prop="provider" style="margin-bottom: 16px;">
-            <template #label>
-              <div class="flex flex-col gap-1">
-                <span class="text-lg text-gray-900 dark:text-[#e8e9ed]">OCR 提供商</span>
-                <span class="text-xs text-gray-500 dark:text-[#8b8d95] font-normal">
-                  选择用于识别扫描件 PDF 的 OCR 服务
-                </span>
-              </div>
-            </template>
-            <el-select v-model="settingsForm.provider" placeholder="请选择 OCR 提供商" style="width: 240px;">
+    <div class="space-y-8">
+      <!-- OCR 设置分组 -->
+      <div>
+        <h3 class="text-sm font-semibold text-gray-900 dark:text-[#e8e9ed] mb-3">OCR 服务</h3>
+        <div class="rounded-xl border border-gray-200 dark:border-[#2e3035] bg-white dark:bg-[#232428] overflow-hidden">
+          <!-- OCR 提供商 -->
+          <div class="px-4 py-3.5 flex items-center justify-between gap-4 border-b border-gray-100 dark:border-[#2e3035]">
+            <div class="flex flex-col gap-1 min-w-0">
+              <span class="text-base text-gray-900 dark:text-[#e8e9ed]">OCR 提供商</span>
+              <span class="text-xs text-gray-500 dark:text-[#8b8d95]">选择用于识别扫描件 PDF 的 OCR 服务，<span class="text-[#409eff] cursor-pointer hover:underline" @click="openOcrDocs">查看使用说明</span></span>
+            </div>
+            <el-select v-model="settingsForm.provider" placeholder="请选择 OCR 提供商" style="width: 200px;" class="shrink-0">
               <el-option label="不启用 OCR" value="none" />
               <el-option label="UMI-OCR（本地）" value="umi" />
             </el-select>
-          </el-form-item>
+          </div>
 
           <!-- UMI-OCR 配置 -->
           <template v-if="settingsForm.provider === 'umi'">
-            <el-form-item prop="umiHost" style="margin-bottom: 16px;">
-              <template #label>
-                <div class="flex flex-col gap-1">
-                  <span class="text-lg text-gray-900 dark:text-[#e8e9ed]">服务地址</span>
-                  <span class="text-xs text-gray-500 dark:text-[#8b8d95] font-normal">
-                    UMI-OCR 服务的主机地址
-                  </span>
-                </div>
-              </template>
-              <el-input v-model="settingsForm.umiHost" placeholder="127.0.0.1" style="width: 240px;" />
-            </el-form-item>
+            <div class="px-4 py-3.5 flex items-center justify-between gap-4 border-b border-gray-100 dark:border-[#2e3035]">
+              <div class="flex flex-col gap-1 min-w-0">
+                <span class="text-base text-gray-900 dark:text-[#e8e9ed]">服务地址</span>
+                <span class="text-xs text-gray-500 dark:text-[#8b8d95]">UMI-OCR 服务的主机地址</span>
+              </div>
+              <el-input v-model="settingsForm.umiHost" placeholder="127.0.0.1" style="width: 200px;" class="shrink-0" />
+            </div>
 
-            <el-form-item prop="umiPort" style="margin-bottom: 0;">
-              <template #label>
-                <div class="flex flex-col gap-1">
-                  <span class="text-lg text-gray-900 dark:text-[#e8e9ed]">服务端口</span>
-                  <span class="text-xs text-gray-500 dark:text-[#8b8d95] font-normal">
-                    UMI-OCR 服务的端口号
-                  </span>
-                </div>
-              </template>
-              <el-input-number v-model="settingsForm.umiPort" :min="1" :max="65535" placeholder="1224" />
-            </el-form-item>
+            <div class="px-4 py-3.5 flex items-center justify-between gap-4">
+              <div class="flex flex-col gap-1 min-w-0">
+                <span class="text-base text-gray-900 dark:text-[#e8e9ed]">服务端口</span>
+                <span class="text-xs text-gray-500 dark:text-[#8b8d95]">UMI-OCR 服务的端口号</span>
+              </div>
+              <el-input-number v-model="settingsForm.umiPort" :min="1" :max="65535" placeholder="1224" class="shrink-0" />
+            </div>
           </template>
 
           <!-- 百度 OCR 配置（暂时隐藏） -->
           <template v-if="false">
-            <el-form-item prop="baiduApiKey" style="margin-bottom: 16px;">
-              <template #label>
-                <div class="flex flex-col gap-1">
-                  <span class="text-lg text-gray-900 dark:text-[#e8e9ed]">API Key</span>
-                  <span class="text-xs text-gray-500 dark:text-[#8b8d95] font-normal">
-                    百度智能云应用的 API Key
-                  </span>
-                </div>
-              </template>
-              <el-input v-model="settingsForm.baiduApiKey" placeholder="请输入 API Key" style="width: 320px;" />
-            </el-form-item>
+            <div class="px-4 py-3.5 flex items-center justify-between gap-4 border-b border-gray-100 dark:border-[#2e3035]">
+              <div class="flex flex-col gap-1 min-w-0">
+                <span class="text-base text-gray-900 dark:text-[#e8e9ed]">API Key</span>
+                <span class="text-xs text-gray-500 dark:text-[#8b8d95]">百度智能云应用的 API Key</span>
+              </div>
+              <el-input v-model="settingsForm.baiduApiKey" placeholder="请输入 API Key" style="width: 320px;" class="shrink-0" />
+            </div>
 
-            <el-form-item prop="baiduSecretKey" style="margin-bottom: 0;">
-              <template #label>
-                <div class="flex flex-col gap-1">
-                  <span class="text-lg text-gray-900 dark:text-[#e8e9ed]">Secret Key</span>
-                  <span class="text-xs text-gray-500 dark:text-[#8b8d95] font-normal">
-                    百度智能云应用的 Secret Key
-                  </span>
-                </div>
-              </template>
-              <el-input v-model="settingsForm.baiduSecretKey" placeholder="请输入 Secret Key" type="password" show-password style="width: 320px;" />
-            </el-form-item>
+            <div class="px-4 py-3.5 flex items-center justify-between gap-4">
+              <div class="flex flex-col gap-1 min-w-0">
+                <span class="text-base text-gray-900 dark:text-[#e8e9ed]">Secret Key</span>
+                <span class="text-xs text-gray-500 dark:text-[#8b8d95]">百度智能云应用的 Secret Key</span>
+              </div>
+              <el-input v-model="settingsForm.baiduSecretKey" placeholder="请输入 Secret Key" type="password" show-password style="width: 320px;" class="shrink-0" />
+            </div>
           </template>
-        </el-form>
 
-        <!-- 提示信息 -->
-        <div class="mt-4 text-xs text-gray-500 dark:text-gray-400 bg-gray-50 dark:bg-gray-800/50 px-3 py-2 rounded border border-gray-200 dark:border-gray-700">
-          <template v-if="settingsForm.provider === 'none'">
-            <div>• 不启用 OCR 时，扫描件 PDF 将无法被识别和索引</div>
-          </template>
-          <template v-else>
-            <div>• 请确保 UMI-OCR 服务已启动（Umi-OCR.exe --server）</div>
-            <div>• 默认监听地址：http://127.0.0.1:1224</div>
-            <div>• 支持 PDF 和图片的 OCR 识别</div>
-          </template>
+          <!-- 提示信息 -->
+          <div class="px-4 py-3.5 bg-gray-50 dark:bg-[#1e1f23] border-t border-gray-100 dark:border-[#2e3035]">
+            <div class="text-xs text-gray-500 dark:text-[#8b8d95] space-y-1">
+              <template v-if="settingsForm.provider === 'none'">
+                <div>• 不启用 OCR 时，扫描件 PDF 将无法被识别和索引</div>
+              </template>
+              <template v-else>
+                <div>• 请确保 UMI-OCR 服务已启动（Umi-OCR.exe --server）</div>
+                <div>• 默认监听地址：http://127.0.0.1:1224</div>
+                <div>• 支持 PDF 和图片的 OCR 识别</div>
+              </template>
+            </div>
+          </div>
         </div>
       </div>
     </div>
@@ -108,8 +75,8 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, computed, onMounted } from 'vue'
-import { SaveOutlined, QuestionCircleOutlined } from '@vicons/antd'
+import { ref, reactive, computed, onMounted, watch } from 'vue'
+import { useDebounceFn } from '@vueuse/core'
 import { apiService } from '@/services/ApiService'
 import { usePopup } from '@/composables/usePopup'
 import { openExternalLink } from '@/utils/modelUtils'
@@ -136,6 +103,21 @@ const hasChanges = computed(() => {
   if (!originalSettings.value) return false
   return JSON.stringify(settingsForm) !== JSON.stringify(originalSettings.value)
 })
+
+// 自动保存（防抖 300ms）
+const debouncedSave = useDebounceFn(async () => {
+  if (!hasChanges.value) return
+  await handleSave()
+}, 300)
+
+// 监听设置变化自动保存
+watch(() => ({
+  provider: settingsForm.provider,
+  umiHost: settingsForm.umiHost,
+  umiPort: settingsForm.umiPort,
+}), () => {
+  debouncedSave()
+}, { deep: true })
 
 // 打开 OCR 使用说明
 const openOcrDocs = () => {

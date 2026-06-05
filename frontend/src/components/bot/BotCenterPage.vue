@@ -1,5 +1,6 @@
 <template>
-  <div class="bg-(--color-sidebar-bg) h-full">
+  <div class="h-full">
+    <PageHeader title="机器人" />
     <div class="h-full flex flex-col md:max-w-260 md:mx-auto">
       <div class="flex-1 overflow-hidden flex flex-col">
         <!-- Tab 头部 -->
@@ -44,6 +45,7 @@ import {
   Database24Regular,
 } from '@vicons/fluent'
 
+import PageHeader from '@/components/PageHeader.vue'
 import { useRouter, useRoute } from 'vue-router'
 
 const router = useRouter()

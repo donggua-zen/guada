@@ -1,53 +1,54 @@
 <template>
-  <div class="h-full flex flex-col md:max-w-260 md:mx-auto bg-(--color-sidebar-bg)">
-    <div class="flex flex-col h-full p-3">
-      <!-- 头部 -->
-      <div class="flex justify-between items-center py-4">
-        <span class="text-lg font-semibold text-gray-800 dark:text-gray-200">助手列表</span>
+  <div class="h-full w-full flex flex-col min-h-0">
+    <PageHeader title="助手列表" />
+    <div class="flex flex-col flex-1 p-3 md:max-w-260 md:mx-auto w-full">
+
+      <!-- 新建助手与使用说明 -->
+      <div class="flex items-center justify-between mb-6">
         <el-button type="primary" @click="createCharacter" class="flex items-center">
           <template #icon>
             <PlusOutlined />
           </template>
           新建助手
         </el-button>
+        <el-button link type="primary" class="text-sm" @click="openDocs">
+          <template #icon>
+            <el-icon :size="16">
+              <QuestionCircleOutlined />
+            </el-icon>
+          </template>
+          使用说明
+        </el-button>
       </div>
 
       <!-- 分组筛选标签区域 -->
-      <div class="pb-4">
-        <div class="flex flex-wrap gap-2">
-          <!-- 全部助手标签 -->
-          <div 
-            class="px-4 py-2 rounded-full cursor-pointer transition-all duration-200 select-none text-sm border"
-            :class="currentGroupId === null 
-              ? 'bg-(--color-primary) text-white border-(--color-primary) shadow-[0_2px_8px_rgba(251,114,153,0.3)] hover:bg-(--color-primary-hover) hover:border-(--color-primary-hover)' 
-              : 'bg-(--color-surface) text-(--color-text-gray) border-(--color-border) hover:bg-(--color-primary-100) hover:text-(--color-primary) hover:border-(--color-primary-200)'"
-            @click="selectGroup(null)">
-            全部助手
-          </div>
+      <div class="flex flex-wrap gap-1">
+        <!-- 全部助手标签 -->
+        <div class="px-3 py-1 rounded cursor-pointer transition-all duration-200 select-none text-sm" :class="currentGroupId === null
+          ? 'bg-gray-100 dark:bg-[#2a2c30] text-(--color-text-primary) font-medium'
+          : 'text-(--color-text-secondary) hover:bg-gray-50 dark:hover:bg-[#2a2c30]/50'"
+          @click="selectGroup(null)">
+          全部
+        </div>
 
-          <!-- 分组标签 -->
-          <div 
-            v-for="group in groups" 
-            :key="group.id"
-            class="px-4 py-2 rounded-full cursor-pointer transition-all duration-200 select-none text-sm border flex items-center gap-2"
-            :class="currentGroupId === group.id 
-              ? 'bg-(--color-primary) text-white border-(--color-primary) shadow-[0_2px_8px_rgba(251,114,153,0.3)] hover:bg-(--color-primary-hover) hover:border-(--color-primary-hover)' 
-              : 'bg-(--color-surface) text-(--color-text-gray) border-(--color-border) hover:bg-(--color-primary-100) hover:text-(--color-primary) hover:border-(--color-primary-200)'"
-            @click="selectGroup(group.id)"
-            @contextmenu.prevent="handleGroupContextMenu($event, group)">
-            <span>{{ group.name }}</span>
-          </div>
+        <!-- 分组标签 -->
+        <div v-for="group in groups" :key="group.id"
+          class="px-3 py-1 rounded cursor-pointer transition-all duration-200 select-none text-sm flex items-center gap-1"
+          :class="currentGroupId === group.id
+            ? 'bg-gray-100 dark:bg-[#2a2c30] text-(--color-text-primary) font-medium'
+            : 'text-gray-500 dark:text-[#8b8d95] hover:bg-gray-50 dark:hover:bg-[#2a2c30]/50'"
+          @click="selectGroup(group.id)" @contextmenu.prevent="handleGroupContextMenu($event, group)">
+          <span>{{ group.name }}</span>
+        </div>
 
-          <!-- 新建分组按钮 -->
-          <div
-            class="px-4 py-2 rounded-full cursor-pointer transition-all duration-200 select-none text-sm border border-dashed flex items-center"
-            :class="'bg-transparent text-(--color-text-gray) border-(--color-border) hover:bg-(--color-primary-100) hover:text-(--color-primary) hover:border-(--color-primary)'"
-            @click="showCreateGroupDialog">
-            <el-icon :size="16" class="mr-1">
-              <PlusOutlined />
-            </el-icon>
-            新建分组
-          </div>
+        <!-- 新建分组按钮 -->
+        <div
+          class="px-3 py-1 rounded cursor-pointer transition-all duration-200 select-none text-sm flex items-center text-gray-500 dark:text-[#8b8d95] hover:text-(--color-primary) hover:bg-gray-50 dark:hover:bg-[#2a2c30]/50"
+          @click="showCreateGroupDialog">
+          <el-icon :size="14" class="mr-1">
+            <PlusOutlined />
+          </el-icon>
+          新建分组
         </div>
       </div>
       <!-- 助手列表 -->
@@ -73,8 +74,10 @@
                 <Avatar class="w-11 h-11" :src="character.avatarUrl" :name="character.title" type="assistant" />
                 <div class="flex-1 min-w-0">
                   <div class="flex items-start justify-between">
-                    <div class="font-medium text-base text-gray-900 dark:text-[#e8e9ed] truncate" :title="character.title">{{
-                      character.title }}</div>
+                    <div class="font-medium text-base text-gray-900 dark:text-[#e8e9ed] truncate"
+                      :title="character.title">
+                      {{
+                        character.title }}</div>
                     <!-- 删除按钮 - 悬停显示 -->
                     <el-button link size="small" type="danger"
                       class="opacity-0 group-hover:opacity-100 transition-all duration-200 delete-btn"
@@ -84,10 +87,13 @@
                       </el-icon>
                     </el-button>
                   </div>
-                  <div class="text-xs text-gray-500 dark:text-[#8b8d95] mt-1.5">{{ character.isPublic ? '共享模板' : '我的模板' }}</div>
+                  <div class="text-xs text-gray-500 dark:text-[#8b8d95] mt-1.5">{{ character.isPublic ? '共享模板' : '我的模板'
+                  }}
+                  </div>
                 </div>
               </div>
-              <div class="text-xs text-gray-400 dark:text-[#6b6d75] mt-2 line-clamp-2 leading-relaxed">{{ character.description ||
+              <div class="text-xs text-gray-400 dark:text-[#6b6d75] mt-2 line-clamp-2 leading-relaxed">{{
+                character.description ||
                 '暂无描述' }}
               </div>
             </div>
@@ -107,7 +113,8 @@
             </div>
           </div>
           <!-- 空状态 -->
-          <div v-if="!loading && characters.length === 0" class="col-span-full text-center py-12 text-gray-500 dark:text-[#8b8d95]">
+          <div v-if="!loading && characters.length === 0"
+            class="col-span-full text-center py-12 text-gray-500 dark:text-[#8b8d95]">
             <el-icon size="48" class="text-gray-300 dark:text-[#5a5c63] mb-3">
               <People />
             </el-icon>
@@ -161,11 +168,16 @@ import {
   People
 } from '@vicons/ionicons5'
 
+import PageHeader from '@/components/PageHeader.vue'
 import {
   PlusOutlined,
   DeleteOutlineOutlined,
   EditOutlined
 } from '@vicons/material'
+
+import {
+  QuestionCircleOutlined
+} from '@vicons/antd'
 
 import {
   EllipsisHorizontal as MoreHorizOutlined
@@ -176,6 +188,7 @@ import { Avatar } from '../ui'
 import CharacterModal from './CharacterModal.vue'
 import { apiService } from '../../services/ApiService'
 import { usePopup } from '../../composables/usePopup'
+import { openExternalLink } from '@/utils/modelUtils'
 import type { CharacterGroup } from '@/types/character'
 
 const { confirm, toast } = usePopup()
@@ -365,6 +378,11 @@ const startNewChat = async (character: any): Promise<void> => {
     console.error('创建会话失败:', error)
     toast.error('创建会话失败')
   }
+}
+
+// 打开使用说明文档
+const openDocs = (): void => {
+  openExternalLink('https://ai.dingd.cn/docs/assistant')
 }
 
 // 处理保存后的回调
