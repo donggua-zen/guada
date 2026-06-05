@@ -1,25 +1,25 @@
 <template>
-  <div class="bg-(--color-sidebar-bg) h-full overflow-auto mx-2">
-    <div class="h-full flex flex-col md:max-w-260 md:mx-auto p-4">
+  <div class="h-full overflow-auto">
+    <PageHeader  title="定时任务">
+      <template #actions>
+        <el-space>
+          <el-button type="primary" @click="handleAddTask">
+            <template #icon>
+              <AddOutlined />
+            </template>
+            新建任务
+          </el-button>
+          <el-button @click="handleRefresh" :loading="loading">
+            <template #icon>
+              <RefreshOutlined />
+            </template>
+            刷新
+          </el-button>
+        </el-space>
+      </template>
+    </PageHeader>
+    <div class="h-full flex flex-col md:max-w-260 md:mx-auto">
       <div class="flex-1 flex flex-col overflow-hidden">
-        <!-- 头部区域 -->
-        <div class="sessions-header py-1 text-lg font-semibold flex justify-between items-center mb-6">
-          <span>定时任务</span>
-          <el-space>
-            <el-button type="primary" @click="handleAddTask">
-              <template #icon>
-                <AddOutlined />
-              </template>
-              新建任务
-            </el-button>
-            <el-button @click="handleRefresh" :loading="loading">
-              <template #icon>
-                <RefreshOutlined />
-              </template>
-              刷新
-            </el-button>
-          </el-space>
-        </div>
 
         <!-- 任务列表 -->
         <div class="rounded-lg border border-gray-200 dark:border-[#232428] bg-white dark:bg-[#232428] overflow-hidden">
@@ -131,6 +131,7 @@ import {
   CalendarTodayOutlined,
   DescriptionOutlined
 } from '@vicons/material'
+import PageHeader from '@/components/PageHeader.vue'
 import { apiService } from '../../services/ApiService'
 import { usePopup } from '../../composables/usePopup'
 import type { ScheduledTask, ScheduledTaskLog } from '../../types/scheduler'

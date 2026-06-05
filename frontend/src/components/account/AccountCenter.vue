@@ -1,6 +1,7 @@
 <template>
     <div class="bg-(--color-sidebar-bg) h-full">
-        <div class="h-full flex flex-col md:max-w-200 md:mx-auto p-4">
+        <PageHeader  title="账户中心" />
+        <div class="h-full flex flex-col md:max-w-200 md:mx-auto">
             <div class="flex-1 overflow-hidden flex flex-col">
                 <div class="border-gray-200 dark:border-gray-700">
                     <el-tabs v-model="currentTabValue" @tab-change="handleTabChange" class="account-center-tabs">
@@ -46,6 +47,7 @@ import {
     VerifiedUserOutlined,
 } from '@vicons/material'
 
+import PageHeader from '@/components/PageHeader.vue'
 import { useAuthStore } from '../../stores/auth'
 import { useRouter, useRoute } from 'vue-router'
 

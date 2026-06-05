@@ -2,7 +2,6 @@
 import { defineStore } from 'pinia'
 import { ref, type Ref } from 'vue'
 import type { Session, SessionState, SessionSettings } from '@/types/session'
-import { apiService } from '@/services/ApiService'
 
 /**
  * 会话状态 Store
@@ -12,6 +11,7 @@ export const useSessionStore = defineStore('session', () => {
     const activeSessionId: Ref<string | null> = ref(null)
     const sessionsList: Ref<Session[]> = ref([])
     const sessions: Ref<Map<string, SessionState>> = ref(new Map())
+    const pendingStreamSession: Ref<{ sessionId: string; replaceMessageId?: string } | null> = ref(null)
 
     /**
      * 获取或初始化会话状态
@@ -244,11 +244,28 @@ export const useSessionStore = defineStore('session', () => {
         sessions.value.delete(sessionId)
     }
 
+    /**
+     * 设置待处理的流会话（用于触发 ChatPanel 订阅流）
+     * @param sessionId - 会话 ID
+     * @param replaceMessageId - 需要替换的消息 ID
+     */
+    const setPendingStreamSession = (sessionId: string, replaceMessageId?: string): void => {
+        pendingStreamSession.value = { sessionId, replaceMessageId }
+    }
+
+    /**
+     * 清除待处理的流会话
+     */
+    const clearPendingStreamSession = (): void => {
+        pendingStreamSession.value = null
+    }
+
     return {
         // 状态
         activeSessionId,
         sessionsList,
         sessions,
+        pendingStreamSession,
 
         // actions
         getSessionState,
@@ -271,6 +288,8 @@ export const useSessionStore = defineStore('session', () => {
         setSessionSetting,
         updateSessionTitle,
         updateSessionLastActiveTime,
-        clearSessionState
+        clearSessionState,
+        setPendingStreamSession,
+        clearPendingStreamSession
     }
 })

@@ -92,6 +92,12 @@ const routes = [
                 name: 'Scheduler',
                 meta: { title: '定时任务', requiresAuth: true },
                 component: () => import('./components/scheduler/SchedulerPage.vue')
+            },
+            {
+                path: 'models',
+                name: 'Models',
+                meta: { title: '模型管理', requiresAuth: true },
+                component: () => import('./components/models/ModelsPage.vue')
             }
         ]
     },

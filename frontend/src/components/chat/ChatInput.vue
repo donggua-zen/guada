@@ -1,9 +1,7 @@
 <template>
   <div class="w-full flex flex-col items-center">
-
-
     <!-- 输入框区域 -->
-    <div class="input-area p-[16px_12px_10px_12px] min-h-15 w-full bg-white dark:bg-[#232428]" :class="styleClass">
+    <div class="input-area p-[16px_12px_10px_12px] min-h-15 w-full bg-white dark:bg-[#252525]" :class="styleClass">
       <!-- 文件列表显示区域 -->
       <div class="file-list flex flex-wrap gap-2 mb-3" v-if="uploadFiles.length > 0">
         <FileItem v-for="file in uploadFiles" :key="file.id" :name="file.displayName" :type="file.fileType"
@@ -54,13 +52,7 @@
               @select="handleThinkingEffortChange" />
             <el-divider direction="vertical"></el-divider>
           </template>
-          <!-- 工作目录按钮 -->
-          <el-button class="tool-btn mr-0.5" @click.stop="openWorkspaceDialog" text>
-            <el-icon size="22">
-              <FolderOpen24Regular />
-            </el-icon>
-            <span class="text-xs font-medium">工作目录</span>
-          </el-button>
+
           <!-- 图片按钮（高频使用，放在左侧） -->
           <el-tooltip content="添加图片" placement="top">
             <el-button class="tool-btn" @click="triggerImageInput" text>
@@ -142,6 +134,16 @@
       <WorkspaceSettingsDialog v-model:visible="workspaceDialogVisible"
         :current-workspace-path="props.config?.workspacePath || null" @confirm="applyWorkspaceSettings" />
     </div>
+    <div class="mt-1 w-full flex justify-start">
+      <!-- 工作目录按钮 -->
+      <el-button class="tool-btn mr-0.5" @click.stop="openWorkspaceDialog" text>
+        <el-icon size="22">
+          <FolderOpen24Regular />
+        </el-icon>
+        <span class="text-xs font-medium">工作目录</span>
+      </el-button>
+    </div>
+
   </div>
 </template>
 
@@ -290,11 +292,11 @@ const styleClass = computed(() => {
   // 始终应用默认样式 
   classes.push('rounded-[22px]');
   if (focused.value) {
-    classes.push('shadow-[0_2px_22px_rgba(0,0,0,0.21)]');
-    classes.push('border border-gray-400 dark:border-gray-700');
+    classes.push('shadow-[0_2px_22px_rgba(0,0,0,0.21)] dark:shadow-none');
+    classes.push('border border-gray-400 dark:border-transparent');
   } else {
-    classes.push('shadow-[0_2px_22px_rgba(0,0,0,0.11)]');
-    classes.push('border border-gray-300 dark:border-gray-700');
+    classes.push('shadow-[0_2px_22px_rgba(0,0,0,0.11)] dark:shadow-none');
+    classes.push('border border-gray-300 dark:border-transparent');
   }
   return classes.join(' ') + ' ' + props.class;
 });

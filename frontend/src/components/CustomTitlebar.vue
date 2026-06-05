@@ -1,6 +1,6 @@
 <template>
   <div v-if="isElectron"
-    class="flex items-center justify-between h-10.5 bg-(--color-titlebar-bg) border-b border-(--color-titlebar-border) select-none drag-region">
+    class="flex items-center justify-between h-8 bg-(--color-titlebar-bg) border-b border-(--color-titlebar-border) select-none drag-region">
     <!-- 左侧：应用标题 -->
     <div class="flex items-center pl-2 flex-1">
       <span class="text-xs font-normal text-(--titlebar-text-color) opacity-80">GuaDa AI</span>
