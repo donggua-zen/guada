@@ -76,11 +76,11 @@
   /* --color-conversation-bg: var(--color-surface); */
   --color-conversation-text: #333;
   --color-conversation-border: transparent;
-  --color-conversation-bg-active: var(--color-primary-100);
-  /* --color-conversation-bg-active: rgba(0, 0, 0, 0.05); */
+  /* --color-conversation-bg-active: var(--color-primary-100); */
+  --color-conversation-bg-active: rgba(0, 0, 0, 0.05);
   --color-conversation-text-active: var(--color-text);
   --color-conversation-bg-hover: var(--color-conversation-bg-active);
-  --color-conversation-text-hover: var(--color-text);
+  --color-conversation-text-hover: var(--color-conversation-text-active);
 
   --size-text-base: 16px;
   --size-text-sm: 14px;

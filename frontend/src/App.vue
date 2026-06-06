@@ -18,8 +18,6 @@ import { ref, provide, onMounted, watch } from 'vue'
 import { useRouter, RouterView } from 'vue-router'
 import { useTitle } from './composables/useTitle'
 import { useTheme } from './composables/useTheme'
-import { useAuthStore } from './stores/auth'
-import { apiService } from './services/ApiService'
 import MockControlPanel from './components/dev/MockControlPanel.vue'
 import CustomTitlebar from './components/CustomTitlebar.vue'
 import SetupGuide from './components/SetupGuide.vue'
@@ -30,22 +28,6 @@ const title = useTitle()
 const theme = useTheme() //不要删除，这里会执行dark模式设置
 const isDev = import.meta.env.DEV
 const guideRef = ref(null)
-const authStore = useAuthStore()
-
-// 监听认证状态，启动/关闭 SSE 连接
-watch(
-  () => authStore.isAuthenticated,
-  (isAuth) => {
-    if (isAuth) {
-      console.log('[App] 认证成功，启动 SSE 连接')
-      apiService.connectSessionEvents()
-    } else {
-      console.log('[App] 未认证，关闭 SSE 连接')
-      apiService.disconnectSessionEvents()
-    }
-  },
-  { immediate: true }
-)
 
 // 主题切换过渡状态
 const showThemeTransition = ref(false)
@@ -64,12 +46,12 @@ watch(
             // 800ms 后开始淡出
             setTimeout(() => {
                 isTransitioning.value = false
-            }, 800)
+            }, 400)
 
             // 1000ms 后完全移除遮罩
             setTimeout(() => {
                 showThemeTransition.value = false
-            }, 1000)
+            }, 700)
         }
     }
 )

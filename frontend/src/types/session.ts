@@ -73,6 +73,10 @@ export interface Session {
     externalId?: string       // 外部会话标识,格式: "platform:type:nativeId"
     workspacePath?: string | null  // 自定义工作目录路径
     // ==================================
+
+    // === 侧边栏状态字段（后端注入或前端维护） ===
+    isStreaming?: boolean     // 是否正在流式响应（后端注入）
+    // ==================================
 }
 
 /**

@@ -315,6 +315,8 @@ class ContextMenuManager {
             const value = inputElement.value
             inputElement.value = value.substring(0, start) + text + value.substring(end)
             inputElement.setSelectionRange(start + text.length, start + text.length)
+            // 触发 input 事件，确保 Vue v-model 同步
+            inputElement.dispatchEvent(new Event('input', { bubbles: true }))
           }
         }
       })

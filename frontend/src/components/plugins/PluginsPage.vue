@@ -1,7 +1,7 @@
 <template>
-    <div class="h-full overflow-auto">
+    <div class="h-full overflow-hidden flex flex-col">
         <PageHeader  title="插件" />
-        <div class="h-full px-4 flex flex-col">
+        <div class="h-full px-4 flex flex-col flex-1 overflow-auto">
             <div class="flex-1 flex flex-col">
                 <div class="sticky top-0 z-10 bg-(--color-bg)">
                     <el-tabs v-model="currentTabValue" @tab-change="handleTabChange" class="plugins-settings-tabs">

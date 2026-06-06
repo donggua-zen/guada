@@ -6,7 +6,7 @@
         class="flex items-center gap-3 px-2 py-1.5 rounded-lg cursor-pointer transition-all duration-200 ease-in-out"
         :class="currentActiveTab === item.key
           ? 'bg-(--color-sidebar-bg-active) text-(--color-sidebar-text-active)'
-          : 'text-(--color-text) hover:bg-(--color-sidebar-bg-hover) hover:text-(--color-text)'">
+          : 'text-(--color-text) hover:bg-(--color-sidebar-bg-hover) hover:text-(--color-sidebar-text-hover)'">
         <component :is="item.icon" class="w-4.5 h-4.5 shrink-0" />
         <span class="text-sm font-medium">{{ item.label }}</span>
       </div>
@@ -16,7 +16,7 @@
     <!-- 会话列表区域 -->
     <div class="px-4 py-1 text-xs font-medium text-gray-500 uppercase tracking-wider">任务列表</div>
     <div class="flex-1 overflow-hidden py-1">
-      <ScrollContainer class="h-full max-h-full" @scroll="handleScroll">
+      <ScrollContainer ref="scrollContainer" class="h-full max-h-full">
         <template v-if="!sortedSessions || sortedSessions.length === 0">
           <div class="empty-state text-center text-gray-500 flex flex-col items-center justify-center h-full py-12">
             <div class="empty-state-title text-sm font-medium mb-1">
@@ -26,13 +26,24 @@
         </template>
         <template v-else>
           <div v-for="session in sortedSessions" :key="session.id"
-            class="session-item flex items-center gap-2.5 py-1 pr-2 pl-4 mx-1 my-[0.2rem] rounded-lg cursor-pointer transition-all duration-200 ease-[cubic-bezier(0.4,0,0.2,1)] group"
+            class="session-item flex items-center gap-2 py-1 pr-2 pl-3 mx-1 my-[0.2rem] rounded-lg cursor-pointer transition-all duration-200 ease-in-out group"
             :class="{
               'session-item-active': session.id === currentSessionId,
               'session-item-inactive': session.id !== currentSessionId
             }" @click="selectSession(session)">
+            <!-- 状态指示器 -->
+            <div class="status-indicator w-1.5 h-1.5 shrink-0 flex items-center justify-center">
+              <!-- 工作中状态：脉冲动画 -->
+              <div v-if="getSessionWorking(session.id)" class="w-1.5 h-1.5 rounded-full bg-blue-500 animate-pulse" />
+              <!-- 未读状态：红点 -->
+              <div v-else-if="getSessionUnread(session.id) && session.id !== currentSessionId"
+                class="w-1 h-1 rounded-full bg-red-500" />
+              <!-- 空闲状态：小灰点 -->
+              <div v-else class="w-1 h-1 rounded-full bg-gray-400 opacity-50" />
+            </div>
+
             <div class="session-info flex-1 min-w-0 flex items-center">
-              <div class="session-title truncate text-sm font-medium w-full text-(--color-conversation-text)">
+              <div class="session-title truncate text-sm font-medium w-full">
                 {{ session.title }}
               </div>
             </div>
@@ -164,16 +175,10 @@ import { apiService } from '@/services/ApiService'
 import { ElMessageBox } from 'element-plus'
 
 import {
-  PlusOutlined,
   EditOutlined,
   DeleteOutlineOutlined,
-  PeopleOutlined,
   PersonOutlined,
   LogOutOutlined,
-  CloudOutlined,
-  MenuBookOutlined,
-  ExtensionOutlined,
-  AlarmOutlined,
   SettingsOutlined,
   WbSunnyTwotone,
   NightlightRound
@@ -245,7 +250,7 @@ const navItems = [
   {
     key: 'models',
     label: '模型管理',
-    icon: CloudOutlined
+    icon: Cloud20Regular
   }
 ]
 
@@ -301,6 +306,13 @@ const loadSessions = async () => {
     const data = await apiService.fetchSessions(0, pageSize)
     sessionStore.sessionsList = data.items || []
     totalSessionsCount.value = data.total || 0
+
+    // 同步后端流式状态到侧边栏
+    for (const session of data.items || []) {
+      if (session.isStreaming) {
+        sessionStore.syncStreamingState(session.id, true)
+      }
+    }
   } catch (error) {
     console.error('获取对话列表失败:', error)
   }
@@ -316,6 +328,13 @@ const loadMoreSessions = async () => {
     const data = await apiService.fetchSessions(skip, pageSize)
     if (data.items && data.items.length > 0) {
       sessionStore.sessionsList = [...sessionStore.sessionsList, ...data.items]
+
+      // 同步后端流式状态到侧边栏
+      for (const session of data.items) {
+        if (session.isStreaming) {
+          sessionStore.syncStreamingState(session.id, true)
+        }
+      }
       totalSessionsCount.value = data.total || 0
     }
   } catch (error) {
@@ -325,43 +344,54 @@ const loadMoreSessions = async () => {
   }
 }
 
+// 侧边栏状态辅助方法
+const getSessionUnread = (sessionId: string): boolean => {
+  return sessionStore.isSessionUnread(sessionId)
+}
+
+const getSessionWorking = (sessionId: string): boolean => {
+  return sessionStore.isSessionWorking(sessionId)
+}
+
 // 选择会话
 const selectSession = (session: any) => {
+  // 进入会话时标记为已读
+  sessionStore.markSessionRead(session.id)
   router.replace({ name: 'Chat', params: { sessionId: session.id } })
 }
 
 /**
  * 处理滚动事件（带防抖）
  */
-const handleScroll = (event: Event): void => {
-  // 清除之前的定时器
-  if (scrollTimer !== null) {
-    clearTimeout(scrollTimer)
-  }
+// const handleScroll = (event: Event): void => {
+// 清除之前的定时器
+// if (scrollTimer !== null) {
+//   clearTimeout(scrollTimer)
+// }
 
-  // 设置防抖，300ms 后执行
-  scrollTimer = window.setTimeout(() => {
-    checkScrollPosition()
-  }, 300)
-}
+// // 设置防抖，300ms 后执行
+// scrollTimer = window.setTimeout(() => {
+//   checkScrollPosition()
+// }, 300)
+// }
 
-/**
- * 检查滚动位置，判断是否需要加载更多
- */
-const checkScrollPosition = (): void => {
-  if (!scrollContainer.value || isLoadingMore.value || !hasMoreSessions.value) {
-    return
-  }
+// /**
+//  * 检查滚动位置，判断是否需要加载更多
+//  */
+// const checkScrollPosition = (): void => {
+//   if (!scrollContainer.value || isLoadingMore.value || !hasMoreSessions.value) {
+//     return
+//   }
 
-  const element = scrollContainer.value.getScrollElement?.() || scrollContainer.value
-  const { scrollTop, scrollHeight, clientHeight } = element
-  const distanceToBottom = scrollHeight - scrollTop - clientHeight
+//   const element = scrollContainer.value.getScrollElement?.() || scrollContainer.value
+//   const { scrollTop, scrollHeight, clientHeight } = element
+//   const distanceToBottom = scrollHeight - scrollTop - clientHeight
 
-  // 如果距离底部小于阈值，则加载更多
-  if (distanceToBottom <= scrollThreshold) {
-    loadMoreSessions()
-  }
-}
+//   // 如果距离底部小于阈值，则加载更多
+//   if (distanceToBottom <= scrollThreshold) {
+//     loadMoreSessions()
+//   }
+// }
 
 // 处理导航点击
 const handleNavClick = (tab: string) => {
@@ -584,11 +614,19 @@ function initSessionEventListeners() {
     }
     // 更新最后活跃时间，触发会话列表重新排序
     sessionStore.updateSessionLastActiveTime(sessionId, event.timestamp)
+
+    // 非当前会话的更新标记为未读
+    if (sessionId !== currentSessionId.value) {
+      sessionStore.markSessionUnread(sessionId)
+    }
   })
 
   // 监听流开始事件（统一处理会话列表排序和会话补全）
   apiService.onSessionEvent('stream_started', (event) => {
     const { sessionId, payload } = event
+
+    // 标记会话为工作中（任何流开始都显示工作状态，包括自身发起）
+    sessionStore.markSessionWorking(sessionId)
 
     // 忽略自身发起的流（通过 source/clientId 判断）
     if (event.source === apiService.getClientId()) {
@@ -609,12 +647,20 @@ function initSessionEventListeners() {
 
     // 更新最后活跃时间，触发会话列表重新排序
     sessionStore.updateSessionLastActiveTime(sessionId, event.timestamp)
+
+    // 非当前会话标记为未读
+    if (sessionId !== currentSessionId.value) {
+      sessionStore.markSessionUnread(sessionId)
+    }
   })
 
   // 监听流结束事件
   apiService.onSessionEvent('stream_finished', (event) => {
     const { sessionId } = event
     console.log('[GlobalSidebar] 会话流已结束:', sessionId)
+
+    // 标记会话为空闲
+    sessionStore.markSessionIdle(sessionId)
   })
 }
 
@@ -644,7 +690,7 @@ onUnmounted(() => {
 
 .session-item-inactive:hover {
   background-color: var(--color-sidebar-bg-hover);
-  color: var(--color-text);
+  color: var(--color-sidebar-text-hover);
 }
 
 .session-item-active {
@@ -706,5 +752,12 @@ onUnmounted(() => {
 
 :deep(.el-scrollbar__bar:hover) {
   opacity: 1;
+}
+
+/* 状态指示器样式 */
+.status-indicator {
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 </style>
