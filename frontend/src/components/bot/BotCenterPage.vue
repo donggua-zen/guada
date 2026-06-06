@@ -2,32 +2,30 @@
   <div class="h-full">
     <PageHeader title="机器人" />
     <div class="h-full flex flex-col md:max-w-260 md:mx-auto">
-      <div class="flex-1 overflow-hidden flex flex-col">
-        <!-- Tab 头部 -->
-        <div class="border-gray-200 dark:border-gray-700 p-4">
-          <el-tabs v-model="currentTabValue" @tab-change="handleTabChange" class="bot-center-tabs">
-            <el-tab-pane v-for="item in tabItems" :key="item.path" :label="item.label" :name="item.path">
-              <template #label>
-                <div class="flex items-center gap-2">
-                  <component :is="item.icon" class="w-[17px] h-[17px]"></component>
-                  <span class="text-[15px]">{{ item.label }}</span>
-                </div>
-              </template>
-            </el-tab-pane>
-          </el-tabs>
-        </div>
+      <!-- Tab 头部 -->
+      <div class="border-gray-200 dark:border-gray-700 p-3">
+        <el-tabs v-model="currentTabValue" @tab-change="handleTabChange" class="bot-center-tabs">
+          <el-tab-pane v-for="item in tabItems" :key="item.path" :label="item.label" :name="item.path">
+            <template #label>
+              <div class="flex items-center gap-2">
+                <component :is="item.icon" class="w-[17px] h-[17px]"></component>
+                <span class="text-[15px]">{{ item.label }}</span>
+              </div>
+            </template>
+          </el-tab-pane>
+        </el-tabs>
+      </div>
 
-        <!-- Tab 内容区 -->
-        <div class="flex-1 overflow-hidden py-2 md:py-2">
-          <ScrollContainer class="h-full px-4 max-h-full">
-            <template v-if="currentTabValue === 'management'">
-              <BotManagementPage />
-            </template>
-            <template v-else-if="currentTabValue === 'sessions'">
-              <BotSessionsList />
-            </template>
-          </ScrollContainer>
-        </div>
+      <!-- Tab 内容区 -->
+      <div class="flex-1 overflow-hidden py-2 md:py-2">
+        <ScrollContainer class="h-full px-2 max-h-full">
+          <template v-if="currentTabValue === 'management'">
+            <BotManagementPage />
+          </template>
+          <template v-else-if="currentTabValue === 'sessions'">
+            <BotSessionsList />
+          </template>
+        </ScrollContainer>
       </div>
     </div>
   </div>

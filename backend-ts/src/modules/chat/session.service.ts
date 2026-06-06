@@ -16,6 +16,7 @@ import { WorkspaceService } from "../../common/services/workspace.service";
 import { SG_MODELS, SK_MOD_CHAT, SK_MOD_TITLE_MODEL } from "../../constants/settings.constants";
 import { SessionContextService } from "./session-context.service";
 import { FileWatcherService } from "../../common/services/file-watcher.service";
+import { SessionStreamManager } from "./session-stream.manager";
 
 @Injectable()
 export class SessionService {
@@ -33,6 +34,7 @@ export class SessionService {
     private workspaceService: WorkspaceService,
     private sessionContextService: SessionContextService,
     private fileWatcherService: FileWatcherService,
+    private streamManager: SessionStreamManager,
   ) { }
 
   /**
@@ -49,9 +51,10 @@ export class SessionService {
       limit,
     );
 
-    // 转换所有 session 的 URL（使用 character 的 avatarUrl）
+    // 转换所有 session 的 URL（使用 character 的 avatarUrl），并注入流式状态
     const transformedItems = items.map((item) => ({
       ...item,
+      isStreaming: this.streamManager.hasActiveStream(item.id),
       character: item.character
         ? {
           ...item.character,

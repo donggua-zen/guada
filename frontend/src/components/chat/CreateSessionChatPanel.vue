@@ -3,7 +3,7 @@
   <!-- 输入区域 -->
   <div class="px-5 pb-2.5 w-full flex-1 flex flex-col items-center justify-center mb-40">
     <div class="w-full flex items-center justify-center mb-4">
-    <div class="banner w-30 mb-4">
+    <div class="banner w-20 mb-4">
       <img :src="bannerPath" alt=""></img>
     </div>
     <h1 class="text-4xl mb-6 text-gray-600 ml-10">Hi，想聊些什么？</h1>

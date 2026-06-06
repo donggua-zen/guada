@@ -292,10 +292,10 @@ const styleClass = computed(() => {
   // 始终应用默认样式 
   classes.push('rounded-[22px]');
   if (focused.value) {
-    classes.push('shadow-[0_2px_22px_rgba(0,0,0,0.21)] dark:shadow-none');
-    classes.push('border border-gray-400 dark:border-transparent');
+    classes.push('shadow-[0_2px_22px_rgba(0,0,0,0.16)] dark:shadow-none');
+    classes.push('border border-gray-300 dark:border-transparent');
   } else {
-    classes.push('shadow-[0_2px_22px_rgba(0,0,0,0.11)] dark:shadow-none');
+    classes.push('shadow-[0_2px_12px_rgba(0,0,0,0.11)] dark:shadow-none');
     classes.push('border border-gray-300 dark:border-transparent');
   }
   return classes.join(' ') + ' ' + props.class;
@@ -984,7 +984,7 @@ onUnmounted(() => {
   background: transparent;
   /* color: #333; */
   overflow-y: auto;
-  margin-bottom: 10px;
+  /* margin-bottom: 10px; */
   box-sizing: border-box;
   transition: height 0.2s ease;
   min-height: 45px;
