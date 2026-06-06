@@ -97,6 +97,7 @@ interface ElectronAPI {
   getBrowserWindows: () => Promise<{ success: boolean; windows?: any[] }>
   onBrowserWindowUpdated: (callback: (event: any, data: any) => void) => void
   onBrowserWindowClosed: (callback: (event: any, data: any) => void) => void
+  onBrowserWindowCreated: (callback: (event: any, data: any) => void) => void
   
   // 浏览器窗口后台/前台模式控制
   hideBrowserWindow: (windowId: string) => Promise<{ success: boolean }>
@@ -109,6 +110,7 @@ interface ElectronAPI {
   
   // 右键菜单
   showTabContextMenu: (params: { tabId: string; isSplitMode: boolean }) => Promise<void>
+
 }
 
 interface Window {

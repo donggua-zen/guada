@@ -79,14 +79,18 @@ contextBridge.exposeInMainWorld('electronAPI', {
   onBrowserWindowClosed: (callback: (event: any, data: any) => void) => {
     ipcRenderer.on('window-closed', callback)
   },
+  onBrowserWindowCreated: (callback: (event: any, data: any) => void) => {
+    ipcRenderer.on('window-created', callback)
+  },
 
   // 浏览器窗口后台/前台模式控制
-  hideBrowserWindow: (windowId: string) => 
+  hideBrowserWindow: (windowId: string) =>
     ipcRenderer.invoke('browser:hide-window', { windowId }),
-  showBrowserWindow: (windowId: string) => 
+  showBrowserWindow: (windowId: string) =>
     ipcRenderer.invoke('browser:show-window', { windowId }),
-  toggleBrowserWindowVisibility: (windowId: string) => 
+  toggleBrowserWindowVisibility: (windowId: string) =>
     ipcRenderer.invoke('browser:toggle-window-visibility', { windowId }),
-  getBrowserWindowVisibility: (windowId: string) => 
-    ipcRenderer.invoke('browser:get-window-visibility', { windowId })
+  getBrowserWindowVisibility: (windowId: string) =>
+    ipcRenderer.invoke('browser:get-window-visibility', { windowId }),
+
 })

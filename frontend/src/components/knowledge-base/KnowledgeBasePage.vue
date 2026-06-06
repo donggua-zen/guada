@@ -3,7 +3,7 @@
     <PageHeader title="知识库" />
     <!-- 视图模式：卡片列表 -->
     <div v-if="viewMode === 'list'" class="flex-1 overflow-hidden flex flex-col">
-      <div class="flex flex-col p-3 max-w-260 mx-auto w-full">
+      <div class="flex flex-col p-4 max-w-260 mx-auto w-full">
 
         <!-- 搜索框 -->
         <div class="pb-4">

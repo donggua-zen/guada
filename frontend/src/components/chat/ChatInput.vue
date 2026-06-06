@@ -134,13 +134,18 @@
       <WorkspaceSettingsDialog v-model:visible="workspaceDialogVisible"
         :current-workspace-path="props.config?.workspacePath || null" @confirm="applyWorkspaceSettings" />
     </div>
-    <div class="mt-1 w-full flex justify-start">
+    <div class="mt-1 w-full flex justify-start px-1">
       <!-- 工作目录按钮 -->
       <el-button class="tool-btn mr-0.5" @click.stop="openWorkspaceDialog" text>
         <el-icon size="22">
           <FolderOpen24Regular />
         </el-icon>
-        <span class="text-xs font-medium">工作目录</span>
+        <template v-if="mode == 'create'">
+          <span class="text-xs font-medium">选择工作目录</span>
+        </template>
+        <template v-else>
+          <span class="text-xs font-medium">{{ props.config?.workspacePath || '打开工作目录' }}</span>
+        </template>
       </el-button>
     </div>
 

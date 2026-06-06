@@ -1,54 +1,51 @@
 <template>
-  <div class="flex h-full">
-    <!-- 主体内容（侧边栏已移至 MainLayout） -->
-    <div class="flex flex-col h-full w-full bg-white dark:bg-[#1a1b1e]">
-
-      <template v-if="sessionStore.activeSessionId !== 'new-session'">
-        <!-- 可拖拽分割区域 -->
-        <div class="flex-1 overflow-hidden">
-          <LiteSplitpanes style="height: 100%;"
-            :pane1="{ size: layoutStore.workspaceVisible ? layoutStore.workspaceSplitSize : 100, minSize: 40, maxSize: 100 }"
-            :pane2="{ size: layoutStore.workspaceVisible ? (100 - layoutStore.workspaceSplitSize) : 0, minSize: 20, maxSize: 60 }"
-            @resize="onPaneResize" @resized="onPaneResized">
-            <template #pane1>
-              <div ref="paneContentRef" class="chat-pane-content"
-                style="height: 100%; display: flex; flex-direction: column;">
-                <!-- 页面标题栏 -->
-                <PageHeader :title="currentSession?.title || ''">
-                  <template #actions>
-                    <!-- 工作目录切换 -->
-                    <div v-if="currentSession?.id"
-                      class="cursor-pointer p-1 rounded-lg text-gray-600 dark:text-[#8b8d95] transition-all duration-200 hover:bg-gray-100 dark:hover:bg-[#2a2c30] hover:text-gray-900 dark:hover:text-[#e8e9ed] flex items-center justify-center"
-                      @click="layoutStore.toggleWorkspace()"
-                      :title="layoutStore.workspaceVisible ? '关闭工作目录' : '打开工作目录'">
-                      <el-icon class="w-5 h-5">
-                        <FolderOpened />
-                      </el-icon>
-                    </div>
-                    <!-- 记忆管理按钮 -->
+  <!-- 主体内容（侧边栏已移至 MainLayout） -->
+  <div class="flex flex-col h-full w-full">
+    <template v-if="sessionStore.activeSessionId !== 'new-session'">
+      <!-- 可拖拽分割区域 -->
+      <div class="flex-1 overflow-hidden">
+        <LiteSplitpanes style="height: 100%;"
+          :pane1="{ size: layoutStore.workspaceVisible ? layoutStore.workspaceSplitSize : 100, minSize: 40, maxSize: 100 }"
+          :pane2="{ size: layoutStore.workspaceVisible ? (100 - layoutStore.workspaceSplitSize) : 0, minSize: 20, maxSize: 60 }"
+          @resize="onPaneResize" @resized="onPaneResized">
+          <template #pane1>
+            <div ref="paneContentRef" class="chat-pane-content"
+              style="height: 100%; display: flex; flex-direction: column;">
+              <!-- 页面标题栏 -->
+              <PageHeader :title="currentSession?.title || ''">
+                <template #actions>
+                  <!-- 工作目录切换 -->
+                  <div v-if="currentSession?.id"
+                    class="cursor-pointer p-1 rounded-lg text-gray-600 dark:text-[#8b8d95] transition-all duration-200 hover:bg-gray-100 dark:hover:bg-[#2a2c30] hover:text-gray-900 dark:hover:text-[#e8e9ed] flex items-center justify-center"
+                    @click="layoutStore.toggleWorkspace()" :title="layoutStore.workspaceVisible ? '关闭工作目录' : '打开工作目录'">
+                    <el-icon class="w-5 h-5">
+                      <FolderOpened />
+                    </el-icon>
+                  </div>
+                  <!-- 记忆管理按钮 -->
+                  <div
+                    class="cursor-pointer p-1 rounded-lg text-gray-600 dark:text-[#8b8d95] transition-all duration-200 hover:bg-gray-100 dark:hover:bg-[#2a2c30] hover:text-gray-900 dark:hover:text-[#e8e9ed] flex items-center justify-center"
+                    @click="memoPanelVisible = !memoPanelVisible" title="记忆管理">
+                    <el-icon class="w-5 h-5">
+                      <Reading />
+                    </el-icon>
+                  </div>
+                  <!-- 更多操作下拉菜单 -->
+                  <el-dropdown trigger="hover" @command="handleMoreSelect" popper-class="chat-header-dropdown">
                     <div
-                      class="cursor-pointer p-1 rounded-lg text-gray-600 dark:text-[#8b8d95] transition-all duration-200 hover:bg-gray-100 dark:hover:bg-[#2a2c30] hover:text-gray-900 dark:hover:text-[#e8e9ed] flex items-center justify-center"
-                      @click="memoPanelVisible = !memoPanelVisible" title="记忆管理">
-                      <el-icon class="w-5 h-5">
-                        <Reading />
-                      </el-icon>
+                      class="cursor-pointer p-1 rounded-lg text-gray-600 dark:text-[#8b8d95] transition-all duration-200 hover:bg-gray-100 dark:hover:bg-[#2a2c30] hover:text-gray-900 dark:hover:text-[#e8e9ed] active:rotate-0 flex items-center justify-center"
+                      title="更多操作">
+                      <MoreVertOutlined class="w-5 h-5" />
                     </div>
-                    <!-- 更多操作下拉菜单 -->
-                    <el-dropdown trigger="hover" @command="handleMoreSelect" popper-class="chat-header-dropdown">
-                      <div
-                        class="cursor-pointer p-1 rounded-lg text-gray-600 dark:text-[#8b8d95] transition-all duration-200 hover:bg-gray-100 dark:hover:bg-[#2a2c30] hover:text-gray-900 dark:hover:text-[#e8e9ed] active:rotate-0 flex items-center justify-center"
-                        title="更多操作">
-                        <MoreVertOutlined class="w-5 h-5" />
-                      </div>
-                      <template #dropdown>
-                        <el-dropdown-menu>
-                          <el-dropdown-item command="clear">
-                            <span class="flex items-center gap-2">
-                              <DeleteTwotone class="w-4 h-4" />
-                              <span>清空记录</span>
-                            </span>
-                          </el-dropdown-item>
-                          <!-- <el-dropdown-item command="export">
+                    <template #dropdown>
+                      <el-dropdown-menu>
+                        <el-dropdown-item command="clear">
+                          <span class="flex items-center gap-2">
+                            <DeleteTwotone class="w-4 h-4" />
+                            <span>清空记录</span>
+                          </span>
+                        </el-dropdown-item>
+                        <!-- <el-dropdown-item command="export">
                             <span class="flex items-center gap-2">
                               <FileDownloadOutlined class="w-4 h-4" />
                               <span>导出记录</span>
@@ -60,32 +57,31 @@
                               <span>导入记录</span>
                             </span>
                           </el-dropdown-item> -->
-                        </el-dropdown-menu>
-                      </template>
-                    </el-dropdown>
-                  </template>
-                </PageHeader>
+                      </el-dropdown-menu>
+                    </template>
+                  </el-dropdown>
+                </template>
+              </PageHeader>
 
-                <ChatPanel ref="chatPanelRef" v-model:session="currentSession"
-                  @save-settings="handleSaveSessionSettings" @toggle-workspace-pane="layoutStore.toggleWorkspace" />
-                <!-- 右侧大纲导航 -->
-                <ChatOutline v-if="currentSession && sessions.length > 0" :messages="chatPanelRef?.activeMessages || []"
-                  :chat-panel-ref="chatPanelRef" @scroll-to-message="handleScrollToMessage" />
-              </div>
-            </template>
+              <ChatPanel ref="chatPanelRef" v-model:session="currentSession" @save-settings="handleSaveSessionSettings"
+                @toggle-workspace-pane="layoutStore.toggleWorkspace" />
+              <!-- 右侧大纲导航 -->
+              <ChatOutline v-if="currentSession && sessions.length > 0" :messages="chatPanelRef?.activeMessages || []"
+                :chat-panel-ref="chatPanelRef" @scroll-to-message="handleScrollToMessage" />
+            </div>
+          </template>
 
-            <template #pane2>
-              <WorkspaceSidebar v-if="layoutStore.workspaceVisible && currentSession" :session-id="currentSession.id" />
-            </template>
-          </LiteSplitpanes>
-        </div>
-      </template>
-      <template v-else>
-        <!-- 新建对话头部 -->
-        <PageHeader title="新建对话" />
-        <CreateSessionChatPanel @create-session="handleCreateSessionWithMessage" />
-      </template>
-    </div>
+          <template #pane2>
+            <WorkspaceSidebar v-if="layoutStore.workspaceVisible && currentSession" :session-id="currentSession.id" />
+          </template>
+        </LiteSplitpanes>
+      </div>
+    </template>
+    <template v-else>
+      <!-- 新建对话头部 -->
+      <PageHeader title="新建对话" />
+      <CreateSessionChatPanel @create-session="handleCreateSessionWithMessage" />
+    </template>
   </div>
 
   <!-- 记忆管理弹窗 -->
@@ -383,14 +379,12 @@ watch(
 // 生命周期
 onMounted(async () => {
   const sessionId = Array.isArray(route.params.sessionId) ? route.params.sessionId[0] : route.params.sessionId;
-  if (sessionId === 'new-session') {
-    sessionStore.activeSessionId = sessionId;
-  }
   if (sessionId && sessionId !== "new-session") {
     sessionStore.activeSessionId = sessionId;
     await updateSelectedSession(sessionId);
   } else {
     currentSession.value = null;
+    sessionStore.activeSessionId = "new-session";
   }
 
   // 注册 SSE stream_started 事件监听

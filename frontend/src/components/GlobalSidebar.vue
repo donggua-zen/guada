@@ -1,5 +1,6 @@
 <template>
-  <div class="flex flex-col h-full bg-(--color-sidebar-bg) border-r border-(--color-sidebar-border) overflow-hidden">
+  <div
+    class="global-sidebar flex flex-col h-full bg-(--color-sidebar-bg) border-r border-(--color-sidebar-border) overflow-hidden">
     <!-- 导航菜单 -->
     <div class="px-3 py-2 space-y-0.5">
       <div v-for="item in navItems" :key="item.key" @click="handleNavClick(item.key)"
@@ -16,7 +17,7 @@
     <!-- 会话列表区域 -->
     <div class="px-4 py-1 text-xs font-medium text-gray-500 uppercase tracking-wider">任务列表</div>
     <div class="flex-1 overflow-hidden py-1">
-      <ScrollContainer ref="scrollContainer" class="h-full max-h-full">
+      <ScrollContainer ref="scrollContainer" class="h-full max-h-full" @scroll="handleScroll">
         <template v-if="!sortedSessions || sortedSessions.length === 0">
           <div class="empty-state text-center text-gray-500 flex flex-col items-center justify-center h-full py-12">
             <div class="empty-state-title text-sm font-medium mb-1">
@@ -163,6 +164,7 @@
 
 <script setup lang="ts">
 import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
+import { useDebounceFn } from '@vueuse/core'
 import { useRouter, useRoute } from 'vue-router'
 import { useAuthStore } from '../stores/auth'
 import { useSessionStore } from '../stores/session'
@@ -213,7 +215,6 @@ const scrollContainer = ref<any>(null)
 
 // 无限滚动相关状态
 const scrollThreshold = 50 // 滚动触发阈值(像素)
-let scrollTimer: number | null = null // 滚动防抖定时器
 
 // 导航项配置
 const navItems = [
@@ -363,35 +364,27 @@ const selectSession = (session: any) => {
 /**
  * 处理滚动事件（带防抖）
  */
-// const handleScroll = (event: Event): void => {
-// 清除之前的定时器
-// if (scrollTimer !== null) {
-//   clearTimeout(scrollTimer)
-// }
+const handleScroll = useDebounceFn((event: Event) => {
+  checkScrollPosition()
+}, 300)
 
-// // 设置防抖，300ms 后执行
-// scrollTimer = window.setTimeout(() => {
-//   checkScrollPosition()
-// }, 300)
-// }
+/**
+ * 检查滚动位置，判断是否需要加载更多
+ */
+const checkScrollPosition = (): void => {
+  if (!scrollContainer.value || isLoadingMore.value || !hasMoreSessions.value) {
+    return
+  }
 
-// /**
-//  * 检查滚动位置，判断是否需要加载更多
-//  */
-// const checkScrollPosition = (): void => {
-//   if (!scrollContainer.value || isLoadingMore.value || !hasMoreSessions.value) {
-//     return
-//   }
+  const element = scrollContainer.value.getScrollElement?.() || scrollContainer.value
+  const { scrollTop, scrollHeight, clientHeight } = element
+  const distanceToBottom = scrollHeight - scrollTop - clientHeight
 
-//   const element = scrollContainer.value.getScrollElement?.() || scrollContainer.value
-//   const { scrollTop, scrollHeight, clientHeight } = element
-//   const distanceToBottom = scrollHeight - scrollTop - clientHeight
-
-//   // 如果距离底部小于阈值，则加载更多
-//   if (distanceToBottom <= scrollThreshold) {
-//     loadMoreSessions()
-//   }
-// }
+  // 如果距离底部小于阈值，则加载更多
+  if (distanceToBottom <= scrollThreshold) {
+    loadMoreSessions()
+  }
+}
 
 // 处理导航点击
 const handleNavClick = (tab: string) => {

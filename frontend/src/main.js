@@ -43,7 +43,7 @@ const routes = [
             {
                 path: '',
                 name: 'Home',
-                redirect: '/chat',
+                redirect: '/chat/new-session',
             },
             {
                 path: 'chat/:sessionId?',
