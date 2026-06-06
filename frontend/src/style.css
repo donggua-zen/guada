@@ -63,7 +63,7 @@
 
   --color-sidebar-bg: var(--color-surface);
   --color-sidebar-border: var(--color-surface);
-  --color-sidebar-bg-active: rgba(0, 0, 0, 0.05);
+  --color-sidebar-bg-active: var(--color-primary-100);
   --color-sidebar-text-active: var(--color-primary);
   --color-sidebar-bg-hover: var(--color-sidebar-bg-active);
   --color-sidebar-text: var(--color-text);
@@ -77,7 +77,7 @@
   --color-conversation-text: #333;
   --color-conversation-border: transparent;
   --color-conversation-bg-active: var(--color-primary-100);
-  --color-conversation-bg-active: rgba(0, 0, 0, 0.05);
+  /* --color-conversation-bg-active: rgba(0, 0, 0, 0.05); */
   --color-conversation-text-active: var(--color-text);
   --color-conversation-bg-hover: var(--color-conversation-bg-active);
   --color-conversation-text-hover: var(--color-text);

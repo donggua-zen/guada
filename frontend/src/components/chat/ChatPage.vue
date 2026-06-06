@@ -159,6 +159,9 @@ const layoutStore = useLayoutStore();
 const authStore = useAuthStore();
 const sessionStore = useSessionStore();
 
+// SSE 事件监听取消函数
+let unsubscribeStreamStarted: (() => void) | null = null;
+
 // 计算属性
 // 获取和设置会话列表的计算属性，与 store 中的会话列表保持同步
 const sessions = computed({
@@ -377,35 +380,6 @@ watch(
   }
 );
 
-// 监听待处理的流会话，触发 ChatPanel 订阅流
-watch(
-  () => sessionStore.pendingStreamSession,
-  (pending) => {
-    if (!pending) return;
-    const { sessionId, replaceMessageId } = pending;
-
-    // 如果是当前会话，通知 ChatPanel 订阅流
-    if (sessionId === currentSession.value?.id) {
-      const chatPanel = chatPanelRef.value as any;
-      if (chatPanel && chatPanel.subscribeToActiveStream) {
-        // 如果存在 replaceMessageId，先删除本地对应消息避免重复
-        if (replaceMessageId) {
-          const messages = sessionStore.getMessages(sessionId);
-          const index = messages.findIndex((m: any) => m.id === replaceMessageId);
-          if (index !== -1) {
-            messages.splice(index, 1);
-          }
-        }
-        chatPanel.subscribeToActiveStream();
-      }
-    }
-
-    // 清除待处理状态
-    sessionStore.clearPendingStreamSession();
-  },
-  { immediate: false }
-);
-
 // 生命周期
 onMounted(async () => {
   const sessionId = Array.isArray(route.params.sessionId) ? route.params.sessionId[0] : route.params.sessionId;
@@ -417,6 +391,41 @@ onMounted(async () => {
     await updateSelectedSession(sessionId);
   } else {
     currentSession.value = null;
+  }
+
+  // 注册 SSE stream_started 事件监听
+  unsubscribeStreamStarted = apiService.onSessionEvent('stream_started', (event) => {
+    const { sessionId, payload } = event;
+
+    // 忽略自身发起的流
+    if (event.source === apiService.getClientId()) {
+      return;
+    }
+
+    // 如果是当前会话，通知 ChatPanel 订阅流
+    if (sessionId === currentSession.value?.id) {
+      const chatPanel = chatPanelRef.value as any;
+      if (chatPanel && chatPanel.subscribeToActiveStream) {
+        // 如果存在 replaceMessageId，先删除本地对应消息避免重复
+        const replaceMessageId = payload?.replaceMessageId;
+        if (replaceMessageId) {
+          const messages = sessionStore.getMessages(sessionId);
+          const index = messages.findIndex((m: any) => m.id === replaceMessageId);
+          if (index !== -1) {
+            messages.splice(index, 1);
+          }
+        }
+        chatPanel.subscribeToActiveStream();
+      }
+    }
+  });
+});
+
+// 组件卸载时取消监听
+onUnmounted(() => {
+  if (unsubscribeStreamStarted) {
+    unsubscribeStreamStarted();
+    unsubscribeStreamStarted = null;
   }
 });
 
