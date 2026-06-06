@@ -39,7 +39,8 @@ import { getClientId } from "@/utils/clientId";
 
 export class SessionEventsService {
   private eventSource: EventSourcePolyfill | null = null;
-  private listeners: Map<SessionEventType | "*", Set<EventListener>> = new Map();
+  private listeners: Map<SessionEventType | "*", Set<EventListener>> =
+    new Map();
   private clientId: string;
   constructor(private getBaseURL: () => string) {
     // 使用全局客户端标识（localStorage 持久化，刷新页面保持不变）
@@ -59,14 +60,15 @@ export class SessionEventsService {
    */
   connect(): void {
     if (this.eventSource?.readyState === EventSource.OPEN) {
-      return;
+      this.disconnect();
     }
 
     this.startConnection();
   }
 
   private startConnection(): void {
-    const token = localStorage.getItem("token") || sessionStorage.getItem("token") || "";
+    const token =
+      localStorage.getItem("token") || sessionStorage.getItem("token") || "";
     const url = `${this.getBaseURL()}/events/sessions`;
 
     this.eventSource = new EventSourcePolyfill(url, {
@@ -106,7 +108,10 @@ export class SessionEventsService {
         try {
           listener(event);
         } catch (error) {
-          console.error(`[SessionEvents] 监听器执行失败 (${event.type}):`, error);
+          console.error(
+            `[SessionEvents] 监听器执行失败 (${event.type}):`,
+            error,
+          );
         }
       }
     }

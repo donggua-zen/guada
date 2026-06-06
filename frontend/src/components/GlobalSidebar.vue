@@ -484,7 +484,7 @@ const confirmDeleteSession = async () => {
         // 没有其他会话了
         router.replace({ name: 'Chat', params: { sessionId: 'new-session' } })
       }
-    }    
+    }
     sessionStore.clearSessionState(session.id)
     sessionStore.sessionsList = sessionStore.sessionsList.filter(s => s.id !== session.id)
     totalSessionsCount.value = Math.max(0, totalSessionsCount.value - 1)
@@ -529,13 +529,6 @@ watch(() => authStore.isAuthenticated, (isAuth) => {
  * 用于多窗口同步会话列表和流式状态
  */
 function initSessionEventListeners() {
-  // 连接 SSE（如果用户已认证）
-  // 后端通过 Authorization Header 中的 token 解析 userId，前端无需传递
-  if (authStore.isAuthenticated) {
-    console.log('[GlobalSidebar] 连接 SSE')
-    apiService.connectSessionEvents()
-  }
-
   // 监听会话创建事件
   apiService.onSessionEvent('session_created', (event) => {
     // 忽略自身发起的事件
@@ -616,18 +609,12 @@ function initSessionEventListeners() {
 
     // 更新最后活跃时间，触发会话列表重新排序
     sessionStore.updateSessionLastActiveTime(sessionId, event.timestamp)
-
-    // 设置待处理的流会话，通知 ChatPanel 订阅流
-    sessionStore.setPendingStreamSession(sessionId, payload?.replaceMessageId)
   })
 
   // 监听流结束事件
   apiService.onSessionEvent('stream_finished', (event) => {
     const { sessionId } = event
-    if (sessionId === currentSessionId.value) {
-      sessionStore.clearPendingStreamSession()
-      console.log('[GlobalSidebar] 当前会话流已结束')
-    }
+    console.log('[GlobalSidebar] 会话流已结束:', sessionId)
   })
 }
 
