@@ -1,0 +1,376 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>浏览器自动化</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    :root {
+      --titlebar-bg: #2b2b2b;
+      --titlebar-text: #ffffff;
+      --toolbar-bg: #f5f5f5;
+      --toolbar-border: #d0d0d0;
+      --btn-hover: #e0e0e0;
+      --btn-active: #d0d0d0;
+      --btn-disabled: #c0c0c0;
+      --address-bg: #ffffff;
+      --address-border: #c0d0d0;
+      --address-focus: #4a90d9;
+      --window-btn-hover: #e81123;
+      --webview-bg: #ffffff;
+    }
+
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --titlebar-bg: #1a1b1e;
+        --titlebar-text: #e8e9ed;
+        --toolbar-bg: #2a2c30;
+        --toolbar-border: #3e4147;
+        --btn-hover: #3e4147;
+        --btn-active: #4a4d54;
+        --btn-disabled: #555;
+        --address-bg: #1a1b1e;
+        --address-border: #3e4147;
+        --address-focus: #4a90d9;
+        --window-btn-hover: #e81123;
+        --webview-bg: #1a1b1e;
+      }
+    }
+
+    html, body {
+      width: 100%;
+      height: 100%;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+      overflow: hidden;
+      background: var(--webview-bg);
+    }
+
+    .shell-container {
+      display: flex;
+      flex-direction: column;
+      width: 100%;
+      height: 100%;
+    }
+
+    /* ========== 标题栏 ========== */
+    .titlebar {
+      display: flex;
+      align-items: center;
+      height: 32px;
+      background: var(--titlebar-bg);
+      color: var(--titlebar-text);
+      user-select: none;
+      flex-shrink: 0;
+    }
+
+    .titlebar-left {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding-left: 12px;
+      font-size: 12px;
+      opacity: 0.9;
+      flex-shrink: 0;
+      -webkit-app-region: drag;
+    }
+
+    .titlebar-icon {
+      width: 14px;
+      height: 14px;
+    }
+
+    /* 中间空白区域负责拖拽，不覆盖按钮 */
+    .titlebar-center {
+      flex: 1;
+      height: 100%;
+      -webkit-app-region: drag;
+    }
+
+    .window-controls {
+      display: flex;
+      flex-shrink: 0;
+    }
+
+    .window-controls button {
+      width: 46px;
+      height: 32px;
+      border: none;
+      background: transparent;
+      color: var(--titlebar-text);
+      font-size: 14px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: background 0.15s;
+    }
+
+    .window-controls button:hover {
+      background: rgba(255,255,255,0.1);
+    }
+
+    .window-controls button.close:hover {
+      background: var(--window-btn-hover);
+    }
+
+    /* ========== 导航栏 ========== */
+    .toolbar {
+      height: 40px;
+      background: var(--toolbar-bg);
+      border-bottom: 1px solid var(--toolbar-border);
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      padding: 0 8px;
+      flex-shrink: 0;
+    }
+
+    .nav-btn {
+      width: 30px;
+      height: 30px;
+      border: none;
+      border-radius: 6px;
+      background: transparent;
+      color: #555;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: background 0.15s;
+    }
+
+    .nav-btn:hover:not(:disabled) {
+      background: var(--btn-hover);
+    }
+
+    .nav-btn:active:not(:disabled) {
+      background: var(--btn-active);
+    }
+
+    .nav-btn:disabled {
+      opacity: 0.35;
+      cursor: not-allowed;
+    }
+
+    @media (prefers-color-scheme: dark) {
+      .nav-btn { color: #aaa; }
+    }
+
+    .address-bar-wrapper {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      margin-left: 4px;
+      background: var(--address-bg);
+      border: 1px solid var(--address-border);
+      border-radius: 16px;
+      padding: 0 12px;
+      height: 30px;
+      transition: border-color 0.2s;
+    }
+
+    .address-bar-wrapper:focus-within {
+      border-color: var(--address-focus);
+    }
+
+    .security-icon {
+      width: 12px;
+      height: 12px;
+      opacity: 0.5;
+      flex-shrink: 0;
+    }
+
+    .address-input {
+      flex: 1;
+      border: none;
+      background: transparent;
+      outline: none;
+      font-size: 13px;
+      color: inherit;
+      font-family: inherit;
+    }
+
+    .address-input::placeholder {
+      opacity: 0.5;
+    }
+
+    /* ========== WebView ========== */
+    #webview {
+      flex: 1;
+      width: 100%;
+      border: none;
+      display: flex;
+    }
+  </style>
+</head>
+<body>
+<div class="shell-container">
+  <!-- 标题栏：中间区域拖拽，两侧按钮无覆盖 -->
+  <div class="titlebar">
+    <div class="titlebar-left">
+      <svg class="titlebar-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <circle cx="12" cy="12" r="10"/>
+        <path d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>
+      </svg>
+      <span id="windowTitle">浏览器自动化</span>
+    </div>
+    <div class="titlebar-center"></div>
+    <div class="window-controls">
+      <button id="btnMinimize" title="最小化">─</button>
+      <button id="btnMaximize" title="最大化">□</button>
+      <button id="btnClose" class="close" title="关闭">×</button>
+    </div>
+  </div>
+
+  <!-- 导航栏 -->
+  <div class="toolbar">
+    <button id="btnBack" class="nav-btn" title="后退" disabled>
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+        <polyline points="15 18 9 12 15 6"/>
+      </svg>
+    </button>
+    <button id="btnForward" class="nav-btn" title="前进" disabled>
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+        <polyline points="9 18 15 12 9 6"/>
+      </svg>
+    </button>
+    <button id="btnReload" class="nav-btn" title="刷新">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+        <polyline points="23 4 23 10 17 10"/>
+        <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>
+      </svg>
+    </button>
+    <div class="address-bar-wrapper">
+      <svg class="security-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+        <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
+        <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+      </svg>
+      <input id="addressBar" class="address-input" type="text" placeholder="输入网址或搜索" autocomplete="off" spellcheck="false"/>
+    </div>
+  </div>
+
+  <!-- WebView：直接作为 flex item，autosize 自动适配 -->
+  <!-- 注意：不设置 src 属性，由 JS 在设置好 partition 后动态加载 -->
+  <webview id="webview" autosize="on" allowpopups></webview>
+</div>
+
+<script>
+(function() {
+  const webview = document.getElementById('webview');
+  const btnBack = document.getElementById('btnBack');
+  const btnForward = document.getElementById('btnForward');
+  const btnReload = document.getElementById('btnReload');
+  const btnMinimize = document.getElementById('btnMinimize');
+  const btnMaximize = document.getElementById('btnMaximize');
+  const btnClose = document.getElementById('btnClose');
+  const addressBar = document.getElementById('addressBar');
+  const windowTitle = document.getElementById('windowTitle');
+
+  let currentWindowId = null;
+  let currentSessionId = null;
+
+  // 设置 webview preload（browser-preload.js 与当前 HTML 同目录）
+  const browserPreloadUrl = new URL('./browser-preload.js', location.href).href;
+  webview.setAttribute('preload', browserPreloadUrl);
+
+  // 接收初始化消息
+  if (window.shellAPI && window.shellAPI.onInit) {
+    window.shellAPI.onInit((data) => {
+      currentWindowId = data.windowId;
+      currentSessionId = data.sessionId;
+      // 为 webview 设置独立的 partition，确保会话隔离
+      if (currentSessionId) {
+        webview.setAttribute('partition', currentSessionId);
+      }
+      // 设置好 partition 后再加载初始 URL
+      if (data.targetUrl && data.targetUrl !== 'about:blank') {
+        webview.setAttribute('src', data.targetUrl);
+      }
+    });
+  }
+
+  // 窗口控制
+  if (window.shellAPI) {
+    btnMinimize.addEventListener('click', () => window.shellAPI.minimize());
+    btnMaximize.addEventListener('click', () => window.shellAPI.maximize());
+    btnClose.addEventListener('click', () => window.shellAPI.close());
+  }
+
+  // 导航控制
+  function navigateTo(url) {
+    let target = url.trim();
+    if (!target) return;
+    if (!/^https?:\/\//.test(target) && !/^file:\/\//.test(target)) {
+      if (/\s/.test(target) || !target.includes('.')) {
+        target = 'https://www.bing.com/search?q=' + encodeURIComponent(target);
+      } else {
+        target = 'https://' + target;
+      }
+    }
+    webview.setAttribute('src', target);
+  }
+
+  btnBack.addEventListener('click', () => {
+    if (webview.canGoBack) webview.goBack();
+  });
+
+  btnForward.addEventListener('click', () => {
+    if (webview.canGoForward) webview.goForward();
+  });
+
+  btnReload.addEventListener('click', () => {
+    webview.reload();
+  });
+
+  addressBar.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+      navigateTo(addressBar.value);
+    }
+  });
+
+  // WebView 事件
+  webview.addEventListener('did-navigate', (e) => {
+    addressBar.value = e.url;
+  });
+
+  webview.addEventListener('did-navigate-in-page', (e) => {
+    if (e.isMainFrame) {
+      addressBar.value = e.url;
+    }
+  });
+
+  webview.addEventListener('page-title-updated', (e) => {
+    windowTitle.textContent = e.title || '浏览器自动化';
+    document.title = e.title || '浏览器自动化';
+  });
+
+  webview.addEventListener('did-stop-loading', () => {
+    try {
+      btnBack.disabled = !webview.canGoBack();
+      btnForward.disabled = !webview.canGoForward();
+    } catch (err) {}
+  });
+
+  // 刷新图标切换
+  webview.addEventListener('did-start-loading', () => {
+    btnReload.innerHTML = `
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+        <line x1="18" y1="6" x2="6" y2="18"/>
+        <line x1="6" y1="6" x2="18" y2="18"/>
+      </svg>`;
+  });
+
+  webview.addEventListener('did-stop-loading', () => {
+    btnReload.innerHTML = `
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+        <polyline points="23 4 23 10 17 10"/>
+        <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>
+      </svg>`;
+  });
+})();
+</script>
+</body>
+</html>

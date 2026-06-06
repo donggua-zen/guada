@@ -28,7 +28,8 @@ export interface ElectronAPI {
   getBrowserWindows: () => Promise<{ success: boolean; windows?: any[] }>
   onBrowserWindowUpdated: (callback: (event: any, data: any) => void) => void
   onBrowserWindowClosed: (callback: (event: any, data: any) => void) => void
-  
+  onBrowserWindowCreated: (callback: (event: any, data: any) => void) => void
+
   // 浏览器窗口后台/前台模式控制
   hideBrowserWindow: (windowId: string) => Promise<{ success: boolean }>
   showBrowserWindow: (windowId: string) => Promise<{ success: boolean }>
@@ -47,6 +48,7 @@ export interface ElectronAPI {
 
   // 打开外部链接
   openExternal: (url: string) => Promise<{ success: boolean; error?: string }>
+
 }
 
 declare global {

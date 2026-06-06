@@ -1239,11 +1239,13 @@ export class BrowserAutomationService {
 
   /**
    * 打开新标签页
-   * 支持传递会话路径用于文件存储隔离
+   * 支持传递会话路径和会话 ID 用于文件存储隔离和会话归属
    */
-  async openNewWindow(url: string, sessionPath?: string): Promise<any> {
-    const metadata = sessionPath ? { sessionPath } : undefined
-    const wid = await this.createWindow(url, metadata)
+  async openNewWindow(url: string, sessionPath?: string, sessionId?: string): Promise<any> {
+    const metadata: Record<string, any> = {}
+    if (sessionPath) metadata.sessionPath = sessionPath
+    if (sessionId) metadata.sessionId = sessionId
+    const wid = await this.createWindow(url, Object.keys(metadata).length > 0 ? metadata : undefined)
 
     return {
       success: true,
@@ -1353,7 +1355,7 @@ export class BrowserAutomationService {
           return await this.reload(params.window_id)
 
         case 'open_new_window':
-          return await this.openNewWindow(params?.url, params?.session_path)
+          return await this.openNewWindow(params?.url, params?.session_path, params?.session_id)
 
         case 'close_window':
           return await this.closeWindow(params.window_id)

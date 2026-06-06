@@ -88,7 +88,6 @@ const loadSettings = async () => {
     // 填充表单
     settingsForm.autoLoginEnabled = response.autoLoginEnabled === true || response.autoLoginEnabled === 'true'
     settingsForm.workspaceBaseDir = response.workspaceBaseDir || ''
-
     // 备份原始数据
     originalSettings.value = JSON.parse(JSON.stringify(settingsForm))
   } catch (error: any) {

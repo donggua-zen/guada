@@ -1,9 +1,9 @@
 <template>
   <div class="h-full">
     <PageHeader title="机器人" />
-    <div class="h-full flex flex-col md:max-w-260 md:mx-auto">
+    <div class="flex-1 flex flex-col md:max-w-260 md:mx-auto">
       <!-- Tab 头部 -->
-      <div class="border-gray-200 dark:border-gray-700 p-3">
+      <div class="border-gray-200 dark:border-gray-700 px-4 py-2">
         <el-tabs v-model="currentTabValue" @tab-change="handleTabChange" class="bot-center-tabs">
           <el-tab-pane v-for="item in tabItems" :key="item.path" :label="item.label" :name="item.path">
             <template #label>

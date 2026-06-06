@@ -28,7 +28,8 @@ export class BrowserWindowManager {
   private mainWindow: BrowserWindow | null = null
   private windows = new Map<string, {
     window: BrowserWindow
-    webContents: WebContents
+    shellWebContents: WebContents
+    webviewWebContents?: WebContents
     info: WindowInfo
   }>()
   private maxWindows: number = 6 // 默认最多6个窗口
@@ -37,13 +38,15 @@ export class BrowserWindowManager {
     height: 768,
     minWidth: 800,
     minHeight: 600,
-    frame: true, // 保留系统标题栏
+    frame: false, // 使用自定义标题栏
     show: false,
+    titleBarStyle: 'hidden', // macOS 兼容
     webPreferences: {
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: true,
-      preload: path.join(__dirname, 'browser-preload.js'),
+      webviewTag: true, // 启用 <webview> 标签
+      preload: path.join(__dirname, 'browser-shell-preload.js'),
     },
   }
 
@@ -91,60 +94,72 @@ export class BrowserWindowManager {
     // 创建独立窗口
     const newWindow = new BrowserWindow(windowOptions)
 
-    const wc = newWindow.webContents
+    const shellWC = newWindow.webContents
 
-    // 默认静音
-    wc.setAudioMuted(true)
+    // 默认静音外壳（不需要声音）
+    shellWC.setAudioMuted(true)
     log.info(`Window ${windowId} audio muted by default`)
 
-    // 设置 Edge User Agent
-    const edgeUserAgent = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36 Edg/146.0.0.0'
-    wc.setUserAgent(edgeUserAgent)
-    log.info(`Custom User Agent set to Edge for window ${windowId}`)
+    // 监听 webview 挂载事件
+    shellWC.on('did-attach-webview', (_event: Electron.Event, webviewWC: WebContents) => {
+      log.info(`Webview attached for window ${windowId}, webContentsId: ${webviewWC.id}`)
 
-    // 拦截新窗口请求，在当前窗口打开
-    wc.setWindowOpenHandler(({ url }: { url: string }) => {
-      log.info(`Intercepting new window request: ${url}, loading in current window`)
-      wc.loadURL(url)
-      return { action: 'deny' }
-    })
-
-    // 监听页面标题变化
-    wc.on('page-title-updated', (_event: Electron.Event, title: string) => {
       const win = this.windows.get(windowId)
-      if (win) {
-        win.info.title = title
-        this.notifyWindowUpdate(windowId)
-      }
-    })
+      if (!win) return
 
-    // 监听导航完成
-    wc.on('did-finish-load', () => {
-      const win = this.windows.get(windowId)
-      if (win) {
-        win.info.url = wc.getURL()
-        this.notifyWindowUpdate(windowId)
-      }
-      // 每次页面加载完成后重新注入反检测脚本
-      this.injectAntiDetectionScript(wc)
-    })
+      win.webviewWebContents = webviewWC
 
-    // 监听加载失败
-    wc.on('did-fail-load', (_event: Electron.Event, errorCode: number, errorDescription: string) => {
-      log.error(`Window ${windowId} failed to load: ${errorCode} - ${errorDescription}`)
-    })
+      // 设置 Edge User Agent
+      const edgeUserAgent = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36 Edg/146.0.0.0'
+      webviewWC.setUserAgent(edgeUserAgent)
+      log.info(`Custom User Agent set to Edge for webview ${windowId}`)
 
-    // 注入反检测脚本
-    this.injectAntiDetectionScript(wc)
+      // 拦截新窗口请求，在当前 webview 打开
+      webviewWC.setWindowOpenHandler(({ url }: { url: string }) => {
+        log.info(`Intercepting new window request: ${url}, loading in current webview`)
+        webviewWC.loadURL(url)
+        return { action: 'deny' }
+      })
+
+      // 监听页面标题变化
+      webviewWC.on('page-title-updated', (_event: Electron.Event, title: string) => {
+        const w = this.windows.get(windowId)
+        if (w) {
+          w.info.title = title
+          this.notifyWindowUpdate(windowId)
+        }
+      })
+
+      // 监听导航完成
+      webviewWC.on('did-finish-load', () => {
+        const w = this.windows.get(windowId)
+        if (w) {
+          w.info.url = webviewWC.getURL()
+          this.notifyWindowUpdate(windowId)
+        }
+        // 每次页面加载完成后重新注入反检测脚本
+        this.injectAntiDetectionScript(webviewWC)
+      })
+
+      // 监听加载失败
+      webviewWC.on('did-fail-load', (_event: Electron.Event, errorCode: number, errorDescription: string) => {
+        log.error(`Window ${windowId} webview failed to load: ${errorCode} - ${errorDescription}`)
+      })
+
+      // 注入反检测脚本
+      this.injectAntiDetectionScript(webviewWC)
+
+      // 为 webview 设置右键菜单
+      this.setupContextMenu(webviewWC, windowId)
+
+      // 初始 URL 由外壳页面在设置好 partition 后加载（确保会话隔离）
+    })
 
     // 设置权限请求处理器
     windowSession.setPermissionRequestHandler((_webContents, permission, callback) => {
       const allowedPermissions = ['notifications', 'clipboard-read', 'clipboard-write', 'media']
       callback(allowedPermissions.includes(permission))
     })
-
-    // 为窗口设置右键菜单
-    this.setupContextMenu(wc, windowId)
 
     // 窗口关闭时自动清理
     newWindow.on('closed', () => {
@@ -168,21 +183,28 @@ export class BrowserWindowManager {
 
     this.windows.set(windowId, { 
       window: newWindow, 
-      webContents: wc, 
+      shellWebContents: shellWC, 
       info: windowInfo 
     })
 
-    // 异步加载 URL
-    if (url && url !== 'about:blank') {
-      wc.loadURL(url).catch(err => {
-        log.error(`Failed to load URL in window ${windowId}:`, err)
-      })
+    // 加载外壳页面
+    try {
+      const shellPath = path.join(__dirname, '..', 'browser-shell.html')
+      await shellWC.loadFile(shellPath)
+      // 发送初始化消息到外壳（包含 sessionId 用于 webview 隔离）
+      shellWC.send('shell:init', { targetUrl: url || 'about:blank', windowId, sessionId })
+    } catch (err) {
+      log.error(`Failed to load browser shell for window ${windowId}:`, err)
     }
 
     // 不自动显示窗口，保持后台模式
     // newWindow.show() 已移除
 
     log.info(`Window created: ${windowId} (total: ${this.windows.size})`)
+
+    // 通知前端新窗口已创建（带动画标记）
+    this.notifyWindowCreated(windowId)
+
     return windowInfo
   }
 
@@ -198,10 +220,13 @@ export class BrowserWindowManager {
     log.info(`🗑️ Closing window: ${windowId}`)
 
     try {
-      // 清理 session 数据
-      if (!win.webContents.isDestroyed()) {
+      // 清理 session 数据（优先使用 webview 的 session）
+      const wc = win.webviewWebContents && !win.webviewWebContents.isDestroyed()
+        ? win.webviewWebContents
+        : win.shellWebContents
+      if (!wc.isDestroyed()) {
         try {
-          await win.webContents.session.clearStorageData({
+          await wc.session.clearStorageData({
             storages: [
               'cookies',
               'filesystem',
@@ -213,7 +238,7 @@ export class BrowserWindowManager {
               'cachestorage',
             ],
           })
-          await win.webContents.session.clearCache()
+          await wc.session.clearCache()
         } catch (error) {
           log.warn(`Failed to clear session data for window ${windowId}:`, error)
         }
@@ -236,20 +261,37 @@ export class BrowserWindowManager {
    */
   getWindowList(): WindowInfo[] {
     return Array.from(this.windows.values())
-      .filter(({ webContents }) => !webContents.isDestroyed())
-      .map(({ info, webContents }) => ({
-        ...info,
-        url: webContents.getURL(),
-        title: webContents.getTitle() || info.title,
-      }))
+      .filter(({ shellWebContents }) => !shellWebContents.isDestroyed())
+      .map(({ info, webviewWebContents, shellWebContents }) => {
+        const wc = webviewWebContents && !webviewWebContents.isDestroyed()
+          ? webviewWebContents
+          : shellWebContents
+        return {
+          ...info,
+          url: wc.getURL(),
+          title: wc.getTitle() || info.title,
+        }
+      })
   }
 
   /**
-   * 获取指定窗口的 WebContents
+   * 获取指定窗口的 WebContents（优先返回 webview，用于自动化操作）
    */
   getWebContents(windowId: string): WebContents | null {
     const win = this.windows.get(windowId)
-    return win ? win.webContents : null
+    if (!win) return null
+    if (win.webviewWebContents && !win.webviewWebContents.isDestroyed()) {
+      return win.webviewWebContents
+    }
+    return win.shellWebContents
+  }
+
+  /**
+   * 获取指定窗口的外壳 WebContents（用于外壳 IPC）
+   */
+  getShellWebContents(windowId: string): WebContents | null {
+    const win = this.windows.get(windowId)
+    return win ? win.shellWebContents : null
   }
 
   /**
@@ -258,7 +300,10 @@ export class BrowserWindowManager {
    */
   getWindowIdByWebContentsId(webContentsId: number): string | null {
     for (const [windowId, win] of this.windows.entries()) {
-      if (!win.webContents.isDestroyed() && win.webContents.id === webContentsId) {
+      if (!win.shellWebContents.isDestroyed() && win.shellWebContents.id === webContentsId) {
+        return windowId
+      }
+      if (win.webviewWebContents && !win.webviewWebContents.isDestroyed() && win.webviewWebContents.id === webContentsId) {
         return windowId
       }
     }
@@ -351,16 +396,39 @@ export class BrowserWindowManager {
   }
 
   /**
+   * 通知前端窗口已创建
+   */
+  private notifyWindowCreated(windowId: string): void {
+    if (this.mainWindow && !this.mainWindow.isDestroyed()) {
+      const win = this.windows.get(windowId)
+      if (win) {
+        this.mainWindow.webContents.send('window-created', {
+          windowId,
+          title: win.info.title,
+          url: win.info.url,
+          isActive: win.info.isActive,
+          isVisible: win.info.isVisible,
+          metadata: win.info.metadata,
+          animate: true,
+        })
+      }
+    }
+  }
+
+  /**
    * 通知前端窗口更新
    */
   private notifyWindowUpdate(windowId: string): void {
     if (this.mainWindow && !this.mainWindow.isDestroyed()) {
       const win = this.windows.get(windowId)
       if (win) {
+        const wc = win.webviewWebContents && !win.webviewWebContents.isDestroyed()
+          ? win.webviewWebContents
+          : win.shellWebContents
         this.mainWindow.webContents.send('window-updated', {
           windowId,
-          title: win.webContents.getTitle() || win.info.title,
-          url: win.webContents.getURL() || win.info.url,
+          title: wc.getTitle() || win.info.title,
+          url: wc.getURL() || win.info.url,
           isActive: win.info.isActive,
           isVisible: win.window.isVisible(), // 使用实际窗口状态
           metadata: win.info.metadata,
@@ -664,14 +732,15 @@ export class BrowserWindowManager {
 
       // 静音/取消静音
       if (windowInfo) {
-        const isMuted = windowInfo.webContents.isAudioMuted()
+        const wc = windowInfo.webviewWebContents || windowInfo.shellWebContents
+        const isMuted = wc.isAudioMuted()
         menu.append(
           new MenuItem({
             label: isMuted ? '取消静音' : '静音',
             type: 'checkbox',
             checked: isMuted,
             click: (item) => {
-              windowInfo.webContents.setAudioMuted(item.checked)
+              wc.setAudioMuted(item.checked)
               log.info(`Window ${windowId} audio muted: ${item.checked}`)
             },
           })

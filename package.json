@@ -70,6 +70,10 @@
     ],
     "extraResources": [
       {
+        "from": "electron/browser-shell.html",
+        "to": "electron/dist/browser-shell.html"
+      },
+      {
         "from": "backend-ts/dist",
         "to": "backend-ts/dist",
         "filter": [

@@ -422,12 +422,14 @@ export class BrowserToolProvider implements IToolProvider {
         throw new Error('Request was aborted');
       }
 
-      // 特殊处理 open_new_window，注入会话路径
+      // 特殊处理 open_new_window，注入会话路径和会话 ID
       if (request.name === 'open_new_window') {
         const sessionPath = context?.workspacePath as string | undefined
+        const sessionId = context?.sessionId as string | undefined
         const argsWithSession = {
           ...request.arguments,
           session_path: sessionPath,
+          session_id: sessionId,
         }
         const result = await this.sendRequest(request.name, argsWithSession, abortSignal)
         if (typeof result === 'string') {

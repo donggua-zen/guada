@@ -17,7 +17,12 @@
             {{ truncateTitle(win.title || '未命名窗口') }}
             <span v-if="!win.isVisible" class="hidden-badge">后台</span>
           </div>
-          <div class="window-url">{{ truncateUrl(win.url || '') }}</div>
+          <div class="window-meta">
+            <span v-if="win.metadata?.sessionId" class="session-badge">
+              会话: {{ truncateSessionId(win.metadata.sessionId) }}
+            </span>
+            <span class="window-url">{{ truncateUrl(win.url || '') }}</span>
+          </div>
         </div>
         <div class="window-actions">
           <button 
@@ -86,6 +91,12 @@ function truncateTitle(title: string, maxLength: number = 30): string {
 function truncateUrl(url: string, maxLength: number = 50): string {
   if (url.length <= maxLength) return url
   return url.substring(0, maxLength) + '...'
+}
+
+// 截断会话 ID 显示
+function truncateSessionId(sessionId: string, maxLength: number = 12): string {
+  if (sessionId.length <= maxLength) return sessionId
+  return sessionId.substring(0, maxLength) + '...'
 }
 
 // 加载窗口列表
@@ -166,13 +177,14 @@ async function toggleWindowVisibility(windowId: string) {
 // 监听窗口更新事件
 function handleWindowUpdated(event: any, data: any) {
   const existingIndex = windows.value.findIndex(w => w.windowId === data.windowId)
-  
+
   if (existingIndex !== -1) {
     // 更新现有窗口
     windows.value[existingIndex].title = data.title
     windows.value[existingIndex].url = data.url
     windows.value[existingIndex].isActive = data.isActive
     windows.value[existingIndex].isVisible = data.isVisible !== undefined ? data.isVisible : true
+    windows.value[existingIndex].metadata = data.metadata
   } else {
     // 添加新窗口
     windows.value.push({
@@ -181,6 +193,22 @@ function handleWindowUpdated(event: any, data: any) {
       url: data.url || '',
       isActive: data.isActive || false,
       isVisible: data.isVisible !== undefined ? data.isVisible : true,
+      metadata: data.metadata,
+    })
+  }
+}
+
+// 监听窗口创建事件
+function handleWindowCreated(event: any, data: any) {
+  const existingIndex = windows.value.findIndex(w => w.windowId === data.windowId)
+  if (existingIndex === -1) {
+    windows.value.push({
+      windowId: data.windowId,
+      title: data.title || '新窗口',
+      url: data.url || '',
+      isActive: data.isActive || false,
+      isVisible: data.isVisible !== undefined ? data.isVisible : true,
+      metadata: data.metadata,
     })
   }
 }
@@ -193,15 +221,20 @@ function handleWindowClosed(event: any, data: any) {
 onMounted(() => {
   if (props.visible) {
     loadWindows()
-    
+
     // 监听窗口更新
     if (window.electronAPI?.onBrowserWindowUpdated) {
       window.electronAPI.onBrowserWindowUpdated(handleWindowUpdated)
     }
-    
+
     // 监听窗口关闭
     if (window.electronAPI?.onBrowserWindowClosed) {
       window.electronAPI.onBrowserWindowClosed(handleWindowClosed)
+    }
+
+    // 监听窗口创建
+    if (window.electronAPI?.onBrowserWindowCreated) {
+      window.electronAPI.onBrowserWindowCreated(handleWindowCreated)
     }
   }
 })
@@ -317,6 +350,23 @@ onUnmounted(() => {
   color: var(--color-text-secondary, #6b7280);
   border-radius: 3px;
   font-weight: normal;
+}
+
+.window-meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: nowrap;
+}
+
+.session-badge {
+  font-size: 10px;
+  padding: 1px 5px;
+  background: rgba(59, 130, 246, 0.15);
+  color: var(--color-primary, #3b82f6);
+  border-radius: 3px;
+  font-weight: normal;
+  white-space: nowrap;
 }
 
 .window-url {

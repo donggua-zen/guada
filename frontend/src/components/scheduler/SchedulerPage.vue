@@ -18,7 +18,7 @@
         </el-space>
       </template>
     </PageHeader>
-    <div class="h-full flex flex-col md:max-w-260 md:mx-auto">
+    <div class="h-full flex flex-col md:max-w-260 md:mx-auto p-4">
       <div class="flex-1 flex flex-col overflow-hidden">
 
         <!-- 任务列表 -->

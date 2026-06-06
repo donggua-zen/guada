@@ -587,7 +587,6 @@ function createWindow() {
     minWidth: 800,
     minHeight: 600,
     frame: false, // 无边框窗口，去掉默认标题栏
-    transparent: false, // 不透明背景
     icon: isDev
       ? path.join(__dirname, "..", "build-resources", "icon.ico")
       : path.join(process.resourcesPath, "build-resources", "icon.ico"),
@@ -920,7 +919,7 @@ function setupIpcHandlers() {
       clipboard.writeText(text);
       return { success: true };
     } catch (error) {
-      console.error("[Main] 剪贴板写入失�?", error);
+      console.error("[Main] 剪贴板写入失败", error);
       return { success: false, error: (error as Error).message };
     }
   });
@@ -930,7 +929,7 @@ function setupIpcHandlers() {
       const text = clipboard.readText();
       return { success: true, text };
     } catch (error) {
-      console.error("[Main] 剪贴板读取失�?", error);
+      console.error("[Main] 剪贴板读取失败", error);
       return { success: false, error: (error as Error).message };
     }
   });
@@ -990,6 +989,46 @@ function setupIpcHandlers() {
     } catch (error: any) {
       log.error("激活窗口失败:", error.message);
       return { success: false, error: error.message };
+    }
+  });
+
+  // ==================== Browser Shell IPC ====================
+
+  // 最小化窗口（从外壳标题栏）
+  ipcMain.on("shell:window-minimize", (event) => {
+    try {
+      const win = BrowserWindow.fromWebContents(event.sender);
+      if (win) win.minimize();
+    } catch (error: any) {
+      log.error("最小化窗口失败:", error.message);
+    }
+  });
+
+  // 最大化/还原窗口（从外壳标题栏）
+  ipcMain.on("shell:window-maximize", (event) => {
+    try {
+      const win = BrowserWindow.fromWebContents(event.sender);
+      if (win) {
+        if (win.isMaximized()) {
+          win.unmaximize();
+        } else {
+          win.maximize();
+        }
+      }
+    } catch (error: any) {
+      log.error("最大化窗口失败:", error.message);
+    }
+  });
+
+  // 隐藏窗口（从外壳标题栏关闭按钮，等同后台运行）
+  ipcMain.on("shell:window-hide", (event) => {
+    try {
+      const windowId = windowManager!.getWindowIdByWebContentsId(event.sender.id);
+      if (windowId) {
+        windowManager!.hideWindow(windowId);
+      }
+    } catch (error: any) {
+      log.error("隐藏窗口失败:", error.message);
     }
   });
 

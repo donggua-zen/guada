@@ -8,7 +8,7 @@
 
     <!-- 初始加载时的骨架屏：仅在消息为空时显示 -->
     <template v-if="showSkeleton">
-      <div class="absolute inset-0 z-1 bg-white dark:bg-[#1a1a1a] h-full overflow-hidden">
+      <div class="absolute inset-0 z-1 bg-(--color-bg) h-full overflow-hidden">
         <div class="px-5 max-w-205 mx-auto h-full flex flex-col py-10 ">
           <MessageSkeleton :count="2" />
         </div>
