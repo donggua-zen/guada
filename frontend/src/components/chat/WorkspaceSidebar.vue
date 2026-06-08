@@ -2,8 +2,8 @@
     <div class="workspace-sidebar h-full flex flex-col border-l border-gray-200 dark:border-[#2e3035]">
         <!-- 可拖拽分割区域 -->
         <LiteSplitpanes class="flex-1" :horizontal="!isHorizontalLayout"
-            :pane1="{ size: selectedFile ? (isHorizontalLayout ? 40 : 60) : 100, minSize: 30, maxSize: 100 }"
-            :pane2="{ size: selectedFile ? (isHorizontalLayout ? 60 : 40) : 0, minSize: 0, maxSize: 100 }">
+            :pane1="{ size: selectedFile ? '280px' : '100%', minSize: '220px', maxSize: '600px' }"
+            :pane2="{ size: selectedFile ? 'auto' : '0px', minSize: selectedFile ? '120px' : '0px', maxSize: 100 }">
             <template #pane1>
                 <div class="h-full flex flex-col">
                     <!-- 浏览器窗口列表（仅 Electron 环境，置于最上方确保可见） -->
@@ -1216,7 +1216,6 @@ onUnmounted(() => {
 /* 工作目录 pane 设置最小宽度和滚动 */
 :deep(.lite-splitpanes__pane:first-child) {
     overflow: hidden !important;
-    min-width: 220px !important;
 }
 
 /* 目录窗格滚动条美化 */

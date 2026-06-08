@@ -24,9 +24,37 @@
         </el-tag>
       </div>
 
-      <textarea class="message-input" v-model="inputContent" placeholder="Enter发送, Shift+Enter换行"
-        @keydown="handleKeydown" @input="adjustTextareaHeight" ref="messageInputRef" rows="1" @focus="handleFocus"
-        @blur="handleBlur"></textarea>
+      <!-- Tiptap 编辑器（替换 textarea） -->
+      <div class="editor-container">
+        <component :is="EditorContent" :editor="editor" class="message-editor" />
+        <!-- 技能选择弹窗 -->
+        <div v-if="skillPickerVisible" class="skill-picker">
+          <div class="skill-picker-list">
+            <div v-for="(skill, index) in filteredSkills" :key="skill.id" class="skill-picker-item"
+              :class="{ active: index === selectedIndex }" @click="selectSkill(skill)"
+              @mouseenter="selectedIndex = index">
+              <div class="skill-picker-content">
+                <span class="skill-picker-icon">
+                  <el-icon size="16">
+                    <Apps20Regular />
+                  </el-icon>
+                </span>
+                <div class="skill-picker-info flex items-center gap-2">
+                  <div class="skill-picker-name whitespace-nowrap" :class="{ 'text-primary': index === selectedIndex }">
+                    {{ skill.manifest?.name || skill.name || skill.id }}
+                  </div>
+                  <div class="skill-picker-desc truncate">
+                    {{ skill.manifest?.description || skill.description || '' }}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div v-if="filteredSkills.length === 0" class="skill-picker-empty">
+            未找到匹配的技能
+          </div>
+        </div>
+      </div>
 
       <!-- 隐藏的文件输入框 -->
       <input type="file" ref="fileInputRef" style="display: none" multiple
@@ -141,7 +169,12 @@
           <FolderOpen24Regular />
         </el-icon>
         <template v-if="mode == 'create'">
-          <span class="text-xs font-medium">选择工作目录</span>
+          <span class="text-xs font-medium">
+            工作目录：{{ props.config?.workspacePath || '自动创建' }}
+          </span>
+          <el-icon size="16" class="ml-0.5">
+            <ChevronUpDown16Regular />
+          </el-icon>
         </template>
         <template v-else>
           <span class="text-xs font-medium">{{ props.config?.workspacePath || '打开工作目录' }}</span>
@@ -157,6 +190,9 @@
 // @ts-nocheck - ChatInput 组件复杂度高，临时使用@ts-nocheck
 import { ref, watch, computed, nextTick, onUnmounted, onMounted, reactive } from 'vue'
 import { ElIcon, ElButton, ElDialog, ElTabs, ElTabPane, ElInput, ElForm, ElFormItem, ElTag, ElMessage, ElMessageBox } from 'element-plus';
+import { Editor, EditorContent } from '@tiptap/vue-3';
+import StarterKit from '@tiptap/starter-kit';
+import Placeholder from '@tiptap/extension-placeholder';
 import FileItem from '../ui/FileItem.vue';
 import Avatar from '../ui/Avatar.vue';
 import ElSliderOptional from '../ui/ElSliderOptional.vue';
@@ -166,6 +202,7 @@ import SessionSettingsDialog from './chat-input/SessionSettingsDialog.vue';
 import ThinkingEffortPopover from './chat-input/ThinkingEffortPopover.vue';
 import ModelSelectorPanel from './chat-input/ModelSelectorPanel.vue';
 import WorkspaceSettingsDialog from './chat-input/WorkspaceSettingsDialog.vue';
+import { SkillNode } from '@/utils/skillNode';
 import { getModelDisplayName, getModelAvatarPath, getModelThinkingEfforts, getThinkingEffortLabel } from '@/utils/modelUtils';
 import { OpenAI } from "@/components/icons";
 import {
@@ -177,7 +214,8 @@ import {
 import { Thinking2 } from "@/components/icons";
 import {
   TextT24Regular, LightbulbFilament24Regular, LightbulbFilament24Filled, WrenchScrewdriver24Regular, Image24Regular, Attach24Regular,
-  Send24Filled, Stop24Filled, Star24Regular, Star24Filled, Settings24Regular, BookSearch24Regular, FolderOpen24Regular
+  Send24Filled, Stop24Filled, Star24Regular, Star24Filled, Settings24Regular, BookSearch24Regular, FolderOpen24Regular, ChevronUpDown16Regular,
+  Apps20Regular
 } from '@vicons/fluent'
 import {
   ThunderboltOutlined,
@@ -209,6 +247,14 @@ const kbButtonRef = ref<any>(null);
 const settingsDialogVisible = ref(false);
 // 知识库选择器相关
 const knowledgeBases = ref<any[]>([]); // 知识库列表
+
+// Tiptap 编辑器相关
+const editor = ref<Editor>();
+const skillPickerVisible = ref(false);
+const pickerQuery = ref('');
+const selectedIndex = ref(0);
+const allSkills = ref<any[]>([]);
+const editorContent = ref('');
 
 // 抽屉面板状态（会话设置保持抽屉样式 - 已废弃，改用模态框）
 const settingsPanelVisible = ref(false)
@@ -309,6 +355,29 @@ const styleClass = computed(() => {
 const inputContent = computed({
   get: () => props.value,
   set: (value) => emit('update:value', value)
+});
+
+// Tiptap 编辑器内容同步
+watch(editorContent, (val) => {
+  if (inputContent.value !== val) {
+    inputContent.value = val;
+  }
+});
+
+/**
+ * 将纯文本中的 <skill:xxx> 标记转换为 HTML 标签
+ * 供 Tiptap 解析为 Skill 节点
+ */
+const parseSkillTags = (text: string): string => {
+  if (!text) return text;
+  return text.replace(/<skill:([^>]+)>/g, '<span data-type="skill" data-skill-name="$1" class="skill-badge" contenteditable="false">/$1</span>');
+};
+
+watch(() => props.value, (val) => {
+  if (editor.value && editor.value.getText() !== val) {
+    const htmlContent = parseSkillTags(val);
+    editor.value.commands.setContent(htmlContent, false);
+  }
 });
 
 // 管理上传文件列表，自动处理图片预览 URL 的生命周期
@@ -780,22 +849,9 @@ const handlePaste = async (event) => {
     const file = new File([blob], `pasted_text_${Date.now()}.txt`, { type: 'text/plain' });
     filesToProcess.push(file);
   } else if (pastedText) {
-    // 短文本 → 手动插入到 textarea，保留光标位置
-    const textarea = messageInputRef.value;
-    if (textarea) {
-      const start = textarea.selectionStart;
-      const end = textarea.selectionEnd;
-      const currentValue = inputContent.value || '';
-      const newValue = currentValue.slice(0, start) + pastedText + currentValue.slice(end);
-
-      // 更新绑定值
-      inputContent.value = newValue;
-
-      // 恢复光标位置（需 nextTick 确保 DOM 已更新）
-      nextTick(() => {
-        textarea.setSelectionRange(start + pastedText.length, start + pastedText.length);
-        textarea.focus();
-      });
+    // 短文本 → 插入到 Tiptap 编辑器
+    if (editor.value) {
+      editor.value.chain().focus().insertContent(pastedText).run();
     }
   }
 
@@ -826,7 +882,8 @@ const triggerFileInput = () => fileInputRef.value.click();
 const triggerImageInput = () => imageInputRef.value.click();
 
 const sendMessage = async () => {
-  if (!inputContent.value.trim() && uploadFiles.value.length === 0) {
+  const content = editor.value ? editor.value.getText() : inputContent.value;
+  if (!content.trim() && uploadFiles.value.length === 0) {
     return;
   }
 
@@ -854,12 +911,13 @@ const sendMessage = async () => {
 
   // 发送消息(仅包含已上传完成的文件)
   emit('send', {
-    content: inputContent.value,
+    content: editor.value ? editor.value.getText() : inputContent.value,
     files: uploadedFiles,
     knowledgeBaseIds: props.config?.knowledgeBaseIds || []
   });
 
-  // 清空文件列表（setter 会自动清理预览 URL）
+  // 清空编辑器和文件列表
+  editor.value?.chain().clearContent().focus().run();
   uploadFiles.value = [];
 };
 
@@ -915,8 +973,156 @@ const handleBlur = () => {
   emit('blur');
 };
 
+// ==================== 技能选择弹窗 ====================
+const openSkillPicker = (query: string = '') => {
+  pickerQuery.value = query;
+  selectedIndex.value = 0;
+  skillPickerVisible.value = true;
+};
+
+const closeSkillPicker = () => {
+  skillPickerVisible.value = false;
+  pickerQuery.value = '';
+  selectedIndex.value = 0;
+};
+
+const scrollToSelectedItem = () => {
+  nextTick(() => {
+    const listEl = document.querySelector('.skill-picker-list');
+    const selectedEl = document.querySelectorAll('.skill-picker-item')[selectedIndex.value];
+    if (!listEl || !selectedEl) return;
+
+    const listRect = listEl.getBoundingClientRect();
+    const selectedRect = selectedEl.getBoundingClientRect();
+
+    if (selectedRect.top < listRect.top) {
+      listEl.scrollTop -= listRect.top - selectedRect.top;
+    } else if (selectedRect.bottom > listRect.bottom) {
+      listEl.scrollTop += selectedRect.bottom - listRect.bottom;
+    }
+  });
+};
+
+const checkSkillTrigger = () => {
+  if (!editor.value) return;
+
+  const { state } = editor.value;
+  const { selection } = state;
+  const { $from } = selection;
+
+  const textBefore = $from.parent.textBetween(0, $from.parentOffset, '\n', '\n');
+  const lastSlashIndex = textBefore.lastIndexOf('/');
+  if (lastSlashIndex < 0) {
+    closeSkillPicker();
+    return;
+  }
+
+  const charBeforeSlash = textBefore[lastSlashIndex - 1];
+  if (lastSlashIndex > 0 && charBeforeSlash !== ' ' && charBeforeSlash !== '\n') {
+    closeSkillPicker();
+    return;
+  }
+
+  const query = textBefore.slice(lastSlashIndex + 1);
+  if (query.includes(' ')) {
+    closeSkillPicker();
+    return;
+  }
+
+  openSkillPicker(query);
+};
+
+const handlePickerKeydown = (e: KeyboardEvent) => {
+  if (!skillPickerVisible.value) return;
+
+  switch (e.key) {
+    case 'ArrowDown':
+      e.preventDefault();
+      selectedIndex.value = (selectedIndex.value + 1) % filteredSkills.value.length;
+      scrollToSelectedItem();
+      break;
+    case 'ArrowUp':
+      e.preventDefault();
+      selectedIndex.value = (selectedIndex.value - 1 + filteredSkills.value.length) % filteredSkills.value.length;
+      scrollToSelectedItem();
+      break;
+    case 'Enter':
+      e.preventDefault();
+      if (filteredSkills.value[selectedIndex.value]) {
+        selectSkill(filteredSkills.value[selectedIndex.value]);
+      }
+      break;
+    case 'Escape':
+      e.preventDefault();
+      closeSkillPicker();
+      break;
+  }
+};
+
+const selectSkill = (skill: any) => {
+  if (!editor.value) return;
+
+  const { state } = editor.value;
+  const { selection } = state;
+  const { $from } = selection;
+
+  const textBefore = $from.parent.textBetween(0, $from.parentOffset, '\n', '\n');
+  const slashIndex = textBefore.lastIndexOf('/');
+
+  if (slashIndex >= 0) {
+    const from = $from.start() + slashIndex;
+    const to = $from.pos;
+    editor.value.chain().focus().deleteRange({ from, to }).run();
+  }
+
+  const skillName = skill.manifest?.name || skill.name || skill.id;
+  editor.value
+    .chain()
+    .focus()
+    .insertContent({
+      type: 'skill',
+      attrs: { name: skillName },
+    })
+    .run();
+
+  closeSkillPicker();
+  editorContent.value = editor.value.getText();
+};
+
+const filteredSkills = computed(() => {
+  if (!pickerQuery.value) return allSkills.value;
+  const q = pickerQuery.value.toLowerCase();
+  return allSkills.value.filter((s: any) => {
+    const name = s.manifest?.name || s.name || s.id;
+    const desc = s.manifest?.description || s.description || '';
+    return name.toLowerCase().includes(q) || desc.toLowerCase().includes(q);
+  });
+});
+
+// ==================== 技能数据加载 ====================
+const loadSkills = async () => {
+  try {
+    const response = await apiService.fetchSkills();
+    allSkills.value = response.items || [];
+  } catch (error) {
+    console.error('获取技能列表失败:', error);
+  }
+};
+
 // 全局点击关闭面板
 // 生命周期和监听器
+
+// 编辑器高度自适应
+watch(editorContent, () => {
+  nextTick(() => {
+    const pmEl = document.querySelector('.message-editor .ProseMirror');
+    if (pmEl) {
+      pmEl.style.minHeight = '56px';
+      pmEl.style.maxHeight = '240px';
+      isInputExpanded.value = pmEl.scrollHeight > 60;
+    }
+  });
+});
 
 // 监听思考强度配置变化，同步到本地状态
 watch(() => props.config?.thinkingEffort, (newEffort) => {
@@ -934,21 +1140,97 @@ watch(() => props.buttons, (value) => {
   });
 }, { immediate: true });
 
-watch(inputContent, () => {
-  nextTick(adjustTextareaHeight);
-}, { immediate: true });
+// textarea 高度调整已废弃，改用 Tiptap 编辑器
+// watch(inputContent, () => {
+//   nextTick(adjustTextareaHeight);
+// }, { immediate: true });
 
 onMounted(() => {
-  document.addEventListener('paste', handlePaste);
   adjustTextareaHeight();
   loadModels();
   loadKnowledgeBases(); // 加载知识库列表
+  loadSkills(); // 加载技能列表
   initThinkingEffort(); // 初始化思考强度
+
+  // 初始化 Tiptap 编辑器
+  try {
+    const tiptapEditor = new Editor({
+      extensions: [
+        StarterKit,
+        SkillNode,
+        Placeholder.configure({
+          placeholder: '按 / 使用技能，Shift+Enter 换行',
+        }),
+      ],
+      content: parseSkillTags(props.value || ''),
+      editable: true,
+      editorProps: {
+        handleKeyDown: (_view, event) => {
+          // 弹窗打开时拦截键盘事件
+          if (skillPickerVisible.value) {
+            if (['ArrowUp', 'ArrowDown', 'Enter', 'Escape'].includes(event.key)) {
+              handlePickerKeydown(event);
+              return true;
+            }
+          }
+          // Shift+Enter 换行，Enter 发送消息
+          if (event.key === 'Enter' && !event.shiftKey) {
+            event.preventDefault();
+            sendMessage();
+            return true;
+          }
+          // Shift+Enter 允许默认行为（换行）
+          if (event.key === 'Enter' && event.shiftKey) {
+            return false;
+          }
+          return false;
+        },
+        handlePaste: (_view, event) => {
+          // 调用自定义粘贴处理，阻止 Tiptap 默认行为
+          handlePaste(event);
+          return true;
+        },
+      },
+      onUpdate: ({ editor: ed }) => {
+        editorContent.value = ed.getText();
+        checkSkillTrigger();
+        nextTick(() => {
+          const pmEl = document.querySelector('.message-editor .ProseMirror');
+          if (pmEl) {
+            const height = Math.min(pmEl.scrollHeight, 240);
+            pmEl.style.minHeight = '56px';
+            pmEl.style.maxHeight = '240px';
+            isInputExpanded.value = pmEl.scrollHeight > 60;
+          }
+        });
+      },
+      onFocus: () => {
+        focused.value = true;
+        emit('focus');
+      },
+      onBlur: () => {
+        focused.value = false;
+        emit('blur');
+        setTimeout(() => {
+          if (!document.querySelector('.skill-picker:hover')) {
+            closeSkillPicker();
+          }
+        }, 200);
+      },
+    });
+    editor.value = tiptapEditor;
+    console.log('[ChatInput] Tiptap editor created:', tiptapEditor);
+  } catch (err) {
+    console.error('[ChatInput] Tiptap editor init failed:', err);
+  }
 });
 
 // 清理事件监听器和预览 URL
 onUnmounted(() => {
-  document.removeEventListener('paste', handlePaste);
+  // 销毁编辑器
+  if (editor.value) {
+    editor.value.destroy();
+  }
 
   // 清理所有预览 URL，防止内存泄漏
   previewUrls.value.forEach((url, fileId) => {
@@ -977,6 +1259,154 @@ onUnmounted(() => {
   z-index: 10;
 }
 
+/* Tiptap 编辑器样式 - 模拟 textarea */
+:deep(.message-editor .ProseMirror) {
+  width: 100%;
+  min-height: 56px;
+  max-height: 240px;
+  border: none;
+  resize: none;
+  outline: none;
+  font-size: var(--size-text-base, 14px);
+  line-height: 1.8;
+  padding: 0 8px;
+  background: transparent;
+  overflow-y: auto;
+  box-sizing: border-box;
+  transition: height 0.2s ease;
+  color: inherit;
+}
+
+:deep(.message-editor .ProseMirror p) {
+  margin: 0;
+}
+
+/* Placeholder 灰色提示文案样式 */
+:deep(.message-editor .ProseMirror p.is-editor-empty:first-child::before) {
+  content: attr(data-placeholder);
+  float: left;
+  color: var(--el-text-color-placeholder, #a8abb2);
+  pointer-events: none;
+  height: 0;
+}
+
+/* 编辑器容器 */
+.editor-container {
+  position: relative;
+}
+
+/* 技能徽标样式 */
+:deep(.skill-badge) {
+  display: inline;
+  color: var(--el-color-primary);
+  font-size: inherit;
+  line-height: inherit;
+  cursor: pointer;
+  user-select: none;
+}
+
+/* 技能选择弹窗样式 - 悬浮在输入框上方 */
+.skill-picker {
+  position: absolute;
+  bottom: calc(100% + 28px);
+  left: 0;
+  right: 0;
+  z-index: 1000;
+  padding: 8px;
+  border-radius: 12px;
+  background: var(--el-bg-color, #fff);
+  border: 1px solid var(--el-border-color, #dcdfe6);
+  box-shadow: 0 -4px 24px rgba(0, 0, 0, 0.12);
+  overflow: hidden;
+}
+
+.dark .skill-picker {
+  background: #2d2d2d;
+  border-color: #3c3c3c;
+  box-shadow: 0 -4px 24px rgba(0, 0, 0, 0.4);
+}
+
+.skill-picker-list {
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+.skill-picker-item {
+  display: flex;
+  align-items: center;
+  padding: 4px 8px;
+  cursor: pointer;
+  transition: background 0.15s;
+  border-radius: 8px;
+}
+
+.skill-picker-item:hover,
+.skill-picker-item.active {
+  background: var(--el-fill-color-light, #f5f7fa);
+}
+
+.dark .skill-picker-item:hover,
+.dark .skill-picker-item.active {
+  background: #3c3c3c;
+}
+
+.skill-picker-content {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.skill-picker-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  flex-shrink: 0;
+}
+
+.skill-picker-info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.skill-picker-name {
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 1.4;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.skill-picker-name.text-primary {
+  color: var(--el-color-primary);
+}
+
+.skill-picker-desc {
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--el-text-color-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1;
+  min-width: 0;
+}
+
+.skill-picker-empty {
+  padding: 16px;
+  text-align: center;
+  font-size: 13px;
+  color: var(--el-text-color-secondary);
+}
+
+/* 保留旧样式兼容 */
 .message-input {
   width: 100%;
   height: auto;
@@ -987,12 +1417,10 @@ onUnmounted(() => {
   line-height: 1.8;
   padding: 0 8px;
   background: transparent;
-  /* color: #333; */
   overflow-y: auto;
-  /* margin-bottom: 10px; */
   box-sizing: border-box;
   transition: height 0.2s ease;
-  min-height: 45px;
+  min-height: 56px;
 }
 
 

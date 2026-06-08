@@ -9,16 +9,15 @@
       <div v-if="isAssistant" class="text-xs text-gray-400 mb-3">
         <div class="flex items-center">
           <div class="mr-5 flex items-center">
-            <Avatar class="w-5.5 h-5.5 mr-2 relative top-0" :src="modelAvatarPath" :round="false" type="assistant"
-              :name="currentModelName"></Avatar>
-            <span class="text-[1.3em] text-gray-500 font-">{{
-              currentModelName
+            <Avatar class="w-6 h-6 mr-2.5 relative top-0" :src="characterAvatar || modelAvatarPath" :round="false"
+              type="assistant" :name="displayName"></Avatar>
+            <span class="text-[1.3em] text-gray-700 dark:text-gray-300 font-medium leading-tight mr-2">{{
+              displayName
             }}</span>
-          </div>
-          <div class="flex items-center">
-            <div class="inline-block h-3 w-3 shrink-0 items-center justify-center mr-1 relative">
-              <AccessTimeTwotone />
-            </div><span class="" :title="currentContentTime.full">{{ currentContentTime.firendly }}</span>
+            <span v-if="currentModelName && currentModelName !== 'unknown'"
+              class="text-[1em] text-gray-400 mt-0.5">{{
+                currentModelName
+              }}</span>
           </div>
         </div>
       </div>
@@ -35,7 +34,7 @@
               :content="turn.content" />
             <div v-else class="message-item__text break-all whitespace-pre-wrap">
               <el-tag v-if="messageMetadata.type === 'scheduler'" size="small" type="success" class="mr-1">定时任务</el-tag>
-              {{ turn.content }}
+              <span v-html="renderSkillBadges(turn.content)"></span>
             </div>
           </template>
 
@@ -70,8 +69,8 @@
           <span class="text-sm">回答中</span>
         </div>
         <!-- Token 消耗显示区域 -->
-        <div v-if="isAssistant && tokenUsage && !streamingState.isStreaming" class="token-usage-section mt-2">
-          <div class="flex items-center gap-3 text-xs text-gray-400">
+        <div v-if="isAssistant && !streamingState.isStreaming" class="token-usage-section mt-2 flex">
+          <div v-if="tokenUsage" class="flex items-center gap-3 text-xs text-gray-400">
             <el-icon size="13" class="text-gray-400">
               <InsightsTwotone />
             </el-icon>
@@ -91,6 +90,11 @@
                 class="text-gray-500 dark:text-gray-300">{{
                   formatTokenNumber(tokenUsage.totalTokens) }}</span>
             </span>
+
+          </div>
+          <div class="flex text-gray-500 shrink-0 items-center justify-center ml-auto">
+            <AccessTimeTwotone class="w-3 h-3 mr-1" />
+            <span class="text-xs" :title="currentContentTime.full">{{ currentContentTime.firendly }}</span>
           </div>
         </div>
       </div>
@@ -155,6 +159,8 @@ const props = defineProps({
     required: true
   },
   avatar: String,
+  characterName: String,
+  characterAvatar: String,
   isLast: {
     type: Boolean,
     default: false
@@ -245,6 +251,31 @@ const currentModelName = computed(() => {
   const modelName = metadata.value?.modelName;
   return modelName ? getModelDisplayName(modelName) : "unknown";
 });
+
+// 显示名称：优先使用角色名称，否则使用模型名称
+const displayName = computed(() => {
+  return props.characterName || currentModelName.value;
+});
+
+/**
+ * 将纯文本中的 <skill:xxx> 标记转换为 HTML 徽标
+ * 其余文本进行 HTML 转义，防止 XSS
+ */
+const renderSkillBadges = (text: string): string => {
+  if (!text) return text;
+  // 先转义所有 HTML 特殊字符
+  const escaped = text
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#x27;');
+  // 再将转义后的 &lt;skill:xxx&gt; 替换为安全的徽标 HTML
+  return escaped.replace(
+    /&lt;skill:([^&]+)&gt;/g,
+    '<span data-type="skill" data-skill-name="$1" class="skill-badge" style="color: var(--el-color-primary);">/$1</span>'
+  );
+};
 
 // 模型头像路径
 const modelAvatarPath = computed(() => {

@@ -4,17 +4,12 @@
       class="thinking-section__header h-7 inline-flex justify-center items-center text-sm text-gray-700 dark:text-[#8b8d95] cursor-pointer font-medium my-1 transition-colors duration-200"
       @click.stop="handleToggle">
       <div class="flex items-center">
-        <el-icon size="15" class="">
+        <!-- <el-icon size="15" class="">
           <Lightbulb24Regular class="text-yellow-500" />
-        </el-icon>
-        <span class="text-gray-500 ml-2">{{ isThinking ? '思考中...' : '已深度思考' }}</span>
+        </el-icon> -->
+        <span class="text-gray-600">{{ isThinking ? '思考中...' : '已深度思考' }}</span>
         <span v-if="thinkingDuration" class="text-xs text-gray-400 ml-2">
-          <template v-if="isThinking">
-            已思考 {{ formattedDuration }}
-          </template>
-          <template v-else>
-            耗时 {{ formattedDuration }}
-          </template>
+          {{ formattedDuration }}
         </span>
         <el-icon :class="['transition-transform duration-300 ml-2', isExpanded ? 'rotate-90' : 'rotate-0']" size="14">
           <ArrowRightTwotone />
@@ -24,10 +19,10 @@
 
     <div class="thinking-section__container" :class="{ 'thinking-section__container--expanded': isExpanded }">
       <div class="thinking-section__content-wrapper flex">
-        <div class="pt-1 flex">
-          <div class="w-5.5 min-h-0 flex justify-center mr-1.5">
+        <div class="flex border-l-2 pl-4 text-sm border-gray-200 dark:border-gray-700">
+          <!-- <div class="w-5.5 min-h-0 flex justify-center mr-1.5">
             <div class="w-px bg-gray-200 dark:bg-gray-700"></div>
-          </div>
+          </div> -->
           <MarkdownContent @click.stop="$emit('click')" class="flex-1 markdown-text text-gray-500 dark:text-gray-400"
             :content="reasoningContent" />
         </div>
@@ -81,7 +76,6 @@ watch(() => props.isThinking, (isThinking: boolean) => {
 </script>
 
 <style scoped>
-
 .thinking-section {
   border-radius: 8px;
   overflow: hidden;

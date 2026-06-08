@@ -1,5 +1,5 @@
 <template>
-    <div class="flex w-full h-full relative overflow-hidden">
+    <div class="flex relative overflow-hidden">
         <!-- 遮罩层：仅在移动端且 sidebarVisible 时显示 -->
         <div v-if="isMobile && sidebarVisible" class="absolute inset-0 bg-black opacity-40 z-19"
             @click="$emit('update:sidebarVisible', false)"></div>

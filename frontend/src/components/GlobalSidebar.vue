@@ -1,6 +1,6 @@
 <template>
   <div
-    class="global-sidebar flex flex-col h-full bg-(--color-sidebar-bg) border-r border-(--color-sidebar-border) overflow-hidden">
+    class="global-sidebar flex flex-col h-full sidebar-transparent-bg overflow-hidden">
     <!-- 导航菜单 -->
     <div class="px-3 py-2 space-y-0.5">
       <div v-for="item in navItems" :key="item.key" @click="handleNavClick(item.key)"

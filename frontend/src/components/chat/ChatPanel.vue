@@ -1,6 +1,6 @@
 <template>
   <!-- 消息内容区域 -->
-  <div class="flex-1 overflow-hidden w-full items-center relative" ref="messagesContainerRef">
+  <div class="flex-1 overflow-hidden w-full items-center relative">
     <template v-if="!isLoading && currentSessionId && activeMessages.length === 0">
       <!-- 欢迎页 -->
       <WelcomeScreen :session="currentSession" />
@@ -8,7 +8,7 @@
 
     <!-- 初始加载时的骨架屏：仅在消息为空时显示 -->
     <template v-if="showSkeleton">
-      <div class="absolute inset-0 z-1 bg-(--color-bg) h-full overflow-hidden">
+      <div class="absolute inset-0 z-1 h-full overflow-hidden">
         <div class="px-5 max-w-205 mx-auto h-full flex flex-col py-10 ">
           <MessageSkeleton :count="2" />
         </div>
@@ -16,7 +16,9 @@
     </template>
 
     <template v-if="!isLoading">
-      <ScrollContainer ref="scrollContainerRef" class="max-h-full chat-scroll-container px-5"
+      <ScrollContainer ref="scrollContainerRef"
+        class="max-h-full chat-scroll-container px-5 transition-opacity duration-300"
+        :class="{ 'opacity-0': showSkeleton, 'opacity-100': !showSkeleton }"
         :auto-scroll="needScrollToBottom && isStreaming" @scroll="handleScroll">
         <div class="max-w-205 mx-auto">
           <!-- 加载更多历史消息指示器 -->
@@ -36,6 +38,8 @@
           <MessageItem v-for="(message, index) in activeMessages" :key="message.id" :message="message"
             v-memo="[message.id, message.contents, message.currentTurnsId, message.state?.isStreaming, message.state?.isThinking, isStreaming]"
             :avatar="message.role == 'user' ? userAvater : currentSession?.avatarUrl"
+            :character-name="currentSession?.character?.title"
+            :character-avatar="currentSession?.character?.avatarUrl"
             :is-last="index === activeMessages.length - 1"
             :allow-generate="!isStreaming && index === lastUserMessageIndex" @delete="deleteMessage" @edit="editMessage"
             @copy="copyMessage" @generate="generateResponse" @regenerate="regenerateResponse"
@@ -66,8 +70,8 @@
 
       <!-- 编辑模式提示条 -->
       <div v-if="editMode"
-        class="bg-gray-200 -mb-1.5 w-full  flex items-center px-4 pt-2 pb-5 rounded-tl-xl rounded-tr-xl">
-        <span class="flex-1 text-sm mr-10">正在编辑消息</span>
+        class="-mb-1.5 w-full flex items-center px-4 pt-2 pb-6 rounded-tl-xl rounded-tr-xl bg-gray-200 dark:bg-[#2a2a2a]">
+        <span class="flex-1 text-sm mr-10 text-gray-700 dark:text-[#c5c7cc]">正在编辑消息</span>
         <el-button size="small" @click="exitEditMode" class="cancel-edit-btn" plain>
           取消编辑
         </el-button>
@@ -958,7 +962,7 @@ defineExpose({
  */
 function scrollToMessage(messageId: string) {
   // 使用外层容器作为滚动上下文
-  const container = messagesContainerRef.value
+  const container = scrollContainerRef.value?.getScrollElement?.() || null;
 
   if (!container) {
     console.warn('[ChatPanel] 未找到滚动容器')

@@ -19,7 +19,6 @@
 .markdown-text h4,
 .markdown-text h5,
 .markdown-text h6 {
-  margin-top: 0.8em;
   margin-bottom: 0.5em;
   font-weight: 600;
   font-size: var(--size-text-base);
@@ -28,7 +27,7 @@
 
 .markdown-text h1 {
   font-size: 18px;
-  padding-bottom: 0.5em;
+  /* padding-bottom: 0.5em; */
 }
 
 .markdown-text h2 {
@@ -304,7 +303,7 @@ ol > *:not(li) {
 }
 
 .dark .custom-code-block pre.hljs {
-  background: var(--color-bg) !important;
+  background: #2f3232 !important;
   color: var(--color-text);
 }
 

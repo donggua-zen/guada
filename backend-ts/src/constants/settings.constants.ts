@@ -46,3 +46,17 @@ export const SK_OCR_UMI_HOST = 'umiHost';
 export const SK_OCR_UMI_PORT = 'umiPort';
 export const SK_OCR_BAIDU_API_KEY = 'baiduApiKey';
 export const SK_OCR_BAIDU_SECRET_KEY = 'baiduSecretKey';
+
+/**
+ * 外观设置分组
+ */
+export const SG_APPEARANCE = 'appearance';
+
+/**
+ * 外观设置键名 (SK_APP = Setting Key Appearance)
+ */
+export const SK_APP_WALLPAPER_URL = 'wallpaperUrl';
+export const SK_APP_SIDEBAR_OPACITY = 'sidebarOpacity';
+export const SK_APP_CONTENT_OPACITY = 'contentOpacity';
+export const SK_APP_ACRYLIC_ENABLED = 'acrylicEnabled';
+export const SK_APP_BLUR_RADIUS = 'blurRadius';

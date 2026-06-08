@@ -29,6 +29,7 @@ NProgress.configure({
 
 import { apiService } from '@/services/ApiService'
 import { initGlobalErrorHandler } from '@/utils/globalErrorHandler'
+import { useLayoutStore } from './stores/layout'
 
 // 在 Electron 环境下初始化后端地址
 if (isElectron) {
@@ -130,6 +131,12 @@ const routes = [
         name: 'SimpleTest',
         meta: { title: '简单测试' },
         component: () => import('./components/test/SimpleTest.vue')
+    },
+    {
+        path: '/input-test',
+        name: 'InputTest',
+        meta: { title: 'Contenteditable 输入测试' },
+        component: () => import('./components/test/InputTest.vue')
     },
 ]
 

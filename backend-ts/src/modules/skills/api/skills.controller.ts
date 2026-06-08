@@ -30,6 +30,13 @@ export class SkillsController {
   }
 
   /**
+   * 获取用户可安装的目标目录（排除 .system）
+   */
+  private getUserSkillsDir(): string {
+    return this.skillsDir;
+  }
+
+  /**
    * 列出所有已加载的 Skills（支持分页）
    */
   @Get()
@@ -195,6 +202,16 @@ export class SkillsController {
         return { success: false, message: validationResult.errors.join('; ') };
       }
 
+      // 检查是否和内置技能冲突
+      const systemDir = path.join(this.skillsDir, '.system', skillName);
+      try {
+        await fs.access(systemDir);
+        await fs.rm(tempDir, { recursive: true, force: true });
+        return { success: false, message: `Skill '${skillName}' is a system built-in skill and cannot be overwritten.` };
+      } catch {
+        // 不是内置技能，继续
+      }
+
       // 移动到 skills 目录
       const targetDir = path.join(this.skillsDir, skillName);
       
@@ -346,6 +363,16 @@ export class SkillsController {
         return { success: false, message: validationResult.errors.join('; ') };
       }
 
+      // 检查是否和内置技能冲突
+      const systemDir = path.join(this.skillsDir, '.system', skillName);
+      try {
+        await fs.access(systemDir);
+        await fs.rm(tempDir, { recursive: true, force: true });
+        return { success: false, message: `Skill '${skillName}' is a system built-in skill and cannot be overwritten.` };
+      } catch {
+        // 不是内置技能，继续
+      }
+
       // 移动到 skills 目录
       const targetDir = path.join(this.skillsDir, skillName);
       
@@ -401,6 +428,11 @@ export class SkillsController {
       const skill = this.orchestrator.getSkillDetail(skillId);
       if (!skill) {
         return { success: false, message: `Skill '${skillId}' not found` };
+      }
+
+      // 禁止卸载系统内置技能
+      if (skill.source === 'system') {
+        return { success: false, message: `Skill '${skillId}' is a system built-in skill and cannot be uninstalled.` };
       }
 
       // 删除技能目录

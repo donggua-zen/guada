@@ -5,6 +5,7 @@
 
     <!-- 自定义标题栏（仅在 Electron 环境显示） -->
     <div class="flex flex-col h-full">
+        <div class="wallpaper-blur-layer"></div>
         <CustomTitlebar @open-guide="openGuide" />
         <SetupGuide ref="guideRef" />
         <RouterView></RouterView>

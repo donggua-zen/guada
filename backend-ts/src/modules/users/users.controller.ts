@@ -98,6 +98,18 @@ export class UsersController {
     return this.userService.uploadAvatar(user.id, file);
   }
 
+  @Post("user/wallpaper")
+  @UseInterceptors(FileInterceptor("wallpaper"))
+  async uploadWallpaper(@UploadedFile() file: any, @CurrentUser() user: any) {
+    return this.userService.uploadWallpaper(user.id, file);
+  }
+
+  @Delete("user/wallpaper")
+  async deleteWallpaper(@CurrentUser() user: any) {
+    await this.userService.deleteWallpaper(user.id);
+    return { success: true };
+  }
+
   @Get("user/reset-password")
   checkResetPassword() {
     if (!this.userService.isPasswordResetAllowed()) {

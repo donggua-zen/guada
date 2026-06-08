@@ -37,9 +37,9 @@
       <!-- Step 3: 添加模型供应商 -->
       <div v-if="currentStep === 3" class="step-panel">
         <h3>🚀 第三步：连接 AI 大脑</h3>
-        <p class="desc">配置一个模型供应商，填入 API Key 即可开始对话。</p>
+        <p class="desc">添加一个模型供应商并配置 API Key，即可开始对话。</p>
         <div class="action-area">
-          <el-button type="primary" @click="goToProviderSettings">去配置供应商</el-button>
+          <el-button type="primary" @click="goToProviderSettings">去添加供应商</el-button>
         </div>
       </div>
 
@@ -72,7 +72,6 @@ import { ref, computed, onMounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { Close, QuestionFilled } from '@element-plus/icons-vue'
-import { apiService } from '@/services/ApiService'
 import { useAuthStore } from '@/stores/auth'
 
 const authStore = useAuthStore()
@@ -84,31 +83,17 @@ const guidePosition = ref({ x: window.innerWidth - 350, y: 60 })
 const isDragging = ref(false)
 const dragOffset = ref({ x: 0, y: 0 })
 
-// Step 3 Data
-const providerTemplates = ref<any[]>([])
-const selectedProvider = ref<any>(null)
-const apiKeyInput = ref('')
-const testing = ref(false)
-const testResult = ref<{ success: boolean; message: string } | null>(null)
-
 const canProceed = computed(() => {
   return true
 })
 
-onMounted(async () => {
+onMounted(() => {
   const hasCompleted = localStorage.getItem('hasCompletedSetup') === 'true'
   if (!hasCompleted) {
     visible.value = true
     // 恢复步骤：从本地存储读取
     const savedStep = localStorage.getItem('setupGuideStep')
     if (savedStep) currentStep.value = parseInt(savedStep)
-    
-    // 获取供应商模板
-    try {
-      providerTemplates.value = await apiService.getProviderTemplates()
-    } catch (e) {
-      console.error('获取供应商模板失败', e)
-    }
   }
 })
 
@@ -183,7 +168,7 @@ const goToSecuritySettings = () => {
 }
 
 const goToProviderSettings = () => {
-  router.push('/setting/models')
+  router.push('/models')
 }
 
 const goToDefaultModelSettings = () => {

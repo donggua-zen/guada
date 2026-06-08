@@ -62,9 +62,9 @@
   --color-bubble-assitant-border: none;
 
   --color-sidebar-bg: var(--color-surface);
-  --color-sidebar-border: var(--color-surface);
-  --color-sidebar-bg-active: var(--color-primary-100);
-  --color-sidebar-text-active: var(--color-primary);
+  --color-sidebar-bg-active: rgba(40, 5, 5, 0.05);
+  /* --color-sidebar-text-active: var(--color-primary); */
+  --color-sidebar-text-active: var(--color-text);
   --color-sidebar-bg-hover: var(--color-sidebar-bg-active);
   --color-sidebar-text: var(--color-text);
   --color-sidebar-text-hover: var(--color-text);
@@ -169,15 +169,14 @@ html.dark {
        比主背景稍深，营造层次感
        ==================== */
   --color-sidebar-bg: #1f1f1f;
-  --color-sidebar-border: var(--color-sidebar-bg);
   --color-sidebar-bg-active: #2f3131;
-  --color-sidebar-text-active: var(--color-primary);
+  /* --color-sidebar-text-active: var(--color-primary); */
+  --color-sidebar-text-active: var(--color-text);
   --color-sidebar-bg-hover: #2f3131;
   --color-sidebar-text-hover: oklch(85% 0.02 250);
 
   /* 标题栏配色 */
   --color-titlebar-bg: var(--color-sidebar-bg);
-  --color-titlebar-border: var(--color-sidebar-border);
 
   /* ====================
        聊天对话区域配色
@@ -295,7 +294,53 @@ body {
     -apple-system, BlinkMacSystemFont, "PingFang SC", "Hiragino Sans GB",
     "Microsoft YaHei", "Helvetica Neue", Helvetica, Arial, sans-serif;
   overflow: hidden;
-  /* 移除颜色过渡动画，避免主题切换时的割裂感 */
+  /* 给 body 设置相对定位，创建 stacking context，使 backdrop-filter 能正确工作 */
+  position: relative;
+  /* 透明背景，让 backdrop-filter 能透出背后的内容 */
+  background: transparent;
+}
+
+/* body::before 作为壁纸层（直接模糊壁纸本身） */
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  background-image: var(--wallpaper-image, none);
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+  /* 使用 CSS 变量控制模糊程度，默认 20px */
+  filter: blur(var(--wallpaper-blur, 20px)) saturate(100%);
+  transform: scale(1.1); /* 放大一点，避免模糊后边缘露馅 */
+  /* 壁纸加载完成后淡入，避免闪烁 */
+  opacity: 0;
+  transition: opacity 2s ease;
+}
+
+/* 壁纸加载完成后显示 */
+html.wallpaper-loaded body::before {
+  opacity: 1;
+}
+
+/* 壁纸暗色遮罩 */
+html.dark body::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  background: rgba(0, 0, 0, 0.4);
+  pointer-events: none;
+}
+
+/* 壁纸亮色遮罩 */
+html:not(.dark) body::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  background: rgba(255, 255, 255, 0.15);
+  pointer-events: none;
 }
 
 .dark body {
@@ -308,16 +353,101 @@ html,
 .n-config-provider {
   width: 100%;
   height: 100%;
+  /* 确保背景透明，让 body 的 backdrop-filter 效果能透出 */
+  background: transparent !important;
 }
 
-/* 布局结构 */
-.container {
-  display: flex;
-  height: 100vh;
-  width: 100%;
-  margin: 0;
-  padding: 0;
-  gap: 0;
+#app {
+  position: relative;
+  z-index: 1;
+}
+
+/* 确保 App.vue 内的 flex 容器在毛玻璃层之上 */
+.flex.flex-col.h-full {
+  position: relative;
+  z-index: 1;
+}
+
+/* ==========================================
+   壁纸与毛玻璃效果
+   ========================================== */
+
+/* 毛玻璃中间层已不需要 backdrop-filter，壁纸本身已模糊 */
+.wallpaper-blur-layer {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+}
+
+/* 浏览器不支持 filter 时，降级为 backdrop-filter */
+@supports not (filter: blur(20px)) {
+  .acrylic-enabled .wallpaper-blur-layer {
+    backdrop-filter: blur(20px) saturate(180%);
+    -webkit-backdrop-filter: blur(20px) saturate(180%);
+  }
+}
+
+/* 毛玻璃效果关闭时清除模糊 */
+html:not(.acrylic-enabled) body::before {
+  filter: none;
+}
+
+/* ==========================================
+   透明度与毛玻璃效果工具类
+   ========================================== */
+
+/* 侧边栏透明背景 */
+.sidebar-transparent-bg {
+  background-color: color-mix(
+    in srgb,
+    var(--color-sidebar-bg) calc(var(--sidebar-opacity, 1) * 100%),
+    transparent
+  ) !important;
+}
+
+/* 内容区透明背景 */
+.content-transparent-bg {
+  background-color: color-mix(
+    in srgb,
+    var(--color-bg) calc(var(--content-opacity, 1) * 100%),
+    transparent
+  ) !important;
+}
+
+/* 内容区清晰壁纸层（使用 background-attachment: fixed 与全局壁纸对齐） */
+.content-clear-wallpaper {
+  position: relative;
+  /* 裁切伪元素，确保圆角区域不溢出 */
+  overflow: hidden;
+  /* 独立的半透明背景层，替代嵌套的 content-transparent-bg */
+  background-color: color-mix(
+    in srgb,
+    var(--color-bg) calc(var(--content-opacity, 1) * 100%),
+    transparent
+  ) !important;
+  
+}
+
+.content-clear-wallpaper::before {
+  content: "";
+  /* 使用 absolute 限制在内容区内 */
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background-image: var(--wallpaper-image, none);
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+  /* 关键：fixed 让背景相对于视口定位，与 body::before 完美对齐 */
+  background-attachment: fixed;
+
+  transform: scale(1.1);
+}
+
+/* 壁纸加载完成后显示 */
+html.wallpaper-loaded .content-clear-wallpaper::before {
+  opacity: 1;
 }
 
 .app-text-light-color {
@@ -422,7 +552,6 @@ html.dark *::-webkit-scrollbar-thumb:hover {
 
   /* 亮色模式：极淡的白色微覆盖 (0.15 透明度) */
   background-color: rgba(255, 255, 255, 0.8) !important;
-  z-index: -1;
 }
 
 html.dark .el-overlay::before {
