@@ -7,7 +7,7 @@
         <!-- <el-icon size="15" class="">
           <Lightbulb24Regular class="text-yellow-500" />
         </el-icon> -->
-        <span class="text-gray-600">{{ isThinking ? '思考中...' : '已深度思考' }}</span>
+        <span class="text-gray-600 dark:text-gray-400">{{ isThinking ? '思考中...' : '已深度思考' }}</span>
         <span v-if="thinkingDuration" class="text-xs text-gray-400 ml-2">
           {{ formattedDuration }}
         </span>
