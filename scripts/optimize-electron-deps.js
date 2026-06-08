@@ -43,7 +43,16 @@ function getDependenciesHash() {
     dependencies: pkg.dependencies,
     overrides: pkg.overrides
   }
-  return crypto.createHash('md5').update(JSON.stringify(deps)).digest('hex')
+  let hash = crypto.createHash('md5').update(JSON.stringify(deps))
+
+  // 将 schema.prisma 内容纳入哈希计算，schema 变更时强制重新生成
+  const prismaSchemaPath = path.join(backendPath, 'prisma', 'schema.prisma')
+  if (fs.existsSync(prismaSchemaPath)) {
+    const schemaContent = fs.readFileSync(prismaSchemaPath, 'utf-8')
+    hash = hash.update(schemaContent)
+  }
+
+  return hash.digest('hex')
 }
 
 function isCacheValid() {
@@ -171,6 +180,13 @@ try {
   delete cleanEnv.ELECTRON_MIRROR
   delete cleanEnv.ELECTRON_BUILDER_BINARIES_MIRROR
   delete cleanEnv.WIN_CSC_IDENTITY_AUTO_DISCOVERY
+
+  // 强制清除 Prisma Client 缓存，确保基于最新 schema 重新生成
+  const prismaClientCachePath = path.join(backendPath, 'node_modules', '.prisma')
+  if (fs.existsSync(prismaClientCachePath)) {
+    fs.rmSync(prismaClientCachePath, { recursive: true, force: true })
+    console.log('✓ Cleared existing Prisma Client cache')
+  }
 
   execSync('npx prisma generate', {
     cwd: backendPath,

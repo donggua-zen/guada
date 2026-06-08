@@ -972,9 +972,11 @@ function scrollToMessage(messageId: string) {
   // 在容器中查找目标消息元素
   const targetElement = container.querySelector(`[data-message-id="${messageId}"]`)
   if (targetElement) {
-    targetElement.scrollIntoView({
-      behavior: 'smooth',
-      block: 'start'  // 滚动到视口顶部
+    // 使用容器级滚动，避免 scrollIntoView 导致整个页面位移
+    const targetTop = targetElement.offsetTop
+    container.scrollTo({
+      top: targetTop,
+      behavior: 'smooth'
     })
   } else {
     console.warn(`[ChatPanel] 未找到消息元素: ${messageId}`)
