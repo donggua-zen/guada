@@ -43,10 +43,15 @@
                             <h3 class="text-lg font-semibold text-gray-900 dark:text-[#e8e9ed] flex-1 truncate">
                                 {{ skill.manifest.name || skill.id }}
                             </h3>
-                            <el-tag v-if="skill.manifest.version" type="info" size="small" effect="plain"
-                                style="margin-top: 2px;">
-                                v{{ skill.manifest.version }}
-                            </el-tag>
+                            <div class="flex gap-1.5 shrink-0">
+                                <el-tag v-if="skill.source === 'system'" type="success" size="small" effect="light">
+                                    内置
+                                </el-tag>
+                                <el-tag v-if="skill.manifest.version" type="info" size="small" effect="plain"
+                                    style="margin-top: 2px;">
+                                    v{{ skill.manifest.version }}
+                                </el-tag>
+                            </div>
                         </div>
 
                         <p class="text-sm text-gray-600 dark:text-[#8b8d95] mb-3 line-clamp-3 min-h-[3.75rem]">
@@ -68,7 +73,8 @@
                                     </template>
                                     重载
                                 </el-button>
-                                <el-button link size="small" type="danger" @click="handleUninstallSkill(skill.id)"
+                                <el-button v-if="skill.source !== 'system'" link size="small" type="danger"
+                                    @click="handleUninstallSkill(skill.id)"
                                     :loading="uninstallingSkills.has(skill.id)">
                                     <template #icon>
                                         <DeleteOutlined />
@@ -277,11 +283,14 @@ interface SkillManifest {
     tags?: string[]
 }
 
+type SkillSource = 'global' | 'system'
+
 interface Skill {
     id: string
     basePath: string
     manifest: SkillManifest
     contentHash: string
+    source?: SkillSource
 }
 
 const loading = ref(false)

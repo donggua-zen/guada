@@ -1,8 +1,9 @@
 <template>
   <div v-if="isElectron"
-    class="custom-titlebar flex items-center justify-between h-8 bg-(--color-titlebar-bg) border-b border-(--color-titlebar-border) select-none drag-region">
+    class="custom-titlebar flex items-center justify-between h-8 sidebar-transparent-bg select-none drag-region">
     <!-- 左侧：应用标题 -->
     <div class="flex items-center pl-2 flex-1">
+      <img :src="logoPath" class="h-6 ml-2 mr-2" />
       <span class="text-xs font-normal text-(--titlebar-text-color) opacity-80">GuaDa AI</span>
     </div>
 
@@ -125,8 +126,12 @@ import { useRouter } from 'vue-router'
 import { PanelSeparateWindow20Filled } from '@vicons/fluent'
 import WindowManager from './WindowManager.vue'
 import UpdateDialog from './UpdateDialog.vue'
+import { fixFrontendAssetUrl } from '@/utils/url'
 
 const router = useRouter()
+
+// Logo 路径（使用 fixFrontendAssetUrl 适配 Electron 环境）
+const logoPath = computed(() => fixFrontendAssetUrl('/images/guada_logo_small.png'))
 
 // 声明组件可能发出的事件
 defineEmits(['openGuide'])

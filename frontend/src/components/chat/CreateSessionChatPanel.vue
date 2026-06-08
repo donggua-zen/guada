@@ -2,15 +2,18 @@
 
   <!-- 输入区域 -->
   <div class="px-5 pb-2.5 w-full flex-1 flex flex-col items-center justify-center mb-20">
-    <div class="w-full flex items-center justify-center mb-4">
+    <div class="w-full flex items-center justify-center mb-10">
       <div class="banner w-20 mb-4">
         <img :src="bannerPath" alt=""></img>
       </div>
-      <h1 class="text-4xl mb-6 text-gray-600 ml-10">Hi，想聊些什么？</h1>
+      <h1 class="text-4xl mb-6 text-(--color-text) ml-5">
+        <span class="typewriter-text">{{ displayedText }}</span>
+        <span class="typewriter-cursor" :class="{ 'cursor-blink': isTypingComplete }"></span>
+      </h1>
     </div>
     <!-- 已选角色显示 -->
     <div
-      class="w-full max-w-200 -mb-6 flex items-center gap-3 p-2 pb-8 bg-gray-50 dark:bg-(--color-surface) border border-gray-100 dark:border-(--color-surface) rounded-lg cursor-pointer hover:bg-gray-100 dark:hover:bg-(--color-sidebar-bg-hover) transition-colors"
+      class="w-full max-w-200 -mb-6 flex items-center gap-3 p-2 pb-8 bg-gray-100 dark:bg-(--color-surface) border border-gray-100 dark:border-(--color-surface) rounded-2xl cursor-pointer hover:bg-gray-100 dark:hover:bg-(--color-sidebar-bg-hover) transition-colors"
       @click="showCharacterSelector = true">
       <div class="w-10 h-10 shrink-0 overflow-hidden rounded">
         <Avatar :src="currentCharacter?.avatarUrl" type="assistant" :name="currentCharacter?.title"
@@ -102,7 +105,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, onMounted } from "vue";
+import { ref, computed, watch, onMounted, onUnmounted } from "vue";
 import { useStorage } from "@vueuse/core"
 import { apiService } from '@/services/ApiService';
 import { usePopup } from "../../composables/usePopup";
@@ -159,6 +162,46 @@ const inputMessage = ref({
   content: "",
   files: []
 });
+
+// 打字机效果相关状态
+const fullText = 'Hi，想聊些什么？';
+const displayedText = ref('');
+const isTypingComplete = ref(false);
+let typeTimer: ReturnType<typeof setTimeout> | null = null;
+
+/**
+ * 启动打字机效果
+ * 逐字显示文本，完成后启动光标闪烁
+ */
+const startTypewriter = (): void => {
+  let index = 0;
+  displayedText.value = '';
+  isTypingComplete.value = false;
+
+  const typeNextChar = (): void => {
+    if (index < fullText.length) {
+      displayedText.value += fullText[index];
+      index++;
+      // 随机延迟 80-150ms，模拟自然打字节奏
+      const delay = 80 + Math.random() * 70;
+      typeTimer = setTimeout(typeNextChar, delay);
+    } else {
+      isTypingComplete.value = true;
+    }
+  };
+
+  typeNextChar();
+};
+
+/**
+ * 清理打字机定时器
+ */
+const clearTypewriterTimer = (): void => {
+  if (typeTimer) {
+    clearTimeout(typeTimer);
+    typeTimer = null;
+  }
+};
 
 // 计算属性
 const currentSession = ref<any>({
@@ -549,6 +592,12 @@ onMounted(() => {
   Promise.all([loadModels(), loadCharacters()]).catch(error => {
     console.error('初始化数据失败:', error);
   });
+  // 启动打字机效果
+  startTypewriter();
+});
+
+onUnmounted(() => {
+  clearTypewriterTimer();
 });
 
 const autoTitle = (): string => {
@@ -594,3 +643,32 @@ const handleCreateSessionClick = (): void => {
 // 设置操作
 
 </script>
+
+<style scoped>
+/* 打字机光标样式 */
+.typewriter-cursor {
+  display: inline-block;
+  width: 3px;
+  height: 1em;
+  background-color: currentColor;
+  margin-left: 2px;
+  vertical-align: text-bottom;
+  opacity: 1;
+  position: relative;
+  top: -4px;
+}
+
+/* 光标闪烁动画 */
+.cursor-blink {
+  animation: blink 1s step-end infinite;
+}
+
+@keyframes blink {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0;
+  }
+}
+</style>

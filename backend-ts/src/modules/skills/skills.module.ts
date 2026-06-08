@@ -6,6 +6,7 @@ import { SkillLoaderService } from './core/skill-loader.service';
 import { SkillVersionManager } from './core/skill-version-manager.service';
 import { SkillWatcherService } from './core/skill-watcher.service';
 import { SkillScriptExecutor } from './execution/skill-script-executor.service';
+import { SkillBundledService } from './core/skill-bundled.service';
 import { SkillsController } from './api/skills.controller';
 
 @Module({
@@ -18,6 +19,7 @@ import { SkillsController } from './api/skills.controller';
     SkillVersionManager,
     SkillWatcherService,
     SkillScriptExecutor,
+    SkillBundledService,
   ],
   exports: [
     SkillOrchestrator,
@@ -27,10 +29,16 @@ export class SkillsModule implements OnModuleInit {
   constructor(
     private orchestrator: SkillOrchestrator,
     private watcher: SkillWatcherService,
+    private bundledService: SkillBundledService,
   ) {}
 
   async onModuleInit() {
-    // SkillOrchestrator 的 onModuleInit 会自动调用 scan
+    // 1. 先同步内置技能到 .system 目录
+    await this.bundledService.syncBundledSkills();
+
+    // 2. SkillOrchestrator 扫描所有技能（包含 .system）
+    await this.orchestrator.onModuleInit();
+
     // SkillWatcherService 的 onModuleInit 会自动启动文件监听
   }
 }

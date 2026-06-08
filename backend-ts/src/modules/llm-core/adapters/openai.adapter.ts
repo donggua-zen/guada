@@ -132,10 +132,6 @@ export class OpenAIAdapter implements IProtocolAdapter {
         yield this.handleNonStreamResponse(response);
       }
     } catch (error) {
-      this.logger.error(
-        `LLM API error (${params.stream ? "stream" : "non-stream"}):`,
-        error,
-      );
       this.handleError(error, params.stream);
     } finally {
       this.cleanup(response);
@@ -268,20 +264,64 @@ export class OpenAIAdapter implements IProtocolAdapter {
   }
 
   private handleError(error: any, isStream: boolean) {
+    // 提取并记录详细的错误信息，避免 NestJS Logger 序列化特殊对象时丢失内容
+    const errorDetail = this.extractErrorDetail(error);
     this.logger.error(
-      `LLM API error (${isStream ? "stream" : "non-stream"}):`,
-      error,
+      `LLM API error (${isStream ? "stream" : "non-stream"}): ${errorDetail}`,
     );
 
-    // 记录详细的错误信息
     if (error instanceof APIError) {
-      this.logger.error(`API Error Details:`, JSON.stringify(error));
       throw new Error(`LLM API Error: ${error.status} - ${error.message}`);
     }
     if (error.name === "AbortError") throw new Error("LLM request aborted");
-    if (error.message.includes("timeout"))
+    if (error.message?.includes("timeout"))
       throw new Error("LLM request timed out (60s)");
     throw error;
+  }
+
+  /**
+   * 提取错误的详细信息字符串，处理各种错误类型
+   */
+  private extractErrorDetail(error: any): string {
+    if (!error) return "Unknown error";
+    if (typeof error === "string") return error;
+
+    const parts: string[] = [];
+    if (error.status) parts.push(`status=${error.status}`);
+    if (error.code) parts.push(`code=${error.code}`);
+    if (error.type) parts.push(`type=${error.type}`);
+    if (error.message) parts.push(`message=${error.message}`);
+    if (error.name && error.name !== "Error") parts.push(`name=${error.name}`);
+
+    // 尝试提取 stack，防止序列化失败
+    if (error.stack) {
+      try {
+        const stackStr = String(error.stack);
+        parts.push(`stack=${stackStr.substring(0, 500)}`);
+      } catch {
+        /* 忽略 stack 提取失败 */
+      }
+    }
+
+    // 如果有额外字段，尝试 JSON 序列化
+    if (Object.keys(error).length > 0) {
+      try {
+        const extra = { ...error };
+        delete extra.stack;
+        delete extra.message;
+        delete extra.name;
+        delete extra.status;
+        delete extra.code;
+        delete extra.type;
+        if (Object.keys(extra).length > 0) {
+          parts.push(`extra=${JSON.stringify(extra).substring(0, 500)}`);
+        }
+      } catch {
+        /* 忽略序列化失败 */
+      }
+    }
+
+    return parts.length > 0 ? parts.join(" | ") : String(error);
   }
 
   private cleanup(response: any) {

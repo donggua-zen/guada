@@ -9,6 +9,7 @@
   >
     <!-- 第一个 Pane -->
     <div
+      v-show="!isPane1Collapsed"
       ref="pane1Ref"
       class="lite-splitpanes__pane"
       :style="pane1Style"
@@ -18,6 +19,7 @@
 
     <!-- 分割条 -->
     <div
+      v-show="!isPane1Collapsed && !isPane2Collapsed"
       class="lite-splitpanes__splitter"
       :class="{ 'lite-splitpanes__splitter--horizontal': horizontal }"
       @mousedown="handleSplitterMouseDown"
@@ -25,6 +27,7 @@
 
     <!-- 第二个 Pane -->
     <div
+      v-show="!isPane2Collapsed"
       ref="pane2Ref"
       class="lite-splitpanes__pane"
       :style="pane2Style"
@@ -35,12 +38,12 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onUnmounted, watch } from 'vue';
+import { ref, computed, onUnmounted, watch, nextTick } from 'vue';
 
 interface PaneConfig {
-  size: number
-  minSize: number
-  maxSize: number
+  size: number | string
+  minSize: number | string
+  maxSize: number | string
 }
 
 const props = defineProps({
@@ -59,8 +62,8 @@ const props = defineProps({
 });
 
 const emit = defineEmits<{
-  resize: [event: { panes: Array<{ size: number }> }]
-  resized: [event: { panes: Array<{ size: number }> }]
+  resize: [event: { panes: Array<{ size: number | string }> }]
+  resized: [event: { panes: Array<{ size: number | string }> }]
 }>();
 
 const containerRef = ref<HTMLElement | null>(null);
@@ -69,14 +72,210 @@ const pane2Ref = ref<HTMLElement | null>(null);
 const isResizing = ref(false);
 
 // 当前尺寸状态（拖拽结束后同步）
-const currentSize1 = ref(props.pane1.size);
-const currentSize2 = ref(props.pane2.size);
+const currentSize1 = ref<number | string>(props.pane1.size);
+const currentSize2 = ref<number | string>(props.pane2.size);
+
+// pane 折叠状态
+const isPane1Collapsed = ref(false);
+const isPane2Collapsed = ref(false);
+
+// 容器尺寸缓存，用于响应式更新样式
+const containerSizeCache = ref(0);
+
+/**
+ * 解析 minSize 为像素值
+ */
+function getMinPixelSize(paneConfig: PaneConfig): number {
+  if (isPixelMode(paneConfig.size)) {
+    return parseLimitToPixel(paneConfig.minSize, 0);
+  }
+  // 百分比模式：minSize 视为百分比，需要容器尺寸才能转像素
+  // 这里返回 0，在计算时结合容器尺寸处理
+  return 0;
+}
+
+/**
+ * 计算自动填充 pane 的最小像素尺寸
+ * 如果 pane2 是自动填充，返回其 minSize 对应的像素值
+ */
+function getAutoPaneMinPixel(paneConfig: PaneConfig, containerSize: number): number {
+  if (isPixelMode(paneConfig.minSize)) {
+    return parseLimitToPixel(paneConfig.minSize, 0);
+  }
+  // 百分比
+  return ((paneConfig.minSize as number) / 100) * containerSize;
+}
+
+/**
+ * 判断是否为像素模式（字符串且以 px 结尾）
+ */
+function isPixelMode(size: number | string): boolean {
+  return typeof size === 'string' && size.trim().toLowerCase().endsWith('px');
+}
+
+/**
+ * 判断是否为自动填充模式
+ */
+function isAutoMode(size: number | string): boolean {
+  return typeof size === 'string' && size.trim().toLowerCase() === 'auto';
+}
+
+/**
+ * 将 size 解析为像素数值
+ */
+function parsePixelSize(size: number | string): number {
+  if (typeof size === 'number') return size;
+  const match = size.trim().match(/^([\d.]+)\s*px$/i);
+  return match ? parseFloat(match[1]) : 0;
+}
+
+/**
+ * 将 min/max 限制值解析为像素数值
+ */
+function parseLimitToPixel(limit: number | string, defaultValue: number): number {
+  if (typeof limit === 'number') return limit;
+  const match = limit.trim().match(/^([\d.]+)\s*px$/i);
+  return match ? parseFloat(match[1]) : defaultValue;
+}
+
+/**
+ * 判断 pane1 是否为固定像素模式
+ */
+const isPane1Pixel = computed(() => isPixelMode(props.pane1.size));
+
+/**
+ * 判断 pane1 是否为自动填充模式
+ */
+const isPane1Auto = computed(() => isAutoMode(props.pane1.size));
+
+/**
+ * 判断 pane2 是否为固定像素模式
+ */
+const isPane2Pixel = computed(() => isPixelMode(props.pane2.size));
+
+/**
+ * 判断 pane2 是否为自动填充模式
+ */
+const isPane2Auto = computed(() => isAutoMode(props.pane2.size));
+
+/**
+ * 获取容器当前尺寸
+ */
+function getContainerSize(): number {
+  if (!containerRef.value) return 0;
+  const size = props.horizontal
+    ? containerRef.value.getBoundingClientRect().height
+    : containerRef.value.getBoundingClientRect().width;
+  containerSizeCache.value = size;
+  return size;
+}
+
+/**
+ * 计算固定像素 pane 的受限尺寸
+ */
+function getClampedPixelSize(
+  pixelSize: number,
+  minLimit: number | string,
+  maxLimit: number | string,
+  containerSize: number
+): number {
+  const minPixel = parseLimitToPixel(minLimit, 0);
+  const maxPixel = parseLimitToPixel(maxLimit, Infinity);
+  let result = pixelSize;
+  if (result < minPixel) result = minPixel;
+  if (result > maxPixel) result = maxPixel;
+  if (containerSize > 0 && result > containerSize) {
+    result = containerSize;
+  }
+  return result;
+}
+
+/**
+ * 更新 pane 折叠状态
+ * 当自动填充 pane 的可用空间小于其 minSize 时，自动折叠
+ */
+function updateCollapseState() {
+  const containerSize = getContainerSize();
+  if (containerSize === 0) return;
+
+  // pane1 固定像素，pane2 自动填充的情况
+  if (isPane1Pixel.value && isPane2Auto.value) {
+    const pixelSize = parsePixelSize(currentSize1.value);
+    // 固定 pane 的实际显示尺寸（不超过容器）
+    const actualPixel = Math.min(pixelSize, containerSize);
+    // 自动填充 pane 的可用空间
+    const autoPaneAvailable = containerSize - actualPixel;
+    // 自动填充 pane 的最小像素需求
+    const autoPaneMinPixel = getAutoPaneMinPixel(props.pane2, containerSize);
+
+    // 如果自动填充 pane 空间不足（小于等于 minSize），折叠它
+    isPane2Collapsed.value = autoPaneAvailable <= autoPaneMinPixel;
+    isPane1Collapsed.value = false;
+    return;
+  }
+
+  // pane2 固定像素，pane1 自动填充的情况
+  if (isPane2Pixel.value && isPane1Auto.value) {
+    const pixelSize = parsePixelSize(currentSize2.value);
+    const actualPixel = Math.min(pixelSize, containerSize);
+    const autoPaneAvailable = containerSize - actualPixel;
+    const autoPaneMinPixel = getAutoPaneMinPixel(props.pane1, containerSize);
+
+    isPane1Collapsed.value = autoPaneAvailable <= autoPaneMinPixel;
+    isPane2Collapsed.value = false;
+    return;
+  }
+
+  // 其他模式：检查是否有 pane 尺寸为 0，是则折叠
+  if (isPane1Pixel.value && parsePixelSize(currentSize1.value) <= 0) {
+    isPane1Collapsed.value = true;
+    isPane2Collapsed.value = false;
+    return;
+  }
+  if (isPane2Pixel.value && parsePixelSize(currentSize2.value) <= 0) {
+    isPane1Collapsed.value = false;
+    isPane2Collapsed.value = true;
+    return;
+  }
+  isPane1Collapsed.value = false;
+  isPane2Collapsed.value = false;
+}
 
 /**
  * Pane1 样式
  */
 const pane1Style = computed(() => {
+  // 依赖容器尺寸缓存，确保容器变化时重新计算
+  const _cache = containerSizeCache.value;
   const sizeProp = props.horizontal ? 'height' : 'width';
+  // 如果 pane2 被折叠，pane1 铺满容器
+  if (isPane2Collapsed.value) {
+    return {
+      flex: '1',
+      minWidth: '0',
+      minHeight: '0'
+    } as Record<string, string>;
+  }
+  if (isPane1Pixel.value) {
+    const pixelSize = parsePixelSize(currentSize1.value);
+    const containerSize = getContainerSize();
+    // 固定 pane 上限为容器尺寸，超出则压缩
+    const maxAllowed = containerSize > 0 ? containerSize : Infinity;
+    const clampedSize = getClampedPixelSize(pixelSize, props.pane1.minSize, props.pane1.maxSize, maxAllowed);
+    return {
+      [sizeProp]: clampedSize + 'px',
+      flexShrink: 0
+    } as Record<string, string>;
+  }
+  if (isPane1Auto.value) {
+    // 自动填充模式：不设置固定尺寸，依靠 CSS flex: 1
+    return {
+      flex: '1',
+      minWidth: '0',
+      minHeight: '0'
+    } as Record<string, string>;
+  }
+  // 百分比模式
   return {
     [sizeProp]: currentSize1.value + '%',
     flexShrink: 0
@@ -87,7 +286,37 @@ const pane1Style = computed(() => {
  * Pane2 样式
  */
 const pane2Style = computed(() => {
+  // 依赖容器尺寸缓存，确保容器变化时重新计算
+  const _cache = containerSizeCache.value;
   const sizeProp = props.horizontal ? 'height' : 'width';
+  // 如果 pane1 被折叠，pane2 铺满容器
+  if (isPane1Collapsed.value) {
+    return {
+      flex: '1',
+      minWidth: '0',
+      minHeight: '0'
+    } as Record<string, string>;
+  }
+  if (isPane2Pixel.value) {
+    const pixelSize = parsePixelSize(currentSize2.value);
+    const containerSize = getContainerSize();
+    // 固定 pane 上限为容器尺寸，超出则压缩
+    const maxAllowed = containerSize > 0 ? containerSize : Infinity;
+    const clampedSize = getClampedPixelSize(pixelSize, props.pane2.minSize, props.pane2.maxSize, maxAllowed);
+    return {
+      [sizeProp]: clampedSize + 'px',
+      flexShrink: 0
+    } as Record<string, string>;
+  }
+  if (isPane2Auto.value) {
+    // 自动填充模式：不设置固定尺寸，依靠 CSS flex: 1
+    return {
+      flex: '1',
+      minWidth: '0',
+      minHeight: '0'
+    } as Record<string, string>;
+  }
+  // 百分比模式
   return {
     [sizeProp]: currentSize2.value + '%',
     flexShrink: 0
@@ -96,8 +325,8 @@ const pane2Style = computed(() => {
 
 // 拖拽状态
 let resizeStartPos = 0;
-let resizeStartSize1 = 0;
-let resizeStartSize2 = 0;
+let resizeStartSize1: number | string = 0;
+let resizeStartSize2: number | string = 0;
 let rafId: number | null = null;
 let pendingMouseEvent: MouseEvent | null = null;
 
@@ -144,25 +373,87 @@ function handleSplitterMouseMove(e: MouseEvent) {
     const currentPos = props.horizontal ? ev.clientY : ev.clientX;
     const delta = currentPos - resizeStartPos;
 
-    // 获取容器尺寸
+    const sizeProp = props.horizontal ? 'height' : 'width';
+
+    // 获取容器当前尺寸，用于像素模式的边界限制
     const containerSize = props.horizontal
       ? containerRef.value.getBoundingClientRect().height
       : containerRef.value.getBoundingClientRect().width;
 
+    // pane1 为固定像素模式，pane2 自动填充
+    if (isPane1Pixel.value && isPane2Auto.value) {
+      const startPixel = parsePixelSize(resizeStartSize1);
+      const minPixel = parseLimitToPixel(props.pane1.minSize, 0);
+      const maxPixel = parseLimitToPixel(props.pane1.maxSize, Infinity);
+      // 自动填充 pane 的最小像素需求
+      const autoPaneMinPixel = getAutoPaneMinPixel(props.pane2, containerSize);
+
+      let newPixel = startPixel + delta;
+      if (newPixel < minPixel) newPixel = minPixel;
+      if (newPixel > maxPixel) newPixel = maxPixel;
+      // 限制固定 pane 不超过容器减去自动 pane 最小需求，确保自动 pane 有空间
+      const maxAllowed = containerSize - autoPaneMinPixel;
+      if (maxAllowed > 0 && newPixel > maxAllowed) {
+        newPixel = maxAllowed;
+      }
+      // 绝对上限为容器尺寸
+      if (containerSize > 0 && newPixel > containerSize) {
+        newPixel = containerSize;
+      }
+
+      pane1Ref.value.style[sizeProp] = newPixel + 'px';
+
+      emit('resize', {
+        panes: [{ size: newPixel + 'px' }, { size: 'auto' }]
+      });
+      return;
+    }
+
+    // pane2 为固定像素模式，pane1 自动填充
+    if (isPane2Pixel.value && isPane1Auto.value) {
+      const startPixel = parsePixelSize(resizeStartSize2);
+      const minPixel = parseLimitToPixel(props.pane2.minSize, 0);
+      const maxPixel = parseLimitToPixel(props.pane2.maxSize, Infinity);
+      // 自动填充 pane 的最小像素需求
+      const autoPaneMinPixel = getAutoPaneMinPixel(props.pane1, containerSize);
+
+      // 拖拽方向与 pane2 尺寸变化相反
+      let newPixel = startPixel - delta;
+      if (newPixel < minPixel) newPixel = minPixel;
+      if (newPixel > maxPixel) newPixel = maxPixel;
+      // 限制固定 pane 不超过容器减去自动 pane 最小需求
+      const maxAllowed = containerSize - autoPaneMinPixel;
+      if (maxAllowed > 0 && newPixel > maxAllowed) {
+        newPixel = maxAllowed;
+      }
+      // 绝对上限为容器尺寸
+      if (containerSize > 0 && newPixel > containerSize) {
+        newPixel = containerSize;
+      }
+
+      pane2Ref.value.style[sizeProp] = newPixel + 'px';
+
+      emit('resize', {
+        panes: [{ size: 'auto' }, { size: newPixel + 'px' }]
+      });
+      return;
+    }
+
+    // 百分比模式（原有逻辑）
     if (containerSize === 0) return;
 
     const deltaPercent = (delta / containerSize) * 100;
 
-    let newSize1 = resizeStartSize1 + deltaPercent;
-    let newSize2 = resizeStartSize2 - deltaPercent;
+    let newSize1 = (resizeStartSize1 as number) + deltaPercent;
+    let newSize2 = (resizeStartSize2 as number) - deltaPercent;
 
-    const totalSize = resizeStartSize1 + resizeStartSize2;
+    const totalSize = (resizeStartSize1 as number) + (resizeStartSize2 as number);
 
     // 应用最小/最大限制
-    const min1 = props.pane1.minSize;
-    const max1 = props.pane1.maxSize;
-    const min2 = props.pane2.minSize;
-    const max2 = props.pane2.maxSize;
+    const min1 = props.pane1.minSize as number;
+    const max1 = props.pane1.maxSize as number;
+    const min2 = props.pane2.minSize as number;
+    const max2 = props.pane2.maxSize as number;
 
     // 限制 Pane1
     if (newSize1 < min1) {
@@ -183,7 +474,6 @@ function handleSplitterMouseMove(e: MouseEvent) {
     }
 
     // 直接操作 DOM，避免 Vue 响应式更新导致的重渲染
-    const sizeProp = props.horizontal ? 'height' : 'width';
     pane1Ref.value.style[sizeProp] = newSize1 + '%';
     pane2Ref.value.style[sizeProp] = newSize2 + '%';
 
@@ -218,10 +508,19 @@ function handleSplitterMouseUp() {
   // 从 DOM 读取最终尺寸并同步到响应式状态
   if (pane1Ref.value && pane2Ref.value) {
     const sizeProp = props.horizontal ? 'height' : 'width';
-    const style1 = pane1Ref.value.style[sizeProp];
-    const style2 = pane2Ref.value.style[sizeProp];
-    if (style1) currentSize1.value = parseFloat(style1);
-    if (style2) currentSize2.value = parseFloat(style2);
+
+    if (isPane1Pixel.value) {
+      const style1 = pane1Ref.value.style[sizeProp];
+      if (style1) currentSize1.value = style1;
+    } else if (isPane2Pixel.value) {
+      const style2 = pane2Ref.value.style[sizeProp];
+      if (style2) currentSize2.value = style2;
+    } else {
+      const style1 = pane1Ref.value.style[sizeProp];
+      const style2 = pane2Ref.value.style[sizeProp];
+      if (style1) currentSize1.value = parseFloat(style1);
+      if (style2) currentSize2.value = parseFloat(style2);
+    }
   }
 
   // 触发 resized 事件
@@ -238,9 +537,23 @@ watch(
     if (!isResizing.value) {
       currentSize1.value = newSize1;
       currentSize2.value = newSize2;
+      // props 变化时重新计算折叠状态
+      nextTick(() => updateCollapseState());
     }
   }
 );
+
+// 监听容器尺寸变化，更新折叠状态
+const resizeObserver = new ResizeObserver(() => {
+  updateCollapseState();
+});
+
+watch(containerRef, (el) => {
+  if (el) {
+    resizeObserver.observe(el);
+    updateCollapseState();
+  }
+});
 
 // 生命周期
 onUnmounted(() => {
@@ -249,6 +562,7 @@ onUnmounted(() => {
   }
   document.removeEventListener('mousemove', handleSplitterMouseMove);
   document.removeEventListener('mouseup', handleSplitterMouseUp);
+  resizeObserver.disconnect();
 });
 </script>
 
@@ -268,8 +582,15 @@ onUnmounted(() => {
   position: relative;
   overflow: hidden;
   flex-shrink: 0;
-  /* 使用 flex-basis 作为基础尺寸，配合 width/height 实现精确控制 */
+  /* 自动填充 pane 依靠 flex: 1 填充剩余空间 */
   flex-basis: auto;
+}
+
+/* 自动填充 pane：当没有固定尺寸时填充剩余空间 */
+.lite-splitpanes__pane:not([style*="width"]):not([style*="height"]) {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
 }
 
 .lite-splitpanes__splitter {

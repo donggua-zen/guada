@@ -401,11 +401,12 @@ export class ToolOrchestrator {
         const response = await this.execute(req, context, abortSignal);
         responses.push(response);
       } catch (error: any) {
-        this.logger.error(`Error executing tool ${req.name}`, error);
+        const errorMsg = error?.message || String(error);
+        this.logger.error(`Error executing tool ${req.name}: ${errorMsg}`);
         responses.push({
           toolCallId: req.id,
           name: req.name,
-          content: `Error: ${error.message}`,
+          content: `Error: ${errorMsg}`,
           isError: true,
         });
       }
@@ -558,12 +559,13 @@ export class ToolOrchestrator {
         isError: false,
       };
     } catch (error: any) {
-      this.logger.error(`Error executing tool ${originalToolName}`, error);
+      const errorMsg = error?.message || String(error);
+      this.logger.error(`Error executing tool ${originalToolName}: ${errorMsg}`);
       // 统一封装错误响应
       return {
         toolCallId,
         name: originalToolName,
-        content: JSON.stringify({ success: false, message: error.message }),
+        content: JSON.stringify({ success: false, message: errorMsg }),
         isError: true,
       };
     }

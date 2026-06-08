@@ -11,6 +11,11 @@ export interface SkillManifest {
 }
 
 /**
+ * 技能来源类型
+ */
+export type SkillSourceType = 'global' | 'system';
+
+/**
  * 完整 Skill 定义（内存表示）
  */
 export interface SkillDefinition {
@@ -18,4 +23,5 @@ export interface SkillDefinition {
   basePath: string;              // 文件系统绝对路径
   manifest: SkillManifest;       // 解析后的 YAML frontmatter
   contentHash: string;           // SHA256（用于变更检测）
+  source: SkillSourceType;       // 技能来源：global=用户安装, system=系统内置
 }

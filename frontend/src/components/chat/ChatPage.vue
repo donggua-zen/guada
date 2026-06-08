@@ -104,6 +104,8 @@ import { useLayoutStore } from "@/stores/layout";
 import { useTitle } from '@/composables/useTitle';
 import type { Session } from '@/types/session';
 import { LiteSplitpanes } from "../ui";
+import ChatPanel from "./ChatPanel.vue";
+import CreateSessionChatPanel from "./CreateSessionChatPanel.vue";
 
 // 引入组件
 import PageHeader from "@/components/PageHeader.vue";
@@ -119,8 +121,6 @@ import { useBreakpoints, breakpointsTailwind } from '@vueuse/core'
 
 const breakpoints = useBreakpoints(breakpointsTailwind)
 
-const ChatPanel = defineAsyncComponent(() => import("./ChatPanel.vue"));
-const CreateSessionChatPanel = defineAsyncComponent(() => import("./CreateSessionChatPanel.vue"));
 const MemoPanel = defineAsyncComponent(() => import("./MemoPanel.vue"));
 const ChatOutline = defineAsyncComponent(() => import("./ChatOutline.vue"));
 const WorkspaceSidebar = defineAsyncComponent(() => import("./WorkspaceSidebar.vue"));

@@ -123,6 +123,7 @@ model User {
   id             String          @id @default(cuid())
   role           String?
   avatarUrl      String?         @map("avatar_url")
+  wallpaperUrl   String?         @map("wallpaper_url")
   parentId       String?         @map("parent_id")
   nickname       String?
   username       String          @unique

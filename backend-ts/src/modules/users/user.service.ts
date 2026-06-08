@@ -142,6 +142,84 @@ export class UserService {
     }
   }
 
+  /**
+   * 上传并处理用户壁纸
+   */
+  async uploadWallpaper(userId: string, file: any) {
+    const user = await this.userRepo.findById(userId);
+    if (!user) {
+      throw new Error("用户不存在");
+    }
+
+    // 1. 验证文件类型
+    if (!file || !this.ALLOWED_MIME_TYPES.includes(file.mimetype)) {
+      throw new Error(
+        `不支持的文件类型。允许的类型: ${this.ALLOWED_MIME_TYPES.join(", ")}`,
+      );
+    }
+
+    // 2. 获取物理路径（自动创建目录）
+    const wallpaperDir = this.uploadPathService.getPhysicalPath("wallpapers");
+
+    // 3. 生成唯一文件名
+    const uniqueFilename = `${crypto.randomUUID()}.jpg`;
+    const filePath = path.join(wallpaperDir, uniqueFilename);
+
+    try {
+      // 4. 使用 sharp 缩放并转换为 JPEG（限制最大宽度 1920px）
+      await sharp(file.buffer)
+        .resize(1920, null, { fit: "inside", withoutEnlargement: true })
+        .jpeg({ quality: 90 })
+        .toFile(filePath);
+
+        // 5. 清理旧壁纸（避免删除刚上传的新文件，先检查旧壁纸）
+      const existingUser = await this.userRepo.findById(userId);
+      const oldWallpaperUrl = (existingUser as any)?.wallpaperUrl;
+      if (oldWallpaperUrl) {
+        const oldFilePath = this.uploadPathService.toPhysicalPath(oldWallpaperUrl);
+        if (fs.existsSync(oldFilePath)) {
+          fs.unlinkSync(oldFilePath);
+        }
+      }
+
+      // 6. 更新数据库（存储相对路径）
+      const relativePath = this.uploadPathService.getStoragePath(
+        "wallpapers",
+        uniqueFilename,
+      );
+      await this.userRepo.update(userId, { wallpaperUrl: relativePath });
+
+      // 转换为绝对 URL 后返回
+      return { url: this.urlService.toResourceAbsoluteUrl(relativePath) };
+    } catch (error: any) {
+      // 如果处理失败，删除可能已生成的临时文件
+      if (fs.existsSync(filePath)) {
+        fs.unlinkSync(filePath);
+      }
+      throw new Error(`壁纸上传失败: ${error.message}`);
+    }
+  }
+
+  /**
+   * 删除用户壁纸
+   */
+  async deleteWallpaper(userId: string) {
+    const user = await this.userRepo.findById(userId);
+    const wallpaperUrl = (user as any)?.wallpaperUrl;
+    if (!user || !wallpaperUrl) {
+      return;
+    }
+
+    // 删除物理文件
+    const oldFilePath = this.uploadPathService.toPhysicalPath(wallpaperUrl);
+    if (fs.existsSync(oldFilePath)) {
+      fs.unlinkSync(oldFilePath);
+    }
+
+    // 清空数据库字段
+    await this.userRepo.update(userId, { wallpaperUrl: null });
+  }
+
   isPasswordResetAllowed(): boolean {
     return !fs.existsSync(this.resetPasswordFlagPath);
   }

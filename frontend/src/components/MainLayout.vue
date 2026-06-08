@@ -1,14 +1,15 @@
 <template>
   <SidebarLayout :sidebarVisible="layoutStore.sidebarVisible" :sidebarWidth="280" :showToggleButton="false"
-    sidebarPosition="left" :z-index="20">
+    sidebarPosition="left" :z-index="20" class="flex-1">
     <template #sidebar>
       <GlobalSidebar />
     </template>
     <template #content>
-      <div class="h-full flex-1 min-w-0 overflow-hidden bg-(--color-sidebar-bg)">
-        <div class="h-full overflow-hidden rounded-tl-xl border-l border-t border-gray-100 dark:border-[#2f2f2f] bg-(--color-bg)">
-          <RouterView />
-        </div>
+      <div class="fixed -z-2 sidebar-transparent-bg w-10 h-10">
+      </div>
+      <div
+        class="relative h-full flex-1 min-w-0 overflow-hidden rounded-tl-xl border-l border-t border-gray-100 dark:border-[#2f2f2f] content-clear-wallpaper">
+        <RouterView />
       </div>
     </template>
   </SidebarLayout>
@@ -27,6 +28,8 @@ const layoutStore = useLayoutStore()
 onMounted(() => {
   console.log('[MainLayout] 启动 SSE 连接')
   apiService.connectSessionEvents()
+  // 组件挂载后再加载外观设置，确保 content-clear-wallpaper 元素已存在
+  layoutStore.loadAppearanceSettings()
 })
 
 // 组件卸载时断开 SSE 连接，避免内存泄漏

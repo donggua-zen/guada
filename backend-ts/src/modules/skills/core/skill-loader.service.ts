@@ -3,7 +3,7 @@ import * as fs from 'fs/promises';
 import * as path from 'path';
 import { createHash } from 'crypto';
 import * as yaml from 'js-yaml';
-import { SkillManifest, SkillDefinition } from '../interfaces/skill-manifest.interface';
+import { SkillManifest, SkillDefinition, SkillSourceType } from '../interfaces/skill-manifest.interface';
 
 /**
  * YAML frontmatter 解析结果
@@ -19,8 +19,10 @@ export class SkillLoaderService {
 
   /**
    * 从目录加载 Skill 元数据（L1）
+   * @param skillDir 技能目录路径
+   * @param source 技能来源，默认为 global
    */
-  async loadManifest(skillDir: string): Promise<SkillDefinition> {
+  async loadManifest(skillDir: string, source: SkillSourceType = 'global'): Promise<SkillDefinition> {
     const skillMdPath = path.join(skillDir, 'SKILL.md');
 
     // 读取并解析 YAML frontmatter
@@ -40,6 +42,7 @@ export class SkillLoaderService {
       basePath: skillDir,
       manifest,
       contentHash,
+      source,
     };
   }
 

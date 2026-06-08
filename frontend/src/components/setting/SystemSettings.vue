@@ -26,6 +26,9 @@
                         <template v-else-if="currentTabValue === 'ocr'">
                             <OcrSettings />
                         </template>
+                        <template v-else-if="currentTabValue === 'appearance'">
+                            <AppearanceSettings />
+                        </template>
                         <template v-else-if="currentTabValue === 'about'">
                             <AboutPanel />
                         </template>
@@ -42,13 +45,15 @@ import { ElTabs, ElTabPane } from 'element-plus'
 import DefaultModelSettings from './DefaultModelSettings.vue'
 import GeneralSettings from './GeneralSettings.vue'
 import OcrSettings from './OcrSettings.vue'
+import AppearanceSettings from './AppearanceSettings.vue'
 import AboutPanel from '../plugins/AboutPanel.vue'
 
 import {
     Grid16Regular,
     Settings16Regular,
     ScanText24Regular,
-    Info24Regular
+    Info24Regular,
+    Image24Regular
 } from '@vicons/fluent'
 
 import { useAuthStore } from '../../stores/auth'
@@ -77,6 +82,12 @@ const sidebarItems = [
         label: 'OCR 设置',
         path: 'ocr',
         icon: ScanText24Regular,
+        roles: ['primary'],
+    },
+    {
+        label: '外观',
+        path: 'appearance',
+        icon: Image24Regular,
         roles: ['primary'],
     },
     {

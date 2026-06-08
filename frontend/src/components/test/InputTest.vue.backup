@@ -1,0 +1,575 @@
+<template>
+  <div class="input-test-page">
+    <h2>Contenteditable 富文本编辑器测试</h2>
+    <p class="subtitle">测试技能徽标、整删、粘贴、换行等交互</p>
+
+    <!-- 测试区域 1：基础 contenteditable 输入框 -->
+    <div class="test-section">
+      <h3>1. 基础 Contenteditable 输入框</h3>
+      <div
+        ref="editorRef"
+        class="rich-editor"
+        contenteditable="true"
+        @keydown="handleKeydown"
+        @input="handleInput"
+        @paste="handlePaste"
+        @click="handleClick"
+        @focus="handleFocus"
+        @blur="handleBlur"
+      ></div>
+      <div class="toolbar">
+        <el-button size="small" @click="insertSkill('code-reviewer')">
+          <el-icon><Tools /></el-icon> 插入技能: code-reviewer
+        </el-button>
+        <el-button size="small" @click="insertSkill('skill-creator')">
+          <el-icon><Tools /></el-icon> 插入技能: skill-creator
+        </el-button>
+        <el-button size="small" @click="insertSkill('xiaohu-wechat-format')">
+          <el-icon><Tools /></el-icon> 插入技能: xiaohu-wechat-format
+        </el-button>
+        <el-button size="small" type="danger" @click="clearEditor">
+          <el-icon><Delete /></el-icon> 清空
+        </el-button>
+      </div>
+    </div>
+
+    <!-- 测试区域 2：原始文本输出 -->
+    <div class="test-section">
+      <h3>2. 原始文本（用于发送到后端）</h3>
+      <pre class="raw-output">{{ rawText || '(空)' }}</pre>
+    </div>
+
+    <!-- 测试区域 3：HTML 结构输出 -->
+    <div class="test-section">
+      <h3>3. HTML 结构</h3>
+      <pre class="html-output">{{ htmlStructure || '(空)' }}</pre>
+    </div>
+
+    <!-- 测试区域 4：操作日志 -->
+    <div class="test-section">
+      <h3>4. 操作日志</h3>
+      <div class="log-panel">
+        <div v-for="(log, index) in logs" :key="index" class="log-item">
+          <span class="log-time">{{ log.time }}</span>
+          <span class="log-type" :class="log.type">{{ log.type }}</span>
+          <span class="log-msg">{{ log.msg }}</span>
+        </div>
+      </div>
+      <el-button size="small" @click="logs = []">清空日志</el-button>
+    </div>
+
+    <!-- 测试区域 5：功能说明 -->
+    <div class="test-section">
+      <h3>5. 测试功能清单</h3>
+      <ul class="feature-list">
+        <li :class="{ tested: testedFeatures.insert }">插入技能徽标（按钮点击）</li>
+        <li :class="{ tested: testedFeatures.deleteWhole }">Delete/Backspace 整删徽标</li>
+        <li :class="{ tested: testedFeatures.arrowSkip }">左右箭头跨越徽标</li>
+        <li :class="{ tested: testedFeatures.paste }">粘贴纯文本</li>
+        <li :class="{ tested: testedFeatures.enter }">Enter 换行</li>
+        <li :class="{ tested: testedFeatures.clickBadge }">点击徽标选中</li>
+        <li :class="{ tested: testedFeatures.rawSync }">原始文本同步</li>
+      </ul>
+    </div>
+  </div>
+</template>
+
+<script setup lang="ts">
+import { ref, onMounted } from 'vue';
+import { Tools, Delete } from '@element-plus/icons-vue';
+
+// 编辑器引用
+const editorRef = ref<HTMLElement | null>(null);
+
+// 状态
+const rawText = ref('');
+const htmlStructure = ref('');
+const logs = ref<Array<{ time: string; type: string; msg: string }>>([]);
+
+// 功能测试标记
+const testedFeatures = ref({
+  insert: false,
+  deleteWhole: false,
+  arrowSkip: false,
+  paste: false,
+  enter: false,
+  clickBadge: false,
+  rawSync: false,
+});
+
+// 添加日志
+const addLog = (type: string, msg: string) => {
+  const now = new Date();
+  const time = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}:${now.getSeconds().toString().padStart(2, '0')}.${now.getMilliseconds().toString().padStart(3, '0')}`;
+  logs.value.unshift({ time, type, msg });
+  if (logs.value.length > 50) logs.value.pop();
+};
+
+// 同步原始文本和 HTML 结构
+const syncRawText = () => {
+  const editor = editorRef.value;
+  if (!editor) return;
+
+  // 递归遍历 DOM，跳过徽标内部子节点
+  const walk = (node: Node): string => {
+    let text = '';
+
+    if (node.nodeType === Node.TEXT_NODE) {
+      return node.textContent || '';
+    }
+
+    if (node.nodeType === Node.ELEMENT_NODE) {
+      const el = node as HTMLElement;
+
+      // 技能徽标：直接输出标签，不遍历子节点
+      if (el.classList.contains('skill-badge')) {
+        const skillName = el.getAttribute('data-skill');
+        return `<skill:${skillName}>`;
+      }
+
+      // 换行符
+      if (el.tagName === 'BR') {
+        return '\n';
+      }
+
+      // contenteditable 中换行产生的 div
+      if (el.tagName === 'DIV') {
+        // 只有顶层 div 才加换行，避免嵌套 div 重复加
+        const isTopLevel = el.parentElement === editor;
+        const children = Array.from(el.childNodes).map(walk).join('');
+        return isTopLevel && text.length > 0 ? '\n' + children : children;
+      }
+
+      // 其他元素：遍历子节点
+      for (const child of Array.from(el.childNodes)) {
+        text += walk(child);
+      }
+    }
+
+    return text;
+  };
+
+  const text = Array.from(editor.childNodes).map(walk).join('');
+
+  rawText.value = text;
+  htmlStructure.value = editor.innerHTML;
+  testedFeatures.value.rawSync = true;
+};
+
+// 插入技能徽标
+const insertSkill = (skillName: string) => {
+  const editor = editorRef.value;
+  if (!editor) return;
+
+  editor.focus();
+  const selection = window.getSelection();
+  if (!selection) return;
+
+  const range = selection.getRangeAt(0);
+
+  // 创建徽标元素
+  const badge = document.createElement('span');
+  badge.className = 'skill-badge';
+  badge.setAttribute('data-skill', skillName);
+  badge.setAttribute('contenteditable', 'false');
+  badge.innerHTML = `
+    <span class="skill-icon">
+      <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor">
+        <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/>
+      </svg>
+    </span>
+    <span class="skill-name">${skillName}</span>
+  `;
+
+  // 插入徽标
+  range.deleteContents();
+  range.insertNode(badge);
+
+  // 在徽标后插入空格文本节点，方便继续输入
+  const space = document.createTextNode('\u00A0');
+  badge.after(space);
+
+  // 移动光标到空格后
+  range.setStartAfter(space);
+  range.setEndAfter(space);
+  selection.removeAllRanges();
+  selection.addRange(range);
+
+  syncRawText();
+  testedFeatures.value.insert = true;
+  addLog('insert', `插入技能徽标: ${skillName}`);
+};
+
+// 处理键盘事件
+const handleKeydown = (e: KeyboardEvent) => {
+  const editor = editorRef.value;
+  if (!editor) return;
+
+  const selection = window.getSelection();
+  if (!selection || selection.rangeCount === 0) return;
+
+  const range = selection.getRangeAt(0);
+
+  // Delete / Backspace 整删徽标
+  if (e.key === 'Delete' || e.key === 'Backspace') {
+    const node = e.key === 'Delete' ? range.startContainer.nextSibling : range.startContainer.previousSibling;
+
+    if (node && node.nodeType === Node.ELEMENT_NODE) {
+      const el = node as HTMLElement;
+      if (el.classList.contains('skill-badge')) {
+        e.preventDefault();
+        el.remove();
+        syncRawText();
+        testedFeatures.value.deleteWhole = true;
+        addLog('delete', `整删徽标: ${el.getAttribute('data-skill')}`);
+        return;
+      }
+    }
+
+    // 检查光标是否在徽标内部（不应该发生，因为徽标 contenteditable=false）
+    const parentBadge = (range.startContainer as HTMLElement)?.closest?.('.skill-badge')
+      || (range.startContainer.parentElement?.closest('.skill-badge'));
+    if (parentBadge) {
+      e.preventDefault();
+      parentBadge.remove();
+      syncRawText();
+      testedFeatures.value.deleteWhole = true;
+      addLog('delete', `整删徽标(内部): ${parentBadge.getAttribute('data-skill')}`);
+      return;
+    }
+  }
+
+  // 左右箭头跨越徽标
+  if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
+    const direction = e.key === 'ArrowLeft' ? 'previous' : 'next';
+    const sibling = direction === 'previous'
+      ? range.startContainer.previousSibling
+      : range.startContainer.nextSibling;
+
+    if (sibling && sibling.nodeType === Node.ELEMENT_NODE) {
+      const el = sibling as HTMLElement;
+      if (el.classList.contains('skill-badge')) {
+        testedFeatures.value.arrowSkip = true;
+        addLog('navigate', `箭头跨越徽标: ${el.getAttribute('data-skill')}`);
+      }
+    }
+  }
+
+  // Enter 换行
+  if (e.key === 'Enter' && !e.shiftKey) {
+    testedFeatures.value.enter = true;
+    addLog('input', 'Enter 换行');
+    // 让默认行为处理换行，稍后同步
+    setTimeout(syncRawText, 0);
+    return;
+  }
+
+  // 阻止在徽标上直接输入
+  const parentBadge = (range.startContainer as HTMLElement)?.closest?.('.skill-badge')
+    || (range.startContainer.parentElement?.closest('.skill-badge'));
+  if (parentBadge && e.key.length === 1 && !e.ctrlKey && !e.metaKey) {
+    e.preventDefault();
+    addLog('block', '阻止在徽标上输入字符');
+    return;
+  }
+};
+
+// 处理输入
+const handleInput = () => {
+  syncRawText();
+  addLog('input', '内容变化');
+};
+
+// 处理粘贴
+const handlePaste = (e: ClipboardEvent) => {
+  e.preventDefault();
+  const text = e.clipboardData?.getData('text/plain') || '';
+
+  const selection = window.getSelection();
+  if (!selection || selection.rangeCount === 0) return;
+
+  const range = selection.getRangeAt(0);
+  range.deleteContents();
+
+  // 将文本按行分割，创建文本节点
+  const lines = text.split('\n');
+  lines.forEach((line, index) => {
+    if (line) {
+      range.insertNode(document.createTextNode(line));
+    }
+    if (index < lines.length - 1) {
+      const br = document.createElement('br');
+      range.insertNode(br);
+    }
+    range.collapse(false);
+  });
+
+  syncRawText();
+  testedFeatures.value.paste = true;
+  addLog('paste', `粘贴文本: ${text.slice(0, 50)}${text.length > 50 ? '...' : ''}`);
+};
+
+// 处理点击
+const handleClick = (e: MouseEvent) => {
+  const target = e.target as HTMLElement;
+  const badge = target.closest('.skill-badge') as HTMLElement;
+  if (badge) {
+    testedFeatures.value.clickBadge = true;
+    addLog('click', `点击徽标: ${badge.getAttribute('data-skill')}`);
+
+    // 选中整个徽标
+    const selection = window.getSelection();
+    if (selection) {
+      const range = document.createRange();
+      range.selectNode(badge);
+      selection.removeAllRanges();
+      selection.addRange(range);
+    }
+  }
+};
+
+const handleFocus = () => {
+  addLog('focus', '编辑器获得焦点');
+};
+
+const handleBlur = () => {
+  addLog('blur', '编辑器失去焦点');
+};
+
+// 清空编辑器
+const clearEditor = () => {
+  const editor = editorRef.value;
+  if (!editor) return;
+  editor.innerHTML = '';
+  syncRawText();
+  addLog('clear', '清空编辑器');
+};
+
+onMounted(() => {
+  addLog('init', 'InputTest 组件已挂载');
+  // 初始聚焦
+  editorRef.value?.focus();
+});
+</script>
+
+<style scoped>
+.input-test-page {
+  height: 100vh;
+  padding: 20px;
+  overflow-y: auto;
+  background: #f5f5f5;
+}
+
+h2 {
+  margin: 0 0 8px 0;
+  color: #333;
+}
+
+.subtitle {
+  color: #666;
+  margin-bottom: 20px;
+}
+
+.test-section {
+  background: white;
+  border-radius: 8px;
+  padding: 16px;
+  margin-bottom: 16px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+}
+
+.test-section h3 {
+  margin: 0 0 12px 0;
+  color: #409eff;
+  font-size: 16px;
+}
+
+/* 富文本编辑器样式 */
+.rich-editor {
+  min-height: 120px;
+  max-height: 300px;
+  overflow-y: auto;
+  padding: 12px;
+  border: 2px solid #dcdfe6;
+  border-radius: 8px;
+  font-size: 14px;
+  line-height: 1.8;
+  color: #303133;
+  background: #fff;
+  outline: none;
+  transition: border-color 0.2s;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+}
+
+.rich-editor:focus {
+  border-color: #409eff;
+}
+
+.rich-editor:empty::before {
+  content: '在此输入内容，点击按钮插入技能徽标...';
+  color: #c0c4cc;
+  pointer-events: none;
+}
+
+/* 技能徽标样式 */
+:deep(.skill-badge) {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 10px;
+  margin: 0 2px;
+  border-radius: 6px;
+  background: linear-gradient(135deg, #e3f2fd 0%, #bbdefb 100%);
+  border: 1px solid #90caf9;
+  color: #1565c0;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  user-select: none;
+  vertical-align: middle;
+  transition: all 0.2s;
+}
+
+:deep(.skill-badge:hover) {
+  background: linear-gradient(135deg, #bbdefb 0%, #90caf9 100%);
+  border-color: #64b5f6;
+  box-shadow: 0 2px 6px rgba(21, 101, 192, 0.2);
+}
+
+:deep(.skill-badge.selected) {
+  background: linear-gradient(135deg, #90caf9 0%, #64b5f6 100%);
+  border-color: #42a5f5;
+}
+
+:deep(.skill-icon) {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+:deep(.skill-name) {
+  white-space: nowrap;
+}
+
+/* 工具栏 */
+.toolbar {
+  margin-top: 12px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+/* 原始文本输出 */
+.raw-output {
+  background: #f5f7fa;
+  border: 1px solid #e4e7ed;
+  border-radius: 4px;
+  padding: 12px;
+  font-family: 'Courier New', monospace;
+  font-size: 13px;
+  color: #606266;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+  min-height: 60px;
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+/* HTML 结构输出 */
+.html-output {
+  background: #f5f7fa;
+  border: 1px solid #e4e7ed;
+  border-radius: 4px;
+  padding: 12px;
+  font-family: 'Courier New', monospace;
+  font-size: 12px;
+  color: #606266;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+  min-height: 60px;
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+/* 日志面板 */
+.log-panel {
+  background: #1e1e1e;
+  border-radius: 4px;
+  padding: 8px;
+  max-height: 200px;
+  overflow-y: auto;
+  font-family: 'Courier New', monospace;
+  font-size: 12px;
+  margin-bottom: 8px;
+}
+
+.log-item {
+  padding: 2px 0;
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+}
+
+.log-time {
+  color: #6a9955;
+  flex-shrink: 0;
+}
+
+.log-type {
+  padding: 0 6px;
+  border-radius: 3px;
+  font-size: 11px;
+  font-weight: bold;
+  flex-shrink: 0;
+  min-width: 50px;
+  text-align: center;
+}
+
+.log-type.insert { background: #4caf50; color: white; }
+.log-type.delete { background: #f44336; color: white; }
+.log-type.input { background: #2196f3; color: white; }
+.log-type.paste { background: #ff9800; color: white; }
+.log-type.navigate { background: #9c27b0; color: white; }
+.log-type.click { background: #00bcd4; color: white; }
+.log-type.focus { background: #607d8b; color: white; }
+.log-type.blur { background: #795548; color: white; }
+.log-type.block { background: #ff5722; color: white; }
+.log-type.clear { background: #e91e63; color: white; }
+.log-type.init { background: #3f51b5; color: white; }
+
+.log-msg {
+  color: #d4d4d4;
+}
+
+/* 功能列表 */
+.feature-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.feature-list li {
+  padding: 8px 12px;
+  margin-bottom: 4px;
+  border-radius: 4px;
+  background: #f5f7fa;
+  color: #606266;
+  transition: all 0.2s;
+}
+
+.feature-list li::before {
+  content: '○ ';
+  color: #c0c4cc;
+}
+
+.feature-list li.tested {
+  background: #e8f5e9;
+  color: #2e7d32;
+}
+
+.feature-list li.tested::before {
+  content: '✓ ';
+  color: #4caf50;
+}
+</style>

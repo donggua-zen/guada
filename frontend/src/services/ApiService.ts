@@ -713,6 +713,31 @@ class ApiService {
     }
   }
 
+  async uploadWallpaper(file: File): Promise<UploadResponse> {
+    const formData = new FormData();
+    formData.append("wallpaper", file);
+
+    try {
+      return await this.axiosInstance.post("/user/wallpaper", formData, {
+        headers: {
+          "Content-Type": "multipart/form-data",
+        },
+      });
+    } catch (error) {
+      console.error("壁纸上传错误:", error);
+      throw error;
+    }
+  }
+
+  async deleteWallpaper(): Promise<{ success: boolean }> {
+    try {
+      return await this.axiosInstance.delete("/user/wallpaper");
+    } catch (error) {
+      console.error("壁纸删除错误:", error);
+      throw error;
+    }
+  }
+
   async uploadFile(sessionId: string, file: File): Promise<UploadResponse> {
     const formData = new FormData();
     // 确保文件名在 FormData 中正确编码

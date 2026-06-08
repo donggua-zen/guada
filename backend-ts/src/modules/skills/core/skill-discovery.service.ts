@@ -2,7 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import * as fs from 'fs/promises';
 import * as path from 'path';
-import { SkillDefinition } from '../interfaces/skill-manifest.interface';
+import { SkillDefinition, SkillSourceType } from '../interfaces/skill-manifest.interface';
 import { SkillDiscoveryResult } from '../interfaces/index';
 import { SkillLoaderService } from './skill-loader.service';
 import { SkillRegistry } from './skill-registry.service';
@@ -13,6 +13,7 @@ import { WorkspaceService } from '../../../common/services/workspace.service';
 export class SkillDiscoveryService {
   private readonly logger = new Logger(SkillDiscoveryService.name);
   private readonly skillsDir: string;
+  private readonly systemSkillsDir: string;
 
   constructor(
     private configService: ConfigService,
@@ -22,13 +23,14 @@ export class SkillDiscoveryService {
   ) {
     this.skillsDir = this.configService.get<string>('SKILLS_DIR') || 
                      path.join(process.cwd(), 'skills');
+    this.systemSkillsDir = path.join(this.skillsDir, '.system');
     
     // 注册 Skills 目录为安全写入路径
     this.workspaceService.registerSafeWritePath(this.skillsDir);
   }
 
   /**
-   * 全量扫描 Skills 目录
+   * 全量扫描 Skills 目录（包含 .system 内置技能）
    */
   async scan(): Promise<SkillDiscoveryResult> {
     const startTime = Date.now();
@@ -41,26 +43,43 @@ export class SkillDiscoveryService {
     };
 
     try {
-      // 确保 Skills 目录存在
-      await fs.mkdir(this.skillsDir, { recursive: true });
+      // 收集所有需要扫描的目录
+      const scanTargets: Array<{ dir: string; source: SkillSourceType }> = [];
 
-      // 读取所有子目录（排除隐藏目录）
+      // 1. 扫描用户安装的技能（skills/ 下排除 .system）
+      await fs.mkdir(this.skillsDir, { recursive: true });
       const entries = await fs.readdir(this.skillsDir, { withFileTypes: true });
-      const skillDirs = entries
+      const userSkillDirs = entries
         .filter(entry => entry.isDirectory() && !entry.name.startsWith('.'))
         .map(entry => path.join(this.skillsDir, entry.name));
 
+      for (const dir of userSkillDirs) {
+        scanTargets.push({ dir, source: 'global' });
+      }
+
+      // 2. 扫描系统内置技能（skills/.system/）
+      try {
+        await fs.access(this.systemSkillsDir);
+        const systemEntries = await fs.readdir(this.systemSkillsDir, { withFileTypes: true });
+        const systemSkillDirs = systemEntries
+          .filter(entry => entry.isDirectory() && !entry.name.startsWith('.'))
+          .map(entry => path.join(this.systemSkillsDir, entry.name));
+
+        for (const dir of systemSkillDirs) {
+          scanTargets.push({ dir, source: 'system' });
+        }
+      } catch {
+        // .system 目录不存在，忽略
+      }
+
       // 获取当前注册表中的所有 Skill ID
       const knownIds = Array.from(this.registry.getAll().keys());
-      const currentDirNames = skillDirs.map(dir => path.basename(dir).toLowerCase());
-
-      // 检测已移除的 Skills（使用小写比较以兼容不同大小写的目录名）
-      result.removed = knownIds.filter(id => !currentDirNames.includes(id.toLowerCase()));
+      const foundSkillIds: string[] = [];
 
       // 并行加载每个 Skill 目录
-      const tasks = skillDirs.map(async (dir) => {
+      const tasks = scanTargets.map(async ({ dir, source }) => {
         try {
-          const skillDef = await this.loader.loadManifest(dir);
+          const skillDef = await this.loader.loadManifest(dir, source);
           const dirName = path.basename(dir);
           
           // 使用公共验证器验证技能元数据
@@ -79,6 +98,7 @@ export class SkillDiscoveryService {
             };
           }
           
+          foundSkillIds.push(skillDef.id);
           const existingSkill = this.registry.get(skillDef.id);
           
           // 判断是新增还是更新
@@ -117,6 +137,9 @@ export class SkillDiscoveryService {
           });
         }
       }
+
+      // 检测已移除的 Skills（使用小写比较以兼容不同大小写的目录名）
+      result.removed = knownIds.filter(id => !foundSkillIds.includes(id.toLowerCase()));
 
       // 移除已删除的 Skills
       for (const removedId of result.removed) {
