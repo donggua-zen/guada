@@ -156,7 +156,7 @@
                     </el-select>
                   </el-form-item>
                   <el-form-item label="API地址" prop="apiUrl">
-                    <el-input v-model="currentProviderEdit.apiUrl" placeholder="api_url" />
+                    <el-input v-model="currentProviderEdit.apiUrl" placeholder="api_url" :disabled="!isCustomProvider" />
                   </el-form-item>
                   <el-form-item label="API KEY" prop="apiKey">
                     <div class="api-key-input-wrapper">

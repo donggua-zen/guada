@@ -194,7 +194,8 @@ export class ModelService {
     let finalDescription = undefined;
 
     // 从供应商实例获取元数据
-    if (provider && this.providerHub.hasProvider(provider)) {
+    // 注意：custom 也是已注册的供应商，所以必须显式判断 provider !== 'custom'
+    if (provider && provider !== 'custom' && this.providerHub.hasProvider(provider)) {
       try {
         const supplier = this.providerHub.getProvider(provider);
         const metadata = supplier.getMetadata();
