@@ -279,8 +279,8 @@ async function loadNode(node: any, resolve: (data: WorkspaceNode[]) => void) {
     }
 }
 
-// 布局方向：true=左右，false=上下，默认左右
-const isHorizontalLayout = useStorage('workspaceLayoutHorizontal', true);
+// 布局方向：true=左右，false=上下，默认上下
+const isHorizontalLayout = useStorage('workspaceLayoutHorizontal', false);
 
 // 预览模式：rendered=预览，source=源码，默认预览
 const currentPreviewMode = useStorage<PreviewMode>('filePreviewMode', 'rendered');
@@ -1081,6 +1081,9 @@ onUnmounted(() => {
 </script>
 <style>
 @import "@/assets/markdown.css";
+.code-preview-container pre code.hljs {
+    color: var(--color-text, #333)!important;
+}
 </style>
 <style scoped>
 .workspace-sidebar {
@@ -1093,6 +1096,9 @@ onUnmounted(() => {
 }
 
 /* Markdown 预览容器 - 复用 markdown-text 样式 */
+.markdown-preview {
+    color: var(--color-text, #333)!important;
+}
 .markdown-preview {
     padding: 16px;
     overflow: auto;
@@ -1187,28 +1193,8 @@ onUnmounted(() => {
     color: var(--color-primary, #409eff);
 }
 
-/* Splitpanes 自定义样式 - 适配暗色模式 */
-:deep(.splitpanes.default-theme .splitpanes__pane) {
-    background-color: transparent;
-}
-
-:deep(.splitpanes.default-theme .splitpanes__splitter) {
-    background-color: var(--color-surface, #f5f5f5);
-    position: relative;
-    transition: background-color 0.2s ease;
-}
-
-:deep(.dark .splitpanes.default-theme .splitpanes__splitter) {
-    background-color: #25262a;
-}
-
-/* 悬停时显示主题色（中等浅色） */
-:deep(.splitpanes.default-theme .splitpanes__splitter:hover) {
-    background-color: var(--el-color-primary-light-8, #d9ecff) !important;
-}
-
-/* 移除 Pane 的边框，避免与分割线重叠 */
-:deep(.splitpanes.default-theme .splitpanes__pane) {
+/* LiteSplitpanes 基础样式 - 适配暗色模式 */
+:deep(.lite-splitpanes__pane) {
     background-color: transparent;
     border: none !important;
 }
@@ -1241,21 +1227,38 @@ onUnmounted(() => {
     background-color: rgba(255, 255, 255, 0.15);
 }
 
-/* 隐藏悬停指示器 */
-:deep(.splitpanes.default-theme .splitpanes__splitter:before),
-:deep(.splitpanes.default-theme .splitpanes__splitter:after) {
-    display: none !important;
+/* LiteSplitpanes 自定义样式 - 使用 :deep 确保穿透 scoped */
+:deep(.lite-splitpanes__splitter) {
+    background-color: var(--color-surface, #f5f5f5) !important;
+    transition: background-color 0.2s ease;
+    position: relative;
+    z-index: 1;
 }
 
-:deep(.splitpanes.default-theme.splitpanes--horizontal .splitpanes__splitter) {
-    border-top: 0;
-    border-bottom: 0;
-    height: 2px !important;
+:deep(.lite-splitpanes__splitter:hover) {
+    background-color: var(--el-color-primary-light-8, #d9ecff) !important;
 }
 
-:deep(.splitpanes.default-theme.splitpanes--vertical .splitpanes__splitter) {
-    border-left: 0;
-    border-right: 0;
-    width: 2px !important;
+:deep(.dark .lite-splitpanes__splitter) {
+    background-color: #25262a !important;
+}
+
+:deep(.dark .lite-splitpanes__splitter:hover) {
+    background-color: var(--el-color-primary-light-8, #4a4d55) !important;
+}
+
+/* 水平布局：分割条为横线 */
+:deep(.lite-splitpanes--horizontal .lite-splitpanes__splitter),
+:deep(.lite-splitpanes__splitter--horizontal) {
+    height: 4px !important;
+    min-height: 4px !important;
+    max-height: 4px !important;
+    cursor: row-resize !important;
+}
+
+/* 垂直布局：分割条为竖线 */
+:deep(.lite-splitpanes:not(.lite-splitpanes--horizontal) .lite-splitpanes__splitter) {
+    width: 4px !important;
+    cursor: col-resize !important;
 }
 </style>

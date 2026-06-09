@@ -11,7 +11,7 @@
         <RouterView></RouterView>
     </div>
     <!-- Mock 控制面板（仅开发环境） -->
-    <MockControlPanel v-if="isDev" />
+    <!-- <MockControlPanel v-if="isDev" /> -->
 </template>
 
 <script setup>

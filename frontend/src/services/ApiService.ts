@@ -27,7 +27,7 @@ import type {
   CharacterListResponse,
   CharacterGroup,
 } from "@/types/character";
-import type { Session, SessionListResponse } from "@/types/session";
+import type { Session, SessionGroup, SessionListResponse } from "@/types/session";
 import type { Message } from "@/types/message";
 import type { PaginatedResponse } from "@/types/common";
 import type { KnowledgeBase, KBFile } from "@/stores/knowledgeBase";
@@ -373,10 +373,12 @@ class ApiService {
   async fetchSessions(
     skip?: number,
     limit?: number,
+    groupId?: string | null,
   ): Promise<SessionListResponse> {
     const params = new URLSearchParams();
     if (skip !== undefined) params.append("skip", skip.toString());
     if (limit !== undefined) params.append("limit", limit.toString());
+    if (groupId !== undefined) params.append("groupId", groupId === null ? "null" : groupId);
 
     const queryString = params.toString();
     const url = queryString ? `/sessions?${queryString}` : "/sessions";
@@ -440,6 +442,57 @@ class ApiService {
     return await this._request(`/sessions/${sessionId}`, {
       method: "PUT",
       data,
+    });
+  }
+
+  // ========== 会话分组管理 ==========
+
+  /**
+   * 获取当前用户的所有会话分组
+   */
+  async fetchSessionGroups(): Promise<SessionGroup[]> {
+    return await this._request("/session-groups");
+  }
+
+  /**
+   * 创建新分组
+   */
+  async createSessionGroup(data: { name: string }): Promise<SessionGroup> {
+    return await this._request("/session-groups", {
+      method: "POST",
+      data,
+    });
+  }
+
+  /**
+   * 更新分组名称
+   */
+  async updateSessionGroup(
+    groupId: string,
+    data: { name: string },
+  ): Promise<SessionGroup> {
+    return await this._request(`/session-groups/${groupId}`, {
+      method: "PUT",
+      data,
+    });
+  }
+
+  /**
+   * 删除分组
+   */
+  async deleteSessionGroup(groupId: string): Promise<{ success: boolean }> {
+    return await this._request(`/session-groups/${groupId}`, {
+      method: "DELETE",
+    });
+  }
+
+  /**
+   * 批量更新分组排序
+   */
+  async reorderSessionGroups(groupIds: string[]): Promise<{ success: boolean }> {
+    return await this._request("/session-groups/reorder", {
+      method: "POST",
+      data: { groupIds },
     });
   }
 

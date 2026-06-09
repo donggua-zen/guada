@@ -6,6 +6,19 @@ datasource db {
   provider = "sqlite"
 }
 
+model SessionGroup {
+  id        String    @id @default(cuid())
+  name      String
+  userId    String    @map("user_id")
+  sortOrder Int       @default(0) @map("sort_order")
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+  sessions  Session[]
+
+  @@index([userId])
+  @@map("session_group")
+}
+
 model Session {
   id            String                @id @default(cuid())
   title         String?
@@ -14,6 +27,7 @@ model Session {
   description   String?
   modelId       String?               @map("model_id")
   characterId   String?               @map("character_id")
+  groupId       String?               @map("group_id")
   settings      Json?
   createdAt     DateTime              @default(now()) @map("created_at")
   updatedAt     DateTime              @updatedAt @map("updated_at")
@@ -27,6 +41,7 @@ model Session {
   messages      Message[]
   character     Character?            @relation(fields: [characterId], references: [id])
   user          User                  @relation(fields: [userId], references: [id])
+  group         SessionGroup?         @relation(fields: [groupId], references: [id])
   // 注意：不配置 onDelete，允许悬空引用。删除 Model 时需业务层手动处理或保留过期ID
   model         Model?                @relation(fields: [modelId], references: [id])
   contextStates SessionContextState[]
@@ -37,6 +52,7 @@ model Session {
   @@index([platform])
   @@index([externalId])
   @@index([botId, externalId])
+  @@index([groupId])
   @@map("session")
 }
 

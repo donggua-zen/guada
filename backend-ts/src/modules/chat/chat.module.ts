@@ -6,6 +6,8 @@ import { ToolOrchestrator } from "../tools/tool-orchestrator.service";
 import { TokenizerService } from "../../common/utils/tokenizer.service";
 import { ChatController } from "./chat.controller";
 import { MessagesController } from "./messages.controller";
+import { SessionGroupController } from "./session-group.controller";
+import { SessionGroupService } from "./session-group.service";
 import { SessionsController } from "./sessions.controller";
 import { WorkspaceEventsController } from "./workspace-events.controller";
 import { MessageService } from "./message.service";
@@ -31,7 +33,7 @@ import { ConversationContextFactory, MESSAGE_STORE_TOKEN, COMPRESSION_STRATEGY_T
 
 @Module({
   imports: [AuthModule, ToolsModule, CharactersModule, FilesModule, LlmCoreModule, SkillsModule],
-  controllers: [ChatController, MessagesController, SessionsController, WorkspaceEventsController, SessionEventsController],
+  controllers: [ChatController, MessagesController, SessionsController, SessionGroupController, WorkspaceEventsController, SessionEventsController],
   providers: [
     AgentEngine,
     SessionContextService,
@@ -42,6 +44,7 @@ import { ConversationContextFactory, MESSAGE_STORE_TOKEN, COMPRESSION_STRATEGY_T
     { provide: COMPRESSION_STRATEGY_TOKEN, useExisting: CompressionEngine },
     MessageService,
     SessionService,
+    SessionGroupService,
 
     SessionStreamManager,
     TokenizerService,

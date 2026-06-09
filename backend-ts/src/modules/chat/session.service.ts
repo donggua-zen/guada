@@ -40,15 +40,21 @@ export class SessionService {
   /**
    * 获取用户会话列表，按最后活跃时间倒序排列
    */
+  /**
+   * 获取用户会话列表，支持按分组查询
+   * @param groupId 分组ID，null表示未分组，undefined表示全部
+   */
   async getSessionsByUser(
     userId: string,
     skip: number = 0,
     limit: number = 20,
+    groupId?: string | null,
   ): Promise<PaginatedResponse<any>> {
     const { items, total } = await this.sessionRepo.findByUserId(
       userId,
       skip,
       limit,
+      groupId,
     );
 
     // 转换所有 session 的 URL（使用 character 的 avatarUrl），并注入流式状态
@@ -198,6 +204,7 @@ export class SessionService {
       modelId: finalModelId,
       settings: filteredSettings,
       workspacePath: finalWorkspacePath,
+      groupId: data.groupId || null,
     };
 
     const session = await this.sessionRepo.create(sessionData);
@@ -275,7 +282,7 @@ export class SessionService {
     }
 
     // 只允许更新特定字段（工作目录路径不允许通过此接口更新）
-    const allowedFields = ["modelId", "settings", "title"];
+    const allowedFields = ["modelId", "settings", "title", "groupId"];
     const updateData: any = {};
 
     for (const key of allowedFields) {

@@ -1,6 +1,5 @@
 <template>
-  <div
-    class="global-sidebar flex flex-col h-full sidebar-transparent-bg overflow-hidden">
+  <div class="global-sidebar flex flex-col h-full sidebar-transparent-bg overflow-hidden">
     <!-- 导航菜单 -->
     <div class="px-3 py-2 space-y-0.5">
       <div v-for="item in navItems" :key="item.key" @click="handleNavClick(item.key)"
@@ -15,79 +14,121 @@
 
 
     <!-- 会话列表区域 -->
-    <div class="px-4 py-1 text-xs font-medium text-gray-500 uppercase tracking-wider">任务列表</div>
     <div class="flex-1 overflow-hidden py-1">
-      <ScrollContainer ref="scrollContainer" class="h-full max-h-full" @scroll="handleScroll">
-        <template v-if="!sortedSessions || sortedSessions.length === 0">
-          <div class="empty-state text-center text-gray-500 flex flex-col items-center justify-center h-full py-12">
-            <div class="empty-state-title text-sm font-medium mb-1">
-              暂无任务
+      <ScrollContainer ref="scrollContainer" class="h-full max-h-full">
+        <!-- 按分组展示会话 -->
+        <div v-for="group in displayGroups" :key="group.id" class="mb-1">
+          <!-- 分组标题栏 -->
+          <div
+            class="group-header flex items-center justify-between px-3 py-1 mx-1 rounded-md cursor-pointer transition-colors duration-200 select-none group"
+            :class="isGroupExpanded(group.id) ? 'text-(--color-text)' : 'text-(--color-text-gray)'"
+            @click="toggleGroupExpand(group.id)">
+            <div class="flex items-center gap-1.5">
+              <span class="text-sm font-medium">{{ group.name }}</span>
+              <!-- 展开/折叠箭头（hover时显示） -->
+              <i class="w-3 transition-all duration-200 opacity-0 group-hover:opacity-100"
+                :class="isGroupExpanded(group.id) ? '' : '-rotate-90'">
+                <ChevronDown12Regular />
+              </i>
             </div>
-          </div>
-        </template>
-        <template v-else>
-          <div v-for="session in sortedSessions" :key="session.id"
-            class="session-item flex items-center gap-2 py-1 pr-2 pl-3 mx-1 my-[0.2rem] rounded-lg cursor-pointer transition-all duration-200 ease-in-out group"
-            :class="{
-              'session-item-active': session.id === currentSessionId,
-              'session-item-inactive': session.id !== currentSessionId
-            }" @click="selectSession(session)">
-            <!-- 状态指示器 -->
-            <div class="status-indicator w-1.5 h-1.5 shrink-0 flex items-center justify-center">
-              <!-- 工作中状态：脉冲动画 -->
-              <div v-if="getSessionWorking(session.id)" class="w-1.5 h-1.5 rounded-full bg-blue-500 animate-pulse" />
-              <!-- 未读状态：红点 -->
-              <div v-else-if="getSessionUnread(session.id) && session.id !== currentSessionId"
-                class="w-1 h-1 rounded-full bg-red-500" />
-              <!-- 空闲状态：小灰点 -->
-              <div v-else class="w-1 h-1 rounded-full bg-gray-400 opacity-50" />
-            </div>
-
-            <div class="session-info flex-1 min-w-0 flex items-center">
-              <div class="session-title truncate text-sm font-medium w-full">
-                {{ session.title }}
+            <div class="flex items-center gap-1">
+              <!-- 分组操作菜单 -->
+              <div v-if="group.id !== UNGROUPED_ID" class="opacity-0 group-hover:opacity-100 transition-opacity"
+                @click.stop>
+                <DropdownMenu @command="(cmd: string) => handleGroupDropdown(cmd, group)">
+                  <div class="session-action-trigger p-0.5">
+                    <el-icon class="w-3.5 h-3.5">
+                      <MoreFilled />
+                    </el-icon>
+                  </div>
+                  <template #dropdown>
+                    <DropdownMenuItem command="rename">
+                      <Edit16Regular class="w-4 h-4 mr-2 inline-block" />
+                      重命名
+                    </DropdownMenuItem>
+                    <DropdownMenuItem command="delete">
+                      <Delete20Regular class="w-4 h-4 mr-2 inline-block" />
+                      删除
+                    </DropdownMenuItem>
+                  </template>
+                </DropdownMenu>
               </div>
             </div>
-            <div class="session-actions flex items-center opacity-0 group-hover:opacity-100"
-              :class="{ 'opacity-100': session.id === currentSessionId }">
-              <DropdownMenu @command="(cmd: string) => handleDropdownSelect(cmd, session)">
-                <div class="session-action-trigger">
-                  <el-icon class="w-4 h-4">
-                    <MoreFilled />
-                  </el-icon>
-                </div>
-                <template #dropdown>
-                  <DropdownMenuItem command="rename">
-                    <EditOutlined class="w-4 h-4 mr-2 inline-block" />
-                    重命名
-                  </DropdownMenuItem>
-                  <DropdownMenuItem command="delete">
-                    <DeleteOutlineOutlined class="w-4 h-4 mr-2 inline-block" />
-                    删除
-                  </DropdownMenuItem>
-                </template>
-              </DropdownMenu>
-            </div>
           </div>
 
-          <!-- 加载更多提示 -->
-          <div v-if="sortedSessions.length > 0" class="py-3 px-5 text-center">
-            <div v-if="isLoadingMore" class="flex items-center justify-center gap-2 text-sm text-gray-500">
-              <el-icon class="animate-spin" size="16">
-                <Loading />
-              </el-icon>
-              <span>加载中...</span>
-            </div>
-            <div v-else-if="hasMoreSessions"
-              class="text-sm text-gray-400 cursor-pointer hover:text-blue-500 transition-colors"
-              @click="loadMoreSessions">
-              点击加载更多 (剩余 {{ totalSessionsCount - sortedSessions.length }} 个)
-            </div>
-            <div v-else-if="totalSessionsCount > 0" class="text-sm text-gray-400">
-              已加载全部 {{ totalSessionsCount }} 个会话
-            </div>
+          <!-- 分组内的会话列表 -->
+          <div v-show="isGroupExpanded(group.id)" class="mt-0.5 space-y-1">
+            <!-- 分组内无会话时显示空状态 -->
+            <template v-if="getGroupSessions(group.id).length === 0 && !isLoadingGroup(group.id)">
+              <div class="text-center text-gray-500 py-6 text-xs">
+                暂无任务
+              </div>
+            </template>
+            <template v-else>
+              <div v-for="session in getGroupSessions(group.id)" :key="session.id"
+                class="session-item flex items-center gap-2 py-0.5 pr-2 pl-3 mx-1  rounded-lg cursor-pointer transition-all duration-200 ease-in-out group"
+                :class="{
+                  'session-item-active': session.id === currentSessionId,
+                  'session-item-inactive': session.id !== currentSessionId
+                }" @click="selectSession(session)">
+                <!-- 状态指示器 -->
+                <div class="status-indicator w-1.5 h-1.5 shrink-0 flex items-center justify-center">
+                  <div v-if="getSessionWorking(session.id)"
+                    class="w-1.5 h-1.5 rounded-full bg-blue-500 animate-pulse" />
+                  <div v-else-if="getSessionUnread(session.id) && session.id !== currentSessionId"
+                    class="w-1 h-1 rounded-full bg-red-500" />
+                  <div v-else class="w-1 h-1 rounded-full bg-gray-400 opacity-50" />
+                </div>
+
+                <div class="session-info flex-1 min-w-0 flex items-center">
+                  <div class="session-title truncate text-sm font-medium w-full">
+                    {{ session.title }}
+                  </div>
+                </div>
+                <div class="session-actions flex items-center opacity-0 group-hover:opacity-100"
+                  :class="{ 'opacity-100': session.id === currentSessionId }">
+                  <DropdownMenu @command="(cmd: string) => handleDropdownSelect(cmd, session)">
+                    <div class="session-action-trigger">
+                      <el-icon class="w-4 h-4">
+                        <MoreFilled />
+                      </el-icon>
+                    </div>
+                    <template #dropdown>
+                      <DropdownMenuItem command="rename">
+                        <Edit16Regular class="w-4 h-4 mr-2 inline-block" />
+                        重命名
+                      </DropdownMenuItem>
+                      <DropdownMenuItem command="move">
+                        <Folder20Regular class="w-4 h-4 mr-2 inline-block" />
+                        移动到分组
+                      </DropdownMenuItem>
+                      <DropdownMenuItem command="delete">
+                        <Delete20Regular class="w-4 h-4 mr-2 inline-block" />
+                        删除
+                      </DropdownMenuItem>
+                    </template>
+                  </DropdownMenu>
+                </div>
+              </div>
+
+              <!-- 分组内加载更多 -->
+              <div v-if="groupHasMoreSessions(group.id) || sessionGroupStore.loadingMoreGroupId === group.id"
+                class="py-2 px-5 text-center">
+                <div v-if="sessionGroupStore.loadingMoreGroupId === group.id"
+                  class="flex items-center justify-center gap-2 text-xs text-gray-500">
+                  <el-icon class="animate-spin" size="14">
+                    <Loading />
+                  </el-icon>
+                  <span>加载中...</span>
+                </div>
+                <div v-else class="text-xs text-gray-400 cursor-pointer hover:text-blue-500 transition-colors"
+                  @click="loadMoreForGroup(group.id)">
+                  点击加载更多
+                </div>
+              </div>
+            </template>
           </div>
-        </template>
+        </div>
       </ScrollContainer>
     </div>
     <!-- 底部：主题 + 设置 + 用户 -->
@@ -96,8 +137,8 @@
         <!-- 主题切换 -->
         <div @click="toggleDark"
           class="flex items-center gap-2 px-2 py-1.5 rounded-lg cursor-pointer transition-all duration-200 text-(--color-text-gray) hover:bg-(--color-sidebar-bg-hover) hover:text-(--color-sidebar-text-hover)">
-          <WbSunnyTwotone v-if="isDark" class="w-4 h-4" />
-          <NightlightRound v-else class="w-4 h-4" />
+          <WeatherSunny20Regular v-if="isDark" class="w-4 h-4" />
+          <WeatherMoon20Filled v-else class="w-4 h-4" />
           <span class="text-xs">{{ isDark ? '亮色' : '暗色' }}</span>
         </div>
 
@@ -106,8 +147,17 @@
           class="flex items-center gap-2 px-2 py-1.5 rounded-lg cursor-pointer transition-all duration-200" :class="currentActiveTab === 'setting'
             ? 'bg-(--color-sidebar-bg-active) text-(--color-sidebar-text-active)'
             : 'text-(--color-text-gray) hover:bg-(--color-sidebar-bg-hover) hover:text-(--color-sidebar-text-hover)'">
-          <component :is="SettingsOutlined" class="w-4 h-4" />
+          <component :is="Settings16Filled" class="w-4 h-4" />
           <span class="text-xs">设置</span>
+        </div>
+
+        <!-- 分组管理 -->
+        <div @click="openGroupManage"
+          class="flex items-center gap-2 px-2 py-1.5 rounded-lg cursor-pointer transition-all duration-200 text-(--color-text-gray) hover:bg-(--color-sidebar-bg-hover) hover:text-(--color-sidebar-text-hover)">
+          <el-icon class="w-4 h-4">
+            <Folder20Filled />
+          </el-icon>
+          <span class="text-xs">分组</span>
         </div>
       </div>
 
@@ -160,31 +210,53 @@
       </div>
     </template>
   </el-dialog>
+
+  <!-- 分组管理弹窗 -->
+  <SessionGroupManageDialog v-model="groupManageVisible" @close="onGroupManageClose" />
+
+  <!-- 移动会话到分组弹窗 -->
+  <el-dialog v-model="moveGroupDialogVisible" title="请选择目标分组" width="360px" :close-on-click-modal="false">
+    <div class="space-y-1 py-2">
+      <div v-for="(g) in moveGroupOptions" :key="g.value"
+        class="flex items-center gap-2 px-3 py-2.5 rounded-lg cursor-pointer transition-all duration-200 text-sm"
+        :class="moveSelectedGroupId === g.value ? 'bg-(--color-sidebar-bg-active) text-(--color-sidebar-text-active)' : 'text-(--color-text-gray) hover:bg-(--color-sidebar-bg-hover) hover:text-(--color-sidebar-text-hover)'"
+        @click="moveSelectedGroupId = g.value">
+        <el-icon class="w-4 h-4">
+          <Folder20Regular />
+        </el-icon>
+        <span>{{ g.label }}</span>
+      </div>
+    </div>
+    <template #footer>
+      <div class="flex justify-end gap-2">
+        <el-button @click="moveGroupDialogVisible = false">取消</el-button>
+        <el-button type="primary" @click="confirmMoveSession">确定</el-button>
+      </div>
+    </template>
+  </el-dialog>
 </template>
 
 <script setup lang="ts">
 import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
-import { useDebounceFn } from '@vueuse/core'
 import { useRouter, useRoute } from 'vue-router'
 import { useAuthStore } from '../stores/auth'
 import { useSessionStore } from '../stores/session'
+import { useSessionGroupStore } from '../stores/sessionGroup'
+import { UNGROUPED_ID } from '../stores/session'
 import { useTheme } from '../composables/useTheme'
 import { usePopup } from '../composables/usePopup'
 import { Avatar, ScrollContainer } from './ui'
 import DropdownMenu from './ui/DropdownMenu.vue'
 import DropdownMenuItem from './ui/DropdownMenuItem.vue'
+import SessionGroupManageDialog from './session/SessionGroupManageDialog.vue'
 import { apiService } from '@/services/ApiService'
 import { ElMessageBox } from 'element-plus'
 
 import {
-  EditOutlined,
-  DeleteOutlineOutlined,
   PersonOutlined,
   LogOutOutlined,
-  SettingsOutlined,
-  WbSunnyTwotone,
-  NightlightRound
 } from '@vicons/material'
+
 import {
   Bot20Regular,
   BookSearch20Regular,
@@ -192,7 +264,15 @@ import {
   AddSquare20Regular,
   ClockAlarm20Regular,
   Apps20Regular,
-  Cloud20Regular
+  Cloud20Regular,
+  Edit16Regular,
+  Delete20Regular,
+  Folder20Regular,
+  Folder20Filled,
+  ChevronDown12Regular,
+  WeatherSunny20Regular,
+  WeatherMoon20Filled,
+  Settings16Filled,
 } from '@vicons/fluent'
 import { MoreFilled, Loading } from '@element-plus/icons-vue'
 
@@ -200,6 +280,7 @@ const router = useRouter()
 const route = useRoute()
 const authStore = useAuthStore()
 const sessionStore = useSessionStore()
+const sessionGroupStore = useSessionGroupStore()
 const { isDark, toggleDark } = useTheme()
 const { toast, prompt, confirm } = usePopup()
 
@@ -208,13 +289,14 @@ const deleteDialogVisible = ref(false)
 const deleteSessionData = ref<any>(null)
 const deleteWorkspaceChecked = ref(false)
 
-// 会话列表状态
-const isLoadingMore = ref(false)
-const totalSessionsCount = ref(0)
-const scrollContainer = ref<any>(null)
+// 移动会话到分组弹窗状态
+const moveGroupDialogVisible = ref(false)
+const moveGroupOptions = ref<{ label: string; value: string }[]>([])
+const moveSelectedGroupId = ref('')
+const moveTargetSession = ref<any>(null)
 
-// 无限滚动相关状态
-const scrollThreshold = 50 // 滚动触发阈值(像素)
+// 是否正在初始化加载
+const isInitializing = ref(false)
 
 // 导航项配置
 const navItems = [
@@ -281,67 +363,150 @@ const currentSessionId = computed(() => {
   return Array.isArray(sessionId) ? sessionId[0] : sessionId
 })
 
-// 排序后的会话列表
-const sortedSessions = computed(() => {
-  const sessions = [...sessionStore.sessionsList]
-  return sessions.sort((a, b) => {
-    const timeA = a.lastActiveAt
-      ? new Date(a.lastActiveAt).getTime()
-      : (a.updatedAt ? new Date(a.updatedAt).getTime() : new Date(a.createdAt || 0).getTime())
-    const timeB = b.lastActiveAt
-      ? new Date(b.lastActiveAt).getTime()
-      : (b.updatedAt ? new Date(b.updatedAt).getTime() : new Date(b.createdAt || 0).getTime())
-    return timeB - timeA
+// 所有已加载的会话（用于空状态判断）
+const allSessions = computed(() => {
+  return Array.from(sessionStore.sessionsMap.values())
+})
+
+
+/**
+ * 判断指定分组是否正在加载
+ */
+const isLoadingGroup = (groupId: string) => {
+  return sessionGroupStore.loadingMoreGroupId === groupId || isInitializing.value
+}
+
+// 展示的分组列表（包含虚拟的未分组）
+const displayGroups = computed(() => {
+  const groups = [...sessionGroupStore.sortedGroups]
+  // 始终在最后添加未分组
+  groups.push({
+    id: UNGROUPED_ID,
+    name: '任务列表',
+    userId: '',
+    sortOrder: groups.length,
+    createdAt: '',
+    updatedAt: ''
   })
+  return groups
 })
 
-// 是否还有更多会话
-const hasMoreSessions = computed(() => {
-  return sortedSessions.value.length < totalSessionsCount.value
-})
+// 获取分组内的会话（从 sessionStore 统一数据源获取）
+const getGroupSessions = (groupId: string): any[] => {
+  const groupIdParam = groupId === UNGROUPED_ID ? null : groupId
+  return sessionStore.getSessionsByGroup(groupIdParam)
+}
 
-// 加载会话列表
+// 获取分组会话数量（从 sessionStore 统一数据源获取）
+const getGroupSessionCount = (groupId: string): number => {
+  const groupIdParam = groupId === UNGROUPED_ID ? null : groupId
+  return sessionStore.getGroupTotal(groupIdParam)
+}
+
+// 分组是否展开
+const isGroupExpanded = (groupId: string): boolean => {
+  if (groupId === UNGROUPED_ID) {
+    return sessionGroupStore.isExpanded(UNGROUPED_ID)
+  }
+  return sessionGroupStore.isExpanded(groupId)
+}
+
+// 切换分组展开/折叠
+const toggleGroupExpand = (groupId: string): void => {
+  sessionGroupStore.toggleExpand(groupId)
+}
+
+// 分组是否还有更多会话
+const groupHasMoreSessions = (groupId: string): boolean => {
+  const loaded = sessionStore.getLoadedCount(groupId)
+  const total = getGroupSessionCount(groupId)
+  return loaded < total
+}
+
+// 初始化加载所有分组的前N个会话
 const loadSessions = async () => {
+  isInitializing.value = true
   try {
-    const pageSize = window.innerHeight > 1080 ? 40 : 20
-    const data = await apiService.fetchSessions(0, pageSize)
-    sessionStore.sessionsList = data.items || []
-    totalSessionsCount.value = data.total || 0
+    // 先加载分组列表
+    await sessionGroupStore.loadGroups()
 
-    // 同步后端流式状态到侧边栏
-    for (const session of data.items || []) {
+    const pageSize = window.innerHeight > 1080 ? 15 : 10
+
+    // 加载每个真实分组的会话
+    for (const group of sessionGroupStore.groups) {
+      const data = await apiService.fetchSessions(0, pageSize, group.id)
+      // 写入统一数据源
+      for (const session of data.items || []) {
+        sessionStore.setSession(session)
+      }
+      sessionStore.setLoadedCount(group.id, data.items?.length || 0)
+      sessionStore.setHasMore(group.id, (data.items?.length || 0) < (data.total || 0))
+      if (!sessionGroupStore.expandedState.has(group.id)) {
+        sessionGroupStore.setExpand(group.id, true)
+      }
+
+      // 同步流式状态
+      for (const session of data.items || []) {
+        if (session.isStreaming) {
+          sessionStore.syncStreamingState(session.id, true)
+        }
+      }
+    }
+
+    // 加载未分组的会话
+    const ungroupedData = await apiService.fetchSessions(0, pageSize, null)
+    for (const session of ungroupedData.items || []) {
+      sessionStore.setSession(session)
+    }
+    sessionStore.setLoadedCount(UNGROUPED_ID, ungroupedData.items?.length || 0)
+    sessionStore.setHasMore(UNGROUPED_ID, (ungroupedData.items?.length || 0) < (ungroupedData.total || 0))
+    if (!sessionGroupStore.expandedState.has(UNGROUPED_ID)) {
+      sessionGroupStore.setExpand(UNGROUPED_ID, true)
+    }
+
+    // 同步流式状态
+    for (const session of ungroupedData.items || []) {
       if (session.isStreaming) {
         sessionStore.syncStreamingState(session.id, true)
       }
     }
   } catch (error) {
     console.error('获取对话列表失败:', error)
+  } finally {
+    isInitializing.value = false
   }
 }
 
-// 加载更多会话
-const loadMoreSessions = async () => {
-  if (isLoadingMore.value || !hasMoreSessions.value) return
-  isLoadingMore.value = true
-  try {
-    const skip = sessionStore.sessionsList.length
-    const pageSize = window.innerHeight > 1080 ? 40 : 20
-    const data = await apiService.fetchSessions(skip, pageSize)
-    if (data.items && data.items.length > 0) {
-      sessionStore.sessionsList = [...sessionStore.sessionsList, ...data.items]
+// 为指定分组加载更多会话
+const loadMoreForGroup = async (groupId: string) => {
+  if (sessionGroupStore.loadingMoreGroupId) return
 
-      // 同步后端流式状态到侧边栏
+  const currentSessions = getGroupSessions(groupId)
+  const groupIdParam = groupId === UNGROUPED_ID ? null : groupId
+
+  sessionGroupStore.setLoadingMore(groupId)
+  try {
+    const data = await apiService.fetchSessions(currentSessions.length, 15, groupIdParam)
+
+    if (data.items && data.items.length > 0) {
+      // 写入统一数据源
+      for (const session of data.items) {
+        sessionStore.setSession(session)
+      }
+      sessionStore.setLoadedCount(groupId, currentSessions.length + data.items.length)
+      sessionStore.setHasMore(groupId, (currentSessions.length + data.items.length) < (data.total || 0))
+
+      // 同步流式状态
       for (const session of data.items) {
         if (session.isStreaming) {
           sessionStore.syncStreamingState(session.id, true)
         }
       }
-      totalSessionsCount.value = data.total || 0
     }
   } catch (error) {
-    console.error('加载更多会话失败:', error)
+    console.error(`加载分组 ${groupId} 更多会话失败:`, error)
   } finally {
-    isLoadingMore.value = false
+    sessionGroupStore.setLoadingMore(null)
   }
 }
 
@@ -364,27 +529,27 @@ const selectSession = (session: any) => {
 /**
  * 处理滚动事件（带防抖）
  */
-const handleScroll = useDebounceFn((event: Event) => {
-  checkScrollPosition()
-}, 300)
+// const handleScroll = useDebounceFn(() => {
+//   checkScrollPosition()
+// }, 300)
 
 /**
  * 检查滚动位置，判断是否需要加载更多
  */
-const checkScrollPosition = (): void => {
-  if (!scrollContainer.value || isLoadingMore.value || !hasMoreSessions.value) {
-    return
-  }
+// const checkScrollPosition = (): void => {
+//   if (!scrollContainer.value || isLoadingMore.value || !hasMoreSessions.value) {
+//     return
+//   }
 
-  const element = scrollContainer.value.getScrollElement?.() || scrollContainer.value
-  const { scrollTop, scrollHeight, clientHeight } = element
-  const distanceToBottom = scrollHeight - scrollTop - clientHeight
+//   const element = scrollContainer.value.getScrollElement?.() || scrollContainer.value
+//   const { scrollTop, scrollHeight, clientHeight } = element
+//   const distanceToBottom = scrollHeight - scrollTop - clientHeight
 
-  // 如果距离底部小于阈值，则加载更多
-  if (distanceToBottom <= scrollThreshold) {
-    loadMoreSessions()
-  }
-}
+//   // 如果距离底部小于阈值，则加载更多
+//   if (distanceToBottom <= scrollThreshold) {
+//     loadMoreSessions()
+//   }
+// }
 
 // 处理导航点击
 const handleNavClick = (tab: string) => {
@@ -407,12 +572,118 @@ const handleNavClick = (tab: string) => {
   }
 }
 
-// 处理下拉菜单选择
+// 处理会话下拉菜单选择
 const handleDropdownSelect = (command: string, session: any) => {
   if (command === 'rename') {
     handleRenameSession(session)
+  } else if (command === 'move') {
+    handleMoveSession(session)
   } else if (command === 'delete') {
     handleDeleteSession(session)
+  }
+}
+
+// 处理分组下拉菜单选择
+const handleGroupDropdown = (command: string, group: any) => {
+  if (command === 'rename') {
+    handleRenameGroup(group)
+  } else if (command === 'delete') {
+    handleDeleteGroup(group)
+  }
+}
+
+/**
+ * 移动会话到分组
+ */
+const handleMoveSession = (session: any) => {
+  // 构建分组选项，顺序与侧边栏一致
+  const groupOptions = sessionGroupStore.groups.map(g => ({
+    label: g.name,
+    value: g.id
+  }))
+  groupOptions.push({ label: '任务列表（未分组）', value: UNGROUPED_ID })
+
+  moveGroupOptions.value = groupOptions
+  moveTargetSession.value = session
+  moveSelectedGroupId.value = session.groupId || UNGROUPED_ID
+  moveGroupDialogVisible.value = true
+}
+
+/**
+ * 确认移动会话到分组
+ */
+const confirmMoveSession = async () => {
+  try {
+    const session = moveTargetSession.value
+    if (!session) return
+
+    const targetGroupId = moveSelectedGroupId.value
+    const groupIdToSet = targetGroupId === UNGROUPED_ID ? null : targetGroupId
+
+    // 调用API更新
+    await apiService.updateSession(session.id, { groupId: groupIdToSet })
+
+    // 更新统一数据源中的分组ID
+    sessionStore.moveSession(session.id, groupIdToSet)
+
+    toast.success('会话已移动')
+    moveGroupDialogVisible.value = false
+    moveTargetSession.value = null
+  } catch (error) {
+    console.error('移动会话失败:', error)
+    toast.error('移动会话失败')
+  }
+}
+
+/**
+ * 重命名分组
+ */
+const handleRenameGroup = async (group: any) => {
+  try {
+    const result = await prompt('重命名分组', {
+      placeholder: '请输入分组名称',
+      defaultValue: group.name
+    })
+
+    if (result && result !== group.name) {
+      const success = await sessionGroupStore.updateGroup(group.id, result)
+      if (success) {
+        toast.success('分组重命名成功')
+      }
+    }
+  } catch (error) {
+    console.error('重命名分组失败:', error)
+    toast.error('重命名分组失败')
+  }
+}
+
+/**
+ * 删除分组
+ */
+const handleDeleteGroup = async (group: any) => {
+  try {
+    const confirmed = await confirm('删除分组', `确定要删除分组 "${group.name}" 吗？该分组下的会话将自动归入未分组。`, {
+      type: 'warning',
+      confirmText: '删除',
+      cancelText: '取消'
+    })
+
+    if (confirmed) {
+      // 将该分组下的所有会话移到未分组（统一数据源中批量更新）
+      const sessionsToMove = sessionStore.getSessionsByGroup(group.id)
+      for (const s of sessionsToMove) {
+        s.groupId = null
+      }
+
+      // 删除分组
+      const success = await sessionGroupStore.deleteGroup(group.id)
+      if (success) {
+        toast.success('分组已删除')
+      }
+    }
+  } catch (error) {
+    console.error('删除分组失败:', error)
+    toast.error('删除分组失败')
   }
 }
 
@@ -438,11 +709,8 @@ const handleRenameSession = async (session: any) => {
       // 调用 API 更新对话
       await apiService.updateSession(session.id, updatedSession)
 
-      // 更新本地会话列表中的标题
-      const localSession = sessionStore.sessionsList.find(s => s.id === session.id)
-      if (localSession) {
-        localSession.title = newTitle
-      }
+      // 更新统一数据源中的标题
+      sessionStore.updateSessionTitle(session.id, newTitle)
 
       toast.success('对话重命名成功')
     }
@@ -493,24 +761,11 @@ const confirmDeleteSession = async () => {
     // 传递 deleteWorkspace 参数
     await apiService.deleteSession(session.id, deleteWorkspaceChecked.value)
 
-    const index = sortedSessions.value.findIndex(s => s.id === session.id)
-
-    // 如果删除的是当前会话
+    // 如果删除的是当前会话，自动切换到相邻会话
     if (currentSessionId.value === session.id) {
-      if (index < sortedSessions.value.length - 1) {
-        // 选择下一个会话
-        router.replace({ name: 'Chat', params: { sessionId: sortedSessions.value[index + 1].id } })
-      } else if (index > 0) {
-        // 选择上一个会话
-        router.replace({ name: 'Chat', params: { sessionId: sortedSessions.value[index - 1].id } })
-      } else {
-        // 没有其他会话了
-        router.replace({ name: 'Chat', params: { sessionId: 'new-session' } })
-      }
+      router.replace({ name: 'Chat', params: { sessionId: 'new-session' } })
     }
     sessionStore.clearSessionState(session.id)
-    sessionStore.sessionsList = sessionStore.sessionsList.filter(s => s.id !== session.id)
-    totalSessionsCount.value = Math.max(0, totalSessionsCount.value - 1)
     toast.success('对话删除成功')
 
     // 关闭对话框
@@ -560,11 +815,10 @@ function initSessionEventListeners() {
     }
     const { payload } = event
     if (payload?.session) {
-      // 避免重复添加已存在的会话
-      const exists = sessionStore.sessionsList.find(s => s.id === payload.session.id)
-      if (!exists) {
-        sessionStore.sessionsList.unshift(payload.session)
-        totalSessionsCount.value++
+      const session = payload.session
+      // 避免重复添加
+      if (!sessionStore.getSession(session.id)) {
+        sessionStore.setSession(session)
       }
     }
   })
@@ -576,18 +830,16 @@ function initSessionEventListeners() {
       return
     }
     const { sessionId } = event
-    const index = sortedSessions.value.findIndex(s => s.id === sessionId)
 
-    sessionStore.sessionsList = sessionStore.sessionsList.filter(s => s.id !== sessionId)
-    totalSessionsCount.value = Math.max(0, totalSessionsCount.value - 1)
+    // 从统一数据源中移除
+    sessionStore.removeSession(sessionId)
+    sessionStore.clearSessionState(sessionId)
 
-    // 如果删除的是当前会话，清理状态并切换到其他会话
+    // 如果删除的是当前会话，切换到其他会话
     if (currentSessionId.value === sessionId) {
-      sessionStore.clearSessionState(sessionId)
-      if (index < sortedSessions.value.length - 1) {
-        router.replace({ name: 'Chat', params: { sessionId: sortedSessions.value[index + 1].id } })
-      } else if (index > 0) {
-        router.replace({ name: 'Chat', params: { sessionId: sortedSessions.value[index - 1].id } })
+      const remainingSessions = allSessions.value
+      if (remainingSessions.length > 0) {
+        router.replace({ name: 'Chat', params: { sessionId: remainingSessions[0].id } })
       } else {
         router.replace({ name: 'Chat', params: { sessionId: 'new-session' } })
       }
@@ -601,11 +853,18 @@ function initSessionEventListeners() {
       return
     }
     const { sessionId, payload } = event
-    const session = sessionStore.sessionsList.find(s => s.id === sessionId)
-    if (session && payload?.session) {
-      Object.assign(session, payload.session)
+
+    // 直接更新统一数据源
+    if (payload?.session) {
+      const existing = sessionStore.getSession(sessionId)
+      if (existing) {
+        Object.assign(existing, payload.session)
+      } else {
+        sessionStore.setSession(payload.session)
+      }
     }
-    // 更新最后活跃时间，触发会话列表重新排序
+
+    // 更新最后活跃时间
     sessionStore.updateSessionLastActiveTime(sessionId, event.timestamp)
 
     // 非当前会话的更新标记为未读
@@ -627,18 +886,17 @@ function initSessionEventListeners() {
       return
     }
 
-    const session = sessionStore.sessionsList.find(s => s.id === sessionId)
-
-    if (!session && payload?.session) {
-      // 会话不在当前列表中（可能是未加载），插入到列表头部
-      sessionStore.sessionsList.unshift(payload.session)
-      totalSessionsCount.value++
-    } else if (session && payload?.session) {
-      // 同步会话字段（如 title、lastMessage 等可能已更新）
-      Object.assign(session, payload.session)
+    // 直接更新统一数据源
+    if (payload?.session) {
+      const existing = sessionStore.getSession(sessionId)
+      if (existing) {
+        Object.assign(existing, payload.session)
+      } else {
+        sessionStore.setSession(payload.session)
+      }
     }
 
-    // 更新最后活跃时间，触发会话列表重新排序
+    // 更新最后活跃时间
     sessionStore.updateSessionLastActiveTime(sessionId, event.timestamp)
 
     // 非当前会话标记为未读
@@ -655,6 +913,23 @@ function initSessionEventListeners() {
     // 标记会话为空闲
     sessionStore.markSessionIdle(sessionId)
   })
+}
+
+// 分组管理弹窗状态
+const groupManageVisible = ref(false)
+
+/**
+ * 打开分组管理弹窗
+ */
+const openGroupManage = () => {
+  groupManageVisible.value = true
+}
+
+/**
+ * 关闭分组管理弹窗后刷新
+ */
+const onGroupManageClose = () => {
+  groupManageVisible.value = false
 }
 
 /**
@@ -691,15 +966,6 @@ onUnmounted(() => {
   color: var(--color-sidebar-text-active);
 }
 
-.session-avatar {
-  width: 1.5rem;
-  height: 1.5rem;
-  flex-shrink: 0;
-}
-
-.session-title {
-  line-height: 1.4;
-}
 
 .session-actions {
   margin-left: auto;

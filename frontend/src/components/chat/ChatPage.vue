@@ -159,14 +159,9 @@ const sessionStore = useSessionStore();
 let unsubscribeStreamStarted: (() => void) | null = null;
 
 // 计算属性
-// 获取和设置会话列表的计算属性，与 store 中的会话列表保持同步
-const sessions = computed({
-  get() {
-    return sessionStore.sessionsList;
-  },
-  set(value) {
-    sessionStore.sessionsList = value;
-  }
+// 从 sessionStore 的 sessionsMap 派生会话列表
+const sessions = computed((): Session[] => {
+  return sessionStore.sessionsList;
 });
 
 
@@ -227,24 +222,20 @@ function onPaneResized(event: { panes: Array<{ size: number }> }) {
 
 /**
  * 根据会话 ID 更新会话信息
- * 只更新允许的字段，防止意外修改敏感数据
+ * 直接更新 sessionStore 中的统一数据源
  */
 const updateSessionById = async (sessionId: string, data: any) => {
-  const session = sessions.value.find(session => session.id === sessionId);
+  const session = sessionStore.getSession(sessionId);
   if (session) {
     // 定义需要更新的字段
     const allowedFields = ['title', 'avatar_url', 'last_message', 'created_at', 'updated_at'];
-    const updateData: any = {};
 
-    // 只复制允许的字段
-    allowedFields.forEach((field: string) => {
+    // 只复制允许的字段并批量更新
+    for (const field of allowedFields) {
       if (field in data) {
-        updateData[field] = data[field];
+        (session as any)[field] = data[field];
       }
-    });
-
-    // 批量更新
-    Object.assign(session, updateData);
+    }
   }
 };
 
@@ -261,8 +252,9 @@ const handleCreateSessionWithMessage = async (session: any, inputMessage: any) =
     return;
   try {
     const response = await apiService.createSession(session)
-    // 直接插入会话列表头部
-    sessionStore.sessionsList.unshift(response)
+    // 写入统一数据源，侧边栏通过响应式自动更新
+    sessionStore.setSession(response)
+
     if (inputMessage) {
       inputMessage.isWaiting = true
       sessionStore.setInputMessage(response.id, inputMessage)
@@ -321,6 +313,7 @@ async function clearChat() {
     try {
       await apiService.clearSessionMessages(currentSession.value.id);
       sessionStore.clearSessionState(currentSession.value.id);
+      // 注意：clearSessionState 已从 sessionsMap 中移除该会话
       // 重新加载消息列表
       const chatPanel = chatPanelRef.value as any;
       if (chatPanel && chatPanel.loadMessages) {

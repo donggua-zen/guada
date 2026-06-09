@@ -418,7 +418,9 @@ function handleSplitterMouseMove(e: MouseEvent) {
       const autoPaneMinPixel = getAutoPaneMinPixel(props.pane1, containerSize);
 
       // 拖拽方向与 pane2 尺寸变化相反
-      let newPixel = startPixel - delta;
+      // 水平布局（上下分割）时，向下拖拽（delta > 0）意味着 pane2 应该变大
+      // 垂直布局（左右分割）时，向右拖拽（delta > 0）意味着 pane2 应该变小
+      let newPixel = props.horizontal ? startPixel + delta : startPixel - delta;
       if (newPixel < minPixel) newPixel = minPixel;
       if (newPixel > maxPixel) newPixel = maxPixel;
       // 限制固定 pane 不超过容器减去自动 pane 最小需求
@@ -611,9 +613,13 @@ onUnmounted(() => {
 }
 
 /* 水平布局：分割条为横线 */
+.lite-splitpanes--horizontal .lite-splitpanes__splitter,
 .lite-splitpanes__splitter--horizontal {
-  height: 4px;
-  cursor: row-resize;
+  width: 100% !important;
+  height: 4px !important;
+  min-height: 4px !important;
+  max-height: 4px !important;
+  cursor: row-resize !important;
 }
 
 /* 拖拽期间禁用所有过渡动画 */
