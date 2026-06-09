@@ -1,11 +1,11 @@
 <template>
-  <div class="tool-calls-section my-1">
+  <div class="tool-calls-section">
     <div class="flex" v-for="(tool, toolIndex) in toolCalls" :key="toolIndex">
       <!-- 循环展示每个工具调用 -->
       <div
-        class="flex items-center text-sm text-gray-700 dark:text-[#8b8d95] cursor-pointer font-medium py-1 transition-colors duration-200 mb-1 min-w-0"
+        class="flex items-center text-sm text-gray-700 dark:text-[#8b8d95] cursor-pointer font-medium py-1 transition-colors duration-200 min-w-0"
         @click.stop="openSingleToolDialog(toolIndex)">
-        <el-icon class="flex-shrink-0" size="15">
+        <el-icon class="shrink-0" size="15">
           <component :is="getToolIconComponent(tool)" class="text-gray-500" />
         </el-icon>
         <div class="ml-2 truncate text-gray-400 dark:text-gray-500 ">
@@ -138,7 +138,6 @@ const isLoadingDetails = ref(false);
 const loadedToolCalls = ref<ToolCall[] | null>(null);
 const loadedToolResponses = ref<any[] | null>(null);
 
-const toolCount = computed(() => props.toolCalls?.length || 0);
 
 /**
  * 获取当前选中的工具（优先使用懒加载的完整数据）
@@ -214,14 +213,14 @@ watch(showDialog, (newVal) => {
  */
 const getToolIconComponent = (tool: ToolCall) => {
   const displayInfo = tool.metadata?.displayMessage;
-  
+
   if (typeof displayInfo === 'object' && displayInfo !== null) {
     const info = displayInfo as ToolDisplayInfo;
     // 优先使用 toolType（如 edit、search），其次从 toolName 提取 namespace
     const iconType = info.toolType || info.toolName?.split('__')[0];
     return getToolIconByNamespace(iconType);
   }
-  
+
   return Wrench24Filled;
 };
 
@@ -351,15 +350,11 @@ const formatToolResponse = (response: any): string => {
 </script>
 
 <style scoped>
-@reference "tailwindcss";
 
 .tool-dialog-content {
   line-height: 1.6;
 }
 
-.tool-call-detail {
-  /* 移除每次数据更新都会触发的淡入动画，避免闪烁 */
-}
 
 .tool-call-detail pre {
   white-space: pre-wrap;
