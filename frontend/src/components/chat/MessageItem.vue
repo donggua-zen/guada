@@ -14,34 +14,55 @@
             <span class="text-[1.3em] text-gray-700 dark:text-gray-300 font-medium leading-tight mr-2">{{
               displayName
             }}</span>
-            <span v-if="currentModelName && currentModelName !== 'unknown'"
-              class="text-[1em] text-gray-400 mt-0.5">{{
-                currentModelName
-              }}</span>
+            <span v-if="currentModelName && currentModelName !== 'unknown'" class="text-[1em] text-gray-400 mt-0.5">{{
+              currentModelName
+            }}</span>
           </div>
         </div>
       </div>
       <div class="message-item__card">
-        <template v-for="(turn, index) in turnsCache" :key="turn.id">
-          <!-- 使用拆分后的思考框组件 -->
-          <MessageThinkingSection v-if="turn.reasoningContent" :reasoning-content="turn.reasoningContent"
-            :is-thinking="turn.state?.isThinking || false" :is-streaming="turn.state?.isStreaming || false"
-            :thinking-duration-ms="turn.thinkingDurationMs ?? turn.metadata?.thinkingDurationMs"
-            :meta-data="turn.metadata" @click="handleThinkingClick" />
-
-          <template v-if="turn.content">
-            <MarkdownContent v-if="isAssistant" class="message-item__text markdown-text" @click="handleClick"
-              :content="turn.content" />
-            <div v-else class="message-item__text break-all whitespace-pre-wrap">
-              <el-tag v-if="messageMetadata.type === 'scheduler'" size="small" type="success" class="mr-1">定时任务</el-tag>
-              <span v-html="renderSkillBadges(turn.content)"></span>
-            </div>
+        <template v-for="(group, groupIndex) in displayGroups" :key="group.id">
+          <!-- 正文内容分组：只渲染 content -->
+          <template v-if="group.type === 'content'">
+            <template v-for="item in group.items" :key="item.id">
+              <MarkdownContent v-if="isAssistant" class="message-item__text markdown-text" @click="handleClick"
+                :content="item.content || ''" />
+              <div v-else class="message-item__text break-all whitespace-pre-wrap">
+                <el-tag v-if="messageMetadata.type === 'scheduler'" size="small" type="success"
+                  class="mr-1">定时任务</el-tag>
+                <span v-html="renderSkillBadges(item.content || '')"></span>
+              </div>
+            </template>
           </template>
 
-          <!-- 使用拆分后的工具调用组件 -->
-          <MessageToolCalls v-if="turn.metadata && turn.metadata.toolCalls" :tool-calls="turn.metadata.toolCalls"
-            :tool-responses="turn.metadata.toolCallsResponse" :is-streaming="turn.state?.isStreaming || false"
-            :content-id="turn.id" />
+          <!-- 中间处理过程分组：可折叠，只渲染 think/tool -->
+          <div v-else class="process-group">
+            <!-- 折叠头部（仅当 isCollapsible 时显示） -->
+            <div v-if="group.isCollapsible" class="process-group__header" @click="toggleGroup(group.id)">
+              <el-icon size="14" class="process-group__arrow" :class="{ 'is-expanded': isGroupExpanded(group.id) }">
+                <ArrowRightTwotone />
+              </el-icon>
+              <span class="process-group__title">
+                {{ streamingState.isStreaming && groupIndex === displayGroups.length - 1 ? '正在处理中' : '中间处理过程' }} ({{ group.items.length }} 个步骤)
+              </span>
+            </div>
+
+            <!-- 展开内容 -->
+            <div v-show="!group.isCollapsible || isGroupExpanded(group.id)" class="process-group__body py-1 space-y-1">
+              <template v-for="item in group.items" :key="item.id">
+                <!-- think -->
+                <MessageThinkingSection v-if="item.type === 'think'" :reasoning-content="item.reasoningContent || ''"
+                  :is-thinking="item.source.state?.isThinking || false"
+                  :is-streaming="item.source.state?.isStreaming || false"
+                  :thinking-duration-ms="item.source.thinkingDurationMs ?? item.source.metadata?.thinkingDurationMs"
+                  :metadata="item.source.metadata" @click="handleThinkingClick" />
+                <!-- tool -->
+                <MessageToolCalls v-if="item.type === 'tool'" :tool-calls="item.toolCalls || []"
+                  :tool-responses="item.toolResponses" :is-streaming="item.source.state?.isStreaming || false"
+                  :content-id="item.source.id" />
+              </template>
+            </div>
+          </div>
         </template>
 
         <el-alert v-if="metadata && metadata.finishReason == 'error'" title="API 请求错误" type="error" :closable="false">
@@ -134,6 +155,7 @@ import {
   AccessTimeTwotone,
   InsightsTwotone,
   MenuBookOutlined,
+  ArrowRightTwotone,
 } from "@vicons/material";
 
 // @ts-ignore - icons 组件尚未迁移到 TypeScript
@@ -142,7 +164,7 @@ import { Loading } from "../icons";
 import { FileItem, Avatar } from "../ui";
 import { usePopup } from "../../composables/usePopup";
 import { formatTime } from '../../utils';
-import { getCurrentTurns, getContentVersions } from '@/utils/messageUtils';
+import { getCurrentTurns, getContentVersions, groupContentsForDisplay, type DisplayGroup } from '@/utils/messageUtils';
 import { getModelDisplayName, getModelAvatarPath } from '@/utils/modelUtils';
 
 // 导入拆分后的子组件
@@ -189,6 +211,60 @@ const showImageViewer = ref(false);
 const currentPreViewIndex = ref(0);
 const rootRef = ref<HTMLElement | null>(null);
 
+// ============================================
+// 🔹 展示分组与折叠状态
+// ============================================
+
+// 跟踪用户手动展开的分组 ID 集合
+const expandedGroups = ref<Set<string>>(new Set());
+
+// 跟踪自动展开的分组 ID 集合（流式输出时自动展开，结束后自动移除）
+const autoExpandedGroups = ref<Set<string>>(new Set());
+
+/**
+ * 切换分组的展开/折叠状态
+ */
+const toggleGroup = (groupId: string) => {
+  const set = expandedGroups.value;
+  if (set.has(groupId)) {
+    set.delete(groupId);
+  } else {
+    set.add(groupId);
+  }
+};
+
+/**
+ * 判断分组是否展开
+ * 优先级：用户手动展开 > 自动展开
+ */
+const isGroupExpanded = (groupId: string): boolean => {
+  return expandedGroups.value.has(groupId) || autoExpandedGroups.value.has(groupId);
+};
+
+// 缓存 turns 结果，避免每次 contents 变化都重新计算
+const turnsCache = computed(() => getCurrentTurns(props.message as any));
+
+// 计算展示分组：将 turnsCache 按 content/process 聚合
+const displayGroups = computed<DisplayGroup[]>(() => {
+  return groupContentsForDisplay(turnsCache.value);
+});
+
+// 监听分组变化，自动展开/折叠最后一个 process 分组
+watch(
+  () => displayGroups.value,
+  (groups) => {
+    autoExpandedGroups.value.clear();
+
+    if (groups.length === 0) return;
+
+    const lastGroup = groups[groups.length - 1];
+    if (lastGroup.type === 'process' && lastGroup.isCollapsible) {
+      autoExpandedGroups.value.add(lastGroup.id);
+    }
+  },
+  { deep: true, immediate: true }
+);
+
 
 
 const previewList = computed(() => {
@@ -200,9 +276,6 @@ const isAssistant = computed(() => props.message.role === "assistant");
 const messageClass = computed(() =>
   isAssistant.value ? "message-item--assistant" : "message-item--user"
 );
-
-// 缓存 turns 结果，避免每次 contents 变化都重新计算
-const turnsCache = computed(() => getCurrentTurns(props.message as any));
 
 // 缓存 contentVersions，避免每次 contents 变化都重新计算
 const contentVersionsCache = computed(() => getContentVersions(props.message as any));
@@ -548,6 +621,48 @@ defineExpose({
     opacity: 1;
     transform: translateY(0);
   }
+}
+
+/* ============================================
+   中间处理过程分组样式
+   ============================================ */
+
+.process-group {
+  margin: 4px 0;
+}
+
+/* 折叠头部 */
+.process-group__header {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 6px;
+  background-color: var(--el-fill-color-light);
+  color: var(--el-text-color-secondary);
+  font-size: 13px;
+  cursor: pointer;
+  transition: background-color 0.2s ease;
+  user-select: none;
+}
+
+.process-group__header:hover {
+  background-color: var(--el-fill-color);
+}
+
+/* 箭头图标 */
+.process-group__arrow {
+  transition: transform 0.2s ease;
+  color: var(--el-text-color-placeholder);
+}
+
+.process-group__arrow.is-expanded {
+  transform: rotate(90deg);
+}
+
+/* 标题文字 */
+.process-group__title {
+  line-height: 1.4;
 }
 </style>
 <style>

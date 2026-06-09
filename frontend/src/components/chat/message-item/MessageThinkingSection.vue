@@ -1,7 +1,7 @@
 <template>
-  <div class="thinking-section mb-2" :class="{ 'thinking-section--expanded': isExpanded }">
+  <div class="thinking-section" :class="{ 'thinking-section--expanded': isExpanded }">
     <div
-      class="thinking-section__header h-7 inline-flex justify-center items-center text-sm text-gray-700 dark:text-[#8b8d95] cursor-pointer font-medium my-1 transition-colors duration-200"
+      class="thinking-section__header inline-flex justify-center items-center text-sm text-gray-700 dark:text-[#8b8d95] cursor-pointer font-medium  transition-colors duration-200"
       @click.stop="handleToggle">
       <div class="flex items-center">
         <!-- <el-icon size="15" class="">

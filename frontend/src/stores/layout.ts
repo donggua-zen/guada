@@ -92,6 +92,19 @@ export const useLayoutStore = defineStore('layout', () => {
   }
 
   /**
+   * 将存储的壁纸路径解析为完整 URL
+   * 根据当前 apiService.baseURL 动态拼接，适配 Electron 随机端口
+   */
+  const resolveWallpaperUrl = (storedUrl: string | null): string | null => {
+    if (!storedUrl) return null
+    if (storedUrl.startsWith('http://') || storedUrl.startsWith('https://')) {
+      return storedUrl
+    }
+    const baseUrl = apiService.baseURL.replace(/\/api\/v1$/, '')
+    return `${baseUrl}${storedUrl.startsWith('/') ? '' : '/'}${storedUrl}`
+  }
+
+  /**
    * 应用壁纸设置到 CSS 变量
    * 无壁纸时不应用透明度和毛玻璃效果
    */
@@ -109,6 +122,9 @@ export const useLayoutStore = defineStore('layout', () => {
       root.classList.remove('wallpaper-loaded')
       isLoadingWallpaper = true
 
+      // 解析为完整 URL 用于加载（适配动态端口）
+      const fullUrl = resolveWallpaperUrl(wallpaperUrl.value)
+
       // 预加载壁纸图片
       const img = new Image()
       img.onload = () => {
@@ -123,10 +139,10 @@ export const useLayoutStore = defineStore('layout', () => {
         root.classList.add('wallpaper-loaded')
         isLoadingWallpaper = false
       }
-      img.src = wallpaperUrl.value
-      console.log('[壁纸加载] 开始加载:', wallpaperUrl.value)
+      img.src = fullUrl || ''
+      console.log('[壁纸加载] 开始加载:', fullUrl)
 
-      root.style.setProperty('--wallpaper-image', `url(${wallpaperUrl.value})`)
+      root.style.setProperty('--wallpaper-image', `url(${fullUrl})`)
       // 有壁纸时才应用透明度和毛玻璃
       root.style.setProperty('--sidebar-opacity', String(sidebarOpacity.value / 100))
       root.style.setProperty('--content-opacity', String(contentOpacity.value / 100))

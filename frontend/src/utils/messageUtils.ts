@@ -163,6 +163,208 @@ export function formatDuration(ms: number | null | undefined): string {
 }
 
 /**
+ * 展示分组类型
+ */
+export type DisplayGroupType = "content" | "process";
+
+/**
+ * 展示项类型
+ * 将大 content 拆分为独立的展示单元
+ */
+export type DisplayItemType = "content" | "think" | "tool";
+
+/**
+ * 展示项接口
+ * 扁平化结构，每个项只包含一种类型的内容
+ */
+export interface DisplayItem {
+  id: string;
+  type: DisplayItemType;
+  // content 类型的内容
+  content?: string;
+  // think 类型的内容
+  reasoningContent?: string;
+  // tool 类型的内容
+  toolCalls?: any[];
+  toolResponses?: any[];
+  // 引用原始 MessageContent，用于获取状态等元数据
+  source: MessageContent;
+}
+
+/**
+ * 展示分组接口
+ * 用于将连续的 think/tool 聚合为「中间处理过程」
+ */
+export interface DisplayGroup {
+  id: string;
+  type: DisplayGroupType;
+  // process 组存 DisplayItem，content 组也存 DisplayItem（但只有一个 content 类型的）
+  items: DisplayItem[];
+  isCollapsible: boolean;
+  isExpanded: boolean;
+}
+
+/**
+ * 将消息内容列表按展示规则分组
+ *
+ * 核心规则：content（小 content）是唯一的分隔符
+ * - 单个大 content 内部顺序：think → content → tool，顺序不可变
+ * - 以 content 为界，把 think/tool 分别归入前后的 process 组
+ * - content 自身单独成组
+ * - 连续多个 think/tool（可来自不同大 content）聚合成一个 process 组
+ * - process 组按包含的 think/tool 数量 > 1 时可折叠
+ *
+ * 示例：
+ *   单个大 content [think + content + tool] → 【process: think】→【content】→【process: tool】
+ *   think → tool → think → content → tool → think → content
+ *   分组：【process: think tool think】→【content】→【process: tool think】→【content】
+ *
+ * @param contents - 消息内容数组
+ * @returns 展示分组数组
+ */
+/**
+ * 增量分组缓存
+ * 用于优化流式输出时的分组计算性能
+ */
+interface GroupCache {
+  // 缓存的源数据引用（用于快速判断是否需要重新计算）
+  contentsRef: MessageContent[];
+  // 缓存的扁平化结果
+  items: DisplayItem[];
+  // 缓存的分组结果
+  groups: DisplayGroup[];
+  // 最后处理的 content 索引（用于增量计算）
+  lastContentIndex: number;
+}
+
+// 全局缓存（按消息 ID 隔离，避免不同消息间的缓存冲突）
+const groupCacheMap = new Map<string, GroupCache>();
+
+/**
+ * 将单个大 content 拆分为 DisplayItem 列表
+ */
+function flattenSingleContent(content: MessageContent): DisplayItem[] {
+  const items: DisplayItem[] = [];
+
+  // 1. think
+  if (content.reasoningContent) {
+    items.push({
+      id: `${content.id}-think`,
+      type: "think",
+      reasoningContent: content.reasoningContent,
+      source: content,
+    });
+  }
+
+  // 2. content
+  if (content.content && content.content.trim().length > 0) {
+    items.push({
+      id: `${content.id}-content`,
+      type: "content",
+      content: content.content,
+      source: content,
+    });
+  }
+
+  // 3. tool
+  if (content.metadata?.toolCalls?.length) {
+    items.push({
+      id: `${content.id}-tool`,
+      type: "tool",
+      toolCalls: content.metadata.toolCalls,
+      toolResponses: content.metadata.toolCallsResponse,
+      source: content,
+    });
+  }
+
+  return items;
+}
+
+/**
+ * 将大 content 列表拆分为扁平化的 DisplayItem 列表（全量计算）
+ */
+function flattenContents(contents: MessageContent[]): DisplayItem[] {
+  const items: DisplayItem[] = [];
+  for (const content of contents) {
+    items.push(...flattenSingleContent(content));
+  }
+  return items;
+}
+
+/**
+ * 执行分组逻辑
+ */
+function doGrouping(items: DisplayItem[]): DisplayGroup[] {
+  const groups: DisplayGroup[] = [];
+  let currentProcess: DisplayItem[] = [];
+
+  const flushProcess = () => {
+    if (currentProcess.length === 0) return;
+    groups.push({
+      id: `process-${currentProcess[0].id}`,
+      type: "process",
+      items: [...currentProcess],
+      isCollapsible: currentProcess.length > 1,
+      isExpanded: false,
+    });
+    currentProcess = [];
+  };
+
+  for (const item of items) {
+    if (item.type === "content") {
+      flushProcess();
+      groups.push({
+        id: `content-${item.id}`,
+        type: "content",
+        items: [item],
+        isCollapsible: false,
+        isExpanded: true,
+      });
+    } else {
+      currentProcess.push(item);
+    }
+  }
+
+  flushProcess();
+  return groups;
+}
+
+/**
+ * 将消息内容列表按展示规则分组（支持增量计算）
+ *
+ * 核心规则：content（小 content）是唯一的分隔符
+ * - 先把大 content 拆分为 think/content/tool 的 DisplayItem 列表
+ * - 以 content 为界，把 think/tool 分别归入前后的 process 组
+ * - content 自身单独成组
+ * - 连续多个 think/tool 聚合成一个 process 组
+ * - process 组按包含的 think/tool 数量 > 1 时可折叠
+ *
+ * 性能优化：
+ * - 使用消息级缓存避免重复计算
+ * - 流式输出时只处理新增的 content
+ *
+ * 示例：
+ *   单个大 content [think + content + tool] → 【process: think】→【content】→【process: tool】
+ *   think → tool → think → content → tool → think → content
+ *   分组：【process: think tool think】→【content】→【process: tool think】→【content】
+ *
+ * @param contents - 消息内容数组
+ * @param messageId - 消息 ID（用于缓存隔离）
+ * @returns 展示分组数组
+ */
+export function groupContentsForDisplay(
+  contents: MessageContent[],
+  _messageId?: string
+): DisplayGroup[] {
+  if (!contents || contents.length === 0) return [];
+
+  const items = flattenContents(contents);
+  if (items.length === 0) return [];
+
+  return doGrouping(items);
+}
+
+/**
  * 从消息内容中提取标题
  * @param message - 消息对象
  * @returns 提取的标题文本
