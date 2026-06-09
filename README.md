@@ -95,14 +95,15 @@
 | **定时任务** | Agent 按周期自动执行，支持 Cron 表达式与固定间隔，角色继承与会话隔离，完整执行记录 |
 | **浏览器自动化** | Electron 内嵌 Chromium，Agent 可直接操控浏览器。经智能压缩优化，保留整体页面架构的同时大幅降低 Token 消耗，AI 既看清全局又省成本 |
 | **多模型管理** | 统一接入 OpenAI、Anthropic、Azure、Google 等主流 LLM，支持动态切换与层级模型配置 |
+| **自定义壁纸** | 自定义背景壁纸、透明度、毛玻璃效果，打造个性化工作站 |
 
 ### 产品截图
 
-| ![产品截图1](./images/1.png) | ![产品截图2](./images/2.png) |
+| ![产品截图1](./images/image_001.png) | ![产品截图2](./images/image_002.png) |
 |:---:|:---:|
-| ![产品截图3](./images/3.png) | ![产品截图4](./images/4.png) |
-| ![知识库截图](./images/知识库截图.png) | ![浏览器自动化](./images/浏览器自动化.png) |
-| ![机器人添加知识库](./images/机器人添加知识库.png) | ![定时任务](./images/定时任务.png) |
+| ![产品截图3](./images/image_003.png) | ![产品截图4](./images/image_004.png) |
+| ![知识库截图](./images/image_005.png) | ![浏览器自动化](./images/image_006.png) |
+| ![机器人添加知识库](./images/image_007.png) | ![定时任务](./images/image_008.png) |
 
 ---
 
