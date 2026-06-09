@@ -8,6 +8,8 @@
 [![Prisma](https://img.shields.io/badge/Prisma-7.x-2D3748?logo=prisma&logoColor=white)](https://www.prisma.io)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
+中文 | [English](README.en.md)
+
 ---
 
 ## 项目仓库
