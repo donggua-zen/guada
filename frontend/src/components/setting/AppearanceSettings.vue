@@ -189,6 +189,35 @@ const settingsForm = reactive({
 const previewUrl = ref<string | null>(null)
 const uploadRef = ref<InstanceType<typeof ElUpload> | null>(null)
 
+/**
+ * 将相对路径拼接为完整 URL（用于预览和显示）
+ * 根据当前 apiService.baseURL 动态拼接，适配 Electron 随机端口
+ */
+const resolveWallpaperUrl = (storedUrl: string | null): string | null => {
+  if (!storedUrl) return null
+  if (storedUrl.startsWith('http://') || storedUrl.startsWith('https://')) {
+    return storedUrl
+  }
+  const baseUrl = apiService.baseURL.replace(/\/api\/v1$/, '')
+  return `${baseUrl}${storedUrl.startsWith('/') ? '' : '/'}${storedUrl}`
+}
+
+/**
+ * 从完整 URL 中提取相对路径（用于保存到后端）
+ */
+const extractRelativePath = (fullUrl: string | null): string | null => {
+  if (!fullUrl) return null
+  if (!fullUrl.startsWith('http://') && !fullUrl.startsWith('https://')) {
+    return fullUrl
+  }
+  try {
+    const url = new URL(fullUrl)
+    return url.pathname
+  } catch {
+    return fullUrl
+  }
+}
+
 // 防抖保存（300ms）
 const debouncedSave = useDebounceFn(async () => {
   await handleSave()
@@ -213,7 +242,7 @@ const loadSettings = async () => {
     settingsForm.contentOpacity = response.contentOpacity ?? 100
     settingsForm.acrylicEnabled = response.acrylicEnabled !== false
     settingsForm.blurRadius = response.blurRadius ?? 20
-    previewUrl.value = response.wallpaperUrl || null
+    previewUrl.value = resolveWallpaperUrl(response.wallpaperUrl || null)
 
     // 同步到 layout store
     syncToLayoutStore()
@@ -240,7 +269,7 @@ const handleSave = async () => {
       contentOpacity: settingsForm.contentOpacity,
       acrylicEnabled: settingsForm.acrylicEnabled,
       blurRadius: settingsForm.blurRadius,
-      wallpaperUrl: previewUrl.value,
+      wallpaperUrl: extractRelativePath(previewUrl.value),
     }
 
     await apiService.updateGroupSettings('appearance', dataToSave)
@@ -274,7 +303,7 @@ const handleFileChange = async (uploadFile: any) => {
 
   try {
     const response = await apiService.uploadWallpaper(file)
-    previewUrl.value = response.url
+    previewUrl.value = resolveWallpaperUrl(extractRelativePath(response.url))
     await handleSave()
     ElMessage.success('壁纸上传成功')
   } catch (error: any) {
