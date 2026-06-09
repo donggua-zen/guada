@@ -418,9 +418,7 @@ const toggleGroupExpand = (groupId: string): void => {
 
 // 分组是否还有更多会话
 const groupHasMoreSessions = (groupId: string): boolean => {
-  const loaded = sessionStore.getLoadedCount(groupId)
-  const total = getGroupSessionCount(groupId)
-  return loaded < total
+  return sessionStore.groupHasMore(groupId)
 }
 
 // 初始化加载所有分组的前N个会话
@@ -440,7 +438,7 @@ const loadSessions = async () => {
         sessionStore.setSession(session)
       }
       sessionStore.setLoadedCount(group.id, data.items?.length || 0)
-      sessionStore.setHasMore(group.id, (data.items?.length || 0) < (data.total || 0))
+      sessionStore.setHasMore(group.id, data.hasMore ?? (data.items?.length || 0) < (data.total || 0))
       if (!sessionGroupStore.expandedState.has(group.id)) {
         sessionGroupStore.setExpand(group.id, true)
       }
@@ -459,7 +457,7 @@ const loadSessions = async () => {
       sessionStore.setSession(session)
     }
     sessionStore.setLoadedCount(UNGROUPED_ID, ungroupedData.items?.length || 0)
-    sessionStore.setHasMore(UNGROUPED_ID, (ungroupedData.items?.length || 0) < (ungroupedData.total || 0))
+    sessionStore.setHasMore(UNGROUPED_ID, ungroupedData.hasMore ?? (ungroupedData.items?.length || 0) < (ungroupedData.total || 0))
     if (!sessionGroupStore.expandedState.has(UNGROUPED_ID)) {
       sessionGroupStore.setExpand(UNGROUPED_ID, true)
     }
@@ -494,7 +492,7 @@ const loadMoreForGroup = async (groupId: string) => {
         sessionStore.setSession(session)
       }
       sessionStore.setLoadedCount(groupId, currentSessions.length + data.items.length)
-      sessionStore.setHasMore(groupId, (currentSessions.length + data.items.length) < (data.total || 0))
+      sessionStore.setHasMore(groupId, data.hasMore ?? (currentSessions.length + data.items.length) < (data.total || 0))
 
       // 同步流式状态
       for (const session of data.items) {
