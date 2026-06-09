@@ -35,12 +35,16 @@ export class SessionsController {
   async getSessions(
     @Query("skip") skip = 0,
     @Query("limit") limit = 20,
+    @Query("groupId") groupId: string | undefined,
     @CurrentUser() user: any,
   ) {
+    // groupId 特殊值处理："null"字符串表示查询未分组会话
+    const parsedGroupId = groupId === "null" ? null : groupId;
     return this.sessionService.getSessionsByUser(
       user.id,
       Number(skip),
       Number(limit),
+      parsedGroupId,
     );
   }
 

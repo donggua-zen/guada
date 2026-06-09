@@ -162,7 +162,7 @@
       <WorkspaceSettingsDialog v-model:visible="workspaceDialogVisible"
         :current-workspace-path="props.config?.workspacePath || null" @confirm="applyWorkspaceSettings" />
     </div>
-    <div class="mt-1 w-full flex justify-start px-1">
+    <div class="mt-1 w-full flex justify-start px-1 gap-1">
       <!-- 工作目录按钮 -->
       <el-button class="tool-btn mr-0.5" @click.stop="openWorkspaceDialog" text>
         <el-icon size="22">
@@ -180,7 +180,37 @@
           <span class="text-xs font-medium">{{ props.config?.workspacePath || '打开工作目录' }}</span>
         </template>
       </el-button>
+
+      <!-- 分组选择按钮（仅创建模式） -->
+      <template v-if="mode == 'create'">
+        <el-button ref="groupButtonRef" class="tool-btn mr-0.5" @click.stop="openGroupSelector" text>
+          <span class="text-xs font-medium">
+            分组：{{ selectedGroupName }}
+          </span>
+          <el-icon size="16" class="ml-0.5">
+            <ChevronUpDown16Regular />
+          </el-icon>
+        </el-button>
+      </template>
     </div>
+
+    <!-- 分组选择弹窗 -->
+    <el-dialog v-model="groupSelectorVisible" title="请选择分组" width="360px" :close-on-click-modal="false">
+      <div class="space-y-1 py-2">
+        <div v-for="g in groupSelectorOptions" :key="g.value"
+          class="flex items-center gap-2 px-3 py-2.5 rounded-lg cursor-pointer transition-all duration-200 text-sm"
+          :class="selectedGroupId === g.value ? 'bg-(--color-sidebar-bg-active) text-(--color-sidebar-text-active)' : 'text-(--color-text-gray) hover:bg-(--color-sidebar-bg-hover) hover:text-(--color-sidebar-text-hover)'"
+          @click="selectGroup(g.value)">
+          <el-icon class="w-4 h-4">
+            <Folder20Regular />
+          </el-icon>
+          <span class="flex-1">{{ g.label }}</span>
+          <el-icon v-if="selectedGroupId === g.value" class="w-4 h-4">
+            <Checkmark16Filled />
+          </el-icon>
+        </div>
+      </div>
+    </el-dialog>
 
   </div>
 </template>
@@ -215,7 +245,7 @@ import { Thinking2 } from "@/components/icons";
 import {
   TextT24Regular, LightbulbFilament24Regular, LightbulbFilament24Filled, WrenchScrewdriver24Regular, Image24Regular, Attach24Regular,
   Send24Filled, Stop24Filled, Star24Regular, Star24Filled, Settings24Regular, BookSearch24Regular, FolderOpen24Regular, ChevronUpDown16Regular,
-  Apps20Regular
+  Apps20Regular, Folder20Regular, Checkmark16Filled
 } from '@vicons/fluent'
 import {
   ThunderboltOutlined,
@@ -224,6 +254,9 @@ import {
 import { usePopup } from '@/composables/usePopup';
 import { useBreakpoints, breakpointsTailwind } from '@vueuse/core'
 import { apiService } from '@/services/ApiService';
+import { useSessionGroupStore, UNGROUPED_ID } from '@/stores/sessionGroup';
+
+const sessionGroupStore = useSessionGroupStore();
 
 const breakpoints = useBreakpoints(breakpointsTailwind)
 const isMobile = breakpoints.smaller('lg') // md = 768px
@@ -434,6 +467,64 @@ const thinkingPopoverVisible = ref(false);
 
 // 工作目录设置相关
 const workspaceDialogVisible = ref(false);
+
+// 分组选择相关
+const groupSelectorVisible = ref(false);
+const groupButtonRef = ref<any>(null);
+
+// 初始化时加载分组列表（store 已做防重复请求处理）
+sessionGroupStore.loadGroups();
+
+/**
+ * 分组选择选项（包含虚拟的未分组）
+ */
+const groupSelectorOptions = computed(() => {
+  const options = sessionGroupStore.sortedGroups.map(g => ({
+    label: g.name,
+    value: g.id
+  }));
+  // 始终添加未分组选项
+  options.unshift({
+    label: '任务列表',
+    value: UNGROUPED_ID
+  });
+  return options;
+});
+
+/**
+ * 当前选中的分组名称
+ */
+const selectedGroupName = computed(() => {
+  const groupId = props.config?.groupId;
+  if (groupId === UNGROUPED_ID || groupId === undefined || groupId === null) {
+    return '任务列表';
+  }
+  const group = sessionGroupStore.sortedGroups.find(g => g.id === groupId);
+  return group?.name || '任务列表';
+});
+
+/**
+ * 当前选中的分组ID
+ */
+const selectedGroupId = computed(() => {
+  return props.config?.groupId || UNGROUPED_ID;
+});
+
+/**
+ * 打开分组选择弹窗
+ */
+const openGroupSelector = () => {
+  groupSelectorVisible.value = true;
+};
+
+/**
+ * 选择分组
+ */
+const selectGroup = (groupId: string) => {
+  const groupIdToSet = groupId === UNGROUPED_ID ? null : groupId;
+  emit('config-change', { groupId: groupIdToSet });
+  groupSelectorVisible.value = false;
+};
 
 const thinkingEffortOptions = computed(() => {
   if (!currentModel.value) return [];

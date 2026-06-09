@@ -523,7 +523,10 @@ const chatInputConfig = computed(() => ({
   knowledgeBaseIds: currentSession.value?.settings?.referencedKbs || [],
 
   // 工作目录路径 - 对应 handleConfigChange 中的 config.workspacePath
-  workspacePath: currentSession.value?.workspacePath || null
+  workspacePath: currentSession.value?.workspacePath || null,
+
+  // 分组 ID - 对应 handleConfigChange 中的 config.groupId
+  groupId: currentSession.value?.groupId || null
 }));
 
 /**
@@ -578,6 +581,12 @@ const handleConfigChange = (config: any): void => {
     currentSession.value.workspacePath = config.workspacePath;
     console.log('保存 workspacePath 到会话:', config.workspacePath);
   }
+
+  // 处理分组选择
+  if (typeof config.groupId !== 'undefined') {
+    currentSession.value.groupId = config.groupId;
+    console.log('保存 groupId 到会话:', config.groupId);
+  }
 };
 
 // 前往角色管理页面
@@ -618,7 +627,8 @@ const sendMessage = (): void => {
     modelId: currentModelId.value,
     title: autoTitle(),
     settings: currentSession.value.settings,
-    workspacePath: currentSession.value.workspacePath || null
+    workspacePath: currentSession.value.workspacePath || null,
+    groupId: currentSession.value.groupId || null
   }, {
     content: inputMessage.value.content,      // 使用 content 字段
     files: inputMessage.value.files || [],    // 使用 files 字段
@@ -636,7 +646,8 @@ const handleCreateSessionClick = (): void => {
     modelId: currentModelId.value,
     title: autoTitle(),
     settings: currentSession.value.settings,
-    workspacePath: currentSession.value.workspacePath || null
+    workspacePath: currentSession.value.workspacePath || null,
+    groupId: currentSession.value.groupId || null
   })
 }
 

@@ -12,6 +12,7 @@ import { MessageContentRepository } from "./message-content.repository";
 import { MessageRepository } from "./message.repository";
 import { ModelRepository } from "./model.repository";
 import { SessionContextStateRepository } from "./session-context-state.repository";
+import { SessionGroupRepository } from "./session-group.repository";
 import { SessionRepository } from "./session.repository";
 
 const REPOSITORIES = [
@@ -28,6 +29,7 @@ const REPOSITORIES = [
   MessageRepository,
   ModelRepository,
   SessionContextStateRepository,
+  SessionGroupRepository,
   SessionRepository,
 ];
 

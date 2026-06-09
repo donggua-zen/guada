@@ -72,6 +72,7 @@ export interface Session {
     platform?: string         // 来源平台: 'qq', 'wechat'
     externalId?: string       // 外部会话标识,格式: "platform:type:nativeId"
     workspacePath?: string | null  // 自定义工作目录路径
+    groupId?: string | null         // 会话分组ID
     // ==================================
 
     // === 侧边栏状态字段（后端注入或前端维护） ===
@@ -96,6 +97,18 @@ export interface UpdateSessionRequest {
     title?: string
     modelId?: string
     settings?: Partial<SessionSettings>
+}
+
+/**
+ * 会话分组
+ */
+export interface SessionGroup {
+    id: string
+    name: string
+    userId: string
+    sortOrder: number
+    createdAt: ISODateString
+    updatedAt: ISODateString
 }
 
 /**

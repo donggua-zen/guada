@@ -1,8 +1,5 @@
 import { Test, TestingModule } from "@nestjs/testing";
 import { ShellToolProvider } from "./shell-tool.provider";
-import * as fs from "fs/promises";
-import * as path from "path";
-import * as os from "os";
 
 describe("ShellToolProvider", () => {
   let provider: ShellToolProvider;
@@ -22,7 +19,7 @@ describe("ShellToolProvider", () => {
   it("应该返回正确的元数据", () => {
     const metadata = provider.getMetadata({});
     expect(metadata.namespace).toBe("shell");
-    expect(metadata.displayName).toBe("Shell 工具");
+    expect(metadata.displayName).toBe("Shell 命令行工具");
     expect(metadata.isMcp).toBe(false);
   });
 
@@ -30,8 +27,8 @@ describe("ShellToolProvider", () => {
     const tools = await provider.getTools(true);
     expect(tools).toHaveLength(3);
     expect(tools[0].name).toBe("execute_command");
-    expect(tools[1].name).toBe("read_file");
-    expect(tools[2].name).toBe("list_directory");
+    expect(tools[1].name).toBe("close_terminal");
+    expect(tools[2].name).toBe("check_terminal_output");
   });
 
   it("当禁用时应该返回空数组", async () => {
@@ -41,141 +38,204 @@ describe("ShellToolProvider", () => {
 
   describe("execute_command", () => {
     it("应该执行简单的命令并返回输出", async () => {
-      const result = await provider.execute({
-        id: "test-1",
-        name: "execute_command",
-        arguments: { command: "echo Hello World" },
-      });
-
-      expect(result).toContain("Hello World");
-      expect(result).toContain("标准输出");
-    });
-
-    it("应该处理无效命令并返回错误", async () => {
-      const result = await provider.execute({
-        id: "test-2",
-        name: "execute_command",
-        arguments: { command: "" },
-      });
-
-      expect(result).toContain("错误");
-      expect(result).toContain("命令不能为空");
-    });
-
-    it("应该在指定工作目录执行命令", async () => {
-      const tempDir = os.tmpdir();
-      // 使用 Windows 兼容的命令
-      const command = process.platform === "win32" ? "cd" : "pwd";
-      const result = await provider.execute({
-        id: "test-3",
-        name: "execute_command",
-        arguments: { 
-          command, 
-          working_directory: tempDir 
+      const resultStr = await provider.execute(
+        {
+          id: "test-1",
+          name: "execute_command",
+          arguments: { command: "echo Hello World" },
         },
-      });
+        { sessionId: "test-session-001" },
+      );
 
-      expect(result).toContain(tempDir);
-    });
-  });
-
-  describe("read_file", () => {
-    let tempFilePath: string;
-
-    beforeEach(async () => {
-      // 创建临时测试文件
-      tempFilePath = path.join(os.tmpdir(), `test-${Date.now()}.txt`);
-      await fs.writeFile(tempFilePath, "测试文件内容\n第二行内容", "utf-8");
+      const result = JSON.parse(resultStr);
+      expect(result.stdout).toContain("Hello World");
+      expect(result.exitCode).toBe(0);
     });
 
-    afterEach(async () => {
-      // 清理临时文件
+    it("应该处理无效命令并抛出错误", async () => {
+      await expect(
+        provider.execute(
+          {
+            id: "test-2",
+            name: "execute_command",
+            arguments: { command: "" },
+          },
+          { sessionId: "test-session-002" },
+        ),
+      ).rejects.toThrow("命令不能为空");
+    });
+
+    it("同一会话启动新命令应自动结束旧的", async () => {
+      const sessionId = "test-session-replace";
+
+      // 启动一个长时间运行的命令（使用 ping 模拟，Windows 和 Unix 都支持）
+      const longCommand = process.platform === "win32" ? "ping -n 60 127.0.0.1" : "ping -c 60 127.0.0.1";
+      const promise1 = provider.execute(
+        {
+          id: "test-replace-1",
+          name: "execute_command",
+          arguments: { command: longCommand },
+        },
+        { sessionId },
+      );
+
+      // 等待一小段时间确保第一个命令已启动
+      await new Promise((resolve) => setTimeout(resolve, 800));
+
+      // 在同一会话启动第二个命令
+      const resultStr2 = await provider.execute(
+        {
+          id: "test-replace-2",
+          name: "execute_command",
+          arguments: { command: "echo Second Command" },
+        },
+        { sessionId },
+      );
+
+      const result2 = JSON.parse(resultStr2);
+      expect(result2.stdout).toContain("Second Command");
+
+      // 第一个命令应该被中止（由于进程被 kill，可能 reject 或 resolve 带错误）
       try {
-        await fs.unlink(tempFilePath);
-      } catch (error) {
-        // 忽略删除错误
+        await promise1;
+      } catch (error: any) {
+        expect(error.message).toContain("aborted");
       }
     });
+  });
 
-    it("应该读取文件内容", async () => {
-      const result = await provider.execute({
-        id: "test-4",
-        name: "read_file",
-        arguments: { file_path: tempFilePath },
-      });
+  describe("close_terminal", () => {
+    it("应该关闭当前会话的终端", async () => {
+      const sessionId = "test-session-close";
 
-      expect(result).toContain("测试文件内容");
-      expect(result).toContain("第二行内容");
-      expect(result).toContain(tempFilePath);
+      // 先启动一个长时间运行的命令（使用 ping 模拟）
+      const longCommand = process.platform === "win32" ? "ping -n 60 127.0.0.1" : "ping -c 60 127.0.0.1";
+      provider.execute(
+        {
+          id: "test-close-1",
+          name: "execute_command",
+          arguments: { command: longCommand },
+        },
+        { sessionId },
+      );
+
+      // 等待命令启动并确保会话已注册
+      await new Promise((resolve) => setTimeout(resolve, 800));
+
+      // 关闭终端
+      const resultStr = await provider.execute(
+        {
+          id: "test-close-2",
+          name: "close_terminal",
+          arguments: {},
+        },
+        { sessionId },
+      );
+
+      const result = JSON.parse(resultStr);
+      expect(result.success).toBe(true);
+      expect(result.message).toBe("终端已关闭");
     });
 
-    it("应该处理不存在的文件", async () => {
-      const result = await provider.execute({
-        id: "test-5",
-        name: "read_file",
-        arguments: { file_path: "/nonexistent/file.txt" },
-      });
+    it("没有运行中的终端时应返回提示", async () => {
+      const resultStr = await provider.execute(
+        {
+          id: "test-close-3",
+          name: "close_terminal",
+          arguments: {},
+        },
+        { sessionId: "test-session-no-terminal" },
+      );
 
-      expect(result).toContain("错误");
-      expect(result).toContain("文件不存在");
+      const result = JSON.parse(resultStr);
+      expect(result.success).toBe(true);
+      expect(result.message).toContain("没有正在运行的终端");
     });
 
-    it("应该拒绝空文件路径", async () => {
-      const result = await provider.execute({
-        id: "test-6",
-        name: "read_file",
-        arguments: { file_path: "" },
-      });
-
-      expect(result).toContain("错误");
-      expect(result).toContain("文件路径不能为空");
+    it("没有 sessionId 时应抛出错误", async () => {
+      await expect(
+        provider.execute({
+          id: "test-close-4",
+          name: "close_terminal",
+          arguments: {},
+        }),
+      ).rejects.toThrow("无法获取会话 ID");
     });
   });
 
-  describe("list_directory", () => {
-    it("应该列出目录内容", async () => {
-      const tempDir = os.tmpdir();
-      const result = await provider.execute({
-        id: "test-7",
-        name: "list_directory",
-        arguments: { directory_path: tempDir },
-      });
+  describe("check_terminal_output", () => {
+    it("应该返回终端的输出", async () => {
+      const sessionId = "test-session-check";
 
-      expect(result).toContain("目录内容");
-      expect(result).toContain(tempDir);
+      // 启动一个命令
+      const resultStr1 = await provider.execute(
+        {
+          id: "test-check-1",
+          name: "execute_command",
+          arguments: { command: "echo CheckOutput" },
+        },
+        { sessionId },
+      );
+
+      const result1 = JSON.parse(resultStr1);
+      expect(result1.stdout).toContain("CheckOutput");
     });
 
-    it("应该处理不存在的目录", async () => {
-      const result = await provider.execute({
-        id: "test-8",
-        name: "list_directory",
-        arguments: { directory_path: "/nonexistent/directory" },
-      });
+    it("没有运行中的终端时应返回提示", async () => {
+      const resultStr = await provider.execute(
+        {
+          id: "test-check-2",
+          name: "check_terminal_output",
+          arguments: {},
+        },
+        { sessionId: "test-session-no-output" },
+      );
 
-      expect(result).toContain("错误");
-      expect(result).toContain("目录不存在");
+      const result = JSON.parse(resultStr);
+      expect(result.success).toBe(true);
+      expect(result.message).toContain("没有正在运行的终端");
     });
 
-    it("应该拒绝空目录路径", async () => {
-      const result = await provider.execute({
-        id: "test-9",
-        name: "list_directory",
-        arguments: { directory_path: "" },
-      });
+    it("没有 sessionId 时应抛出错误", async () => {
+      await expect(
+        provider.execute({
+          id: "test-check-3",
+          name: "check_terminal_output",
+          arguments: {},
+        }),
+      ).rejects.toThrow("无法获取会话 ID");
+    });
+  });
 
-      expect(result).toContain("错误");
-      expect(result).toContain("目录路径不能为空");
+  describe("formatDisplayMessage", () => {
+    it("应该为 execute_command 生成正确的展示文案", () => {
+      const result = provider.formatDisplayMessage("execute_command", { command: "ls -la" }, true);
+      expect(result.action).toBe("正在执行命令");
+      expect(result.toolName).toBe("shell__execute_command");
+    });
+
+    it("应该为 close_terminal 生成正确的展示文案", () => {
+      const result = provider.formatDisplayMessage("close_terminal", {}, true);
+      expect(result.action).toBe("正在关闭终端");
+      expect(result.toolName).toBe("shell__close_terminal");
+    });
+
+    it("应该为 check_terminal_output 生成正确的展示文案", () => {
+      const result = provider.formatDisplayMessage("check_terminal_output", {}, false);
+      expect(result.action).toBe("已等待终端输出");
+      expect(result.toolName).toBe("shell__check_terminal_output");
     });
   });
 
   describe("getPrompt", () => {
     it("应该返回工具使用说明", async () => {
       const prompt = await provider.getPrompt({});
-      
-      expect(prompt).toContain("Shell 工具使用说明");
-      expect(prompt).toContain("execute_command");
-      expect(prompt).toContain("read_file");
-      expect(prompt).toContain("list_directory");
+
+      expect(prompt).toContain("Shell 命令行工具使用说明");
+      expect(prompt).toContain("check_terminal_output");
+      expect(prompt).toContain("close_terminal");
+      expect(prompt).toContain("30 秒");
+      expect(prompt).toContain("后台运行");
       expect(prompt).toContain("重要提醒");
     });
   });

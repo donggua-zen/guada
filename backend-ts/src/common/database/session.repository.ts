@@ -19,24 +19,37 @@ export class SessionRepository {
     });
   }
 
-  async findByUserId(userId: string, skip: number = 0, limit: number = 20) {
+  /**
+   * 获取用户会话列表，支持按分组筛选
+   * @param groupId undefined-全部, null-未分组, string-指定分组
+   */
+  async findByUserId(
+    userId: string,
+    skip: number = 0,
+    limit: number = 20,
+    groupId?: string | null,
+  ) {
+    const where: any = {
+      userId,
+      sessionType: { not: 'bot' },
+    };
+
+    // 分组筛选：null表示未分组，undefined表示全部
+    if (groupId === null) {
+      where.groupId = null;
+    } else if (groupId !== undefined) {
+      where.groupId = groupId;
+    }
+
     const [items, total] = await Promise.all([
       this.prisma.session.findMany({
-        where: {
-          userId,
-          sessionType: { not: 'bot' }
-        },
+        where,
         orderBy: [{ lastActiveAt: "desc" }],
         skip,
         take: limit,
         include: { character: true },
       }),
-      this.prisma.session.count({
-        where: {
-          userId,
-          sessionType: { not: 'bot' }
-        }
-      }),
+      this.prisma.session.count({ where }),
     ]);
     return { items, total };
   }
