@@ -89,7 +89,11 @@ const handleSaveUserInfo = async () => {
       avater_file.value = null
       userForm.value.avatarUrl = response.url
     }
-    authStore.user = { ...authStore.user, ...userForm.value }
+    //authStore.user = { ...authStore.user, ...userForm.value }
+    if(!authStore.checkAuth()){
+      router.replace({ name: 'Login' });
+      return
+    }
     toast.success('用户信息保存成功')
     // 更新原始表单数据
     originalUserForm.value = { ...userForm.value }
