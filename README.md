@@ -14,6 +14,7 @@
 
 ## 项目仓库
 
+- **GitCode**: https://atomgit.com/donggua_sherlock/GuaDaAI
 - **GitHub**: https://github.com/donggua-zen/guada
 - **Gitee**: https://gitee.com/zhendongdong/guada_ai
 

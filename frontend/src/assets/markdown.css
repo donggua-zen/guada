@@ -296,7 +296,7 @@ ol > *:not(li) {
   margin: 0;
   border-radius: 0 0 8px 8px;
   background: #fafafb !important;
-  /* border: 1px solid #e3e3e7; */
+  border: 1px solid #e3e3e7;
   border-top: 0;
   max-height: 800px;
   overflow: auto;
@@ -305,6 +305,7 @@ ol > *:not(li) {
 .dark .custom-code-block pre.hljs {
   background: #2f3232 !important;
   color: var(--color-text);
+  border: 1px solid #2f3232;
 }
 
 .custom-code-block code.hljs {
@@ -321,7 +322,6 @@ ol > *:not(li) {
 }
 
 .dark .custom-code-block {
-  background: var(--color-surface);
   border-color: var(--color-border);
 }
 
@@ -334,13 +334,14 @@ ol > *:not(li) {
   color: #222;
   font-size: 0.8em;
   border-radius: 8px 8px 0 0;
-  /* border: 1px solid #e3e3e7; */
+  border: 1px solid #e3e3e7;
   border-bottom: 0;
 }
 
 .dark .code-header {
   background: var(--color-sidebar-bg-active);
   color: var(--color-text);
+  border: 1px solid #2f3232;
 }
 
 .code-language {
@@ -448,7 +449,7 @@ ol > *:not(li) {
 }
 
 .dark .custom-code-block ::-webkit-scrollbar-track {
-  background: oklch(25% 0.02 250); /* 滚动条轨道 */
+  background: transparent;
 }
 
 .dark .custom-code-block ::-webkit-scrollbar-thumb {
