@@ -153,7 +153,7 @@ html.dark {
   /* #2e3035 左右 */
 
   /* 文本颜色 - 确保在深色背景下的可读性 */
-  --color-text: #c5c7cc;
+  --color-text: #ccccc;
   /* 主文本，柔和亮色 */
   --color-text-gray: #a8aab3;
   /* 次要文本 */

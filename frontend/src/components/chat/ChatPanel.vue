@@ -17,10 +17,10 @@
 
     <template v-if="!isLoading">
       <ScrollContainer ref="scrollContainerRef"
-        class="max-h-full chat-scroll-container transition-opacity duration-300"
+        class="max-h-full chat-scroll-container transition-opacity duration-300 px-5"
         :class="{ 'opacity-0': showSkeleton, 'opacity-100': !showSkeleton }"
         :auto-scroll="needScrollToBottom && isStreaming" @scroll="handleScroll">
-        <div class="max-w-205 mx-auto  pt-5 pb-8">
+        <div class="max-w-205 mx-auto pt-5 pb-8">
           <!-- 加载更多历史消息指示器 -->
           <div v-if="isLoadingMore" class="w-full py-4 flex items-center justify-center text-gray-400">
             <el-icon class="is-loading mr-2" size="16">

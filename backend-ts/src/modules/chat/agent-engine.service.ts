@@ -70,7 +70,7 @@ export class AgentEngine {
   private readonly logger = new Logger(AgentEngine.name);
 
   // 流式输出限流间隔（毫秒）
-  private readonly THROTTLE_MS = 100;
+  private readonly THROTTLE_MS = 80;
 
   constructor(
     private toolOrchestrator: ToolOrchestrator,
