@@ -38,17 +38,20 @@
           <!-- 中间处理过程分组：可折叠，只渲染 think/tool -->
           <div v-else class="process-group">
             <!-- 折叠头部（仅当 isCollapsible 时显示） -->
-            <div v-if="group.isCollapsible" class="process-group__header" @click="toggleGroup(group.id)">
+            <div v-if="group.isCollapsible && !(streamingState.isStreaming && groupIndex === displayGroups.length - 1)"
+              class="process-group__header" @click="toggleGroup(group.id)">
               <el-icon size="14" class="process-group__arrow" :class="{ 'is-expanded': isGroupExpanded(group.id) }">
                 <ArrowRightTwotone />
               </el-icon>
               <span class="process-group__title">
-                {{ streamingState.isStreaming && groupIndex === displayGroups.length - 1 ? '正在处理中' : '中间处理过程' }} ({{ group.items.length }} 个步骤)
+                中间处理过程 ({{ group.items.length }} 个步骤)
               </span>
             </div>
 
             <!-- 展开内容 -->
-            <div v-show="!group.isCollapsible || isGroupExpanded(group.id)" class="process-group__body py-1 space-y-1">
+            <div
+              v-show="!group.isCollapsible || isGroupExpanded(group.id) || (streamingState.isStreaming && groupIndex === displayGroups.length - 1)"
+              class="process-group__body py-1 space-y-1">
               <template v-for="item in group.items" :key="item.id">
                 <!-- think -->
                 <MessageThinkingSection v-if="item.type === 'think'" :reasoning-content="item.reasoningContent || ''"
@@ -90,8 +93,8 @@
           <span class="text-sm">回答中</span>
         </div>
         <!-- Token 消耗显示区域 -->
-        <div v-if="isAssistant && !streamingState.isStreaming" class="token-usage-section mt-2 flex">
-          <div v-if="tokenUsage" class="flex items-center gap-3 text-xs text-gray-400">
+        <div v-if="isAssistant && tokenUsage &&!streamingState.isStreaming" class="token-usage-section mt-2 flex">
+          <div class="flex items-center gap-3 text-xs text-gray-400">
             <el-icon size="13" class="text-gray-400">
               <InsightsTwotone />
             </el-icon>
@@ -112,10 +115,6 @@
                   formatTokenNumber(tokenUsage.totalTokens) }}</span>
             </span>
 
-          </div>
-          <div class="flex text-gray-500 shrink-0 items-center justify-center ml-auto">
-            <AccessTimeTwotone class="w-3 h-3 mr-1" />
-            <span class="text-xs" :title="currentContentTime.full">{{ currentContentTime.firendly }}</span>
           </div>
         </div>
       </div>
@@ -140,6 +139,7 @@
       <!-- 使用拆分后的操作按钮组件 -->
       <MessageActions v-if="!streamingState.isStreaming" :is-assistant="isAssistant" :is-last="isLast"
         :allow-generate="allowGenerate" :content-versions="contentVersions" :current-version-index="currentVersionIndex"
+        :time-full="currentContentTime.full" :time-friendly="currentContentTime.firendly"
         @copy="handleCopy" @generate="handleGenerate" @regenerate="handleRegenerate" @switch-version="switchContent"
         @edit="handleEdit" @delete="handleDelete" />
     </div>
@@ -238,7 +238,7 @@ const toggleGroup = (groupId: string) => {
  * 优先级：用户手动展开 > 自动展开
  */
 const isGroupExpanded = (groupId: string): boolean => {
-  return expandedGroups.value.has(groupId) || autoExpandedGroups.value.has(groupId);
+  return expandedGroups.value.has(groupId) /*|| autoExpandedGroups.value.has(groupId)*/;
 };
 
 // 缓存 turns 结果，避免每次 contents 变化都重新计算
@@ -250,20 +250,20 @@ const displayGroups = computed<DisplayGroup[]>(() => {
 });
 
 // 监听分组变化，自动展开/折叠最后一个 process 分组
-watch(
-  () => displayGroups.value,
-  (groups) => {
-    autoExpandedGroups.value.clear();
+// watch(
+//   () => displayGroups.value,
+//   (groups) => {
+//     autoExpandedGroups.value.clear();
 
-    if (groups.length === 0) return;
+//     if (groups.length === 0) return;
 
-    const lastGroup = groups[groups.length - 1];
-    if (lastGroup.type === 'process' && lastGroup.isCollapsible) {
-      autoExpandedGroups.value.add(lastGroup.id);
-    }
-  },
-  { deep: true, immediate: true }
-);
+//     const lastGroup = groups[groups.length - 1];
+//     if (lastGroup.type === 'process' && lastGroup.isCollapsible) {
+//       autoExpandedGroups.value.add(lastGroup.id);
+//     }
+//   },
+//   { deep: true, immediate: true }
+// );
 
 
 
