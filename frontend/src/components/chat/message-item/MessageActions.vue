@@ -61,6 +61,12 @@
         </DropdownMenuItem>
       </template>
     </DropdownMenu>
+    <template v-if="isAssistant">
+      <div class="flex text-gray-500 shrink-0 items-center justify-center ml-auto">
+        <AccessTimeTwotone class="w-3 h-3 mr-1" />
+        <span class="text-xs" :title="props.timeFull">{{ props.timeFriendly }}</span>
+      </div>
+    </template>
   </div>
 </template>
 
@@ -76,7 +82,7 @@ import {
   ChevronLeft24Filled,
   ChevronRight24Filled
 } from '@vicons/fluent';
-import { EditTwotone, DeleteTwotone, ArrowDownwardTwotone } from '@vicons/material';
+import { EditTwotone, DeleteTwotone, ArrowDownwardTwotone, AccessTimeTwotone } from '@vicons/material';
 
 const props = defineProps<{
   isAssistant: boolean;
@@ -84,6 +90,8 @@ const props = defineProps<{
   allowGenerate: boolean;
   contentVersions: string[];
   currentVersionIndex: number;
+  timeFull: string;
+  timeFriendly: string;
 }>();
 
 const emit = defineEmits<{
@@ -114,6 +122,4 @@ const handleCommand = (command: string) => {
 .message-action-button {
   @apply cursor-pointer flex items-center gap-1 py-1 px-1 rounded mr-1 hover:bg-(--color-surface) disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-gray-100 disabled:hover:text-gray-400 transition-transform duration-100;
 }
-
-
 </style>
