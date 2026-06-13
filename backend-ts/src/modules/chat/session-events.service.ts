@@ -1,6 +1,17 @@
 import { Injectable, Logger, OnModuleDestroy } from "@nestjs/common";
+import { OnEvent } from "@nestjs/event-emitter";
 import { Subject, Observable, Subscription } from "rxjs";
 import { MessageEvent } from "@nestjs/common";
+import {
+  StreamFinishedEvent,
+  StreamStartedEvent,
+  SessionCreatedEvent,
+  SessionUpdatedEvent,
+  SessionDeletedEvent,
+  SubAgentCreatedEvent,
+  SubAgentClosedEvent,
+  toSessionEvent,
+} from "../../common/events/stream.events";
 
 /**
  * 会话事件类型
@@ -13,7 +24,9 @@ export type SessionEventType =
   | "session_updated"
   | "stream_started"
   | "stream_finished"
-  | "user_message_created";
+  | "user_message_created"
+  | "sub_agent_create"
+  | "sub_agent_closed";
 
 /**
  * 会话事件
@@ -41,6 +54,14 @@ interface UserEventSubscriber {
 }
 
 /**
+ * 内部事件监听器
+ */
+interface InternalEventListener {
+  type: SessionEventType;
+  callback: (event: SessionEvent) => void;
+}
+
+/**
  * 用户级会话事件服务
  *
  * 职责：
@@ -51,7 +72,10 @@ interface UserEventSubscriber {
 @Injectable()
 export class SessionEventsService implements OnModuleDestroy {
   private readonly logger = new Logger(SessionEventsService.name);
-  private readonly userSubscribers = new Map<string, Map<string, UserEventSubscriber>>();
+  private readonly userSubscribers = new Map<
+    string,
+    Map<string, UserEventSubscriber>
+  >();
 
   /**
    * 订阅用户事件流
@@ -72,9 +96,7 @@ export class SessionEventsService implements OnModuleDestroy {
     const heartbeatSubscription = new Subscription();
     const heartbeatTimer = setInterval(() => {
       try {
-        this.logger.debug(
-          `Sending heartbeat to ${userId}/${clientId}`,
-        );
+        this.logger.debug(`Sending heartbeat to ${userId}/${clientId}`);
         subject.next({
           data: JSON.stringify({
             type: "heartbeat",
@@ -134,9 +156,83 @@ export class SessionEventsService implements OnModuleDestroy {
   }
 
   /**
+   * 监听内部 stream.started 事件，转发给 SSE 客户端
+   */
+  @OnEvent("stream.started")
+  handleStreamStarted(event: StreamStartedEvent) {
+    this.broadcastToUser(event.userId, toSessionEvent("stream_started", event));
+  }
+
+  /**
+   * 监听内部 stream.finished 事件，转发给 SSE 客户端
+   */
+  @OnEvent("stream.finished")
+  handleStreamFinished(event: StreamFinishedEvent) {
+    this.broadcastToUser(
+      event.userId,
+      toSessionEvent("stream_finished", event),
+    );
+  }
+
+  /**
+   * 监听内部 session.created 事件，转发给 SSE 客户端
+   */
+  @OnEvent("session.created")
+  handleSessionCreated(event: SessionCreatedEvent) {
+    this.broadcastToUser(
+      event.userId,
+      toSessionEvent("session_created", event),
+    );
+  }
+
+  /**
+   * 监听内部 session.updated 事件，转发给 SSE 客户端
+   */
+  @OnEvent("session.updated")
+  handleSessionUpdated(event: SessionUpdatedEvent) {
+    this.broadcastToUser(
+      event.userId,
+      toSessionEvent("session_updated", event),
+    );
+  }
+
+  /**
+   * 监听内部 session.deleted 事件，转发给 SSE 客户端
+   */
+  @OnEvent("session.deleted")
+  handleSessionDeleted(event: SessionDeletedEvent) {
+    this.broadcastToUser(
+      event.userId,
+      toSessionEvent("session_deleted", event),
+    );
+  }
+
+  /**
+   * 监听内部 subagent.created 事件，转发给 SSE 客户端
+   */
+  @OnEvent("subagent.created")
+  handleSubAgentCreated(event: SubAgentCreatedEvent) {
+    this.broadcastToUser(
+      event.userId,
+      toSessionEvent("sub_agent_create", event),
+    );
+  }
+
+  /**
+   * 监听内部 subagent.closed 事件，转发给 SSE 客户端
+   */
+  @OnEvent("subagent.closed")
+  handleSubAgentClosed(event: SubAgentClosedEvent) {
+    this.broadcastToUser(
+      event.userId,
+      toSessionEvent("sub_agent_closed", event),
+    );
+  }
+
+  /**
    * 向指定用户的所有客户端广播事件
    */
-  broadcastToUser(userId: string, event: SessionEvent): void {
+  private broadcastToUser(userId: string, event: SessionEvent): void {
     const subscribers = this.userSubscribers.get(userId);
     if (!subscribers || subscribers.size === 0) {
       return;

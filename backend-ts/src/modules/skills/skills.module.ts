@@ -8,8 +8,12 @@ import { SkillWatcherService } from './core/skill-watcher.service';
 import { SkillScriptExecutor } from './execution/skill-script-executor.service';
 import { SkillBundledService } from './core/skill-bundled.service';
 import { SkillsController } from './api/skills.controller';
+import { ToolsModule } from '../tools/tools.module';
+import { ToolOrchestrator } from '../tools/tool-orchestrator.service';
+import { SkillToolBridgeService } from './integration/skill-tool-bridge.service';
 
 @Module({
+  imports: [ToolsModule],
   controllers: [SkillsController],
   providers: [
     SkillOrchestrator,
@@ -20,6 +24,7 @@ import { SkillsController } from './api/skills.controller';
     SkillWatcherService,
     SkillScriptExecutor,
     SkillBundledService,
+    SkillToolBridgeService,
   ],
   exports: [
     SkillOrchestrator,
@@ -30,9 +35,14 @@ export class SkillsModule implements OnModuleInit {
     private orchestrator: SkillOrchestrator,
     private watcher: SkillWatcherService,
     private bundledService: SkillBundledService,
+    private toolOrchestrator: ToolOrchestrator,
+    private skillToolBridge: SkillToolBridgeService,
   ) {}
 
   async onModuleInit() {
+    // 注册技能工具桥接
+    this.toolOrchestrator.addProvider(this.skillToolBridge);
+
     // 1. 先同步内置技能到 .system 目录
     await this.bundledService.syncBundledSkills();
 

@@ -22,7 +22,17 @@ export class MessageService {
     private fileRepo: FileRepository,
     private urlService: UrlService,
     private fileService: FileService,
-  ) { }
+  ) {}
+
+  /**
+   * 过滤 metadata 中的 systemPayload，避免无意义的响应式追踪和传输
+   */
+  private stripSystemPayload(
+    metadata: Record<string, any>,
+  ): Record<string, any> {
+    const { systemPayload, ...rest } = metadata;
+    return rest;
+  }
 
   private async assertSessionOwner(sessionId: string, userId: string) {
     const session = await this.sessionRepo.findById(sessionId);
@@ -112,11 +122,14 @@ export class MessageService {
     // 格式化返回数据
     const formattedMessages = messages.map((msg) => {
       // 转换文件 URL 为绝对路径
-      const filesWithAbsoluteUrls = msg.files?.map((file) => ({
-        ...file,
-        url: this.urlService.toResourceAbsoluteUrl(file.url || ""),
-        previewUrl: this.urlService.toResourceAbsoluteUrl(file.previewUrl || ""),
-      })) || [];
+      const filesWithAbsoluteUrls =
+        msg.files?.map((file) => ({
+          ...file,
+          url: this.urlService.toResourceAbsoluteUrl(file.url || ""),
+          previewUrl: this.urlService.toResourceAbsoluteUrl(
+            file.previewUrl || "",
+          ),
+        })) || [];
 
       return {
         ...msg,
@@ -124,6 +137,9 @@ export class MessageService {
         contents: msg.contents
           .filter((content) => content.role !== "tool")
           .map((content) => this.stripToolCallDetails(content)),
+        metadata: msg.metadata
+          ? this.stripSystemPayload(msg.metadata as Record<string, any>)
+          : undefined,
       };
     });
 
@@ -167,7 +183,7 @@ export class MessageService {
               return { ...tr, content: undefined };
             }
             return tr;
-          }
+          },
         );
       }
 
@@ -324,9 +340,12 @@ export class MessageService {
         // 这些文件包括：本次编辑解绑但未重新关联的文件 + 历史遗留的孤儿文件
         // 使用 setImmediate 延迟执行，避免阻塞当前请求响应，同时给数据库一些时间释放锁
         setImmediate(() => {
-          this.logger.debug('开始后台清理孤儿文件...');
-          this.fileService.cleanupOrphanFiles().catch(error => {
-            this.logger.error(`清理孤儿文件失败: ${error.message}`, error.stack);
+          this.logger.debug("开始后台清理孤儿文件...");
+          this.fileService.cleanupOrphanFiles().catch((error) => {
+            this.logger.error(
+              `清理孤儿文件失败: ${error.message}`,
+              error.stack,
+            );
           });
         });
       } catch (error) {
@@ -425,7 +444,9 @@ export class MessageService {
         completeMessage.files = completeMessage.files.map((file) => ({
           ...file,
           url: this.urlService.toResourceAbsoluteUrl(file.url || ""),
-          previewUrl: this.urlService.toResourceAbsoluteUrl(file.previewUrl || ""),
+          previewUrl: this.urlService.toResourceAbsoluteUrl(
+            file.previewUrl || "",
+          ),
         }));
       }
 
@@ -526,7 +547,9 @@ export class MessageService {
         updatedMessage.files = updatedMessage.files.map((file) => ({
           ...file,
           url: this.urlService.toResourceAbsoluteUrl(file.url || ""),
-          previewUrl: this.urlService.toResourceAbsoluteUrl(file.previewUrl || ""),
+          previewUrl: this.urlService.toResourceAbsoluteUrl(
+            file.previewUrl || "",
+          ),
         }));
       }
 
@@ -588,8 +611,8 @@ export class MessageService {
     });
 
     // 2. 删除所有消息关联的物理文件（并行执行）
-    const fileDeletePromises = messages.map(msg =>
-      this.fileService.deleteFilesByMessageId(msg.id)
+    const fileDeletePromises = messages.map((msg) =>
+      this.fileService.deleteFilesByMessageId(msg.id),
     );
     await Promise.all(fileDeletePromises);
 

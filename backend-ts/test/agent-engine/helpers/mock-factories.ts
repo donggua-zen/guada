@@ -105,23 +105,58 @@ export function createMockToolOrchestrator(options?: {
 }
 
 /**
- * SessionContextService Mock 工厂
+ * 创建 ISessionContext Mock（合并后包含对话状态）
+ */
+export function createMockSessionContext(options?: {
+  contextWindow?: number;
+  thinkingEffort?: string;
+}) {
+  return {
+    sessionId: 'test-session-001',
+    userId: 'test-user',
+    sessionType: 'web' as const,
+    getModelConfig: jest.fn((): any => ({
+      id: 'model-1',
+      modelName: 'gpt-4',
+      name: 'GPT-4',
+      provider: { id: 'p1', provider: 'openai' },
+      modelType: 'chat',
+      config: { features: ['tools', 'thinking'], contextWindow: options?.contextWindow || 8000 },
+    })),
+    getModelParams: jest.fn(() => ({ temperature: 0.7, topP: 1.0, frequencyPenalty: 0 })),
+    supportsFeature: jest.fn((f: string) => ['tools', 'thinking'].includes(f)),
+    getSystemPrompt: jest.fn(() => 'You are a helpful assistant.'),
+    getThinkingEffort: jest.fn(() => options?.thinkingEffort || 'medium'),
+    getToolContext: jest.fn(() => ({ getFlatTools: jest.fn(() => []) })),
+    getToolApprovalConfig: jest.fn(() => ({ enabled: false, requiresApproval: [] })),
+    getMemoryConfig: jest.fn(() => ({})),
+    getEffectiveContextWindow: jest.fn(() => options?.contextWindow || 8000),
+    getWorkspacePath: jest.fn(() => ''),
+    isVirtual: jest.fn(() => false),
+    // 对话状态方法
+    initialize: jest.fn().mockResolvedValue(undefined),
+    getMessages: jest.fn().mockResolvedValue([]),
+    getHistory: jest.fn(() => []),
+    appendParts: jest.fn().mockResolvedValue(undefined),
+    persist: jest.fn().mockResolvedValue(undefined),
+    prepareAssistantResponse: jest.fn().mockResolvedValue('assistant-msg-id'),
+    generateId: jest.fn(() => `msg-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`),
+    getTokenCount: jest.fn(() => 0),
+    forceCompress: jest.fn().mockResolvedValue([]),
+  };
+}
+
+/**
+ * SessionContextService Mock 工厂（已废弃，保留兼容）
  */
 export function createMockSessionContextService(options?: {
   contextWindow?: number;
   thinkingEffort?: string;
 }) {
-  const mockContext = {
-    generateId: jest.fn(() => `msg-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`),
-    prepareAssistantResponse: jest.fn().mockResolvedValue('assistant-msg-id'),
-    getMessages: jest.fn().mockResolvedValue([]),
-    appendParts: jest.fn().mockResolvedValue(undefined),
-    initialize: jest.fn().mockResolvedValue(undefined),
-  };
-
+  const mockCtx = createMockSessionContext(options);
   return {
     buildContext: jest.fn().mockResolvedValue({
-      context: mockContext,
+      context: mockCtx,
       toolContext: { sessionId: 'test-session-001', userId: 'test-user' },
       effectiveContextWindow: options?.contextWindow || 8000,
       thinkingEffort: options?.thinkingEffort || 'medium',
@@ -159,9 +194,20 @@ export function createAllMocks(options?: {
     toolOrchestrator: createMockToolOrchestrator({
       toolCallsResponse: options?.toolCallsResponse,
     }),
-    sessionContextService: createMockSessionContextService({
+    sessionContext: createMockSessionContext({
       contextWindow: options?.contextWindow,
       thinkingEffort: options?.thinkingEffort,
     }),
+    displayManager: {
+      clear: jest.fn(),
+      injectDisplayMessages: jest.fn(),
+      finalizeAll: jest.fn(() => []),
+      getDisplayMessage: jest.fn((index: number) => ({ index, message: `tool ${index}` })),
+      initialize: jest.fn(),
+    },
+    streamManager: {
+      broadcast: jest.fn(),
+      stopStream: jest.fn(),
+    },
   };
 }

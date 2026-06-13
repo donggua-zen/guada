@@ -9,7 +9,9 @@ export type SessionEventType =
   | "session_updated"
   | "stream_started"
   | "stream_finished"
-  | "user_message_created";
+  | "user_message_created"
+  | "sub_agent_create"
+  | "sub_agent_closed";
 
 /**
  * 会话事件

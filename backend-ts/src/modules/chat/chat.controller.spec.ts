@@ -10,12 +10,12 @@ describe("ChatController", () => {
   const user = { id: "user-1" };
   const body = { sessionId: "session-1", messageId: "message-1" };
 
-  let chatRunner: { startStream: jest.Mock };
+  let chatRunner: { startStream: jest.Mock; enqueueMessage: jest.Mock };
   let sessionService: { getSessionById: jest.Mock };
   let controller: any;
 
   beforeEach(() => {
-    chatRunner = { startStream: jest.fn() };
+    chatRunner = { startStream: jest.fn(), enqueueMessage: jest.fn() };
     sessionService = { getSessionById: jest.fn() };
     controller = new ChatController(
       sessionService as any,

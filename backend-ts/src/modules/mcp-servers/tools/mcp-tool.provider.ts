@@ -4,10 +4,10 @@ import {
   ToolCallRequest,
   ToolCallResponse,
   ToolProviderMetadata,
-} from "../interfaces/tool-provider.interface";
+  ToolDefinition,
+} from "../../tools/interfaces/tool-provider.interface";
 import { PrismaService } from "../../../common/database/prisma.service";
 import { McpClientService } from "../../../common/mcp/mcp-client.service";
-import { InternalToolDefinition } from "../../llm-core/types/llm.types";
 
 @Injectable()
 export class MCPToolProvider implements IToolProvider {
@@ -30,7 +30,7 @@ export class MCPToolProvider implements IToolProvider {
     const servers = await this.prisma.mcpServer.findMany({
       where: whereClause,
     });
-    const allTools: InternalToolDefinition[] = [];
+    const allTools: ToolDefinition[] = [];
 
     for (const server of servers) {
       if (!server.tools) continue;

@@ -3,11 +3,11 @@ import { OpenAI } from "openai";
 import { IProtocolAdapter } from "./base.adapter";
 import {
   MessageRecord,
-  InternalToolDefinition,
   LLMCompletionParams,
   LLMResponseChunk,
   ToolCallItem,
 } from "../types/llm.types";
+import { ToolDefinition } from "../../tools/interfaces/tool-provider.interface";
 import { ProviderConfig, ConnectionTestResult } from "../types/provider.types";
 
 /**
@@ -203,7 +203,7 @@ export class OpenAIResponseAdapter implements IProtocolAdapter {
   /**
    * 将内部扁平化工具定义转换为 OpenAI Responses API 格式
    */
-  private convertTools(tools: InternalToolDefinition[]): any[] {
+  private convertTools(tools: ToolDefinition[]): any[] {
     return tools.map((tool) => ({
       type: "function",
       name: tool.name,

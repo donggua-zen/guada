@@ -4,9 +4,9 @@ import {
   ToolCallRequest,
   ToolCallResponse,
   ToolProviderMetadata,
-} from "../interfaces/tool-provider.interface";
+} from "../../tools/interfaces/tool-provider.interface";
 import { PrismaService } from "../../../common/database/prisma.service";
-import { appendResetMarker } from "../../bot-gateway/utils/external-id";
+import { appendResetMarker } from "../utils/external-id";
 
 @Injectable()
 export class SessionManagementToolProvider implements IToolProvider {

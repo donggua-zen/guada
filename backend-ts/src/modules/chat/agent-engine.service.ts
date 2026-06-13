@@ -1,12 +1,12 @@
 import { Injectable, Logger } from "@nestjs/common";
 import { LLMService } from "../llm-core/llm.service";
 import { ToolOrchestrator } from "../tools/tool-orchestrator.service";
-import { SessionContextService } from "./session-context.service";
 import { MessageRecord, LLMResponseChunk } from "../llm-core/types/llm.types";
-import { IConversationContext } from "./interfaces";
 import { RequestContext } from "../../common/context/request-context";
 import { throttledStream } from "./utils/stream-throttle.util";
 import { ToolCallDisplayUtil } from "./utils/tool-call-display.util";
+import { ISessionContext } from "./session-context";
+import { EventChunk } from "./types/event-chunk.types";
 
 /**
  * 审批上下文
@@ -38,20 +38,10 @@ class ThinkingTimeInfo {
 }
 
 /**
- * 扩展的 LLM 响应块（累加器使用）
- *
- * 在标准 LLMResponseChunk 基础上增加思考时长字段，
- * 用于 executeLLMStream 返回完整的累加状态。
- */
-interface AccumulatedChunk extends LLMResponseChunk {
-  thinkingDurationMs?: number | null;
-}
-
-/**
  * Agent 推理引擎
  *
  * 负责协调会话级别的 AI 代理执行流程，包括多轮工具调用循环、流式响应管理。
- * 不管理会话生命周期——配置合并、上下文构建等数据准备工作由 SessionContextService 统一提供。
+ * 不管理会话生命周期——配置合并、上下文构建等数据准备工作由 ISessionContext 统一提供。
  *
  * 核心职责：
  * - 管理会话级别的并发锁，防止同一会话的多次请求冲突
@@ -75,7 +65,6 @@ export class AgentEngine {
   constructor(
     private toolOrchestrator: ToolOrchestrator,
     private llmService: LLMService,
-    private sessionContextService: SessionContextService,
     private displayManager: ToolCallDisplayUtil,
   ) {}
 
@@ -87,57 +76,42 @@ export class AgentEngine {
    *
    * 执行流程：
    * - 加载会话并更新最后活跃时间
-   * - 委托 SessionContextService 完成所有数据准备
+   * - 委托 ISessionContext 提供所有运行配置
    * - 进入多轮工具调用循环，逐轮生成响应
    *
-   * @param session 会话对象
+   * @param sessionContext 类型安全的会话上下文
    * @param messageId 触发本次补全的用户消息 ID
    * @param regenerationMode 再生模式（"overwrite" 覆盖旧回复 / "multi_version" 保留多版本 / "resume" 断点续传）
    * @param assistantMessageId 现有助手消息 ID（仅 multi_version 模式使用）
    * @param abortSignal 中断信号，用于客户端断开连接时中止 LLM 请求
-   * @param resumeData 【新增】断点续传数据（如审批决策、表单数据等）
+   * @param resumeData 断点续传数据（如审批决策、表单数据等）
    * @yields SSE 的事件对象（create / text / think / tool_call / finish 等）
    */
-  async *completions(
-    session: any,
+  async *run(
+    sessionContext: ISessionContext,
     messageId: string,
-    regenerationMode: string = "overwrite", // 再生模式：'overwrite' | 'multi_version' | 'resume'
-    assistantMessageId?: string, // 现有助手消息 ID（用于 multi_version 和 resume 模式）
-    abortSignal?: AbortSignal, // 中断信号（用于客户端断开连接时中止 LLM 请求）
-    resumeData?: any, // 【新增】断点续传数据
-  ) {
-    const sessionId = session.id;
+    regenerationMode: string = "overwrite",
+    assistantMessageId?: string,
+    abortSignal?: AbortSignal,
+    resumeData?: any,
+  ): AsyncGenerator<EventChunk> {
+    const sessionId = sessionContext.sessionId;
 
-    // 在 AsyncLocalStorage 上下文中执行整个请求
-    // 这样内部所有服务都可以自动访问 abortSignal，无需层层透传
     const generatorFn = async function* (this: AgentEngine) {
       try {
-        // 委托 SessionContextService 完成所有数据准备
-        // 现在 buildContext 内部可以通过 RequestContext.abortSignal() 自动获取信号
-        const { context, toolContext, thinkingEffort } =
-          await this.sessionContextService.buildContext(
-            session,
-            regenerationMode !== "resume" ? messageId : undefined,
-          );
-
-        // 执行多轮工具调用循环，通过生成器逐轮产出响应事件
         yield* this.executeAgentLoop(
-          context,
-          session,
+          sessionContext,
           messageId,
-          toolContext,
-          thinkingEffort,
           regenerationMode,
           assistantMessageId,
-          abortSignal, // 仍然显式传递给工具层，用于控制外部资源
-          resumeData, // 【新增】传递断点续传数据
+          abortSignal,
+          resumeData,
         );
       } catch (error) {
         throw error;
       }
     }.bind(this);
 
-    // 在 AsyncLocalStorage 上下文中执行生成器
     const wrappedGenerator = RequestContext.run(
       {
         abortSignal,
@@ -163,11 +137,8 @@ export class AgentEngine {
    * - 最大迭代次数限制（40 次），防止无限循环
    * - SessionStreamManager 确保同一会话不会同时启动多个流
    *
-   * @param conversationContext 已初始化的会话上下文管理器
-   * @param session 会话对象，包含模型配置和设置
+   * @param sessionContext 类型安全的会话上下文（包含对话状态）
    * @param userMessageId 触发本次循环的用户消息 ID
-   * @param toolContext 工具执行上下文（内部按需获取 tools）
-   * @param thinkingEffort 思考强度级别
    * @param regenerationMode 再生模式标识（'overwrite' | 'multi_version' | 'resume'）
    * @param assistantMessageId 现有助手消息 ID（可选）
    * @param abortSignal 中断信号（可选）
@@ -175,20 +146,18 @@ export class AgentEngine {
    * @yields SSE 格式的事件对象
    */
   private async *executeAgentLoop(
-    conversationContext: IConversationContext,
-    session: any,
+    sessionContext: ISessionContext,
     userMessageId: string,
-    toolContext: any,
-    thinkingEffort: string | undefined,
     regenerationMode: string,
     assistantMessageId?: string,
     abortSignal?: AbortSignal,
-    resumeData?: any, // 【新增】断点续传数据
-  ): AsyncGenerator<any> {
+    resumeData?: any,
+  ): AsyncGenerator<EventChunk> {
+    const tools = sessionContext.getToolContext()?.getFlatTools();
     // 清理上一轮的工具调用状态
     this.displayManager.clear();
 
-    // 【新增】判断是否为断点模式
+    // 判断是否为断点模式
 
     let isResumeMode = regenerationMode === "resume";
     let assistantResponse: MessageRecord | null = null;
@@ -199,33 +168,30 @@ export class AgentEngine {
       // 【正常模式】生成新的 turnsId 和 messageId
 
       // 生成本次对话轮次的唯一 ID，用于关联同一轮中的所有消息和工具调用
-      turnsId = conversationContext.generateId();
+      turnsId = sessionContext.generateId();
 
       // 准备助手回复的消息容器，根据再生模式决定是覆盖旧回复还是创建新版本
-      responseMessageId = await conversationContext.prepareAssistantResponse(
+      responseMessageId = await sessionContext.prepareAssistantResponse(
         userMessageId,
         regenerationMode,
         turnsId,
         assistantMessageId,
       );
     }
-    // 按需获取 tools（仅在需要时查询）
-    const tools = toolContext
-      ? await this.toolOrchestrator.getAllTools(toolContext)
-      : undefined;
     let needToContinue = false;
 
     // 工具调用轮次计数器
     let iterationCount = 0;
-
+    sessionContext.setMessageCursor(userMessageId);
     do {
       iterationCount++;
       needToContinue = false;
 
       // 从会话上下文中获取准备发送给 LLM 的完整消息列表（含 system prompt、摘要和历史）
-      const historyMessages = await conversationContext.getMessages();
+      const historyMessages = await sessionContext.getMessages();
+
       // 生成本轮助手回复的内容 ID，用于唯一标识该轮次的输出
-      let contentId = conversationContext.generateId();
+      let contentId = sessionContext.generateId();
       assistantResponse = {
         role: "assistant",
         content: "",
@@ -233,7 +199,7 @@ export class AgentEngine {
         contentId: contentId,
         turnsId: turnsId,
         metadata: {
-          modelName: session.model?.modelName,
+          modelName: sessionContext.getModelConfig().modelName,
         },
       };
       const lastMessage = historyMessages[historyMessages.length - 1];
@@ -254,7 +220,7 @@ export class AgentEngine {
         messageId: responseMessageId,
         turnsId: turnsId,
         contentId: contentId,
-        modelName: session.model?.modelName,
+        modelName: sessionContext.getModelConfig().modelName,
         requestId: RequestContext.current()?.requestId,
         parentId: userMessageId,
       };
@@ -268,16 +234,13 @@ export class AgentEngine {
       } else {
         // 将 accumulated 转换为 MessageRecord 格式用于后续处理
         const accumulatedChunk: LLMResponseChunk = {};
-        let streamError: Error | null = null;
         const currentTurnThinkingInfo = new ThinkingTimeInfo();
 
         try {
           // 执行 LLM 流式请求，获取原始 chunk 和累加结果
           const streamResult = this.executeLLMStream(
-            session,
+            sessionContext,
             historyMessages,
-            tools,
-            thinkingEffort,
             abortSignal,
           );
           for await (const { chunk, accumulated } of streamResult) {
@@ -311,9 +274,10 @@ export class AgentEngine {
             if (accumulatedChunk.usage) {
               assistantResponse.metadata.usage = accumulatedChunk.usage;
             }
-            // 给每个 chunk 加上 contentId，用于聚合和 lastContentId 过滤
-            const chunkWithId = { ...chunk, contentId };
-            const yieldEvent = this.buildYieldEvent(chunkWithId);
+
+            chunk.contentId = contentId;
+
+            const yieldEvent = this.buildYieldEvent(chunk, accumulated);
             if (yieldEvent) {
               yield yieldEvent;
             }
@@ -328,9 +292,12 @@ export class AgentEngine {
           };
         } catch (error) {
           // 由外部捕获并处理流式异常
-          streamError =
+          const streamError =
             error instanceof Error ? error : new Error(String(error));
-          this.logger.error(`Stream error in agent loop:`, streamError);
+          this.logger.error(
+            `Stream error in agent loop:${streamError.message}`,
+            streamError.stack,
+          );
           // 使用 handleStreamError 分类处理错误并设置状态
           this.handleStreamError(
             assistantResponse,
@@ -340,7 +307,7 @@ export class AgentEngine {
           if (!abortSignal || !abortSignal.aborted) {
             yield {
               type: "finish",
-              finishReason: 'error',
+              finishReason: "error",
               error: streamError.message,
               usage: accumulatedChunk.usage,
               contentId,
@@ -352,9 +319,9 @@ export class AgentEngine {
       }
 
       // 处理工具执行：若模型返回了工具调用指令，则批量执行所有工具
-      if (assistantResponse.toolCalls && toolContext) {
+      if (assistantResponse.toolCalls && tools) {
         // 【工具轮次限制】检查是否达到最大工具调用轮次
-        const MAX_TOOL_ITERATIONS = 40;
+        const MAX_TOOL_ITERATIONS = 100;
         if (iterationCount >= MAX_TOOL_ITERATIONS) {
           this.logger.warn(
             `工具调用达到最大轮次限制 (${MAX_TOOL_ITERATIONS})，暂停执行等待用户确认`,
@@ -383,7 +350,7 @@ export class AgentEngine {
             assistantResponse.toolCalls,
           );
           // 持久化当前消息（包含断点元数据），确保刷新后仍能显示继续按钮
-          await conversationContext.appendParts(parts);
+          await sessionContext.appendParts(parts);
           break;
         }
 
@@ -392,7 +359,7 @@ export class AgentEngine {
           this.classifyToolsByApproval(
             assistantResponse.toolCalls,
             assistantResponse.metadata,
-            session,
+            sessionContext,
           );
 
         // 【原子性审批】只要有需要审批且未审批的工具，就触发审批请求
@@ -416,7 +383,7 @@ export class AgentEngine {
             usage: assistantResponse.metadata?.usage,
           };
 
-          await conversationContext.appendParts(parts);
+          await sessionContext.appendParts(parts);
 
           break;
         }
@@ -427,8 +394,10 @@ export class AgentEngine {
         );
 
         // 执行 approved 工具（包括已通过审批和不需要审批的）
+        let toolResponses: any[] = [];
         if (approvedTools.length > 0) {
-          const toolResponses = await this.toolOrchestrator.executeBatch(
+          const toolContext = sessionContext.getToolContext();
+          toolResponses = await this.toolOrchestrator.executeBatch(
             approvedTools.map((tc: any) => ({
               id: tc.id,
               name: tc.name,
@@ -511,13 +480,13 @@ export class AgentEngine {
       }
 
       // 将本轮产生的所有消息（助手回复 + 工具响应）追加到会话上下文并持久化存储
-      await conversationContext.appendParts(parts);
+      await sessionContext.appendParts(parts);
 
       this.logger.debug(
         `Iteration ${iterationCount} cleanup completed. Finish reason: ${assistantResponse.metadata?.finishReason}`,
       );
     } while (needToContinue);
-    await conversationContext.persist();
+    await sessionContext.persist();
   }
 
   /**
@@ -532,39 +501,38 @@ export class AgentEngine {
    * - 该方法不直接 yield SSE 事件，由调用方负责转换和 yield
    * - 该方法不捕获异常，异常由调用方处理
    *
-   * @param session 会话对象
+   * @param sessionContext 类型安全的会话上下文
    * @param messages 发送给 LLM 的完整消息列表
-   * @param tools 可用工具定义数组（可选）
-   * @param thinkingEffort 思考强度级别：'off' | 'on' | 'low' | 'medium' | 'high' | 'max' 等
    * @param abortSignal 中断信号（可选）
    * @yields { chunk: LLMResponseChunk; accumulated: LLMResponseChunk } 原始块和累加块
    */
   private async *executeLLMStream(
-    session: any,
+    sessionContext: ISessionContext,
     messages: MessageRecord[],
-    tools: any[] | undefined,
-    thinkingEffort: string | undefined,
     abortSignal?: AbortSignal,
   ): AsyncGenerator<
     { chunk: LLMResponseChunk; accumulated: LLMResponseChunk },
     any,
     unknown
   > {
+    const tools = sessionContext.getToolContext()?.getFlatTools();
+    const thinkingEffort = sessionContext.getThinkingEffort();
     // 累加器：使用 LLMResponseChunk 格式保存累积状态
     const accumulated: LLMResponseChunk = {};
 
-    const config = (session.model?.config as any) || {};
+    const modelConfig = sessionContext.getModelConfig();
+    const modelParams = sessionContext.getModelParams();
 
     // 调用 LLM 服务发起流式请求，传递所有必要的配置参数
     const stream = this.llmService.completions({
-      model: session.model?.modelName,
+      model: modelConfig.modelName,
       messages,
       tools,
-      temperature: session.settings.modelTemperature, // 控制输出的随机性
-      topP: session.settings.modelTopP, // 核采样参数
-      frequencyPenalty: session.settings.modelFrequencyPenalty, // 频率惩罚，降低重复内容
-      maxTokens: config.maxOutputTokens, // 最大输出 Token 数限制
-      providerConfig: session.model.provider,
+      temperature: modelParams.temperature, // 控制输出的随机性
+      topP: modelParams.topP, // 核采样参数
+      frequencyPenalty: modelParams.frequencyPenalty, // 频率惩罚，降低重复内容
+      maxTokens: modelConfig.config.maxOutputTokens, // 最大输出 Token 数限制
+      providerConfig: modelConfig.provider,
       stream: true,
       thinkingEffort, // 传递思考强度
       abortSignal,
@@ -609,45 +577,55 @@ export class AgentEngine {
    * @param chunk LLM 响应块
    * @returns SSE 事件对象，若 chunk 为空则返回 null
    */
-  private buildYieldEvent(chunk: LLMResponseChunk): any {
-    let eventType: string;
-    let msg: string | null = null;
+  private buildYieldEvent(
+    chunk: LLMResponseChunk,
+    accumulated?: LLMResponseChunk,
+  ): EventChunk | null {
+    let eventType: EventChunk["type"];
 
     if (chunk.finishReason) {
       eventType = "finish";
+      if (accumulated.toolCalls) {
+        // 从文案管理器获取展示文案
+        const displayMessages = accumulated.toolCalls.map((tc) => {
+          return this.displayManager.getDisplayMessage(tc.index);
+        });
+        accumulated.displayMessages = displayMessages;
+      }
     } else if (chunk.reasoningContent) {
       eventType = "think";
-      msg = chunk.reasoningContent;
     } else if (chunk.content) {
       eventType = "text";
-      msg = chunk.content;
     } else if (chunk.toolCalls) {
       eventType = "tool_call";
-
       // 从文案管理器获取展示文案
       const displayMessages = chunk.toolCalls.map((tc) => {
-        const message = this.displayManager.getDisplayMessage(tc.index);
-        return message;
+        return this.displayManager.getDisplayMessage(tc.index);
       });
-
       chunk.displayMessages = displayMessages;
     } else if (chunk.usage) {
-      // 只有 usage 没有内容的情况（通常是最后一个块），跳过不发送以避免冗余
-      return null;
+      // 只有 usage 没有内容的情况（通常是最后一个块）
     } else {
       // 其他未知情况，跳过不处理
       return null;
     }
 
+    const isFinish = eventType === "finish";
+
     return {
       type: eventType,
-      msg,
-      toolCalls: chunk.toolCalls,
-      displayMessages: chunk.displayMessages,
+      content: isFinish ? accumulated?.content : chunk.content,
+      reasoningContent: isFinish
+        ? accumulated?.reasoningContent
+        : chunk.reasoningContent,
+      toolCalls: isFinish ? accumulated?.toolCalls : chunk.toolCalls,
+      displayMessages: isFinish
+        ? accumulated?.displayMessages
+        : chunk.displayMessages,
       finishReason: chunk.finishReason,
       usage: chunk.usage,
-      contentId: (chunk as any).contentId,
-    };
+      contentId: chunk.contentId,
+    } as EventChunk;
   }
 
   /**
@@ -801,6 +779,7 @@ export class AgentEngine {
           id: delta.id,
           name: delta.name || "",
           arguments: "",
+          index: index,
         };
 
         // 每个工具调用对象创建时都必须初始化状态
@@ -879,18 +858,20 @@ export class AgentEngine {
   }
 
   /**
-   * 【新增】检查工具是否需要审批
+   * 检查工具是否需要审批
    */
-  private needsApproval(toolCalls: any[], session: any): boolean {
-    const settings = session.settings || {};
-    const approvalConfig = settings.toolApproval || {};
+  private needsApproval(
+    toolCalls: any[],
+    sessionContext: ISessionContext,
+  ): boolean {
+    const approvalConfig = sessionContext.getToolApprovalConfig();
 
     // 如果全局禁用审批，返回 false
     if (approvalConfig.enabled === false) {
       return false;
     }
 
-    const requiresApprovalTools = approvalConfig.requiresApproval || [];
+    const requiresApprovalTools = approvalConfig.requiresApproval;
 
     return toolCalls.some((tc: any) => {
       const toolName = tc.name;
@@ -911,17 +892,17 @@ export class AgentEngine {
   }
 
   /**
-   * 【新增】将工具按审批状态分类
+   * 将工具按审批状态分类
    *
    * @param toolCalls 所有工具调用
    * @param metadata 消息的 metadata（包含 approvalContext）
-   * @param session 会话对象（用于获取审批配置）
+   * @param sessionContext 会话上下文（用于获取审批配置）
    * @returns 三类工具：pendingTools（需要审批但未决策）、approvedTools（已通过/不需要审批）、rejectedTools（被拒绝）
    */
   private classifyToolsByApproval(
     toolCalls: any[],
     metadata?: any,
-    session?: any,
+    sessionContext?: ISessionContext,
   ): {
     pendingTools: any[];
     approvedTools: any[];
@@ -952,9 +933,8 @@ export class AgentEngine {
       }
     } else {
       // 未审批场景：检查哪些工具需要审批
-      const settings = session?.settings || {};
-      const approvalConfig = settings.toolApproval || {};
-      const requiresApprovalTools = approvalConfig.requiresApproval || [];
+      const approvalConfig = sessionContext?.getToolApprovalConfig();
+      const requiresApprovalTools = approvalConfig?.requiresApproval || [];
 
       for (const tc of toolCalls) {
         const needsApproval = this.isToolRequiresApproval(

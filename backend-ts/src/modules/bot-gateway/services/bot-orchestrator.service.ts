@@ -7,6 +7,7 @@ import {
   BotConfig,
 } from "../interfaces/bot-platform.interface";
 import { AgentEngine } from "../../chat/agent-engine.service";
+import { SessionContextFactory } from "../../chat/session-context.factory";
 import { SessionMapperService } from "./session-mapper.service";
 import { WorkspaceService } from "../../../common/services/workspace.service";
 import { buildExternalId } from "../utils/external-id";
@@ -35,6 +36,7 @@ export class BotOrchestrator {
 
   constructor(
     private agentEngine: AgentEngine,
+    private sessionContextFactory: SessionContextFactory,
     private sessionMapper: SessionMapperService,
     private workspaceService: WorkspaceService,
   ) {}
@@ -255,9 +257,12 @@ export class BotOrchestrator {
         config.knowledgeBaseIds,
       );
 
+      // 构建类型安全的会话上下文
+      const sessionContext = await this.sessionContextFactory.createFromSession(session);
+
       // 调用 AgentEngine 获取流式迭代器
-      const iterator = this.agentEngine.completions(
-        session,
+      const iterator = this.agentEngine.run(
+        sessionContext,
         userMessage.id,
         "overwrite",
       );
@@ -326,8 +331,8 @@ export class BotOrchestrator {
     try {
       for await (const chunk of iterator) {
         // AgentService 返回的 type: "text" | "think" | "finish" | "tool_call" | "tool_calls_response"
-        if (chunk.type === "text" && chunk.msg) {
-          accumulatedContent += chunk.msg;
+        if (chunk.type === "text" && chunk.content) {
+          accumulatedContent += chunk.content;
 
           const now = Date.now();
           // 定期更新消息内容（避免过于频繁的网络请求）
@@ -384,8 +389,8 @@ export class BotOrchestrator {
       // 收集完整回复
       let fullReply = "";
       for await (const chunk of iterator) {
-        if (chunk.type === "text" && chunk.msg) {
-          fullReply += chunk.msg;
+        if (chunk.type === "text" && chunk.content) {
+          fullReply += chunk.content;
         }
       }
 

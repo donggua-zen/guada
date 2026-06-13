@@ -4,9 +4,9 @@ import {
   ToolCallRequest,
   ToolProviderMetadata,
   ToolDisplayInfo,
-} from "../interfaces/tool-provider.interface";
-import { InternalToolDefinition } from "../../llm-core/types/llm.types";
-import { SchedulerService } from "../../scheduler/scheduler.service";
+  ToolDefinition,
+} from "../tools/interfaces/tool-provider.interface";
+import { SchedulerService } from "./scheduler.service";
 
 /**
  * 定时任务工具提供者
@@ -19,7 +19,7 @@ export class SchedulerToolProvider implements IToolProvider {
   private readonly logger = new Logger(SchedulerToolProvider.name);
   public readonly namespace = "scheduler";
 
-  private readonly toolsConfig: InternalToolDefinition[] = [
+  private readonly toolsConfig: ToolDefinition[] = [
     {
       name: "create_task",
       description:
@@ -105,7 +105,9 @@ export class SchedulerToolProvider implements IToolProvider {
     },
   ];
 
-  constructor(private schedulerService: SchedulerService) {}
+  constructor(
+    private schedulerService: SchedulerService,
+  ) {}
 
   async getTools(
     enabled?: boolean | string[],
@@ -325,7 +327,7 @@ export class SchedulerToolProvider implements IToolProvider {
     promptParts.push("# 定时任务工具使用说明");
     promptParts.push("");
     promptParts.push(
-      "你可以使用这些工具帮助用户创建和管理定时任务。任务会在指定时间自动将提示词以用户消息的形式发送到当前对话中。定时器本身不会自动获得执行结果，仅仅是发送提示词，你可以理解为其本质是一个“闹钟”。",
+      "你可以使用这些工具帮助用户创建和管理定时任务。任务会在指定时间自动将提示词以用户消息的形式发送到当前对话中。定时器本身不会自动获得执行结果，仅仅是发送提示词，你可以理解为其本质是一个「闹钟」。",
     );
     promptParts.push("");
     promptParts.push("## 使用场景示例");

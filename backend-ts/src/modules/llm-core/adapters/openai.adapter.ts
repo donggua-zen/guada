@@ -4,11 +4,11 @@ import { IProtocolAdapter } from "./base.adapter";
 import { ProviderConfig, ConnectionTestResult } from "../types/provider.types";
 import {
   MessageRecord,
-  InternalToolDefinition,
   LLMCompletionParams,
   LLMResponseChunk,
   ToolCallItem,
 } from "../types/llm.types";
+import { ToolDefinition } from "../../tools/interfaces/tool-provider.interface";
 
 export class OpenAIAdapter implements IProtocolAdapter {
   readonly protocol = "openai";
@@ -160,7 +160,7 @@ export class OpenAIAdapter implements IProtocolAdapter {
   /**
    * 将内部扁平化工具定义转换为 OpenAI 格式
    */
-  private convertTools(tools: InternalToolDefinition[]): any[] {
+  private convertTools(tools: ToolDefinition[]): any[] {
     return tools.map((tool) => ({
       type: "function",
       function: {

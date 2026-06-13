@@ -28,9 +28,20 @@
               <MarkdownContent v-if="isAssistant" class="message-item__text markdown-text" @click="handleClick"
                 :content="item.content || ''" />
               <div v-else class="message-item__text break-all whitespace-pre-wrap">
-                <el-tag v-if="messageMetadata.type === 'scheduler'" size="small" type="success"
-                  class="mr-1">定时任务</el-tag>
-                <span v-html="renderSkillBadges(item.content || '')"></span>
+                <!-- 系统消息专用布局 -->
+                <template v-if="isSystemMessage">
+                  <div class="system-message-header">
+                    <el-icon size="14" class="system-message-icon">
+                      <Alert16Regular />
+                    </el-icon>
+                    <span class="system-message-label">{{ systemMessageLabel }}</span>
+                  </div>
+                  <div class="system-message-divider" />
+                  <div class="system-message-body">
+                    <span v-html="renderSkillBadges(item.content || '')"></span>
+                  </div>
+                </template>
+                <span v-else v-html="renderSkillBadges(item.content || '')"></span>
               </div>
             </template>
           </template>
@@ -93,7 +104,7 @@
           <span class="text-sm">回答中</span>
         </div>
         <!-- Token 消耗显示区域 -->
-        <div v-if="isAssistant && tokenUsage &&!streamingState.isStreaming" class="token-usage-section mt-2 flex">
+        <div v-if="isAssistant && tokenUsage && !streamingState.isStreaming" class="token-usage-section mt-2 flex">
           <div class="flex items-center gap-3 text-xs text-gray-400">
             <el-icon size="13" class="text-gray-400">
               <InsightsTwotone />
@@ -139,24 +150,54 @@
       <!-- 使用拆分后的操作按钮组件 -->
       <MessageActions v-if="!streamingState.isStreaming" :is-assistant="isAssistant" :is-last="isLast"
         :allow-generate="allowGenerate" :content-versions="contentVersions" :current-version-index="currentVersionIndex"
-        :time-full="currentContentTime.full" :time-friendly="currentContentTime.firendly"
-        @copy="handleCopy" @generate="handleGenerate" @regenerate="handleRegenerate" @switch-version="switchContent"
-        @edit="handleEdit" @delete="handleDelete" />
+        :time-full="currentContentTime.full" :time-friendly="currentContentTime.firendly" @copy="handleCopy"
+        @generate="handleGenerate" @regenerate="handleRegenerate" @switch-version="switchContent" @edit="handleEdit"
+        @delete="handleDelete" />
     </div>
   </div>
   <el-image-viewer v-if="showImageViewer" v-model:visible="showImageViewer" :url-list="previewList"
     :initial-index="currentPreViewIndex" @close="showImageViewer = false" :teleported="true" />
 </template>
 
+<style scoped>
+.system-message-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 6px;
+}
+
+.system-message-icon {
+  color: var(--el-color-warning);
+}
+
+.system-message-label {
+  font-size: 12px;
+  color: var(--el-text-color-secondary);
+  font-weight: 500;
+}
+
+.system-message-divider {
+  height: 1px;
+  background-color: var(--el-border-color-lighter);
+  margin: 8px 0;
+}
+
+.system-message-body {
+  font-size: 14px;
+  color: var(--el-text-color-regular);
+}
+</style>
+
 <script setup lang="ts">
-import { computed, ref, watch, nextTick } from "vue";
+import { computed, ref } from "vue";
 import { ElAlert, ElIcon, ElImageViewer } from "element-plus";
 import {
-  AccessTimeTwotone,
   InsightsTwotone,
   MenuBookOutlined,
   ArrowRightTwotone,
 } from "@vicons/material";
+import { Alert16Regular } from "@vicons/fluent";
 
 // @ts-ignore - icons 组件尚未迁移到 TypeScript
 import { Loading } from "../icons";
@@ -308,6 +349,29 @@ const metadata = computed(() => {
 
 const messageMetadata = computed(() => {
   return props.message.metadata || {};
+});
+
+/**
+ * 系统消息来源徽标类型映射
+ */
+
+
+const isSystemMessage = computed(() => {
+  const type = messageMetadata.value.type;
+  return type && type !== 'client';
+});
+
+const systemMessageLabel = computed(() => {
+  const type = messageMetadata.value.type;
+  const name = messageMetadata.value.subAgentName || '';
+  switch (type) {
+    case 'scheduler':
+      return '来自定时任务的系统消息';
+    case 'sub_agent':
+      return '来自子代理的系统消息';
+    default:
+      return '系统消息';
+  }
 });
 
 const state = computed(() =>

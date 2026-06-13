@@ -7,8 +7,8 @@ import {
   ToolCallResponse,
   ToolProviderMetadata,
   ToolDisplayInfo,
+  ToolDefinition,
 } from "../interfaces/tool-provider.interface";
-import { InternalToolDefinition } from "../../llm-core/types/llm.types";
 import { WorkspaceService } from "../../../common/services/workspace.service";
 
 @Injectable()
@@ -16,7 +16,7 @@ export class FileToolProvider implements IToolProvider {
   private readonly logger = new Logger(FileToolProvider.name);
   public readonly namespace = "file";
 
-  private readonly toolsConfig: InternalToolDefinition[] = [
+  private readonly toolsConfig: ToolDefinition[] = [
     {
       name: "read",
       description: "读取指定路径的文本文件内容。",

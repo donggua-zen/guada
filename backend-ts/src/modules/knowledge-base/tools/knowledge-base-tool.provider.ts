@@ -6,14 +6,14 @@ import { KnowledgeBaseRepository } from "../../../common/database/knowledge-base
 import { KBFileRepository } from "../../../common/database/kb-file.repository";
 import { KBChunkRepository } from "../../../common/database/kb-chunk.repository";
 import { VectorDbService } from "../../../common/vector-db/vector-db.service";
-import { EmbeddingService } from "../../knowledge-base/embedding.service";
-import { KbFileService } from "../../knowledge-base/kb-file.service";
+import { EmbeddingService } from "../embedding.service";
+import { KbFileService } from "../kb-file.service";
 import {
   IToolProvider,
   ToolCallRequest,
   ToolProviderMetadata,
   ToolDisplayInfo,
-} from "../interfaces/tool-provider.interface";
+} from "../../tools/interfaces/tool-provider.interface";
 import { InternalToolDefinition } from "../../llm-core/types/llm.types";
 
 @Injectable()
@@ -214,17 +214,14 @@ export class KnowledgeBaseToolProvider implements IToolProvider {
 - 需要检查分块质量时
 - 想要深入了解文件细节时`);
 
-      // 差异部分：根据会话类型动态拼接
-
       if (isWebSession) {
-        // Web 会话：包含添加文档工具和完整的使用建议
         promptParts.push(`### 4. 添加文档到知识库 (knowledge_base__add_document)
 **用途**: 将指定路径的文本文件添加到知识库中
 
 **何时使用**:
 - 用户提供了文件路径，要求将其内容保存到知识库时
 - 需要将本地文档（如 .txt, .md 文件）添加到知识库时
-- 用户说“把这个文件加入知识库”等意图时
+- 用户说"把这个文件加入知识库"等意图时
 
 **使用建议**:
 1. **先搜索再查看**: 先用 \`search\` 找到相关内容，如有必要再用 \`get_chunks\` 查看完整分块
@@ -232,13 +229,11 @@ export class KnowledgeBaseToolProvider implements IToolProvider {
 3. **错误处理**: 如果返回错误信息，请检查参数是否正确、知识库/文件是否存在
 4. **路径规范**: target_path 应包含完整的相对路径和文件名，系统会自动创建对应的文件夹结构`);
       } else {
-        // 非 Web 会话：仅包含查询工具的使用建议
         promptParts.push(`**使用建议**:
 1. **先搜索再查看**: 先用 \`search\` 找到相关内容，如有必要再用 \`get_chunks\` 查看完整分块
 2. **注意分页**: 使用 \`get_chunks\` 时，每次最多获取 10 个分块，可通过调整 \`chunk_index\` 实现分页
 3. **错误处理**: 如果返回错误信息，请检查参数是否正确、知识库/文件是否存在`);
       }
-
 
       return promptParts.join("\n");
     } catch (error: any) {

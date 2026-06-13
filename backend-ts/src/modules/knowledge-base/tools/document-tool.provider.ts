@@ -6,9 +6,9 @@ import {
   ToolCallRequest,
   ToolProviderMetadata,
   ToolDisplayInfo,
-} from "../interfaces/tool-provider.interface";
-import { InternalToolDefinition } from "../../llm-core/types/llm.types";
-import { FileParserService } from "../../knowledge-base/file-parser.service";
+  ToolDefinition,
+} from "../../tools/interfaces/tool-provider.interface";
+import { FileParserService } from "../file-parser.service";
 import { WorkspaceService } from "../../../common/services/workspace.service";
 
 /**
@@ -22,7 +22,7 @@ export class DocumentToolProvider implements IToolProvider {
   private readonly logger = new Logger(DocumentToolProvider.name);
   public readonly namespace = "document";
 
-  private readonly toolsConfig: InternalToolDefinition[] = [
+  private readonly toolsConfig: ToolDefinition[] = [
     {
       name: "parse",
       description:

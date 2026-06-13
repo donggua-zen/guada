@@ -13,8 +13,12 @@ import {
 } from "../../common/types/pagination";
 import { UrlService } from "../../common/services/url.service";
 import { WorkspaceService } from "../../common/services/workspace.service";
-import { SG_MODELS, SK_MOD_CHAT, SK_MOD_TITLE_MODEL } from "../../constants/settings.constants";
-import { SessionContextService } from "./session-context.service";
+import {
+  SG_MODELS,
+  SK_MOD_CHAT,
+  SK_MOD_TITLE_MODEL,
+} from "../../constants/settings.constants";
+import { SessionContextFactory } from "./session-context.factory";
 import { FileWatcherService } from "../../common/services/file-watcher.service";
 import { SessionStreamManager } from "./session-stream.manager";
 
@@ -32,10 +36,10 @@ export class SessionService {
     private contextManager: MessageStoreService,
     private urlService: UrlService,
     private workspaceService: WorkspaceService,
-    private sessionContextService: SessionContextService,
+    private sessionContextFactory: SessionContextFactory,
     private fileWatcherService: FileWatcherService,
     private streamManager: SessionStreamManager,
-  ) { }
+  ) {}
 
   /**
    * 获取用户会话列表，按最后活跃时间倒序排列
@@ -63,11 +67,11 @@ export class SessionService {
       isStreaming: this.streamManager.hasActiveStream(item.id),
       character: item.character
         ? {
-          ...item.character,
-          avatarUrl: item.character.avatarUrl
-            ? this.urlService.toResourceAbsoluteUrl(item.character.avatarUrl)
-            : null,
-        }
+            ...item.character,
+            avatarUrl: item.character.avatarUrl
+              ? this.urlService.toResourceAbsoluteUrl(item.character.avatarUrl)
+              : null,
+          }
         : null,
     }));
     return createPaginatedResponse(transformedItems, total, { skip, limit });
@@ -84,20 +88,26 @@ export class SessionService {
       throw new HttpException("Session not found", HttpStatus.NOT_FOUND);
     }
 
-    // 转换 URL（使用 character 的 avatarUrl）
-    return session
-      ? {
-        ...session,
-        character: session.character
-          ? {
+    // 转换 URL（使用 character 的 avatarUrl）并注入子会话
+    if (!session) return null;
+
+    return {
+      ...session,
+      character: session.character
+        ? {
             ...session.character,
             avatarUrl: session.character.avatarUrl
-              ? this.urlService.toResourceAbsoluteUrl(session.character.avatarUrl)
+              ? this.urlService.toResourceAbsoluteUrl(
+                  session.character.avatarUrl,
+                )
               : null,
           }
-          : null,
-      }
-      : null;
+        : null,
+      subSessions: (session.children || []).map((child) => ({
+        ...child,
+        isStreaming: this.streamManager.hasActiveStream(child.id),
+      })),
+    };
   }
 
   /**
@@ -167,7 +177,10 @@ export class SessionService {
     }
 
     // 处理会话设置：过滤非法字段 + 处理 memory 继承
-    const filteredSettings = this.filterAndMergeSessionSettings(settings, character.settings);
+    const filteredSettings = this.filterAndMergeSessionSettings(
+      settings,
+      character.settings,
+    );
 
     // 确定使用的模型 ID：优先使用传入的 modelId，其次使用角色的 modelId，最后使用默认对话模型
     let finalModelId = modelId || character.modelId;
@@ -220,12 +233,15 @@ export class SessionService {
 
   /**
    * 过滤并合并会话设置：防止非法字段 + 处理 memory 继承
-   * 
+   *
    * @param sessionSettings 客户端传递的会话设置
    * @param characterSettings 角色的默认设置
    * @returns 过滤后的安全设置
    */
-  private filterAndMergeSessionSettings(sessionSettings: any, characterSettings: any) {
+  private filterAndMergeSessionSettings(
+    sessionSettings: any,
+    characterSettings: any,
+  ) {
     // 如果 sessionSettings 为空，使用空对象
     if (!sessionSettings) {
       sessionSettings = {};
@@ -233,11 +249,11 @@ export class SessionService {
 
     // 定义允许的顶层字段白名单
     const allowedTopLevelFields = [
-      'thinkingEffort',
-      'referencedKbs',
-      'modelName',
-      'memoryEnabled',  // 控制是否启用自定义记忆配置
-      'memory'          // 具体的记忆配置对象
+      "thinkingEffort",
+      "referencedKbs",
+      "modelName",
+      "memoryEnabled", // 控制是否启用自定义记忆配置
+      "memory", // 具体的记忆配置对象
     ];
 
     // 第一步：过滤掉非法字段
@@ -263,7 +279,7 @@ export class SessionService {
         maxMemoryLength: sessionMemory.maxMemoryLength ?? null,
         compressionTriggerRatio: sessionMemory.compressionTriggerRatio ?? 0.8,
         compressionTargetRatio: sessionMemory.compressionTargetRatio ?? 0.5,
-        summaryMode: sessionMemory.summaryMode ?? 'fast', // 默认快速模式
+        summaryMode: sessionMemory.summaryMode ?? "fast", // 默认快速模式
         maxTokensLimit: sessionMemory.maxTokensLimit ?? null,
       };
     }
@@ -300,7 +316,11 @@ export class SessionService {
    * 更新会话的工作目录路径
    * 不允许设置为空，必须提供有效路径
    */
-  async updateSessionWorkspacePath(sessionId: string, userId: string, workspacePath: string) {
+  async updateSessionWorkspacePath(
+    sessionId: string,
+    userId: string,
+    workspacePath: string,
+  ) {
     // 验证会话权限
     const session = await this.sessionRepo.findById(sessionId);
     if (!session || session.userId !== userId) {
@@ -317,6 +337,12 @@ export class SessionService {
 
     // 更新会话配置
     await this.sessionRepo.update(sessionId, { workspacePath });
+
+    // 级联更新所有子会话的工作目录
+    const children = await this.sessionRepo.findByParentId(sessionId);
+    for (const child of children) {
+      await this.sessionRepo.update(child.id, { workspacePath });
+    }
   }
 
   /**
@@ -325,14 +351,18 @@ export class SessionService {
    * @param userId 用户 ID
    * @param deleteWorkspace 是否同时删除工作目录（默认 false）
    */
-  async deleteSession(sessionId: string, userId: string, deleteWorkspace: boolean = false) {
+  async deleteSession(
+    sessionId: string,
+    userId: string,
+    deleteWorkspace: boolean = false,
+  ) {
     const session = await this.sessionRepo.findById(sessionId);
     if (!session || session.userId !== userId) {
       throw new Error("Session not found or unauthorized");
     }
 
     // 停止文件监听（强制关闭，不等待引用计数）
-    this.fileWatcherService.stopWatching(sessionId, '__force_close__');
+    this.fileWatcherService.stopWatching(sessionId, "__force_close__");
 
     // 级联删除消息（Prisma Schema 中已配置 onDelete: Cascade）
     await this.sessionRepo.deleteById(sessionId);
@@ -344,7 +374,9 @@ export class SessionService {
         await this.workspaceService.cleanupDefaultWorkspace(sessionId);
         this.logger.log(`Default workspace deleted for session ${sessionId}`);
       } catch (err: any) {
-        this.logger.error(`Failed to delete default workspace for session ${sessionId}: ${err.message}`);
+        this.logger.error(
+          `Failed to delete default workspace for session ${sessionId}: ${err.message}`,
+        );
         // 不抛出错误，避免影响会话删除
       }
     } else {
@@ -365,6 +397,13 @@ export class SessionService {
         throw new Error("Session not found");
       }
 
+      if (session.sessionType === "sub_agent")
+        return {
+          title: session.title,
+          skipped: true,
+          reason: "session_type_sub_agent",
+        };
+
       // 从全局设置中获取标题总结模型
       const titleModelId = this.settingsStorage.getSettingValue(
         SG_MODELS,
@@ -383,17 +422,14 @@ export class SessionService {
       }
 
       // 使用 MessageStoreService 获取最近的 3 条消息（已过滤系统消息，正序排列）
-      const recentMessages =
-        await this.contextManager.loadMessages({
-          sessionId,
-          maxMessages: 2
-        }
-        );
-
-
+      const recentMessages = await this.contextManager.loadMessages({
+        sessionId,
+        maxMessages: 2,
+      });
 
       // 获取全局设置中的标题总结提示词（已暂时移除用户配置，使用固定提示词）
-      const titlePrompt = "请根据以下对话内容，生成一个简洁、准确且具有描述性的会话标题（不超过 20 个字）。直接返回标题即可，不需要其他解释。";
+      const titlePrompt =
+        "请根据以下对话内容，生成一个简洁、准确且具有描述性的会话标题（不超过 20 个字）。直接返回标题即可，不需要其他解释。";
       // const titlePrompt = this.settingsStorage.getSettingValue(
       //   SG_MODELS,
       //   SK_MOD_TITLE_PROMPT,
@@ -423,7 +459,10 @@ export class SessionService {
         })
         .map((m) => ({
           role: m.role,
-          content: typeof m.content === "string" ? m.content : JSON.stringify(m.content),
+          content:
+            typeof m.content === "string"
+              ? m.content
+              : JSON.stringify(m.content),
         }));
 
       if (simplifiedMessages.length === 0) {
@@ -450,7 +489,7 @@ export class SessionService {
         messages: [{ role: "user", content: prompt }],
         temperature: 0.3, // 较低的温度使输出更稳定
         maxTokens: 50, // 限制输出长度
-        thinkingEffort: 'off', // 禁用思考功能
+        thinkingEffort: "off", // 禁用思考功能
         stream: false,
         providerConfig: model.provider,
       });
@@ -508,13 +547,15 @@ export class SessionService {
       throw new Error("Session not found or unauthorized");
     }
 
-    const { context, effectiveContextWindow } = await this.sessionContextService.buildContext(
-      session,
-    );
+    const context = await this.sessionContextFactory.createFromSession(session);
+    const effectiveContextWindow = context.getEffectiveContextWindow();
 
     const messages = context.getHistory();
     const usedTokens = context.getTokenCount();
-    const percentage = Math.min((usedTokens / effectiveContextWindow) * 100, 100);
+    const percentage = Math.min(
+      (usedTokens / effectiveContextWindow) * 100,
+      100,
+    );
     const remainingTokens = Math.max(effectiveContextWindow - usedTokens, 0);
 
     return {
@@ -537,7 +578,7 @@ export class SessionService {
       throw new Error("Session not found or unauthorized");
     }
 
-    const { context } = await this.sessionContextService.buildContext(session);
+    const context = await this.sessionContextFactory.createFromSession(session);
 
     const beforeTokenCount = context.getTokenCount();
     const beforeMessageCount = context.getHistory().length;
@@ -550,7 +591,7 @@ export class SessionService {
     const afterMessageCount = compressedMessages.length;
 
     const checkpoint = await this.contextStateRepo.findBySessionId(sessionId);
-    const compressionStrategy = checkpoint?.cleaningStrategy || 'none';
+    const compressionStrategy = checkpoint?.cleaningStrategy || "none";
 
     return {
       success: true,
@@ -562,9 +603,10 @@ export class SessionService {
       after: {
         tokenCount: afterTokenCount,
         messageCount: afterMessageCount,
-        compressionRatio: beforeTokenCount > 0
-          ? ((1 - afterTokenCount / beforeTokenCount) * 100).toFixed(2) + '%'
-          : '0%',
+        compressionRatio:
+          beforeTokenCount > 0
+            ? ((1 - afterTokenCount / beforeTokenCount) * 100).toFixed(2) + "%"
+            : "0%",
       },
       strategy: compressionStrategy,
       modelName: session.model?.modelName || "gpt-4",
@@ -577,5 +619,4 @@ export class SessionService {
   async updateLastActiveAt(sessionId: string) {
     return this.sessionRepo.updateLastActiveAt(sessionId);
   }
-
 }

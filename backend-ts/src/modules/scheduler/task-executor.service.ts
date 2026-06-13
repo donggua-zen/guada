@@ -1,7 +1,7 @@
 import { Injectable, Logger } from "@nestjs/common";
 import { SessionService } from "../chat/session.service";
 import { ChatRunnerService } from "../chat/chat-runner.service";
-import { SessionEventsService } from "../chat/session-events.service";
+import { EventBusService } from "../../common/events/event-bus.service";
 import { TaskStorageService } from "./task-storage.service";
 import { SettingsStorage } from "../../common/utils/settings-storage.util";
 import { PrismaService } from "../../common/database/prisma.service";
@@ -49,7 +49,7 @@ export class TaskExecutorService {
   constructor(
     private sessionService: SessionService,
     private chatRunner: ChatRunnerService,
-    private sessionEventsService: SessionEventsService,
+    private eventBus: EventBusService,
     private storage: TaskStorageService,
     private settingsStorage: SettingsStorage,
     private prisma: PrismaService,
@@ -147,6 +147,9 @@ export class TaskExecutorService {
 
   /**
    * 单次执行任务
+   *
+   * 使用 ChatRunnerService.enqueueMessage() 投递消息，
+   * 由 ChatRunnerService 内部队列管理执行时机。
    */
   private async runOnce(
     task: ScheduledTask,
@@ -160,28 +163,22 @@ export class TaskExecutorService {
     // 更新日志中的会话 ID
     await this.storage.updateLog(log.id, { sessionId });
 
-    // 使用 ChatRunnerService 启动流式对话（不传 callbacks，后台执行）
-    await this.chatRunner.startStream(
-      {
-        sessionId,
-        userId: task.userId,
-        userMessage: {
-          content: task.prompt,
-        },
-        regenerationMode: "overwrite",
-        source: { type: "scheduler", schedulerId: task.id },
-      },
-      undefined, // 不传 callbacks，后台执行
-    );
+    // 投递到 ChatRunnerService 队列
+    await this.chatRunner.enqueueMessage({
+      sessionId,
+      userId: task.userId,
+      content: task.prompt,
+      source: { type: "scheduler", schedulerId: task.id },
+    });
 
-    this.logger.log(`已启动流式对话: ${task.name}`);
+    this.logger.log(`任务已投递到消息队列: ${task.name}`);
 
     // 更新任务最后执行时间
     await this.storage.updateTask(task.id, {
       lastRunAt: new Date().toISOString(),
     });
 
-    // 标记日志为完成（流是异步运行的，这里只表示启动成功）
+    // 标记日志为完成
     await this.storage.updateLog(log.id, {
       status: "completed",
       finishedAt: new Date().toISOString(),
@@ -209,21 +206,15 @@ export class TaskExecutorService {
       throw new Error("无法准备会话");
     }
 
-    // 使用 ChatRunnerService 启动流式对话（不传 callbacks，后台执行）
-    await this.chatRunner.startStream(
-      {
-        sessionId,
-        userId: task.userId,
-        userMessage: {
-          content: task.prompt,
-        },
-        regenerationMode: "overwrite",
-        source: { type: "scheduler", schedulerId: task.id },
-      },
-      undefined, // 不传 callbacks，后台执行
-    );
+    // 投递到 ChatRunnerService 队列
+    await this.chatRunner.enqueueMessage({
+      sessionId,
+      userId: task.userId,
+      content: task.prompt,
+      source: { type: "scheduler", schedulerId: task.id, dryRun: true },
+    });
 
-    this.logger.log(`测试任务执行完成: ${task.name}`);
+    this.logger.log(`测试任务已投递到消息队列: ${task.name}`);
   }
 
   /**
@@ -315,8 +306,7 @@ export class TaskExecutorService {
       this.logger.log(`已创建新会话: ${session.id}`);
 
       // 广播会话创建事件，让前端会话列表刷新
-      this.sessionEventsService.broadcastToUser(task.userId, {
-        type: "session_created",
+      this.eventBus.emit("session.created", {
         userId: task.userId,
         sessionId: session.id,
         timestamp: new Date().toISOString(),

@@ -1,6 +1,7 @@
 /// <reference types="jest" />
 
 import { AgentEngine } from '../../src/modules/chat/agent-engine.service';
+import { EventChunk } from '../../src/modules/chat/types/event-chunk.types';
 import { ConflictException } from '@nestjs/common';
 import { createAllMocks } from './helpers/mock-factories';
 import { loadChunksFromJsonl } from './helpers/chunk-replayer';
@@ -15,16 +16,14 @@ describe('AgentEngine - completions', () => {
       });
 
       const agentEngine = new AgentEngine(
-        mocks.sessionRepo as any,
         mocks.toolOrchestrator as any,
         mocks.llmService as any,
-        mocks.sessionLockService as any,
-        mocks.sessionContextService as any,
+        mocks.displayManager as any,
       );
 
       await expect(
         (async () => {
-          for await (const _ of agentEngine.completions('test-session-001', 'msg-001')) {
+          for await (const _ of agentEngine.completions(mocks.sessionContext, 'msg-001')) {
             // consume generator
           }
         })(),
@@ -43,16 +42,14 @@ describe('AgentEngine - completions', () => {
       });
 
       const agentEngine = new AgentEngine(
-        mocks.sessionRepo as any,
         mocks.toolOrchestrator as any,
         mocks.llmService as any,
-        mocks.sessionLockService as any,
-        mocks.sessionContextService as any,
+        mocks.displayManager as any,
       );
 
       // 第一次请求
-      const events1: any[] = [];
-      for await (const event of agentEngine.completions('test-session-001', 'msg-001')) {
+      const events1: EventChunk[] = [];
+      for await (const event of agentEngine.completions(mocks.sessionContext, 'msg-001')) {
         events1.push(event);
       }
 
@@ -63,8 +60,8 @@ describe('AgentEngine - completions', () => {
       (mocks.sessionLockService.tryLock as jest.Mock).mockReturnValue(true);
 
       // 第二次请求应该能成功
-      const events2: any[] = [];
-      for await (const event of agentEngine.completions('test-session-001', 'msg-002')) {
+      const events2: EventChunk[] = [];
+      for await (const event of agentEngine.completions(mocks.sessionContext, 'msg-002')) {
         events2.push(event);
       }
 
@@ -83,15 +80,13 @@ describe('AgentEngine - completions', () => {
       });
 
       const agentEngine = new AgentEngine(
-        mocks.sessionRepo as any,
         mocks.toolOrchestrator as any,
         mocks.llmService as any,
-        mocks.sessionLockService as any,
-        mocks.sessionContextService as any,
+        mocks.displayManager as any,
       );
 
-      const events: any[] = [];
-      for await (const event of agentEngine.completions('test-session-001', 'msg-001')) {
+      const events: EventChunk[] = [];
+      for await (const event of agentEngine.completions(mocks.sessionContext, 'msg-001')) {
         events.push(event);
       }
 
@@ -117,21 +112,19 @@ describe('AgentEngine - completions', () => {
       });
 
       const agentEngine = new AgentEngine(
-        mocks.sessionRepo as any,
         mocks.toolOrchestrator as any,
         mocks.llmService as any,
-        mocks.sessionLockService as any,
-        mocks.sessionContextService as any,
+        mocks.displayManager as any,
       );
 
-      const events: any[] = [];
-      for await (const event of agentEngine.completions('test-session-001', 'msg-001')) {
+      const events: EventChunk[] = [];
+      for await (const event of agentEngine.completions(mocks.sessionContext, 'msg-001')) {
         events.push(event);
       }
 
       // thinkingDurationMs 应该在合理范围内 (> 0 且 < 10000ms)
       // 注意:实际值取决于执行时间,这里只验证存在性和合理性
-      const contextMock = (mocks.sessionContextService.buildContext as jest.Mock).mock.results[0]?.value?.context;
+      const contextMock = mocks.sessionContext;
       
       if (contextMock && (contextMock.appendParts as jest.Mock)?.mock?.calls?.length > 0) {
         const appendPartsCall = (contextMock.appendParts as jest.Mock).mock.calls[0];
@@ -170,17 +163,15 @@ describe('AgentEngine - completions', () => {
       });
 
       const agentEngine = new AgentEngine(
-        mocks.sessionRepo as any,
         mocks.toolOrchestrator as any,
         mocks.llmService as any,
-        mocks.sessionLockService as any,
-        mocks.sessionContextService as any,
+        mocks.displayManager as any,
       );
 
-      const events: any[] = [];
+      const events: EventChunk[] = [];
       try {
         for await (const event of agentEngine.completions(
-          'test-session-001',
+          mocks.sessionContext,
           'msg-001',
           'overwrite',
           undefined,
@@ -217,15 +208,13 @@ describe('AgentEngine - completions', () => {
       });
 
       const agentEngine = new AgentEngine(
-        mocks.sessionRepo as any,
         mocks.toolOrchestrator as any,
         mocks.llmService as any,
-        mocks.sessionLockService as any,
-        mocks.sessionContextService as any,
+        mocks.displayManager as any,
       );
 
-      const events: any[] = [];
-      for await (const event of agentEngine.completions('test-session-001', 'msg-001')) {
+      const events: EventChunk[] = [];
+      for await (const event of agentEngine.completions(mocks.sessionContext, 'msg-001')) {
         events.push(event);
       }
 
@@ -237,7 +226,7 @@ describe('AgentEngine - completions', () => {
       expect(toolResponseEvents.length).toBeGreaterThan(0);
 
       // 验证工具调用参数被正确累加
-      const contextMock = (mocks.sessionContextService.buildContext as jest.Mock).mock.results[0]?.value?.context;
+      const contextMock = mocks.sessionContext;
       
       if (contextMock && (contextMock.appendParts as jest.Mock)?.mock?.calls?.length > 0) {
         const appendPartsCall = (contextMock.appendParts as jest.Mock).mock.calls[0];
@@ -261,15 +250,13 @@ describe('AgentEngine - completions', () => {
       });
 
       const agentEngine = new AgentEngine(
-        mocks.sessionRepo as any,
         mocks.toolOrchestrator as any,
         mocks.llmService as any,
-        mocks.sessionLockService as any,
-        mocks.sessionContextService as any,
+        mocks.displayManager as any,
       );
 
-      const events: any[] = [];
-      for await (const event of agentEngine.completions('test-session-001', 'msg-001')) {
+      const events: EventChunk[] = [];
+      for await (const event of agentEngine.completions(mocks.sessionContext, 'msg-001')) {
         events.push(event);
       }
 
@@ -318,15 +305,13 @@ describe('AgentEngine - completions', () => {
       });
 
       const agentEngine = new AgentEngine(
-        mocks.sessionRepo as any,
         mocks.toolOrchestrator as any,
         mocks.llmService as any,
-        mocks.sessionLockService as any,
-        mocks.sessionContextService as any,
+        mocks.displayManager as any,
       );
 
-      const events: any[] = [];
-      for await (const event of agentEngine.completions('test-session-001', 'msg-001')) {
+      const events: EventChunk[] = [];
+      for await (const event of agentEngine.completions(mocks.sessionContext, 'msg-001')) {
         events.push(event);
       }
 
@@ -357,15 +342,13 @@ describe('AgentEngine - completions', () => {
       });
 
       const agentEngine = new AgentEngine(
-        mocks.sessionRepo as any,
         mocks.toolOrchestrator as any,
         mocks.llmService as any,
-        mocks.sessionLockService as any,
-        mocks.sessionContextService as any,
+        mocks.displayManager as any,
       );
 
-      const events: any[] = [];
-      for await (const event of agentEngine.completions('test-session-001', 'msg-001')) {
+      const events: EventChunk[] = [];
+      for await (const event of agentEngine.completions(mocks.sessionContext, 'msg-001')) {
         events.push(event);
       }
 
@@ -386,15 +369,13 @@ describe('AgentEngine - completions', () => {
       });
 
       const agentEngine = new AgentEngine(
-        mocks.sessionRepo as any,
         mocks.toolOrchestrator as any,
         mocks.llmService as any,
-        mocks.sessionLockService as any,
-        mocks.sessionContextService as any,
+        mocks.displayManager as any,
       );
 
-      const events: any[] = [];
-      for await (const event of agentEngine.completions('test-session-001', 'msg-001')) {
+      const events: EventChunk[] = [];
+      for await (const event of agentEngine.completions(mocks.sessionContext, 'msg-001')) {
         events.push(event);
       }
 
@@ -416,15 +397,13 @@ describe('AgentEngine - completions', () => {
       });
 
       const agentEngine = new AgentEngine(
-        mocks.sessionRepo as any,
         mocks.toolOrchestrator as any,
         mocks.llmService as any,
-        mocks.sessionLockService as any,
-        mocks.sessionContextService as any,
+        mocks.displayManager as any,
       );
 
-      const events: any[] = [];
-      for await (const event of agentEngine.completions('test-session-001', 'msg-001')) {
+      const events: EventChunk[] = [];
+      for await (const event of agentEngine.completions(mocks.sessionContext, 'msg-001')) {
         events.push(event);
       }
 
@@ -446,15 +425,13 @@ describe('AgentEngine - completions', () => {
       });
 
       const agentEngine = new AgentEngine(
-        mocks.sessionRepo as any,
         mocks.toolOrchestrator as any,
         mocks.llmService as any,
-        mocks.sessionLockService as any,
-        mocks.sessionContextService as any,
+        mocks.displayManager as any,
       );
 
-      const events: any[] = [];
-      for await (const event of agentEngine.completions('test-session-001', 'msg-001')) {
+      const events: EventChunk[] = [];
+      for await (const event of agentEngine.completions(mocks.sessionContext, 'msg-001')) {
         if (event.type === 'text') {
           events.push(event);
         }
@@ -475,15 +452,13 @@ describe('AgentEngine - completions', () => {
       });
 
       const agentEngine = new AgentEngine(
-        mocks.sessionRepo as any,
         mocks.toolOrchestrator as any,
         mocks.llmService as any,
-        mocks.sessionLockService as any,
-        mocks.sessionContextService as any,
+        mocks.displayManager as any,
       );
 
-      const events: any[] = [];
-      for await (const event of agentEngine.completions('test-session-001', 'msg-001')) {
+      const events: EventChunk[] = [];
+      for await (const event of agentEngine.completions(mocks.sessionContext, 'msg-001')) {
         events.push(event);
       }
 
@@ -505,15 +480,13 @@ describe('AgentEngine - completions', () => {
       });
 
       const agentEngine = new AgentEngine(
-        mocks.sessionRepo as any,
         mocks.toolOrchestrator as any,
         mocks.llmService as any,
-        mocks.sessionLockService as any,
-        mocks.sessionContextService as any,
+        mocks.displayManager as any,
       );
 
-      const events: any[] = [];
-      for await (const event of agentEngine.completions('test-session-001', 'msg-001')) {
+      const events: EventChunk[] = [];
+      for await (const event of agentEngine.completions(mocks.sessionContext, 'msg-001')) {
         events.push(event);
       }
 

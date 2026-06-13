@@ -210,6 +210,18 @@ async function initializeDatabase(
     if (!isFirstRun) {
       const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
       const backupPath = `${dbPath}.bak.${timestamp}`;
+
+      // WAL 模式下先 checkpoint，确保 .db-wal 中的数据合并回主文件
+      try {
+        const Database = require(path.join(backendPath, "node_modules", "better-sqlite3"));
+        const db = new Database(dbPath);
+        db.pragma("wal_checkpoint(TRUNCATE)");
+        db.close();
+        console.log("WAL checkpoint 完成，数据已合并");
+      } catch (e) {
+        console.warn("⚠️  WAL checkpoint 失败，仍以当前状态备份:", e);
+      }
+
       fs.copyFileSync(dbPath, backupPath);
       console.log(`数据库结构变更，已备份至: ${backupPath}`);
 

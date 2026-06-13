@@ -6,8 +6,8 @@ import {
   ToolCallRequest,
   ToolCallResponse,
   ToolProviderMetadata,
+  ToolDefinition,
 } from "../interfaces/tool-provider.interface";
-import { InternalToolDefinition } from "../../llm-core/types/llm.types";
 
 /**
  * 记忆索引数据结构
@@ -39,7 +39,7 @@ export class MemoryToolProvider implements IToolProvider {
   // 最大缓存会话数
   private readonly MAX_CACHE_SIZE = 10;
 
-  private readonly toolsConfig: InternalToolDefinition[] = [];
+  private readonly toolsConfig: ToolDefinition[] = [];
 
   constructor() { }
 
