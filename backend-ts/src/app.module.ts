@@ -1,5 +1,6 @@
 import { Module } from "@nestjs/common";
 import { ConfigModule } from "@nestjs/config";
+import { EventEmitterModule } from "@nestjs/event-emitter";
 import { DatabaseModule } from "./common/database/database.module";
 import { UploadModule } from "./common/upload/upload.module";
 import { SharedModule } from "./common/services/shared.module";
@@ -19,11 +20,18 @@ import { BotGatewayModule } from "./modules/bot-gateway/bot-gateway.module";
 import { SkillsModule } from './modules/skills/skills.module';
 import { LlmCoreModule } from './modules/llm-core/providers.module';
 import { SchedulerModule } from './modules/scheduler/scheduler.module';
+import { SubAgentModule } from './modules/sub-agent/sub-agent.module';
 
 @Module({
   imports: [
     ConfigModule.forRoot({
       isGlobal: true,
+    }),
+    EventEmitterModule.forRoot({
+      // 全局事件发射器，供模块间解耦通信
+      wildcard: false,
+      delimiter: '.',
+      maxListeners: 20,
     }),
     LlmCoreModule, // LLM 核心模块（全局）
     DatabaseModule, // 全局数据库模块（包含 PrismaService 和 Repositories）
@@ -45,6 +53,7 @@ import { SchedulerModule } from './modules/scheduler/scheduler.module';
     KnowledgeBaseModule,
     BotGatewayModule, // 机器人网关模块
     SchedulerModule,  // 定时任务模块
+    SubAgentModule,   // 子 Agent 模块
   ],
 })
 export class AppModule {}

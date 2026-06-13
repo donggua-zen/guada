@@ -336,7 +336,7 @@ export async function* mockChatStream(
 
       yield {
         type: 'think',
-        msg: chunk,
+        reasoningContent: chunk,
       }
 
       await delay(chunkDelay || 50)
@@ -390,7 +390,7 @@ export async function* mockChatStream(
 
     yield {
       type: 'text',
-      msg: chunk,
+      content: chunk,
     }
 
     await delay(chunkDelay || 50)

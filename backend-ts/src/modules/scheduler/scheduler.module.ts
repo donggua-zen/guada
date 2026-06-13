@@ -1,4 +1,4 @@
-import { Module, forwardRef } from "@nestjs/common";
+import { Module, OnModuleInit, Logger } from "@nestjs/common";
 import { SchedulerController } from "./scheduler.controller";
 import { SchedulerService } from "./scheduler.service";
 import { TaskSchedulerService } from "./task-scheduler.service";
@@ -8,6 +8,9 @@ import { ChatModule } from "../chat/chat.module";
 import { AuthModule } from "../auth/auth.module";
 import { SharedModule } from "../../common/services/shared.module";
 import { DatabaseModule } from "../../common/database/database.module";
+import { ToolsModule } from "../tools/tools.module";
+import { ToolOrchestrator } from "../tools/tool-orchestrator.service";
+import { SchedulerToolProvider } from "./scheduler-tool.provider";
 
 /**
  * 定时任务模块
@@ -17,18 +20,29 @@ import { DatabaseModule } from "../../common/database/database.module";
  * - 按 cron 表达式周期执行
  * - 自动创建新会话或在指定会话中执行
  * - 任务执行日志记录
- *
- * 数据持久化：使用 JSON 文件存储（data/scheduler/）
  */
 @Module({
-  imports: [forwardRef(() => ChatModule), AuthModule, SharedModule, DatabaseModule],
+  imports: [ChatModule, ToolsModule, AuthModule, SharedModule, DatabaseModule],
   controllers: [SchedulerController],
   providers: [
     SchedulerService,
     TaskSchedulerService,
     TaskExecutorService,
     TaskStorageService,
+    SchedulerToolProvider,
   ],
   exports: [SchedulerService],
 })
-export class SchedulerModule {}
+export class SchedulerModule implements OnModuleInit {
+  private readonly logger = new Logger(SchedulerModule.name);
+
+  constructor(
+    private readonly toolOrchestrator: ToolOrchestrator,
+    private readonly schedulerToolProvider: SchedulerToolProvider,
+  ) {}
+
+  onModuleInit() {
+    this.toolOrchestrator.addProvider(this.schedulerToolProvider);
+    this.logger.log("SchedulerToolProvider 已注册到 ToolOrchestrator");
+  }
+}

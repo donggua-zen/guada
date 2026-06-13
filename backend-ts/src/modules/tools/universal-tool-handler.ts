@@ -1,11 +1,11 @@
 import { Logger } from "@nestjs/common";
-import { ToolCallRequest, ToolCallResponse, IToolProvider } from "./interfaces/tool-provider.interface";
-import { ToolContext, ProviderConfig } from "./tool-context";
+import { ToolCallRequest, ToolCallResponse, IToolProvider, ToolDefinition } from "./interfaces/tool-provider.interface";
+
 
 /**
  * 通用工具定义
  */
-export const UNIVERSAL_TOOLS = [
+export const UNIVERSAL_TOOLS: ToolDefinition[] = [
   {
     name: "tool_load",
     description: "加载指定工具命名空间的详细说明，获取该类别下所有工具的参数定义和使用示例。在首次使用某类工具前，建议先调用此工具了解使用方法。",
@@ -55,13 +55,13 @@ export class UniversalToolHandler {
    * 处理 tool_load 请求
    */
   async handleToolLoad(
-    request: ToolCallRequest, 
-    context: ToolContext,
+    request: ToolCallRequest,
+    injectParams: Record<string, any>,
     getProvider: (namespace: string) => IToolProvider | undefined,
-    getProviderConfig: (namespace: string) => ProviderConfig | undefined
+    isNamespaceEnabled: (namespace: string) => boolean,
   ): Promise<ToolCallResponse> {
     const { namespace } = request.arguments;
-  
+
     if (!namespace || typeof namespace !== "string") {
       return {
         toolCallId: request.id,
@@ -70,7 +70,7 @@ export class UniversalToolHandler {
         isError: true,
       };
     }
-  
+
     const provider = getProvider(namespace);
     if (!provider) {
       return {
@@ -81,16 +81,7 @@ export class UniversalToolHandler {
       };
     }
 
-    const providerConfig = getProviderConfig(namespace);
-    if (!providerConfig) {
-      return {
-        toolCallId: request.id,
-        name: request.name,
-        content: `Error: 未找到命名空间 ${namespace} 的配置`,
-        isError: true,
-      };
-    }
-    if (providerConfig.enabledTools === false) {
+    if (!isNamespaceEnabled(namespace)) {
       return {
         toolCallId: request.id,
         name: request.name,
@@ -100,8 +91,8 @@ export class UniversalToolHandler {
     }
 
     try {
-      // 根据配置获取可用的工具
-      const tools = await provider.getTools(providerConfig.enabledTools, context.injectParams);
+      // 获取该命名空间下的所有工具
+      const tools = await provider.getTools(true, injectParams);
     
       // 构建详细的工具说明
       const toolDescriptions = tools.map((tool: any) => {
@@ -128,7 +119,7 @@ export class UniversalToolHandler {
       // 获取工具使用说明（如果提供者实现了 getPrompt）
       let toolUsagePrompt = "";
       try {
-        toolUsagePrompt = await provider.getPrompt(context.injectParams);
+        toolUsagePrompt = await provider.getPrompt(injectParams);
       } catch (error: any) {
         this.logger.warn(`Failed to get prompt for namespace ${namespace}: ${error.message}`);
       }
@@ -176,7 +167,7 @@ export class UniversalToolHandler {
    * 处理 tool_call 请求（通用调用接口）
    * 注意：此方法现在只负责解析和验证，返回转换后的参数，由编排器统一执行
    */
-  parseToolCall(request: ToolCallRequest): { namespace: string; coreName: string; toolArgs: any } {
+  parseToolCall(request: ToolCallRequest): { fullToolName: string; toolArgs: any } {
     const { tool_name, arguments: toolArgs } = request.arguments;
 
     if (!tool_name || typeof tool_name !== "string") {
@@ -187,15 +178,6 @@ export class UniversalToolHandler {
       throw new Error("无效的参数：arguments 必须是对象");
     }
 
-    // 解析工具名称
-    const parts = tool_name.split("__");
-    if (parts.length < 2) {
-      throw new Error(`无效的工具名称格式: ${tool_name}，应为 namespace__tool_name`);
-    }
-
-    const namespace = parts[0];
-    const coreName = parts.slice(1).join("__");
-
-    return { namespace, coreName, toolArgs };
+    return { fullToolName: tool_name, toolArgs };
   }
 }

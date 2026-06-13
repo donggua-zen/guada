@@ -16,7 +16,7 @@ import { AuthGuard } from "../auth/auth.guard";
 import { CurrentUser } from "../auth/current-user.decorator";
 import { SessionService } from "./session.service";
 import { WorkspaceService } from "../../common/services/workspace.service";
-import { SessionEventsService } from "./session-events.service";
+import { EventBusService } from "../../common/events/event-bus.service";
 import { UpdateSessionDto } from "./dto/update-session.dto";
 import * as path from 'path';
 import * as fs from 'fs';
@@ -28,7 +28,7 @@ export class SessionsController {
   constructor(
     private readonly sessionService: SessionService,
     private readonly workspaceService: WorkspaceService,
-    private readonly sessionEventsService: SessionEventsService,
+    private readonly eventBus: EventBusService,
   ) { }
 
   @Get("sessions")
@@ -57,8 +57,7 @@ export class SessionsController {
     const session = await this.sessionService.createSession(user.id, data);
 
     // 广播会话创建事件，携带 source 使前端能过滤自身事件
-    this.sessionEventsService.broadcastToUser(user.id, {
-      type: "session_created",
+    this.eventBus.emit("session.created", {
       userId: user.id,
       sessionId: session.id,
       timestamp: new Date().toISOString(),
@@ -84,8 +83,7 @@ export class SessionsController {
     const session = await this.sessionService.updateSession(id, user.id, data);
 
     // 广播会话更新事件，携带 source 使前端能过滤自身事件
-    this.sessionEventsService.broadcastToUser(user.id, {
-      type: "session_updated",
+    this.eventBus.emit("session.updated", {
       userId: user.id,
       sessionId: id,
       timestamp: new Date().toISOString(),
@@ -117,8 +115,7 @@ export class SessionsController {
     await this.sessionService.deleteSession(id, user.id, shouldDeleteWorkspace);
 
     // 广播会话删除事件，携带 source 使前端能过滤自身事件
-    this.sessionEventsService.broadcastToUser(user.id, {
-      type: "session_deleted",
+    this.eventBus.emit("session.deleted", {
       userId: user.id,
       sessionId: id,
       timestamp: new Date().toISOString(),

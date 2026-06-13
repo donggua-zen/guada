@@ -1,3 +1,30 @@
+/**
+ * 工具参数属性定义
+ */
+export interface ToolParameterProperty {
+  type: string;
+  description?: string;
+  enum?: any[];
+  properties?: Record<string, ToolParameterProperty>;
+  required?: string[];
+  items?: ToolParameterProperty;
+  default?: any;
+  maxLength?: number;
+}
+
+/**
+ * 系统内部使用的扁平化工具定义（不带 function 包装层）
+ */
+export interface ToolDefinition {
+  name: string;
+  description: string;
+  parameters?: {
+    type: "object";
+    properties: Record<string, ToolParameterProperty>;
+    required?: string[];
+  };
+}
+
 export interface ToolCallRequest {
   id: string;
   name: string;
@@ -21,7 +48,7 @@ export interface ToolDisplayInfo {
   args?: string;
   /** 原始工具名 */
   toolName?: string;
-  /** 
+  /**
    * 工具类型标识（用于前端图标映射）
    * 默认使用 namespace，仅在需要特殊图标时显式指定
    */
@@ -71,7 +98,7 @@ export interface IToolProvider {
    * @param context 上下文信息（session_id, user_id, session_type 等）
    * @returns 工具定义数组
    */
-  getTools(enabled?: boolean | string[], context?: Record<string, any>): Promise<any[]>;
+  getTools(enabled?: boolean | string[], context?: Record<string, any>): Promise<ToolDefinition[]>;
   /**
    * 执行工具调用
    * @param request 工具调用请求

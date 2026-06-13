@@ -52,9 +52,11 @@ interface StreamResponse {
   turnsId?: string;
   contentId?: string;
   modelName?: string;
-  msg?: string;
+  content?: string;
+  reasoningContent?: string;
   toolCalls?: any[];
   toolCallsResponse?: any[];
+  displayMessages?: any[];
   usage?: any;
   finishReason?: string;
   error?: string;
@@ -358,15 +360,21 @@ export function useStreamResponse(sessionStore: any, apiService: any) {
 
     // 更新展示文案为完成状态
     if (displayMessages && content.metadata.toolCalls) {
+      // 先收集所有需要更新的 displayMessage，避免逐个设置触发多次 watch
+      const updates: { index: number; displayMessage: any }[] = [];
       for (let i = 0; i < content.metadata.toolCalls.length; i++) {
         if (displayMessages[i]) {
-          // 确保 metadata 存在
-          if (!content.metadata.toolCalls[i].metadata) {
-            content.metadata.toolCalls[i].metadata = {};
-          }
-          content.metadata.toolCalls[i].metadata.displayMessage =
-            displayMessages[i];
+          updates.push({ index: i, displayMessage: displayMessages[i] });
         }
+      }
+      // 一次性应用所有更新
+      for (const { index, displayMessage } of updates) {
+        // 确保 metadata 存在
+        if (!content.metadata.toolCalls[index].metadata) {
+          content.metadata.toolCalls[index].metadata = {};
+        }
+        content.metadata.toolCalls[index].metadata.displayMessage =
+          displayMessage;
       }
     }
   }
@@ -407,36 +415,48 @@ export function useStreamResponse(sessionStore: any, apiService: any) {
 
     const content = message.contents[contentIndex];
 
+    // finish 携带完整内容时，直接覆盖（天然聚合）
+    if (response.content !== undefined) {
+      content.content = response.content;
+    }
+    if (response.reasoningContent !== undefined) {
+      content.reasoningContent = response.reasoningContent;
+    }
+
+    const metadata = content.metadata || {};
+
+    if (response.toolCalls && response.toolCalls.length > 0) {
+      metadata.toolCalls = response.toolCalls.map((tc: any) => ({
+        id: tc.id,
+        index: tc.index,
+        type: tc.type,
+        name: tc.name,
+        arguments: tc.arguments || "",
+        metadata: tc.metadata || {},
+      }));
+      if (response.displayMessages && response.displayMessages.length > 0) {
+        metadata.displayMessages = response.displayMessages;
+      }
+    }
+
     // 保存 usage 信息到 metadata.usage
     if (response.usage) {
-      content.metadata = {
-        ...content.metadata,
-        usage: response.usage,
-      };
+      metadata.usage = response.usage;
     }
 
     // 保存 finishReason
     if (response.finishReason) {
-      content.metadata = {
-        ...content.metadata,
-        finishReason: response.finishReason,
-      };
+      metadata.finishReason = response.finishReason;
     }
 
     // 处理错误情况
     if (response.finishReason === "error") {
       console.error("Error in stream:", response.error);
-      content.metadata = {
-        ...content.metadata,
-        error: response.error,
-        finishReason: response.finishReason,
-      };
-      // 错误时也要强制 flush，确保内容同步
-      forceFlushContent(message, contentIndex);
-      content.state.isStreaming = false;
-      content.state.isThinking = false;
-      return;
+      metadata.error = response.error;
+      metadata.finishReason = response.finishReason;
     }
+
+    content.metadata = metadata;
 
     // 正常结束，强制 flush 缓冲区内容并清理
     forceFlushContent(message, contentIndex);
@@ -617,7 +637,7 @@ export function useStreamResponse(sessionStore: any, apiService: any) {
         }
 
         if (response.type === "think") {
-          thinkingContent += response.msg;
+          thinkingContent += response.reasoningContent;
           if (message)
             handleThink(
               message.contents[contentIndex],
@@ -658,7 +678,7 @@ export function useStreamResponse(sessionStore: any, apiService: any) {
 
         // 处理文本内容
         if (response.type === "text") {
-          responseContent = responseContent + response.msg;
+          responseContent = responseContent + response.content;
           handleText(
             message!.contents[contentIndex],
             responseContent,
@@ -671,16 +691,19 @@ export function useStreamResponse(sessionStore: any, apiService: any) {
         // 处理压缩开始事件
         if (response.type === "compression_start") {
           sessionStore.setSessionIsCompressing(streamingSessionId, true);
-          toast.info(response.msg || "正在优化对话历史...");
+          toast.info(response.content || "正在优化对话历史...");
           continue;
         }
 
         // 处理压缩错误事件
         if (response.type === "compression_error") {
           sessionStore.setSessionIsCompressing(streamingSessionId, false);
-          toast.error(response.msg || "自动压缩失败");
+          toast.error(response.content || "自动压缩失败");
           continue;
         }
+
+        // 注意：sub_agent_start / sub_agent_finish 事件通过 SessionEventsService
+        // 全局广播（SSE 用户级事件流），不经过消息流，因此此处无需处理。
       }
     } catch (error) {
       handleStreamCatchError(

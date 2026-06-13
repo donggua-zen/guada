@@ -9,11 +9,11 @@ import {
 import { IProtocolAdapter } from "./base.adapter";
 import {
   MessageRecord,
-  InternalToolDefinition,
   LLMCompletionParams,
   LLMResponseChunk,
   ToolCallItem,
 } from "../types/llm.types";
+import { ToolDefinition } from "../../tools/interfaces/tool-provider.interface";
 import { ProviderConfig, ConnectionTestResult } from "../types/provider.types";
 
 export class GeminiAdapter implements IProtocolAdapter {
@@ -191,7 +191,7 @@ export class GeminiAdapter implements IProtocolAdapter {
     });
   }
 
-  private convertTools(tools: InternalToolDefinition[]): any[] {
+  private convertTools(tools: ToolDefinition[]): any[] {
     return tools.map((tool) => ({
       name: tool.name,
       description: tool.description,

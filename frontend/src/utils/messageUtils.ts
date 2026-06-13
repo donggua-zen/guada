@@ -73,7 +73,6 @@ export interface FileAttachment {
  */
 export type MessagePair = [Message] | [Message, Message];
 
-
 /**
  * 获取当前内容索引（已废弃）
  * @deprecated 已废弃，直接使用 message.currentTurnsId 和 turns 过滤
@@ -86,7 +85,6 @@ export function getCurrentIndex(messageContents: MessageContent[]): number {
   );
   return currentIndex !== -1 ? currentIndex : 0;
 }
-
 
 /**
  * 获取当前版本的内容数组
@@ -103,7 +101,9 @@ export function getCurrentTurns(message: Message): MessageContent[] {
   // 如果是 assistant 消息，根据 currentTurnsId 过滤
   if (message.role === "assistant" && message.currentTurnsId) {
     const matchedContents = validContents.filter(
-      (content) => content.turnsId === message.currentTurnsId && content.role === "assistant"
+      (content) =>
+        content.turnsId === message.currentTurnsId &&
+        content.role === "assistant",
     );
 
     // 对过滤后的内容进行工具调用预处理
@@ -292,6 +292,25 @@ function flattenContents(contents: MessageContent[]): DisplayItem[] {
 }
 
 /**
+ * 计算 process 组是否可折叠
+ * 规则：如果包含 tool 类型项，按工具调用数量判断；否则按 item 数量判断
+ */
+function calculateIsCollapsible(processItems: DisplayItem[]): boolean {
+  if (processItems.length === 0) return false;
+
+  let count = 0;
+  for (const item of processItems) {
+    if (item.type === "tool" && item.toolCalls?.length) {
+      count += item.toolCalls.length;
+    } else {
+      count += 1;
+    }
+  }
+
+  return count > 1;
+}
+
+/**
  * 执行分组逻辑
  */
 function doGrouping(items: DisplayItem[]): DisplayGroup[] {
@@ -304,7 +323,7 @@ function doGrouping(items: DisplayItem[]): DisplayGroup[] {
       id: `process-${currentProcess[0].id}`,
       type: "process",
       items: [...currentProcess],
-      isCollapsible: currentProcess.length > 1,
+      isCollapsible: calculateIsCollapsible(currentProcess),
       isExpanded: false,
     });
     currentProcess = [];
@@ -354,7 +373,7 @@ function doGrouping(items: DisplayItem[]): DisplayGroup[] {
  */
 export function groupContentsForDisplay(
   contents: MessageContent[],
-  _messageId?: string
+  _messageId?: string,
 ): DisplayGroup[] {
   if (!contents || contents.length === 0) return [];
 
@@ -370,7 +389,6 @@ export function groupContentsForDisplay(
  * @returns 提取的标题文本
  */
 export function extractMessageTitle(message: Message): string {
-
   // 从内容中提取第一行或前50字符
   const content = message.contents?.[0]?.content || "";
   if (!content) return "未命名消息";

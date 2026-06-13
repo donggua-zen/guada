@@ -852,6 +852,9 @@ function initSessionEventListeners() {
     }
     const { sessionId, payload } = event
 
+    if (payload?.session?.sessionType === 'sub_agent')
+      return
+
     // 直接更新统一数据源
     if (payload?.session) {
       const existing = sessionStore.getSession(sessionId)
@@ -875,6 +878,8 @@ function initSessionEventListeners() {
   apiService.onSessionEvent('stream_started', (event) => {
     const { sessionId, payload } = event
 
+    if (payload?.session?.sessionType === 'sub_agent')
+      return
     // 标记会话为工作中（任何流开始都显示工作状态，包括自身发起）
     sessionStore.markSessionWorking(sessionId)
 
@@ -905,7 +910,10 @@ function initSessionEventListeners() {
 
   // 监听流结束事件
   apiService.onSessionEvent('stream_finished', (event) => {
-    const { sessionId } = event
+    const { sessionId, payload } = event
+    // 注意，这里 payload 中没有 session 字段，只有 sessionType
+    if (payload?.sessionType === 'sub_agent')
+      return
     console.log('[GlobalSidebar] 会话流已结束:', sessionId)
 
     // 标记会话为空闲

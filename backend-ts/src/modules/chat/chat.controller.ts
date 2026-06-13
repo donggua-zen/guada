@@ -180,7 +180,7 @@ export class ChatController {
   }
 
   /**
-   * 【新增】工具审批接口
+   * 工具审批接口
    *
    * 前端调用此接口批量提交审批决策。
    * 审批后，前端需要重新发起流式请求，Agent 循环会检测到 approvalContext.decisions
@@ -210,12 +210,6 @@ export class ChatController {
     if (!message || !message.contents || message.contents.length === 0) {
       throw new Error("Message not found");
     }
-
-    // TODO: 验证消息属于当前用户
-    // const session = await this.sessionService.getSessionById(message.sessionId, user.id);
-    // if (!session) {
-    //   throw new Error('Unauthorized');
-    // }
 
     // 获取当前 content 的最后一个轮次（ReAct 循环中最新的一轮）
     const currentContent = message.contents[message.contents.length - 1];

@@ -15,6 +15,9 @@ export class SessionRepository {
             provider: true, // 包含供应商信息
           },
         },
+        children: {
+          orderBy: { createdAt: "asc" },
+        },
       },
     });
   }
@@ -31,7 +34,7 @@ export class SessionRepository {
   ) {
     const where: any = {
       userId,
-      sessionType: { not: 'bot' },
+      sessionType: 'web',
     };
 
     // 分组筛选：null表示未分组，undefined表示全部
@@ -78,6 +81,34 @@ export class SessionRepository {
     return this.prisma.session.update({
       where: { id },
       data: { lastActiveAt: new Date() },
+    });
+  }
+
+  /**
+   * 查找指定父会话下的所有子会话
+   */
+  async findByParentId(parentSessionId: string) {
+    return this.prisma.session.findMany({
+      where: { parentId: parentSessionId },
+      orderBy: { createdAt: "asc" },
+    });
+  }
+
+  /**
+   * 统计指定父会话下的子会话数量
+   */
+  async countByParentId(parentSessionId: string) {
+    return this.prisma.session.count({
+      where: { parentId: parentSessionId },
+    });
+  }
+
+  /**
+   * 级联删除指定父会话下的所有子会话
+   */
+  async deleteByParentId(parentSessionId: string) {
+    return this.prisma.session.deleteMany({
+      where: { parentId: parentSessionId },
     });
   }
 

@@ -78,6 +78,10 @@ export interface Session {
     // === 侧边栏状态字段（后端注入或前端维护） ===
     isStreaming?: boolean     // 是否正在流式响应（后端注入）
     // ==================================
+
+    // === 子会话列表（后端注入） ===
+    subSessions?: Session[]
+    // ==================================
 }
 
 /**
@@ -119,4 +123,5 @@ export interface SessionListResponse {
     total: number
     page: number
     pageSize: number
+    hasMore?: boolean
 }

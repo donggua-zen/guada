@@ -1,13 +1,11 @@
 import { Injectable, Logger } from "@nestjs/common";
 import { Subject } from "rxjs";
+import { EventChunk } from "./types/event-chunk.types";
 
 /**
  * 流式事件
  */
-export interface StreamEvent {
-  type: string;
-  [key: string]: any;
-}
+export type StreamEvent = EventChunk;
 
 /**
  * 流订阅者
@@ -31,6 +29,8 @@ interface ActiveStream {
   isRunning: boolean;
   startedAt: Date;
   assistantMessageId: string | null;
+  /** 停止原因，由 stopStream 设置，subscribe 的 complete 回调通过闭包读取 */
+  stopReason?: "user_cancel" | "completed" | "error";
 }
 
 /**
@@ -107,7 +107,7 @@ export class SessionStreamManager {
     sessionId: string,
     subscriberId: string,
     onEvent: (data: string) => void,
-    onComplete: () => void,
+    onComplete: (reason: string) => void,
     onError: (err: any) => void,
     lastContentId: string | null = null,
   ): (() => void) | null {
@@ -128,7 +128,10 @@ export class SessionStreamManager {
     // 建立订阅，将事件转发到调用方提供的回调
     const subscription = subject.subscribe({
       next: (event) => onEvent(event.data),
-      complete: onComplete,
+      complete: () => {
+        const stream = this.activeStreams.get(sessionId);
+        onComplete(stream?.stopReason || "completed");
+      },
       error: onError,
     });
 
@@ -193,9 +196,9 @@ export class SessionStreamManager {
       return;
     }
 
-    // 收到 finish 事件时，聚合该 content 的历史 chunk
+    // 收到 finish 事件时，清理该 content 的中间事件
     if (event.type === "finish" && event.contentId) {
-      this.aggregateContentInBuffer(stream, event.contentId);
+      this.cleanupIntermediateEvents(stream, event.contentId);
     }
 
     // 缓存事件
@@ -219,149 +222,30 @@ export class SessionStreamManager {
   }
 
   /**
-   * 聚合指定 contentId 在 eventBuffer 中的事件
+   * 清理指定 contentId 在 eventBuffer 中的中间事件
    *
-   * 将连续的 text/think 事件合并为单个事件，减少事件数量。
-   * 保留 create/update、tool_call、tool_calls_response、finish 等事件。
+   * finish 事件已携带完整内容，新订阅者只需 create/update + finish 即可重建。
+   * 因此移除 text/think/tool_call 等中间事件，只保留首尾和特殊事件。
    */
-  private aggregateContentInBuffer(
+  private cleanupIntermediateEvents(
     stream: ActiveStream,
     contentId: string,
   ): void {
-    const contentEvents = stream.eventBuffer.filter(
-      (e) => e.contentId === contentId,
-    );
-    if (contentEvents.length === 0) return;
-
-    // 提取各类事件
-    const textEvents = contentEvents.filter((e) => e.type === "text");
-    const thinkEvents = contentEvents.filter((e) => e.type === "think");
-
-    // 如果没有需要聚合的 text/think 事件，直接返回
-    if (textEvents.length <= 1 && thinkEvents.length <= 1) return;
-
-    // 构建聚合后的事件列表
-    const aggregatedEvents: StreamEvent[] = [];
-
-    // 保留 create/update 事件
-    const createEvent = contentEvents.find(
-      (e) => e.type === "create" || e.type === "update",
-    );
-    if (createEvent) aggregatedEvents.push(createEvent);
-
-    // 聚合 text 事件
-    if (textEvents.length > 0) {
-      const aggregatedText = textEvents.map((e) => e.msg).join("");
-      aggregatedEvents.push({
-        type: "text",
-        msg: aggregatedText,
-        contentId,
-      });
-    }
-
-    // 聚合 think 事件
-    if (thinkEvents.length > 0) {
-      const aggregatedThink = thinkEvents.map((e) => e.msg).join("");
-      aggregatedEvents.push({
-        type: "think",
-        msg: aggregatedThink,
-        contentId,
-      });
-    }
-
-    // 聚合 tool_call 事件（增量参数累加）
-    const toolCallEvents = contentEvents.filter((e) => e.type === "tool_call");
-    if (toolCallEvents.length > 0) {
-      const aggregatedToolCalls = this.aggregateToolCalls(toolCallEvents);
-      aggregatedEvents.push({
-        type: "tool_call",
-        toolCalls: aggregatedToolCalls,
-        contentId,
-      });
-    }
-
-    // 保留 tool_calls_response 事件
-    const toolCallsResponseEvents = contentEvents.filter(
-      (e) => e.type === "tool_calls_response",
-    );
-    if (toolCallsResponseEvents.length > 0) {
-      aggregatedEvents.push(
-        toolCallsResponseEvents[toolCallsResponseEvents.length - 1],
+    // 从 eventBuffer 中移除该 content 的所有中间流式事件
+    // 只保留 create/update、tool_calls_response、finish
+    stream.eventBuffer = stream.eventBuffer.filter((e) => {
+      if (e.contentId !== contentId) return true;
+      return (
+        e.type === "create" ||
+        e.type === "update" ||
+        e.type === "tool_calls_response" ||
+        e.type === "finish"
       );
-    }
-
-    // 保留其他类型事件（如 compression_start 等）
-    const otherEvents = contentEvents.filter(
-      (e) =>
-        e.type !== "create" &&
-        e.type !== "update" &&
-        e.type !== "text" &&
-        e.type !== "think" &&
-        e.type !== "tool_call" &&
-        e.type !== "tool_calls_response" &&
-        e.type !== "finish",
-    );
-    aggregatedEvents.push(...otherEvents);
-
-    // 保留 finish 事件（放在最后，标记 content 完成）
-    const finishEvent = contentEvents.find((e) => e.type === "finish");
-    if (finishEvent) aggregatedEvents.push(finishEvent);
-
-    // 从 eventBuffer 中移除该 content 的所有原始事件
-    stream.eventBuffer = stream.eventBuffer.filter(
-      (e) => e.contentId !== contentId,
-    );
-
-    // 插入聚合后的事件
-    stream.eventBuffer.push(...aggregatedEvents);
+    });
 
     this.logger.debug(
-      `Aggregated content ${contentId}: ${contentEvents.length} events → ${aggregatedEvents.length} events`,
+      `Cleaned up intermediate events for content ${contentId}`,
     );
-  }
-
-  /**
-   * 聚合 tool_call 事件
-   *
-   * tool_call 是增量发送的，每个 chunk 只包含部分参数。
-   * 需要按 index 分组，累加 arguments 字符串，合并为完整的工具调用。
-   */
-  private aggregateToolCalls(toolCallEvents: StreamEvent[]): any[] {
-    const toolCallMap = new Map<
-      number,
-      { id?: string; index: number; type: string; name: string; arguments: string }
-    >();
-
-    for (const event of toolCallEvents) {
-      const toolCalls = event.toolCalls || [];
-      for (const tc of toolCalls) {
-        const index = tc.index;
-        if (!toolCallMap.has(index)) {
-          toolCallMap.set(index, {
-            id: tc.id,
-            index: tc.index,
-            type: tc.type || "function",
-            name: tc.name || "",
-            arguments: "",
-          });
-        }
-        const existing = toolCallMap.get(index)!;
-        // 更新 id（可能从空到具体值）
-        if (tc.id && !existing.id) {
-          existing.id = tc.id;
-        }
-        // 更新 name（可能从空到具体值）
-        if (tc.name) {
-          existing.name = tc.name;
-        }
-        // 累加 arguments
-        if (tc.arguments) {
-          existing.arguments += tc.arguments;
-        }
-      }
-    }
-
-    return Array.from(toolCallMap.values());
   }
 
   /**
@@ -400,8 +284,9 @@ export class SessionStreamManager {
     }
 
     stream.isRunning = false;
+    stream.stopReason = reason;
 
-    // 通知所有订阅者流已结束，然后关闭连接
+    // 通知所有订 阅者流已结束，然后关闭连接
     for (const subscriber of stream.subscribers.values()) {
       try {
         subscriber.subject.complete();

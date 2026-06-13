@@ -1,7 +1,7 @@
 <template>
   <!-- 消息内容区域 -->
   <div class="flex-1 overflow-hidden w-full items-center relative">
-    <template v-if="!isLoading && currentSessionId && activeMessages.length === 0">
+    <template v-if="!isLoading && currentSessionId && activeMessages.length === 0 && currentSession?.character">
       <!-- 欢迎页 -->
       <WelcomeScreen :session="currentSession" />
     </template>
@@ -36,10 +36,8 @@
           </div>
 
           <MessageItem v-for="(message, index) in activeMessages" :key="message.id" :message="message"
-            v-memo="[message.id, message.contents, message.currentTurnsId, message.state?.isStreaming, message.state?.isThinking, isStreaming]"
             :avatar="message.role == 'user' ? userAvater : currentSession?.avatarUrl"
-            :character-name="currentSession?.character?.title"
-            :character-avatar="currentSession?.character?.avatarUrl"
+            :character-name="currentSession?.character?.title" :character-avatar="currentSession?.character?.avatarUrl"
             :is-last="index === activeMessages.length - 1"
             :allow-generate="!isStreaming && index === lastUserMessageIndex" @delete="deleteMessage" @edit="editMessage"
             @copy="copyMessage" @generate="generateResponse" @regenerate="regenerateResponse"
@@ -68,6 +66,45 @@
     <div class="max-w-205 flex flex-col items-start mx-auto">
 
 
+      <!-- 线程列表抽屉 -->
+      <template v-if="agentTabs">
+        <div v-if="agentTabs.length > 1"
+          class="-mb-1.5 pb-4 w-full flex flex-col rounded-tl-xl rounded-tr-xl bg-gray-200 dark:bg-[#2a2a2a] overflow-hidden transition-all duration-300"
+          :class="{ 'max-h-48': isAgentDrawerExpanded, 'max-h-13': !isAgentDrawerExpanded }">
+          <!-- 头部折叠栏 -->
+          <div class="flex items-center px-4 py-2 cursor-pointer select-none" @click="toggleAgentDrawer">
+            <el-icon class="mr-2 text-gray-500 dark:text-[#8b8d95] transition-transform duration-300"
+              :class="{ 'rotate-180': isAgentDrawerExpanded }">
+              <ArrowUp />
+            </el-icon>
+            <span class="text-sm text-gray-700 dark:text-[#c5c7cc]">
+              线程列表 ({{ runningAgentCount }} 运行中)
+            </span>
+            <span class="ml-auto text-xs text-gray-400 dark:text-[#6b6d75]">
+              {{ agentTabs.length - 1 }} 个子线程
+            </span>
+          </div>
+          <!-- 展开的线程列表 -->
+          <div class="px-1.5 pb-2" style="scrollbar-gutter: stable both-edges"
+            :class="{ 'overflow-y-auto': isAgentDrawerExpanded, 'overflow-y-hidden': !isAgentDrawerExpanded }">
+            <div v-for="tab in agentTabs" :key="tab.id"
+              class="flex items-center gap-2 py-1.5 px-2 rounded-lg cursor-pointer transition-colors" :class="{
+                'bg-white dark:bg-[#2a2c30] text-gray-900 dark:text-[#e8e9ed]': tab.id === activeTabId,
+                'text-gray-500 dark:text-[#8b8d95] hover:bg-gray-100 dark:hover:bg-[#25262a]': tab.id !== activeTabId,
+              }" @click="emit('switch-agent', tab.id)">
+              <!-- 运行状态指示器 -->
+              <el-icon v-if="tab.status === 'running'" class="is-loading text-blue-500" size="12">
+                <Loading />
+              </el-icon>
+              <span v-else-if="tab.status === 'completed'" class="w-2 h-2 rounded-full bg-green-500" />
+              <span v-else class="w-3 h-3 rounded-full bg-red-500" />
+              <span class="text-sm flex-1 truncate">{{ tab.name }}</span>
+
+            </div>
+          </div>
+        </div>
+      </template>
+
       <!-- 编辑模式提示条 -->
       <div v-if="editMode"
         class="-mb-1.5 w-full flex items-center px-4 pt-2 pb-6 rounded-tl-xl rounded-tr-xl bg-gray-200 dark:bg-[#2a2a2a]">
@@ -79,7 +116,7 @@
 
       <div class="w-full flex items-center" style="margin-top: -16px;z-index: 9;">
         <ChatInput v-model:value="inputMessage.content" v-model:files="inputMessage.files"
-          :session-id="currentSession?.id" :config="chatInputConfig" :streaming="isStreaming" mode="chat"
+          :session-id="effectiveSessionId" :config="chatInputConfig" :streaming="isStreaming" mode="chat"
           @config-change="handleConfigChange" @send="handleSendMessage" @abort="abortResponse"
           @toggle-workspace-pane="emit('toggle-workspace-pane')" />
       </div>
@@ -110,6 +147,7 @@ import MessageSkeleton from "./MessageSkeleton.vue";
 import { ChatInput, ScrollContainer, ScrollToBottomButton } from "../ui";
 import WelcomeScreen from './WelcomeScreen.vue';
 import { LoadingOutlined } from '@vicons/antd'
+import { ArrowUp, Loading } from '@element-plus/icons-vue'
 
 
 // 常量定义
@@ -126,6 +164,11 @@ const streamHandler = useStreamResponse(sessionStore, apiService)
 // Props & Emits - 类型化
 const props = defineProps<{
   session: Session | null;
+  sessionId?: string;      // 外部传入的会话 ID（优先级高于 session.id）
+  readonly?: boolean;      // 只读模式（子 Agent）
+  hideHeader?: boolean;    // 隐藏头部（子 Agent）
+  agentTabs?: { id: string; name: string; status: 'running' | 'completed' | 'error'; loaded?: boolean }[]; // 子代理 Tab 列表
+  activeTabId?: string;    // 当前激活的 Tab ID
 }>();
 
 const emit = defineEmits<{
@@ -133,6 +176,8 @@ const emit = defineEmits<{
   openSettings: []
   'save-settings': []
   'toggle-workspace-pane': []
+  'switch-agent': [tabId: string]  // 切换子代理
+  'close-agent': [tabId: string]    // 关闭子代理
 }>();
 
 // 计算属性 - 类型化
@@ -143,6 +188,14 @@ const currentSession = computed({
 
 const userAvater = computed(() => authStore.user?.avatarUrl);
 const currentSessionId = ref<string | null>(null);
+
+/**
+ * 有效的会话 ID
+ * 优先使用 props.sessionId，其次使用 props.session.id
+ */
+const effectiveSessionId = computed(() => {
+  return props.sessionId || props.session?.id || '';
+});
 const isLoading = ref(true);
 // 使用 useSessionChat composable
 const {
@@ -183,6 +236,23 @@ const {
   prepareNewMessage,
   enterEditMode
 } = useMessageOperations(sessionStore, apiService, currentSessionId)
+
+// 子代理抽屉展开状态
+const isAgentDrawerExpanded = ref(false)
+
+/**
+ * 切换子代理抽屉展开/折叠
+ */
+function toggleAgentDrawer() {
+  isAgentDrawerExpanded.value = !isAgentDrawerExpanded.value
+}
+
+/**
+ * 运行中的子代理数量
+ */
+const runningAgentCount = computed(() => {
+  return (props.agentTabs || []).filter(t => t.status === 'running').length
+})
 
 // isStreaming 需要在滚动逻辑之前定义
 const isStreaming = computed(() => {
@@ -406,8 +476,10 @@ const debouncedSaveSession = useDebounceFn(() => {
 }, 100);
 
 // 监听器
-watch(() => props.session?.id, async (newSessionId: string | undefined, oldSessionId: string | undefined) => {
-  await handleSessionChange(newSessionId ?? null, oldSessionId ?? null);
+watch(() => props.session?.id || props.sessionId, async (newSessionId: string | undefined, oldSessionId: string | undefined) => {
+  const newId = newSessionId ?? props.sessionId ?? null;
+  const effectiveOldId = oldSessionId ?? null;
+  await handleSessionChange(newId, effectiveOldId);
 }, { immediate: true });
 
 // 监听流式状态变化，在第一次对话完成后生成标题
