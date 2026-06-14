@@ -5,10 +5,15 @@ import { PrismaService } from "../../common/database/prisma.service";
 export class CharacterRepository {
   constructor(private prisma: PrismaService) { }
 
-  async findById(id: string) {
+  async findById(id: string, includeModel: boolean = true) {
+    if (includeModel) {
+      return this.prisma.character.findUnique({
+        where: { id },
+        include: { model: true },
+      });
+    }
     return this.prisma.character.findUnique({
       where: { id },
-      include: { model: true },
     });
   }
 

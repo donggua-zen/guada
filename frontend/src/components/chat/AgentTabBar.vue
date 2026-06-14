@@ -12,22 +12,32 @@
       }"
       @click="$emit('switch', tab.id)"
     >
-      <!-- 运行状态指示器 -->
-      <el-icon
-        v-if="tab.status === 'running'"
-        class="is-loading text-blue-500"
-        size="12"
-      >
-        <Loading />
-      </el-icon>
-      <span
-        v-else-if="tab.status === 'completed'"
-        class="w-3 h-3 rounded-full bg-green-500"
+      <!-- 角色头像（如有） -->
+      <Avatar
+        v-if="tab.avatarUrl"
+        class="w-4 h-4 shrink-0"
+        :src="tab.avatarUrl"
+        :name="tab.name"
+        type="assistant"
       />
-      <span
-        v-else
-        class="w-3 h-3 rounded-full bg-red-500"
-      />
+      <!-- 运行状态指示器（无头像时） -->
+      <template v-else>
+        <el-icon
+          v-if="tab.status === 'running'"
+          class="is-loading text-blue-500"
+          size="12"
+        >
+          <Loading />
+        </el-icon>
+        <span
+          v-else-if="tab.status === 'completed'"
+          class="w-3 h-3 rounded-full bg-green-500"
+        />
+        <span
+          v-else
+          class="w-3 h-3 rounded-full bg-red-500"
+        />
+      </template>
 
       <span>{{ tab.name }}</span>
 
@@ -46,15 +56,18 @@
 
 <script setup lang="ts">
 import { Loading, Close } from '@element-plus/icons-vue';
+import { Avatar } from '../ui';
 
 /**
  * Agent Tab 数据接口
+ * 扩展支持 avatarUrl 用于团队子Agent的角色头像显示
  */
 export interface AgentTab {
   id: string;
   name: string;
   status: 'running' | 'completed' | 'error';
   loaded?: boolean;
+  avatarUrl?: string;  // 角色/团队子Agent的头像
 }
 
 defineProps<{

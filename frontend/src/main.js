@@ -53,7 +53,7 @@ const routes = [
                 component: () => import('./components/chat/ChatPage.vue')
             },
             {
-                path: 'characters',
+                path: 'characters/:tab?',
                 name: 'Characters',
                 meta: { title: '助手', requiresAuth: true },
                 component: () => import('./components/characters/CharactersPage.vue')

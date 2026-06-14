@@ -21,6 +21,7 @@ import {
 import { SessionContextFactory } from "./session-context.factory";
 import { FileWatcherService } from "../../common/services/file-watcher.service";
 import { SessionStreamManager } from "./session-stream.manager";
+import { TeamRepository } from "../../common/database/team.repository";
 
 @Injectable()
 export class SessionService {
@@ -39,6 +40,7 @@ export class SessionService {
     private sessionContextFactory: SessionContextFactory,
     private fileWatcherService: FileWatcherService,
     private streamManager: SessionStreamManager,
+    private teamRepo: TeamRepository,
   ) {}
 
   /**
@@ -65,14 +67,14 @@ export class SessionService {
     const transformedItems = items.map((item) => ({
       ...item,
       isStreaming: this.streamManager.hasActiveStream(item.id),
-      character: item.character
-        ? {
-            ...item.character,
-            avatarUrl: item.character.avatarUrl
-              ? this.urlService.toResourceAbsoluteUrl(item.character.avatarUrl)
-              : null,
-          }
-        : null,
+      // character: item.character
+      //   ? {
+      //       ...item.character,
+      //       avatarUrl: item.character.avatarUrl
+      //         ? this.urlService.toResourceAbsoluteUrl(item.character.avatarUrl)
+      //         : null,
+      //     }
+      //   : null,
     }));
     return createPaginatedResponse(transformedItems, total, { skip, limit });
   }
@@ -161,17 +163,27 @@ export class SessionService {
    * 创建新会话，支持从角色继承配置
    */
   async createSession(userId: string, data: any) {
-    // 兼容 camelCase 和 snake_case
-    const characterId = data.characterId || data.character_id;
-    const modelId = data.modelId || data.model_id;
+    const modelId = data.modelId;
+    const teamId = data.teamId;
     const { title, settings, workspacePath } = data;
+
+    // 团队模式：从团队获取主理人角色ID
+    let characterId = data.characterId;
+    let team = null;
+    if (teamId) {
+      team = await this.teamRepo.findById(teamId, false);
+      if (!team) {
+        throw new Error(`Team with ID ${teamId} not found`);
+      }
+      characterId = team.leaderCharacterId;
+    }
 
     if (!characterId) {
       throw new Error("characterId is required");
     }
 
     // 获取角色信息
-    const character = await this.characterRepo.findById(characterId);
+    const character = await this.characterRepo.findById(characterId, false);
     if (!character) {
       throw new Error(`Character with ID ${characterId} not found`);
     }
@@ -207,17 +219,30 @@ export class SessionService {
       finalWorkspacePath = this.workspaceService.generateWorkspaceDir();
     }
 
+    // 团队模式：使用团队信息作为会话标题/头像/描述
+    let finalTitle = title || character.title;
+    let finalAvatarUrl = character.avatarUrl;
+    let finalDescription = character.description;
+    if (team) {
+      // 使用团队名称作为会话标题，团队头像作为会话头像
+      finalTitle = title || team.name;
+      finalAvatarUrl = team.avatarUrl || character.avatarUrl;
+      finalDescription = team.description || character.description;
+    }
+
     // 继承角色配置
     const sessionData = {
       userId,
-      characterId: characterId,
-      title: title || character.title,
-      avatarUrl: character.avatarUrl,
-      description: character.description,
+      characterId: teamId ? null : characterId,
+      title: finalTitle,
+      avatarUrl: finalAvatarUrl,
+      description: finalDescription,
       modelId: finalModelId,
       settings: filteredSettings,
       workspacePath: finalWorkspacePath,
       groupId: data.groupId || null,
+      teamId: teamId || null,
+      sessionType: teamId ? "team" : "web",
     };
 
     const session = await this.sessionRepo.create(sessionData);

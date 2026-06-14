@@ -11,20 +11,35 @@
         <span class="typewriter-cursor" :class="{ 'cursor-blink': isTypingComplete }"></span>
       </h1>
     </div>
-    <!-- 已选角色显示 -->
+    <!-- 已选角色/团队显示 -->
     <div
       class="w-full max-w-200 -mb-6 flex items-center gap-3 p-2 pb-8 bg-gray-100 dark:bg-(--color-surface) border border-gray-100 dark:border-(--color-surface) rounded-2xl cursor-pointer hover:bg-gray-100 dark:hover:bg-(--color-sidebar-bg-hover) transition-colors"
       @click="showCharacterSelector = true">
-      <div class="w-10 h-10 shrink-0 overflow-hidden rounded">
-        <Avatar :src="currentCharacter?.avatarUrl" type="assistant" :name="currentCharacter?.title"
-          class="w-full h-full object-cover" />
-      </div>
-      <div class="flex-1 min-w-0">
-        <p class="text-sm font-medium text-gray-700 dark:text-(--color-text) truncate">{{ currentCharacter?.title ||
-          '未命名角色' }}</p>
-        <p class="text-xs text-gray-500 dark:text-(--color-text-gray) truncate">{{ currentCharacter?.description ||
-          '暂无描述' }}</p>
-      </div>
+      <!-- 团队选中状态 -->
+      <template v-if="selectedTeam">
+        <div class="w-10 h-10 shrink-0 rounded-lg bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-white text-base font-bold">
+          {{ selectedTeam.name?.charAt(0) || '团' }}
+        </div>
+        <div class="flex-1 min-w-0">
+          <p class="text-sm font-medium text-gray-700 dark:text-(--color-text) truncate">{{ selectedTeam.name }}</p>
+          <p class="text-xs text-gray-500 dark:text-(--color-text-gray) truncate">
+            {{ selectedTeam.description || `${selectedTeam.leader?.title || '主理人'} + ${(selectedTeam.members?.length || 1) - 1} 位成员` }}
+          </p>
+        </div>
+      </template>
+      <!-- 角色选中状态 -->
+      <template v-else>
+        <div class="w-10 h-10 shrink-0 overflow-hidden rounded">
+          <Avatar :src="currentCharacter?.avatarUrl" type="assistant" :name="currentCharacter?.title"
+            class="w-full h-full object-cover" />
+        </div>
+        <div class="flex-1 min-w-0">
+          <p class="text-sm font-medium text-gray-700 dark:text-(--color-text) truncate">{{ currentCharacter?.title ||
+            '未命名角色' }}</p>
+          <p class="text-xs text-gray-500 dark:text-(--color-text-gray) truncate">{{ currentCharacter?.description ||
+            '暂无描述' }}</p>
+        </div>
+      </template>
       <el-icon class="text-gray-400 dark:text-(--color-text-gray) shrink-0">
         <ArrowRightTwotone />
       </el-icon>
@@ -44,60 +59,97 @@
     </div>
   </div>
 
-  <!-- 角色选择器弹窗 -->
-  <el-dialog v-model="showCharacterSelector" title="选择角色" :width="isMobile ? '90%' : '450px'" :append-to-body="true">
-    <!-- 搜索框 -->
-    <div class="mb-4">
-      <el-input v-model="characterSearchText" placeholder="搜索角色..." clearable>
-        <template #prefix>
-          <el-icon>
-            <SearchFilled />
-          </el-icon>
+  <!-- 角色/团队选择器弹窗 -->
+  <el-dialog v-model="showCharacterSelector" title="选择助手" :width="isMobile ? '90%' : '500px'" :append-to-body="true">
+    <!-- Tab：角色 / 团队 -->
+    <el-tabs v-model="selectorTab" class="selector-tabs">
+      <el-tab-pane label="角色" name="characters">
+        <template #label>
+          <div class="flex items-center gap-1.5">
+            <component :is="ContactCard24Regular" class="w-4 h-4" />
+            <span>角色</span>
+          </div>
         </template>
-      </el-input>
-    </div>
-
-    <!-- 角色列表 -->
-    <div class="character-list max-h-96 overflow-y-auto">
-      <div v-for="character in filteredCharacters" :key="character.id"
-        class="character-item flex items-center gap-3 p-3 rounded-lg cursor-pointer hover:bg-gray-50 dark:hover:bg-[#2f3131] transition-colors border border-transparent dark:border-[#1f1f1f]"
-        :class="{ 'bg-blue-50 dark:bg-[#2f3131] border-blue-200 dark:border-[#2f3131]': currentSession.characterId === character.id }"
-        @click="selectCharacter(character)">
-        <div class="w-12 h-12 shrink-0 overflow-hidden rounded">
-          <Avatar :src="character.avatarUrl" type="assistant" :name="character.title"
-            class="w-full h-full object-cover" />
+        <!-- 搜索框 -->
+        <div class="mb-3">
+          <el-input v-model="characterSearchText" placeholder="搜索角色..." clearable size="small">
+            <template #prefix>
+              <el-icon><SearchFilled /></el-icon>
+            </template>
+          </el-input>
         </div>
-        <div class="flex-1 min-w-0">
-          <p class="text-sm font-medium text-gray-700 dark:text-(--color-text) truncate">{{ character.title }}</p>
-          <p class="text-xs text-gray-500 dark:text-(--color-text-gray) truncate mt-1">{{ character.description ||
-            '暂无描述' }}
-          </p>
+        <!-- 角色列表 -->
+        <div class="max-h-80 overflow-y-auto">
+          <div v-for="character in filteredCharacters" :key="character.id"
+            class="character-item flex items-center gap-3 p-2.5 rounded-lg cursor-pointer hover:bg-gray-50 dark:hover:bg-[#2f3131] transition-colors border border-transparent dark:border-[#1f1f1f]"
+            :class="{ 'bg-blue-50 dark:bg-[#2f3131] border-blue-200 dark:border-[#2f3131]': currentSession.characterId === character.id && !selectedTeam }"
+            @click="selectCharacterFromSelector(character)">
+            <div class="w-10 h-10 shrink-0 overflow-hidden rounded">
+              <Avatar :src="character.avatarUrl" type="assistant" :name="character.title" class="w-full h-full object-cover" />
+            </div>
+            <div class="flex-1 min-w-0">
+              <p class="text-sm font-medium text-gray-700 dark:text-(--color-text) truncate">{{ character.title }}</p>
+              <p class="text-xs text-gray-500 dark:text-(--color-text-gray) truncate mt-0.5">{{ character.description || '暂无描述' }}</p>
+            </div>
+            <el-icon v-if="currentSession.characterId === character.id && !selectedTeam"
+              class="text-blue-500 dark:text-(--color-primary) shrink-0" size="18">
+              <CheckCircleFilled />
+            </el-icon>
+          </div>
+          <div v-if="filteredCharacters.length === 0" class="text-center py-6 text-gray-400 dark:text-(--color-text-gray)">
+            <p class="text-sm">未找到匹配的角色</p>
+          </div>
         </div>
-        <el-icon v-if="currentSession.characterId === character.id"
-          class="text-blue-500 dark:text-(--color-primary) shrink-0" size="20">
-          <CheckCircleFilled />
-        </el-icon>
-      </div>
+      </el-tab-pane>
 
-      <!-- 空状态 -->
-      <div v-if="filteredCharacters.length === 0" class="text-center py-8 text-gray-400 dark:text-(--color-text-gray)">
-        <el-icon :size="48" color="rgb(156 163 175)" class="mb-2">
-          <SearchFilled />
-        </el-icon>
-        <p>未找到匹配的角色</p>
-      </div>
-    </div>
+      <el-tab-pane label="团队" name="teams">
+        <template #label>
+          <div class="flex items-center gap-1.5">
+            <component :is="PeopleTeam24Regular" class="w-4 h-4" />
+            <span>团队</span>
+          </div>
+        </template>
+        <!-- 团队列表 -->
+        <div class="max-h-80 overflow-y-auto">
+          <div v-for="team in teams" :key="team.id"
+            class="flex items-center gap-3 p-2.5 rounded-lg cursor-pointer hover:bg-gray-50 dark:hover:bg-[#2f3131] transition-colors border border-transparent dark:border-[#1f1f1f]"
+            :class="{ 'bg-blue-50 dark:bg-[#2f3131] border-blue-200 dark:border-[#2f3131]': selectedTeam?.id === team.id }"
+            @click="selectTeamFromSelector(team)">
+            <div class="w-10 h-10 shrink-0 rounded-lg bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-white text-sm font-bold">
+              {{ team.name?.charAt(0) || '团' }}
+            </div>
+            <div class="flex-1 min-w-0">
+              <p class="text-sm font-medium text-gray-700 dark:text-(--color-text) truncate">{{ team.name }}</p>
+              <p class="text-xs text-gray-500 dark:text-(--color-text-gray) truncate mt-0.5">
+                {{ team.leader?.title || '主理人' }} + {{ (team.members?.length || 1) - 1 }} 位成员
+              </p>
+            </div>
+            <el-icon v-if="selectedTeam?.id === team.id"
+              class="text-blue-500 dark:text-(--color-primary) shrink-0" size="18">
+              <CheckCircleFilled />
+            </el-icon>
+          </div>
+          <div v-if="teams.length === 0" class="text-center py-6 text-gray-400 dark:text-(--color-text-gray)">
+            <p class="text-sm">暂无团队</p>
+            <el-button link type="primary" size="small" @click="goToCharactersPage" class="mt-1">前往创建</el-button>
+          </div>
+        </div>
+      </el-tab-pane>
+    </el-tabs>
 
     <!-- 底部按钮 -->
     <template #footer>
       <div class="flex justify-between items-center">
-        <el-button @click="goToCharactersPage" plain>
-          <el-icon class="mr-1">
-            <AppsFilled />
-          </el-icon>
-          管理角色
+        <el-button @click="goToCharactersPage" plain size="small">
+          <el-icon class="mr-1"><AppsFilled /></el-icon>
+          管理
         </el-button>
-        <el-button @click="showCharacterSelector = false">取消</el-button>
+        <div class="flex gap-2">
+          <el-button @click="showCharacterSelector = false" size="small">取消</el-button>
+          <el-button type="primary" @click="confirmSelector" size="small" :disabled="!currentSession.characterId && !selectedTeam">
+            确定
+          </el-button>
+        </div>
       </div>
     </template>
   </el-dialog>
@@ -116,9 +168,10 @@ import { fixFrontendAssetUrl } from '@/utils/url'
 import { ChatInput } from "../ui";
 
 import { ArrowRightTwotone, CheckCircleFilled, AppsFilled, SearchFilled } from '@vicons/material'
+import { ContactCard24Regular, PeopleTeam24Regular } from '@vicons/fluent'
 
 // UI 组件导入
-import { ElButton } from "element-plus";
+import { ElButton, ElTabs, ElTabPane } from "element-plus";
 import { useBreakpoints, breakpointsTailwind } from '@vueuse/core'
 
 const breakpoints = useBreakpoints(breakpointsTailwind)
@@ -141,6 +194,11 @@ const bannerPath = computed(() => fixFrontendAssetUrl('/images/guada_logo.png'))
 const characters = ref<any[]>([]);
 const showCharacterSelector = ref(false);
 const characterSearchText = ref('');
+
+// 团队数据
+const teams = ref<any[]>([]);
+const selectedTeam = ref<any>(null);
+const selectorTab = ref('characters');
 
 // 模型数据
 const models = ref<any[]>([]);
@@ -447,7 +505,74 @@ const loadCharacters = async (): Promise<void> => {
   }
 };
 
-// 选择角色
+// 选择角色（从弹窗中选择，不立即关闭弹窗）
+const selectCharacterFromSelector = (character: any): void => {
+  selectedTeam.value = null
+  currentSession.value.characterId = character.id;
+  lastSelectedCharacterId.value = character.id;
+  characterSearchText.value = '';
+
+  // 切换角色时的模型选择逻辑
+  let selectedModelId: string | null = null;
+
+  if (character.model_id) {
+    selectedModelId = character.model_id;
+    userSelectedModelId.value = null;
+  } else if (userSelectedModelId.value) {
+    selectedModelId = userSelectedModelId.value;
+  } else if (models.value.length > 0) {
+    selectedModelId = models.value[0].id;
+  }
+
+  if (selectedModelId) {
+    currentSession.value.model_id = selectedModelId;
+  }
+
+  currentSession.value.settings = {
+    ...(currentSession.value.settings || {}),
+    memoryEnabled: false,
+    memory: {
+      maxMemoryLength: character.settings?.memory?.maxMemoryLength || character.settings?.maxMemoryLength,
+      compressionTriggerRatio: character.settings?.memory?.compressionTriggerRatio || 0.8,
+      compressionTargetRatio: character.settings?.memory?.compressionTargetRatio || 0.5,
+      summaryMode: character.settings?.memory?.summaryMode || 'fast',
+      maxTokensLimit: character.settings?.memory?.maxTokensLimit || null
+    }
+  };
+
+  if (selectedModelId) {
+    lastModelConfig.value = {
+      ...lastModelConfig.value,
+      modelId: selectedModelId,
+      maxMemoryLength: character.settings?.maxMemoryLength
+    };
+  }
+};
+
+// 加载团队列表
+const loadTeams = async (): Promise<void> => {
+  try {
+    const data = await apiService.fetchTeams();
+    teams.value = data.items || (Array.isArray(data) ? data : []);
+  } catch (error) {
+    console.error('获取团队列表失败:', error);
+  }
+};
+
+// 从弹窗选择团队
+const selectTeamFromSelector = (team: any): void => {
+  selectedTeam.value = team;
+  // 团队模式下，使用主理人角色ID
+  currentSession.value.characterId = team.leaderCharacterId;
+  lastSelectedCharacterId.value = team.leaderCharacterId;
+};
+
+// 确认选择（关闭弹窗）
+const confirmSelector = (): void => {
+  showCharacterSelector.value = false;
+};
+
+// 选择角色（原有逻辑，保留兼容）
 const selectCharacter = (character: any): void => {
   currentSession.value.characterId = character.id;
   lastSelectedCharacterId.value = character.id;
@@ -597,8 +722,8 @@ const goToCharactersPage = (): void => {
 
 onMounted(() => {
   title.value = "你今天想聊点什么";
-  // 先加载模型列表，再加载角色列表（因为角色初始化可能依赖模型列表）
-  Promise.all([loadModels(), loadCharacters()]).catch(error => {
+  // 先加载模型列表，再加载角色和团队列表
+  Promise.all([loadModels(), loadCharacters(), loadTeams()]).catch(error => {
     console.error('初始化数据失败:', error);
   });
   // 启动打字机效果
@@ -616,7 +741,26 @@ const autoTitle = (): string => {
   return "新建对话"
 }
 
-const sendMessage = (): void => {
+const sendMessage = async (): Promise<void> => {
+  // 团队模式：通过团队ID创建会话
+  if (selectedTeam.value) {
+    try {
+      const session = await apiService.createSession({
+        teamId: selectedTeam.value.id,
+        title: selectedTeam.value.name,
+      });
+      emit("create-session", session, {
+        content: inputMessage.value.content,
+        files: inputMessage.value.files || [],
+        knowledgeBaseIds: currentSession.value.settings?.referencedKbs || []
+      });
+    } catch (error: any) {
+      console.error('创建团队会话失败:', error);
+      notify.error("创建失败", error.message || '团队会话创建失败');
+    }
+    return;
+  }
+
   if (!currentSession.value.characterId) {
     notify.error("创建失败", '请先选择一个角色模板');
     return;

@@ -4,6 +4,7 @@ import { ToolsModule } from "../tools/tools.module";
 import { ToolOrchestrator } from "../tools/tool-orchestrator.service";
 import { SubAgentManager } from "./sub-agent.manager";
 import { SubAgentToolProvider } from "./sub-agent-tool.provider";
+import { CharacterRepository } from "../../common/database/character.repository";
 
 /**
  * 子 Agent 模块
@@ -16,6 +17,7 @@ import { SubAgentToolProvider } from "./sub-agent-tool.provider";
   providers: [
     SubAgentManager,
     SubAgentToolProvider,
+    CharacterRepository,
   ],
   exports: [SubAgentManager],
 })

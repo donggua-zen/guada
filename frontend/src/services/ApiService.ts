@@ -351,6 +351,45 @@ class ApiService {
     });
   }
 
+  // ========== 团队相关 ==========
+  async fetchTeams(): Promise<any[]> {
+    return await this._request("/teams");
+  }
+
+  async fetchTeam(teamId: string): Promise<any> {
+    return await this._request(`/teams/${teamId}`);
+  }
+
+  async createTeam(data: {
+    name: string;
+    description?: string;
+    leaderCharacterId: string;
+    memberCharacterIds?: string[];
+  }): Promise<any> {
+    return await this._request("/teams", { method: "POST", data });
+  }
+
+  async updateTeam(
+    teamId: string,
+    data: {
+      name?: string;
+      description?: string;
+      leaderCharacterId?: string;
+      memberCharacterIds?: string[];
+    },
+  ): Promise<any> {
+    return await this._request(`/teams/${teamId}`, {
+      method: "PUT",
+      data,
+    });
+  }
+
+  async deleteTeam(teamId: string): Promise<{ success: boolean }> {
+    return await this._request(`/teams/${teamId}`, {
+      method: "DELETE",
+    });
+  }
+
   // ========== 会话相关 ==========
   async createSession(data: any): Promise<Session> {
     return await this._request("/sessions", { method: "POST", data });
