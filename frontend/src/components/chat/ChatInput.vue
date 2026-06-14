@@ -1311,6 +1311,12 @@ onMounted(() => {
     });
     editor.value = tiptapEditor;
     console.log('[ChatInput] Tiptap editor created:', tiptapEditor);
+
+    // 将 editor 实例挂载到 DOM 元素，供全局右键菜单使用
+    const editorEl = document.querySelector('.message-editor');
+    if (editorEl) {
+      (editorEl as any).__tiptapEditor = tiptapEditor;
+    }
   } catch (err) {
     console.error('[ChatInput] Tiptap editor init failed:', err);
   }
