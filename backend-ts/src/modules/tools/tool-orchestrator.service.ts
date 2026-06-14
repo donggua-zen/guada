@@ -233,6 +233,7 @@ export class ToolOrchestrator {
     injectParams: Record<string, any>,
     toolsConfig: any,
     mcpServersConfig: any,
+    eagerNamespaces?: string[],
   ): Promise<ToolRuntime> {
     // 获取全局启用的工具列表，与角色配置取交集
     const globalTools = await this.getLocalToolsList();
@@ -257,7 +258,9 @@ export class ToolOrchestrator {
       );
       if (!enabled) continue;
 
-      const loadMode = metadata.loadMode || "eager";
+      // 如果指定了强制 eager 的命名空间，则覆盖 loadMode
+      const forceEager = eagerNamespaces?.includes(namespace);
+      const loadMode = forceEager ? "eager" : (metadata.loadMode || "eager");
 
       // 根据加载模式决定是否包含该工具
       if (loadMode === "none") {

@@ -4,6 +4,7 @@ import * as path from "path";
 import * as fs from "fs/promises";
 import { SessionRepository } from "../../common/database/session.repository";
 import { MessageRepository } from "../../common/database/message.repository";
+import { CharacterRepository } from "../../common/database/character.repository";
 import { ChatRunnerService } from "../chat/chat-runner.service";
 import { SessionEventsService } from "../chat/session-events.service";
 import { StreamFinishedEvent } from "../../common/events/stream.events";
@@ -84,6 +85,7 @@ export class SubAgentManager implements OnModuleInit {
     private messageRepo: MessageRepository,
     private chatRunnerService: ChatRunnerService,
     private eventBus: EventBusService,
+    private characterRepo: CharacterRepository,
   ) {}
 
   onModuleInit() {
@@ -231,6 +233,7 @@ export class SubAgentManager implements OnModuleInit {
       userId: string;
       name: string;
       task: string;
+      characterId?: string;
     },
     mode: "foreground" | "background" = "foreground",
     abortSignal?: AbortSignal,
@@ -263,22 +266,55 @@ export class SubAgentManager implements OnModuleInit {
     const inheritedMcpServers =
       parentSessionSettings.mcpServers ?? parentCharacterSettings.mcpServers;
 
-    // 3. 创建子会话记录（继承父会话的工作目录和工具配置，使用默认子 Agent 提示词）
+    // 3. 角色驱动的子 Agent 创建
+    let characterSettings: any = {};
+    let characterModelId: string | null = null;
+    let characterAvatarUrl: string | undefined;
+
+    if (params.characterId) {
+      const character = await this.characterRepo.findById(params.characterId);
+      if (character) {
+        characterSettings = character.settings || {};
+        characterModelId = character.modelId;
+        characterAvatarUrl = character.avatarUrl || undefined;
+        this.logger.log(
+          `子 Agent 将继承角色设定: ${character.title} (${params.characterId})`,
+        );
+      } else {
+        this.logger.warn(
+          `角色 ${params.characterId} 不存在，使用默认子 Agent 设定`,
+        );
+      }
+    }
+
+    // 4. 创建子会话记录
+    // 角色提示词优先于默认子 Agent 提示词，工具和模型参数继承策略：
+    // systemPrompt: 角色设定 > 默认子Agent提示词
+    // tools: 角色工具 > 父会话工具
+    // mcpServers: 角色MCP > 父会话MCP
+    // modelId: 角色模型 > 父会话模型
     const subSession = await this.sessionRepo.create({
       userId: params.userId,
       parentId: params.parentSessionId,
       title: params.name,
-      characterId: null,
-      modelId: parentSession.modelId,
+      characterId: params.characterId || null,
+      modelId: characterModelId || parentSession.modelId,
       settings: {
-        // 子 Agent 默认提示词（通过 settings 注入，可被自定义覆盖）
-        systemPrompt: SUB_AGENT_DEFAULT_PROMPT,
-        // 继承工具权限配置
-        tools: inheritedTools,
-        mcpServers: inheritedMcpServers,
+        // 角色提示词优先，否则使用默认子 Agent 提示词
+        systemPrompt: characterSettings.systemPrompt || SUB_AGENT_DEFAULT_PROMPT,
+        // 继承工具权限：角色工具 > 父会话工具
+        tools: characterSettings.tools ?? inheritedTools,
+        mcpServers: characterSettings.mcpServers ?? inheritedMcpServers,
+        // 继承角色模型参数
+        modelTemperature: characterSettings.modelTemperature,
+        modelTopP: characterSettings.modelTopP,
+        modelFrequencyPenalty: characterSettings.modelFrequencyPenalty,
+        // 是否使用 User Role（继承角色设置）
+        useUserPrompt: characterSettings.useUserPrompt,
       },
       sessionType: "sub_agent",
       workspacePath: parentSession.workspacePath,
+      avatarUrl: characterAvatarUrl || null,
     });
 
     this.logger.log(

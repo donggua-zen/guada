@@ -107,6 +107,7 @@ interface AgentTab {
   name: string;
   status: 'running' | 'completed' | 'error';
   loaded?: boolean;
+  avatarUrl?: string;  // 角色/团队子Agent的头像
 }
 
 // 引入组件
@@ -166,6 +167,7 @@ function handleSubAgentCreate(event: any) {
       name,
       status: 'completed',
       loaded: false,
+      avatarUrl: session?.avatarUrl || session?.character?.avatarUrl || undefined,
     });
   }
 

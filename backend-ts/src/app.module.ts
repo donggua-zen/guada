@@ -21,6 +21,7 @@ import { SkillsModule } from './modules/skills/skills.module';
 import { LlmCoreModule } from './modules/llm-core/providers.module';
 import { SchedulerModule } from './modules/scheduler/scheduler.module';
 import { SubAgentModule } from './modules/sub-agent/sub-agent.module';
+import { TeamModule } from './modules/team/team.module';
 
 @Module({
   imports: [
@@ -54,6 +55,7 @@ import { SubAgentModule } from './modules/sub-agent/sub-agent.module';
     BotGatewayModule, // 机器人网关模块
     SchedulerModule,  // 定时任务模块
     SubAgentModule,   // 子 Agent 模块
+    TeamModule,       // 团队/专家团模块
   ],
 })
 export class AppModule {}

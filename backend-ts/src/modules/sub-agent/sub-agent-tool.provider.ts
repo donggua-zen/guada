@@ -40,10 +40,13 @@ export class SubAgentToolProvider implements IToolProvider {
 如需获取结果，请使用 wait 工具等待完成。
 适用于：需要独立研究的复杂问题、多步骤分析、代码生成等。
 
+**角色驱动模式**：如果指定 characterId，子代理将继承该角色的完整设定（系统提示词、工具权限、模型参数等），以该角色身份执行任务。适用于团队协作场景。
+
 使用示例：
-1. 调用 spawn 创建子Agent，获得 subSessionId
-2. （可选）继续其他工作
-3. 调用 wait(subSessionId) 获取结果`,
+1. 通用模式：调用 spawn(name="分析", task="分析数据") 创建子Agent
+2. 角色模式：调用 spawn(name="编剧", characterId="ch_xxx", task="写剧本") 以角色身份创建子Agent
+3. （可选）继续其他工作
+4. 调用 wait 获取结果`,
         parameters: {
           type: "object",
           properties: {
@@ -55,6 +58,11 @@ export class SubAgentToolProvider implements IToolProvider {
               type: "string",
               description:
                 "子代理需要完成的具体任务描述（越详细越好，包含所有必要的背景信息）",
+            },
+            characterId: {
+              type: "string",
+              description:
+                "角色ID（可选）。传入后子代理将继承该角色的完整设定，以角色身份执行任务。在团队协作场景中，使用团队成员的角色ID创建对应子代理",
             },
             mode: {
               type: "string",
@@ -139,6 +147,7 @@ export class SubAgentToolProvider implements IToolProvider {
           userId: context?.userId,
           name: params.name,
           task: params.task,
+          characterId: params.characterId,
         },
         params.mode || "foreground",
         abortSignal,
@@ -266,6 +275,12 @@ export class SubAgentToolProvider implements IToolProvider {
 - 未经用户明确要求，禁止自动使用子代理
 - 拆分任务时必须边界清晰，确保各子代理不会互相修改同一文件或者任务重叠
 
+**角色驱动模式**：
+- 当你的系统提示词中包含【团队成员】时，你可以使用 spawn 的 characterId 参数创建角色驱动的子代理
+- 角色驱动的子代理会继承该角色的完整设定（系统提示词、工具权限等），以该角色身份执行任务
+- 格式：spawn(name="角色名", characterId="角色ID", task="具体任务")
+- 根据任务性质选择合适的团队成员角色
+
 **执行流程**：
 1. 调用 \`spawn\` 创建子 Agent（可创建多个后台任务）
 2. 后台子代理完成后会主动通知，切勿轮询等待
@@ -300,8 +315,9 @@ export class SubAgentToolProvider implements IToolProvider {
     const prefix = isStreaming ? "正在" : "已";
 
     if (toolName === "spawn") {
+      const modeLabel = args.characterId ? "角色子代理" : "子代理";
       return {
-        action: `${prefix}创建子代理`,
+        action: `${prefix}创建${modeLabel}`,
         args: args.name || args.task?.substring(0, 30),
         toolName: "spawn",
         toolType: "sub_agent",
