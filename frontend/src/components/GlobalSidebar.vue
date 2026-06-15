@@ -510,17 +510,17 @@ const loadMoreForGroup = async (groupId: string) => {
 
 // 侧边栏状态辅助方法
 const getSessionUnread = (sessionId: string): boolean => {
-  return sessionStore.isSessionUnread(sessionId)
+  return sessionStore.getSidebarFlag(sessionId, 'unread')
 }
 
 const getSessionWorking = (sessionId: string): boolean => {
-  return sessionStore.isSessionWorking(sessionId)
+  return sessionStore.getSidebarFlag(sessionId, 'working')
 }
 
 // 选择会话
 const selectSession = (session: any) => {
   // 进入会话时标记为已读
-  sessionStore.markSessionRead(session.id)
+  sessionStore.setSidebarFlag(session.id, 'unread', false)
   router.replace({ name: 'Chat', params: { sessionId: session.id } })
 }
 
@@ -763,7 +763,8 @@ const confirmDeleteSession = async () => {
     if (currentSessionId.value === session.id) {
       router.replace({ name: 'Chat', params: { sessionId: 'new-session' } })
     }
-    sessionStore.clearSessionState(session.id)
+    sessionStore.removeSession(session.id)
+    sessionStore.clearSidebarState(session.id)
     toast.success('对话删除成功')
 
     // 关闭对话框
@@ -831,7 +832,7 @@ function initSessionEventListeners() {
 
     // 从统一数据源中移除
     sessionStore.removeSession(sessionId)
-    sessionStore.clearSessionState(sessionId)
+    sessionStore.clearSidebarState(sessionId)
 
     // 如果删除的是当前会话，切换到其他会话
     if (currentSessionId.value === sessionId) {
@@ -870,7 +871,7 @@ function initSessionEventListeners() {
 
     // 非当前会话的更新标记为未读
     if (sessionId !== currentSessionId.value) {
-      sessionStore.markSessionUnread(sessionId)
+      sessionStore.setSidebarFlag(sessionId, 'unread', true)
     }
   })
 
@@ -881,7 +882,7 @@ function initSessionEventListeners() {
     if (payload?.session?.sessionType === 'sub_agent')
       return
     // 标记会话为工作中（任何流开始都显示工作状态，包括自身发起）
-    sessionStore.markSessionWorking(sessionId)
+    sessionStore.setSidebarFlag(sessionId, 'working', true)
 
     // 忽略自身发起的流（通过 source/clientId 判断）
     if (event.source === apiService.getClientId()) {
@@ -904,11 +905,11 @@ function initSessionEventListeners() {
 
     // 非当前会话标记为未读
     if (sessionId !== currentSessionId.value) {
-      sessionStore.markSessionUnread(sessionId)
+      sessionStore.setSidebarFlag(sessionId, 'unread', true)
     }
   })
-
-  // 监听流结束事件
+  
+  // 监听流式结束事件
   apiService.onSessionEvent('stream_finished', (event) => {
     const { sessionId, payload } = event
     // 注意，这里 payload 中没有 session 字段，只有 sessionType
@@ -917,7 +918,7 @@ function initSessionEventListeners() {
     console.log('[GlobalSidebar] 会话流已结束:', sessionId)
 
     // 标记会话为空闲
-    sessionStore.markSessionIdle(sessionId)
+    sessionStore.setSidebarFlag(sessionId, 'working', false)
   })
 }
 

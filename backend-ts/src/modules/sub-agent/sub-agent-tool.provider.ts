@@ -10,8 +10,8 @@ import { SubAgentManager } from "./sub-agent.manager";
 /**
  * 子代理工具提供者
  *
- * 提供 spawn 和 wait 工具：
- * - spawn：创建子代理并启动，返回结果
+ * 提供 create 和 wait 工具：
+ * - create：创建子代理并启动，返回结果
  * - wait：等待子代理完成并返回结果（阻塞）
  */
 @Injectable()
@@ -34,7 +34,7 @@ export class SubAgentToolProvider implements IToolProvider {
 
     return [
       {
-        name: "spawn",
+        name: "subagent_create",
         description: `创建一个子代理独立执行指定任务。
 子代理拥有独立的对话上下文和工具能力，创建后立即返回子会话ID。
 如需获取结果，请使用 wait 工具等待完成。
@@ -43,8 +43,8 @@ export class SubAgentToolProvider implements IToolProvider {
 **角色驱动模式**：如果指定 characterId，子代理将继承该角色的完整设定（系统提示词、工具权限、模型参数等），以该角色身份执行任务。适用于团队协作场景。
 
 使用示例：
-1. 通用模式：调用 spawn(name="分析", task="分析数据") 创建子Agent
-2. 角色模式：调用 spawn(name="编剧", characterId="ch_xxx", task="写剧本") 以角色身份创建子Agent
+1. 通用模式：调用 create(name="分析", task="分析数据") 创建子Agent
+2. 角色模式：调用 create(name="编剧", characterId="ch_xxx", task="写剧本") 以角色身份创建子Agent
 3. （可选）继续其他工作
 4. 调用 wait 获取结果`,
         parameters: {
@@ -75,9 +75,9 @@ export class SubAgentToolProvider implements IToolProvider {
         },
       },
       {
-        name: "wait",
+        name: "subagent_wait",
         description: `等待子代理执行完成并返回结果摘要。
-必须在调用 spawn 后使用。
+必须在调用 create 后使用。
 如果同一会话下有任意子代理已完成，立即返回结果；否则阻塞等待直到完成或超时。`,
         parameters: {
           type: "object",
@@ -85,22 +85,22 @@ export class SubAgentToolProvider implements IToolProvider {
         },
       },
       {
-        name: "close",
+        name: "subagent_close",
         description: `关闭指定子代理并删除其会话数据。
 仅允许关闭已完成的子 Agent，正在运行中的子代理无法关闭。`,
         parameters: {
           type: "object",
           properties: {
-            sub_session_id: {
+            sessionId: {
               type: "string",
               description: "要关闭的子代理会话 ID",
             },
           },
-          required: ["sub_session_id"],
+          required: ["sessionId"],
         },
       },
       {
-        name: "list",
+        name: "subagent_list",
         description: `获取当前父会话下所有子代理列表，包含每个子代理的状态（running / completed / error）。`,
         parameters: {
           type: "object",
@@ -108,13 +108,13 @@ export class SubAgentToolProvider implements IToolProvider {
         },
       },
       {
-        name: "send_message",
+        name: "subagent_send_message",
         description: `向已存在的子代理发送消息继续交互。
 仅当子代理已完成时才能发送，否则报错。`,
         parameters: {
           type: "object",
           properties: {
-            sub_session_id: {
+            sessionId: {
               type: "string",
               description: "子代理会话 ID",
             },
@@ -123,7 +123,7 @@ export class SubAgentToolProvider implements IToolProvider {
               description: "要发送给子代理的消息内容",
             },
           },
-          required: ["sub_session_id", "message"],
+          required: ["sessionId", "message"],
         },
       },
     ];
@@ -136,7 +136,7 @@ export class SubAgentToolProvider implements IToolProvider {
   ): Promise<string> {
     const params = request.arguments;
 
-    if (request.name === "spawn") {
+    if (request.name === "subagent_create") {
       this.logger.log(
         `创建子 Agent: ${params.name}, 父会话: ${context?.sessionId}`,
       );
@@ -155,7 +155,7 @@ export class SubAgentToolProvider implements IToolProvider {
 
       return JSON.stringify({
         success: true,
-        subSessionId: result.subSessionId,
+        sessionId: result.subSessionId,
         status: result.status,
         content: result.status === "completed" ? result.content : undefined,
         message:
@@ -165,7 +165,7 @@ export class SubAgentToolProvider implements IToolProvider {
       });
     }
 
-    if (request.name === "wait") {
+    if (request.name === "subagent_wait") {
       this.logger.log(`等待子代理完成: 父会话 ${context?.sessionId}`);
 
       const completed = await this.subAgentManager.waitForComplete(
@@ -184,7 +184,7 @@ export class SubAgentToolProvider implements IToolProvider {
       return JSON.stringify({
         success: true,
         completedSubAgents: completed.map((c) => ({
-          subSessionId: c.subSessionId,
+          sessionId: c.subSessionId,
           name: c.name,
           status: c.result.status,
           content: c.result.content,
@@ -195,12 +195,12 @@ export class SubAgentToolProvider implements IToolProvider {
       });
     }
 
-    if (request.name === "close") {
-      this.logger.log(`关闭子 Agent: ${params.sub_session_id}`);
+    if (request.name === "subagent_close") {
+      this.logger.log(`关闭子 Agent: ${params.sessionId}`);
 
       try {
         await this.subAgentManager.closeSubAgent(
-          params.sub_session_id,
+          params.sessionId,
           context?.sessionId,
           context?.userId,
           context?.workspacePath,
@@ -217,7 +217,7 @@ export class SubAgentToolProvider implements IToolProvider {
       }
     }
 
-    if (request.name === "list") {
+    if (request.name === "subagent_list") {
       const agents = await this.subAgentManager.getSubAgents(
         context?.sessionId,
       );
@@ -228,9 +228,9 @@ export class SubAgentToolProvider implements IToolProvider {
       });
     }
 
-    if (request.name === "send_message") {
+    if (request.name === "subagent_send_message") {
       this.logger.log(
-        `向子代理发送消息: ${params.sub_session_id}, 父会话: ${context?.sessionId}`,
+        `向子代理发送消息: ${params.sessionId}, 父会话: ${context?.sessionId}`,
       );
 
       try {
@@ -238,7 +238,7 @@ export class SubAgentToolProvider implements IToolProvider {
           {
             parentSessionId: context?.sessionId,
             userId: context?.userId,
-            subSessionId: params.sub_session_id,
+            sessionId: params.sessionId,
             message: params.message,
           },
           "foreground",
@@ -247,7 +247,7 @@ export class SubAgentToolProvider implements IToolProvider {
 
         return JSON.stringify({
           success: true,
-          subSessionId: result.subSessionId,
+          sessionId: result.subSessionId,
           status: result.status,
           content: result.status === "completed" ? result.content : undefined,
           message:
@@ -276,20 +276,20 @@ export class SubAgentToolProvider implements IToolProvider {
 - 拆分任务时必须边界清晰，确保各子代理不会互相修改同一文件或者任务重叠
 
 **角色驱动模式**：
-- 当你的系统提示词中包含【团队成员】时，你可以使用 spawn 的 characterId 参数创建角色驱动的子代理
+- 当你的系统提示词中包含【团队成员】时，你可以使用 create 的 characterId 参数创建角色驱动的子代理
 - 角色驱动的子代理会继承该角色的完整设定（系统提示词、工具权限等），以该角色身份执行任务
-- 格式：spawn(name="角色名", characterId="角色ID", task="具体任务")
+- 格式：create(name="角色名", characterId="角色ID", task="具体任务")
 - 根据任务性质选择合适的团队成员角色
 
 **执行流程**：
-1. 调用 \`spawn\` 创建子 Agent（可创建多个后台任务）
+1. 调用 \`create\` 创建子 Agent（可创建多个后台任务）
 2. 后台子代理完成后会主动通知，切勿轮询等待
 3. 使用 \`list\` 查看当前所有子代理的状态
 4. 使用 \`send_message\` 向已完成的子代理发送消息继续交互
 5. 子代理不再需要时，调用 \`close\` 关闭并清理其会话数据
 
 **注意**：
-- spawn 创建后立即返回，后台子代理在后台执行
+- create 创建后立即返回，后台子代理在后台执行
 - wait 返回同一会话下最早完成的子代理结果
 - 多次调用 wait 可获取所有子代理结果
 - send_message 只能向已完成的子代理发送消息，运行中的会报错
@@ -310,23 +310,23 @@ export class SubAgentToolProvider implements IToolProvider {
   formatDisplayMessage(
     toolName: string,
     args: Record<string, any>,
-    isStreaming: boolean,
+    isExecuting: boolean,
   ): ToolDisplayInfo {
-    const prefix = isStreaming ? "正在" : "已";
+    const prefix = isExecuting ? "正在" : "已";
 
-    if (toolName === "spawn") {
+    if (toolName === "subagent_create") {
       const modeLabel = args.characterId ? "角色子代理" : "子代理";
       return {
         action: `${prefix}创建${modeLabel}`,
         args: args.name || args.task?.substring(0, 30),
-        toolName: "spawn",
+        toolName: "subagent_create",
         toolType: "sub_agent",
       };
     }
     if (toolName === "wait") {
       return {
         action: `${prefix}等待子代理完成`,
-        args: args.subSessionId?.substring(0, 16),
+        args: args.sessionId?.substring(0, 16),
         toolName: "wait",
         toolType: "sub_agent",
       };
@@ -334,7 +334,7 @@ export class SubAgentToolProvider implements IToolProvider {
     if (toolName === "send_message") {
       return {
         action: `${prefix}向子代理发送消息`,
-        args: args.sub_session_id?.substring(0, 16),
+        args: args.sessionId?.substring(0, 16),
         toolName: "send_message",
         toolType: "sub_agent",
       };
@@ -342,7 +342,7 @@ export class SubAgentToolProvider implements IToolProvider {
     if (toolName === "close") {
       return {
         action: `${prefix}关闭子代理`,
-        args: args.sub_session_id?.substring(0, 16),
+        args: args.sessionId?.substring(0, 16),
         toolName: "close",
         toolType: "sub_agent",
       };

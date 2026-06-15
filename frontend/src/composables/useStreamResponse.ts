@@ -282,7 +282,6 @@ export function useStreamResponse(sessionStore: any, apiService: any) {
   function handleToolCall(
     content: MessageContent,
     toolCalls: any[],
-    displayMessages?: any[],
   ): void {
     // 初始化 metadata
     if (!content.metadata) {
@@ -303,9 +302,8 @@ export function useStreamResponse(sessionStore: any, apiService: any) {
 
       if (!existingToolCall) {
         // 如果是新的工具调用，添加到列表
-        // 需要找到 toolCall 在 toolCalls 数组中的局部索引
-        const localIndex = toolCalls.findIndex((tc) => tc.index === index);
-        const displayMessage = displayMessages?.[localIndex] || null;
+        // 直接从 toolCall.metadata.displayMessage 获取展示消息
+        const displayMessage = toolCall.metadata?.displayMessage || null;
 
         content.metadata.toolCalls.push({
           id: toolCall.id,
@@ -314,7 +312,7 @@ export function useStreamResponse(sessionStore: any, apiService: any) {
           name: toolCall.name,
           arguments: toolCall.arguments || "",
           metadata: {
-            displayMessage: displayMessage, // 存储结构化的展示信息到 metadata
+            displayMessage: displayMessage,
           },
         });
       } else {
@@ -322,31 +320,14 @@ export function useStreamResponse(sessionStore: any, apiService: any) {
         if (toolCall.arguments !== null && toolCall.arguments !== undefined) {
           existingToolCall.arguments += toolCall.arguments;
         }
-        // 更新展示文案（如果提供）
-        if (displayMessages?.[index]) {
-          // 确保 metadata 存在
-          if (!existingToolCall.metadata) {
-            existingToolCall.metadata = {};
-          }
-          existingToolCall.metadata.displayMessage = displayMessages[index];
-        } else if (displayMessages) {
-          // displayMessages 数组可能只包含当前 chunk 中的工具
-          // 需要找到 toolCall 在 toolCalls 数组中的局部索引
-          const localIndex = toolCalls.findIndex((tc) => tc.index === index);
-          if (localIndex !== -1 && displayMessages[localIndex]) {
-            if (!existingToolCall.metadata) {
-              existingToolCall.metadata = {};
-            }
-            existingToolCall.metadata.displayMessage =
-              displayMessages[localIndex];
-          }
-        }
       }
     }
   }
 
   /**
    * 处理工具调用响应
+   * 从 tool_calls_response 事件接收执行完毕后的展示文案，更新到 toolCalls metadata 中
+   * （文案不持久化到工具结果，仅通过事件传送给前端更新显示状态）
    */
   function handleToolCallsResponse(
     content: MessageContent,
@@ -358,23 +339,17 @@ export function useStreamResponse(sessionStore: any, apiService: any) {
     }
     content.metadata.toolCallsResponse = toolCallsResponse;
 
-    // 更新展示文案为完成状态
-    if (displayMessages && content.metadata.toolCalls) {
-      // 先收集所有需要更新的 displayMessage，避免逐个设置触发多次 watch
-      const updates: { index: number; displayMessage: any }[] = [];
-      for (let i = 0; i < content.metadata.toolCalls.length; i++) {
-        if (displayMessages[i]) {
-          updates.push({ index: i, displayMessage: displayMessages[i] });
+    // 更新展示文案为完成状态（从 tool_calls_response 携带的最新文案）
+    if (displayMessages && displayMessages.length > 0 && content.metadata.toolCalls) {
+      for (let i = 0; i < displayMessages.length; i++) {
+        const dm = displayMessages[i];
+        if (dm) {
+          if (!content.metadata.toolCalls[i]?.metadata) {
+            if (!content.metadata.toolCalls[i]) continue;
+            content.metadata.toolCalls[i].metadata = {};
+          }
+          content.metadata.toolCalls[i].metadata.displayMessage = dm;
         }
-      }
-      // 一次性应用所有更新
-      for (const { index, displayMessage } of updates) {
-        // 确保 metadata 存在
-        if (!content.metadata.toolCalls[index].metadata) {
-          content.metadata.toolCalls[index].metadata = {};
-        }
-        content.metadata.toolCalls[index].metadata.displayMessage =
-          displayMessage;
       }
     }
   }
@@ -434,9 +409,6 @@ export function useStreamResponse(sessionStore: any, apiService: any) {
         arguments: tc.arguments || "",
         metadata: tc.metadata || {},
       }));
-      if (response.displayMessages && response.displayMessages.length > 0) {
-        metadata.displayMessages = response.displayMessages;
-      }
     }
 
     // 保存 usage 信息到 metadata.usage
@@ -661,8 +633,7 @@ export function useStreamResponse(sessionStore: any, apiService: any) {
           handleToolCall(
             message!.contents[contentIndex],
             response.toolCalls,
-            response.displayMessages,
-          ); // 驼峰式
+          );
           continue;
         }
 
@@ -672,7 +643,7 @@ export function useStreamResponse(sessionStore: any, apiService: any) {
             message!.contents[contentIndex],
             response.toolCallsResponse,
             response.displayMessages,
-          ); // 驼峰式
+          );
           continue;
         }
 

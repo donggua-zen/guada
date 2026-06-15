@@ -1,5 +1,4 @@
 import { ToolCallItem } from "../../llm-core/types/llm.types";
-import { ToolDisplayInfo } from "../../tools/interfaces/tool-provider.interface";
 
 /**
  * Token 使用量统计
@@ -42,7 +41,6 @@ export interface EventChunk {
 
   // ===== 工具调用（tool_call）=====
   toolCalls?: ToolCallItem[];
-  displayMessages?: (ToolDisplayInfo | string)[];
 
   // ===== 工具调用响应（tool_calls_response）=====
   toolCallsResponse?: Array<{
@@ -50,6 +48,7 @@ export interface EventChunk {
     content: string;
     toolCallId: string;
   }>;
+  displayMessages?: any[]; // 工具执行完毕后携带的最新展示文案，不持久化到工具结果
 
   // ===== 完成信息（finish）=====
   finishReason?: string;

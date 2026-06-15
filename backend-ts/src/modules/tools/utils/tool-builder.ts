@@ -19,14 +19,13 @@ export interface SimpleToolDef {
 
 /**
  * 将简化的工具定义转换为 OpenAI 兼容的格式
- * @param namespace 命名空间，用于生成带前缀的工具名称
  * @param tool 简化的工具定义对象
  */
-export function buildOpenAITool(namespace: string, tool: SimpleToolDef): any {
+export function buildOpenAITool(tool: SimpleToolDef): any {
   return {
     type: "function",
     function: {
-      name: `${namespace}__${tool.name}`,
+      name: tool.name,
       description: tool.description,
       parameters: tool.parameters,
     },

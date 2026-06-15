@@ -30,7 +30,7 @@ export class SkillToolBridgeService implements IToolProvider {
     // 返回 Skills 系统管理工具（ToolOrchestrator 会自动添加 skill__ 前缀）
     return [
       {
-        name: "scan",
+        name: "skill_scan",
         description:
           "Scan the skills directory to discover new or updated skills. Use this when you need to refresh the list of available skills.",
         parameters: {
@@ -50,7 +50,7 @@ export class SkillToolBridgeService implements IToolProvider {
       //   },
       // },
       {
-        name: "reload",
+        name: "skill_reload",
         description:
           "Reload a specific skill to apply changes. Use this after modifying a skill's SKILL.md file. If you changed the skill name (directory name), use scan instead.",
         parameters: {
@@ -65,7 +65,7 @@ export class SkillToolBridgeService implements IToolProvider {
         },
       },
       {
-        name: "call",
+        name: "skill_call",
         description:
           "Call a specific skill to activate it and get its complete instructions. This will return the full SKILL.md content that you must follow to complete the task.",
         parameters: {
@@ -91,7 +91,7 @@ export class SkillToolBridgeService implements IToolProvider {
 
     // 直接根据工具名称执行
     switch (request.name) {
-      case "scan":
+      case "skill_scan":
         try {
           const result = await this.orchestrator.triggerScan();
           return `Scan completed successfully. Found ${result.added.length} new skills, ${result.updated.length} updated, ${result.removed.length} removed.`;
@@ -116,7 +116,7 @@ export class SkillToolBridgeService implements IToolProvider {
 
         return `Currently loaded skills (${skills.length} total):\n${skillList}`;
 
-      case "reload":
+      case "skill_reload":
         const skillId = request.arguments?.skillId;
         if (!skillId) {
           return "Error: skillId parameter is required";
@@ -134,7 +134,7 @@ export class SkillToolBridgeService implements IToolProvider {
           return `Failed to reload skill ${skillId}: ${errorMessage}`;
         }
 
-      case "call":
+      case "skill_call":
         const skillName = request.arguments?.skillName;
         if (!skillName) {
           return "Error: skillName parameter is required";

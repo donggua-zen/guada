@@ -28,7 +28,7 @@ export const UNIVERSAL_TOOLS: ToolDefinition[] = [
       properties: {
         tool_name: {
           type: "string",
-          description: "完整的工具名称，格式为：namespace__tool_name，例如：knowledge_base__search",
+          description: "完整的工具名称，由工具提供者保证全局唯一",
         },
         arguments: {
           type: "object",
@@ -96,7 +96,6 @@ export class UniversalToolHandler {
     
       // 构建详细的工具说明
       const toolDescriptions = tools.map((tool: any) => {
-        const fullName = `${namespace}__${tool.name}`;
         const params = tool.parameters?.properties || {};
         const required = tool.parameters?.required || [];
     
@@ -109,7 +108,7 @@ export class UniversalToolHandler {
           .join("\n");
     
         return [
-          `### ${fullName}`,
+          `### ${tool.name}`,
           `**功能**: ${tool.description}`,
           `**参数**:\n${paramList}`,
           "",
@@ -141,7 +140,7 @@ export class UniversalToolHandler {
         "---",
         "",
         "**使用方式**:",
-        "直接调用工具，格式为：`namespace__tool_name`,或者使用`tool_call`间接调用",
+        "直接调用工具，格式为：`tool_name`，或者使用`tool_call`间接调用",
         "",
         "现在你可以根据上述说明调用相应的工具了。"
       );

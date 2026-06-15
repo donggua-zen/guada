@@ -34,7 +34,7 @@ export class ImageRecognitionToolProvider implements IToolProvider {
   async getTools(enabled?: boolean | string[], context?: Record<string, any>): Promise<any[]> {
     const toolsConfig = [
       {
-        name: "recognize",
+        name: "image_recognize",
         description: "识别图片内容并返回详细的文本描述。当用户询问关于上传图片的内容时使用此工具。",
         parameters: {
           type: "object",
@@ -48,7 +48,7 @@ export class ImageRecognitionToolProvider implements IToolProvider {
         },
       },
       {
-        name: "recognize_by_path",
+        name: "image_recognize_by_path",
         description: "根据图片文件路径识别图片内容并返回详细的文本描述。当用户提供图片的绝对路径或相对路径时使用此工具。",
         parameters: {
           type: "object",
@@ -75,10 +75,10 @@ export class ImageRecognitionToolProvider implements IToolProvider {
   }
 
   async execute(request: ToolCallRequest, context?: Record<string, any>, abortSignal?: AbortSignal): Promise<string> {
-    if (request.name === "recognize") {
+    if (request.name === "image_recognize") {
       return this.handleRecognize(request, abortSignal);
     }
-    if (request.name === "recognize_by_path") {
+    if (request.name === "image_recognize_by_path") {
       return this.handleRecognizeByPath(request, context, abortSignal);
     }
 
@@ -89,8 +89,8 @@ export class ImageRecognitionToolProvider implements IToolProvider {
     return `# 图片识别工具使用说明\n
 你可以使用以下工具来识别图片内容：
 
-1. \`recognize\` - 通过图片文件 ID 识别图片。当用户提到"这张图"、"图片里有什么"或上传了图片并询问相关内容时，请调用此工具。
-2. \`recognize_by_path\` - 通过图片文件路径识别图片。当用户提供图片的绝对路径或相对路径时使用此工具。
+1. \`image_recognize\` - 通过图片文件 ID 识别图片。当用户提到"这张图"、"图片里有什么"或上传了图片并询问相关内容时，请调用此工具。
+2. \`image_recognize_by_path\` - 通过图片文件路径识别图片。当用户提供图片的绝对路径或相对路径时使用此工具。
 
 工具会返回图片的详细文本描述，你可以基于该描述回答用户的问题。如果你能看到图片而不是图片ID或路径，忽略此工具。`;
   }
@@ -113,20 +113,20 @@ export class ImageRecognitionToolProvider implements IToolProvider {
   /**
    * 生成图片识别工具的展示文案
    */
-  formatDisplayMessage(toolName: string, args: Record<string, any>, isStreaming: boolean): ToolDisplayInfo {
-    const prefix = isStreaming ? '正在' : '已';
+  formatDisplayMessage(toolName: string, args: Record<string, any>, isExecuting: boolean): ToolDisplayInfo {
+    const prefix = isExecuting ? '正在' : '已';
 
     let action: string;
     let toolType: string = this.namespace;
     let target: string;
 
     switch (toolName) {
-      case 'recognize':
+      case 'image_recognize':
         action = `${prefix}识别图片`;
         target = args.image_id || '';
         break;
 
-      case 'recognize_by_path':
+      case 'image_recognize_by_path':
         action = `${prefix}识别图片`;
         target = args.image_path || '';
         break;
@@ -139,7 +139,7 @@ export class ImageRecognitionToolProvider implements IToolProvider {
     return {
       action,
       args: target,
-      toolName: `${this.namespace}__${toolName}`,
+      toolName: toolName,
       toolType,
     };
   }

@@ -137,8 +137,8 @@ export interface IToolProvider {
    * 生成工具调用的展示文案（在 LLM 输出参数后立即调用）
    * @param toolName 工具名称（不含命名空间前缀）
    * @param args 工具参数（可能不完整，流式累积中）
-   * @param isStreaming 是否处于流式状态
+   * @param isExecuting 工具是否正在执行（true=正在进行，false=已完成）
    * @returns 结构化的展示信息或自然语言字符串（向后兼容）
    */
-  formatDisplayMessage?(toolName: string, args: Record<string, any>, isStreaming: boolean): ToolDisplayInfo | string;
+  formatDisplayMessage?(toolName: string, args: Record<string, any>, isExecuting: boolean): ToolDisplayInfo | string;
 }

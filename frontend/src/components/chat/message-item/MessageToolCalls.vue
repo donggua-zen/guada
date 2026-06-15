@@ -216,8 +216,8 @@ const getToolIconComponent = (tool: ToolCall) => {
 
   if (typeof displayInfo === 'object' && displayInfo !== null) {
     const info = displayInfo as ToolDisplayInfo;
-    // 优先使用 toolType（如 edit、search），其次从 toolName 提取 namespace
-    const iconType = info.toolType || info.toolName?.split('__')[0];
+    // 优先使用 toolType（如 edit、search）
+    const iconType = info.toolType || 'generic';
     return getToolIconByNamespace(iconType);
   }
 

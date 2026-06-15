@@ -19,7 +19,7 @@
       <ScrollContainer ref="scrollContainerRef"
         class="max-h-full chat-scroll-container transition-opacity duration-300 px-5"
         :class="{ 'opacity-0': showSkeleton, 'opacity-100': !showSkeleton }"
-        :auto-scroll="needScrollToBottom && isStreaming" @scroll="handleScroll">
+        :auto-scroll="needScrollToBottom" @scroll="handleScroll">
         <div class="max-w-205 mx-auto pt-5 pb-8">
           <!-- 加载更多历史消息指示器 -->
           <div v-if="isLoadingMore" class="w-full py-4 flex items-center justify-center text-gray-400">
@@ -205,7 +205,6 @@ const {
 } = useSessionChat(sessionStore, apiService)
 
 // 响应式数据
-const messagesContainerRef = ref<HTMLElement | null>(null);
 const scrollContainerRef = ref<any>(null);
 const needScrollToBottom = ref(true);
 let scrollTicking = false;
@@ -489,6 +488,9 @@ watch(() => isStreaming.value, async (newVal, oldVal) => {
     if (activeMessages.value.length == 2 && !hasGeneratedTitle.value) {
       await generateTitleIfNeeded(currentSessionId.value!, activeMessages.value, currentSession);
     }
+    nextTick(() => {
+      needScrollToBottom.value = false;
+    });
   }
 }, { immediate: true });
 

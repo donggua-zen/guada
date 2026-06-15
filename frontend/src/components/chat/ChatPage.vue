@@ -58,7 +58,7 @@
                 @switch-agent="switchTab" @close-agent="closeSubAgentTab" />
 
               <!-- 右侧大纲导航 -->
-              <ChatOutline v-if="currentSession && sessions.length > 0 && activeTabId === 'main'"
+              <ChatOutline v-if="currentSession  && activeTabId === 'main'"
                 :messages="chatPanelRef?.activeMessages || []" :chat-panel-ref="chatPanelRef"
                 @scroll-to-message="handleScrollToMessage" />
             </div>
@@ -322,12 +322,6 @@ let unsubscribeStreamFinished: (() => void) | null = null;
 let unsubscribeSubAgentCreate: (() => void) | null = null;
 let unsubscribeSubAgentClosed: (() => void) | null = null;
 
-// 计算属性
-// 从 sessionStore 的 sessionsMap 派生会话列表
-const sessions = computed((): Session[] => {
-  return sessionStore.sessionsList;
-});
-
 
 // 业务逻辑函数
 
@@ -496,8 +490,7 @@ async function clearChat() {
   if (await confirm("清空聊天记录", "确定要删除所有聊天记录吗？此操作不可撤销。")) {
     try {
       await apiService.clearSessionMessages(currentSession.value.id);
-      sessionStore.clearSessionState(currentSession.value.id);
-      // 注意：clearSessionState 已从 sessionsMap 中移除该会话
+      sessionStore.clearSessionMessages(currentSession.value.id);
       // 重新加载消息列表
       const chatPanel = chatPanelRef.value as any;
       if (chatPanel && chatPanel.loadMessages) {

@@ -24,7 +24,7 @@ export class DocumentToolProvider implements IToolProvider {
 
   private readonly toolsConfig: ToolDefinition[] = [
     {
-      name: "parse",
+      name: "doc_parse",
       description:
         "解析 PDF、Word 或 Excel 文档，提取其中的纯文本内容。支持 .pdf、.docx、.xlsx 和 .xls 格式。当用户需要阅读、分析、总结或提取文档内容时使用此工具。",
       parameters: {
@@ -44,7 +44,7 @@ export class DocumentToolProvider implements IToolProvider {
       },
     },
     {
-      name: "batch_parse",
+      name: "doc_batch_parse",
       description:
         "批量解析多个 PDF 或 Word 文档，返回每个文件的文本内容摘要。适用于需要同时处理多个文档的场景。",
       parameters: {
@@ -97,8 +97,8 @@ export class DocumentToolProvider implements IToolProvider {
         signal?: AbortSignal,
       ) => Promise<string>
     > = {
-      parse: this.handleParse.bind(this),
-      batch_parse: this.handleBatchParse.bind(this),
+      doc_parse: this.handleParse.bind(this),
+      doc_batch_parse: this.handleBatchParse.bind(this),
     };
 
     const handler = handlers[request.name];
@@ -150,9 +150,9 @@ export class DocumentToolProvider implements IToolProvider {
   formatDisplayMessage(
     toolName: string,
     args: Record<string, any>,
-    isStreaming: boolean,
+    isExecuting: boolean,
   ): ToolDisplayInfo {
-    const prefix = isStreaming ? "正在" : "已";
+    const prefix = isExecuting ? "正在" : "已";
     const fileName = args.file_path
       ? path.basename(args.file_path)
       : args.file_paths?.length

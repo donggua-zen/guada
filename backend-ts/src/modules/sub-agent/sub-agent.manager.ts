@@ -358,14 +358,14 @@ export class SubAgentManager implements OnModuleInit {
     params: {
       parentSessionId: string;
       userId: string;
-      subSessionId: string;
+      sessionId: string;
       message: string;
     },
     mode: "foreground" | "background" = "foreground",
     abortSignal?: AbortSignal,
   ): Promise<SubAgentResult> {
     // 1. 验证子会话存在且属于该父会话
-    const subSession = await this.sessionRepo.findById(params.subSessionId);
+    const subSession = await this.sessionRepo.findById(params.sessionId);
     if (!subSession) {
       throw new Error("子 Agent 会话不存在");
     }
@@ -374,17 +374,17 @@ export class SubAgentManager implements OnModuleInit {
     }
 
     // 2. 检查子 Agent 是否正在运行
-    if (this.isSubAgentRunning(params.subSessionId)) {
+    if (this.isSubAgentRunning(params.sessionId)) {
       throw new Error("子 Agent 正在运行中，请等待完成后再发送消息");
     }
 
     this.logger.log(
-      `向子 Agent 发送消息: ${params.subSessionId}, 父会话: ${params.parentSessionId}, 模式: ${mode}`,
+      `向子 Agent 发送消息: ${params.sessionId}, 父会话: ${params.parentSessionId}, 模式: ${mode}`,
     );
 
     // 3. 复用执行逻辑
     return this.executeSubAgentStream(
-      params.subSessionId,
+      params.sessionId,
       params.userId,
       params.message,
       params.parentSessionId,
