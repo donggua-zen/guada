@@ -28,6 +28,7 @@ export interface ModelConfig {
     protocol: string;
     apiUrl?: string;
     apiKey?: string;
+    headers?: Record<string, string>;
     config?: Record<string, any>;
   };
   /** 模型类型 */

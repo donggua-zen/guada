@@ -472,6 +472,7 @@ export class PersistentSessionContext implements ISessionContext {
         protocol: model.provider?.protocol,
         apiUrl: model.provider?.apiUrl,
         apiKey: model.provider?.apiKey,
+        headers: model.provider?.attributes?.headers,
         config: model.provider?.config,
       },
       modelType: model.modelType,

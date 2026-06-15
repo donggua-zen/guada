@@ -45,22 +45,12 @@ const stopScrolling = useDebounceFn(() => {
     isScrolling.value = false;
 }, 1500);
 
-function checkIsAtBottom(): boolean {
-    const element = scrollElement.value;
-    if (!element) return true;
 
-    const distanceToBottom =
-        element.scrollHeight - element.scrollTop - element.clientHeight;
-    return distanceToBottom <= (props.scrollThreshold ?? SCROLL_THRESHOLD);
-}
 
 function handleScroll(event: Event): void {
-    isAtBottom.value = checkIsAtBottom();
-
     // 滚动时显示滚动条
     isScrolling.value = true;
     stopScrolling();
-
     emit("scroll", event);
 }
 
@@ -105,9 +95,7 @@ function initScrollObservers() {
     // 使用 ResizeObserver 作为兜底（处理图片加载等异步尺寸变化）
     resizeObserver.value = new ResizeObserver(() => {
         if (props.autoScroll) {
-            //   requestAnimationFrame(() => {
             immediateScrollToBottom();
-            //   });
         }
     });
 
@@ -134,7 +122,6 @@ defineExpose({
     smoothScrollToBottom,
     getScrollElement: () => scrollElement.value,
     scrollTop: () => scrollElement.value?.scrollTop,
-    isAtBottom: computed(() => isAtBottom.value),
 });
 </script>
 

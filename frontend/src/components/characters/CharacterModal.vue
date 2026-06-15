@@ -53,6 +53,9 @@ watch(() => props.show, (newVal) => {
 watch(visible, (newVal) => {
     if (!newVal) {
         emit('update:show', false)
+    } else if (!props.characterId) {
+        // 对话框打开且为新建模式时，清空上次残留的数据
+        currentCharacter.value = {};
     }
 })
 

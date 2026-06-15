@@ -161,10 +161,10 @@ export class DocumentToolProvider implements IToolProvider {
 
     let action: string;
     switch (toolName) {
-      case "parse":
+      case "doc_parse":
         action = `${prefix}解析文档`;
         break;
-      case "batch_parse":
+      case "doc_batch_parse":
         action = `${prefix}批量解析文档`;
         break;
       default:

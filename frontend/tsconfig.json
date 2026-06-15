@@ -47,6 +47,7 @@
     
     /* 路径解析 */
     "baseUrl": ".",
+    "ignoreDeprecations": "6.0",
     "paths": {
       "@/*": ["./src/*"]
     },

@@ -2,7 +2,6 @@ import { Injectable, Logger } from "@nestjs/common";
 import {
   IToolProvider,
   ToolCallRequest,
-  ToolCallResponse,
   ToolProviderMetadata,
   ToolDefinition,
 } from "../../tools/interfaces/tool-provider.interface";
@@ -19,7 +18,10 @@ export class MCPToolProvider implements IToolProvider {
     private prisma: PrismaService,
   ) {}
 
-  async getTools(enabled?: boolean | string[], context?: Record<string, any>): Promise<any[]> {
+  async getTools(
+    enabled?: boolean | string[],
+    context?: Record<string, any>,
+  ): Promise<any[]> {
     if (enabled === false) return [];
 
     const whereClause: any = { enabled: true };
@@ -38,7 +40,7 @@ export class MCPToolProvider implements IToolProvider {
       const tools = server.tools as Record<string, any>;
       for (const [toolName, toolSchema] of Object.entries(tools)) {
         allTools.push({
-          name: toolName,
+          name: `mcp__${toolName}`,
           description: (toolSchema as any).description || `Execute ${toolName}`,
           parameters: (toolSchema as any).inputSchema || {
             type: "object",
@@ -51,8 +53,15 @@ export class MCPToolProvider implements IToolProvider {
     return allTools;
   }
 
-  async execute(request: ToolCallRequest, context?: Record<string, any>, abortSignal?: AbortSignal): Promise<string> {
-    const toolName = request.name;
+  async execute(
+    request: ToolCallRequest,
+    context?: Record<string, any>,
+    abortSignal?: AbortSignal,
+  ): Promise<string> {
+    // 去除 mcp__ 前缀，还原原始工具名
+    const toolName = request.name.startsWith('mcp__')
+      ? request.name.slice(5)
+      : request.name;
 
     try {
       const servers = await this.prisma.mcpServer.findMany({
@@ -67,6 +76,12 @@ export class MCPToolProvider implements IToolProvider {
             targetServer = server;
             break;
           }
+          // 兼容无前缀的查找
+          const prefixedName = `mcp__${toolName}`;
+          if (tools[prefixedName]) {
+            targetServer = server;
+            break;
+          }
         }
       }
 
@@ -78,7 +93,9 @@ export class MCPToolProvider implements IToolProvider {
         {
           url: targetServer.url || undefined,
           headers: (targetServer.headers as Record<string, any>) || undefined,
-          type: (targetServer.type as "sse" | "streamableHttp" | "stdio") || undefined,
+          type:
+            (targetServer.type as "sse" | "streamableHttp" | "stdio") ||
+            undefined,
           command: targetServer.command || undefined,
           args: targetServer.args || undefined,
           env: targetServer.env || undefined,
@@ -98,37 +115,7 @@ export class MCPToolProvider implements IToolProvider {
   }
 
   async getPrompt(context?: Record<string, any>): Promise<string> {
-    try {
-      const promptParts: string[] = [];
-
-      promptParts.push("# MCP 工具使用说明");
-
-      const toolInstructions = `
-你拥有以下 MCP（Model Context Protocol）工具，可以主动调用它们来扩展功能：
-
-### MCP 工具特点
-- **动态加载**: MCP 工具来自外部服务器，可根据需要启用或禁用
-- **标准化接口**: 所有 MCP 工具遵循统一的调用协议
-- **灵活扩展**: 可通过添加新的 MCP 服务器来扩展 AI 能力
-
-### 使用建议
-1. **了解工具功能**: 在使用前，先查看工具的 description 字段了解其用途
-2. **检查参数要求**: 仔细阅读工具的 parameters schema，确保提供正确的参数
-3. **处理错误响应**: 如果工具执行失败，检查错误信息并调整参数
-4. **权限验证**: 确保只调用已启用且有权限访问的 MCP 服务器上的工具
-
-### 注意事项
-- MCP 工具的名称格式为 \`mcp__<tool_name>\`
-- 工具的具体功能取决于配置的 MCP 服务器
-- 如果某个工具不可用，可能是对应的 MCP 服务器未启用或连接失败
-`;
-      promptParts.push(toolInstructions);
-
-      return promptParts.join("\n");
-    } catch (error: any) {
-      this.logger.error(`获取 MCP 提示词失败：${error.message}`);
-      return "";
-    }
+    return "";
   }
 
   getMetadata(context?: Record<string, any>): ToolProviderMetadata {

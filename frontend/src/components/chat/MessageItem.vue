@@ -97,7 +97,7 @@
             </div>
           </el-alert>
         </div>
-        <div v-if="streamingState.isStreaming" class="mt-5 mb-10 w-full flex items-center text-gray-500">
+        <div v-if="streamingState.isStreaming" class="mt-4 mb-4 w-full flex items-center text-gray-500">
           <el-icon size="16" class="mr-2 relative top-0">
             <Loading />
           </el-icon>

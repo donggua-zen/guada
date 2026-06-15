@@ -81,6 +81,7 @@ export interface ProviderConfig {
   apiUrl: string;
   apiKey: string;
   protocol?: string;
+  headers?: Record<string, string>;
 }
 
 /**

@@ -56,11 +56,26 @@ const updatePosition = () => {
   const rect = dropdownRef.value?.getBoundingClientRect();
   if (!rect) return;
 
-  menuStyle.value = {
-    top: `${rect.bottom + 4}px`,
-    left: `${rect.left + rect.width / 2}px`,
-    transform: 'translateX(-50%)'
-  };
+  const menuHeight = menuRef.value?.offsetHeight || 160;
+  const spaceBelow = window.innerHeight - rect.bottom;
+  const spaceAbove = rect.top;
+  const MARGIN = 8;
+
+  if (spaceBelow < menuHeight && spaceAbove > spaceBelow) {
+    // 下方空间不足且上方空间更大，改为向上弹出
+    menuStyle.value = {
+      top: `${Math.max(MARGIN, rect.top - menuHeight)}px`,
+      left: `${rect.left + rect.width / 2}px`,
+      transform: 'translateX(-50%)'
+    };
+  } else {
+    // 默认向下弹出
+    menuStyle.value = {
+      top: `${rect.bottom + 4}px`,
+      left: `${rect.left + rect.width / 2}px`,
+      transform: 'translateX(-50%)'
+    };
+  }
 };
 
 const startScrollTracking = () => {
@@ -130,5 +145,4 @@ defineExpose({
   transform: translateX(-50%) scale(0.95);
 }
 </style>
-
 

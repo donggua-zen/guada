@@ -126,21 +126,24 @@ export class ModelService {
    * 测试供应商连接（不保存到数据库）
    */
   async testProviderConnection(data: any) {
-    const { provider, apiKey, apiUrl } = data;
-    // const template = PROVIDER_TEMPLATES.find((t) => t.id === provider);
-
-    // if (!template) {
-    //   throw new Error("未知的供应商类型");
-    // }
+    const { provider, apiKey, apiUrl, attributes } = data;
 
     const baseUrl = apiUrl || "";
+    const headers = attributes?.headers;
+
+    const clientOptions: any = {
+      apiKey: apiKey,
+      baseURL: baseUrl,
+    };
+
+    // 支持自定义请求头
+    if (headers && Object.keys(headers).length > 0) {
+      clientOptions.defaultHeaders = { ...headers };
+    }
 
     try {
       // 尝试创建一个临时的 OpenAI 客户端进行测试
-      const client = new OpenAI({
-        apiKey: apiKey,
-        baseURL: baseUrl,
-      });
+      const client = new OpenAI(clientOptions);
 
       // 尝试获取模型列表，如果能成功则说明 Key 和 URL 有效
       await client.models.list();
@@ -379,10 +382,19 @@ export class ModelService {
       // 直接使用数据库中的 apiUrl，不做任何修改
       // OpenAI SDK 会在 baseURL 后面拼接 /models 等路径
 
-      const client = new OpenAI({
+      const clientOptions: any = {
         baseURL: provider.apiUrl,
         apiKey: provider.apiKey,
-      });
+      };
+
+      // 支持自定义请求头
+      const attrs = provider.attributes as any;
+      const headers = attrs?.headers;
+      if (headers && typeof headers === 'object' && Object.keys(headers).length > 0) {
+        clientOptions.defaultHeaders = { ...headers };
+      }
+
+      const client = new OpenAI(clientOptions);
 
       this.logger.log(
         `Fetching remote models for provider ${provider.apiKey} url ${provider.apiUrl}`,
