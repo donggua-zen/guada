@@ -25,6 +25,7 @@ export interface ToolCallItem {
   type: "function";
   name: string;
   arguments: string; // JSON 字符串
+  metadata?: Record<string, any>; // 运行时扩展字段（如 displayMessage）
 }
 
 /**

@@ -9,7 +9,6 @@ import {
   MessageRecord,
 } from "../../../common/types/message.types";
 import {
-  ToolDisplayInfo,
   ToolDefinition,
   ToolParameterProperty,
 } from "../../tools/interfaces/tool-provider.interface";
@@ -47,7 +46,6 @@ export interface LLMResponseChunk {
   reasoningContent?: string | null;
   finishReason?: string | null;
   toolCalls?: ToolCallItem[];
-  displayMessages?: ToolDisplayInfo[]; // 工具调用的展示信息数组（支持结构化数据或字符串）
   contentId?: string;
   usage?: {
     promptTokens: number;

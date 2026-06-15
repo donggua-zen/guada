@@ -33,7 +33,7 @@ export class KnowledgeBaseToolProvider implements IToolProvider {
 
   private readonly toolsConfig: InternalToolDefinition[] = [
     {
-      name: "search",
+      name: "kb_search",
       description: "在知识库中搜索相关内容",
       parameters: {
         type: "object",
@@ -60,7 +60,7 @@ export class KnowledgeBaseToolProvider implements IToolProvider {
       },
     },
     {
-      name: "list_files",
+      name: "kb_list_files",
       description: "列出知识库中的所有文件",
       parameters: {
         type: "object",
@@ -84,7 +84,7 @@ export class KnowledgeBaseToolProvider implements IToolProvider {
       },
     },
     {
-      name: "get_chunks",
+      name: "kb_get_chunks",
       description: "获取文件的分块内容",
       parameters: {
         type: "object",
@@ -108,7 +108,7 @@ export class KnowledgeBaseToolProvider implements IToolProvider {
       },
     },
     {
-      name: "add_document",
+      name: "kb_add_document",
       description: "将指定路径的文本文件添加到知识库中，自动完成分块、向量化和存储",
       parameters: {
         type: "object",
@@ -140,7 +140,7 @@ export class KnowledgeBaseToolProvider implements IToolProvider {
 
     if (sessionType && sessionType !== 'web') {
       // 非 web 会话时，移除 add_document 工具
-      availableTools = this.toolsConfig.filter(tool => tool.name !== 'add_document');
+      availableTools = this.toolsConfig.filter(tool => tool.name !== 'kb_add_document');
     }
 
     // 如果是数组，只返回数组中指定的工具
@@ -157,10 +157,10 @@ export class KnowledgeBaseToolProvider implements IToolProvider {
       string,
       (args: any, injectParams?: Record<string, any>) => Promise<string>
     > = {
-      search: this.handleSearch.bind(this),
-      list_files: this.handleListFiles.bind(this),
-      get_chunks: this.handleGetChunks.bind(this),
-      add_document: this.handleAddDocument.bind(this),
+      kb_search: this.handleSearch.bind(this),
+      kb_list_files: this.handleListFiles.bind(this),
+      kb_get_chunks: this.handleGetChunks.bind(this),
+      kb_add_document: this.handleAddDocument.bind(this),
     };
 
     const handler = handlers[request.name];
@@ -439,8 +439,8 @@ export class KnowledgeBaseToolProvider implements IToolProvider {
   /**
    * 生成知识库工具的展示文案
    */
-  formatDisplayMessage(toolName: string, args: Record<string, any>, isStreaming: boolean): ToolDisplayInfo {
-    const prefix = isStreaming ? '正在' : '已';
+  formatDisplayMessage(toolName: string, args: Record<string, any>, isExecuting: boolean): ToolDisplayInfo {
+    const prefix = isExecuting ? '正在' : '已';
     
     let action: string;
     let toolArgs: string | undefined;

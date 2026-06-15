@@ -82,12 +82,13 @@ export class ToolOrchestrator {
   /**
    * 生成工具调用的展示文案（结构化）
    * @param request 工具调用请求
-   * @param isStreaming 是否处于流式状态
+   * @param isExecuting 工具是否正在执行（true=正在进行，false=已完成）
    * @returns 结构化的展示信息
    */
   generateDisplayMessage(
     request: ToolCallRequest,
-    isStreaming: boolean = true,
+    isExecuting: boolean = true,
+    runtime?: ToolRuntime,
   ): ToolDisplayInfo {
     try {
       // 特殊处理 tool_call 工具：从参数中提取实际调用的工具名
@@ -99,11 +100,12 @@ export class ToolOrchestrator {
           // 递归调用，使用实际的工具名和参数
           return this.generateDisplayMessage(
             { id: request.id, name: actualToolName, arguments: actualArgs },
-            isStreaming,
+            isExecuting,
+            runtime,
           );
         }
         return {
-          action: isStreaming ? "正在调用工具" : "已调用工具",
+          action: isExecuting ? "正在调用工具" : "已调用工具",
           args: request.arguments?.namespace,
           toolName: request.name,
           toolType: "generic",
@@ -111,7 +113,7 @@ export class ToolOrchestrator {
       }
       if (request.name === "tool_load") {
         return {
-          action: isStreaming ? "正在加载工具" : "已加载工具",
+          action: isExecuting ? "正在加载工具" : "已加载工具",
           args: request.arguments?.namespace,
           toolName: request.name,
           toolType: "generic",
@@ -119,27 +121,15 @@ export class ToolOrchestrator {
       }
 
       // 解析工具名称获取命名空间
-      const parts = request.name.split("__");
-      if (parts.length < 2) {
-        // 如果不是标准格式，尝试直接查找
-        return this.generateGenericDisplayInfo(
-          request.name,
-          request.arguments,
-          isStreaming,
-        );
-      }
-
-      const namespace = parts[0];
-      const coreName = parts.slice(1).join("__");
-
+      const namespace = runtime?.resolveNamespace(request.name) || request.name;
       const provider = this.providers.get(namespace);
 
       if (provider && typeof provider.formatDisplayMessage === "function") {
         // 如果提供者返回的是字符串，转换为结构化数据
         const result = provider.formatDisplayMessage(
-          coreName,
+          request.name,
           request.arguments,
-          isStreaming,
+          isExecuting,
         );
         if (typeof result === "string") {
           return {
@@ -161,7 +151,7 @@ export class ToolOrchestrator {
       return this.generateGenericDisplayInfo(
         request.name,
         request.arguments,
-        isStreaming,
+        isExecuting,
       );
     } catch (error) {
       this.logger.warn(
@@ -169,7 +159,7 @@ export class ToolOrchestrator {
         error,
       );
       return {
-        action: isStreaming ? "正在调用工具" : "已调用工具",
+        action: isExecuting ? "正在调用工具" : "已调用工具",
         toolName: request.name,
         toolType: "generic",
       };
@@ -182,7 +172,7 @@ export class ToolOrchestrator {
   private generateGenericDisplayInfo(
     toolName: string,
     args: Record<string, any>,
-    isStreaming: boolean,
+    isExecuting: boolean,
   ): ToolDisplayInfo {
     // 尝试从工具名推断可读名称
     const readableName =
@@ -210,13 +200,11 @@ export class ToolOrchestrator {
       }
     }
 
-    const namespace = toolName.split("__")[0] || "generic";
-
     return {
       action: `${readableName}`,
       args: argsSummary,
       toolName: toolName,
-      toolType: namespace,
+      toolType: "generic",
     };
   }
 
@@ -273,17 +261,12 @@ export class ToolOrchestrator {
       const providerTools = await provider.getTools(enabled, injectParams);
 
       const namespacedTools = providerTools.map((tool) => {
-        const fullName = `${namespace}__${tool.name}`;
-
-        if (toolNames.has(fullName)) {
-          this.logger.warn(`Duplicate tool name detected: ${fullName}`);
+        if (toolNames.has(tool.name)) {
+          this.logger.warn(`Duplicate tool name detected: ${tool.name}`);
         }
-        toolNames.add(fullName);
+        toolNames.add(tool.name);
 
-        return {
-          ...tool,
-          name: fullName,
-        };
+        return tool;
       });
 
       if (loadMode === "lazy") {
@@ -488,13 +471,13 @@ export class ToolOrchestrator {
     context: ToolRuntime,
     abortSignal?: AbortSignal,
   ): Promise<ToolCallResponse> {
-    const parts = fullToolName.split("__");
-    if (parts.length < 2) {
-      throw new Error(`Invalid tool name format: ${fullToolName}`);
+    // 通过 ToolRuntime 查表定位工具所属命名空间
+    const resolved = context.resolveTool(fullToolName);
+    if (!resolved) {
+      throw new Error(`Tool ${fullToolName} is not available or disabled`);
     }
 
-    const namespace = parts[0];
-    const coreName = parts.slice(1).join("__");
+    const { namespace } = resolved;
 
     // 验证工具是否存在
     const provider = this.providers.get(namespace);
@@ -513,21 +496,10 @@ export class ToolOrchestrator {
       );
     }
 
-    // 检查工具是否在可用列表中
-    const isToolAvailable = context
-      .getFlatTools(true)
-      .some((tool) => tool.name === fullToolName);
-
-    if (!isToolAvailable) {
-      throw new Error(
-        `Tool ${coreName} is not available or disabled in namespace ${namespace}`,
-      );
-    }
-
     // 构造工具调用请求
     const toolRequest: ToolCallRequest = {
       id: toolCallId,
-      name: coreName,
+      name: fullToolName,
       arguments: toolArgs,
     };
 
@@ -619,12 +591,7 @@ export class ToolOrchestrator {
       try {
         tools = await provider.getTools(true, {});
 
-        const namespacedTools = tools.map((tool) => ({
-          ...tool,
-          name: `${namespace}__${tool.name}`,
-        }));
-
-        tools = namespacedTools;
+        // 工具名不再拼接命名空间前缀，由 Provider 保证全局唯一
       } catch (error: any) {
         this.logger.error(
           `Error getting tools from provider ${namespace}: ${error.message}`,

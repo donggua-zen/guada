@@ -240,7 +240,7 @@ export class BrowserToolProvider implements IToolProvider {
 
     return [
       {
-        name: 'navigate',
+        name: 'browser_navigate',
         description: '导航到指定 URL，返回页面标题和 URL',
         parameters: {
           type: 'object',
@@ -252,7 +252,7 @@ export class BrowserToolProvider implements IToolProvider {
         },
       },
       {
-        name: 'execute_js',
+        name: 'browser_run_js',
         description: '在指定窗口执行 JavaScript 代码并返回结果。支持直接传入代码字符串或文件路径（相对路径相对于会话工作目录）。获取返回值需要使用return。',
         parameters: {
           type: 'object',
@@ -266,7 +266,7 @@ export class BrowserToolProvider implements IToolProvider {
         },
       },
       // {
-      //   name: 'screenshot',
+      //   name: 'browser_screenshot',
       //   description: '截取当前页面的完整截图（base64 编码 PNG）',
       //   parameters: {
       //     type: 'object',
@@ -276,7 +276,7 @@ export class BrowserToolProvider implements IToolProvider {
       //   },
       // },
       {
-        name: 'get_page_text',
+        name: 'browser_page_text',
         description: '获取指定窗口的页面纯文本内容（移除所有 HTML 标签、脚本和样式）',
         parameters: {
           type: 'object',
@@ -287,7 +287,7 @@ export class BrowserToolProvider implements IToolProvider {
         },
       },
       {
-        name: 'get_page_struct',
+        name: 'browser_page_struct',
         description: '获取指定窗口的页面结构化 JSON（选择器风格优化，大幅减少 Token 占用）',
         parameters: {
           type: 'object',
@@ -298,7 +298,7 @@ export class BrowserToolProvider implements IToolProvider {
         },
       },
       {
-        name: 'get_page_summary',
+        name: 'browser_page_summary',
         description: '获取指定窗口的页面摘要（提取文本、链接和标题层级）',
         parameters: {
           type: 'object',
@@ -309,7 +309,7 @@ export class BrowserToolProvider implements IToolProvider {
         },
       },
       {
-        name: 'go_back',
+        name: 'browser_go_back',
         description: '浏览器后退',
         parameters: {
           type: 'object',
@@ -320,7 +320,7 @@ export class BrowserToolProvider implements IToolProvider {
         },
       },
       {
-        name: 'go_forward',
+        name: 'browser_go_forward',
         description: '浏览器前进',
         parameters: {
           type: 'object',
@@ -331,7 +331,7 @@ export class BrowserToolProvider implements IToolProvider {
         },
       },
       {
-        name: 'reload',
+        name: 'browser_reload',
         description: '刷新指定窗口的页面',
         parameters: {
           type: 'object',
@@ -342,7 +342,7 @@ export class BrowserToolProvider implements IToolProvider {
         },
       },
       {
-        name: 'click',
+        name: 'browser_click',
         description: '点击指定窗口中 CSS 选择器匹配的元素',
         parameters: {
           type: 'object',
@@ -354,7 +354,7 @@ export class BrowserToolProvider implements IToolProvider {
         },
       },
       {
-        name: 'fill_input',
+        name: 'browser_input',
         description: '向指定窗口的输入框填入文本',
         parameters: {
           type: 'object',
@@ -367,7 +367,7 @@ export class BrowserToolProvider implements IToolProvider {
         },
       },
       {
-        name: 'open_new_window',
+        name: 'browser_new_window',
         description: '打开新的独立窗口，返回 window_id。支持传递元数据用于 session 隔离和作用域标识',
         parameters: {
           type: 'object',
@@ -386,7 +386,7 @@ export class BrowserToolProvider implements IToolProvider {
         },
       },
       {
-        name: 'close_window',
+        name: 'browser_close',
         description: '关闭指定窗口并清除所有浏览数据',
         parameters: {
           type: 'object',
@@ -397,7 +397,7 @@ export class BrowserToolProvider implements IToolProvider {
         },
       },
       {
-        name: 'get_window_list',
+        name: 'browser_windows',
         description: '获取当前所有窗口的列表，包括窗口 ID、URL、标题等信息',
         parameters: {
           type: 'object',
@@ -422,8 +422,8 @@ export class BrowserToolProvider implements IToolProvider {
         throw new Error('Request was aborted');
       }
 
-      // 特殊处理 open_new_window，注入会话路径和会话 ID
-      if (request.name === 'open_new_window') {
+      // 特殊处理 browser_new_window，注入会话路径和会话 ID
+      if (request.name === 'browser_new_window') {
         const sessionPath = context?.workspacePath as string | undefined
         const sessionId = context?.sessionId as string | undefined
         const argsWithSession = {
@@ -438,15 +438,15 @@ export class BrowserToolProvider implements IToolProvider {
         return JSON.stringify(result)
       }
 
-      // 特殊处理 execute_js，支持文件路径
-      if (request.name === 'execute_js') {
+      // 特殊处理 browser_run_js，支持文件路径
+      if (request.name === 'browser_run_js') {
         return await this.executeJsWithFileSupport(request.arguments, context, abortSignal)
       }
 
       const result = await this.sendRequest(request.name, request.arguments, abortSignal)
 
-      // 特殊处理 get_page_struct，如果结果过大则保存到临时文件
-      if (request.name === 'get_page_struct') {
+      // 特殊处理 browser_page_struct，如果结果过大则保存到临时文件
+      if (request.name === 'browser_page_struct') {
         return await this.handleLargeStructResult(result, context)
       }
 
@@ -492,7 +492,7 @@ export class BrowserToolProvider implements IToolProvider {
     }
 
     // 发送请求到 Electron
-    const result = await this.sendRequest('execute_js', {
+    const result = await this.sendRequest('browser_run_js', {
       code: finalCode,
       window_id,
       is_async: is_async || false,
@@ -556,7 +556,7 @@ export class BrowserToolProvider implements IToolProvider {
   }
 
   /**
-   * 处理 get_page_struct 的大结果，超过 100KB 时保存到临时文件
+   * 处理 browser_page_struct 的大结果，超过 100KB 时保存到临时文件
    */
   private async handleLargeStructResult(result: any, context?: Record<string, any>): Promise<string> {
     const MAX_SIZE_BYTES = 50 * 1024 // 100KB
@@ -567,12 +567,12 @@ export class BrowserToolProvider implements IToolProvider {
 
     // 如果结果小于 100KB，直接返回
     if (byteSize <= MAX_SIZE_BYTES) {
-      this.logger.debug(`get_page_struct result size: ${byteSize} bytes (< 100KB), returning directly`)
+      this.logger.debug(`page_struct result size: ${byteSize} bytes (< 100KB), returning directly`)
       return jsonString
     }
 
     // 结果过大，保存到临时文件
-    this.logger.log(`get_page_struct result too large: ${byteSize} bytes (> 100KB), saving to temp file`)
+    this.logger.log(`page_struct result too large: ${byteSize} bytes (> 100KB), saving to temp file`)
 
     try {
       // 确保 sessionId 存在
@@ -582,7 +582,7 @@ export class BrowserToolProvider implements IToolProvider {
 
       // 生成临时文件名
       const timestamp = Date.now()
-      const fileName = `get_page_struct_output_${timestamp}.json`
+      const fileName = `page_struct_output_${timestamp}.json`
 
       // 使用注入的工作路径创建 tools_output 目录
       const workspaceDir = context?.workspacePath
@@ -631,25 +631,25 @@ export class BrowserToolProvider implements IToolProvider {
       '## 多窗口支持',
       '- 最多支持 5 个并发窗口',
       '- 每个窗口有独立的会话隔离（cookies、localStorage 等完全隔离）',
-      '- 使用 `get_window_list()` 查看当前所有可用窗口',
-      '- 使用 `open_new_window(url)` 创建新窗口后会返回新的 `window_id`',
+      '- 使用 `browser_windows()` 查看当前所有可用窗口',
+      '- 使用 `browser_new_window(url)` 创建新窗口后会返回新的 `window_id`',
       '',
       '## 使用建议',
-      '1. 先用 `open_new_window(url)` 创建新窗口并导航到目标网页，获取 `window_id`',
-      '2. 用 `get_page_text` 获取纯文本内容进行分析（适合快速了解页面主要内容）',
-      '3. 用 `get_page_struct` 获取结构化 JSON（适合需要分析 DOM 结构或提取特定元素）',
-      '4. 如需交互，使用 `click` 和 `fill_input` 操作页面元素',
-      '5. 进阶功能，使用 `execute_js` 编写 JavaScript 或使用 `file_path` 参数执行外部 JS 文件',
+      '1. 先用 `browser_new_window(url)` 创建新窗口并导航到目标网页，获取 `window_id`',
+      '2. 用 `browser_page_text` 获取纯文本内容进行分析（适合快速了解页面主要内容）',
+      '3. 用 `browser_page_struct` 获取结构化 JSON（适合需要分析 DOM 结构或提取特定元素）',
+      '4. 如需交互，使用 `browser_click` 和 `browser_input` 操作页面元素',
+      '5. 进阶功能，使用 `browser_run_js` 编写 JavaScript 或使用 `file_path` 参数执行外部 JS 文件',
       '6. 所有新打开的自动化窗口都是**完全无痕的**，关闭后不留任何数据，如果需要保存登录信息，请导出认证相关信息（如cookie）并下次注入',
       '',
-      '## execute_js 异步代码使用',
+      '## browser_run_js 异步代码使用',
       '当需要执行异步代码时，设置 `is_async: true`：',
       '- `async/await` 语法',
       '- `Promise` 对象',
       '- `fetch` API 进行网络请求',
       '- `setTimeout/setInterval` 等定时器',
       '',
-      '## execute_js 文件执行',
+      '## run_js 文件执行',
       '可以通过 `file_path` 参数执行外部 JavaScript 文件，长代码建议使用此方法',
       '',
       '```javascript',
@@ -674,7 +674,7 @@ export class BrowserToolProvider implements IToolProvider {
       '```',
       '',
       '## 浏览器内文件存储 API（导出/保存到本地、读取本地文件）',
-      '每个浏览器自动化窗口的渲染进程中都注入了 `window._browserBridge` 对象，支持在页面内部直接保存数据到本地文件或读取本地文件。支持文本、JSON 和二进制数据（通过 base64 编码）。你可以在 `execute_js` 的代码中调用这些方法：',
+      '每个浏览器自动化窗口的渲染进程中都注入了 `window._browserBridge` 对象，支持在页面内部直接保存数据到本地文件或读取本地文件。支持文本、JSON 和二进制数据（通过 base64 编码）。你可以在 `run_js` 的代码中调用这些方法：',
       '',
       '- `window._browserBridge.saveLocalFile(filename, data, options?)` — 保存数据到本地文件（导出/下载）',
       '  - `filename`: 文件名（字符串,只能导出到工作目录下）',
@@ -757,23 +757,22 @@ export class BrowserToolProvider implements IToolProvider {
   /**
    * 生成浏览器工具的展示文案
    */
-  formatDisplayMessage(toolName: string, args: Record<string, any>, isStreaming: boolean): ToolDisplayInfo {
-    const prefix = isStreaming ? '正在' : '已';
+  formatDisplayMessage(toolName: string, args: Record<string, any>, isExecuting: boolean): ToolDisplayInfo {
+    const prefix = isExecuting ? '正在' : '已';
 
     let action: string;
     let toolArgs: string | undefined;
     let toolType: string = this.namespace;
 
     switch (toolName) {
-      case 'open_new_window':
+      case 'browser_new_window':
         action = `${prefix}打开新窗口`;
         toolArgs = args.url;
         break;
-      case 'close_window':
+      case 'browser_close':
         action = `${prefix}关闭窗口`;
         break;
-      case 'navigate':
-      case 'goto':
+      case 'browser_navigate':
         const url = args.url;
         if (url) {
           action = `${prefix}访问网页`;
@@ -783,42 +782,41 @@ export class BrowserToolProvider implements IToolProvider {
         }
         break;
 
-      case 'screenshot':
+      case 'browser_screenshot':
         action = `${prefix}截图`;
         break;
 
-      case 'click':
+      case 'browser_click':
         const selector = args.selector;
         action = `${prefix}点击`;
         toolArgs = selector;
         break;
 
-      case 'type':
-      case 'input':
+      case 'browser_input':
         const inputSelector = args.selector;
         action = `${prefix}输入文本`;
         toolArgs = inputSelector;
         break;
 
-      case 'get_text':
+      case 'browser_page_text':
         action = `${prefix}提取页面文本`;
         break;
 
-      case 'get_page_struct':
+      case 'browser_page_struct':
         action = `${prefix}获取页面结构`;
         break;
 
-      case 'execute_js':
+      case 'browser_run_js':
         action = `${prefix}执行 JavaScript`;
         toolType = "code";
         toolArgs = args.code || args.file_path;
         break;
 
-      case 'wait_for':
+      case 'browser_wait':
         action = `${prefix}等待元素`;
         break;
 
-      case 'scroll':
+      case 'browser_scroll':
         action = `${prefix}滚动页面`;
         break;
 
@@ -829,7 +827,7 @@ export class BrowserToolProvider implements IToolProvider {
     return {
       action,
       args: toolArgs,
-      toolName: `browser__${toolName}`,
+      toolName: toolName,
       toolType: toolType  // 返回 toolType，code 类型会使用 Code24Regular，其他使用 browser namespace 映射到 WindowWrench24Regular
     };
   }

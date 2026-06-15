@@ -127,13 +127,13 @@ export class ShellToolProvider implements IToolProvider {
   formatDisplayMessage(
     toolName: string,
     args: Record<string, any>,
-    isStreaming: boolean,
+    isExecuting: boolean,
   ): ToolDisplayInfo {
     const cmd = args.command;
     return {
-      action: isStreaming ? "正在执行命令" : "已执行命令",
+      action: isExecuting ? "正在执行命令" : "已执行命令",
       args: cmd?.length > 60 ? cmd.substring(0, 60) + "..." : cmd,
-      toolName: `shell__${toolName}`,
+      toolName: toolName,
     };
   }
 

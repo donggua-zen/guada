@@ -21,7 +21,7 @@ export class SchedulerToolProvider implements IToolProvider {
 
   private readonly toolsConfig: ToolDefinition[] = [
     {
-      name: "create_task",
+      name: "scheduler_create_task",
       description:
         "创建一个定时任务，让 AI 可以在指定时间自动执行提示词。任务会注入到当前会话中执行。",
       parameters: {
@@ -68,7 +68,7 @@ export class SchedulerToolProvider implements IToolProvider {
       },
     },
     {
-      name: "list_tasks",
+      name: "scheduler_list_tasks",
       description: "获取当前用户的所有定时任务列表",
       parameters: {
         type: "object",
@@ -76,7 +76,7 @@ export class SchedulerToolProvider implements IToolProvider {
       },
     },
     {
-      name: "delete_task",
+      name: "scheduler_delete_task",
       description: "删除指定的定时任务",
       parameters: {
         type: "object",
@@ -90,7 +90,7 @@ export class SchedulerToolProvider implements IToolProvider {
       },
     },
     {
-      name: "toggle_task",
+      name: "scheduler_toggle_task",
       description: "启用或禁用指定的定时任务",
       parameters: {
         type: "object",
@@ -135,10 +135,10 @@ export class SchedulerToolProvider implements IToolProvider {
         signal?: AbortSignal,
       ) => Promise<string>
     > = {
-      create_task: this.handleCreateTask.bind(this),
-      list_tasks: this.handleListTasks.bind(this),
-      delete_task: this.handleDeleteTask.bind(this),
-      toggle_task: this.handleToggleTask.bind(this),
+      scheduler_create_task: this.handleCreateTask.bind(this),
+      scheduler_list_tasks: this.handleListTasks.bind(this),
+      scheduler_delete_task: this.handleDeleteTask.bind(this),
+      scheduler_toggle_task: this.handleToggleTask.bind(this),
     };
 
     const handler = handlers[request.name];
@@ -383,9 +383,9 @@ export class SchedulerToolProvider implements IToolProvider {
   formatDisplayMessage(
     toolName: string,
     args: Record<string, any>,
-    isStreaming: boolean,
+    isExecuting: boolean,
   ): ToolDisplayInfo {
-    const prefix = isStreaming ? "正在" : "已";
+    const prefix = isExecuting ? "正在" : "已";
 
     switch (toolName) {
       case "create_task":

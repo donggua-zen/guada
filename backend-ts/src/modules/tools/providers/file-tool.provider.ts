@@ -58,18 +58,18 @@ export class FileToolProvider implements IToolProvider {
       parameters: {
         type: "object",
         properties: {
-          directory_path: {
+          path: {
             type: "string",
             description: "要列出的目录路径（绝对路径或相对路径）",
           },
-          max_depth: {
+          depth: {
             type: "number",
             description:
               "递归深度，范围 1-3。1=仅当前目录，2=包含一级子目录，3=包含两级子目录",
             default: 1,
           },
         },
-        required: ["directory_path"],
+        required: ["path"],
       },
     },
     {
@@ -96,7 +96,7 @@ export class FileToolProvider implements IToolProvider {
       },
     },
     {
-      name: "replace",
+      name: "edit",
       description: "在文件中查找并替换指定文本",
       parameters: {
         type: "object",
@@ -105,18 +105,18 @@ export class FileToolProvider implements IToolProvider {
             type: "string",
             description: "目标文件路径（绝对路径或相对路径）",
           },
-          search_text: {
+          old_text: {
             type: "string",
             description: "需要被替换的原始文本",
           },
-          replace_text: {
+          new_text: {
             type: "string",
             description: "用于替换的新文本",
           },
-          expected_count: {
+          count: {
             type: "number",
             description:
-              "预期匹配并替换的次数。默认为 1；设为 -1 或 0 表示替换所有匹配项；设为正整数则必须严格匹配该次数",
+              "预期匹配并修改的次数。默认为 1；小于 0 表示替换所有匹配项；设为正整数则会严格匹配该次数，防止预期外的修改",
             default: 1,
           },
           encoding: {
@@ -125,7 +125,7 @@ export class FileToolProvider implements IToolProvider {
             default: "utf-8",
           },
         },
-        required: ["file_path", "search_text", "replace_text"],
+        required: ["file_path", "old_text", "new_text"],
       },
     },
     {
@@ -144,7 +144,7 @@ export class FileToolProvider implements IToolProvider {
       },
     },
     {
-      name: "grep_file",
+      name: "grep",
       description:
         "使用正则表达式搜索文件内容。返回匹配的行及其行号。适合查找特定模式或关键词。",
       parameters: {
@@ -207,9 +207,9 @@ export class FileToolProvider implements IToolProvider {
       read: this.handleReadFile.bind(this),
       list: this.handleListDirectory.bind(this),
       write: this.handleWriteFile.bind(this),
-      replace: this.handleReplaceInFile.bind(this),
+      edit: this.handleReplaceInFile.bind(this),
       delete: this.handleDelete.bind(this),
-      grep_file: this.handleGrepFile.bind(this),
+      grep: this.handleGrepFile.bind(this),
     };
 
     const handler = handlers[request.name];
@@ -274,10 +274,10 @@ export class FileToolProvider implements IToolProvider {
   formatDisplayMessage(
     toolName: string,
     args: Record<string, any>,
-    isStreaming: boolean,
+    isExecuting: boolean,
   ): ToolDisplayInfo {
-    const prefix = isStreaming ? "正在" : "已";
-    const fileName = args.file_path || args.path || args.directory_path;
+    const prefix = isExecuting ? "正在" : "已";
+    const fileName = args.file_path || args.path || args.path;
 
     let action: string;
     let toolType: string = this.namespace;
@@ -301,12 +301,12 @@ export class FileToolProvider implements IToolProvider {
         action = `${prefix}删除`;
         break;
 
-      case "replace":
+      case "edit":
         action = `${prefix}修改`;
         toolType = "edit";
         break;
 
-      case "grep_file":
+      case "grep":
         action = `${prefix}搜索`;
         toolType = "search";
         break;
@@ -318,7 +318,7 @@ export class FileToolProvider implements IToolProvider {
     return {
       action,
       args: fileName,
-      toolName: `file__${toolName}`,
+      toolName: toolName,
       toolType,
     };
   }
@@ -484,14 +484,12 @@ export class FileToolProvider implements IToolProvider {
         file_path: resolvedPath,
         chars_read: selectedContent.length,
         total_chars: content.length,
-        lines_info: {
-          start_line: startLine,
-          end_line: endLine,
-          total_lines: totalLines,
-          lines_read: endLine - startLine,
-          skip_chars_in_start_line: skip_chars,
-        },
-        has_more: hasMore,
+
+        start_line: startLine,
+        end_line: endLine,
+        total_lines: totalLines,
+        lines_read: endLine - startLine,
+
         next_offset: hasMore ? endLine : undefined,
         next_skip_chars:
           hasMore && currentChars >= MAX_BYTES
@@ -521,21 +519,21 @@ export class FileToolProvider implements IToolProvider {
     args: any,
     context?: Record<string, any>,
   ): Promise<string> {
-    const { directory_path, max_depth = 1 } = args;
+    const { path, depth = 1 } = args;
 
     // 验证目录路径
-    if (!directory_path || typeof directory_path !== "string") {
+    if (!path || typeof path !== "string") {
       throw new Error("目录路径不能为空");
     }
 
     // 验证递归深度
-    const depth = Math.max(1, Math.min(3, max_depth));
+    const finalDepth = Math.max(1, Math.min(3, depth));
 
     try {
       // 解析路径
-      const resolvedPath = this.resolvePath(directory_path, context);
+      const resolvedPath = this.resolvePath(path, context);
       this.logger.log(
-        `列出目录: ${directory_path} -> ${resolvedPath}, 递归深度: ${depth}`,
+        `列出目录: ${path} -> ${resolvedPath}, 递归深度: ${depth}`,
       );
 
       // 检查是否为目录
@@ -545,7 +543,10 @@ export class FileToolProvider implements IToolProvider {
       }
 
       // 读取目录内容
-      const entries = await this.readDirectoryWithDepth(resolvedPath, depth);
+      const entries = await this.readDirectoryWithDepth(
+        resolvedPath,
+        finalDepth,
+      );
 
       if (entries.length === 0) {
         return `目录为空：${resolvedPath}`;
@@ -562,9 +563,9 @@ export class FileToolProvider implements IToolProvider {
       this.logger.error(`列出目录失败：${error.message}`);
 
       if (error.code === "ENOENT") {
-        throw new Error(`目录不存在 - ${directory_path}`);
+        throw new Error(`目录不存在 - ${path}`);
       } else if (error.code === "EACCES") {
-        throw new Error(`没有权限访问目录 - ${directory_path}`);
+        throw new Error(`没有权限访问目录 - ${path}`);
       }
 
       throw error;
@@ -720,9 +721,9 @@ export class FileToolProvider implements IToolProvider {
   ): Promise<string> {
     const {
       file_path,
-      search_text,
-      replace_text,
-      expected_count = 1,
+      old_text,
+      new_text,
+      count = 1,
       encoding = "utf-8",
     } = args;
 
@@ -731,14 +732,14 @@ export class FileToolProvider implements IToolProvider {
       throw new Error("文件路径不能为空");
     }
 
-    if (!search_text || typeof search_text !== "string") {
+    if (!old_text || typeof old_text !== "string") {
       throw new Error("搜索文本不能为空");
     }
 
     if (
-      replace_text === undefined ||
-      replace_text === null ||
-      typeof replace_text !== "string"
+      new_text === undefined ||
+      new_text === null ||
+      typeof new_text !== "string"
     ) {
       throw new Error("替换文本不能为空");
     }
@@ -751,7 +752,7 @@ export class FileToolProvider implements IToolProvider {
       this.validateWritePath(file_path, context);
 
       this.logger.log(
-        `替换文件内容: ${file_path} -> ${resolvedPath}, 搜索: "${search_text}", 替换为: "${replace_text}", 预期次数: ${expected_count}`,
+        `替换文件内容: ${file_path} -> ${resolvedPath}, 搜索: "${old_text}", 替换为: "${new_text}", 预期次数: ${count}`,
       );
 
       // 检查文件是否存在且为文件
@@ -769,10 +770,10 @@ export class FileToolProvider implements IToolProvider {
       const normalizedOriginal = originalContent
         .replace(/\r\n/g, "\n")
         .replace(/\r/g, "\n");
-      const normalizedSearch = search_text
+      const normalizedSearch = old_text
         .replace(/\r\n/g, "\n")
         .replace(/\r/g, "\n");
-      const normalizedReplace = replace_text
+      const normalizedReplace = new_text
         .replace(/\r\n/g, "\n")
         .replace(/\r/g, "\n");
 
@@ -788,19 +789,17 @@ export class FileToolProvider implements IToolProvider {
 
       // 验证匹配次数
       if (matchCount === 0) {
-        throw new Error(`未找到匹配的文本 "${search_text}"`);
+        throw new Error(`未找到匹配的文本 "${old_text}"`);
       }
 
       // 如果设置了具体的期望次数（非 -1 或 0），则验证是否匹配
-      if (expected_count > 0 && matchCount !== expected_count) {
-        throw new Error(
-          `实际匹配 ${matchCount} 次，但预期匹配 ${expected_count} 次`,
-        );
+      if (count > 0 && matchCount !== count) {
+        throw new Error(`实际匹配 ${matchCount} 次，但预期匹配 ${count} 次`);
       }
 
       // 执行替换（使用标准化后的内容）
       let newNormalizedContent: string;
-      if (expected_count === -1 || expected_count === 0) {
+      if (count === -1 || count === 0) {
         // 替换所有匹配项
         newNormalizedContent = normalizedOriginal
           .split(normalizedSearch)

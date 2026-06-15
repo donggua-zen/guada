@@ -23,7 +23,7 @@ describe('AgentEngine - completions', () => {
 
       await expect(
         (async () => {
-          for await (const _ of agentEngine.completions(mocks.sessionContext, 'msg-001')) {
+          for await (const _ of agentEngine.run(mocks.sessionContext, 'msg-001')) {
             // consume generator
           }
         })(),
@@ -49,7 +49,7 @@ describe('AgentEngine - completions', () => {
 
       // 第一次请求
       const events1: EventChunk[] = [];
-      for await (const event of agentEngine.completions(mocks.sessionContext, 'msg-001')) {
+      for await (const event of agentEngine.run(mocks.sessionContext, 'msg-001')) {
         events1.push(event);
       }
 
@@ -61,7 +61,7 @@ describe('AgentEngine - completions', () => {
 
       // 第二次请求应该能成功
       const events2: EventChunk[] = [];
-      for await (const event of agentEngine.completions(mocks.sessionContext, 'msg-002')) {
+      for await (const event of agentEngine.run(mocks.sessionContext, 'msg-002')) {
         events2.push(event);
       }
 
@@ -86,7 +86,7 @@ describe('AgentEngine - completions', () => {
       );
 
       const events: EventChunk[] = [];
-      for await (const event of agentEngine.completions(mocks.sessionContext, 'msg-001')) {
+      for await (const event of agentEngine.run(mocks.sessionContext, 'msg-001')) {
         events.push(event);
       }
 
@@ -118,7 +118,7 @@ describe('AgentEngine - completions', () => {
       );
 
       const events: EventChunk[] = [];
-      for await (const event of agentEngine.completions(mocks.sessionContext, 'msg-001')) {
+      for await (const event of agentEngine.run(mocks.sessionContext, 'msg-001')) {
         events.push(event);
       }
 
@@ -170,7 +170,7 @@ describe('AgentEngine - completions', () => {
 
       const events: EventChunk[] = [];
       try {
-        for await (const event of agentEngine.completions(
+        for await (const event of agentEngine.run(
           mocks.sessionContext,
           'msg-001',
           'overwrite',
@@ -214,7 +214,7 @@ describe('AgentEngine - completions', () => {
       );
 
       const events: EventChunk[] = [];
-      for await (const event of agentEngine.completions(mocks.sessionContext, 'msg-001')) {
+      for await (const event of agentEngine.run(mocks.sessionContext, 'msg-001')) {
         events.push(event);
       }
 
@@ -256,7 +256,7 @@ describe('AgentEngine - completions', () => {
       );
 
       const events: EventChunk[] = [];
-      for await (const event of agentEngine.completions(mocks.sessionContext, 'msg-001')) {
+      for await (const event of agentEngine.run(mocks.sessionContext, 'msg-001')) {
         events.push(event);
       }
 
@@ -311,7 +311,7 @@ describe('AgentEngine - completions', () => {
       );
 
       const events: EventChunk[] = [];
-      for await (const event of agentEngine.completions(mocks.sessionContext, 'msg-001')) {
+      for await (const event of agentEngine.run(mocks.sessionContext, 'msg-001')) {
         events.push(event);
       }
 
@@ -348,7 +348,7 @@ describe('AgentEngine - completions', () => {
       );
 
       const events: EventChunk[] = [];
-      for await (const event of agentEngine.completions(mocks.sessionContext, 'msg-001')) {
+      for await (const event of agentEngine.run(mocks.sessionContext, 'msg-001')) {
         events.push(event);
       }
 
@@ -375,7 +375,7 @@ describe('AgentEngine - completions', () => {
       );
 
       const events: EventChunk[] = [];
-      for await (const event of agentEngine.completions(mocks.sessionContext, 'msg-001')) {
+      for await (const event of agentEngine.run(mocks.sessionContext, 'msg-001')) {
         events.push(event);
       }
 
@@ -403,7 +403,7 @@ describe('AgentEngine - completions', () => {
       );
 
       const events: EventChunk[] = [];
-      for await (const event of agentEngine.completions(mocks.sessionContext, 'msg-001')) {
+      for await (const event of agentEngine.run(mocks.sessionContext, 'msg-001')) {
         events.push(event);
       }
 
@@ -431,7 +431,7 @@ describe('AgentEngine - completions', () => {
       );
 
       const events: EventChunk[] = [];
-      for await (const event of agentEngine.completions(mocks.sessionContext, 'msg-001')) {
+      for await (const event of agentEngine.run(mocks.sessionContext, 'msg-001')) {
         if (event.type === 'text') {
           events.push(event);
         }
@@ -458,7 +458,7 @@ describe('AgentEngine - completions', () => {
       );
 
       const events: EventChunk[] = [];
-      for await (const event of agentEngine.completions(mocks.sessionContext, 'msg-001')) {
+      for await (const event of agentEngine.run(mocks.sessionContext, 'msg-001')) {
         events.push(event);
       }
 
@@ -486,7 +486,7 @@ describe('AgentEngine - completions', () => {
       );
 
       const events: EventChunk[] = [];
-      for await (const event of agentEngine.completions(mocks.sessionContext, 'msg-001')) {
+      for await (const event of agentEngine.run(mocks.sessionContext, 'msg-001')) {
         events.push(event);
       }
 

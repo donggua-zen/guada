@@ -87,7 +87,7 @@ export class BrowserAutomationService {
     const windowInfo = windows.find(w => w.windowId === windowId)
 
     if (!windowInfo) {
-      throw new Error(`Window ${windowId} not found. Use get_window_list() to see available windows.`)
+      throw new Error(`Window ${windowId} not found. Use browser_windows() to see available windows.`)
     }
 
     return { windowId, windowInfo }
@@ -479,7 +479,7 @@ export class BrowserAutomationService {
         errorMessage += `\n1. Check for syntax errors in your JavaScript code`
         errorMessage += `\n2. Ensure all variables and functions are defined`
         errorMessage += `\n3. Try wrapping your code in a try-catch block`
-        errorMessage += `\n4. Use execute_js with simpler code first to test`
+        errorMessage += `\n4. Use browser_run_js with simpler code first to test`
       }
           
       return {
@@ -1317,50 +1317,50 @@ export class BrowserAutomationService {
 
     try {
       switch (method) {
-        case 'navigate':
+        case 'browser_navigate':
           return await this.navigate(params.url, params.window_id)
 
         // TODO: 暂时注释截图工具
         // case 'screenshot':
         //   return await this.screenshot({ ...params, windowId: params.window_id })
 
-        case 'execute_js':
+        case 'browser_run_js':
           return await this.executeJavaScript(params.code, params.window_id, params.is_async || false)
 
-        case 'get_page_struct':
+        case 'browser_page_struct':
           return await this.getPageStruct(params.window_id)
 
-        case 'get_page_text':
+        case 'browser_page_text':
           return await this.getPageText(params.window_id)
 
-        case 'get_page_summary':
+        case 'browser_page_summary':
           return await this.getPageSummary(params.window_id)
 
-        case 'wait_for_selector':
+        case 'browser_wait':
           return await this.waitForSelector(params.selector, params.timeout, params.window_id)
 
-        case 'click':
+        case 'browser_click':
           return await this.click(params.selector, params.window_id)
 
-        case 'fill_input':
+        case 'browser_input':
           return await this.fillForm(params.selector, params.value, params.window_id)
 
-        case 'go_back':
+        case 'browser_back':
           return await this.goBack(params.window_id)
 
-        case 'go_forward':
+        case 'browser_forward':
           return await this.goForward(params.window_id)
 
-        case 'reload':
+        case 'browser_reload':
           return await this.reload(params.window_id)
 
-        case 'open_new_window':
+        case 'browser_new_window':
           return await this.openNewWindow(params?.url, params?.session_path, params?.session_id)
 
-        case 'close_window':
+        case 'browser_close':
           return await this.closeWindow(params.window_id)
 
-        case 'get_window_list':
+        case 'browser_windows':
           return {
             success: true,
             windows: this.getWindowList(),

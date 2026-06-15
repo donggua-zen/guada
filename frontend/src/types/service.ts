@@ -71,7 +71,6 @@ export interface StreamThinkEvent {
 export interface StreamToolCallEvent {
     type: 'tool_call'
     toolCalls: ToolCall[]  // 驼峰式
-    displayMessages?: string[]  // 工具调用的展示文案数组
 }
 
 /**
@@ -92,7 +91,6 @@ export interface ToolCall {
     type: 'function'
     name: string
     arguments?: string
-    displayMessage?: string  // 展示文案
 }
 
 /**

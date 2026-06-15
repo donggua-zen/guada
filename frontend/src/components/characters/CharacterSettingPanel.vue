@@ -1041,17 +1041,9 @@ const handleAllSubToolsToggle = (enabled) => {
   }
 };
 
-// 获取工具的显示名称（去除 namespace 前缀）
+// 获取工具的显示名称（工具名不再拼接命名空间前缀，直接返回原名称）
 const getToolDisplayName = (toolName) => {
-  if (!toolName) return '';
-  // 检查是否包含 __ 前缀（如 shell__execute_command）
-  const parts = toolName.split('__');
-  // 如果有前缀且前缀长度 > 1，返回第二部分
-  if (parts.length > 1 && parts[0].length > 0) {
-    return parts.slice(1).join('__');
-  }
-  // 否则直接返回原名称
-  return toolName;
+  return toolName || '';
 };
 
 const loadModels = async () => {

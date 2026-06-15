@@ -153,9 +153,8 @@ export class AgentEngine {
     abortSignal?: AbortSignal,
     resumeData?: any,
   ): AsyncGenerator<EventChunk> {
-    const tools = sessionContext.getToolContext()?.getFlatTools();
-    // 清理上一轮的工具调用状态
-    this.displayManager.clear();
+    const toolContext = sessionContext.getToolContext();
+    const tools = toolContext?.getFlatTools();
 
     // 判断是否为断点模式
 
@@ -276,9 +275,8 @@ export class AgentEngine {
             }
 
             chunk.contentId = contentId;
-
-            const yieldEvent = this.buildYieldEvent(chunk, accumulated);
-            if (yieldEvent) {
+            const yieldEvent = this.buildYieldEvent(chunk, accumulated, toolContext);           
+            if (yieldEvent) {             
               yield yieldEvent;
             }
           }
@@ -345,10 +343,6 @@ export class AgentEngine {
             usage: assistantResponse.metadata?.usage,
           };
 
-          // 在持久化前，将最终的文案注入到 toolCalls 的 metadata 中
-          this.displayManager.injectDisplayMessages(
-            assistantResponse.toolCalls,
-          );
           // 持久化当前消息（包含断点元数据），确保刷新后仍能显示继续按钮
           await sessionContext.appendParts(parts);
           break;
@@ -389,9 +383,8 @@ export class AgentEngine {
         }
 
         // 【已处理场景】执行 approved 工具 + 为 rejected 工具生成错误响应
-        const completedDisplayMessages = this.displayManager.finalizeAll(
-          assistantResponse.toolCalls,
-        );
+        // 工具执行完毕后，重新格式化展示文案（此时已完成状态），更新到 assistant metadata，
+        // 再通过 tool_calls_response 事件传送给前端（工具结果本身不持久化文案）
 
         // 执行 approved 工具（包括已通过审批和不需要审批的）
         let toolResponses: any[] = [];
@@ -407,6 +400,22 @@ export class AgentEngine {
             abortSignal,
           );
 
+          // 工具执行完毕，重新格式化文案（已完成状态）并更新到 assistant toolCalls metadata
+          const toolCallDisplayMessages = approvedTools.map((at: any) => {
+            const tc = assistantResponse.toolCalls?.find((t: any) => t.id === at.id);
+            if (tc) {
+              if (!tc.metadata) tc.metadata = {};
+              tc.metadata.displayMessage = this.displayManager.format(
+                tc.name,
+                tc.arguments,
+                false,
+                toolContext,
+              );
+              return tc.metadata.displayMessage;
+            }
+            return undefined;
+          });
+
           yield {
             type: "tool_calls_response",
             toolCallsResponse: toolResponses.map((tr) => ({
@@ -414,10 +423,7 @@ export class AgentEngine {
               content: tr.content,
               toolCallId: tr.toolCallId,
             })),
-            displayMessages: completedDisplayMessages.filter((_, index) => {
-              const tc = assistantResponse.toolCalls[index];
-              return approvedTools.some((at: any) => at.id === tc.id);
-            }),
+            displayMessages: toolCallDisplayMessages,
             contentId,
           };
 
@@ -475,7 +481,6 @@ export class AgentEngine {
         }
 
         // 在持久化前，将最终的文案注入到 toolCalls 的 metadata 中
-        this.displayManager.injectDisplayMessages(assistantResponse.toolCalls);
         needToContinue = true;
       }
 
@@ -580,17 +585,24 @@ export class AgentEngine {
   private buildYieldEvent(
     chunk: LLMResponseChunk,
     accumulated?: LLMResponseChunk,
+    runtime?: any,
   ): EventChunk | null {
     let eventType: EventChunk["type"];
 
     if (chunk.finishReason) {
       eventType = "finish";
       if (accumulated.toolCalls) {
-        // 从文案管理器获取展示文案
-        const displayMessages = accumulated.toolCalls.map((tc) => {
-          return this.displayManager.getDisplayMessage(tc.index);
+        // LLM 流式结束但工具尚未执行，标记为"正在进行"（isExecuting=true）
+        // 等工具执行完毕后（executeAgentLoop 中）再更新为"已完成"（isExecuting=false）
+        accumulated.toolCalls.forEach((tc) => {
+          if (!tc.metadata) tc.metadata = {};
+          tc.metadata.displayMessage = this.displayManager.format(
+            tc.name,
+            tc.arguments,
+            true,
+            runtime,
+          );
         });
-        accumulated.displayMessages = displayMessages;
       }
     } else if (chunk.reasoningContent) {
       eventType = "think";
@@ -598,11 +610,16 @@ export class AgentEngine {
       eventType = "text";
     } else if (chunk.toolCalls) {
       eventType = "tool_call";
-      // 从文案管理器获取展示文案
-      const displayMessages = chunk.toolCalls.map((tc) => {
-        return this.displayManager.getDisplayMessage(tc.index);
+      // 将文案注入到 toolCalls 的 metadata 中，确保刷新后仍可显示
+      chunk.toolCalls.forEach((tc) => {
+        if (!tc.metadata) tc.metadata = {};
+        tc.metadata.displayMessage = this.displayManager.format(
+          tc.name,
+          tc.arguments,
+          true,
+          runtime,
+        );
       });
-      chunk.displayMessages = displayMessages;
     } else if (chunk.usage) {
       // 只有 usage 没有内容的情况（通常是最后一个块）
     } else {
@@ -619,9 +636,6 @@ export class AgentEngine {
         ? accumulated?.reasoningContent
         : chunk.reasoningContent,
       toolCalls: isFinish ? accumulated?.toolCalls : chunk.toolCalls,
-      displayMessages: isFinish
-        ? accumulated?.displayMessages
-        : chunk.displayMessages,
       finishReason: chunk.finishReason,
       usage: chunk.usage,
       contentId: chunk.contentId,
@@ -781,14 +795,6 @@ export class AgentEngine {
           arguments: "",
           index: index,
         };
-
-        // 每个工具调用对象创建时都必须初始化状态
-        // 如果 name 暂时为空，使用 toolName 字段，后续会在 name 到达时更新
-        this.displayManager.initialize(
-          index,
-          delta.id,
-          delta.name || "tool_call",
-        );
       }
 
       const tc = target.toolCalls[index];
@@ -796,9 +802,6 @@ export class AgentEngine {
       // 将本次分片的参数字符串追加到已有参数中，实现完整参数的重建
       if (delta?.arguments) {
         tc.arguments += delta.arguments;
-
-        // 委托文案管理器更新展示文案（传入完整累积结果，而非增量）
-        this.displayManager.updateFromChunk(index, tc.name, tc.arguments);
       }
     }
   }
@@ -881,12 +884,6 @@ export class AgentEngine {
         return true;
       }
 
-      // 命名空间匹配（如 file__*）
-      const namespace = toolName.split("__")[0];
-      if (requiresApprovalTools.includes(`${namespace}__*`)) {
-        return true;
-      }
-
       return false;
     });
   }
@@ -962,12 +959,6 @@ export class AgentEngine {
   ): boolean {
     // 精确匹配
     if (requiresApprovalTools.includes(toolName)) {
-      return true;
-    }
-
-    // 命名空间匹配（如 file__*）
-    const namespace = toolName.split("__")[0];
-    if (requiresApprovalTools.includes(`${namespace}__*`)) {
       return true;
     }
 

@@ -392,52 +392,26 @@ export const useSessionStore = defineStore('session', () => {
         return sessionSidebarStates.value.get(sessionId)!
     }
 
+    type SidebarFlag = 'unread' | 'working'
+
     /**
-     * 标记会话为未读
+     * 设置会话侧边栏标记
      * @param sessionId - 会话 ID
+     * @param flag - 标记类型
+     * @param value - 标记值
      */
-    const markSessionUnread = (sessionId: string): void => {
-        getSidebarState(sessionId).unread = true
+    const setSidebarFlag = (sessionId: string, flag: SidebarFlag, value: boolean): void => {
+        getSidebarState(sessionId)[flag] = value
     }
 
     /**
-     * 标记会话为已读
+     * 获取会话侧边栏标记
      * @param sessionId - 会话 ID
+     * @param flag - 标记类型
+     * @returns 标记值
      */
-    const markSessionRead = (sessionId: string): void => {
-        getSidebarState(sessionId).unread = false
-    }
-
-    /**
-     * 标记会话为工作中（流式响应中）
-     * @param sessionId - 会话 ID
-     */
-    const markSessionWorking = (sessionId: string): void => {
-        getSidebarState(sessionId).working = true
-    }
-
-    /**
-     * 标记会话为空闲（流式响应结束）
-     * @param sessionId - 会话 ID
-     */
-    const markSessionIdle = (sessionId: string): void => {
-        getSidebarState(sessionId).working = false
-    }
-
-    /**
-     * 检查会话是否未读
-     * @param sessionId - 会话 ID
-     */
-    const isSessionUnread = (sessionId: string): boolean => {
-        return getSidebarState(sessionId).unread
-    }
-
-    /**
-     * 检查会话是否工作中
-     * @param sessionId - 会话 ID
-     */
-    const isSessionWorking = (sessionId: string): boolean => {
-        return getSidebarState(sessionId).working
+    const getSidebarFlag = (sessionId: string, flag: SidebarFlag): boolean => {
+        return getSidebarState(sessionId)[flag]
     }
 
     /**
@@ -470,30 +444,35 @@ export const useSessionStore = defineStore('session', () => {
         clearSidebarState(sessionId)
     }
 
+    /**
+     * 清空会话消息（清空聊天记录时调用）
+     * 只清理消息和输入状态，保留会话本身
+     * @param sessionId - 会话 ID
+     */
+    const clearSessionMessages = (sessionId: string): void => {
+        const state = sessions.value.get(sessionId)
+        if (state) {
+            state.messages = []
+            state.isStreaming = false
+            state.isCompressing = false
+            state.inputMessage = {
+                content: '',
+                files: [],
+                isWaiting: false,
+            }
+            state.scrollPosition = 0
+            state.lastUpdated = Date.now()
+        }
+        clearSidebarState(sessionId)
+    }
+
     return {
         // 状态
         activeSessionId,
         sessionsMap,
-        sessionsList,
-        sessions,
-        sessionSidebarStates,
-        loadedCounts,
-        hasMoreMap,
 
         // actions
         getSessionState,
-        setChatSidebar,
-        setSession,
-        getSession,
-        removeSession,
-        getSessionsByGroup,
-        getGroupTotal,
-        moveSession,
-        setSessionGroupId,
-        setLoadedCount,
-        getLoadedCount,
-        setHasMore,
-        groupHasMore,
         getMessages,
         addMessage,
         setMessages,
@@ -512,14 +491,22 @@ export const useSessionStore = defineStore('session', () => {
         setSessionSetting,
         updateSessionTitle,
         updateSessionLastActiveTime,
-        clearSessionState,
+        clearSessionMessages,
+        setChatSidebar,
+        setSession,
+        getSession,
+        removeSession,
+        getSessionsByGroup,
+        getGroupTotal,
+        moveSession,
+        setSessionGroupId,
+        setLoadedCount,
+        getLoadedCount,
+        setHasMore,
+        groupHasMore,
         getSidebarState,
-        markSessionUnread,
-        markSessionRead,
-        markSessionWorking,
-        markSessionIdle,
-        isSessionUnread,
-        isSessionWorking,
+        setSidebarFlag,
+        getSidebarFlag,
         syncStreamingState,
         clearSidebarState
     }
