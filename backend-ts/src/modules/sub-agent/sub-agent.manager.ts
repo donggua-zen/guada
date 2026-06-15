@@ -6,7 +6,6 @@ import { SessionRepository } from "../../common/database/session.repository";
 import { MessageRepository } from "../../common/database/message.repository";
 import { CharacterRepository } from "../../common/database/character.repository";
 import { ChatRunnerService } from "../chat/chat-runner.service";
-import { SessionEventsService } from "../chat/session-events.service";
 import { StreamFinishedEvent } from "../../common/events/stream.events";
 import { EventBusService } from "../../common/events/event-bus.service";
 
@@ -301,16 +300,11 @@ export class SubAgentManager implements OnModuleInit {
       modelId: characterModelId || parentSession.modelId,
       settings: {
         // 角色提示词优先，否则使用默认子 Agent 提示词
-        systemPrompt: characterSettings.systemPrompt || SUB_AGENT_DEFAULT_PROMPT,
+        systemPrompt:
+          characterSettings.systemPrompt || SUB_AGENT_DEFAULT_PROMPT,
         // 继承工具权限：角色工具 > 父会话工具
         tools: characterSettings.tools ?? inheritedTools,
         mcpServers: characterSettings.mcpServers ?? inheritedMcpServers,
-        // 继承角色模型参数
-        modelTemperature: characterSettings.modelTemperature,
-        modelTopP: characterSettings.modelTopP,
-        modelFrequencyPenalty: characterSettings.modelFrequencyPenalty,
-        // 是否使用 User Role（继承角色设置）
-        useUserPrompt: characterSettings.useUserPrompt,
       },
       sessionType: "sub_agent",
       workspacePath: parentSession.workspacePath,

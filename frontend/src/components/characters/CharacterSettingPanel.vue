@@ -655,11 +655,7 @@ const basicRules = {
   ]
 }
 
-const promptRules = {
-  systemPrompt: [
-    { min: 2, max: 8000, message: '详细设定长度在8000个字符之间', trigger: ['input', 'blur'] }
-  ]
-}
+const promptRules = {}
 
 const modelRules = {
   // 模型改为可选项，移除必填验证

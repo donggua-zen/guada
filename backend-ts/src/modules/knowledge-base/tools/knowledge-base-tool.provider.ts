@@ -13,8 +13,8 @@ import {
   ToolCallRequest,
   ToolProviderMetadata,
   ToolDisplayInfo,
+  ToolDefinition,
 } from "../../tools/interfaces/tool-provider.interface";
-import { InternalToolDefinition } from "../../llm-core/types/llm.types";
 
 @Injectable()
 export class KnowledgeBaseToolProvider implements IToolProvider {
@@ -31,7 +31,7 @@ export class KnowledgeBaseToolProvider implements IToolProvider {
     private kbFileService: KbFileService,
   ) { }
 
-  private readonly toolsConfig: InternalToolDefinition[] = [
+  private readonly toolsConfig: ToolDefinition[] = [
     {
       name: "kb_search",
       description: "在知识库中搜索相关内容",
@@ -446,24 +446,24 @@ export class KnowledgeBaseToolProvider implements IToolProvider {
     let toolArgs: string | undefined;
     
     switch (toolName) {
-      case 'search':
+      case 'kb_search':
         action = `${prefix}搜索知识库`;
         toolArgs = args.query;
         break;
-      
-      case 'list_files':
+
+      case 'kb_list_files':
         action = `${prefix}列出文件`;
         break;
-      
-      case 'get_chunks':
+
+      case 'kb_get_chunks':
         action = `${prefix}获取分块内容`;
         break;
-      
-      case 'add_document':
+
+      case 'kb_add_document':
         action = `${prefix}添加文档`;
         toolArgs = args.file_name || args.file_path;
         break;
-      
+
       default:
         action = `${prefix}操作知识库`;
     }
@@ -471,7 +471,7 @@ export class KnowledgeBaseToolProvider implements IToolProvider {
     return {
       action,
       args: toolArgs,
-      toolName: `knowledge_base__${toolName}`,
+      toolName: toolName,
       toolType: this.namespace // 使用 namespace 作为 toolType，前端会映射到 BookSearch24Regular
     };
   }

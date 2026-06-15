@@ -18,10 +18,19 @@ export class OpenAIAdapter implements IProtocolAdapter {
    * 创建 OpenAI API 客户端（可被子类覆盖）
    */
   protected createClient(config: ProviderConfig): OpenAI {
-    return new OpenAI({
+    const clientOptions: any = {
       baseURL: config.apiUrl,
       apiKey: config.apiKey,
-    });
+    };
+
+    // 支持自定义请求头
+    if (config.headers && Object.keys(config.headers).length > 0) {
+      clientOptions.defaultHeaders = {
+        ...config.headers,
+      };
+    }
+
+    return new OpenAI(clientOptions);
   }
 
   /**

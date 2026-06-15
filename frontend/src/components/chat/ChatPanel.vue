@@ -18,8 +18,8 @@
     <template v-if="!isLoading">
       <ScrollContainer ref="scrollContainerRef"
         class="max-h-full chat-scroll-container transition-opacity duration-300 px-5"
-        :class="{ 'opacity-0': showSkeleton, 'opacity-100': !showSkeleton }"
-        :auto-scroll="needScrollToBottom" @scroll="handleScroll">
+        :class="{ 'opacity-0': showSkeleton, 'opacity-100': !showSkeleton }" :auto-scroll="needScrollToBottom"
+        @scroll="handleScroll">
         <div class="max-w-205 mx-auto pt-5 pb-8">
           <!-- 加载更多历史消息指示器 -->
           <div v-if="isLoadingMore" class="w-full py-4 flex items-center justify-center text-gray-400">
@@ -127,7 +127,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, nextTick, onMounted, onUnmounted } from "vue";
+import { ref, computed, watch, nextTick } from "vue";
 import { apiService } from "../../services/ApiService";
 import { usePopup } from "@/composables/usePopup";
 import { useDebounceFn } from "@vueuse/core";
@@ -206,7 +206,7 @@ const {
 
 // 响应式数据
 const scrollContainerRef = ref<any>(null);
-const needScrollToBottom = ref(true);
+const needScrollToBottom = ref(false);
 let scrollTicking = false;
 let lastScrollTop = 0;
 
@@ -222,7 +222,6 @@ const showSkeleton = ref(false)
 let skeletonTimer: ReturnType<typeof setTimeout> | null = null
 let skeletonMinDisplayTimer: ReturnType<typeof setTimeout> | null = null
 let skeletonShowTime: number = 0 // 记录骨架屏开始显示的时间戳
-const SKELETON_DELAY = 200 // 延迟显示骨架屏的毫秒数
 const SKELETON_MIN_DISPLAY = 500 // 骨架屏最少显示毫秒数
 
 
@@ -287,9 +286,7 @@ const updateScrollButtonVisibility = useDebounceFn(() => {
  * 平滑滚动到底部
  */
 function scrollToBottom() {
-
   if (scrollContainerRef.value) {
-    needScrollToBottom.value = true;
     scrollContainerRef.value.smoothScrollToBottom()
   }
 }
@@ -298,9 +295,9 @@ function scrollToBottom() {
  * 立即滚动到底部
  */
 function immediateScrollToBottom() {
-  needScrollToBottom.value = true;
   scrollContainerRef.value?.immediateScrollToBottom()
 }
+
 
 /**
  * 处理滚动事件
@@ -308,11 +305,13 @@ function immediateScrollToBottom() {
 function handleScroll(event: any) {
   if (scrollTicking) return;
   scrollTicking = true;
+
   requestAnimationFrame(() => {
-    const isAtBottom = scrollContainerRef.value?.isAtBottom;
     // 从 ScrollContainer 的滚动元素获取 scrollTop，确保准确性
     const scrollElement = scrollContainerRef.value?.getScrollElement?.();
     const scrollTop = scrollElement?.scrollTop ?? event.target?.scrollTop ?? 0;
+    const isAtBottom =
+      scrollElement?.scrollHeight - scrollTop - scrollElement?.clientHeight <= 5;
 
     // 检测是否滚动到顶部附近，触发加载更多历史消息
     if (
@@ -329,9 +328,10 @@ function handleScroll(event: any) {
       }
     }
 
+    // 注意，容器变小导致的滚动不应该视为向上滚动
     if (needScrollToBottom.value && lastScrollTop - scrollTop > 10 && !isAtBottom) {
       needScrollToBottom.value = false;
-    } else if (!needScrollToBottom.value && isAtBottom) {
+    } else if (!needScrollToBottom.value && isAtBottom && isStreaming.value) {
       needScrollToBottom.value = true;
     }
     lastScrollTop = scrollTop;
@@ -489,8 +489,14 @@ watch(() => isStreaming.value, async (newVal, oldVal) => {
       await generateTitleIfNeeded(currentSessionId.value!, activeMessages.value, currentSession);
     }
     nextTick(() => {
-      needScrollToBottom.value = false;
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          needScrollToBottom.value = false;
+        });
+      });
     });
+  } else {
+    needScrollToBottom.value = true;
   }
 }, { immediate: true });
 

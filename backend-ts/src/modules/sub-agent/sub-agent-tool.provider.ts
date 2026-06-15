@@ -36,17 +36,7 @@ export class SubAgentToolProvider implements IToolProvider {
       {
         name: "subagent_create",
         description: `创建一个子代理独立执行指定任务。
-子代理拥有独立的对话上下文和工具能力，创建后立即返回子会话ID。
-如需获取结果，请使用 wait 工具等待完成。
-适用于：需要独立研究的复杂问题、多步骤分析、代码生成等。
-
-**角色驱动模式**：如果指定 characterId，子代理将继承该角色的完整设定（系统提示词、工具权限、模型参数等），以该角色身份执行任务。适用于团队协作场景。
-
-使用示例：
-1. 通用模式：调用 create(name="分析", task="分析数据") 创建子Agent
-2. 角色模式：调用 create(name="编剧", characterId="ch_xxx", task="写剧本") 以角色身份创建子Agent
-3. （可选）继续其他工作
-4. 调用 wait 获取结果`,
+子代理拥有独立的对话上下文和工具能力，创建后立即返回子会话ID。`,
         parameters: {
           type: "object",
           properties: {
@@ -61,14 +51,13 @@ export class SubAgentToolProvider implements IToolProvider {
             },
             characterId: {
               type: "string",
-              description:
-                "角色ID（可选）。传入后子代理将继承该角色的完整设定，以角色身份执行任务。在团队协作场景中，使用团队成员的角色ID创建对应子代理",
+              description: "角色ID（可选）",
             },
             mode: {
               type: "string",
-              description:
-                "执行模式：foreground（前台，阻塞等待结果，默认）或 background（后台，立即返回，后续用 wait 获取）",
+              description: "执行模式：foreground 或 background",
               enum: ["foreground", "background"],
+              default: "foreground",
             },
           },
           required: ["name", "task"],
@@ -76,9 +65,7 @@ export class SubAgentToolProvider implements IToolProvider {
       },
       {
         name: "subagent_wait",
-        description: `等待子代理执行完成并返回结果摘要。
-必须在调用 create 后使用。
-如果同一会话下有任意子代理已完成，立即返回结果；否则阻塞等待直到完成或超时。`,
+        description: `等待子代理执行完成并返回结果摘要`,
         parameters: {
           type: "object",
           properties: {},
@@ -86,8 +73,7 @@ export class SubAgentToolProvider implements IToolProvider {
       },
       {
         name: "subagent_close",
-        description: `关闭指定子代理并删除其会话数据。
-仅允许关闭已完成的子 Agent，正在运行中的子代理无法关闭。`,
+        description: `关闭指定子代理并删除其会话数据`,
         parameters: {
           type: "object",
           properties: {
@@ -101,7 +87,7 @@ export class SubAgentToolProvider implements IToolProvider {
       },
       {
         name: "subagent_list",
-        description: `获取当前父会话下所有子代理列表，包含每个子代理的状态（running / completed / error）。`,
+        description: `获取当前父会话下所有子代理列表，包含每个子代理的状态`,
         parameters: {
           type: "object",
           properties: {},
@@ -109,8 +95,7 @@ export class SubAgentToolProvider implements IToolProvider {
       },
       {
         name: "subagent_send_message",
-        description: `向已存在的子代理发送消息继续交互。
-仅当子代理已完成时才能发送，否则报错。`,
+        description: `向已存在的子代理发送消息继续交互`,
         parameters: {
           type: "object",
           properties: {
@@ -266,13 +251,17 @@ export class SubAgentToolProvider implements IToolProvider {
     throw new Error(`未知工具: ${request.name}`);
   }
 
+  async getBriefDescription(context?: Record<string, any>): Promise<string> {
+    return "对于只关心结果不关系中间过程的任务，可以使用本工具集创建子代理协助";
+  }
+
   async getPrompt(context?: Record<string, any>): Promise<string> {
-    return `## 子代理工具
+    return `# 子代理工具
 
 **使用原则**：
-- 默认使用前台子代理（run_mode="foreground"），与用户保持实时交互
-- 仅当任务复杂、耗时较长或需要并行处理时，才使用后台子代理（run_mode="background"）
-- 未经用户明确要求，禁止自动使用子代理
+- 对于某项任务如果只关心结果不关系中间过程，可以使用子代理协助完成
+- 默认使用前台子代理（run_mode="foreground"）
+- 当任务复杂、耗时较长，使用后台子代理（run_mode="background"）
 - 拆分任务时必须边界清晰，确保各子代理不会互相修改同一文件或者任务重叠
 
 **角色驱动模式**：
@@ -281,19 +270,11 @@ export class SubAgentToolProvider implements IToolProvider {
 - 格式：create(name="角色名", characterId="角色ID", task="具体任务")
 - 根据任务性质选择合适的团队成员角色
 
-**执行流程**：
-1. 调用 \`create\` 创建子 Agent（可创建多个后台任务）
-2. 后台子代理完成后会主动通知，切勿轮询等待
-3. 使用 \`list\` 查看当前所有子代理的状态
-4. 使用 \`send_message\` 向已完成的子代理发送消息继续交互
-5. 子代理不再需要时，调用 \`close\` 关闭并清理其会话数据
-
 **注意**：
-- create 创建后立即返回，后台子代理在后台执行
-- wait 返回同一会话下最早完成的子代理结果
-- 多次调用 wait 可获取所有子代理结果
-- send_message 只能向已完成的子代理发送消息，运行中的会报错
-- close 只能关闭已完成的子 Agent，正在运行的无法关闭`
+- create 前台模式会阻塞到任务完成，后台子代理在后台执行，结果会通过系统消息通知
+- 如非必要禁止使用wait轮询等待子代理结果
+- 若对子代理任务需要进一步追问或者调整，使用 \`send_message\` 继续交互
+- 对于任务结束且不需要后续交互的子代理，及时 \`close\` 关闭并清理其会话数据`;
   }
 
   getMetadata(context?: Record<string, any>): ToolProviderMetadata {
@@ -323,27 +304,27 @@ export class SubAgentToolProvider implements IToolProvider {
         toolType: "sub_agent",
       };
     }
-    if (toolName === "wait") {
+    if (toolName === "subagent_wait") {
       return {
         action: `${prefix}等待子代理完成`,
         args: args.sessionId?.substring(0, 16),
-        toolName: "wait",
+        toolName: "subagent_wait",
         toolType: "sub_agent",
       };
     }
-    if (toolName === "send_message") {
+    if (toolName === "subagent_send_message") {
       return {
         action: `${prefix}向子代理发送消息`,
         args: args.sessionId?.substring(0, 16),
-        toolName: "send_message",
+        toolName: "subagent_send_message",
         toolType: "sub_agent",
       };
     }
-    if (toolName === "close") {
+    if (toolName === "subagent_close") {
       return {
         action: `${prefix}关闭子代理`,
         args: args.sessionId?.substring(0, 16),
-        toolName: "close",
+        toolName: "subagent_close",
         toolType: "sub_agent",
       };
     }
