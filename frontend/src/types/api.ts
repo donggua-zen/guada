@@ -23,6 +23,14 @@ export interface Model {
     isFavorite?: boolean
     createdAt?: string
     updatedAt?: string
+    config?: {
+        inputCapabilities?: string[]
+        outputCapabilities?: string[]
+        features?: string[]
+        contextWindow?: number | null
+        maxOutputTokens?: number | null
+        customParameters?: Record<string, any>
+    }
 }
 
 /**
