@@ -575,7 +575,7 @@ export class SessionService {
     const context = await this.sessionContextFactory.createFromSession(session);
     const effectiveContextWindow = context.getEffectiveContextWindow();
 
-    const messages = context.getHistory();
+    const messages = await context.getHistory();
     const usedTokens = context.getTokenCount();
     const percentage = Math.min(
       (usedTokens / effectiveContextWindow) * 100,
@@ -606,13 +606,13 @@ export class SessionService {
     const context = await this.sessionContextFactory.createFromSession(session);
 
     const beforeTokenCount = context.getTokenCount();
-    const beforeMessageCount = context.getHistory().length;
+    const beforeMessageCount = (await context.getHistory()).length;
 
     this.logger.log(`Manually triggering compression for session ${sessionId}`);
     await context.forceCompress();
 
     const afterTokenCount = context.getTokenCount();
-    const compressedMessages = context.getHistory();
+    const compressedMessages = await context.getHistory();
     const afterMessageCount = compressedMessages.length;
 
     const checkpoint = await this.contextStateRepo.findBySessionId(sessionId);
