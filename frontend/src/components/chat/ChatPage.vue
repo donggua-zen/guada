@@ -213,10 +213,15 @@ function handleStreamStarted(event: any) {
   const { sessionId } = event;
   if (!sessionId) return;
 
-  // 如果是子 Agent 的流，更新对应 Tab 状态为 running
+  // 更新对应 Tab 状态为 running（子 Agent 按 sessionId 匹配）
   const tab = agentTabs.value.find(t => t.id === sessionId);
   if (tab) {
     tab.status = 'running';
+  }
+  // 主代理流开始：同步更新 main Tab 状态
+  if (sessionId === currentSession.value?.id) {
+    const mainTab = agentTabs.value.find(t => t.id === 'main');
+    if (mainTab) mainTab.status = 'running';
   }
   // 忽略自身发起的流
   if (event.source === apiService.getClientId()) {
@@ -252,11 +257,19 @@ function handleStreamFinished(event: any) {
   const { sessionId, payload } = event;
   if (!sessionId) return;
 
-  // 如果是子 Agent 的流结束，更新对应 Tab 状态
+  // 更新对应 Tab 状态（子 Agent 按 sessionId 匹配）
   const tab = agentTabs.value.find(t => t.id === sessionId);
   if (tab) {
     const reason = payload?.reason;
     tab.status = reason === 'completed' ? 'completed' : 'error';
+  }
+  // 主代理流结束：同步更新 main Tab 状态
+  if (sessionId === currentSession.value?.id) {
+    const mainTab = agentTabs.value.find(t => t.id === 'main');
+    if (mainTab) {
+      const reason = payload?.reason;
+      mainTab.status = reason === 'completed' ? 'completed' : 'error';
+    }
   }
 }
 
