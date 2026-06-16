@@ -1,8 +1,6 @@
 import { Module, OnModuleInit } from "@nestjs/common";
 import { HttpModule } from "@nestjs/axios";
 import { SharedModule } from "../../common/services/shared.module";
-import { SettingsStorage } from "../../common/utils/settings-storage.util";
-import { SettingsService } from "../settings/settings.service";
 import { ToolOrchestrator } from "./tool-orchestrator.service";
 
 import { MemoryToolProvider } from "./providers/memory-tool.provider";
@@ -25,8 +23,6 @@ import { BrowserToolProvider } from "./providers/browser-tool.provider";
     ShellToolProvider,
     FileToolProvider,
     BrowserToolProvider,
-    SettingsStorage,
-    SettingsService,
   ],
   exports: [ToolOrchestrator],
 })

@@ -19,7 +19,7 @@ import {
 @Injectable()
 export class KnowledgeBaseToolProvider implements IToolProvider {
   private readonly logger = new Logger(KnowledgeBaseToolProvider.name);
-  namespace = "knowledge_base";
+  pluginId = "knowledge_base";
 
   constructor(
     private prisma: PrismaService,
@@ -472,18 +472,19 @@ export class KnowledgeBaseToolProvider implements IToolProvider {
       action,
       args: toolArgs,
       toolName: toolName,
-      toolType: this.namespace // 使用 namespace 作为 toolType，前端会映射到 BookSearch24Regular
+      toolType: this.pluginId // 使用 pluginId 作为 toolType，前端会映射到 BookSearch24Regular
     };
   }
 
   getMetadata(context?: Record<string, any>): ToolProviderMetadata {
     return {
-      namespace: this.namespace,
+      pluginId: this.pluginId,
       displayName: "知识库",
       description: "知识库检索与管理工具集",
       isMcp: false,
       loadMode: context?.sessionType === "web" ? "lazy" : "eager",
       type: "core",
+      promptFrequency: "REGULAR",
     };
   }
 }

@@ -17,7 +17,7 @@ import { SubAgentManager } from "./sub-agent.manager";
 @Injectable()
 export class SubAgentToolProvider implements IToolProvider {
   private readonly logger = new Logger(SubAgentToolProvider.name);
-  public readonly namespace = "sub_agent";
+  public readonly pluginId = "sub_agent";
 
   constructor(private subAgentManager: SubAgentManager) {}
 
@@ -34,7 +34,7 @@ export class SubAgentToolProvider implements IToolProvider {
 
     return [
       {
-        name: "subagent_create",
+        name: "subagent_spawn",
         description: `创建一个子代理独立执行指定任务。
 子代理拥有独立的对话上下文和工具能力，创建后立即返回子会话ID。`,
         parameters: {
@@ -121,7 +121,7 @@ export class SubAgentToolProvider implements IToolProvider {
   ): Promise<string> {
     const params = request.arguments;
 
-    if (request.name === "subagent_create") {
+    if (request.name === "subagent_spawn") {
       this.logger.log(
         `创建子 Agent: ${params.name}, 父会话: ${context?.sessionId}`,
       );
@@ -267,11 +267,11 @@ export class SubAgentToolProvider implements IToolProvider {
 **角色驱动模式**：
 - 当你的系统提示词中包含【团队成员】时，你可以使用 create 的 characterId 参数创建角色驱动的子代理
 - 角色驱动的子代理会继承该角色的完整设定（系统提示词、工具权限等），以该角色身份执行任务
-- 格式：create(name="角色名", characterId="角色ID", task="具体任务")
+- 格式：spawn(name="角色名", characterId="角色ID", task="具体任务")
 - 根据任务性质选择合适的团队成员角色
 
 **注意**：
-- create 前台模式会阻塞到任务完成，后台子代理在后台执行，结果会通过系统消息通知
+- spawn 前台模式会阻塞到任务完成，后台子代理在后台执行，结果会通过系统消息通知
 - 如非必要禁止使用wait轮询等待子代理结果
 - 若对子代理任务需要进一步追问或者调整，使用 \`send_message\` 继续交互
 - 对于任务结束且不需要后续交互的子代理，及时 \`close\` 关闭并清理其会话数据`;
@@ -279,12 +279,13 @@ export class SubAgentToolProvider implements IToolProvider {
 
   getMetadata(context?: Record<string, any>): ToolProviderMetadata {
     return {
-      namespace: "sub_agent",
+      pluginId: "sub_agent",
       displayName: "子 Agent",
       description: "创建子代理独立执行特定任务",
       isMcp: false,
-      loadMode: "lazy",
+      loadMode: context?.sessionType === "sub_agent" ? "none" : "lazy",
       type: "core",
+      promptFrequency: "REGULAR",
     };
   }
 
@@ -295,12 +296,12 @@ export class SubAgentToolProvider implements IToolProvider {
   ): ToolDisplayInfo {
     const prefix = isExecuting ? "正在" : "已";
 
-    if (toolName === "subagent_create") {
+    if (toolName === "subagent_spawn") {
       const modeLabel = args.characterId ? "角色子代理" : "子代理";
       return {
-        action: `${prefix}创建${modeLabel}`,
+        action: `${prefix}运行${modeLabel}`,
         args: args.name || args.task?.substring(0, 30),
-        toolName: "subagent_create",
+        toolName: "subagent_spawn",
         toolType: "sub_agent",
       };
     }

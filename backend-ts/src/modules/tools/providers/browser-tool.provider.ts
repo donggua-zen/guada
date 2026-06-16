@@ -28,7 +28,7 @@ interface IPCResponse {
 @Injectable()
 export class BrowserToolProvider implements IToolProvider {
   private readonly logger = new Logger(BrowserToolProvider.name)
-  namespace = 'browser'
+  pluginId = 'browser'
 
   private pendingRequests = new Map<string, {
     resolve: (value: any) => void
@@ -745,12 +745,13 @@ export class BrowserToolProvider implements IToolProvider {
 
   getMetadata(context?: Record<string, any>): ToolProviderMetadata {
     return {
-      namespace: this.namespace,
+      pluginId: this.pluginId,
       displayName: '浏览器控制',
       description: '通过 Electron 内置 Chromium 进行浏览器自动化操作',
       isMcp: false,
       loadMode: 'lazy',
       type: 'core',
+      promptFrequency: 'REGULAR',
     }
   }
 
@@ -762,7 +763,7 @@ export class BrowserToolProvider implements IToolProvider {
 
     let action: string;
     let toolArgs: string | undefined;
-    let toolType: string = this.namespace;
+    let toolType: string = this.pluginId;
 
     switch (toolName) {
       case 'browser_new_window':
@@ -828,7 +829,7 @@ export class BrowserToolProvider implements IToolProvider {
       action,
       args: toolArgs,
       toolName: toolName,
-      toolType: toolType  // 返回 toolType，code 类型会使用 Code24Regular，其他使用 browser namespace 映射到 WindowWrench24Regular
+      toolType: toolType  // 返回 toolType，code 类型会使用 Code24Regular，其他使用 browser pluginId 映射到 WindowWrench24Regular
     };
   }
 }

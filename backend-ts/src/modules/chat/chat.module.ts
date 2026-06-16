@@ -3,7 +3,6 @@ import { Module, OnModuleInit } from "@nestjs/common";
 import { AgentEngine } from "./agent-engine.service";
 import { SessionContextFactory } from "./session-context.factory";
 import { ToolOrchestrator } from "../tools/tool-orchestrator.service";
-import { TokenizerService } from "../../common/utils/tokenizer.service";
 import { ChatController } from "./chat.controller";
 import { MessagesController } from "./messages.controller";
 import { SessionGroupController } from "./session-group.controller";
@@ -47,15 +46,13 @@ import { MESSAGE_STORE_TOKEN, COMPRESSION_STRATEGY_TOKEN } from "./interfaces";
     SessionGroupService,
 
     SessionStreamManager,
-    TokenizerService,
     UploadPathService,
     FileWatcherService,
     SessionEventsService,
     ChatRunnerService,
     ToolCallDisplayUtil,
-    EventBusService,
   ],
-  exports: [AgentEngine, SessionService, MessageService, SessionEventsService, ChatRunnerService, SessionContextFactory, EventBusService],
+  exports: [AgentEngine, SessionService, MessageService, SessionEventsService, ChatRunnerService, SessionContextFactory],
 })
 export class ChatModule implements OnModuleInit {
   constructor(

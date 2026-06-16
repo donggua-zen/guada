@@ -9,7 +9,7 @@ import {
 @Injectable()
 export class TimeToolProvider implements IToolProvider {
   private readonly logger = new Logger(TimeToolProvider.name);
-  public readonly namespace = "time";
+  public readonly pluginId = "time";
 
   private readonly toolsConfig = [
     {
@@ -199,12 +199,13 @@ export class TimeToolProvider implements IToolProvider {
 
   getMetadata(context?: Record<string, any>): ToolProviderMetadata {
     return {
-      namespace: this.namespace,
+      pluginId: this.pluginId,
       displayName: "时间工具",
       description: "自动注入当前时间信息，支持获取详细时间",
       isMcp: false,
       loadMode: "eager",
       type: "core",
+      promptFrequency: "STATIC",
     };
   }
 }

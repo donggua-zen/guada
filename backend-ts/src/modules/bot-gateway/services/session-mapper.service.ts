@@ -150,7 +150,7 @@ export class SessionMapperService {
 
     // 3. 最后使用全局默认对话模型
     if (!modelId) {
-      modelId = this.settingsStorage.getSettingValue(
+      modelId = await this.settingsStorage.getSettingValue(
         SG_MODELS,
         SK_MOD_CHAT,
         null

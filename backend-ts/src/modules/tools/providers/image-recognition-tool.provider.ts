@@ -20,7 +20,7 @@ import * as path from "path";
 @Injectable()
 export class ImageRecognitionToolProvider implements IToolProvider {
   private readonly logger = new Logger(ImageRecognitionToolProvider.name);
-  namespace = "image_recognition";
+  pluginId = "image_recognition";
 
   constructor(
     private fileRepo: FileRepository,
@@ -101,12 +101,13 @@ export class ImageRecognitionToolProvider implements IToolProvider {
 
   getMetadata(context?: Record<string, any>): ToolProviderMetadata {
     return {
-      namespace: this.namespace,
+      pluginId: this.pluginId,
       displayName: "图像识别",
       description: "图片内容识别工具",
       isMcp: false,
       loadMode: "lazy",
       type: "core",
+      promptFrequency: "REGULAR",
     };
   }
 
@@ -117,7 +118,7 @@ export class ImageRecognitionToolProvider implements IToolProvider {
     const prefix = isExecuting ? '正在' : '已';
 
     let action: string;
-    let toolType: string = this.namespace;
+    let toolType: string = this.pluginId;
     let target: string;
 
     switch (toolName) {

@@ -21,7 +21,7 @@ export interface CompressionConfig {
   triggerRatio: number;
   targetRatio: number;
   model?: any;
-  summaryMode?: SummaryMode; // 摘要生成模式，默认为 ITERATIVE(迭代优化)
+  summaryMode?: SummaryMode; // 摘要生成模式，默认为 MEMORY_SYNC
   chatModelName?: string; // 对话模型名称，用于 Token 计算
 }
 
@@ -29,7 +29,7 @@ export interface MemoryConfig {
   maxMemoryLength?: number;
   compressionTriggerRatio?: number;
   compressionTargetRatio?: number;
-  summaryMode?: string; // 摘要模式：'disabled' | 'fast' | 'iterative'
+  summaryMode?: 'disabled' | 'fast' | 'memory_sync'; // 摘要模式
   maxTokensLimit?: number;
 }
 
@@ -90,6 +90,7 @@ export interface ICompressionStrategy {
     messages: MessageRecord[],
     config: CompressionConfig,
     currentTokenCount?: number, // 当前缓存的 Token 数，避免重复计算
+    onStage2?: () => Promise<void>, // 二级压缩（摘要/丢弃）前的回调
   ): Promise<CompressionResult>;
   getCheckpoint(sessionId: string): Promise<CompressionCheckpoint | null>;
   preprocess(

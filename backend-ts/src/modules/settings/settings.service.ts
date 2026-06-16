@@ -27,7 +27,7 @@ export class SettingsService {
    * 更新分组内的一个或多个设置项，并自动保存
    */
   async updateGroupSettings(group: string, data: Record<string, any>): Promise<void> {
-    this.storage.updateSettings(group, data);
+    await this.storage.updateSettings(group, data);
   }
 
   /**

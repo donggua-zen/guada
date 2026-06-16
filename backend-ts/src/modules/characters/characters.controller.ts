@@ -118,7 +118,7 @@ export class CharactersController {
         ...tool,
         effectiveEnabled: this.calculateEffectiveEnabled(
           characterToolsConfig,
-          tool.namespace,
+          tool.pluginId,
         ),
       })),
     };
@@ -134,12 +134,12 @@ export class CharactersController {
    * 1. 如果角色设置为 true，则启用（跟随全局，自动适应新增工具）
    * 2. 如果角色设置为 false，则禁用
    * 3. 如果角色设置为数组，表示部分启用（至少有一个工具启用就算启用）
-   * 4. 如果角色设置为对象，则取 namespace 的配置（未设置默认为 false）
+   * 4. 如果角色设置为对象，则取 pluginId 的配置（未设置默认为 false）
    * 5. 如果角色未设置，则默认禁用
    */
   private calculateEffectiveEnabled(
     characterTools: any,
-    namespace: string,
+    pluginId: string,
   ): boolean {
     // 角色设置为 true，启用（跟随全局，自动适应新增工具）
     if (characterTools === true) {
@@ -156,9 +156,9 @@ export class CharactersController {
       return characterTools.length > 0;
     }
 
-    // 角色设置为对象，取 namespace 的配置
+    // 角色设置为对象，取 pluginId 的配置
     if (typeof characterTools === "object" && characterTools !== null) {
-      const charValue = characterTools[namespace];
+      const charValue = characterTools[pluginId];
 
       // 如果是数组，至少有一个工具启用就算启用
       if (Array.isArray(charValue)) {

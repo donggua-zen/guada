@@ -79,7 +79,7 @@
           <template #label>
             <div class="flex flex-col gap-1">
               <span class="text-base text-gray-900 dark:text-gray-100 font-medium">摘要模式</span>
-              <span class="text-xs text-gray-500 dark:text-gray-400 font-normal">选择摘要生成方式：关闭、快速或迭代优化</span>
+              <span class="text-xs text-gray-500 dark:text-gray-400 font-normal">选择摘要生成方式：关闭、快速或记忆同步</span>
             </div>
           </template>
           <div class="w-full max-w-md">
@@ -100,12 +100,12 @@
                   <span>快速摘要 - 单次调用生成</span>
                 </span>
               </el-option>
-              <el-option label="迭代摘要" value="iterative">
+              <el-option label="记忆同步" value="memory_sync">
                 <span class="flex items-center gap-2">
                   <el-icon>
                     <SyncOutlined />
                   </el-icon>
-                  <span>迭代摘要 - 多轮优化，质量最高</span>
+                  <span>记忆同步 - 压缩前自动保存重要记忆到文件</span>
                 </span>
               </el-option>
             </el-select>
@@ -115,7 +115,7 @@
         <el-alert title="提示" type="info" :closable="false" show-icon class="mb-6">
           <p class="text-sm">• 触发阈值：控制何时启动压缩（建议 70%-85%）</p>
           <p class="text-sm">• 保留目标：控制压缩后的 Token 占用（建议 40%-60%）</p>
-          <p class="text-sm">• 摘要模式：关闭仅裁剪工具结果，快速适合日常使用，迭代质量最高但耗时较长</p>
+          <p class="text-sm">• 摘要模式：关闭仅裁剪工具结果，快速适合日常使用，记忆同步自动保存重要记忆到文件</p>
         </el-alert>
       </template>
     </el-form>

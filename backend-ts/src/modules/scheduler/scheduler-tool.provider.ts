@@ -17,7 +17,7 @@ import { SchedulerService } from "./scheduler.service";
 @Injectable()
 export class SchedulerToolProvider implements IToolProvider {
   private readonly logger = new Logger(SchedulerToolProvider.name);
-  public readonly namespace = "scheduler";
+  public readonly pluginId = "scheduler";
 
   private readonly toolsConfig: ToolDefinition[] = [
     {
@@ -368,12 +368,13 @@ export class SchedulerToolProvider implements IToolProvider {
 
   getMetadata(context?: Record<string, any>): ToolProviderMetadata {
     return {
-      namespace: this.namespace,
+      pluginId: this.pluginId,
       displayName: "定时任务工具",
       description: "创建和管理定时任务，让 AI 在指定时间自动执行",
       isMcp: false,
       loadMode: "lazy",
       type: "core",
+      promptFrequency: "REGULAR",
     };
   }
 
@@ -392,29 +393,29 @@ export class SchedulerToolProvider implements IToolProvider {
         return {
           action: `${prefix}创建定时任务`,
           args: args.name,
-          toolName: `${this.namespace}__${toolName}`,
+          toolName: `${this.pluginId}__${toolName}`,
         };
       case "scheduler_list_tasks":
         return {
           action: `${prefix}获取定时任务列表`,
-          toolName: `${this.namespace}__${toolName}`,
+          toolName: `${this.pluginId}__${toolName}`,
         };
       case "scheduler_delete_task":
         return {
           action: `${prefix}删除定时任务`,
           args: args.task_id,
-          toolName: `${this.namespace}__${toolName}`,
+          toolName: `${this.pluginId}__${toolName}`,
         };
       case "scheduler_toggle_task":
         return {
           action: `${prefix}切换任务状态`,
           args: args.task_id,
-          toolName: `${this.namespace}__${toolName}`,
+          toolName: `${this.pluginId}__${toolName}`,
         };
       default:
         return {
           action: `${prefix}执行定时任务操作`,
-          toolName: `${this.namespace}__${toolName}`,
+          toolName: `${this.pluginId}__${toolName}`,
         };
     }
   }

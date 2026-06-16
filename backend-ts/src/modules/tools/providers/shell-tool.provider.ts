@@ -21,7 +21,7 @@ import {
 @Injectable()
 export class ShellToolProvider implements IToolProvider {
   private readonly logger = new Logger(ShellToolProvider.name);
-  public readonly namespace = "shell";
+  public readonly pluginId = "shell";
 
   /** 120 秒超时 */
   private readonly CMD_TIMEOUT_MS = 120_000;
@@ -116,11 +116,12 @@ export class ShellToolProvider implements IToolProvider {
 
   getMetadata(context?: Record<string, any>): ToolProviderMetadata {
     return {
-      namespace: this.namespace,
+      pluginId: this.pluginId,
       displayName: "Shell",
       description: "系统命令执行工具",
       isMcp: false,
       type: "core",
+      promptFrequency: "STATIC",
     };
   }
 

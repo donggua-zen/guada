@@ -9,7 +9,7 @@ import { AuthModule } from "../auth/auth.module";
 import { FileParserService } from "../knowledge-base/file-parser.service";
 import { OcrService } from "../knowledge-base/ocr.service";
 import { SettingsService } from "../settings/settings.service";
-import { SettingsStorage } from "../../common/utils/settings-storage.util";
+
 import * as multer from "multer";
 
 @Module({
@@ -32,7 +32,7 @@ import * as multer from "multer";
     }),
   ],
   controllers: [FilesController],
-  providers: [FileService, FileRepository, PrismaService, FileParserService, OcrService, SettingsService, SettingsStorage],
+  providers: [FileService, FileRepository, PrismaService, FileParserService, OcrService, SettingsService],
   exports: [FileService], // 导出 FileService 供其他模块使用
 })
 export class FilesModule { }

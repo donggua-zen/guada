@@ -1,27 +1,35 @@
-import { Injectable } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
-import * as fs from 'fs';
-import * as path from 'path';
+import { Injectable, OnModuleInit } from "@nestjs/common";
+import { ConfigService } from "@nestjs/config";
+import * as fs from "fs";
+import * as path from "path";
 
 /**
  * 设置存储工具类
- * 
+ *
  * 负责设置的底层文件操作和内存缓存管理。
  * 这是一个纯技术实现类，不包含任何业务逻辑，可被任意模块安全引用。
- * 
+ *
  * @Injectable - 注册为 NestJS 单例服务，由容器统一管理生命周期
  */
 @Injectable()
-export class SettingsStorage {
+export class SettingsStorage implements OnModuleInit {
   private readonly settingsDir: string;
   private cache: Record<string, any> = {};
 
   constructor(private readonly configService: ConfigService) {
-    this.settingsDir = this.configService.get<string>('SETTINGS_DIR') || path.join(process.cwd(), '.config');
-    
-    // 确保目录存在
-    if (!fs.existsSync(this.settingsDir)) {
-      fs.mkdirSync(this.settingsDir, { recursive: true });
+    this.settingsDir =
+      this.configService.get<string>("SETTINGS_DIR") ||
+      path.join(process.cwd(), ".config");
+  }
+
+  /**
+   * 异步初始化：确保目录存在
+   */
+  async onModuleInit(): Promise<void> {
+    try {
+      await fs.promises.access(this.settingsDir);
+    } catch {
+      await fs.promises.mkdir(this.settingsDir, { recursive: true });
     }
   }
 
@@ -35,20 +43,16 @@ export class SettingsStorage {
   /**
    * 从磁盘加载指定分组到内存缓存
    */
-  private loadGroup(group: string): void {
+  private async loadGroup(group: string): Promise<void> {
     // 已加载则跳过
     if (this.cache[group]) return;
 
     const filePath = this.getFilePath(group);
     try {
-      if (fs.existsSync(filePath)) {
-        const content = fs.readFileSync(filePath, 'utf-8');
-        this.cache[group] = JSON.parse(content);
-      } else {
-        this.cache[group] = {};
-      }
-    } catch (error) {
-      console.error(`Failed to load config group ${group}:`, error);
+      await fs.promises.access(filePath);
+      const content = await fs.promises.readFile(filePath, "utf-8");
+      this.cache[group] = JSON.parse(content);
+    } catch {
       this.cache[group] = {};
     }
   }
@@ -56,10 +60,14 @@ export class SettingsStorage {
   /**
    * 将指定分组从内存缓存原子性地写入磁盘
    */
-  private saveGroup(group: string): void {
+  private async saveGroup(group: string): Promise<void> {
     const filePath = this.getFilePath(group);
     try {
-      fs.writeFileSync(filePath, JSON.stringify(this.cache[group], null, 2), 'utf-8');
+      await fs.promises.writeFile(
+        filePath,
+        JSON.stringify(this.cache[group], null, 2),
+        "utf-8",
+      );
     } catch (error) {
       console.error(`Failed to save config group ${group}:`, error);
       throw error;
@@ -71,8 +79,8 @@ export class SettingsStorage {
    * @param group 分组名称
    * @returns 设置对象的副本（防止外部直接修改缓存）
    */
-  getSettings(group: string): any {
-    this.loadGroup(group);
+  async getSettings(group: string): Promise<any> {
+    await this.loadGroup(group);
     return { ...this.cache[group] };
   }
 
@@ -81,10 +89,13 @@ export class SettingsStorage {
    * @param group 分组名称
    * @param data 要更新的设置项
    */
-  updateSettings(group: string, data: Record<string, any>): void {
-    this.loadGroup(group);
+  async updateSettings(
+    group: string,
+    data: Record<string, any>,
+  ): Promise<void> {
+    await this.loadGroup(group);
     Object.assign(this.cache[group], data);
-    this.saveGroup(group);
+    await this.saveGroup(group);
   }
 
   /**
@@ -94,9 +105,15 @@ export class SettingsStorage {
    * @param defaultValue 默认值
    * @returns 设置项的值或默认值
    */
-  getSettingValue(group: string, key: string, defaultValue: any = null): any {
-    this.loadGroup(group);
-    return this.cache[group][key] !== undefined ? this.cache[group][key] : defaultValue;
+  async getSettingValue(
+    group: string,
+    key: string,
+    defaultValue: any = null,
+  ): Promise<any> {
+    await this.loadGroup(group);
+    return this.cache[group][key] !== undefined
+      ? this.cache[group][key]
+      : defaultValue;
   }
 
   /**
