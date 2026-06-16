@@ -160,7 +160,7 @@ export interface ISessionContext {
   /** 获取准备发送给 LLM 的完整消息列表（含 system prompt、摘要和历史） */
   getMessages(): Promise<MessageRecord[]>;
   /** 获取当前对话历史（不含 system prompt 和摘要） */
-  getHistory(): MessageRecord[];
+  getHistory(): Promise<MessageRecord[]>;
   /** 追加消息记录到历史并持久化 */
   appendParts(records: MessageRecord[]): Promise<void>;
   /** 持久化待保存的消息 */

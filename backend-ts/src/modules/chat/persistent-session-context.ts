@@ -252,11 +252,10 @@ export class PersistentSessionContext implements ISessionContext {
     this.logger.debug(`Initial token count: ${this.currentTokenCount}`);
   }
 
-  getHistory(): MessageRecord[] {
+  async getHistory(): Promise<MessageRecord[]> {
     if (!this.conversationStateLoaded) {
-      this.logger.warn(
-        `getHistory called before conversation state loaded for ${this.sessionId}, returning empty`,
-      );
+      await this.loadConversationState();
+      this.conversationStateLoaded = true; 
     }
     return this.buildFinalMessages(this.history);
   }
@@ -737,7 +736,7 @@ export class PersistentSessionContext implements ISessionContext {
       mcpServers: mergedMcpServers,
     };
 
-    // 记忆/压缩配置（独立继承） 
+    // 记忆/压缩配置（独立继承）
     const memoryEnabled = sessionSettings.memoryEnabled;
     const sessionMemory = sessionSettings.memory || {};
     const characterMemory = characterSettings.memory || {};
