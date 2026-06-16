@@ -52,6 +52,15 @@
             </el-icon>
             <span class="text-sm">正在优化对话历史，请稍候...</span>
           </div>
+
+          <!-- 流式输出状态指示 -->
+          <div v-if="isStreaming && !sessionStore.sessionIsCompressing(currentSession?.id || '')"
+            class="w-full py-8 flex flex-col items-center justify-center text-gray-500">
+            <el-icon class="is-loading mb-2" size="24">
+              <Loading />
+            </el-icon>
+            <span class="text-sm">回答中</span>
+          </div>
         </div>
       </ScrollContainer>
 
@@ -892,6 +901,7 @@ async function handleSendMessage(payload?: InputMessageState) {
 
     // 统一处理发送后的滚动
     await nextTick();
+    needScrollToBottom.value = true;
     immediateScrollToBottom();
 
     // 发起流式请求（后端会自动创建消息并启动流）
