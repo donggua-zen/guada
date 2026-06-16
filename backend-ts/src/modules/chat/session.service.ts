@@ -603,6 +603,14 @@ export class SessionService {
       throw new Error("Session not found or unauthorized");
     }
 
+    // 检查会话是否正在流式输出，避免干扰工作流程
+    if (this.streamManager.hasActiveStream(sessionId)) {
+      throw new HttpException(
+        { error: "当前会话正在流式输出，请等待结束后再压缩", code: "SESSION_STREAMING" },
+        HttpStatus.CONFLICT,
+      );
+    }
+
     const context = await this.sessionContextFactory.createFromSession(session);
 
     const beforeTokenCount = context.getTokenCount();
