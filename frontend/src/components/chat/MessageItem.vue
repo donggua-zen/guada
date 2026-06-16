@@ -97,12 +97,6 @@
             </div>
           </el-alert>
         </div>
-        <div v-if="streamingState.isStreaming" class="mt-4 mb-4 w-full flex items-center text-gray-500">
-          <el-icon size="16" class="mr-2 relative top-0">
-            <Loading />
-          </el-icon>
-          <span class="text-sm">回答中</span>
-        </div>
         <!-- Token 消耗显示区域 -->
         <div v-if="isAssistant && tokenUsage && !streamingState.isStreaming" class="token-usage-section mt-2 flex">
           <div class="flex items-center gap-3 text-xs text-gray-400">
@@ -199,8 +193,6 @@ import {
 } from "@vicons/material";
 import { Alert16Regular } from "@vicons/fluent";
 
-// @ts-ignore - icons 组件尚未迁移到 TypeScript
-import { Loading } from "../icons";
 // @ts-ignore - UI 组件尚未迁移到 TypeScript
 import { FileItem, Avatar } from "../ui";
 import { usePopup } from "../../composables/usePopup";
