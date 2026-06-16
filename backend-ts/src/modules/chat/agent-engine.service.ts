@@ -911,25 +911,40 @@ export class AgentEngine {
 
     const modelConfig = sessionContext.getModelConfig();
 
-    // 追加保存指令（用 user 包裹，避免第二条 system）
+    // 获取记忆工具完整使用说明（懒加载模式下影子轮次无法访问工具本身）
+    const memoryProvider = this.toolOrchestrator.getProvider("memory");
+    const memoryGuide = memoryProvider?.getPrompt
+      ? await memoryProvider.getPrompt({
+          sessionId: sessionContext.sessionId,
+          userId: sessionContext.userId,
+          sessionType: sessionContext.sessionType,
+          workspacePath: sessionContext.getWorkspacePath(),
+        })
+      : "";
+
+    if (!memoryGuide) return; // 无记忆指南则跳过整个记忆写入
+
+    const instructionParts: string[] = [
+      `<system_message>`,
+      `这是一条系统消息，即将进行上下文压缩，请检查你的记忆文件是否需要更新。`,
+      `如果有新的重要信息（用户偏好、决策、待办等），请使用文件工具写入记忆。`,
+      ``,
+      memoryGuide,
+      ``,
+      `操作原则：`,
+      `- 已保存的内容无需重复写入`,
+      `- 只保存重要的、持久的、未来需要的信息`,
+      `- 写入完成后不需要回复用户`,
+      `- 最多操作 5 轮工具调用，工作流程如下：`,
+      `  1. LLM 调用文件工具批量读取记忆文件，判断是否需要保存记忆`,
+      `  2. 若需要保存，调用文件工具批量写入记忆`,
+      `  3. 若无需要保存或者保存完毕，回复"DONE"`,
+      `</system_message>`,
+    ];
+
     messages.push({
       role: "user",
-      content: `<system_message>
-这是一条系统消息，即将进行上下文压缩，请检查你的记忆文件是否需要更新。
-如果有新的重要信息（用户偏好、决策、待办等），请使用文件工具写入记忆。
-记忆文件夹结构：
-- .guada/memory/factual.md  — 事实性记忆（用户偏好、项目状态）
-- .guada/memory/soul.md     — 人格定义
-- .guada/memos/*.md         — 备忘录
-操作原则：
-- 已保存的内容无需重复写入
-- 只保存重要的、持久的、未来需要的信息
-- 写入完成后不需要回复用户
-- 最多操作 5 轮工具调用，工作流程如下：
-  1. LLM 调用文件工具批量读取记忆文件，判断是否需要保存记忆
-  2. 若需要保存，调用文件工具批量写入记忆
-  3. 若无需要保存或者保存完毕，回复"DONE"
-</system_message>`,
+      content: instructionParts.join("\n"),
     });
 
     // 仅保留文件读写工具
@@ -976,12 +991,24 @@ export class AgentEngine {
             continue;
           }
 
-          // 路径校验
+          // 路径校验：影子轮次只允许操作记忆相关目录
           const targetPath = args.path || args.file_path || "";
-          if (targetPath && !targetPath.includes(".guada")) {
+          const allowedPrefixes =
+            sessionContext.sessionType === "sub_agent"
+              ? [
+                  `.guada/subagents/${sessionContext.sessionId}/memory/`,
+                  `.guada/subagents/${sessionContext.sessionId}/memos/`,
+                ]
+              : [`.guada/memory/`, `.guada/memos/`];
+          const isAllowed =
+            targetPath &&
+            allowedPrefixes.some(
+              (p) => targetPath.startsWith(p) || targetPath.startsWith("/" + p),
+            );
+          if (!isAllowed) {
             messages.push({
               role: "tool",
-              content: `ERROR: 不允许操作 ${targetPath}`,
+              content: `ERROR: 不允许操作 ${targetPath}，记忆操作仅限于 memory/ 和 memos/ 目录`,
               toolCallId: tc.id,
               name: tc.name,
             });

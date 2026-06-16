@@ -709,9 +709,10 @@ export class PersistentSessionContext implements ISessionContext {
       systemPrompt,
       thinkingEffort: undefined,
       memory: {},
-      modelTemperature: leaderSettings.modelTemperature,
-      modelTopP: leaderSettings.modelTopP,
-      modelFrequencyPenalty: leaderSettings.modelFrequencyPenalty,
+      // 模型参数：会话设置 > 角色设置（与 tools/mcpServers 一致）
+      modelTemperature: sessionSettings.modelTemperature ?? leaderSettings.modelTemperature,
+      modelTopP: sessionSettings.modelTopP ?? leaderSettings.modelTopP,
+      modelFrequencyPenalty: sessionSettings.modelFrequencyPenalty ?? leaderSettings.modelFrequencyPenalty,
       tools: mergedTools,
       mcpServers: mergedMcpServers,
     };

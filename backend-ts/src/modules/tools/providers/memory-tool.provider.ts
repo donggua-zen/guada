@@ -91,16 +91,21 @@ export class MemoryToolProvider implements IToolProvider {
   async getPrompt(context?: Record<string, any>): Promise<string> {
     const promptParts: string[] = [];
 
+    // 子代理使用隔离的记忆路径
+    const memoryRoot = context?.sessionType === "sub_agent"
+      ? `.guada/subagents/${context.sessionId}`
+      : ".guada";
+
     promptParts.push("# 记忆管理指南");
     promptParts.push("");
     promptParts.push(
-      "你应该主动发现并记录你认为有价值的内容，使用文件工具集管理你的记忆。文件位于工作目录的 `.guada/` 子目录中。",
+      `你应该主动发现并记录你认为有价值的内容，使用文件工具集管理你的记忆。文件位于工作目录的 \`${memoryRoot}/\` 子目录中。`,
     );
     promptParts.push("");
     promptParts.push("## 记忆文件结构");
     promptParts.push("");
     promptParts.push("```");
-    promptParts.push(".guada/");
+    promptParts.push(`${memoryRoot}/`);
     promptParts.push("├── memory/");
     promptParts.push(
       "│   ├── factual.md          # 事实性记忆（用户偏好、项目状态、待办事项）",
@@ -151,7 +156,7 @@ export class MemoryToolProvider implements IToolProvider {
     promptParts.push("");
     promptParts.push("**场景1 - 用户偏好**：");
     promptParts.push('当用户说"我喜欢用中文交流，希望回答简洁一些"时');
-    promptParts.push("应该写入 `.guada/memory/factual.md`，内容为：");
+    promptParts.push(`应该写入 \`${memoryRoot}/memory/factual.md\`，内容为：`);
     promptParts.push("```");
     promptParts.push("用户偏好：中文交流，简洁风格");
     promptParts.push("```");
@@ -160,7 +165,7 @@ export class MemoryToolProvider implements IToolProvider {
     promptParts.push(
       '当用户说"我们正在开发一个聊天应用，目前完成了登录功能"时',
     );
-    promptParts.push("应该写入 `.guada/memory/factual.md`，内容为：");
+    promptParts.push(`应该写入 \`${memoryRoot}/memory/factual.md\`，内容为：`);
     promptParts.push("```");
     promptParts.push("当前项目：聊天应用，进度：登录功能已完成");
     promptParts.push("```");
@@ -168,13 +173,13 @@ export class MemoryToolProvider implements IToolProvider {
     promptParts.push("**场景3 - 技术笔记**：");
     promptParts.push('当用户说"帮我记录一下 Docker 的常用命令"时');
     promptParts.push(
-      "应该创建备忘录 `.guada/memos/Docker常用命令.md`，保存完整的命令列表",
+      `应该创建备忘录 \`${memoryRoot}/memos/Docker常用命令.md\`，保存完整的命令列表`,
     );
     promptParts.push("");
     promptParts.push("**场景4 - 会议纪要**：");
     promptParts.push("当对话中讨论了项目需求后");
     promptParts.push(
-      "应该创建备忘录 `.guada/memos/2024-01-15_项目需求会议.md`，保存详细的会议记录",
+      `应该创建备忘录 \`${memoryRoot}/memos/2024-01-15_项目需求会议.md\`，保存详细的会议记录`,
     );
     promptParts.push("");
     promptParts.push("### 4. 重要提醒");
@@ -220,9 +225,18 @@ export class MemoryToolProvider implements IToolProvider {
       this.logger.debug(
         `Memory cache miss for session ${sessionId}, rebuilding from disk`,
       );
-      const guadaDir = path.join(workspaceDir, ".guada");
-      const memoryDir = path.join(guadaDir, "memory");
-      const memosDir = path.join(guadaDir, "memos");
+
+      // 子代理使用隔离的记忆路径，避免与主代理记忆混淆
+      let memoryDir: string;
+      let memosDir: string;
+      if (context?.sessionType === "sub_agent") {
+        const subDir = path.join(workspaceDir, ".guada", "subagents", sessionId);
+        memoryDir = path.join(subDir, "memory");
+        memosDir = path.join(subDir, "memos");
+      } else {
+        memoryDir = path.join(workspaceDir, ".guada", "memory");
+        memosDir = path.join(workspaceDir, ".guada", "memos");
+      }
 
       await this.rebuildIndexForSession(sessionId, memoryDir, memosDir);
 
@@ -245,7 +259,7 @@ export class MemoryToolProvider implements IToolProvider {
       displayName: "记忆管理",
       description: "记忆索引管理与缓存同步工具",
       isMcp: false,
-      loadMode: context?.sessionType === "sub_agent" ? "none" : "lazy",
+      loadMode: "lazy",
       type: "core",
       promptFrequency: "VOLATILE",
     };

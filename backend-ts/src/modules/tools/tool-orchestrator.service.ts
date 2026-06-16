@@ -325,7 +325,7 @@ export class ToolOrchestrator {
       if (!provider) continue;
       const pluginSortKey = this.resolvePromptSortKey(provider, injectParams);
 
-      // 收集 persistentPrompt（始终收集，不受 loadMode 影响）
+      // persistentPrompt：loadMode: "none" 的插件在 buildToolRuntime 已被排除，不会进入此循环
       if (provider.getPersistentPrompt) {
         const persistentPrompt =
           await provider.getPersistentPrompt(injectParams);

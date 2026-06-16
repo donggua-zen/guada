@@ -287,25 +287,37 @@ export class SubAgentManager implements OnModuleInit {
     }
 
     // 4. 创建子会话记录
-    // 角色提示词优先于默认子 Agent 提示词，工具和模型参数继承策略：
-    // systemPrompt: 角色设定 > 默认子Agent提示词
-    // tools: 角色工具 > 父会话工具
-    // mcpServers: 角色MCP > 父会话MCP
-    // modelId: 角色模型 > 父会话模型
+    // 配置继承策略委托给 PersistentSessionContext.mergeSettings()，
+    // 它自动处理 sessionSettings.xxx ?? characterSettings.xxx 回退。
+    //
+    // 有角色时: 角色设定自动生效，spawn 只需设 characterId，不设重复值
+    // 无角色时: 显式设置父会话的继承值作为 sessionSettings
+    const settings: Record<string, any> = {};
+
+    // 思考强度：无论是否有角色，都从父会话继承
+    settings.thinkingEffort = parentSessionSettings.thinkingEffort;
+
+    if (!params.characterId) {
+      // 【无角色】直接继承父会话配置作为 sessionSettings
+      settings.systemPrompt = SUB_AGENT_DEFAULT_PROMPT;
+      settings.tools = inheritedTools;
+      settings.mcpServers = inheritedMcpServers;
+      // 模型参数：父会话当前无会话级入口，直接从父角色设置继承
+      settings.modelTemperature = parentCharacterSettings.modelTemperature;
+      settings.modelTopP = parentCharacterSettings.modelTopP;
+      settings.modelFrequencyPenalty = parentCharacterSettings.modelFrequencyPenalty;
+      settings.memory = parentSessionSettings.memory;
+      settings.memoryEnabled = parentSessionSettings.memoryEnabled;
+    }
+    // 有角色时：仅继承 thinkingEffort，其余配置由 mergeSettings 从 characterSettings 自动读取
+
     const subSession = await this.sessionRepo.create({
       userId: params.userId,
       parentId: params.parentSessionId,
       title: params.name,
       characterId: params.characterId || null,
       modelId: characterModelId || parentSession.modelId,
-      settings: {
-        // 角色提示词优先，否则使用默认子 Agent 提示词
-        systemPrompt:
-          characterSettings.systemPrompt || SUB_AGENT_DEFAULT_PROMPT,
-        // 继承工具权限：角色工具 > 父会话工具
-        tools: characterSettings.tools ?? inheritedTools,
-        mcpServers: characterSettings.mcpServers ?? inheritedMcpServers,
-      },
+      settings,
       sessionType: "sub_agent",
       workspacePath: parentSession.workspacePath,
       avatarUrl: characterAvatarUrl || null,
