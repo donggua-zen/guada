@@ -510,11 +510,6 @@ watch(() => isStreaming.value, async (newVal, oldVal) => {
   }
 }, { immediate: true });
 
-// 监听消息变化，智能显示回到底部按钮
-watch(() => activeMessages.value.length, () => {
-  updateScrollButtonVisibility()
-}, { immediate: true });
-
 
 /**
   * 加载会话配置和消息（首次加载，只加载最近 N 条）

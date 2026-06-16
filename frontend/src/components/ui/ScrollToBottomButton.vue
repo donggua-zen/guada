@@ -77,7 +77,7 @@ defineExpose({
 /* 按钮基础样式 */
 .scroll-to-bottom-btn {
     position: absolute;
-    bottom: 150px; /* 输入框上方，留出足够空间 */
+    bottom: 20px; /* 输入框上方，留出足够空间 */
     left: 50%;
     transform: translateX(-50%);
     width: 44px;
