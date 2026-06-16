@@ -48,17 +48,16 @@ export class MemoryToolProvider implements IToolProvider {
   }
 
   /**
-   * 监听预压缩事件，失效当前会话的记忆缓存。
-   * 无论哪种摘要模式，只要历史即将被压缩处理，缓存都应提前失效，
-   * 确保下一轮 system prompt 构建时从磁盘读取最新记忆。
+   * 监听压缩完成或预压缩事件，失效当前会话的记忆缓存。
+   * - memory.pre_compress：MEMORY_SYNC 模式在记忆保存前触发
    */
-  @OnEvent("memory.pre_compact")
-  handleMemoryPreCompress(payload: { sessionId: string }) {
+  @OnEvent("memory.pre_compress")
+  handleMemoryCompressed(payload: { sessionId: string }) {
     const { sessionId } = payload;
     if (this.cache.has(sessionId)) {
       this.cache.delete(sessionId);
       this.logger.debug(
-        `Memory cache invalidated for session ${sessionId}`,
+        `Memory cache invalidated for session ${sessionId} after compression`,
       );
     }
   }
