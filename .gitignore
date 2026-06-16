@@ -36,3 +36,5 @@ onebots-temp/
 log.txt
 *.code-workspace
 .workbuddy/**
+frontend/src/nul
+.atomcode/graph.bin
