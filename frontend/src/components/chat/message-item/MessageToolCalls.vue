@@ -209,7 +209,7 @@ watch(showDialog, (newVal) => {
 });
 
 /**
- * 根据工具的 namespace 或 toolType 获取对应的图标组件
+ * 根据工具的 pluginId 或 toolType 获取对应的图标组件
  */
 const getToolIconComponent = (tool: ToolCall) => {
   const displayInfo = tool.metadata?.displayMessage;

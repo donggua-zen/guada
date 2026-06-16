@@ -20,7 +20,7 @@ import { WorkspaceService } from "../../../common/services/workspace.service";
 @Injectable()
 export class DocumentToolProvider implements IToolProvider {
   private readonly logger = new Logger(DocumentToolProvider.name);
-  public readonly namespace = "document";
+  public readonly pluginId = "document";
 
   private readonly toolsConfig: ToolDefinition[] = [
     {
@@ -135,12 +135,13 @@ export class DocumentToolProvider implements IToolProvider {
 
   getMetadata(context?: Record<string, any>): ToolProviderMetadata {
     return {
-      namespace: this.namespace,
+      pluginId: this.pluginId,
       displayName: "文档解析工具",
       description: "PDF 和 Word 文档文本提取工具",
       isMcp: false,
       loadMode: "lazy",
       type: "extended",
+      promptFrequency: "REGULAR",
     };
   }
 
@@ -175,7 +176,7 @@ export class DocumentToolProvider implements IToolProvider {
       action,
       args: fileName,
       toolName: `document__${toolName}`,
-      toolType: this.namespace,
+      toolType: this.pluginId,
     };
   }
 

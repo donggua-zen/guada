@@ -11,7 +11,7 @@ import { appendResetMarker } from "../utils/external-id";
 @Injectable()
 export class SessionManagementToolProvider implements IToolProvider {
   private readonly logger = new Logger(SessionManagementToolProvider.name);
-  public readonly namespace = "session_management";
+  public readonly pluginId = "session_management";
 
   constructor(private prisma: PrismaService) { }
 
@@ -148,12 +148,13 @@ export class SessionManagementToolProvider implements IToolProvider {
     const loadMode = sessionType === 'bot' ? 'lazy' : 'none';
 
     return {
-      namespace: this.namespace,
+      pluginId: this.pluginId,
       displayName: "会话管理",
       description: "机器人会话管理工具集,可以根据用户指令清空并新建对话",
       isMcp: false,
       loadMode,
       type: "core",
+      promptFrequency: "REGULAR",
     };
   }
 }

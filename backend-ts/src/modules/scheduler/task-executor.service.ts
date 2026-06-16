@@ -260,7 +260,7 @@ export class TaskExecutorService {
 
     // 第三优先级：全局默认对话模型
     if (!modelId) {
-      modelId = this.settingsStorage.getSettingValue(
+      modelId = await this.settingsStorage.getSettingValue(
         SG_MODELS,
         SK_MOD_CHAT,
         null,

@@ -12,7 +12,7 @@ import * as path from "path";
 export class SkillToolBridgeService implements IToolProvider {
   private readonly logger = new Logger(SkillToolBridgeService.name);
   private readonly skillsDir: string;
-  namespace = "skill";
+  pluginId = "skill";
 
   constructor(
     private orchestrator: SkillOrchestrator,
@@ -216,10 +216,11 @@ export class SkillToolBridgeService implements IToolProvider {
 
   getMetadata(context?: Record<string, any>): ToolProviderMetadata {
     return {
-      namespace: "skill",
+      pluginId: "skill",
       displayName: "Skills 技能",
       description: "由 Skills 核心支持及附属工具，关闭后Agent将不能使用技能",
       isMcp: false,
+      promptFrequency: 'REGULAR',
     };
   }
 }

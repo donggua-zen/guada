@@ -84,7 +84,6 @@ export class SettingsController {
     const allTools = await this.toolOrchestrator.getLocalToolsList();
 
     return {
-      globalTools: await this.settingsService.getGroupSettings('tools'),
       tools: allTools,
     };
   }
@@ -116,17 +115,17 @@ export class SettingsController {
 
   /**
    * 更新全局工具状态
-   * 请求体：{ namespace: string, enabled: boolean }
+   * 请求体：{ pluginId: string, enabled: boolean }
    */
   @UseGuards(AuthGuard)
   @Put("settings/tools/global")
-  async updateGlobalToolStatus(@Body() data: { namespace: string; enabled: boolean }) {
-    const { namespace, enabled } = data;
+  async updateGlobalToolStatus(@Body() data: { pluginId: string; enabled: boolean }) {
+    const { pluginId, enabled } = data;
 
     await this.settingsService.updateGroupSettings('tools', {
-      [namespace]: enabled,
+      [pluginId]: enabled,
     });
 
-    return { success: true, namespace, enabled };
+    return { success: true, pluginId, enabled };
   }
 }

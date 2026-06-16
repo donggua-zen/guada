@@ -6,7 +6,7 @@ import { SettingsStorage } from "../../common/utils/settings-storage.util";
 import { SessionContextStateRepository } from "../../common/database/session-context-state.repository";
 import { LLMService } from "../llm-core/llm.service";
 import { MessageStoreService } from "./message-store.service";
-import { TokenizerService } from "../../common/utils/tokenizer.service";
+import { AgentEngine } from "./agent-engine.service";
 import {
   createPaginatedResponse,
   PaginatedResponse,
@@ -41,6 +41,7 @@ export class SessionService {
     private fileWatcherService: FileWatcherService,
     private streamManager: SessionStreamManager,
     private teamRepo: TeamRepository,
+    private agentEngine: AgentEngine,
   ) {}
 
   /**
@@ -199,7 +200,7 @@ export class SessionService {
 
     // 如果角色和会话均未设置模型，尝试使用默认对话模型
     if (!finalModelId) {
-      finalModelId = this.settingsStorage.getSettingValue(
+      finalModelId = await this.settingsStorage.getSettingValue(
         SG_MODELS,
         SK_MOD_CHAT,
       );
@@ -430,7 +431,7 @@ export class SessionService {
         };
 
       // 从全局设置中获取标题总结模型
-      const titleModelId = this.settingsStorage.getSettingValue(
+      const titleModelId = await this.settingsStorage.getSettingValue(
         SG_MODELS,
         SK_MOD_TITLE_MODEL,
       );
@@ -617,7 +618,11 @@ export class SessionService {
     const beforeMessageCount = (await context.getHistory()).length;
 
     this.logger.log(`Manually triggering compression for session ${sessionId}`);
-    await context.forceCompress();
+    await context.compress(async () => {
+      if (context.getMemoryConfig().summaryMode === "memory_sync") {
+        await this.agentEngine.runMemorySaveShadowTurn(context);
+      }
+    });
 
     const afterTokenCount = context.getTokenCount();
     const compressedMessages = await context.getHistory();

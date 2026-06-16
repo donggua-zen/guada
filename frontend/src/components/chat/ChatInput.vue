@@ -359,7 +359,7 @@ const props = defineProps({
         maxMemoryLength: null,
         compressionTriggerRatio: 0.8,
         compressionTargetRatio: 0.5,
-        summaryMode: 'fast', // 默认快速模式
+        summaryMode: 'memory_sync', // 默认记忆同步模式
         maxTokensLimit: null,
       },
       knowledgeBaseIds: [],

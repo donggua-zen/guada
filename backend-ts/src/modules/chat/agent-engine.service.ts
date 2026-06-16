@@ -5,8 +5,9 @@ import { MessageRecord, LLMResponseChunk } from "../llm-core/types/llm.types";
 import { RequestContext } from "../../common/context/request-context";
 import { throttledStream } from "./utils/stream-throttle.util";
 import { ToolCallDisplayUtil } from "./utils/tool-call-display.util";
-import { ISessionContext } from "./session-context";
+import { ISessionContext, ModelConfig } from "./session-context";
 import { EventChunk } from "./types/event-chunk.types";
+import { partialParse } from "partial-json-parser";
 
 /**
  * 审批上下文
@@ -181,6 +182,9 @@ export class AgentEngine {
 
     // 工具调用轮次计数器
     let iterationCount = 0;
+    // 状态机：normal → shadow_save → compress → normal
+    type LoopState = "normal" | "shadow_save" | "compress";
+    let loopState: LoopState = "normal";
     sessionContext.setMessageCursor(userMessageId);
     do {
       iterationCount++;
@@ -188,6 +192,18 @@ export class AgentEngine {
 
       // 从会话上下文中获取准备发送给 LLM 的完整消息列表（含 system prompt、摘要和历史）
       const historyMessages = await sessionContext.getMessages();
+
+      // 消息已加载，此时检查是否需要进入保存/压缩状态
+      if (await sessionContext.shouldCompress()) {
+        // onStage2 回调：仅在需要二级压缩（摘要/丢弃）时触发
+        const onStage2 = async () => {
+          if (sessionContext.getMemoryConfig().summaryMode === "memory_sync") {
+            await this.runMemorySaveShadowTurn(sessionContext, abortSignal);
+          }
+        };
+        await sessionContext.compress(onStage2);
+        continue;
+      }
 
       // 生成本轮助手回复的内容 ID，用于唯一标识该轮次的输出
       let contentId = sessionContext.generateId();
@@ -238,8 +254,10 @@ export class AgentEngine {
         try {
           // 执行 LLM 流式请求，获取原始 chunk 和累加结果
           const streamResult = this.executeLLMStream(
-            sessionContext,
             historyMessages,
+            sessionContext.getModelConfig(),
+            sessionContext.getToolContext()?.getFlatTools(),
+            sessionContext.getThinkingEffort(),
             abortSignal,
           );
           for await (const { chunk, accumulated } of streamResult) {
@@ -275,8 +293,12 @@ export class AgentEngine {
             }
 
             chunk.contentId = contentId;
-            const yieldEvent = this.buildYieldEvent(chunk, accumulated, toolContext);           
-            if (yieldEvent) {             
+            const yieldEvent = this.buildYieldEvent(
+              chunk,
+              accumulated,
+              toolContext,
+            );
+            if (yieldEvent) {
               yield yieldEvent;
             }
           }
@@ -394,7 +416,7 @@ export class AgentEngine {
             approvedTools.map((tc: any) => ({
               id: tc.id,
               name: tc.name,
-              arguments: this.safeJsonParse(tc.arguments),
+              arguments: partialParse(tc.arguments) || {},
             })),
             toolContext,
             abortSignal,
@@ -402,7 +424,9 @@ export class AgentEngine {
 
           // 工具执行完毕，重新格式化文案（已完成状态）并更新到 assistant toolCalls metadata
           const toolCallDisplayMessages = approvedTools.map((at: any) => {
-            const tc = assistantResponse.toolCalls?.find((t: any) => t.id === at.id);
+            const tc = assistantResponse.toolCalls?.find(
+              (t: any) => t.id === at.id,
+            );
             if (tc) {
               if (!tc.metadata) tc.metadata = {};
               tc.metadata.displayMessage = this.displayManager.format(
@@ -495,54 +519,43 @@ export class AgentEngine {
   }
 
   /**
-   * 执行单次 LLM 流式请求
+   * 执行 LLM 流式请求，返回累积的响应块。
    *
-   * 该方法负责调用 LLM API 并实时处理流式响应，包括：
-   * - 累加文本内容、思维链内容和工具调用参数到 accumulated
-   * - 追踪思维链的开始和结束时间，用于计算思考时长
-   * - 返回原始 chunk 和累加后的 accumulated（均为 LLMResponseChunk 格式）
-   *
-   * 注意：
-   * - 该方法不直接 yield SSE 事件，由调用方负责转换和 yield
-   * - 该方法不捕获异常，异常由调用方处理
-   *
-   * @param sessionContext 类型安全的会话上下文
-   * @param messages 发送给 LLM 的完整消息列表
-   * @param abortSignal 中断信号（可选）
-   * @yields { chunk: LLMResponseChunk; accumulated: LLMResponseChunk } 原始块和累加块
+   * @param messages 发送给 LLM 的消息列表
+   * @param modelConfig 模型配置（含运行时调用参数）
+   * @param tools 工具定义列表
+   * @param thinkingEffort 思考强度
+   * @param abortSignal 中断信号
+   * @yields { chunk: LLMResponseChunk; accumulated: LLMResponseChunk }
    */
   private async *executeLLMStream(
-    sessionContext: ISessionContext,
     messages: MessageRecord[],
+    modelConfig: ModelConfig,
+    tools: any[] | undefined,
+    thinkingEffort: string | undefined,
     abortSignal?: AbortSignal,
   ): AsyncGenerator<
     { chunk: LLMResponseChunk; accumulated: LLMResponseChunk },
     any,
     unknown
   > {
-    const tools = sessionContext.getToolContext()?.getFlatTools();
-    const thinkingEffort = sessionContext.getThinkingEffort();
     // 累加器：使用 LLMResponseChunk 格式保存累积状态
     const accumulated: LLMResponseChunk = {};
-
-    const modelConfig = sessionContext.getModelConfig();
-    const modelParams = sessionContext.getModelParams();
 
     // 调用 LLM 服务发起流式请求，传递所有必要的配置参数
     const stream = this.llmService.completions({
       model: modelConfig.modelName,
       messages,
       tools,
-      temperature: modelParams.temperature, // 控制输出的随机性
-      topP: modelParams.topP, // 核采样参数
-      frequencyPenalty: modelParams.frequencyPenalty, // 频率惩罚，降低重复内容
-      maxTokens: modelConfig.config.maxOutputTokens, // 最大输出 Token 数限制
+      temperature: modelConfig.config.temperature,
+      topP: modelConfig.config.topP,
+      frequencyPenalty: modelConfig.config.frequencyPenalty,
+      maxTokens: modelConfig.config.maxOutputTokens,
       providerConfig: modelConfig.provider,
       stream: true,
-      thinkingEffort, // 传递思考强度
+      thinkingEffort,
       abortSignal,
     }) as AsyncGenerator<LLMResponseChunk>;
-
     // 使用限流包装器合并高频 chunk，降低前端渲染压力
     const throttled = throttledStream(stream, this.THROTTLE_MS, abortSignal);
 
@@ -684,90 +697,6 @@ export class AgentEngine {
       currentChunk.metadata.error = streamError.message;
     }
     this.recordThinkingFinished(currentTurnThinkingInfo, "api error");
-  }
-
-  /**
-   * 安全地解析JSON字符串，处理无效JSON的情况
-   *
-   * 该方法采用多层容错策略：
-   * - 首先尝试标准 JSON.parse
-   * - 若失败则尝试修复常见问题（重复输出、缺少引号、单引号等）
-   * - 若仍失败则返回包含原始字符串的对象，供工具自行处理
-   *
-   * 这种设计提高了工具调用的鲁棒性，避免因模型输出格式不完美而导致执行失败。
-   *
-   * @param jsonString 要解析的JSON字符串
-   * @returns 解析后的对象，如果解析失败则返回空对象或包含原始字符串的对象
-   */
-  private safeJsonParse(jsonString: string): any {
-    if (!jsonString || typeof jsonString !== "string") {
-      return {};
-    }
-
-    try {
-      const parsed = JSON.parse(jsonString);
-      return parsed || {};
-    } catch (error) {
-      const errorMessage =
-        error instanceof Error ? error.message : String(error);
-      this.logger.warn(
-        `Failed to parse JSON arguments: ${jsonString.substring(0, 100)}... Error: ${errorMessage}`,
-      );
-
-      // 尝试修复常见的JSON格式问题，提高对模型输出不完美的容忍度
-      try {
-        let fixedString = jsonString.trim();
-
-        // 修复1: 检测并提取第一个完整的JSON对象（处理重复输出的情况）
-        // 例如：模型可能输出 {"a":1}{"a":1}，我们只取第一个完整对象
-        const firstBraceIndex = fixedString.indexOf("{");
-        if (firstBraceIndex >= 0) {
-          let braceCount = 0;
-          let endIndex = -1;
-
-          for (let i = firstBraceIndex; i < fixedString.length; i++) {
-            if (fixedString[i] === "{") {
-              braceCount++;
-            } else if (fixedString[i] === "}") {
-              braceCount--;
-              if (braceCount === 0) {
-                endIndex = i + 1;
-                break;
-              }
-            }
-          }
-
-          if (endIndex > 0) {
-            fixedString = fixedString.substring(firstBraceIndex, endIndex);
-            this.logger.debug(
-              `Extracted first complete JSON object: ${fixedString}`,
-            );
-          }
-        }
-
-        // 修复2: 检查是否是未加引号的键值对格式，若是则包裹在花括号中
-        if (fixedString.includes(":") && !fixedString.startsWith("{")) {
-          fixedString = `{${fixedString}}`;
-        }
-
-        // 修复3: 替换单引号为双引号（简单的修复，处理 Python 风格的字典输出）
-        fixedString = fixedString.replace(/'/g, '"');
-
-        // 尝试再次解析
-        const parsed = JSON.parse(fixedString);
-        return parsed || {};
-      } catch (secondError) {
-        const secondErrorMessage =
-          secondError instanceof Error
-            ? secondError.message
-            : String(secondError);
-        this.logger.error(
-          `Failed to fix and parse JSON arguments: ${secondErrorMessage}`,
-        );
-        // 如果仍然失败，返回一个包含原始字符串的对象，以便工具可以自行解析或报错
-        return { _raw_arguments: jsonString };
-      }
-    }
   }
 
   /**
@@ -963,5 +892,119 @@ export class AgentEngine {
     }
 
     return false;
+  }
+
+  /**
+   * 执行影子轮次：在压缩前静默调用 LLM 保存记忆。
+   *
+   * 使用对话模型 + 仅文件读写工具，让 AI 自行判断需要保存的内容。
+   * 整个交互不入库，不 yield SSE 事件。
+   * 最多 5 轮工具调用，无工具调用即提前结束。
+   */
+  async runMemorySaveShadowTurn(
+    sessionContext: ISessionContext,
+    abortSignal?: AbortSignal,
+  ): Promise<void> {
+    const messages = await sessionContext.getMessages();
+    const toolContext = sessionContext.getToolContext();
+    if (!toolContext) return;
+
+    const modelConfig = sessionContext.getModelConfig();
+
+    // 追加保存指令（用 user 包裹，避免第二条 system）
+    messages.push({
+      role: "user",
+      content: `<system_message>
+这是一条系统消息，即将进行上下文压缩，请检查你的记忆文件是否需要更新。
+如果有新的重要信息（用户偏好、决策、待办等），请使用文件工具写入记忆。
+记忆文件夹结构：
+- .guada/memory/factual.md  — 事实性记忆（用户偏好、项目状态）
+- .guada/memory/soul.md     — 人格定义
+- .guada/memos/*.md         — 备忘录
+操作原则：
+- 已保存的内容无需重复写入
+- 只保存重要的、持久的、未来需要的信息
+- 写入完成后不需要回复用户
+- 最多操作 5 轮工具调用，工作流程如下：
+  1. LLM 调用文件工具批量读取记忆文件，判断是否需要保存记忆
+  2. 若需要保存，调用文件工具批量写入记忆
+  3. 若无需要保存或者保存完毕，回复"DONE"
+</system_message>`,
+    });
+
+    // 仅保留文件读写工具
+    const ALLOWED_TOOL_NAMES = new Set(["read", "list", "write", "edit"]);
+    const saveTools = (toolContext.getFlatTools() as any[]).filter((t: any) => {
+      const pluginId = toolContext.resolvePluginId(t.name);
+      return pluginId === "file" && ALLOWED_TOOL_NAMES.has(t.name);
+    });
+
+    if (saveTools.length === 0) return;
+
+    // 与主循环共用 executeLLMStream，保证参数一致
+    const MAX_ROUNDS = 5;
+    for (let round = 1; round <= MAX_ROUNDS; round++) {
+      try {
+        const streamResult = this.executeLLMStream(
+          messages,
+          modelConfig,
+          saveTools,
+          "off", // 记忆保存不需要思考
+          abortSignal,
+        );
+        let accumulated: LLMResponseChunk = {};
+        for await (const { accumulated: acc } of streamResult) {
+          accumulated = acc;
+        }
+
+        if (!accumulated.toolCalls?.length) break;
+
+        messages.push({
+          role: "assistant",
+          content: accumulated.content || null,
+          toolCalls: accumulated.toolCalls,
+        });
+
+        for (const tc of accumulated.toolCalls) {
+          let args: any;
+          try {
+            args =
+              typeof tc.arguments === "string"
+                ? JSON.parse(tc.arguments)
+                : tc.arguments;
+          } catch {
+            continue;
+          }
+
+          // 路径校验
+          const targetPath = args.path || args.file_path || "";
+          if (targetPath && !targetPath.includes(".guada")) {
+            messages.push({
+              role: "tool",
+              content: `ERROR: 不允许操作 ${targetPath}`,
+              toolCallId: tc.id,
+              name: tc.name,
+            });
+            continue;
+          }
+
+          const responses = await this.toolOrchestrator.executeBatch(
+            [{ id: tc.id, name: tc.name, arguments: args }],
+            toolContext,
+          );
+
+          messages.push({
+            role: "tool",
+            content: responses[0]?.content || "",
+            toolCallId: tc.id,
+            name: tc.name,
+          });
+        }
+      } catch (error: any) {
+        this.logger.warn(`记忆保存第${round}轮失败: ${error.message}`);
+        break;
+      }
+    }
+    // 不入库，不 yield
   }
 }

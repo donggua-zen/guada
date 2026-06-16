@@ -50,7 +50,7 @@ export interface ToolDisplayInfo {
   toolName?: string;
   /**
    * 工具类型标识（用于前端图标映射）
-   * 默认使用 namespace，仅在需要特殊图标时显式指定
+   * 默认使用 pluginId，仅在需要特殊图标时显式指定
    */
   toolType?: string;
   /** 额外信息（可选，用于扩展） */
@@ -69,8 +69,16 @@ export type ToolLoadMode = 'eager' | 'lazy' | 'none';
  */
 export type ToolProviderType = 'core' | 'extended';
 
+/**
+ * 提示词在 system prompt 中的变动频率
+ * - STATIC:   完全静态，内容不随会话变化（如 file/shell 的使用指南）
+ * - REGULAR:  偶尔变化，通常由配置或角色设定触发（如知识库说明、子代理提示词）
+ * - VOLATILE: 每次对话都可能不同（如 memory 的记忆内容）
+ */
+export type PromptFrequency = 'STATIC' | 'REGULAR' | 'VOLATILE';
+
 export interface ToolProviderMetadata {
-  namespace: string;
+  pluginId: string;
   displayName: string;
   description: string;
   isMcp: boolean;
@@ -88,10 +96,16 @@ export interface ToolProviderMetadata {
    * 未配置时默认为 core，保持向后兼容
    */
   type?: ToolProviderType;
+  /**
+   * 提示词变动频率，用于排序优化 KV cache 命中率。
+   * 排序规则：STATIC → REGULAR → VOLATILE（越静态越靠前）。
+   * 未配置时默认 REGULAR，保持向后兼容。
+   */
+  promptFrequency?: PromptFrequency;
 }
 
 export interface IToolProvider {
-  namespace: string;
+  pluginId: string;
   /**
    * 获取工具定义列表
    * @param enabled 启用状态或启用的工具名称列表
@@ -110,10 +124,11 @@ export interface IToolProvider {
   execute(request: ToolCallRequest, context?: Record<string, any>, abortSignal?: AbortSignal): Promise<string>;
   /**
    * 获取工具的完整提示词（包含工具说明和使用指南）
+   * 可选实现。如果模块不需要额外提示词（如 MCP），可以不实现此方法。
    * @param context 上下文信息
-   * @returns 工具提示词字符串
+   * @returns 工具提示词字符串，不需要则返回空字符串
    */
-  getPrompt(context?: Record<string, any>): Promise<string>;
+  getPrompt?(context?: Record<string, any>): Promise<string>;
   /**
    * 获取需要持续注入的提示词内容（如记忆内容、动态上下文等）
    * 这部分内容会始终注入到 System Prompt 中，不受 loadMode 影响
@@ -135,7 +150,7 @@ export interface IToolProvider {
   getBriefDescription?(context?: Record<string, any>): Promise<string>;
   /**
    * 生成工具调用的展示文案（在 LLM 输出参数后立即调用）
-   * @param toolName 工具名称（不含命名空间前缀）
+   * @param toolName 工具名称
    * @param args 工具参数（可能不完整，流式累积中）
    * @param isExecuting 工具是否正在执行（true=正在进行，false=已完成）
    * @returns 结构化的展示信息或自然语言字符串（向后兼容）

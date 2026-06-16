@@ -60,7 +60,7 @@ export class AuthService {
   async autoLogin(): Promise<{ accessToken: string; user: any } | null> {
     try {
       // 检查是否开启免登录模式
-      const autoLoginEnabled = this.settingsStorage.getSettingValue(
+      const autoLoginEnabled = await this.settingsStorage.getSettingValue(
         SG_SYSTEM,
         SK_SYS_AUTO_LOGIN,
         false,

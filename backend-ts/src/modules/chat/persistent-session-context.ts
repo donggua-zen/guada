@@ -3,7 +3,6 @@ import {
   ISessionContext,
   ModelConfig,
   ModelFeature,
-  ModelParams,
   ToolApprovalConfig,
   MemoryConfig,
 } from "./session-context";
@@ -65,7 +64,6 @@ export class PersistentSessionContext implements ISessionContext {
 
   // 初始化后构建完成的 DTO（在 initialize() 中一次性填充）
   private modelConfig!: ModelConfig;
-  private modelParams!: ModelParams;
   private systemPrompt!: string;
   private thinkingEffortValue!: string | undefined;
   private toolRuntime: ToolRuntime | undefined;
@@ -113,15 +111,14 @@ export class PersistentSessionContext implements ISessionContext {
     const model = prep.model;
 
     // 一次性构建所有 DTO，避免 getter 中的延迟计算和缓存逻辑
-    this.modelConfig = this.buildModelConfig(model);
-    this.modelParams = this.buildModelParams(prep.mergedSettings, model);
+    this.modelConfig = this.buildModelConfig(model, prep.mergedSettings);
     this.systemPrompt = prep.fullSystemPrompt || "";
     this.thinkingEffortValue = prep.features.includes("thinking")
       ? prep.mergedSettings.thinkingEffort || "off"
       : undefined;
     this.toolRuntime = prep.toolRuntime;
     this.toolApprovalConfig = this.buildToolApprovalConfig();
-    this.memoryConfig = this.buildMemoryConfig(prep.mergedSettings.memory);
+    this.memoryConfig = await this.buildMemoryConfig(prep.mergedSettings.memory);
     this.effectiveContextWindow = prep.effectiveContextWindow;
     this.workspacePath = this.session.workspacePath || "";
   }
@@ -274,55 +271,9 @@ export class PersistentSessionContext implements ISessionContext {
       this.conversationStateLoaded = true;
     }
 
-    const memoryConfig = this.memoryConfig;
-    const modelConfig = this.modelConfig;
-    const chatModelName = modelConfig.modelName || modelConfig.name || "gpt4";
-
-    const compressionConfig: CompressionConfig = {
-      contextWindow: this.effectiveContextWindow - this.systemPromptTokenCount,
-      triggerRatio: memoryConfig.compressionTriggerRatio ?? 0.8,
-      targetRatio: memoryConfig.compressionTargetRatio ?? 0.5,
-      model: this.compressionModel,
-      summaryMode: (memoryConfig.summaryMode || "fast") as any,
-      chatModelName,
-    };
-
-    let messages = this.history;
-
-    if (
-      await this.compressionStrategy.shouldCompress(
-        messages,
-        compressionConfig,
-        this.currentTokenCount,
-      )
-    ) {
-      this.logger.log(
-        `Compression triggered: ${compressionConfig.contextWindow * compressionConfig.triggerRatio} tokens threshold exceeded`,
-      );
-      const result = await this.compressionStrategy.execute(
-        this.sessionId,
-        messages,
-        compressionConfig,
-        this.currentTokenCount,
-      );
-
-      messages = result.messages;
-      this.history = messages;
-      this.currentSummary = result.summary;
-
-      if (result.tokenCount !== undefined) {
-        this.currentTokenCount = result.tokenCount;
-        this.logger.log(
-          `Compression completed with strategy: ${result.strategy}, token count: ${result.tokenCount}`,
-        );
-      } else {
-        this.logger.log(
-          `Compression completed with strategy: ${result.strategy}`,
-        );
-      }
-    }
-
-    return this.buildFinalMessages(messages);
+    // 压缩由外部（AgentEngine）通过 shouldCompress/compress 控制，
+    // getMessages 仅负责组装消息，不再触发压缩
+    return this.buildFinalMessages(this.history);
   }
 
   /**
@@ -377,25 +328,32 @@ export class PersistentSessionContext implements ISessionContext {
   }
 
   /**
-   * 强制触发压缩，不受 Token 阈值限制。
+   * 执行压缩，不受 Token 阈值限制。
    *
    * 将 contextWindow 临时设置为当前 Token 数，确保 shouldCompress 判断通过。
    * 压缩完成后恢复原始 contextWindow。
    */
-  async forceCompress(): Promise<MessageRecord[]> {
+  async compress(onStage2?: () => Promise<void>): Promise<MessageRecord[]> {
     if (!this.conversationStateLoaded) {
       await this.loadConversationState();
       this.conversationStateLoaded = true;
     }
 
     const currentTokens = this.currentTokenCount;
-    this.logger.log(
-      `Force compressing session ${this.sessionId} with ${currentTokens} tokens`,
-    );
-
     const memoryConfig = this.memoryConfig;
     const modelConfig = this.modelConfig;
     const chatModelName = modelConfig.modelName || modelConfig.name || "gpt4";
+
+    // 检查是否已在目标范围内，避免反复压缩
+    const targetTokens = Math.floor(
+      this.effectiveContextWindow * (memoryConfig.compressionTargetRatio ?? 0.5),
+    );
+    if (currentTokens <= targetTokens) {
+      this.logger.log(
+        `Skipping compression: ${currentTokens} tokens <= target ${targetTokens}`,
+      );
+      return this.buildFinalMessages(this.history);
+    }
 
     const compressionConfig: CompressionConfig = {
       contextWindow: currentTokens,
@@ -411,6 +369,7 @@ export class PersistentSessionContext implements ISessionContext {
       this.history,
       compressionConfig,
       this.currentTokenCount,
+      onStage2,
     );
 
     this.history = result.messages;
@@ -428,6 +387,31 @@ export class PersistentSessionContext implements ISessionContext {
     }
 
     return this.buildFinalMessages(result.messages);
+  }
+
+  /**
+   * 检查是否达到压缩阈值。
+   *
+   * 通过 compressionStrategy.shouldCompress 判断当前 Token 数是否达到阈值。
+   * 由 AgentEngine 在每轮循环前调用，决定是否进入 shadow_save 或 compress 状态。
+   */
+  async shouldCompress(): Promise<boolean> {
+    const memoryConfig = this.memoryConfig;
+    const modelConfig = this.modelConfig;
+    const chatModelName = modelConfig.modelName || modelConfig.name || "gpt4";
+
+    const config: CompressionConfig = {
+      contextWindow: this.effectiveContextWindow - this.systemPromptTokenCount,
+      triggerRatio: memoryConfig.compressionTriggerRatio ?? 0.8,
+      targetRatio: memoryConfig.compressionTargetRatio ?? 0.5,
+      chatModelName,
+    };
+
+    return this.compressionStrategy.shouldCompress(
+      this.history,
+      config,
+      this.currentTokenCount,
+    );
   }
 
   /**
@@ -456,7 +440,10 @@ export class PersistentSessionContext implements ISessionContext {
     ];
   }
 
-  private buildModelConfig(model: any): ModelConfig {
+  private buildModelConfig(
+    model: any,
+    mergedSettings: MergedSettings,
+  ): ModelConfig {
     if (!model) {
       throw new Error(`Session ${this.sessionId} has no resolved model`);
     }
@@ -480,20 +467,13 @@ export class PersistentSessionContext implements ISessionContext {
         maxOutputTokens: model.config?.maxOutputTokens,
         features: model.config?.features || [],
         inputCapabilities: model.config?.inputCapabilities || [],
+        // 模型默认配置（会被下面的运行时参数覆盖）
         ...(model.config || {}),
+        // 运行时调用参数（优先级最高）
+        temperature: mergedSettings.modelTemperature ?? 0.7,
+        topP: mergedSettings.modelTopP ?? 1.0,
+        frequencyPenalty: mergedSettings.modelFrequencyPenalty ?? 0,
       },
-    };
-  }
-
-  private buildModelParams(
-    mergedSettings: MergedSettings,
-    model: any,
-  ): ModelParams {
-    return {
-      temperature: mergedSettings.modelTemperature ?? 0.7,
-      topP: mergedSettings.modelTopP ?? 1.0,
-      frequencyPenalty: mergedSettings.modelFrequencyPenalty ?? 0,
-      maxTokens: model?.config?.maxOutputTokens,
     };
   }
 
@@ -507,8 +487,8 @@ export class PersistentSessionContext implements ISessionContext {
     };
   }
 
-  private buildMemoryConfig(memory: any): MemoryConfig {
-    const summaryMode = this.resolveSummaryMode(memory);
+  private async buildMemoryConfig(memory: any): Promise<MemoryConfig> {
+    const summaryMode = await this.resolveSummaryMode(memory);
 
     return {
       maxMemoryLength: memory?.maxMemoryLength,
@@ -525,13 +505,13 @@ export class PersistentSessionContext implements ISessionContext {
    * 优先级：角色级别 summaryMode > 全局 enableSummary 设置 > 默认快速模式（fast）。
    * 当全局 enableSummary 为 false/disabled 时返回 disabled。
    */
-  private resolveSummaryMode(memory: any): string {
+  private async resolveSummaryMode(memory: any): Promise<string> {
     if (memory?.summaryMode) {
       this.logger.debug(`Using role-level summaryMode: ${memory.summaryMode}`);
       return memory.summaryMode;
     }
 
-    const globalEnableSummary = this.settingsStorage.getSettingValue(
+    const globalEnableSummary = await this.settingsStorage.getSettingValue(
       SG_MODELS,
       SK_MOD_COMPRESS_ENABLE_SUMMARY,
       true,
@@ -555,7 +535,7 @@ export class PersistentSessionContext implements ISessionContext {
    * 专用压缩模型通常选择成本更低、速度更快的模型。
    */
   private async resolveCompressionModel(fallbackModel: any): Promise<any> {
-    const compressionModelId = this.settingsStorage.getSettingValue(
+    const compressionModelId = await this.settingsStorage.getSettingValue(
       SG_MODELS,
       SK_MOD_COMPRESS_MODEL,
       null,
@@ -629,13 +609,13 @@ export class PersistentSessionContext implements ISessionContext {
       };
 
       // 团队模式：强制 subagent 命名空间使用 eager 加载
-      const eagerNamespaces = this.session.team ? ["sub_agent"] : undefined;
+      const eagerPluginIds = this.session.team ? ["sub_agent"] : undefined;
 
       toolRuntime = await this.toolOrchestrator.buildToolRuntime(
         injectParams,
         merged.tools,
         merged.mcpServers,
-        eagerNamespaces,
+        eagerPluginIds,
       );
 
       toolPrompts = await this.toolOrchestrator.getPrompts(toolRuntime);
@@ -764,7 +744,7 @@ export class PersistentSessionContext implements ISessionContext {
   private async resolveModel() {
     let model = this.session.model;
     if (!model) {
-      const modelId = this.settingsStorage.getSettingValue(
+      const modelId = await this.settingsStorage.getSettingValue(
         SG_MODELS,
         SK_MOD_CHAT,
       );
@@ -777,10 +757,6 @@ export class PersistentSessionContext implements ISessionContext {
 
   getModelConfig(): ModelConfig {
     return this.modelConfig;
-  }
-
-  getModelParams(): ModelParams {
-    return this.modelParams;
   }
 
   supportsFeature(feature: ModelFeature): boolean {

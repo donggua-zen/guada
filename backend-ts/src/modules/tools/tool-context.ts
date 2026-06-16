@@ -10,66 +10,66 @@ import { ToolDefinition } from "./interfaces/tool-provider.interface";
  */
 export class ToolRuntime {
   /**
-   * 工具名到命名空间的映射，用于快速查表定位工具所属命名空间
+   * 工具名到插件标识的映射，用于快速查表定位工具所属插件
    */
-  private readonly _toolNameToNamespace: Map<string, string>;
+  private readonly _toolNameToPluginId: Map<string, string>;
 
   constructor(
     readonly injectParams: Record<string, any>,
     readonly tools: Record<string, ToolDefinition[]>,
     readonly lazyTools: Record<string, ToolDefinition[]> = {},
   ) {
-    // 构建工具名到命名空间的映射
-    this._toolNameToNamespace = new Map();
-    for (const [namespace, toolList] of Object.entries(this.tools)) {
+    // 构建工具名到插件标识的映射
+    this._toolNameToPluginId = new Map();
+    for (const [pluginId, toolList] of Object.entries(this.tools)) {
       for (const tool of toolList) {
-        this._toolNameToNamespace.set(tool.name, namespace);
+        this._toolNameToPluginId.set(tool.name, pluginId);
       }
     }
-    for (const [namespace, toolList] of Object.entries(this.lazyTools)) {
+    for (const [pluginId, toolList] of Object.entries(this.lazyTools)) {
       for (const tool of toolList) {
-        this._toolNameToNamespace.set(tool.name, namespace);
+        this._toolNameToPluginId.set(tool.name, pluginId);
       }
     }
   }
 
   /**
    * 返回扁平化的工具列表
-   * @param includeLazy 是否包含懒加载命名空间的工具（默认 false）
+   * @param includeLazy 是否包含懒加载插件的工具（默认 false）
    */
   getFlatTools(includeLazy = false): ToolDefinition[] {
     const result: ToolDefinition[] = [];
-    for (const namespaceTools of Object.values(this.tools)) {
-      result.push(...namespaceTools);
+    for (const pluginTools of Object.values(this.tools)) {
+      result.push(...pluginTools);
     }
     if (includeLazy) {
-      for (const namespaceTools of Object.values(this.lazyTools)) {
-        result.push(...namespaceTools);
+      for (const pluginTools of Object.values(this.lazyTools)) {
+        result.push(...pluginTools);
       }
     }
     return result;
   }
 
   /**
-   * 根据工具名查找其所属命名空间
-   * @param toolName 工具名（不拼接命名空间前缀）
-   * @returns 命名空间，未找到返回 undefined
+   * 根据工具名查找其所属插件标识
+   * @param toolName 工具名
+   * @returns 插件标识，未找到返回 undefined
    */
-  resolveNamespace(toolName: string): string | undefined {
-    return this._toolNameToNamespace.get(toolName);
+  resolvePluginId(toolName: string): string | undefined {
+    return this._toolNameToPluginId.get(toolName);
   }
 
   /**
-   * 根据工具名查找工具定义及其所属命名空间
-   * @param toolName 工具名（不拼接命名空间前缀）
-   * @returns 包含 namespace 和 tool 的对象，未找到返回 undefined
+   * 根据工具名查找工具定义及其所属插件标识
+   * @param toolName 工具名
+   * @returns 包含 pluginId 和 tool 的对象，未找到返回 undefined
    */
-  resolveTool(toolName: string): { namespace: string; tool: ToolDefinition } | undefined {
-    const namespace = this._toolNameToNamespace.get(toolName);
-    if (!namespace) return undefined;
+  resolveTool(toolName: string): { pluginId: string; tool: ToolDefinition } | undefined {
+    const pluginId = this._toolNameToPluginId.get(toolName);
+    if (!pluginId) return undefined;
 
-    const toolList = this.tools[namespace] || this.lazyTools[namespace];
+    const toolList = this.tools[pluginId] || this.lazyTools[pluginId];
     const tool = toolList?.find((t) => t.name === toolName);
-    return tool ? { namespace, tool } : undefined;
+    return tool ? { pluginId, tool } : undefined;
   }
 }

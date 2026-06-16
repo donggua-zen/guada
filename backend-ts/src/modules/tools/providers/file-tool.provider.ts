@@ -14,7 +14,7 @@ import { WorkspaceService } from "../../../common/services/workspace.service";
 @Injectable()
 export class FileToolProvider implements IToolProvider {
   private readonly logger = new Logger(FileToolProvider.name);
-  public readonly namespace = "file";
+  public readonly pluginId = "file";
 
   private readonly toolsConfig: ToolDefinition[] = [
     {
@@ -235,6 +235,9 @@ export class FileToolProvider implements IToolProvider {
       promptParts.push(
         "2. **默认路径规则**：所有文件操作工具在处理相对路径时，都会自动以该工作目录为基准。除非用户明确指定了其他绝对路径，否则请始终使用相对路径。",
       );
+      promptParts.push(
+        "3. .guada 为特殊目录，只允许存放提示词中指定文件，项目文件、脚本等禁止放在.guada目录下",
+      );
       promptParts.push("");
     }
     return promptParts.join("\n");
@@ -259,12 +262,13 @@ export class FileToolProvider implements IToolProvider {
 
   getMetadata(context?: Record<string, any>): ToolProviderMetadata {
     return {
-      namespace: this.namespace,
+      pluginId: this.pluginId,
       displayName: "文件操作工具",
       description: "文件系统读写与目录浏览工具",
       isMcp: false,
       loadMode: "eager",
       type: "core",
+      promptFrequency: "STATIC",
     };
   }
 
@@ -280,7 +284,7 @@ export class FileToolProvider implements IToolProvider {
     const fileName = args.file_path || args.path || args.path;
 
     let action: string;
-    let toolType: string = this.namespace;
+    let toolType: string = this.pluginId;
     switch (toolName) {
       case "write":
         action = `${prefix}写入`;

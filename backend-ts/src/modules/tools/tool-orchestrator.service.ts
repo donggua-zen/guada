@@ -5,6 +5,7 @@ import {
   ToolCallResponse,
   ToolDisplayInfo,
   ToolDefinition,
+  PromptFrequency,
 } from "./interfaces/tool-provider.interface";
 
 import {
@@ -15,17 +16,27 @@ import { ToolRuntime } from "./tool-context";
 import { SettingsStorage } from "../../common/utils/settings-storage.util";
 
 /**
- * 获取指定命名空间的工具启用配置
+ * 提示词片段，附带排序元信息
+ */
+interface PromptPiece {
+  content: string;
+  /** 排序优先级：STATIC=0, REGULAR=1, VOLATILE=2 */
+  sortKey: number;
+  pluginId: string;
+}
+
+/**
+ * 获取指定插件的工具启用配置
  * @param toolsConfig 角色工具配置
  * @param mcpServersConfig MCP 服务器配置
- * @param namespace 命名空间
+ * @param pluginId 插件标识
  * @param isMcp 是否为 MCP 工具
  * @returns 启用配置（boolean | string[]）
  */
 function getEnabledConfig(
   toolsConfig: any,
   mcpServersConfig: any,
-  namespace: string,
+  pluginId: string,
   isMcp: boolean,
 ): boolean | string[] {
   if (isMcp) {
@@ -34,11 +45,11 @@ function getEnabledConfig(
   if (toolsConfig === true) {
     return true;
   }
-  return toolsConfig?.[namespace] || false;
+  return toolsConfig?.[pluginId] || false;
 }
 
 export interface ToolMetadata {
-  namespace: string;
+  pluginId: string;
   name: string;
   displayName: string;
   description: string;
@@ -59,9 +70,9 @@ export class ToolOrchestrator {
   }
 
   addProvider(provider: IToolProvider) {
-    if (provider.namespace) {
-      this.providers.set(provider.namespace, provider);
-      this.logger.log(`Added tool provider: ${provider.namespace}`);
+    if (provider.pluginId) {
+      this.providers.set(provider.pluginId, provider);
+      this.logger.log(`Added tool provider: ${provider.pluginId}`);
     }
   }
 
@@ -73,10 +84,10 @@ export class ToolOrchestrator {
   }
 
   /**
-   * 获取指定命名空间的工具提供者
+   * 获取指定插件标识的工具提供者
    */
-  getProvider(namespace: string): IToolProvider | undefined {
-    return this.providers.get(namespace);
+  getProvider(pluginId: string): IToolProvider | undefined {
+    return this.providers.get(pluginId);
   }
 
   /**
@@ -106,7 +117,7 @@ export class ToolOrchestrator {
         }
         return {
           action: isExecuting ? "正在调用工具" : "已调用工具",
-          args: request.arguments?.namespace,
+          args: request.arguments?.pluginId,
           toolName: request.name,
           toolType: "generic",
         };
@@ -114,15 +125,15 @@ export class ToolOrchestrator {
       if (request.name === "tool_load") {
         return {
           action: isExecuting ? "正在加载工具" : "已加载工具",
-          args: request.arguments?.namespace,
+          args: request.arguments?.pluginId,
           toolName: request.name,
           toolType: "generic",
         };
       }
 
-      // 解析工具名称获取命名空间
-      const namespace = runtime?.resolveNamespace(request.name) || request.name;
-      const provider = this.providers.get(namespace);
+      // 解析工具名称获取插件标识
+      const pluginId = runtime?.resolvePluginId(request.name) || request.name;
+      const provider = this.providers.get(pluginId);
 
       if (provider && typeof provider.formatDisplayMessage === "function") {
         // 如果提供者返回的是字符串，转换为结构化数据
@@ -135,13 +146,13 @@ export class ToolOrchestrator {
           return {
             action: result,
             toolName: request.name,
-            toolType: namespace,
+            toolType: pluginId,
           };
         }
 
-        // 如果没有显式指定 toolType，使用 namespace 作为默认值
+        // 如果没有显式指定 toolType，使用 pluginId 作为默认值
         if (!result.toolType) {
-          result.toolType = namespace;
+          result.toolType = pluginId;
         }
 
         return result;
@@ -221,46 +232,46 @@ export class ToolOrchestrator {
     injectParams: Record<string, any>,
     toolsConfig: any,
     mcpServersConfig: any,
-    eagerNamespaces?: string[],
+    eagerPluginIds?: string[],
   ): Promise<ToolRuntime> {
     // 获取全局启用的工具列表，与角色配置取交集
     const globalTools = await this.getLocalToolsList();
-    const globalEnabledNamespaces = new Set(
-      globalTools.filter((t) => t.enabled).map((t) => t.namespace),
+    const globalEnabledPluginIds = new Set(
+      globalTools.filter((t) => t.enabled).map((t) => t.pluginId),
     );
 
     const groupedTools: Record<string, ToolDefinition[]> = {};
     const lazyTools: Record<string, ToolDefinition[]> = {};
     const toolNames = new Set<string>();
 
-    for (const [namespace, provider] of this.providers.entries()) {
-      // 全局未启用的命名空间直接跳过
-      if (!globalEnabledNamespaces.has(namespace)) continue;
+    for (const [pluginId, provider] of this.providers.entries()) {
+      // 全局未启用的插件直接跳过
+      if (!globalEnabledPluginIds.has(pluginId)) continue;
 
       const metadata = provider.getMetadata(injectParams);
       const enabled = getEnabledConfig(
         toolsConfig,
         mcpServersConfig,
-        namespace,
+        pluginId,
         metadata.isMcp,
       );
       if (!enabled) continue;
 
-      // 如果指定了强制 eager 的命名空间，则覆盖 loadMode
-      const forceEager = eagerNamespaces?.includes(namespace);
+      // 如果指定了强制 eager 的插件，则覆盖 loadMode
+      const forceEager = eagerPluginIds?.includes(pluginId);
       const loadMode = forceEager ? "eager" : (metadata.loadMode || "eager");
 
       // 根据加载模式决定是否包含该工具
       if (loadMode === "none") {
         this.logger.debug(
-          `Skipping disabled namespace ${namespace} (loadMode: none)`,
+          `Skipping disabled plugin ${pluginId} (loadMode: none)`,
         );
         continue;
       }
 
       const providerTools = await provider.getTools(enabled, injectParams);
 
-      const namespacedTools = providerTools.map((tool) => {
+      const pluginTools = providerTools.map((tool) => {
         if (toolNames.has(tool.name)) {
           this.logger.warn(`Duplicate tool name detected: ${tool.name}`);
         }
@@ -270,10 +281,10 @@ export class ToolOrchestrator {
       });
 
       if (loadMode === "lazy") {
-        this.logger.debug(`Recording lazy-load namespace ${namespace}`);
-        lazyTools[namespace] = namespacedTools;
+        this.logger.debug(`Recording lazy-load plugin ${pluginId}`);
+        lazyTools[pluginId] = pluginTools;
       } else {
-        groupedTools[namespace] = namespacedTools;
+        groupedTools[pluginId] = pluginTools;
       }
     }
 
@@ -287,7 +298,7 @@ export class ToolOrchestrator {
       0,
     );
     this.logger.debug(
-      `Collected ${flatCount} tools in ${Object.keys(groupedTools).length} namespaces, unique names: ${toolNames.size}`,
+      `Collected ${flatCount} tools in ${Object.keys(groupedTools).length} plugins, unique names: ${toolNames.size}`,
     );
 
     return new ToolRuntime(injectParams, groupedTools, lazyTools);
@@ -302,32 +313,45 @@ export class ToolOrchestrator {
    */
   async getPrompts(runtime: ToolRuntime): Promise<string> {
     const { injectParams, tools: groupedTools, lazyTools } = runtime;
-    const enabledNamespaces = new Set(Object.keys(groupedTools));
-    const lazyNamespaces = new Set(Object.keys(lazyTools));
+    const enabledPluginIds = new Set(Object.keys(groupedTools));
+    const lazyPluginIds = new Set(Object.keys(lazyTools));
 
-    const prompts: string[] = [];
+    // 收集所有提示词片段，带上排序元信息
+    const pieces: PromptPiece[] = [];
 
-    for (const namespace of [...enabledNamespaces, ...lazyNamespaces]) {
-      const provider = this.providers.get(namespace);
+    for (const pluginId of [...enabledPluginIds, ...lazyPluginIds]) {
+      const provider = this.providers.get(pluginId);
 
       if (!provider) continue;
+      const pluginSortKey = this.resolvePromptSortKey(provider, injectParams);
+
+      // 收集 persistentPrompt（始终收集，不受 loadMode 影响）
       if (provider.getPersistentPrompt) {
         const persistentPrompt =
           await provider.getPersistentPrompt(injectParams);
         if (persistentPrompt) {
-          prompts.push(persistentPrompt);
+          pieces.push({ content: persistentPrompt, sortKey: pluginSortKey, pluginId });
         }
       }
-      if (!lazyNamespaces.has(namespace)) {
+
+      // 收集普通 prompt（非 lazy 插件，且 provider 实现了 getPrompt）
+      if (!lazyPluginIds.has(pluginId) && provider.getPrompt) {
         const prompt = await provider.getPrompt(injectParams);
         if (prompt) {
-          prompts.push(prompt);
+          pieces.push({ content: prompt, sortKey: pluginSortKey, pluginId });
         }
       }
     }
+
+    // ★ 按变动频率排序：STATIC 在前，VOLATILE 在后
+    pieces.sort((a, b) => {
+      if (a.sortKey !== b.sortKey) return a.sortKey - b.sortKey;
+      // 同频率下按 pluginId 字典序保证稳定顺序
+      return a.pluginId.localeCompare(b.pluginId);
+    });
     const metaInfos: string[] = [];
-    for (const namespace of lazyNamespaces) {
-      const provider = this.providers.get(namespace);
+    for (const pluginId of lazyPluginIds) {
+      const provider = this.providers.get(pluginId);
       if (!provider) continue;
       const metadata = provider.getMetadata(injectParams);
 
@@ -335,7 +359,7 @@ export class ToolOrchestrator {
         ? await provider.getBriefDescription(injectParams)
         : metadata.description;
       if (briefDesc) {
-        metaInfos.push(`- ${namespace}:${metadata.displayName},${briefDesc}`);
+        metaInfos.push(`- ${pluginId}:${metadata.displayName},${briefDesc}`);
       }
     }
     if (metaInfos.length > 0) {
@@ -348,7 +372,6 @@ export class ToolOrchestrator {
         "---",
         "",
       ].join("\n");
-      prompts.push(metaSection);
       const toolGuidePrompt = `## 使用原则
       
 1. **避免重复**：已了解用法的工具无需重复加载
@@ -356,12 +379,32 @@ export class ToolOrchestrator {
 3. **执行调用**：加载后根据说明使用 \`tool_call\` 执行具体操作
 `;
 
-      prompts.push(toolGuidePrompt);
+      pieces.push({ content: metaSection, sortKey: 3, pluginId: "__meta" });
+      pieces.push({ content: toolGuidePrompt, sortKey: 3, pluginId: "__meta" });
     }
 
-    this.logger.debug(`Collected ${prompts.length} tool prompt sections`);
-    // this.logger.debug(prompts.join("\n\n"))
-    return prompts.join("\n\n");
+    this.logger.debug(`Collected ${pieces.length} tool prompt sections`);
+    // this.logger.debug(pieces.map(p => p.pluginId + ":" + p.sortKey).join(", "))
+    return pieces.map(p => p.content).join("\n\n");
+  }
+
+  /**
+   * 解析 provider 的提示词排序优先级。
+   * 根据 metadata 中配置的 promptFrequency 映射为数值用于排序。
+   * 未配置时默认 REGULAR（1），保证向后兼容。
+   */
+  private resolvePromptSortKey(
+    provider: IToolProvider,
+    context?: Record<string, any>,
+  ): number {
+    const metadata = provider.getMetadata(context);
+    const frequency = metadata.promptFrequency ?? 'REGULAR';
+    switch (frequency) {
+      case 'STATIC':   return 0;
+      case 'REGULAR':  return 1;
+      case 'VOLATILE': return 2;
+      default:         return 1;
+    }
   }
 
   async executeBatch(
@@ -431,8 +474,8 @@ export class ToolOrchestrator {
       return await this.universalHandler.handleToolLoad(
         request,
         context.injectParams,
-        (ns) => this.getProvider(ns),
-        (ns) => Object.keys(context.lazyTools).some((key) => key === ns),
+        (pluginId) => this.getProvider(pluginId),
+        (pluginId) => Object.keys(context.lazyTools).some((key) => key === pluginId),
       );
     }
 
@@ -471,19 +514,19 @@ export class ToolOrchestrator {
     context: ToolRuntime,
     abortSignal?: AbortSignal,
   ): Promise<ToolCallResponse> {
-    // 通过 ToolRuntime 查表定位工具所属命名空间
+    // 通过 ToolRuntime 查表定位工具所属插件
     const resolved = context.resolveTool(fullToolName);
     if (!resolved) {
       throw new Error(`Tool ${fullToolName} is not available or disabled`);
     }
 
-    const { namespace } = resolved;
+    const { pluginId } = resolved;
 
     // 验证工具是否存在
-    const provider = this.providers.get(namespace);
+    const provider = this.providers.get(pluginId);
 
     if (!provider) {
-      throw new Error(`未知的命名空间: ${namespace}`);
+      throw new Error(`未知的插件: ${pluginId}`);
     }
 
     // 检查工具的加载模式
@@ -492,7 +535,7 @@ export class ToolOrchestrator {
 
     if (loadMode === "none") {
       throw new Error(
-        `Tool provider ${namespace} is disabled (loadMode: none)`,
+        `Tool provider ${pluginId} is disabled (loadMode: none)`,
       );
     }
 
@@ -567,9 +610,8 @@ export class ToolOrchestrator {
 
   async getLocalToolsList(): Promise<ToolMetadata[]> {
     const toolsList: ToolMetadata[] = [];
-    const globalToolsConfig = this.settingsStorage.getSettings("tools");
-
-    for (const [namespace, provider] of this.providers.entries()) {
+    const globalToolsConfig = await this.settingsStorage.getSettings("tools");
+    for (const [pluginId, provider] of this.providers.entries()) {
       const metadata = provider.getMetadata({});
 
       // 根据 provider 的 type 字段确定默认值：core 默认启用，extended 默认禁用
@@ -578,7 +620,7 @@ export class ToolOrchestrator {
       if (typeof globalToolsConfig === "boolean") {
         isEnabled = globalToolsConfig;
       } else if (typeof globalToolsConfig === "object") {
-        const config = globalToolsConfig[namespace];
+        const config = globalToolsConfig[pluginId];
         if (typeof config === "boolean") {
           isEnabled = config;
         } else if (Array.isArray(config)) {
@@ -591,16 +633,16 @@ export class ToolOrchestrator {
       try {
         tools = await provider.getTools(true, {});
 
-        // 工具名不再拼接命名空间前缀，由 Provider 保证全局唯一
+        // 工具名由 Provider 保证全局唯一
       } catch (error: any) {
         this.logger.error(
-          `Error getting tools from provider ${namespace}: ${error.message}`,
+          `Error getting tools from provider ${pluginId}: ${error.message}`,
         );
       }
 
       const toolMetadata: ToolMetadata = {
         ...metadata,
-        name: namespace,
+        name: pluginId,
         enabled: isEnabled,
         tools,
       };

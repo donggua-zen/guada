@@ -10,9 +10,9 @@ import { MessageRecord } from "../llm-core/types/llm.types";
 export type ModelFeature = "tools" | "thinking" | "vision" | "image";
 
 /**
- * 模型配置
+ * 模型调用参数
  *
- * 包含 Agent 循环所需的模型元数据，屏蔽底层 model 结构差异。
+ * 合并到 ModelConfig 中，避免调用方分别获取两份配置。
  */
 export interface ModelConfig {
   /** 模型唯一标识 */
@@ -33,30 +33,18 @@ export interface ModelConfig {
   };
   /** 模型类型 */
   modelType: string;
-  /** 模型原生配置（contextWindow、features、inputCapabilities 等） */
+  /** 完整模型参数（含原生配置和运行时调用参数） */
   config: {
     contextWindow?: number;
     maxOutputTokens?: number;
     features?: ModelFeature[];
     inputCapabilities?: string[];
+    // 运行时调用参数（与会话设置合并）
+    temperature: number;
+    topP: number;
+    frequencyPenalty: number;
     [key: string]: any;
   };
-}
-
-// ============================================================================
-// DTO: 模型调用参数
-// ============================================================================
-
-/**
- * 模型调用参数
- *
- * 直接传递给 LLMService.completions() 的参数子集。
- */
-export interface ModelParams {
-  temperature: number;
-  topP: number;
-  frequencyPenalty: number;
-  maxTokens?: number;
 }
 
 // ============================================================================
@@ -89,10 +77,6 @@ export interface MemoryConfig {
 }
 
 // ============================================================================
-// DTO: 工具上下文
-// ============================================================================
-
-// ============================================================================
 // ISessionContext: Agent 循环唯一依赖的会话抽象
 // ============================================================================
 
@@ -117,10 +101,8 @@ export interface ISessionContext {
   readonly sessionType: "web" | "bot" | "sub_agent";
 
   // === 模型配置 ===
-  /** 获取完整模型配置 */
+  /** 获取完整模型配置（含运行时调用参数） */
   getModelConfig(): ModelConfig;
-  /** 获取模型调用参数（temperature、topP 等） */
-  getModelParams(): ModelParams;
   /** 检查模型是否支持指定特性 */
   supportsFeature(feature: ModelFeature): boolean;
 
@@ -176,6 +158,8 @@ export interface ISessionContext {
   generateId(): string;
   /** 获取当前 Token 计数 */
   getTokenCount(): number;
-  /** 强制触发压缩 */
-  forceCompress(): Promise<MessageRecord[]>;
+  /** 检查是否达到压缩阈值 */
+  shouldCompress(): Promise<boolean>;
+  /** 执行压缩 */
+  compress(onStage2?: () => Promise<void>): Promise<MessageRecord[]>;
 }

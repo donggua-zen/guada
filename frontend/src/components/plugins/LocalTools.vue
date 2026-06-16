@@ -20,7 +20,7 @@
       <div class="grid gap-4" style="grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));">
         <div
           v-for="tool in globalTools"
-          :key="tool.namespace"
+          :key="tool.pluginId"
           class="rounded-lg border border-gray-200 dark:border-[#232428] overflow-hidden bg-white dark:bg-[#232428] transition-all hover:border-(--color-primary)"
         >
           <div class="p-5 pb-4">
@@ -30,8 +30,8 @@
               </h3>
               <el-switch
                 :model-value="tool.enabled"
-                :loading="updatingTools.has(tool.namespace)"
-                @update:model-value="(val: boolean) => handleToggleTool(tool.namespace, val)"
+                :loading="updatingTools.has(tool.pluginId)"
+                @update:model-value="(val: boolean) => handleToggleTool(tool.pluginId, val)"
                 inline-prompt
                 active-text="启动"
                 inactive-text="禁用"
@@ -62,7 +62,7 @@ import { ElMessage } from 'element-plus'
 import { apiService } from '@/services/ApiService'
 
 interface ToolMetadata {
-  namespace: string
+  pluginId: string
   name: string
   displayName: string
   description: string
@@ -94,11 +94,11 @@ async function loadGlobalTools() {
   }
 }
 
-async function updateGlobalToolStatus(namespace: string, enabled: boolean) {
+async function updateGlobalToolStatus(pluginId: string, enabled: boolean) {
   try {
-    const response = await apiService.updateGlobalToolStatus(namespace, enabled)
+    const response = await apiService.updateGlobalToolStatus(pluginId, enabled)
     if (response.success) {
-      const tool = globalTools.value.find(t => t.namespace === namespace)
+      const tool = globalTools.value.find(t => t.pluginId === pluginId)
       if (tool) {
         tool.enabled = enabled
       }
@@ -109,21 +109,21 @@ async function updateGlobalToolStatus(namespace: string, enabled: boolean) {
   }
 }
 
-function handleToggleTool(namespace: string, enabled: boolean) {
-  const tool = globalTools.value.find(t => t.namespace === namespace)
+function handleToggleTool(pluginId: string, enabled: boolean) {
+  const tool = globalTools.value.find(t => t.pluginId === pluginId)
   if (!tool) return
   
   const previousState = tool.enabled
   
   try {
-    updatingTools.value.add(namespace)
-    updateGlobalToolStatus(namespace, enabled)
+    updatingTools.value.add(pluginId)
+    updateGlobalToolStatus(pluginId, enabled)
   } catch (err: any) {
     console.error('更新工具状态失败:', err)
     tool.enabled = previousState
     ElMessage.error(err.message || '更新工具状态失败')
   } finally {
-    updatingTools.value.delete(namespace)
+    updatingTools.value.delete(pluginId)
   }
 }
 

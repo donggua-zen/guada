@@ -982,12 +982,12 @@ class ApiService {
   }
 
   async updateGlobalToolStatus(
-    namespace: string,
+    pluginId: string,
     enabled: boolean,
   ): Promise<{ success: boolean }> {
     return await this._request("/settings/tools/global", {
       method: "PUT",
-      data: { namespace, enabled },
+      data: { pluginId, enabled },
     });
   }
 

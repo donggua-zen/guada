@@ -266,7 +266,7 @@
                 <template #label>
                   <div class="flex flex-col gap-1">
                     <span class="text-base text-gray-900 dark:text-gray-100 font-medium">摘要模式</span>
-                    <span class="text-xs text-gray-500 dark:text-gray-400 font-normal">选择摘要生成方式：关闭、快速或迭代优化</span>
+                    <span class="text-xs text-gray-500 dark:text-gray-400 font-normal">选择摘要生成方式：关闭、快速或记忆同步</span>
                   </div>
                 </template>
                 <div class="w-full max-w-md">
@@ -287,12 +287,12 @@
                         <span>快速摘要 - 单次调用生成，速度快</span>
                       </span>
                     </el-option>
-                    <el-option label="迭代摘要" value="iterative">
+                    <el-option label="记忆同步" value="memory_sync">
                       <span class="flex items-center gap-2">
                         <el-icon>
-                          <SyncOutlined />
+                          <FolderOutlined />
                         </el-icon>
-                        <span>迭代摘要 - 多轮优化，质量最高但耗时较长</span>
+                        <span>记忆同步 - 将历史对话压缩为结构化记忆，保持长期一致性</span>
                       </span>
                     </el-option>
                   </el-select>
@@ -302,7 +302,7 @@
               <el-alert title="提示" type="info" :closable="false" show-icon class="mb-6">
                 <p class="text-sm">• 触发阈值：控制何时启动压缩（建议 70%-85%）</p>
                 <p class="text-sm">• 保留目标：控制压缩后的 Token 占用（建议 40%-60%）</p>
-                <p class="text-sm">• 启用摘要：关闭后将仅裁剪工具结果，不生成语义摘要</p>
+                <p class="text-sm">• 记忆同步：开启后将历史对话压缩为结构化记忆，保持长期一致性；关闭后仅裁剪工具结果</p>
               </el-alert>
             </el-form>
           </div>
@@ -362,7 +362,7 @@
               <div v-else>
                 <!-- 网格布局：每行3列 -->
                 <div class="grid grid-cols-3 gap-3">
-                  <div v-for="tool in localTools" :key="tool.namespace" class="tool-item p-3 border rounded relative">
+                  <div v-for="tool in localTools" :key="tool.pluginId" class="tool-item p-3 border rounded relative">
                     <div class="flex items-start justify-between gap-2 mb-2">
                       <div class="font-medium text-sm flex-1 truncate">{{ tool.displayName }}</div>
                       <div class="flex items-center gap-2">
@@ -373,8 +373,8 @@
                             <SettingOutlined />
                           </el-icon>
                         </el-tooltip>
-                        <el-switch v-if="!allToolsEnabled" :model-value="isToolProviderEnabled(tool.namespace)"
-                          @update:model-value="handleLocalToolToggle(tool.namespace, $event)" inline-prompt
+                        <el-switch v-if="!allToolsEnabled" :model-value="isToolProviderEnabled(tool.pluginId)"
+                          @update:model-value="handleLocalToolToggle(tool.pluginId, $event)" inline-prompt
                           active-text="启动" inactive-text="禁用" size="default" />
                         <el-tag v-else type="primary" size="small">已启用</el-tag>
                       </div>
@@ -643,7 +643,7 @@ const characterForm = reactive({
   enabledMcpServers: [],  // 启用的 MCP 服务器 ID 数组
   compressionTriggerRatio: 0.8, // 触发阈值
   compressionTargetRatio: 0.5, // 保留目标
-  summaryMode: 'fast', // 摘要模式：'disabled' | 'fast' | 'iterative'
+  summaryMode: 'fast', // 摘要模式：'disabled' | 'fast' | 'memory_sync'
   maxTokensLimit: null, // Token 上限（null 表示不限制）
 })
 
@@ -728,7 +728,7 @@ const characterGroups = ref([]);
 const localTools = ref([]);
 const loadingTools = ref(false);
 
-// 角色工具设置（namespace -> boolean | 'all'）
+// 角色工具设置（pluginId -> boolean | 'all'）
 const characterToolSettings = ref({});
 
 // Token 上限显示值（用于格式化显示）
@@ -748,13 +748,13 @@ const allToolsEnabled = computed(() => {
 });
 
 // 判断某个工具提供者是否启用（用于 Switch 显示）
-const isToolProviderEnabled = (namespace) => {
+const isToolProviderEnabled = (pluginId) => {
   // 如果 characterToolSettings 是布尔值，直接返回
   if (typeof characterToolSettings.value === 'boolean') {
     return characterToolSettings.value;
   }
 
-  const config = characterToolSettings.value[namespace];
+  const config = characterToolSettings.value[pluginId];
 
   // true 表示全部启用
   if (config === true) return true;
@@ -765,7 +765,7 @@ const isToolProviderEnabled = (namespace) => {
   // 数组表示部分启用，数组长度 > 0 表示启用
   if (Array.isArray(config)) return config.length > 0;
 
-  // 默认禁用（当配置为对象但某个 namespace 未配置时）
+  // 默认禁用（当配置为对象但某个 pluginId 未配置时）
   return false;
 };
 
@@ -904,14 +904,14 @@ const handleAllToolsToggle = (enabled) => {
 }
 
 // 本地工具开关切换处理
-const handleLocalToolToggle = (namespace, enabled) => {
+const handleLocalToolToggle = (pluginId, enabled) => {
   // 只更新本地状态，不立即调用 API
   if (typeof characterToolSettings.value !== 'object') {
     // 如果之前是整体开关模式，转换为对象模式
     characterToolSettings.value = {};
   }
-  characterToolSettings.value[namespace] = enabled;
-  console.log(`本地工具 ${namespace} ${enabled ? '启用' : '禁用'}`);
+  characterToolSettings.value[pluginId] = enabled;
+  console.log(`本地工具 ${pluginId} ${enabled ? '启用' : '禁用'}`);
 }
 
 // 打开工具配置对话框
@@ -924,8 +924,8 @@ const openToolConfig = (tool) => {
     // 整体开关模式：所有工具都使用同一个配置
     config = characterToolSettings.value;
   } else if (typeof characterToolSettings.value === 'object') {
-    // 单独控制模式：取对应 namespace 的配置
-    config = characterToolSettings.value[tool.namespace];
+    // 单独控制模式：取对应 pluginId 的配置
+    config = characterToolSettings.value[tool.pluginId];
   } else {
     // 其他情况：默认为 undefined
     config = undefined;
@@ -967,7 +967,7 @@ const openToolConfig = (tool) => {
 const saveToolConfig = () => {
   if (!currentToolConfig.value) return;
 
-  const namespace = currentToolConfig.value.namespace;
+  const pluginId = currentToolConfig.value.pluginId;
   const allTools = (currentToolConfig.value.tools || []).map(t => t.name);
 
   // 确保是对象模式
@@ -978,19 +978,19 @@ const saveToolConfig = () => {
   // 判断是否全部选中
   if (selectedSubTools.value.length === 0) {
     // 全部未选中：设置为 false
-    characterToolSettings.value[namespace] = false;
+    characterToolSettings.value[pluginId] = false;
   } else if (selectedSubTools.value.length === allTools.length && selectedSubTools.value.length > 0) {
     // 全部选中：根据是否使用全局开关决定保存方式
     if (isUsingGlobalToggle.value) {
       // 通过"启动全部"开关启用：设置为 true，新增工具自动启用
-      characterToolSettings.value[namespace] = true;
+      characterToolSettings.value[pluginId] = true;
     } else {
       // 手动逐个选择全部：保持数组形式，新增工具默认禁用
-      characterToolSettings.value[namespace] = [...selectedSubTools.value];
+      characterToolSettings.value[pluginId] = [...selectedSubTools.value];
     }
   } else {
     // 部分选中：保存为数组
-    characterToolSettings.value[namespace] = [...selectedSubTools.value];
+    characterToolSettings.value[pluginId] = [...selectedSubTools.value];
   }
 
   toolConfigDialogVisible.value = false;

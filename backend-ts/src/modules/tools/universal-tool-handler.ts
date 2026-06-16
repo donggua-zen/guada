@@ -8,16 +8,16 @@ import { ToolCallRequest, ToolCallResponse, IToolProvider, ToolDefinition } from
 export const UNIVERSAL_TOOLS: ToolDefinition[] = [
   {
     name: "tool_load",
-    description: "加载指定工具命名空间的详细说明，获取该类别下所有工具的参数定义和使用示例。在首次使用某类工具前，建议先调用此工具了解使用方法。",
+    description: "加载指定工具插件的详细说明，获取该类别下所有工具的参数定义和使用示例。在首次使用某类工具前，建议先调用此工具了解使用方法。",
     parameters: {
       type: "object",
       properties: {
-        namespace: {
+        pluginId: {
           type: "string",
-          description: "工具命名空间，例如：knowledge_base、memory、shell 等",
+          description: "工具插件标识，例如：knowledge_base、memory、shell 等",
         },
       },
-      required: ["namespace"],
+      required: ["pluginId"],
     },
   },
   {
@@ -57,41 +57,41 @@ export class UniversalToolHandler {
   async handleToolLoad(
     request: ToolCallRequest,
     injectParams: Record<string, any>,
-    getProvider: (namespace: string) => IToolProvider | undefined,
-    isNamespaceEnabled: (namespace: string) => boolean,
+    getProvider: (pluginId: string) => IToolProvider | undefined,
+    isPluginEnabled: (pluginId: string) => boolean,
   ): Promise<ToolCallResponse> {
-    const { namespace } = request.arguments;
+    const { pluginId } = request.arguments;
 
-    if (!namespace || typeof namespace !== "string") {
+    if (!pluginId || typeof pluginId !== "string") {
       return {
         toolCallId: request.id,
         name: request.name,
-        content: "Error: 无效的参数：namespace 必须是字符串",
+        content: "Error: 无效的参数：pluginId 必须是字符串",
         isError: true,
       };
     }
 
-    const provider = getProvider(namespace);
+    const provider = getProvider(pluginId);
     if (!provider) {
       return {
         toolCallId: request.id,
         name: request.name,
-        content: `Error: 未知的命名空间: ${namespace}`,
+        content: `Error: 未知的插件: ${pluginId}`,
         isError: true,
       };
     }
 
-    if (!isNamespaceEnabled(namespace)) {
+    if (!isPluginEnabled(pluginId)) {
       return {
         toolCallId: request.id,
         name: request.name,
-        content: `Error: 工具提供者 ${namespace} 已禁用`,
+        content: `Error: 工具提供者 ${pluginId} 已禁用`,
         isError: true,
       };
     }
 
     try {
-      // 获取该命名空间下的所有工具
+      // 获取该插件下的所有工具
       const tools = await provider.getTools(true, injectParams);
     
       // 构建详细的工具说明
@@ -120,13 +120,13 @@ export class UniversalToolHandler {
       try {
         toolUsagePrompt = await provider.getPrompt(injectParams);
       } catch (error: any) {
-        this.logger.warn(`Failed to get prompt for namespace ${namespace}: ${error.message}`);
+        this.logger.warn(`Failed to get prompt for plugin ${pluginId}: ${error.message}`);
       }
     
       const responseParts: string[] = [
-        `# ${namespace} 工具集详细说明`,
+        `# ${pluginId} 工具集详细说明`,
         "",
-        `该命名空间包含以下 ${tools.length} 个工具：`,
+        `该插件包含以下 ${tools.length} 个工具：`,
         "",
         toolDescriptions,
       ];

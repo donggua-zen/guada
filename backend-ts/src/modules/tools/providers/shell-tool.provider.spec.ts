@@ -13,12 +13,12 @@ describe("ShellToolProvider", () => {
   });
 
   it("应该正确定义命名空间", () => {
-    expect(provider.namespace).toBe("shell");
+    expect(provider.pluginId).toBe("shell");
   });
 
   it("应该返回正确的元数据", () => {
     const metadata = provider.getMetadata({});
-    expect(metadata.namespace).toBe("shell");
+    expect(metadata.pluginId).toBe("shell");
     expect(metadata.displayName).toBe("Shell 命令行工具");
     expect(metadata.isMcp).toBe(false);
   });

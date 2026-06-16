@@ -11,7 +11,7 @@ import { McpClientService } from "../../../common/mcp/mcp-client.service";
 @Injectable()
 export class MCPToolProvider implements IToolProvider {
   private readonly logger = new Logger(MCPToolProvider.name);
-  public readonly namespace = "mcp";
+  public readonly pluginId = "mcp";
 
   constructor(
     private mcpClient: McpClientService,
@@ -114,16 +114,13 @@ export class MCPToolProvider implements IToolProvider {
     }
   }
 
-  async getPrompt(context?: Record<string, any>): Promise<string> {
-    return "";
-  }
-
   getMetadata(context?: Record<string, any>): ToolProviderMetadata {
     return {
-      namespace: this.namespace,
+      pluginId: this.pluginId,
       displayName: "MCP 工具",
       description: "通过 Model Context Protocol 连接外部工具和服务",
       isMcp: true,
+      promptFrequency: 'REGULAR',
     };
   }
 }

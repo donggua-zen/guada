@@ -25,7 +25,7 @@ export class ToolCallDisplayUtil {
    * @param toolName 工具名
    * @param args 工具参数字符串（JSON 格式，可能不完整）
    * @param isExecuting 工具是否正在执行（true=正在进行，false=已完成）
-   * @param runtime 工具运行时上下文（可选，用于解析 namespace）
+   * @param runtime 工具运行时上下文（可选，用于解析 pluginId）
    * @returns 结构化的展示信息
    */
   format(
