@@ -449,7 +449,13 @@ watch(
 // 处理压缩历史（弹出确认框）
 async function handleCompress() {
   if (!props.sessionId) return;
-  
+
+  // 检查会话是否正在流式输出，避免干扰工作流程
+  if (sessionStore.sessionIsStreaming(props.sessionId)) {
+    toast.warning('当前会话正在流式输出，请等待结束后再压缩');
+    return;
+  }
+
   if (!(await confirm('确认压缩', '确定要压缩当前会话的历史记录吗？此操作将根据会话和角色的配置自动执行压缩。'))) {
     return;
   }
@@ -457,7 +463,7 @@ async function handleCompress() {
   try {
     sessionStore.setSessionIsCompressing(props.sessionId, true);
     const res = await apiService.compressSession(props.sessionId);
-    
+
     if (res.success) {
       toast.success(`压缩成功！压缩比例: ${res.after?.compressionRatio || 'N/A'}`);
       // 压缩后重新加载统计数据和摘要列表
@@ -468,9 +474,9 @@ async function handleCompress() {
     }
   } catch (error: any) {
     console.error('压缩失败:', error);
-    // 处理 409 冲突错误（会话繁忙）
-    if (error.status === 409 || error.message?.includes('busy')) {
-      toast.warning('当前会话正在处理其他任务（如对话或压缩），请稍后再试。');
+    // 处理 409 冲突错误（会话正在流式输出或繁忙）
+    if (error.status === 409 || error.message?.includes('busy') || error.message?.includes('STREAMING')) {
+      toast.warning('当前会话正在流式输出，请等待结束后再压缩。');
     } else {
       toast.error(error.message || '压缩失败');
     }
