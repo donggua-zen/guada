@@ -255,10 +255,13 @@ export class FileParserService {
       await onProgress?.(5, "正在逐页提取 PDF 文本...");
       const pdfResult = await this.parsePdfByPages(content);
 
+      // 检查 OCR 是否支持 PDF（提前判断，避免进入扫描件分支后再回退）
+      const caps = await this.ocrService.getCapabilities();
+
       // 判断是否为扫描件：字符数少于 50 的页面超过一半
       const isScan = this.isScanPdf(pdfResult.pages);
 
-      if (isScan) {
+      if (isScan && caps.supportsPdf) {
         const lowCharCount = pdfResult.pages.filter(
           (p) => p.charCount < 50,
         ).length;
@@ -267,10 +270,9 @@ export class FileParserService {
         );
         await onProgress?.(10, "检测到扫描件，正在准备 OCR 识别...");
 
-        // OCR 回调：映射到 10%~80% 范围
+        // OCR 已配置，执行识别
         const ocrOnProgress: FileProgressCallback | undefined = onProgress
           ? async (ocrPct, ocrStep) => {
-              // OCR 内部是 0%~100%，映射到全局 10%~80%
               const globalPct = 10 + Math.round((ocrPct / 100) * 70);
               await onProgress(globalPct, ocrStep);
             }
@@ -286,6 +288,7 @@ export class FileParserService {
             pages: [{ pageNum: 1, text: ocrResult.text }],
           };
         }
+        // OCR 已配置但识别失败 → 抛错
         throw new Error("OCR 识别失败或结果为空");
       }
 
