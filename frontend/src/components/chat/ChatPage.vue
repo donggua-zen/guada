@@ -58,7 +58,7 @@
                 @switch-agent="switchTab" @close-agent="closeSubAgentTab" />
 
               <!-- 右侧大纲导航 -->
-              <ChatOutline v-if="currentSession  && activeTabId === 'main'"
+              <ChatOutline v-if="currentSession && activeTabId === 'main'"
                 :messages="chatPanelRef?.activeMessages || []" :chat-panel-ref="chatPanelRef"
                 @scroll-to-message="handleScrollToMessage" />
             </div>
@@ -428,6 +428,12 @@ const updateSessionById = async (sessionId: string, data: any) => {
 
 
 const updateSelectedSession = async (sessionId: string) => {
+  if (sessionId == null || sessionId === 'new-session') {
+    currentSession.value = null;
+    sessionStore.activeSessionId = "new-session";
+    return;
+  }
+  sessionStore.activeSessionId = sessionId;
   if (sessionId !== currentSession.value?.id) {
     // 切换会话时重置子代理状态到主线程
     activeTabId.value = 'main';
@@ -553,22 +559,15 @@ watch(
       return;
     }
     const sessionId = Array.isArray(newSessionId) ? newSessionId[0] : newSessionId;
-    sessionStore.activeSessionId = sessionId;
-    if (sessionStore.activeSessionId !== 'new-session')
-      await updateSelectedSession(sessionId);
+    await updateSelectedSession(sessionId);
   }
 );
 
 // 生命周期
 onMounted(async () => {
   const sessionId = Array.isArray(route.params.sessionId) ? route.params.sessionId[0] : route.params.sessionId;
-  if (sessionId && sessionId !== "new-session") {
-    sessionStore.activeSessionId = sessionId;
-    await updateSelectedSession(sessionId);
-  } else {
-    currentSession.value = null;
-    sessionStore.activeSessionId = "new-session";
-  }
+
+  await updateSelectedSession(sessionId);
 
   // 注册流事件监听（统一的状态来源）
   unsubscribeStreamStarted = apiService.onSessionEvent('stream_started', handleStreamStarted);
