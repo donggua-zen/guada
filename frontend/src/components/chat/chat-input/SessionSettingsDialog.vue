@@ -180,6 +180,7 @@
 </template>
 
 <script setup lang="ts">
+import { DEFAULT_SUMMARY_MODE } from '@/constants'
 import { reactive, ref, watch } from 'vue'
 import { ElDialog, ElForm, ElFormItem, ElSwitch, ElInput, ElSlider, ElSelect, ElOption, ElAlert, ElButton, ElIcon, ElTooltip } from 'element-plus'
 import ElSliderOptional from '../../ui/ElSliderOptional.vue'
@@ -235,7 +236,7 @@ const tempConfig = reactive<TempConfig>({
   maxMemoryLength: undefined,
   triggerRatio: 0.8,
   targetRatio: 0.5,
-  summaryMode: 'fast',
+  summaryMode: DEFAULT_SUMMARY_MODE,
   maxTokensLimit: null,
 })
 
@@ -329,7 +330,7 @@ function initTempConfig() {
   tempConfig.maxMemoryLength = settings.maxMemoryLength ?? undefined
   tempConfig.triggerRatio = settings.compressionTriggerRatio ?? 0.8
   tempConfig.targetRatio = settings.compressionTargetRatio ?? 0.5
-  tempConfig.summaryMode = settings.summaryMode ?? 'fast'
+  tempConfig.summaryMode = settings.summaryMode ?? DEFAULT_SUMMARY_MODE
   tempConfig.maxTokensLimit = settings.maxTokensLimit || null
   
   // 同步更新显示值

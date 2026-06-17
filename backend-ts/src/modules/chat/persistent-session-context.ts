@@ -24,6 +24,7 @@ import {
   SK_MOD_COMPRESS_ENABLE_SUMMARY,
 } from "../../constants/settings.constants";
 import { TokenizerService } from "../../common/utils/tokenizer.service";
+import { SummaryMode } from "./compression-engine";
 
 /**
  * 合并后的会话设置
@@ -369,7 +370,7 @@ export class PersistentSessionContext implements ISessionContext {
       triggerRatio: memoryConfig.compressionTriggerRatio ?? 0.8,
       targetRatio: memoryConfig.compressionTargetRatio ?? 0.5,
       model: this.compressionModel,
-      summaryMode: (memoryConfig.summaryMode || "fast") as any,
+      summaryMode: (memoryConfig.summaryMode || SummaryMode.DEFAULT) as any,
       chatModelName,
     };
 
@@ -531,7 +532,7 @@ export class PersistentSessionContext implements ISessionContext {
       globalEnableSummary === true ||
       globalEnableSummary === "true" ||
       globalEnableSummary === 1;
-    const summaryMode = enabled ? "fast" : "disabled";
+    const summaryMode = enabled ? SummaryMode.DEFAULT : "disabled";
     this.logger.debug(
       `Using global enableSummary setting, converted to summaryMode: ${summaryMode}`,
     );

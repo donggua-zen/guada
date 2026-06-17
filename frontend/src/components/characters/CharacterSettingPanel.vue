@@ -568,6 +568,7 @@ import { apiService } from '../../services/ApiService'
 import { usePopup } from '../../composables/usePopup'
 import AvatarPreview from '../ui/AvatarPreview.vue'
 import ElSliderOptional from '../ui/ElSliderOptional.vue'
+import { DEFAULT_SUMMARY_MODE } from '@/constants'
 
 const { toast, notify } = usePopup()
 
@@ -646,7 +647,7 @@ const characterForm = reactive({
   enabledMcpServers: [],  // 启用的 MCP 服务器 ID 数组
   compressionTriggerRatio: 0.8, // 触发阈值
   compressionTargetRatio: 0.5, // 保留目标
-  summaryMode: 'fast', // 摘要模式：'disabled' | 'fast' | 'memory_sync'
+  summaryMode: DEFAULT_SUMMARY_MODE, // 摘要模式：'disabled' | 'fast' | 'memory_sync'
   maxTokensLimit: null, // Token 上限（null 表示不限制）
 })
 
@@ -804,7 +805,7 @@ watch(() => props.data, (newVal) => {
   characterForm.maxMemoryLength = memoryConfig.maxMemoryLength ?? newVal.settings?.maxMemoryLength ?? null;
   characterForm.compressionTriggerRatio = memoryConfig.compressionTriggerRatio ?? newVal.settings?.compressionTriggerRatio ?? 0.8;
   characterForm.compressionTargetRatio = memoryConfig.compressionTargetRatio ?? newVal.settings?.compressionTargetRatio ?? 0.5;
-  characterForm.summaryMode = memoryConfig.summaryMode ?? 'fast'; // 默认快速模式
+  characterForm.summaryMode = memoryConfig.summaryMode ?? DEFAULT_SUMMARY_MODE; // 默认记忆同步模式
   characterForm.maxTokensLimit = memoryConfig.maxTokensLimit ?? newVal.settings?.maxTokensLimit ?? null;
   // 同步更新显示值
   maxTokensLimitDisplay.value = formatTokenValue(characterForm.maxTokensLimit);

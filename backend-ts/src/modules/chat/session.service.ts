@@ -22,6 +22,7 @@ import { SessionContextFactory } from "./session-context.factory";
 import { FileWatcherService } from "../../common/services/file-watcher.service";
 import { SessionStreamManager } from "./session-stream.manager";
 import { TeamRepository } from "../../common/database/team.repository";
+import { SummaryMode } from "./compression-engine";
 
 @Injectable()
 export class SessionService {
@@ -309,7 +310,7 @@ export class SessionService {
         maxMemoryLength: sessionMemory.maxMemoryLength ?? null,
         compressionTriggerRatio: sessionMemory.compressionTriggerRatio ?? 0.8,
         compressionTargetRatio: sessionMemory.compressionTargetRatio ?? 0.5,
-        summaryMode: sessionMemory.summaryMode ?? "fast", // 默认快速模式
+        summaryMode: sessionMemory.summaryMode ?? SummaryMode.DEFAULT,
         maxTokensLimit: sessionMemory.maxTokensLimit ?? null,
       };
     }

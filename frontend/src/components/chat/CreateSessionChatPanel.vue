@@ -164,6 +164,7 @@ import { usePopup } from "../../composables/usePopup";
 import { useTitle } from "../../composables/useTitle";
 import { useRouter } from 'vue-router';
 import { fixFrontendAssetUrl } from '@/utils/url'
+import { DEFAULT_SUMMARY_MODE } from '@/constants'
 // 组件导入
 import { ChatInput } from "../ui";
 
@@ -280,7 +281,7 @@ const currentSession = ref<any>({
       maxMemoryLength: null,
       compressionTriggerRatio: 0.8,
       compressionTargetRatio: 0.5,
-      summaryMode: 'fast', // 默认快速模式
+      summaryMode: DEFAULT_SUMMARY_MODE, // 默认记忆同步模式
       maxTokensLimit: null
     }
   }
@@ -369,7 +370,7 @@ watch(() => currentSession.value.characterId, (newCharId, oldCharId) => {
           maxMemoryLength: newCharacter.settings?.memory?.maxMemoryLength || newCharacter.settings?.maxMemoryLength,
           compressionTriggerRatio: newCharacter.settings?.memory?.compressionTriggerRatio || 0.8,
           compressionTargetRatio: newCharacter.settings?.memory?.compressionTargetRatio || 0.5,
-          summaryMode: newCharacter.settings?.memory?.summaryMode || 'fast',
+          summaryMode: newCharacter.settings?.memory?.summaryMode || DEFAULT_SUMMARY_MODE,
           maxTokensLimit: newCharacter.settings?.memory?.maxTokensLimit || null
         }
       };
@@ -479,7 +480,7 @@ const loadCharacters = async (): Promise<void> => {
             maxMemoryLength: targetCharacter.settings?.memory?.maxMemoryLength || targetCharacter.settings?.maxMemoryLength,
             compressionTriggerRatio: targetCharacter.settings?.memory?.compressionTriggerRatio || 0.8,
             compressionTargetRatio: targetCharacter.settings?.memory?.compressionTargetRatio || 0.5,
-            summaryMode: targetCharacter.settings?.memory?.summaryMode || 'fast',
+            summaryMode: targetCharacter.settings?.memory?.summaryMode || DEFAULT_SUMMARY_MODE,
             maxTokensLimit: targetCharacter.settings?.memory?.maxTokensLimit || null
           }
         };
@@ -535,7 +536,7 @@ const selectCharacterFromSelector = (character: any): void => {
       maxMemoryLength: character.settings?.memory?.maxMemoryLength || character.settings?.maxMemoryLength,
       compressionTriggerRatio: character.settings?.memory?.compressionTriggerRatio || 0.8,
       compressionTargetRatio: character.settings?.memory?.compressionTargetRatio || 0.5,
-      summaryMode: character.settings?.memory?.summaryMode || 'fast',
+      summaryMode: character.settings?.memory?.summaryMode || DEFAULT_SUMMARY_MODE,
       maxTokensLimit: character.settings?.memory?.maxTokensLimit || null
     }
   };
@@ -610,7 +611,7 @@ const selectCharacter = (character: any): void => {
       maxMemoryLength: character.settings?.memory?.maxMemoryLength || character.settings?.maxMemoryLength,
       compressionTriggerRatio: character.settings?.memory?.compressionTriggerRatio || 0.8,
       compressionTargetRatio: character.settings?.memory?.compressionTargetRatio || 0.5,
-      summaryMode: character.settings?.memory?.summaryMode || 'fast',
+      summaryMode: character.settings?.memory?.summaryMode || DEFAULT_SUMMARY_MODE,
       maxTokensLimit: character.settings?.memory?.maxTokensLimit || null
     }
   };

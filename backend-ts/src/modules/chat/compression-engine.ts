@@ -31,6 +31,8 @@ export enum SummaryMode {
   FAST = "fast",
   /** 记忆同步：压缩前先让 AI 保存记忆到文件，再执行 LLM 摘要 */
   MEMORY_SYNC = "memory_sync",
+  /** 默认摘要模式（指向 MEMORY_SYNC），统一修改入口 */
+  DEFAULT = "memory_sync",
 }
 
 /**
@@ -182,7 +184,7 @@ export class CompressionEngine implements ICompressionStrategy {
           targetTokens,
           compressionState.summaryContent, // 直接使用压缩状态中的摘要内容
           config.model,
-          config.summaryMode ?? SummaryMode.FAST,
+          config.summaryMode ?? SummaryMode.DEFAULT,
           config.chatModelName, // 传递对话模型名称用于 Token 计算
         );
 
@@ -385,7 +387,7 @@ export class CompressionEngine implements ICompressionStrategy {
     targetTokens: number,
     previousSummary?: string,
     compressionModel?: any,
-    summaryMode: SummaryMode = SummaryMode.FAST,
+    summaryMode: SummaryMode = SummaryMode.DEFAULT,
     chatModelName?: string,
   ): Promise<{
     summary: string;
