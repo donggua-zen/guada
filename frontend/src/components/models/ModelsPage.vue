@@ -278,6 +278,23 @@
                 </el-input-number>
               </el-form-item>
 
+              <el-divider content-position="left" class="!my-4 text-xs text-gray-400">模型默认参数（除非你明确知道自己在干什么，否则请留空，由 API 自行决定）</el-divider>
+
+              <el-form-item label="温度" prop="config.temperature">
+                <el-input-number v-model="editModelForm.config.temperature" :min="0" :max="2" :step="0.1"
+                  placeholder="模型默认" controls-position="right" style="width: 240px;" />
+              </el-form-item>
+
+              <el-form-item label="Top P" prop="config.topP">
+                <el-input-number v-model="editModelForm.config.topP" :min="0" :max="1" :step="0.05"
+                  placeholder="模型默认" controls-position="right" style="width: 240px;" />
+              </el-form-item>
+
+              <el-form-item label="频率惩罚" prop="config.frequencyPenalty">
+                <el-input-number v-model="editModelForm.config.frequencyPenalty" :min="-2" :max="2" :step="0.1"
+                  placeholder="模型默认" controls-position="right" style="width: 240px;" />
+              </el-form-item>
+
               <el-form-item label="自定义参数 (JSON)" prop="config.customParameters">
                 <el-input v-model="customParamsStr" type="textarea" :rows="3"
                   placeholder='{ "temperature": 0.7, "top_p": 1 }' class="font-mono text-xs" />
@@ -621,6 +638,9 @@ const editModelForm = ref({
     features: [],
     contextWindow: null,
     maxOutputTokens: null,
+    temperature: null,
+    topP: null,
+    frequencyPenalty: null,
     customParameters: {},
     vectorDimensions: null
   }
@@ -979,6 +999,9 @@ const handleAddModel = () => {
       features: [],
       contextWindow: null,
       maxOutputTokens: null,
+      temperature: null,
+      topP: null,
+      frequencyPenalty: null,
       customParameters: {},
       vectorDimensions: null
     }
@@ -1076,6 +1099,9 @@ const handleEditClick = (model: any) => {
       features: config.features || [],
       contextWindow: config.contextWindow || null,
       maxOutputTokens: config.maxOutputTokens || null,
+      temperature: config.temperature ?? null,
+      topP: config.topP ?? null,
+      frequencyPenalty: config.frequencyPenalty ?? null,
       customParameters: config.customParameters || {},
       vectorDimensions: config.vectorDimensions || null
     }

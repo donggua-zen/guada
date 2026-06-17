@@ -104,6 +104,17 @@ export interface ToolProviderMetadata {
   promptFrequency?: PromptFrequency;
 }
 
+/**
+ * 工具提供者运行上下文（由 ISessionContext 等实现，结构兼容）
+ */
+export interface ProviderContext {
+  sessionId: string;
+  sessionType: string;
+  workspacePath: string;
+  userId?: string;
+  [key: string]: any;
+}
+
 export interface IToolProvider {
   pluginId: string;
   /**
@@ -112,7 +123,7 @@ export interface IToolProvider {
    * @param context 上下文信息（session_id, user_id, session_type 等）
    * @returns 工具定义数组
    */
-  getTools(enabled?: boolean | string[], context?: Record<string, any>): Promise<ToolDefinition[]>;
+  getTools(enabled?: boolean | string[], context?: ProviderContext): Promise<ToolDefinition[]>;
   /**
    * 执行工具调用
    * @param request 工具调用请求
@@ -121,33 +132,33 @@ export interface IToolProvider {
    * @returns 工具执行结果内容字符串
    * @throws Error 如果执行失败，抛出异常由 ToolOrchestrator 捕获
    */
-  execute(request: ToolCallRequest, context?: Record<string, any>, abortSignal?: AbortSignal): Promise<string>;
+  execute(request: ToolCallRequest, context?: ProviderContext, abortSignal?: AbortSignal): Promise<string>;
   /**
    * 获取工具的完整提示词（包含工具说明和使用指南）
    * 可选实现。如果模块不需要额外提示词（如 MCP），可以不实现此方法。
    * @param context 上下文信息
    * @returns 工具提示词字符串，不需要则返回空字符串
    */
-  getPrompt?(context?: Record<string, any>): Promise<string>;
+  getPrompt?(context?: ProviderContext): Promise<string>;
   /**
    * 获取需要持续注入的提示词内容（如记忆内容、动态上下文等）
    * 这部分内容会始终注入到 System Prompt 中，不受 loadMode 影响
    * @param context 上下文信息
    * @returns 持续注入的提示词字符串，如不需要则返回空字符串
    */
-  getPersistentPrompt?(context?: Record<string, any>): Promise<string>;
+  getPersistentPrompt?(context?: ProviderContext): Promise<string>;
   /**
    * 获取提供者的元数据信息
    * @param context 上下文信息
    * @returns 提供者元数据
    */
-  getMetadata(context?: Record<string, any>): ToolProviderMetadata;
+  getMetadata(context?: ProviderContext): ToolProviderMetadata;
   /**
    * 获取工具的简要说明（用于 system prompt 中的元信息展示）
    * @param context 上下文信息
    * @returns 简短的工具类别描述
    */
-  getBriefDescription?(context?: Record<string, any>): Promise<string>;
+  getBriefDescription?(context?: ProviderContext): Promise<string>;
   /**
    * 生成工具调用的展示文案（在 LLM 输出参数后立即调用）
    * @param toolName 工具名称

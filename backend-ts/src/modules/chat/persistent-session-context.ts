@@ -64,19 +64,22 @@ export class PersistentSessionContext implements ISessionContext {
 
   // 初始化后构建完成的 DTO（在 initialize() 中一次性填充）
   private modelConfig!: ModelConfig;
-  private systemPrompt!: string;
+  /** system prompt 各部件：base / team / tool / summary */
+  private systemPromptParts: Record<string, string> = {};
   private thinkingEffortValue!: string | undefined;
   private toolRuntime: ToolRuntime | undefined;
   private toolApprovalConfig!: ToolApprovalConfig;
   private memoryConfig!: MemoryConfig;
   private effectiveContextWindow!: number;
-  private workspacePath!: string;
+  private _workspacePath!: string;
+  get workspacePath(): string {
+    return this._workspacePath;
+  }
 
   // 对话状态
   private history: MessageRecord[] = [];
   private pendingPersistRecords: MessageRecord[] = [];
   private systemPromptTokenCount: number = 0;
-  private currentSummary?: string;
   private compressionModel: any;
 
   private currentTokenCount: number = 0;
@@ -107,20 +110,29 @@ export class PersistentSessionContext implements ISessionContext {
    * 由工厂在构造后调用。
    */
   async initialize(): Promise<void> {
+    // 先解析工作目录，后续 prepareSessionData 直接使用 this._workspacePath
+    this._workspacePath = this.workspaceService.resolveSessionWorkspaceDir(
+      this.session,
+    );
+
     const prep = await this.prepareSessionData();
     const model = prep.model;
 
     // 一次性构建所有 DTO，避免 getter 中的延迟计算和缓存逻辑
     this.modelConfig = this.buildModelConfig(model, prep.mergedSettings);
-    this.systemPrompt = prep.fullSystemPrompt || "";
+    this.systemPromptParts = {
+      base: prep.mergedSettings.systemPrompt || "",
+      tool: prep.toolPrompts || "",
+    };
     this.thinkingEffortValue = prep.features.includes("thinking")
       ? prep.mergedSettings.thinkingEffort || "off"
       : undefined;
     this.toolRuntime = prep.toolRuntime;
     this.toolApprovalConfig = this.buildToolApprovalConfig();
-    this.memoryConfig = await this.buildMemoryConfig(prep.mergedSettings.memory);
+    this.memoryConfig = await this.buildMemoryConfig(
+      prep.mergedSettings.memory,
+    );
     this.effectiveContextWindow = prep.effectiveContextWindow;
-    this.workspacePath = this.session.workspacePath || "";
   }
 
   /**
@@ -171,7 +183,9 @@ export class PersistentSessionContext implements ISessionContext {
       : { messages: rawMessages, summary: undefined };
 
     this.history = preprocessResult.messages;
-    this.currentSummary = preprocessResult.summary;
+    if (preprocessResult.summary) {
+      this.systemPromptParts.summary = preprocessResult.summary;
+    }
 
     // reasoning content 处理
     if (shouldLoadReasoning) {
@@ -237,7 +251,7 @@ export class PersistentSessionContext implements ISessionContext {
     // 计算系统提示词的 Token 数
     this.systemPromptTokenCount = await this.tokenizerService.countTextTokens(
       modelName,
-      this.systemPrompt,
+      this.getSystemPrompt(),
     );
     // compressionConfig.contextWindow -= this.systemPromptTokenCount;
 
@@ -249,14 +263,6 @@ export class PersistentSessionContext implements ISessionContext {
     this.logger.debug(`Initial token count: ${this.currentTokenCount}`);
   }
 
-  async getHistory(): Promise<MessageRecord[]> {
-    if (!this.conversationStateLoaded) {
-      await this.loadConversationState();
-      this.conversationStateLoaded = true; 
-    }
-    return this.buildFinalMessages(this.history);
-  }
-
   /**
    * 获取准备发送给 LLM 的完整消息列表。
    *
@@ -265,7 +271,9 @@ export class PersistentSessionContext implements ISessionContext {
    *
    * @returns 包含 system prompt 和对话历史的消息数组，可直接传递给 LLM API
    */
-  async getMessages(): Promise<MessageRecord[]> {
+  async getMessages(options?: {
+    exclude?: string[];
+  }): Promise<MessageRecord[]> {
     if (!this.conversationStateLoaded) {
       await this.loadConversationState();
       this.conversationStateLoaded = true;
@@ -273,7 +281,7 @@ export class PersistentSessionContext implements ISessionContext {
 
     // 压缩由外部（AgentEngine）通过 shouldCompress/compress 控制，
     // getMessages 仅负责组装消息，不再触发压缩
-    return this.buildFinalMessages(this.history);
+    return this.buildFinalMessages(this.history, options);
   }
 
   /**
@@ -346,7 +354,8 @@ export class PersistentSessionContext implements ISessionContext {
 
     // 检查是否已在目标范围内，避免反复压缩
     const targetTokens = Math.floor(
-      this.effectiveContextWindow * (memoryConfig.compressionTargetRatio ?? 0.5),
+      this.effectiveContextWindow *
+        (memoryConfig.compressionTargetRatio ?? 0.5),
     );
     if (currentTokens <= targetTokens) {
       this.logger.log(
@@ -373,7 +382,9 @@ export class PersistentSessionContext implements ISessionContext {
     );
 
     this.history = result.messages;
-    this.currentSummary = result.summary;
+    if (result.summary) {
+      this.systemPromptParts.summary = result.summary;
+    }
 
     if (result.tokenCount !== undefined) {
       this.currentTokenCount = result.tokenCount;
@@ -414,22 +425,13 @@ export class PersistentSessionContext implements ISessionContext {
     );
   }
 
-  /**
-   * 将 system prompt、压缩摘要和对话历史组装成完整的 LLM 消息数组。
-   *
-   * 摘要是通过压缩策略生成的历史概要，注入到 system prompt 末尾以帮助模型理解上下文。
-   * 支持 {time} 占位符替换为当前 ISO 时间。
-   */
-  private buildFinalMessages(messages: MessageRecord[]): MessageRecord[] {
+  private buildFinalMessages(
+    messages: MessageRecord[],
+    options?: { exclude?: string[] },
+  ): MessageRecord[] {
     const nonSystemMessages = messages.filter((msg) => msg.role !== "system");
 
-    let finalSystemPrompt = this.systemPrompt;
-
-    if (this.currentSummary) {
-      finalSystemPrompt += `\n\n[历史对话摘要]\n${this.currentSummary}`;
-    }
-
-    finalSystemPrompt = finalSystemPrompt.replace(
+    const finalSystemPrompt = this.getSystemPrompt(options?.exclude).replace(
       "{time}",
       new Date().toISOString(),
     );
@@ -467,12 +469,21 @@ export class PersistentSessionContext implements ISessionContext {
         maxOutputTokens: model.config?.maxOutputTokens,
         features: model.config?.features || [],
         inputCapabilities: model.config?.inputCapabilities || [],
-        // 模型默认配置（会被下面的运行时参数覆盖）
+        // 模型原始配置（显式展开，避免意外覆盖下面运行时参数）
         ...(model.config || {}),
-        // 运行时调用参数（优先级最高）
-        temperature: mergedSettings.modelTemperature ?? 0.7,
-        topP: mergedSettings.modelTopP ?? 1.0,
-        frequencyPenalty: mergedSettings.modelFrequencyPenalty ?? 0,
+        // 二级链：会话设置（创建时已从角色继承）> 模型默认 > undefined（API自行决策）
+        temperature:
+          mergedSettings.modelTemperature ??
+          model.config?.temperature ??
+          undefined,
+        topP:
+          mergedSettings.modelTopP ??
+          model.config?.topP ??
+          undefined,
+        frequencyPenalty:
+          mergedSettings.modelFrequencyPenalty ??
+          model.config?.frequencyPenalty ??
+          undefined,
       },
     };
   }
@@ -576,7 +587,7 @@ export class PersistentSessionContext implements ISessionContext {
   private async prepareSessionData(): Promise<{
     model: any;
     mergedSettings: MergedSettings;
-    fullSystemPrompt: string;
+    toolPrompts: string;
     effectiveContextWindow: number;
     thinkingEffort: string | undefined;
     toolRuntime: ToolRuntime | undefined;
@@ -597,15 +608,11 @@ export class PersistentSessionContext implements ISessionContext {
     let toolRuntime: ToolRuntime | undefined;
 
     if (supportsTools) {
-      const workspacePath = this.workspaceService.resolveSessionWorkspaceDir(
-        this.session,
-      );
-
       const injectParams = {
         sessionId,
         userId,
         sessionType: this.sessionType,
-        workspacePath,
+        workspacePath: this._workspacePath,
       };
 
       // 团队模式：强制 subagent 命名空间使用 eager 加载
@@ -621,10 +628,6 @@ export class PersistentSessionContext implements ISessionContext {
       toolPrompts = await this.toolOrchestrator.getPrompts(toolRuntime);
     }
 
-    const fullSystemPrompt = [merged.systemPrompt, toolPrompts]
-      .filter(Boolean)
-      .join("\n");
-
     const effectiveContextWindow = this.calcEffectiveContextWindow(
       model,
       merged.memory,
@@ -637,7 +640,7 @@ export class PersistentSessionContext implements ISessionContext {
     return {
       model,
       mergedSettings: merged,
-      fullSystemPrompt,
+      toolPrompts,
       effectiveContextWindow,
       thinkingEffort,
       toolRuntime,
@@ -652,7 +655,7 @@ export class PersistentSessionContext implements ISessionContext {
    * - systemPrompt：会话设置 > 角色设置 > 空字符串
    * - memory（记忆配置）：当 memoryEnabled !== false 时使用会话配置，否则继承角色配置
    * - thinkingEffort：仅从会话设置读取
-   * - 模型参数（temperature/topP等）：仅从角色设置读取
+   * - 模型参数（temperature/topP等）：仅从会话设置读取（创建会话时已从角色继承，见 filterAndMergeSessionSettings）
    * - tools / mcpServers：会话设置 > 角色设置
    */
   private mergeSettings(): MergedSettings {
@@ -709,10 +712,18 @@ export class PersistentSessionContext implements ISessionContext {
       systemPrompt,
       thinkingEffort: undefined,
       memory: {},
-      // 模型参数：会话设置 > 角色设置（与 tools/mcpServers 一致）
-      modelTemperature: sessionSettings.modelTemperature ?? leaderSettings.modelTemperature,
-      modelTopP: sessionSettings.modelTopP ?? leaderSettings.modelTopP,
-      modelFrequencyPenalty: sessionSettings.modelFrequencyPenalty ?? leaderSettings.modelFrequencyPenalty,
+      // 模型参数：从 settings.model 对象读取（遵循 modelOverrideEnabled 控制）
+      ...(sessionSettings.modelOverrideEnabled && sessionSettings.model
+        ? {
+            modelTemperature: sessionSettings.model.temperature ?? undefined,
+            modelTopP: sessionSettings.model.topP ?? undefined,
+            modelFrequencyPenalty: sessionSettings.model.frequencyPenalty ?? undefined,
+          }
+        : {
+            modelTemperature: undefined,
+            modelTopP: undefined,
+            modelFrequencyPenalty: undefined,
+          }),
       tools: mergedTools,
       mcpServers: mergedMcpServers,
     };
@@ -764,8 +775,15 @@ export class PersistentSessionContext implements ISessionContext {
     return this.modelConfig.config.features?.includes(feature) || false;
   }
 
-  getSystemPrompt(): string {
-    return this.systemPrompt;
+  getSystemPrompt(exclude?: string[]): string {
+    const order = ["base", "tool", "summary"];
+    const filtered = exclude?.length
+      ? order.filter((k) => !exclude.includes(k))
+      : order;
+    return filtered
+      .map((k) => this.systemPromptParts[k])
+      .filter(Boolean)
+      .join("\n\n");
   }
 
   getThinkingEffort(): string | undefined {

@@ -1,4 +1,4 @@
-import { ToolDefinition } from "./interfaces/tool-provider.interface";
+import { ToolDefinition, ProviderContext } from "./interfaces/tool-provider.interface";
 
 /**
  * 工具执行上下文
@@ -15,7 +15,7 @@ export class ToolRuntime {
   private readonly _toolNameToPluginId: Map<string, string>;
 
   constructor(
-    readonly injectParams: Record<string, any>,
+    readonly injectParams: ProviderContext,
     readonly tools: Record<string, ToolDefinition[]>,
     readonly lazyTools: Record<string, ToolDefinition[]> = {},
   ) {
@@ -60,7 +60,7 @@ export class ToolRuntime {
   }
 
   /**
-   * 根据工具名查找工具定义及其所属插件标识
+   * 根据工具名查找工具定义及其所属插件标识。
    * @param toolName 工具名
    * @returns 包含 pluginId 和 tool 的对象，未找到返回 undefined
    */

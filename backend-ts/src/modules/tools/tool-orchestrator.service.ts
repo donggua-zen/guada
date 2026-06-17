@@ -6,6 +6,7 @@ import {
   ToolDisplayInfo,
   ToolDefinition,
   PromptFrequency,
+  ProviderContext,
 } from "./interfaces/tool-provider.interface";
 
 import {
@@ -229,7 +230,7 @@ export class ToolOrchestrator {
    * @returns 按命名空间分组的工具定义映射
    */
   async buildToolRuntime(
-    injectParams: Record<string, any>,
+    injectParams: ProviderContext,
     toolsConfig: any,
     mcpServersConfig: any,
     eagerPluginIds?: string[],
@@ -395,7 +396,7 @@ export class ToolOrchestrator {
    */
   private resolvePromptSortKey(
     provider: IToolProvider,
-    context?: Record<string, any>,
+    context?: ProviderContext,
   ): number {
     const metadata = provider.getMetadata(context);
     const frequency = metadata.promptFrequency ?? 'REGULAR';
@@ -612,7 +613,7 @@ export class ToolOrchestrator {
     const toolsList: ToolMetadata[] = [];
     const globalToolsConfig = await this.settingsStorage.getSettings("tools");
     for (const [pluginId, provider] of this.providers.entries()) {
-      const metadata = provider.getMetadata({});
+      const metadata = provider.getMetadata({} as ProviderContext);
 
       // 根据 provider 的 type 字段确定默认值：core 默认启用，extended 默认禁用
       const defaultEnabled = metadata.type !== "extended";
@@ -631,7 +632,7 @@ export class ToolOrchestrator {
 
       let tools: any[] = [];
       try {
-        tools = await provider.getTools(true, {});
+        tools = await provider.getTools(true, {} as ProviderContext);
 
         // 工具名由 Provider 保证全局唯一
       } catch (error: any) {

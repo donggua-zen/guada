@@ -423,7 +423,11 @@ const chatInputConfig = computed(() => ({
   knowledgeBaseIds: inputMessage.value?.knowledgeBaseIds || currentSession.value?.settings?.referencedKbs || [],
 
   // 工作目录路径 - 对应 handleConfigChange 中的 config.workspacePath
-  workspacePath: currentSession.value?.workspacePath || null
+  workspacePath: currentSession.value?.workspacePath || null,
+
+  // 模型参数 - 对应 handleConfigChange 中的 config.model 等
+  modelOverrideEnabled: currentSession.value?.settings?.modelOverrideEnabled ?? false,
+  model: currentSession.value?.settings?.model ?? null,
 }));
 
 /**
@@ -473,6 +477,22 @@ const handleConfigChange = (config: any) => {
   if (typeof config.workspacePath !== 'undefined') {
     currentSession.value.workspacePath = config.workspacePath;
     console.log('保存 workspacePath 到会话:', config.workspacePath);
+  }
+
+  // 处理模型参数
+  if (typeof config.modelOverrideEnabled !== 'undefined') {
+    currentSession.value.settings.modelOverrideEnabled = config.modelOverrideEnabled;
+  }
+  if (typeof config.model !== 'undefined') {
+    if (config.model) {
+      currentSession.value.settings.model = {
+        temperature: config.model.temperature ?? null,
+        topP: config.model.topP ?? null,
+        frequencyPenalty: config.model.frequencyPenalty ?? null,
+      };
+    } else {
+      currentSession.value.settings.model = null;
+    }
   }
 
   debouncedSaveSession();

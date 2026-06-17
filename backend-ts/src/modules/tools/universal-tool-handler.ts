@@ -1,5 +1,5 @@
 import { Logger } from "@nestjs/common";
-import { ToolCallRequest, ToolCallResponse, IToolProvider, ToolDefinition } from "./interfaces/tool-provider.interface";
+import { ToolCallRequest, ToolCallResponse, IToolProvider, ToolDefinition, ProviderContext } from "./interfaces/tool-provider.interface";
 
 
 /**
@@ -56,7 +56,7 @@ export class UniversalToolHandler {
    */
   async handleToolLoad(
     request: ToolCallRequest,
-    injectParams: Record<string, any>,
+    injectParams: ProviderContext,
     getProvider: (pluginId: string) => IToolProvider | undefined,
     isPluginEnabled: (pluginId: string) => boolean,
   ): Promise<ToolCallResponse> {

@@ -1,4 +1,6 @@
 import { Injectable, Logger } from "@nestjs/common";
+import * as path from "path";
+import * as fs from "fs";
 import { LLMService } from "../llm-core/llm.service";
 import { ToolOrchestrator } from "../tools/tool-orchestrator.service";
 import { MessageRecord, LLMResponseChunk } from "../llm-core/types/llm.types";
@@ -6,6 +8,7 @@ import { RequestContext } from "../../common/context/request-context";
 import { throttledStream } from "./utils/stream-throttle.util";
 import { ToolCallDisplayUtil } from "./utils/tool-call-display.util";
 import { ISessionContext, ModelConfig } from "./session-context";
+import { ToolRuntime } from "../tools/tool-context";
 import { EventChunk } from "./types/event-chunk.types";
 import { partialParse } from "partial-json-parser";
 
@@ -542,6 +545,10 @@ export class AgentEngine {
     // 累加器：使用 LLMResponseChunk 格式保存累积状态
     const accumulated: LLMResponseChunk = {};
 
+    this.logger.debug(
+      `[LLM] ${modelConfig.modelName} temperature=${modelConfig.config.temperature} topP=${modelConfig.config.topP} frequencyPenalty=${modelConfig.config.frequencyPenalty}`,
+    );
+
     // 调用 LLM 服务发起流式请求，传递所有必要的配置参数
     const stream = this.llmService.completions({
       model: modelConfig.modelName,
@@ -905,34 +912,60 @@ export class AgentEngine {
     sessionContext: ISessionContext,
     abortSignal?: AbortSignal,
   ): Promise<void> {
-    const messages = await sessionContext.getMessages();
-    const toolContext = sessionContext.getToolContext();
-    if (!toolContext) return;
+    // 跳过工具提示词注入（影子轮次只需要记忆和文件工具，不需要 skill 描述等）
+    const messages = await sessionContext.getMessages({ exclude: ["tool"] });
+    const shadowMessages: MessageRecord[] = [];
 
     const modelConfig = sessionContext.getModelConfig();
 
-    // 获取记忆工具完整使用说明（懒加载模式下影子轮次无法访问工具本身）
+    // 获取记忆工具完整使用说明和当前记忆内容
     const memoryProvider = this.toolOrchestrator.getProvider("memory");
     const memoryGuide = memoryProvider?.getPrompt
-      ? await memoryProvider.getPrompt({
-          sessionId: sessionContext.sessionId,
-          userId: sessionContext.userId,
-          sessionType: sessionContext.sessionType,
-          workspacePath: sessionContext.getWorkspacePath(),
-        })
+      ? await memoryProvider.getPrompt(sessionContext)
+      : "";
+    const memoryContent = memoryProvider?.getPersistentPrompt
+      ? await memoryProvider.getPersistentPrompt(sessionContext)
       : "";
 
-    if (!memoryGuide) return; // 无记忆指南则跳过整个记忆写入
+    if (!memoryGuide) return;
 
+    // 构建专属运行时：仅含受限的文件工具，不依赖原会话的 toolContext
+    const fileProvider = this.toolOrchestrator.getProvider("file");
+    if (!fileProvider) return;
+
+    const ALLOWED_TOOL_NAMES = ["read", "list", "write", "edit"];
+    const fileTools = await fileProvider.getTools(
+      ALLOWED_TOOL_NAMES,
+      sessionContext,
+    );
+    if (fileTools.length === 0) return;
+
+    const shadowRuntime = new ToolRuntime(sessionContext, { file: fileTools });
+
+    // 组装指令消息（history 中不含系统提示词，此处自行注入）
     const instructionParts: string[] = [
       `<system_message>`,
       `这是一条系统消息，即将进行上下文压缩，请检查你的记忆文件是否需要更新。`,
       `如果有新的重要信息（用户偏好、决策、待办等），请使用文件工具写入记忆。`,
       ``,
       memoryGuide,
+    ];
+
+    // 注入当前已保存的记忆内容（避免 AI 额外花一轮工具调用读取）
+    if (memoryContent) {
+      instructionParts.push(
+        ``,
+        `---`,
+        `以下是当前已保存的记忆内容：`,
+        memoryContent,
+      );
+    }
+
+    instructionParts.push(
       ``,
       `操作原则：`,
       `- 已保存的内容无需重复写入`,
+      `- 发现冲突、冗余、过时的记忆需要进行对应的更正和简化`,
       `- 只保存重要的、持久的、未来需要的信息`,
       `- 写入完成后不需要回复用户`,
       `- 最多操作 5 轮工具调用，工作流程如下：`,
@@ -940,45 +973,41 @@ export class AgentEngine {
       `  2. 若需要保存，调用文件工具批量写入记忆`,
       `  3. 若无需要保存或者保存完毕，回复"DONE"`,
       `</system_message>`,
-    ];
+    );
 
-    messages.push({
+    shadowMessages.push({
       role: "user",
       content: instructionParts.join("\n"),
     });
-
-    // 仅保留文件读写工具
-    const ALLOWED_TOOL_NAMES = new Set(["read", "list", "write", "edit"]);
-    const saveTools = (toolContext.getFlatTools() as any[]).filter((t: any) => {
-      const pluginId = toolContext.resolvePluginId(t.name);
-      return pluginId === "file" && ALLOWED_TOOL_NAMES.has(t.name);
-    });
-
-    if (saveTools.length === 0) return;
 
     // 与主循环共用 executeLLMStream，保证参数一致
     const MAX_ROUNDS = 5;
     for (let round = 1; round <= MAX_ROUNDS; round++) {
       try {
         const streamResult = this.executeLLMStream(
-          messages,
+          messages.concat(shadowMessages),
           modelConfig,
-          saveTools,
-          "off", // 记忆保存不需要思考
+          fileTools,
+          sessionContext.getThinkingEffort(),
           abortSignal,
         );
+
         let accumulated: LLMResponseChunk = {};
         for await (const { accumulated: acc } of streamResult) {
           accumulated = acc;
         }
 
-        if (!accumulated.toolCalls?.length) break;
-
-        messages.push({
+        shadowMessages.push({
           role: "assistant",
+          reasoningContent: accumulated.reasoningContent || null,
           content: accumulated.content || null,
           toolCalls: accumulated.toolCalls,
         });
+        if (!accumulated.toolCalls?.length) break;
+
+        // 收集本轮所有工具调用，批量执行
+        const batch: { id: string; name: string; arguments: any }[] = [];
+        const errors: { id: string; name: string; content: string }[] = [];
 
         for (const tc of accumulated.toolCalls) {
           let args: any;
@@ -1006,31 +1035,65 @@ export class AgentEngine {
               (p) => targetPath.startsWith(p) || targetPath.startsWith("/" + p),
             );
           if (!isAllowed) {
-            messages.push({
-              role: "tool",
-              content: `ERROR: 不允许操作 ${targetPath}，记忆操作仅限于 memory/ 和 memos/ 目录`,
-              toolCallId: tc.id,
+            errors.push({
+              id: tc.id,
               name: tc.name,
+              content: `ERROR: 不允许操作 ${targetPath}，记忆操作仅限于 memory/ 和 memos/ 目录`,
             });
             continue;
           }
 
-          const responses = await this.toolOrchestrator.executeBatch(
-            [{ id: tc.id, name: tc.name, arguments: args }],
-            toolContext,
-          );
+          batch.push({ id: tc.id, name: tc.name, arguments: args });
+        }
 
-          messages.push({
+        // 先推入拒绝的路径错误
+        for (const e of errors) {
+          shadowMessages.push({
             role: "tool",
-            content: responses[0]?.content || "",
-            toolCallId: tc.id,
-            name: tc.name,
+            content: e.content,
+            toolCallId: e.id,
+            name: e.name,
           });
+        }
+
+        // 批量执行合法的工具调用
+        if (batch.length > 0) {
+          const responses = await this.toolOrchestrator.executeBatch(
+            batch,
+            shadowRuntime,
+          );
+          for (const r of responses) {
+            shadowMessages.push({
+              role: "tool",
+              content: r.content,
+              toolCallId: r.toolCallId,
+              name: r.name,
+            });
+          }
         }
       } catch (error: any) {
         this.logger.warn(`记忆保存第${round}轮失败: ${error.message}`);
         break;
       }
+    }
+    // 落盘原始交互记录
+    try {
+      const logDir = path.join(
+        sessionContext.getWorkspacePath(),
+        ".guada",
+        "logs",
+      );
+      fs.mkdirSync(logDir, { recursive: true });
+      fs.appendFileSync(
+        path.join(logDir, "compression.jsonl"),
+        JSON.stringify({
+          time: new Date().toISOString(),
+          sessionId: sessionContext.sessionId,
+          records: shadowMessages,
+        }) + "\n",
+      );
+    } catch (e) {
+      // 非关键
     }
     // 不入库，不 yield
   }
