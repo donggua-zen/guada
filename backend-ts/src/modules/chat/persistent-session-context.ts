@@ -112,7 +112,7 @@ export class PersistentSessionContext implements ISessionContext {
    */
   async initialize(): Promise<void> {
     // 先解析工作目录，后续 prepareSessionData 直接使用 this._workspacePath
-    this._workspacePath = this.workspaceService.resolveSessionWorkspaceDir(
+    this._workspacePath = await this.workspaceService.resolveSessionWorkspaceDir(
       this.session,
     );
 

@@ -219,7 +219,7 @@ export class SessionService {
     // 确定工作目录路径：客户端未传值时生成新的默认工作目录
     let finalWorkspacePath = workspacePath;
     if (finalWorkspacePath === undefined || finalWorkspacePath === null) {
-      finalWorkspacePath = this.workspaceService.generateWorkspaceDir();
+      finalWorkspacePath = await this.workspaceService.generateWorkspaceDir();
     }
 
     // 团队模式：使用团队信息作为会话标题/头像/描述
