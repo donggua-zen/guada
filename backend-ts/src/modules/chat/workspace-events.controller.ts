@@ -49,7 +49,7 @@ export class WorkspaceEventsController {
     }
 
     // 确定工作目录路径（已自动确保目录存在）
-    const workspacePath = this.workspaceService.resolveSessionWorkspaceDir(session);
+    const workspacePath = await this.workspaceService.resolveSessionWorkspaceDir(session);
 
     // 使用 clientId 区分不同页面，支持多页面共享 watcher
     const finalClientId = clientId || `default_${Date.now()}`;

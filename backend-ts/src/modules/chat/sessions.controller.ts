@@ -175,7 +175,7 @@ export class SessionsController {
     }
 
     // 解析会话工作目录路径（已自动确保目录存在）
-    const workspacePath = this.workspaceService.resolveSessionWorkspaceDir(session);
+    const workspacePath = await this.workspaceService.resolveSessionWorkspaceDir(session);
 
     return { workspacePath };
   }
@@ -188,7 +188,7 @@ export class SessionsController {
       throw new Error("Session not found or unauthorized");
     }
 
-    const workspacePath = this.workspaceService.resolveSessionWorkspaceDir(session);
+    const workspacePath = await this.workspaceService.resolveSessionWorkspaceDir(session);
 
     const tree = await this.buildDirectoryTree(workspacePath, '', 0, 0);
     return { tree };
@@ -211,7 +211,7 @@ export class SessionsController {
     }
 
     // 确定工作目录路径（已自动确保目录存在）
-    const workspaceDir = this.workspaceService.resolveSessionWorkspaceDir(session);
+    const workspaceDir = await this.workspaceService.resolveSessionWorkspaceDir(session);
 
     // 解析文件路径并安全检查
     const resolvedPath = this.workspaceService.resolveFilePath(filePath, workspaceDir);
@@ -271,7 +271,7 @@ export class SessionsController {
     }
 
     // 确定工作目录路径（已自动确保目录存在）
-    const workspaceDir = this.workspaceService.resolveSessionWorkspaceDir(session);
+    const workspaceDir = await this.workspaceService.resolveSessionWorkspaceDir(session);
 
     // 解析目录路径并安全检查
     const resolvedDirPath = this.workspaceService.resolveFilePath(dirPath, workspaceDir);
@@ -376,7 +376,7 @@ export class SessionsController {
     }
 
     // 确定工作目录路径（已自动确保目录存在）
-    const workspaceDir = this.workspaceService.resolveSessionWorkspaceDir(session);
+    const workspaceDir = await this.workspaceService.resolveSessionWorkspaceDir(session);
 
     // 解析文件路径并安全检查
     const resolvedPath = this.workspaceService.resolveFilePath(filePath, workspaceDir);

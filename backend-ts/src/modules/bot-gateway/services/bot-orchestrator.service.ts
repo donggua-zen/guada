@@ -97,7 +97,7 @@ export class BotOrchestrator {
       try {
         const workspacePath =
           queue.session.workspacePath ||
-          this.workspaceService.getDefaultWorkspaceDir(queue.session.id);
+          await this.workspaceService.getDefaultWorkspaceDir(queue.session.id);
         const destDir = path.join(workspacePath, "files");
         await fs.promises.mkdir(destDir, { recursive: true });
         const downloadedPaths = await adapter

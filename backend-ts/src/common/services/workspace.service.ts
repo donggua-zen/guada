@@ -30,8 +30,8 @@ export class WorkspaceService {
    * 优先级：全局设置 > 环境变量/内置默认值
    * @returns 生效的基路径绝对路径
    */
-  getEffectiveBaseDir(): string {
-    const globalBaseDir = this.settingsStorage.getSettingValue(
+  async getEffectiveBaseDir(): Promise<string> {
+    const globalBaseDir = await this.settingsStorage.getSettingValue(
       SG_SYSTEM, SK_SYS_WORKSPACE_BASE_DIR, null,
     );
     if (globalBaseDir && typeof globalBaseDir === 'string' && path.isAbsolute(globalBaseDir)) {
@@ -56,8 +56,8 @@ export class WorkspaceService {
    * @param sessionId 会话 ID
    * @returns 会话专属工作目录的绝对路径
    */
-  getWorkspaceDir(sessionId: string): string {
-    const baseDir = this.getEffectiveBaseDir();
+  async getWorkspaceDir(sessionId: string): Promise<string> {
+    const baseDir = await this.getEffectiveBaseDir();
     // 使用 path.resolve 处理相对路径和特殊字符
     const sessionDir = path.resolve(baseDir, sessionId);
     const resolvedBaseDir = path.resolve(baseDir);
@@ -103,8 +103,8 @@ export class WorkspaceService {
    * @param prefix 前缀，默认为 'WORK'
    * @returns 新生成的工作目录绝对路径
    */
-  generateWorkspaceDir(prefix: string = 'WORK'): string {
-    const baseDir = this.getEffectiveBaseDir();
+  async generateWorkspaceDir(prefix: string = 'WORK'): Promise<string> {
+    const baseDir = await this.getEffectiveBaseDir();
     const resolvedBaseDir = path.resolve(baseDir);
 
     let attempts = 0;
@@ -138,8 +138,8 @@ export class WorkspaceService {
    * @param sessionId 会话 ID
    * @returns 默认工作目录的绝对路径
    */
-  getDefaultWorkspaceDir(sessionId: string): string {
-    const baseDir = this.getEffectiveBaseDir();
+  async getDefaultWorkspaceDir(sessionId: string): Promise<string> {
+    const baseDir = await this.getEffectiveBaseDir();
     const sessionDir = path.resolve(baseDir, sessionId);
     const resolvedBaseDir = path.resolve(baseDir);
 
@@ -193,7 +193,7 @@ export class WorkspaceService {
    * @param sessionId 会话 ID
    */
   async cleanupDefaultWorkspace(sessionId: string): Promise<void> {
-    const defaultWorkspaceDir = this.getDefaultWorkspaceDir(sessionId);
+    const defaultWorkspaceDir = await this.getDefaultWorkspaceDir(sessionId);
     if (fs.existsSync(defaultWorkspaceDir)) {
       try {
         await fs.promises.rm(defaultWorkspaceDir, { recursive: true, force: true });
@@ -210,12 +210,12 @@ export class WorkspaceService {
    * @param session 会话对象
    * @returns 解析后的工作目录绝对路径
    */
-  resolveSessionWorkspaceDir(session: any): string {
+  async resolveSessionWorkspaceDir(session: any): Promise<string> {
     if (session?.workspacePath) {
       return path.resolve(session.workspacePath);
     }
     // 会话未设置工作目录时，使用基于 sessionId 的旧路径（兼容已有会话）
-    return this.getDefaultWorkspaceDir(session.id);
+    return await this.getDefaultWorkspaceDir(session.id);
   }
 
   /**
