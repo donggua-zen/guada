@@ -581,9 +581,11 @@ const sessionMemoryConfig = computed(() => {
   if (!config) return {};
 
   return {
-    useCustom: config.memoryEnabled ?? true, // 将 memoryEnabled 映射为 useCustom
-    ...config.memory, // 展开 memory 对象的其他属性
-    workspacePath: config.workspacePath || null, // 工作目录路径
+    modelOverrideEnabled: config.modelOverrideEnabled ?? false,
+    model: config.model ?? null,
+    useCustom: config.memoryEnabled ?? true,
+    ...config.memory,
+    workspacePath: config.workspacePath || null,
   };
 });
 
@@ -1208,7 +1210,7 @@ watch(editorContent, () => {
   nextTick(() => {
     const pmEl = document.querySelector('.message-editor .ProseMirror');
     if (pmEl) {
-      pmEl.style.minHeight = '56px';
+      pmEl.style.minHeight = '58px';
       pmEl.style.maxHeight = '240px';
       isInputExpanded.value = pmEl.scrollHeight > 60;
     }
@@ -1289,7 +1291,7 @@ onMounted(() => {
           const pmEl = document.querySelector('.message-editor .ProseMirror');
           if (pmEl) {
             const height = Math.min(pmEl.scrollHeight, 240);
-            pmEl.style.minHeight = '56px';
+            pmEl.style.minHeight = '58px';
             pmEl.style.maxHeight = '240px';
             isInputExpanded.value = pmEl.scrollHeight > 60;
           }
@@ -1359,7 +1361,7 @@ onUnmounted(() => {
 /* Tiptap 编辑器样式 - 模拟 textarea */
 :deep(.message-editor .ProseMirror) {
   width: 100%;
-  min-height: 56px;
+  min-height: 58px;
   max-height: 240px;
   border: none;
   resize: none;
@@ -1517,7 +1519,7 @@ onUnmounted(() => {
   overflow-y: auto;
   box-sizing: border-box;
   transition: height 0.2s ease;
-  min-height: 56px;
+  min-height: 58px;
 }
 
 

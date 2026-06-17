@@ -189,10 +189,11 @@ export class SessionService {
       throw new Error(`Character with ID ${characterId} not found`);
     }
 
-    // 处理会话设置：过滤非法字段 + 处理 memory 继承
+    // 处理会话设置：过滤非法字段 + 处理 memory 继承 + 继承角色模型参数
     const filteredSettings = this.filterAndMergeSessionSettings(
       settings,
       character.settings,
+      !!character.modelId,
     );
 
     // 确定使用的模型 ID：优先使用传入的 modelId，其次使用角色的 modelId，最后使用默认对话模型
@@ -267,6 +268,7 @@ export class SessionService {
   private filterAndMergeSessionSettings(
     sessionSettings: any,
     characterSettings: any,
+    characterHasModel: boolean = false,
   ) {
     // 如果 sessionSettings 为空，使用空对象
     if (!sessionSettings) {
@@ -278,8 +280,10 @@ export class SessionService {
       "thinkingEffort",
       "referencedKbs",
       "modelName",
-      "memoryEnabled", // 控制是否启用自定义记忆配置
-      "memory", // 具体的记忆配置对象
+      "memoryEnabled",
+      "memory",
+      "modelOverrideEnabled",
+      "model",
     ];
 
     // 第一步：过滤掉非法字段
@@ -307,6 +311,32 @@ export class SessionService {
         compressionTargetRatio: sessionMemory.compressionTargetRatio ?? 0.5,
         summaryMode: sessionMemory.summaryMode ?? "fast", // 默认快速模式
         maxTokensLimit: sessionMemory.maxTokensLimit ?? null,
+      };
+    }
+
+    // 第三步：模型参数继承（创建会话时从角色拷贝，之后除非显式修改不再跟随角色变动）
+    // 仅当角色使能了覆盖且绑定了模型时，才将角色参数作为会话初始值
+    if (filteredSettings.modelOverrideEnabled === undefined) {
+      const charOverride = characterSettings?.overrideModelParams ?? false;
+      if (charOverride && characterHasModel) {
+        filteredSettings.modelOverrideEnabled = true;
+        filteredSettings.model = {
+          temperature: characterSettings.modelTemperature ?? undefined,
+          topP: characterSettings.modelTopP ?? undefined,
+          frequencyPenalty: characterSettings.modelFrequencyPenalty ?? undefined,
+        };
+      } else {
+        filteredSettings.modelOverrideEnabled = false;
+        filteredSettings.model = null;
+      }
+    } else if (filteredSettings.modelOverrideEnabled === false) {
+      filteredSettings.model = null;
+    } else if (filteredSettings.model) {
+      // 确保 model 对象结构完整
+      filteredSettings.model = {
+        temperature: filteredSettings.model.temperature ?? undefined,
+        topP: filteredSettings.model.topP ?? undefined,
+        frequencyPenalty: filteredSettings.model.frequencyPenalty ?? undefined,
       };
     }
 
@@ -576,7 +606,7 @@ export class SessionService {
     const context = await this.sessionContextFactory.createFromSession(session);
     const effectiveContextWindow = context.getEffectiveContextWindow();
 
-    const messages = await context.getHistory();
+    const messages = await context.getMessages();
     const usedTokens = context.getTokenCount();
     const percentage = Math.min(
       (usedTokens / effectiveContextWindow) * 100,
@@ -615,7 +645,7 @@ export class SessionService {
     const context = await this.sessionContextFactory.createFromSession(session);
 
     const beforeTokenCount = context.getTokenCount();
-    const beforeMessageCount = (await context.getHistory()).length;
+    const beforeMessageCount = (await context.getMessages()).length;
 
     this.logger.log(`Manually triggering compression for session ${sessionId}`);
     await context.compress(async () => {
@@ -625,7 +655,7 @@ export class SessionService {
     });
 
     const afterTokenCount = context.getTokenCount();
-    const compressedMessages = await context.getHistory();
+    const compressedMessages = await context.getMessages();
     const afterMessageCount = compressedMessages.length;
 
     const checkpoint = await this.contextStateRepo.findBySessionId(sessionId);

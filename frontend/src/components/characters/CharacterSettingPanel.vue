@@ -140,55 +140,58 @@
                 </el-select>
               </el-form-item>
 
-              <!-- 模型参数设置 (折叠面板) -->
-              <el-collapse v-model="activeModelParams" class="mb-6">
-                <el-collapse-item name="params">
-                  <template #title>
-                    <div class="flex items-center gap-2 text-base font-medium">
-                      <el-icon>
-                        <SettingOutlined />
-                      </el-icon>
-                      <span>模型参数设置</span>
+              <!-- 模型参数设置 -->
+              <!-- 覆盖模型参数开关 -->
+              <el-form-item prop="overrideModelParams">
+                <template #label>
+                  <div class="flex flex-col gap-1">
+                    <span class="text-base text-gray-900 dark:text-gray-100 font-medium">覆盖模型参数</span>
+                    <span class="text-xs text-gray-500 dark:text-gray-400 font-normal">关闭后使用模型本身的默认参数。除非你明确知道自己在干什么，否则保持默认关闭</span>
+                  </div>
+                </template>
+                <el-switch v-model="characterForm.overrideModelParams" inline-prompt active-text="开启" inactive-text="关闭" />
+              </el-form-item>
+              <template v-if="characterForm.overrideModelParams">
+                <!-- 温度设置 -->
+                <el-form-item prop="modelTemperature">
+                  <template #label>
+                    <div class="flex flex-col gap-1">
+                      <span class="text-base text-gray-900 dark:text-gray-100 font-medium">温度</span>
+                      <span class="text-xs text-gray-500 dark:text-gray-400 font-normal">控制输出的随机性和创造性，值越高越富有创意</span>
                     </div>
                   </template>
-                  <!-- 温度设置 -->
-                  <el-form-item prop="modelTemperature">
-                    <template #label>
-                      <div class="flex flex-col gap-1">
-                        <span class="text-base text-gray-900 dark:text-gray-100 font-medium">温度</span>
-                        <span class="text-xs text-gray-500 dark:text-gray-400 font-normal">控制输出的随机性和创造性，值越高越富有创意</span>
-                      </div>
-                    </template>
-                    <el-slider-optional v-model="characterForm.modelTemperature" :min="0" :max="1.9" :step="0.1"
-                      show-input optional-direction="max" optional-text="Auto" class="w-full max-w-md" />
-                  </el-form-item>
+                  <el-slider-optional v-model="characterForm.modelTemperature" :min="0" :max="1.9" :step="0.1"
+                    show-input optional-direction="max" optional-text="Auto" class="w-full max-w-md" />
+                </el-form-item>
 
-                  <!-- Top P -->
-                  <el-form-item prop="modelTopP">
-                    <template #label>
-                      <div class="flex flex-col gap-1">
-                        <span class="text-base text-gray-900 dark:text-gray-100 font-medium">Top P</span>
-                        <span class="text-xs text-gray-500 dark:text-gray-400 font-normal">核采样参数，控制输出词汇的多样性范围</span>
-                      </div>
-                    </template>
-                    <el-slider-optional v-model="characterForm.modelTopP" :min="0" :max="1" :step="0.1" show-input
-                      optional-direction="max" optional-text="Auto" class="w-full max-w-md" />
-                  </el-form-item>
+                <!-- Top P -->
+                <el-form-item prop="modelTopP">
+                  <template #label>
+                    <div class="flex flex-col gap-1">
+                      <span class="text-base text-gray-900 dark:text-gray-100 font-medium">Top P</span>
+                      <span class="text-xs text-gray-500 dark:text-gray-400 font-normal">核采样参数，控制输出词汇的多样性范围</span>
+                    </div>
+                  </template>
+                  <el-slider-optional v-model="characterForm.modelTopP" :min="0" :max="1" :step="0.1" show-input
+                    optional-direction="max" optional-text="Auto" class="w-full max-w-md" />
+                </el-form-item>
 
-                  <!-- 频率惩罚 -->
-                  <el-form-item prop="modelFrequencyPenalty">
-                    <template #label>
-                      <div class="flex flex-col gap-1">
-                        <span class="text-base text-gray-900 dark:text-gray-100 font-medium">频率惩罚</span>
-                        <span
-                          class="text-xs text-gray-500 dark:text-gray-400 font-normal">降低重复内容的出现概率，正值减少重复，负值鼓励重复</span>
-                      </div>
-                    </template>
-                    <el-slider-optional v-model="characterForm.modelFrequencyPenalty" :min="-1.9" :max="1.9" :step="0.1"
-                      show-input optional-direction="max" optional-text="Auto" class="w-full max-w-md" />
-                  </el-form-item>
-                </el-collapse-item>
-              </el-collapse>
+                <!-- 频率惩罚 -->
+                <el-form-item prop="modelFrequencyPenalty">
+                  <template #label>
+                    <div class="flex flex-col gap-1">
+                      <span class="text-base text-gray-900 dark:text-gray-100 font-medium">频率惩罚</span>
+                      <span
+                        class="text-xs text-gray-500 dark:text-gray-400 font-normal">降低重复内容的出现概率，正值减少重复，负值鼓励重复</span>
+                    </div>
+                  </template>
+                  <el-slider-optional v-model="characterForm.modelFrequencyPenalty" :min="-1.9" :max="1.9" :step="0.1"
+                    show-input optional-direction="max" optional-text="Auto" class="w-full max-w-md" />
+                </el-form-item>
+              </template>
+              <el-alert title="提示" type="warning" :closable="false" show-icon class="mb-4">
+                修改模型配置不会同步修改已经创建的会话。新会话将自动继承当前配置。
+              </el-alert>
             </el-form>
           </div>
         </div>
@@ -619,7 +622,6 @@ const modelFormRef = ref(null)
 const memoryFormRef = ref(null)
 
 const tabsValue = ref(props.tab)
-const activeModelParams = ref([]) // 默认折叠模型参数
 
 // 表单数据
 const characterForm = reactive({
@@ -637,6 +639,7 @@ const characterForm = reactive({
   modelTemperature: null,
   modelTopP: null,
   modelFrequencyPenalty: null,
+  overrideModelParams: false,
   maxMemoryLength: null,
   useUserPrompt: false,
   enabledTools: [],  // 启用的本地工具
@@ -790,9 +793,10 @@ watch(() => props.data, (newVal) => {
   characterForm.assistantIdentity = newVal.settings?.assistantIdentity || '';
   characterForm.systemPrompt = newVal.settings?.systemPrompt || '';
   characterForm.memoryType = newVal.settings?.memoryType || 'sliding_window';
-  characterForm.modelTemperature = newVal.settings?.modelTemperature || null;
-  characterForm.modelTopP = newVal.settings?.modelTopP || null;
-  characterForm.modelFrequencyPenalty = newVal.settings?.modelFrequencyPenalty || null;
+  characterForm.modelTemperature = newVal.settings?.modelTemperature ?? null;
+  characterForm.modelTopP = newVal.settings?.modelTopP ?? null;
+  characterForm.modelFrequencyPenalty = newVal.settings?.modelFrequencyPenalty ?? null;
+  characterForm.overrideModelParams = newVal.settings?.overrideModelParams ?? false;
   characterForm.useUserPrompt = newVal.settings?.useUserPrompt || false;
 
   // 从 memory 分组加载记忆与压缩配置
@@ -1132,6 +1136,7 @@ const getFormData = () => {
       'modelTemperature': characterForm.modelTemperature,
       'modelTopP': characterForm.modelTopP,
       'modelFrequencyPenalty': characterForm.modelFrequencyPenalty,
+      'overrideModelParams': characterForm.overrideModelParams,
       'useUserPrompt': characterForm.useUserPrompt,
       // 记忆与压缩配置分组
       'memory': {

@@ -80,10 +80,12 @@ import { apiService } from '../../services/ApiService'
 import { usePopup } from '../../composables/usePopup'
 import { openExternalLink } from '@/utils/modelUtils'
 import type { CharacterGroup } from '@/types/character'
+import { useSessionStore } from '@/stores/session'
 
 const { confirm, toast } = usePopup()
 const router = useRouter()
 const route = useRoute()
+const sessionStore = useSessionStore()
 
 // ========== Tab 系统 ==========
 const tabItems = [
@@ -220,6 +222,7 @@ const startNewChat = async (character: any): Promise<void> => {
       characterId: character.id,
       title: character.title,
     })
+    sessionStore.setSession(session)
     router.replace({ name: 'Chat', params: { sessionId: session.id } })
     toast.success('会话创建成功')
   } catch (error: any) {
@@ -234,6 +237,7 @@ const startTeamChat = async (team: any): Promise<void> => {
       teamId: team.id,
       title: team.name,
     })
+    sessionStore.setSession(session)
     router.replace({ name: 'Chat', params: { sessionId: session.id } })
     toast.success('团队会话创建成功')
   } catch (error: any) {

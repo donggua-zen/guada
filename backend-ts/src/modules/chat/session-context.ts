@@ -76,6 +76,14 @@ export interface MemoryConfig {
   maxTokensLimit?: number;
 }
 
+/**
+ * 获取消息选项
+ */
+export interface GetMessagesOptions {
+  /** 排除的提示词部件（如 ["tool"] 跳过工具提示词） */
+  exclude?: string[];
+}
+
 // ============================================================================
 // ISessionContext: Agent 循环唯一依赖的会话抽象
 // ============================================================================
@@ -126,6 +134,7 @@ export interface ISessionContext {
 
   // === 工作目录 ===
   /** 获取会话工作目录路径 */
+  readonly workspacePath: string;
   getWorkspacePath(): string;
 
   // === 虚拟会话扩展 ===
@@ -140,9 +149,7 @@ export interface ISessionContext {
   /** 初始化：加载历史消息、恢复压缩状态 */
   initialize(): Promise<void>;
   /** 获取准备发送给 LLM 的完整消息列表（含 system prompt、摘要和历史） */
-  getMessages(): Promise<MessageRecord[]>;
-  /** 获取当前对话历史（不含 system prompt 和摘要） */
-  getHistory(): Promise<MessageRecord[]>;
+  getMessages(options?: GetMessagesOptions): Promise<MessageRecord[]>;
   /** 追加消息记录到历史并持久化 */
   appendParts(records: MessageRecord[]): Promise<void>;
   /** 持久化待保存的消息 */
