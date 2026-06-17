@@ -7,7 +7,7 @@
         <template #label>
           <div style="display: flex; flex-direction: column; gap: 8px;">
             <span class="text-base text-gray-900 dark:text-gray-100 font-medium">覆盖模型参数</span>
-            <span class="text-xs text-gray-500 dark:text-gray-400 font-normal">设置后将覆盖角色和模型本身的默认参数。除非你明确知道自己在干什么，否则保持默认关闭</span>
+            <span class="text-xs text-gray-500 dark:text-gray-400 font-normal">将覆盖模型本身的默认参数。除非你明确知道自己在干什么，否则保持默认关闭</span>
           </div>
         </template>
         <div class="w-full max-w-md">
