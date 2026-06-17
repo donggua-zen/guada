@@ -36,7 +36,10 @@
             
             <!-- 状态标签 -->
             <el-tag v-if="!node.isDirectory" size="small" :type="getStatusType(node.processingStatus)" class="shrink-0">
-                {{ getStatusText(node.processingStatus) }}
+                <el-tooltip v-if="node.processingStatus === 'processing' && node.currentStep" :content="node.currentStep" placement="top">
+                    <span>{{ getStatusText(node.processingStatus) }}</span>
+                </el-tooltip>
+                <span v-else>{{ getStatusText(node.processingStatus) }}</span>
             </el-tag>
         </div>
         

@@ -19,14 +19,12 @@ export interface PageEntry {
 }
 
 export interface ChunkResult {
-  content: string; // 包含重叠的完整内容（用于向量化）
-  cleanContent: string; // 纯净内容（不含重叠，用于展示）
+  content: string; // 分块文本内容（可能含前块末尾重叠，用于向量化）
   chunkIndex: number; // 分块索引
   metadata: {
     overlapLength: number; // 重叠部分的 Token 数
     chunkSize: number; // 原始内容长度（字符数）
     tokenCount: number; // Token 数量
-    cleanSize: number; // 纯净内容长度（字符数）
     strategy: string; // 分块策略
     sourcePages?: number[]; // 来源页码列表（PDF 分块时记录）
   };
@@ -198,7 +196,6 @@ export class ChunkingService {
         let tokenCount = currentTokensList.length;
 
         let overlapLength = 0;
-        let cleanContent = content;
         let finalContent = content;
 
         // 处理重叠逻辑（仅在同一页内重叠，不跨页）
@@ -217,21 +214,18 @@ export class ChunkingService {
             const fullEmbeddingContent = overlapText + content;
             overlapLength = overlapTokenIds.length;
             tokenCount = await this.countTokens(fullEmbeddingContent);
-            cleanContent = content;
             finalContent = fullEmbeddingContent;
           }
         }
 
         const chunk: ChunkResult = {
           content: finalContent,
-          cleanContent: cleanContent,
           chunkIndex: globalChunkIndex++,
           metadata: {
             ...(chunkMetadata || {}),
             overlapLength,
-            chunkSize: cleanContent.length,
+            chunkSize: finalContent.length,
             tokenCount,
-            cleanSize: cleanContent.length,
             strategy: "token",
             sourcePages: [page.pageNum],
           },

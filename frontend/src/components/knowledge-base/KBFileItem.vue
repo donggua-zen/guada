@@ -38,10 +38,10 @@
 
         <!-- 进度条 -->
         <div v-if="file.processingStatus === 'processing' || file.processingStatus === 'uploading'" class="mt-2">
-            <el-progress 
-                v-if="file.processingStatus === 'uploading'" 
-                :percentage="file.progressPercentage" 
-                :stroke-width="3" 
+            <el-progress
+                :percentage="file.progressPercentage"
+                :stroke-width="3"
+                :status="file.processingStatus === 'uploading' ? undefined : 'warning'"
             />
             <p class="text-xs text-gray-500 dark:text-[#8b8d95] mt-1">
                 {{ file.currentStep || '处理中...' }}

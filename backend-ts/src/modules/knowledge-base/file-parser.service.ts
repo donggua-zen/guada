@@ -4,6 +4,7 @@ import * as path from "path";
 import * as mammoth from "mammoth";
 import { OcrService } from "./ocr.service";
 import { PageEntry } from "./chunking.service";
+import type { FileProgressCallback } from "../../common/types/file-progress.types";
 
 /**
  * PDF 逐页解析结果
@@ -109,8 +110,12 @@ export class FileParserService {
   /**
    * 解析文件内容（返回带页码信息的结果）
    * @param filePath 文件绝对路径
+   * @param onProgress 进度回调
    */
-  async parseFile(filePath: string): Promise<ParsedFileResult> {
+  async parseFile(
+    filePath: string,
+    onProgress?: FileProgressCallback,
+  ): Promise<ParsedFileResult> {
     const ext = path.extname(filePath).replace(/^\./, "").toLowerCase();
     const fileType = await this.detectFileType(ext);
 
@@ -122,19 +127,28 @@ export class FileParserService {
 
     try {
       if (fileType === "text" || fileType === "code") {
+        await onProgress?.(5, "正在读取文本文件...");
         const text = await this.parseTextFile(filePath);
+        await onProgress?.(25, "文本文件读取完成");
         return { text, pages: text ? [{ pageNum: 1, text }] : [] };
       } else if (fileType === "pdf") {
-        return await this.parsePdfFileWithPages(filePath);
+        return await this.parsePdfFileWithPages(filePath, onProgress);
       } else if (fileType === "word") {
+        await onProgress?.(5, "正在解析 Word 文档...");
         const text = await this.parseWordFile(filePath);
+        await onProgress?.(25, "Word 文档解析完成");
         return { text, pages: text ? [{ pageNum: 1, text }] : [] };
       } else if (fileType === "excel") {
-        return await this.parseExcelFile(filePath);
+        await onProgress?.(5, "正在解析 Excel 文件...");
+        const result = await this.parseExcelFile(filePath);
+        await onProgress?.(25, "Excel 文件解析完成");
+        return result;
       } else {
         // 未知类型，尝试当作文本解析
         this.logger.warn(`未知文件类型：${fileType}，尝试当作文本解析`);
+        await onProgress?.(5, "正在尝试解析文件...");
         const text = await this.parseTextFile(filePath);
+        await onProgress?.(25, "文件解析完成");
         return { text, pages: text ? [{ pageNum: 1, text }] : [] };
       }
     } catch (error: any) {
@@ -229,12 +243,16 @@ export class FileParserService {
    * 解析 PDF 文件（返回带页码信息的结果）
    * 如果解析结果为空（可能是扫描件），则尝试使用 OCR 识别
    * @param filePath 文件绝对路径
+   * @param onProgress 进度回调
    */
   private async parsePdfFileWithPages(
     filePath: string,
+    onProgress?: FileProgressCallback,
   ): Promise<ParsedFileResult> {
     try {
       const content = await fs.promises.readFile(filePath);
+
+      await onProgress?.(5, "正在逐页提取 PDF 文本...");
       const pdfResult = await this.parsePdfByPages(content);
 
       // 判断是否为扫描件：字符数少于 50 的页面超过一半
@@ -247,7 +265,18 @@ export class FileParserService {
         this.logger.warn(
           `检测到扫描件 PDF（共 ${pdfResult.totalPages} 页，其中 ${lowCharCount} 页字符数少于 50），尝试 OCR 识别`,
         );
-        const ocrResult = await this.ocrService.recognizePdf(filePath);
+        await onProgress?.(10, "检测到扫描件，正在准备 OCR 识别...");
+
+        // OCR 回调：映射到 10%~80% 范围
+        const ocrOnProgress: FileProgressCallback | undefined = onProgress
+          ? async (ocrPct, ocrStep) => {
+              // OCR 内部是 0%~100%，映射到全局 10%~80%
+              const globalPct = 10 + Math.round((ocrPct / 100) * 70);
+              await onProgress(globalPct, ocrStep);
+            }
+          : undefined;
+
+        const ocrResult = await this.ocrService.recognizePdf(filePath, ocrOnProgress);
         if (ocrResult && ocrResult.text.trim()) {
           this.logger.log(
             `OCR 识别成功，提取文本长度: ${ocrResult.text.length} 字符`,
@@ -259,6 +288,8 @@ export class FileParserService {
         }
         throw new Error("OCR 识别失败或结果为空");
       }
+
+      await onProgress?.(10, "PDF 文本提取完成");
 
       if (!pdfResult.fullText || pdfResult.fullText.trim().length === 0) {
         this.logger.warn(
