@@ -4,6 +4,7 @@ import { firstValueFrom } from "rxjs";
 import * as fs from "fs";
 import * as path from "path";
 import { SettingsService } from "../settings/settings.service";
+import type { FileProgressCallback } from "../../common/types/file-progress.types";
 
 /**
  * OCR 服务配置接口
@@ -150,9 +151,13 @@ export class OcrService {
    * 对 PDF 文件执行 OCR 识别
    * 如果当前提供商不支持 PDF，返回 null 而非抛错
    * @param filePath PDF 文件路径
+   * @param onProgress 进度回调
    * @returns OCR 识别结果
    */
-  async recognizePdf(filePath: string): Promise<OcrResult | null> {
+  async recognizePdf(
+    filePath: string,
+    onProgress?: FileProgressCallback,
+  ): Promise<OcrResult | null> {
     const config = await this.getOcrConfig();
 
     if (config.provider === "none") {
@@ -168,7 +173,7 @@ export class OcrService {
 
     try {
       if (config.provider === "umi") {
-        return await this.recognizePdfWithUmi(filePath, config);
+        return await this.recognizePdfWithUmi(filePath, config, onProgress);
       }
       return null;
     } catch (error) {
@@ -211,6 +216,7 @@ export class OcrService {
   private async recognizePdfWithUmi(
     filePath: string,
     config: OcrConfig,
+    onProgress?: FileProgressCallback,
   ): Promise<OcrResult> {
     const host = config.umiHost || "127.0.0.1";
     const port = config.umiPort || 1224;
@@ -219,14 +225,17 @@ export class OcrService {
     this.logger.log(`使用 UMI OCR 识别 PDF: ${filePath}`);
 
     // 1. 上传 PDF 文件
+    await onProgress?.(12, "正在上传 PDF 到 OCR 服务...");
     const msnId = await this.uploadPdfToUmi(filePath, baseUrl);
     this.logger.log(`UMI PDF 任务已创建: ${msnId}`);
 
-    // 2. 轮询结果
-    const pages = await this.pollUmiPdfResult(msnId, baseUrl);
+    // 2. 轮询结果（内部上报进度 15%~80%）
+    await onProgress?.(15, "OCR 识别中...");
+    const pages = await this.pollUmiPdfResult(msnId, baseUrl, onProgress);
     this.logger.log(`UMI PDF 识别完成，共 ${pages.length} 页`);
 
     // 3. 清理任务
+    await onProgress?.(82, "OCR 处理完成，正在清理...");
     await this.clearUmiPdfTask(msnId, baseUrl);
 
     // 4. 拼接全文
@@ -244,47 +253,26 @@ export class OcrService {
    * 上传 PDF 到 UMI OCR
    */
   private async uploadPdfToUmi(filePath: string, baseUrl: string): Promise<string> {
-    const boundary = `----NodeFormBoundary${Date.now()}`;
+    const { default: FormData } = await import("form-data");
     const filename = path.basename(filePath);
     const fileData = await fs.promises.readFile(filePath);
 
-    const options = JSON.stringify({
+    const form = new FormData();
+    form.append("file", fileData, {
+      filename,
+      contentType: "application/pdf",
+    });
+    form.append("json", JSON.stringify({
       "ocr.language": "简体中文",
       "doc.extractionMode": "mixed",
-    });
-
-    // 构造 multipart/form-data
-    const parts = [
-      `--${boundary}`,
-      `Content-Disposition: form-data; name="file"; filename="${filename}"`,
-      "Content-Type: application/pdf",
-      "",
-      "",
-      `--${boundary}`,
-      'Content-Disposition: form-data; name="json"',
-      "",
-      options,
-      `--${boundary}--`,
-    ];
-
-    const bodyParts: Buffer[] = [];
-    for (let i = 0; i < parts.length; i++) {
-      bodyParts.push(Buffer.from(parts[i] + "\r\n"));
-      if (parts[i].includes("Content-Type: application/pdf")) {
-        bodyParts.push(fileData);
-        bodyParts.push(Buffer.from("\r\n"));
-      }
-    }
-    const body = Buffer.concat(bodyParts);
+    }));
 
     const response = await firstValueFrom(
       this.httpService.post<UmiPdfUploadResponse>(
         `${baseUrl}/api/doc/upload`,
-        body,
+        form,
         {
-          headers: {
-            "Content-Type": `multipart/form-data; boundary=${boundary}`,
-          },
+          headers: form.getHeaders(),
           timeout: 30000,
         },
       ),
@@ -304,6 +292,7 @@ export class OcrService {
   private async pollUmiPdfResult(
     msnId: string,
     baseUrl: string,
+    onProgress?: FileProgressCallback,
   ): Promise<Array<{ page: number; text: string }>> {
     const allPages: Array<{ page: number; text: string }> = [];
     const NO_PROGRESS_TIMEOUT_MS = 5 * 60 * 1000; // 5 分钟无进度超时
@@ -339,11 +328,18 @@ export class OcrService {
         });
       }
 
-      // 有进度，更新时间戳
+      // 有进度，更新时间戳并上报
       if (datas.length > 0) {
         lastProgressTime = Date.now();
+        const totalPages = result.pages_count || allPages.length;
         this.logger.log(
-          `UMI OCR 进度: ${allPages.length}/${result.pages_count || "?"} 页`,
+          `UMI OCR 进度: ${allPages.length}/${totalPages} 页`,
+        );
+
+        // 每页约 (80-15)/totalPages 的百分比增量
+        await onProgress?.(
+          Math.min(80, 15 + Math.round((allPages.length / Math.max(totalPages, 1)) * 65)),
+          `OCR 识别中 (${allPages.length}/${totalPages} 页)`,
         );
       }
 
