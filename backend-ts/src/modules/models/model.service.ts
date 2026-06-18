@@ -68,7 +68,8 @@ export class ModelService {
             models: modelsWithThinkingEfforts,
             name: provider.provider == 'custom' ? provider.name : metadata.name,
             avatarUrl: this.urlService.toResourceAbsoluteUrl(metadata.avatarUrl || provider.avatarUrl),
-            protocol: metadata.protocols[0], // 使用第一个协议
+            // 非 custom 供应商使用协议的第一个协议，custom 供应商使用数据库中存储的实际协议
+            protocol: provider.provider === 'custom' ? (provider.protocol || metadata.protocols[0]) : metadata.protocols[0],
             description: metadata.description,
             apiKeyUrl: metadata.apiKeyUrl,
           };
