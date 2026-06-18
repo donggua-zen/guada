@@ -185,9 +185,6 @@ export class AgentEngine {
 
     // 工具调用轮次计数器
     let iterationCount = 0;
-    // 状态机：normal → shadow_save → compress → normal
-    type LoopState = "normal" | "shadow_save" | "compress";
-    let loopState: LoopState = "normal";
     sessionContext.setMessageCursor(userMessageId);
     do {
       iterationCount++;
@@ -250,9 +247,8 @@ export class AgentEngine {
       if (isResumeMode) {
         isResumeMode = false;
       } else {
-        // 将 accumulated 转换为 MessageRecord 格式用于后续处理
-        const accumulatedChunk: LLMResponseChunk = {};
         const currentTurnThinkingInfo = new ThinkingTimeInfo();
+        let lastAcc: LLMResponseChunk | undefined;
 
         try {
           // 执行 LLM 流式请求，获取原始 chunk 和累加结果
@@ -264,9 +260,6 @@ export class AgentEngine {
             abortSignal,
           );
           for await (const { chunk, accumulated } of streamResult) {
-            // 保存最新累加状态
-            Object.assign(accumulatedChunk, accumulated);
-
             // 记录思考时间：第一次收到 reasoningContent 时标记思考开始
             if (
               accumulated.reasoningContent &&
@@ -282,37 +275,41 @@ export class AgentEngine {
             ) {
               currentTurnThinkingInfo.thinkingFinishedAt = new Date();
             }
-            // 将 accumulated 转换为 MessageRecord 保存到 assistantResponse
-            assistantResponse.content = accumulatedChunk.content || "";
-            if (accumulatedChunk.reasoningContent) {
-              assistantResponse.reasoningContent =
-                accumulatedChunk.reasoningContent;
-            }
-            if (accumulatedChunk.toolCalls) {
-              assistantResponse.toolCalls = accumulatedChunk.toolCalls;
-            }
-            if (accumulatedChunk.usage) {
-              assistantResponse.metadata.usage = accumulatedChunk.usage;
-            }
 
-            chunk.contentId = contentId;
-            const yieldEvent = this.buildYieldEvent(
+            const yieldEvent = this.toEventChunk(
               chunk,
               accumulated,
               toolContext,
+              contentId,
             );
             if (yieldEvent) {
               yield yieldEvent;
             }
+
+            // 保存最新累加状态，流结束后写入 assistantResponse
+            lastAcc = { ...accumulated };
           }
 
-          assistantResponse.metadata = {
-            ...assistantResponse.metadata,
-            finishReason: accumulatedChunk.finishReason,
-            thinkingDurationMs: this.calculateThinkingDuration(
-              currentTurnThinkingInfo,
-            ),
-          };
+          // 流结束后，将 accumulated 写入 assistantResponse
+          if (lastAcc) {
+            assistantResponse.content = lastAcc.content || "";
+            if (lastAcc.reasoningContent) {
+              assistantResponse.reasoningContent = lastAcc.reasoningContent;
+            }
+            if (lastAcc.toolCalls) {
+              assistantResponse.toolCalls = lastAcc.toolCalls;
+            }
+            if (lastAcc.usage) {
+              assistantResponse.metadata.usage = lastAcc.usage;
+            }
+            assistantResponse.metadata = {
+              ...assistantResponse.metadata,
+              finishReason: lastAcc.finishReason,
+              thinkingDurationMs: this.calculateThinkingDuration(
+                currentTurnThinkingInfo,
+              ),
+            };
+          }
         } catch (error) {
           // 由外部捕获并处理流式异常
           const streamError =
@@ -332,7 +329,7 @@ export class AgentEngine {
               type: "finish",
               finishReason: "error",
               error: streamError.message,
-              usage: accumulatedChunk.usage,
+              usage: lastAcc?.usage,
               contentId,
             };
           }
@@ -599,17 +596,19 @@ export class AgentEngine {
    * 将 LLM 响应块转换为前端可识别的 SSE 事件格式。
    * 根据 chunk 的内容类型决定事件类型（text / think / tool_call / finish）。
    *
-   * @param chunk LLM 响应块
+   * @param contentId 内容标识符
    * @returns SSE 事件对象，若 chunk 为空则返回 null
    */
-  private buildYieldEvent(
+  private toEventChunk(
     chunk: LLMResponseChunk,
     accumulated?: LLMResponseChunk,
     runtime?: any,
+    contentId?: string,
   ): EventChunk | null {
+    // 优先使用显式 type，兼容旧数据无 type 时的字段推断
     let eventType: EventChunk["type"];
 
-    if (chunk.finishReason) {
+    if (chunk.type === "finish" || chunk.finishReason) {
       eventType = "finish";
       if (accumulated.toolCalls) {
         // LLM 流式结束但工具尚未执行，标记为"正在进行"（isExecuting=true）
@@ -624,14 +623,12 @@ export class AgentEngine {
           );
         });
       }
-    } else if (chunk.reasoningContent) {
+    } else if (chunk.type === "think" || chunk.reasoningContent) {
       eventType = "think";
-    } else if (chunk.content) {
-      eventType = "text";
-    } else if (chunk.toolCalls) {
+    } else if (chunk.type === "tool_call" || chunk.toolCalls) {
       eventType = "tool_call";
       // 将文案注入到 toolCalls 的 metadata 中，确保刷新后仍可显示
-      chunk.toolCalls.forEach((tc) => {
+      chunk.toolCalls!.forEach((tc) => {
         if (!tc.metadata) tc.metadata = {};
         tc.metadata.displayMessage = this.displayManager.format(
           tc.name,
@@ -640,6 +637,8 @@ export class AgentEngine {
           runtime,
         );
       });
+    } else if (chunk.type === "text" || chunk.content) {
+      eventType = "text";
     } else if (chunk.usage) {
       // 只有 usage 没有内容的情况（通常是最后一个块）
     } else {
@@ -658,7 +657,7 @@ export class AgentEngine {
       toolCalls: isFinish ? accumulated?.toolCalls : chunk.toolCalls,
       finishReason: chunk.finishReason,
       usage: chunk.usage,
-      contentId: chunk.contentId,
+      contentId: contentId,
     } as EventChunk;
   }
 
@@ -723,10 +722,11 @@ export class AgentEngine {
       const index = delta.index;
 
       // 若该索引位置尚无工具调用对象，则创建新对象并初始化字段
+      // 注意：只在新创建时设置 id/name，后续 delta 事件（如 content_block_stop）不覆盖
       if (!target.toolCalls[index]) {
         target.toolCalls[index] = {
           type: "function",
-          id: delta.id,
+          id: delta.id || "",
           name: delta.name || "",
           arguments: "",
           index: index,
@@ -740,6 +740,10 @@ export class AgentEngine {
         tc.arguments += delta.arguments;
       }
     }
+
+    // 清理数组空洞（thinking block 可能占用了低索引但未创建 toolCalls 条目）
+    // 使用 filter 去除 undefined 条目，保持连续
+    target.toolCalls = target.toolCalls.filter(Boolean);
   }
 
   /**
@@ -845,6 +849,9 @@ export class AgentEngine {
     const approvedTools: any[] = [];
     const rejectedTools: any[] = [];
 
+    // 防御：过滤掉 undefined 或无效的工具调用
+    const validToolCalls = (toolCalls || []).filter((tc: any) => tc && tc.name);
+
     // 检查是否有审批上下文
     const approvalContext = metadata?.approvalContext;
 
@@ -852,7 +859,7 @@ export class AgentEngine {
       // 已审批场景：根据 decisions 分类
       const decisions = approvalContext.decisions || [];
 
-      for (const tc of toolCalls) {
+      for (const tc of validToolCalls) {
         const decision = decisions.find((d: any) => d.toolCallId === tc.id);
 
         if (!decision) {
@@ -869,7 +876,7 @@ export class AgentEngine {
       const approvalConfig = sessionContext?.getToolApprovalConfig();
       const requiresApprovalTools = approvalConfig?.requiresApproval || [];
 
-      for (const tc of toolCalls) {
+      for (const tc of validToolCalls) {
         const needsApproval = this.isToolRequiresApproval(
           tc.name,
           requiresApprovalTools,

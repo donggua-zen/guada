@@ -15,6 +15,7 @@ import { MoonshotProvider } from './providers/moonshot/moonshot.provider';
 import { AzureOpenAIProvider } from './providers/azure-openai/azure-openai.provider';
 import { GroqProvider } from './providers/groq/groq.provider';
 import { GoogleProvider } from './providers/google/google.provider';
+import { AnthropicProvider } from './providers/anthropic/anthropic.provider';
 
 /**
  * LLM 核心模块
@@ -39,6 +40,7 @@ import { GoogleProvider } from './providers/google/google.provider';
     AzureOpenAIProvider,
     GroqProvider,
     GoogleProvider,
+    AnthropicProvider,
   ],
   exports: [ProviderHub, LLMService],
 })
@@ -59,6 +61,7 @@ export class LlmCoreModule implements OnModuleInit {
     private readonly azureOpenAIProvider: AzureOpenAIProvider,
     private readonly groqProvider: GroqProvider,
     private readonly googleProvider: GoogleProvider,
+    private readonly anthropicProvider: AnthropicProvider,
   ) { }
 
   onModuleInit() {
@@ -77,5 +80,6 @@ export class LlmCoreModule implements OnModuleInit {
     this.providerHub.register(this.azureOpenAIProvider);
     this.providerHub.register(this.groqProvider);
     this.providerHub.register(this.googleProvider);
+    this.providerHub.register(this.anthropicProvider);
   }
 }

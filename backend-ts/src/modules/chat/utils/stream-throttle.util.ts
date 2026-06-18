@@ -57,6 +57,8 @@ export async function* throttledStream(
    * 判断 chunk 的事件类型（用于区分不同类型的 chunk 是否能合并）
    */
   const getChunkEventType = (chunk: LLMResponseChunk): string => {
+    // 优先使用显式 type，兼容旧数据（无 type 时靠字段推断）
+    if (chunk.type) return chunk.type;
     if (chunk.finishReason) return "finish";
     if (chunk.reasoningContent) return "think";
     if (chunk.content) return "text";

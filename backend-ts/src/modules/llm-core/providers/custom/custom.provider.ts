@@ -14,7 +14,7 @@ import { IProtocolAdapter } from '../../adapters/base.adapter';
 export class CustomProvider implements IModelProvider {
   readonly id = 'custom';
   readonly name = 'Custom';
-  readonly protocols = ['openai', 'openai-response'];
+  readonly protocols = ['openai', 'openai-response', 'anthropic', 'gemini'];
   readonly defaultApiUrl = '';
 
   // 内部持有基础适配器实例（仅 OpenAI 协议）

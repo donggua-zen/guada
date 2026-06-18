@@ -27,6 +27,7 @@
   "license": "ISC",
   "type": "commonjs",
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.104.2",
     "@google/generative-ai": "^0.24.1",
     "@huggingface/tokenizers": "^0.1.3",
     "@larksuiteoapi/node-sdk": "^1.62.0",
