@@ -33,48 +33,43 @@ export class AnthropicProvider implements IModelProvider {
     return null;
   }
 
-  // 支持官方全部思考档次
-  private defaultThinkingEfforts: string[] = ['off', 'low', 'medium', 'high', 'xhigh', 'max'];
+  // 自适应思考模式下支持的 effort 级别
+  private defaultThinkingEfforts: string[] = ['low', 'medium', 'high', 'xhigh', 'max'];
 
   private models: ModelDefinition[] = [
-    // Claude 4 系列
+    // Fable 5 — 能力最强，自适应思考始终开启
     createTextModel(
-      "claude-sonnet-4-20250514",
-      ConfigFragments.ContextWindow._200K,
+      "claude-fable-5",
+      ConfigFragments.ContextWindow._1M,
       ConfigFragments.MaxOutput._128K,
       ConfigFragments.WithTools,
     ),
+    // Mythos 5 — Project Glasswing
     createTextModel(
-      "claude-opus-4-20250514",
-      ConfigFragments.ContextWindow._200K,
+      "claude-mythos-5",
+      ConfigFragments.ContextWindow._1M,
       ConfigFragments.MaxOutput._128K,
       ConfigFragments.WithTools,
     ),
-    // Claude 3.5 系列
+    // Opus 4.8 — 复杂推理
     createTextModel(
-      "claude-sonnet-4.5-20250214",
-      ConfigFragments.ContextWindow._200K,
+      "claude-opus-4-8",
+      ConfigFragments.ContextWindow._1M,
       ConfigFragments.MaxOutput._128K,
       ConfigFragments.WithTools,
     ),
-    // Claude 3 系列
+    // Sonnet 4.6 — 速度与智能平衡
     createTextModel(
-      "claude-3-5-sonnet-20241022",
-      ConfigFragments.ContextWindow._200K,
-      ConfigFragments.MaxOutput._128K,
+      "claude-sonnet-4-6",
+      ConfigFragments.ContextWindow._1M,
+      ConfigFragments.MaxOutput._66K,
       ConfigFragments.WithTools,
     ),
+    // Haiku 4.5 — 最快
     createTextModel(
-      "claude-3-5-haiku-20241022",
+      "claude-haiku-4-5",
       ConfigFragments.ContextWindow._200K,
-      ConfigFragments.MaxOutput._128K,
-      ConfigFragments.WithTools,
-    ),
-    // Claude 3 (Opus)
-    createTextModel(
-      "claude-3-opus-20240229",
-      ConfigFragments.ContextWindow._200K,
-      ConfigFragments.MaxOutput._128K,
+      ConfigFragments.MaxOutput._66K,
       ConfigFragments.WithTools,
     ),
   ];

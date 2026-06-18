@@ -41,7 +41,7 @@ export interface MessageRecord {
   toolCalls?: ToolCallItem[];
   toolCallId?: string; // 当 role 为 'tool' 时使用
   name?: string; // 当 role 为 'tool' 时使用，对应调用的函数名
-  metadata?: Partial<Record<"referencedKbs" | "thinkingDurationMs" | "modelName" | "usage" | "finishReason" | "error" | "approvalContext" | "resumeContext", any>> | undefined;
+  metadata?: Partial<Record<"referencedKbs" | "thinkingDurationMs" | "modelName" | "usage" | "finishReason" | "error" | "approvalContext" | "resumeContext" | "signature", any>> | undefined;
   // usage?: any;
   // finishReason?: string;
   // error?: string;
