@@ -55,6 +55,8 @@ export interface LLMResponseChunk {
   finishReason?: string | null;
   toolCalls?: ToolCallItem[];
   contentId?: string;
+  /** Anthropic extended thinking signature，用于多轮思考连续性回传 */
+  signature?: string;
   usage?: {
     promptTokens: number;
     completionTokens: number;

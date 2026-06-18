@@ -38,9 +38,14 @@ export class ModelService {
             const supplier = this.providerHub.getProvider(provider.provider);
             // 调用供应商的 getModelThinkingEfforts 方法
             const thinkingEfforts = supplier.getModelThinkingEfforts(model.modelName);
+            // Anthropic adaptive thinking 不支持 'off'，自动过滤
+            const isAnthropic = provider.protocol === 'anthropic';
+            const filtered = isAnthropic
+              ? thinkingEfforts.filter((e: string) => e !== 'off')
+              : thinkingEfforts;
             return {
               ...model,
-              thinkingEfforts, // 在模型级别添加 thinkingEfforts
+              thinkingEfforts: filtered, // 在模型级别添加 thinkingEfforts
             };
           } catch (error) {
             this.logger.warn(`Failed to get thinking efforts for model ${model.modelName}:`, error);

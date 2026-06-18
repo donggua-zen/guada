@@ -302,6 +302,10 @@ export class AgentEngine {
             if (lastAcc.usage) {
               assistantResponse.metadata.usage = lastAcc.usage;
             }
+            // 保存 Anthropic thinking signature，用于后续多轮回传
+            if (lastAcc.signature) {
+              assistantResponse.metadata.signature = lastAcc.signature;
+            }
             assistantResponse.metadata = {
               ...assistantResponse.metadata,
               finishReason: lastAcc.finishReason,
@@ -583,6 +587,10 @@ export class AgentEngine {
       }
       if (chunk.finishReason) {
         accumulated.finishReason = chunk.finishReason;
+      }
+      // 累加 Anthropic thinking signature（来自 signature_delta 事件）
+      if (chunk.signature) {
+        accumulated.signature = chunk.signature;
       }
 
       // 返回原始 chunk 和累加后的 accumulated（由调用方决定如何 yield）

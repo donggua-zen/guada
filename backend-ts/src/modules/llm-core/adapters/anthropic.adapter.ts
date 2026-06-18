@@ -125,21 +125,16 @@ export class AnthropicAdapter implements IProtocolAdapter {
       ...(params.tools?.length ? { tools: this.convertTools(params.tools) } : {}),
     };
 
-    // 处理思考功能：通过 thinking + output_config 两个参数
+    // 处理思考功能：使用自适应模式 + effort 参数
+    // 官方推荐使用 thinking: {type: "adaptive"}，废弃手动 budget_tokens
+    // effort 通过 output_config 透传，控制思考深度
     const effort = params.thinkingEffort;
     if (effort && effort !== 'off') {
-      // budget_tokens 最小 1024，默认取 max_tokens 的 80%
-      const budgetTokens = Math.min(
-        Math.max(1024, Math.floor((params.maxTokens || 8192) * 0.8)),
-        params.maxTokens || 8192,
-      );
-      requestParams.thinking = { type: "enabled", budget_tokens: budgetTokens };
-      // effort 类型来自 OutputConfig: 'low' | 'medium' | 'high' | 'xhigh' | 'max'
+      requestParams.thinking = { type: "adaptive" };
       requestParams.output_config = { effort: effort as any };
-    } else if (effort === 'off') {
-      // 显式禁用思考（某些第三方服务需要明确参数才能关闭）
-      requestParams.thinking = { type: "disabled" };
     }
+    // 注意：不传 thinking 参数 = 模型默认行为（Claude 4+ 默认启用思考）
+    // 不传 output_config = 默认 effort
 
     try {
       if (params.stream) {
@@ -197,6 +192,18 @@ export class AnthropicAdapter implements IProtocolAdapter {
             }],
             usage: null,
           };
+        }
+        continue;
+      }
+
+      // 拦截 signature_delta：携带签名透传下游
+      if (
+        event.type === "content_block_delta" &&
+        (event.delta as any).type === "signature_delta"
+      ) {
+        const sig = (event.delta as any).signature || (event.delta as any).signature_delta || '';
+        if (sig) {
+          yield { type: "finish", signature: sig } as any;
         }
         continue;
       }
@@ -328,8 +335,10 @@ export class AnthropicAdapter implements IProtocolAdapter {
     }) as Anthropic.Messages.Message;
 
     // 提取 thinking blocks → reasoningContent
-    const thinkingContent = message.content
-      .filter((block): block is any => block.type === "thinking")
+    const thinkingBlocks = message.content.filter((block): block is any => block.type === "thinking");
+    // 只取第一个 thinking block 的 signature（理论上只有一个）
+    const signature = thinkingBlocks.length > 0 ? (thinkingBlocks[0] as any).signature : undefined;
+    const thinkingContent = thinkingBlocks
       .map((block) => block.thinking)
       .join("");
 
@@ -359,6 +368,7 @@ export class AnthropicAdapter implements IProtocolAdapter {
       reasoningContent: thinkingContent || null,
       finishReason: message.stop_reason || null,
       toolCalls,
+      signature,
       usage: message.usage
         ? {
             promptTokens: message.usage.input_tokens,
@@ -410,31 +420,53 @@ export class AnthropicAdapter implements IProtocolAdapter {
         } as Anthropic.Messages.MessageParam;
       }
 
-      // 处理 assistant 且有 toolCalls → text + tool_use content blocks
-      if (msg.role === "assistant" && msg.toolCalls?.length) {
+      // 处理 assistant 消息：text + thinking（有签名时）+ tool_use
+      if (msg.role === "assistant") {
         const blocks: any[] = [];
-        // 如果有文本内容，先加 text block
+
+        // 如果有 reasoningContent 且包含签名，回传 thinking block
+        // 签名存储在 msg.metadata.signature 中，由流结束时注入
+        const signature = msg.metadata?.signature;
+        if (msg.reasoningContent && signature) {
+          blocks.push({
+            type: "thinking",
+            thinking: msg.reasoningContent,
+            signature,
+          });
+        }
+
+        // 如果有文本内容，加 text block
         if (msg.content) {
           blocks.push({ type: "text", text: typeof msg.content === "string" ? msg.content : JSON.stringify(msg.content) });
         }
-        // 再加 tool_use blocks
-        for (const tc of msg.toolCalls) {
-          blocks.push({
-            type: "tool_use",
-            id: tc.id,
-            name: tc.name,
-            input: tc.arguments ? JSON.parse(tc.arguments) : {},
-          });
+
+        // 如果有工具调用，加 tool_use blocks
+        if (msg.toolCalls?.length) {
+          for (const tc of msg.toolCalls) {
+            blocks.push({
+              type: "tool_use",
+              id: tc.id,
+              name: tc.name,
+              input: tc.arguments ? JSON.parse(tc.arguments) : {},
+            });
+          }
         }
-        return { role: "assistant", content: blocks };
+
+        // 只有在有实际内容块时才返回
+        if (blocks.length > 0) {
+          return { role: "assistant", content: blocks };
+        }
+        // 没有内容块则降级为纯文本（兼容旧数据）
+        const content = msg.content || "";
+        return { role: "assistant", content: typeof content === "string" ? content : JSON.stringify(content) } as Anthropic.Messages.MessageParam;
       }
 
       // Anthropic 的 role 只支持 user / assistant
-      const role = msg.role === "assistant" ? "assistant" : "user";
+      // 此处 role 只能是 user 或 system（assistant 已在上面处理）
       const content = msg.content || "";
 
       return {
-        role,
+        role: msg.role === "user" ? "user" : "user", // system → user
         content: typeof content === "string" ? content : JSON.stringify(content),
       } as Anthropic.Messages.MessageParam;
     });

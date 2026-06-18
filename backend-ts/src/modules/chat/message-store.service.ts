@@ -126,35 +126,18 @@ export class MessageStoreService implements IMessageStore {
       if (!records || records.length === 0) return [];
 
       for (const record of records) {
-        // 构建元数据对象，提取关键的性能和状态信息
+        // 透传整个 metadata 对象，所有关键字段（modelName、finishReason、usage、signature 等）
+        // 已在流结束阶段由各模块负责写入 record.metadata，此处无需逐个字段手动拷贝
         const metadata: any = {
+          ...(record.metadata || {}),
           modelName: record.metadata?.modelName || "",
           finishReason: record.metadata?.finishReason || "",
         };
 
-        // 条件性地添加可选元数据字段，避免存储 null 或 undefined 值
-        if (record.metadata?.error) {
-          metadata.error = record.metadata?.error;
-        }
-
-        // 思维链耗时仅在存在时记录，用于性能分析和优化
-        if (
-          record.metadata?.thinkingDurationMs !== null &&
-          record.metadata?.thinkingDurationMs !== undefined
-        ) {
-          metadata.thinkingDurationMs = record.metadata?.thinkingDurationMs;
-        }
-
-        // Token 使用量统计，用于成本核算和配额管理
-        if (record.metadata?.usage) {
-          metadata.usage = record.metadata?.usage;
-        }
-
-        // 工具调用信息和 ID，用于追踪函数执行流程
+        // 工具调用信息和 ID 属于消息记录级别，补充到 metadata 中
         if (record.toolCalls) {
           metadata.toolCalls = record.toolCalls;
         }
-
         if (record.toolCallId) {
           metadata.toolCallId = record.toolCallId;
         }

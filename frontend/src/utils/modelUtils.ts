@@ -220,12 +220,7 @@ export function getModelThinkingEfforts(
   }
 
   // 备用逻辑：如果模型支持思考功能但没有配置具体强度，提供简化的开关模式
-  const supportsThinking = model.features?.includes("thinking");
-  if (supportsThinking) {
-    // 返回 ['off', 'on']，用 'on' 代表开启状态
-    return ["off", "on"];
-  }
-
+  // 注意：后端已根据协议过滤了无效选项，此处不额外添加
   return [];
 }
 

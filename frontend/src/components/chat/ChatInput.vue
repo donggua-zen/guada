@@ -696,11 +696,11 @@ const handleModelSelect = (modelId: string) => {
     const nonOffOptions = options.filter(e => e !== 'off');
 
     if (currentEffort === 'off') {
-      // 原来就是 'off'，保持 'off'
-      newThinkingEffort = 'off';
+      // 原来是 off 但新选项不含 off → 选最小思考档
+      newThinkingEffort = nonOffOptions.length > 0 ? nonOffOptions[0] : 'off';
     } else {
-      // 原来是非 'off'，优先选择第一个非 'off' 选项
-      newThinkingEffort = nonOffOptions.length > 0 ? nonOffOptions[nonOffOptions.length - 1] : 'off';
+      // 原来的非 off 值失效 → 选中间值
+      newThinkingEffort = nonOffOptions.length > 0 ? nonOffOptions[Math.floor(nonOffOptions.length / 2)] : 'off';
     }
   }
 

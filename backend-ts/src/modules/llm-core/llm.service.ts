@@ -59,9 +59,35 @@ export class LLMService {
       throw new Error(`Provider ${providerId} does not support protocol: ${protocol}`);
     }
 
+    // ===== 思考参数二次校验 =====
+    // 前端传值可能不可靠（如模型切换后旧值失效），此处做安全兜底
+    let thinkingEffort = params.thinkingEffort;
+    if (thinkingEffort !== undefined) {
+      const validEfforts = provider.getModelThinkingEfforts(params.model);
+      if (validEfforts.length > 0 && !validEfforts.includes(thinkingEffort)) {
+        // 当前值不在合法选项中，需要纠正
+        const nonOffOptions = validEfforts.filter(e => e !== 'off');
+
+        if (thinkingEffort === 'off') {
+          // 原来是 off 但新模型不支持 → 取最小档位
+          thinkingEffort = nonOffOptions.length > 0
+            ? nonOffOptions[0]
+            : undefined;
+          this.logger.log(`thinkingEffort adjusted: 'off' → '${thinkingEffort}' (not supported by model)`);
+        } else {
+          // 原来的非 off 值失效 → 取中间值
+          thinkingEffort = nonOffOptions.length > 0
+            ? nonOffOptions[Math.floor(nonOffOptions.length / 2)]
+            : undefined;
+          this.logger.log(`thinkingEffort adjusted: '${params.thinkingEffort}' → '${thinkingEffort}' (invalid for model)`);
+        }
+      }
+    }
+
     const isStream = params.stream === true;
     const iterator = adapter.chatCompletion({
       ...params,
+      thinkingEffort, // 使用校验后的值覆盖原始值
       abortSignal, // 使用合并后的信号
     });
 
