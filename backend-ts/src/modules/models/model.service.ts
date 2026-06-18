@@ -1,9 +1,9 @@
 import { Injectable, Logger } from "@nestjs/common";
 import { ModelRepository } from "../../common/database/model.repository";
-import { OpenAI } from "openai";
 import { createPaginatedResponse } from "../../common/types/pagination";
 import { UrlService } from "../../common/services/url.service";
 import { ProviderHub } from "../llm-core/provider-hub.service";
+import type { ProviderConfig } from "../llm-core/types/provider.types";
 
 @Injectable()
 export class ModelService {
@@ -126,30 +126,39 @@ export class ModelService {
    * 测试供应商连接（不保存到数据库）
    */
   async testProviderConnection(data: any) {
-    const { provider, apiKey, apiUrl, attributes } = data;
+    const { provider, apiKey, apiUrl, attributes, protocol } = data;
 
     const baseUrl = apiUrl || "";
-    const headers = attributes?.headers;
-
-    const clientOptions: any = {
+    const config: ProviderConfig = {
+      apiUrl: baseUrl,
       apiKey: apiKey,
-      baseURL: baseUrl,
+      protocol: protocol || 'openai',
+      headers: attributes?.headers,
     };
 
-    // 支持自定义请求头
-    if (headers && Object.keys(headers).length > 0) {
-      clientOptions.defaultHeaders = { ...headers };
-    }
-
     try {
-      // 尝试创建一个临时的 OpenAI 客户端进行测试
-      const client = new OpenAI(clientOptions);
+      // 通过 ProviderHub 获取供应商 → 适配器 → 测试连接
+      if (this.providerHub.hasProvider(config.protocol)) {
+        const supplier = this.providerHub.getProvider(config.protocol);
+        const adapter = supplier.getAdapter(config.protocol);
+        if (adapter) {
+          return await adapter.testConnection(config);
+        }
+      }
 
-      // 尝试获取模型列表，如果能成功则说明 Key 和 URL 有效
-      await client.models.list();
+      // 对于 "custom" 类型，按协议找到适配器
+      const suppliersByProtocol = this.providerHub.getProvidersByProtocol(config.protocol);
+      for (const sup of suppliersByProtocol) {
+        const adapter = sup.getAdapter(config.protocol);
+        if (adapter) {
+          return await adapter.testConnection(config);
+        }
+      }
 
-      return { success: true, message: "连接成功" };
+      throw new Error(`Unsupported protocol: ${config.protocol}`);
     } catch (error: any) {
+      // 适配器抛出的错误已处理为 ConnectionTestResult，直接抛出
+      if (error.success !== undefined) throw error;
       this.logger.error(`Provider connection test failed: ${error.message}`);
       return {
         success: false,
@@ -378,70 +387,46 @@ export class ModelService {
       throw new Error("Provider not found");
     }
 
-    try {
-      // 直接使用数据库中的 apiUrl，不做任何修改
-      // OpenAI SDK 会在 baseURL 后面拼接 /models 等路径
+    const protocol = provider.protocol || 'openai';
+    const config: ProviderConfig = {
+      apiUrl: provider.apiUrl,
+      apiKey: provider.apiKey,
+      protocol,
+    };
 
-      const clientOptions: any = {
-        baseURL: provider.apiUrl,
-        apiKey: provider.apiKey,
-      };
-
-      // 支持自定义请求头
-      const attrs = provider.attributes as any;
-      const headers = attrs?.headers;
-      if (headers && typeof headers === 'object' && Object.keys(headers).length > 0) {
-        clientOptions.defaultHeaders = { ...headers };
-      }
-
-      const client = new OpenAI(clientOptions);
-
-      this.logger.log(
-        `Fetching remote models for provider ${provider.apiKey} url ${provider.apiUrl}`,
-      );
-
-      const response = await client.models.list();
-
-      // 从供应商实例获取模型配置
-      let supplierModels: any[] = [];
-      try {
-        if (this.providerHub.hasProvider(provider.provider)) {
-          const supplier = this.providerHub.getProvider(provider.provider);
-          supplierModels = supplier.getModels();
-        }
-      } catch (error) {
-        this.logger.warn(`Failed to get models for provider ${provider.provider}:`, error);
-      }
-
-      const models = response.data.map((model: any) => {
-        // 尝试从供应商模型中匹配配置
-        const supplierModel = supplierModels.find(
-          (m) => m.modelName === model.id,
-        );
-
-        // 如果找到匹配的模型，使用其配置；否则使用默认值
-        return {
-          modelName: model.id,
-          modelType:
-            supplierModel?.modeType || supplierModel?.modelType || "text",
-          config: supplierModel?.config || {
-            inputCapabilities: ["text"],
-            outputCapabilities: ["text"],
-            features: [],
-            contextWindow: 128000,
-          },
-        };
-      });
-
-      // 返回分页格式，与其他列表接口保持一致
-      return createPaginatedResponse(models, models.length);
-    } catch (error) {
-      this.logger.error(
-        `Failed to fetch remote models for provider ${providerId}`,
-        error,
-      );
-      throw new Error("Failed to fetch remote models");
+    // 通过 ProviderHub 获取供应商 → 适配器 → 同步模型列表
+    const supplier = this.providerHub.getProvider(provider.provider);
+    const adapter = supplier.getAdapter(protocol);
+    if (!adapter) {
+      return createPaginatedResponse([], 0);
     }
+
+    const remoteModels = await adapter.syncRemoteModels(config);
+
+    // 获取供应商的默认模型配置用于 enrichment
+    let supplierModels: any[] = [];
+    try {
+      supplierModels = supplier.getModels();
+    } catch { /* ignore */ }
+
+    const models = remoteModels.map((m: any) => {
+      const supplierModel = supplierModels.find(
+        (sm) => sm.modelName === m.id,
+      );
+      return {
+        modelName: m.id,
+        modelType:
+          supplierModel?.modeType || supplierModel?.modelType || "text",
+        config: supplierModel?.config || {
+          inputCapabilities: ["text"],
+          outputCapabilities: ["text"],
+          features: [],
+          contextWindow: 128000,
+        },
+      };
+    });
+
+    return createPaginatedResponse(models, models.length);
   }
 
   /**

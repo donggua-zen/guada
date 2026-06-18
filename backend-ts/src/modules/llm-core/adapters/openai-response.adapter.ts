@@ -8,7 +8,7 @@ import {
   ToolCallItem,
 } from "../types/llm.types";
 import { ToolDefinition } from "../../tools/interfaces/tool-provider.interface";
-import { ProviderConfig, ConnectionTestResult } from "../types/provider.types";
+import { ProviderConfig, ConnectionTestResult, RemoteModel } from "../types/provider.types";
 
 /**
  * OpenAI Responses API 适配器
@@ -44,6 +44,25 @@ export class OpenAIResponseAdapter implements IProtocolAdapter {
           : `连接失败: ${error.message}`,
         details: error,
       };
+    }
+  }
+
+  /**
+   * 从 OpenAI 兼容 API 同步模型列表
+   * 部分第三方服务可能不支持 /v1/models，此时返回空列表
+   */
+  async syncRemoteModels(config: ProviderConfig): Promise<RemoteModel[]> {
+    try {
+      const client = this.createClient(config);
+      const response = await client.models.list();
+      return response.data.map((model) => ({
+        id: model.id,
+        created: model.created,
+        owned_by: model.owned_by,
+      }));
+    } catch (error: any) {
+      this.logger.warn(`Failed to sync remote models (API may not support /v1/models): ${error.message}`);
+      return [];
     }
   }
 
@@ -228,6 +247,7 @@ export class OpenAIResponseAdapter implements IProtocolAdapter {
 
     for await (const event of response) {
       const responseChunk: LLMResponseChunk = {
+        type: "text",
         content: null,
         reasoningContent: null,
         finishReason: null,
@@ -243,6 +263,7 @@ export class OpenAIResponseAdapter implements IProtocolAdapter {
           continue;
 
         case "response.reasoning_text.delta":
+          responseChunk.type = "think";
           responseChunk.reasoningContent = event.delta;
           break;
 
@@ -250,6 +271,7 @@ export class OpenAIResponseAdapter implements IProtocolAdapter {
           continue;
 
         case "response.reasoning_summary_text.delta":
+          responseChunk.type = "think";
           responseChunk.reasoningContent = event.delta;
           break;
 
@@ -274,6 +296,7 @@ export class OpenAIResponseAdapter implements IProtocolAdapter {
             const info = toolCallInfoMap.get(event.item_id);
             if (!info) continue;
             if (!responseChunk.toolCalls) {
+              responseChunk.type = "tool_call";
               responseChunk.toolCalls = [];
             }
             responseChunk.toolCalls.push({
@@ -290,6 +313,7 @@ export class OpenAIResponseAdapter implements IProtocolAdapter {
           continue;
 
         case "response.completed":
+          responseChunk.type = "finish";
           responseChunk.finishReason = "stop";
           if (event.response?.usage) {
             responseChunk.usage = {
@@ -331,6 +355,7 @@ export class OpenAIResponseAdapter implements IProtocolAdapter {
     }
 
     const result: LLMResponseChunk = {
+      type: "finish",
       content: null,
       reasoningContent: null,
       finishReason: "stop",

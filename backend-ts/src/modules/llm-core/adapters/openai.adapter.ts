@@ -1,7 +1,7 @@
 import { Logger } from "@nestjs/common";
 import { OpenAI, APIError } from "openai";
 import { IProtocolAdapter } from "./base.adapter";
-import { ProviderConfig, ConnectionTestResult } from "../types/provider.types";
+import { ProviderConfig, ConnectionTestResult, RemoteModel } from "../types/provider.types";
 import {
   MessageRecord,
   LLMCompletionParams,
@@ -52,6 +52,25 @@ export class OpenAIAdapter implements IProtocolAdapter {
           : `连接失败: ${error.message}`,
         details: error,
       };
+    }
+  }
+
+  /**
+   * 从 OpenAI 兼容 API 同步模型列表
+   * 部分第三方服务可能不支持 /v1/models，此时返回空列表
+   */
+  async syncRemoteModels(config: ProviderConfig): Promise<RemoteModel[]> {
+    try {
+      const client = this.createClient(config);
+      const response = await client.models.list();
+      return response.data.map((model) => ({
+        id: model.id,
+        created: model.created,
+        owned_by: model.owned_by,
+      }));
+    } catch (error: any) {
+      this.logger.warn(`Failed to sync remote models (API may not support /v1/models): ${error.message}`);
+      return [];
     }
   }
 
@@ -189,12 +208,15 @@ export class OpenAIAdapter implements IProtocolAdapter {
 
       const delta = choice.delta;
       const responseChunk: LLMResponseChunk = {
+        type: "text",
         content: delta?.content || null,
         reasoningContent: (delta as any)?.reasoning_content || null,
         finishReason: choice.finish_reason || null,
         toolCalls: undefined,
         usage: null,
       };
+      if ((delta as any)?.reasoning_content) responseChunk.type = "think";
+      if (choice.finish_reason) responseChunk.type = "finish";
 
       if ((chunk as any).usage) {
         responseChunk.usage = {
@@ -205,6 +227,7 @@ export class OpenAIAdapter implements IProtocolAdapter {
       }
 
       if (delta?.tool_calls) {
+        responseChunk.type = "tool_call";
         responseChunk.toolCalls = delta.tool_calls.map(
           (tc): ToolCallItem => ({
             id: tc.id,
@@ -234,7 +257,10 @@ export class OpenAIAdapter implements IProtocolAdapter {
       throw new Error("Invalid response from LLM API");
 
     const message = choice.message;
+    const hasToolCalls = !!message.tool_calls;
+    const hasReasoning = !!(message as any).reasoning_content;
     const result: LLMResponseChunk = {
+      type: hasToolCalls ? "tool_call" : hasReasoning ? "think" : "finish",
       content: message.content || null,
       reasoningContent: (message as any).reasoning_content || null,
       finishReason: choice.finish_reason || null,

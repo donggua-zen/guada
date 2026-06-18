@@ -42,6 +42,14 @@ export interface LLMCompletionParams {
 }
 
 export interface LLMResponseChunk {
+  /**
+   * 显式事件类型（适配器层直接标记，避免下游靠字段推断）
+   * - text: 普通文本增量
+   * - think: 推理/思考内容增量
+   * - tool_call: 工具调用（含增量参数）
+   * - finish: 流结束，携带完整累积数据 + usage
+   */
+  type?: 'text' | 'think' | 'tool_call' | 'finish';
   content?: string | null;
   reasoningContent?: string | null;
   finishReason?: string | null;

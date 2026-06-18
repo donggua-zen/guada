@@ -46,6 +46,11 @@ export class LLMService {
         provider = this.providerHub.getProvider('google');
         adapter = provider.getAdapter(protocol);
       }
+      // anthropic 协议转发到 Anthropic 供应商
+      if (protocol === 'anthropic') {
+        provider = this.providerHub.getProvider('anthropic');
+        adapter = provider.getAdapter(protocol);
+      }
     }
     
     this.logger.log(`Using ${protocol} adapter from provider ${provider.id}`);
