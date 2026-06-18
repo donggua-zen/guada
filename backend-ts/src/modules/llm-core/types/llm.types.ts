@@ -57,6 +57,8 @@ export interface LLMResponseChunk {
   contentId?: string;
   /** Anthropic extended thinking signature，用于多轮思考连续性回传 */
   signature?: string;
+  /** Anthropic redacted thinking data（display=omitted 时的加密思考内容） */
+  redactedData?: string;
   usage?: {
     promptTokens: number;
     completionTokens: number;

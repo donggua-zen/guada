@@ -163,6 +163,9 @@ export class AnthropicAdapter implements IProtocolAdapter {
     // 维护块索引 → 工具序号的映射（Anthropic 的 index 是全局消息块索引）
     const blockToToolIndex = new Map<number, number>();
     let nextToolIndex = 0;
+    // 缓存 thinking signature + redacted data，在 content_block_stop 时清理
+    let pendingSignature = '';
+    let pendingRedactedData = '';
 
     for await (const event of stream) {
       // 调试：记录关键事件
@@ -196,19 +199,26 @@ export class AnthropicAdapter implements IProtocolAdapter {
         continue;
       }
 
-      // 拦截 signature_delta：携带签名透传下游
+      // 拦截 signature_delta：缓存签名，不在单独事件中发射
       if (
         event.type === "content_block_delta" &&
         (event.delta as any).type === "signature_delta"
       ) {
         const sig = (event.delta as any).signature || (event.delta as any).signature_delta || '';
         if (sig) {
-          yield { type: "finish", signature: sig } as any;
+          pendingSignature = sig;
         }
         continue;
       }
 
-      // content_block_stop：无需处理，参数已在增量流中发射完毕
+      // content_block_start(redacted_thinking)：记录加密 data，不发射 think 事件
+      if (event.type === "content_block_start" && (event.content_block as any).type === "redacted_thinking") {
+        pendingRedactedData = (event.content_block as any).data || '';
+        continue;
+      }
+
+      // content_block_stop：不发射 finish，只处理缓存清理
+      // finish 统一由 message_delta 发射
       if (event.type === "content_block_stop") {
         continue;
       }
@@ -221,6 +231,18 @@ export class AnthropicAdapter implements IProtocolAdapter {
           const ti = nextToolIndex++;
           tc.index = ti;
           blockToToolIndex.set((event as any).index, ti);
+        }
+      }
+
+      // 将缓存的 signature/redactedData 注入到 message_delta 的 finish 事件中
+      if (chunk?.type === "finish") {
+        if (pendingSignature) {
+          chunk.signature = pendingSignature;
+          pendingSignature = '';
+        }
+        if (pendingRedactedData) {
+          chunk.redactedData = pendingRedactedData;
+          pendingRedactedData = '';
         }
       }
 
@@ -336,11 +358,14 @@ export class AnthropicAdapter implements IProtocolAdapter {
 
     // 提取 thinking blocks → reasoningContent
     const thinkingBlocks = message.content.filter((block): block is any => block.type === "thinking");
-    // 只取第一个 thinking block 的 signature（理论上只有一个）
     const signature = thinkingBlocks.length > 0 ? (thinkingBlocks[0] as any).signature : undefined;
     const thinkingContent = thinkingBlocks
       .map((block) => block.thinking)
       .join("");
+
+    // 提取 redacted_thinking blocks → redactedData
+    const redactedBlocks = message.content.filter((block): block is any => block.type === "redacted_thinking");
+    const redactedData = redactedBlocks.length > 0 ? redactedBlocks[0].data : undefined;
 
     // 提取 text blocks → content
     const textContent = message.content
@@ -369,6 +394,7 @@ export class AnthropicAdapter implements IProtocolAdapter {
       finishReason: message.stop_reason || null,
       toolCalls,
       signature,
+      redactedData,
       usage: message.usage
         ? {
             promptTokens: message.usage.input_tokens,
@@ -425,13 +451,20 @@ export class AnthropicAdapter implements IProtocolAdapter {
         const blocks: any[] = [];
 
         // 如果有 reasoningContent 且包含签名，回传 thinking block
-        // 签名存储在 msg.metadata.signature 中，由流结束时注入
         const signature = msg.metadata?.signature;
+        const redactedData = msg.metadata?.redactedData;
         if (msg.reasoningContent && signature) {
           blocks.push({
             type: "thinking",
             thinking: msg.reasoningContent,
             signature,
+          });
+        }
+        // 如果有 redactedData，原样回传 redacted_thinking block
+        if (redactedData) {
+          blocks.push({
+            type: "redacted_thinking",
+            data: redactedData,
           });
         }
 
