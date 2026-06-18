@@ -10,6 +10,27 @@ import {
 } from "../types/llm.types";
 import { ToolDefinition } from "../../tools/interfaces/tool-provider.interface";
 
+/**
+ * 扩展 OpenAI 客户端，重写 makeStatusError 以保留完整 HTTP 响应体。
+ * OpenAI SDK 默认只保存 errJSON['error']，丢失了无 error 包裹的响应体。
+ */
+class BodyPreservingOpenAI extends OpenAI {
+  protected makeStatusError(
+    status: number | undefined,
+    error: Object | undefined,
+    message: string | undefined,
+    headers: any,
+  ): APIError {
+    const err = super.makeStatusError(status, error, message, headers);
+    // error 是完整的 errJSON（与 SDK 内部 APIError.generate 的第二个参数相同）
+    // 保存到 __rawBody 供 extractErrorDetail 提取
+    if (error) {
+      (err as any).__rawBody = typeof error === "object" ? JSON.stringify(error) : String(error);
+    }
+    return err;
+  }
+}
+
 export class OpenAIAdapter implements IProtocolAdapter {
   readonly protocol = "openai";
   private readonly logger = new Logger(OpenAIAdapter.name);
@@ -30,7 +51,7 @@ export class OpenAIAdapter implements IProtocolAdapter {
       };
     }
 
-    return new OpenAI(clientOptions);
+    return new BodyPreservingOpenAI(clientOptions);
   }
 
   /**
@@ -305,7 +326,28 @@ export class OpenAIAdapter implements IProtocolAdapter {
       `LLM API error (${isStream ? "stream" : "non-stream"}): ${errorDetail}`,
     );
 
+    // 额外输出完整错误对象的所有自有属性（部分供应商返回非标准格式，如 body 不在标准字段中）
+    try {
+      const extraFields: Record<string, any> = {};
+      for (const key of Object.getOwnPropertyNames(error)) {
+        if (!["stack", "message", "name", "status", "code", "type"].includes(key)) {
+          const val = error[key];
+          if (val !== undefined && val !== null) {
+            extraFields[key] = typeof val === "object" ? val : String(val);
+          }
+        }
+      }
+      if (Object.keys(extraFields).length > 0) {
+        this.logger.error(`LLM API error extra: ${JSON.stringify(extraFields).substring(0, 2000)}`);
+      }
+    } catch { /* ignore serialization errors */ }
+
     if (error instanceof APIError) {
+      const rawBody = (error as any).__rawBody;
+      // 如果 SDK 显示 "(no body)" 但实际有 body，替换消息
+      if (rawBody && error.message?.includes("(no body)")) {
+        throw new Error(`LLM API Error: ${error.status} - body=${rawBody.substring(0, 500)}`);
+      }
       throw new Error(`LLM API Error: ${error.status} - ${error.message}`);
     }
     if (error.name === "AbortError") throw new Error("LLM request aborted");
@@ -327,6 +369,16 @@ export class OpenAIAdapter implements IProtocolAdapter {
     if (error.type) parts.push(`type=${error.type}`);
     if (error.message) parts.push(`message=${error.message}`);
     if (error.name && error.name !== "Error") parts.push(`name=${error.name}`);
+
+    // 提取原始 HTTP 响应体（通过 BodyPreservingOpenAI.makeStatusError 注入）
+    if ((error as any).__rawBody) {
+      parts.push(`body=${(error as any).__rawBody}`);
+    }
+
+    // 提取 request_id（OpenAI SDK 的标准字段）
+    if (error.request_id) {
+      parts.push(`request_id=${error.request_id}`);
+    }
 
     // 尝试提取 stack，防止序列化失败
     if (error.stack) {
