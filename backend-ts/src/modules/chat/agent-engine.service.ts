@@ -306,6 +306,9 @@ export class AgentEngine {
             if (lastAcc.signature) {
               assistantResponse.metadata.signature = lastAcc.signature;
             }
+            if (lastAcc.redactedData) {
+              assistantResponse.metadata.redactedData = lastAcc.redactedData;
+            }
             assistantResponse.metadata = {
               ...assistantResponse.metadata,
               finishReason: lastAcc.finishReason,
