@@ -1,142 +1,126 @@
 <template>
     <div class="workspace-sidebar h-full flex flex-col border-l border-gray-200 dark:border-[#2e3035]">
-        <!-- 可拖拽分割区域 -->
-        <LiteSplitpanes class="flex-1" :horizontal="!isHorizontalLayout"
-            :pane1="{ size: selectedFile ? '280px' : '100%', minSize: '220px', maxSize: '600px' }"
-            :pane2="{ size: selectedFile ? 'auto' : '0px', minSize: selectedFile ? '120px' : '0px', maxSize: 100 }">
-            <template #pane1>
-                <div class="h-full flex flex-col">
-                    <!-- 浏览器窗口列表（仅 Electron 环境，置于最上方确保可见） -->
-                    <SessionBrowserWindowList v-if="isElectron" :session-id="props.sessionId" />
-
-                    <!-- 头部（仅在左侧目录树显示） -->
-                    <div
-                        class="shrink-0 flex items-center justify-between px-2 py-1.5 border-b border-gray-200 dark:border-[#2e3035]">
-                        <h3 class="text-sm font-semibold text-gray-700 dark:text-[#e8e9ed] whitespace-nowrap mr-1.5">
-                            工作目录</h3>
-                        <div class="flex items-center gap-0 shrink-0">
-                            <!-- 更换工作目录按钮 -->
-                            <el-tooltip content="更换工作目录" placement="bottom">
-                                <el-button class="workspace-tool-btn" text @click="changeWorkspacePath">
-                                    <el-icon size="16">
-                                        <Switch />
-                                    </el-icon>
-                                </el-button>
-                            </el-tooltip>
-                            <!-- 打开文件夹按钮（仅 Electron 环境） -->
-                            <el-tooltip v-if="isElectron" content="在文件管理器中打开" placement="bottom">
-                                <el-button class="workspace-tool-btn" text @click="openInFileManager">
-                                    <el-icon size="16">
-                                        <FolderOpened />
-                                    </el-icon>
-                                </el-button>
-                            </el-tooltip>
-                            <!-- 布局切换按钮 -->
-                            <el-tooltip :content="isHorizontalLayout ? '切换为上下布局' : '切换为左右布局'" placement="bottom">
-                                <el-button class="workspace-tool-btn" text @click="toggleLayout">
-                                    <el-icon size="16">
-                                        <component :is="isHorizontalLayout ? SplitVerticalIcon : SplitHorizontalIcon" />
-                                    </el-icon>
-                                </el-button>
-                            </el-tooltip>
-                            <!-- 刷新按钮 -->
-                            <el-tooltip content="刷新" placement="bottom">
-                                <el-button class="workspace-tool-btn" text @click="refreshTree" :loading="isLoading">
-                                    <el-icon size="16">
-                                        <Refresh />
-                                    </el-icon>
-                                </el-button>
-                            </el-tooltip>
-                        </div>
-                    </div>
-
-                    <!-- 目录树内容 -->
-                    <div class="flex-1 overflow-auto min-w-0">
-                        <div v-if="!treeData.length" class="text-center py-8 text-gray-400 text-sm p-2">
-                            暂无文件
-                        </div>
-
-                        <el-tree v-else ref="treeRef" :key="treeKey" :data="treeData" :props="treeProps" node-key="path"
-                            :expand-on-click-node="true" :default-expanded-keys="expandedKeys" :lazy="true"
-                            :load="loadNode" @node-click="handleTreeNodeClick" @node-expand="onNodeExpand"
-                            @node-collapse="onNodeCollapse" @node-contextmenu="handleNodeContextMenu" highlight-current
-                            class="workspace-tree min-w-fit p-2">
-                            <template #default="{ node, data }">
-                                <span class="workspace-tree-node">
-                                    <el-icon v-if="data.isDirectory" class="mr-1">
-                                        <Folder />
-                                    </el-icon>
-                                    <el-icon v-else class="mr-1">
-                                        <Document />
-                                    </el-icon>
-                                    {{ node.label }}
-                                </span>
-                            </template>
-                        </el-tree>
-                    </div>
-                </div>
-            </template>
-
-            <!-- 文件预览面板 -->
-            <template #pane2>
-                <div v-if="selectedFile" class="flex flex-col h-full w-full overflow-hidden">
-                    <!-- 标题栏 -->
-                    <div
-                        class="shrink-0 flex items-center justify-between px-2 py-1.5 bg-gray-50 dark:bg-[#2a2c30] border-b border-gray-200 dark:border-[#2e3035]">
-                        <span class="text-xs font-medium text-gray-600 dark:text-[#8b8d95] truncate">
-                            {{ selectedFile.name }}
-                        </span>
-
-                        <div class="flex items-center gap-2">
-                            <!-- 预览/源码切换按钮（仅 md 和 html） -->
-                            <el-button-group v-if="canTogglePreview">
-                                <el-button size="small" :type="currentPreviewMode === 'rendered' ? 'primary' : ''"
-                                    @click="currentPreviewMode = 'rendered'">
-                                    预览
-                                </el-button>
-                                <el-button size="small" :type="currentPreviewMode === 'source' ? 'primary' : ''"
-                                    @click="currentPreviewMode = 'source'">
-                                    源码
-                                </el-button>
-                            </el-button-group>
-
-                            <!-- 关闭按钮 -->
-                            <el-button :icon="Close" circle size="small" @click="closePreview" />
-                        </div>
-                    </div>
-
-                    <div class="flex-1 flex overflow-auto min-h-0">
-                        <div v-if="previewLoading" class="flex items-center justify-center h-full">
-                            <el-icon class="is-loading" size="20">
-                                <LoadingOutlined />
+        <!-- 目录树（预览时隐藏，v-show 保留 DOM） -->
+        <div v-show="!selectedFile" class="h-full flex flex-col flex-1 min-h-0">
+            <!-- 浏览器窗口列表（仅 Electron 环境，置于最上方确保可见） -->
+            <SessionBrowserWindowList v-if="isElectron" :session-id="props.sessionId" />
+            <div class="border-b border-gray-100 dark:border-[#2e3035] mx-4 mt-3"></div>
+            <!-- 头部 -->
+            <div
+                class="shrink-0 flex items-center justify-between px-2 py-3 ">
+                <h3 class="text-sm font-normal text-gray-500 dark:text-[#8b8d95] whitespace-nowrap mx-2">
+                    工作目录</h3>
+                <div class="flex items-center gap-0 shrink-0">
+                    <!-- 更换工作目录按钮 -->
+                    <el-tooltip content="更换工作目录" placement="bottom">
+                        <el-button class="workspace-tool-btn" text @click="changeWorkspacePath">
+                            <el-icon size="16">
+                                <Switch />
                             </el-icon>
-                        </div>
-
-                        <div v-else-if="previewError" class="text-red-500 text-sm p-4">
-                            {{ previewError }}
-                        </div>
-
-                        <div v-else class="w-full min-h-0">
-                            <!-- HTML 预览模式 -->
-                            <iframe v-if="isHtmlFile && currentPreviewMode === 'rendered'" :srcdoc="fileContent"
-                                class="w-full border-0" style="height: 100%;"
-                                sandbox="allow-same-origin allow-scripts" />
-
-                            <!-- Markdown 渲染模式 -->
-                            <div v-else-if="isMarkdownFile && currentPreviewMode === 'rendered'"
-                                class="markdown-preview markdown-text" v-html="renderedContent" />
-
-                            <!-- 源码模式（带语法高亮）- 所有支持的文件类型 -->
-                            <div v-else-if="renderedContent" class="code-preview-container" v-html="renderedContent" />
-
-                            <!-- 普通文本预览（不支持高亮的文件） -->
-                            <pre v-else v-text="fileContent"
-                                class="text-sm leading-relaxed whitespace-pre-wrap break-all  dark:bg-[#2a2c30] text-gray-800 dark:text-gray-200 p-4 m-0 overflow-auto min-h-0 font-mono" />
-                        </div>
-                    </div>
+                        </el-button>
+                    </el-tooltip>
+                    <!-- 打开文件夹按钮（仅 Electron 环境） -->
+                    <el-tooltip v-if="isElectron" content="在文件管理器中打开" placement="bottom">
+                        <el-button class="workspace-tool-btn" text @click="openInFileManager">
+                            <el-icon size="16">
+                                <FolderOpened />
+                            </el-icon>
+                        </el-button>
+                    </el-tooltip>
+                    <!-- 刷新按钮 -->
+                    <el-tooltip content="刷新" placement="bottom">
+                        <el-button class="workspace-tool-btn" text @click="refreshTree" :loading="isLoading">
+                            <el-icon size="16">
+                                <Refresh />
+                            </el-icon>
+                        </el-button>
+                    </el-tooltip>
                 </div>
-            </template>
-        </LiteSplitpanes>
+            </div>
+
+            <!-- 目录树内容 -->
+            <div class="flex-1 overflow-auto min-w-0">
+                <div v-if="!treeData.length" class="text-center py-12 text-gray-400 dark:text-[#6b6d73] text-xs p-2">
+                    暂无文件，请先设置工作目录
+                </div>
+
+                <el-tree v-else ref="treeRef" :key="treeKey" :data="treeData" :props="treeProps" node-key="path"
+                    :expand-on-click-node="true" :default-expanded-keys="expandedKeys" :lazy="true"
+                    :load="loadNode" @node-click="handleTreeNodeClick" @node-expand="onNodeExpand"
+                    @node-collapse="onNodeCollapse" @node-contextmenu="handleNodeContextMenu" highlight-current
+                    class="workspace-tree min-w-fit px-2">
+                    <template #default="{ node, data }">
+                        <span class="workspace-tree-node">
+                            <el-icon v-if="data.isDirectory" class="mr-1">
+                                <Folder />
+                            </el-icon>
+                            <el-icon v-else class="mr-1">
+                                <Document />
+                            </el-icon>
+                            {{ node.label }}
+                        </span>
+                    </template>
+                </el-tree>
+            </div>
+        </div>
+
+        <!-- 文件预览面板（全屏覆盖，v-show 保留目录树 DOM） -->
+        <div v-show="selectedFile" class="flex flex-col h-full w-full  flex-1">
+            <!-- 标题栏 -->
+            <div
+                class="shrink-0 flex items-center justify-between px-2 py-1.5 bg-gray-50 dark:bg-[#2a2c30] border-b border-gray-200 dark:border-[#2e3035]">
+                <span class="text-xs font-medium text-gray-600 dark:text-[#8b8d95] truncate">
+                    {{ selectedFile?.name }}
+                </span>
+
+                <div class="flex items-center gap-2">
+                    <!-- 预览/源码切换按钮（仅 md 和 html） -->
+                    <el-button-group v-if="canTogglePreview">
+                        <el-button size="small" :type="currentPreviewMode === 'rendered' ? 'primary' : ''"
+                            @click="currentPreviewMode = 'rendered'">
+                            预览
+                        </el-button>
+                        <el-button size="small" :type="currentPreviewMode === 'source' ? 'primary' : ''"
+                            @click="currentPreviewMode = 'source'">
+                            源码
+                        </el-button>
+                    </el-button-group>
+
+                    <!-- 返回目录树按钮 -->
+                    <el-button :icon="Close" circle size="small" @click="closePreview" />
+                </div>
+            </div>
+
+            <div class="flex-1 flex overflow-auto min-h-0 p-1">
+                <div v-if="previewLoading" class="flex items-center justify-center h-full">
+                    <el-icon class="is-loading" size="20">
+                        <LoadingOutlined />
+                    </el-icon>
+                </div>
+
+                <div v-else-if="previewError" class="text-red-500 text-sm p-4">
+                    {{ previewError }}
+                </div>
+
+                <div v-else class="w-full min-h-0">
+                    <!-- HTML 预览模式 -->
+                    <iframe v-if="isHtmlFile && currentPreviewMode === 'rendered'" :srcdoc="fileContent"
+                        class="w-full border-0" style="height: 100%;"
+                        sandbox="allow-same-origin allow-scripts" />
+
+                    <!-- Markdown 渲染模式 -->
+                    <div v-else-if="isMarkdownFile && currentPreviewMode === 'rendered'"
+                        class="markdown-preview markdown-text" v-html="renderedContent" />
+
+                    <!-- 源码模式（带语法高亮）- 所有支持的文件类型 -->
+                    <div v-else-if="renderedContent" class="code-preview-container" v-html="renderedContent" />
+
+                    <!-- 普通文本预览（不支持高亮的文件） -->
+                    <pre v-else v-text="fileContent"
+                        class="text-sm leading-relaxed whitespace-pre-wrap break-all dark:bg-[#2a2c30] text-gray-800 dark:text-gray-200 p-4 m-0 overflow-auto min-h-0 font-mono" />
+                </div>
+            </div>
+        </div>
     </div>
 
     <!-- 更换工作目录弹窗 -->
@@ -177,10 +161,8 @@ import { ref, computed, watch, onUnmounted, nextTick } from 'vue';
 import { ElMessage } from 'element-plus';
 import { apiService, type FileChangeEvent } from '@/services/ApiService';
 import { Refresh, Close, FolderOpened, Switch, CopyDocument } from '@element-plus/icons-vue';
-import { SwapHorizTwotone as SplitVerticalIcon, SwapVertTwotone as SplitHorizontalIcon } from '@vicons/material';
 import { LoadingOutlined } from '@vicons/antd';
 import { Folder, Document } from '@element-plus/icons-vue';
-import { LiteSplitpanes } from "../ui";
 import { useStorage, useThrottleFn } from '@vueuse/core';
 import { useMarkdown } from '@/composables/useMarkdown';
 import { useHighlight } from '@/composables/useHighlight';
@@ -278,9 +260,6 @@ async function loadNode(node: any, resolve: (data: WorkspaceNode[]) => void) {
         resolve([]);
     }
 }
-
-// 布局方向：true=左右，false=上下，默认上下
-const isHorizontalLayout = useStorage('workspaceLayoutHorizontal', false);
 
 // 预览模式：rendered=预览，source=源码，默认预览
 const currentPreviewMode = useStorage<PreviewMode>('filePreviewMode', 'rendered');
@@ -930,13 +909,6 @@ function closePreview() {
 }
 
 /**
- * 切换布局方向
- */
-function toggleLayout() {
-    isHorizontalLayout.value = !isHorizontalLayout.value;
-}
-
-/**
  * 在文件管理器中打开工作目录
  */
 async function openInFileManager() {
@@ -1193,72 +1165,4 @@ onUnmounted(() => {
     color: var(--color-primary, #409eff);
 }
 
-/* LiteSplitpanes 基础样式 - 适配暗色模式 */
-:deep(.lite-splitpanes__pane) {
-    background-color: transparent;
-    border: none !important;
-}
-
-/* 工作目录 pane 设置最小宽度和滚动 */
-:deep(.lite-splitpanes__pane:first-child) {
-    overflow: hidden !important;
-}
-
-/* 目录窗格滚动条美化 */
-:deep(.lite-splitpanes__pane:first-child) ::-webkit-scrollbar {
-    width: 6px;
-    height: 6px;
-}
-
-:deep(.lite-splitpanes__pane:first-child) ::-webkit-scrollbar-thumb {
-    background-color: rgba(0, 0, 0, 0.08);
-    border-radius: 6px;
-}
-
-:deep(.lite-splitpanes__pane:first-child) ::-webkit-scrollbar-thumb:hover {
-    background-color: rgba(0, 0, 0, 0.15);
-}
-
-:deep(.dark .lite-splitpanes__pane:first-child) ::-webkit-scrollbar-thumb {
-    background-color: rgba(255, 255, 255, 0.08);
-}
-
-:deep(.dark .lite-splitpanes__pane:first-child) ::-webkit-scrollbar-thumb:hover {
-    background-color: rgba(255, 255, 255, 0.15);
-}
-
-/* LiteSplitpanes 自定义样式 - 使用 :deep 确保穿透 scoped */
-:deep(.lite-splitpanes__splitter) {
-    background-color: var(--color-surface, #f5f5f5) !important;
-    transition: background-color 0.2s ease;
-    position: relative;
-    z-index: 1;
-}
-
-:deep(.lite-splitpanes__splitter:hover) {
-    background-color: var(--el-color-primary-light-8, #d9ecff) !important;
-}
-
-:deep(.dark .lite-splitpanes__splitter) {
-    background-color: #25262a !important;
-}
-
-:deep(.dark .lite-splitpanes__splitter:hover) {
-    background-color: var(--el-color-primary-light-8, #4a4d55) !important;
-}
-
-/* 水平布局：分割条为横线 */
-:deep(.lite-splitpanes--horizontal .lite-splitpanes__splitter),
-:deep(.lite-splitpanes__splitter--horizontal) {
-    height: 4px !important;
-    min-height: 4px !important;
-    max-height: 4px !important;
-    cursor: row-resize !important;
-}
-
-/* 垂直布局：分割条为竖线 */
-:deep(.lite-splitpanes:not(.lite-splitpanes--horizontal) .lite-splitpanes__splitter) {
-    width: 4px !important;
-    cursor: col-resize !important;
-}
 </style>

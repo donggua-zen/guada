@@ -13,7 +13,7 @@ export const useLayoutStore = defineStore('layout', () => {
   const sidebarVisible = useStorage('sidebarVisible', true)
 
   // 工作目录可见性（持久化）
-  const workspaceVisible = useStorage('workspaceVisible', false)
+  const workspaceVisible = useStorage('workspaceVisible', true)
 
   // 工作目录分割比例（持久化，默认 pane1=75%, pane2=25%）
   const workspaceSplitSize = useStorage('workspaceSplitSize', 75)
