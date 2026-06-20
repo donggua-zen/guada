@@ -12,6 +12,7 @@ import { ISessionContext, ModelConfig } from "./session-context";
 import { ToolRuntime } from "../tools/tool-context";
 import { EventChunk } from "./types/event-chunk.types";
 import { partialParse } from "partial-json-parser";
+import { SummaryMode } from "./compression-engine";
 
 /**
  * 审批上下文
@@ -199,8 +200,14 @@ export class AgentEngine {
       if (await sessionContext.shouldCompress()) {
         // onStage2 回调：仅在需要二级压缩（摘要/丢弃）时触发
         const onStage2 = async () => {
-          if (sessionContext.getMemoryConfig().summaryMode === "memory_sync") {
+          console.log("onStage2", sessionContext.getMemoryConfig());
+          if (
+            sessionContext.getMemoryConfig().summaryMode ===
+            SummaryMode.MEMORY_SYNC
+          ) {
+            console.log("run memory save shadow turn");
             await this.runMemorySaveShadowTurn(sessionContext, abortSignal);
+            console.log("memory save shadow turn done");
           }
         };
         await sessionContext.compress(onStage2);
@@ -939,31 +946,41 @@ export class AgentEngine {
     const modelConfig = sessionContext.getModelConfig();
 
     // 通过 PluginManager 获取记忆提示词（guide=静态说明, content=动态记忆内容）
-    const memoryPrompts = this.pluginManager.collectPluginPrompts
-      ? await this.pluginManager.collectPluginPrompts("memory", sessionContext)
-      : [];
-    const memoryGuide = memoryPrompts
-      .filter(p => p.frequency !== "VOLATILE")
-      .map(p => p.content).join("\n") || "";
-    const memoryContent = memoryPrompts
-      .filter(p => p.frequency === "VOLATILE")
-      .map(p => p.content).join("\n") || "";
+    const memoryGuide =
+      (
+        await this.pluginManager.collectPluginLazyPrompts(
+          "memory",
+          sessionContext,
+        )
+      )
+        .map((p) => p.content)
+        .join("\n") || "";
 
+    const memoryContent =
+      (await this.pluginManager.collectPluginPrompts("memory", sessionContext))
+        .map((p) => p.content)
+        .join("\n") || "";
+
+    // console.log("memoryGuide", memoryGuide);
     if (!memoryGuide) return;
 
     // 构建专属运行时：仅含受限的文件工具，不依赖原会话的 toolContext
-    const allGroups = await this.pluginManager.getTools({ sessionId: sessionContext.sessionId, sessionType: sessionContext.sessionType, workspacePath: sessionContext.workspacePath, userId: sessionContext.userId });
-    const allFileTools = allGroups.find(g => g.pluginId === "file")?.tools || [];
-    const fileTools = allFileTools
-      .filter((t) => ["read", "list", "write", "edit"].includes(t.name))
-      .map((t) => ({
-        name: t.name,
-        description: t.description,
-        parameters: t.parameters as any,
-      }));
+    const allGroups = await this.pluginManager.getTools(sessionContext);
+    const allFileTools =
+      allGroups.find((g) => g.pluginId === "file")?.tools || [];
+    const fileTools = allFileTools.map((t) => ({
+      name: t.name,
+      description: t.description,
+      parameters: t.parameters as any,
+    }));
+    console.log("fileTools", fileTools);
     if (fileTools.length === 0) return;
 
-    const shadowRuntime = new ToolRuntime(sessionContext, new Map(fileTools.map(t => [t.name, t])), new Map());
+    const shadowRuntime = new ToolRuntime(
+      sessionContext,
+      new Map(fileTools.map((t) => [t.name, t])),
+      new Map(),
+    );
 
     // 组装指令消息（history 中不含系统提示词，此处自行注入）
     const instructionParts: string[] = [

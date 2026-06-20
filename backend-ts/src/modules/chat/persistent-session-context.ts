@@ -627,7 +627,7 @@ export class PersistentSessionContext implements ISessionContext {
       for (const p of promptPieces) {
         if (p.content) allParts.push(p.content);
       }
-      console.log(promptPieces);
+      // console.log(promptPieces);
       // 懒加载 ToolSet 的激活词
       const activators =
         await this.pluginManager.getToolActivators(injectParams);
@@ -767,7 +767,7 @@ export class PersistentSessionContext implements ISessionContext {
     const characterMemory = characterSettings.memory || {};
 
     if (memoryEnabled !== false) {
-      merged.memory = { ...sessionMemory };
+      merged.memory = { ...characterMemory, ...sessionMemory };
     } else {
       merged.memory = { ...characterMemory };
     }

@@ -104,7 +104,7 @@ export class MemoryPlugin extends PluginBase {
           "",
           "- 长期记忆固定为 `factual.md` 和 `soul.md`",
           "- 备忘录文件名应清晰反映内容，如 `Docker常用命令.md`、`2024-01-15_项目需求会议.md`",
-          '- 避免使用特殊字符：`<>:"/\\\\|?*`',
+          '- 避免使用特殊字符：`<>:"/\\|?*`',
           "",
           "### 3. 实际使用示例",
           "",
@@ -151,24 +151,41 @@ export class MemoryPlugin extends PluginBase {
       frequency: "VOLATILE",
       description: "用户长期记忆内容",
       content: async (context: PluginContext) => {
-        const sessionId = context.sessionId;
-        if (!sessionId) return "";
-
-        const cached = this.cache.get(sessionId);
-        if (cached) {
-          cached.lastAccessed = new Date();
-          return cached.promptContent;
-        }
-
         try {
-          const index = await this.rebuildIndexForSession(sessionId);
-          const promptContent = this.buildMemoryPrompt(index);
-          this.updateCache(sessionId, index, promptContent);
-          return promptContent;
+          const sessionId = context?.sessionId;
+          if (!sessionId) return "";
+
+          const workspaceDir = context?.workspacePath;
+          if (!workspaceDir) {
+            this.logger.warn("No workspace path provided for session " + sessionId);
+            return "";
+          }
+
+          const cacheItem = this.cache.get(sessionId);
+          if (cacheItem) {
+            cacheItem.lastAccessed = new Date();
+            return cacheItem.promptContent;
+          }
+
+          this.logger.debug("Memory cache miss for session " + sessionId + ", rebuilding from disk");
+
+          let memoryDir: string;
+          let memosDir: string;
+          if (context?.sessionType === "sub_agent") {
+            const subDir = path.join(workspaceDir, ".guada", "subagents", sessionId);
+            memoryDir = path.join(subDir, "memory");
+            memosDir = path.join(subDir, "memos");
+          } else {
+            memoryDir = path.join(workspaceDir, ".guada", "memory");
+            memosDir = path.join(workspaceDir, ".guada", "memos");
+          }
+
+          await this.rebuildIndexForSession(sessionId, memoryDir, memosDir);
+
+          const updated = this.cache.get(sessionId);
+          return updated?.promptContent || "";
         } catch (error: any) {
-          this.logger.debug(
-            `Memory not available for session ${sessionId}: ${error.message}`,
-          );
+          this.logger.error("Memory prompt error: " + (error?.message || error));
           return "";
         }
       },
@@ -177,49 +194,97 @@ export class MemoryPlugin extends PluginBase {
 
   private async rebuildIndexForSession(
     sessionId: string,
-  ): Promise<MemoryIndex> {
-    const filePath = path.join(
-      process.cwd(),
-      "data",
-      "memory",
-      `${sessionId}.json`,
-    );
+    memoryDir: string,
+    memosDir: string,
+  ): Promise<void> {
+    const index: MemoryIndex = {
+      factual: undefined,
+      soul: undefined,
+      memos: [],
+      lastUpdated: new Date(),
+    };
+
+    // 读取长期记忆
     try {
-      const data = await fs.readFile(filePath, "utf-8");
-      const parsed = JSON.parse(data);
-      return {
-        factual: parsed.factual,
-        soul: parsed.soul,
-        memos: parsed.memos || [],
-        lastUpdated: new Date(parsed.lastUpdated),
-      };
-    } catch {
-      return { memos: [], lastUpdated: new Date() };
+      const factualPath = path.join(memoryDir, "factual.md");
+      index.factual = await fs.readFile(factualPath, "utf-8");
+    } catch (error: any) {
+      if (error.code !== "ENOENT") {
+        this.logger.warn("Failed to read factual.md: " + error.message);
+      }
     }
+
+    try {
+      const soulPath = path.join(memoryDir, "soul.md");
+      index.soul = await fs.readFile(soulPath, "utf-8");
+    } catch (error: any) {
+      if (error.code !== "ENOENT") {
+        this.logger.warn("Failed to read soul.md: " + error.message);
+      }
+    }
+
+    // 读取备忘录
+    try {
+      await fs.access(memosDir);
+      const files = await fs.readdir(memosDir);
+      const memoFiles = files.filter((f) => f.endsWith(".md"));
+
+      for (const file of memoFiles) {
+        const title = file.replace(".md", "");
+        const fPath = path.join(memosDir, file);
+        const content = await fs.readFile(fPath, "utf-8");
+        index.memos.push({ title, content });
+      }
+    } catch (error: any) {
+      if (error.code !== "ENOENT") {
+        this.logger.warn("Failed to read memos directory: " + error.message);
+      }
+    }
+
+    // 生成提示词内容并更新缓存
+    const promptContent = this.buildMemoryPrompt(index);
+    this.updateCache(sessionId, index, promptContent);
+
+    this.logger.log("Rebuilt memory index for session " + sessionId + ": " + index.memos.length + " memos");
   }
 
   private buildMemoryPrompt(index: MemoryIndex): string {
-    const parts: string[] = [];
-    parts.push("# 记忆存储");
+    const promptParts: string[] = [];
+
+    // ========== 第一部分：长期记忆注入 ==========
+    promptParts.push("# 记忆");
+
+    promptParts.push("\n## 事实性记忆 (.guada/memory/factual.md)");
+    promptParts.push("<factual-memory>");
     if (index.factual) {
-      parts.push("");
-      parts.push("## 事实性记忆（长期有效）");
-      parts.push(index.factual);
+      promptParts.push(index.factual);
     } else {
-      parts.push("当前没有事实性记忆");
+      promptParts.push("目前没有事实性记忆");
     }
-    if (index.memos && index.memos.length > 0) {
-      parts.push("");
-      parts.push("## 备忘录");
-      for (const memo of index.memos) {
-        parts.push(`- **${memo.title}**: ${memo.content}`);
-      }
+    promptParts.push("</factual-memory>");
+
+    promptParts.push("\n## 人格定义 (.guada/memory/soul.md)");
+    promptParts.push("<soul-memory>");
+    if (index.soul) {
+      promptParts.push(index.soul);
     } else {
-      parts.push("当前没有备忘录");
+      promptParts.push("目前没有人格定义记忆");
     }
-    parts.push("");
-    parts.push(`最后更新: ${index.lastUpdated.toLocaleString("zh-CN")}`);
-    return parts.join("\n");
+    promptParts.push("</soul-memory>");
+
+    // ========== 第二部分：备忘录目录注入 ==========
+    promptParts.push("\n# 备忘录目录 (.guada/memos/*.md)");
+    promptParts.push("<memo-list>");
+    if (index.memos.length > 0) {
+      index.memos.forEach((memo, idx) => {
+        promptParts.push((idx + 1) + ". " + memo.title);
+      });
+    } else {
+      promptParts.push("目前没有备忘录");
+    }
+    promptParts.push("</memo-list>");
+
+    return promptParts.join("\n");
   }
 
   private updateCache(

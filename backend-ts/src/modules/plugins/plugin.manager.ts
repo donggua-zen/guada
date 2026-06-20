@@ -438,14 +438,13 @@ export class PluginManager {
       // 从 PluginRegistry 读取注册的提示词元数据（OnLoad(api).registerPrompt 方式）
       const { prompts: promptMetas } = PluginRegistry.getPromptMetas(id);
       for (const meta of promptMetas) {
-        // 解析实际 loadMode：如果绑定了 toolSet，从 toolSet 运行时决定
-        let actualLoadMode = meta.loadMode;
-        if (meta.toolSet && !actualLoadMode) {
+        // 解析实际 loadMode：从 toolSet 运行时决定，无 toolSet 时默认为 eager
+        let actualLoadMode: string | undefined;
+        if (meta.toolSet) {
           try {
             const toolSets = PluginRegistry.getToolSets(id);
             const ts = toolSets.find((t) => t.name === meta.toolSet);
             if (ts) {
-              // 合并 toolSet 静态定义与运行时返回的动态属性
               const tsDefaults = {
                 loadMode: ts.loadMode || ("eager" as ToolLoadMode),
               };
@@ -462,6 +461,7 @@ export class PluginManager {
             }
           } catch {}
         }
+        actualLoadMode = actualLoadMode || "eager";
         if (actualLoadMode !== loadMode) continue;
         try {
           const content = await meta.handler(context);

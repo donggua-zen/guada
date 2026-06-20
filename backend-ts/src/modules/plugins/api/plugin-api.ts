@@ -88,7 +88,6 @@ export class PluginApiImpl implements PluginApi {
   private _promptMetas: Array<{
     methodName: string;
     frequency: string;
-    loadMode?: string;
     toolSet?: string;
     description: string;
     handler: (context: any) => string | Promise<string>;
@@ -220,9 +219,6 @@ export class PluginApiImpl implements PluginApi {
     const meta = {
       methodName: "",
       frequency: def.frequency || "REGULAR",
-      // 如果绑定了 toolSet，loadMode 由该 toolSet 运行时决定（collectByLoadMode 处解析）
-      // 未绑定 toolSet 时默认 eager
-      loadMode: def.toolSet ? undefined : ("eager" as const),
       toolSet: def.toolSet,
       description: def.description || "",
       handler: (typeof def.content === "function"
@@ -290,7 +286,6 @@ export class PluginApiImpl implements PluginApi {
   /** 获取 prompts 供 PluginManager 消费 */
   getPrompts(): Array<{
     frequency: string;
-    loadMode?: string;
     description: string;
     handler: (ctx: any) => string | Promise<string>;
   }> {

@@ -650,8 +650,10 @@ export class SessionService {
 
     this.logger.log(`Manually triggering compression for session ${sessionId}`);
     await context.compress(async () => {
-      if (context.getMemoryConfig().summaryMode === "memory_sync") {
+      if (context.getMemoryConfig().summaryMode === SummaryMode.MEMORY_SYNC) {
+        console.log("run memory save shadow turn");
         await this.agentEngine.runMemorySaveShadowTurn(context);
+        console.log("memory save shadow turn done");
       }
     });
 
