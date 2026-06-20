@@ -38,8 +38,10 @@ export class BrowserPlugin extends PluginBase {
       this.tcpBaseUrl = `http://127.0.0.1:${process.env.BROWSER_BRIDGE_PORT || "3001"}/browser-tool`;
     }
     if (process.send) {
-      process.on("message", (msg: any) => {
-        if (msg?.type === "browser-tool-response") this.handleResponse(msg);
+      process.on("message", (message: any) => {
+        if (message && message.type === "BROWSER_TOOL_RESPONSE") {
+          this.handleResponse(message.data);
+        }
       });
     }
   }
@@ -246,7 +248,7 @@ export class BrowserPlugin extends PluginBase {
     });
 
     // ── 使用说明提示词 ──
-    api.registerPrompt({
+        api.registerPrompt({
       frequency: "REGULAR",
       toolSet: "browser",
       description: "浏览器控制工具使用说明",
@@ -263,41 +265,105 @@ export class BrowserPlugin extends PluginBase {
         "",
         "## 使用建议",
         "1. 先用 `browser_new_window(url)` 创建新窗口并导航到目标网页，获取 `window_id`",
-        "2. 用 `browser_page_text` 获取纯文本内容进行分析",
-        "3. 用 `browser_page_struct` 获取结构化 JSON",
+        "2. 用 `browser_page_text` 获取纯文本内容进行分析（适合快速了解页面主要内容）",
+        "3. 用 `browser_page_struct` 获取结构化 JSON（适合需要分析 DOM 结构或提取特定元素）",
         "4. 如需交互，使用 `browser_click` 和 `browser_input` 操作页面元素",
         "5. 进阶功能，使用 `browser_run_js` 编写 JavaScript 或使用 `file_path` 参数执行外部 JS 文件",
-        "6. 所有新打开的自动化窗口都是**完全无痕的**，关闭后不留任何数据",
+        "6. 所有新打开的自动化窗口都是**完全无痕的**，关闭后不留任何数据，如果需要保存登录信息，请导出认证相关信息（如cookie）并下次注入",
         "",
         "## browser_run_js 异步代码使用",
         "当需要执行异步代码时，设置 `is_async: true`：",
         "- `async/await` 语法",
         "- `Promise` 对象",
         "- `fetch` API 进行网络请求",
+        "- `setTimeout/setInterval` 等定时器",
         "",
         "## run_js 文件执行",
         "可以通过 `file_path` 参数执行外部 JavaScript 文件，长代码建议使用此方法",
         "",
         "```javascript",
+        '// 示例 1: 使用 code 参数直接执行代码',
         '{"code": "document.title", "window_id": "abc123"}',
+        "",
+        '// 示例 2: 使用 file_path 参数执行文件',
         '{"file_path": "scripts/extract-data.js", "window_id": "abc123", "is_async": true}',
+        "",
+        '// 示例 3: 使用 async/await (is_async: true)',
         'const response = await fetch("https://api.example.com/data");',
-        "const data = await response.json();",
-        "return data;",
+        'const data = await response.json();',
+        'return data;',
+        "",
+        '// 示例 4: 同步代码',
+        'document.title',
+        "",
+        '// 示例 5: 使用 Promise',
+        'new Promise((resolve) => {',
+        '  setTimeout(() => resolve("Hello after 1 second"), 1000);',
+        '})',
         "```",
         "",
-        "## 浏览器内文件存储 API",
-        "每个窗口的渲染进程中都注入了 `window._browserBridge` 对象，支持保存/读取本地文件：",
+        "## 浏览器内文件存储 API（导出/保存到本地、读取本地文件）",
+        "每个浏览器自动化窗口的渲染进程中都注入了 `window._browserBridge` 对象，支持在页面内部直接保存数据到本地文件或读取本地文件。支持文本、JSON 和二进制数据（通过 base64 编码）。你可以在 `run_js` 的代码中调用这些方法：",
         "",
-        "- `window._browserBridge.saveLocalFile(filename, data, options?)` — 保存数据到本地文件",
-        '  - `options.encoding`: `"utf8"`（默认）或 `"base64"`（二进制）',
+        "- `window._browserBridge.saveLocalFile(filename, data, options?)` — 保存数据到本地文件（导出/下载）",
+        '  - `filename`: 文件名（字符串,只能导出到工作目录下）',
+        '  - `data`: 要保存的数据（字符串、对象或 base64 编码的二进制数据）',
+        '  - `options.encoding`: 数据编码方式，`"utf8"`（默认，文本/JSON）或 `"base64"`（二进制数据）',
+        '  - 返回: `{ success: boolean, filePath?: string, error?: string }`',
+        "",
         "- `window._browserBridge.readLocalFile(filename, options?)` — 读取本地文件内容",
-        '  - `options.encoding`: `"utf8"`（默认）或 `"base64"`',
-        "- `window._browserBridge.getCookies(url?)` — 获取 Cookie",
-        "- `window._browserBridge.setCookie(cookie)` — 设置 Cookie",
-        "- `window._browserBridge.removeCookie(url, name)` — 删除 Cookie",
+        '  - `filename`: 文件名（字符串）',
+        '  - `options.encoding`: 读取编码方式，`"utf8"`（默认，返回文本）或 `"base64"`（返回 base64 编码字符串，用于二进制数据）',
+        '  - 返回: `{ success: boolean, content?: string, error?: string }`',
         "",
         "文件自动保存到当前会话的工作目录中，不同会话之间相互隔离。",
+        "",
+        "```javascript",
+        '// 示例 1: 保存文本/JSON 数据',
+        'const data = { title: document.title, url: location.href, timestamp: Date.now() };',
+        'const result = await window._browserBridge.saveLocalFile("page-data.json", data);',
+        'return result;',
+        "",
+        '// 示例 2: 保存二进制数据（如 canvas 转图片）',
+        'const canvas = document.querySelector("canvas");',
+        'const base64Data = canvas.toDataURL("image/png").replace("data:image/png;base64,", "");',
+        'const result = await window._browserBridge.saveLocalFile("screenshot.png", base64Data, { encoding: "base64" });',
+        'return result;',
+        "",
+        '// 示例 3: 读取文本文件',
+        'const result = await window._browserBridge.readLocalFile("page-data.json");',
+        'return result;',
+        "",
+        '// 示例 4: 读取二进制文件（如图片）',
+        'const result = await window._browserBridge.readLocalFile("screenshot.png", { encoding: "base64" });',
+        'if (result.success) {',
+        '  const img = document.createElement("img");',
+        '  img.src = "data:image/png;base64," + result.content;',
+        '  document.body.appendChild(img);',
+        '}',
+        'return result;',
+        "",
+        '// 示例 5: 获取 Cookie',
+        'const result = await window._browserBridge.getCookies();',
+        'return result.cookies;',
+        "",
+        '// 示例 6: 按 URL 过滤获取 Cookie',
+        'const result = await window._browserBridge.getCookies({ url: "https://example.com" });',
+        'return result.cookies;',
+        "",
+        '// 示例 7: 设置 Cookie',
+        'const result = await window._browserBridge.setCookie({',
+        '  url: "https://example.com",',
+        '  name: "session_id",',
+        '  value: "abc123",',
+        '  expirationDate: Math.floor(Date.now() / 1000) + 86400',
+        '});',
+        'return result;',
+        "",
+        '// 示例 8: 删除 Cookie',
+        'const result = await window._browserBridge.removeCookie("https://example.com", "session_id");',
+        'return result;',
+        "```",
       ].join("\n"),
     });
   }
@@ -330,20 +396,24 @@ export class BrowserPlugin extends PluginBase {
   ): Promise<any> {
     return new Promise((resolve, reject) => {
       const id = String(++this.requestIdCounter);
-      const timeout = setTimeout(() => {
-        this.pendingRequests.delete(id);
-        reject(new Error("Request timeout"));
-      }, 30000);
-      this.pendingRequests.set(id, { resolve, reject, timeout });
       const req = http.request(
         this.tcpBaseUrl,
-        { method: "POST", headers: { "Content-Type": "application/json" } },
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          timeout: 60000,
+        },
         (res) => {
           let data = "";
           res.on("data", (chunk) => (data += chunk));
           res.on("end", () => {
             try {
-              resolve(JSON.parse(data));
+              const response = JSON.parse(data);
+              if (response.error) {
+                reject(new Error(response.error.message));
+              } else {
+                resolve(response.result);
+              }
             } catch {
               resolve(data);
             }
@@ -351,6 +421,20 @@ export class BrowserPlugin extends PluginBase {
         },
       );
       req.on("error", (err) => reject(err));
+      req.on("timeout", () => {
+        req.destroy();
+        reject(new Error("Request timeout"));
+      });
+      if (abortSignal) {
+        if (abortSignal.aborted) {
+          req.destroy();
+          reject(new Error("Request was aborted"));
+          return;
+        }
+        abortSignal.addEventListener("abort", () => {
+          req.destroy();
+        }, { once: true });
+      }
       req.write(JSON.stringify({ id, method, params }));
       req.end();
     });
@@ -370,9 +454,10 @@ export class BrowserPlugin extends PluginBase {
       const timeout = setTimeout(() => {
         this.pendingRequests.delete(id);
         reject(new Error("Request timeout"));
-      }, 30000);
+      }, 60000);
       this.pendingRequests.set(id, { resolve, reject, timeout });
-      process.send({ type: "browser-tool-request", id, method, params });
+      const request = { id, method, params };
+      process.send({ type: "BROWSER_TOOL_CALL", data: request });
       if (abortSignal) {
         if (abortSignal.aborted) {
           clearTimeout(timeout);
@@ -447,6 +532,7 @@ export class BrowserPlugin extends PluginBase {
         message: "结果过大，已保存到你的工作目录",
         file_path: path.join("tools_output", fileName),
         file_size_bytes: byteSize,
+        file_size_kb: Math.round(byteSize / 1024),
       });
     } catch (error: any) {
       const truncated =
@@ -454,6 +540,7 @@ export class BrowserPlugin extends PluginBase {
       return JSON.stringify({
         error: `保存大结果失败: ${error.message}`,
         truncated_result: truncated,
+        original_size_bytes: byteSize,
       });
     }
   }
