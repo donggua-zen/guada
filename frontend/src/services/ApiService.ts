@@ -978,14 +978,14 @@ class ApiService {
   }
 
   async fetchGlobalTools(): Promise<any> {
-    return await this._request("/settings/tools/global");
+    return await this._request("/settings/plugins/global");
   }
 
   async updateGlobalToolStatus(
     pluginId: string,
     enabled: boolean,
   ): Promise<{ success: boolean }> {
-    return await this._request("/settings/tools/global", {
+    return await this._request("/settings/plugins/global", {
       method: "PUT",
       data: { pluginId, enabled },
     });

@@ -23,6 +23,12 @@ export interface ToolDefinition {
     properties: Record<string, ToolParameterProperty>;
     required?: string[];
   };
+  /** 前端展示动作描述（如"读取文件"） */
+  action?: string;
+  /** 前端展示图标标识 */
+  icon?: string;
+  /** 从 args 中提取摘要的字段名 */
+  argsKey?: string;
 }
 
 export interface ToolCallRequest {

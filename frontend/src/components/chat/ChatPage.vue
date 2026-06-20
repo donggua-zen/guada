@@ -12,10 +12,10 @@
             <div ref="paneContentRef" class="chat-pane-content"
               style="height: 100%; display: flex; flex-direction: column;">
               <!-- 页面标题栏 -->
-              <PageHeader :title="currentSession?.title || ''">
+              <PageHeader :title="mainSession?.title || ''">
                 <template #actions>
                   <!-- 工作目录切换 -->
-                  <div v-if="currentSession?.id"
+                  <div v-if="mainSession?.id"
                     class="cursor-pointer p-1 rounded-lg text-gray-600 dark:text-[#8b8d95] transition-all duration-200 hover:bg-gray-100 dark:hover:bg-[#2a2c30] hover:text-gray-900 dark:hover:text-[#e8e9ed] flex items-center justify-center"
                     @click="layoutStore.toggleWorkspace()" :title="layoutStore.workspaceVisible ? '关闭工作目录' : '打开工作目录'">
                     <el-icon class="w-5 h-5">
@@ -52,20 +52,20 @@
               </PageHeader>
 
               <!-- 会话面板：主会话和子 Agent 共用同一个 ChatPanel，通过 session 切换 -->
-              <ChatPanel ref="chatPanelRef" :session="activeSession" :readonly="activeTabId !== 'main'"
+              <ChatPanel ref="chatPanelRef" :session="panelSession" :readonly="activeTabId !== 'main'"
                 :hide-header="activeTabId !== 'main'" :agent-tabs="agentTabs" :active-tab-id="activeTabId"
                 @save-settings="handleSaveSessionSettings" @toggle-workspace-pane="layoutStore.toggleWorkspace"
                 @switch-agent="switchTab" @close-agent="closeSubAgentTab" />
 
               <!-- 右侧大纲导航 -->
-              <ChatOutline v-if="currentSession && activeTabId === 'main'"
+              <ChatOutline v-if="mainSession && activeTabId === 'main'"
                 :messages="chatPanelRef?.activeMessages || []" :chat-panel-ref="chatPanelRef"
                 @scroll-to-message="handleScrollToMessage" />
             </div>
           </template>
 
           <template #pane2>
-            <WorkspaceSidebar v-if="layoutStore.workspaceVisible && currentSession" :session-id="currentSession.id" />
+            <WorkspaceSidebar v-if="layoutStore.workspaceVisible && mainSession" :session-id="mainSession.id" />
           </template>
         </LiteSplitpanes>
       </div>
@@ -80,7 +80,7 @@
   <!-- 记忆管理弹窗 -->
   <el-dialog v-model="memoPanelVisible" title="记忆管理" width="390px" :close-on-click-modal="false" destroy-on-close
     class="memo-panel-dialog">
-    <MemoPanel v-if="currentSession" :session-id="currentSession.id" />
+    <MemoPanel v-if="mainSession" :session-id="mainSession.id" />
   </el-dialog>
 
 
@@ -136,13 +136,13 @@ const activeTabId = ref('main');
 const subSessions = ref<Session[]>([]);
 
 /**
- * 当前激活的会话对象
- * - main Tab：使用 currentSession（主会话）
+ * 面板当前展示的会话对象
+ * - main Tab：使用 mainSession（主会话）
  * - 子 Agent Tab：从 subSessions 中查找对应的子会话
  */
-const activeSession = computed(() => {
+const panelSession = computed(() => {
   if (activeTabId.value === 'main') {
-    return currentSession.value;
+    return mainSession.value;
   }
   // 从子会话列表中查找
   return subSessions.value.find((s) => s.id === activeTabId.value) || null;
@@ -219,7 +219,7 @@ function handleStreamStarted(event: any) {
     tab.status = 'running';
   }
   // 主代理流开始：同步更新 main Tab 状态
-  if (sessionId === currentSession.value?.id) {
+  if (sessionId === mainSession.value?.id) {
     const mainTab = agentTabs.value.find(t => t.id === 'main');
     if (mainTab) mainTab.status = 'running';
   }
@@ -229,7 +229,7 @@ function handleStreamStarted(event: any) {
   }
 
   // 如果是主会话的流，通知 ChatPanel 订阅流
-  if (sessionId === currentSession.value?.id) {
+  if (sessionId === mainSession.value?.id) {
     const chatPanel = chatPanelRef.value as any;
     if (chatPanel && chatPanel.subscribeToActiveStream) {
       const replaceMessageId = event.payload?.replaceMessageId;
@@ -264,7 +264,7 @@ function handleStreamFinished(event: any) {
     tab.status = reason === 'completed' ? 'completed' : 'error';
   }
   // 主代理流结束：同步更新 main Tab 状态
-  if (sessionId === currentSession.value?.id) {
+  if (sessionId === mainSession.value?.id) {
     const mainTab = agentTabs.value.find(t => t.id === 'main');
     if (mainTab) {
       const reason = payload?.reason;
@@ -307,8 +307,8 @@ const title = useTitle();
 
 // 删除会话确认对话框状态
 
-// 当前会话对象，包含会话的基本信息和设置
-const currentSession: Ref<Session | null> = ref(null);
+// 主会话对象（侧边栏选中的根会话），包含会话的基本信息和设置
+const mainSession: Ref<Session | null> = ref(null);
 
 
 // 判断是否为 Electron 环境
@@ -344,7 +344,7 @@ let unsubscribeSubAgentClosed: (() => void) | null = null;
 const fetchSession = async (sessionId: string) => {
   try {
     const session = await apiService.fetchSession(sessionId);
-    currentSession.value = session;
+    mainSession.value = session;
 
     // 恢复子会话 Tab 状态（页面刷新后从 subSessions 重建，isStreaming 由后端注入）
     subSessions.value = session.subSessions || [];
@@ -376,7 +376,7 @@ const goChatRoute = async (sessionId: string | null) => {
     router.replace({ name: 'Chat', params: { sessionId: sessionId } });
   } else {
     router.replace({ name: 'Chat', params: { sessionId: 'new-session' } });
-    currentSession.value = null;
+    mainSession.value = null;
   }
 };
 
@@ -429,12 +429,12 @@ const updateSessionById = async (sessionId: string, data: any) => {
 
 const updateSelectedSession = async (sessionId: string) => {
   if (sessionId == null || sessionId === 'new-session') {
-    currentSession.value = null;
+    mainSession.value = null;
     sessionStore.activeSessionId = "new-session";
     return;
   }
   sessionStore.activeSessionId = sessionId;
-  if (sessionId !== currentSession.value?.id) {
+  if (sessionId !== mainSession.value?.id) {
     // 切换会话时重置子代理状态到主线程
     activeTabId.value = 'main';
     agentTabs.value = [{ id: 'main', name: '主代理', status: 'completed', loaded: true }];
@@ -468,11 +468,12 @@ const handleCreateSessionWithMessage = async (session: any, inputMessage: any) =
  */
 const handleSaveSessionSettings = async () => {
   try {
-    if (currentSession.value) {
-      await apiService.updateSession(currentSession.value.id, {
-        modelId: currentSession.value.modelId,
-        settings: currentSession.value.settings,
-        workspacePath: currentSession.value.workspacePath
+    const targetSession = panelSession.value;
+    if (targetSession) {
+      await apiService.updateSession(targetSession.id, {
+        modelId: targetSession.modelId,
+        settings: targetSession.settings,
+        workspacePath: targetSession.workspacePath
       });
     }
   } catch (error: any) {
@@ -501,19 +502,19 @@ async function handleMoreSelect(key: string) {
  * 清空聊天记录
  */
 async function clearChat() {
-  if (!currentSession.value) {
+  if (!mainSession.value) {
     toast.error("当前没有活动的会话");
     return;
   }
 
   if (await confirm("清空聊天记录", "确定要删除所有聊天记录吗？此操作不可撤销。")) {
     try {
-      await apiService.clearSessionMessages(currentSession.value.id);
-      sessionStore.clearSessionMessages(currentSession.value.id);
+      await apiService.clearSessionMessages(mainSession.value.id);
+      sessionStore.clearSessionMessages(mainSession.value.id);
       // 重新加载消息列表
       const chatPanel = chatPanelRef.value as any;
       if (chatPanel && chatPanel.loadMessages) {
-        chatPanel.loadMessages(currentSession.value.id);
+        chatPanel.loadMessages(mainSession.value.id);
       }
       toast.success("聊天记录已清空");
     } catch (error) {
@@ -539,7 +540,7 @@ function handleScrollToMessage(messageId: string) {
 
 // 监听当前会话的变化，更新页面标题
 watch(
-  () => currentSession,
+  () => mainSession,
   (session) => {
     if (session.value) {
       title.value = `${session.value.title}-对话`;
@@ -554,7 +555,7 @@ watch(
   () => route.params.sessionId,
   async (newSessionId) => {
     if (!newSessionId) {
-      currentSession.value = null;
+      mainSession.value = null;
       goChatRoute(null);
       return;
     }

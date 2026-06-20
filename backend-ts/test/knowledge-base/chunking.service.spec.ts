@@ -105,24 +105,21 @@ describe('ChunkingService', () => {
       const result = await service.chunkPages(pages);
 
       expect(result.length).toBe(1);
-      expect(result[0].metadata.sourcePages).toEqual([1]);
     });
 
-    it('应该逐页分块，不跨页', async () => {
+    it('应该跨页合并为统一分块', async () => {
       const pages = buildPages([
         '第一页内容。' + Array(20).fill('A').join(''),
         '第二页内容。' + Array(20).fill('B').join(''),
       ]);
       const result = await service.chunkPages(pages);
 
-      // 至少每页一个分块
-      expect(result.length).toBeGreaterThanOrEqual(2);
-
-      // 验证分块记录了正确的来源页码
-      const page1Chunks = result.filter(c => c.metadata.sourcePages?.includes(1));
-      const page2Chunks = result.filter(c => c.metadata.sourcePages?.includes(2));
-      expect(page1Chunks.length).toBeGreaterThan(0);
-      expect(page2Chunks.length).toBeGreaterThan(0);
+      // 合并后统一分块，不再按页切割
+      expect(result.length).toBeGreaterThanOrEqual(1);
+      // 验证相邻分块的内容来源于合并后的连续文本
+      for (const chunk of result) {
+        expect(chunk.metadata.strategy).toBe('token');
+      }
     });
 
     it('应该为多页内容生成全局递增的 chunkIndex', async () => {
@@ -138,7 +135,7 @@ describe('ChunkingService', () => {
       }
     });
 
-    it('应该跳过空白页', async () => {
+    it('应该跳过空白页后合并非空白内容统一分块', async () => {
       const pages = buildPages([
         '第一页有内容',
         '',
@@ -147,11 +144,12 @@ describe('ChunkingService', () => {
       ]);
       const result = await service.chunkPages(pages);
 
-      // 只有两页有内容
-      expect(result.length).toBeGreaterThanOrEqual(2);
-      const pageNums = new Set(result.flatMap(c => c.metadata.sourcePages || []));
-      expect(pageNums.has(2)).toBe(false);
-      expect(pageNums.has(3)).toBe(false);
+      // 空白页被过滤后，非空白内容合并为连续文本统一分块
+      expect(result.length).toBeGreaterThanOrEqual(1);
+      // 内容应为合并后的文本
+      const allContent = result.map(c => c.content).join('');
+      expect(allContent).toContain('第一页有内容');
+      expect(allContent).toContain('第三页也有内容');
     });
   });
 

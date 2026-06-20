@@ -1,12 +1,8 @@
 import { Injectable, Logger } from "@nestjs/common";
 import {
-  IToolProvider,
   ToolCallRequest,
   ToolCallResponse,
-  ToolDisplayInfo,
   ToolDefinition,
-  PromptFrequency,
-  ProviderContext,
 } from "./interfaces/tool-provider.interface";
 
 import {
@@ -15,398 +11,270 @@ import {
 } from "./universal-tool-handler";
 import { ToolRuntime } from "./tool-context";
 import { SettingsStorage } from "../../common/utils/settings-storage.util";
+import { PluginInstance, PluginManager } from "../plugins/plugin.manager";
+import {
+  PluginContext,
+  PluginManifest,
+  ToolHandlerDef,
+  ToolLoadMode,
+  PluginConfig,
+} from "../plugins/types/plugin.types";
 
 /**
- * 提示词片段，附带排序元信息
+ * MCP 配置以 toolsConfig.mcp 字段形式存在
  */
-interface PromptPiece {
-  content: string;
-  /** 排序优先级：STATIC=0, REGULAR=1, VOLATILE=2 */
-  sortKey: number;
-  pluginId: string;
-}
-
-/**
- * 获取指定插件的工具启用配置
- * @param toolsConfig 角色工具配置
- * @param mcpServersConfig MCP 服务器配置
- * @param pluginId 插件标识
- * @param isMcp 是否为 MCP 工具
- * @returns 启用配置（boolean | string[]）
- */
-function getEnabledConfig(
-  toolsConfig: any,
-  mcpServersConfig: any,
-  pluginId: string,
-  isMcp: boolean,
-): boolean | string[] {
-  if (isMcp) {
-    return mcpServersConfig;
-  }
-  if (toolsConfig === true) {
-    return true;
-  }
-  return toolsConfig?.[pluginId] || false;
-}
-
-export interface ToolMetadata {
-  pluginId: string;
-  name: string;
-  displayName: string;
-  description: string;
-  enabled: boolean;
-  isMcp: boolean;
-  tools?: any[];
-}
 
 @Injectable()
 export class ToolOrchestrator {
   private readonly logger = new Logger(ToolOrchestrator.name);
-  private providers = new Map<string, IToolProvider>();
   private universalHandler: UniversalToolHandler;
 
-  constructor(private readonly settingsStorage: SettingsStorage) {
-    // 初始化通用工具处理器
+  constructor(
+    private readonly settingsStorage: SettingsStorage,
+    private readonly pluginManager: PluginManager,
+  ) {
     this.universalHandler = new UniversalToolHandler();
   }
-
-  addProvider(provider: IToolProvider) {
-    if (provider.pluginId) {
-      this.providers.set(provider.pluginId, provider);
-      this.logger.log(`Added tool provider: ${provider.pluginId}`);
-    }
-  }
-
-  /**
-   * 获取所有工具提供者（用于动态配置）
-   */
-  getProviders(): Map<string, IToolProvider> {
-    return this.providers;
-  }
-
-  /**
-   * 获取指定插件标识的工具提供者
-   */
-  getProvider(pluginId: string): IToolProvider | undefined {
-    return this.providers.get(pluginId);
-  }
-
-  /**
-   * 生成工具调用的展示文案（结构化）
-   * @param request 工具调用请求
-   * @param isExecuting 工具是否正在执行（true=正在进行，false=已完成）
-   * @returns 结构化的展示信息
-   */
-  generateDisplayMessage(
-    request: ToolCallRequest,
-    isExecuting: boolean = true,
-    runtime?: ToolRuntime,
-  ): ToolDisplayInfo {
-    try {
-      // 特殊处理 tool_call 工具：从参数中提取实际调用的工具名
-      if (request.name === "tool_call") {
-        if (request.arguments?.tool_name) {
-          const actualToolName = request.arguments.tool_name as string;
-          const actualArgs = request.arguments.arguments || {};
-
-          // 递归调用，使用实际的工具名和参数
-          return this.generateDisplayMessage(
-            { id: request.id, name: actualToolName, arguments: actualArgs },
-            isExecuting,
-            runtime,
-          );
-        }
-        return {
-          action: isExecuting ? "正在调用工具" : "已调用工具",
-          args: request.arguments?.pluginId,
-          toolName: request.name,
-          toolType: "generic",
-        };
-      }
-      if (request.name === "tool_load") {
-        return {
-          action: isExecuting ? "正在加载工具" : "已加载工具",
-          args: request.arguments?.pluginId,
-          toolName: request.name,
-          toolType: "generic",
-        };
-      }
-
-      // 解析工具名称获取插件标识
-      const pluginId = runtime?.resolvePluginId(request.name) || request.name;
-      const provider = this.providers.get(pluginId);
-
-      if (provider && typeof provider.formatDisplayMessage === "function") {
-        // 如果提供者返回的是字符串，转换为结构化数据
-        const result = provider.formatDisplayMessage(
-          request.name,
-          request.arguments,
-          isExecuting,
-        );
-        if (typeof result === "string") {
-          return {
-            action: result,
-            toolName: request.name,
-            toolType: pluginId,
-          };
-        }
-
-        // 如果没有显式指定 toolType，使用 pluginId 作为默认值
-        if (!result.toolType) {
-          result.toolType = pluginId;
-        }
-
-        return result;
-      }
-
-      // 降级：使用通用格式化
-      return this.generateGenericDisplayInfo(
-        request.name,
-        request.arguments,
-        isExecuting,
+  async resolveAvailableTools(
+    role?: PluginConfig,
+    mcpServersConfig?: any,
+  ): Promise<
+    {
+      enabled: boolean;
+      effective: "global" | "role";
+      plugin: PluginManifest;
+      enabledTools: ToolHandlerDef[];
+      allTools: ToolHandlerDef[];
+    }[]
+  > {
+    const rawGlobal = await this.settingsStorage.getSettings("plugins");
+    const globalCfg = this.normalizePluginConfig(rawGlobal, undefined);
+    const rawRole = role;
+    const roleCfg = this.normalizePluginConfig(rawRole, mcpServersConfig);
+    const pluginToosList: {
+      enabled: boolean;
+      effective: "global" | "role";
+      plugin: PluginManifest;
+      enabledTools: ToolHandlerDef[];
+      allTools: ToolHandlerDef[];
+    }[] = [];
+    for (const instance of this.pluginManager.getAllPluginRegistrations()) {
+      const pluginId = instance.manifest.id;
+      // 即使 disabled 也要获取 tools（onLoad 始终调用，PluginRegistry 有数据）
+      const tools = this.pluginManager.getPluginTools(pluginId);
+      const manifest = instance.manifest;
+      const result = this.resolvePluginEnabledTools(
+        globalCfg,
+        roleCfg,
+        manifest,
+        tools,
       );
-    } catch (error) {
-      this.logger.warn(
-        `Failed to generate display message for ${request.name}:`,
-        error,
-      );
-      return {
-        action: isExecuting ? "正在调用工具" : "已调用工具",
-        toolName: request.name,
-        toolType: "generic",
-      };
+      // console.log(result);
+      pluginToosList.push({
+        enabled: result.enabled,
+        effective: result.effective,
+        plugin: manifest,
+        enabledTools: result.tools,
+        allTools: tools,
+      });
     }
+    return pluginToosList;
   }
+  // ── 构建工具运行时 ──
 
-  /**
-   * 通用展示文案生成（降级方案）
-   */
-  private generateGenericDisplayInfo(
-    toolName: string,
-    args: Record<string, any>,
-    isExecuting: boolean,
-  ): ToolDisplayInfo {
-    // 尝试从工具名推断可读名称
-    const readableName =
-      toolName
-        .split("__")
-        .pop()
-        ?.replace(/_/g, " ")
-        .replace(/\b\w/g, (l) => l.toUpperCase()) || toolName;
-
-    // 提取关键参数作为 args
-    let argsSummary: string | undefined;
-    if (args && typeof args === "object") {
-      // 尝试提取第一个有意义的参数值
-      const keys = Object.keys(args);
-      for (const key of keys) {
-        const value = args[key];
-        if (typeof value === "string" && value.length > 0) {
-          // 如果是文件路径，只保留文件名
-          argsSummary =
-            value.includes("/") || value.includes("\\")
-              ? value.split(/[\/\\]/).pop() || value
-              : value;
-          break;
-        }
-      }
-    }
-
-    return {
-      action: `${readableName}`,
-      args: argsSummary,
-      toolName: toolName,
-      toolType: "generic",
-    };
-  }
-
-  /**
-   * 构建工具运行时上下文
-   *
-   * 根据角色工具配置和全局工具启用状态取交集，返回按命名空间分组的工具定义。
-   * @param injectParams 注入参数（sessionId, userId 等）
-   * @param toolsConfig 角色工具配置
-   * @param mcpServersConfig MCP 服务器配置
-   * @returns 按命名空间分组的工具定义映射
-   */
   async buildToolRuntime(
-    injectParams: ProviderContext,
-    toolsConfig: any,
-    mcpServersConfig: any,
-    eagerPluginIds?: string[],
+    injectParams: PluginContext,
+    toolsConfig: PluginConfig,
+    mcpServersConfig?: any,
   ): Promise<ToolRuntime> {
-    // 获取全局启用的工具列表，与角色配置取交集
-    const globalTools = await this.getLocalToolsList();
-    const globalEnabledPluginIds = new Set(
-      globalTools.filter((t) => t.enabled).map((t) => t.pluginId),
+    const pluginAvailableTools = await this.resolveAvailableTools(
+      toolsConfig,
+      mcpServersConfig,
     );
+    const allToolSets =
+      await this.pluginManager.getPluginToolSets(injectParams);
 
-    const groupedTools: Record<string, ToolDefinition[]> = {};
-    const lazyTools: Record<string, ToolDefinition[]> = {};
+    // // 1. 读取全局配置并标准化
+    // const rawGlobal = await this.settingsStorage.getSettings("plugins");
+    // const globalCfg = this.normalizePluginConfig(rawGlobal, undefined);
+
+    // // 2. 标准化角色/会话配置 + 合并 MCP
+    // const roleCfg = this.normalizePluginConfig(toolsConfig, mcpServersConfig);
+
+    const eagerTools = new Map<string, ToolDefinition>();
+    const lazyToolSets = new Map<
+      string,
+      { tools: ToolDefinition[]; pluginId: string }
+    >();
     const toolNames = new Set<string>();
 
-    for (const [pluginId, provider] of this.providers.entries()) {
-      // 全局未启用的插件直接跳过
-      if (!globalEnabledPluginIds.has(pluginId)) continue;
+    // 先获取所有已解析运行时的 ToolSet 信息
+    // const allToolSets =
+    // await this.pluginManager.getPluginToolSets(injectParams);
+    // 构建 toolSet → loadMode 查找表
+    const toolSetLoadModes = new Map<string, ToolLoadMode>();
+    for (const group of allToolSets) {
+      for (const ts of group.toolSets) {
+        toolSetLoadModes.set(ts.name, ts.loadMode);
+      }
+    }
 
-      const metadata = provider.getMetadata(injectParams);
-      const enabled = getEnabledConfig(
-        toolsConfig,
-        mcpServersConfig,
-        pluginId,
-        metadata.isMcp,
-      );
+    for (const { enabled, plugin, enabledTools } of pluginAvailableTools) {
+      // const enabled = this.resolvePluginEnabledTools(
+      //   globalCfg,
+      //   roleCfg,
+      //   plugin.id,
+      //   manifest?.category,
+      // );
       if (!enabled) continue;
 
-      // 如果指定了强制 eager 的插件，则覆盖 loadMode
-      const forceEager = eagerPluginIds?.includes(pluginId);
-      const loadMode = forceEager ? "eager" : (metadata.loadMode || "eager");
+      const lazyByToolSet = new Map<string, ToolDefinition[]>();
 
-      // 根据加载模式决定是否包含该工具
-      if (loadMode === "none") {
-        this.logger.debug(
-          `Skipping disabled plugin ${pluginId} (loadMode: none)`,
-        );
-        continue;
-      }
+      for (const tool of enabledTools) {
+        // 根据 tool.toolSet 查表获取加载模式
+        const loadMode = tool.toolSet
+          ? (toolSetLoadModes.get(tool.toolSet) ?? "eager")
+          : "eager";
 
-      const providerTools = await provider.getTools(enabled, injectParams);
+        // 细粒度过滤：如果 enabled 是 string[]，只包含数组中的工具
+        let toolAllowed = true;
+        if (Array.isArray(enabled)) {
+          toolAllowed = enabled.includes(tool.name);
+        }
+        if (!toolAllowed) continue;
 
-      const pluginTools = providerTools.map((tool) => {
+        const def: ToolDefinition = {
+          name: tool.name,
+          description: tool.description,
+          parameters: tool.parameters as any,
+          action: tool.action,
+          icon: tool.icon,
+          argsKey: tool.argsKey,
+        };
+
         if (toolNames.has(tool.name)) {
-          this.logger.warn(`Duplicate tool name detected: ${tool.name}`);
+          this.logger.warn(`Duplicate tool name: ${tool.name}`);
+          continue;
         }
         toolNames.add(tool.name);
 
-        return tool;
-      });
+        if (loadMode === "lazy") {
+          const ts = tool.toolSet || "__default";
+          if (!lazyByToolSet.has(ts)) lazyByToolSet.set(ts, []);
+          lazyByToolSet.get(ts)!.push(def);
+        } else if (loadMode === "eager") {
+          eagerTools.set(tool.name, def);
+        }
+        // loadMode === "none" 则跳过
+      }
 
-      if (loadMode === "lazy") {
-        this.logger.debug(`Recording lazy-load plugin ${pluginId}`);
-        lazyTools[pluginId] = pluginTools;
-      } else {
-        groupedTools[pluginId] = pluginTools;
+      // 注册懒加载工具集
+      for (const [ts, tsTools] of lazyByToolSet) {
+        lazyToolSets.set(ts, { tools: tsTools, pluginId: plugin.id });
       }
     }
 
-    if (Object.keys(lazyTools).length > 0) {
-      // 通用工具放入特殊命名空间
-      groupedTools["__universal"] = [...UNIVERSAL_TOOLS];
+    // 有懒加载工具集时添加通用工具
+    if (lazyToolSets.size > 0) {
+      for (const ut of UNIVERSAL_TOOLS) {
+        eagerTools.set(ut.name, ut);
+      }
     }
 
-    const flatCount = Object.values(groupedTools).reduce(
-      (sum, arr) => sum + arr.length,
-      0,
-    );
-    this.logger.debug(
-      `Collected ${flatCount} tools in ${Object.keys(groupedTools).length} plugins, unique names: ${toolNames.size}`,
-    );
-
-    return new ToolRuntime(injectParams, groupedTools, lazyTools);
+    return new ToolRuntime(injectParams, eagerTools, lazyToolSets, toolsConfig);
   }
 
   /**
-   * 获取工具提示词
+   * 标准化 toolsConfig：旧格式转对象 + 合并 MCP 配置
+   */
+  private normalizePluginConfig(
+    toolsConfig: PluginConfig,
+    mcpServersConfig?: any,
+  ): PluginConfig {
+    let merged: Record<string, boolean | string[]>;
+
+    // 旧格式转换
+    if (typeof toolsConfig === "boolean") {
+      // 旧版 true/false → 空对象（后续由 resolvePluginEnabledTools 按类型推导）
+      merged = {};
+    } else if (Array.isArray(toolsConfig)) {
+      // 旧版 string[] → { pluginId: true }
+      merged = {};
+      for (const id of toolsConfig) merged[id] = true;
+    } else {
+      merged = { ...toolsConfig };
+    }
+
+    // MCP 配置直接存入 merged.mcp
+    if (
+      mcpServersConfig &&
+      typeof mcpServersConfig === "object" &&
+      merged.mcp !== false
+    ) {
+      merged.mcp = mcpServersConfig;
+    }
+
+    return merged;
+  }
+
+  /**
+   * 判断插件是否启用：全局与角色直接传入，不提前合并
    *
-   * 基于已构建的 ToolRuntime，收集所有启用工具的提示词，避免重复调用 getLocalToolsList。
-   * @param runtime 工具运行时上下文
-   * @returns 合并后的工具提示词字符串
+   * 规则：
+   * 1. 全局禁用（值为 false）→ 角色不可覆盖
+   * 2. 角色有配置 → 全局已定义则采纳；全局未定义时仅 core 可采纳
+   * 3. 角色未配置、全局有值 → 用全局
+   * 4. 完全未配置 → core=true，其余=false
    */
-  async getPrompts(runtime: ToolRuntime): Promise<string> {
-    const { injectParams, tools: groupedTools, lazyTools } = runtime;
-    const enabledPluginIds = new Set(Object.keys(groupedTools));
-    const lazyPluginIds = new Set(Object.keys(lazyTools));
-
-    // 收集所有提示词片段，带上排序元信息
-    const pieces: PromptPiece[] = [];
-
-    for (const pluginId of [...enabledPluginIds, ...lazyPluginIds]) {
-      const provider = this.providers.get(pluginId);
-
-      if (!provider) continue;
-      const pluginSortKey = this.resolvePromptSortKey(provider, injectParams);
-
-      // persistentPrompt：loadMode: "none" 的插件在 buildToolRuntime 已被排除，不会进入此循环
-      if (provider.getPersistentPrompt) {
-        const persistentPrompt =
-          await provider.getPersistentPrompt(injectParams);
-        if (persistentPrompt) {
-          pieces.push({ content: persistentPrompt, sortKey: pluginSortKey, pluginId });
-        }
+  public resolvePluginEnabledTools(
+    global: PluginConfig,
+    role: PluginConfig,
+    plugin: PluginManifest,
+    tools: ToolHandlerDef[],
+  ): {
+    enabled: boolean;
+    effective: "global" | "role";
+    tools: ToolHandlerDef[];
+  } {
+    const resolve = (
+      val: boolean | string[] | undefined,
+      effective: "global" | "role",
+    ) => {
+      if (val === true) return { enabled: true, effective, tools };
+      if (Array.isArray(val) && val.length > 0) {
+        return {
+          enabled: true,
+          effective,
+          tools: val.map((id) => tools.find((t) => t.name === id))!,
+        };
       }
+      return { enabled: false, effective, tools: [] };
+    };
 
-      // 收集普通 prompt（非 lazy 插件，且 provider 实现了 getPrompt）
-      if (!lazyPluginIds.has(pluginId) && provider.getPrompt) {
-        const prompt = await provider.getPrompt(injectParams);
-        if (prompt) {
-          pieces.push({ content: prompt, sortKey: pluginSortKey, pluginId });
-        }
-      }
+    // 1. 全局禁用 → 不可覆盖
+    if (plugin.id in global && global[plugin.id] === false)
+      return { enabled: false, effective: "global", tools: [] };
+
+    const defaultEnabled = plugin.category === "core";
+
+    // 2. 角色有配置
+    if (plugin.id in role) {
+      // 全局已定义 → 角色可覆盖
+      if (plugin.id in global) return resolve(role[plugin.id], "role");
+      // 全局未定义 + core → 采纳角色
+      if (defaultEnabled) return resolve(role[plugin.id], "role");
+      // 全局未定义 + 非 core → 不可激活
+      return { enabled: false, effective: "global", tools: [] };
     }
 
-    // ★ 按变动频率排序：STATIC 在前，VOLATILE 在后
-    pieces.sort((a, b) => {
-      if (a.sortKey !== b.sortKey) return a.sortKey - b.sortKey;
-      // 同频率下按 pluginId 字典序保证稳定顺序
-      return a.pluginId.localeCompare(b.pluginId);
-    });
-    const metaInfos: string[] = [];
-    for (const pluginId of lazyPluginIds) {
-      const provider = this.providers.get(pluginId);
-      if (!provider) continue;
-      const metadata = provider.getMetadata(injectParams);
+    // 3. 角色未配置，全局有值
+    if (plugin.id in global) return resolve(global[plugin.id], "global");
 
-      const briefDesc = provider.getBriefDescription
-        ? await provider.getBriefDescription(injectParams)
-        : metadata.description;
-      if (briefDesc) {
-        metaInfos.push(`- ${pluginId}:${metadata.displayName},${briefDesc}`);
-      }
-    }
-    if (metaInfos.length > 0) {
-      const metaSection = [
-        "# 可用工具集",
-        "你可以使用以下工具集。当用户请求或任务与工具集的能力相匹配时，您应该主动使用`tool_load`阅读并应用工具集：",
-        "",
-        ...metaInfos,
-        "",
-        "---",
-        "",
-      ].join("\n");
-      const toolGuidePrompt = `## 使用原则
-      
-1. **避免重复**：已了解用法的工具无需重复加载
-2. **仅描述不加载**：如用户仅询问能力或功能介绍，无需加载工具说明
-3. **执行调用**：加载后根据说明使用 \`tool_call\` 执行具体操作
-`;
-
-      pieces.push({ content: metaSection, sortKey: 3, pluginId: "__meta" });
-      pieces.push({ content: toolGuidePrompt, sortKey: 3, pluginId: "__meta" });
-    }
-
-    this.logger.debug(`Collected ${pieces.length} tool prompt sections`);
-    // this.logger.debug(pieces.map(p => p.pluginId + ":" + p.sortKey).join(", "))
-    return pieces.map(p => p.content).join("\n\n");
+    // 4. 完全未配置 → 按类型默认
+    return { enabled: defaultEnabled, effective: "global", tools: tools };
   }
 
-  /**
-   * 解析 provider 的提示词排序优先级。
-   * 根据 metadata 中配置的 promptFrequency 映射为数值用于排序。
-   * 未配置时默认 REGULAR（1），保证向后兼容。
-   */
-  private resolvePromptSortKey(
-    provider: IToolProvider,
-    context?: ProviderContext,
-  ): number {
-    const metadata = provider.getMetadata(context);
-    const frequency = metadata.promptFrequency ?? 'REGULAR';
-    switch (frequency) {
-      case 'STATIC':   return 0;
-      case 'REGULAR':  return 1;
-      case 'VOLATILE': return 2;
-      default:         return 1;
-    }
-  }
+  // ── 批量执行工具 ──
 
   async executeBatch(
     requests: ToolCallRequest[],
@@ -417,51 +285,41 @@ export class ToolOrchestrator {
     const MAX_CONCURRENCY = 10;
     let nextIndex = 0;
 
-    const worker = async (): Promise<void> => {
+    const worker = async () => {
       while (nextIndex < requests.length) {
         if (abortSignal?.aborted) break;
-
         const index = nextIndex++;
         const req = requests[index];
-
         try {
-          const response = await this.execute(req, context, abortSignal);
-          responses[index] = response;
+          responses[index] = await this.execute(req, context, abortSignal);
         } catch (error: any) {
-          const errorMsg = error?.message || String(error);
-          this.logger.error(`Error executing tool ${req.name}:`, error);
           responses[index] = {
             toolCallId: req.id,
             name: req.name,
-            content: `Error: ${errorMsg}`,
+            content: `Error: ${error.message || String(error)}`,
             isError: true,
           };
         }
       }
     };
 
-    // 启动最多 MAX_CONCURRENCY 个 worker 并行消费队列
-    const workerCount = Math.min(MAX_CONCURRENCY, requests.length);
-    const workers: Promise<void>[] = [];
-    for (let i = 0; i < workerCount; i++) {
-      workers.push(worker());
-    }
-    await Promise.all(workers);
+    await Promise.all(
+      Array.from({ length: Math.min(MAX_CONCURRENCY, requests.length) }, () =>
+        worker(),
+      ),
+    );
 
-    // 如果被中止，填充未执行的请求为错误响应
     if (abortSignal?.aborted) {
       for (let i = 0; i < requests.length; i++) {
-        if (!responses[i]) {
+        if (!responses[i])
           responses[i] = {
             toolCallId: requests[i].id,
             name: requests[i].name,
             content: "Error: Request was aborted",
             isError: true,
           };
-        }
       }
     }
-
     return responses;
   }
 
@@ -470,22 +328,12 @@ export class ToolOrchestrator {
     context: ToolRuntime,
     abortSignal?: AbortSignal,
   ): Promise<ToolCallResponse> {
-    // 特殊处理：拦截通用工具调用
     if (request.name === "tool_load") {
-      return await this.universalHandler.handleToolLoad(
-        request,
-        context.injectParams,
-        (pluginId) => this.getProvider(pluginId),
-        (pluginId) => Object.keys(context.lazyTools).some((key) => key === pluginId),
-      );
+      return await this.handleToolLoad(request, context);
     }
-
     if (request.name === "tool_call") {
-      // 解析 tool_call 参数
       const { fullToolName, toolArgs } =
         this.universalHandler.parseToolCall(request);
-
-      // 由编排器统一执行
       return await this.executeTool(
         fullToolName,
         toolArgs,
@@ -494,8 +342,6 @@ export class ToolOrchestrator {
         abortSignal,
       );
     }
-
-    // 使用公共方法执行工具调用
     return await this.executeTool(
       request.name,
       request.arguments,
@@ -506,8 +352,144 @@ export class ToolOrchestrator {
   }
 
   /**
-   * 公共方法：执行工具调用
+   * 处理 tool_load 请求：通过 PluginManager 加载插件详细说明
    */
+  private async handleToolLoad(
+    request: ToolCallRequest,
+    context: ToolRuntime,
+  ): Promise<ToolCallResponse> {
+    const { toolSet } = request.arguments;
+
+    if (!toolSet || typeof toolSet !== "string") {
+      return {
+        toolCallId: request.id,
+        name: request.name,
+        content: "Error: 无效的参数：toolSet 必须是字符串",
+        isError: true,
+      };
+    }
+
+    // 通过 runtime 预建结构直接获取懒加载工具集
+    const lazySet = context.getLazyToolSet(toolSet);
+    if (!lazySet) {
+      return {
+        toolCallId: request.id,
+        name: request.name,
+        content: `Error: 未知的工具集: ${toolSet}`,
+        isError: true,
+      };
+    }
+
+    const plugin = this.pluginManager.getPlugin(lazySet.pluginId);
+    if (!plugin || !plugin.enabled) {
+      return {
+        toolCallId: request.id,
+        name: request.name,
+        content: `Error: 工具集 ${toolSet} 不可用`,
+        isError: true,
+      };
+    }
+
+    try {
+      // 直接从 lazySet 获取工具定义
+      const tools = lazySet.tools;
+
+      // 获取该 toolSet 关联的 lazy 提示词
+      let toolUsagePrompt = "";
+      try {
+        const prompts = await this.pluginManager.collectLazyPrompts(
+          context.injectParams,
+        );
+        const tsPrompts = prompts.filter(
+          (p: any) => p.pluginId === lazySet.pluginId,
+        );
+        if (tsPrompts.length > 0) {
+          toolUsagePrompt = tsPrompts.map((p: any) => p.content).join("\n\n");
+        }
+      } catch {}
+
+      // 工具和提示词都为 0 才报错
+      if (tools.length === 0 && !toolUsagePrompt) {
+        return {
+          toolCallId: request.id,
+          name: request.name,
+          content: `Error: 工具集 ${toolSet} 下没有可加载的内容`,
+          isError: true,
+        };
+      }
+
+      const responseParts: string[] = [];
+
+      if (tools.length > 0) {
+        const toolDescriptions = tools
+          .map((tool) => {
+            const params = tool.parameters?.properties || {};
+            const required = tool.parameters?.required || [];
+
+            const paramList = Object.entries(params)
+              .map(([key, value]: [string, any]) => {
+                const isRequired = required.includes(key)
+                  ? "（必填）"
+                  : "（可选）";
+                const defaultValue =
+                  value.default !== undefined
+                    ? ` 默认值: ${value.default}`
+                    : "";
+                return `  - ${key}: ${value.description || "无描述"} ${isRequired}${defaultValue}`;
+              })
+              .join("\n");
+
+            return [
+              `### ${tool.name}`,
+              `**功能**: ${tool.description}`,
+              `**参数**:\n${paramList}`,
+              "",
+            ].join("\n");
+          })
+          .join("\n");
+
+        responseParts.push(
+          `# ${toolSet} 工具集详细说明`,
+          "",
+          `该工具集包含以下 ${tools.length} 个工具：`,
+          "",
+          toolDescriptions,
+        );
+      }
+
+      if (toolUsagePrompt) {
+        if (responseParts.length > 0) responseParts.push("---", "");
+        responseParts.push(toolUsagePrompt);
+      }
+
+      if (responseParts.length > 0) {
+        responseParts.push(
+          "---",
+          "",
+          "**使用方式**:",
+          "直接调用工具，格式为：`tool_name`，或者使用`tool_call`间接调用",
+          "",
+          "现在你可以根据上述说明调用相应的工具了。",
+        );
+      }
+
+      return {
+        toolCallId: request.id,
+        name: request.name,
+        content: responseParts.join("\n"),
+        isError: false,
+      };
+    } catch (error: any) {
+      this.logger.error(`Error executing tool_load`, error);
+      return {
+        toolCallId: request.id,
+        name: request.name,
+        content: `Error: ${error.message}`,
+        isError: true,
+      };
+    }
+  }
+
   private async executeTool(
     fullToolName: string,
     toolArgs: any,
@@ -515,91 +497,49 @@ export class ToolOrchestrator {
     context: ToolRuntime,
     abortSignal?: AbortSignal,
   ): Promise<ToolCallResponse> {
-    // 通过 ToolRuntime 查表定位工具所属插件
-    const resolved = context.resolveTool(fullToolName);
-    if (!resolved) {
+    if (!context.hasTool(fullToolName))
       throw new Error(`Tool ${fullToolName} is not available or disabled`);
-    }
 
-    const { pluginId } = resolved;
-
-    // 验证工具是否存在
-    const provider = this.providers.get(pluginId);
-
-    if (!provider) {
-      throw new Error(`未知的插件: ${pluginId}`);
-    }
-
-    // 检查工具的加载模式
-    const metadata = provider.getMetadata(context.injectParams);
-    const loadMode = metadata.loadMode || "eager";
-
-    if (loadMode === "none") {
-      throw new Error(
-        `Tool provider ${pluginId} is disabled (loadMode: none)`,
-      );
-    }
-
-    // 构造工具调用请求
-    const toolRequest: ToolCallRequest = {
-      id: toolCallId,
-      name: fullToolName,
-      arguments: toolArgs,
-    };
+    const allGroups = await this.pluginManager.getTools(context.injectParams);
+    const allTools = allGroups.flatMap((g) => g.tools);
+    const toolEntry = allTools.find((t) => t.name === fullToolName);
+    if (!toolEntry) throw new Error(`Tool handler not found: ${fullToolName}`);
 
     try {
-      // 提供者只返回内容字符串，异常由这里捕获
-      let content = await provider.execute(
-        toolRequest,
+      // Zod 运行时校验（仅当工具通过 inputSchema 注册时）
+      let validatedArgs = toolArgs;
+      if (toolEntry._zodSchema) {
+        const result = toolEntry._zodSchema.safeParse(toolArgs);
+        if (!result.success) {
+          return {
+            toolCallId,
+            name: fullToolName,
+            content: `参数校验失败：${result.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`).join("; ")}`,
+            isError: true,
+          };
+        }
+        validatedArgs = result.data;
+      }
+
+      let content = await toolEntry.handler(
+        validatedArgs,
         context.injectParams,
         abortSignal,
       );
 
-      // 检查结果长度，如果超过 10000 字符则截断
       const MAX_CONTENT_LENGTH = 50000;
       if (content && content.length > MAX_CONTENT_LENGTH) {
-        const truncatedContent = content.substring(0, MAX_CONTENT_LENGTH);
         const omittedLength = content.length - MAX_CONTENT_LENGTH;
         content = JSON.stringify({
-          warning: `Content truncated. Omitted ${omittedLength} characters. Use other tools or adjust query conditions to view complete content.`,
-          tool_truncated: truncatedContent,
+          warning: `Content truncated. Omitted ${omittedLength} characters.`,
+          tool_truncated: content.substring(0, MAX_CONTENT_LENGTH),
           omitted_length: omittedLength,
         });
-        this.logger.warn(
-          `Tool ${fullToolName} output truncated: ${content.length} chars (original: ${content.length + omittedLength} chars)`,
-        );
       }
-
-      return {
-        toolCallId,
-        name: fullToolName,
-        content,
-        isError: false,
-      };
+      return { toolCallId, name: fullToolName, content, isError: false };
     } catch (error: any) {
-      // 提取错误信息，处理各种异常类型（包括 null、undefined、非 Error 对象）
-      let errorMsg: string;
-      let errorStack: string | undefined;
-
-      if (error instanceof Error) {
-        errorMsg = error.message;
-        errorStack = error.stack;
-      } else if (error && typeof error === "object" && error.message) {
-        errorMsg = error.message;
-        errorStack = error.stack;
-      } else {
-        errorMsg = String(error);
-      }
-
-      // 记录详细错误信息，包含堆栈
-      const logMessage = `Error executing tool ${fullToolName}: ${errorMsg}`;
-      if (errorStack) {
-        this.logger.error(logMessage + `\nStack: ${errorStack}`);
-      } else {
-        this.logger.error(logMessage);
-      }
-
-      // 统一封装错误响应
+      const errorMsg = error instanceof Error ? error.message : String(error);
+      this.logger.error(`Error executing tool ${fullToolName}: ${errorMsg}`);
       return {
         toolCallId,
         name: fullToolName,
@@ -609,48 +549,31 @@ export class ToolOrchestrator {
     }
   }
 
-  async getLocalToolsList(): Promise<ToolMetadata[]> {
-    const toolsList: ToolMetadata[] = [];
-    const globalToolsConfig = await this.settingsStorage.getSettings("tools");
-    for (const [pluginId, provider] of this.providers.entries()) {
-      const metadata = provider.getMetadata({} as ProviderContext);
+  // ── 工具列表（前端 UI 用） ──
 
-      // 根据 provider 的 type 字段确定默认值：core 默认启用，extended 默认禁用
-      const defaultEnabled = metadata.type !== "extended";
-      let isEnabled = defaultEnabled;
-      if (typeof globalToolsConfig === "boolean") {
-        isEnabled = globalToolsConfig;
-      } else if (typeof globalToolsConfig === "object") {
-        const config = globalToolsConfig[pluginId];
-        if (typeof config === "boolean") {
-          isEnabled = config;
-        } else if (Array.isArray(config)) {
-          isEnabled = true;
-        }
-        // 未配置时保持 defaultEnabled
-      }
+  async getLocalToolsList(roleCfg?: PluginConfig): Promise<any[]> {
+    const toolsList: any[] = [];
 
-      let tools: any[] = [];
-      try {
-        tools = await provider.getTools(true, {} as ProviderContext);
+    for (const instance of await this.resolveAvailableTools(roleCfg)) {
+      const { enabled, effective, plugin, enabledTools, allTools } = instance;
 
-        // 工具名由 Provider 保证全局唯一
-      } catch (error: any) {
-        this.logger.error(
-          `Error getting tools from provider ${pluginId}: ${error.message}`,
-        );
-      }
-
-      const toolMetadata: ToolMetadata = {
-        ...metadata,
-        name: pluginId,
-        enabled: isEnabled,
-        tools,
-      };
-
-      toolsList.push(toolMetadata);
+      toolsList.push({
+        pluginId: plugin.id,
+        effective,
+        name: plugin.id,
+        displayName: plugin.name,
+        description: plugin.description,
+        category: plugin.category,
+        enabled,
+        isMcp: plugin.id === "mcp",
+        tools: allTools.map((t) => ({
+          enabled: enabledTools.some((e) => e.name === t.name),
+          name: t.name,
+          description: t.description,
+          parameters: t.parameters as any,
+        })),
+      });
     }
-
     return toolsList;
   }
 }

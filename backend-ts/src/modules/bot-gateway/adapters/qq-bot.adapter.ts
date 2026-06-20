@@ -151,18 +151,20 @@ export class QQBotAdapter extends BaseBotAdapter {
     }
 
     try {
-      // 根据消息来源类型调用对应的发送方法
-      // sourceType 在接收消息时已经确定(private/group)
-
-      this.logger.log(
-        `Sending message: sourceType=${response.sourceType}, conversationId=${response.conversationId}, content=${response.content}`,
-      );
-
-      // 构建消息参数
+      // 构建消息参数（QQ API 对 markdown 支持有限，统一使用纯文本）
       const params: any = {
         msg_type: 0, // 0=文本消息
         content: response.content,
       };
+
+      this.logger.log(
+        `Sending message: sourceType=${response.sourceType}`,
+      );
+
+      // 群聊被动回复时必须带上 msg_id，否则 QQ API 视为主动消息需额外权限
+      if (response.sourceType === "group" && response.replyToMessageId) {
+        params.msg_id = response.replyToMessageId;
+      }
 
       // 如果有附件，需要特殊处理
       if (

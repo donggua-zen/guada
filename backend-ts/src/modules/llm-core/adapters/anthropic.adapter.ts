@@ -430,20 +430,31 @@ export class AnthropicAdapter implements IProtocolAdapter {
   private formatMessages(
     messages: MessageRecord[],
   ): Anthropic.Messages.MessageParam[] {
-    return messages.map((msg) => {
-      // 处理 tool 角色 → tool_result content block
+    const result: Anthropic.Messages.MessageParam[] = [];
+
+    for (let i = 0; i < messages.length; i++) {
+      const msg = messages[i];
+
+      // 合并连续的 tool 角色消息 → 单条 user 消息，每个工具一个 tool_result block
       if (msg.role === "tool") {
-        return {
-          role: "user",
-          content: [
-            {
-              type: "tool_result",
-              tool_use_id: msg.toolCallId || "",
-              content: typeof msg.content === "string" ? msg.content : JSON.stringify(msg.content),
-              is_error: false,
-            },
-          ],
-        } as Anthropic.Messages.MessageParam;
+        const toolBlocks: Anthropic.Messages.ContentBlock[] = [];
+        // 收集当前及后续所有连续的 tool 消息
+        while (i < messages.length && messages[i].role === "tool") {
+          const toolMsg = messages[i];
+          toolBlocks.push({
+            type: "tool_result",
+            tool_use_id: toolMsg.toolCallId || "",
+            content:
+              typeof toolMsg.content === "string"
+                ? toolMsg.content
+                : JSON.stringify(toolMsg.content),
+            is_error: false,
+          } as any);
+          i++;
+        }
+        i--; // for 循环会再 ++，抵消
+        result.push({ role: "user", content: toolBlocks } as any);
+        continue;
       }
 
       // 处理 assistant 消息：text + thinking（有签名时）+ tool_use
@@ -487,22 +498,97 @@ export class AnthropicAdapter implements IProtocolAdapter {
 
         // 只有在有实际内容块时才返回
         if (blocks.length > 0) {
-          return { role: "assistant", content: blocks };
+          result.push({ role: "assistant", content: blocks });
+        } else {
+          // 没有内容块则降级为纯文本（兼容旧数据）
+          const content = msg.content || "";
+          result.push({ role: "assistant", content: typeof content === "string" ? content : JSON.stringify(content) });
         }
-        // 没有内容块则降级为纯文本（兼容旧数据）
-        const content = msg.content || "";
-        return { role: "assistant", content: typeof content === "string" ? content : JSON.stringify(content) } as Anthropic.Messages.MessageParam;
+        continue;
       }
 
       // Anthropic 的 role 只支持 user / assistant
-      // 此处 role 只能是 user 或 system（assistant 已在上面处理）
       const content = msg.content || "";
-
-      return {
-        role: msg.role === "user" ? "user" : "user", // system → user
+      result.push({
+        role: "user",
         content: typeof content === "string" ? content : JSON.stringify(content),
-      } as Anthropic.Messages.MessageParam;
-    });
+      } as Anthropic.Messages.MessageParam);
+    }
+
+    // 降级检查：确保每条 assistant 消息中的 tool_use 都有对应的 tool_result
+    // 处理场景：用户中断、engine 崩溃等导致工具结果缺失
+    this.patchMissingToolResults(result);
+
+    return result;
+  }
+
+  /**
+   * 检查并修补缺失的 tool_result block。
+   * 当 assistant 消息中的 tool_use 在紧随的下一条消息中找不到对应 tool_result 时，
+   * 注入一个空的 tool_result block 并记录警告，避免 Anthropic API 报 400 错误。
+   */
+  private patchMissingToolResults(messages: Anthropic.Messages.MessageParam[]): void {
+    for (let i = 0; i < messages.length; i++) {
+      const msg = messages[i];
+      if (msg.role !== "assistant") continue;
+
+      // 提取本消息中所有的 tool_use id
+      const blocks = Array.isArray(msg.content) ? msg.content : [];
+      const toolUseIds = blocks
+        .filter((b: any) => b.type === "tool_use")
+        .map((b: any) => b.id)
+        .filter(Boolean);
+
+      if (toolUseIds.length === 0) continue;
+
+      // 检查下一条消息是否有 tool_result
+      const nextMsg = messages[i + 1];
+      const nextBlocks = nextMsg && Array.isArray(nextMsg.content) ? nextMsg.content : [];
+
+      // 收集下一条消息中已有的 tool_result id
+      const existingResultIds = new Set(
+        nextBlocks
+          .filter((b: any) => b.type === "tool_result")
+          .map((b: any) => b.tool_use_id)
+          .filter(Boolean),
+      );
+
+      const missingIds = toolUseIds.filter((id: string) => !existingResultIds.has(id));
+      if (missingIds.length === 0) continue;
+
+      this.logger.warn(
+        `检测到 ${missingIds.length} 个 tool_use 缺少对应的 tool_result: ${missingIds.join(", ")}，将注入空回复`,
+      );
+
+      // 备用方案 A：如果下一条消息存在但缺少部分 tool_result → 补全到该消息中
+      if (nextMsg && nextBlocks.length > 0) {
+        for (const id of missingIds) {
+          nextBlocks.push({
+            type: "tool_result",
+            tool_use_id: id,
+            content: "[工具调用结果缺失：该工具调用被中断或未完成，请根据实际情况继续处理]",
+            is_error: true,
+          } as any);
+        }
+        continue;
+      }
+
+      // 备用方案 B：下一条消息完全不存在（数组末尾）→ 注入一条仅含 tool_result 的 user 消息
+      if (nextMsg) {
+        // 下一条消息存在但不是 content 数组格式，无法修补 → 跳过
+        continue;
+      }
+
+      messages.splice(i + 1, 0, {
+        role: "user",
+        content: missingIds.map((id: string) => ({
+          type: "tool_result",
+          tool_use_id: id,
+          content: "[工具调用结果缺失：该工具调用被中断或未完成，请根据实际情况继续处理]",
+          is_error: true,
+        })),
+      } as any);
+    }
   }
 
   /**

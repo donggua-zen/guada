@@ -11,6 +11,7 @@ import {
   ICompressionStrategy,
 } from "./interfaces";
 import { MESSAGE_STORE_TOKEN, COMPRESSION_STRATEGY_TOKEN } from "./interfaces";
+import { PluginManager } from "../plugins/plugin.manager";
 
 /**
  * SessionContext 工厂
@@ -28,24 +29,20 @@ export class SessionContextFactory {
     private modelRepository: ModelRepository,
     private settingsStorage: SettingsStorage,
     private toolOrchestrator: ToolOrchestrator,
+    private pluginManager: PluginManager,
     private workspaceService: WorkspaceService,
     @Inject(MESSAGE_STORE_TOKEN) private messageStore: IMessageStore,
     @Inject(COMPRESSION_STRATEGY_TOKEN) private compressionStrategy: ICompressionStrategy,
     private tokenizerService: TokenizerService,
   ) {}
 
-  /**
-   * 从持久化会话构建 ISessionContext
-   *
-   * @param session 原始会话对象（应包含 model 和 character 关联数据）
-   * @returns 类型安全的会话上下文
-   */
   async createFromSession(session: any): Promise<ISessionContext> {
     const context = new PersistentSessionContext(
       session,
       this.modelRepository,
       this.settingsStorage,
       this.toolOrchestrator,
+      this.pluginManager,
       this.workspaceService,
       this.messageStore,
       this.compressionStrategy,

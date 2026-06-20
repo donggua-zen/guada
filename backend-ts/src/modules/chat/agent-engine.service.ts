@@ -3,6 +3,7 @@ import * as path from "path";
 import * as fs from "fs";
 import { LLMService } from "../llm-core/llm.service";
 import { ToolOrchestrator } from "../tools/tool-orchestrator.service";
+import { PluginManager } from "../plugins/plugin.manager";
 import { MessageRecord, LLMResponseChunk } from "../llm-core/types/llm.types";
 import { RequestContext } from "../../common/context/request-context";
 import { throttledStream } from "./utils/stream-throttle.util";
@@ -68,6 +69,7 @@ export class AgentEngine {
 
   constructor(
     private toolOrchestrator: ToolOrchestrator,
+    private pluginManager: PluginManager,
     private llmService: LLMService,
     private displayManager: ToolCallDisplayUtil,
   ) {}
@@ -936,29 +938,32 @@ export class AgentEngine {
 
     const modelConfig = sessionContext.getModelConfig();
 
-    // 获取记忆工具完整使用说明和当前记忆内容
-    const memoryProvider = this.toolOrchestrator.getProvider("memory");
-    const memoryGuide = memoryProvider?.getPrompt
-      ? await memoryProvider.getPrompt(sessionContext)
-      : "";
-    const memoryContent = memoryProvider?.getPersistentPrompt
-      ? await memoryProvider.getPersistentPrompt(sessionContext)
-      : "";
+    // 通过 PluginManager 获取记忆提示词（guide=静态说明, content=动态记忆内容）
+    const memoryPrompts = this.pluginManager.collectPluginPrompts
+      ? await this.pluginManager.collectPluginPrompts("memory", sessionContext)
+      : [];
+    const memoryGuide = memoryPrompts
+      .filter(p => p.frequency !== "VOLATILE")
+      .map(p => p.content).join("\n") || "";
+    const memoryContent = memoryPrompts
+      .filter(p => p.frequency === "VOLATILE")
+      .map(p => p.content).join("\n") || "";
 
     if (!memoryGuide) return;
 
     // 构建专属运行时：仅含受限的文件工具，不依赖原会话的 toolContext
-    const fileProvider = this.toolOrchestrator.getProvider("file");
-    if (!fileProvider) return;
-
-    const ALLOWED_TOOL_NAMES = ["read", "list", "write", "edit"];
-    const fileTools = await fileProvider.getTools(
-      ALLOWED_TOOL_NAMES,
-      sessionContext,
-    );
+    const allGroups = await this.pluginManager.getTools({ sessionId: sessionContext.sessionId, sessionType: sessionContext.sessionType, workspacePath: sessionContext.workspacePath, userId: sessionContext.userId });
+    const allFileTools = allGroups.find(g => g.pluginId === "file")?.tools || [];
+    const fileTools = allFileTools
+      .filter((t) => ["read", "list", "write", "edit"].includes(t.name))
+      .map((t) => ({
+        name: t.name,
+        description: t.description,
+        parameters: t.parameters as any,
+      }));
     if (fileTools.length === 0) return;
 
-    const shadowRuntime = new ToolRuntime(sessionContext, { file: fileTools });
+    const shadowRuntime = new ToolRuntime(sessionContext, new Map(fileTools.map(t => [t.name, t])), new Map());
 
     // 组装指令消息（history 中不含系统提示词，此处自行注入）
     const instructionParts: string[] = [

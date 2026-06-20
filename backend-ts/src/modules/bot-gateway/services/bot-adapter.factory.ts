@@ -43,7 +43,7 @@ export class BotAdapterFactory implements IBotAdapterFactory {
       case 'wecom':
         return new WeComAiBotAdapter(this.platformUtils);
       case 'mock':
-        return new MockBotAdapter();
+        return new MockBotAdapter(this.platformUtils);
       // TODO: 微信公众号适配器（已注释，使用 OneBots）
       // case 'wechat':
       //   return new WeChatBotAdapter(this.platformUtils);
