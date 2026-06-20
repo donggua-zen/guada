@@ -329,6 +329,153 @@ export class SkillsController {
   }
 
   /**
+   * 从 URL 安装技能（下载 ZIP 包）
+   */
+  @Post('install-from-url')
+  async installFromUrl(@Body() body: {
+    url: string;
+    force?: boolean;
+  }): Promise<{ success: boolean; skillId?: string; message: string }> {
+    try {
+      const { url, force } = body;
+
+      if (!url) {
+        return { success: false, message: 'URL is required' };
+      }
+
+      // 验证 URL 格式
+      if (!url.startsWith('http://') && !url.startsWith('https://')) {
+        return { success: false, message: 'Invalid URL. Must start with http:// or https://' };
+      }
+
+      this.logger.log(`Downloading skill from URL: ${url}`);
+
+      // 创建临时目录
+      const tempDirName = `skill-url-${Date.now()}`;
+      const tempDir = path.join(process.cwd(), 'temp', tempDirName);
+      await fs.mkdir(tempDir, { recursive: true });
+
+      // 下载 ZIP 文件
+      const zipPath = path.join(tempDir, 'skill.zip');
+      const response = await fetch(url);
+      if (!response.ok) {
+        await fs.rm(tempDir, { recursive: true, force: true });
+        return { success: false, message: `Failed to download ZIP: HTTP ${response.status} ${response.statusText}` };
+      }
+      const buffer = Buffer.from(await response.arrayBuffer());
+      await fs.writeFile(zipPath, buffer);
+
+      // 验证 ZIP 文件
+      let zip: AdmZip;
+      try {
+        zip = new AdmZip(zipPath);
+      } catch {
+        await fs.rm(tempDir, { recursive: true, force: true });
+        return { success: false, message: 'Downloaded file is not a valid ZIP archive' };
+      }
+
+      // 解压 ZIP
+      zip.extractAllTo(tempDir, true);
+
+      // 智能查找 SKILL.md 文件（两级目录搜索）
+      const skillInfo = await this.findSkillWithSmartLevel(tempDir);
+      if (!skillInfo) {
+        await fs.rm(tempDir, { recursive: true, force: true });
+        return { success: false, message: 'No SKILL.md found in the downloaded ZIP (searched up to 2 levels deep)' };
+      }
+
+      const { skillMdPath, skillDir } = skillInfo;
+
+      // 读取 SKILL.md 获取技能元数据
+      const skillMdContent = await fs.readFile(skillMdPath, 'utf-8');
+      const frontmatterMatch = skillMdContent.match(/^---\s*\n([\s\S]*?)\n---/);
+      let manifestName = '';
+      let description = '';
+      if (frontmatterMatch) {
+        const yamlContent = frontmatterMatch[1];
+        const nameMatch = yamlContent.match(/^name:\s*(.+)/im);
+        if (nameMatch) {
+          manifestName = nameMatch[1].trim().replace(/^['"]|['"]$/g, '');
+        }
+        const descMatch = yamlContent.match(/description:\s*(.+)/i);
+        if (descMatch) {
+          description = descMatch[1].trim().replace(/^['"]|['"]$/g, '');
+        }
+      }
+
+      if (!manifestName) {
+        await fs.rm(tempDir, { recursive: true, force: true });
+        return { success: false, message: 'Skill name not found in SKILL.md frontmatter' };
+      }
+
+      // 使用公共验证器验证技能元数据
+      const validationResult = SkillMetadataValidator.validateMetadata(
+        manifestName,
+        description,
+        manifestName,
+      );
+
+      if (!validationResult.isValid) {
+        await fs.rm(tempDir, { recursive: true, force: true });
+        return { success: false, message: validationResult.errors.join('; ') };
+      }
+
+      // 检查是否和内置技能冲突
+      const systemDir = path.join(this.skillsDir, '.system', manifestName);
+      try {
+        await fs.access(systemDir);
+        await fs.rm(tempDir, { recursive: true, force: true });
+        return { success: false, message: `Skill '${manifestName}' is a system built-in skill and cannot be overwritten.` };
+      } catch {
+        // 不是内置技能，继续
+      }
+
+      // 移动到 skills 目录
+      const targetDir = path.join(this.skillsDir, manifestName);
+
+      // 检查是否已存在
+      try {
+        await fs.access(targetDir);
+
+        if (!force) {
+          await fs.rm(tempDir, { recursive: true, force: true });
+          return { success: false, message: `Skill '${manifestName}' already exists. Use force=true to overwrite.` };
+        }
+
+        // 强制覆盖：删除旧目录
+        this.logger.log(`Force overwriting existing skill from URL: ${manifestName}`);
+        await fs.rm(targetDir, { recursive: true, force: true });
+      } catch {
+        // 目录不存在，继续
+      }
+
+      // 确保目标父目录存在
+      await fs.mkdir(path.dirname(targetDir), { recursive: true });
+
+      // 移动目录（使用 copy + rm 替代 rename，以支持跨磁盘分区移动）
+      await this.copyDirectory(skillDir, targetDir);
+      await fs.rm(skillDir, { recursive: true, force: true });
+
+      // 清理临时文件
+      await fs.rm(tempDir, { recursive: true, force: true });
+
+      // 触发扫描以加载新 Skill
+      await this.orchestrator.triggerScan();
+
+      this.logger.log(`Successfully installed skill from URL: ${manifestName}${force ? ' (forced overwrite)' : ''}`);
+      return {
+        success: true,
+        skillId: manifestName,
+        message: `Skill '${manifestName}' installed successfully${force ? ' (overwritten)' : ''}`
+      };
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      this.logger.error(`Failed to install skill from URL: ${errorMessage}`);
+      return { success: false, message: `Installation failed: ${errorMessage}` };
+    }
+  }
+
+  /**
    * 更新技能（从 Git 重新拉取）
    */
   @Post(':id/update')

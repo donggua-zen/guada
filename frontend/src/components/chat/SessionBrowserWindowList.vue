@@ -1,16 +1,18 @@
 <template>
-  <div v-if="isElectron && sessionWindows.length > 0" class="session-window-list">
+  <div v-if="isElectron" class="session-window-list">
     <!-- 头部 -->
     <div
-      class="shrink-0 flex items-center justify-between px-2 py-1.5 border-b border-gray-200 dark:border-[#2e3035] bg-white dark:bg-[#1a1b1e]">
-      <h3 class="text-sm font-semibold text-gray-700 dark:text-[#e8e9ed] whitespace-nowrap mr-1.5">
+      class="shrink-0 flex items-center justify-between px-2 py-3  bg-white dark:bg-[#1a1b1e]">
+      <h3 class="text-sm font-normal text-gray-500 dark:text-[#8b8d95] whitespace-nowrap mx-2">
         浏览器窗口
-        <span class="ml-1 text-xs text-gray-400 font-normal">({{ sessionWindows.length }})</span>
       </h3>
     </div>
 
     <!-- 窗口列表 -->
-    <div class="window-items overflow-y-auto py-2" style="max-height: 160px;">
+    <div v-if="sessionWindows.length === 0" class="text-center py-6 text-gray-400 dark:text-[#6b6d73] text-xs">
+        暂无浏览器窗口
+      </div>
+    <div v-else class="window-items overflow-y-auto py-2" style="max-height: 160px;">
       <div v-for="win in sessionWindows" :key="win.windowId"
         class="window-item px-2 py-1.5 flex items-center gap-2 cursor-pointer transition-all duration-200"
         :class="{

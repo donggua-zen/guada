@@ -158,6 +158,17 @@ const isPane2Pixel = computed(() => isPixelMode(props.pane2.size));
  */
 const isPane2Auto = computed(() => isAutoMode(props.pane2.size));
 
+// 分割条宽度（像素）
+const SPLITTER_SIZE = 4;
+
+/**
+ * 计算百分比模式下扣除了分割条宽度后的 pane 尺寸
+ */
+function calcPctWithSplitter(pct: number): string {
+  var share = SPLITTER_SIZE * pct / 100;
+  return "calc(" + pct + "% - " + share + "px)";
+}
+
 /**
  * 获取容器当前尺寸
  */
@@ -275,9 +286,9 @@ const pane1Style = computed(() => {
       minHeight: '0'
     } as Record<string, string>;
   }
-  // 百分比模式
+  // 百分比模式（扣除分割条宽度）
   return {
-    [sizeProp]: currentSize1.value + '%',
+    [sizeProp]: calcPctWithSplitter(currentSize1.value as number),
     flexShrink: 0
   } as Record<string, string>;
 });
@@ -316,9 +327,9 @@ const pane2Style = computed(() => {
       minHeight: '0'
     } as Record<string, string>;
   }
-  // 百分比模式
+  // 百分比模式（扣除分割条宽度）
   return {
-    [sizeProp]: currentSize2.value + '%',
+    [sizeProp]: calcPctWithSplitter(currentSize2.value as number),
     flexShrink: 0
   } as Record<string, string>;
 });
@@ -441,10 +452,15 @@ function handleSplitterMouseMove(e: MouseEvent) {
       return;
     }
 
-    // 百分比模式（原有逻辑）
+    // 百分比模式
     if (containerSize === 0) return;
 
-    const deltaPercent = (delta / containerSize) * 100;
+    // 扣除分割条后的可用空间
+    const availableSpace = containerSize - SPLITTER_SIZE;
+    if (availableSpace <= 0) return;
+
+    // delta 相对于可用空间的百分比
+    const deltaPercent = (delta / availableSpace) * 100;
 
     let newSize1 = (resizeStartSize1 as number) + deltaPercent;
     let newSize2 = (resizeStartSize2 as number) - deltaPercent;
@@ -476,8 +492,11 @@ function handleSplitterMouseMove(e: MouseEvent) {
     }
 
     // 直接操作 DOM，避免 Vue 响应式更新导致的重渲染
-    pane1Ref.value.style[sizeProp] = newSize1 + '%';
-    pane2Ref.value.style[sizeProp] = newSize2 + '%';
+    // 拖拽中使用像素值精确控制，避免 calc() 的百分比/像素混合计算偏差
+    const size1Px = availableSpace * newSize1 / 100;
+    const size2Px = availableSpace * newSize2 / 100;
+    pane1Ref.value.style[sizeProp] = size1Px + 'px';
+    pane2Ref.value.style[sizeProp] = size2Px + 'px';
 
     // 触发 resize 事件
     emit('resize', {
@@ -518,10 +537,13 @@ function handleSplitterMouseUp() {
       const style2 = pane2Ref.value.style[sizeProp];
       if (style2) currentSize2.value = style2;
     } else {
+      // 从像素值反算百分比（相对可用空间）
+      const containerSize = getContainerSize();
+      const availableSpace = containerSize - SPLITTER_SIZE;
       const style1 = pane1Ref.value.style[sizeProp];
       const style2 = pane2Ref.value.style[sizeProp];
-      if (style1) currentSize1.value = parseFloat(style1);
-      if (style2) currentSize2.value = parseFloat(style2);
+      if (style1 && availableSpace > 0) currentSize1.value = parseFloat(style1) / availableSpace * 100;
+      if (style2 && availableSpace > 0) currentSize2.value = parseFloat(style2) / availableSpace * 100;
     }
   }
 

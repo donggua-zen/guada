@@ -1127,6 +1127,19 @@ class ApiService {
   }
 
   /**
+   * 从 URL 安装 Skill（服务端下载 ZIP）
+   */
+  async installSkillFromUrl(
+    url: string,
+    force: boolean = false,
+  ): Promise<{ success: boolean; skillId?: string; message: string }> {
+    return await this._request("/skills/install-from-url", {
+      method: "POST",
+      data: { url, force },
+    });
+  }
+
+  /**
    * 卸载 Skill
    */
   async uninstallSkill(

@@ -151,9 +151,12 @@
                     class="rounded-lg border border-gray-200 dark:border-[#232428] overflow-hidden bg-white dark:bg-[#232428] transition-all hover:border-(--color-primary)">
                     <div class="p-5 pb-4">
                         <div class="flex items-start justify-between gap-2 mb-2">
-                            <h3 class="text-lg font-semibold text-gray-900 dark:text-[#e8e9ed] flex-1 truncate">
-                                {{ skill.name }}
-                            </h3>
+                            <div class="flex-1 min-w-0">
+                                <h3 class="text-lg font-semibold text-gray-900 dark:text-[#e8e9ed] truncate">
+                                    {{ skill.name }}
+                                </h3>
+                                <p class="text-xs text-gray-400 dark:text-[#6b6d73] mt-0.5 truncate">{{ skill.id }}</p>
+                            </div>
                         </div>
 
                         <p class="text-sm text-gray-600 dark:text-[#8b8d95] mb-3 line-clamp-3 min-h-[3.75rem]">
@@ -167,8 +170,10 @@
                                     {{ label }}
                                 </el-tag>
                             </div>
-                            <el-button v-if="skill.detailUrl" size="small" @click="handleOpenDetailUrl(skill)">
-                                获取
+                            <el-button size="small"
+                                :type="skill.localStatus === 'updatable' ? 'warning' : undefined"
+                                @click="handleShowMarketInstallDialog(skill)">
+                                {{ installingFromMarket.has(skill.id) ? '安装中...' : getMarketButtonLabel(skill) }}
                             </el-button>
                         </div>
                     </div>
@@ -268,6 +273,42 @@
                 <el-button type="primary" @click="handleInstallSkill" :loading="installing" :disabled="!selectedFile">
                     安装
                 </el-button>
+            </template>
+        </el-dialog>
+
+        <!-- 市场技能安装对话框 -->
+        <el-dialog v-model="showMarketInstallDialog" title="安装技能" width="420px" align-center destroy-on-close>
+            <div v-if="selectedMarketSkill" class="py-2">
+                <h3 class="text-lg font-semibold text-gray-900 dark:text-[#e8e9ed] mb-2">
+                    {{ selectedMarketSkill.name }}
+                </h3>
+                <p class="text-sm text-gray-600 dark:text-[#8b8d95] mb-4">
+                    {{ selectedMarketSkill.description || '暂无描述' }}
+                </p>
+                <div class="flex flex-col gap-3 market-install-actions">
+                    <!-- 直接安装（ZIP） -->
+                    <el-button v-if="getInstallUrl(selectedMarketSkill, 'zip')" type="primary" size="large"
+                        :loading="installingFromMarket.has(selectedMarketSkill.id)"
+                        @click="handleInstallFromMarketUrl(selectedMarketSkill)">
+                        <template #icon>
+                            <ArrowDownload16Regular />
+                        </template>
+                        {{ getMarketButtonLabel(selectedMarketSkill) }}
+                    </el-button>
+                    <!-- 访问仓库（Git） -->
+                    <el-button v-if="getInstallUrl(selectedMarketSkill, 'git')" size="large"
+                        @click="handleViewSourceCode(selectedMarketSkill)">
+                        访问仓库
+                    </el-button>
+                    <!-- 查看详情 -->
+                    <el-button v-if="selectedMarketSkill.detailUrl" size="large"
+                        @click="handleOpenDetailUrl(selectedMarketSkill)">
+                        查看详情
+                    </el-button>
+                </div>
+            </div>
+            <template #footer>
+                <el-button @click="showMarketInstallDialog = false">取消</el-button>
             </template>
         </el-dialog>
     </div>
@@ -447,6 +488,103 @@ const marketSkills = ref<MarketSkillWithStatus[]>([])
 const loadingMarket = ref(false)
 const marketError = ref<string | null>(null)
 
+// 市场安装弹窗相关状态
+const showMarketInstallDialog = ref(false)
+const selectedMarketSkill = ref<MarketSkillWithStatus | null>(null)
+const installingFromMarket = ref<Set<string>>(new Set())
+
+/**
+ * 获取指定类型的安装 URL
+ */
+function getInstallUrl(skill: MarketSkillWithStatus, type: 'zip' | 'git'): string | undefined {
+    return skill.installUrls?.find(u => u.type === type)?.url
+}
+
+/**
+ * 显示市场技能安装弹窗
+ */
+function handleShowMarketInstallDialog(marketSkill: MarketSkillWithStatus) {
+    selectedMarketSkill.value = marketSkill
+    showMarketInstallDialog.value = true
+}
+
+/**
+ * 从市场安装技能（ZIP 方式）
+ */
+async function handleInstallFromMarketUrl(marketSkill: MarketSkillWithStatus) {
+    const zipUrl = getInstallUrl(marketSkill, 'zip')
+    if (!zipUrl) {
+        ElMessage.warning('该技能暂无 ZIP 安装包')
+        return
+    }
+
+    installingFromMarket.value.add(marketSkill.id)
+
+    try {
+        const response = await apiService.installSkillFromUrl(zipUrl)
+        if (response.success) {
+            ElMessage.success(response.message || '安装成功')
+            showMarketInstallDialog.value = false
+            selectedMarketSkill.value = null
+            // 刷新本地技能列表
+            await loadSkills()
+        } else {
+            ElMessage.error(response.message || '安装失败')
+        }
+    } catch (err: any) {
+        console.error('从市场安装技能失败:', err)
+        ElMessage.error(err.message || '安装失败')
+    } finally {
+        installingFromMarket.value.delete(marketSkill.id)
+    }
+}
+
+/**
+ * 访问仓库（Git）
+ */
+function handleViewSourceCode(marketSkill: MarketSkillWithStatus) {
+    const gitUrl = getInstallUrl(marketSkill, 'git')
+    if (!gitUrl) {
+        ElMessage.warning('该技能暂无源码链接')
+        return
+    }
+    openExternalLink(gitUrl)
+}
+
+/**
+ * 更新所有市场技能的状态（与本地已安装技能做名字匹配）
+ */
+function refreshMarketSkillStatus() {
+    const localSkills = skills.value
+    marketSkills.value = marketSkills.value.map(marketSkill => {
+        const match = localSkills.find(
+            local => local.manifest.name?.toLowerCase() === marketSkill.id?.toLowerCase()
+        )
+        if (!match) {
+            return { ...marketSkill, localStatus: 'not_installed' as const }
+        }
+
+        // 名字匹配成功，比较版本
+        const localVer = match.manifest.version
+        const marketVer = marketSkill.version
+        if (marketVer && localVer && marketVer !== localVer) {
+            return { ...marketSkill, localStatus: 'updatable' as const, localVersion: localVer }
+        }
+        return { ...marketSkill, localStatus: 'installed' as const, localVersion: localVer }
+    })
+}
+
+/**
+ * 获取市场技能按钮文案
+ */
+function getMarketButtonLabel(skill: MarketSkillWithStatus): string {
+    switch (skill.localStatus) {
+        case 'updatable': return '升级'
+        case 'installed': return '重新安装'
+        default: return '安装'
+    }
+}
+
 /**
  * 加载 Skills 列表
  */
@@ -456,6 +594,8 @@ async function loadSkills() {
     try {
         const response = await apiService.fetchSkills()
         skills.value = Array.isArray(response?.items) ? response.items : []
+        // 加载后刷新市场技能状态
+        refreshMarketSkillStatus()
     } catch (err: any) {
         console.error('加载 Skills 失败:', err)
         const errorMsg = err.message || '加载 Skills 失败'
@@ -704,6 +844,8 @@ async function loadMarketSkills(forceRefresh: boolean = false) {
             ...skill,
             localStatus: 'not_installed' as const,
         }))
+        // 与本地技能做名字匹配，更新状态
+        refreshMarketSkillStatus()
     } catch (err: any) {
         console.error('加载市场技能失败:', err)
         marketError.value = err.message || '加载推荐技能失败'
@@ -731,6 +873,11 @@ onMounted(async () => {
 
 <style scoped>
 @import "@/assets/markdown.css";
+
+/* 市场安装弹窗中按钮垂直排列，取消 Element Plus 默认水平按钮间距 */
+.market-install-actions :deep(.el-button + .el-button) {
+    margin-left: 0;
+}
 
 
 /* 代码块容器 */

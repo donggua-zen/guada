@@ -27,6 +27,7 @@ export interface MarketSkill {
   labels: string[];
   installUrls: InstallUrl[];
   detailUrl?: string;
+  version?: string;
 }
 
 /** 本地状态 */
