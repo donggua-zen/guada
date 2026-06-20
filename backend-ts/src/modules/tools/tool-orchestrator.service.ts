@@ -35,10 +35,7 @@ export class ToolOrchestrator {
   ) {
     this.universalHandler = new UniversalToolHandler();
   }
-  async resolveAvailableTools(
-    role?: PluginConfig,
-    mcpServersConfig?: any,
-  ): Promise<
+  async resolveAvailableTools(role?: PluginConfig): Promise<
     {
       enabled: boolean;
       effective: "global" | "role";
@@ -48,9 +45,9 @@ export class ToolOrchestrator {
     }[]
   > {
     const rawGlobal = await this.settingsStorage.getSettings("plugins");
-    const globalCfg = this.normalizePluginConfig(rawGlobal, undefined);
+    const globalCfg = this.normalizePluginConfig(rawGlobal);
     const rawRole = role;
-    const roleCfg = this.normalizePluginConfig(rawRole, mcpServersConfig);
+    const roleCfg = this.normalizePluginConfig(rawRole);
     const pluginToosList: {
       enabled: boolean;
       effective: "global" | "role";
@@ -82,14 +79,9 @@ export class ToolOrchestrator {
   }
   // ── 构建工具运行时 ──
 
-  async buildToolRuntime(
-    injectParams: PluginContext,
-    toolsConfig: PluginConfig,
-    mcpServersConfig?: any,
-  ): Promise<ToolRuntime> {
+  async buildToolRuntime(injectParams: PluginContext): Promise<ToolRuntime> {
     const pluginAvailableTools = await this.resolveAvailableTools(
-      toolsConfig,
-      mcpServersConfig,
+      injectParams.tools,
     );
     const allToolSets =
       await this.pluginManager.getPluginToolSets(injectParams);
@@ -181,7 +173,12 @@ export class ToolOrchestrator {
       }
     }
 
-    return new ToolRuntime(injectParams, eagerTools, lazyToolSets, toolsConfig);
+    return new ToolRuntime(
+      injectParams,
+      eagerTools,
+      lazyToolSets,
+      injectParams.tools,
+    );
   }
 
   /**

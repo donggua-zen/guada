@@ -26,6 +26,7 @@ export class SkillPlugin extends PluginBase {
   async onLoad(api: PluginApi) {
     api.registerToolSet({
       name: "skill",
+      loadMode: "eager",
       activator: "当需要管理或调用技能时使用 tool_load 加载技能管理工具",
     });
 
@@ -105,7 +106,14 @@ export class SkillPlugin extends PluginBase {
       frequency: "VOLATILE",
       description: "可用技能列表及使用指南",
       content: (context: PluginContext) => {
-        const skills = this.orchestrator.listSkills(true);
+        const allSkills = this.orchestrator.listSkills(true);
+        if (allSkills.length === 0) return "";
+
+        // 按角色级偏好过滤（角色未配置的项继承全局，即保留）
+        const charSkillCfg = context?.skillConfig;
+        const skills = charSkillCfg
+          ? allSkills.filter(s => charSkillCfg[s.id] !== false)
+          : allSkills;
         if (skills.length === 0) return "";
 
         const metadataList = skills
