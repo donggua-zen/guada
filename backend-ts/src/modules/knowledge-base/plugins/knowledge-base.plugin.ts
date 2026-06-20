@@ -66,21 +66,53 @@ export class KnowledgeBasePlugin extends PluginBase {
         const { knowledge_base_id, query, top_k = 5, filter_file_id } = args;
         const kb = await this.kbRepo.findById(knowledge_base_id);
         if (!kb) throw new Error("知识库不存在");
-        const vector = await (this.embeddingService as any).getEmbedding(
+
+        // 获取向量模型配置
+        const model = await this.prisma.model.findUnique({
+          where: { id: kb.embeddingModelId },
+          include: { provider: true },
+        });
+        if (!model) {
+          throw new Error(`向量模型不存在：${kb.embeddingModelId}`);
+        }
+
+        // 构建过滤条件
+        const filterOptions = filter_file_id
+          ? { documentId: filter_file_id }
+          : undefined;
+
+        // 获取查询文本的向量
+        const queryEmbedding = await this.embeddingService.getEmbedding(
           query,
-          "",
-          "",
-          "",
+          model.provider.apiUrl || "",
+          model.provider.apiKey || "",
+          model.modelName,
         );
-        const filter: any = {
-          knowledgeBaseId: knowledge_base_id,
-          userId: ctx?.userId,
-        };
-        if (filter_file_id) filter.fileId = filter_file_id;
-        const results = await (
-          this.vectorDbService as any
-        ).searchChunksSemantic(knowledge_base_id, vector, top_k, filter);
-        return JSON.stringify({ query, results: results || [] });
+
+        // 执行混合搜索
+        const tableId = `kb_${knowledge_base_id}`;
+        const results = await this.vectorDbService.searchChunksHybrid(
+          tableId,
+          queryEmbedding,
+          query,
+          top_k,
+          0.6,
+          0.4,
+          filterOptions,
+        );
+
+        // 格式化结果
+        const formattedResults = results.map((result: any) => ({
+          content: result.content,
+          metadata: result.metadata,
+          file_name: result.metadata?.file_name,
+        }));
+
+        return JSON.stringify({
+          query,
+          results: formattedResults,
+          total: formattedResults.length,
+        });
       },
       display: { action: "搜索知识库", argsKey: "query", icon: "search" },
     });
@@ -98,20 +130,26 @@ export class KnowledgeBasePlugin extends PluginBase {
         const { knowledge_base_id, skip = 0, limit = 50 } = args;
         const kb = await this.kbRepo.findById(knowledge_base_id);
         if (!kb) throw new Error("知识库不存在");
-        const files = await (this.fileRepo as any).findByKnowledgeBaseId(
+        const { items: files, total } = await this.fileRepo.findByKnowledgeBaseId(
           knowledge_base_id,
           skip,
           limit,
         );
+        const formattedFiles = files.map((f: any) => ({
+          id: f.id,
+          file_name: f.displayName,
+          file_size: Number(f.fileSize),
+          file_type: f.fileType,
+          processing_status: f.processingStatus,
+          progress_percentage: f.progressPercentage,
+          total_chunks: f.totalChunks,
+          uploaded_at: f.uploadedAt.toISOString(),
+        }));
         return JSON.stringify({
-          total: files.length,
-          items: files.map((f) => ({
-            id: f.id,
-            fileName: f.fileName,
-            fileType: f.fileType,
-            fileSize: f.fileSize,
-            createdAt: f.createdAt,
-          })),
+          files: formattedFiles,
+          total,
+          skip,
+          limit,
         });
       },
       display: { action: "列出知识库文件", icon: "search" },
@@ -135,18 +173,24 @@ export class KnowledgeBasePlugin extends PluginBase {
         const { file_id, skip = 0, limit = 10 } = args;
         const file = await this.fileRepo.findById(file_id);
         if (!file) throw new Error("文件不存在");
-        const chunks = await (this.chunkRepo as any).findByFileId(
-          file_id,
-          skip,
-          limit,
-        );
+
+        // 检查文件处理状态
+        if (file.processingStatus !== "completed") {
+          throw new Error(`文件尚未处理完成，当前状态：${file.processingStatus}`);
+        }
+
+        const chunks = await this.chunkRepo.findByFileId(file_id, skip, limit);
+        const formattedChunks = chunks.map((c: any) => ({
+          id: c.id,
+          content: c.content,
+          chunk_index: c.chunkIndex,
+          token_count: c.tokenCount,
+          metadata: c.metadata || null,
+        }));
         return JSON.stringify({
+          file_id,
+          chunks: formattedChunks,
           total: chunks.length,
-          items: chunks.map((c) => ({
-            id: c.id,
-            content: c.content,
-            chunkIndex: c.chunkIndex,
-          })),
         });
       },
       display: { action: "获取文件分块", argsKey: "file_id", icon: "search" },
@@ -168,18 +212,34 @@ export class KnowledgeBasePlugin extends PluginBase {
         const { knowledge_base_id, source_file_path, target_path } = args;
         const userId = ctx?.userId;
         if (!userId) throw new Error("无法获取用户身份，操作被拒绝");
-        const result = await (this.kbFileService as any).addDocument(
-          knowledge_base_id,
-          source_file_path,
-          target_path,
-          userId,
-        );
-        return JSON.stringify({
-          success: true,
-          message: `文件已添加到知识库`,
-          fileId: result.fileId,
-          chunksCount: result.chunksCount,
-        });
+
+        // 解析源文件路径（支持相对路径和绝对路径）
+        let resolvedSourcePath = source_file_path;
+        if (!path.isAbsolute(source_file_path)) {
+          resolvedSourcePath = path.resolve(process.cwd(), source_file_path);
+        }
+
+        try {
+          const fileRecord = await this.kbFileService.addTextDocument(
+            knowledge_base_id,
+            userId,
+            resolvedSourcePath,
+            target_path,
+          );
+
+          return JSON.stringify({
+            success: true,
+            message: "文档已提交处理，将在后台自动完成分块和向量化",
+            file_id: fileRecord.id,
+            file_name: fileRecord.displayName,
+            knowledge_base_id,
+            target_path: fileRecord.relativePath,
+            status: fileRecord.processingStatus,
+          });
+        } catch (error: any) {
+          this.logger.error(`添加文档失败：${error.message}`);
+          throw new Error(`添加文档失败：${error.message}`);
+        }
       },
       display: {
         action: "添加文档到知识库",
