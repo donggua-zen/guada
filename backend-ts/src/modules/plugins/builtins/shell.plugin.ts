@@ -41,6 +41,10 @@ export class ShellPlugin extends PluginBase {
           .optional()
           .describe(
             "命令输出的编码格式。Windows 中文环境建议使用 'gbk'；Unix 默认 'utf-8'。不指定则自动检测",
+          )
+          .refine(
+            (v) => !v || ["utf-8", "gbk", "gb2312", "gb18030", "big5", "latin1"].includes(v),
+            { message: "不支持的编码格式" },
           ),
       }),
       execute: async (args, ctx, abortSignal) => {
