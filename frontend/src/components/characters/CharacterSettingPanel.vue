@@ -493,9 +493,26 @@
         <div class="px-0 py-6 h-full overflow-y-auto">
           <div class="px-0">
             <el-form label-position="top" size="large">
-              <!-- Skills 提示 -->
+              <!-- Skills 全局开关 -->
+              <el-form-item label="自动启用全部 Skills" label-position="left">
+                <div class="flex items-center gap-2">
+                  <el-tooltip content="开启后，角色将自动使用所有全局启用的技能，无需逐个选择" placement="top">
+                    <el-icon class="cursor-help text-gray-400 hover:text-gray-600" size="16">
+                      <QuestionCircleOutlined />
+                    </el-icon>
+                  </el-tooltip>
+                  <el-switch :model-value="characterForm.enabledSkills === true"
+                    @update:model-value="handleSkillsGlobalToggle" inline-prompt active-text="开" inactive-text="关" />
+                </div>
+              </el-form-item>
+
               <el-alert title="Skills 说明" type="info" :closable="false" class="mb-4" show-icon>
-                <p class="text-sm">Skills 是专业技能模块，启用后 AI 助手可在对话中主动调用。每个技能可单独启用或禁用。</p>
+                <p class="text-sm" v-if="characterForm.enabledSkills === true">
+                  当前已启用所有全局启用的技能，下方列表仅供参考
+                </p>
+                <p class="text-sm" v-else>
+                  Skills 是专业技能模块，启用后 AI 助手可在对话中主动调用。每个技能可单独启用或禁用。
+                </p>
               </el-alert>
 
               <div v-if="loadingSkills" class="text-center py-8">
@@ -829,8 +846,10 @@ const allToolsEnabled = computed(() => {
 
 // 计算技能的最终显示状态
 const getSkillEffectiveEnabled = (skill) => {
-  // 角色级优先
-  if (skill.id in characterForm.enabledSkills) {
+  // 全局启用模式：所有技能启用
+  if (characterForm.enabledSkills === true) return true;
+  // 角色级优先（对象模式）
+  if (typeof characterForm.enabledSkills === 'object' && skill.id in characterForm.enabledSkills) {
     return characterForm.enabledSkills[skill.id];
   }
   // 无角色级配置 → 使用全局状态
@@ -840,9 +859,14 @@ const getSkillEffectiveEnabled = (skill) => {
 // 角色面板可见的技能：全局启用 或 有角色级覆盖
 const visibleSkills = computed(() => {
   return skillsList.value.filter(skill => {
-    // 如果全局禁用 且 没有角色级覆盖 → 隐藏
-    if (skill.enabled === false && !(skill.id in characterForm.enabledSkills)) {
-      return false;
+    // 如果全局禁用 且 没有角色级覆盖（全局启用模式下也隐藏全局禁用的技能）
+    if (skill.enabled === false) {
+      // 全局启用模式不覆盖全局禁用
+      if (characterForm.enabledSkills === true) return false;
+      // 对象模式下检查是否有角色级覆盖
+      if (typeof characterForm.enabledSkills !== 'object' || !(skill.id in characterForm.enabledSkills)) {
+        return false;
+      }
     }
     return true;
   });
@@ -930,9 +954,11 @@ watch(() => props.data, (newVal) => {
     characterForm.enabledMcpServers = [];
   }
 
-  // 加载角色技能偏好
+  // 加载角色技能偏好（支持 boolean = 全部启用，object = 逐一选择）
   const skillsConfig = newVal.settings?.skills;
-  if (typeof skillsConfig === 'object' && !Array.isArray(skillsConfig)) {
+  if (skillsConfig === true || skillsConfig === false) {
+    characterForm.enabledSkills = skillsConfig;
+  } else if (typeof skillsConfig === 'object' && !Array.isArray(skillsConfig)) {
     characterForm.enabledSkills = { ...skillsConfig };
   } else {
     characterForm.enabledSkills = {};
@@ -966,10 +992,25 @@ const handleMcpServerToggle = (serverId, enabled) => {
 // ── Skills 切换 ──
 const handleSkillToggle = (skillId, enabled) => {
   // 仅更新本地角色配置，不调用全局 API
+  // 如果当前是全局启用模式，不允许单独切换
+  if (characterForm.enabledSkills === true) {
+    console.warn('当前为全局启用模式，无法单独切换技能');
+    return;
+  }
   characterForm.enabledSkills[skillId] = enabled;
   // 触发响应式更新
   characterForm.enabledSkills = { ...characterForm.enabledSkills };
   console.log(`角色技能 ${skillId} ${enabled ? '启用' : '禁用'}`);
+};
+
+// Skills 全局开关切换处理
+const handleSkillsGlobalToggle = (enabled) => {
+  if (enabled) {
+    characterForm.enabledSkills = true;
+  } else {
+    characterForm.enabledSkills = {};
+  }
+  console.log(`角色技能全局启用 ${enabled ? '开启' : '关闭'}`);
 };
 
 // MCP 全局开关切换处理

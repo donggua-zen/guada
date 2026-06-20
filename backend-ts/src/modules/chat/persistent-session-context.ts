@@ -39,7 +39,7 @@ interface MergedSettings {
   modelTopP?: number;
   modelFrequencyPenalty?: number;
   tools?: any;
-  mcpServers?: any;
+  skills?: Record<string, boolean>; // 角色级技能偏好 { skillId: true/false }
 }
 
 /**
@@ -614,29 +614,23 @@ export class PersistentSessionContext implements ISessionContext {
         sessionType: this.sessionType,
         workspacePath: this._workspacePath,
         model,
+        tools: merged.tools,
+        skillConfig: merged.skills,
       };
 
-      toolRuntime = await this.toolOrchestrator.buildToolRuntime(
-        injectParams,
-        merged.tools,
-        merged.mcpServers,
-      );
+      toolRuntime = await this.toolOrchestrator.buildToolRuntime(injectParams);
 
       // 从 PluginManager 收集 eager 提示词（传入角色配置做二次过滤）
-      const promptPieces = await this.pluginManager.collectPrompts(
-        injectParams,
-        merged.tools,
-      );
+      const promptPieces =
+        await this.pluginManager.collectPrompts(injectParams);
       const allParts: string[] = [];
       for (const p of promptPieces) {
         if (p.content) allParts.push(p.content);
       }
-      // console.log(promptPieces);
+      console.log(promptPieces);
       // 懒加载 ToolSet 的激活词
-      const activators = await this.pluginManager.getToolActivators(
-        injectParams,
-        merged.tools,
-      );
+      const activators =
+        await this.pluginManager.getToolActivators(injectParams);
       if (activators.length > 0) {
         // console.log(activators);
         allParts.push(
@@ -698,9 +692,18 @@ export class PersistentSessionContext implements ISessionContext {
     }
 
     // 工具配置：会话设置优先于角色设置
-    const mergedTools = sessionSettings.tools ?? leaderSettings.tools;
+    let mergedTools = sessionSettings.tools ?? leaderSettings.tools;
     const mergedMcpServers =
       sessionSettings.mcpServers ?? leaderSettings.mcpServers;
+    // 合并 MCP 配置到 tools（MCP 本质是 tools 的一种）
+    if (mergedMcpServers) {
+      if (typeof mergedTools === 'object' && !Array.isArray(mergedTools)) {
+        mergedTools = { ...mergedTools, mcp: mergedMcpServers };
+      } else if (mergedTools === true) {
+        mergedTools = { mcp: mergedMcpServers };
+      }
+    }
+    const mergedSkills = sessionSettings.skills ?? leaderSettings.skills;
 
     // 系统提示词组装
     let systemPrompt =
@@ -755,7 +758,7 @@ export class PersistentSessionContext implements ISessionContext {
             modelFrequencyPenalty: undefined,
           }),
       tools: mergedTools,
-      mcpServers: mergedMcpServers,
+      skills: mergedSkills,
     };
 
     // 记忆/压缩配置（独立继承）

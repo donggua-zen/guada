@@ -319,7 +319,8 @@ export class PluginManager {
     const val = roleCfg[pluginId];
     if (val === true) return true;
     if (Array.isArray(val)) return val.length > 0;
-    return false;
+    // 角色未配置此项 → 继承全局（由 isPluginAvailable 决定）
+    return true;
   }
 
   private isPluginAvailable(id: string): boolean {
@@ -362,7 +363,7 @@ export class PluginManager {
     const result: Array<{ pluginId: string; toolSets: Array<{ name: string; loadMode: ToolLoadMode; activator?: string }> }> = [];
     for (const [id, instance] of this.instances) {
       if (!this.isPluginAvailable(id)) continue;
-      if (!this.isRolePluginEnabled(id, roleCfg)) continue;
+      if (!this.isRolePluginEnabled(id, context.tools)) continue;
 
       const toolSets = PluginRegistry.getToolSets(id);
       if (toolSets.length === 0) continue;
@@ -390,15 +391,15 @@ export class PluginManager {
    * 收集所有启用插件中 loadMode=eager 的提示词（始终注入 system prompt）
    * 按 frequency 排序：STATIC → REGULAR → VOLATILE
    */
-  async collectPrompts(context: PluginContext, roleCfg?: PluginConfig): Promise<PromptPiece[]> {
-    return this.collectByLoadMode(context, "eager", roleCfg);
+  async collectPrompts(context: PluginContext): Promise<PromptPiece[]> {
+    return this.collectByLoadMode(context, "eager");
   }
 
   /**
    * 收集所有启用插件中 loadMode=lazy 的提示词（仅在 tool_load 时注入）
    */
-  async collectLazyPrompts(context: PluginContext, roleCfg?: PluginConfig): Promise<PromptPiece[]> {
-    return this.collectByLoadMode(context, "lazy", roleCfg);
+  async collectLazyPrompts(context: PluginContext): Promise<PromptPiece[]> {
+    return this.collectByLoadMode(context, "lazy");
   }
 
   /**
@@ -407,9 +408,8 @@ export class PluginManager {
   async collectPluginPrompts(
     pluginId: string,
     context: PluginContext,
-    roleCfg?: PluginConfig,
   ): Promise<PromptPiece[]> {
-    const all = await this.collectByLoadMode(context, "eager", roleCfg);
+    const all = await this.collectByLoadMode(context, "eager");
     return all.filter((p) => p.pluginId === pluginId);
   }
 
@@ -419,9 +419,8 @@ export class PluginManager {
   async collectPluginLazyPrompts(
     pluginId: string,
     context: PluginContext,
-    roleCfg?: PluginConfig,
   ): Promise<PromptPiece[]> {
-    const all = await this.collectByLoadMode(context, "lazy", roleCfg);
+    const all = await this.collectByLoadMode(context, "lazy");
     return all.filter((p) => p.pluginId === pluginId);
   }
 
@@ -429,13 +428,12 @@ export class PluginManager {
   private async collectByLoadMode(
     context: PluginContext,
     loadMode: string,
-    roleCfg?: PluginConfig,
   ): Promise<PromptPiece[]> {
     const pieces: PromptPiece[] = [];
 
     for (const [id, instance] of this.instances) {
       if (!this.isPluginAvailable(id)) continue;
-      if (!this.isRolePluginEnabled(id, roleCfg)) continue;
+      if (!this.isRolePluginEnabled(id, context.tools)) continue;
 
       // 从 PluginRegistry 读取注册的提示词元数据（OnLoad(api).registerPrompt 方式）
       const { prompts: promptMetas } = PluginRegistry.getPromptMetas(id);
@@ -449,7 +447,7 @@ export class PluginManager {
             if (ts) {
               // 合并 toolSet 静态定义与运行时返回的动态属性
               const tsDefaults = {
-                loadMode: ts.loadMode || ("lazy" as ToolLoadMode),
+                loadMode: ts.loadMode || ("eager" as ToolLoadMode),
               };
               let tsResolved = { ...tsDefaults };
               if (ts.handler) {
@@ -508,12 +506,12 @@ export class PluginManager {
    * 按 ToolSet 维度输出，一个 ToolSet 一行。格式：
    * - pluginId/toolSetId: 激活说明
    */
-  async getToolActivators(context: PluginContext, roleCfg?: PluginConfig): Promise<string[]> {
+  async getToolActivators(context: PluginContext): Promise<string[]> {
     const activators: string[] = [];
 
     for (const [id, instance] of this.instances) {
       if (!this.isPluginAvailable(id)) continue;
-      if (!this.isRolePluginEnabled(id, roleCfg)) continue;
+      if (!this.isRolePluginEnabled(id, context.tools)) continue;
 
       const toolSets = PluginRegistry.getToolSets(id);
 
