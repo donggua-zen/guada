@@ -115,7 +115,8 @@ export class SkillOrchestrator implements OnModuleInit, OnModuleDestroy {
   /**
    * 列出所有 Skills
    */
-  listSkills(): SkillDefinition[] {
+  listSkills(filterEnabled = true): SkillDefinition[] {
+    if (filterEnabled) return this.registry.getEnabled();
     return Array.from(this.registry.getAll().values());
   }
 
@@ -124,6 +125,22 @@ export class SkillOrchestrator implements OnModuleInit, OnModuleDestroy {
    */
   getSkillDetail(skillId: string): SkillDefinition | null {
     return this.registry.get(skillId) || null;
+  }
+
+  async enableSkill(skillId: string): Promise<void> {
+    const skill = this.registry.get(skillId);
+    if (!skill) throw new Error(`Skill ${skillId} not found`);
+    return this.registry.enable(skillId);
+  }
+
+  async disableSkill(skillId: string): Promise<void> {
+    const skill = this.registry.get(skillId);
+    if (!skill) throw new Error(`Skill ${skillId} not found`);
+    return this.registry.disable(skillId);
+  }
+
+  async batchToggleSkills(skillIds: string[], enabled: boolean): Promise<void> {
+    return this.registry.batchToggle(skillIds, enabled);
   }
 
   /**

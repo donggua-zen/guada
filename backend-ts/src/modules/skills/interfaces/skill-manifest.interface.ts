@@ -24,4 +24,5 @@ export interface SkillDefinition {
   manifest: SkillManifest;       // 解析后的 YAML frontmatter
   contentHash: string;           // SHA256（用于变更检测）
   source: SkillSourceType;       // 技能来源：global=用户安装, system=系统内置
+  enabled: boolean;              // 是否启用（默认 true）
 }

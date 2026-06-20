@@ -1137,6 +1137,45 @@ class ApiService {
     });
   }
 
+  /**
+   * 启用 Skill
+   */
+  async enableSkill(
+    skillId: string,
+  ): Promise<{ success: boolean; message: string }> {
+    return await this._request(`/skills/${skillId}/enable`, {
+      method: "POST",
+    });
+  }
+
+  /**
+   * 禁用 Skill
+   */
+  async disableSkill(
+    skillId: string,
+  ): Promise<{ success: boolean; message: string }> {
+    return await this._request(`/skills/${skillId}/disable`, {
+      method: "POST",
+    });
+  }
+
+  /**
+   * 批量启用/禁用 Skills
+   */
+  async batchToggleSkills(ids: string[], enabled: boolean): Promise<{ success: boolean; message: string }> {
+    return await this._request("/skills/batch-toggle", {
+      method: "POST",
+      data: { ids, enabled },
+    });
+  }
+
+  /**
+   * 获取所有技能的启用状态
+   */
+  async fetchSkillsEnabledStatus(): Promise<Array<{ id: string; enabled: boolean }>> {
+    return await this._request("/skills/enabled-status");
+  }
+
   // ========== 知识库管理 ==========
 
   /**

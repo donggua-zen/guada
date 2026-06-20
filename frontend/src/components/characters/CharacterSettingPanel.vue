@@ -1,6 +1,7 @@
 <template>
-  <div class="flex flex-col flex-1 character-setting-panel">
-    <el-tabs ref="tabsInstRef" v-model="tabsValue" class="flex-1 flex flex-col character-tabs">
+  <div class="character-setting-panel-root">
+    <div class="flex flex-col flex-1 character-setting-panel">
+      <el-tabs ref="tabsInstRef" v-model="tabsValue" class="flex-1 flex flex-col character-tabs">
       <!-- 基础设置 -->
       <el-tab-pane name="basic" class="flex-1 overflow-hidden">
         <template #label>
@@ -63,7 +64,7 @@
                 </template>
                 <el-select v-model="characterForm.groupId" placeholder="请选择分组" clearable class="w-full max-w-md">
                   <el-option label="未分组" value="" />
-                  <el-option v-for="group in characterGroups" :key="group.id" :label="group.name" :value="group.id" />
+                  <el-option v-for="group in characterGroups" :key="group.id" :label="group.name" :value="group.id ?? ''" />
                 </el-select>
               </el-form-item>
             </el-form>
@@ -251,7 +252,7 @@
                   </div>
                 </template>
                 <el-slider v-model="characterForm.compressionTriggerRatio" :min="0.5" :max="0.95" :step="0.05"
-                  show-input format-tooltip="(val) => `${Math.round(val * 100)}%`" class="w-full max-w-md" />
+                  show-input :format-tooltip="formatSliderTooltip" class="w-full max-w-md" />
               </el-form-item>
 
               <el-form-item label="保留目标" prop="compressionTargetRatio">
@@ -262,7 +263,7 @@
                   </div>
                 </template>
                 <el-slider v-model="characterForm.compressionTargetRatio" :min="0.2" :max="0.8" :step="0.05" show-input
-                  format-tooltip="(val) => `${Math.round(val * 100)}%`" class="w-full max-w-md" />
+                  :format-tooltip="(val) => `${Math.round(val * 100)}%`" class="w-full max-w-md" />
               </el-form-item>
 
               <el-form-item label="启用摘要生成" prop="summaryMode">
@@ -365,7 +366,7 @@
               <div v-else>
                 <!-- 网格布局：每行3列 -->
                 <div class="grid grid-cols-3 gap-3">
-                  <div v-for="tool in localTools" :key="tool.pluginId" class="tool-item p-3 border rounded relative">
+                  <div v-for="tool in localTools" :key="tool.pluginId" class="tool-item p-3 border rounded relative dark:border-[#232428]">
                     <div class="flex items-start justify-between gap-2 mb-2">
                       <div class="font-medium text-sm flex-1 truncate">{{ tool.displayName }}</div>
                       <div class="flex items-center gap-2">
@@ -442,7 +443,7 @@
               </div>
 
               <div v-else>
-                <div v-for="server in mcpServers" :key="server.id" class="mcp-server-item p-3 border rounded mb-3">
+                <div v-for="server in mcpServers" :key="server.id" class="mcp-server-item p-3 border rounded mb-3 dark:border-[#232428]">
                   <div class="flex items-start justify-between">
                     <div class="flex-1 mr-4">
                       <div class="font-medium text-base mb-1">
@@ -472,6 +473,66 @@
                       :model-value="Array.isArray(characterForm.enabledMcpServers) && characterForm.enabledMcpServers.includes(server.id)"
                       @update:model-value="handleMcpServerToggle(server.id, $event)" :disabled="!server.enabled" />
                   </div>
+                </div>
+              </div>
+            </el-form>
+          </div>
+        </div>
+      </el-tab-pane>
+
+      <!-- Skills 技能 -->
+      <el-tab-pane name="skills" class="flex-1 overflow-hidden">
+        <template #label>
+          <div class="tab-label">
+            <el-icon :size="18">
+              <Code24Regular />
+            </el-icon>
+            <span>Skills</span>
+          </div>
+        </template>
+        <div class="px-0 py-6 h-full overflow-y-auto">
+          <div class="px-0">
+            <el-form label-position="top" size="large">
+              <!-- Skills 提示 -->
+              <el-alert title="Skills 说明" type="info" :closable="false" class="mb-4" show-icon>
+                <p class="text-sm">Skills 是专业技能模块，启用后 AI 助手可在对话中主动调用。每个技能可单独启用或禁用。</p>
+              </el-alert>
+
+              <div v-if="loadingSkills" class="text-center py-8">
+                <el-icon class="is-loading" size="24">
+                  <LoadingOutlined />
+                </el-icon>
+                <div class="text-sm text-gray-500 mt-2">加载中...</div>
+              </div>
+
+              <div v-else-if="visibleSkills.length === 0" class="text-center text-gray-500 py-8">
+                <el-icon size="48" class="mb-2">
+                  <InfoCircleOutlined />
+                </el-icon>
+                <div>暂无可用的 Skills</div>
+                <div class="text-sm mt-2">请先到"插件 > Skills"中安装技能</div>
+              </div>
+
+              <div v-else class="grid gap-3" style="grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));">
+                <div v-for="skill in visibleSkills" :key="skill.id"
+                  class="skill-item p-3 border rounded dark:border-[#232428]" :style="getSkillEffectiveEnabled(skill) ? {} : { opacity: 0.6 }">
+                  <div class="flex items-start justify-between gap-2 mb-2">
+                    <div class="font-medium text-sm flex-1 truncate">{{ skill.manifest?.name || skill.id }}</div>
+                    <div class="flex items-center gap-1.5 shrink-0">
+                      <el-switch
+                        :model-value="getSkillEffectiveEnabled(skill)"
+                        :loading="updatingSkills.has(skill.id)"
+                        @update:model-value="(val) => handleSkillToggle(skill.id, val)"
+                        size="small"
+                        inline-prompt
+                        active-text="启用"
+                        inactive-text="禁用"
+                      />
+                      <el-tag v-if="skill.source === 'system'" type="success" size="small" effect="light">内置</el-tag>
+                      <el-tag v-if="skill.manifest?.version" type="info" size="small" effect="plain">v{{ skill.manifest.version }}</el-tag>
+                    </div>
+                  </div>
+                  <p class="text-xs text-gray-500 line-clamp-2 min-h-[2rem]">{{ skill.manifest?.description || '暂无描述' }}</p>
                 </div>
               </div>
             </el-form>
@@ -522,6 +583,7 @@
     </template>
   </el-dialog>
 
+  </div>
 </template>
 
 <script setup lang="ts">
@@ -558,9 +620,12 @@ import {
   ApiOutlined,
   SettingOutlined,
   CloseOutlined,
+  FolderOutlined,
   ThunderboltOutlined,
   SyncOutlined
 } from '@vicons/antd'
+
+import { Code24Regular } from '@vicons/fluent'
 
 import { apiService } from '../../services/ApiService'
 
@@ -571,6 +636,11 @@ import ElSliderOptional from '../ui/ElSliderOptional.vue'
 import { DEFAULT_SUMMARY_MODE } from '@/constants'
 
 const { toast, notify } = usePopup()
+
+// Slider 百分比格式化函数
+const formatSliderTooltip = (val: number): string => {
+  return `${Math.round(val * 100)}%`;
+};
 
 // Props
 const props = defineProps({
@@ -589,7 +659,7 @@ const props = defineProps({
         assistantName: '',
         assistantIdentity: '',
         systemPrompt: '',
-        modelId: null,
+        modelId: '',
         memoryType: null,
         modelTemperature: null,
         modelTopP: null,
@@ -645,6 +715,7 @@ const characterForm = reactive({
   useUserPrompt: false,
   enabledTools: [],  // 启用的本地工具
   enabledMcpServers: [],  // 启用的 MCP 服务器 ID 数组
+  enabledSkills: {},       // 按角色启用的技能 { skillId: true/false }
   compressionTriggerRatio: 0.8, // 触发阈值
   compressionTargetRatio: 0.5, // 保留目标
   summaryMode: DEFAULT_SUMMARY_MODE, // 摘要模式：'disabled' | 'fast' | 'memory_sync'
@@ -690,7 +761,7 @@ const modelOptions = computed(() => {
   // 添加"使用默认模型"选项
   options.push({
     label: '使用默认模型',
-    value: null,
+    value: '',
     key: 'default'
   })
 
@@ -704,9 +775,9 @@ const modelOptions = computed(() => {
       // 添加分组标签
       options.push({
         label: provider.name,
+        value: provider.id,
         key: provider.id,
         disabled: true,
-
       })
 
       // 添加该分组下的模型选项
@@ -724,6 +795,11 @@ const modelOptions = computed(() => {
 
 // MCP 服务器数据
 const mcpServers = ref([]);
+
+// Skills 数据
+const skillsList = ref([]);
+const loadingSkills = ref(false);
+const updatingSkills = ref(new Set());
 
 // 角色分组数据
 const characterGroups = ref([]);
@@ -749,6 +825,27 @@ const isUsingGlobalToggle = ref(false);
 const allToolsEnabled = computed(() => {
   // 如果角色工具配置为 true，则认为启用了全部工具
   return characterToolSettings.value === true;
+});
+
+// 计算技能的最终显示状态
+const getSkillEffectiveEnabled = (skill) => {
+  // 角色级优先
+  if (skill.id in characterForm.enabledSkills) {
+    return characterForm.enabledSkills[skill.id];
+  }
+  // 无角色级配置 → 使用全局状态
+  return skill.enabled !== false;
+};
+
+// 角色面板可见的技能：全局启用 或 有角色级覆盖
+const visibleSkills = computed(() => {
+  return skillsList.value.filter(skill => {
+    // 如果全局禁用 且 没有角色级覆盖 → 隐藏
+    if (skill.enabled === false && !(skill.id in characterForm.enabledSkills)) {
+      return false;
+    }
+    return true;
+  });
 });
 
 // 判断某个工具提供者是否启用（用于 Switch 显示）
@@ -788,7 +885,7 @@ watch(() => props.data, (newVal) => {
   characterForm.avatarUrl = newVal.avatarUrl || '';
   // groupId: null 或 undefined 转换为空字符串，以便 el-select 正确显示
   characterForm.groupId = newVal.groupId || '';  // 加载分组 ID
-  characterForm.modelId = newVal.modelId || null;
+  characterForm.modelId = newVal.modelId || '';
 
   characterForm.assistantName = newVal.settings?.assistantName || '';
   characterForm.assistantIdentity = newVal.settings?.assistantIdentity || '';
@@ -833,6 +930,14 @@ watch(() => props.data, (newVal) => {
     characterForm.enabledMcpServers = [];
   }
 
+  // 加载角色技能偏好
+  const skillsConfig = newVal.settings?.skills;
+  if (typeof skillsConfig === 'object' && !Array.isArray(skillsConfig)) {
+    characterForm.enabledSkills = { ...skillsConfig };
+  } else {
+    characterForm.enabledSkills = {};
+  }
+
 }, { immediate: true })
 
 const handleAvatarChanged = (file) => {
@@ -858,6 +963,15 @@ const handleMcpServerToggle = (serverId, enabled) => {
   console.log(`MCP 服务器 ${serverId} ${enabled ? '启用' : '禁用'}, 当前列表:`, characterForm.enabledMcpServers);
 }
 
+// ── Skills 切换 ──
+const handleSkillToggle = (skillId, enabled) => {
+  // 仅更新本地角色配置，不调用全局 API
+  characterForm.enabledSkills[skillId] = enabled;
+  // 触发响应式更新
+  characterForm.enabledSkills = { ...characterForm.enabledSkills };
+  console.log(`角色技能 ${skillId} ${enabled ? '启用' : '禁用'}`);
+};
+
 // MCP 全局开关切换处理
 const handleMcpGlobalToggle = (enabled) => {
   if (enabled) {
@@ -882,13 +996,13 @@ const loadLocalTools = async () => {
     // API 返回 plugins[]，每个元素含 enabled 有效状态
     const plugins = response.plugins || [];
 
-    // 本地工具列表：过滤掉 MCP（有独立 Tab）
-    localTools.value = plugins.filter(p => !p.isMcp);
+    // 本地工具列表：过滤掉 MCP 和 Skills（有独立 Tab）
+    localTools.value = plugins.filter(p => !p.isMcp && !p.isSkill);
 
     // 从 plugins 的 enabled 字段反向构建角色工具配置
     const toolsConfig = {};
     for (const plugin of plugins) {
-      if (plugin.isMcp) continue; // MCP 由单独逻辑处理
+      if (plugin.isMcp || plugin.isSkill) continue; // MCP / Skills 由单独逻辑处理
       toolsConfig[plugin.pluginId] = plugin.enabled;
     }
     characterToolSettings.value = toolsConfig;
@@ -1046,6 +1160,20 @@ const getToolDisplayName = (toolName) => {
   return toolName || '';
 };
 
+const loadSkills = async () => {
+  loadingSkills.value = true;
+  try {
+    const response = await apiService.fetchSkills();
+    skillsList.value = Array.isArray(response?.items) 
+      ? response.items.filter(s => s.enabled !== false) 
+      : [];
+  } catch (err) {
+    console.error('加载 Skills 失败:', err);
+  } finally {
+    loadingSkills.value = false;
+  }
+};
+
 const loadModels = async () => {
   try {
     const response = await apiService.fetchModels()
@@ -1098,6 +1226,7 @@ onMounted(async () => {
   // if (!isSimpleStyle.value)
   loadModels();
   loadMCPServers();
+  loadSkills();
   loadCharacterGroups();  // 加载分组列表
   // 注意：工具列表由 watch 自动加载（immediate: true）
 })
@@ -1127,7 +1256,7 @@ const getFormData = () => {
     'avatarFile': characterForm.avatarFile,
     'groupId': characterForm.groupId === '' ? null : characterForm.groupId,
     'identity': characterForm.identity,
-    'modelId': characterForm.modelId,
+    'modelId': characterForm.modelId === '' ? null : characterForm.modelId,
     'settings': {
       'assistantName': characterForm.assistantName,
       'assistantIdentity': characterForm.assistantIdentity,
@@ -1148,6 +1277,7 @@ const getFormData = () => {
       },
       'tools': characterToolSettings.value,
       'mcpServers': characterForm.enabledMcpServers,
+      'skills': characterForm.enabledSkills,
     }
   }
   return finalData;
@@ -1299,7 +1429,16 @@ defineExpose({
 
 .tool-item:hover {
   border-color: var(--el-color-primary);
-  background-color: #f5f7fa;
+  background-color: var(--el-fill-color-lighter);
+}
+
+.skill-item {
+  transition: all 0.2s;
+}
+
+.skill-item:hover {
+  border-color: var(--el-color-primary-light-5);
+  background-color: var(--el-fill-color-lighter);
 }
 
 /* 工具配置对话框样式 */

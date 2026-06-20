@@ -105,7 +105,7 @@ export class SkillPlugin extends PluginBase {
       frequency: "VOLATILE",
       description: "可用技能列表及使用指南",
       content: (context: PluginContext) => {
-        const skills = this.orchestrator.listSkills();
+        const skills = this.orchestrator.listSkills(true);
         if (skills.length === 0) return "";
 
         const metadataList = skills
