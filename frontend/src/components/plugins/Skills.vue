@@ -37,13 +37,22 @@
             <!-- 技能卡片列表 -->
             <div class="grid gap-4" style="grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));">
                 <div v-for="skill in skills" :key="skill.id"
-                    class="rounded-lg border border-gray-200 dark:border-[#232428] overflow-hidden bg-white dark:bg-[#232428] transition-all hover:border-(--color-primary)">
+                    class="rounded-lg border border-gray-200 dark:border-[#232428] overflow-hidden bg-white dark:bg-[#232428] transition-all hover:border-(--color-primary)"
+                    :style="skill.enabled === false ? { opacity: 0.6 } : {}">
                     <div class="p-5 pb-4">
                         <div class="flex items-start justify-between gap-2 mb-2">
                             <h3 class="text-lg font-semibold text-gray-900 dark:text-[#e8e9ed] flex-1 truncate">
                                 {{ skill.manifest.name || skill.id }}
                             </h3>
-                            <div class="flex gap-1.5 shrink-0">
+                            <div class="flex items-center gap-2 shrink-0">
+                                <el-switch
+                                    :model-value="skill.enabled !== false"
+                                    :loading="updatingSkills.has(skill.id)"
+                                    @update:model-value="(val: boolean) => handleToggleSkill(skill.id, val)"
+                                    size="small"
+                                    :active-text="skill.enabled !== false ? '启用' : '禁用'"
+                                    inline-prompt
+                                />
                                 <el-tag v-if="skill.source === 'system'" type="success" size="small" effect="light">
                                     内置
                                 </el-tag>
@@ -291,6 +300,7 @@ interface Skill {
     manifest: SkillManifest
     contentHash: string
     source?: SkillSource
+    enabled?: boolean
 }
 
 const loading = ref(false)
@@ -430,6 +440,7 @@ const forceOverwrite = ref(false)
 
 // 卸载相关状态
 const uninstallingSkills = ref<Set<string>>(new Set())
+const updatingSkills = ref<Set<string>>(new Set())
 
 // 市场推荐相关状态
 const marketSkills = ref<MarketSkillWithStatus[]>([])
@@ -452,6 +463,34 @@ async function loadSkills() {
         skills.value = []
     } finally {
         loading.value = false
+    }
+}
+
+/**
+ * 触发手动扫描
+ */
+async function handleToggleSkill(skillId: string, enabled: boolean) {
+    const skill = skills.value.find(s => s.id === skillId)
+    if (!skill) return
+
+    const previousState = skill.enabled
+    // 乐观更新
+    skill.enabled = enabled
+    updatingSkills.value.add(skillId)
+
+    try {
+        if (enabled) {
+            await apiService.enableSkill(skillId)
+        } else {
+            await apiService.disableSkill(skillId)
+        }
+    } catch (err: any) {
+        // 失败回滚
+        skill.enabled = previousState
+        console.error('切换技能状态失败:', err)
+        ElMessage.error(err.message || '切换技能状态失败')
+    } finally {
+        updatingSkills.value.delete(skillId)
     }
 }
 

@@ -43,6 +43,7 @@ export class SkillLoaderService {
       manifest,
       contentHash,
       source,
+      enabled: true,
     };
   }
 

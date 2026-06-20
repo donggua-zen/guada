@@ -566,6 +566,7 @@ export class ToolOrchestrator {
         category: plugin.category,
         enabled,
         isMcp: plugin.id === "mcp",
+        isSkill: plugin.id === "skill",
         tools: allTools.map((t) => ({
           enabled: enabledTools.some((e) => e.name === t.name),
           name: t.name,

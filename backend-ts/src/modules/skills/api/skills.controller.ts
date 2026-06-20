@@ -44,7 +44,7 @@ export class SkillsController {
     @Query('page') page?: number,
     @Query('size') size?: number,
   ): PaginatedResponse<SkillDefinition> {
-    const allSkills = this.orchestrator.listSkills();
+    const allSkills = this.orchestrator.listSkills(false);
     const total = allSkills.length;
 
     // 如果未提供分页参数，返回全部数据
@@ -122,6 +122,59 @@ export class SkillsController {
     // TODO: 实现动态启用/禁用监听器
     // 目前仅返回状态，实际需要在 SkillWatcherService 中添加 enable/disable 方法
     return { enabled: body.enabled };
+  }
+
+  /**
+   * 启用技能
+   */
+  @Post(':id/enable')
+  async enableSkill(@Param('id') skillId: string): Promise<{ success: boolean; message: string }> {
+    this.logger.log(`Enabling skill: ${skillId}`);
+    try {
+      await this.orchestrator.enableSkill(skillId);
+      return { success: true, message: `Skill '${skillId}' enabled` };
+    } catch (error: any) {
+      return { success: false, message: error.message };
+    }
+  }
+
+  /**
+   * 禁用技能
+   */
+  @Post(':id/disable')
+  async disableSkill(@Param('id') skillId: string): Promise<{ success: boolean; message: string }> {
+    this.logger.log(`Disabling skill: ${skillId}`);
+    try {
+      await this.orchestrator.disableSkill(skillId);
+      return { success: true, message: `Skill '${skillId}' disabled` };
+    } catch (error: any) {
+      return { success: false, message: error.message };
+    }
+  }
+
+  /**
+   * 批量启用/禁用技能
+   */
+  @Post('batch-toggle')
+  async batchToggleSkills(@Body() body: { ids: string[]; enabled: boolean }): Promise<{ success: boolean; message: string }> {
+    this.logger.log(`Batch toggle skills: ${body.ids.length} skills -> enabled=${body.enabled}`);
+    try {
+      await this.orchestrator.batchToggleSkills(body.ids, body.enabled);
+      return { success: true, message: `${body.ids.length} skills ${body.enabled ? 'enabled' : 'disabled'}` };
+    } catch (error: any) {
+      return { success: false, message: error.message };
+    }
+  }
+
+  /**
+   * 获取所有技能的启用状态
+   */
+  @Get('enabled-status')
+  getEnabledStatus(): Array<{ id: string; enabled: boolean }> {
+    return this.orchestrator.listSkills(false).map(s => ({
+      id: s.id,
+      enabled: s.enabled !== false,
+    }));
   }
 
   /**
