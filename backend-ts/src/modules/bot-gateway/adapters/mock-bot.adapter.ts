@@ -7,6 +7,7 @@ import {
   PlatformCapabilities,
 } from '../interfaces/bot-platform.interface';
 import { BaseBotAdapter } from './base-bot.adapter';
+import { PlatformUtilsService } from '../services/platform-utils.service';
 
 /**
  * 模拟机器人适配器（用于测试重连机制）
@@ -22,7 +23,9 @@ export class MockBotAdapter extends BaseBotAdapter {
   private disconnectTimer: NodeJS.Timeout | null = null;
   private destroy$ = new Subject<void>();
 
-  constructor() {
+  constructor(
+    private _platformUtils: PlatformUtilsService,
+  ) {
     super();
   }
 

@@ -374,7 +374,8 @@ export class WechatPersonalBotAdapter extends BaseBotAdapter {
     return {
       messageId: String(evt.id ?? evt.seq ?? Date.now()),
       senderId: evt.from.id,
-      senderName: evt.from.id,
+      // 微信个人号 SDK 不提供昵称字段，使用通用标识避免暴露 ID
+      senderName: "用户",
       conversationId: evt.chat.id,
       content: rawText,
       messageType: this.detectMessageType(evt),

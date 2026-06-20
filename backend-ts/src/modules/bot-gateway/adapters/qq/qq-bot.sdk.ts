@@ -131,10 +131,12 @@ export interface SendMessageParams {
   media?: {
     file_info: string;  // 媒体文件ID
   };
-  /** 消息引用 */
+  /** 消息引用（频道/私信使用） */
   message_reference?: {
     message_id: string;
   };
+  /** 回复目标消息ID（群聊被动回复时必填，无此字段视为主动消息需额外权限） */
+  msg_id?: string;
 }
 
 /**

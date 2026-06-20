@@ -4,12 +4,14 @@ import { SettingsService } from "./settings.service";
 import { AuthGuard } from "../auth/auth.guard";
 import { Public } from "../auth/public.decorator";
 import { ToolOrchestrator } from "../tools/tool-orchestrator.service";
+import { PluginManager } from "../plugins/plugin.manager";
 
 @Controller()
 export class SettingsController {
   constructor(
     private readonly settingsService: SettingsService,
     private readonly toolOrchestrator: ToolOrchestrator,
+    private readonly pluginManager: PluginManager,
   ) { }
 
   /**
@@ -79,7 +81,7 @@ export class SettingsController {
    * 获取全局工具列表
    */
   @Public()
-  @Get("settings/tools/global")
+  @Get("settings/plugins/global")
   async getGlobalTools() {
     const allTools = await this.toolOrchestrator.getLocalToolsList();
 
@@ -114,17 +116,21 @@ export class SettingsController {
   }
 
   /**
-   * 更新全局工具状态
+   * 更新全局插件状态
    * 请求体：{ pluginId: string, enabled: boolean }
    */
   @UseGuards(AuthGuard)
-  @Put("settings/tools/global")
+  @Put("settings/plugins/global")
   async updateGlobalToolStatus(@Body() data: { pluginId: string; enabled: boolean }) {
     const { pluginId, enabled } = data;
 
-    await this.settingsService.updateGroupSettings('tools', {
+    // 持久化全局配置
+    await this.settingsService.updateGroupSettings('plugins', {
       [pluginId]: enabled,
     });
+
+    // 同步运行时状态（触发 onLoad/onUnload）
+    await this.pluginManager.setPluginEnabled(pluginId, enabled);
 
     return { success: true, pluginId, enabled };
   }

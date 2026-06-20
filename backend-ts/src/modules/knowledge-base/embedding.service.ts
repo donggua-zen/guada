@@ -2,6 +2,16 @@ import { Injectable, Logger } from "@nestjs/common";
 import OpenAI from "openai";
 
 /**
+ * 向量化进度回调
+ * @param current 已处理的条数
+ * @param total 总条数
+ */
+export type EmbeddingProgressCallback = (
+  current: number,
+  total: number,
+) => Promise<void> | void;
+
+/**
  * Embedding 服务
  *
  * 专门负责将文本转换为向量嵌入，不涉及向量存储逻辑。
@@ -18,6 +28,7 @@ export class EmbeddingService {
    * @param baseUrl API 基础 URL
    * @param apiKey API 密钥
    * @param modelName 模型名称
+   * @param onProgress 进度回调（每处理完一条触发）
    * @returns 向量数组，每个元素对应一个输入文本的嵌入向量
    */
   async getEmbeddings(
@@ -25,6 +36,7 @@ export class EmbeddingService {
     baseUrl: string,
     apiKey: string,
     modelName: string,
+    onProgress?: EmbeddingProgressCallback,
   ): Promise<number[][]> {
     if (texts.length === 0) {
       return [];
@@ -50,7 +62,12 @@ export class EmbeddingService {
         const embedding = response.data[0].embedding;
         embeddings.push(embedding);
 
-        // 每处理 10 个或最后一个时记录进度
+        // 每处理一条（或至少每 3 条）触发进度回调
+        if (onProgress) {
+          await onProgress(i + 1, totalTexts);
+        }
+
+        // 每处理 10 个或最后一个时记录日志
         if ((i + 1) % 10 === 0 || i === totalTexts - 1) {
           this.logger.log(`向量化进度：${i + 1}/${totalTexts}`);
         }

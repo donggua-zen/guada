@@ -568,7 +568,7 @@ export class KbFileService implements OnModuleInit {
 
       await updateProgress(82, "文件解析完成，正在分块...");
 
-      // 5. 文本分块（使用智能分块服务，按页边界分块）
+      // 5. 文本分块（合并所有页面为连续文档后统一分块，不再按页边界切割）
       const chunksData = await this.chunkingService.chunkPages(
         parseResult.pages,
         {
@@ -620,11 +620,16 @@ export class KbFileService implements OnModuleInit {
         this.logger.log(`开始批量向量化 ${chunks.length} 个分块...`);
         await updateProgress(88, `正在批量向量化 (${chunks.length} 个分块)...`);
 
+        // 向量化进度映射：每条完成 → 全局百分比 88%~93%
         allEmbeddings = await this.embeddingService.getEmbeddings(
           chunks,
           modelWithProvider.provider.apiUrl || "",
           modelWithProvider.provider.apiKey || "",
           modelWithProvider.modelName,
+          async (current, total) => {
+            const pct = 88 + Math.round((current / total) * 5);
+            await updateProgress(pct, `向量化进度：${current}/${total}`);
+          },
         );
 
         await updateProgress(93, "向量化完成，正在存储...");

@@ -1,33 +1,14 @@
 import { Injectable, Logger } from "@nestjs/common";
-import { ToolOrchestrator } from "../../tools/tool-orchestrator.service";
-import { ToolDisplayInfo } from "../../tools/interfaces/tool-provider.interface";
+import { ToolDisplayInfo, ToolDefinition } from "../../tools/interfaces/tool-provider.interface";
+import { ToolHandlerDef } from "../../plugins/types/plugin.types";
 import { ToolRuntime } from "../../tools/tool-context";
+import { generateDisplayMessage } from "../../plugins/utils/display-formatter";
 import { partialParse } from "partial-json-parser";
 
-/**
- * 工具调用展示文案工具类
- *
- * 纯函数式格式化，无状态管理。
- * 所有文案生成在调用时直接计算，不维护内部状态。
- */
 @Injectable()
 export class ToolCallDisplayUtil {
   private readonly logger = new Logger(ToolCallDisplayUtil.name);
 
-  constructor(private toolOrchestrator: ToolOrchestrator) {}
-
-  /**
-   * 格式化工具调用的展示文案
-   *
-   * 纯函数，无状态，每次调用直接计算。
-   * 支持不完整 JSON 参数解析（partial-json-parser）。
-   *
-   * @param toolName 工具名
-   * @param args 工具参数字符串（JSON 格式，可能不完整）
-   * @param isExecuting 工具是否正在执行（true=正在进行，false=已完成）
-   * @param runtime 工具运行时上下文（可选，用于解析 pluginId）
-   * @returns 结构化的展示信息
-   */
   format(
     toolName: string,
     args: string | Record<string, any>,
@@ -42,12 +23,8 @@ export class ToolCallDisplayUtil {
         const parsed = partialParse(args);
         if (parsed && typeof parsed === "object") {
           if (toolName === "tool_call") {
-            if (parsed.tool_name) {
-              actualToolName = parsed.tool_name;
-            }
-            if (parsed.arguments && typeof parsed.arguments === "object") {
-              extractedParams = parsed.arguments;
-            }
+            if (parsed.tool_name) actualToolName = parsed.tool_name;
+            if (parsed.arguments && typeof parsed.arguments === "object") extractedParams = parsed.arguments;
           } else {
             extractedParams = parsed;
           }
@@ -59,24 +36,33 @@ export class ToolCallDisplayUtil {
       extractedParams = args;
     }
 
-    return this.toolOrchestrator.generateDisplayMessage(
+    // 从 runtime 查找工具显示配置
+    let toolEntry: ToolHandlerDef | undefined;
+    if (runtime) {
+      const flatTools = runtime.getFlatTools(true);
+      const matched = flatTools.find(t => t.name === actualToolName);
+      if (matched) {
+        toolEntry = {
+          name: matched.name,
+          description: matched.description,
+          parameters: matched.parameters,
+          action: matched.action,
+          icon: matched.icon,
+          argsKey: matched.argsKey,
+        } as any;
+      }
+    }
+    return generateDisplayMessage(
       { id: "", name: actualToolName, arguments: extractedParams },
       isExecuting,
       runtime,
+      toolEntry,
     );
   }
 
-  /**
-   * 安全解析 JSON 字符串
-   */
   safeJsonParse(jsonString: string): any {
-    if (!jsonString || typeof jsonString !== "string") {
-      return {};
-    }
-    try {
-      return JSON.parse(jsonString) || {};
-    } catch {
-      return { _raw_arguments: jsonString };
-    }
+    if (!jsonString || typeof jsonString !== "string") return {};
+    try { return JSON.parse(jsonString) || {}; }
+    catch { return { _raw_arguments: jsonString }; }
   }
 }

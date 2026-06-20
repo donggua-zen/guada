@@ -5,21 +5,21 @@ import { McpServerRepository } from "../../common/database/mcp-server.repository
 import { PrismaService } from "../../common/database/prisma.service";
 import { AuthModule } from "../auth/auth.module";
 import { ToolsModule } from "../tools/tools.module";
-import { ToolOrchestrator } from "../tools/tool-orchestrator.service";
-import { MCPToolProvider } from "./tools/mcp-tool.provider";
+import { PluginManager } from "../plugins";
+import { McpPlugin } from "./tools/mcp.plugin";
 
 @Module({
   imports: [AuthModule, ToolsModule],
   controllers: [McpServersController],
-  providers: [McpServerService, McpServerRepository, PrismaService, MCPToolProvider],
+  providers: [McpServerService, McpServerRepository, PrismaService, McpPlugin],
 })
 export class McpServersModule implements OnModuleInit {
   constructor(
-    private readonly toolOrchestrator: ToolOrchestrator,
-    private readonly mcpToolProvider: MCPToolProvider,
+    private readonly pluginManager: PluginManager,
+    private readonly mcpPlugin: McpPlugin,
   ) {}
 
-  onModuleInit() {
-    this.toolOrchestrator.addProvider(this.mcpToolProvider);
+  async onModuleInit() {
+    await this.pluginManager.registerPlugin(this.mcpPlugin);
   }
 }

@@ -10,6 +10,7 @@ import { SettingsStorage } from "../../common/utils/settings-storage.util";
 import { ModelRepository } from "../../common/database/model.repository";
 import { ToolOrchestrator } from "../tools/tool-orchestrator.service";
 import { ToolRuntime } from "../tools/tool-context";
+import { PluginManager } from "../plugins/plugin.manager";
 import { WorkspaceService } from "../../common/services/workspace.service";
 import { SG_MODELS, SK_MOD_CHAT } from "../../constants/settings.constants";
 import { MessageRecord } from "../llm-core/types/llm.types";
@@ -25,6 +26,7 @@ import {
 } from "../../constants/settings.constants";
 import { TokenizerService } from "../../common/utils/tokenizer.service";
 import { SummaryMode } from "./compression-engine";
+import { PluginContext } from "../plugins/types/plugin.types";
 
 /**
  * 合并后的会话设置
@@ -94,6 +96,7 @@ export class PersistentSessionContext implements ISessionContext {
     private readonly modelRepository: ModelRepository,
     private readonly settingsStorage: SettingsStorage,
     private readonly toolOrchestrator: ToolOrchestrator,
+    private readonly pluginManager: PluginManager,
     private readonly workspaceService: WorkspaceService,
     private readonly messageStore: IMessageStore,
     private readonly compressionStrategy: ICompressionStrategy,
@@ -112,9 +115,8 @@ export class PersistentSessionContext implements ISessionContext {
    */
   async initialize(): Promise<void> {
     // 先解析工作目录，后续 prepareSessionData 直接使用 this._workspacePath
-    this._workspacePath = await this.workspaceService.resolveSessionWorkspaceDir(
-      this.session,
-    );
+    this._workspacePath =
+      await this.workspaceService.resolveSessionWorkspaceDir(this.session);
 
     const prep = await this.prepareSessionData();
     const model = prep.model;
@@ -477,10 +479,7 @@ export class PersistentSessionContext implements ISessionContext {
           mergedSettings.modelTemperature ??
           model.config?.temperature ??
           undefined,
-        topP:
-          mergedSettings.modelTopP ??
-          model.config?.topP ??
-          undefined,
+        topP: mergedSettings.modelTopP ?? model.config?.topP ?? undefined,
         frequencyPenalty:
           mergedSettings.modelFrequencyPenalty ??
           model.config?.frequencyPenalty ??
@@ -609,24 +608,53 @@ export class PersistentSessionContext implements ISessionContext {
     let toolRuntime: ToolRuntime | undefined;
 
     if (supportsTools) {
-      const injectParams = {
+      const injectParams: PluginContext = {
         sessionId,
         userId,
         sessionType: this.sessionType,
         workspacePath: this._workspacePath,
+        model,
       };
-
-      // 团队模式：强制 subagent 命名空间使用 eager 加载
-      const eagerPluginIds = this.session.team ? ["sub_agent"] : undefined;
 
       toolRuntime = await this.toolOrchestrator.buildToolRuntime(
         injectParams,
         merged.tools,
         merged.mcpServers,
-        eagerPluginIds,
       );
 
-      toolPrompts = await this.toolOrchestrator.getPrompts(toolRuntime);
+      // 从 PluginManager 收集 eager 提示词（传入角色配置做二次过滤）
+      const promptPieces = await this.pluginManager.collectPrompts(
+        injectParams,
+        merged.tools,
+      );
+      const allParts: string[] = [];
+      for (const p of promptPieces) {
+        if (p.content) allParts.push(p.content);
+      }
+      // console.log(promptPieces);
+      // 懒加载 ToolSet 的激活词
+      const activators = await this.pluginManager.getToolActivators(
+        injectParams,
+        merged.tools,
+      );
+      if (activators.length > 0) {
+        // console.log(activators);
+        allParts.push(
+          [
+            "# 可用工具集",
+            "你可以使用以下工具集：",
+            "",
+            ...activators,
+            "",
+            "---",
+          ].join("\n"),
+        );
+        allParts.push(
+          "## 使用原则\n1. **避免重复**...\n2. **仅描述不加载**...\n3. **执行调用**...",
+        );
+      }
+
+      toolPrompts = allParts.join("\n\n");
     }
 
     const effectiveContextWindow = this.calcEffectiveContextWindow(
@@ -718,7 +746,8 @@ export class PersistentSessionContext implements ISessionContext {
         ? {
             modelTemperature: sessionSettings.model.temperature ?? undefined,
             modelTopP: sessionSettings.model.topP ?? undefined,
-            modelFrequencyPenalty: sessionSettings.model.frequencyPenalty ?? undefined,
+            modelFrequencyPenalty:
+              sessionSettings.model.frequencyPenalty ?? undefined,
           }
         : {
             modelTemperature: undefined,

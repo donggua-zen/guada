@@ -878,21 +878,20 @@ const loadLocalTools = async () => {
     // 创建角色时使用特殊 ID，编辑角色时使用真实 ID
     const characterId = props.data?.id || '__new_character__';
     const response = await apiService.fetchCharacterTools(characterId);
-    // 只显示全局启用的工具
-    localTools.value = (response.tools || []).filter(tool => tool.enabled);
 
-    // 初始化角色工具设置
-    const toolsConfig = response.characterTools;
-    if (toolsConfig === true || toolsConfig === false) {
-      // 整体开关模式
-      characterToolSettings.value = toolsConfig;
-    } else if (typeof toolsConfig === 'object') {
-      // 单独控制模式
-      characterToolSettings.value = { ...toolsConfig };
-    } else {
-      // 默认启用全部
-      characterToolSettings.value = false;
+    // API 返回 plugins[]，每个元素含 enabled 有效状态
+    const plugins = response.plugins || [];
+
+    // 本地工具列表：过滤掉 MCP（有独立 Tab）
+    localTools.value = plugins.filter(p => !p.isMcp);
+
+    // 从 plugins 的 enabled 字段反向构建角色工具配置
+    const toolsConfig = {};
+    for (const plugin of plugins) {
+      if (plugin.isMcp) continue; // MCP 由单独逻辑处理
+      toolsConfig[plugin.pluginId] = plugin.enabled;
     }
+    characterToolSettings.value = toolsConfig;
   } catch (error) {
     console.error('加载本地工具失败:', error);
     toast.error('加载本地工具失败');

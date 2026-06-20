@@ -7,44 +7,31 @@ import { BotAdminService } from './services/bot-admin.service';
 import { TempFileManager } from './services/temp-file-manager.service';
 import { PlatformUtilsService } from './services/platform-utils.service';
 import { BotAdminController } from './controllers/bot-admin.controller';
-// 适配器不再作为提供者，由工厂直接创建
 import { ChatModule } from '../chat/chat.module';
 import { AuthModule } from '../auth/auth.module';
 import { SharedModule } from '../../common/services/shared.module';
 import { ToolsModule } from '../tools/tools.module';
-import { ToolOrchestrator } from '../tools/tool-orchestrator.service';
-import { SessionManagementToolProvider } from './tools/session-management-tool.provider';
-
+import { PluginManager } from '../plugins';
+import { PrismaService } from '../../common/database/prisma.service';
+import { SessionManagementPlugin } from './plugins/session-management.plugin';
 
 @Module({
-  imports: [
-    ChatModule, // 引入 AgentService
-    AuthModule, // 引入 AuthGuard (需要 JwtService)
-    SharedModule, // 引入 SettingsStorage
-    ToolsModule,
-  ],
+  imports: [ChatModule, AuthModule, SharedModule, ToolsModule],
   controllers: [BotAdminController],
   providers: [
-    BotInstanceManager,
-    BotAdapterFactory,
-    BotOrchestrator,
-    SessionMapperService,
-    BotAdminService, // 新增
-    TempFileManager, // 临时文件管理器
-    PlatformUtilsService, // 平台工具服务
-    SessionManagementToolProvider,
-    // 适配器不再作为提供者，由工厂直接创建实例
-
+    BotInstanceManager, BotAdapterFactory, BotOrchestrator,
+    SessionMapperService, BotAdminService, TempFileManager, PlatformUtilsService,
+    PrismaService,
   ],
-  exports: [BotInstanceManager], // 导出供其他模块使用
+  exports: [BotInstanceManager],
 })
 export class BotGatewayModule implements OnModuleInit {
   constructor(
-    private readonly toolOrchestrator: ToolOrchestrator,
-    private readonly sessionMgmtProvider: SessionManagementToolProvider,
+    private readonly pluginManager: PluginManager,
+    private readonly prisma: PrismaService,
   ) {}
 
-  onModuleInit() {
-    this.toolOrchestrator.addProvider(this.sessionMgmtProvider);
+  async onModuleInit() {
+    await this.pluginManager.registerPlugin(new SessionManagementPlugin(this.prisma));
   }
 }

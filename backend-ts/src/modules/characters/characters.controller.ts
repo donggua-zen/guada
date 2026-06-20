@@ -92,34 +92,33 @@ export class CharactersController {
   async getCharacterTools(@Param("id") characterId: string) {
     const isNewCharacter = characterId === "__new_character__";
 
-    let characterToolsConfig: any;
+    let characterPluginConfig: any;
 
     if (isNewCharacter) {
       // 创建角色模式：默认禁用所有工具，由用户手动开启
-      characterToolsConfig = false;
+      characterPluginConfig = {};
     } else {
       const character =
         await this.characterService.getCharacterById(characterId);
       if (!character) {
         throw new Error("Character not found");
       }
-      characterToolsConfig = (character.settings as any)?.tools;
+      characterPluginConfig = (character.settings as any)?.tools;
     }
 
-    const allTools = await this.toolOrchestrator.getLocalToolsList();
+    const allTools =
+      await this.toolOrchestrator.getLocalToolsList(characterPluginConfig);
 
     // 过滤掉全局禁用的工具，不显示在角色配置界面
-    const enabledTools = allTools.filter((tool) => tool.enabled);
+    const enabledTools = allTools.filter(
+      (tool) => !(tool.enabled === false && tool.effective === "global"),
+    );
 
     return {
       characterId,
-      characterTools: characterToolsConfig,
-      tools: enabledTools.map((tool) => ({
+      plugins: enabledTools.map((tool) => ({
         ...tool,
-        effectiveEnabled: this.calculateEffectiveEnabled(
-          characterToolsConfig,
-          tool.pluginId,
-        ),
+        effectiveEnabled: tool.enabled,
       })),
     };
   }

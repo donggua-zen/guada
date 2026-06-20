@@ -8,6 +8,7 @@ import {
 } from "../interfaces/bot-platform.interface";
 import { AgentEngine } from "../../chat/agent-engine.service";
 import { SessionContextFactory } from "../../chat/session-context.factory";
+import { SessionService } from "../../chat/session.service";
 import { SessionMapperService } from "./session-mapper.service";
 import { WorkspaceService } from "../../../common/services/workspace.service";
 import { buildExternalId } from "../utils/external-id";
@@ -37,6 +38,7 @@ export class BotOrchestrator {
   constructor(
     private agentEngine: AgentEngine,
     private sessionContextFactory: SessionContextFactory,
+    private sessionService: SessionService,
     private sessionMapper: SessionMapperService,
     private workspaceService: WorkspaceService,
   ) {}
@@ -225,7 +227,7 @@ export class BotOrchestrator {
 
     try {
       this.logger.log(
-        `Processing merged messages from ${firstMessage.senderId}: ${messages.length} messages`,
+        `Processing merged messages from ${firstMessage.senderName || firstMessage.senderId}: ${messages.length} messages`,
       );
 
       // 从队列中获取已准备好的会话
@@ -237,11 +239,25 @@ export class BotOrchestrator {
         return;
       }
 
+      // 更新会话最后活跃时间（当前 web 端由 ChatRunnerService 处理，bot 路径需手动处理）
+      await this.sessionService.updateLastActiveAt(session.id).catch((err: any) => {
+        this.logger.warn(`Failed to update lastActiveAt: ${err.message}`);
+      });
+
       // 合并消息内容（附件引用已在 enqueueMessage 时追加到各消息 content 中）
-      // 过滤掉空白内容，并对非空白内容去除首尾空白字符
+      // 群聊时在每条消息前标注发送者昵称，避免 AI 无法区分说话人
+      const isGroupChat = firstMessage.sourceType === "group";
       const mergedContent = messages
-        .map((m) => m.content?.trim())
-        .filter((content) => content && content.length > 0)
+        .map((m) => {
+          const text = m.content?.trim();
+          if (!text) return null;
+          // 群聊消息用昵称标注来源，不暴露 senderId（openid/uin 等敏感字段）
+          if (isGroupChat && m.senderName && m.senderName !== m.senderId) {
+            return `[${m.senderName}]: ${text}`;
+          }
+          return text;
+        })
+        .filter((content): content is string => content !== null && content.length > 0)
         .join("\n\n");
 
       const capabilities = adapter.getCapabilities();
@@ -304,7 +320,7 @@ export class BotOrchestrator {
           });
         }
 
-        this.logger.log(`Sent error message to ${firstMessage.senderId}`);
+        this.logger.log(`Sent error message to ${firstMessage.senderName || firstMessage.senderId}`);
       } catch (sendError: any) {
         this.logger.error(`Failed to send error message: ${sendError.message}`);
       }
@@ -319,7 +335,7 @@ export class BotOrchestrator {
    * - 因此我们需要累积内容后，定期更新整条消息
    */
   private async handleStreamingReply(
-    adapter: any,
+    adapter: IBotPlatform,
     message: BotMessage,
     iterator: AsyncGenerator<any>,
   ): Promise<void> {
@@ -327,6 +343,8 @@ export class BotOrchestrator {
     let accumulatedContent = "";
     let lastUpdateTime = Date.now();
     const UPDATE_INTERVAL = 500; // 每 500ms 更新一次，避免频繁请求
+    // sendStreamReply 在调用处已验证存在（capabilities.supportsStreaming && adapter.sendStreamReply）
+    const sendReply = adapter.sendStreamReply!;
 
     try {
       for await (const chunk of iterator) {
@@ -337,7 +355,7 @@ export class BotOrchestrator {
           const now = Date.now();
           // 定期更新消息内容（避免过于频繁的网络请求）
           if (now - lastUpdateTime >= UPDATE_INTERVAL) {
-            await adapter.sendStreamReply(
+            await sendReply(
               {
                 conversationId: message.conversationId,
                 content: accumulatedContent,
@@ -356,7 +374,7 @@ export class BotOrchestrator {
       }
 
       // 发送最终完整内容（finish=true）
-      await adapter.sendStreamReply(
+      await sendReply(
         {
           conversationId: message.conversationId,
           content: accumulatedContent,
@@ -370,7 +388,7 @@ export class BotOrchestrator {
         },
       );
 
-      this.logger.log(`Replied to ${message.senderId} via streaming`);
+      this.logger.log(`Replied to ${message.senderName || message.senderId} via streaming`);
     } catch (error: any) {
       this.logger.error(`Stream reply error: ${error.message}`);
       throw error;
@@ -381,7 +399,7 @@ export class BotOrchestrator {
    * 处理普通回复（收集完整后发送）
    */
   private async handleNormalReply(
-    adapter: any,
+    adapter: IBotPlatform,
     message: BotMessage,
     iterator: AsyncGenerator<any>,
   ): Promise<void> {
@@ -403,7 +421,7 @@ export class BotOrchestrator {
         rawFrame: message.rawEvent,
       });
 
-      this.logger.log(`Replied to ${message.senderId}`);
+      this.logger.log(`Replied to ${message.senderName || message.senderId}`);
     } catch (error: any) {
       this.logger.error(`Failed to send normal reply: ${error.message}`);
       throw error;

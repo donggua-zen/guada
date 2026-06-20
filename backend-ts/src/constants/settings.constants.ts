@@ -4,7 +4,7 @@
  */
 export const SG_SYSTEM = 'system';
 export const SG_MODELS = 'models';
-export const SG_TOOLS = 'tools';
+export const SG_PLUGINS = 'plugins';
 
 /**
  * 系统级设置键名 (SK_SYS = Setting Key System)
@@ -31,7 +31,7 @@ export const SK_MOD_VISUAL = 'defaultVisualAssistantModelId';
 /**
  * 工具设置键名
  */
-export const SK_TOOLS_CONFIG = 'tools';
+export const SK_PLUGINS_CONFIG = 'plugins';
 
 /**
  * OCR 设置分组

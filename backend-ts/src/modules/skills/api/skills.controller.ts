@@ -176,25 +176,42 @@ export class SkillsController {
         return { success: false, message: 'No SKILL.md found in the repository (searched up to 2 levels deep)' };
       }
 
-      const { skillMdPath, skillDir, skillName } = skillInfo;
+      const { skillMdPath, skillDir } = skillInfo;
 
-      // 读取 SKILL.md 获取描述信息用于验证
+      // 读取 SKILL.md 获取技能元数据
       const skillMdContent = await fs.readFile(skillMdPath, 'utf-8');
-      const descriptionMatch = skillMdContent.match(/^---\s*\n([\s\S]*?)\n---/);
+      const frontmatterMatch = skillMdContent.match(/^---\s*\n([\s\S]*?)\n---/);
+      let manifestName = '';
       let description = '';
-      if (descriptionMatch) {
-        const yamlContent = descriptionMatch[1];
+      if (frontmatterMatch) {
+        const yamlContent = frontmatterMatch[1];
+        const nameMatch = yamlContent.match(/^name:\s*(.+)/im);
+        if (nameMatch) {
+          manifestName = nameMatch[1].trim().replace(/^['"]|['"]$/g, '');
+        }
         const descMatch = yamlContent.match(/description:\s*(.+)/i);
         if (descMatch) {
           description = descMatch[1].trim().replace(/^['"]|['"]$/g, '');
         }
       }
 
+      // 必须从 manifest 中提取到 name，不用 skillInfo.skillName（那是临时目录名）
+      if (!manifestName) {
+        await fs.rm(tempDir, { recursive: true, force: true });
+        return { success: false, message: 'Skill name not found in SKILL.md frontmatter' };
+      }
+
+      // 必须从 manifest 中提取到 name，不用 skillInfo.skillName（那是临时目录名）
+      if (!manifestName) {
+        await fs.rm(tempDir, { recursive: true, force: true });
+        return { success: false, message: 'Skill name not found in SKILL.md frontmatter' };
+      }
+
       // 使用公共验证器验证技能元数据
       const validationResult = SkillMetadataValidator.validateMetadata(
-        skillName,
+        manifestName,
         description,
-        skillName  // 目录名与技能名应该相同
+        manifestName,  // 目录名以 manifest name 为准
       );
       
       if (!validationResult.isValid) {
@@ -203,17 +220,17 @@ export class SkillsController {
       }
 
       // 检查是否和内置技能冲突
-      const systemDir = path.join(this.skillsDir, '.system', skillName);
+      const systemDir = path.join(this.skillsDir, '.system', manifestName);
       try {
         await fs.access(systemDir);
         await fs.rm(tempDir, { recursive: true, force: true });
-        return { success: false, message: `Skill '${skillName}' is a system built-in skill and cannot be overwritten.` };
+        return { success: false, message: `Skill '${manifestName}' is a system built-in skill and cannot be overwritten.` };
       } catch {
         // 不是内置技能，继续
       }
 
       // 移动到 skills 目录
-      const targetDir = path.join(this.skillsDir, skillName);
+      const targetDir = path.join(this.skillsDir, manifestName);
       
       // 检查是否已存在
       try {
@@ -221,11 +238,11 @@ export class SkillsController {
         
         if (!force) {
           await fs.rm(tempDir, { recursive: true, force: true });
-          return { success: false, message: `Skill '${skillName}' already exists. Use force=true to overwrite.` };
+          return { success: false, message: `Skill '${manifestName}' already exists. Use force=true to overwrite.` };
         }
         
         // 强制覆盖：删除旧目录
-        this.logger.log(`Force overwriting existing skill from Git: ${skillName}`);
+        this.logger.log(`Force overwriting existing skill from Git: ${manifestName}`);
         await fs.rm(targetDir, { recursive: true, force: true });
       } catch {
         // 目录不存在，继续
@@ -245,11 +262,11 @@ export class SkillsController {
       // 触发扫描以加载新 Skill
       await this.orchestrator.triggerScan();
 
-      this.logger.log(`Successfully installed skill from Git: ${skillName}${force ? ' (forced overwrite)' : ''}`);
+      this.logger.log(`Successfully installed skill from Git: ${manifestName}${force ? ' (forced overwrite)' : ''}`);
       return { 
         success: true, 
-        skillId: skillName, 
-        message: `Skill '${skillName}' installed successfully from Git${force ? ' (overwritten)' : ''}` 
+        skillId: manifestName, 
+        message: `Skill '${manifestName}' installed successfully from Git${force ? ' (overwritten)' : ''}` 
       };
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
@@ -337,14 +354,19 @@ export class SkillsController {
         return { success: false, message: 'No SKILL.md found in the ZIP file (searched up to 2 levels deep)' };
       }
 
-      const { skillMdPath, skillDir, skillName } = skillInfo;
+      const { skillMdPath, skillDir } = skillInfo;
 
-      // 读取 SKILL.md 获取描述信息用于验证
+      // 读取 SKILL.md 获取技能元数据
       const skillMdContent = await fs.readFile(skillMdPath, 'utf-8');
-      const descriptionMatch = skillMdContent.match(/^---\s*\n([\s\S]*?)\n---/);
+      const frontmatterMatch = skillMdContent.match(/^---\s*\n([\s\S]*?)\n---/);
+      let manifestName = '';
       let description = '';
-      if (descriptionMatch) {
-        const yamlContent = descriptionMatch[1];
+      if (frontmatterMatch) {
+        const yamlContent = frontmatterMatch[1];
+        const nameMatch = yamlContent.match(/^name:\s*(.+)/im);
+        if (nameMatch) {
+          manifestName = nameMatch[1].trim().replace(/^['"]|['"]$/g, '');
+        }
         const descMatch = yamlContent.match(/description:\s*(.+)/i);
         if (descMatch) {
           description = descMatch[1].trim().replace(/^['"]|['"]$/g, '');
@@ -353,9 +375,9 @@ export class SkillsController {
 
       // 使用公共验证器验证技能元数据
       const validationResult = SkillMetadataValidator.validateMetadata(
-        skillName,
+        manifestName,
         description,
-        skillName  // 目录名与技能名应该相同
+        manifestName,  // 目录名以 manifest name 为准
       );
       
       if (!validationResult.isValid) {
@@ -364,17 +386,17 @@ export class SkillsController {
       }
 
       // 检查是否和内置技能冲突
-      const systemDir = path.join(this.skillsDir, '.system', skillName);
+      const systemDir = path.join(this.skillsDir, '.system', manifestName);
       try {
         await fs.access(systemDir);
         await fs.rm(tempDir, { recursive: true, force: true });
-        return { success: false, message: `Skill '${skillName}' is a system built-in skill and cannot be overwritten.` };
+        return { success: false, message: `Skill '${manifestName}' is a system built-in skill and cannot be overwritten.` };
       } catch {
         // 不是内置技能，继续
       }
 
       // 移动到 skills 目录
-      const targetDir = path.join(this.skillsDir, skillName);
+      const targetDir = path.join(this.skillsDir, manifestName);
       
       // 检查是否已存在
       try {
@@ -382,11 +404,11 @@ export class SkillsController {
         
         if (!force) {
           await fs.rm(tempDir, { recursive: true, force: true });
-          return { success: false, message: `Skill '${skillName}' already exists. Use force=true to overwrite.` };
+          return { success: false, message: `Skill '${manifestName}' already exists. Use force=true to overwrite.` };
         }
         
         // 强制覆盖：删除旧目录
-        this.logger.log(`Force overwriting existing skill: ${skillName}`);
+        this.logger.log(`Force overwriting existing skill: ${manifestName}`);
         await fs.rm(targetDir, { recursive: true, force: true });
       } catch {
         // 目录不存在，继续
@@ -406,11 +428,11 @@ export class SkillsController {
       // 触发扫描以加载新 Skill
       await this.orchestrator.triggerScan();
 
-      this.logger.log(`Successfully installed skill: ${skillName}${force ? ' (forced overwrite)' : ''}`);
+      this.logger.log(`Successfully installed skill: ${manifestName}${force ? ' (forced overwrite)' : ''}`);
       return { 
         success: true, 
-        skillId: skillName, 
-        message: `Skill '${skillName}' installed successfully${force ? ' (overwritten)' : ''}` 
+        skillId: manifestName, 
+        message: `Skill '${manifestName}' installed successfully${force ? ' (overwritten)' : ''}` 
       };
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
