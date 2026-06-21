@@ -127,33 +127,13 @@
     <WorkspaceSettingsDialog v-model:visible="workspaceDialogVisible" :current-workspace-path="currentWorkspacePath"
         :allow-empty="false" @confirm="handleWorkspaceChange" />
 
-    <!-- 右键菜单 -->
-    <div v-if="contextMenu.visible"
-        class="fixed bg-white dark:bg-[#232428] rounded-lg shadow-lg border border-gray-200 dark:border-[#2e3035] py-1 z-50 min-w-40"
-        :style="{ left: contextMenu.x + 'px', top: contextMenu.y + 'px' }" @click.stop @contextmenu.prevent>
-        <div class="px-4 py-2 text-sm text-gray-700 dark:text-[#e8e9ed] hover:bg-gray-100 dark:hover:bg-[#2a2c30] cursor-pointer flex items-center gap-2"
-            @click="handleCopyFileName">
-            <el-icon>
-                <CopyDocument />
-            </el-icon>
-            复制文件名
-        </div>
-        <div class="px-4 py-2 text-sm text-gray-700 dark:text-[#e8e9ed] hover:bg-gray-100 dark:hover:bg-[#2a2c30] cursor-pointer flex items-center gap-2"
-            @click="handleCopyFilePath">
-            <el-icon>
-                <CopyDocument />
-            </el-icon>
-            复制路径
-        </div>
-        <div v-if="isElectron"
-            class="px-4 py-2 text-sm text-gray-700 dark:text-[#e8e9ed] hover:bg-gray-100 dark:hover:bg-[#2a2c30] cursor-pointer flex items-center gap-2"
-            @click="handleOpenInExplorer">
-            <el-icon>
-                <FolderOpened />
-            </el-icon>
-            在资源管理器中打开
-        </div>
-    </div>
+    <ContextMenu
+        :visible="contextMenu.visible"
+        :x="contextMenu.x"
+        :y="contextMenu.y"
+        :items="contextMenuItems"
+        @close="closeContextMenu"
+    />
 </template>
 
 <script setup lang="ts">
@@ -166,6 +146,7 @@ import { Folder, Document } from '@element-plus/icons-vue';
 import { useStorage, useThrottleFn } from '@vueuse/core';
 import { useMarkdown } from '@/composables/useMarkdown';
 import { useHighlight } from '@/composables/useHighlight';
+import ContextMenu, { type ContextMenuItem } from '@/components/ui/ContextMenu.vue';
 import WorkspaceSettingsDialog from './chat-input/WorkspaceSettingsDialog.vue';
 import SessionBrowserWindowList from './SessionBrowserWindowList.vue';
 
@@ -212,6 +193,30 @@ const contextMenu = ref({
     x: 0,
     y: 0,
     node: null as WorkspaceNode | null,
+});
+
+// 右键菜单项
+const contextMenuItems = computed<ContextMenuItem[]>(() => {
+    const items: ContextMenuItem[] = [
+        {
+            label: '复制文件名',
+            icon: CopyDocument,
+            onClick: handleCopyFileName,
+        },
+        {
+            label: '复制路径',
+            icon: CopyDocument,
+            onClick: handleCopyFilePath,
+        },
+    ];
+    if (isElectron) {
+        items.push({
+            label: '在资源管理器中打开',
+            icon: FolderOpened,
+            onClick: handleOpenInExplorer,
+        });
+    }
+    return items;
 });
 
 // 检测是否为 Electron 环境
@@ -679,15 +684,6 @@ function handleNodeContextMenu(event: MouseEvent, data: WorkspaceNode) {
         y: event.clientY,
         node: data,
     };
-
-    // 点击其他地方关闭菜单
-    const closeHandler = () => {
-        closeContextMenu();
-        document.removeEventListener('click', closeHandler);
-    };
-    setTimeout(() => {
-        document.addEventListener('click', closeHandler);
-    }, 0);
 }
 
 /**

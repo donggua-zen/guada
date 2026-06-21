@@ -7,15 +7,21 @@
  * - 兼容性好：不破坏现有组件的自定义右键菜单
  */
 
-interface MenuItem {
+export interface MenuItem {
   label: string;
   type?: "normal" | "separator";
   action?: () => void;
 }
 
+type ShowMenuFn = (x: number, y: number, items: MenuItem[]) => void;
+
 class ContextMenuManager {
   private static instance: ContextMenuManager;
-  private menuElement: HTMLDivElement | null = null;
+  private showMenuFn: ShowMenuFn | null = null;
+
+  setShowMenuFn(fn: ShowMenuFn) {
+    this.showMenuFn = fn;
+  }
 
   static getInstance(): ContextMenuManager {
     if (!ContextMenuManager.instance) {
@@ -89,93 +95,15 @@ class ContextMenuManager {
    */
   private showGlobalMenu(event: MouseEvent, target: HTMLElement): void {
     const menuItems = this.buildMenuItems(target);
-
-    if (menuItems.length === 0) {
-      return;
-    }
-
-    // 隐藏旧菜单
-    this.hideMenu();
-
-    // 创建菜单容器
-    const menu = document.createElement("div");
-    const isDark = document.documentElement.classList.contains("dark");
-    menu.className = "global-context-menu";
-    menu.style.cssText = `
-      position: fixed;
-      left: ${event.clientX}px;
-      top: ${event.clientY}px;
-      background: ${isDark ? "#1f1f1f" : "white"};
-      border: 1px solid ${isDark ? "#1f1f1f" : "#e4e7ed"};
-      border-radius: 4px;
-      box-shadow: 0 2px 12px 0 rgba(0, 0, 0, 0.1);
-      padding: 4px 0;
-      min-width: 160px;
-      z-index: 9999;
-    `;
-
-    // 添加菜单项
-    menuItems.forEach((item) => {
-      if (item.type === "separator") {
-        const separator = document.createElement("div");
-        separator.style.cssText = `height: 1px; background: ${isDark ? "#383a40" : "#e4e7ed"}; margin: 4px 0;`;
-        menu.appendChild(separator);
-      } else {
-        const menuItem = document.createElement("div");
-        menuItem.className = "context-menu-item";
-        menuItem.textContent = item.label;
-        menuItem.style.cssText = `
-          padding: 8px 16px;
-          cursor: pointer;
-          font-size: 14px;
-          color: ${isDark ? "#c5c7cc" : "#606266"};
-          transition: background 0.2s;
-        `;
-
-        menuItem.addEventListener("mouseenter", () => {
-          menuItem.style.background = isDark ? "#2f3131" : "#f5f7fa";
-        });
-
-        menuItem.addEventListener("mouseleave", () => {
-          menuItem.style.background = "";
-        });
-
-        menuItem.addEventListener("click", () => {
-          if (item.action) {
-            try {
-              item.action();
-            } catch (error) {
-              console.error("[ContextMenu] 动作执行异常:", error);
-            }
-          }
-          this.hideMenu();
-        });
-
-        menu.appendChild(menuItem);
-      }
-    });
-
-    document.body.appendChild(menu);
-    this.menuElement = menu;
-
-    // 调整菜单位置，避免超出屏幕
-    const rect = menu.getBoundingClientRect();
-    if (rect.right > window.innerWidth) {
-      menu.style.left = `${window.innerWidth - rect.width - 10}px`;
-    }
-    if (rect.bottom > window.innerHeight) {
-      menu.style.top = `${window.innerHeight - rect.height - 10}px`;
-    }
+    if (menuItems.length === 0 || !this.showMenuFn) return;
+    this.showMenuFn(event.clientX, event.clientY, menuItems);
   }
 
   /**
    * 隐藏菜单
    */
   private hideMenu(): void {
-    if (this.menuElement) {
-      this.menuElement.remove();
-      this.menuElement = null;
-    }
+    // 菜单关闭由 ContextMenu 组件管理
   }
 
   /**

@@ -12,6 +12,19 @@
     </div>
     <!-- Mock 控制面板（仅开发环境） -->
     <!-- <MockControlPanel v-if="isDev" /> -->
+
+<!-- 全局右键菜单 (Electron 剪贴板操作) -->
+<ContextMenu
+    :visible="globalMenuVisible"
+    :x="globalMenuX"
+    :y="globalMenuY"
+    :items="globalMenuItems.map(item => ({
+        label: item.label,
+        onClick: item.action || (() => {}),
+    }))"
+    @close="globalMenuVisible = false"
+/>
+
 </template>
 
 <script setup>
@@ -57,9 +70,22 @@ watch(
     }
 )
 
-// 初始化全局右键菜单管理器
+// 全局右键菜单状态
+const globalMenuVisible = ref(false)
+const globalMenuX = ref(0)
+const globalMenuY = ref(0)
+const globalMenuItems = ref([])
+
+// 初始化全局右键菜单管理器 (Electron 环境下)
 onMounted(() => {
-    ContextMenuManager.getInstance().init()
+    const mgr = ContextMenuManager.getInstance()
+    mgr.setShowMenuFn((x, y, items) => {
+        globalMenuX.value = x
+        globalMenuY.value = y
+        globalMenuItems.value = items
+        globalMenuVisible.value = true
+    })
+    mgr.init()
 })
 
 // 提供打开引导的方法给全局使用
