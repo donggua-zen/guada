@@ -248,7 +248,7 @@ onUnmounted(() => {
 .window-manager-panel {
   position: fixed;
   top: 50px;
-  right: 20px;
+  left: 20px;
   width: 350px;
   max-height: 500px;
   background: var(--color-bg-secondary, #ffffff);
