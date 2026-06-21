@@ -211,6 +211,8 @@ export class AgentEngine {
           }
         };
         await sessionContext.compress(onStage2);
+        // 必须继续循环，确保压缩完成后再继续
+        needToContinue = true;
         continue;
       }
 
@@ -973,7 +975,7 @@ export class AgentEngine {
       description: t.description,
       parameters: t.parameters as any,
     }));
-    console.log("fileTools", fileTools);
+    // console.log("fileTools", fileTools);
     if (fileTools.length === 0) return;
 
     const shadowRuntime = new ToolRuntime(
@@ -1062,6 +1064,7 @@ export class AgentEngine {
 
           // 路径校验：影子轮次只允许操作记忆相关目录
           const targetPath = args.path || args.file_path || "";
+          const workspacePath = sessionContext.workspacePath;
           const allowedPrefixes =
             sessionContext.sessionType === "sub_agent"
               ? [
@@ -1069,11 +1072,22 @@ export class AgentEngine {
                   `.guada/subagents/${sessionContext.sessionId}/memos/`,
                 ]
               : [`.guada/memory/`, `.guada/memos/`];
+
+          const normalizeForComparison = (p: string): string => {
+            let normalized = path.normalize(p).replace(/\\/g, "/");
+            if (!path.isAbsolute(normalized)) {
+              normalized = path.join(workspacePath, normalized);
+            }
+            return normalized;
+          };
+
+          const normalizedTarget = normalizeForComparison(targetPath);
           const isAllowed =
-            targetPath &&
-            allowedPrefixes.some(
-              (p) => targetPath.startsWith(p) || targetPath.startsWith("/" + p),
-            );
+            normalizedTarget &&
+            allowedPrefixes.some((prefix) => {
+              const normalizedPrefix = normalizeForComparison(prefix);
+              return normalizedTarget.startsWith(normalizedPrefix);
+            });
           if (!isAllowed) {
             errors.push({
               id: tc.id,
