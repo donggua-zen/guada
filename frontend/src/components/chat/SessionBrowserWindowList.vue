@@ -1,10 +1,15 @@
 <template>
   <div v-if="isElectron" class="session-window-list">
     <!-- 头部 -->
-    <div class="shrink-0 flex items-center justify-between px-2 py-3  ">
+    <div class="shrink-0 flex items-center justify-between px-2 py-3">
       <h3 class="text-sm font-normal text-gray-500 dark:text-[#8b8d95] whitespace-nowrap mx-2">
         浏览器窗口
       </h3>
+      <el-button text class="window-add-btn" @click.stop="createNewWindow" :disabled="!sessionId">
+        <el-icon size="16">
+          <Plus />
+        </el-icon>
+      </el-button>
     </div>
 
     <!-- 窗口列表 -->
@@ -40,7 +45,7 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
-import { Close } from '@element-plus/icons-vue'
+import { Close, Plus } from '@element-plus/icons-vue'
 
 interface WindowInfo {
   windowId: string
@@ -103,6 +108,22 @@ async function closeWindow(windowId: string) {
     sessionWindows.value = sessionWindows.value.filter(w => w.windowId !== windowId)
   } catch (error) {
     console.error('[SessionBrowserWindowList] Failed to close window:', error)
+  }
+}
+
+// 创建新浏览器窗口
+async function createNewWindow() {
+  if (!window.electronAPI || !props.sessionId) return
+
+  try {
+    const result = await window.electronAPI.createBrowserWindow('https://www.baidu.com', {
+      sessionId: props.sessionId
+    })
+    if (result.success) {
+      await loadSessionWindows()
+    }
+  } catch (error) {
+    console.error('[SessionBrowserWindowList] Failed to create window:', error)
   }
 }
 
@@ -210,5 +231,18 @@ onUnmounted(() => {
 .window-item {
   border-radius: 4px;
   margin: 0 4px;
+}
+
+.window-add-btn {
+  padding: 4px;
+  margin-right: 8px;
+  color: var(--color-text-secondary, #9ca3af);
+  transition: all 0.2s;
+}
+
+.window-add-btn:hover {
+  color: var(--color-primary, #3b82f6);
+  background: var(--color-hover-bg, #f3f4f6);
+  border-radius: 4px;
 }
 </style>
