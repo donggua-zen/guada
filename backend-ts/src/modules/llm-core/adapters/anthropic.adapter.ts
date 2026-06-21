@@ -169,10 +169,10 @@ export class AnthropicAdapter implements IProtocolAdapter {
 
     for await (const event of stream) {
       // 调试：记录关键事件
-      if (event.type === "content_block_start" || event.type === "content_block_stop" || 
-          (event.type === "content_block_delta" && ["input_json_delta", "thinking_delta"].includes((event.delta as any).type))) {
-        this.logger.debug(`Stream event: type=${event.type}, index=${(event as any).index}, deltaType=${(event as any).delta?.type}`);
-      }
+      // if (event.type === "content_block_start" || event.type === "content_block_stop" || 
+      //     (event.type === "content_block_delta" && ["input_json_delta", "thinking_delta"].includes((event.delta as any).type))) {
+      //   this.logger.debug(`Stream event: type=${event.type}, index=${(event as any).index}, deltaType=${(event as any).delta?.type}`);
+      // }
 
       // 拦截 input_json_delta：用工具序号替换块索引后向下游发射
       if (

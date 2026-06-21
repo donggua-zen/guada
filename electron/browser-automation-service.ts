@@ -1363,7 +1363,9 @@ export class BrowserAutomationService {
         case 'browser_windows':
           return {
             success: true,
-            windows: this.getWindowList(),
+            windows: params?.session_id
+              ? this.getWindowList().filter(w => w.metadata?.sessionId === params.session_id)
+              : this.getWindowList(),
             count: this.getWindowCount(),
           }
 
