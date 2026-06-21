@@ -602,7 +602,7 @@ export class ToolOrchestrator {
     // 使用 tiktoken（cl100k_base）快速计数
     let tokenCount: number;
     try {
-      tokenCount = await this.tokenizerService.countTextTokens('default', content, true);
+      tokenCount = await this.tokenizerService.countTextTokens('default', content, false);
     } catch {
       // 分词器失败时回退到字节估算（约 4 字符/token）
       tokenCount = Math.ceil(Buffer.byteLength(content, 'utf-8') / 4);

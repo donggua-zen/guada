@@ -1,19 +1,61 @@
 /// <reference types="jest" />
 
+import { TokenizerService } from '../../src/common/utils/tokenizer.service';
 import { ChunkingService, PageEntry, ChunkResult } from '../../src/modules/knowledge-base/chunking.service';
+
+// Mock TokenizerService
+function createMockTokenizer() {
+  // 使用真实的 tiktoken 计算来保证结果准确
+  let ttEnc: any = null;
+
+  const getEncoder = async () => {
+    if (!ttEnc) {
+      const tiktoken = await import('tiktoken');
+      ttEnc = tiktoken.get_encoding('cl100k_base');
+    }
+    return ttEnc;
+  };
+
+  return {
+    countTextTokens: jest.fn().mockImplementation(async (_model: string, text: string, _useCache?: boolean) => {
+      if (!text) return 0;
+      const enc = await getEncoder();
+      return enc.encode(text).length;
+    }),
+    encode: jest.fn().mockImplementation(async (_model: string, text: string) => {
+      if (!text) return [];
+      const enc = await getEncoder();
+      return Array.from(enc.encode(text));
+    }),
+    decode: jest.fn().mockImplementation(async (_model: string, tokenIds: number[]) => {
+      if (tokenIds.length === 0) return '';
+      const enc = await getEncoder();
+      const decoded = enc.decode(new Uint32Array(tokenIds));
+      return new TextDecoder().decode(decoded);
+    }),
+    _cleanup: async () => {
+      if (ttEnc) {
+        ttEnc.free();
+        ttEnc = null;
+      }
+    },
+  };
+}
 
 describe('ChunkingService', () => {
   let service: ChunkingService;
+  let mockTokenizer: ReturnType<typeof createMockTokenizer>;
 
   beforeEach(() => {
-    service = new ChunkingService({
+    mockTokenizer = createMockTokenizer();
+    service = new ChunkingService(mockTokenizer as unknown as TokenizerService, {
       chunkSize: 100,
       overlapSize: 20,
     });
   });
 
-  afterEach(() => {
-    service.dispose();
+  afterEach(async () => {
+    await mockTokenizer._cleanup();
   });
 
   describe('chunkText', () => {
@@ -155,11 +197,10 @@ describe('ChunkingService', () => {
 
   describe('分块选项', () => {
     it('应该使用构造时的默认选项', async () => {
-      const defaultService = new ChunkingService();
+      const defaultService = new ChunkingService(mockTokenizer as unknown as TokenizerService);
       const text = '测试默认分块大小';
       const result = await defaultService.chunkText(text);
       expect(result.length).toBe(1);
-      defaultService.dispose();
     });
 
     it('应该在 chunkPages 中覆盖分块选项', async () => {

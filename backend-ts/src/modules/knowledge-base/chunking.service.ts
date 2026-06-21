@@ -2,13 +2,13 @@
  * 智能文本分块服务
  *
  * 基于 Token 数量进行文本分块，保持语义连贯性：
- * - 使用 tiktoken 计算 Token 数
+ * - 使用 TokenizerService 计算 Token 数
  * - 优先在句子或段落边界处分块
  * - 支持分块重叠（避免信息丢失）
  */
 
-import { Logger } from "@nestjs/common";
-import * as tiktoken from "tiktoken";
+import { Injectable, Logger } from "@nestjs/common";
+import { TokenizerService } from "../../common/utils/tokenizer.service";
 
 /**
  * 页码文本条目
@@ -39,80 +39,40 @@ export interface ChunkTextOptions extends ChunkingOptions {
   modelName?: string; // 可以覆盖构造函数中的模型名称
 }
 
+const DEFAULT_MODEL = "default";
+
+// 默认分块配置
+const DEFAULT_CHUNK_SIZE = 1000;
+const DEFAULT_OVERLAP_SIZE = 100;
+
+@Injectable()
 export class ChunkingService {
   private readonly logger = new Logger(ChunkingService.name);
-  private tokenizer: tiktoken.Tiktoken | null = null;
-  // 固定使用 cl100k_base 编码
-  private readonly encodingName: tiktoken.TiktokenEncoding =
-    "cl100k_base" as tiktoken.TiktokenEncoding;
 
-  constructor(private options: ChunkingOptions = {}) {
-    this.options = {
-      chunkSize: options.chunkSize || 1000,
-      overlapSize: options.overlapSize || 100,
-      modelName: options.modelName || "gpt-4o", // 保留但不再使用
-    };
-  }
-
-  /**
-   * 根据模型名称获取对应的 tiktoken 编码
-   */
-  private getEncodingForModel(modelName: string): tiktoken.TiktokenEncoding {
-    const model = modelName.toLowerCase();
-
-    // OpenAI 模型映射
-    if (model.includes("gpt-4o") || model.includes("gpt-4-turbo")) {
-      return "o200k_base" as tiktoken.TiktokenEncoding;
-    }
-    if (model.includes("gpt-4") || model.includes("gpt-3.5")) {
-      return "cl100k_base" as tiktoken.TiktokenEncoding;
-    }
-
-    // 默认使用 cl100k_base
-    return "cl100k_base" as tiktoken.TiktokenEncoding;
-  }
-
-  /**
-   * 获取或初始化 tokenizer（固定使用 cl100k_base 编码）
-   */
-  private async getTokenizer(): Promise<tiktoken.Tiktoken> {
-    if (!this.tokenizer) {
-      try {
-        this.tokenizer = await tiktoken.get_encoding(this.encodingName);
-        this.logger.debug("Tokenizer initialized with cl100k_base encoding");
-      } catch (error: any) {
-        this.logger.error(`Failed to initialize tokenizer: ${error.message}`);
-        throw error;
-      }
-    }
-    return this.tokenizer;
-  }
+  constructor(
+    private readonly tokenizerService: TokenizerService,
+  ) {}
 
   /**
    * 计算文本的 Token 数量
+   * 不走缓存——文档分块是批量一次性操作，几乎没有重复
    */
   async countTokens(text: string): Promise<number> {
-    const tokenizer = await this.getTokenizer();
-    return tokenizer.encode(text).length;
+    return this.tokenizerService.countTextTokens(DEFAULT_MODEL, text, false);
   }
 
   /**
    * 将文本编码为 Token ID 列表
    */
   async encodeText(text: string): Promise<number[]> {
-    const tokenizer = await this.getTokenizer();
-    const tokens = tokenizer.encode(text);
-    return Array.from(tokens);
+    return this.tokenizerService.encode(DEFAULT_MODEL, text);
   }
 
   /**
    * 将 Token ID 列表解码为文本
    */
   async decodeTokens(tokenIds: number[]): Promise<string> {
-    const tokenizer = await this.getTokenizer();
-    const uint32Array = new Uint32Array(tokenIds);
-    const decoded = tokenizer.decode(uint32Array);
-    return new TextDecoder().decode(decoded);
+    return this.tokenizerService.decode(DEFAULT_MODEL, tokenIds);
   }
 
   /**
@@ -169,9 +129,8 @@ export class ChunkingService {
     }
 
     const finalOptions: ChunkingOptions = {
-      chunkSize: chunkOptions.chunkSize ?? this.options.chunkSize,
-      overlapSize: chunkOptions.overlapSize ?? this.options.overlapSize,
-      modelName: this.options.modelName,
+      chunkSize: chunkOptions.chunkSize ?? DEFAULT_CHUNK_SIZE,
+      overlapSize: chunkOptions.overlapSize ?? DEFAULT_OVERLAP_SIZE,
     };
 
     // 合并所有页面文本为连续文档（用换行分隔），不再按页边界单独分块
@@ -384,15 +343,5 @@ export class ChunkingService {
     processed = processed.replace(/\uFFFD/g, "");
 
     return processed;
-  }
-
-  /**
-   * 释放 tokenizer 资源
-   */
-  dispose() {
-    if (this.tokenizer) {
-      this.tokenizer.free();
-      this.tokenizer = null;
-    }
   }
 }

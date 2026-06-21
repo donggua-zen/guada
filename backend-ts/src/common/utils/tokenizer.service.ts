@@ -127,37 +127,84 @@ export class TokenizerService {
   }
 
   /**
+   * 根据模型名自动选择 tokenizer：优先 HF（模型在 hfTokenizerMapping 中有匹配），
+   * 否则回退到 tiktoken（ttEncodingMapping 或默认 cl100k_base）。
+   */
+  private getTokenizerKind(modelName: string): 'hf' | 'tiktoken' {
+    if (this.hfTokenizerMapping[modelName]) return 'hf';
+    if (this.findMatchingKey(modelName)) return 'hf';
+    return 'tiktoken';
+  }
+
+  /**
+   * 将文本编码为 Token ID 列表
+   * 不走缓存——encode 是底层操作，调用方自行管理。
+   * @param modelName 模型名称
+   * @param text 待编码的文本
+   */
+  async encode(modelName: string, text: string): Promise<number[]> {
+    const kind = this.getTokenizerKind(modelName);
+    if (kind === 'hf') {
+      const tokenizer = await this.getHFTokenizer(modelName);
+      return Array.from(tokenizer.encode(text).ids);
+    }
+    const encoding = this.ttEncodingMapping[modelName] || this.ttEncodingMapping.default;
+    const enc = this.getTTEncoder(encoding);
+    return Array.from(enc.encode(text));
+  }
+
+  /**
+   * 将 Token ID 列表解码为文本
+   * @param modelName 模型名称
+   * @param tokenIds Token ID 列表
+   */
+  async decode(modelName: string, tokenIds: number[]): Promise<string> {
+    const kind = this.getTokenizerKind(modelName);
+    if (kind === 'hf') {
+      const tokenizer = await this.getHFTokenizer(modelName);
+      return tokenizer.decode(tokenIds);
+    }
+    const encoding = this.ttEncodingMapping[modelName] || this.ttEncodingMapping.default;
+    const enc = this.getTTEncoder(encoding);
+    const decoded = enc.decode(new Uint32Array(tokenIds));
+    return new TextDecoder().decode(decoded);
+  }
+
+  /**
    * 计算纯文本的 Token 数量（核心实现）
    * @param modelName 模型名称
    * @param text 待计算的纯文本字符串
-   * @param useTiktoken 是否强制使用 Tiktoken
+   * @param useCache 是否使用缓存（默认 true；一次性文本应传 false 避免挤占缓存名额）
    */
-  async countTextTokens(modelName: string, text: string, useTiktoken?: boolean): Promise<number> {
-    // 生成缓存 Key 并尝试从缓存获取
+  async countTextTokens(modelName: string, text: string, useCache: boolean = true): Promise<number> {
+    // 生成缓存 Key
     const cacheKey = this.cache.generateKey(modelName, text);
-    const cached = this.cache.get(cacheKey);
-    if (cached !== null) {
-      return cached;
+
+    // 启用缓存时尝试命中
+    if (useCache) {
+      const cached = this.cache.get(cacheKey);
+      if (cached !== null) {
+        return cached;
+      }
     }
 
-    // 自动选择方案：如果模型在 HF 映射中（支持模糊匹配）且未强制使用 Tiktoken，则优先使用 HF
-    const matchedKey = this.findMatchingKey(modelName);
-    const shouldUseHF = !useTiktoken && (this.hfTokenizerMapping[modelName] || matchedKey);
-
+    // 根据模型名自动选择 tokenizer
+    const kind = this.getTokenizerKind(modelName);
     let result: number;
-    if (shouldUseHF) {
+    if (kind === 'hf') {
       const tokenizer = await this.getHFTokenizer(modelName);
       const encoded = tokenizer.encode(text);
       result = encoded.ids.length;
     } else {
-      // 默认使用 cl100k_base，也可以根据 modelName 扩展映射
       const encoding = this.ttEncodingMapping[modelName] || this.ttEncodingMapping.default;
       const enc = this.getTTEncoder(encoding);
       result = enc.encode(text).length;
     }
 
-    // 将结果写入缓存
-    this.cache.set(cacheKey, result, modelName, text);
+    // 启用缓存时将结果写入缓存
+    if (useCache) {
+      this.cache.set(cacheKey, result, modelName, text);
+    }
     return result;
   }
 
@@ -165,9 +212,9 @@ export class TokenizerService {
    * 计算消息数组的 Token 数量（支持工具调用、复杂内容结构和图片）
    * @param modelName 模型名称
    * @param messages 待计算的消息数组
-   * @param useTiktoken 是否强制使用 Tiktoken（默认根据模型自动选择）
+   * @param useCache 是否使用缓存（默认 true；一次性文本应传 false 避免挤占缓存名额）
    */
-  async countTokens(modelName: string, messages: MessageRecord[], useTiktoken?: boolean): Promise<number> {
+  async countTokens(modelName: string, messages: MessageRecord[], useCache: boolean = true): Promise<number> {
     let totalTokens = 0;
 
     for (const item of messages) {
@@ -175,20 +222,20 @@ export class TokenizerService {
         // 1. 处理工具调用 (toolCalls)
         if (item.toolCalls && Array.isArray(item.toolCalls)) {
           for (const tc of item.toolCalls) {
-            totalTokens += await this.countTextTokens(modelName, JSON.stringify(tc), useTiktoken);
+            totalTokens += await this.countTextTokens(modelName, JSON.stringify(tc), useCache);
           }
         }
 
         // 2. 处理思维链 (reasoning_content)
         if (item.reasoningContent) {
-          totalTokens += await this.countTextTokens(modelName, item.reasoningContent, useTiktoken);
+          totalTokens += await this.countTextTokens(modelName, item.reasoningContent, useCache);
         }
 
         // 3. 处理内容 (content)
         if (Array.isArray(item.content)) {
           for (const part of item.content) {
             if (part.text) {
-              totalTokens += await this.countTextTokens(modelName, part.text, useTiktoken);
+              totalTokens += await this.countTextTokens(modelName, part.text, useCache);
             }
             // 4. 处理图片 (image_url)
             if (part.type === "image_url" && part.image_url) {
@@ -196,7 +243,7 @@ export class TokenizerService {
             }
           }
         } else if (item.content) {
-          totalTokens += await this.countTextTokens(modelName, item.content, useTiktoken);
+          totalTokens += await this.countTextTokens(modelName, item.content, useCache);
         }
       }
     }
@@ -206,11 +253,12 @@ export class TokenizerService {
 
   /**
    * 批量计算多个文本片段的 Token 数
+   * @param useCache 是否使用缓存（默认 true；一次性文本应传 false 避免挤占缓存名额）
    */
-  async countBatchTokens(modelName: string, texts: string[], useTiktoken?: boolean): Promise<number> {
+  async countBatchTokens(modelName: string, texts: string[], useCache: boolean = true): Promise<number> {
     let total = 0;
     for (const text of texts) {
-      total += await this.countTextTokens(modelName, text, useTiktoken);
+      total += await this.countTextTokens(modelName, text, useCache);
     }
     return total;
   }
