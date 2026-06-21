@@ -9,6 +9,7 @@ import { PrismaService } from "../../common/database/prisma.service";
 import { KnowledgeBaseRepository } from "../../common/database/knowledge-base.repository";
 import { VectorDatabase } from "../../common/vector-db/interfaces/vector-database.interface";
 import { createPaginatedResponse } from "../../common/types/pagination";
+import { KbFileService } from "./kb-file.service";
 
 @Injectable()
 export class KnowledgeBaseService {
@@ -18,6 +19,7 @@ export class KnowledgeBaseService {
     private prisma: PrismaService,
     private kbRepo: KnowledgeBaseRepository,
     @Inject("VECTOR_DB") private vectorDb: VectorDatabase,
+    private kbFileService: KbFileService,
   ) {}
 
   /**
@@ -84,6 +86,7 @@ export class KnowledgeBaseService {
 
   /**
    * 更新知识库
+   * 如果修改了向量模型，自动清空分块和向量数据，重置文件状态并重新处理
    */
   async update(kbId: string, data: any) {
     const kb = await this.kbRepo.findById(kbId);
@@ -93,6 +96,12 @@ export class KnowledgeBaseService {
     }
 
     try {
+      // 检测向量模型是否变更
+      const newModelId = data.embedding_model_id !== undefined
+        ? data.embedding_model_id
+        : null;
+      const modelChanged = newModelId !== null && newModelId !== kb.embeddingModelId;
+
       const updateData: any = {};
       if (data.name !== undefined) updateData.name = data.name;
       if (data.description !== undefined)
@@ -111,6 +120,15 @@ export class KnowledgeBaseService {
       }
 
       const updatedKb = await this.kbRepo.update(kbId, updateData);
+
+      // 向量模型变更：清空已有分块和向量，重置文件状态，重新处理
+      if (modelChanged) {
+        this.logger.log(
+          `向量模型变更：${kb.embeddingModelId} → ${newModelId}，开始清理并重新处理知识库 ${kbId}`,
+        );
+        await this.kbFileService.clearAndReprocessKnowledgeBase(kbId);
+      }
+
       this.logger.log(`更新知识库成功：${kbId}`);
       return updatedKb;
     } catch (error: any) {

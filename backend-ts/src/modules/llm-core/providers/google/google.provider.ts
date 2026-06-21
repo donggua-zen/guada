@@ -57,7 +57,7 @@ export class GoogleProvider implements IModelProvider {
       id: this.id,
       name: this.name,
       description: '谷歌提供的 Gemini 大模型服务，具备强大的多模态理解与生成能力。',
-      avatarUrl: 'static/images/providers/google.svg',
+      avatarUrl: 'google.svg',
       apiKeyUrl: 'https://aistudio.google.com/app/apikey',
       protocols: this.protocols,
       defaultApiUrl: this.defaultApiUrl,

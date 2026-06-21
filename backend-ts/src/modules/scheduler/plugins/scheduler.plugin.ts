@@ -111,10 +111,6 @@ export class SchedulerPlugin extends PluginBase {
           task: {
             id: task.id,
             name: task.name,
-            scheduleType: task.scheduleType,
-            cronExpression: task.cronExpression,
-            executeAt: task.executeAt,
-            enabled: task.enabled,
             nextRunAt: task.nextRunAt,
           },
         });
@@ -187,6 +183,11 @@ export class SchedulerPlugin extends PluginBase {
         return JSON.stringify({
           success: true,
           message: `任务已${task.enabled ? "启用" : "禁用"}`,
+          task: {
+            id: task.id,
+            name: task.name,
+            enabled: task.enabled,
+          },
         });
       },
       display: { action: "切换定时任务状态", icon: "time" },

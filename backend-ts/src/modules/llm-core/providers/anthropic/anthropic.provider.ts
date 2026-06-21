@@ -79,7 +79,7 @@ export class AnthropicProvider implements IModelProvider {
       id: this.id,
       name: this.name,
       description: "Anthropic 的 Claude 系列模型，以安全和高质量对话著称。",
-      avatarUrl: "static/images/providers/anthropic.svg",
+      avatarUrl: "anthropic.svg",
       apiKeyUrl: "https://console.anthropic.com/settings/keys",
       protocols: this.protocols,
       defaultApiUrl: this.defaultApiUrl,

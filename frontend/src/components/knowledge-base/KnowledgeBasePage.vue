@@ -199,23 +199,21 @@
   </div>
 
   <!-- 创建/编辑知识库对话框 -->
-  <el-dialog v-model="showCreateModal" title="创建知识库" width="600px" :close-on-click-modal="false" append-to-body>
-    <el-form :model="createForm" label-width="140px" size="large">
+  <el-dialog v-model="showKbDialog" :title="dialogMode === 'create' ? '创建知识库' : '编辑知识库'" width="600px" :close-on-click-modal="false" append-to-body>
+    <el-form :model="dialogForm" label-width="140px" size="large">
       <el-form-item label="知识库名称" required>
-        <el-input v-model="createForm.name" placeholder="请输入知识库名称" maxlength="255" show-word-limit />
+        <el-input v-model="dialogForm.name" placeholder="请输入知识库名称" maxlength="255" show-word-limit />
       </el-form-item>
 
       <el-form-item label="描述">
-        <el-input v-model="createForm.description" type="textarea" :rows="3" placeholder="可选，描述知识库的用途和特点"
+        <el-input v-model="dialogForm.description" type="textarea" :rows="3" placeholder="可选，描述知识库的用途和特点"
           maxlength="2000" show-word-limit />
       </el-form-item>
 
       <el-form-item label="向量模型" required>
-        <el-select v-model="createForm.embeddingModelId" placeholder="请选择向量模型" class="w-full">
+        <el-select v-model="dialogForm.embeddingModelId" placeholder="请选择向量模型" class="w-full">
           <template v-for="provider in embeddingProviders" :key="provider.id">
-            <!-- 分组标题（不可点击） -->
             <el-option :label="provider.name" :value="''" disabled />
-            <!-- 模型选项 -->
             <el-option v-for="model in provider.models" :key="model.id" :label="model.modelName" :value="model.id" />
           </template>
         </el-select>
@@ -228,86 +226,34 @@
         <template #label>
           <span class="font-medium text-gray-700 dark:text-gray-300">最大分块大小</span>
         </template>
-        <el-input-number v-model="createForm.chunkMaxSize" :min="100" :max="5000" :step="100" class="w-full" />
+        <el-input-number v-model="dialogForm.chunkMaxSize" :min="100" :max="5000" :step="100" class="w-full" />
       </el-form-item>
 
       <el-form-item>
         <template #label>
           <span class="font-medium text-gray-700 dark:text-gray-300">重叠大小</span>
         </template>
-        <el-input-number v-model="createForm.chunkOverlapSize" :min="0" :max="500" :step="10" class="w-full" />
+        <el-input-number v-model="dialogForm.chunkOverlapSize" :min="0" :max="500" :step="10" class="w-full" />
       </el-form-item>
 
       <el-form-item>
         <template #label>
           <span class="font-medium text-gray-700 dark:text-gray-300">最小分块大小</span>
         </template>
-        <el-input-number v-model="createForm.chunkMinSize" :min="10" :max="500" :step="10" class="w-full" />
-      </el-form-item>
-
-      <!-- <el-form-item label="可见性">
-                <el-switch v-model="createForm.isPublic" />
-                <span class="text-sm text-gray-500 dark:text-gray-400 ml-2">公开的知识库可被其他人查看</span>
-            </el-form-item> -->
-    </el-form>
-
-    <template #footer>
-      <div class="flex justify-end gap-3">
-        <el-button @click="showCreateModal = false">取消</el-button>
-        <el-button type="primary" @click="handleCreate" :loading="store.loading">
-          创建
-        </el-button>
-      </div>
-    </template>
-  </el-dialog>
-
-  <!-- 编辑知识库对话框 -->
-  <el-dialog v-model="showEditModal" title="编辑知识库" width="600px" :close-on-click-modal="false">
-    <el-form :model="editForm" label-width="140px" size="large">
-      <el-form-item label="知识库名称" required>
-        <el-input v-model="editForm.name" placeholder="请输入知识库名称" maxlength="255" show-word-limit />
-      </el-form-item>
-
-      <el-form-item label="描述">
-        <el-input v-model="editForm.description" type="textarea" :rows="3" placeholder="可选，描述知识库的用途和特点" maxlength="2000"
-          show-word-limit />
-      </el-form-item>
-
-      <el-divider />
-
-      <!-- 分块大小配置 -->
-      <el-form-item>
-        <template #label>
-          <span class="font-medium text-gray-700 dark:text-gray-300">最大分块大小</span>
-        </template>
-        <el-input-number v-model="editForm.chunkMaxSize" :min="100" :max="5000" :step="100" class="w-full" />
-      </el-form-item>
-
-      <el-form-item>
-        <template #label>
-          <span class="font-medium text-gray-700 dark:text-gray-300">重叠大小</span>
-        </template>
-        <el-input-number v-model="editForm.chunkOverlapSize" :min="0" :max="500" :step="10" class="w-full" />
-      </el-form-item>
-
-      <el-form-item>
-        <template #label>
-          <span class="font-medium text-gray-700 dark:text-gray-300">最小分块大小</span>
-        </template>
-        <el-input-number v-model="editForm.chunkMinSize" :min="10" :max="500" :step="10" class="w-full" />
+        <el-input-number v-model="dialogForm.chunkMinSize" :min="10" :max="500" :step="10" class="w-full" />
       </el-form-item>
 
       <el-form-item label="可见性">
-        <el-switch v-model="editForm.isPublic" />
+        <el-switch v-model="dialogForm.isPublic" />
         <span class="text-sm text-gray-500 dark:text-gray-400 ml-2">公开的知识库可被其他人查看</span>
       </el-form-item>
     </el-form>
 
     <template #footer>
       <div class="flex justify-end gap-3">
-        <el-button @click="showEditModal = false">取消</el-button>
-        <el-button type="primary" @click="handleUpdate" :loading="store.loading">
-          保存
+        <el-button @click="showKbDialog = false">取消</el-button>
+        <el-button type="primary" @click="handleKbSave" :loading="store.loading">
+          {{ dialogMode === 'create' ? '创建' : '保存' }}
         </el-button>
       </div>
     </template>
@@ -347,8 +293,8 @@ const route = useRoute()
 const router = useRouter()
 
 // ========== 状态 ==========
-const showCreateModal = ref(false)
-const showEditModal = ref(false)
+const showKbDialog = ref(false)
+const dialogMode = ref<'create' | 'edit'>('create')
 const showUploadModal = ref(false)
 const showFileChunksModal = ref(false)  // 文件分块查看弹窗
 const showUploadTaskModal = ref(false)  // 上传任务弹窗
@@ -376,22 +322,12 @@ const fileListContainer = ref<any>(null) // 文件列表容器引用（ScrollCon
 const fileTreeRef = ref<any>(null) // 文件树组件引用
 const scrollThreshold = 50 // 滚动触发阈值(像素)
 
-// ========== 创建表单 ==========
-const createForm = reactive({
-  name: '',
-  description: '',
-  embeddingModelId: '',
-  chunkMaxSize: 1000,
-  chunkOverlapSize: 100,
-  chunkMinSize: 50,
-  isPublic: false
-})
-
-// ========== 编辑表单 ==========
-const editForm = reactive({
+// ========== 对话框表单（创建/编辑共用） ==========
+const dialogForm = reactive({
   id: '',
   name: '',
   description: '',
+  embeddingModelId: '',
   chunkMaxSize: 1000,
   chunkOverlapSize: 100,
   chunkMinSize: 50,
@@ -490,48 +426,94 @@ function handleDropdownCommand(command: string, kb: KnowledgeBase) {
 }
 
 /**
- * 创建知识库
+ * 打开创建对话框
  */
-async function handleCreate() {
+function handleOpenCreate() {
+  dialogForm.id = ''
+  dialogForm.name = ''
+  dialogForm.description = ''
+  dialogForm.embeddingModelId = ''
+  dialogForm.chunkMaxSize = 1000
+  dialogForm.chunkOverlapSize = 100
+  dialogForm.chunkMinSize = 50
+  dialogForm.isPublic = false
+  dialogMode.value = 'create'
+  showKbDialog.value = true
+}
+
+/**
+ * 保存知识库（创建/更新共用）
+ */
+async function handleKbSave() {
   // 验证必填字段
-  if (!createForm.name.trim()) {
+  if (!dialogForm.name.trim()) {
     toast.warning('请输入知识库名称')
     return
   }
 
-  if (!createForm.embeddingModelId) {
+  if (dialogMode.value === 'create' && !dialogForm.embeddingModelId) {
     toast.warning('请选择向量模型')
     return
   }
 
   try {
-    const newKb = await store.createKnowledgeBase({
-      name: createForm.name,
-      description: createForm.description || undefined,
-      embeddingModelId: createForm.embeddingModelId,
-      chunkMaxSize: createForm.chunkMaxSize,
-      chunkOverlapSize: createForm.chunkOverlapSize,
-      chunkMinSize: createForm.chunkMinSize,
-      isPublic: createForm.isPublic
-    })
+    if (dialogMode.value === 'create') {
+      // 创建
+      const newKb = await store.createKnowledgeBase({
+        name: dialogForm.name,
+        description: dialogForm.description || undefined,
+        embeddingModelId: dialogForm.embeddingModelId,
+        chunkMaxSize: dialogForm.chunkMaxSize,
+        chunkOverlapSize: dialogForm.chunkOverlapSize,
+        chunkMinSize: dialogForm.chunkMinSize,
+        isPublic: dialogForm.isPublic
+      })
 
-    toast.success('创建成功')
-    showCreateModal.value = false
+      toast.success('创建成功')
+      showKbDialog.value = false
 
-    // 重置表单
-    resetForm()
+      // 刷新列表
+      await store.fetchKnowledgeBases()
 
-    // 刷新列表
-    await store.fetchKnowledgeBases()
+      // 创建成功后自动选中新建的知识库
+      const createdKb = store.knowledgeBases.find(kb => kb.id === newKb.id)
+      if (createdKb) {
+        await handleSelectKB(createdKb)
+      }
+    } else {
+      // 更新
+      // 检测向量模型是否变更
+      const currentKb = store.knowledgeBases.find(kb => kb.id === dialogForm.id)
+      const modelChanged = currentKb && dialogForm.embeddingModelId && currentKb.embeddingModelId !== dialogForm.embeddingModelId
 
-    // 关键修改：创建成功后自动选中新建的知识库
-    const createdKb = store.knowledgeBases.find(kb => kb.id === newKb.id)
-    if (createdKb) {
-      await handleSelectKB(createdKb)
+      if (modelChanged) {
+        const confirmed = await confirm(
+          '切换向量模型',
+          '切换模型需要重新处理全部文档，可能导致较高的成本。确定要继续吗？',
+          { type: 'warning', confirmText: '确定切换', cancelText: '取消' }
+        )
+        if (!confirmed) return
+      }
+
+      await store.updateKnowledgeBase(dialogForm.id, {
+        name: dialogForm.name,
+        description: dialogForm.description,
+        embeddingModelId: dialogForm.embeddingModelId || undefined,
+        chunkMaxSize: dialogForm.chunkMaxSize,
+        chunkOverlapSize: dialogForm.chunkOverlapSize,
+        chunkMinSize: dialogForm.chunkMinSize,
+        isPublic: dialogForm.isPublic
+      })
+
+      toast.success('保存成功')
+      showKbDialog.value = false
+
+      // 刷新列表
+      await store.fetchKnowledgeBases()
     }
   } catch (error: any) {
-    console.error('创建失败:', error)
-    toast.error(error.response?.data?.detail || '创建失败')
+    console.error('操作失败:', error)
+    toast.error(error.response?.data?.detail || '操作失败')
   }
 }
 
@@ -539,47 +521,20 @@ async function handleCreate() {
  * 编辑知识库
  */
 function handleEdit(kb: KnowledgeBase) {
-  Object.assign(editForm, {
+  Object.assign(dialogForm, {
     id: kb.id,
     name: kb.name,
     description: kb.description || '',
+    embeddingModelId: kb.embeddingModelId || '',
     chunkMaxSize: kb.chunkMaxSize,
     chunkOverlapSize: kb.chunkOverlapSize,
     chunkMinSize: kb.chunkMinSize,
     isPublic: kb.isPublic
   })
-  showEditModal.value = true
+  dialogMode.value = 'edit'
+  showKbDialog.value = true
 }
 
-/**
- * 更新知识库
- */
-async function handleUpdate() {
-  if (!editForm.name.trim()) {
-    toast.warning('请输入知识库名称')
-    return
-  }
-
-  try {
-    await store.updateKnowledgeBase(editForm.id, {
-      name: editForm.name,
-      description: editForm.description,
-      chunkMaxSize: editForm.chunkMaxSize,
-      chunkOverlapSize: editForm.chunkOverlapSize,
-      chunkMinSize: editForm.chunkMinSize,
-      isPublic: editForm.isPublic
-    })
-
-    toast.success('保存成功')
-    showEditModal.value = false
-
-    // 刷新列表
-    await store.fetchKnowledgeBases()
-  } catch (error: any) {
-    console.error('更新失败:', error)
-    toast.error(error.response?.data?.detail || '更新失败')
-  }
-}
 
 /**
  * 删除知识库
@@ -646,18 +601,7 @@ function handleAfterDelete(deletedKbId: string, currentIndex: number) {
   }
 }
 
-/**
- * 重置创建表单
- */
-function resetForm() {
-  createForm.name = ''
-  createForm.description = ''
-  createForm.embeddingModelId = ''
-  createForm.chunkMaxSize = 1000
-  createForm.chunkOverlapSize = 100
-  createForm.chunkMinSize = 50
-  createForm.isPublic = false
-}
+
 
 /**
  * 处理上传完成事件

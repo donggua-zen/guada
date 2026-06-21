@@ -47,7 +47,7 @@ export class MoonshotProvider implements IModelProvider {
       id: this.id,
       name: this.name,
       description: '月之暗面科技，Kimi 智能助手背后的技术提供方，擅长长文本处理。',
-      avatarUrl: 'static/images/providers/moonshotai_new.png',
+      avatarUrl: 'moonshotai_new.png',
       apiKeyUrl: 'https://platform.moonshot.cn/console/api-keys',
       protocols: this.protocols,
       defaultApiUrl: this.defaultApiUrl,

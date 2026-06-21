@@ -61,7 +61,7 @@ export class OpenAIResponseProvider implements IModelProvider {
       id: this.id,
       name: this.name,
       description: '使用 OpenAI 最新 Responses API（beta），专为 o 系列推理模型和高级智能体场景设计。',
-      avatarUrl: 'static/images/providers/openai.svg',
+      avatarUrl: 'openai.svg',
       apiKeyUrl: 'https://platform.openai.com/api-keys',
       protocols: this.protocols,
       defaultApiUrl: this.defaultApiUrl,
