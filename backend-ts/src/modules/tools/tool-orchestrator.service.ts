@@ -1,10 +1,11 @@
 import { Injectable, Logger } from "@nestjs/common";
+import * as path from "path";
+import * as fs from "fs/promises";
 import {
   ToolCallRequest,
   ToolCallResponse,
   ToolDefinition,
 } from "./interfaces/tool-provider.interface";
-
 import {
   UniversalToolHandler,
   UNIVERSAL_TOOLS,
@@ -19,6 +20,7 @@ import {
   ToolLoadMode,
   PluginConfig,
 } from "../plugins/types/plugin.types";
+import { TokenizerService } from "../../common/utils/tokenizer.service";
 
 /**
  * MCP 配置以 toolsConfig.mcp 字段形式存在
@@ -32,6 +34,7 @@ export class ToolOrchestrator {
   constructor(
     private readonly settingsStorage: SettingsStorage,
     private readonly pluginManager: PluginManager,
+    private readonly tokenizerService: TokenizerService,
   ) {
     this.universalHandler = new UniversalToolHandler();
   }
@@ -524,14 +527,19 @@ export class ToolOrchestrator {
         abortSignal,
       );
 
-      const MAX_CONTENT_LENGTH = 50000;
-      if (content && content.length > MAX_CONTENT_LENGTH) {
-        const omittedLength = content.length - MAX_CONTENT_LENGTH;
-        content = JSON.stringify({
-          warning: `Content truncated. Omitted ${omittedLength} characters.`,
-          tool_truncated: content.substring(0, MAX_CONTENT_LENGTH),
-          omitted_length: omittedLength,
-        });
+      // 统一序列化：工具返回对象时自动转字符串，返回字符串时保持原样
+      if (typeof content === 'object' && content !== null) {
+        content = JSON.stringify(content);
+      }
+
+      // 判断工具所属插件是否为 file 插件（file 插件有自身的长度控制，豁免大结果处理）
+      const toolPluginId = allGroups.find(g =>
+        g.tools.some(t => t.name === fullToolName)
+      )?.pluginId;
+
+      // 大结果处理：非 file 插件的结果过大时保存到文件
+      if (content && toolPluginId !== 'file') {
+        content = await this.handleLargeResult(content, fullToolName, toolCallId, context);
       }
       return { toolCallId, name: fullToolName, content, isError: false };
     } catch (error: any) {
@@ -573,5 +581,66 @@ export class ToolOrchestrator {
       });
     }
     return toolsList;
+  }
+
+  // ── 大结果处理 ──
+
+  /**
+   * 处理过大的工具结果：使用 tiktoken 快速计数，超过 20K tokens 时保存到文件
+   * 返回 2KB 预览 + 文件路径，并引导 AI 分段读取
+   * file 插件在调用前已豁免，不会进入此方法
+   */
+  private async handleLargeResult(
+    content: string,
+    toolName: string,
+    toolCallId: string,
+    context: ToolRuntime,
+  ): Promise<string> {
+    const MAX_TOKENS = 20000;
+    const PREVIEW_BYTES = 2048;
+
+    // 使用 tiktoken（cl100k_base）快速计数
+    let tokenCount: number;
+    try {
+      tokenCount = await this.tokenizerService.countTextTokens('default', content, true);
+    } catch {
+      // 分词器失败时回退到字节估算（约 4 字符/token）
+      tokenCount = Math.ceil(Buffer.byteLength(content, 'utf-8') / 4);
+    }
+    if (tokenCount <= MAX_TOKENS) return content;
+
+    // 预览：取前 2KB
+    const preview = content.substring(0, PREVIEW_BYTES);
+
+    const workspacePath = context.injectParams?.workspacePath;
+    if (!workspacePath) {
+      return JSON.stringify({
+        warning: `结果过大（约 ${tokenCount} tokens），且无法保存到工作目录`,
+        preview,
+        tool_truncated_hint: '请使用 read 工具读取文件，或要求缩小范围',
+      });
+    }
+
+    try {
+      const outputDir = path.join(workspacePath, '.guada', 'tools_output');
+      await fs.mkdir(outputDir, { recursive: true });
+      const safeName = toolName.replace(/[^a-zA-Z0-9_-]/g, '_');
+      const fileName = `${safeName}_${toolCallId}.json`;
+      await fs.writeFile(path.join(outputDir, fileName), content, 'utf-8');
+      return JSON.stringify({
+        message: `结果较大（约 ${tokenCount} tokens），已保存到工作目录`,
+        file_path: path.join('.guada', 'tools_output', fileName),
+        preview,
+        tool_truncated_hint: `完整结果已保存至上述文件。如需读取，请使用 read 工具并指定 file_path 参数为 "${path.join('.guada', 'tools_output', fileName)}"，可配合 unit/offset/limit 分块读取（unit="char" 按字符偏移读取）。`,
+      });
+    } catch (saveError: any) {
+      this.logger.warn(`保存大结果到文件失败: ${saveError.message}，回退到截断`);
+      return JSON.stringify({
+        warning: '结果过大且无法保存到文件',
+        preview,
+        tool_truncated_hint: '请使用 read 工具读取文件，或要求缩小范围',
+        token_count: tokenCount,
+      });
+    }
   }
 }

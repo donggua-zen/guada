@@ -26,7 +26,8 @@ export class FilePlugin extends PluginBase {
   async onLoad(api: PluginApi) {
     api.registerTool({
       name: "read",
-      description: "读取指定路径的文本文件内容，支持按行和字符分页。",
+      description:
+        "读取指定路径的文本文件内容，支持按行或按字符分页。读取到硬上限（20KB）时自动截断，返回 next 参数供继续读取。",
       inputSchema: z.object({
         file_path: z
           .string()
@@ -35,102 +36,123 @@ export class FilePlugin extends PluginBase {
           .string()
           .optional()
           .describe("文件编码，如 utf-8、gbk，默认自动检测"),
+        unit: z
+          .enum(["line", "char"])
+          .optional()
+          .describe(
+            "偏移单位：line=按行读取（默认），char=按字符读取。当 truncated=true 时使用返回的 next.unit 继续",
+          ),
         offset: z
           .number()
           .int()
           .min(0)
           .optional()
-          .describe("起始读取行号，从 0 开始"),
-        skip_chars: z
-          .number()
-          .int()
-          .min(0)
-          .optional()
-          .describe("跳过开头的字符数"),
+          .describe("起始位置（行号或字符偏移），默认 0"),
         limit: z
-          .number()
-          .int()
-          .min(-1)
-          .optional()
-          .describe("最多读取行数，-1 表示不限制"),
-        max_chars: z
           .number()
           .int()
           .min(1)
           .optional()
-          .describe("最多读取字符数"),
+          .describe(
+            "读取数量：unit=line 时最多读取行数（默认 200），unit=char 时最多读取字符数（默认 20000）",
+          ),
       }),
       execute: async (args, ctx) => {
-        const { file_path, encoding, offset, skip_chars, limit, max_chars } =
-          args;
+        const { file_path, encoding, unit = "line", offset = 0, limit } = args;
         if (!file_path) throw new Error("文件路径不能为空");
 
         const resolvedPath = this.resolvePath(file_path, ctx);
-        this.logger.log(`读取文件: ${file_path}`);
-        const stats = await fs.stat(resolvedPath);
-        if (!stats.isFile()) throw new Error(`${resolvedPath} 不是一个文件`);
-
-        const maxSize = 10 * 1024 * 1024;
-        if (stats.size > maxSize)
-          throw new Error(
-            `文件过大（${(stats.size / 1024 / 1024).toFixed(2)}MB），超过限制`,
-          );
+        this.logger.log(
+          `读取文件: ${file_path}, unit=${unit}, offset=${offset}, limit=${limit}`,
+        );
 
         const raw = await fs.readFile(resolvedPath, {
           encoding: (encoding || "utf-8") as BufferEncoding,
         });
 
+        const totalChars = raw.length;
         const lines = raw.split("\n");
         const totalLines = lines.length;
-        const MAX_LINES = 500;
         const MAX_BYTES = 20 * 1024;
-        const actualLimit = Math.min(
-          limit === -1 ? MAX_LINES : (limit ?? MAX_LINES),
-          MAX_LINES,
-        );
-        const startLine = Math.max(0, Math.min(offset ?? 0, totalLines));
-        let selected = "",
-          chars = 0,
-          endLine = startLine,
-          skip = skip_chars ?? 0;
+        let content = "";
 
-        for (let i = startLine; i < totalLines; i++) {
-          if (i - startLine >= actualLimit) {
-            endLine = i;
-            break;
+        if (unit === "char") {
+          // 按字符读取
+          const charLimit = limit ?? 20000;
+          content = raw.substring(offset, offset + charLimit);
+          const charsRead = content.length;
+          const truncated = offset + charLimit < totalChars;
+          const result: any = {
+            content,
+            truncated,
+            total_lines: totalLines,
+            total_chars: totalChars,
+          };
+          if (truncated) {
+            result.next = {
+              unit: "char",
+              offset: offset + charLimit,
+              limit: charLimit,
+            };
           }
-          let line = lines[i];
-          if (i === startLine && skip > 0) line = line.substring(skip);
-          const ln = line + (i < totalLines - 1 ? "\n" : "");
-          if (chars + ln.length > MAX_BYTES) {
-            const avail = MAX_BYTES - chars;
-            if (avail > 0) selected += ln.substring(0, avail);
-            chars += avail;
-            endLine = i;
-            break;
-          }
-          selected += ln;
-          chars += ln.length;
-          endLine = i;
+          return result;
         }
 
-        const hasMore = endLine < totalLines - 1 || chars >= MAX_BYTES;
-        return JSON.stringify({
-          content: selected,
-          file_path: resolvedPath,
-          chars_read: selected.length,
-          total_chars: raw.length,
-          start_line: startLine,
-          end_line: endLine,
+        // 按行读取
+        const lineLimit = limit ?? 200;
+        const startLine = Math.min(offset, totalLines);
+
+        // 计算起始行的原始字符位置
+        let nextCharOffset = 0;
+        for (let i = 0; i < startLine; i++) {
+          nextCharOffset += lines[i].length + 1; // +1 换行符
+        }
+
+        let endLine = startLine;
+        let charsRead = 0;
+        let truncatedByBytes = false;
+
+        for (let i = startLine; i < totalLines; i++) {
+          if (i - startLine >= lineLimit) {
+            endLine = i;
+            break;
+          }
+          const line = lines[i];
+          const ln = line + (i < totalLines - 1 ? "\n" : "");
+          if (charsRead + ln.length > MAX_BYTES) {
+            const avail = MAX_BYTES - charsRead;
+            content += ln.substring(0, avail);
+            charsRead += avail;
+            endLine = i;
+            truncatedByBytes = true;
+            break;
+          }
+          content += ln;
+          charsRead += ln.length;
+          endLine = i + 1;
+        }
+        nextCharOffset += charsRead;
+
+        const hasMoreLines = endLine < totalLines;
+        const truncated = hasMoreLines || truncatedByBytes;
+        const result: any = {
+          content,
+          truncated,
           total_lines: totalLines,
-          lines_read: endLine - startLine,
-          next_offset: hasMore ? endLine : undefined,
-          next_skip_chars:
-            hasMore && chars >= MAX_BYTES
-              ? lines[endLine]?.length -
-                (selected.split("\n").pop()?.length || 0)
-              : 0,
-        });
+          total_chars: totalChars,
+        };
+        if (truncated) {
+          if (truncatedByBytes) {
+            result.next = {
+              unit: "char",
+              offset: nextCharOffset,
+              limit: 20000,
+            };
+          } else {
+            result.next = { unit: "line", offset: endLine, limit: lineLimit };
+          }
+        }
+        return JSON.stringify(result);
       },
       display: { action: "读取文件", argsKey: "file_path", icon: "read" },
     });
@@ -186,11 +208,11 @@ export class FilePlugin extends PluginBase {
         };
 
         const items = await readDir(resolvedPath, Math.min(depth, 3));
-        return JSON.stringify({
+        return {
           path: resolvedPath,
           items,
           total: items.length,
-        });
+        };
       },
       display: { action: "列出目录", argsKey: "path", icon: "search" },
     });
@@ -215,7 +237,11 @@ export class FilePlugin extends PluginBase {
         await fs.writeFile(resolvedPath, content, {
           encoding: encoding as BufferEncoding,
         });
-        return `文件已写入：${resolvedPath}，共 ${content.length} 字符`;
+        return {
+          success: true,
+          message: `文件已写入：${resolvedPath}，共 ${content.length} 字符`,
+          file_path: resolvedPath,
+        };
       },
       display: { action: "写入文件", argsKey: "file_path", icon: "edit" },
       dangerLevel: "high",
@@ -259,7 +285,12 @@ export class FilePlugin extends PluginBase {
         await fs.writeFile(resolvedPath, modified, {
           encoding: encoding as BufferEncoding,
         });
-        return `文件 ${resolvedPath} 已修改，共替换 ${actualCount} 处`;
+        return {
+          success: true,
+          message: `文件 ${resolvedPath} 已修改，共替换 ${actualCount} 处`,
+          file_path: resolvedPath,
+          replace_count: actualCount,
+        };
       },
       display: { action: "替换文本", argsKey: "file_path", icon: "edit" },
       dangerLevel: "high",
@@ -285,10 +316,10 @@ export class FilePlugin extends PluginBase {
         const stats = await fs.stat(resolvedPath);
         if (stats.isFile()) {
           await fs.unlink(resolvedPath);
-          return `文件已删除：${resolvedPath}`;
+          return { success: true, message: `文件已删除：${resolvedPath}`, path: resolvedPath };
         } else if (stats.isDirectory()) {
           await fs.rm(resolvedPath, { recursive: true, force: true });
-          return `目录已删除：${resolvedPath}`;
+          return { success: true, message: `目录已删除：${resolvedPath}`, path: resolvedPath };
         }
         throw new Error(`${resolvedPath} 不是有效的文件或目录`);
       },
@@ -352,13 +383,13 @@ export class FilePlugin extends PluginBase {
             });
           }
         }
-        return JSON.stringify({
+        return {
           file_path: resolvedPath,
           pattern,
           total_matches: total,
           matched_lines: matches.length,
           matches,
-        });
+        };
       },
       display: { action: "搜索文件内容", argsKey: "regex", icon: "search" },
     });

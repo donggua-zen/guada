@@ -10,6 +10,8 @@ import { z } from "zod";
 
 // ── PluginApi ──
 
+export type ToolResult = string | Record<string, any>;
+
 export interface ToolExecCtx extends PluginContext {}
 
 export interface PluginApi {
@@ -25,7 +27,7 @@ export interface PluginApi {
       args: z.output<Z>,
       ctx?: ToolExecCtx,
       signal?: AbortSignal,
-    ) => string | Promise<string>;
+    ) => ToolResult | Promise<ToolResult>;
     display?: {
       action?: string;
       argsKey?: string;
@@ -47,7 +49,7 @@ export interface PluginApi {
       args: any,
       ctx?: ToolExecCtx,
       signal?: AbortSignal,
-    ) => string | Promise<string>;
+    ) => ToolResult | Promise<ToolResult>;
     display?: {
       action?: string;
       argsKey?: string;
