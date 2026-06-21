@@ -53,7 +53,7 @@ export class ZhipuProvider implements IModelProvider {
       id: this.id,
       name: this.name,
       description: '源自清华技术背景，提供 GLM 系列大语言模型，支持强大的推理与代码能力。',
-      avatarUrl: 'static/images/providers/zhipu.svg',
+      avatarUrl: 'zhipu.svg',
       apiKeyUrl: 'https://open.bigmodel.cn/usercenter/apikeys',
       protocols: this.protocols,
       defaultApiUrl: this.defaultApiUrl,

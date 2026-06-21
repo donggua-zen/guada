@@ -1,8 +1,7 @@
 <template>
   <div v-if="isElectron" class="session-window-list">
     <!-- 头部 -->
-    <div
-      class="shrink-0 flex items-center justify-between px-2 py-3  bg-white dark:bg-[#1a1b1e]">
+    <div class="shrink-0 flex items-center justify-between px-2 py-3  ">
       <h3 class="text-sm font-normal text-gray-500 dark:text-[#8b8d95] whitespace-nowrap mx-2">
         浏览器窗口
       </h3>
@@ -10,16 +9,14 @@
 
     <!-- 窗口列表 -->
     <div v-if="sessionWindows.length === 0" class="text-center py-6 text-gray-400 dark:text-[#6b6d73] text-xs">
-        暂无浏览器窗口
-      </div>
+      暂无浏览器窗口
+    </div>
     <div v-else class="window-items overflow-y-auto py-2" style="max-height: 160px;">
       <div v-for="win in sessionWindows" :key="win.windowId"
-        class="window-item px-2 py-1.5 flex items-center gap-2 cursor-pointer transition-all duration-200"
-        :class="{
+        class="window-item px-2 py-1.5 flex items-center gap-2 cursor-pointer transition-all duration-200" :class="{
           'bg-blue-50 dark:bg-blue-900/20': animatedWindowId === win.windowId,
           'hover:bg-gray-100 dark:hover:bg-[#2a2c30]': animatedWindowId !== win.windowId
-        }"
-        @click="activateWindow(win.windowId)">
+        }" @click="activateWindow(win.windowId)">
         <!-- 窗口状态指示器 -->
         <span class="w-2 h-2 rounded-full shrink-0"
           :class="win.isVisible ? 'bg-green-500' : 'bg-gray-400 dark:bg-gray-600'"
@@ -27,8 +24,7 @@
         </span>
 
         <!-- 窗口标题 -->
-        <span class="text-xs text-gray-600 dark:text-[#8b8d95] truncate flex-1"
-          :title="win.title || '未命名窗口'">
+        <span class="text-xs text-gray-600 dark:text-[#8b8d95] truncate flex-1" :title="win.title || '未命名窗口'">
           {{ truncateTitle(win.title || '未命名窗口') }}
         </span>
 
@@ -194,8 +190,6 @@ onUnmounted(() => {
 </script>
 
 <style scoped>
-
-
 .window-items {
   scrollbar-width: thin;
 }

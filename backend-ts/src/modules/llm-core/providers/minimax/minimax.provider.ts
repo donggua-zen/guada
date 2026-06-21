@@ -50,7 +50,7 @@ export class MinimaxProvider implements IModelProvider {
       id: this.id,
       name: this.name,
       description: '专注于通用人工智能，提供高质量的语言模型和语音合成服务。',
-      avatarUrl: 'static/images/providers/minimax.svg',
+      avatarUrl: 'minimax.svg',
       apiKeyUrl: 'https://platform.minimaxi.com/user-center/basic-information/interface-key',
       protocols: this.protocols,
       defaultApiUrl: this.defaultApiUrl,

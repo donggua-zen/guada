@@ -44,7 +44,7 @@ export class AzureOpenAIProvider implements IModelProvider {
       id: this.id,
       name: this.name,
       description: '微软 Azure 云平台提供的 OpenAI 服务，支持企业级部署和更高的安全性。',
-      avatarUrl: 'static/images/providers/azure.svg',
+      avatarUrl: 'azure.svg',
       apiKeyUrl: 'https://portal.azure.com/#view/Microsoft_Azure_ProjectOxford/CognitiveServicesHub/~/OpenAI',
       protocols: this.protocols,
       defaultApiUrl: this.defaultApiUrl,

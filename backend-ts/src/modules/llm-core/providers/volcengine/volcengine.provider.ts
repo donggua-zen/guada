@@ -72,7 +72,7 @@ export class VolcEngineProvider implements IModelProvider {
 			id: this.id,
 			name: this.name,
 			description: '字节跳动旗下云平台，提供豆包大模型及企业级 AI 解决方案。',
-			avatarUrl: 'static/images/providers/volcengine.svg',
+			avatarUrl: 'volcengine.svg',
 			apiKeyUrl: 'https://console.volcengine.com/ark/region:ark+cn-beijing/apikey',
 			protocols: this.protocols,
 			defaultApiUrl: this.defaultApiUrl,

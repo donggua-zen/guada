@@ -19,11 +19,12 @@
         <div v-for="provider in items" :key="provider.id"
           class="provider-card group relative bg-white dark:bg-[#232428] border border-gray-200 dark:border-[#232428] rounded-lg p-4 cursor-default hover:border-(--color-primary) transition-all duration-200">
           <div class="flex items-start gap-3">
-            <div
-              class="w-11 h-11 shrink-0 flex items-center justify-center text-(--color-primary) bg-gray-50 dark:bg-[#2a2c30] rounded-md">
-              <img v-if="provider.avatarUrl" :src="provider.avatarUrl" class="w-6 h-6 object-contain" alt="icon" />
-              <component v-else :is="getTemplateIcon(provider)" :size="22" />
-            </div>
+            <Avatar
+              :src="getProviderIcon(provider)"
+              :name="provider.name"
+              type="assistant"
+              class="w-11 h-11 shrink-0"
+            />
             <div class="flex-1 min-w-0">
               <div class="flex items-start justify-between">
                 <div class="font-medium text-base text-gray-900 dark:text-[#e8e9ed] truncate" :title="provider.name">{{ provider.name }}
@@ -68,11 +69,12 @@
         <div v-for="template in templates" :key="template.id"
           class="provider-card template-card relative border border-gray-200 dark:border-[#232428] bg-white dark:bg-[#232428] rounded-lg p-4 cursor-pointer hover:border-(--color-primary) transition-all duration-200 group">
           <div class="flex items-start gap-3">
-            <div class="w-11 h-11 shrink-0 flex items-center justify-center text-gray-400 dark:text-[#6b6d75] bg-gray-50 dark:bg-[#2a2c30] rounded-md">
-              <img v-if="typeof getTemplateIcon(template) === 'string'" :src="getTemplateIcon(template)"
-                class="w-6 h-6 object-contain" alt="icon" />
-              <component v-else :is="getTemplateIcon(template)" :size="22" />
-            </div>
+            <Avatar
+              :src="getProviderIcon(template)"
+              :name="template.name"
+              type="assistant"
+              class="w-11 h-11 shrink-0"
+            />
             <div class="flex-1 min-w-0">
               <div class="font-medium text-base text-gray-700 dark:text-[#e8e9ed] truncate" :title="template.name">{{ template.name }}
               </div>
@@ -104,7 +106,6 @@
 </template>
 
 <script setup>
-import { OpenAI } from '@/components/icons'
 import {
   PlusOutlined,
   EditOutlined,
@@ -112,6 +113,7 @@ import {
 } from '@vicons/material'
 import { ElButton, ElIcon } from 'element-plus'
 import ScrollContainer from '@/components/ui/ScrollContainer.vue'
+import Avatar from '@/components/ui/Avatar.vue'
 
 
 defineProps({
@@ -127,27 +129,13 @@ defineProps({
 
 defineEmits(['item-click', 'create-group', 'item-edit', 'item-delete', 'template-click'])
 
-const getTemplateIcon = (item) => {
-  // 优先使用自带的 avatarUrl（修正 URL）
-  if (item.avatarUrl) {
-    return item.avatarUrl;
+const getProviderIcon = (item) => {
+  // 根据 provider ID 匹配本地图标文件
+  const providerId = (item.provider || item.id || '').toLowerCase();
+  if (providerId && providerId !== 'custom') {
+    return `/images/providers/${providerId}.svg`;
   }
-
-  // 根据 protocol 返回对应的图标组件
-  const protocol = item.protocol || 'openai';
-  switch (protocol) {
-    case 'openai':
-    case 'openai-response':
-      return OpenAI;
-    case 'gemini':
-      // TODO: 添加 Gemini 图标组件
-      return OpenAI;
-    case 'anthropic':
-      // TODO: 添加 Anthropic 图标组件
-      return OpenAI;
-    default:
-      return OpenAI;
-  }
+  return null;
 }
 
 const getProviderTypeLabel = (provider) => {

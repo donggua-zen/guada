@@ -44,7 +44,7 @@ export class BaiduQianfanProvider implements IModelProvider {
       id: this.id,
       name: this.name,
       description: '百度千帆大模型平台，提供文心一言系列模型及完整的 AI 开发生态。',
-      avatarUrl: 'static/images/providers/baidu-qianfan.svg',
+      avatarUrl: 'baidu-qianfan.svg',
       apiKeyUrl: 'https://console.bce.baidu.com/qianfan/ais/console/applicationConsole/application',
       protocols: this.protocols,
       defaultApiUrl: this.defaultApiUrl,

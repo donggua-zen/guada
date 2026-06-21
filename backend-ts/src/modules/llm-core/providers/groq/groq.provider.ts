@@ -44,7 +44,7 @@ export class GroqProvider implements IModelProvider {
       id: this.id,
       name: this.name,
       description: '以极致的推理速度著称，提供低延迟的大语言模型 API 服务。',
-      avatarUrl: 'static/images/providers/groq.svg',
+      avatarUrl: 'groq.svg',
       apiKeyUrl: 'https://console.groq.com/keys',
       protocols: this.protocols,
       defaultApiUrl: this.defaultApiUrl,

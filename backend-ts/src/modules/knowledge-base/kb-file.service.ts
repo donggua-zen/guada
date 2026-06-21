@@ -1057,6 +1057,67 @@ export class KbFileService implements OnModuleInit {
   }
 
   /**
+   * 清空知识库所有分块和向量数据，重置文件状态为待处理
+   * 在向量模型变更时调用
+   */
+  async clearAndReprocessKnowledgeBase(kbId: string): Promise<void> {
+    this.logger.log(`开始清空知识库分块和向量数据: ${kbId}`);
+
+    // 1. 删除向量集合
+    const tableId = `kb_${kbId}`;
+    try {
+      await this.vectorDb.deleteCollection(tableId);
+      this.logger.log(`已删除向量集合: ${tableId}`);
+    } catch (error: any) {
+      this.logger.warn(`删除向量集合失败（可能不存在）: ${error.message}`);
+    }
+
+    // 2. 获取所有非目录文件
+    const allFiles = await this.prisma.kBFile.findMany({
+      where: {
+        knowledgeBaseId: kbId,
+        isDirectory: false,
+      },
+      select: { id: true },
+    });
+
+    if (allFiles.length === 0) {
+      this.logger.log(`知识库 ${kbId} 没有需要重新处理的文件`);
+      return;
+    }
+
+    // 3. 逐文件删除分块记录
+    let totalChunks = 0;
+    for (const file of allFiles) {
+      const deleted = await this.chunkRepo.deleteByFileId(file.id);
+      totalChunks += deleted;
+    }
+    this.logger.log(`已删除 ${totalChunks} 条分块记录`);
+
+    // 4. 重置所有文件状态为 pending
+    const fileIds = allFiles.map(f => f.id);
+    for (const fileId of fileIds) {
+      await this.fileRepo.updateProcessingStatus(
+        fileId,
+        "pending",
+        0,
+        "等待重新处理...",
+        null,
+        0,
+        0,
+      );
+    }
+    this.logger.log(`已重置 ${fileIds.length} 个文件状态为 pending`);
+
+    // 5. 逐个启动后台处理
+    for (const fileId of fileIds) {
+      this.processFileInBackground(fileId);
+    }
+
+    this.logger.log(`知识库 ${kbId} 已开始全部重新处理`);
+  }
+
+  /**
    * 验证文件或文件夹名称
    */
   private validateFileName(name: string, isDirectory: boolean = false): void {

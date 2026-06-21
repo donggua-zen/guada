@@ -56,7 +56,7 @@ export class DeepSeekProvider implements IModelProvider {
       id: this.id,
       name: this.name,
       description: '深度求索，以高性价比和强大的代码生成能力著称，支持深度思考模式。',
-      avatarUrl: 'static/images/providers/deepseek.svg',
+      avatarUrl: 'deepseek.svg',
       apiKeyUrl: 'https://platform.deepseek.com/api_keys',
       protocols: this.protocols,
       defaultApiUrl: this.defaultApiUrl,

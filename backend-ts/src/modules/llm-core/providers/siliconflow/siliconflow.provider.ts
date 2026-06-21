@@ -107,7 +107,7 @@ export class SiliconFlowProvider implements IModelProvider {
       id: this.id,
       name: this.name,
       description: "提供高性价比的开源模型 API 服务，支持多种主流大语言模型。",
-      avatarUrl: "static/images/providers/siliconflow.svg",
+      avatarUrl: "siliconflow.svg",
       apiKeyUrl: "https://cloud.siliconflow.cn/me/account/ak",
       protocols: this.protocols,
       defaultApiUrl: this.defaultApiUrl,

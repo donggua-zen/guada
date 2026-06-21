@@ -104,7 +104,7 @@ export class AliyunBailianProvider implements IModelProvider {
       name: this.name,
       description:
         "阿里云推出的大模型服务平台，提供通义千问等自研模型及第三方模型接入。",
-      avatarUrl: "static/images/providers/aliyun-bailian.svg",
+      avatarUrl: "aliyun-bailian.svg",
       apiKeyUrl:
         "https://bailian.console.aliyun.com/cn-beijing?tab=model#/api-key",
       protocols: this.protocols,

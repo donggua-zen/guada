@@ -62,7 +62,7 @@ export class OpenAIProvider implements IModelProvider {
       id: this.id,
       name: this.name,
       description: '全球领先的 AI 研究机构，ChatGPT 和 GPT 系列模型的创造者。',
-      avatarUrl: 'static/images/providers/openai.svg',
+      avatarUrl: 'openai.svg',
       apiKeyUrl: 'https://platform.openai.com/api-keys',
       protocols: this.protocols,
       defaultApiUrl: this.defaultApiUrl,
