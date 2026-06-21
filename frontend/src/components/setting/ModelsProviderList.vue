@@ -38,7 +38,7 @@
                   </el-icon>
                 </el-button>
               </div>
-              <div class="text-xs text-gray-500 dark:text-[#8b8d95] mt-1.5">{{ getProviderTypeLabel(provider) }}</div>
+              <div class="text-xs text-gray-500 dark:text-[#8b8d95] mt-1.5">{{ getProtocolLabel(provider.protocol) }}</div>
             </div>
           </div>
           <div class="text-xs text-gray-400 dark:text-[#6b6d75] mt-2 line-clamp-2 leading-relaxed">{{ provider.description || '暂无简介' }}
@@ -114,6 +114,7 @@ import {
 import { ElButton, ElIcon } from 'element-plus'
 import ScrollContainer from '@/components/ui/ScrollContainer.vue'
 import Avatar from '@/components/ui/Avatar.vue'
+import { fixFrontendAssetUrl } from '@/utils/url'
 
 
 defineProps({
@@ -133,7 +134,7 @@ const getProviderIcon = (item) => {
   // 根据 provider ID 匹配本地图标文件
   const providerId = (item.provider || item.id || '').toLowerCase();
   if (providerId && providerId !== 'custom') {
-    return `/images/providers/${providerId}.svg`;
+    return fixFrontendAssetUrl(`/images/providers/${providerId}.svg`);
   }
   return null;
 }
