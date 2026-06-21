@@ -108,11 +108,11 @@ export class KnowledgeBasePlugin extends PluginBase {
           file_name: result.metadata?.file_name,
         }));
 
-        return JSON.stringify({
+        return {
           query,
           results: formattedResults,
           total: formattedResults.length,
-        });
+        };
       },
       display: { action: "搜索知识库", argsKey: "query", icon: "search" },
     });
@@ -145,12 +145,12 @@ export class KnowledgeBasePlugin extends PluginBase {
           total_chunks: f.totalChunks,
           uploaded_at: f.uploadedAt.toISOString(),
         }));
-        return JSON.stringify({
+        return {
           files: formattedFiles,
           total,
           skip,
           limit,
-        });
+        };
       },
       display: { action: "列出知识库文件", icon: "search" },
     });
@@ -187,11 +187,11 @@ export class KnowledgeBasePlugin extends PluginBase {
           token_count: c.tokenCount,
           metadata: c.metadata || null,
         }));
-        return JSON.stringify({
+        return {
           file_id,
           chunks: formattedChunks,
           total: chunks.length,
-        });
+        };
       },
       display: { action: "获取文件分块", argsKey: "file_id", icon: "search" },
     });
@@ -227,7 +227,7 @@ export class KnowledgeBasePlugin extends PluginBase {
             target_path,
           );
 
-          return JSON.stringify({
+          return {
             success: true,
             message: "文档已提交处理，将在后台自动完成分块和向量化",
             file_id: fileRecord.id,
@@ -235,7 +235,7 @@ export class KnowledgeBasePlugin extends PluginBase {
             knowledge_base_id,
             target_path: fileRecord.relativePath,
             status: fileRecord.processingStatus,
-          });
+          };
         } catch (error: any) {
           this.logger.error(`添加文档失败：${error.message}`);
           throw new Error(`添加文档失败：${error.message}`);
