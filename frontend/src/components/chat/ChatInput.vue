@@ -1213,6 +1213,8 @@ watch(editorContent, () => {
       pmEl.style.minHeight = '58px';
       pmEl.style.maxHeight = '240px';
       isInputExpanded.value = pmEl.scrollHeight > 60;
+      // 自动滚动到底部
+      pmEl.scrollTop = pmEl.scrollHeight;
     }
   });
 });
@@ -1294,6 +1296,8 @@ onMounted(() => {
             pmEl.style.minHeight = '58px';
             pmEl.style.maxHeight = '240px';
             isInputExpanded.value = pmEl.scrollHeight > 60;
+            // 自动滚动到底部
+            pmEl.scrollTop = pmEl.scrollHeight;
           }
         });
       },

@@ -238,10 +238,10 @@ export class BrowserPlugin extends PluginBase {
     api.registerTool({
       name: "browser_windows",
       toolSet: "browser",
-      description: "获取当前所有窗口的列表，包括窗口 ID、URL、标题等信息",
+      description: "获取当前会话的所有窗口列表，包括窗口 ID、URL、标题等信息",
       inputSchema: z.object({}),
       execute: async (args, ctx, signal) => {
-        const r = await this.sendRequest("browser_windows", args, signal);
+        const r = await this.sendRequest("browser_windows", {...args, session_id: ctx?.sessionId}, signal);
         return typeof r === "string" ? r : JSON.stringify(r);
       },
       display: { action: "获取窗口列表", icon: "browser" },
