@@ -122,42 +122,13 @@
     </div>
 
     <!-- 右键菜单 -->
-    <div v-if="contextMenu.visible"
-      class="fixed bg-white dark:bg-[#232428] rounded-lg shadow-lg border border-gray-200 dark:border-[#2e3035] py-1 z-50 min-w-40"
-      :style="{ left: contextMenu.x + 'px', top: contextMenu.y + 'px' }" @click.stop @contextmenu.prevent>
-      <div
-        class="px-4 py-2 text-sm text-gray-700 dark:text-[#e8e9ed] hover:bg-gray-100 dark:hover:bg-[#2a2c30] cursor-pointer flex items-center gap-2"
-        @click="handleRenameFromMenu">
-        <el-icon>
-          <Edit />
-        </el-icon>
-        重命名
-      </div>
-      <div
-        class="px-4 py-2 text-sm text-gray-700 dark:text-[#e8e9ed] hover:bg-gray-100 dark:hover:bg-[#2a2c30] cursor-pointer flex items-center gap-2"
-        @click="handleMoveFromMenu">
-        <el-icon>
-          <Position />
-        </el-icon>
-        移动到...
-      </div>
-      <div v-if="!contextMenu.item?.isDirectory"
-        class="px-4 py-2 text-sm text-gray-700 dark:text-[#e8e9ed] hover:bg-gray-100 dark:hover:bg-[#2a2c30] cursor-pointer flex items-center gap-2"
-        @click="handleRetryFromMenu">
-        <el-icon>
-          <RefreshRight />
-        </el-icon>
-        重新处理
-      </div>
-      <div
-        class="px-4 py-2 text-sm text-red-600 dark:text-red-400 hover:bg-gray-100 dark:hover:bg-[#2a2c30] cursor-pointer flex items-center gap-2"
-        @click="handleDeleteFromMenu">
-        <el-icon>
-          <Delete />
-        </el-icon>
-        删除
-      </div>
-    </div>
+    <ContextMenu
+        :visible="contextMenu.visible"
+        :x="contextMenu.x"
+        :y="contextMenu.y"
+        :items="contextMenuItems"
+        @close="closeContextMenu"
+    />
 
     <!-- 重命名对话框 -->
     <el-dialog v-model="showRenameDialog" title="重命名" width="400px" :close-on-click-modal="false" append-to-body>
@@ -202,12 +173,13 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch, onUnmounted } from 'vue'
+import { ref, computed, watch, onUnmounted } from 'vue'
 import { Folder, View, RefreshRight, Delete, Loading, Edit, Position } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 import type { KBFile } from '@/stores/knowledgeBase'
 import { useKnowledgeBaseStore } from '@/stores/knowledgeBase'
 import { apiService } from '@/services/ApiService'
+import ContextMenu, { type ContextMenuItem } from '@/components/ui/ContextMenu.vue'
 
 // 导入文件图标
 import fileCodeIcon from '@/assets/file_code.svg'
@@ -273,6 +245,34 @@ const contextMenu = ref({
   y: 0,
   item: null as KBFile | null
 })
+
+const contextMenuItems = computed<ContextMenuItem[]>(() => {
+  const items: ContextMenuItem[] = [
+    {
+      label: '重命名',
+      icon: Edit,
+      onClick: handleRenameFromMenu,
+    },
+    {
+      label: '移动到...',
+      icon: Position,
+      onClick: handleMoveFromMenu,
+    },
+  ];
+  if (contextMenu.value.item && !contextMenu.value.item.isDirectory) {
+    items.push({
+      label: '重新处理',
+      icon: RefreshRight,
+      onClick: handleRetryFromMenu,
+    });
+  }
+  items.push({
+    label: '删除',
+    icon: Delete,
+    onClick: handleDeleteFromMenu,
+  });
+  return items;
+});
 
 /**
  * 重命名表单状态
