@@ -66,7 +66,7 @@ export class SubAgentPlugin extends PluginBase {
           args.mode || "foreground",
           abortSignal,
         );
-        return JSON.stringify({
+        return {
           success: true,
           sessionId: result.subSessionId,
           status: result.status,
@@ -75,7 +75,7 @@ export class SubAgentPlugin extends PluginBase {
             result.status === "running"
               ? "子代理已创建并开始执行，请使用 wait 获取结果"
               : "子代理执行完成",
-        });
+        };
       },
       display: { action: "创建子代理", argsKey: "name", icon: "generic" },
     });
@@ -93,12 +93,12 @@ export class SubAgentPlugin extends PluginBase {
           abortSignal,
         );
         if (completed.length === 0) {
-          return JSON.stringify({
+          return {
             success: true,
             message: "没有进行中的子代理任务",
-          });
+          };
         }
-        return JSON.stringify({
+        return {
           success: true,
           completedSubAgents: completed.map((c: any) => ({
             sessionId: c.subSessionId,
@@ -109,7 +109,7 @@ export class SubAgentPlugin extends PluginBase {
             finishReason: c.result?.finishReason,
           })),
           message: `以下子代理已完成: ${completed.map((c: any) => c.name).join(", ")}`,
-        });
+        };
       },
       display: { action: "等待子代理", icon: "generic" },
     });
@@ -129,15 +129,15 @@ export class SubAgentPlugin extends PluginBase {
             ctx?.userId,
             ctx?.workspacePath,
           );
-          return JSON.stringify({
+          return {
             success: true,
             message: "子代理已关闭并删除",
-          });
+          };
         } catch (e: any) {
-          return JSON.stringify({
+          return {
             success: false,
             message: e.message || "关闭子代理失败",
-          });
+          };
         }
       },
       display: { action: "关闭子代理", argsKey: "sessionId", icon: "generic" },
@@ -150,11 +150,11 @@ export class SubAgentPlugin extends PluginBase {
       inputSchema: z.object({}),
       execute: async (_args, ctx) => {
         const agents = await this.subAgentManager.getSubAgents(ctx?.sessionId);
-        return JSON.stringify({
+        return {
           success: true,
           sub_agents: agents,
           total: agents.length,
-        });
+        };
       },
       display: { action: "列出子代理", icon: "generic" },
     });
@@ -179,7 +179,7 @@ export class SubAgentPlugin extends PluginBase {
             "foreground",
             abortSignal,
           );
-          return JSON.stringify({
+          return {
             success: true,
             sessionId: result.subSessionId,
             status: result.status,
@@ -188,12 +188,12 @@ export class SubAgentPlugin extends PluginBase {
               result.status === "running"
                 ? "消息已发送，子代理开始执行，请使用 wait 获取结果"
                 : "子代理执行完成",
-          });
+          };
         } catch (e: any) {
-          return JSON.stringify({
+          return {
             success: false,
             message: e.message || "发送消息失败",
-          });
+          };
         }
       },
       display: {

@@ -3,7 +3,7 @@ import { spawn, ChildProcess, exec } from "child_process";
 import * as iconv from "iconv-lite";
 import { PluginBase } from "../base-plugin";
 import { PluginContext } from "../types/plugin.types";
-import { PluginApi } from "../api/plugin-api";
+import { PluginApi, ToolResult } from "../api/plugin-api";
 import { z } from "zod";
 
 @Injectable()
@@ -60,7 +60,7 @@ export class ShellPlugin extends PluginBase {
         if (abortSignal?.aborted) throw new Error("Request was aborted");
         this.logger.log(`执行命令: ${command}, 工作目录: ${cwd}`);
 
-        return new Promise<string>((resolve, reject) => {
+        return new Promise<ToolResult>((resolve, reject) => {
           let stdoutBuffer = Buffer.alloc(0);
           let stderrBuffer = Buffer.alloc(0);
           let timedOut = false;
@@ -90,34 +90,28 @@ export class ShellPlugin extends PluginBase {
             const stdoutStr = this.decodeBuffer(stdoutBuffer, encoding);
             const stderrStr = this.decodeBuffer(stderrBuffer, encoding);
             if (timedOut) {
-              resolve(
-                JSON.stringify({
-                  status: "timeout",
-                  stdout: this.truncate(stdoutStr),
-                  stderr: this.truncate(stderrStr),
-                }),
-              );
+              resolve({
+                status: "timeout",
+                stdout: this.truncate(stdoutStr),
+                stderr: this.truncate(stderrStr),
+              });
             } else {
-              resolve(
-                JSON.stringify({
-                  status: "completed",
-                  exitCode: code ?? 0,
-                  stdout: this.truncate(stdoutStr),
-                  stderr: this.truncate(stderrStr),
-                }),
-              );
+              resolve({
+                status: "completed",
+                exitCode: code ?? 0,
+                stdout: this.truncate(stdoutStr),
+                stderr: this.truncate(stderrStr),
+              });
             }
           });
           childProcess.on("error", (err) => {
             processExited = true;
             clearTimeout(timeoutId);
-            resolve(
-              JSON.stringify({
-                status: "error",
-                exitCode: 1,
-                stderr: err.message,
-              }),
-            );
+            resolve({
+              status: "error",
+              exitCode: 1,
+              stderr: err.message,
+            });
           });
 
           if (abortSignal) {
