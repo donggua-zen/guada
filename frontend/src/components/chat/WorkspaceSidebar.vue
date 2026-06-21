@@ -44,23 +44,16 @@
                     暂无文件，请先设置工作目录
                 </div>
 
-                <el-tree v-else ref="treeRef" :key="treeKey" :data="treeData" :props="treeProps" node-key="path"
-                    :expand-on-click-node="true" :default-expanded-keys="expandedKeys" :lazy="true"
-                    :load="loadNode" @node-click="handleTreeNodeClick" @node-expand="onNodeExpand"
-                    @node-collapse="onNodeCollapse" @node-contextmenu="handleNodeContextMenu" highlight-current
-                    class="workspace-tree min-w-fit px-2">
-                    <template #default="{ node, data }">
-                        <span class="workspace-tree-node">
-                            <el-icon v-if="data.isDirectory" class="mr-1">
-                                <Folder />
-                            </el-icon>
-                            <el-icon v-else class="mr-1">
-                                <Document />
-                            </el-icon>
-                            {{ node.label }}
-                        </span>
-                    </template>
-                </el-tree>
+                <WorkspaceTree
+                    v-else
+                    :nodes="treeData"
+                    :selected-path="selectedNodePath"
+                    :loading-paths="loadingPaths"
+                    :on-load="(node) => handleTreeNodeToggle(node, true)"
+                    @select="handleTreeNodeSelect"
+                    @toggle="handleTreeNodeExpandToggle"
+                    @contextmenu="handleContextMenu"
+                />
             </div>
         </div>
 
@@ -142,23 +135,14 @@ import { ElMessage } from 'element-plus';
 import { apiService, type FileChangeEvent } from '@/services/ApiService';
 import { Refresh, Close, FolderOpened, Switch, CopyDocument } from '@element-plus/icons-vue';
 import { LoadingOutlined } from '@vicons/antd';
-import { Folder, Document } from '@element-plus/icons-vue';
 import { useStorage, useThrottleFn } from '@vueuse/core';
 import { useMarkdown } from '@/composables/useMarkdown';
 import { useHighlight } from '@/composables/useHighlight';
 import ContextMenu, { type ContextMenuItem } from '@/components/ui/ContextMenu.vue';
 import WorkspaceSettingsDialog from './chat-input/WorkspaceSettingsDialog.vue';
 import SessionBrowserWindowList from './SessionBrowserWindowList.vue';
-
-interface WorkspaceNode {
-    name: string;
-    path: string;
-    isDirectory: boolean;
-    children?: WorkspaceNode[];
-    size?: number;
-    hasChildren?: boolean;
-    loaded?: boolean; // 标记是否已加载子节点
-}
+import WorkspaceTree from './WorkspaceTree.vue';
+import type { WorkspaceNode } from './WorkspaceTree.vue';
 
 interface SelectedFile {
     name: string;
@@ -183,9 +167,10 @@ const previewLoading = ref(false);
 const workspaceDialogVisible = ref(false);
 const currentWorkspacePath = ref<string | null>(null);
 const previewError = ref('');
-const expandedKeys = ref<string[]>([]);
-const treeRef = ref();
-const treeKey = ref(0);
+const selectedNodePath = ref('');
+
+// 正在加载子节点的目录路径集合
+const loadingPaths = ref<Set<string>>(new Set());
 
 // 右键菜单状态
 const contextMenu = ref({
@@ -222,48 +207,78 @@ const contextMenuItems = computed<ContextMenuItem[]>(() => {
 // 检测是否为 Electron 环境
 const isElectron = typeof window !== 'undefined' && window.electronAPI !== undefined;
 
-// el-tree 配置
-const treeProps = {
-    label: 'name',
-    children: 'children',
-    isLeaf: (data: WorkspaceNode) => !data.isDirectory,
-};
+/**
+ * 异步加载目录的子节点
+ */
+async function loadChildren(node: WorkspaceNode): Promise<WorkspaceNode[]> {
+    if (!props.sessionId) return [];
+    try {
+        const response = await apiService.getWorkspaceChildren(props.sessionId, node.path);
+        return response.children || [];
+    } catch (error: any) {
+        console.error('[WorkspaceSidebar] Failed to load children:', error);
+        return [];
+    }
+}
 
 /**
- * 懒加载节点数据
+ * 展开目录时加载子节点
  */
-async function loadNode(node: any, resolve: (data: WorkspaceNode[]) => void) {
-    // 根节点（level === 0）已经在 loadTree 中加载
-    if (node.level === 0) {
-        resolve(treeData.value);
-        return;
-    }
+async function handleTreeNodeToggle(node: WorkspaceNode, expanded: boolean) {
+    if (!expanded || !node.isDirectory) return;
 
-    // 子节点懒加载
-    const nodeData = node.data as WorkspaceNode;
-
-    if (!nodeData.isDirectory || !props.sessionId) {
-        resolve([]);
-        return;
-    }
-
-    // 关键：如果节点已经加载过，直接返回缓存数据，不重复发起 API 请求
-    if (nodeData.loaded && nodeData.children) {
-        resolve(nodeData.children);
-        return;
-    }
+    // 标记加载中
+    loadingPaths.value = new Set(loadingPaths.value).add(node.path);
 
     try {
-        const response = await apiService.getWorkspaceChildren(props.sessionId, nodeData.path);
-        const children = response.children || [];
-        // 保存到 nodeData，以便后续本地更新
-        nodeData.children = children;
-        nodeData.loaded = true;
-        resolve(children);
-    } catch (error: any) {
-        console.error('[WorkspaceSidebar] Failed to lazy load node:', error);
-        resolve([]);
+        const children = await loadChildren(node);
+        node.children = children;
+    } finally {
+        const next = new Set(loadingPaths.value);
+        next.delete(node.path);
+        loadingPaths.value = next;
     }
+}
+
+// 展开/折叠状态同步到后端（用于文件变化事件监听）
+let collapseSyncTimer: ReturnType<typeof setTimeout> | null = null;
+const expandedPaths = ref<Set<string>>(new Set());
+
+function handleTreeNodeExpandToggle(node: WorkspaceNode, expanded: boolean) {
+    if (expanded) {
+        // 展开：取消待处理的删除，立即同步
+        expandedPaths.value = new Set(expandedPaths.value).add(node.path);
+        if (collapseSyncTimer) clearTimeout(collapseSyncTimer);
+        syncExpandedPaths();
+    } else {
+        // 折叠：消抖 10 秒，避免频繁开关浪费后端监听资源
+        const next = new Set(expandedPaths.value);
+        next.delete(node.path);
+        expandedPaths.value = next;
+        if (collapseSyncTimer) clearTimeout(collapseSyncTimer);
+        collapseSyncTimer = setTimeout(() => syncExpandedPaths(), 10000);
+    }
+}
+
+async function syncExpandedPaths() {
+    if (!props.sessionId) return;
+    try {
+        await apiService.updateWorkspaceExpandedPaths(
+            props.sessionId,
+            Array.from(expandedPaths.value),
+        );
+    } catch (error) {
+        console.error('[WorkspaceSidebar] 同步展开状态失败:', error);
+    }
+}
+
+/**
+ * 点击文件节点选中
+ */
+function handleTreeNodeSelect(node: WorkspaceNode) {
+    if (node.isDirectory) return;
+    selectedNodePath.value = node.path;
+    handleFileSelect(node);
 }
 
 // 预览模式：rendered=预览，source=源码，默认预览
@@ -428,19 +443,14 @@ async function loadTree(force = false) {
     try {
         const response = await apiService.getWorkspaceTree(props.sessionId);
 
-        // 记录当前的选中状态
-        const currentSelectedKey = treeRef.value?.getCurrentKey();
+        // 保存当前选中路径
+        const currentSelected = selectedNodePath.value;
 
         // 增量更新树数据，保留已加载的子节点和展开状态
         updateTreeData(treeData.value, response.tree || []);
 
-        // 等待 DOM 更新
-        await nextTick();
-
-        // 恢复选中状态
-        if (currentSelectedKey) {
-            treeRef.value?.setCurrentKey(currentSelectedKey);
-        }
+        // 如果当前选中的文件还在树中，保持选中状态（由 selectedNodePath 驱动）
+        selectedNodePath.value = currentSelected;
     } catch (error: any) {
         console.error('Failed to load workspace tree:', error);
     } finally {
@@ -463,71 +473,10 @@ function refreshTree() {
 /**
  * 检查路径是否在已展开的目录下
  * 如果父目录未展开，则该路径下的变化不需要更新展示
+ * 由 updateNodeLocal 中的 !parentNode.children 守卫处理
  */
-function isPathInExpandedDir(filePath: string): boolean {
-    // 根目录总是展开的（因为根目录数据始终加载）
-    if (!filePath || (filePath.indexOf('/') === -1 && filePath.indexOf('\\') === -1)) {
-        return true;
-    }
-
-    // 获取所有已展开节点的路径
-    const expandedPaths = getExpandedNodePaths();
-
-    // 统一使用 / 分隔符处理路径
-    const normalizedPath = filePath.replace(/\\/g, '/');
-    // 检查文件路径的任何一个父目录是否已展开
-    const parts = normalizedPath.split('/');
-    let currentPath = '';
-    for (let i = 0; i < parts.length - 1; i++) {
-        currentPath = currentPath ? `${currentPath}/${parts[i]}` : parts[i];
-        if (expandedPaths.includes(currentPath)) {
-            return true;
-        }
-    }
-
-    return false;
-}
-
-/**
- * 获取所有已展开节点的路径
- */
-function getExpandedNodePaths(): string[] {
-    const paths: string[] = [];
-    const tree = treeRef.value;
-
-    // 尝试多种方式获取展开节点
-    if (tree) {
-        // 方式1: 通过 store.nodesMap
-        const nodesMap = tree.store?.nodesMap;
-        if (nodesMap) {
-            Object.values(nodesMap).forEach((node: any) => {
-                if (node.expanded && node.data?.path) {
-                    paths.push(node.data.path);
-                }
-            });
-        }
-
-        // 方式2: 通过 $refs.rootNode
-        if (paths.length === 0 && tree.$refs?.rootNode?.childNodes) {
-            collectExpandedPaths(tree.$refs.rootNode.childNodes, paths);
-        }
-    }
-
-    return paths;
-}
-
-/**
- * 递归收集已展开节点的路径
- */
-function collectExpandedPaths(nodes: any[], paths: string[]): void {
-    nodes.forEach((node: any) => {
-        if (node.expanded && node.data?.path) {
-            paths.push(node.data.path);
-        }
-        if (node.childNodes && node.childNodes.length > 0) {
-            collectExpandedPaths(node.childNodes, paths);
-        }
-    });
+function isPathInExpandedDir(_filePath: string): boolean {
+    return true;
 }
 
 /**
@@ -566,7 +515,7 @@ function updateNodeLocal(event: FileChangeEvent) {
 
     // 如果父节点尚未加载（未展开过），忽略此次更新
     // 根目录（path 为空）始终视为已加载
-    if (!parentNode.loaded && parentNode.path !== '') {
+    if (!parentNode.children && parentNode.path !== '') {
         return;
     }
 
@@ -579,62 +528,39 @@ function updateNodeLocal(event: FileChangeEvent) {
         case 'add':
         case 'addDir':
             // 检查是否已存在
-            const existingIndex = parentNode.children.findIndex(child => child.name === fileName);
-            if (existingIndex === -1) {
-                // 创建新节点
-                const newNode: WorkspaceNode = {
-                    name: fileName,
-                    path: normalizedPath,
-                    isDirectory: event.type === 'addDir',
-                    hasChildren: event.type === 'addDir',
-                    children: event.type === 'addDir' ? [] : undefined,
-                };
-                // 计算插入位置（保持排序：目录在前，按名称排序）
-                let insertBeforeNode = null;
-                for (const child of parentNode.children) {
-                    const childIsDir = child.isDirectory;
-                    const newIsDir = newNode.isDirectory;
-                    if (newIsDir && !childIsDir) {
-                        // 新节点是目录，当前是文件，插入到当前之前
-                        insertBeforeNode = treeRef.value.getNode(child.path);
-                        break;
-                    }
-                    if (newIsDir === childIsDir && newNode.name.localeCompare(child.name) < 0) {
-                        // 同类型且名称更小，插入到当前之前
-                        insertBeforeNode = treeRef.value.getNode(child.path);
-                        break;
-                    }
-                }
-                // 如果 treeRef 未初始化（目录为空时 el-tree 未渲染），直接修改 treeData
-                if (!treeRef.value) {
-                    parentNode.children.push(newNode);
-                    parentNode.children.sort((a, b) => {
-                        if (a.isDirectory !== b.isDirectory) {
-                            return a.isDirectory ? -1 : 1;
-                        }
-                        return a.name.localeCompare(b.name);
-                    });
-                } else if (insertBeforeNode) {
-                    treeRef.value.insertBefore(newNode, insertBeforeNode);
-                } else {
-                    // 根目录的虚拟节点 path 为空字符串，需传入 null 而非节点对象
-                    treeRef.value.append(newNode, parentNode.path || null);
-                }
+            if (parentNode.children.some(child => child.name === fileName)) {
+                break;
             }
+            // 创建新节点
+            const newNode: WorkspaceNode = {
+                name: fileName,
+                path: normalizedPath,
+                isDirectory: event.type === 'addDir',
+                hasChildren: event.type === 'addDir',
+            };
+            // 直接添加到数组，Vue 响应式会自动更新视图
+            parentNode.children.push(newNode);
+            parentNode.children.sort((a, b) => {
+                if (a.isDirectory !== b.isDirectory) {
+                    return a.isDirectory ? -1 : 1;
+                }
+                return a.name.localeCompare(b.name);
+            });
             break;
 
         case 'unlink':
-        case 'unlinkDir':
-            // 使用 el-tree 官方 API 移除节点
-            const node = treeRef.value.getNode(normalizedPath);
-            if (node) {
-                treeRef.value.remove(node);
+        case 'unlinkDir': {
+            // 从 children 数组中移除
+            const rmIdx = parentNode.children.findIndex(child => child.name === fileName);
+            if (rmIdx !== -1) {
+                parentNode.children.splice(rmIdx, 1);
             }
             // 如果删除的是当前预览的文件，自动关闭预览
             if (selectedFile.value && selectedFile.value.path === normalizedPath) {
                 closePreview();
             }
             break;
+        }
 
         case 'change':
             // 文件内容变化，刷新预览内容（如果是当前选中的文件）
@@ -667,16 +593,9 @@ function findNodeByPath(nodes: WorkspaceNode[], path: string): WorkspaceNode | n
 }
 
 /**
- * 处理树节点点击
- */
-function handleTreeNodeClick(data: WorkspaceNode) {
-    handleFileSelect(data);
-}
-
-/**
  * 处理节点右键菜单
  */
-function handleNodeContextMenu(event: MouseEvent, data: WorkspaceNode) {
+function handleContextMenu(event: MouseEvent, data: WorkspaceNode) {
     event.preventDefault();
     contextMenu.value = {
         visible: true,
@@ -953,57 +872,11 @@ async function handleWorkspaceChange(workspacePath: string | null) {
 
         // 清空旧树数据并重新加载，确保显示新的工作目录
         treeData.value = [];
-        expandedKeys.value = [];
         await loadTree();
     } catch (error: any) {
         console.error('Failed to change workspace path:', error);
         ElMessage.error(error.message || '更换工作目录失败');
     }
-}
-
-/**
- * 收集当前所有已展开节点的路径
- */
-function collectExpandedPathsFromTree(): string[] {
-    const paths: string[] = [];
-    const tree = treeRef.value;
-    if (!tree) return paths;
-
-    const nodesMap = tree.store?.nodesMap;
-    if (nodesMap) {
-        Object.values(nodesMap).forEach((node: any) => {
-            if (node.expanded && node.data?.path) {
-                paths.push(node.data.path);
-            }
-        });
-    }
-    return paths;
-}
-
-// 防抖发送展开状态到后端
-let expandPathsDebounceTimer: ReturnType<typeof setTimeout> | null = null;
-function sendExpandedPathsToBackend() {
-    if (expandPathsDebounceTimer) {
-        clearTimeout(expandPathsDebounceTimer);
-    }
-    expandPathsDebounceTimer = setTimeout(async () => {
-        if (!props.sessionId) return;
-        const paths = collectExpandedPathsFromTree();
-        try {
-            await apiService.updateWorkspaceExpandedPaths(props.sessionId, paths);
-        } catch (error) {
-            console.error('[WorkspaceSidebar] 同步展开状态失败:', error);
-        }
-    }, 300);
-}
-
-// 节点展开/折叠事件处理
-function onNodeExpand() {
-    sendExpandedPathsToBackend();
-}
-
-function onNodeCollapse() {
-    sendExpandedPathsToBackend();
 }
 
 let unsubscribeWatcher: (() => void) | null = null;
@@ -1088,51 +961,7 @@ onUnmounted(() => {
     background-color: unset !important;
 }
 
-/* 工作目录树样式 */
-.workspace-tree {
-    background: transparent;
-    --el-tree-node-content-height: 32px;
-}
-
-.workspace-tree .el-tree-node__content {
-    border-radius: 4px;
-    padding: 0 8px;
-}
-
-.workspace-tree .el-tree-node__content:hover {
-    background-color: var(--el-color-primary-light-9, rgba(0, 0, 0, 0.04));
-}
-
-.dark .workspace-tree .el-tree-node__content:hover {
-    background-color: rgba(255, 255, 255, 0.05);
-}
-
-.workspace-tree .el-tree-node.is-current>.el-tree-node__content {
-    background-color: var(--el-color-primary-light-9, rgba(0, 0, 0, 0.06)) !important;
-}
-
-.dark .workspace-tree .el-tree-node.is-current>.el-tree-node__content {
-    background-color: rgba(255, 255, 255, 0.08) !important;
-}
-
-.workspace-tree .el-tree-node__expand-icon {
-    color: var(--color-text-gray, #666);
-}
-
-.dark .workspace-tree .el-tree-node__expand-icon {
-    color: var(--color-text-gray);
-}
-
-.workspace-tree-node {
-    font-size: 13px;
-    color: var(--color-text, #333);
-    display: block;
-    width: 100%;
-}
-
-.dark .workspace-tree-node {
-    color: var(--color-text);
-}
+/* 工作目录树样式 — 已迁移到 WorkspaceTreeNode.vue */
 
 /* 工作目录工具按钮 - 纯图标无框样式 */
 .workspace-tool-btn {

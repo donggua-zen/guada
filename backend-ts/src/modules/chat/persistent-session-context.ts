@@ -27,6 +27,7 @@ import {
 import { TokenizerService } from "../../common/utils/tokenizer.service";
 import { SummaryMode } from "./compression-engine";
 import { PluginContext } from "../plugins/types/plugin.types";
+import { SessionTokenTracker } from "./utils/session-token-tracker";
 
 /**
  * 合并后的会话设置
@@ -90,6 +91,8 @@ export class PersistentSessionContext implements ISessionContext {
 
   /** 消息加载游标：第一次 getMessages 时传给 loadMessages，只加载到此消息为止 */
   private messageCursor: string | undefined = undefined;
+  /** 会话级 Token 消费追踪器 */
+  private tokenTracker: SessionTokenTracker | null = null;
 
   constructor(
     private readonly session: any,
@@ -849,5 +852,15 @@ export class PersistentSessionContext implements ISessionContext {
 
   setMessageCursor(messageId: string): void {
     this.messageCursor = messageId;
+  }
+
+  // === Token 消费追踪 ===
+
+  async recordTokenUsage(promptTokens: number, completionTokens: number): Promise<void> {
+    if (!this.tokenTracker) {
+      this.tokenTracker = new SessionTokenTracker(this._workspacePath, this.sessionId);
+      await this.tokenTracker.load();
+    }
+    await this.tokenTracker.addUsage(promptTokens, completionTokens);
   }
 }
