@@ -166,8 +166,16 @@ export class AnthropicAdapter implements IProtocolAdapter {
     // 缓存 thinking signature + redacted data，在 content_block_stop 时清理
     let pendingSignature = '';
     let pendingRedactedData = '';
+    // 缓存 message_start 返回的 input_tokens（总输入 token 数），合并到 message_delta
+    let inputTokensFromStart = 0;
 
     for await (const event of stream) {
+      // 拦截 message_start：缓存 input_tokens，不下发
+      if (event.type === "message_start") {
+        inputTokensFromStart = (event as any).message?.usage?.input_tokens || 0;
+        continue;
+      }
+
       // 调试：记录关键事件
       // if (event.type === "content_block_start" || event.type === "content_block_stop" || 
       //     (event.type === "content_block_delta" && ["input_json_delta", "thinking_delta"].includes((event.delta as any).type))) {
@@ -223,7 +231,7 @@ export class AnthropicAdapter implements IProtocolAdapter {
         continue;
       }
 
-      const chunk = this.parseStreamEvent(event);
+      const chunk = this.parseStreamEvent(event, inputTokensFromStart);
 
       // content_block_start(tool_use)：分配自增工具序号
       if (chunk?.toolCalls?.length) {
@@ -255,6 +263,7 @@ export class AnthropicAdapter implements IProtocolAdapter {
    */
   private parseStreamEvent(
     event: Anthropic.MessageStreamEvent,
+    inputTokensFromStart: number,
   ): LLMResponseChunk | null {
     switch (event.type) {
       case "content_block_delta": {
@@ -316,25 +325,24 @@ export class AnthropicAdapter implements IProtocolAdapter {
       }
 
       case "content_block_stop":
-      case "message_start":
       case "message_stop":
         return null;
 
       case "message_delta": {
         const usage = event.usage;
+        // 合并 message_start 缓存的 input_tokens + message_delta 的 output_tokens
+        const promptTokens = inputTokensFromStart || usage?.input_tokens || 0;
+        const completionTokens = usage?.output_tokens || 0;
         return {
           type: "finish",
           content: null,
           reasoningContent: null,
           finishReason: event.delta?.stop_reason || null,
-          usage: usage
-            ? {
-                promptTokens: usage.input_tokens || 0,
-                completionTokens: usage.output_tokens || 0,
-                totalTokens:
-                  (usage.input_tokens || 0) + (usage.output_tokens || 0),
-              }
-            : null,
+          usage: {
+            promptTokens,
+            completionTokens,
+            totalTokens: promptTokens + completionTokens,
+          },
         };
       }
 

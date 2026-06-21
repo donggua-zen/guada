@@ -312,6 +312,11 @@ export class AgentEngine {
             }
             if (lastAcc.usage) {
               assistantResponse.metadata.usage = lastAcc.usage;
+              // 累计会话级 token 消费
+              sessionContext.recordTokenUsage(
+                lastAcc.usage.promptTokens,
+                lastAcc.usage.completionTokens,
+              );
             }
             // 保存 Anthropic thinking signature，用于后续多轮回传
             if (lastAcc.signature) {
