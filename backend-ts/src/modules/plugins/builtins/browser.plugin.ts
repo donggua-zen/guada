@@ -99,7 +99,7 @@ export class BrowserPlugin extends PluginBase {
           { code: finalCode, window_id, is_async: is_async || false },
           signal,
         );
-        return typeof result === "string" ? result : JSON.stringify(result);
+        return result;
       },
       display: { action: "执行 JavaScript", argsKey: "code", icon: "code" },
     });
@@ -111,7 +111,7 @@ export class BrowserPlugin extends PluginBase {
       inputSchema: z.object({ window_id: z.string().describe("目标窗口 ID") }),
       execute: async (args, ctx, signal) => {
         const r = await this.sendRequest("browser_page_text", args, signal);
-        return typeof r === "string" ? r : JSON.stringify(r);
+        return r;
       },
       display: { action: "提取页面文本", icon: "browser" },
     });
@@ -123,7 +123,7 @@ export class BrowserPlugin extends PluginBase {
       inputSchema: z.object({ window_id: z.string().describe("目标窗口 ID") }),
       execute: async (args, ctx, signal) => {
         const r = await this.sendRequest("browser_page_struct", args, signal);
-        return this.handleLargeStructResult(r, ctx);
+        return r;
       },
       display: { action: "获取页面结构", icon: "browser" },
     });
@@ -134,7 +134,7 @@ export class BrowserPlugin extends PluginBase {
       inputSchema: z.object({ window_id: z.string().describe("目标窗口 ID") }),
       execute: async (args, ctx, signal) => {
         const r = await this.sendRequest("browser_page_summary", args, signal);
-        return typeof r === "string" ? r : JSON.stringify(r);
+        return r;
       },
       display: { action: "获取页面摘要", icon: "browser" },
     });
@@ -220,7 +220,7 @@ export class BrowserPlugin extends PluginBase {
           },
           signal,
         );
-        return typeof r === "string" ? r : JSON.stringify(r);
+        return r;
       },
       display: { action: "打开新窗口", argsKey: "url", icon: "browser" },
     });
@@ -242,7 +242,7 @@ export class BrowserPlugin extends PluginBase {
       inputSchema: z.object({}),
       execute: async (args, ctx, signal) => {
         const r = await this.sendRequest("browser_windows", {...args, session_id: ctx?.sessionId}, signal);
-        return typeof r === "string" ? r : JSON.stringify(r);
+        return r;
       },
       display: { action: "获取窗口列表", icon: "browser" },
     });
@@ -504,44 +504,6 @@ export class BrowserPlugin extends PluginBase {
       return content;
     } catch (error: any) {
       throw new Error(`读取 JavaScript 文件失败: ${error.message}`);
-    }
-  }
-
-  // ── 大结果处理 ──
-
-  private async handleLargeStructResult(
-    result: any,
-    context?: PluginContext,
-  ): Promise<string> {
-    const MAX_SIZE_BYTES = 50 * 1024;
-    const jsonString =
-      typeof result === "string" ? result : JSON.stringify(result);
-    const byteSize = Buffer.byteLength(jsonString, "utf-8");
-    if (byteSize <= MAX_SIZE_BYTES) return jsonString;
-    try {
-      if (!context?.workspacePath) throw new Error("工作路径未提供");
-      const outputDir = path.join(context.workspacePath, "tools_output");
-      await fs.promises.mkdir(outputDir, { recursive: true });
-      const fileName = `page_struct_output_${Date.now()}.json`;
-      await fs.promises.writeFile(
-        path.join(outputDir, fileName),
-        jsonString,
-        "utf-8",
-      );
-      return JSON.stringify({
-        message: "结果过大，已保存到你的工作目录",
-        file_path: path.join("tools_output", fileName),
-        file_size_bytes: byteSize,
-        file_size_kb: Math.round(byteSize / 1024),
-      });
-    } catch (error: any) {
-      const truncated =
-        jsonString.substring(0, MAX_SIZE_BYTES) + "\n... [结果被截断]";
-      return JSON.stringify({
-        error: `保存大结果失败: ${error.message}`,
-        truncated_result: truncated,
-        original_size_bytes: byteSize,
-      });
     }
   }
 
