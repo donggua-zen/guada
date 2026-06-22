@@ -320,6 +320,7 @@ export class OpenAIResponseAdapter implements IProtocolAdapter {
               promptTokens: event.response.usage.input_tokens,
               completionTokens: event.response.usage.output_tokens,
               totalTokens: event.response.usage.total_tokens,
+              cachedTokens: extractOpenAICachedTokens(event.response.usage),
             };
           }
           break;
@@ -392,6 +393,7 @@ export class OpenAIResponseAdapter implements IProtocolAdapter {
         promptTokens: response.usage.input_tokens,
         completionTokens: response.usage.output_tokens,
         totalTokens: response.usage.total_tokens,
+        cachedTokens: extractOpenAICachedTokens(response.usage),
       };
     }
 
@@ -441,4 +443,30 @@ export class OpenAIResponseAdapter implements IProtocolAdapter {
       }
     }
   }
+}
+
+/**
+ * 从 OpenAI 协议 usage 对象中提取缓存 token 字段
+ * 兼容 OpenAI 官方 (prompt_tokens_details.cached_tokens) 和 DeepSeek (prompt_cache_hit_tokens) 风格
+ */
+function extractOpenAICachedTokens(rawUsage: any): { read?: number; missed?: number } | undefined {
+  const cachedTokens: { read?: number; missed?: number } = {};
+
+  // DeepSeek 风格: usage.prompt_cache_hit_tokens (flat in usage)
+  if (rawUsage.prompt_cache_hit_tokens != null) {
+    cachedTokens.read = Number(rawUsage.prompt_cache_hit_tokens);
+    if (rawUsage.prompt_cache_miss_tokens != null) {
+      cachedTokens.missed = Number(rawUsage.prompt_cache_miss_tokens);
+    }
+  } else {
+    // OpenAI 官方格式: usage.prompt_tokens_details.cached_tokens
+    const details = rawUsage.prompt_tokens_details;
+    if (details?.cached_tokens != null) {
+      cachedTokens.read = Number(details.cached_tokens);
+    }
+  }
+
+  return cachedTokens.read !== undefined || cachedTokens.missed !== undefined
+    ? cachedTokens
+    : undefined;
 }

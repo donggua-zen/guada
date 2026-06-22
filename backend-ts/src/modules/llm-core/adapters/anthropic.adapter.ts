@@ -333,6 +333,10 @@ export class AnthropicAdapter implements IProtocolAdapter {
         // 合并 message_start 缓存的 input_tokens + message_delta 的 output_tokens
         const promptTokens = inputTokensFromStart || usage?.input_tokens || 0;
         const completionTokens = usage?.output_tokens || 0;
+        // Anthropic 缓存字段：cache_creation_input_tokens / cache_read_input_tokens
+        const cachedTokens = usage?.cache_creation_input_tokens || usage?.cache_read_input_tokens
+          ? { read: usage.cache_read_input_tokens, written: usage.cache_creation_input_tokens }
+          : undefined;
         return {
           type: "finish",
           content: null,
@@ -342,6 +346,7 @@ export class AnthropicAdapter implements IProtocolAdapter {
             promptTokens,
             completionTokens,
             totalTokens: promptTokens + completionTokens,
+            cachedTokens,
           },
         };
       }
@@ -409,6 +414,9 @@ export class AnthropicAdapter implements IProtocolAdapter {
             completionTokens: message.usage.output_tokens,
             totalTokens:
               message.usage.input_tokens + message.usage.output_tokens,
+            cachedTokens: message.usage.cache_creation_input_tokens || message.usage.cache_read_input_tokens
+              ? { read: message.usage.cache_read_input_tokens, written: message.usage.cache_creation_input_tokens }
+              : undefined,
           }
         : null,
     };

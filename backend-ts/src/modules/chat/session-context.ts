@@ -172,5 +172,9 @@ export interface ISessionContext {
 
   // === Token 消费追踪 ===
   /** 记录一次 LLM 调用的 token 消耗（prompt + completion），累加到会话累计中 */
-  recordTokenUsage(promptTokens: number, completionTokens: number): Promise<void>;
+  recordTokenUsage(
+    promptTokens: number,
+    completionTokens: number,
+    cachedTokens?: number,
+  ): Promise<void>;
 }

@@ -63,5 +63,20 @@ export interface LLMResponseChunk {
     promptTokens: number;
     completionTokens: number;
     totalTokens: number;
+    /**
+     * 各供应商缓存相关 token 数（私有扩展，非所有供应商都有）
+     * - OpenAI Chat/Response: read = prompt_tokens_details.cached_tokens
+     * - DeepSeek: read = prompt_cache_hit_tokens, missed = prompt_cache_miss_tokens
+     * - Anthropic: read = cache_read_input_tokens, written = cache_creation_input_tokens
+     * - Gemini: read = usage_metadata.cachedContentTokenCount
+     */
+    cachedTokens?: {
+      /** 从缓存读取的 token 数（缓存命中） */
+      read?: number;
+      /** 写入缓存的 token 数（首次创建缓存，Anthropic 特有） */
+      written?: number;
+      /** 缓存未命中的 token 数（DeepSeek 特有） */
+      missed?: number;
+    };
   };
 }
