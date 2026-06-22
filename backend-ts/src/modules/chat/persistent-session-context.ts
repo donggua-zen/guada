@@ -858,8 +858,7 @@ export class PersistentSessionContext implements ISessionContext {
 
   async recordTokenUsage(promptTokens: number, completionTokens: number): Promise<void> {
     if (!this.tokenTracker) {
-      this.tokenTracker = new SessionTokenTracker(this._workspacePath, this.sessionId);
-      await this.tokenTracker.load();
+      this.tokenTracker = new SessionTokenTracker(this._workspacePath);
     }
     await this.tokenTracker.addUsage(promptTokens, completionTokens);
   }
