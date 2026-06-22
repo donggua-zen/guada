@@ -944,7 +944,7 @@ const handlePaste = async (event) => {
   } else if (pastedText) {
     // 短文本 → 插入到 Tiptap 编辑器
     if (editor.value) {
-      editor.value.chain().focus().insertContent(pastedText).run();
+      editor.value.chain().focus().insertContent(pastedText).scrollIntoView().run();
     }
   }
 
@@ -1213,8 +1213,6 @@ watch(editorContent, () => {
       pmEl.style.minHeight = '58px';
       pmEl.style.maxHeight = '240px';
       isInputExpanded.value = pmEl.scrollHeight > 60;
-      // 自动滚动到底部
-      pmEl.scrollTop = pmEl.scrollHeight;
     }
   });
 });
@@ -1296,8 +1294,6 @@ onMounted(() => {
             pmEl.style.minHeight = '58px';
             pmEl.style.maxHeight = '240px';
             isInputExpanded.value = pmEl.scrollHeight > 60;
-            // 自动滚动到底部
-            pmEl.scrollTop = pmEl.scrollHeight;
           }
         });
       },
@@ -1318,10 +1314,29 @@ onMounted(() => {
     editor.value = tiptapEditor;
     console.log('[ChatInput] Tiptap editor created:', tiptapEditor);
 
-    // 将 editor 实例挂载到 DOM 元素，供全局右键菜单使用
+    // 将编辑器处理器挂载到 DOM 元素，供全局右键菜单使用（解耦方式）
     const editorEl = document.querySelector('.message-editor');
     if (editorEl) {
-      (editorEl as any).__tiptapEditor = tiptapEditor;
+      (editorEl as any).__editorHandler = {
+        getSelectionText: () => {
+          return tiptapEditor.state.doc.textBetween(
+            tiptapEditor.state.selection.from,
+            tiptapEditor.state.selection.to,
+            '',
+          );
+        },
+        paste: (text: string) => {
+          tiptapEditor.chain().focus().insertContent(text).scrollIntoView().run();
+        },
+        deleteSelection: () => {
+          tiptapEditor.commands.deleteSelection();
+        },
+        selectAll: () => {
+          tiptapEditor.commands.focus();
+          tiptapEditor.commands.selectAll();
+        },
+      };
+      editorEl.setAttribute('data-editor-handler', 'true');
     }
   } catch (err) {
     console.error('[ChatInput] Tiptap editor init failed:', err);
