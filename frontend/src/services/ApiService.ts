@@ -634,10 +634,12 @@ class ApiService {
 
   /**
    * 获取工作目录中原始文件的访问 URL（用于图片等资源）
+   * 携带 token query 参数以支持 <img> 标签直出
    */
   getWorkspaceRawFileUrl(sessionId: string, filePath: string): string {
     const baseUrl = this.baseURL.replace(/\/$/, '');
-    return `${baseUrl}/sessions/${sessionId}/workspace/raw-file?path=${encodeURIComponent(filePath)}`;
+    const token = sessionStorage.getItem("token") || localStorage.getItem("token") || '';
+    return `${baseUrl}/sessions/${sessionId}/workspace/raw-file?path=${encodeURIComponent(filePath)}&token=${encodeURIComponent(token)}`;
   }
 
   /**

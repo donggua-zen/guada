@@ -85,32 +85,58 @@
             </div>
 
             <div class="flex-1 flex overflow-auto min-h-0 p-1">
-                <div v-if="previewLoading" class="flex items-center justify-center h-full">
+                <div v-if="previewLoading" class="flex items-center justify-center h-full w-full">
                     <el-icon class="is-loading" size="20">
                         <LoadingOutlined />
                     </el-icon>
                 </div>
 
-                <div v-else-if="previewError" class="text-red-500 text-sm p-4">
-                    {{ previewError }}
+                <!-- 图片预览 -->
+                <img v-else-if="previewMode === 'image' && !previewError"
+                    :src="imagePreviewUrl"
+                    @error="onImageError"
+                    class="image-preview w-full h-full object-contain p-2"
+                    alt="图片预览" />
+
+                <!-- 不支持的文件 -->
+                <div v-else-if="previewMode === 'unsupported' && !previewError"
+                    class="w-full h-full flex items-center justify-center">
+                    <div class="text-center">
+                        <p class="text-gray-400 dark:text-gray-500 text-sm">此文件暂不支持预览</p>
+                        <el-button v-if="isElectron" @click="handleOpenInExplorerForCurrent" size="small" class="mt-3">
+                            在资源管理器中打开
+                        </el-button>
+                    </div>
                 </div>
 
+                <!-- 错误 / 文本内容 -->
                 <div v-else class="w-full min-h-0">
-                    <!-- HTML 预览模式 -->
-                    <iframe v-if="isHtmlFile && currentPreviewMode === 'rendered'" :srcdoc="fileContent"
-                        class="w-full border-0" style="height: 100%;"
-                        sandbox="allow-same-origin allow-scripts" />
+                    <div v-if="previewError"
+                        class="w-full h-full flex items-center justify-center p-4">
+                        <div class="text-center">
+                            <p class="text-gray-400 dark:text-gray-500 text-sm">{{ previewError }}</p>
+                            <el-button v-if="isElectron && previewMode === 'unsupported'" @click="handleOpenInExplorerForCurrent" size="small" class="mt-3">
+                                在资源管理器中打开
+                            </el-button>
+                        </div>
+                    </div>
+                    <template v-else-if="previewMode === 'text'">
+                        <!-- HTML 预览模式 -->
+                        <iframe v-if="isHtmlFile && currentPreviewMode === 'rendered'" :srcdoc="fileContent"
+                            class="w-full border-0" style="height: 100%;"
+                            sandbox="allow-same-origin allow-scripts" />
 
-                    <!-- Markdown 渲染模式 -->
-                    <div v-else-if="isMarkdownFile && currentPreviewMode === 'rendered'"
-                        class="markdown-preview markdown-text" v-html="renderedContent" />
+                        <!-- Markdown 渲染模式 -->
+                        <div v-else-if="isMarkdownFile && currentPreviewMode === 'rendered'"
+                            class="markdown-preview markdown-text" v-html="renderedContent" />
 
-                    <!-- 源码模式（带语法高亮）- 所有支持的文件类型 -->
-                    <div v-else-if="renderedContent" class="code-preview-container" v-html="renderedContent" />
+                        <!-- 源码模式（带语法高亮）- 所有支持的文件类型 -->
+                        <div v-else-if="renderedContent" class="code-preview-container" v-html="renderedContent" />
 
-                    <!-- 普通文本预览（不支持高亮的文件） -->
-                    <pre v-else v-text="fileContent"
-                        class="text-sm leading-relaxed whitespace-pre-wrap break-all dark:bg-[#2a2c30] text-gray-800 dark:text-gray-200 p-4 m-0 overflow-auto min-h-0 font-mono" />
+                        <!-- 普通文本预览（不支持高亮的文件） -->
+                        <pre v-else v-text="fileContent"
+                            class="text-sm leading-relaxed whitespace-pre-wrap break-all dark:bg-[#2a2c30] text-gray-800 dark:text-gray-200 p-4 m-0 overflow-auto min-h-0 font-mono" />
+                    </template>
                 </div>
             </div>
         </div>
@@ -168,6 +194,11 @@ const workspaceDialogVisible = ref(false);
 const currentWorkspacePath = ref<string | null>(null);
 const previewError = ref('');
 const selectedNodePath = ref('');
+
+// 预览类型：text / image / unsupported
+const previewMode = ref<'text' | 'image' | 'unsupported' | null>(null);
+// 图片预览 URL（Electron 为 file:// 协议，非 Electron 为 rawfile URL）
+const imagePreviewUrl = ref('');
 
 // 正在加载子节点的目录路径集合
 const loadingPaths = ref<Set<string>>(new Set());
@@ -305,7 +336,7 @@ const { parseMarkdown } = useMarkdown({
 });
 
 // 初始化代码高亮
-const { highlightCode, getLanguageFromExtension, isTextFile } = useHighlight();
+const { highlightCode, getLanguageFromExtension, isTextFile, isImageFile } = useHighlight();
 
 // 当前预览文件的内容哈希，用于检测文件是否变化
 const fileContentHash = ref('');
@@ -743,21 +774,20 @@ async function handleOpenInExplorer() {
 
 /**
  * 处理文件选择
+ *
+ * 所有文件都打开预览面板，按类型决定显示内容：
+ * - 文本文件 → 通过 API 加载内容（后端限制 5MB）
+ * - 图片文件（Electron）→ 拼接本地 file:// 路径，无大小限制
+ * - 图片文件（非 Electron）→ 使用 rawfile URL（后端限制 20MB）
+ * - 不支持格式 → 显示"此文件暂不支持预览" + Electron 打开按钮
  */
 async function handleFileSelect(node: WorkspaceNode) {
     if (node.isDirectory) return;
-
     if (!props.sessionId) return;
 
-    // 检查是否为文本文件，非文本文件不打开预览
     const ext = node.name.substring(node.name.lastIndexOf('.')).toLowerCase();
-    if (!isTextFile(ext)) {
-        previewError.value = '不支持预览二进制文件';
-        selectedFile.value = null;
-        fileContent.value = '';
-        return;
-    }
 
+    // 总是打开预览面板
     selectedFile.value = {
         name: node.name,
         path: node.path,
@@ -766,11 +796,60 @@ async function handleFileSelect(node: WorkspaceNode) {
         content: '',
         mimeType: ''
     };
+    previewError.value = '';
+    previewLoading.value = false;
 
-    // 切换文件时重置哈希值，确保新文件内容能正常加载
-    fileContentHash.value = '';
+    if (isTextFile(ext)) {
+        // 文本文件：通过后端 API 读取（已有 5MB 限制）
+        previewMode.value = 'text';
+        fileContentHash.value = '';
+        await loadFileContent(node.path);
+    } else if (isImageFile(ext)) {
+        previewMode.value = 'image';
+        // Electron 正式环境（file:// 协议）：直连本地文件，无大小限制
+        // 开发环境（http://localhost）或非 Electron：走 rawfile 接口，后端限制 20MB
+        if (isElectron && window.location.protocol === 'file:') {
+            await loadImageLocal(node);
+        } else {
+            // 非 Electron / Electron 开发环境：rawfile URL 携带 ?token=，直接 <img> 渲染
+            if (node.size && node.size > 20 * 1024 * 1024) {
+                previewError.value = '文件过大暂不支持预览';
+            } else {
+                imagePreviewUrl.value = apiService.getWorkspaceRawFileUrl(props.sessionId, node.path);
+            }
+        }
+    } else {
+        // 不支持的文件格式
+        previewMode.value = 'unsupported';
+    }
+}
 
-    await loadFileContent(node.path);
+/**
+ * Electron 环境下加载本地图片
+ * 获取工作目录绝对路径，拼接相对路径构造 file:// URL
+ */
+async function loadImageLocal(node: WorkspaceNode) {
+    try {
+        const resp = await apiService.getWorkspacePath(props.sessionId!);
+        const absWorkspacePath = resp.workspacePath;
+        if (!absWorkspacePath) {
+            previewError.value = '无法获取工作目录路径';
+            return;
+        }
+        // 拼接绝对路径：工作目录 + 文件相对路径
+        const relativePath = node.path.replace(/\\/g, '/');
+        const separator = absWorkspacePath.endsWith('/') || absWorkspacePath.endsWith('\\') ? '' : '/';
+        const fullPath = (absWorkspacePath + separator + relativePath).replace(/\\/g, '/');
+        // encodeURI 编码空格、中文等特殊字符，但保留 : / 等 URL 合法字符
+        const encodedPath = encodeURI(fullPath);
+        // 构造 file:// 协议 URL，Windows 需要 / 前缀
+        const fileUrl = encodedPath.startsWith('/') ? `file://${encodedPath}` : `file:///${encodedPath}`;
+        imagePreviewUrl.value = fileUrl;
+        console.log('[WorkspaceSidebar] Image local URL:', fileUrl);
+    } catch (error: any) {
+        previewError.value = '加载图片失败';
+        console.error('[WorkspaceSidebar] Failed to load image locally:', error);
+    }
 }
 
 /**
@@ -807,7 +886,13 @@ async function loadFileContent(filePath: string, force = false, skipLoading = fa
         selectedFile.value!.mimeType = response.mimeType;
         fileContent.value = response.content;
     } catch (error: any) {
-        previewError.value = error.message || '加载文件失败';
+        // 翻译后端错误信息为友好中文提示
+        const msg = error?.response?.data?.message || error.message || '';
+        if (msg.includes('File too large') || msg.includes('too large')) {
+            previewError.value = '文件过大暂不支持预览';
+        } else {
+            previewError.value = '加载文件失败';
+        }
         console.error('Failed to load file:', error);
     } finally {
         previewLoading.value = false;
@@ -821,6 +906,48 @@ function closePreview() {
     selectedFile.value = null;
     fileContent.value = '';
     previewError.value = '';
+    previewMode.value = null;
+    imagePreviewUrl.value = '';
+}
+
+/**
+ * 图片加载失败处理
+ * - Electron: file:// 加载失败，通常是文件不存在/无法访问
+ * - 非 Electron: rawfile 返回错误，通常是文件过大（超 20MB）
+ */
+function onImageError(event: Event | string) {
+    const src = (typeof event === 'object' && (event as Event).target instanceof HTMLImageElement)
+        ? (event as Event).target!.getAttribute('src')
+        : imagePreviewUrl.value;
+    console.error('[WorkspaceSidebar] Image load failed, URL:', src);
+    previewError.value = isElectron ? '图片加载失败' : '文件过大暂不支持预览';
+}
+
+/**
+ * 在资源管理器中打开当前选中的文件（预览面板内的按钮使用）
+ */
+async function handleOpenInExplorerForCurrent() {
+    if (!selectedFile.value || !props.sessionId || !isElectron) return;
+    try {
+        const resp = await apiService.getWorkspacePath(props.sessionId);
+        const wsPath = resp.workspacePath;
+        if (!wsPath) {
+            ElMessage.error('无法获取工作目录路径');
+            return;
+        }
+        const relativePath = selectedFile.value.path.replace(/\\/g, '/');
+        const separator = wsPath.endsWith('/') || wsPath.endsWith('\\') || relativePath.startsWith('/') ? '' : '/';
+        let fullPath = wsPath + separator + relativePath;
+        // 如果是文件，打开其父目录
+        const lastSep = Math.max(fullPath.lastIndexOf('/'), fullPath.lastIndexOf('\\'));
+        if (lastSep > 0) {
+            fullPath = fullPath.substring(0, lastSep);
+        }
+        await window.electronAPI!.openFolder(fullPath);
+    } catch (error: any) {
+        console.error('[WorkspaceSidebar] Open in explorer failed:', error);
+        ElMessage.error('打开失败');
+    }
 }
 
 /**

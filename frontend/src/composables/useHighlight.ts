@@ -38,6 +38,7 @@ import lua from 'highlight.js/lib/languages/lua'
 import lisp from 'highlight.js/lib/languages/lisp'
 import dart from 'highlight.js/lib/languages/dart'
 import plaintext from 'highlight.js/lib/languages/plaintext'
+import dos from 'highlight.js/lib/languages/dos'
 
 // 注册语言
 hljs.registerLanguage('javascript', javascript)
@@ -77,6 +78,7 @@ hljs.registerLanguage('lua', lua)
 hljs.registerLanguage('lisp', lisp)
 hljs.registerLanguage('dart', dart)
 hljs.registerLanguage('plaintext', plaintext)
+hljs.registerLanguage('dos', dos)
 
 /**
  * 根据文件扩展名获取对应的语言标识
@@ -87,6 +89,10 @@ export function getLanguageFromExtension(ext: string): string | null {
     '.ts': 'typescript',
     '.jsx': 'javascript',
     '.tsx': 'typescript',
+    '.mjs': 'javascript',
+    '.cjs': 'javascript',
+    '.mts': 'typescript',
+    '.cts': 'typescript',
     '.py': 'python',
     '.java': 'java',
     '.cpp': 'cpp',
@@ -100,15 +106,18 @@ export function getLanguageFromExtension(ext: string): string | null {
     '.css': 'css',
     '.scss': 'scss',
     '.json': 'json',
+    '.jsonl': 'json',
     '.yaml': 'yaml',
     '.yml': 'yaml',
     '.sh': 'bash',
     '.bash': 'bash',
+    '.bat': 'dos',
+    '.cmd': 'dos',
+    '.ps1': 'powershell',
     '.xml': 'xml',
     '.vue': 'vue',
     '.dockerfile': 'dockerfile',
     '.nginx': 'nginx',
-    '.ps1': 'powershell',
     '.ini': 'ini',
     '.conf': 'apache',
     '.makefile': 'makefile',
@@ -122,7 +131,7 @@ export function getLanguageFromExtension(ext: string): string | null {
     '.lisp': 'lisp',
     '.dart': 'dart',
   }
-  
+
   return langMap[ext.toLowerCase()] || null
 }
 
@@ -138,9 +147,25 @@ export function isTextFile(ext: string): boolean {
     '.sql', '.dockerfile', '.nginx', '.conf', '.ini', '.toml', '.env',
     '.gitignore', '.npmignore', '.editorconfig', '.eslintrc', '.prettierrc',
     '.log', '.csv', '.tsv', '.svg', '.graphql', '.proto',
+    // 新增格式
+    '.jsonl', '.ndjson',
+    '.bat', '.cmd',
+    '.mjs', '.cjs', '.mts', '.cts',
+    '.properties', '.cfg', '.gradle',
   ]
-  
+
   return textExtensions.includes(ext.toLowerCase())
+}
+
+/**
+ * 判断是否为图片文件
+ */
+export function isImageFile(ext: string): boolean {
+  const imageExtensions = [
+    '.png', '.jpg', '.jpeg', '.gif', '.webp',
+    '.bmp', '.ico', '.avif', '.tiff', '.tif',
+  ]
+  return imageExtensions.includes(ext.toLowerCase())
 }
 
 /**
@@ -155,7 +180,7 @@ export function useHighlight() {
    */
   const highlightCode = (code: string, language: string): string => {
     if (!code) return ''
-    
+
     try {
       const lang = hljs.getLanguage(language) ? language : 'plaintext'
       const result = hljs.highlight(code, { language: lang })
@@ -166,7 +191,7 @@ export function useHighlight() {
       return `<pre><code>${escapeHtml(code)}</code></pre>`
     }
   }
-  
+
   /**
    * 转义 HTML 特殊字符
    */
@@ -180,12 +205,13 @@ export function useHighlight() {
     }
     return text.replace(/[&<>"']/g, (m) => map[m])
   }
-  
+
   return {
     hljs,
     highlightCode,
     getLanguageFromExtension,
     isTextFile,
+    isImageFile,
     escapeHtml
   }
 }
