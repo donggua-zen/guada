@@ -5,12 +5,32 @@
  * - 上下文感知：根据点击目标显示不同的菜单选项
  * - 自动检测：通过事件系统自动识别已有自定义菜单的区域
  * - 兼容性好：不破坏现有组件的自定义右键菜单
+ *
+ * 编辑器解耦设计：
+ * 组件通过 DOM 属性注册 EditorHandler 实现，ContextMenuManager 仅调用接口方法，
+ * 不依赖任何编辑器实现（Tiptap/Quill 等）。
  */
 
 export interface MenuItem {
   label: string;
   type?: "normal" | "separator";
   action?: () => void;
+}
+
+/**
+ * 编辑器处理器接口 —— 组件实现此接口并挂载到 DOM 元素上，
+ * ContextMenuManager 通过 data-editor-handler 属性查找并调用。
+ * 这样 ContextMenuManager 不直接依赖任何编辑器实现。
+ */
+export interface EditorHandler {
+  /** 获取选中文本 */
+  getSelectionText(): string;
+  /** 粘贴文本到光标位置（含滚动到可视区域） */
+  paste(text: string): void;
+  /** 删除选中内容 */
+  deleteSelection(): void;
+  /** 全选 */
+  selectAll(): void;
 }
 
 type ShowMenuFn = (x: number, y: number, items: MenuItem[]) => void;
@@ -214,13 +234,82 @@ class ContextMenuManager {
    * @returns {boolean} 是否插入成功
    */
 
+  /**
+   * 查找目标元素关联的编辑器处理器
+   * 组件需在 DOM 元素上设置 data-editor-handler 属性和 __editorHandler 对象
+   */
+  private getEditorHandler(target: HTMLElement): EditorHandler | null {
+    const el = target.closest("[data-editor-handler]");
+    return el ? (el as any).__editorHandler || null : null;
+  }
+
+  /**
+   * 获取 contenteditable 元素的选中文本
+   */
+  private getContentEditableSelection(target: HTMLElement): {
+    text: string;
+    range: Range | null;
+  } {
+    // 优先使用注册的编辑器处理器
+    const handler = this.getEditorHandler(target);
+    if (handler) {
+      return { text: handler.getSelectionText(), range: null };
+    }
+
+    const sel = window.getSelection();
+    if (sel && sel.rangeCount > 0) {
+      const range = sel.getRangeAt(0);
+      return { text: range.toString(), range };
+    }
+    return { text: "", range: null };
+  }
+
+  /**
+   * 删除 contenteditable 元素的选中文本
+   */
+  private deleteContentEditableSelection(target: HTMLElement): void {
+    const handler = this.getEditorHandler(target);
+    if (handler) {
+      handler.deleteSelection();
+      return;
+    }
+
+    const sel = window.getSelection();
+    if (sel && sel.rangeCount > 0) {
+      const range = sel.getRangeAt(0);
+      range.deleteContents();
+    }
+  }
+
+  /**
+   * 全选 contenteditable 元素内容
+   */
+  private selectAllContentEditable(target: HTMLElement): void {
+    const handler = this.getEditorHandler(target);
+    if (handler) {
+      handler.selectAll();
+      return;
+    }
+
+    const sel = window.getSelection();
+    if (sel) {
+      const range = document.createRange();
+      range.selectNodeContents(target);
+      sel.removeAllRanges();
+      sel.addRange(range);
+    }
+  }
+
+  /**
+   * 粘贴文本到 contenteditable 元素
+   */
   private insertTextToContentEditable(
     text: string,
     target: HTMLElement,
   ): boolean {
-    const tiptapEditor = this.getTiptapEditor(target);
-    if (tiptapEditor) {
-      tiptapEditor.commands.insertContent(text);
+    const handler = this.getEditorHandler(target);
+    if (handler) {
+      handler.paste(text);
       return true;
     }
 
@@ -239,80 +328,6 @@ class ContextMenuManager {
     sel.removeAllRanges();
     sel.addRange(range);
     return true;
-  }
-
-  /**
-   * 获取目标元素关联的 Tiptap 编辑器实例
-   */
-  private getTiptapEditor(target: HTMLElement): any {
-    const tiptapWrapper =
-      target.closest(".message-editor") || target.closest(".editor-container");
-    if (tiptapWrapper) {
-      return (tiptapWrapper as any).__tiptapEditor || null;
-    }
-    return null;
-  }
-
-  /**
-   * 获取 contenteditable 元素的选中文本
-   */
-  private getContentEditableSelection(target: HTMLElement): {
-    text: string;
-    range: Range | null;
-  } {
-    const tiptapEditor = this.getTiptapEditor(target);
-    if (tiptapEditor) {
-      const text = tiptapEditor.state.doc.textBetween(
-        tiptapEditor.state.selection.from,
-        tiptapEditor.state.selection.to,
-        "",
-      );
-      return { text, range: null };
-    }
-
-    const sel = window.getSelection();
-    if (sel && sel.rangeCount > 0) {
-      const range = sel.getRangeAt(0);
-      return { text: range.toString(), range };
-    }
-    return { text: "", range: null };
-  }
-
-  /**
-   * 删除 contenteditable 元素的选中文本
-   */
-  private deleteContentEditableSelection(target: HTMLElement): void {
-    const tiptapEditor = this.getTiptapEditor(target);
-    if (tiptapEditor) {
-      tiptapEditor.commands.deleteSelection();
-      return;
-    }
-
-    const sel = window.getSelection();
-    if (sel && sel.rangeCount > 0) {
-      const range = sel.getRangeAt(0);
-      range.deleteContents();
-    }
-  }
-
-  /**
-   * 全选 contenteditable 元素内容
-   */
-  private selectAllContentEditable(target: HTMLElement): void {
-    const tiptapEditor = this.getTiptapEditor(target);
-    if (tiptapEditor) {
-      tiptapEditor.commands.focus();
-      tiptapEditor.commands.selectAll();
-      return;
-    }
-
-    const sel = window.getSelection();
-    if (sel) {
-      const range = document.createRange();
-      range.selectNodeContents(target);
-      sel.removeAllRanges();
-      sel.addRange(range);
-    }
   }
   /**
    * 根据上下文构建菜单项
