@@ -14,6 +14,8 @@
  *   "promptTokensReadable": "15.4K",
  *   "completionTokensReadable": "8.9K",
  *   "totalTokensReadable": "24.4K",
+ *   "cachedTokens": 8192,
+ *   "cachedTokensReadable": "8.2K",
  *   "updatedAt": "2026-06-22T03:00:00.000Z"
  * }
  */
@@ -27,6 +29,9 @@ export interface TokenUsageRecord {
   promptTokensReadable: string;
   completionTokensReadable: string;
   totalTokensReadable: string;
+  /** 累计缓存命中的 token 数（OpenAI cached_tokens / DeepSeek hit / Anthropic read / Gemini cached） */
+  cachedTokens: number;
+  cachedTokensReadable: string;
   updatedAt: string;
 }
 
@@ -53,13 +58,20 @@ export class SessionTokenTracker {
     try {
       const data = await fs.readFile(this.filePath, "utf-8");
       const record = JSON.parse(data);
-      // 兼容旧文件（不含 readable 字段）
+      // 兼容旧文件（不含 readable / cache 字段）
       record.promptTokensReadable = record.promptTokensReadable || formatTokens(record.promptTokens || 0);
       record.completionTokensReadable = record.completionTokensReadable || formatTokens(record.completionTokens || 0);
       record.totalTokensReadable = record.totalTokensReadable || formatTokens(record.totalTokens || 0);
+      record.cachedTokens = record.cachedTokens || 0;
+      record.cachedTokensReadable = record.cachedTokensReadable || formatTokens(record.cachedTokens || 0);
       return record;
     } catch {
-      return { promptTokens: 0, completionTokens: 0, totalTokens: 0, promptTokensReadable: "0", completionTokensReadable: "0", totalTokensReadable: "0", updatedAt: "" };
+      return {
+        promptTokens: 0, completionTokens: 0, totalTokens: 0,
+        promptTokensReadable: "0", completionTokensReadable: "0", totalTokensReadable: "0",
+        cachedTokens: 0, cachedTokensReadable: "0",
+        updatedAt: "",
+      };
     }
   }
 
@@ -68,17 +80,27 @@ export class SessionTokenTracker {
    *
    * 每次写入前先读取文件中的最新值再合并，
    * 避免并发运行时（如多个子 agent 同时写入）相互覆盖。
+   *
+   * @param cachedTokens 缓存命中的 token 数（可选）
    */
-  async addUsage(promptTokens: number, completionTokens: number): Promise<void> {
+  async addUsage(
+    promptTokens: number,
+    completionTokens: number,
+    cachedTokens?: number,
+  ): Promise<void> {
     try {
       await fs.mkdir(path.dirname(this.filePath), { recursive: true });
       const current = await this.readRecord();
       current.promptTokens += promptTokens;
       current.completionTokens += completionTokens;
       current.totalTokens = current.promptTokens + current.completionTokens;
+      if (cachedTokens) {
+        current.cachedTokens += cachedTokens;
+      }
       current.promptTokensReadable = formatTokens(current.promptTokens);
       current.completionTokensReadable = formatTokens(current.completionTokens);
       current.totalTokensReadable = formatTokens(current.totalTokens);
+      current.cachedTokensReadable = formatTokens(current.cachedTokens);
       current.updatedAt = new Date().toISOString();
       await fs.writeFile(this.filePath, JSON.stringify(current, null, 2), "utf-8");
     } catch {

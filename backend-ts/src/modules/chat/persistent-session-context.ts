@@ -856,10 +856,14 @@ export class PersistentSessionContext implements ISessionContext {
 
   // === Token 消费追踪 ===
 
-  async recordTokenUsage(promptTokens: number, completionTokens: number): Promise<void> {
+  async recordTokenUsage(
+    promptTokens: number,
+    completionTokens: number,
+    cachedTokens?: number,
+  ): Promise<void> {
     if (!this.tokenTracker) {
       this.tokenTracker = new SessionTokenTracker(this._workspacePath);
     }
-    await this.tokenTracker.addUsage(promptTokens, completionTokens);
+    await this.tokenTracker.addUsage(promptTokens, completionTokens, cachedTokens);
   }
 }

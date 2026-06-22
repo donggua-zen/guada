@@ -137,11 +137,24 @@ export class GeminiAdapter implements IProtocolAdapter {
       }
 
       // 模拟结束块
+      // Gemini 流结束后，尝试获取 usage_metadata（缓存统计 + token 统计）
+      const usageMetadata = (result as any)?.response?.usageMetadata || (result as any)?.usageMetadata;
+      const geminiUsage = usageMetadata
+        ? {
+            promptTokens: usageMetadata.promptTokenCount ?? 0,
+            completionTokens: usageMetadata.candidatesTokenCount ?? 0,
+            totalTokens: usageMetadata.totalTokenCount ?? 0,
+            cachedTokens: usageMetadata.cachedContentTokenCount
+              ? { read: usageMetadata.cachedContentTokenCount }
+              : undefined,
+          }
+        : null;
+
       yield {
         type: "finish",
         content: null,
         finishReason: "stop",
-        usage: null,
+        usage: geminiUsage,
       };
     } catch (error) {
       this.logger.error("Gemini API error:", error);

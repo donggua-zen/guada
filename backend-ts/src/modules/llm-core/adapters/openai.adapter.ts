@@ -144,6 +144,12 @@ export class OpenAIAdapter implements IProtocolAdapter {
       requestParams.reasoning_effort = params.thinkingEffort;
     }
 
+    // 流式模式下请求返回 usage 信息（OpenAI 标准要求显式声明）
+    // 多数供应商默认返回，但 OpenAI / Azure OpenAI 严格遵循此标准
+    if (params.stream) {
+      requestParams.stream_options = { include_usage: true };
+    }
+
     return requestParams;
   }
 
@@ -240,10 +246,12 @@ export class OpenAIAdapter implements IProtocolAdapter {
       if (choice.finish_reason) responseChunk.type = "finish";
 
       if ((chunk as any).usage) {
+        const rawUsage = (chunk as any).usage;
         responseChunk.usage = {
-          promptTokens: (chunk as any).usage.prompt_tokens,
-          completionTokens: (chunk as any).usage.completion_tokens,
-          totalTokens: (chunk as any).usage.total_tokens,
+          promptTokens: rawUsage.prompt_tokens,
+          completionTokens: rawUsage.completion_tokens,
+          totalTokens: rawUsage.total_tokens,
+          cachedTokens: extractOpenAICachedTokens(rawUsage),
         };
       }
 
@@ -294,6 +302,7 @@ export class OpenAIAdapter implements IProtocolAdapter {
         promptTokens: response.usage.prompt_tokens,
         completionTokens: response.usage.completion_tokens,
         totalTokens: response.usage.total_tokens,
+        cachedTokens: extractOpenAICachedTokens(response.usage),
       };
     }
 
@@ -420,4 +429,33 @@ export class OpenAIAdapter implements IProtocolAdapter {
       }
     }
   }
+}
+
+/**
+ * 从 OpenAI 协议 usage 对象中提取缓存 token 字段
+ * 兼容两种格式：
+ * - OpenAI 官方: usage.prompt_tokens_details.cached_tokens
+ * - DeepSeek 风格: usage.prompt_cache_hit_tokens / prompt_cache_miss_tokens
+ */
+function extractOpenAICachedTokens(rawUsage: any): { read?: number; missed?: number } | undefined {
+  const cachedTokens: { read?: number; missed?: number } = {};
+
+  // DeepSeek 风格: usage.prompt_cache_hit_tokens (flat in usage)
+  // 优先使用此格式，若存在则不再检查 prompt_tokens_details
+  if (rawUsage.prompt_cache_hit_tokens != null) {
+    cachedTokens.read = Number(rawUsage.prompt_cache_hit_tokens);
+    if (rawUsage.prompt_cache_miss_tokens != null) {
+      cachedTokens.missed = Number(rawUsage.prompt_cache_miss_tokens);
+    }
+  } else {
+    // OpenAI 官方格式: usage.prompt_tokens_details.cached_tokens
+    const details = rawUsage.prompt_tokens_details;
+    if (details?.cached_tokens != null) {
+      cachedTokens.read = Number(details.cached_tokens);
+    }
+  }
+
+  return cachedTokens.read !== undefined || cachedTokens.missed !== undefined
+    ? cachedTokens
+    : undefined;
 }

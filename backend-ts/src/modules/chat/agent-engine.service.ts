@@ -312,10 +312,11 @@ export class AgentEngine {
             }
             if (lastAcc.usage) {
               assistantResponse.metadata.usage = lastAcc.usage;
-              // 累计会话级 token 消费
+              // 累计会话级 token 消费（含缓存命中数）
               sessionContext.recordTokenUsage(
                 lastAcc.usage.promptTokens,
                 lastAcc.usage.completionTokens,
+                lastAcc.usage.cachedTokens?.read,
               );
             }
             // 保存 Anthropic thinking signature，用于后续多轮回传
