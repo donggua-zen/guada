@@ -144,7 +144,6 @@ async function createDefaultCharacters(userId: string, modelId: string) {
           mcpServers: charData.mcpServers,
           // {"maxMemoryLength":null,"compressionTriggerRatio":0.95,"compressionTargetRatio":0.25,"enableSummaryCompression":true,"maxTokensLimit":128000}
           memory: {
-            maxTokensLimit: 128000,
             summaryMode: 'memory_sync'
           }
         },
