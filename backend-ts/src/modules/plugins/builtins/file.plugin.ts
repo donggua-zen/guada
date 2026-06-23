@@ -250,7 +250,7 @@ export class FilePlugin extends PluginBase {
     api.registerTool({
       name: "edit",
       description:
-        "在文件中查找并替换指定文本。old_text 必须精确匹配原文中的一段连续文本。",
+        "在文件中查找并替换指定文本。old_text 必须精确匹配原文中的一段连续文本。局部编辑优先使用此工具",
       inputSchema: z.object({
         file_path: z
           .string()
@@ -272,24 +272,36 @@ export class FilePlugin extends PluginBase {
         const content = await fs.readFile(resolvedPath, {
           encoding: encoding as BufferEncoding,
         });
-        let modified: string;
-        let actualCount = 0;
         if (old_text === new_text) {
-          modified = content;
-        } else {
-          const parts = content.split(old_text);
-          actualCount = parts.length - 1;
-          if (actualCount === 0) throw new Error(`未找到匹配文本: ${old_text}`);
-          modified = parts.join(new_text);
+          return {
+            success: true,
+            message: `文件 ${resolvedPath} 无变更（old === new）`,
+            file_path: resolvedPath,
+            replace_count: 1,
+          };
         }
+
+        // 统一换行后匹配（解决 CRLF/LF 不匹配问题）
+        const normContent = content.replace(/\r\n/g, "\n");
+        const normOld = old_text.replace(/\r\n/g, "\n");
+        const idx = normContent.indexOf(normOld);
+        if (idx === -1) {
+          throw new Error(`未找到匹配文本: ${old_text}`);
+        }
+
+        // 替换后统一恢复原文件的行尾风格
+        const hasCRLF = content.includes("\r\n");
+        const normResult = normContent.replace(normOld, new_text);
+        const modified = hasCRLF ? normResult.replace(/\n/g, "\r\n") : normResult;
+
         await fs.writeFile(resolvedPath, modified, {
           encoding: encoding as BufferEncoding,
         });
         return {
           success: true,
-          message: `文件 ${resolvedPath} 已修改，共替换 ${actualCount} 处`,
+          message: `文件 ${resolvedPath} 已修改`,
           file_path: resolvedPath,
-          replace_count: actualCount,
+          replace_count: 1,
         };
       },
       display: { action: "替换文本", argsKey: "file_path", icon: "edit" },
@@ -330,68 +342,86 @@ export class FilePlugin extends PluginBase {
     api.registerTool({
       name: "grep",
       description:
-        "使用正则表达式搜索文件内容，返回匹配的行及其行号。适合查找特定模式或关键词。",
+        "搜索文件内容。支持单文件或递归搜索目录（自动跳过 node_modules/.git）。pattern 全小写时不区分大小写，含大写字母时区分。",
       inputSchema: z.object({
-        regex: z.string().describe("要搜索的正则表达式模式"),
+        pattern: z.string().describe("正则表达式"),
         path: z
           .string()
-          .describe("要搜索的文件路径，可以是绝对路径或相对工作目录的相对路径"),
-        case_sensitive: z
-          .boolean()
           .optional()
-          .describe("是否区分大小写，默认不区分"),
-        max_matches: z
+          .describe("目标文件或目录路径，默认工作目录。传入目录时自动递归搜索"),
+        context: z
+          .number()
+          .int()
+          .min(0)
+          .max(10)
+          .optional()
+          .describe("匹配行上下文行数，默认 3"),
+        max_results: z
           .number()
           .int()
           .min(1)
           .optional()
-          .describe("最多返回的匹配行数，默认 100"),
+          .describe("最多返回的匹配行数，默认 50"),
       }),
       execute: async (args, ctx) => {
-        const {
-          regex: pattern,
-          path: targetPath,
-          case_sensitive = false,
-          max_matches = 100,
-        } = args;
-        if (!pattern) throw new Error("正则表达式不能为空");
-        if (!targetPath) throw new Error("文件路径不能为空");
-        const resolvedPath = this.resolvePath(targetPath, ctx);
-        const content = await fs.readFile(resolvedPath, "utf-8");
-        const lines = content.split("\n");
-        const flags = case_sensitive ? "g" : "gi";
+        const { pattern, path: targetPath, context = 3, max_results = 50 } = args;
+        if (!pattern) throw new Error("pattern 不能为空");
+
+        const basePath = targetPath
+          ? this.resolvePath(targetPath, ctx)
+          : (ctx?.workspacePath || process.cwd());
+        const stat = await fs.stat(basePath);
+
+        const files: string[] = [];
+        if (stat.isFile()) {
+          files.push(basePath);
+        } else if (stat.isDirectory()) {
+          await this.collectFiles(basePath, files);
+        }
+
+        // smart-case：全小写自动不区分，含大写区分
+        const flags = pattern === pattern.toLowerCase() ? "gi" : "g";
         let regex: RegExp;
         try {
           regex = new RegExp(pattern, flags);
         } catch {
           throw new Error(`无效正则: ${pattern}`);
         }
-        const matches: Array<{
-          line: number;
-          content: string;
-          matchCount: number;
-        }> = [];
+
+        const fileResults: any[] = [];
         let total = 0;
-        for (let i = 0; i < lines.length && matches.length < max_matches; i++) {
-          const lm = lines[i].match(regex);
-          if (lm) {
-            total += lm.length;
-            matches.push({
-              line: i,
-              content: lines[i].substring(0, 200),
-              matchCount: lm.length,
-            });
+
+        for (const fp of files) {
+          try {
+            const content = await fs.readFile(fp, "utf-8");
+            const lines = content.split("\n");
+            const matchRows: any[] = [];
+
+            for (let i = 0; i < lines.length && matchRows.length < max_results; i++) {
+              regex.lastIndex = 0;
+              if (regex.test(lines[i])) {
+                const start = Math.max(0, i - context);
+                const end = Math.min(lines.length, i + context + 1);
+                matchRows.push({
+                  line: i + 1,
+                  before: lines.slice(start, i).map(l => l.substring(0, 500)),
+                  content: lines[i].substring(0, 500),
+                  after: lines.slice(i + 1, end).map(l => l.substring(0, 500)),
+                });
+              }
+            }
+            if (matchRows.length > 0) {
+              fileResults.push({ file: fp, matched_lines: matchRows.length, matches: matchRows });
+              total += matchRows.length;
+            }
+          } catch {
+            continue;
           }
         }
-        return {
-          file_path: resolvedPath,
-          pattern,
-          total_matches: total,
-          matched_lines: matches.length,
-          matches,
-        };
+
+        return { pattern, total_matches: total, matched_files: fileResults.length, files: fileResults };
       },
-      display: { action: "搜索文件内容", argsKey: "regex", icon: "search" },
+      display: { action: "搜索", argsKey: "pattern", icon: "search" },
     });
 
     api.registerPrompt({
@@ -444,5 +474,21 @@ export class FilePlugin extends PluginBase {
     const resolved = this.resolvePath(filePath, context);
     const extra = context?.workspacePath ? [context.workspacePath] : [];
     this.workspaceService.validateWritePath(resolved, extra);
+  }
+
+  /**
+   * 递归收集目录下所有文件的路径（跳过 node_modules、.git）
+   */
+  private async collectFiles(dirPath: string, results: string[]): Promise<void> {
+    const entries = await fs.readdir(dirPath, { withFileTypes: true });
+    for (const entry of entries) {
+      if (entry.name === "node_modules" || entry.name === ".git") continue;
+      const fullPath = path.join(dirPath, entry.name);
+      if (entry.isFile()) {
+        results.push(fullPath);
+      } else if (entry.isDirectory()) {
+        await this.collectFiles(fullPath, results);
+      }
+    }
   }
 }
