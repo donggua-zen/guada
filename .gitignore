@@ -38,3 +38,4 @@ log.txt
 .workbuddy/**
 frontend/src/nul
 .atomcode/graph.bin
+.trae/**
