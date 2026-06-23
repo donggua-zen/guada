@@ -22,14 +22,6 @@
                       <FolderOpened />
                     </el-icon>
                   </div>
-                  <!-- 记忆管理按钮 -->
-                  <div
-                    class="cursor-pointer p-1 rounded-lg text-gray-600 dark:text-[#8b8d95] transition-all duration-200 hover:bg-gray-100 dark:hover:bg-[#2a2c30] hover:text-gray-900 dark:hover:text-[#e8e9ed] flex items-center justify-center"
-                    @click="memoPanelVisible = !memoPanelVisible" title="记忆管理">
-                    <el-icon class="w-5 h-5">
-                      <Reading />
-                    </el-icon>
-                  </div>
                   <!-- 更多操作下拉菜单 -->
                   <el-dropdown trigger="hover" @command="handleMoreSelect" popper-class="chat-header-dropdown">
                     <div
@@ -77,11 +69,7 @@
     </template>
   </div>
 
-  <!-- 记忆管理弹窗 -->
-  <el-dialog v-model="memoPanelVisible" title="记忆管理" width="390px" :close-on-click-modal="false" destroy-on-close
-    class="memo-panel-dialog">
-    <MemoPanel v-if="mainSession" :session-id="mainSession.id" />
-  </el-dialog>
+
 
 
 </template>
@@ -122,7 +110,6 @@ import {
 } from "@vicons/material";
 
 
-const MemoPanel = defineAsyncComponent(() => import("./MemoPanel.vue"));
 const ChatOutline = defineAsyncComponent(() => import("./ChatOutline.vue"));
 const WorkspaceSidebar = defineAsyncComponent(() => import("./WorkspaceSidebar.vue"));
 
@@ -320,8 +307,6 @@ const chatPanelRef = ref<InstanceType<typeof ChatPanel> | null>(null);
 const paneContentRef = ref<HTMLElement | null>(null);
 let paneSnapWidth = 0;
 // 控制设置模态框的显示与隐藏
-// 控制记忆管理窗格的显示状态，调试阶段默认打开
-const memoPanelVisible = useStorage('memoPanelVisible', false);
 // 布局状态
 const layoutStore = useLayoutStore();
 
