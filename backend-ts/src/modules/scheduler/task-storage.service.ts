@@ -25,7 +25,8 @@ export class TaskStorageService {
   private isLogsLoaded = false;
 
   constructor() {
-    this.storageDir = path.join(process.cwd(), "data", "scheduler");
+    const dataDir = process.env.USERDATA_DIR || process.env.DATA_DIR || path.join(process.cwd(), "data");
+    this.storageDir = path.join(dataDir, "scheduler");
     this.tasksFile = path.join(this.storageDir, "tasks.json");
     this.logsFile = path.join(this.storageDir, "logs.json");
     this.ensureDirectoryExists();
