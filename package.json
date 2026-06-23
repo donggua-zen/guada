@@ -207,7 +207,6 @@
     ]
   },
   "dependencies": {
-    "electron-log": "^5.4.3",
-    "minimatch": "^10.2.5"
+    "electron-log": "^5.4.3"
   }
 }
