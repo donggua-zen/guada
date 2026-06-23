@@ -56,13 +56,13 @@ export class BrowserPlugin extends PluginBase {
     api.registerTool({
       name: "browser_navigate",
       toolSet: "browser",
-      description: "导航到指定 URL，返回页面标题和 URL",
+      description: "导航到指定 URL，返回页面标题、URL 和页面摘要内容",
       inputSchema: z.object({
         url: z.string().describe("要导航到的 URL"),
         window_id: z.string().describe("目标窗口 ID（必填）"),
       }),
       execute: async (args, ctx, signal) =>
-        this.sendRequest("browser_navigate", args, signal),
+        this.executeWithContent("browser_navigate", args, signal),
       display: { action: "访问网页", argsKey: "url", icon: "browser" },
     });
     api.registerTool({
@@ -144,7 +144,7 @@ export class BrowserPlugin extends PluginBase {
       description: "浏览器后退",
       inputSchema: z.object({ window_id: z.string().describe("目标窗口 ID") }),
       execute: async (args, ctx, signal) =>
-        this.sendRequest("browser_go_back", args, signal),
+        this.executeWithContent("browser_go_back", args, signal),
       display: { action: "后退", icon: "browser" },
     });
     api.registerTool({
@@ -153,7 +153,7 @@ export class BrowserPlugin extends PluginBase {
       description: "浏览器前进",
       inputSchema: z.object({ window_id: z.string().describe("目标窗口 ID") }),
       execute: async (args, ctx, signal) =>
-        this.sendRequest("browser_go_forward", args, signal),
+        this.executeWithContent("browser_go_forward", args, signal),
       display: { action: "前进", icon: "browser" },
     });
     api.registerTool({
@@ -162,32 +162,32 @@ export class BrowserPlugin extends PluginBase {
       description: "刷新指定窗口的页面",
       inputSchema: z.object({ window_id: z.string().describe("目标窗口 ID") }),
       execute: async (args, ctx, signal) =>
-        this.sendRequest("browser_reload", args, signal),
+        this.executeWithContent("browser_reload", args, signal),
       display: { action: "刷新页面", icon: "browser" },
     });
     api.registerTool({
       name: "browser_click",
       toolSet: "browser",
-      description: "点击指定窗口中 CSS 选择器匹配的元素",
+      description: "点击指定窗口中 CSS 选择器匹配的元素，操作后自动返回页面摘要",
       inputSchema: z.object({
         selector: z.string().describe("CSS 选择器"),
         window_id: z.string().describe("目标窗口 ID"),
       }),
       execute: async (args, ctx, signal) =>
-        this.sendRequest("browser_click", args, signal),
+        this.executeWithContent("browser_click", args, signal),
       display: { action: "点击元素", argsKey: "selector", icon: "browser" },
     });
     api.registerTool({
       name: "browser_input",
       toolSet: "browser",
-      description: "向指定窗口的输入框填入文本",
+      description: "向指定窗口的输入框填入文本，操作后自动返回页面摘要",
       inputSchema: z.object({
         selector: z.string().describe("CSS 选择器"),
         value: z.string().describe("要填入的文本"),
         window_id: z.string().describe("目标窗口 ID"),
       }),
       execute: async (args, ctx, signal) =>
-        this.sendRequest("browser_input", args, signal),
+        this.executeWithContent("browser_input", args, signal),
       display: { action: "输入文本", argsKey: "value", icon: "browser" },
     });
     api.registerTool({
@@ -265,11 +265,12 @@ export class BrowserPlugin extends PluginBase {
         "",
         "## 使用建议",
         "1. 先用 `browser_new_window(url)` 创建新窗口并导航到目标网页，获取 `window_id`",
-        "2. 用 `browser_page_text` 获取纯文本内容进行分析（适合快速了解页面主要内容）",
-        "3. 用 `browser_page_struct` 获取结构化 JSON（适合需要分析 DOM 结构或提取特定元素）",
-        "4. 如需交互，使用 `browser_click` 和 `browser_input` 操作页面元素",
-        "5. 进阶功能，使用 `browser_run_js` 编写 JavaScript 或使用 `file_path` 参数执行外部 JS 文件",
-        "6. 所有新打开的自动化窗口都是**完全无痕的**，关闭后不留任何数据，如果需要保存登录信息，请导出认证相关信息（如cookie）并下次注入",
+        "2. `browser_navigate`、`browser_click`、`browser_input`、`browser_go_back/forward`、`browser_reload` 操作后**自动返回页面摘要**，无需额外调用获取内容",
+        "3. 如需更详细的结构化 DOM 信息，使用 `browser_page_struct` 获取选择器优化后的 JSON",
+        "4. `browser_page_text` 可获取纯文本内容（适合提取全文）",
+        "5. 如需交互，使用 `browser_click` 和 `browser_input` 操作页面元素",
+        "6. 进阶功能，使用 `browser_run_js` 编写 JavaScript 或使用 `file_path` 参数执行外部 JS 文件",
+        "7. 所有新打开的自动化窗口都是**完全无痕的**，关闭后不留任何数据，如果需要保存登录信息，请导出认证相关信息（如cookie）并下次注入",
         "",
         "## browser_run_js 异步代码使用",
         "当需要执行异步代码时，设置 `is_async: true`：",
@@ -387,6 +388,29 @@ export class BrowserPlugin extends PluginBase {
     if (this.bridgeMode === "tcp")
       return this.sendTCPRequest(method, params, abortSignal);
     return this.sendIPCRequest(method, params, abortSignal);
+  }
+
+  private async executeWithContent(
+    method: string,
+    args: any,
+    signal?: AbortSignal,
+  ): Promise<any> {
+    // 先执行主操作（导航/点击/输入等）
+    const result = await this.sendRequest(method, args, signal);
+    if (result?.success === false) return result;
+
+    // 操作成功后自动跟随获取页面摘要，避免 LLM 多一轮成对调用
+    try {
+      const summary = await this.sendRequest(
+        "browser_page_summary",
+        { window_id: args.window_id },
+        signal,
+      );
+      return { ...result, page_summary: summary };
+    } catch {
+      // 获取摘要失败不影响主操作结果
+      return result;
+    }
   }
 
   private sendTCPRequest(
