@@ -65,14 +65,11 @@
     },
     "files": [
       "electron/dist/**/*",
+      "electron/browser-shell.html",
       "frontend/dist/**/*",
       "build-resources/icon.ico"
     ],
     "extraResources": [
-      {
-        "from": "electron/browser-shell.html",
-        "to": "electron/dist/browser-shell.html"
-      },
       {
         "from": "backend-ts/dist",
         "to": "backend-ts/dist",
@@ -210,6 +207,7 @@
     ]
   },
   "dependencies": {
-    "electron-log": "^5.4.3"
+    "electron-log": "^5.4.3",
+    "minimatch": "^10.2.5"
   }
 }

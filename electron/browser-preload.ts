@@ -1,3 +1,4 @@
+/// <reference lib="dom" />
 import { contextBridge, ipcRenderer } from 'electron'
 
 /**
@@ -129,3 +130,41 @@ contextBridge.exposeInMainWorld('_browserBridge', {
 
 
 })
+// ── 用户脚本自动注入 ──
+// 从磁盘 .browser-work/*.js 读取脚本，以 <script> 注入到页面世界
+async function injectUserScripts() {
+  console.log('[BrowserPreload] injectUserScripts() called, href=' + location.href)
+  try {
+    const result = await ipcRenderer.invoke('browser:get-user-scripts', location.href)
+    console.log('[BrowserPreload] IPC result:', JSON.stringify(result))
+    const scripts = result?.scripts
+    if (!scripts || scripts.length === 0) {
+      console.log('[BrowserPreload] No scripts returned')
+      return
+    }
+    for (const { id, code } of scripts) {
+      try {
+        console.log('[BrowserPreload] Injecting script:', id)
+        const el = document.createElement('script')
+        el.textContent = code
+        document.documentElement.appendChild(el)
+        console.log('[BrowserPreload] Script injected:', id)
+      } catch (e) {
+        console.error('[BrowserPreload] Failed to inject script ' + id + ':', e)
+      }
+    }
+  } catch (e) {
+    console.error('[BrowserPreload] Failed to load user scripts:', e)
+  }
+}
+
+// document 就绪后尽早执行
+console.log('[BrowserPreload] Preload loaded, readyState=' + document.readyState)
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', () => {
+    console.log('[BrowserPreload] DOMContentLoaded fired')
+    injectUserScripts()
+  }, { once: true })
+} else {
+  injectUserScripts()
+}

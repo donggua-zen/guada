@@ -20,7 +20,6 @@ import {
   stopBrowserBridgeTCP,
 } from "./browser-bridge-tcp";
 import { BrowserWindowManager } from "./browser-tab-manager";
-
 let backendProcess: ChildProcess | null = null;
 let mainWindow: BrowserWindow | null = null;
 let windowManager: BrowserWindowManager | null = null; // 窗口管理器
@@ -1289,9 +1288,63 @@ function setupIpcHandlers() {
       return { success: false, error: error.message };
     }
   });
+
+  // glob 转正则匹配 URL（* → .*，? → .）
+  function matchUrl(pattern: string, url: string): boolean {
+    const re = "^" + pattern.replace(/[.+^${}()|[\]\\]/g, "\\$&").replace(/\*/g, ".*").replace(/\?/g, ".") + "$";
+    return new RegExp(re).test(url);
+  }
+
+  // 解析 @match / @exclude 头
+  function parseUserscriptHeader(code: string): { include: string[]; exclude: string[] } {
+    const result = { include: ["**"] as string[], exclude: [] as string[] };
+    const headerMatch = code.match(
+      /\/\/ ==UserScript==\n([\s\S]*?)\/\/ ==\/UserScript==/,
+    );
+    if (!headerMatch) return result;
+    const header = headerMatch[1];
+    const matches = header.matchAll(/\/\/ @(match|include|exclude)\s+(\S+)/g);
+    let hasMatch = false;
+    const include: string[] = [];
+    for (const [, key, pattern] of matches) {
+      if (key === "exclude") result.exclude.push(pattern);
+      else { include.push(pattern); hasMatch = true; }
+    }
+    if (hasMatch) result.include = include;
+    return result;
+  }
+
+  // 获取用户脚本（preload 读取 .browser-work/scripts/*.js 用，带 URL 匹配过滤）
+  ipcMain.handle("browser:get-user-scripts", async (event, currentUrl: string) => {
+    try {
+      const senderId = (event.sender as any).id;
+      const windowId = windowManager!.getWindowIdByWebContentsId(senderId);
+      if (!windowId) { log.warn("[UserScripts] no windowId for sender " + senderId); return { success: true, scripts: [] }; }
+      const metadata = windowManager!.getWindowMetadata(windowId);
+      const sessionPath = metadata?.sessionPath as string | undefined;
+      if (!sessionPath) { log.warn("[UserScripts] no sessionPath for window " + windowId); return { success: true, scripts: [] }; }
+      const scriptsDir = path.join(sessionPath, ".browser-work", "scripts");
+      log.info("[UserScripts] scanning: " + scriptsDir + " for URL: " + currentUrl);
+      if (!fs.existsSync(scriptsDir)) { log.warn("[UserScripts] dir not found: " + scriptsDir); return { success: true, scripts: [] }; }
+      const files = (await fs.promises.readdir(scriptsDir)).filter(f => f.endsWith(".js"));
+      log.info("[UserScripts] found files: " + JSON.stringify(files));
+      const scripts = [];
+      for (const f of files) {
+        const code = await fs.promises.readFile(path.join(scriptsDir, f), "utf-8");
+        const { include, exclude } = parseUserscriptHeader(code);
+        const matchesUrl = exclude.some(p => matchUrl(p, currentUrl))
+          ? false
+          : include.some(p => matchUrl(p, currentUrl));
+        if (matchesUrl) scripts.push({ id: f, code, matchesUrl });
+      }
+      return { success: true, scripts };
+    } catch (error: any) {
+      log.error("获取用户脚本失败:", error.message);
+      return { success: true, scripts: [] };
+    }
+  });
 }
 
-// 应用就绪
 app.whenReady().then(async () => {
   try {
     log.info("Application starting...");

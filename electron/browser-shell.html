@@ -272,8 +272,8 @@
   let currentWindowId = null;
   let currentSessionId = null;
 
-  // 设置 webview preload（browser-preload.js 与当前 HTML 同目录）
-  const browserPreloadUrl = new URL('./browser-preload.js', location.href).href;
+  // 设置 webview preload（browser-preload.js 与当前 HTML 同目录，已通过 extraResources 打包）
+  const browserPreloadUrl = new URL('./dist/browser-preload.js', location.href).href;
   webview.setAttribute('preload', browserPreloadUrl);
 
   // 接收初始化消息

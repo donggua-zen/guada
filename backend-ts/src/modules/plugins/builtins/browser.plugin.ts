@@ -69,7 +69,7 @@ export class BrowserPlugin extends PluginBase {
       name: "browser_run_js",
       toolSet: "browser",
       description:
-        "在指定窗口执行 JavaScript 代码并返回结果。支持直接传入代码字符串或文件路径（相对路径相对于会话工作目录）。获取返回值需要使用 return。",
+        "在指定窗口执行 JavaScript 代码并返回结果。支持直接传入代码字符串或文件路径（相对路径相对于会话工作目录）",
       inputSchema: z.object({
         code: z.string().optional().describe("要执行的 JavaScript 代码字符串"),
         file_path: z
@@ -79,13 +79,9 @@ export class BrowserPlugin extends PluginBase {
             "JavaScript 文件路径（相对路径相对于会话工作目录，与 code 二选一）",
           ),
         window_id: z.string().describe("目标窗口 ID（必填）"),
-        is_async: z
-          .boolean()
-          .optional()
-          .describe("是否支持异步代码（async/await、Promise 等），默认 false"),
       }),
       execute: async (args, ctx, signal) => {
-        const { code, file_path, window_id, is_async } = args;
+        const { code, file_path, window_id } = args;
         if (!window_id) throw new Error("window_id 是必填参数");
         if (!code && !file_path)
           throw new Error("必须提供 code 或 file_path 其中之一");
@@ -96,7 +92,7 @@ export class BrowserPlugin extends PluginBase {
           : code!;
         const result = await this.sendRequest(
           "browser_run_js",
-          { code: finalCode, window_id, is_async: is_async || false },
+          { code: finalCode, window_id },
           signal,
         );
         return result;
@@ -221,6 +217,19 @@ export class BrowserPlugin extends PluginBase {
           },
           signal,
         );
+        // 创建成功后自动获取页面摘要
+        if (r?.windowId) {
+          try {
+            const summary = await this.sendRequest(
+              "browser_page_summary",
+              { window_id: r.windowId },
+              signal,
+            );
+            return { ...r, ...summary, page_summary: undefined };
+          } catch {
+            return r;
+          }
+        }
         return r;
       },
       display: { action: "打开新窗口", argsKey: "url", icon: "browser" },
@@ -255,7 +264,8 @@ export class BrowserPlugin extends PluginBase {
     api.registerPrompt({
       frequency: "REGULAR",
       toolSet: "browser",
-      description: "浏览器控制工具使用说明",      content: [
+      description: "浏览器控制工具使用说明",
+      content: [
         "# 浏览器工具",
         "",
         "## 多窗口支持",
@@ -268,10 +278,20 @@ export class BrowserPlugin extends PluginBase {
         "3. 所有窗口默认**完全无痕**，关闭后不留数据",
         "",
         "## 持久化用户脚本",
-        "`.browser-work/scripts/*.js` 会在页面加载时自动注入（document-start），支持油猴 `@match` 头过滤 URL。修改后 `browser_reload` 生效。",
+        "`.browser-work/scripts/*.js` 会在页面加载时自动注入（document-start），修改后 `browser_reload` 生效。",
+        "支持 `@match` 头过滤 URL。",
+        "",
+        "示例：",
+        "```javascript",
+        "// ==UserScript==",
+        "// @match  https://example.com/*",
+        "// ==/UserScript==",
+        "",
+        "console.log('只在 example.com 下执行');",
+        "```",
         "",
         "## 调试",
-        "控制台日志写入 `.browser-work/console/`，`browser_run_js` 自动附带最近 50 行。完整日志用 `read_file` 读取。",
+        "控制台日志写入 `.browser-work/console/`，`browser_run_js` 自动附带最近 50 行。完整日志用文件工具读取。",
         "",
         "## 高级用法",
         "- `browser_run_js` 支持 `code` 或 `file_path`（相对于会话目录），`await` 自然可用",

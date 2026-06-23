@@ -157,9 +157,9 @@
 
 <script setup lang="ts">
 import { ref, computed, watch, onUnmounted, nextTick } from 'vue';
-import { ElMessage } from 'element-plus';
+import { ElMessage, ElMessageBox } from 'element-plus';
 import { apiService, type FileChangeEvent } from '@/services/ApiService';
-import { Refresh, Close, FolderOpened, Switch, CopyDocument } from '@element-plus/icons-vue';
+import { Refresh, Close, FolderOpened, Switch, CopyDocument, Edit, Delete } from '@element-plus/icons-vue';
 import { LoadingOutlined } from '@vicons/antd';
 import { useStorage, useThrottleFn } from '@vueuse/core';
 import { useMarkdown } from '@/composables/useMarkdown';
@@ -232,6 +232,17 @@ const contextMenuItems = computed<ContextMenuItem[]>(() => {
             onClick: handleOpenInExplorer,
         });
     }
+    items.push({
+        label: '重命名',
+        icon: Edit,
+        divider: true,
+        onClick: handleRename,
+    });
+    items.push({
+        label: '删除',
+        icon: Delete,
+        onClick: handleDelete,
+    });
     return items;
 });
 
@@ -768,6 +779,120 @@ async function handleOpenInExplorer() {
     } catch (error: any) {
         console.error('Failed to open in explorer:', error);
         ElMessage.error('打开失败');
+    }
+    closeContextMenu();
+}
+
+/**
+ * 重命名文件/目录 - 弹出输入框
+ */
+async function handleRename() {
+    const node = contextMenu.value.node;
+    if (!node || !props.sessionId) {
+        closeContextMenu();
+        return;
+    }
+
+    try {
+        const { value: newName } = await ElMessageBox.prompt(
+            '请输入新名称',
+            '重命名',
+            {
+                inputValue: node.name,
+                inputPlaceholder: '请输入新文件名',
+                confirmButtonText: '确定',
+                cancelButtonText: '取消',
+                inputValidator: (val: string) => {
+                    if (!val || !val.trim()) return '名称不能为空';
+                    if (val.includes('/') || val.includes('\\')) return '名称不能包含路径分隔符';
+                    return true;
+                },
+            },
+        );
+
+        if (!newName || !newName.trim()) {
+            closeContextMenu();
+            return;
+        }
+
+        const result = await apiService.renameWorkspaceFile(
+            props.sessionId,
+            node.path,
+            newName.trim(),
+        );
+
+        if (result.success) {
+            ElMessage.success('重命名成功');
+            // 本地更新节点名称，避免重新加载整棵树
+            node.name = newName.trim();
+            if (result.newPath) {
+                node.path = result.newPath;
+            }
+            // 如果当前预览的文件正好是重命名的文件，更新预览路径
+            if (selectedFile.value && selectedFile.value.path === node.path) {
+                selectedFile.value.name = newName.trim();
+                selectedFile.value.path = result.newPath || node.path;
+                const ext = newName.trim().substring(newName.trim().lastIndexOf('.')).toLowerCase();
+                selectedFile.value.extension = ext;
+            }
+        }
+    } catch (error: any) {
+        // ElMessageBox.prompt 取消会抛异常，忽略
+        if (error === 'cancel' || error === 'close') {
+            closeContextMenu();
+            return;
+        }
+        console.error('[WorkspaceSidebar] Rename failed:', error);
+        ElMessage.error(error?.response?.data?.message || error.message || '重命名失败');
+    }
+    closeContextMenu();
+}
+
+/**
+ * 删除文件/目录 - 二次确认后执行
+ */
+async function handleDelete() {
+    const node = contextMenu.value.node;
+    if (!node || !props.sessionId) {
+        closeContextMenu();
+        return;
+    }
+
+    const displayName = node.name;
+    const typeLabel = node.isDirectory ? '目录' : '文件';
+
+    try {
+        await ElMessageBox.confirm(
+            `确定要删除${typeLabel}「${displayName}」吗？${node.isDirectory ? '该目录下的所有内容将被永久删除。' : ''}`,
+            '删除确认',
+            {
+                confirmButtonText: '确定删除',
+                cancelButtonText: '取消',
+                type: 'warning',
+                distinguishCancelAndClose: true,
+            },
+        );
+
+        const result = await apiService.deleteWorkspaceFile(
+            props.sessionId,
+            node.path,
+        );
+
+        if (result.success) {
+            ElMessage.success('删除成功');
+            // 如果删除的是当前预览的文件，关闭预览
+            if (selectedFile.value && selectedFile.value.path === node.path) {
+                closePreview();
+            }
+        }
+    } catch (error: any) {
+        // ElMessageBox.confirm 取消会抛异常，忽略
+        if (error === 'cancel' || error === 'close') {
+            closeContextMenu();
+            return;
+        }
+        console.error('[WorkspaceSidebar] Delete failed:', error);
+        ElMessage.error(error?.response?.data?.message || error.message || '删除失败');
     }
     closeContextMenu();
 }
