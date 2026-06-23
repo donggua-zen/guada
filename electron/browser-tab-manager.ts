@@ -1,4 +1,4 @@
-import { BrowserWindow, WebContents, session, Menu, MenuItem } from 'electron'
+import { BrowserWindow, WebContents, session, Menu, MenuItem, app } from 'electron'
 import * as path from 'path'
 import log from 'electron-log/main'
 
@@ -189,7 +189,11 @@ export class BrowserWindowManager {
 
     // 加载外壳页面
     try {
-      const shellPath = path.join(__dirname, '..', 'browser-shell.html')
+      // 开发环境: __dirname = electron/dist/, 向上到 electron/
+      // 打包环境: extraResources 将文件输出到 resources/electron/dist/
+      const shellPath = app.isPackaged
+        ? path.join(process.resourcesPath, 'electron', 'dist', 'browser-shell.html')
+        : path.join(__dirname, '..', 'browser-shell.html')
       await shellWC.loadFile(shellPath)
       // 发送初始化消息到外壳（包含 sessionId 用于 webview 隔离）
       shellWC.send('shell:init', { targetUrl: url || 'about:blank', windowId, sessionId })
