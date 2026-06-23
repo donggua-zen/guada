@@ -127,8 +127,26 @@
         <ChatInput v-model:value="inputMessage.content" v-model:files="inputMessage.files"
           :session-id="effectiveSessionId" :config="chatInputConfig" :streaming="isStreaming" mode="chat"
           @config-change="handleConfigChange" @send="handleSendMessage" @abort="abortResponse"
-          @toggle-workspace-pane="emit('toggle-workspace-pane')" />
+          @toggle-workspace-pane="emit('toggle-workspace-pane')">
+          <template #toolbar-actions>
+            <!-- 上下文使用率指示器：10 格竖条 -->
+            <el-button class="workspace-btn" @click="memoPanelVisible = true" text>
+              <el-icon size="16">
+                <Database24Regular />
+              </el-icon>
+              <div class="bar-indicator flex items-end gap-0.5">
+                <div v-for="i in 10" :key="i" class="bar"
+                  :class="{ active: sharedTokenStats && i <= activeBars, [barColor]: true }" />
+              </div>
+            </el-button>
+          </template>
+        </ChatInput>
       </div>
+      <!-- 记忆管理弹窗 -->
+      <el-dialog v-model="memoPanelVisible" title="记忆管理" width="390px" :close-on-click-modal="false" destroy-on-close
+        class="memo-panel-dialog">
+        <MemoPanel v-if="currentSessionId" :session-id="currentSessionId" />
+      </el-dialog>
       <!-- <div class="ai-disclaimer text-xs text-gray-400 text-center mt-2">内容由 AI 生成，仅供参考</div> -->
     </div>
   </div>
@@ -136,7 +154,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, nextTick } from "vue";
+import { ref, computed, watch, nextTick, defineAsyncComponent } from "vue";
 import { apiService } from "../../services/ApiService";
 import { usePopup } from "@/composables/usePopup";
 import { useDebounceFn } from "@vueuse/core";
@@ -149,14 +167,17 @@ import type { InputMessageState, Session } from '@/types/session';
 // 导入新创建的 composables
 import { useSessionChat } from '@/composables/useSessionChat'
 import { useMessageOperations } from '@/composables/useMessageOperations'
+import { useSessionTokenStats } from '@/composables/useSessionTokenStats'
 
 // 组件导入
 import MessageItem from "./MessageItem.vue";
 import MessageSkeleton from "./MessageSkeleton.vue";
 import { ChatInput, ScrollContainer, ScrollToBottomButton } from "../ui";
 import WelcomeScreen from './WelcomeScreen.vue';
+const MemoPanel = defineAsyncComponent(() => import("./MemoPanel.vue"));
 import { LoadingOutlined } from '@vicons/antd'
 import { ArrowUp, Loading } from '@element-plus/icons-vue'
+import { Database24Regular } from '@vicons/fluent'
 
 
 // 常量定义
@@ -166,6 +187,24 @@ const MAX_REGENERATE_VERSIONS = 5
 const { confirm, editText, toast, notify } = usePopup();
 const authStore = useAuthStore()
 const sessionStore = useSessionStore();
+
+
+// 记忆管理弹窗显隐
+const memoPanelVisible = ref(false);
+
+// 上下午使用率指示器：10 格竖条
+const activeBars = computed(() => {
+  if (!sharedTokenStats.value) return 0;
+  return Math.ceil(sharedTokenStats.value.percentage / 10);
+});
+
+const barColor = computed(() => {
+  if (!sharedTokenStats.value) return 'bar-gray';
+  const pct = sharedTokenStats.value.percentage;
+  if (pct >= 80) return 'bar-orange';
+  if (pct >= 60) return 'bar-yellow';
+  return 'bar-green';
+});
 
 // 初始化流式响应处理器
 const streamHandler = useStreamResponse(sessionStore, apiService)
@@ -197,6 +236,10 @@ const currentSession = computed({
 
 const userAvater = computed(() => authStore.user?.avatarUrl);
 const currentSessionId = ref<string | null>(null);
+
+// 共享的 Token 统计（useSessionTokenStats 自动监听流状态刷新）
+const currentSessionIdRef = computed(() => currentSessionId.value);
+const { tokenStats: sharedTokenStats, fetchTokenStats } = useSessionTokenStats(currentSessionIdRef);
 
 /**
  * 有效的会话 ID
@@ -1115,5 +1158,45 @@ function scrollToMessage(messageId: string) {
 
 .edit-mode-banner:hover {
   box-shadow: 0 3px 12px rgba(230, 162, 60, 0.15);
+}
+
+/* 工具栏按钮：与 ChatInputToolbar 保持样式一致 */
+.workspace-btn {
+  color: #888;
+  cursor: pointer;
+  font-size: 14px;
+  height: 22px;
+  padding: 0 3px;
+  display: flex;
+  align-items: center;
+  transition: all 0.2s;
+}
+
+/* 竖条指示器 */
+.bar-indicator {
+  height: 10px;
+  margin: 2px 0 2px 4px;
+  display: flex;
+  align-items: flex-end;
+}
+
+.bar-indicator .bar {
+  width: 2px;
+  height: 100%;
+  border-radius: 1px;
+  background-color: #e0e0e0;
+  transition: background-color 0.3s;
+}
+
+.bar-indicator .bar.active.bar-green {
+  background-color: #67c23a;
+}
+
+.bar-indicator .bar.active.bar-yellow {
+  background-color: #e6a23c;
+}
+
+.bar-indicator .bar.active.bar-orange {
+  background-color: #f56c6c;
 }
 </style>

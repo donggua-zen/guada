@@ -263,6 +263,7 @@
 
 <script setup lang="ts">
 import { ref, watch, computed } from 'vue';
+import { useSessionTokenStats } from '@/composables/useSessionTokenStats';
 import { useDebounceFn } from '@vueuse/core';
 import { useSessionStore } from '@/stores/session';
 import { apiService } from '@/services/ApiService';
@@ -285,15 +286,8 @@ const summaries = ref<any[]>([]);
 const editDialogVisible = ref(false);
 const historyDialogVisible = ref(false);
 const editingSummary = ref({ id: '', content: '' });
-const tokenStats = ref<{
-  usedTokens: number
-  totalTokens: number
-  remainingTokens: number
-  percentage: number
-  modelName: string
-  messageCount: number
-} | null>(null);
-const loadingStats = ref(false);
+const sessionIdRef = computed(() => props.sessionId);
+const { tokenStats, loading: loadingStats, fetchTokenStats } = useSessionTokenStats(sessionIdRef);
 
 // 使用 Store 中的会话级压缩状态
 const isCompressing = computed(() => {
@@ -329,18 +323,9 @@ async function loadSummaries() {
   }
 }
 
-// 加载 Token 统计
+// 加载 Token 统计（委托到共享 composable）
 async function loadTokenStats() {
-  if (!props.sessionId) return;
-  loadingStats.value = true;
-  try {
-    tokenStats.value = await apiService.fetchSessionTokenStats(props.sessionId);
-  } catch (error: any) {
-    console.error('加载 Token 统计失败:', error);
-    toast.error('加载 Token 统计失败');
-  } finally {
-    loadingStats.value = false;
-  }
+  await fetchTokenStats();
 }
 
 // 编辑摘要
@@ -428,20 +413,12 @@ watch(
   { immediate: true }
 );
 
-// 监听流状态变化，实现对话完成后的自动刷新
-const debouncedRefresh = useDebounceFn(() => {
-  if (!props.sessionId || !sessionStore.activeSessionId) return;
-  
-  loadTokenStats();
-  loadSummaries();
-}, 1000); // 1秒防抖
-
+// 流状态变化自动刷新由 useSessionTokenStats 处理，这里只刷新摘要
 watch(
   () => props.sessionId ? sessionStore.sessionIsStreaming(props.sessionId) : false,
   (isStreaming, wasStreaming) => {
-    // 当状态从 true 变为 false 时（对话结束）
     if (wasStreaming && !isStreaming) {
-      debouncedRefresh();
+      loadSummaries();
     }
   }
 );
