@@ -1,38 +1,49 @@
-import { BrowserWindow, WebContents, session, Menu, MenuItem, app } from 'electron'
-import * as path from 'path'
-import log from 'electron-log/main'
+import {
+  BrowserWindow,
+  WebContents,
+  session,
+  Menu,
+  MenuItem,
+  app,
+} from "electron";
+import * as path from "path";
+import * as fs from "fs";
+import log from "electron-log/main";
 
 /**
  * 窗口信息接口
  */
 export interface WindowInfo {
-  windowId: string
-  title: string
-  url: string
-  favicon?: string
-  createdAt: number
-  lastActiveAt: number
-  isActive: boolean
-  isMainApp: boolean
-  isVisible: boolean // 窗口是否可见（前台/后台模式）
-  metadata?: Record<string, any> // 元数据支持（用于 session 隔离和作用域标识）
+  windowId: string;
+  title: string;
+  url: string;
+  favicon?: string;
+  createdAt: number;
+  lastActiveAt: number;
+  isActive: boolean;
+  isMainApp: boolean;
+  isVisible: boolean; // 窗口是否可见（前台/后台模式）
+  metadata?: Record<string, any>; // 元数据支持（用于 session 隔离和作用域标识）
 }
 
 /**
  * 浏览器窗口管理器（基于独立 BrowserWindow）
- * 
+ *
  * 每个自动化窗口都是独立的 BrowserWindow，与主窗口完全隔离
  * 支持元数据传递、Session 隔离、悬浮窗格等功能
  */
 export class BrowserWindowManager {
-  private mainWindow: BrowserWindow | null = null
-  private windows = new Map<string, {
-    window: BrowserWindow
-    shellWebContents: WebContents
-    webviewWebContents?: WebContents
-    info: WindowInfo
-  }>()
-  private maxWindows: number = 6 // 默认最多6个窗口
+  private mainWindow: BrowserWindow | null = null;
+  private windows = new Map<
+    string,
+    {
+      window: BrowserWindow;
+      shellWebContents: WebContents;
+      webviewWebContents?: WebContents;
+      info: WindowInfo;
+    }
+  >();
+  private maxWindows: number = 6; // 默认最多6个窗口
   private defaultWindowOptions: Electron.BrowserWindowConstructorOptions = {
     width: 1024,
     height: 768,
@@ -40,19 +51,19 @@ export class BrowserWindowManager {
     minHeight: 600,
     frame: false, // 使用自定义标题栏
     show: false,
-    titleBarStyle: 'hidden', // macOS 兼容
+    titleBarStyle: "hidden", // macOS 兼容
     webPreferences: {
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: true,
       webviewTag: true, // 启用 <webview> 标签
-      preload: path.join(__dirname, 'browser-shell-preload.js'),
+      preload: path.join(__dirname, "browser-shell-preload.js"),
     },
-  }
+  };
 
   constructor(mainWindow: BrowserWindow, maxWindows: number = 6) {
-    this.mainWindow = mainWindow
-    this.maxWindows = maxWindows
+    this.mainWindow = mainWindow;
+    this.maxWindows = maxWindows;
   }
 
   /**
@@ -61,26 +72,26 @@ export class BrowserWindowManager {
    * @param metadata - 元数据（可选，用于 session 隔离和作用域标识）
    */
   async createWindow(
-    url?: string, 
-    metadata?: Record<string, any>
+    url?: string,
+    metadata?: Record<string, any>,
   ): Promise<WindowInfo> {
     if (!this.mainWindow) {
-      throw new Error('Main window not initialized')
+      throw new Error("Main window not initialized");
     }
 
     // 检查窗口数限制
     if (this.windows.size >= this.maxWindows) {
-      throw new Error(`窗口数量已达上限（最多 ${this.maxWindows} 个）`)
+      throw new Error(`窗口数量已达上限（最多 ${this.maxWindows} 个）`);
     }
 
-    const windowId = `win_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
-    
-    log.info(`Creating new independent window: ${windowId}`)
+    const windowId = `win_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+
+    log.info(`Creating new independent window: ${windowId}`);
 
     // 创建独立的 session（基于 metadata.scope 或默认）
-    const scope = metadata?.scope || 'default'
-    const sessionId = `persist:window_${scope}_${windowId}`
-    const windowSession = session.fromPartition(sessionId, { cache: true })
+    const scope = metadata?.scope || "default";
+    const sessionId = `persist:window_${scope}_${windowId}`;
+    const windowSession = session.fromPartition(sessionId, { cache: true });
 
     // 合并窗口选项
     const windowOptions: Electron.BrowserWindowConstructorOptions = {
@@ -89,174 +100,261 @@ export class BrowserWindowManager {
         ...this.defaultWindowOptions.webPreferences,
         session: windowSession,
       },
-    }
+    };
 
     // 创建独立窗口
-    const newWindow = new BrowserWindow(windowOptions)
+    const newWindow = new BrowserWindow(windowOptions);
 
-    const shellWC = newWindow.webContents
+    const shellWC = newWindow.webContents;
 
     // 默认静音外壳（不需要声音）
-    shellWC.setAudioMuted(true)
-    log.info(`Window ${windowId} audio muted by default`)
+    shellWC.setAudioMuted(true);
+    log.info(`Window ${windowId} audio muted by default`);
 
     // 监听 webview 挂载事件
-    shellWC.on('did-attach-webview', (_event: Electron.Event, webviewWC: WebContents) => {
-      log.info(`Webview attached for window ${windowId}, webContentsId: ${webviewWC.id}`)
+    shellWC.on(
+      "did-attach-webview",
+      (_event: Electron.Event, webviewWC: WebContents) => {
+        log.info(
+          `Webview attached for window ${windowId}, webContentsId: ${webviewWC.id}`,
+        );
 
-      const win = this.windows.get(windowId)
-      if (!win) return
+        const win = this.windows.get(windowId);
+        if (!win) return;
 
-      win.webviewWebContents = webviewWC
+        win.webviewWebContents = webviewWC;
 
-      // 设置 Edge User Agent
-      const edgeUserAgent = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36 Edg/146.0.0.0'
-      webviewWC.setUserAgent(edgeUserAgent)
-      log.info(`Custom User Agent set to Edge for webview ${windowId}`)
-
-      // 拦截新窗口请求，在当前 webview 打开
-      webviewWC.setWindowOpenHandler(({ url }: { url: string }) => {
-        log.info(`Intercepting new window request: ${url}, loading in current webview`)
-        webviewWC.loadURL(url)
-        return { action: 'deny' }
-      })
-
-      // 监听页面标题变化
-      webviewWC.on('page-title-updated', (_event: Electron.Event, title: string) => {
-        const w = this.windows.get(windowId)
-        if (w) {
-          w.info.title = title
-          this.notifyWindowUpdate(windowId)
+        // 控制台日志写入文件（.browser-work/console/{windowId}.log，跨导航持久）
+        const sessionPath: string =
+          (win.info.metadata?.sessionPath as string) || "";
+        const consoleDir: string = sessionPath
+          ? sessionPath + "/.browser-work/console"
+          : "";
+        const consoleFile: string = consoleDir
+          ? consoleDir + "/" + windowId + ".log"
+          : "";
+        // 确保控制台目录存在
+        if (consoleDir) {
+          fs.promises.mkdir(consoleDir, { recursive: true }).catch(() => {});
         }
-      })
+        // 控制台异步写入（fire-and-forget，不阻塞事件循环）
+        (webviewWC as any).on(
+          "console-message",
+          (event: Electron.ConsoleMessageEvent) => {
+            if (!consoleFile) return;
+            const levelNames: Record<number, string> = {
+              0: "verbose",
+              1: "info",
+              2: "warning",
+              3: "error",
+            };
+            const line = `[${levelNames[event.level] || "log"}] ${event.message}\n`;
+            // 异步写入，不等待（console-message 是同步事件）
+            const cf = consoleFile;
+            fs.promises.writeFile(cf, line, { flag: "as" }).catch(() => {
+              // 写入失败时尝试创建文件后重写
+              fs.promises.writeFile(cf, line).catch(() => {});
+            });
+          },
+        );
 
-      // 监听导航完成
-      webviewWC.on('did-finish-load', () => {
-        const w = this.windows.get(windowId)
-        if (w) {
-          w.info.url = webviewWC.getURL()
-          this.notifyWindowUpdate(windowId)
-        }
-        // 每次页面加载完成后重新注入反检测脚本
-        this.injectAntiDetectionScript(webviewWC)
-      })
+        // 主框架导航开始时清空控制台日志（旧页面已卸载，注入脚本还未执行）
+        (webviewWC as any).on(
+          "did-start-navigation",
+          (_e: any, _url: string, _isInPlace: boolean, isMainFrame: boolean) => {
+            if (isMainFrame && consoleFile) {
+              fs.promises.writeFile(consoleFile, "").catch(() => {});
+            }
+          },
+        );
 
-      // 监听加载失败
-      webviewWC.on('did-fail-load', (_event: Electron.Event, errorCode: number, errorDescription: string) => {
-        log.error(`Window ${windowId} webview failed to load: ${errorCode} - ${errorDescription}`)
-      })
+        // 设置 Edge User Agent
+        const edgeUserAgent =
+          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36 Edg/146.0.0.0";
+        webviewWC.setUserAgent(edgeUserAgent);
+        log.info(`Custom User Agent set to Edge for webview ${windowId}`);
 
-      // 注入反检测脚本
-      this.injectAntiDetectionScript(webviewWC)
+        // 拦截新窗口请求，在当前 webview 打开
+        webviewWC.setWindowOpenHandler(({ url }: { url: string }) => {
+          log.info(
+            `Intercepting new window request: ${url}, loading in current webview`,
+          );
+          webviewWC.loadURL(url);
+          return { action: "deny" };
+        });
 
-      // 为 webview 设置右键菜单
-      this.setupContextMenu(webviewWC, windowId)
+        // 监听页面标题变化
+        webviewWC.on(
+          "page-title-updated",
+          (_event: Electron.Event, title: string) => {
+            const w = this.windows.get(windowId);
+            if (w) {
+              w.info.title = title;
+              this.notifyWindowUpdate(windowId);
+            }
+          },
+        );
 
-      // 初始 URL 由外壳页面在设置好 partition 后加载（确保会话隔离）
-    })
+        // 监听导航完成
+        webviewWC.on("did-finish-load", () => {
+          const w = this.windows.get(windowId);
+          if (w) {
+            w.info.url = webviewWC.getURL();
+            this.notifyWindowUpdate(windowId);
+          }
+          // 每次页面加载完成后重新注入反检测脚本
+          this.injectAntiDetectionScript(webviewWC);
+        });
+
+        // 监听加载失败
+        webviewWC.on(
+          "did-fail-load",
+          (
+            _event: Electron.Event,
+            errorCode: number,
+            errorDescription: string,
+          ) => {
+            log.error(
+              `Window ${windowId} webview failed to load: ${errorCode} - ${errorDescription}`,
+            );
+          },
+        );
+
+        // 注入反检测脚本
+        this.injectAntiDetectionScript(webviewWC);
+
+        // 为 webview 设置右键菜单
+        this.setupContextMenu(webviewWC, windowId);
+
+        // 初始 URL 由外壳页面在设置好 partition 后加载（确保会话隔离）
+      },
+    );
 
     // 设置权限请求处理器
-    windowSession.setPermissionRequestHandler((_webContents, permission, callback) => {
-      const allowedPermissions = ['notifications', 'clipboard-read', 'clipboard-write', 'media']
-      callback(allowedPermissions.includes(permission))
-    })
+    windowSession.setPermissionRequestHandler(
+      (_webContents, permission, callback) => {
+        const allowedPermissions = [
+          "notifications",
+          "clipboard-read",
+          "clipboard-write",
+          "media",
+        ];
+        callback(allowedPermissions.includes(permission));
+      },
+    );
 
     // 窗口关闭时自动清理
-    newWindow.on('closed', () => {
-      log.info(`Window closed: ${windowId}`)
-      this.windows.delete(windowId)
-      this.notifyWindowClosed(windowId)
-    })
+    newWindow.on("closed", () => {
+      log.info(`Window closed: ${windowId}`);
+      this.windows.delete(windowId);
+      this.notifyWindowClosed(windowId);
+    });
 
-    const now = Date.now()
+    const now = Date.now();
     const windowInfo: WindowInfo = {
       windowId,
-      title: url || 'New Window',
-      url: url || 'about:blank',
+      title: url || "New Window",
+      url: url || "about:blank",
       createdAt: now,
       lastActiveAt: now,
       isActive: false,
       isMainApp: false,
       isVisible: false, // 默认隐藏（后台模式）
       metadata, // 保存元数据
-    }
+    };
 
-    this.windows.set(windowId, { 
-      window: newWindow, 
-      shellWebContents: shellWC, 
-      info: windowInfo 
-    })
+    this.windows.set(windowId, {
+      window: newWindow,
+      shellWebContents: shellWC,
+      info: windowInfo,
+    });
 
     // 加载外壳页面
     try {
-      // 开发环境: __dirname = electron/dist/, 向上到 electron/
-      // 打包环境: extraResources 将文件输出到 resources/electron/dist/
-      const shellPath = app.isPackaged
-        ? path.join(process.resourcesPath, 'electron', 'dist', 'browser-shell.html')
-        : path.join(__dirname, '..', 'browser-shell.html')
-      await shellWC.loadFile(shellPath)
+      // 开发/打包均使用 __dirname（electron/dist/）向上到 electron/browser-shell.html
+      const shellPath = path.join(__dirname, "..", "browser-shell.html");
+      await shellWC.loadFile(shellPath);
       // 发送初始化消息到外壳（包含 sessionId 用于 webview 隔离）
-      shellWC.send('shell:init', { targetUrl: url || 'about:blank', windowId, sessionId })
+      shellWC.send("shell:init", {
+        targetUrl: url || "about:blank",
+        windowId,
+        sessionId,
+      });
     } catch (err) {
-      log.error(`Failed to load browser shell for window ${windowId}:`, err)
+      log.error(`Failed to load browser shell for window ${windowId}:`, err);
     }
 
     // 不自动显示窗口，保持后台模式
     // newWindow.show() 已移除
 
-    log.info(`Window created: ${windowId} (total: ${this.windows.size})`)
+    log.info(`Window created: ${windowId} (total: ${this.windows.size})`);
 
     // 通知前端新窗口已创建（带动画标记）
-    this.notifyWindowCreated(windowId)
+    this.notifyWindowCreated(windowId);
 
-    return windowInfo
+    return windowInfo;
   }
 
   /**
    * 关闭窗口
    */
   async closeWindow(windowId: string): Promise<boolean> {
-    const win = this.windows.get(windowId)
+    const win = this.windows.get(windowId);
     if (!win) {
-      return false
+      return false;
     }
 
-    log.info(`🗑️ Closing window: ${windowId}`)
+    log.info(`🗑️ Closing window: ${windowId}`);
 
     try {
       // 清理 session 数据（优先使用 webview 的 session）
-      const wc = win.webviewWebContents && !win.webviewWebContents.isDestroyed()
-        ? win.webviewWebContents
-        : win.shellWebContents
+      const wc =
+        win.webviewWebContents && !win.webviewWebContents.isDestroyed()
+          ? win.webviewWebContents
+          : win.shellWebContents;
       if (!wc.isDestroyed()) {
         try {
           await wc.session.clearStorageData({
             storages: [
-              'cookies',
-              'filesystem',
-              'indexdb',
-              'localstorage',
-              'shadercache',
-              'websql',
-              'serviceworkers',
-              'cachestorage',
+              "cookies",
+              "filesystem",
+              "indexdb",
+              "localstorage",
+              "shadercache",
+              "websql",
+              "serviceworkers",
+              "cachestorage",
             ],
-          })
-          await wc.session.clearCache()
+          });
+          await wc.session.clearCache();
         } catch (error) {
-          log.warn(`Failed to clear session data for window ${windowId}:`, error)
+          log.warn(
+            `Failed to clear session data for window ${windowId}:`,
+            error,
+          );
         }
       }
 
+      // 清理控制台日志文件（异步）
+      const sPath = win.info.metadata?.sessionPath;
+      if (sPath) {
+        const logFile = path.join(
+          sPath,
+          ".browser-work",
+          "console",
+          windowId + ".log",
+        );
+        fs.promises.unlink(logFile).catch(() => {});
+      }
       // 关闭窗口（会触发 closed 事件）
       if (!win.window.isDestroyed()) {
-        win.window.close()
+        win.window.close();
       }
 
-      return true
+      return true;
     } catch (error) {
-      log.error(`Error closing window ${windowId}:`, error)
-      return false
+      log.error(`Error closing window ${windowId}:`, error);
+      return false;
     }
   }
 
@@ -267,35 +365,36 @@ export class BrowserWindowManager {
     return Array.from(this.windows.values())
       .filter(({ shellWebContents }) => !shellWebContents.isDestroyed())
       .map(({ info, webviewWebContents, shellWebContents }) => {
-        const wc = webviewWebContents && !webviewWebContents.isDestroyed()
-          ? webviewWebContents
-          : shellWebContents
+        const wc =
+          webviewWebContents && !webviewWebContents.isDestroyed()
+            ? webviewWebContents
+            : shellWebContents;
         return {
           ...info,
           url: wc.getURL(),
           title: wc.getTitle() || info.title,
-        }
-      })
+        };
+      });
   }
 
   /**
    * 获取指定窗口的 WebContents（优先返回 webview，用于自动化操作）
    */
   getWebContents(windowId: string): WebContents | null {
-    const win = this.windows.get(windowId)
-    if (!win) return null
+    const win = this.windows.get(windowId);
+    if (!win) return null;
     if (win.webviewWebContents && !win.webviewWebContents.isDestroyed()) {
-      return win.webviewWebContents
+      return win.webviewWebContents;
     }
-    return win.shellWebContents
+    return win.shellWebContents;
   }
 
   /**
    * 获取指定窗口的外壳 WebContents（用于外壳 IPC）
    */
   getShellWebContents(windowId: string): WebContents | null {
-    const win = this.windows.get(windowId)
-    return win ? win.shellWebContents : null
+    const win = this.windows.get(windowId);
+    return win ? win.shellWebContents : null;
   }
 
   /**
@@ -304,28 +403,35 @@ export class BrowserWindowManager {
    */
   getWindowIdByWebContentsId(webContentsId: number): string | null {
     for (const [windowId, win] of this.windows.entries()) {
-      if (!win.shellWebContents.isDestroyed() && win.shellWebContents.id === webContentsId) {
-        return windowId
+      if (
+        !win.shellWebContents.isDestroyed() &&
+        win.shellWebContents.id === webContentsId
+      ) {
+        return windowId;
       }
-      if (win.webviewWebContents && !win.webviewWebContents.isDestroyed() && win.webviewWebContents.id === webContentsId) {
-        return windowId
+      if (
+        win.webviewWebContents &&
+        !win.webviewWebContents.isDestroyed() &&
+        win.webviewWebContents.id === webContentsId
+      ) {
+        return windowId;
       }
     }
-    return null
+    return null;
   }
 
   /**
    * 获取指定窗口的元数据
    */
   getWindowMetadata(windowId: string): Record<string, any> | undefined {
-    const win = this.windows.get(windowId)
-    return win ? win.info.metadata : undefined
+    const win = this.windows.get(windowId);
+    return win ? win.info.metadata : undefined;
   }
   async closeAllWindows(): Promise<void> {
-    const windowIds = Array.from(this.windows.keys())
-    
+    const windowIds = Array.from(this.windows.keys());
+
     for (const windowId of windowIds) {
-      await this.closeWindow(windowId)
+      await this.closeWindow(windowId);
     }
   }
 
@@ -333,11 +439,11 @@ export class BrowserWindowManager {
    * 设置窗口为置顶悬浮模式（可选功能）
    */
   setAlwaysOnTop(windowId: string, alwaysOnTop: boolean): void {
-    const win = this.windows.get(windowId)
+    const win = this.windows.get(windowId);
     if (win && !win.window.isDestroyed()) {
-      win.window.setAlwaysOnTop(alwaysOnTop, 'floating')
-      win.window.setSkipTaskbar(alwaysOnTop)
-      log.info(`Window ${windowId} alwaysOnTop set to: ${alwaysOnTop}`)
+      win.window.setAlwaysOnTop(alwaysOnTop, "floating");
+      win.window.setSkipTaskbar(alwaysOnTop);
+      log.info(`Window ${windowId} alwaysOnTop set to: ${alwaysOnTop}`);
     }
   }
 
@@ -345,12 +451,12 @@ export class BrowserWindowManager {
    * 隐藏窗口（后台模式）
    */
   hideWindow(windowId: string): void {
-    const win = this.windows.get(windowId)
+    const win = this.windows.get(windowId);
     if (win && !win.window.isDestroyed()) {
-      win.window.hide()
-      win.info.isVisible = false
-      this.notifyWindowUpdate(windowId)
-      log.info(`Window ${windowId} hidden (background mode)`)
+      win.window.hide();
+      win.info.isVisible = false;
+      this.notifyWindowUpdate(windowId);
+      log.info(`Window ${windowId} hidden (background mode)`);
     }
   }
 
@@ -358,16 +464,16 @@ export class BrowserWindowManager {
    * 显示窗口（前台模式）
    */
   showWindow(windowId: string): void {
-    const win = this.windows.get(windowId)
+    const win = this.windows.get(windowId);
     if (win && !win.window.isDestroyed()) {
       if (win.window.isMinimized()) {
-        win.window.restore()
+        win.window.restore();
       }
-      win.window.show()
-      win.window.focus()
-      win.info.isVisible = true
-      this.notifyWindowUpdate(windowId)
-      log.info(`Window ${windowId} shown (foreground mode)`)
+      win.window.show();
+      win.window.focus();
+      win.info.isVisible = true;
+      this.notifyWindowUpdate(windowId);
+      log.info(`Window ${windowId} shown (foreground mode)`);
     }
   }
 
@@ -375,28 +481,28 @@ export class BrowserWindowManager {
    * 切换窗口显示状态
    */
   toggleWindowVisibility(windowId: string): boolean {
-    const win = this.windows.get(windowId)
+    const win = this.windows.get(windowId);
     if (win && !win.window.isDestroyed()) {
       if (win.info.isVisible) {
-        this.hideWindow(windowId)
-        return false
+        this.hideWindow(windowId);
+        return false;
       } else {
-        this.showWindow(windowId)
-        return true
+        this.showWindow(windowId);
+        return true;
       }
     }
-    return false
+    return false;
   }
 
   /**
    * 获取窗口可见性状态
    */
   isWindowVisible(windowId: string): boolean {
-    const win = this.windows.get(windowId)
+    const win = this.windows.get(windowId);
     if (win && !win.window.isDestroyed()) {
-      return win.window.isVisible()
+      return win.window.isVisible();
     }
-    return false
+    return false;
   }
 
   /**
@@ -404,9 +510,9 @@ export class BrowserWindowManager {
    */
   private notifyWindowCreated(windowId: string): void {
     if (this.mainWindow && !this.mainWindow.isDestroyed()) {
-      const win = this.windows.get(windowId)
+      const win = this.windows.get(windowId);
       if (win) {
-        this.mainWindow.webContents.send('window-created', {
+        this.mainWindow.webContents.send("window-created", {
           windowId,
           title: win.info.title,
           url: win.info.url,
@@ -414,7 +520,7 @@ export class BrowserWindowManager {
           isVisible: win.info.isVisible,
           metadata: win.info.metadata,
           animate: true,
-        })
+        });
       }
     }
   }
@@ -424,19 +530,20 @@ export class BrowserWindowManager {
    */
   private notifyWindowUpdate(windowId: string): void {
     if (this.mainWindow && !this.mainWindow.isDestroyed()) {
-      const win = this.windows.get(windowId)
+      const win = this.windows.get(windowId);
       if (win) {
-        const wc = win.webviewWebContents && !win.webviewWebContents.isDestroyed()
-          ? win.webviewWebContents
-          : win.shellWebContents
-        this.mainWindow.webContents.send('window-updated', {
+        const wc =
+          win.webviewWebContents && !win.webviewWebContents.isDestroyed()
+            ? win.webviewWebContents
+            : win.shellWebContents;
+        this.mainWindow.webContents.send("window-updated", {
           windowId,
           title: wc.getTitle() || win.info.title,
           url: wc.getURL() || win.info.url,
           isActive: win.info.isActive,
           isVisible: win.window.isVisible(), // 使用实际窗口状态
           metadata: win.info.metadata,
-        })
+        });
       }
     }
   }
@@ -446,9 +553,9 @@ export class BrowserWindowManager {
    */
   private notifyWindowClosed(windowId: string): void {
     if (this.mainWindow && !this.mainWindow.isDestroyed()) {
-      this.mainWindow.webContents.send('window-closed', {
+      this.mainWindow.webContents.send("window-closed", {
         windowId,
-      })
+      });
     }
   }
 
@@ -640,8 +747,8 @@ export class BrowserWindowManager {
       })();
     `;
 
-    webContents.executeJavaScript(antiDetectionScript, true).catch(err => {
-      log.warn('Failed to inject anti-detection script:', err);
+    webContents.executeJavaScript(antiDetectionScript, true).catch((err) => {
+      log.warn("Failed to inject anti-detection script:", err);
     });
   }
 
@@ -649,114 +756,116 @@ export class BrowserWindowManager {
    * 为窗口设置右键菜单
    */
   private setupContextMenu(webContents: WebContents, windowId: string): void {
-    webContents.on('context-menu', (_event, params) => {
+    webContents.on("context-menu", (_event, params) => {
       // 创建右键菜单
-      const menu = new Menu()
+      const menu = new Menu();
 
       // 后退
       menu.append(
         new MenuItem({
-          label: '后退',
+          label: "后退",
           enabled: webContents.canGoBack(),
           click: () => {
             if (webContents.canGoBack()) {
-              webContents.goBack()
+              webContents.goBack();
             }
           },
-        })
-      )
+        }),
+      );
 
       // 前进
       menu.append(
         new MenuItem({
-          label: '前进',
+          label: "前进",
           enabled: webContents.canGoForward(),
           click: () => {
             if (webContents.canGoForward()) {
-              webContents.goForward()
+              webContents.goForward();
             }
           },
-        })
-      )
+        }),
+      );
 
       // 刷新
       menu.append(
         new MenuItem({
-          label: '刷新',
+          label: "刷新",
           click: () => {
-            webContents.reload()
+            webContents.reload();
           },
-        })
-      )
+        }),
+      );
 
-      menu.append(new MenuItem({ type: 'separator' }))
+      menu.append(new MenuItem({ type: "separator" }));
 
       // 打开开发者工具
       menu.append(
         new MenuItem({
-          label: '打开开发者工具',
+          label: "打开开发者工具",
           click: () => {
-            webContents.openDevTools({ mode: 'right' })
+            webContents.openDevTools({ mode: "right" });
           },
-        })
-      )
+        }),
+      );
 
-      menu.append(new MenuItem({ type: 'separator' }))
+      menu.append(new MenuItem({ type: "separator" }));
 
       // 设为悬浮窗口
-      const windowInfo = this.windows.get(windowId)
-      const isAlwaysOnTop = windowInfo ? windowInfo.window.isAlwaysOnTop() : false
+      const windowInfo = this.windows.get(windowId);
+      const isAlwaysOnTop = windowInfo
+        ? windowInfo.window.isAlwaysOnTop()
+        : false;
       menu.append(
         new MenuItem({
-          label: isAlwaysOnTop ? '取消悬浮' : '设为悬浮窗口',
-          type: 'checkbox',
+          label: isAlwaysOnTop ? "取消悬浮" : "设为悬浮窗口",
+          type: "checkbox",
           checked: isAlwaysOnTop,
           click: (item) => {
-            this.setAlwaysOnTop(windowId, item.checked)
+            this.setAlwaysOnTop(windowId, item.checked);
           },
-        })
-      )
+        }),
+      );
 
       // 隐藏/显示窗口（后台/前台模式）
       if (windowInfo) {
-        const isVisible = windowInfo.window.isVisible()
+        const isVisible = windowInfo.window.isVisible();
         menu.append(
           new MenuItem({
-            label: isVisible ? '隐藏窗口（后台模式）' : '显示窗口（前台模式）',
+            label: isVisible ? "隐藏窗口（后台模式）" : "显示窗口（前台模式）",
             click: () => {
               if (isVisible) {
-                this.hideWindow(windowId)
+                this.hideWindow(windowId);
               } else {
-                this.showWindow(windowId)
+                this.showWindow(windowId);
               }
             },
-          })
-        )
+          }),
+        );
       }
 
       // 静音/取消静音
       if (windowInfo) {
-        const wc = windowInfo.webviewWebContents || windowInfo.shellWebContents
-        const isMuted = wc.isAudioMuted()
+        const wc = windowInfo.webviewWebContents || windowInfo.shellWebContents;
+        const isMuted = wc.isAudioMuted();
         menu.append(
           new MenuItem({
-            label: isMuted ? '取消静音' : '静音',
-            type: 'checkbox',
+            label: isMuted ? "取消静音" : "静音",
+            type: "checkbox",
             checked: isMuted,
             click: (item) => {
-              wc.setAudioMuted(item.checked)
-              log.info(`Window ${windowId} audio muted: ${item.checked}`)
+              wc.setAudioMuted(item.checked);
+              log.info(`Window ${windowId} audio muted: ${item.checked}`);
             },
-          })
-        )
+          }),
+        );
       }
 
       // 显示菜单
-      menu.popup({ window: this.windows.get(windowId)?.window })
-    })
+      menu.popup({ window: this.windows.get(windowId)?.window });
+    });
   }
 }
 
 // 保持向后兼容的导出
-export { BrowserWindowManager as BrowserTabManager }
-export type { WindowInfo as TabInfo }
+export { BrowserWindowManager as BrowserTabManager };
+export type { WindowInfo as TabInfo };

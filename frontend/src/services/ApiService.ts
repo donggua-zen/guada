@@ -655,6 +655,33 @@ class ApiService {
     });
   }
 
+  /**
+   * 删除工作目录中的文件/目录
+   */
+  async deleteWorkspaceFile(
+    sessionId: string,
+    filePath: string,
+  ): Promise<{ success: boolean; isDirectory?: boolean }> {
+    return await this._request(
+      `/sessions/${sessionId}/workspace/file?path=${encodeURIComponent(filePath)}`,
+      { method: "DELETE" },
+    );
+  }
+
+  /**
+   * 重命名工作目录中的文件/目录
+   */
+  async renameWorkspaceFile(
+    sessionId: string,
+    filePath: string,
+    newName: string,
+  ): Promise<{ success: boolean; isDirectory?: boolean; newPath?: string }> {
+    return await this._request(`/sessions/${sessionId}/workspace/rename`, {
+      method: "POST",
+      data: { path: filePath, newName },
+    });
+  }
+
   // ========== 消息管理 ==========
   async deleteMessage(messageId: string): Promise<{ success: boolean }> {
     return await this._request(`/messages/${messageId}`, { method: "DELETE" });
