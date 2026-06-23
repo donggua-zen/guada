@@ -45,9 +45,8 @@ export class FilePlugin extends PluginBase {
         offset: z
           .number()
           .int()
-          .min(0)
           .optional()
-          .describe("起始位置（行号或字符偏移），默认 0"),
+          .describe("起始位置（行号或字符偏移），负数表示从末尾倒数（如 -10 最后 10 行），默认 0"),
         limit: z
           .number()
           .int()
@@ -100,7 +99,8 @@ export class FilePlugin extends PluginBase {
 
         // 按行读取
         const lineLimit = limit ?? 200;
-        const startLine = Math.min(offset, totalLines);
+        const effectiveOffset = offset < 0 ? Math.max(0, totalLines + offset) : offset;
+        const startLine = Math.min(effectiveOffset, totalLines);
 
         // 计算起始行的原始字符位置
         let nextCharOffset = 0;
