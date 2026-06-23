@@ -4,7 +4,6 @@ import { BotAdapterFactory } from './services/bot-adapter.factory';
 import { BotOrchestrator } from './services/bot-orchestrator.service';
 import { SessionMapperService } from './services/session-mapper.service';
 import { BotAdminService } from './services/bot-admin.service';
-import { TempFileManager } from './services/temp-file-manager.service';
 import { PlatformUtilsService } from './services/platform-utils.service';
 import { BotAdminController } from './controllers/bot-admin.controller';
 import { ChatModule } from '../chat/chat.module';
@@ -20,7 +19,7 @@ import { SessionManagementPlugin } from './plugins/session-management.plugin';
   controllers: [BotAdminController],
   providers: [
     BotInstanceManager, BotAdapterFactory, BotOrchestrator,
-    SessionMapperService, BotAdminService, TempFileManager, PlatformUtilsService,
+    SessionMapperService, BotAdminService, PlatformUtilsService,
     PrismaService,
   ],
   exports: [BotInstanceManager],

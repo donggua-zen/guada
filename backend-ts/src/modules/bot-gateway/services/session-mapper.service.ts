@@ -10,7 +10,6 @@ import { KnowledgeBaseRepository } from '../../../common/database/knowledge-base
 import { UploadPathService } from '../../../common/services/upload-path.service';
 import { WorkspaceService } from '../../../common/services/workspace.service';
 import { appendResetMarker } from '../utils/external-id';
-import { TempFileManager } from './temp-file-manager.service';
 
 /**
  * 会话映射服务
@@ -29,7 +28,6 @@ export class SessionMapperService {
     private kbRepo: KnowledgeBaseRepository,
     private uploadPathService: UploadPathService,
     private workspaceService: WorkspaceService,
-    private tempFileManager: TempFileManager,
   ) { }
 
   /**
