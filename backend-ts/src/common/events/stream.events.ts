@@ -112,6 +112,19 @@ export interface SubAgentClosedEvent {
 }
 
 /**
+ * 通用消息投递事件（内部模块间使用）
+ *
+ * 事件名：session.message.enqueue
+ * 投递者自行构建完整消息内容，监听者只负责转发到会话消息队列。
+ */
+export interface EnqueueMessageEvent {
+  sessionId: string;
+  userId: string;
+  content: string;
+  source: Record<string, any>;
+}
+
+/**
  * 将内部事件转换为 SSE 事件格式
  */
 export function toSessionEvent(

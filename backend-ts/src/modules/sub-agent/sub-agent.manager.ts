@@ -518,7 +518,7 @@ export class SubAgentManager implements OnModuleInit {
       }
       // 从队列中移除已获取的消息
       for (const item of completed) {
-        this.chatRunnerService.removeQueuedMessage(
+        this.chatRunnerService.peekQueuedMessage(
           parentSessionId,
           (q) =>
             q.source?.type === "sub_agent" &&
@@ -574,7 +574,7 @@ export class SubAgentManager implements OnModuleInit {
           }
           // 从队列中移除已获取的消息，防止 processQueue 重复消费
           for (const item of completed) {
-            this.chatRunnerService.removeQueuedMessage(
+            this.chatRunnerService.peekQueuedMessage(
               parentSessionId,
               (q) =>
                 q.source?.type === "sub_agent" &&

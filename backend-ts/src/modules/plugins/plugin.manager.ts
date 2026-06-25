@@ -273,6 +273,29 @@ export class PluginManager {
   }
 
   /**
+   * 重新加载插件：清除旧注册数据后重新走一遍 onLoad 注册流程
+   * 适用于插件所依赖的外部配置发生变化（如 MCP 服务器增删改）后需要刷新工具列表的场景
+   */
+  async reloadPlugin(pluginId: string): Promise<void> {
+    const instance = this.instances.get(pluginId);
+    if (!instance) {
+      this.logger.warn(`Plugin ${pluginId} not found, cannot reload`);
+      return;
+    }
+
+    const plugin = instance.plugin;
+    const wasEnabled = instance.enabled;
+
+    // 完整卸载：onStop → onUnload → clearPlugin → delete instances
+    await this.unregisterPlugin(pluginId);
+
+    // 重新注册：创建新 PluginApiImpl → onLoad(查最新数据) → flush → (onStart)
+    await this.registerPlugin(plugin, wasEnabled);
+
+    this.logger.log(`Plugin reloaded: ${pluginId}, enabled=${wasEnabled}`);
+  }
+
+  /**
    * 启用/禁用插件
    */
   async setPluginEnabled(pluginId: string, enabled: boolean): Promise<void> {
