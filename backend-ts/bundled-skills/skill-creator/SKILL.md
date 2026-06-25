@@ -158,7 +158,7 @@ Only `name` and `description` are loaded into the system prompt at startup. The 
 
 ### 3.2 L2 — Instructions (activated on demand)
 
-When the AI decides a skill is relevant, it calls `skill__call({ skillName })` to load the full `SKILL.md` body. This is the core instruction content.
+When the AI decides a skill is relevant, it reads the full `SKILL.md` body from its file path (provided in the skills list). This is the core instruction content.
 
 ### 3.3 L3 — Resources (loaded as needed)
 
@@ -222,16 +222,15 @@ Detailed instructions the AI should follow when this skill is activated.
 mkdir scripts/ references/ assets/
 ```
 
-### Step 5: Register the Skill
+### Step 5: Automatic Registration
 
-```
-skill__scan()
-```
+The file watcher automatically detects the new SKILL.md and registers the skill within seconds — no manual action needed.
 
 ### Step 6: Verify
 
-```
-skill__call({ skillName: "my-skill-name" })
+Use the `read` tool to confirm the skill content:
+```markdown
+read({ path: "{SKILLS_DIR}/my-skill-name/SKILL.md" })
 ```
 
 ---
@@ -299,13 +298,13 @@ When asked to say hello:
 |-------|--------|--------|
 | Create | Author SKILL.md + optional resources | Manual or via this skill |
 | Place | Put in correct directory | `{SKILLS_DIR}/<name>/` |
-| Register | Discover by system | `skill__scan()` |
-| Verify | Confirm it's loaded | `skill__call({ skillName })` |
+| Register | Auto-detected by file watcher | Within seconds, no manual action |
+| Verify | Confirm it's loaded | `read({ path: "{SKILLS_DIR}/<name>/SKILL.md" })` |
 | Use | Mention in conversation | AI matches and activates |
-| Update (same name) | Edit SKILL.md, then reload | `skill__reload({ skillId })` |
-| Update (renamed) | Move directory, then rescan | `skill__scan()` |
+| Update (same name) | Edit SKILL.md, auto-detected | File watcher reloads automatically |
+| Update (renamed) | Move directory | File watcher detects removal + new registration |
 | Disable | Toggle in UI settings | Does not uninstall; excluded from prompt |
-| Uninstall | Remove directory via UI | `skill__scan()` detects removal |
+| Uninstall | Remove directory | File watcher detects removal and unregisters |
 
 ---
 
@@ -363,7 +362,7 @@ assets/
 
 ## 10. Validation Reference
 
-System validates on every `skill__scan()` call:
+The system validates on every automatic scan or reload, triggered by the file watcher on any SKILL.md change:
 
 ```
 ✓ File exists: <dir>/SKILL.md

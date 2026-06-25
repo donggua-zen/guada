@@ -91,7 +91,7 @@ The `name` field in SKILL.md must follow these rules (enforced by the system val
 5. Check naming conflict with existing skills
 6. Copy to `{SKILLS_DIR}/<name>/`
 7. Clean up temp directory
-8. Trigger `skill__scan()` to register
+8. The file watcher automatically detects the new skill — it will be registered and available within seconds
 
 ### 3.2 Method B: Install from ZIP Archive
 
@@ -104,7 +104,7 @@ The `name` field in SKILL.md must follow these rules (enforced by the system val
 5. Check naming conflicts
 6. Copy to `{SKILLS_DIR}/<name>/`
 7. Clean up
-8. Trigger scan
+8. The file watcher automatically detects and registers the new skill
 
 ### 3.3 Method C: Manual Placement
 
@@ -113,7 +113,7 @@ The `name` field in SKILL.md must follow these rules (enforced by the system val
 1. Create directory: `mkdir -p {SKILLS_DIR}/<name>`
 2. Create `{SKILLS_DIR}/<name>/SKILL.md` with valid frontmatter
 3. Optionally add `scripts/`, `references/`, `assets/`
-4. Call `skill__scan()` to register
+4. The file watcher automatically detects and registers the skill
 
 ---
 
@@ -122,21 +122,14 @@ The `name` field in SKILL.md must follow these rules (enforced by the system val
 ### 4.1 Check Registration
 
 ```
-skill__call({ skillName: "installed-skill-name" })
+read({ path: "{SKILLS_DIR}/<skill-name>/SKILL.md" })
 ```
 
-Returns the full SKILL.md content if found and enabled.
+Returns the full SKILL.md content if the skill exists and is valid.
 
-### 4.2 Scan Results
+### 4.2 Registration Confirmation
 
-```
-Scan completed: +1 new, ~0 updated, -0 removed (errors: 0)
-```
-
-- **+N**: Newly discovered skills
-- **~N**: Skills with changed content hash
-- **-N**: Skills whose directories were deleted
-- **errors**: Skills that failed validation
+When a skill is placed in the correct directory, the file watcher automatically detects, validates, and registers it. You can verify by checking that the skill's content is readable via the `read` tool.
 
 ### 4.3 Validation Error Reference
 
@@ -157,15 +150,11 @@ Scan completed: +1 new, ~0 updated, -0 removed (errors: 0)
 
 ### 5.1 Hot-Reload (same name, content change only)
 
-```
-skill__reload({ skillId: "skill-name" })
-```
-
-Re-reads SKILL.md, re-parses manifest, recalculates content hash. The skill's instructions update immediately.
+Simply edit the SKILL.md file. The file watcher detects the change and automatically reloads the skill — no manual action needed.
 
 ### 5.2 Full Reinstall (renamed or moved)
 
-Re-install using the same method, then call `skill__scan()` instead of `skill__reload()`.
+Re-install using the same method. The file watcher detects the old skill removal and the new skill registration automatically.
 
 ### 5.3 Version Tracking
 
@@ -193,10 +182,9 @@ If the skill has a `version` field, the system tracks history in `{SKILLS_DIR}/.
 | Symptom | Likely Cause | Action |
 |---------|-------------|--------|
 | "No SKILL.md found" during install | Repo/ZIP doesn't contain valid skill | Check source has SKILL.md at root or ≤2 levels deep |
-| Scan shows 0 changes | Skills already registered | Verify content hash actually changed |
 | Skill not in system prompt | Skill is disabled | Enable in settings UI |
-| `skill__call` returns "not found" | Not registered or wrong name | Run `skill__scan()`, verify exact `name` from frontmatter |
-| Skill validation error on scan | Invalid frontmatter | Check error message and fix SKILL.md |
+| Skill content not available via `read` | Not registered or wrong path | Verify directory name matches `name` field in SKILL.md |
+| Skill validation error | Invalid frontmatter | Check error message and fix SKILL.md |
 | Directory mismatch error | Directory name ≠ `name` field | Rename directory to match `name:`, or change `name:` to match directory |
 
 ---

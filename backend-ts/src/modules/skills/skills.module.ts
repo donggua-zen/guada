@@ -33,6 +33,11 @@ export class SkillsModule implements OnModuleInit {
   async onModuleInit() {
     await this.pluginManager.registerPlugin(this.skillPlugin);
     await this.bundledService.syncBundledSkills();
+
+    // 先执行全量扫描初始化技能注册表
     await this.orchestrator.onModuleInit();
+
+    // 启动文件监听，后续变更自动同步
+    await this.watcher.start();
   }
 }
