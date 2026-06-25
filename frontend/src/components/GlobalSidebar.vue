@@ -20,9 +20,9 @@
         <div v-for="group in displayGroups" :key="group.id" class="mb-1">
           <!-- 分组标题栏 -->
           <div
-            class="group-header flex items-center justify-between px-3 py-1 mx-1 rounded-md cursor-pointer transition-colors duration-200 select-none group"
+            class="group-header flex items-center justify-between pl-3 pr-2 py-1 mx-1 rounded-md cursor-pointer transition-colors duration-200 select-none group"
             :class="isGroupExpanded(group.id) ? 'text-(--color-text)' : 'text-(--color-text-gray)'"
-            @click="toggleGroupExpand(group.id)">
+            @click="toggleGroupExpand(group.id)" @contextmenu.prevent="openGroupContextMenu($event, group)">
             <div class="flex items-center gap-1.5">
               <span class="text-sm font-medium">{{ group.name }}</span>
               <!-- 展开/折叠箭头（hover时显示） -->
@@ -32,32 +32,18 @@
               </i>
             </div>
             <div class="flex items-center gap-1">
-              <!-- 分组操作菜单 -->
-              <div v-if="group.id !== UNGROUPED_ID" class="opacity-0 group-hover:opacity-100 transition-opacity"
-                @click.stop>
-                <DropdownMenu @command="(cmd: string) => handleGroupDropdown(cmd, group)">
-                  <div class="session-action-trigger p-0.5">
-                    <el-icon class="w-3.5 h-3.5">
-                      <MoreFilled />
-                    </el-icon>
-                  </div>
-                  <template #dropdown>
-                    <DropdownMenuItem command="rename">
-                      <Edit16Regular class="w-4 h-4 mr-2 inline-block" />
-                      重命名
-                    </DropdownMenuItem>
-                    <DropdownMenuItem command="delete">
-                      <Delete20Regular class="w-4 h-4 mr-2 inline-block" />
-                      删除
-                    </DropdownMenuItem>
-                  </template>
-                </DropdownMenu>
+              <!-- 新建会话按钮（始终显示） -->
+              <div :title="`在「${group.name}」中新建会话`" @click.stop="openNewSession(group.id)">
+                <div
+                  class="session-action-trigger p-0.5 bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-700">
+                  <Add12Regular class="w-2.5 h-2.5 text-gray-500 dark:text-gray-300" />
+                </div>
               </div>
             </div>
           </div>
 
           <!-- 分组内的会话列表 -->
-          <div v-show="isGroupExpanded(group.id)" class="mt-0.5 space-y-1">
+          <div v-show="isGroupExpanded(group.id)" class="mt-0.5 space-y-0.5">
             <!-- 分组内无会话时显示空状态 -->
             <template v-if="getGroupSessions(group.id).length === 0 && !isLoadingGroup(group.id)">
               <div class="text-center text-gray-500 py-6 text-xs">
@@ -66,7 +52,7 @@
             </template>
             <template v-else>
               <div v-for="session in getGroupSessions(group.id)" :key="session.id"
-                class="session-item flex items-center gap-2 py-0.5 pr-2 pl-3 mx-1  rounded-lg cursor-pointer transition-all duration-200 ease-in-out group"
+                class="session-item flex items-center gap-2 py-1.5 pr-2 pl-2.5 mx-2  rounded-md cursor-pointer transition-all duration-200 ease-in-out group"
                 :class="{
                   'session-item-active': session.id === currentSessionId,
                   'session-item-inactive': session.id !== currentSessionId
@@ -85,29 +71,38 @@
                     {{ session.title }}
                   </div>
                 </div>
-                <div class="session-actions flex items-center opacity-0 group-hover:opacity-100"
-                  :class="{ 'opacity-100': session.id === currentSessionId }">
-                  <DropdownMenu @command="(cmd: string) => handleDropdownSelect(cmd, session)">
-                    <div class="session-action-trigger">
-                      <el-icon class="w-4 h-4">
-                        <MoreFilled />
-                      </el-icon>
-                    </div>
-                    <template #dropdown>
-                      <DropdownMenuItem command="rename">
-                        <Edit16Regular class="w-4 h-4 mr-2 inline-block" />
-                        重命名
-                      </DropdownMenuItem>
-                      <DropdownMenuItem command="move">
-                        <Folder20Regular class="w-4 h-4 mr-2 inline-block" />
-                        移动到分组
-                      </DropdownMenuItem>
-                      <DropdownMenuItem command="delete">
-                        <Delete20Regular class="w-4 h-4 mr-2 inline-block" />
-                        删除
-                      </DropdownMenuItem>
-                    </template>
-                  </DropdownMenu>
+                <div class="session-actions shrink-0 relative min-w-6 h-full flex items-center">
+                  <!-- 最后活跃时间（非当前会话时显示，hover 时隐藏） -->
+                  <span v-if="session.id !== currentSessionId"
+                    class="absolute right-0 top-1/2 -translate-y-1/2 text-xs text-gray-400 dark:text-gray-500 group-hover:hidden whitespace-nowrap">
+                    {{ formatLastActive(session.lastActiveAt || session.updatedAt) }}
+                  </span>
+                  <!-- 操作菜单（默认隐藏，hover 时显示） -->
+                  <div
+                    class="absolute right-0 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 flex items-center"
+                    :class="{ 'opacity-100': session.id === currentSessionId }">
+                    <DropdownMenu @command="(cmd: string) => handleDropdownSelect(cmd, session)">
+                      <div class="session-action-trigger">
+                        <el-icon class="w-4 h-4">
+                          <MoreFilled />
+                        </el-icon>
+                      </div>
+                      <template #dropdown>
+                        <DropdownMenuItem command="rename">
+                          <Edit16Regular class="w-4 h-4 mr-2 inline-block" />
+                          重命名
+                        </DropdownMenuItem>
+                        <DropdownMenuItem command="move">
+                          <Folder20Regular class="w-4 h-4 mr-2 inline-block" />
+                          移动到分组
+                        </DropdownMenuItem>
+                        <DropdownMenuItem command="delete">
+                          <Delete20Regular class="w-4 h-4 mr-2 inline-block" />
+                          删除
+                        </DropdownMenuItem>
+                      </template>
+                    </DropdownMenu>
+                  </div>
                 </div>
               </div>
 
@@ -234,6 +229,10 @@
       </div>
     </template>
   </el-dialog>
+
+  <!-- 分组右键菜单 -->
+  <ContextMenu :visible="groupContextMenu.visible" :x="groupContextMenu.x" :y="groupContextMenu.y"
+    :items="groupContextMenuItems" @close="closeGroupContextMenu" />
 </template>
 
 <script setup lang="ts">
@@ -249,6 +248,7 @@ import { Avatar, ScrollContainer } from './ui'
 import DropdownMenu from './ui/DropdownMenu.vue'
 import DropdownMenuItem from './ui/DropdownMenuItem.vue'
 import SessionGroupManageDialog from './session/SessionGroupManageDialog.vue'
+import ContextMenu, { type ContextMenuItem } from './ui/ContextMenu.vue'
 import { apiService } from '@/services/ApiService'
 import { ElMessageBox } from 'element-plus'
 
@@ -262,6 +262,7 @@ import {
   BookSearch20Regular,
   ContactCard20Regular,
   AddSquare20Regular,
+  Add12Regular,
   ClockAlarm20Regular,
   Apps20Regular,
   Cloud20Regular,
@@ -297,6 +298,68 @@ const moveTargetSession = ref<any>(null)
 
 // 是否正在初始化加载
 const isInitializing = ref(false)
+
+// 分组右键菜单状态
+const groupContextMenu = ref({
+  visible: false,
+  x: 0,
+  y: 0,
+  group: null as any,
+})
+
+// 分组右键菜单项
+const groupContextMenuItems = computed<ContextMenuItem[]>(() => {
+  const group = groupContextMenu.value.group
+  if (!group || group.id === UNGROUPED_ID) return []
+  return [
+    {
+      label: '重命名',
+      icon: Edit16Regular as any,
+      onClick: () => handleRenameGroup(group),
+    },
+    {
+      label: '删除',
+      icon: Delete20Regular as any,
+      onClick: () => handleDeleteGroup(group),
+    },
+  ]
+})
+
+// 打开分组右键菜单
+const openGroupContextMenu = (event: MouseEvent, group: any) => {
+  // 未分组只做右键菜单不做实际处理（不可重命名/删除）
+  if (group.id === UNGROUPED_ID) return
+  groupContextMenu.value = {
+    visible: true,
+    x: event.clientX,
+    y: event.clientY,
+    group,
+  }
+}
+
+// 关闭分组右键菜单
+const closeGroupContextMenu = () => {
+  groupContextMenu.value.visible = false
+  groupContextMenu.value.group = null
+}
+
+// 打开新建会话面板，指定分组
+const openNewSession = (groupId: string) => {
+  // 已在新会话页面时只更新 query 参数，不重新导航
+  if (currentActiveTab.value === 'chat') {
+    if (groupId === UNGROUPED_ID) {
+      router.replace({ name: 'Chat', params: { sessionId: 'new-session' } })
+    } else {
+      router.replace({ name: 'Chat', params: { sessionId: 'new-session' }, query: { groupId } })
+    }
+    return
+  }
+  if (groupId === UNGROUPED_ID) {
+    router.replace({ name: 'Chat', params: { sessionId: 'new-session' } })
+  } else {
+    router.replace({ name: 'Chat', params: { sessionId: 'new-session' }, query: { groupId } })
+  }
+}
 
 // 导航项配置
 const navItems = [
@@ -508,6 +571,23 @@ const loadMoreForGroup = async (groupId: string) => {
   }
 }
 
+// 友好格式化最后活跃时间
+const formatLastActive = (dateStr: string | null | undefined): string => {
+  if (!dateStr) return ''
+  const now = Date.now()
+  const diff = now - new Date(dateStr).getTime()
+  const minutes = Math.floor(diff / 60000)
+  if (minutes < 1) return '刚刚'
+  if (minutes < 60) return `${minutes}min`
+  const hours = Math.floor(minutes / 60)
+  if (hours < 24) return `${hours}h`
+  const days = Math.floor(hours / 24)
+  if (days < 30) return `${days}d`
+  const months = Math.floor(days / 30)
+  if (months < 12) return `${months}m`
+  return '更早'
+}
+
 // 侧边栏状态辅助方法
 const getSessionUnread = (sessionId: string): boolean => {
   return sessionStore.getSidebarFlag(sessionId, 'unread')
@@ -523,31 +603,6 @@ const selectSession = (session: any) => {
   sessionStore.setSidebarFlag(session.id, 'unread', false)
   router.replace({ name: 'Chat', params: { sessionId: session.id } })
 }
-
-/**
- * 处理滚动事件（带防抖）
- */
-// const handleScroll = useDebounceFn(() => {
-//   checkScrollPosition()
-// }, 300)
-
-/**
- * 检查滚动位置，判断是否需要加载更多
- */
-// const checkScrollPosition = (): void => {
-//   if (!scrollContainer.value || isLoadingMore.value || !hasMoreSessions.value) {
-//     return
-//   }
-
-//   const element = scrollContainer.value.getScrollElement?.() || scrollContainer.value
-//   const { scrollTop, scrollHeight, clientHeight } = element
-//   const distanceToBottom = scrollHeight - scrollTop - clientHeight
-
-//   // 如果距离底部小于阈值，则加载更多
-//   if (distanceToBottom <= scrollThreshold) {
-//     loadMoreSessions()
-//   }
-// }
 
 // 处理导航点击
 const handleNavClick = (tab: string) => {
@@ -578,15 +633,6 @@ const handleDropdownSelect = (command: string, session: any) => {
     handleMoveSession(session)
   } else if (command === 'delete') {
     handleDeleteSession(session)
-  }
-}
-
-// 处理分组下拉菜单选择
-const handleGroupDropdown = (command: string, group: any) => {
-  if (command === 'rename') {
-    handleRenameGroup(group)
-  } else if (command === 'delete') {
-    handleDeleteGroup(group)
   }
 }
 
@@ -772,7 +818,7 @@ const confirmDeleteSession = async () => {
     deleteSessionData.value = null
   } catch (error) {
     console.error('删除对话失败:', error)
-    toast.error('对话删除失败')
+    toast.error('删除对话失败')
   }
 }
 
@@ -908,7 +954,7 @@ function initSessionEventListeners() {
       sessionStore.setSidebarFlag(sessionId, 'unread', true)
     }
   })
-  
+
   // 监听流式结束事件
   apiService.onSessionEvent('stream_finished', (event) => {
     const { sessionId, payload } = event
@@ -976,13 +1022,6 @@ onUnmounted(() => {
 
 .session-actions {
   margin-left: auto;
-  opacity: 0;
-  transition: opacity 0.2s ease;
-}
-
-/* 鼠标悬停时会话项的操作按钮显示 */
-.session-item:hover .session-actions {
-  opacity: 1;
 }
 
 .session-action-trigger {

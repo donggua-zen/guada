@@ -586,7 +586,8 @@ defineExpose({
   padding: 5px 12px;
   border-radius: 16px;
   border: 1px solid var(--color-bubble-user-border);
-  margin-left: auto;
+  /* margin-left: auto; */
+  /* max-width: 80%; */
 }
 
 /* AI消息气泡特定样式 - BEM Modifier */
@@ -611,7 +612,8 @@ defineExpose({
 }
 
 .message-item.message-item--user .message-item__wrapper {
-  align-items: flex-start;
+  align-items: flex-end;
+  max-width: 80%;
 }
 
 .message-item.message-item--assistant .message-item__wrapper {
