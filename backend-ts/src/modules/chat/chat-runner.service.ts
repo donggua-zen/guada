@@ -403,28 +403,35 @@ export class ChatRunnerService {
   }
 
   /**
-   * 从会话队列中移除匹配指定条件的消息
+   * 从会话队列中查找并移除匹配指定条件的消息
    *
-   * 适用于 waitForComplete 等场景：已通过其他方式获取了消息内容，
+   * 适用于 waitForComplete、poll 撤回等场景：已通过其他方式获取了消息内容，
    * 需要从队列中移除以防止 processQueue 再次消费导致重复。
    *
    * @param sessionId 会话 ID
-   * @param predicate 匹配条件函数，返回 true 的消息将被移除
-   * @returns 被移除的消息数量
+   * @param predicate 匹配条件函数，返回 true 的消息将被移除并返回
+   * @returns 被移除的消息数组
    */
-  removeQueuedMessage(
+  peekQueuedMessage(
     sessionId: string,
     predicate: (item: QueueItem) => boolean,
-  ): number {
+  ): QueueItem[] {
     const state = this.queues.get(sessionId);
-    if (!state || state.items.length === 0) return 0;
+    if (!state || state.items.length === 0) return [];
 
-    const before = state.items.length;
-    state.items = state.items.filter((item) => !predicate(item));
-    const removed = before - state.items.length;
+    const removed: QueueItem[] = [];
+    const kept: QueueItem[] = [];
+    for (const item of state.items) {
+      if (predicate(item)) {
+        removed.push(item);
+      } else {
+        kept.push(item);
+      }
+    }
+    state.items = kept;
 
-    if (removed > 0) {
-      this.logger.log(`从队列中移除了 ${removed} 条消息: ${sessionId}`);
+    if (removed.length > 0) {
+      this.logger.log(`从队列中移除了 ${removed.length} 条消息: ${sessionId}`);
     }
 
     // 清理空状态

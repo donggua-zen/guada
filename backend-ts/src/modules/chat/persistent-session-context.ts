@@ -441,7 +441,7 @@ export class PersistentSessionContext implements ISessionContext {
       "{time}",
       new Date().toISOString(),
     );
-
+    console.log(finalSystemPrompt);
     return [
       { role: "system" as const, content: finalSystemPrompt },
       ...nonSystemMessages,
@@ -639,7 +639,7 @@ export class PersistentSessionContext implements ISessionContext {
         allParts.push(
           [
             "# 可用工具集",
-            "你可以使用以下工具集：",
+            "你可以使用以下工具集。当用户请求或任务与工具集的能力相匹配时，您应该主动使用`tool_load`阅读并应用工具集：",
             "",
             ...activators,
             "",
@@ -647,7 +647,11 @@ export class PersistentSessionContext implements ISessionContext {
           ].join("\n"),
         );
         allParts.push(
-          "## 使用原则\n1. **避免重复**...\n2. **仅描述不加载**...\n3. **执行调用**...",
+          `## 使用原则
+      
+1. **避免重复**：已了解用法的工具无需重复加载
+2. **仅描述不加载**：如用户仅询问能力或功能介绍，无需加载工具说明
+3. **执行调用**：加载后根据说明使用 \`tool_call\` 执行具体操作`,
         );
       }
 

@@ -22,6 +22,7 @@ import { LlmCoreModule } from './modules/llm-core/providers.module';
 import { SchedulerModule } from './modules/scheduler/scheduler.module';
 import { SubAgentModule } from './modules/sub-agent/sub-agent.module';
 import { TeamModule } from './modules/team/team.module';
+import { ShellModule } from './modules/shell/shell.module';
 
 @Module({
   imports: [
@@ -56,6 +57,7 @@ import { TeamModule } from './modules/team/team.module';
     SchedulerModule,  // 定时任务模块
     SubAgentModule,   // 子 Agent 模块
     TeamModule,       // 团队/专家团模块
+    ShellModule,      // Shell 命令行模块
   ],
 })
 export class AppModule {}

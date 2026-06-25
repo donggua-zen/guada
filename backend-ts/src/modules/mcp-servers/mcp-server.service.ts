@@ -1,6 +1,7 @@
 import { Injectable, Logger } from "@nestjs/common";
 import { McpClientService } from "../../common/mcp/mcp-client.service";
 import { McpServerRepository } from "../../common/database/mcp-server.repository";
+import { PluginManager } from "../plugins/plugin.manager";
 
 @Injectable()
 export class McpServerService {
@@ -9,6 +10,7 @@ export class McpServerService {
   constructor(
     private mcpRepo: McpServerRepository,
     private mcpClient: McpClientService,
+    private pluginManager: PluginManager,
   ) {}
 
   /**
@@ -193,6 +195,9 @@ export class McpServerService {
       // 不抛出错误，允许服务器创建成功但无工具
     }
 
+    // 3. 刷新插件注册，使新工具立即可用
+    await this.pluginManager.reloadPlugin("mcp");
+
     return server;
   }
 
@@ -285,6 +290,9 @@ export class McpServerService {
       }
     }
 
+    // 刷新插件注册，使变更立即可用（始终执行，包括名称/启用等变更）
+    await this.pluginManager.reloadPlugin("mcp");
+
     return server;
   }
 
@@ -294,6 +302,10 @@ export class McpServerService {
       throw new Error("MCP Server not found or unauthorized");
     }
     this.logger.log(`Deleted MCP server: ${id}`);
+
+    // 刷新插件注册，清除已删除服务器的工具
+    await this.pluginManager.reloadPlugin("mcp");
+
     return true;
   }
 
@@ -305,6 +317,10 @@ export class McpServerService {
     this.logger.log(
       `Toggled MCP server status: ${id} -> ${enabled ? "enabled" : "disabled"}`,
     );
+
+    // 刷新插件注册，使启禁用状态生效
+    await this.pluginManager.reloadPlugin("mcp");
+
     return server;
   }
 
@@ -339,7 +355,9 @@ export class McpServerService {
         `Manually refreshed ${Object.keys(toolsDict).length} tools for MCP server: ${server.name}`,
       );
 
-      // 返回更新后的服务器信息
+      // 返回更新后的服务器信息前，刷新插件注册
+      await this.pluginManager.reloadPlugin("mcp");
+
       return this.mcpRepo.findById(id);
     } catch (error: any) {
       // 如果是自定义的错误消息，直接抛出

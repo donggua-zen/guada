@@ -23,7 +23,7 @@ export class SubAgentPlugin extends PluginBase {
     api.registerToolSet({
       name: "subagent",
       loadMode: "lazy",
-      activator: "当需要创建子代理执行独立任务时通过 tool_load 加载",
+      activator: "需要创建子代理执行独立任务时，可以调用此工具集",
       handler: (ctx) => ({
         loadMode:
           ctx.sessionType === "team" ? ("eager" as const) : ("lazy" as const),
@@ -207,29 +207,23 @@ export class SubAgentPlugin extends PluginBase {
       toolSet: "subagent",
       frequency: "REGULAR",
       description: "子代理工具使用说明",
-      content: `# 子代理工具
+      content: `# 子代理工具使用说明：
+- 对于某项任务如果只关心结果不关系中间过程，可以使用子代理协助完成
+- 默认使用前台子代理（run_mode="foreground"）
+- 当任务复杂、耗时较长，使用后台子代理（run_mode="background"）
+- 拆分任务时必须边界清晰，确保各子代理不会互相修改同一文件或者任务重叠
 
-你可以使用以下工具来管理子代理：
+**角色驱动模式**：
+- 当你的系统提示词中包含【团队成员】时，你可以使用 create 的 characterId 参数创建角色驱动的子代理
+- 角色驱动的子代理会继承该角色的完整设定（系统提示词、工具权限等），以该角色身份执行任务
+- 格式：spawn(name="角色名", characterId="角色ID", task="具体任务")
+- 根据任务性质选择合适的团队成员角色
 
-## subagent_spawn
-创建子代理独立执行任务。子代理拥有独立的对话上下文和工具能力。
-
-**何时使用**：
-- 需要并行处理多个独立任务
-- 有一个耗时任务需要异步执行
-- 需要隔离不同任务的上下文
-
-## subagent_wait
-等待当前会话创建的子代理执行完成并返回结果。
-
-## subagent_close
-关闭指定子代理。
-
-## subagent_list
-获取当前所有子代理列表。
-
-## subagent_send_message
-向已存在的子代理发送新消息继续交互。`,
+**注意**：
+- spawn 前台模式会阻塞到任务完成，后台子代理在后台执行，结果会通过系统消息通知
+- 如非必要禁止使用wait轮询等待子代理结果
+- 若对子代理任务需要进一步追问或者调整，使用 \`send_message\` 继续交互
+- 对于任务结束且不需要后续交互的子代理，及时 \`close\` 关闭并清理其会话数据`,
     });
   }
 }
