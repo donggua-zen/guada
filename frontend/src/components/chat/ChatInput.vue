@@ -357,7 +357,8 @@ const parseSkillTags = (text: string): string => {
 
 watch(() => props.value, (val) => {
   if (editor.value && editor.value.getText() !== val) {
-    const htmlContent = parseSkillTags(val);
+    // 将纯文本中的 \n 转换为 <br>，确保 setContent 作为 HTML 解析时保留换行
+    const htmlContent = parseSkillTags(val).replace(/\n/g, '<br>');
     editor.value.commands.setContent(htmlContent, false);
   }
 });
@@ -1172,6 +1173,8 @@ onMounted(() => {
             pmEl.style.minHeight = '58px';
             pmEl.style.maxHeight = '240px';
             isInputExpanded.value = pmEl.scrollHeight > 60;
+            // 自动滚动光标到可见区域（修复 Shift+Enter 换行时光标被遮挡）
+            ed.commands.scrollIntoView();
           }
         });
       },
