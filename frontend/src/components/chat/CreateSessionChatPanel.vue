@@ -162,7 +162,7 @@ import { useStorage } from "@vueuse/core"
 import { apiService } from '@/services/ApiService';
 import { usePopup } from "../../composables/usePopup";
 import { useTitle } from "../../composables/useTitle";
-import { useRouter } from 'vue-router';
+import { useRouter, useRoute } from 'vue-router';
 import { fixFrontendAssetUrl } from '@/utils/url'
 import { DEFAULT_SUMMARY_MODE } from '@/constants'
 // 组件导入
@@ -181,6 +181,7 @@ const isMobile = breakpoints.smaller('md') // md = 768px
 // 弹出层工具
 const { notify } = usePopup();
 const router = useRouter();
+const route = useRoute();
 
 // 响应式数据 - 类型化
 const title = useTitle();
@@ -749,6 +750,20 @@ onMounted(() => {
   });
   // 启动打字机效果
   startTypewriter();
+  // 从 query 参数恢复分组预选
+  const groupId = route.query.groupId;
+  if (groupId && typeof groupId === 'string') {
+    currentSession.value.groupId = groupId;
+  }
+});
+
+// 监听 groupId 查询参数变化（已在新建面板时点击其他分组的情况）
+watch(() => route.query.groupId, (newGroupId) => {
+  if (newGroupId && typeof newGroupId === 'string') {
+    currentSession.value.groupId = newGroupId;
+  } else {
+    currentSession.value.groupId = null;
+  }
 });
 
 onUnmounted(() => {

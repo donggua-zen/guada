@@ -49,7 +49,7 @@
   --color-text-gray: #666;
   --color-text-disabled: #9ca3af;
   --color-surface: rgb(247, 247, 250);
-  --color-surface: #fcfcfc;
+  --color-surface: #f5f5f5;/*#fcfcfc*/
   --color-surface-border: #efefef;
   --color-bg: #fff;
   --color-border: #d1d5db;

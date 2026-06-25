@@ -1,5 +1,5 @@
 <template>
-  <SidebarLayout v-model:sidebarVisible="layoutStore.sidebarVisible" :sidebarWidth="280" :showToggleButton="false"
+  <SidebarLayout v-model:sidebarVisible="layoutStore.sidebarVisible" :sidebarWidth="300" :showToggleButton="false"
     sidebarPosition="left" :z-index="20" class="flex-1">
     <template #sidebar>
       <GlobalSidebar />
