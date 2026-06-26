@@ -295,7 +295,9 @@ export class ToolOrchestrator {
         return {
           enabled: true,
           effective,
-          tools: val.map((id) => tools.find((t) => t.name === id))!,
+          tools: val
+            .map((id) => tools.find((t) => t.name === id))
+            .filter((t): t is ToolHandlerDef => !!t),
         };
       }
       return { enabled: false, effective, tools: [] };

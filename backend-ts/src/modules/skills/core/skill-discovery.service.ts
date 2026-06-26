@@ -79,7 +79,7 @@ export class SkillDiscoveryService {
       // 并行加载每个 Skill 目录
       const tasks = scanTargets.map(async ({ dir, source }) => {
         try {
-          const skillDef = await this.loader.loadManifest(dir, source);
+          const skillDef = await this.loader.loadManifest(dir, source, this.skillsDir);
           const dirName = path.basename(dir);
           
           // 使用公共验证器验证技能元数据

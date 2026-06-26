@@ -155,7 +155,7 @@ export class SkillToolBridgeService implements IToolProvider {
           return [
             `# Skill: ${skill.manifest.name}`,
             "",
-            `**Path**: ${skill.basePath}/SKILL.md`,
+            `**Path**: ${skill.baseDir}/${skill.basePath}/SKILL.md`,
             "",
             "---",
             "",

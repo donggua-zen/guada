@@ -20,7 +20,8 @@ export type SkillSourceType = 'global' | 'system';
  */
 export interface SkillDefinition {
   id: string;                    // = manifest.name
-  basePath: string;              // 文件系统绝对路径
+  baseDir: string;               // 技能根目录（skillsDir），用于还原绝对路径
+  basePath: string;              // 相对 baseDir 的路径（如 "pubchem-database"）
   manifest: SkillManifest;       // 解析后的 YAML frontmatter
   contentHash: string;           // SHA256（用于变更检测）
   source: SkillSourceType;       // 技能来源：global=用户安装, system=系统内置
