@@ -638,10 +638,12 @@ export class PersistentSessionContext implements ISessionContext {
         // console.log(activators);
         allParts.push(
           [
-            "# 可用工具集",
-            "你可以使用以下工具集。当用户请求或任务与工具集的能力相匹配时，您应该主动使用`tool_load`阅读并应用工具集：",
+            "# 可用懒加载工具集",
+            "你可以使用以下懒加载工具集。当用户请求或任务与工具集的能力相匹配时，您应该主动使用`tool_load`加载对应工具集：",
             "",
+            "<tool_sets>",
             ...activators,
+            "</tool_sets>",
             "",
             "---",
           ].join("\n"),

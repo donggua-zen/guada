@@ -32,7 +32,12 @@ let tray: Tray | null = null; // 系统托盘图标
 async function doCheckForUpdates() {
   try {
     const currentVersion = app.getVersion();
-    const platform = process.platform === "win32" ? "win" : process.platform === "darwin" ? "mac" : "linux";
+    const platform =
+      process.platform === "win32"
+        ? "win"
+        : process.platform === "darwin"
+          ? "mac"
+          : "linux";
     const apiUrl = `https://ai.dingd.cn/api/check_update?version=${currentVersion}&platform=${platform}`;
 
     const response = await fetch(apiUrl);
@@ -48,7 +53,9 @@ async function doCheckForUpdates() {
         info: data,
       });
     } else {
-      mainWindow?.webContents.send("update-status", { status: "not-available" });
+      mainWindow?.webContents.send("update-status", {
+        status: "not-available",
+      });
     }
 
     return { success: true, data };
@@ -76,6 +83,20 @@ log.transports.file.format = "[{y}-{m}-{d} {h}:{i}:{s}.{ms}] [{level}] {text}";
 
 // 单实例锁：确保同一时间只有一个应用实例运行
 const gotTheLock = app.requestSingleInstanceLock();
+// ── 进程级异常保护 ──
+process.on("uncaughtException", (error) => {
+  log.error("[Process] Uncaught exception:", error);
+  log.error("[Process] Stack:", error.stack);
+  // 不退出，让应用继续运行
+});
+
+process.on("unhandledRejection", (reason) => {
+  const msg = reason instanceof Error ? reason.message : String(reason);
+  const stack = reason instanceof Error ? reason.stack : "";
+  log.error(`[Process] Unhandled rejection: ${msg}`);
+  if (stack) log.error("[Process] Stack:", stack);
+  // 不退出，让应用继续运行
+});
 
 if (!gotTheLock) {
   // 如果获取锁失败，说明已有实例在运行，立即退出当前实例
@@ -212,7 +233,9 @@ async function initializeDatabase(
 
       // WAL 模式下先 checkpoint，确保 .db-wal 中的数据合并回主文件
       try {
-        const Database = require(path.join(backendPath, "node_modules", "better-sqlite3"));
+        const Database = require(
+          path.join(backendPath, "node_modules", "better-sqlite3"),
+        );
         const db = new Database(dbPath);
         db.pragma("wal_checkpoint(TRUNCATE)");
         db.close();
@@ -671,10 +694,13 @@ function createWindow() {
     doCheckForUpdates();
 
     // 每 6 小时定期检查更新
-    setInterval(() => {
-      log.info("Periodic update check...");
-      doCheckForUpdates();
-    }, 6 * 60 * 60 * 1000);
+    setInterval(
+      () => {
+        log.info("Periodic update check...");
+        doCheckForUpdates();
+      },
+      6 * 60 * 60 * 1000,
+    );
   });
 
   // 关闭按钮最小化到托盘
@@ -728,7 +754,7 @@ function setupIpcHandlers() {
     } else {
       mainWindow?.maximize();
     }
-  }); 
+  });
 
   ipcMain.on("window-close", () => {
     mainWindow?.close();
@@ -1034,7 +1060,9 @@ function setupIpcHandlers() {
   // 隐藏窗口（从外壳标题栏关闭按钮，等同后台运行）
   ipcMain.on("shell:window-hide", (event) => {
     try {
-      const windowId = windowManager!.getWindowIdByWebContentsId(event.sender.id);
+      const windowId = windowManager!.getWindowIdByWebContentsId(
+        event.sender.id,
+      );
       if (windowId) {
         windowManager!.hideWindow(windowId);
       }
@@ -1193,52 +1221,43 @@ function setupIpcHandlers() {
   );
 
   // 获取 Cookie
-  ipcMain.handle(
-    "browser:get-cookies",
-    async (event, filter) => {
-      try {
-        const sender = event.sender;
-        const cookies = await sender.session.cookies.get(filter || {});
-        log.info(`[BrowserCookie] 获取到 ${cookies.length} 个 cookie`);
-        return { success: true, cookies };
-      } catch (error: any) {
-        log.error("[BrowserCookie] 获取 cookie 失败:", error);
-        return { success: false, error: error.message || "获取 cookie 失败" };
-      }
-    },
-  );
+  ipcMain.handle("browser:get-cookies", async (event, filter) => {
+    try {
+      const sender = event.sender;
+      const cookies = await sender.session.cookies.get(filter || {});
+      log.info(`[BrowserCookie] 获取到 ${cookies.length} 个 cookie`);
+      return { success: true, cookies };
+    } catch (error: any) {
+      log.error("[BrowserCookie] 获取 cookie 失败:", error);
+      return { success: false, error: error.message || "获取 cookie 失败" };
+    }
+  });
 
   // 设置 Cookie
-  ipcMain.handle(
-    "browser:set-cookie",
-    async (event, cookie) => {
-      try {
-        const sender = event.sender;
-        await sender.session.cookies.set(cookie);
-        log.info(`[BrowserCookie] 设置 cookie: ${cookie.name}`);
-        return { success: true };
-      } catch (error: any) {
-        log.error("[BrowserCookie] 设置 cookie 失败:", error);
-        return { success: false, error: error.message || "设置 cookie 失败" };
-      }
-    },
-  );
+  ipcMain.handle("browser:set-cookie", async (event, cookie) => {
+    try {
+      const sender = event.sender;
+      await sender.session.cookies.set(cookie);
+      log.info(`[BrowserCookie] 设置 cookie: ${cookie.name}`);
+      return { success: true };
+    } catch (error: any) {
+      log.error("[BrowserCookie] 设置 cookie 失败:", error);
+      return { success: false, error: error.message || "设置 cookie 失败" };
+    }
+  });
 
   // 删除 Cookie
-  ipcMain.handle(
-    "browser:remove-cookie",
-    async (event, { url, name }) => {
-      try {
-        const sender = event.sender;
-        await sender.session.cookies.remove(url, name);
-        log.info(`[BrowserCookie] 删除 cookie: ${name}`);
-        return { success: true };
-      } catch (error: any) {
-        log.error("[BrowserCookie] 删除 cookie 失败:", error);
-        return { success: false, error: error.message || "删除 cookie 失败" };
-      }
-    },
-  );
+  ipcMain.handle("browser:remove-cookie", async (event, { url, name }) => {
+    try {
+      const sender = event.sender;
+      await sender.session.cookies.remove(url, name);
+      log.info(`[BrowserCookie] 删除 cookie: ${name}`);
+      return { success: true };
+    } catch (error: any) {
+      log.error("[BrowserCookie] 删除 cookie 失败:", error);
+      return { success: false, error: error.message || "删除 cookie 失败" };
+    }
+  });
 
   // ==================== 浏览器窗口后台/前台模式控制 ====================
 
@@ -1291,12 +1310,21 @@ function setupIpcHandlers() {
 
   // glob 转正则匹配 URL（* → .*，? → .）
   function matchUrl(pattern: string, url: string): boolean {
-    const re = "^" + pattern.replace(/[.+^${}()|[\]\\]/g, "\\$&").replace(/\*/g, ".*").replace(/\?/g, ".") + "$";
+    const re =
+      "^" +
+      pattern
+        .replace(/[.+^${}()|[\]\\]/g, "\\$&")
+        .replace(/\*/g, ".*")
+        .replace(/\?/g, ".") +
+      "$";
     return new RegExp(re).test(url);
   }
 
   // 解析 @match / @exclude 头
-  function parseUserscriptHeader(code: string): { include: string[]; exclude: string[] } {
+  function parseUserscriptHeader(code: string): {
+    include: string[];
+    exclude: string[];
+  } {
     const result = { include: ["**"] as string[], exclude: [] as string[] };
     const headerMatch = code.match(
       /\/\/ ==UserScript==\n([\s\S]*?)\/\/ ==\/UserScript==/,
@@ -1308,41 +1336,63 @@ function setupIpcHandlers() {
     const include: string[] = [];
     for (const [, key, pattern] of matches) {
       if (key === "exclude") result.exclude.push(pattern);
-      else { include.push(pattern); hasMatch = true; }
+      else {
+        include.push(pattern);
+        hasMatch = true;
+      }
     }
     if (hasMatch) result.include = include;
     return result;
   }
 
   // 获取用户脚本（preload 读取 .browser-work/scripts/*.js 用，带 URL 匹配过滤）
-  ipcMain.handle("browser:get-user-scripts", async (event, currentUrl: string) => {
-    try {
-      const senderId = (event.sender as any).id;
-      const windowId = windowManager!.getWindowIdByWebContentsId(senderId);
-      if (!windowId) { log.warn("[UserScripts] no windowId for sender " + senderId); return { success: true, scripts: [] }; }
-      const metadata = windowManager!.getWindowMetadata(windowId);
-      const sessionPath = metadata?.sessionPath as string | undefined;
-      if (!sessionPath) { log.warn("[UserScripts] no sessionPath for window " + windowId); return { success: true, scripts: [] }; }
-      const scriptsDir = path.join(sessionPath, ".browser-work", "scripts");
-      log.info("[UserScripts] scanning: " + scriptsDir + " for URL: " + currentUrl);
-      if (!fs.existsSync(scriptsDir)) { log.warn("[UserScripts] dir not found: " + scriptsDir); return { success: true, scripts: [] }; }
-      const files = (await fs.promises.readdir(scriptsDir)).filter(f => f.endsWith(".js"));
-      log.info("[UserScripts] found files: " + JSON.stringify(files));
-      const scripts = [];
-      for (const f of files) {
-        const code = await fs.promises.readFile(path.join(scriptsDir, f), "utf-8");
-        const { include, exclude } = parseUserscriptHeader(code);
-        const matchesUrl = exclude.some(p => matchUrl(p, currentUrl))
-          ? false
-          : include.some(p => matchUrl(p, currentUrl));
-        if (matchesUrl) scripts.push({ id: f, code, matchesUrl });
+  ipcMain.handle(
+    "browser:get-user-scripts",
+    async (event, currentUrl: string) => {
+      try {
+        const senderId = (event.sender as any).id;
+        const windowId = windowManager!.getWindowIdByWebContentsId(senderId);
+        if (!windowId) {
+          log.warn("[UserScripts] no windowId for sender " + senderId);
+          return { success: true, scripts: [] };
+        }
+        const metadata = windowManager!.getWindowMetadata(windowId);
+        const sessionPath = metadata?.sessionPath as string | undefined;
+        if (!sessionPath) {
+          log.warn("[UserScripts] no sessionPath for window " + windowId);
+          return { success: true, scripts: [] };
+        }
+        const scriptsDir = path.join(sessionPath, ".browser-work", "scripts");
+        log.info(
+          "[UserScripts] scanning: " + scriptsDir + " for URL: " + currentUrl,
+        );
+        if (!fs.existsSync(scriptsDir)) {
+          log.warn("[UserScripts] dir not found: " + scriptsDir);
+          return { success: true, scripts: [] };
+        }
+        const files = (await fs.promises.readdir(scriptsDir)).filter((f) =>
+          f.endsWith(".js"),
+        );
+        log.info("[UserScripts] found files: " + JSON.stringify(files));
+        const scripts = [];
+        for (const f of files) {
+          const code = await fs.promises.readFile(
+            path.join(scriptsDir, f),
+            "utf-8",
+          );
+          const { include, exclude } = parseUserscriptHeader(code);
+          const matchesUrl = exclude.some((p) => matchUrl(p, currentUrl))
+            ? false
+            : include.some((p) => matchUrl(p, currentUrl));
+          if (matchesUrl) scripts.push({ id: f, code, matchesUrl });
+        }
+        return { success: true, scripts };
+      } catch (error: any) {
+        log.error("获取用户脚本失败:", error.message);
+        return { success: true, scripts: [] };
       }
-      return { success: true, scripts };
-    } catch (error: any) {
-      log.error("获取用户脚本失败:", error.message);
-      return { success: true, scripts: [] };
-    }
-  });
+    },
+  );
 }
 
 app.whenReady().then(async () => {

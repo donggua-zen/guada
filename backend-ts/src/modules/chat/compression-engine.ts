@@ -11,6 +11,7 @@ import {
 } from "./interfaces";
 import { resolveThinkingEffort } from "../llm-core/utils/model-config.helper";
 import { EventBusService } from "../../common/events/event-bus.service";
+import { safeSubstring, safeTail } from "../../common/utils/string.utils";
 
 /**
  * 压缩配置常量
@@ -165,11 +166,6 @@ export class CompressionEngine implements ICompressionStrategy {
     if (prunedTokens > targetTokens) {
       this.logger.log("Pruning insufficient, triggering Stage 2: Compaction");
 
-      // 二级压缩前的回调（用于记忆保存等预处理）
-      if (onStage2) {
-        await onStage2();
-      }
-
       try {
         // 执行第二阶段：调用 LLM 生成摘要，将超出部分的历史对话浓缩为简洁概要
         const {
@@ -196,6 +192,10 @@ export class CompressionEngine implements ICompressionStrategy {
           );
           // 保持默认的 pruned_only 策略，不更新结果变量
         } else {
+          // 二级压缩前的回调（用于记忆保存等预处理）
+          if (onStage2) {
+            await onStage2();
+          }
           // 成功生成摘要，更新结果为摘要模式
           resultMessages = retained;
           resultSummary = summary;
@@ -323,7 +323,7 @@ export class CompressionEngine implements ICompressionStrategy {
           // 这样既减少了 Token 占用，又保留了工具结果的开头标识和结尾关键数据
           const headLength = Math.floor(PRUNING_TOOL_RESULT_MAX_LENGTH / 2);
           const tailLength = PRUNING_TOOL_RESULT_MAX_LENGTH - headLength;
-          const prunedContent = `${content.substring(0, headLength)}...[omitted ${content.length - PRUNING_TOOL_RESULT_MAX_LENGTH} characters]...${content.substring(content.length - tailLength)}`;
+          const prunedContent = `${safeSubstring(content, 0, headLength)}...[omitted ${content.length - PRUNING_TOOL_RESULT_MAX_LENGTH} characters]...${safeTail(content, tailLength)}`;
 
           // 记录裁剪元数据，用于后续恢复或调试；同时更新最后裁剪的 Content ID 游标
           // 游标选择逻辑：确保记录的是消息列表中位置最靠后的被裁剪项

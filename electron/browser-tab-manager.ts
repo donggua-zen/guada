@@ -203,7 +203,7 @@ export class BrowserWindowManager {
             this.notifyWindowUpdate(windowId);
           }
           // 每次页面加载完成后重新注入反检测脚本
-          this.injectAntiDetectionScript(webviewWC);
+          try { if (!webviewWC.isDestroyed()) this.injectAntiDetectionScript(webviewWC); } catch {}
         });
 
         // 监听加载失败
@@ -220,8 +220,19 @@ export class BrowserWindowManager {
           },
         );
 
+
+        // 监听 webview 崩溃（Electron 30+ 使用 render-process-gone 替代 crashed）
+        (webviewWC as any).on("render-process-gone", (_event: any, details: any) => {
+          log.error(
+            `Window ${windowId} webview render process gone, reason=${details?.reason}, exitCode=${details?.exitCode}`,
+          );
+        });
+
+        // 监听 webview 意外销毁（已销毁的 webContents 无法再触发事件，isDestroyed() 才是可靠检查）
+        log.info(`Window ${windowId} webview webContentsId: ${webviewWC.id}`);
+
         // 注入反检测脚本
-        this.injectAntiDetectionScript(webviewWC);
+        try { if (!webviewWC.isDestroyed()) this.injectAntiDetectionScript(webviewWC); } catch {}
 
         // 为 webview 设置右键菜单
         this.setupContextMenu(webviewWC, windowId);
@@ -563,6 +574,7 @@ export class BrowserWindowManager {
    * 注入反检测脚本，降低被封控识别的可能性
    */
   private injectAntiDetectionScript(webContents: WebContents): void {
+    if (webContents.isDestroyed()) return;
     const antiDetectionScript = `
       (function() {
         // 1. 移除 webdriver 标志

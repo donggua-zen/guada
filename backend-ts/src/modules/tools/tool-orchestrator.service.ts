@@ -185,6 +185,56 @@ export class ToolOrchestrator {
   }
 
   /**
+   * 按作用域构建受限的工具运行时
+   *
+   * "memory_only" 作用域：只暴露文件插件的工具，并在 injectParams 中注入 scope 标记，
+   * 文件工具内部根据 scope 决定是否进行路径限制。
+   */
+  async buildRuntimeByScope(
+    injectParams: PluginContext,
+    scope: string,
+  ): Promise<ToolRuntime> {
+    const allGroups = await this.pluginManager.getTools(injectParams);
+
+    // 只对已知 scope 做精确放行，未知 scope 返回空工具（防手误）
+    let allowedPluginIds: string[] | null = null;
+    if (scope === "memory_only") {
+      allowedPluginIds = ["file"];
+    } else {
+      // 未知 scope：不暴露任何工具
+      allowedPluginIds = [];
+    }
+
+    const scopeGroups = allowedPluginIds
+      ? allGroups.filter((g) => allowedPluginIds!.includes(g.pluginId))
+      : [];
+
+    // ... rest unchanged
+    const fileTools = scopeGroups.flatMap((g) => g.tools).map((t) => ({
+      name: t.name,
+      description: t.description,
+      parameters: t.parameters as any,
+      action: t.action,
+      icon: t.icon,
+      argsKey: t.argsKey,
+    }));
+
+    if (fileTools.length === 0) {
+      return new ToolRuntime(
+        { ...injectParams, scope },
+        new Map(),
+        new Map(),
+      );
+    }
+
+    return new ToolRuntime(
+      { ...injectParams, scope },
+      new Map(fileTools.map((t) => [t.name, t])),
+      new Map(),
+    );
+  }
+
+  /**
    * 标准化 toolsConfig：旧格式转对象 + 合并 MCP 配置
    */
   private normalizePluginConfig(
@@ -428,32 +478,40 @@ export class ToolOrchestrator {
 
             const paramList = Object.entries(params)
               .map(([key, value]: [string, any]) => {
-                const isRequired = required.includes(key)
-                  ? "（必填）"
-                  : "（可选）";
-                const defaultValue =
+                const isRequired = required.includes(key);
+                const type = value.type || "string";
+                const description = value.description || "";
+                const enumStr = value.enum
+                  ? ` enum="${value.enum.join("|")}"`
+                  : "";
+                const defaultStr =
                   value.default !== undefined
-                    ? ` 默认值: ${value.default}`
+                    ? ` default="${value.default}"`
                     : "";
-                return `  - ${key}: ${value.description || "无描述"} ${isRequired}${defaultValue}`;
+                return [
+                  `      <param name="${key}" required="${isRequired}" type="${type}"${defaultStr}${enumStr}>`,
+                  `        <description>${description}</description>`,
+                  `      </param>`,
+                ].join("\n");
               })
               .join("\n");
 
             return [
-              `### ${tool.name}`,
-              `**功能**: ${tool.description}`,
-              `**参数**:\n${paramList}`,
-              "",
+              `  <tool name="${tool.name}">`,
+              `    <description>${tool.description}</description>`,
+              `    <parameters>`,
+              paramList,
+              `    </parameters>`,
+              `  </tool>`,
             ].join("\n");
           })
           .join("\n");
 
         responseParts.push(
-          `# ${toolSet} 工具集详细说明`,
-          "",
-          `该工具集包含以下 ${tools.length} 个工具：`,
+          `<tool_set name="${toolSet}">`,
           "",
           toolDescriptions,
+          `</tool_set>`,
         );
       }
 
@@ -533,12 +591,12 @@ export class ToolOrchestrator {
       }
 
       // 判断工具所属插件是否为 file 插件（file 插件有自身的长度控制，豁免大结果处理）
-      const toolPluginId = allGroups.find(g =>
-        g.tools.some(t => t.name === fullToolName)
-      )?.pluginId;
+      // const toolPluginId = allGroups.find(g =>
+      //   g.tools.some(t => t.name === fullToolName)
+      // )?.pluginId;
 
       // 大结果处理：非 file 插件的结果过大时保存到文件
-      if (content && toolPluginId !== 'file') {
+      if (content && fullToolName !== 'read') {
         content = await this.handleLargeResult(content, fullToolName, toolCallId, context);
       }
       return { toolCallId, name: fullToolName, content, isError: false };

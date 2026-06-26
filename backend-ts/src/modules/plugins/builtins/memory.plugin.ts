@@ -149,7 +149,7 @@ export class MemoryPlugin extends PluginBase {
 
     api.registerPrompt({
       frequency: "VOLATILE",
-      description: "用户长期记忆内容",
+      description: "长期记忆内容",
       content: async (context: PluginContext) => {
         try {
           const sessionId = context?.sessionId;
@@ -190,6 +190,10 @@ export class MemoryPlugin extends PluginBase {
         }
       },
     });
+
+
+
+
   }
 
   private async rebuildIndexForSession(

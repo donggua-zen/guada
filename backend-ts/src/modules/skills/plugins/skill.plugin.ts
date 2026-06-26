@@ -57,7 +57,7 @@ export class SkillPlugin extends PluginBase {
           "When a user's request matches a skill's description, use the `read` tool to load the full",
           "SKILL.md file from its location to get complete instructions. Do not guess the skill's",
           "behavior — always read the file first.",
-          "",
+
           "<available_skills>",
           skillXml,
           "</available_skills>",
