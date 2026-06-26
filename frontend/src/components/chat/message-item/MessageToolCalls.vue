@@ -5,7 +5,10 @@
       <div
         class="flex items-center text-sm text-gray-700 dark:text-[#8b8d95] cursor-pointer font-medium py-1 transition-colors duration-200 min-w-0"
         @click.stop="openSingleToolDialog(toolIndex)">
-        <el-icon class="shrink-0" size="15">
+        <el-icon v-if="props.isExecuting" class="shrink-0 animate-spin" size="15">
+          <SpinnerIos20Filled />
+        </el-icon>
+        <el-icon v-else class="shrink-0" size="15">
           <component :is="getToolIconComponent(tool)" class="text-gray-500" />
         </el-icon>
         <div class="ml-2 truncate text-gray-400 dark:text-gray-500 ">
@@ -30,18 +33,21 @@
       </div>
       <div v-else-if="selectedTool" class="tool-call-detail">
         <div class="flex items-center gap-2 mb-3 pb-2 border-b border-gray-200 dark:border-gray-700">
-          <el-icon size="18" class="text-blue-500">
+          <el-icon v-if="props.isExecuting" size="18" class="text-blue-500 animate-spin">
+            <SpinnerIos20Filled />
+          </el-icon>
+          <el-icon v-else size="18" class="text-blue-500">
             <component :is="getToolIconComponent(selectedTool)" />
           </el-icon>
           <span class="text-base font-semibold text-gray-800 dark:text-gray-200">
-            {{ getDisplayText(selectedTool) }}
+            {{ getToolDisplayName(selectedTool) }}
           </span>
           <span class="text-xs text-gray-400 ml-auto">
             #{{ selectedToolIndex + 1 }}
           </span>
         </div>
 
-        <div v-if="selectedTool.arguments || selectedTool.args" class="mb-4">
+        <div v-if="getToolArgs(selectedTool)" class="mb-4">
           <div class="text-sm font-medium text-gray-600 dark:text-gray-400 mb-2 flex items-center">
             <el-icon size="14" class="mr-1">
               <SettingsOutlined />
@@ -49,12 +55,12 @@
             调用参数
           </div>
           <div class="bg-gray-50 dark:bg-gray-900 rounded-lg p-3">
-            <div v-if="isSimpleParams(selectedTool.arguments || selectedTool.args)" class="params-table">
+            <div v-if="isSimpleParams(getToolArgs(selectedTool))" class="params-table">
               <div class="param-header py-2 border-b border-gray-200 dark:border-gray-700">
                 <span class="param-key text-sm font-semibold text-gray-800 dark:text-gray-200">参数</span>
                 <span class="param-value text-sm font-semibold text-gray-800 dark:text-gray-200 ml-4">值</span>
               </div>
-              <div v-for="(value, key) in parseParams(selectedTool.arguments || selectedTool.args)" :key="key"
+              <div v-for="(value, key) in parseParams(getToolArgs(selectedTool))" :key="key"
                 class="param-row py-2 border-b border-gray-100 dark:border-gray-800 last:border-b-0">
                 <span class="param-key text-sm font-medium text-gray-700 dark:text-gray-300">{{ key }}</span>
                 <span class="param-value text-sm text-gray-600 dark:text-gray-400 ml-4">{{ formatParamValue(value)
@@ -62,7 +68,7 @@
               </div>
             </div>
             <pre v-else class="text-sm overflow-x-auto text-gray-700 dark:text-gray-300 whitespace-pre-wrap break-all">
-                <code>{{ formatToolArgs(selectedTool.arguments || selectedTool.args) }}</code>
+                <code>{{ formatToolArgs(getToolArgs(selectedTool)) }}</code>
               </pre>
           </div>
         </div>
@@ -95,10 +101,11 @@
 import { computed, ref, watch } from 'vue';
 import { ElIcon, ElDialog, ElButton } from 'element-plus';
 import { SettingsOutlined, CheckCircleOutlined } from '@vicons/material';
-import { Wrench24Filled } from '@vicons/fluent';
+import { Wrench24Filled, SpinnerIos20Filled } from '@vicons/fluent';
 // @ts-ignore - icons 组件尚未迁移到 TypeScript
 import { Loading } from '@/components/icons';
 import { getToolIconByNamespace } from '@/utils/toolIconMapper';
+import { parse as partialParse } from 'partial-json';
 import { apiService } from '@/services/ApiService';
 import { usePopup } from '@/composables/usePopup';
 
@@ -123,7 +130,7 @@ interface ToolCall {
 const props = defineProps<{
   toolCalls: ToolCall[];
   toolResponses?: any[];
-  isStreaming: boolean;
+  isExecuting: boolean;
   contentId?: string;  // 消息内容 ID，用于懒加载完整数据
 }>();
 
@@ -169,9 +176,11 @@ const currentToolResponses = computed(() => {
 
 /**
  * 判断是否需要懒加载（arguments 或 content 为空）
+ * 执行中的工具不尝试懒加载（数据尚未入库）
  */
 const needsLazyLoad = computed(() => {
   if (!props.contentId) return false;
+  if (props.isExecuting) return false;
   // 检查第一个工具调用是否有参数
   const firstTool = props.toolCalls?.[0];
   if (!firstTool) return false;
@@ -299,9 +308,42 @@ const closeDialog = () => {
   selectedToolIndex.value = null;
 };
 
+/**
+ * 获取工具显示名
+ * - tool_use 显示为 tool_use.<tool_name>
+ * - 其他工具显示原始 name
+ */
+const getToolDisplayName = (tool: ToolCall): string => {
+  if (tool.name === 'tool_use') {
+    try {
+      const parsed = typeof tool.arguments === 'string' ? partialParse(tool.arguments) : tool.arguments;
+      const innerName = parsed?.tool_name;
+      if (innerName) {
+        return `tool_use.${innerName}`;
+      }
+    } catch {}
+  }
+  return tool.name || 'Unknown Tool';
+};
+
+/**
+ * 获取工具的实际参数
+ * - tool_use 提取内层 arguments
+ * - 其他工具直接返回 arguments || args
+ */
+const getToolArgs = (tool: ToolCall): any => {
+  if (tool.name === 'tool_use') {
+    try {
+      const parsed = typeof tool.arguments === 'string' ? partialParse(tool.arguments) : tool.arguments;
+      if (parsed?.arguments) return parsed.arguments;
+    } catch {}
+  }
+  return tool.arguments ?? tool.args;
+};
+
 const isSimpleParams = (args: any): boolean => {
   try {
-    const parsed = typeof args === 'string' ? JSON.parse(args) : args;
+    const parsed = typeof args === 'string' ? partialParse(args) : args;
     // 如果是对象且层级不深,使用表格展示
     return typeof parsed === 'object' && parsed !== null && !Array.isArray(parsed) && Object.keys(parsed).length > 0;
   } catch (e) {
@@ -311,7 +353,7 @@ const isSimpleParams = (args: any): boolean => {
 
 const parseParams = (args: any): Record<string, any> => {
   try {
-    return typeof args === 'string' ? JSON.parse(args) : args;
+    return typeof args === 'string' ? partialParse(args) : args;
   } catch (e) {
     return {};
   }
@@ -329,7 +371,7 @@ const formatParamValue = (value: any): string => {
 const formatToolArgs = (args: any): string => {
   if (!args) return '{}';
   try {
-    const parsed = typeof args === 'string' ? JSON.parse(args) : args;
+    const parsed = typeof args === 'string' ? partialParse(args) : args;
     return JSON.stringify(parsed, null, 2);
   } catch (e) {
     return String(args);

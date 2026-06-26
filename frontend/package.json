@@ -29,6 +29,7 @@
     "marked": "^16.4.2",
     "marked-highlight": "^2.2.3",
     "nprogress": "^0.2.0",
+    "partial-json": "^0.1.7",
     "pinia": "^3.0.4",
     "simplebar-vue": "^2.4.2",
     "splitpanes": "^4.0.4",

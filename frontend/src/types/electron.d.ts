@@ -10,7 +10,9 @@ export interface ElectronAPI {
     version: string
     userDataPath: string
   }>
-  showNotification: (title: string, body: string) => Promise<void>
+  getBackendPort: () => Promise<number | null>
+  /** 同步查询后端就绪状态（阻塞，用于 Vue 挂载前确定初始值） */
+  getBackendStatusSync: () => { ready: boolean }
   minimizeWindow: () => void
   maximizeWindow: () => void
   closeWindow: () => void
@@ -49,6 +51,8 @@ export interface ElectronAPI {
   // 打开外部链接
   openExternal: (url: string) => Promise<{ success: boolean; error?: string }>
 
+  // 后端就绪等待：单次 IPC invoke，后端就绪后返回 { port, error }
+  waitBackendReady: () => Promise<{ port: number | null; error?: string | null }>
 }
 
 declare global {

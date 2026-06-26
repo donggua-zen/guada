@@ -441,7 +441,7 @@ export class PersistentSessionContext implements ISessionContext {
       "{time}",
       new Date().toISOString(),
     );
-    console.log(finalSystemPrompt);
+    // console.log(finalSystemPrompt);
     return [
       { role: "system" as const, content: finalSystemPrompt },
       ...nonSystemMessages,

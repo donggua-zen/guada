@@ -72,7 +72,8 @@
                   :metadata="item.source.metadata" @click="handleThinkingClick" />
                 <!-- tool -->
                 <MessageToolCalls v-if="item.type === 'tool'" :tool-calls="item.toolCalls || []"
-                  :tool-responses="item.toolResponses" :is-streaming="item.source.state?.isStreaming || false"
+                  :tool-responses="item.toolResponses"
+                  :is-executing="streamingState.isStreaming && !item.toolResponses?.length"
                   :content-id="item.source.id" />
               </template>
             </div>
