@@ -110,7 +110,7 @@ export class PluginApiImpl implements PluginApi {
   }): void {
     const entry = {
       name: def.name,
-      loadMode: def.loadMode || "lazy",
+      loadMode: def.loadMode || "eager",
       activator: def.activator,
       handler: def.handler,
     };

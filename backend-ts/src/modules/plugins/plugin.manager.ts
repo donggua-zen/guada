@@ -541,7 +541,7 @@ export class PluginManager {
       for (const ts of toolSets) {
         // 合并 toolSet 静态定义与运行时返回的动态属性
         const tsDefaults = {
-          loadMode: ts.loadMode || ("lazy" as ToolLoadMode),
+          loadMode: ts.loadMode || ("eager" as ToolLoadMode),
           activator: ts.activator,
         };
         let tsResolved = { ...tsDefaults };
@@ -560,8 +560,8 @@ export class PluginManager {
         if (tsResolved.loadMode === "eager") continue; // eager 的 ToolSet 不需要激活词
 
         const line = tsResolved.activator
-          ? `- ${ts.name}: ${tsResolved.activator}`
-          : `- ${ts.name}: ${instance.manifest.name} 工具集`;
+          ? `<tool_set name="${ts.name}">${tsResolved.activator}</tool_set>`
+          : `<tool_set name="${ts.name}">${instance.manifest.name} 工具集</tool_set>`;
         activators.push(line);
       }
     }

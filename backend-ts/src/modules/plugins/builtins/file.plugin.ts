@@ -46,7 +46,9 @@ export class FilePlugin extends PluginBase {
           .number()
           .int()
           .optional()
-          .describe("起始位置（行号或字符偏移），负数表示从末尾倒数（如 -10 最后 10 行），默认 0"),
+          .describe(
+            "起始位置（行号或字符偏移），负数表示从末尾倒数（如 -10 最后 10 行），默认 0",
+          ),
         limit: z
           .number()
           .int()
@@ -99,7 +101,8 @@ export class FilePlugin extends PluginBase {
 
         // 按行读取
         const lineLimit = limit ?? 200;
-        const effectiveOffset = offset < 0 ? Math.max(0, totalLines + offset) : offset;
+        const effectiveOffset =
+          offset < 0 ? Math.max(0, totalLines + offset) : offset;
         const startLine = Math.min(effectiveOffset, totalLines);
 
         // 计算起始行的原始字符位置
@@ -191,14 +194,12 @@ export class FilePlugin extends PluginBase {
             if (entry.isDirectory()) {
               const children = d > 1 ? await readDir(fullPath, d - 1) : [];
               items.push({
-                name: entry.name,
                 type: "directory",
                 path: relativePath,
                 children,
               });
             } else {
               items.push({
-                name: entry.name,
                 type: "file",
                 path: relativePath,
               });
@@ -292,7 +293,9 @@ export class FilePlugin extends PluginBase {
         // 替换后统一恢复原文件的行尾风格
         const hasCRLF = content.includes("\r\n");
         const normResult = normContent.replace(normOld, new_text);
-        const modified = hasCRLF ? normResult.replace(/\n/g, "\r\n") : normResult;
+        const modified = hasCRLF
+          ? normResult.replace(/\n/g, "\r\n")
+          : normResult;
 
         await fs.writeFile(resolvedPath, modified, {
           encoding: encoding as BufferEncoding,
@@ -328,10 +331,18 @@ export class FilePlugin extends PluginBase {
         const stats = await fs.stat(resolvedPath);
         if (stats.isFile()) {
           await fs.unlink(resolvedPath);
-          return { success: true, message: `文件已删除：${resolvedPath}`, path: resolvedPath };
+          return {
+            success: true,
+            message: `文件已删除：${resolvedPath}`,
+            path: resolvedPath,
+          };
         } else if (stats.isDirectory()) {
           await fs.rm(resolvedPath, { recursive: true, force: true });
-          return { success: true, message: `目录已删除：${resolvedPath}`, path: resolvedPath };
+          return {
+            success: true,
+            message: `目录已删除：${resolvedPath}`,
+            path: resolvedPath,
+          };
         }
         throw new Error(`${resolvedPath} 不是有效的文件或目录`);
       },
@@ -360,16 +371,22 @@ export class FilePlugin extends PluginBase {
           .number()
           .int()
           .min(1)
+          .max(50)
           .optional()
           .describe("最多返回的匹配行数，默认 50"),
       }),
       execute: async (args, ctx) => {
-        const { pattern, path: targetPath, context = 3, max_results = 50 } = args;
+        const {
+          pattern,
+          path: targetPath,
+          context = 3,
+          max_results = 50,
+        } = args;
         if (!pattern) throw new Error("pattern 不能为空");
 
         const basePath = targetPath
           ? this.resolvePath(targetPath, ctx)
-          : (ctx?.workspacePath || process.cwd());
+          : ctx?.workspacePath || process.cwd();
         const stat = await fs.stat(basePath);
 
         const files: string[] = [];
@@ -397,21 +414,34 @@ export class FilePlugin extends PluginBase {
             const lines = content.split("\n");
             const matchRows: any[] = [];
 
-            for (let i = 0; i < lines.length && matchRows.length < max_results; i++) {
+            for (
+              let i = 0;
+              i < lines.length && matchRows.length < max_results;
+              i++
+            ) {
               regex.lastIndex = 0;
-              if (regex.test(lines[i])) {
-                const start = Math.max(0, i - context);
-                const end = Math.min(lines.length, i + context + 1);
+              const m = regex.exec(lines[i]);
+              if (m) {
+                const matchIdx = m.index;
+                const matchLen = m[0].length;
+                const ctxLen = 50;
+                const cStart = Math.max(0, matchIdx - ctxLen);
+                const cEnd = Math.min(
+                  lines[i].length,
+                  matchIdx + matchLen + ctxLen,
+                );
                 matchRows.push({
                   line: i + 1,
-                  before: lines.slice(start, i).map(l => l.substring(0, 500)),
-                  content: lines[i].substring(0, 500),
-                  after: lines.slice(i + 1, end).map(l => l.substring(0, 500)),
+                  content: lines[i].substring(cStart, cEnd),
                 });
               }
             }
             if (matchRows.length > 0) {
-              fileResults.push({ file: fp, matched_lines: matchRows.length, matches: matchRows });
+              fileResults.push({
+                file: fp,
+                matched_lines: matchRows.length,
+                matches: matchRows,
+              });
               total += matchRows.length;
             }
           } catch {
@@ -419,7 +449,12 @@ export class FilePlugin extends PluginBase {
           }
         }
 
-        return { pattern, total_matches: total, matched_files: fileResults.length, files: fileResults };
+        return {
+          pattern,
+          total_matches: total,
+          matched_files: fileResults.length,
+          files: fileResults,
+        };
       },
       display: { action: "搜索", argsKey: "pattern", icon: "search" },
     });
@@ -441,26 +476,6 @@ export class FilePlugin extends PluginBase {
         ].join("\n");
       },
     });
-
-    api.registerPrompt({
-      frequency: "STATIC",
-      description: "文件操作工具使用说明",
-      content: [
-        "# 文件操作工具使用说明",
-        "",
-        "**重要提醒**：",
-        "1. 文件读写类操作优先使用文件工具集而不是命令行",
-        "2. 对于超大文件，请使用分页读取功能，避免一次性加载过多内容",
-        "",
-        "本插件提供以下操作：",
-        "- read：读取文件内容（支持分页）",
-        "- list：列出目录内容（支持递归）",
-        "- write：写入文件（自动创建目录）",
-        "- edit：查找替换文本",
-        "- delete：删除文件/目录",
-        "- grep：正则搜索文件内容",
-      ].join("\n"),
-    });
   }
 
   private resolvePath(filePath: string, context?: PluginContext): string {
@@ -474,12 +489,36 @@ export class FilePlugin extends PluginBase {
     const resolved = this.resolvePath(filePath, context);
     const extra = context?.workspacePath ? [context.workspacePath] : [];
     this.workspaceService.validateWritePath(resolved, extra);
+
+    // memory_only 作用域：只允许操作 memory/ 和 memos/ 目录
+    if (context?.scope === "memory_only") {
+      const allowedPrefixes =
+        context.sessionType === "sub_agent"
+          ? [
+              `.guada/subagents/${context.sessionId}/memory/`,
+              `.guada/subagents/${context.sessionId}/memos/`,
+            ]
+          : [`.guada/memory/`, `.guada/memos/`];
+
+      const normalizedPath = resolved.replace(/\\/g, "/");
+      const isAllowed = allowedPrefixes.some((prefix) =>
+        normalizedPath.includes(prefix),
+      );
+      if (!isAllowed) {
+        throw new Error(
+          `memory_only 模式下只允许操作 memory/ 和 memos/ 目录`,
+        );
+      }
+    }
   }
 
   /**
    * 递归收集目录下所有文件的路径（跳过 node_modules、.git）
    */
-  private async collectFiles(dirPath: string, results: string[]): Promise<void> {
+  private async collectFiles(
+    dirPath: string,
+    results: string[],
+  ): Promise<void> {
     const entries = await fs.readdir(dirPath, { withFileTypes: true });
     for (const entry of entries) {
       if (entry.name === "node_modules" || entry.name === ".git") continue;

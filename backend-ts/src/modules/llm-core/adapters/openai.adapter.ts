@@ -1,5 +1,7 @@
 import { Logger } from "@nestjs/common";
 import { OpenAI, APIError } from "openai";
+import * as path from "path";
+import * as fs from "fs";
 import { IProtocolAdapter } from "./base.adapter";
 import { ProviderConfig, ConnectionTestResult, RemoteModel } from "../types/provider.types";
 import {
@@ -9,6 +11,7 @@ import {
   ToolCallItem,
 } from "../types/llm.types";
 import { ToolDefinition } from "../../tools/interfaces/tool-provider.interface";
+import { removeOrphanSurrogates } from "../../../common/utils/string.utils";
 
 /**
  * 扩展 OpenAI 客户端，重写 makeStatusError 以保留完整 HTTP 响应体。
@@ -195,7 +198,13 @@ export class OpenAIAdapter implements IProtocolAdapter {
 
   private formatMessages(messages: MessageRecord[]) {
     return messages.map((msg) => {
-      const filtered: any = { role: msg.role, content: msg.content || "" };
+      const rawContent = msg.content || "";
+      const filtered: any = {
+        role: msg.role,
+        content: typeof rawContent === "string"
+          ? removeOrphanSurrogates(rawContent)
+          : rawContent,
+      };
       if (msg.reasoningContent !== undefined)
         filtered.reasoning_content = msg.reasoningContent;
       if (msg.toolCallId !== undefined) filtered.tool_call_id = msg.toolCallId;

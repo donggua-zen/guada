@@ -194,7 +194,7 @@ export class AgentEngine {
       needToContinue = false;
 
       // 从会话上下文中获取准备发送给 LLM 的完整消息列表（含 system prompt、摘要和历史）
-      const historyMessages = await sessionContext.getMessages();
+      let historyMessages = await sessionContext.getMessages();
 
       // 消息已加载，此时检查是否需要进入保存/压缩状态
       if (await sessionContext.shouldCompress()) {
@@ -210,10 +210,10 @@ export class AgentEngine {
             console.log("memory save shadow turn done");
           }
         };
-        await sessionContext.compress(onStage2);
+        historyMessages = await sessionContext.compress(onStage2);
         // 必须继续循环，确保压缩完成后再继续
-        needToContinue = true;
-        continue;
+        // needToContinue = true;
+        // continue;
       }
 
       // 生成本轮助手回复的内容 ID，用于唯一标识该轮次的输出
@@ -531,7 +531,8 @@ export class AgentEngine {
         // 在持久化前，将最终的文案注入到 toolCalls 的 metadata 中
         needToContinue = true;
       }
-
+      console.log(parts);
+      
       // 将本轮产生的所有消息（助手回复 + 工具响应）追加到会话上下文并持久化存储
       await sessionContext.appendParts(parts);
 
@@ -972,23 +973,13 @@ export class AgentEngine {
     // console.log("memoryGuide", memoryGuide);
     if (!memoryGuide) return;
 
-    // 构建专属运行时：仅含受限的文件工具，不依赖原会话的 toolContext
-    const allGroups = await this.pluginManager.getTools(sessionContext);
-    const allFileTools =
-      allGroups.find((g) => g.pluginId === "file")?.tools || [];
-    const fileTools = allFileTools.map((t) => ({
-      name: t.name,
-      description: t.description,
-      parameters: t.parameters as any,
-    }));
-    // console.log("fileTools", fileTools);
-    if (fileTools.length === 0) return;
-
-    const shadowRuntime = new ToolRuntime(
+    // 构建专属运行时：仅含受限的文件工具
+    const shadowRuntime = await this.toolOrchestrator.buildRuntimeByScope(
       sessionContext,
-      new Map(fileTools.map((t) => [t.name, t])),
-      new Map(),
+      "memory_only",
     );
+    const fileTools = Array.from(shadowRuntime.eagerTools.values());
+    if (fileTools.length === 0) return;
 
     // 组装指令消息（history 中不含系统提示词，此处自行注入）
     const instructionParts: string[] = [
@@ -1030,6 +1021,7 @@ export class AgentEngine {
 
     // 与主循环共用 executeLLMStream，保证参数一致
     const MAX_ROUNDS = 5;
+
     for (let round = 1; round <= MAX_ROUNDS; round++) {
       try {
         const streamResult = this.executeLLMStream(
@@ -1068,41 +1060,8 @@ export class AgentEngine {
             continue;
           }
 
-          // 路径校验：影子轮次只允许操作记忆相关目录
+          // 路径校验由文件工具通过 injectParams.scope 自行处理
           const targetPath = args.path || args.file_path || "";
-          const workspacePath = sessionContext.workspacePath;
-          const allowedPrefixes =
-            sessionContext.sessionType === "sub_agent"
-              ? [
-                  `.guada/subagents/${sessionContext.sessionId}/memory/`,
-                  `.guada/subagents/${sessionContext.sessionId}/memos/`,
-                ]
-              : [`.guada/memory/`, `.guada/memos/`];
-
-          const normalizeForComparison = (p: string): string => {
-            let normalized = path.normalize(p).replace(/\\/g, "/");
-            if (!path.isAbsolute(normalized)) {
-              normalized = path.join(workspacePath, normalized);
-            }
-            return normalized;
-          };
-
-          const normalizedTarget = normalizeForComparison(targetPath);
-          const isAllowed =
-            normalizedTarget &&
-            allowedPrefixes.some((prefix) => {
-              const normalizedPrefix = normalizeForComparison(prefix);
-              return normalizedTarget.startsWith(normalizedPrefix);
-            });
-          if (!isAllowed) {
-            errors.push({
-              id: tc.id,
-              name: tc.name,
-              content: `ERROR: 不允许操作 ${targetPath}，记忆操作仅限于 memory/ 和 memos/ 目录`,
-            });
-            continue;
-          }
-
           batch.push({ id: tc.id, name: tc.name, arguments: args });
         }
 

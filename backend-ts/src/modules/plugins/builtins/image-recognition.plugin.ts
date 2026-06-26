@@ -39,9 +39,10 @@ export class ImageRecognitionPlugin extends PluginBase {
 
   async onLoad(api: PluginApi) {
     api.registerToolSet({
+      loadMode: "lazy",
       name: "image_recognition",
       activator:
-        "当用户提供图片ID或图片路径时，使用此工具识别图片内容并返回详细描述。",
+        "当需要识别用户提供图片ID或图片路径时，使用此工具集识别图片内容并返回详细描述。",
     });
 
     api.registerTool({
@@ -98,9 +99,30 @@ export class ImageRecognitionPlugin extends PluginBase {
     abortSignal?: AbortSignal,
   ): Promise<string> {
     try {
-      const modelConfig = await this.settingsStorage.getSettings(SK_MOD_VISUAL);
-      const model = modelConfig?.model?.trim() || "gpt-4o";
-      const thinkingEffort = resolveThinkingEffort(model);
+      // 1. 从 settings 读取视觉模型 ID
+      const visualModelId = await this.settingsStorage.getSettingValue(
+        "models",
+        SK_MOD_VISUAL,
+      );
+      if (!visualModelId) {
+        throw new Error(
+          "请在系统设置中配置视觉辅助模型 (defaultVisualAssistantModelId)",
+        );
+      }
+
+      // 2. 从数据库查询模型完整配置（含 provider）
+      const visualModelConfig = await this.prisma.model.findUnique({
+        where: { id: visualModelId },
+        include: { provider: true },
+      });
+      if (!visualModelConfig) {
+        throw new Error(
+          `配置的视觉辅助模型 (ID: ${visualModelId}) 不存在，请检查系统设置`,
+        );
+      }
+
+      const model = visualModelConfig.modelName;
+      const thinkingEffort = resolveThinkingEffort(visualModelConfig, "off");
 
       // 读取图片并转为 base64
       const imageBuffer = fs.readFileSync(physicalPath);
@@ -138,6 +160,7 @@ export class ImageRecognitionPlugin extends PluginBase {
         model,
         messages,
         stream: true,
+        providerConfig: visualModelConfig.provider,
         thinkingEffort,
         abortSignal,
       })) as AsyncGenerator<any, void, unknown>;
