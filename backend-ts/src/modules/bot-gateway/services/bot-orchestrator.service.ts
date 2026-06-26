@@ -344,7 +344,7 @@ export class BotOrchestrator {
     let lastUpdateTime = Date.now();
     const UPDATE_INTERVAL = 500; // 每 500ms 更新一次，避免频繁请求
     // sendStreamReply 在调用处已验证存在（capabilities.supportsStreaming && adapter.sendStreamReply）
-    const sendReply = adapter.sendStreamReply!;
+    const sendReply = adapter.sendStreamReply!.bind(adapter);
 
     try {
       for await (const chunk of iterator) {
