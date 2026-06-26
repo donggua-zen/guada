@@ -12,10 +12,18 @@ import './tailwind.css'
 import './style.css'
 import 'nprogress/nprogress.css'
 
-// 配置 NProgress
-// 检测是否为 Electron 环境
-const isElectron = typeof window !== 'undefined' && window.electronAPI !== undefined
+import { apiService } from '@/services/ApiService'
+import { initGlobalErrorHandler } from '@/utils/globalErrorHandler'
+import { useLayoutStore } from './stores/layout'
+import { backendReady, backendError, isElectron } from '@/composables/useBackendStatus'
 
+// Electron 环境下：同步查询后端状态，在 Vue 挂载前确定初始值（防刷新闪烁）
+if (isElectron && window.electronAPI?.getBackendStatusSync) {
+  const status = window.electronAPI.getBackendStatusSync()
+  backendReady.value = status.ready
+}
+
+// 配置 NProgress
 NProgress.configure({
     easing: 'ease-in-out',
     speed: 1000,
@@ -26,15 +34,6 @@ NProgress.configure({
     // 在 Electron 环境下完全禁用进度条
     disabled: isElectron
 })
-
-import { apiService } from '@/services/ApiService'
-import { initGlobalErrorHandler } from '@/utils/globalErrorHandler'
-import { useLayoutStore } from './stores/layout'
-
-// 在 Electron 环境下初始化后端地址
-if (isElectron) {
-  await apiService.initBackendUrl().catch(err => console.error('Failed to init backend URL:', err))
-}
 
 const routes = [
     {
@@ -206,6 +205,30 @@ app.use(router)
 
 // 初始化全局错误处理器（在 router 挂载后）
 initGlobalErrorHandler(router)
+
+// Electron 环境下：单次 IPC invoke 等待后端就绪
+if (isElectron && window.electronAPI?.waitBackendReady) {
+  // 超时保护：60 秒后显示错误
+  const timeoutId = setTimeout(() => {
+    if (!backendReady.value) {
+      backendError.value = '后端启动超时，请检查后端进程或重启应用';
+    }
+  }, 60000);
+
+  window.electronAPI.waitBackendReady().then((data) => {
+    clearTimeout(timeoutId);
+    if (backendError.value) return; // 已显示超时错误，不再覆盖
+    if (data.port) {
+      console.log(`🔗 后端已就绪，端口: ${data.port}`);
+      apiService.initBackendUrl().then(() => {
+        backendReady.value = true;
+      });
+    } else {
+      console.error('❌ 后端启动失败:', data.error);
+      backendError.value = data.error || '后端启动失败';
+    }
+  });
+}
 
 app.mount('#app')
 

@@ -3,27 +3,24 @@
     <div v-if="showThemeTransition" class="theme-transition-overlay"
         :class="{ 'theme-transition-active': isTransitioning }" :style="{ backgroundColor: transitionColor }"></div>
 
-    <!-- 自定义标题栏（仅在 Electron 环境显示） -->
+    <!-- 主内容区域 -->
     <div class="flex flex-col h-full">
         <div class="wallpaper-blur-layer"></div>
+        <!-- CustomTitlebar 始终可见 -->
         <CustomTitlebar @open-guide="openGuide" />
-        <SetupGuide ref="guideRef" />
-        <RouterView></RouterView>
+        <!-- 后端等待遮罩（fixed 全屏，top:32px 让出标题栏） -->
+        <BackendWaitingOverlay v-if="!backendReady" :error="backendError" />
+        <template v-else>
+            <SetupGuide ref="guideRef" />
+            <RouterView></RouterView>
+        </template>
     </div>
-    <!-- Mock 控制面板（仅开发环境） -->
-    <!-- <MockControlPanel v-if="isDev" /> -->
 
-<!-- 全局右键菜单 (Electron 剪贴板操作) -->
-<ContextMenu
-    :visible="globalMenuVisible"
-    :x="globalMenuX"
-    :y="globalMenuY"
-    :items="globalMenuItems.map(item => ({
+    <!-- 全局右键菜单 (Electron 剪贴板操作) -->
+    <ContextMenu :visible="globalMenuVisible" :x="globalMenuX" :y="globalMenuY" :items="globalMenuItems.map(item => ({
         label: item.label,
-        onClick: item.action || (() => {}),
-    }))"
-    @close="globalMenuVisible = false"
-/>
+        onClick: item.action || (() => { }),
+    }))" @close="globalMenuVisible = false" />
 
 </template>
 
@@ -35,7 +32,9 @@ import { useTheme } from './composables/useTheme'
 import MockControlPanel from './components/dev/MockControlPanel.vue'
 import CustomTitlebar from './components/CustomTitlebar.vue'
 import SetupGuide from './components/SetupGuide.vue'
+import BackendWaitingOverlay from './components/BackendWaitingOverlay.vue'
 import ContextMenuManager from './utils/ContextMenuManager'
+import { backendReady, backendError } from '@/composables/useBackendStatus'
 
 const router = useRouter()
 const title = useTitle()

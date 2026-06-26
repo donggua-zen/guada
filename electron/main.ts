@@ -27,6 +27,7 @@ let isBackendStarting = false; // 防止重复启动
 let backendPort: number | null = null; // 记录后端端口
 let browserBridgeInitialized = false; // Browser Bridge 是否已初始化
 let tray: Tray | null = null; // 系统托盘图标
+let isBackendReady = false; // 后端真正就绪标志（仅 startBackend resolve 后为 true）
 
 // 检查更新函数（定义在全局作用域，供 IPC 和自动检查共用）
 async function doCheckForUpdates() {
@@ -552,7 +553,7 @@ async function startBackend(): Promise<void> {
     // 设置超时
     setTimeout(() => {
       reject(new Error("Backend startup timeout"));
-    }, 30000);
+    }, 60000);
   });
 }
 
@@ -736,6 +737,19 @@ function setupIpcHandlers() {
       userDataPath: app.getPath("userData"),
       backendPort: backendPort,
     };
+  });
+
+  // wait-backend-ready：单次 IPC 调用，后端就绪后返回，无需双向通信
+  ipcMain.handle("wait-backend-ready", async () => {
+    if (!isBackendReady) {
+      await backendReadyPromise;
+    }
+    return { port: backendPort, error: null };
+  });
+
+  // 同步查询后端就绪状态（用于刷新场景，在 Vue 挂载前阻塞式确定初始值）
+  ipcMain.on("get-backend-status-sync", (event) => {
+    event.returnValue = { ready: isBackendReady };
   });
 
   ipcMain.handle("show-notification", (_, { title, body }) => {
@@ -1395,23 +1409,37 @@ function setupIpcHandlers() {
   );
 }
 
+// 后端启动 Promise（供 IPC 和 Browser Bridge 等待）
+let backendReadyPromise: Promise<void> | null = null;
+
 app.whenReady().then(async () => {
   try {
     log.info("Application starting...");
     setupIpcHandlers();
 
-    // 启动后端服务
-    log.info("Starting backend service...");
-    await startBackend();
-    log.info("Backend service started successfully");
-
-    // 创建窗口
+    // 立即创建窗口，不用等后端启动
     createWindow();
 
     // 创建系统托盘图标
     createTray();
 
-    // 窗口创建后，初始化 Browser Bridge（此时 windowManager 和 backendProcess 都可用）
+    // 启动后端服务（不阻塞窗口）
+    log.info("Starting backend service in background...");
+
+    // backendReadyPromise 在 startBackend 完成后 resolve（无论成功失败），供 IPC 和 Browser Bridge 使用
+    backendReadyPromise = startBackend()
+      .then(() => {
+        log.info("Backend service started successfully");
+        isBackendReady = true;
+      })
+      .catch((error) => {
+        log.error("Backend service failed to start:", error);
+        isBackendReady = true; // 让 UI 正常显示，错误由前端自行处理
+      });
+
+    // 窗口创建后，初始化 Browser Bridge（等后端就绪后再初始化）
+    await backendReadyPromise;
+
     const bridgeMode =
       process.env.BROWSER_BRIDGE_MODE || (isDev ? "tcp" : "ipc");
 

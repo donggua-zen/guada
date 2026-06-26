@@ -13,6 +13,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // IPC 通信方法
   getAppInfo: () => ipcRenderer.invoke('get-app-info'),
   getBackendPort: () => ipcRenderer.invoke('get-backend-port'),
+  getBackendStatusSync: () => ipcRenderer.sendSync('get-backend-status-sync'),
   showNotification: (title: string, body: string) => 
     ipcRenderer.invoke('show-notification', { title, body }),
   
@@ -64,6 +65,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   // 打开外部链接（使用系统默认浏览器）
   openExternal: (url: string) => ipcRenderer.invoke('open-external', url),
+
+  // 后端就绪等待：单次 IPC invoke，后端就绪后 resolve
+  waitBackendReady: () => ipcRenderer.invoke('wait-backend-ready'),
 
   // 窗口管理（新 API - 浏览器自动化窗口）
   createBrowserWindow: (url?: string, metadata?: Record<string, any>) => 
