@@ -40,19 +40,21 @@ export class SkillPlugin extends PluginBase {
         if (skills.length === 0) return "";
 
         const skillXml = skills
-          .map(s => [
-            "    <skill>",
-            `      <name>${s.manifest.name}</name>`,
-            `      <description>${s.manifest.description}</description>`,
-            `      <location>${s.basePath}/SKILL.md</location>`,
-            "    </skill>",
-          ].join("\n"))
+          .map(s => {
+            return [
+              `    <skill name="${s.manifest.name}">`,
+              `      <description>${s.manifest.description}</description>`,
+              `      <location>${s.basePath}/SKILL.md</location>`,
+              "    </skill>",
+            ].join("\n");
+          })
           .join("\n");
 
         return [
           "",
           "## Skills",
           "",
+          `Your skills base directory is \`${this.skillsDir}\`.`,
           "You have access to the following skills. Each skill has a name, description, and location.",
           "When a user's request matches a skill's description, use the `read` tool to load the full",
           "SKILL.md file from its location to get complete instructions. Do not guess the skill's",

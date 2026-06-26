@@ -80,7 +80,7 @@ export class SkillsController {
     // 直接读取原始 SKILL.md 文件内容
     const fs = await import('fs/promises');
     const path = await import('path');
-    const skillMdPath = path.join(skill.basePath, 'SKILL.md');
+    const skillMdPath = path.join(skill.baseDir, skill.basePath, 'SKILL.md');
     const rawContent = await fs.readFile(skillMdPath, 'utf-8');
 
     return { content: rawContent };
@@ -421,7 +421,7 @@ export class SkillsController {
       }
 
       // 检查是否是 Git 仓库
-      const gitDir = path.join(skill.basePath, '.git');
+      const gitDir = path.join(skill.baseDir, skill.basePath, '.git');
       try {
         await fs.access(gitDir);
       } catch {
@@ -432,7 +432,7 @@ export class SkillsController {
 
       // 执行 git pull
       await execAsync('git pull', { 
-        cwd: skill.basePath,
+        cwd: path.join(skill.baseDir, skill.basePath),
         timeout: 30000 
       });
 
@@ -532,7 +532,7 @@ export class SkillsController {
       }
 
       // 删除技能目录
-      await fs.rm(skill.basePath, { recursive: true, force: true });
+      await fs.rm(path.join(skill.baseDir, skill.basePath), { recursive: true, force: true });
 
       // 触发扫描以更新注册表
       await this.orchestrator.triggerScan();

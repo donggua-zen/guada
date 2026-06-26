@@ -75,13 +75,14 @@ export class SkillWatcherService implements OnModuleDestroy {
 
   private skillIdFromPath(
     filePath: string,
-  ): { id: string; basePath: string } | null {
+  ): { id: string; baseDir: string; basePath: string } | null {
     const dir = path.dirname(filePath);
     const dirName = path.basename(dir);
     if (dirName.startsWith(".")) return null;
     return {
       id: dirName.toLowerCase(),
-      basePath: dir,
+      baseDir: this.skillsDir,
+      basePath: path.relative(this.skillsDir, dir),
     };
   }
 
@@ -110,8 +111,9 @@ export class SkillWatcherService implements OnModuleDestroy {
     this.debounced("add:" + info.id, async () => {
       this.logger.log("New skill detected: " + info.id);
       try {
+        const absDir = path.join(info.baseDir, info.basePath);
         const skillDef = await this.loader.loadManifest(
-          info.basePath,
+          absDir,
           "global",
         );
         this.registry.register(skillDef);

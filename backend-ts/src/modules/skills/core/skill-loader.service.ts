@@ -19,10 +19,11 @@ export class SkillLoaderService {
 
   /**
    * 从目录加载 Skill 元数据（L1）
-   * @param skillDir 技能目录路径
+   * @param skillDir 技能目录路径（绝对路径）
    * @param source 技能来源，默认为 global
+   * @param baseDir 技能根目录（skillsDir），为空时与 skillDir 相同
    */
-  async loadManifest(skillDir: string, source: SkillSourceType = 'global'): Promise<SkillDefinition> {
+  async loadManifest(skillDir: string, source: SkillSourceType = 'global', baseDir?: string): Promise<SkillDefinition> {
     const skillMdPath = path.join(skillDir, 'SKILL.md');
 
     // 读取并解析 YAML frontmatter
@@ -37,9 +38,13 @@ export class SkillLoaderService {
 
     const stat = await fs.stat(skillMdPath);
 
+    const bd = baseDir || skillDir;
+    const relPath = path.relative(bd, skillDir);
+
     return {
       id: manifest.name.toLowerCase(),
-      basePath: skillDir,
+      baseDir: bd,
+      basePath: relPath,
       manifest,
       contentHash,
       source,
@@ -51,7 +56,7 @@ export class SkillLoaderService {
    * 加载 L2 指令（SKILL.md 正文）
    */
   async loadInstructions(skill: SkillDefinition): Promise<string> {
-    const skillMdPath = path.join(skill.basePath, 'SKILL.md');
+    const skillMdPath = path.join(skill.baseDir, skill.basePath, 'SKILL.md');
     const content = await fs.readFile(skillMdPath, 'utf-8');
     const { body } = this.parseFrontmatter(content);
 
@@ -63,7 +68,7 @@ export class SkillLoaderService {
    * 重新加载 Manifest（用于热更新）
    */
   async reloadManifest(skill: SkillDefinition): Promise<SkillDefinition> {
-    const skillMdPath = path.join(skill.basePath, 'SKILL.md');
+    const skillMdPath = path.join(skill.baseDir, skill.basePath, 'SKILL.md');
     const content = await fs.readFile(skillMdPath, 'utf-8');
     const { manifest, body } = this.parseFrontmatter(content);
 
