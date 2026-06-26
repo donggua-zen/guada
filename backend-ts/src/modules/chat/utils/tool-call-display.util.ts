@@ -22,7 +22,7 @@ export class ToolCallDisplayUtil {
       try {
         const parsed = partialParse(args);
         if (parsed && typeof parsed === "object") {
-          if (toolName === "tool_call") {
+          if (toolName === "tool_use") {
             if (parsed.tool_name) actualToolName = parsed.tool_name;
             if (parsed.arguments && typeof parsed.arguments === "object") extractedParams = parsed.arguments;
           } else {

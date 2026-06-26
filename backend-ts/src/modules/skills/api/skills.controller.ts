@@ -90,9 +90,14 @@ export class SkillsController {
    * 触发手动扫描
    */
   @Post('scan')
-  async triggerScan(): Promise<SkillDiscoveryResult> {
+  async triggerScan(): Promise<{ success: boolean; message: string }> {
     this.logger.log('Manual scan triggered');
-    return this.orchestrator.triggerScan();
+    try {
+      await this.orchestrator.triggerScan();
+      return { success: true, message: 'Scan completed' };
+    } catch (error: any) {
+      return { success: false, message: error.message };
+    }
   }
 
   /**

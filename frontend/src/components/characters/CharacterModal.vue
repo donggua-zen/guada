@@ -1,6 +1,6 @@
 <template>
     <el-dialog v-model="visible" :close-on-click-modal="false" width="900px"
-        :style="{ minHeight: '80vh', maxHeight: '95vh', maxWidth: '90vw' }" class="character-setting-dialog" destroy-on-close>
+        :style="{ minHeight: '80vh', maxHeight: '95vh', maxWidth: '90vw' }" class="character-setting-dialog" destroy-on-close append-to-body>
         <template #header>
             <div class="dialog-header">
                 <span class="dialog-title">{{ currentCharacter?.id ? '编辑角色' : '新建角色' }}</span>

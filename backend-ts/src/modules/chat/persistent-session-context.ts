@@ -631,31 +631,6 @@ export class PersistentSessionContext implements ISessionContext {
         if (p.content) allParts.push(p.content);
       }
       // console.log(promptPieces);
-      // 懒加载 ToolSet 的激活词
-      const activators =
-        await this.pluginManager.getToolActivators(injectParams);
-      if (activators.length > 0) {
-        // console.log(activators);
-        allParts.push(
-          [
-            "# 可用懒加载工具集",
-            "你可以使用以下懒加载工具集。当用户请求或任务与工具集的能力相匹配时，您应该主动使用`tool_load`加载对应工具集：",
-            "",
-            "<tool_sets>",
-            ...activators,
-            "</tool_sets>",
-            "",
-            "---",
-          ].join("\n"),
-        );
-        allParts.push(
-          `## 使用原则
-      
-1. **避免重复**：已了解用法的工具无需重复加载
-2. **仅描述不加载**：如用户仅询问能力或功能介绍，无需加载工具说明
-3. **执行调用**：加载后根据说明使用 \`tool_call\` 执行具体操作`,
-        );
-      }
 
       toolPrompts = allParts.join("\n\n");
     }
@@ -706,7 +681,7 @@ export class PersistentSessionContext implements ISessionContext {
       sessionSettings.mcpServers ?? leaderSettings.mcpServers;
     // 合并 MCP 配置到 tools（MCP 本质是 tools 的一种）
     if (mergedMcpServers) {
-      if (typeof mergedTools === 'object' && !Array.isArray(mergedTools)) {
+      if (typeof mergedTools === "object" && !Array.isArray(mergedTools)) {
         mergedTools = { ...mergedTools, mcp: mergedMcpServers };
       } else if (mergedTools === true) {
         mergedTools = { mcp: mergedMcpServers };
@@ -823,7 +798,14 @@ export class PersistentSessionContext implements ISessionContext {
       ? order.filter((k) => !exclude.includes(k))
       : order;
     return filtered
-      .map((k) => this.systemPromptParts[k])
+      .map((k) => {
+        const content = this.systemPromptParts[k];
+        if (!content) return "";
+        if (k === "summary") {
+          return `# 历史对话摘要\n<summary>\n${content}\n</conversation>`;
+        }
+        return content;
+      })
       .filter(Boolean)
       .join("\n\n");
   }
@@ -870,6 +852,10 @@ export class PersistentSessionContext implements ISessionContext {
     if (!this.tokenTracker) {
       this.tokenTracker = new SessionTokenTracker(this._workspacePath);
     }
-    await this.tokenTracker.addUsage(promptTokens, completionTokens, cachedTokens);
+    await this.tokenTracker.addUsage(
+      promptTokens,
+      completionTokens,
+      cachedTokens,
+    );
   }
 }

@@ -82,9 +82,7 @@ export class PluginApiImpl implements PluginApi {
     name: string;
     loadMode: ToolLoadMode;
     activator?: string;
-    handler?: (
-      ctx: PluginContext,
-    ) => ToolSetRuntime | Promise<ToolSetRuntime>;
+    handler?: (ctx: PluginContext) => ToolSetRuntime | Promise<ToolSetRuntime>;
   }> = [];
   private _toolDefs: ToolHandlerDef[] = [];
   private _promptMetas: Array<{
@@ -104,9 +102,7 @@ export class PluginApiImpl implements PluginApi {
     name: string;
     loadMode?: ToolLoadMode;
     activator?: string;
-    handler?: (
-      ctx: PluginContext,
-    ) => ToolSetRuntime | Promise<ToolSetRuntime>;
+    handler?: (ctx: PluginContext) => ToolSetRuntime | Promise<ToolSetRuntime>;
   }): void {
     const entry = {
       name: def.name,
@@ -126,7 +122,10 @@ export class PluginApiImpl implements PluginApi {
       const rawJson = z.toJSONSchema(zodSchema) as any;
 
       // 提取 required、properties（兼容不同输出格式）
-      const root = rawJson.type === "object" ? rawJson : rawJson.$defs?.[Object.keys(rawJson.$defs || {})[0]] || rawJson;
+      const root =
+        rawJson.type === "object"
+          ? rawJson
+          : rawJson.$defs?.[Object.keys(rawJson.$defs || {})[0]] || rawJson;
       const required: string[] = root.required || [];
       const properties: Record<string, any> = {};
       const rawProps = root.properties || {};
@@ -141,7 +140,9 @@ export class PluginApiImpl implements PluginApi {
         properties[key] = clean;
       }
 
-      const argsKey = def.display?.argsKey ?? Object.keys(properties).find(k => properties[k]?.type === "string");
+      const argsKey =
+        def.display?.argsKey ??
+        Object.keys(properties).find((k) => properties[k]?.type === "string");
 
       const entry: ToolHandlerDef = {
         name: def.name,
@@ -276,9 +277,7 @@ export class PluginApiImpl implements PluginApi {
     // 注册 prompts
     if (reg) {
       for (const pm of this._promptMetas) {
-        if (
-          !reg.prompts.find((x: any) => x.description === pm.description)
-        ) {
+        if (!reg.prompts.find((x: any) => x.description === pm.description)) {
           reg.prompts.push(pm);
         }
       }

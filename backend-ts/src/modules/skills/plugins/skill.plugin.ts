@@ -26,33 +26,32 @@ export class SkillPlugin extends PluginBase {
     // 动态技能列表提示词（每次收集时从 orchestrator 读取当前技能）
     api.registerPrompt({
       toolSet: "skill",
-      frequency: "VOLATILE",
+      frequency: "REGULAR",
       description: "可用技能列表及使用指南",
       content: (context: PluginContext) => {
-        const allSkills = this.orchestrator.listSkills(true);
-        if (allSkills.length === 0) return "";
+        const allSkills = this.orchestrator.listSkills(true, context?.workspacePath);
 
         // 按角色级偏好过滤（角色未配置的项继承全局，即保留）
         const charSkillCfg = context?.skillConfig;
         const skills = charSkillCfg
-          ? allSkills.filter(s => charSkillCfg[s.id] !== false)
+          ? allSkills.filter((s) => charSkillCfg[s.id] !== false)
           : allSkills;
         if (skills.length === 0) return "";
 
         const skillXml = skills
-          .map(s => {
+          .map((s) => {
             return [
-              `    <skill name="${s.manifest.name}">`,
-              `      <description>${s.manifest.description}</description>`,
-              `      <location>${s.basePath}/SKILL.md</location>`,
-              "    </skill>",
+              ` <skill name="${s.manifest.name}">`,
+              `   <description>${s.manifest.description}</description>`,
+              `   <location>${s.basePath}/SKILL.md</location>`,
+              ` </skill>`,
             ].join("\n");
           })
           .join("\n");
 
         return [
           "",
-          "## Skills",
+          "# Skills",
           "",
           `Your skills base directory is \`${this.skillsDir}\`.`,
           "You have access to the following skills. Each skill has a name, description, and location.",
