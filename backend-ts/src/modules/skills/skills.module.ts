@@ -1,7 +1,7 @@
 import { Module, OnModuleInit } from '@nestjs/common';
 import { SkillOrchestrator } from './core/skill-orchestrator.service';
 import { SkillRegistry } from './core/skill-registry.service';
-import { SkillDiscoveryService } from './core/skill-discovery.service';
+import { SkillSourceManager } from './core/skill-source.manager';
 import { SkillLoaderService } from './core/skill-loader.service';
 import { SkillVersionManager } from './core/skill-version-manager.service';
 import { SkillWatcherService } from './core/skill-watcher.service';
@@ -15,7 +15,7 @@ import { SkillPlugin } from './plugins/skill.plugin';
   imports: [ToolsModule],
   controllers: [SkillsController],
   providers: [
-    SkillOrchestrator, SkillRegistry, SkillDiscoveryService,
+    SkillOrchestrator, SkillRegistry, SkillSourceManager,
     SkillLoaderService, SkillVersionManager, SkillWatcherService,
     SkillBundledService, SkillPlugin,
   ],
@@ -25,6 +25,7 @@ export class SkillsModule implements OnModuleInit {
   constructor(
     private orchestrator: SkillOrchestrator,
     private watcher: SkillWatcherService,
+    private sourceManager: SkillSourceManager,
     private bundledService: SkillBundledService,
     private pluginManager: PluginManager,
     private skillPlugin: SkillPlugin,
@@ -34,10 +35,9 @@ export class SkillsModule implements OnModuleInit {
     await this.pluginManager.registerPlugin(this.skillPlugin);
     await this.bundledService.syncBundledSkills();
 
-    // 先执行全量扫描初始化技能注册表
+    await this.watcher.start(['.system/*/SKILL.md', 'skills/*/SKILL.md']);
+    // 注册 system + global 来源，扫描技能
+    await this.sourceManager.start();
     await this.orchestrator.onModuleInit();
-
-    // 启动文件监听，后续变更自动同步
-    await this.watcher.start();
   }
 }

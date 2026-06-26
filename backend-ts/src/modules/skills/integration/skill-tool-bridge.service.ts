@@ -27,7 +27,6 @@ export class SkillToolBridgeService implements IToolProvider {
     enabled?: boolean | string[],
     context?: Record<string, any>,
   ): Promise<any[]> {
-    // 返回 Skills 系统管理工具（ToolOrchestrator 会自动添加 skill__ 前缀）
     return [
       {
         name: "skill_scan",
@@ -39,16 +38,6 @@ export class SkillToolBridgeService implements IToolProvider {
           required: [],
         },
       },
-      // TODO: 暂时屏蔽 list 工具，技能列表已注入提示词
-      // {
-      //   name: 'list',
-      //   description: 'List all currently loaded skills with their names and descriptions.',
-      //   parameters: {
-      //     type: 'object',
-      //     properties: {},
-      //     required: [],
-      //   },
-      // },
       {
         name: "skill_reload",
         description:
@@ -86,15 +75,13 @@ export class SkillToolBridgeService implements IToolProvider {
     request: ToolCallRequest,
     context?: Record<string, any>,
   ): Promise<string> {
-    // request.name 已经是去掉命名空间前缀后的名称（如 scan, list, reload）
     this.logger.debug(`Executing skill tool: ${request.name}`);
 
-    // 直接根据工具名称执行
     switch (request.name) {
       case "skill_scan":
         try {
-          const result = await this.orchestrator.triggerScan();
-          return `Scan completed successfully. Found ${result.added.length} new skills, ${result.updated.length} updated, ${result.removed.length} removed.`;
+          await this.orchestrator.triggerScan();
+          return "Scan completed successfully.";
         } catch (error) {
           const errorMessage =
             error instanceof Error ? error.message : String(error);
@@ -123,7 +110,6 @@ export class SkillToolBridgeService implements IToolProvider {
         }
 
         try {
-          // 统一转换为小写进行匹配
           const normalizedSkillId = skillId.toLowerCase();
           const updatedSkill =
             await this.orchestrator.reloadSkill(normalizedSkillId);
@@ -141,14 +127,12 @@ export class SkillToolBridgeService implements IToolProvider {
         }
 
         try {
-          // 统一转换为小写进行匹配
           const normalizedSkillName = skillName.toLowerCase();
           const skill = this.orchestrator.getSkillDetail(normalizedSkillName);
           if (!skill) {
             return `Skill '${skillName}' not found.`;
           }
 
-          // 获取 SKILL.md 内容
           const content =
             await this.orchestrator.getSkillDocumentation(normalizedSkillName);
 
@@ -173,7 +157,6 @@ export class SkillToolBridgeService implements IToolProvider {
   }
 
   async getPrompt(context?: Record<string, any>): Promise<string> {
-    // 返回 Skills 元数据和工具使用说明
     const skills = this.orchestrator.listSkills();
 
     if (skills.length === 0) {

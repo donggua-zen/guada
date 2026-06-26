@@ -1,12 +1,12 @@
 import { ToolDefinition, ProviderContext } from "./interfaces/tool-provider.interface";
-import { PluginConfig } from "../plugins/types/plugin.types";
+import { ToolHandlerDef, PluginConfig } from "../plugins/types/plugin.types";
 
 /**
  * 懒加载工具集信息
  */
 export interface LazyToolSet {
-  /** 该工具集下的所有工具定义 */
-  tools: ToolDefinition[];
+  /** 该工具集下的所有工具定义（含 handler） */
+  tools: ToolHandlerDef[];
   /** 所属插件 ID */
   pluginId: string;
 }
@@ -15,12 +15,13 @@ export interface LazyToolSet {
  * 工具执行上下文
  *
  * 封装工具调用所需的所有配置和参数，由调用方创建并传递给 ToolOrchestrator。
+ * 直接存储 ToolHandlerDef，避免执行时重新查找 handler。
  */
 export class ToolRuntime {
   constructor(
     readonly injectParams: ProviderContext,
-    /** 普通工具（eager）：工具名 → 定义 */
-    readonly eagerTools: Map<string, ToolDefinition>,
+    /** 普通工具（eager）：工具名 → 完整 handler */
+    readonly eagerTools: Map<string, ToolHandlerDef>,
     /** 懒加载工具集：工具集名 → { 工具列表, 所属插件 } */
     readonly lazyToolSets: Map<string, LazyToolSet>,
     /** 角色插件配置（用于提示词收集时的二次过滤） */
@@ -39,17 +40,26 @@ export class ToolRuntime {
   }
 
   /**
-   * 返回扁平化的工具列表
+   * 返回扁平化的工具定义列表（供 LLM 使用，不含 handler）
    * @param includeLazy 是否包含懒加载工具集的工具（默认 false）
    */
   getFlatTools(includeLazy = false): ToolDefinition[] {
+    const toDef = (t: ToolHandlerDef): ToolDefinition => ({
+      name: t.name,
+      description: t.description,
+      parameters: t.parameters as any,
+      action: t.action,
+      icon: t.icon,
+      argsKey: t.argsKey,
+    });
+
     const result: ToolDefinition[] = [];
     for (const tool of this.eagerTools.values()) {
-      result.push(tool);
+      result.push(toDef(tool));
     }
     if (includeLazy) {
       for (const ls of this.lazyToolSets.values()) {
-        result.push(...ls.tools);
+        result.push(...ls.tools.map(toDef));
       }
     }
     return result;

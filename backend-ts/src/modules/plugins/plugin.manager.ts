@@ -68,9 +68,7 @@ export class PluginManager {
   private readonly logger = new Logger(PluginManager.name);
   private instances = new Map<string, PluginInstance>();
 
-  constructor(
-    private readonly settingsStorage: SettingsStorage,
-  ) {}
+  constructor(private readonly settingsStorage: SettingsStorage) {}
 
   // ── 生命周期 ──
 
@@ -79,10 +77,7 @@ export class PluginManager {
    * @param plugin 插件实例
    * @param enabled 是否启用
    */
-  async registerPlugin(
-    plugin: PluginBase,
-    enabled?: boolean,
-  ): Promise<void> {
+  async registerPlugin(plugin: PluginBase, enabled?: boolean): Promise<void> {
     const id = plugin.manifest.id;
     if (this.instances.has(id)) {
       this.logger.warn(`Plugin ${id} already registered, skipping`);
@@ -100,10 +95,10 @@ export class PluginManager {
         if (pluginVal === true || pluginVal === false) {
           finalEnabled = pluginVal;
         } else {
-          finalEnabled = (plugin.manifest.category === "core");
+          finalEnabled = plugin.manifest.category === "core";
         }
       } catch {
-        finalEnabled = (plugin.manifest.category === "core");
+        finalEnabled = plugin.manifest.category === "core";
       }
     }
 
@@ -215,7 +210,6 @@ export class PluginManager {
         typeof p.content === "function" ? p.content : async () => p.content,
     }));
 
-
     const instance: PluginInstance = {
       plugin: {
         manifest,
@@ -304,16 +298,22 @@ export class PluginManager {
 
     // 持久化
     try {
-      await this.settingsStorage.updateSettings(SG_PLUGINS, { [pluginId]: enabled });
+      await this.settingsStorage.updateSettings(SG_PLUGINS, {
+        [pluginId]: enabled,
+      });
     } catch (err) {
-      this.logger.error(`Failed to persist plugin state for ${pluginId}: ${err}`);
+      this.logger.error(
+        `Failed to persist plugin state for ${pluginId}: ${err}`,
+      );
     }
 
     if (enabled && !instance.enabled) {
       // 启用：调用 onStart
       if (instance.plugin.onStart) {
         await instance.plugin.onStart().catch((err) => {
-          this.logger.error(`Plugin ${pluginId} onStart failed: ${err.message}`);
+          this.logger.error(
+            `Plugin ${pluginId} onStart failed: ${err.message}`,
+          );
         });
       }
       instance.enabled = true;
@@ -333,8 +333,11 @@ export class PluginManager {
   // ── 工具聚合 ──
 
   /** 检查插件是否已启用（注册时已评估 @Condition） */
-    /** 检查角色级配置是否允许此插件 */
-  private isRolePluginEnabled(pluginId: string, roleCfg?: PluginConfig): boolean {
+  /** 检查角色级配置是否允许此插件 */
+  private isRolePluginEnabled(
+    pluginId: string,
+    roleCfg?: PluginConfig,
+  ): boolean {
     if (!roleCfg) return true;
     // PluginConfig 本身可为 true/false（旧角色配置兼容）
     if ((roleCfg as any) === true) return true;
@@ -382,8 +385,27 @@ export class PluginManager {
    * 获取所有启用插件中已解析运行时的 ToolSet 信息
    * 外部（如 ToolOrchestrator）可据此按 toolSet 分类工具
    */
-  async getPluginToolSets(context: PluginContext, roleCfg?: PluginConfig): Promise<Array<{ pluginId: string; toolSets: Array<{ name: string; loadMode: ToolLoadMode; activator?: string }> }>> {
-    const result: Array<{ pluginId: string; toolSets: Array<{ name: string; loadMode: ToolLoadMode; activator?: string }> }> = [];
+  async getPluginToolSets(
+    context: PluginContext,
+    roleCfg?: PluginConfig,
+  ): Promise<
+    Array<{
+      pluginId: string;
+      toolSets: Array<{
+        name: string;
+        loadMode: ToolLoadMode;
+        activator?: string;
+      }>;
+    }>
+  > {
+    const result: Array<{
+      pluginId: string;
+      toolSets: Array<{
+        name: string;
+        loadMode: ToolLoadMode;
+        activator?: string;
+      }>;
+    }> = [];
     for (const [id, instance] of this.instances) {
       if (!this.isPluginAvailable(id)) continue;
       if (!this.isRolePluginEnabled(id, context.tools)) continue;
@@ -391,17 +413,33 @@ export class PluginManager {
       const toolSets = PluginRegistry.getToolSets(id);
       if (toolSets.length === 0) continue;
 
-      const resolved: Array<{ name: string; loadMode: ToolLoadMode; activator?: string }> = [];
+      const resolved: Array<{
+        name: string;
+        loadMode: ToolLoadMode;
+        activator?: string;
+      }> = [];
       for (const ts of toolSets) {
-        const def = { loadMode: ts.loadMode || ("lazy" as ToolLoadMode), activator: ts.activator };
+        const def = {
+          loadMode: ts.loadMode || ("lazy" as ToolLoadMode),
+          activator: ts.activator,
+        };
         let resolved_ts = { ...def };
         try {
           if (ts.handler) {
             const runtime = await ts.handler(context);
-            if (runtime) resolved_ts = { ...resolved_ts, loadMode: runtime.loadMode ?? resolved_ts.loadMode, activator: runtime.activator ?? resolved_ts.activator };
+            if (runtime)
+              resolved_ts = {
+                ...resolved_ts,
+                loadMode: runtime.loadMode ?? resolved_ts.loadMode,
+                activator: runtime.activator ?? resolved_ts.activator,
+              };
           }
         } catch {}
-        resolved.push({ name: ts.name, loadMode: resolved_ts.loadMode, activator: resolved_ts.activator });
+        resolved.push({
+          name: ts.name,
+          loadMode: resolved_ts.loadMode,
+          activator: resolved_ts.activator,
+        });
       }
       result.push({ pluginId: id, toolSets: resolved });
     }
@@ -525,12 +563,11 @@ export class PluginManager {
   }
 
   /**
-   * 获取所有懒加载 ToolSet 的激活词列表（注入 system prompt 供 AI 判断何时 tool_load）
-   * 按 ToolSet 维度输出，一个 ToolSet 一行。格式：
-   * - pluginId/toolSetId: 激活说明
+   * 获取所有懒加载 ToolSet 的激活词原始数据（已过滤+运行时解析），供插件格式化。
+   * 返回格式：[{ name: "todo", activator: "..." }, ...]
    */
-  async getToolActivators(context: PluginContext): Promise<string[]> {
-    const activators: string[] = [];
+  async getToolActivators(context: PluginContext): Promise<Array<{ name: string; activator: string }>> {
+    const activators: Array<{ name: string; activator: string }> = [];
 
     for (const [id, instance] of this.instances) {
       if (!this.isPluginAvailable(id)) continue;
@@ -539,7 +576,6 @@ export class PluginManager {
       const toolSets = PluginRegistry.getToolSets(id);
 
       for (const ts of toolSets) {
-        // 合并 toolSet 静态定义与运行时返回的动态属性
         const tsDefaults = {
           loadMode: ts.loadMode || ("eager" as ToolLoadMode),
           activator: ts.activator,
@@ -557,14 +593,15 @@ export class PluginManager {
           }
         } catch {}
 
-        if (tsResolved.loadMode === "eager") continue; // eager 的 ToolSet 不需要激活词
+        if (tsResolved.loadMode !== "lazy") continue;
 
-        const line = tsResolved.activator
-          ? `<tool_set name="${ts.name}">${tsResolved.activator}</tool_set>`
-          : `<tool_set name="${ts.name}">${instance.manifest.name} 工具集</tool_set>`;
-        activators.push(line);
+        activators.push({
+          name: ts.name,
+          activator: tsResolved.activator || `${instance.manifest.name} 工具集`,
+        });
       }
     }
+
     return activators;
   }
 

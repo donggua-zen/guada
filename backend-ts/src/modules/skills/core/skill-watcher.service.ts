@@ -1,71 +1,63 @@
 import { Injectable, Logger, OnModuleDestroy } from "@nestjs/common";
-import { ConfigService } from "@nestjs/config";
-import * as path from "path";
 import * as chokidar from "chokidar";
-import { SkillDiscoveryService } from "./skill-discovery.service";
-import { SkillLoaderService } from "./skill-loader.service";
-import { SkillRegistry } from "./skill-registry.service";
+
+/** 文件变更事件回调 */
+export interface FileEventHandlers {
+  onAdd: (absDir: string) => Promise<void>;
+  onRemove: (id: string) => void;
+}
 
 @Injectable()
 export class SkillWatcherService implements OnModuleDestroy {
   private readonly logger = new Logger(SkillWatcherService.name);
-  private readonly skillsDir: string;
-  private readonly systemSkillsDir: string;
   private watcher: chokidar.FSWatcher | null = null;
+  private handlers = new Map<string, FileEventHandlers>();
   private debounceTimers = new Map<string, NodeJS.Timeout>();
 
-  constructor(
-    private configService: ConfigService,
-    private discoveryService: SkillDiscoveryService,
-    private loader: SkillLoaderService,
-    private registry: SkillRegistry,
-  ) {
-    this.skillsDir =
-      this.configService.get<string>("SKILLS_DIR") ||
-      path.join(process.cwd(), "skills");
-    this.systemSkillsDir = path.join(this.skillsDir, ".system");
-  }
-
-  start(): void {
+  start(initialPatterns: string[]): void {
     if (this.watcher) {
       this.logger.warn("Watcher already started, ignoring");
       return;
     }
 
-    const targets = new Set<string>();
-    targets.add(this.skillsDir + "/*/SKILL.md");
-    targets.add(this.systemSkillsDir + "/*/SKILL.md");
-
-    const patterns = Array.from(targets);
-    this.logger.log(
-      "Starting skills file watcher on patterns: " + patterns.join(", "),
-    );
-
-    this.watcher = chokidar.watch(patterns, {
+    this.logger.log("Starting skills file watcher...");
+    this.watcher = chokidar.watch(initialPatterns, {
       ignoreInitial: true,
       ignorePermissionErrors: true,
       persistent: true,
     });
 
     this.watcher
-      .on("add", (filePath: string) => this.handleAdd(filePath))
-      .on("change", (filePath: string) => this.handleChange(filePath))
-      .on("unlink", (filePath: string) => this.handleUnlink(filePath))
-      .on("error", (err: unknown) =>
-        this.logger.error("Watcher error: " + String(err)),
-      );
+      .on("add", (fp) => this.dispatch("add", fp))
+      .on("change", (fp) => this.dispatch("change", fp))
+      .on("unlink", (fp) => this.dispatch("unlink", fp))
+      .on("error", (err) => this.logger.error("Watcher error: " + String(err)));
+  }
+
+  /** 添加监控模式，绑定该模式的事件处理器 */
+  addWatch(pattern: string, h: FileEventHandlers): void {
+    if (!this.watcher) return;
+    this.watcher.add(pattern);
+    this.handlers.set(pattern, h);
+    this.logger.log(`Watcher added: ${pattern}`);
+  }
+
+  /** 移除监控模式 */
+  removeWatch(pattern: string): void {
+    if (!this.watcher) return;
+    this.watcher.unwatch(pattern);
+    this.handlers.delete(pattern);
+    this.logger.log(`Watcher removed: ${pattern}`);
   }
 
   async stop(): Promise<void> {
-    for (const timer of this.debounceTimers.values()) {
-      clearTimeout(timer);
-    }
+    for (const t of this.debounceTimers.values()) clearTimeout(t);
     this.debounceTimers.clear();
-
+    this.handlers.clear();
     if (this.watcher) {
       await this.watcher.close();
       this.watcher = null;
-      this.logger.log("Skills file watcher stopped");
+      this.logger.log("Skill watcher stopped");
     }
   }
 
@@ -73,17 +65,33 @@ export class SkillWatcherService implements OnModuleDestroy {
     await this.stop();
   }
 
-  private skillIdFromPath(
-    filePath: string,
-  ): { id: string; baseDir: string; basePath: string } | null {
-    const dir = path.dirname(filePath);
-    const dirName = path.basename(dir);
-    if (dirName.startsWith(".")) return null;
-    return {
-      id: dirName.toLowerCase(),
-      baseDir: this.skillsDir,
-      basePath: path.relative(this.skillsDir, dir),
-    };
+  // ── 内部 ──
+
+  private dispatch(event: string, filePath: string): void {
+    // 按 pattern 前缀匹配最长的（防止嵌套目录误匹配）
+    let matched: { key: string; h: FileEventHandlers } | null = null;
+    let maxLen = -1;
+    for (const [key, h] of this.handlers) {
+      const base = key.replace(/\*.*$/, ""); // "skills/*/SKILL.md" → "skills/"
+      if (filePath.startsWith(base) && base.length > maxLen) {
+        maxLen = base.length;
+        matched = { key, h };
+      }
+    }
+    if (!matched) return;
+
+    if (event === "unlink") {
+      const dirName = filePath.split(/[/\\]/g).slice(-2, -1)[0];
+      if (!dirName || dirName.startsWith(".")) return;
+      matched.h.onRemove(dirName.toLowerCase());
+    } else {
+      const dir = filePath.substring(0, filePath.lastIndexOf("/") !== -1
+        ? filePath.lastIndexOf("/")
+        : filePath.lastIndexOf("\\"));
+      const dirName = dir.split(/[/\\]/g).pop();
+      if (!dirName || dirName.startsWith(".")) return;
+      this.debounced("file:" + dirName, () => matched!.h.onAdd(dir));
+    }
   }
 
   private debounced(key: string, fn: () => Promise<void>, ms = 300): void {
@@ -93,70 +101,10 @@ export class SkillWatcherService implements OnModuleDestroy {
       key,
       setTimeout(async () => {
         this.debounceTimers.delete(key);
-        try {
-          await fn();
-        } catch (error: any) {
-          this.logger.error(
-            "Watcher handler error for " + key + ": " + error.message,
-          );
+        try { await fn(); } catch (e: any) {
+          this.logger.error(`Watcher handler error: ${e.message}`);
         }
       }, ms),
     );
-  }
-
-  private async handleAdd(filePath: string): Promise<void> {
-    const info = this.skillIdFromPath(filePath);
-    if (!info) return;
-
-    this.debounced("add:" + info.id, async () => {
-      this.logger.log("New skill detected: " + info.id);
-      try {
-        const absDir = path.join(info.baseDir, info.basePath);
-        const skillDef = await this.loader.loadManifest(
-          absDir,
-          "global",
-        );
-        this.registry.register(skillDef);
-        this.logger.log("Skill registered: " + skillDef.manifest.name);
-      } catch (error: any) {
-        this.logger.warn(
-          "Failed to load new skill " + info.id + ": " + error.message,
-        );
-      }
-    });
-  }
-
-  private async handleChange(filePath: string): Promise<void> {
-    const info = this.skillIdFromPath(filePath);
-    if (!info) return;
-
-    this.debounced("change:" + info.id, async () => {
-      const existing = this.registry.get(info.id);
-      if (!existing) {
-        this.logger.log("Unknown skill changed, treating as new: " + info.id);
-        return this.handleAdd(filePath);
-      }
-
-      this.logger.log("Skill changed: " + info.id);
-      try {
-        const updatedDef = await this.loader.reloadManifest(existing);
-        this.registry.update(updatedDef);
-        this.logger.log("Skill updated: " + updatedDef.manifest.name);
-      } catch (error: any) {
-        this.logger.warn(
-          "Failed to reload skill " + info.id + ": " + error.message,
-        );
-      }
-    });
-  }
-
-  private async handleUnlink(filePath: string): Promise<void> {
-    const info = this.skillIdFromPath(filePath);
-    if (!info) return;
-
-    this.debounced("unlink:" + info.id, async () => {
-      this.logger.log("Skill removed: " + info.id);
-      this.registry.unregister(info.id);
-    });
   }
 }
