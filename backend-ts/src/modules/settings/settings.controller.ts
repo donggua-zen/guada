@@ -83,7 +83,7 @@ export class SettingsController {
   @Public()
   @Get("settings/plugins/global")
   async getGlobalTools() {
-    const allTools = await this.toolOrchestrator.getLocalToolsList();
+    const allTools = await this.pluginManager.getHotPluggablePlugins();
 
     return {
       tools: allTools,

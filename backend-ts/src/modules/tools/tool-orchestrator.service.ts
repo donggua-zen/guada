@@ -125,6 +125,17 @@ export class ToolOrchestrator {
       }
     }
 
+    // 有懒加载工具集时才注入 universal_tools（tool_learn / tool_use）
+    if (lazyToolSets.size > 0) {
+      const universalTools = this.pluginManager.getPluginTools("universal_tools");
+      for (const tool of universalTools) {
+        if (!toolNames.has(tool.name)) {
+          toolNames.add(tool.name);
+          eagerTools.set(tool.name, tool);
+        }
+      }
+    }
+
     return new ToolRuntime(
       injectParams,
       eagerTools,
@@ -182,7 +193,7 @@ export class ToolOrchestrator {
       merged = {};
       for (const id of toolsConfig) merged[id] = true;
     } else {
-      merged = { ...toolsConfig };
+      merged = { ...(toolsConfig || {}) };
     }
 
     if (
@@ -206,6 +217,10 @@ export class ToolOrchestrator {
     effective: "global" | "role";
     tools: ToolHandlerDef[];
   } {
+    if (plugin.category === "system") {
+      return { enabled: true, effective: "global", tools };
+    }
+
     const resolve = (
       val: boolean | string[] | undefined,
       effective: "global" | "role",
@@ -236,7 +251,7 @@ export class ToolOrchestrator {
 
     if (plugin.id in global) return resolve(global[plugin.id], "global");
 
-    return { enabled: defaultEnabled, effective: "global", tools: tools };
+    return { enabled: defaultEnabled, effective: "global", tools };
   }
 
   async executeBatch(
@@ -349,35 +364,6 @@ export class ToolOrchestrator {
         isError: true,
       };
     }
-  }
-
-  // ── 工具列表（前端 UI 用） ──
-
-  async getLocalToolsList(roleCfg?: PluginConfig): Promise<any[]> {
-    const toolsList: any[] = [];
-
-    for (const instance of await this.resolveAvailableTools(roleCfg)) {
-      const { enabled, effective, plugin, enabledTools, allTools } = instance;
-
-      toolsList.push({
-        pluginId: plugin.id,
-        effective,
-        name: plugin.id,
-        displayName: plugin.name,
-        description: plugin.description,
-        category: plugin.category,
-        enabled,
-        isMcp: plugin.id === "mcp",
-        isSkill: plugin.id === "skill",
-        tools: allTools.map((t) => ({
-          enabled: enabledTools.some((e) => e.name === t.name),
-          name: t.name,
-          description: t.description,
-          parameters: t.parameters as any,
-        })),
-      });
-    }
-    return toolsList;
   }
 
   // ── 大结果处理 ──

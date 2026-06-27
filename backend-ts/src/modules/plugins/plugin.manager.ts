@@ -88,6 +88,9 @@ export class PluginManager {
     let finalEnabled: boolean;
     if (enabled !== undefined) {
       finalEnabled = enabled;
+    } else if (plugin.manifest.category === "system") {
+      // 基础设施插件始终启用，不受配置影响
+      finalEnabled = true;
     } else {
       try {
         const globalCfg = await this.settingsStorage.getSettings(SG_PLUGINS);
@@ -340,11 +343,12 @@ export class PluginManager {
   ): boolean {
     if (!roleCfg) return true;
     // PluginConfig 本身可为 true/false（旧角色配置兼容）
-    if ((roleCfg as any) === true) return true;
-    if ((roleCfg as any) === false) return false;
-    const val = roleCfg[pluginId];
-    if (val === true) return true;
-    if (Array.isArray(val)) return val.length > 0;
+    if (typeof roleCfg === "boolean") return roleCfg;
+    if (pluginId in roleCfg) {
+      const val = roleCfg[pluginId];
+      if (typeof val === "boolean") return val;
+      if (Array.isArray(val)) return val.length > 0;
+    }
     // 角色未配置此项 → 继承全局（由 isPluginAvailable 决定）
     return true;
   }
@@ -385,10 +389,7 @@ export class PluginManager {
    * 获取所有启用插件中已解析运行时的 ToolSet 信息
    * 外部（如 ToolOrchestrator）可据此按 toolSet 分类工具
    */
-  async getPluginToolSets(
-    context: PluginContext,
-    roleCfg?: PluginConfig,
-  ): Promise<
+  async getPluginToolSets(context: PluginContext): Promise<
     Array<{
       pluginId: string;
       toolSets: Array<{
@@ -566,7 +567,9 @@ export class PluginManager {
    * 获取所有懒加载 ToolSet 的激活词原始数据（已过滤+运行时解析），供插件格式化。
    * 返回格式：[{ name: "todo", activator: "..." }, ...]
    */
-  async getToolActivators(context: PluginContext): Promise<Array<{ name: string; activator: string }>> {
+  async getToolActivators(
+    context: PluginContext,
+  ): Promise<Array<{ name: string; activator: string }>> {
     const activators: Array<{ name: string; activator: string }> = [];
 
     for (const [id, instance] of this.instances) {
@@ -631,7 +634,66 @@ export class PluginManager {
   }
 
   /**
-   * 获取指定插件的所有能力入口
-   * 对外公开，整个系统统一通过 getTools 获取工具，不再单独提供 findTool/findPluginTools
+   * 获取可热插拔插件列表（前端 UI 用）。
+   * 过滤掉 system 分类的基础设施插件，使用 isPluginEnabled / isRolePluginEnabled 判断状态。
    */
+  async getHotPluggablePlugins(roleCfg?: PluginConfig): Promise<
+    Array<{
+      pluginId: string;
+      effective: "global" | "role";
+      name: string;
+      displayName: string;
+      description: string;
+      category?: string;
+      enabled: boolean;
+      isMcp: boolean;
+      isSkill: boolean;
+      tools: Array<{
+        enabled: boolean;
+        name: string;
+        description: string;
+        parameters: any;
+      }>;
+    }>
+  > {
+    const result: any[] = [];
+
+    for (const instance of this.getAllPluginRegistrations()) {
+      const manifest = instance.manifest;
+      if (manifest.category === "system") continue;
+
+      const pluginId = manifest.id;
+
+      // 插件级别是否可用：全局启用 && 角色允许
+      const globalEnabled = this.isPluginEnabled(pluginId);
+      const roleOk = this.isRolePluginEnabled(pluginId, roleCfg);
+      const enabled = globalEnabled && roleOk;
+      const effective =
+        roleCfg && pluginId in (roleCfg as any)
+          ? ("role" as const)
+          : ("global" as const);
+      console.log(roleCfg, pluginId, roleOk);
+      const allTools = PluginRegistry.getTools(pluginId);
+
+      result.push({
+        pluginId,
+        effective,
+        name: pluginId,
+        displayName: manifest.name,
+        description: manifest.description,
+        category: manifest.category,
+        enabled,
+        isMcp: pluginId === "mcp",
+        isSkill: pluginId === "skill",
+        tools: allTools.map((t) => ({
+          enabled,
+          name: t.name,
+          description: t.description,
+          parameters: t.parameters as any,
+        })),
+      });
+    }
+
+    return result;
+  }
 }
