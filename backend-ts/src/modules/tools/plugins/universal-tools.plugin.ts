@@ -15,7 +15,7 @@ export class UniversalToolsPlugin extends PluginBase {
     name: "通用工具",
     description: "tool_learn / tool_use 系统级通用工具",
     version: "1.0.0",
-    category: "core" as const,
+    category: "system" as const,
   };
 
   constructor(

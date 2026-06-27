@@ -9,7 +9,7 @@ export interface PluginManifest {
   /** 依赖的其他插件 ID */
   dependencies?: string[];
   /** 插件分类 */
-  category?: 'core' | 'extended' | 'user';
+  category?: 'system' | 'core' | 'extended' | 'user';
 }
 
 // ==================== 提示词 ====================

@@ -16,6 +16,7 @@ import { CurrentUser } from "../auth/current-user.decorator";
 import { CharacterService } from "./character.service";
 import { FileInterceptor } from "@nestjs/platform-express";
 import { ToolOrchestrator } from "../tools/tool-orchestrator.service";
+import { PluginManager } from "../plugins/plugin.manager";
 
 @Controller()
 @UseGuards(AuthGuard)
@@ -23,6 +24,7 @@ export class CharactersController {
   constructor(
     private readonly characterService: CharacterService,
     private readonly toolOrchestrator: ToolOrchestrator,
+    private readonly pluginManager: PluginManager,
   ) {}
 
   @Get("characters")
@@ -107,7 +109,7 @@ export class CharactersController {
     }
 
     const allTools =
-      await this.toolOrchestrator.getLocalToolsList(characterPluginConfig);
+      await this.pluginManager.getHotPluggablePlugins(characterPluginConfig);
 
     // 过滤掉全局禁用的工具，不显示在角色配置界面
     const enabledTools = allTools.filter(
@@ -126,7 +128,7 @@ export class CharactersController {
   /**
    * 计算工具有效状态
    *
-   * 说明：getLocalToolsList 已根据 globalTools 过滤，传入的工具仅包含全局启用的工具。
+   * 说明：getHotPluggableTools 已根据 globalTools 过滤，传入的工具仅包含全局启用的工具。
    * 因此此处只需判断角色级别的配置即可。
    *
    * 规则：
