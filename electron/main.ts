@@ -108,6 +108,10 @@ if (!gotTheLock) {
   app.on("second-instance", (event, commandLine, workingDirectory) => {
     // 当用户尝试启动第二个实例时，激活已存在的主窗口
     if (mainWindow) {
+      // 如果窗口隐藏在托盘，则显示出来
+      if (!mainWindow.isVisible()) {
+        mainWindow.show();
+      }
       // 如果窗口最小化，则还原窗口
       if (mainWindow.isMinimized()) {
         mainWindow.restore();

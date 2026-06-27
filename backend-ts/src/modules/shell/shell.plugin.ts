@@ -1,6 +1,8 @@
 import { Injectable, Logger } from "@nestjs/common";
 import { spawn, ChildProcess, exec } from "child_process";
 import * as iconv from "iconv-lite";
+import * as path from "path";
+import * as fs from "fs/promises";
 import { PluginBase } from "../plugins/base-plugin";
 import { PluginContext } from "../plugins/types/plugin.types";
 import { PluginApi, ToolResult } from "../plugins/api/plugin-api";
@@ -33,16 +35,7 @@ export class ShellPlugin extends PluginBase {
     // ── execute 工具 ──
     api.registerTool({
       name: "execute",
-      description: `执行系统命令并返回输出结果。
-命令执行超过 1 分钟会自动转入后台运行（返回 processId）。
-如需立即转入后台，设置 "background": true 即可。
-
-后台进程可通过 process 工具管理：
-- process({"action": "poll", "processId": "..."}) 获取自上次轮询后的新输出
-- process({"action": "kill", "processId": "..."}) 终止进程
-- process({"action": "modify_silent_monitoring", "processId": "...", "silentMinutes": N}) 设置静默超时通知
-
-进程执行结束或发生异常时，系统会自动发送通知。`,
+      description: `执行系统命令并返回输出结果,命令执行超过 1 分钟会自动转入后台运行（返回 processId）,设置 "background": true立即转入后台`,
       inputSchema: z.object({
         command: z
           .string()
@@ -86,127 +79,71 @@ export class ShellPlugin extends PluginBase {
           `执行命令: ${command}, 工作目录: ${cwd}, background: ${background}`,
         );
 
-        // ── 显式后台模式：立即转入后台 ──
+        // 统一启动进程并转入后台管理（所有 stdout/stderr 由 ProcessManager 接管）
+        const childProcess = spawn(shell, [shellFlag, command], { cwd });
+        const result = this.processManager.background(
+          childProcess,
+          command,
+          cwd,
+          encoding,
+          ctx?.sessionId || "",
+          ctx?.userId || "",
+        );
+
+        // 纯后台模式：立即返回
         if (background) {
-          const childProcess = spawn(shell, [shellFlag, command], { cwd });
-          const result = this.processManager.background(
-            childProcess,
-            command,
-            cwd,
-            encoding,
-            ctx?.sessionId || "",
-            ctx?.userId || "",
-          );
           return {
-            status: "backgrounded",
+            success: true,
             processId: result.processId,
             stdout: result.stdout,
             stderr: result.stderr,
-            logPath: result.logPath,
             message: `进程已转入后台运行，ID: ${result.processId}。可使用 process 工具进行管理。`,
           };
         }
 
-        // ── 前台模式：等待执行，超时自动转入后台 ──
-        return new Promise<ToolResult>((resolve) => {
-          let stdoutBuffer = Buffer.alloc(0);
-          let stderrBuffer = Buffer.alloc(0);
-          let timedOut = false;
-          let processExited = false;
-          let autoBackgrounded = false;
+        // 前台模式：内部 poll 等待结果，支持 abortSignal
+        if (abortSignal?.aborted) {
+          this.processManager.kill(result.processId);
+          return { success: false, message: "请求已被中止" };
+        }
+        const onAbort = () => this.processManager.kill(result.processId);
+        abortSignal?.addEventListener("abort", onAbort, { once: true });
 
-          const childProcess: ChildProcess = spawn(
-            shell,
-            [shellFlag, command],
-            { cwd },
-          );
+        try {
+          const pollResult = await this.processManager.poll(
+            result.processId,
+            this.BACKGROUND_THRESHOLD_MS,
+            ctx?.sessionId,
+          )!;
 
-          // 自动转入后台定时器（1 分钟）
-          const backgroundTimer = setTimeout(() => {
-            if (processExited || autoBackgrounded) return;
-            autoBackgrounded = true;
-            this.logger.log(
-              `命令执行超过 ${this.BACKGROUND_THRESHOLD_MS / 1000}s，自动转入后台: ${command}`,
-            );
-
-            const stdoutStr = this.decodeBuffer(stdoutBuffer, encoding);
-            const stderrStr = this.decodeBuffer(stderrBuffer, encoding);
-            const stdoutLines = stdoutStr
-              .split("\n")
-              .filter((l: string) => l.length > 0);
-            const stderrLines = stderrStr
-              .split("\n")
-              .filter((l: string) => l.length > 0);
-
-            const result = this.processManager.background(
-              childProcess,
-              command,
-              cwd,
-              encoding,
-              ctx?.sessionId || "",
-              ctx?.userId || "",
-              stdoutLines,
-              stderrLines,
-            );
-
-            resolve({
-              status: "backgrounded",
+          // 进程在 1 分钟内结束了 → 返回结果
+          if (pollResult.status !== "running") {
+            return {
+              success: true,
               processId: result.processId,
-              stdout: stdoutLines.slice(-this.MAX_OUTPUT_LINES),
-              stderr: stderrLines.slice(-this.MAX_OUTPUT_LINES),
-              logPath: result.logPath,
-              message: `命令执行超过 ${this.BACKGROUND_THRESHOLD_MS / 1000} 秒，已自动转入后台运行，ID: ${result.processId}。可使用 process 工具进行管理。`,
-            });
-          }, this.BACKGROUND_THRESHOLD_MS);
-
-          childProcess.stdout?.on("data", (chunk: Buffer) => {
-            stdoutBuffer = Buffer.concat([stdoutBuffer, chunk]);
-          });
-          childProcess.stderr?.on("data", (chunk: Buffer) => {
-            stderrBuffer = Buffer.concat([stderrBuffer, chunk]);
-          });
-          childProcess.on("close", (code) => {
-            if (autoBackgrounded) return; // 已转入后台，不再处理
-            processExited = true;
-            clearTimeout(backgroundTimer);
-            const stdoutStr = this.decodeBuffer(stdoutBuffer, encoding);
-            const stderrStr = this.decodeBuffer(stderrBuffer, encoding);
-            resolve({
-              status: "completed",
-              exitCode: code ?? 0,
-              stdout: this.truncate(stdoutStr),
-              stderr: this.truncate(stderrStr),
-            });
-          });
-          childProcess.on("error", (err) => {
-            if (autoBackgrounded) return;
-            processExited = true;
-            clearTimeout(backgroundTimer);
-            resolve({
-              status: "error",
-              exitCode: 1,
-              stderr: err.message,
-            });
-          });
-
-          if (abortSignal) {
-            const onAbort = () => {
-              if (autoBackgrounded) return;
-              clearTimeout(backgroundTimer);
-              this.killProcess(childProcess, isWindows);
-              resolve({
-                status: "error",
-                exitCode: 1,
-                stderr: "Request was aborted",
-              });
+              processStatus: pollResult.status,
+              exitCode: pollResult.exitCode,
+              stdout: pollResult.newStdout,
+              stderr: pollResult.newStderr,
+              stdoutLineCount: pollResult.newStdout.length,
+              stderrLineCount: pollResult.newStderr.length,
+              message: `命令执行完毕（ID: ${result.processId}），退出码: ${pollResult.exitCode}`,
             };
-            if (abortSignal.aborted) {
-              onAbort();
-              return;
-            }
-            abortSignal.addEventListener("abort", onAbort, { once: true });
           }
-        });
+
+          // 1 分钟超时，进程还在跑 → 返回 backgrounded（含已收集的输出）
+          return {
+            success: true,
+            processId: result.processId,
+            stdout: pollResult.newStdout,
+            stderr: pollResult.newStderr,
+            stdoutLineCount: pollResult.newStdout.length,
+            stderrLineCount: pollResult.newStderr.length,
+            message: `命令执行超过 ${this.BACKGROUND_THRESHOLD_MS / 1000} 秒，已自动转入后台运行，ID: ${result.processId}。可使用 process 工具进行管理。`,
+          };
+        } finally {
+          abortSignal?.removeEventListener("abort", onAbort);
+        }
       },
       display: { action: "执行命令", argsKey: "command", icon: "shell" },
       dangerLevel: "critical",
@@ -215,60 +152,65 @@ export class ShellPlugin extends PluginBase {
     // ── process 管理工具 ──
     api.registerTool({
       name: "process",
-      description: `管理后台进程。支持三个操作：
-1. poll: 轮询进程状态和自上次 poll 以来的新输出（最多 50 行），不重复
-2. kill: 终止后台进程
-3. modify_silent_monitoring: 修改静默监控时间（分钟），0=关闭监控
-
-进程执行结束或静默超时时，系统会自动发送通知。`,
+      description: `管理后台进程`,
       inputSchema: z.object({
-        action: z.enum(["kill", "poll", "modify_silent_monitoring"]),
+        action: z.enum([
+          "kill",
+          "poll",
+          "modify_progress_monitoring",
+          "dump_log",
+          "write",
+        ]),
         processId: z.string().describe("后台进程 ID"),
-        timeout: z
-          .number()
-          .optional()
-          .describe("poll 阻塞等待时间（秒，最小 30s）")
-          .default(30),
-        silentMinutes: z
-          .number()
+        params: z
+          .record(z.string(), z.any())
           .optional()
           .describe(
-            "静默监控时间（分钟），0=关闭监控。仅 modify_silent_monitoring 使用",
+            "各操作的附加参数，统一放入此对象中。详见工具描述和系统提示",
           ),
       }),
       execute: async (args, ctx) => {
-        const { action, processId } = args;
+        const {
+          action,
+          processId,
+          params = {},
+        } = args as {
+          action: string;
+          processId: string;
+          params?: Record<string, any>;
+        };
 
         switch (action) {
           case "kill": {
             const status = this.processManager.kill(processId);
             if (status === null) {
               return {
-                status: "error",
+                success: false,
                 message: `进程 ${processId} 不存在或已结束`,
               };
             }
             return {
-              status: "killed",
+              success: true,
               processId,
+              processStatus: status,
               message: `进程 ${processId} 已终止（状态: ${status}）`,
             };
           }
 
           case "poll": {
-            const timeoutMs = (args.timeout || 0) * 1000;
+            const timeoutMs = (params.timeout || 0) * 1000;
             const result = await this.processManager.poll(
-              processId, timeoutMs, ctx?.sessionId,
+              processId,
+              timeoutMs,
+              ctx?.sessionId,
             );
             if (result === null) {
-              return {
-                status: "error",
-                message: `进程 ${processId} 不存在`,
-              };
+              return { success: false, message: `进程 ${processId} 不存在` };
             }
             return {
-              status: result.status,
-              processId: result.processId,
+              success: true,
+              processId,
+              processStatus: result.status,
               exitCode: result.exitCode,
               newStdout: result.newStdout,
               newStderr: result.newStderr,
@@ -278,35 +220,116 @@ export class ShellPlugin extends PluginBase {
             };
           }
 
-          case "modify_silent_monitoring": {
-            const minutes = args.silentMinutes ?? 0;
-            const entry = this.processManager.updateSilentMonitoring(
+          case "modify_progress_monitoring": {
+            const minutes = params.intervalMinutes ?? 30;
+            const entry = this.processManager.updateProgressMonitoring(
               processId,
               minutes,
             );
             if (entry === null) {
-              return {
-                status: "error",
-                message: `进程 ${processId} 不存在`,
-              };
+              return { success: false, message: `进程 ${processId} 不存在` };
             }
             const msg =
               minutes > 0
-                ? `静默监控已开启，${minutes} 分钟无输出将收到通知`
-                : "静默监控已关闭";
+                ? `进度通知已开启，每 ${minutes} 分钟报告一次。可根据需要调整频率，若无需持续监控请设置 0 关闭提醒。`
+                : "进度通知已关闭";
             return {
-              status: "ok",
+              success: true,
               processId,
-              silentMonitoringMinutes: minutes,
+              progressIntervalMinutes: minutes,
               message: msg,
             };
           }
 
-          default:
+          case "dump_log": {
+            const entry = this.processManager.getRawEntry(processId);
+            if (!entry) {
+              return { success: false, message: `进程 ${processId} 不存在` };
+            }
+            if (
+              !entry.fullLog &&
+              entry.recentStdout.length === 0 &&
+              entry.recentStderr.length === 0
+            ) {
+              return {
+                success: true,
+                processId,
+                message: `进程 ${processId} 无输出日志`,
+              };
+            }
+
+            const targetPath =
+              params.file_path ||
+              path.join(".guada", "process", "exports", `${processId}.log`);
+            const cwd = ctx?.workspacePath || process.cwd();
+            const resolved = path.resolve(cwd, targetPath);
+
+            // 安全检查：确保导出路径在工作目录内
+            const workspaceNorm = cwd.replace(/\\/g, "/").replace(/\/$/, "");
+            const resolvedNorm = resolved.replace(/\\/g, "/");
+            if (
+              !resolvedNorm.startsWith(workspaceNorm + "/") &&
+              resolvedNorm !== workspaceNorm
+            ) {
+              return {
+                success: false,
+                message: `导出路径不在工作目录内: ${resolved}`,
+              };
+            }
+
+            await fs.mkdir(path.dirname(resolved), { recursive: true });
+            await fs.writeFile(resolved, entry.fullLog || "", "utf-8");
+
+            // 已导出到磁盘，立即释放内存缓冲区
+            this.processManager.removeProcess(processId);
+
             return {
-              status: "error",
-              message: `未知操作: ${action}`,
+              success: true,
+              processId,
+              message: `日志已导出到 ${resolved}，共 ${(entry.fullLog || "").length} 字符`,
+              file_path: resolved,
             };
+          }
+
+          case "write": {
+            const input = params.input;
+            if (!input || typeof input !== "string") {
+              return { success: false, message: "params.input 不能为空" };
+            }
+
+            const entry = this.processManager.getRawEntry(processId);
+            if (!entry) {
+              return { success: false, message: `进程 ${processId} 不存在` };
+            }
+            if (entry.status !== "running") {
+              return {
+                success: false,
+                message: `进程 ${processId} 已结束，无法写入`,
+              };
+            }
+
+            if (!entry.childProcess.stdin) {
+              return {
+                success: false,
+                message: `进程 ${processId} 的 stdin 不可用`,
+              };
+            }
+
+            const appendNewline = params.appendNewline !== false;
+            const textToWrite = appendNewline ? input + "\n" : input;
+
+            entry.childProcess.stdin.write(textToWrite);
+
+            return {
+              success: true,
+              processId,
+              message: `已向进程 ${processId} 写入 ${textToWrite.length} 字符`,
+              input: input,
+            };
+          }
+
+          default:
+            return { success: false, message: `未知操作: ${action}` };
         }
       },
       display: { action: "管理进程", argsKey: "action", icon: "terminal" },
@@ -320,62 +343,45 @@ export class ShellPlugin extends PluginBase {
       content: () => {
         const isWindows = process.platform === "win32";
         return [
-          "# Shell 命令行工具",
+          "# 命令行工具使用说明",
           "",
           `**当前系统**：${isWindows ? "Windows" : process.platform === "darwin" ? "macOS" : "Linux"}`,
           "",
-          "## 执行行为",
+          "## 命令执行",
+          "- 使用 `execute` 命令执行command命令",
           "- 命令默认前台执行，等待完成后返回输出（最多 8000 字符）",
-          '- 设置 `"background": true` 可将命令立即转入后台运行，返回进程 ID',
-          "- 前台命令执行超过 **1 分钟** 也会自动转入后台模式执行",
+          "- 前台命令执行超过 **1 分钟** 会自动转入后台模式执行",
           "",
           "## 后台进程管理",
-          "使用 **process** 工具管理后台进程：",
-          "- `poll` — 获取自上次轮询以来的新输出（最多 50 行），支持阻塞等待新数据",
-          "- `kill` — 终止指定进程",
-          "- `modify_silent_monitoring` — 设置静默超时通知（N 分钟无输出时自动通知）",
+          "使用 **process** 工具管理后台进程，附加参数统一放入 params 对象中：",
+          "",
+          "**kill** — 终止进程，无需 params：",
+          '  `{"action":"kill","processId":"xxx"}`',
+          "",
+          "**poll** — 查看新输出，可选 params.timeout（秒，最小 30）：",
+          '  `{"action":"poll","processId":"xxx","params":{"timeout":30}}`',
+          "",
+          "**modify_progress_monitoring** — 设置进度通知间隔，params.intervalMinutes（分钟，0=关闭，默认30）：",
+          '  `{"action":"modify_progress_monitoring","processId":"xxx","params":{"intervalMinutes":30}}`',
+          "  默认已经开启，设置 0 关闭。非0值不得低于15分钟",
+          "",
+          "**dump_log** — 导出完整日志，可选 params.file_path：",
+          '  `{"action":"dump_log","processId":"xxx","params":{"file_path":"logs/my.log"}}`',
+          "",
+          "**write** — 向进程 stdin 写入输入，必填 params.input，可选 params.appendNewline（默认 true）：",
+          '  `{"action":"write","processId":"xxx","params":{"input":"y"}}`',
           "",
           "## 系统通知",
           "- 后台进程执行结束、异常退出或静默超时，会自动收到系统通知",
-          "- 完整输出日志保存在本地文件系统中",
-          "- 如果你在执行其他任务可以通过poll顺带查看进度，切勿循环轮询等待，因为系统会主动通知",
-          "- 已经通过poll查收的消息不会再次被系统通知（如进程退出事件）",
+          "- 已经通过poll查收的消息不会再次被系统通知",
           "",
-          "## 安全提醒",
-          "1. 删除或修改文件前务必确认操作安全",
-          "2. 执行前先预览目标路径",
+          "## 后台任务最佳实践",
+          "- 优先使用前台任务执行以获取初期输出判断是否正常启动",
+          "- 转入后台后可并行其他工作，或结束本轮对话等待系统通知",
+          "- 优先使用poll kill杀死进程，若使用命令行kill需要poll确认状态，否则可能被系统重复通知",
+          "- 长时间任务（预期>30分钟）利用进度通知（已默认开启）及时了解任务进度,短时间任务不必特意关闭监控（利用默认30分钟间隔做兜底）",
         ].join("\n");
       },
     });
-  }
-
-  private truncate(str: string): string {
-    if (str.length <= this.MAX_OUTPUT_LENGTH) return str;
-    return `...（前 ${str.length - this.MAX_OUTPUT_LENGTH} 字符已截断）\n${str.slice(-this.MAX_OUTPUT_LENGTH)}`;
-  }
-
-  private decodeBuffer(buffer: Buffer, encoding?: string): string {
-    if (!buffer || buffer.length === 0) return "";
-    try {
-      if (encoding) return iconv.decode(buffer, encoding);
-      return iconv.decode(
-        buffer,
-        process.platform === "win32" ? "gbk" : "utf-8",
-      );
-    } catch {
-      return buffer.toString("latin1");
-    }
-  }
-
-  private killProcess(childProcess: ChildProcess, isWindows: boolean): void {
-    if (isWindows) {
-      const pid = childProcess.pid;
-      if (pid) exec(`taskkill /F /T /PID ${pid}`, () => {});
-    } else {
-      childProcess.kill("SIGTERM");
-      setTimeout(() => {
-        if (!childProcess.killed) childProcess.kill("SIGKILL");
-      }, 2000);
-    }
   }
 }

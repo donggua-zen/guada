@@ -152,16 +152,19 @@ export class ToolOrchestrator {
 
     const fileTools = scopeGroups.flatMap((g) => g.tools);
 
+    // 修复：显式复制 workspacePath，避免 injectParams 为 class 实例时 getter 丢失
+    const safeParams: PluginContext = {
+      ...injectParams,
+      workspacePath: injectParams.workspacePath,
+      scope,
+    };
+
     if (fileTools.length === 0) {
-      return new ToolRuntime(
-        { ...injectParams, scope },
-        new Map(),
-        new Map(),
-      );
+      return new ToolRuntime(safeParams, new Map(), new Map());
     }
 
     return new ToolRuntime(
-      { ...injectParams, scope },
+      safeParams,
       new Map(fileTools.map((t) => [t.name, t])),
       new Map(),
     );

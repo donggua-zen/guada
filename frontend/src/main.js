@@ -137,6 +137,11 @@ const routes = [
         meta: { title: 'Contenteditable 输入测试' },
         component: () => import('./components/test/InputTest.vue')
     },
+    {
+        path: '/empty',
+        name: 'Empty',
+        component: () => import('./components/BackendWaitingOverlay.vue')
+    },
 ]
 
 // 根据环境动态选择路由模式
@@ -149,6 +154,20 @@ const router = createRouter({
 });
 
 router.beforeEach(async (to, from, next) => {
+    // 后端未就绪时重定向到加载页，保存原始目标
+    if (!backendReady.value) {
+        if (to.path !== '/empty') {
+            return next({ path: '/empty', query: { redirect: to.fullPath } })
+        }
+        return next()
+    }
+
+    // 后端就绪后若还在加载页，跳回原始目标
+    if (to.path === '/empty') {
+        const target = to.query.redirect || '/'
+        return next(target)
+    }
+
     // 仅在非 Electron 环境下显示进度条
     if (!isElectron) {
         NProgress.start()
@@ -206,8 +225,8 @@ app.use(router)
 // 初始化全局错误处理器（在 router 挂载后）
 initGlobalErrorHandler(router)
 
-// Electron 环境下：单次 IPC invoke 等待后端就绪
-if (isElectron && window.electronAPI?.waitBackendReady) {
+// 后端未就绪时才注册异步等待（已就绪说明是刷新场景，无需再监听）
+if (isElectron && !backendReady.value && window.electronAPI?.waitBackendReady) {
   // 超时保护：60 秒后显示错误
   const timeoutId = setTimeout(() => {
     if (!backendReady.value) {
@@ -222,6 +241,11 @@ if (isElectron && window.electronAPI?.waitBackendReady) {
       console.log(`🔗 后端已就绪，端口: ${data.port}`);
       apiService.initBackendUrl().then(() => {
         backendReady.value = true;
+        // 如果当前在加载页，跳回原始目标
+        if (router.currentRoute.value.path === '/empty') {
+          const redirect = router.currentRoute.value.query.redirect || '/'
+          router.replace(typeof redirect === 'string' ? redirect : '/')
+        }
       });
     } else {
       console.error('❌ 后端启动失败:', data.error);

@@ -1,7 +1,5 @@
 import { Injectable, Logger } from "@nestjs/common";
 import { spawn, ChildProcess, exec } from "child_process";
-import * as path from "path";
-import * as fs from "fs";
 import * as iconv from "iconv-lite";
 import { ChatRunnerService } from "../chat/chat-runner.service";
 
@@ -22,17 +20,20 @@ export interface ProcessEntry {
   cwd: string;
   encoding: string;
   isBackgrounded: boolean;
-  /** 合并日志文件路径（stdout + stderr 交织写入同一文件，同终端效果） */
-  logPath: string;
+  /** 日志文件路径（仅 dump_log 导出后设置） */
+  logPath?: string;
+  /** 完整的累积日志（最大 1MB，超出保留末尾） */
+  fullLog: string;
   /** 最近 stdout 行（最多 50 行，poll 后清空） */
   recentStdout: string[];
   /** 最近 stderr 行（最多 50 行，poll 后清空） */
   recentStderr: string[];
-  /** 静默监控 */
-  silentMonitoringMinutes: number;
+  /** 进度通知间隔（分钟），0=关闭 */
+  progressIntervalMinutes: number;
   lastOutputAt: Date;
-  silentTimer: ReturnType<typeof setInterval> | null;
-  /** 元数据 */
+  progressTimer: ReturnType<typeof setInterval> | null;
+  /** 延迟清理定时器 */
+  cleanupTimer: NodeJS.Timeout | null;
   /** 元数据 */
   startedAt: Date;
   finishedAt?: Date;
@@ -46,8 +47,8 @@ export interface PollResult {
   newStdout: string[];
   /** 自上次 poll 以来的新 stderr（最多 50 行） */
   newStderr: string[];
-  /** 完整日志文件路径 */
-  logPath: string;
+  /** 完整日志文件路径（仅 dump_log 导出后存在） */
+  logPath?: string;
 }
 
 export interface BackgroundResult {
@@ -57,7 +58,7 @@ export interface BackgroundResult {
   stdout: string[];
   /** 转入后台时截取的 stderr 行（最多 50 行） */
   stderr: string[];
-  logPath: string;
+  logPath?: string;
 }
 
 export interface ProcessListEntry {
@@ -68,7 +69,7 @@ export interface ProcessListEntry {
   isBackgrounded: boolean;
   startedAt: Date;
   finishedAt?: Date;
-  silentMonitoringMinutes: number;
+  progressIntervalMinutes: number;
 }
 
 // ============================================================================
@@ -92,8 +93,15 @@ export class ProcessManagerService {
 
   /** 最近输出最大行数 */
   private readonly MAX_RECENT_LINES = 50;
-  /** 默认静默监控时长（分钟），0 = 不监控 */
-  private readonly DEFAULT_SILENT_MONITORING_MINUTES = 0;
+  /** 完整日志缓冲区最大值（1MB） */
+  private readonly MAX_BUFFER_BYTES = 1024 * 1024;
+  /** 进程结束后延迟清理时间（10分钟） */
+  private readonly CLEANUP_DELAY_MS = 10 * 60 * 1000;
+  /** 进程最大存活时间兜底（30分钟） */
+  private readonly MAX_LIFETIME_MS = 30 * 60 * 1000;
+  /** 进度通知间隔（分钟），0=关闭，默认30分钟，非0不得低于15 */
+  private readonly DEFAULT_PROGRESS_INTERVAL_MINUTES = 30;
+  private readonly MIN_PROGRESS_INTERVAL_MINUTES = 15;
 
   constructor(private readonly chatRunnerService: ChatRunnerService) {}
 
@@ -113,13 +121,7 @@ export class ProcessManagerService {
     initialStdout?: string[],
     initialStderr?: string[],
   ): BackgroundResult {
-    const processId = this.generateId();
-
-    // 日志写入工作目录下的 .guada/process/logs/{processId}.log
-    const logDir = path.join(cwd, ".guada/process/logs");
-    fs.mkdirSync(logDir, { recursive: true });
-    const logPath = path.join(logDir, `${processId}.log`);
-    const logStream = fs.createWriteStream(logPath, { flags: "a" });
+    const processId = childProcess.pid?.toString() || this.generateId();
 
     const entry: ProcessEntry = {
       id: processId,
@@ -132,59 +134,60 @@ export class ProcessManagerService {
       cwd,
       encoding,
       isBackgrounded: true,
-      logPath,
+      fullLog: "",
       recentStdout: (initialStdout || []).slice(-this.MAX_RECENT_LINES),
       recentStderr: (initialStderr || []).slice(-this.MAX_RECENT_LINES),
-      silentMonitoringMinutes: this.DEFAULT_SILENT_MONITORING_MINUTES,
+      progressIntervalMinutes: this.DEFAULT_PROGRESS_INTERVAL_MINUTES,
       lastOutputAt: new Date(),
-      silentTimer: null,
+      progressTimer: null,
+      cleanupTimer: null,
       startedAt: new Date(),
     };
 
-    this.logger.log(`开始写入日志: ${logPath}`);
+    this.logger.log(
+      `后台进程 ${processId} 开始，缓冲区上限 1MB: ${command.substring(0, 80)}`,
+    );
 
-    // 接管 stdout/stderr pipe → 同一文件（交织写入，同控制台效果）
+    // 接管 stdout/stderr → 内存缓冲区
     childProcess.stdout?.on("data", (chunk: Buffer) => {
       const text = this.decodeBuffer(chunk, encoding);
-      logStream.write(text);
+      this.appendFullLog(entry, text);
       this.appendRecent(entry, text, "stdout");
       this.onOutput(entry);
     });
 
     childProcess.stderr?.on("data", (chunk: Buffer) => {
       const text = this.decodeBuffer(chunk, encoding);
-      logStream.write(text);
+      this.appendFullLog(entry, text);
       this.appendRecent(entry, text, "stderr");
       this.onOutput(entry);
     });
 
     childProcess.on("close", (code) => {
-      logStream.end();
       entry.status = code === 0 ? "completed" : "error";
       entry.exitCode = code;
       entry.finishedAt = new Date();
 
-      if (entry.silentTimer) {
-        clearInterval(entry.silentTimer);
-        entry.silentTimer = null;
+      if (entry.progressTimer) {
+        clearInterval(entry.progressTimer);
+        entry.progressTimer = null;
       }
 
       this.logger.log(`后台进程 ${processId} 已结束, 退出码: ${code}`);
 
-      // 先投递信箱，再通知 poll 等待者（后者从中撤回）
+      // 投递信箱 + 延迟清理
       this.enqueueSystemMessage(entry);
       this.resolvePollWatchers(entry);
     });
 
     childProcess.on("error", (err) => {
-      logStream.end();
       entry.status = "error";
       entry.exitCode = 1;
       entry.finishedAt = new Date();
 
-      if (entry.silentTimer) {
-        clearInterval(entry.silentTimer);
-        entry.silentTimer = null;
+      if (entry.progressTimer) {
+        clearInterval(entry.progressTimer);
+        entry.progressTimer = null;
       }
 
       this.logger.error(`后台进程 ${processId} 错误: ${err.message}`);
@@ -200,6 +203,9 @@ export class ProcessManagerService {
     }
     this.sessionProcesses.get(sessionId)!.set(processId, entry);
 
+    // 自动启动进度通知（默认每 30 分钟报告一次）
+    this.startProgressTimer(entry);
+
     this.logger.log(
       `进程已转入后台: ${processId}, 命令: ${command.substring(0, 80)}`,
     );
@@ -209,7 +215,6 @@ export class ProcessManagerService {
       status: "backgrounded",
       stdout: entry.recentStdout.slice(-this.MAX_RECENT_LINES),
       stderr: entry.recentStderr.slice(-this.MAX_RECENT_LINES),
-      logPath,
     };
   }
 
@@ -240,9 +245,9 @@ export class ProcessManagerService {
     entry.status = "killed";
     entry.finishedAt = new Date();
 
-    if (entry.silentTimer) {
-      clearInterval(entry.silentTimer);
-      entry.silentTimer = null;
+    if (entry.progressTimer) {
+      clearInterval(entry.progressTimer);
+      entry.progressTimer = null;
     }
 
     this.logger.log(`后台进程 ${processId} 已被手动终止`);
@@ -321,23 +326,28 @@ export class ProcessManagerService {
   /**
    * 修改静默监控时间
    */
-  updateSilentMonitoring(
+  updateProgressMonitoring(
     processId: string,
     minutes: number,
   ): ProcessEntry | null {
     const entry = this.processes.get(processId);
     if (!entry) return null;
 
-    entry.silentMonitoringMinutes = minutes;
+    // 非0值不得低于15分钟
+    if (minutes > 0 && minutes < this.MIN_PROGRESS_INTERVAL_MINUTES) {
+      minutes = this.MIN_PROGRESS_INTERVAL_MINUTES;
+    }
+
+    entry.progressIntervalMinutes = minutes;
 
     // 重置定时器
-    if (entry.silentTimer) {
-      clearInterval(entry.silentTimer);
-      entry.silentTimer = null;
+    if (entry.progressTimer) {
+      clearInterval(entry.progressTimer);
+      entry.progressTimer = null;
     }
 
     if (minutes > 0 && entry.status === "running") {
-      this.startSilentTimer(entry);
+      this.startProgressTimer(entry);
     }
 
     return entry;
@@ -358,7 +368,7 @@ export class ProcessManagerService {
           isBackgrounded: entry.isBackgrounded,
           startedAt: entry.startedAt,
           finishedAt: entry.finishedAt,
-          silentMonitoringMinutes: entry.silentMonitoringMinutes,
+          progressIntervalMinutes: entry.progressIntervalMinutes,
         });
       }
     }
@@ -379,8 +389,13 @@ export class ProcessManagerService {
       isBackgrounded: entry.isBackgrounded,
       startedAt: entry.startedAt,
       finishedAt: entry.finishedAt,
-      silentMonitoringMinutes: entry.silentMonitoringMinutes,
+      progressIntervalMinutes: entry.progressIntervalMinutes,
     };
+  }
+
+  /** 获取完整进程条目（含完整日志），供 dump_log 使用 */
+  getRawEntry(processId: string): ProcessEntry | null {
+    return this.processes.get(processId) || null;
   }
 
   // ── 内部 cleanup ──
@@ -430,6 +445,15 @@ export class ProcessManagerService {
     }
   }
 
+  /** 将新输出追加到完整日志缓冲区（最大 1MB，超出保留末尾） */
+  private appendFullLog(entry: ProcessEntry, text: string): void {
+    entry.fullLog += text;
+    if (entry.fullLog.length > this.MAX_BUFFER_BYTES) {
+      // 丢掉前半，保留末尾 1MB
+      entry.fullLog = entry.fullLog.slice(-this.MAX_BUFFER_BYTES);
+    }
+  }
+
   /** 有输出时的处理：更新最后输出时间（poll 不因中间输出提前返回） */
   private onOutput(entry: ProcessEntry): void {
     entry.lastOutputAt = new Date();
@@ -442,13 +466,13 @@ export class ProcessManagerService {
     entry.recentStdout.length = 0;
     entry.recentStderr.length = 0;
 
-    // AI poll 看到进程结束 → 从信箱撤回消息 + 清理本地
+    // AI poll 看到进程结束 → 从信箱撤回消息 + 延迟清理
     if (entry.status !== "running") {
       this.chatRunnerService.peekQueuedMessage(
         entry.sessionId,
         (item) => item.source?.processId === entry.id,
       );
-      this.cleanupProcess(entry.id, entry.sessionId);
+      this.scheduleCleanup(entry);
     }
 
     return {
@@ -495,38 +519,56 @@ export class ProcessManagerService {
     this.pollWatchers.delete(entry.id);
   }
 
-  // ── 静默监控 ──
+  // ── 进度通知 ──
 
-  private startSilentTimer(entry: ProcessEntry): void {
-    if (entry.silentTimer) return;
+  /** 定时发送进度通知。每 progressIntervalMinutes 分钟报告一次最近输出 */
+  private startProgressTimer(entry: ProcessEntry): void {
+    if (entry.progressTimer) return;
 
-    entry.silentTimer = setInterval(() => {
-      const silentSince = Date.now() - entry.lastOutputAt.getTime();
-      const thresholdMs = entry.silentMonitoringMinutes * 60 * 1000;
+    entry.progressTimer = setInterval(
+      () => {
+        if (entry.status !== "running") return;
 
-      if (silentSince >= thresholdMs && entry.status === "running") {
+        const elapsed = Math.round(
+          (Date.now() - entry.startedAt.getTime()) / 60000,
+        );
+        const newStdout = entry.recentStdout.slice(-this.MAX_RECENT_LINES);
+        const newStderr = entry.recentStderr.slice(-this.MAX_RECENT_LINES);
+
         this.chatRunnerService.enqueueMessage({
           sessionId: entry.sessionId,
           userId: entry.userId,
-          content: `[系统通知] 后台进程 \`${entry.id}\` (\`${entry.command}\`) 已持续 ${entry.silentMonitoringMinutes} 分钟无任何输出`,
+          content: [
+            `[进度通知] 后台进程 \`${entry.id}\` (\`${entry.command}\`) 运行中（已运行 ${elapsed} 分钟）`,
+            newStdout.length > 0
+              ? `\n最近 stdout（${newStdout.length} 行）:\n${newStdout.join("\n")}`
+              : "",
+            newStderr.length > 0
+              ? `\n最近 stderr（${newStderr.length} 行）:\n${newStderr.join("\n")}`
+              : "",
+            `\n\n可通过 process modify_progress_monitoring 调整通知频率（当前 ${entry.progressIntervalMinutes} 分钟/次）。若无需持续监控请设置 0 关闭提醒。`,
+          ]
+            .filter(Boolean)
+            .join(""),
           source: {
             type: "process_monitor",
             processId: entry.id,
-            event: "silent_timeout",
-            silentMinutes: entry.silentMonitoringMinutes,
+            event: "progress_report",
+            progressIntervalMinutes: entry.progressIntervalMinutes,
+            newStdout,
+            newStderr,
           },
         });
 
-        this.logger.log(
-          `静默监控触发: ${entry.id} 已 ${entry.silentMonitoringMinutes} 分钟无输出`,
-        );
-      }
-    }, 30_000);
+        this.logger.log(`进度通知: ${entry.id} 已运行 ${elapsed} 分钟`);
+      },
+      entry.progressIntervalMinutes * 60 * 1000,
+    );
   }
 
   // ── 系统消息投递 ──
 
-  /** 投递系统消息，每进程独立投递，投递后清理本地 */
+  /** 投递系统消息，每进程独立投递，投递后延迟清理 */
   private enqueueSystemMessage(entry: ProcessEntry): void {
     const content = `[系统通知] 后台进程 \`${entry.id}\` (\`${entry.command}\`) 已${entry.status === "completed" ? `执行结束，退出码 ${entry.exitCode}` : entry.status === "error" ? `异常退出，退出码 ${entry.exitCode}` : "被终止"}`;
 
@@ -552,7 +594,43 @@ export class ProcessManagerService {
       },
     });
 
-    // 信箱即副本，本地不再保留
+    // 信箱即副本，保留 10 分钟供 AI 读取后再清理
+    this.scheduleCleanup(entry);
+  }
+
+  // ── 延迟清理 ──
+
+  /** 安排延迟清理：10 分钟后移除，最多保留 30 分钟兜底 */
+  private scheduleCleanup(entry: ProcessEntry): void {
+    if (entry.cleanupTimer) clearTimeout(entry.cleanupTimer);
+
+    const lifetimeElapsed =
+      Date.now() - (entry.finishedAt?.getTime() || Date.now());
+    const remaining = Math.max(0, this.MAX_LIFETIME_MS - lifetimeElapsed);
+    const delay = Math.min(this.CLEANUP_DELAY_MS, remaining);
+
+    if (delay <= 0) {
+      this.cleanupProcess(entry.id, entry.sessionId);
+      return;
+    }
+
+    entry.cleanupTimer = setTimeout(() => {
+      this.cleanupProcess(entry.id, entry.sessionId);
+    }, delay);
+  }
+
+  /** 重置延迟清理计时器 */
+  resetCleanupTimer(processId: string): void {
+    const entry = this.processes.get(processId);
+    if (!entry) return;
+    this.scheduleCleanup(entry);
+  }
+
+  /** 立即从内存移除进程（供 dump_log 导出后调用，释放缓冲区） */
+  removeProcess(processId: string): void {
+    const entry = this.processes.get(processId);
+    if (!entry) return;
+    if (entry.cleanupTimer) clearTimeout(entry.cleanupTimer);
     this.cleanupProcess(entry.id, entry.sessionId);
   }
 }

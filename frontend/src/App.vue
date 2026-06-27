@@ -8,12 +8,8 @@
         <div class="wallpaper-blur-layer"></div>
         <!-- CustomTitlebar 始终可见 -->
         <CustomTitlebar @open-guide="openGuide" />
-        <!-- 后端等待遮罩（fixed 全屏，top:32px 让出标题栏） -->
-        <BackendWaitingOverlay v-if="!backendReady" :error="backendError" />
-        <template v-else>
-            <SetupGuide ref="guideRef" />
-            <RouterView></RouterView>
-        </template>
+        <SetupGuide ref="guideRef" />
+        <RouterView></RouterView>
     </div>
 
     <!-- 全局右键菜单 (Electron 剪贴板操作) -->
@@ -32,9 +28,7 @@ import { useTheme } from './composables/useTheme'
 import MockControlPanel from './components/dev/MockControlPanel.vue'
 import CustomTitlebar from './components/CustomTitlebar.vue'
 import SetupGuide from './components/SetupGuide.vue'
-import BackendWaitingOverlay from './components/BackendWaitingOverlay.vue'
 import ContextMenuManager from './utils/ContextMenuManager'
-import { backendReady, backendError } from '@/composables/useBackendStatus'
 
 const router = useRouter()
 const title = useTitle()
