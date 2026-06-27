@@ -31,16 +31,11 @@ defineProps<{
 
 <style scoped>
 .backend-waiting-overlay {
-  position: fixed;
-  top: 32px;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  z-index: 99998;
   display: flex;
   align-items: center;
   justify-content: center;
   background: var(--color-bg);
+  height: 100%;
 }
 
 .waiting-content,
