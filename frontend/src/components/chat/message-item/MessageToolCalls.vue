@@ -1,14 +1,14 @@
 <template>
-  <div class="tool-calls-section">
-    <div class="flex" v-for="(tool, toolIndex) in toolCalls" :key="toolIndex">
+  <div class="process-section tool-calls-section">
+    <div class="" v-for="(tool, toolIndex) in toolCalls" :key="toolIndex">
       <!-- 循环展示每个工具调用 -->
       <div
-        class="flex items-center text-sm text-gray-700 dark:text-[#8b8d95] cursor-pointer font-medium py-1 transition-colors duration-200 min-w-0"
+        class="flex items-center text-sm text-gray-700 dark:text-[#8b8d95] cursor-pointer font-medium transition-colors duration-200 min-w-0"
         @click.stop="openSingleToolDialog(toolIndex)">
-        <el-icon v-if="props.isExecuting" class="shrink-0 animate-spin" size="15">
+        <el-icon v-if="props.isExecuting" class="shrink-0 animate-spin" size="14">
           <SpinnerIos20Filled />
         </el-icon>
-        <el-icon v-else class="shrink-0" size="15">
+        <el-icon v-else class="shrink-0" size="14">
           <component :is="getToolIconComponent(tool)" class="text-gray-500" />
         </el-icon>
         <div class="ml-2 truncate text-gray-400 dark:text-gray-500 ">
@@ -17,8 +17,12 @@
           }}</span>
         </div>
       </div>
+      <div v-if="toolIndex < toolCalls.length - 1" class="process-in-timeline border-l border-gray-300 dark:border-gray-700 min-h-2 ml-1.5"></div>
     </div>
+    <div class="process-timeline border-l border-gray-300 dark:border-gray-700 min-h-2 ml-1.5"></div>
   </div>
+
+
   <!-- 单个工具详情对话框 -->
   <ElDialog v-if="keepElement && selectedToolIndex !== null" v-model="showDialog"
     :title="`工具调用详情 #${selectedToolIndex + 1}`" width="700px" :close-on-click-modal="true" destroy-on-close
@@ -321,7 +325,7 @@ const getToolDisplayName = (tool: ToolCall): string => {
       if (innerName) {
         return `tool_use.${innerName}`;
       }
-    } catch {}
+    } catch { }
   }
   return tool.name || 'Unknown Tool';
 };
@@ -336,7 +340,7 @@ const getToolArgs = (tool: ToolCall): any => {
     try {
       const parsed = typeof tool.arguments === 'string' ? partialParse(tool.arguments) : tool.arguments;
       if (parsed?.arguments) return parsed.arguments;
-    } catch {}
+    } catch { }
   }
   return tool.arguments ?? tool.args;
 };
@@ -392,7 +396,6 @@ const formatToolResponse = (response: any): string => {
 </script>
 
 <style scoped>
-
 .tool-dialog-content {
   line-height: 1.6;
 }

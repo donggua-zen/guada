@@ -51,12 +51,12 @@
             <!-- 折叠头部（仅当 isCollapsible 时显示） -->
             <div v-if="group.isCollapsible && !(streamingState.isStreaming && groupIndex === displayGroups.length - 1)"
               class="process-group__header" @click="toggleGroup(group.id)">
-              <el-icon size="14" class="process-group__arrow" :class="{ 'is-expanded': isGroupExpanded(group.id) }">
-                <ArrowRightTwotone />
-              </el-icon>
               <span class="process-group__title">
                 中间处理过程 ({{ group.items.length }} 个步骤)
-              </span>
+              </span> <el-icon size="14" class="process-group__arrow"
+                :class="{ 'is-expanded': isGroupExpanded(group.id) }">
+                <ArrowRightTwotone />
+              </el-icon>
             </div>
 
             <!-- 展开内容 -->
@@ -695,9 +695,8 @@ defineExpose({
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  padding: 4px 10px;
+  padding: 4px 0;
   border-radius: 6px;
-  background-color: var(--el-fill-color-light);
   color: var(--el-text-color-secondary);
   font-size: 13px;
   cursor: pointer;
@@ -705,9 +704,12 @@ defineExpose({
   user-select: none;
 }
 
-.process-group__header:hover {
-  background-color: var(--el-fill-color);
+:deep(.process-group__body .process-section:last-child .process-timeline) {
+  display: none;
 }
+
+/* .process-group__header:hover {
+} */
 
 /* 箭头图标 */
 .process-group__arrow {

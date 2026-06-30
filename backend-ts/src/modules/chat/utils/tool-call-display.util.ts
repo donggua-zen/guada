@@ -1,6 +1,5 @@
 import { Injectable, Logger } from "@nestjs/common";
 import { ToolDisplayInfo } from "../../tools/interfaces/tool-provider.interface";
-import { ToolHandlerDef } from "../../plugins/types/plugin.types";
 import { generateDisplayMessage } from "../../plugins/utils/display-formatter";
 import { partialParse } from "partial-json-parser";
 
@@ -12,8 +11,8 @@ export class ToolCallDisplayUtil {
     toolName: string,
     args: string | Record<string, any>,
     isExecuting: boolean = true,
-    toolEntry?: ToolHandlerDef,
   ): ToolDisplayInfo {
+
     let actualToolName = toolName;
     let extractedParams: Record<string, any> = {};
 
@@ -38,7 +37,6 @@ export class ToolCallDisplayUtil {
     return generateDisplayMessage(
       { id: "", name: actualToolName, arguments: extractedParams },
       isExecuting,
-      toolEntry,
     );
   }
 
