@@ -1,34 +1,31 @@
 <template>
-  <div class="thinking-section" :class="{ 'thinking-section--expanded': isExpanded }">
+  <div class="process-section thinking-section" :class="{ 'thinking-section--expanded': isExpanded }">
     <div
-      class="thinking-section__header inline-flex justify-center items-center text-sm text-gray-700 dark:text-[#8b8d95] cursor-pointer font-medium  transition-colors duration-200"
+      class="thinking-section__header flex items-center text-sm text-gray-700 dark:text-[#8b8d95] cursor-pointer font-medium  transition-colors duration-200"
       @click.stop="handleToggle">
       <div class="flex items-center">
-        <!-- <el-icon size="15" class="">
-          <Lightbulb24Regular class="text-yellow-500" />
-        </el-icon> -->
-        <span class="text-gray-600 dark:text-gray-400">{{ isThinking ? '思考中...' : '已深度思考' }}</span>
+        <el-icon size="14" class="">
+          <Lightbulb24Regular />
+        </el-icon>
+        <span class="text-gray-600 dark:text-gray-400 ml-2">{{ isThinking ? '思考中...' : '已深度思考' }}</span>
         <span v-if="thinkingDuration" class="text-xs text-gray-400 ml-2">
           {{ formattedDuration }}
         </span>
-        <el-icon :class="['transition-transform duration-300 ml-2', isExpanded ? 'rotate-90' : 'rotate-0']" size="14">
+        <!-- <el-icon :class="['transition-transform duration-300 ml-2', isExpanded ? 'rotate-90' : 'rotate-0']" size="14">
           <ArrowRightTwotone />
-        </el-icon>
+        </el-icon> -->
       </div>
     </div>
-
     <div class="thinking-section__container" :class="{ 'thinking-section__container--expanded': isExpanded }">
       <div class="thinking-section__content-wrapper flex">
-        <div class="flex border-l-2 pl-4 text-sm border-gray-200 dark:border-gray-700">
-          <!-- <div class="w-5.5 min-h-0 flex justify-center mr-1.5">
-            <div class="w-px bg-gray-200 dark:bg-gray-700"></div>
-          </div> -->
+        <div class="flex border-l ml-1.5 pl-4 text-sm border-gray-300 dark:border-gray-700">
           <MarkdownContent @click.stop="$emit('click')" class="flex-1 markdown-text text-gray-500 dark:text-gray-400"
             :content="reasoningContent" />
         </div>
 
       </div>
     </div>
+    <div class="process-timeline border-l border-gray-300 dark:border-gray-700 min-h-2 ml-1.5"></div>
   </div>
 </template>
 

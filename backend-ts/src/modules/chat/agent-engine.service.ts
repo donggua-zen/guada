@@ -554,7 +554,6 @@ export class AgentEngine {
             tc.name,
             tc.arguments,
             true,
-            runtime,
           );
         });
       }
@@ -569,7 +568,6 @@ export class AgentEngine {
           tc.name,
           tc.arguments,
           true,
-          runtime,
         );
       });
     } else if (chunk.type === "text" || chunk.content) {

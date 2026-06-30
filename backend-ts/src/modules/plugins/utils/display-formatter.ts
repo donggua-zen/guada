@@ -1,14 +1,14 @@
 import { ToolDisplayInfo, ToolCallRequest } from "../../tools/interfaces/tool-provider.interface";
 import { ToolHandlerDef } from "../types/plugin.types";
+import { PluginRegistry } from "../registry/plugin-registry";
 
 /**
  * 生成工具调用的展示文案
- * 不再依赖 ToolRuntime，直接使用 ToolHandlerDef 获取展示信息。
+ * 内部自动按工具名从 PluginRegistry 查找 display 配置
  */
 export function generateDisplayMessage(
   request: ToolCallRequest,
   isExecuting: boolean = true,
-  toolEntry?: ToolHandlerDef,
 ): ToolDisplayInfo {
   try {
     // 递归解析 tool_call 包装
@@ -25,7 +25,8 @@ export function generateDisplayMessage(
       return { action: isExecuting ? "正在加载工具" : "已加载工具", args: request.arguments?.pluginId, toolName: request.name, toolType: "generic" };
     }
 
-    // 从 @Tool 装饰器的 action/argsKey/icon 生成
+    // 从 PluginRegistry 查找工具定义，提取 display 配置
+    const toolEntry: ToolHandlerDef | undefined = PluginRegistry.findToolByName(request.name);
     if (toolEntry?.action) {
       const prefix = isExecuting ? "正在" : "已";
       let argsSummary: string | undefined;

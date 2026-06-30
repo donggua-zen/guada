@@ -81,6 +81,19 @@ class PluginRegistryImpl {
   clearPlugin(pluginId: string): void {
     this.registrations.delete(pluginId);
   }
+
+  /** 跨所有插件、所有 ToolKit 按名称查找工具定义（用于 display 降级恢复） */
+  findToolByName(toolName: string): ToolHandlerDef | undefined {
+    for (const [, reg] of this.registrations) {
+      const found = reg.tools.find((t) => t.name === toolName);
+      if (found) return found;
+      for (const kit of reg.toolKits) {
+        const kitFound = kit.tools.find((t) => t.name === toolName);
+        if (kitFound) return kitFound;
+      }
+    }
+    return undefined;
+  }
 }
 
 export const PluginRegistry = new PluginRegistryImpl();
