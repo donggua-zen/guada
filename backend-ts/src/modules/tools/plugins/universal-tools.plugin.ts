@@ -113,7 +113,8 @@ export class UniversalToolsPlugin extends PluginBase {
         (k) => k.id === name || k.name === name,
       );
       if (!kitInfo) continue;
-      const kitTools = rp.enabledTools.filter((t) => t.toolSet === kitInfo.id);
+      // 懒加载工具包的工具存在 allTools 中（enabledTools 不含未激活的懒加载工具）
+      const kitTools = rp.allTools.filter((t) => t.toolSet === kitInfo.id);
       if (kitTools.length > 0 || kitInfo.loadMode === "lazy") {
         targetKit = { tools: kitTools, pluginId: rp.plugin.id };
         break;
