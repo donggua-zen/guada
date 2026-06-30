@@ -21,15 +21,15 @@ export class SchedulerPlugin extends PluginBase {
   }
 
   async onLoad(api: PluginApi) {
-    api.registerToolSet({
+    const schedKit = api.registerToolKit({
+      id: "scheduler",
+      name: "定时任务",
       loadMode: "lazy",
-      name: "scheduler",
       activator:
         "定时任务管理工具，用于创建、查看、删除定时任务，当你需要在指定时间自动执行某项任务时，可以使用此工具",
     });
 
-    api.registerTool({
-      toolSet: "scheduler",
+    schedKit.registerTool({
       name: "scheduler_create_task",
       description:
         "创建一个定时任务，让 AI 可以在指定时间自动执行提示词。定时器本身不会自动获得执行结果，仅仅是发送提示词，本质是一个「闹钟」。",
@@ -73,9 +73,9 @@ export class SchedulerPlugin extends PluginBase {
           .describe("重试间隔（秒），默认 60"),
       }),
       execute: async (args, ctx) => {
-        const userId = ctx?.userId;
+        const userId = ctx?.session.userId;
         if (!userId) throw new Error("无法获取用户ID，无法创建定时任务");
-        const sessionId = ctx?.sessionId;
+        const sessionId = ctx?.session.sessionId;
         if (!sessionId) throw new Error("无法获取会话ID，无法创建定时任务");
 
         const scheduleType = args.schedule_type;
@@ -118,13 +118,12 @@ export class SchedulerPlugin extends PluginBase {
       display: { action: "创建定时任务", argsKey: "name", icon: "time" },
     });
 
-    api.registerTool({
-      toolSet: "scheduler",
+    schedKit.registerTool({
       name: "scheduler_list_tasks",
       description: "获取当前用户的所有定时任务列表",
       inputSchema: z.object({}),
       execute: async (_args, ctx) => {
-        const userId = ctx?.userId;
+        const userId = ctx?.session.userId;
         if (!userId) throw new Error("无法获取用户ID");
         const tasks = await this.schedulerService.getTasks(userId);
         return JSON.stringify({
@@ -148,15 +147,14 @@ export class SchedulerPlugin extends PluginBase {
       display: { action: "列出定时任务", icon: "time" },
     });
 
-    api.registerTool({
-      toolSet: "scheduler",
+    schedKit.registerTool({
       name: "scheduler_delete_task",
       description: "删除指定的定时任务",
       inputSchema: z.object({
         task_id: z.string().describe("要删除的定时任务 ID"),
       }),
       execute: async (args, ctx) => {
-        const userId = ctx?.userId;
+        const userId = ctx?.session.userId;
         if (!userId) throw new Error("无法获取用户ID");
         if (!args.task_id) throw new Error("需要提供 task_id");
         await this.schedulerService.deleteTask(args.task_id, userId);
@@ -165,15 +163,14 @@ export class SchedulerPlugin extends PluginBase {
       display: { action: "删除定时任务", icon: "time" },
     });
 
-    api.registerTool({
-      toolSet: "scheduler",
+    schedKit.registerTool({
       name: "scheduler_toggle_task",
       description: "启用或禁用指定的定时任务",
       inputSchema: z.object({
         task_id: z.string().describe("要启用或禁用的定时任务 ID"),
       }),
       execute: async (args, ctx) => {
-        const userId = ctx?.userId;
+        const userId = ctx?.session.userId;
         if (!userId) throw new Error("无法获取用户ID");
         if (!args.task_id) throw new Error("需要提供 task_id");
         const task = await this.schedulerService.toggleTask(
@@ -193,8 +190,7 @@ export class SchedulerPlugin extends PluginBase {
       display: { action: "切换定时任务状态", icon: "time" },
     });
 
-    api.registerPrompt({
-      toolSet: "scheduler",
+    schedKit.registerPrompt({
       frequency: "REGULAR",
       description: "定时任务工具使用说明",
       content: [

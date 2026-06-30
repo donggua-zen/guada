@@ -171,7 +171,7 @@ export class ImageRecognitionToolProvider implements IToolProvider {
     // 使用 WorkspaceService 解析路径（自动处理相对路径和绝对路径）
     let physicalPath: string;
     try {
-      physicalPath = this.workspaceService.resolveFilePath(image_path, context?.workspacePath);
+      physicalPath = this.workspaceService.resolveFilePath(image_path, context?.session.workspacePath);
     } catch (error: any) {
       throw new Error(`路径解析失败：${error.message}`);
     }

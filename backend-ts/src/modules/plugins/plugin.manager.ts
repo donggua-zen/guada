@@ -8,12 +8,17 @@ import {
   PluginManifest,
   ToolLoadMode,
   PluginConfig,
+  PluginEntryConfig,
+  ToolKitLoadMode,
+  ResolvedPluginInfo,
 } from "./types/plugin.types";
 import { IToolProvider } from "../tools/interfaces/tool-provider.interface";
-import { LegacyProviderAdapter } from "./adapter/legacy-provider.adapter";
 import { PluginApiImpl } from "./api/plugin-api";
 import { SettingsStorage } from "../../common/utils/settings-storage.util";
 import { SG_PLUGINS } from "../../constants/settings.constants";
+import { PluginConfigParser } from "./utils/plugin-config-parser";
+import { PromptCollector } from "./prompt-collector.service";
+import { ISessionContext } from "../chat/session-context";
 
 // ── 新 registerTools API 类型 ──
 
@@ -60,22 +65,23 @@ export interface PluginInstance {
  *
  * 职责：
  * 1. 管理插件的加载/卸载/启用/禁用生命周期
- * 2. 聚合所有插件的工具定义（供 ToolOrchestrator 消费）
- * 3. 聚合所有插件的提示词（替代 ToolOrchestrator 的提示词收集逻辑）
+ * 2. 统一配置解析（全局→角色两级合并）
+ * 3. 聚合所有插件的工具定义和提示词
  */
 @Injectable()
 export class PluginManager {
   private readonly logger = new Logger(PluginManager.name);
   private instances = new Map<string, PluginInstance>();
 
-  constructor(private readonly settingsStorage: SettingsStorage) {}
+  constructor(
+    private readonly settingsStorage: SettingsStorage,
+    private readonly promptCollector: PromptCollector,
+  ) {}
 
   // ── 生命周期 ──
 
   /**
    * 注册并加载一个插件实例
-   * @param plugin 插件实例
-   * @param enabled 是否启用
    */
   async registerPlugin(plugin: PluginBase, enabled?: boolean): Promise<void> {
     const id = plugin.manifest.id;
@@ -84,12 +90,11 @@ export class PluginManager {
       return;
     }
 
-    // 从全局配置读取启用状态（未传 enabled 参数时）
+    // 从全局配置读取启用状态
     let finalEnabled: boolean;
     if (enabled !== undefined) {
       finalEnabled = enabled;
     } else if (plugin.manifest.category === "system") {
-      // 基础设施插件始终启用，不受配置影响
       finalEnabled = true;
     } else {
       try {
@@ -105,16 +110,28 @@ export class PluginManager {
       }
     }
 
-    // 创建 api 并调用 onLoad（始终调用——注册工具/提示词等元数据）
+    // 创建 api 并调用 onLoad
     const api = new PluginApiImpl(id, plugin.manifest.name);
     if (plugin.onLoad) {
       await plugin.onLoad(api).catch((err) => {
         this.logger.error(`Plugin ${id} onLoad failed: ${err.message}`);
       });
     }
+
+    // 执行 ToolKit onLoad 回调（支持二级注册）
+    for (const tk of api["_toolKits"] || []) {
+      if (tk.def.onLoad) {
+        try {
+          await tk.def.onLoad(tk);
+        } catch (err: any) {
+          this.logger.error(`ToolKit ${tk.id} onLoad failed: ${err.message}`);
+        }
+      }
+    }
+
     api.flush();
 
-    // 启用时调用 onStart（启动活跃运行时）
+    // 启用时调用 onStart
     if (finalEnabled && plugin.onStart) {
       await plugin.onStart().catch((err) => {
         this.logger.error(`Plugin ${id} onStart failed: ${err.message}`);
@@ -129,22 +146,22 @@ export class PluginManager {
     this.instances.set(id, instance);
 
     this.logger.log(
-      `Plugin registered: ${plugin.manifest.name} (${id}), tools=${PluginRegistry.getTools(id).length}, enabled=${finalEnabled}`,
+      `Plugin registered: ${plugin.manifest.name} (${id}), tools=${PluginRegistry.getTools(id).length}, kits=${PluginRegistry.getToolKits(id).length}, enabled=${finalEnabled}`,
     );
   }
 
   /**
-   * 将旧 IToolProvider 包装为 LegacyProviderAdapter 并注册为插件
-   * 用于模块原有的 IToolProvider 无缝接入 Plugin 体系
+   * 将旧 IToolProvider 包装并注册
+   * @deprecated 使用 registerPlugin 替代
    */
   async registerLegacyProvider(provider: IToolProvider): Promise<void> {
-    const adapter = new LegacyProviderAdapter(provider);
-    await this.registerPlugin(adapter);
+    throw new Error(
+      "registerLegacyProvider 已废弃，请将 provider 迁移为 PluginBase 使用 registerPlugin",
+    );
   }
 
   /**
-   * 以纯对象方式注册工具插件（类 OpenClaw 风格，无装饰器）
-   * 与 @Plugin 装饰器方案共存，逐步迁移
+   * 以纯对象方式注册工具插件
    */
   async registerTools(def: ToolPluginDef): Promise<void> {
     const id = def.id;
@@ -165,7 +182,6 @@ export class PluginManager {
       PluginRegistry.registerManifest(manifest);
     }
 
-    // 构建 ToolHandlerDef[]
     const toolDefs: ToolHandlerDef[] = def.tools.map((t) => ({
       name: t.name,
       description: t.description,
@@ -193,7 +209,6 @@ export class PluginManager {
       icon: t.icon,
     }));
 
-    // 注册到 registry
     const reg = (PluginRegistry as any).registrations.get(id);
     if (reg) {
       for (const td of toolDefs) {
@@ -203,7 +218,6 @@ export class PluginManager {
       }
     }
 
-    // 构建 prompts
     const promptMetas: any[] = (def.prompts || []).map((p) => ({
       methodName: "",
       frequency: p.frequency || "REGULAR",
@@ -252,7 +266,6 @@ export class PluginManager {
     const instance = this.instances.get(pluginId);
     if (!instance) return;
 
-    // 先 stop（如果正在运行）
     if (instance.enabled && instance.plugin.onStop) {
       await instance.plugin.onStop().catch((err) => {
         this.logger.error(`Plugin ${pluginId} onStop failed: ${err.message}`);
@@ -270,8 +283,7 @@ export class PluginManager {
   }
 
   /**
-   * 重新加载插件：清除旧注册数据后重新走一遍 onLoad 注册流程
-   * 适用于插件所依赖的外部配置发生变化（如 MCP 服务器增删改）后需要刷新工具列表的场景
+   * 重新加载插件
    */
   async reloadPlugin(pluginId: string): Promise<void> {
     const instance = this.instances.get(pluginId);
@@ -283,10 +295,7 @@ export class PluginManager {
     const plugin = instance.plugin;
     const wasEnabled = instance.enabled;
 
-    // 完整卸载：onStop → onUnload → clearPlugin → delete instances
     await this.unregisterPlugin(pluginId);
-
-    // 重新注册：创建新 PluginApiImpl → onLoad(查最新数据) → flush → (onStart)
     await this.registerPlugin(plugin, wasEnabled);
 
     this.logger.log(`Plugin reloaded: ${pluginId}, enabled=${wasEnabled}`);
@@ -299,7 +308,11 @@ export class PluginManager {
     const instance = this.instances.get(pluginId);
     if (!instance) return;
 
-    // 持久化
+    if (instance.manifest.category === "system" && !enabled) {
+      this.logger.warn(`Cannot disable system plugin: ${pluginId}`);
+      return;
+    }
+
     try {
       await this.settingsStorage.updateSettings(SG_PLUGINS, {
         [pluginId]: enabled,
@@ -311,7 +324,6 @@ export class PluginManager {
     }
 
     if (enabled && !instance.enabled) {
-      // 启用：调用 onStart
       if (instance.plugin.onStart) {
         await instance.plugin.onStart().catch((err) => {
           this.logger.error(
@@ -322,7 +334,6 @@ export class PluginManager {
       instance.enabled = true;
       this.logger.log(`Plugin ${pluginId} enabled`);
     } else if (!enabled && instance.enabled) {
-      // 禁用：调用 onStop（不清除 PluginRegistry，保持元数据可见）
       if (instance.plugin.onStop) {
         await instance.plugin.onStop().catch((err) => {
           this.logger.error(`Plugin ${pluginId} onStop failed: ${err.message}`);
@@ -335,32 +346,20 @@ export class PluginManager {
 
   // ── 工具聚合 ──
 
-  /** 检查插件是否已启用（注册时已评估 @Condition） */
-  /** 检查角色级配置是否允许此插件 */
-  private isRolePluginEnabled(
-    pluginId: string,
-    roleCfg?: PluginConfig,
-  ): boolean {
-    if (!roleCfg) return true;
-    // PluginConfig 本身可为 true/false（旧角色配置兼容）
-    if (typeof roleCfg === "boolean") return roleCfg;
-    if (pluginId in roleCfg) {
-      const val = roleCfg[pluginId];
-      if (typeof val === "boolean") return val;
-      if (Array.isArray(val)) return val.length > 0;
-    }
-    // 角色未配置此项 → 继承全局（由 isPluginAvailable 决定）
-    return true;
+  /** 检查插件是否已全局启用 */
+  isPluginEnabled(pluginId: string): boolean {
+    const inst = this.instances.get(pluginId);
+    if (!inst) return false;
+    if (inst.manifest.category === "system") return true;
+    return inst.enabled;
   }
 
   private isPluginAvailable(id: string): boolean {
-    return this.instances.get(id)?.enabled === true;
+    return this.isPluginEnabled(id);
   }
 
   /**
    * 获取所有已启用插件的工具定义
-   * @param context 运行时上下文，用于 ToolSet 解析
-   * @param enabledPlugins 可选，限制只返回指定插件的工具
    */
   async getTools(
     context?: PluginContext,
@@ -380,15 +379,214 @@ export class PluginManager {
     return result;
   }
 
-  /** 获取指定插件的工具定义（无论启用/禁用，仅用于前端列表展示） */
+  /** 获取指定插件的工具定义（仅用于前端列表展示） */
   getPluginTools(pluginId: string): ToolHandlerDef[] {
     return PluginRegistry.getTools(pluginId);
   }
 
   /**
-   * 获取所有启用插件中已解析运行时的 ToolSet 信息
-   * 外部（如 ToolOrchestrator）可据此按 toolSet 分类工具
+   * 获取所有懒加载 ToolKit/ToolSet 的激活词
    */
+  async getToolActivators(
+    resolved: ResolvedPluginInfo[],
+  ): Promise<Array<{ name: string; activator: string }>> {
+    const activators: Array<{ name: string; activator: string }> = [];
+
+    for (const rp of resolved) {
+      if (!rp.enabled) continue;
+
+      // 从 ToolKit 收集
+      for (const tk of rp.toolKits) {
+        if (!tk.enabled) continue;
+        if (tk.loadMode !== "lazy") continue;
+        activators.push({
+          name: tk.id,
+          activator: tk.activator || `${rp.plugin.name} 工具包`,
+        });
+      }
+    }
+
+    return activators;
+  }
+
+  // ── 查询 ──
+
+  getPlugin(pluginId: string): PluginInstance | undefined {
+    return this.instances.get(pluginId);
+  }
+
+  async getAllPlugins(
+    includeDisabled?: boolean,
+    roleCfg?: any,
+  ): Promise<PluginInstance[]> {
+    const resolved = await this.resolvePlugins(undefined, roleCfg, true);
+    const enabledMap = new Map(resolved.map((r) => [r.plugin.id, r.enabled]));
+    const all = Array.from(this.instances.values());
+
+    return all
+      .filter((inst) => {
+        if (inst.manifest.category === "system") return true;
+        if (!includeDisabled) {
+          return enabledMap.get(inst.manifest.id) !== false;
+        }
+        return true;
+      })
+      .map((inst) => ({
+        ...inst,
+        enabled: enabledMap.get(inst.manifest.id) ?? inst.enabled,
+      }));
+  }
+
+  // ==================== 统一决议层 ====================
+
+  /**
+   * 统一决议：给定上下文，返回所有插件的启用状态 + 可用工具 + 工具包信息
+   *
+   * 这是 PluginManager 对外唯一决议入口。
+   * - ToolOrchestrator / ToolExecutor 调用后直接按结果构建运行时
+   * - PromptCollector 复用此结果
+   */
+  async resolvePlugins(
+    session?: ISessionContext,
+    pluginsConfig?: any,
+    skipHandler = false,
+  ): Promise<ResolvedPluginInfo[]> {
+    const rawGlobal = await this.settingsStorage.getSettings(SG_PLUGINS);
+    const globalCfg = PluginConfigParser.normalize(rawGlobal);
+
+    // 读取策略，默认 custom
+    const strategy = pluginsConfig?.__strategy || "custom";
+    const { __strategy: _, ...cleanCfg } = pluginsConfig || {};
+    const denyAll = strategy === "deny_nonsystem";
+    const roleCfg =
+      strategy === "inherit" ? {} : PluginConfigParser.normalize(cleanCfg);
+
+    const merged = PluginConfigParser.merge(globalCfg, roleCfg);
+
+    // __deny: "none-system" 覆盖：所有非 system 插件强制禁用
+    if (denyAll) {
+      for (const [id, instance] of this.instances) {
+        if (instance.manifest.category !== "system") {
+          merged[id] = { ...merged[id], enabled: false };
+        }
+      }
+    }
+
+    const result: ResolvedPluginInfo[] = [];
+
+    for (const [id, instance] of this.instances) {
+      const manifest = instance.manifest;
+      const entry = merged[id];
+
+      // 1. 解析 enabled 状态
+      // system 插件默认启用，其他按 category
+      const defaultEnabled =
+        manifest.category === "system" || manifest.category === "core";
+      const enabled = PluginConfigParser.isEnabled(entry, defaultEnabled);
+
+      // 计算 effective：谁导致了这个状态
+      const globalDisabled = globalCfg[id]?.enabled === false;
+      const effective: "global" | "role" =
+        !enabled && (globalDisabled || !defaultEnabled) ? "global" : "role";
+
+      if (!enabled) {
+        result.push({
+          enabled: false,
+          effective,
+          plugin: manifest,
+          enabledTools: [],
+          allTools: PluginRegistry.getTools(id),
+          toolKits: [],
+          deniedToolKits: { global: [], role: [] },
+        });
+        continue;
+      }
+
+      const tools = PluginRegistry.getTools(id);
+      // 合并工具包内的工具（供前端展示所有工具用）
+      const allTools = [
+        ...tools,
+        ...PluginRegistry.getToolKits(id).flatMap((k) => k.tools),
+      ];
+
+      // 2. 解析 toolkits deny 过滤（分来源）
+      const toolkitsDenyGlobal: string[] = PluginConfigParser.getToolkitsFilter(
+        globalCfg[id],
+      )
+        ? (entry as any).toolkits_deny_global || []
+        : [];
+      const toolkitsDenyRole: string[] = PluginConfigParser.getToolkitsFilter(
+        merged[id],
+      )
+        ? (entry as any).toolkits_deny_role || []
+        : [];
+      const deniedToolKits = {
+        global: toolkitsDenyGlobal,
+        role: toolkitsDenyRole,
+      };
+      const effectiveDenied = new Set([
+        ...toolkitsDenyGlobal,
+        ...toolkitsDenyRole,
+      ]);
+
+      // 3. 初始化 enabledTools（plugin级工具，工具包工具在下方循环中追加）
+      const enabledTools = [...tools];
+
+      // 4. 解析 ToolKit 运行时信息，eager 工具包的工具追加到 enabledTools
+      const kitRegs = PluginRegistry.getToolKits(id);
+      const resolvedToolKits: Array<{
+        id: string;
+        name: string;
+        loadMode: ToolLoadMode;
+        activator?: string;
+        enabled: boolean;
+      }> = [];
+      for (const kitReg of kitRegs) {
+        const kitEnabled = !effectiveDenied.has(kitReg.def.id);
+        if (!kitEnabled) continue;
+
+        let loadMode: ToolLoadMode = kitReg.def.loadMode || "eager";
+        let activator = kitReg.def.activator;
+        try {
+          if (kitReg.def.handler && !skipHandler && session) {
+            const runtime = await kitReg.def.handler({
+              session,
+            } as PluginContext);
+            if (runtime) {
+              loadMode = (runtime.loadMode as ToolLoadMode) ?? loadMode;
+              activator = runtime.activator ?? activator;
+            }
+          }
+        } catch {}
+        resolvedToolKits.push({
+          id: kitReg.def.id,
+          name: kitReg.def.name || kitReg.def.id,
+          loadMode,
+          activator,
+          enabled: true,
+        });
+
+        // eager 工具包的工具直接追加到启用列表
+        if (loadMode === "eager") {
+          enabledTools.push(...kitReg.tools);
+        }
+      }
+
+      result.push({
+        enabled,
+        effective,
+        plugin: manifest,
+        enabledTools,
+        allTools,
+        toolKits: resolvedToolKits,
+        deniedToolKits,
+      });
+    }
+
+    return result;
+  }
+
+  /** @deprecated 使用 resolvePlugins 代替 */
   async getPluginToolSets(context: PluginContext): Promise<
     Array<{
       pluginId: string;
@@ -399,301 +597,32 @@ export class PluginManager {
       }>;
     }>
   > {
-    const result: Array<{
-      pluginId: string;
-      toolSets: Array<{
-        name: string;
-        loadMode: ToolLoadMode;
-        activator?: string;
-      }>;
-    }> = [];
-    for (const [id, instance] of this.instances) {
-      if (!this.isPluginAvailable(id)) continue;
-      if (!this.isRolePluginEnabled(id, context.tools)) continue;
+    throw new Error("getPluginToolSets 已废弃，请使用 resolvePlugins 替代");
+  }
 
-      const toolSets = PluginRegistry.getToolSets(id);
-      if (toolSets.length === 0) continue;
-
-      const resolved: Array<{
-        name: string;
-        loadMode: ToolLoadMode;
-        activator?: string;
-      }> = [];
-      for (const ts of toolSets) {
-        const def = {
-          loadMode: ts.loadMode || ("lazy" as ToolLoadMode),
-          activator: ts.activator,
-        };
-        let resolved_ts = { ...def };
-        try {
-          if (ts.handler) {
-            const runtime = await ts.handler(context);
-            if (runtime)
-              resolved_ts = {
-                ...resolved_ts,
-                loadMode: runtime.loadMode ?? resolved_ts.loadMode,
-                activator: runtime.activator ?? resolved_ts.activator,
-              };
-          }
-        } catch {}
-        resolved.push({
-          name: ts.name,
-          loadMode: resolved_ts.loadMode,
-          activator: resolved_ts.activator,
-        });
+  /** @deprecated 使用 PluginConfigParser */
+  isRolePluginEnabled(pluginId: string, roleCfg?: PluginConfig): boolean {
+    if (!roleCfg) return true;
+    if (typeof roleCfg === "boolean") return roleCfg;
+    if (pluginId in roleCfg) {
+      const val: any = roleCfg[pluginId];
+      if (typeof val === "boolean") return val;
+      if (typeof val === "object" && !Array.isArray(val)) {
+        return val.enabled !== false;
       }
-      result.push({ pluginId: id, toolSets: resolved });
+      if (Array.isArray(val)) return val.length > 0;
     }
-    return result;
+    return true;
   }
 
-  // ── 提示词聚合 ──
-
-  /**
-   * 收集所有启用插件中 loadMode=eager 的提示词（始终注入 system prompt）
-   * 按 frequency 排序：STATIC → REGULAR → VOLATILE
-   */
-  async collectPrompts(context: PluginContext): Promise<PromptPiece[]> {
-    return this.collectByLoadMode(context, "eager");
-  }
-
-  /**
-   * 收集所有启用插件中 loadMode=lazy 的提示词（仅在 tool_load 时注入）
-   */
-  async collectLazyPrompts(context: PluginContext): Promise<PromptPiece[]> {
-    return this.collectByLoadMode(context, "lazy");
-  }
-
-  /**
-   * 获取指定插件的所有 loadMode=eager 的提示词（注入 system prompt 的静态/动态内容）
-   */
-  async collectPluginPrompts(
+  /** 获取所有已注册的工具包（供外部汇总） */
+  getPluginToolKits(
     pluginId: string,
-    context: PluginContext,
-  ): Promise<PromptPiece[]> {
-    const all = await this.collectByLoadMode(context, "eager");
-    return all.filter((p) => p.pluginId === pluginId);
-  }
-
-  /**
-   * 获取指定插件的所有 loadMode=lazy 的提示词（tool_load 时才注入的详细说明）
-   */
-  async collectPluginLazyPrompts(
-    pluginId: string,
-    context: PluginContext,
-  ): Promise<PromptPiece[]> {
-    const all = await this.collectByLoadMode(context, "lazy");
-    return all.filter((p) => p.pluginId === pluginId);
-  }
-
-  /** 按 loadMode 收集提示词 */
-  private async collectByLoadMode(
-    context: PluginContext,
-    loadMode: string,
-  ): Promise<PromptPiece[]> {
-    const pieces: PromptPiece[] = [];
-
-    for (const [id, instance] of this.instances) {
-      if (!this.isPluginAvailable(id)) continue;
-      if (!this.isRolePluginEnabled(id, context.tools)) continue;
-
-      // 从 PluginRegistry 读取注册的提示词元数据（OnLoad(api).registerPrompt 方式）
-      const { prompts: promptMetas } = PluginRegistry.getPromptMetas(id);
-      for (const meta of promptMetas) {
-        // 解析实际 loadMode：从 toolSet 运行时决定，无 toolSet 时默认为 eager
-        let actualLoadMode: string | undefined;
-        if (meta.toolSet) {
-          try {
-            const toolSets = PluginRegistry.getToolSets(id);
-            const ts = toolSets.find((t) => t.name === meta.toolSet);
-            if (ts) {
-              const tsDefaults = {
-                loadMode: ts.loadMode || ("eager" as ToolLoadMode),
-              };
-              let tsResolved = { ...tsDefaults };
-              if (ts.handler) {
-                const runtime = await ts.handler(context);
-                if (runtime)
-                  tsResolved = {
-                    ...tsResolved,
-                    loadMode: runtime.loadMode ?? tsResolved.loadMode,
-                  };
-              }
-              actualLoadMode = tsResolved.loadMode;
-            }
-          } catch {}
-        }
-        actualLoadMode = actualLoadMode || "eager";
-        if (actualLoadMode !== loadMode) continue;
-        try {
-          const content = await meta.handler(context);
-          if (content)
-            pieces.push({
-              content,
-              frequency: meta.frequency as any,
-              loadMode: actualLoadMode as any,
-              pluginId: id,
-              description: meta.description,
-            });
-        } catch {}
-      }
-
-      // 旧适配器兼容：getPrompts/getPersistentPrompts 方法（LegacyProviderAdapter 使用）
-      if (loadMode === "eager") {
-        if (instance.plugin.getPrompts) {
-          try {
-            const r = await instance.plugin.getPrompts(context);
-            if (r) pieces.push(...r);
-          } catch {}
-        }
-        if (instance.plugin.getPersistentPrompts) {
-          try {
-            const r = await instance.plugin.getPersistentPrompts(context);
-            if (r) pieces.push(...r);
-          } catch {}
-        }
-      }
-    }
-
-    const order = { STATIC: 0, REGULAR: 1, VOLATILE: 2 };
-    pieces.sort((a, b) => {
-      const diff = (order[a.frequency] ?? 1) - (order[b.frequency] ?? 1);
-      return diff !== 0 ? diff : a.pluginId.localeCompare(b.pluginId);
-    });
-    return pieces;
-  }
-
-  /**
-   * 获取所有懒加载 ToolSet 的激活词原始数据（已过滤+运行时解析），供插件格式化。
-   * 返回格式：[{ name: "todo", activator: "..." }, ...]
-   */
-  async getToolActivators(
-    context: PluginContext,
-  ): Promise<Array<{ name: string; activator: string }>> {
-    const activators: Array<{ name: string; activator: string }> = [];
-
-    for (const [id, instance] of this.instances) {
-      if (!this.isPluginAvailable(id)) continue;
-      if (!this.isRolePluginEnabled(id, context.tools)) continue;
-
-      const toolSets = PluginRegistry.getToolSets(id);
-
-      for (const ts of toolSets) {
-        const tsDefaults = {
-          loadMode: ts.loadMode || ("eager" as ToolLoadMode),
-          activator: ts.activator,
-        };
-        let tsResolved = { ...tsDefaults };
-        try {
-          if (ts.handler) {
-            const runtime = await ts.handler(context);
-            if (runtime)
-              tsResolved = {
-                ...tsResolved,
-                loadMode: runtime.loadMode ?? tsResolved.loadMode,
-                activator: runtime.activator ?? tsResolved.activator,
-              };
-          }
-        } catch {}
-
-        if (tsResolved.loadMode !== "lazy") continue;
-
-        activators.push({
-          name: ts.name,
-          activator: tsResolved.activator || `${instance.manifest.name} 工具集`,
-        });
-      }
-    }
-
-    return activators;
-  }
-
-  // ── 查询 ──
-
-  isPluginEnabled(pluginId: string): boolean {
-    return this.instances.get(pluginId)?.enabled ?? false;
-  }
-
-  getPlugin(pluginId: string): PluginInstance | undefined {
-    return this.instances.get(pluginId);
-  }
-
-  getAllPlugins(): PluginInstance[] {
-    return Array.from(this.instances.values()).filter((i) => i.enabled);
-  }
-
-  /** 返回所有已注册插件实例（包括禁用），用于前端列表展示 */
-  getAllPluginRegistrations(): PluginInstance[] {
-    return Array.from(this.instances.values());
-  }
-
-  getEnabledPluginIds(): string[] {
-    return Array.from(this.instances.values())
-      .filter((i) => i.enabled)
-      .map((i) => i.manifest.id);
-  }
-
-  /**
-   * 获取可热插拔插件列表（前端 UI 用）。
-   * 过滤掉 system 分类的基础设施插件，使用 isPluginEnabled / isRolePluginEnabled 判断状态。
-   */
-  async getHotPluggablePlugins(roleCfg?: PluginConfig): Promise<
-    Array<{
-      pluginId: string;
-      effective: "global" | "role";
-      name: string;
-      displayName: string;
-      description: string;
-      category?: string;
-      enabled: boolean;
-      isMcp: boolean;
-      isSkill: boolean;
-      tools: Array<{
-        enabled: boolean;
-        name: string;
-        description: string;
-        parameters: any;
-      }>;
-    }>
-  > {
-    const result: any[] = [];
-
-    for (const instance of this.getAllPluginRegistrations()) {
-      const manifest = instance.manifest;
-      if (manifest.category === "system") continue;
-
-      const pluginId = manifest.id;
-
-      // 插件级别是否可用：全局启用 && 角色允许
-      const globalEnabled = this.isPluginEnabled(pluginId);
-      const roleOk = this.isRolePluginEnabled(pluginId, roleCfg);
-      const enabled = globalEnabled && roleOk;
-      const effective =
-        roleCfg && pluginId in (roleCfg as any)
-          ? ("role" as const)
-          : ("global" as const);
-      console.log(roleCfg, pluginId, roleOk);
-      const allTools = PluginRegistry.getTools(pluginId);
-
-      result.push({
-        pluginId,
-        effective,
-        name: pluginId,
-        displayName: manifest.name,
-        description: manifest.description,
-        category: manifest.category,
-        enabled,
-        isMcp: pluginId === "mcp",
-        isSkill: pluginId === "skill",
-        tools: allTools.map((t) => ({
-          enabled,
-          name: t.name,
-          description: t.description,
-          parameters: t.parameters as any,
-        })),
-      });
-    }
-
-    return result;
+  ): Array<{ id: string; name: string; loadMode: ToolKitLoadMode }> {
+    return PluginRegistry.getToolKits(pluginId).map((k) => ({
+      id: k.def.id,
+      name: k.def.name || k.def.id,
+      loadMode: k.def.loadMode || "lazy",
+    }));
   }
 }

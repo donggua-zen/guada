@@ -224,7 +224,7 @@ export class FileToolProvider implements IToolProvider {
   async getPersistentPrompt(context?: Record<string, any>): Promise<string> {
     const promptParts: string[] = [];
     // 注入工作目录提示
-    if (context?.workspacePath) {
+    if (context?.session.workspacePath) {
       promptParts.push("# 当前会话工作目录");
       promptParts.push(`\`${context.workspacePath}\``);
       promptParts.push("");
@@ -333,7 +333,7 @@ export class FileToolProvider implements IToolProvider {
   private resolvePath(filePath: string, context?: Record<string, any>): string {
     return this.workspaceService.resolveFilePath(
       filePath,
-      context?.workspacePath,
+      context?.session.workspacePath,
     );
   }
 
@@ -347,7 +347,7 @@ export class FileToolProvider implements IToolProvider {
     const resolvedPath = this.resolvePath(filePath, context);
 
     // 检查是否为安全工作路径（传入工作目录作为额外安全路径）
-    const extraSafePaths = context?.workspacePath
+    const extraSafePaths = context?.session.workspacePath
       ? [context.workspacePath]
       : [];
     this.workspaceService.validateWritePath(resolvedPath, extraSafePaths);

@@ -53,7 +53,13 @@ export class LegacyProviderAdapter extends PluginBase {
   async getPrompts(context: PluginContext): Promise<PromptPiece[]> {
     if (!this.provider.getPrompt) return [];
     try {
-      const content = await this.provider.getPrompt(context);
+      const adapterCtx = {
+        sessionId: context.session.sessionId,
+        sessionType: context.session.sessionType,
+        workspacePath: context.session.workspacePath,
+        userId: context.session.userId,
+      };
+      const content = await this.provider.getPrompt(adapterCtx);
       if (!content) return [];
       const meta = this.provider.getMetadata();
       const freq = meta.promptFrequency === "STATIC" ? "STATIC"
@@ -67,7 +73,13 @@ export class LegacyProviderAdapter extends PluginBase {
   async getPersistentPrompts(context: PluginContext): Promise<PromptPiece[]> {
     if (!this.provider.getPersistentPrompt) return [];
     try {
-      const content = await this.provider.getPersistentPrompt(context);
+      const adapterCtx = {
+        sessionId: context.session.sessionId,
+        sessionType: context.session.sessionType,
+        workspacePath: context.session.workspacePath,
+        userId: context.session.userId,
+      };
+      const content = await this.provider.getPersistentPrompt(adapterCtx);
       if (!content) return [];
       const meta = this.provider.getMetadata();
       return [{ content, frequency: (meta.promptFrequency || "REGULAR") as any, pluginId: this.manifest.id, description: `${this.manifest.name} 持久数据` }];

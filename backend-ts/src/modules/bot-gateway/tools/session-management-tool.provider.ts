@@ -18,7 +18,7 @@ export class SessionManagementToolProvider implements IToolProvider {
   async getTools(enabled?: boolean | string[], context?: Record<string, any>): Promise<any[]> {
     if (enabled === false) return [];
 
-    const sessionType = context?.sessionType;
+    const sessionType = context?.session.sessionType;
 
     if (sessionType !== 'bot') {
       return [];
@@ -49,12 +49,12 @@ export class SessionManagementToolProvider implements IToolProvider {
   }
 
   async execute(request: ToolCallRequest, context?: Record<string, any>, abortSignal?: AbortSignal): Promise<string> {
-    const sessionId = context?.sessionId;
+    const sessionId = context?.session.sessionId;
     if (!sessionId) {
       throw new Error("无法获取会话 ID");
     }
 
-    const sessionType = context?.sessionType;
+    const sessionType = context?.session.sessionType;
     if (sessionType !== 'bot') {
       throw new Error("此工具仅在机器人会话中可用");
     }
@@ -107,7 +107,7 @@ export class SessionManagementToolProvider implements IToolProvider {
   }
 
   async getPrompt(context?: Record<string, any>): Promise<string> {
-    const sessionType = context?.sessionType;
+    const sessionType = context?.session.sessionType;
     if (sessionType !== 'bot') {
       return "";
     }
@@ -136,7 +136,7 @@ export class SessionManagementToolProvider implements IToolProvider {
   }
 
   async getBriefDescription(context?: Record<string, any>): Promise<string> {
-    const sessionType = context?.sessionType;
+    const sessionType = context?.session.sessionType;
     if (sessionType !== 'bot') {
       return "";
     }
@@ -144,7 +144,7 @@ export class SessionManagementToolProvider implements IToolProvider {
   }
 
   getMetadata(context?: Record<string, any>): ToolProviderMetadata {
-    const sessionType = context?.sessionType;
+    const sessionType = context?.session.sessionType;
     const loadMode = sessionType === 'bot' ? 'lazy' : 'none';
 
     return {

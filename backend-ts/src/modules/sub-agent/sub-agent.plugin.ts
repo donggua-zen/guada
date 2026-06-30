@@ -20,19 +20,19 @@ export class SubAgentPlugin extends PluginBase {
   }
 
   async onLoad(api: PluginApi) {
-    api.registerToolSet({
-      name: "subagent",
+    const subKit = api.registerToolKit({
+      id: "subagent",
+      name: "子代理",
       loadMode: "lazy",
-      activator: "需要创建子代理执行独立任务时，可以调用此工具集",
+      activator: "需要创建子代理执行独立任务时，可以调用此工具包",
       handler: (ctx) => ({
         loadMode:
-          ctx.sessionType === "team" ? ("eager" as const) : ("lazy" as const),
+          ctx.session.sessionType === "team" ? ("eager" as const) : ("lazy" as const),
       }),
     });
 
-    api.registerTool({
+    subKit.registerTool({
       name: "subagent_spawn",
-      toolSet: "subagent",
       description: `创建一个子代理独立执行指定任务。
 子代理拥有独立的对话上下文和工具能力，创建后立即返回子会话 ID。`,
       inputSchema: z.object({
@@ -53,12 +53,12 @@ export class SubAgentPlugin extends PluginBase {
       }),
       execute: async (args, ctx, abortSignal) => {
         this.logger.log(
-          `创建子 Agent: ${args.name}, 父会话: ${ctx?.sessionId}`,
+          `创建子 Agent: ${args.name}, 父会话: ${ctx?.session.sessionId}`,
         );
         const result = await this.subAgentManager.spawn(
           {
-            parentSessionId: ctx?.sessionId,
-            userId: ctx?.userId,
+            parentSessionId: ctx?.session.sessionId,
+            userId: ctx?.session.userId,
             name: args.name,
             task: args.task,
             characterId: args.characterId,
@@ -80,15 +80,14 @@ export class SubAgentPlugin extends PluginBase {
       display: { action: "创建子代理", argsKey: "name", icon: "generic" },
     });
 
-    api.registerTool({
+    subKit.registerTool({
       name: "subagent_wait",
-      toolSet: "subagent",
       description: "等待子代理执行完成并返回结果摘要",
       inputSchema: z.object({}),
       execute: async (_args, ctx, abortSignal) => {
-        this.logger.log(`等待子代理完成: 父会话 ${ctx?.sessionId}`);
+        this.logger.log(`等待子代理完成: 父会话 ${ctx?.session.sessionId}`);
         const completed = await this.subAgentManager.waitForComplete(
-          ctx?.sessionId,
+          ctx?.session.sessionId,
           120000,
           abortSignal,
         );
@@ -114,9 +113,8 @@ export class SubAgentPlugin extends PluginBase {
       display: { action: "等待子代理", icon: "generic" },
     });
 
-    api.registerTool({
+    subKit.registerTool({
       name: "subagent_close",
-      toolSet: "subagent",
       description: "关闭指定子代理并删除其会话数据",
       inputSchema: z.object({
         sessionId: z.string().describe("要关闭的子代理会话 ID"),
@@ -125,9 +123,9 @@ export class SubAgentPlugin extends PluginBase {
         try {
           await this.subAgentManager.closeSubAgent(
             args.sessionId,
-            ctx?.sessionId,
-            ctx?.userId,
-            ctx?.workspacePath,
+            ctx?.session.sessionId,
+            ctx?.session.userId,
+            ctx?.session.workspacePath,
           );
           return {
             success: true,
@@ -143,13 +141,12 @@ export class SubAgentPlugin extends PluginBase {
       display: { action: "关闭子代理", argsKey: "sessionId", icon: "generic" },
     });
 
-    api.registerTool({
+    subKit.registerTool({
       name: "subagent_list",
-      toolSet: "subagent",
       description: "获取当前父会话下所有子代理列表",
       inputSchema: z.object({}),
       execute: async (_args, ctx) => {
-        const agents = await this.subAgentManager.getSubAgents(ctx?.sessionId);
+        const agents = await this.subAgentManager.getSubAgents(ctx?.session.sessionId);
         return {
           success: true,
           sub_agents: agents,
@@ -159,9 +156,8 @@ export class SubAgentPlugin extends PluginBase {
       display: { action: "列出子代理", icon: "generic" },
     });
 
-    api.registerTool({
+    subKit.registerTool({
       name: "subagent_send_message",
-      toolSet: "subagent",
       description: "向已存在的子代理发送消息继续交互",
       inputSchema: z.object({
         sessionId: z.string().describe("子代理的会话 ID"),
@@ -171,8 +167,8 @@ export class SubAgentPlugin extends PluginBase {
         try {
           const result = await this.subAgentManager.sendMessage(
             {
-              parentSessionId: ctx?.sessionId,
-              userId: ctx?.userId,
+              parentSessionId: ctx?.session.sessionId,
+              userId: ctx?.session.userId,
               sessionId: args.sessionId,
               message: args.message,
             },
@@ -203,8 +199,7 @@ export class SubAgentPlugin extends PluginBase {
       },
     });
 
-    api.registerPrompt({
-      toolSet: "subagent",
+    subKit.registerPrompt({
       frequency: "REGULAR",
       description: "子代理工具使用说明",
       content: `# 子代理工具使用说明：

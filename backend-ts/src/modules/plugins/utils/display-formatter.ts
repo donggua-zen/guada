@@ -1,15 +1,13 @@
 import { ToolDisplayInfo, ToolCallRequest } from "../../tools/interfaces/tool-provider.interface";
-import { ToolRuntime } from "../../tools/tool-context";
 import { ToolHandlerDef } from "../types/plugin.types";
 
 /**
  * 生成工具调用的展示文案
- * 独立于 ToolOrchestrator，可在任何地方使用
+ * 不再依赖 ToolRuntime，直接使用 ToolHandlerDef 获取展示信息。
  */
 export function generateDisplayMessage(
   request: ToolCallRequest,
   isExecuting: boolean = true,
-  runtime?: ToolRuntime,
   toolEntry?: ToolHandlerDef,
 ): ToolDisplayInfo {
   try {
@@ -18,7 +16,6 @@ export function generateDisplayMessage(
       return generateDisplayMessage(
         { id: request.id, name: request.arguments.tool_name, arguments: request.arguments.arguments || {} },
         isExecuting,
-        runtime,
       );
     }
     if (request.name === "tool_call") {

@@ -1,14 +1,14 @@
 import {
   PluginManifest,
   ToolHandlerDef,
-  ToolSetDef,
+  ToolKitRegistration,
 } from "../types/plugin.types";
 import { PluginBase } from "../base-plugin";
 
 interface PluginRegistration {
   manifest: PluginManifest;
   tools: ToolHandlerDef[];
-  toolSets: ToolSetDef[];
+  toolKits: ToolKitRegistration[];
   prompts: Array<{
     methodName: string;
     frequency: string;
@@ -24,22 +24,35 @@ class PluginRegistryImpl {
 
   registerManifest(manifest: PluginManifest) {
     if (this.registrations.has(manifest.id)) return;
-    this.registrations.set(manifest.id, { manifest, tools: [], toolSets: [], prompts: [] });
+    this.registrations.set(manifest.id, { manifest, tools: [], toolKits: [], prompts: [] });
   }
 
   getTools(pluginId: string): ToolHandlerDef[] {
     return this.registrations.get(pluginId)?.tools || [];
   }
 
-  registerToolSet(id: string, entry: ToolSetDef) {
-    const reg = this.registrations.get(id);
-    if (reg && !reg.toolSets.find((x) => x.name === entry.name)) {
-      reg.toolSets.push(entry);
-    }
+  /** 注册 ToolKit */
+  registerToolKit(pluginId: string, reg: ToolKitRegistration) {
+    const pReg = this.registrations.get(pluginId);
+    if (!pReg) return;
+    if (pReg.toolKits.find((x) => x.def.id === reg.def.id)) return;
+    pReg.toolKits.push(reg);
   }
 
-  getToolSets(pluginId: string): ToolSetDef[] {
-    return this.registrations.get(pluginId)?.toolSets || [];
+  /** 获取插件的所有 ToolKit 注册 */
+  getToolKits(pluginId: string): ToolKitRegistration[] {
+    return this.registrations.get(pluginId)?.toolKits || [];
+  }
+
+  /** 获取所有 ToolKit（所有插件） */
+  getAllToolKits(): Array<{ pluginId: string; kit: ToolKitRegistration }> {
+    const result: Array<{ pluginId: string; kit: ToolKitRegistration }> = [];
+    for (const [pluginId, reg] of this.registrations) {
+      for (const kit of reg.toolKits) {
+        result.push({ pluginId, kit });
+      }
+    }
+    return result;
   }
 
   getPromptMetas(pluginId: string) {

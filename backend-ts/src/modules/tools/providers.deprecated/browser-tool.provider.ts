@@ -424,8 +424,8 @@ export class BrowserToolProvider implements IToolProvider {
 
       // 特殊处理 browser_new_window，注入会话路径和会话 ID
       if (request.name === 'browser_new_window') {
-        const sessionPath = context?.workspacePath as string | undefined
-        const sessionId = context?.sessionId as string | undefined
+        const sessionPath = context?.session.workspacePath as string | undefined
+        const sessionId = context?.session.sessionId as string | undefined
         const argsWithSession = {
           ...request.arguments,
           session_path: sessionPath,
@@ -552,7 +552,7 @@ export class BrowserToolProvider implements IToolProvider {
    * 解析 JavaScript 文件路径（复用 WorkspaceService）
    */
   private resolveJsFilePath(filePath: string, context?: Record<string, any>): string {
-    return this.workspaceService.resolveFilePath(filePath, context?.workspacePath)
+    return this.workspaceService.resolveFilePath(filePath, context?.session.workspacePath)
   }
 
   /**
@@ -576,7 +576,7 @@ export class BrowserToolProvider implements IToolProvider {
 
     try {
       // 确保 sessionId 存在
-      if (!context?.sessionId) {
+      if (!context?.session.sessionId) {
         throw new Error('无法保存大结果：缺少会话 ID')
       }
 
@@ -585,7 +585,7 @@ export class BrowserToolProvider implements IToolProvider {
       const fileName = `page_struct_output_${timestamp}.json`
 
       // 使用注入的工作路径创建 tools_output 目录
-      const workspaceDir = context?.workspacePath
+      const workspaceDir = context?.session.workspacePath
       if (!workspaceDir) {
         throw new Error('工作路径未提供')
       }

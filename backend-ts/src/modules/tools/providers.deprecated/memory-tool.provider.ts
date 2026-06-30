@@ -92,7 +92,7 @@ export class MemoryToolProvider implements IToolProvider {
     const promptParts: string[] = [];
 
     // 子代理使用隔离的记忆路径
-    const memoryRoot = context?.sessionType === "sub_agent"
+    const memoryRoot = context?.session.sessionType === "sub_agent"
       ? `.guada/subagents/${context.sessionId}`
       : ".guada";
 
@@ -202,13 +202,13 @@ export class MemoryToolProvider implements IToolProvider {
 
   async getPersistentPrompt(context?: Record<string, any>): Promise<string> {
     try {
-      const sessionId = context?.sessionId;
+      const sessionId = context?.session.sessionId;
       if (!sessionId) {
         return "";
       }
 
       // 使用注入的工作路径
-      const workspaceDir = context?.workspacePath;
+      const workspaceDir = context?.session.workspacePath;
       if (!workspaceDir) {
         this.logger.warn(`No workspace path provided for session ${sessionId}`);
         return "";
@@ -229,7 +229,7 @@ export class MemoryToolProvider implements IToolProvider {
       // 子代理使用隔离的记忆路径，避免与主代理记忆混淆
       let memoryDir: string;
       let memosDir: string;
-      if (context?.sessionType === "sub_agent") {
+      if (context?.session.sessionType === "sub_agent") {
         const subDir = path.join(workspaceDir, ".guada", "subagents", sessionId);
         memoryDir = path.join(subDir, "memory");
         memosDir = path.join(subDir, "memos");

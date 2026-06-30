@@ -47,256 +47,245 @@ export class BrowserPlugin extends PluginBase {
   }
 
   async onLoad(api: PluginApi) {
-    api.registerToolSet({
-      name: "browser",
+    // 注册浏览器工具包（ToolKit 方式）
+    api.registerToolKit({
+      id: "browser",
+      name: "浏览器自动化",
       loadMode: "lazy",
       activator: "当需要浏览器自动化操作时通过 tool_load 加载",
-    });
-
-    api.registerTool({
-      name: "browser_navigate",
-      toolSet: "browser",
-      description: "导航到指定 URL，返回页面标题、URL 和页面摘要内容",
-      inputSchema: z.object({
-        url: z.string().describe("要导航到的 URL"),
-        window_id: z.string().describe("目标窗口 ID（必填）"),
-      }),
-      execute: async (args, ctx, signal) =>
-        this.executeWithContent("browser_navigate", args, signal),
-      display: { action: "访问网页", argsKey: "url", icon: "browser" },
-    });
-    api.registerTool({
-      name: "browser_run_js",
-      toolSet: "browser",
-      description:
-        "在指定窗口执行 JavaScript 代码并返回结果。支持直接传入代码字符串或文件路径（相对路径相对于会话工作目录）",
-      inputSchema: z.object({
-        code: z.string().optional().describe("要执行的 JavaScript 代码字符串"),
-        file_path: z
-          .string()
-          .optional()
-          .describe(
-            "JavaScript 文件路径（相对路径相对于会话工作目录，与 code 二选一）",
-          ),
-        window_id: z.string().describe("目标窗口 ID（必填）"),
-      }),
-      execute: async (args, ctx, signal) => {
-        const { code, file_path, window_id } = args;
-        if (!window_id) throw new Error("window_id 是必填参数");
-        if (!code && !file_path)
-          throw new Error("必须提供 code 或 file_path 其中之一");
-        if (code && file_path)
-          throw new Error("code 和 file_path 不能同时提供");
-        const finalCode = file_path
-          ? await this.readJsFile(file_path, ctx)
-          : code!;
-        const result = await this.sendRequest(
-          "browser_run_js",
-          { code: finalCode, window_id },
-          signal,
-        );
-        return result;
-      },
-      display: { action: "执行 JavaScript", argsKey: "code", icon: "code" },
-    });
-    api.registerTool({
-      name: "browser_page_text",
-      toolSet: "browser",
-      description:
-        "获取指定窗口的页面纯文本内容（移除所有 HTML 标签、脚本和样式）",
-      inputSchema: z.object({ window_id: z.string().describe("目标窗口 ID") }),
-      execute: async (args, ctx, signal) => {
-        const r = await this.sendRequest("browser_page_text", args, signal);
-        return r;
-      },
-      display: { action: "提取页面文本", icon: "browser" },
-    });
-    api.registerTool({
-      name: "browser_page_struct",
-      toolSet: "browser",
-      description:
-        "获取指定窗口的页面结构化 JSON（选择器风格优化，大幅减少 Token 占用）",
-      inputSchema: z.object({ window_id: z.string().describe("目标窗口 ID") }),
-      execute: async (args, ctx, signal) => {
-        const r = await this.sendRequest("browser_page_struct", args, signal);
-        return r;
-      },
-      display: { action: "获取页面结构", icon: "browser" },
-    });
-    api.registerTool({
-      name: "browser_page_summary",
-      toolSet: "browser",
-      description: "获取指定窗口的页面摘要（提取文本、链接和标题层级）",
-      inputSchema: z.object({ window_id: z.string().describe("目标窗口 ID") }),
-      execute: async (args, ctx, signal) => {
-        const r = await this.sendRequest("browser_page_summary", args, signal);
-        return r;
-      },
-      display: { action: "获取页面摘要", icon: "browser" },
-    });
-    api.registerTool({
-      name: "browser_go_back",
-      toolSet: "browser",
-      description: "浏览器后退",
-      inputSchema: z.object({ window_id: z.string().describe("目标窗口 ID") }),
-      execute: async (args, ctx, signal) =>
-        this.executeWithContent("browser_go_back", args, signal),
-      display: { action: "后退", icon: "browser" },
-    });
-    api.registerTool({
-      name: "browser_go_forward",
-      toolSet: "browser",
-      description: "浏览器前进",
-      inputSchema: z.object({ window_id: z.string().describe("目标窗口 ID") }),
-      execute: async (args, ctx, signal) =>
-        this.executeWithContent("browser_go_forward", args, signal),
-      display: { action: "前进", icon: "browser" },
-    });
-    api.registerTool({
-      name: "browser_reload",
-      toolSet: "browser",
-      description: "刷新指定窗口的页面",
-      inputSchema: z.object({ window_id: z.string().describe("目标窗口 ID") }),
-      execute: async (args, ctx, signal) =>
-        this.executeWithContent("browser_reload", args, signal),
-      display: { action: "刷新页面", icon: "browser" },
-    });
-    api.registerTool({
-      name: "browser_click",
-      toolSet: "browser",
-      description:
-        "点击指定窗口中 CSS 选择器匹配的元素，操作后自动返回页面摘要",
-      inputSchema: z.object({
-        selector: z.string().describe("CSS 选择器"),
-        window_id: z.string().describe("目标窗口 ID"),
-      }),
-      execute: async (args, ctx, signal) =>
-        this.sendRequest("browser_click", args, signal),
-      display: { action: "点击元素", argsKey: "selector", icon: "browser" },
-    });
-    api.registerTool({
-      name: "browser_input",
-      toolSet: "browser",
-      description: "向指定窗口的输入框填入文本，操作后自动返回页面摘要",
-      inputSchema: z.object({
-        selector: z.string().describe("CSS 选择器"),
-        value: z.string().describe("要填入的文本"),
-        window_id: z.string().describe("目标窗口 ID"),
-      }),
-      execute: async (args, ctx, signal) =>
-        this.sendRequest("browser_input", args, signal),
-      display: { action: "输入文本", argsKey: "value", icon: "browser" },
-    });
-    api.registerTool({
-      name: "browser_new_window",
-      toolSet: "browser",
-      description:
-        "打开新的独立窗口，返回 window_id。支持传递元数据用于 session 隔离和作用域标识",
-      inputSchema: z.object({
-        url: z.string().describe("要打开的 URL"),
-        metadata: z
-          .object({
-            scope: z
+      onLoad: (toolkit) => {
+        toolkit.registerTool({
+          name: "browser_navigate",
+          description: "导航到指定 URL，返回页面标题、URL 和页面摘要内容",
+          inputSchema: z.object({
+            url: z.string().describe("要导航到的 URL"),
+            window_id: z.string().describe("目标窗口 ID（必填）"),
+          }),
+          execute: async (args, ctx, signal) =>
+            this.executeWithContent("browser_navigate", args, signal),
+          display: { action: "访问网页", argsKey: "url", icon: "browser" },
+        });
+        toolkit.registerTool({
+          name: "browser_run_js",
+          description:
+            "在指定窗口执行 JavaScript 代码并返回结果。支持直接传入代码字符串或文件路径（相对路径相对于会话工作目录）",
+          inputSchema: z.object({
+            code: z.string().optional().describe("要执行的 JavaScript 代码字符串"),
+            file_path: z
               .string()
               .optional()
-              .describe("作用域标识，用于 session 隔离"),
-            purpose: z.string().optional().describe("窗口用途描述"),
-          })
-          .optional()
-          .describe(
-            "可选元数据，如 { scope: 'session_123', purpose: 'research' }",
-          ),
-      }),
-      execute: async (args, ctx, signal) => {
-        const r = await this.sendRequest(
-          "browser_new_window",
-          {
-            ...args,
-            session_path: ctx?.workspacePath,
-            session_id: ctx?.sessionId,
-          },
-          signal,
-        );
-        // 创建成功后自动获取页面摘要
-        if (r?.windowId) {
-          try {
-            const summary = await this.sendRequest(
-              "browser_page_summary",
-              { window_id: r.windowId },
+              .describe(
+                "JavaScript 文件路径（相对路径相对于会话工作目录，与 code 二选一）",
+              ),
+            window_id: z.string().describe("目标窗口 ID（必填）"),
+          }),
+          execute: async (args, ctx, signal) => {
+            const { code, file_path, window_id } = args;
+            if (!window_id) throw new Error("window_id 是必填参数");
+            if (!code && !file_path)
+              throw new Error("必须提供 code 或 file_path 其中之一");
+            if (code && file_path)
+              throw new Error("code 和 file_path 不能同时提供");
+            const finalCode = file_path
+              ? await this.readJsFile(file_path, ctx)
+              : code!;
+            const result = await this.sendRequest(
+              "browser_run_js",
+              { code: finalCode, window_id },
               signal,
             );
-            return { ...r, ...summary, page_summary: undefined };
-          } catch {
+            return result;
+          },
+          display: { action: "执行 JavaScript", argsKey: "code", icon: "code" },
+        });
+        toolkit.registerTool({
+          name: "browser_page_text",
+          description:
+            "获取指定窗口的页面纯文本内容（移除所有 HTML 标签、脚本和样式）",
+          inputSchema: z.object({ window_id: z.string().describe("目标窗口 ID") }),
+          execute: async (args, ctx, signal) => {
+            const r = await this.sendRequest("browser_page_text", args, signal);
             return r;
-          }
-        }
-        return r;
+          },
+          display: { action: "提取页面文本", icon: "browser" },
+        });
+        toolkit.registerTool({
+          name: "browser_page_struct",
+          description:
+            "获取指定窗口的页面结构化 JSON（选择器风格优化，大幅减少 Token 占用）",
+          inputSchema: z.object({ window_id: z.string().describe("目标窗口 ID") }),
+          execute: async (args, ctx, signal) => {
+            const r = await this.sendRequest("browser_page_struct", args, signal);
+            return r;
+          },
+          display: { action: "获取页面结构", icon: "browser" },
+        });
+        toolkit.registerTool({
+          name: "browser_page_summary",
+          description: "获取指定窗口的页面摘要（提取文本、链接和标题层级）",
+          inputSchema: z.object({ window_id: z.string().describe("目标窗口 ID") }),
+          execute: async (args, ctx, signal) => {
+            const r = await this.sendRequest("browser_page_summary", args, signal);
+            return r;
+          },
+          display: { action: "获取页面摘要", icon: "browser" },
+        });
+        toolkit.registerTool({
+          name: "browser_go_back",
+          description: "浏览器后退",
+          inputSchema: z.object({ window_id: z.string().describe("目标窗口 ID") }),
+          execute: async (args, ctx, signal) =>
+            this.executeWithContent("browser_go_back", args, signal),
+          display: { action: "后退", icon: "browser" },
+        });
+        toolkit.registerTool({
+          name: "browser_go_forward",
+          description: "浏览器前进",
+          inputSchema: z.object({ window_id: z.string().describe("目标窗口 ID") }),
+          execute: async (args, ctx, signal) =>
+            this.executeWithContent("browser_go_forward", args, signal),
+          display: { action: "前进", icon: "browser" },
+        });
+        toolkit.registerTool({
+          name: "browser_reload",
+          description: "刷新指定窗口的页面",
+          inputSchema: z.object({ window_id: z.string().describe("目标窗口 ID") }),
+          execute: async (args, ctx, signal) =>
+            this.executeWithContent("browser_reload", args, signal),
+          display: { action: "刷新页面", icon: "browser" },
+        });
+        toolkit.registerTool({
+          name: "browser_click",
+          description:
+            "点击指定窗口中 CSS 选择器匹配的元素，操作后自动返回页面摘要",
+          inputSchema: z.object({
+            selector: z.string().describe("CSS 选择器"),
+            window_id: z.string().describe("目标窗口 ID"),
+          }),
+          execute: async (args, ctx, signal) =>
+            this.sendRequest("browser_click", args, signal),
+          display: { action: "点击元素", argsKey: "selector", icon: "browser" },
+        });
+        toolkit.registerTool({
+          name: "browser_input",
+          description: "向指定窗口的输入框填入文本，操作后自动返回页面摘要",
+          inputSchema: z.object({
+            selector: z.string().describe("CSS 选择器"),
+            value: z.string().describe("要填入的文本"),
+            window_id: z.string().describe("目标窗口 ID"),
+          }),
+          execute: async (args, ctx, signal) =>
+            this.sendRequest("browser_input", args, signal),
+          display: { action: "输入文本", argsKey: "value", icon: "browser" },
+        });
+        toolkit.registerTool({
+          name: "browser_new_window",
+          description:
+            "打开新的独立窗口，返回 window_id。支持传递元数据用于 session 隔离和作用域标识",
+          inputSchema: z.object({
+            url: z.string().describe("要打开的 URL"),
+            metadata: z
+              .object({
+                scope: z
+                  .string()
+                  .optional()
+                  .describe("作用域标识，用于 session 隔离"),
+                purpose: z.string().optional().describe("窗口用途描述"),
+              })
+              .optional()
+              .describe(
+                "可选元数据，如 { scope: 'session_123', purpose: 'research' }",
+              ),
+          }),
+          execute: async (args, ctx, signal) => {
+            const r = await this.sendRequest(
+              "browser_new_window",
+              {
+                ...args,
+                session_path: ctx?.session.workspacePath,
+                session_id: ctx?.session.sessionId,
+              },
+              signal,
+            );
+            if (r?.windowId) {
+              try {
+                const summary = await this.sendRequest(
+                  "browser_page_summary",
+                  { window_id: r.windowId },
+                  signal,
+                );
+                return { ...r, ...summary, page_summary: undefined };
+              } catch {
+                return r;
+              }
+            }
+            return r;
+          },
+          display: { action: "打开新窗口", argsKey: "url", icon: "browser" },
+        });
+        toolkit.registerTool({
+          name: "browser_close",
+          description: "关闭指定窗口并清除所有浏览数据",
+          inputSchema: z.object({
+            window_id: z.string().describe("要关闭的窗口 ID"),
+          }),
+          execute: async (args, ctx, signal) =>
+            this.sendRequest("browser_close", args, signal),
+          display: { action: "关闭窗口", icon: "browser" },
+        });
+        toolkit.registerTool({
+          name: "browser_windows",
+          description: "获取当前会话的所有窗口列表，包括窗口 ID、URL、标题等信息",
+          inputSchema: z.object({}),
+          execute: async (args, ctx, signal) => {
+            const r = await this.sendRequest(
+              "browser_windows",
+              { ...args, session_id: ctx?.session.sessionId },
+              signal,
+            );
+            return r;
+          },
+          display: { action: "获取窗口列表", icon: "browser" },
+        });
+
+        // 使用说明提示词
+        toolkit.registerPrompt({
+          frequency: "REGULAR",
+          description: "浏览器控制工具使用说明",
+          content: [
+            "# 浏览器工具",
+            "",
+            "## 多窗口支持",
+            "- 最多支持 5 个并发窗口，独立会话隔离",
+            "- `browser_new_window(url)` 打开新窗口，`browser_windows()` 查看列表",
+            "",
+            "## 使用建议",
+            "1. `browser_navigate` / `click` / `input` / `go_back` / `go_forward` / `reload` 操作后**自动返回页面摘要**",
+            "2. `browser_page_struct` 获取选择器优化的 JSON 结构，`browser_page_text` 获取纯文本",
+            "3. 所有窗口默认**完全无痕**，关闭后不留数据",
+            "",
+            "## 持久化用户脚本",
+            "`.browser-work/scripts/*.js` 会在页面加载时自动注入（document-start），修改后 `browser_reload` 生效。",
+            "支持 `@match` 头过滤 URL。",
+            "",
+            "示例：",
+            "```javascript",
+            "// ==UserScript==",
+            "// @match  https://example.com/*",
+            "// ==/UserScript==",
+            "",
+            "console.log('只在 example.com 下执行');",
+            "```",
+            "",
+            "## 调试",
+            "控制台日志写入 `.browser-work/console/`，`browser_run_js` 自动附带最近 50 行。完整日志用文件工具读取。",
+            "",
+            "## 高级用法",
+            "- `browser_run_js` 支持 `code` 或 `file_path`（相对于会话目录），`await` 自然可用",
+            "- 页面内可通过 `window._browserBridge.saveLocalFile()` / `.readLocalFile()` / `.getCookies()` / `.setCookie()` / `.removeCookie()` 操作本地文件（自动保存到会话工作目录）",
+          ].join("\n"),
+        });
       },
-      display: { action: "打开新窗口", argsKey: "url", icon: "browser" },
-    });
-    api.registerTool({
-      name: "browser_close",
-      toolSet: "browser",
-      description: "关闭指定窗口并清除所有浏览数据",
-      inputSchema: z.object({
-        window_id: z.string().describe("要关闭的窗口 ID"),
-      }),
-      execute: async (args, ctx, signal) =>
-        this.sendRequest("browser_close", args, signal),
-      display: { action: "关闭窗口", icon: "browser" },
-    });
-    api.registerTool({
-      name: "browser_windows",
-      toolSet: "browser",
-      description: "获取当前会话的所有窗口列表，包括窗口 ID、URL、标题等信息",
-      inputSchema: z.object({}),
-      execute: async (args, ctx, signal) => {
-        const r = await this.sendRequest(
-          "browser_windows",
-          { ...args, session_id: ctx?.sessionId },
-          signal,
-        );
-        return r;
-      },
-      display: { action: "获取窗口列表", icon: "browser" },
-    });
-    // ── 使用说明提示词 ──
-    api.registerPrompt({
-      frequency: "REGULAR",
-      toolSet: "browser",
-      description: "浏览器控制工具使用说明",
-      content: [
-        "# 浏览器工具",
-        "",
-        "## 多窗口支持",
-        "- 最多支持 5 个并发窗口，独立会话隔离",
-        "- `browser_new_window(url)` 打开新窗口，`browser_windows()` 查看列表",
-        "",
-        "## 使用建议",
-        "1. `browser_navigate` / `click` / `input` / `go_back` / `go_forward` / `reload` 操作后**自动返回页面摘要**",
-        "2. `browser_page_struct` 获取选择器优化的 JSON 结构，`browser_page_text` 获取纯文本",
-        "3. 所有窗口默认**完全无痕**，关闭后不留数据",
-        "",
-        "## 持久化用户脚本",
-        "`.browser-work/scripts/*.js` 会在页面加载时自动注入（document-start），修改后 `browser_reload` 生效。",
-        "支持 `@match` 头过滤 URL。",
-        "",
-        "示例：",
-        "```javascript",
-        "// ==UserScript==",
-        "// @match  https://example.com/*",
-        "// ==/UserScript==",
-        "",
-        "console.log('只在 example.com 下执行');",
-        "```",
-        "",
-        "## 调试",
-        "控制台日志写入 `.browser-work/console/`，`browser_run_js` 自动附带最近 50 行。完整日志用文件工具读取。",
-        "",
-        "## 高级用法",
-        "- `browser_run_js` 支持 `code` 或 `file_path`（相对于会话目录），`await` 自然可用",
-        "- 页面内可通过 `window._browserBridge.saveLocalFile()` / `.readLocalFile()` / `.getCookies()` / `.setCookie()` / `.removeCookie()` 操作本地文件（自动保存到会话工作目录）",
-      ].join("\n"),
     });
   }
 
@@ -443,7 +432,7 @@ export class BrowserPlugin extends PluginBase {
   private resolveJsFilePath(filePath: string, context?: PluginContext): string {
     return this.workspaceService.resolveFilePath(
       filePath,
-      context?.workspacePath,
+      context?.session.workspacePath,
     );
   }
 

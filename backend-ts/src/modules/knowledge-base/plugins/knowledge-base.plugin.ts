@@ -36,17 +36,18 @@ export class KnowledgeBasePlugin extends PluginBase {
   }
 
   async onLoad(api: PluginApi) {
-    api.registerToolSet({
-      name: "knowledge_base",
-      loadMode: "eager",
+    const kbKit = api.registerToolKit({
+      id: "knowledge_base",
+      name: "知识库",
+      loadMode: "lazy",
+      activator: "用户询问与知识库相关的问题时，使用此工具集搜索知识库内容",
       handler: (ctx) => ({
-        loadMode: ctx?.sessionType === "bot" ? "eager" : "lazy",
+        loadMode: ctx?.session?.sessionType === "bot" ? "eager" : ("lazy" as const),
       }),
     });
 
-    api.registerTool({
+    kbKit.registerTool({
       name: "kb_search",
-      toolSet: "knowledge_base",
       description: "在知识库中搜索相关内容",
       inputSchema: z.object({
         knowledge_base_id: z.string().describe("知识库 ID"),
@@ -117,9 +118,9 @@ export class KnowledgeBasePlugin extends PluginBase {
       display: { action: "搜索知识库", argsKey: "query", icon: "search" },
     });
 
-    api.registerTool({
+    kbKit.registerTool({
       name: "kb_list_files",
-      toolSet: "knowledge_base",
+
       description: "列出知识库中的所有文件",
       inputSchema: z.object({
         knowledge_base_id: z.string().describe("知识库 ID"),
@@ -155,9 +156,9 @@ export class KnowledgeBasePlugin extends PluginBase {
       display: { action: "列出知识库文件", icon: "search" },
     });
 
-    api.registerTool({
+    kbKit.registerTool({
       name: "kb_get_chunks",
-      toolSet: "knowledge_base",
+
       description: "获取文件的分块内容",
       inputSchema: z.object({
         file_id: z.string().describe("文件 ID"),
@@ -196,9 +197,9 @@ export class KnowledgeBasePlugin extends PluginBase {
       display: { action: "获取文件分块", argsKey: "file_id", icon: "search" },
     });
 
-    api.registerTool({
+    kbKit.registerTool({
       name: "kb_add_document",
-      toolSet: "knowledge_base",
+
       description:
         "将指定路径的文本文件添加到知识库中，自动完成分块、向量化和存储",
       inputSchema: z.object({
@@ -210,7 +211,7 @@ export class KnowledgeBasePlugin extends PluginBase {
       }),
       execute: async (args, ctx) => {
         const { knowledge_base_id, source_file_path, target_path } = args;
-        const userId = ctx?.userId;
+        const userId = ctx?.session.userId;
         if (!userId) throw new Error("无法获取用户身份，操作被拒绝");
 
         // 解析源文件路径（支持相对路径和绝对路径）
@@ -249,13 +250,13 @@ export class KnowledgeBasePlugin extends PluginBase {
       dangerLevel: "high",
     });
 
-    // 知识库使用说明提示词（对应原 getPrompt 的详细说明），绑定到 kb_search 工具集
-    api.registerPrompt({
+    // 知识库使用说明提示词（对应原 getPrompt 的详细说明），绑定到知识库工具包
+    kbKit.registerPrompt({
       frequency: "REGULAR",
-      toolSet: "knowledge_base",
+
       description: "知识库工具使用说明",
       content: (context: PluginContext) => {
-        const sessionType = context?.sessionType;
+        const sessionType = context?.session.sessionType;
         const isWebSession = !sessionType || sessionType === "web";
         const parts: string[] = [];
 

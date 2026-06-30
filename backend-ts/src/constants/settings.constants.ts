@@ -4,7 +4,7 @@
  */
 export const SG_SYSTEM = 'system';
 export const SG_MODELS = 'models';
-export const SG_PLUGINS = 'plugins';
+export const SG_PLUGINS = 'plugins_config';
 
 /**
  * 系统级设置键名 (SK_SYS = Setting Key System)

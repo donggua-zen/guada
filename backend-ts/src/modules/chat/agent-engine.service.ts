@@ -4,12 +4,13 @@ import * as fs from "fs";
 import { LLMService } from "../llm-core/llm.service";
 import { ToolOrchestrator } from "../tools/tool-orchestrator.service";
 import { PluginManager } from "../plugins/plugin.manager";
+import { PromptCollector } from "../plugins/prompt-collector.service";
+import { PluginContext } from "../plugins/types/plugin.types";
 import { MessageRecord, LLMResponseChunk } from "../llm-core/types/llm.types";
 import { RequestContext } from "../../common/context/request-context";
 import { throttledStream } from "./utils/stream-throttle.util";
 import { ToolCallDisplayUtil } from "./utils/tool-call-display.util";
 import { ISessionContext, ModelConfig } from "./session-context";
-import { ToolRuntime } from "../tools/tool-context";
 import { EventChunk } from "./types/event-chunk.types";
 import { partialParse } from "partial-json-parser";
 import { SummaryMode } from "./compression-engine";
@@ -71,6 +72,7 @@ export class AgentEngine {
   constructor(
     private toolOrchestrator: ToolOrchestrator,
     private pluginManager: PluginManager,
+    private promptCollector: PromptCollector,
     private llmService: LLMService,
     private displayManager: ToolCallDisplayUtil,
   ) {}
@@ -160,8 +162,11 @@ export class AgentEngine {
     abortSignal?: AbortSignal,
     resumeData?: any,
   ): AsyncGenerator<EventChunk> {
-    const toolContext = sessionContext.getToolContext();
-    const tools = toolContext?.getFlatTools();
+    const resolved = sessionContext.getResolvedPlugins();
+    const tools =
+      resolved.length > 0
+        ? ToolOrchestrator.toFlatToolDefs(resolved)
+        : undefined;
 
     // 判断是否为断点模式
 
@@ -266,7 +271,9 @@ export class AgentEngine {
           const streamResult = this.executeLLMStream(
             historyMessages,
             sessionContext.getModelConfig(),
-            sessionContext.getToolContext()?.getFlatTools(),
+            ToolOrchestrator.toFlatToolDefs(
+              sessionContext.getResolvedPlugins(),
+            ),
             sessionContext.getThinkingEffort(),
             abortSignal,
           );
@@ -290,7 +297,7 @@ export class AgentEngine {
             const yieldEvent = this.toEventChunk(
               chunk,
               accumulated,
-              toolContext,
+              undefined,
               contentId,
             );
             if (yieldEvent) {
@@ -394,145 +401,44 @@ export class AgentEngine {
           break;
         }
 
-        // 【关键】将工具分为三组
-        const { pendingTools, approvedTools, rejectedTools } =
-          this.classifyToolsByApproval(
-            assistantResponse.toolCalls,
-            assistantResponse.metadata,
-            sessionContext,
-          );
+        // 【关键】将工具分为三组并执行
+        const execResult = await this.executeToolsAndBuildParts(
+          assistantResponse, sessionContext, abortSignal,
+        );
 
-        // 【原子性审批】只要有需要审批且未审批的工具，就触发审批请求
-        if (pendingTools.length > 0) {
-          // 保存审批上下文到 metadata
-          if (!assistantResponse.metadata) {
-            assistantResponse.metadata = {};
-          }
-
-          assistantResponse.metadata.approvalContext = {
-            type: "approval",
-            status: "pending",
-            pendingToolCallIds: pendingTools.map((tc: any) => tc.id),
-            createdAt: new Date().toISOString(),
-          } as ApprovalContext;
-
-          // 提前终止，发送审批请求
+        // 【原子性审批】需要审批时提前终止
+        if (execResult.approvalContext) {
+          assistantResponse.metadata.approvalContext = execResult.approvalContext;
           yield {
             type: "finish",
             finishReason: "approval_required",
             usage: assistantResponse.metadata?.usage,
           };
-
           await sessionContext.appendParts(parts);
-
           break;
         }
 
-        // 【已处理场景】执行 approved 工具 + 为 rejected 工具生成错误响应
-        // 工具执行完毕后，重新格式化展示文案（此时已完成状态），更新到 assistant metadata，
-        // 再通过 tool_calls_response 事件传送给前端（工具结果本身不持久化文案）
-
-        // 执行 approved 工具（包括已通过审批和不需要审批的）
-        let toolResponses: any[] = [];
-        if (approvedTools.length > 0) {
-          const toolContext = sessionContext.getToolContext();
-          toolResponses = await this.toolOrchestrator.executeBatch(
-            approvedTools.map((tc: any) => ({
-              id: tc.id,
-              name: tc.name,
-              arguments: partialParse(tc.arguments) || {},
-            })),
-            toolContext,
-            abortSignal,
-          );
-
-          // 工具执行完毕，重新格式化文案（已完成状态）并更新到 assistant toolCalls metadata
-          const toolCallDisplayMessages = approvedTools.map((at: any) => {
-            const tc = assistantResponse.toolCalls?.find(
-              (t: any) => t.id === at.id,
-            );
-            if (tc) {
-              if (!tc.metadata) tc.metadata = {};
-              tc.metadata.displayMessage = this.displayManager.format(
-                tc.name,
-                tc.arguments,
-                false,
-                toolContext,
-              );
-              return tc.metadata.displayMessage;
-            }
-            return undefined;
-          });
-
+        // 【执行】yield 工具结果 + 入库
+        if (execResult.toolResponses.length > 0) {
           yield {
             type: "tool_calls_response",
-            toolCallsResponse: toolResponses.map((tr) => ({
-              name: tr.name,
-              content: tr.content,
-              toolCallId: tr.toolCallId,
+            toolCallsResponse: execResult.toolResponses.map((tr: any) => ({
+              name: tr.name, content: tr.content, toolCallId: tr.toolCallId,
             })),
-            displayMessages: toolCallDisplayMessages,
+            displayMessages: execResult.displayMessages,
             contentId,
           };
 
-          for (const res of toolResponses) {
+          for (const res of execResult.toolResponses) {
             parts.push({
-              role: "tool",
-              name: res.name,
-              content: res.content,
-              toolCallId: res.toolCallId,
-              messageId: responseMessageId,
-              turnsId: turnsId,
+              role: "tool", name: res.name, content: res.content,
+              toolCallId: res.toolCallId, messageId: responseMessageId, turnsId: turnsId,
             });
           }
+          needToContinue = true;
         }
-
-        // 为 rejected 工具生成错误响应
-        if (rejectedTools.length > 0) {
-          for (const rejected of rejectedTools) {
-            // 从 decisions 中获取拒绝原因
-            const decision =
-              assistantResponse.metadata?.approvalContext?.decisions?.find(
-                (d: any) => d.toolCallId === rejected.id,
-              );
-
-            // 构建错误消息：固定前缀 + 可选的原因
-            let errorMessage = "用户拒绝了工具执行";
-            if (decision?.reason) {
-              errorMessage += `，原因：${decision.reason}`;
-            }
-
-            const errorResponse = {
-              toolCallId: rejected.id,
-              name: rejected.name,
-              content: JSON.stringify({
-                success: false,
-                message: errorMessage,
-              }),
-              isError: true,
-            };
-
-            yield {
-              type: "tool_calls_response",
-              toolCallsResponse: [errorResponse],
-            };
-
-            parts.push({
-              role: "tool",
-              name: errorResponse.name,
-              content: errorResponse.content,
-              toolCallId: errorResponse.toolCallId,
-              messageId: responseMessageId,
-              turnsId: turnsId,
-            });
-          }
-        }
-
-        // 在持久化前，将最终的文案注入到 toolCalls 的 metadata 中
-        needToContinue = true;
       }
-      console.log(parts);
-      
+
       // 将本轮产生的所有消息（助手回复 + 工具响应）追加到会话上下文并持久化存储
       await sessionContext.appendParts(parts);
 
@@ -949,36 +855,39 @@ export class AgentEngine {
     abortSignal?: AbortSignal,
   ): Promise<void> {
     // 跳过工具提示词注入（影子轮次只需要记忆和文件工具，不需要 skill 描述等）
-    const messages = await sessionContext.getMessages({ exclude: ["tool"] });
+    const messages = await sessionContext.getMessages({ exclude: ["plugins"] });
     const shadowMessages: MessageRecord[] = [];
 
     const modelConfig = sessionContext.getModelConfig();
 
-    // 通过 PluginManager 获取记忆提示词（guide=静态说明, content=动态记忆内容）
+    // 通过 PromptCollector 获取记忆提示词
+    const resolved = sessionContext.getResolvedPlugins();
     const memoryGuide =
       (
-        await this.pluginManager.collectPluginLazyPrompts(
+        await this.promptCollector.collectPluginLazyPrompts(
           "memory",
-          sessionContext,
+          resolved,
+          { session: sessionContext } as PluginContext,
         )
       )
         .map((p) => p.content)
         .join("\n") || "";
 
     const memoryContent =
-      (await this.pluginManager.collectPluginPrompts("memory", sessionContext))
+      (
+        await this.promptCollector.collectPluginPrompts("memory", resolved, {
+          session: sessionContext,
+        } as PluginContext)
+      )
         .map((p) => p.content)
         .join("\n") || "";
 
     // console.log("memoryGuide", memoryGuide);
     if (!memoryGuide) return;
 
-    // 构建专属运行时：仅含受限的文件工具
-    const shadowRuntime = await this.toolOrchestrator.buildRuntimeByScope(
-      sessionContext,
-      "memory_only",
-    );
-    const fileTools = Array.from(shadowRuntime.eagerTools.values());
+    // 从会话已决议的数据中过滤出 file 插件的工具（影子轮次只需要文件工具）
+    const filePlugin = resolved.find((r) => r.plugin.id === "file");
+    const fileTools = filePlugin?.enabledTools ?? [];
     if (fileTools.length === 0) return;
 
     // 组装指令消息（history 中不含系统提示词，此处自行注入）
@@ -1046,50 +955,21 @@ export class AgentEngine {
         });
         if (!accumulated.toolCalls?.length) break;
 
-        // 收集本轮所有工具调用，批量执行
-        const batch: { id: string; name: string; arguments: any }[] = [];
-        const errors: { id: string; name: string; content: string }[] = [];
-
-        for (const tc of accumulated.toolCalls) {
-          let args: any;
-          try {
-            args =
-              typeof tc.arguments === "string"
-                ? JSON.parse(tc.arguments)
-                : tc.arguments;
-          } catch {
-            continue;
-          }
-
-          // 路径校验由文件工具通过 injectParams.scope 自行处理
-          const targetPath = args.path || args.file_path || "";
-          batch.push({ id: tc.id, name: tc.name, arguments: args });
-        }
-
-        // 先推入拒绝的路径错误
-        for (const e of errors) {
+        const responses = await this.toolOrchestrator.executeBatch(
+          accumulated.toolCalls.map((tc: any) => ({
+            id: tc.id,
+            name: tc.name,
+            arguments: partialParse(tc.arguments) || {},
+          })),
+          sessionContext,
+        );
+        for (const r of responses) {
           shadowMessages.push({
             role: "tool",
-            content: e.content,
-            toolCallId: e.id,
-            name: e.name,
+            content: r.content,
+            toolCallId: r.toolCallId,
+            name: r.name,
           });
-        }
-
-        // 批量执行合法的工具调用
-        if (batch.length > 0) {
-          const responses = await this.toolOrchestrator.executeBatch(
-            batch,
-            shadowRuntime,
-          );
-          for (const r of responses) {
-            shadowMessages.push({
-              role: "tool",
-              content: r.content,
-              toolCallId: r.toolCallId,
-              name: r.name,
-            });
-          }
         }
       } catch (error: any) {
         this.logger.warn(`记忆保存第${round}轮失败: ${error.message}`);
@@ -1116,5 +996,92 @@ export class AgentEngine {
       // 非关键
     }
     // 不入库，不 yield
+  }
+
+  /**
+   * 执行工具并构建入库数据（不 yield 事件，不入库）
+   *
+   * 由 executeAgentLoop 调用，返回执行结果后由调用方负责 yield 和 persist。
+   */
+  private async executeToolsAndBuildParts(
+    assistantResponse: MessageRecord,
+    sessionContext: ISessionContext,
+    abortSignal?: AbortSignal,
+  ): Promise<{
+    toolResponses: any[];
+    displayMessages: (string | undefined)[];
+    approvalContext?: any;
+  }> {
+    const toolCalls = assistantResponse.toolCalls;
+    if (!toolCalls) return { toolResponses: [], displayMessages: [] };
+    // 1. 分为三组
+    const { pendingTools, approvedTools, rejectedTools } =
+      this.classifyToolsByApproval(
+        toolCalls,
+        assistantResponse.metadata,
+        sessionContext,
+      );
+
+    // 2. 需要审批 → 返回 approvalContext
+    if (pendingTools.length > 0) {
+      return {
+        toolResponses: [],
+        displayMessages: [],
+        approvalContext: {
+          type: "approval",
+          status: "pending",
+          pendingToolCallIds: pendingTools.map((tc: any) => tc.id),
+          createdAt: new Date().toISOString(),
+        },
+      };
+    }
+
+    // 3. 执行 approved + 为 rejected 生成错误响应
+    const toolResponses: any[] = [];
+    const displayMessages: (string | undefined)[] = [];
+
+    if (approvedTools.length > 0) {
+      const results = await this.toolOrchestrator.executeBatch(
+        approvedTools.map((tc: any) => ({
+          id: tc.id,
+          name: tc.name,
+          arguments: (() => {
+            try { return typeof tc.arguments === "string" ? JSON.parse(tc.arguments) : tc.arguments; }
+            catch { return {}; }
+          })(),
+        })),
+        sessionContext,
+        abortSignal,
+      );
+      toolResponses.push(...results);
+
+      for (const at of approvedTools) {
+        const tc = assistantResponse.toolCalls?.find((t: any) => t.id === at.id);
+        if (tc) {
+          if (!tc.metadata) tc.metadata = {};
+          tc.metadata.displayMessage = this.displayManager.format(tc.name, tc.arguments, false);
+          displayMessages.push(tc.metadata.displayMessage);
+        } else {
+          displayMessages.push(undefined);
+        }
+      }
+    }
+
+    for (const rejected of rejectedTools) {
+      const decision =
+        assistantResponse.metadata?.approvalContext?.decisions?.find(
+          (d: any) => d.toolCallId === rejected.id,
+        );
+      let errorMessage = "用户拒绝了工具执行";
+      if (decision?.reason) errorMessage += `，原因：${decision.reason}`;
+      toolResponses.push({
+        toolCallId: rejected.id,
+        name: rejected.name,
+        content: JSON.stringify({ success: false, message: errorMessage }),
+        isError: true,
+      });
+    }
+
+    return { toolResponses, displayMessages };
   }
 }

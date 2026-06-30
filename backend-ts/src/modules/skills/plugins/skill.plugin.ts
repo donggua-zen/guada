@@ -15,7 +15,7 @@ export class SkillPlugin extends PluginBase {
     name: "Skills 技能",
     description: "技能系统的管理工具",
     version: "1.0.0",
-    category: "core" as const,
+    category: "system" as const,
   };
 
   constructor(private orchestrator: SkillOrchestrator) {
@@ -25,17 +25,22 @@ export class SkillPlugin extends PluginBase {
   async onLoad(api: PluginApi) {
     // 动态技能列表提示词（每次收集时从 orchestrator 读取当前技能）
     api.registerPrompt({
-      toolSet: "skill",
       frequency: "REGULAR",
       description: "可用技能列表及使用指南",
       content: (context: PluginContext) => {
-        const allSkills = this.orchestrator.listSkills(true, context?.workspacePath);
+        const allSkills = this.orchestrator.listSkills(
+          true,
+          context?.session.workspacePath,
+        );
 
-        // 按角色级偏好过滤（角色未配置的项继承全局，即保留）
-        const charSkillCfg = context?.skillConfig;
-        const skills = charSkillCfg
-          ? allSkills.filter((s) => charSkillCfg[s.id] !== false)
-          : allSkills;
+        // 按角色级偏好过滤
+        const charSkillCfg = context?.session.getSkillsConfig?.();
+        const skills =
+          charSkillCfg === false
+            ? []
+            : typeof charSkillCfg === "object" && charSkillCfg !== null
+              ? allSkills.filter((s: any) => charSkillCfg[s.id] !== false)
+              : allSkills;
         if (skills.length === 0) return "";
 
         const skillXml = skills

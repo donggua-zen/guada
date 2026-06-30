@@ -5,6 +5,7 @@ import { AuthGuard } from "../auth/auth.guard";
 import { Public } from "../auth/public.decorator";
 import { ToolOrchestrator } from "../tools/tool-orchestrator.service";
 import { PluginManager } from "../plugins/plugin.manager";
+import { SG_PLUGINS } from "../../constants/settings.constants";
 
 @Controller()
 export class SettingsController {
@@ -83,10 +84,34 @@ export class SettingsController {
   @Public()
   @Get("settings/plugins/global")
   async getGlobalTools() {
-    const allTools = await this.pluginManager.getHotPluggablePlugins();
+    const plugins = await this.pluginManager.getAllPlugins(true);
 
     return {
-      tools: allTools,
+      plugins: plugins
+        .filter((p) => p.manifest.category !== "system")
+        .map((p) => ({
+          pluginId: p.manifest.id,
+          effective: "global" as const,
+          name: p.manifest.id,
+          displayName: p.manifest.name,
+          description: p.manifest.description,
+          category: p.manifest.category,
+          enabled: p.enabled,
+          isMcp: p.manifest.id === "mcp",
+          isSkill: p.manifest.id === "skill",
+          tools: this.pluginManager.getPluginTools(p.manifest.id).map((t) => ({
+            enabled: p.enabled,
+            name: t.name,
+            description: t.description,
+            parameters: t.parameters as any,
+          })),
+          toolkits: this.pluginManager.getPluginToolKits(p.manifest.id).map((k) => ({
+            id: k.id,
+            name: k.name,
+            loadMode: k.loadMode,
+            enabled: p.enabled,
+          })),
+        })),
     };
   }
 
@@ -124,9 +149,9 @@ export class SettingsController {
   async updateGlobalToolStatus(@Body() data: { pluginId: string; enabled: boolean }) {
     const { pluginId, enabled } = data;
 
-    // 持久化全局配置
-    await this.settingsService.updateGroupSettings('plugins', {
-      [pluginId]: enabled,
+    // 持久化全局配置（新格式 PluginEntryConfig）
+    await this.settingsService.updateGroupSettings(SG_PLUGINS, {
+      [pluginId]: { enabled },
     });
 
     // 同步运行时状态（触发 onLoad/onUnload）

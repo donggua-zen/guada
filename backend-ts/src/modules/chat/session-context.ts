@@ -106,7 +106,7 @@ export interface ISessionContext {
   // === 身份标识 ===
   readonly sessionId: string;
   readonly userId: string;
-  readonly sessionType: "web" | "bot" | "sub_agent";
+  readonly sessionType: "web" | "bot" | "sub_agent" | "team";
 
   // === 模型配置 ===
   /** 获取完整模型配置（含运行时调用参数） */
@@ -115,14 +115,14 @@ export interface ISessionContext {
   supportsFeature(feature: ModelFeature): boolean;
 
   // === 提示词与上下文 ===
-  /** 获取完整的 system prompt（已合并工具提示词） */
-  getSystemPrompt(): string;
   /** 获取思考强度配置 */
   getThinkingEffort(): string | undefined;
 
   // === 工具相关 ===
-  /** 获取工具执行上下文（未定义表示不支持工具调用） */
-  getToolContext(): any;
+  /** 获取已决议的插件列表（resolvePlugins 的结果快照） */
+  getResolvedPlugins(): import("../plugins/types/plugin.types").ResolvedPluginInfo[];
+  /** 获取角色级技能偏好配置 */
+  getSkillsConfig(): any;
   /** 获取工具审批配置 */
   getToolApprovalConfig(): ToolApprovalConfig;
 

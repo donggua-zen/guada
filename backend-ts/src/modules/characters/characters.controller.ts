@@ -89,6 +89,7 @@ export class CharactersController {
   /**
    * 获取角色工具列表（包含有效状态）
    * 支持特殊 ID '__new_character__'，用于创建角色时预览全局启用的工具
+   * @deprecated 使用 getCharacterPlugins 代替
    */
   @Get("characters/:id/tools")
   async getCharacterTools(@Param("id") characterId: string) {
@@ -97,7 +98,6 @@ export class CharactersController {
     let characterPluginConfig: any;
 
     if (isNewCharacter) {
-      // 创建角色模式：默认禁用所有工具，由用户手动开启
       characterPluginConfig = {};
     } else {
       const character =
@@ -105,23 +105,152 @@ export class CharactersController {
       if (!character) {
         throw new Error("Character not found");
       }
-      characterPluginConfig = (character.settings as any)?.tools;
+      characterPluginConfig = (character.settings as any)?.plugins ?? (character.settings as any)?.tools;
     }
 
-    const allTools =
-      await this.pluginManager.getHotPluggablePlugins(characterPluginConfig);
-
-    // 过滤掉全局禁用的工具，不显示在角色配置界面
-    const enabledTools = allTools.filter(
-      (tool) => !(tool.enabled === false && tool.effective === "global"),
+    const plugins = await this.pluginManager.getAllPlugins(
+      true,
+      characterPluginConfig,
     );
 
+    const filtered = plugins.filter((p) => p.manifest.category !== "system");
+
+    const denyAll = (characterPluginConfig as any)?.__strategy === "deny_nonsystem";
     return {
       characterId,
-      plugins: enabledTools.map((tool) => ({
-        ...tool,
-        effectiveEnabled: tool.enabled,
-      })),
+      plugins: filtered.map((p) => {
+        const isRoleConfigured =
+          characterPluginConfig === true ||
+          (typeof characterPluginConfig === "object" &&
+            p.manifest.id in (characterPluginConfig as any));
+
+        const effective =
+          (isRoleConfigured || (denyAll && p.manifest.category !== "system"))
+            ? ("role" as const)
+            : ("global" as const);
+
+        const pluginCfg =
+          characterPluginConfig === true
+            ? true
+            : typeof characterPluginConfig === "object"
+              ? (characterPluginConfig as any)[p.manifest.id]
+              : undefined;
+
+        return {
+          pluginId: p.manifest.id,
+          effective,
+          name: p.manifest.id,
+          displayName: p.manifest.name,
+          description: p.manifest.description,
+          category: p.manifest.category,
+          enabled: p.enabled,
+          isMcp: p.manifest.id === "mcp",
+          isSkill: p.manifest.id === "skill",
+          tools: this.pluginManager.getPluginTools(p.manifest.id).map((t) => ({
+            enabled: pluginCfg === true
+              ? true
+              : Array.isArray(pluginCfg)
+                ? pluginCfg.includes(t.name)
+                : p.enabled,
+            name: t.name,
+            description: t.description,
+            parameters: t.parameters as any,
+          })),
+          toolkits: this.pluginManager.getPluginToolKits(p.manifest.id).map((k) => ({
+            id: k.id,
+            name: k.name,
+            loadMode: k.loadMode,
+          })),
+          effectiveEnabled: p.enabled,
+        };
+      }),
+    };
+  }
+
+  /**
+   * 获取角色插件列表（新接口，替代 getCharacterTools）
+   * 配置从 character.settings.plugins 读取
+   */
+  @Get("characters/:id/plugins")
+  async getCharacterPlugins(@Param("id") characterId: string) {
+    const isNewCharacter = characterId === "__new_character__";
+
+    let characterPluginConfig: any;
+
+    if (isNewCharacter) {
+      characterPluginConfig = {};
+    } else {
+      const character =
+        await this.characterService.getCharacterById(characterId);
+      if (!character) {
+        throw new Error("Character not found");
+      }
+      // 新接口：从 plugins 字段读取角色级插件配置
+      characterPluginConfig = (character.settings as any)?.plugins;
+    }
+
+    // 仍然使用旧的 getAllPlugins 逻辑获取插件列表
+    const plugins = await this.pluginManager.getAllPlugins(
+      true,
+      characterPluginConfig,
+    );
+
+    const filtered = plugins.filter((p) => p.manifest.category !== "system");
+
+    const denyAll = (characterPluginConfig as any)?.__strategy === "deny_nonsystem";
+    return {
+      characterId,
+      plugins: filtered.map((p) => {
+        const isRoleConfigured =
+          characterPluginConfig === true ||
+          (typeof characterPluginConfig === "object" &&
+            p.manifest.id in (characterPluginConfig as any));
+
+        const effective =
+          (isRoleConfigured || (denyAll && p.manifest.category !== "system"))
+            ? ("role" as const)
+            : ("global" as const);
+
+        const pluginCfg =
+          characterPluginConfig === true
+            ? true
+            : typeof characterPluginConfig === "object"
+              ? (characterPluginConfig as any)[p.manifest.id]
+              : undefined;
+
+        return {
+          pluginId: p.manifest.id,
+          effective,
+          name: p.manifest.id,
+          displayName: p.manifest.name,
+          description: p.manifest.description,
+          category: p.manifest.category,
+          enabled: p.enabled,
+          isMcp: p.manifest.id === "mcp",
+          isSkill: p.manifest.id === "skill",
+          tools: this.pluginManager.getPluginTools(p.manifest.id).map((t) => ({
+            enabled: pluginCfg === true
+              ? true
+              : typeof pluginCfg === "object" && !Array.isArray(pluginCfg)
+                ? !(pluginCfg.toolkits_deny || []).includes(t.toolSet)
+                : p.enabled,
+            name: t.name,
+            description: t.description,
+            parameters: t.parameters as any,
+          })),
+          toolkits: this.pluginManager.getPluginToolKits(p.manifest.id).map((k) => ({
+            id: k.id,
+            name: k.name,
+            loadMode: k.loadMode,
+            enabled: pluginCfg === true
+              ? true
+              : typeof pluginCfg === "object" && !Array.isArray(pluginCfg) && pluginCfg.toolkits_filter
+                ? !(pluginCfg.toolkits_deny || []).includes(k.id)
+                : true,
+          })),
+          effectiveEnabled: p.enabled,
+        };
+      }),
     };
   }
 

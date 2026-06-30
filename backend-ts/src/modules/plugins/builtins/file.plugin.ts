@@ -189,7 +189,7 @@ export class FilePlugin extends PluginBase {
           for (const entry of entries) {
             const fullPath = path.join(p, entry.name);
             const relativePath = path
-              .relative(ctx?.workspacePath || "", fullPath)
+              .relative(ctx?.session.workspacePath || "", fullPath)
               .replace(/\\/g, "/");
             if (entry.isDirectory()) {
               const children = d > 1 ? await readDir(fullPath, d - 1) : [];
@@ -386,7 +386,7 @@ export class FilePlugin extends PluginBase {
 
         const basePath = targetPath
           ? this.resolvePath(targetPath, ctx)
-          : ctx?.workspacePath || process.cwd();
+          : ctx?.session.workspacePath || process.cwd();
         const stat = await fs.stat(basePath);
 
         const files: string[] = [];
@@ -463,10 +463,10 @@ export class FilePlugin extends PluginBase {
       frequency: "STATIC",
       description: "当前会话工作目录和安全路径说明",
       content: (ctx: PluginContext) => {
-        if (!ctx.workspacePath) return "";
+        if (!ctx.session.workspacePath) return "";
         return [
           "# 当前会话工作目录",
-          `\`${ctx.workspacePath}\``,
+          `\`${ctx.session.workspacePath}\``,
           "",
           "**重要说明**：",
           "1. 你编写的所有脚本、临时文件、生成的数据等都应该存放在上述工作目录中。",
@@ -481,22 +481,22 @@ export class FilePlugin extends PluginBase {
   private resolvePath(filePath: string, context?: PluginContext): string {
     return this.workspaceService.resolveFilePath(
       filePath,
-      context?.workspacePath,
+      context?.session.workspacePath,
     );
   }
 
   private validateWritePath(filePath: string, context?: PluginContext): void {
     const resolved = this.resolvePath(filePath, context);
-    const extra = context?.workspacePath ? [context.workspacePath] : [];
+    const extra = context?.session.workspacePath ? [context.session.workspacePath] : [];
     this.workspaceService.validateWritePath(resolved, extra);
 
     // memory_only 作用域：只允许操作 memory/ 和 memos/ 目录
-    if (context?.scope === "memory_only") {
+    if ((context as any)?.scope === "memory_only") {
       const allowedPrefixes =
-        context.sessionType === "sub_agent"
+        context.session.sessionType === "sub_agent"
           ? [
-              `.guada/subagents/${context.sessionId}/memory/`,
-              `.guada/subagents/${context.sessionId}/memos/`,
+              `.guada/subagents/${context.session.sessionId}/memory/`,
+              `.guada/subagents/${context.session.sessionId}/memos/`,
             ]
           : [`.guada/memory/`, `.guada/memos/`];
 
