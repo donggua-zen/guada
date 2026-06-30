@@ -295,7 +295,7 @@ const movingFileId = ref<string | null>(null) // 保存正在移动的文件ID
  * 文件处理轮询相关状态
  */
 const POLL_INTERVAL = 3000 // 3 秒轮询间隔
-let pollingTimer: NodeJS.Timeout | null = null
+let pollingTimer: ReturnType<typeof setTimeout> | null = null
 let pollingFileIds = new Set<string>()
 
 /**

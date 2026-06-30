@@ -20,7 +20,7 @@ export interface UploadTask {
     uploadedAt: string
     processedAt: string | null
     knowledgeBaseId: string
-    timerId?: NodeJS.Timeout
+    timerId?: ReturnType<typeof setTimeout>
     rawFile?: File // 原始文件对象(用于延迟上传)
     relativePath?: string // 相对路径(用于文件夹上传)
     createdAt: number // 创建时间戳(用于队列排序)
@@ -43,7 +43,7 @@ export const useFileUploadStore = defineStore('fileUpload', () => {
     const MAX_CONCURRENT_UPLOADS = 3
 
     /** 上传队列定时器 */
-    let queueProcessorTimer: NodeJS.Timeout | null = null
+    let queueProcessorTimer: ReturnType<typeof setTimeout> | null = null
 
 
     // ========== Actions ==========

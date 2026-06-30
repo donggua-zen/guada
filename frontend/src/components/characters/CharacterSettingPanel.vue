@@ -1113,10 +1113,8 @@ const getFormData = () => {
           if (Object.keys(mcpConfig).length > 0) {
             result.mcp = mcpConfig;
           }
-          // Skills 全部禁用 → plugins.skill.enabled = false（单项 skills 配置不变）
-          if (allSkillsDisabled.value) {
-            result.skill = { enabled: false };
-          }
+          // Skills：始终显式写入 enabled 状态，true=启用 false=全部禁用
+          result.skill = { enabled: !allSkillsDisabled.value };
           return result;
         };
         // 全部禁用

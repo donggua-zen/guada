@@ -86,7 +86,7 @@ const drawerTitle = computed(() => {
 /**
  * 获取状态标签类型
  */
-function getStatusType(status: string): string {
+function getStatusType(status: string): 'primary' | 'success' | 'info' | 'warning' | 'danger' {
   switch (status) {
     case 'completed':
       return 'success'

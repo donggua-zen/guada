@@ -79,7 +79,7 @@ const checkForUpdates = async () => {
         const res = await window.electronAPI.checkForUpdates()
         if (!res.success) {
             updateStatus.value = 'error'
-            errorMessage.value = res.error
+            errorMessage.value = res.error || ''
         }
     } catch (e: any) {
         updateStatus.value = 'error'
