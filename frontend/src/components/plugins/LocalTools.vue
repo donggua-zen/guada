@@ -45,10 +45,24 @@
             </p>
             
             <div class="text-sm text-gray-500 dark:text-[#6b6d75]">
-              <el-tag size="small" type="info" effect="plain">
+              <el-tag size="small" type="info" effect="plain" class="cursor-pointer"
+                @click="toggleToolList(tool.pluginId)">
                 {{ tool.tools?.length || 0 }} 个工具
               </el-tag>
             </div>
+
+            <!-- 工具列表（可展开查看，只读） -->
+            <el-collapse-transition>
+              <div v-if="expandedTools.has(tool.pluginId)" class="mt-3 pt-3 border-t border-gray-100 dark:border-[#333]">
+                <div v-for="sub in tool.tools || []" :key="sub.name"
+                  class="flex items-center justify-between py-1.5 px-2 rounded hover:bg-gray-50 dark:hover:bg-[#2a2a2e]">
+                  <div class="flex-1 min-w-0">
+                    <div class="text-sm text-gray-700 dark:text-[#d0d1d5] truncate">{{ sub.name }}</div>
+                    <div v-if="sub.description" class="text-xs text-gray-400 truncate">{{ sub.description }}</div>
+                  </div>
+                </div>
+              </div>
+            </el-collapse-transition>
           </div>
         </div>
       </div>
@@ -58,7 +72,7 @@
 
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElCollapseTransition } from 'element-plus'
 import { apiService } from '@/services/ApiService'
 
 interface ToolMetadata {
@@ -76,14 +90,25 @@ const error = ref<string | null>(null)
 const updatingTools = ref<Set<string>>(new Set())
 
 const globalTools = ref<ToolMetadata[]>([])
+const expandedTools = ref<Set<string>>(new Set())
+
+function toggleToolList(pluginId: string) {
+  const next = new Set(expandedTools.value)
+  if (next.has(pluginId)) {
+    next.delete(pluginId)
+  } else {
+    next.add(pluginId)
+  }
+  expandedTools.value = next
+}
 
 async function loadGlobalTools() {
   loading.value = true
   error.value = null
   
   try {
-    const response = await apiService.fetchGlobalTools()
-    globalTools.value = response.tools
+    const response = await apiService.queryPlugins()
+    globalTools.value = response.plugins
   } catch (err: any) {
     console.error('加载全局工具失败:', err)
     const errorMsg = err.message || '加载全局工具失败'

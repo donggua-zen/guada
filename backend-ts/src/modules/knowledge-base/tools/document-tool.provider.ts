@@ -201,7 +201,7 @@ export class DocumentToolProvider implements IToolProvider {
     // 解析路径
     const resolvedPath = this.workspaceService.resolveFilePath(
       file_path,
-      context?.workspacePath,
+      context?.session.workspacePath,
     );
 
     this.logger.log(`解析文档: ${file_path} -> ${resolvedPath}`);

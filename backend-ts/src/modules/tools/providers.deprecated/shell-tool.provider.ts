@@ -158,7 +158,7 @@ export class ShellToolProvider implements IToolProvider {
     const isWindows = process.platform === "win32";
     const shell = isWindows ? "cmd" : "sh";
     const shellFlag = isWindows ? "/c" : "-c";
-    const cwd = context?.workspacePath || process.cwd();
+    const cwd = context?.session.workspacePath || process.cwd();
 
     if (abortSignal?.aborted) {
       throw new Error("Request was aborted");

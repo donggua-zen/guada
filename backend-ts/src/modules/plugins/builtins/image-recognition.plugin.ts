@@ -38,59 +38,59 @@ export class ImageRecognitionPlugin extends PluginBase {
   }
 
   async onLoad(api: PluginApi) {
-    api.registerToolSet({
+    api.registerToolKit({
+      id: "image_recognition",
+      name: "图像识别",
       loadMode: "lazy",
-      name: "image_recognition",
       activator:
         "当需要识别用户提供图片ID或图片路径时，使用此工具集识别图片内容并返回详细描述。",
-    });
+      onLoad: (toolkit) => {
+        toolkit.registerTool({
+          name: "image_recognize",
+          description:
+            "识别图片内容并返回详细的文本描述。当用户询问关于上传图片的内容时使用此工具。",
+          inputSchema: z.object({
+            image_id: z
+              .string()
+              .describe("上传的图片文件 ID，通常从消息上下文中获取"),
+          }),
+          execute: async (args, _ctx, abortSignal) => {
+            const { image_id } = args;
+            if (!image_id) throw new Error("缺少参数：image_id");
+            const file = await this.fileRepo.findById(image_id);
+            if (!file || file.fileType !== "image")
+              throw new Error(`无效的图片 ID 或文件类型不是图片：${image_id}`);
+            const physicalPath = this.uploadPathService.toPhysicalPath(file.url);
+            if (!fs.existsSync(physicalPath))
+              throw new Error(`图片文件不存在: ${physicalPath}`);
+            return this.recognizeImage(physicalPath, abortSignal);
+          },
+          display: { action: "识别图片", argsKey: "image_id", icon: "vision" },
+        });
 
-    api.registerTool({
-      name: "image_recognize",
-      toolSet: "image_recognition",
-      description:
-        "识别图片内容并返回详细的文本描述。当用户询问关于上传图片的内容时使用此工具。",
-      inputSchema: z.object({
-        image_id: z
-          .string()
-          .describe("上传的图片文件 ID，通常从消息上下文中获取"),
-      }),
-      execute: async (args, _ctx, abortSignal) => {
-        const { image_id } = args;
-        if (!image_id) throw new Error("缺少参数：image_id");
-        const file = await this.fileRepo.findById(image_id);
-        if (!file || file.fileType !== "image")
-          throw new Error(`无效的图片 ID 或文件类型不是图片：${image_id}`);
-        const physicalPath = this.uploadPathService.toPhysicalPath(file.url);
-        if (!fs.existsSync(physicalPath))
-          throw new Error(`图片文件不存在: ${physicalPath}`);
-        return this.recognizeImage(physicalPath, abortSignal);
+        toolkit.registerTool({
+          name: "image_recognize_by_path",
+          description:
+            "根据图片文件路径识别图片内容并返回详细的文本描述。当用户提供图片的绝对路径或相对路径时使用此工具。",
+          inputSchema: z.object({
+            image_path: z
+              .string()
+              .describe("图片文件的路径，可以是绝对路径或相对工作目录的相对路径"),
+          }),
+          execute: async (args, ctx, abortSignal) => {
+            const { image_path } = args;
+            if (!image_path) throw new Error("图片路径不能为空");
+            let physicalPath = this.workspaceService.resolveFilePath(
+              image_path,
+              ctx?.session.workspacePath,
+            );
+            if (!fs.existsSync(physicalPath))
+              throw new Error(`图片文件不存在：${physicalPath}`);
+            return this.recognizeImage(physicalPath, abortSignal);
+          },
+          display: { action: "识别图片", argsKey: "image_path", icon: "vision" },
+        });
       },
-      display: { action: "识别图片", argsKey: "image_id", icon: "vision" },
-    });
-
-    api.registerTool({
-      name: "image_recognize_by_path",
-      toolSet: "image_recognition",
-      description:
-        "根据图片文件路径识别图片内容并返回详细的文本描述。当用户提供图片的绝对路径或相对路径时使用此工具。",
-      inputSchema: z.object({
-        image_path: z
-          .string()
-          .describe("图片文件的路径，可以是绝对路径或相对工作目录的相对路径"),
-      }),
-      execute: async (args, ctx, abortSignal) => {
-        const { image_path } = args;
-        if (!image_path) throw new Error("图片路径不能为空");
-        let physicalPath = this.workspaceService.resolveFilePath(
-          image_path,
-          ctx?.workspacePath,
-        );
-        if (!fs.existsSync(physicalPath))
-          throw new Error(`图片文件不存在：${physicalPath}`);
-        return this.recognizeImage(physicalPath, abortSignal);
-      },
-      display: { action: "识别图片", argsKey: "image_path", icon: "vision" },
     });
   }
 

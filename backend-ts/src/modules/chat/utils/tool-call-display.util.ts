@@ -1,7 +1,6 @@
 import { Injectable, Logger } from "@nestjs/common";
-import { ToolDisplayInfo, ToolDefinition } from "../../tools/interfaces/tool-provider.interface";
+import { ToolDisplayInfo } from "../../tools/interfaces/tool-provider.interface";
 import { ToolHandlerDef } from "../../plugins/types/plugin.types";
-import { ToolRuntime } from "../../tools/tool-context";
 import { generateDisplayMessage } from "../../plugins/utils/display-formatter";
 import { partialParse } from "partial-json-parser";
 
@@ -13,7 +12,7 @@ export class ToolCallDisplayUtil {
     toolName: string,
     args: string | Record<string, any>,
     isExecuting: boolean = true,
-    runtime?: ToolRuntime,
+    toolEntry?: ToolHandlerDef,
   ): ToolDisplayInfo {
     let actualToolName = toolName;
     let extractedParams: Record<string, any> = {};
@@ -36,26 +35,9 @@ export class ToolCallDisplayUtil {
       extractedParams = args;
     }
 
-    // 从 runtime 查找工具显示配置
-    let toolEntry: ToolHandlerDef | undefined;
-    if (runtime) {
-      const flatTools = runtime.getFlatTools(true);
-      const matched = flatTools.find(t => t.name === actualToolName);
-      if (matched) {
-        toolEntry = {
-          name: matched.name,
-          description: matched.description,
-          parameters: matched.parameters,
-          action: matched.action,
-          icon: matched.icon,
-          argsKey: matched.argsKey,
-        } as any;
-      }
-    }
     return generateDisplayMessage(
       { id: "", name: actualToolName, arguments: extractedParams },
       isExecuting,
-      runtime,
       toolEntry,
     );
   }

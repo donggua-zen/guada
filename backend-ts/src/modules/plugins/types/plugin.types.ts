@@ -1,3 +1,6 @@
+import { z } from "zod";
+import { ISessionContext } from "../../chat/session-context";
+
 // ==================== 插件元数据 ====================
 
 export interface PluginManifest {
@@ -30,20 +33,10 @@ export interface PromptPiece {
 }
 
 export interface PluginContext {
-  sessionId: string;
-  sessionType: string;
-  workspacePath: string;
-  userId?: string;
-  /** 角色信息（动态挂载） */
-  character?: any;
-  /** 模型信息（动态挂载） */
-  model?: any;
-  /** 发送者昵称（Bot 消息） */
-  senderName?: string;
-  /** 是否管理员（Bot 消息） */
-  isAdmin?: boolean;
-  /** 扩展字段 */
-  [key: string]: any;
+  /** 会话上下文 */
+  session: ISessionContext;
+  /** 插件原始配置（原 roles.tools / settings.plugins 的原始配置） */
+  pluginsConfig?: any;
 }
 
 /** @deprecated 使用 PluginContext */
@@ -54,8 +47,26 @@ export type PromptContext = PluginContext;
 export type ToolLoadMode = 'eager' | 'lazy' | 'none';
 export type ToolProviderType = 'core' | 'extended';
 export type ConditionFn = (context: PluginContext) => boolean | Promise<boolean>;
-/** 插件/工具配置类型：{ pluginId: true/false } 或 { pluginId: string[] } */
-export type PluginConfig = Record<string, boolean | string[]>;
+/**
+ * 插件级配置项（新格式 v2）
+ * - enabled: 是否启用插件（默认 true）
+ * - toolkits_filter: 是否启用工具包过滤（默认 false）
+ * - toolkits_deny: 禁用的工具包 ID 列表（当 toolkits_filter=true 时生效，未列出的允许）
+ * - params: 插件私有参数（预留）
+ */
+export interface PluginEntryConfig {
+  enabled?: boolean;
+  toolkits_filter?: boolean;
+  toolkits_deny?: string[];
+  params?: Record<string, any>;
+}
+
+/**
+ * 插件配置类型
+ * 格式：{ pluginId: PluginEntryConfig }
+ */
+export type PluginConfig = Record<string, PluginEntryConfig>;
+
 
 export interface ToolParamSchema {
   type: string;
@@ -102,26 +113,82 @@ export interface ToolHandlerDef {
   argsKey?: string;
 }
 
-// ==================== 工具集定义 ====================
+// ==================== 工具集定义（旧版，已废弃） ====================
 
+/** @deprecated 使用 ToolKitDef / ToolKit */
 export interface ToolSetDef {
-  /** 工具集 ID */
   id: string;
-  /** 工具集名称 */
   name: string;
-  /** 该工具集包含的工具名列表 */
   tools: string[];
-  /** 加载模式（默认 lazy） */
   loadMode?: ToolLoadMode;
-  /** 激活词/触发说明：告诉 AI 何时加载本工具集 */
   activator?: string;
-  /** 运行时解析器：返回此工具集的动态属性 */
   handler?: (context: PluginContext) => Promise<ToolSetRuntime> | ToolSetRuntime;
 }
 
+/** @deprecated */
 export interface ToolSetRuntime {
   loadMode?: ToolLoadMode;
   activator?: string;
+}
+
+// ==================== 工具包定义（ToolKit，新版） ====================
+
+/** 工具包加载模式 */
+export type ToolKitLoadMode = 'eager' | 'lazy' | 'none';
+
+/** 工具包定义（注册时传入） */
+export interface ToolKitDef {
+  /** 工具包唯一 ID（在同一插件内唯一） */
+  id: string;
+  /** 显示名称 */
+  name?: string;
+  /** 加载模式（默认 lazy） */
+  loadMode?: ToolKitLoadMode;
+  /** 是否默认启用（默认 true） */
+  enabled?: boolean;
+  /** 激活词/触发说明：告诉 AI 何时加载本工具包 */
+  activator?: string;
+  /** 运行时解析器：返回此工具包的动态属性 */
+  handler?: (context: PluginContext) => Promise<Partial<ToolKitRuntime>> | Partial<ToolKitRuntime>;
+  /** 初始化回调（可在此回调中注册工具/提示词） */
+  onLoad?: (toolkit: ToolKitHandle) => void | Promise<void>;
+}
+
+/** 工具包运行时属性 */
+export interface ToolKitRuntime {
+  loadMode: ToolKitLoadMode;
+  activator?: string;
+}
+
+/** 工具包句柄（在 onLoad 回调中暴露给插件） */
+export interface ToolKitHandle {
+  readonly id: string;
+  readonly name: string;
+  registerTool<Z extends z.ZodTypeAny>(def: {
+    name: string;
+    description: string;
+    inputSchema: Z;
+    execute: (args: z.output<Z>, ctx?: PluginContext, signal?: AbortSignal) => string | Record<string, any> | Promise<string | Record<string, any>>;
+    display?: { action?: string; argsKey?: string; icon?: string };
+    dangerLevel?: "info" | "normal" | "high" | "critical";
+  }): void;
+  registerRawTool(def: ToolHandlerDef): void;
+  registerPrompt(def: {
+    content: string | ((ctx: PluginContext) => string | Promise<string>);
+    frequency?: "STATIC" | "REGULAR" | "VOLATILE";
+    description?: string;
+  }): void;
+}
+
+/** 工具包注册后的内部存储结构 */
+export interface ToolKitRegistration {
+  def: ToolKitDef;
+  tools: ToolHandlerDef[];
+  prompts: Array<{
+    frequency: string;
+    description: string;
+    handler: (ctx: any) => string | Promise<string>;
+  }>;
 }
 
 export interface ToolUsingEvent {
@@ -154,4 +221,36 @@ export interface LLMResponseEvent {
   messages: any[];
   response: any;
   pluginId?: string;
+}
+
+// ==================== 插件决议信息 ====================
+
+/**
+ * 插件决议后的信息（统一由 PluginManager.resolvePlugins 返回）
+ * 各消费方（ToolExecutor、PromptCollector 等）通过此类型消费插件运行时状态。
+ */
+export interface ResolvedPluginInfo {
+  /** 是否启用 */
+  enabled: boolean;
+  /** 配置生效层级 */
+  effective: "global" | "role";
+  /** 插件清单 */
+  plugin: PluginManifest;
+  /** 启用的工具（经过配置过滤后的） */
+  enabledTools: ToolHandlerDef[];
+  /** 所有注册的工具（不过滤） */
+  allTools: ToolHandlerDef[];
+  /** 工具包运行时信息 */
+  toolKits: Array<{
+    id: string;
+    name: string;
+    loadMode: ToolLoadMode;
+    activator?: string;
+    enabled: boolean;
+  }>;
+  /** 被配置禁止的工具包 ID，按来源分层 */
+  deniedToolKits: {
+    global: string[];
+    role: string[];
+  };
 }

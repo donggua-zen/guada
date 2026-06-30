@@ -12,6 +12,7 @@ import {
 } from "./interfaces";
 import { MESSAGE_STORE_TOKEN, COMPRESSION_STRATEGY_TOKEN } from "./interfaces";
 import { PluginManager } from "../plugins/plugin.manager";
+import { PromptCollector } from "../plugins/prompt-collector.service";
 
 /**
  * SessionContext 工厂
@@ -30,6 +31,7 @@ export class SessionContextFactory {
     private settingsStorage: SettingsStorage,
     private toolOrchestrator: ToolOrchestrator,
     private pluginManager: PluginManager,
+    private promptCollector: PromptCollector,
     private workspaceService: WorkspaceService,
     @Inject(MESSAGE_STORE_TOKEN) private messageStore: IMessageStore,
     @Inject(COMPRESSION_STRATEGY_TOKEN) private compressionStrategy: ICompressionStrategy,
@@ -41,8 +43,8 @@ export class SessionContextFactory {
       session,
       this.modelRepository,
       this.settingsStorage,
-      this.toolOrchestrator,
       this.pluginManager,
+      this.promptCollector,
       this.workspaceService,
       this.messageStore,
       this.compressionStrategy,

@@ -4,8 +4,12 @@ import {
   PromptPiece,
   ToolLoadMode,
   ToolSetRuntime,
+  ToolKitDef,
+  ToolKitHandle,
+  ToolKitRegistration,
 } from "../types/plugin.types";
 import { PluginRegistry } from "../registry/plugin-registry";
+import { Toolkit } from "../toolkit/toolkit";
 import { z } from "zod";
 
 // ── PluginApi ──
@@ -73,18 +77,22 @@ export interface PluginApi {
   }): void;
 
   registerRawTool(def: ToolHandlerDef): void;
+
+  /**
+   * 注册工具包（ToolKit）
+   *
+   * 支持两种用法：
+   * 1. 回调方式：registerToolKit({ onLoad: (toolkit) => { toolkit.registerTool({...}) } })
+   * 2. 返回值方式：const tk = registerToolKit({}); tk.registerTool({...})
+   */
+  registerToolKit(def: ToolKitDef): ToolKitHandle;
 }
 
 // ── PluginApi 实现 ──
 
 export class PluginApiImpl implements PluginApi {
-  private _toolSets: Array<{
-    name: string;
-    loadMode: ToolLoadMode;
-    activator?: string;
-    handler?: (ctx: PluginContext) => ToolSetRuntime | Promise<ToolSetRuntime>;
-  }> = [];
   private _toolDefs: ToolHandlerDef[] = [];
+  private _toolKits: Toolkit[] = [];
   private _promptMetas: Array<{
     methodName: string;
     frequency: string;
@@ -104,15 +112,9 @@ export class PluginApiImpl implements PluginApi {
     activator?: string;
     handler?: (ctx: PluginContext) => ToolSetRuntime | Promise<ToolSetRuntime>;
   }): void {
-    const entry = {
-      name: def.name,
-      loadMode: def.loadMode || "eager",
-      activator: def.activator,
-      handler: def.handler,
-    };
-    if (!this._toolSets.find((x) => x.name === entry.name)) {
-      this._toolSets.push(entry);
-    }
+    throw new Error(
+      "registerToolSet 已废弃，请使用 registerToolKit 替代。插件: " + this.pluginId,
+    );
   }
 
   registerTool(def: any): void {
@@ -237,6 +239,14 @@ export class PluginApiImpl implements PluginApi {
     }
   }
 
+  registerToolKit(def: ToolKitDef): ToolKitHandle {
+    const toolkit = new Toolkit(def, this.pluginId);
+    if (!this._toolKits.find((x) => x.id === toolkit.id)) {
+      this._toolKits.push(toolkit);
+    }
+    return toolkit;
+  }
+
   /** 注册到 PluginRegistry */
   flush(): void {
     // 注册 manifest
@@ -250,21 +260,7 @@ export class PluginApiImpl implements PluginApi {
       });
     }
 
-    // 注册 toolSets
-    for (const ts of this._toolSets) {
-      PluginRegistry.registerToolSet(this.pluginId, {
-        id: ts.name,
-        name: ts.name,
-        tools: this._toolDefs
-          .filter((t) => t.toolSet === ts.name)
-          .map((t) => t.name),
-        loadMode: ts.loadMode,
-        activator: ts.activator,
-        handler: ts.handler,
-      });
-    }
-
-    // 注册 tools
+    // 注册 tools（顶层）
     const reg = (PluginRegistry as any).registrations.get(this.pluginId);
     if (reg) {
       for (const td of this._toolDefs) {
@@ -272,6 +268,11 @@ export class PluginApiImpl implements PluginApi {
           reg.tools.push(td);
         }
       }
+    }
+
+    // 注册 ToolKits
+    for (const tk of this._toolKits) {
+      PluginRegistry.registerToolKit(this.pluginId, tk.toRegistration());
     }
 
     // 注册 prompts

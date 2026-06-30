@@ -14,7 +14,8 @@ export class McpPlugin extends PluginBase {
     name: "MCP 工具",
     description: "通过 Model Context Protocol 连接外部工具和服务",
     version: "1.0.0",
-    category: "core" as const,
+    /** system 类别：插件实例始终加载，工具可用性由 toolsets_allow 控制 */
+    category: "system" as const,
   };
 
   constructor(
@@ -31,11 +32,21 @@ export class McpPlugin extends PluginBase {
 
     for (const server of servers) {
       if (!server.tools) continue;
+      const serverToolKitId = `mcp_${server.id}`;
       const rawTools = server.tools as Record<string, any>;
+
+      // 为每个 MCP 服务器注册一个工具包（返回值方式）
+      const toolkit = api.registerToolKit({
+        id: serverToolKitId,
+        name: server.name || serverToolKitId,
+        loadMode: "eager",
+      });
+
       for (const [toolName, toolSchema] of Object.entries(rawTools)) {
         const mcpToolName = `mcp__${toolName}`;
         const schema = (toolSchema as any).inputSchema;
-        api.registerRawTool({
+
+        toolkit.registerRawTool({
           name: mcpToolName,
           description: (toolSchema as any).description || `Execute ${toolName}`,
           parameters: schema || { type: "object", properties: {} },

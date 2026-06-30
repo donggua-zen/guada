@@ -326,36 +326,15 @@
         <div class="px-0 py-6 h-full overflow-y-auto">
           <div class="px-0">
             <el-form label-position="top" size="large">
-              <!-- 全局开关 -->
-              <el-form-item label="自动启用全部工具" label-position="left">
+              <!-- 全部禁用开关 -->
+              <el-form-item>
                 <div class="flex items-center gap-2">
-                  <el-tooltip content="开启后，角色将自动使用所有全局启用的工具，无需逐个选择" placement="top">
-                    <el-icon class="cursor-help text-gray-400 hover:text-gray-600" size="16">
-                      <QuestionCircleOutlined />
-                    </el-icon>
-                  </el-tooltip>
-                  <el-switch :model-value="allToolsEnabled" @update:model-value="handleAllToolsToggle" inline-prompt
-                    active-text="开" inactive-text="关" />
+                  <el-switch :model-value="allDisabled" @update:model-value="handleAllDisabledToggle" inline-prompt active-text="全部禁用" inactive-text="自定义" />
+                  <span class="text-sm text-gray-500">禁用全部插件</span>
                 </div>
               </el-form-item>
 
-              <el-alert title="工具说明" type="info" :closable="false" class="mb-4" show-icon>
-                <p class="text-sm" v-if="allToolsEnabled">
-                  当前已启用所有全局允许的工具，下方列表仅供参考
-                </p>
-                <p class="text-sm" v-else>
-                  只有在全局设置中启用的工具才会显示在这里。您可以进一步选择启用或禁用这些工具。
-                </p>
-              </el-alert>
-
-              <div v-if="loadingTools" class="text-center py-8">
-                <el-icon class="is-loading" size="24">
-                  <LoadingOutlined />
-                </el-icon>
-                <div class="text-sm text-gray-500 mt-2">加载中...</div>
-              </div>
-
-              <div v-else-if="localTools.length === 0" class="text-center text-gray-500 py-8">
+              <div v-if="localTools.length === 0" class="text-center text-gray-500 py-8">
                 <el-icon size="48" class="mb-2">
                   <InfoCircleOutlined />
                 </el-icon>
@@ -363,35 +342,25 @@
                 <div class="text-sm mt-2">请先到"插件 > 本地工具"中启用工具</div>
               </div>
 
-              <div v-else>
-                <!-- 网格布局：每行3列 -->
-                <div class="grid grid-cols-3 gap-3">
-                  <div v-for="tool in localTools" :key="tool.pluginId" class="tool-item p-3 border rounded relative dark:border-[#232428]">
-                    <div class="flex items-start justify-between gap-2 mb-2">
-                      <div class="font-medium text-sm flex-1 truncate">{{ tool.displayName }}</div>
-                      <div class="flex items-center gap-2">
-                        <!-- 设置按钮 -->
-                        <el-tooltip content="配置子工具" placement="top">
-                          <el-icon class="cursor-pointer text-gray-400 hover:text-blue-500 transition-colors" size="16"
-                            @click="openToolConfig(tool)">
-                            <SettingOutlined />
-                          </el-icon>
-                        </el-tooltip>
-                        <el-switch v-if="!allToolsEnabled" :model-value="isToolProviderEnabled(tool.pluginId)"
-                          @update:model-value="handleLocalToolToggle(tool.pluginId, $event)" inline-prompt
-                          active-text="启动" inactive-text="禁用" size="default" />
-                        <el-tag v-else type="primary" size="small">已启用</el-tag>
-                      </div>
+              <div v-else class="grid gap-3" style="grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));">
+                <div v-for="tool in localTools" :key="tool.pluginId"
+                  class="tool-item p-3 border rounded dark:border-[#232428]"
+                  :class="{ 'opacity-50 pointer-events-none': allDisabled }">
+                  <div class="flex items-start justify-between gap-2 mb-2">
+                    <div class="font-medium text-sm flex-1 truncate">{{ tool.displayName }}</div>
+                    <div class="flex items-center gap-2">
+                      <el-switch :model-value="isToolProviderEnabled(tool.pluginId)"
+                        @update:model-value="(val) => handleLocalToolToggle(tool.pluginId, val)"
+                        :disabled="allDisabled"
+                        inline-prompt
+                        active-text="启动" inactive-text="禁用" size="default" />
                     </div>
-                    <p class="text-xs text-gray-500 line-clamp-2 min-h-[2rem] mb-2">{{ tool.description }}</p>
-                    <div v-if="allToolsEnabled" class="text-xs text-blue-500">
-                      ✓ 已自动启用
-                    </div>
-                    <div v-else class="text-xs text-gray-400">
-                      <el-tag size="small" type="info" effect="plain">
-                        {{ tool.tools?.length || 0 }} 个工具
-                      </el-tag>
-                    </div>
+                  </div>
+                  <p class="text-xs text-gray-500 line-clamp-2 min-h-[2rem] mb-2">{{ tool.description }}</p>
+                  <div class="text-xs text-gray-400">
+                    <el-tag size="small" type="info" effect="plain">
+                      {{ tool.tools?.length || 0 }} 个工具
+                    </el-tag>
                   </div>
                 </div>
               </div>
@@ -413,27 +382,13 @@
         <div class="px-0 py-6 h-full overflow-y-auto">
           <div class="px-0">
             <el-form label-position="top" size="large">
-              <!-- MCP 全局开关 -->
-              <el-form-item label="自动启用全部MCP服务器" label-position="left">
+              <!-- MCP 全部禁用开关 -->
+              <el-form-item>
                 <div class="flex items-center gap-2">
-                  <el-tooltip content="开启后，角色将自动使用所有已启用的MCP服务器及其工具，无需逐个选择" placement="top">
-                    <el-icon class="cursor-help text-gray-400 hover:text-gray-600" size="16">
-                      <QuestionCircleOutlined />
-                    </el-icon>
-                  </el-tooltip>
-                  <el-switch :model-value="characterForm.enabledMcpServers === true"
-                    @update:model-value="handleMcpGlobalToggle" inline-prompt active-text="开" inactive-text="关" />
+                  <el-switch :model-value="allMcpDisabled" @update:model-value="handleAllMcpDisabledToggle" inline-prompt active-text="全部禁用" inactive-text="自定义" />
+                  <span class="text-sm text-gray-500">禁用全部 MCP 工具</span>
                 </div>
               </el-form-item>
-
-              <el-alert title="MCP 服务说明" type="info" :closable="false" class="mb-4" show-icon>
-                <p class="text-sm" v-if="characterForm.enabledMcpServers === true">
-                  当前已启用所有MCP服务器，下方列表仅供参考
-                </p>
-                <p class="text-sm" v-else>
-                  启用表示此角色可以使用该 MCP 服务，禁用不会影响其他角色或全局 MCP 服务
-                </p>
-              </el-alert>
 
               <div v-if="mcpServers.length === 0" class="text-center text-gray-500 py-8">
                 <el-icon size="48" class="mb-2">
@@ -443,7 +398,8 @@
               </div>
 
               <div v-else>
-                <div v-for="server in mcpServers" :key="server.id" class="mcp-server-item p-3 border rounded mb-3 dark:border-[#232428]">
+                <div v-for="server in mcpServers" :key="server.id" class="mcp-server-item p-3 border rounded mb-3 dark:border-[#232428]"
+                  :class="{ 'opacity-50': allMcpDisabled }">
                   <div class="flex items-start justify-between">
                     <div class="flex-1 mr-4">
                       <div class="font-medium text-base mb-1">
@@ -453,10 +409,6 @@
                         </el-tag>
                         <el-tag v-else type="info" size="small" class="ml-2">
                           未运行
-                        </el-tag>
-                        <el-tag v-if="characterForm.enabledMcpServers === true" type="primary" size="small"
-                          class="ml-2">
-                          已自动启用
                         </el-tag>
                       </div>
                       <div v-if="server.description" class="text-sm text-gray-600 line-clamp-2">
@@ -469,13 +421,14 @@
                     </div>
 
                     <!-- 启用/禁用开关 -->
-                    <el-switch v-if="characterForm.enabledMcpServers !== true"
-                      :model-value="Array.isArray(characterForm.enabledMcpServers) && characterForm.enabledMcpServers.includes(server.id)"
-                      @update:model-value="handleMcpServerToggle(server.id, $event)" :disabled="!server.enabled" />
+                    <el-switch
+                      :model-value="!mcpDeniedServers.includes(server.id)"
+                      @update:model-value="(val) => handleMcpServerToggle(server.id, val)"
+                      :disabled="allMcpDisabled" />
+                    </div>
                   </div>
                 </div>
-              </div>
-            </el-form>
+              </el-form>
           </div>
         </div>
       </el-tab-pane>
@@ -493,27 +446,13 @@
         <div class="px-0 py-6 h-full overflow-y-auto">
           <div class="px-0">
             <el-form label-position="top" size="large">
-              <!-- Skills 全局开关 -->
-              <el-form-item label="自动启用全部 Skills" label-position="left">
+              <!-- Skills 全部禁用开关 -->
+              <el-form-item>
                 <div class="flex items-center gap-2">
-                  <el-tooltip content="开启后，角色将自动使用所有全局启用的技能，无需逐个选择" placement="top">
-                    <el-icon class="cursor-help text-gray-400 hover:text-gray-600" size="16">
-                      <QuestionCircleOutlined />
-                    </el-icon>
-                  </el-tooltip>
-                  <el-switch :model-value="characterForm.enabledSkills === true"
-                    @update:model-value="handleSkillsGlobalToggle" inline-prompt active-text="开" inactive-text="关" />
+                  <el-switch :model-value="allSkillsDisabled" @update:model-value="handleAllSkillsDisabledToggle" inline-prompt active-text="全部禁用" inactive-text="自定义" />
+                  <span class="text-sm text-gray-500">禁用全部 Skills</span>
                 </div>
               </el-form-item>
-
-              <el-alert title="Skills 说明" type="info" :closable="false" class="mb-4" show-icon>
-                <p class="text-sm" v-if="characterForm.enabledSkills === true">
-                  当前已启用所有全局启用的技能，下方列表仅供参考
-                </p>
-                <p class="text-sm" v-else>
-                  Skills 是专业技能模块，启用后 AI 助手可在对话中主动调用。每个技能可单独启用或禁用。
-                </p>
-              </el-alert>
 
               <div v-if="loadingSkills" class="text-center py-8">
                 <el-icon class="is-loading" size="24">
@@ -532,7 +471,8 @@
 
               <div v-else class="grid gap-3" style="grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));">
                 <div v-for="skill in visibleSkills" :key="skill.id"
-                  class="skill-item p-3 border rounded dark:border-[#232428]" :style="getSkillEffectiveEnabled(skill) ? {} : { opacity: 0.6 }">
+                  class="skill-item p-3 border rounded dark:border-[#232428]"
+                  :class="{ 'opacity-50 pointer-events-none': allSkillsDisabled }">
                   <div class="flex items-start justify-between gap-2 mb-2">
                     <div class="font-medium text-sm flex-1 truncate">{{ skill.manifest?.name || skill.id }}</div>
                     <div class="flex items-center gap-1.5 shrink-0">
@@ -540,6 +480,7 @@
                         :model-value="getSkillEffectiveEnabled(skill)"
                         :loading="updatingSkills.has(skill.id)"
                         @update:model-value="(val) => handleSkillToggle(skill.id, val)"
+                        :disabled="allSkillsDisabled"
                         size="small"
                         inline-prompt
                         active-text="启用"
@@ -557,49 +498,7 @@
         </div>
       </el-tab-pane>
     </el-tabs>
-  </div>
-
-  <!-- 工具配置对话框 -->
-  <el-dialog v-model="toolConfigDialogVisible" :title="`${currentToolConfig?.displayName || ''} - 子工具配置`" width="600px"
-    destroy-on-close class="tool-config-dialog">
-    <div v-if="currentToolConfig" class="py-2">
-      <div class="flex items-center justify-between mb-4">
-        <span class="text-sm text-gray-600">启动全部工具</span>
-        <el-switch :model-value="isUsingGlobalToggle" @update:model-value="handleAllSubToolsToggle" inline-prompt
-          active-text="启用" inactive-text="禁用" />
-      </div>
-
-      <div v-if="!currentToolConfig.tools || currentToolConfig.tools.length === 0"
-        class="text-center text-gray-500 py-8">
-        暂无子工具配置
-      </div>
-
-      <div v-else class="tool-config-list">
-        <div v-for="subTool in currentToolConfig.tools" :key="subTool.name" class="tool-config-item">
-          <div class="flex items-center justify-between gap-3">
-            <div class="flex flex-col gap-1 flex-1 min-w-0">
-              <span class="font-medium text-sm break-words">{{ getToolDisplayName(subTool.name) }}</span>
-              <span v-if="subTool.description" class="text-xs text-gray-500 break-words whitespace-normal">{{
-                subTool.description }}</span>
-            </div>
-            <el-switch v-if="!isUsingGlobalToggle"
-              :model-value="selectedSubTools.includes(getToolDisplayName(subTool.name))"
-              @update:model-value="handleSubToolToggle(getToolDisplayName(subTool.name), $event)" inline-prompt
-              active-text="启用" inactive-text="禁用" />
-            <el-tag v-else type="success" size="small">已启用</el-tag>
-          </div>
-        </div>
-      </div>
     </div>
-
-    <template #footer>
-      <div class="flex justify-end gap-2">
-        <el-button @click="toolConfigDialogVisible = false">取消</el-button>
-        <el-button type="primary" @click="saveToolConfig">确定</el-button>
-      </div>
-    </template>
-  </el-dialog>
-
   </div>
 </template>
 
@@ -635,7 +534,6 @@ import {
   DatabaseOutlined,
   ToolOutlined,
   ApiOutlined,
-  SettingOutlined,
   CloseOutlined,
   FolderOutlined,
   ThunderboltOutlined,
@@ -731,8 +629,9 @@ const characterForm = reactive({
   maxMemoryLength: null,
   useUserPrompt: false,
   enabledTools: [],  // 启用的本地工具
-  enabledMcpServers: [],  // 启用的 MCP 服务器 ID 数组
+  toolsMode: 'inherit',
   enabledSkills: {},       // 按角色启用的技能 { skillId: true/false }
+  skillsMode: 'inherit',  // Skills 模式: 'inherit' | 'custom' | 'disabled'
   compressionTriggerRatio: 0.8, // 触发阈值
   compressionTargetRatio: 0.5, // 保留目标
   summaryMode: DEFAULT_SUMMARY_MODE, // 摘要模式：'disabled' | 'fast' | 'memory_sync'
@@ -810,6 +709,9 @@ const modelOptions = computed(() => {
   return options
 })
 
+// MCP 禁用列表（不在列表中的 MCP 服务器默认启用）
+const mcpDeniedServers = ref<string[]>([]);
+
 // MCP 服务器数据
 const mcpServers = ref([]);
 
@@ -828,15 +730,13 @@ const loadingTools = ref(false);
 // 角色工具设置（pluginId -> boolean | 'all'）
 const characterToolSettings = ref({});
 
-// Token 上限显示值（用于格式化显示）
+// 是否全部禁用本地工具
+const allDisabled = ref(false);
+// 是否全部禁用 MCP
+const allMcpDisabled = ref(false);
+// 是否全部禁用 Skills
+const allSkillsDisabled = ref(false);
 const maxTokensLimitDisplay = ref('');
-
-// 工具配置对话框
-const toolConfigDialogVisible = ref(false);
-const currentToolConfig = ref<any>(null);
-const selectedSubTools = ref<string[]>([]);
-// 标记是否通过“启动全部”开关启用（用于区分手动选择和全局启用）
-const isUsingGlobalToggle = ref(false);
 
 // 是否自动启用全部工具
 const allToolsEnabled = computed(() => {
@@ -846,27 +746,24 @@ const allToolsEnabled = computed(() => {
 
 // 计算技能的最终显示状态
 const getSkillEffectiveEnabled = (skill) => {
-  // 全局启用模式：所有技能启用
-  if (characterForm.enabledSkills === true) return true;
-  // 角色级优先（对象模式）
-  if (typeof characterForm.enabledSkills === 'object' && skill.id in characterForm.enabledSkills) {
+  // 全部禁用时 switch 不改变原值，仅展示原状态，由后端策略控制
+  // 正常模式：使用角色级配置
+  if (skill.id in characterForm.enabledSkills) {
     return characterForm.enabledSkills[skill.id];
   }
-  // 无角色级配置 → 使用全局状态
   return skill.enabled !== false;
 };
 
-// 角色面板可见的技能：全局启用 或 有角色级覆盖
+// 角色面板可见的技能
 const visibleSkills = computed(() => {
+  // 全部禁用模式下仍然展示所有技能（灰色不可操作状态）
   return skillsList.value.filter(skill => {
-    // 如果全局禁用 且 没有角色级覆盖（全局启用模式下也隐藏全局禁用的技能）
+    // 全局禁用的技能，但角色级覆盖启用了 → 显示
     if (skill.enabled === false) {
-      // 全局启用模式不覆盖全局禁用
-      if (characterForm.enabledSkills === true) return false;
-      // 对象模式下检查是否有角色级覆盖
-      if (typeof characterForm.enabledSkills !== 'object' || !(skill.id in characterForm.enabledSkills)) {
-        return false;
+      if (characterForm.skillsMode === 'custom' && characterForm.enabledSkills[skill.id] === true) {
+        return true;
       }
+      return false;
     }
     return true;
   });
@@ -874,24 +771,9 @@ const visibleSkills = computed(() => {
 
 // 判断某个工具提供者是否启用（用于 Switch 显示）
 const isToolProviderEnabled = (pluginId) => {
-  // 如果 characterToolSettings 是布尔值，直接返回
-  if (typeof characterToolSettings.value === 'boolean') {
-    return characterToolSettings.value;
-  }
-
-  const config = characterToolSettings.value[pluginId];
-
-  // true 表示全部启用
-  if (config === true) return true;
-
-  // false 表示全部禁用
-  if (config === false) return false;
-
-  // 数组表示部分启用，数组长度 > 0 表示启用
-  if (Array.isArray(config)) return config.length > 0;
-
-  // 默认禁用（当配置为对象但某个 pluginId 未配置时）
-  return false;
+  // 全部禁用时 switch 不改变原值，仅展示原状态，由后端策略控制
+  const tool = localTools.value.find(t => t.pluginId === pluginId);
+  return tool ? tool.enabled : false;
 };
 
 // 监听 props.data 变化
@@ -930,39 +812,55 @@ watch(() => props.data, (newVal) => {
   characterForm.maxTokensLimit = memoryConfig.maxTokensLimit ?? newVal.settings?.maxTokensLimit ?? null;
   // 同步更新显示值
   maxTokensLimitDisplay.value = formatTokenValue(characterForm.maxTokensLimit);
-  // 加载已启用的工具
-  characterForm.enabledTools = newVal.settings?.tools || [];
-  // 加载角色工具设置
-  const toolsConfig = newVal.settings?.tools;
-  if (toolsConfig === true || toolsConfig === false) {
-    // 整体开关模式
-    characterToolSettings.value = toolsConfig;
-  } else if (typeof toolsConfig === 'object' && !Array.isArray(toolsConfig)) {
-    // 单独控制模式
-    characterToolSettings.value = { ...toolsConfig };
-  } else {
-    // 默认关闭全部
-    characterToolSettings.value = false;
+  // 加载已启用的插件
+  characterForm.enabledTools = newVal.settings?.plugins || [];
+  // 加载角色插件设置（新格式：{ pluginId: { enabled: true/false } }）
+  let pluginsConfig = newVal.settings?.plugins;
+  // 向后兼容：旧数据使用 tools 字段
+  if (pluginsConfig === undefined) {
+    pluginsConfig = newVal.settings?.tools;
   }
-  // 加载已启用的 MCP 服务器 (支持 boolean 或 array)
-  const mcpServersConfig = newVal.settings?.mcpServers;
-  if (typeof mcpServersConfig === 'boolean') {
-    characterForm.enabledMcpServers = mcpServersConfig;
-  } else if (Array.isArray(mcpServersConfig)) {
-    characterForm.enabledMcpServers = mcpServersConfig;
+  if (typeof pluginsConfig === 'object' && pluginsConfig !== null && !Array.isArray(pluginsConfig)) {
+    // 读取策略 → 全部禁用开关
+    const strategy = pluginsConfig?.__strategy;
+    allDisabled.value = strategy === 'deny_nonsystem';
+    characterToolSettings.value = {};
+    for (const [pluginId, cfg] of Object.entries(pluginsConfig)) {
+      if (pluginId === '__strategy') continue;
+      if (typeof cfg === 'object' && cfg !== null) {
+        characterToolSettings.value[pluginId] = (cfg as any).enabled !== false;
+      } else {
+        characterToolSettings.value[pluginId] = cfg === true;
+      }
+    }
   } else {
-    characterForm.enabledMcpServers = [];
+    // undefined / null / true → 继承全局
+    // 继承全局
+    characterToolSettings.value = {};
   }
+  // 加载 MCP 禁用列表（黑名单：settings.plugins.mcp.toolkits_deny）
+  const mcpPluginsCfg = newVal.settings?.plugins?.mcp;
+  const mcpDeny = mcpPluginsCfg?.toolkits_deny;
+  mcpDeniedServers.value = mcpDeny
+    ? mcpDeny.map((id: string) => id.replace(/^mcp_/, ''))
+    : [];
+  // 优先使用 enabled: false 判断，否则 fallback 到 deny list 推断
+  allMcpDisabled.value = mcpPluginsCfg?.enabled === false ||
+    (mcpDeny?.length > 0 && mcpDeny.length === mcpServers.value.filter(s => s.enabled).length);
 
-  // 加载角色技能偏好（支持 boolean = 全部启用，object = 逐一选择）
+  // 加载角色技能偏好
+  // 全部禁用：从 plugins.skill.enabled 读取
+  allSkillsDisabled.value = newVal.settings?.plugins?.skill?.enabled === false;
+  // 单项偏好：从 skills 读取（不受全部禁用影响）
   const skillsConfig = newVal.settings?.skills;
-  if (skillsConfig === true || skillsConfig === false) {
-    characterForm.enabledSkills = skillsConfig;
-  } else if (typeof skillsConfig === 'object' && !Array.isArray(skillsConfig)) {
+  if (typeof skillsConfig === 'object' && !Array.isArray(skillsConfig)) {
     characterForm.enabledSkills = { ...skillsConfig };
   } else {
     characterForm.enabledSkills = {};
   }
+
+  // 加载本地工具列表
+  loadLocalTools();
 
 }, { immediate: true })
 
@@ -970,88 +868,88 @@ const handleAvatarChanged = (file) => {
   characterForm.avatarFile = file
 }
 
-// MCP 服务器开关切换处理
+// MCP 服务器开关切换处理（黑名单机制：禁用时加入拒绝列表）
 const handleMcpServerToggle = (serverId, enabled) => {
-  // 如果当前是全局启用模式，不允许单独切换
-  if (characterForm.enabledMcpServers === true) {
-    console.warn('当前为全局启用模式，无法单独切换服务器');
-    return;
+  const index = mcpDeniedServers.value.indexOf(serverId);
+  if (!enabled && index === -1) {
+    mcpDeniedServers.value.push(serverId);
+  } else if (enabled && index !== -1) {
+    mcpDeniedServers.value.splice(index, 1);
   }
-
-  const index = characterForm.enabledMcpServers.indexOf(serverId);
-  if (enabled && index === -1) {
-    // 启用：添加到数组
-    characterForm.enabledMcpServers.push(serverId);
-  } else if (!enabled && index !== -1) {
-    // 禁用：从数组移除
-    characterForm.enabledMcpServers.splice(index, 1);
-  }
-  console.log(`MCP 服务器 ${serverId} ${enabled ? '启用' : '禁用'}, 当前列表:`, characterForm.enabledMcpServers);
 }
 
 // ── Skills 切换 ──
 const handleSkillToggle = (skillId, enabled) => {
-  // 仅更新本地角色配置，不调用全局 API
-  // 如果当前是全局启用模式，不允许单独切换
-  if (characterForm.enabledSkills === true) {
-    console.warn('当前为全局启用模式，无法单独切换技能');
-    return;
-  }
   characterForm.enabledSkills[skillId] = enabled;
-  // 触发响应式更新
   characterForm.enabledSkills = { ...characterForm.enabledSkills };
-  console.log(`角色技能 ${skillId} ${enabled ? '启用' : '禁用'}`);
 };
 
-// Skills 全局开关切换处理
-const handleSkillsGlobalToggle = (enabled) => {
-  if (enabled) {
-    characterForm.enabledSkills = true;
-  } else {
-    characterForm.enabledSkills = {};
+// 模式切换时同步初始状态
+const handleMcpModeChange = (mode) => {
+  if (mode === 'custom' && characterForm.enabledMcpServers.length === 0) {
+    // 默认全选当前可用服务器
+    characterForm.enabledMcpServers = mcpServers.value
+      .filter(s => s.enabled)
+      .map(s => s.id);
   }
-  console.log(`角色技能全局启用 ${enabled ? '开启' : '关闭'}`);
 };
 
-// MCP 全局开关切换处理
-const handleMcpGlobalToggle = (enabled) => {
-  if (enabled) {
-    // 开启全局启用
-    characterForm.enabledMcpServers = true;
-    console.log('MCP 全局启用已开启');
-  } else {
-    // 关闭全局启用，初始化为空数组
-    characterForm.enabledMcpServers = [];
-    console.log('MCP 全局启用已关闭，需要手动选择服务器');
+const handleSkillsModeChange = (mode) => {
+  if (mode === 'custom' && Object.keys(characterForm.enabledSkills).length === 0) {
+    // 默认全选当前可用技能
+    const initial = {};
+    skillsList.value
+      .filter(s => s.enabled !== false)
+      .forEach(s => { initial[s.id] = true; });
+    characterForm.enabledSkills = initial;
   }
-}
+};
+
+// 全部禁用开关切换处理
+const handleAllDisabledToggle = async (val) => {
+  allDisabled.value = val;
+  await loadLocalTools();
+};
+
+const handleAllMcpDisabledToggle = async (val) => {
+  allMcpDisabled.value = val;
+  await loadMCPServers();
+};
+
+const handleAllSkillsDisabledToggle = async (val) => {
+  allSkillsDisabled.value = val;
+};
 
 // 加载本地工具列表
-const loadLocalTools = async () => {
-  loadingTools.value = true;
+async function loadLocalTools() {
   try {
-    // 创建角色时使用特殊 ID，编辑角色时使用真实 ID
-    const characterId = props.data?.id || '__new_character__';
-    const response = await apiService.fetchCharacterTools(characterId);
+    // 根据当前 UI 状态动态构建查询配置（包含最新的 strategy）
+    const basePluginsConfig = props.data?.settings?.plugins || {};
+    const queryConfig = JSON.parse(JSON.stringify(basePluginsConfig));
+    queryConfig.__strategy = allDisabled.value ? 'deny_nonsystem' : 'custom';
+    const response = await apiService.queryPlugins(queryConfig);
 
     // API 返回 plugins[]，每个元素含 enabled 有效状态
     const plugins = response.plugins || [];
 
-    // 本地工具列表：过滤掉 MCP 和 Skills（有独立 Tab）
-    localTools.value = plugins.filter(p => !p.isMcp && !p.isSkill);
+    // 本地工具列表：后端已过滤 system 插件，此处只排除全局关闭的
+    localTools.value = plugins.filter(p => !(p.effective === 'global' && !p.enabled));
 
-    // 从 plugins 的 enabled 字段反向构建角色工具配置
-    const toolsConfig = {};
-    for (const plugin of plugins) {
-      if (plugin.isMcp || plugin.isSkill) continue; // MCP / Skills 由单独逻辑处理
-      toolsConfig[plugin.pluginId] = plugin.enabled;
+    // 正常模式（非全部禁用）：初始化 characterToolSettings
+    if (!allDisabled.value) {
+      const stored = { ...characterToolSettings.value };
+      characterToolSettings.value = {};
+      for (const tool of localTools.value) {
+        characterToolSettings.value[tool.pluginId] = tool.enabled;
+      }
+      // 覆盖保存的用户自定义值
+      for (const [pluginId, val] of Object.entries(stored)) {
+        characterToolSettings.value[pluginId] = val;
+      }
     }
-    characterToolSettings.value = toolsConfig;
   } catch (error) {
     console.error('加载本地工具失败:', error);
     toast.error('加载本地工具失败');
-  } finally {
-    loadingTools.value = false;
   }
 }
 
@@ -1064,142 +962,17 @@ const handleAllToolsToggle = (enabled) => {
 
 // 本地工具开关切换处理
 const handleLocalToolToggle = (pluginId, enabled) => {
-  // 只更新本地状态，不立即调用 API
-  if (typeof characterToolSettings.value !== 'object') {
-    // 如果之前是整体开关模式，转换为对象模式
+  // 从全部禁用模式切换到正常模式
+  if (allDisabled.value) {
+    allDisabled.value = false;
     characterToolSettings.value = {};
   }
   characterToolSettings.value[pluginId] = enabled;
+  // 同步更新 localTools 以便 isToolProviderEnabled 即时反馈
+  const tool = localTools.value.find(t => t.pluginId === pluginId);
+  if (tool) tool.enabled = enabled;
   console.log(`本地工具 ${pluginId} ${enabled ? '启用' : '禁用'}`);
 }
-
-// 打开工具配置对话框
-const openToolConfig = (tool) => {
-  currentToolConfig.value = tool;
-
-  // 获取当前配置
-  let config;
-  if (typeof characterToolSettings.value === 'boolean') {
-    // 整体开关模式：所有工具都使用同一个配置
-    config = characterToolSettings.value;
-  } else if (typeof characterToolSettings.value === 'object') {
-    // 单独控制模式：取对应 pluginId 的配置
-    config = characterToolSettings.value[tool.pluginId];
-  } else {
-    // 其他情况：默认为 undefined
-    config = undefined;
-  }
-
-  // 初始化选中的子工具列表（使用去除前缀后的名称）
-  if (config === true) {
-    // 明确设置为 true：全部启用，标记为使用全局开关
-    selectedSubTools.value = (tool.tools || []).map(t => getToolDisplayName(t.name));
-    isUsingGlobalToggle.value = true;
-  } else if (config === undefined) {
-    // 未配置：默认全部启用，但不标记为使用全局开关（保持灵活性）
-    selectedSubTools.value = (tool.tools || []).map(t => getToolDisplayName(t.name));
-    isUsingGlobalToggle.value = false;
-  } else if (config === false) {
-    // 全部禁用：不选中任何工具
-    selectedSubTools.value = [];
-    isUsingGlobalToggle.value = false;
-  } else if (Array.isArray(config)) {
-    // 数组模式：直接使用数组中的工具名（已经是去除前缀的）
-    selectedSubTools.value = [...config];
-    isUsingGlobalToggle.value = false;
-  } else if (typeof config === 'object') {
-    // 对象模式：提取值为 true 的工具（需要去除前缀）
-    selectedSubTools.value = Object.entries(config)
-      .filter(([_, enabled]) => enabled)
-      .map(([name]) => getToolDisplayName(name));
-    isUsingGlobalToggle.value = false;
-  } else {
-    // 其他情况：默认全部选中
-    selectedSubTools.value = (tool.tools || []).map(t => getToolDisplayName(t.name));
-    isUsingGlobalToggle.value = false;
-  }
-
-  toolConfigDialogVisible.value = true;
-};
-
-// 保存工具配置
-const saveToolConfig = () => {
-  if (!currentToolConfig.value) return;
-
-  const pluginId = currentToolConfig.value.pluginId;
-  const allTools = (currentToolConfig.value.tools || []).map(t => t.name);
-
-  // 确保是对象模式
-  if (typeof characterToolSettings.value !== 'object' || Array.isArray(characterToolSettings.value)) {
-    characterToolSettings.value = {};
-  }
-
-  // 判断是否全部选中
-  if (selectedSubTools.value.length === 0) {
-    // 全部未选中：设置为 false
-    characterToolSettings.value[pluginId] = false;
-  } else if (selectedSubTools.value.length === allTools.length && selectedSubTools.value.length > 0) {
-    // 全部选中：根据是否使用全局开关决定保存方式
-    if (isUsingGlobalToggle.value) {
-      // 通过"启动全部"开关启用：设置为 true，新增工具自动启用
-      characterToolSettings.value[pluginId] = true;
-    } else {
-      // 手动逐个选择全部：保持数组形式，新增工具默认禁用
-      characterToolSettings.value[pluginId] = [...selectedSubTools.value];
-    }
-  } else {
-    // 部分选中：保存为数组
-    characterToolSettings.value[pluginId] = [...selectedSubTools.value];
-  }
-
-  toolConfigDialogVisible.value = false;
-};
-
-// 处理单个子工具开关切换
-const handleSubToolToggle = (toolName, enabled) => {
-  const index = selectedSubTools.value.indexOf(toolName);
-
-  if (enabled && index === -1) {
-    // 启用：添加到数组
-    selectedSubTools.value.push(toolName);
-  } else if (!enabled && index !== -1) {
-    // 禁用：从数组移除
-    selectedSubTools.value.splice(index, 1);
-  }
-
-  // 如果用户手动调整了单个工具，取消全局开关标记
-  isUsingGlobalToggle.value = false;
-};
-
-// 判断是否所有子工具都被选中
-const isAllSubToolsSelected = computed(() => {
-  if (!currentToolConfig.value || !currentToolConfig.value.tools) return false;
-  const allTools = currentToolConfig.value.tools.map(t => t.name);
-  return selectedSubTools.value.length === allTools.length && allTools.length > 0;
-});
-
-// 处理全部子工具开关切换
-const handleAllSubToolsToggle = (enabled) => {
-  if (!currentToolConfig.value || !currentToolConfig.value.tools) return;
-
-  // 使用去除前缀后的工具名称
-  const allTools = currentToolConfig.value.tools.map(t => getToolDisplayName(t.name));
-
-  if (enabled) {
-    // 启用全部：选中所有工具，并标记为使用全局开关
-    selectedSubTools.value = [...allTools];
-    isUsingGlobalToggle.value = true;
-  } else {
-    // 禁用全部：清空选择
-    selectedSubTools.value = [];
-    isUsingGlobalToggle.value = false;
-  }
-};
-
-// 获取工具的显示名称（工具名不再拼接命名空间前缀，直接返回原名称）
-const getToolDisplayName = (toolName) => {
-  return toolName || '';
-};
 
 const loadSkills = async () => {
   loadingSkills.value = true;
@@ -1254,13 +1027,19 @@ const findModelById = (modelId) => {
   return models.value.find(model => model.id === modelId)
 }
 
-// 监听 props.data 变化，重新加载工具列表
-watch(() => props.data, async (newVal, oldVal) => {
-  // 角色数据变化时重新加载工具（包括新建角色 id 为空的情况）
-  if (newVal !== oldVal) {
-    await loadLocalTools();
+// localTools 加载完成后，自定义模式下初始化 characterToolSettings
+watch(localTools, (tools) => {
+  if (!allDisabled.value && tools.length > 0) {
+    const stored = { ...characterToolSettings.value };
+    characterToolSettings.value = {};
+    for (const tool of tools) {
+      characterToolSettings.value[tool.pluginId] = tool.enabled;
+    }
+    for (const [pluginId, val] of Object.entries(stored)) {
+      characterToolSettings.value[pluginId] = val;
+    }
   }
-}, { immediate: true });
+});
 
 // 生命周期
 onMounted(async () => {
@@ -1316,9 +1095,41 @@ const getFormData = () => {
         'summaryMode': characterForm.summaryMode,
         'maxTokensLimit': characterForm.maxTokensLimit,
       },
-      'tools': characterToolSettings.value,
-      'mcpServers': characterForm.enabledMcpServers,
-      'skills': characterForm.enabledSkills,
+      // 插件配置
+      'plugins': (() => {
+        const buildCustom = () => {
+          const result: Record<string, any> = {};
+          for (const [pluginId, enabled] of Object.entries(characterToolSettings.value)) {
+            if (!enabled) result[pluginId] = { enabled: false };
+          }
+          // MCP 配置
+          const mcpConfig: Record<string, any> = {};
+          if (mcpDeniedServers.value.length > 0) {
+            mcpConfig.toolkits_deny = mcpDeniedServers.value.map((id: string) => `mcp_${id}`);
+          }
+          if (allMcpDisabled.value) {
+            mcpConfig.enabled = false;
+          }
+          if (Object.keys(mcpConfig).length > 0) {
+            result.mcp = mcpConfig;
+          }
+          // Skills 全部禁用 → plugins.skill.enabled = false（单项 skills 配置不变）
+          if (allSkillsDisabled.value) {
+            result.skill = { enabled: false };
+          }
+          return result;
+        };
+        // 全部禁用
+        if (allDisabled.value) {
+          return { __strategy: 'deny_nonsystem', ...buildCustom() };
+        }
+        // 正常（自定义）
+        return { __strategy: 'custom', ...buildCustom() };
+      })(),
+      // Skills 单项偏好保持不变（仅在有个性化配置时写入）
+      'skills': Object.keys(characterForm.enabledSkills).length > 0
+        ? { ...characterForm.enabledSkills }
+        : undefined,
     }
   }
   return finalData;

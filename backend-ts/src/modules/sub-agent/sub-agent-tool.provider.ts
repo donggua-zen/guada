@@ -155,12 +155,12 @@ export class SubAgentToolProvider implements IToolProvider {
     abortSignal?: AbortSignal,
   ): Promise<string> {
     this.logger.log(
-      `创建子 Agent: ${args.name}, 父会话: ${context?.sessionId}`,
+      `创建子 Agent: ${args.name}, 父会话: ${context?.session.sessionId}`,
     );
     const result = await this.subAgentManager.spawn(
       {
-        parentSessionId: context?.sessionId,
-        userId: context?.userId,
+        parentSessionId: context?.session.sessionId,
+        userId: context?.session.userId,
         name: args.name,
         task: args.task,
         characterId: args.characterId,
@@ -185,9 +185,9 @@ export class SubAgentToolProvider implements IToolProvider {
     context?: any,
     abortSignal?: AbortSignal,
   ): Promise<string> {
-    this.logger.log(`等待子代理完成: 父会话 ${context?.sessionId}`);
+    this.logger.log(`等待子代理完成: 父会话 ${context?.session.sessionId}`);
     const completed = await this.subAgentManager.waitForComplete(
-      context?.sessionId,
+      context?.session.sessionId,
       120000,
       abortSignal,
     );
@@ -214,9 +214,9 @@ export class SubAgentToolProvider implements IToolProvider {
     try {
       await this.subAgentManager.closeSubAgent(
         args.sessionId,
-        context?.sessionId,
-        context?.userId,
-        context?.workspacePath,
+        context?.session.sessionId,
+        context?.session.userId,
+        context?.session.workspacePath,
       );
       return JSON.stringify({ success: true, message: "子代理已关闭并删除" });
     } catch (e: any) {
@@ -228,7 +228,7 @@ export class SubAgentToolProvider implements IToolProvider {
   }
 
   private async handleList(args: any, context?: any): Promise<string> {
-    const agents = await this.subAgentManager.getSubAgents(context?.sessionId);
+    const agents = await this.subAgentManager.getSubAgents(context?.session.sessionId);
     return JSON.stringify({
       success: true,
       sub_agents: agents,
@@ -244,8 +244,8 @@ export class SubAgentToolProvider implements IToolProvider {
     try {
       const result = await this.subAgentManager.sendMessage(
         {
-          parentSessionId: context?.sessionId,
-          userId: context?.userId,
+          parentSessionId: context?.session.sessionId,
+          userId: context?.session.userId,
           sessionId: args.sessionId,
           message: args.message,
         },

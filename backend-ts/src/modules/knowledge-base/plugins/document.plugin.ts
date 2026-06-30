@@ -41,7 +41,7 @@ export class DocumentPlugin extends PluginBase {
         if (!file_path) throw new Error("文件路径不能为空");
         const resolvedPath = this.workspaceService.resolveFilePath(
           file_path,
-          ctx?.workspacePath,
+          ctx?.session.workspacePath,
         );
         this.logger.log(`解析文档: ${file_path} -> ${resolvedPath}`);
         const stats = await fs.stat(resolvedPath);
@@ -92,7 +92,7 @@ export class DocumentPlugin extends PluginBase {
           try {
             const resolvedPath = this.workspaceService.resolveFilePath(
               fp,
-              ctx?.workspacePath,
+              ctx?.session.workspacePath,
             );
             const ext = path
               .extname(resolvedPath)

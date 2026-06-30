@@ -49,14 +49,60 @@ export class MemoryPlugin extends PluginBase {
   }
 
   async onLoad(api: PluginApi) {
+    // 长期记忆内容：插件级，每次对话都注入（AI 需要知道记住了什么）
     api.registerPrompt({
+      frequency: "VOLATILE",
+      description: "长期记忆内容",
+      content: async (context: PluginContext) => {
+        try {
+          const sessionId = context?.session.sessionId;
+          if (!sessionId) return "";
+          const workspaceDir = context?.session.workspacePath;
+          if (!workspaceDir) {
+            this.logger.warn("No workspace path provided for session " + sessionId);
+            return "";
+          }
+          const cacheItem = this.cache.get(sessionId);
+          if (cacheItem) {
+            cacheItem.lastAccessed = new Date();
+            return cacheItem.promptContent;
+          }
+          this.logger.debug("Memory cache miss for session " + sessionId + ", rebuilding from disk");
+          let memoryDir: string;
+          let memosDir: string;
+          if (context?.session.sessionType === "sub_agent") {
+            const subDir = path.join(workspaceDir, ".guada", "subagents", sessionId);
+            memoryDir = path.join(subDir, "memory");
+            memosDir = path.join(subDir, "memos");
+          } else {
+            memoryDir = path.join(workspaceDir, ".guada", "memory");
+            memosDir = path.join(workspaceDir, ".guada", "memos");
+          }
+          await this.rebuildIndexForSession(sessionId, memoryDir, memosDir);
+          const updated = this.cache.get(sessionId);
+          return updated?.promptContent || "";
+        } catch (error: any) {
+          this.logger.error("Memory prompt error: " + (error?.message || error));
+          return "";
+        }
+      },
+    });
+
+    // 记忆管理指南：工具包级，懒加载，需要时才看说明
+    const memoryKit = api.registerToolKit({
+      id: "memory",
+      name: "记忆管理",
+      loadMode: "lazy",
+      activator: "当需要了解如何管理记忆或读写记忆文件时，使用此工具包获取使用指南",
+    });
+
+    memoryKit.registerPrompt({
       frequency: "REGULAR",
       description: "记忆管理指南",
-      toolSet: "memory",
       content: (context: PluginContext) => {
         const memoryRoot =
-          context?.sessionType === "sub_agent"
-            ? `.guada/subagents/${context.sessionId}`
+          context?.session.sessionType === "sub_agent"
+            ? `.guada/subagents/${context.session.sessionId}`
             : ".guada";
 
         return [
@@ -139,60 +185,6 @@ export class MemoryPlugin extends PluginBase {
         ].join("\n");
       },
     });
-
-    api.registerToolSet({
-      name: "memory",
-      activator: "当用户明确要求你记住某事或者你认为有重要内容需要记忆请使用此工具集",
-      loadMode: "lazy",
-    });
-
-    api.registerPrompt({
-      frequency: "VOLATILE",
-      description: "长期记忆内容",
-      content: async (context: PluginContext) => {
-        try {
-          const sessionId = context?.sessionId;
-          if (!sessionId) return "";
-
-          const workspaceDir = context?.workspacePath;
-          if (!workspaceDir) {
-            this.logger.warn("No workspace path provided for session " + sessionId);
-            return "";
-          }
-
-          const cacheItem = this.cache.get(sessionId);
-          if (cacheItem) {
-            cacheItem.lastAccessed = new Date();
-            return cacheItem.promptContent;
-          }
-
-          this.logger.debug("Memory cache miss for session " + sessionId + ", rebuilding from disk");
-
-          let memoryDir: string;
-          let memosDir: string;
-          if (context?.sessionType === "sub_agent") {
-            const subDir = path.join(workspaceDir, ".guada", "subagents", sessionId);
-            memoryDir = path.join(subDir, "memory");
-            memosDir = path.join(subDir, "memos");
-          } else {
-            memoryDir = path.join(workspaceDir, ".guada", "memory");
-            memosDir = path.join(workspaceDir, ".guada", "memos");
-          }
-
-          await this.rebuildIndexForSession(sessionId, memoryDir, memosDir);
-
-          const updated = this.cache.get(sessionId);
-          return updated?.promptContent || "";
-        } catch (error: any) {
-          this.logger.error("Memory prompt error: " + (error?.message || error));
-          return "";
-        }
-      },
-    });
-
-
-
-
   }
 
   private async rebuildIndexForSession(

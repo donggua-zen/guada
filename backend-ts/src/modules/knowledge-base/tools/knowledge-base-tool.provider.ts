@@ -135,7 +135,7 @@ export class KnowledgeBaseToolProvider implements IToolProvider {
     if (enabled === false) return [];
 
     // 检查 sessionType，非 web 会话时排除 add_document 工具
-    const sessionType = context?.sessionType;
+    const sessionType = context?.session.sessionType;
     let availableTools = this.toolsConfig;
 
     if (sessionType && sessionType !== 'web') {
@@ -183,7 +183,7 @@ export class KnowledgeBaseToolProvider implements IToolProvider {
       promptParts.push("# 知识库工具使用说明");
 
       // 检查 sessionType，非 web 会话时不包含添加文档功能
-      const sessionType = context?.sessionType;
+      const sessionType = context?.session.sessionType;
       const isWebSession = !sessionType || sessionType === 'web';
 
       // 共同部分：基础工具说明
@@ -482,7 +482,7 @@ export class KnowledgeBaseToolProvider implements IToolProvider {
       displayName: "知识库",
       description: "知识库检索与管理工具集",
       isMcp: false,
-      loadMode: context?.sessionType === "web" ? "lazy" : "eager",
+      loadMode: context?.session.sessionType === "web" ? "lazy" : "eager",
       type: "core",
       promptFrequency: "REGULAR",
     };

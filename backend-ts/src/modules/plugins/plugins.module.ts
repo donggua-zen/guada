@@ -1,17 +1,23 @@
-import { Global, Module, OnModuleInit } from "@nestjs/common";
+import { Global, Module, OnModuleInit, forwardRef } from "@nestjs/common";
 import { ModuleRef } from "@nestjs/core";
+import { AuthModule } from "../auth/auth.module";
 import { PluginManager } from "./plugin.manager";
+import { PluginsController } from "./plugins.controller";
 import { FilePlugin } from "./builtins/file.plugin";
 import { ImageRecognitionPlugin } from "./builtins/image-recognition.plugin";
 import { MemoryPlugin } from "./builtins/memory.plugin";
 import { TimePlugin } from "./builtins/time.plugin";
 import { BrowserPlugin } from "./builtins/browser.plugin";
 import { TodoPlugin } from "./builtins/todo.plugin";
+import { PromptCollector } from "./prompt-collector.service";
 
 @Global()
 @Module({
+  imports: [forwardRef(() => AuthModule)],
+  controllers: [PluginsController],
   providers: [
     PluginManager,
+    PromptCollector,
     FilePlugin,
     ImageRecognitionPlugin,
     MemoryPlugin,
@@ -19,7 +25,7 @@ import { TodoPlugin } from "./builtins/todo.plugin";
     BrowserPlugin,
     TodoPlugin,
   ],
-  exports: [PluginManager],
+  exports: [PluginManager, PromptCollector],
 })
 export class PluginsModule implements OnModuleInit {
   constructor(
@@ -40,7 +46,5 @@ export class PluginsModule implements OnModuleInit {
       await this.pluginManager.registerPlugin(this.moduleRef.get(BrowserPlugin));
     }
 
-    const names = this.pluginManager.getAllPlugins().map(p => p.manifest.name).join(", ");
-    console.log(`Plugins: ${names}`);
   }
 }

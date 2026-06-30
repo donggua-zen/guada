@@ -20,8 +20,6 @@ export interface ProcessEntry {
   cwd: string;
   encoding: string;
   isBackgrounded: boolean;
-  /** 日志文件路径（仅 dump_log 导出后设置） */
-  logPath?: string;
   /** 完整的累积日志（最大 1MB，超出保留末尾） */
   fullLog: string;
   /** 最近 stdout 行（最多 50 行，poll 后清空） */
@@ -47,8 +45,6 @@ export interface PollResult {
   newStdout: string[];
   /** 自上次 poll 以来的新 stderr（最多 50 行） */
   newStderr: string[];
-  /** 完整日志文件路径（仅 dump_log 导出后存在） */
-  logPath?: string;
 }
 
 export interface BackgroundResult {
@@ -58,7 +54,6 @@ export interface BackgroundResult {
   stdout: string[];
   /** 转入后台时截取的 stderr 行（最多 50 行） */
   stderr: string[];
-  logPath?: string;
 }
 
 export interface ProcessListEntry {
@@ -175,8 +170,10 @@ export class ProcessManagerService {
 
       this.logger.log(`后台进程 ${processId} 已结束, 退出码: ${code}`);
 
-      // 投递信箱 + 延迟清理
-      this.enqueueSystemMessage(entry);
+      // 如果有人在 poll 等结果，直接 resolve 即可，不必重复投递系统消息
+      if (!this.pollWatchers.has(processId)) {
+        this.enqueueSystemMessage(entry);
+      }
       this.resolvePollWatchers(entry);
     });
 
@@ -192,7 +189,10 @@ export class ProcessManagerService {
 
       this.logger.error(`后台进程 ${processId} 错误: ${err.message}`);
 
-      this.enqueueSystemMessage(entry);
+      // 如果有人在 poll 等结果，直接 resolve 即可，不必重复投递系统消息
+      if (!this.pollWatchers.has(processId)) {
+        this.enqueueSystemMessage(entry);
+      }
       this.resolvePollWatchers(entry);
     });
 
@@ -283,7 +283,7 @@ export class ProcessManagerService {
           (item) => item.source?.processId === processId,
         );
         if (removed.length > 0) {
-          const payload = removed[0].source?.systemPayload?.[0];
+          const payload = removed[removed.length - 1].source?.systemPayload?.[0];
           if (payload) {
             return {
               processId: payload.processId,
@@ -291,7 +291,6 @@ export class ProcessManagerService {
               exitCode: payload.exitCode,
               newStdout: payload.recentStdout || [],
               newStderr: payload.recentStderr || [],
-              logPath: payload.logPath,
             };
           }
         }
@@ -304,9 +303,17 @@ export class ProcessManagerService {
       return this.buildPollResult(entry);
     }
 
-    // 进程还在跑且需要等待
-    if (timeoutMs > 0) {
-      return new Promise<PollResult>((resolve) => {
+    // poll 即视为已收到消息，重置进度通知计时器
+    if (entry.progressIntervalMinutes > 0) {
+      if (entry.progressTimer) {
+        clearInterval(entry.progressTimer);
+        entry.progressTimer = null;
+      }
+      this.startProgressTimer(entry);
+    }
+
+    // 进程还在跑，注册等待器，有新输出或超时时 resolve
+    return new Promise<PollResult>((resolve) => {
         const timer = setTimeout(() => {
           this.removePollWatcher(processId, resolve);
           resolve(this.buildPollResult(entry));
@@ -317,10 +324,6 @@ export class ProcessManagerService {
           resolve(result);
         });
       });
-    }
-
-    // 进程还在跑，timeout=0（理论上不会被 Zod 传递下来，但兜底处理）
-    return this.buildPollResult(entry);
   }
 
   /**
@@ -481,7 +484,6 @@ export class ProcessManagerService {
       exitCode: entry.exitCode,
       newStdout: newStdout.slice(-this.MAX_RECENT_LINES),
       newStderr: newStderr.slice(-this.MAX_RECENT_LINES),
-      logPath: entry.logPath,
     };
   }
 
@@ -529,38 +531,14 @@ export class ProcessManagerService {
       () => {
         if (entry.status !== "running") return;
 
-        const elapsed = Math.round(
-          (Date.now() - entry.startedAt.getTime()) / 60000,
+        // poll 期间有人正在等结果，跳过通知避免重复
+        if (this.pollWatchers.has(entry.id)) return;
+
+        this.enqueueSystemMessage(entry, "progress_report");
+
+        this.logger.log(
+          `进度通知: ${entry.id} 已运行 ${Math.round((Date.now() - entry.startedAt.getTime()) / 60000)} 分钟`,
         );
-        const newStdout = entry.recentStdout.slice(-this.MAX_RECENT_LINES);
-        const newStderr = entry.recentStderr.slice(-this.MAX_RECENT_LINES);
-
-        this.chatRunnerService.enqueueMessage({
-          sessionId: entry.sessionId,
-          userId: entry.userId,
-          content: [
-            `[进度通知] 后台进程 \`${entry.id}\` (\`${entry.command}\`) 运行中（已运行 ${elapsed} 分钟）`,
-            newStdout.length > 0
-              ? `\n最近 stdout（${newStdout.length} 行）:\n${newStdout.join("\n")}`
-              : "",
-            newStderr.length > 0
-              ? `\n最近 stderr（${newStderr.length} 行）:\n${newStderr.join("\n")}`
-              : "",
-            `\n\n可通过 process modify_progress_monitoring 调整通知频率（当前 ${entry.progressIntervalMinutes} 分钟/次）。若无需持续监控请设置 0 关闭提醒。`,
-          ]
-            .filter(Boolean)
-            .join(""),
-          source: {
-            type: "process_monitor",
-            processId: entry.id,
-            event: "progress_report",
-            progressIntervalMinutes: entry.progressIntervalMinutes,
-            newStdout,
-            newStderr,
-          },
-        });
-
-        this.logger.log(`进度通知: ${entry.id} 已运行 ${elapsed} 分钟`);
       },
       entry.progressIntervalMinutes * 60 * 1000,
     );
@@ -569,8 +547,28 @@ export class ProcessManagerService {
   // ── 系统消息投递 ──
 
   /** 投递系统消息，每进程独立投递，投递后延迟清理 */
-  private enqueueSystemMessage(entry: ProcessEntry): void {
-    const content = `[系统通知] 后台进程 \`${entry.id}\` (\`${entry.command}\`) 已${entry.status === "completed" ? `执行结束，退出码 ${entry.exitCode}` : entry.status === "error" ? `异常退出，退出码 ${entry.exitCode}` : "被终止"}`;
+  private enqueueSystemMessage(entry: ProcessEntry, event?: string): void {
+    const eventType = event || entry.status;
+
+    const isProgress = eventType === "progress_report";
+
+    const content = isProgress
+      ? `[进度通知] 后台进程 \`${entry.id}\` (\`${entry.command}\`) 运行中（已运行 ${Math.round((Date.now() - entry.startedAt.getTime()) / 60000)} 分钟）`
+      : `[系统通知] 后台进程 \`${entry.id}\` (\`${entry.command}\`) 已${entry.status === "completed" ? `执行结束，退出码 ${entry.exitCode}` : entry.status === "error" ? `异常退出，退出码 ${entry.exitCode}` : "被终止"}`;
+
+    const systemPayload: Record<string, any>[] = [
+      {
+        processId: entry.id,
+        command: entry.command,
+        status: isProgress ? "running" : entry.status,
+        exitCode: isProgress ? undefined : entry.exitCode,
+        progressIntervalMinutes: isProgress
+          ? entry.progressIntervalMinutes
+          : undefined,
+        recentStdout: entry.recentStdout.slice(-this.MAX_RECENT_LINES),
+        recentStderr: entry.recentStderr.slice(-this.MAX_RECENT_LINES),
+      },
+    ];
 
     this.chatRunnerService.enqueueMessage({
       sessionId: entry.sessionId,
@@ -579,23 +577,15 @@ export class ProcessManagerService {
       source: {
         type: "process_monitor",
         processId: entry.id,
-        event: entry.status,
-        systemPayload: [
-          {
-            processId: entry.id,
-            command: entry.command,
-            status: entry.status,
-            exitCode: entry.exitCode,
-            logPath: entry.logPath,
-            recentStdout: entry.recentStdout.slice(-this.MAX_RECENT_LINES),
-            recentStderr: entry.recentStderr.slice(-this.MAX_RECENT_LINES),
-          },
-        ],
+        event: eventType,
+        systemPayload,
       },
     });
 
-    // 信箱即副本，保留 10 分钟供 AI 读取后再清理
-    this.scheduleCleanup(entry);
+    // 进度通知不触发清理，仅进程结束时才调度清理
+    if (!isProgress) {
+      this.scheduleCleanup(entry);
+    }
   }
 
   // ── 延迟清理 ──

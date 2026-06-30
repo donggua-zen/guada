@@ -18,7 +18,7 @@
 
         <!-- 新建按钮和使用说明 -->
         <div class="flex justify-between items-center pb-4">
-          <el-button type="primary" @click="showCreateModal = true" class="flex items-center">
+          <el-button type="primary" @click="handleOpenCreate" class="flex items-center">
             <template #icon>
               <Plus />
             </template>

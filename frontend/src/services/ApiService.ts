@@ -1006,22 +1006,21 @@ class ApiService {
     });
   }
 
-  async fetchGlobalTools(): Promise<any> {
-    return await this._request("/settings/plugins/global");
+  async queryPlugins(config?: any): Promise<any> {
+    return await this._request("/plugins/query", {
+      method: "POST",
+      data: { config },
+    });
   }
 
   async updateGlobalToolStatus(
     pluginId: string,
     enabled: boolean,
   ): Promise<{ success: boolean }> {
-    return await this._request("/settings/plugins/global", {
+    return await this._request("/plugins/global", {
       method: "PUT",
       data: { pluginId, enabled },
     });
-  }
-
-  async fetchCharacterTools(characterId: string): Promise<any> {
-    return await this._request(`/characters/${characterId}/tools`);
   }
 
   // ========== MCP 服务器管理 ==========

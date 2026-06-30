@@ -72,7 +72,7 @@ export class ShellPlugin extends PluginBase {
         const isWindows = process.platform === "win32";
         const shell = isWindows ? "cmd" : "sh";
         const shellFlag = isWindows ? "/c" : "-c";
-        const cwd = ctx?.workspacePath || process.cwd();
+        const cwd = ctx?.session.workspacePath || process.cwd();
 
         if (abortSignal?.aborted) throw new Error("Request was aborted");
         this.logger.log(
@@ -86,8 +86,8 @@ export class ShellPlugin extends PluginBase {
           command,
           cwd,
           encoding,
-          ctx?.sessionId || "",
-          ctx?.userId || "",
+          ctx?.session.sessionId || "",
+          ctx?.session.userId || "",
         );
 
         // 纯后台模式：立即返回
@@ -113,7 +113,7 @@ export class ShellPlugin extends PluginBase {
           const pollResult = await this.processManager.poll(
             result.processId,
             this.BACKGROUND_THRESHOLD_MS,
-            ctx?.sessionId,
+            ctx?.session.sessionId,
           )!;
 
           // 进程在 1 分钟内结束了 → 返回结果
@@ -202,7 +202,7 @@ export class ShellPlugin extends PluginBase {
             const result = await this.processManager.poll(
               processId,
               timeoutMs,
-              ctx?.sessionId,
+              ctx?.session.sessionId,
             );
             if (result === null) {
               return { success: false, message: `进程 ${processId} 不存在` };
@@ -216,7 +216,6 @@ export class ShellPlugin extends PluginBase {
               newStderr: result.newStderr,
               stdoutLineCount: result.newStdout.length,
               stderrLineCount: result.newStderr.length,
-              logPath: result.logPath,
             };
           }
 
@@ -229,14 +228,15 @@ export class ShellPlugin extends PluginBase {
             if (entry === null) {
               return { success: false, message: `进程 ${processId} 不存在` };
             }
+            const actualMinutes = entry.progressIntervalMinutes;
             const msg =
-              minutes > 0
-                ? `进度通知已开启，每 ${minutes} 分钟报告一次。可根据需要调整频率，若无需持续监控请设置 0 关闭提醒。`
+              actualMinutes > 0
+                ? `进度通知已开启，每 ${actualMinutes} 分钟报告一次。可根据需要调整频率，若无需持续监控请设置 0 关闭提醒。`
                 : "进度通知已关闭";
             return {
               success: true,
               processId,
-              progressIntervalMinutes: minutes,
+              progressIntervalMinutes: actualMinutes,
               message: msg,
             };
           }
@@ -261,7 +261,7 @@ export class ShellPlugin extends PluginBase {
             const targetPath =
               params.file_path ||
               path.join(".guada", "process", "exports", `${processId}.log`);
-            const cwd = ctx?.workspacePath || process.cwd();
+            const cwd = ctx?.session.workspacePath || process.cwd();
             const resolved = path.resolve(cwd, targetPath);
 
             // 安全检查：确保导出路径在工作目录内

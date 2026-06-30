@@ -9,8 +9,8 @@ import {
 import { SettingsStorage } from "../../common/utils/settings-storage.util";
 import { ModelRepository } from "../../common/database/model.repository";
 import { ToolOrchestrator } from "../tools/tool-orchestrator.service";
-import { ToolRuntime } from "../tools/tool-context";
 import { PluginManager } from "../plugins/plugin.manager";
+import { PromptCollector } from "../plugins/prompt-collector.service";
 import { WorkspaceService } from "../../common/services/workspace.service";
 import { SG_MODELS, SK_MOD_CHAT } from "../../constants/settings.constants";
 import { MessageRecord } from "../llm-core/types/llm.types";
@@ -26,8 +26,12 @@ import {
 } from "../../constants/settings.constants";
 import { TokenizerService } from "../../common/utils/tokenizer.service";
 import { SummaryMode } from "./compression-engine";
-import { PluginContext } from "../plugins/types/plugin.types";
+import {
+  PluginContext,
+  ResolvedPluginInfo,
+} from "../plugins/types/plugin.types";
 import { SessionTokenTracker } from "./utils/session-token-tracker";
+import { PluginConfigParser } from "../plugins/utils/plugin-config-parser";
 
 /**
  * 合并后的会话设置
@@ -39,7 +43,7 @@ interface MergedSettings {
   modelTemperature?: number;
   modelTopP?: number;
   modelFrequencyPenalty?: number;
-  tools?: any;
+  plugins?: any;
   skills?: Record<string, boolean>; // 角色级技能偏好 { skillId: true/false }
 }
 
@@ -71,8 +75,9 @@ export class PersistentSessionContext implements ISessionContext {
   /** system prompt 各部件：base / team / tool / summary */
   private systemPromptParts: Record<string, string> = {};
   private thinkingEffortValue!: string | undefined;
-  private toolRuntime: ToolRuntime | undefined;
   private toolApprovalConfig!: ToolApprovalConfig;
+  private resolvedPlugins: ResolvedPluginInfo[] = [];
+  private skillsConfig: any;
   private memoryConfig!: MemoryConfig;
   private effectiveContextWindow!: number;
   private _workspacePath!: string;
@@ -98,8 +103,8 @@ export class PersistentSessionContext implements ISessionContext {
     private readonly session: any,
     private readonly modelRepository: ModelRepository,
     private readonly settingsStorage: SettingsStorage,
-    private readonly toolOrchestrator: ToolOrchestrator,
     private readonly pluginManager: PluginManager,
+    private readonly promptCollector: PromptCollector,
     private readonly workspaceService: WorkspaceService,
     private readonly messageStore: IMessageStore,
     private readonly compressionStrategy: ICompressionStrategy,
@@ -128,12 +133,12 @@ export class PersistentSessionContext implements ISessionContext {
     this.modelConfig = this.buildModelConfig(model, prep.mergedSettings);
     this.systemPromptParts = {
       base: prep.mergedSettings.systemPrompt || "",
-      tool: prep.toolPrompts || "",
     };
     this.thinkingEffortValue = prep.features.includes("thinking")
       ? prep.mergedSettings.thinkingEffort || "off"
       : undefined;
-    this.toolRuntime = prep.toolRuntime;
+    this.resolvedPlugins = prep.resolvedPlugins;
+    this.skillsConfig = prep.mergedSettings.skills;
     this.toolApprovalConfig = this.buildToolApprovalConfig();
     this.memoryConfig = await this.buildMemoryConfig(
       prep.mergedSettings.memory,
@@ -280,6 +285,21 @@ export class PersistentSessionContext implements ISessionContext {
   async getMessages(options?: {
     exclude?: string[];
   }): Promise<MessageRecord[]> {
+    // 每次调用时动态搜集插件提示词（必须在 loadConversationState 之前）
+    if (
+      !options?.exclude?.includes("plugins") &&
+      this.resolvedPlugins.length > 0
+    ) {
+      const promptPieces = await this.promptCollector.collectPrompts(
+        this.resolvedPlugins,
+        { session: this },
+      );
+      this.systemPromptParts.plugins = promptPieces
+        .map((p) => p.content)
+        .filter(Boolean)
+        .join("\n\n");
+    }
+
     if (!this.conversationStateLoaded) {
       await this.loadConversationState();
       this.conversationStateLoaded = true;
@@ -367,7 +387,7 @@ export class PersistentSessionContext implements ISessionContext {
       this.logger.log(
         `Skipping compression: ${currentTokens} tokens <= target ${targetTokens}`,
       );
-      return this.buildFinalMessages(this.history);
+      return await this.getMessages();
     }
 
     const compressionConfig: CompressionConfig = {
@@ -403,7 +423,7 @@ export class PersistentSessionContext implements ISessionContext {
       );
     }
 
-    return this.buildFinalMessages(result.messages);
+    return await this.getMessages();
   }
 
   /**
@@ -431,17 +451,16 @@ export class PersistentSessionContext implements ISessionContext {
     );
   }
 
-  private buildFinalMessages(
+  private async buildFinalMessages(
     messages: MessageRecord[],
     options?: { exclude?: string[] },
-  ): MessageRecord[] {
+  ): Promise<MessageRecord[]> {
     const nonSystemMessages = messages.filter((msg) => msg.role !== "system");
 
-    const finalSystemPrompt = this.getSystemPrompt(options?.exclude).replace(
-      "{time}",
-      new Date().toISOString(),
-    );
-    // console.log(finalSystemPrompt);
+    const finalSystemPrompt = (
+       this.getSystemPrompt(options?.exclude)
+    ).replace("{time}", new Date().toISOString());
+    this.logger.log(finalSystemPrompt);
     return [
       { role: "system" as const, content: finalSystemPrompt },
       ...nonSystemMessages,
@@ -590,15 +609,12 @@ export class PersistentSessionContext implements ISessionContext {
   private async prepareSessionData(): Promise<{
     model: any;
     mergedSettings: MergedSettings;
-    toolPrompts: string;
     effectiveContextWindow: number;
     thinkingEffort: string | undefined;
-    toolRuntime: ToolRuntime | undefined;
+    resolvedPlugins: ResolvedPluginInfo[];
+    pluginsConfig: any;
     features: string[];
   }> {
-    const sessionId = this.sessionId;
-    const userId = this.userId;
-
     const model = await this.resolveModel();
 
     const merged = this.mergeSettings();
@@ -606,33 +622,17 @@ export class PersistentSessionContext implements ISessionContext {
     const features = model?.config?.features || [];
     const supportsTools = features.includes("tools");
 
-    // 注入工具提示词
-    let toolPrompts = "";
-    let toolRuntime: ToolRuntime | undefined;
+    let resolvedPlugins: ResolvedPluginInfo[] = [];
+    let pluginsConfig: any = undefined;
 
     if (supportsTools) {
-      const injectParams: PluginContext = {
-        sessionId,
-        userId,
-        sessionType: this.sessionType,
-        workspacePath: this._workspacePath,
-        model,
-        tools: merged.tools,
-        skillConfig: merged.skills,
-      };
-
-      toolRuntime = await this.toolOrchestrator.buildToolRuntime(injectParams);
-
-      // 从 PluginManager 收集 eager 提示词（传入角色配置做二次过滤）
-      const promptPieces =
-        await this.pluginManager.collectPrompts(injectParams);
-      const allParts: string[] = [];
-      for (const p of promptPieces) {
-        if (p.content) allParts.push(p.content);
-      }
-      // console.log(promptPieces);
-
-      toolPrompts = allParts.join("\n\n");
+      // 一次决议
+      const resolved = await this.pluginManager.resolvePlugins(
+        this,
+        merged.plugins,
+      );
+      resolvedPlugins = resolved;
+      pluginsConfig = merged.plugins;
     }
 
     const effectiveContextWindow = this.calcEffectiveContextWindow(
@@ -647,10 +647,10 @@ export class PersistentSessionContext implements ISessionContext {
     return {
       model,
       mergedSettings: merged,
-      toolPrompts,
       effectiveContextWindow,
       thinkingEffort,
-      toolRuntime,
+      resolvedPlugins,
+      pluginsConfig,
       features,
     };
   }
@@ -675,18 +675,8 @@ export class PersistentSessionContext implements ISessionContext {
       leaderSettings = this.session.team.leader.settings;
     }
 
-    // 工具配置：会话设置优先于角色设置
-    let mergedTools = sessionSettings.tools ?? leaderSettings.tools;
-    const mergedMcpServers =
-      sessionSettings.mcpServers ?? leaderSettings.mcpServers;
-    // 合并 MCP 配置到 tools（MCP 本质是 tools 的一种）
-    if (mergedMcpServers) {
-      if (typeof mergedTools === "object" && !Array.isArray(mergedTools)) {
-        mergedTools = { ...mergedTools, mcp: mergedMcpServers };
-      } else if (mergedTools === true) {
-        mergedTools = { mcp: mergedMcpServers };
-      }
-    }
+    // 插件配置：会话设置优先于角色设置
+    let mergedTools = sessionSettings.plugins ?? leaderSettings.plugins;
     const mergedSkills = sessionSettings.skills ?? leaderSettings.skills;
 
     // 系统提示词组装
@@ -741,7 +731,7 @@ export class PersistentSessionContext implements ISessionContext {
             modelTopP: undefined,
             modelFrequencyPenalty: undefined,
           }),
-      tools: mergedTools,
+      plugins: mergedTools,
       skills: mergedSkills,
     };
 
@@ -792,8 +782,8 @@ export class PersistentSessionContext implements ISessionContext {
     return this.modelConfig.config.features?.includes(feature) || false;
   }
 
-  getSystemPrompt(exclude?: string[]): string {
-    const order = ["base", "tool", "summary"];
+  private getSystemPrompt(exclude?: string[]): string {
+    const order = ["base", "plugins", "summary"];
     const filtered = exclude?.length
       ? order.filter((k) => !exclude.includes(k))
       : order;
@@ -814,8 +804,12 @@ export class PersistentSessionContext implements ISessionContext {
     return this.thinkingEffortValue;
   }
 
-  getToolContext(): ToolRuntime | undefined {
-    return this.toolRuntime;
+  getResolvedPlugins(): ResolvedPluginInfo[] {
+    return this.resolvedPlugins;
+  }
+
+  getSkillsConfig(): any {
+    return this.skillsConfig;
   }
 
   getToolApprovalConfig(): ToolApprovalConfig {

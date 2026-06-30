@@ -159,12 +159,12 @@ export class SchedulerToolProvider implements IToolProvider {
     args: any,
     context?: Record<string, any>,
   ): Promise<string> {
-    const userId = context?.userId;
+    const userId = context?.session.userId;
     if (!userId) {
       throw new Error("无法获取用户ID，无法创建定时任务");
     }
 
-    const sessionId = context?.sessionId;
+    const sessionId = context?.session.sessionId;
     if (!sessionId) {
       throw new Error("无法获取会话ID，无法创建定时任务");
     }
@@ -230,7 +230,7 @@ export class SchedulerToolProvider implements IToolProvider {
     args: any,
     context?: Record<string, any>,
   ): Promise<string> {
-    const userId = context?.userId;
+    const userId = context?.session.userId;
     if (!userId) {
       throw new Error("无法获取用户ID");
     }
@@ -267,7 +267,7 @@ export class SchedulerToolProvider implements IToolProvider {
     args: any,
     context?: Record<string, any>,
   ): Promise<string> {
-    const userId = context?.userId;
+    const userId = context?.session.userId;
     if (!userId) {
       throw new Error("无法获取用户ID");
     }
@@ -295,7 +295,7 @@ export class SchedulerToolProvider implements IToolProvider {
     args: any,
     context?: Record<string, any>,
   ): Promise<string> {
-    const userId = context?.userId;
+    const userId = context?.session.userId;
     if (!userId) {
       throw new Error("无法获取用户ID");
     }
