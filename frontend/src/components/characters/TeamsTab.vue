@@ -233,7 +233,7 @@ const loading = ref(false)
 const loadTeams = async () => {
   loading.value = true
   try {
-    const data = await apiService.fetchTeams()
+    const data: any = await apiService.fetchTeams()
     teams.value = data.items || (Array.isArray(data) ? data : [])
   } catch (error: any) {
     console.error('获取团队列表失败:', error)

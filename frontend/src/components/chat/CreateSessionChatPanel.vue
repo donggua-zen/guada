@@ -554,7 +554,7 @@ const selectCharacterFromSelector = (character: any): void => {
 // 加载团队列表
 const loadTeams = async (): Promise<void> => {
   try {
-    const data = await apiService.fetchTeams();
+    const data: any = await apiService.fetchTeams();
     teams.value = data.items || (Array.isArray(data) ? data : []);
   } catch (error) {
     console.error('获取团队列表失败:', error);

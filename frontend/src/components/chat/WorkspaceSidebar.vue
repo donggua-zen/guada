@@ -1042,7 +1042,7 @@ function closePreview() {
  */
 function onImageError(event: Event | string) {
     const src = (typeof event === 'object' && (event as Event).target instanceof HTMLImageElement)
-        ? (event as Event).target!.getAttribute('src')
+        ? (event.target as HTMLImageElement).getAttribute('src')
         : imagePreviewUrl.value;
     console.error('[WorkspaceSidebar] Image load failed, URL:', src);
     previewError.value = isElectron ? '图片加载失败' : '文件过大暂不支持预览';

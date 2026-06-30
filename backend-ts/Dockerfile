@@ -6,14 +6,16 @@ FROM node:20-slim AS builder
 WORKDIR /app
 
 # Install build dependencies for native modules
-RUN apt-get update && apt-get install -y python3 make g++ libsqlite3-dev && rm -rf /var/lib/apt/lists/*
+RUN sed -i 's|deb.debian.org|mirrors.ustc.edu.cn|g' /etc/apt/sources.list.d/debian.sources 2>/dev/null; \
+    sed -i 's|deb.debian.org|mirrors.ustc.edu.cn|g' /etc/apt/sources.list 2>/dev/null; \
+    apt-get update && apt-get install -y python3 make g++ libsqlite3-dev && rm -rf /var/lib/apt/lists/*
 
 # Copy package files
 COPY package*.json ./
 COPY prisma ./prisma/
 
 # Install all dependencies (including devDependencies for build)
-RUN npm ci
+RUN PRISMA_ENGINES_MIRROR=https://registry.npmmirror.com/-/binary/prisma npm ci
 
 # Copy source code
 COPY . .
@@ -23,10 +25,6 @@ RUN npx prisma generate
 
 # Build the application (remove tsbuildinfo to force full rebuild)
 RUN rm -f tsconfig.tsbuildinfo && npm run build
-
-# Compile seed script for production use
-RUN npx tsc src/scripts/seed.ts --outDir dist/scripts --module commonjs --target ES2021 --esModuleInterop --skipLibCheck --resolveJsonModule || \
-    echo "Seed script compilation skipped"
 
 
 
@@ -38,7 +36,9 @@ FROM node:20-slim AS production
 WORKDIR /app
 
 # Install runtime dependencies only (no build tools needed - better-sqlite3 uses prebuilt binaries)
-RUN apt-get update && apt-get install -y sqlite3 tini wget && rm -rf /var/lib/apt/lists/*
+RUN sed -i 's|deb.debian.org|mirrors.ustc.edu.cn|g' /etc/apt/sources.list.d/debian.sources 2>/dev/null; \
+    sed -i 's|deb.debian.org|mirrors.ustc.edu.cn|g' /etc/apt/sources.list 2>/dev/null; \
+    apt-get update && apt-get install -y sqlite3 tini wget && rm -rf /var/lib/apt/lists/*
 
 # Create non-root user
 RUN groupadd -g 1001 nodejs && \
@@ -54,7 +54,7 @@ COPY prisma ./prisma/
 COPY prisma.config.js ./prisma.config.js
 
 # Install production dependencies only and clean up unnecessary files
-RUN npm ci --omit=dev && \
+RUN PRISMA_ENGINES_MIRROR=https://registry.npmmirror.com/-/binary/prisma npm ci --omit=dev && \
     npm cache clean --force && \
     # Remove unnecessary files from node_modules to reduce size
     find node_modules -type f \( \
