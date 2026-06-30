@@ -7,6 +7,7 @@ import {
   ToolDefinition,
 } from "./interfaces/tool-provider.interface";
 import { PluginManager } from "../plugins/plugin.manager";
+import { PluginRegistry } from "../plugins/registry/plugin-registry";
 import {
   PluginContext,
   ToolHandlerDef,
@@ -42,10 +43,23 @@ export class ToolExecutor {
     resolved: ResolvedPluginInfo[],
     toolName: string,
   ): ToolHandlerDef | undefined {
+    // 第 1 遍：enabledTools（plugin 级 + eager 工具包工具，已通过权限过滤）
     for (const rp of resolved) {
       if (!rp.enabled) continue;
       const found = rp.enabledTools.find((t) => t.name === toolName);
       if (found) return found;
+    }
+    // 第 2 遍：已启用(lazy)工具包的工具，通过 PluginRegistry 查找并验证包状态
+    for (const rp of resolved) {
+      if (!rp.enabled) continue;
+      for (const tk of rp.toolKits) {
+        if (!tk.enabled) continue;
+        const kitRegs = PluginRegistry.getToolKits(rp.plugin.id);
+        const kitReg = kitRegs.find((k) => k.def.id === tk.id);
+        if (!kitReg) continue;
+        const found = kitReg.tools.find((t) => t.name === toolName);
+        if (found) return found;
+      }
     }
     return undefined;
   }
