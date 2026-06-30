@@ -792,7 +792,7 @@ export class PersistentSessionContext implements ISessionContext {
         const content = this.systemPromptParts[k];
         if (!content) return "";
         if (k === "summary") {
-          return `# 历史对话摘要\n<summary>\n${content}\n</conversation>`;
+          return `# 历史对话摘要\n<summary>\n${content}\n</summary>`;
         }
         return content;
       })
