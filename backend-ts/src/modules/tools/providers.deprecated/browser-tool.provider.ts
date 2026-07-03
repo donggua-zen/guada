@@ -54,7 +54,7 @@ export class BrowserToolProvider implements IToolProvider {
 
     if (this.bridgeMode === 'tcp') {
       // TCP 模式（开发环境）
-      const port = process.env.BROWSER_BRIDGE_PORT || '3001'
+      const port = process.env.BROWSER_BRIDGE_PORT || '4111'
       this.tcpBaseUrl = `http://127.0.0.1:${port}/browser-tool`
       this.logger.log(`Using TCP communication mode: ${this.tcpBaseUrl}`)
       this.logger.log('Browser Tool Provider ready (TCP mode)')

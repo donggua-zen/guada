@@ -12,13 +12,15 @@ export interface PluginManifest {
   /** 依赖的其他插件 ID */
   dependencies?: string[];
   /** 插件分类 */
-  category?: 'system' | 'core' | 'extended' | 'user';
+  category?: "system" | "core" | "extended" | "user";
+  /** 系统必需，不可被任何方式禁用 */
+  essential?: boolean;
 }
 
 // ==================== 提示词 ====================
 
 /** 提示词在 system prompt 中的变动频率 */
-export type PromptFrequency = 'STATIC' | 'REGULAR' | 'VOLATILE';
+export type PromptFrequency = "STATIC" | "REGULAR" | "VOLATILE";
 
 export interface PromptPiece {
   content: string;
@@ -44,20 +46,24 @@ export type PromptContext = PluginContext;
 
 // ==================== 工具（沿用现有定义） ====================
 
-export type ToolLoadMode = 'eager' | 'lazy' | 'none';
-export type ToolProviderType = 'core' | 'extended';
-export type ConditionFn = (context: PluginContext) => boolean | Promise<boolean>;
+export type ToolLoadMode = "eager" | "lazy" | "none";
+export type ToolProviderType = "core" | "extended";
+export type ConditionFn = (
+  context: PluginContext,
+) => boolean | Promise<boolean>;
 /**
  * 插件级配置项（新格式 v2）
  * - enabled: 是否启用插件（默认 true）
- * - toolkits_filter: 是否启用工具包过滤（默认 false）
- * - toolkits_deny: 禁用的工具包 ID 列表（当 toolkits_filter=true 时生效，未列出的允许）
+ * - toolkits_filter: 工具包过滤模式，"deny"=黑名单（默认）|"allow"=白名单
+ * - toolkits_deny: 黑名单：禁用的工具包 ID 列表
+ * - toolkits_allow: 白名单：允许的工具包 ID 列表
  * - params: 插件私有参数（预留）
  */
 export interface PluginEntryConfig {
   enabled?: boolean;
-  toolkits_filter?: boolean;
+  toolkits_filter?: "deny" | "allow";
   toolkits_deny?: string[];
+  toolkits_allow?: string[];
   params?: Record<string, any>;
 }
 
@@ -65,8 +71,14 @@ export interface PluginEntryConfig {
  * 插件配置类型
  * 格式：{ pluginId: PluginEntryConfig }
  */
-export type PluginConfig = Record<string, PluginEntryConfig>;
+export type PluginConfig = {
+  /** 未配置的插件默认值 */
+  __default?: boolean;
+  /** 插件配置策略 */
+  __strategy?: string;
 
+  [key: string]: PluginEntryConfig | boolean | string;
+};
 
 export interface ToolParamSchema {
   type: string;
@@ -93,14 +105,17 @@ export interface ToolHandlerDef {
   /** @internal Zod 运行时校验 schema（inputSchema 注册时自动注入） */
   _zodSchema?: import("zod").ZodTypeAny;
   /** 危险等级标记 */
-  dangerLevel?: 'info' | 'normal' | 'high' | 'critical';
+  dangerLevel?: "info" | "normal" | "high" | "critical";
   /**
    * 自定义工具调用展示文案
    * @param args 工具参数
    * @param isExecuting 是否正在执行
    * @returns 展示文案
    */
-  formatDisplayMessage?(args: Record<string, any>, isExecuting: boolean): string;
+  formatDisplayMessage?(
+    args: Record<string, any>,
+    isExecuting: boolean,
+  ): string;
   /**
    * 所属工具集 ID（用于按工具集分组加载，由 @ToolSet 统一控制加载模式）
    */
@@ -122,7 +137,9 @@ export interface ToolSetDef {
   tools: string[];
   loadMode?: ToolLoadMode;
   activator?: string;
-  handler?: (context: PluginContext) => Promise<ToolSetRuntime> | ToolSetRuntime;
+  handler?: (
+    context: PluginContext,
+  ) => Promise<ToolSetRuntime> | ToolSetRuntime;
 }
 
 /** @deprecated */
@@ -134,7 +151,7 @@ export interface ToolSetRuntime {
 // ==================== 工具包定义（ToolKit，新版） ====================
 
 /** 工具包加载模式 */
-export type ToolKitLoadMode = 'eager' | 'lazy' | 'none';
+export type ToolKitLoadMode = "eager" | "lazy" | "none";
 
 /** 工具包定义（注册时传入） */
 export interface ToolKitDef {
@@ -149,7 +166,9 @@ export interface ToolKitDef {
   /** 激活词/触发说明：告诉 AI 何时加载本工具包 */
   activator?: string;
   /** 运行时解析器：返回此工具包的动态属性 */
-  handler?: (context: PluginContext) => Promise<Partial<ToolKitRuntime>> | Partial<ToolKitRuntime>;
+  handler?: (
+    context: PluginContext,
+  ) => Promise<Partial<ToolKitRuntime>> | Partial<ToolKitRuntime>;
   /** 初始化回调（可在此回调中注册工具/提示词） */
   onLoad?: (toolkit: ToolKitHandle) => void | Promise<void>;
 }
@@ -168,7 +187,11 @@ export interface ToolKitHandle {
     name: string;
     description: string;
     inputSchema: Z;
-    execute: (args: z.output<Z>, ctx?: PluginContext, signal?: AbortSignal) => string | Record<string, any> | Promise<string | Record<string, any>>;
+    execute: (
+      args: z.output<Z>,
+      ctx?: PluginContext,
+      signal?: AbortSignal,
+    ) => string | Record<string, any> | Promise<string | Record<string, any>>;
     display?: { action?: string; argsKey?: string; icon?: string };
     dangerLevel?: "info" | "normal" | "high" | "critical";
   }): void;
@@ -233,7 +256,7 @@ export interface ResolvedPluginInfo {
   /** 是否启用 */
   enabled: boolean;
   /** 配置生效层级 */
-  effective: "global" | "role";
+  effective: string;
   /** 插件清单 */
   plugin: PluginManifest;
   /** 启用的工具（经过配置过滤后的） */
@@ -241,16 +264,11 @@ export interface ResolvedPluginInfo {
   /** 所有注册的工具（不过滤） */
   allTools: ToolHandlerDef[];
   /** 工具包运行时信息 */
-  toolKits: Array<{
+  enabledToolKits: Array<{
     id: string;
     name: string;
     loadMode: ToolLoadMode;
     activator?: string;
     enabled: boolean;
   }>;
-  /** 被配置禁止的工具包 ID，按来源分层 */
-  deniedToolKits: {
-    global: string[];
-    role: string[];
-  };
 }

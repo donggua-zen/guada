@@ -36,7 +36,7 @@ export class PluginsController {
             description: t.description,
             parameters: t.parameters as any,
           })),
-          toolkits: r.toolKits.map((k) => ({
+          toolkits: r.enabledToolKits.map((k) => ({
             id: k.id,
             name: k.name,
             loadMode: k.loadMode,

@@ -34,13 +34,21 @@ export class SkillPlugin extends PluginBase {
         );
 
         // 按角色级偏好过滤
-        const charSkillCfg = context?.session.getSkillsConfig?.();
-        const skills =
-          charSkillCfg === false
-            ? []
-            : typeof charSkillCfg === "object" && charSkillCfg !== null
-              ? allSkills.filter((s: any) => charSkillCfg[s.id] !== false)
-              : allSkills;
+        const charSkillCfg = context?.session.getSettings?.('skills');
+        let skills: any[];
+        if (charSkillCfg === false) {
+          skills = [];
+        } else if (typeof charSkillCfg === "object" && charSkillCfg !== null) {
+          if (charSkillCfg.__default === false) {
+            // 白名单模式：只保留显式 enabled: true 的技能
+            skills = allSkills.filter((s: any) => charSkillCfg[s.id] === true);
+          } else {
+            // 黑名单模式：排除显式 enabled: false 的技能
+            skills = allSkills.filter((s: any) => charSkillCfg[s.id] !== false);
+          }
+        } else {
+          skills = allSkills;
+        }
         if (skills.length === 0) return "";
 
         const skillXml = skills

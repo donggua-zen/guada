@@ -2,6 +2,7 @@ import { Injectable, Logger } from "@nestjs/common";
 import { spawn, ChildProcess, exec } from "child_process";
 import * as iconv from "iconv-lite";
 import { ChatRunnerService } from "../chat/chat-runner.service";
+import { AsyncNotifier } from "../../common/utils/async-notifier";
 
 // ============================================================================
 // 类型定义
@@ -45,6 +46,8 @@ export interface PollResult {
   newStdout: string[];
   /** 自上次 poll 以来的新 stderr（最多 50 行） */
   newStderr: string[];
+  /** 本次 poll 实际等待的秒数（0=未等待） */
+  waitSeconds: number;
 }
 
 export interface BackgroundResult {
@@ -80,11 +83,8 @@ export class ProcessManagerService {
     string,
     Map<string, ProcessEntry>
   >();
-  /** 等待新数据时 resolve 的 poll 回调队列 */
-  private readonly pollWatchers = new Map<
-    string,
-    Array<(result: PollResult) => void>
-  >();
+  /** poll 等待者管理：wait / notify 条件变量 */
+  private readonly pollNotifier = new AsyncNotifier();
 
   /** 最近输出最大行数 */
   private readonly MAX_RECENT_LINES = 50;
@@ -170,11 +170,11 @@ export class ProcessManagerService {
 
       this.logger.log(`后台进程 ${processId} 已结束, 退出码: ${code}`);
 
-      // 如果有人在 poll 等结果，直接 resolve 即可，不必重复投递系统消息
-      if (!this.pollWatchers.has(processId)) {
+      // 如果有人在 poll 等结果，直接 notify 即可，不必重复投递系统消息
+      if (!this.pollNotifier.hasWaiters(processId)) {
         this.enqueueSystemMessage(entry);
       }
-      this.resolvePollWatchers(entry);
+      this.pollNotifier.notify(processId);
     });
 
     childProcess.on("error", (err) => {
@@ -189,11 +189,11 @@ export class ProcessManagerService {
 
       this.logger.error(`后台进程 ${processId} 错误: ${err.message}`);
 
-      // 如果有人在 poll 等结果，直接 resolve 即可，不必重复投递系统消息
-      if (!this.pollWatchers.has(processId)) {
+      // 如果有人在 poll 等结果，直接 notify 即可，不必重复投递系统消息
+      if (!this.pollNotifier.hasWaiters(processId)) {
         this.enqueueSystemMessage(entry);
       }
-      this.resolvePollWatchers(entry);
+      this.pollNotifier.notify(processId);
     });
 
     this.processes.set(processId, entry);
@@ -253,10 +253,9 @@ export class ProcessManagerService {
     this.logger.log(`后台进程 ${processId} 已被手动终止`);
 
     // 通知 poll 等待者
-    this.resolvePollWatchers(entry);
+    this.pollNotifier.notify(entry.id);
 
     // kill 是 AI 主动行为，AI 已知晓，不投递系统消息
-    // 但若有 pendingNotify 标记，仍需清除
 
     return "killed";
   }
@@ -283,7 +282,8 @@ export class ProcessManagerService {
           (item) => item.source?.processId === processId,
         );
         if (removed.length > 0) {
-          const payload = removed[removed.length - 1].source?.systemPayload?.[0];
+          const payload =
+            removed[removed.length - 1].source?.systemPayload?.[0];
           if (payload) {
             return {
               processId: payload.processId,
@@ -291,6 +291,7 @@ export class ProcessManagerService {
               exitCode: payload.exitCode,
               newStdout: payload.recentStdout || [],
               newStderr: payload.recentStderr || [],
+              waitSeconds: 0,
             };
           }
         }
@@ -300,7 +301,7 @@ export class ProcessManagerService {
 
     // 进程已结束 → 直接返回结果
     if (entry.status !== "running") {
-      return this.buildPollResult(entry);
+      return this.buildPollResult(entry, 0);
     }
 
     // poll 即视为已收到消息，重置进度通知计时器
@@ -312,18 +313,11 @@ export class ProcessManagerService {
       this.startProgressTimer(entry);
     }
 
-    // 进程还在跑，注册等待器，有新输出或超时时 resolve
-    return new Promise<PollResult>((resolve) => {
-        const timer = setTimeout(() => {
-          this.removePollWatcher(processId, resolve);
-          resolve(this.buildPollResult(entry));
-        }, timeoutMs);
-
-        this.addPollWatcher(processId, (result) => {
-          clearTimeout(timer);
-          resolve(result);
-        });
-      });
+    // 进程还在跑，注册等待器，有新输出或超时时返回
+    const waitStartedAt = Date.now();
+    await this.pollNotifier.wait(processId, timeoutMs);
+    const waitSeconds = Math.round((Date.now() - waitStartedAt) / 1000);
+    return this.buildPollResult(entry, waitSeconds);
   }
 
   /**
@@ -463,7 +457,7 @@ export class ProcessManagerService {
   }
 
   /** 构建 poll 结果，返回后清空缓冲区 */
-  private buildPollResult(entry: ProcessEntry): PollResult {
+  private buildPollResult(entry: ProcessEntry, waitSeconds = 0): PollResult {
     const newStdout = [...entry.recentStdout];
     const newStderr = [...entry.recentStderr];
     entry.recentStdout.length = 0;
@@ -484,41 +478,8 @@ export class ProcessManagerService {
       exitCode: entry.exitCode,
       newStdout: newStdout.slice(-this.MAX_RECENT_LINES),
       newStderr: newStderr.slice(-this.MAX_RECENT_LINES),
+      waitSeconds,
     };
-  }
-
-  // ── Poll 等待者管理 ──
-
-  private addPollWatcher(
-    processId: string,
-    resolve: (result: PollResult) => void,
-  ): void {
-    if (!this.pollWatchers.has(processId)) {
-      this.pollWatchers.set(processId, []);
-    }
-    this.pollWatchers.get(processId)!.push(resolve);
-  }
-
-  private removePollWatcher(
-    processId: string,
-    resolve: (result: PollResult) => void,
-  ): void {
-    const watchers = this.pollWatchers.get(processId);
-    if (!watchers) return;
-    const idx = watchers.indexOf(resolve);
-    if (idx !== -1) watchers.splice(idx, 1);
-    if (watchers.length === 0) this.pollWatchers.delete(processId);
-  }
-
-  private resolvePollWatchers(entry: ProcessEntry): void {
-    const watchers = this.pollWatchers.get(entry.id);
-    if (!watchers || watchers.length === 0) return;
-
-    const result = this.buildPollResult(entry);
-    for (const resolve of watchers) {
-      resolve(result);
-    }
-    this.pollWatchers.delete(entry.id);
   }
 
   // ── 进度通知 ──
@@ -532,7 +493,7 @@ export class ProcessManagerService {
         if (entry.status !== "running") return;
 
         // poll 期间有人正在等结果，跳过通知避免重复
-        if (this.pollWatchers.has(entry.id)) return;
+        if (this.pollNotifier.hasWaiters(entry.id)) return;
 
         this.enqueueSystemMessage(entry, "progress_report");
 
@@ -569,7 +530,7 @@ export class ProcessManagerService {
         recentStderr: entry.recentStderr.slice(-this.MAX_RECENT_LINES),
       },
     ];
-
+    this.logger.debug(`投递系统消息: ${content}`);
     this.chatRunnerService.enqueueMessage({
       sessionId: entry.sessionId,
       userId: entry.userId,

@@ -35,7 +35,7 @@ export class BrowserPlugin extends PluginBase {
     super();
     this.bridgeMode = (process.env.BROWSER_BRIDGE_MODE as any) || "ipc";
     if (this.bridgeMode === "tcp") {
-      this.tcpBaseUrl = `http://127.0.0.1:${process.env.BROWSER_BRIDGE_PORT || "3001"}/browser-tool`;
+      this.tcpBaseUrl = `http://127.0.0.1:${process.env.BROWSER_BRIDGE_PORT || "4111"}/browser-tool`;
     }
     if (process.send) {
       process.on("message", (message: any) => {

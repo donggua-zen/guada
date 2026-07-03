@@ -1,53 +1,46 @@
 <template>
   <div class="h-full w-full flex flex-col min-h-0">
     <PageHeader title="助手" />
-    <div class="flex-1 flex flex-col w-full md:max-w-260 md:mx-auto">
-      <!-- Tab 头部 -->
-      <div class="border-gray-200 dark:border-gray-700 px-4 py-2">
-        <el-tabs v-model="currentTabValue" @tab-change="handleTabChange" class="characters-tabs">
-          <el-tab-pane v-for="item in tabItems" :key="item.path" :label="item.label" :name="item.path">
-            <template #label>
-              <div class="flex items-center gap-2">
-                <component :is="item.icon" class="w-[17px] h-[17px]"></component>
-                <span class="text-[15px]">{{ item.label }}</span>
-              </div>
-            </template>
-          </el-tab-pane>
-        </el-tabs>
-      </div>
+    <div class="flex flex-1 overflow-scroll w-full">
+      <div class="flex-1 flex flex-col w-full md:max-w-260 md:mx-auto">
+        <!-- Tab 头部 -->
+        <div class="border-gray-200 dark:border-gray-700 px-4 py-2">
+          <el-tabs v-model="currentTabValue" @tab-change="handleTabChange" class="characters-tabs">
+            <el-tab-pane v-for="item in tabItems" :key="item.path" :label="item.label" :name="item.path">
+              <template #label>
+                <div class="flex items-center gap-2">
+                  <component :is="item.icon" class="w-4.25 h-4.25"></component>
+                  <span class="text-[15px]">{{ item.label }}</span>
+                </div>
+              </template>
+            </el-tab-pane>
+          </el-tabs>
+        </div>
 
-      <!-- Tab 内容区 -->
-      <div class="flex-1 overflow-hidden py-2 md:py-2">
-        <ScrollContainer class="h-full px-2 max-h-full">
+        <!-- Tab 内容区 -->
+        <div class="flex-1 px-4 py-2 md:py-2">
+
           <!-- 助手列表 Tab -->
           <template v-if="currentTabValue === 'assistants'">
-            <CharacterListTab
-              :characters="characters"
-              :groups="groups"
-              :currentGroupId="currentGroupId"
-              :loading="loading"
-              @create-character="createCharacter"
-              @edit-character="editCharacter"
-              @delete-character="deleteCharacter"
-              @start-new-chat="startNewChat"
-              @select-group="selectGroup"
-              @create-group="showCreateGroupDialog"
-              @rename-group="handleRenameGroup"
-              @delete-group="handleDeleteGroup"
-              @open-docs="openDocs"
-            />
+            <CharacterListTab :characters="characters" :groups="groups" :currentGroupId="currentGroupId"
+              :loading="loading" @create-character="createCharacter" @edit-character="editCharacter"
+              @delete-character="deleteCharacter" @start-new-chat="startNewChat" @select-group="selectGroup"
+              @create-group="showCreateGroupDialog" @rename-group="handleRenameGroup" @delete-group="handleDeleteGroup"
+              @open-docs="openDocs" />
           </template>
 
           <!-- 团队 Tab -->
           <template v-else-if="currentTabValue === 'teams'">
-            <TeamsTab
-              @start-team-chat="startTeamChat"
-            />
+            <TeamsTab @start-team-chat="startTeamChat" />
           </template>
-        </ScrollContainer>
+
+          <!-- 轻量 Agent Tab -->
+          <template v-else-if="currentTabValue === 'agents'">
+            <AgentListTab />
+          </template>
+        </div>
       </div>
     </div>
-
     <!-- 助手弹窗 -->
     <CharacterModal v-model:show="showModal" v-model:characterId="currentCharacterId" @saved="handleSaved" />
   </div>
@@ -69,12 +62,14 @@ import {
 import {
   ContactCard24Regular,
   PeopleTeam24Regular,
+  Bot24Regular,
 } from '@vicons/fluent'
 
 import PageHeader from '@/components/PageHeader.vue'
 import ScrollContainer from '@/components/ui/ScrollContainer.vue'
 import CharacterListTab from './CharacterListTab.vue'
 import TeamsTab from './TeamsTab.vue'
+import AgentListTab from './AgentListTab.vue'
 import CharacterModal from './CharacterModal.vue'
 import { apiService } from '../../services/ApiService'
 import { usePopup } from '../../composables/usePopup'
@@ -91,6 +86,7 @@ const sessionStore = useSessionStore()
 const tabItems = [
   { label: '助手', path: 'assistants', icon: ContactCard24Regular },
   { label: '团队', path: 'teams', icon: PeopleTeam24Regular },
+  { label: '子Agent', path: 'agents', icon: Bot24Regular },
 ]
 
 const getDefaultTabPath = () => tabItems[0]?.path || 'assistants'

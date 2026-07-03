@@ -1,4 +1,5 @@
 import { NestFactory } from "@nestjs/core";
+import { ValidationPipe } from "@nestjs/common";
 import { WinstonModule } from 'nest-winston';
 import { AppModule } from "./app.module";
 import { AllExceptionsFilter } from "./common/filters/all-exceptions.filter";
@@ -73,6 +74,15 @@ async function bootstrap() {
 
   app.useGlobalFilters(new AllExceptionsFilter());
   app.useGlobalInterceptors(new RequestTimingInterceptor());
+
+  // 全局 ValidationPipe：whitelist=true 自动剔除 DTO 未声明的字段
+  app.useGlobalPipes(
+    new ValidationPipe({
+      whitelist: true,
+      transform: true,
+    }),
+  );
+
   app.enableCors(); // Enable CORS for frontend integration
 
   // 支持通过环境变量 PORT 指定端口，若未指定则使用 0 让系统自动分配可用端口
