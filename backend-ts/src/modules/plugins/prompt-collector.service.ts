@@ -81,19 +81,14 @@ export class PromptCollector {
 
       const pluginId = rp.plugin.id;
 
-      // 从 ToolKit 注册的提示词
-      const kitRegs = PluginRegistry.getToolKits(pluginId);
-      for (const kitReg of kitRegs) {
-        if (rp.deniedToolKits.global.includes(kitReg.def.id) || rp.deniedToolKits.role.includes(kitReg.def.id)) continue;
+      // 从 rp.toolKits 取已决议的工具包信息，无需重复调用 handler
+      for (const tk of rp.enabledToolKits) {
+        if (!tk.enabled) continue;
+        if (tk.loadMode !== loadMode) continue;
 
-        let actualLoadMode = kitReg.def.loadMode || "lazy";
-        if (kitReg.def.handler) {
-          try {
-            const runtime = await kitReg.def.handler(context);
-            if (runtime?.loadMode) actualLoadMode = runtime.loadMode;
-          } catch {}
-        }
-        if (actualLoadMode !== loadMode) continue;
+        const kitRegs = PluginRegistry.getToolKits(pluginId);
+        const kitReg = kitRegs.find((k) => k.def.id === tk.id);
+        if (!kitReg) continue;
 
         for (const pm of kitReg.prompts) {
           try {
@@ -102,7 +97,7 @@ export class PromptCollector {
               pieces.push({
                 content,
                 frequency: pm.frequency as any,
-                loadMode: actualLoadMode as any,
+                loadMode: tk.loadMode as any,
                 pluginId,
                 description: pm.description,
               });

@@ -308,7 +308,7 @@ export class PluginManager {
     const instance = this.instances.get(pluginId);
     if (!instance) return;
 
-    if (instance.manifest.category === "system" && !enabled) {
+    if ((instance.manifest.category === "system" || instance.manifest.essential) && !enabled) {
       this.logger.warn(`Cannot disable system plugin: ${pluginId}`);
       return;
     }
@@ -350,7 +350,7 @@ export class PluginManager {
   isPluginEnabled(pluginId: string): boolean {
     const inst = this.instances.get(pluginId);
     if (!inst) return false;
-    if (inst.manifest.category === "system") return true;
+    if (inst.manifest.category === "system" || inst.manifest.essential) return true;
     return inst.enabled;
   }
 
@@ -396,7 +396,7 @@ export class PluginManager {
       if (!rp.enabled) continue;
 
       // 从 ToolKit 收集
-      for (const tk of rp.toolKits) {
+      for (const tk of rp.enabledToolKits) {
         if (!tk.enabled) continue;
         if (tk.loadMode !== "lazy") continue;
         activators.push({
@@ -419,22 +419,7 @@ export class PluginManager {
     includeDisabled?: boolean,
     roleCfg?: any,
   ): Promise<PluginInstance[]> {
-    const resolved = await this.resolvePlugins(undefined, roleCfg, true);
-    const enabledMap = new Map(resolved.map((r) => [r.plugin.id, r.enabled]));
-    const all = Array.from(this.instances.values());
-
-    return all
-      .filter((inst) => {
-        if (inst.manifest.category === "system") return true;
-        if (!includeDisabled) {
-          return enabledMap.get(inst.manifest.id) !== false;
-        }
-        return true;
-      })
-      .map((inst) => ({
-        ...inst,
-        enabled: enabledMap.get(inst.manifest.id) ?? inst.enabled,
-      }));
+    throw new Error("Method is deprecated.");
   }
 
   // ==================== 统一决议层 ====================
@@ -446,173 +431,350 @@ export class PluginManager {
    * - ToolOrchestrator / ToolExecutor 调用后直接按结果构建运行时
    * - PromptCollector 复用此结果
    */
+  // async resolvePlugins(
+  //   session?: ISessionContext,
+  //   pluginsConfig?: any,
+  //   skipHandler = false,
+  // ): Promise<ResolvedPluginInfo[]> {
+  //   const rawGlobal = await this.settingsStorage.getSettings(SG_PLUGINS);
+  //   const globalCfg = PluginConfigParser.normalize(rawGlobal);
+
+  //   // 读取策略，默认 custom
+  //   const strategy = pluginsConfig?.__strategy || "custom";
+  //   const { __strategy: _, ...cleanCfg } = pluginsConfig || {};
+  //   const denyAll = strategy === "deny_nonsystem";
+  //   const roleCfg =
+  //     strategy === "inherit" ? {} : PluginConfigParser.normalize(cleanCfg);
+
+  //   const merged = PluginConfigParser.merge(globalCfg, roleCfg);
+
+  //   // __deny: "none-system" 覆盖：所有非 system 插件强制禁用
+  //   if (denyAll) {
+  //     for (const [id, instance] of this.instances) {
+  //       if (instance.manifest.category !== "system") {
+  //         merged[id] = { ...merged[id], enabled: false };
+  //       }
+  //     }
+  //   }
+
+  //   const result: ResolvedPluginInfo[] = [];
+
+  //   for (const [id, instance] of this.instances) {
+  //     const manifest = instance.manifest;
+  //     const entry = merged[id];
+
+  //     // 1. 解析 enabled 状态
+  //     // system/core 插件默认启用，其他按 category
+  //     const defaultEnabled =
+  //       manifest.category === "system" || manifest.category === "core";
+  //     const enabled = PluginConfigParser.isEnabled(entry, defaultEnabled);
+
+  //     // 计算 effective：谁导致了这个状态
+  //     const globalDisabled = globalCfg[id]?.enabled === false;
+  //     const effective: "global" | "role" =
+  //       !enabled && (globalDisabled || !defaultEnabled) ? "global" : "role";
+
+  //     if (!enabled) {
+  //       result.push({
+  //         enabled: false,
+  //         effective,
+  //         plugin: manifest,
+  //         enabledTools: [],
+  //         allTools: PluginRegistry.getTools(id),
+  //         toolKits: [],
+  //         deniedToolKits: { global: [], role: [] },
+  //       });
+  //       continue;
+  //     }
+
+  //     const tools = PluginRegistry.getTools(id);
+  //     // 合并工具包内的工具（供前端展示所有工具用）
+  //     const allTools = [
+  //       ...tools,
+  //       ...PluginRegistry.getToolKits(id).flatMap((k) => k.tools),
+  //     ];
+
+  //     // 2. 解析 toolkits deny 过滤（分来源）
+  //     const toolkitsDenyGlobal: string[] = PluginConfigParser.getToolkitsFilter(
+  //       globalCfg[id],
+  //     )
+  //       ? (entry as any).toolkits_deny_global || []
+  //       : [];
+  //     const toolkitsDenyRole: string[] = PluginConfigParser.getToolkitsFilter(
+  //       merged[id],
+  //     )
+  //       ? (entry as any).toolkits_deny_role || []
+  //       : [];
+  //     const deniedToolKits = {
+  //       global: toolkitsDenyGlobal,
+  //       role: toolkitsDenyRole,
+  //     };
+  //     const effectiveDenied = new Set([
+  //       ...toolkitsDenyGlobal,
+  //       ...toolkitsDenyRole,
+  //     ]);
+
+  //     // 3. 初始化 enabledTools（plugin级工具，工具包工具在下方循环中追加）
+  //     const enabledTools = [...tools];
+
+  //     // 4. 解析 ToolKit 运行时信息，eager 工具包的工具追加到 enabledTools
+  //     const kitRegs = PluginRegistry.getToolKits(id);
+  //     const resolvedToolKits: Array<{
+  //       id: string;
+  //       name: string;
+  //       loadMode: ToolLoadMode;
+  //       activator?: string;
+  //       enabled: boolean;
+  //     }> = [];
+  //     for (const kitReg of kitRegs) {
+  //       const kitEnabled = !effectiveDenied.has(kitReg.def.id);
+  //       if (!kitEnabled) continue;
+
+  //       let loadMode: ToolLoadMode = kitReg.def.loadMode || "eager";
+  //       let activator = kitReg.def.activator;
+  //       try {
+  //         if (kitReg.def.handler && !skipHandler && session) {
+  //           const runtime = await kitReg.def.handler({
+  //             session,
+  //           } as PluginContext);
+  //           if (runtime) {
+  //             loadMode = (runtime.loadMode as ToolLoadMode) ?? loadMode;
+  //             activator = runtime.activator ?? activator;
+  //           }
+  //         }
+  //       } catch {}
+  //       resolvedToolKits.push({
+  //         id: kitReg.def.id,
+  //         name: kitReg.def.name || kitReg.def.id,
+  //         loadMode,
+  //         activator,
+  //         enabled: true,
+  //       });
+
+  //       // eager 工具包的工具直接追加到启用列表
+  //       if (loadMode === "eager") {
+  //         enabledTools.push(...kitReg.tools);
+  //       }
+  //     }
+
+  //     result.push({
+  //       enabled,
+  //       effective,
+  //       plugin: manifest,
+  //       enabledTools,
+  //       allTools,
+  //       toolKits: resolvedToolKits,
+  //       deniedToolKits,
+  //     });
+  //   }
+
+  //   return result;
+  // }
+
+  /**
+   * V2：分层决议——先准备好全部插件的默认状态，
+   * 然后遍历配置层级（global → deny_nonsystem → role），
+   * 每层根据自身配置禁用/修改插件，并标记来源层级。
+   *
+   * 与 resolvePlugins 保持相同签名，方便对照验证。
+   */
   async resolvePlugins(
     session?: ISessionContext,
-    pluginsConfig?: any,
+    pluginsConfig?: PluginConfig,
     skipHandler = false,
   ): Promise<ResolvedPluginInfo[]> {
     const rawGlobal = await this.settingsStorage.getSettings(SG_PLUGINS);
-    const globalCfg = PluginConfigParser.normalize(rawGlobal);
+    // const globalCfg = PluginConfigParser.normalize(rawGlobal);
+    const globalCfg = rawGlobal as PluginConfig;
 
-    // 读取策略，默认 custom
-    const strategy = pluginsConfig?.__strategy || "custom";
-    const { __strategy: _, ...cleanCfg } = pluginsConfig || {};
-    const denyAll = strategy === "deny_nonsystem";
-    const roleCfg =
-      strategy === "inherit" ? {} : PluginConfigParser.normalize(cleanCfg);
+    // role 配置原样保留 __strategy，作为该层的内置策略
+    const roleCfg = pluginsConfig || {};
+    // 1. 准备全部插件的初始状态（按 category 决定默认启用）
+    type PluginState = {
+      manifest: PluginManifest;
+      enabled: boolean;
+      effective: string;
+      /** 被禁用的 toolkit ID 集合（仅用于运行时过滤，不入输出） */
+      deniedToolkits: Set<string>;
+    };
+    const stateMap = new Map<string, PluginState>();
 
-    const merged = PluginConfigParser.merge(globalCfg, roleCfg);
+    for (const [id, instance] of this.instances) {
+      const defaultEnabled =
+        instance.manifest.category === "system" ||
+        instance.manifest.category === "core" ||
+        instance.manifest.essential === true;
+      stateMap.set(id, {
+        manifest: instance.manifest,
+        enabled: defaultEnabled,
+        effective: defaultEnabled ? "default" : "global",
+        deniedToolkits: new Set(),
+      });
+    }
 
-    // __deny: "none-system" 覆盖：所有非 system 插件强制禁用
-    if (denyAll) {
-      for (const [id, instance] of this.instances) {
-        if (instance.manifest.category !== "system") {
-          merged[id] = { ...merged[id], enabled: false };
+    // 2. 逐层处理配置
+    const layers: Record<string, PluginConfig> = {
+      global: globalCfg,
+      role: roleCfg,
+    };
+
+    for (const [layerName, layerCfg] of Object.entries(layers)) {
+      if (!layerCfg) continue;
+      const layerStrategy = layerCfg.__strategy || undefined;
+      const layerDefault = layerCfg.__default ?? true;
+      delete layerCfg.__strategy;
+      delete layerCfg.__default;
+      console.log(layerCfg);
+
+      if (layerStrategy === "deny_nonsystem") {
+        for (const [pluginId, state] of stateMap) {
+          if (state.enabled && state.manifest.category !== "system" && !state.manifest.essential) {
+            state.enabled = false;
+            state.effective = layerName;
+          }
+        }
+      }
+      for (const [pluginId, state] of stateMap) {
+        // essential 插件跳过所有后续处理，始终保持启用
+        if (state.manifest.essential) continue;
+        // 前层已禁用的插件，后层不再处理
+        if (!state.enabled) continue;
+
+        if (
+          layerStrategy === "deny_nonsystem" &&
+          state.manifest.category !== "system"
+        ) {
+          state.enabled = false;
+          state.effective = layerName;
+          continue;
+        }
+
+        const entry = layerCfg[pluginId];
+        if (!entry || typeof entry !== "object") {
+          // 未配置或者格式错误按照默认值处理
+          if (!layerDefault) {
+            state.enabled = false;
+            state.effective = layerName;
+          }
+          continue;
+        }
+
+        if (entry.enabled === false) {
+          state.enabled = false;
+          state.effective = layerName;
+          continue;
+        }
+
+        if (entry.toolkits_filter !== "allow") {
+          // 黑名单模式（默认）：拒绝列出的工具包
+          for (const d of (entry.toolkits_deny || [])) state.deniedToolkits.add(d);
+        } else {
+          // 白名单模式：拒绝所有工具包，只允许列出的
+          const allKits = PluginRegistry.getToolKits(pluginId);
+          for (const kit of allKits) state.deniedToolkits.add(kit.def.id);
+          for (const a of (entry.toolkits_allow || [])) state.deniedToolkits.delete(a);
         }
       }
     }
 
+    // 3. 构建最终结果
     const result: ResolvedPluginInfo[] = [];
 
-    for (const [id, instance] of this.instances) {
-      const manifest = instance.manifest;
-      const entry = merged[id];
-
-      // 1. 解析 enabled 状态
-      // system 插件默认启用，其他按 category
-      const defaultEnabled =
-        manifest.category === "system" || manifest.category === "core";
-      const enabled = PluginConfigParser.isEnabled(entry, defaultEnabled);
-
-      // 计算 effective：谁导致了这个状态
-      const globalDisabled = globalCfg[id]?.enabled === false;
-      const effective: "global" | "role" =
-        !enabled && (globalDisabled || !defaultEnabled) ? "global" : "role";
-
-      if (!enabled) {
-        result.push({
-          enabled: false,
-          effective,
-          plugin: manifest,
-          enabledTools: [],
-          allTools: PluginRegistry.getTools(id),
-          toolKits: [],
-          deniedToolKits: { global: [], role: [] },
-        });
-        continue;
-      }
-
-      const tools = PluginRegistry.getTools(id);
-      // 合并工具包内的工具（供前端展示所有工具用）
-      const allTools = [
-        ...tools,
-        ...PluginRegistry.getToolKits(id).flatMap((k) => k.tools),
-      ];
-
-      // 2. 解析 toolkits deny 过滤（分来源）
-      const toolkitsDenyGlobal: string[] = PluginConfigParser.getToolkitsFilter(
-        globalCfg[id],
-      )
-        ? (entry as any).toolkits_deny_global || []
-        : [];
-      const toolkitsDenyRole: string[] = PluginConfigParser.getToolkitsFilter(
-        merged[id],
-      )
-        ? (entry as any).toolkits_deny_role || []
-        : [];
-      const deniedToolKits = {
-        global: toolkitsDenyGlobal,
-        role: toolkitsDenyRole,
-      };
-      const effectiveDenied = new Set([
-        ...toolkitsDenyGlobal,
-        ...toolkitsDenyRole,
-      ]);
-
-      // 3. 初始化 enabledTools（plugin级工具，工具包工具在下方循环中追加）
-      const enabledTools = [...tools];
-
-      // 4. 解析 ToolKit 运行时信息，eager 工具包的工具追加到 enabledTools
-      const kitRegs = PluginRegistry.getToolKits(id);
-      const resolvedToolKits: Array<{
-        id: string;
-        name: string;
-        loadMode: ToolLoadMode;
-        activator?: string;
-        enabled: boolean;
-      }> = [];
-      for (const kitReg of kitRegs) {
-        const kitEnabled = !effectiveDenied.has(kitReg.def.id);
-        if (!kitEnabled) continue;
-
-        let loadMode: ToolLoadMode = kitReg.def.loadMode || "eager";
-        let activator = kitReg.def.activator;
-        try {
-          if (kitReg.def.handler && !skipHandler && session) {
-            const runtime = await kitReg.def.handler({
-              session,
-            } as PluginContext);
-            if (runtime) {
-              loadMode = (runtime.loadMode as ToolLoadMode) ?? loadMode;
-              activator = runtime.activator ?? activator;
-            }
-          }
-        } catch {}
-        resolvedToolKits.push({
-          id: kitReg.def.id,
-          name: kitReg.def.name || kitReg.def.id,
-          loadMode,
-          activator,
-          enabled: true,
-        });
-
-        // eager 工具包的工具直接追加到启用列表
-        if (loadMode === "eager") {
-          enabledTools.push(...kitReg.tools);
-        }
-      }
-
-      result.push({
-        enabled,
-        effective,
-        plugin: manifest,
-        enabledTools,
-        allTools,
-        toolKits: resolvedToolKits,
-        deniedToolKits,
-      });
+    for (const [id, state] of stateMap) {
+      result.push(
+        await this.buildPluginResult(
+          id,
+          state.manifest,
+          state.enabled,
+          state.effective,
+          state.deniedToolkits,
+          skipHandler,
+          session,
+        ),
+      );
     }
 
     return result;
   }
 
-  /** @deprecated 使用 resolvePlugins 代替 */
-  async getPluginToolSets(context: PluginContext): Promise<
-    Array<{
-      pluginId: string;
-      toolSets: Array<{
-        name: string;
-        loadMode: ToolLoadMode;
-        activator?: string;
-      }>;
-    }>
-  > {
-    throw new Error("getPluginToolSets 已废弃，请使用 resolvePlugins 替代");
-  }
-
-  /** @deprecated 使用 PluginConfigParser */
-  isRolePluginEnabled(pluginId: string, roleCfg?: PluginConfig): boolean {
-    if (!roleCfg) return true;
-    if (typeof roleCfg === "boolean") return roleCfg;
-    if (pluginId in roleCfg) {
-      const val: any = roleCfg[pluginId];
-      if (typeof val === "boolean") return val;
-      if (typeof val === "object" && !Array.isArray(val)) {
-        return val.enabled !== false;
-      }
-      if (Array.isArray(val)) return val.length > 0;
+  /**
+   * 根据插件状态构建 ResolvedPluginInfo
+   */
+  private async buildPluginResult(
+    pluginId: string,
+    manifest: PluginManifest,
+    enabled: boolean,
+    effective: string,
+    deniedSet: Set<string> | undefined,
+    skipHandler: boolean,
+    session: ISessionContext | undefined,
+  ): Promise<ResolvedPluginInfo> {
+    const allTools = [
+      ...PluginRegistry.getTools(pluginId),
+      ...PluginRegistry.getToolKits(pluginId).flatMap((k) => k.tools),
+    ];
+    if (!enabled) {
+      return {
+        enabled: false,
+        effective,
+        plugin: manifest,
+        enabledTools: [],
+        allTools,
+        enabledToolKits: [],
+      };
     }
-    return true;
+
+    const tools = PluginRegistry.getTools(pluginId);
+
+    const allDenied = deniedSet ?? new Set();
+
+    const enabledTools = [...tools];
+    const kitRegs = PluginRegistry.getToolKits(pluginId);
+    const enabledToolKits: Array<{
+      id: string;
+      name: string;
+      loadMode: ToolLoadMode;
+      activator?: string;
+      enabled: boolean;
+    }> = [];
+
+    for (const kitReg of kitRegs) {
+      if (allDenied.has(kitReg.def.id)) continue;
+
+      let loadMode: ToolLoadMode = kitReg.def.loadMode || "eager";
+      let activator = kitReg.def.activator;
+      try {
+        if (kitReg.def.handler && !skipHandler && session) {
+          const runtime = await kitReg.def.handler({
+            session,
+          } as PluginContext);
+          if (runtime) {
+            loadMode = (runtime.loadMode as ToolLoadMode) ?? loadMode;
+            activator = runtime.activator ?? activator;
+          }
+        }
+      } catch {}
+      enabledToolKits.push({
+        id: kitReg.def.id,
+        name: kitReg.def.name || kitReg.def.id,
+        loadMode,
+        activator,
+        enabled: true,
+      });
+
+      if (loadMode === "eager") {
+        enabledTools.push(...kitReg.tools);
+      }
+    }
+
+    return {
+      enabled: true,
+      effective,
+      plugin: manifest,
+      enabledTools,
+      allTools,
+      enabledToolKits,
+    };
   }
 
   /** 获取所有已注册的工具包（供外部汇总） */

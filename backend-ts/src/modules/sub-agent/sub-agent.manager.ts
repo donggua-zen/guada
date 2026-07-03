@@ -8,6 +8,7 @@ import { CharacterRepository } from "../../common/database/character.repository"
 import { ChatRunnerService } from "../chat/chat-runner.service";
 import { StreamFinishedEvent } from "../../common/events/stream.events";
 import { EventBusService } from "../../common/events/event-bus.service";
+import { AgentScannerService } from "./agent-scanner.service";
 
 /**
  * 子 Agent 默认系统提示词
@@ -85,6 +86,7 @@ export class SubAgentManager implements OnModuleInit {
     private chatRunnerService: ChatRunnerService,
     private eventBus: EventBusService,
     private characterRepo: CharacterRepository,
+    private agentScanner: AgentScannerService,
   ) {}
 
   onModuleInit() {
@@ -260,33 +262,17 @@ export class SubAgentManager implements OnModuleInit {
       {}) as any;
     const parentSessionSettings = (parentSession.settings || {}) as any;
 
-    const inheritedTools =
-      parentSessionSettings.tools ?? parentCharacterSettings.tools;
-    const inheritedMcpServers =
-      parentSessionSettings.mcpServers ?? parentCharacterSettings.mcpServers;
+    const inheritedPlugins =
+      parentSessionSettings.plugins ?? parentCharacterSettings.plugins;
+    const inheritedSkillsConfig =
+      parentSessionSettings.skills ?? parentCharacterSettings.skills;
 
     // 3. 角色驱动的子 Agent 创建
     let characterSettings: any = {};
-    let characterModelId: string | null = null;
-    let characterAvatarUrl: string | undefined;
+    let finalModelId: string | null = parentSession.modelId;
+    let finalCharacterId: string | null = null;
+    let finalAvatarUrl: string | undefined;
 
-    if (params.characterId) {
-      const character = await this.characterRepo.findById(params.characterId);
-      if (character) {
-        characterSettings = character.settings || {};
-        characterModelId = character.modelId;
-        characterAvatarUrl = character.avatarUrl || undefined;
-        this.logger.log(
-          `子 Agent 将继承角色设定: ${character.title} (${params.characterId})`,
-        );
-      } else {
-        this.logger.warn(
-          `角色 ${params.characterId} 不存在，使用默认子 Agent 设定`,
-        );
-      }
-    }
-
-    // 4. 创建子会话记录
     // 配置继承策略委托给 PersistentSessionContext.mergeSettings()，
     // 它自动处理 sessionSettings.xxx ?? characterSettings.xxx 回退。
     //
@@ -297,37 +283,106 @@ export class SubAgentManager implements OnModuleInit {
     // 思考强度：无论是否有角色，都从父会话继承
     settings.thinkingEffort = parentSessionSettings.thinkingEffort;
 
-    if (!params.characterId) {
-      // 【无角色】直接继承父会话配置作为 sessionSettings
-      settings.systemPrompt = SUB_AGENT_DEFAULT_PROMPT;
-      settings.tools = inheritedTools;
-      settings.mcpServers = inheritedMcpServers;
-      // 模型参数：父会话当前无会话级入口，直接从父角色设置继承
-      settings.modelTemperature = parentCharacterSettings.modelTemperature;
-      settings.modelTopP = parentCharacterSettings.modelTopP;
-      settings.modelFrequencyPenalty = parentCharacterSettings.modelFrequencyPenalty;
-      settings.memory = parentSessionSettings.memory;
-      settings.memoryEnabled = parentSessionSettings.memoryEnabled;
+    if (!params.characterId.startsWith("agent-")) {
+      // ── 数据库角色模式 ──
+      // 仅设 thinkingEffort，其余由 mergeSettings 从 character.settings 自动读取
+      const character = await this.characterRepo.findById(params.characterId);
+      if (!character) {
+        throw new Error(
+          `角色 ${params.characterId} 不存在，请检查是否输入有误，或此角色已被删除`,
+        );
+      }
+      finalModelId = character.modelId || parentSession.modelId;
+      finalCharacterId = params.characterId;
+      finalAvatarUrl = character.avatarUrl || undefined;
+      this.logger.log(
+        `子 Agent 将继承角色设定: ${character.title} (${params.characterId})`,
+      );
+    } else {
+      if (params.characterId.startsWith("agent-")) {
+        // ── 轻量 Agent 模式 ──
+        const agent = await this.agentScanner.getAgent(params.characterId);
+        if (!agent) {
+          throw new Error(
+            `Agent ${params.characterId} 不存在，请检查是否输入有误，或此 Agent 已被删除`,
+          );
+        }
+        this.logger.log(
+          `子 Agent 使用轻量 Agent: ${agent.name} (${params.characterId})`,
+        );
+        settings.systemPrompt = agent.body;
+      } else {
+        settings.systemPrompt = SUB_AGENT_DEFAULT_PROMPT;
+      }
+      settings.plugins = inheritedPlugins;
+      settings.skills = inheritedSkillsConfig;
+      if (parentSessionSettings.modelOverrideEnabled) {
+        settings.model = parentSessionSettings.model;
+      } else {
+        settings.model = {
+          temperature: parentCharacterSettings.modelTemperature,
+          topP: parentCharacterSettings.modelTopP,
+          frequencyPenalty: parentCharacterSettings.modelFrequencyPenalty,
+        };
+      }
+      settings.modelOverrideEnabled = true;
+      if (parentSessionSettings.memoryEnabled) {
+        settings.memory = parentSessionSettings.memory;
+      } else {
+        settings.memory = parentCharacterSettings.memory;
+      }
+      settings.memoryEnabled = true;
+      // finalCharacterId 保持 null（不走 characterRepo）
     }
-    // 有角色时：仅继承 thinkingEffort，其余配置由 mergeSettings 从 characterSettings 自动读取
 
+    return this.createSubSessionAndRun(
+      params,
+      mode,
+      abortSignal,
+      settings,
+      parentSession,
+      finalModelId,
+      finalCharacterId,
+      finalAvatarUrl,
+    );
+  }
+
+  /**
+   * 创建子会话记录、广播事件并启动执行
+   * 抽离为私有方法，供普通角色和轻量 Agent 共用
+   */
+  private async createSubSessionAndRun(
+    params: {
+      parentSessionId: string;
+      userId: string;
+      name: string;
+      task: string;
+      characterId?: string;
+    },
+    mode: "foreground" | "background",
+    abortSignal: AbortSignal | undefined,
+    settings: Record<string, any>,
+    parentSession: any,
+    modelId: string,
+    characterId: string | null,
+    avatarUrl: string | undefined,
+  ): Promise<SubAgentResult> {
     const subSession = await this.sessionRepo.create({
       userId: params.userId,
       parentId: params.parentSessionId,
       title: params.name,
-      characterId: params.characterId || null,
-      modelId: characterModelId || parentSession.modelId,
+      characterId,
+      modelId,
       settings,
       sessionType: "sub_agent",
       workspacePath: parentSession.workspacePath,
-      avatarUrl: characterAvatarUrl || null,
+      avatarUrl: avatarUrl || null,
     });
 
     this.logger.log(
       `子 Agent 会话创建成功: ${subSession.id}, 父会话: ${params.parentSessionId}, 模式: ${mode}`,
     );
 
-    // 4. 广播 sub_agent_create 事件（仅通知前端新增子 Agent，不负责状态管理）
     this.eventBus.emit("subagent.created", {
       userId: params.userId,
       sessionId: params.parentSessionId,
@@ -340,7 +395,6 @@ export class SubAgentManager implements OnModuleInit {
       },
     });
 
-    // 5. 确保父会话状态存在（用于后续完成事件收集）
     this.getOrCreateState(params.parentSessionId);
 
     return this.executeSubAgentStream(

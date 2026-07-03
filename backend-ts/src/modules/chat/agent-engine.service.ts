@@ -403,12 +403,15 @@ export class AgentEngine {
 
         // 【关键】将工具分为三组并执行
         const execResult = await this.executeToolsAndBuildParts(
-          assistantResponse, sessionContext, abortSignal,
+          assistantResponse,
+          sessionContext,
+          abortSignal,
         );
 
         // 【原子性审批】需要审批时提前终止
         if (execResult.approvalContext) {
-          assistantResponse.metadata.approvalContext = execResult.approvalContext;
+          assistantResponse.metadata.approvalContext =
+            execResult.approvalContext;
           yield {
             type: "finish",
             finishReason: "approval_required",
@@ -423,7 +426,9 @@ export class AgentEngine {
           yield {
             type: "tool_calls_response",
             toolCallsResponse: execResult.toolResponses.map((tr: any) => ({
-              name: tr.name, content: tr.content, toolCallId: tr.toolCallId,
+              name: tr.name,
+              content: tr.content,
+              toolCallId: tr.toolCallId,
             })),
             displayMessages: execResult.displayMessages,
             contentId,
@@ -431,8 +436,12 @@ export class AgentEngine {
 
           for (const res of execResult.toolResponses) {
             parts.push({
-              role: "tool", name: res.name, content: res.content,
-              toolCallId: res.toolCallId, messageId: responseMessageId, turnsId: turnsId,
+              role: "tool",
+              name: res.name,
+              content: res.content,
+              toolCallId: res.toolCallId,
+              messageId: responseMessageId,
+              turnsId: turnsId,
             });
           }
           needToContinue = true;
@@ -852,148 +861,124 @@ export class AgentEngine {
     sessionContext: ISessionContext,
     abortSignal?: AbortSignal,
   ): Promise<void> {
-    // 跳过工具提示词注入（影子轮次只需要记忆和文件工具，不需要 skill 描述等）
-    const messages = await sessionContext.getMessages({ exclude: ["plugins"] });
-    const shadowMessages: MessageRecord[] = [];
-
-    const modelConfig = sessionContext.getModelConfig();
-
-    // 通过 PromptCollector 获取记忆提示词
-    const resolved = sessionContext.getResolvedPlugins();
-    const memoryGuide =
-      (
-        await this.promptCollector.collectPluginLazyPrompts(
-          "memory",
-          resolved,
-          { session: sessionContext } as PluginContext,
-        )
-      )
-        .map((p) => p.content)
-        .join("\n") || "";
-
-    const memoryContent =
-      (
-        await this.promptCollector.collectPluginPrompts("memory", resolved, {
-          session: sessionContext,
-        } as PluginContext)
-      )
-        .map((p) => p.content)
-        .join("\n") || "";
-
-    // console.log("memoryGuide", memoryGuide);
-    if (!memoryGuide) return;
-
-    // 从会话已决议的数据中过滤出 file 插件的工具（影子轮次只需要文件工具）
-    const filePlugin = resolved.find((r) => r.plugin.id === "file");
-    const fileTools = filePlugin?.enabledTools ?? [];
-    if (fileTools.length === 0) return;
-
-    // 组装指令消息（history 中不含系统提示词，此处自行注入）
-    const instructionParts: string[] = [
-      `<system_message>`,
-      `这是一条系统消息，即将进行上下文压缩，请检查你的记忆文件是否需要更新。`,
-      `如果有新的重要信息（用户偏好、决策、待办等），请使用文件工具写入记忆。`,
-      ``,
-      memoryGuide,
-    ];
-
-    // 注入当前已保存的记忆内容（避免 AI 额外花一轮工具调用读取）
-    if (memoryContent) {
-      instructionParts.push(
-        ``,
-        `---`,
-        `以下是当前已保存的记忆内容：`,
-        memoryContent,
-      );
-    }
-
-    instructionParts.push(
-      ``,
-      `操作原则：`,
-      `- 已保存的内容无需重复写入`,
-      `- 发现冲突、冗余、过时的记忆需要进行对应的更正和简化`,
-      `- 只保存重要的、持久的、未来需要的信息`,
-      `- 写入完成后不需要回复用户`,
-      `- 最多操作 5 轮工具调用，工作流程如下：`,
-      `  1. 根据当前记忆内容结合对话历史，判断是否需要保存记忆`,
-      `  2. 若需要保存，调用文件工具批量写入记忆`,
-      `  3. 局部更新优先使用edit工具`,
-      `  4. 若无需要保存或保存完毕，回复"DONE"并且不要再调用任何工具`,
-      `</system_message>`,
-    );
-
-    shadowMessages.push({
-      role: "user",
-      content: instructionParts.join("\n"),
-    });
-
-    // 与主循环共用 executeLLMStream，保证参数一致
-    const MAX_ROUNDS = 5;
-
-    for (let round = 1; round <= MAX_ROUNDS; round++) {
-      try {
-        const streamResult = this.executeLLMStream(
-          messages.concat(shadowMessages),
-          modelConfig,
-          fileTools,
-          sessionContext.getThinkingEffort(),
-          abortSignal,
-        );
-
-        let accumulated: LLMResponseChunk = {};
-        for await (const { accumulated: acc } of streamResult) {
-          accumulated = acc;
-        }
-
-        shadowMessages.push({
-          role: "assistant",
-          reasoningContent: accumulated.reasoningContent || null,
-          content: accumulated.content || null,
-          toolCalls: accumulated.toolCalls,
-        });
-        if (!accumulated.toolCalls?.length) break;
-
-        const responses = await this.toolOrchestrator.executeBatch(
-          accumulated.toolCalls.map((tc: any) => ({
-            id: tc.id,
-            name: tc.name,
-            arguments: partialParse(tc.arguments) || {},
-          })),
-          sessionContext,
-        );
-        for (const r of responses) {
-          shadowMessages.push({
-            role: "tool",
-            content: r.content,
-            toolCallId: r.toolCallId,
-            name: r.name,
-          });
-        }
-      } catch (error: any) {
-        this.logger.warn(`记忆保存第${round}轮失败: ${error.message}`);
-        break;
-      }
-    }
-    // 落盘原始交互记录
+    // 切换到 memory 模式：getResolvedPlugins() 只返回 file 插件，
+    // getSettings('skills') 返回空，确保 LLM 和工具执行层一致受限
+    const originalMode = sessionContext.getRunMode();
+    await sessionContext.setRunMode("memory");
     try {
-      const logDir = path.join(
-        sessionContext.getWorkspacePath(),
-        ".guada",
-        "logs",
-      );
-      fs.mkdirSync(logDir, { recursive: true });
-      fs.appendFileSync(
-        path.join(logDir, "compression.jsonl"),
-        JSON.stringify({
-          time: new Date().toISOString(),
-          sessionId: sessionContext.sessionId,
-          records: shadowMessages,
-        }) + "\n",
-      );
-    } catch (e) {
-      // 非关键
+      // 跳过工具提示词注入（影子轮次只需要记忆和文件工具，不需要 skill 描述等）
+      const messages = await sessionContext.getMessages();
+      const shadowMessages: MessageRecord[] = [];
+
+      const modelConfig = sessionContext.getModelConfig();
+
+      // 组装指令消息（history 中不含系统提示词，此处自行注入）
+      const instructionParts: string[] = [
+        `<system>
+[BEGIN SYSTEM INSTRUCTION - DO NOT REPLY TO USER]
+This is a silent system-level instruction for memory maintenance during context compression. Strictly execute the following workflow. Do NOT output any natural language explanations to the user.
+
+【OPERATING PRINCIPLES】
+1. Memory Evaluation: Scan the conversation history. ONLY update memory if the following conditions are met:
+   - Explicit long-term user preferences or habits
+   - Critical factual corrections or decisions
+   - Cross-session to-do items or commitments
+   - Conflicts, redundancies, or outdated information detected in existing memory
+2. Existing Memory Status: The contents within the <factual-memory/> and <soul-memory/> tags are already up-to-date. Do NOT re-extract them.
+
+【EXECUTION WORKFLOW】
+1. Evaluate: Determine if the current conversation contains new information that requires persistence.
+2. If NO update is needed: Immediately reply with "DONE" and terminate the task.
+3. If an update IS needed:
+   - Call the file tools to batch write/update the memory.
+   - Prioritize using the 'edit' tool for local modifications. If the file does not exist or the 'edit' tool fails, fall back to using the 'write' or 'create' tool.
+   - Ensure a maximum of 5 tool calls are executed.
+4. Upon completion of the update: Reply with "DONE" and terminate the task.
+
+【STRICT CONSTRAINTS】
+- Your final output MUST be EXACTLY "DONE". Absolutely no punctuation, explanations, or thought processes are allowed.
+- The user cannot see your intermediate steps and relies solely on this final status code.
+[END SYSTEM INSTRUCTION]
+</system>`,
+      ];
+
+      shadowMessages.push({
+        role: "user",
+        content: instructionParts.join("\n"),
+      });
+
+      // 与主循环共用 executeLLMStream，保证参数一致
+      const MAX_ROUNDS = 5;
+
+      for (let round = 1; round <= MAX_ROUNDS; round++) {
+        try {
+          const streamResult = this.executeLLMStream(
+            messages.concat(shadowMessages),
+            modelConfig,
+            ToolOrchestrator.toFlatToolDefs(
+              sessionContext.getResolvedPlugins(),
+            ),
+            sessionContext.getThinkingEffort(),
+            abortSignal,
+          );
+
+          let accumulated: LLMResponseChunk = {};
+          for await (const { accumulated: acc } of streamResult) {
+            accumulated = acc;
+          }
+
+          shadowMessages.push({
+            role: "assistant",
+            reasoningContent: accumulated.reasoningContent || null,
+            content: accumulated.content || null,
+            toolCalls: accumulated.toolCalls,
+          });
+          if (!accumulated.toolCalls?.length) break;
+
+          const responses = await this.toolOrchestrator.executeBatch(
+            accumulated.toolCalls.map((tc: any) => ({
+              id: tc.id,
+              name: tc.name,
+              arguments: partialParse(tc.arguments) || {},
+            })),
+            sessionContext,
+          );
+          for (const r of responses) {
+            shadowMessages.push({
+              role: "tool",
+              content: r.content,
+              toolCallId: r.toolCallId,
+              name: r.name,
+            });
+          }
+        } catch (error: any) {
+          this.logger.warn(`记忆保存第${round}轮失败: ${error.message}`);
+          break;
+        }
+      }
+      // 落盘原始交互记录
+      try {
+        const logDir = path.join(
+          sessionContext.getWorkspacePath(),
+          ".guada",
+          "logs",
+        );
+        fs.mkdirSync(logDir, { recursive: true });
+        fs.writeFileSync(
+          path.join(logDir, "compression.jsonl"),
+          JSON.stringify({
+            time: new Date().toISOString(),
+            sessionId: sessionContext.sessionId,
+            records: [messages[0] || {}].concat(shadowMessages),
+          }) + "\n",
+        );
+      } catch (e) {
+        // 非关键
+      }
+      // 不入库，不 yield
+    } finally {
+      await sessionContext.setRunMode(originalMode);
     }
-    // 不入库，不 yield
   }
 
   /**
@@ -1044,8 +1029,13 @@ export class AgentEngine {
           id: tc.id,
           name: tc.name,
           arguments: (() => {
-            try { return typeof tc.arguments === "string" ? JSON.parse(tc.arguments) : tc.arguments; }
-            catch { return {}; }
+            try {
+              return typeof tc.arguments === "string"
+                ? JSON.parse(tc.arguments)
+                : tc.arguments;
+            } catch {
+              return {};
+            }
           })(),
         })),
         sessionContext,
@@ -1054,10 +1044,16 @@ export class AgentEngine {
       toolResponses.push(...results);
 
       for (const at of approvedTools) {
-        const tc = assistantResponse.toolCalls?.find((t: any) => t.id === at.id);
+        const tc = assistantResponse.toolCalls?.find(
+          (t: any) => t.id === at.id,
+        );
         if (tc) {
           if (!tc.metadata) tc.metadata = {};
-          tc.metadata.displayMessage = this.displayManager.format(tc.name, tc.arguments, false);
+          tc.metadata.displayMessage = this.displayManager.format(
+            tc.name,
+            tc.arguments,
+            false,
+          );
           displayMessages.push(tc.metadata.displayMessage);
         } else {
           displayMessages.push(undefined);

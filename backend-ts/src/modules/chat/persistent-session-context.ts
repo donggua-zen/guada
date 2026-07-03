@@ -5,10 +5,10 @@ import {
   ModelFeature,
   ToolApprovalConfig,
   MemoryConfig,
+  SessionRunMode,
 } from "./session-context";
 import { SettingsStorage } from "../../common/utils/settings-storage.util";
 import { ModelRepository } from "../../common/database/model.repository";
-import { ToolOrchestrator } from "../tools/tool-orchestrator.service";
 import { PluginManager } from "../plugins/plugin.manager";
 import { PromptCollector } from "../plugins/prompt-collector.service";
 import { WorkspaceService } from "../../common/services/workspace.service";
@@ -26,12 +26,8 @@ import {
 } from "../../constants/settings.constants";
 import { TokenizerService } from "../../common/utils/tokenizer.service";
 import { SummaryMode } from "./compression-engine";
-import {
-  PluginContext,
-  ResolvedPluginInfo,
-} from "../plugins/types/plugin.types";
+import { ResolvedPluginInfo } from "../plugins/types/plugin.types";
 import { SessionTokenTracker } from "./utils/session-token-tracker";
-import { PluginConfigParser } from "../plugins/utils/plugin-config-parser";
 
 /**
  * 合并后的会话设置
@@ -40,11 +36,17 @@ interface MergedSettings {
   systemPrompt: string;
   thinkingEffort?: string;
   memory: any;
-  modelTemperature?: number;
-  modelTopP?: number;
-  modelFrequencyPenalty?: number;
+  model: {
+    temperature?: number;
+    topP?: number;
+    frequencyPenalty?: number;
+  };
+  // modelTemperature?: number;
+  // modelTopP?: number;
+  // modelFrequencyPenalty?: number;
   plugins?: any;
   skills?: Record<string, boolean>; // 角色级技能偏好 { skillId: true/false }
+  agents?: Record<string, boolean>; // 角色级 Agent 偏好 { agentId: true/false }
 }
 
 /**
@@ -78,6 +80,8 @@ export class PersistentSessionContext implements ISessionContext {
   private toolApprovalConfig!: ToolApprovalConfig;
   private resolvedPlugins: ResolvedPluginInfo[] = [];
   private skillsConfig: any;
+  private agentsConfig: any;
+  private mergedSettings!: any;
   private memoryConfig!: MemoryConfig;
   private effectiveContextWindow!: number;
   private _workspacePath!: string;
@@ -98,6 +102,11 @@ export class PersistentSessionContext implements ISessionContext {
   private messageCursor: string | undefined = undefined;
   /** 会话级 Token 消费追踪器 */
   private tokenTracker: SessionTokenTracker | null = null;
+
+  /** 当前会话运行模式（默认 normal） */
+  private runMode: SessionRunMode = "normal";
+  /** memory 模式强制插件缓存（initialize 时预计算） */
+  private forcedMemoryPlugins: ResolvedPluginInfo[] = [];
 
   constructor(
     private readonly session: any,
@@ -139,6 +148,8 @@ export class PersistentSessionContext implements ISessionContext {
       : undefined;
     this.resolvedPlugins = prep.resolvedPlugins;
     this.skillsConfig = prep.mergedSettings.skills;
+    this.agentsConfig = prep.mergedSettings.agents;
+    this.mergedSettings = prep.mergedSettings;
     this.toolApprovalConfig = this.buildToolApprovalConfig();
     this.memoryConfig = await this.buildMemoryConfig(
       prep.mergedSettings.memory,
@@ -262,7 +273,7 @@ export class PersistentSessionContext implements ISessionContext {
     // 计算系统提示词的 Token 数
     this.systemPromptTokenCount = await this.tokenizerService.countTextTokens(
       modelName,
-      this.getSystemPrompt(),
+      this.buildSystemPrompt(),
     );
     // compressionConfig.contextWindow -= this.systemPromptTokenCount;
 
@@ -286,12 +297,10 @@ export class PersistentSessionContext implements ISessionContext {
     exclude?: string[];
   }): Promise<MessageRecord[]> {
     // 每次调用时动态搜集插件提示词（必须在 loadConversationState 之前）
-    if (
-      !options?.exclude?.includes("plugins") &&
-      this.resolvedPlugins.length > 0
-    ) {
+    const modePlugins = this.getResolvedPlugins();
+    if (!options?.exclude?.includes("plugins") && modePlugins.length > 0) {
       const promptPieces = await this.promptCollector.collectPrompts(
-        this.resolvedPlugins,
+        modePlugins,
         { session: this },
       );
       this.systemPromptParts.plugins = promptPieces
@@ -457,10 +466,7 @@ export class PersistentSessionContext implements ISessionContext {
   ): Promise<MessageRecord[]> {
     const nonSystemMessages = messages.filter((msg) => msg.role !== "system");
 
-    const finalSystemPrompt = (
-       this.getSystemPrompt(options?.exclude)
-    ).replace("{time}", new Date().toISOString());
-    this.logger.log(finalSystemPrompt);
+    const finalSystemPrompt = this.buildSystemPrompt(options?.exclude);
     return [
       { role: "system" as const, content: finalSystemPrompt },
       ...nonSystemMessages,
@@ -498,12 +504,16 @@ export class PersistentSessionContext implements ISessionContext {
         ...(model.config || {}),
         // 二级链：会话设置（创建时已从角色继承）> 模型默认 > undefined（API自行决策）
         temperature:
-          mergedSettings.modelTemperature ??
+          mergedSettings.model.temperature ??
           model.config?.temperature ??
           undefined,
-        topP: mergedSettings.modelTopP ?? model.config?.topP ?? undefined,
+        topP:
+          mergedSettings.model.topP ??
+          model.config?.modelTopP ??
+          model.config?.topP ??
+          undefined,
         frequencyPenalty:
-          mergedSettings.modelFrequencyPenalty ??
+          mergedSettings.model.frequencyPenalty ??
           model.config?.frequencyPenalty ??
           undefined,
       },
@@ -676,8 +686,9 @@ export class PersistentSessionContext implements ISessionContext {
     }
 
     // 插件配置：会话设置优先于角色设置
-    let mergedTools = sessionSettings.plugins ?? leaderSettings.plugins;
+    const mergedTools = sessionSettings.plugins ?? leaderSettings.plugins;
     const mergedSkills = sessionSettings.skills ?? leaderSettings.skills;
+    const mergedAgents = sessionSettings.agents ?? leaderSettings.agents;
 
     // 系统提示词组装
     let systemPrompt =
@@ -718,22 +729,19 @@ export class PersistentSessionContext implements ISessionContext {
       systemPrompt,
       thinkingEffort: undefined,
       memory: {},
-      // 模型参数：从 settings.model 对象读取（遵循 modelOverrideEnabled 控制）
-      ...(sessionSettings.modelOverrideEnabled && sessionSettings.model
-        ? {
-            modelTemperature: sessionSettings.model.temperature ?? undefined,
-            modelTopP: sessionSettings.model.topP ?? undefined,
-            modelFrequencyPenalty:
-              sessionSettings.model.frequencyPenalty ?? undefined,
-          }
-        : {
-            modelTemperature: undefined,
-            modelTopP: undefined,
-            modelFrequencyPenalty: undefined,
-          }),
+      model: {},
       plugins: mergedTools,
       skills: mergedSkills,
+      agents: mergedAgents,
     };
+
+    if (sessionSettings.modelOverrideEnabled && sessionSettings.model) {
+      merged.model = {
+        temperature: sessionSettings.model?.temperature,
+        topP: sessionSettings.model?.topP,
+        frequencyPenalty: sessionSettings.model?.frequencyPenalty,
+      };
+    }
 
     // 记忆/压缩配置（独立继承）
     const memoryEnabled = sessionSettings.memoryEnabled;
@@ -774,15 +782,7 @@ export class PersistentSessionContext implements ISessionContext {
     return model;
   }
 
-  getModelConfig(): ModelConfig {
-    return this.modelConfig;
-  }
-
-  supportsFeature(feature: ModelFeature): boolean {
-    return this.modelConfig.config.features?.includes(feature) || false;
-  }
-
-  private getSystemPrompt(exclude?: string[]): string {
+  private buildSystemPrompt(exclude?: string[]): string {
     const order = ["base", "plugins", "summary"];
     const filtered = exclude?.length
       ? order.filter((k) => !exclude.includes(k))
@@ -800,16 +800,61 @@ export class PersistentSessionContext implements ISessionContext {
       .join("\n\n");
   }
 
+  getModelConfig(): ModelConfig {
+    return this.modelConfig;
+  }
+
+  supportsFeature(feature: ModelFeature): boolean {
+    return this.modelConfig.config.features?.includes(feature) || false;
+  }
+
   getThinkingEffort(): string | undefined {
     return this.thinkingEffortValue;
   }
 
+  // === 运行模式 ===
+
+  getRunMode(): SessionRunMode {
+    return this.runMode;
+  }
+
+  async setRunMode(mode: SessionRunMode): Promise<void> {
+    this.logger.debug(`Switching run mode: ${this.runMode} -> ${mode}`);
+    this.runMode = mode;
+
+    // memory 模式：懒加载强制插件列表
+    if (mode === "memory" && this.forcedMemoryPlugins.length === 0) {
+      this.forcedMemoryPlugins = await this.pluginManager.resolvePlugins(this, {
+        __default: false,
+        memory: { enabled: true },
+        file: { enabled: true },
+      });
+    }
+  }
+
+  /**
+   * 根据运行模式返回插件列表。
+   *
+   * - normal: 返回全部已决议插件（受用户配置控制）
+   * - memory: 返回强制插件列表（memory + file，无视用户开关）
+   *           首次切换到 memory 模式时通过 resolvePlugins 懒加载。
+   */
   getResolvedPlugins(): ResolvedPluginInfo[] {
+    if (this.runMode === "memory") {
+      return this.forcedMemoryPlugins;
+    }
     return this.resolvedPlugins;
   }
 
-  getSkillsConfig(): any {
-    return this.skillsConfig;
+  /**
+   * 根据运行模式返回技能配置。
+   *
+   * - normal: 返回完整技能配置
+   * - memory: 返回空（记忆模式下不需要技能提示词）
+   */
+  getSettings(field?: string): any {
+    if (field) return (this.mergedSettings as any)[field];
+    return this.mergedSettings;
   }
 
   getToolApprovalConfig(): ToolApprovalConfig {

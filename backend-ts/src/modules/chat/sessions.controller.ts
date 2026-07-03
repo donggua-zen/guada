@@ -20,6 +20,7 @@ import { SessionService } from "./session.service";
 import { WorkspaceService } from "../../common/services/workspace.service";
 import { EventBusService } from "../../common/events/event-bus.service";
 import { UpdateSessionDto } from "./dto/update-session.dto";
+import { CreateSessionDto } from "./dto/create-session.dto";
 import * as path from 'path';
 import * as fs from 'fs';
 import * as fsPromises from 'fs/promises';
@@ -52,7 +53,7 @@ export class SessionsController {
 
   @Post("sessions")
   async createSession(
-    @Body() data: any,
+    @Body() data: CreateSessionDto,
     @CurrentUser() user: any,
     @Headers("x-client-id") clientId: string,
   ) {

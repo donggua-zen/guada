@@ -3,6 +3,8 @@ import { z } from "zod";
 import { PluginBase } from "../plugins/base-plugin";
 import { SubAgentManager } from "./sub-agent.manager";
 import { PluginApi } from "../plugins/api/plugin-api";
+import { PluginContext } from "../plugins/types/plugin.types";
+import { AgentScannerService } from "./agent-scanner.service";
 
 @Injectable()
 export class SubAgentPlugin extends PluginBase {
@@ -15,7 +17,10 @@ export class SubAgentPlugin extends PluginBase {
     category: "core" as const,
   };
 
-  constructor(private subAgentManager: SubAgentManager) {
+  constructor(
+    private subAgentManager: SubAgentManager,
+    private agentScanner: AgentScannerService,
+  ) {
     super();
   }
 
@@ -25,10 +30,24 @@ export class SubAgentPlugin extends PluginBase {
       name: "子代理",
       loadMode: "lazy",
       activator: "需要创建子代理执行独立任务时，可以调用此工具包",
-      handler: (ctx) => ({
-        loadMode:
-          ctx.session.sessionType === "team" ? ("eager" as const) : ("lazy" as const),
-      }),
+      handler: async (ctx) => {
+        // sub_agent 会话禁止递归加载子代理工具
+        if (ctx.session.sessionType === "sub_agent") {
+          return { loadMode: "none" as const };
+        }
+        // // team 模式始终 eager
+        // if (ctx.session.sessionType === "team") {
+        //   return { loadMode: "eager" as const };
+        // }
+        // // 存在可见的轻量 Agent 时 eager（让 AI 知道可用 agent 列表）
+        // const agents = await this.agentScanner.listAgents();
+        // const visibleAgents = agents.filter((a) => a.visible);
+        // if (visibleAgents.length > 0) {
+        //   return { loadMode: "eager" as const };
+        // }
+        // return { loadMode: "lazy" as const };
+        return { loadMode: "eager" as const };
+      },
     });
 
     subKit.registerTool({
@@ -43,7 +62,7 @@ export class SubAgentPlugin extends PluginBase {
         characterId: z
           .string()
           .optional()
-          .describe("角色 ID（可选，不传则使用默认模型）"),
+          .describe("角色 ID/agent ID（可选，不传则创建通用子代理）"),
         mode: z
           .enum(["foreground", "background"])
           .optional()
@@ -146,7 +165,9 @@ export class SubAgentPlugin extends PluginBase {
       description: "获取当前父会话下所有子代理列表",
       inputSchema: z.object({}),
       execute: async (_args, ctx) => {
-        const agents = await this.subAgentManager.getSubAgents(ctx?.session.sessionId);
+        const agents = await this.subAgentManager.getSubAgents(
+          ctx?.session.sessionId,
+        );
         return {
           success: true,
           sub_agents: agents,
@@ -208,17 +229,13 @@ export class SubAgentPlugin extends PluginBase {
 - 当任务复杂、耗时较长，使用后台子代理（run_mode="background"）
 - 拆分任务时必须边界清晰，确保各子代理不会互相修改同一文件或者任务重叠
 
-**角色驱动模式**：
-- 当你的系统提示词中包含【团队成员】时，你可以使用 create 的 characterId 参数创建角色驱动的子代理
-- 角色驱动的子代理会继承该角色的完整设定（系统提示词、工具权限等），以该角色身份执行任务
-- 格式：spawn(name="角色名", characterId="角色ID", task="具体任务")
-- 根据任务性质选择合适的团队成员角色
-
 **注意**：
 - spawn 前台模式会阻塞到任务完成，后台子代理在后台执行，结果会通过系统消息通知
 - 如非必要禁止使用wait轮询等待子代理结果
 - 若对子代理任务需要进一步追问或者调整，使用 \`send_message\` 继续交互
 - 对于任务结束且不需要后续交互的子代理，及时 \`close\` 关闭并清理其会话数据`,
     });
+
+    // 轻量 Agent 列表提示词 — 已迁移到 AgentPresetsPlugin
   }
 }

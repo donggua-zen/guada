@@ -390,6 +390,28 @@ class ApiService {
     });
   }
 
+  // ========== 轻量 Agent 相关 ==========
+  async fetchAgents(): Promise<{ agents: any[]; groups: any[] }> {
+    return await this._request("/agents");
+  }
+
+  async fetchAgentDetail(id: string): Promise<any> {
+    return await this._request(`/agents/${encodeURIComponent(id)}`);
+  }
+
+  async updateAgentVisibility(id: string, visible: boolean, collapsed?: boolean): Promise<any> {
+    return await this._request(`/agents/${encodeURIComponent(id)}/visibility`, {
+      method: "PUT",
+      data: collapsed !== undefined ? { visible, collapsed } : { visible },
+    });
+  }
+
+  async deleteAgent(id: string): Promise<any> {
+    return await this._request(`/agents/${encodeURIComponent(id)}`, {
+      method: "DELETE",
+    });
+  }
+
   // ========== 会话相关 ==========
   async createSession(data: any): Promise<Session> {
     return await this._request("/sessions", { method: "POST", data });

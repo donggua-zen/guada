@@ -77,6 +77,17 @@ export interface MemoryConfig {
 }
 
 /**
+ * 会话运行模式
+ *
+ * - normal: 默认模式，所有插件、技能完整可用
+ * - memory: 记忆模式，仅暴露 file 插件工具，技能为空
+ *           用于影子轮次等需要限制工具范围的场景
+ *
+ * 后续可扩展 readonly(只读)、minimal(最小) 等模式
+ */
+export type SessionRunMode = "normal" | "memory";
+
+/**
  * 获取消息选项
  */
 export interface GetMessagesOptions {
@@ -108,6 +119,12 @@ export interface ISessionContext {
   readonly userId: string;
   readonly sessionType: "web" | "bot" | "sub_agent" | "team";
 
+  // === 运行模式 ===
+  /** 获取当前会话运行模式 */
+  getRunMode(): SessionRunMode;
+  /** 设置会话运行模式（运行时切换，如影子轮次临时切换为 memory） */
+  setRunMode(mode: SessionRunMode): Promise<void>;
+
   // === 模型配置 ===
   /** 获取完整模型配置（含运行时调用参数） */
   getModelConfig(): ModelConfig;
@@ -121,8 +138,8 @@ export interface ISessionContext {
   // === 工具相关 ===
   /** 获取已决议的插件列表（resolvePlugins 的结果快照） */
   getResolvedPlugins(): import("../plugins/types/plugin.types").ResolvedPluginInfo[];
-  /** 获取角色级技能偏好配置 */
-  getSkillsConfig(): any;
+  /** 获取合并后的会话设置（指定字段或全部） */
+  getSettings(field?: string): any;
   /** 获取工具审批配置 */
   getToolApprovalConfig(): ToolApprovalConfig;
 

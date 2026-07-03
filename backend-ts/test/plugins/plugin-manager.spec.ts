@@ -1,277 +1,266 @@
-import { PluginManager, PluginInstance } from "../../src/modules/plugins/plugin.manager";
+import { PluginManager } from "../../src/modules/plugins/plugin.manager";
 import { PluginBase } from "../../src/modules/plugins/base-plugin";
 import { PluginRegistry } from "../../src/modules/plugins/registry/plugin-registry";
-import {
-  PluginManifest,
-  ToolHandlerDef,
-  PluginContext,
-  PROMPTS_META_KEY,
-} from "../../src/modules/plugins/types/plugin.types";
 
-// ── 辅助函数：创建 mock 插件 ──
+// ==================== Mock Helpers ====================
 
-function createMockPlugin(
-  id: string,
-  name: string,
-  tools: ToolHandlerDef[] = [],
-  extra?: Partial<PluginBase>,
-): PluginBase {
-  const manifest: PluginManifest = {
-    id, name, description: `${name} description`,
-    version: "1.0.0", category: "core",
-  };
-  if (!PluginRegistry.has(id)) {
-    PluginRegistry.registerManifest(manifest);
-  }
-  for (const t of tools) {
-    const reg = (PluginRegistry as any).registrations.get(id);
-    if (reg && !reg.tools.find((x: any) => x.name === t.name)) {
-      reg.tools.push(t);
-    }
-  }
-  const plugin: PluginBase = {
-    manifest,
+function createMockPlugin(id: string, category: "system" | "core" | "extended" | "user" = "extended"): PluginBase {
+  return {
+    manifest: { id, name: id, version: "1.0", description: "", category },
     _enabled: true,
-    ...extra,
-  };
-  return plugin;
+  } as PluginBase;
+}
+
+function createEssentialPlugin(id: string): PluginBase {
+  return {
+    manifest: { id, name: id, version: "1.0", description: "", category: "extended", essential: true },
+    _enabled: true,
+  } as PluginBase;
+}
+
+function createMockToolKit(id: string) {
+  return { def: { id, name: id, loadMode: "eager" as const }, tools: [], prompts: [] };
 }
 
 describe("PluginManager", () => {
   let manager: PluginManager;
+  let mockSettingsStorage: any;
+  let mockLogger: any;
 
   beforeEach(() => {
-    manager = new PluginManager();
+    (PluginRegistry as any).registrations?.clear?.();
+    mockSettingsStorage = { getSettings: jest.fn().mockResolvedValue({}), updateSettings: jest.fn() };
+    mockLogger = { log: jest.fn(), warn: jest.fn(), error: jest.fn(), debug: jest.fn() };
+    manager = new (PluginManager as any)(mockSettingsStorage, null, null, null, null, null);
+    (manager as any).logger = mockLogger;
+    (manager as any).instances = new Map();
   });
 
-  afterEach(async () => {
-    for (const id of PluginRegistry.getAllIds()) {
-      await manager.unregisterPlugin(id);
-    }
+  /** 快捷注册插件到 instances */
+  function addPlugin(id: string, category: "system" | "core" | "extended" | "user") {
+    (manager as any).instances.set(id, {
+      manifest: { id, category },
+      plugin: createMockPlugin(id, category),
+    });
+  }
+
+  function addEssentialPlugin(id: string) {
+    (manager as any).instances.set(id, {
+      manifest: { id: id, category: "extended", essential: true },
+      plugin: createEssentialPlugin(id),
+    });
+  }
+
+  // ==================== 基础流程 ====================
+
+  describe("基础流程", () => {
+    it("system/core 插件默认启用，extended/user 默认禁用", async () => {
+      addPlugin("p_sys", "system");
+      addPlugin("p_core", "core");
+      addPlugin("p_ext", "extended");
+      addPlugin("p_user", "user");
+      const r = await manager.resolvePlugins();
+      expect(r.find((x) => x.plugin.id === "p_sys")?.enabled).toBe(true);
+      expect(r.find((x) => x.plugin.id === "p_core")?.enabled).toBe(true);
+      expect(r.find((x) => x.plugin.id === "p_ext")?.enabled).toBe(false);
+      expect(r.find((x) => x.plugin.id === "p_user")?.enabled).toBe(false);
+    });
   });
 
-  // ── 基础注册 ──
+  // ==================== 全局层：禁用已启用的插件 ====================
 
-  describe("registerPlugin", () => {
-    it("should register a plugin", async () => {
-      const plugin = createMockPlugin("test_plugin", "测试插件");
-      await manager.registerPlugin(plugin);
-      expect(manager.isPluginEnabled("test_plugin")).toBe(true);
+  describe("全局层", () => {
+    beforeEach(() => {
+      addPlugin("p_core", "core"); // 初始启用
     });
 
-    it("should not register duplicate plugins", async () => {
-      const plugin = createMockPlugin("dup", "重复插件");
-      await manager.registerPlugin(plugin);
-      await manager.registerPlugin(plugin);
-      const plugins = manager.getAllPlugins();
-      expect(plugins.length).toBe(1);
+    it("全局配置 { enabled: false } 可禁用 core 插件", async () => {
+      mockSettingsStorage.getSettings.mockResolvedValue({ p_core: { enabled: false } });
+      const r = await manager.resolvePlugins();
+      expect(r.find((x) => x.plugin.id === "p_core")?.enabled).toBe(false);
+      expect(r.find((x) => x.plugin.id === "p_core")?.effective).toBe("global");
     });
   });
 
-  // ── 工具加载模式 ──
+  // ==================== 层级收窄：全局禁用 → 角色无法复活 ====================
 
-  describe("getTools (loadMode resolution)", () => {
-    it("should return empty for disabled plugins", async () => {
-      const plugin = createMockPlugin("disabled_p", "禁用插件");
-      await manager.registerPlugin(plugin, false);
-      const result = await manager.getTools();
-      expect(result).toHaveLength(0);
+  describe("层级收窄", () => {
+    beforeEach(() => {
+      addPlugin("p_core", "core"); // 初始启用
+      mockSettingsStorage.getSettings.mockResolvedValue({ p_core: { enabled: false } }); // 全局禁用
     });
 
-    it("should return tools for enabled plugins without condition", async () => {
-      const tools: ToolHandlerDef[] = [
-        { name: "tool_a", description: "Tool A", parameters: { type: "object", properties: {} }, handler: async () => "ok" },
-      ];
-      const plugin = createMockPlugin("simple", "简单插件", tools);
-      await manager.registerPlugin(plugin);
-      const result = await manager.getTools();
-      expect(result).toHaveLength(1);
-      expect(result[0].tools).toHaveLength(1);
-      expect(result[0].tools[0].name).toBe("tool_a");
+    it("全局禁用后角色层无法通过 { enabled: true } 复活", async () => {
+      const r = await manager.resolvePlugins(undefined, { p_core: { enabled: true } });
+      expect(r.find((x) => x.plugin.id === "p_core")?.enabled).toBe(false);
     });
 
-    it("should skip plugin when condition guard returns false", async () => {
-      const plugin = createMockPlugin("guarded", "守卫插件");
-      PluginRegistry.extractCondition("guarded", {
-        __plugin_condition__: async () => false, // 注册时评估，false = 不入注册
+    it("全局禁用后角色层无法通过白名单复活", async () => {
+      const r = await manager.resolvePlugins(undefined, { __default: false, p_core: { enabled: true } });
+      expect(r.find((x) => x.plugin.id === "p_core")?.enabled).toBe(false);
+    });
+  });
+
+  // ==================== 角色层：黑名单 ====================
+
+  describe("角色层黑名单", () => {
+    beforeEach(() => {
+      addPlugin("p_a", "core");
+      addPlugin("p_b", "core");
+      mockSettingsStorage.getSettings.mockResolvedValue({ p_a: { enabled: true }, p_b: { enabled: true } });
+    });
+
+    it("角色层 { enabled: false } 可禁用单个插件", async () => {
+      const r = await manager.resolvePlugins(undefined, { p_a: { enabled: false } });
+      expect(r.find((x) => x.plugin.id === "p_a")?.enabled).toBe(false);
+      expect(r.find((x) => x.plugin.id === "p_a")?.effective).toBe("role");
+      expect(r.find((x) => x.plugin.id === "p_b")?.enabled).toBe(true);
+    });
+  });
+
+  // ==================== 角色层：白名单 ====================
+
+  describe("角色层白名单 (__default: false)", () => {
+    beforeEach(() => {
+      addPlugin("p_a", "core");
+      addPlugin("p_b", "core");
+      mockSettingsStorage.getSettings.mockResolvedValue({ p_a: { enabled: true }, p_b: { enabled: true } });
+    });
+
+    it("__default: false 时仅显式 { enabled: true } 的插件启用", async () => {
+      const r = await manager.resolvePlugins(undefined, { __default: false, p_a: { enabled: true } });
+      expect(r.find((x) => x.plugin.id === "p_a")?.enabled).toBe(true);
+      expect(r.find((x) => x.plugin.id === "p_b")?.enabled).toBe(false);
+      expect(r.find((x) => x.plugin.id === "p_b")?.effective).toBe("role");
+    });
+
+    it("__default: false 影响所有非显式配置的插件（system 也不例外）", async () => {
+      addPlugin("p_sys", "system");
+      const r = await manager.resolvePlugins(undefined, { __default: false });
+      // system 插件没有在配置条目中 → 也被禁用
+      expect(r.find((x) => x.plugin.id === "p_sys")?.enabled).toBe(false);
+    });
+  });
+
+  // ==================== deny_nonsystem 策略 ====================
+
+  describe("deny_nonsystem 策略", () => {
+    beforeEach(() => {
+      addPlugin("p_sys", "system");
+      addPlugin("p_core", "core");
+    });
+
+    it("deny_nonsystem 禁用所有非 system 插件", async () => {
+      mockSettingsStorage.getSettings.mockResolvedValue({ __strategy: "deny_nonsystem" });
+      const r = await manager.resolvePlugins();
+      expect(r.find((x) => x.plugin.id === "p_sys")?.enabled).toBe(true);
+      expect(r.find((x) => x.plugin.id === "p_core")?.enabled).toBe(false);
+    });
+
+    it("角色层 deny_nonsystem 覆盖全局", async () => {
+      mockSettingsStorage.getSettings.mockResolvedValue({ p_core: { enabled: true } });
+      const r = await manager.resolvePlugins(undefined, { __strategy: "deny_nonsystem" });
+      expect(r.find((x) => x.plugin.id === "p_core")?.enabled).toBe(false);
+    });
+  });
+
+  // ==================== MCP Toolkit 过滤 ====================
+
+  describe("MCP Toolkit 过滤", () => {
+    beforeEach(() => {
+      addPlugin("mcp", "system");
+      jest.spyOn(PluginRegistry, "getToolKits").mockImplementation((pluginId: string) => {
+        if (pluginId === "mcp") return [createMockToolKit("mcp_srv1"), createMockToolKit("mcp_srv2")];
+        return [];
       });
-      await manager.registerPlugin(plugin);
-      expect(manager.isPluginEnabled("guarded")).toBe(false);
-      const result = await manager.getTools();
-      expect(result).toHaveLength(0);
+    });
+    afterEach(() => jest.restoreAllMocks());
+
+    it("默认黑名单：toolkits_deny 中的工具包被拒绝", async () => {
+      const r = await manager.resolvePlugins(undefined, {
+        mcp: { enabled: true, toolkits_filter: "deny", toolkits_deny: ["mcp_srv1"] },
+      });
+      const mcp = r.find((x) => x.plugin.id === "mcp")!;
+      expect(mcp.enabledToolKits.map((k) => k.id)).not.toContain("mcp_srv1");
+      expect(mcp.enabledToolKits.map((k) => k.id)).toContain("mcp_srv2");
     });
 
-    it("should include plugin when condition guard returns true", async () => {
-      const tools: ToolHandlerDef[] = [
-        { name: "bot_only", description: "Bot Tool", parameters: { type: "object", properties: {} }, handler: async () => "ok" },
-      ];
-      const plugin = createMockPlugin("bot_tool", "Bot工具", tools);
-      PluginRegistry.extractCondition("bot_tool", {
-        __plugin_condition__: async () => true, // 注册时评估
+    it("白名单：toolkits_allow 中的工具包被保留", async () => {
+      const r = await manager.resolvePlugins(undefined, {
+        mcp: { enabled: true, toolkits_filter: "allow", toolkits_allow: ["mcp_srv2"] },
       });
-      await manager.registerPlugin(plugin);
-      expect(manager.isPluginEnabled("bot_tool")).toBe(true);
-      const result = await manager.getTools();
-      expect(result).toHaveLength(1);
-      expect(result[0].tools[0].name).toBe("bot_only");
+      const mcp = r.find((x) => x.plugin.id === "mcp")!;
+      expect(mcp.enabledToolKits.map((k) => k.id)).toContain("mcp_srv2");
+      expect(mcp.enabledToolKits.map((k) => k.id)).not.toContain("mcp_srv1");
+    });
+
+    it("空 tk_allow 拒绝所有工具包", async () => {
+      const r = await manager.resolvePlugins(undefined, {
+        mcp: { enabled: true, toolkits_filter: "allow", toolkits_allow: [] },
+      });
+      expect(r.find((x) => x.plugin.id === "mcp")?.enabledToolKits).toHaveLength(0);
+    });
+
+    it("白名单 + 全局禁用插件：层级收窄", async () => {
+      addPlugin("p_ext", "extended");
+      mockSettingsStorage.getSettings.mockResolvedValue({ p_ext: { enabled: false } });
+      const r = await manager.resolvePlugins(undefined, {
+        __default: false,
+        p_ext: { enabled: true },
+        mcp: { enabled: true, toolkits_filter: "deny", toolkits_deny: ["mcp_srv1"] },
+      });
+      // extended 插件初始禁用，全局也禁用 → 无法复活
+      expect(r.find((x) => x.plugin.id === "p_ext")?.enabled).toBe(false);
+      // MCP 黑名单拒绝
+      const mcp = r.find((x) => x.plugin.id === "mcp")!;
+      expect(mcp.enabledToolKits.map((k) => k.id)).not.toContain("mcp_srv1");
+      expect(mcp.enabledToolKits.map((k) => k.id)).toContain("mcp_srv2");
     });
   });
 
-  // ── ToolSet 解析 ──
+  // ==================== essential 插件：不可被任何方式禁用 ====================
 
-  describe("ToolSet resolution", () => {
-    it("should handle ToolSet handler that throws", async () => {
-      const plugin = createMockPlugin("ts_error", "ToolSet错误");
-      PluginRegistry.registerToolSet("ts_error", {
-        id: "broken",
-        name: "broken",
-        tools: [],
-        loadMode: "lazy",
-        handler: async () => { throw new Error("handler error"); },
+  describe("essential 插件保护", () => {
+    beforeEach(() => {
+      addEssentialPlugin("p_ess");
+      addPlugin("p_ext", "extended"); // 对照组
+      mockSettingsStorage.getSettings.mockResolvedValue({});
+    });
+
+    it("essential 插件默认启用", async () => {
+      const r = await manager.resolvePlugins();
+      expect(r.find((x) => x.plugin.id === "p_ess")?.enabled).toBe(true);
+    });
+
+    it("全局 { enabled: false } 不能禁用 essential", async () => {
+      mockSettingsStorage.getSettings.mockResolvedValue({ p_ess: { enabled: false } });
+      const r = await manager.resolvePlugins();
+      expect(r.find((x) => x.plugin.id === "p_ess")?.enabled).toBe(true);
+    });
+
+    it("角色层 { enabled: false } 不能禁用 essential", async () => {
+      const r = await manager.resolvePlugins(undefined, { p_ess: { enabled: false } });
+      expect(r.find((x) => x.plugin.id === "p_ess")?.enabled).toBe(true);
+    });
+
+    it("白名单模式 (__default: false) 不能禁用 essential", async () => {
+      const r = await manager.resolvePlugins(undefined, { __default: false });
+      expect(r.find((x) => x.plugin.id === "p_ess")?.enabled).toBe(true);
+    });
+
+    it("deny_nonsystem 不能禁用 essential", async () => {
+      mockSettingsStorage.getSettings.mockResolvedValue({ __strategy: "deny_nonsystem" });
+      const r = await manager.resolvePlugins();
+      expect(r.find((x) => x.plugin.id === "p_ess")?.enabled).toBe(true);
+    });
+
+    it("非 essential 插件不受影响（对照组可被禁用）", async () => {
+      const r = await manager.resolvePlugins(undefined, {
+        __default: false,
+        p_ext: { enabled: false },
       });
-      await manager.registerPlugin(plugin);
-      const result = await manager.getTools({ sessionId: "s1", sessionType: "web", workspacePath: "/tmp" });
-      expect(result).toHaveLength(0);
-    });
-  });
-
-  // ── 提示词收集 ──
-
-  describe("collectPrompts", () => {
-    it("should collect eager prompts and skip lazy", async () => {
-      const plugin = createMockPlugin("prompt_test", "提示词测试");
-      const proto: any = { __plugin_manifest__: plugin.manifest };
-      proto[PROMPTS_META_KEY] = [
-        { methodName: "eagerPrompt", frequency: "STATIC", loadMode: "eager", description: "Eager", handler: async () => "eager content" },
-        { methodName: "lazyPrompt", frequency: "REGULAR", loadMode: "lazy", description: "Lazy", handler: async () => "lazy content" },
-      ];
-      PluginRegistry.extractFromPrototype("prompt_test", proto);
-      await manager.registerPlugin(plugin);
-      const ctx: PluginContext = { sessionId: "s1", sessionType: "web", workspacePath: "/tmp" };
-
-      const eager = await manager.collectPrompts(ctx);
-      expect(eager).toHaveLength(1);
-      expect(eager[0].content).toBe("eager content");
-
-      const lazy = await manager.collectLazyPrompts(ctx);
-      expect(lazy).toHaveLength(1);
-      expect(lazy[0].content).toBe("lazy content");
-    });
-
-    it("should sort by frequency: STATIC < REGULAR < VOLATILE, then by pluginId", async () => {
-      // 两个插件，各注册 STATIC / REGULAR / VOLATILE 三种 prompt
-      const pluginA = createMockPlugin("plugin_a", "A插件");
-      const protoA: any = { __plugin_manifest__: pluginA.manifest };
-      protoA[PROMPTS_META_KEY] = [
-        { methodName: "a_volatile", frequency: "VOLATILE", loadMode: "eager", description: "A-VOL", handler: async () => "A-VOLATILE" },
-        { methodName: "a_static",   frequency: "STATIC",   loadMode: "eager", description: "A-STA", handler: async () => "A-STATIC" },
-        { methodName: "a_regular",  frequency: "REGULAR",  loadMode: "eager", description: "A-REG", handler: async () => "A-REGULAR" },
-      ];
-      PluginRegistry.extractFromPrototype("plugin_a", protoA);
-
-      const pluginB = createMockPlugin("plugin_b", "B插件");
-      const protoB: any = { __plugin_manifest__: pluginB.manifest };
-      protoB[PROMPTS_META_KEY] = [
-        { methodName: "b_regular",  frequency: "REGULAR",  loadMode: "eager", description: "B-REG", handler: async () => "B-REGULAR" },
-        { methodName: "b_static",   frequency: "STATIC",   loadMode: "eager", description: "B-STA", handler: async () => "B-STATIC" },
-        { methodName: "b_volatile", frequency: "VOLATILE", loadMode: "eager", description: "B-VOL", handler: async () => "B-VOLATILE" },
-      ];
-      PluginRegistry.extractFromPrototype("plugin_b", protoB);
-
-      await manager.registerPlugin(pluginA);
-      await manager.registerPlugin(pluginB);
-      const ctx: PluginContext = { sessionId: "s1", sessionType: "web", workspacePath: "/tmp" };
-
-      const all = await manager.collectPrompts(ctx);
-      expect(all).toHaveLength(6);
-
-      // 排序：STATIC(0) < REGULAR(1) < VOLATILE(2)
-      // 同频率按 pluginId 字典序
-      expect(all.map(p => p.content)).toEqual([
-        "A-STATIC",   // STATIC, plugin_a
-        "B-STATIC",   // STATIC, plugin_b
-        "A-REGULAR",  // REGULAR, plugin_a
-        "B-REGULAR",  // REGULAR, plugin_b
-        "A-VOLATILE", // VOLATILE, plugin_a
-        "B-VOLATILE", // VOLATILE, plugin_b
-      ]);
-    });
-
-    it("should place prompts without frequency at REGULAR position", async () => {
-      const plugin = createMockPlugin("freq_test", "频率测试");
-      const proto: any = { __plugin_manifest__: plugin.manifest };
-      proto[PROMPTS_META_KEY] = [
-        { methodName: "noFreq",  frequency: undefined, loadMode: "eager", description: "NoFreq", handler: async () => "NO-FREQ" },
-        { methodName: "withReg", frequency: "REGULAR", loadMode: "eager", description: "Reg",    handler: async () => "WITH-REG" },
-      ];
-      PluginRegistry.extractFromPrototype("freq_test", proto);
-      await manager.registerPlugin(plugin);
-      const ctx: PluginContext = { sessionId: "s1", sessionType: "web", workspacePath: "/tmp" };
-
-      const all = await manager.collectPrompts(ctx);
-      expect(all).toHaveLength(2);
-      // 两者都在 REGULAR 位置，按 pluginId 排序（相同插件，注册顺序）
-      expect(all[0].content).toBe("NO-FREQ");
-      expect(all[1].content).toBe("WITH-REG");
-    });
-
-    it("should maintain stable order within the same pluginId", async () => {
-      // 同插件同频率，应保持注册顺序
-      const plugin = createMockPlugin("stable", "稳定测试");
-      const proto: any = { __plugin_manifest__: plugin.manifest };
-      proto[PROMPTS_META_KEY] = [
-        { methodName: "first",  frequency: "REGULAR", loadMode: "eager", description: "First",  handler: async () => "FIRST" },
-        { methodName: "second", frequency: "REGULAR", loadMode: "eager", description: "Second", handler: async () => "SECOND" },
-        { methodName: "third",  frequency: "REGULAR", loadMode: "eager", description: "Third",  handler: async () => "THIRD" },
-      ];
-      PluginRegistry.extractFromPrototype("stable", proto);
-      await manager.registerPlugin(plugin);
-      const ctx: PluginContext = { sessionId: "s1", sessionType: "web", workspacePath: "/tmp" };
-
-      const all = await manager.collectPrompts(ctx);
-      expect(all).toHaveLength(3);
-      expect(all.map(p => p.content)).toEqual(["FIRST", "SECOND", "THIRD"]);
-    });
-  });
-
-  // ── 激活词 ──
-
-  describe("getToolActivators", () => {
-    it("should return activator for lazy ToolSets", async () => {
-      const tools: ToolHandlerDef[] = [
-        { name: "lazy_tool", description: "Lazy", parameters: { type: "object", properties: {} }, handler: async () => "ok", toolSet: "lazy_set" },
-      ];
-      const plugin = createMockPlugin("act_test", "激活测试", tools);
-
-      PluginRegistry.registerToolSet("act_test", {
-        id: "lazy_set",
-        name: "lazy_set",
-        tools: ["lazy_tool"],
-        loadMode: "lazy",
-        activator: "当需要懒加载时使用",
-      });
-
-      await manager.registerPlugin(plugin);
-      const ctx: PluginContext = { sessionId: "s1", sessionType: "web", workspacePath: "/tmp" };
-      const activators = await manager.getToolActivators(ctx);
-      expect(activators).toHaveLength(1);
-      expect(activators[0]).toContain("lazy_set");
-      expect(activators[0]).toContain("当需要懒加载时使用");
-    });
-
-    it("should skip eager ToolSets in activators", async () => {
-      const plugin = createMockPlugin("eager_act", "Eager激活");
-      PluginRegistry.registerToolSet("eager_act", {
-        id: "eager_set",
-        name: "eager_set",
-        tools: [],
-        loadMode: "eager",
-        handler: async () => ({ loadMode: "eager" as const }),
-      });
-      await manager.registerPlugin(plugin);
-      const ctx: PluginContext = { sessionId: "s1", sessionType: "web", workspacePath: "/tmp" };
-      const activators = await manager.getToolActivators(ctx);
-      expect(activators).toHaveLength(0);
+      expect(r.find((x) => x.plugin.id === "p_ess")?.enabled).toBe(true);
+      expect(r.find((x) => x.plugin.id === "p_ext")?.enabled).toBe(false);
     });
   });
 });

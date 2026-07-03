@@ -420,9 +420,9 @@ async function startBackend(): Promise<void> {
           WORKSPACE_BASE_DIR: workspaceDir, // 传递会话工作目录基础路径
           ELECTRON_APP: "true", // 标识这是 Electron 环境
           BROWSER_BRIDGE_MODE: "tcp", // 开发模式使用 TCP
-          BROWSER_BRIDGE_PORT: process.env.BROWSER_BRIDGE_PORT || "3001", // 传递端口号
+          BROWSER_BRIDGE_PORT: process.env.BROWSER_BRIDGE_PORT || "4111", // 传递端口号
         },
-        stdio: ["pipe", "pipe", "pipe"], // 开发模式不需�?IPC
+        stdio: ["pipe", "pipe", "pipe"], // 开发模式不需 IPC
         shell: true,
       };
 
@@ -1449,7 +1449,7 @@ app.whenReady().then(async () => {
 
     if (bridgeMode === "tcp") {
       // TCP 模式（开发环境）
-      const port = parseInt(process.env.BROWSER_BRIDGE_PORT || "3001");
+      const port = parseInt(process.env.BROWSER_BRIDGE_PORT || "4111");
       log.info(`Starting Browser Bridge in TCP mode on port ${port}...`);
       await startBrowserBridgeTCP(port, windowManager!);
       process.env.BROWSER_BRIDGE_PORT = String(port);

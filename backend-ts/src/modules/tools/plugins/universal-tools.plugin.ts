@@ -4,7 +4,10 @@ import { PluginBase } from "../../plugins/base-plugin";
 import { PluginApi, ToolExecCtx } from "../../plugins/api/plugin-api";
 import { PluginManager } from "../../plugins/plugin.manager";
 import { PromptCollector } from "../../plugins/prompt-collector.service";
-import { PluginContext, ToolHandlerDef } from "../../plugins/types/plugin.types";
+import {
+  PluginContext,
+  ToolHandlerDef,
+} from "../../plugins/types/plugin.types";
 import { ToolOrchestrator } from "../tool-orchestrator.service";
 
 @Injectable()
@@ -17,6 +20,7 @@ export class UniversalToolsPlugin extends PluginBase {
     description: "tool_learn / tool_use 系统级通用工具",
     version: "1.0.0",
     category: "system" as const,
+    essential: true,
   };
 
   constructor(
@@ -51,9 +55,7 @@ export class UniversalToolsPlugin extends PluginBase {
       description:
         "学习指定工具包的详细用法，获取该工具包下所有工具的参数定义和使用示例。在首次使用某类工具前，建议先调用此工具了解使用方法。",
       inputSchema: z.object({
-        name: z
-          .string()
-          .describe("工具包名称"),
+        name: z.string().describe("工具包名称"),
       }),
       execute: async (args: { name: string }, ctx?: ToolExecCtx) => {
         return this.handleToolLearn(args.name, ctx!);
@@ -109,7 +111,7 @@ export class UniversalToolsPlugin extends PluginBase {
       | undefined;
     for (const rp of resolved) {
       if (!rp.enabled) continue;
-      const kitInfo = rp.toolKits.find(
+      const kitInfo = rp.enabledToolKits.find(
         (k) => k.id === name || k.name === name,
       );
       if (!kitInfo) continue;
@@ -136,7 +138,10 @@ export class UniversalToolsPlugin extends PluginBase {
       let toolUsagePrompt = "";
       try {
         const resolved = ctx!.session.getResolvedPlugins();
-        const prompts = await this.promptCollector.collectLazyPrompts(resolved, ctx!);
+        const prompts = await this.promptCollector.collectLazyPrompts(
+          resolved,
+          ctx!,
+        );
         const tsPrompts = prompts.filter(
           (p: any) => p.pluginId === targetKit.pluginId,
         );
@@ -196,14 +201,7 @@ export class UniversalToolsPlugin extends PluginBase {
       }
 
       if (responseParts.length > 0) {
-        responseParts.push(
-          "---",
-          "",
-          "**使用方式**:",
-          "直接调用工具，或使用`tool_use`间接调用",
-          "",
-          "现在你可以根据上述说明调用相应的工具了。",
-        );
+        responseParts.push("---", "", "## 使用方式:", "使用`tool_use`调用");
       }
 
       return responseParts.join("\n");

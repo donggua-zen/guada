@@ -94,6 +94,13 @@ export class MemoryPlugin extends PluginBase {
       name: "记忆管理",
       loadMode: "lazy",
       activator: "当需要了解如何管理记忆或读写记忆文件时，使用此工具包获取使用指南",
+      handler: async (ctx) => {
+        // 记忆模式：直接注入记忆管理指南（影子轮次需要此说明）
+        if (ctx.session.getRunMode?.() === "memory") {
+          return { loadMode: "eager" as const };
+        }
+        return { loadMode: "lazy" as const };
+      },
     });
 
     memoryKit.registerPrompt({

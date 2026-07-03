@@ -1,6 +1,7 @@
 import { Logger, Injectable } from "@nestjs/common";
 import * as fs from "fs/promises";
 import * as path from "path";
+import fg from "fast-glob";
 import { PluginBase } from "../base-plugin";
 import { PluginContext } from "../types/plugin.types";
 import { WorkspaceService } from "../../../common/services/workspace.service";
@@ -161,61 +162,60 @@ export class FilePlugin extends PluginBase {
     });
 
     api.registerTool({
-      name: "list",
-      description: "列出指定目录下的文件和子目录，支持递归深度控制。",
+      name: "glob",
+      description:
+        "使用 glob 模式搜索文件（如 **/*.ts、*.json、src/**/*.css）。返回扁平文件列表，支持深度控制和结果数限制。",
       inputSchema: z.object({
-        path: z
+        pattern: z.string().describe("glob 模式，如 **/*.ts、*.json、src/**/*"),
+        directory: z
           .string()
-          .describe("要列出的目录路径，可以是绝对路径或相对工作目录的相对路径"),
+          .optional()
+          .describe("基准目录，默认当前工作目录"),
+        limit: z
+          .number()
+          .int()
+          .positive()
+          .optional()
+          .describe("最多返回的文件数，默认 100"),
         depth: z
           .number()
           .int()
-          .min(0)
-          .max(3)
+          .nonnegative()
           .optional()
-          .describe("递归深度，0=仅当前目录，默认 1，最大 3"),
+          .describe("递归深度，0=当前目录，不传=不限"),
       }),
       execute: async (args, ctx) => {
-        const { path: dirPath, depth = 1 } = args;
-        if (!dirPath) throw new Error("目录路径不能为空");
-        const resolvedPath = this.resolvePath(dirPath, ctx);
-        const stats = await fs.stat(resolvedPath);
-        if (!stats.isDirectory())
-          throw new Error(`${resolvedPath} 不是一个目录`);
+        const { pattern, directory, limit = 100, depth } = args;
+        if (!pattern) throw new Error("pattern 不能为空");
 
-        const readDir = async (p: string, d: number): Promise<any[]> => {
-          const items: any[] = [];
-          const entries = await fs.readdir(p, { withFileTypes: true });
-          for (const entry of entries) {
-            const fullPath = path.join(p, entry.name);
-            const relativePath = path
-              .relative(ctx?.session.workspacePath || "", fullPath)
-              .replace(/\\/g, "/");
-            if (entry.isDirectory()) {
-              const children = d > 1 ? await readDir(fullPath, d - 1) : [];
-              items.push({
-                type: "directory",
-                path: relativePath,
-                children,
-              });
-            } else {
-              items.push({
-                type: "file",
-                path: relativePath,
-              });
-            }
-          }
-          return items;
-        };
+        const basePath = directory
+          ? this.resolvePath(directory, ctx)
+          : ctx?.session.workspacePath || process.cwd();
 
-        const items = await readDir(resolvedPath, Math.min(depth, 3));
+        // fast-glob deep 语义：1=当前目录, 2=一级, ... N=N-1级
+        const deep = depth !== undefined ? depth + 1 : undefined;
+
+        const files = await fg(pattern, {
+          cwd: basePath,
+          deep,
+          onlyFiles: true,
+          dot: false,
+          absolute: false,
+        });
+
+        const result = limit ? files.slice(0, limit) : files;
+        const total = files.length;
+        const truncated = total > result.length;
+
         return {
-          path: resolvedPath,
-          items,
-          total: items.length,
+          pattern,
+          directory: basePath,
+          total,
+          truncated,
+          files: result,
         };
       },
-      display: { action: "列出目录", argsKey: "path", icon: "search" },
+      display: { action: "搜索文件", argsKey: "pattern", icon: "search" },
     });
 
     api.registerTool({
@@ -393,7 +393,12 @@ export class FilePlugin extends PluginBase {
         if (stat.isFile()) {
           files.push(basePath);
         } else if (stat.isDirectory()) {
-          await this.collectFiles(basePath, files);
+          const entries = await fg("**/*", {
+            cwd: basePath,
+            onlyFiles: true,
+            dot: false,
+          });
+          files.push(...entries.map((e) => path.join(basePath, e)));
         }
 
         // smart-case：全小写自动不区分，含大写区分
@@ -491,7 +496,7 @@ export class FilePlugin extends PluginBase {
     this.workspaceService.validateWritePath(resolved, extra);
 
     // memory_only 作用域：只允许操作 memory/ 和 memos/ 目录
-    if ((context as any)?.scope === "memory_only") {
+    if (context?.session?.getRunMode?.() === "memory") {
       const allowedPrefixes =
         context.session.sessionType === "sub_agent"
           ? [
@@ -508,25 +513,6 @@ export class FilePlugin extends PluginBase {
         throw new Error(
           `memory_only 模式下只允许操作 memory/ 和 memos/ 目录`,
         );
-      }
-    }
-  }
-
-  /**
-   * 递归收集目录下所有文件的路径（跳过 node_modules、.git）
-   */
-  private async collectFiles(
-    dirPath: string,
-    results: string[],
-  ): Promise<void> {
-    const entries = await fs.readdir(dirPath, { withFileTypes: true });
-    for (const entry of entries) {
-      if (entry.name === "node_modules" || entry.name === ".git") continue;
-      const fullPath = path.join(dirPath, entry.name);
-      if (entry.isFile()) {
-        results.push(fullPath);
-      } else if (entry.isDirectory()) {
-        await this.collectFiles(fullPath, results);
       }
     }
   }

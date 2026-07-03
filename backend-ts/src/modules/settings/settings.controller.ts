@@ -78,42 +78,6 @@ export class SettingsController {
     return this.settingsService.getSettings();
   }
 
-  /**
-   * 获取全局工具列表
-   */
-  @Public()
-  @Get("settings/plugins/global")
-  async getGlobalTools() {
-    const plugins = await this.pluginManager.getAllPlugins(true);
-
-    return {
-      plugins: plugins
-        .filter((p) => p.manifest.category !== "system")
-        .map((p) => ({
-          pluginId: p.manifest.id,
-          effective: "global" as const,
-          name: p.manifest.id,
-          displayName: p.manifest.name,
-          description: p.manifest.description,
-          category: p.manifest.category,
-          enabled: p.enabled,
-          isMcp: p.manifest.id === "mcp",
-          isSkill: p.manifest.id === "skill",
-          tools: this.pluginManager.getPluginTools(p.manifest.id).map((t) => ({
-            enabled: p.enabled,
-            name: t.name,
-            description: t.description,
-            parameters: t.parameters as any,
-          })),
-          toolkits: this.pluginManager.getPluginToolKits(p.manifest.id).map((k) => ({
-            id: k.id,
-            name: k.name,
-            loadMode: k.loadMode,
-            enabled: p.enabled,
-          })),
-        })),
-    };
-  }
 
   /**
    * 获取全局工作目录基路径

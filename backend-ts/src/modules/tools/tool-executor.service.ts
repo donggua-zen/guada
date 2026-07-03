@@ -43,22 +43,20 @@ export class ToolExecutor {
     resolved: ResolvedPluginInfo[],
     toolName: string,
   ): ToolHandlerDef | undefined {
-    // 第 1 遍：enabledTools（plugin 级 + eager 工具包工具，已通过权限过滤）
     for (const rp of resolved) {
       if (!rp.enabled) continue;
+      // 第 1 遍：enabledTools（plugin 级 + eager 工具包工具，已通过权限过滤）
       const found = rp.enabledTools.find((t) => t.name === toolName);
       if (found) return found;
-    }
-    // 第 2 遍：已启用(lazy)工具包的工具，通过 PluginRegistry 查找并验证包状态
-    for (const rp of resolved) {
-      if (!rp.enabled) continue;
-      for (const tk of rp.toolKits) {
-        if (!tk.enabled) continue;
-        const kitRegs = PluginRegistry.getToolKits(rp.plugin.id);
-        const kitReg = kitRegs.find((k) => k.def.id === tk.id);
-        if (!kitReg) continue;
-        const found = kitReg.tools.find((t) => t.name === toolName);
-        if (found) return found;
+      // 第 2 遍：已启用(lazy)工具包的工具
+      const lazyTool = rp.allTools.find((t) => t.toolSet === toolName);
+      if (lazyTool) {
+        const inLazyKit = rp.enabledToolKits.some(
+          (tk) => tk.id === lazyTool.toolSet,
+        );
+        if (inLazyKit) {
+          return lazyTool;
+        }
       }
     }
     return undefined;
@@ -81,28 +79,15 @@ export class ToolExecutor {
     });
 
     const result: ToolDefinition[] = [];
-    let hasLazyKit = false;
-    for (const rp of resolved) {
-      if (!rp.enabled) continue;
-      for (const tk of rp.toolKits) {
-        if (tk.loadMode === "lazy" && tk.enabled) {
-          hasLazyKit = true;
-          break;
-        }
-      }
-      if (hasLazyKit) break;
-    }
+    const hasLazyKit = resolved.some((rp) =>
+      rp.enabledToolKits.some((tk) => tk.loadMode === "lazy" && tk.enabled),
+    );
 
     for (const rp of resolved) {
-      if (!rp.enabled) continue;
       for (const tool of rp.enabledTools) {
-        // 无懒加载工具包时排除 tool_learn / tool_use
-        if (!hasLazyKit && (tool.name === "tool_learn" || tool.name === "tool_use")) continue;
-        const loadMode = tool.toolSet
-          ? (rp.toolKits.find((tk) => tk.id === tool.toolSet)?.loadMode ??
-            "eager")
-          : "eager";
-        if (loadMode === "lazy" && !includeLazy) continue;
+        if (!hasLazyKit) {
+          if (tool.toolSet == "lazy_tools") continue;
+        }
         result.push(toDef(tool));
       }
     }

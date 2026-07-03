@@ -12,12 +12,8 @@ import { ProcessManagerService } from "./process-manager.service";
 @Injectable()
 export class ShellPlugin extends PluginBase {
   private readonly logger = new Logger(ShellPlugin.name);
-  private readonly CMD_TIMEOUT_MS = 120_000;
   /** 自动转入后台的阈值（1分钟） */
   private readonly BACKGROUND_THRESHOLD_MS = 60_000;
-  private readonly MAX_OUTPUT_LENGTH = 8000;
-  /** 返回给 AI 的最大行数 */
-  private readonly MAX_OUTPUT_LINES = 50;
 
   constructor(private readonly processManager: ProcessManagerService) {
     super();
