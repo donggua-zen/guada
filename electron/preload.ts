@@ -53,6 +53,13 @@ contextBridge.exposeInMainWorld('electronAPI', {
   openUserDataFolder: () => ipcRenderer.send('open-user-data-folder'),
   openInstallFolder: () => ipcRenderer.send('open-install-folder'),
   openFolder: (folderPath: string) => ipcRenderer.invoke('open-folder', folderPath),
+
+  // 在资源管理器中显示并选中文件
+  showItemInFolder: (filePath: string) => ipcRenderer.invoke('show-item-in-folder', filePath),
+
+  // 用外部编辑器打开文件/目录（如 vscode，后续可扩展）
+  openWithEditor: (targetPath: string, editor: string) =>
+    ipcRenderer.invoke('open-with-editor', { path: targetPath, editor }),
   
   // 选择文件夹（返回选中的路径）
   selectFolder: () => ipcRenderer.invoke('select-folder'),

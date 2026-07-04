@@ -61,8 +61,7 @@
         <div ref="liteContainer" class="split-container">
           <LiteSplitpanes
             style="height: 100%"
-            :pane1="{ size: 50, minSize: 20, maxSize: 80 }"
-            :pane2="{ size: 50, minSize: 20, maxSize: 80 }"
+            :split-size="50" :min-size="20" :max-size="80"
             @resize="onLiteResize"
             @resized="onLiteResized"
           >

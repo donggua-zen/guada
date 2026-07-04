@@ -89,6 +89,8 @@ interface ElectronAPI {
   openUserDataFolder: () => void
   openInstallFolder: () => void
   openFolder: (folderPath: string) => Promise<void>
+  showItemInFolder: (filePath: string) => Promise<{ success: boolean }>
+  openWithEditor: (targetPath: string, editor: string) => Promise<{ success: boolean; error?: string }>
   
   // 窗口管理（新 API - 浏览器自动化窗口）
   createBrowserWindow: (url?: string, metadata?: Record<string, any>) => Promise<{ success: boolean; window?: any }>

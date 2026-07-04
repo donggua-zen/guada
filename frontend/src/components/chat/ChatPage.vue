@@ -5,8 +5,8 @@
       <!-- 可拖拽分割区域 -->
       <div class="flex-1 overflow-hidden">
         <LiteSplitpanes style="height: 100%;"
-          :pane1="{ size: layoutStore.workspaceVisible ? layoutStore.workspaceSplitSize : 100, minSize: 40, maxSize: 100 }"
-          :pane2="{ size: layoutStore.workspaceVisible ? (100 - layoutStore.workspaceSplitSize) : 0, minSize: 20, maxSize: 60 }"
+          :split-size="layoutStore.workspaceVisible ? layoutStore.workspaceSplitSize : 100"
+          :min-size="40" :max-size="80"
           @resize="onPaneResize" @resized="onPaneResized">
           <template #pane1>
             <div ref="paneContentRef" class="chat-pane-content"
@@ -379,7 +379,7 @@ function onPaneResize() {
   }
 }
 
-function onPaneResized(event: { panes: Array<{ size: string | number }> }) {
+function onPaneResized(size: number) {
   paneSnapWidth = 0;
   const el = paneContentRef.value;
   if (el) {
@@ -387,8 +387,8 @@ function onPaneResized(event: { panes: Array<{ size: string | number }> }) {
   }
 
   // 保存工作目录分割位置
-  if (layoutStore.workspaceVisible && isElectron && event.panes.length >= 1) {
-    layoutStore.setWorkspaceSplitSize(Number(event.panes[0].size));
+  if (layoutStore.workspaceVisible && isElectron) {
+    layoutStore.setWorkspaceSplitSize(size);
   }
 }
 
