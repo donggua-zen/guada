@@ -854,6 +854,10 @@ async function handleStreamResponseWithCreate(
 // 消息操作方法
 function abortResponse() {
   if (currentSessionId.value) {
+    // 立即更新本地流状态
+    sessionStore.setSidebarFlag(currentSessionId.value, 'working', false)
+    sessionStore.setSessionIsStreaming(currentSessionId.value, false)
+
     apiService.cancelResponse(currentSessionId.value);
   }
 }

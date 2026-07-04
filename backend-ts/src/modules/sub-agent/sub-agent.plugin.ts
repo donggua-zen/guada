@@ -3,8 +3,6 @@ import { z } from "zod";
 import { PluginBase } from "../plugins/base-plugin";
 import { SubAgentManager } from "./sub-agent.manager";
 import { PluginApi } from "../plugins/api/plugin-api";
-import { PluginContext } from "../plugins/types/plugin.types";
-import { AgentScannerService } from "./agent-scanner.service";
 
 @Injectable()
 export class SubAgentPlugin extends PluginBase {
@@ -17,10 +15,7 @@ export class SubAgentPlugin extends PluginBase {
     category: "core" as const,
   };
 
-  constructor(
-    private subAgentManager: SubAgentManager,
-    private agentScanner: AgentScannerService,
-  ) {
+  constructor(private subAgentManager: SubAgentManager) {
     super();
   }
 
@@ -28,28 +23,18 @@ export class SubAgentPlugin extends PluginBase {
     const subKit = api.registerToolKit({
       id: "subagent",
       name: "子代理",
-      loadMode: "lazy",
+      loadMode: "eager",
       activator: "需要创建子代理执行独立任务时，可以调用此工具包",
       handler: async (ctx) => {
         // sub_agent 会话禁止递归加载子代理工具
         if (ctx.session.sessionType === "sub_agent") {
           return { loadMode: "none" as const };
         }
-        // // team 模式始终 eager
-        // if (ctx.session.sessionType === "team") {
-        //   return { loadMode: "eager" as const };
-        // }
-        // // 存在可见的轻量 Agent 时 eager（让 AI 知道可用 agent 列表）
-        // const agents = await this.agentScanner.listAgents();
-        // const visibleAgents = agents.filter((a) => a.visible);
-        // if (visibleAgents.length > 0) {
-        //   return { loadMode: "eager" as const };
-        // }
-        // return { loadMode: "lazy" as const };
         return { loadMode: "eager" as const };
       },
     });
 
+    // ── spawn：创建 + 执行子代理 ──
     subKit.registerTool({
       name: "subagent_spawn",
       description: `创建一个子代理独立执行指定任务。
@@ -92,150 +77,142 @@ export class SubAgentPlugin extends PluginBase {
           content: result.status === "completed" ? result.content : undefined,
           message:
             result.status === "running"
-              ? "子代理已创建并开始执行，请使用 wait 获取结果"
+              ? "子代理已创建并开始执行，请使用 subagent_manager wait 获取结果"
               : "子代理执行完成",
         };
       },
       display: { action: "创建子代理", argsKey: "name", icon: "generic" },
     });
 
+    // ── manager：管理子代理（wait / list / close / send_message）──
     subKit.registerTool({
-      name: "subagent_wait",
-      description: "等待子代理执行完成并返回结果摘要",
-      inputSchema: z.object({}),
-      execute: async (_args, ctx, abortSignal) => {
-        this.logger.log(`等待子代理完成: 父会话 ${ctx?.session.sessionId}`);
-        const completed = await this.subAgentManager.waitForComplete(
-          ctx?.session.sessionId,
-          120000,
-          abortSignal,
-        );
-        if (completed.length === 0) {
-          return {
-            success: true,
-            message: "没有进行中的子代理任务",
-          };
-        }
-        return {
-          success: true,
-          completedSubAgents: completed.map((c: any) => ({
-            sessionId: c.subSessionId,
-            name: c.name,
-            status: c.result?.status,
-            content: c.result?.content,
-            reasoningContent: c.result?.reasoningContent,
-            finishReason: c.result?.finishReason,
-          })),
-          message: `以下子代理已完成: ${completed.map((c: any) => c.name).join(", ")}`,
-        };
-      },
-      display: { action: "等待子代理", icon: "generic" },
-    });
-
-    subKit.registerTool({
-      name: "subagent_close",
-      description: "关闭指定子代理并删除其会话数据",
+      name: "subagent_manager",
+      description: `管理子代理：等待完成 / 关闭 / 列表 / 发送消息`,
       inputSchema: z.object({
-        sessionId: z.string().describe("要关闭的子代理会话 ID"),
-      }),
-      execute: async (args, ctx) => {
-        try {
-          await this.subAgentManager.closeSubAgent(
-            args.sessionId,
-            ctx?.session.sessionId,
-            ctx?.session.userId,
-            ctx?.session.workspacePath,
-          );
-          return {
-            success: true,
-            message: "子代理已关闭并删除",
-          };
-        } catch (e: any) {
-          return {
-            success: false,
-            message: e.message || "关闭子代理失败",
-          };
-        }
-      },
-      display: { action: "关闭子代理", argsKey: "sessionId", icon: "generic" },
-    });
-
-    subKit.registerTool({
-      name: "subagent_list",
-      description: "获取当前父会话下所有子代理列表",
-      inputSchema: z.object({}),
-      execute: async (_args, ctx) => {
-        const agents = await this.subAgentManager.getSubAgents(
-          ctx?.session.sessionId,
-        );
-        return {
-          success: true,
-          sub_agents: agents,
-          total: agents.length,
-        };
-      },
-      display: { action: "列出子代理", icon: "generic" },
-    });
-
-    subKit.registerTool({
-      name: "subagent_send_message",
-      description: "向已存在的子代理发送消息继续交互",
-      inputSchema: z.object({
-        sessionId: z.string().describe("子代理的会话 ID"),
-        message: z.string().describe("要发送给子代理的消息内容"),
+        action: z.enum(["wait", "list", "close", "send_message"]),
+        sessionId: z
+          .string()
+          .optional()
+          .describe("close 或 send_message 时需要"),
+        message: z.string().optional().describe("send_message 时需要"),
       }),
       execute: async (args, ctx, abortSignal) => {
-        try {
-          const result = await this.subAgentManager.sendMessage(
-            {
-              parentSessionId: ctx?.session.sessionId,
-              userId: ctx?.session.userId,
-              sessionId: args.sessionId,
-              message: args.message,
-            },
-            "foreground",
-            abortSignal,
-          );
-          return {
-            success: true,
-            sessionId: result.subSessionId,
-            status: result.status,
-            content: result.status === "completed" ? result.content : undefined,
-            message:
-              result.status === "running"
-                ? "消息已发送，子代理开始执行，请使用 wait 获取结果"
-                : "子代理执行完成",
-          };
-        } catch (e: any) {
-          return {
-            success: false,
-            message: e.message || "发送消息失败",
-          };
+        const { action, sessionId, message } = args as {
+          action: string;
+          sessionId?: string;
+          message?: string;
+        };
+        switch (action) {
+          case "wait": {
+            this.logger.log(`等待子代理完成: 父会话 ${ctx?.session.sessionId}`);
+            const completed = await this.subAgentManager.waitForComplete(
+              ctx?.session.sessionId,
+              120000,
+              abortSignal,
+            );
+            if (completed.length === 0) {
+              return { success: true, message: "没有进行中的子代理任务" };
+            }
+            return {
+              success: true,
+              completedSubAgents: completed.map((c: any) => ({
+                sessionId: c.subSessionId,
+                name: c.name,
+                status: c.result?.status,
+                content: c.result?.content,
+                reasoningContent: c.result?.reasoningContent,
+                finishReason: c.result?.finishReason,
+              })),
+              message: `以下子代理已完成: ${completed.map((c: any) => c.name).join(", ")}`,
+            };
+          }
+
+          case "list": {
+            const agents = await this.subAgentManager.getSubAgents(
+              ctx?.session.sessionId,
+            );
+            return { success: true, sub_agents: agents, total: agents.length };
+          }
+
+          case "close": {
+            if (!sessionId)
+              return { success: false, message: "缺少 sessionId" };
+            try {
+              await this.subAgentManager.closeSubAgent(
+                sessionId,
+                ctx?.session.sessionId,
+                ctx?.session.userId,
+                ctx?.session.workspacePath,
+              );
+              return { success: true, message: "子代理已关闭并删除" };
+            } catch (e: any) {
+              return { success: false, message: e.message || "关闭子代理失败" };
+            }
+          }
+
+          case "send_message": {
+            if (!sessionId || !message)
+              return { success: false, message: "缺少 sessionId 或 message" };
+            try {
+              const result = await this.subAgentManager.sendMessage(
+                {
+                  parentSessionId: ctx?.session.sessionId,
+                  userId: ctx?.session.userId,
+                  sessionId,
+                  message,
+                },
+                "foreground",
+                abortSignal,
+              );
+              return {
+                success: true,
+                sessionId: result.subSessionId,
+                status: result.status,
+                content:
+                  result.status === "completed" ? result.content : undefined,
+                message:
+                  result.status === "running"
+                    ? "消息已发送，子代理开始执行"
+                    : "子代理执行完成",
+              };
+            } catch (e: any) {
+              return { success: false, message: e.message || "发送消息失败" };
+            }
+          }
+
+          default:
+            return { success: false, message: `未知操作: ${action}` };
         }
       },
-      display: {
-        action: "向子代理发消息",
-        argsKey: "sessionId",
-        icon: "generic",
-      },
+      display: { action: "管理子代理", argsKey: "action", icon: "generic" },
     });
 
+    // ── Prompt ──
     subKit.registerPrompt({
       frequency: "REGULAR",
       description: "子代理工具使用说明",
-      content: `# 子代理工具使用说明：
-- 对于某项任务如果只关心结果不关系中间过程，可以使用子代理协助完成
-- 默认使用前台子代理（run_mode="foreground"）
-- 当任务复杂、耗时较长，使用后台子代理（run_mode="background"）
-- 拆分任务时必须边界清晰，确保各子代理不会互相修改同一文件或者任务重叠
+      content: `# 子代理工具使用说明
 
-**注意**：
-- spawn 前台模式会阻塞到任务完成，后台子代理在后台执行，结果会通过系统消息通知
-- 如非必要禁止使用wait轮询等待子代理结果
-- 若对子代理任务需要进一步追问或者调整，使用 \`send_message\` 继续交互
-- 对于任务结束且不需要后续交互的子代理，及时 \`close\` 关闭并清理其会话数据`,
+拆分原则：任务边界必须清晰，严禁不同子代理修改同一文件或任务重叠。
+
+**模式选择标准**：
+
+- 若预期耗时 < 5分钟 或 主逻辑依赖返回值，使用 \`foreground\`（同步执行）。
+- 若预期耗时 > 5分钟 或 允许异步，使用 \`background\`（非阻塞执行）。
+
+**工具接口**：
+- subagent_spawn：创建并启动子代理，需指定 run_mode。
+- subagent_manager：
+  - wait：阻塞等待，直到任意一个后台子代理完成即返回（不支持指定sessionId）。
+  - list：列出当前所有子代理。
+  - close：关闭指定子代理（需 sessionId）。
+  - send_message：向指定子代理发送追加指令（需 sessionId + message）。
+
+**注意事项**：
+如非必要（例如流程结束前的最后一次同步），禁止使用 wait 轮询，应依靠系统消息被动接收后台结果。
+任务结束且无需后续交互时，及时 close 释放会话资源。
+
+`,
     });
-
-    // 轻量 Agent 列表提示词 — 已迁移到 AgentPresetsPlugin
   }
 }

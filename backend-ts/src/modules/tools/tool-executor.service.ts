@@ -49,7 +49,7 @@ export class ToolExecutor {
       const found = rp.enabledTools.find((t) => t.name === toolName);
       if (found) return found;
       // 第 2 遍：已启用(lazy)工具包的工具
-      const lazyTool = rp.allTools.find((t) => t.toolSet === toolName);
+      const lazyTool = rp.allTools.find((t) => t.name === toolName);
       if (lazyTool) {
         const inLazyKit = rp.enabledToolKits.some(
           (tk) => tk.id === lazyTool.toolSet,
@@ -69,14 +69,18 @@ export class ToolExecutor {
     resolved: ResolvedPluginInfo[],
     includeLazy = false,
   ): ToolDefinition[] {
-    const toDef = (t: ToolHandlerDef) => ({
-      name: t.name,
-      description: t.description,
-      parameters: t.parameters as any,
-      action: t.action,
-      icon: t.icon,
-      argsKey: t.argsKey,
-    });
+    const toDef = (t: ToolHandlerDef) => {
+      const params = t.parameters as any;
+      // 临时调试：tool_use 的 arguments 显式标记 additionalProperties: true
+      if (t.name === "tool_use" && params?.properties?.arguments) {
+        params.properties.arguments.additionalProperties = true;
+      }
+      return {
+        name: t.name,
+        description: t.description,
+        parameters: params,
+      };
+    };
 
     const result: ToolDefinition[] = [];
     const hasLazyKit = resolved.some((rp) =>
@@ -148,6 +152,23 @@ export class ToolExecutor {
     const toolEntry = ToolExecutor.findTool(resolved, fullToolName);
     if (!toolEntry)
       throw new Error(`Tool ${fullToolName} is not available or disabled`);
+
+    // 记忆模式运行时限制：仅允许 memory 插件的工具
+    if (session.getRunMode?.() === "memory") {
+      const inMemoryPlugin = resolved.some(
+        (rp) =>
+          rp.plugin.id === "memory" &&
+          rp.enabledTools.some((t) => t.name === fullToolName),
+      );
+      if (!inMemoryPlugin) {
+        return {
+          toolCallId,
+          name: fullToolName,
+          content: `In memory mode, only the memory tool is allowed`,
+          isError: true,
+        };
+      }
+    }
 
     try {
       let validatedArgs = toolArgs;

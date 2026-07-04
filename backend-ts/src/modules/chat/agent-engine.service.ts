@@ -12,7 +12,6 @@ import { throttledStream } from "./utils/stream-throttle.util";
 import { ToolCallDisplayUtil } from "./utils/tool-call-display.util";
 import { ISessionContext, ModelConfig } from "./session-context";
 import { EventChunk } from "./types/event-chunk.types";
-import { partialParse } from "partial-json-parser";
 import { SummaryMode } from "./compression-engine";
 
 /**
@@ -454,6 +453,14 @@ export class AgentEngine {
       this.logger.debug(
         `Iteration ${iterationCount} cleanup completed. Finish reason: ${assistantResponse.metadata?.finishReason}`,
       );
+
+      // 开发模式下每次迭代完成后保存对话历史到 .guada/logs 便于审计
+      this.saveTranscript(
+        historyMessages,
+        parts,
+        sessionContext.getWorkspacePath(),
+        sessionContext.sessionId,
+      );
     } while (needToContinue);
     await sessionContext.persist();
   }
@@ -743,6 +750,46 @@ export class AgentEngine {
   }
 
   /**
+   * 开发模式下保存当前对话历史到 .guada/logs（每次覆盖，便于审计）
+   */
+  private saveTranscript(
+    historyMessages: MessageRecord[],
+    newParts: MessageRecord[],
+    workspacePath: string,
+    sessionId: string,
+  ): void {
+    // 仅开发模式下保存
+    if (process.env.NODE_ENV === "production" || !workspacePath || !sessionId) {
+      return;
+    }
+    try {
+      const transcriptDir = path.join(workspacePath, ".guada", "logs");
+      fs.mkdirSync(transcriptDir, { recursive: true });
+      const filePath = path.join(transcriptDir, `${sessionId}_transcript.json`);
+      const allMessages = [...historyMessages, ...newParts];
+      const data = allMessages.map((m) => ({
+        role: m.role,
+        content:
+          typeof m.content === "string" ? m.content : JSON.stringify(m.content),
+        toolCalls: m.toolCalls
+          ? m.toolCalls.map((tc) => ({
+              name: tc.name,
+              arguments: tc.arguments,
+            }))
+          : undefined,
+        toolCallId: m.toolCallId,
+        name: m.name,
+        reasoningContent: m.reasoningContent,
+      }));
+      fs.writeFileSync(filePath, JSON.stringify(data, null, 2), "utf-8");
+    } catch (e) {
+      this.logger.warn(
+        `保存对话历史失败: ${e instanceof Error ? e.message : e}`,
+      );
+    }
+  }
+
+  /**
    * 检查工具是否需要审批
    */
   private needsApproval(
@@ -861,7 +908,7 @@ export class AgentEngine {
     sessionContext: ISessionContext,
     abortSignal?: AbortSignal,
   ): Promise<void> {
-    // 切换到 memory 模式：getResolvedPlugins() 只返回 file 插件，
+    // 切换到 memory 模式：getResolvedPlugins() 只返回 memory 插件，
     // getSettings('skills') 返回空，确保 LLM 和工具执行层一致受限
     const originalMode = sessionContext.getRunMode();
     await sessionContext.setRunMode("memory");
@@ -875,30 +922,37 @@ export class AgentEngine {
       // 组装指令消息（history 中不含系统提示词，此处自行注入）
       const instructionParts: string[] = [
         `<system>
-[BEGIN SYSTEM INSTRUCTION - DO NOT REPLY TO USER]
-This is a silent system-level instruction for memory maintenance during context compression. Strictly execute the following workflow. Do NOT output any natural language explanations to the user.
+[BEGIN SILENT SYSTEM PROCESS - MEMORY MAINTENANCE]
+⚠️ CRITICAL MODE SWITCH: You are currently executing a background system routine. 
+You are NOT in a conversation with the user. Do not attempt to answer the user's previous prompt in this specific turn.
+Your output will be parsed by the system, not read by the user.
 
-【OPERATING PRINCIPLES】
-1. Memory Evaluation: Scan the conversation history. ONLY update memory if the following conditions are met:
-   - Explicit long-term user preferences or habits
-   - Critical factual corrections or decisions
-   - Cross-session to-do items or commitments
-   - Conflicts, redundancies, or outdated information detected in existing memory
-2. Existing Memory Status: The contents within the <factual-memory/> and <soul-memory/> tags are already up-to-date. Do NOT re-extract them.
+【OBJECTIVE】
+Determine if the conversation history requires updating the long-term memory files.
 
-【EXECUTION WORKFLOW】
-1. Evaluate: Determine if the current conversation contains new information that requires persistence.
-2. If NO update is needed: Immediately reply with "DONE" and terminate the task.
-3. If an update IS needed:
-   - Call the file tools to batch write/update the memory.
-   - Prioritize using the 'edit' tool for local modifications. If the file does not exist or the 'edit' tool fails, fall back to using the 'write' or 'create' tool.
-   - Ensure a maximum of 5 tool calls are executed.
-4. Upon completion of the update: Reply with "DONE" and terminate the task.
+【EVALUATION LOGIC】
+Scan history. ONLY trigger an update if:
+- New explicit long-term preferences/habits found.
+- Critical factual corrections provided.
+- Existing memory conflicts or is outdated.
+(Note: If <factual-memory/> is already accurate, do nothing.)
 
-【STRICT CONSTRAINTS】
-- Your final output MUST be EXACTLY "DONE". Absolutely no punctuation, explanations, or thought processes are allowed.
-- The user cannot see your intermediate steps and relies solely on this final status code.
-[END SYSTEM INSTRUCTION]
+【EXECUTION PROTOCOL】
+1. IF NO update needed:
+   - Output EXACTLY: DONE
+   - STOP immediately.
+
+2. IF update IS needed:
+   - Use memory tool ('memory') to update memory.
+   - Max 5 tool calls.
+   - After tools finish, Output EXACTLY: DONE
+   - STOP immediately.
+
+【STRICT OUTPUT FORMAT】
+- The ONLY valid output string is "DONE".
+- Any other text (including explanations, apologies, or reasoning) will cause a system error.
+- Do not worry about the user's pending questions; the system will return to normal mode after receiving "DONE".
+[END SILENT SYSTEM PROCESS]
 </system>`,
       ];
 
@@ -939,7 +993,15 @@ This is a silent system-level instruction for memory maintenance during context 
             accumulated.toolCalls.map((tc: any) => ({
               id: tc.id,
               name: tc.name,
-              arguments: partialParse(tc.arguments) || {},
+              arguments: (() => {
+                try {
+                  return typeof tc.arguments === "string"
+                    ? JSON.parse(tc.arguments)
+                    : tc.arguments;
+                } catch {
+                  return {};
+                }
+              })(),
             })),
             sessionContext,
           );
@@ -952,7 +1014,7 @@ This is a silent system-level instruction for memory maintenance during context 
             });
           }
         } catch (error: any) {
-          this.logger.warn(`记忆保存第${round}轮失败: ${error.message}`);
+          this.logger.error(`记忆保存第${round}轮失败: ${error.message}`);
           break;
         }
       }

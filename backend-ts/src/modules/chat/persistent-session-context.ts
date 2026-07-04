@@ -105,8 +105,6 @@ export class PersistentSessionContext implements ISessionContext {
 
   /** 当前会话运行模式（默认 normal） */
   private runMode: SessionRunMode = "normal";
-  /** memory 模式强制插件缓存（initialize 时预计算） */
-  private forcedMemoryPlugins: ResolvedPluginInfo[] = [];
 
   constructor(
     private readonly session: any,
@@ -271,9 +269,10 @@ export class PersistentSessionContext implements ISessionContext {
     this.logger.debug(`Loaded ${this.history.length} messages into context`);
 
     // 计算系统提示词的 Token 数
-    this.systemPromptTokenCount = await this.tokenizerService.countTextTokens(
+    this.systemPromptTokenCount = await this.tokenizerService.countTokens(
       modelName,
-      this.buildSystemPrompt(),
+      this.buildPreludeMessages(),
+      false,
     );
     // compressionConfig.contextWindow -= this.systemPromptTokenCount;
 
@@ -465,12 +464,8 @@ export class PersistentSessionContext implements ISessionContext {
     options?: { exclude?: string[] },
   ): Promise<MessageRecord[]> {
     const nonSystemMessages = messages.filter((msg) => msg.role !== "system");
-
-    const finalSystemPrompt = this.buildSystemPrompt(options?.exclude);
-    return [
-      { role: "system" as const, content: finalSystemPrompt },
-      ...nonSystemMessages,
-    ];
+    const promptParts = this.buildPreludeMessages(options?.exclude);
+    return [...promptParts, ...nonSystemMessages];
   }
 
   private buildModelConfig(
@@ -782,22 +777,34 @@ export class PersistentSessionContext implements ISessionContext {
     return model;
   }
 
-  private buildSystemPrompt(exclude?: string[]): string {
+  private buildPreludeMessages(exclude?: string[]): MessageRecord[] {
     const order = ["base", "plugins", "summary"];
     const filtered = exclude?.length
       ? order.filter((k) => !exclude.includes(k))
       : order;
-    return filtered
-      .map((k) => {
-        const content = this.systemPromptParts[k];
-        if (!content) return "";
-        if (k === "summary") {
-          return `# 历史对话摘要\n<summary>\n${content}\n</summary>`;
-        }
-        return content;
-      })
-      .filter(Boolean)
-      .join("\n\n");
+    const result: MessageRecord[] = [];
+
+    // base + plugins → system 消息
+    const systemParts = filtered
+      .filter((k) => k !== "summary")
+      .map((k) => this.systemPromptParts[k])
+      .filter(Boolean);
+    if (systemParts.length > 0) {
+      result.push({
+        role: "system",
+        content: systemParts.join("\n\n"),
+      } as MessageRecord);
+    }
+
+    // summary → user 消息
+    if (filtered.includes("summary") && this.systemPromptParts.summary) {
+      result.push({
+        role: "user",
+        content: `[CONTEXT COMPACTION — REFERENCE ONLY]\n${this.systemPromptParts.summary}\n[CONTEXT COMPACTION — REFERENCE ONLY END]`,
+      } as MessageRecord);
+    }
+
+    return result;
   }
 
   getModelConfig(): ModelConfig {
@@ -821,37 +828,16 @@ export class PersistentSessionContext implements ISessionContext {
   async setRunMode(mode: SessionRunMode): Promise<void> {
     this.logger.debug(`Switching run mode: ${this.runMode} -> ${mode}`);
     this.runMode = mode;
-
-    // memory 模式：懒加载强制插件列表
-    if (mode === "memory" && this.forcedMemoryPlugins.length === 0) {
-      this.forcedMemoryPlugins = await this.pluginManager.resolvePlugins(this, {
-        __default: false,
-        memory: { enabled: true },
-        file: { enabled: true },
-      });
-    }
   }
 
   /**
-   * 根据运行模式返回插件列表。
-   *
-   * - normal: 返回全部已决议插件（受用户配置控制）
-   * - memory: 返回强制插件列表（memory + file，无视用户开关）
-   *           首次切换到 memory 模式时通过 resolvePlugins 懒加载。
+   * 获取已决议的插件列表。
    */
   getResolvedPlugins(): ResolvedPluginInfo[] {
-    if (this.runMode === "memory") {
-      return this.forcedMemoryPlugins;
-    }
     return this.resolvedPlugins;
   }
 
-  /**
-   * 根据运行模式返回技能配置。
-   *
-   * - normal: 返回完整技能配置
-   * - memory: 返回空（记忆模式下不需要技能提示词）
-   */
+  /** 获取合并后的会话设置（指定字段或全部） */
   getSettings(field?: string): any {
     if (field) return (this.mergedSettings as any)[field];
     return this.mergedSettings;

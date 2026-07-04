@@ -201,7 +201,7 @@ export class UniversalToolsPlugin extends PluginBase {
       }
 
       if (responseParts.length > 0) {
-        responseParts.push("---", "", "## 使用方式:", "使用`tool_use`调用");
+        responseParts.push("---", "", "## 使用方式:", "使用`tool_use(tool_name, arguments{param1: value1, param2: value2})`调用");
       }
 
       return responseParts.join("\n");
