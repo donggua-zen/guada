@@ -10,7 +10,7 @@ import {
   clipboard,
 } from "electron";
 import * as path from "path";
-import { ChildProcess } from "child_process";
+import { ChildProcess, exec } from "child_process";
 import * as fs from "fs";
 // import { autoUpdater } from "electron-updater";
 import log from "electron-log";
@@ -950,6 +950,42 @@ function setupIpcHandlers() {
       return { success: true };
     } catch (error) {
       log.error("打开文件夹失�?", error);
+      return { success: false, error: String(error) };
+    }
+  });
+
+  // 在资源管理器中显示并选中文件
+  ipcMain.handle("show-item-in-folder", async (_, filePath: string) => {
+    try {
+      shell.showItemInFolder(filePath);
+      return { success: true };
+    } catch (error) {
+      log.error("在资源管理器中显示文件失败", error);
+      return { success: false, error: String(error) };
+    }
+  });
+
+  // 用外部编辑器打开文件/目录（支持 vscode, 后续可扩展 cursor, webstorm 等）
+  ipcMain.handle("open-with-editor", async (_, params: { path: string; editor: string }) => {
+    const { path: targetPath, editor } = params;
+    try {
+      let cmd: string;
+      switch (editor) {
+        case "vscode":
+          cmd = `code "${targetPath}"`;
+          break;
+        default:
+          return { success: false, error: `Unknown editor: ${editor}` };
+      }
+      await new Promise<void>((resolve, reject) => {
+        exec(cmd, (error) => {
+          if (error) reject(error);
+          else resolve();
+        });
+      });
+      return { success: true };
+    } catch (error) {
+      log.error(`用 ${editor} 打开失败`, error);
       return { success: false, error: String(error) };
     }
   });

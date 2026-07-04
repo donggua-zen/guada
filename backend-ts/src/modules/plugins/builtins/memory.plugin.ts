@@ -149,12 +149,12 @@ export class MemoryPlugin extends PluginBase {
     // ── memory 工具 ──
     api.registerTool({
       name: "memory",
-      description: `编辑长期记忆：追加/替换/删除事实记忆或存档记忆。修改不会立即刷新上下文，等待记忆压缩后自动同步。`,
+      description: `编辑长期记忆：追加/替换/删除事实记忆或记事本。修改不会立即刷新上下文，等待记忆压缩后自动同步。`,
       inputSchema: z.object({
         action: z.enum(["append", "replace", "search"]),
         target: z
           .enum(["factual", "memo"])
-          .describe("factual=事实记忆, memo=存档记忆"),
+          .describe("factual=事实记忆, memo=记事本"),
         content: z
           .string()
           .optional()
@@ -205,20 +205,20 @@ export class MemoryPlugin extends PluginBase {
         case "search":
           return await this.memorySearch(pattern, ctx);
         default:
-          return { success: false, message: `未知操作: ${action}` };
+          return { success: false, message: `unknown action: ${action}` };
       }
-      // 写入操作后附加容量信息
-      if (result?.success) {
+      // 写入操作后附加容量信息（仅事实记忆受影响）
+      if (result?.success && target === "factual") {
         const cap = await this.calculateMemoryCapacity(ctx);
         result.memory_capacity = `${cap.percent}% — ${cap.used}/${cap.limit} chars`;
         if (cap.overLimit) {
-          result.warning = `记忆已满（${cap.percent}%），写入成功但无法完整显示。使用 memory replace 整理压缩旧记忆腾出空间。`;
+          result.warning = `Memory full (${cap.percent}%), write succeeded but cannot display. Use 'memory replace' to compress old entries.`;
         }
       }
       return result;
     } catch (e: any) {
-      this.logger.error(`memory 失败: ${e.message}`);
-      return { success: false, message: e.message || "记忆编辑失败" };
+      this.logger.error(`memory failed: ${e.message}`);
+      return { success: false, message: e.message || "memory operation failed" };
     }
   }
 
@@ -228,9 +228,9 @@ export class MemoryPlugin extends PluginBase {
     memoTitle: string | undefined,
     ctx: PluginContext,
   ): Promise<{ success: boolean; message: string }> {
-    if (!content) throw new Error("content 不能为空");
+    if (!content) throw new Error("content cannot be empty");
     if (target === "memo" && !memoTitle)
-      throw new Error("编辑 memo 需要 memo_title");
+      throw new Error("memo_title required for memo target");
 
     const filePath = this.resolveMemoryPath(target, ctx, memoTitle);
     await fs.mkdir(path.dirname(filePath), { recursive: true });
@@ -246,10 +246,10 @@ export class MemoryPlugin extends PluginBase {
       : content + "\n";
     await fs.writeFile(filePath, toWrite, "utf-8");
 
-    const label = target === "memo" ? `存档记忆 ${memoTitle}` : "事实记忆";
+    const label = target === "memo" ? `note ${memoTitle}` : "factual";
     return {
       success: true,
-      message: `${label} 已追加，共 ${content.length} 字符`,
+      message: `${label} appended, ${content.length} chars`,
     };
   }
 
@@ -260,9 +260,9 @@ export class MemoryPlugin extends PluginBase {
     memoTitle: string | undefined,
     ctx: PluginContext,
   ): Promise<{ success: boolean; message: string }> {
-    if (!oldText) throw new Error("old_text 不能为空");
+    if (!oldText) throw new Error("old_text cannot be empty");
     if (target === "memo" && !memoTitle)
-      throw new Error("编辑 memo 需要 memo_title");
+      throw new Error("memo_title required for memo target");
 
     // content 为空或 null → 视为删除操作
     const isDelete =
@@ -274,15 +274,15 @@ export class MemoryPlugin extends PluginBase {
     const normContent = existing.replace(/\r\n/g, "\n");
     const normOld = oldText.replace(/\r\n/g, "\n");
     const idx = normContent.indexOf(normOld);
-    if (idx === -1) throw new Error(`未找到匹配文本: ${oldText}`);
+    if (idx === -1) throw new Error(`text not found: ${oldText}`);
 
     const hasCRLF = existing.includes("\r\n");
     const normResult = normContent.replace(normOld, replaceWith);
     const modified = hasCRLF ? normResult.replace(/\n/g, "\r\n") : normResult;
     await fs.writeFile(filePath, modified, "utf-8");
 
-    const label = target === "memo" ? `存档记忆 ${memoTitle}` : "事实记忆";
-    const actionLabel = isDelete ? "已删除匹配内容" : "已替换，共替换 1 处";
+    const label = target === "memo" ? `note ${memoTitle}` : "factual";
+    const actionLabel = isDelete ? "deleted" : "replaced, 1 occurrence";
     return { success: true, message: `${label} ${actionLabel}` };
   }
 
@@ -290,10 +290,10 @@ export class MemoryPlugin extends PluginBase {
     pattern: string,
     ctx: PluginContext,
   ): Promise<any> {
-    if (!pattern) throw new Error("pattern 不能为空");
+    if (!pattern) throw new Error("pattern is required");
 
     const workspaceDir = ctx?.session.workspacePath;
-    if (!workspaceDir) throw new Error("缺少工作目录");
+    if (!workspaceDir) throw new Error("workspace path required");
 
     const memosDir =
       ctx?.session.sessionType === "sub_agent"
@@ -373,7 +373,7 @@ export class MemoryPlugin extends PluginBase {
         : workspaceDir;
 
     if (target === "memo") {
-      if (!memoTitle) throw new Error("编辑存档记忆需要 memo_title");
+      if (!memoTitle) throw new Error("memo_title required for memo target");
       return path.join(root, ".guada", "memos", `${memoTitle}.md`);
     }
     return path.join(root, ".guada", "memory", "factual.md");

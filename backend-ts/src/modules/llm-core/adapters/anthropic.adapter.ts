@@ -426,10 +426,10 @@ export class AnthropicAdapter implements IProtocolAdapter {
 
   /**
    * 从 messages 中提取 system 消息
-   * Anthropic 使用顶层 system 字段而非 role=system 的消息
+   * 返回 content block 数组，最后一个 block 带 cache_control 标记（ephemeral 缓存）
    */
   private extractSystemMessage(messages: MessageRecord[]): {
-    system?: string;
+    system?: Array<{ type: "text"; text: string; cache_control?: { type: "ephemeral" } }>;
     messages: MessageRecord[];
   } {
     const systemMessages = messages.filter((m) => m.role === "system");
@@ -437,8 +437,12 @@ export class AnthropicAdapter implements IProtocolAdapter {
 
     if (systemMessages.length === 0) return { messages: otherMessages };
 
-    const system = systemMessages.map((m) => m.content || "").join("\n");
-    return { system: system.trim() || undefined, messages: otherMessages };
+    const blocks = systemMessages.map((m, i) => ({
+      type: "text" as const,
+      text: typeof m.content === "string" ? m.content : JSON.stringify(m.content),
+      ...(i === systemMessages.length - 1 ? { cache_control: { type: "ephemeral" as const } } : {}),
+    }));
+    return { system: blocks, messages: otherMessages };
   }
 
   /**

@@ -87,10 +87,10 @@
               <ArrowUp />
             </el-icon>
             <span class="text-sm text-gray-700 dark:text-[#c5c7cc]">
-              线程列表 ({{ runningAgentCount }} 运行中)
+              任务列表 ({{ runningAgentCount }} 运行中)
             </span>
             <span class="ml-auto text-xs text-gray-400 dark:text-[#6b6d75]">
-              {{ agentTabs.length - 1 }} 个子线程
+              {{ agentTabs.length - 1 }} 个子任务
             </span>
           </div>
           <!-- 展开的线程列表 -->
@@ -101,13 +101,13 @@
                 'bg-white dark:bg-[#2a2c30] text-gray-900 dark:text-[#e8e9ed]': tab.id === activeTabId,
                 'text-gray-500 dark:text-[#8b8d95] hover:bg-gray-100 dark:hover:bg-[#25262a]': tab.id !== activeTabId,
               }" @click="emit('switch-agent', tab.id)">
+              <span class="text-sm flex-1 truncate">{{ tab.name }}</span>
               <!-- 运行状态指示器 -->
               <el-icon v-if="tab.status === 'running'" class="is-loading text-blue-500" size="12">
                 <Loading />
               </el-icon>
               <span v-else-if="tab.status === 'completed'" class="w-2 h-2 rounded-full bg-green-500" />
               <span v-else class="w-3 h-3 rounded-full bg-red-500" />
-              <span class="text-sm flex-1 truncate">{{ tab.name }}</span>
 
             </div>
           </div>

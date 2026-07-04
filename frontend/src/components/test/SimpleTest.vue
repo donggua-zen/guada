@@ -5,8 +5,7 @@
     <div style="height: 400px; border: 2px solid red;">
       <LiteSplitpanes
         style="height: 100%;"
-        :pane1="{ size: 50, minSize: 20, maxSize: 80 }"
-        :pane2="{ size: 50, minSize: 20, maxSize: 80 }"
+        :split-size="50" :min-size="20" :max-size="80"
       >
         <template #pane1>
           <div style="background: lightblue; height: 100%; padding: 20px;">

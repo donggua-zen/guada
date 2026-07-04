@@ -27,6 +27,14 @@
                             </el-icon>
                         </el-button>
                     </el-tooltip>
+                    <!-- 以 VSCode 打开工作目录（仅 Electron 环境） -->
+                    <el-tooltip v-if="isElectron" content="以 VSCode 打开工作目录" placement="bottom">
+                        <el-button class="workspace-tool-btn" text @click="openWorkspaceInVSCode">
+                            <el-icon size="16">
+                                <VsCode />
+                            </el-icon>
+                        </el-button>
+                    </el-tooltip>
                     <!-- 刷新按钮 -->
                     <el-tooltip content="刷新" placement="bottom">
                         <el-button class="workspace-tool-btn" text @click="refreshTree" :loading="isLoading">
@@ -161,6 +169,8 @@ import { ElMessage, ElMessageBox } from 'element-plus';
 import { apiService, type FileChangeEvent } from '@/services/ApiService';
 import { Refresh, Close, FolderOpened, Switch, CopyDocument, Edit, Delete } from '@element-plus/icons-vue';
 import { LoadingOutlined } from '@vicons/antd';
+// @ts-ignore - icons 组件尚未迁移到 TypeScript
+import { VsCode } from '@/components/icons';
 import { useStorage, useThrottleFn } from '@vueuse/core';
 import { useMarkdown } from '@/composables/useMarkdown';
 import { useHighlight } from '@/composables/useHighlight';
@@ -230,6 +240,12 @@ const contextMenuItems = computed<ContextMenuItem[]>(() => {
             label: '在资源管理器中打开',
             icon: FolderOpened,
             onClick: handleOpenInExplorer,
+        });
+        // 文件/目录支持以 VSCode 打开
+        items.push({
+            label: '以 VSCode 打开',
+            icon: VsCode,
+            onClick: handleOpenInVSCode,
         });
     }
     items.push({
@@ -744,7 +760,7 @@ async function handleCopyFilePath() {
 }
 
 /**
- * 在资源管理器中打开
+ * 在资源管理器中打开（文件会选中，目录直接打开）
  */
 async function handleOpenInExplorer() {
     const node = contextMenu.value.node;
@@ -763,22 +779,47 @@ async function handleOpenInExplorer() {
         // 拼接完整绝对路径
         const relativePath = node.path.replace(/\\/g, '/');
         const separator = workspacePath.endsWith('/') || workspacePath.endsWith('\\') || relativePath.startsWith('/') ? '' : '/';
-        let fullPath = workspacePath + separator + relativePath;
+        const fullPath = workspacePath + separator + relativePath;
 
-        // 如果是文件，获取其父目录路径
-        if (!node.isDirectory) {
-            const lastSepIndex = Math.max(fullPath.lastIndexOf('/'), fullPath.lastIndexOf('\\'));
-            if (lastSepIndex > 0) {
-                fullPath = fullPath.substring(0, lastSepIndex);
-            }
-        }
-
-        if (window.electronAPI) {
-            await window.electronAPI.openFolder(fullPath);
+        if (node.isDirectory) {
+            // 目录：直接打开
+            await window.electronAPI!.openFolder(fullPath);
+        } else {
+            // 文件：在资源管理器中显示并选中
+            await window.electronAPI!.showItemInFolder(fullPath);
         }
     } catch (error: any) {
         console.error('Failed to open in explorer:', error);
         ElMessage.error('打开失败');
+    }
+    closeContextMenu();
+}
+
+/**
+ * 用 VSCode 打开文件
+ */
+async function handleOpenInVSCode() {
+    const node = contextMenu.value.node;
+    if (!node || !isElectron || !props.sessionId) return;
+
+    try {
+        const response = await apiService.getWorkspacePath(props.sessionId);
+        const workspacePath = response.workspacePath;
+        if (!workspacePath) {
+            ElMessage.error('无法获取工作目录路径');
+            closeContextMenu();
+            return;
+        }
+
+        const relativePath = node.path.replace(/\\/g, '/');
+        const separator = workspacePath.endsWith('/') || workspacePath.endsWith('\\') || relativePath.startsWith('/') ? '' : '/';
+        const fullPath = workspacePath + separator + relativePath;
+
+        await window.electronAPI!.openWithEditor(fullPath, 'vscode');
+        ElMessage.success('已通过 VSCode 打开');
+    } catch (error: any) {
+        console.error('Failed to open in VSCode:', error);
+        ElMessage.error('打开失败，请确认已安装 VSCode 且 code 命令可用');
     }
     closeContextMenu();
 }
@@ -1088,6 +1129,23 @@ async function openInFileManager() {
         }
     } catch (error: any) {
         console.error('Failed to open workspace folder:', error);
+    }
+}
+
+/**
+ * 以 VSCode 打开工作目录
+ */
+async function openWorkspaceInVSCode() {
+    if (!props.sessionId || !isElectron) return;
+
+    try {
+        const response = await apiService.getWorkspacePath(props.sessionId);
+        if (response.workspacePath && window.electronAPI) {
+            await window.electronAPI.openWithEditor(response.workspacePath, 'vscode');
+        }
+    } catch (error: any) {
+        console.error('Failed to open workspace in VSCode:', error);
+        ElMessage.error('打开失败，请确认已安装 VSCode 且 code 命令可用');
     }
 }
 

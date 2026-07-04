@@ -21,6 +21,8 @@ export interface ElectronAPI {
   openUserDataFolder: () => void
   openInstallFolder: () => void
   openFolder: (folderPath: string) => Promise<{ success: boolean }>
+  showItemInFolder: (filePath: string) => Promise<{ success: boolean }>
+  openWithEditor: (targetPath: string, editor: string) => Promise<{ success: boolean; error?: string }>
   selectFolder: () => Promise<string | null>
   
   // 窗口管理（新 API - 浏览器自动化窗口）
