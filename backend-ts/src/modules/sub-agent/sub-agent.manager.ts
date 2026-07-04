@@ -283,7 +283,7 @@ export class SubAgentManager implements OnModuleInit {
     // 思考强度：无论是否有角色，都从父会话继承
     settings.thinkingEffort = parentSessionSettings.thinkingEffort;
 
-    if (!params.characterId.startsWith("agent-")) {
+    if (params.characterId && !params.characterId?.startsWith("agent-")) {
       // ── 数据库角色模式 ──
       // 仅设 thinkingEffort，其余由 mergeSettings 从 character.settings 自动读取
       const character = await this.characterRepo.findById(params.characterId);
@@ -299,7 +299,7 @@ export class SubAgentManager implements OnModuleInit {
         `子 Agent 将继承角色设定: ${character.title} (${params.characterId})`,
       );
     } else {
-      if (params.characterId.startsWith("agent-")) {
+      if (params.characterId && params.characterId?.startsWith("agent-")) {
         // ── 轻量 Agent 模式 ──
         const agent = await this.agentScanner.getAgent(params.characterId);
         if (!agent) {

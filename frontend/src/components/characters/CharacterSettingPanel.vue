@@ -566,19 +566,60 @@
                   <div class="text-sm mt-2">在 data/agents/ 目录中放入 .md 文件即可创建</div>
                 </div>
 
-                <div v-else class="grid gap-3" style="grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));">
-                  <div v-for="agent in visibleAgents" :key="agent.id"
-                    class="agent-item p-3 border rounded dark:border-[#232428]"
-                    :class="{ 'opacity-50 pointer-events-none': allAgentsDisabled }">
-                    <div class="flex items-start justify-between gap-2 mb-2">
-                      <div class="font-medium text-sm flex-1 truncate">{{ agent.emoji }} {{ agent.name }}</div>
-                      <div class="flex items-center gap-1.5 shrink-0">
-                        <el-switch :model-value="getAgentEffectiveEnabled(agent)"
-                          @update:model-value="(val) => handleAgentToggle(agent.id, val)" :disabled="allAgentsDisabled"
+                <div v-else>
+                  <!-- 无分组的 Agent -->
+                  <div v-if="ungroupedVisibleAgents.length > 0" class="grid gap-3 mb-6"
+                    style="grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));">
+                    <div v-for="agent in ungroupedVisibleAgents" :key="agent.id"
+                      class="agent-item p-3 border rounded dark:border-[#232428]"
+                      :class="{ 'opacity-50 pointer-events-none': allAgentsDisabled }">
+                      <div class="flex items-start justify-between gap-2 mb-2">
+                        <div class="font-medium text-sm flex-1 truncate">{{ agent.emoji }} {{ agent.name }}</div>
+                        <div class="flex items-center gap-1.5 shrink-0">
+                          <el-switch :model-value="getAgentEffectiveEnabled(agent)"
+                            @update:model-value="(val) => handleAgentToggle(agent.id, val)" :disabled="allAgentsDisabled"
+                            size="small" inline-prompt active-text="启用" inactive-text="禁用" />
+                        </div>
+                      </div>
+                      <p class="text-xs text-gray-500 line-clamp-2 min-h-[2rem]">{{ agent.description || '暂无描述' }}</p>
+                    </div>
+                  </div>
+
+                  <!-- 文件夹分组 -->
+                  <div v-for="group in agentsGroups" :key="group.id" class="mb-6">
+                    <div class="flex items-center gap-2 mb-3 px-1 select-none cursor-pointer"
+                      :class="{ 'opacity-60': !group.visible }"
+                      @click="toggleAgentsGroupCollapse(group.id)">
+                      <component :is="collapsedAgentsGroups.has(group.id) ? ChevronRight24Regular : ChevronDown24Regular"
+                        class="w-5 h-5 text-gray-400" />
+                      <span class="text-lg">{{ group.emoji || '📁' }}</span>
+                      <span class="text-sm font-semibold text-gray-800 dark:text-[#e8e9ed]">
+                        {{ group.name }}
+                      </span>
+                      <span class="text-xs text-gray-400">({{ group.agentCount }})</span>
+                      <div class="ml-auto flex items-center gap-2" @click.stop>
+                        <el-switch :model-value="getGroupEffectiveEnabled(group.id)"
+                          @update:model-value="(val) => handleGroupToggle(group.id, val)" :disabled="allAgentsDisabled"
                           size="small" inline-prompt active-text="启用" inactive-text="禁用" />
                       </div>
                     </div>
-                    <p class="text-xs text-gray-500 line-clamp-2 min-h-[2rem]">{{ agent.description || '暂无描述' }}</p>
+
+                    <div v-if="!collapsedAgentsGroups.has(group.id)" class="grid gap-3 pl-2"
+                      style="grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));">
+                      <div v-for="agent in getGroupedVisibleAgents(group.id)" :key="agent.id"
+                        class="agent-item p-3 border rounded dark:border-[#232428]"
+                        :class="{ 'opacity-50 pointer-events-none': allAgentsDisabled }">
+                        <div class="flex items-start justify-between gap-2 mb-2">
+                          <div class="font-medium text-sm flex-1 truncate">{{ agent.emoji }} {{ agent.name }}</div>
+                          <div class="flex items-center gap-1.5 shrink-0">
+                            <el-switch :model-value="getAgentEffectiveEnabled(agent)"
+                              @update:model-value="(val) => handleAgentToggle(agent.id, val)" :disabled="allAgentsDisabled"
+                              size="small" inline-prompt active-text="启用" inactive-text="禁用" />
+                          </div>
+                        </div>
+                        <p class="text-xs text-gray-500 line-clamp-2 min-h-[2rem]">{{ agent.description || '暂无描述' }}</p>
+                      </div>
+                    </div>
                   </div>
                 </div>
               </el-form>
@@ -628,7 +669,7 @@ import {
   SyncOutlined
 } from '@vicons/antd'
 
-import { Code24Regular, Bot24Regular } from '@vicons/fluent'
+import { Code24Regular, Bot24Regular, ChevronRight24Regular, ChevronDown24Regular } from '@vicons/fluent'
 
 import { apiService } from '../../services/ApiService'
 
@@ -842,20 +883,30 @@ const allAgentsDisabled = ref(false);
 const agentsAllowlistMode = ref(false);
 // Agent 列表
 const agentsList = ref([]);
+const agentsGroups = ref<any[]>([]);
+const collapsedAgentsGroups = ref(new Set<string>());
 const loadingAgents = ref(false);
 // Agent 偏好 { agentId: true/false }
 const enabledAgents = reactive<Record<string, boolean>>({});
+// 文件夹偏好 { groupId: true/false }
+const enabledGroups = reactive<Record<string, boolean>>({});
 // 面板可见的 Agent（过滤全局不可见的）
 const visibleAgents = computed(() => {
   void agentsAllowlistMode.value;
   return agentsList.value.filter(agent => {
     if (!agent.visible) {
-      if ((enabledAgents as any)[agent.id] === true) return true;
       return false;
     }
     return true;
   });
 });
+/** 无分组的 Agent */
+const ungroupedVisibleAgents = computed(() =>
+  visibleAgents.value.filter((a) => !a.folder)
+);
+/** 获取文件夹内 Agent */
+const getGroupedVisibleAgents = (groupId: string) =>
+  visibleAgents.value.filter((a) => a.folder === groupId);
 const maxTokensLimitDisplay = ref('');
 
 // 是否自动启用全部工具
@@ -1004,12 +1055,18 @@ watch(() => props.data, (newVal, oldVal) => {
   allAgentsDisabled.value = newVal.settings?.plugins?.agent_presets?.enabled === false;
   const agentsConfig = newVal.settings?.agents;
   agentsAllowlistMode.value = agentsConfig?.__default === false;
-  // 重建 enabledAgents
+  // 重建 enabledAgents / enabledGroups
   for (const key of Object.keys(enabledAgents)) delete (enabledAgents as any)[key];
+  for (const key of Object.keys(enabledGroups)) delete (enabledGroups as any)[key];
   if (typeof agentsConfig === 'object' && !Array.isArray(agentsConfig)) {
-    for (const [agentId, val] of Object.entries(agentsConfig)) {
-      if (agentId === '__default') continue;
-      (enabledAgents as any)[agentId] = val;
+    for (const [key, val] of Object.entries(agentsConfig)) {
+      if (key === '__default' || key.startsWith('__')) continue;
+      if (key.startsWith('agent-')) {
+        (enabledAgents as any)[key] = val;
+      } else {
+        // 非 agent- 开头的 key → 文件夹名
+        (enabledGroups as any)[key] = val;
+      }
     }
   }
 
@@ -1060,6 +1117,22 @@ const getAgentEffectiveEnabled = (agent) => {
 const handleAgentToggle = (agentId, enabled) => {
   (enabledAgents as any)[agentId] = enabled;
 };
+const getGroupEffectiveEnabled = (groupId: string): boolean => {
+  if (groupId in enabledGroups) return (enabledGroups as any)[groupId];
+  return true; // 默认启用
+};
+const handleGroupToggle = (groupId: string, enabled: boolean) => {
+  (enabledGroups as any)[groupId] = enabled;
+};
+const toggleAgentsGroupCollapse = (groupId: string) => {
+  const s = new Set(collapsedAgentsGroups.value);
+  if (s.has(groupId)) {
+    s.delete(groupId);
+  } else {
+    s.add(groupId);
+  }
+  collapsedAgentsGroups.value = s;
+};
 const handleAllAgentsDisabledToggle = async (val) => {
   allAgentsDisabled.value = val;
 };
@@ -1068,6 +1141,7 @@ const loadAgents = async () => {
   try {
     const response = await apiService.fetchAgents();
     agentsList.value = Array.isArray(response) ? response : (response.agents || []);
+    agentsGroups.value = response.groups || [];
     // 白名单模式：未配置的 agent 初始化为关闭
     if (agentsAllowlistMode.value) {
       for (const agent of agentsList.value) {
@@ -1429,6 +1503,12 @@ const getFormData = () => {
             if (effectiveEnabled) agentsOut[agent.id] = true;
           } else {
             if (!effectiveEnabled) agentsOut[agent.id] = false;
+          }
+        }
+        // 文件夹配置
+        for (const group of agentsGroups.value) {
+          if (group.id in enabledGroups) {
+            agentsOut[group.id] = (enabledGroups as any)[group.id];
           }
         }
         if (agentsAllowlistMode.value) {

@@ -159,6 +159,7 @@ export class ProcessManagerService {
     });
 
     childProcess.on("close", (code) => {
+      if (entry.status === "killed") return;
       entry.status = code === 0 ? "completed" : "error";
       entry.exitCode = code;
       entry.finishedAt = new Date();
@@ -178,6 +179,7 @@ export class ProcessManagerService {
     });
 
     childProcess.on("error", (err) => {
+      if (entry.status === "killed") return;
       entry.status = "error";
       entry.exitCode = 1;
       entry.finishedAt = new Date();

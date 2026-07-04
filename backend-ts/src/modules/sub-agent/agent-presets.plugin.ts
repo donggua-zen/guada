@@ -35,18 +35,37 @@ export class AgentPresetsPlugin extends PluginBase {
         // 按角色级偏好过滤（复刻 SkillPlugin 逻辑）
         const charAgentCfg = context?.session.getSettings?.('agents');
         let agents: AgentDefinition[];
+
+        // 1. 提取文件夹配置（不以 agent- 开头且非系统字段的 key 视为文件夹名）
+        const folderCfg: Record<string, boolean> = {};
+        if (typeof charAgentCfg === "object" && charAgentCfg !== null) {
+          for (const key of Object.keys(charAgentCfg)) {
+            if (key.startsWith("__") || key.startsWith("agent-")) continue;
+            if (typeof charAgentCfg[key] === "boolean") {
+              folderCfg[key] = charAgentCfg[key];
+            }
+          }
+        }
+
+        // 2. 过滤掉文件夹关闭的 agent
+        const folderFiltered = visibleAgents.filter((a) => {
+          if (a.folder && folderCfg[a.folder] === false) return false;
+          return true;
+        });
+
+        // 3. 再按 agent 级黑白名单过滤
         if (charAgentCfg === false) {
           agents = [];
         } else if (typeof charAgentCfg === "object" && charAgentCfg !== null) {
           if (charAgentCfg.__default === false) {
             // 白名单：只保留显式 true 的 agent
-            agents = visibleAgents.filter((a) => charAgentCfg[a.id] === true);
+            agents = folderFiltered.filter((a) => charAgentCfg[a.id] === true);
           } else {
             // 黑名单：排除显式 false 的 agent
-            agents = visibleAgents.filter((a) => charAgentCfg[a.id] !== false);
+            agents = folderFiltered.filter((a) => charAgentCfg[a.id] !== false);
           }
         } else {
-          agents = visibleAgents;
+          agents = folderFiltered;
         }
         if (agents.length === 0) return "";
 

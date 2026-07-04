@@ -572,8 +572,13 @@ const loadMoreForGroup = async (groupId: string) => {
 }
 
 // 友好格式化最后活跃时间
+const updateTick = ref(0)
+let tickTimer: ReturnType<typeof setInterval> | null = null
+
 const formatLastActive = (dateStr: string | null | undefined): string => {
   if (!dateStr) return ''
+  // 读取 tick 让 Vue 将其视为响应式依赖，实现定时刷新
+  void updateTick.value
   const now = Date.now()
   const diff = now - new Date(dateStr).getTime()
   const minutes = Math.floor(diff / 60000)
@@ -965,6 +970,11 @@ function initSessionEventListeners() {
 
     // 标记会话为空闲
     sessionStore.setSidebarFlag(sessionId, 'working', false)
+
+    // 如果不是当前会话，转为未读状态
+    if (sessionId !== currentSessionId.value) {
+      sessionStore.setSidebarFlag(sessionId, 'unread', true)
+    }
   })
 }
 
@@ -994,12 +1004,20 @@ function cleanupSessionEventListeners() {
 
 onMounted(() => {
   initSessionEventListeners()
+  // 每分钟更新一次最后活跃时间显示（无需SSE事件驱动，自动刷新相对时间）
+  tickTimer = setInterval(() => {
+    updateTick.value++
+  }, 60_000)
 })
 
 
 // 组件卸载时清理
 onUnmounted(() => {
   cleanupSessionEventListeners()
+  if (tickTimer !== null) {
+    clearInterval(tickTimer)
+    tickTimer = null
+  }
 })
 </script>
 
