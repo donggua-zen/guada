@@ -1,13 +1,14 @@
 import { Injectable, Logger } from "@nestjs/common";
-import { spawn, ChildProcess, exec } from "child_process";
-import * as iconv from "iconv-lite";
+import { OnEvent } from "@nestjs/event-emitter";
+import { spawn } from "child_process";
 import * as path from "path";
 import * as fs from "fs/promises";
 import { PluginBase } from "../plugins/base-plugin";
-import { PluginContext } from "../plugins/types/plugin.types";
-import { PluginApi, ToolResult } from "../plugins/api/plugin-api";
+import { PluginApi } from "../plugins/api/plugin-api";
 import { z } from "zod";
 import { ProcessManagerService } from "./process-manager.service";
+import { PluginContext } from "../plugins/types/plugin.types";
+import { StreamFinishedEvent } from "../../common/events/stream.events";
 
 @Injectable()
 export class ShellPlugin extends PluginBase {
@@ -30,8 +31,8 @@ export class ShellPlugin extends PluginBase {
   async onLoad(api: PluginApi) {
     // ── execute 工具 ──
     api.registerTool({
-      name: "execute",
-      description: `执行系统命令并返回输出结果,命令执行超过 1 分钟会自动转入后台运行（返回 processId）,设置 "background": true立即转入后台`,
+      name: "terminal",
+      description: `执行系统命令并返回输出结果,命令执行超过 1 分钟会自动转入后台运行,"background": true立即转入后台`,
       inputSchema: z.object({
         command: z
           .string()
@@ -84,6 +85,7 @@ export class ShellPlugin extends PluginBase {
           encoding,
           ctx?.session.sessionId || "",
           ctx?.session.userId || "",
+          { notify: ctx?.session.sessionType !== "sub_agent" },
         );
 
         // 纯后台模式：立即返回
@@ -91,8 +93,7 @@ export class ShellPlugin extends PluginBase {
           return {
             success: true,
             processId: result.processId,
-            stdout: result.stdout,
-            stderr: result.stderr,
+            output: result.output,
             message: `进程已转入后台运行，ID: ${result.processId}。可使用 process 工具进行管理。`,
           };
         }
@@ -116,14 +117,13 @@ export class ShellPlugin extends PluginBase {
           if (pollResult.status !== "running") {
             return {
               success: true,
-              processId: result.processId,
               processStatus: pollResult.status,
               exitCode: pollResult.exitCode,
-              stdout: pollResult.newStdout,
-              stderr: pollResult.newStderr,
-              stdoutLineCount: pollResult.newStdout.length,
-              stderrLineCount: pollResult.newStderr.length,
-              message: `命令执行完毕（ID: ${result.processId}），退出码: ${pollResult.exitCode}`,
+              output: pollResult.output,
+              lineCount: pollResult.output
+                ? pollResult.output.split("\n").length
+                : 0,
+              message: `命令执行完毕，退出码: ${pollResult.exitCode}`,
             };
           }
 
@@ -131,11 +131,11 @@ export class ShellPlugin extends PluginBase {
           return {
             success: true,
             processId: result.processId,
-            stdout: pollResult.newStdout,
-            stderr: pollResult.newStderr,
-            stdoutLineCount: pollResult.newStdout.length,
-            stderrLineCount: pollResult.newStderr.length,
-            message: `命令执行超过 ${this.BACKGROUND_THRESHOLD_MS / 1000} 秒，已自动转入后台运行，ID: ${result.processId}。可使用 process 工具进行管理。`,
+            output: pollResult.output,
+            lineCount: pollResult.output
+              ? pollResult.output.split("\n").length
+              : 0,
+            message: `命令执行超过 ${this.BACKGROUND_THRESHOLD_MS / 1000} 秒，已自动转入后台运行,可使用 process 工具进行管理。`,
           };
         } finally {
           abortSignal?.removeEventListener("abort", onAbort);
@@ -208,10 +208,8 @@ export class ShellPlugin extends PluginBase {
               processId,
               processStatus: result.status,
               exitCode: result.exitCode,
-              newStdout: result.newStdout,
-              newStderr: result.newStderr,
-              stdoutLineCount: result.newStdout.length,
-              stderrLineCount: result.newStderr.length,
+              output: result.output,
+              lineCount: result.output ? result.output.split("\n").length : 0,
             };
           }
 
@@ -242,11 +240,7 @@ export class ShellPlugin extends PluginBase {
             if (!entry) {
               return { success: false, message: `进程 ${processId} 不存在` };
             }
-            if (
-              !entry.fullLog &&
-              entry.recentStdout.length === 0 &&
-              entry.recentStderr.length === 0
-            ) {
+            if (!entry.fullLog && !entry.output) {
               return {
                 success: true,
                 processId,
@@ -336,48 +330,64 @@ export class ShellPlugin extends PluginBase {
     api.registerPrompt({
       frequency: "STATIC",
       description: "Shell 工具使用说明和安全提醒",
-      content: () => {
+      content: (ctx: PluginContext) => {
         const isWindows = process.platform === "win32";
-        return [
-          "# 命令行工具使用说明",
-          "",
-          `**当前系统**：${isWindows ? "Windows" : process.platform === "darwin" ? "macOS" : "Linux"}`,
-          "",
-          "## 命令执行",
-          "- 使用 `execute` 命令执行command命令",
-          "- 命令默认前台执行，等待完成后返回输出（最多 8000 字符）",
-          "- 前台命令执行超过 **1 分钟** 会自动转入后台模式执行",
-          "",
-          "## 后台进程管理",
-          "使用 **process** 工具管理后台进程，附加参数统一放入 params 对象中：",
-          "",
-          "**kill** — 终止进程，无需 params：",
-          '  `{"action":"kill","processId":"xxx"}`',
-          "",
-          "**poll** — 查看新输出，可选 params.timeout（秒，最小 30）：",
-          '  `{"action":"poll","processId":"xxx","params":{"timeout":30}}`',
-          "",
-          "**modify_progress_monitoring** — 设置进度通知间隔，params.intervalMinutes（分钟，0=关闭，默认30）：",
-          '  `{"action":"modify_progress_monitoring","processId":"xxx","params":{"intervalMinutes":30}}`',
-          "  默认已经开启，设置 0 关闭。非0值不得低于15分钟",
-          "",
-          "**dump_log** — 导出完整日志，可选 params.file_path：",
-          '  `{"action":"dump_log","processId":"xxx","params":{"file_path":"logs/my.log"}}`',
-          "",
-          "**write** — 向进程 stdin 写入输入，必填 params.input，可选 params.appendNewline（默认 true）：",
-          '  `{"action":"write","processId":"xxx","params":{"input":"y"}}`',
-          "",
-          "## 系统通知",
-          "- 后台进程执行结束、异常退出或静默超时，会自动收到系统通知",
-          "- 已经通过poll查收的消息不会再次被系统通知",
-          "",
-          "## 后台任务最佳实践",
-          "- 优先使用前台任务执行以获取初期输出判断是否正常启动",
-          "- 转入后台后可并行其他工作，或结束本轮对话等待系统通知",
-          "- 优先使用poll kill杀死进程，若使用命令行kill需要poll确认状态，否则可能被系统重复通知",
-          "- 长时间任务（预期>30分钟）利用进度通知（已默认开启）及时了解任务进度,短时间任务不必特意关闭监控（利用默认30分钟间隔做兜底）",
-        ].join("\n");
+        const isNotSubAgent = ctx?.session?.sessionType !== "sub_agent";
+        return `# 命令行工具使用说明
+          
+**当前系统**：${isWindows ? "Windows" : process.platform === "darwin" ? "macOS" : "Linux"}
+          
+## 命令执行
+- 使用 \`terminal\` 命令执行command命令
+- 命令默认前台执行，等待完成后返回输出（最多 8000 字符）
+- 前台命令执行超过 **1 分钟** 会自动转入后台模式执行
+- processId一般是shell壳的进程ID，不是命令本身进程ID
+## 后台进程管理
+- 使用 **process** 工具管理后台进程，附加参数统一放入 params 对象中：
+- **kill** — 终止进程，无需 params：
+  \`{"action":"kill","processId":"xxx"}\`
+- **poll** — 查看新输出，可选 params.timeout（秒，最小 30）：
+   \`{"action":"poll","processId":"xxx","params":{"timeout":30}}\`
+${
+  isNotSubAgent
+    ? `
+- **modify_progress_monitoring** — 设置系统自动监控报告间隔，intervalMinutes（分钟，0=关闭，默认30）：
+    \`{"action":"modify_progress_monitoring","processId":"xxx","params":{"intervalMinutes":30}}\`
+- 默认已经开启，设置 0 关闭。非0值不得低于15分钟`
+    : ""
+}
+- **dump_log** — 导出完整日志，可选 params.file_path：
+  \`{"action":"dump_log","processId":"xxx","params":{"file_path":"logs/my.log"}}\`
+- **write** — 向进程 stdin 写入输入，必填 params.input，可选 params.appendNewline（默认 true）：
+    \`{"action":"write","processId":"xxx","params":{"input":"y"}}\`
+## 后台任务最佳实践
+- 优先使用前台任务执行以获取初期输出判断是否正常启动
+- 优先使用process(action=kill,processId=...)杀死进程          
+ ${
+   isNotSubAgent
+     ? `
+- 转入后台后可并行其他工作，或结束本轮对话等待系统通知
+- 后台进程执行结束会自动收到系统通知,无需持续轮询
+- 已经通过poll查收的消息不会再次被系统通知
+- 长时间任务（预期>30分钟）利用进度通知（已默认开启）及时了解任务进度,短时间任务不必特意关闭监控（利用默认30分钟间隔做兜底）`
+     : `- 结束对话后，会自动终止所有后台进程，务必使用POLL等待进程结束`
+ }`;
       },
     });
+  }
+
+  /**
+   * 子 Agent 流结束时，自动杀死该会话下的所有后台进程
+   */
+  @OnEvent("stream.finished")
+  handleStreamFinished(event: StreamFinishedEvent): void {
+    if (event.payload.sessionType !== "sub_agent") return;
+
+    const processes = this.processManager.listBySession(event.sessionId);
+    for (const proc of processes) {
+      if (proc.status !== "running") continue;
+      this.processManager.kill(proc.id);
+      this.logger.log(`子 Agent 流结束，自动终止后台进程: ${proc.id}`);
+    }
   }
 }

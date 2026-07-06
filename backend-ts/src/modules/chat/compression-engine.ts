@@ -505,34 +505,8 @@ export class CompressionEngine implements ICompressionStrategy {
 
     // 构造发送给 LLM 的提示词,包含历史摘要(若有)和待压缩的新增对话内容
     // 通过清晰的分区标记帮助模型理解不同部分的作用
-    const promptParts = [];
-    promptParts.push(`你是一个对话事件摘要生成专家。你的任务是将会话内容浓缩为一份**事件概要**，不记录具体事实细节。
+    const new_dialogue = [];
 
-## 定位说明
-- **摘要的定位是"事件索引"**：记录讨论过什么话题、正在进行什么任务、对话的氛围和走向。
-- **具体事实、偏好、决策、待办等已由独立的记忆系统保存**，摘要中不要重复记录这些内容。
-- 摘要的作用是在模型加载历史时快速了解"之前发生了什么"，而不是替代记忆系统。
-
-## 压缩原则
-1. **话题级概括**：记录讨论了哪些话题（如"讨论了 Python 并发方案"）和结论（如"决定用 multiprocessing.Pool"）。
-2. **事件走向**：记录对话的进展状态（如"正在实现登录模块"、"等待用户提供数据库地址"）。
-3. **省略细节**：跳过代码内容、具体参数、配置项、错误信息等细节、讨论过程。
-4. **时间有序**：按对话发生的时间线组织。
-5. **控制长度**：合并历史摘要时进一步浓缩，总长度不超过800字。
-
-## 输出结构
-- 使用简洁的自然段落，类似"讨论了X→决定Y→进行中Z"的风格。
-- 若无历史摘要，则仅基于新增对话生成。
-- 直接输出摘要正文，不附加任何解释、前言或后缀。
-
-## 输出示例(仅供参考风格)
-用户开始询问 Python 并发编程，讨论了 GIL 限制和多进程方案，目前正在 review 代码示例。后续话题转向了数据库选型，对比了 MySQL 和 PostgreSQL，暂未做最终决定。`);
-
-    if (previousSummary) {
-      promptParts.push(`\n\n【历史对话摘要】\n${previousSummary}\n`);
-    }
-
-    promptParts.push("【待压缩的新增对话内容】");
     toCompress.forEach((msg) => {
       // 构建简化的消息对象
       const simplifiedMsg: any = {
@@ -576,18 +550,67 @@ export class CompressionEngine implements ICompressionStrategy {
         return;
       }
 
-      promptParts.push(JSON.stringify(simplifiedMsg));
+      new_dialogue.push(JSON.stringify(simplifiedMsg));
     });
 
     // this.logger.debug(promptParts.join("\n"));
+    const promptStr =
+      previousSummary && previousSummary.length > 0
+        ? `You are a conversation summarization expert. Update the existing summary by integrating the new dialogue fragment.
 
-    promptParts.push("\n\n开始压缩，不超过2000字");
+Rules:
+- Retain all valid information from the Existing Summary.
+- Based on the New Dialogue, add new topics, update task statuses, and modify the Current Progress section.
+- If an item is completed, move it from "Pending Items" to "Completed Items".
+- Merge redundant information, but do not drop any facts.
+- Output language must match the conversation's language.
+
+The updated summary must maintain the same four-section structure (write "None" if empty):
+1. Discussed Topics: List all main topics, sub-topics, and key details.
+2. Completed Items: Record all tasks, decisions, and problems that have been explicitly resolved or finalized.
+3. Current Progress: Describe the current status, ongoing work, latest consensus, or recent changes.
+4. Pending Items: List any unfinished tasks, open questions, or next steps.
+5. Other Context: Include key data, blockers, notes worth keeping for
+
+Existing Summary:
+"""
+${previousSummary}
+"""
+
+New Dialogue:
+"""
+${new_dialogue.join("\n")}
+"""
+
+Updated Summary:
+`
+        : `You are a conversation summarization expert. Generate a structured summary from the complete conversation history provided below.
+
+The summary must be organized into four sections (if a section has no content, write "None"):
+1. Discussed Topics: List all main topics, sub-topics, and key details.
+2. Completed Items: Record all tasks, decisions, and problems that have been explicitly resolved or finalized.
+3. Current Progress: Describe the current status, ongoing work, latest consensus, or recent changes.
+4. Pending Items: List any unfinished tasks, open questions, or next steps.
+5. Other Context: Include key data, blockers, notes worth keeping for
+continuity.
+
+Requirements:
+- Be concise, using bullet points.
+- Base your summary strictly on the provided conversation; do not infer.
+- Output language must match the conversation's language.
+
+Conversation History:
+"""
+${new_dialogue.join("\n")}
+"""
+
+Summary:`;
 
     // 快速摘要：单次 LLM 调用
     this.logger.log("Using fast summary mode (single call)");
     const response = await this.llmService.completions({
       model: compressionModel?.modelName || "gpt-3.5-turbo",
-      messages: [{ role: "user", content: promptParts.join("\n") }],
+      messages: [{ role: "user", content: promptStr }],
       temperature: 0.4,
       maxTokens: 2000,
       thinkingEffort: resolveThinkingEffort(compressionModel, "off"),

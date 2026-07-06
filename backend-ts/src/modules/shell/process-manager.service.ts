@@ -23,10 +23,10 @@ export interface ProcessEntry {
   isBackgrounded: boolean;
   /** 完整的累积日志（最大 1MB，超出保留末尾） */
   fullLog: string;
-  /** 最近 stdout 行（最多 50 行，poll 后清空） */
-  recentStdout: string[];
-  /** 最近 stderr 行（最多 50 行，poll 后清空） */
-  recentStderr: string[];
+  /** 自上次 poll 以来累积的输出（字符串，poll 后清空） */
+  output: string;
+  /** 进程结束时是否投递系统消息到信箱（默认 true） */
+  notify: boolean;
   /** 进度通知间隔（分钟），0=关闭 */
   progressIntervalMinutes: number;
   lastOutputAt: Date;
@@ -42,10 +42,8 @@ export interface PollResult {
   processId: string;
   status: ProcessStatus;
   exitCode: number | null;
-  /** 自上次 poll 以来的新 stdout（最多 50 行） */
-  newStdout: string[];
-  /** 自上次 poll 以来的新 stderr（最多 50 行） */
-  newStderr: string[];
+  /** 自上次 poll 以来的新输出（已清洗+截断后的文本） */
+  output: string;
   /** 本次 poll 实际等待的秒数（0=未等待） */
   waitSeconds: number;
 }
@@ -53,10 +51,8 @@ export interface PollResult {
 export interface BackgroundResult {
   processId: string;
   status: "backgrounded";
-  /** 转入后台时截取的 stdout 行（最多 50 行） */
-  stdout: string[];
-  /** 转入后台时截取的 stderr 行（最多 50 行） */
-  stderr: string[];
+  /** 转入后台时截取的输出文本 */
+  output: string;
 }
 
 export interface ProcessListEntry {
@@ -86,8 +82,6 @@ export class ProcessManagerService {
   /** poll 等待者管理：wait / notify 条件变量 */
   private readonly pollNotifier = new AsyncNotifier();
 
-  /** 最近输出最大行数 */
-  private readonly MAX_RECENT_LINES = 50;
   /** 完整日志缓冲区最大值（1MB） */
   private readonly MAX_BUFFER_BYTES = 1024 * 1024;
   /** 进程结束后延迟清理时间（10分钟） */
@@ -113,8 +107,7 @@ export class ProcessManagerService {
     encoding: string,
     sessionId: string,
     userId: string,
-    initialStdout?: string[],
-    initialStderr?: string[],
+    options?: { notify?: boolean },
   ): BackgroundResult {
     const processId = childProcess.pid?.toString() || this.generateId();
 
@@ -130,8 +123,8 @@ export class ProcessManagerService {
       encoding,
       isBackgrounded: true,
       fullLog: "",
-      recentStdout: (initialStdout || []).slice(-this.MAX_RECENT_LINES),
-      recentStderr: (initialStderr || []).slice(-this.MAX_RECENT_LINES),
+      output: "",
+      notify: options?.notify ?? true,
       progressIntervalMinutes: this.DEFAULT_PROGRESS_INTERVAL_MINUTES,
       lastOutputAt: new Date(),
       progressTimer: null,
@@ -143,18 +136,18 @@ export class ProcessManagerService {
       `后台进程 ${processId} 开始，缓冲区上限 1MB: ${command.substring(0, 80)}`,
     );
 
-    // 接管 stdout/stderr → 内存缓冲区
+    // 接管 stdout/stderr → 内存缓冲区（自然交错拼接）
     childProcess.stdout?.on("data", (chunk: Buffer) => {
       const text = this.decodeBuffer(chunk, encoding);
       this.appendFullLog(entry, text);
-      this.appendRecent(entry, text, "stdout");
+      this.appendRecent(entry, text);
       this.onOutput(entry);
     });
 
     childProcess.stderr?.on("data", (chunk: Buffer) => {
       const text = this.decodeBuffer(chunk, encoding);
       this.appendFullLog(entry, text);
-      this.appendRecent(entry, text, "stderr");
+      this.appendRecent(entry, text);
       this.onOutput(entry);
     });
 
@@ -215,8 +208,7 @@ export class ProcessManagerService {
     return {
       processId,
       status: "backgrounded",
-      stdout: entry.recentStdout.slice(-this.MAX_RECENT_LINES),
-      stderr: entry.recentStderr.slice(-this.MAX_RECENT_LINES),
+      output: entry.output,
     };
   }
 
@@ -291,8 +283,7 @@ export class ProcessManagerService {
               processId: payload.processId,
               status: payload.status,
               exitCode: payload.exitCode,
-              newStdout: payload.recentStdout || [],
-              newStderr: payload.recentStderr || [],
+              output: payload.output || "",
               waitSeconds: 0,
             };
           }
@@ -428,20 +419,9 @@ export class ProcessManagerService {
     }
   }
 
-  /** 将新输出追加到 recent 行列表（限制最大行数） */
-  private appendRecent(
-    entry: ProcessEntry,
-    text: string,
-    type: "stdout" | "stderr",
-  ): void {
-    const lines = text.split("\n");
-    const target = type === "stdout" ? entry.recentStdout : entry.recentStderr;
-    for (const line of lines) {
-      if (line.length > 0) target.push(line);
-    }
-    if (target.length > this.MAX_RECENT_LINES) {
-      target.splice(0, target.length - this.MAX_RECENT_LINES);
-    }
+  /** 将新输出追加到 output 缓冲区（自然交错拼接） */
+  private appendRecent(entry: ProcessEntry, text: string): void {
+    entry.output += text;
   }
 
   /** 将新输出追加到完整日志缓冲区（最大 1MB，超出保留末尾） */
@@ -458,12 +438,116 @@ export class ProcessManagerService {
     entry.lastOutputAt = new Date();
   }
 
+  // ── 输出后处理 ──
+
+  /**
+   * 清洗终端输出：逐字节擦除 ANSI 转义码 + 归一化换行 + \r 进度条重建
+   */
+  private sanitizeOutput(raw: string): string {
+    // 1. 逐字节擦除 ANSI 转义码
+    let cleaned = "";
+    let i = 0;
+    while (i < raw.length) {
+      if (raw.charCodeAt(i) === 0x1b) {
+        // ESC
+        if (i + 1 < raw.length) {
+          const next = raw.charCodeAt(i + 1);
+          if (next === 0x5b) {
+            // CSI: ESC [
+            i += 2;
+            while (i < raw.length) {
+              const c = raw.charCodeAt(i);
+              if (c >= 0x40 && c <= 0x7e) {
+                i++;
+                break;
+              } // final byte
+              i++;
+            }
+            continue;
+          } else if (next === 0x5d) {
+            // OSC: ESC ]
+            i += 2;
+            while (i < raw.length) {
+              if (raw.charCodeAt(i) === 0x07) {
+                i++;
+                break;
+              } // BEL
+              if (
+                raw[i] === "\x1B" &&
+                i + 1 < raw.length &&
+                raw[i + 1] === "\\"
+              ) {
+                i += 2;
+                break;
+              } // ST
+              i++;
+            }
+            continue;
+          } else {
+            // 两字节转义：ESC + 任一字符
+            i += 2;
+            continue;
+          }
+        }
+        i++;
+        continue;
+      }
+      cleaned += raw[i];
+      i++;
+    }
+
+    // 2. \r\n → \n
+    cleaned = cleaned.replace(/\r\n/g, "\n");
+
+    // 3. \r 进度条重建：每行只保留最后一个 \r 之后的内容
+    const lines = cleaned.split("\n");
+    const result = lines.map((line) => {
+      line = line.replace(/\r$/, ""); // 清掉 \r\n 转换残余
+      const lastR = line.lastIndexOf("\r");
+      return lastR >= 0 ? line.substring(lastR + 1) : line;
+    });
+    return result.join("\n");
+  }
+
+  /**
+   * 智能截断输出：字符优先（10K），再行数（50），40%+notice+60%
+   */
+  private truncateOutput(cleanText: string): string {
+    const MAX_CHARS = 10_000;
+    const MAX_LINES = 50;
+
+    const lines = cleanText.split("\n");
+    const charCount = cleanText.length;
+    const lineCount = lines.length;
+
+    // 两者都未超 → 完整输出
+    if (charCount <= MAX_CHARS && lineCount <= MAX_LINES) {
+      return cleanText;
+    }
+
+    if (charCount > MAX_CHARS) {
+      // 字符超出 → 按字符 40% + notice + 60%
+      const headLen = Math.floor(MAX_CHARS * 0.4);
+      const tailLen = MAX_CHARS - headLen - 100; // 留 100 给 notice
+      const head = cleanText.substring(0, headLen);
+      const tail = cleanText.substring(cleanText.length - tailLen);
+      const notice = `\n[...输出截断，共 ${charCount} 字符，仅展示首尾...]\n`;
+      return head + notice + tail;
+    }
+
+    // 仅行数超出 → 按行 40% + notice + 60%
+    const headLines = Math.floor(MAX_LINES * 0.4);
+    const tailLines = MAX_LINES - headLines - 3; // 3 行给 notice
+    const head = lines.slice(0, headLines).join("\n");
+    const tail = lines.slice(lines.length - tailLines).join("\n");
+    const notice = `\n[...输出截断，共 ${lineCount} 行，仅展示首尾...]\n`;
+    return head + notice + tail;
+  }
+
   /** 构建 poll 结果，返回后清空缓冲区 */
   private buildPollResult(entry: ProcessEntry, waitSeconds = 0): PollResult {
-    const newStdout = [...entry.recentStdout];
-    const newStderr = [...entry.recentStderr];
-    entry.recentStdout.length = 0;
-    entry.recentStderr.length = 0;
+    const rawOutput = entry.output;
+    entry.output = "";
 
     // AI poll 看到进程结束 → 从信箱撤回消息 + 延迟清理
     if (entry.status !== "running") {
@@ -474,12 +558,15 @@ export class ProcessManagerService {
       this.scheduleCleanup(entry);
     }
 
+    // 后处理：清洗 → 截断
+    const cleanOutput = this.sanitizeOutput(rawOutput);
+    const finalOutput = this.truncateOutput(cleanOutput);
+
     return {
       processId: entry.id,
       status: entry.status,
       exitCode: entry.exitCode,
-      newStdout: newStdout.slice(-this.MAX_RECENT_LINES),
-      newStderr: newStderr.slice(-this.MAX_RECENT_LINES),
+      output: finalOutput,
       waitSeconds,
     };
   }
@@ -511,6 +598,8 @@ export class ProcessManagerService {
 
   /** 投递系统消息，每进程独立投递，投递后延迟清理 */
   private enqueueSystemMessage(entry: ProcessEntry, event?: string): void {
+    if (!entry.notify) return;
+
     const eventType = event || entry.status;
 
     const isProgress = eventType === "progress_report";
@@ -528,8 +617,7 @@ export class ProcessManagerService {
         progressIntervalMinutes: isProgress
           ? entry.progressIntervalMinutes
           : undefined,
-        recentStdout: entry.recentStdout.slice(-this.MAX_RECENT_LINES),
-        recentStderr: entry.recentStderr.slice(-this.MAX_RECENT_LINES),
+        output: entry.output,
       },
     ];
     this.logger.debug(`投递系统消息: ${content}`);

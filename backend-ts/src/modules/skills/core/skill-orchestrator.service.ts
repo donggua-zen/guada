@@ -1,9 +1,15 @@
-import { Injectable, Logger, OnModuleInit, OnModuleDestroy } from '@nestjs/common';
-import { SkillSourceManager } from './skill-source.manager';
-import { SkillRegistry } from './skill-registry.service';
-import { SkillLoaderService } from './skill-loader.service';
-import { SkillVersionManager } from './skill-version-manager.service';
-import { SkillDefinition } from '../interfaces/skill-manifest.interface';
+import {
+  Injectable,
+  Logger,
+  OnModuleInit,
+  OnModuleDestroy,
+} from "@nestjs/common";
+import * as path from "path";
+import { SkillSourceManager } from "./skill-source.manager";
+import { SkillRegistry } from "./skill-registry.service";
+import { SkillLoaderService } from "./skill-loader.service";
+import { SkillVersionManager } from "./skill-version-manager.service";
+import { SkillDefinition } from "../interfaces/skill-manifest.interface";
 
 /**
  * Skill 匹配结果
@@ -26,7 +32,7 @@ export class SkillOrchestrator implements OnModuleInit, OnModuleDestroy {
   ) {}
 
   async onModuleInit(): Promise<void> {
-    this.logger.log('Initializing Skills framework...');
+    this.logger.log("Initializing Skills framework...");
     try {
       // 由 SkillsModule.onModuleInit 先调用 watcher.start() 和 sourceManager.start()
       const n = this.registry.getAll().size;
@@ -37,14 +43,14 @@ export class SkillOrchestrator implements OnModuleInit, OnModuleDestroy {
   }
 
   async onModuleDestroy(): Promise<void> {
-    this.logger.log('Shutting down Skills framework...');
+    this.logger.log("Shutting down Skills framework...");
   }
 
   /**
    * 重新触发全量扫描（现有 system + global 来源重新加载）
    */
   async triggerScan(): Promise<void> {
-    this.logger.log('Triggering manual scan...');
+    this.logger.log("Triggering manual scan...");
     // 重新注册 system + global，更新 registry
     await this.sourceManager.restart();
   }
@@ -62,7 +68,7 @@ export class SkillOrchestrator implements OnModuleInit, OnModuleDestroy {
     if (!workspacePath) return base;
 
     // workspace 技能（来自 SourceManager 独立缓存）
-    const wsKey = 'workspace_' + workspacePath;
+    const wsKey = "workspace_" + workspacePath;
     const wsSkills = this.sourceManager.getSourceSkills(wsKey);
     if (wsSkills.length === 0) return base;
 
@@ -107,6 +113,20 @@ export class SkillOrchestrator implements OnModuleInit, OnModuleDestroy {
   }
 
   /**
+   * 通过名称获取技能内容（纯正文，不含 YAML 头）和路径
+   * 供 skill_lean 工具调用
+   */
+  async skillLean(
+    name: string,
+  ): Promise<{ name: string; content: string; path: string } | null> {
+    const skill = this.registry.get(name.toLowerCase());
+    if (!skill) return null;
+    const content = await this.loader.loadInstructions(skill);
+    const fullPath = path.join(skill.baseDir, skill.basePath, "SKILL.md");
+    return { name: skill.manifest.name, content, path: fullPath };
+  }
+
+  /**
    * 重新加载指定 Skill
    */
   async reloadSkill(skillId: string): Promise<SkillDefinition> {
@@ -126,14 +146,17 @@ export class SkillOrchestrator implements OnModuleInit, OnModuleDestroy {
           updatedSkill.contentHash,
         );
       } catch (error) {
-        const errorMessage = error instanceof Error ? error.message : String(error);
-        if (errorMessage.includes('not found in version records')) {
+        const errorMessage =
+          error instanceof Error ? error.message : String(error);
+        if (errorMessage.includes("not found in version records")) {
           await this.versionManager.recordInstall(
             skillId,
             updatedSkill.manifest.version,
             updatedSkill.contentHash,
           );
-          this.logger.debug(`Created initial version record for skill: ${skillId}`);
+          this.logger.debug(
+            `Created initial version record for skill: ${skillId}`,
+          );
         } else {
           throw error;
         }
@@ -152,10 +175,7 @@ export class SkillOrchestrator implements OnModuleInit, OnModuleDestroy {
     const matches: SkillMatch[] = [];
 
     for (const skill of skills) {
-      const keywords = [
-        skill.manifest.name,
-        ...(skill.manifest.tags || []),
-      ];
+      const keywords = [skill.manifest.name, ...(skill.manifest.tags || [])];
 
       const lowerMessage = userMessage.toLowerCase();
       const matchedKeywords = keywords.filter((kw) =>
@@ -166,7 +186,7 @@ export class SkillOrchestrator implements OnModuleInit, OnModuleDestroy {
         matches.push({
           skillId: skill.id,
           confidence: matchedKeywords.length / keywords.length,
-          reason: `Matched keywords: ${matchedKeywords.join(', ')}`,
+          reason: `Matched keywords: ${matchedKeywords.join(", ")}`,
         });
       }
     }
@@ -179,11 +199,11 @@ export class SkillOrchestrator implements OnModuleInit, OnModuleDestroy {
    */
   getMetadataInjection(): string {
     const skills = Array.from(this.registry.getAll().values());
-    if (skills.length === 0) return '';
+    if (skills.length === 0) return "";
 
     const metadataList = skills
       .map((skill) => `- ${skill.manifest.name}: ${skill.manifest.description}`)
-      .join('\n');
+      .join("\n");
 
     return `\n\n# Available Skills\nThe following professional skills are available. Use the skill management tools to interact with them:\n\n${metadataList}`;
   }

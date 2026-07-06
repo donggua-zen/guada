@@ -1,5 +1,5 @@
 import { Injectable, Logger } from "@nestjs/common";
-import * as path from "path";
+import { z } from "zod";
 import { PluginBase } from "../../plugins/base-plugin";
 import { PluginContext } from "../../plugins/types/plugin.types";
 import { SkillOrchestrator } from "../core/skill-orchestrator.service";
@@ -8,8 +8,6 @@ import { PluginApi } from "../../plugins/api/plugin-api";
 @Injectable()
 export class SkillPlugin extends PluginBase {
   private readonly logger = new Logger(SkillPlugin.name);
-  private readonly skillsDir =
-    process.env.SKILLS_DIR || path.join(process.cwd(), "skills");
   manifest = {
     id: "skill",
     name: "Skills 技能",
@@ -23,10 +21,51 @@ export class SkillPlugin extends PluginBase {
   }
 
   async onLoad(api: PluginApi) {
-    // 动态技能列表提示词（每次收集时从 orchestrator 读取当前技能）
-    api.registerPrompt({
+    const skillKit = api.registerToolKit({
+      id: "skill",
+      name: "技能指令",
+      loadMode: "eager",
+      activator: "当需要使用某个技能时，调用此工具包获取技能完整指令",
+      handler: async (ctx: PluginContext) => {
+        const skills = this.orchestrator.listSkills(
+          true,
+          ctx?.session.workspacePath,
+        );
+        if (skills.length === 0) return { loadMode: "none" as const };
+        return { loadMode: "eager" as const };
+      },
+    });
+
+    // ── skill_lean：获取技能完整指令 ──
+    skillKit.registerTool({
+      name: "skill_lean",
+      description:
+        "通过技能名称获取技能的完整指令内容和路径。技能内容已去除 YAML 元数据头，可直接使用",
+      inputSchema: z.object({
+        name: z
+          .string()
+          .describe("技能名称（SKILL.md frontmatter 中定义的 name 字段）"),
+      }),
+      execute: async (args) => {
+        const result = await this.orchestrator.skillLean(args.name);
+        if (!result) {
+          return { success: false, message: `技能 "${args.name}" 不存在` };
+        }
+        return {
+          success: true,
+          name: result.name,
+          content: result.content,
+          path: result.path,
+        };
+      },
+      display: { action: "读取技能", argsKey: "name", icon: "book" },
+      dangerLevel: "info",
+    });
+
+    // ── Prompt（toolkit 的 prompt 随 loadMode 自动注入/隐藏）──
+    skillKit.registerPrompt({
       frequency: "REGULAR",
-      description: "可用技能列表及使用指南",
+      description: "可用技能列表",
       content: (context: PluginContext) => {
         const allSkills = this.orchestrator.listSkills(
           true,
@@ -34,7 +73,7 @@ export class SkillPlugin extends PluginBase {
         );
 
         // 按角色级偏好过滤
-        const charSkillCfg = context?.session.getSettings?.('skills');
+        const charSkillCfg = context?.session.getSettings?.("skills");
         let skills: any[];
         if (charSkillCfg === false) {
           skills = [];
@@ -51,29 +90,21 @@ export class SkillPlugin extends PluginBase {
         }
         if (skills.length === 0) return "";
 
-        const skillXml = skills
-          .map((s) => {
-            return [
-              ` <skill name="${s.manifest.name}">`,
-              `   <description>${s.manifest.description}</description>`,
-              `   <location>${s.basePath}/SKILL.md</location>`,
-              ` </skill>`,
-            ].join("\n");
-          })
+        const skillList = skills
+          .map((s) => `- ${s.manifest.name}: ${s.manifest.description}`)
           .join("\n");
 
         return [
           "",
           "# Skills",
           "",
-          `Your skills base directory is \`${this.skillsDir}\`.`,
-          "You have access to the following skills. Each skill has a name, description, and location.",
-          "When a user's request matches a skill's description, use the `read` tool to load the full",
+          "You have access to the following skills. Each skill has a name and description.",
+          "When a user's request matches a skill's description, use the `skill_learn` tool to load the full",
           "SKILL.md file from its location to get complete instructions. Do not guess the skill's",
           "behavior — always read the file first.",
-
+          "",
           "<available_skills>",
-          skillXml,
+          skillList,
           "</available_skills>",
         ].join("\n");
       },
