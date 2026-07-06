@@ -131,19 +131,19 @@ export class BrowserPlugin extends PluginBase {
           display: { action: "获取页面摘要", icon: "browser" },
         });
         toolkit.registerTool({
-          name: "browser_go_back",
+          name: "browser_back",
           description: "浏览器后退",
           inputSchema: z.object({ window_id: z.string().describe("目标窗口 ID") }),
           execute: async (args, ctx, signal) =>
-            this.executeWithContent("browser_go_back", args, signal),
+            this.executeWithContent("browser_back", args, signal),
           display: { action: "后退", icon: "browser" },
         });
         toolkit.registerTool({
-          name: "browser_go_forward",
+          name: "browser_forward",
           description: "浏览器前进",
           inputSchema: z.object({ window_id: z.string().describe("目标窗口 ID") }),
           execute: async (args, ctx, signal) =>
-            this.executeWithContent("browser_go_forward", args, signal),
+            this.executeWithContent("browser_forward", args, signal),
           display: { action: "前进", icon: "browser" },
         });
         toolkit.registerTool({

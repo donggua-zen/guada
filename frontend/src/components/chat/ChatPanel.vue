@@ -817,6 +817,7 @@ async function handleStreamResponse(
     }
     if (error.name !== 'AbortError') {
       notify.error("请求错误", error.message)
+      console.error("请求错误:", error)
     }
   }
 }

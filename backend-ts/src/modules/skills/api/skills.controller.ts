@@ -9,6 +9,7 @@ import { SkillMetadataValidator } from '../common/skill-metadata.validator';
 import { ConfigService } from '@nestjs/config';
 import * as path from 'path';
 import * as fs from 'fs/promises';
+import * as os from 'os';
 import AdmZip from 'adm-zip';
 import { exec } from 'child_process';
 import { promisify } from 'util';
@@ -206,7 +207,7 @@ export class SkillsController {
 
       // 生成临时目录名
       const tempDirName = `skill-git-${Date.now()}`;
-      const tempDir = path.join(process.cwd(), 'temp', tempDirName);
+      const tempDir = path.join(os.tmpdir(), tempDirName);
       await fs.mkdir(tempDir, { recursive: true });
 
       this.logger.log(`Cloning skill from Git: ${url}`);
@@ -358,7 +359,7 @@ export class SkillsController {
 
       // 创建临时目录
       const tempDirName = `skill-url-${Date.now()}`;
-      const tempDir = path.join(process.cwd(), 'temp', tempDirName);
+      const tempDir = path.join(os.tmpdir(), tempDirName);
       await fs.mkdir(tempDir, { recursive: true });
 
       // 下载 ZIP 文件
@@ -476,7 +477,7 @@ export class SkillsController {
       const force = body?.force === true || String(body?.force) === 'true';
 
       // 创建临时目录解压
-      const tempDir = path.join(process.cwd(), 'temp', `skill-install-${Date.now()}`);
+      const tempDir = path.join(os.tmpdir(), `skill-install-${Date.now()}`);
       await fs.mkdir(tempDir, { recursive: true });
 
       // 保存 ZIP 文件

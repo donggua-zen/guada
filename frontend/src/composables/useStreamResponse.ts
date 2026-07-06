@@ -279,10 +279,7 @@ export function useStreamResponse(sessionStore: any, apiService: any) {
   /**
    * 处理工具调用（增量更新）
    */
-  function handleToolCall(
-    content: MessageContent,
-    toolCalls: any[],
-  ): void {
+  function handleToolCall(content: MessageContent, toolCalls: any[]): void {
     // 初始化 metadata
     if (!content.metadata) {
       content.metadata = {};
@@ -340,7 +337,11 @@ export function useStreamResponse(sessionStore: any, apiService: any) {
     content.metadata.toolCallsResponse = toolCallsResponse;
 
     // 更新展示文案为完成状态（从 tool_calls_response 携带的最新文案）
-    if (displayMessages && displayMessages.length > 0 && content.metadata.toolCalls) {
+    if (
+      displayMessages &&
+      displayMessages.length > 0 &&
+      content.metadata.toolCalls
+    ) {
       for (let i = 0; i < displayMessages.length; i++) {
         const dm = displayMessages[i];
         if (dm) {
@@ -482,12 +483,10 @@ export function useStreamResponse(sessionStore: any, apiService: any) {
       // 强制 flush 并清理缓冲区
       if (content) {
         forceFlushContent(message, contentIndex);
-      }
-
-      content.state.isStreaming = false;
-      content.state.isThinking = false;
-
-      if (content && message) {
+        if (content.state) { 
+          content.state.isStreaming = false;
+          content.state.isThinking = false;
+        }
         content.updatedAt = new Date().toISOString();
       }
     }
@@ -630,10 +629,7 @@ export function useStreamResponse(sessionStore: any, apiService: any) {
 
         // 处理工具调用（增量更新）
         if (response.type === "tool_call") {
-          handleToolCall(
-            message!.contents[contentIndex],
-            response.toolCalls,
-          );
+          handleToolCall(message!.contents[contentIndex], response.toolCalls);
           continue;
         }
 
@@ -687,6 +683,7 @@ export function useStreamResponse(sessionStore: any, apiService: any) {
       if ((error as Error).message.includes("SessionBusyError")) {
         return;
       }
+      console.error("stream error:", error);
       throw error; // 重新抛出错误，由调用者处理
     } finally {
       cleanupStreaming(streamingSessionId, message, contentIndex);

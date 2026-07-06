@@ -10,7 +10,8 @@ export class AgentPresetsPlugin extends PluginBase {
   manifest = {
     id: "agent_presets",
     name: "预设 Agent",
-    description: "预设 Agent 角色列表，可通过 subagent_spawn + characterId 创建",
+    description:
+      "预设 Agent 角色列表，可通过 subagent_spawn + characterId 创建",
     version: "1.0.0",
     category: "system" as const,
   };
@@ -29,11 +30,13 @@ export class AgentPresetsPlugin extends PluginBase {
         if (context?.session.sessionType === "team") return "";
         const allAgents = await this.agentScanner.listAgents();
         // 仅注入可见的 agent（自身 visible + 文件夹 cascade）
-        const visibleAgents = allAgents.filter((a) => a.visible && a.folderVisible !== false);
+        const visibleAgents = allAgents.filter(
+          (a) => a.visible && a.folderVisible !== false,
+        );
         if (visibleAgents.length === 0) return "";
 
         // 按角色级偏好过滤（复刻 SkillPlugin 逻辑）
-        const charAgentCfg = context?.session.getSettings?.('agents');
+        const charAgentCfg = context?.session.getSettings?.("agents");
         let agents: AgentDefinition[];
 
         // 1. 提取文件夹配置（不以 agent- 开头且非系统字段的 key 视为文件夹名）
@@ -72,10 +75,7 @@ export class AgentPresetsPlugin extends PluginBase {
         const agentXml = agents
           .map((a) => {
             return [
-              ` <agent id="${a.id}">`,
-              `   <name>${a.emoji} ${a.name}</name>`,
-              `   <description>${a.description}</description>`,
-              ` </agent>`,
+              `   - id: ${a.id} name: ${a.name} description: ${a.description}`,
             ].join("\n");
           })
           .join("\n");
@@ -84,9 +84,10 @@ export class AgentPresetsPlugin extends PluginBase {
           "",
           "# Agents",
           "",
-          "You have access to the following lightweight agents. " +
-            "Use `subagent_spawn` with `characterId` set to the agent's `id` " +
-            "to create a sub-agent with that agent's personality and instructions.",
+          "You can use the following preset Agent roles. ",
+          "Scan the agent descriptions to see if they match user requirements. If they match, use subagent_spawn with characterId to create a sub-agent.",
+          "Preset Agents already have built-in role instructions and working methods.",
+          "You only need to specify requirements and deliverables, no need to specify additional workflows.",
           "",
           "<available_agents>",
           agentXml,

@@ -240,6 +240,7 @@ export class AgentEngine {
         turnsId = lastMessage.turnsId;
         if (lastMessage.role === "tool") {
           isResumeMode = false;
+          needToContinue = true;
           continue;
         }
       }

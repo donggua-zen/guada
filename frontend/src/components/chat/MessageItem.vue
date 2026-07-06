@@ -91,7 +91,7 @@
             <template #title v-if="metadata.finishReason === 'max_iterations_reached'">
               <span>已达到最大工具调用轮次限制</span>
             </template>
-            <div class="flex items-center gap-3 mt-2">
+            <div v-if="isLast" class="flex items-center gap-3 mt-2">
               <el-button type="primary" size="small" @click="handleContinue">
                 继续执行
               </el-button>

@@ -551,6 +551,7 @@ export class ChatRunnerService {
     clientId?: string,
   ): Promise<void> {
     const sessionId = session.id;
+    let lastFinishReason: string | undefined;
     try {
       // 构建类型安全的会话上下文（已包含对话状态）
       const sessionContext =
@@ -566,6 +567,10 @@ export class ChatRunnerService {
       );
 
       for await (const chunk of iterator) {
+        // 捕获最后一次 finishReason，用于 finally 判断是否跳过队列处理
+        if ((chunk as any).finishReason) {
+          lastFinishReason = (chunk as any).finishReason;
+        }
         this.streamManager.broadcast(sessionId, chunk as EventChunk);
       }
 
@@ -618,8 +623,13 @@ export class ChatRunnerService {
         throw error;
       }
     } finally {
-      // Agent循环结束后（成功、取消、异常），统一触发队列消费
-      await this.processQueue(sessionId);
+      // 队列消息等待暂停态（max_iterations / approval）由用户操作触发 resume 后处理，不自动消费
+      if (
+        lastFinishReason !== "max_iterations_reached" &&
+        lastFinishReason !== "approval_required"
+      ) {
+        await this.processQueue(sessionId);
+      }
     }
   }
 }
