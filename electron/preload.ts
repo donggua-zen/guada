@@ -104,4 +104,12 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getBrowserWindowVisibility: (windowId: string) =>
     ipcRenderer.invoke('browser:get-window-visibility', { windowId }),
 
+  // 托盘悬浮窗：推送聚合统计数据（fire-and-forget）
+  updateTrayStats: (stats: { running: number; unread: number }) =>
+    ipcRenderer.send('tray:update-stats', stats),
+
+  // 托盘悬浮窗：推送配置（显隐 + 透明度）
+  updateTraySettings: (settings: { enabled: boolean; opacity: number }) =>
+    ipcRenderer.send('tray:update-settings', settings),
+
 })

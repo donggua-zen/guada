@@ -11,6 +11,7 @@ import {
 import { PluginRegistry } from "../registry/plugin-registry";
 import { Toolkit } from "../toolkit/toolkit";
 import { z } from "zod";
+import { ICommandProvider } from "../../commands/interfaces/command-provider.interface";
 
 // ── PluginApi ──
 
@@ -86,6 +87,12 @@ export interface PluginApi {
    * 2. 返回值方式：const tk = registerToolKit({}); tk.registerTool({...})
    */
   registerToolKit(def: ToolKitDef): ToolKitHandle;
+
+  /**
+   * 注册命令提供者（斜杠命令 / 艾特命令）
+   * 插件通过此接口注册后，前端即可通过 / 或 @ 触发该命令的补全列表。
+   */
+  registerCommandProvider(def: ICommandProvider): void;
 }
 
 // ── PluginApi 实现 ──
@@ -100,6 +107,7 @@ export class PluginApiImpl implements PluginApi {
     description: string;
     handler: (context: any) => string | Promise<string>;
   }> = [];
+  private _commandProviders: ICommandProvider[] = [];
 
   constructor(
     private pluginId: string,
@@ -247,6 +255,12 @@ export class PluginApiImpl implements PluginApi {
     return toolkit;
   }
 
+  registerCommandProvider(def: ICommandProvider): void {
+    if (!this._commandProviders.find((x) => x.id === def.id)) {
+      this._commandProviders.push(def);
+    }
+  }
+
   /** 注册到 PluginRegistry */
   flush(): void {
     // 注册 manifest
@@ -292,5 +306,10 @@ export class PluginApiImpl implements PluginApi {
     handler: (ctx: any) => string | Promise<string>;
   }> {
     return this._promptMetas;
+  }
+
+  /** 获取命令提供者 供 PluginManager 消费 */
+  getCommandProviders(): ICommandProvider[] {
+    return this._commandProviders;
   }
 }

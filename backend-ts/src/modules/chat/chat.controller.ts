@@ -21,6 +21,7 @@ import { Response, Request } from "express";
 import { SessionStreamManager } from "./session-stream.manager";
 import { SessionEventsService } from "./session-events.service";
 import { ChatRunnerService } from "./chat-runner.service";
+import { TagParserPipeline } from "./parsers/tag-parser-pipeline.service";
 
 @Controller("chat")
 @UseGuards(AuthGuard)
@@ -32,6 +33,7 @@ export class ChatController {
     private messageRepo: MessageRepository,
     private streamManager: SessionStreamManager,
     private chatRunner: ChatRunnerService,
+    private tagParserPipeline: TagParserPipeline,
   ) {}
 
   /**
@@ -73,6 +75,22 @@ export class ChatController {
       userMessage,
     } = body;
 
+    // 构建 source 对象（包含客户端 ID 和标签解析结果）
+    const source: Record<string, any> = { clientId: clientId || null };
+
+    // 如果需要解析标签，对用户消息内容进行解析
+    if (userMessage?.content) {
+      try {
+        const parsed = await this.tagParserPipeline.parse(userMessage.content);
+        console.log(parsed);
+        if (parsed.content !== parsed.originalText) {
+          source.parseResult = { content: parsed.content };
+        }
+      } catch (error: any) {
+        this.logger.warn(`标签解析失败，使用原始内容: ${error?.message || error}`);
+      }
+    }
+
     // 设置 SSE 响应头
     res.setHeader("Content-Type", "text/event-stream");
     res.setHeader("Cache-Control", "no-cache");
@@ -111,7 +129,7 @@ export class ChatController {
           assistantMessageId: assistantMessageId || null,
           resumeData,
           lastContentId: lastContentId || null,
-          source: { clientId: clientId || null },
+          source,
         },
         callbacks,
       );

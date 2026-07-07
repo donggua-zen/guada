@@ -482,10 +482,16 @@ export class ChatRunnerService {
     const mergedSystemPayload = items.flatMap(
       (item) => item.source?.systemPayload || [],
     );
+    // 合并 parseResult：取最后一个（最新）有 parseResult 的 source
+    const lastParseResult = [...items]
+      .reverse()
+      .find((item) => item.source?.parseResult)
+      ?.source?.parseResult;
     const mergedSource = {
       ...firstItem.source,
       systemPayload:
         mergedSystemPayload.length > 0 ? mergedSystemPayload : undefined,
+      parseResult: lastParseResult || undefined,
       queueItemCount: items.length,
       queueItemIds: items.map((item) => item.id),
       queuedAt: firstItem.createdAt.toISOString(),

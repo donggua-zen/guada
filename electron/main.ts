@@ -8,6 +8,7 @@ import {
   MenuItemConstructorOptions,
   dialog,
   clipboard,
+  screen,
 } from "electron";
 import * as path from "path";
 import { ChildProcess, exec } from "child_process";
@@ -27,6 +28,11 @@ let isBackendStarting = false; // 防止重复启动
 let backendPort: number | null = null; // 记录后端端口
 let browserBridgeInitialized = false; // Browser Bridge 是否已初始化
 let tray: Tray | null = null; // 系统托盘图标
+let floatWindow: BrowserWindow | null = null; // 托盘悬浮小窗
+/** 当前聚合的托盘统计信息 */
+let trayStats = { running: 0, unread: 0 };
+/** 悬浮窗设置（默认开启，不透明度 0.85） */
+let traySettings = { enabled: true, opacity: 85 };
 let isBackendReady = false; // 后端真正就绪标志（仅 startBackend resolve 后为 true）
 
 // 检查更新函数（定义在全局作用域，供 IPC 和自动检查共用）
@@ -573,28 +579,7 @@ function createTray() {
   tray = new Tray(iconPath);
   tray.setToolTip("GuaDa");
 
-  const contextMenu = Menu.buildFromTemplate([
-    {
-      label: "显示主窗口",
-      click: () => {
-        if (mainWindow) {
-          mainWindow.show();
-          mainWindow.focus();
-        } else {
-          createWindow();
-        }
-      },
-    },
-    { type: "separator" },
-    {
-      label: "退出",
-      click: () => {
-        app.quit();
-      },
-    },
-  ]);
-
-  tray.setContextMenu(contextMenu);
+  updateTrayMenu();
 
   // 左键单击恢复窗口
   tray.on("click", () => {
@@ -616,6 +601,191 @@ function createTray() {
       mainWindow.focus();
     }
   });
+}
+
+/** 更新托盘上下文菜单（含动态状态信息） */
+function updateTrayMenu() {
+  if (!tray) return;
+  const items: MenuItemConstructorOptions[] = [
+    {
+      label: `运行中: ${trayStats.running}  未读: ${trayStats.unread}`,
+      enabled: trayStats.running > 0 || trayStats.unread > 0,
+      icon: undefined,
+    },
+    { type: "separator" },
+    {
+      label: "显示主窗口",
+      click: () => {
+        if (mainWindow) {
+          mainWindow.show();
+          mainWindow.focus();
+        } else {
+          createWindow();
+        }
+      },
+    },
+    { type: "separator" },
+    {
+      label: "退出",
+      click: () => {
+        app.quit();
+      },
+    },
+  ];
+  tray.setContextMenu(Menu.buildFromTemplate(items));
+}
+
+/**
+ * 创建托盘悬浮小窗
+ * 主窗口隐藏时，在屏幕右下角显示一个半透明状态卡片
+ */
+function createFloatWindow() {
+  const primaryDisplay = screen.getPrimaryDisplay();
+  const { width: screenWidth, height: screenHeight } = primaryDisplay.workAreaSize;
+
+  const floatingHTML = `<!DOCTYPE html>
+<html lang="zh-CN">
+<head><meta charset="UTF-8"><style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+html, body { height: 100%; overflow: hidden; }
+body {
+  display: flex; align-items: center; justify-content: center;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  background: transparent;
+}
+.card {
+  background: rgba(30, 30, 35, 0.85);
+  backdrop-filter: blur(8px);
+  border-radius: 12px; padding: 10px 16px;
+  min-width: 220px;
+  box-shadow: 0 4px 20px rgba(0,0,0,.3);
+  border: 1px solid rgba(255,255,255,0.08);
+  color: #e8e9ed;
+  user-select: none;
+}
+.row { display: flex; align-items: center; gap: 8px; padding: 3px 0; font-size: 13px; }
+.icon-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+.dot-green { background: #4caf50; box-shadow: 0 0 4px #4caf50; }
+.dot-orange { background: #ff9800; box-shadow: 0 0 4px #ff9800; }
+.row .val { margin-left: auto; font-weight: 600; font-variant-numeric: tabular-nums; }
+</style></head>
+<body>
+<div class="card" id="card">
+  <div class="row"><span class="icon-dot dot-green"></span><span>任务运行中</span><span class="val" id="val-running">0</span></div>
+  <div class="row"><span class="icon-dot dot-orange"></span><span>未读消息</span><span class="val" id="val-unread">0</span></div>
+</div>
+<script>
+const { ipcRenderer } = require('electron');
+const card = document.getElementById('card');
+
+// 用户设置的透明度系数（0.3~1.0），默认 0.85
+let userOpacity = 0.85;
+
+// 悬浮窗统计数据更新
+ipcRenderer.on('float:update', (_, data) => {
+  document.getElementById('val-running').textContent = data.running;
+  document.getElementById('val-unread').textContent = data.unread;
+  // 全为零时半透明提示（在用户透明度基础上减半）
+  const isEmpty = data.running === 0 && data.unread === 0;
+  card.style.opacity = String(isEmpty ? userOpacity * 0.5 : userOpacity);
+});
+
+// 双击恢复主窗口
+card.addEventListener('dblclick', () => {
+  ipcRenderer.send('float:dblclick');
+});
+
+// JS 拖拽实现（替代 -webkit-app-region，避免鼠标事件被拦截）
+let isDragging = false;
+let dragStartX = 0, dragStartY = 0;
+
+card.addEventListener('mousedown', (e) => {
+  isDragging = false;
+  dragStartX = e.screenX;
+  dragStartY = e.screenY;
+
+  const onMouseMove = (e) => {
+    if (e.buttons !== 1) { cleanup(); return; }
+    const dx = e.screenX - dragStartX;
+    const dy = e.screenY - dragStartY;
+    if (Math.abs(dx) > 2 || Math.abs(dy) > 2) {
+      isDragging = true;
+      ipcRenderer.send('float:drag-move', { dx, dy });
+      dragStartX = e.screenX;
+      dragStartY = e.screenY;
+    }
+  };
+
+  const onMouseUp = () => {
+    cleanup();
+    isDragging = false;
+  };
+
+  const cleanup = () => {
+    document.removeEventListener('mousemove', onMouseMove);
+    document.removeEventListener('mouseup', onMouseUp);
+  };
+
+  document.addEventListener('mousemove', onMouseMove);
+  document.addEventListener('mouseup', onMouseUp);
+  });
+
+  // 接收悬浮窗设置（透明度）
+  ipcRenderer.on('float:settings', (_, settings) => {
+    if (settings.opacity !== undefined) {
+      userOpacity = settings.opacity / 100;
+      card.style.opacity = String(userOpacity);
+    }
+  });
+
+  // 通知主进程：浮窗已就绪，可下发缓存设置
+  ipcRenderer.send('float:ready');
+  <\/script>
+</body>
+</html>`;
+
+  floatWindow = new BrowserWindow({
+    width: 240,
+    height: 80,
+    x: screenWidth - 260,
+    y: screenHeight - 100,
+    transparent: true,
+    frame: false,
+    alwaysOnTop: true,
+    skipTaskbar: true,
+    resizable: false,
+    show: false,
+    focusable: false,
+    webPreferences: {
+      preload: path.join(__dirname, "preload.js"),
+      nodeIntegration: true,
+      contextIsolation: false,
+    },
+  });
+
+  floatWindow.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(floatingHTML)}`);
+
+  floatWindow.on("closed", () => {
+    floatWindow = null;
+  });
+}
+
+/**
+ * 应用悬浮窗设置（显隐 + 透明度）
+ */
+function applyTraySettings() {
+  if (!floatWindow || floatWindow.isDestroyed()) return;
+
+  // 显隐控制：仅主窗口隐藏时且 enabled 才显示浮窗
+  const shouldShow = traySettings.enabled && mainWindow && !mainWindow.isVisible();
+  if (shouldShow) {
+    floatWindow.show();
+    floatWindow.webContents.send("float:settings", {
+      opacity: traySettings.opacity,
+    });
+  } else {
+    floatWindow.hide();
+  }
 }
 
 // 创建窗口
@@ -713,6 +883,26 @@ function createWindow() {
     if (!(app as AppExtended).isQuiting) {
       event.preventDefault();
       mainWindow?.hide();
+      applyTraySettings();
+    }
+  });
+
+  // 主窗口隐藏时显示悬浮窗（受 enabled 开关控制）
+  mainWindow.on("hide", () => {
+    applyTraySettings();
+  });
+
+  // 主窗口显示时隐藏悬浮窗
+  mainWindow.on("show", () => {
+    if (floatWindow) {
+      floatWindow.hide();
+    }
+  });
+
+  // 主窗口恢复时隐藏悬浮窗
+  mainWindow.on("restore", () => {
+    if (floatWindow) {
+      floatWindow.hide();
     }
   });
 
@@ -759,6 +949,56 @@ function setupIpcHandlers() {
   ipcMain.handle("show-notification", (_, { title, body }) => {
     // 可以在这里实现系统通知
     console.log("Notification:", title, body);
+  });
+
+  // 接收渲染进程推送的托盘统计信息，更新悬浮窗 + 托盘菜单
+  ipcMain.on("tray:update-stats", (_, stats: { running: number; unread: number }) => {
+    trayStats = stats;
+    // 更新托盘工具提示
+    if (tray) {
+      const parts: string[] = [];
+      if (stats.running > 0) parts.push(`${stats.running} 个任务运行中`);
+      if (stats.unread > 0) parts.push(`${stats.unread} 条未读`);
+      tray.setToolTip(`GuaDa${parts.length > 0 ? ` - ${parts.join("，")}` : ""}`);
+    }
+    // 更新托盘菜单
+    updateTrayMenu();
+    // 更新悬浮窗内容
+    if (floatWindow && !floatWindow.isDestroyed()) {
+      floatWindow.webContents.send("float:update", stats);
+    }
+  });
+
+  // 悬浮窗双击 → 显示主窗口
+  ipcMain.on("float:dblclick", () => {
+    if (mainWindow) {
+      mainWindow.show();
+      mainWindow.focus();
+    } else {
+      createWindow();
+    }
+  });
+
+  // 悬浮窗鼠标拖拽移动
+  ipcMain.on("float:drag-move", (_, { dx, dy }: { dx: number; dy: number }) => {
+    if (!floatWindow || floatWindow.isDestroyed()) return;
+    const [x, y] = floatWindow.getPosition();
+    floatWindow.setPosition(x + dx, y + dy);
+  });
+
+  // 接收前端设置的悬浮窗配置
+  ipcMain.on("tray:update-settings", (_, settings: { enabled: boolean; opacity: number }) => {
+    traySettings = settings;
+    applyTraySettings();
+  });
+
+  // 浮窗就绪后主动发送缓存的设置
+  ipcMain.on("float:ready", () => {
+    applyTraySettings();
+    // 顺便推送当前统计数据
+    if (floatWindow && !floatWindow.isDestroyed()) {
+      floatWindow.webContents.send("float:update", trayStats);
+    }
   });
 
   // 窗口控制
@@ -1462,6 +1702,9 @@ app.whenReady().then(async () => {
 
     // 创建系统托盘图标
     createTray();
+
+    // 创建托盘悬浮小窗
+    createFloatWindow();
 
     // 启动后端服务（不阻塞窗口）
     log.info("Starting backend service in background...");

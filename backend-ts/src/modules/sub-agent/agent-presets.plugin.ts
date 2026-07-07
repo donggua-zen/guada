@@ -21,6 +21,35 @@ export class AgentPresetsPlugin extends PluginBase {
   }
 
   async onLoad(api: PluginApi) {
+    // ── 注册艾特命令提供者（含解析器） ──
+    api.registerCommandProvider({
+      id: "subagent",
+      trigger: "mention",
+      fetchItems: async () => {
+        const allAgents = await this.agentScanner.listAgents();
+        // 仅返回可见的 agent
+        const visibleAgents = allAgents.filter(
+          (a) => a.visible && a.folderVisible !== false,
+        );
+        return visibleAgents.map((a) => ({
+          name: a.id,
+          description: a.description,
+          label: `${a.emoji || ""} ${a.name}`,
+        }));
+      },
+      parse: async (attrs) => {
+        const agentId = attrs.name || "unknown";
+        const allAgents = await this.agentScanner.listAgents();
+        const agent = allAgents.find((a) => a.id === agentId);
+        if (!agent) return undefined;
+        return {
+          replacement: `\`subagent:${agent.name}(id:${agent.id})\``,
+          appendix: agent.description
+            ? `---subagent:${agent.name}---\nid:${agent.id}\ndescription:${agent.description}`
+            : undefined,
+        };
+      },
+    });
     // 轻量 Agent 列表提示词
     api.registerPrompt({
       frequency: "REGULAR",

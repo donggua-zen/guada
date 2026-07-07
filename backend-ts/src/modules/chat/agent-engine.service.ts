@@ -770,6 +770,7 @@ export class AgentEngine {
       const allMessages = [...historyMessages, ...newParts];
       const data = allMessages.map((m) => ({
         role: m.role,
+        metadata: m.metadata,
         content:
           typeof m.content === "string" ? m.content : JSON.stringify(m.content),
         toolCalls: m.toolCalls

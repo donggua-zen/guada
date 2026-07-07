@@ -4,6 +4,7 @@ import { PluginBase } from "../../plugins/base-plugin";
 import { PluginContext } from "../../plugins/types/plugin.types";
 import { SkillOrchestrator } from "../core/skill-orchestrator.service";
 import { PluginApi } from "../../plugins/api/plugin-api";
+import path from "path";
 
 @Injectable()
 export class SkillPlugin extends PluginBase {
@@ -21,6 +22,40 @@ export class SkillPlugin extends PluginBase {
   }
 
   async onLoad(api: PluginApi) {
+    // ── 注册斜杠命令提供者（含解析器） ──
+    api.registerCommandProvider({
+      id: "skill",
+      trigger: "slash",
+      fetchItems: () => {
+        const skills = this.orchestrator.listSkills(true);
+        return skills.map((s) => ({
+          name: s.manifest?.name || s.id,
+          description: s.manifest?.description || "",
+          label: s.manifest?.name || s.id,
+        }));
+      },
+      parse: (attrs) => {
+        const name = attrs.name || "unknown";
+
+        const allSkills = this.orchestrator.listSkills(true);
+        const skill = allSkills.find(
+          (s) => (s.manifest?.name || s.id) === name,
+        );
+        if (skill) {
+          const skillName = skill.manifest?.name || skill.id || name;
+          const desc = skill.manifest?.description || "";
+          const replacement = `\`skill:${skillName}\``;
+          if (desc) {
+            return {
+              replacement,
+              appendix: `---skill:${skillName}---\nndescription:${desc}`,
+            };
+          }
+        }
+        return undefined;
+      },
+    });
+
     const skillKit = api.registerToolKit({
       id: "skill",
       name: "技能指令",

@@ -107,6 +107,12 @@ interface ElectronAPI {
   toggleBrowserWindowVisibility: (windowId: string) => Promise<{ success: boolean; isVisible?: boolean }>
   getBrowserWindowVisibility: (windowId: string) => Promise<{ success: boolean; isVisible?: boolean }>
   
+  // 托盘悬浮窗统计推送
+  updateTrayStats: (stats: { running: number; unread: number }) => void
+  
+  // 托盘悬浮窗配置（显隐 + 透明度）
+  updateTraySettings: (settings: { enabled: boolean; opacity: number }) => void
+  
   // 调试菜单
   showDebugMenu: () => Promise<void>
   

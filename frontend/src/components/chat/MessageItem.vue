@@ -13,10 +13,10 @@
               type="assistant" :name="displayName"></Avatar>
             <span class="text-[1.3em] text-gray-700 dark:text-gray-300 font-medium leading-tight mr-2">{{
               displayName
-            }}</span>
+              }}</span>
             <span v-if="currentModelName && currentModelName !== 'unknown'" class="text-[1em] text-gray-400 mt-0.5">{{
               currentModelName
-            }}</span>
+              }}</span>
           </div>
         </div>
       </div>
@@ -38,7 +38,7 @@
                   </div>
                   <div class="system-message-divider" />
                   <div class="system-message-body">
-                    <span v-html="renderSkillBadges(item.content || '')"></span>
+                    <span v-html="item.content || ''"></span>
                   </div>
                 </template>
                 <span v-else v-html="renderSkillBadges(item.content || '')"></span>
@@ -388,22 +388,23 @@ const displayName = computed(() => {
 });
 
 /**
- * 将纯文本中的 <skill:xxx> 标记转换为 HTML 徽标
- * 其余文本进行 HTML 转义，防止 XSS
+ * 将纯文本中的 [/type:name label="xxx"] 或 [@type:name label="xxx"] 标记
+ * 转换为 HTML 徽标，其余文本进行 HTML 转义防止 XSS
  */
 const renderSkillBadges = (text: string): string => {
   if (!text) return text;
-  // 先转义所有 HTML 特殊字符
+  // 先转义 HTML 特殊字符（不转义 " '，避免破坏标签内的 label="xxx"）
   const escaped = text
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#x27;');
-  // 再将转义后的 &lt;skill:xxx&gt; 替换为安全的徽标 HTML
+    .replace(/>/g, '&gt;');
+  // 再将转义后的 [/type:name ...] 替换为 HTML 徽标
   return escaped.replace(
-    /&lt;skill:([^&]+)&gt;/g,
-    '<span data-type="skill" data-skill-name="$1" class="skill-badge" style="color: var(--el-color-primary);">/$1</span>'
+    /\[([\/@])([a-zA-Z_][\w-]*):([\w-]+)(?:\s+label="([^"]*)")?\s*\]/g,
+    (_, prefix, provider, name, label) => {
+      const displayText = label || `${prefix}${name}`;
+      return `<span data-type="command" data-provider-id="${provider}" data-name="${name}" data-label="${label || ''}" data-trigger="${prefix}" class="command-badge" style="color: var(--el-color-primary);">${displayText}</span>`;
+    }
   );
 };
 

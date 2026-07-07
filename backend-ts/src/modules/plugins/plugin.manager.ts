@@ -19,6 +19,7 @@ import { SG_PLUGINS } from "../../constants/settings.constants";
 import { PluginConfigParser } from "./utils/plugin-config-parser";
 import { PromptCollector } from "./prompt-collector.service";
 import { ISessionContext } from "../chat/session-context";
+import { CommandProviderRegistry } from "../commands/command-provider-registry.service";
 
 // ── 新 registerTools API 类型 ──
 
@@ -76,6 +77,7 @@ export class PluginManager {
   constructor(
     private readonly settingsStorage: SettingsStorage,
     private readonly promptCollector: PromptCollector,
+    private readonly commandRegistry: CommandProviderRegistry,
   ) {}
 
   // ── 生命周期 ──
@@ -148,6 +150,12 @@ export class PluginManager {
     this.logger.log(
       `Plugin registered: ${plugin.manifest.name} (${id}), tools=${PluginRegistry.getTools(id).length}, kits=${PluginRegistry.getToolKits(id).length}, enabled=${finalEnabled}`,
     );
+
+    // 注册命令提供者
+    const cmdProviders = api.getCommandProviders();
+    for (const cp of cmdProviders) {
+      this.commandRegistry.register(cp);
+    }
   }
 
   /**

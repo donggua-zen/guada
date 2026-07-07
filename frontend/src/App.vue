@@ -25,6 +25,7 @@ import { ref, provide, onMounted, watch } from 'vue'
 import { useRouter, RouterView } from 'vue-router'
 import { useTitle } from './composables/useTitle'
 import { useTheme } from './composables/useTheme'
+import { useTrayStats } from './composables/useTrayStats'
 import MockControlPanel from './components/dev/MockControlPanel.vue'
 import CustomTitlebar from './components/CustomTitlebar.vue'
 import SetupGuide from './components/SetupGuide.vue'
@@ -33,6 +34,7 @@ import ContextMenuManager from './utils/ContextMenuManager'
 const router = useRouter()
 const title = useTitle()
 const theme = useTheme() //不要删除，这里会执行dark模式设置
+useTrayStats() // 托盘悬浮窗统计推送（仅 Electron 生效）
 const isDev = import.meta.env.DEV
 const guideRef = ref(null)
 

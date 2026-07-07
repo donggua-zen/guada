@@ -160,6 +160,48 @@
         </div>
       </div>
 
+      <!-- 悬浮任务状态分组 -->
+      <div>
+        <h3 class="text-sm font-semibold text-gray-900 dark:text-[#e8e9ed] mb-3">悬浮任务状态</h3>
+        <div
+          class="rounded-xl border border-gray-200 dark:border-[#2e3035] bg-white dark:bg-[#232428] overflow-hidden"
+        >
+          <!-- 显隐开关 -->
+          <div class="px-4 py-3.5 flex items-center justify-between gap-4 border-b border-gray-100 dark:border-[#2e3035]">
+            <div class="flex flex-col gap-1 min-w-0">
+              <span class="text-base text-gray-900 dark:text-[#e8e9ed]">显示悬浮窗</span>
+              <span class="text-xs text-gray-500 dark:text-[#8b8d95]">
+                最小化到托盘时显示任务运行和未读统计
+              </span>
+            </div>
+            <el-switch v-model="settingsForm.floatWidgetEnabled" size="large" @change="handleFloatWidgetChange" />
+          </div>
+
+          <!-- 透明度调节 -->
+          <div class="px-4 py-3.5 flex items-center justify-between gap-4">
+            <div class="flex flex-col gap-1 min-w-0">
+              <span class="text-base text-gray-900 dark:text-[#e8e9ed]">悬浮窗透明度</span>
+              <span class="text-xs text-gray-500 dark:text-[#8b8d95]">
+                调节悬浮窗卡片的不透明度
+              </span>
+            </div>
+            <div class="flex items-center gap-3 shrink-0 w-48">
+              <el-slider
+                v-model="settingsForm.floatWidgetOpacity"
+                :min="30"
+                :max="100"
+                :step="1"
+                class="flex-1"
+                @change="handleFloatWidgetChange"
+              />
+              <span class="text-sm text-gray-600 dark:text-[#8b8d95] w-10 text-right">
+                {{ settingsForm.floatWidgetOpacity }}%
+              </span>
+            </div>
+          </div>
+        </div>
+      </div>
+
       <!-- 重置按钮 -->
       <div class="flex justify-end">
         <el-button @click="handleReset">恢复默认设置</el-button>
@@ -184,6 +226,8 @@ const settingsForm = reactive({
   contentOpacity: 100,
   acrylicEnabled: true,
   blurRadius: 20,
+  floatWidgetEnabled: true,
+  floatWidgetOpacity: 85,
 })
 
 const previewUrl = ref<string | null>(null)
@@ -242,10 +286,14 @@ const loadSettings = async () => {
     settingsForm.contentOpacity = response.contentOpacity ?? 100
     settingsForm.acrylicEnabled = response.acrylicEnabled !== false
     settingsForm.blurRadius = response.blurRadius ?? 20
+    settingsForm.floatWidgetEnabled = response.floatWidgetEnabled !== false
+    settingsForm.floatWidgetOpacity = response.floatWidgetOpacity ?? 85
     previewUrl.value = resolveWallpaperUrl(response.wallpaperUrl || null)
 
     // 同步到 layout store
     syncToLayoutStore()
+    // 同步到 Electron 主进程
+    pushFloatWidgetSettings()
   } catch (error) {
     console.error('获取外观设置失败:', error)
     // 使用默认值
@@ -259,6 +307,8 @@ const syncToLayoutStore = () => {
   layoutStore.setAcrylicEnabled(settingsForm.acrylicEnabled)
   layoutStore.setBlurRadius(settingsForm.blurRadius)
   layoutStore.setWallpaperUrl(previewUrl.value)
+  layoutStore.setFloatWidgetEnabled(settingsForm.floatWidgetEnabled)
+  layoutStore.setFloatWidgetOpacity(settingsForm.floatWidgetOpacity)
 }
 
 // 保存设置
@@ -270,12 +320,16 @@ const handleSave = async () => {
       acrylicEnabled: settingsForm.acrylicEnabled,
       blurRadius: settingsForm.blurRadius,
       wallpaperUrl: extractRelativePath(previewUrl.value),
+      floatWidgetEnabled: settingsForm.floatWidgetEnabled,
+      floatWidgetOpacity: settingsForm.floatWidgetOpacity,
     }
 
     await apiService.updateGroupSettings('appearance', dataToSave)
 
     // 同步到 layout store
     syncToLayoutStore()
+    // 同步到 Electron 主进程
+    pushFloatWidgetSettings()
   } catch (error: any) {
     console.error('保存外观设置失败:', error)
     ElMessage.error('保存失败: ' + (error.message || '未知错误'))
@@ -342,12 +396,33 @@ const handleBlurChange = () => {
   layoutStore.setBlurRadius(settingsForm.blurRadius)
 }
 
+/**
+ * 推送悬浮窗设置到 Electron 主进程
+ */
+const pushFloatWidgetSettings = () => {
+  window.electronAPI?.updateTraySettings({
+    enabled: settingsForm.floatWidgetEnabled,
+    opacity: settingsForm.floatWidgetOpacity,
+  })
+}
+
+/**
+ * 悬浮任务窗设置变化（开关 / 透明度）
+ */
+const handleFloatWidgetChange = () => {
+  layoutStore.setFloatWidgetEnabled(settingsForm.floatWidgetEnabled)
+  layoutStore.setFloatWidgetOpacity(settingsForm.floatWidgetOpacity)
+  handleSave()
+}
+
 // 恢复默认设置
 const handleReset = async () => {
   settingsForm.sidebarOpacity = 100
   settingsForm.contentOpacity = 100
   settingsForm.acrylicEnabled = true
   settingsForm.blurRadius = 20
+  settingsForm.floatWidgetEnabled = true
+  settingsForm.floatWidgetOpacity = 85
 
   if (previewUrl.value) {
     try {

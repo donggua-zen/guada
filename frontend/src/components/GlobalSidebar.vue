@@ -61,7 +61,7 @@
                 <div class="status-indicator w-1.5 h-1.5 shrink-0 flex items-center justify-center">
                   <div v-if="getSessionWorking(session.id)"
                     class="w-1.5 h-1.5 rounded-full bg-blue-500 animate-pulse" />
-                  <div v-else-if="getSessionUnread(session.id) && session.id !== currentSessionId"
+                  <div v-else-if="getSessionUnread(session.id) && (session.id !== currentSessionId || windowHidden)"
                     class="w-1 h-1 rounded-full bg-red-500" />
                   <div v-else class="w-1 h-1 rounded-full bg-gray-400 opacity-50" />
                 </div>
@@ -424,6 +424,19 @@ const currentActiveTab = computed(() => {
 const currentSessionId = computed(() => {
   const sessionId = route.params.sessionId
   return Array.isArray(sessionId) ? sessionId[0] : sessionId
+})
+
+// 窗口隐藏状态（最小化/隐藏到托盘时所有会话记为未读）
+const windowHidden = ref(false)
+
+onMounted(() => {
+  document.addEventListener('visibilitychange', () => {
+    windowHidden.value = document.hidden
+    // 窗口重新可见时清除当前会话的未读标记
+    if (!document.hidden && currentSessionId.value) {
+      sessionStore.setSidebarFlag(currentSessionId.value, 'unread', false)
+    }
+  })
 })
 
 // 所有已加载的会话（用于空状态判断）
@@ -920,8 +933,8 @@ function initSessionEventListeners() {
     // 更新最后活跃时间
     sessionStore.updateSessionLastActiveTime(sessionId, event.timestamp)
 
-    // 非当前会话的更新标记为未读
-    if (sessionId !== currentSessionId.value) {
+    // 非当前会话的更新标记为未读；窗口隐藏时所有会话都标记
+    if (sessionId !== currentSessionId.value || windowHidden.value) {
       sessionStore.setSidebarFlag(sessionId, 'unread', true)
     }
   })
@@ -954,8 +967,8 @@ function initSessionEventListeners() {
     // 更新最后活跃时间
     sessionStore.updateSessionLastActiveTime(sessionId, event.timestamp)
 
-    // 非当前会话标记为未读
-    if (sessionId !== currentSessionId.value) {
+    // 非当前会话标记为未读；窗口隐藏时所有会话都标记
+    if (sessionId !== currentSessionId.value || windowHidden.value) {
       sessionStore.setSidebarFlag(sessionId, 'unread', true)
     }
   })
@@ -971,8 +984,8 @@ function initSessionEventListeners() {
     // 标记会话为空闲
     sessionStore.setSidebarFlag(sessionId, 'working', false)
 
-    // 如果不是当前会话，转为未读状态
-    if (sessionId !== currentSessionId.value) {
+    // 如果不是当前会话，转为未读状态；窗口隐藏时所有会话都标记
+    if (sessionId !== currentSessionId.value || windowHidden.value) {
       sessionStore.setSidebarFlag(sessionId, 'unread', true)
     }
   })
