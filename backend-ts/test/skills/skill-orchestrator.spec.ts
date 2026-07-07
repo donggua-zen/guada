@@ -1,20 +1,25 @@
 import { SkillOrchestrator } from "../../src/modules/skills/core/skill-orchestrator.service";
 import { SkillRegistry } from "../../src/modules/skills/core/skill-registry.service";
 import { SkillDefinition } from "../../src/modules/skills/interfaces/skill-manifest.interface";
-import { SkillDiscoveryService } from "../../src/modules/skills/core/skill-discovery.service";
 import { SkillLoaderService } from "../../src/modules/skills/core/skill-loader.service";
 import { SkillVersionManager } from "../../src/modules/skills/core/skill-version-manager.service";
 
 // ── Mocks ──
 
-const mockDiscovery = { scan: jest.fn().mockResolvedValue({ added: [], updated: [], removed: [], errors: [], scanDurationMs: 0 }) } as any;
+const mockSourceManager = {
+  restart: jest.fn().mockResolvedValue(undefined),
+  getSourceSkills: jest.fn().mockReturnValue([]),
+  getAllSkills: jest.fn().mockReturnValue([]),
+  getEnabledSkills: jest.fn().mockReturnValue([]),
+} as any;
 const mockLoader = {} as SkillLoaderService;
 const mockVersionManager = {} as SkillVersionManager;
 
 function makeSkill(id: string, enabled = true): SkillDefinition {
   return {
     id,
-    basePath: `/tmp/skills/${id}`,
+    baseDir: '/tmp/skills',
+    basePath: id,
     manifest: { name: id, description: `Skill ${id}`, tags: [id] },
     contentHash: "abc123",
     source: "global",
@@ -28,7 +33,7 @@ describe("SkillOrchestrator", () => {
 
   beforeEach(() => {
     registry = new SkillRegistry();
-    orchestrator = new SkillOrchestrator(mockDiscovery, registry, mockLoader, mockVersionManager);
+    orchestrator = new SkillOrchestrator(mockSourceManager, registry, mockLoader, mockVersionManager);
   });
 
   describe("listSkills", () => {

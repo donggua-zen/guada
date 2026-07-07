@@ -29,11 +29,6 @@
               @open-docs="openDocs" />
           </template>
 
-          <!-- 团队 Tab -->
-          <template v-else-if="currentTabValue === 'teams'">
-            <TeamsTab @start-team-chat="startTeamChat" />
-          </template>
-
           <!-- 轻量 Agent Tab -->
           <template v-else-if="currentTabValue === 'agents'">
             <AgentListTab />
@@ -61,14 +56,12 @@ import {
 } from '@vicons/ionicons5'
 import {
   ContactCard24Regular,
-  PeopleTeam24Regular,
   Bot24Regular,
 } from '@vicons/fluent'
 
 import PageHeader from '@/components/PageHeader.vue'
 import ScrollContainer from '@/components/ui/ScrollContainer.vue'
 import CharacterListTab from './CharacterListTab.vue'
-import TeamsTab from './TeamsTab.vue'
 import AgentListTab from './AgentListTab.vue'
 import CharacterModal from './CharacterModal.vue'
 import { apiService } from '../../services/ApiService'
@@ -85,7 +78,6 @@ const sessionStore = useSessionStore()
 // ========== Tab 系统 ==========
 const tabItems = [
   { label: '助手', path: 'assistants', icon: ContactCard24Regular },
-  { label: '团队', path: 'teams', icon: PeopleTeam24Regular },
   { label: '子Agent', path: 'agents', icon: Bot24Regular },
 ]
 
@@ -224,21 +216,6 @@ const startNewChat = async (character: any): Promise<void> => {
   } catch (error: any) {
     console.error('创建会话失败:', error)
     toast.error('创建会话失败')
-  }
-}
-
-const startTeamChat = async (team: any): Promise<void> => {
-  try {
-    const session = await apiService.createSession({
-      teamId: team.id,
-      title: team.name,
-    })
-    sessionStore.setSession(session)
-    router.replace({ name: 'Chat', params: { sessionId: session.id } })
-    toast.success('团队会话创建成功')
-  } catch (error: any) {
-    console.error('创建团队会话失败:', error)
-    toast.error('创建团队会话失败')
   }
 }
 

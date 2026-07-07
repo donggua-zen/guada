@@ -38,7 +38,6 @@ model Session {
   externalId    String?               @map("external_id")
   workspacePath String?               @map("workspace_path")
   parentId      String?               @map("parent_id")
-  teamId        String?               @map("team_id")
   memories      Memory[]
   messages      Message[]
   character     Character?            @relation(fields: [characterId], references: [id])
@@ -49,7 +48,6 @@ model Session {
   contextStates SessionContextState[]
   parent        Session?              @relation("SessionHierarchy", fields: [parentId], references: [id])
   children      Session[]             @relation("SessionHierarchy")
-  team          Team?                 @relation(fields: [teamId], references: [id])
 
   @@index([userId])
   @@index([sessionType])
@@ -59,7 +57,6 @@ model Session {
   @@index([botId, externalId])
   @@index([groupId])
   @@index([parentId])
-  @@index([teamId])
   @@map("session")
 }
 
@@ -159,7 +156,6 @@ model User {
   mcpServers     McpServer[]
   sessions       Session[]
   settings       UserSetting?
-  teams          Team[]
 
   @@map("user")
 }
@@ -193,8 +189,6 @@ model Character {
   model       Model?          @relation(fields: [modelId], references: [id])
   user        User            @relation(fields: [userId], references: [id])
   sessions    Session[]
-  teamMembers TeamMember[]
-  teamAsLeader Team[]          @relation("TeamLeader")
 
   @@map("character")
 }
@@ -396,42 +390,4 @@ model BotInstance {
   @@index([platform])
   @@index([status])
   @@map("bot_instance")
-}
-
-model Team {
-  id                String       @id @default(cuid())
-  userId            String       @map("user_id")
-  name              String
-  description       String?
-  avatarUrl         String?      @map("avatar_url")
-  leaderCharacterId String       @map("leader_character_id")
-  settings          Json?
-  createdAt         DateTime     @default(now()) @map("created_at")
-  updatedAt         DateTime     @updatedAt @map("updated_at")
-  members           TeamMember[]
-  leader            Character    @relation("TeamLeader", fields: [leaderCharacterId], references: [id])
-  user              User         @relation(fields: [userId], references: [id])
-  sessions          Session[]
-
-  @@index([userId])
-  @@index([leaderCharacterId])
-  @@map("team")
-}
-
-model TeamMember {
-  id                String   @id @default(cuid())
-  teamId            String   @map("team_id")
-  characterId       String   @map("character_id")
-  role              String   @default("member")
-  sortOrder         Int      @default(0) @map("sort_order")
-  characterSnapshot Json?    @map("character_snapshot")
-  createdAt         DateTime @default(now()) @map("created_at")
-
-  team      Team      @relation(fields: [teamId], references: [id], onDelete: Cascade)
-  character Character @relation(fields: [characterId], references: [id])
-
-  @@unique([teamId, characterId])
-  @@index([teamId])
-  @@index([characterId])
-  @@map("team_member")
 }

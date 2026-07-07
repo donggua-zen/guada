@@ -14,7 +14,6 @@ import { ModelRepository } from "./model.repository";
 import { SessionContextStateRepository } from "./session-context-state.repository";
 import { SessionGroupRepository } from "./session-group.repository";
 import { SessionRepository } from "./session.repository";
-import { TeamRepository, TeamMemberRepository } from "./team.repository";
 
 const REPOSITORIES = [
   PrismaService,
@@ -32,8 +31,6 @@ const REPOSITORIES = [
   SessionContextStateRepository,
   SessionGroupRepository,
   SessionRepository,
-  TeamRepository,
-  TeamMemberRepository,
 ];
 
 @Global()

@@ -117,7 +117,7 @@ export interface ISessionContext {
   // === 身份标识 ===
   readonly sessionId: string;
   readonly userId: string;
-  readonly sessionType: "web" | "bot" | "sub_agent" | "team";
+  readonly sessionType: "web" | "bot" | "sub_agent";
 
   // === 运行模式 ===
   /** 获取当前会话运行模式 */

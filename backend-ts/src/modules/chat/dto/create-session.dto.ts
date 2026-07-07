@@ -23,10 +23,6 @@ export class CreateSessionDto {
 
   @IsOptional()
   @IsString()
-  teamId?: string;
-
-  @IsOptional()
-  @IsString()
   workspacePath?: string;
 
   @IsOptional()

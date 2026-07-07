@@ -4,7 +4,8 @@ import { SkillDefinition } from "../../src/modules/skills/interfaces/skill-manif
 function makeSkill(id: string, enabled = true): SkillDefinition {
   return {
     id,
-    basePath: `/tmp/skills/${id}`,
+    baseDir: '/tmp/skills',
+    basePath: id,
     manifest: { name: id, description: `Skill ${id}` },
     contentHash: "abc123",
     source: "global",

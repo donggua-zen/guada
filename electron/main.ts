@@ -31,8 +31,8 @@ let tray: Tray | null = null; // 系统托盘图标
 let floatWindow: BrowserWindow | null = null; // 托盘悬浮小窗
 /** 当前聚合的托盘统计信息 */
 let trayStats = { running: 0, unread: 0 };
-/** 悬浮窗设置（默认开启，不透明度 0.85） */
-let traySettings = { enabled: true, opacity: 85 };
+/** 悬浮窗设置（默认隐藏，用户在设置页开启后生效） */
+let traySettings = { enabled: false, opacity: 95 };
 let isBackendReady = false; // 后端真正就绪标志（仅 startBackend resolve 后为 true）
 
 // 检查更新函数（定义在全局作用域，供 IPC 和自动检查共用）
@@ -647,30 +647,34 @@ function createFloatWindow() {
 <html lang="zh-CN">
 <head><meta charset="UTF-8"><style>
 * { margin: 0; padding: 0; box-sizing: border-box; }
+html { background: transparent; }
 html, body { height: 100%; overflow: hidden; }
 body {
-  display: flex; align-items: center; justify-content: center;
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   background: transparent;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  color: #e8e9ed;
+  user-select: none;
+  white-space: nowrap;
+  display: flex; flex-direction: column; justify-content: center;
+  padding: 0;
 }
 .card {
   background: rgba(30, 30, 35, 0.85);
   backdrop-filter: blur(8px);
-  border-radius: 12px; padding: 10px 16px;
-  min-width: 220px;
-  box-shadow: 0 4px 20px rgba(0,0,0,.3);
-  border: 1px solid rgba(255,255,255,0.08);
-  color: #e8e9ed;
-  user-select: none;
+  border-radius: 10px;
+  border: 1px solid rgba(255,255,255,0.1);
+  width: 100%; height: 100%;
+  display: flex; flex-direction: column; justify-content: center;
+  padding: 6px 12px;
 }
-.row { display: flex; align-items: center; gap: 8px; padding: 3px 0; font-size: 13px; }
-.icon-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
-.dot-green { background: #4caf50; box-shadow: 0 0 4px #4caf50; }
-.dot-orange { background: #ff9800; box-shadow: 0 0 4px #ff9800; }
+.row { display: flex; align-items: center; gap: 6px; padding: 2px 0; font-size: 12px; }
+.icon-dot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
+.dot-green { background: #4caf50; box-shadow: 0 0 3px #4caf50; }
+.dot-orange { background: #ff9800; box-shadow: 0 0 3px #ff9800; }
 .row .val { margin-left: auto; font-weight: 600; font-variant-numeric: tabular-nums; }
 </style></head>
 <body>
-<div class="card" id="card">
+<div class="card" id="card" style="opacity:0">
   <div class="row"><span class="icon-dot dot-green"></span><span>任务运行中</span><span class="val" id="val-running">0</span></div>
   <div class="row"><span class="icon-dot dot-orange"></span><span>未读消息</span><span class="val" id="val-unread">0</span></div>
 </div>
@@ -678,16 +682,17 @@ body {
 const { ipcRenderer } = require('electron');
 const card = document.getElementById('card');
 
-// 用户设置的透明度系数（0.3~1.0），默认 0.85
-let userOpacity = 0.85;
+// 接收用户设置的透明度（浮窗就绪后主进程 float:ready → applyTraySettings 会立即下发）
+ipcRenderer.on('float:settings', (_, settings) => {
+  if (settings.opacity !== undefined) {
+    card.style.opacity = String(settings.opacity / 100);
+  }
+});
 
-// 悬浮窗统计数据更新
+// 悬浮窗统计数据更新（仅更新数字，不设置透明度）
 ipcRenderer.on('float:update', (_, data) => {
   document.getElementById('val-running').textContent = data.running;
   document.getElementById('val-unread').textContent = data.unread;
-  // 全为零时半透明提示（在用户透明度基础上减半）
-  const isEmpty = data.running === 0 && data.unread === 0;
-  card.style.opacity = String(isEmpty ? userOpacity * 0.5 : userOpacity);
 });
 
 // 双击恢复主窗口
@@ -745,9 +750,9 @@ card.addEventListener('mousedown', (e) => {
 </html>`;
 
   floatWindow = new BrowserWindow({
-    width: 240,
+    width: 160,
     height: 80,
-    x: screenWidth - 260,
+    x: screenWidth - 180,
     y: screenHeight - 100,
     transparent: true,
     frame: false,
@@ -776,8 +781,10 @@ card.addEventListener('mousedown', (e) => {
 function applyTraySettings() {
   if (!floatWindow || floatWindow.isDestroyed()) return;
 
-  // 显隐控制：仅主窗口隐藏时且 enabled 才显示浮窗
-  const shouldShow = traySettings.enabled && mainWindow && !mainWindow.isVisible();
+  // 显隐控制：主窗口最小化或隐藏时且 enabled 才显示浮窗
+  const isMinimized = mainWindow?.isMinimized() ?? false;
+  const isHidden = mainWindow ? !mainWindow.isVisible() : true;
+  const shouldShow = traySettings.enabled && mainWindow && (isMinimized || isHidden);
   if (shouldShow) {
     floatWindow.show();
     floatWindow.webContents.send("float:settings", {
@@ -806,7 +813,7 @@ function createWindow() {
       sandbox: true,
     },
     show: false,
-    backgroundColor: "#ffffff",
+    backgroundColor: "#000000",
     titleBarStyle: "hidden", // 隐藏标题栏但保留系统按钮（macOS）
   });
 
@@ -878,32 +885,31 @@ function createWindow() {
     );
   });
 
-  // 关闭按钮最小化到托盘
+  // 关闭按钮最小化到托盘（hide 事件中执行 applyTraySettings，避免重复触发闪烁）
   mainWindow.on("close", (event) => {
     if (!(app as AppExtended).isQuiting) {
       event.preventDefault();
       mainWindow?.hide();
-      applyTraySettings();
     }
   });
 
-  // 主窗口隐藏时显示悬浮窗（受 enabled 开关控制）
+  // 主窗口隐藏/最小化 → 延迟 1s 显示浮窗（避免闪烁），恢复/显示 → 立即隐藏
+  let floatShowTimeout: ReturnType<typeof setTimeout> | null = null;
   mainWindow.on("hide", () => {
-    applyTraySettings();
+    if (floatShowTimeout) clearTimeout(floatShowTimeout);
+    floatShowTimeout = setTimeout(() => { applyTraySettings(); floatShowTimeout = null; }, 500);
   });
-
-  // 主窗口显示时隐藏悬浮窗
+  mainWindow.on("minimize", () => {
+    if (floatShowTimeout) clearTimeout(floatShowTimeout);
+    floatShowTimeout = setTimeout(() => { applyTraySettings(); floatShowTimeout = null; }, 500);
+  });
   mainWindow.on("show", () => {
-    if (floatWindow) {
-      floatWindow.hide();
-    }
+    if (floatShowTimeout) { clearTimeout(floatShowTimeout); floatShowTimeout = null; }
+    if (floatWindow) floatWindow.hide();
   });
-
-  // 主窗口恢复时隐藏悬浮窗
   mainWindow.on("restore", () => {
-    if (floatWindow) {
-      floatWindow.hide();
-    }
+    if (floatShowTimeout) { clearTimeout(floatShowTimeout); floatShowTimeout = null; }
+    if (floatWindow) floatWindow.hide();
   });
 
   mainWindow.on("closed", () => {
@@ -963,7 +969,7 @@ function setupIpcHandlers() {
     }
     // 更新托盘菜单
     updateTrayMenu();
-    // 更新悬浮窗内容
+    // 更新悬浮窗内容（仅统计数据，不携带设置项）
     if (floatWindow && !floatWindow.isDestroyed()) {
       floatWindow.webContents.send("float:update", stats);
     }
@@ -986,16 +992,19 @@ function setupIpcHandlers() {
     floatWindow.setPosition(x + dx, y + dy);
   });
 
-  // 接收前端设置的悬浮窗配置
+  // 接收前端设置的悬浮窗配置（始终下发浮窗，不依赖主窗口可见状态）
   ipcMain.on("tray:update-settings", (_, settings: { enabled: boolean; opacity: number }) => {
     traySettings = settings;
+    if (floatWindow && !floatWindow.isDestroyed()) {
+      floatWindow.webContents.send("float:settings", { opacity: traySettings.opacity });
+    }
     applyTraySettings();
   });
 
   // 浮窗就绪后主动发送缓存的设置
   ipcMain.on("float:ready", () => {
     applyTraySettings();
-    // 顺便推送当前统计数据
+    // 推送当前统计数据
     if (floatWindow && !floatWindow.isDestroyed()) {
       floatWindow.webContents.send("float:update", trayStats);
     }

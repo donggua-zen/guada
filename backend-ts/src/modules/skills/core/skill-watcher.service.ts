@@ -1,5 +1,6 @@
 import { Injectable, Logger, OnModuleDestroy } from "@nestjs/common";
 import * as chokidar from "chokidar";
+import * as path from "path";
 
 /** 文件变更事件回调 */
 export interface FileEventHandlers {
@@ -90,7 +91,7 @@ export class SkillWatcherService implements OnModuleDestroy {
         : filePath.lastIndexOf("\\"));
       const dirName = dir.split(/[/\\]/g).pop();
       if (!dirName || dirName.startsWith(".")) return;
-      this.debounced("file:" + dirName, () => matched!.h.onAdd(dir));
+      this.debounced("file:" + dirName, () => matched!.h.onAdd(path.resolve(dir)));
     }
   }
 

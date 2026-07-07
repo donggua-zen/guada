@@ -351,45 +351,6 @@ class ApiService {
     });
   }
 
-  // ========== 团队相关 ==========
-  async fetchTeams(): Promise<any[]> {
-    return await this._request("/teams");
-  }
-
-  async fetchTeam(teamId: string): Promise<any> {
-    return await this._request(`/teams/${teamId}`);
-  }
-
-  async createTeam(data: {
-    name: string;
-    description?: string;
-    leaderCharacterId: string;
-    memberCharacterIds?: string[];
-  }): Promise<any> {
-    return await this._request("/teams", { method: "POST", data });
-  }
-
-  async updateTeam(
-    teamId: string,
-    data: {
-      name?: string;
-      description?: string;
-      leaderCharacterId?: string;
-      memberCharacterIds?: string[];
-    },
-  ): Promise<any> {
-    return await this._request(`/teams/${teamId}`, {
-      method: "PUT",
-      data,
-    });
-  }
-
-  async deleteTeam(teamId: string): Promise<{ success: boolean }> {
-    return await this._request(`/teams/${teamId}`, {
-      method: "DELETE",
-    });
-  }
-
   // ========== 轻量 Agent 相关 ==========
   async fetchAgents(): Promise<{ agents: any[]; groups: any[] }> {
     return await this._request("/agents");

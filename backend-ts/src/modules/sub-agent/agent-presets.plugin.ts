@@ -28,9 +28,10 @@ export class AgentPresetsPlugin extends PluginBase {
       fetchItems: async () => {
         const allAgents = await this.agentScanner.listAgents();
         // 仅返回可见的 agent
-        const visibleAgents = allAgents.filter(
-          (a) => a.visible && a.folderVisible !== false,
-        );
+        // const visibleAgents = allAgents.filter(
+        //   (a) => a.visible && a.folderVisible !== false,
+        // );
+        const visibleAgents = allAgents;
         return visibleAgents.map((a) => ({
           name: a.id,
           description: a.description,
@@ -55,8 +56,6 @@ export class AgentPresetsPlugin extends PluginBase {
       frequency: "REGULAR",
       description: "可用预设 Agent 列表及使用指南",
       content: async (context: PluginContext) => {
-        // 团队会话不注入预设 Agent 列表
-        if (context?.session.sessionType === "team") return "";
         const allAgents = await this.agentScanner.listAgents();
         // 仅注入可见的 agent（自身 visible + 文件夹 cascade）
         const visibleAgents = allAgents.filter(

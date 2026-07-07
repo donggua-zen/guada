@@ -138,7 +138,7 @@ export class SkillSourceManager implements OnModuleDestroy {
             const idx = src.skills.findIndex((s) => s.id === sd.id);
             if (idx >= 0) src.skills[idx] = sd;
             else src.skills.push(sd);
-            if (cfg.persistent) this.registry.update(sd);
+            if (cfg.persistent) this.registry.register(sd);
           }
           this.logger.log(`Skill ${sd.id} updated [${cfg.key}]`);
         } catch (e: any) {
