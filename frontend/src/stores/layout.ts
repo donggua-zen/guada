@@ -26,8 +26,8 @@ export const useLayoutStore = defineStore('layout', () => {
   const blurRadius = useStorage<number>('blurRadius', 20)
 
   // 悬浮任务窗设置（持久化到 localStorage）
-  const floatWidgetEnabled = useStorage<boolean>('floatWidgetEnabled', true)
-  const floatWidgetOpacity = useStorage<number>('floatWidgetOpacity', 85)
+  const floatWidgetEnabled = useStorage<boolean>('floatWidgetEnabled', false)
+  const floatWidgetOpacity = useStorage<number>('floatWidgetOpacity', 95)
 
   // 防止重复加载壁纸的标志
   let isLoadingWallpaper = false
@@ -204,8 +204,22 @@ export const useLayoutStore = defineStore('layout', () => {
       if (response.blurRadius !== undefined) {
         blurRadius.value = response.blurRadius
       }
+      if (response.floatWidgetEnabled !== undefined) {
+        floatWidgetEnabled.value = response.floatWidgetEnabled === true
+      }
+      if (response.floatWidgetOpacity !== undefined) {
+        floatWidgetOpacity.value = response.floatWidgetOpacity
+      }
 
       applyWallpaperSettings()
+
+      // 同步悬浮窗设置到 Electron 主进程
+      if (window.electronAPI) {
+        window.electronAPI.updateTraySettings({
+          enabled: floatWidgetEnabled.value,
+          opacity: floatWidgetOpacity.value,
+        })
+      }
     } catch (error) {
       console.error('加载外观设置失败:', error)
       // 使用本地存储的值作为回退

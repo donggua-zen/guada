@@ -674,51 +674,14 @@ export class PersistentSessionContext implements ISessionContext {
     const sessionSettings = this.session.settings || {};
     const characterSettings = this.session.character?.settings || {};
 
-    // 团队模式：从主理人获取角色设置
-    let leaderSettings = characterSettings;
-    if (this.session.team?.leader?.settings) {
-      leaderSettings = this.session.team.leader.settings;
-    }
-
     // 插件配置：会话设置优先于角色设置
-    const mergedTools = sessionSettings.plugins ?? leaderSettings.plugins;
-    const mergedSkills = sessionSettings.skills ?? leaderSettings.skills;
-    const mergedAgents = sessionSettings.agents ?? leaderSettings.agents;
+    const mergedTools = sessionSettings.plugins ?? characterSettings.plugins;
+    const mergedSkills = sessionSettings.skills ?? characterSettings.skills;
+    const mergedAgents = sessionSettings.agents ?? characterSettings.agents;
 
     // 系统提示词组装
     let systemPrompt =
-      sessionSettings.systemPrompt || leaderSettings.systemPrompt || "";
-
-    // 团队模式：拼接团队成员信息到提示词
-    if (this.session.team) {
-      const team = this.session.team;
-      // const leader = team.leader;
-      const members = team.members || [];
-
-      // 从主理人获取基础提示词
-      const leaderPrompt = leaderSettings.systemPrompt || "";
-      if (leaderPrompt) {
-        systemPrompt = leaderPrompt;
-      }
-
-      // 拼接团队成员信息
-      const memberInfos = members
-        .filter((m: any) => m.role !== "leader" && m.character)
-        .map((m: any) => {
-          const c = m.character;
-          return `- ID: ${c.id}, 名称: ${c.title}${c.description ? `, 描述: ${c.description}` : ""}`;
-        });
-
-      if (memberInfos.length > 0) {
-        const teamPromptParts = [
-          "",
-          "# 团队成员",
-          `你是团队 "${team.name}" 的主理人，你的任务是协调和分配任务。当需求和以下的团队成员能力匹配的时候，*你必须加载subagent能力*，使用对应的角色ID创建子代理，并分配任务：`,
-          ...memberInfos,
-        ];
-        systemPrompt = teamPromptParts.join("\n") + systemPrompt;
-      }
-    }
+      sessionSettings.systemPrompt || characterSettings.systemPrompt || "";
 
     const merged: MergedSettings = {
       systemPrompt,

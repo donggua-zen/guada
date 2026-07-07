@@ -226,8 +226,8 @@ const settingsForm = reactive({
   contentOpacity: 100,
   acrylicEnabled: true,
   blurRadius: 20,
-  floatWidgetEnabled: true,
-  floatWidgetOpacity: 85,
+  floatWidgetEnabled: false,
+  floatWidgetOpacity: 95,
 })
 
 const previewUrl = ref<string | null>(null)
@@ -286,8 +286,8 @@ const loadSettings = async () => {
     settingsForm.contentOpacity = response.contentOpacity ?? 100
     settingsForm.acrylicEnabled = response.acrylicEnabled !== false
     settingsForm.blurRadius = response.blurRadius ?? 20
-    settingsForm.floatWidgetEnabled = response.floatWidgetEnabled !== false
-    settingsForm.floatWidgetOpacity = response.floatWidgetOpacity ?? 85
+    settingsForm.floatWidgetEnabled = response.floatWidgetEnabled === true
+    settingsForm.floatWidgetOpacity = response.floatWidgetOpacity ?? 95
     previewUrl.value = resolveWallpaperUrl(response.wallpaperUrl || null)
 
     // 同步到 layout store
@@ -421,8 +421,8 @@ const handleReset = async () => {
   settingsForm.contentOpacity = 100
   settingsForm.acrylicEnabled = true
   settingsForm.blurRadius = 20
-  settingsForm.floatWidgetEnabled = true
-  settingsForm.floatWidgetOpacity = 85
+  settingsForm.floatWidgetEnabled = false
+  settingsForm.floatWidgetOpacity = 95
 
   if (previewUrl.value) {
     try {

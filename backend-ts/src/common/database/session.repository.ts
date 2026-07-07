@@ -18,15 +18,6 @@ export class SessionRepository {
         children: {
           orderBy: { createdAt: "asc" },
         },
-        team: {
-          include: {
-            leader: true,
-            members: {
-              orderBy: { sortOrder: "asc" },
-              include: { character: true },
-            },
-          },
-        },
       },
     });
   }
@@ -43,7 +34,7 @@ export class SessionRepository {
   ) {
     const where: any = {
       userId,
-      sessionType: { in: ['web', 'team'] },
+      sessionType: 'web',
     };
 
     // 分组筛选：null表示未分组，undefined表示全部

@@ -24,7 +24,7 @@ export class CommandProviderRegistry {
   private readonly logger = new Logger(CommandProviderRegistry.name);
   private providers = new Map<string, ICommandProvider>();
 
-  private readonly NAME_RE = /^[\w-]+$/;
+  private readonly NAME_RE = /^[\w\-\/]+$/;
 
   register(provider: ICommandProvider): void {
     // 校验 id 只能包含字母数字下划线连字符

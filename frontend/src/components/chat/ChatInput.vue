@@ -348,7 +348,7 @@ const parseCommandTags = (text: string): string => {
   if (!text) return text;
   // 匹配 [/type:name label="xxx"] 或 [@type:name label="xxx"]
   return text.replace(
-    /\[([\/@])([a-zA-Z_][\w-]*):([\w-]+)(?:\s+label="([^"]*)")?\s*\]/g,
+    /\[([\/@])([a-zA-Z][\w\-\/]*):([\w-]+)(?:\s+label="([^"]*)")?\s*\]/g,
     (_, prefix, provider, name, label) => {
       const displayText = label || `${prefix}${name}`;
       return `<span data-type="command" data-provider-id="${provider}" data-name="${name}" data-label="${label || ''}" data-trigger="${prefix}" class="command-badge" contenteditable="false">${displayText}</span>`;
@@ -1121,7 +1121,7 @@ onMounted(() => {
         StarterKit,
         CommandNode,
         Placeholder.configure({
-          placeholder: '按 / 使用技能，Shift+Enter 换行',
+          placeholder: '按 / 使用技能，@ 召唤agent，Shift+Enter 换行',
         }),
       ],
       content: parseCommandTags(props.value || ''),

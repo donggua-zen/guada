@@ -36,9 +36,7 @@ export interface PipelineResult {
 export class TagParserPipeline {
   private readonly logger = new Logger(TagParserPipeline.name);
 
-  constructor(
-    private readonly commandRegistry: CommandProviderRegistry,
-  ) {}
+  constructor(private readonly commandRegistry: CommandProviderRegistry) {}
 
   /**
    * 解析完整文本：
@@ -74,10 +72,7 @@ export class TagParserPipeline {
       try {
         result = await parseFn(tag.attrs);
       } catch (error) {
-        this.logger.error(
-          `标签解析失败: [${tag.type}] ${tag.raw}`,
-          error,
-        );
+        this.logger.error(`标签解析失败: [${tag.type}] ${tag.raw}`, error);
         seen.set(tag.raw, { replacement: tag.raw });
         continue;
       }
@@ -126,14 +121,14 @@ export class TagParserPipeline {
    */
   private extractTags(text: string): ExtractedTag[] {
     const tags: ExtractedTag[] = [];
-    const regex = /\[([\/@])(\w+):([\w-]+)((?:\s+\w+="[^"]*")*)\s*\]/g;
+    const regex = /\[([\/@])([\w\-\/]+):([\w-]+)((?:\s+\w+="[^"]*")*)\s*\]/g;
     let match: RegExpExecArray | null;
 
     while ((match = regex.exec(text)) !== null) {
       const raw = match[0];
-      const trigger = match[1];   // '/' or '@'
-      const type = match[2];       // e.g. "skill"
-      const name = match[3];       // e.g. "coder"
+      const trigger = match[1]; // '/' or '@'
+      const type = match[2]; // e.g. "skill"
+      const name = match[3]; // e.g. "coder"
       const attrsStr = match[4].trim();
 
       const attrs: Record<string, string> = { name };

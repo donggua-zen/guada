@@ -400,7 +400,7 @@ const renderSkillBadges = (text: string): string => {
     .replace(/>/g, '&gt;');
   // 再将转义后的 [/type:name ...] 替换为 HTML 徽标
   return escaped.replace(
-    /\[([\/@])([a-zA-Z_][\w-]*):([\w-]+)(?:\s+label="([^"]*)")?\s*\]/g,
+    /\[([\/@])([a-zA-Z][\w\-\/]*):([\w-]+)(?:\s+label="([^"]*)")?\s*\]/g,
     (_, prefix, provider, name, label) => {
       const displayText = label || `${prefix}${name}`;
       return `<span data-type="command" data-provider-id="${provider}" data-name="${name}" data-label="${label || ''}" data-trigger="${prefix}" class="command-badge" style="color: var(--el-color-primary);">${displayText}</span>`;
