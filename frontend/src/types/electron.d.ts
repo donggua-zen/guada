@@ -39,6 +39,9 @@ export interface ElectronAPI {
   showBrowserWindow: (windowId: string) => Promise<{ success: boolean }>
   toggleBrowserWindowVisibility: (windowId: string) => Promise<{ success: boolean; isVisible?: boolean }>
   getBrowserWindowVisibility: (windowId: string) => Promise<{ success: boolean; isVisible?: boolean }>
+
+  // 托盘悬浮窗统计推送
+  updateTrayStats: (stats: { running: number; unread: number }) => void
   
   // Debug 菜单
   showDebugMenu: () => Promise<void>

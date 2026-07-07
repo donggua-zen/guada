@@ -9,15 +9,21 @@ import {
   Query,
   UseGuards,
   Request,
+  Logger,
 } from "@nestjs/common";
 import { AuthGuard } from "../auth/auth.guard";
 import { CurrentUser } from "../auth/current-user.decorator";
 import { MessageService } from "./message.service";
+import { TagParserPipeline } from "./parsers/tag-parser-pipeline.service";
 
 @Controller()
 @UseGuards(AuthGuard)
 export class MessagesController {
-  constructor(private readonly messageService: MessageService) {}
+  private readonly logger = new Logger(MessagesController.name);
+  constructor(
+    private readonly messageService: MessageService,
+    private readonly tagParserPipeline: TagParserPipeline,
+  ) {}
 
   /**
    * 获取会话的消息列表（支持分页加载）
@@ -80,6 +86,21 @@ export class MessagesController {
     @Body() body: any,
     @CurrentUser() user: any,
   ) {
+    // 如果更新了 content，走标签解析管线
+    if (body.content) {
+      try {
+        const parsed = await this.tagParserPipeline.parse(body.content);
+        if (parsed.content !== parsed.originalText) {
+          body.source = {
+            ...(body.source || {}),
+            parseResult: { content: parsed.content },
+          };
+        }
+      } catch (error: any) {
+        this.logger.warn(`标签解析失败，使用原始内容: ${error?.message || error}`);
+      }
+    }
+
     return this.messageService.updateMessage(messageId, body, user.id);
   }
 

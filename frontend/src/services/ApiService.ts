@@ -1104,6 +1104,14 @@ class ApiService {
   }
 
   /**
+   * 获取命令列表（按触发方式聚合所有提供者的 items）
+   * @param trigger 'slash' | 'mention'
+   */
+  async fetchCommands(trigger: string): Promise<{ items: any[]; total: number }> {
+    return await this._request(`/commands?trigger=${trigger}`);
+  }
+
+  /**
    * 获取单个 Skill 详情
    */
   async fetchSkillDetail(skillId: string): Promise<any> {

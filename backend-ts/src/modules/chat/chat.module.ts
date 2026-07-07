@@ -31,6 +31,9 @@ import { MessageStoreService } from "./message-store.service";
 import { CompressionEngine } from "./compression-engine";
 import { MESSAGE_STORE_TOKEN, COMPRESSION_STRATEGY_TOKEN } from "./interfaces";
 
+// 标签解析器
+import { TagParserPipeline } from "./parsers/tag-parser-pipeline.service";
+
 @Module({
   imports: [AuthModule, ToolsModule, CharactersModule, FilesModule, LlmCoreModule, SkillsModule],
   controllers: [ChatController, MessagesController, SessionsController, SessionGroupController, WorkspaceEventsController, SessionEventsController],
@@ -51,6 +54,9 @@ import { MESSAGE_STORE_TOKEN, COMPRESSION_STRATEGY_TOKEN } from "./interfaces";
     SessionEventsService,
     ChatRunnerService,
     ToolCallDisplayUtil,
+
+    // 标签解析器管道
+    TagParserPipeline,
   ],
   exports: [AgentEngine, SessionService, MessageService, SessionEventsService, ChatRunnerService, SessionContextFactory],
 })
@@ -61,5 +67,6 @@ export class ChatModule implements OnModuleInit {
 
   onModuleInit() {
     // KnowledgeBaseToolProvider 已在 ToolsModule 中注册，无需再次添加
+    // 标签解析器通过 CommandProviderRegistry 自动关联，无需手动注册
   }
 }

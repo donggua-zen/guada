@@ -352,10 +352,15 @@ export class MessageStoreService implements IMessageStore {
 
       let userContent = activeContent.content || "";
 
+      // 如果存在 parseResult（标签解析结果），使用解析后的最终内容替换原始文本
+      // parseResult 由前端标签解析器生成，将 [skill name="xxx"] 等标签替换为 LLM 可读文本
+      const meta = msg.metadata;
+      if (meta && typeof meta === "object" && meta.parseResult?.content) {
+        userContent = meta.parseResult.content;
+      }
       // 非普通聊天消息（如子代理、定时任务等），使用 XML 标签包装来源信息
       // metadata 是平铺存储的，source 字段不存在，直接用 metadata 判断
-      const meta = msg.metadata;
-      if (
+      else if (
         meta &&
         typeof meta === "object" &&
         meta.type &&

@@ -25,6 +25,10 @@ export const useLayoutStore = defineStore('layout', () => {
   const acrylicEnabled = useStorage<boolean>('acrylicEnabled', true)
   const blurRadius = useStorage<number>('blurRadius', 20)
 
+  // 悬浮任务窗设置（持久化到 localStorage）
+  const floatWidgetEnabled = useStorage<boolean>('floatWidgetEnabled', true)
+  const floatWidgetOpacity = useStorage<number>('floatWidgetOpacity', 85)
+
   // 防止重复加载壁纸的标志
   let isLoadingWallpaper = false
 
@@ -89,6 +93,20 @@ export const useLayoutStore = defineStore('layout', () => {
    */
   const setBlurRadius = (radius: number): void => {
     blurRadius.value = radius
+  }
+
+  /**
+   * 设置悬浮任务窗显隐
+   */
+  const setFloatWidgetEnabled = (enabled: boolean): void => {
+    floatWidgetEnabled.value = enabled
+  }
+
+  /**
+   * 设置悬浮任务窗透明度
+   */
+  const setFloatWidgetOpacity = (opacity: number): void => {
+    floatWidgetOpacity.value = opacity
   }
 
   /**
@@ -212,6 +230,8 @@ export const useLayoutStore = defineStore('layout', () => {
     contentOpacity,
     acrylicEnabled,
     blurRadius,
+    floatWidgetEnabled,
+    floatWidgetOpacity,
     toggleSidebar,
     setSidebarVisible,
     toggleWorkspace,
@@ -221,6 +241,8 @@ export const useLayoutStore = defineStore('layout', () => {
     setContentOpacity,
     setAcrylicEnabled,
     setBlurRadius,
+    setFloatWidgetEnabled,
+    setFloatWidgetOpacity,
     applyWallpaperSettings,
     loadAppearanceSettings,
   }

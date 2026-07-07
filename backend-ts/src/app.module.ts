@@ -23,6 +23,7 @@ import { SchedulerModule } from './modules/scheduler/scheduler.module';
 import { SubAgentModule } from './modules/sub-agent/sub-agent.module';
 import { TeamModule } from './modules/team/team.module';
 import { ShellModule } from './modules/shell/shell.module';
+import { CommandsModule } from './modules/commands/commands.module';
 
 @Module({
   imports: [
@@ -58,6 +59,7 @@ import { ShellModule } from './modules/shell/shell.module';
     SubAgentModule,   // 子 Agent 模块
     TeamModule,       // 团队/专家团模块
     ShellModule,      // Shell 命令行模块
+    CommandsModule,   // 命令提供者注册 & 聚合接口
   ],
 })
 export class AppModule {}

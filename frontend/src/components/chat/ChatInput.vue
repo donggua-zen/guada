@@ -27,33 +27,19 @@
       <!-- Tiptap 编辑器（替换 textarea） -->
       <div class="editor-container">
         <component :is="EditorContent" :editor="editor" class="message-editor" />
-        <!-- 技能选择弹窗 -->
-        <div v-if="skillPickerVisible" class="skill-picker">
-          <div class="skill-picker-list">
-            <div v-for="(skill, index) in filteredSkills" :key="skill.id" class="skill-picker-item"
-              :class="{ active: index === selectedIndex }" @click="selectSkill(skill)"
-              @mouseenter="selectedIndex = index">
-              <div class="skill-picker-content">
-                <span class="skill-picker-icon">
-                  <el-icon size="16">
-                    <Apps20Regular />
-                  </el-icon>
-                </span>
-                <div class="skill-picker-info flex items-center gap-2">
-                  <div class="skill-picker-name whitespace-nowrap" :class="{ 'text-primary': index === selectedIndex }">
-                    {{ skill.manifest?.name || skill.name || skill.id }}
-                  </div>
-                  <div class="skill-picker-desc truncate">
-                    {{ skill.manifest?.description || skill.description || '' }}
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-          <div v-if="filteredSkills.length === 0" class="skill-picker-empty">
-            未找到匹配的技能
-          </div>
-        </div>
+        <!-- 命令选择弹窗 -->
+        <CommandPicker
+          v-if="commandPickerVisible"
+          ref="commandPickerRef"
+          :visible="commandPickerVisible"
+          :items="commandsCache[commandTrigger]"
+          :query="pickerQuery"
+          :selected-index="selectedIndex"
+          :trigger="commandTrigger"
+          @select="selectCommand"
+          @close="closeCommandPicker"
+          @update:selected-index="selectedIndex = $event"
+        />
       </div>
 
       <!-- 隐藏的文件输入框 -->
@@ -184,7 +170,8 @@ import SessionSettingsDialog from './chat-input/SessionSettingsDialog.vue';
 import ThinkingEffortPopover from './chat-input/ThinkingEffortPopover.vue';
 import ModelSelectorPanel from './chat-input/ModelSelectorPanel.vue';
 import ChatInputToolbar from './chat-input/ChatInputToolbar.vue';
-import { SkillNode } from '@/utils/skillNode';
+import { CommandNode } from './chat-input/commandNode';
+import CommandPicker from './chat-input/CommandPicker.vue';
 import { getModelDisplayName, getModelAvatarPath, getModelThinkingEfforts, getThinkingEffortLabel } from '@/utils/modelUtils';
 import { OpenAI } from "@/components/icons";
 import {
@@ -232,11 +219,18 @@ const knowledgeBases = ref<any[]>([]); // 知识库列表
 
 // Tiptap 编辑器相关
 const editor = ref<Editor>();
-const skillPickerVisible = ref(false);
+const commandPickerVisible = ref(false);
 const pickerQuery = ref('');
 const selectedIndex = ref(0);
-const allSkills = ref<any[]>([]);
+const commandsCache = reactive<{ slash: any[]; mention: any[] }>({
+  slash: [],
+  mention: [],
+});
+const commandTrigger = ref<'slash' | 'mention'>('slash');
 const editorContent = ref('');
+
+// 命令选择弹窗 ref
+const commandPickerRef = ref<any>();
 
 // 抽屉面板状态（会话设置保持抽屉样式 - 已废弃，改用模态框）
 const settingsPanelVisible = ref(false)
@@ -347,18 +341,25 @@ watch(editorContent, (val) => {
 });
 
 /**
- * 将纯文本中的 <skill:xxx> 标记转换为 HTML 标签
- * 供 Tiptap 解析为 Skill 节点
+ * 将纯文本中的 [/type:name ...] 标记转换为 HTML 标签
+ * 供 Tiptap 解析为 Command 节点
  */
-const parseSkillTags = (text: string): string => {
+const parseCommandTags = (text: string): string => {
   if (!text) return text;
-  return text.replace(/<skill:([^>]+)>/g, '<span data-type="skill" data-skill-name="$1" class="skill-badge" contenteditable="false">/$1</span>');
+  // 匹配 [/type:name label="xxx"] 或 [@type:name label="xxx"]
+  return text.replace(
+    /\[([\/@])([a-zA-Z_][\w-]*):([\w-]+)(?:\s+label="([^"]*)")?\s*\]/g,
+    (_, prefix, provider, name, label) => {
+      const displayText = label || `${prefix}${name}`;
+      return `<span data-type="command" data-provider-id="${provider}" data-name="${name}" data-label="${label || ''}" data-trigger="${prefix}" class="command-badge" contenteditable="false">${displayText}</span>`;
+    }
+  );
 };
 
 watch(() => props.value, (val) => {
   if (editor.value && editor.value.getText() !== val) {
     // 将纯文本中的 \n 转换为 <br>，确保 setContent 作为 HTML 解析时保留换行
-    const htmlContent = parseSkillTags(val).replace(/\n/g, '<br>');
+    const htmlContent = parseCommandTags(val).replace(/\n/g, '<br>');
     editor.value.commands.setContent(htmlContent, false);
   }
 });
@@ -945,37 +946,23 @@ const handleBlur = () => {
   emit('blur');
 };
 
-// ==================== 技能选择弹窗 ====================
-const openSkillPicker = (query: string = '') => {
+// ==================== 命令选择弹窗（斜杠/艾特） ====================
+const openCommandPicker = async (query: string = '', trigger: 'slash' | 'mention' = 'slash') => {
   pickerQuery.value = query;
   selectedIndex.value = 0;
-  skillPickerVisible.value = true;
+  commandTrigger.value = trigger;
+  // 按需加载对应触发方式的命令
+  await loadCommands(trigger);
+  commandPickerVisible.value = true;
 };
 
-const closeSkillPicker = () => {
-  skillPickerVisible.value = false;
+const closeCommandPicker = () => {
+  commandPickerVisible.value = false;
   pickerQuery.value = '';
   selectedIndex.value = 0;
 };
 
-const scrollToSelectedItem = () => {
-  nextTick(() => {
-    const listEl = document.querySelector('.skill-picker-list');
-    const selectedEl = document.querySelectorAll('.skill-picker-item')[selectedIndex.value];
-    if (!listEl || !selectedEl) return;
-
-    const listRect = listEl.getBoundingClientRect();
-    const selectedRect = selectedEl.getBoundingClientRect();
-
-    if (selectedRect.top < listRect.top) {
-      listEl.scrollTop -= listRect.top - selectedRect.top;
-    } else if (selectedRect.bottom > listRect.bottom) {
-      listEl.scrollTop += selectedRect.bottom - listRect.bottom;
-    }
-  });
-};
-
-const checkSkillTrigger = () => {
+const checkCommandTrigger = () => {
   if (!editor.value) return;
 
   const { state } = editor.value;
@@ -983,55 +970,60 @@ const checkSkillTrigger = () => {
   const { $from } = selection;
 
   const textBefore = $from.parent.textBetween(0, $from.parentOffset, '\n', '\n');
+
+  // 检测 / 触发（斜杠命令）
   const lastSlashIndex = textBefore.lastIndexOf('/');
-  if (lastSlashIndex < 0) {
-    closeSkillPicker();
-    return;
+  if (lastSlashIndex >= 0) {
+    const charBeforeSlash = textBefore[lastSlashIndex - 1];
+    if (lastSlashIndex === 0 || charBeforeSlash === ' ' || charBeforeSlash === '\n') {
+      const query = textBefore.slice(lastSlashIndex + 1);
+      if (!query.includes(' ')) {
+        openCommandPicker(query, 'slash');
+        return;
+      }
+    }
   }
 
-  const charBeforeSlash = textBefore[lastSlashIndex - 1];
-  if (lastSlashIndex > 0 && charBeforeSlash !== ' ' && charBeforeSlash !== '\n') {
-    closeSkillPicker();
-    return;
+  // 检测 @ 触发（艾特命令）
+  const lastAtIndex = textBefore.lastIndexOf('@');
+  if (lastAtIndex >= 0) {
+    const charBeforeAt = textBefore[lastAtIndex - 1];
+    if (lastAtIndex === 0 || charBeforeAt === ' ' || charBeforeAt === '\n') {
+      const query = textBefore.slice(lastAtIndex + 1);
+      if (!query.includes(' ')) {
+        openCommandPicker(query, 'mention');
+        return;
+      }
+    }
   }
 
-  const query = textBefore.slice(lastSlashIndex + 1);
-  if (query.includes(' ')) {
-    closeSkillPicker();
-    return;
-  }
-
-  openSkillPicker(query);
+  closeCommandPicker();
 };
 
 const handlePickerKeydown = (e: KeyboardEvent) => {
-  if (!skillPickerVisible.value) return;
+  if (!commandPickerVisible.value || !commandPickerRef.value) return;
 
   switch (e.key) {
     case 'ArrowDown':
       e.preventDefault();
-      selectedIndex.value = (selectedIndex.value + 1) % filteredSkills.value.length;
-      scrollToSelectedItem();
+      commandPickerRef.value.moveDown();
       break;
     case 'ArrowUp':
       e.preventDefault();
-      selectedIndex.value = (selectedIndex.value - 1 + filteredSkills.value.length) % filteredSkills.value.length;
-      scrollToSelectedItem();
+      commandPickerRef.value.moveUp();
       break;
     case 'Enter':
       e.preventDefault();
-      if (filteredSkills.value[selectedIndex.value]) {
-        selectSkill(filteredSkills.value[selectedIndex.value]);
-      }
+      commandPickerRef.value.confirmSelection();
       break;
     case 'Escape':
       e.preventDefault();
-      closeSkillPicker();
+      closeCommandPicker();
       break;
   }
 };
 
-const selectSkill = (skill: any) => {
+const selectCommand = (item: any) => {
   if (!editor.value) return;
 
   const { state } = editor.value;
@@ -1041,43 +1033,42 @@ const selectSkill = (skill: any) => {
   const textBefore = $from.parent.textBetween(0, $from.parentOffset, '\n', '\n');
   const slashIndex = textBefore.lastIndexOf('/');
 
-  if (slashIndex >= 0) {
-    const from = $from.start() + slashIndex;
+  // 删除触发字符（/ 或 @）及其后的查询文本
+  const triggerIndex = textBefore.lastIndexOf('/');
+  const atIndex = textBefore.lastIndexOf('@');
+  const delIndex = Math.max(triggerIndex, atIndex);
+
+  if (delIndex >= 0) {
+    const from = $from.start() + delIndex;
     const to = $from.pos;
     editor.value.chain().focus().deleteRange({ from, to }).run();
   }
 
-  const skillName = skill.manifest?.name || skill.name || skill.id;
+  const providerId = item.providerId || 'skill';
+  const name = item.name;
+  const label = item.label || item.name;
+  const trigger = commandTrigger.value === 'mention' ? '@' : '/';
+
   editor.value
     .chain()
     .focus()
     .insertContent({
-      type: 'skill',
-      attrs: { name: skillName },
+      type: 'command',
+      attrs: { providerId, name, label, trigger },
     })
     .run();
 
-  closeSkillPicker();
+  closeCommandPicker();
   editorContent.value = editor.value.getText();
 };
 
-const filteredSkills = computed(() => {
-  if (!pickerQuery.value) return allSkills.value;
-  const q = pickerQuery.value.toLowerCase();
-  return allSkills.value.filter((s: any) => {
-    const name = s.manifest?.name || s.name || s.id;
-    const desc = s.manifest?.description || s.description || '';
-    return name.toLowerCase().includes(q) || desc.toLowerCase().includes(q);
-  });
-});
-
-// ==================== 技能数据加载 ====================
-const loadSkills = async () => {
+// ==================== 命令数据加载（按需 + 缓存） ====================
+const loadCommands = async (trigger: 'slash' | 'mention') => {
   try {
-    const response = await apiService.fetchSkills();
-    allSkills.value = response.items || [];
+    const res = await apiService.fetchCommands(trigger);
+    commandsCache[trigger] = res.items || [];
   } catch (error) {
-    console.error('获取技能列表失败:', error);
+    console.error('获取命令列表失败:', error);
   }
 };
 
@@ -1121,7 +1112,6 @@ onMounted(() => {
   adjustTextareaHeight();
   loadModels();
   loadKnowledgeBases(); // 加载知识库列表
-  loadSkills(); // 加载技能列表
   initThinkingEffort(); // 初始化思考强度
 
   // 初始化 Tiptap 编辑器
@@ -1129,17 +1119,17 @@ onMounted(() => {
     const tiptapEditor = new Editor({
       extensions: [
         StarterKit,
-        SkillNode,
+        CommandNode,
         Placeholder.configure({
           placeholder: '按 / 使用技能，Shift+Enter 换行',
         }),
       ],
-      content: parseSkillTags(props.value || ''),
+      content: parseCommandTags(props.value || ''),
       editable: true,
       editorProps: {
         handleKeyDown: (_view, event) => {
           // 弹窗打开时拦截键盘事件
-          if (skillPickerVisible.value) {
+          if (commandPickerVisible.value) {
             if (['ArrowUp', 'ArrowDown', 'Enter', 'Escape'].includes(event.key)) {
               handlePickerKeydown(event);
               return true;
@@ -1165,7 +1155,7 @@ onMounted(() => {
       },
       onUpdate: ({ editor: ed }) => {
         editorContent.value = ed.getText();
-        checkSkillTrigger();
+        checkCommandTrigger();
         nextTick(() => {
           const pmEl = document.querySelector('.message-editor .ProseMirror');
           if (pmEl) {
@@ -1186,8 +1176,8 @@ onMounted(() => {
         focused.value = false;
         emit('blur');
         setTimeout(() => {
-          if (!document.querySelector('.skill-picker:hover')) {
-            closeSkillPicker();
+          if (!document.querySelector('.command-picker:hover')) {
+            closeCommandPicker();
           }
         }, 200);
       },
@@ -1294,115 +1284,14 @@ onUnmounted(() => {
   position: relative;
 }
 
-/* 技能徽标样式 */
-:deep(.skill-badge) {
+/* 命令徽标样式 */
+:deep(.command-badge) {
   display: inline;
   color: var(--el-color-primary);
   font-size: inherit;
   line-height: inherit;
   cursor: pointer;
   user-select: none;
-}
-
-/* 技能选择弹窗样式 - 悬浮在输入框上方 */
-.skill-picker {
-  position: absolute;
-  bottom: calc(100% + 28px);
-  left: 0;
-  right: 0;
-  z-index: 1000;
-  padding: 8px;
-  border-radius: 12px;
-  background: var(--el-bg-color, #fff);
-  border: 1px solid var(--el-border-color, #dcdfe6);
-  box-shadow: 0 -4px 24px rgba(0, 0, 0, 0.12);
-  overflow: hidden;
-}
-
-.dark .skill-picker {
-  background: #2d2d2d;
-  border-color: #3c3c3c;
-  box-shadow: 0 -4px 24px rgba(0, 0, 0, 0.4);
-}
-
-.skill-picker-list {
-  max-height: 200px;
-  overflow-y: auto;
-}
-
-.skill-picker-item {
-  display: flex;
-  align-items: center;
-  padding: 4px 8px;
-  cursor: pointer;
-  transition: background 0.15s;
-  border-radius: 8px;
-}
-
-.skill-picker-item:hover,
-.skill-picker-item.active {
-  background: var(--el-fill-color-light, #f5f7fa);
-}
-
-.dark .skill-picker-item:hover,
-.dark .skill-picker-item.active {
-  background: #3c3c3c;
-}
-
-.skill-picker-content {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  width: 100%;
-  min-width: 0;
-  overflow: hidden;
-}
-
-.skill-picker-icon {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 20px;
-  height: 20px;
-  flex-shrink: 0;
-}
-
-.skill-picker-info {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.skill-picker-name {
-  font-size: 14px;
-  font-weight: 500;
-  line-height: 1.4;
-  white-space: nowrap;
-  flex-shrink: 0;
-}
-
-.skill-picker-name.text-primary {
-  color: var(--el-color-primary);
-}
-
-.skill-picker-desc {
-  font-size: 12px;
-  line-height: 1.4;
-  color: var(--el-text-color-secondary);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  flex: 1;
-  min-width: 0;
-}
-
-.skill-picker-empty {
-  padding: 16px;
-  text-align: center;
-  font-size: 13px;
-  color: var(--el-text-color-secondary);
 }
 
 /* 保留旧样式兼容 */
