@@ -76,7 +76,7 @@ export class AgentsController {
    */
   @Post("import")
   async importAgents(
-    @Body() body: { files: { content: string; filename: string }[]; folder?: string },
+    @Body() body: { files: { content: string; filename: string }[]; folder?: string; overwrite?: boolean },
   ) {
     if (!body.files || !Array.isArray(body.files) || body.files.length === 0) {
       return { success: false, message: "files 不能为空" };
@@ -85,6 +85,7 @@ export class AgentsController {
       const results = await this.agentScanner.importAgents(
         body.files,
         body.folder,
+        body.overwrite,
       );
       const ok = results.filter((r) => r.status === "ok").length;
       const conflict = results.filter((r) => r.status === "conflict").length;

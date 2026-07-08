@@ -384,7 +384,7 @@ class ApiService {
     });
   }
 
-  async importAgents(data: { files: { content: string; filename: string }[]; folder?: string }): Promise<any> {
+  async importAgents(data: { files: { content: string; filename: string }[]; folder?: string; overwrite?: boolean }): Promise<any> {
     return await this._request("/agents/import", { method: "POST", data });
   }
 

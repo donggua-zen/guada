@@ -25,10 +25,21 @@
       </el-space>
     </div>
 
-    <div class="text-sm text-gray-600 dark:text-[#8b8d95] mb-4">
-      打开可见性后 AI 会根据任务自动调用对应的 Agent，关闭的 Agent 可以通过@命令手动调用。<br>
-      <span class="text-red-500">太多的 可见Agent 会占用上下文预算，使得对话成本增加，且可能导致AI困惑。</span><br>
-      <span>建议只保留必要且高频使用Agent可见（少于5个），其余agent使用时手动@调用即可。</span>
+    <div class="bg-gradient-to-br from-gray-50 to-gray-100/50 dark:from-[#1e1f22] dark:to-[#1e1f22]/60 rounded-xl p-4 mb-5 space-y-2.5">
+      <div class="flex items-start gap-2.5">
+        <span class="text-base shrink-0 mt-0.5">💡</span>
+        <div class="text-sm text-gray-600 dark:text-[#9b9da5] leading-relaxed space-y-2">
+          <p>
+            通过预置子代理可以更好的控制 AI 使用子代理的行为。AI 会优先使用能力匹配的子代理，而不是自行创建通用的子代理。
+          </p>
+          <p>
+            打开可见性后 AI 会根据任务自动调用对应的 Agent，关闭的 Agent 可以通过 <code class="bg-gray-200/60 dark:bg-[#2a2c30] px-1.5 py-0.5 rounded text-xs font-mono">@</code> 命令手动调用。
+          </p>
+          <p class="text-amber-600 dark:text-amber-400 font-medium">
+            ⚠️ 注意：可见 Agent 过多会占用上下文预算，增加对话成本，且可能导致 AI 困惑。建议只保留必要且高频的 Agent（少于 5 个），其余使用时手动 @ 调用即可。
+          </p>
+        </div>
+      </div>
     </div>
 
     <!-- 加载中 -->
@@ -114,21 +125,26 @@
         </div>
 
         <div>
-          <label class="text-sm text-gray-500 mb-1 block">ID *（用作文件名）</label>
+          <label class="text-sm text-gray-500 mb-1 block">文件名 *</label>
           <el-input v-model="editForm.agentId"
             placeholder="如：my-agent"
             :disabled="isEditing"
             :class="{ 'border-red-500': agentIdError || agentIdDuplicate }" />
           <p class="text-xs text-gray-400 mt-1">
-            {{ isEditing ? '编辑模式下 ID 不可更改' : '仅允许英文字母、下划线、短横线（a-zA-Z_-）' }}
+            <template v-if="isEditing">
+              实际路径：{{ editForm.folder ? editForm.folder + '/' : '' }}{{ editForm.agentId }}.md
+            </template>
+            <template v-else>
+              仅允许英文字母、下划线、短横线（a-zA-Z_-）
+            </template>
             <span v-if="agentIdError" class="text-red-500">格式不正确，只允许英文字母、下划线、短横线</span>
             <span v-else-if="agentIdDuplicate" class="text-red-500">该 ID 已被使用，请换一个</span>
           </p>
         </div>
 
         <div>
-          <label class="text-sm text-gray-500 mb-1 block">描述</label>
-          <el-input v-model="editForm.description" placeholder="Agent 功能描述" type="textarea" :rows="3" />
+          <label class="text-sm text-gray-500 mb-1 block">描述 <span class="text-gray-400 font-normal">— 描述 agent 功能以及何时使用，决定了 AI 能否按预期使用此代理</span></label>
+          <el-input v-model="editForm.description" placeholder="例如：当用户需要编写和调试 Python 代码时使用，支持代码补全、运行、错误分析等功能" type="textarea" :rows="3" />
         </div>
 
         <div>
@@ -166,17 +182,19 @@
       <template v-if="!importSummary">
         <div class="space-y-4">
           <!-- 目录提示 -->
-          <div class="text-sm bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-3 space-y-2">
-            <p class="font-medium text-blue-700 dark:text-blue-300">📥 导入说明</p>
-            <p class="text-blue-600 dark:text-blue-400">
-              支持导入符合 <strong>Claude Code</strong> 格式的 Agent 文件（<code class="bg-blue-100 dark:bg-blue-800 px-1 rounded">.md</code> 文件，含 YAML frontmatter）。
+          <div class="text-sm bg-gradient-to-br from-blue-50 to-indigo-50 dark:from-blue-900/15 dark:to-indigo-900/15 rounded-xl p-4 space-y-2.5">
+            <p class="font-semibold text-blue-700 dark:text-blue-300 flex items-center gap-1.5">
+              <span class="text-base">📥</span> 导入说明
             </p>
-            <p class="text-blue-600 dark:text-blue-400">
+            <p class="text-blue-600 dark:text-blue-400/90 leading-relaxed">
+              支持导入符合 <strong>Claude Code</strong> 格式的 Agent 文件（<code class="bg-blue-100/60 dark:bg-blue-800/40 px-1.5 py-0.5 rounded text-xs font-mono">.md</code>，含 YAML frontmatter）。
+            </p>
+            <p class="text-blue-600 dark:text-blue-400/90">
               文件将导入到以下目录：
             </p>
-            <div class="flex items-center gap-2 bg-white dark:bg-[#1c1d20] rounded px-3 py-2 text-xs font-mono text-gray-700 dark:text-gray-300">
+            <div class="flex items-center gap-2 bg-white/70 dark:bg-white/5 backdrop-blur-sm rounded-lg px-3 py-2 border border-blue-200/50 dark:border-blue-700/30 text-xs font-mono text-gray-700 dark:text-gray-300">
               <span class="flex-1 truncate select-all">{{ agentsDirPath }}</span>
-              <el-button link size="small" @click="copyAgentsDir">
+              <el-button link size="small" @click="copyAgentsDir" class="!text-blue-500 hover:!text-blue-700">
                 <template #icon><component :is="FileCopyOutlined" class="w-3.5 h-3.5" /></template>
               </el-button>
             </div>
@@ -236,7 +254,7 @@
       </div>
       <template #footer>
         <el-button v-if="!importSummary" @click="showImportDialog = false">取消</el-button>
-        <el-button v-if="!importSummary" type="primary" :loading="importing" :disabled="pendingFiles.length === 0" @click="handleConfirmImport">
+        <el-button v-if="!importSummary" type="primary" :loading="importing" :disabled="pendingFiles.length === 0" @click="() => handleConfirmImport()">
           确认导入
         </el-button>
         <el-button v-else type="primary" @click="showImportDialog = false">确定</el-button>
@@ -432,8 +450,9 @@ const handleCreateAgent = (): void => {
 /** 打开编辑弹窗（先加载详情） */
 const openEditor = async (agent: any): Promise<void> => {
   editingId.value = agent.id
-  // 从 agent.id 中提取标识符（去掉 "agent-" 前缀）
-  const baseId = agent.id.startsWith('agent-') ? agent.id.slice(6) : agent.id
+  // 从 agent.id 中提取纯文件名（去掉 "agent-" 前缀和文件夹部分）
+  const rawId = agent.id.startsWith('agent-') ? agent.id.slice(6) : agent.id
+  const baseId = rawId.includes('/') ? rawId.split('/').pop()! : rawId
   // 先填充卡片已有的信息
   editForm.value = {
     name: agent.name || '',
@@ -489,7 +508,7 @@ const handleSaveAgent = async (): Promise<void> => {
       emoji: editForm.value.emoji || '🤖',
       visible: editForm.value.visible,
       body: editForm.value.body,
-      folder: editForm.value.folder || undefined,
+      folder: editForm.value.folder,
     }
 
     if (!isEditing.value) {
@@ -621,21 +640,37 @@ const copyAgentsDir = (): void => {
 }
 
 /** 确认导入 */
-const handleConfirmImport = async (): Promise<void> => {
+const handleConfirmImport = async (overwrite = false): Promise<void> => {
   if (pendingFiles.value.length === 0) return
 
   importing.value = true
-  importResults.value = []
-  importSummary.value = null
+  if (!overwrite) {
+    importResults.value = []
+    importSummary.value = null
+  }
   try {
     const resp = await apiService.importAgents({
       files: pendingFiles.value,
       folder: importFolder.value || undefined,
+      overwrite,
     })
     if (resp.success) {
       importResults.value = resp.results || []
       importSummary.value = resp.summary
       await loadAgents()
+
+      // 有冲突 → 弹窗询问是否覆盖
+      if (!overwrite && resp.summary?.conflict > 0) {
+        importing.value = false
+        const confirmed = await confirm(
+          '覆盖确认',
+          `${resp.summary.conflict} 个文件已存在，是否覆盖？覆盖后将替换原有文件。`,
+        )
+        if (confirmed) {
+          await handleConfirmImport(true)
+        }
+        return
+      }
     } else {
       toast.error(resp.message || '导入失败')
       showImportDialog.value = false

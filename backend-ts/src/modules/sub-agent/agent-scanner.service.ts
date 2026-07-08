@@ -220,6 +220,11 @@ export class AgentScannerService {
     const filePath = this.resolveAgentFilePath(agentId);
     if (!filePath) throw new Error(`Agent ${agentId} 不存在`);
 
+    // 解析旧文件夹和文件名
+    const rawId = agentId.startsWith(this.PREFIX) ? agentId.slice(this.PREFIX.length) : agentId;
+    const oldFolder = rawId.includes('/') ? rawId.split('/')[0] : null;
+    const fileName = rawId.includes('/') ? rawId.split('/').pop()! : rawId;
+
     const content = await readFile(filePath, "utf-8");
     const match = content.match(/^---\s*\n([\s\S]*?)\n---\s*\n([\s\S]*)$/);
     if (!match) throw new Error(`Agent 文件格式无效: ${agentId}`);
@@ -237,10 +242,39 @@ export class AgentScannerService {
     const newYaml = yaml.dump(parsed, { lineWidth: -1 }).trim();
     const body = data.body !== undefined ? data.body : match[2];
     const newContent = `---\n${newYaml}\n---\n${body}`;
-    await writeFile(filePath, newContent, "utf-8");
+
+    // 检查文件夹是否变化 → 需要移动文件
+    const newFolder = data.folder !== undefined ? data.folder || null : oldFolder;
+    if (newFolder !== oldFolder) {
+      // 删除旧文件
+      await unlink(filePath);
+
+      // 写入新路径
+      const newDir = newFolder ? path.join(this.agentsDir, newFolder) : this.agentsDir;
+      await mkdir(newDir, { recursive: true });
+      const newFilePath = path.join(newDir, `${fileName}.md`);
+      await writeFile(newFilePath, newContent, "utf-8");
+
+      // 如果旧文件夹为空，删除它
+      if (oldFolder) {
+        const oldDir = path.join(this.agentsDir, oldFolder);
+        try {
+          const remaining = await readdir(oldDir);
+          if (remaining.length === 0) await rmdir(oldDir);
+        } catch { /* 忽略 */ }
+      }
+    } else {
+      // 文件夹没变，直接原地写回
+      await writeFile(filePath, newContent, "utf-8");
+    }
+
     await this.refresh();
 
-    const result = this.cache?.find((a) => a.id === agentId);
+    // 查找新 agentId（文件夹变化后 agentId 也变了）
+    const newAgentId = newFolder
+      ? `agent-${newFolder}/${fileName}`
+      : `agent-${fileName}`;
+    const result = this.cache?.find((a) => a.id === newAgentId);
     if (!result) throw new Error("更新后未找到 Agent");
     return result;
   }
@@ -584,6 +618,7 @@ export class AgentScannerService {
   async importAgents(
     files: { content: string; filename: string }[],
     targetFolder?: string,
+    overwrite?: boolean,
   ): Promise<{ filename: string; status: "ok" | "conflict" | "invalid"; message?: string }[]> {
     const results: { filename: string; status: "ok" | "conflict" | "invalid"; message?: string }[] = [];
 
@@ -628,6 +663,12 @@ export class AgentScannerService {
           : `${baseName}.md`;
         const absPath = path.join(this.agentsDir, relPath);
         if (fs.existsSync(absPath)) {
+          if (overwrite) {
+            // 覆盖模式：直接写入
+            await writeFile(absPath, content, "utf-8");
+            results.push({ filename, status: "ok", message: "已覆盖" });
+            continue;
+          }
           results.push({ filename, status: "conflict", message: `文件已存在: ${relPath}` });
           continue;
         }
