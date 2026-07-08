@@ -4,6 +4,18 @@
     <div class="flex items-center justify-between mb-6">
       <span class="text-lg font-semibold">轻量 Agent</span>
       <el-space>
+        <el-button type="primary" @click="handleCreateAgent">
+          <template #icon>
+            <component :is="AddOutlined" class="w-4 h-4" />
+          </template>
+          新增 Agent
+        </el-button>
+        <el-button @click="handleImportClick">
+          <template #icon>
+            <component :is="FileUploadOutlined" class="w-4 h-4" />
+          </template>
+          导入
+        </el-button>
         <el-button @click="refreshAgents" :loading="loading">
           <template #icon>
             <component :is="RefreshOutlined" class="w-4 h-4" />
@@ -31,7 +43,7 @@
       <div v-if="ungroupedAgents.length > 0" class="grid gap-3 mb-6"
         style="grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));">
         <AgentCard v-for="agent in ungroupedAgents" :key="agent.id" :agent="agent" :disabled="!agent.visible"
-          @toggle-visibility="handleToggleAgentVisibility" @view-detail="viewAgentDetail" @delete="handleDeleteAgent" />
+          @toggle-visibility="handleToggleAgentVisibility" @edit="openEditor" @export="handleExportAgent" @delete="handleDeleteAgent" />
       </div>
 
       <!-- ========== 文件夹分组 ========== -->
@@ -59,7 +71,7 @@
           style="grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));">
           <AgentCard v-for="agent in getGroupedAgents(group.id)" :key="agent.id" :agent="agent"
             :disabled="!agent.visible || !agent.folderVisible" @toggle-visibility="handleToggleAgentVisibility"
-            @view-detail="viewAgentDetail" @delete="handleDeleteAgent" />
+            @edit="openEditor" @export="handleExportAgent" @delete="handleDeleteAgent" />
         </div>
       </div>
     </template>
@@ -71,56 +83,172 @@
       <p class="text-sm mt-1">在 agents/ 目录中放入 .md 文件即可创建</p>
     </div>
 
-    <!-- Agent 详情弹窗 -->
-    <el-dialog v-model="showDetailDialog" :title="detailAgent?.name || 'Agent 详情'" :width="isMobile ? '90%' : '560px'"
-      :append-to-body="true">
+    <!-- Agent 编辑弹窗 -->
+    <el-dialog v-model="showEditorDialog" :title="editorTitle" :width="isMobile ? '90%' : '640px'"
+      :append-to-body="true" :close-on-click-modal="false">
       <div class="space-y-4">
-        <div class="flex items-center gap-3">
-          <div class="w-12 h-12 rounded-lg flex items-center justify-center text-3xl"
-            :style="{ backgroundColor: detailAgent?.color + '20' || '#f0f0f0' }">
-            {{ detailAgent?.emoji || '🤖' }}
+        <!-- 基本信息 -->
+        <div class="flex gap-3 items-start">
+          <div class="flex-1 min-w-0">
+            <label class="text-sm text-gray-500 mb-1 block">名称 *</label>
+            <el-input v-model="editForm.name" placeholder="Agent 名称" />
           </div>
-          <div>
-            <h3 class="font-medium text-lg">{{ detailAgent?.name }}</h3>
-            <p class="text-sm text-gray-500">{{ detailAgent?.description }}</p>
-          </div>
-        </div>
-        <div class="flex items-center gap-2">
-          <span class="text-sm text-gray-500">提示词注入：</span>
-          <el-tag :type="detailAgent?.visible ? 'success' : 'info'" size="small">
-            {{ detailAgent?.visible ? '可见' : '不可见' }}
-          </el-tag>
-        </div>
-        <div class="border-t border-gray-200 dark:border-[#2a2c30] pt-4 space-y-2">
-          <div class="flex items-center gap-2">
-            <span class="text-sm text-gray-500 shrink-0">Agent ID:</span>
-            <code class="text-sm bg-gray-100 dark:bg-[#2a2c30] px-2 py-1 rounded">{{ detailAgent?.id }}</code>
-          </div>
-          <div class="flex items-center gap-2">
-            <span class="text-sm text-gray-500 shrink-0">Path:</span>
-            <code class="text-sm bg-gray-100 dark:bg-[#2a2c30] px-2 py-1 rounded flex-1 truncate">{{ detailFilePath
-            }}</code>
-            <el-button v-if="detailFilePath" link size="small" @click="openFilePath(detailFilePath)">
-              <template #icon>
-                <component :is="OpenInNewOutlined" class="w-4 h-4" />
+          <div class="shrink-0">
+            <label class="text-sm text-gray-500 mb-1 block">Emoji</label>
+            <el-popover placement="bottom" :width="320" trigger="click" popper-class="emoji-picker-popover">
+              <template #reference>
+                <el-button style="font-size: 24px; padding: 4px 8px; height: auto;">
+                  {{ editForm.emoji || '🤖' }}
+                </el-button>
               </template>
-            </el-button>
+              <div class="emoji-grid">
+                <button v-for="e in commonEmojis" :key="e"
+                  class="emoji-item"
+                  :class="{ active: editForm.emoji === e }"
+                  @click="editForm.emoji = e">
+                  {{ e }}
+                </button>
+              </div>
+            </el-popover>
           </div>
         </div>
-        <div v-if="detailBody" class="border-t border-gray-200 dark:border-[#2a2c30] pt-4">
-          <h4 class="text-sm font-medium text-gray-500 mb-2">系统提示词</h4>
-          <pre class="text-sm bg-gray-50 dark:bg-[#1c1d20] p-3 rounded-lg max-h-60 overflow-y-auto whitespace-pre-wrap">{{
-            detailBody }}</pre>
+
+        <div>
+          <label class="text-sm text-gray-500 mb-1 block">ID *（用作文件名）</label>
+          <el-input v-model="editForm.agentId"
+            placeholder="如：my-agent"
+            :disabled="isEditing"
+            :class="{ 'border-red-500': agentIdError || agentIdDuplicate }" />
+          <p class="text-xs text-gray-400 mt-1">
+            {{ isEditing ? '编辑模式下 ID 不可更改' : '仅允许英文字母、下划线、短横线（a-zA-Z_-）' }}
+            <span v-if="agentIdError" class="text-red-500">格式不正确，只允许英文字母、下划线、短横线</span>
+            <span v-else-if="agentIdDuplicate" class="text-red-500">该 ID 已被使用，请换一个</span>
+          </p>
+        </div>
+
+        <div>
+          <label class="text-sm text-gray-500 mb-1 block">描述</label>
+          <el-input v-model="editForm.description" placeholder="Agent 功能描述" type="textarea" :rows="3" />
+        </div>
+
+        <div>
+          <label class="text-sm text-gray-500 mb-1 block">所属文件夹</label>
+          <el-select v-model="editForm.folder" placeholder="无文件夹" clearable allow-create filterable>
+            <el-option label="（无文件夹）" value="" />
+            <el-option v-for="g in groups" :key="g.id" :label="g.name" :value="g.id" />
+          </el-select>
+        </div>
+
+        <div class="flex items-center gap-2">
+          <el-switch v-model="editForm.visible" size="small" />
+          <span class="text-sm text-gray-500">Agent自动可见</span>
+        </div>
+
+        <!-- 系统提示词 -->
+        <div>
+          <label class="text-sm text-gray-500 mb-1 block">系统提示词</label>
+          <el-input v-model="editForm.body" type="textarea" :rows="10"
+            placeholder="输入 Agent 的系统提示词（Markdown 格式）" />
         </div>
       </div>
+
+      <template #footer>
+        <el-button @click="showEditorDialog = false">取消</el-button>
+        <el-button type="primary" :loading="saving" @click="handleSaveAgent">
+          {{ isEditing ? '保存修改' : '创建 Agent' }}
+        </el-button>
+      </template>
+    </el-dialog>
+
+    <!-- 导入弹窗 -->
+    <el-dialog v-model="showImportDialog" :title="importSummary ? '导入结果' : '导入 Agent'" :width="isMobile ? '90%' : '560px'" :append-to-body="true">
+      <!-- 导入前: 提示文案 + 文件选择 + 文件夹选择 -->
+      <template v-if="!importSummary">
+        <div class="space-y-4">
+          <!-- 目录提示 -->
+          <div class="text-sm bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-3 space-y-2">
+            <p class="font-medium text-blue-700 dark:text-blue-300">📥 导入说明</p>
+            <p class="text-blue-600 dark:text-blue-400">
+              支持导入符合 <strong>Claude Code</strong> 格式的 Agent 文件（<code class="bg-blue-100 dark:bg-blue-800 px-1 rounded">.md</code> 文件，含 YAML frontmatter）。
+            </p>
+            <p class="text-blue-600 dark:text-blue-400">
+              文件将导入到以下目录：
+            </p>
+            <div class="flex items-center gap-2 bg-white dark:bg-[#1c1d20] rounded px-3 py-2 text-xs font-mono text-gray-700 dark:text-gray-300">
+              <span class="flex-1 truncate select-all">{{ agentsDirPath }}</span>
+              <el-button link size="small" @click="copyAgentsDir">
+                <template #icon><component :is="FileCopyOutlined" class="w-3.5 h-3.5" /></template>
+              </el-button>
+            </div>
+          </div>
+
+          <!-- 文件选择 -->
+          <div>
+            <input ref="fileInputRef" type="file" multiple accept=".md" class="hidden" @change="handleFilesSelected" />
+            <el-button @click="selectImportFiles" :disabled="importing">
+              <template #icon><component :is="FileUploadOutlined" class="w-4 h-4" /></template>
+              选择 .md 文件
+            </el-button>
+            <span v-if="pendingFiles.length > 0" class="text-sm text-gray-500 ml-2">
+              已选 <strong>{{ pendingFiles.length }}</strong> 个文件
+            </span>
+          </div>
+
+          <!-- 文件列表 -->
+          <div v-if="pendingFiles.length > 0" class="max-h-40 overflow-y-auto space-y-1 border border-gray-200 dark:border-[#2a2c30] rounded-lg p-2">
+            <div v-for="f in pendingFiles" :key="f.filename"
+              class="flex items-center gap-2 text-sm px-2 py-1 bg-gray-50 dark:bg-[#1c1d20] rounded">
+              <span class="text-blue-500 shrink-0">📄</span>
+              <span class="flex-1 truncate">{{ f.filename }}</span>
+            </div>
+          </div>
+
+          <!-- 文件夹选择 -->
+          <div>
+            <label class="text-sm text-gray-500 mb-1 block">目标文件夹（可选）</label>
+            <el-select v-model="importFolder" placeholder="导入到根目录" clearable class="w-full">
+              <el-option label="（根目录）" value="" />
+              <el-option v-for="g in groups" :key="g.id" :label="g.name" :value="g.id" />
+            </el-select>
+          </div>
+        </div>
+      </template>
+      <!-- 导入后: 结果 -->
+      <div v-else class="space-y-3">
+        <div class="flex gap-4 text-sm">
+          <span class="text-green-600">成功: {{ importSummary.ok }}</span>
+          <span v-if="importSummary.conflict > 0" class="text-orange-600">冲突: {{ importSummary.conflict }}</span>
+          <span v-if="importSummary.invalid > 0" class="text-red-600">无效: {{ importSummary.invalid }}</span>
+        </div>
+        <div v-if="importResults.length > 0" class="max-h-48 overflow-y-auto space-y-1">
+          <div v-for="r in importResults" :key="r.filename"
+            class="flex items-center gap-2 text-sm px-2 py-1 rounded"
+            :class="{
+              'bg-green-50 dark:bg-green-900/20': r.status === 'ok',
+              'bg-orange-50 dark:bg-orange-900/20': r.status === 'conflict',
+              'bg-red-50 dark:bg-red-900/20': r.status === 'invalid',
+            }">
+            <span class="shrink-0">{{ r.status === 'ok' ? '✅' : r.status === 'conflict' ? '⚠️' : '❌' }}</span>
+            <span class="flex-1 truncate">{{ r.filename }}</span>
+            <span v-if="r.message" class="text-xs text-gray-500 truncate">{{ r.message }}</span>
+          </div>
+        </div>
+      </div>
+      <template #footer>
+        <el-button v-if="!importSummary" @click="showImportDialog = false">取消</el-button>
+        <el-button v-if="!importSummary" type="primary" :loading="importing" :disabled="pendingFiles.length === 0" @click="handleConfirmImport">
+          确认导入
+        </el-button>
+        <el-button v-else type="primary" @click="showImportDialog = false">确定</el-button>
+      </template>
     </el-dialog>
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
-import { ElIcon, ElButton, ElDialog, ElSpace, ElSwitch, ElTag } from 'element-plus'
-import { Loading } from '@element-plus/icons-vue'
+import { ElIcon, ElButton, ElDialog, ElSpace, ElSwitch, ElTag, ElInput, ElSelect, ElOption } from 'element-plus'
+import { Loading, Plus as AddOutlined } from '@element-plus/icons-vue'
 import {
   Bot24Regular,
   ChevronRight24Regular as ChevronRight,
@@ -128,9 +256,8 @@ import {
 } from '@vicons/fluent'
 import {
   RefreshOutlined,
-  DescriptionOutlined,
-  DeleteOutlineOutlined,
-  OpenInNewOutlined,
+  FileUploadOutlined,
+  FileCopyOutlined,
 } from '@vicons/material'
 import { apiService } from '../../services/ApiService'
 import { usePopup } from '../../composables/usePopup'
@@ -138,19 +265,77 @@ import AgentCard from './AgentCard.vue'
 
 const { toast, confirm } = usePopup()
 
+const fileInputRef = ref<HTMLInputElement | null>(null)
+
+interface AgentForm {
+  name: string
+  agentId: string
+  description: string
+  color: string
+  emoji: string
+  visible: boolean
+  body: string
+  folder: string
+}
+
+const defaultForm: AgentForm = {
+  name: '',
+  agentId: '',
+  description: '',
+  color: 'gray',
+  emoji: '🤖',
+  visible: true,
+  body: '',
+  folder: '',
+}
+
+const commonEmojis = [
+  '🤖', '🧠', '⚡', '🎯', '🚀', '💻', '📱', '🔧',
+  '🎨', '📊', '📝', '📚', '🔬', '🌐', '🛡️', '🎮',
+  '🤝', '💬', '📈', '📉', '🧩', '🎪', '🎭', '🎬',
+  '✍️', '🎵', '🎶', '📡', '🔍', '💡', '🕹️', '🧪',
+  '🤗', '😎', '🤩', '😺', '🦊', '🐱', '🐶', '🐼',
+  '🌟', '⭐', '🔥', '💎', '🎁', '🏆', '🥇', '🏅',
+]
+
 const agents = ref<any[]>([])
 const groups = ref<any[]>([])
+const agentsDirPath = ref('')
 const loading = ref(false)
 const collapsedGroups = ref(new Set<string>())
-const showDetailDialog = ref(false)
-const detailAgent = ref<any>(null)
-const detailBody = ref('')
-const detailFilePath = ref('')
 const isMobile = ref(window.innerWidth < 768)
 
-const hasItems = computed(() => agents.value.length > 0 || groups.value.length > 0)
+// 编辑弹窗状态
+const showEditorDialog = ref(false)
+const saving = ref(false)
+const editingId = ref<string | null>(null)
+const editForm = ref<AgentForm>({ ...defaultForm })
 
-/** 无分组的 Agent（folder === undefined） */
+// 导入状态
+const showImportDialog = ref(false)
+const importing = ref(false)
+const importResults = ref<any[]>([])
+const importSummary = ref<{ total: number; ok: number; conflict: number; invalid: number } | null>(null)
+const pendingFiles = ref<{ content: string; filename: string }[]>([])
+const importFolder = ref('')
+
+const hasItems = computed(() => agents.value.length > 0 || groups.value.length > 0)
+const isEditing = computed(() => !!editingId.value)
+const editorTitle = computed(() => isEditing.value ? '编辑 Agent' : '新增 Agent')
+const agentIdError = computed(() => {
+  const id = editForm.value.agentId
+  return id.length > 0 && !/^[a-zA-Z_-]+$/.test(id)
+})
+const agentIdDuplicate = computed(() => {
+  if (isEditing.value || !editForm.value.agentId) return false
+  // 检查 id + folder 组合是否已被占用
+  const targetId = editForm.value.folder
+    ? `agent-${editForm.value.folder}/${editForm.value.agentId}`
+    : `agent-${editForm.value.agentId}`
+  return agents.value.some((a) => a.id === targetId)
+})
+
+/** 无分组的 Agent（folder === undefined/null） */
 const ungroupedAgents = computed(() =>
   agents.value.filter((a) => !a.folder)
 )
@@ -165,6 +350,7 @@ const loadAgents = async (): Promise<void> => {
     const response = await apiService.fetchAgents()
     agents.value = response.agents || []
     groups.value = response.groups || []
+    agentsDirPath.value = response.agentsDir || ''
     // 从清单文件恢复折叠状态
     collapsedGroups.value = new Set(
       groups.value.filter((g: any) => g.collapsed).map((g: any) => g.id)
@@ -234,30 +420,98 @@ const handleToggleGroupVisibility = async (group: any, visible: boolean): Promis
   }
 }
 
-// ── Agent 详情 ──
+// ── 新增 / 编辑 ──
 
-const viewAgentDetail = async (agent: any): Promise<void> => {
-  detailAgent.value = agent
-  detailBody.value = ''
-  detailFilePath.value = ''
-  showDetailDialog.value = true
+/** 打开新增弹窗 */
+const handleCreateAgent = (): void => {
+  editingId.value = null
+  editForm.value = { ...defaultForm }
+  showEditorDialog.value = true
+}
+
+/** 打开编辑弹窗（先加载详情） */
+const openEditor = async (agent: any): Promise<void> => {
+  editingId.value = agent.id
+  // 从 agent.id 中提取标识符（去掉 "agent-" 前缀）
+  const baseId = agent.id.startsWith('agent-') ? agent.id.slice(6) : agent.id
+  // 先填充卡片已有的信息
+  editForm.value = {
+    name: agent.name || '',
+    agentId: baseId,
+    description: agent.description || '',
+    color: agent.color || 'gray',
+    emoji: agent.emoji || '🤖',
+    visible: agent.visible !== false,
+    body: '',
+    folder: agent.folder || '',
+  }
+  showEditorDialog.value = true
+
+  // 异步加载完整 body
   try {
     const detail = await apiService.fetchAgentDetail(agent.id)
     if (detail.success && detail.data) {
-      detailBody.value = detail.data.body
-      detailFilePath.value = detail.data.filePath || ''
+      editForm.value.body = detail.data.body || ''
     }
   } catch {
     // 静默失败
   }
 }
 
-const openFilePath = (filePath: string): void => {
-  navigator.clipboard.writeText(filePath).then(() => {
-    toast.success('文件路径已复制到剪贴板')
-  }).catch(() => {
-    // 静默失败
-  })
+/** 保存（新增或更新） */
+const handleSaveAgent = async (): Promise<void> => {
+  if (!editForm.value.name.trim()) {
+    toast.warning('请输入 Agent 名称')
+    return
+  }
+
+  // 创建时 id 必填
+  if (!isEditing.value) {
+    if (!editForm.value.agentId.trim()) {
+      toast.warning('请输入 Agent ID')
+      return
+    }
+    if (!/^[a-zA-Z_-]+$/.test(editForm.value.agentId)) {
+      toast.warning('ID 只允许英文字母、下划线、短横线')
+      return
+    }
+    if (agentIdDuplicate.value) {
+      toast.warning('该 ID 已被使用，请换一个')
+      return
+    }
+  }
+
+  saving.value = true
+  try {
+    const payload: any = {
+      name: editForm.value.name.trim(),
+      description: editForm.value.description.trim(),
+      emoji: editForm.value.emoji || '🤖',
+      visible: editForm.value.visible,
+      body: editForm.value.body,
+      folder: editForm.value.folder || undefined,
+    }
+
+    if (!isEditing.value) {
+      payload.id = editForm.value.agentId
+    }
+
+    if (isEditing.value) {
+      await apiService.updateAgent(editingId.value!, payload)
+      toast.success('Agent 已更新')
+    } else {
+      await apiService.createAgent(payload)
+      toast.success('Agent 已创建')
+    }
+
+    showEditorDialog.value = false
+    await loadAgents()
+  } catch (error: any) {
+    console.error('保存 Agent 失败:', error)
+    toast.error(error?.message || '保存失败')
+  } finally {
+    saving.value = false
+  }
 }
 
 // ── 删除 ──
@@ -275,6 +529,126 @@ const handleDeleteAgent = async (agent: any): Promise<void> => {
   }
 }
 
+// ── 导出 ──
+
+/** 导出单个 Agent 为 .md 文件 */
+const handleExportAgent = async (agent: any): Promise<void> => {
+  try {
+    // 获取完整 body
+    let body = ''
+    try {
+      const detail = await apiService.fetchAgentDetail(agent.id)
+      if (detail.success && detail.data) {
+        body = detail.data.body || ''
+      }
+    } catch {
+      // 静默，body 留空
+    }
+    // 从 agent.id 提取文件名标识
+    const fileId = agent.id.startsWith('agent-') ? agent.id.slice(6) : agent.id
+    const filename = `${fileId}.md`
+
+    // 重建 .md 内容
+    const frontmatter: Record<string, any> = {
+      name: agent.name,
+    }
+    if (agent.description) frontmatter.description = agent.description
+    if (agent.emoji && agent.emoji !== '🤖') frontmatter.emoji = agent.emoji
+    if (agent.visible === false) frontmatter.visible = false
+    if (agent.color && agent.color !== 'gray') frontmatter.color = agent.color
+
+    const yamlStr = Object.entries(frontmatter)
+      .map(([k, v]) => `${k}: ${v}`)
+      .join('\n')
+    const mdContent = `---\n${yamlStr}\n---\n${body}`
+
+    // 触发下载
+    const blob = new Blob([mdContent], { type: 'text/markdown' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = filename
+    a.click()
+    URL.revokeObjectURL(url)
+    toast.success(`已导出 ${filename}`)
+  } catch (error: any) {
+    console.error('导出 Agent 失败:', error)
+    toast.error('导出失败')
+  }
+}
+
+// ── 导入 ──
+
+/** 点击导入按钮 → 打开导入弹窗 */
+const handleImportClick = (): void => {
+  pendingFiles.value = []
+  importFolder.value = ''
+  importResults.value = []
+  importSummary.value = null
+  showImportDialog.value = true
+}
+
+/** 选择文件后 → 读取内容，追加到文件列表 */
+const selectImportFiles = (): void => {
+  fileInputRef.value?.click()
+}
+
+const handleFilesSelected = async (event: Event): Promise<void> => {
+  const input = event.target as HTMLInputElement
+  if (!input.files || input.files.length === 0) return
+
+  for (const file of Array.from(input.files)) {
+    try {
+      const content = await file.text()
+      pendingFiles.value.push({ content, filename: file.name })
+    } catch {
+      toast.error(`读取文件失败: ${file.name}`)
+    }
+  }
+
+  // 重置 input 以便再次选择同一文件
+  input.value = ''
+}
+
+/** 复制 agents 目录路径 */
+const copyAgentsDir = (): void => {
+  if (!agentsDirPath.value) return
+  navigator.clipboard.writeText(agentsDirPath.value).then(() => {
+    toast.success('目录路径已复制')
+  }).catch(() => {
+    toast.error('复制失败')
+  })
+}
+
+/** 确认导入 */
+const handleConfirmImport = async (): Promise<void> => {
+  if (pendingFiles.value.length === 0) return
+
+  importing.value = true
+  importResults.value = []
+  importSummary.value = null
+  try {
+    const resp = await apiService.importAgents({
+      files: pendingFiles.value,
+      folder: importFolder.value || undefined,
+    })
+    if (resp.success) {
+      importResults.value = resp.results || []
+      importSummary.value = resp.summary
+      await loadAgents()
+    } else {
+      toast.error(resp.message || '导入失败')
+      showImportDialog.value = false
+    }
+  } catch (error: any) {
+    console.error('导入 Agent 失败:', error)
+    toast.error('导入失败')
+    showImportDialog.value = false
+  } finally {
+    importing.value = false
+  }
+}
+
 onMounted(() => {
   loadAgents()
 })
@@ -286,5 +660,37 @@ onMounted(() => {
   .grid {
     grid-template-columns: 1fr !important;
   }
+}
+</style>
+
+<style>
+/* Emoji picker grid (global: rendered outside scoped via popper-class) */
+.emoji-picker-popover .emoji-grid {
+  display: grid;
+  grid-template-columns: repeat(8, 1fr);
+  gap: 2px;
+  max-height: 260px;
+  overflow-y: auto;
+}
+.emoji-picker-popover .emoji-item {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  font-size: 20px;
+  border: none;
+  background: transparent;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.emoji-picker-popover .emoji-item:hover {
+  background: #f0f0f0;
+}
+.emoji-picker-popover .emoji-item.active {
+  background: var(--color-primary-light, #e0e7ff);
+  outline: 2px solid var(--color-primary, #409eff);
+  outline-offset: -2px;
 }
 </style>

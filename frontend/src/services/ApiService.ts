@@ -352,7 +352,7 @@ class ApiService {
   }
 
   // ========== 轻量 Agent 相关 ==========
-  async fetchAgents(): Promise<{ agents: any[]; groups: any[] }> {
+  async fetchAgents(): Promise<{ agents: any[]; groups: any[]; agentsDir?: string }> {
     return await this._request("/agents");
   }
 
@@ -371,6 +371,21 @@ class ApiService {
     return await this._request(`/agents/${encodeURIComponent(id)}`, {
       method: "DELETE",
     });
+  }
+
+  async createAgent(data: any): Promise<any> {
+    return await this._request("/agents", { method: "POST", data });
+  }
+
+  async updateAgent(id: string, data: any): Promise<any> {
+    return await this._request(`/agents/${encodeURIComponent(id)}`, {
+      method: "PUT",
+      data,
+    });
+  }
+
+  async importAgents(data: { files: { content: string; filename: string }[]; folder?: string }): Promise<any> {
+    return await this._request("/agents/import", { method: "POST", data });
   }
 
   // ========== 会话相关 ==========

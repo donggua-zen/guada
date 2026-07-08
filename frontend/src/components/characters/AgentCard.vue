@@ -30,11 +30,17 @@
           />
         </div>
         <div class="flex gap-2">
-          <el-button link size="small" @click="$emit('view-detail', agent)">
+          <el-button link size="small" @click="$emit('export', agent)">
+            <template #icon>
+              <component :is="FileDownloadOutlined" class="w-4 h-4" />
+            </template>
+            导出
+          </el-button>
+          <el-button link size="small" @click="$emit('edit', agent)">
             <template #icon>
               <component :is="DescriptionOutlined" class="w-4 h-4" />
             </template>
-            查看
+            编辑
           </el-button>
           <el-button link size="small" type="danger" @click="$emit('delete', agent)">
             <template #icon>
@@ -53,6 +59,7 @@ import { ElButton, ElSwitch } from 'element-plus'
 import {
   DescriptionOutlined,
   DeleteOutlineOutlined,
+  FileDownloadOutlined,
 } from '@vicons/material'
 
 defineProps<{
@@ -62,7 +69,8 @@ defineProps<{
 
 defineEmits<{
   'toggle-visibility': [agent: any, visible: boolean]
-  'view-detail': [agent: any]
+  'export': [agent: any]
+  'edit': [agent: any]
   'delete': [agent: any]
 }>()
 </script>
