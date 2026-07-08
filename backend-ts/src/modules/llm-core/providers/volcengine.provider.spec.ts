@@ -30,10 +30,10 @@ describe('VolcEngineProvider', () => {
     const models = provider.getModels();
     
     expect(models).toBeInstanceOf(Array);
-    expect(models.length).toBe(5); // 4个豆包模型 + 1个DeepSeek模型
+    expect(models.length).toBe(4); // 4个豆包模型
     
     // 验证豆包模型
-    const doubaoModel = models.find(m => m.modelName === 'doubao-seed-2-0-pro-260215');
+    const doubaoModel = models.find(m => m.modelName === 'doubao-seed-1.8');
     expect(doubaoModel).toBeDefined();
     expect(doubaoModel?.modeType).toBe('text');
     expect(doubaoModel?.config.contextWindow).toBe(256000);

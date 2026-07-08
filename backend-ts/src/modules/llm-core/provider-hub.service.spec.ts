@@ -64,14 +64,16 @@ describe('ProviderHub', () => {
   it('should get model thinking efforts for supported model', () => {
     providerHub.register(siliconFlowProvider);
     
-    // DeepSeek V3.2 - 根据名称模式推断为开关模式
+    // DeepSeek V3.2 - 根据名称模式推断为多级强度
     const efforts = providerHub.getModelThinkingEfforts(
       'siliconflow',
       'deepseek-ai/DeepSeek-V3.2'
     );
     
     expect(efforts).toContain('off');
-    expect(efforts).toContain('on');
+    expect(efforts).toContain('low');
+    expect(efforts).toContain('medium');
+    expect(efforts).toContain('high');
   });
 
   it('should return empty array for embedding model by heuristic', () => {
@@ -89,25 +91,25 @@ describe('ProviderHub', () => {
   it('should infer thinking efforts for Qwen models', () => {
     providerHub.register(siliconFlowProvider);
     
-    // Qwen 模型 - 根据名称模式推断为开关模式
+    // Qwen 模型 - 根据名称模式推断为多级强度
     const efforts = providerHub.getModelThinkingEfforts(
       'siliconflow',
       'Qwen/Qwen3.5-397B-A17B'
     );
     
-    expect(efforts).toEqual(['off', 'on']);
+    expect(efforts).toEqual(['off', 'low', 'medium', 'high', 'xhigh']);
   });
 
   it('should infer thinking efforts for Kimi models', () => {
     providerHub.register(siliconFlowProvider);
     
-    // Kimi 模型 - 根据名称模式推断为开关模式
+    // Kimi 模型 - 根据名称模式推断为多级强度
     const efforts = providerHub.getModelThinkingEfforts(
       'siliconflow',
       'moonshotai/Kimi-K2-Thinking'
     );
     
-    expect(efforts).toEqual(['off', 'on']);
+    expect(efforts).toEqual(['off', 'low', 'medium', 'high', 'xhigh']);
   });
 
   it('should handle unknown model gracefully', () => {
@@ -119,7 +121,7 @@ describe('ProviderHub', () => {
       'unknown/new-model-123'
     );
     
-    // 硅基流动的默认配置是 ['off', 'on']
-    expect(efforts).toEqual(['off', 'on']);
+    // 硅基流动的默认配置是 ['off', 'low', 'medium', 'high', 'xhigh']
+    expect(efforts).toEqual(['off', 'low', 'medium', 'high', 'xhigh']);
   });
 });

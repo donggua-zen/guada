@@ -74,28 +74,7 @@ export class BrowserPlugin extends PluginBase {
               ),
           }),
           execute: async (args, ctx, signal) => {
-            const r = await this.sendRequest(
-              "browser_new_window",
-              {
-                ...args,
-                session_path: ctx?.session.workspacePath,
-                session_id: ctx?.session.sessionId,
-              },
-              signal,
-            );
-            if (r?.windowId) {
-              try {
-                const summary = await this.sendRequest(
-                  "browser_page_summary",
-                  { window_id: r.windowId },
-                  signal,
-                );
-                return { ...r, ...summary, page_summary: undefined };
-              } catch {
-                return r;
-              }
-            }
-            return r;
+            return this.executeWithContent("browser_new_window", args, signal);
           },
           display: { action: "打开新窗口", argsKey: "url", icon: "browser" },
         });
@@ -349,6 +328,9 @@ export class BrowserPlugin extends PluginBase {
         { window_id: args.window_id },
         signal,
       );
+      if (summary?.success === false) {
+        return result;
+      }
       return { ...result, page_summary: summary };
     } catch {
       // 获取摘要失败不影响主操作结果
