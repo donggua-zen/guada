@@ -386,6 +386,9 @@ export class FilePlugin extends PluginBase {
           : ctx?.session.workspacePath || process.cwd();
         const stat = await fs.stat(basePath);
 
+        // 相对路径的基准目录（搜索结果返回相对路径，节省 tokens）
+        const relativeRoot = stat.isFile() ? path.dirname(basePath) : basePath;
+
         const files: string[] = [];
         if (stat.isFile()) {
           files.push(basePath);
@@ -440,7 +443,7 @@ export class FilePlugin extends PluginBase {
             }
             if (matchRows.length > 0) {
               fileResults.push({
-                file: fp,
+                file: path.relative(relativeRoot, fp),
                 matched_lines: matchRows.length,
                 matches: matchRows,
               });
@@ -452,7 +455,6 @@ export class FilePlugin extends PluginBase {
         }
 
         return {
-          pattern,
           total_matches: total,
           matched_files: fileResults.length,
           files: fileResults,
