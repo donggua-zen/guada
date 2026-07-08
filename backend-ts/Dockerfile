@@ -94,6 +94,9 @@ RUN mkdir -p data/uploads data/compression-states logs static && \
 # Copy static files from builder
 COPY --from=builder /app/static ./static
 
+# Copy bundled skills from builder (用于同步到 skills/.system/)
+COPY --from=builder /app/bundled-skills ./bundled-skills
+
 
 
 # Copy entrypoint script and convert line endings

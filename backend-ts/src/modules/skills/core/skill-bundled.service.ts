@@ -54,22 +54,28 @@ export class SkillBundledService {
     await fs.mkdir(this.systemSkillsDir, { recursive: true });
 
     // 同步每个内置技能（直接覆盖）
+    let syncedCount = 0;
     for (const skill of bundledSkills) {
       const targetPath = path.join(this.systemSkillsDir, skill.id);
 
-      // 删除旧版本（如果存在）
       try {
-        await fs.rm(targetPath, { recursive: true, force: true });
-      } catch {
-        // 忽略删除错误
-      }
+        // 删除旧版本（如果存在）
+        try {
+          await fs.rm(targetPath, { recursive: true, force: true });
+        } catch {
+          // 旧目录不存在或删除失败，继续
+        }
 
-      // 拷贝新版本
-      await this.copyDirectory(skill.sourcePath, targetPath);
-      this.logger.log(`Synced bundled skill: ${skill.id}`);
+        // 拷贝新版本
+        await this.copyDirectory(skill.sourcePath, targetPath);
+        this.logger.log(`Synced bundled skill: ${skill.id}`);
+        syncedCount++;
+      } catch (err) {
+        this.logger.error(`Failed to sync bundled skill: ${skill.id}`, err);
+      }
     }
 
-    this.logger.log(`Synced ${bundledSkills.length} bundled skills to .system/`);
+    this.logger.log(`Synced ${syncedCount}/${bundledSkills.length} bundled skills to .system/`);
   }
 
   /**
