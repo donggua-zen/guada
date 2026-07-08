@@ -52,7 +52,7 @@
             <div v-if="group.isCollapsible && !(streamingState.isStreaming && groupIndex === displayGroups.length - 1)"
               class="process-group__header" @click="toggleGroup(group.id)">
               <span class="process-group__title">
-                中间处理过程 ({{ group.items.length }} 个步骤)
+                调用了 {{ countToolCalls(group.items) }} 个工具
               </span> <el-icon size="14" class="process-group__arrow"
                 :class="{ 'is-expanded': isGroupExpanded(group.id) }">
                 <ArrowRightTwotone />
@@ -198,7 +198,7 @@ import { Alert16Regular } from "@vicons/fluent";
 import { FileItem, Avatar } from "../ui";
 import { usePopup } from "../../composables/usePopup";
 import { formatTime } from '../../utils';
-import { getCurrentTurns, getContentVersions, groupContentsForDisplay, type DisplayGroup } from '@/utils/messageUtils';
+import { getCurrentTurns, getContentVersions, groupContentsForDisplay, countToolCalls, type DisplayGroup } from '@/utils/messageUtils';
 import { getModelDisplayName, getModelAvatarPath } from '@/utils/modelUtils';
 
 // 导入拆分后的子组件
