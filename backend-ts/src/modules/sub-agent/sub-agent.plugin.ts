@@ -44,7 +44,7 @@ export class SubAgentPlugin extends PluginBase {
           .string()
           .describe('子代理的名称（简洁明了，如"财报分析"、"代码生成"）'),
         task: z.string().describe("子代理需要完成的具体任务描述（越详细越好）"),
-        characterId: z
+        agentId: z
           .string()
           .optional()
           .describe("角色 ID/agent ID（可选，不传则创建通用子代理）"),
@@ -65,7 +65,7 @@ export class SubAgentPlugin extends PluginBase {
             userId: ctx?.session.userId,
             name: args.name,
             task: args.task,
-            characterId: args.characterId,
+            characterId: args.agentId,
           },
           args.mode || "foreground",
           abortSignal,
@@ -193,24 +193,25 @@ export class SubAgentPlugin extends PluginBase {
       description: "子代理工具使用说明",
       content: `# 子代理工具使用说明
 
-拆分原则：任务边界必须清晰，严禁不同子代理修改同一文件或任务重叠。
+## 何时使用
+- 推理繁重的子任务（调试、代码审查、研究）
+- 将中间数据淹没上下文的任务
+- 并行独立工作流
+- 任务匹配优先级：手动@ > 预定义subagent > skills
 
-**模式选择标准**：
+## 何时不使用
+- 机械多步骤工作→ 使用execute_code
+- 单一工具调用→ 直接调用该工具即可
+- 需要用户交互的任务→ 子代理不能使用clear
 
-- 若预期耗时 < 5分钟 或 主逻辑依赖返回值，使用 \`foreground\`（同步执行）。
-- 若预期耗时 > 5分钟 或 允许异步，使用 \`background\`（非阻塞执行）。
+## agentId 使用说明
+- 可选参数，不传则使用通用子代理
+- 你可以通过预定义列表（若存在）或者用户@手动指定来获取预定义的子代理Id
+- ** 若用户明确指定子代理Id（即便不在预定义列表），必须优先使用 **
 
-**工具接口**：
-- subagent_spawn：创建并启动子代理，需指定 run_mode。
-- subagent_manager：
-  - wait：阻塞等待，直到任意一个后台子代理完成即返回（不支持指定sessionId）。
-  - list：列出当前所有子代理。
-  - close：关闭指定子代理（需 sessionId）。
-  - send_message：向指定子代理发送追加指令（需 sessionId + message）。
-
-**注意事项**：
-如非必要（例如流程结束前的最后一次同步），禁止使用 wait 轮询，应依靠系统消息被动接收后台结果。
-任务结束且无需后续交互时，及时 close 释放会话资源。
+## 注意事项
+- 拆分原则：任务边界必须清晰，严禁不同子代理修改同一文件或任务重叠。
+- 任务结束且无需后续交互时，及时 close 释放会话资源。
 
 `,
     });

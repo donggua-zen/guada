@@ -156,7 +156,7 @@ export class FilePlugin extends PluginBase {
             result.next = { unit: "line", offset: endLine, limit: lineLimit };
           }
         }
-        return JSON.stringify(result);
+        return result;
       },
       display: { action: "读取文件", argsKey: "file_path", icon: "read" },
     });
@@ -167,10 +167,7 @@ export class FilePlugin extends PluginBase {
         "使用 glob 模式搜索文件（如 **/*.ts、*.json、src/**/*.css）。返回扁平文件列表，支持深度控制和结果数限制。",
       inputSchema: z.object({
         pattern: z.string().describe("glob 模式，如 **/*.ts、*.json、src/**/*"),
-        directory: z
-          .string()
-          .optional()
-          .describe("基准目录，默认当前工作目录"),
+        directory: z.string().optional().describe("基准目录，默认当前工作目录"),
         limit: z
           .number()
           .int()
@@ -492,7 +489,9 @@ export class FilePlugin extends PluginBase {
 
   private validateWritePath(filePath: string, context?: PluginContext): void {
     const resolved = this.resolvePath(filePath, context);
-    const extra = context?.session.workspacePath ? [context.session.workspacePath] : [];
+    const extra = context?.session.workspacePath
+      ? [context.session.workspacePath]
+      : [];
     this.workspaceService.validateWritePath(resolved, extra);
 
     // memory_only 作用域：只允许操作 memory/ 和 memos/ 目录
@@ -510,9 +509,7 @@ export class FilePlugin extends PluginBase {
         normalizedPath.includes(prefix),
       );
       if (!isAllowed) {
-        throw new Error(
-          `memory_only 模式下只允许操作 memory/ 和 memos/ 目录`,
-        );
+        throw new Error(`memory_only 模式下只允许操作 memory/ 和 memos/ 目录`);
       }
     }
   }

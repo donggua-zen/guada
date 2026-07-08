@@ -11,6 +11,7 @@ import {
   screen,
 } from "electron";
 import * as path from "path";
+import * as os from "os";
 import { ChildProcess, exec } from "child_process";
 import * as fs from "fs";
 // import { autoUpdater } from "electron-updater";
@@ -131,6 +132,85 @@ if (!gotTheLock) {
 // 判断是否为开发模式（根据是否打包，而不是 NODE_ENV）
 const isDev = !app.isPackaged;
 
+// 旧数据目录（Electron 默认 userData）
+const DEFAULT_USER_DATA = app.getPath("userData");
+// 新数据目录（用户主目录下的 .guada）
+const GUADA_HOME = path.join(os.homedir(), ".guada");
+// 迁移标记文件
+const MIGRATED_FLAG = path.join(GUADA_HOME, ".migrated");
+// 跳过迁移标记
+const SKIP_MIGRATION_FLAG = path.join(DEFAULT_USER_DATA, ".skip_migration");
+
+/**
+ * 检测应使用的数据目录
+ * 优先级：已迁移标记 > 已存在 ~/.guada 数据 > 老用户 AppData > 新安装
+ * Electron 环境下，环境变量由主进程动态设置，不作为用户自定义依据
+ * @returns 数据根目录（~/guada/ 或 AppData/Roaming/guada-ai/）
+ */
+function detectDataPath(): string {
+  // 已迁移：~/.guada/ 下有数据或迁移标记
+  if (
+    fs.existsSync(MIGRATED_FLAG) ||
+    fs.existsSync(path.join(GUADA_HOME, "data", "ai_chat.db"))
+  ) {
+    return GUADA_HOME;
+  }
+  // 老用户：AppData 下已有数据库
+  if (fs.existsSync(path.join(DEFAULT_USER_DATA, "ai_chat.db"))) {
+    return DEFAULT_USER_DATA;
+  }
+  // 新安装：直接使用 ~/.guada/
+  return GUADA_HOME;
+}
+
+/** 数据路径集合 */
+interface DataPaths {
+  dataHome: string; // 数据根目录
+  dbPath: string; // 数据库文件
+  vectorDbPath: string; // 向量数据库
+  versionFile: string; // 数据库版本标记
+  uploadDir: string; // 上传文件目录
+  logsDir: string; // 日志目录
+  skillsDir: string; // 技能目录
+  workspaceDir: string; // 工作目录
+  isNewLayout: boolean; // 是否使用新目录结构（data/ 子目录）
+}
+
+/**
+ * 根据数据根目录计算所有子路径
+ * 自动区分新旧布局：
+ *   - 旧用户（dataHome === DEFAULT_USER_DATA）：文件直接在根目录
+ *   - 新安装/已迁移（dataHome === GUADA_HOME）：文件在 data/ 子目录
+ */
+function computeDataPaths(dataHome: string): DataPaths {
+  const isNewLayout = dataHome !== DEFAULT_USER_DATA;
+  if (isNewLayout) {
+    return {
+      dataHome,
+      dbPath: path.join(dataHome, "data", "ai_chat.db"),
+      vectorDbPath: path.join(dataHome, "data", "vector_db.sqlite"),
+      versionFile: path.join(dataHome, "data", "db_version.json"),
+      uploadDir: path.join(dataHome, "file_stores"),
+      logsDir: path.join(dataHome, "logs"),
+      skillsDir: path.join(dataHome, "skills"),
+      workspaceDir: path.join(dataHome, "workspaces"),
+      isNewLayout: true,
+    };
+  }
+  // 旧布局：数据库、上传文件等直接在根目录
+  return {
+    dataHome,
+    dbPath: path.join(dataHome, "ai_chat.db"),
+    vectorDbPath: path.join(dataHome, "vector_db.sqlite"),
+    versionFile: path.join(dataHome, "db_version.json"),
+    uploadDir: path.join(dataHome, "file_stores"),
+    logsDir: path.join(dataHome, "logs"),
+    skillsDir: path.join(dataHome, "skills"),
+    workspaceDir: path.join(dataHome, "workspace"),
+    isNewLayout: false,
+  };
+}
+
 // 配置更新（已改为自定义 API 检测，不再使用 electron-updater）
 // autoUpdater.autoDownload = false;
 // if (isDev) {
@@ -164,12 +244,18 @@ function getSchemaVersion(backendPath: string): string {
 
 // 初始化数据库文件
 async function initializeDatabase(
-  userDataPath: string,
+  dataHome: string,
   backendPath: string,
 ): Promise<void> {
-  const dbPath = path.join(userDataPath, "ai_chat.db");
-  const vectorDbPath = path.join(userDataPath, "vector_db.sqlite");
-  const versionFilePath = path.join(userDataPath, "db_version.json");
+  const paths = computeDataPaths(dataHome);
+  const dbPath = paths.dbPath;
+  const vectorDbPath = paths.vectorDbPath;
+  const versionFilePath = paths.versionFile;
+  // 确保 data 目录存在
+  const dataDir = path.dirname(dbPath);
+  if (!fs.existsSync(dataDir)) {
+    fs.mkdirSync(dataDir, { recursive: true });
+  }
   const { execSync } = require("child_process");
 
   // 设置环境变量
@@ -313,7 +399,8 @@ async function initializeDatabase(
     console.log("数据库版本标记已更新");
   } catch (error: any) {
     console.error("数据库同步失败:", error.message);
-    handleDatabaseError(error, dbPath, userDataPath);
+    const dataHome = detectDataPath();
+    handleDatabaseError(error, dbPath, dataHome);
     throw error; // 抛出错误以便主进程捕获并提示用户
   }
 }
@@ -322,7 +409,7 @@ async function initializeDatabase(
 async function handleDatabaseError(
   error: any,
   dbPath: string,
-  userDataPath: string,
+  dataHome: string,
 ) {
   if (!mainWindow) return;
 
@@ -341,9 +428,9 @@ async function handleDatabaseError(
     if (response.response === 0) {
       // 重试：重新调用初始化
       console.log("用户选择重试数据库初始化...");
-      await initializeDatabase(userDataPath, getBackendPath());
+      await initializeDatabase(dataHome, getBackendPath());
     } else if (response.response === 1) {
-      shell.openPath(userDataPath);
+      shell.openPath(dataHome);
       app.quit();
     } else {
       app.quit();
@@ -352,6 +439,138 @@ async function handleDatabaseError(
     console.error("显示错误对话框失败:", e);
     app.quit();
   }
+}
+
+// 迁移状态枚举
+type MigrationStatus =
+  | "available"
+  | "migrated"
+  | "new_install"
+  | "skipped"
+  | "env_override";
+
+/**
+ * 检测迁移状态（供前端判断是否显示迁移提示）
+ */
+function getMigrationStatus(): MigrationStatus {
+  if (
+    process.env.DATABASE_URL ||
+    process.env.UPLOAD_ROOT_DIR ||
+    process.env.SKILLS_DIR
+  ) {
+    return "env_override";
+  }
+  if (
+    fs.existsSync(MIGRATED_FLAG) ||
+    fs.existsSync(path.join(GUADA_HOME, "data", "ai_chat.db"))
+  ) {
+    return "migrated";
+  }
+  if (fs.existsSync(SKIP_MIGRATION_FLAG)) {
+    return "skipped";
+  }
+  if (fs.existsSync(path.join(DEFAULT_USER_DATA, "ai_chat.db"))) {
+    return "available";
+  }
+  return "new_install";
+}
+
+/** 递归复制目录 */
+function copyRecursiveSync(src: string, dest: string): void {
+  if (!fs.existsSync(src)) return;
+  const stat = fs.statSync(src);
+  if (stat.isDirectory()) {
+    if (!fs.existsSync(dest)) {
+      fs.mkdirSync(dest, { recursive: true });
+    }
+    const entries = fs.readdirSync(src);
+    for (const entry of entries) {
+      copyRecursiveSync(path.join(src, entry), path.join(dest, entry));
+    }
+  } else {
+    fs.copyFileSync(src, dest);
+  }
+}
+
+/**
+ * 执行数据迁移（从 AppData 复制到 ~/.guada/）
+ * 注意：必须在后端进程停止后执行，否则 SQLite 文件被锁定
+ */
+async function handleMigration(): Promise<void> {
+  const oldDir = DEFAULT_USER_DATA;
+  const newDir = GUADA_HOME;
+
+  // 1. 创建目标目录结构
+  const newPaths = computeDataPaths(newDir);
+  fs.mkdirSync(path.dirname(newPaths.dbPath), { recursive: true });
+  fs.mkdirSync(newPaths.logsDir, { recursive: true });
+  fs.mkdirSync(path.join(newDir, "skills"), { recursive: true });
+
+  // 2. 复制数据文件（后端已停止，数据库处于一致状态）
+  const oldDbPath = path.join(oldDir, "ai_chat.db");
+  const copyTasks = [
+    // 数据库文件
+    { src: oldDbPath, dest: newPaths.dbPath },
+    {
+      src: path.join(oldDir, "ai_chat.db-wal"),
+      dest: path.join(path.dirname(newPaths.dbPath), "ai_chat.db-wal"),
+    },
+    {
+      src: path.join(oldDir, "ai_chat.db-shm"),
+      dest: path.join(path.dirname(newPaths.dbPath), "ai_chat.db-shm"),
+    },
+    { src: path.join(oldDir, "vector_db.sqlite"), dest: newPaths.vectorDbPath },
+    { src: path.join(oldDir, "db_version.json"), dest: newPaths.versionFile },
+    // 上传文件
+    { src: path.join(oldDir, "file_stores"), dest: newPaths.uploadDir },
+    // 技能
+    { src: path.join(oldDir, "skills"), dest: newPaths.skillsDir },
+    // 日志
+    { src: path.join(oldDir, "logs"), dest: newPaths.logsDir },
+    // 定时任务
+    { src: path.join(oldDir, "scheduler"), dest: path.join(newDir, "scheduler") },
+    // 子 Agent
+    { src: path.join(oldDir, "agents"), dest: path.join(newDir, "agents") },
+    // 微信机器人会话
+    { src: path.join(oldDir, "wechat-personal"), dest: path.join(newDir, "wechat-personal") },
+  ];
+
+  for (const task of copyTasks) {
+    if (fs.existsSync(task.src)) {
+      copyRecursiveSync(task.src, task.dest);
+      console.log(`已复制: ${task.src} → ${task.dest}`);
+    }
+  }
+
+  // 3. 校验目标数据库文件头（SQLite 格式标记 "SQLite format 3\0"）
+  const newDbPath = newPaths.dbPath;
+  if (fs.existsSync(newDbPath)) {
+    const fd = fs.openSync(newDbPath, 'r');
+    const buffer = Buffer.alloc(16);
+    fs.readSync(fd, buffer, 0, 16, 0);
+    fs.closeSync(fd);
+    const header = buffer.toString('utf8', 0, 16);
+    if (header !== 'SQLite format 3\0') {
+      throw new Error(`目标数据库文件格式无效: ${header}`);
+    }
+    console.log('目标数据库校验通过（SQLite 格式正确）');
+  }
+
+  // 4. 写迁移标记
+  fs.writeFileSync(
+    MIGRATED_FLAG,
+    JSON.stringify(
+      {
+        migratedAt: new Date().toISOString(),
+        from: oldDir,
+        to: newDir,
+        version: 2,
+      },
+      null,
+      2,
+    ),
+  );
+  console.log(`迁移标记已写入: ${MIGRATED_FLAG}`);
 }
 
 // 启动 NestJS 后端服务
@@ -389,24 +608,22 @@ async function startBackend(): Promise<void> {
 
       console.log("开发模式：使用 ts-node-dev 启动后端（支持热重载）");
 
-      const userDataPath = app.getPath("userData");
-      await initializeDatabase(userDataPath, backendPath);
+      // 检测数据目录
+      const dataHome = detectDataPath();
+      const paths = computeDataPaths(dataHome);
+      console.log(`数据目录: ${dataHome}`);
 
-      const dbPath = path.join(userDataPath, "ai_chat.db");
-      const vectorDbPath = path.join(userDataPath, "vector_db.sqlite");
+      await initializeDatabase(dataHome, backendPath);
+
       const staticDir = path.join(backendPath, "static");
-      const uploadDir = path.join(userDataPath, "file_stores");
-      const logsDir = path.join(userDataPath, "logs"); // 后端日志目录
-      const skillsDir = path.join(userDataPath, "skills"); // 技能目录
-      const workspaceDir = path.join(userDataPath, "workspace"); // 会话工作目录
 
-      console.log("Database path:", dbPath);
-      console.log("Vector database path:", vectorDbPath);
+      console.log("Database path:", paths.dbPath);
+      console.log("Vector database path:", paths.vectorDbPath);
       console.log("Static directory:", staticDir);
-      console.log("Upload directory:", uploadDir);
-      console.log("Backend logs directory:", logsDir);
-      console.log("Skills directory:", skillsDir);
-      console.log("Workspace directory:", workspaceDir);
+      console.log("Upload directory:", paths.uploadDir);
+      console.log("Backend logs directory:", paths.logsDir);
+      console.log("Skills directory:", paths.skillsDir);
+      console.log("Workspace directory:", paths.workspaceDir);
 
       const spawnOptions: any = {
         cwd: backendPath,
@@ -414,16 +631,16 @@ async function startBackend(): Promise<void> {
           ...process.env,
           NODE_ENV: "development",
           PORT: "3000",
-          DATABASE_URL: `file:${dbPath}`,
-          VECTOR_DB_PATH: vectorDbPath,
+          DATABASE_URL: `file:${paths.dbPath}`,
+          VECTOR_DB_PATH: paths.vectorDbPath,
           STATIC_DIR: staticDir,
-          UPLOAD_ROOT_DIR: uploadDir,
+          UPLOAD_ROOT_DIR: paths.uploadDir,
           UPLOAD_URL_PREFIX: "/uploads",
-          SETTINGS_DIR: userDataPath, // 传递设置目录
-          USERDATA_DIR: userDataPath, // 传递用户数据目录
-          LOGS_DIR: logsDir, // 传递后端日志目录到用户数据目录
-          SKILLS_DIR: skillsDir, // 传递技能目录到用户数据目录
-          WORKSPACE_BASE_DIR: workspaceDir, // 传递会话工作目录基础路径
+          SETTINGS_DIR: dataHome, // 传递设置目录
+          USERDATA_DIR: dataHome, // 传递用户数据目录
+          LOGS_DIR: paths.logsDir, // 传递后端日志目录
+          SKILLS_DIR: paths.skillsDir, // 传递技能目录
+          WORKSPACE_BASE_DIR: paths.workspaceDir, // 传递会话工作目录基础路径
           ELECTRON_APP: "true", // 标识这是 Electron 环境
           BROWSER_BRIDGE_MODE: "tcp", // 开发模式使用 TCP
           BROWSER_BRIDGE_PORT: process.env.BROWSER_BRIDGE_PORT || "4111", // 传递端口号
@@ -450,25 +667,23 @@ async function startBackend(): Promise<void> {
       console.log("生产模式：从 unpacked 目录启动后端");
       console.log("后端路径:", backendPath);
 
+      // 检测数据目录
+      const dataHome = detectDataPath();
+      const paths = computeDataPaths(dataHome);
+      console.log(`数据目录: ${dataHome}`);
+
       // 初始化数据库
-      const userDataPath = app.getPath("userData");
-      await initializeDatabase(userDataPath, backendPath);
+      await initializeDatabase(dataHome, backendPath);
 
-      const dbPath = path.join(userDataPath, "ai_chat.db");
-      const vectorDbPath = path.join(userDataPath, "vector_db.sqlite");
       const staticDir = path.join(backendPath, "static");
-      const uploadDir = path.join(userDataPath, "file_stores");
-      const logsDir = path.join(userDataPath, "logs"); // 后端日志目录
-      const skillsDir = path.join(userDataPath, "skills"); // 技能目录
-      const workspaceDir = path.join(userDataPath, "workspace"); // 会话工作目录
 
-      console.log("Database path:", dbPath);
-      console.log("Vector database path:", vectorDbPath);
+      console.log("Database path:", paths.dbPath);
+      console.log("Vector database path:", paths.vectorDbPath);
       console.log("Static directory:", staticDir);
-      console.log("Upload directory:", uploadDir);
-      console.log("Backend logs directory:", logsDir);
-      console.log("Skills directory:", skillsDir);
-      console.log("Workspace directory:", workspaceDir);
+      console.log("Upload directory:", paths.uploadDir);
+      console.log("Backend logs directory:", paths.logsDir);
+      console.log("Skills directory:", paths.skillsDir);
+      console.log("Workspace directory:", paths.workspaceDir);
 
       // 使用 spawn 启动后端
       const spawnOptions: any = {
@@ -480,16 +695,16 @@ async function startBackend(): Promise<void> {
           NODE_NO_WARNINGS: "1", // 抑制 Node.js 警告（如 punycode 弃用警告）
           PORT: backendPort.toString(),
           BASE_URL: "__auto__", // Electron 生产环境使用自动模式，动态设置 BASE_URL
-          DATABASE_URL: `file:${dbPath}`,
-          VECTOR_DB_PATH: vectorDbPath,
+          DATABASE_URL: `file:${paths.dbPath}`,
+          VECTOR_DB_PATH: paths.vectorDbPath,
           STATIC_DIR: staticDir,
-          UPLOAD_ROOT_DIR: uploadDir,
+          UPLOAD_ROOT_DIR: paths.uploadDir,
           UPLOAD_URL_PREFIX: "/uploads",
-          SETTINGS_DIR: userDataPath, // 传递设置目录
-          USERDATA_DIR: userDataPath, // 传递用户数据目录
-          LOGS_DIR: logsDir, // 传递后端日志目录到用户数据目录
-          SKILLS_DIR: skillsDir, // 传递技能目录到用户数据目录
-          WORKSPACE_BASE_DIR: workspaceDir, // 传递会话工作目录基础路径
+          SETTINGS_DIR: dataHome, // 传递设置目录
+          USERDATA_DIR: dataHome, // 传递用户数据目录
+          LOGS_DIR: paths.logsDir, // 传递后端日志目录
+          SKILLS_DIR: paths.skillsDir, // 传递技能目录
+          WORKSPACE_BASE_DIR: paths.workspaceDir, // 传递会话工作目录基础路径
           ELECTRON_APP: "true", // 标识这是 Electron 环境
           BROWSER_BRIDGE_MODE: "ipc", // 生产模式使用 IPC
         },
@@ -641,7 +856,8 @@ function updateTrayMenu() {
  */
 function createFloatWindow() {
   const primaryDisplay = screen.getPrimaryDisplay();
-  const { width: screenWidth, height: screenHeight } = primaryDisplay.workAreaSize;
+  const { width: screenWidth, height: screenHeight } =
+    primaryDisplay.workAreaSize;
 
   const floatingHTML = `<!DOCTYPE html>
 <html lang="zh-CN">
@@ -768,7 +984,9 @@ card.addEventListener('mousedown', (e) => {
     },
   });
 
-  floatWindow.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(floatingHTML)}`);
+  floatWindow.loadURL(
+    `data:text/html;charset=utf-8,${encodeURIComponent(floatingHTML)}`,
+  );
 
   floatWindow.on("closed", () => {
     floatWindow = null;
@@ -784,7 +1002,8 @@ function applyTraySettings() {
   // 显隐控制：主窗口最小化或隐藏时且 enabled 才显示浮窗
   const isMinimized = mainWindow?.isMinimized() ?? false;
   const isHidden = mainWindow ? !mainWindow.isVisible() : true;
-  const shouldShow = traySettings.enabled && mainWindow && (isMinimized || isHidden);
+  const shouldShow =
+    traySettings.enabled && mainWindow && (isMinimized || isHidden);
   if (shouldShow) {
     floatWindow.show();
     floatWindow.webContents.send("float:settings", {
@@ -897,18 +1116,30 @@ function createWindow() {
   let floatShowTimeout: ReturnType<typeof setTimeout> | null = null;
   mainWindow.on("hide", () => {
     if (floatShowTimeout) clearTimeout(floatShowTimeout);
-    floatShowTimeout = setTimeout(() => { applyTraySettings(); floatShowTimeout = null; }, 500);
+    floatShowTimeout = setTimeout(() => {
+      applyTraySettings();
+      floatShowTimeout = null;
+    }, 500);
   });
   mainWindow.on("minimize", () => {
     if (floatShowTimeout) clearTimeout(floatShowTimeout);
-    floatShowTimeout = setTimeout(() => { applyTraySettings(); floatShowTimeout = null; }, 500);
+    floatShowTimeout = setTimeout(() => {
+      applyTraySettings();
+      floatShowTimeout = null;
+    }, 500);
   });
   mainWindow.on("show", () => {
-    if (floatShowTimeout) { clearTimeout(floatShowTimeout); floatShowTimeout = null; }
+    if (floatShowTimeout) {
+      clearTimeout(floatShowTimeout);
+      floatShowTimeout = null;
+    }
     if (floatWindow) floatWindow.hide();
   });
   mainWindow.on("restore", () => {
-    if (floatShowTimeout) { clearTimeout(floatShowTimeout); floatShowTimeout = null; }
+    if (floatShowTimeout) {
+      clearTimeout(floatShowTimeout);
+      floatShowTimeout = null;
+    }
     if (floatWindow) floatWindow.hide();
   });
 
@@ -936,7 +1167,57 @@ function setupIpcHandlers() {
       version: app.getVersion(),
       userDataPath: app.getPath("userData"),
       backendPort: backendPort,
+      migration: {
+        status: getMigrationStatus(),
+        oldPath: DEFAULT_USER_DATA,
+        newPath: GUADA_HOME,
+      },
     };
+  });
+
+  // 数据迁移 IPC
+  ipcMain.handle("migrate-data", async () => {
+    try {
+      console.log("开始数据迁移...");
+      // 先停止后端
+      if (backendProcess && !backendProcess.killed) {
+        const { exec } = require("child_process");
+        await new Promise<void>((resolve, reject) => {
+          exec(`taskkill /pid ${backendProcess!.pid} /T /F`, (error: any) => {
+            if (error) {
+              console.error("停止后端失败:", error.message);
+              reject(error);
+            } else {
+              console.log("后端进程已终止");
+              resolve();
+            }
+          });
+        });
+        backendProcess = null;
+      }
+
+      await handleMigration();
+      console.log("数据迁移完成，重新启动后端...");
+
+      // 重启后端（startBackend 会检测到 .migrated 标记，使用新路径）
+      isBackendReady = false;
+      isBackendStarting = false;
+      backendReadyPromise = startBackend()
+        .then(() => {
+          isBackendReady = true;
+          console.log("后端迁移后重启成功");
+        })
+        .catch((error) => {
+          console.error("后端迁移后重启失败:", error);
+          isBackendReady = true;
+        });
+
+      await backendReadyPromise;
+      return { success: true, message: "迁移完成" };
+    } catch (error: any) {
+      console.error("数据迁移失败:", error);
+      return { success: false, message: error.message };
+    }
   });
 
   // wait-backend-ready：单次 IPC 调用，后端就绪后返回，无需双向通信
@@ -958,22 +1239,27 @@ function setupIpcHandlers() {
   });
 
   // 接收渲染进程推送的托盘统计信息，更新悬浮窗 + 托盘菜单
-  ipcMain.on("tray:update-stats", (_, stats: { running: number; unread: number }) => {
-    trayStats = stats;
-    // 更新托盘工具提示
-    if (tray) {
-      const parts: string[] = [];
-      if (stats.running > 0) parts.push(`${stats.running} 个任务运行中`);
-      if (stats.unread > 0) parts.push(`${stats.unread} 条未读`);
-      tray.setToolTip(`GuaDa${parts.length > 0 ? ` - ${parts.join("，")}` : ""}`);
-    }
-    // 更新托盘菜单
-    updateTrayMenu();
-    // 更新悬浮窗内容（仅统计数据，不携带设置项）
-    if (floatWindow && !floatWindow.isDestroyed()) {
-      floatWindow.webContents.send("float:update", stats);
-    }
-  });
+  ipcMain.on(
+    "tray:update-stats",
+    (_, stats: { running: number; unread: number }) => {
+      trayStats = stats;
+      // 更新托盘工具提示
+      if (tray) {
+        const parts: string[] = [];
+        if (stats.running > 0) parts.push(`${stats.running} 个任务运行中`);
+        if (stats.unread > 0) parts.push(`${stats.unread} 条未读`);
+        tray.setToolTip(
+          `GuaDa${parts.length > 0 ? ` - ${parts.join("，")}` : ""}`,
+        );
+      }
+      // 更新托盘菜单
+      updateTrayMenu();
+      // 更新悬浮窗内容（仅统计数据，不携带设置项）
+      if (floatWindow && !floatWindow.isDestroyed()) {
+        floatWindow.webContents.send("float:update", stats);
+      }
+    },
+  );
 
   // 悬浮窗双击 → 显示主窗口
   ipcMain.on("float:dblclick", () => {
@@ -993,13 +1279,18 @@ function setupIpcHandlers() {
   });
 
   // 接收前端设置的悬浮窗配置（始终下发浮窗，不依赖主窗口可见状态）
-  ipcMain.on("tray:update-settings", (_, settings: { enabled: boolean; opacity: number }) => {
-    traySettings = settings;
-    if (floatWindow && !floatWindow.isDestroyed()) {
-      floatWindow.webContents.send("float:settings", { opacity: traySettings.opacity });
-    }
-    applyTraySettings();
-  });
+  ipcMain.on(
+    "tray:update-settings",
+    (_, settings: { enabled: boolean; opacity: number }) => {
+      traySettings = settings;
+      if (floatWindow && !floatWindow.isDestroyed()) {
+        floatWindow.webContents.send("float:settings", {
+          opacity: traySettings.opacity,
+        });
+      }
+      applyTraySettings();
+    },
+  );
 
   // 浮窗就绪后主动发送缓存的设置
   ipcMain.on("float:ready", () => {
@@ -1167,8 +1458,8 @@ function setupIpcHandlers() {
 
   // 打开用户数据目录
   ipcMain.on("open-user-data-folder", () => {
-    const userDataPath = app.getPath("userData");
-    shell.openPath(userDataPath).then((error) => {
+    const targetPath = detectDataPath();
+    shell.openPath(targetPath).then((error) => {
       if (error) {
         console.error("Failed to open user data folder:", error);
       }
@@ -1215,29 +1506,32 @@ function setupIpcHandlers() {
   });
 
   // 用外部编辑器打开文件/目录（支持 vscode, 后续可扩展 cursor, webstorm 等）
-  ipcMain.handle("open-with-editor", async (_, params: { path: string; editor: string }) => {
-    const { path: targetPath, editor } = params;
-    try {
-      let cmd: string;
-      switch (editor) {
-        case "vscode":
-          cmd = `code "${targetPath}"`;
-          break;
-        default:
-          return { success: false, error: `Unknown editor: ${editor}` };
-      }
-      await new Promise<void>((resolve, reject) => {
-        exec(cmd, (error) => {
-          if (error) reject(error);
-          else resolve();
+  ipcMain.handle(
+    "open-with-editor",
+    async (_, params: { path: string; editor: string }) => {
+      const { path: targetPath, editor } = params;
+      try {
+        let cmd: string;
+        switch (editor) {
+          case "vscode":
+            cmd = `code "${targetPath}"`;
+            break;
+          default:
+            return { success: false, error: `Unknown editor: ${editor}` };
+        }
+        await new Promise<void>((resolve, reject) => {
+          exec(cmd, (error) => {
+            if (error) reject(error);
+            else resolve();
+          });
         });
-      });
-      return { success: true };
-    } catch (error) {
-      log.error(`用 ${editor} 打开失败`, error);
-      return { success: false, error: String(error) };
-    }
-  });
+        return { success: true };
+      } catch (error) {
+        log.error(`用 ${editor} 打开失败`, error);
+        return { success: false, error: String(error) };
+      }
+    },
+  );
 
   // 选择文件夹对话框
   ipcMain.handle("select-folder", async () => {

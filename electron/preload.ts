@@ -54,6 +54,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   openInstallFolder: () => ipcRenderer.send('open-install-folder'),
   openFolder: (folderPath: string) => ipcRenderer.invoke('open-folder', folderPath),
 
+  // 数据迁移
+  migrateData: () => ipcRenderer.invoke('migrate-data'),
+
   // 在资源管理器中显示并选中文件
   showItemInFolder: (filePath: string) => ipcRenderer.invoke('show-item-in-folder', filePath),
 

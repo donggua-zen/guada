@@ -43,10 +43,13 @@ export class AgentPresetsPlugin extends PluginBase {
         const allAgents = await this.agentScanner.listAgents();
         const agent = allAgents.find((a) => a.id === agentId);
         if (!agent) return undefined;
+        const description =
+          agent.visible && agent.folderVisible ? agent.description : "";
+
         return {
-          replacement: `\`subagent:${agent.name}(id:${agent.id})\``,
+          replacement: `\`@subagent: ${agent.name}(id:${agent.id})\``,
           appendix: agent.description
-            ? `---subagent:${agent.name}---\nid:${agent.id}\ndescription:${agent.description}`
+            ? `\n<agents>name:${agent.name}\id:${agent.id}\n${description ? `description:${description}` : ""}</agents>`
             : undefined,
         };
       },
@@ -103,7 +106,7 @@ export class AgentPresetsPlugin extends PluginBase {
         const agentXml = agents
           .map((a) => {
             return [
-              `   - id: ${a.id} name: ${a.name} description: ${a.description}`,
+              `   - name: ${a.name}\nid: ${a.id}\ndescription: ${a.description}`,
             ].join("\n");
           })
           .join("\n");
@@ -113,13 +116,14 @@ export class AgentPresetsPlugin extends PluginBase {
           "# Agents",
           "",
           "You can use the following preset Agent roles. ",
-          "Scan the agent descriptions to see if they match user requirements. If they match, use subagent_spawn with characterId to create a sub-agent.",
+          "Scan the agent descriptions to see if they match user requirements. If they match, use subagent_spawn with agentId to create a sub-agent.",
           "Preset Agents already have built-in role instructions and working methods.",
           "You only need to specify requirements and deliverables, no need to specify additional workflows.",
+          "In addition to the agents listed, if the user actively @mentions an agent, you can also use it.",
           "",
-          "<available_agents>",
+          "<agents>",
           agentXml,
-          "</available_agents>",
+          "</agents>",
         ].join("\n");
       },
     });
