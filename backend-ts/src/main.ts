@@ -11,6 +11,13 @@ import * as path from "path";
 import * as fs from "fs";
 
 async function bootstrap() {
+  // 修正工作目录到 backend-ts 根目录，确保 bundled-skills/、skills/ 等路径可预测
+  const backendRoot = path.resolve(__dirname, '..');
+  if (process.cwd() !== backendRoot) {
+    process.chdir(backendRoot);
+    console.log(`工作目录已修正: ${backendRoot}`);
+  }
+
   // 确定日志目录（优先使用环境变量 LOGS_DIR）
   const logsDir = process.env.LOGS_DIR || path.join(process.cwd(), 'logs');
   
