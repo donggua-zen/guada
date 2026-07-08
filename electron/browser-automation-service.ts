@@ -308,9 +308,9 @@ export class BrowserAutomationService {
 
     log.info(`Getting page structure (tab: ${wid})...`)
 
-    const webContents = this.windowManager.getWebContents(wid)
+    const webContents = await this.windowManager.getWebviewWebContents(wid)
     if (!webContents) {
-      throw new Error(`Tab ${wid} not found`)
+      throw new Error(`Window ${wid} webview not ready (did-attach-webview not fired)`)
     }
 
     // 等待页面完全加载
@@ -608,9 +608,9 @@ export class BrowserAutomationService {
 
     log.info(`Getting page text (tab: ${wid})...`)
 
-    const webContents = this.windowManager.getWebContents(wid)
+    const webContents = await this.windowManager.getWebviewWebContents(wid)
     if (!webContents) {
-      throw new Error(`Tab ${wid} not found`)
+      throw new Error(`Window ${wid} webview not ready (did-attach-webview not fired)`)
     }
 
     // 等待页面完全加载
@@ -680,9 +680,9 @@ export class BrowserAutomationService {
 
     log.info(`Getting main structure (tab: ${wid})...`)
 
-    const webContents = this.windowManager.getWebContents(wid)
+    const webContents = await this.windowManager.getWebviewWebContents(wid)
     if (!webContents) {
-      throw new Error(`Tab ${wid} not found`)
+      throw new Error(`Window ${wid} webview not ready (did-attach-webview not fired)`)
     }
 
     // 等待页面完全加载

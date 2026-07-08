@@ -74,7 +74,15 @@ export class BrowserPlugin extends PluginBase {
               ),
           }),
           execute: async (args, ctx, signal) => {
-            return this.executeWithContent("browser_new_window", args, signal);
+            return await this.executeWithContent(
+              "browser_new_window",
+              {
+                ...args,
+                session_path: ctx?.session.workspacePath,
+                session_id: ctx?.session.sessionId,
+              },
+              signal,
+            );
           },
           display: { action: "打开新窗口", argsKey: "url", icon: "browser" },
         });
@@ -320,7 +328,7 @@ export class BrowserPlugin extends PluginBase {
     // 先执行主操作（导航/点击/输入等）
     const result = await this.sendRequest(method, args, signal);
     if (result?.success === false) return result;
-
+    if (result?.windowId && !args.window_id) args.window_id = result.windowId;
     // 操作成功后自动跟随获取页面摘要，避免 LLM 多一轮成对调用
     try {
       const summary = await this.sendRequest(
@@ -329,9 +337,10 @@ export class BrowserPlugin extends PluginBase {
         signal,
       );
       if (summary?.success === false) {
+        this.logger.warn("get page summary failed");
         return result;
       }
-      return { ...result, page_summary: summary };
+      return { ...result, ...summary };
     } catch {
       // 获取摘要失败不影响主操作结果
       return result;

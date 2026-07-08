@@ -401,6 +401,37 @@ export class BrowserWindowManager {
   }
 
   /**
+   * 等待并获取指定窗口的 webview WebContents（实际加载页面的内容）
+   * 用于新窗口刚创建时，webview 可能尚未 attach，等待后再返回
+   * 超时返回 null，不会回退到外壳页面
+   */
+  async getWebviewWebContents(
+    windowId: string,
+    timeoutMs: number = 10000,
+  ): Promise<WebContents | null> {
+    const win = this.windows.get(windowId);
+    if (!win) return null;
+    if (win.webviewWebContents && !win.webviewWebContents.isDestroyed()) {
+      return win.webviewWebContents;
+    }
+
+    // 等待 did-attach-webview 设置 webviewWebContents
+    const pollInterval = 50;
+    const deadline = Date.now() + timeoutMs;
+    while (Date.now() < deadline) {
+      await new Promise((r) => setTimeout(r, pollInterval));
+      const w = this.windows.get(windowId);
+      if (w?.webviewWebContents && !w.webviewWebContents.isDestroyed()) {
+        return w.webviewWebContents;
+      }
+    }
+    log.warn(
+      `getWebviewWebContents: webview not attached for window ${windowId} after ${timeoutMs}ms`,
+    );
+    return null;
+  }
+
+  /**
    * 获取指定窗口的外壳 WebContents（用于外壳 IPC）
    */
   getShellWebContents(windowId: string): WebContents | null {
