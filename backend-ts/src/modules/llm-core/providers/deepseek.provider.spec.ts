@@ -22,7 +22,7 @@ describe('DeepSeekProvider', () => {
     expect(metadata.id).toBe('deepseek');
     expect(metadata.name).toBe('DeepSeek');
     expect(metadata.protocols).toContain('openai');
-    expect(metadata.defaultApiUrl).toBe('https://api.deepseek.com');
+    expect(metadata.defaultApiUrl).toBe('https://api.deepseek.com/v1/');
   });
 
   it('should get all models', () => {
@@ -44,8 +44,8 @@ describe('DeepSeekProvider', () => {
   it('should infer thinking efforts for DeepSeek models', () => {
     const efforts = provider.getModelThinkingEfforts('deepseek-v4-pro');
     
-    // DeepSeek 仅支持 high 和 max
-    expect(efforts).toEqual(['high', 'max']);
+    // DeepSeek 支持 off, high 和 max
+    expect(efforts).toEqual(['off', 'high', 'max']);
   });
 
   it('should return empty array for embedding models', () => {
@@ -58,12 +58,12 @@ describe('DeepSeekProvider', () => {
     const efforts = provider.getModelThinkingEfforts('unknown-model');
     
     // 默认返回 DeepSeek 的标准配置
-    expect(efforts).toEqual(['high', 'max']);
+    expect(efforts).toEqual(['off', 'high', 'max']);
   });
 
-  it('should return high/max for all models', () => {
+  it('should return off/high/max for all models', () => {
     const efforts = provider.getModelThinkingEfforts('deepseek-v4-pro');
-    expect(efforts).toEqual(['high', 'max']);
+    expect(efforts).toEqual(['off', 'high', 'max']);
   });
 
   it('should return empty array for embedding models', () => {

@@ -520,6 +520,14 @@ async function handleMigration(): Promise<void> {
       dest: path.join(path.dirname(newPaths.dbPath), "ai_chat.db-shm"),
     },
     { src: path.join(oldDir, "vector_db.sqlite"), dest: newPaths.vectorDbPath },
+    {
+      src: path.join(oldDir, "vector_db.sqlite-wal"),
+      dest: path.join(path.dirname(newPaths.vectorDbPath), "vector_db.sqlite-wal"),
+    },
+    {
+      src: path.join(oldDir, "vector_db.sqlite-shm"),
+      dest: path.join(path.dirname(newPaths.vectorDbPath), "vector_db.sqlite-shm"),
+    },
     { src: path.join(oldDir, "db_version.json"), dest: newPaths.versionFile },
     // 上传文件
     { src: path.join(oldDir, "file_stores"), dest: newPaths.uploadDir },
@@ -533,6 +541,8 @@ async function handleMigration(): Promise<void> {
     { src: path.join(oldDir, "agents"), dest: path.join(newDir, "agents") },
     // 微信机器人会话
     { src: path.join(oldDir, "wechat-personal"), dest: path.join(newDir, "wechat-personal") },
+    // 设置中心配置文件（模型偏好、插件开关、OCR、外观等）
+    { src: path.join(oldDir, ".config"), dest: path.join(newDir, ".config") },
   ];
 
   for (const task of copyTasks) {
