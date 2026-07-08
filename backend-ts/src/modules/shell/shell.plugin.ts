@@ -77,7 +77,10 @@ export class ShellPlugin extends PluginBase {
         );
 
         // 统一启动进程并转入后台管理（所有 stdout/stderr 由 ProcessManager 接管）
-        const childProcess = spawn(shell, [shellFlag, command], { cwd });
+        const childProcess = spawn(shell, [shellFlag, command], {
+          cwd,
+          env: { ...process.env, PYTHONUNBUFFERED: "1" },
+        });
         const result = this.processManager.background(
           childProcess,
           command,
