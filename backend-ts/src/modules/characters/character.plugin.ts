@@ -39,9 +39,9 @@ export class CharacterPlugin extends PluginBase {
 
         const displayName = character.title || characterId;
         return {
-          replacement: `\`@${displayName} (id:${characterId})\``,
+          replacement: `\`@subagent: ${displayName} (id:${characterId})\``,
           appendix: character.description
-            ? `---${displayName} description---\n${character.description}`
+            ? `<available_agents>name:${displayName}\id:${characterId}\n${character.description ? `description:${character.description}` : ""}</available_agents>`
             : undefined,
         };
       },

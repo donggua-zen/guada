@@ -22,6 +22,14 @@
           <div class="px-4 py-2 cursor-pointer text-sm text-(--titlebar-text-color) transition-colors duration-150 whitespace-nowrap hover:bg-(--titlebar-hover-bg) hover:text-(--color-text)" @click="openDevTools">
             <span>开发者控制台</span>
           </div>
+          <div v-if="migrationStatus === 'available'"
+            class="px-4 py-2 cursor-pointer text-sm text-yellow-400 transition-colors duration-150 whitespace-nowrap hover:bg-(--titlebar-hover-bg)" @click="startMigration">
+            <span>📦 数据迁移</span>
+          </div>
+          <div v-if="migrationStatus === 'migrated'"
+            class="px-4 py-2 text-sm text-green-400 whitespace-nowrap opacity-70">
+            <span>✅ 数据已迁移</span>
+          </div>
           <div class="px-4 py-2 cursor-pointer text-sm text-(--titlebar-text-color) transition-colors duration-150 whitespace-nowrap hover:bg-(--titlebar-hover-bg) hover:text-(--color-text)" @click="openUserDataFolder">
             <span>打开数据目录</span>
           </div>
@@ -127,6 +135,8 @@ const showDebugMenu = ref(false)
 const showWindowManager = ref(false)
 const showUpdateDialog = ref(false)
 const skipVersion = ref<string | null>(localStorage.getItem('update-skip-version'))
+const migrationStatus = ref<string>('')
+const isMigrating = ref(false)
 
 // 切换浏览器管理面板
 function toggleWindowManager() {
@@ -208,6 +218,44 @@ const openInstallFolder = () => {
   showDebugMenu.value = false
 }
 
+/** 获取迁移状态 */
+const loadMigrationStatus = async () => {
+  if (!window.electronAPI) return
+  try {
+    const info = await window.electronAPI.getAppInfo()
+    migrationStatus.value = info.migration?.status || ''
+  } catch {
+    // ignore
+  }
+}
+
+/** 执行数据迁移 */
+const startMigration = async () => {
+  if (!window.electronAPI || isMigrating.value) return
+  isMigrating.value = true
+  showDebugMenu.value = false
+
+  const confirmed = confirm('即将把数据从 AppData 目录迁移到用户主目录下的 .guada 目录，此过程需要重启后端，是否继续？')
+  if (!confirmed) {
+    isMigrating.value = false
+    return
+  }
+
+  try {
+    const result = await window.electronAPI.migrateData()
+    if (result.success) {
+      alert('✅ 数据迁移成功！数据已迁移至 ~/.guada/')
+      migrationStatus.value = 'migrated'
+    } else {
+      alert(`❌ 迁移失败：${result.message}`)
+    }
+  } catch (error: any) {
+    alert(`❌ 迁移异常：${error.message || error}`)
+  } finally {
+    isMigrating.value = false
+  }
+}
+
 // 监听窗口大小变化，自动更新最大化状态
 const handleResize = () => {
   updateMaximizedState()
@@ -226,6 +274,7 @@ onMounted(() => {
   updateMaximizedState()
   window.addEventListener('resize', handleResize)
   document.addEventListener('click', handleClickOutside)
+  loadMigrationStatus()
 
   if (window.electronAPI && typeof window.electronAPI.onUpdateStatus === 'function') {
     window.electronAPI.onUpdateStatus(handleUpdateStatus)

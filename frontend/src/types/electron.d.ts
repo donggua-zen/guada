@@ -9,6 +9,12 @@ export interface ElectronAPI {
     platform: string
     version: string
     userDataPath: string
+    backendPort: number | null
+    migration: {
+      status: 'available' | 'migrated' | 'new_install' | 'skipped' | 'env_override'
+      oldPath: string
+      newPath: string
+    }
   }>
   getBackendPort: () => Promise<number | null>
   /** 同步查询后端就绪状态（阻塞，用于 Vue 挂载前确定初始值） */
@@ -55,6 +61,9 @@ export interface ElectronAPI {
 
   // 打开外部链接
   openExternal: (url: string) => Promise<{ success: boolean; error?: string }>
+
+  // 数据迁移
+  migrateData: () => Promise<{ success: boolean; message: string }>
 
   // 后端就绪等待：单次 IPC invoke，后端就绪后返回 { port, error }
   waitBackendReady: () => Promise<{ port: number | null; error?: string | null }>

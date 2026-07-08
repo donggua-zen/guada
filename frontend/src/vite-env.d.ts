@@ -76,6 +76,7 @@ interface ElectronAPI {
   }
   getAppInfo: () => Promise<any>
   showNotification: (title: string, body: string) => Promise<void>
+  migrateData: () => Promise<{ success: boolean; message: string }>
   minimizeWindow: () => void
   maximizeWindow: () => void
   closeWindow: () => void
