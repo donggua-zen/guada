@@ -204,6 +204,16 @@ export interface DisplayGroup {
   isExpanded: boolean;
 }
 
+/** 计算分组中实际工具调用总次数（一个 tool item 可能携带多个 toolCalls） */
+export function countToolCalls(items: DisplayItem[]): number {
+  return items.reduce((sum, item) => {
+    if (item.type === 'tool' && item.toolCalls?.length) {
+      return sum + item.toolCalls.length;
+    }
+    return sum;
+  }, 0);
+}
+
 /**
  * 将消息内容列表按展示规则分组
  *
