@@ -413,7 +413,7 @@ export class FilePlugin extends PluginBase {
         for (const fp of files) {
           try {
             const content = await fs.readFile(fp, "utf-8");
-            const lines = content.split("\n");
+            const lines = content.replace(/\r\n/g, "\n").split("\n");
             const matchRows: any[] = [];
 
             for (

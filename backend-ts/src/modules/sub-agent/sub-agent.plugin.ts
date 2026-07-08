@@ -191,28 +191,33 @@ export class SubAgentPlugin extends PluginBase {
     subKit.registerPrompt({
       frequency: "REGULAR",
       description: "子代理工具使用说明",
-      content: `# 子代理工具使用说明
+      content: `# Overall Principles for Using Sub-Agents
 
-## 何时使用
-- 推理繁重的子任务（调试、代码审查、研究）
-- 将中间数据淹没上下文的任务
-- 并行独立工作流
-- 任务匹配优先级：手动@ > 预定义subagent > skills
+The preset list provides you with dedicated agents that are visible by default and have built-in system instructions. However, this does not mean you are restricted to only these. You are still free to use the generic agent, or create sub-tasks based on any agent explicitly specified by the user.
 
-## 何时不使用
-- 机械多步骤工作→ 使用execute_code
-- 单一工具调用→ 直接调用该工具即可
-- 需要用户交互的任务→ 子代理不能使用clear
+1. When to Use
+   - The task involves heavy reasoning, e.g., in-depth debugging, complex code review, technical research.
+   - You care only about the final deliverable and do not need to intervene in the sub-task's execution in real time.
+   - The sub-task is independent and can run in parallel with other tasks without blocking.
 
-## agentId 使用说明
-- 可选参数，不传则使用通用子代理
-- 你可以通过预定义列表（若存在）或者用户@手动指定来获取预定义的子代理Id
-- ** 若用户明确指定子代理Id（即便不在预定义列表），必须优先使用 **
+2. When NOT to Use
+   - The task can be completed with a single tool call → directly call that tool; no need to spawn a sub-agent.
+   - The task requires soliciting user input or obtaining real-time feedback during execution → sub-agents cannot directly interact with users; such interactions must remain in the main flow.
 
-## 注意事项
-- 拆分原则：任务边界必须清晰，严禁不同子代理修改同一文件或任务重叠。
-- 任务结束且无需后续交互时，及时 close 释放会话资源。
+3. Priority for Selecting a Sub-Agent
+   When you decide that a sub-task is needed, determine which agent to use strictly in the following priority:
+   1) User explicitly specifies (highest priority): If the user @mentions or clearly provides an agentId (regardless of whether that ID exists in the preset list), you must unconditionally use that agent.
+   2) Predefined specialized agent (second priority): If the user does not specify, scan the descriptions of agents in the preset list and match one that best fits the current requirements.
+   3) Generic fallback (default): If no preset agent matches, or the current task is not suitable for a specialized agent, omit the agentId and automatically use the generic sub-agent.
 
+4. Detailed Rules for agentId
+   - This parameter is optional; leaving it empty invokes the generic sub-agent.
+   - You can obtain preset agent IDs from the system-provided preset list (if it exists).
+
+5. Critical Operational Guidelines (Cautions)
+   - Boundary isolation: When splitting tasks, the boundaries must be absolutely clear. It is strictly forbidden to assign the same file to multiple sub-agents for modification, or to have overlapping responsibilities among different sub-agents.
+   - Resource release: Once a sub-task finishes and no further interaction with that sub-agent is required, you must immediately call close to release session resources in a timely manner.
+   - Transparency management: Users cannot see the internal interaction logs between you and the sub-agents. You must not assume that users are aware of execution details. Ultimately, you must summarize and distill the results of sub-tasks and present them to the user in a clear, structured form.
 `,
     });
   }
