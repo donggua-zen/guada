@@ -2,12 +2,18 @@ import {
   Controller,
   Get,
   Put,
+  Post,
   Delete,
   Param,
   Body,
   Logger,
 } from "@nestjs/common";
-import { AgentScannerService, AgentGroup } from "./agent-scanner.service";
+import {
+  AgentScannerService,
+  AgentGroup,
+  CreateAgentDto,
+  UpdateAgentDto,
+} from "./agent-scanner.service";
 
 @Controller("agents")
 export class AgentsController {
@@ -34,6 +40,7 @@ export class AgentsController {
         folderVisible: a.folderVisible,
       })),
       groups,
+      agentsDir: this.agentScanner.agentsDirectory,
     };
   }
 
@@ -62,6 +69,62 @@ export class AgentsController {
       };
     }
     return { success: false, message: `Agent ${id} 不存在` };
+  }
+
+  /**
+   * 批量导入 Agent（.md 文件）
+   */
+  @Post("import")
+  async importAgents(
+    @Body() body: { files: { content: string; filename: string }[]; folder?: string },
+  ) {
+    if (!body.files || !Array.isArray(body.files) || body.files.length === 0) {
+      return { success: false, message: "files 不能为空" };
+    }
+    try {
+      const results = await this.agentScanner.importAgents(
+        body.files,
+        body.folder,
+      );
+      const ok = results.filter((r) => r.status === "ok").length;
+      const conflict = results.filter((r) => r.status === "conflict").length;
+      const invalid = results.filter((r) => r.status === "invalid").length;
+      return { success: true, results, summary: { total: results.length, ok, conflict, invalid } };
+    } catch (err: any) {
+      this.logger.error(`导入 Agent 失败: ${err.message}`);
+      return { success: false, message: err.message };
+    }
+  }
+
+  /**
+   * 创建新 Agent
+   */
+  @Post()
+  async createAgent(@Body() body: CreateAgentDto) {
+    try {
+      const agent = await this.agentScanner.createAgent(body);
+      return { success: true, data: agent };
+    } catch (err: any) {
+      this.logger.error(`创建 Agent 失败: ${err.message}`);
+      return { success: false, message: err.message };
+    }
+  }
+
+  /**
+   * 更新 Agent（含 body）
+   */
+  @Put(":id")
+  async updateAgent(
+    @Param("id") id: string,
+    @Body() body: UpdateAgentDto,
+  ) {
+    try {
+      const agent = await this.agentScanner.updateAgent(id, body);
+      return { success: true, data: agent };
+    } catch (err: any) {
+      this.logger.error(`更新 Agent 失败: ${err.message}`);
+      return { success: false, message: err.message };
+    }
   }
 
   /**

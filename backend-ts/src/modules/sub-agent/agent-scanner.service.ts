@@ -46,6 +46,33 @@ const FOLDER_NAME_RE = /^[a-zA-Z0-9_]+$/;
 /**
  * 解析后的 Agent 定义
  */
+/**
+ * 创建 Agent 的请求参数
+ */
+export interface CreateAgentDto {
+  name: string;
+  id: string;        // 文件名标识，仅允许 [a-zA-Z_-]，中文名称必须手动指定
+  description?: string;
+  color?: string;
+  emoji?: string;
+  visible?: boolean;
+  body?: string;
+  folder?: string;
+}
+
+/**
+ * 更新 Agent 的请求参数
+ */
+export interface UpdateAgentDto {
+  name?: string;
+  description?: string;
+  color?: string;
+  emoji?: string;
+  visible?: boolean;
+  body?: string;
+  folder?: string;
+}
+
 export interface AgentDefinition {
   id: string; // "agent-{filename}" 或 "agent-{folder}/{filename}"
   name: string;
@@ -73,6 +100,10 @@ export class AgentScannerService {
       path.join(process.cwd(), "data");
     this.agentsDir = path.join(dataDir, "agents");
     this.logger.log(`Agent 目录: ${this.agentsDir}`);
+  }
+
+  get agentsDirectory(): string {
+    return this.agentsDir;
   }
 
   /**
@@ -123,6 +154,95 @@ export class AgentScannerService {
     this.cache = null;
     this.groupsCache = null;
     await this.scan();
+  }
+
+  /**
+   * 生成安全的文件名（只保留字母数字下划线短横线）
+   */
+  private slugify(text: string): string {
+    return text
+      .toLowerCase()
+      .replace(/[^a-z0-9_\u4e00-\u9fa5]/g, "-")
+      .replace(/-+/g, "-")
+      .replace(/^-|-$/g, "")
+      || "agent";
+  }
+
+  /**
+   * 创建新 Agent
+   */
+  async createAgent(data: CreateAgentDto): Promise<AgentDefinition> {
+    const { name, id: customId, description, color, emoji, visible, body, folder } = data;
+    if (!name) throw new Error("name 不能为空");
+    if (!customId) throw new Error("id 不能为空");
+
+    if (!/^[a-zA-Z_-]+$/.test(customId)) {
+      throw new Error("id 只允许英文字母、下划线和短横线（a-zA-Z_-）");
+    }
+
+    const fileId = customId;
+    if (fs.existsSync(path.join(this.agentsDir, folder ? `${folder}/${fileId}.md` : `${fileId}.md`))) {
+      throw new Error(`id「${customId}」已被使用，请换一个`);
+    }
+
+    const manifest: Record<string, any> = { name };
+    if (description !== undefined) manifest.description = description;
+    if (color !== undefined) manifest.color = color;
+    if (emoji !== undefined) manifest.emoji = emoji;
+    if (visible !== undefined) manifest.visible = visible;
+    else manifest.visible = true;
+
+    const yamlStr = yaml.dump(manifest, { lineWidth: -1 }).trim();
+    const mdBody = body || "";
+    const content = `---\n${yamlStr}\n---\n${mdBody}`;
+
+    // 确保目录存在
+    const targetDir = folder
+      ? path.join(this.agentsDir, folder)
+      : this.agentsDir;
+    await mkdir(targetDir, { recursive: true });
+
+    const absPath = path.join(targetDir, `${fileId}.md`);
+    await writeFile(absPath, content, "utf-8");
+    await this.refresh();
+
+    // 从新缓存查找并返回
+    const fullId = `agent-${folder ? `${folder}/` : ""}${fileId}`;
+    const result = this.cache?.find((a) => a.id === fullId) || null;
+    if (!result) throw new Error("创建后未找到 Agent");
+    return result;
+  }
+
+  /**
+   * 更新已有 Agent
+   */
+  async updateAgent(agentId: string, data: UpdateAgentDto): Promise<AgentDefinition> {
+    const filePath = this.resolveAgentFilePath(agentId);
+    if (!filePath) throw new Error(`Agent ${agentId} 不存在`);
+
+    const content = await readFile(filePath, "utf-8");
+    const match = content.match(/^---\s*\n([\s\S]*?)\n---\s*\n([\s\S]*)$/);
+    if (!match) throw new Error(`Agent 文件格式无效: ${agentId}`);
+
+    const parsed = yaml.load(match[1]) as Record<string, any>;
+    if (!parsed || typeof parsed !== "object") throw new Error(`YAML 解析失败: ${agentId}`);
+
+    // 更新字段
+    if (data.name !== undefined) parsed.name = data.name;
+    if (data.description !== undefined) parsed.description = data.description;
+    if (data.color !== undefined) parsed.color = data.color;
+    if (data.emoji !== undefined) parsed.emoji = data.emoji;
+    if (data.visible !== undefined) parsed.visible = data.visible;
+
+    const newYaml = yaml.dump(parsed, { lineWidth: -1 }).trim();
+    const body = data.body !== undefined ? data.body : match[2];
+    const newContent = `---\n${newYaml}\n---\n${body}`;
+    await writeFile(filePath, newContent, "utf-8");
+    await this.refresh();
+
+    const result = this.cache?.find((a) => a.id === agentId);
+    if (!result) throw new Error("更新后未找到 Agent");
+    return result;
   }
 
   // ── 文件夹操作 ──
@@ -456,5 +576,77 @@ export class AgentScannerService {
     if (!agentId.startsWith(this.PREFIX)) return null;
     const filePath = agentId.slice(this.PREFIX.length);
     return path.join(this.agentsDir, `${filePath}.md`);
+  }
+
+  /**
+   * 导入 Agent 文件
+   */
+  async importAgents(
+    files: { content: string; filename: string }[],
+    targetFolder?: string,
+  ): Promise<{ filename: string; status: "ok" | "conflict" | "invalid"; message?: string }[]> {
+    const results: { filename: string; status: "ok" | "conflict" | "invalid"; message?: string }[] = [];
+
+    for (const { content, filename } of files) {
+      try {
+        // 提取文件名（不含 .md）
+        const baseName = path.basename(filename, ".md");
+        if (!baseName) {
+          results.push({ filename, status: "invalid", message: "无效文件名" });
+          continue;
+        }
+
+        // 校验 frontmatter
+        const match = content.match(/^---\s*\n([\s\S]*?)\n---\s*\n([\s\S]*)$/);
+        if (!match) {
+          results.push({ filename, status: "invalid", message: "缺少 YAML frontmatter" });
+          continue;
+        }
+
+        let manifest: any;
+        try {
+          manifest = yaml.load(match[1]);
+        } catch {
+          results.push({ filename, status: "invalid", message: "YAML 解析失败" });
+          continue;
+        }
+
+        if (!manifest || typeof manifest !== "object" || !manifest.name) {
+          results.push({ filename, status: "invalid", message: "缺少 name 字段" });
+          continue;
+        }
+
+        // 校验 id 合法性
+        if (!/^[a-zA-Z_-]+$/.test(baseName)) {
+          results.push({ filename, status: "invalid", message: "文件名只允许英文字母、下划线、短横线" });
+          continue;
+        }
+
+        // 检查冲突
+        const relPath = targetFolder
+          ? `${targetFolder}/${baseName}.md`
+          : `${baseName}.md`;
+        const absPath = path.join(this.agentsDir, relPath);
+        if (fs.existsSync(absPath)) {
+          results.push({ filename, status: "conflict", message: `文件已存在: ${relPath}` });
+          continue;
+        }
+
+        // 确保目录存在
+        const targetDir = targetFolder
+          ? path.join(this.agentsDir, targetFolder)
+          : this.agentsDir;
+        await mkdir(targetDir, { recursive: true });
+
+        // 写入文件
+        await writeFile(absPath, content, "utf-8");
+        results.push({ filename, status: "ok" });
+      } catch (err: any) {
+        results.push({ filename, status: "invalid", message: err.message });
+      }
+    }
+
+    await this.refresh();
+    return results;
   }
 }
