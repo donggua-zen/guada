@@ -61,7 +61,7 @@ export class SkillLoaderService {
     const { body } = this.parseFrontmatter(content);
 
     this.logger.debug(`Loaded instructions for skill: ${skill.id}`);
-    return body.trim();
+    return body.replace(/\r\n/g, '\n').trim();
   }
 
   /**

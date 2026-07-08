@@ -14,7 +14,9 @@
     </div>
 
     <div class="text-sm text-gray-600 dark:text-[#8b8d95] mb-4">
-      打开可见性后 AI 会根据任务自动调用对应的 Agent，关闭的 Agent 需要通过斜杠命令手动调用。
+      打开可见性后 AI 会根据任务自动调用对应的 Agent，关闭的 Agent 可以通过@命令手动调用。<br>
+      <span class="text-red-500">太多的 可见Agent 会占用上下文预算，使得对话成本增加，且可能导致AI困惑。</span><br>
+      <span>建议只保留必要且高频使用Agent可见（少于5个），其余agent使用时手动@调用即可。</span>
     </div>
 
     <!-- 加载中 -->
@@ -28,25 +30,16 @@
       <!-- ========== 无分组的 Agent ========== -->
       <div v-if="ungroupedAgents.length > 0" class="grid gap-3 mb-6"
         style="grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));">
-        <AgentCard
-          v-for="agent in ungroupedAgents"
-          :key="agent.id"
-          :agent="agent"
-          :disabled="!agent.visible"
-          @toggle-visibility="handleToggleAgentVisibility"
-          @view-detail="viewAgentDetail"
-          @delete="handleDeleteAgent"
-        />
+        <AgentCard v-for="agent in ungroupedAgents" :key="agent.id" :agent="agent" :disabled="!agent.visible"
+          @toggle-visibility="handleToggleAgentVisibility" @view-detail="viewAgentDetail" @delete="handleDeleteAgent" />
       </div>
 
       <!-- ========== 文件夹分组 ========== -->
       <div v-for="group in groups" :key="group.id" class="mb-6">
         <!-- 文件夹标题栏 -->
         <div class="flex items-center gap-2 mb-3 px-1 select-none cursor-pointer"
-          :class="{ 'opacity-60': !group.visible }"
-          @click="toggleGroupCollapse(group.id)">
-          <component :is="collapsedGroups.has(group.id) ? ChevronRight : ChevronDown"
-            class="w-5 h-5 text-gray-400" />
+          :class="{ 'opacity-60': !group.visible }" @click="toggleGroupCollapse(group.id)">
+          <component :is="collapsedGroups.has(group.id) ? ChevronRight : ChevronDown" class="w-5 h-5 text-gray-400" />
           <span class="text-xl">{{ group.emoji || '📁' }}</span>
           <span class="text-base font-semibold text-gray-800 dark:text-[#e8e9ed]">
             {{ group.name }}
@@ -55,28 +48,18 @@
 
           <div class="ml-auto flex items-center gap-2">
             <span class="text-sm text-gray-500">分组可见</span>
-            <el-switch
-              :model-value="group.visible"
-              @click.stop
-              @update:model-value="(val: any) => handleToggleGroupVisibility(group, !!val)"
-              size="small"
-              inline-prompt
-            />
+            <el-switch :model-value="group.visible" @click.stop
+              @update:model-value="(val: any) => handleToggleGroupVisibility(group, !!val)" size="small"
+              inline-prompt />
           </div>
         </div>
 
         <!-- 文件夹内 Agent 卡片 -->
         <div v-if="!collapsedGroups.has(group.id)" class="grid gap-3 pl-2"
           style="grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));">
-          <AgentCard
-            v-for="agent in getGroupedAgents(group.id)"
-            :key="agent.id"
-            :agent="agent"
-            :disabled="!agent.visible || !agent.folderVisible"
-            @toggle-visibility="handleToggleAgentVisibility"
-            @view-detail="viewAgentDetail"
-            @delete="handleDeleteAgent"
-          />
+          <AgentCard v-for="agent in getGroupedAgents(group.id)" :key="agent.id" :agent="agent"
+            :disabled="!agent.visible || !agent.folderVisible" @toggle-visibility="handleToggleAgentVisibility"
+            @view-detail="viewAgentDetail" @delete="handleDeleteAgent" />
         </div>
       </div>
     </template>
@@ -89,8 +72,8 @@
     </div>
 
     <!-- Agent 详情弹窗 -->
-    <el-dialog v-model="showDetailDialog" :title="detailAgent?.name || 'Agent 详情'"
-      :width="isMobile ? '90%' : '560px'" :append-to-body="true">
+    <el-dialog v-model="showDetailDialog" :title="detailAgent?.name || 'Agent 详情'" :width="isMobile ? '90%' : '560px'"
+      :append-to-body="true">
       <div class="space-y-4">
         <div class="flex items-center gap-3">
           <div class="w-12 h-12 rounded-lg flex items-center justify-center text-3xl"
@@ -115,7 +98,8 @@
           </div>
           <div class="flex items-center gap-2">
             <span class="text-sm text-gray-500 shrink-0">Path:</span>
-            <code class="text-sm bg-gray-100 dark:bg-[#2a2c30] px-2 py-1 rounded flex-1 truncate">{{ detailFilePath }}</code>
+            <code class="text-sm bg-gray-100 dark:bg-[#2a2c30] px-2 py-1 rounded flex-1 truncate">{{ detailFilePath
+            }}</code>
             <el-button v-if="detailFilePath" link size="small" @click="openFilePath(detailFilePath)">
               <template #icon>
                 <component :is="OpenInNewOutlined" class="w-4 h-4" />
