@@ -357,6 +357,10 @@ html,
   background: transparent !important;
 }
 
+html{
+  background: var(--color-bg) !important;
+}
+
 #app {
   position: relative;
   z-index: 1;
