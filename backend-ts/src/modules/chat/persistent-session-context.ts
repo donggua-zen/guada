@@ -268,12 +268,6 @@ export class PersistentSessionContext implements ISessionContext {
 
     this.logger.debug(`Loaded ${this.history.length} messages into context`);
 
-    // 计算系统提示词的 Token 数
-    this.systemPromptTokenCount = await this.tokenizerService.countTokens(
-      modelName,
-      this.buildPreludeMessages(),
-      false,
-    );
     // compressionConfig.contextWindow -= this.systemPromptTokenCount;
 
     // 初始化时计算全量 Token 数并缓存
@@ -312,7 +306,13 @@ export class PersistentSessionContext implements ISessionContext {
       await this.loadConversationState();
       this.conversationStateLoaded = true;
     }
-
+    // 计算系统提示词的 Token 数
+    const modelName = this.modelConfig.modelName || this.modelConfig.name || "";
+    this.systemPromptTokenCount = await this.tokenizerService.countTokens(
+      modelName,
+      this.buildPreludeMessages(),
+      false,
+    );
     // 压缩由外部（AgentEngine）通过 shouldCompress/compress 控制，
     // getMessages 仅负责组装消息，不再触发压缩
     return this.buildFinalMessages(this.history, options);
@@ -446,7 +446,7 @@ export class PersistentSessionContext implements ISessionContext {
     const chatModelName = modelConfig.modelName || modelConfig.name || "gpt4";
 
     const config: CompressionConfig = {
-      contextWindow: this.effectiveContextWindow - this.systemPromptTokenCount,
+      contextWindow: this.effectiveContextWindow,
       triggerRatio: memoryConfig.compressionTriggerRatio ?? 0.8,
       targetRatio: memoryConfig.compressionTargetRatio ?? 0.5,
       chatModelName,
@@ -455,7 +455,7 @@ export class PersistentSessionContext implements ISessionContext {
     return this.compressionStrategy.shouldCompress(
       this.history,
       config,
-      this.currentTokenCount,
+      this.currentTokenCount + this.systemPromptTokenCount,
     );
   }
 
