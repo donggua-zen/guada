@@ -60,6 +60,10 @@ export class BrowserPlugin extends PluginBase {
             "打开新的独立窗口，返回 window_id。支持传递元数据用于 session 隔离和作用域标识",
           inputSchema: z.object({
             url: z.string().describe("要打开的 URL"),
+            load_delay: z
+              .number()
+              .optional()
+              .describe("页面加载后等待的秒数（默认 3s），用于等待动态内容渲染后再提取摘要"),
             metadata: z
               .object({
                 scope: z
@@ -92,6 +96,10 @@ export class BrowserPlugin extends PluginBase {
           inputSchema: z.object({
             url: z.string().describe("要导航到的 URL"),
             window_id: z.string().describe("目标窗口 ID（必填）"),
+            load_delay: z
+              .number()
+              .optional()
+              .describe("页面加载后等待的秒数（默认 3s），用于等待动态内容渲染后再提取摘要"),
           }),
           execute: async (args, ctx, signal) =>
             this.executeWithContent("browser_navigate", args, signal),
@@ -184,6 +192,10 @@ export class BrowserPlugin extends PluginBase {
           description: "浏览器后退",
           inputSchema: z.object({
             window_id: z.string().describe("目标窗口 ID"),
+            load_delay: z
+              .number()
+              .optional()
+              .describe("页面加载后等待的秒数（默认 3s），用于等待动态内容渲染后再提取摘要"),
           }),
           execute: async (args, ctx, signal) =>
             this.executeWithContent("browser_back", args, signal),
@@ -194,6 +206,10 @@ export class BrowserPlugin extends PluginBase {
           description: "浏览器前进",
           inputSchema: z.object({
             window_id: z.string().describe("目标窗口 ID"),
+            load_delay: z
+              .number()
+              .optional()
+              .describe("页面加载后等待的秒数（默认 3s），用于等待动态内容渲染后再提取摘要"),
           }),
           execute: async (args, ctx, signal) =>
             this.executeWithContent("browser_forward", args, signal),
@@ -204,6 +220,10 @@ export class BrowserPlugin extends PluginBase {
           description: "刷新指定窗口的页面",
           inputSchema: z.object({
             window_id: z.string().describe("目标窗口 ID"),
+            load_delay: z
+              .number()
+              .optional()
+              .describe("页面加载后等待的秒数（默认 3s），用于等待动态内容渲染后再提取摘要"),
           }),
           execute: async (args, ctx, signal) =>
             this.executeWithContent("browser_reload", args, signal),
@@ -270,6 +290,7 @@ export class BrowserPlugin extends PluginBase {
             "## 多窗口支持",
             "- 必须首先使用`browser_new_window(url)` 打开新窗口",
             "- `browser_new_window` / `browser_navigate` / `go_back` / `go_forward` / `reload` 操作后**自动返回页面摘要**",
+            "- 对于动态加载的页面（SPA 等），可通过 `load_delay` 参数（秒数，默认 3s）控制摘要提取前等待的时间",
             "- `browser_page_struct` 获取选择器优化的 JSON 结构，`browser_page_text` 获取纯文本",
             "- 所有窗口默认**完全无痕**，关闭后不留数据",
             "",
@@ -325,15 +346,25 @@ export class BrowserPlugin extends PluginBase {
     args: any,
     signal?: AbortSignal,
   ): Promise<any> {
-    // 先执行主操作（导航/点击/输入等）
-    const result = await this.sendRequest(method, args, signal);
+    // 提取 load_delay，不传给 Electron 端操作
+    const { load_delay, ...restArgs } = args;
+    const delayMs = (load_delay ?? 3) * 1000;
+
+    // 先执行主操作（导航/后退/前进/刷新等）
+    const result = await this.sendRequest(method, restArgs, signal);
     if (result?.success === false) return result;
-    if (result?.windowId && !args.window_id) args.window_id = result.windowId;
+    if (result?.windowId && !restArgs.window_id) restArgs.window_id = result.windowId;
+
+    // 等待动态内容加载后再取摘要
+    if (delayMs > 0) {
+      await this.sleep(delayMs, signal);
+    }
+
     // 操作成功后自动跟随获取页面摘要，避免 LLM 多一轮成对调用
     try {
       const summary = await this.sendRequest(
         "browser_page_summary",
-        { window_id: args.window_id },
+        { window_id: restArgs.window_id },
         signal,
       );
       if (summary?.success === false) {
@@ -345,6 +376,20 @@ export class BrowserPlugin extends PluginBase {
       // 获取摘要失败不影响主操作结果
       return result;
     }
+  }
+
+  /** 可被 AbortSignal 提前中断的延时 */
+  private sleep(ms: number, signal?: AbortSignal): Promise<void> {
+    if (signal?.aborted) return Promise.resolve();
+    return new Promise((resolve) => {
+      const timer = setTimeout(resolve, ms);
+      if (signal) {
+        signal.addEventListener("abort", () => {
+          clearTimeout(timer);
+          resolve();
+        }, { once: true });
+      }
+    });
   }
 
   private sendTCPRequest(

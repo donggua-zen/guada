@@ -36,3 +36,7 @@ Thumbs.db
 tmp/
 temp/
 *.tmp
+
+# Compression replay test data
+scripts/data/
+scripts/tmp/

@@ -556,50 +556,49 @@ export class CompressionEngine implements ICompressionStrategy {
     // this.logger.debug(promptParts.join("\n"));
     const promptStr =
       previousSummary && previousSummary.length > 0
-        ? `You are a conversation summarization expert. Update the existing summary by integrating the new dialogue fragment.
+        ? `你是一位对话摘要专家。请通过整合新的对话片段来更新现有摘要。
 
-Rules:
-- Retain all valid information from the Existing Summary.
-- Based on the New Dialogue, add new topics, update task statuses, and modify the Current Progress section.
-- If an item is completed, move it from "Pending Items" to "Completed Items".
-- Merge redundant information, but do not drop any facts.
-- Output language must match the conversation's language.
+规则：
+- 保留现有摘要中的所有有效信息。
+- 基于新对话，添加新主题、更新任务状态。
+- 如果某项已完成，将其从"待办事项/正在进行"移至"已完成事项"。
+- 合并冗余信息，但不要遗漏任何事实。
+- 输出语言必须与对话语言一致。
+- 直接输出更新后的摘要。不要包含任何引言、解释或元评论（例如"以下是更新后的摘要"）。直接从摘要内容开始。
 
-The updated summary must maintain the same four-section structure (write "None" if empty):
-1. Discussed Topics: List all main topics, sub-topics, and key details.
-2. Completed Items: Record all tasks, decisions, and problems that have been explicitly resolved or finalized.
-3. Current Progress: Describe the current status, ongoing work, latest consensus, or recent changes.
-4. Pending Items: List any unfinished tasks, open questions, or next steps.
-5. Other Context: Include key data, blockers, notes worth keeping for
+更新后的摘要必须保持相同的四段结构（如为空则写"无"）：
+1. 已完成：记录所有已明确解决或最终确定的任务、决策和问题或者已讨论的话题。
+2. 正在进行：描述当前状态、正在进行的工作、最新共识或最近变更，此项永远只保留正在进行的任务。
+3. 待办：列出任何未完成的任务、待解答的问题或后续步骤，此项只保留未开始的任务或问题。
+4. 其他背景：包含关键数据、阻塞项、值得保留的备注等。
 
-Existing Summary:
+现有摘要：
 """
 ${previousSummary}
 """
 
-New Dialogue:
+新对话：
 """
 ${new_dialogue.join("\n")}
 """
 
-Updated Summary:
+更新后的摘要：
 `
-        : `You are a conversation summarization expert. Generate a structured summary from the complete conversation history provided below.
+        : `你是一位对话摘要专家。请从下面提供的完整对话历史中生成结构化摘要。
 
-The summary must be organized into four sections (if a section has no content, write "None"):
-1. Discussed Topics: List all main topics, sub-topics, and key details.
-2. Completed Items: Record all tasks, decisions, and problems that have been explicitly resolved or finalized.
-3. Current Progress: Describe the current status, ongoing work, latest consensus, or recent changes.
-4. Pending Items: List any unfinished tasks, open questions, or next steps.
-5. Other Context: Include key data, blockers, notes worth keeping for
-continuity.
+摘要必须按以下四段组织（如某段无内容，则写"无"）：
+1. 已完成：记录所有已明确解决或最终确定的任务、决策和问题或者已讨论的话题。
+2. 正在进行：描述当前状态、正在进行的工作、最新共识或最近变更。
+3. 待办：列出任何未完成的任务、待解答的问题或后续步骤。
+4. 其他背景：包含关键数据、阻塞项、值得保留的备注等。
 
-Requirements:
-- Be concise, using bullet points.
-- Base your summary strictly on the provided conversation; do not infer.
-- Output language must match the conversation's language.
+要求：
+- 简洁明了，使用项目符号。
+- 严格基于提供的对话进行总结，不要推断。
+- 输出语言必须与对话语言一致。
+- 直接输出摘要。不要包含任何引言、解释或元评论。直接从摘要内容开始。
 
-Conversation History:
+对话历史：
 """
 ${new_dialogue.join("\n")}
 """
@@ -612,7 +611,7 @@ Summary:`;
       model: compressionModel?.modelName || "gpt-3.5-turbo",
       messages: [{ role: "user", content: promptStr }],
       temperature: 0.4,
-      maxTokens: 2000,
+      maxTokens: 4000,
       thinkingEffort: resolveThinkingEffort(compressionModel, "off"),
       stream: false,
       providerConfig: compressionModel.provider,
