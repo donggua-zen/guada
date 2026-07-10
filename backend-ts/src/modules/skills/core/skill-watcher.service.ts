@@ -15,14 +15,15 @@ export class SkillWatcherService implements OnModuleDestroy {
   private handlers = new Map<string, FileEventHandlers>();
   private debounceTimers = new Map<string, NodeJS.Timeout>();
 
-  start(initialPatterns: string[]): void {
+  start(): void {
     if (this.watcher) {
       this.logger.warn("Watcher already started, ignoring");
       return;
     }
 
     this.logger.log("Starting skills file watcher...");
-    this.watcher = chokidar.watch(initialPatterns, {
+    // 不传初始 patterns，所有路径由 addWatch 添加
+    this.watcher = chokidar.watch([], {
       ignoreInitial: true,
       ignorePermissionErrors: true,
       persistent: true,
@@ -32,13 +33,17 @@ export class SkillWatcherService implements OnModuleDestroy {
       .on("add", (fp) => this.dispatch("add", fp))
       .on("change", (fp) => this.dispatch("change", fp))
       .on("unlink", (fp) => this.dispatch("unlink", fp))
+      .on("unlinkDir", (fp) => this.dispatch("unlinkDir", fp))
       .on("error", (err) => this.logger.error("Watcher error: " + String(err)));
   }
 
   /** 添加监控模式，绑定该模式的事件处理器 */
   addWatch(pattern: string, h: FileEventHandlers): void {
     if (!this.watcher) return;
-    this.watcher.add(pattern);
+    // chokidar.add() 传 glob 模式在 Windows 上不工作，
+    // 提取基准目录（去掉 /*/SKILL.md 部分）后直接添加目录
+    const baseDir = path.resolve(pattern.replace(/\*.*$/, ""));
+    this.watcher.add(baseDir);
     this.handlers.set(pattern, h);
     this.logger.log(`Watcher added: ${pattern}`);
   }
@@ -72,9 +77,12 @@ export class SkillWatcherService implements OnModuleDestroy {
     // 按 pattern 前缀匹配最长的（防止嵌套目录误匹配）
     let matched: { key: string; h: FileEventHandlers } | null = null;
     let maxLen = -1;
+    // resolve 统一路径分隔符 且 将相对路径转为绝对路径，
+    // 避免 chokidar 发出相对路径而 handler key 是绝对路径时 startsWith 不匹配
+    const normalizedFilePath = path.resolve(filePath);
     for (const [key, h] of this.handlers) {
-      const base = key.replace(/\*.*$/, ""); // "skills/*/SKILL.md" → "skills/"
-      if (filePath.startsWith(base) && base.length > maxLen) {
+      const base = path.resolve(key.replace(/\*.*$/, ""));
+      if (normalizedFilePath.startsWith(base) && base.length > maxLen) {
         maxLen = base.length;
         matched = { key, h };
       }
@@ -83,6 +91,11 @@ export class SkillWatcherService implements OnModuleDestroy {
 
     if (event === "unlink") {
       const dirName = filePath.split(/[/\\]/g).slice(-2, -1)[0];
+      if (!dirName || dirName.startsWith(".")) return;
+      matched.h.onRemove(dirName.toLowerCase());
+    } else if (event === "unlinkDir") {
+      // unlinkDir 的 filePath 是目录本身，取最后一段
+      const dirName = filePath.split(/[/\\]/g).slice(-1)[0];
       if (!dirName || dirName.startsWith(".")) return;
       matched.h.onRemove(dirName.toLowerCase());
     } else {

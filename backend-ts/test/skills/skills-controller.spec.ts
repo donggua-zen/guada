@@ -163,60 +163,16 @@ describe('SkillsController', () => {
   });
 
   describe('POST /skills/scan', () => {
-    it('应该触发扫描并返回结果', async () => {
+    it('应该触发扫描并返回成功', async () => {
       const result = await controller.triggerScan();
       expect(mockOrchestrator.triggerScan).toHaveBeenCalledTimes(1);
-      expect(result).toHaveProperty('added');
-      expect(result).toHaveProperty('updated');
-      expect(result).toHaveProperty('removed');
-      expect(result).toHaveProperty('errors');
-      expect(result).toHaveProperty('scanDurationMs');
+      expect(result).toEqual({ success: true, message: 'Scan completed' });
     });
 
-    it('扫描后应该能发现新安装的技能目录', async () => {
-      // 手动创建一个技能目录
-      const skillDir = path.join(testSkillsDir, 'test-find');
-      await fs.mkdir(skillDir, { recursive: true });
-      await fs.writeFile(
-        path.join(skillDir, 'SKILL.md'),
-        '---\nname: test-find\ndescription: Test find\n---\n\nContent',
-        'utf-8',
-      );
-
-      // 模拟扫描发现
-      const fakeDef: SkillDefinition = {
-        id: 'test-find',
-        basePath: skillDir,
-        manifest: { name: 'test-find', description: 'Test find' },
-        contentHash: 'abc',
-        source: 'global',
-        enabled: true,
-      };
-      mockOrchestrator.triggerScan.mockResolvedValueOnce({
-        added: [fakeDef],
-        updated: [],
-        removed: [],
-        errors: [],
-        scanDurationMs: 10,
-      });
-
+    it('扫描失败时应返回错误信息', async () => {
+      mockOrchestrator.triggerScan.mockRejectedValueOnce(new Error('Scan failed'));
       const result = await controller.triggerScan();
-      expect(result.added).toHaveLength(1);
-      expect(result.added[0].id).toBe('test-find');
-    });
-
-    it('扫描后应报告错误信息', async () => {
-      mockOrchestrator.triggerScan.mockResolvedValueOnce({
-        added: [],
-        updated: [],
-        removed: [],
-        errors: [{ path: '/tmp/bad-skill', error: 'Invalid SKILL.md format' }],
-        scanDurationMs: 5,
-      });
-
-      const result = await controller.triggerScan();
-      expect(result.errors).toHaveLength(1);
-      expect(result.errors[0].error).toContain('Invalid');
+      expect(result).toEqual({ success: false, message: 'Scan failed' });
     });
   });
 
@@ -224,6 +180,7 @@ describe('SkillsController', () => {
     it('应重新加载已注册的技能', async () => {
       const def: SkillDefinition = {
         id: 'my-skill',
+        baseDir: testSkillsDir,
         basePath: path.join(testSkillsDir, 'my-skill'),
         manifest: { name: 'my-skill', description: 'My test skill' },
         contentHash: 'hash1',
@@ -245,6 +202,7 @@ describe('SkillsController', () => {
     it('重载后内容哈希应更新', async () => {
       const def: SkillDefinition = {
         id: 'updatable',
+        baseDir: testSkillsDir,
         basePath: path.join(testSkillsDir, 'updatable'),
         manifest: { name: 'updatable', description: 'Old' },
         contentHash: 'old-hash',

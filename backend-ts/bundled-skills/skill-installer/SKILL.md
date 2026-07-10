@@ -1,6 +1,6 @@
 ---
 name: skill-installer
-description: Installing, updating, and uninstalling AI skills from various sources including Git repositories, ZIP archives, and manual file placement
+description: Installing, updating, and uninstalling AI skills from Git repositories, ZIP archives, and manual placement. Use this skill whenever a user asks to install, download, add, import, set up, or save a skill.
 version: 1.2.0
 author: system
 tags: [system, meta, skill-management, installing, setup]
@@ -10,66 +10,60 @@ tags: [system, meta, skill-management, installing, setup]
 
 ## Overview
 
-This skill guides you through installing, updating, and uninstalling skills from various sources. Skills follow the [AgentSkills](https://agentskills.io/specification) open specification and consist of a directory with `SKILL.md` plus optional `scripts/`, `references/`, and `assets/` subdirectories.
+This skill guides you through installing, updating, and uninstalling skills. The core workflow is:
+
+```
+Download/Prepare → Validate (must pass) → Install to ~/.guada/skills/<name>/
+```
+
+**Target directory**: `~/.guada/skills/` (Windows: `C:\Users\<username>\.guada\skills\`)
 
 ---
 
-## 1. Skill Storage Architecture
+## 1. Installation Workflow
 
-### 1.1 Complete Directory Layout
+All installation methods follow the same three-step workflow.
+
+### 1.1 Download — to Working Directory
+
+Place the skill source in the **current working directory**, not the target directory:
 
 ```
-{SKILLS_DIR}/                            # Root skills directory (configurable)
-├── <user-skill-1>/                      # User-installed skills
-│   ├── SKILL.md
-│   ├── scripts/
-│   ├── references/
-│   └── assets/
-├── <user-skill-2>/
-│   └── SKILL.md                         # Minimal: single file is sufficient
-├── .system/                             # System built-in skills
-│   ├── <system-skill-1>/
-│   │   ├── SKILL.md
-│   │   ├── scripts/
-│   │   └── references/
-│   └── <system-skill-2>/
-│       └── SKILL.md
-├── .versions/                           # Version tracking (auto-managed)
-│   └── versions.json
-└── .cache/                              # Cache data (auto-managed)
+# Git clone
+git clone https://github.com/.../repo.git  ./<skill-name>
+
+# ZIP extraction
+unzip skill.zip -d ./<skill-name>
+
+# Manual creation
+mkdir ./<skill-name>  (then edit SKILL.md)
 ```
 
-### 1.2 Directory Resolution
+### 1.2 Validate — Must Pass
 
-`SKILLS_DIR` is configured via the `SKILLS_DIR` environment variable. Default is `./skills/` relative to the application working directory.
+Run the bundled validation script before installing:
 
-### 1.3 Source Types
+```bash
+node ~/.guada/skills/skill-installer/scripts/validate-skill.mjs ./<skill-name>
+```
 
-| Source | Location | Management |
-|--------|----------|------------|
-| `system` | `{SKILLS_DIR}/.system/` | Synced from `bundled-skills/` on startup, overwritten on upgrade, cannot be uninstalled, can be disabled |
-| `global` | `{SKILLS_DIR}/` | User-installed, can be installed/updated/uninstalled |
+**All 14 checks must pass** before proceeding. If validation fails, fix the reported issues and re-run until it passes.
+
+### 1.3 Install — Move to System Directory
+
+Once validated, move the directory to the target location:
+
+```bash
+mv ./<skill-name> ~/.guada/skills/<skill-name>
+```
+
+The file watcher automatically detects and registers the skill within seconds.
 
 ---
 
-## 2. Skill Name and Directory Rules
+## 2. Installation Methods
 
-The `name` field in SKILL.md must follow these rules (enforced by the system validator):
-
-```
-✓ 1-64 characters
-✓ Only lowercase letters, digits, and hyphens: ^[a-z0-9-]+$
-✓ Cannot start or end with a hyphen
-✓ Must match the parent directory name (case-insensitive)
-```
-
-**Directory name must match the SKILL.md `name` field.** For example, a skill named `code-review` must live at `{SKILLS_DIR}/code-review/SKILL.md`. If they don't match, the system rejects the skill with: `"Skill name mismatch: SKILL.md declares 'X' but directory is 'Y'."`
-
----
-
-## 3. Installation Methods
-
-### 3.1 Method A: Install from Git Repository
+### 2.1 From Git Repository
 
 **Best for:** Published skills, team-shared skills, version history.
 
@@ -78,60 +72,64 @@ The `name` field in SKILL.md must follow these rules (enforced by the system val
 - **Branch** (optional): specific branch (defaults to repo default)
 - **Subdirectory** (optional): path in monorepos where the skill lives
 
-**Limits:**
-- Clone depth: 1 (latest commit)
-- Timeout: 60 seconds
-- Smart search: looks for SKILL.md at root, then 1-2 levels deep
+**Steps:**
 
-**Automatic workflow:**
 1. Validate Git URL format (must start with `http://`, `https://`, or `git@`)
-2. Clone to temp directory
-3. Locate SKILL.md (smart depth search)
+2. Clone to current working directory: `git clone --depth 1 <url> ./temp-<name>`
+3. Locate SKILL.md (search root, then 1-2 levels deep)
 4. Extract `name` from frontmatter
-5. Check naming conflict with existing skills
-6. Copy to `{SKILLS_DIR}/<name>/`
-7. Clean up temp directory
-8. The file watcher automatically detects the new skill — it will be registered and available within seconds
+5. **Run validation script** (must pass)
+6. Check for naming conflicts in target directory
+7. Move to `~/.guada/skills/<name>/`
+8. Clean up temp files
+9. File watcher auto-detects and registers
 
-### 3.2 Method B: Install from ZIP Archive
+### 2.2 From ZIP Archive
 
 **Best for:** Local skills, downloaded bundles, manual distribution.
 
-1. Accept ZIP upload
-2. Extract to temp directory
-3. Locate SKILL.md (smart search: root → 1-2 levels deep)
-4. Validate frontmatter
-5. Check naming conflicts
-6. Copy to `{SKILLS_DIR}/<name>/`
-7. Clean up
-8. The file watcher automatically detects and registers the new skill
+**Steps:**
 
-### 3.3 Method C: Manual Placement
+1. Extract ZIP to current working directory: `unzip <file>.zip -d ./temp-<name>`
+2. Locate SKILL.md (search root, then 1-2 levels deep)
+3. Extract `name` from frontmatter
+4. **Run validation script** (must pass)
+5. Check for naming conflicts in target directory
+6. Move to `~/.guada/skills/<name>/`
+7. Clean up temp files
+8. File watcher auto-detects and registers
+
+### 2.3 Manual Placement
 
 **Best for:** Development, testing, quick prototyping.
 
-1. Create directory: `mkdir -p {SKILLS_DIR}/<name>`
-2. Create `{SKILLS_DIR}/<name>/SKILL.md` with valid frontmatter
+**Steps:**
+
+1. Create skill directory in working directory: `mkdir ./<name>`
+2. Write `./<name>/SKILL.md` with valid frontmatter
 3. Optionally add `scripts/`, `references/`, `assets/`
-4. The file watcher automatically detects and registers the skill
+4. **Run validation script** (must pass):
+
+   ```bash
+   node ~/.guada/skills/skill-installer/scripts/validate-skill.mjs ./<name>
+   ```
+
+5. Move to target directory: `mv ./<name> ~/.guada/skills/<name>/`
+6. File watcher auto-detects and registers
 
 ---
 
-## 4. Verification
+## 3. Verification
 
-### 4.1 Check Registration
+### 3.1 Confirm Registration
 
-```
-read({ path: "{SKILLS_DIR}/<skill-name>/SKILL.md" })
+```markdown
+read({ path: "~/.guada/skills/<skill-name>/SKILL.md" })
 ```
 
 Returns the full SKILL.md content if the skill exists and is valid.
 
-### 4.2 Registration Confirmation
-
-When a skill is placed in the correct directory, the file watcher automatically detects, validates, and registers it. You can verify by checking that the skill's content is readable via the `read` tool.
-
-### 4.3 Validation Error Reference
+### 3.2 Validation Error Reference
 
 | Error Message | Root Cause | Fix |
 |---------------|------------|-----|
@@ -146,79 +144,39 @@ When a skill is placed in the correct directory, the file watcher automatically 
 
 ---
 
-## 5. Updates
+## 4. Updates
 
-### 5.1 Hot-Reload (same name, content change only)
+### 4.1 Hot-Reload (content change only)
 
-Simply edit the SKILL.md file. The file watcher detects the change and automatically reloads the skill — no manual action needed.
+Directly edit `~/.guada/skills/<name>/SKILL.md`. The file watcher detects the change and reloads the skill automatically.
 
-### 5.2 Full Reinstall (renamed or moved)
+### 4.2 Full Reinstall (renamed or moved)
 
-Re-install using the same method. The file watcher detects the old skill removal and the new skill registration automatically.
+Re-install using the same method. The file watcher handles old skill removal and new skill registration automatically.
 
-### 5.3 Version Tracking
+### 4.3 Version Tracking
 
-If the skill has a `version` field, the system tracks history in `{SKILLS_DIR}/.versions/versions.json`:
-- Skill ID
-- Version string
-- Content hash
-- Timestamp
+If the skill has a `version` field, the system tracks history in `~/.guada/skills/.versions/versions.json`.
 
 ---
 
-## 6. Uninstall vs Disable
+## 5. Uninstall vs Disable
 
-| Action | Disk | Prompt | Reversible? |
-|--------|------|--------|-------------|
-| **Disable** | ✅ Kept | ❌ Excluded | ✅ Toggle back on |
+| Operation | Disk | Prompt | Reversible? |
+|-----------|------|--------|-------------|
+| **Disable** | ✅ Kept | ❌ Excluded | ✅ Can re-enable |
 | **Uninstall** | ❌ Deleted | ❌ N/A | ❌ Must reinstall |
 
-**System skills** (`.system/`) cannot be uninstalled — the uninstall button is hidden in the UI.
+**System skills** (under `.system/`) cannot be uninstalled but can be disabled.
 
 ---
 
-## 7. Troubleshooting
+## 6. Troubleshooting
 
 | Symptom | Likely Cause | Action |
 |---------|-------------|--------|
 | "No SKILL.md found" during install | Repo/ZIP doesn't contain valid skill | Check source has SKILL.md at root or ≤2 levels deep |
 | Skill not in system prompt | Skill is disabled | Enable in settings UI |
-| Skill content not available via `read` | Not registered or wrong path | Verify directory name matches `name` field in SKILL.md |
-| Skill validation error | Invalid frontmatter | Check error message and fix SKILL.md |
-| Directory mismatch error | Directory name ≠ `name` field | Rename directory to match `name:`, or change `name:` to match directory |
-
----
-
-## 8. System Skills Management
-
-### 8.1 Built-in Skills
-
-- Source directory: `backend-ts/bundled-skills/` in the application package
-- Target: `{SKILLS_DIR}/.system/`
-- Synced on **every startup** via `SkillBundledService.syncBundledSkills()`
-- **Overwritten** on upgrade (user modifications not preserved)
-- Cannot be uninstalled
-- Can be enabled/disabled
-
-### 8.2 Adding New System Skills
-
-1. Create skill directory under `backend-ts/bundled-skills/<name>/`
-2. Write `SKILL.md` with valid frontmatter
-3. Optionally add `scripts/`, `references/`, `assets/`
-4. Restart the application (or trigger resync)
-
----
-
-## 9. Path Reference
-
-| Path | Purpose |
-|------|---------|
-| `{SKILLS_DIR}/` | Root for all user skills |
-| `{SKILLS_DIR}/.system/` | System built-in skills |
-| `{SKILLS_DIR}/.versions/` | Version tracking |
-| `{SKILLS_DIR}/<name>/` | Individual skill directory |
-| `{SKILLS_DIR}/<name>/SKILL.md` | Skill definition file |
-| `{SKILLS_DIR}/<name>/scripts/` | Executable scripts |
-| `{SKILLS_DIR}/<name>/references/` | Reference documentation |
-| `{SKILLS_DIR}/<name>/assets/` | Templates and resources |
-| `bundled-skills/` (app dir) | Source of system skills |
+| `read` returns nothing | Not registered or wrong path | Verify directory name matches `name` field, and lives under `~/.guada/skills/` |
+| Validation fails | Invalid frontmatter | Check error message and fix SKILL.md |
+| Directory mismatch | Directory name ≠ `name` field | Rename directory or change `name:` field |

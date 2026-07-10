@@ -502,7 +502,6 @@ export class ProcessManagerService {
     // 3. \r 进度条重建：每行只保留最后一个 \r 之后的内容
     const lines = cleaned.split("\n");
     const result = lines.map((line) => {
-      line = line.replace(/\r$/, ""); // 清掉 \r\n 转换残余
       const lastR = line.lastIndexOf("\r");
       return lastR >= 0 ? line.substring(lastR + 1) : line;
     });

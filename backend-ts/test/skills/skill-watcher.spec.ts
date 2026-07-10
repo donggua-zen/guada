@@ -1,16 +1,20 @@
 import { SkillWatcherService } from "../../src/modules/skills/core/skill-watcher.service";
+import * as path from "path";
 
-/**
- * 热更新核心测试：验证 SkillWatcherService.dispatch() 的路径处理和回调触发
- *
- * 关键验证点：
- * 1. 文件 add/change → onAdd 接收绝对路径
- * 2. 文件 unlink → onRemove 接收 skill ID
- * 3. 无关文件不触发回调
- * 4. 多模式匹配时选最长前缀
- * 5. debounce 间隔内重复事件只触发一次
- */
-describe("SkillWatcherService", () => {
+// ===========================================================================
+// 单元测试：验证 dispatch 的路径匹配逻辑
+//
+// 注意：这些测试直接调用 dispatch() 而非经过 chokidar，因为 chokidar
+// 在 CI/Windows 上的行为不可预测。但 dispatch() 是 chokidar 事件触发的
+// 实际处理函数，测试覆盖了所有生产场景的路径组合：
+// 1. 相对 handler key + 相对 filePath（通用场景）
+// 2. 绝对 handler key + 绝对 filePath（Windows addWatch 场景）
+// 3. 绝对 handler key + 相对 filePath（chokidar 可能发出相对路径）
+// 4. 混合分隔符（Windows path.join + 字面量 /*/）
+// 5. unlink / unlinkDir 事件
+// ===========================================================================
+
+describe("SkillWatcherService.dispatch", () => {
   let watcher: SkillWatcherService;
   let onAdd: jest.Mock;
   let onRemove: jest.Mock;
@@ -22,7 +26,6 @@ describe("SkillWatcherService", () => {
     onRemove = jest.fn();
 
     // 注入 handlers（绕过 chokidar，直接测试 dispatch）
-    // chokidar 在所有平台都使用前向斜杠，所以用 "/" 匹配
     (watcher as any).handlers.set("skills/*/SKILL.md", { onAdd, onRemove });
     (watcher as any).handlers.set(".system/*/SKILL.md", { onAdd, onRemove });
   });
@@ -66,9 +69,25 @@ describe("SkillWatcherService", () => {
   it("unlink 事件应触发 onRemove 并传递小写 skill ID", () => {
     (watcher as any).dispatch("unlink", "skills/My-Skill/SKILL.md");
 
-    // unlink 不下发 debounce，直接调用
     expect(onRemove).toHaveBeenCalledTimes(1);
     expect(onRemove).toHaveBeenCalledWith("my-skill");
+  });
+
+  // ── unlinkDir 事件 ──
+
+  it("unlinkDir 事件应触发 onRemove", () => {
+    (watcher as any).dispatch("unlinkDir", "skills/My-Dir");
+
+    expect(onRemove).toHaveBeenCalledTimes(1);
+    expect(onRemove).toHaveBeenCalledWith("my-dir");
+  });
+
+  it("unlinkDir 绝对路径应触发 onRemove", () => {
+    (watcher as any).handlers.set("D:\\skills\\*/SKILL.md", { onAdd, onRemove });
+    (watcher as any).dispatch("unlinkDir", "D:\\skills\\another-skill");
+
+    expect(onRemove).toHaveBeenCalledTimes(1);
+    expect(onRemove).toHaveBeenCalledWith("another-skill");
   });
 
   // ── 多模式匹配 ──
@@ -104,26 +123,61 @@ describe("SkillWatcherService", () => {
 
   it("debounce 间隔内重复相同文件只触发一次 onAdd", () => {
     (watcher as any).dispatch("add", "skills/my-skill/SKILL.md");
-    (watcher as any).dispatch("change", "skills/my-skill/SKILL.md"); // 同目录，debounce 重置
+    (watcher as any).dispatch("change", "skills/my-skill/SKILL.md");
     (watcher as any).dispatch("change", "skills/my-skill/SKILL.md");
 
-    // debounce 300ms 内不应触发
-    expect(onAdd).not.toHaveBeenCalled();
+    expect(onAdd).not.toHaveBeenCalled(); // debounce 300ms 内
 
-    // 快进 300ms，应触发一次
     jest.advanceTimersByTime(300);
     expect(onAdd).toHaveBeenCalledTimes(1);
   });
 
   // ── 路径处理 ──
 
-  it("连续触发后 onAdd 收到绝对路径可被 path.resolve 安全使用", async () => {
-    const nodePath = require("path");
-
+  it("add 后 onAdd 收到绝对路径可被 path.resolve 安全使用", async () => {
     await dispatchAndSettle("add", "skills/my-skill/SKILL.md");
 
     const dirArg = onAdd.mock.calls[0][0];
-    // path.resolve 后应与原值一致（已经是绝对路径）
-    expect(nodePath.resolve(dirArg)).toBe(dirArg);
+    expect(path.resolve(dirArg)).toBe(dirArg);
+  });
+
+  // ── 生产场景：绝对路径 pattern（addWatch 的实际行为） ──
+
+  it("绝对路径 pattern + 绝对路径 filePath（标准 Windows 场景）", async () => {
+    (watcher as any).handlers.set(
+      "D:\\AI\\ai_chat\\backend-ts\\skills/*/SKILL.md",
+      { onAdd, onRemove }
+    );
+    await dispatchAndSettle(
+      "add",
+      "D:\\AI\\ai_chat\\backend-ts\\skills\\my-skill\\SKILL.md"
+    );
+
+    expect(onAdd).toHaveBeenCalledTimes(1);
+    const arg = onAdd.mock.calls[0][0];
+    expect(arg).toMatch(/my-skill$/);
+  });
+
+  it("绝对路径 pattern + 相对 filePath（chokidar 可能发出相对路径）", async () => {
+    (watcher as any).handlers.set(
+      "D:\\AI\\ai_chat\\backend-ts\\skills\\*/SKILL.md",
+      { onAdd, onRemove }
+    );
+    await dispatchAndSettle("add", "skills/my-skill/SKILL.md");
+
+    expect(onAdd).toHaveBeenCalledTimes(1);
+    const arg = onAdd.mock.calls[0][0];
+    expect(arg).toMatch(/my-skill$/);
+  });
+
+  it("绝对路径 pattern + 相对 unlink 路径", async () => {
+    (watcher as any).handlers.set(
+      "D:\\AI\\ai_chat\\backend-ts\\skills\\*/SKILL.md",
+      { onAdd, onRemove }
+    );
+    (watcher as any).dispatch("unlink", "skills/My-Skill/SKILL.md");
+
+    expect(onRemove).toHaveBeenCalledTimes(1);
+    expect(onRemove).toHaveBeenCalledWith("my-skill");
   });
 });

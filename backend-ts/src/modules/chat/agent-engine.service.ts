@@ -13,6 +13,7 @@ import { ToolCallDisplayUtil } from "./utils/tool-call-display.util";
 import { ISessionContext, ModelConfig } from "./session-context";
 import { EventChunk } from "./types/event-chunk.types";
 import { SummaryMode } from "./compression-engine";
+import { RateLimitError } from "../llm-core/utils/retry.util";
 
 /**
  * 审批上下文
@@ -359,7 +360,7 @@ export class AgentEngine {
           if (!abortSignal || !abortSignal.aborted) {
             yield {
               type: "finish",
-              finishReason: "error",
+              finishReason: assistantResponse.metadata?.finishReason || "error",
               error: streamError.message,
               usage: lastAcc?.usage,
               contentId,
@@ -651,9 +652,7 @@ export class AgentEngine {
       currentChunk.metadata.finishReason = "timeout";
       currentChunk.metadata.error = streamError.message;
     } else if (
-      streamError.message.includes("429") ||
-      streamError.message.includes("Too Many Requests") ||
-      streamError.message.includes("rate_limit")
+      streamError instanceof RateLimitError
     ) {
       // 429 限流错误（重试已耗尽），标记为 rate_limited 以便前端展示继续按钮
       currentChunk.metadata.finishReason = "rate_limited";

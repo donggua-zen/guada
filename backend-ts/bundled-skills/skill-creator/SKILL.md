@@ -57,7 +57,7 @@ A single `SKILL.md` file is all that's required. The optional directories are fo
 | **System (built-in)** | `{SKILLS_DIR}/.system/<name>/` | Synced from `bundled-skills/` on startup, overwritten on upgrade, **cannot be uninstalled** |
 | **User (installed)** | `{SKILLS_DIR}/<name>/` | Installed by user, can be updated/uninstalled |
 
-`SKILLS_DIR` defaults to `skills/` in the working directory; configurable via `SKILLS_DIR` environment variable.
+`SKILLS_DIR` defaults to `~/.guada/skills/` (where `~` is the user's home directory, e.g. `C:\Users\<username>\.guada\skills` on Windows); configurable via `SKILLS_DIR` environment variable.
 
 ---
 
@@ -115,12 +115,68 @@ The system enforces these rules:
 ❌ code--review       (consecutive hyphens)
 ```
 
+#### Naming Strategy
+
+A good name is **short, scannable, and self-explanatory**:
+
+- **Use the core function** as the name: `pdf`, `docx`, `xlsx`, `mcp-builder`
+- **Avoid vague names**: `tool`, `helper`, `utils`, `my-script` — these don't tell Claude when to trigger
+- **Compound names OK**: `slack-gif-creator`, `web-artifacts-builder`, `theme-factory`
+- **Version suffix only when needed**: `data-analyzing-v2` (not `data-analyzing-final-final`)
+- **Follow existing conventions**: look at other skills in the system for naming patterns
+
+Good names read like CLI commands — users and AI alike can guess what they do by reading the name alone.
+
 ### 2.4 Description Best Practices
 
+The description is the **primary trigger mechanism** — it's what Claude reads to decide whether to use the skill. Get this right above all else.
+
+#### Core Rules
+
 - Use **third-person** ("Generating review reports…" not "Generate review reports…")
-- Describe **what** the skill does and **when** to use it
-- Include **specific keywords** for matching
+- Describe **what** the skill does **and when** to use it
 - Max **1024 characters**
+
+#### The "Pushy" Style
+
+Claude has a tendency to **undertrigger** skills — not use them when they'd be useful. To combat this, make descriptions a little **pushy**. Include not just what the skill does, but **specific contexts** where it should trigger — even if the user doesn't explicitly ask for it.
+
+**Pattern:**
+```markdown
+<what it does>. Use this skill whenever <context A>, <context B>, or <context C>,
+even if the user doesn't explicitly mention <keyword>.
+```
+
+**Good:**
+```
+Creating slide decks, pitch decks, and presentations. Use this skill any time
+a .pptx file is involved in any way — as input, output, or both. Trigger
+whenever the user mentions "deck," "slides," "presentation," or references a
+.pptx filename, regardless of what they plan to do with the content afterward.
+```
+
+**Poor (too passive):**
+```
+Creating PowerPoint presentations
+```
+
+#### Trigger Coverage
+
+Ask yourself: **what are all the ways a user might ask for this?** List the synonyms, casual phrasings, and edge cases:
+
+- Formal: "Generate a PDF report"
+- Casual: "turn this into a PDF"
+- Implicit: "I need to send this to the client" (implies PDF)
+- Adjacent: "make this fillable" (implies PDF form)
+
+Cover these in the description so Claude catches them all.
+
+#### What NOT to Put in Description
+
+- ❌ Implementation details ("uses Python 3.10 with pandas")
+- ❌ Step-by-step instructions (that goes in the body)
+- ❌ Developer notes ("todo: add error handling")
+- ❌ Version info or changelog
 
 **Good:**
 ```
@@ -193,10 +249,12 @@ Determine:
 - **Scope**: How much instruction content is needed?
 - **Resources**: Any scripts, templates, or references?
 
-### Step 2: Create the Directory
+### Step 2: Create the Development Directory
+
+Create the skill directory in your **current working directory** for development:
 
 ```
-mkdir -p {SKILLS_DIR}/<skill-name>
+mkdir -p <skill-name>
 ```
 
 Directory name **must** match the planned `name` field.
@@ -222,16 +280,47 @@ Detailed instructions the AI should follow when this skill is activated.
 mkdir scripts/ references/ assets/
 ```
 
-### Step 5: Automatic Registration
+### Step 5: Validate the Skill ⚠️ Required
 
-The file watcher automatically detects the new SKILL.md and registers the skill within seconds — no manual action needed.
+**Before installing**, run the bundled validation script to check for errors:
 
-### Step 6: Verify
-
-Use the `read` tool to confirm the skill content:
-```markdown
-read({ path: "{SKILLS_DIR}/my-skill-name/SKILL.md" })
+```bash
+node ~/.guada/skills/skill-creator/scripts/validate-skill.mjs <skill-name>
 ```
+
+Or if you're in the skill-creator directory:
+```bash
+node scripts/validate-skill.mjs <skill-name>
+```
+
+This checks 14 items: frontmatter format, name rules (lowercase, length, no leading/trailing hyphens), directory-name consistency, description constraints, optional fields, body length, and directory structure. **All must pass** before proceeding.
+
+If validation fails, fix the reported issues and re-run until it passes.
+
+### Step 6: Install the Skill
+
+After validation passes, move the skill directory to the system's skills directory:
+
+```
+mv <skill-name> ~/.guada/skills/<skill-name>
+```
+
+> **Windows users**: `~` maps to your user directory, i.e. `C:\Users\<username>\.guada\skills\`.  
+> You can also move the `<skill-name>` folder via File Explorer to `C:\Users\<username>\.guada\skills\`.
+
+### Step 7: Automatic Registration
+
+Once placed in `~/.guada/skills/`, the file watcher automatically detects the new SKILL.md and registers the skill within seconds — no manual action needed.
+
+### Step 8: Verify Registration
+
+Use the `read` tool to confirm the skill is registered:
+
+```markdown
+read({ path: "~/.guada/skills/my-skill-name/SKILL.md" })
+```
+
+This checks **14 items** including frontmatter format, name rules, directory-name consistency, description constraints, optional fields, and directory structure. See `scripts/validate-skill.mjs` for details.
 
 ---
 
@@ -249,15 +338,77 @@ read({ path: "{SKILLS_DIR}/my-skill-name/SKILL.md" })
 | **Troubleshooting** | Common issues | If applicable |
 | **References** | Links to related files/dirs | If applicable |
 
-### 5.2 Good Practices
+### 5.2 Writing Philosophy
+
+#### Explain the WHY, Not Just the WHAT
+
+Today's LLMs are **smart** — they have good theory of mind and can go beyond rote instructions when given proper understanding. Instead of heavy-handed `ALWAYS` / `MUST` / `NEVER`, explain the reasoning:
+
+```markdown
+## Good: Explain the WHY
+Use the imperative verb form (e.g. "Generate a report") rather than descriptive
+("This skill generates a report"). The imperative form makes the instruction
+actionable — Claude will execute it directly rather than reading about it.
+
+## Poor: Rigid MUST/ALWAYS
+ALWAYS use imperative form. NEVER use descriptive form.
+```
+
+When you find yourself typing ALL CAPS or extremely rigid structures, that's a yellow flag — try to reframe and explain the *why*.
+
+#### Keep It Lean
+
+Every line in a skill is executed on every invocation. Remove things that aren't pulling their weight:
+
+- **Read the transcripts**, not just the outputs — if Claude wastes time on unproductive steps, prune those parts of the skill
+- **Avoid redundancy** — don't restate the same instruction in multiple ways
+- **Short paragraphs** — one idea per paragraph, scannable
+- **Bundle repeated work** — if test runs show Claude writing the same helper script across different prompts, that script belongs in `scripts/`
+
+#### Generalize, Don't Overfit
+
+Skills are used **millions of times** across unpredictable prompts. Don't write instructions that only work for the examples you tested:
+
+- Use **theory of mind** — understand the user's intent, not just their literal words
+- **Explain patterns** rather than prescribing exact steps
+- **Branch out** — if a stubborn issue keeps appearing, try a different metaphor or approach instead of piling on more constraints
+- **Test with fresh eyes** — write a draft, step away, then review it as if you're seeing it for the first time
+
+#### Writing Patterns
+
+**Use imperative form** in instructions. Tell Claude what to do, not what the skill is about.
+
+**Defining output formats** — be explicit about structure:
+```markdown
+## Report structure
+ALWAYS use this exact template:
+# [Title]
+## Executive summary
+## Key findings
+## Recommendations
+```
+
+**Examples with Input/Output** — useful for format-oriented skills:
+```markdown
+## Commit message format
+**Example 1:**
+Input: Added user authentication with JWT tokens
+Output: feat(auth): implement JWT-based authentication
+```
+
+#### Principle of Lack of Surprise
+
+Skills must **not** contain malware, exploit code, or content that could compromise system security. A skill's intent should not surprise the user if described honestly. Don't go along with requests to create misleading skills or skills designed for unauthorized access.
+
+#### Organization Tips
 
 - Use **headings** (`##`, `###`) to structure content
 - Use **code blocks** for commands, configs, and code
 - Use **tables** for reference data
 - Use **numbered lists** for sequential steps
 - Reference bundled files explicitly: `see references/style-guide.md`
-- Keep paragraphs short and scannable
 - Define clear boundaries — what the skill does AND doesn't do
+- Keep paragraphs short and scannable
 
 ### 5.3 Complete Minimal Example
 
@@ -297,9 +448,9 @@ When asked to say hello:
 | Phase | Action | Method |
 |-------|--------|--------|
 | Create | Author SKILL.md + optional resources | Manual or via this skill |
-| Place | Put in correct directory | `{SKILLS_DIR}/<name>/` |
+| Place | Put in correct directory | `~/.guada/skills/<name>/` |
 | Register | Auto-detected by file watcher | Within seconds, no manual action |
-| Verify | Confirm it's loaded | `read({ path: "{SKILLS_DIR}/<name>/SKILL.md" })` |
+| Verify | Confirm it's loaded | `read({ path: "~/.guada/skills/<name>/SKILL.md" })` |
 | Use | Mention in conversation | AI matches and activates |
 | Update (same name) | Edit SKILL.md, auto-detected | File watcher reloads automatically |
 | Update (renamed) | Move directory | File watcher detects removal + new registration |
@@ -314,9 +465,8 @@ Place **executable code** in `scripts/`. The AI can read and run these files:
 
 ```
 scripts/
-├── analyze.py          # Python script
-├── deploy.sh           # Shell script
-├── transform.js        # JavaScript/Node.js script
+├── transform.py         # Data transformation script
+├── generate_report.sh   # Report generation script
 └── ...
 ```
 
@@ -324,6 +474,8 @@ The AI can:
 - Read script contents for understanding
 - Execute scripts using available tools
 - Reference scripts from SKILL.md body
+
+**Best practice**: When test runs reveal Claude repeatedly writing the same helper logic across different prompts, bundle it into a script under `scripts/` instead. This saves every future invocation from reinventing the wheel.
 
 ---
 
@@ -362,6 +514,8 @@ assets/
 
 ## 10. Validation Reference
 
+### 10.1 System Auto-Validation
+
 The system validates on every automatic scan or reload, triggered by the file watcher on any SKILL.md change:
 
 ```
@@ -375,6 +529,35 @@ The system validates on every automatic scan or reload, triggered by the file wa
 ✓ description: present (≤1024 chars)
 ✓ SHA256 content_hash computed for change detection
 ```
+
+### 10.2 Offline Validation Script
+
+This skill bundles `scripts/validate-skill.mjs` — a more comprehensive Node.js validation tool that you run **before installation**. It checks everything the system checks, plus additional guardrails:
+
+**14 checks performed:**
+| Category | Check |
+|------|--------|
+| File structure | SKILL.md exists, frontmatter delimiters correct |
+| Format parsing | YAML frontmatter parses correctly |
+| name field | Present, ≤64 chars, lowercase/digits/hyphens only, no leading/trailing hyphens |
+| Name match | Directory name matches frontmatter name |
+| description | Present, ≤1024 chars, no angle brackets |
+| Optional fields | version (semver), author, tags, license, compatibility |
+| Body content | Not empty, >500 lines warns to split |
+| Directory structure | Non-standard subdirectory warnings |
+
+**Usage:**
+```bash
+# Via absolute path (recommended)
+node ~/.guada/skills/skill-creator/scripts/validate-skill.mjs <skill-directory>
+
+# Or via relative path from the skill-creator directory
+node scripts/validate-skill.mjs <skill-directory>
+```
+
+**Exit codes:**
+- Exit code `0` — all checks passed
+- Exit code `1` — errors found and must be fixed
 
 ---
 

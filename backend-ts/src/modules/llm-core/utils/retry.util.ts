@@ -1,8 +1,27 @@
 import { Logger } from "@nestjs/common";
 
-const DEFAULT_MAX_RETRIES = 5;
-const BASE_DELAY_MS = 1000;
-const MAX_DELAY_MS = 16000;
+const DEFAULT_MAX_RETRIES = 6;
+const BASE_DELAY_MS = 2000;
+const MAX_DELAY_MS = 18000;
+
+/**
+ * 限流异常 — 当 429 重试耗尽时抛出此异常，上层可按 instanceof 精确判断。
+ *
+ * 与字符串匹配不同，使用具体的异常类型能避免误判（例如错误消息本身包含 "429" 字样）。
+ */
+export class RateLimitError extends Error {
+  /** 原始 SDK 错误中的 HTTP status（通常是 429） */
+  readonly statusCode: number;
+  /** 原始错误对象（如 OpenAI SDK 的 APIError），供上层提取 Retry-After 等信息 */
+  readonly cause: any;
+
+  constructor(message: string, cause: any) {
+    super(message);
+    this.name = "RateLimitError";
+    this.statusCode = 429;
+    this.cause = cause;
+  }
+}
 
 /**
  * 解析 Retry-After 响应头，返回建议的等待毫秒数
@@ -156,6 +175,9 @@ export async function retryOn429<T>(
     }
   }
 
-  // 所有重试耗尽，重新抛出最后一个错误
-  throw lastError;
+  // 所有重试耗尽，重新抛出 RateLimitError，上层可通过 instanceof 精确判断
+  throw new RateLimitError(
+    lastError?.message || "429 Too Many Requests (retries exhausted)",
+    lastError,
+  );
 }
