@@ -59,6 +59,7 @@ export class AgentPresetsPlugin extends PluginBase {
       frequency: "REGULAR",
       description: "可用预设 Agent 列表及使用指南",
       content: async (context: PluginContext) => {
+        if (context?.session.sessionType === "sub_agent") return "";
         const allAgents = await this.agentScanner.listAgents();
         // 仅注入可见的 agent（自身 visible + 文件夹 cascade）
         const visibleAgents = allAgents.filter(
