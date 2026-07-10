@@ -19,6 +19,7 @@ import {
   IMessageStore,
   ICompressionStrategy,
   CompressionConfig,
+  TokenBreakdown,
 } from "./interfaces";
 import {
   SK_MOD_COMPRESS_MODEL,
@@ -79,8 +80,6 @@ export class PersistentSessionContext implements ISessionContext {
   private thinkingEffortValue!: string | undefined;
   private toolApprovalConfig!: ToolApprovalConfig;
   private resolvedPlugins: ResolvedPluginInfo[] = [];
-  private skillsConfig: any;
-  private agentsConfig: any;
   private mergedSettings!: any;
   private memoryConfig!: MemoryConfig;
   private effectiveContextWindow!: number;
@@ -92,11 +91,20 @@ export class PersistentSessionContext implements ISessionContext {
   // 对话状态
   private history: MessageRecord[] = [];
   private pendingPersistRecords: MessageRecord[] = [];
-  private systemPromptTokenCount: number = 0;
+  /** 细粒度 Token 统计 */
+  private tokenBreakdown: TokenBreakdown = {
+    total: 0,
+    systemPrompt: 0,
+    summary: 0,
+    history: 0,
+  };
   private compressionModel: any;
 
-  private currentTokenCount: number = 0;
   private conversationStateLoaded: boolean = false;
+  /** 最近一次加载的压缩断点，传给 execute 避免重复查库 */
+  private loadedCheckpoint:
+    | import("./interfaces").CompressionCheckpoint
+    | null = null;
 
   /** 消息加载游标：第一次 getMessages 时传给 loadMessages，只加载到此消息为止 */
   private messageCursor: string | undefined = undefined;
@@ -145,8 +153,6 @@ export class PersistentSessionContext implements ISessionContext {
       ? prep.mergedSettings.thinkingEffort || "off"
       : undefined;
     this.resolvedPlugins = prep.resolvedPlugins;
-    this.skillsConfig = prep.mergedSettings.skills;
-    this.agentsConfig = prep.mergedSettings.agents;
     this.mergedSettings = prep.mergedSettings;
     this.toolApprovalConfig = this.buildToolApprovalConfig();
     this.memoryConfig = await this.buildMemoryConfig(
@@ -175,6 +181,7 @@ export class PersistentSessionContext implements ISessionContext {
     const checkpoint = await this.compressionStrategy.getCheckpoint(
       this.sessionId,
     );
+    this.loadedCheckpoint = checkpoint;
 
     const modelName = modelConfig.modelName || modelConfig.name || "";
     const isDeepSeekV4 = modelName.includes("deepseek-v4");
@@ -268,14 +275,16 @@ export class PersistentSessionContext implements ISessionContext {
 
     this.logger.debug(`Loaded ${this.history.length} messages into context`);
 
-    // compressionConfig.contextWindow -= this.systemPromptTokenCount;
+    // compressionConfig.contextWindow -= this.tokenBreakdown.total;
 
-    // 初始化时计算全量 Token 数并缓存
-    this.currentTokenCount = await this.tokenizerService.countTokens(
+    // 初始化时计算历史消息 Token 数并缓存
+    this.tokenBreakdown.history = await this.tokenizerService.countTokens(
       modelName,
       this.history,
     );
-    this.logger.debug(`Initial token count: ${this.currentTokenCount}`);
+    this.logger.debug(
+      `Initial history token count: ${this.tokenBreakdown.history}`,
+    );
   }
 
   /**
@@ -306,16 +315,27 @@ export class PersistentSessionContext implements ISessionContext {
       await this.loadConversationState();
       this.conversationStateLoaded = true;
     }
-    // 计算系统提示词的 Token 数
+    // 分别计算系统提示词和摘要的 Token 数
     const modelName = this.modelConfig.modelName || this.modelConfig.name || "";
-    this.systemPromptTokenCount = await this.tokenizerService.countTokens(
+    const promptParts = this.buildPreludeMessages(options?.exclude);
+
+    this.tokenBreakdown.systemPrompt = await this.tokenizerService.countTokens(
       modelName,
-      this.buildPreludeMessages(),
+      promptParts.filter((msg) => msg.role === "system"),
       false,
     );
+    this.tokenBreakdown.summary = await this.tokenizerService.countTokens(
+      modelName,
+      promptParts.filter((msg) => msg.role === "user"),
+      false,
+    );
+    this.tokenBreakdown.total =
+      this.tokenBreakdown.systemPrompt +
+      this.tokenBreakdown.summary +
+      this.tokenBreakdown.history;
     // 压缩由外部（AgentEngine）通过 shouldCompress/compress 控制，
     // getMessages 仅负责组装消息，不再触发压缩
-    return this.buildFinalMessages(this.history, options);
+    return [...promptParts, ...this.history];
   }
 
   /**
@@ -335,9 +355,10 @@ export class PersistentSessionContext implements ISessionContext {
       records,
     );
     await this.messageStore.persistContent(records);
-    this.currentTokenCount += newTokens;
+    this.tokenBreakdown.history += newTokens;
+    this.tokenBreakdown.total += newTokens;
     this.logger.debug(
-      `Appended ${records.length} messages, added ${newTokens} tokens, total: ${this.currentTokenCount}`,
+      `Appended ${records.length} messages, added ${newTokens} tokens, history: ${this.tokenBreakdown.history}`,
     );
   }
 
@@ -366,7 +387,7 @@ export class PersistentSessionContext implements ISessionContext {
   }
 
   getTokenCount(): number {
-    return this.currentTokenCount + this.systemPromptTokenCount;
+    return this.tokenBreakdown.total;
   }
 
   /**
@@ -381,7 +402,7 @@ export class PersistentSessionContext implements ISessionContext {
       this.conversationStateLoaded = true;
     }
 
-    const currentTokens = this.currentTokenCount;
+    const currentTokens = this.tokenBreakdown.history;
     const memoryConfig = this.memoryConfig;
     const modelConfig = this.modelConfig;
     const chatModelName = modelConfig.modelName || modelConfig.name || "gpt4";
@@ -411,25 +432,32 @@ export class PersistentSessionContext implements ISessionContext {
       this.sessionId,
       this.history,
       compressionConfig,
-      this.currentTokenCount,
+      this.tokenBreakdown,
       onStage2,
+      this.loadedCheckpoint,
     );
+
+    // 更新缓存的 checkpoint，后续压缩直接复用无需查库
+    if (result.checkpoint) {
+      this.loadedCheckpoint = result.checkpoint;
+    }
 
     this.history = result.messages;
     if (result.summary) {
       this.systemPromptParts.summary = result.summary;
     }
-
     if (result.tokenCount !== undefined) {
-      this.currentTokenCount = result.tokenCount;
-      this.logger.log(
-        `Force compression completed with strategy: ${result.strategy}, token count: ${result.tokenCount}`,
-      );
-    } else {
-      this.logger.log(
-        `Force compression completed with strategy: ${result.strategy}`,
-      );
+      this.tokenBreakdown.history = result.tokenCount;
+      this.tokenBreakdown.total =
+        this.tokenBreakdown.systemPrompt +
+        this.tokenBreakdown.summary +
+        result.tokenCount;
     }
+
+    this.logger.log(
+      `Force compression completed with strategy: ${result.strategy}, ` +
+        `tokens: history=${this.tokenBreakdown.history}, sys=${this.tokenBreakdown.systemPrompt}, summary=${this.tokenBreakdown.summary}`,
+    );
 
     return await this.getMessages();
   }
@@ -455,17 +483,8 @@ export class PersistentSessionContext implements ISessionContext {
     return this.compressionStrategy.shouldCompress(
       this.history,
       config,
-      this.currentTokenCount + this.systemPromptTokenCount,
+      this.tokenBreakdown.total,
     );
-  }
-
-  private async buildFinalMessages(
-    messages: MessageRecord[],
-    options?: { exclude?: string[] },
-  ): Promise<MessageRecord[]> {
-    const nonSystemMessages = messages.filter((msg) => msg.role !== "system");
-    const promptParts = this.buildPreludeMessages(options?.exclude);
-    return [...promptParts, ...nonSystemMessages];
   }
 
   private buildModelConfig(

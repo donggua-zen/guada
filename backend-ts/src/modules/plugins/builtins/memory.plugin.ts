@@ -108,10 +108,10 @@ export class MemoryPlugin extends PluginBase {
     const memoryKit = api.registerToolKit({
       id: "memory",
       name: "记忆管理",
-      loadMode: "lazy",
+      loadMode: "eager",
       activator: "用户主动要求记住某事的时候请阅读此说明",
       handler: async (ctx) => {
-        return { loadMode: "lazy" as const };
+        return { loadMode: "eager" as const };
       },
     });
 
