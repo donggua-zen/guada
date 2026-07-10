@@ -35,7 +35,8 @@ export class SkillsModule implements OnModuleInit {
     await this.pluginManager.registerPlugin(this.skillPlugin);
     await this.bundledService.syncBundledSkills();
 
-    await this.watcher.start(['.system/*/SKILL.md', 'skills/*/SKILL.md']);
+    // watcher 不传初始路径，所有路径由 SkillSourceManager 的 addWatch 添加
+    await this.watcher.start();
     // 注册 system + global 来源，扫描技能
     await this.sourceManager.start();
     await this.orchestrator.onModuleInit();

@@ -82,7 +82,6 @@ export class ChatController {
     if (userMessage?.content) {
       try {
         const parsed = await this.tagParserPipeline.parse(userMessage.content);
-        console.log(parsed);
         if (parsed.content !== parsed.originalText) {
           source.parseResult = { content: parsed.content };
         }

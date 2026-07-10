@@ -70,7 +70,7 @@ describe("技能热更新集成测试 (Watcher + SourceManager + Registry)", () 
     const loader = new SkillLoaderService();
 
     // 必须先启动 watcher（初始化 chokidar），sourceManager.register() 才能注册 watcher handlers
-    watcher.start([]);
+    watcher.start();
 
     sourceManager = new SkillSourceManager(
       mockConfigService,
