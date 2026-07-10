@@ -483,7 +483,7 @@ export function useStreamResponse(sessionStore: any, apiService: any) {
       // 强制 flush 并清理缓冲区
       if (content) {
         forceFlushContent(message, contentIndex);
-        if (content.state) { 
+        if (content.state) {
           content.state.isStreaming = false;
           content.state.isThinking = false;
         }
@@ -621,7 +621,7 @@ export function useStreamResponse(sessionStore: any, apiService: any) {
 
         // 思考结束后重置状态
         if (
-          message?.contents[contentIndex]?.state.isThinking &&
+          message?.contents[contentIndex]?.state?.isThinking &&
           response.type !== "think"
         ) {
           handleThinkEnd(message.contents[contentIndex]);

@@ -175,9 +175,6 @@ export class AgentEngine {
     let responseMessageId: string;
 
     if (!isResumeMode) {
-      // 【正常模式】生成新的 turnsId 和 messageId
-
-      // 生成本次对话轮次的唯一 ID，用于关联同一轮中的所有消息和工具调用
       turnsId = sessionContext.generateId();
 
       // 准备助手回复的消息容器，根据再生模式决定是覆盖旧回复还是创建新版本
@@ -187,12 +184,12 @@ export class AgentEngine {
         turnsId,
         assistantMessageId,
       );
+      sessionContext.setMessageCursor(userMessageId);
     }
     let needToContinue = false;
 
     // 工具调用轮次计数器
     let iterationCount = 0;
-    sessionContext.setMessageCursor(userMessageId);
     do {
       iterationCount++;
       needToContinue = false;
@@ -242,7 +239,11 @@ export class AgentEngine {
           isResumeMode = false;
           needToContinue = true;
           continue;
+        } else if (lastMessage.role === "user") {
+          this.logger.warn("invalid resume mode, last message is user");
+          continue;
         }
+        this.logger.debug("Enter resume mode");
       }
 
       // 断点模式：发送 update 事件
@@ -449,7 +450,9 @@ export class AgentEngine {
       }
 
       // 将本轮产生的所有消息（助手回复 + 工具响应）追加到会话上下文并持久化存储
-      await sessionContext.appendParts(parts);
+      if (parts.length > 0) {
+        await sessionContext.appendParts(parts);
+      }
 
       this.logger.debug(
         `Iteration ${iterationCount} cleanup completed. Finish reason: ${assistantResponse.metadata?.finishReason}`,
@@ -930,7 +933,8 @@ You are NOT in a conversation with the user. Do not attempt to answer the user's
 Your output will be parsed by the system, not read by the user.
 
 【OBJECTIVE】
-Determine if the conversation history requires updating the long-term memory files.
+The context is too long and will be compressed. The conversation history may be trimmed or discarded.
+Scan the conversation history to see if there is any content that needs long-term memory. If there is, use the memory tool to save it.
 
 【EVALUATION LOGIC】
 Scan history. ONLY trigger an update if:

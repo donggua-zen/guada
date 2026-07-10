@@ -8,6 +8,7 @@ import {
   CompressionConfig,
   CompressionResult,
   CompressionCheckpoint,
+  TokenBreakdown,
 } from "./interfaces";
 import { resolveThinkingEffort } from "../llm-core/utils/model-config.helper";
 import { EventBusService } from "../../common/events/event-bus.service";
@@ -102,10 +103,11 @@ export class CompressionEngine implements ICompressionStrategy {
     sessionId: string,
     messages: MessageRecord[],
     config: CompressionConfig,
-    currentTokenCount?: number, // 当前缓存的 Token 数，避免重复计算
+    tokenBreakdown?: TokenBreakdown, // 细粒度 Token 统计
     onStage2?: () => Promise<void>, // 二级压缩（摘要/丢弃）前的回调
+    checkpoint?: CompressionCheckpoint | null, // 已加载的断点，避免内部重复查库
   ): Promise<CompressionResult> {
-    const state = await this.contextStateRepo.findBySessionId(sessionId);
+    const state = checkpoint ?? null;
 
     const cleanMessages = messages.filter((msg) => msg.role !== "system");
 
@@ -115,13 +117,8 @@ export class CompressionEngine implements ICompressionStrategy {
       timestamp: new Date().toISOString(),
     });
 
-    // 记录压缩前的状态：优先使用传入的缓存 Token 数，避免实时计算的开销
-    const beforeTokenCount =
-      currentTokenCount ??
-      (await this.tokenizerService.countTokens(
-        config.chatModelName || "gpt4",
-        cleanMessages,
-      ));
+    // 记录压缩前的状态：使用传入的细粒度 Token 统计
+    const beforeTokenCount = tokenBreakdown?.total;
     const beforeMessageCount = cleanMessages.length;
 
     this.logger.log("Executing Stage 1: Pruning");
@@ -136,6 +133,10 @@ export class CompressionEngine implements ICompressionStrategy {
     const targetTokens = Math.floor(config.contextWindow * config.targetRatio);
 
     this.logger.debug(
+      `After pruning: ${prunedTokens} tokens (target: ${targetTokens})`,
+    );
+
+    console.log(
       `After pruning: ${prunedTokens} tokens (target: ${targetTokens})`,
     );
 
@@ -179,6 +180,7 @@ export class CompressionEngine implements ICompressionStrategy {
           prunedTokens,
           targetTokens,
           compressionState.summaryContent, // 直接使用压缩状态中的摘要内容
+          tokenBreakdown?.summary ?? 0, // 传递当前摘要 Token 数
           config.model,
           config.summaryMode ?? SummaryMode.DEFAULT,
           config.chatModelName, // 传递对话模型名称用于 Token 计算
@@ -266,6 +268,7 @@ export class CompressionEngine implements ICompressionStrategy {
       strategy: compressionState.cleaningStrategy,
       tokenCount: resultTokenCount,
       compressionStats,
+      checkpoint: compressionState as CompressionCheckpoint,
     };
   }
 
@@ -298,14 +301,14 @@ export class CompressionEngine implements ICompressionStrategy {
 
     // 根据上次处理点的游标确定起始索引，跳过已经裁剪过的消息，实现增量处理
     let startIndex = 0;
-    if (lastProcessedContentId) {
-      const idx = messages.findIndex(
-        (m) => m.contentId === lastProcessedContentId,
-      );
-      if (idx !== -1) {
-        startIndex = idx + 1;
-      }
-    }
+    // if (lastProcessedContentId) {
+    //   const idx = messages.findIndex(
+    //     (m) => m.contentId === lastProcessedContentId,
+    //   );
+    //   if (idx !== -1) {
+    //     startIndex = idx + 1;
+    //   }
+    // }
 
     // 从后往前遍历消息列表，保护最近的 N 条工具结果不被裁剪
     // 倒序遍历确保最新的重要上下文得到优先保护
@@ -318,42 +321,54 @@ export class CompressionEngine implements ICompressionStrategy {
         }
 
         const content = typeof msg.content === "string" ? msg.content : "";
-        if (content.length > PRUNING_TOOL_RESULT_MAX_LENGTH) {
-          // 采用"头部+尾部"保留策略：各保留一半长度，中间用省略号替代
-          // 这样既减少了 Token 占用，又保留了工具结果的开头标识和结尾关键数据
+
+        // 采用"头部+尾部"保留策略：各保留一半长度，中间用省略号替代
+        // 这样既减少了 Token 占用，又保留了工具结果的开头标识和结尾关键数据
+        const pruneContext = () => {
+          if (msg.contentId < lastProcessedContentId) {
+            return "[tool result has been pruned due to age]";
+          }
+          if (content.length <= PRUNING_TOOL_RESULT_MAX_LENGTH) {
+            return undefined;
+          }
           const headLength = Math.floor(PRUNING_TOOL_RESULT_MAX_LENGTH / 2);
           const tailLength = PRUNING_TOOL_RESULT_MAX_LENGTH - headLength;
           const prunedContent = `${safeSubstring(content, 0, headLength)}...[omitted ${content.length - PRUNING_TOOL_RESULT_MAX_LENGTH} characters]...${safeTail(content, tailLength)}`;
+          return prunedContent;
+        };
 
-          // 记录裁剪元数据，用于后续恢复或调试；同时更新最后裁剪的 Content ID 游标
-          // 游标选择逻辑：确保记录的是消息列表中位置最靠后的被裁剪项
-          if (msg.contentId) {
-            metadata[msg.contentId] = {
-              contentId: msg.contentId,
-              messageId: msg.messageId,
-              originalLength: content.length,
-              prunedLength: prunedContent.length,
-              prunedContent: prunedContent,
-              prunedAt: new Date().toISOString(),
-            };
-            // 记录最后一个被裁剪的 ContentId
-            if (
-              !lastPrunedContentId ||
-              messages.findIndex((m) => m.contentId === msg.contentId) >
-                messages.findIndex((m) => m.contentId === lastPrunedContentId)
-            ) {
-              lastPrunedContentId = msg.contentId;
-            }
-          }
-
-          prunedMessages[i] = {
-            ...msg,
-            content: prunedContent,
-          };
-          this.logger.debug(
-            `Pruned tool result for message ${msg.messageId}, length: ${content.length} -> ${prunedContent.length}`,
-          );
+        const prunedContent = pruneContext();
+        if (!prunedContent) {
+          continue;
         }
+
+        // 记录裁剪元数据，用于后续恢复或调试；同时更新最后裁剪的 Content ID 游标
+        // 游标选择逻辑：确保记录的是消息列表中位置最靠后的被裁剪项
+
+        metadata[msg.contentId] = {
+          contentId: msg.contentId,
+          messageId: msg.messageId,
+          originalLength: content.length,
+          prunedLength: prunedContent.length,
+          prunedContent: prunedContent,
+          prunedAt: new Date().toISOString(),
+        };
+        // 记录最后一个被裁剪的 ContentId
+        if (
+          !lastPrunedContentId ||
+          messages.findIndex((m) => m.contentId === msg.contentId) >
+            messages.findIndex((m) => m.contentId === lastPrunedContentId)
+        ) {
+          lastPrunedContentId = msg.contentId;
+        }
+
+        prunedMessages[i] = {
+          ...msg,
+          content: prunedContent,
+        };
+        this.logger.debug(
+          `Pruned tool result for message ${msg.messageId}, length: ${content.length} -> ${prunedContent.length}`,
+        );
       }
     }
 
@@ -373,7 +388,7 @@ export class CompressionEngine implements ICompressionStrategy {
    * - 支持三种摘要模式:关闭、快速、迭代
    *
    * @param messages 裁剪后的消息列表
-   * @param prunedTokens 裁剪后的 Token 总数
+   * @param currentTokens 当前 Token 总数
    * @param targetTokens 目标 Token 数(上下文窗口 × 目标比例)
    * @param previousSummary 之前生成的摘要内容(可选)
    * @param compressionModel 用于生成摘要的专用模型配置
@@ -383,9 +398,10 @@ export class CompressionEngine implements ICompressionStrategy {
    */
   async compactMessages(
     messages: MessageRecord[],
-    prunedTokens: number,
+    currentTokens: number,
     targetTokens: number,
     previousSummary?: string,
+    summaryTokens?: number,
     compressionModel?: any,
     summaryMode: SummaryMode = SummaryMode.DEFAULT,
     chatModelName?: string,
@@ -409,6 +425,11 @@ export class CompressionEngine implements ICompressionStrategy {
           currentGroup = [];
         }
         messageGroups.push([msg]); // user 消息独立成组
+      } else if (msg.role === "assistant") {
+        if (currentGroup.length > 0) {
+          messageGroups.push(currentGroup);
+        }
+        currentGroup = [msg];
       } else {
         // assistant 或 tool 消息加入当前组
         currentGroup.push(msg);
@@ -417,10 +438,9 @@ export class CompressionEngine implements ICompressionStrategy {
     if (currentGroup.length > 0) {
       messageGroups.push(currentGroup);
     }
-
+    // 消息数量过少时无需压缩,直接返回原有摘要和全部消息
+    // 返回 undefined 表示没有实际压缩发生，调用方应回退到仅裁剪模式
     if (messages.length <= MIN_RETAINED_MESSAGES) {
-      // 消息数量过少时无需压缩,直接返回原有摘要和全部消息
-      // 返回 undefined 表示没有实际压缩发生，调用方应回退到仅裁剪模式
       this.logger.log(
         "messages is too short, no compression needed, returning original summary and all messages",
       );
@@ -428,7 +448,7 @@ export class CompressionEngine implements ICompressionStrategy {
         summary: previousSummary || "",
         retained: messages,
         lastCompactedContentId: undefined,
-        retainedTokens: prunedTokens,
+        retainedTokens: currentTokens,
       };
     }
 
@@ -447,6 +467,10 @@ export class CompressionEngine implements ICompressionStrategy {
         messageGroups[i],
       );
     }
+
+    this.logger.debug(
+      `retainedTokens: ${retainedTokens}, targetTokens: ${targetTokens}`,
+    );
 
     let retainGroupIndex = minRetainGroupIndex; // 默认从强制保留区的起点开始
     // 从强制保留区的前一组开始向前判断
@@ -552,7 +576,9 @@ export class CompressionEngine implements ICompressionStrategy {
 
       new_dialogue.push(JSON.stringify(simplifiedMsg));
     });
-
+    if (summaryTokens > 2000) {
+      this.logger.warn(`当前摘要已经过长，${summaryTokens} 个 Token`);
+    }
     // this.logger.debug(promptParts.join("\n"));
     const promptStr =
       previousSummary && previousSummary.length > 0
@@ -568,11 +594,14 @@ export class CompressionEngine implements ICompressionStrategy {
 
 更新后的摘要必须保持相同的四段结构（如为空则写"无"）：
 1. 已完成：记录所有已明确解决或最终确定的任务、决策和问题或者已讨论的话题。
-2. 正在进行：描述当前状态、正在进行的工作、最新共识或最近变更，此项永远只保留正在进行的任务。
+2. 正在进行：用户的最新提问/任务以及当前进展
 3. 待办：列出任何未完成的任务、待解答的问题或后续步骤，此项只保留未开始的任务或问题。
 4. 其他背景：包含关键数据、阻塞项、值得保留的备注等。
+5. 目标tokens为2000，不要超过这个限制，若剩余tokens不足，需合并精简原有内容。
 
-现有摘要：
+${summaryTokens > 2000 ? `** 当前摘要已经过长，你必须大幅精简现有摘要后再整合新对话**` : ``}
+
+现有摘要(tokens: ${summaryTokens})：
 """
 ${previousSummary}
 """
@@ -582,13 +611,12 @@ ${previousSummary}
 ${new_dialogue.join("\n")}
 """
 
-更新后的摘要：
 `
         : `你是一位对话摘要专家。请从下面提供的完整对话历史中生成结构化摘要。
 
 摘要必须按以下四段组织（如某段无内容，则写"无"）：
 1. 已完成：记录所有已明确解决或最终确定的任务、决策和问题或者已讨论的话题。
-2. 正在进行：描述当前状态、正在进行的工作、最新共识或最近变更。
+2. 正在进行：用户的最新提问/任务以及当前进展
 3. 待办：列出任何未完成的任务、待解答的问题或后续步骤。
 4. 其他背景：包含关键数据、阻塞项、值得保留的备注等。
 

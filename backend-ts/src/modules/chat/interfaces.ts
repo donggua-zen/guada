@@ -41,6 +41,14 @@ export interface CompressionStats {
   afterMessageCount?: number;     // 压缩后的消息数
 }
 
+/** 细粒度 Token 统计：系统提示词 / 摘要 / 对话消息 */
+export interface TokenBreakdown {
+  total: number;          // systemPrompt + summary + history
+  systemPrompt: number;   // base + plugins tokens
+  summary: number;        // summary 内容（含包裹标记）的 tokens
+  history: number;        // user/assistant 对话消息 tokens
+}
+
 export interface CompressionResult {
   messages: MessageRecord[];      // 纯对话消息,不含 system 角色
   summary?: string;                // 生成的摘要内容(如果执行了压缩)
@@ -48,6 +56,7 @@ export interface CompressionResult {
   strategy?: string;
   tokenCount?: number;
   compressionStats?: CompressionStats; // 压缩统计信息
+  checkpoint?: CompressionCheckpoint;  // 本次压缩后最新的断点（可缓存复用，避免重复查库）
 }
 
 export interface CompressionCheckpoint {
@@ -89,8 +98,9 @@ export interface ICompressionStrategy {
     sessionId: string,
     messages: MessageRecord[],
     config: CompressionConfig,
-    currentTokenCount?: number, // 当前缓存的 Token 数，避免重复计算
-    onStage2?: () => Promise<void>, // 二级压缩（摘要/丢弃）前的回调
+    tokenBreakdown?: TokenBreakdown,   // 细粒度 Token 统计，替代 currentTokenCount
+    onStage2?: () => Promise<void>,    // 二级压缩（摘要/丢弃）前的回调
+    checkpoint?: CompressionCheckpoint | null, // 已加载的断点，避免内部重复查库
   ): Promise<CompressionResult>;
   getCheckpoint(sessionId: string): Promise<CompressionCheckpoint | null>;
   preprocess(
