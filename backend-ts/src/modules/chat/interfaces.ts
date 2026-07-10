@@ -99,7 +99,7 @@ export interface ICompressionStrategy {
     messages: MessageRecord[],
     config: CompressionConfig,
     tokenBreakdown?: TokenBreakdown,   // 细粒度 Token 统计，替代 currentTokenCount
-    onStage2?: () => Promise<void>,    // 二级压缩（摘要/丢弃）前的回调
+    onBeforeCompaction?: () => Promise<void>,    // 二级压缩（摘要/丢弃）前的回调
     checkpoint?: CompressionCheckpoint | null, // 已加载的断点，避免内部重复查库
   ): Promise<CompressionResult>;
   getCheckpoint(sessionId: string): Promise<CompressionCheckpoint | null>;

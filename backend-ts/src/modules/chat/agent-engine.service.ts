@@ -199,9 +199,9 @@ export class AgentEngine {
 
       // 消息已加载，此时检查是否需要进入保存/压缩状态
       if (await sessionContext.shouldCompress()) {
-        // onStage2 回调：仅在需要二级压缩（摘要/丢弃）时触发
-        const onStage2 = async () => {
-          console.log("onStage2", sessionContext.getMemoryConfig());
+        // onBeforeCompaction 回调：仅在需要二级压缩（摘要/丢弃）时触发
+        const onBeforeCompaction = async () => {
+          console.log("onBeforeCompaction", sessionContext.getMemoryConfig());
           if (
             sessionContext.getMemoryConfig().summaryMode ===
             SummaryMode.MEMORY_SYNC
@@ -211,7 +211,7 @@ export class AgentEngine {
             console.log("memory save shadow turn done");
           }
         };
-        historyMessages = await sessionContext.compress(onStage2);
+        historyMessages = await sessionContext.compress(onBeforeCompaction);
         // 必须继续循环，确保压缩完成后再继续
         // needToContinue = true;
         // continue;
@@ -455,7 +455,7 @@ export class AgentEngine {
       }
 
       this.logger.debug(
-        `Iteration ${iterationCount} cleanup completed. Finish reason: ${assistantResponse.metadata?.finishReason}`,
+        `Iteration ${iterationCount} completed. reason: ${assistantResponse.metadata?.finishReason} continue=${needToContinue}`,
       );
 
       // 开发模式下每次迭代完成后保存对话历史到 .guada/logs 便于审计
@@ -649,6 +649,14 @@ export class AgentEngine {
     ) {
       // 超时错误，标记为 timeout 并记录详细错误信息
       currentChunk.metadata.finishReason = "timeout";
+      currentChunk.metadata.error = streamError.message;
+    } else if (
+      streamError.message.includes("429") ||
+      streamError.message.includes("Too Many Requests") ||
+      streamError.message.includes("rate_limit")
+    ) {
+      // 429 限流错误（重试已耗尽），标记为 rate_limited 以便前端展示继续按钮
+      currentChunk.metadata.finishReason = "rate_limited";
       currentChunk.metadata.error = streamError.message;
     } else {
       // 其他 API 错误或运行时错误，标记为 error 并记录完整错误消息

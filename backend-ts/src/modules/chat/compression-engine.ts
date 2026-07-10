@@ -104,7 +104,7 @@ export class CompressionEngine implements ICompressionStrategy {
     messages: MessageRecord[],
     config: CompressionConfig,
     tokenBreakdown?: TokenBreakdown, // 细粒度 Token 统计
-    onStage2?: () => Promise<void>, // 二级压缩（摘要/丢弃）前的回调
+    onBeforeCompaction?: () => Promise<void>, // 二级压缩（摘要/丢弃）前的回调
     checkpoint?: CompressionCheckpoint | null, // 已加载的断点，避免内部重复查库
   ): Promise<CompressionResult> {
     const state = checkpoint ?? null;
@@ -195,8 +195,8 @@ export class CompressionEngine implements ICompressionStrategy {
           // 保持默认的 pruned_only 策略，不更新结果变量
         } else {
           // 二级压缩前的回调（用于记忆保存等预处理）
-          if (onStage2) {
-            await onStage2();
+          if (onBeforeCompaction) {
+            await onBeforeCompaction();
           }
           // 成功生成摘要，更新结果为摘要模式
           resultMessages = retained;

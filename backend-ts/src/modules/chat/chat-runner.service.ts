@@ -629,10 +629,11 @@ export class ChatRunnerService {
         throw error;
       }
     } finally {
-      // 队列消息等待暂停态（max_iterations / approval）由用户操作触发 resume 后处理，不自动消费
+      // 队列消息等待暂停态（max_iterations / approval / rate_limited）由用户操作触发 resume 后处理，不自动消费
       if (
         lastFinishReason !== "max_iterations_reached" &&
-        lastFinishReason !== "approval_required"
+        lastFinishReason !== "approval_required" &&
+        lastFinishReason !== "rate_limited"
       ) {
         await this.processQueue(sessionId);
       }

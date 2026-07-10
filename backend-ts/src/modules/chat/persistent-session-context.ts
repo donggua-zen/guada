@@ -396,7 +396,7 @@ export class PersistentSessionContext implements ISessionContext {
    * 将 contextWindow 临时设置为当前 Token 数，确保 shouldCompress 判断通过。
    * 压缩完成后恢复原始 contextWindow。
    */
-  async compress(onStage2?: () => Promise<void>): Promise<MessageRecord[]> {
+  async compress(onBeforeCompaction?: () => Promise<void>): Promise<MessageRecord[]> {
     if (!this.conversationStateLoaded) {
       await this.loadConversationState();
       this.conversationStateLoaded = true;
@@ -433,7 +433,7 @@ export class PersistentSessionContext implements ISessionContext {
       this.history,
       compressionConfig,
       this.tokenBreakdown,
-      onStage2,
+      onBeforeCompaction,
       this.loadedCheckpoint,
     );
 

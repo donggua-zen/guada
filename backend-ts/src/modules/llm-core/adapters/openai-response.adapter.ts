@@ -8,7 +8,12 @@ import {
   ToolCallItem,
 } from "../types/llm.types";
 import { ToolDefinition } from "../../tools/interfaces/tool-provider.interface";
-import { ProviderConfig, ConnectionTestResult, RemoteModel } from "../types/provider.types";
+import { retryOn429 } from "../utils/retry.util";
+import {
+  ProviderConfig,
+  ConnectionTestResult,
+  RemoteModel,
+} from "../types/provider.types";
 
 /**
  * OpenAI Responses API 适配器
@@ -61,7 +66,9 @@ export class OpenAIResponseAdapter implements IProtocolAdapter {
         owned_by: model.owned_by,
       }));
     } catch (error: any) {
-      this.logger.warn(`Failed to sync remote models (API may not support /v1/models): ${error.message}`);
+      this.logger.warn(
+        `Failed to sync remote models (API may not support /v1/models): ${error.message}`,
+      );
       return [];
     }
   }
@@ -76,9 +83,18 @@ export class OpenAIResponseAdapter implements IProtocolAdapter {
     let response: any = null;
 
     try {
-      response = await client.responses.create(requestParams, {
-        signal: params.abortSignal,
-      });
+      // 对 client.responses.create 进行 429 指数退避重试
+      response = await retryOn429(
+        () =>
+          client.responses.create(requestParams, {
+            signal: params.abortSignal,
+          }),
+        {
+          logger: this.logger,
+          context: `${this.constructor.name}.chatCompletion`,
+          abortSignal: params.abortSignal,
+        },
+      );
 
       if (params.stream) {
         yield* this.handleStreamResponse(response);
@@ -86,7 +102,10 @@ export class OpenAIResponseAdapter implements IProtocolAdapter {
         yield this.handleNonStreamResponse(response);
       }
     } catch (error) {
-      this.logger.error(`LLM Responses API error (${params.stream ? "stream" : "non-stream"}):`, error);
+      this.logger.error(
+        `LLM Responses API error (${params.stream ? "stream" : "non-stream"}):`,
+        error,
+      );
       this.handleError(error, params.stream);
     } finally {
       this.cleanup(response);
@@ -121,7 +140,10 @@ export class OpenAIResponseAdapter implements IProtocolAdapter {
         items.push({
           type: "function_call_output",
           call_id: msg.toolCallId,
-          output: typeof msg.content === "string" ? msg.content : JSON.stringify(msg.content),
+          output:
+            typeof msg.content === "string"
+              ? msg.content
+              : JSON.stringify(msg.content),
         });
         continue;
       }
@@ -149,7 +171,10 @@ export class OpenAIResponseAdapter implements IProtocolAdapter {
       }
 
       // 跳过空内容且无工具调用的消息
-      if (baseMessage.content === "" && (!msg.toolCalls || msg.toolCalls.length === 0)) {
+      if (
+        baseMessage.content === "" &&
+        (!msg.toolCalls || msg.toolCalls.length === 0)
+      ) {
         continue;
       }
 
@@ -209,7 +234,10 @@ export class OpenAIResponseAdapter implements IProtocolAdapter {
     }
 
     // 处理思考强度（OpenAI Responses API 使用 reasoning 对象）
-    if (params.thinkingEffort && !["on", "off"].includes(params.thinkingEffort)) {
+    if (
+      params.thinkingEffort &&
+      !["on", "off"].includes(params.thinkingEffort)
+    ) {
       // OpenAI Responses API 使用 reasoning.effort 参数
       requestParams.reasoning = {
         effort: params.thinkingEffort,
@@ -242,7 +270,10 @@ export class OpenAIResponseAdapter implements IProtocolAdapter {
     response: any,
   ): AsyncGenerator<LLMResponseChunk> {
     // 跟踪工具调用元信息，用于关联增量参数与具体工具
-    const toolCallInfoMap = new Map<string, { callId: string; name: string; index: number }>();
+    const toolCallInfoMap = new Map<
+      string,
+      { callId: string; name: string; index: number }
+    >();
     let toolCallCounter = 0;
 
     for await (const event of response) {
@@ -417,7 +448,9 @@ export class OpenAIResponseAdapter implements IProtocolAdapter {
         param: error.param,
         type: error.type,
       });
-      throw new Error(`LLM Responses API Error: ${error.status} - ${error.message}`);
+      throw new Error(
+        `LLM Responses API Error: ${error.status} - ${error.message}`,
+      );
     }
 
     if (error.name === "AbortError") {
@@ -449,7 +482,9 @@ export class OpenAIResponseAdapter implements IProtocolAdapter {
  * 从 OpenAI 协议 usage 对象中提取缓存 token 字段
  * 兼容 OpenAI 官方 (prompt_tokens_details.cached_tokens) 和 DeepSeek (prompt_cache_hit_tokens) 风格
  */
-function extractOpenAICachedTokens(rawUsage: any): { read?: number; missed?: number } | undefined {
+function extractOpenAICachedTokens(
+  rawUsage: any,
+): { read?: number; missed?: number } | undefined {
   const cachedTokens: { read?: number; missed?: number } = {};
 
   // DeepSeek 风格: usage.prompt_cache_hit_tokens (flat in usage)

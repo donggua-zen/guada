@@ -185,7 +185,7 @@ export interface ISessionContext {
   /** 检查是否达到压缩阈值 */
   shouldCompress(): Promise<boolean>;
   /** 执行压缩 */
-  compress(onStage2?: () => Promise<void>): Promise<MessageRecord[]>;
+  compress(onBeforeCompaction?: () => Promise<void>): Promise<MessageRecord[]>;
 
   // === Token 消费追踪 ===
   /** 记录一次 LLM 调用的 token 消耗（prompt + completion），累加到会话累计中 */
