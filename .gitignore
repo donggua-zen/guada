@@ -41,3 +41,6 @@ frontend/src/nul
 .trae/**
 backend-ts/src/nul
 .guada/**
+
+# Docker
+.dockerignore
