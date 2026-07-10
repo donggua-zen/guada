@@ -12,6 +12,7 @@ import {
 } from "../types/llm.types";
 import { ToolDefinition } from "../../tools/interfaces/tool-provider.interface";
 import { removeOrphanSurrogates } from "../../../common/utils/string.utils";
+import { retryOn429 } from "../utils/retry.util";
 
 /**
  * 扩展 OpenAI 客户端，重写 makeStatusError 以保留完整 HTTP 响应体。
@@ -180,9 +181,18 @@ export class OpenAIAdapter implements IProtocolAdapter {
     let response: any = null;
 
     try {
-      response = await client.chat.completions.create(requestParams, {
-        signal: params.abortSignal,
-      });
+      // 对 client.chat.completions.create 进行 429 指数退避重试
+      response = await retryOn429(
+        () =>
+          client.chat.completions.create(requestParams, {
+            signal: params.abortSignal,
+          }),
+        {
+          logger: this.logger,
+          context: `${this.constructor.name}.chatCompletion`,
+          abortSignal: params.abortSignal,
+        },
+      );
 
       if (params.stream) {
         yield* this.handleStreamResponse(response);

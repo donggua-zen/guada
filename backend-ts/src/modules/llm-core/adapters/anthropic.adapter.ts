@@ -9,6 +9,7 @@ import {
 } from "../types/llm.types";
 import { ToolDefinition } from "../../tools/interfaces/tool-provider.interface";
 import { ProviderConfig, ConnectionTestResult, RemoteModel } from "../types/provider.types";
+import { retryOn429 } from "../utils/retry.util";
 
 /**
  * Anthropic 协议适配器
@@ -138,9 +139,34 @@ export class AnthropicAdapter implements IProtocolAdapter {
 
     try {
       if (params.stream) {
-        yield* this.handleStreamResponse(client, requestParams);
+        // 对 client.messages.create 进行 429 指数退避重试
+        const stream = await retryOn429(
+          () =>
+            client.messages.create({
+              ...requestParams,
+              stream: true,
+            }) as Promise<AsyncIterable<Anthropic.MessageStreamEvent>>,
+          {
+            logger: this.logger,
+            context: `${this.constructor.name}.chatCompletion`,
+            abortSignal: params.abortSignal,
+          },
+        );
+        yield* this.handleStreamResponse(stream);
       } else {
-        yield await this.handleNonStreamResponse(client, requestParams);
+        const message = await retryOn429(
+          () =>
+            client.messages.create({
+              ...requestParams,
+              stream: false,
+            }) as Promise<Anthropic.Messages.Message>,
+          {
+            logger: this.logger,
+            context: `${this.constructor.name}.chatCompletion`,
+            abortSignal: params.abortSignal,
+          },
+        );
+        yield this.handleNonStreamResponse(message);
       }
     } catch (error) {
       this.handleError(error, !!params.stream);
@@ -152,13 +178,9 @@ export class AnthropicAdapter implements IProtocolAdapter {
    * Anthropic SDK 使用 for await ... of stream 模式
    */
   private async *handleStreamResponse(
-    client: Anthropic,
-    params: Anthropic.MessageCreateParams,
+    stream: AsyncIterable<Anthropic.MessageStreamEvent>,
   ): AsyncGenerator<LLMResponseChunk> {
-    const stream = await client.messages.create({
-      ...params,
-      stream: true,
-    });
+    // 迭代 stream 进行事件处理
 
     // 维护块索引 → 工具序号的映射（Anthropic 的 index 是全局消息块索引）
     const blockToToolIndex = new Map<number, number>();
@@ -362,14 +384,8 @@ export class AnthropicAdapter implements IProtocolAdapter {
    * 处理非流式响应
    */
   private async handleNonStreamResponse(
-    client: Anthropic,
-    params: Anthropic.MessageCreateParams,
+    message: Anthropic.Messages.Message,
   ): Promise<LLMResponseChunk> {
-    // 显式指定非流式，消除 TS 联合类型
-    const message = await client.messages.create({
-      ...params,
-      stream: false,
-    }) as Anthropic.Messages.Message;
 
     // 提取 thinking blocks → reasoningContent
     const thinkingBlocks = message.content.filter((block): block is any => block.type === "thinking");
