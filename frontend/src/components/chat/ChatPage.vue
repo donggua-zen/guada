@@ -4,10 +4,8 @@
     <template v-if="sessionStore.activeSessionId !== 'new-session'">
       <!-- 可拖拽分割区域 -->
       <div class="flex-1 overflow-hidden">
-        <LiteSplitpanes style="height: 100%;"
-          :split-size="layoutStore.workspaceVisible ? layoutStore.workspaceSplitSize : 100"
-          :min-size="40" :max-size="80"
-          @resize="onPaneResize" @resized="onPaneResized">
+        <LiteSplitpanes style="height: 100%;" :split-size="layoutStore.workspaceVisible ? workspaceSize : 100"
+          :min-size="30" :max-size="85" :min-pane2-size="320" @resize="onPaneResize" @resized="onPaneResized">
           <template #pane1>
             <div ref="paneContentRef" class="chat-pane-content"
               style="height: 100%; display: flex; flex-direction: column;">
@@ -50,14 +48,14 @@
                 @switch-agent="switchTab" @close-agent="closeSubAgentTab" />
 
               <!-- 右侧大纲导航 -->
-              <ChatOutline v-if="mainSession && activeTabId === 'main'"
-                :messages="chatPanelRef?.activeMessages || []" :chat-panel-ref="chatPanelRef"
-                @scroll-to-message="handleScrollToMessage" />
+              <ChatOutline v-if="mainSession && activeTabId === 'main'" :messages="chatPanelRef?.activeMessages || []"
+                :chat-panel-ref="chatPanelRef" @scroll-to-message="handleScrollToMessage" />
             </div>
           </template>
 
           <template #pane2>
-            <WorkspaceSidebar v-if="layoutStore.workspaceVisible && mainSession" :session-id="mainSession.id" />
+            <WorkspaceSidebar v-if="layoutStore.workspaceVisible && mainSession" :session-id="mainSession.id"
+              @preview-open="isPreviewMode = true" @preview-close="isPreviewMode = false" />
           </template>
         </LiteSplitpanes>
       </div>
@@ -305,7 +303,12 @@ const isElectron = typeof window !== 'undefined' && !!(window as any).electronAP
 // ChatPanel 组件引用，用于调用组件内部方法
 const chatPanelRef = ref<InstanceType<typeof ChatPanel> | null>(null);
 const paneContentRef = ref<HTMLElement | null>(null);
-let paneSnapWidth = 0;
+// 工作目录预览模式状态（用于独立分割比例）
+const isPreviewMode = ref(false);
+// 根据当前模式计算工作目录分割比例
+const workspaceSize = computed(() =>
+  isPreviewMode.value ? layoutStore.workspacePreviewSplitSize : layoutStore.workspaceSplitSize,
+);
 // 控制设置模态框的显示与隐藏
 // 布局状态
 const layoutStore = useLayoutStore();
@@ -368,28 +371,24 @@ const goChatRoute = async (sessionId: string | null) => {
 
 
 function onPaneResize() {
-  const el = paneContentRef.value;
-  if (!el) return;
-  if (!paneSnapWidth) {
-    paneSnapWidth = el.offsetWidth;
-    el.style.width = paneSnapWidth + 'px';
-    el.style.flexShrink = '0';
-    el.style.flexGrow = '0';
-    el.style.width = paneSnapWidth + 'px';
-  }
+  // LiteSplitpanes 自身通过 computed 管理布局，无需外部快照
 }
 
 function onPaneResized(size: number) {
-  paneSnapWidth = 0;
   const el = paneContentRef.value;
   if (el) {
     el.style.width = '';
   }
 
-  // 保存工作目录分割位置
+  // 保存工作目录分割位置（根据当前模式分别保存）
   if (layoutStore.workspaceVisible && isElectron) {
-    layoutStore.setWorkspaceSplitSize(size);
+    if (isPreviewMode.value) {
+      layoutStore.setWorkspacePreviewSplitSize(size);
+    } else {
+      layoutStore.setWorkspaceSplitSize(size);
+    }
   }
+  console.log('onPaneResized', size);
 }
 
 /**
@@ -562,6 +561,13 @@ onMounted(async () => {
   // 注册子 Agent 生命周期事件监听（仅负责增删 Tab）
   unsubscribeSubAgentCreate = apiService.onSessionEvent('sub_agent_create', handleSubAgentCreate);
   unsubscribeSubAgentClosed = apiService.onSessionEvent('sub_agent_closed', handleSubAgentClosed);
+});
+
+// 工作目录隐藏时重置预览模式状态
+watch(() => layoutStore.workspaceVisible, (visible) => {
+  if (!visible) {
+    isPreviewMode.value = false;
+  }
 });
 
 // 组件卸载时取消监听

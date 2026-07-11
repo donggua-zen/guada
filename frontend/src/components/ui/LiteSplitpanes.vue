@@ -42,15 +42,20 @@ const props = defineProps({
     type: Number,
     default: 75,
   },
-  /** pane1 最小百分比（拖拽和初始化时均会 clamp 到此值以上） */
+  /** pane1 最小百分比 */
   minSize: {
     type: Number,
     default: 0,
   },
-  /** pane1 最大百分比（拖拽和初始化时均会 clamp 到此值以下） */
+  /** pane1 最大百分比 */
   maxSize: {
     type: Number,
     default: 100,
+  },
+  /** pane2 最小像素宽度 */
+  minPane2Size: {
+    type: Number,
+    default: 0,
   },
 });
 
@@ -64,23 +69,8 @@ const pane1Ref = ref<HTMLElement | null>(null);
 const pane2Ref = ref<HTMLElement | null>(null);
 const isResizing = ref(false);
 
-/**
- * 将 splitSize 钳制到合法范围 [minSize, maxSize] ∩ [0, 100]
- * 对 NaN / undefined / 非法旧数据做兜底
- */
-function clampSplitSize(size: number): number {
-  if (typeof size !== 'number' || isNaN(size)) return props.minSize;
-  let v = size;
-  if (v < 0) v = 0;
-  if (v > 100) v = 100;
-  if (v < props.minSize) v = props.minSize;
-  if (v > props.maxSize) v = props.maxSize;
-  return v;
-}
-
-// 响应式拆分明细（非拖拽时与 props 同步）
-const clampedSize = computed(() => clampSplitSize(props.splitSize));
-const currentSplitSize = ref(clampSplitSize(props.splitSize));
+// 容器实际像素宽度（由 ResizeObserver 实时更新）
+const containerWidth = ref(0);
 
 // pane 折叠状态
 const isPane1Collapsed = ref(false);
@@ -88,10 +78,75 @@ const isPane2Collapsed = ref(false);
 
 const SPLITTER_SIZE = 4;
 
-function calcPctWithSplitter(pct: number): string {
-  const share = SPLITTER_SIZE * pct / 100;
-  return "calc(" + pct + "% - " + share + "px)";
+/**
+ * 将 splitSize 钳制到合法范围
+ * 100 和 0 是折叠信号，不进行约束钳制
+ */
+function clampSplitSize(size: number): number {
+  if (typeof size !== 'number' || isNaN(size)) return props.minSize;
+  if (size >= 100) return 100;
+  if (size <= 0) return 0;
+  let v = size;
+  if (v < props.minSize) v = props.minSize;
+  if (v > props.maxSize) v = props.maxSize;
+  return v;
 }
+
+const currentSplitSize = ref(clampSplitSize(props.splitSize));
+
+/**
+ * 计算两个 pane 的实际像素宽度，考虑所有约束
+ * 这是唯一的布局计算入口，同时服务于非拖拽态和拖拽态
+ * @param applyConstraints 是否应用约束（折叠状态时不应用，否则无法完全折叠）
+ */
+function computePixelWidths(cw: number, pct: number, applyConstraints = true): { p1Px: number; p2Px: number } {
+  const available = cw - SPLITTER_SIZE;
+  if (available <= 0) return { p1Px: 0, p2Px: 0 };
+
+  let p1Px = available * pct / 100;
+  let p2Px = available - p1Px;
+
+  if (applyConstraints) {
+    // pane2 最小百分比约束（来自 max-size）
+    const p2MinPct = 100 - props.maxSize;
+    let p2Min = 0;
+    if (p2MinPct > 0) p2Min = Math.max(p2Min, available * p2MinPct / 100);
+    // pane2 最小像素约束
+    if (props.minPane2Size > 0) p2Min = Math.max(p2Min, props.minPane2Size);
+
+    if (p2Min > 0 && p2Px < p2Min) {
+      p2Px = Math.min(p2Min, available);
+      p1Px = available - p2Px;
+    }
+
+    // pane1 最小/最大百分比约束
+    const p1Min = available * props.minSize / 100;
+    const p1Max = available * props.maxSize / 100;
+    if (p1Px < p1Min) { p1Px = p1Min; p2Px = available - p1Px; }
+    if (p1Px > p1Max) { p1Px = p1Max; p2Px = available - p1Px; }
+  }
+
+  // 兜底非负
+  p1Px = Math.max(0, p1Px);
+  p2Px = Math.max(0, p2Px);
+
+  return { p1Px, p2Px };
+}
+
+/**
+ * 核心：响应式计算像素宽度，驱动 :style 绑定
+ * 依赖 currentSplitSize、containerWidth 和所有约束 props
+ * 任何变化都会自动触发重新计算和样式更新
+ */
+const paneWidths = computed(() => {
+  const cw = containerWidth.value;
+  if (cw <= 0) return { p1: '0px', p2: '0px' };
+
+  // 折叠状态不应用约束（否则 pane2 像素最小值会阻止完全折叠）
+  const isCollapsing = currentSplitSize.value >= 100 || currentSplitSize.value <= 0;
+  const { p1Px, p2Px } = computePixelWidths(cw, currentSplitSize.value, !isCollapsing);
+  return { p1: p1Px + 'px', p2: p2Px + 'px' };
+});
 
 /**
  * Pane1 样式
@@ -101,7 +156,7 @@ const pane1Style = computed(() => {
     return { flex: '1', minWidth: '0', minHeight: '0' } as any;
   }
   return {
-    width: calcPctWithSplitter(currentSplitSize.value),
+    width: paneWidths.value.p1,
     flexShrink: 0,
   } as any;
 });
@@ -114,7 +169,7 @@ const pane2Style = computed(() => {
     return { flex: '1', minWidth: '0', minHeight: '0' } as any;
   }
   return {
-    width: calcPctWithSplitter(100 - currentSplitSize.value),
+    width: paneWidths.value.p2,
     flexShrink: 0,
   } as any;
 });
@@ -132,7 +187,20 @@ function handleSplitterMouseDown(e: MouseEvent) {
 
   isResizing.value = true;
   resizeStartPos = e.clientX;
-  resizeStartSize = currentSplitSize.value;
+
+  // 从 DOM 获取实际布局作为拖拽起点
+  if (pane1Ref.value && containerRef.value) {
+    const cw = containerRef.value.getBoundingClientRect().width;
+    const available = cw - SPLITTER_SIZE;
+    if (available > 0) {
+      const p1Actual = pane1Ref.value.getBoundingClientRect().width;
+      resizeStartSize = Math.min(100, Math.max(0, (p1Actual / available) * 100));
+    } else {
+      resizeStartSize = currentSplitSize.value;
+    }
+  } else {
+    resizeStartSize = currentSplitSize.value;
+  }
 
   document.addEventListener('mousemove', handleSplitterMouseMove);
   document.addEventListener('mouseup', handleSplitterMouseUp);
@@ -150,30 +218,34 @@ function handleSplitterMouseMove(e: MouseEvent) {
     const ev = pendingMouseEvent;
     pendingMouseEvent = null;
 
-    if (!containerRef.value || !pane1Ref.value || !pane2Ref.value) return;
+    if (!containerRef.value) return;
 
     const delta = ev.clientX - resizeStartPos;
-    const containerWidth = containerRef.value.getBoundingClientRect().width;
-    if (containerWidth === 0) return;
+    const cw = containerRef.value.getBoundingClientRect().width;
+    const available = cw - SPLITTER_SIZE;
+    if (available <= 0) return;
 
-    const availableSpace = containerWidth - SPLITTER_SIZE;
-    if (availableSpace <= 0) return;
+    const deltaPct = (delta / available) * 100;
+    let newSize = resizeStartSize + deltaPct;
 
-    const deltaPercent = (delta / availableSpace) * 100;
-    let newSize = resizeStartSize + deltaPercent;
+    // 应用 pane1 约束
+    newSize = Math.max(newSize, props.minSize);
+    newSize = Math.min(newSize, props.maxSize);
+    newSize = Math.max(newSize, 0);
+    newSize = Math.min(newSize, 100);
 
-    // 应用 min/max 限制，同时保证 pane2 >= 0
-    if (newSize < props.minSize) newSize = props.minSize;
-    if (newSize > props.maxSize) newSize = props.maxSize;
-    if (newSize < 0) newSize = 0;
-    if (newSize > 100) newSize = 100;
+    // 应用 pane2 约束（像素最小值 + 百分比最小值）
+    const p2MinPct = 100 - props.maxSize;
+    let p2Min = 0;
+    if (p2MinPct > 0) p2Min = Math.max(p2Min, available * p2MinPct / 100);
+    if (props.minPane2Size > 0) p2Min = Math.max(p2Min, props.minPane2Size);
+    if (p2Min > 0) {
+      const maxPane1Pct = ((available - p2Min) / available) * 100;
+      newSize = Math.min(newSize, maxPane1Pct);
+    }
 
-    // 直接操作 DOM 避免 Vue 响应式开销
-    const p1Px = availableSpace * newSize / 100;
-    const p2Px = availableSpace * (100 - newSize) / 100;
-    pane1Ref.value.style.width = p1Px + 'px';
-    pane2Ref.value.style.width = p2Px + 'px';
-
+    // 更新 currentSplitSize → 触发 paneWidths computed → :style 自动更新
+    currentSplitSize.value = newSize;
     emit('resize', newSize);
   });
 }
@@ -192,13 +264,16 @@ function handleSplitterMouseUp() {
   document.body.style.cursor = '';
   document.body.style.userSelect = '';
 
-  // 从 DOM 读取最终尺寸同步到响应式状态
+  // 从 DOM 读取实际布局，同步到 currentSplitSize
   if (pane1Ref.value && containerRef.value) {
-    const containerWidth = containerRef.value.getBoundingClientRect().width;
-    const availableSpace = containerWidth - SPLITTER_SIZE;
-    if (availableSpace > 0) {
-      const p1Px = parseFloat(pane1Ref.value.style.width || '0');
-      currentSplitSize.value = (p1Px / availableSpace) * 100;
+    const cw = containerRef.value.getBoundingClientRect().width;
+    const available = cw - SPLITTER_SIZE;
+    if (available > 0) {
+      const p1Actual = pane1Ref.value.getBoundingClientRect().width;
+      const p2Actual = pane2Ref.value ? pane2Ref.value.getBoundingClientRect().width : 0;
+      const total = p1Actual + p2Actual;
+      const pct = total > 0 ? (p1Actual / total) * 100 : 50;
+      currentSplitSize.value = Math.min(100, Math.max(0, pct));
     }
   }
 
@@ -232,13 +307,18 @@ watch(
   },
 );
 
-// 容器尺寸变化时重新计算折叠状态
-const resizeObserver = new ResizeObserver(() => {
+// 容器尺寸变化时更新 containerWidth → 触发 paneWidths 重新计算
+const resizeObserver = new ResizeObserver((entries) => {
+  for (const entry of entries) {
+    containerWidth.value = entry.contentRect.width;
+  }
   updateCollapseState();
 });
 
 watch(containerRef, (el) => {
   if (el) {
+    // 初始化容器宽度
+    containerWidth.value = el.getBoundingClientRect().width;
     resizeObserver.observe(el);
     updateCollapseState();
   }

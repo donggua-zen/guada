@@ -18,6 +18,9 @@ export const useLayoutStore = defineStore('layout', () => {
   // 工作目录分割比例（持久化，默认 pane1=75%, pane2=25%）
   const workspaceSplitSize = useStorage('workspaceSplitSize', 75)
 
+  // 工作目录预览模式分割比例（持久化，默认 pane1=50%, pane2=50%）
+  const workspacePreviewSplitSize = useStorage('workspacePreviewSplitSize', 50)
+
   // 壁纸与透明度设置（持久化到 localStorage）
   const wallpaperUrl = useStorage<string | null>('wallpaperUrl', null)
   const sidebarOpacity = useStorage<number>('sidebarOpacity', 100)
@@ -54,10 +57,17 @@ export const useLayoutStore = defineStore('layout', () => {
   }
 
   /**
-   * 设置工作目录分割比例
+   * 设置工作目录分割比例（目录模式）
    */
   const setWorkspaceSplitSize = (size: number): void => {
     workspaceSplitSize.value = size
+  }
+
+  /**
+   * 设置工作目录分割比例（预览模式）
+   */
+  const setWorkspacePreviewSplitSize = (size: number): void => {
+    workspacePreviewSplitSize.value = size
   }
 
   /**
@@ -239,6 +249,7 @@ export const useLayoutStore = defineStore('layout', () => {
     sidebarVisible,
     workspaceVisible,
     workspaceSplitSize,
+    workspacePreviewSplitSize,
     wallpaperUrl,
     sidebarOpacity,
     contentOpacity,
@@ -250,6 +261,7 @@ export const useLayoutStore = defineStore('layout', () => {
     setSidebarVisible,
     toggleWorkspace,
     setWorkspaceSplitSize,
+    setWorkspacePreviewSplitSize,
     setWallpaperUrl,
     setSidebarOpacity,
     setContentOpacity,
