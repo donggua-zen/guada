@@ -40,10 +40,10 @@ export class ImageRecognitionPlugin extends PluginBase {
   async onLoad(api: PluginApi) {
     api.registerToolKit({
       id: "image_recognition",
-      name: "图像识别",
+      name: "Image Recognition",
       loadMode: "lazy",
       activator:
-        "当需要识别用户提供图片ID或图片路径时，使用此工具集识别图片内容并返回详细描述。",
+        "Use this toolkit when you need to recognize image content from a user-provided image ID or image path and return a detailed description.",
       onLoad: (toolkit) => {
         toolkit.registerTool({
           name: "image_recognize",
@@ -52,7 +52,7 @@ export class ImageRecognitionPlugin extends PluginBase {
           inputSchema: z.object({
             image_id: z
               .string()
-              .describe("上传的图片文件 ID，通常从消息上下文中获取"),
+              .describe("Uploaded image file ID, usually obtained from the message context"),
           }),
           execute: async (args, _ctx, abortSignal) => {
             const { image_id } = args;
@@ -75,7 +75,7 @@ export class ImageRecognitionPlugin extends PluginBase {
           inputSchema: z.object({
             image_path: z
               .string()
-              .describe("图片文件的路径，可以是绝对路径或相对工作目录的相对路径"),
+              .describe("Path to the image file, can be an absolute path or a relative path relative to the working directory"),
           }),
           execute: async (args, ctx, abortSignal) => {
             const { image_path } = args;
@@ -145,7 +145,7 @@ export class ImageRecognitionPlugin extends PluginBase {
           content: [
             {
               type: "text" as const,
-              text: "请详细描述这张图片的内容，包括但不限于：画面中的主体、人物、物体、场景、文字信息（如果有）、颜色、构图等。",
+              text: "Please describe the content of this image in detail, including but not limited to: the main subject, people, objects, scenes, text (if any), colors, composition, etc.",
             },
             {
               type: "image_url" as const,

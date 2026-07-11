@@ -28,27 +28,31 @@ export class FilePlugin extends PluginBase {
     api.registerTool({
       name: "read",
       description:
-        "读取指定路径的文本文件内容，支持按行或按字符分页。读取到硬上限（20KB）时自动截断，返回 next 参数供继续读取。",
+        "Read the content of a text file at the specified path, supports pagination by line or by character. Automatically truncates at a hard limit (20KB) and returns a next parameter for continued reading.",
       inputSchema: z.object({
         file_path: z
           .string()
-          .describe("要读取的文件路径，可以是绝对路径或相对工作目录的相对路径"),
+          .describe(
+            "Path to the file to read, can be an absolute path or a relative path relative to the working directory",
+          ),
         encoding: z
           .string()
           .optional()
-          .describe("文件编码，如 utf-8、gbk，默认自动检测"),
+          .describe(
+            "File encoding, e.g., utf-8, gbk; auto-detected by default",
+          ),
         unit: z
           .enum(["line", "char"])
           .optional()
           .describe(
-            "偏移单位：line=按行读取（默认），char=按字符读取。当 truncated=true 时使用返回的 next.unit 继续",
+            "Offset unit: line=read by line (default), char=read by character. When truncated=true, use the returned next.unit to continue",
           ),
         offset: z
           .number()
           .int()
           .optional()
           .describe(
-            "起始位置（行号或字符偏移），负数表示从末尾倒数（如 -10 最后 10 行），默认 0",
+            "Starting position (line number or character offset); negative values count from the end (e.g., -10 = last 10 lines), default 0",
           ),
         limit: z
           .number()
@@ -56,12 +60,12 @@ export class FilePlugin extends PluginBase {
           .min(1)
           .optional()
           .describe(
-            "读取数量：unit=line 时最多读取行数（默认 200），unit=char 时最多读取字符数（默认 20000）",
+            "Number to read: when unit=line, max lines to read (default 200); when unit=char, max characters to read (default 20000)",
           ),
       }),
       execute: async (args, ctx) => {
         const { file_path, encoding, unit = "line", offset = 0, limit } = args;
-        if (!file_path) throw new Error("文件路径不能为空");
+        if (!file_path) throw new Error("File path cannot be empty");
 
         const resolvedPath = this.resolvePath(file_path, ctx);
         this.logger.log(
@@ -164,22 +168,31 @@ export class FilePlugin extends PluginBase {
     api.registerTool({
       name: "glob",
       description:
-        "使用 glob 模式搜索文件（如 **/*.ts、*.json、src/**/*.css）。返回扁平文件列表，支持深度控制和结果数限制。",
+        "Search for files using a glob pattern (e.g., **/*.ts, *.json, src/**/*.css). Returns a flat file list. Supports depth control and result limits.",
       inputSchema: z.object({
-        pattern: z.string().describe("glob 模式，如 **/*.ts、*.json、src/**/*"),
-        directory: z.string().optional().describe("基准目录，默认当前工作目录"),
+        pattern: z
+          .string()
+          .describe("Glob pattern, e.g., **/*.ts, *.json, src/**/*"),
+        directory: z
+          .string()
+          .optional()
+          .describe(
+            "Base directory, defaults to the current working directory",
+          ),
         limit: z
           .number()
           .int()
           .positive()
           .optional()
-          .describe("最多返回的文件数，默认 100"),
+          .describe("Maximum number of files to return, default 100"),
         depth: z
           .number()
           .int()
           .nonnegative()
           .optional()
-          .describe("递归深度，0=当前目录，不传=不限"),
+          .describe(
+            "Recursion depth: 0=current directory only, omit=unlimited",
+          ),
       }),
       execute: async (args, ctx) => {
         const { pattern, directory, limit = 100, depth } = args;
@@ -217,13 +230,19 @@ export class FilePlugin extends PluginBase {
 
     api.registerTool({
       name: "write",
-      description: "将内容全量写入指定文件，自动创建目录。",
+      description:
+        "Write content to the specified file in full, automatically creating directories.",
       inputSchema: z.object({
         file_path: z
           .string()
-          .describe("要写入的文件路径，可以是绝对路径或相对工作目录的相对路径"),
-        content: z.string().describe("要写入的文件内容"),
-        encoding: z.string().optional().describe("文件编码，默认 utf-8"),
+          .describe(
+            "Path to the file to write, can be an absolute path or a relative path relative to the working directory",
+          ),
+        content: z.string().describe("File content to write"),
+        encoding: z
+          .string()
+          .optional()
+          .describe("File encoding, default utf-8"),
       }),
       execute: async (args, ctx) => {
         const { file_path, content, encoding = "utf-8" } = args;
@@ -248,22 +267,29 @@ export class FilePlugin extends PluginBase {
     api.registerTool({
       name: "edit",
       description:
-        "在文件中查找并替换指定文本。old_text 必须精确匹配原文中的一段连续文本。局部编辑优先使用此工具",
+        "Find and replace specified text in a file. old_text must exactly match a contiguous segment in the original file. Prefer this tool for partial edits.",
       inputSchema: z.object({
         file_path: z
           .string()
-          .describe("要编辑的文件路径，可以是绝对路径或相对工作目录的相对路径"),
+          .describe(
+            "Path to the file to edit, can be an absolute path or a relative path relative to the working directory",
+          ),
         old_text: z
           .string()
-          .describe("要被替换的旧文本，必须精确匹配原文中的一段连续文本"),
-        new_text: z.string().describe("替换后的新文本"),
-        encoding: z.string().optional().describe("文件编码，默认 utf-8"),
+          .describe(
+            "The old text to be replaced; must exactly match a contiguous segment in the original file",
+          ),
+        new_text: z.string().describe("The new text to replace with"),
+        encoding: z
+          .string()
+          .optional()
+          .describe("File encoding, default utf-8"),
       }),
       execute: async (args, ctx) => {
         const { file_path, old_text, new_text, encoding = "utf-8" } = args;
-        if (!file_path) throw new Error("文件路径不能为空");
-        if (!old_text) throw new Error("old_text 不能为空");
-        if (new_text === undefined) throw new Error("new_text 不能为空");
+        if (!file_path) throw new Error("file_path is required");
+        if (!old_text) throw new Error("old_text is required");
+        if (new_text === undefined) throw new Error("new_text is required");
         const resolvedPath = this.resolvePath(file_path, ctx);
         this.validateWritePath(file_path, ctx);
         this.logger.log(`编辑文件: ${file_path}`);
@@ -273,7 +299,7 @@ export class FilePlugin extends PluginBase {
         if (old_text === new_text) {
           return {
             success: true,
-            message: `文件 ${resolvedPath} 无变更（old === new）`,
+            message: `File ${resolvedPath} unchanged`,
             file_path: resolvedPath,
             replace_count: 1,
           };
@@ -284,7 +310,7 @@ export class FilePlugin extends PluginBase {
         const normOld = old_text.replace(/\r\n/g, "\n");
         const idx = normContent.indexOf(normOld);
         if (idx === -1) {
-          throw new Error(`未找到匹配文本: ${old_text}`);
+          throw new Error(`No match text found: ${old_text}`);
         }
 
         // 替换后统一恢复原文件的行尾风格
@@ -299,7 +325,7 @@ export class FilePlugin extends PluginBase {
         });
         return {
           success: true,
-          message: `文件 ${resolvedPath} 已修改`,
+          message: `File ${resolvedPath} modified`,
           file_path: resolvedPath,
           replace_count: 1,
         };
@@ -311,12 +337,12 @@ export class FilePlugin extends PluginBase {
     api.registerTool({
       name: "delete",
       description:
-        "删除文件或目录（递归删除所有内容）。此操作不可恢复，请谨慎使用！",
+        "Delete a file or directory (recursively deletes all contents). This operation cannot be undone — use with caution!",
       inputSchema: z.object({
         path: z
           .string()
           .describe(
-            "要删除的文件或目录路径，可以是绝对路径或相对工作目录的相对路径",
+            "Path to the file or directory to delete, can be an absolute path or a relative path relative to the working directory",
           ),
       }),
       execute: async (args, ctx) => {
@@ -341,7 +367,7 @@ export class FilePlugin extends PluginBase {
             path: resolvedPath,
           };
         }
-        throw new Error(`${resolvedPath} 不是有效的文件或目录`);
+        throw new Error(`${resolvedPath} is not a valid file or directory`);
       },
       display: { action: "删除文件", argsKey: "path", icon: "edit" },
       dangerLevel: "critical",
@@ -350,27 +376,29 @@ export class FilePlugin extends PluginBase {
     api.registerTool({
       name: "grep",
       description:
-        "搜索文件内容。支持单文件或递归搜索目录（自动跳过 node_modules/.git）。pattern 全小写时不区分大小写，含大写字母时区分。",
+        "Search file contents. Supports single-file or recursive directory search (automatically skips node_modules/.git). When pattern is all lowercase, the search is case-insensitive; when it contains uppercase letters, it is case-sensitive.",
       inputSchema: z.object({
-        pattern: z.string().describe("正则表达式"),
+        pattern: z.string().describe("Regex pattern"),
         path: z
           .string()
           .optional()
-          .describe("目标文件或目录路径，默认工作目录。传入目录时自动递归搜索"),
+          .describe(
+            "Target file or directory path, defaults to the working directory. If a directory is given, it will be searched recursively",
+          ),
         context: z
           .number()
           .int()
           .min(0)
           .max(10)
           .optional()
-          .describe("匹配行上下文行数，默认 3"),
+          .describe("Number of context lines around each match, default 3"),
         max_results: z
           .number()
           .int()
           .min(1)
           .max(50)
           .optional()
-          .describe("最多返回的匹配行数，默认 50"),
+          .describe("Maximum number of matching lines to return, default 50"),
       }),
       execute: async (args, ctx) => {
         const {
@@ -379,7 +407,7 @@ export class FilePlugin extends PluginBase {
           context = 3,
           max_results = 50,
         } = args;
-        if (!pattern) throw new Error("pattern 不能为空");
+        if (!pattern) throw new Error("pattern is required");
 
         const basePath = targetPath
           ? this.resolvePath(targetPath, ctx)
@@ -407,7 +435,7 @@ export class FilePlugin extends PluginBase {
         try {
           regex = new RegExp(pattern, flags);
         } catch {
-          throw new Error(`无效正则: ${pattern}`);
+          throw new Error(`Invalid regex pattern: ${pattern}`);
         }
 
         const fileResults: any[] = [];
@@ -469,14 +497,14 @@ export class FilePlugin extends PluginBase {
       content: (ctx: PluginContext) => {
         if (!ctx.session.workspacePath) return "";
         return [
-          "# 当前会话工作目录",
-          `\`${ctx.session.workspacePath}\``,
+          "# Working Directory:",
+          `${ctx.session.workspacePath}`,
           "",
-          "**重要说明**：",
-          "1. 你编写的所有脚本、临时文件、生成的数据等都应该存放在上述工作目录中。",
-          "2. **默认路径规则**：所有文件操作工具在处理相对路径时，都会自动以该工作目录为基准。",
-          "   除非用户明确指定了其他绝对路径，否则请始终使用相对路径。",
-          "3. .guada 为特殊目录，只允许存放提示词中指定文件，项目文件、脚本等禁止放在.guada目录下",
+          "**Important Notes**:",
+          "1. All scripts, temporary files, generated data, etc. should be stored in the working directory above.",
+          "2. **Default Path Rule**: All file operation tools automatically use the working directory as the base when handling relative paths.",
+          "   Always use relative paths unless the user explicitly specifies an absolute path.",
+          "3. .guada is a special directory — only store files specified in prompts here. Project files, scripts, etc. must not be placed under .guada.",
         ].join("\n");
       },
     });
@@ -511,7 +539,9 @@ export class FilePlugin extends PluginBase {
         normalizedPath.includes(prefix),
       );
       if (!isAllowed) {
-        throw new Error(`memory_only 模式下只允许操作 memory/ 和 memos/ 目录`);
+        throw new Error(
+          `memory_only mode only allows memory/ and memos/ directories`,
+        );
       }
     }
   }

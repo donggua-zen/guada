@@ -582,51 +582,51 @@ export class CompressionEngine implements ICompressionStrategy {
     // this.logger.debug(promptParts.join("\n"));
     const promptStr =
       previousSummary && previousSummary.length > 0
-        ? `你是一位对话摘要专家。请通过整合新的对话片段来更新现有摘要。
+        ? `You are a conversation summarization expert. Update the existing summary by integrating the new dialogue segments.
 
-规则：
-- 保留现有摘要中的所有有效信息。
-- 基于新对话，添加新主题、更新任务状态。
-- 如果某项已完成，将其从"待办事项/正在进行"移至"已完成事项"。
-- 合并冗余信息，但不要遗漏任何事实。
-- 输出语言必须与对话语言一致。
-- 直接输出更新后的摘要。不要包含任何引言、解释或元评论（例如"以下是更新后的摘要"）。直接从摘要内容开始。
+Rules:
+- Retain all valid information from the existing summary.
+- Add new topics and update task statuses based on the new dialogue.
+- If an item is completed, move it from "In Progress / To Do" to "Completed".
+- Merge redundant information, but do not omit any facts.
+- Output language must match the language of the dialogue.
+- Output the updated summary directly. Do not include any introductions, explanations, or meta-commentary (e.g., "Here is the updated summary"). Start directly with the summary content.
 
-更新后的摘要必须保持相同的四段结构（如为空则写"无"）：
-1. 已完成：记录所有已明确解决或最终确定的任务、决策和问题或者已讨论的话题。
-2. 正在进行：用户的最新提问/任务以及当前进展
-3. 待办：列出任何未完成的任务、待解答的问题或后续步骤，此项只保留未开始的任务或问题。
-4. 其他背景：包含关键数据、阻塞项、值得保留的备注等。
-5. 目标tokens为2000，不要超过这个限制，若剩余tokens不足，需合并精简原有内容。
+The updated summary must maintain the same four-section structure (write "None" if empty):
+1. Completed: Record all tasks, decisions, and issues that have been explicitly resolved or finalized, as well as topics that have been discussed.
+2. In Progress: The user's latest questions/tasks and current progress.
+3. To Do: List any unfinished tasks, unanswered questions, or next steps — only include tasks or issues that have not yet been started.
+4. Other Context: Include key data, blockers, remarks worth keeping, etc.
+5. Target tokens: 2000 — do not exceed this limit. If remaining tokens are insufficient, merge and condense existing content.
 
-${summaryTokens > 2000 ? `** 当前摘要已经过长，你必须大幅精简现有摘要后再整合新对话**` : ``}
+${summaryTokens > 2000 ? `** The current summary is too long. You must significantly condense the existing summary before integrating the new dialogue.**` : ``}
 
-现有摘要(tokens: ${summaryTokens})：
+Existing Summary (tokens: ${summaryTokens}):
 """
 ${previousSummary}
 """
 
-新对话：
+New Dialogue:
 """
 ${new_dialogue.join("\n")}
 """
 
 `
-        : `你是一位对话摘要专家。请从下面提供的完整对话历史中生成结构化摘要。
+        : `You are a conversation summarization expert. Generate a structured summary from the complete conversation history provided below.
 
-摘要必须按以下四段组织（如某段无内容，则写"无"）：
-1. 已完成：记录所有已明确解决或最终确定的任务、决策和问题或者已讨论的话题。
-2. 正在进行：用户的最新提问/任务以及当前进展
-3. 待办：列出任何未完成的任务、待解答的问题或后续步骤。
-4. 其他背景：包含关键数据、阻塞项、值得保留的备注等。
+The summary must be organized into the following four sections (write "None" if a section is empty):
+1. Completed: Record all tasks, decisions, and issues that have been explicitly resolved or finalized, as well as topics that have been discussed.
+2. In Progress: The user's latest questions/tasks and current progress.
+3. To Do: List any unfinished tasks, unanswered questions, or next steps.
+4. Other Context: Include key data, blockers, remarks worth keeping, etc.
 
-要求：
-- 简洁明了，使用项目符号。
-- 严格基于提供的对话进行总结，不要推断。
-- 输出语言必须与对话语言一致。
-- 直接输出摘要。不要包含任何引言、解释或元评论。直接从摘要内容开始。
+Requirements:
+- Be concise and use bullet points.
+- Summarize strictly based on the provided conversation — do not infer.
+- Output language must match the language of the dialogue.
+- Output the summary directly. Do not include any introductions, explanations, or meta-commentary. Start directly with the summary content.
 
-对话历史：
+Conversation History:
 """
 ${new_dialogue.join("\n")}
 """

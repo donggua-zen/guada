@@ -35,9 +35,9 @@ export class UniversalToolsPlugin extends PluginBase {
     // 注册懒加载工具包
     const lazyKit = api.registerToolKit({
       id: "lazy_tools",
-      name: "懒加载工具管理",
+      name: "Lazy-Load Toolkit Management",
       loadMode: "eager",
-      activator: "使用 tool_learn 学习工具包用法，使用 tool_use 调用具体工具",
+      activator: "Use tool_learn to learn toolkit usage, use tool_use to invoke specific tools",
     });
 
     // 懒加载工具包激活词提示词
@@ -201,7 +201,7 @@ export class UniversalToolsPlugin extends PluginBase {
       }
 
       if (responseParts.length > 0) {
-        responseParts.push("---", "", "## 使用方式:", "使用`tool_use(tool_name, arguments{param1: value1, param2: value2})`调用");
+        responseParts.push("---", "", "## Usage:", "Use `tool_use(tool_name, arguments{param1: value1, param2: value2})` to invoke");
       }
 
       return responseParts.join("\n");
@@ -219,8 +219,8 @@ export class UniversalToolsPlugin extends PluginBase {
       (item) => `<toolkit name="${item.name}">${item.activator}</toolkit>`,
     );
     return [
-      "# 可用懒加载工具包",
-      "你可以使用以下懒加载工具包。当用户请求或任务与工具包的能力相匹配时，您应该主动使用`tool_learn`加载对应工具包",
+      "# Available Lazy-Load Toolkits",
+      "You can use the following lazy-load toolkits. When a user's request or task matches a toolkit's capabilities, you should proactively use `tool_learn` to load the corresponding toolkit.",
       "",
       "<toolkits>",
       ...xml,

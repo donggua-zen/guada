@@ -58,9 +58,9 @@ export class SkillPlugin extends PluginBase {
 
     const skillKit = api.registerToolKit({
       id: "skill",
-      name: "技能指令",
+      name: "Skill Instructions",
       loadMode: "eager",
-      activator: "当需要使用某个技能时，调用此工具包获取技能完整指令",
+      activator: "Call this toolkit to get the full instructions for a skill when you need to use one",
       handler: async (ctx: PluginContext) => {
         const skills = this.orchestrator.listSkills(
           true,

@@ -38,9 +38,9 @@ export class KnowledgeBasePlugin extends PluginBase {
   async onLoad(api: PluginApi) {
     const kbKit = api.registerToolKit({
       id: "knowledge_base",
-      name: "知识库",
+      name: "Knowledge Base",
       loadMode: "lazy",
-      activator: "用户询问与知识库相关的问题时，使用此工具集搜索知识库内容",
+      activator: "Use this toolkit to search knowledge base content when the user asks questions related to the knowledge base",
       handler: (ctx) => ({
         loadMode: ctx?.session?.sessionType === "bot" ? "eager" : ("lazy" as const),
       }),
@@ -48,20 +48,20 @@ export class KnowledgeBasePlugin extends PluginBase {
 
     kbKit.registerTool({
       name: "kb_search",
-      description: "在知识库中搜索相关内容",
+      description: "Search for relevant content in the knowledge base",
       inputSchema: z.object({
-        knowledge_base_id: z.string().describe("知识库 ID"),
-        query: z.string().describe("搜索关键词或问题"),
+        knowledge_base_id: z.string().describe("Knowledge base ID"),
+        query: z.string().describe("Search keyword or question"),
         top_k: z
           .number()
           .int()
           .min(1)
           .optional()
-          .describe("返回结果数量，默认 5"),
+          .describe("Number of results to return, default 5"),
         filter_file_id: z
           .string()
           .optional()
-          .describe("按文件 ID 过滤搜索范围"),
+          .describe("Filter search scope by file ID"),
       }),
       execute: async (args, ctx) => {
         const { knowledge_base_id, query, top_k = 5, filter_file_id } = args;
@@ -121,11 +121,11 @@ export class KnowledgeBasePlugin extends PluginBase {
     kbKit.registerTool({
       name: "kb_list_files",
 
-      description: "列出知识库中的所有文件",
+      description: "List all files in the knowledge base",
       inputSchema: z.object({
-        knowledge_base_id: z.string().describe("知识库 ID"),
-        skip: z.number().int().min(0).optional().describe("跳过数量，默认 0"),
-        limit: z.number().int().min(1).optional().describe("返回数量，默认 50"),
+        knowledge_base_id: z.string().describe("Knowledge base ID"),
+        skip: z.number().int().min(0).optional().describe("Number of items to skip, default 0"),
+        limit: z.number().int().min(1).optional().describe("Number of items to return, default 50"),
       }),
       execute: async (args, ctx) => {
         const { knowledge_base_id, skip = 0, limit = 50 } = args;
@@ -159,16 +159,16 @@ export class KnowledgeBasePlugin extends PluginBase {
     kbKit.registerTool({
       name: "kb_get_chunks",
 
-      description: "获取文件的分块内容",
+      description: "Get the chunked content of a file",
       inputSchema: z.object({
-        file_id: z.string().describe("文件 ID"),
-        skip: z.number().int().min(0).optional().describe("跳过分块数，默认 0"),
+        file_id: z.string().describe("File ID"),
+        skip: z.number().int().min(0).optional().describe("Number of chunks to skip, default 0"),
         limit: z
           .number()
           .int()
           .min(1)
           .optional()
-          .describe("返回分块数，默认 10"),
+          .describe("Number of chunks to return, default 10"),
       }),
       execute: async (args, ctx) => {
         const { file_id, skip = 0, limit = 10 } = args;
@@ -201,13 +201,13 @@ export class KnowledgeBasePlugin extends PluginBase {
       name: "kb_add_document",
 
       description:
-        "将指定路径的文本文件添加到知识库中，自动完成分块、向量化和存储",
+        "Add a text file at the specified path to the knowledge base, automatically performing chunking, vectorization, and storage",
       inputSchema: z.object({
-        knowledge_base_id: z.string().describe("知识库 ID"),
+        knowledge_base_id: z.string().describe("Knowledge base ID"),
         source_file_path: z
           .string()
-          .describe("源文件路径，可以是绝对路径或相对工作目录的路径"),
-        target_path: z.string().describe("知识库内的目标存储路径，包含文件名"),
+          .describe("Source file path, can be an absolute path or a path relative to the working directory"),
+        target_path: z.string().describe("Target storage path in the knowledge base, including the file name"),
       }),
       execute: async (args, ctx) => {
         const { knowledge_base_id, source_file_path, target_path } = args;
@@ -260,53 +260,53 @@ export class KnowledgeBasePlugin extends PluginBase {
         const isWebSession = !sessionType || sessionType === "web";
         const parts: string[] = [];
 
-        parts.push(`# 知识库工具使用说明
+        parts.push(`# Knowledge Base Tool Instructions
 
-你拥有以下知识库管理工具，可以主动调用它们来查询和利用知识库内容：
+You have the following knowledge base management tools available. You can proactively call them to query and utilize knowledge base content:
 
-### 1. 知识库语义搜索 (kb_search)
-**用途**: 在知识库中进行向量相似度搜索，找到最相关的内容
+### 1. Knowledge Base Semantic Search (kb_search)
+**Purpose**: Perform vector similarity search in the knowledge base to find the most relevant content
 
-**何时使用**:
-- 用户询问与知识库相关的问题时
-- 需要查找特定主题的资料时
-- 想要验证知识库中是否有相关信息时
+**When to use**:
+- When the user asks questions related to the knowledge base
+- When you need to find information on a specific topic
+- When you want to verify whether relevant information exists in the knowledge base
 
-### 2. 知识库文件列表 (kb_list_files)
-**用途**: 获取知识库下所有已上传文件的元数据列表
+### 2. Knowledge Base File List (kb_list_files)
+**Purpose**: Get the metadata list of all uploaded files in the knowledge base
 
-**何时使用**:
-- 用户想了解知识库里有哪些文件时
-- 需要查看文件的处理状态时
-- 想要获取文件 ID 以便进一步操作时
+**When to use**:
+- When the user wants to know what files are in the knowledge base
+- When you need to check the processing status of files
+- When you need to obtain a file ID for further operations
 
-### 3. 知识库文件分块详情 (kb_get_chunks)
-**用途**: 获取指定文件的特定分块内容（支持分页）
+### 3. Knowledge Base File Chunk Details (kb_get_chunks)
+**Purpose**: Get the specific chunk content of a file (supports pagination)
 
-**何时使用**:
-- 用户想查看某个文件的具体内容时
-- 需要检查分块质量时
-- 想要深入了解文件细节时`);
+**When to use**:
+- When the user wants to view the specific content of a file
+- When you need to check chunk quality
+- When you want to dive deeper into file details`);
 
         if (isWebSession) {
-          parts.push(`### 4. 添加文档到知识库 (kb_add_document)
-**用途**: 将指定路径的文本文件添加到知识库中
+          parts.push(`### 4. Add Document to Knowledge Base (kb_add_document)
+**Purpose**: Add a text file at the specified path to the knowledge base
 
-**何时使用**:
-- 用户提供了文件路径，要求将其内容保存到知识库时
-- 需要将本地文档（如 .txt, .md 文件）添加到知识库时
-- 用户说"把这个文件加入知识库"等意图时
+**When to use**:
+- When the user provides a file path and asks to save its content to the knowledge base
+- When you need to add local documents (e.g., .txt, .md files) to the knowledge base
+- When the user says something like "add this file to the knowledge base"
 
-**使用建议**:
-1. **先搜索再查看**: 先用 \`kb_search\` 找到相关内容，如有必要再用 \`kb_get_chunks\` 查看完整分块
-2. **注意分页**: 使用 \`kb_get_chunks\` 时，每次最多获取 10 个分块，可通过调整 \`limit\` 和 \`skip\` 实现分页
-3. **错误处理**: 如果返回错误信息，请检查参数是否正确、知识库/文件是否存在
-4. **路径规范**: target_path 应包含完整的相对路径和文件名，系统会自动创建对应的文件夹结构`);
+**Usage Suggestions**:
+1. **Search first, then view**: Use \`kb_search\` first to find relevant content, then use \`kb_get_chunks\` to view the full chunks if necessary
+2. **Pagination**: When using \`kb_get_chunks\`, each call returns at most 10 chunks. Use the \`limit\` and \`skip\` parameters for pagination
+3. **Error Handling**: If an error is returned, check whether the parameters are correct and whether the knowledge base/file exists
+4. **Path Specification**: target_path should include the full relative path and file name. The system will automatically create the corresponding folder structure`);
         } else {
-          parts.push(`**使用建议**:
-1. **先搜索再查看**: 先用 \`kb_search\` 找到相关内容，如有必要再用 \`kb_get_chunks\` 查看完整分块
-2. **注意分页**: 使用 \`kb_get_chunks\` 时，每次最多获取 10 个分块，可通过调整 \`limit\` 和 \`skip\` 实现分页
-3. **错误处理**: 如果返回错误信息，请检查参数是否正确、知识库/文件是否存在`);
+          parts.push(`**Usage Suggestions**:
+1. **Search first, then view**: Use \`kb_search\` first to find relevant content, then use \`kb_get_chunks\` to view the full chunks if necessary
+2. **Pagination**: When using \`kb_get_chunks\`, each call returns at most 10 chunks. Use the \`limit\` and \`skip\` parameters for pagination
+3. **Error Handling**: If an error is returned, check whether the parameters are correct and whether the knowledge base/file exists`);
         }
 
         return parts.join("\n");

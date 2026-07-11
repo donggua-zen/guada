@@ -107,9 +107,9 @@ export class MemoryPlugin extends PluginBase {
     // 记忆管理指南：工具包级，懒加载，需要时才看说明
     const memoryKit = api.registerToolKit({
       id: "memory",
-      name: "记忆管理",
+      name: "Memory Management",
       loadMode: "eager",
-      activator: "用户主动要求记住某事的时候请阅读此说明",
+      activator: "Read this guide when the user asks to remember something",
       handler: async (ctx) => {
         return { loadMode: "eager" as const };
       },
@@ -120,57 +120,57 @@ export class MemoryPlugin extends PluginBase {
       description: "记忆管理指南",
       content: (context: PluginContext) => {
         return `
-# 记忆管理指南
+# Memory Management Guide
 
-主动发现有价值的内容，使用 \`memory\` 工具管理记忆。
+Actively discover valuable content and use the \`memory\` tool to manage memories.
 
-## 存储原则
+## Storage Principles
 
-**事实记忆 (factual)** — 长期保持紧凑，聚焦于将来仍然重要的事实：
-- 用户偏好、环境细节、工具怪癖、稳定的约定
-- 优先保存能减少用户未来纠正次数的事情——最有价值的记忆是那种能防止用户不得不再次纠正或提醒你的记忆
-- 用户偏好和反复出现的修正，比过程性的任务细节更重要
-- **不要保存**：任务进度、会话结果、已完成的工作日志、临时的 TODO 状态
-- 事实记忆只保存**结论**
+**Factual Memory** — Keep it compact long-term, focus on facts that will still be important in the future:
+- User preferences, environment details, tool quirks, stable conventions
+- Prioritize saving things that reduce the number of future corrections from the user — the most valuable memories are those that prevent the user from having to correct or remind you again
+- User preferences and recurring corrections are more important than procedural task details
+- **Do NOT save**: task progress, session results, completed work logs, temporary TODO states
+- Factual memory only stores **conclusions**
 
-**备忘录 (memos)** — 需要长期记住但不需要时刻注入的长内容：
-- 如会议纪要、技术笔记、完整需求文档
-- 仅显示标题在上下文中，按需读取
+**Memos** — Long content that needs to be remembered long-term but does not need to be injected into the context at all times:
+- E.g., meeting notes, technical notes, full requirement documents
+- Only titles are shown in the context; read on demand
 
-## 使用示例
-- 保存偏好 → \`memory action=append target=factual content="用户偏好：..."\`
-- 修正记忆 → \`memory action=replace target=factual old_text="旧" content="新"\`
-- 搜索记事本 → \`memory action=search pattern="关键词"\`
-- 新增笔记 → \`memory action=append target=memo memo_title="标题" content="详细内容"\`
-- 删除笔记 → \`memory action=replace target=memo memo_title="旧标题"\`（content 留空即删除）`;
+## Usage Examples
+- Save preference → \`memory action=append target=factual content="User preference: ..."\`
+- Correct memory → \`memory action=replace target=factual old_text="old" content="new"\`
+- Search memos → \`memory action=search pattern="keyword"\`
+- Add memo → \`memory action=append target=memo memo_title="Title" content="Details"\`
+- Delete memo → \`memory action=replace target=memo memo_title="Old Title"\` (leave content empty to delete)`;
       },
     });
 
     // ── memory 工具 ──
     api.registerTool({
       name: "memory",
-      description: `编辑长期记忆：追加/替换/删除事实记忆或记事本。修改不会立即刷新上下文，等待记忆压缩后自动同步。`,
+      description: `Edit long-term memory: append/replace/delete factual memories or memos. Changes will not immediately refresh the context; they will be automatically synced after memory compression.`,
       inputSchema: z.object({
         action: z.enum(["append", "replace", "search"]),
         target: z
           .enum(["factual", "memo"])
-          .describe("factual=事实记忆, memo=记事本"),
+          .describe("factual=factual memory, memo=memo/notepad"),
         content: z
           .string()
           .optional()
-          .describe("写入内容，replace 时为空/空字符串则视为删除 old_text"),
+          .describe("Content to write. When empty/empty string during replace, the old_text is considered deleted"),
         old_text: z
           .string()
           .optional()
-          .describe("replace 时定位的旧文本，需精确匹配原文"),
+          .describe("Old text to locate during replace; must exactly match the original text"),
         memo_title: z
           .string()
           .optional()
-          .describe("target=memo 时的备忘录标题（不含 .md）"),
+          .describe("Memo title when target=memo (without .md)"),
         pattern: z
           .string()
           .optional()
-          .describe("search 时的正则表达式，固定搜索 memos 目录"),
+          .describe("Regex pattern for search; searches the memos directory by default"),
       }),
       execute: async (args, ctx) => {
         return this.handleMemoryEdit(args, ctx);
@@ -453,27 +453,27 @@ export class MemoryPlugin extends PluginBase {
     const promptParts: string[] = [];
     const MAX_MEMOS = 20;
 
-    promptParts.push("# 记忆");
+    promptParts.push("# Memory");
 
     const factualOverLimit = totalChars > this.MEMORY_LIMIT;
 
-    promptParts.push("\n## 事实性记忆");
+    promptParts.push("\n## Factual Memory");
     promptParts.push("<factual-memory>");
     if (index.factual) {
       if (factualOverLimit) {
         promptParts.push(index.factual.substring(0, this.MEMORY_LIMIT));
         promptParts.push(
-          "\n⚠️ **事实记忆已达容量上限**（3K），部分内容无法显示。请使用 `memory replace` 整理压缩旧记忆腾出空间。",
+          "\n⚠️ **Factual memory has reached its capacity limit** (3K). Some content cannot be displayed. Use `memory replace` to organize and compress old memories to free up space.",
         );
       } else {
         promptParts.push(index.factual);
       }
     } else {
-      promptParts.push("目前没有事实性记忆");
+      promptParts.push("No factual memory yet");
     }
     promptParts.push("</factual-memory>");
 
-    promptParts.push("\n# 备忘录目录");
+    promptParts.push("\n# Memo Directory");
     promptParts.push("<memo-list>");
     if (index.memos.length > 0) {
       const shownMemos = index.memos.slice(0, MAX_MEMOS);
@@ -483,11 +483,11 @@ export class MemoryPlugin extends PluginBase {
       });
       if (hiddenCount > 0) {
         promptParts.push(
-          `... 另有 ${hiddenCount} 条记录被隐藏（共 ${index.memos.length} 条）`,
+          `... ${hiddenCount} more records hidden (${index.memos.length} total)`,
         );
       }
     } else {
-      promptParts.push("目前没有备忘录");
+      promptParts.push("No memos yet");
     }
     promptParts.push("</memo-list>");
 

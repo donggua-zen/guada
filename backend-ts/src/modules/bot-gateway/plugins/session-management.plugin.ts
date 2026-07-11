@@ -83,18 +83,18 @@ export class SessionManagementPlugin extends PluginBase {
       content: (context: PluginContext) => {
         if (context.session.sessionType !== "bot") return "";
         return [
-          "# 会话管理工具",
+          "# Session Management Tools",
           "",
           "## clear_session",
-          "**用途**：清空当前会话的所有消息历史，开始全新的对话",
+          "**Purpose**: Clear all message history in the current session and start a fresh conversation",
           "",
-          "**何时使用**：",
-          '- 用户明确要求"清空聊天"、"重新开始"、"删除所有消息"',
-          "- 话题发生彻底转变，旧上下文不再相关",
+          "**When to use**:",
+          '- User explicitly asks to "clear chat", "start over", "delete all messages"',
+          "- The topic has completely shifted and the old context is no longer relevant",
           "",
-          "**注意事项**：",
-          "- 此操作不可撤销",
-          "- 调用前必须设置 confirm: true",
+          "**Important Notes**:",
+          "- This operation cannot be undone",
+          "- Must set confirm: true before calling",
         ].join("\n");
       },
     });
