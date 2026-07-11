@@ -263,4 +263,68 @@ describe("PluginManager", () => {
       expect(r.find((x) => x.plugin.id === "p_ext")?.enabled).toBe(false);
     });
   });
+
+  // ==================== setPluginEnabled 持久化格式 ====================
+
+  describe("setPluginEnabled 持久化", () => {
+    beforeEach(() => {
+      addPlugin("p_ext", "extended");
+    });
+
+    it("启用插件时 updateSettings 应保存对象格式 { enabled: true }", async () => {
+      await manager.setPluginEnabled("p_ext", true);
+      expect(mockSettingsStorage.updateSettings).toHaveBeenCalledWith("plugins_config", {
+        p_ext: { enabled: true },
+      });
+    });
+
+    it("禁用插件时 updateSettings 应保存对象格式 { enabled: false }", async () => {
+      await manager.setPluginEnabled("p_ext", false);
+      expect(mockSettingsStorage.updateSettings).toHaveBeenCalledWith("plugins_config", {
+        p_ext: { enabled: false },
+      });
+    });
+
+    it("setPluginEnabled 后 instance.enabled 同步更新", async () => {
+      const inst = (manager as any).instances.get("p_ext");
+      expect(inst.enabled).toBeUndefined(); // 初始无状态
+
+      await manager.setPluginEnabled("p_ext", true);
+      expect(inst.enabled).toBe(true);
+
+      await manager.setPluginEnabled("p_ext", false);
+      expect(inst.enabled).toBe(false);
+    });
+
+    it("setPluginEnabled 保存后 resolvePlugins 能正确读取（对象格式）", async () => {
+      // 用 core 插件测试（默认启用，resolvePlugins 可处理 enabled:true/false）
+      addPlugin("p_core", "core");
+
+      // 模拟禁用
+      mockSettingsStorage.getSettings.mockResolvedValue({
+        p_core: { enabled: false },
+      });
+      let r = await manager.resolvePlugins();
+      expect(r.find((x) => x.plugin.id === "p_core")?.enabled).toBe(false);
+
+      // 模拟启用
+      mockSettingsStorage.getSettings.mockResolvedValue({
+        p_core: { enabled: true },
+      });
+      r = await manager.resolvePlugins();
+      expect(r.find((x) => x.plugin.id === "p_core")?.enabled).toBe(true);
+    });
+  });
+
+  it("setPluginEnabled 对不存在的插件无操作", async () => {
+    await manager.setPluginEnabled("non_existent", true);
+    expect(mockSettingsStorage.updateSettings).not.toHaveBeenCalled();
+  });
+
+  it("setPluginEnabled 不能禁用 system 插件", async () => {
+    addPlugin("p_sys", "system");
+    await manager.setPluginEnabled("p_sys", false);
+    const inst = (manager as any).instances.get("p_sys");
+    expect(inst.enabled).not.toBe(false); // 保持原始状态
+  });
 });
