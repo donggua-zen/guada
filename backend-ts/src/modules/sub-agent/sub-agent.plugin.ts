@@ -22,9 +22,9 @@ export class SubAgentPlugin extends PluginBase {
   async onLoad(api: PluginApi) {
     const subKit = api.registerToolKit({
       id: "subagent",
-      name: "子代理",
+      name: "Sub-Agent",
       loadMode: "eager",
-      activator: "需要创建子代理执行独立任务时，可以调用此工具包",
+      activator: "Call this toolkit when you need to create a sub-agent to execute an independent task",
       handler: async (ctx) => {
         // sub_agent 会话禁止递归加载子代理工具
         if (ctx.session.sessionType === "sub_agent") {

@@ -8,7 +8,6 @@ import {
   PluginManifest,
   ToolLoadMode,
   PluginConfig,
-  PluginEntryConfig,
   ToolKitLoadMode,
   ResolvedPluginInfo,
 } from "./types/plugin.types";
@@ -16,7 +15,6 @@ import { IToolProvider } from "../tools/interfaces/tool-provider.interface";
 import { PluginApiImpl } from "./api/plugin-api";
 import { SettingsStorage } from "../../common/utils/settings-storage.util";
 import { SG_PLUGINS } from "../../constants/settings.constants";
-import { PluginConfigParser } from "./utils/plugin-config-parser";
 import { PromptCollector } from "./prompt-collector.service";
 import { ISessionContext } from "../chat/session-context";
 import { CommandProviderRegistry } from "../commands/command-provider-registry.service";
@@ -104,6 +102,12 @@ export class PluginManager {
         const pluginVal = globalCfg[id];
         if (pluginVal === true || pluginVal === false) {
           finalEnabled = pluginVal;
+        } else if (
+          pluginVal &&
+          typeof pluginVal === "object" &&
+          "enabled" in pluginVal
+        ) {
+          finalEnabled = pluginVal.enabled !== false;
         } else {
           finalEnabled = plugin.manifest.category === "core";
         }
@@ -316,14 +320,18 @@ export class PluginManager {
     const instance = this.instances.get(pluginId);
     if (!instance) return;
 
-    if ((instance.manifest.category === "system" || instance.manifest.essential) && !enabled) {
+    if (
+      (instance.manifest.category === "system" ||
+        instance.manifest.essential) &&
+      !enabled
+    ) {
       this.logger.warn(`Cannot disable system plugin: ${pluginId}`);
       return;
     }
 
     try {
       await this.settingsStorage.updateSettings(SG_PLUGINS, {
-        [pluginId]: enabled,
+        [pluginId]: { enabled },
       });
     } catch (err) {
       this.logger.error(
@@ -358,7 +366,8 @@ export class PluginManager {
   isPluginEnabled(pluginId: string): boolean {
     const inst = this.instances.get(pluginId);
     if (!inst) return false;
-    if (inst.manifest.category === "system" || inst.manifest.essential) return true;
+    if (inst.manifest.category === "system" || inst.manifest.essential)
+      return true;
     return inst.enabled;
   }
 
@@ -594,13 +603,14 @@ export class PluginManager {
     const rawGlobal = await this.settingsStorage.getSettings(SG_PLUGINS);
     // const globalCfg = PluginConfigParser.normalize(rawGlobal);
     const globalCfg = rawGlobal as PluginConfig;
-
+    console.log(globalCfg);
     // role 配置原样保留 __strategy，作为该层的内置策略
     const roleCfg = pluginsConfig || {};
     // 1. 准备全部插件的初始状态（按 category 决定默认启用）
     type PluginState = {
       manifest: PluginManifest;
-      enabled: boolean;
+      enabled: boolean | undefined;
+      defaultEnabled: boolean;
       effective: string;
       /** 被禁用的 toolkit ID 集合（仅用于运行时过滤，不入输出） */
       deniedToolkits: Set<string>;
@@ -614,8 +624,9 @@ export class PluginManager {
         instance.manifest.essential === true;
       stateMap.set(id, {
         manifest: instance.manifest,
-        enabled: defaultEnabled,
-        effective: defaultEnabled ? "default" : "global",
+        enabled: instance.manifest.essential ? true : undefined,
+        defaultEnabled: defaultEnabled,
+        effective: "default",
         deniedToolkits: new Set(),
       });
     }
@@ -632,11 +643,14 @@ export class PluginManager {
       const layerDefault = layerCfg.__default ?? true;
       delete layerCfg.__strategy;
       delete layerCfg.__default;
-      console.log(layerCfg);
 
       if (layerStrategy === "deny_nonsystem") {
         for (const [pluginId, state] of stateMap) {
-          if (state.enabled && state.manifest.category !== "system" && !state.manifest.essential) {
+          if (
+            state.enabled &&
+            state.manifest.category !== "system" &&
+            !state.manifest.essential
+          ) {
             state.enabled = false;
             state.effective = layerName;
           }
@@ -645,8 +659,9 @@ export class PluginManager {
       for (const [pluginId, state] of stateMap) {
         // essential 插件跳过所有后续处理，始终保持启用
         if (state.manifest.essential) continue;
-        // 前层已禁用的插件，后层不再处理
-        if (!state.enabled) continue;
+
+        // 前层已禁用的插件，后层不再处理,必须使用 === false 判断
+        if (state.enabled === false) continue;
 
         if (
           layerStrategy === "deny_nonsystem" &&
@@ -657,30 +672,36 @@ export class PluginManager {
           continue;
         }
 
-        const entry = layerCfg[pluginId];
-        if (!entry || typeof entry !== "object") {
-          // 未配置或者格式错误按照默认值处理
-          if (!layerDefault) {
-            state.enabled = false;
-            state.effective = layerName;
+        const getEntry = (pluginId: string) => {
+          const entry = layerCfg[pluginId];
+          if (!entry || typeof entry !== "object") {
+            return {
+              enabled:
+                layerName !== "global" ? layerDefault : state.defaultEnabled,
+            };
           }
-          continue;
-        }
+          return entry;
+        };
 
-        if (entry.enabled === false) {
-          state.enabled = false;
+        const entry = getEntry(pluginId);
+
+        state.enabled = !!entry.enabled;
+
+        if (state.enabled === false) {
           state.effective = layerName;
           continue;
         }
 
         if (entry.toolkits_filter !== "allow") {
           // 黑名单模式（默认）：拒绝列出的工具包
-          for (const d of (entry.toolkits_deny || [])) state.deniedToolkits.add(d);
+          for (const d of entry.toolkits_deny || [])
+            state.deniedToolkits.add(d);
         } else {
           // 白名单模式：拒绝所有工具包，只允许列出的
           const allKits = PluginRegistry.getToolKits(pluginId);
           for (const kit of allKits) state.deniedToolkits.add(kit.def.id);
-          for (const a of (entry.toolkits_allow || [])) state.deniedToolkits.delete(a);
+          for (const a of entry.toolkits_allow || [])
+            state.deniedToolkits.delete(a);
         }
       }
     }

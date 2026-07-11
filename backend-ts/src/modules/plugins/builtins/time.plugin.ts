@@ -17,8 +17,8 @@ export class TimePlugin extends PluginBase {
   async onLoad(api: PluginApi) {
     const timeKit = api.registerToolKit({
       id: "time",
-      name: "时间工具",
-      activator: "获取当前详细时间信息，包括日期、星期、时间、时区等",
+      name: "Time Tools",
+      activator: "Get current detailed time information, including date, day of week, time, timezone, etc.",
     });
     timeKit.registerTool({
       name: "get_current_time",
@@ -116,11 +116,11 @@ export class TimePlugin extends PluginBase {
       hour12: false,
     });
     return [
-      "# 当前时间信息",
+      "# Current Time",
       currentTime,
       "",
-      "在与用户对话时，如需提及时间相关信息，请使用上述提供的准确时间。",
-      "还可调用 `get_current_time` 工具获取详细信息。",
+      "When interacting with the user, use the accurate time provided above if you need to mention time-related information.",
+      "You can also call the `get_current_time` tool for detailed information.",
     ].join("\n");
   }
 }

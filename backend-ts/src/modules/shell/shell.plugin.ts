@@ -336,44 +336,44 @@ export class ShellPlugin extends PluginBase {
       content: (ctx: PluginContext) => {
         const isWindows = process.platform === "win32";
         const isNotSubAgent = ctx?.session?.sessionType !== "sub_agent";
-        return `# 命令行工具使用说明
+        return `# Shell Tool Usage Instructions
           
-**当前系统**：${isWindows ? "Windows" : process.platform === "darwin" ? "macOS" : "Linux"}
+**Current System**: ${isWindows ? "Windows" : process.platform === "darwin" ? "macOS" : "Linux"}
           
-## 命令执行
-- 使用 \`terminal\` 命令执行command命令
-- 命令默认前台执行，等待完成后返回输出（最多 8000 字符）
-- 前台命令执行超过 **1 分钟** 会自动转入后台模式执行
-- processId一般是shell壳的进程ID，不是命令本身进程ID
-## 后台进程管理
-- 使用 **process** 工具管理后台进程，附加参数统一放入 params 对象中：
-- **kill** — 终止进程，无需 params：
+## Command Execution
+- Use the \`terminal\` command to execute commands
+- Commands run in the foreground by default; the tool waits for completion and returns the output (up to 8000 characters)
+- Foreground commands that exceed **1 minute** will automatically switch to background mode
+- processId is typically the shell process ID, not the command's own process ID
+## Background Process Management
+- Use the **process** tool to manage background processes. Additional parameters are grouped into the params object:
+- **kill** — Terminate a process, no params required:
   \`{"action":"kill","processId":"xxx"}\`
-- **poll** — 查看新输出，可选 params.timeout（秒，最小 30）：
+- **poll** — Check for new output. Optional params.timeout (seconds, minimum 30):
    \`{"action":"poll","processId":"xxx","params":{"timeout":30}}\`
 ${
   isNotSubAgent
     ? `
-- **modify_progress_monitoring** — 设置系统自动监控报告间隔，intervalMinutes（分钟，0=关闭，默认30）：
+- **modify_progress_monitoring** — Set the system's automatic monitoring report interval. intervalMinutes (minutes, 0=off, default 30):
     \`{"action":"modify_progress_monitoring","processId":"xxx","params":{"intervalMinutes":30}}\`
-- 默认已经开启，设置 0 关闭。非0值不得低于15分钟`
+- Monitoring is enabled by default. Set to 0 to disable. Non-zero values must not be less than 15 minutes.`
     : ""
 }
-- **dump_log** — 导出完整日志，可选 params.file_path：
+- **dump_log** — Export the full log. Optional params.file_path:
   \`{"action":"dump_log","processId":"xxx","params":{"file_path":"logs/my.log"}}\`
-- **write** — 向进程 stdin 写入输入，必填 params.input，可选 params.appendNewline（默认 true）：
+- **write** — Write input to the process's stdin. Required params.input, optional params.appendNewline (default true):
     \`{"action":"write","processId":"xxx","params":{"input":"y"}}\`
-## 后台任务最佳实践
-- 优先使用前台任务执行以获取初期输出判断是否正常启动
-- 优先使用process(action=kill,processId=...)杀死进程          
+## Background Task Best Practices
+- Prefer foreground execution first to check initial output and verify normal startup
+- Prefer using process(action=kill, processId=xxx) to terminate processes          
  ${
    isNotSubAgent
      ? `
-- 转入后台后可并行其他工作，或结束本轮对话等待系统通知
-- 后台进程执行结束会自动收到系统通知,无需持续轮询
-- 已经通过poll查收的消息不会再次被系统通知
-- 长时间任务（预期>30分钟）利用进度通知（已默认开启）及时了解任务进度,短时间任务不必特意关闭监控（利用默认30分钟间隔做兜底）`
-     : `- 结束对话后，会自动终止所有后台进程，务必使用POLL等待进程结束`
+- After switching to background, you can work on other tasks in parallel, or end the current turn and wait for system notifications
+- The system will automatically notify you when a background process finishes — no need for continuous polling
+- Messages already retrieved via poll will not be re-sent as system notifications
+- For long-running tasks (expected >30 minutes), use progress notifications (enabled by default) to stay informed. Short tasks do not need to disable monitoring (the default 30-minute interval serves as a fallback).`
+     : `- After ending the conversation, all background processes will be automatically terminated. Make sure to use POLL to wait for process completion.`
  }`;
       },
     });
