@@ -367,6 +367,11 @@ onUnmounted(() => {
   background-color: var(--el-color-primary-light-8, #d9ecff);
 }
 
+/* 拖拽中持续高亮分割线，即使鼠标移出分割条区域 */
+.lite-splitpanes--resizing .lite-splitpanes__splitter {
+  background-color: var(--el-color-primary-light-8, #d9ecff);
+}
+
 /* 拖拽期间禁用所有过渡动画 */
 .lite-splitpanes--resizing,
 .lite-splitpanes--resizing * {
