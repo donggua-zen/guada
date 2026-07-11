@@ -64,24 +64,17 @@
                 class="shrink-0 flex items-center justify-between px-4 py-2 border-b border-gray-100 dark:border-[#2e3035]">
                 <div class="flex items-center gap-2 min-w-0">
                     <!-- 预览/源码切换按钮（仅 md 和 html），放在左侧高频操作区 -->
-                    <div v-if="canTogglePreview" class="flex items-center gap-0.5 bg-gray-100/80 dark:bg-[#242529] rounded-md p-0.5 shrink-0">
-                        <button
-                            class="preview-mode-btn"
-                            :class="{ 'is-active': currentPreviewMode === 'rendered' }"
-                            title="预览"
-                            @click="currentPreviewMode = 'rendered'"
-                        >
+                    <div v-if="canTogglePreview"
+                        class="flex items-center gap-0.5 bg-gray-100/80 dark:bg-[#242529] rounded-md p-0.5 shrink-0">
+                        <button class="preview-mode-btn" :class="{ 'is-active': currentPreviewMode === 'rendered' }"
+                            title="预览" @click="currentPreviewMode = 'rendered'">
                             <el-icon :size="16">
                                 <Eye20Regular v-if="currentPreviewMode !== 'rendered'" />
                                 <Eye20Filled v-else />
                             </el-icon>
                         </button>
-                        <button
-                            class="preview-mode-btn"
-                            :class="{ 'is-active': currentPreviewMode === 'source' }"
-                            title="源码"
-                            @click="currentPreviewMode = 'source'"
-                        >
+                        <button class="preview-mode-btn" :class="{ 'is-active': currentPreviewMode === 'source' }"
+                            title="源码" @click="currentPreviewMode = 'source'">
                             <el-icon :size="16">
                                 <Code20Regular v-if="currentPreviewMode !== 'source'" />
                                 <Code20Filled v-else />
@@ -144,10 +137,10 @@
 
                         <!-- Markdown 渲染模式 -->
                         <div v-else-if="isMarkdownFile && currentPreviewMode === 'rendered'"
-                            class="markdown-preview markdown-text" v-html="renderedContent" />
+                            class="markdown-preview markdown-text" v-html="markdownHtml" />
 
-                        <!-- 源码模式（带语法高亮）- 所有支持的文件类型 -->
-                        <div v-else-if="renderedContent" class="code-preview-container" v-html="renderedContent" />
+                        <!-- 源码高亮（所有文件的 source 模式 + 不支持预览的文本文件） -->
+                        <div v-else-if="highlightedCode" class="code-preview-container" v-html="highlightedCode" />
 
                         <!-- 普通文本预览（不支持高亮的文件） -->
                         <pre v-else v-text="fileContent"
@@ -410,38 +403,17 @@ const canTogglePreview = computed(() => {
     return isMarkdownFile.value || isHtmlFile.value;
 });
 
-// 渲染后的内容（用于 Markdown 预览和源码高亮）
-const renderedContent = computed(() => {
+// Markdown 渲染（仅负责渲染，不判断文件类型和模式）
+const markdownHtml = computed(() => {
     if (!selectedFile.value || !fileContent.value) return '';
+    return parseMarkdown(fileContent.value);
+});
 
-    const ext = selectedFile.value.extension.toLowerCase();
-
-    // Markdown 预览模式
-    if ((ext === '.md' || ext === '.markdown') && currentPreviewMode.value === 'rendered') {
-        return parseMarkdown(fileContent.value);
-    }
-
-    // HTML 预览模式 - iframe 单独处理，这里返回空
-    if ((ext === '.html' || ext === '.htm') && currentPreviewMode.value === 'rendered') {
-        return '';
-    }
-
-    // 源码模式 - 所有支持高亮的文件
-    if (currentPreviewMode.value === 'source') {
-        const lang = getLanguageFromExtension(ext);
-        if (lang) {
-            return highlightCode(fileContent.value, lang);
-        }
-        // 如果没有匹配的语言，返回空，使用普通文本预览
-        return '';
-    }
-
-    // 预览模式下，如果是支持高亮的代码文件，也显示高亮
-    const lang = getLanguageFromExtension(ext);
-    if (lang && currentPreviewMode.value === 'rendered') {
-        return highlightCode(fileContent.value, lang);
-    }
-
+// 源码高亮（仅负责渲染，不判断文件类型和模式）
+const highlightedCode = computed(() => {
+    if (!selectedFile.value || !fileContent.value) return '';
+    const lang = getLanguageFromExtension(selectedFile.value.extension.toLowerCase());
+    if (lang) return highlightCode(fileContent.value, lang);
     return '';
 });
 
@@ -983,6 +955,8 @@ async function handleFileSelect(node: WorkspaceNode) {
                 // Electron 开发模式（http://）和非 Electron 环境：走后端 html-preview 代理
                 htmlPreviewUrl.value = apiService.getWorkspaceHtmlPreviewUrl(props.sessionId!, node.path);
             }
+            // 同时加载文件内容，用于源码模式切换
+            await loadFileContent(node.path);
         } else {
             await loadFileContent(node.path);
         }
@@ -1283,6 +1257,38 @@ onUnmounted(() => {
 
 .code-preview-container pre code.hljs {
     color: var(--color-text, #333) !important;
+}
+
+/* 代码行号样式 */
+.code-lines {
+    display: flex;
+    flex-direction: column;
+}
+
+.line {
+    display: flex;
+    min-height: 1.5em;
+}
+
+.line-num {
+    box-sizing: content-box;
+    user-select: none;
+    text-align: right;
+    padding-right: 0.75em;
+    color: #9ca3af;
+    font-variant-numeric: tabular-nums;
+    border-right: 1px solid #e5e7eb;
+    margin-right: 0.75em;
+}
+
+.dark .line-num {
+    color: #4b5563;
+    border-right-color: #374151;
+}
+
+.line-content {
+    flex: 1;
+    white-space: pre;
 }
 </style>
 <style scoped>
