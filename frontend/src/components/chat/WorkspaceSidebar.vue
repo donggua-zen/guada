@@ -1,13 +1,12 @@
 <template>
-    <div class="workspace-sidebar h-full flex flex-col border-l border-gray-200 dark:border-[#2e3035]">
+    <div class="workspace-sidebar h-full flex flex-col">
         <!-- 目录树（预览时隐藏，v-show 保留 DOM） -->
         <div v-show="!selectedFile" class="h-full flex flex-col flex-1 min-h-0">
             <!-- 浏览器窗口列表（仅 Electron 环境，置于最上方确保可见） -->
             <SessionBrowserWindowList v-if="isElectron" :session-id="props.sessionId" />
             <div class="border-b border-gray-100 dark:border-[#2e3035] mx-4 mt-3"></div>
             <!-- 头部 -->
-            <div
-                class="shrink-0 flex items-center justify-between px-2 py-3 ">
+            <div class="shrink-0 flex items-center justify-between px-2 py-3 ">
                 <h3 class="text-sm font-normal text-gray-500 dark:text-[#8b8d95] whitespace-nowrap mx-2">
                     工作目录</h3>
                 <div class="flex items-center gap-0 shrink-0">
@@ -52,16 +51,9 @@
                     暂无文件，请先设置工作目录
                 </div>
 
-                <WorkspaceTree
-                    v-else
-                    :nodes="treeData"
-                    :selected-path="selectedNodePath"
-                    :loading-paths="loadingPaths"
-                    :on-load="(node) => handleTreeNodeToggle(node, true)"
-                    @select="handleTreeNodeSelect"
-                    @toggle="handleTreeNodeExpandToggle"
-                    @contextmenu="handleContextMenu"
-                />
+                <WorkspaceTree v-else :nodes="treeData" :selected-path="selectedNodePath" :loading-paths="loadingPaths"
+                    :on-load="(node) => handleTreeNodeToggle(node, true)" @select="handleTreeNodeSelect"
+                    @toggle="handleTreeNodeExpandToggle" @contextmenu="handleContextMenu" />
             </div>
         </div>
 
@@ -69,26 +61,46 @@
         <div v-show="selectedFile" class="flex flex-col h-full w-full  flex-1">
             <!-- 标题栏 -->
             <div
-                class="shrink-0 flex items-center justify-between px-2 py-1.5 bg-gray-50 dark:bg-[#2a2c30] border-b border-gray-200 dark:border-[#2e3035]">
-                <span class="text-xs font-medium text-gray-600 dark:text-[#8b8d95] truncate">
-                    {{ selectedFile?.name }}
-                </span>
+                class="shrink-0 flex items-center justify-between px-4 py-2 border-b border-gray-100 dark:border-[#2e3035]">
+                <div class="flex items-center gap-2 min-w-0">
+                    <!-- 预览/源码切换按钮（仅 md 和 html），放在左侧高频操作区 -->
+                    <div v-if="canTogglePreview" class="flex items-center gap-0.5 bg-gray-100/80 dark:bg-[#242529] rounded-md p-0.5 shrink-0">
+                        <button
+                            class="preview-mode-btn"
+                            :class="{ 'is-active': currentPreviewMode === 'rendered' }"
+                            title="预览"
+                            @click="currentPreviewMode = 'rendered'"
+                        >
+                            <el-icon :size="16">
+                                <Eye20Regular v-if="currentPreviewMode !== 'rendered'" />
+                                <Eye20Filled v-else />
+                            </el-icon>
+                        </button>
+                        <button
+                            class="preview-mode-btn"
+                            :class="{ 'is-active': currentPreviewMode === 'source' }"
+                            title="源码"
+                            @click="currentPreviewMode = 'source'"
+                        >
+                            <el-icon :size="16">
+                                <Code20Regular v-if="currentPreviewMode !== 'source'" />
+                                <Code20Filled v-else />
+                            </el-icon>
+                        </button>
+                    </div>
 
-                <div class="flex items-center gap-2">
-                    <!-- 预览/源码切换按钮（仅 md 和 html） -->
-                    <el-button-group v-if="canTogglePreview">
-                        <el-button size="small" :type="currentPreviewMode === 'rendered' ? 'primary' : ''"
-                            @click="currentPreviewMode = 'rendered'">
-                            预览
-                        </el-button>
-                        <el-button size="small" :type="currentPreviewMode === 'source' ? 'primary' : ''"
-                            @click="currentPreviewMode = 'source'">
-                            源码
-                        </el-button>
-                    </el-button-group>
+                    <span class="font-medium text-gray-600 dark:text-[#8b8d95] truncate ml-2">
+                        {{ selectedFile?.name }}
+                    </span>
+                </div>
 
+                <div class="flex items-center gap-1 shrink-0">
                     <!-- 返回目录树按钮 -->
-                    <el-button :icon="Close" circle size="small" @click="closePreview" />
+                    <button class="preview-close-btn" title="关闭预览" @click="closePreview">
+                        <el-icon :size="16">
+                            <Dismiss20Regular />
+                        </el-icon>
+                    </button>
                 </div>
             </div>
 
@@ -100,11 +112,8 @@
                 </div>
 
                 <!-- 图片预览 -->
-                <img v-else-if="previewMode === 'image' && !previewError"
-                    :src="imagePreviewUrl"
-                    @error="onImageError"
-                    class="image-preview w-full h-full object-contain p-2"
-                    alt="图片预览" />
+                <img v-else-if="previewMode === 'image' && !previewError" :src="imagePreviewUrl" @error="onImageError"
+                    class="image-preview w-full h-full object-contain p-2" alt="图片预览" />
 
                 <!-- 不支持的文件 -->
                 <div v-else-if="previewMode === 'unsupported' && !previewError"
@@ -119,11 +128,11 @@
 
                 <!-- 错误 / 文本内容 -->
                 <div v-else class="w-full min-h-0">
-                    <div v-if="previewError"
-                        class="w-full h-full flex items-center justify-center p-4">
+                    <div v-if="previewError" class="w-full h-full flex items-center justify-center p-4">
                         <div class="text-center">
                             <p class="text-gray-400 dark:text-gray-500 text-sm">{{ previewError }}</p>
-                            <el-button v-if="isElectron && previewMode === 'unsupported'" @click="handleOpenInExplorerForCurrent" size="small" class="mt-3">
+                            <el-button v-if="isElectron && previewMode === 'unsupported'"
+                                @click="handleOpenInExplorerForCurrent" size="small" class="mt-3">
                                 在资源管理器中打开
                             </el-button>
                         </div>
@@ -131,8 +140,7 @@
                     <template v-else-if="previewMode === 'text'">
                         <!-- HTML 预览模式 -->
                         <iframe v-if="isHtmlFile && currentPreviewMode === 'rendered'" :srcdoc="fileContent"
-                            class="w-full border-0" style="height: 100%;"
-                            sandbox="allow-same-origin allow-scripts" />
+                            class="w-full border-0" style="height: 100%;" sandbox="allow-same-origin allow-scripts" />
 
                         <!-- Markdown 渲染模式 -->
                         <div v-else-if="isMarkdownFile && currentPreviewMode === 'rendered'"
@@ -154,21 +162,17 @@
     <WorkspaceSettingsDialog v-model:visible="workspaceDialogVisible" :current-workspace-path="currentWorkspacePath"
         :allow-empty="false" @confirm="handleWorkspaceChange" />
 
-    <ContextMenu
-        :visible="contextMenu.visible"
-        :x="contextMenu.x"
-        :y="contextMenu.y"
-        :items="contextMenuItems"
-        @close="closeContextMenu"
-    />
+    <ContextMenu :visible="contextMenu.visible" :x="contextMenu.x" :y="contextMenu.y" :items="contextMenuItems"
+        @close="closeContextMenu" />
 </template>
 
 <script setup lang="ts">
 import { ref, computed, watch, onUnmounted, nextTick } from 'vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import { apiService, type FileChangeEvent } from '@/services/ApiService';
-import { Refresh, Close, FolderOpened, Switch, CopyDocument, Edit, Delete } from '@element-plus/icons-vue';
+import { Refresh, FolderOpened, Switch, CopyDocument, Edit, Delete } from '@element-plus/icons-vue';
 import { LoadingOutlined } from '@vicons/antd';
+import { Dismiss20Regular, Eye20Filled, Eye20Regular, Code20Filled, Code20Regular } from '@vicons/fluent';
 // @ts-ignore - icons 组件尚未迁移到 TypeScript
 import { VsCode } from '@/components/icons';
 import { useStorage, useThrottleFn } from '@vueuse/core';
@@ -193,6 +197,11 @@ type PreviewMode = 'rendered' | 'source';
 
 const props = defineProps<{
     sessionId: string | null;
+}>();
+
+const emit = defineEmits<{
+    'preview-open': [];
+    'preview-close': [];
 }>();
 
 const treeData = ref<WorkspaceNode[]>([]);
@@ -434,16 +443,6 @@ const renderedContent = computed(() => {
     return '';
 });
 
-/**
- * 检查节点是否在树中
- */
-function isNodeInTree(nodes: WorkspaceNode[], path: string): boolean {
-    for (const node of nodes) {
-        if (node.path === path) return true;
-        if (node.children && isNodeInTree(node.children, path)) return true;
-    }
-    return false;
-}
 
 /**
  * 增量更新树数据，保留已加载的子节点和展开状态
@@ -516,8 +515,6 @@ async function loadTree(force = false) {
     }
 }
 
-// 创建节流版本的 loadTree（5秒内最多执行一次）
-const throttledLoadTree = useThrottleFn(loadTree, 5000);
 
 /**
  * 刷新树（强制立即执行）
@@ -953,6 +950,10 @@ async function handleFileSelect(node: WorkspaceNode) {
 
     const ext = node.name.substring(node.name.lastIndexOf('.')).toLowerCase();
 
+    // 通知父组件预览已打开，以便切换分割比例
+    // 注意要先通知后打开
+    emit('preview-open');
+
     // 总是打开预览面板
     selectedFile.value = {
         name: node.name,
@@ -988,6 +989,8 @@ async function handleFileSelect(node: WorkspaceNode) {
         // 不支持的文件格式
         previewMode.value = 'unsupported';
     }
+
+
 }
 
 /**
@@ -1074,6 +1077,9 @@ function closePreview() {
     previewError.value = '';
     previewMode.value = null;
     imagePreviewUrl.value = '';
+
+    // 通知父组件预览已关闭，以便恢复分割比例
+    emit('preview-close');
 }
 
 /**
@@ -1232,8 +1238,9 @@ onUnmounted(() => {
 </script>
 <style>
 @import "@/assets/markdown.css";
+
 .code-preview-container pre code.hljs {
-    color: var(--color-text, #333)!important;
+    color: var(--color-text, #333) !important;
 }
 </style>
 <style scoped>
@@ -1248,8 +1255,9 @@ onUnmounted(() => {
 
 /* Markdown 预览容器 - 复用 markdown-text 样式 */
 .markdown-preview {
-    color: var(--color-text, #333)!important;
+    color: var(--color-text, #333) !important;
 }
+
 .markdown-preview {
     padding: 16px;
     overflow: auto;
@@ -1300,4 +1308,69 @@ onUnmounted(() => {
     color: var(--color-primary, #409eff);
 }
 
+/* 预览/源码模式切换按钮 */
+.preview-mode-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 24px;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    background: transparent;
+    color: #6b7280;
+    transition: all 0.15s ease;
+    outline: none;
+}
+
+.preview-mode-btn:hover {
+    background-color: rgba(0, 0, 0, 0.06);
+}
+
+.dark .preview-mode-btn {
+    color: #6b7280;
+}
+
+.dark .preview-mode-btn:hover {
+    background-color: rgba(255, 255, 255, 0.08);
+}
+
+.preview-mode-btn.is-active {
+    color: #1a1a1a;
+    background-color: #fff;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06);
+}
+
+.dark .preview-mode-btn.is-active {
+    color: #fff;
+    background-color: #3a3c42;
+    box-shadow: none;
+}
+
+/* 关闭预览按钮 */
+.preview-close-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    background: transparent;
+    color: #1a1a1a;
+    transition: all 0.15s ease;
+    outline: none;
+}
+
+.preview-close-btn:hover {
+    color: #1a1a1a;
+    background-color: rgba(0, 0, 0, 0.06);
+}
+
+.dark .preview-close-btn:hover {
+    color: #fff;
+    background-color: rgba(255, 255, 255, 0.08);
+}
 </style>

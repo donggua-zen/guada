@@ -133,55 +133,68 @@ exit /b %errorlevel%
   }
 }
 
-// 动态检测 Visual Studio 路径
+// 动态检测 Visual Studio 路径（使用 vswhere.exe，比 VSSetup PowerShell 模块更可靠）
 function findVisualStudio() {
   console.log('Step 1: Detecting Visual Studio installation...')
   
-  try {
-    const tempPsPath = path.join(__dirname, '_temp_find_vs.ps1')
-    const psScript = `
-$ErrorActionPreference = 'Stop'
-try {
-  Import-Module VSSetup -ErrorAction Stop
-  $instance = Get-VSSetupInstance | Select-Object -First 1
-  if ($instance) {
-    Write-Output $instance.InstallationPath
-    exit 0
-  } else {
-    Write-Error "No Visual Studio instance found"
-    exit 1
+  // 可能的 vswhere 路径
+  const vswhereCandidates = [
+    path.join(process.env['ProgramFiles(x86)'] || 'C:\\Program Files (x86)', 'Microsoft Visual Studio', 'Installer', 'vswhere.exe'),
+    path.join(process.env['ProgramFiles'] || 'C:\\Program Files', 'Microsoft Visual Studio', 'Installer', 'vswhere.exe'),
+    path.join(__dirname, '..', 'vswhere.exe')
+  ]
+  
+  let vswherePath = null
+  for (const candidate of vswhereCandidates) {
+    if (fs.existsSync(candidate)) {
+      vswherePath = candidate
+      break
+    }
   }
-} catch {
-  Write-Error $_.Exception.Message
-  exit 1
-}
-`
-    fs.writeFileSync(tempPsPath, psScript)
-    
+  
+  if (vswherePath) {
     try {
-      const vsPath = execSync(`powershell -ExecutionPolicy Bypass -NoProfile -File "${tempPsPath}"`, {
+      const vsPath = execSync(`"${vswherePath}" -latest -property installationPath`, {
         encoding: 'utf8',
         stdio: ['pipe', 'pipe', 'pipe']
       }).trim()
       
-      if (!vsPath) {
-        throw new Error('No Visual Studio installation found')
+      if (vsPath && fs.existsSync(vsPath)) {
+        console.log(`Found Visual Studio at: ${vsPath}`)
+        return vsPath
       }
-      
+    } catch (e) {
+      // fall through to fallback
+    }
+  }
+  
+  // 回退方案：检查常见安装路径
+  const commonPaths = [
+    'C:\\Program Files\\Microsoft Visual Studio\\2022\\Community',
+    'C:\\Program Files\\Microsoft Visual Studio\\2022\\Professional',
+    'C:\\Program Files\\Microsoft Visual Studio\\2022\\Enterprise',
+    'C:\\Program Files\\Microsoft Visual Studio\\2022\\BuildTools',
+    'C:\\Program Files (x86)\\Microsoft Visual Studio\\2019\\Community',
+    'C:\\Program Files (x86)\\Microsoft Visual Studio\\2019\\Professional',
+    'C:\\Program Files (x86)\\Microsoft Visual Studio\\2019\\Enterprise',
+    'C:\\Program Files (x86)\\Microsoft Visual Studio\\2019\\BuildTools',
+    'D:\\Program Files\\Microsoft Visual Studio\\18\\Community',
+    'D:\\Program Files\\Microsoft Visual Studio\\17\\Community',
+    'D:\\Program Files\\Microsoft Visual Studio\\16\\Community'
+  ]
+  
+  for (const vsPath of commonPaths) {
+    const vcvarsall = path.join(vsPath, 'VC\\Auxiliary\\Build\\vcvarsall.bat')
+    if (fs.existsSync(vcvarsall)) {
       console.log(`Found Visual Studio at: ${vsPath}`)
       return vsPath
-    } finally {
-      if (fs.existsSync(tempPsPath)) {
-        fs.unlinkSync(tempPsPath)
-      }
     }
-  } catch (error) {
-    console.error('Failed to detect Visual Studio automatically')
-    console.error('Please ensure:')
-    console.error('1. Visual Studio is installed with "Desktop development with C++" workload')
-    console.error('2. VSSetup PowerShell module is installed: Install-Module VSSetup -Scope CurrentUser')
-    throw error
   }
+  
+  console.error('Failed to detect Visual Studio automatically')
+  console.error('Please ensure:')
+  console.error('1. Visual Studio is installed with "Desktop development with C++" workload')
+  throw new Error('No Visual Studio installation found')
 }
 
 const vsPath = findVisualStudio()
