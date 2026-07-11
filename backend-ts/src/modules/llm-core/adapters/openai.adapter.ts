@@ -153,11 +153,10 @@ export class OpenAIAdapter implements IProtocolAdapter {
     ) {
       // OpenAI 使用 reasoning_effort 参数
       requestParams.reasoning_effort = params.thinkingEffort;
-    } 
-    // else if (params.thinkingEffort === "off") {
-    //   requestParams.reasoning_effort = undefined;
-    //   requestParams.thinking = { type: "disabled" };
-    // }
+    } else if (params.thinkingEffort === "off") {
+      requestParams.reasoning_effort = undefined;
+      requestParams.thinking = { type: "disabled" };
+    }
 
     // 流式模式下请求返回 usage 信息（OpenAI 标准要求显式声明）
     // 多数供应商默认返回，但 OpenAI / Azure OpenAI 严格遵循此标准

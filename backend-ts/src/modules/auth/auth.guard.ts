@@ -84,6 +84,11 @@ export class AuthGuard implements CanActivate {
     if (typeof queryToken === "string" && queryToken) {
       return queryToken;
     }
+    // 尝试从 cookie 获取 token（用于 html-preview 子资源请求）
+    const cookies = (request as any).cookies;
+    if (cookies?.ws_token) {
+      return cookies.ws_token;
+    }
     return undefined;
   }
 }
