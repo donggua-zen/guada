@@ -373,6 +373,11 @@ onUnmounted(() => {
   transition: none !important;
 }
 
+/* 拖拽期间禁用 iframe 指针事件，防止 iframe 截获鼠标事件导致拖拽中断 */
+.lite-splitpanes--resizing :deep(iframe) {
+  pointer-events: none !important;
+}
+
 /* 暗色模式适配 */
 .dark .lite-splitpanes__splitter {
   background-color: #25262a;
@@ -380,5 +385,13 @@ onUnmounted(() => {
 
 .dark .lite-splitpanes__splitter:hover {
   background-color: var(--el-color-primary-light-8, #4a4d55);
+}
+
+/* 拖拽覆盖层：防止 iframe 截获鼠标事件 */
+.drag-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 9999;
+  cursor: col-resize;
 }
 </style>

@@ -641,6 +641,16 @@ class ApiService {
   }
 
   /**
+   * 获取 HTML 预览的 URL（用于 iframe src）
+   * 携带 token query 参数，后端验证后通过 Set-Cookie 让子资源请求自动鉴权
+   */
+  getWorkspaceHtmlPreviewUrl(sessionId: string, filePath: string): string {
+    const baseUrl = this.baseURL.replace(/\/$/, '');
+    const token = sessionStorage.getItem("token") || localStorage.getItem("token") || '';
+    return `${baseUrl}/sessions/${sessionId}/workspace/html-preview/${encodeURIComponent(filePath)}?token=${encodeURIComponent(token)}`;
+  }
+
+  /**
    * 更新会话的工作目录路径
    */
   async updateSessionWorkspacePath(

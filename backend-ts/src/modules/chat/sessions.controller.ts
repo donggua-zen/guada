@@ -9,16 +9,20 @@ import {
   Query,
   UseGuards,
   Res,
+  Req,
   Headers,
   HttpException,
   HttpStatus,
 } from "@nestjs/common";
-import type { Response } from "express";
+import type { Request, Response } from "express";
+import { JwtService } from "@nestjs/jwt";
 import { AuthGuard } from "../auth/auth.guard";
 import { CurrentUser } from "../auth/current-user.decorator";
+import { Public } from "../auth/public.decorator";
 import { SessionService } from "./session.service";
 import { WorkspaceService } from "../../common/services/workspace.service";
 import { EventBusService } from "../../common/events/event-bus.service";
+import { UserRepository } from "../../common/database/user.repository";
 import { UpdateSessionDto } from "./dto/update-session.dto";
 import { CreateSessionDto } from "./dto/create-session.dto";
 import * as path from 'path';
@@ -32,6 +36,8 @@ export class SessionsController {
     private readonly sessionService: SessionService,
     private readonly workspaceService: WorkspaceService,
     private readonly eventBus: EventBusService,
+    private readonly jwtService: JwtService,
+    private readonly userRepo: UserRepository,
   ) { }
 
   @Get("sessions")
@@ -415,6 +421,93 @@ export class SessionsController {
     stream.pipe(res);
   }
 
+  /**
+   * HTML 预览端点 — 专为 iframe 预览设计
+   * 标记为 @Public() 自行鉴权，通过 Set-Cookie 让子资源请求自动携带凭据
+   */
+  @Get("sessions/:id/workspace/html-preview/*filePath")
+  @Public()
+  async htmlPreview(
+    @Param("id") id: string,
+    @Param("filePath") filePath: string,
+    @Req() req: Request,
+    @Res() res: Response,
+  ) {
+    if (!filePath) {
+      throw new HttpException("File path is required", HttpStatus.BAD_REQUEST);
+    }
+
+    // 从 query 参数或 Cookie 获取 token（项目未使用 cookie-parser，手动解析 Cookie 头）
+    const queryToken = req.query?.token as string | undefined;
+    const cookieHeader = req.headers?.cookie as string | undefined;
+    const cookies = parseCookieHeader(cookieHeader);
+    const jwtToken = queryToken || cookies.ws_token;
+    if (!jwtToken) {
+      throw new HttpException("Missing authentication token", HttpStatus.UNAUTHORIZED);
+    }
+
+    let userId: string;
+    try {
+      const payload = await this.jwtService.verifyAsync(jwtToken, {
+        secret: process.env.JWT_SECRET,
+      });
+      userId = payload.sub;
+    } catch {
+      throw new HttpException("Invalid or expired token", HttpStatus.UNAUTHORIZED);
+    }
+
+    // 验证用户存在
+    const user = await this.userRepo.findById(userId);
+    if (!user) {
+      throw new HttpException("User no longer exists", HttpStatus.UNAUTHORIZED);
+    }
+
+    // 验证会话归属权
+    const session = await this.sessionService.getSessionById(id, userId);
+    if (!session) {
+      throw new HttpException("Session not found or unauthorized", HttpStatus.NOT_FOUND);
+    }
+
+    // 设置 Cookie（仅首次请求需要，后续子资源请求自动携带）
+    // 作用域限制在 html-preview 路径下，5分钟过期
+    const cookiePath = `/api/v1/sessions/${id}/workspace/html-preview`;
+    res.setHeader('Set-Cookie', `ws_token=${jwtToken}; Path=${cookiePath}; HttpOnly; SameSite=Lax; Max-Age=300`);
+
+    // 确定工作目录路径
+    const workspaceDir = await this.workspaceService.resolveSessionWorkspaceDir(session);
+
+    // 解析文件路径并安全检查
+    const resolvedPath = this.workspaceService.resolveFilePath(filePath, workspaceDir);
+    if (!resolvedPath.startsWith(workspaceDir)) {
+      throw new HttpException("Access denied: File is outside workspace directory", HttpStatus.FORBIDDEN);
+    }
+
+    if (!fs.existsSync(resolvedPath)) {
+      throw new HttpException("File not found", HttpStatus.NOT_FOUND);
+    }
+
+    const stat = fs.statSync(resolvedPath);
+    if (stat.isDirectory()) {
+      throw new HttpException("Cannot read directory as file", HttpStatus.BAD_REQUEST);
+    }
+
+    // 检查文件大小（限制为 10MB）
+    const MAX_FILE_SIZE = 10 * 1024 * 1024;
+    if (stat.size > MAX_FILE_SIZE) {
+      throw new HttpException("File too large (max 10MB)", HttpStatus.PAYLOAD_TOO_LARGE);
+    }
+
+    // 根据扩展名设置 Content-Type
+    const ext = path.extname(filePath).toLowerCase();
+    const mimeType = this.getMimeType(ext);
+    res.setHeader('Content-Type', mimeType);
+    res.setHeader('Content-Length', stat.size);
+
+    // 流式返回文件内容
+    const stream = fs.createReadStream(resolvedPath);
+    stream.pipe(res);
+  }
+
   @Delete("sessions/:id/workspace/file")
   async deleteWorkspaceFile(
     @Param("id") id: string,
@@ -546,4 +639,22 @@ export class SessionsController {
     };
     return mimeTypes[extension] || 'application/octet-stream';
   }
+}
+
+/**
+ * 手动解析 Cookie 请求头
+ * 项目未使用 cookie-parser 中间件，故手动解析
+ */
+function parseCookieHeader(header: string | undefined): Record<string, string> {
+  const cookies: Record<string, string> = {};
+  if (!header) return cookies;
+  header.split(';').forEach(pair => {
+    const idx = pair.indexOf('=');
+    if (idx > 0) {
+      const key = pair.substring(0, idx).trim();
+      const value = pair.substring(idx + 1).trim();
+      if (key) cookies[key] = value;
+    }
+  });
+  return cookies;
 }

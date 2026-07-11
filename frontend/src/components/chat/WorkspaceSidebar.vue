@@ -138,8 +138,8 @@
                         </div>
                     </div>
                     <template v-else-if="previewMode === 'text'">
-                        <!-- HTML 预览模式 -->
-                        <iframe v-if="isHtmlFile && currentPreviewMode === 'rendered'" :srcdoc="fileContent"
+                        <!-- HTML 预览模式（通过 src 直接加载，后端 Set-Cookie 鉴权） -->
+                        <iframe v-if="isHtmlFile && currentPreviewMode === 'rendered'" :src="htmlPreviewUrl"
                             class="w-full border-0" style="height: 100%;" sandbox="allow-same-origin allow-scripts" />
 
                         <!-- Markdown 渲染模式 -->
@@ -218,6 +218,8 @@ const selectedNodePath = ref('');
 const previewMode = ref<'text' | 'image' | 'unsupported' | null>(null);
 // 图片预览 URL（Electron 为 file:// 协议，非 Electron 为 rawfile URL）
 const imagePreviewUrl = ref('');
+// HTML 预览 URL（iframe src，Electron 为 file://，非 Electron 为 html-preview 端点）
+const htmlPreviewUrl = ref('');
 
 // 正在加载子节点的目录路径集合
 const loadingPaths = ref<Set<string>>(new Set());
@@ -970,7 +972,20 @@ async function handleFileSelect(node: WorkspaceNode) {
         // 文本文件：通过后端 API 读取（已有 5MB 限制）
         previewMode.value = 'text';
         fileContentHash.value = '';
-        await loadFileContent(node.path);
+
+        // HTML 文件走 iframe src 直连，无需加载内容
+        if (isHtmlFile.value) {
+            if (isElectron && window.location.protocol === 'file:') {
+                // Electron 生产环境（file:// 协议）：直接使用 file:// 加载本地文件
+                // 浏览器原生解析所有相对路径（CSS、图片等），无鉴权问题
+                await loadHtmlPreviewLocal(node);
+            } else {
+                // Electron 开发模式（http://）和非 Electron 环境：走后端 html-preview 代理
+                htmlPreviewUrl.value = apiService.getWorkspaceHtmlPreviewUrl(props.sessionId!, node.path);
+            }
+        } else {
+            await loadFileContent(node.path);
+        }
     } else if (isImageFile(ext)) {
         previewMode.value = 'image';
         // Electron 正式环境（file:// 协议）：直连本地文件，无大小限制
@@ -1018,6 +1033,32 @@ async function loadImageLocal(node: WorkspaceNode) {
     } catch (error: any) {
         previewError.value = '加载图片失败';
         console.error('[WorkspaceSidebar] Failed to load image locally:', error);
+    }
+}
+
+/**
+ * Electron 环境下加载本地 HTML 文件
+ * 获取工作目录绝对路径，拼接相对路径构造 file:// URL
+ * 浏览器原生处理所有相对路径（CSS、图片等）
+ */
+async function loadHtmlPreviewLocal(node: WorkspaceNode) {
+    try {
+        const resp = await apiService.getWorkspacePath(props.sessionId!);
+        const absWorkspacePath = resp.workspacePath;
+        if (!absWorkspacePath) {
+            previewError.value = '无法获取工作目录路径';
+            return;
+        }
+        const relativePath = node.path.replace(/\\/g, '/');
+        const separator = absWorkspacePath.endsWith('/') || absWorkspacePath.endsWith('\\') ? '' : '/';
+        const fullPath = (absWorkspacePath + separator + relativePath).replace(/\\/g, '/');
+        const encodedPath = encodeURI(fullPath);
+        const fileUrl = encodedPath.startsWith('/') ? `file://${encodedPath}` : `file:///${encodedPath}`;
+        htmlPreviewUrl.value = fileUrl;
+        console.log('[WorkspaceSidebar] HTML local URL:', fileUrl);
+    } catch (error: any) {
+        previewError.value = '加载 HTML 失败';
+        console.error('[WorkspaceSidebar] Failed to load HTML locally:', error);
     }
 }
 
@@ -1077,6 +1118,7 @@ function closePreview() {
     previewError.value = '';
     previewMode.value = null;
     imagePreviewUrl.value = '';
+    htmlPreviewUrl.value = '';
 
     // 通知父组件预览已关闭，以便恢复分割比例
     emit('preview-close');
