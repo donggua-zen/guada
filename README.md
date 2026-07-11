@@ -5,7 +5,6 @@
 <p align="center">
   <a href="https://gitee.com/zhendongdong/guada_ai/stargazers"><img src="https://gitee.com/zhendongdong/guada_ai/badge/star.svg?theme=dark" alt="stars"></a>
   <a href="https://gitee.com/zhendongdong/guada_ai/members"><img src="https://gitee.com/zhendongdong/guada_ai/badge/fork.svg?theme=dark" alt="forks"></a>
-  <a href="https://gitee.com/zhendongdong/guada_ai/watchers"><img src="https://gitee.com/zhendongdong/guada_ai/badge/watchers.svg?theme=dark" alt="watchers"></a>
   <img src="https://img.shields.io/badge/NestJS-11.x-red.svg" alt="NestJS">
   <img src="https://img.shields.io/badge/Vue-3.x-4FC08D?logo=vue.js&logoColor=white" alt="Vue">
   <img src="https://img.shields.io/badge/TypeScript-6.x-blue.svg" alt="TypeScript">
@@ -123,48 +122,6 @@ cp .env.example .env
 
 ![系统架构](./images/system-architecture.png)
 
-```mermaid
-graph TB
-    subgraph FE["前端入口"]
-        Web["Vue 3 Web 应用"]
-        Electron["Electron 桌面应用"]
-        IM["QQ / 企微等 IM 客户端"]
-    end
-    subgraph GW["入口层"]
-        API["REST + SSE API"]
-        BOT["Bot Gateway"]
-    end
-    subgraph CORE["核心服务层"]
-        AE["Agent Engine<br/>ReAct 循环 · 会话锁 · 流式传输"]
-        SUB["Sub-Agent Manager<br/>子 Agent 创建 · 委派 · 结果归集"]
-        CTX["Context Manager<br/>两级压缩 · 检查点 · 快照回退"]
-        KB["Knowledge Base / RAG<br/>混合检索 · Agent 自助搜索/写入"]
-        TOOL["Tool Orchestrator<br/>工具调度 · MCP 协议 · 审批"]
-        SKILL["Skills 框架<br/>渐进式加载 · 热插拔 · 命名空间"]
-        LLM["LLM Adapter<br/>多供应商 · Token 计数 · Thinking"]
-    end
-    subgraph DATA["数据层"]
-        DB[("关系数据库<br/>SQLite / PostgreSQL")]
-        VEC[("向量索引<br/>sqlite-vec + FTS5")]
-        FS["文件系统"]
-    end
-    Web -->|HTTP / SSE| API
-    Electron -->|HTTP / SSE| API
-    IM -->|WebSocket| BOT
-    API --> AE
-    BOT --> AE
-    AE --> SUB
-    AE --> CTX
-    AE --> KB
-    AE --> TOOL
-    AE --> SKILL
-    AE --> LLM
-    SUB --> TOOL
-    SUB --> LLM
-    KB --> VEC
-    CTX --> DB
-    TOOL --> LLM
-```
 
 **架构四层：** `前端入口 → 入口层 → 核心服务层 → 数据层`
 
