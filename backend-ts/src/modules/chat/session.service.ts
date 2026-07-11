@@ -22,6 +22,7 @@ import { SessionContextFactory } from "./session-context.factory";
 import { FileWatcherService } from "../../common/services/file-watcher.service";
 import { SessionStreamManager } from "./session-stream.manager";
 import { SummaryMode } from "./compression-engine";
+import { resolveThinkingEffort } from "../llm-core";
 
 @Injectable()
 export class SessionService {
@@ -163,8 +164,7 @@ export class SessionService {
    * 创建新会话，支持从角色继承配置
    */
   async createSession(userId: string, data: any) {
-    const { modelId, characterId, title, settings, workspacePath } =
-      data;
+    const { modelId, characterId, title, settings, workspacePath } = data;
 
     let mainCharacterId = characterId;
 
@@ -508,7 +508,7 @@ export class SessionService {
         messages: [{ role: "user", content: prompt }],
         temperature: 0.3, // 较低的温度使输出更稳定
         maxTokens: 50, // 限制输出长度
-        thinkingEffort: "off", // 禁用思考功能
+        thinkingEffort: resolveThinkingEffort(model, "off"), // 禁用思考功能
         stream: false,
         providerConfig: model.provider,
       });
