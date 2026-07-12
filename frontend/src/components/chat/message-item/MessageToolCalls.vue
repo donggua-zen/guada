@@ -85,7 +85,20 @@
             执行结果
           </div>
           <div class="bg-gray-50 dark:bg-gray-900 rounded-lg p-3">
-            <pre class="text-sm overflow-x-auto text-gray-700 dark:text-gray-300 whitespace-pre-wrap break-all">{{
+            <!-- JSON 解码成功且为简单对象 → 表格展示 -->
+            <div v-if="isSimpleResult(currentToolResponses[selectedToolIndex])" class="params-table">
+              <div class="param-header py-2 border-b border-gray-200 dark:border-gray-700">
+                <span class="param-key text-sm font-semibold text-gray-800 dark:text-gray-200">字段</span>
+                <span class="param-value text-sm font-semibold text-gray-800 dark:text-gray-200 ml-4">值</span>
+              </div>
+              <div v-for="(value, key) in parseResult(currentToolResponses[selectedToolIndex])" :key="key"
+                class="param-row py-2 border-b border-gray-100 dark:border-gray-800 last:border-b-0">
+                <span class="param-key text-sm font-medium text-gray-700 dark:text-gray-300">{{ key }}</span>
+                <span class="param-value text-sm text-gray-600 dark:text-gray-400 ml-4">{{ formatParamValue(value) }}</span>
+              </div>
+            </div>
+            <!-- JSON 解码失败或复杂对象 → pre 展示 -->
+            <pre v-else class="text-sm overflow-x-auto text-gray-700 dark:text-gray-300 whitespace-pre-wrap break-all">{{
               formatToolResponse(currentToolResponses[selectedToolIndex])
             }}</pre>
           </div>
@@ -382,16 +395,63 @@ const formatToolArgs = (args: any): string => {
   }
 };
 
-const formatToolResponse = (response: any): string => {
-  if (!response) return '无响应';
+/**
+ * 提取工具结果中真正有意义的内容：
+ * 1. 解析外层 JSON 响应
+ * 2. 如果存在 content 字段，尝试将其解析为内层 JSON
+ * 3. content 解析成功 → 返回内层数据（这才是真正的工具结果）
+ * 4. content 不是 JSON / 没有 content 字段 → 返回外层原始数据
+ */
+const extractResultContent = (response: any): any => {
+  if (!response) return null;
   try {
     const parsed = typeof response === 'string' ? JSON.parse(response) : response;
-    const content = parsed['content'];
-    // 如果 content 是字符串,直接返回;如果是对象,才格式化
-    return typeof content === 'string' ? content : JSON.stringify(content, null, 2);
-  } catch (e) {
-    return String(response);
+    // 尝试解析 content 字段中的内层 JSON
+    if (parsed.content) {
+      try {
+        const inner = typeof parsed.content === 'string'
+          ? JSON.parse(parsed.content)
+          : parsed.content;
+        return inner; // 内层有意义的数据
+      } catch {
+        // content 不是 JSON 字符串，返回外层
+        return parsed;
+      }
+    }
+    // 没有 content 字段，直接返回解析结果
+    return parsed;
+  } catch {
+    return null; // 整体 JSON 解析失败
   }
+};
+
+const formatToolResponse = (response: any): string => {
+  if (!response) return '无响应';
+  const content = extractResultContent(response);
+  if (content) {
+    return JSON.stringify(content, null, 2);
+  }
+  return String(response);
+};
+
+/**
+ * 判断工具结果是否为简单 JSON 对象（扁平 key-value，非数组）
+ * 优先取 content 内层数据判断
+ * 是则用表格展示，否则用 pre 展示完整 JSON
+ */
+const isSimpleResult = (response: any): boolean => {
+  const content = extractResultContent(response);
+  if (!content) return false;
+  return typeof content === 'object' && content !== null && !Array.isArray(content) && Object.keys(content).length > 0;
+};
+
+/**
+ * 将工具结果解析为 key-value 对象（用于表格展示）
+ * 优先取 content 内层数据
+ */
+const parseResult = (response: any): Record<string, any> => {
+  const content = extractResultContent(response);
+  return content && typeof content === 'object' ? content : {};
 };
 </script>
 
@@ -434,6 +494,7 @@ const formatToolResponse = (response: any): string => {
 .param-value {
   flex: 1;
   word-break: break-word;
+  white-space: pre-wrap;
 }
 
 

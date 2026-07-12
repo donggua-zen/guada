@@ -206,9 +206,6 @@ const barColor = computed(() => {
   return 'bar-green';
 });
 
-// 初始化流式响应处理器
-const streamHandler = useStreamResponse(sessionStore, apiService)
-
 // Props & Emits - 类型化
 const props = defineProps<{
   session: Session | null;
@@ -803,7 +800,8 @@ async function handleStreamResponse(
   userMessageId?: string | null,
 ) {
   try {
-    await streamHandler.processStream(
+    const handler = useStreamResponse(sessionStore, apiService)
+    await handler.processStream(
       streamingSessionId,
       regenerationMode,
       assistantMessageId,
@@ -834,7 +832,8 @@ async function handleStreamResponseWithCreate(
   knowledgeBaseIds?: string[],
 ) {
   try {
-    await streamHandler.processStreamWithCreate(
+    const handler = useStreamResponse(sessionStore, apiService)
+    await handler.processStreamWithCreate(
       streamingSessionId,
       content,
       fileIds,
@@ -1077,7 +1076,8 @@ async function handleStreamResponseAsSubscriber(
       ? lastAssistantMessage.contents[lastAssistantMessage.contents.length - 1].id
       : null;
 
-    await streamHandler.processStream(
+    const handler = useStreamResponse(sessionStore, apiService)
+    await handler.processStream(
       streamingSessionId,
       'subscribe',
       null,
