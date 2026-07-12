@@ -158,11 +158,15 @@ Actively discover valuable content and use the \`memory\` tool to manage memorie
         content: z
           .string()
           .optional()
-          .describe("Content to write. When empty/empty string during replace, the old_text is considered deleted"),
+          .describe(
+            "Content to write. When empty/empty string during replace, the old_text is considered deleted",
+          ),
         old_text: z
           .string()
           .optional()
-          .describe("Old text to locate during replace; must exactly match the original text"),
+          .describe(
+            "Old text to locate during replace; must exactly match the original text",
+          ),
         memo_title: z
           .string()
           .optional()
@@ -170,7 +174,9 @@ Actively discover valuable content and use the \`memory\` tool to manage memorie
         pattern: z
           .string()
           .optional()
-          .describe("Regex pattern for search; searches the memos directory by default"),
+          .describe(
+            "Regex pattern for search; searches the memos directory by default",
+          ),
       }),
       execute: async (args, ctx) => {
         return this.handleMemoryEdit(args, ctx);
@@ -218,7 +224,10 @@ Actively discover valuable content and use the \`memory\` tool to manage memorie
       return result;
     } catch (e: any) {
       this.logger.error(`memory failed: ${e.message}`);
-      return { success: false, message: e.message || "memory operation failed" };
+      return {
+        success: false,
+        message: e.message || "memory operation failed",
+      };
     }
   }
 
@@ -242,7 +251,7 @@ Actively discover valuable content and use the \`memory\` tool to manage memorie
       if (e.code !== "ENOENT") throw e;
     }
     const toWrite = existing
-      ? existing.trimEnd() + "\n" + content + "\n"
+      ? existing.trimEnd() + "\n\n" + content + "\n"
       : content + "\n";
     await fs.writeFile(filePath, toWrite, "utf-8");
 

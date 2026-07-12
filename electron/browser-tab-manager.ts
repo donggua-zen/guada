@@ -445,18 +445,27 @@ export class BrowserWindowManager {
    */
   getWindowIdByWebContentsId(webContentsId: number): string | null {
     for (const [windowId, win] of this.windows.entries()) {
-      if (
-        !win.shellWebContents.isDestroyed() &&
-        win.shellWebContents.id === webContentsId
-      ) {
-        return windowId;
+      try {
+        if (
+          win.shellWebContents &&
+          !win.shellWebContents.isDestroyed() &&
+          win.shellWebContents.id === webContentsId
+        ) {
+          return windowId;
+        }
+      } catch {
+        // shellWebContents 可能已处于无效状态
       }
-      if (
-        win.webviewWebContents &&
-        !win.webviewWebContents.isDestroyed() &&
-        win.webviewWebContents.id === webContentsId
-      ) {
-        return windowId;
+      try {
+        if (
+          win.webviewWebContents &&
+          !win.webviewWebContents.isDestroyed() &&
+          win.webviewWebContents.id === webContentsId
+        ) {
+          return windowId;
+        }
+      } catch {
+        // webviewWebContents 可能已处于无效状态
       }
     }
     return null;

@@ -88,7 +88,7 @@ export class BrowserPlugin extends PluginBase {
               signal,
             );
           },
-          display: { action: "Open New Window", argsKey: "url", icon: "browser" },
+          display: { action: "打开新窗口", argsKey: "url", icon: "browser" },
         });
         toolkit.registerTool({
           name: "browser_navigate",
@@ -139,7 +139,7 @@ export class BrowserPlugin extends PluginBase {
             );
             return result;
           },
-          display: { action: "Execute JavaScript", argsKey: "code", icon: "code" },
+          display: { action: "执行JavaScript", argsKey: "code", icon: "browser" },
         });
         toolkit.registerTool({
           name: "browser_page_text",
@@ -169,7 +169,7 @@ export class BrowserPlugin extends PluginBase {
             );
             return r;
           },
-          display: { action: "Get Page Structure", icon: "browser" },
+          display: { action: "提取页面结构", icon: "browser" },
         });
         toolkit.registerTool({
           name: "browser_page_summary",
@@ -185,7 +185,7 @@ export class BrowserPlugin extends PluginBase {
             );
             return r;
           },
-          display: { action: "Get Page Summary", icon: "browser" },
+          display: { action: "提取页面摘要", icon: "browser" },
         });
         toolkit.registerTool({
           name: "browser_back",
@@ -213,7 +213,7 @@ export class BrowserPlugin extends PluginBase {
           }),
           execute: async (args, ctx, signal) =>
             this.executeWithContent("browser_forward", args, signal),
-          display: { action: "Go Forward", icon: "browser" },
+          display: { action: "前进", icon: "browser" },
         });
         toolkit.registerTool({
           name: "browser_reload",
@@ -227,7 +227,7 @@ export class BrowserPlugin extends PluginBase {
           }),
           execute: async (args, ctx, signal) =>
             this.executeWithContent("browser_reload", args, signal),
-          display: { action: "Reload Page", icon: "browser" },
+          display: { action: "刷新页面", icon: "browser" },
         });
         toolkit.registerTool({
           name: "browser_click",
@@ -239,7 +239,7 @@ export class BrowserPlugin extends PluginBase {
           }),
           execute: async (args, ctx, signal) =>
             this.sendRequest("browser_click", args, signal),
-          display: { action: "Click Element", argsKey: "selector", icon: "browser" },
+          display: { action: "点击元素", argsKey: "selector", icon: "browser" },
         });
         toolkit.registerTool({
           name: "browser_input",
@@ -277,7 +277,7 @@ export class BrowserPlugin extends PluginBase {
             );
             return r;
           },
-          display: { action: "Get Window List", icon: "browser" },
+          display: { action: "获取窗口列表", icon: "browser" },
         });
 
         // 使用说明提示词
