@@ -12,6 +12,7 @@ interface PluginRegistration {
   prompts: Array<{
     methodName: string;
     frequency: string;
+    type?: "system" | "user";
     toolSet?: string;
     description: string;
     handler: (context: any) => string | Promise<string>;

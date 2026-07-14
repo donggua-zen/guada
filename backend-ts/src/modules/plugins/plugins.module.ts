@@ -9,6 +9,10 @@ import { MemoryPlugin } from "./builtins/memory.plugin";
 import { TimePlugin } from "./builtins/time.plugin";
 import { BrowserPlugin } from "./builtins/browser.plugin";
 import { TodoPlugin } from "./builtins/todo.plugin";
+import { WebSearchPlugin } from "./builtins/web-search.plugin";
+import { MetasoProvider } from "./builtins/search-providers/metaso.provider";
+import { TavilyProvider } from "./builtins/search-providers/tavily.provider";
+import { BochaProvider } from "./builtins/search-providers/bocha.provider";
 import { PromptCollector } from "./prompt-collector.service";
 
 @Global()
@@ -24,6 +28,10 @@ import { PromptCollector } from "./prompt-collector.service";
     TimePlugin,
     BrowserPlugin,
     TodoPlugin,
+    WebSearchPlugin,
+    MetasoProvider,
+    TavilyProvider,
+    BochaProvider,
   ],
   exports: [PluginManager, PromptCollector],
 })
@@ -41,6 +49,7 @@ export class PluginsModule implements OnModuleInit {
     await this.pluginManager.registerPlugin(this.moduleRef.get(TimePlugin));
 
     await this.pluginManager.registerPlugin(this.moduleRef.get(TodoPlugin));
+    await this.pluginManager.registerPlugin(this.moduleRef.get(WebSearchPlugin));
 
     if (process.env.ELECTRON_APP === "true") {
       await this.pluginManager.registerPlugin(this.moduleRef.get(BrowserPlugin));

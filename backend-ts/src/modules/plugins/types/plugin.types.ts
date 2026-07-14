@@ -28,6 +28,8 @@ export interface PromptPiece {
   frequency: PromptFrequency;
   /** 加载模式：eager=始终注入, lazy=tool_load时注入, none=不注入 */
   loadMode?: ToolLoadMode;
+  /** 注入位置：system=system prompt, user=user消息（插件级提示词专用） */
+  type?: "system" | "user";
   /** 所属插件 ID */
   pluginId: string;
   /** 描述（用于调试和 UI） */
@@ -46,7 +48,7 @@ export type PromptContext = PluginContext;
 
 // ==================== 工具（沿用现有定义） ====================
 
-export type ToolLoadMode = "eager" | "lazy" | "none";
+export type ToolLoadMode = "eager" | "lazy" | "user" | "none";
 export type ToolProviderType = "core" | "extended";
 export type ConditionFn = (
   context: PluginContext,

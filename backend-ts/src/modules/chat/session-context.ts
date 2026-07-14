@@ -165,8 +165,22 @@ export interface ISessionContext {
   // === 对话状态管理 ===
   /** 初始化：加载历史消息、恢复压缩状态 */
   initialize(): Promise<void>;
-  /** 获取准备发送给 LLM 的完整消息列表（含 system prompt、摘要和历史） */
+  /**
+   * 获取准备发送给 LLM 的完整消息列表（含 system prompt、摘要和历史）
+   *
+   * ⚠️ 禁止在插件中调用，否则会导致无限递归！插件应使用 getHistory()
+   */
   getMessages(options?: GetMessagesOptions): Promise<MessageRecord[]>;
+  /**
+   * 获取原始的对话历史消息列表（不含 system prompt / 摘要 / 插件提示词）。
+   *
+   * 与 getMessages() 的区别：
+   * - getMessages() 返回完整消息列表（含 system prompt），禁止在插件中调用
+   * - getHistory() 只返回 raw conversation messages，可在插件中安全使用
+   *
+   * 返回的数组是浅拷贝，修改不会影响内部状态。
+   */
+  getHistory(): Promise<MessageRecord[]>;
   /** 追加消息记录到历史并持久化 */
   appendParts(records: MessageRecord[]): Promise<void>;
   /** 持久化待保存的消息 */

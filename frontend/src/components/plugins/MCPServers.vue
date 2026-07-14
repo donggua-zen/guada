@@ -19,7 +19,8 @@
         </div>
 
         <!-- MCP 服务器列表 -->
-        <div v-if="servers.length > 0" class="grid gap-4" style="grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));">
+        <div v-if="servers.length > 0" class="grid gap-4"
+            style="grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));">
             <div v-for="server in servers" :key="server.id"
                 class="rounded-lg border border-gray-200 dark:border-[#232428] overflow-hidden bg-white dark:bg-[#232428] transition-all hover:border-(--color-primary)">
                 <div class="p-5 pb-4">
@@ -28,8 +29,8 @@
                             {{ server.name }}
                         </h3>
                         <el-switch v-model="server.enabled" :active-value="true" :inactive-value="false"
-                            @change="handleToggleServer(server)" inline-prompt active-text="启动" inactive-text="禁用" size="large"
-                            class="-mt-2" />
+                            @change="handleToggleServer(server)" inline-prompt active-text="启动" inactive-text="禁用"
+                            size="large" class="-mt-2" />
                     </div>
 
                     <p class="text-sm text-gray-600 dark:text-[#8b8d95] mb-3 line-clamp-3 min-h-[3.75rem]">
@@ -58,7 +59,8 @@
                 </div>
             </div>
         </div>
-        <div v-else class="rounded-lg border border-gray-200 dark:border-[#232428] bg-white dark:bg-[#232428] p-12 text-center">
+        <div v-else
+            class="rounded-lg border border-gray-200 dark:border-[#232428] bg-white dark:bg-[#232428] p-12 text-center">
             <el-icon size="48" class="mb-3 opacity-50 text-gray-400">
                 <InboxOutlined />
             </el-icon>
@@ -67,12 +69,11 @@
         </div>
 
         <!-- 添加/编辑服务器对话框 -->
-        <el-dialog v-model="showModal" :title="isEditMode ? '编辑 MCP 服务器' : '添加 MCP 服务器'" width="40%" align-center
+        <el-dialog v-model="showModal" :title="isEditMode ? '编辑 MCP 服务器' : '添加 MCP 服务器'"  style="max-width: 800px;width: 80%" align-center
             destroy-on-close>
-            <!-- 使用 ScrollContainer 包裹内容以支持滚动 -->
-            <ScrollContainer class="h-[60vh]">
-                <!-- Tab 切换 -->
-                <el-tabs v-model="activeTab" class="mb-4">
+
+            <!-- Tab 切换 -->
+            <el-tabs v-model="activeTab" class="mb-4">
                 <el-tab-pane label="基本配置" name="config">
                     <el-form ref="formRef" :model="serverForm" :rules="formRules" label-position="left"
                         label-width="120px" size="large">
@@ -139,7 +140,8 @@
                         </el-form-item>
 
                         <el-form-item label="启用状态">
-                            <el-switch v-model="serverForm.enabled" inline-prompt active-text="启动" inactive-text="禁用" size="large" />
+                            <el-switch v-model="serverForm.enabled" inline-prompt active-text="启动" inactive-text="禁用"
+                                size="large" />
                         </el-form-item>
                     </el-form>
                 </el-tab-pane>
@@ -185,7 +187,7 @@
                                             <div v-for="(paramInfo, paramName) in tool.inputSchema.properties"
                                                 :key="paramName" class="flex items-start gap-2">
                                                 <span class="font-mono text-blue-600 dark:text-blue-400">{{ paramName
-                                                    }}</span>
+                                                }}</span>
                                                 <span class="text-gray-400">:</span>
                                                 <span class="text-gray-600 dark:text-[#e8e9ed] flex-1">
                                                     {{ paramInfo.description || paramInfo.type || '' }}
@@ -212,7 +214,6 @@
                     </div>
                 </el-tab-pane>
             </el-tabs>
-            </ScrollContainer>
 
             <template #footer>
                 <span class="dialog-footer">
@@ -223,20 +224,22 @@
         </el-dialog>
 
         <!-- 导入配置对话框 -->
-        <el-dialog v-model="showImportModal" title="导入 MCP 服务器配置" width="50%" align-center destroy-on-close>
-            <ScrollContainer class="h-[60vh]">
-                <div class="mb-4">
-                    <div class="text-sm text-gray-600 dark:text-[#8b8d95] mb-2">
-                        请粘贴 MCP 服务器配置 JSON 数据，支持以下格式：
-                    </div>
-                    <ul class="text-xs text-gray-500 dark:text-[#6b6d75] list-disc list-inside space-y-1">
-                        <li>标准格式：<code class="bg-gray-100 dark:bg-[#2a2c30] px-1 rounded">{"mcpServers": {...}}</code></li>
-                        <li>单个服务器对象格式：<code class="bg-gray-100 dark:bg-[#2a2c30] px-1 rounded">{"name": "...", "baseUrl":
-                        "..."}</code></li>
-                    </ul>
-                </div>
+        <el-dialog v-model="showImportModal" title="导入 MCP 服务器配置" align-center destroy-on-close
+            style="max-width: 500px;width: 80%">
 
-                <el-input v-model="importJsonText" type="textarea" :rows="15" placeholder='请粘贴 JSON 配置，例如：
+            <div class="mb-4">
+                <div class="text-sm text-gray-600 dark:text-[#8b8d95] mb-2">
+                    请粘贴 MCP 服务器配置 JSON 数据，支持以下格式：
+                </div>
+                <ul class="text-xs text-gray-500 dark:text-[#6b6d75] list-disc list-inside space-y-1">
+                    <li>标准格式：<code class="bg-gray-100 dark:bg-[#2a2c30] px-1 rounded">{"mcpServers": {...}}</code>
+                    </li>
+                    <li>单个服务器对象格式：<code class="bg-gray-100 dark:bg-[#2a2c30] px-1 rounded">{"name": "...", "baseUrl":
+                    "..."}</code></li>
+                </ul>
+            </div>
+
+            <el-input v-model="importJsonText" type="textarea" :rows="15" placeholder='请粘贴 JSON 配置，例如：
 {
   "mcpServers": {
     "WebSearch": {
@@ -251,7 +254,6 @@
     }
   }
 }' />
-            </ScrollContainer>
 
             <template #footer>
                 <span class="dialog-footer">
@@ -790,6 +792,4 @@ onMounted(() => {
     -webkit-box-orient: vertical;
     overflow: hidden;
 }
-
-
 </style>

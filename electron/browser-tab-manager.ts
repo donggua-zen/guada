@@ -203,7 +203,18 @@ export class BrowserWindowManager {
             this.notifyWindowUpdate(windowId);
           }
           // 每次页面加载完成后重新注入反检测脚本
-          try { if (!webviewWC.isDestroyed()) this.injectAntiDetectionScript(webviewWC); } catch {}
+          // ⚠️ 跳过 chrome-error 内部页：在其上执行 JS 会触发 Chromium CHECK() 原生断言崩溃
+          const currentUrl = webviewWC.getURL();
+          if (
+            currentUrl &&
+            !currentUrl.startsWith("chrome-error://") &&
+            !currentUrl.startsWith("about:")
+          ) {
+            try {
+              if (!webviewWC.isDestroyed())
+                this.injectAntiDetectionScript(webviewWC);
+            } catch {}
+          }
         });
 
         // 监听加载失败
@@ -217,6 +228,23 @@ export class BrowserWindowManager {
             log.error(
               `Window ${windowId} webview failed to load: ${errorCode} - ${errorDescription}`,
             );
+            // 通知前端导航失败（含原始 URL 和错误详情）
+            if (this.mainWindow && !this.mainWindow.isDestroyed()) {
+              this.mainWindow.webContents.send("window-navigation-error", {
+                windowId,
+                errorCode,
+                errorDescription,
+                url: webviewWC.getURL(),
+              });
+            }
+            // 导航到 about:blank 阻止 chrome-error 页加载——该页面在部分 Electron
+            // 版本中会触发原生层退出（exit code 3 / STATUS_BREAKPOINT）
+            if (
+              !webviewWC.isDestroyed() &&
+              webviewWC.getURL() !== "about:blank"
+            ) {
+              webviewWC.loadURL("about:blank").catch(() => {});
+            }
           },
         );
 

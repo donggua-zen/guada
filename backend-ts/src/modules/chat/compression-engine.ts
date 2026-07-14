@@ -9,6 +9,7 @@ import {
   CompressionResult,
   CompressionCheckpoint,
   TokenBreakdown,
+  calcTotalTokens,
 } from "./interfaces";
 import { resolveThinkingEffort } from "../llm-core/utils/model-config.helper";
 import { EventBusService } from "../../common/events/event-bus.service";
@@ -61,34 +62,6 @@ export class CompressionEngine implements ICompressionStrategy {
   ) {}
 
   /**
-   * 判断是否需要触发压缩
-   *
-   * 基于当前 Token 总数与上下文窗口的比例进行判断。
-   * 优先使用缓存的 Token 计数以避免重复计算开销。
-   *
-   * @param messages 待评估的消息列表
-   * @param config 压缩配置，包含上下文窗口和触发阈值（contextWindow 已是实际生效值）
-   * @param cachedTokenCount 可选的缓存 Token 计数，若提供则直接使用
-   * @returns 是否达到压缩触发条件
-   */
-  async shouldCompress(
-    messages: MessageRecord[],
-    config: CompressionConfig,
-    cachedTokenCount?: number,
-  ): Promise<boolean> {
-    // 优先使用缓存的 Token 计数，避免重复计算
-    const modelName = config.chatModelName || "gpt4";
-    const totalTokens =
-      cachedTokenCount ??
-      (await this.tokenizerService.countTokens(modelName, messages));
-    const ratio = totalTokens / config.contextWindow;
-    this.logger.debug(
-      `Token stats: ${totalTokens}/${config.contextWindow} (${(ratio * 100).toFixed(1)}%), trigger at ${config.triggerRatio}${cachedTokenCount ? " (cached)" : ""}`,
-    );
-    return ratio >= config.triggerRatio;
-  }
-
-  /**
    * 执行完整的压缩流程
    *
    * 该方法协调两阶段压缩策略的执行：先尝试轻量级的裁剪操作，若无法满足目标则升级为摘要压缩。
@@ -118,7 +91,9 @@ export class CompressionEngine implements ICompressionStrategy {
     });
 
     // 记录压缩前的状态：使用传入的细粒度 Token 统计
-    const beforeTokenCount = tokenBreakdown?.total;
+    const beforeTokenCount = tokenBreakdown
+      ? calcTotalTokens(tokenBreakdown)
+      : undefined;
     const beforeMessageCount = cleanMessages.length;
 
     this.logger.log("Executing Stage 1: Pruning");
@@ -130,13 +105,9 @@ export class CompressionEngine implements ICompressionStrategy {
       config.chatModelName || "gpt4",
       prunedMessages,
     );
-    const targetTokens = Math.floor(config.contextWindow * config.targetRatio);
+    const targetTokens = config.targetTokens;
 
     this.logger.debug(
-      `After pruning: ${prunedTokens} tokens (target: ${targetTokens})`,
-    );
-
-    console.log(
       `After pruning: ${prunedTokens} tokens (target: ${targetTokens})`,
     );
 
@@ -315,6 +286,11 @@ export class CompressionEngine implements ICompressionStrategy {
     for (let i = prunedMessages.length - 1; i >= startIndex; i--) {
       const msg = prunedMessages[i];
       if (msg.role === "tool") {
+        // 保护 tool_learn 结果不被裁剪（含工具定义XML，裁剪后AI将丢失工具使用说明）
+        if (msg.name === "tool_learn") {
+          continue;
+        }
+
         if (protectedCount < PROTECTED_RECENT_TOOL_RESULTS_COUNT) {
           protectedCount++;
           continue;
