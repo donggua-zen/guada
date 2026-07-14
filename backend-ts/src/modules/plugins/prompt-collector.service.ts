@@ -3,7 +3,6 @@ import { PluginRegistry } from "./registry/plugin-registry";
 import {
   PromptPiece,
   PluginContext,
-  ToolLoadMode,
   ResolvedPluginInfo,
 } from "./types/plugin.types";
 
@@ -63,6 +62,49 @@ export class PromptCollector {
   }
 
   /**
+   * 收集所有启用插件的 type=user 插件级提示词（注入到 user 消息，而非 system prompt）。
+   *
+   * 只在插件级 prompts（api.registerPrompt）中扫描，不涉及工具包级。
+   */
+  async collectUserPrompts(
+    resolvedPlugins: ResolvedPluginInfo[],
+    context: PluginContext,
+  ): Promise<PromptPiece[]> {
+    const pieces: PromptPiece[] = [];
+
+    for (const rp of resolvedPlugins) {
+      if (!rp.enabled) continue;
+
+      const { prompts: pluginPrompts } = PluginRegistry.getPromptMetas(
+        rp.plugin.id,
+      );
+      for (const meta of pluginPrompts) {
+        if (meta.type !== "user") continue;
+        try {
+          const content = await meta.handler(context);
+          if (content) {
+            pieces.push({
+              content,
+              frequency: meta.frequency as any,
+              loadMode: "user",
+              type: "user",
+              pluginId: rp.plugin.id,
+              description: meta.description,
+            });
+          }
+        } catch {}
+      }
+    }
+
+    const order = { STATIC: 0, REGULAR: 1, VOLATILE: 2 };
+    pieces.sort((a, b) => {
+      const diff = (order[a.frequency] ?? 1) - (order[b.frequency] ?? 1);
+      return diff !== 0 ? diff : a.pluginId.localeCompare(b.pluginId);
+    });
+    return pieces;
+  }
+
+  /**
    * 从已决议的插件信息中，按 loadMode 收集提示词
    *
    * 提示词来源：
@@ -106,10 +148,12 @@ export class PromptCollector {
         }
       }
 
-      // 插件级 prompts（始终 eager）
+      // 插件级 prompts（始终 eager，跳过 type=user 的）
       if (loadMode === "eager") {
-        const { prompts: pluginPrompts } = PluginRegistry.getPromptMetas(pluginId);
+        const { prompts: pluginPrompts } =
+          PluginRegistry.getPromptMetas(pluginId);
         for (const meta of pluginPrompts) {
+          if (meta.type === "user") continue;
           try {
             const content = await meta.handler(context);
             if (content) {

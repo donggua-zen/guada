@@ -20,6 +20,8 @@ import {
   ICompressionStrategy,
   CompressionConfig,
   TokenBreakdown,
+  CompressionCheckpoint,
+  calcTotalTokens,
 } from "./interfaces";
 import {
   SK_MOD_COMPRESS_MODEL,
@@ -76,11 +78,11 @@ export class PersistentSessionContext implements ISessionContext {
   // 初始化后构建完成的 DTO（在 initialize() 中一次性填充）
   private modelConfig!: ModelConfig;
   /** system prompt 各部件：base / team / tool / summary */
-  private systemPromptParts: Record<string, string> = {};
+  private preludeParts: MessageRecord[] = [];
   private thinkingEffortValue!: string | undefined;
   private toolApprovalConfig!: ToolApprovalConfig;
   private resolvedPlugins: ResolvedPluginInfo[] = [];
-  private mergedSettings!: any;
+  private mergedSettings!: MergedSettings;
   private memoryConfig!: MemoryConfig;
   private effectiveContextWindow!: number;
   private _workspacePath!: string;
@@ -93,18 +95,17 @@ export class PersistentSessionContext implements ISessionContext {
   private pendingPersistRecords: MessageRecord[] = [];
   /** 细粒度 Token 统计 */
   private tokenBreakdown: TokenBreakdown = {
-    total: 0,
     systemPrompt: 0,
     summary: 0,
+    userPrompt: 0,
     history: 0,
   };
   private compressionModel: any;
 
+  private messagesLoaded: boolean = false;
   private conversationStateLoaded: boolean = false;
   /** 最近一次加载的压缩断点，传给 execute 避免重复查库 */
-  private loadedCheckpoint:
-    | import("./interfaces").CompressionCheckpoint
-    | null = null;
+  private loadedCheckpoint: CompressionCheckpoint | null = null;
 
   /** 消息加载游标：第一次 getMessages 时传给 loadMessages，只加载到此消息为止 */
   private messageCursor: string | undefined = undefined;
@@ -146,9 +147,6 @@ export class PersistentSessionContext implements ISessionContext {
 
     // 一次性构建所有 DTO，避免 getter 中的延迟计算和缓存逻辑
     this.modelConfig = this.buildModelConfig(model, prep.mergedSettings);
-    this.systemPromptParts = {
-      base: prep.mergedSettings.systemPrompt || "",
-    };
     this.thinkingEffortValue = prep.features.includes("thinking")
       ? prep.mergedSettings.thinkingEffort || "off"
       : undefined;
@@ -170,7 +168,7 @@ export class PersistentSessionContext implements ISessionContext {
    * - 对 Kimi 模型做空 content 兼容处理
    * - 计算 system prompt 和初始消息的 Token 计数（用于后续增量更新）
    */
-  private async loadConversationState(): Promise<void> {
+  private async loadMessages(): Promise<void> {
     this.logger.log(`Initializing conversation state for ${this.sessionId}`);
 
     const modelConfig = this.modelConfig;
@@ -210,9 +208,6 @@ export class PersistentSessionContext implements ISessionContext {
       : { messages: rawMessages, summary: undefined };
 
     this.history = preprocessResult.messages;
-    if (preprocessResult.summary) {
-      this.systemPromptParts.summary = preprocessResult.summary;
-    }
 
     // reasoning content 处理
     if (shouldLoadReasoning) {
@@ -290,52 +285,49 @@ export class PersistentSessionContext implements ISessionContext {
   /**
    * 获取准备发送给 LLM 的完整消息列表。
    *
-   * 在首次调用时触发懒加载（loadConversationState），后续复用缓存的历史数据。
+   * 在首次调用时触发懒加载（loadMessages），后续复用缓存的历史数据。
    * 每次调用前会检查是否达到压缩阈值，若达到则自动执行压缩策略。
+   *
+   * @warning 禁止在插件中调用，否则会导致无限递归
    *
    * @returns 包含 system prompt 和对话历史的消息数组，可直接传递给 LLM API
    */
   async getMessages(options?: {
     exclude?: string[];
   }): Promise<MessageRecord[]> {
-    // 每次调用时动态搜集插件提示词（必须在 loadConversationState 之前）
-    const modePlugins = this.getResolvedPlugins();
-    if (!options?.exclude?.includes("plugins") && modePlugins.length > 0) {
-      const promptPieces = await this.promptCollector.collectPrompts(
-        modePlugins,
-        { session: this },
-      );
-      this.systemPromptParts.plugins = promptPieces
-        .map((p) => p.content)
-        .filter(Boolean)
-        .join("\n\n");
+    // 懒加载用户消息
+    if (!this.messagesLoaded) {
+      await this.loadMessages();
+      this.messagesLoaded = true;
     }
 
     if (!this.conversationStateLoaded) {
-      await this.loadConversationState();
+      this.preludeParts = await this.buildPreludeMessages();
       this.conversationStateLoaded = true;
     }
-    // 分别计算系统提示词和摘要的 Token 数
-    const modelName = this.modelConfig.modelName || this.modelConfig.name || "";
-    const promptParts = this.buildPreludeMessages(options?.exclude);
 
-    this.tokenBreakdown.systemPrompt = await this.tokenizerService.countTokens(
-      modelName,
-      promptParts.filter((msg) => msg.role === "system"),
-      false,
-    );
-    this.tokenBreakdown.summary = await this.tokenizerService.countTokens(
-      modelName,
-      promptParts.filter((msg) => msg.role === "user"),
-      false,
-    );
-    this.tokenBreakdown.total =
-      this.tokenBreakdown.systemPrompt +
-      this.tokenBreakdown.summary +
-      this.tokenBreakdown.history;
     // 压缩由外部（AgentEngine）通过 shouldCompress/compress 控制，
     // getMessages 仅负责组装消息，不再触发压缩
-    return [...promptParts, ...this.history];
+    return [...this.preludeParts, ...this.history];
+  }
+
+  /**
+   * 获取原始的对话历史消息列表（不含 system prompt / 摘要 / 插件提示词）。
+   *
+   * 与 getMessages() 的区别：
+   * - getMessages() 返回完整消息列表（含 system prompt），禁止在插件中调用
+   * - getHistory() 只返回 raw conversation messages，可在插件中安全使用
+   *
+   * 仅在消息已加载时返回；若未加载（如插件在初始化阶段调用）则返回空数组，
+   * 避免触发 loadMessages 带来副作用。
+   */
+  async getHistory(): Promise<MessageRecord[]> {
+    // 仅在消息已加载时返回，避免意外触发 loadMessages
+    // （插件在 getMessages→collectPrompts 流程中调用时，消息一定已加载）
+    if (!this.messagesLoaded) {
+      return [];
+    }
+    return [...this.history];
   }
 
   /**
@@ -356,7 +348,6 @@ export class PersistentSessionContext implements ISessionContext {
     );
     await this.messageStore.persistContent(records);
     this.tokenBreakdown.history += newTokens;
-    this.tokenBreakdown.total += newTokens;
     this.logger.debug(
       `Appended ${records.length} messages, added ${newTokens} tokens, history: ${this.tokenBreakdown.history}`,
     );
@@ -387,7 +378,7 @@ export class PersistentSessionContext implements ISessionContext {
   }
 
   getTokenCount(): number {
-    return this.tokenBreakdown.total;
+    return calcTotalTokens(this.tokenBreakdown);
   }
 
   /**
@@ -396,10 +387,11 @@ export class PersistentSessionContext implements ISessionContext {
    * 将 contextWindow 临时设置为当前 Token 数，确保 shouldCompress 判断通过。
    * 压缩完成后恢复原始 contextWindow。
    */
-  async compress(onBeforeCompaction?: () => Promise<void>): Promise<MessageRecord[]> {
-    if (!this.conversationStateLoaded) {
-      await this.loadConversationState();
-      this.conversationStateLoaded = true;
+  async compress(
+    onBeforeCompaction?: () => Promise<void>,
+  ): Promise<MessageRecord[]> {
+    if (!this.messagesLoaded) {
+      throw new Error("Messages not loaded yet");
     }
 
     const currentTokens = this.tokenBreakdown.history;
@@ -420,9 +412,7 @@ export class PersistentSessionContext implements ISessionContext {
     }
 
     const compressionConfig: CompressionConfig = {
-      contextWindow: currentTokens,
-      triggerRatio: memoryConfig.compressionTriggerRatio ?? 0.8,
-      targetRatio: memoryConfig.compressionTargetRatio ?? 0.5,
+      targetTokens,
       model: this.compressionModel,
       summaryMode: (memoryConfig.summaryMode || SummaryMode.DEFAULT) as any,
       chatModelName,
@@ -443,48 +433,32 @@ export class PersistentSessionContext implements ISessionContext {
     }
 
     this.history = result.messages;
-    if (result.summary) {
-      this.systemPromptParts.summary = result.summary;
-    }
     if (result.tokenCount !== undefined) {
       this.tokenBreakdown.history = result.tokenCount;
-      this.tokenBreakdown.total =
-        this.tokenBreakdown.systemPrompt +
-        this.tokenBreakdown.summary +
-        result.tokenCount;
     }
 
     this.logger.log(
       `Force compression completed with strategy: ${result.strategy}, ` +
         `tokens: history=${this.tokenBreakdown.history}, sys=${this.tokenBreakdown.systemPrompt}, summary=${this.tokenBreakdown.summary}`,
     );
-
+    this.conversationStateLoaded = false;
     return await this.getMessages();
   }
 
   /**
    * 检查是否达到压缩阈值。
    *
-   * 通过 compressionStrategy.shouldCompress 判断当前 Token 数是否达到阈值。
-   * 由 AgentEngine 在每轮循环前调用，决定是否进入 shadow_save 或 compress 状态。
+   * 直接根据当前 Token 总数与上下文窗口的比例判断，不再委托给压缩引擎。
    */
   async shouldCompress(): Promise<boolean> {
     const memoryConfig = this.memoryConfig;
-    const modelConfig = this.modelConfig;
-    const chatModelName = modelConfig.modelName || modelConfig.name || "gpt4";
-
-    const config: CompressionConfig = {
-      contextWindow: this.effectiveContextWindow,
-      triggerRatio: memoryConfig.compressionTriggerRatio ?? 0.8,
-      targetRatio: memoryConfig.compressionTargetRatio ?? 0.5,
-      chatModelName,
-    };
-
-    return this.compressionStrategy.shouldCompress(
-      this.history,
-      config,
-      this.tokenBreakdown.total,
+    const total = calcTotalTokens(this.tokenBreakdown);
+    const ratio = total / this.effectiveContextWindow;
+    const triggerRatio = memoryConfig.compressionTriggerRatio ?? 0.8;
+    this.logger.debug(
+      `Token stats: ${total}/${this.effectiveContextWindow} (${(ratio * 100).toFixed(1)}%), trigger at ${triggerRatio}`,
     );
+    return ratio >= triggerRatio;
   }
 
   private buildModelConfig(
@@ -759,30 +733,70 @@ export class PersistentSessionContext implements ISessionContext {
     return model;
   }
 
-  private buildPreludeMessages(exclude?: string[]): MessageRecord[] {
-    const order = ["base", "plugins", "summary"];
-    const filtered = exclude?.length
-      ? order.filter((k) => !exclude.includes(k))
-      : order;
-    const result: MessageRecord[] = [];
+  private async buildPreludeMessages(): Promise<MessageRecord[]> {
+    const systemPrompts: string[] = [this.mergedSettings.systemPrompt];
+    const userPrompts: string[] = [];
 
-    // base + plugins → system 消息
-    const systemParts = filtered
-      .filter((k) => k !== "summary")
-      .map((k) => this.systemPromptParts[k])
-      .filter(Boolean);
-    if (systemParts.length > 0) {
-      result.push({
-        role: "system",
-        content: systemParts.join("\n\n"),
-      } as MessageRecord);
+    // 分别计算系统提示词和摘要的 Token 数
+    const modelName = this.modelConfig.modelName || this.modelConfig.name || "";
+
+    if (this.loadedCheckpoint?.summaryContent) {
+      const summaryPrompt = `[CONTEXT COMPACTION — REFERENCE ONLY]\n${this.loadedCheckpoint.summaryContent}\n[CONTEXT COMPACTION — REFERENCE ONLY END]`;
+      userPrompts.push(summaryPrompt);
+      this.tokenBreakdown.summary = await this.tokenizerService.countTextTokens(
+        modelName,
+        summaryPrompt,
+      );
     }
 
-    // summary → user 消息
-    if (filtered.includes("summary") && this.systemPromptParts.summary) {
+    // 每次调用时动态搜集插件提示词，因为插件可能在运行时加载
+    const modePlugins = this.getResolvedPlugins();
+    if (modePlugins.length > 0) {
+      // eager → system prompt
+      const promptPieces = await this.promptCollector.collectPrompts(
+        modePlugins,
+        { session: this },
+      );
+      systemPrompts.push(
+        promptPieces
+          .map((p) => p.content)
+          .filter(Boolean)
+          .join("\n\n"),
+      );
+
+      // user → user 消息（如工具包记忆）
+      const userPieces = await this.promptCollector.collectUserPrompts(
+        modePlugins,
+        { session: this },
+      );
+      const userContent = userPieces
+        .map((p) => p.content)
+        .filter(Boolean)
+        .join("\n\n");
+      if (userContent) {
+        userPrompts.push(userContent);
+      }
+
+      this.tokenBreakdown.userPrompt =
+        await this.tokenizerService.countTextTokens(modelName, userContent);
+    }
+
+    const result: MessageRecord[] = [];
+
+    if (systemPrompts.length > 0) {
+      result.push({
+        role: "system",
+        content: systemPrompts.map((p) => p).join("\n\n"),
+      } as MessageRecord);
+    }
+    this.tokenBreakdown.systemPrompt = await this.tokenizerService.countTokens(
+      modelName,
+      result.filter((p) => p.role === "system"),
+    );
+    if (userPrompts.length > 0) {
       result.push({
         role: "user",
-        content: `[CONTEXT COMPACTION — REFERENCE ONLY]\n${this.systemPromptParts.summary}\n[CONTEXT COMPACTION — REFERENCE ONLY END]`,
+        content: userPrompts.map((p) => p).join("\n\n"),
       } as MessageRecord);
     }
 

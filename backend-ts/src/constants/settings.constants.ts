@@ -60,3 +60,14 @@ export const SK_APP_SIDEBAR_OPACITY = 'sidebarOpacity';
 export const SK_APP_CONTENT_OPACITY = 'contentOpacity';
 export const SK_APP_ACRYLIC_ENABLED = 'acrylicEnabled';
 export const SK_APP_BLUR_RADIUS = 'blurRadius';
+
+/**
+ * 搜索设置分组
+ */
+export const SG_SEARCH = 'search';
+
+/**
+ * 搜索设置键名 (SK_SRCH = Setting Key Search)
+ */
+export const SK_SRCH_API_KEY = 'apiKey';
+export const SK_SRCH_ENABLED = 'enabled';

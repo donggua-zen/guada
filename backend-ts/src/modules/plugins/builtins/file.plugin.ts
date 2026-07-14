@@ -142,14 +142,14 @@ export class FilePlugin extends PluginBase {
         nextCharOffset += charsRead;
 
         const hasMoreLines = endLine < totalLines;
-        const truncated = hasMoreLines || truncatedByBytes;
+        const truncated = truncatedByBytes;
         const result: any = {
           content,
           truncated,
           total_lines: totalLines,
           total_chars: totalChars,
         };
-        if (truncated) {
+        if (truncatedByBytes || hasMoreLines) {
           if (truncatedByBytes) {
             result.next = {
               unit: "char",

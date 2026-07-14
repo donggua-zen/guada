@@ -29,6 +29,9 @@
                         <template v-else-if="currentTabValue === 'appearance'">
                             <AppearanceSettings />
                         </template>
+                        <template v-else-if="currentTabValue === 'search'">
+                            <SearchSettings />
+                        </template>
                         <template v-else-if="currentTabValue === 'about'">
                             <AboutPanel />
                         </template>
@@ -46,6 +49,7 @@ import DefaultModelSettings from './DefaultModelSettings.vue'
 import GeneralSettings from './GeneralSettings.vue'
 import OcrSettings from './OcrSettings.vue'
 import AppearanceSettings from './AppearanceSettings.vue'
+import SearchSettings from './SearchSettings.vue'
 import AboutPanel from '../plugins/AboutPanel.vue'
 
 import {
@@ -53,7 +57,8 @@ import {
     Settings16Regular,
     ScanText24Regular,
     Info24Regular,
-    Image24Regular
+    Image24Regular,
+    Search16Regular
 } from '@vicons/fluent'
 
 import { useAuthStore } from '../../stores/auth'
@@ -88,6 +93,12 @@ const sidebarItems = [
         label: '外观',
         path: 'appearance',
         icon: Image24Regular,
+        roles: ['primary'],
+    },
+    {
+        label: '搜索设置',
+        path: 'search',
+        icon: Search16Regular,
         roles: ['primary'],
     },
     {

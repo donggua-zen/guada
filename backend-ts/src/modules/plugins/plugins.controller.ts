@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Put, Body, UseGuards, Logger } from "@nestjs/common";
+import { Controller, Get, Post, Put, Body, Param, UseGuards, Logger } from "@nestjs/common";
 import { AuthGuard } from "../auth/auth.guard";
 import { Public } from "../auth/public.decorator";
 import { PluginManager } from "./plugin.manager";
@@ -68,5 +68,15 @@ export class PluginsController {
     await this.pluginManager.setPluginEnabled(pluginId, enabled);
 
     return { success: true, pluginId, enabled };
+  }
+
+  /**
+   * 重新加载插件（触发 onUnload -> onLoad 重新注册工具）
+   */
+  @UseGuards(AuthGuard)
+  @Post("reload/:pluginId")
+  async reloadPlugin(@Param("pluginId") pluginId: string) {
+    await this.pluginManager.reloadPlugin(pluginId);
+    return { success: true, pluginId };
   }
 }

@@ -17,9 +17,8 @@ export interface MessageLoadParams {
 }
 
 export interface CompressionConfig {
-  contextWindow: number; // 实际生效的上下文窗口（已考虑 maxTokensLimit 限制）
-  triggerRatio: number;
-  targetRatio: number;
+  /** 压缩目标 Token 数（压缩后历史应不超过此值） */
+  targetTokens: number;
   model?: any;
   summaryMode?: SummaryMode; // 摘要生成模式，默认为 MEMORY_SYNC
   chatModelName?: string; // 对话模型名称，用于 Token 计算
@@ -41,12 +40,17 @@ export interface CompressionStats {
   afterMessageCount?: number;     // 压缩后的消息数
 }
 
-/** 细粒度 Token 统计：系统提示词 / 摘要 / 对话消息 */
+/** 细粒度 Token 统计：系统提示词 / 摘要 / 用户提示 / 对话消息 */
 export interface TokenBreakdown {
-  total: number;          // systemPrompt + summary + history
   systemPrompt: number;   // base + plugins tokens
   summary: number;        // summary 内容（含包裹标记）的 tokens
+  userPrompt: number;     // user 内容（含包裹标记）的 tokens
   history: number;        // user/assistant 对话消息 tokens
+}
+
+/** 计算 TokenBreakdown 的总和 */
+export function calcTotalTokens(b: TokenBreakdown): number {
+  return b.systemPrompt + b.summary + b.userPrompt + b.history;
 }
 
 export interface CompressionResult {
@@ -93,7 +97,6 @@ export interface IMessageStore {
 // ============================================================================
 
 export interface ICompressionStrategy {
-  shouldCompress(messages: MessageRecord[], config: CompressionConfig, cachedTokenCount?: number): Promise<boolean>;
   execute(
     sessionId: string,
     messages: MessageRecord[],

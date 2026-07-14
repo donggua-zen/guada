@@ -73,6 +73,7 @@ export interface PluginApi {
   registerPrompt(def: {
     content: string | ((ctx: PluginContext) => string | Promise<string>);
     frequency?: "STATIC" | "REGULAR" | "VOLATILE";
+    type?: "system" | "user";
     toolSet?: string;
     description?: string;
   }): void;
@@ -103,6 +104,7 @@ export class PluginApiImpl implements PluginApi {
   private _promptMetas: Array<{
     methodName: string;
     frequency: string;
+    type?: "system" | "user";
     toolSet?: string;
     description: string;
     handler: (context: any) => string | Promise<string>;
@@ -226,12 +228,14 @@ export class PluginApiImpl implements PluginApi {
   registerPrompt(def: {
     content: string | ((ctx: PluginContext) => string | Promise<string>);
     frequency?: "STATIC" | "REGULAR" | "VOLATILE";
+    type?: "system" | "user";
     toolSet?: string;
     description?: string;
   }): void {
     const meta = {
       methodName: "",
       frequency: def.frequency || "REGULAR",
+      type: def.type,
       toolSet: def.toolSet,
       description: def.description || "",
       handler: (typeof def.content === "function"

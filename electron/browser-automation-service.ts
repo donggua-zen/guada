@@ -73,6 +73,36 @@ export class BrowserAutomationService {
 
     const windowInfo = await this.windowManager.createWindow(url, metadata);
 
+    // 等待初始导航完成（架构统一：与 navigate 使用相同的 waitForPageLoad）
+    if (url && windowInfo.windowId) {
+      try {
+        const wc = await this.windowManager.getWebviewWebContents(
+          windowInfo.windowId,
+        );
+        if (wc) {
+          await this.waitForPageLoad(wc);
+          // waitForPageLoad 在页面已加载（含 chrome-error 错误页）时会立即 resolve，
+          // 需要额外检查是否落在了错误页
+          const currentUrl = wc.getURL();
+          if (currentUrl.startsWith("chrome-error://")) {
+            throw new Error(
+              `Initial navigation failed: page loaded chrome-error for ${url}`,
+            );
+          }
+        }
+      } catch (error: any) {
+        // 导航失败，关闭窗口避免悬空，然后传播错误
+        await this.windowManager
+          .closeWindow(windowInfo.windowId)
+          .catch(() => {});
+        log.info(
+          `Browser window closed after navigation failure: ${windowInfo.windowId}`,
+          metadata,
+        );
+        throw error;
+      }
+    }
+
     log.info(`Browser window created: ${windowInfo.windowId}`, metadata);
     return windowInfo.windowId;
   }
@@ -255,13 +285,12 @@ export class BrowserAutomationService {
       const winInfo = windows.find((w: any) => w.windowId === wid);
       const sessionPath = winInfo?.metadata?.sessionPath;
       if (sessionPath) {
-        consoleFilePath = path.join(sessionPath, '.browser-work', 'console', wid + '.log');
-        if (fs.existsSync(consoleFilePath)) {
-          const content = fs.readFileSync(consoleFilePath, 'utf-8');
-          const lines = content.split('\n').filter(Boolean);
-          // 取最后 50 行
-          recentConsoleLines = lines.slice(-50);
-        }
+        consoleFilePath = path.join(
+          sessionPath,
+          ".browser-work",
+          "console",
+          wid + ".log",
+        );
       }
     } catch (_e) {
       // 控制台日志文件读取失败不影响主流程
@@ -273,67 +302,71 @@ export class BrowserAutomationService {
         success: true,
         windowId: wid,
         result,
-        console: recentConsoleLines.length > 0
-          ? recentConsoleLines.join('\n')
-          : undefined,
+        console:
+          recentConsoleLines.length > 0
+            ? recentConsoleLines.join("\n")
+            : undefined,
         consoleFile: consoleFilePath,
       };
     } catch (error: any) {
+      if (consoleFilePath && fs.existsSync(consoleFilePath)) {
+        const content = fs.readFileSync(consoleFilePath, "utf-8");
+        const lines = content.split("\n").filter(Boolean);
+        // 取最后 50 行
+        recentConsoleLines = lines.slice(-50);
+      }
       log.error(`JavaScript execution failed in tab ${wid}:`, error.message);
       return {
         success: false,
         windowId: wid,
         error: error.message,
-        console: recentConsoleLines.length > 0
-          ? recentConsoleLines.join('\n')
-          : undefined,
+        console:
+          recentConsoleLines.length > 0
+            ? recentConsoleLines.join("\n")
+            : undefined,
       };
     }
   }
 
-
-
-
-
-
-
-
-
   async getPageStruct(windowId: string): Promise<any> {
-    const { windowId: wid } = await this.ensureWindow(windowId)
+    const { windowId: wid } = await this.ensureWindow(windowId);
 
     if (!this.windowManager) {
-      throw new Error('TabManager not initialized')
+      throw new Error("TabManager not initialized");
     }
 
-    log.info(`Getting page structure (tab: ${wid})...`)
+    log.info(`Getting page structure (tab: ${wid})...`);
 
-    const webContents = await this.windowManager.getWebviewWebContents(wid)
+    const webContents = await this.windowManager.getWebviewWebContents(wid);
     if (!webContents) {
-      throw new Error(`Window ${wid} webview not ready (did-attach-webview not fired)`)
+      throw new Error(
+        `Window ${wid} webview not ready (did-attach-webview not fired)`,
+      );
     }
 
     // 等待页面完全加载
-    await this.waitForPageLoad(webContents)
+    await this.waitForPageLoad(webContents);
 
     // 记录页面状态信息用于调试
-    const currentUrl = webContents.getURL()
-    const pageTitle = webContents.getTitle()
-    const isLoading = webContents.isLoading()
-    log.info(`Page status: URL=${currentUrl}, Title=${pageTitle}, Loading=${isLoading}`)
+    const currentUrl = webContents.getURL();
+    const pageTitle = webContents.getTitle();
+    const isLoading = webContents.isLoading();
+    log.info(
+      `Page status: URL=${currentUrl}, Title=${pageTitle}, Loading=${isLoading}`,
+    );
 
-    let jsonStructure: any
-    let originalHtmlLength = 0
+    let jsonStructure: any;
+    let originalHtmlLength = 0;
     try {
       // 先获取原始 HTML 长度用于对比
       originalHtmlLength = await webContents.executeJavaScript(`
         (function() {
           return document.documentElement.outerHTML.length;
         })()
-      `)
-      log.debug(`Original HTML length: ${originalHtmlLength} chars`)
+      `);
+      log.debug(`Original HTML length: ${originalHtmlLength} chars`);
 
-      log.debug('Executing JavaScript to get page structure...')
+      log.debug("Executing JavaScript to get page structure...");
       jsonStructure = await webContents.executeJavaScript(`
         (function() {
           try {
@@ -568,27 +601,41 @@ export class BrowserAutomationService {
             return { node: 'error', text: 'Failed to parse DOM: ' + error.toString() };
           }
         })()
-      `)
-      log.debug(`Successfully got page structure, length: ${JSON.stringify(jsonStructure).length} chars`)
+      `);
+      log.debug(
+        `Successfully got page structure, length: ${JSON.stringify(jsonStructure).length} chars`,
+      );
 
       // 计算并记录压缩比例
-      const jsonLength = JSON.stringify(jsonStructure).length
-      const compressionRatio = ((1 - jsonLength / originalHtmlLength) * 100).toFixed(2)
-      log.info(`Page Structure Size Comparison:`)
-      log.info(`   Original HTML:    ${originalHtmlLength.toLocaleString()} chars`)
-      log.info(`   Selector JSON:    ${jsonLength.toLocaleString()} chars (${compressionRatio}% reduction)`)
-      log.info(`   Saved:            ${(originalHtmlLength - jsonLength).toLocaleString()} chars`)
+      const jsonLength = JSON.stringify(jsonStructure).length;
+      const compressionRatio = (
+        (1 - jsonLength / originalHtmlLength) *
+        100
+      ).toFixed(2);
+      log.info(`Page Structure Size Comparison:`);
+      log.info(
+        `   Original HTML:    ${originalHtmlLength.toLocaleString()} chars`,
+      );
+      log.info(
+        `   Selector JSON:    ${jsonLength.toLocaleString()} chars (${compressionRatio}% reduction)`,
+      );
+      log.info(
+        `   Saved:            ${(originalHtmlLength - jsonLength).toLocaleString()} chars`,
+      );
     } catch (error: any) {
-      log.warn(`Failed to get page structure: ${error.message}`)
-      log.warn(`   Error name: ${error.name}`)
-      log.warn(`   Error stack: ${error.stack}`)
+      log.warn(`Failed to get page structure: ${error.message}`);
+      log.warn(`   Error name: ${error.name}`);
+      log.warn(`   Error stack: ${error.stack}`);
 
       // 降级方案：返回错误对象
-      jsonStructure = { node: 'error', text: 'Failed to parse DOM: ' + error.toString() }
+      jsonStructure = {
+        node: "error",
+        text: "Failed to parse DOM: " + error.toString(),
+      };
     }
 
-    const title = webContents.getTitle()
-    const url = webContents.getURL()
+    const title = webContents.getTitle();
+    const url = webContents.getURL();
 
     return {
       success: true,
@@ -596,34 +643,36 @@ export class BrowserAutomationService {
       url,
       title,
       struct: jsonStructure,
-    }
+    };
   }
 
   async getPageText(windowId: string): Promise<any> {
-    const { windowId: wid } = await this.ensureWindow(windowId)
+    const { windowId: wid } = await this.ensureWindow(windowId);
 
     if (!this.windowManager) {
-      throw new Error('TabManager not initialized')
+      throw new Error("TabManager not initialized");
     }
 
-    log.info(`Getting page text (tab: ${wid})...`)
+    log.info(`Getting page text (tab: ${wid})...`);
 
-    const webContents = await this.windowManager.getWebviewWebContents(wid)
+    const webContents = await this.windowManager.getWebviewWebContents(wid);
     if (!webContents) {
-      throw new Error(`Window ${wid} webview not ready (did-attach-webview not fired)`)
+      throw new Error(
+        `Window ${wid} webview not ready (did-attach-webview not fired)`,
+      );
     }
 
     // 等待页面完全加载
-    await this.waitForPageLoad(webContents)
+    await this.waitForPageLoad(webContents);
 
     // 记录页面状态信息用于调试
-    const currentUrl = webContents.getURL()
-    const pageTitle = webContents.getTitle()
-    log.info(`Page status for text: URL=${currentUrl}, Title=${pageTitle}`)
+    const currentUrl = webContents.getURL();
+    const pageTitle = webContents.getTitle();
+    log.info(`Page status for text: URL=${currentUrl}, Title=${pageTitle}`);
 
-    let text = ''
+    let text = "";
     try {
-      log.debug('Executing JavaScript to extract plain text...')
+      log.debug("Executing JavaScript to extract plain text...");
       text = await webContents.executeJavaScript(`
         (function() {
           try {
@@ -649,18 +698,18 @@ export class BrowserAutomationService {
             return ''
           }
         })()
-      `)
+      `);
     } catch (error: any) {
-      log.error(`Failed to get plain text`)
-      log.error(`   Error message: ${error.message}`)
-      log.error(`   Error name: ${error.name}`)
-      log.error(`   Tab ID: ${wid}`)
-      log.error(`   URL: ${currentUrl}`)
-      throw new Error(`Failed to get plain text: ${error.message}`)
+      log.error(`Failed to get plain text`);
+      log.error(`   Error message: ${error.message}`);
+      log.error(`   Error name: ${error.name}`);
+      log.error(`   Tab ID: ${wid}`);
+      log.error(`   URL: ${currentUrl}`);
+      throw new Error(`Failed to get plain text: ${error.message}`);
     }
 
-    const title = webContents.getTitle()
-    const url = webContents.getURL()
+    const title = webContents.getTitle();
+    const url = webContents.getURL();
 
     return {
       success: true,
@@ -668,34 +717,38 @@ export class BrowserAutomationService {
       url,
       title,
       text,
-    }
+    };
   }
 
   async getPageSummary(windowId: string): Promise<any> {
-    const { windowId: wid } = await this.ensureWindow(windowId)
+    const { windowId: wid } = await this.ensureWindow(windowId);
 
     if (!this.windowManager) {
-      throw new Error('TabManager not initialized')
+      throw new Error("TabManager not initialized");
     }
 
-    log.info(`Getting main structure (tab: ${wid})...`)
+    log.info(`Getting main structure (tab: ${wid})...`);
 
-    const webContents = await this.windowManager.getWebviewWebContents(wid)
+    const webContents = await this.windowManager.getWebviewWebContents(wid);
     if (!webContents) {
-      throw new Error(`Window ${wid} webview not ready (did-attach-webview not fired)`)
+      throw new Error(
+        `Window ${wid} webview not ready (did-attach-webview not fired)`,
+      );
     }
 
     // 等待页面完全加载
-    await this.waitForPageLoad(webContents)
+    await this.waitForPageLoad(webContents);
 
     // 记录页面状态信息用于调试
-    const currentUrl = webContents.getURL()
-    const pageTitle = webContents.getTitle()
-    log.info(`Page status for structure: URL=${currentUrl}, Title=${pageTitle}`)
+    const currentUrl = webContents.getURL();
+    const pageTitle = webContents.getTitle();
+    log.info(
+      `Page status for structure: URL=${currentUrl}, Title=${pageTitle}`,
+    );
 
-    let structure: any
+    let structure: any;
     try {
-      log.debug('Executing JavaScript to extract main structure...')
+      log.debug("Executing JavaScript to extract main structure...");
 
       // 使用更简单、更安全的 JavaScript 代码，避免复杂的 DOM 操作
       structure = await webContents.executeJavaScript(`
@@ -757,22 +810,24 @@ export class BrowserAutomationService {
             };
           }
         })()
-      `)
+      `);
 
       // 检查是否返回了错误信息
       if (structure && structure.error) {
-        log.warn(`JavaScript execution returned error: ${structure.error}`)
+        log.warn(`JavaScript execution returned error: ${structure.error}`);
       }
 
-      log.debug(`Successfully got structure: text=${structure.text?.length || 0} chars, links=${structure.links?.length || 0}, headings=${structure.headings?.length || 0}`)
+      log.debug(
+        `Successfully got structure: text=${structure.text?.length || 0} chars, links=${structure.links?.length || 0}, headings=${structure.headings?.length || 0}`,
+      );
     } catch (error: any) {
-      log.error(`Failed to get main structure`)
-      log.error(`   Error message: ${error.message}`)
-      log.error(`   Error name: ${error.name}`)
-      log.error(`   Error stack: ${error.stack}`)
-      log.error(`   Tab ID: ${wid}`)
-      log.error(`   URL: ${currentUrl}`)
-      log.error(`   Title: ${pageTitle}`)
+      log.error(`Failed to get main structure`);
+      log.error(`   Error message: ${error.message}`);
+      log.error(`   Error name: ${error.name}`);
+      log.error(`   Error stack: ${error.stack}`);
+      log.error(`   Tab ID: ${wid}`);
+      log.error(`   URL: ${currentUrl}`);
+      log.error(`   Title: ${pageTitle}`);
 
       // 尝试获取渲染进程的控制台日志
       try {
@@ -785,17 +840,17 @@ export class BrowserAutomationService {
               bodyChildCount: document.body ? document.body.children.length : 0
             };
           })()
-        `)
-        log.error(`   Page diagnostics: ${JSON.stringify(consoleLogs)}`)
+        `);
+        log.error(`   Page diagnostics: ${JSON.stringify(consoleLogs)}`);
       } catch (diagError: any) {
-        log.error(`   Failed to get page diagnostics: ${diagError.message}`)
+        log.error(`   Failed to get page diagnostics: ${diagError.message}`);
       }
 
-      throw new Error(`Failed to get main structure: ${error.message}`)
+      throw new Error(`Failed to get main structure: ${error.message}`);
     }
 
-    const title = webContents.getTitle()
-    const url = webContents.getURL()
+    const title = webContents.getTitle();
+    const url = webContents.getURL();
 
     return {
       success: true,
@@ -803,21 +858,25 @@ export class BrowserAutomationService {
       url,
       title,
       ...structure,
-    }
+    };
   }
 
-  async waitForSelector(selector: string, timeout: number = 10000, windowId: string): Promise<any> {
-    const { windowId: wid } = await this.ensureWindow(windowId)
+  async waitForSelector(
+    selector: string,
+    timeout: number = 10000,
+    windowId: string,
+  ): Promise<any> {
+    const { windowId: wid } = await this.ensureWindow(windowId);
 
     if (!this.windowManager) {
-      throw new Error('TabManager not initialized')
+      throw new Error("TabManager not initialized");
     }
 
-    log.info(`Waiting for selector: ${selector} (tab: ${wid})`)
+    log.info(`Waiting for selector: ${selector} (tab: ${wid})`);
 
-    const webContents = this.windowManager.getWebContents(wid)
+    const webContents = this.windowManager.getWebContents(wid);
     if (!webContents) {
-      throw new Error(`Tab ${wid} not found`)
+      throw new Error(`Tab ${wid} not found`);
     }
 
     const result = await webContents.executeJavaScript(`
@@ -843,27 +902,27 @@ export class BrowserAutomationService {
           resolve({ found: false, exists: false })
         }, ${timeout})
       })
-    `)
+    `);
 
     return {
       success: true,
       windowId: wid,
       ...result,
-    }
+    };
   }
 
   async click(selector: string, windowId: string): Promise<any> {
-    const { windowId: wid } = await this.ensureWindow(windowId)
+    const { windowId: wid } = await this.ensureWindow(windowId);
 
     if (!this.windowManager) {
-      throw new Error('TabManager not initialized')
+      throw new Error("TabManager not initialized");
     }
 
-    log.info(`Clicking element: ${selector} (tab: ${wid})`)
+    log.info(`Clicking element: ${selector} (tab: ${wid})`);
 
-    const webContents = this.windowManager.getWebContents(wid)
+    const webContents = this.windowManager.getWebContents(wid);
     if (!webContents) {
-      throw new Error(`Tab ${wid} not found`)
+      throw new Error(`Tab ${wid} not found`);
     }
 
     const result = await webContents.executeJavaScript(`
@@ -886,27 +945,30 @@ export class BrowserAutomationService {
           resolve({ success: false, clicked: false, error: 'Element not found' })
         }
       })
-    `)
+    `);
 
     return {
       windowId: wid,
       ...result,
-    }
+    };
   }
 
-
-  async fillForm(selector: string, value: string, windowId: string): Promise<any> {
-    const { windowId: wid } = await this.ensureWindow(windowId)
+  async fillForm(
+    selector: string,
+    value: string,
+    windowId: string,
+  ): Promise<any> {
+    const { windowId: wid } = await this.ensureWindow(windowId);
 
     if (!this.windowManager) {
-      throw new Error('TabManager not initialized')
+      throw new Error("TabManager not initialized");
     }
 
-    log.info(`Filling form field: ${selector} (tab: ${wid})`)
+    log.info(`Filling form field: ${selector} (tab: ${wid})`);
 
-    const webContents = this.windowManager.getWebContents(wid)
+    const webContents = this.windowManager.getWebContents(wid);
     if (!webContents) {
-      throw new Error(`Tab ${wid} not found`)
+      throw new Error(`Tab ${wid} not found`);
     }
 
     const result = await webContents.executeJavaScript(`
@@ -921,12 +983,12 @@ export class BrowserAutomationService {
           resolve({ success: false, filled: false, error: 'Element not found' })
         }
       })
-    `)
+    `);
 
     return {
       windowId: wid,
       ...result,
-    }
+    };
   }
 
   /**

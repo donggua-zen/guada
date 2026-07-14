@@ -1031,6 +1031,15 @@ class ApiService {
     });
   }
 
+  /**
+   * 重新加载插件（切换供应商后触发重新注册工具）
+   */
+  async reloadPlugin(pluginId: string): Promise<{ success: boolean }> {
+    return await this._request(`/plugins/reload/${pluginId}`, {
+      method: "POST",
+    });
+  }
+
   // ========== MCP 服务器管理 ==========
   async fetchMcpServers(): Promise<PaginatedResponse<McpServer>> {
     return await this._request("/mcp-servers");
