@@ -25,6 +25,9 @@ import {
   isElectron,
 } from "@/composables/useBackendStatus";
 
+// 页面刷新标志：首次导航时强制服务端验证 token，后续路由切换不再重复验证
+let isInitialPageLoad = true;
+
 // Electron 环境下：同步查询后端状态，在 Vue 挂载前确定初始值（防刷新闪烁）
 if (isElectron && window.electronAPI?.getBackendStatusSync) {
   const status = window.electronAPI.getBackendStatusSync();
@@ -191,27 +194,41 @@ router.beforeEach(async (to, from, next) => {
 
   // 3. 正常的鉴权逻辑
   if (to.meta.requiresAuth) {
-    // 先尝试自动登录（如果开启了免登录模式）
+    // 页面加载后的首次导航：先尝试自动登录（如果开启了免登录模式）
     if (!authStore.isAuthenticated) {
       await authStore.checkAutoLoginStatus();
       if (authStore.autoLoginEnabled) {
         const success = await authStore.tryAutoLogin();
         if (success) {
+          isInitialPageLoad = false;
           return next();
         }
       }
     }
 
-    // 页面刷新后 store 为空，但 storage 中可能有数据，需要初始化认证状态
+    // 页面加载后的首次导航：从 storage 恢复 token（如果尚未恢复）
     if (!authStore.isAuthenticated) {
       const initialized = await authStore.initializeAuth();
       if (initialized) {
+        isInitialPageLoad = false;
         return next();
       }
     }
 
-    // 路由守卫只检查本地是否有 token，不调用 API 验证有效性
-    // token 是否过期由页面内具体 API 请求自行验证（401 会统一触发跳转）
+    // 页面加载后的首次导航 — 强制服务端验证 token 有效性
+    // 当 isInitialPageLoad 为 true 时，无论 isAuthenticated 是否为 true，
+    // 都调用 checkAuth() 向后端发送 /user/profile 请求验证 token
+    if (isInitialPageLoad) {
+      isInitialPageLoad = false;
+      const isValid = await authStore.checkAuth();
+      if (!isValid) {
+        return next("/login");
+      }
+      return next();
+    }
+
+    // 后续路由切换：只检查本地是否有 token，不重复调用 API
+    // token 过期由页面内具体 API 请求自行验证（401 会统一触发跳转）
     if (!authStore.isAuthenticated) {
       return next("/login");
     }
