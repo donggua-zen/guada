@@ -734,7 +734,7 @@ async function startBackend(): Promise<void> {
     backendProcess.on("message", (message: any) => {
       if (message && message.type === "PORT_READY" && !isResolved) {
         backendPort = message.port;
-        console.log(`通过 IPC 接收到后端端�? ${backendPort}`);
+        console.log(`通过 IPC 接收到后端端口号 ${backendPort}`);
         isBackendStarting = false;
         isResolved = true;
         resolve();
