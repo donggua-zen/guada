@@ -1,4 +1,5 @@
 import { MessageRecord } from "../llm-core/types/llm.types";
+import { TokenBreakdown } from "./interfaces";
 
 // ============================================================================
 // DTO: 模型配置
@@ -196,6 +197,8 @@ export interface ISessionContext {
   generateId(): string;
   /** 获取当前 Token 计数 */
   getTokenCount(): number;
+  /** 获取细粒度 Token 统计（系统提示词/摘要/用户提示/历史/工具定义） */
+  getTokenBreakdown(): TokenBreakdown;
   /** 检查是否达到压缩阈值 */
   shouldCompress(): Promise<boolean>;
   /** 执行压缩 */

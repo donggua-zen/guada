@@ -63,14 +63,19 @@ export class BrowserPlugin extends PluginBase {
             load_delay: z
               .number()
               .optional()
-              .describe("Seconds to wait after page load (default 3s), used to wait for dynamic content to render before extracting summary"),
+              .describe(
+                "Seconds to wait after page load (default 3s), used to wait for dynamic content to render before extracting summary",
+              ),
             metadata: z
               .object({
                 scope: z
                   .string()
                   .optional()
                   .describe("Scope identifier for session isolation"),
-                purpose: z.string().optional().describe("Purpose description for the window"),
+                purpose: z
+                  .string()
+                  .optional()
+                  .describe("Purpose description for the window"),
               })
               .optional()
               .describe(
@@ -92,21 +97,24 @@ export class BrowserPlugin extends PluginBase {
         });
         toolkit.registerTool({
           name: "browser_navigate",
-          description: "Navigate to the specified URL, returns page title, URL, and page summary content",
+          description:
+            "Navigate to the specified URL, returns page title, URL, and page summary content",
           inputSchema: z.object({
             url: z.string().describe("URL to navigate to"),
             window_id: z.string().describe("Target window ID (required)"),
             load_delay: z
               .number()
               .optional()
-              .describe("Seconds to wait after page load (default 3s), used to wait for dynamic content to render before extracting summary"),
+              .describe(
+                "Seconds to wait after page load (default 3s), used to wait for dynamic content to render before extracting summary",
+              ),
           }),
           execute: async (args, ctx, signal) =>
             this.executeWithContent("browser_navigate", args, signal),
-          display: { action: "Navigate", argsKey: "url", icon: "browser" },
+          display: { action: "访问", argsKey: "url", icon: "browser" },
         });
         toolkit.registerTool({
-          name: "browser_run_js",
+          name: "browser_evaluate",
           description:
             "Execute JavaScript code in the specified window and return the result. Supports passing code directly as a string or a file path (relative to the session working directory).",
           inputSchema: z.object({
@@ -128,31 +136,24 @@ export class BrowserPlugin extends PluginBase {
             if (!code && !file_path)
               throw new Error("Must provide either code or file_path");
             if (code && file_path)
-              throw new Error("code and file_path cannot be provided simultaneously");
+              throw new Error(
+                "code and file_path cannot be provided simultaneously",
+              );
             const finalCode = file_path
               ? await this.readJsFile(file_path, ctx)
               : code!;
             const result = await this.sendRequest(
-              "browser_run_js",
+              "browser_evaluate",
               { code: finalCode, window_id },
               signal,
             );
             return result;
           },
-          display: { action: "执行JavaScript", argsKey: "code", icon: "browser" },
-        });
-        toolkit.registerTool({
-          name: "browser_page_text",
-          description:
-            "Get the plain text content of the page in the specified window (removes all HTML tags, scripts, and styles)",
-          inputSchema: z.object({
-            window_id: z.string().describe("Target window ID"),
-          }),
-          execute: async (args, ctx, signal) => {
-            const r = await this.sendRequest("browser_page_text", args, signal);
-            return r;
+          display: {
+            action: "执行JavaScript",
+            argsKey: "code",
+            icon: "browser",
           },
-          display: { action: "Extract Page Text", icon: "browser" },
         });
         toolkit.registerTool({
           name: "browser_page_struct",
@@ -173,7 +174,8 @@ export class BrowserPlugin extends PluginBase {
         });
         toolkit.registerTool({
           name: "browser_page_summary",
-          description: "Get the page summary of the specified window (extracts text, links, and heading hierarchy)",
+          description:
+            "Get the page summary of the specified window (extracts text, links, and heading hierarchy)",
           inputSchema: z.object({
             window_id: z.string().describe("Target window ID"),
           }),
@@ -188,32 +190,25 @@ export class BrowserPlugin extends PluginBase {
           display: { action: "提取页面摘要", icon: "browser" },
         });
         toolkit.registerTool({
-          name: "browser_back",
-          description: "Go back in the browser",
+          name: "browser_history",
+          description:
+            "Navigate history: go back or forward in the browser. Use action='back' to go to the previous page, action='forward' to go to the next page.",
           inputSchema: z.object({
             window_id: z.string().describe("Target window ID"),
+            action: z
+              .enum(["back", "forward"])
+              .describe("Navigation direction: 'back' or 'forward'"),
             load_delay: z
               .number()
               .optional()
-              .describe("Seconds to wait after page load (default 3s), used to wait for dynamic content to render before extracting summary"),
+              .describe(
+                "Seconds to wait after page load (default 3s), used to wait for dynamic content to render before extracting summary",
+              ),
           }),
-          execute: async (args, ctx, signal) =>
-            this.executeWithContent("browser_back", args, signal),
-          display: { action: "Go Back", icon: "browser" },
-        });
-        toolkit.registerTool({
-          name: "browser_forward",
-          description: "Go forward in the browser",
-          inputSchema: z.object({
-            window_id: z.string().describe("Target window ID"),
-            load_delay: z
-              .number()
-              .optional()
-              .describe("Seconds to wait after page load (default 3s), used to wait for dynamic content to render before extracting summary"),
-          }),
-          execute: async (args, ctx, signal) =>
-            this.executeWithContent("browser_forward", args, signal),
-          display: { action: "前进", icon: "browser" },
+          execute: async (args, ctx, signal) => {
+            return this.executeWithContent("browser_history", args, signal);
+          },
+          display: { action: "导航历史", argsKey: "action", icon: "browser" },
         });
         toolkit.registerTool({
           name: "browser_reload",
@@ -223,35 +218,35 @@ export class BrowserPlugin extends PluginBase {
             load_delay: z
               .number()
               .optional()
-              .describe("Seconds to wait after page load (default 3s), used to wait for dynamic content to render before extracting summary"),
+              .describe(
+                "Seconds to wait after page load (default 3s), used to wait for dynamic content to render before extracting summary",
+              ),
           }),
           execute: async (args, ctx, signal) =>
             this.executeWithContent("browser_reload", args, signal),
           display: { action: "刷新页面", icon: "browser" },
         });
         toolkit.registerTool({
-          name: "browser_click",
+          name: "browser_interact",
           description:
-            "Click the element matching the CSS selector in the specified window; automatically returns the page summary after the operation",
+            "Interact with the page: click an element or fill text into an input field. Use action='click' to click, action='input' to fill text.",
           inputSchema: z.object({
-            selector: z.string().describe("CSS selector"),
+            action: z
+              .enum(["click", "input"])
+              .describe("Interaction type: 'click' or 'input'"),
+            selector: z.string().describe("CSS selector of the target element"),
+            value: z
+              .string()
+              .optional()
+              .describe("Text to fill in (required when action='input')"),
             window_id: z.string().describe("Target window ID"),
           }),
-          execute: async (args, ctx, signal) =>
-            this.sendRequest("browser_click", args, signal),
-          display: { action: "点击元素", argsKey: "selector", icon: "browser" },
-        });
-        toolkit.registerTool({
-          name: "browser_input",
-          description: "Fill text into an input field in the specified window; automatically returns the page summary after the operation",
-          inputSchema: z.object({
-            selector: z.string().describe("CSS selector"),
-            value: z.string().describe("Text to fill in"),
-            window_id: z.string().describe("Target window ID"),
-          }),
-          execute: async (args, ctx, signal) =>
-            this.sendRequest("browser_input", args, signal),
-          display: { action: "Input Text", argsKey: "value", icon: "browser" },
+          execute: async (args, ctx, signal) => {
+            const method =
+              args.action === "click" ? "browser_click" : "browser_input";
+            return this.sendRequest(method, args, signal);
+          },
+          display: { action: "交互操作", argsKey: "action", icon: "browser" },
         });
 
         toolkit.registerTool({
@@ -262,7 +257,7 @@ export class BrowserPlugin extends PluginBase {
           }),
           execute: async (args, ctx, signal) =>
             this.sendRequest("browser_close", args, signal),
-          display: { action: "Close Window", icon: "browser" },
+          display: { action: "关闭窗口", icon: "browser" },
         });
         toolkit.registerTool({
           name: "browser_windows",
@@ -279,6 +274,18 @@ export class BrowserPlugin extends PluginBase {
           },
           display: { action: "获取窗口列表", icon: "browser" },
         });
+        toolkit.registerTool({
+          name: "browser_console",
+          description:
+            "Get the console logs from the specified window (including page errors, warnings, and log outputs). Use this to debug page issues or check script execution results.",
+          inputSchema: z.object({
+            window_id: z.string().describe("Target window ID"),
+          }),
+          execute: async (args, ctx, signal) => {
+            return this.sendRequest("browser_console", args, signal);
+          },
+          display: { action: "查看控制台日志", icon: "browser" },
+        });
 
         // 使用说明提示词
         toolkit.registerPrompt({
@@ -289,29 +296,17 @@ export class BrowserPlugin extends PluginBase {
             "",
             "## Multi-Window Support",
             "- Always use `browser_new_window(url)` first to open a new window",
-            "- After `browser_new_window` / `browser_navigate` / `go_back` / `go_forward` / `reload` operations, **the page summary is automatically returned**",
+            "- After `browser_new_window` / `browser_navigate` / `browser_history` / `browser_reload` operations, **the page summary is automatically returned**",
             "- For dynamically loaded pages (SPA, etc.), use the `load_delay` parameter (seconds, default 3s) to control the wait time before summary extraction",
-            "- `browser_page_struct` returns a JSON structure optimized for selectors; `browser_page_text` returns plain text",
+            "- `browser_page_struct` returns a JSON structure optimized for selectors",
             "- All windows are **completely incognito** by default — no data is retained after closing",
             "",
-            "## Persistent User Scripts",
-            "`.browser-work/scripts/*.js` are automatically injected at document-start on page load. Changes take effect after `browser_reload`.",
-            "Supports `@match` header for URL filtering.",
-            "",
-            "Example:",
-            "```javascript",
-            "// ==UserScript==",
-            "// @match  https://example.com/*",
-            "// ==/UserScript==",
-            "",
-            "console.log('Only executes on example.com');",
-            "```",
-            "",
             "## Debugging",
-            "Console logs are written to `.browser-work/console/`. `browser_run_js` automatically includes the last 50 lines. Use file tools to read full logs.",
+            "- Use `browser_console(window_id)` to view console logs (logs are cleared after each read, so each call returns only new logs)",
+            "- Use `browser_evaluate` to execute JavaScript for debugging",
             "",
             "## Advanced Usage",
-            "- `browser_run_js` supports `code` or `file_path` (relative to the session directory); `await` is naturally available",
+            "- `browser_evaluate` supports `code` or `file_path` (relative to the session directory); `await` is naturally available",
             "- Within a page, you can use `window._browserBridge.saveLocalFile()` / `.readLocalFile()` / `.getCookies()` / `.setCookie()` / `.removeCookie()` to operate local files (automatically saved to the session working directory)",
           ].join("\n"),
         });
@@ -327,7 +322,7 @@ export class BrowserPlugin extends PluginBase {
     if (!pending) return;
     clearTimeout(pending.timeout);
     this.pendingRequests.delete(response.id);
-    if (response.error) pending.reject(new Error(response.error.message));
+    if (response.error) pending.reject(new Error(response.error));
     else pending.resolve(response.result);
   }
 
@@ -353,7 +348,8 @@ export class BrowserPlugin extends PluginBase {
     // 先执行主操作（导航/后退/前进/刷新等）
     const result = await this.sendRequest(method, restArgs, signal);
     if (result?.success === false) return result;
-    if (result?.windowId && !restArgs.window_id) restArgs.window_id = result.windowId;
+    if (result?.windowId && !restArgs.window_id)
+      restArgs.window_id = result.windowId;
 
     // 等待动态内容加载后再取摘要
     if (delayMs > 0) {
@@ -384,10 +380,14 @@ export class BrowserPlugin extends PluginBase {
     return new Promise((resolve) => {
       const timer = setTimeout(resolve, ms);
       if (signal) {
-        signal.addEventListener("abort", () => {
-          clearTimeout(timer);
-          resolve();
-        }, { once: true });
+        signal.addEventListener(
+          "abort",
+          () => {
+            clearTimeout(timer);
+            resolve();
+          },
+          { once: true },
+        );
       }
     });
   }
@@ -413,7 +413,7 @@ export class BrowserPlugin extends PluginBase {
             try {
               const response = JSON.parse(data);
               if (response.error) {
-                reject(new Error(response.error.message));
+                reject(new Error(response.error));
               } else {
                 resolve(response.result);
               }
@@ -533,18 +533,14 @@ export class BrowserPlugin extends PluginBase {
         toolArgs =
           args.url?.length > 40 ? args.url.substring(0, 40) + "..." : args.url;
         break;
-      case "browser_click":
-        action = `${prefix}点击`;
-        toolArgs = args.selector;
-        break;
-      case "browser_input":
-        action = `${prefix}输入文本`;
-        toolArgs = args.selector;
+      case "browser_interact":
+        action = `${prefix}交互`;
+        toolArgs = args.action + ": " + (args.selector || "");
         break;
       case "browser_page_struct":
         action = `${prefix}获取页面结构`;
         break;
-      case "browser_run_js":
+      case "browser_evaluate":
         action = `${prefix}执行 JavaScript`;
         toolType = "code";
         toolArgs = args.code || args.file_path;

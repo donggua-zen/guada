@@ -21,7 +21,25 @@
             :show-text="false" />
         </div>
 
-        <!-- 详细统计卡片 -->
+        <!-- 细分统计 -->
+        <div v-if="tokenStats.breakdown" class="mb-4">
+          <div class="grid grid-cols-5 gap-1">
+            <div v-for="item in breakdownItems" :key="item.key" class="text-center px-0.5">
+              <div class="text-xs text-gray-500 dark:text-[#8b8d95] truncate mb-0.5" :title="item.label">{{ item.label }}</div>
+              <div class="text-sm font-semibold" :class="item.colorClass">
+                {{ item.tokens.toLocaleString() }}
+              </div>
+              <div class="text-xs" :class="item.colorClass">
+                {{ item.percentage }}%
+              </div>
+              <div class="mt-1 h-1 bg-gray-200 dark:bg-[#2a2c30] rounded-full overflow-hidden">
+                <div class="h-full rounded-full transition-all duration-300" :class="item.barClass" :style="{ width: item.percentage + '%' }" />
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 汇总统计 -->
         <div class="grid grid-cols-3 gap-2 mb-4">
           <div class="text-center">
             <div class="text-xs text-gray-500 dark:text-[#8b8d95] mb-0.5">已用</div>
@@ -77,7 +95,7 @@
           <div :key="summaries[0].id" class="mb-2.5">
             <div class="rounded-lg py-2">
               <!-- 摘要内容或裁剪信息 -->
-              <div v-if="summaries[0].summaryContent" class="text-xs text-gray-700 dark:text-[#c8c9cd] whitespace-pre-wrap leading-relaxed mb-2">
+              <div v-if="summaries[0].summaryContent" class="text-xs text-gray-700 dark:text-[#c8c9cd] whitespace-pre-wrap leading-relaxed mb-2 max-h-32 overflow-y-auto">
                 {{ summaries[0].summaryContent }}
               </div>
               
@@ -312,11 +330,33 @@ const usageColorClass = computed(() => {
   return 'text-red-600';
 });
 
+// 细分统计项（系统提示词/摘要/用户提示/历史/工具定义）
+const breakdownItems = computed(() => {
+  if (!tokenStats.value?.breakdown) return [];
+  const total = tokenStats.value.totalTokens;
+  const b = tokenStats.value.breakdown;
+  const items = [
+    { key: 'systemPrompt', label: '系统提示词', tokens: b.systemPrompt },
+    { key: 'summary', label: '摘要', tokens: b.summary },
+    { key: 'userPrompt', label: '用户提示', tokens: b.userPrompt },
+    { key: 'history', label: '历史', tokens: b.history },
+    { key: 'tools', label: '工具定义', tokens: b.tools },
+  ];
+  return items.map((item) => {
+    const pct = total > 0 ? parseFloat(((item.tokens / total) * 100).toFixed(1)) : 0;
+    const intense = pct >= 50;
+    const moderate = pct >= 20;
+    const colorClass = intense ? 'text-red-600 dark:text-red-500' : moderate ? 'text-yellow-600 dark:text-yellow-500' : 'text-green-600 dark:text-green-500';
+    const barClass = intense ? 'bg-red-500' : moderate ? 'bg-yellow-500' : 'bg-green-500';
+    return { ...item, percentage: pct, colorClass, barClass };
+  });
+});
+
 // 加载摘要列表
 async function loadSummaries() {
   if (!props.sessionId) return;
   try {
-    summaries.value = await apiService.fetchSessionSummaries(props.sessionId);
+    summaries.value = await apiService.fetchSessionSummaries(props.sessionId, 10);
   } catch (error: any) {
     console.error('加载摘要失败:', error);
     toast.error('加载摘要失败');

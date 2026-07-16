@@ -58,11 +58,13 @@ export class SessionContextStateRepository {
 
   /**
    * 获取会话的所有压缩状态历史记录（按时间倒序）
+   * @param limit 可选，限制返回条数
    */
-  async findAllBySessionId(sessionId: string): Promise<any[]> {
+  async findAllBySessionId(sessionId: string, limit?: number): Promise<any[]> {
     return this.prisma.sessionContextState.findMany({
       where: { sessionId },
       orderBy: { createdAt: 'desc' },
+      ...(limit ? { take: limit } : {}),
     });
   }
 

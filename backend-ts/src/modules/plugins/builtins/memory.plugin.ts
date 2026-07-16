@@ -68,7 +68,7 @@ export class MemoryPlugin extends PluginBase {
             return "";
           }
           const cacheItem = this.cache.get(sessionId);
-          if (cacheItem) {
+          if (cacheItem !== undefined) {
             cacheItem.lastAccessed = new Date();
             return cacheItem.promptContent;
           }
@@ -115,12 +115,10 @@ export class MemoryPlugin extends PluginBase {
       },
     });
 
-    memoryKit.registerPrompt({
-      frequency: "REGULAR",
-      description: "记忆管理指南",
-      content: (context: PluginContext) => {
-        return `
-# Memory Management Guide
+    // ── memory 工具 ──
+    memoryKit.registerTool({
+      name: "memory",
+      description: `# Memory Management Guide
 
 Actively discover valuable content and use the \`memory\` tool to manage memories.
 
@@ -142,14 +140,7 @@ Actively discover valuable content and use the \`memory\` tool to manage memorie
 - Correct memory → \`memory action=replace target=factual old_text="old" content="new"\`
 - Search memos → \`memory action=search pattern="keyword"\`
 - Add memo → \`memory action=append target=memo memo_title="Title" content="Details"\`
-- Delete memo → \`memory action=replace target=memo memo_title="Old Title"\` (leave content empty to delete)`;
-      },
-    });
-
-    // ── memory 工具 ──
-    api.registerTool({
-      name: "memory",
-      description: `Edit long-term memory: append/replace/delete factual memories or memos. Changes will not immediately refresh the context; they will be automatically synced after memory compression.`,
+- Delete memo → \`memory action=replace target=memo memo_title="Old Title"\` (leave content empty to delete)`,
       inputSchema: z.object({
         action: z.enum(["append", "replace", "search"]),
         target: z

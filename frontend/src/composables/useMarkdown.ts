@@ -152,11 +152,9 @@ function createMarkedInstance(options?: MarkdownOptions): Marked {
             const lang = code.lang || 'text'
             return `
         <div class="custom-code-block">
-          <div style="position: sticky; top: 0;background-color: var(--color-bubble-assitant-bg)">
-            <div class="code-header">
+          <div class="code-header">
                 <span class="code-language">${lang}</span>
                 <button class="copy-code-button"><i role="img">${coypysvg}</i></button>
-            </div>
           </div>
           <pre class="hljs language-${lang}"><code class="hljs language-${lang}">${code.text}</code></pre>
         </div>

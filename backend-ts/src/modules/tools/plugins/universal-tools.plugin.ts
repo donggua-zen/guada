@@ -115,7 +115,7 @@ export class UniversalToolsPlugin extends PluginBase {
     // 工具包记忆提示词：注入到 user 消息（压缩后自动恢复 AI 正在使用的工具包定义）
     api.registerPrompt({
       frequency: "VOLATILE",
-      type: "user",
+      type: "system",
       description: "已加载工具包的工具定义（压缩后自动恢复）",
       content: async (context: PluginContext) => {
         return this.buildToolkitMemoryPrompt(context);
@@ -232,10 +232,7 @@ export class UniversalToolsPlugin extends PluginBase {
       if (content) parts.push(content);
     }
 
-    const result =
-      "[LEARNED TOOLKITS — REFERENCE ONLY]\n" +
-      parts.join("\n\n") +
-      "\n[LEARNED TOOLKITS — REFERENCE ONLY END]";
+    const result = "# LEARNED TOOLKITS\n" + parts.join("\n\n");
 
     // 回填缓存
     this.toolkitMemoryCache.set(sessionId, result);
@@ -292,12 +289,7 @@ export class UniversalToolsPlugin extends PluginBase {
         })
         .join("\n");
 
-      parts.push(
-        `<toolkit name="${kitName}">`,
-        "",
-        toolDescriptions,
-        `</toolkit>`,
-      );
+      parts.push(`toolkit ${kitName}`, "", toolDescriptions);
     }
 
     // 2. 使用说明 prompt（lazy prompts）

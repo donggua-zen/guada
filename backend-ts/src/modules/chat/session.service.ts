@@ -115,15 +115,16 @@ export class SessionService {
 
   /**
    * 获取会话的所有摘要记录
+   * @param limit 可选，限制返回条数
    */
-  async getSessionSummaries(sessionId: string, userId: string) {
+  async getSessionSummaries(sessionId: string, userId: string, limit?: number) {
     // 验证会话归属权
     const session = await this.getSessionById(sessionId, userId);
     if (!session) {
       throw new Error("Session not found or unauthorized");
     }
 
-    return this.contextStateRepo.findAllBySessionId(sessionId);
+    return this.contextStateRepo.findAllBySessionId(sessionId, limit);
   }
 
   /**
@@ -584,6 +585,7 @@ export class SessionService {
       percentage: parseFloat(percentage.toFixed(2)),
       modelName: session.model?.modelName || "gpt-4",
       messageCount: messages.length,
+      breakdown: context.getTokenBreakdown(),
     };
   }
 

@@ -263,7 +263,7 @@ export class OcrService {
       contentType: "application/pdf",
     });
     form.append("json", JSON.stringify({
-      "ocr.language": "简体中文",
+      "ocr.language": "models/config_chinese.txt",
       "doc.extractionMode": "mixed",
     }));
 
@@ -321,7 +321,7 @@ export class OcrService {
       // 提取新增内容
       for (const pageData of datas) {
         const pageNum = pageData.page || 0;
-        const lines = (pageData.data || []).map((l) => l.text);
+        const lines = Array.isArray(pageData.data) ? pageData.data.map((l) => l.text) : [];
         allPages.push({
           page: pageNum,
           text: lines.join("\n"),
@@ -401,7 +401,7 @@ export class OcrService {
         {
           base64,
           options: {
-            "ocr.language": "简体中文",
+            "ocr.language": "models/config_chinese.txt",
             "data.format": "json",
             "tbpu.parser": "multi_para",
           },

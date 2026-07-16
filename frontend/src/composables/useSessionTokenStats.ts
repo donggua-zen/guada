@@ -3,6 +3,14 @@ import { useDebounceFn } from '@vueuse/core'
 import { useSessionStore } from '@/stores/session'
 import { apiService } from '@/services/ApiService'
 
+export interface TokenBreakdown {
+  systemPrompt: number
+  summary: number
+  userPrompt: number
+  history: number
+  tools: number
+}
+
 export interface TokenStatsData {
   usedTokens: number
   totalTokens: number
@@ -10,6 +18,7 @@ export interface TokenStatsData {
   percentage: number
   modelName: string
   messageCount: number
+  breakdown: TokenBreakdown
 }
 
 const tokenStats = ref<TokenStatsData | null>(null)

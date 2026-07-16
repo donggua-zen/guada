@@ -143,7 +143,7 @@
         </ChatInput>
       </div>
       <!-- 记忆管理弹窗 -->
-      <el-dialog v-model="memoPanelVisible" title="记忆管理" width="390px" :close-on-click-modal="false" destroy-on-close
+      <el-dialog v-model="memoPanelVisible" title="记忆管理" width="490px" :close-on-click-modal="false" destroy-on-close
         class="memo-panel-dialog">
         <MemoPanel v-if="currentSessionId" :session-id="currentSessionId" />
       </el-dialog>
