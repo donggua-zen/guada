@@ -41,7 +41,6 @@ import { CommandsModule } from './modules/commands/commands.module';
     UploadModule, // 全局上传路径模块
     VectorDbModule, // 向量数据库模块
     McpClientModule, // MCP 客户端模块（全局）
-    LlmCoreModule, // LLM 核心模块（全局）
     SkillsModule, // Skills 集成框架模块
     ChatModule,
     ModelsModule,

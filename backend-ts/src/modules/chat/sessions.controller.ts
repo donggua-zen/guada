@@ -140,8 +140,12 @@ export class SessionsController {
   }
 
   @Get("sessions/:id/summaries")
-  async getSessionSummaries(@Param("id") id: string, @CurrentUser() user: any) {
-    return this.sessionService.getSessionSummaries(id, user.id);
+  async getSessionSummaries(
+    @Param("id") id: string,
+    @CurrentUser() user: any,
+    @Query("limit") limit?: string,
+  ) {
+    return this.sessionService.getSessionSummaries(id, user.id, limit ? parseInt(limit, 10) : undefined);
   }
 
   @Put("sessions/summaries/:summaryId")

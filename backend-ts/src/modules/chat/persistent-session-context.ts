@@ -31,6 +31,7 @@ import { TokenizerService } from "../../common/utils/tokenizer.service";
 import { SummaryMode } from "./compression-engine";
 import { ResolvedPluginInfo } from "../plugins/types/plugin.types";
 import { SessionTokenTracker } from "./utils/session-token-tracker";
+import { ToolOrchestrator } from "../tools/tool-orchestrator.service";
 
 /**
  * 合并后的会话设置
@@ -99,6 +100,7 @@ export class PersistentSessionContext implements ISessionContext {
     summary: 0,
     userPrompt: 0,
     history: 0,
+    tools: 0,
   };
   private compressionModel: any;
 
@@ -381,6 +383,10 @@ export class PersistentSessionContext implements ISessionContext {
     return calcTotalTokens(this.tokenBreakdown);
   }
 
+  getTokenBreakdown(): TokenBreakdown {
+    return { ...this.tokenBreakdown };
+  }
+
   /**
    * 执行压缩，不受 Token 阈值限制。
    *
@@ -439,7 +445,7 @@ export class PersistentSessionContext implements ISessionContext {
 
     this.logger.log(
       `Force compression completed with strategy: ${result.strategy}, ` +
-        `tokens: history=${this.tokenBreakdown.history}, sys=${this.tokenBreakdown.systemPrompt}, summary=${this.tokenBreakdown.summary}`,
+        `tokens: history=${this.tokenBreakdown.history}, sys=${this.tokenBreakdown.systemPrompt}, summary=${this.tokenBreakdown.summary}, tools=${this.tokenBreakdown.tools}`,
     );
     this.conversationStateLoaded = false;
     return await this.getMessages();
@@ -798,6 +804,30 @@ export class PersistentSessionContext implements ISessionContext {
         role: "user",
         content: userPrompts.map((p) => p).join("\n\n"),
       } as MessageRecord);
+    }
+
+    // 计算工具定义（tool definitions）的 Token 数
+    // 使用最详细格式（OpenAI: {type:"function", function:{name,description,parameters}}）
+    // 确保不低估工具定义占用的上下文窗口
+    const toolDefs = ToolOrchestrator.toFlatToolDefs(this.resolvedPlugins);
+    if (toolDefs.length > 0) {
+      const toolsJson = JSON.stringify(
+        toolDefs.map((t) => ({
+          type: "function",
+          function: {
+            name: t.name,
+            description: t.description,
+            parameters: t.parameters,
+          },
+        })),
+      );
+      this.tokenBreakdown.tools = await this.tokenizerService.countTextTokens(
+        modelName,
+        toolsJson,
+        false, // 不缓存，避免挤占
+      );
+    } else {
+      this.tokenBreakdown.tools = 0;
     }
 
     return result;

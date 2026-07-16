@@ -15,7 +15,6 @@
     "@tiptap/vue-3": "^3.26.0",
     "@vicons/antd": "^0.13.0",
     "@vicons/fluent": "^0.13.0",
-    "@vicons/ionicons4": "^0.13.0",
     "@vicons/ionicons5": "^0.13.0",
     "@vicons/material": "^0.13.0",
     "@vuelidate/core": "^2.0.3",
@@ -37,8 +36,7 @@
     "vue": "^3.5.21",
     "vue-advanced-cropper": "^2.8.9",
     "vue-router": "^4.6.4",
-    "vuedraggable": "^4.1.0",
-    "vuex": "^4.1.0"
+    "vuedraggable": "^4.1.0"
   },
   "devDependencies": {
     "@tailwindcss/vite": "^4.1.18",
@@ -47,7 +45,6 @@
     "@types/nprogress": "^0.2.3",
     "@vitejs/plugin-vue": "^6.0.3",
     "rollup-plugin-visualizer": "^6.0.5",
-    "sass": "^1.100.0",
     "sass-embedded": "^1.98.0",
     "tailwindcss": "^4.1.18",
     "typescript": "^6.0.2",

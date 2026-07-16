@@ -52,7 +52,7 @@ const emit = defineEmits<{
   click: [];
 }>();
 
-const isExpanded = ref(false);
+const isExpanded = ref(props.isThinking);
 
 const handleToggle = () => {
   isExpanded.value = !isExpanded.value;
@@ -69,10 +69,12 @@ const formattedDuration = computed(() => {
   return formatDuration(thinkingDuration.value);
 });
 watch(() => props.isThinking, (isThinking: boolean) => {
-  if (!isThinking) {
+  if (isThinking) {
+    isExpanded.value = true;
+  } else {
     isExpanded.value = false;
   }
-});
+}, { immediate: true });
 </script>
 
 <style scoped>

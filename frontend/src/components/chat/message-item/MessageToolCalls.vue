@@ -398,30 +398,30 @@ const formatToolArgs = (args: any): string => {
 /**
  * 提取工具结果中真正有意义的内容：
  * 1. 解析外层 JSON 响应
- * 2. 如果存在 content 字段，尝试将其解析为内层 JSON
- * 3. content 解析成功 → 返回内层数据（这才是真正的工具结果）
- * 4. content 不是 JSON / 没有 content 字段 → 返回外层原始数据
+ * 2. 如果存在 content 字段，无论是否为 JSON，都返回 content 本身
+ * 3. content 是 JSON 字符串 → 解析后返回内层数据
+ * 4. content 是普通字符串 → 直接返回该字符串
+ * 5. 没有 content 字段 → 返回外层原始数据
  */
 const extractResultContent = (response: any): any => {
   if (!response) return null;
   try {
     const parsed = typeof response === 'string' ? JSON.parse(response) : response;
-    // 尝试解析 content 字段中的内层 JSON
+    // 有 content 字段则直接返回 content（无论是否为 JSON）
     if (parsed.content) {
       try {
-        const inner = typeof parsed.content === 'string'
+        return typeof parsed.content === 'string'
           ? JSON.parse(parsed.content)
           : parsed.content;
-        return inner; // 内层有意义的数据
       } catch {
-        // content 不是 JSON 字符串，返回外层
-        return parsed;
+        // content 不是 JSON 字符串，直接返回原字符串
+        return parsed.content;
       }
     }
     // 没有 content 字段，直接返回解析结果
     return parsed;
   } catch {
-    return null; // 整体 JSON 解析失败
+    return null;
   }
 };
 
@@ -429,6 +429,7 @@ const formatToolResponse = (response: any): string => {
   if (!response) return '无响应';
   const content = extractResultContent(response);
   if (content) {
+    if (typeof content === 'string') return content;
     return JSON.stringify(content, null, 2);
   }
   return String(response);

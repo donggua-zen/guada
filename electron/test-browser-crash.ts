@@ -140,61 +140,9 @@ async function testLevel2(): Promise<void> {
   }
 }
 
-// ──= 级别6 =─ 最小化 webview 测试（不依赖 BrowserWindowManager，通过 shell:init IPC） ──
+// ──= 级别6 =─ 纯 webview 标签 + 直接 src 设置（最小复现，无 shell:init IPC） ──
 async function testLevel6(): Promise<void> {
-  trackEvent("LEVEL6", "minimal webview via shell:init IPC → bad URL");
-
-  // 创建一个带 <webview> 标签的外壳窗口
-  const shellWin = new BrowserWindow({
-    width: 800, height: 600, show: false,
-    webPreferences: {
-      contextIsolation: true,
-      nodeIntegration: false,
-      preload: path.join(__dirname, "browser-shell-preload.js"),
-    },
-  });
-
-  const shellHTML = path.join(__dirname, "..", "browser-shell.html");
-  await shellWin.loadFile(shellHTML);
-
-  // 等 webview 挂载
-  await new Promise<void>((resolve) => {
-    shellWin.webContents.on("did-attach-webview", (_e, wc) => {
-      trackEvent("webview attached", `id=${wc.id}`);
-
-      wc.on("did-fail-load", (_ev, code, desc) => {
-        trackEvent("webview did-fail-load", `${code} - ${desc}`);
-      });
-      wc.on("did-finish-load", () => {
-        trackEvent("webview did-finish-load", wc.getURL());
-      });
-      wc.on("render-process-gone", (_ev, details) => {
-        trackEvent("webview render-process-gone", `reason=${details.reason}`);
-      });
-
-      resolve();
-    });
-  });
-
-  // 发送 shell:init 导航到坏 URL
-  const windowId = "test_win_1";
-  const sessionId = "persist:test_session";
-  shellWin.webContents.send("shell:init", {
-    targetUrl: BAD_URL,
-    windowId,
-    sessionId,
-  });
-
-  // 等导航结果
-  await new Promise((r) => setTimeout(r, 5000));
-  trackEvent("test done", "shell window survived 5s");
-
-  shellWin.close();
-}
-
-// ──= 级别7 =─ 纯 webview 标签 + 直接 src 设置（无 shell:init IPC） ──
-async function testLevel7(): Promise<void> {
-  trackEvent("LEVEL7", "minimal webview: direct src attribute (no shell:init IPC)");
+  trackEvent("LEVEL6", "minimal webview: direct src attribute (no shell:init IPC)");
 
   const shellWin = new BrowserWindow({
     width: 800, height: 600, show: false,
@@ -333,9 +281,8 @@ app.whenReady().then(async () => {
       case 4:  await testLevel4(); break;
       case 5:  await testLevel5(); break;
       case 6:  await testLevel6(); break;
-      case 7:  await testLevel7(); break;
       default:
-        for (let lv = 1; lv <= 5; lv++) {
+        for (let lv = 1; lv <= 6; lv++) {
           trackEvent("RUNNING LEVEL", String(lv));
           switch (lv) {
             case 1: await testLevel1(); break;

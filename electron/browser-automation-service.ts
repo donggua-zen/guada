@@ -1,6 +1,4 @@
 import { BrowserWindow } from "electron";
-import * as path from "path";
-import * as fs from "fs";
 import log from "electron-log/main";
 import { BrowserWindowManager, WindowInfo } from "./browser-tab-manager";
 
@@ -91,12 +89,9 @@ export class BrowserAutomationService {
           }
         }
       } catch (error: any) {
-        // 导航失败，关闭窗口避免悬空，然后传播错误
-        await this.windowManager
-          .closeWindow(windowInfo.windowId)
-          .catch(() => {});
-        log.info(
-          `Browser window closed after navigation failure: ${windowInfo.windowId}`,
+        // 导航失败/超时，不关闭窗口——页面可能仍有内容或稍后可用
+        log.warn(
+          `Browser window navigation warning: ${windowInfo.windowId} - ${error.message}`,
           metadata,
         );
         throw error;
@@ -180,37 +175,20 @@ export class BrowserAutomationService {
       throw new Error(`Window ${wid} not found`);
     }
 
-    return new Promise((resolve, reject) => {
-      const timeout = setTimeout(() => {
-        reject(new Error("Navigation timeout"));
-      }, 30000);
-
-      webContents.once("did-finish-load", () => {
-        clearTimeout(timeout);
-        resolve({
-          success: true,
-          windowId: wid,
-          url: webContents.getURL(),
-          title: webContents.getTitle(),
-        });
-      });
-
-      webContents.once(
-        "did-fail-load",
-        (
-          _event: Electron.Event,
-          errorCode: number,
-          errorDescription: string,
-        ) => {
-          clearTimeout(timeout);
-          reject(
-            new Error(`Navigation failed: ${errorCode} - ${errorDescription}`),
-          );
-        },
-      );
-
-      webContents.loadURL(url).catch(reject);
-    });
+    // 统一使用 waitForPageLoad 等待页面加载完成（含子资源）
+    // 不再自行监听 did-finish-load / did-fail-load
+    try {
+      await webContents.loadURL(url);
+      await this.waitForPageLoad(webContents);
+      return {
+        success: true,
+        windowId: wid,
+        url: webContents.getURL(),
+        title: webContents.getTitle(),
+      };
+    } catch (error: any) {
+      throw new Error(`Navigation failed: ${error.message}`);
+    }
   }
 
   /**
@@ -277,53 +255,19 @@ export class BrowserAutomationService {
       throw new Error(`Tab ${wid} not found`);
     }
 
-    // 读取控制台日志最新内容（附带在返回值中）
-    let recentConsoleLines: string[] = [];
-    let consoleFilePath: string | undefined;
-    try {
-      const windows = this.windowManager.getWindowList();
-      const winInfo = windows.find((w: any) => w.windowId === wid);
-      const sessionPath = winInfo?.metadata?.sessionPath;
-      if (sessionPath) {
-        consoleFilePath = path.join(
-          sessionPath,
-          ".browser-work",
-          "console",
-          wid + ".log",
-        );
-      }
-    } catch (_e) {
-      // 控制台日志文件读取失败不影响主流程
-    }
-
     try {
       const result = await webContents.executeJavaScript(code, true);
       return {
         success: true,
         windowId: wid,
         result,
-        console:
-          recentConsoleLines.length > 0
-            ? recentConsoleLines.join("\n")
-            : undefined,
-        consoleFile: consoleFilePath,
       };
     } catch (error: any) {
-      if (consoleFilePath && fs.existsSync(consoleFilePath)) {
-        const content = fs.readFileSync(consoleFilePath, "utf-8");
-        const lines = content.split("\n").filter(Boolean);
-        // 取最后 50 行
-        recentConsoleLines = lines.slice(-50);
-      }
       log.error(`JavaScript execution failed in tab ${wid}:`, error.message);
       return {
         success: false,
         windowId: wid,
         error: error.message,
-        console:
-          recentConsoleLines.length > 0
-            ? recentConsoleLines.join("\n")
-            : undefined,
       };
     }
   }
@@ -1124,31 +1068,67 @@ export class BrowserAutomationService {
   }
 
   /**
+   * 获取窗口控制台日志
+   */
+  async getConsoleLogs(windowId: string): Promise<any> {
+    if (!this.windowManager) {
+      return { success: false, message: "TabManager not initialized" };
+    }
+    const logs = this.windowManager.getConsoleLogs(windowId);
+    // 读取后清空缓冲区，下次调用只返回新日志
+    this.windowManager.clearConsoleLogs(windowId);
+    return {
+      success: true,
+      windowId,
+      logs: logs || [],
+      recent: (logs || []).slice(-50).join("\n"),
+    };
+  }
+
+  /**
+   * 清空窗口控制台日志
+   */
+  async clearConsoleLogs(windowId: string): Promise<any> {
+    if (!this.windowManager) {
+      return { success: false, message: "TabManager not initialized" };
+    }
+    const consoleLogs = (this.windowManager as any).consoleLogs;
+    const logs = consoleLogs?.get(windowId);
+    if (logs) logs.length = 0;
+    return { success: true, windowId };
+  }
+
+  /**
    * 等待页面加载完成
    */
   private async waitForPageLoad(
     webContents: Electron.WebContents,
-    timeout: number = 10000,
+    timeout: number = 60000,
   ): Promise<void> {
     return new Promise((resolve, reject) => {
       const timer = setTimeout(() => {
         reject(new Error("Page load timeout"));
       }, timeout);
 
-      // 检查是否已经加载完成
-      if (!webContents.isLoadingMainFrame() && webContents.getURL() !== "") {
+      // 检查是否已经加载完成（did-stop-loading 已触发，页面资源全部加载完毕）
+      const currentUrl = webContents.getURL();
+      if (
+        !webContents.isLoading() &&
+        currentUrl !== "" &&
+        currentUrl !== "about:blank"
+      ) {
         clearTimeout(timer);
         resolve();
         return;
       }
 
-      // 监听加载完成事件
-      webContents.once("did-finish-load", () => {
+      // 主事件：did-stop-loading 表示页面及其所有子资源加载完毕
+      webContents.once("did-stop-loading", () => {
         clearTimeout(timer);
         resolve();
       });
 
-      // 监听加载失败事件
+      // 加载失败
       webContents.once(
         "did-fail-load",
         (
@@ -1185,7 +1165,7 @@ export class BrowserAutomationService {
         // case 'screenshot':
         //   return await this.screenshot({ ...params, windowId: params.window_id })
 
-        case "browser_run_js":
+        case "browser_evaluate":
           return await this.executeJavaScript(
             params.code,
             params.window_id,
@@ -1218,11 +1198,26 @@ export class BrowserAutomationService {
             params.window_id,
           );
 
-        case "browser_back":
-          return await this.goBack(params.window_id);
+        case "browser_interact":
+          if (params.action === "click") {
+            return await this.click(params.selector, params.window_id);
+          } else {
+            return await this.fillForm(
+              params.selector,
+              params.value,
+              params.window_id,
+            );
+          }
 
-        case "browser_forward":
-          return await this.goForward(params.window_id);
+        case "browser_console":
+          return await this.getConsoleLogs(params.window_id);
+
+        case "browser_navigate_history":
+          if (params.action === "back") {
+            return await this.goBack(params.window_id);
+          } else {
+            return await this.goForward(params.window_id);
+          }
 
         case "browser_reload":
           return await this.reload(params.window_id);

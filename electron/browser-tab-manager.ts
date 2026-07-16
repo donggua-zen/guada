@@ -41,9 +41,12 @@ export class BrowserWindowManager {
       shellWebContents: WebContents;
       webviewWebContents?: WebContents;
       info: WindowInfo;
+      /** 控制台日志内存缓存 */
+      consoleLogs: string[];
     }
   >();
   private maxWindows: number = 6; // 默认最多6个窗口
+  private nextWindowId = 1; // 自增窗口 ID 计数器
   private defaultWindowOptions: Electron.BrowserWindowConstructorOptions = {
     width: 1024,
     height: 768,
@@ -84,7 +87,7 @@ export class BrowserWindowManager {
       throw new Error(`窗口数量已达上限（最多 ${this.maxWindows} 个）`);
     }
 
-    const windowId = `win_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    const windowId = `win_${this.nextWindowId++}`;
 
     log.info(`Creating new independent window: ${windowId}`);
 
@@ -124,46 +127,38 @@ export class BrowserWindowManager {
 
         win.webviewWebContents = webviewWC;
 
-        // 控制台日志写入文件（.browser-work/console/{windowId}.log，跨导航持久）
-        const sessionPath: string =
-          (win.info.metadata?.sessionPath as string) || "";
-        const consoleDir: string = sessionPath
-          ? sessionPath + "/.browser-work/console"
-          : "";
-        const consoleFile: string = consoleDir
-          ? consoleDir + "/" + windowId + ".log"
-          : "";
-        // 确保控制台目录存在
-        if (consoleDir) {
-          fs.promises.mkdir(consoleDir, { recursive: true }).catch(() => {});
-        }
-        // 控制台异步写入（fire-and-forget，不阻塞事件循环）
+        // 控制台日志内存缓存（跨导航持久，按窗口隔离）
+        const logs = win.consoleLogs;
+        logs.length = 0; // 确保清空（复用已有数组）
+
+        // 控制台日志收集到内存（不再写文件）
         (webviewWC as any).on(
           "console-message",
           (event: Electron.ConsoleMessageEvent) => {
-            if (!consoleFile) return;
             const levelNames: Record<number, string> = {
               0: "verbose",
               1: "info",
               2: "warning",
               3: "error",
             };
-            const line = `[${levelNames[event.level] || "log"}] ${event.message}\n`;
-            // 异步写入，不等待（console-message 是同步事件）
-            const cf = consoleFile;
-            fs.promises.writeFile(cf, line, { flag: "as" }).catch(() => {
-              // 写入失败时尝试创建文件后重写
-              fs.promises.writeFile(cf, line).catch(() => {});
-            });
+            const line = `[${levelNames[event.level] || "log"}] ${event.message}`;
+            logs.push(line);
+            // 最多保留 200 条，防止内存泄漏
+            if (logs.length > 200) logs.shift();
           },
         );
 
-        // 主框架导航开始时清空控制台日志（旧页面已卸载，注入脚本还未执行）
+        // 主框架导航开始时清空控制台日志
         (webviewWC as any).on(
           "did-start-navigation",
-          (_e: any, _url: string, _isInPlace: boolean, isMainFrame: boolean) => {
-            if (isMainFrame && consoleFile) {
-              fs.promises.writeFile(consoleFile, "").catch(() => {});
+          (
+            _e: any,
+            _url: string,
+            _isInPlace: boolean,
+            isMainFrame: boolean,
+          ) => {
+            if (isMainFrame) {
+              logs.length = 0;
             }
           },
         );
@@ -237,30 +232,37 @@ export class BrowserWindowManager {
                 url: webviewWC.getURL(),
               });
             }
+            log.info(
+              `Window ${windowId} error: ${errorCode} - ${errorDescription}`,
+            );
             // 导航到 about:blank 阻止 chrome-error 页加载——该页面在部分 Electron
             // 版本中会触发原生层退出（exit code 3 / STATUS_BREAKPOINT）
-            if (
-              !webviewWC.isDestroyed() &&
-              webviewWC.getURL() !== "about:blank"
-            ) {
+            if (webviewWC.getURL().startsWith("chrome-error://")) {
+              console.warn("Blocked chrome-error:// navigation:", url);
+              _event.preventDefault();
               webviewWC.loadURL("about:blank").catch(() => {});
             }
           },
         );
 
-
         // 监听 webview 崩溃（Electron 30+ 使用 render-process-gone 替代 crashed）
-        (webviewWC as any).on("render-process-gone", (_event: any, details: any) => {
-          log.error(
-            `Window ${windowId} webview render process gone, reason=${details?.reason}, exitCode=${details?.exitCode}`,
-          );
-        });
+        (webviewWC as any).on(
+          "render-process-gone",
+          (_event: any, details: any) => {
+            log.error(
+              `Window ${windowId} webview render process gone, reason=${details?.reason}, exitCode=${details?.exitCode}`,
+            );
+          },
+        );
 
         // 监听 webview 意外销毁（已销毁的 webContents 无法再触发事件，isDestroyed() 才是可靠检查）
         log.info(`Window ${windowId} webview webContentsId: ${webviewWC.id}`);
 
         // 注入反检测脚本
-        try { if (!webviewWC.isDestroyed()) this.injectAntiDetectionScript(webviewWC); } catch {}
+        try {
+          if (!webviewWC.isDestroyed())
+            this.injectAntiDetectionScript(webviewWC);
+        } catch {}
 
         // 为 webview 设置右键菜单
         this.setupContextMenu(webviewWC, windowId);
@@ -306,6 +308,7 @@ export class BrowserWindowManager {
       window: newWindow,
       shellWebContents: shellWC,
       info: windowInfo,
+      consoleLogs: [],
     });
 
     // 加载外壳页面
@@ -506,6 +509,19 @@ export class BrowserWindowManager {
     const win = this.windows.get(windowId);
     return win ? win.info.metadata : undefined;
   }
+
+  /** 获取指定窗口的控制台日志 */
+  getConsoleLogs(windowId: string): string[] {
+    const win = this.windows.get(windowId);
+    return win ? win.consoleLogs : [];
+  }
+
+  /** 清空指定窗口的控制台日志 */
+  clearConsoleLogs(windowId: string): void {
+    const win = this.windows.get(windowId);
+    if (win) win.consoleLogs.length = 0;
+  }
+
   async closeAllWindows(): Promise<void> {
     const windowIds = Array.from(this.windows.keys());
 
@@ -844,10 +860,10 @@ export class BrowserWindowManager {
       menu.append(
         new MenuItem({
           label: "后退",
-          enabled: webContents.canGoBack(),
+          enabled: webContents.navigationHistory.canGoBack(),
           click: () => {
-            if (webContents.canGoBack()) {
-              webContents.goBack();
+            if (webContents.navigationHistory.canGoBack()) {
+              webContents.navigationHistory.goBack();
             }
           },
         }),
@@ -857,10 +873,10 @@ export class BrowserWindowManager {
       menu.append(
         new MenuItem({
           label: "前进",
-          enabled: webContents.canGoForward(),
+          enabled: webContents.navigationHistory.canGoForward(),
           click: () => {
-            if (webContents.canGoForward()) {
-              webContents.goForward();
+            if (webContents.navigationHistory.canGoForward()) {
+              webContents.navigationHistory.goForward();
             }
           },
         }),

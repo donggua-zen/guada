@@ -32,18 +32,18 @@ export class ShellPlugin extends PluginBase {
     // ── execute 工具 ──
     api.registerTool({
       name: "terminal",
-      description: `执行系统命令并返回输出结果,命令执行超过 1 分钟会自动转入后台运行,"background": true立即转入后台`,
+      description: `Execute system commands and return output. Commands running over 1 minute will auto-switch to background. "background": true starts in background immediately.`,
       inputSchema: z.object({
         command: z
           .string()
           .describe(
-            "要执行的系统命令，如 ls -la、echo hello、node script.js 等",
+            "System command to execute, e.g. ls -la, echo hello, node script.js",
           ),
         encoding: z
           .string()
           .optional()
           .describe(
-            "命令输出的编码格式。Windows 中文环境建议使用 'gbk'；Unix 默认 'utf-8'。不指定则自动检测",
+            "Output encoding format. Use 'gbk' for Windows Chinese environment; defaults to 'utf-8' on Unix. Auto-detected if not specified.",
           )
           .refine(
             (v) =>
@@ -51,19 +51,19 @@ export class ShellPlugin extends PluginBase {
               ["utf-8", "gbk", "gb2312", "gb18030", "big5", "latin1"].includes(
                 v,
               ),
-            { message: "不支持的编码格式" },
+            { message: "Unsupported encoding format" },
           ),
         background: z
           .boolean()
           .optional()
           .describe(
-            "是否立即以后台模式运行，默认为 false。设为 true 则立刻返回进程 ID，不等待执行结束",
+            "Whether to run in background mode immediately. Defaults to false. When true, returns process ID immediately without waiting.",
           ),
       }),
       execute: async (args, ctx, abortSignal) => {
         const command: string = args.command;
         if (!command || typeof command !== "string")
-          throw new Error("命令不能为空");
+          throw new Error("Command cannot be empty");
         const encoding = args.encoding as string | undefined;
         const background = args.background === true;
         const isWindows = process.platform === "win32";
@@ -73,7 +73,7 @@ export class ShellPlugin extends PluginBase {
 
         if (abortSignal?.aborted) throw new Error("Request was aborted");
         this.logger.log(
-          `执行命令: ${command}, 工作目录: ${cwd}, background: ${background}`,
+          `Running command: ${command}, working directory: ${cwd}, background: ${background}`,
         );
 
         // 统一启动进程并转入后台管理（所有 stdout/stderr 由 ProcessManager 接管）
@@ -94,17 +94,16 @@ export class ShellPlugin extends PluginBase {
         // 纯后台模式：立即返回
         if (background) {
           return {
-            success: true,
             processId: result.processId,
             output: result.output,
-            message: `进程已转入后台运行，ID: ${result.processId}。可使用 process 工具进行管理。`,
+            message: `Process has been moved to background, use the process tool to manage it.`,
           };
         }
 
         // 前台模式：内部 poll 等待结果，支持 abortSignal
         if (abortSignal?.aborted) {
           this.processManager.kill(result.processId);
-          return { success: false, message: "请求已被中止" };
+          return { success: false, message: "Request was aborted" };
         }
         const onAbort = () => this.processManager.kill(result.processId);
         abortSignal?.addEventListener("abort", onAbort, { once: true });
@@ -119,26 +118,21 @@ export class ShellPlugin extends PluginBase {
           // 进程在 1 分钟内结束了 → 返回结果
           if (pollResult.status !== "running") {
             return {
-              success: true,
-              processStatus: pollResult.status,
               exitCode: pollResult.exitCode,
               output: pollResult.output,
               lineCount: pollResult.output
                 ? pollResult.output.split("\n").length
                 : 0,
-              message: `命令执行完毕，退出码: ${pollResult.exitCode}`,
             };
           }
 
           // 1 分钟超时，进程还在跑 → 返回 backgrounded（含已收集的输出）
           return {
-            success: true,
-            processId: result.processId,
             output: pollResult.output,
             lineCount: pollResult.output
               ? pollResult.output.split("\n").length
               : 0,
-            message: `命令执行超过 ${this.BACKGROUND_THRESHOLD_MS / 1000} 秒，已自动转入后台运行,可使用 process 工具进行管理。`,
+            message: `Command execution exceeded ${this.BACKGROUND_THRESHOLD_MS / 1000}s, automatically switched to background. Use the process tool to manage.`,
           };
         } finally {
           abortSignal?.removeEventListener("abort", onAbort);
@@ -151,7 +145,7 @@ export class ShellPlugin extends PluginBase {
     // ── process 管理工具 ──
     api.registerTool({
       name: "process",
-      description: `管理后台进程`,
+      description: `Manage background processes`,
       inputSchema: z.object({
         action: z.enum([
           "kill",
@@ -160,12 +154,12 @@ export class ShellPlugin extends PluginBase {
           "dump_log",
           "write",
         ]),
-        processId: z.string().describe("后台进程 ID"),
+        processId: z.string().describe("Background process ID"),
         params: z
           .record(z.string(), z.any())
           .optional()
           .describe(
-            "各操作的附加参数，统一放入此对象中。详见工具描述和系统提示",
+            "Additional parameters for each action, grouped into this object. See tool description and system prompt for details.",
           ),
       }),
       execute: async (args, ctx) => {
@@ -185,14 +179,12 @@ export class ShellPlugin extends PluginBase {
             if (status === null) {
               return {
                 success: false,
-                message: `进程 ${processId} 不存在或已结束`,
+                message: `Process ${processId} does not exist or has already ended`,
               };
             }
             return {
-              success: true,
               processId,
-              processStatus: status,
-              message: `进程 ${processId} 已终止（状态: ${status}）`,
+              message: `Process ${processId} terminated (status: ${status})`,
             };
           }
 
@@ -204,11 +196,12 @@ export class ShellPlugin extends PluginBase {
               ctx?.session.sessionId,
             );
             if (result === null) {
-              return { success: false, message: `进程 ${processId} 不存在` };
+              return {
+                success: false,
+                message: `Process ${processId} does not exist`,
+              };
             }
             return {
-              success: true,
-              processId,
               processStatus: result.status,
               exitCode: result.exitCode,
               output: result.output,
@@ -223,32 +216,29 @@ export class ShellPlugin extends PluginBase {
               minutes,
             );
             if (entry === null) {
-              return { success: false, message: `进程 ${processId} 不存在` };
+              return {
+                success: false,
+                message: `Process ${processId} does not exist`,
+              };
             }
             const actualMinutes = entry.progressIntervalMinutes;
             const msg =
               actualMinutes > 0
-                ? `进度通知已开启，每 ${actualMinutes} 分钟报告一次。可根据需要调整频率，若无需持续监控请设置 0 关闭提醒。`
-                : "进度通知已关闭";
-            return {
-              success: true,
-              processId,
-              progressIntervalMinutes: actualMinutes,
-              message: msg,
-            };
+                ? `Progress notifications enabled, reporting every ${actualMinutes} minute(s). Adjust frequency as needed. Set to 0 to disable monitoring.`
+                : "Progress notifications disabled";
+            return msg;
           }
 
           case "dump_log": {
             const entry = this.processManager.getRawEntry(processId);
             if (!entry) {
-              return { success: false, message: `进程 ${processId} 不存在` };
+              return {
+                success: false,
+                message: `Process ${processId} does not exist`,
+              };
             }
             if (!entry.fullLog && !entry.output) {
-              return {
-                success: true,
-                processId,
-                message: `进程 ${processId} 无输出日志`,
-              };
+              return `Process ${processId} has no output log`;
             }
 
             const targetPath =
@@ -266,7 +256,7 @@ export class ShellPlugin extends PluginBase {
             ) {
               return {
                 success: false,
-                message: `导出路径不在工作目录内: ${resolved}`,
+                message: `Export path is not within the working directory: ${resolved}`,
               };
             }
 
@@ -277,9 +267,7 @@ export class ShellPlugin extends PluginBase {
             this.processManager.removeProcess(processId);
 
             return {
-              success: true,
-              processId,
-              message: `日志已导出到 ${resolved}，共 ${(entry.fullLog || "").length} 字符`,
+              message: `Log exported to ${resolved}, ${(entry.fullLog || "").length} characters total`,
               file_path: resolved,
             };
           }
@@ -287,24 +275,30 @@ export class ShellPlugin extends PluginBase {
           case "write": {
             const input = params.input;
             if (!input || typeof input !== "string") {
-              return { success: false, message: "params.input 不能为空" };
+              return {
+                success: false,
+                message: "params.input cannot be empty",
+              };
             }
 
             const entry = this.processManager.getRawEntry(processId);
             if (!entry) {
-              return { success: false, message: `进程 ${processId} 不存在` };
+              return {
+                success: false,
+                message: `Process ${processId} does not exist`,
+              };
             }
             if (entry.status !== "running") {
               return {
                 success: false,
-                message: `进程 ${processId} 已结束，无法写入`,
+                message: `Process ${processId} has ended, cannot write`,
               };
             }
 
             if (!entry.childProcess.stdin) {
               return {
                 success: false,
-                message: `进程 ${processId} 的 stdin 不可用`,
+                message: `stdin for process ${processId} is not available`,
               };
             }
 
@@ -314,15 +308,13 @@ export class ShellPlugin extends PluginBase {
             entry.childProcess.stdin.write(textToWrite);
 
             return {
-              success: true,
-              processId,
-              message: `已向进程 ${processId} 写入 ${textToWrite.length} 字符`,
+              message: `Written ${textToWrite.length} characters to process ${processId}`,
               input: input,
             };
           }
 
           default:
-            return { success: false, message: `未知操作: ${action}` };
+            return { success: false, message: `Unknown action: ${action}` };
         }
       },
       display: { action: "管理进程", argsKey: "action", icon: "terminal" },
@@ -332,7 +324,7 @@ export class ShellPlugin extends PluginBase {
     // ── Prompt ──
     api.registerPrompt({
       frequency: "STATIC",
-      description: "Shell 工具使用说明和安全提醒",
+      description: "Shell tool usage instructions and safety reminders",
       content: (ctx: PluginContext) => {
         const isWindows = process.platform === "win32";
         const isNotSubAgent = ctx?.session?.sessionType !== "sub_agent";
@@ -390,7 +382,9 @@ ${
     for (const proc of processes) {
       if (proc.status !== "running") continue;
       this.processManager.kill(proc.id);
-      this.logger.log(`子 Agent 流结束，自动终止后台进程: ${proc.id}`);
+      this.logger.log(
+        `Sub-agent stream ended, terminating background process: ${proc.id}`,
+      );
     }
   }
 }
