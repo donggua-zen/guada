@@ -33,11 +33,10 @@ describe("MessageService ownership checks", () => {
     service = new MessageService(
       messageRepo,
       contentRepo,
-      sessionRepo,
       { findByIds: jest.fn() } as any,
-      {} as any,
       { toResourceAbsoluteUrl: (url: string) => url } as any,
       { deleteFilesByMessageId: jest.fn() } as any,
+      { toPhysicalPath: jest.fn() } as any,
     );
   });
 
@@ -72,14 +71,12 @@ describe("MessageService ownership checks", () => {
     ]);
 
     await expect(
-      service.addMessage(
+      service.addUserMessage(
         "session-1",
-        "user",
         "hello",
         ["file-1"],
         undefined,
         undefined,
-        "user-1",
       ),
     ).rejects.toThrow("File not found");
 

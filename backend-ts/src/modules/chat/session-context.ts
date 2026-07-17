@@ -188,8 +188,18 @@ export interface ISessionContext {
   appendParts(records: MessageRecord[]): Promise<void>;
   /** 持久化待保存的消息 */
   persist(): Promise<void>;
+
+  /** 添加用户消息到历史并持久化 */
+  addUserMessage(
+    content: string,
+    files?: string[],
+    replaceMessageId?: string,
+    knowledgeBaseIds?: string[],
+    metadata?: Record<string, any>,
+  ): Promise<any>;
+
   /** 准备助手回复的消息 ID */
-  prepareAssistantResponse(
+  addAssistantMessageVersion(
     parentId: string,
     regenerationMode: string,
     turnsId: string,

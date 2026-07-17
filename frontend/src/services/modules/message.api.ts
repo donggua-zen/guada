@@ -22,7 +22,6 @@ export interface MessageApi {
   clearSessionMessages(sessionId: string): Promise<boolean>;
   deleteMessage(messageId: string): Promise<{ success: boolean }>;
   updateMessage(messageId: string, data: any): Promise<Message>;
-  setMessageCurrentContent(messageId: string, contentId: string): Promise<any>;
   fetchMessageContentToolDetails(contentId: string): Promise<{
     toolCalls: any[];
     toolCallsResponse: any[];
@@ -94,12 +93,6 @@ export const messageApi: MessageApi = {
     return await this._request(`/messages/${messageId}`, {
       method: "PUT",
       data,
-    });
-  },
-
-  async setMessageCurrentContent(this: ApiContext, messageId: string, contentId: string) {
-    return await this._request(`/messages/${messageId}/content/${contentId}`, {
-      method: "PUT",
     });
   },
 

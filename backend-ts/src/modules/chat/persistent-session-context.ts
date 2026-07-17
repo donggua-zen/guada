@@ -15,8 +15,8 @@ import { WorkspaceService } from "../../common/services/workspace.service";
 import { SG_MODELS, SK_MOD_CHAT } from "../../constants/settings.constants";
 import { MessageRecord } from "../llm-core/types/llm.types";
 import { cuid } from "../../common/utils/cuid.util";
+import { MessageService } from "./message.service";
 import {
-  IMessageStore,
   ICompressionStrategy,
   CompressionConfig,
   TokenBreakdown,
@@ -104,7 +104,6 @@ export class PersistentSessionContext implements ISessionContext {
   };
   private compressionModel: any;
 
-  private messagesLoaded: boolean = false;
   private conversationStateLoaded: boolean = false;
   /** 最近一次加载的压缩断点，传给 execute 避免重复查库 */
   private loadedCheckpoint: CompressionCheckpoint | null = null;
@@ -124,7 +123,7 @@ export class PersistentSessionContext implements ISessionContext {
     private readonly pluginManager: PluginManager,
     private readonly promptCollector: PromptCollector,
     private readonly workspaceService: WorkspaceService,
-    private readonly messageStore: IMessageStore,
+    private readonly messageStore: MessageService,
     private readonly compressionStrategy: ICompressionStrategy,
     private readonly tokenizerService: TokenizerService,
   ) {
@@ -165,6 +164,8 @@ export class PersistentSessionContext implements ISessionContext {
     if (savedRunMode === "plan") {
       this.runMode = "plan";
     }
+    // 加载用户消息
+    await this.loadMessages();
   }
 
   /**
@@ -303,12 +304,6 @@ export class PersistentSessionContext implements ISessionContext {
   async getMessages(options?: {
     exclude?: string[];
   }): Promise<MessageRecord[]> {
-    // 懒加载用户消息
-    if (!this.messagesLoaded) {
-      await this.loadMessages();
-      this.messagesLoaded = true;
-    }
-
     if (!this.conversationStateLoaded) {
       this.preludeParts = await this.buildPreludeMessages();
       this.conversationStateLoaded = true;
@@ -317,6 +312,53 @@ export class PersistentSessionContext implements ISessionContext {
     // 压缩由外部（AgentEngine）通过 shouldCompress/compress 控制，
     // getMessages 仅负责组装消息，不再触发压缩
     return [...this.preludeParts, ...this.history];
+  }
+
+  async addUserMessage(
+    content: string,
+    files?: string[],
+    replaceMessageId?: string | undefined,
+    knowledgeBaseIds?: string[] | undefined,
+    metadata?: Record<string, any>,
+  ) {
+    const message = await this.messageStore.addUserMessage(
+      this.sessionId,
+      content,
+      files,
+      replaceMessageId,
+      knowledgeBaseIds,
+      metadata,
+    );
+
+    if (message) {
+      const record = await this.messageStore.transformContentStructure(
+        message,
+        true,
+      );
+      const chatModelName =
+        this.modelConfig.modelName || this.modelConfig.name || "gpt4";
+      if (replaceMessageId) {
+        const index = this.history.findIndex(
+          (msg) => msg.messageId === replaceMessageId,
+        );
+        if (index !== -1) {
+          // 保留 index 之前的全部消息，删除 index 及之后的所有
+          this.history = this.history.slice(0, index);
+          this.tokenBreakdown.history -=
+            await this.tokenizerService.countTokens(
+              chatModelName,
+              this.history.slice(index + 1),
+            );
+        }
+      }
+      this.history.push(...record);
+      const newTokens = await this.tokenizerService.countTokens(
+        chatModelName,
+        record,
+      );
+      this.tokenBreakdown.history += newTokens;
+    }
+    return message;
   }
 
   /**
@@ -330,11 +372,6 @@ export class PersistentSessionContext implements ISessionContext {
    * 避免触发 loadMessages 带来副作用。
    */
   async getHistory(): Promise<MessageRecord[]> {
-    // 仅在消息已加载时返回，避免意外触发 loadMessages
-    // （插件在 getMessages→collectPrompts 流程中调用时，消息一定已加载）
-    if (!this.messagesLoaded) {
-      return [];
-    }
     return [...this.history];
   }
 
@@ -366,13 +403,13 @@ export class PersistentSessionContext implements ISessionContext {
     this.pendingPersistRecords = [];
   }
 
-  async prepareAssistantResponse(
+  async addAssistantMessageVersion(
     parentId: string,
     regenerationMode: string,
     turnsId: string,
     existingAssistantMessageId?: string,
   ): Promise<string> {
-    return this.messageStore.prepareAssistantResponse(
+    return this.messageStore.addAssistantMessageVersion(
       this.sessionId,
       parentId,
       regenerationMode,
@@ -402,10 +439,6 @@ export class PersistentSessionContext implements ISessionContext {
   async compress(
     onBeforeCompaction?: () => Promise<void>,
   ): Promise<MessageRecord[]> {
-    if (!this.messagesLoaded) {
-      throw new Error("Messages not loaded yet");
-    }
-
     const currentTokens = this.tokenBreakdown.history;
     const memoryConfig = this.memoryConfig;
     const modelConfig = this.modelConfig;

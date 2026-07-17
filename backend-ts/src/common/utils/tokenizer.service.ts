@@ -38,7 +38,7 @@ export class TokenizerService {
 
   // Tiktoken 编码映射
   private readonly ttEncodingMapping: Record<string, tiktoken.TiktokenEncoding> = {
-    default: "cl100k_base",
+    default: "o200k_base",
     gpt4: "cl100k_base",
     gpt35: "cl100k_base",
   };
