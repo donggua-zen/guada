@@ -78,23 +78,7 @@ export interface AssistantResponsePrepResult {
 }
 
 // ============================================================================
-// Layer 1a: 消息存储接口 —— 纯数据存取
-// ============================================================================
-
-export interface IMessageStore {
-  loadMessages(params: MessageLoadParams): Promise<MessageRecord[]>;
-  persistContent(records: MessageRecord[]): Promise<MessageRecord[]>;
-  prepareAssistantResponse(
-    sessionId: string,
-    parentId: string,
-    regenerationMode: string,
-    turnsId: string,
-    existingAssistantMessageId?: string,
-  ): Promise<string>;
-}
-
-// ============================================================================
-// Layer 1b: 压缩策略接口 —— 纯压缩算法+策略判断
+// 压缩策略接口 —— 纯压缩算法+策略判断
 // ============================================================================
 
 export interface ICompressionStrategy {
@@ -114,8 +98,7 @@ export interface ICompressionStrategy {
 }
 
 // ============================================================================
-// DI Token — 从废弃的 conversation-context.factory 迁移至此
+// DI Token
 // ============================================================================
 
-export const MESSAGE_STORE_TOKEN = "IMessageStore";
 export const COMPRESSION_STRATEGY_TOKEN = "ICompressionStrategy";

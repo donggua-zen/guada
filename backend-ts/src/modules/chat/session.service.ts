@@ -5,7 +5,7 @@ import { ModelRepository } from "../../common/database/model.repository";
 import { SettingsStorage } from "../../common/utils/settings-storage.util";
 import { SessionContextStateRepository } from "../../common/database/session-context-state.repository";
 import { LLMService } from "../llm-core/llm.service";
-import { MessageStoreService } from "./message-store.service";
+import { MessageService } from "./message.service";
 import { AgentEngine } from "./agent-engine.service";
 import {
   createPaginatedResponse,
@@ -35,7 +35,7 @@ export class SessionService {
     private settingsStorage: SettingsStorage,
     private contextStateRepo: SessionContextStateRepository,
     private llmService: LLMService,
-    private contextManager: MessageStoreService,
+    private contextManager: MessageService,
     private urlService: UrlService,
     private workspaceService: WorkspaceService,
     private sessionContextFactory: SessionContextFactory,

@@ -10,6 +10,7 @@ import {
   StreamFinishedEvent,
   StreamStartedEvent,
 } from "../../common/events/stream.events";
+import { ISessionContext } from "./session-context";
 
 /**
  * 流订阅回调
@@ -143,7 +144,8 @@ export class ChatRunnerService {
     }
 
     let createdUserMessage: any = null;
-
+    const sessionContext =
+      await this.sessionContextFactory.createFromSession(session);
     // overwrite 模式下自动创建消息
     if (regenerationMode === "overwrite" || !regenerationMode) {
       if (!userMessage?.content) {
@@ -153,14 +155,11 @@ export class ChatRunnerService {
         );
       }
       try {
-        createdUserMessage = await this.messageService.addMessage(
-          sessionId,
-          "user",
+        createdUserMessage = await sessionContext.addUserMessage(
           userMessage.content,
           userMessage.files || [],
           userMessage.replaceMessageId,
           userMessage.knowledgeBaseIds,
-          userId,
           source,
         );
       } catch (error: any) {
@@ -174,6 +173,12 @@ export class ChatRunnerService {
         );
       }
     }
+
+    if(regenerationMode !== "resume")
+    {
+      sessionContext.setMessageCursor(userMessage?.id || createdUserMessage?.id);
+    }
+
 
     const subscriberId = `${userId}_${Date.now()}_${Math.random().toString(36).slice(2)}`;
 
@@ -246,7 +251,7 @@ export class ChatRunnerService {
 
     // 在后台启动 Agent 循环
     this.runAgentEngine(
-      session,
+      sessionContext,
       userMessage?.id || createdUserMessage?.id,
       abortController,
       userId,
@@ -256,11 +261,11 @@ export class ChatRunnerService {
       clientId,
     ).catch((error) => {
       this.logger.error(`Agent engine error stack:`, error?.stack);
-      this.streamManager.broadcast(session.id, {
+      this.streamManager.broadcast(sessionId, {
         type: "error",
         error: error.message,
       } as any);
-      this.streamManager.stopStream(session.id, "error");
+      this.streamManager.stopStream(sessionId, "error");
     });
 
     return unsubscribe || (() => {});
@@ -485,8 +490,7 @@ export class ChatRunnerService {
     // 合并 parseResult：取最后一个（最新）有 parseResult 的 source
     const lastParseResult = [...items]
       .reverse()
-      .find((item) => item.source?.parseResult)
-      ?.source?.parseResult;
+      .find((item) => item.source?.parseResult)?.source?.parseResult;
     const mergedSource = {
       ...firstItem.source,
       systemPayload:
@@ -547,7 +551,7 @@ export class ChatRunnerService {
    */
 
   private async runAgentEngine(
-    session: any,
+    sessionContext: ISessionContext,
     userMessageId: string,
     abortController: AbortController,
     userId: string,
@@ -556,13 +560,9 @@ export class ChatRunnerService {
     resumeData?: any,
     clientId?: string,
   ): Promise<void> {
-    const sessionId = session.id;
+    const sessionId = sessionContext.sessionId;
     let lastFinishReason: string | undefined;
     try {
-      // 构建类型安全的会话上下文（已包含对话状态）
-      const sessionContext =
-        await this.sessionContextFactory.createFromSession(session);
-
       const iterator = this.agentEngine.run(
         sessionContext,
         userMessageId,
@@ -589,8 +589,8 @@ export class ChatRunnerService {
         source: clientId,
         payload: {
           reason: "completed",
-          workspacePath: session.workspacePath,
-          sessionType: session.sessionType,
+          workspacePath: sessionContext.workspacePath,
+          sessionType: sessionContext.sessionType,
         },
       };
       this.eventEmitter.emit("stream.finished", streamFinishedEvent);
@@ -606,8 +606,8 @@ export class ChatRunnerService {
           source: clientId,
           payload: {
             reason: "user_cancel",
-            workspacePath: session.workspacePath,
-            sessionType: session.sessionType,
+            workspacePath: sessionContext.workspacePath,
+            sessionType: sessionContext.sessionType,
           },
         };
         this.eventEmitter.emit("stream.finished", streamFinishedEvent);
@@ -620,8 +620,8 @@ export class ChatRunnerService {
           payload: {
             reason: "error",
             error: error.message,
-            workspacePath: session.workspacePath,
-            sessionType: session.sessionType,
+            workspacePath: sessionContext.workspacePath,
+            sessionType: sessionContext.sessionType,
           },
         };
         this.eventEmitter.emit("stream.finished", streamFinishedEvent);

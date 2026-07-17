@@ -179,13 +179,12 @@ export class AgentEngine {
       turnsId = sessionContext.generateId();
 
       // 准备助手回复的消息容器，根据再生模式决定是覆盖旧回复还是创建新版本
-      responseMessageId = await sessionContext.prepareAssistantResponse(
+      responseMessageId = await sessionContext.addAssistantMessageVersion(
         userMessageId,
         regenerationMode,
         turnsId,
         assistantMessageId,
       );
-      sessionContext.setMessageCursor(userMessageId);
     }
     let needToContinue = false;
 
@@ -651,9 +650,7 @@ export class AgentEngine {
       // 超时错误，标记为 timeout 并记录详细错误信息
       currentChunk.metadata.finishReason = "timeout";
       currentChunk.metadata.error = streamError.message;
-    } else if (
-      streamError instanceof RateLimitError
-    ) {
+    } else if (streamError instanceof RateLimitError) {
       // 429 限流错误（重试已耗尽），标记为 rate_limited 以便前端展示继续按钮
       currentChunk.metadata.finishReason = "rate_limited";
       currentChunk.metadata.error = streamError.message;

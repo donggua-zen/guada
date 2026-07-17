@@ -1,14 +1,17 @@
 import { Injectable, Logger, HttpException, HttpStatus } from "@nestjs/common";
 import { Prisma } from "@prisma/client";
+import * as fs from "fs";
+import * as path from "path";
 import { MessageRepository } from "../../common/database/message.repository";
 import { MessageContentRepository } from "../../common/database/message-content.repository";
-import { SessionRepository } from "../../common/database/session.repository";
 import { KnowledgeBaseRepository } from "../../common/database/knowledge-base.repository";
 import { createPaginatedResponse } from "../../common/types/pagination";
 import { randomUUID } from "crypto";
-import { FileRepository } from "../../common/database/file.repository";
 import { UrlService } from "../../common/services/url.service";
 import { FileService } from "../files/file.service";
+import { UploadPathService } from "../../common/services/upload-path.service";
+import { MessageRecord, MessagePart } from "../llm-core/types/llm.types";
+import { MessageLoadParams } from "./interfaces";
 
 @Injectable()
 export class MessageService {
@@ -17,11 +20,10 @@ export class MessageService {
   constructor(
     private messageRepo: MessageRepository,
     private contentRepo: MessageContentRepository,
-    private sessionRepo: SessionRepository,
     private kbRepo: KnowledgeBaseRepository,
-    private fileRepo: FileRepository,
     private urlService: UrlService,
     private fileService: FileService,
+    private uploadPathService: UploadPathService,
   ) {}
 
   /**
@@ -32,43 +34,6 @@ export class MessageService {
   ): Record<string, any> {
     const { systemPayload, ...rest } = metadata;
     return rest;
-  }
-
-  private async assertSessionOwner(sessionId: string, userId: string) {
-    const session = await this.sessionRepo.findById(sessionId);
-    if (!session || session.userId !== userId) {
-      throw new HttpException("Session not found", HttpStatus.NOT_FOUND);
-    }
-    return session;
-  }
-
-  private assertMessageOwner(message: any, userId: string) {
-    if (!message || message.session?.userId !== userId) {
-      throw new HttpException("Message not found", HttpStatus.NOT_FOUND);
-    }
-  }
-
-  private async assertFilesBelongToSession(
-    fileIds: string[],
-    sessionId: string,
-    userId: string,
-  ) {
-    const ids = [...new Set(fileIds.filter(Boolean))];
-    if (ids.length === 0) return;
-
-    const files = await this.contentRepo.getPrismaClient().file.findMany({
-      where: { id: { in: ids } },
-      select: { id: true, sessionId: true, uploadUserId: true },
-    });
-
-    const allowed = files.filter(
-      (file) =>
-        file.sessionId === sessionId &&
-        (!file.uploadUserId || file.uploadUserId === userId),
-    );
-    if (allowed.length !== ids.length) {
-      throw new HttpException("File not found", HttpStatus.NOT_FOUND);
-    }
   }
 
   /**
@@ -91,8 +56,6 @@ export class MessageService {
       afterMessageId?: string;
     },
   ) {
-    await this.assertSessionOwner(sessionId, userId);
-
     let messages: any[];
 
     // 如果有分页参数，使用 findRecentBySessionId（基于 ID 的游标分页）
@@ -220,8 +183,6 @@ export class MessageService {
     }
 
     // 验证消息所有权
-    const message = await this.messageRepo.findById(content.messageId);
-    this.assertMessageOwner(message, userId);
 
     const metadata = (content.metadata || {}) as Record<string, any>;
     const toolCalls = metadata.toolCalls || [];
@@ -260,120 +221,17 @@ export class MessageService {
    * 添加新消息（支持多版本）
    * 使用事务确保所有数据库操作的原子性
    */
-  async addMessage(
+  async addUserMessage(
     sessionId: string,
-    role: string,
     content: string,
-    files: any[] = [],
+    files: string[] = [],
     replaceMessageId: string | undefined,
     knowledgeBaseIds: string[] | undefined,
-    userId: string,
-    source?: Record<string, any>,
+    metadata?: Record<string, any>,
   ) {
-    if (!userId) {
-      throw new HttpException("Unauthorized", HttpStatus.UNAUTHORIZED);
-    }
-    await this.assertSessionOwner(sessionId, userId);
-    await this.assertFilesBelongToSession(files, sessionId, userId);
-
-    let messageId: string;
-    let turnsId: string;
-
-    // 如果是替换模式：完全删除旧消息，然后创建新消息（与 Python 后端保持一致）
-    if (replaceMessageId) {
-      const existingMessage = await this.messageRepo.findById(replaceMessageId);
-      if (!existingMessage) {
-        throw new HttpException("Message not found", HttpStatus.NOT_FOUND);
-      }
-
-      // 检查权限：确保消息属于该会话
-      if (existingMessage.sessionId !== sessionId) {
-        throw new HttpException(
-          "Message does not belong to this session",
-          HttpStatus.FORBIDDEN,
-        );
-      }
-
-      // 生成新的轮次 ID
-      turnsId = randomUUID();
-
-      // 使用事务确保删除和创建的原子性
-      try {
-        const prisma = this.contentRepo.getPrismaClient();
-        await prisma.$transaction(async (tx) => {
-          // 1. 解绑旧消息关联的文件（将 messageId 设置为 null）
-          await tx.file.updateMany({
-            where: { messageId: replaceMessageId },
-            data: { messageId: null },
-          });
-
-          // 2. 删除旧消息的所有内容版本
-
-          await tx.message.deleteMany({
-            where: { parentId: replaceMessageId },
-          });
-
-          await tx.messageContent.deleteMany({
-            where: { messageId: replaceMessageId },
-          });
-
-          // 3. 删除旧消息本身
-          await tx.message.delete({
-            where: { id: replaceMessageId },
-          });
-
-          // 4. 创建全新的消息（而不是创建新版本）
-          const newMessage = await tx.message.create({
-            data: {
-              sessionId,
-              role,
-              parentId: existingMessage.parentId, // 继承原消息的 parent_id
-              currentTurnsId: turnsId, // 设置当前轮次 ID
-              metadata: source || undefined,
-            } as any,
-          });
-
-          messageId = newMessage.id;
-        });
-
-        // 5. 事务成功后，在后台异步清理所有 messageId 为 NULL 的孤儿文件
-        // 这些文件包括：本次编辑解绑但未重新关联的文件 + 历史遗留的孤儿文件
-        // 使用 setImmediate 延迟执行，避免阻塞当前请求响应，同时给数据库一些时间释放锁
-        setImmediate(() => {
-          this.logger.debug("开始后台清理孤儿文件...");
-          this.fileService.cleanupOrphanFiles().catch((error) => {
-            this.logger.error(
-              `清理孤儿文件失败: ${error.message}`,
-              error.stack,
-            );
-          });
-        });
-      } catch (error) {
-        const errorMessage =
-          error instanceof Error ? error.message : "Unknown error";
-        this.logger.error(
-          `Transaction failed when replacing message: ${errorMessage}`,
-        );
-        throw new HttpException(
-          "Failed to replace message",
-          HttpStatus.INTERNAL_SERVER_ERROR,
-        );
-      }
-    } else {
-      // 创建新消息
-      turnsId = randomUUID(); // 生成轮次 ID
-      const message = await this.messageRepo.create({
-        sessionId,
-        role,
-        parentId: undefined,
-        currentTurnsId: turnsId, // 设置当前轮次 ID
-        metadata: source || undefined,
-      });
-      messageId = message.id;
-    }
-
-    // 处理知识库引用逻辑
-    let metadata: any = null;
+    const turnsId = randomUUID();
+    // 提前处理知识库引用逻辑，不占用事务
+    let finalMetadata: any = null;
     if (knowledgeBaseIds && knowledgeBaseIds.length > 0) {
       // 使用批量查询提升效率（替代多次单独查询）
       const kbs = await this.kbRepo.findByIds(knowledgeBaseIds);
@@ -382,55 +240,82 @@ export class MessageService {
         name: kb.name,
         description: kb.description,
       }));
-      metadata = { referencedKbs: kbMetadata };
+      finalMetadata = { ...metadata, referencedKbs: kbMetadata };
     }
+    const prisma = this.contentRepo.getPrismaClient();
+    const messageId = await prisma.$transaction(async (tx) => {
+      let messageId: string;
+      if (replaceMessageId) {
+        const existingMessage = await tx.message.findFirst({
+          where: { id: replaceMessageId },
+        });
+        if (!existingMessage || existingMessage.sessionId !== sessionId) {
+          throw new HttpException("Message not found", HttpStatus.NOT_FOUND);
+        }
 
-    // 使用事务确保消息内容和文件更新的原子性
-    try {
-      const prisma = this.contentRepo.getPrismaClient();
-      await prisma.$transaction(async (tx) => {
-        // 1. 创建消息内容
-        await tx.messageContent.create({
+        // 1. 解绑旧消息关联的文件（将 messageId 设置为 null）
+        await tx.file.updateMany({
+          where: { messageId: replaceMessageId },
+          data: { messageId: null },
+        });
+
+        // 2. 删除旧消息的所有内容版本
+        await tx.message.deleteMany({
+          where: { parentId: replaceMessageId },
+        });
+
+        // 3. 删除旧消息本身
+        await tx.message.delete({
+          where: { id: replaceMessageId },
+        });
+
+        // 4. 创建全新的消息（而不是创建新版本）
+        const newMessage = await tx.message.create({
           data: {
-            messageId,
-            turnsId, // 使用相同的 turnsId
-            role, // 添加 role
-            content,
-            metadata, // 存储知识库引用信息
+            sessionId,
+            role: "user",
+            parentId: existingMessage.parentId, // 继承原消息的 parent_id
+            currentTurnsId: turnsId, // 设置当前轮次 ID
+            metadata: metadata || undefined,
           },
         });
 
-        // 2. 更新文件关联（如果有文件）
-        if (files && files.length > 0) {
-          await tx.file.updateMany({
-            where: { id: { in: files } },
-            data: { messageId },
-          });
-        }
-      });
-    } catch (error) {
-      const errorMessage =
-        error instanceof Error ? error.message : "Unknown error";
-      this.logger.error(
-        `Transaction failed when creating message content: ${errorMessage}`,
-      );
-      // 如果事务失败，需要清理已创建的消息记录
-      try {
-        await this.messageRepo.delete(messageId);
-      } catch (cleanupError) {
-        const cleanupErrorMessage =
-          cleanupError instanceof Error
-            ? cleanupError.message
-            : "Unknown error";
-        this.logger.error(
-          `Failed to cleanup message after transaction failure: ${cleanupErrorMessage}`,
-        );
+        messageId = newMessage.id;
+      } else {
+        // 创建新消息
+        const message = await tx.message.create({
+          data: {
+            sessionId: sessionId,
+            role: "user",
+            parentId: undefined,
+            currentTurnsId: turnsId, // 设置当前轮次 ID
+            metadata: finalMetadata || undefined,
+          },
+        });
+        messageId = message.id;
       }
-      throw new HttpException(
-        "Failed to create message content",
-        HttpStatus.INTERNAL_SERVER_ERROR,
-      );
-    }
+
+      // 1. 创建消息内容
+      await tx.messageContent.create({
+        data: {
+          messageId,
+          turnsId, // 使用相同的 turnsId
+          role: "user", // 添加 role
+          content,
+          metadata, // 存储知识库引用信息
+        },
+      });
+
+      // 2. 更新文件关联（如果有文件）
+      if (files && files.length > 0) {
+        await tx.file.updateMany({
+          where: { id: { in: files } },
+          data: { messageId },
+        });
+      }
+
+      return messageId;
+    });
 
     // 获取完整的消息对象（包含文件信息）
     const completeMessage = await this.messageRepo.findById(messageId, {
@@ -449,14 +334,7 @@ export class MessageService {
           ),
         }));
       }
-
-      // // 格式化内容字段
-      // completeMessage.contents.forEach((content) => {
-      //   content.metadata = content.metadata || null;
-      //   content.additionalKwargs = content.additionalKwargs || null;
-      // });
     }
-
     return completeMessage;
   }
 
@@ -475,7 +353,6 @@ export class MessageService {
     // 获取消息及其当前内容版本（与 Python 后端一致）
     const message =
       await this.messageRepo.findByIdWithCurrentContent(messageId);
-    this.assertMessageOwner(message, userId);
 
     // 分离消息字段和内容字段（与 Python 后端逻辑一致）
     const messageFields: any = {};
@@ -585,7 +462,6 @@ export class MessageService {
    */
   async deleteMessage(messageId: string, userId: string) {
     const message = await this.messageRepo.findById(messageId);
-    this.assertMessageOwner(message, userId);
 
     // 执行删除
     await this.deleteMessageInternal(messageId);
@@ -602,54 +478,9 @@ export class MessageService {
    * 清空会话的所有消息
    */
   async deleteMessagesBySessionId(sessionId: string, userId: string) {
-    await this.assertSessionOwner(sessionId, userId);
-
-    // 1. 先获取该会话下的所有消息 ID
-    const messages = await this.messageRepo.findBySessionId(sessionId, {
-      withFiles: false,
-      withContents: false,
-    });
-
-    // 2. 删除所有消息关联的物理文件（并行执行）
-    const fileDeletePromises = messages.map((msg) =>
-      this.fileService.deleteFilesByMessageId(msg.id),
-    );
-    await Promise.all(fileDeletePromises);
-
-    // 3. 删除所有消息（级联删除内容）
+    //  删除所有消息（级联删除内容）
     await this.messageRepo.deleteBySessionId(sessionId);
 
-    return { success: true };
-  }
-
-  /**
-   * 设置消息的当前活动内容版本
-   */
-  async setMessageCurrentContent(
-    messageId: string,
-    contentId: string,
-    userId: string,
-  ) {
-    const message = await this.messageRepo.findById(messageId);
-    this.assertMessageOwner(message, userId);
-
-    const content = await this.contentRepo.findById(contentId);
-    if (!content) {
-      throw new HttpException(
-        "Content version not found",
-        HttpStatus.NOT_FOUND,
-      );
-    }
-
-    // 验证内容属于该消息
-    if (content.messageId !== messageId) {
-      throw new HttpException(
-        "Content does not belong to this message",
-        HttpStatus.FORBIDDEN,
-      );
-    }
-
-    // Python 后端通过查询最后一个 content 来获取当前内容，不需要单独设置
     return { success: true };
   }
 
@@ -657,8 +488,6 @@ export class MessageService {
    * 批量导入消息
    */
   async importMessages(sessionId: string, messages: any[], userId: string) {
-    await this.assertSessionOwner(sessionId, userId);
-
     // 验证消息格式并转换
     const formattedMessages = messages.map((msg) => ({
       sessionId,
@@ -674,8 +503,390 @@ export class MessageService {
     return { success: true, count: result.count };
   }
 
+  // ============================================================================
+  // 以下方法来自合并前的 MessageStoreService —— 纯数据存取 + LLM 格式转换
+  // ============================================================================
+
   /**
-   * 清理所有 messageId 为 NULL 的孤儿文件
-   * 在编辑消息后调用，异步执行，不阻塞响应
+   * 加载会话历史消息
+   *
+   * 从数据库中检索指定会话的最近消息，并将其转换为 LLM 可识别的 MessageRecord 格式。
+   * 该方法支持多模态内容（图片、文本附件）的自动转换，以及基于压缩游标的增量加载。
+   *
+   * 加载流程：
+   * - 从数据库查询原始消息（包含内容和文件信息）
+   * - 反转消息顺序并逐条转换为标准格式
+   * - 根据压缩检查点裁剪已压缩的内容部分
+   * - 返回纯净的对话历史（不含摘要和裁剪覆盖层，由上层负责处理）
+   *
+   * @param params 加载参数，包含会话 ID、最大消息数、压缩游标等信息
+   * @returns 转换后的消息记录数组，按时间正序排列
    */
+  async loadMessages(params: MessageLoadParams): Promise<MessageRecord[]> {
+    const {
+      sessionId,
+      userMessageId,
+      maxMessages = undefined,
+      supportsImageInput = false,
+      keepReasoningContent = false,
+      lastCompactedMessageId,
+      lastCompactedContentId,
+    } = params;
+
+    // 从数据库加载原始消息（不包含压缩状态处理），传入压缩游标实现增量加载
+    const rawMessages = await this.messageRepo.findRecentBySessionId(
+      sessionId,
+      maxMessages,
+      userMessageId,
+      lastCompactedMessageId,
+      { withFiles: true, withContents: true, onlyCurrentContent: true },
+    );
+
+    const context: MessageRecord[] = [];
+    const lastMessage = rawMessages[0];
+    // 反转消息列表以按时间正序处理，同时保留最后一条消息的标识用于特殊处理
+    for (const msg of rawMessages.reverse()) {
+      const transformed = await this.transformContentStructure(
+        msg,
+        msg.id === lastMessage?.id,
+        supportsImageInput,
+        keepReasoningContent,
+      );
+      if (transformed.length > 0) {
+        context.push(...transformed);
+      }
+    }
+
+    // 根据压缩检查点中的 Content ID 裁剪已压缩的内容部分
+    if (lastCompactedContentId) {
+      const idx = context.findIndex(
+        (m) => m.contentId === lastCompactedContentId,
+      );
+      if (idx !== -1) {
+        context.splice(0, idx + 1);
+      }
+    }
+
+    return context;
+  }
+
+  /**
+   * 持久化消息内容记录
+   *
+   * 将新的消息内容写入数据库，支持助手回复、工具调用结果等多种角色类型。
+   * 该方法会提取消息中的元数据（模型名称、完成原因、Token 使用量、思维链耗时等）并一并存储。
+   *
+   * @param records 待持久化的消息记录数组
+   * @returns 成功持久化的消息记录数组
+   * @throws 若数据库写入失败则抛出异常
+   */
+  async persistContent(records: MessageRecord[]): Promise<MessageRecord[]> {
+    try {
+      if (!records || records.length === 0) return [];
+
+      for (const record of records) {
+        const metadata: any = {
+          ...(record.metadata || {}),
+          modelName: record.metadata?.modelName || "",
+          finishReason: record.metadata?.finishReason || "",
+        };
+
+        if (record.toolCalls) {
+          metadata.toolCalls = record.toolCalls;
+        }
+        if (record.toolCallId) {
+          metadata.toolCallId = record.toolCallId;
+        }
+
+        await this.contentRepo.create({
+          id: record.contentId,
+          messageId: record.messageId || "",
+          turnsId: record.turnsId || "",
+          role: record.role,
+          content: typeof record.content === "string" ? record.content : "",
+          reasoningContent: record.reasoningContent,
+          metadata,
+        });
+      }
+
+      return records;
+    } catch (error) {
+      this.logger.error("Failed to create content", error);
+      throw error;
+    }
+  }
+
+  /**
+   * 准备助手回复的消息容器
+   *
+   * 根据再生模式创建或更新助手消息的记录。支持三种场景：
+   * - overwrite 模式：删除父消息下的所有子消息，创建全新的助手消息（用于重新生成）
+   * - 普通模式：若提供了现有消息 ID 则更新其轮次 ID，否则创建新消息
+   *
+   * @param sessionId 会话 ID
+   * @param parentId 父消息 ID（通常是用户消息）
+   * @param regenerationMode 再生模式标识（"overwrite" 或其他）
+   * @param turnsId 当前对话轮次 ID
+   * @param existingAssistantMessageId 已存在的助手消息 ID（可选）
+   * @returns 目标助手消息的 ID
+   */
+  async addAssistantMessageVersion(
+    sessionId: string,
+    parentId: string,
+    regenerationMode: string,
+    turnsId: string,
+    existingAssistantMessageId?: string,
+  ): Promise<string> {
+    let targetMessageId = existingAssistantMessageId;
+
+    if (regenerationMode === "overwrite" || !regenerationMode) {
+      await this.messageRepo.deleteByParentId(parentId);
+      const msg = await this.messageRepo.create({
+        sessionId,
+        role: "assistant",
+        parentId,
+        currentTurnsId: turnsId,
+      });
+      targetMessageId = msg.id;
+    } else if (targetMessageId) {
+      await this.messageRepo.update(targetMessageId, {
+        currentTurnsId: turnsId,
+      });
+    }
+    return targetMessageId;
+  }
+
+  /**
+   * 转换消息内容结构
+   *
+   * 将数据库中的原始消息格式转换为 LLM 所需的 MessageRecord 格式。
+   * 该方法根据消息角色（user/assistant/tool）采用不同的转换策略：
+   * - assistant/tool：展开多个内容版本，提取工具调用信息
+   * - user：组装文本、图片和附件为多模态消息格式，注入知识库引用信息
+   */
+  public async transformContentStructure(
+    msg: any,
+    isNewUserMessage: boolean,
+    supportsImageInput: boolean = true,
+    keepReasoningContent: boolean = false,
+  ): Promise<MessageRecord[]> {
+    if (msg.role === "assistant") {
+      const transformed: MessageRecord[] = [];
+
+      for (const content of msg.contents || []) {
+        const metadata = content.metadata || {};
+
+        const baseMsg: MessageRecord = {
+          messageId: msg.id,
+          contentId: content.id,
+          turnsId: content.turnsId,
+          role: content.role,
+          content: content.content || "",
+          metadata: { ...metadata },
+        };
+
+        if (keepReasoningContent) {
+          baseMsg.reasoningContent = content.reasoningContent;
+        }
+        if (metadata.toolCalls) {
+          baseMsg.toolCalls = metadata.toolCalls;
+        }
+        if (metadata.toolCallId) {
+          baseMsg.toolCallId = metadata.toolCallId;
+        }
+        transformed.push(baseMsg);
+      }
+      return transformed;
+    } else {
+      const activeContent = msg.contents?.[0];
+      if (!activeContent)
+        return [
+          {
+            messageId: msg.id,
+            contentId: undefined,
+            role: "user",
+            content: "",
+            metadata: {},
+          },
+        ];
+
+      let userContent = activeContent.content || "";
+
+      const meta = msg.metadata;
+      if (meta && typeof meta === "object" && meta.parseResult?.content) {
+        userContent = meta.parseResult.content;
+      } else if (
+        meta &&
+        typeof meta === "object" &&
+        meta.type &&
+        meta.type !== "client"
+      ) {
+        userContent = this.wrapSystemMessage(meta, userContent);
+      }
+
+      const textParts: MessagePart[] = [{ type: "text", text: userContent }];
+
+      let metadata = {};
+
+      const kbInfo = this.appendKbReferenceInfo(activeContent);
+      if (kbInfo) {
+        textParts.push({ type: "text", text: kbInfo });
+        metadata["referencedKbs"] = kbInfo;
+      }
+
+      if (msg.files && Array.isArray(msg.files)) {
+        for (let index = 0; index < msg.files.length; index++) {
+          const file = msg.files[index];
+          if (file.fileType === "image") {
+            const imagePart = await this.transformImageFile(
+              file,
+              supportsImageInput,
+            );
+            if (imagePart) textParts.push(imagePart);
+          } else if (file.fileType === "text") {
+            const textPart = this.transformTextFile(file, index);
+            if (textPart) textParts.push(textPart);
+          }
+        }
+      }
+
+      return [
+        {
+          messageId: msg.id,
+          contentId: msg.contents?.[0].id,
+          turnsId: activeContent.turnsId,
+          role: "user",
+          content: textParts.length === 1 ? textParts[0].text : textParts,
+          metadata: metadata,
+        },
+      ];
+    }
+  }
+
+  /**
+   * 追加知识库引用信息到用户消息
+   */
+  private appendKbReferenceInfo(activeContent: any): string | null {
+    try {
+      const referencedKbs = activeContent.metadata?.referencedKbs;
+      if (
+        !referencedKbs ||
+        !Array.isArray(referencedKbs) ||
+        referencedKbs.length === 0
+      ) {
+        return null;
+      }
+
+      const lines = ["【当前引用的知识库】"];
+      referencedKbs.forEach((kb: any) => {
+        const name = kb.name || "未知";
+        const id = kb.id || "unknown";
+        const desc = kb.description || "";
+        let line = `- 名称：${name}, ID: ${id}`;
+        if (desc) line += `, 简介：${desc}`;
+        lines.push(line);
+      });
+
+      return "\n" + lines.join("\n");
+    } catch (error) {
+      this.logger.error("Failed to append KB reference info", error);
+      return null;
+    }
+  }
+
+  /**
+   * 转换图片文件为 Base64 格式
+   */
+  private async transformImageFile(
+    file: any,
+    supportsImageInput: boolean,
+  ): Promise<any | null> {
+    if (!supportsImageInput) {
+      return { type: "text", text: `[图片ID：${file.id}]` };
+    }
+
+    if (!file.url) return null;
+
+    try {
+      const physicalPath = this.uploadPathService.toPhysicalPath(file.url);
+      if (!fs.existsSync(physicalPath)) {
+        this.logger.warn(`Image file not found at path: ${physicalPath}`);
+        return null;
+      }
+
+      const imageBuffer = await fs.promises.readFile(physicalPath);
+      const base64Data = imageBuffer.toString("base64");
+
+      const ext = path.extname(physicalPath).toLowerCase();
+      let mimeType = "image/jpeg";
+      switch (ext) {
+        case ".png":
+          mimeType = "image/png";
+          break;
+        case ".gif":
+          mimeType = "image/gif";
+          break;
+        case ".webp":
+          mimeType = "image/webp";
+          break;
+        case ".bmp":
+          mimeType = "image/bmp";
+          break;
+        case ".tiff":
+        case ".tif":
+          mimeType = "image/tiff";
+          break;
+      }
+
+      const dataUri = `data:${mimeType};base64,${base64Data}`;
+
+      return {
+        type: "image_url",
+        image_url: { url: dataUri },
+      };
+    } catch (error: any) {
+      this.logger.error(`Failed to transform image file: ${error.message}`);
+      return null;
+    }
+  }
+
+  /**
+   * 转换文本文件为结构化文本块
+   */
+  private transformTextFile(file: any, index: number): any | null {
+    const fileName = file.fileName || "unknown";
+    const content = file.content || "";
+    const fileText =
+      `\n\n<ATTACHMENT_FILE>\n` +
+      `<FILE_INDEX>File ${index}</FILE_INDEX>\n` +
+      `<FILE_NAME>${fileName}</FILE_NAME>\n` +
+      `<FILE_CONTENT>\n${content}\n</FILE_CONTENT>\n` +
+      `</ATTACHMENT_FILE>\n`;
+
+    return { type: "text", text: fileText };
+  }
+
+  /**
+   * 将系统消息 metadata 包装为 XML 格式
+   */
+  private wrapSystemMessage(meta: any, userContent: string): string {
+    const systemPayload = meta.systemPayload;
+    if (Array.isArray(systemPayload) && systemPayload.length > 0) {
+      const payloadXml = systemPayload
+        .map((payload: any) => {
+          const entries = Object.entries(payload)
+            .map(([key, value]) => `<${key}>${value}</${key}>`)
+            .join("");
+          return `<payload>${entries}</payload>`;
+        })
+        .join("");
+      return `<system_message note="This message is automatically triggered by the system" type="${meta.type}">${payloadXml}</system_message>`;
+    }
+
+    const { type, ...rest } = meta;
+    const tags = Object.entries(rest)
+      .map(([key, value]) => `<${key}>${value}</${key}>`)
+      .join("");
+    return `<system_message note="This message is automatically triggered by the system" type="${type}">${tags}<content>${userContent}</content></system_message>`;
+  }
 }

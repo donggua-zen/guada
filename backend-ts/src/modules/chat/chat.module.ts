@@ -27,9 +27,8 @@ import { ChatRunnerService } from "./chat-runner.service";
 import { ToolCallDisplayUtil } from "./utils/tool-call-display.util";
 import { EventBusService } from "../../common/events/event-bus.service";
 
-import { MessageStoreService } from "./message-store.service";
 import { CompressionEngine } from "./compression-engine";
-import { MESSAGE_STORE_TOKEN, COMPRESSION_STRATEGY_TOKEN } from "./interfaces";
+import { COMPRESSION_STRATEGY_TOKEN } from "./interfaces";
 
 // 标签解析器
 import { TagParserPipeline } from "./parsers/tag-parser-pipeline.service";
@@ -40,9 +39,7 @@ import { TagParserPipeline } from "./parsers/tag-parser-pipeline.service";
   providers: [
     AgentEngine,
     SessionContextFactory,
-    MessageStoreService,
     CompressionEngine,
-    { provide: MESSAGE_STORE_TOKEN, useExisting: MessageStoreService },
     { provide: COMPRESSION_STRATEGY_TOKEN, useExisting: CompressionEngine },
     MessageService,
     SessionService,

@@ -48,34 +48,7 @@ export class MessagesController {
     });
   }
 
-  /**
-   * 添加新消息到会话
-   */
-  @Post("sessions/:sessionId/messages")
-  async addMessage(
-    @Param("sessionId") sessionId: string,
-    @Body()
-    body: {
-      content: string;
-      role?: string;
-      files?: any[];
-      replaceMessageId?: string; // 驼峰式
-      knowledgeBaseIds?: string[];
-      source?: Record<string, any>;
-    },
-    @CurrentUser() user: any,
-  ) {
-    return this.messageService.addMessage(
-      sessionId,
-      body.role || "user",
-      body.content,
-      body.files || [],
-      body.replaceMessageId, // 驼峰式
-      body.knowledgeBaseIds,
-      user.id,
-      body.source,
-    );
-  }
+
 
   /**
    * 更新消息
@@ -124,22 +97,6 @@ export class MessagesController {
     @CurrentUser() user: any,
   ) {
     return this.messageService.deleteMessagesBySessionId(sessionId, user.id);
-  }
-
-  /**
-   * 设置消息的当前活动内容版本
-   */
-  @Put("message-content/:contentId/active")
-  async updateMessageActiveContent(
-    @Param("contentId") contentId: string,
-    @Body() body: { message_id: string },
-    @CurrentUser() user: any,
-  ) {
-    return this.messageService.setMessageCurrentContent(
-      body.message_id,
-      contentId,
-      user.id,
-    );
   }
 
   /**

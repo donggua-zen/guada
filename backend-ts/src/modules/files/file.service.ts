@@ -65,23 +65,21 @@ export class FileService implements OnModuleInit {
     }
   }
 
-  private async assertFileOwner(file: any, userId: string) {
-    if (file.uploadUserId === userId) return;
-
-    if (file.sessionId) {
-      const session = await this.prisma.session.findFirst({
-        where: { id: file.sessionId, userId },
-        select: { id: true },
-      });
-      if (session) return;
-    }
-
-    throw new HttpException("File not found", HttpStatus.NOT_FOUND);
-  }
 
   async onModuleInit() {
     // 启动时清理所有未关联消息的孤儿文件
     await this.cleanupOrphanFiles();
+
+    // 之后每 30 分钟定时清理一次，处理消息编辑等场景产生的孤儿文件
+    setInterval(() => {
+      this.cleanupOrphanFiles().catch((error) => {
+        this.logger.error(`定时清理孤儿文件失败: ${error.message}`);
+      });
+    }, 30 * 60 * 1000);
+
+    this.logger.log(
+      `孤儿文件定时清理已启动，间隔 30 分钟`,
+    );
   }
 
   /**

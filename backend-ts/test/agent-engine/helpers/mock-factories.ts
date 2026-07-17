@@ -139,7 +139,7 @@ export function createMockSessionContext(options?: {
     getHistory: jest.fn(() => []),
     appendParts: jest.fn().mockResolvedValue(undefined),
     persist: jest.fn().mockResolvedValue(undefined),
-    prepareAssistantResponse: jest.fn().mockResolvedValue('assistant-msg-id'),
+    addAssistantMessageVersion: jest.fn().mockResolvedValue('assistant-msg-id'),
     generateId: jest.fn(() => `msg-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`),
     getTokenCount: jest.fn(() => 0),
     forceCompress: jest.fn().mockResolvedValue([]),

@@ -6,13 +6,11 @@ import { SettingsStorage } from "../../common/utils/settings-storage.util";
 import { ToolOrchestrator } from "../tools/tool-orchestrator.service";
 import { WorkspaceService } from "../../common/services/workspace.service";
 import { TokenizerService } from "../../common/utils/tokenizer.service";
-import {
-  IMessageStore,
-  ICompressionStrategy,
-} from "./interfaces";
-import { MESSAGE_STORE_TOKEN, COMPRESSION_STRATEGY_TOKEN } from "./interfaces";
+import { ICompressionStrategy } from "./interfaces";
+import { COMPRESSION_STRATEGY_TOKEN } from "./interfaces";
 import { PluginManager } from "../plugins/plugin.manager";
 import { PromptCollector } from "../plugins/prompt-collector.service";
+import { MessageService } from "./message.service";
 
 /**
  * SessionContext 工厂
@@ -33,7 +31,7 @@ export class SessionContextFactory {
     private pluginManager: PluginManager,
     private promptCollector: PromptCollector,
     private workspaceService: WorkspaceService,
-    @Inject(MESSAGE_STORE_TOKEN) private messageStore: IMessageStore,
+    private messageStore: MessageService,
     @Inject(COMPRESSION_STRATEGY_TOKEN) private compressionStrategy: ICompressionStrategy,
     private tokenizerService: TokenizerService,
   ) {}
