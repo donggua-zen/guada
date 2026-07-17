@@ -114,8 +114,9 @@ export class SessionService {
   }
 
   /**
-   * 获取会话的所有摘要记录
+   * 获取会话的摘要记录（分页）
    * @param limit 可选，限制返回条数
+   * @returns { items, total }
    */
   async getSessionSummaries(sessionId: string, userId: string, limit?: number) {
     // 验证会话归属权
@@ -124,7 +125,11 @@ export class SessionService {
       throw new Error("Session not found or unauthorized");
     }
 
-    return this.contextStateRepo.findAllBySessionId(sessionId, limit);
+    const [items, total] = await Promise.all([
+      this.contextStateRepo.findAllBySessionId(sessionId, limit),
+      this.contextStateRepo.countBySessionId(sessionId),
+    ]);
+    return { items, total };
   }
 
   /**

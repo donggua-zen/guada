@@ -107,7 +107,7 @@ export interface ToolHandlerDef {
   /** @internal Zod 运行时校验 schema（inputSchema 注册时自动注入） */
   _zodSchema?: import("zod").ZodTypeAny;
   /** 危险等级标记 */
-  dangerLevel?: "info" | "normal" | "high" | "critical";
+  dangerLevel?: "safe" | "info" | "normal" | "high" | "critical";
   /**
    * 自定义工具调用展示文案
    * @param args 工具参数
@@ -195,7 +195,7 @@ export interface ToolKitHandle {
       signal?: AbortSignal,
     ) => string | Record<string, any> | Promise<string | Record<string, any>>;
     display?: { action?: string; argsKey?: string; icon?: string };
-    dangerLevel?: "info" | "normal" | "high" | "critical";
+    dangerLevel?: "safe" | "info" | "normal" | "high" | "critical";
   }): void;
   registerRawTool(def: ToolHandlerDef): void;
   registerPrompt(def: {

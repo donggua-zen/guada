@@ -13,17 +13,17 @@
     </div>
     <!-- 已选角色显示 -->
     <div
-      class="w-full max-w-200 -mb-6 flex items-center gap-3 p-2 pb-8 bg-gray-100 dark:bg-(--color-surface) border border-gray-100 dark:border-(--color-surface) rounded-2xl cursor-pointer hover:bg-gray-100 dark:hover:bg-(--color-sidebar-bg-hover) transition-colors"
+      class="w-full max-w-200 -mb-6 flex items-center gap-3 p-2 pb-7 bg-gray-100 dark:bg-(--color-surface) border border-gray-100 dark:border-(--color-surface) rounded-2xl cursor-pointer hover:bg-gray-100 dark:hover:bg-(--color-sidebar-bg-hover) transition-colors"
       @click="showCharacterSelector = true">
-      <div class="w-10 h-10 shrink-0 overflow-hidden rounded">
+      <div class="w-6 h-6 shrink-0 overflow-hidden rounded">
         <Avatar :src="currentCharacter?.avatarUrl" type="assistant" :name="currentCharacter?.title"
           class="w-full h-full object-cover" />
       </div>
         <div class="flex-1 min-w-0">
-          <p class="text-sm font-medium text-gray-700 dark:text-(--color-text) truncate">{{ currentCharacter?.title ||
-            '未命名角色' }}</p>
-          <p class="text-xs text-gray-500 dark:text-(--color-text-gray) truncate">{{ currentCharacter?.description ||
-            '暂无描述' }}</p>
+          <span class="text-sm font-medium text-gray-700 dark:text-(--color-text) truncate">{{ currentCharacter?.title ||
+            '未命名角色' }}</span>
+          <span class="text-xs text-gray-500 dark:text-(--color-text-gray) truncate ml-2">{{ currentCharacter?.description ||
+            '暂无描述' }}</span>
         </div>
       <el-icon class="text-gray-400 dark:text-(--color-text-gray) shrink-0">
         <ArrowRightTwotone />

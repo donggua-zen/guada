@@ -110,7 +110,7 @@ html.dark {
   --color-primary-hover: oklch(75% 0.16 355);
   --color-primary-active: oklch(65% 0.12 355);
   --color-primary-disabled: oklch(45% 0.08 355);
-  --color-primary-text: #ffffff;
+  --color-primary-text: #d3d3d3;
   --color-primary-text-disabled: rgba(255, 255, 255, 0.5);
 
   /* 主色调渐变系列 - 用于背景和状态 */
@@ -145,15 +145,15 @@ html.dark {
        ==================== */
 
   /* 页面主背景 */
-  --color-bg: #181818;
+  --color-bg: #222;
 
   /* 表面层背景 - 用于卡片、面板等 */
-  --color-surface: #1f1f1f;
+  --color-surface: #222;
   --color-surface-border: oklch(28% 0.02 250);
   /* #2e3035 左右 */
 
   /* 文本颜色 - 确保在深色背景下的可读性 */
-  --color-text: #ccccc;
+  --color-text: #d3d3d3;
   /* 主文本，柔和亮色 */
   --color-text-gray: #a8aab3;
   /* 次要文本 */
@@ -505,7 +505,7 @@ html.wallpaper-loaded .content-clear-wallpaper::before {
    适用于所有可滚动元素
    ========================================== */
 *::-webkit-scrollbar {
-  width: 8px;
+  width: 6px;
   height: 8px;
 }
 

@@ -93,17 +93,15 @@ export class ShellPlugin extends PluginBase {
 
         // 纯后台模式：立即返回
         if (background) {
-          return {
-            processId: result.processId,
-            output: result.output,
-            message: `Process has been moved to background, use the process tool to manage it.`,
-          };
+          let out = result.output || "";
+          out += `\n[Process moved to background, processId: ${result.processId}. Use the process tool to manage.]`;
+          return out;
         }
 
         // 前台模式：内部 poll 等待结果，支持 abortSignal
         if (abortSignal?.aborted) {
           this.processManager.kill(result.processId);
-          return { success: false, message: "Request was aborted" };
+          throw new Error("Request was aborted");
         }
         const onAbort = () => this.processManager.kill(result.processId);
         abortSignal?.addEventListener("abort", onAbort, { once: true });
@@ -117,23 +115,15 @@ export class ShellPlugin extends PluginBase {
 
           // 进程在 1 分钟内结束了 → 返回结果
           if (pollResult.status !== "running") {
-            return {
-              exitCode: pollResult.exitCode,
-              output: pollResult.output,
-              lineCount: pollResult.output
-                ? pollResult.output.split("\n").length
-                : 0,
-            };
+            let out = pollResult.output || "";
+            out += `\n[exit code: ${pollResult.exitCode}]`;
+            return out;
           }
 
           // 1 分钟超时，进程还在跑 → 返回 backgrounded（含已收集的输出）
-          return {
-            output: pollResult.output,
-            lineCount: pollResult.output
-              ? pollResult.output.split("\n").length
-              : 0,
-            message: `Command execution exceeded ${this.BACKGROUND_THRESHOLD_MS / 1000}s, automatically switched to background. Use the process tool to manage.`,
-          };
+          let out = pollResult.output || "";
+          out += `\n[Command exceeded ${this.BACKGROUND_THRESHOLD_MS / 1000}s, switched to background. processId: ${result.processId}. Use the process tool to manage.]`;
+          return out;
         } finally {
           abortSignal?.removeEventListener("abort", onAbort);
         }
@@ -177,15 +167,11 @@ export class ShellPlugin extends PluginBase {
           case "kill": {
             const status = this.processManager.kill(processId);
             if (status === null) {
-              return {
-                success: false,
-                message: `Process ${processId} does not exist or has already ended`,
-              };
+              throw new Error(
+                `Process ${processId} does not exist or has already ended`,
+              );
             }
-            return {
-              processId,
-              message: `Process ${processId} terminated (status: ${status})`,
-            };
+            return `Process ${processId} terminated (status: ${status})`;
           }
 
           case "poll": {
@@ -196,17 +182,15 @@ export class ShellPlugin extends PluginBase {
               ctx?.session.sessionId,
             );
             if (result === null) {
-              return {
-                success: false,
-                message: `Process ${processId} does not exist`,
-              };
+              throw new Error(`Process ${processId} does not exist`);
             }
-            return {
-              processStatus: result.status,
-              exitCode: result.exitCode,
-              output: result.output,
-              lineCount: result.output ? result.output.split("\n").length : 0,
-            };
+            let out = result.output || "";
+            if (result.status === "running") {
+              out += `\n[status: running]`;
+            } else {
+              out += `\n[status: ${result.status}, exit code: ${result.exitCode}]`;
+            }
+            return out;
           }
 
           case "modify_progress_monitoring": {
@@ -216,26 +200,18 @@ export class ShellPlugin extends PluginBase {
               minutes,
             );
             if (entry === null) {
-              return {
-                success: false,
-                message: `Process ${processId} does not exist`,
-              };
+              throw new Error(`Process ${processId} does not exist`);
             }
             const actualMinutes = entry.progressIntervalMinutes;
-            const msg =
-              actualMinutes > 0
-                ? `Progress notifications enabled, reporting every ${actualMinutes} minute(s). Adjust frequency as needed. Set to 0 to disable monitoring.`
-                : "Progress notifications disabled";
-            return msg;
+            return actualMinutes > 0
+              ? `Progress notifications enabled, reporting every ${actualMinutes} minute(s). Adjust frequency as needed. Set to 0 to disable monitoring.`
+              : "Progress notifications disabled";
           }
 
           case "dump_log": {
             const entry = this.processManager.getRawEntry(processId);
             if (!entry) {
-              return {
-                success: false,
-                message: `Process ${processId} does not exist`,
-              };
+              throw new Error(`Process ${processId} does not exist`);
             }
             if (!entry.fullLog && !entry.output) {
               return `Process ${processId} has no output log`;
@@ -254,10 +230,9 @@ export class ShellPlugin extends PluginBase {
               !resolvedNorm.startsWith(workspaceNorm + "/") &&
               resolvedNorm !== workspaceNorm
             ) {
-              return {
-                success: false,
-                message: `Export path is not within the working directory: ${resolved}`,
-              };
+              throw new Error(
+                `Export path is not within the working directory: ${resolved}`,
+              );
             }
 
             await fs.mkdir(path.dirname(resolved), { recursive: true });
@@ -266,40 +241,29 @@ export class ShellPlugin extends PluginBase {
             // 已导出到磁盘，立即释放内存缓冲区
             this.processManager.removeProcess(processId);
 
-            return {
-              message: `Log exported to ${resolved}, ${(entry.fullLog || "").length} characters total`,
-              file_path: resolved,
-            };
+            return `Log exported to ${resolved}, ${(entry.fullLog || "").length} characters total`;
           }
 
           case "write": {
             const input = params.input;
             if (!input || typeof input !== "string") {
-              return {
-                success: false,
-                message: "params.input cannot be empty",
-              };
+              throw new Error("params.input cannot be empty");
             }
 
             const entry = this.processManager.getRawEntry(processId);
             if (!entry) {
-              return {
-                success: false,
-                message: `Process ${processId} does not exist`,
-              };
+              throw new Error(`Process ${processId} does not exist`);
             }
             if (entry.status !== "running") {
-              return {
-                success: false,
-                message: `Process ${processId} has ended, cannot write`,
-              };
+              throw new Error(
+                `Process ${processId} has ended, cannot write`,
+              );
             }
 
             if (!entry.childProcess.stdin) {
-              return {
-                success: false,
-                message: `stdin for process ${processId} is not available`,
-              };
+              throw new Error(
+                `stdin for process ${processId} is not available`,
+              );
             }
 
             const appendNewline = params.appendNewline !== false;
@@ -307,14 +271,11 @@ export class ShellPlugin extends PluginBase {
 
             entry.childProcess.stdin.write(textToWrite);
 
-            return {
-              message: `Written ${textToWrite.length} characters to process ${processId}`,
-              input: input,
-            };
+            return `Written ${textToWrite.length} characters to process ${processId}`;
           }
 
           default:
-            return { success: false, message: `Unknown action: ${action}` };
+            throw new Error(`Unknown action: ${action}`);
         }
       },
       display: { action: "管理进程", argsKey: "action", icon: "terminal" },

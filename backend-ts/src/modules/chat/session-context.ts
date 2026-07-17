@@ -83,10 +83,12 @@ export interface MemoryConfig {
  * - normal: 默认模式，所有插件、技能完整可用
  * - memory: 记忆模式，仅暴露 file 插件工具，技能为空
  *           用于影子轮次等需要限制工具范围的场景
+ * - plan: 计划模式，仅允许 safe 等级的只读工具，
+ *         危险工具（write/edit/shell等）在运行时被拦截
  *
  * 后续可扩展 readonly(只读)、minimal(最小) 等模式
  */
-export type SessionRunMode = "normal" | "memory";
+export type SessionRunMode = "normal" | "memory" | "plan";
 
 /**
  * 获取消息选项

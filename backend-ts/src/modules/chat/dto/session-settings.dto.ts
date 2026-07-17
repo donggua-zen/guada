@@ -80,4 +80,8 @@ export class SessionSettingsDto {
   @ValidateNested()
   @Type(() => ModelSettingsDto)
   model?: ModelSettingsDto;
+
+  @IsOptional()
+  @IsString()
+  runMode?: string; // "normal" | "plan"
 }

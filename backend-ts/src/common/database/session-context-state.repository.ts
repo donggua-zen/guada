@@ -69,6 +69,15 @@ export class SessionContextStateRepository {
   }
 
   /**
+   * 统计会话的压缩状态记录总数
+   */
+  async countBySessionId(sessionId: string): Promise<number> {
+    return this.prisma.sessionContextState.count({
+      where: { sessionId },
+    });
+  }
+
+  /**
    * 创建新的压缩状态记录（每次压缩都保存新记录）
    */
   async create(sessionId: string, data: CompressionState): Promise<void> {

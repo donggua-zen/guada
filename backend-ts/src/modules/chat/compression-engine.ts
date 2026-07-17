@@ -302,7 +302,7 @@ export class CompressionEngine implements ICompressionStrategy {
         // 这样既减少了 Token 占用，又保留了工具结果的开头标识和结尾关键数据
         const pruneContext = () => {
           if (msg.contentId < lastProcessedContentId) {
-            return "[tool result has been pruned due to age]";
+            return "[Old tool result content cleared]";
           }
           if (content.length <= PRUNING_TOOL_RESULT_MAX_LENGTH) {
             return undefined;
