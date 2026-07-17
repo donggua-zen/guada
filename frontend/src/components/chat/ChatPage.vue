@@ -662,8 +662,8 @@ onUnmounted(() => {
 <style>
 /* 记忆管理弹窗样式（非scoped，用于覆盖el-dialog默认样式） */
 .memo-panel-dialog .el-dialog__body {
-  padding: 16px 8px;
-  /* 更紧凑的内边距 */
+  padding: 20px 16px;
+  /* 更宽松的内边距 */
   max-height: 65vh;
   /* 稍微减小最大高度 */
   overflow-y: auto;

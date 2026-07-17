@@ -125,6 +125,7 @@ declare module 'vue' {
     PluginsPage: typeof import('./../components/plugins/PluginsPage.vue')['default']
     RouterLink: typeof import('vue-router')['RouterLink']
     RouterView: typeof import('vue-router')['RouterView']
+    RunModePopover: typeof import('./../components/chat/chat-input/RunModePopover.vue')['default']
     SchedulerPage: typeof import('./../components/scheduler/SchedulerPage.vue')['default']
     ScrollContainer: typeof import('./../components/ui/ScrollContainer.vue')['default']
     'ScrollContainer copy': typeof import('./../components/ui/ScrollContainer copy.vue')['default']

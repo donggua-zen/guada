@@ -66,7 +66,7 @@ export class KnowledgeBasePlugin extends PluginBase {
       execute: async (args, ctx) => {
         const { knowledge_base_id, query, top_k = 5, filter_file_id } = args;
         const kb = await this.kbRepo.findById(knowledge_base_id);
-        if (!kb) throw new Error("知识库不存在");
+        if (!kb) throw new Error("Knowledge base not found");
 
         // 获取向量模型配置
         const model = await this.prisma.model.findUnique({
@@ -74,7 +74,7 @@ export class KnowledgeBasePlugin extends PluginBase {
           include: { provider: true },
         });
         if (!model) {
-          throw new Error(`向量模型不存在：${kb.embeddingModelId}`);
+          throw new Error(`Embedding model not found: ${kb.embeddingModelId}`);
         }
 
         // 构建过滤条件
@@ -102,18 +102,19 @@ export class KnowledgeBasePlugin extends PluginBase {
           filterOptions,
         );
 
-        // 格式化结果
-        const formattedResults = results.map((result: any) => ({
-          content: result.content,
-          metadata: result.metadata,
-          file_name: result.metadata?.file_name,
-        }));
+        if (results.length === 0) {
+          return `No results found for: "${query}"`;
+        }
 
-        return {
-          query,
-          results: formattedResults,
-          total: formattedResults.length,
-        };
+        const parts: string[] = [];
+        results.forEach((result: any, i: number) => {
+          const fileName = result.metadata?.fileName || "unknown";
+          const chunkIndex = result.metadata?.chunkIndex;
+          const chunkLabel = chunkIndex !== undefined ? `, chunk: ${chunkIndex}` : "";
+          parts.push(`--- [${i + 1}] file: ${fileName}${chunkLabel} ---`);
+          parts.push(result.content || "");
+        });
+        return parts.join("\n\n");
       },
       display: { action: "搜索知识库", argsKey: "query", icon: "search" },
     });
@@ -130,28 +131,33 @@ export class KnowledgeBasePlugin extends PluginBase {
       execute: async (args, ctx) => {
         const { knowledge_base_id, skip = 0, limit = 50 } = args;
         const kb = await this.kbRepo.findById(knowledge_base_id);
-        if (!kb) throw new Error("知识库不存在");
+        if (!kb) throw new Error("Knowledge base not found");
         const { items: files, total } = await this.fileRepo.findByKnowledgeBaseId(
           knowledge_base_id,
           skip,
           limit,
         );
-        const formattedFiles = files.map((f: any) => ({
-          id: f.id,
-          file_name: f.displayName,
-          file_size: Number(f.fileSize),
-          file_type: f.fileType,
-          processing_status: f.processingStatus,
-          progress_percentage: f.progressPercentage,
-          total_chunks: f.totalChunks,
-          uploaded_at: f.uploadedAt.toISOString(),
-        }));
-        return {
-          files: formattedFiles,
-          total,
-          skip,
-          limit,
-        };
+        if (files.length === 0) {
+          return `No files in knowledge base: ${knowledge_base_id}`;
+        }
+
+        const lines: string[] = [`${total} files:`];
+        for (const f of files as any[]) {
+          const status =
+            f.processingStatus === "completed"
+              ? "completed"
+              : `${f.processingStatus} ${f.progressPercentage}%`;
+          lines.push(
+            `  ${f.displayName} (id: ${f.id}, type: ${f.fileType}, ${Number(f.fileSize)} bytes, ${status}, ${f.totalChunks} chunks)`,
+          );
+        }
+        const hasMore = skip + files.length < total;
+        if (hasMore) {
+          lines.push(
+            `(${total - skip - files.length} more files. To continue: skip=${skip + files.length}, limit=${limit})`,
+          );
+        }
+        return lines.join("\n");
       },
       display: { action: "列出知识库文件", icon: "search" },
     });
@@ -173,26 +179,24 @@ export class KnowledgeBasePlugin extends PluginBase {
       execute: async (args, ctx) => {
         const { file_id, skip = 0, limit = 10 } = args;
         const file = await this.fileRepo.findById(file_id);
-        if (!file) throw new Error("文件不存在");
+        if (!file) throw new Error("File not found");
 
         // 检查文件处理状态
         if (file.processingStatus !== "completed") {
-          throw new Error(`文件尚未处理完成，当前状态：${file.processingStatus}`);
+          throw new Error(`File is not ready, current status: ${file.processingStatus}`);
         }
 
         const chunks = await this.chunkRepo.findByFileId(file_id, skip, limit);
-        const formattedChunks = chunks.map((c: any) => ({
-          id: c.id,
-          content: c.content,
-          chunk_index: c.chunkIndex,
-          token_count: c.tokenCount,
-          metadata: c.metadata || null,
-        }));
-        return {
-          file_id,
-          chunks: formattedChunks,
-          total: chunks.length,
-        };
+        if (chunks.length === 0) {
+          return `No chunks found for file: ${file_id}`;
+        }
+
+        const parts: string[] = [];
+        chunks.forEach((c: any) => {
+          parts.push(`--- [${c.chunkIndex}] tokens: ${c.tokenCount} ---`);
+          parts.push(c.content || "");
+        });
+        return parts.join("\n\n");
       },
       display: { action: "获取文件分块", argsKey: "file_id", icon: "search" },
     });
@@ -212,7 +216,7 @@ export class KnowledgeBasePlugin extends PluginBase {
       execute: async (args, ctx) => {
         const { knowledge_base_id, source_file_path, target_path } = args;
         const userId = ctx?.session.userId;
-        if (!userId) throw new Error("无法获取用户身份，操作被拒绝");
+        if (!userId) throw new Error("Unable to get user identity, operation denied");
 
         // 解析源文件路径（支持相对路径和绝对路径）
         let resolvedSourcePath = source_file_path;
@@ -228,18 +232,10 @@ export class KnowledgeBasePlugin extends PluginBase {
             target_path,
           );
 
-          return {
-            success: true,
-            message: "文档已提交处理，将在后台自动完成分块和向量化",
-            file_id: fileRecord.id,
-            file_name: fileRecord.displayName,
-            knowledge_base_id,
-            target_path: fileRecord.relativePath,
-            status: fileRecord.processingStatus,
-          };
+          return `Document submitted for processing. file_id: ${fileRecord.id}, file_name: ${fileRecord.displayName}, status: ${fileRecord.processingStatus}`;
         } catch (error: any) {
-          this.logger.error(`添加文档失败：${error.message}`);
-          throw new Error(`添加文档失败：${error.message}`);
+          this.logger.error(`Failed to add document: ${error.message}`);
+          throw new Error(`Failed to add document: ${error.message}`);
         }
       },
       display: {

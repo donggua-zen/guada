@@ -164,22 +164,17 @@ Display format:
     ctx: PluginContext,
   ): Promise<string> {
     const { action, contents, id, status, merge } = args;
-    try {
-      switch (action) {
-        case "add":
-          return await this.addTodos(contents, merge, ctx);
-        case "update":
-          return await this.updateTodo(id, status, ctx);
-        case "next":
-          return await this.nextTodo(id, ctx);
-        case "list":
-          return await this.listTodos(ctx);
-        default:
-          return `Unknown action: ${action}`;
-      }
-    } catch (e: any) {
-      this.logger.error(`todo failed: ${e.message}`);
-      return `Error: ${e.message}`;
+    switch (action) {
+      case "add":
+        return await this.addTodos(contents, merge, ctx);
+      case "update":
+        return await this.updateTodo(id, status, ctx);
+      case "next":
+        return await this.nextTodo(id, ctx);
+      case "list":
+        return await this.listTodos(ctx);
+      default:
+        throw new Error(`Unknown action: ${action}`);
     }
   }
 

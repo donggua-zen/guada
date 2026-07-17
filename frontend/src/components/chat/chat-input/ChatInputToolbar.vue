@@ -1,5 +1,19 @@
 <template>
   <div class="mt-2 w-full flex justify-start px-1 gap-1">
+    <!-- 运行模式按钮 -->
+    <el-button ref="runModeButtonRef" class="workspace-btn mr-0.5" @click.stop="toggleRunModePopover" text>
+      <el-icon size="16">
+        <component :is="runModeIcon" class="text-gray-600" />
+      </el-icon>
+      <span class="text-xs font-medium">
+        {{ runModeLabel }}
+      </span>
+    </el-button>
+
+    <!-- 运行模式弹窗 -->
+    <RunModePopover v-model:visible="runModePopoverVisible" :anchor-el="runModeButtonRef?.$el"
+      :current-value="currentRunMode" @select="handleRunModeChange" />
+
     <!-- 工作目录按钮 -->
     <el-button class="workspace-btn mr-0.5" @click.stop="openWorkspaceDialog" text>
       <el-icon size="18">
@@ -29,6 +43,7 @@
         </el-icon>
       </el-button>
     </template>
+
     <!-- 外部自定义按钮 -->
     <slot name="actions" />
   </div>
@@ -58,8 +73,9 @@
 
 <script setup lang="ts">
 import { ref, computed } from 'vue'
-import { FolderOpen24Regular, ChevronUpDown16Regular, Folder20Regular, Checkmark16Filled } from '@vicons/fluent'
+import { FolderOpen24Regular, ChevronUpDown16Regular, Folder20Regular, Checkmark16Filled, DrinkCoffee16Regular, ClipboardTask24Regular } from '@vicons/fluent'
 import WorkspaceSettingsDialog from './WorkspaceSettingsDialog.vue'
+import RunModePopover from './RunModePopover.vue'
 import { useSessionGroupStore, UNGROUPED_ID } from '@/stores/sessionGroup'
 
 const props = defineProps<{
@@ -76,6 +92,28 @@ const sessionGroupStore = useSessionGroupStore()
 
 // 工作目录设置相关
 const workspaceDialogVisible = ref(false)
+
+// 运行模式相关
+const runModeButtonRef = ref<any>(null)
+const runModePopoverVisible = ref(false)
+
+const currentRunMode = computed(() => props.config?.runMode || 'normal')
+
+const runModeLabel = computed(() => {
+  return currentRunMode.value === 'plan' ? '计划模式' : '工作模式'
+})
+
+const runModeIcon = computed(() => {
+  return currentRunMode.value === 'plan' ? ClipboardTask24Regular : DrinkCoffee16Regular
+})
+
+const toggleRunModePopover = () => {
+  runModePopoverVisible.value = !runModePopoverVisible.value
+}
+
+const handleRunModeChange = (mode: string) => {
+  emit('config-change', { runMode: mode })
+}
 
 // 分组选择相关
 const groupSelectorVisible = ref(false)

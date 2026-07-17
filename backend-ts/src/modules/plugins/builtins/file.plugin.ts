@@ -28,7 +28,7 @@ export class FilePlugin extends PluginBase {
     api.registerTool({
       name: "read",
       description:
-        "Read the content of a text file at the specified path, supports pagination by line or by character. Automatically truncates at a hard limit (20KB) and returns a next parameter for continued reading.",
+        "Read the content of a text file at the specified path, supports pagination by line or by character. Automatically truncates at a hard limit (20KB) and appends continuation parameters when truncated. NOTE: line numbers are prepended by the tool (e.g. '     1\\t') and are NOT part of the original file content.",
       inputSchema: z.object({
         file_path: z
           .string()
@@ -80,26 +80,26 @@ export class FilePlugin extends PluginBase {
         const lines = raw.split("\n");
         const totalLines = lines.length;
         const MAX_BYTES = 20 * 1024;
-        let content = "";
 
         if (unit === "char") {
           // 按字符读取
           const charLimit = limit ?? 20000;
-          content = raw.substring(offset, offset + charLimit);
-          const charsRead = content.length;
+          const content = raw.substring(offset, offset + charLimit);
           const truncated = offset + charLimit < totalChars;
-          const result: any = {
-            content,
-            truncated,
-            total_lines: totalLines,
-            total_chars: totalChars,
-          };
+
+          // 计算起始行号
+          const startLineNumber = raw.substring(0, offset).split("\n").length;
+          const contentLines = content.split("\n");
+          const endLineNumber = startLineNumber + contentLines.length - 1;
+          const padWidth = String(endLineNumber).length;
+          const formattedLines = contentLines.map((line, i) => {
+            const num = String(startLineNumber + i).padStart(padWidth, " ");
+            return `${num}\t${line}`;
+          });
+          let result = formattedLines.join("\n");
+
           if (truncated) {
-            result.next = {
-              unit: "char",
-              offset: offset + charLimit,
-              limit: charLimit,
-            };
+            result += `\n(Text truncated at 20KB. To continue: unit=char, offset=${offset + charLimit}, limit=${charLimit})`;
           }
           return result;
         }
@@ -119,6 +119,7 @@ export class FilePlugin extends PluginBase {
         let endLine = startLine;
         let charsRead = 0;
         let truncatedByBytes = false;
+        let partialLine: string | null = null;
 
         for (let i = startLine; i < totalLines; i++) {
           if (i - startLine >= lineLimit) {
@@ -129,40 +130,41 @@ export class FilePlugin extends PluginBase {
           const ln = line + (i < totalLines - 1 ? "\n" : "");
           if (charsRead + ln.length > MAX_BYTES) {
             const avail = MAX_BYTES - charsRead;
-            content += ln.substring(0, avail);
-            charsRead += avail;
+            partialLine = line.substring(0, avail);
             endLine = i;
             truncatedByBytes = true;
             break;
           }
-          content += ln;
           charsRead += ln.length;
           endLine = i + 1;
         }
         nextCharOffset += charsRead;
 
         const hasMoreLines = endLine < totalLines;
-        const truncated = truncatedByBytes;
-        const result: any = {
-          content,
-          truncated,
-          total_lines: totalLines,
-          total_chars: totalChars,
-        };
-        if (truncatedByBytes || hasMoreLines) {
-          if (truncatedByBytes) {
-            result.next = {
-              unit: "char",
-              offset: nextCharOffset,
-              limit: 20000,
-            };
-          } else {
-            result.next = { unit: "line", offset: endLine, limit: lineLimit };
-          }
+
+        // 拼接行号
+        const padWidth = String(Math.max(endLine, 1)).length;
+        const formattedLines: string[] = [];
+        for (let i = startLine; i < endLine; i++) {
+          const num = String(i + 1).padStart(padWidth, " ");
+          formattedLines.push(`${num}\t|${lines[i]}`);
+        }
+        if (partialLine !== null) {
+          const num = String(endLine + 1).padStart(padWidth, " ");
+          formattedLines.push(`${num}\t|${partialLine}`);
+        }
+        let result = formattedLines.join("\n");
+
+        if (truncatedByBytes) {
+          result += `\n(Text truncated at 20KB. To continue: unit=char, offset=${nextCharOffset}, limit=20000)`;
+        } else if (hasMoreLines) {
+          const remaining = totalLines - endLine;
+          result += `\n(${remaining} more lines remain. To continue: unit=line, offset=${endLine}, limit=${lineLimit})`;
         }
         return result;
       },
       display: { action: "读取文件", argsKey: "file_path", icon: "read" },
+      dangerLevel: "safe",
     });
 
     api.registerTool({
@@ -215,17 +217,149 @@ export class FilePlugin extends PluginBase {
 
         const result = limit ? files.slice(0, limit) : files;
         const total = files.length;
-        const truncated = total > result.length;
 
-        return {
-          pattern,
-          directory: basePath,
-          total,
-          truncated,
-          files: result,
-        };
+        let output = `${total} files found:`;
+        for (const f of result) {
+          output += `\n                 ${f}`;
+        }
+        if (total > result.length) {
+          output += `\n(Results truncated, ${total - result.length} more files omitted.)`;
+        }
+        
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+        return output;
       },
       display: { action: "搜索文件", argsKey: "pattern", icon: "search" },
+      dangerLevel: "safe",
     });
 
     api.registerTool({
@@ -246,7 +380,7 @@ export class FilePlugin extends PluginBase {
       }),
       execute: async (args, ctx) => {
         const { file_path, content, encoding = "utf-8" } = args;
-        if (!file_path) throw new Error("文件路径不能为空");
+        if (!file_path) throw new Error("file_path is required");
         const resolvedPath = this.resolvePath(file_path, ctx);
         this.validateWritePath(file_path, ctx);
         this.logger.log(`写入文件: ${file_path}`);
@@ -254,11 +388,7 @@ export class FilePlugin extends PluginBase {
         await fs.writeFile(resolvedPath, content, {
           encoding: encoding as BufferEncoding,
         });
-        return {
-          success: true,
-          message: `文件已写入：${resolvedPath}，共 ${content.length} 字符`,
-          file_path: resolvedPath,
-        };
+        return `File written: ${resolvedPath} (${content.length} chars)`;
       },
       display: { action: "写入文件", argsKey: "file_path", icon: "edit" },
       dangerLevel: "high",
@@ -297,12 +427,7 @@ export class FilePlugin extends PluginBase {
           encoding: encoding as BufferEncoding,
         });
         if (old_text === new_text) {
-          return {
-            success: true,
-            message: `File ${resolvedPath} unchanged`,
-            file_path: resolvedPath,
-            replace_count: 1,
-          };
+          return `File ${resolvedPath} unchanged`;
         }
 
         // 统一换行后匹配（解决 CRLF/LF 不匹配问题）
@@ -323,12 +448,7 @@ export class FilePlugin extends PluginBase {
         await fs.writeFile(resolvedPath, modified, {
           encoding: encoding as BufferEncoding,
         });
-        return {
-          success: true,
-          message: `File ${resolvedPath} modified`,
-          file_path: resolvedPath,
-          replace_count: 1,
-        };
+        return `File ${resolvedPath} modified (1 replacement)`;
       },
       display: { action: "替换文本", argsKey: "file_path", icon: "edit" },
       dangerLevel: "high",
@@ -354,18 +474,10 @@ export class FilePlugin extends PluginBase {
         const stats = await fs.stat(resolvedPath);
         if (stats.isFile()) {
           await fs.unlink(resolvedPath);
-          return {
-            success: true,
-            message: `文件已删除：${resolvedPath}`,
-            path: resolvedPath,
-          };
+          return `File deleted: ${resolvedPath}`;
         } else if (stats.isDirectory()) {
           await fs.rm(resolvedPath, { recursive: true, force: true });
-          return {
-            success: true,
-            message: `目录已删除：${resolvedPath}`,
-            path: resolvedPath,
-          };
+          return `Directory deleted: ${resolvedPath}`;
         }
         throw new Error(`${resolvedPath} is not a valid file or directory`);
       },
@@ -438,18 +550,19 @@ export class FilePlugin extends PluginBase {
           throw new Error(`Invalid regex pattern: ${pattern}`);
         }
 
-        const fileResults: any[] = [];
+        const outputLines: string[] = [];
         let total = 0;
 
         for (const fp of files) {
           try {
             const content = await fs.readFile(fp, "utf-8");
             const lines = content.replace(/\r\n/g, "\n").split("\n");
-            const matchRows: any[] = [];
+            const relPath = path.relative(relativeRoot, fp);
+            let fileMatchCount = 0;
 
             for (
               let i = 0;
-              i < lines.length && matchRows.length < max_results;
+              i < lines.length && fileMatchCount < max_results;
               i++
             ) {
               regex.lastIndex = 0;
@@ -463,32 +576,273 @@ export class FilePlugin extends PluginBase {
                   lines[i].length,
                   matchIdx + matchLen + ctxLen,
                 );
-                matchRows.push({
-                  line: i + 1,
-                  content: lines[i].substring(cStart, cEnd),
-                });
+                const snippet = lines[i].substring(cStart, cEnd).trim();
+                const funcName = this.findEnclosingFunction(lines, i);
+                const funcSuffix = funcName ? `    ← in ${funcName}()` : "";
+                outputLines.push(
+                  `${relPath}:${i + 1}: ${snippet}${funcSuffix}`,
+                );
+                fileMatchCount++;
+                total++;
               }
-            }
-            if (matchRows.length > 0) {
-              fileResults.push({
-                file: path.relative(relativeRoot, fp),
-                matched_lines: matchRows.length,
-                matches: matchRows,
-              });
-              total += matchRows.length;
             }
           } catch {
             continue;
           }
         }
 
-        return {
-          total_matches: total,
-          matched_files: fileResults.length,
-          files: fileResults,
-        };
+        if (outputLines.length === 0) {
+          return "No matches found.";
+        }
+        
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+        return outputLines.join("\n");
       },
       display: { action: "搜索", argsKey: "pattern", icon: "search" },
+      dangerLevel: "safe",
     });
 
     api.registerPrompt({
@@ -544,5 +898,29 @@ export class FilePlugin extends PluginBase {
         );
       }
     }
+  }
+
+  private findEnclosingFunction(
+    lines: string[],
+    lineIndex: number,
+  ): string | null {
+    const patterns: RegExp[] = [
+      /\bfunction\s+(\w+)\s*\(/, // JS/TS: function foo()
+      /\bclass\s+(\w+)\b/, // class Foo
+      /\bdef\s+(\w+)\s*\(/, // Python: def foo()
+      /\bfn\s+(\w+)\s*\(/, // Rust: fn foo()
+      /\bfunc\s+(?:\([^)]*\)\s+)?(\w+)\s*\(/, // Go: func foo() or func (r *T) foo()
+      /\b(?:impl|struct|enum|trait|interface)\s+(\w+)\b/, // Rust/TS: impl Foo, struct Foo
+      /\b(?:const|let|var)\s+(\w+)\s*=\s*(?:async\s*)?\(?[^=]*=>/, // JS/TS arrow
+    ];
+
+    for (let i = lineIndex; i >= 0; i--) {
+      const line = lines[i];
+      for (const pattern of patterns) {
+        const m = line.match(pattern);
+        if (m) return m[1];
+      }
+    }
+    return null;
   }
 }

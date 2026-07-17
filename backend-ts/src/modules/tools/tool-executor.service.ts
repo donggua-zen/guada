@@ -170,6 +170,19 @@ export class ToolExecutor {
       }
     }
 
+    // 计划模式运行时限制：仅允许 safe 等级的只读工具
+    if (session.getRunMode?.() === "plan") {
+      if (toolEntry.dangerLevel && toolEntry.dangerLevel !== "safe") {
+        return {
+          toolCallId,
+          name: fullToolName,
+          content: `In plan mode, only read-only (safe) tools are allowed. "${fullToolName}" is a ${toolEntry.dangerLevel} level tool and has been blocked. Exit plan mode to execute write operations.`,
+          isError: true,
+        };
+      }
+    }
+
+
     try {
       let validatedArgs = toolArgs;
       if (toolEntry._zodSchema) {

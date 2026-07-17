@@ -44,8 +44,70 @@ export class Toolkit implements ToolKitHandle {
       ctx?: PluginContext,
       signal?: AbortSignal,
     ) => string | Record<string, any> | Promise<string | Record<string, any>>;
+    
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
     display?: { action?: string; argsKey?: string; icon?: string };
-    dangerLevel?: "info" | "normal" | "high" | "critical";
+    dangerLevel?: "safe" | "info" | "normal" | "high" | "critical";
   }): void {
     const zodSchema = def.inputSchema as any;
     const rawJson = z.toJSONSchema(zodSchema) as any;
