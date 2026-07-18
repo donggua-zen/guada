@@ -1,5 +1,7 @@
 <template>
-  <div class="flex-1 flex items-center justify-center bg-surface p-5">
+  <div class="flex flex-col h-full">
+    <CustomTitlebar />
+    <div class="flex-1 flex items-center justify-center bg-surface p-5">
     <div class="w-full max-w-md p-10 transition-all duration-300 ease-in-out">
       <div class="text-center mb-8">
         <div class="flex items-center justify-center gap-3 mb-3"> 
@@ -39,15 +41,16 @@
       </el-form>
     </div>
   </div>
+</div>
 </template>
 
 <!-- @ts-ignore - Element Plus 组件类型缺失 -->
 <script setup lang="ts">
 import { ref, reactive } from 'vue'
 import {
-  PersonOutlined as UserIcon,
-  LockOutlined as LockIcon,
-  LogInOutlined as LoginIcon
+    PersonOutlined as UserIcon,
+    LockOutlined as LockIcon,
+    LogInOutlined as LoginIcon
 } from '@vicons/material'
 
 import { useRouter } from 'vue-router'
@@ -55,6 +58,7 @@ import { useRouter } from 'vue-router'
 import { useAuthStore } from '../stores/auth'
 import { usePopup } from '../composables/usePopup'
 import { useStorage } from '@vueuse/core'
+import CustomTitlebar from './CustomTitlebar.vue'
 
 // Element Plus 组件导入
 import {

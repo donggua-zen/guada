@@ -57,7 +57,7 @@ export interface Message {
     role: MessageRole
     contents: MessageContent[]
     parentId?: string
-    currentTurnsId?: string
+    currentVersionId?: string
     state: MessageState
     createdAt?: ISODateString
     files?: FileAttachment[]

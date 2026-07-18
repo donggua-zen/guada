@@ -10,7 +10,7 @@
             <div ref="paneContentRef" class="chat-pane-content"
               style="height: 100%; display: flex; flex-direction: column;">
               <!-- 页面标题栏 -->
-              <PageHeader :title="mainSession?.title || ''">
+              <PageHeader :title="mainSession?.title || ''" :hide-window-controls="layoutStore.workspaceVisible">
                 <template #actions>
                   <!-- 工作目录切换 -->
                   <div v-if="mainSession?.id"

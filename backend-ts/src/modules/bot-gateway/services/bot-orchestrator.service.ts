@@ -6,8 +6,7 @@ import {
   BotMessage,
   BotConfig,
 } from "../interfaces/bot-platform.interface";
-import { AgentEngine } from "../../chat/agent-engine.service";
-import { SessionContextFactory } from "../../chat/session-context.factory";
+import { ChatRunnerService } from "../../chat/chat-runner.service";
 import { SessionService } from "../../chat/session.service";
 import { SessionMapperService } from "./session-mapper.service";
 import { WorkspaceService } from "../../../common/services/workspace.service";
@@ -36,8 +35,7 @@ export class BotOrchestrator {
   private readonly MAX_QUEUE_LENGTH = 10; // 最大缓冲消息数
 
   constructor(
-    private agentEngine: AgentEngine,
-    private sessionContextFactory: SessionContextFactory,
+    private chatRunner: ChatRunnerService,
     private sessionService: SessionService,
     private sessionMapper: SessionMapperService,
     private workspaceService: WorkspaceService,
@@ -99,7 +97,9 @@ export class BotOrchestrator {
       try {
         const workspacePath =
           queue.session.workspacePath ||
-          await this.workspaceService.getDefaultWorkspaceDir(queue.session.id);
+          (await this.workspaceService.getDefaultWorkspaceDir(
+            queue.session.id,
+          ));
         const destDir = path.join(workspacePath, "files");
         await fs.promises.mkdir(destDir, { recursive: true });
         const downloadedPaths = await adapter
@@ -225,6 +225,23 @@ export class BotOrchestrator {
   ): Promise<void> {
     const firstMessage = messages[0];
 
+    const baseReply = {
+      conversationId: firstMessage.conversationId,
+      replyToMessageId: firstMessage.messageId,
+      sourceType: firstMessage.sourceType,
+      rawFrame: firstMessage.rawEvent,
+    };
+
+    const capabilities = adapter.getCapabilities();
+
+    const sendReply = (content: string, extra: any = {}) => {
+      if (capabilities.supportsStreaming && adapter.sendStreamReply) {
+        adapter.sendStreamReply({ ...baseReply, content }, extra);
+      } else {
+        adapter.sendMessage({ ...baseReply, content });
+      }
+    };
+
     try {
       this.logger.log(
         `Processing merged messages from ${firstMessage.senderName || firstMessage.senderId}: ${messages.length} messages`,
@@ -239,11 +256,6 @@ export class BotOrchestrator {
         return;
       }
 
-      // 更新会话最后活跃时间（当前 web 端由 ChatRunnerService 处理，bot 路径需手动处理）
-      await this.sessionService.updateLastActiveAt(session.id).catch((err: any) => {
-        this.logger.warn(`Failed to update lastActiveAt: ${err.message}`);
-      });
-
       // 合并消息内容（附件引用已在 enqueueMessage 时追加到各消息 content 中）
       // 群聊时在每条消息前标注发送者昵称，避免 AI 无法区分说话人
       const isGroupChat = firstMessage.sourceType === "group";
@@ -257,38 +269,49 @@ export class BotOrchestrator {
           }
           return text;
         })
-        .filter((content): content is string => content !== null && content.length > 0)
+        .filter(
+          (content): content is string =>
+            content !== null && content.length > 0,
+        )
         .join("\n\n");
 
-      const capabilities = adapter.getCapabilities();
+      const streamId = this.generateStreamId();
+      let accumulatedContent = "";
 
-      // 创建用户消息记录
-      this.logger.log(
-        `Creating user message with knowledgeBaseIds: ${JSON.stringify(config.knowledgeBaseIds)}`,
+      // 通过 ChatRunner 启动标准流程
+      await this.chatRunner.startStream(
+        {
+          sessionId: session.id,
+          userId: session.userId,
+          userMessage: {
+            content: mergedContent,
+            knowledgeBaseIds: config.knowledgeBaseIds,
+          },
+          source: { type: "bot", platform: config.platform, botId },
+        },
+        {
+          onEvent: (data) => {
+            const chunk = JSON.parse(data);
+            if (chunk.type === "text" && chunk.content) {
+              accumulatedContent += chunk.content;
+              sendReply(accumulatedContent, { streamId, finish: false });
+            }
+          },
+          onComplete: async (reason) => {
+            sendReply(accumulatedContent || "抱歉,我暂时无法回复。", {
+              streamId,
+              finish: true,
+            });
+            this.logger.log(
+              `Replied to ${firstMessage.senderName || firstMessage.senderId}`,
+            );
+          },
+          onError: async (err) => {
+            this.logger.error(`Stream error: ${err.message}`);
+            sendReply(err.message || "抱歉,我暂时无法回复。", { finish: true });
+          },
+        },
       );
-
-      const userMessage = await this.sessionMapper.createUserMessage(
-        session.id,
-        mergedContent,
-        config.knowledgeBaseIds,
-      );
-
-      // 构建类型安全的会话上下文
-      const sessionContext = await this.sessionContextFactory.createFromSession(session);
-
-      // 调用 AgentEngine 获取流式迭代器
-      const iterator = this.agentEngine.run(
-        sessionContext,
-        userMessage.id,
-        "overwrite",
-      );
-
-      // 根据平台能力选择回复方式
-      if (capabilities.supportsStreaming && adapter.sendStreamReply) {
-        await this.handleStreamingReply(adapter, firstMessage, iterator);
-      } else {
-        await this.handleNormalReply(adapter, firstMessage, iterator);
-      }
     } catch (error: any) {
       this.logger.error(
         `Failed to process message: ${error.message}`,
@@ -297,134 +320,13 @@ export class BotOrchestrator {
 
       // 向用户发送原始错误消息
       try {
-        const capabilities = adapter.getCapabilities();
-
-        if (capabilities.supportsStreaming && adapter.sendStreamReply) {
-          await adapter.sendStreamReply(
-            {
-              conversationId: firstMessage.conversationId,
-              content: error.message,
-              replyToMessageId: firstMessage.messageId,
-              sourceType: firstMessage.sourceType,
-              rawFrame: firstMessage.rawEvent,
-            },
-            { finish: true },
-          );
-        } else {
-          await adapter.sendMessage({
-            conversationId: firstMessage.conversationId,
-            content: error.message,
-            replyToMessageId: firstMessage.messageId,
-            sourceType: firstMessage.sourceType,
-            rawFrame: firstMessage.rawEvent,
-          });
-        }
-
-        this.logger.log(`Sent error message to ${firstMessage.senderName || firstMessage.senderId}`);
+        sendReply(error.message, { finish: true });
+        this.logger.log(
+          `Sent error message to ${firstMessage.senderName || firstMessage.senderId}`,
+        );
       } catch (sendError: any) {
         this.logger.error(`Failed to send error message: ${sendError.message}`);
       }
-    }
-  }
-
-  /**
-   * 处理流式回复（边生成边发送）
-   *
-   * 注意：企业微信智能机器人的流式回复机制是“更新”而非“追加”
-   * - 使用相同 streamId 会替换消息内容
-   * - 因此我们需要累积内容后，定期更新整条消息
-   */
-  private async handleStreamingReply(
-    adapter: IBotPlatform,
-    message: BotMessage,
-    iterator: AsyncGenerator<any>,
-  ): Promise<void> {
-    const streamId = this.generateStreamId();
-    let accumulatedContent = "";
-    let lastUpdateTime = Date.now();
-    const UPDATE_INTERVAL = 500; // 每 500ms 更新一次，避免频繁请求
-    // sendStreamReply 在调用处已验证存在（capabilities.supportsStreaming && adapter.sendStreamReply）
-    const sendReply = adapter.sendStreamReply!.bind(adapter);
-
-    try {
-      for await (const chunk of iterator) {
-        // AgentService 返回的 type: "text" | "think" | "finish" | "tool_call" | "tool_calls_response"
-        if (chunk.type === "text" && chunk.content) {
-          accumulatedContent += chunk.content;
-
-          const now = Date.now();
-          // 定期更新消息内容（避免过于频繁的网络请求）
-          if (now - lastUpdateTime >= UPDATE_INTERVAL) {
-            await sendReply(
-              {
-                conversationId: message.conversationId,
-                content: accumulatedContent,
-                replyToMessageId: message.messageId,
-                sourceType: message.sourceType,
-                rawFrame: message.rawEvent,
-              },
-              {
-                streamId,
-                finish: false, // 还未完成
-              },
-            );
-            lastUpdateTime = now;
-          }
-        }
-      }
-
-      // 发送最终完整内容（finish=true）
-      await sendReply(
-        {
-          conversationId: message.conversationId,
-          content: accumulatedContent,
-          replyToMessageId: message.messageId,
-          sourceType: message.sourceType,
-          rawFrame: message.rawEvent,
-        },
-        {
-          streamId,
-          finish: true, // 完成
-        },
-      );
-
-      this.logger.log(`Replied to ${message.senderName || message.senderId} via streaming`);
-    } catch (error: any) {
-      this.logger.error(`Stream reply error: ${error.message}`);
-      throw error;
-    }
-  }
-
-  /**
-   * 处理普通回复（收集完整后发送）
-   */
-  private async handleNormalReply(
-    adapter: IBotPlatform,
-    message: BotMessage,
-    iterator: AsyncGenerator<any>,
-  ): Promise<void> {
-    try {
-      // 收集完整回复
-      let fullReply = "";
-      for await (const chunk of iterator) {
-        if (chunk.type === "text" && chunk.content) {
-          fullReply += chunk.content;
-        }
-      }
-
-      // 一次性发送完整回复
-      await adapter.sendMessage({
-        conversationId: message.conversationId,
-        content: fullReply || "抱歉,我暂时无法回复。",
-        replyToMessageId: message.messageId,
-        sourceType: message.sourceType,
-        rawFrame: message.rawEvent,
-      });
-
-      this.logger.log(`Replied to ${message.senderName || message.senderId}`);
-    } catch (error: any) {
-      this.logger.error(`Failed to send normal reply: ${error.message}`);
-      throw error;
     }
   }
 

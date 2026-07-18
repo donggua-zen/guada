@@ -1,7 +1,7 @@
 <template>
-  <div class="flex items-center justify-between gap-2 px-3 h-10">
+  <div class="flex items-center justify-between gap-2 h-11 drag-region">
     <!-- 左侧：侧边栏切换按钮 -->
-    <div class="flex items-center justify-start">
+    <div class="flex items-center justify-start no-drag ml-3">
       <div
         class="cursor-pointer p-1 rounded-lg text-gray-600 dark:text-[#8b8d95] transition-all duration-200 hover:bg-gray-100 dark:hover:bg-[#2a2c30] hover:text-gray-900 dark:hover:text-[#e8e9ed] active:translate-x-0"
         @click="layoutStore.toggleSidebar()" :title="layoutStore.sidebarVisible ? '收起侧边栏' : '展开侧边栏'">
@@ -17,15 +17,21 @@
     </div>
 
     <!-- 右侧：操作按钮组 -->
-    <div class="flex items-center justify-end min-w-10 gap-2">
+    <div class="flex items-center justify-end min-w-10 gap-2 no-drag mr-3">
       <slot name="actions" />
     </div>
+
+    <!-- Electron 窗口控制按钮 -->
+    <WindowControls v-if="isElectron && !hideWindowControls" />
   </div>
 </template>
 
 <script setup lang="ts">
 import { useLayoutStore } from '@/stores/layout'
 import LeftBarIcon from './icons/LeftBarIcon.vue'
+import WindowControls from './WindowControls.vue'
+
+const isElectron = typeof window !== 'undefined' && window.electronAPI !== undefined
 
 /**
  * 页面通用标题栏组件
@@ -35,5 +41,16 @@ const layoutStore = useLayoutStore()
 
 defineProps<{
   title?: string
+  hideWindowControls?: boolean
 }>()
 </script>
+
+<style scoped>
+.drag-region {
+  -webkit-app-region: drag;
+}
+
+.no-drag {
+  -webkit-app-region: no-drag;
+}
+</style>

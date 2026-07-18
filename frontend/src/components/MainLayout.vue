@@ -5,10 +5,8 @@
       <GlobalSidebar />
     </template>
     <template #content>
-      <div class="fixed -z-2 sidebar-transparent-bg w-10 h-10">
-      </div>
       <div
-        class="relative h-full flex-1 min-w-0 overflow-hidden rounded-tl-xl border-l border-t border-gray-100 dark:border-[#2f2f2f] content-clear-wallpaper">
+        class="relative h-full flex-1 min-w-0 overflow-hidden border-l border-gray-100 dark:border-[#2f2f2f] content-clear-wallpaper">
         <RouterView />
       </div>
     </template>

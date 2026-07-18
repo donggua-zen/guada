@@ -28,7 +28,6 @@ interface ActiveStream {
   maxBufferSize: number;
   isRunning: boolean;
   startedAt: Date;
-  assistantMessageId: string | null;
   /** 停止原因，由 stopStream 设置，subscribe 的 complete 回调通过闭包读取 */
   stopReason?: "user_cancel" | "completed" | "error";
 }
@@ -54,14 +53,12 @@ export class SessionStreamManager {
    * @param sessionId 会话 ID
    * @param userId 用户 ID
    * @param abortController 用于中止底层 LLM 请求的控制器
-   * @param assistantMessageId 现有助手消息 ID
    * @returns 是否成功启动（如果同一会话已有活跃流则返回 false）
    */
   startStream(
     sessionId: string,
     userId: string,
     abortController: AbortController,
-    assistantMessageId: string | null = null,
   ): boolean {
     if (this.activeStreams.has(sessionId)) {
       const existing = this.activeStreams.get(sessionId)!;
@@ -82,7 +79,6 @@ export class SessionStreamManager {
       maxBufferSize: this.DEFAULT_MAX_BUFFER_SIZE,
       isRunning: true,
       startedAt: new Date(),
-      assistantMessageId,
     };
 
     this.activeStreams.set(sessionId, stream);
@@ -135,14 +131,6 @@ export class SessionStreamManager {
       error: onError,
     });
 
-    // 扫描 eventBuffer 中已收到 finish 的 contentId
-    const finishedContentIds = new Set<string>();
-    for (const event of stream.eventBuffer) {
-      if (event.type === "finish" && event.contentId) {
-        finishedContentIds.add(event.contentId);
-      }
-    }
-
     // 发送缓冲区中的历史事件，过滤掉前端已知的已完成内容
     let sentCount = 0;
     let skippedCount = 0;
@@ -150,12 +138,7 @@ export class SessionStreamManager {
       const contentId = event.contentId;
 
       // 已 finish 且 <= lastContentId，前端数据库已有，跳过
-      if (
-        contentId &&
-        finishedContentIds.has(contentId) &&
-        lastContentId &&
-        contentId <= lastContentId
-      ) {
+      if (contentId && lastContentId && contentId <= lastContentId) {
         skippedCount++;
         continue;
       }

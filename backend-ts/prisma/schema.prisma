@@ -61,25 +61,25 @@ model Session {
 }
 
 model Message {
-  id             String           @id @default(cuid())
-  sessionId      String           @map("session_id")
-  role           String
-  parentId       String?          @map("parent_id")
-  currentTurnsId String?          @map("current_turns_id")
-  metadata       Json?            @map("meta_data")
-  createdAt      DateTime         @default(now()) @map("created_at")
-  updatedAt      DateTime         @updatedAt @map("updated_at")
-  files          File[]
-  // 注意：使用 NoAction 避免删除 Model 时自动置空 modelId
-  // 保留 ORM 层面关联查询能力（include/join）
-  session        Session          @relation(fields: [sessionId], references: [id], onDelete: Cascade)
-  parent         Message?         @relation("MessageThread", fields: [parentId], references: [id])
-  children       Message[]        @relation("MessageThread")
-  contents       MessageContent[]
+  id               String           @id @default(cuid())
+  sessionId        String           @map("session_id")
+  role             String
+  parentId         String?          @map("parent_id")
+  currentTurnsId   String?          @map("current_turns_id")
+  currentVersionId String?          @map("current_version_id")
+  metadata         Json?            @map("meta_data")
+  createdAt        DateTime         @default(now()) @map("created_at")
+  updatedAt        DateTime         @updatedAt @map("updated_at")
+  files            File[]
+  session          Session          @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  // parent           Message?         @relation("MessageThread", fields: [parentId], references: [id])
+  // children         Message[]        @relation("MessageThread")
+  contents         MessageContent[]
 
   @@index([sessionId])
   @@index([parentId])
-  @@index([currentTurnsId])
+  // @@index([currentTurnsId])
+  @@index([currentVersionId])
   @@map("message")
 }
 
@@ -97,7 +97,7 @@ model MessageContent {
   message          Message  @relation(fields: [messageId], references: [id], onDelete: Cascade)
 
   @@index([messageId])
-  @@index([turnsId])
+  // @@index([turnsId])
   @@map("message_content")
 }
 

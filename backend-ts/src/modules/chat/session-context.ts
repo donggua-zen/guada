@@ -157,10 +157,6 @@ export interface ISessionContext {
   readonly workspacePath: string;
   getWorkspacePath(): string;
 
-  // === 虚拟会话扩展 ===
-  /** 是否为虚拟会话（非持久化） */
-  isVirtual(): boolean;
-
   // === 游标控制 ===
   /** 设置消息游标：第一次 getMessages 时从数据库只加载**到此消息为止**的历史（含该消息） */
   setMessageCursor(messageId: string): void;
@@ -196,14 +192,13 @@ export interface ISessionContext {
     replaceMessageId?: string,
     knowledgeBaseIds?: string[],
     metadata?: Record<string, any>,
+    preGenAssistantId?: string,
   ): Promise<any>;
 
   /** 准备助手回复的消息 ID */
   addAssistantMessageVersion(
-    parentId: string,
-    regenerationMode: string,
-    turnsId: string,
-    existingAssistantMessageId?: string,
+    userMessageId: string,
+    preGenAssistantId?: string,
   ): Promise<string>;
   /** 生成唯一 ID */
   generateId(): string;
@@ -215,12 +210,4 @@ export interface ISessionContext {
   shouldCompress(): Promise<boolean>;
   /** 执行压缩 */
   compress(onBeforeCompaction?: () => Promise<void>): Promise<MessageRecord[]>;
-
-  // === Token 消费追踪 ===
-  /** 记录一次 LLM 调用的 token 消耗（prompt + completion），累加到会话累计中 */
-  recordTokenUsage(
-    promptTokens: number,
-    completionTokens: number,
-    cachedTokens?: number,
-  ): Promise<void>;
 }

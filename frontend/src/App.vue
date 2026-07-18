@@ -6,8 +6,6 @@
     <!-- 主内容区域 -->
     <div class="flex flex-col h-full">
         <div class="wallpaper-blur-layer"></div>
-        <!-- CustomTitlebar 始终可见 -->
-        <CustomTitlebar @open-guide="openGuide" />
         <SetupGuide ref="guideRef" />
         <RouterView></RouterView>
     </div>
@@ -27,7 +25,6 @@ import { useTitle } from './composables/useTitle'
 import { useTheme } from './composables/useTheme'
 import { useTrayStats } from './composables/useTrayStats'
 import MockControlPanel from './components/dev/MockControlPanel.vue'
-import CustomTitlebar from './components/CustomTitlebar.vue'
 import SetupGuide from './components/SetupGuide.vue'
 import ContextMenuManager from './utils/ContextMenuManager'
 

@@ -329,13 +329,38 @@ async function initializeDatabase(
       const backupPath = `${dbPath}.bak.${timestamp}`;
 
       // WAL 模式下先 checkpoint，确保 .db-wal 中的数据合并回主文件
+      // 开发模式：系统 Node.js 编译的原生模块与 Electron 主进程 ABI 不匹配，
+      // 改用子进程（系统 Node.js）执行，避免直接加载失败。
+      // 生产模式：node_modules 已为 Electron 重建，可直接加载。
       try {
-        const Database = require(
-          path.join(backendPath, "node_modules", "better-sqlite3"),
-        );
-        const db = new Database(dbPath);
-        db.pragma("wal_checkpoint(TRUNCATE)");
-        db.close();
+        if (isDev) {
+          // 开发模式：通过 execSync 启动系统 Node.js 子进程来做 checkpoint
+          const { execSync } = require("child_process");
+          const modulesDir = path.join(backendPath, "node_modules", "better-sqlite3");
+          const script = [
+            `const Database = require(${JSON.stringify(modulesDir)});`,
+            `const db = new Database(${JSON.stringify(dbPath)});`,
+            `db.pragma('wal_checkpoint(TRUNCATE)');`,
+            `db.close();`,
+          ].join("");
+          execSync(`"node" -e ${JSON.stringify(script)}`, {
+            cwd: backendPath,
+            env: {
+              ...process.env,
+              NODE_PATH: path.join(backendPath, "node_modules"),
+            },
+            stdio: "pipe",
+            timeout: 10000,
+          });
+        } else {
+          // 生产模式：直接加载（模块已为 Electron 重建）
+          const Database = require(
+            path.join(backendPath, "node_modules", "better-sqlite3"),
+          );
+          const db = new Database(dbPath);
+          db.pragma("wal_checkpoint(TRUNCATE)");
+          db.close();
+        }
         console.log("WAL checkpoint 完成，数据已合并");
       } catch (e) {
         console.warn("⚠️  WAL checkpoint 失败，仍以当前状态备份:", e);

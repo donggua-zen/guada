@@ -35,10 +35,10 @@
             没有更多消息了
           </div>
 
-          <MessageItem v-for="(message, index) in activeMessages" :key="message.id" :message="message"
-            :avatar="message.role == 'user' ? userAvater : currentSession?.avatarUrl"
+          <TurnItem v-for="(turn, index) in visibleTurns" :key="turn.user.id" :turn="turn"
+            :avatar="userAvater"
             :character-name="currentSession?.character?.title" :character-avatar="currentSession?.character?.avatarUrl"
-            :is-last="index === activeMessages.length - 1"
+            :is-last="index === visibleTurns.length - 1"
             :allow-generate="!isStreaming && index === lastUserMessageIndex" @delete="deleteMessage" @edit="editMessage"
             @copy="copyMessage" @generate="generateResponse" @regenerate="regenerateResponse"
             @continue="continueResponse" @switch="switchContent" />
@@ -168,6 +168,7 @@ import { useSessionTokenStats } from '@/composables/useSessionTokenStats'
 
 // 组件导入
 import MessageItem from "./MessageItem.vue";
+import TurnItem from "./TurnItem.vue";
 import MessageSkeleton from "./MessageSkeleton.vue";
 import { ChatInput, ScrollContainer, ScrollToBottomButton } from "../ui";
 import WelcomeScreen from './WelcomeScreen.vue';
@@ -414,14 +415,40 @@ const activeMessages = computed({
 
 // 最后一条 user 消息的索引，避免每轮 v-for 重复计算
 const lastUserMessageIndex = computed(() => {
-  const messages = activeMessages.value;
-  for (let i = messages.length - 1; i >= 0; i--) {
-    if (messages[i].role === 'user') {
+  const turns = visibleTurns.value;
+  for (let i = turns.length - 1; i >= 0; i--) {
+    if (turns[i].user) {
       return i;
     }
   }
   return -1;
 });
+
+// ============================================
+// 轮次分组：将扁平消息列表按 user 消息分组
+// ============================================
+const turns = computed(() => {
+  const map: Record<string, { user: any; assistants: any[] }> = {};
+  const order: string[] = [];
+  for (const msg of activeMessages.value) {
+    if (msg.role === 'user') {
+      map[msg.id] = { user: msg, assistants: [] };
+      order.push(msg.id);
+    } else if (msg.role === 'assistant' && msg.parentId) {
+      if (!map[msg.parentId]) {
+        map[msg.parentId] = { user: null, assistants: [] };
+        order.push(msg.parentId);
+      }
+      map[msg.parentId].assistants.push(msg);
+    }
+  }
+  return order.map((id) => map[id]);
+});
+
+// 过滤：只保留有 user 消息的组
+const visibleTurns = computed(() =>
+  turns.value.filter((t) => t.user),
+);
 
 const currentModelId = computed({
   get() {
@@ -2302,15 +2329,13 @@ function generateResponse(message: any) {
  * 重新生成响应（多版本）
  */
 function regenerateResponse(message: any) {
-  const versions: string[] = []
-  for (let i = 0; i < message.contents.length; i++) {
-    const turnsId = message.contents[i].turnsId
-    if (!versions.includes(turnsId)) {
-      versions.push(turnsId)
-    }
-  }
+  // 新模型：统计同 parentId 的兄弟 assistant 消息数量
+  const parentId = message.parentId;
+  const existingVersions = activeMessages.value.filter(
+    (m) => m.parentId === parentId && m.role === "assistant"
+  );
 
-  if (versions.length >= MAX_REGENERATE_VERSIONS) {
+  if (existingVersions.length >= MAX_REGENERATE_VERSIONS) {
     toast.error(`暂时最多支持${MAX_REGENERATE_VERSIONS}个回答版本`);
     return;
   }
@@ -2349,10 +2374,14 @@ function continueResponse(message: any) {
   });
 }
 
-function switchContent(message: any, turns_id: string) {
-  const targetMessage = activeMessages.value.find((m) => m.id === message.id);
-  targetMessage.currentTurnsId = turns_id
-  apiService.updateMessage(message.id, { currentTurnsId: turns_id });
+function switchContent(message: any, versionId: string) {
+  // 新模型：找到用户消息，更新 currentVersionId
+  const userMessage = activeMessages.value.find((m) => m.role === "user" && m.currentVersionId === message.id);
+  if (userMessage && currentSessionId.value) {
+    userMessage.currentVersionId = versionId;
+    apiService.updateMessage(userMessage.id, { currentVersionId: versionId });
+    sessionStore.updateMessage(currentSessionId.value, userMessage.id, userMessage);
+  }
   nextTick(() => {
     immediateScrollToBottom();
   });

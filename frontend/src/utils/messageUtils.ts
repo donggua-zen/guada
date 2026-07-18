@@ -12,7 +12,7 @@ export interface Message {
   role: "user" | "assistant";
   contents: MessageContent[];
   parentId?: string;
-  currentTurnsId?: string;
+  currentVersionId?: string;
   state: {
     isStreaming: boolean;
     isThinking?: boolean;
@@ -98,19 +98,7 @@ export function getCurrentTurns(message: Message): MessageContent[] {
   const validContents = message.contents.filter((content) => content != null);
   if (validContents.length === 0) return [];
 
-  // 如果是 assistant 消息，根据 currentTurnsId 过滤
-  if (message.role === "assistant" && message.currentTurnsId) {
-    const matchedContents = validContents.filter(
-      (content) =>
-        content.turnsId === message.currentTurnsId &&
-        content.role === "assistant",
-    );
-
-    // 对过滤后的内容进行工具调用预处理
-    return matchedContents;
-  }
-
-  // User 消息或没有 currentTurnsId 的情况：返回所有内容
+  // 新模型：每个消息的 contents 就是该版本的全部内容，无需过滤
   return validContents;
 }
 
@@ -120,16 +108,11 @@ export function getCurrentTurns(message: Message): MessageContent[] {
  * @returns 所有唯一的 turnsId 集合
  */
 export function getContentVersions(message: Message): string[] {
-  if (!message?.contents) return [];
-
-  const versions = new Set<string>();
-  message.contents.forEach((content) => {
-    if (content.turnsId) {
-      versions.add(content.turnsId);
-    }
-  });
-
-  return Array.from(versions);
+  // 新模型：每个 assistant 消息就是一个版本，返回自身 ID
+  if (message.role === "assistant" && message.id) {
+    return [message.id];
+  }
+  return [];
 }
 
 /**
