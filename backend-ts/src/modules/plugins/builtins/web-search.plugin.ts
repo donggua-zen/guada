@@ -96,11 +96,6 @@ export class WebSearchPlugin extends PluginBase {
               "Returns formatted text. Use when you need the complete article content from a known webpage.",
             inputSchema: z.object({
               url: z.string().describe("The URL of the webpage to read."),
-              format: z
-                .enum(["json", "markdown"])
-                .optional()
-                .default("json")
-                .describe("Output format: json or markdown."),
             }),
             execute: async (args) => {
               return await this.executeReadWebpage(args, provider);
@@ -168,7 +163,7 @@ export class WebSearchPlugin extends PluginBase {
   /**
    * 执行网络搜索
    */
-  private async executeSearch(args: Record<string, any>, provider: SearchProvider): Promise<Record<string, any>> {
+  private async executeSearch(args: Record<string, any>, provider: SearchProvider): Promise<string> {
     const { q, size = 10 } = args;
 
     if (!q?.trim()) {
@@ -180,8 +175,19 @@ export class WebSearchPlugin extends PluginBase {
     try {
       const result = await provider.search(q, { size }, apiKey);
 
-      (result as any).provider = provider.name;
-      return result as any;
+      if (!result.results || result.results.length === 0) {
+        return `No results found for: "${q}"`;
+      }
+
+      const parts: string[] = [`${result.total} results found:`];
+      for (const item of result.results) {
+        parts.push(`--- [${item.index}] ${item.title} ---`);
+        parts.push(`URL: ${item.link}`);
+        if (item.date) parts.push(`Date: ${item.date}`);
+        parts.push("");
+        parts.push(item.content || item.summary || "");
+      }
+      return parts.join("\n");
     } catch (error: any) {
       this.logger.error(`Search failed (${provider.name}): ${error.message}`);
       if (error.message.includes("fetch")) {
@@ -197,7 +203,7 @@ export class WebSearchPlugin extends PluginBase {
    * 读取指定 URL 的网页内容
    */
   private async executeReadWebpage(args: { url: string; format?: string }, provider: SearchProvider): Promise<string> {
-    const { url, format = "json" } = args;
+    const { url } = args;
 
     if (!url?.trim()) {
       throw new Error("URL is required");
@@ -206,13 +212,21 @@ export class WebSearchPlugin extends PluginBase {
     const { apiKey } = await this.getProviderWithKey();
 
     try {
-      const result = await provider.readWebpage(url, format, apiKey);
+      // Always use markdown format for clean plain-text output
+      const result = await provider.readWebpage(url, "markdown", apiKey);
 
       if (typeof result === "string") {
         return result;
       }
 
-      return JSON.stringify(result, null, 2);
+      // Fallback: format ParseResponse as plain text
+      const lines: string[] = [];
+      if (result.title) lines.push(`# ${result.title}`);
+      lines.push(`URL: ${result.url}`);
+      if (result.date) lines.push(`Date: ${result.date}`);
+      lines.push("");
+      lines.push(result.content || result.summary || "No content");
+      return lines.join("\n");
     } catch (error: any) {
       this.logger.error(`Webpage read failed (${provider.name}): ${error.message}`);
       if (error.message.includes("fetch")) {
