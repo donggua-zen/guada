@@ -1,16 +1,21 @@
 <template>
-  <div v-if="isElectron" class="flex items-center px-2 h-10 select-none drag-region shrink-0">
+  <div class="flex items-center px-2 h-10 select-none drag-region shrink-0">
     <div class="flex items-center h-full no-drag">
       <img :src="logoPath" class="h-6 ml-2 mr-2" />
       <span class="text-xs font-normal text-(--titlebar-text-color) opacity-80 mr-3">GuaDa AI</span>
 
-      <!-- 浏览器管理按钮 -->
-      <button class="titlebar-menu-btn" @click="toggleWindowManager" title="浏览器管理">
+      <!-- 搜索按钮 -->
+      <button v-if="authStore.isAuthenticated" class="titlebar-menu-btn" @click="showSearchDialog = true" title="搜索会话">
+        <Search16Regular class="w-4 h-4" />
+      </button>
+
+      <!-- 浏览器管理按钮（仅 Electron） -->
+      <button v-if="isElectron" class="titlebar-menu-btn" @click="toggleWindowManager" title="浏览器管理">
         <Window16Regular class="w-4 h-4" />
       </button>
 
-      <!-- Debug 下拉菜单 -->
-      <div class="relative flex items-center h-full debug-dropdown" :class="{ 'active': showDebugMenu }">
+      <!-- Debug 下拉菜单（仅 Electron） -->
+      <div v-if="isElectron" class="relative flex items-center h-full debug-dropdown" :class="{ 'active': showDebugMenu }">
         <button class="titlebar-menu-btn debug-button" @click="toggleDebugMenu" title="调试工具">
           <Bug16Regular class="w-4 h-4" />
         </button>
@@ -56,16 +61,23 @@
 
   <!-- 更新弹窗 -->
   <UpdateDialog v-model:visible="showUpdateDialog" :update-info="updateInfo" :is-skipped="skipVersion === updateInfo?.version" @dont-remind="handleDontRemind" @cancel-skip="handleCancelSkip" />
+
+  <!-- 会话搜索弹窗 -->
+  <SessionSearchDialog v-model="showSearchDialog" />
 </template>
 
 <script setup lang="ts">
 import { computed, ref, onMounted, onUnmounted } from 'vue'
-import { Window16Regular, Bug16Regular } from '@vicons/fluent'
+import { Window16Regular, Bug16Regular, Search16Regular } from '@vicons/fluent'
 import WindowManager from './WindowManager.vue'
 import UpdateDialog from './UpdateDialog.vue'
+import SessionSearchDialog from './SessionSearchDialog.vue'
 import { fixFrontendAssetUrl } from '@/utils/url'
+import { useAuthStore } from '@/stores/auth'
 
 const isElectron = typeof window !== 'undefined' && window.electronAPI !== undefined
+
+const authStore = useAuthStore()
 
 const logoPath = computed(() => fixFrontendAssetUrl('/images/guada_logo_small.png'))
 
@@ -75,6 +87,7 @@ const updateInfo = ref<any>(null)
 const showDebugMenu = ref(false)
 const showWindowManager = ref(false)
 const showUpdateDialog = ref(false)
+const showSearchDialog = ref(false)
 const skipVersion = ref<string | null>(localStorage.getItem('update-skip-version'))
 const migrationStatus = ref<string>('')
 const isMigrating = ref(false)

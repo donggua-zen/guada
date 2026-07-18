@@ -24,18 +24,28 @@ export class SessionRepository {
 
   /**
    * 获取用户会话列表，支持按分组筛选
+   * 默认排除已归档会话
    * @param groupId undefined-全部, null-未分组, string-指定分组
+   * @param includeArchived 是否包含已归档会话，默认 false
+   * @param keyword 关键词搜索（标题模糊匹配）
    */
   async findByUserId(
     userId: string,
     skip: number = 0,
     limit: number = 20,
     groupId?: string | null,
+    keyword?: string,
+    includeArchived: boolean = false,
   ) {
     const where: any = {
       userId,
       sessionType: 'web',
     };
+
+    // 默认排除已归档会话
+    if (!includeArchived) {
+      where.archived = false;
+    }
 
     // 分组筛选：null表示未分组，undefined表示全部
     if (groupId === null) {
@@ -44,10 +54,42 @@ export class SessionRepository {
       where.groupId = groupId;
     }
 
+    // 关键词搜索：按标题模糊匹配（SQLite 天然不区分大小写）
+    if (keyword) {
+      where.title = { contains: keyword };
+    }
+
     const [items, total] = await Promise.all([
       this.prisma.session.findMany({
         where,
         orderBy: [{ lastActiveAt: "desc" }],
+        skip,
+        take: limit,
+        include: { character: true },
+      }),
+      this.prisma.session.count({ where }),
+    ]);
+    return { items, total };
+  }
+
+  /**
+   * 获取用户已归档的会话列表
+   */
+  async findArchivedByUserId(
+    userId: string,
+    skip: number = 0,
+    limit: number = 50,
+  ) {
+    const where: any = {
+      userId,
+      sessionType: 'web',
+      archived: true,
+    };
+
+    const [items, total] = await Promise.all([
+      this.prisma.session.findMany({
+        where,
+        orderBy: [{ updatedAt: "desc" }],
         skip,
         take: limit,
         include: { character: true },

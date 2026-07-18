@@ -56,12 +56,16 @@ export class SessionService {
     skip: number = 0,
     limit: number = 20,
     groupId?: string | null,
+    keyword?: string,
+    includeArchived: boolean = false,
   ): Promise<PaginatedResponse<any>> {
     const { items, total } = await this.sessionRepo.findByUserId(
       userId,
       skip,
       limit,
       groupId,
+      keyword,
+      includeArchived,
     );
 
     // 转换所有 session 的 URL（使用 character 的 avatarUrl），并注入流式状态
@@ -76,6 +80,89 @@ export class SessionService {
       //         : null,
       //     }
       //   : null,
+    }));
+    return createPaginatedResponse(transformedItems, total, { skip, limit });
+  }
+
+  /**
+   * 归档/取消归档会话
+   * 流式输出中的会话禁止归档
+   * 取消归档时同步更新最后活跃时间
+   */
+  async archiveSession(
+    sessionId: string,
+    userId: string,
+    archived: boolean,
+  ): Promise<{ success: boolean; session?: any }> {
+    const session = await this.sessionRepo.findById(sessionId);
+    if (!session || session.userId !== userId) {
+      throw new HttpException("会话不存在", HttpStatus.NOT_FOUND);
+    }
+
+    // 归档时校验：流式输出中禁止归档
+    if (archived && this.streamManager.hasActiveStream(sessionId)) {
+      throw new HttpException("会话正在流式输出中，无法归档", HttpStatus.BAD_REQUEST);
+    }
+
+    const updateData: any = { archived };
+    if (!archived) {
+      updateData.lastActiveAt = new Date();
+    }
+
+    const updated = await this.sessionRepo.update(sessionId, updateData);
+    return { success: true, session: updated };
+  }
+
+  /**
+   * 批量归档/取消归档会话
+   * 流式输出中的会话会被跳过
+   */
+  async batchArchiveSessions(
+    sessionIds: string[],
+    userId: string,
+    archived: boolean,
+  ): Promise<{ success: boolean; skipped: string[] }> {
+    const skipped: string[] = [];
+
+    for (const id of sessionIds) {
+      const session = await this.sessionRepo.findById(id);
+      if (!session || session.userId !== userId) {
+        skipped.push(id);
+        continue;
+      }
+
+      if (archived && this.streamManager.hasActiveStream(id)) {
+        skipped.push(id);
+        continue;
+      }
+
+      const updateData: any = { archived };
+      if (!archived) {
+        updateData.lastActiveAt = new Date();
+      }
+      await this.sessionRepo.update(id, updateData);
+    }
+
+    return { success: true, skipped };
+  }
+
+  /**
+   * 获取用户已归档的会话列表
+   */
+  async getArchivedSessions(
+    userId: string,
+    skip: number = 0,
+    limit: number = 50,
+  ): Promise<PaginatedResponse<any>> {
+    const { items, total } = await this.sessionRepo.findArchivedByUserId(
+      userId,
+      skip,
+      limit,
+    );
+
+    const transformedItems = items.map((item) => ({
+      ...item,
+      isStreaming: false,
     }));
     return createPaginatedResponse(transformedItems, total, { skip, limit });
   }

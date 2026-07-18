@@ -5,7 +5,10 @@ export interface SessionApi {
   createSession(data: any): Promise<Session>;
   deleteSession(sessionId: string, deleteWorkspace?: boolean): Promise<{ success: boolean }>;
   fetchSession(sessionId: string): Promise<Session>;
-  fetchSessions(skip?: number, limit?: number, groupId?: string | null): Promise<SessionListResponse>;
+  fetchSessions(skip?: number, limit?: number, groupId?: string | null, keyword?: string, includeArchived?: boolean): Promise<SessionListResponse>;
+  fetchArchivedSessions(skip?: number, limit?: number): Promise<SessionListResponse>;
+  archiveSession(sessionId: string, archived: boolean): Promise<{ success: boolean; session?: any }>;
+  batchArchiveSessions(sessionIds: string[], archived: boolean): Promise<{ success: boolean; skipped: string[] }>;
   updateSession(sessionId: string, data: any): Promise<Session>;
   fetchSessionGroups(): Promise<SessionGroup[]>;
   createSessionGroup(data: { name: string }): Promise<SessionGroup>;
@@ -300,16 +303,43 @@ export const sessionApi: SessionApi = {
     return await this._request(`/sessions/${sessionId}`);
   },
 
-  async fetchSessions(this: ApiContext, skip?: number, limit?: number, groupId?: string | null) {
+  async fetchSessions(this: ApiContext, skip?: number, limit?: number, groupId?: string | null, keyword?: string, includeArchived?: boolean) {
     const params = new URLSearchParams();
     if (skip !== undefined) params.append("skip", skip.toString());
     if (limit !== undefined) params.append("limit", limit.toString());
     if (groupId !== undefined) params.append("groupId", groupId === null ? "null" : groupId);
+    if (keyword) params.append("keyword", keyword);
+    if (includeArchived) params.append("includeArchived", "true");
 
     const queryString = params.toString();
     const url = queryString ? `/sessions?${queryString}` : "/sessions";
 
     return await this._request(url);
+  },
+
+  async fetchArchivedSessions(this: ApiContext, skip?: number, limit?: number) {
+    const params = new URLSearchParams();
+    if (skip !== undefined) params.append("skip", skip.toString());
+    if (limit !== undefined) params.append("limit", limit.toString());
+
+    const queryString = params.toString();
+    const url = queryString ? `/sessions/archived?${queryString}` : "/sessions/archived";
+
+    return await this._request(url);
+  },
+
+  async archiveSession(this: ApiContext, sessionId: string, archived: boolean) {
+    return await this._request(`/sessions/${sessionId}/archive`, {
+      method: "PUT",
+      data: { archived },
+    });
+  },
+
+  async batchArchiveSessions(this: ApiContext, sessionIds: string[], archived: boolean) {
+    return await this._request(`/sessions/batch-archive`, {
+      method: "POST",
+      data: { sessionIds, archived },
+    });
   },
 
   async updateSession(this: ApiContext, sessionId: string, data: any) {
