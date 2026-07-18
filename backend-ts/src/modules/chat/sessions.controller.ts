@@ -45,6 +45,8 @@ export class SessionsController {
     @Query("skip") skip = 0,
     @Query("limit") limit = 20,
     @Query("groupId") groupId: string | undefined,
+    @Query("keyword") keyword: string | undefined,
+    @Query("includeArchived") includeArchived: string | undefined,
     @CurrentUser() user: any,
   ) {
     // groupId 特殊值处理："null"字符串表示查询未分组会话
@@ -54,6 +56,46 @@ export class SessionsController {
       Number(skip),
       Number(limit),
       parsedGroupId,
+      keyword?.trim() || undefined,
+      includeArchived === "true",
+    );
+  }
+
+  @Get("sessions/archived")
+  async getArchivedSessions(
+    @Query("skip") skip = 0,
+    @Query("limit") limit = 50,
+    @CurrentUser() user: any,
+  ) {
+    return this.sessionService.getArchivedSessions(
+      user.id,
+      Number(skip),
+      Number(limit),
+    );
+  }
+
+  @Put("sessions/:id/archive")
+  async archiveSession(
+    @Param("id") id: string,
+    @Body() data: { archived: boolean },
+    @CurrentUser() user: any,
+  ) {
+    return this.sessionService.archiveSession(
+      id,
+      user.id,
+      data.archived,
+    );
+  }
+
+  @Post("sessions/batch-archive")
+  async batchArchiveSessions(
+    @Body() data: { sessionIds: string[]; archived: boolean },
+    @CurrentUser() user: any,
+  ) {
+    return this.sessionService.batchArchiveSessions(
+      data.sessionIds,
+      user.id,
+      data.archived,
     );
   }
 

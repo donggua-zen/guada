@@ -1,7 +1,7 @@
 <template>
   <div class="global-sidebar flex flex-col h-full sidebar-transparent-bg overflow-hidden">
-    <!-- Electron 标题栏左侧面板 -->
-    <TitlebarLeftPanel v-if="isElectron" />
+    <!-- 标题栏左侧面板 -->
+    <TitlebarLeftPanel />
     <!-- 导航菜单 -->
     <div class="px-3 py-2 space-y-0.5">
       <div v-for="item in navItems" :key="item.key" @click="handleNavClick(item.key)"
@@ -98,6 +98,10 @@
                           <Folder20Regular class="w-4 h-4 mr-2 inline-block" />
                           移动到分组
                         </DropdownMenuItem>
+                        <DropdownMenuItem command="archive">
+                          <Archive20Regular class="w-4 h-4 mr-2 inline-block" />
+                          归档
+                        </DropdownMenuItem>
                         <DropdownMenuItem command="delete">
                           <Delete20Regular class="w-4 h-4 mr-2 inline-block" />
                           删除
@@ -148,13 +152,13 @@
           <span class="text-xs">设置</span>
         </div>
 
-        <!-- 分组管理 -->
-        <div @click="openGroupManage"
+        <!-- 会话管理 -->
+        <div @click="goToSessionManage"
           class="flex items-center gap-2 px-2 py-1.5 rounded-lg cursor-pointer transition-all duration-200 text-(--color-text-gray) hover:bg-(--color-sidebar-bg-hover) hover:text-(--color-sidebar-text-hover)">
           <el-icon class="w-4 h-4">
             <Folder20Filled />
           </el-icon>
-          <span class="text-xs">分组</span>
+          <span class="text-xs">管理</span>
         </div>
       </div>
 
@@ -208,9 +212,6 @@
     </template>
   </el-dialog>
 
-  <!-- 分组管理弹窗 -->
-  <SessionGroupManageDialog v-model="groupManageVisible" @close="onGroupManageClose" />
-
   <!-- 移动会话到分组弹窗 -->
   <el-dialog v-model="moveGroupDialogVisible" title="请选择目标分组" width="360px" :close-on-click-modal="false">
     <div class="space-y-1 py-2">
@@ -249,7 +250,6 @@ import { usePopup } from '../composables/usePopup'
 import { Avatar, ScrollContainer } from './ui'
 import DropdownMenu from './ui/DropdownMenu.vue'
 import DropdownMenuItem from './ui/DropdownMenuItem.vue'
-import SessionGroupManageDialog from './session/SessionGroupManageDialog.vue'
 import ContextMenu, { type ContextMenuItem } from './ui/ContextMenu.vue'
 import { apiService } from '@/services/ApiService'
 import { ElMessageBox } from 'element-plus'
@@ -272,6 +272,7 @@ import {
   Delete20Regular,
   Folder20Regular,
   Folder20Filled,
+  Archive20Regular,
   ChevronDown12Regular,
   WeatherSunny20Regular,
   WeatherMoon20Filled,
@@ -654,8 +655,35 @@ const handleDropdownSelect = (command: string, session: any) => {
     handleRenameSession(session)
   } else if (command === 'move') {
     handleMoveSession(session)
+  } else if (command === 'archive') {
+    handleArchiveSession(session)
   } else if (command === 'delete') {
     handleDeleteSession(session)
+  }
+}
+
+/**
+ * 归档会话
+ */
+const handleArchiveSession = async (session: any) => {
+  const confirmed = await confirm('归档会话', `确定要归档 "${session.title}" 吗？归档后将不在列表中显示。`, {
+    type: 'info',
+    confirmText: '归档',
+    cancelText: '取消'
+  })
+  if (!confirmed) return
+
+  try {
+    const result = await apiService.archiveSession(session.id, true)
+    if (result.success) {
+      // 从 sessionStore 中删除（不再展示在侧边栏）
+      sessionStore.removeSession(session.id)
+      sessionStore.clearSidebarState(session.id)
+      toast.success('会话已归档')
+    }
+  } catch (error: any) {
+    console.error('归档失败:', error)
+    toast.error(error?.response?.data?.message || '归档失败')
   }
 }
 
@@ -996,21 +1024,11 @@ function initSessionEventListeners() {
   })
 }
 
-// 分组管理弹窗状态
-const groupManageVisible = ref(false)
-
 /**
- * 打开分组管理弹窗
+ * 跳转会话管理页面
  */
-const openGroupManage = () => {
-  groupManageVisible.value = true
-}
-
-/**
- * 关闭分组管理弹窗后刷新
- */
-const onGroupManageClose = () => {
-  groupManageVisible.value = false
+const goToSessionManage = () => {
+  router.replace({ name: 'SessionsManage' })
 }
 
 /**

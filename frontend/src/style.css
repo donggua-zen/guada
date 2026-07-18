@@ -300,7 +300,7 @@ body {
   background: transparent;
 }
 
-/* body::before 作为壁纸层（直接模糊壁纸本身） */
+/* body::before 作为全局壁纸层（清晰，不模糊） */
 body::before {
   content: "";
   position: fixed;
@@ -310,9 +310,6 @@ body::before {
   background-size: cover;
   background-position: center;
   background-repeat: no-repeat;
-  /* 使用 CSS 变量控制模糊程度，默认 20px */
-  filter: blur(var(--wallpaper-blur, 20px)) saturate(100%);
-  transform: scale(1.1); /* 放大一点，避免模糊后边缘露馅 */
   /* 壁纸加载完成后淡入，避免闪烁 */
   opacity: 0;
   transition: opacity 2s ease;
@@ -376,25 +373,10 @@ html{
    壁纸与毛玻璃效果
    ========================================== */
 
-/* 毛玻璃中间层已不需要 backdrop-filter，壁纸本身已模糊 */
-.wallpaper-blur-layer {
-  position: fixed;
-  inset: 0;
-  z-index: 0;
-  pointer-events: none;
-}
-
-/* 浏览器不支持 filter 时，降级为 backdrop-filter */
-@supports not (filter: blur(20px)) {
-  .acrylic-enabled .wallpaper-blur-layer {
-    backdrop-filter: blur(20px) saturate(180%);
-    -webkit-backdrop-filter: blur(20px) saturate(180%);
-  }
-}
-
-/* 毛玻璃效果关闭时清除模糊 */
-html:not(.acrylic-enabled) body::before {
-  filter: none;
+/* 侧边栏毛玻璃效果：通过 backdrop-filter 模糊背后的清晰壁纸 */
+html.acrylic-enabled .sidebar-transparent-bg {
+  backdrop-filter: blur(var(--wallpaper-blur, 20px)) saturate(180%);
+  -webkit-backdrop-filter: blur(var(--wallpaper-blur, 20px)) saturate(180%);
 }
 
 /* ==========================================
@@ -419,39 +401,15 @@ html:not(.acrylic-enabled) body::before {
   ) !important;
 }
 
-/* 内容区清晰壁纸层（使用 background-attachment: fixed 与全局壁纸对齐） */
+/* 内容区半透明背景层，透出 body::before 的清晰壁纸 */
 .content-clear-wallpaper {
   position: relative;
-  /* 裁切伪元素，确保圆角区域不溢出 */
   overflow: hidden;
-  /* 独立的半透明背景层，替代嵌套的 content-transparent-bg */
   background-color: color-mix(
     in srgb,
     var(--color-bg) calc(var(--content-opacity, 1) * 100%),
     transparent
   ) !important;
-  
-}
-
-.content-clear-wallpaper::before {
-  content: "";
-  /* 使用 absolute 限制在内容区内 */
-  position: absolute;
-  inset: 0;
-  z-index: -1;
-  background-image: var(--wallpaper-image, none);
-  background-size: cover;
-  background-position: center;
-  background-repeat: no-repeat;
-  /* 关键：fixed 让背景相对于视口定位，与 body::before 完美对齐 */
-  background-attachment: fixed;
-
-  transform: scale(1.1);
-}
-
-/* 壁纸加载完成后显示 */
-html.wallpaper-loaded .content-clear-wallpaper::before {
-  opacity: 1;
 }
 
 .app-text-light-color {

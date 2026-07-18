@@ -108,12 +108,13 @@ export const useSessionStore = defineStore('session', () => {
 
     /**
      * 按分组获取会话列表（已按 lastActiveAt 降序排序）
+     * 自动排除已归档会话（archived === true）
      * @param groupId - 分组ID，null 表示未分组
      */
     const getSessionsByGroup = (groupId: string | null): Session[] => {
         const targetGroupId = groupId === UNGROUPED_ID ? null : groupId
         return Array.from(sessionsMap.value.values())
-            .filter(s => (s.groupId || null) === targetGroupId)
+            .filter(s => (s.groupId || null) === targetGroupId && !s.archived)
             .sort((a, b) => {
                 const timeA = new Date(a.lastActiveAt || a.updatedAt || 0).getTime()
                 const timeB = new Date(b.lastActiveAt || b.updatedAt || 0).getTime()

@@ -33,6 +33,7 @@ model Session {
   updatedAt     DateTime              @updatedAt @map("updated_at")
   lastActiveAt  DateTime?             @map("last_active_at")
   sessionType   String?               @default("web") @map("session_type")
+  archived      Boolean               @default(false)
   botId         String?               @map("bot_id")
   platform      String?
   externalId    String?               @map("external_id")

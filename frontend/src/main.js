@@ -115,6 +115,13 @@ const routes = [
         meta: { title: "模型管理", requiresAuth: true },
         component: () => import("./components/models/ModelsPage.vue"),
       },
+      {
+        path: "sessions-manage/:tab?",
+        name: "SessionsManage",
+        meta: { title: "会话管理", requiresAuth: true },
+        component: () =>
+          import("./components/session/SessionManagement.vue"),
+      },
     ],
   },
   {

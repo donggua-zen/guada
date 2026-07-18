@@ -5,7 +5,6 @@
 
     <!-- 主内容区域 -->
     <div class="flex flex-col h-full">
-        <div class="wallpaper-blur-layer"></div>
         <SetupGuide ref="guideRef" />
         <RouterView></RouterView>
     </div>
