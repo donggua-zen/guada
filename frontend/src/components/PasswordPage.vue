@@ -1,5 +1,7 @@
 <template>
-    <div class="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100 p-4">
+  <div class="flex flex-col h-full">
+    <CustomTitlebar />
+    <div class="flex-1 min-h-0 flex items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100 p-4">
         <div class="flex flex-col md:flex-row bg-white rounded-2xl overflow-hidden shadow-xl max-w-4xl w-full">
             <!-- 左侧说明区域 -->
             <div
@@ -197,6 +199,7 @@
             </div>
         </div>
     </div>
+  </div>
 </template>
 
 <!-- @ts-ignore - Element Plus 组件类型缺失 -->
@@ -214,6 +217,7 @@ import { useRouter } from 'vue-router'
 import { apiService } from '../services/ApiService'
 import { usePopup } from '../composables/usePopup'
 import { useStorage } from '@vueuse/core'
+import CustomTitlebar from './CustomTitlebar.vue'
 
 // Element Plus 组件导入
 import {

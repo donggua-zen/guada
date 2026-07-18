@@ -230,7 +230,7 @@ html.dark {
   --el-color-primary-light-1: var(--color-primary-950) !important;
 
   /* 标题栏样式变量 */
-  --titlebar-text-color: #333;
+  --titlebar-text-color: #222;
   --titlebar-hover-bg: rgba(0, 0, 0, 0.06);
 }
 
@@ -245,7 +245,7 @@ html.dark {
   --el-color-primary-light-1: var(--color-primary-950) !important;
 
   /* 标题栏暗色模式样式变量 */
-  --titlebar-text-color: oklch(75% 0.02 250);
+  --titlebar-text-color: var(--color-text);
   /* #a8aab3 - 柔和的灰白色 */
   --titlebar-hover-bg: rgba(255, 255, 255, 0.06);
   /* 更柔和的悬停效果 */

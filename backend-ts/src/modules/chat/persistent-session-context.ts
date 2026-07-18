@@ -30,7 +30,6 @@ import {
 import { TokenizerService } from "../../common/utils/tokenizer.service";
 import { SummaryMode } from "./compression-engine";
 import { ResolvedPluginInfo } from "../plugins/types/plugin.types";
-import { SessionTokenTracker } from "./utils/session-token-tracker";
 import { ToolOrchestrator } from "../tools/tool-orchestrator.service";
 
 /**
@@ -87,6 +86,7 @@ export class PersistentSessionContext implements ISessionContext {
   private memoryConfig!: MemoryConfig;
   private effectiveContextWindow!: number;
   private _workspacePath!: string;
+  private isMessagesLoaded: boolean = false;
   get workspacePath(): string {
     return this._workspacePath;
   }
@@ -110,8 +110,6 @@ export class PersistentSessionContext implements ISessionContext {
 
   /** 消息加载游标：第一次 getMessages 时传给 loadMessages，只加载到此消息为止 */
   private messageCursor: string | undefined = undefined;
-  /** 会话级 Token 消费追踪器 */
-  private tokenTracker: SessionTokenTracker | null = null;
 
   /** 当前会话运行模式（默认 normal） */
   private runMode: SessionRunMode = "normal";
@@ -164,8 +162,6 @@ export class PersistentSessionContext implements ISessionContext {
     if (savedRunMode === "plan") {
       this.runMode = "plan";
     }
-    // 加载用户消息
-    await this.loadMessages();
   }
 
   /**
@@ -304,6 +300,10 @@ export class PersistentSessionContext implements ISessionContext {
   async getMessages(options?: {
     exclude?: string[];
   }): Promise<MessageRecord[]> {
+    if (!this.isMessagesLoaded) {
+      await this.loadMessages();
+      this.isMessagesLoaded = true;
+    }
     if (!this.conversationStateLoaded) {
       this.preludeParts = await this.buildPreludeMessages();
       this.conversationStateLoaded = true;
@@ -314,12 +314,24 @@ export class PersistentSessionContext implements ISessionContext {
     return [...this.preludeParts, ...this.history];
   }
 
+  /**
+   * 追加用户消息记录并持久化。
+   *
+   * @param content 用户消息内容
+   * @param files 可选的文件列表
+   * @param replaceMessageId 可选的替换消息 ID，用于更新或删除
+   * @param knowledgeBaseIds 可选的知识知识库 ID列表
+   * @param metadata 可选的元数据
+   * @param preGenAssistantId 可选的预生成助手 ID
+   * @returns 新添加的消息记录
+   */
   async addUserMessage(
     content: string,
     files?: string[],
     replaceMessageId?: string | undefined,
     knowledgeBaseIds?: string[] | undefined,
     metadata?: Record<string, any>,
+    preGenAssistantId?: string,
   ) {
     const message = await this.messageStore.addUserMessage(
       this.sessionId,
@@ -328,9 +340,10 @@ export class PersistentSessionContext implements ISessionContext {
       replaceMessageId,
       knowledgeBaseIds,
       metadata,
+      preGenAssistantId,
     );
 
-    if (message) {
+    if (this.isMessagesLoaded && message) {
       const record = await this.messageStore.transformContentStructure(
         message,
         true,
@@ -404,17 +417,13 @@ export class PersistentSessionContext implements ISessionContext {
   }
 
   async addAssistantMessageVersion(
-    parentId: string,
-    regenerationMode: string,
-    turnsId: string,
-    existingAssistantMessageId?: string,
+    userMessageId: string,
+    preGenAssistantId?: string,
   ): Promise<string> {
     return this.messageStore.addAssistantMessageVersion(
       this.sessionId,
-      parentId,
-      regenerationMode,
-      turnsId,
-      existingAssistantMessageId,
+      userMessageId,
+      preGenAssistantId,
     );
   }
 
@@ -924,28 +933,7 @@ export class PersistentSessionContext implements ISessionContext {
     return this.workspacePath;
   }
 
-  isVirtual(): boolean {
-    return false;
-  }
-
   setMessageCursor(messageId: string): void {
     this.messageCursor = messageId;
-  }
-
-  // === Token 消费追踪 ===
-
-  async recordTokenUsage(
-    promptTokens: number,
-    completionTokens: number,
-    cachedTokens?: number,
-  ): Promise<void> {
-    if (!this.tokenTracker) {
-      this.tokenTracker = new SessionTokenTracker(this._workspacePath);
-    }
-    await this.tokenTracker.addUsage(
-      promptTokens,
-      completionTokens,
-      cachedTokens,
-    );
   }
 }

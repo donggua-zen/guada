@@ -13,13 +13,11 @@ export class MessageRepository {
     options?: {
       withFiles?: boolean;
       withContents?: boolean;
-      onlyCurrentContent?: boolean;
     },
   ) {
     const {
       withFiles = false,
       withContents = true,
-      onlyCurrentContent = false,
     } = options || {};
 
     return this.prisma.message.findMany({
@@ -29,8 +27,6 @@ export class MessageRepository {
         ...(withContents && {
           contents: {
             orderBy: { createdAt: "asc" },
-            // Prisma 不支持在 include 中直接过滤关联数据
-            // 如果需要 onlyCurrentContent，需要在查询后过滤
           },
         }),
       },
@@ -88,19 +84,19 @@ export class MessageRepository {
       },
     });
 
-    // 如果需要仅当前轮次内容，在应用层过滤（Prisma 不支持 nested filtering）
+    // 新模型：仅保留活跃版本的 assistant 消息
     if (onlyCurrentContent) {
-      return messages.map((message) => {
-        if (message.contents && message.currentTurnsId) {
-          return {
-            ...message,
-            contents: message.contents.filter(
-              (content) => content.turnsId === message.currentTurnsId,
-            ),
-          };
+      // 收集所有用户消息的 currentVersionId
+      const activeVersionIds = new Set<string>();
+      for (const msg of messages) {
+        if (msg.role === "user" && msg.currentVersionId) {
+          activeVersionIds.add(msg.currentVersionId);
         }
-        return message;
-      });
+      }
+      // 过滤：只保留用户消息和活跃版本的 assistant 消息
+      return messages.filter(
+        (msg) => msg.role === "user" || activeVersionIds.has(msg.id),
+      );
     }
 
     return messages;
@@ -114,13 +110,11 @@ export class MessageRepository {
     options?: {
       withFiles?: boolean;
       withContents?: boolean;
-      onlyCurrentContent?: boolean;
     },
   ) {
     const {
       withFiles = false,
       withContents = true,
-      onlyCurrentContent = false,
     } = options || {};
 
     const message = await this.prisma.message.findUnique({
@@ -136,44 +130,18 @@ export class MessageRepository {
       },
     });
 
-    // 如果需要仅当前轮次内容，在应用层过滤
-    if (
-      message &&
-      onlyCurrentContent &&
-      message.contents &&
-      message.currentTurnsId
-    ) {
-      return {
-        ...message,
-        contents: message.contents.filter(
-          (content) => content.turnsId === message.currentTurnsId,
-        ),
-      };
-    }
-
     return message;
-  }
-
-  /**
-   * 根据 ID 获取消息及其当前内容版本（便捷方法）
-   * 与 Python 后端 get_message(message_id, only_current_content=True) 一致
-   */
-  async findByIdWithCurrentContent(messageId: string) {
-    return this.findById(messageId, {
-      withFiles: false,
-      withContents: true,
-      onlyCurrentContent: true,
-    });
   }
 
   /**
    * 创建新消息
    */
   async create(data: {
+    id?: string;
     sessionId: string;
     role: string;
     parentId?: string;
-    currentTurnsId?: string; // 添加 currentTurnsId（与 Python 后端一致）
+    currentTurnsId?: string;
     metadata?: Record<string, any>;
   }) {
     return this.prisma.message.create({

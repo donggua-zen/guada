@@ -1,5 +1,7 @@
 <template>
   <div class="global-sidebar flex flex-col h-full sidebar-transparent-bg overflow-hidden">
+    <!-- Electron 标题栏左侧面板 -->
+    <TitlebarLeftPanel v-if="isElectron" />
     <!-- 导航菜单 -->
     <div class="px-3 py-2 space-y-0.5">
       <div v-for="item in navItems" :key="item.key" @click="handleNavClick(item.key)"
@@ -276,6 +278,9 @@ import {
   Settings16Filled,
 } from '@vicons/fluent'
 import { MoreFilled, Loading } from '@element-plus/icons-vue'
+import TitlebarLeftPanel from './TitlebarLeftPanel.vue'
+
+const isElectron = typeof window !== 'undefined' && window.electronAPI !== undefined
 
 const router = useRouter()
 const route = useRoute()

@@ -23,7 +23,8 @@ export interface EventChunk {
     | "think"
     | "tool_call"
     | "tool_calls_response"
-    | "finish";
+    | "finish"
+    | "user_message";
 
   // ===== 消息标识（create / update / text / think / tool_call / tool_calls_response / finish）=====
   messageId?: string;
@@ -59,4 +60,7 @@ export interface EventChunk {
     completedIterations: number;
     maxIterations: number;
   };
+
+  // ===== 用户消息（user_message）=====
+  userMessage?: any;
 }

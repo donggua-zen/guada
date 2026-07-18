@@ -1,5 +1,9 @@
 <template>
     <div class="workspace-sidebar h-full flex flex-col">
+        <!-- Electron 窗口控制标题栏 -->
+        <div v-if="isElectron" class="flex items-center justify-end h-11 drag-region shrink-0">
+            <WindowControls class="no-drag" />
+        </div>
         <!-- 目录树（预览时隐藏，v-show 保留 DOM） -->
         <div v-show="!selectedFile" class="h-full flex flex-col flex-1 min-h-0">
             <!-- 浏览器窗口列表（仅 Electron 环境，置于最上方确保可见） -->
@@ -182,6 +186,7 @@ import WorkspaceSettingsDialog from './chat-input/WorkspaceSettingsDialog.vue';
 import SessionBrowserWindowList from './SessionBrowserWindowList.vue';
 import WorkspaceTree from './WorkspaceTree.vue';
 import type { WorkspaceNode } from './WorkspaceTree.vue';
+import WindowControls from '@/components/WindowControls.vue';
 
 interface SelectedFile {
     name: string;
@@ -2273,5 +2278,13 @@ onUnmounted(() => {
 .dark .preview-close-btn:hover {
     color: #fff;
     background-color: rgba(255, 255, 255, 0.08);
+}
+
+.drag-region {
+    -webkit-app-region: drag;
+}
+
+.no-drag {
+    -webkit-app-region: no-drag;
 }
 </style>

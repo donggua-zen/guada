@@ -130,7 +130,7 @@ export class SubAgentManager implements OnModuleInit {
         50,
         undefined,
         undefined,
-        { onlyCurrentContent: true, withContents: true },
+        { withContents: true },
       );
 
       if (messages.length === 0) {

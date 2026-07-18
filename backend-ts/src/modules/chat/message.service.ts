@@ -228,10 +228,11 @@ export class MessageService {
     replaceMessageId: string | undefined,
     knowledgeBaseIds: string[] | undefined,
     metadata?: Record<string, any>,
+    preGenAssistantId?: string,
   ) {
     const turnsId = randomUUID();
     // 提前处理知识库引用逻辑，不占用事务
-    let finalMetadata: any = null;
+    let contentMetadata: any = null;
     if (knowledgeBaseIds && knowledgeBaseIds.length > 0) {
       // 使用批量查询提升效率（替代多次单独查询）
       const kbs = await this.kbRepo.findByIds(knowledgeBaseIds);
@@ -240,7 +241,7 @@ export class MessageService {
         name: kb.name,
         description: kb.description,
       }));
-      finalMetadata = { ...metadata, referencedKbs: kbMetadata };
+      contentMetadata = { referencedKbs: kbMetadata };
     }
     const prisma = this.contentRepo.getPrismaClient();
     const messageId = await prisma.$transaction(async (tx) => {
@@ -268,32 +269,19 @@ export class MessageService {
         await tx.message.delete({
           where: { id: replaceMessageId },
         });
-
-        // 4. 创建全新的消息（而不是创建新版本）
-        const newMessage = await tx.message.create({
-          data: {
-            sessionId,
-            role: "user",
-            parentId: existingMessage.parentId, // 继承原消息的 parent_id
-            currentTurnsId: turnsId, // 设置当前轮次 ID
-            metadata: metadata || undefined,
-          },
-        });
-
-        messageId = newMessage.id;
-      } else {
-        // 创建新消息
-        const message = await tx.message.create({
-          data: {
-            sessionId: sessionId,
-            role: "user",
-            parentId: undefined,
-            currentTurnsId: turnsId, // 设置当前轮次 ID
-            metadata: finalMetadata || undefined,
-          },
-        });
-        messageId = message.id;
       }
+      // 4. 创建全新的消息（而不是创建新版本）
+      const newMessage = await tx.message.create({
+        data: {
+          sessionId,
+          role: "user",
+          parentId: undefined,
+          currentVersionId: preGenAssistantId,
+          metadata: metadata || undefined,
+        },
+      });
+
+      messageId = newMessage.id;
 
       // 1. 创建消息内容
       await tx.messageContent.create({
@@ -302,7 +290,7 @@ export class MessageService {
           turnsId, // 使用相同的 turnsId
           role: "user", // 添加 role
           content,
-          metadata, // 存储知识库引用信息
+          metadata: contentMetadata || undefined, // 存储知识库引用信息
         },
       });
 
@@ -351,8 +339,9 @@ export class MessageService {
    */
   async updateMessage(messageId: string, data: any, userId: string) {
     // 获取消息及其当前内容版本（与 Python 后端一致）
-    const message =
-      await this.messageRepo.findByIdWithCurrentContent(messageId);
+    const message = await this.messageRepo.findById(messageId, {
+      withContents: true,
+    });
 
     // 分离消息字段和内容字段（与 Python 后端逻辑一致）
     const messageFields: any = {};
@@ -601,7 +590,7 @@ export class MessageService {
         await this.contentRepo.create({
           id: record.contentId,
           messageId: record.messageId || "",
-          turnsId: record.turnsId || "",
+          turnsId: "",
           role: record.role,
           content: typeof record.content === "string" ? record.content : "",
           reasoningContent: record.reasoningContent,
@@ -632,28 +621,18 @@ export class MessageService {
    */
   async addAssistantMessageVersion(
     sessionId: string,
-    parentId: string,
-    regenerationMode: string,
-    turnsId: string,
-    existingAssistantMessageId?: string,
+    userMessageId: string,
+    preGenAssistantId?: string,
   ): Promise<string> {
-    let targetMessageId = existingAssistantMessageId;
-
-    if (regenerationMode === "overwrite" || !regenerationMode) {
-      await this.messageRepo.deleteByParentId(parentId);
-      const msg = await this.messageRepo.create({
-        sessionId,
-        role: "assistant",
-        parentId,
-        currentTurnsId: turnsId,
-      });
-      targetMessageId = msg.id;
-    } else if (targetMessageId) {
-      await this.messageRepo.update(targetMessageId, {
-        currentTurnsId: turnsId,
-      });
-    }
-    return targetMessageId;
+    const msg = await this.messageRepo.create({
+      id: preGenAssistantId,
+      sessionId,
+      role: "assistant",
+      parentId: userMessageId,
+    });
+    // 无论何种模式，创建新版本后更新用户消息的 currentVersionId
+    await this.messageRepo.update(userMessageId, { currentVersionId: msg.id });
+    return msg.id;
   }
 
   /**

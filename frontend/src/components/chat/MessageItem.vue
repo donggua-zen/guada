@@ -470,8 +470,8 @@ const tokenUsage = computed(() => {
 const contentVersions = computed(() => contentVersionsCache.value);
 
 const currentVersionIndex = computed(() => {
-  if (!props.message.currentTurnsId) return 0;
-  return contentVersions.value.findIndex(version => version === props.message.currentTurnsId);
+  // 新模型：每个消息就是一个版本，索引始终为 0
+  return 0;
 });
 
 const handleAction = (action: 'switch' | 'delete' | 'edit' | 'copy' | 'generate' | 'regenerate') => {

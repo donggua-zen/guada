@@ -15,11 +15,9 @@ import { AuthGuard } from "../auth/auth.guard";
 import { CurrentUser } from "../auth/current-user.decorator";
 
 import { SessionService } from "./session.service";
-import { MessageService } from "./message.service";
 import { MessageRepository } from "../../common/database/message.repository";
 import { Response, Request } from "express";
 import { SessionStreamManager } from "./session-stream.manager";
-import { SessionEventsService } from "./session-events.service";
 import { ChatRunnerService } from "./chat-runner.service";
 import { TagParserPipeline } from "./parsers/tag-parser-pipeline.service";
 
@@ -49,7 +47,6 @@ export class ChatController {
     @Body()
     body: {
       sessionId: string;
-      assistantMessageId?: string;
       regenerationMode?: string;
       resumeData?: any;
       lastContentId?: string | null;
@@ -68,7 +65,6 @@ export class ChatController {
   ) {
     const {
       sessionId,
-      assistantMessageId,
       regenerationMode = "overwrite",
       resumeData,
       lastContentId,
@@ -86,7 +82,9 @@ export class ChatController {
           source.parseResult = { content: parsed.content };
         }
       } catch (error: any) {
-        this.logger.warn(`标签解析失败，使用原始内容: ${error?.message || error}`);
+        this.logger.warn(
+          `标签解析失败，使用原始内容: ${error?.message || error}`,
+        );
       }
     }
 
@@ -124,8 +122,7 @@ export class ChatController {
           sessionId,
           userId: user.id,
           userMessage,
-          regenerationMode,
-          assistantMessageId: assistantMessageId || null,
+          regenerationMode: regenerationMode || "overwrite",
           resumeData,
           lastContentId: lastContentId || null,
           source,
@@ -150,7 +147,10 @@ export class ChatController {
           res.status(status).json(response);
         }
       } else {
-        this.logger.error(`启动流失败:`, error);
+        this.logger.error(
+          `启动流失败: ${error?.message || 'Unknown error'}`,
+          error instanceof Error ? error.stack : JSON.stringify(error, null, 2),
+        );
         if (!res.writableEnded) {
           res.status(500).json({
             error: error.message || "启动流失败",
@@ -165,9 +165,7 @@ export class ChatController {
    * 手动停止会话流
    */
   @Post("stream/:sessionId/stop")
-  async stopStream(
-    @Param("sessionId") sessionId: string,
-  ) {
+  async stopStream(@Param("sessionId") sessionId: string) {
     const status = this.streamManager.getStreamStatus(sessionId);
 
     if (!status?.isRunning) {
@@ -221,7 +219,6 @@ export class ChatController {
     // 验证消息存在，并获取当前的 content
     const message = await this.messageRepo.findById(messageId, {
       withContents: true,
-      onlyCurrentContent: true,
     });
 
     if (!message || !message.contents || message.contents.length === 0) {

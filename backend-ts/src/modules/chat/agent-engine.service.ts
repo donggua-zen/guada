@@ -10,28 +10,11 @@ import { MessageRecord, LLMResponseChunk } from "../llm-core/types/llm.types";
 import { RequestContext } from "../../common/context/request-context";
 import { throttledStream } from "./utils/stream-throttle.util";
 import { ToolCallDisplayUtil } from "./utils/tool-call-display.util";
+import { SessionTokenTracker } from "./utils/session-token-tracker";
 import { ISessionContext, ModelConfig } from "./session-context";
 import { EventChunk } from "./types/event-chunk.types";
 import { SummaryMode } from "./compression-engine";
 import { RateLimitError } from "../llm-core/utils/retry.util";
-
-/**
- * 审批上下文
- */
-interface ApprovalContext {
-  type: "approval";
-  status: "pending" | "completed";
-  token?: string; // 用于验证（可选）
-  pendingToolCallIds?: string[]; // pending 状态时保存需要审批的工具 ID 列表
-  decisions?: Array<{
-    // completed 状态时保存
-    toolCallId: string;
-    decision: "approve" | "reject";
-    reason?: string;
-  }>;
-  createdAt?: string;
-  updatedAt?: string;
-}
 
 /**
  * 思考时间信息（简单数据容器）
@@ -71,10 +54,9 @@ export class AgentEngine {
 
   constructor(
     private toolOrchestrator: ToolOrchestrator,
-    private pluginManager: PluginManager,
-    private promptCollector: PromptCollector,
     private llmService: LLMService,
     private displayManager: ToolCallDisplayUtil,
+    private tokenTracker: SessionTokenTracker,
   ) {}
 
   /**
@@ -98,27 +80,62 @@ export class AgentEngine {
    */
   async *run(
     sessionContext: ISessionContext,
-    messageId: string,
+    userMessage: {
+      id?: string;
+      content?: string;
+      files?: string[];
+      replaceMessageId?: string;
+      knowledgeBaseIds?: string[];
+      metadata?: Record<string, any>;
+    },
     regenerationMode: string = "overwrite",
-    assistantMessageId?: string,
     abortSignal?: AbortSignal,
     resumeData?: any,
   ): AsyncGenerator<EventChunk> {
     const sessionId = sessionContext.sessionId;
+    // 创建用户消息
+    const createdUserMessage =
+      regenerationMode === "overwrite"
+        ? await sessionContext.addUserMessage(
+            userMessage?.content,
+            userMessage?.files || [],
+            userMessage?.replaceMessageId,
+            userMessage?.knowledgeBaseIds,
+            userMessage?.metadata,
+            undefined,
+          )
+        : null;
+
+    // 必须在用户消息之后创建预生成助手消息 ID
+    const preGenAssistantId = sessionContext.generateId();
+
+    // 广播用户消息事件
+    if (createdUserMessage) {
+      yield {
+        type: "user_message",
+        messageId: createdUserMessage.id,
+        contentId: createdUserMessage.contents[0].id,
+        userMessage: createdUserMessage,
+      };
+    }
+
+    const userMessageId = userMessage?.id || createdUserMessage?.id;
+    if (!userMessageId) {
+      throw new Error("userMessageId is required");
+    }
+    if (regenerationMode !== "resume") {
+      sessionContext.setMessageCursor(userMessageId);
+    }
 
     const generatorFn = async function* (this: AgentEngine) {
-      try {
-        yield* this.executeAgentLoop(
-          sessionContext,
-          messageId,
-          regenerationMode,
-          assistantMessageId,
-          abortSignal,
-          resumeData,
-        );
-      } catch (error) {
-        throw error;
-      }
+      yield* this.executeAgentLoop(
+        sessionContext,
+        userMessageId,
+        regenerationMode,
+        abortSignal,
+        resumeData,
+        preGenAssistantId,
+      );
     }.bind(this);
 
     const wrappedGenerator = RequestContext.run(
@@ -158,9 +175,9 @@ export class AgentEngine {
     sessionContext: ISessionContext,
     userMessageId: string,
     regenerationMode: string,
-    assistantMessageId?: string,
     abortSignal?: AbortSignal,
     resumeData?: any,
+    preGenAssistantId?: string,
   ): AsyncGenerator<EventChunk> {
     const resolved = sessionContext.getResolvedPlugins();
     const tools =
@@ -172,18 +189,13 @@ export class AgentEngine {
 
     let isResumeMode = regenerationMode === "resume";
     let assistantResponse: MessageRecord | null = null;
-    let turnsId: string;
     let responseMessageId: string;
 
     if (!isResumeMode) {
-      turnsId = sessionContext.generateId();
-
-      // 准备助手回复的消息容器，根据再生模式决定是覆盖旧回复还是创建新版本
+      // 创建新版本的助手消息
       responseMessageId = await sessionContext.addAssistantMessageVersion(
         userMessageId,
-        regenerationMode,
-        turnsId,
-        assistantMessageId,
+        preGenAssistantId,
       );
     }
     let needToContinue = false;
@@ -224,7 +236,6 @@ export class AgentEngine {
         content: "",
         messageId: responseMessageId,
         contentId: contentId,
-        turnsId: turnsId,
         metadata: {
           modelName: sessionContext.getModelConfig().modelName,
         },
@@ -234,7 +245,6 @@ export class AgentEngine {
         assistantResponse = lastMessage;
         contentId = lastMessage.contentId;
         responseMessageId = lastMessage.messageId;
-        turnsId = lastMessage.turnsId;
         if (lastMessage.role === "tool") {
           isResumeMode = false;
           needToContinue = true;
@@ -250,7 +260,6 @@ export class AgentEngine {
       yield {
         type: isResumeMode ? "update" : "create",
         messageId: responseMessageId,
-        turnsId: turnsId,
         contentId: contentId,
         modelName: sessionContext.getModelConfig().modelName,
         requestId: RequestContext.current()?.requestId,
@@ -321,7 +330,8 @@ export class AgentEngine {
             if (lastAcc.usage) {
               assistantResponse.metadata.usage = lastAcc.usage;
               // 累计会话级 token 消费（含缓存命中数）
-              sessionContext.recordTokenUsage(
+              this.tokenTracker.addUsage(
+                sessionContext.getWorkspacePath(),
                 lastAcc.usage.promptTokens,
                 lastAcc.usage.completionTokens,
                 lastAcc.usage.cachedTokens?.read,
@@ -442,7 +452,6 @@ export class AgentEngine {
               content: res.content,
               toolCallId: res.toolCallId,
               messageId: responseMessageId,
-              turnsId: turnsId,
             });
           }
           needToContinue = true;
@@ -796,34 +805,6 @@ export class AgentEngine {
         `保存对话历史失败: ${e instanceof Error ? e.message : e}`,
       );
     }
-  }
-
-  /**
-   * 检查工具是否需要审批
-   */
-  private needsApproval(
-    toolCalls: any[],
-    sessionContext: ISessionContext,
-  ): boolean {
-    const approvalConfig = sessionContext.getToolApprovalConfig();
-
-    // 如果全局禁用审批，返回 false
-    if (approvalConfig.enabled === false) {
-      return false;
-    }
-
-    const requiresApprovalTools = approvalConfig.requiresApproval;
-
-    return toolCalls.some((tc: any) => {
-      const toolName = tc.name;
-
-      // 精确匹配
-      if (requiresApprovalTools.includes(toolName)) {
-        return true;
-      }
-
-      return false;
-    });
   }
 
   /**

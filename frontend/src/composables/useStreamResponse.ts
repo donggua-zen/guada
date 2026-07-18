@@ -24,7 +24,6 @@ interface MessageContent {
   role: string;
   content: string | null;
   reasoningContent: string | null;
-  turnsId: string;
   additionalKwargs: any;
   metadata: Record<string, any>;
   createdAt: string;
@@ -40,7 +39,7 @@ interface Message {
   role: string;
   contents: MessageContent[];
   parentId: string;
-  currentTurnsId: string;
+  currentVersionId?: string;
   state: ContentState;
   createdAt: string;
   [key: string]: any;
@@ -125,7 +124,7 @@ export function useStreamResponse(sessionStore: any, apiService: any) {
     response: StreamResponse,
     sessionId: string,
   ): { message: Message; contentIndex: number } {
-    const { messageId, turnsId, contentId, modelName } = response;
+    const { messageId, contentId, modelName } = response;
     const time = new Date().toISOString();
 
     // 创建新内容块
@@ -134,7 +133,6 @@ export function useStreamResponse(sessionStore: any, apiService: any) {
       role: "assistant",
       content: null,
       reasoningContent: null,
-      turnsId: turnsId!,
       additionalKwargs: [],
       metadata: { modelName },
       createdAt: time,
@@ -160,7 +158,6 @@ export function useStreamResponse(sessionStore: any, apiService: any) {
         contents: [newContent],
         parentId: response.parentId || "",
         sessionId,
-        currentTurnsId: turnsId!,
         state: {
           isStreaming: true,
           isThinking: false,
@@ -168,16 +165,22 @@ export function useStreamResponse(sessionStore: any, apiService: any) {
         createdAt: time,
       });
       sessionStore.getMessages(sessionId).push(existingMessage);
+
+      // 新版本：更新用户消息的 currentVersionId 指向新创建的 assistant 消息
+      const parentMessage = sessionStore
+        .getMessages(sessionId)
+        .find((msg: Message) => msg.id === response.parentId);
+      if (parentMessage && parentMessage.role === "user") {
+        parentMessage.currentVersionId = messageId!;
+      }
     } else {
       console.log("Message already exists, pushing new content");
       existingMessage.contents.push(newContent);
-      existingMessage.currentTurnsId = turnsId!;
       existingMessage.state = {
         isStreaming: true,
         isThinking: false,
       };
     }
-
     return {
       message: existingMessage,
       contentIndex: existingMessage.contents.length - 1,
@@ -557,15 +560,9 @@ export function useStreamResponse(sessionStore: any, apiService: any) {
 
         if (response.type === "user_message") {
           // 后端广播的用户消息，添加到消息列表
-          const userMsg = response.message;
+          const userMsg = response.userMessage;
           if (userMsg) {
-            // 避免重复添加已存在的消息
-            const exists = sessionStore
-              .getMessages(streamingSessionId)
-              .some((msg: Message) => msg.id === userMsg.id);
-            if (!exists) {
-              sessionStore.addMessage(streamingSessionId, userMsg);
-            }
+            sessionStore.addMessage(streamingSessionId, userMsg);
           }
           continue;
         }

@@ -19,6 +19,7 @@
  *   "updatedAt": "2026-06-22T03:00:00.000Z"
  * }
  */
+import { Injectable } from "@nestjs/common";
 import * as path from "path";
 import * as fs from "fs/promises";
 
@@ -44,19 +45,14 @@ function formatTokens(count: number): string {
   return String(count);
 }
 
+@Injectable()
 export class SessionTokenTracker {
-  private filePath: string;
-
-  constructor(workspacePath: string) {
-    this.filePath = path.join(workspacePath, ".guada", "tokens.json");
-  }
-
   /**
    * 从文件读取当前记录，文件不存在则返回零值
    */
-  private async readRecord(): Promise<TokenUsageRecord> {
+  private async readRecord(filePath: string): Promise<TokenUsageRecord> {
     try {
-      const data = await fs.readFile(this.filePath, "utf-8");
+      const data = await fs.readFile(filePath, "utf-8");
       const record = JSON.parse(data);
       // 兼容旧文件（不含 readable / cache 字段）
       record.promptTokensReadable = record.promptTokensReadable || formatTokens(record.promptTokens || 0);
@@ -81,16 +77,21 @@ export class SessionTokenTracker {
    * 每次写入前先读取文件中的最新值再合并，
    * 避免并发运行时（如多个子 agent 同时写入）相互覆盖。
    *
+   * @param workspacePath 会话工作目录
+   * @param promptTokens 输入 token 数
+   * @param completionTokens 输出 token 数
    * @param cachedTokens 缓存命中的 token 数（可选）
    */
   async addUsage(
+    workspacePath: string,
     promptTokens: number,
     completionTokens: number,
     cachedTokens?: number,
   ): Promise<void> {
     try {
-      await fs.mkdir(path.dirname(this.filePath), { recursive: true });
-      const current = await this.readRecord();
+      const filePath = path.join(workspacePath, ".guada", "tokens.json");
+      await fs.mkdir(path.dirname(filePath), { recursive: true });
+      const current = await this.readRecord(filePath);
       current.promptTokens += promptTokens;
       current.completionTokens += completionTokens;
       current.totalTokens = current.promptTokens + current.completionTokens;
@@ -102,7 +103,7 @@ export class SessionTokenTracker {
       current.totalTokensReadable = formatTokens(current.totalTokens);
       current.cachedTokensReadable = formatTokens(current.cachedTokens);
       current.updatedAt = new Date().toISOString();
-      await fs.writeFile(this.filePath, JSON.stringify(current, null, 2), "utf-8");
+      await fs.writeFile(filePath, JSON.stringify(current, null, 2), "utf-8");
     } catch {
       // 写入失败不应影响主流程，静默忽略
     }
@@ -110,8 +111,11 @@ export class SessionTokenTracker {
 
   /**
    * 获取当前累计的 token 统计（从文件读取最新数据）
+   *
+   * @param workspacePath 会话工作目录
    */
-  async getStats(): Promise<TokenUsageRecord> {
-    return this.readRecord();
+  async getStats(workspacePath: string): Promise<TokenUsageRecord> {
+    const filePath = path.join(workspacePath, ".guada", "tokens.json");
+    return this.readRecord(filePath);
   }
 }

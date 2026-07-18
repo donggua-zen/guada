@@ -1,29 +1,34 @@
 <template>
-  <div class="backend-waiting-overlay">
-    <!-- 加载状态 -->
-    <div v-if="!error" class="waiting-content">
-      <div class="logo-container">
-        <svg class="logo-spin" viewBox="0 0 100 100" width="80" height="80">
-          <circle cx="50" cy="50" r="45" fill="none" stroke="currentColor" stroke-width="3"
-            stroke-dasharray="283" stroke-dashoffset="200" class="spinner-ring" />
-          <text x="50" y="62" text-anchor="middle" font-size="32" fill="currentColor"
-            class="logo-text">⚡</text>
-        </svg>
+  <div class="flex flex-col h-full">
+    <CustomTitlebar />
+    <div class="backend-waiting-overlay">
+      <!-- 加载状态 -->
+      <div v-if="!error" class="waiting-content">
+        <div class="logo-container">
+          <svg class="logo-spin" viewBox="0 0 100 100" width="80" height="80">
+            <circle cx="50" cy="50" r="45" fill="none" stroke="currentColor" stroke-width="3"
+              stroke-dasharray="283" stroke-dashoffset="200" class="spinner-ring" />
+            <text x="50" y="62" text-anchor="middle" font-size="32" fill="currentColor"
+              class="logo-text">⚡</text>
+          </svg>
+        </div>
+        <h2 class="loading-title">正在启动后端服务</h2>
+        <p class="loading-desc">首次启动需初始化数据库，请稍候…</p>
       </div>
-      <h2 class="loading-title">正在启动后端服务</h2>
-      <p class="loading-desc">首次启动需初始化数据库，请稍候…</p>
-    </div>
 
-    <!-- 错误状态 -->
-    <div v-else class="error-content">
-      <div class="error-icon">⚠</div>
-      <h2 class="error-title">启动失败</h2>
-      <p class="error-text">{{ error }}</p>
+      <!-- 错误状态 -->
+      <div v-else class="error-content">
+        <div class="error-icon">⚠</div>
+        <h2 class="error-title">启动失败</h2>
+        <p class="error-text">{{ error }}</p>
+      </div>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
+import CustomTitlebar from './CustomTitlebar.vue'
+
 defineProps<{
   error: string | null;
 }>();

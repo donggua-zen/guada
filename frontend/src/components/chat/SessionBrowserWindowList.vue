@@ -1,7 +1,7 @@
 <template>
   <div v-if="isElectron" class="session-window-list">
     <!-- 头部 -->
-    <div class="shrink-0 flex items-center justify-between px-2 py-3">
+    <div class="shrink-0 flex items-center justify-between px-2">
       <h3 class="text-sm font-normal text-gray-500 dark:text-[#8b8d95] whitespace-nowrap mx-2">
         浏览器窗口
       </h3>

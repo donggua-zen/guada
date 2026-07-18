@@ -135,7 +135,7 @@ export function createMockMethods() {
       content,
       files: files || [],
       parentId: replaceMessageId,
-      currentTurnsId: null,
+      currentVersionId: null,
       state: {
         isStreaming: false,
         isThinking: false,

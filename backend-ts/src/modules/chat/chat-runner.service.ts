@@ -3,7 +3,6 @@ import { EventEmitter2 } from "@nestjs/event-emitter";
 import { AgentEngine } from "./agent-engine.service";
 import { SessionStreamManager } from "./session-stream.manager";
 import { SessionService } from "./session.service";
-import { MessageService } from "./message.service";
 import { SessionContextFactory } from "./session-context.factory";
 import { EventChunk } from "./types/event-chunk.types";
 import {
@@ -55,7 +54,6 @@ export class ChatRunnerService {
 
   constructor(
     private streamManager: SessionStreamManager,
-    private messageService: MessageService,
     private sessionService: SessionService,
     private agentEngine: AgentEngine,
     private sessionContextFactory: SessionContextFactory,
@@ -89,9 +87,9 @@ export class ChatRunnerService {
         files?: string[];
         replaceMessageId?: string;
         knowledgeBaseIds?: string[];
+        metadata?: Record<string, any>;
       };
       regenerationMode?: string;
-      assistantMessageId?: string | null;
       resumeData?: any;
       source?: Record<string, any>;
       lastContentId?: string | null;
@@ -103,7 +101,6 @@ export class ChatRunnerService {
       userId,
       userMessage,
       regenerationMode = "overwrite",
-      assistantMessageId = null,
       resumeData,
       source,
       lastContentId = null,
@@ -111,7 +108,9 @@ export class ChatRunnerService {
 
     // 提取前端传入的 clientId，用于广播事件的 source 字段
     const clientId = source?.clientId as string | undefined;
-
+    if (userMessage) {
+      userMessage.metadata = { ...userMessage?.metadata, source };
+    }
     // 获取会话
     const session = await this.sessionService.getSessionById(sessionId, userId);
     if (!session) {
@@ -143,43 +142,6 @@ export class ChatRunnerService {
       );
     }
 
-    let createdUserMessage: any = null;
-    const sessionContext =
-      await this.sessionContextFactory.createFromSession(session);
-    // overwrite 模式下自动创建消息
-    if (regenerationMode === "overwrite" || !regenerationMode) {
-      if (!userMessage?.content) {
-        throw new HttpException(
-          { error: "缺少消息内容", code: "MISSING_CONTENT" },
-          HttpStatus.BAD_REQUEST,
-        );
-      }
-      try {
-        createdUserMessage = await sessionContext.addUserMessage(
-          userMessage.content,
-          userMessage.files || [],
-          userMessage.replaceMessageId,
-          userMessage.knowledgeBaseIds,
-          source,
-        );
-      } catch (error: any) {
-        this.logger.error(`创建消息失败:`, error);
-        throw new HttpException(
-          {
-            error: "创建消息失败: " + (error.message || "Unknown error"),
-            code: "MESSAGE_CREATE_FAILED",
-          },
-          HttpStatus.INTERNAL_SERVER_ERROR,
-        );
-      }
-    }
-
-    if(regenerationMode !== "resume")
-    {
-      sessionContext.setMessageCursor(userMessage?.id || createdUserMessage?.id);
-    }
-
-
     const subscriberId = `${userId}_${Date.now()}_${Math.random().toString(36).slice(2)}`;
 
     // 情况 1: 该会话已有活跃流，加入订阅
@@ -199,7 +161,6 @@ export class ChatRunnerService {
       sessionId,
       userId,
       abortController,
-      assistantMessageId,
     );
     if (!started) {
       throw new HttpException(
@@ -234,29 +195,21 @@ export class ChatRunnerService {
       timestamp: new Date().toISOString(),
       source: clientId || subscriberId,
       payload: {
-        messageId: createdUserMessage?.id || userMessage?.id,
         replaceMessageId: userMessage?.replaceMessageId || null,
         session,
       },
     };
     this.eventEmitter.emit("stream.started", streamStartedEvent);
-
-    // 如果有用户消息，广播给所有流订阅者
-    if (createdUserMessage) {
-      this.streamManager.broadcast(sessionId, {
-        type: "user_message",
-        message: createdUserMessage,
-      } as any);
-    }
+    const sessionContext =
+      await this.sessionContextFactory.createFromSession(session);
 
     // 在后台启动 Agent 循环
     this.runAgentEngine(
       sessionContext,
-      userMessage?.id || createdUserMessage?.id,
+      userMessage,
       abortController,
       userId,
       regenerationMode,
-      assistantMessageId,
       resumeData,
       clientId,
     ).catch((error) => {
@@ -552,11 +505,10 @@ export class ChatRunnerService {
 
   private async runAgentEngine(
     sessionContext: ISessionContext,
-    userMessageId: string,
+    userMessage: any,
     abortController: AbortController,
     userId: string,
     regenerationMode: string = "overwrite",
-    assistantMessageId?: string | null,
     resumeData?: any,
     clientId?: string,
   ): Promise<void> {
@@ -565,17 +517,16 @@ export class ChatRunnerService {
     try {
       const iterator = this.agentEngine.run(
         sessionContext,
-        userMessageId,
+        userMessage,
         regenerationMode,
-        assistantMessageId || undefined,
         abortController.signal,
         resumeData,
       );
 
       for await (const chunk of iterator) {
         // 捕获最后一次 finishReason，用于 finally 判断是否跳过队列处理
-        if ((chunk as any).finishReason) {
-          lastFinishReason = (chunk as any).finishReason;
+        if (chunk.finishReason) {
+          lastFinishReason = chunk.finishReason;
         }
         this.streamManager.broadcast(sessionId, chunk as EventChunk);
       }
