@@ -153,11 +153,16 @@ export class SessionService {
     userId: string,
     skip: number = 0,
     limit: number = 50,
+    keyword?: string,
+    groupId?: string | null,
   ): Promise<PaginatedResponse<any>> {
+    const parsedGroupId = groupId === "null" ? null : groupId;
     const { items, total } = await this.sessionRepo.findArchivedByUserId(
       userId,
       skip,
       limit,
+      keyword,
+      parsedGroupId,
     );
 
     const transformedItems = items.map((item) => ({

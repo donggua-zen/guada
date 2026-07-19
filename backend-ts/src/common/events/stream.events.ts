@@ -125,6 +125,18 @@ export interface EnqueueMessageEvent {
 }
 
 /**
+ * 计划更新事件（内部模块间使用）
+ *
+ * 事件名：plan.updated
+ */
+export interface PlanUpdatedEvent {
+  userId: string;
+  sessionId: string;
+  timestamp: string;
+  source?: string;
+}
+
+/**
  * 将内部事件转换为 SSE 事件格式
  */
 export function toSessionEvent(
@@ -136,7 +148,8 @@ export function toSessionEvent(
     | SessionUpdatedEvent
     | SessionDeletedEvent
     | SubAgentCreatedEvent
-    | SubAgentClosedEvent,
+    | SubAgentClosedEvent
+    | PlanUpdatedEvent,
 ): SessionEvent {
   return {
     type,
@@ -144,6 +157,6 @@ export function toSessionEvent(
     sessionId: event.sessionId,
     timestamp: event.timestamp,
     source: event.source,
-    payload: event.payload,
+    payload: "payload" in event ? event.payload : undefined,
   };
 }

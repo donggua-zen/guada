@@ -65,12 +65,16 @@ export class SessionsController {
   async getArchivedSessions(
     @Query("skip") skip = 0,
     @Query("limit") limit = 50,
+    @Query("keyword") keyword: string | undefined,
+    @Query("groupId") groupId: string | undefined,
     @CurrentUser() user: any,
   ) {
     return this.sessionService.getArchivedSessions(
       user.id,
       Number(skip),
       Number(limit),
+      keyword?.trim() || undefined,
+      groupId,
     );
   }
 
@@ -233,6 +237,28 @@ export class SessionsController {
     const workspacePath = await this.workspaceService.resolveSessionWorkspaceDir(session);
 
     return { workspacePath };
+  }
+
+  @Get("sessions/:id/plan")
+  async getSessionPlan(@Param("id") id: string, @CurrentUser() user: any) {
+    const session = await this.sessionService.getSessionById(id, user.id);
+    if (!session) {
+      throw new HttpException("Session not found or unauthorized", HttpStatus.NOT_FOUND);
+    }
+
+    const workspacePath = await this.workspaceService.resolveSessionWorkspaceDir(session);
+    const planFile = path.join(workspacePath, ".guada", "plan", "main.json");
+
+    try {
+      const raw = await fsPromises.readFile(planFile, "utf-8");
+      const store = JSON.parse(raw);
+      return { items: store.items || [] };
+    } catch (e: any) {
+      if (e.code === "ENOENT") {
+        return { items: [] };
+      }
+      throw e;
+    }
   }
 
   @Get("sessions/:id/workspace/tree")

@@ -76,7 +76,7 @@ const containerWidth = ref(0);
 const isPane1Collapsed = ref(false);
 const isPane2Collapsed = ref(false);
 
-const SPLITTER_SIZE = 4;
+const SPLITTER_SIZE = 1;
 
 /**
  * 将 splitSize 钳制到合法范围
@@ -356,11 +356,23 @@ onUnmounted(() => {
 
 .lite-splitpanes__splitter {
   flex-shrink: 0;
-  width: 4px;
+  width: 1px;
   cursor: col-resize;
   background-color: var(--color-surface, #f5f5f5);
   transition: background-color 0.2s ease;
   position: relative;
+  z-index: 1;
+}
+
+/* 透明伪元素：视觉1px + 布局1px，但鼠标命中区4px */
+.lite-splitpanes__splitter::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 50%;
+  margin-left: -2px;
+  width: 4px;
 }
 
 .lite-splitpanes__splitter:hover {

@@ -8,7 +8,7 @@ import { ImageRecognitionPlugin } from "./builtins/image-recognition.plugin";
 import { MemoryPlugin } from "./builtins/memory.plugin";
 import { TimePlugin } from "./builtins/time.plugin";
 import { BrowserPlugin } from "./builtins/browser.plugin";
-import { TodoPlugin } from "./builtins/todo.plugin";
+import { PlanPlugin } from "./builtins/plan.plugin";
 import { WebSearchPlugin } from "./builtins/web-search.plugin";
 import { MetasoProvider } from "./builtins/search-providers/metaso.provider";
 import { TavilyProvider } from "./builtins/search-providers/tavily.provider";
@@ -27,7 +27,7 @@ import { PromptCollector } from "./prompt-collector.service";
     MemoryPlugin,
     TimePlugin,
     BrowserPlugin,
-    TodoPlugin,
+    PlanPlugin,
     WebSearchPlugin,
     MetasoProvider,
     TavilyProvider,
@@ -48,7 +48,7 @@ export class PluginsModule implements OnModuleInit {
     await this.pluginManager.registerPlugin(this.moduleRef.get(MemoryPlugin));
     await this.pluginManager.registerPlugin(this.moduleRef.get(TimePlugin));
 
-    await this.pluginManager.registerPlugin(this.moduleRef.get(TodoPlugin));
+    await this.pluginManager.registerPlugin(this.moduleRef.get(PlanPlugin));
     await this.pluginManager.registerPlugin(this.moduleRef.get(WebSearchPlugin));
 
     if (process.env.ELECTRON_APP === "true") {

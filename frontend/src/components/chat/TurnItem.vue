@@ -38,7 +38,7 @@
         <div class="file-list flex flex-wrap gap-2 mt-3 ml-auto" v-if="turn.user.files?.length > 0">
           <FileItem v-for="file, index in turn.user.files" :key="file.id" :name="file.displayName" :type="file.fileType"
             :ext="file.fileExtension" :size="file.fileSize" :preview-url="file.previewUrl"
-            :clickable="file.fileType === 'image'" @click="handleImageClick(index)"></FileItem>
+            :clickable="file.fileType === 'image'" @click="handleImageClick(Number(index))"></FileItem>
         </div>
         <!-- 用户操作按钮 -->
         <MessageActions v-if="true" :is-assistant="false" :is-last="false"

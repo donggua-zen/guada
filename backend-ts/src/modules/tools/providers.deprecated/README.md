@@ -7,6 +7,6 @@
 示例参考：
 - `plugins/builtins/file.plugin.ts`
 - `plugins/builtins/browser.plugin.ts`
-- `plugins/builtins/todo.plugin.ts`
+- `plugins/builtins/plan.plugin.ts`
 
 遗留文件仅供参考，部分逻辑已迁移至对应 plugin 中。

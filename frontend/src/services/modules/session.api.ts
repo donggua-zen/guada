@@ -6,7 +6,7 @@ export interface SessionApi {
   deleteSession(sessionId: string, deleteWorkspace?: boolean): Promise<{ success: boolean }>;
   fetchSession(sessionId: string): Promise<Session>;
   fetchSessions(skip?: number, limit?: number, groupId?: string | null, keyword?: string, includeArchived?: boolean): Promise<SessionListResponse>;
-  fetchArchivedSessions(skip?: number, limit?: number): Promise<SessionListResponse>;
+  fetchArchivedSessions(skip?: number, limit?: number, keyword?: string, groupId?: string | null): Promise<SessionListResponse>;
   archiveSession(sessionId: string, archived: boolean): Promise<{ success: boolean; session?: any }>;
   batchArchiveSessions(sessionIds: string[], archived: boolean): Promise<{ success: boolean; skipped: string[] }>;
   updateSession(sessionId: string, data: any): Promise<Session>;
@@ -285,6 +285,7 @@ export interface SessionApi {
   }>;
   getWorkspacePath(sessionId: string): Promise<{ workspacePath: string }>;
   updateSessionWorkspacePath(sessionId: string, workspacePath: string): Promise<{ success: boolean }>;
+  getSessionPlan(sessionId: string): Promise<{ items: Array<{ content: string; status: string }> }>;
 }
 
 export const sessionApi: SessionApi = {
@@ -317,10 +318,12 @@ export const sessionApi: SessionApi = {
     return await this._request(url);
   },
 
-  async fetchArchivedSessions(this: ApiContext, skip?: number, limit?: number) {
+  async fetchArchivedSessions(this: ApiContext, skip?: number, limit?: number, keyword?: string, groupId?: string | null) {
     const params = new URLSearchParams();
     if (skip !== undefined) params.append("skip", skip.toString());
     if (limit !== undefined) params.append("limit", limit.toString());
+    if (keyword) params.append("keyword", keyword);
+    if (groupId !== undefined) params.append("groupId", groupId === null ? "null" : groupId);
 
     const queryString = params.toString();
     const url = queryString ? `/sessions/archived?${queryString}` : "/sessions/archived";
@@ -425,5 +428,9 @@ export const sessionApi: SessionApi = {
       method: "PUT",
       data: { workspacePath },
     });
+  },
+
+  async getSessionPlan(this: ApiContext, sessionId: string) {
+    return await this._request(`/sessions/${sessionId}/plan`);
   },
 };
