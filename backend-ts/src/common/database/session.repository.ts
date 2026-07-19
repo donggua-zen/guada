@@ -73,18 +73,30 @@ export class SessionRepository {
   }
 
   /**
-   * 获取用户已归档的会话列表
+   * 获取用户已归档的会话列表，支持关键词搜索和分组筛选
    */
   async findArchivedByUserId(
     userId: string,
     skip: number = 0,
     limit: number = 50,
+    keyword?: string,
+    groupId?: string | null,
   ) {
     const where: any = {
       userId,
       sessionType: 'web',
       archived: true,
     };
+
+    if (groupId === null) {
+      where.groupId = null;
+    } else if (groupId !== undefined) {
+      where.groupId = groupId;
+    }
+
+    if (keyword) {
+      where.title = { contains: keyword };
+    }
 
     const [items, total] = await Promise.all([
       this.prisma.session.findMany({

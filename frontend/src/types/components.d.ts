@@ -136,6 +136,7 @@ declare module 'vue' {
     SessionGroupManage: typeof import('./../components/session/SessionGroupManage.vue')['default']
     SessionGroupManageDialog: typeof import('./../components/session/SessionGroupManageDialog.vue')['default']
     SessionManagement: typeof import('./../components/session/SessionManagement.vue')['default']
+    SessionPlanList: typeof import('./../components/chat/SessionPlanList.vue')['default']
     SessionSearchDialog: typeof import('./../components/SessionSearchDialog.vue')['default']
     SessionSettingsDialog: typeof import('./../components/chat/chat-input/SessionSettingsDialog.vue')['default']
     SetupGuide: typeof import('./../components/SetupGuide.vue')['default']

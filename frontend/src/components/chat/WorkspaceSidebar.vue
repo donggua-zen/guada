@@ -8,7 +8,9 @@
         <div v-show="!selectedFile" class="h-full flex flex-col flex-1 min-h-0">
             <!-- 浏览器窗口列表（仅 Electron 环境，置于最上方确保可见） -->
             <SessionBrowserWindowList v-if="isElectron" :session-id="props.sessionId" />
-            <div class="border-b border-gray-100 dark:border-[#2e3035] mx-4 mt-3"></div>
+            <div v-if="isElectron" class="border-b border-gray-100 dark:border-[#2e3035] mx-4 mt-3"></div>
+            <!-- 计划事项列表 -->
+            <SessionPlanList :session-id="props.sessionId" />
             <!-- 头部 -->
             <div class="shrink-0 flex items-center justify-between px-2 py-3 ">
                 <h3 class="text-sm font-normal text-gray-500 dark:text-[#8b8d95] whitespace-nowrap mx-2">
@@ -184,6 +186,7 @@ import { useHighlight } from '@/composables/useHighlight';
 import ContextMenu, { type ContextMenuItem } from '@/components/ui/ContextMenu.vue';
 import WorkspaceSettingsDialog from './chat-input/WorkspaceSettingsDialog.vue';
 import SessionBrowserWindowList from './SessionBrowserWindowList.vue';
+import SessionPlanList from './SessionPlanList.vue';
 import WorkspaceTree from './WorkspaceTree.vue';
 import type { WorkspaceNode } from './WorkspaceTree.vue';
 import WindowControls from '@/components/WindowControls.vue';

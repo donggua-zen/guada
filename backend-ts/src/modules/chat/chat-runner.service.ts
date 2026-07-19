@@ -109,7 +109,7 @@ export class ChatRunnerService {
     // 提取前端传入的 clientId，用于广播事件的 source 字段
     const clientId = source?.clientId as string | undefined;
     if (userMessage) {
-      userMessage.metadata = { ...userMessage?.metadata, source };
+      userMessage.metadata = { ...userMessage?.metadata, ...source };
     }
     // 获取会话
     const session = await this.sessionService.getSessionById(sessionId, userId);

@@ -212,6 +212,9 @@ const currentSession = ref<any>({
     memoryEnabled: false,  // 默认使用角色配置
     // 思考强度配置 - 从 localStorage 恢复用户上次选择
     thinkingEffort: userSelectedThinkingEffort.value,
+
+    // 运行模式 - 默认工作模式
+    runMode: 'normal',
     // 新增：memory 分组配置（压缩与记忆配置）
     memory: {
       maxMemoryLength: null,
@@ -565,6 +568,9 @@ const chatInputConfig = computed(() => ({
   // 知识库 IDs - 对应 handleConfigChange 中的 config.knowledgeBaseIds
   knowledgeBaseIds: currentSession.value?.settings?.referencedKbs || [],
 
+  // 运行模式 - 对应 handleConfigChange 中的 config.runMode
+  runMode: currentSession.value?.settings?.runMode || 'normal',
+
   // 工作目录路径 - 对应 handleConfigChange 中的 config.workspacePath
   workspacePath: currentSession.value?.workspacePath || null,
 
@@ -627,6 +633,12 @@ const handleConfigChange = (config: any): void => {
   if (typeof config.workspacePath !== 'undefined') {
     currentSession.value.workspacePath = config.workspacePath;
     console.log('保存 workspacePath 到会话:', config.workspacePath);
+  }
+
+  // 处理运行模式变更
+  if (typeof config.runMode !== 'undefined') {
+    currentSession.value.settings.runMode = config.runMode;
+    console.log('保存 runMode 到会话:', config.runMode);
   }
 
   // 处理分组选择

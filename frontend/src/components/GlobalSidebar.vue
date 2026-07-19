@@ -679,6 +679,10 @@ const handleArchiveSession = async (session: any) => {
       // 从 sessionStore 中删除（不再展示在侧边栏）
       sessionStore.removeSession(session.id)
       sessionStore.clearSidebarState(session.id)
+      // 如果归档的是当前会话，跳转到新建会话页面
+      if (currentSessionId.value === session.id) {
+        router.replace({ name: 'Chat', params: { sessionId: 'new-session' } })
+      }
       toast.success('会话已归档')
     }
   } catch (error: any) {

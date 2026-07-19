@@ -11,7 +11,8 @@ export type SessionEventType =
   | "stream_finished"
   | "user_message_created"
   | "sub_agent_create"
-  | "sub_agent_closed";
+  | "sub_agent_closed"
+  | "plan_updated";
 
 /**
  * 会话事件
