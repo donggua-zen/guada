@@ -87,19 +87,22 @@
       <div class="w-full flex items-center relative" style="margin-top: -16px;z-index: 30;">
         <ChatInput v-model:value="inputMessage.content" v-model:files="inputMessage.files"
           :session-id="effectiveSessionId" :config="chatInputConfig" :streaming="isStreaming" :readonly="readonly"
-          mode="chat" @config-change="handleConfigChange" @send="handleSendMessage" @abort="abortResponse"
-          @toggle-workspace-pane="emit('toggle-workspace-pane')">
-          <template #toolbar-actions>
-            <!-- 上下文使用率指示器：10 格竖条 -->
-            <el-button class="workspace-btn" @click="memoPanelVisible = true" text>
-              <el-icon size="16">
-                <Database24Regular />
-              </el-icon>
-              <div class="bar-indicator flex items-end gap-0.5">
-                <div v-for="i in 10" :key="i" class="bar"
-                  :class="{ active: sharedTokenStats && i <= activeBars, [barColor]: true }" />
-              </div>
-            </el-button>
+          mode="chat" @config-change="handleConfigChange" @send="handleSendMessage" @abort="abortResponse">
+          <template #right-actions-before>
+            <!-- 上下文使用率：圆形进度条 -->
+            <el-tooltip :content="contextTooltip" placement="top">
+              <button class="context-ring-btn" @click="memoPanelVisible = true">
+                <svg class="context-ring" width="16" height="16" viewBox="0 0 36 36">
+                  <circle class="ring-bg" cx="18" cy="18" r="15" fill="none" stroke-width="3.5" />
+                  <circle class="ring-fg" cx="18" cy="18" r="15" fill="none" stroke-width="3.5"
+                    :stroke="ringColor"
+                    :stroke-dasharray="ringCircumference"
+                    :stroke-dashoffset="ringDashOffset"
+                    stroke-linecap="round"
+                    transform="rotate(-90 18 18)" />
+                </svg>
+              </button>
+            </el-tooltip>
           </template>
         </ChatInput>
       </div>
@@ -140,7 +143,6 @@ import WelcomeScreen from './WelcomeScreen.vue';
 const MemoPanel = defineAsyncComponent(() => import("./MemoPanel.vue"));
 import { LoadingOutlined } from '@vicons/antd'
 import { Loading } from '@element-plus/icons-vue'
-import { Database24Regular } from '@vicons/fluent'
 import AgentSwitcherBar from './AgentSwitcherBar.vue';
 
 
@@ -156,18 +158,30 @@ const sessionStore = useSessionStore();
 // 记忆管理弹窗显隐
 const memoPanelVisible = ref(false);
 
-// 上下午使用率指示器：10 格竖条
-const activeBars = computed(() => {
+// 上下文使用率：圆形进度条
+const ringPercent = computed(() => {
   if (!sharedTokenStats.value) return 0;
-  return Math.ceil(sharedTokenStats.value.percentage / 10);
+  return Math.round(sharedTokenStats.value.percentage);
 });
 
-const barColor = computed(() => {
-  if (!sharedTokenStats.value) return 'bar-gray';
-  const pct = sharedTokenStats.value.percentage;
-  if (pct >= 80) return 'bar-orange';
-  if (pct >= 60) return 'bar-yellow';
-  return 'bar-green';
+const ringCircumference = 2 * Math.PI * 15; // r=15
+
+const ringDashOffset = computed(() => {
+  const pct = ringPercent.value;
+  return ringCircumference * (1 - pct / 100);
+});
+
+const ringColor = computed(() => {
+  const pct = ringPercent.value;
+  if (pct >= 80) return '#f56c6c';
+  if (pct >= 60) return '#e6a23c';
+  return '#67c23a';
+});
+
+const contextTooltip = computed(() => {
+  if (!sharedTokenStats.value) return '上下文使用率';
+  const pct = ringPercent.value;
+  return `上下文使用率 ${pct}%`;
 });
 
 // Props & Emits - 类型化
@@ -182,7 +196,6 @@ const emit = defineEmits<{
   'update:session': [session: Session]
   openSettings: []
   'save-settings': []
-  'toggle-workspace-pane': []
   'select-character': [character: Character]  // 切换角色
 }>();
 
@@ -2473,31 +2486,29 @@ function scrollToMessage(messageId: string) {
   transition: all 0.2s;
 }
 
-/* 竖条指示器 */
-.bar-indicator {
-  height: 10px;
-  margin: 2px 0 2px 4px;
+/* 圆形进度条按钮 */
+.context-ring-btn {
   display: flex;
-  align-items: flex-end;
+  align-items: center;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 6px;
+  transition: background 0.2s;
+  outline: none;
 }
 
-.bar-indicator .bar {
-  width: 2px;
-  height: 100%;
-  border-radius: 1px;
-  background-color: #e0e0e0;
-  transition: background-color 0.3s;
+.context-ring-btn:hover {
+  background: var(--color-sidebar-bg-hover);
 }
 
-.bar-indicator .bar.active.bar-green {
-  background-color: #67c23a;
+.context-ring .ring-bg {
+  stroke: var(--color-text-disabled);
+  opacity: 0.3;
 }
 
-.bar-indicator .bar.active.bar-yellow {
-  background-color: #e6a23c;
-}
-
-.bar-indicator .bar.active.bar-orange {
-  background-color: #f56c6c;
+.context-ring .ring-fg {
+  transition: stroke-dashoffset 0.3s ease, stroke 0.3s ease;
 }
 </style>

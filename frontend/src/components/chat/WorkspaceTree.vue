@@ -46,4 +46,12 @@ const emit = defineEmits<{
     padding: 0 8px;
     min-width: fit-content;
 }
+
+.workspace-tree-custom > .tree-node + .tree-node {
+    margin-top: 2px;
+}
+
+.workspace-tree-custom :deep(.tree-children > .tree-node + .tree-node) {
+    margin-top: 2px;
+}
 </style>

@@ -8,11 +8,10 @@
         <span class="text-sm font-semibold text-gray-800 dark:text-gray-200">思考强度</span>
       </div>
     </template>
-    <div class="popover-content space-y-1">
+    <div class="popover-content space-y-0.5">
       <div v-for="effort in options" :key="effort"
-        class="flex items-center justify-between px-2 py-1.5 rounded cursor-pointer transition-all text-sm" :class="{
-          'bg-pink-50 dark:bg-pink-900/20': currentValue === effort,
-          'hover:bg-gray-50 dark:hover:bg-gray-800/50': currentValue !== effort
+        class="te-item flex items-center justify-between px-2 py-1.5 rounded cursor-pointer transition-all text-sm" :class="{
+          'te-item-active': currentValue === effort
         }" :data-effort="effort" @click="handleSelect(effort)">
         <span>{{ getLabel(effort) }}</span>
         <span class="text-xs text-gray-400 dark:text-gray-500">{{ effort }}</span>
@@ -58,5 +57,13 @@ function handleSelect(effort: string) {
 <style scoped>
 .popover-content {
   padding: 4px 0;
+}
+
+.te-item:hover {
+  background: var(--color-sidebar-bg-hover);
+}
+
+.te-item-active {
+  background: var(--color-sidebar-bg-active);
 }
 </style>

@@ -18,6 +18,7 @@ declare module 'vue' {
     AgentTabBar: typeof import('./../components/chat/AgentTabBar.vue')['default']
     AppearanceSettings: typeof import('./../components/setting/AppearanceSettings.vue')['default']
     ArchivedSessions: typeof import('./../components/setting/ArchivedSessions.vue')['default']
+    AttachmentPopover: typeof import('./../components/chat/chat-input/AttachmentPopover.vue')['default']
     Avatar: typeof import('./../components/ui/Avatar.vue')['default']
     AvatarPreview: typeof import('./../components/ui/AvatarPreview.vue')['default']
     BackendWaitingOverlay: typeof import('./../components/BackendWaitingOverlay.vue')['default']

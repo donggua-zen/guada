@@ -117,29 +117,21 @@ async function toggle() {
     display: flex;
     align-items: center;
     gap: 4px;
-    height: 32px;
+    height: 26px;
     padding: 0 8px 0 8px;
     border-radius: 4px;
     cursor: pointer;
     font-size: 13px;
-    color: var(--color-text, #333);
+    color: var(--color-text);
     transition: background-color 0.15s;
 }
 
 .tree-node-content:hover {
-    background-color: var(--el-color-primary-light-9, rgba(0, 0, 0, 0.04));
-}
-
-.dark .tree-node-content:hover {
-    background-color: rgba(255, 255, 255, 0.08);
+    background-color: var(--color-sidebar-bg-hover);
 }
 
 .tree-node-content.is-selected {
-    background-color: var(--el-color-primary-light-9, rgba(0, 0, 0, 0.06)) !important;
-}
-
-.dark .tree-node-content.is-selected {
-    background-color: rgba(255, 255, 255, 0.08) !important;
+    background-color: var(--color-sidebar-bg-active) !important;
 }
 
 .expand-icon {
@@ -148,12 +140,8 @@ async function toggle() {
     justify-content: center;
     width: 16px;
     height: 16px;
-    color: var(--color-text-gray, #666);
-    flex-shrink: 0;
-}
-
-.dark .expand-icon {
     color: var(--color-text-gray);
+    flex-shrink: 0;
 }
 
 .expand-icon-placeholder {
@@ -173,7 +161,7 @@ async function toggle() {
 }
 
 .file-icon {
-    color: var(--color-text-gray, #999);
+    color: var(--color-text-gray);
 }
 
 .node-label {
@@ -189,7 +177,7 @@ async function toggle() {
     justify-content: center;
     width: 16px;
     height: 16px;
-    color: var(--color-text-gray, #666);
+    color: var(--color-text-gray);
     flex-shrink: 0;
     margin-left: auto;
 }

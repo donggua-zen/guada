@@ -24,8 +24,7 @@
           <div v-else class="space-y-1">
             <div v-for="kb in filteredKnowledgeBases" :key="kb.id"
               class="kb-item-compact p-2 rounded cursor-pointer transition-all flex items-center gap-2" :class="{
-                'bg-pink-50 dark:bg-pink-900/20': selectedIds.includes(kb.id),
-                'hover:bg-gray-50 dark:hover:bg-gray-800/50': !selectedIds.includes(kb.id)
+                'kb-item-active': selectedIds.includes(kb.id)
               }" @click="handleToggle(kb.id)">
               <el-checkbox :model-value="selectedIds.includes(kb.id)" @click.stop @change="handleToggle(kb.id)"
                 size="small" />
@@ -100,11 +99,11 @@ watch(() => props.visible, (newVal) => {
 }
 
 .kb-item-compact:hover {
-  background-color: var(--el-fill-color-light, #f5f7fa);
+  background: var(--color-sidebar-bg-hover);
 }
 
-.dark .kb-item-compact:hover {
-  background-color: oklch(30% 0.03 250);
+.kb-item-active {
+  background: var(--color-sidebar-bg-active);
 }
 
 .kb-list-container {

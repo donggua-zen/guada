@@ -57,101 +57,85 @@
       <div class="input-actions w-full flex justify-between">
         <div class="tools left-tools flex gap-0.5 items-center">
           <slot name="buttons"></slot>
+          <!-- 运行模式按钮 -->
+          <template v-if="!props.readonly">
+            <button ref="runModeButtonRef" class="tool-btn" @click.stop="toggleRunModePopover">
+              <el-icon size="16">
+                <component :is="runModeIcon" class="text-gray-600" />
+              </el-icon>
+              <span class="text-xs font-medium">{{ runModeLabel }}</span>
+            </button>
+            <RunModePopover v-model:visible="runModePopoverVisible" :anchor-el="runModeButtonRef"
+              :current-value="currentRunMode" @select="handleRunModeChange" />
+            <el-divider direction="vertical"></el-divider>
+          </template>
+
+          <!-- 附件/图片/知识库按钮 -->
+          <template v-if="!props.readonly">
+            <button ref="attachButtonRef" class="tool-btn" @click.stop="toggleAttachPopover">
+              <el-icon size="16">
+                <Add24Regular />
+              </el-icon>
+            </button>
+            <AttachmentPopover v-model:visible="attachPopoverVisible" :anchor-el="attachButtonRef"
+              :knowledge-bases="knowledgeBases" :selected-ids="props.config?.knowledgeBaseIds || []"
+              @select-image="triggerImageInput" @select-file="triggerFileInput"
+              @toggle-kb="toggleKnowledgeBaseSelection" />
+          </template>
+        </div>
+        <div class="right-actions flex items-center gap-1">
+          <slot name="right-actions-before" />
+          <!-- 模型选择按钮 -->
+          <button ref="modelButtonRef" @click.stop="openModelPanel" class="model-selector-btn">
+            <span class="text-sm font-medium truncate flex-1 min-w-0"
+              style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">{{
+                currentModelName }}</span>
+          </button>
+          <!-- 思考强度按钮 -->
           <template v-if="showButtons.thinkingButton && currentModel">
-            <!-- 思考强度按钮 -->
-            <el-button ref="thinkingButtonRef" class="tool-btn" text @click.stop="toggleThinkingPopover">
-              <el-icon size="20" :class="{ 'thinking-active': localThinkingEffort !== 'off' }">
+            <button ref="thinkingButtonRef" class="tool-btn" @click.stop="toggleThinkingPopover">
+              <el-icon size="16" :class="{ 'thinking-active': localThinkingEffort !== 'off' }">
                 <LightbulbFilament24Regular />
               </el-icon>
               <span class="text-xs font-medium" :class="{ 'thinking-active-text': localThinkingEffort !== 'off' }">{{
                 getThinkingEffortShortLabel(localThinkingEffort) }}</span>
-            </el-button>
-
-            <!-- 思考强度弹窗 -->
-            <ThinkingEffortPopover v-model:visible="thinkingPopoverVisible" :anchor-el="thinkingButtonRef?.$el"
+            </button>
+            <ThinkingEffortPopover v-model:visible="thinkingPopoverVisible" :anchor-el="thinkingButtonRef"
               :options="thinkingEffortOptions" :current-value="localThinkingEffort"
               @select="handleThinkingEffortChange" />
-            <el-divider direction="vertical"></el-divider>
           </template>
-
-          <!-- 图片按钮（高频使用，放在左侧） -->
-          <el-tooltip v-if="!props.readonly" content="添加图片" placement="top">
-            <el-button class="tool-btn" @click="triggerImageInput" text>
-              <el-icon size="22">
-                <Image24Regular />
+          <!-- 会话设置按钮 -->
+          <el-tooltip v-if="!props.readonly" content="会话设置" placement="top">
+            <button class="tool-btn" @click.stop="openSettingsPanel">
+              <el-icon size="16">
+                <Settings24Regular />
               </el-icon>
-            </el-button>
+            </button>
           </el-tooltip>
-          <!-- 附件按钮（高频使用，放在左侧） -->
-          <el-tooltip v-if="!props.readonly" content="上传文件" placement="top">
-            <el-button class="tool-btn" @click="triggerFileInput" text>
-              <el-icon size="22">
-                <Attach24Regular />
-              </el-icon>
-            </el-button>
+          <!-- 发送/停止按钮 -->
+          <el-tooltip v-if="!streaming" content="发送" placement="top">
+            <button class="send-btn" @click="sendMessage"
+              :disabled="props.readonly || !inputContent.trim() || !props.config?.modelId">
+              <el-icon size="20"><Send24Filled /></el-icon>
+            </button>
           </el-tooltip>
-          <!-- 知识库选择按钮 -->
-          <el-tooltip v-if="!props.readonly" content="知识库" placement="top">
-            <el-button ref="kbButtonRef" class="tool-btn" @click.stop="openKnowledgeBasePanel" text>
-              <el-icon size="22">
-                <BookSearch24Regular />
-              </el-icon>
-            </el-button>
+          <el-tooltip v-else content="停止生成" placement="top">
+            <button class="send-btn stop-btn" @click="abortResponse">
+              <el-icon size="20"><Stop24Filled /></el-icon>
+            </button>
           </el-tooltip>
-        </div>
-        <div class="right-actions">
-          <!-- 模型选择按钮 -->
-          <el-button ref="modelButtonRef" @click.stop="openModelPanel" plain
-            class="model-selector-btn rounded-full overflow-hidden flex items-center justify-center">
-            <div class="flex items-center gap-1.5" style="height:24px; max-width: 200px;">
-              <span class="text-sm font-medium truncate flex-1 min-w-0"
-                style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">{{
-                  currentModelName }}</span>
-            </div>
-          </el-button>
-          <div class="tools right-tools">
-            <!-- 会话设置按钮 -->
-            <el-tooltip v-if="!props.readonly" content="会话设置" placement="top">
-              <el-button class="tool-btn" @click.stop="openSettingsPanel" text>
-                <el-icon size="22">
-                  <Settings24Regular />
-                </el-icon>
-              </el-button>
-            </el-tooltip>
-          </div>
-          <div>
-            <el-tooltip v-if="!streaming" content="发送" placement="top">
-              <el-button class="send-btn" type="primary" @click="sendMessage" circle
-                :disabled="props.readonly || !inputContent.trim() || !props.config?.modelId" :icon="Send24Filled" />
-            </el-tooltip>
-            <el-tooltip v-else content="停止生成" placement="top">
-              <el-button class="send-btn stop-btn" @click="abortResponse" circle type="danger" :icon="Stop24Filled">
-              </el-button>
-            </el-tooltip>
-          </div>
         </div>
       </div>
 
       <!-- 模型选择器弹窗 -->
-      <ModelSelectorPanel v-model:visible="modelPanelVisible" :anchor-el="modelButtonRef?.$el" :models="models"
+      <ModelSelectorPanel v-model:visible="modelPanelVisible" :anchor-el="modelButtonRef" :models="models"
         :providers="providers" :current-model-id="props.config?.modelId || null" @select="handleModelSelect"
         @favorite-changed="handleFavoriteChanged" />
-
-      <!-- 知识库选择弹窗 -->
-      <KnowledgeBasePanel v-model:visible="kbPanelVisible" :anchor-el="kbButtonRef?.$el"
-        :knowledge-bases="knowledgeBases" :selected-ids="props.config?.knowledgeBaseIds || []"
-        @toggle="toggleKnowledgeBaseSelection" />
 
       <!-- 会话设置模态框 -->
       <SessionSettingsDialog v-model:visible="settingsDialogVisible" :config="sessionMemoryConfig"
         @confirm="applySessionSettings" @cancel="settingsDialogVisible = false" />
     </div>
-    <ChatInputToolbar :mode="mode" :config="props.config" @config-change="onToolbarConfigChange"
-      @toggle-workspace-pane="$emit('toggle-workspace-pane')">
-      <template #actions>
-        <slot name="toolbar-actions" />
-      </template>
-    </ChatInputToolbar>
   </div>
 </template>
 
@@ -168,10 +152,11 @@ import Avatar from '../ui/Avatar.vue';
 import ElSliderOptional from '../ui/ElSliderOptional.vue';
 import CustomPopover from '../ui/CustomPopover.vue';
 import KnowledgeBasePanel from './chat-input/KnowledgeBasePanel.vue';
+import AttachmentPopover from './chat-input/AttachmentPopover.vue';
 import SessionSettingsDialog from './chat-input/SessionSettingsDialog.vue';
 import ThinkingEffortPopover from './chat-input/ThinkingEffortPopover.vue';
+import RunModePopover from './chat-input/RunModePopover.vue';
 import ModelSelectorPanel from './chat-input/ModelSelectorPanel.vue';
-import ChatInputToolbar from './chat-input/ChatInputToolbar.vue';
 import { CommandNode } from './chat-input/commandNode';
 import CommandPicker from './chat-input/CommandPicker.vue';
 import { getModelDisplayName, getModelAvatarPath, getModelThinkingEfforts, getThinkingEffortLabel } from '@/utils/modelUtils';
@@ -186,7 +171,7 @@ import { Thinking2 } from "@/components/icons";
 import {
   TextT24Regular, LightbulbFilament24Regular, LightbulbFilament24Filled, WrenchScrewdriver24Regular, Image24Regular, Attach24Regular,
   Send24Filled, Stop24Filled, Star24Regular, Star24Filled, Settings24Regular, BookSearch24Regular,
-  Apps20Regular
+  Apps20Regular, DrinkCoffee16Regular, ClipboardTask24Regular, Add24Regular
 } from '@vicons/fluent'
 import {
   ThunderboltOutlined,
@@ -213,7 +198,6 @@ const models = ref([]);
 const providers = ref([]);
 // 弹窗触发按钮引用
 const modelButtonRef = ref<any>(null);
-const kbButtonRef = ref<any>(null);
 // 会话设置对话框相关
 const settingsDialogVisible = ref(false);
 // 知识库选择器相关
@@ -238,7 +222,8 @@ const commandPickerRef = ref<any>();
 const settingsPanelVisible = ref(false)
 // 弹窗面板状态（模型和知识库使用弹窗样式）
 const modelPanelVisible = ref(false)
-const kbPanelVisible = ref(false)
+const attachPopoverVisible = ref(false)
+const attachButtonRef = ref<any>(null)
 
 // 常量定义
 const FILE_TYPES = {
@@ -418,6 +403,22 @@ const localThinkingEffort = ref<string>('off'); // 'off' | 'low' | 'medium' | 'h
 const thinkingButtonRef = ref<any>(null);
 const thinkingPopoverVisible = ref(false);
 
+// 运行模式相关
+const runModeButtonRef = ref<any>(null);
+const runModePopoverVisible = ref(false);
+
+const currentRunMode = computed(() => props.config?.runMode || 'normal');
+const runModeLabel = computed(() => currentRunMode.value === 'plan' ? '计划模式' : '工作模式');
+const runModeIcon = computed(() => currentRunMode.value === 'plan' ? ClipboardTask24Regular : DrinkCoffee16Regular);
+
+const toggleRunModePopover = () => {
+  runModePopoverVisible.value = !runModePopoverVisible.value;
+};
+
+const handleRunModeChange = (mode: string) => {
+  emit('config-change', { runMode: mode });
+};
+
 const thinkingEffortOptions = computed(() => {
   if (!currentModel.value) return [];
   return getModelThinkingEfforts(currentModel.value, providers.value);
@@ -506,8 +507,7 @@ const emit = defineEmits([
   'update:files',
   'send', 'abort', 'files-change',
   'focus', 'blur',
-  'update:modelId', 'config-change', 'update:knowledgeBaseIds',
-  'toggle-workspace-pane'
+  'update:modelId', 'config-change', 'update:knowledgeBaseIds'
 ]);
 
 // 工具函数
@@ -638,29 +638,18 @@ const applySessionSettings = (configChanges: any) => {
   settingsDialogVisible.value = false
 };
 
-// Toolbar 配置变更中转
-const onToolbarConfigChange = (payload: any) => {
-  if (payload.workspacePath) {
-    ElMessage.success('工作目录已更新');
+// 附件弹窗切换
+const toggleAttachPopover = async () => {
+  if (attachPopoverVisible.value) {
+    attachPopoverVisible.value = false;
+    return;
   }
-  emit('config-change', payload);
-};
-
-// 打开知识库面板
-const openKnowledgeBasePanel = async () => {
-  // 如果面板已经打开，则关闭它（实现切换效果）
-  if (kbPanelVisible.value) {
-    kbPanelVisible.value = false
-    return
-  }
-
-  // 重新加载知识库列表，确保数据是最新的
   try {
     await loadKnowledgeBases();
   } catch (error) {
     console.error('加载知识库列表失败:', error);
   }
-  kbPanelVisible.value = true
+  attachPopoverVisible.value = true;
 };
 
 // 切换知识库选中状态 - 立即同步到父组件
@@ -1326,7 +1315,7 @@ onUnmounted(() => {
 .right-actions {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 2px;
 }
 
 .right-tools {
@@ -1335,70 +1324,101 @@ onUnmounted(() => {
 }
 
 
+/* 工具按钮 - 原生 button */
 .tool-btn {
-  color: #888;
+  color: var(--color-text-gray);
   cursor: pointer;
   font-size: 14px;
   height: 28px;
-  padding: 0 3px;
+  padding: 0 6px;
   display: flex;
   align-items: center;
   justify-content: center;
+  gap: 4px;
   transition: all 0.2s;
+  background: transparent;
+  border: none;
+  border-radius: 6px;
+  outline: none;
 }
 
-
-/* 工作目录按钮：继承 tool-btn 样式但高度自适应 */
-.workspace-btn {
-  color: #888;
-  cursor: pointer;
-  font-size: 14px;
-  padding: 0 3px;
-  display: flex;
-  align-items: center;
-  transition: all 0.2s;
+.tool-btn:hover {
+  background: var(--color-sidebar-bg-hover);
+  color: var(--color-text);
 }
 
-
-.right-tools .tool-btn {
-  padding: 0 3px;
+.tool-btn:active {
+  background: var(--color-sidebar-bg-active);
 }
 
-/* 深度思考按钮激活状态样式 */
-.tool-btn.active {
-  border-color: var(--color-primary);
-  background-color: var(--color-primary-0f);
-  color: var(--color-primary);
-}
-
-/* 模型选择器按钮样式 */
+/* 模型选择器按钮 - 原生 button */
 .model-selector-btn {
-  transition: all 0.3s ease-in-out;
-  overflow: hidden;
-  height: 32px;
-  padding: 6px 6px;
-  border-color: transparent;
+  cursor: pointer;
+  height: 28px;
+  padding: 0 8px;
+  border: none;
+  border-radius: 16px;
   background-color: transparent;
-  color: var(--el-text-color-regular);
+  color: var(--color-text);
   display: flex;
   align-items: center;
   justify-content: center;
+  max-width: 180px;
+  overflow: hidden;
+  transition: all 0.2s;
+  outline: none;
+  font-size: 12px;
 }
 
 .model-selector-btn:hover {
-  background-color: var(--el-fill-color-light, #f5f7fa);
-  border-color: transparent;
-  color: var(--el-text-color-primary);
+  background: var(--color-sidebar-bg-hover);
+  color: var(--color-text);
 }
 
 .model-selector-btn:active {
-  background-color: var(--el-fill-color, #e5e9ed);
+  background: var(--color-sidebar-bg-active);
 }
 
-/* 移动端适配 */
-@media (max-width: 768px) {
-  .model-selector-btn {
-    display: none !important;
-  }
+/* 发送按钮 - 原生 button */
+.send-btn {
+  cursor: pointer;
+  width: 32px;
+  height: 32px;
+  border: none;
+  border-radius: 50%;
+  background-color: var(--color-primary);
+  color: var(--color-primary-text);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+  outline: none;
+  flex-shrink: 0;
+}
+
+.send-btn:hover:not(:disabled) {
+  background-color: var(--color-primary-hover);
+}
+
+.send-btn:active:not(:disabled) {
+  background-color: var(--color-primary-active);
+}
+
+.send-btn:disabled {
+  background-color: var(--color-text-disabled);
+  cursor: not-allowed;
+}
+
+.send-btn.stop-btn {
+  background-color: #f56c6c;
+  color: #fff;
+}
+
+.send-btn.stop-btn:hover {
+  background-color: #f78989;
+}
+
+.send-btn.stop-btn:active {
+  background-color: #e64242;
 }
 </style>
