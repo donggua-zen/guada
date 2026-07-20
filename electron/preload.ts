@@ -107,6 +107,21 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getBrowserWindowVisibility: (windowId: string) =>
     ipcRenderer.invoke('browser:get-window-visibility', { windowId }),
 
+  // Webview 生命周期事件（主进程 → 前端）
+  onCreateWebview: (callback: (event: any, data: { windowId: string; partition: string; url: string; preloadUrl: string; metadata?: any }) => void) => {
+    ipcRenderer.on('browser:create-webview', callback)
+  },
+  onDestroyWebview: (callback: (event: any, data: { windowId: string }) => void) => {
+    ipcRenderer.on('browser:destroy-webview', callback)
+  },
+  onSetWebviewVisibility: (callback: (event: any, data: { windowId: string; visible: boolean }) => void) => {
+    ipcRenderer.on('browser:set-webview-visibility', callback)
+  },
+
+  // 清空所有浏览器自动化 session 数据（cookie、缓存、localStorage 等，不影响主程序）
+  clearBrowserData: () =>
+    ipcRenderer.invoke('browser:clear-all-data'),
+
   // 托盘悬浮窗：推送聚合统计数据（fire-and-forget）
   updateTrayStats: (stats: { running: number; unread: number }) =>
     ipcRenderer.send('tray:update-stats', stats),

@@ -1,32 +1,39 @@
 <template>
     <div class="workspace-sidebar h-full flex flex-col">
         <!-- 顶部工具栏：预览模式下显示资源管理器按钮 + 浏览器标签 + 窗口控制 -->
-        <div v-if="isElectron" class="flex items-center h-11 drag-region shrink-0 border-b border-gray-100 dark:border-[#2e3035]">
+        <div v-if="isElectron"
+            class="flex items-center h-11 drag-region shrink-0 border-b border-gray-100 dark:border-[#2e3035]">
             <!-- 资源管理器切换按钮（任何预览模式都显示：文件预览或 webview 预览） -->
             <el-tooltip v-if="browserStore.activeWindowId || selectedFile" content="返回工作目录" placement="bottom">
                 <div class="cursor-pointer p-1 rounded-lg text-gray-600 dark:text-[#8b8d95] transition-all duration-200 hover:bg-gray-100 dark:hover:bg-[#2a2c30] hover:text-gray-900 dark:hover:text-[#e8e9ed] no-drag ml-1 flex items-center"
                     @click="showFileTree">
-                    <el-icon class="w-5 h-5"><FolderOpened /></el-icon>
+                    <el-icon class="w-5 h-5">
+                        <FolderOpened />
+                    </el-icon>
                 </div>
             </el-tooltip>
 
             <!-- 标签 + 新建按钮容器（仅 webview 预览模式显示） -->
-            <div v-if="browserStore.activeWindowId" class="flex items-center gap-0.5 flex-1 overflow-x-auto no-drag browser-tabs-scroll">
-                <div v-for="win in browserStore.sessionWebviews" :key="win.windowId"
-                    class="browser-tab" :class="{ active: browserStore.activeWindowId === win.windowId }"
-                    :title="win.title || '未命名窗口'"
+            <div v-if="browserStore.activeWindowId"
+                class="flex items-center gap-0.5 flex-1 overflow-x-auto no-drag browser-tabs-scroll">
+                <div v-for="win in browserStore.sessionWebviews" :key="win.windowId" class="browser-tab"
+                    :class="{ active: browserStore.activeWindowId === win.windowId }" :title="win.title || '未命名窗口'"
                     @click="activateBrowserWindow(win.windowId)">
                     <img v-if="win.favicon" :src="win.favicon" class="tab-favicon" alt=""
                         @error="(e: Event) => (e.target as HTMLImageElement).style.display = 'none'" />
                     <span v-else class="tab-globe">
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <circle cx="12" cy="12" r="10"/>
-                            <path d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="2">
+                            <circle cx="12" cy="12" r="10" />
+                            <path
+                                d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />
                         </svg>
                     </span>
                     <span class="tab-title">{{ truncateTabTitle(win.title || '新窗口') }}</span>
                     <span class="tab-close" @click.stop="closeBrowserWindow(win.windowId)">
-                        <el-icon size="10"><Close /></el-icon>
+                        <el-icon size="10">
+                            <Close />
+                        </el-icon>
                     </span>
                 </div>
 
@@ -36,8 +43,11 @@
                         :disabled="!props.sessionId" @click="createNewBrowserWindow">
                         浏览器
                     </button>
-                    <button v-else class="sidebar-tool-btn no-drag" :disabled="!props.sessionId" @click="createNewBrowserWindow">
-                        <el-icon size="14"><Plus /></el-icon>
+                    <button v-else class="sidebar-tool-btn no-drag" :disabled="!props.sessionId"
+                        @click="createNewBrowserWindow">
+                        <el-icon size="14">
+                            <Plus />
+                        </el-icon>
                     </button>
                 </el-tooltip>
             </div>
@@ -59,7 +69,7 @@
             <!-- 计划事项列表 -->
             <SessionPlanList :session-id="props.sessionId" />
             <!-- 头部 -->
-            <div class="shrink-0 flex items-center justify-between px-2 py-3 ">
+            <div class="shrink-0 flex items-center justify-between px-2  py-3 ">
                 <h3 class="text-sm font-normal text-gray-500 dark:text-[#8b8d95] whitespace-nowrap mx-2">
                     工作目录</h3>
                 <div class="flex items-center gap-0 shrink-0">
@@ -1220,7 +1230,7 @@ async function loadFileContent(filePath: string, force = false, skipLoading = fa
             return;
         }
 
-        
+
 
 
 
@@ -2543,16 +2553,20 @@ onUnmounted(() => {
     .sidebar-tool-btn {
         color: #8b8d95;
     }
+
     .sidebar-tool-btn:hover:not(:disabled) {
         background: #2a2c30;
         color: #e8e9ed;
     }
+
     .browser-tab:hover {
         background: #2a2c30;
     }
+
     .tab-title {
         color: #8b8d95;
     }
+
     .browser-tab.active .tab-title {
         color: #e8e9ed;
     }

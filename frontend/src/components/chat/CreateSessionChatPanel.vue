@@ -217,7 +217,6 @@ const currentSession = ref<any>({
     runMode: 'normal',
     // 新增：memory 分组配置（压缩与记忆配置）
     memory: {
-      maxMemoryLength: null,
       compressionTriggerRatio: 0.8,
       compressionTargetRatio: 0.5,
       summaryMode: DEFAULT_SUMMARY_MODE, // 默认记忆同步模式
@@ -306,7 +305,6 @@ watch(() => currentSession.value.characterId, (newCharId, oldCharId) => {
         ...(currentSession.value.settings || {}),
         memoryEnabled: false,  // 默认使用角色配置
         memory: {
-          maxMemoryLength: newCharacter.settings?.memory?.maxMemoryLength || newCharacter.settings?.maxMemoryLength,
           compressionTriggerRatio: newCharacter.settings?.memory?.compressionTriggerRatio || 0.8,
           compressionTargetRatio: newCharacter.settings?.memory?.compressionTargetRatio || 0.5,
           summaryMode: newCharacter.settings?.memory?.summaryMode || DEFAULT_SUMMARY_MODE,
@@ -318,8 +316,7 @@ watch(() => currentSession.value.characterId, (newCharId, oldCharId) => {
       if (selectedModelId) {
         lastModelConfig.value = {
           ...lastModelConfig.value,
-          modelId: selectedModelId,
-          maxMemoryLength: newCharacter.settings?.maxMemoryLength
+          modelId: selectedModelId
         };
       }
     }
@@ -416,7 +413,6 @@ const loadCharacters = async (): Promise<void> => {
           ...currentSession.value.settings,
           memoryEnabled: false,  // 默认使用角色配置
           memory: {
-            maxMemoryLength: targetCharacter.settings?.memory?.maxMemoryLength || targetCharacter.settings?.maxMemoryLength,
             compressionTriggerRatio: targetCharacter.settings?.memory?.compressionTriggerRatio || 0.8,
             compressionTargetRatio: targetCharacter.settings?.memory?.compressionTargetRatio || 0.5,
             summaryMode: targetCharacter.settings?.memory?.summaryMode || DEFAULT_SUMMARY_MODE,
@@ -428,8 +424,7 @@ const loadCharacters = async (): Promise<void> => {
         if (selectedModelId) {
           lastModelConfig.value = {
             ...lastModelConfig.value,
-            modelId: selectedModelId,
-            maxMemoryLength: targetCharacter.settings?.maxMemoryLength
+            modelId: selectedModelId
           };
         }
       }
@@ -471,7 +466,6 @@ const selectCharacterFromSelector = (character: any): void => {
     ...(currentSession.value.settings || {}),
     memoryEnabled: false,
     memory: {
-      maxMemoryLength: character.settings?.memory?.maxMemoryLength || character.settings?.maxMemoryLength,
       compressionTriggerRatio: character.settings?.memory?.compressionTriggerRatio || 0.8,
       compressionTargetRatio: character.settings?.memory?.compressionTargetRatio || 0.5,
       summaryMode: character.settings?.memory?.summaryMode || DEFAULT_SUMMARY_MODE,
@@ -482,8 +476,7 @@ const selectCharacterFromSelector = (character: any): void => {
   if (selectedModelId) {
     lastModelConfig.value = {
       ...lastModelConfig.value,
-      modelId: selectedModelId,
-      maxMemoryLength: character.settings?.maxMemoryLength
+      modelId: selectedModelId
     };
   }
 };
@@ -528,7 +521,6 @@ const selectCharacter = (character: any): void => {
     ...(currentSession.value.settings || {}),
     memoryEnabled: false,  // 默认使用角色配置
     memory: {
-      maxMemoryLength: character.settings?.memory?.maxMemoryLength || character.settings?.maxMemoryLength,
       compressionTriggerRatio: character.settings?.memory?.compressionTriggerRatio || 0.8,
       compressionTargetRatio: character.settings?.memory?.compressionTargetRatio || 0.5,
       summaryMode: character.settings?.memory?.summaryMode || DEFAULT_SUMMARY_MODE,
@@ -540,8 +532,7 @@ const selectCharacter = (character: any): void => {
   if (selectedModelId) {
     lastModelConfig.value = {
       ...lastModelConfig.value,
-      modelId: selectedModelId,
-      maxMemoryLength: character.settings?.maxMemoryLength
+      modelId: selectedModelId
     };
   }
 };

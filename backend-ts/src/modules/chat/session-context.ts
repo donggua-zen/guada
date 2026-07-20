@@ -70,7 +70,6 @@ export interface ToolApprovalConfig {
  * 记忆与压缩配置
  */
 export interface MemoryConfig {
-  maxMemoryLength?: number;
   compressionTriggerRatio?: number;
   compressionTargetRatio?: number;
   summaryMode?: string;
@@ -121,6 +120,8 @@ export interface ISessionContext {
   readonly sessionId: string;
   readonly userId: string;
   readonly sessionType: "web" | "bot" | "sub_agent";
+  /** 父会话 ID（子代理场景下为主会话 ID，主会话场景下为 null） */
+  readonly parentSessionId?: string | null;
 
   // === 运行模式 ===
   /** 获取当前会话运行模式 */

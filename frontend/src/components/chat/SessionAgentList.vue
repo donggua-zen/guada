@@ -1,7 +1,7 @@
 <template>
   <div v-if="hasSubAgents" class="session-agent-list">
     <!-- 头部 -->
-    <div class="shrink-0 flex items-center justify-between px-2">
+    <div class="shrink-0 flex items-center justify-between px-2 py-3">
       <h3 class="text-sm font-normal text-gray-500 dark:text-[#8b8d95] whitespace-nowrap mx-2">
         子任务
       </h3>
@@ -11,9 +11,9 @@
     </div>
 
     <!-- 任务列表 -->
-    <div class="agent-items overflow-y-auto py-2" style="max-height: 200px;">
+    <div class="overflow-y-auto px-1 space-y-0.5" style="max-height: 200px;">
       <div v-for="tab in allTabs" :key="tab.id"
-        class="agent-item px-2 py-1.5 flex items-center gap-2 cursor-pointer transition-all duration-200" :class="{
+        class="mx-1 px-2 py-1 flex items-center cursor-pointer transition-all duration-200 rounded" :class="{
           'bg-gray-100 dark:bg-[#2a2c30]': tab.id === activeTabId,
           'hover:bg-gray-100 dark:hover:bg-[#2a2c30]': tab.id !== activeTabId
         }" @click="$emit('switch', tab.id)">
@@ -59,27 +59,3 @@ const allTabs = computed(() => {
 
 const hasSubAgents = computed(() => allTabs.value.length > 1);
 </script>
-
-<style scoped>
-.agent-items {
-  scrollbar-width: thin;
-}
-
-.agent-items::-webkit-scrollbar {
-  width: 4px;
-}
-
-.agent-items::-webkit-scrollbar-thumb {
-  background-color: rgba(0, 0, 0, 0.1);
-  border-radius: 4px;
-}
-
-.dark .agent-items::-webkit-scrollbar-thumb {
-  background-color: rgba(255, 255, 255, 0.1);
-}
-
-.agent-item {
-  border-radius: 4px;
-  margin: 0 4px;
-}
-</style>

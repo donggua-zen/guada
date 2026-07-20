@@ -65,7 +65,6 @@
     },
     "files": [
       "electron/dist/**/*",
-      "electron/browser-shell.html",
       "frontend/dist/**/*",
       "build-resources/icon.ico"
     ],

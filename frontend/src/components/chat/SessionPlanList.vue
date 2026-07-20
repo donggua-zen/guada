@@ -11,11 +11,11 @@
     </div>
 
     <!-- 计划列表 -->
-    <div class="plan-items overflow-y-auto py-2" style="max-height: 200px;">
+    <div class="overflow-y-auto py-2 px-1 space-y-0.5" style="max-height: 200px;">
       <div v-for="(item, i) in planItems" :key="i"
-        class="plan-item px-2 py-1.5 flex items-center gap-2">
+        class="mx-1 px-2 py-1 flex items-center gap-2 rounded hover:bg-gray-100 dark:hover:bg-[#2a2c30] transition-all duration-200">
         <!-- 状态图标 -->
-        <span class="plan-status-icon shrink-0 w-3.5 h-3.5 flex items-center justify-center">
+        <span class="shrink-0 w-3.5 h-3.5 flex items-center justify-center">
           <el-icon v-if="item.status === 'completed'" size="14" class="text-green-500">
             <Check />
           </el-icon>
@@ -90,31 +90,5 @@ onUnmounted(() => {
 <style scoped>
 .session-plan-list {
   padding-top: 0.5rem;
-}
-
-.plan-item {
-  transition: background-color 0.15s ease;
-  border-radius: 4px;
-}
-
-.plan-item:hover {
-  background-color: rgba(0, 0, 0, 0.03);
-}
-
-.dark .plan-item:hover {
-  background-color: rgba(255, 255, 255, 0.05);
-}
-
-.plan-status-icon .is-loading {
-  animation: rotating 1.5s linear infinite;
-}
-
-@keyframes rotating {
-  from {
-    transform: rotate(0deg);
-  }
-  to {
-    transform: rotate(360deg);
-  }
 }
 </style>

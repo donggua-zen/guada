@@ -72,6 +72,7 @@ export class PersistentSessionContext implements ISessionContext {
   readonly sessionId: string;
   readonly userId: string;
   readonly sessionType: "web" | "bot" | "sub_agent";
+  readonly parentSessionId?: string | null;
 
   private readonly logger = new Logger(PersistentSessionContext.name);
 
@@ -128,6 +129,7 @@ export class PersistentSessionContext implements ISessionContext {
     this.sessionId = session.id;
     this.userId = session.userId;
     this.sessionType = session.sessionType || "web";
+    this.parentSessionId = session.parentId || null;
   }
 
   /**
@@ -200,7 +202,6 @@ export class PersistentSessionContext implements ISessionContext {
     const rawMessages = await this.messageStore.loadMessages({
       sessionId: this.sessionId,
       userMessageId: this.messageCursor,
-      maxMessages: memoryConfig.maxMemoryLength,
       supportsImageInput:
         modelConfig.config.inputCapabilities?.includes("image"),
       keepReasoningContent: shouldLoadReasoning,
@@ -576,7 +577,6 @@ export class PersistentSessionContext implements ISessionContext {
     const summaryMode = await this.resolveSummaryMode(memory);
 
     return {
-      maxMemoryLength: memory?.maxMemoryLength,
       compressionTriggerRatio: memory?.compressionTriggerRatio,
       compressionTargetRatio: memory?.compressionTargetRatio,
       summaryMode,

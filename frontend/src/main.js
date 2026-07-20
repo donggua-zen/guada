@@ -79,12 +79,6 @@ const routes = [
         component: () => import("./components/bot/BotCenterPage.vue"),
       },
       {
-        path: "account/:tab?",
-        name: "AccountCenter",
-        meta: { title: "账户中心", requiresAuth: true },
-        component: () => import("./components/account/AccountCenter.vue"),
-      },
-      {
         path: "setting/:tab?",
         name: "SystemSettings",
         meta: { title: "系统设置", requiresAuth: true },
@@ -114,13 +108,6 @@ const routes = [
         name: "Models",
         meta: { title: "模型管理", requiresAuth: true },
         component: () => import("./components/models/ModelsPage.vue"),
-      },
-      {
-        path: "sessions-manage/:tab?",
-        name: "SessionsManage",
-        meta: { title: "会话管理", requiresAuth: true },
-        component: () =>
-          import("./components/session/SessionManagement.vue"),
       },
     ],
   },

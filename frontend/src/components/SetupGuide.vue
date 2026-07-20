@@ -164,7 +164,7 @@ const nextStep = async () => {
 }
 
 const goToSecuritySettings = () => {
-  router.push('/account/security')
+  router.push({ name: 'SystemSettings', params: { tab: 'security' } })
 }
 
 const goToProviderSettings = () => {

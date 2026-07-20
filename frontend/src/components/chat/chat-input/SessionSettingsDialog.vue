@@ -68,18 +68,6 @@
 
       <!-- 仅在开启自定义时显示详细配置 -->
       <template v-if="tempConfig.useCustom">
-        <!-- 上下文条数 -->
-        <el-form-item>
-          <template #label>
-            <div class="flex flex-col gap-1">
-              <span class="text-base text-gray-900 dark:text-gray-100 font-medium">上下文条数</span>
-              <span class="text-xs text-gray-500 dark:text-gray-400 font-normal">控制对话历史的最大消息数量，影响模型的长期记忆能力</span>
-            </div>
-          </template>
-          <el-slider-optional v-model="tempConfig.maxMemoryLength" :min="2" :max="100" :step="1" show-input
-            optional-direction="max" optional-text="No Limit" class="w-full max-w-md" />
-        </el-form-item>
-
         <!-- Token 上限 -->
         <el-form-item>
           <template #label>
@@ -195,7 +183,6 @@ interface MemoryConfig {
     frequencyPenalty?: number | null
   }
   useCustom?: boolean
-  maxMemoryLength?: number | null
   compressionTriggerRatio?: number
   compressionTargetRatio?: number
   summaryMode?: string
@@ -220,7 +207,6 @@ interface TempConfig {
   modelTopP: number | undefined
   modelFrequencyPenalty: number | undefined
   useCustom: boolean
-  maxMemoryLength: number | undefined
   triggerRatio: number
   targetRatio: number
   summaryMode: string
@@ -233,7 +219,6 @@ const tempConfig = reactive<TempConfig>({
   modelTopP: undefined,
   modelFrequencyPenalty: undefined,
   useCustom: true,
-  maxMemoryLength: undefined,
   triggerRatio: 0.8,
   targetRatio: 0.5,
   summaryMode: DEFAULT_SUMMARY_MODE,
@@ -327,7 +312,6 @@ function initTempConfig() {
   tempConfig.modelTopP = settings.model?.topP ?? undefined
   tempConfig.modelFrequencyPenalty = settings.model?.frequencyPenalty ?? undefined
   tempConfig.useCustom = settings.useCustom ?? true
-  tempConfig.maxMemoryLength = settings.maxMemoryLength ?? undefined
   tempConfig.triggerRatio = settings.compressionTriggerRatio ?? 0.8
   tempConfig.targetRatio = settings.compressionTargetRatio ?? 0.5
   tempConfig.summaryMode = settings.summaryMode ?? DEFAULT_SUMMARY_MODE
@@ -360,7 +344,6 @@ function handleConfirm() {
   // 只有当记忆开启自定义配置时，才保存具体的数值
   if (tempConfig.useCustom) {
     configChanges.memory = {
-      maxMemoryLength: tempConfig.maxMemoryLength,
       compressionTriggerRatio: tempConfig.triggerRatio,
       compressionTargetRatio: tempConfig.targetRatio,
       summaryMode: tempConfig.summaryMode,

@@ -35,15 +35,6 @@ export interface ToolResponse {
  */
 export class BrowserAutomationService {
   private windowManager: BrowserWindowManager | null = null;
-  private maxWindows: number = 6; // 默认最多6个窗口（含主应用，即可创建5个）
-  private inactivityTimeout: number = 300000; // 默认5分钟无操作自动关闭
-
-  constructor(
-    config: { maxWindows?: number; inactivityTimeout?: number } = {},
-  ) {
-    this.maxWindows = config.maxWindows || 6;
-    this.inactivityTimeout = config.inactivityTimeout || 300000;
-  }
 
   /**
    * 初始化窗口管理器（必须在应用启动时调用）
@@ -107,6 +98,7 @@ export class BrowserAutomationService {
    */
   private async ensureWindow(
     windowId: string,
+    createdBy?: string,
   ): Promise<{ windowId: string; windowInfo: WindowInfo }> {
     if (!windowId) {
       throw new Error("window_id is required for all browser operations");
@@ -122,6 +114,13 @@ export class BrowserAutomationService {
     if (!windowInfo) {
       throw new Error(
         `Window ${windowId} not found. Use browser_windows() to see available windows.`,
+      );
+    }
+
+    // 所有权验证：如果提供了 createdBy，必须匹配窗口的 createdBy
+    if (createdBy && windowInfo.metadata?.createdBy && windowInfo.metadata.createdBy !== createdBy) {
+      throw new Error(
+        `Permission denied: window ${windowId} does not belong to this agent. Use browser_windows() to see your own windows.`,
       );
     }
 
@@ -161,8 +160,8 @@ export class BrowserAutomationService {
   /**
    * 导航到指定 URL
    */
-  async navigate(url: string, windowId: string): Promise<any> {
-    const { windowId: wid } = await this.ensureWindow(windowId);
+  async navigate(url: string, windowId: string, createdBy?: string): Promise<any> {
+    const { windowId: wid } = await this.ensureWindow(windowId, createdBy);
 
     if (!this.windowManager) {
       throw new Error("WindowManager not initialized");
@@ -241,8 +240,9 @@ export class BrowserAutomationService {
     code: string,
     windowId: string,
     isAsync: boolean = false,
+    createdBy?: string,
   ): Promise<any> {
-    const { windowId: wid } = await this.ensureWindow(windowId);
+    const { windowId: wid } = await this.ensureWindow(windowId, createdBy);
 
     if (!this.windowManager) {
       throw new Error("TabManager not initialized");
@@ -272,8 +272,8 @@ export class BrowserAutomationService {
     }
   }
 
-  async getPageStruct(windowId: string): Promise<any> {
-    const { windowId: wid } = await this.ensureWindow(windowId);
+  async getPageStruct(windowId: string, createdBy?: string): Promise<any> {
+    const { windowId: wid } = await this.ensureWindow(windowId, createdBy);
 
     if (!this.windowManager) {
       throw new Error("TabManager not initialized");
@@ -590,8 +590,8 @@ export class BrowserAutomationService {
     };
   }
 
-  async getPageText(windowId: string): Promise<any> {
-    const { windowId: wid } = await this.ensureWindow(windowId);
+  async getPageText(windowId: string, createdBy?: string): Promise<any> {
+    const { windowId: wid } = await this.ensureWindow(windowId, createdBy);
 
     if (!this.windowManager) {
       throw new Error("TabManager not initialized");
@@ -664,8 +664,8 @@ export class BrowserAutomationService {
     };
   }
 
-  async getPageSummary(windowId: string): Promise<any> {
-    const { windowId: wid } = await this.ensureWindow(windowId);
+  async getPageSummary(windowId: string, createdBy?: string): Promise<any> {
+    const { windowId: wid } = await this.ensureWindow(windowId, createdBy);
 
     if (!this.windowManager) {
       throw new Error("TabManager not initialized");
@@ -809,8 +809,9 @@ export class BrowserAutomationService {
     selector: string,
     timeout: number = 10000,
     windowId: string,
+    createdBy?: string,
   ): Promise<any> {
-    const { windowId: wid } = await this.ensureWindow(windowId);
+    const { windowId: wid } = await this.ensureWindow(windowId, createdBy);
 
     if (!this.windowManager) {
       throw new Error("TabManager not initialized");
@@ -855,8 +856,8 @@ export class BrowserAutomationService {
     };
   }
 
-  async click(selector: string, windowId: string): Promise<any> {
-    const { windowId: wid } = await this.ensureWindow(windowId);
+  async click(selector: string, windowId: string, createdBy?: string): Promise<any> {
+    const { windowId: wid } = await this.ensureWindow(windowId, createdBy);
 
     if (!this.windowManager) {
       throw new Error("TabManager not initialized");
@@ -901,8 +902,9 @@ export class BrowserAutomationService {
     selector: string,
     value: string,
     windowId: string,
+    createdBy?: string,
   ): Promise<any> {
-    const { windowId: wid } = await this.ensureWindow(windowId);
+    const { windowId: wid } = await this.ensureWindow(windowId, createdBy);
 
     if (!this.windowManager) {
       throw new Error("TabManager not initialized");
@@ -939,8 +941,8 @@ export class BrowserAutomationService {
    * 后退
    */
 
-  async goBack(windowId: string): Promise<any> {
-    const { windowId: wid } = await this.ensureWindow(windowId);
+  async goBack(windowId: string, createdBy?: string): Promise<any> {
+    const { windowId: wid } = await this.ensureWindow(windowId, createdBy);
 
     if (!this.windowManager) {
       throw new Error("TabManager not initialized");
@@ -969,8 +971,8 @@ export class BrowserAutomationService {
   /**
    * 前进
    */
-  async goForward(windowId: string): Promise<any> {
-    const { windowId: wid } = await this.ensureWindow(windowId);
+  async goForward(windowId: string, createdBy?: string): Promise<any> {
+    const { windowId: wid } = await this.ensureWindow(windowId, createdBy);
 
     if (!this.windowManager) {
       throw new Error("TabManager not initialized");
@@ -999,8 +1001,8 @@ export class BrowserAutomationService {
   /**
    * 刷新页面
    */
-  async reload(windowId: string): Promise<any> {
-    const { windowId: wid } = await this.ensureWindow(windowId);
+  async reload(windowId: string, createdBy?: string): Promise<any> {
+    const { windowId: wid } = await this.ensureWindow(windowId, createdBy);
 
     if (!this.windowManager) {
       throw new Error("TabManager not initialized");
@@ -1031,10 +1033,12 @@ export class BrowserAutomationService {
     url: string,
     sessionPath?: string,
     sessionId?: string,
+    createdBy?: string,
   ): Promise<any> {
     const metadata: Record<string, any> = {};
     if (sessionPath) metadata.sessionPath = sessionPath;
     if (sessionId) metadata.sessionId = sessionId;
+    if (createdBy) metadata.createdBy = createdBy;
     const wid = await this.createWindow(
       url,
       Object.keys(metadata).length > 0 ? metadata : undefined,
@@ -1051,26 +1055,43 @@ export class BrowserAutomationService {
   /**
    * 关闭指定标签
    */
-  async closeWindow(windowId: string): Promise<any> {
+  async closeWindow(windowId: string, createdBy?: string): Promise<any> {
+    // 验证所有权
+    try {
+      await this.ensureWindow(windowId, createdBy);
+    } catch (e: any) {
+      return { success: false, message: e.message };
+    }
+
     if (!this.windowManager) {
-      return {
-        success: false,
-        message: "TabManager not initialized",
-      };
+      return { success: false, message: "TabManager not initialized" };
     }
 
     const success = await this.windowManager.closeWindow(windowId);
+    return { success, message: success ? "Tab closed" : "Failed to close tab" };
+  }
 
-    return {
-      success,
-      message: success ? "Tab closed" : "Failed to close tab",
-    };
+  /**
+   * 关闭指定创建者的所有窗口（子代理清理）
+   */
+  async closeWindowsByCreator(createdBy: string): Promise<any> {
+    if (!this.windowManager) {
+      return { success: false, message: "TabManager not initialized" };
+    }
+    const windows = this.getWindowList().filter(
+      (w) => w.metadata?.createdBy === createdBy,
+    );
+    log.info(`Closing ${windows.length} windows for creator ${createdBy}`);
+    for (const w of windows) {
+      await this.windowManager.closeWindow(w.windowId);
+    }
+    return { success: true, closed: windows.length };
   }
 
   /**
    * 获取窗口控制台日志
    */
-  async getConsoleLogs(windowId: string): Promise<any> {
+  async getConsoleLogs(windowId: string, createdBy?: string): Promise<any> {
     if (!this.windowManager) {
       return { success: false, message: "TabManager not initialized" };
     }
@@ -1088,7 +1109,7 @@ export class BrowserAutomationService {
   /**
    * 清空窗口控制台日志
    */
-  async clearConsoleLogs(windowId: string): Promise<any> {
+  async clearConsoleLogs(windowId: string, createdBy?: string): Promise<any> {
     if (!this.windowManager) {
       return { success: false, message: "TabManager not initialized" };
     }
@@ -1159,85 +1180,89 @@ export class BrowserAutomationService {
     try {
       switch (method) {
         case "browser_navigate":
-          return await this.navigate(params.url, params.window_id);
-
-        // TODO: 暂时注释截图工具
-        // case 'screenshot':
-        //   return await this.screenshot({ ...params, windowId: params.window_id })
+          return await this.navigate(params.url, params.window_id, params.created_by);
 
         case "browser_evaluate":
           return await this.executeJavaScript(
             params.code,
             params.window_id,
             params.is_async || false,
+            params.created_by,
           );
 
         case "browser_page_struct":
-          return await this.getPageStruct(params.window_id);
+          return await this.getPageStruct(params.window_id, params.created_by);
 
         case "browser_page_text":
-          return await this.getPageText(params.window_id);
+          return await this.getPageText(params.window_id, params.created_by);
 
         case "browser_page_summary":
-          return await this.getPageSummary(params.window_id);
+          return await this.getPageSummary(params.window_id, params.created_by);
 
         case "browser_wait":
           return await this.waitForSelector(
             params.selector,
             params.timeout,
             params.window_id,
+            params.created_by,
           );
 
         case "browser_click":
-          return await this.click(params.selector, params.window_id);
+          return await this.click(params.selector, params.window_id, params.created_by);
 
         case "browser_input":
           return await this.fillForm(
             params.selector,
             params.value,
             params.window_id,
+            params.created_by,
           );
 
         case "browser_interact":
           if (params.action === "click") {
-            return await this.click(params.selector, params.window_id);
+            return await this.click(params.selector, params.window_id, params.created_by);
           } else {
             return await this.fillForm(
               params.selector,
               params.value,
               params.window_id,
+              params.created_by,
             );
           }
 
         case "browser_console":
-          return await this.getConsoleLogs(params.window_id);
+          return await this.getConsoleLogs(params.window_id, params.created_by);
 
         case "browser_navigate_history":
           if (params.action === "back") {
-            return await this.goBack(params.window_id);
+            return await this.goBack(params.window_id, params.created_by);
           } else {
-            return await this.goForward(params.window_id);
+            return await this.goForward(params.window_id, params.created_by);
           }
 
         case "browser_reload":
-          return await this.reload(params.window_id);
+          return await this.reload(params.window_id, params.created_by);
 
         case "browser_new_window":
           return await this.openNewWindow(
             params?.url,
             params?.session_path,
             params?.session_id,
+            params?.created_by,
           );
 
         case "browser_close":
-          return await this.closeWindow(params.window_id);
+          return await this.closeWindow(params.window_id, params.created_by);
+
+        case "browser_close_by_creator":
+          return await this.closeWindowsByCreator(params.created_by);
 
         case "browser_windows":
           return {
             success: true,
             windows: params?.session_id
               ? this.getWindowList().filter(
-                  (w) => w.metadata?.sessionId === params.session_id,
+                  (w) => w.metadata?.createdBy === params.session_id,
                 )
               : this.getWindowList(),
             count: this.getWindowCount(),

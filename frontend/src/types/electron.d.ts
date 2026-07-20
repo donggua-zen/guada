@@ -32,7 +32,7 @@ export interface ElectronAPI {
   selectFolder: () => Promise<string | null>
   
   // 窗口管理（新 API - 浏览器自动化窗口）
-  createBrowserWindow: (url?: string, metadata?: Record<string, any>) => Promise<{ success: boolean; window?: any }>
+  createBrowserWindow: (url?: string, metadata?: Record<string, any>) => Promise<{ success: boolean; window?: any; error?: string }>
   activateBrowserWindow: (windowId: string) => Promise<{ success: boolean }>
   closeBrowserWindow: (windowId: string) => Promise<{ success: boolean }>
   getBrowserWindows: () => Promise<{ success: boolean; windows?: any[] }>
@@ -45,6 +45,14 @@ export interface ElectronAPI {
   showBrowserWindow: (windowId: string) => Promise<{ success: boolean }>
   toggleBrowserWindowVisibility: (windowId: string) => Promise<{ success: boolean; isVisible?: boolean }>
   getBrowserWindowVisibility: (windowId: string) => Promise<{ success: boolean; isVisible?: boolean }>
+
+  // Webview 生命周期事件（主进程 → 前端）
+  onCreateWebview?: (callback: (event: any, data: { windowId: string; partition: string; url: string; preloadUrl: string; metadata?: any }) => void) => void
+  onDestroyWebview?: (callback: (event: any, data: { windowId: string }) => void) => void
+  onSetWebviewVisibility?: (callback: (event: any, data: { windowId: string; visible: boolean }) => void) => void
+
+  // 清空所有浏览器自动化 session 数据
+  clearBrowserData: () => Promise<{ success: boolean; error?: string }>
 
   // 托盘悬浮窗统计推送
   updateTrayStats: (stats: { running: number; unread: number }) => void

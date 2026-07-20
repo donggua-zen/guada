@@ -1,6 +1,6 @@
 <template>
     <el-dialog v-model="visible" :close-on-click-modal="false" width="900px"
-        :style="{ minHeight: '80vh', maxHeight: '95vh', maxWidth: '90vw' }" class="character-setting-dialog" destroy-on-close append-to-body>
+        :style="{ height: '70vh', maxWidth: '90vw' }" class="character-setting-dialog" destroy-on-close append-to-body>
         <template #header>
             <div class="dialog-header">
                 <span class="dialog-title">{{ currentCharacter?.id ? '编辑角色' : '新建角色' }}</span>
@@ -146,6 +146,14 @@ const handleSave = async (): Promise<void> => {
 .character-setting-dialog .el-dialog__body {
     display: flex !important;
     flex-direction: column !important;
-    height: 100%; /* 确保有明确高度，让子组件的 flex: 1 生效 */
+    flex: 1;
+    min-height: 0;
+    padding: 0 !important;
+    overflow: hidden;
+}
+
+.character-setting-dialog .el-dialog {
+    display: flex;
+    flex-direction: column;
 }
 </style>
