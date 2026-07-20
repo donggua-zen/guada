@@ -11,29 +11,14 @@
         <span class="typewriter-cursor" :class="{ 'cursor-blink': isTypingComplete }"></span>
       </h1>
     </div>
-    <!-- 已选角色显示 -->
-    <div
-      class="w-full max-w-200 -mb-6 flex items-center gap-3 p-2 pb-7 bg-gray-100 dark:bg-(--color-surface) border border-gray-100 dark:border-(--color-surface) rounded-2xl cursor-pointer hover:bg-gray-100 dark:hover:bg-(--color-sidebar-bg-hover) transition-colors"
-      @click="showCharacterSelector = true">
-      <div class="w-6 h-6 shrink-0 overflow-hidden rounded">
-        <Avatar :src="currentCharacter?.avatarUrl" type="assistant" :name="currentCharacter?.title"
-          class="w-full h-full object-cover" />
+    <!-- 已选角色 + 抽屉切换 -->
+    <div class="w-full max-w-200 flex flex-col items-start mx-auto relative">
+      <AgentSwitcherBar :character="currentCharacter" @select="handleCharacterSelect" />
+      <div class="w-full relative z-30 -mt-4">
+        <ChatInput v-model:value="inputMessage.content" :config="chatInputConfig" mode="create"
+          @config-change="handleConfigChange" :buttons="chatInputButtons" :files="inputMessage.files" :streaming="false"
+          @send="sendMessage" />
       </div>
-        <div class="flex-1 min-w-0">
-          <span class="text-sm font-medium text-gray-700 dark:text-(--color-text) truncate">{{ currentCharacter?.title ||
-            '未命名角色' }}</span>
-          <span class="text-xs text-gray-500 dark:text-(--color-text-gray) truncate ml-2">{{ currentCharacter?.description ||
-            '暂无描述' }}</span>
-        </div>
-      <el-icon class="text-gray-400 dark:text-(--color-text-gray) shrink-0">
-        <ArrowRightTwotone />
-      </el-icon>
-    </div>
-
-    <div class="w-full  max-w-200">
-      <ChatInput v-model:value="inputMessage.content" :config="chatInputConfig" mode="create"
-        @config-change="handleConfigChange" :buttons="chatInputButtons" :files="inputMessage.files" :streaming="false"
-        @send="sendMessage" />
       <ChatInputToolbar :config="chatInputConfig" @config-change="handleConfigChange" />
     </div>
     <div>
@@ -44,56 +29,6 @@
       </div> -->
     </div>
   </div>
-
-  <!-- 角色选择器弹窗 -->
-  <el-dialog v-model="showCharacterSelector" title="选择助手" :width="isMobile ? '90%' : '500px'" :append-to-body="true">
-    <!-- 搜索框 -->
-    <div class="mb-3">
-      <el-input v-model="characterSearchText" placeholder="搜索角色..." clearable size="small">
-        <template #prefix>
-          <el-icon><SearchFilled /></el-icon>
-        </template>
-      </el-input>
-    </div>
-    <!-- 角色列表 -->
-    <div class="max-h-80 overflow-y-auto">
-      <div v-for="character in filteredCharacters" :key="character.id"
-        class="character-item flex items-center gap-3 p-2.5 rounded-lg cursor-pointer hover:bg-gray-50 dark:hover:bg-[#2f3131] transition-colors border border-transparent dark:border-[#1f1f1f]"
-        :class="{ 'bg-blue-50 dark:bg-[#2f3131] border-blue-200 dark:border-[#2f3131]': currentSession.characterId === character.id }"
-        @click="selectCharacterFromSelector(character)">
-        <div class="w-10 h-10 shrink-0 overflow-hidden rounded">
-          <Avatar :src="character.avatarUrl" type="assistant" :name="character.title" class="w-full h-full object-cover" />
-        </div>
-        <div class="flex-1 min-w-0">
-          <p class="text-sm font-medium text-gray-700 dark:text-(--color-text) truncate">{{ character.title }}</p>
-          <p class="text-xs text-gray-500 dark:text-(--color-text-gray) truncate mt-0.5">{{ character.description || '暂无描述' }}</p>
-        </div>
-        <el-icon v-if="currentSession.characterId === character.id"
-          class="text-blue-500 dark:text-(--color-primary) shrink-0" size="18">
-          <CheckCircleFilled />
-        </el-icon>
-      </div>
-      <div v-if="filteredCharacters.length === 0" class="text-center py-6 text-gray-400 dark:text-(--color-text-gray)">
-        <p class="text-sm">未找到匹配的角色</p>
-      </div>
-    </div>
-
-    <!-- 底部按钮 -->
-    <template #footer>
-      <div class="flex justify-between items-center">
-        <el-button @click="goToCharactersPage" plain size="small">
-          <el-icon class="mr-1"><AppsFilled /></el-icon>
-          管理
-        </el-button>
-        <div class="flex gap-2">
-          <el-button @click="showCharacterSelector = false" size="small">取消</el-button>
-          <el-button type="primary" @click="confirmSelector" size="small" :disabled="!currentSession.characterId">
-            确定
-          </el-button>
-        </div>
-      </div>
-    </template>
-  </el-dialog>
 
 </template>
 
@@ -109,6 +44,7 @@ import { DEFAULT_SUMMARY_MODE } from '@/constants'
 // 组件导入
 import { ChatInput } from "../ui";
 import ChatInputToolbar from "./chat-input/ChatInputToolbar.vue";
+import AgentSwitcherBar from "./AgentSwitcherBar.vue";
 
 import { ArrowRightTwotone, CheckCircleFilled, AppsFilled, SearchFilled } from '@vicons/material'
 import { ContactCard24Regular } from '@vicons/fluent'
@@ -136,8 +72,6 @@ const bannerPath = computed(() => fixFrontendAssetUrl('/images/guada_logo.png'))
 
 // 角色数据
 const characters = ref<any[]>([]);
-const showCharacterSelector = ref(false);
-const characterSearchText = ref('');
 
 // 模型数据
 const models = ref<any[]>([]);
@@ -325,20 +259,6 @@ watch(() => currentSession.value.characterId, (newCharId, oldCharId) => {
   }
 });
 
-// 过滤后的角色列表（支持搜索）
-const filteredCharacters = computed(() => {
-  if (!characterSearchText.value) {
-    return characters.value;
-  }
-  const searchText = characterSearchText.value.toLowerCase();
-  return characters.value.filter(char =>
-    char.title?.toLowerCase().includes(searchText) ||
-    char.description?.toLowerCase().includes(searchText)
-  );
-});
-
-
-
 // Props & Emits - 类型化
 const props = defineProps<{
   session?: any;
@@ -442,11 +362,10 @@ const loadCharacters = async (): Promise<void> => {
   }
 };
 
-// 选择角色（从弹窗中选择，不立即关闭弹窗）
-const selectCharacterFromSelector = (character: any): void => {
+// 选择角色（从抽屉中选择）
+const handleCharacterSelect = (character: any): void => {
   currentSession.value.characterId = character.id;
   lastSelectedCharacterId.value = character.id;
-  characterSearchText.value = '';
 
   // 切换角色时的模型选择逻辑
   let selectedModelId: string | null = null;
@@ -475,62 +394,6 @@ const selectCharacterFromSelector = (character: any): void => {
     }
   };
 
-  if (selectedModelId) {
-    lastModelConfig.value = {
-      ...lastModelConfig.value,
-      modelId: selectedModelId
-    };
-  }
-};
-
-// 确认选择（关闭弹窗）
-const confirmSelector = (): void => {
-  showCharacterSelector.value = false;
-};
-
-// 选择角色（原有逻辑，保留兼容）
-const selectCharacter = (character: any): void => {
-  currentSession.value.characterId = character.id;
-  lastSelectedCharacterId.value = character.id;
-  showCharacterSelector.value = false;
-  characterSearchText.value = '';
-
-  // 切换角色时的模型选择逻辑
-  let selectedModelId: string | null = null;
-
-  // 第一优先级：角色的默认模型
-  if (character.model_id) {
-    selectedModelId = character.model_id;
-    // 清空用户手动选择的模型 ID（因为角色有推荐模型）
-    userSelectedModelId.value = null;
-  }
-  // 第二优先级：用户之前手动选择的模型（角色没有推荐模型时保留）
-  else if (userSelectedModelId.value) {
-    selectedModelId = userSelectedModelId.value;
-  }
-  // 第三优先级：模型列表的第一个模型
-  else if (models.value.length > 0) {
-    selectedModelId = models.value[0].id;
-  }
-
-  // 设置模型 ID
-  if (selectedModelId) {
-    currentSession.value.model_id = selectedModelId;
-  }
-
-  // 思考模型状态保持用户上次选择的状态
-  currentSession.value.settings = {
-    ...(currentSession.value.settings || {}),
-    memoryEnabled: false,  // 默认使用角色配置
-    memory: {
-      compressionTriggerRatio: character.settings?.memory?.compressionTriggerRatio || 0.8,
-      compressionTargetRatio: character.settings?.memory?.compressionTargetRatio || 0.5,
-      summaryMode: character.settings?.memory?.summaryMode || DEFAULT_SUMMARY_MODE,
-      maxTokensLimit: character.settings?.memory?.maxTokensLimit || null
-    }
-  };
-
-  // 更新本地存储的配置信息
   if (selectedModelId) {
     lastModelConfig.value = {
       ...lastModelConfig.value,
@@ -659,7 +522,6 @@ const handleConfigChange = (config: any): void => {
 
 // 前往角色管理页面
 const goToCharactersPage = (): void => {
-  showCharacterSelector.value = false;
   router.replace({ name: 'Characters' });
 };
 
