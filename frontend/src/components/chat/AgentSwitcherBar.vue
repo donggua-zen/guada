@@ -1,16 +1,15 @@
 <template>
   <div
-    class="absolute bottom-full left-0 right-0 z-20 w-full flex flex-col rounded-tl-3xl rounded-tr-3xl bg-gray-200 dark:bg-[#2a2a2a] overflow-hidden transition-all duration-300 shadow-lg"
+    class="absolute bottom-full left-0 right-0 z-20 w-full flex flex-col rounded-tl-3xl rounded-tr-2xl  bg-[#f0f0f0] dark:bg-[#2a2a2a] overflow-hidden transition-all duration-300 shadow-lg"
     :class="{ 'max-h-48': isExpanded, 'max-h-12': !isExpanded }">
     <!-- 头部折叠栏 -->
     <div class="flex items-center px-5 py-2 cursor-pointer select-none" @click="toggleExpand">
-    
       <Avatar :src="character?.avatarUrl" type="assistant" :name="character?.title || '智能助手'"
         class="w-5 h-5 shrink-0 rounded overflow-hidden mr-2" />
       <span class="text-sm text-gray-700 dark:text-[#c5c7cc] shrink-0">
         {{ character?.title || '智能助手' }}
       </span>
-      <span class="text-xs text-gray-400 dark:text-[#6b6d75] truncate ml-2">
+      <span class="text-xs text-gray-400 dark:text-[#6b6d75] truncate">
         {{ character?.description || '一个友好、专业的 AI 助手，可以帮你解答各种问题。' }}
       </span>
     </div>
@@ -33,7 +32,7 @@
           @click.stop="handleSelect(char)">
           <Avatar :src="char.avatarUrl" type="assistant" :name="char.title"
             class="w-5 h-5 shrink-0 rounded overflow-hidden" />
-          <span class="text-sm flex-1 truncate">{{ char.title }}</span>
+          <span class="text-sm shrink-0">{{ char.title }}</span>
           <span class="text-xs text-gray-400 dark:text-[#6b6d75] truncate">{{ char.description || '暂无描述' }}</span>
         </div>
         <div v-if="selectableCharacters.length === 0" class="text-center py-4 text-gray-400 dark:text-[#6b6d75]">
