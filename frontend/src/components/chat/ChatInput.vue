@@ -26,13 +26,19 @@
 
       <!-- Tiptap 编辑器（替换 textarea） -->
       <div class="editor-container">
-        <component :is="EditorContent" :editor="editor" class="message-editor" />
-        <!-- 命令选择弹窗 -->
-        <CommandPicker
-          v-if="commandPickerVisible"
-          ref="commandPickerRef"
-          :visible="commandPickerVisible"
-          :items="commandsCache[commandTrigger]"
+        <template v-if="props.readonly">
+          <div class="readonly-placeholder" style="min-height: 58px; padding: 0 8px; font-size: var(--size-text-base, 14px); line-height: 1.8; color: var(--el-text-color-placeholder, #a8abb2); display: flex; align-items: center;">
+            子代理会话为只读模式
+          </div>
+        </template>
+        <template v-else>
+          <component :is="EditorContent" :editor="editor" class="message-editor" />
+          <!-- 命令选择弹窗 -->
+          <CommandPicker
+            v-if="commandPickerVisible"
+            ref="commandPickerRef"
+            :visible="commandPickerVisible"
+            :items="commandsCache[commandTrigger]"
           :query="pickerQuery"
           :selected-index="selectedIndex"
           :trigger="commandTrigger"
@@ -40,6 +46,7 @@
           @close="closeCommandPicker"
           @update:selected-index="selectedIndex = $event"
         />
+        </template>
       </div>
 
       <!-- 隐藏的文件输入框 -->
@@ -68,7 +75,7 @@
           </template>
 
           <!-- 图片按钮（高频使用，放在左侧） -->
-          <el-tooltip content="添加图片" placement="top">
+          <el-tooltip v-if="!props.readonly" content="添加图片" placement="top">
             <el-button class="tool-btn" @click="triggerImageInput" text>
               <el-icon size="22">
                 <Image24Regular />
@@ -76,7 +83,7 @@
             </el-button>
           </el-tooltip>
           <!-- 附件按钮（高频使用，放在左侧） -->
-          <el-tooltip content="上传文件" placement="top">
+          <el-tooltip v-if="!props.readonly" content="上传文件" placement="top">
             <el-button class="tool-btn" @click="triggerFileInput" text>
               <el-icon size="22">
                 <Attach24Regular />
@@ -84,7 +91,7 @@
             </el-button>
           </el-tooltip>
           <!-- 知识库选择按钮 -->
-          <el-tooltip content="知识库" placement="top">
+          <el-tooltip v-if="!props.readonly" content="知识库" placement="top">
             <el-button ref="kbButtonRef" class="tool-btn" @click.stop="openKnowledgeBasePanel" text>
               <el-icon size="22">
                 <BookSearch24Regular />
@@ -97,11 +104,6 @@
           <el-button ref="modelButtonRef" @click.stop="openModelPanel" plain
             class="model-selector-btn rounded-full overflow-hidden flex items-center justify-center">
             <div class="flex items-center gap-1.5" style="height:24px; max-width: 200px;">
-              <Avatar v-if="currentModel"
-                :src="getModelAvatarPath(currentModel.modelName, currentModel.provider?.name) || undefined"
-                :name="getModelDisplayName(currentModel.modelName)" type="assistant" :round="false"
-                class="w-5 h-5 shrink-0" />
-              <OpenAI v-else class="w-5 h-5 shrink-0" />
               <span class="text-sm font-medium truncate flex-1 min-w-0"
                 style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">{{
                   currentModelName }}</span>
@@ -109,7 +111,7 @@
           </el-button>
           <div class="tools right-tools">
             <!-- 会话设置按钮 -->
-            <el-tooltip content="会话设置" placement="top">
+            <el-tooltip v-if="!props.readonly" content="会话设置" placement="top">
               <el-button class="tool-btn" @click.stop="openSettingsPanel" text>
                 <el-icon size="22">
                   <Settings24Regular />
@@ -120,7 +122,7 @@
           <div>
             <el-tooltip v-if="!streaming" content="发送" placement="top">
               <el-button class="send-btn" type="primary" @click="sendMessage" circle
-                :disabled="!inputContent.trim() || !props.config?.modelId" :icon="Send24Filled" />
+                :disabled="props.readonly || !inputContent.trim() || !props.config?.modelId" :icon="Send24Filled" />
             </el-tooltip>
             <el-tooltip v-else content="停止生成" placement="top">
               <el-button class="send-btn stop-btn" @click="abortResponse" circle type="danger" :icon="Stop24Filled">
@@ -285,6 +287,7 @@ const props = defineProps({
   value: { type: String, default: '' },
   files: { type: Array, default: () => [] },
   streaming: { type: Boolean, default: false },
+  readonly: { type: Boolean, default: false },
   buttons: { type: Object, default: () => [] },
   class: { type: String, default: '' },
   sessionId: { type: [String, Number], default: null },
@@ -299,7 +302,6 @@ const props = defineProps({
       // 新增：记忆与压缩配置分组
       memory: {
         useCustom: true, // 默认开启自定义，方便用户直接看到设置
-        maxMemoryLength: null,
         compressionTriggerRatio: 0.8,
         compressionTargetRatio: 0.5,
         summaryMode: 'memory_sync', // 默认记忆同步模式

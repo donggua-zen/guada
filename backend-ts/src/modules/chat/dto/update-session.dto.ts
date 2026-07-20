@@ -18,6 +18,13 @@ export class UpdateSessionDto {
   title?: string;
 
   /**
+   * 角色 ID
+   */
+  @IsOptional()
+  @IsString()
+  characterId?: string;
+
+  /**
    * 使用的模型 ID
    */
   @IsOptional()

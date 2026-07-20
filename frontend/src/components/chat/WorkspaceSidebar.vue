@@ -1,14 +1,61 @@
 <template>
     <div class="workspace-sidebar h-full flex flex-col">
-        <!-- Electron 窗口控制标题栏 -->
-        <div v-if="isElectron" class="flex items-center justify-end h-11 drag-region shrink-0">
+        <!-- 顶部工具栏：预览模式下显示资源管理器按钮 + 浏览器标签 + 窗口控制 -->
+        <div v-if="isElectron" class="flex items-center h-11 drag-region shrink-0 border-b border-gray-100 dark:border-[#2e3035]">
+            <!-- 资源管理器切换按钮（任何预览模式都显示：文件预览或 webview 预览） -->
+            <el-tooltip v-if="browserStore.activeWindowId || selectedFile" content="返回工作目录" placement="bottom">
+                <div class="cursor-pointer p-1 rounded-lg text-gray-600 dark:text-[#8b8d95] transition-all duration-200 hover:bg-gray-100 dark:hover:bg-[#2a2c30] hover:text-gray-900 dark:hover:text-[#e8e9ed] no-drag ml-1 flex items-center"
+                    @click="showFileTree">
+                    <el-icon class="w-5 h-5"><FolderOpened /></el-icon>
+                </div>
+            </el-tooltip>
+
+            <!-- 标签 + 新建按钮容器（仅 webview 预览模式显示） -->
+            <div v-if="browserStore.activeWindowId" class="flex items-center gap-0.5 flex-1 overflow-x-auto no-drag browser-tabs-scroll">
+                <div v-for="win in browserStore.sessionWebviews" :key="win.windowId"
+                    class="browser-tab" :class="{ active: browserStore.activeWindowId === win.windowId }"
+                    :title="win.title || '未命名窗口'"
+                    @click="activateBrowserWindow(win.windowId)">
+                    <img v-if="win.favicon" :src="win.favicon" class="tab-favicon" alt=""
+                        @error="(e: Event) => (e.target as HTMLImageElement).style.display = 'none'" />
+                    <span v-else class="tab-globe">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <circle cx="12" cy="12" r="10"/>
+                            <path d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>
+                        </svg>
+                    </span>
+                    <span class="tab-title">{{ truncateTabTitle(win.title || '新窗口') }}</span>
+                    <span class="tab-close" @click.stop="closeBrowserWindow(win.windowId)">
+                        <el-icon size="10"><Close /></el-icon>
+                    </span>
+                </div>
+
+                <!-- 新建按钮：紧跟标签右侧，无标签时显示"浏览器"文字，有标签时显示 + -->
+                <el-tooltip content="新建浏览器窗口" placement="bottom">
+                    <button v-if="browserStore.sessionWebviews.length === 0" class="sidebar-tool-btn no-drag text-xs"
+                        :disabled="!props.sessionId" @click="createNewBrowserWindow">
+                        浏览器
+                    </button>
+                    <button v-else class="sidebar-tool-btn no-drag" :disabled="!props.sessionId" @click="createNewBrowserWindow">
+                        <el-icon size="14"><Plus /></el-icon>
+                    </button>
+                </el-tooltip>
+            </div>
+
+            <!-- 弹性占位（webview 预览不需要，标签容器已占满；文件预览和目录树需要） -->
+            <div v-if="!browserStore.activeWindowId" class="flex-1"></div>
+
+            <!-- 窗口控制按钮 -->
             <WindowControls class="no-drag" />
         </div>
         <!-- 目录树（预览时隐藏，v-show 保留 DOM） -->
-        <div v-show="!selectedFile" class="h-full flex flex-col flex-1 min-h-0">
-            <!-- 浏览器窗口列表（仅 Electron 环境，置于最上方确保可见） -->
+        <div v-show="!selectedFile && !browserStore.activeWindowId" class="h-full flex flex-col flex-1 min-h-0">
+            <!-- 浏览器窗口列表（仅 Electron 环境，资源管理器模式下显示） -->
             <SessionBrowserWindowList v-if="isElectron" :session-id="props.sessionId" />
             <div v-if="isElectron" class="border-b border-gray-100 dark:border-[#2e3035] mx-4 mt-3"></div>
+            <!-- 子代理任务列表 -->
+            <SessionAgentList :agent-tabs="props.agentTabs" :active-tab-id="props.activeTabId"
+                @switch="emit('switch-agent', $event)" />
             <!-- 计划事项列表 -->
             <SessionPlanList :session-id="props.sessionId" />
             <!-- 头部 -->
@@ -63,8 +110,11 @@
             </div>
         </div>
 
+        <!-- 浏览器窗口预览占位（webview 实际在 MainLayout 层，此处仅空壳坐标） -->
+        <BrowserPreviewPlaceholder v-if="isElectron" v-show="browserStore.activeWindowId" />
+
         <!-- 文件预览面板（全屏覆盖，v-show 保留目录树 DOM） -->
-        <div v-show="selectedFile" class="flex flex-col h-full w-full  flex-1">
+        <div v-show="selectedFile && !browserStore.activeWindowId" class="flex flex-col h-full w-full  flex-1">
             <!-- 标题栏 -->
             <div
                 class="shrink-0 flex items-center justify-between px-4 py-2 border-b border-gray-100 dark:border-[#2e3035]">
@@ -175,7 +225,7 @@
 import { ref, computed, watch, onUnmounted, nextTick } from 'vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import { apiService, type FileChangeEvent } from '@/services/ApiService';
-import { Refresh, FolderOpened, Switch, CopyDocument, Edit, Delete } from '@element-plus/icons-vue';
+import { Refresh, FolderOpened, Switch, CopyDocument, Edit, Delete, Plus, Close } from '@element-plus/icons-vue';
 import { LoadingOutlined } from '@vicons/antd';
 import { Dismiss20Regular, Eye20Filled, Eye20Regular, Code20Filled, Code20Regular, ArrowClockwise20Regular } from '@vicons/fluent';
 // @ts-ignore - icons 组件尚未迁移到 TypeScript
@@ -187,7 +237,10 @@ import ContextMenu, { type ContextMenuItem } from '@/components/ui/ContextMenu.v
 import WorkspaceSettingsDialog from './chat-input/WorkspaceSettingsDialog.vue';
 import SessionBrowserWindowList from './SessionBrowserWindowList.vue';
 import SessionPlanList from './SessionPlanList.vue';
+import SessionAgentList from './SessionAgentList.vue';
 import WorkspaceTree from './WorkspaceTree.vue';
+import BrowserPreviewPlaceholder from './BrowserPreviewPlaceholder.vue';
+import { useBrowserWebviewStore } from '@/stores/browserWebview';
 import type { WorkspaceNode } from './WorkspaceTree.vue';
 import WindowControls from '@/components/WindowControls.vue';
 
@@ -204,11 +257,14 @@ type PreviewMode = 'rendered' | 'source';
 
 const props = defineProps<{
     sessionId: string | null;
+    agentTabs?: { id: string; name: string; status: 'running' | 'completed' | 'error'; loaded?: boolean; avatarUrl?: string }[];
+    activeTabId?: string;
 }>();
 
 const emit = defineEmits<{
     'preview-open': [];
     'preview-close': [];
+    'switch-agent': [tabId: string];
 }>();
 
 const treeData = ref<WorkspaceNode[]>([]);
@@ -284,6 +340,84 @@ const contextMenuItems = computed<ContextMenuItem[]>(() => {
 
 // 检测是否为 Electron 环境
 const isElectron = typeof window !== 'undefined' && window.electronAPI !== undefined;
+
+// 浏览器 webview store（用于预览占位与文件预览互斥）
+const browserStore = useBrowserWebviewStore();
+
+// ── 浏览器标签操作 ──
+
+function truncateTabTitle(title: string, maxLen = 12): string {
+    return title.length <= maxLen ? title : title.substring(0, maxLen) + '...';
+}
+
+/** 点击资源管理器按钮：关闭浏览器预览和文件预览，显示目录树 */
+function showFileTree(): void {
+    browserStore.setActive(null);
+    closePreview();
+}
+
+/** 点击浏览器标签：切换预览 */
+function activateBrowserWindow(windowId: string): void {
+    if (browserStore.activeWindowId === windowId) {
+        browserStore.setActive(null);
+    } else {
+        browserStore.setActive(windowId);
+    }
+}
+
+/** 关闭浏览器窗口：关闭后切换到后一个标签，全部关闭则退出预览模式 */
+async function closeBrowserWindow(windowId: string): Promise<void> {
+    if (!window.electronAPI) return;
+
+    // 关闭前计算下一个要激活的标签
+    const tabs = browserStore.sessionWebviews;
+    const closedIndex = tabs.findIndex(t => t.windowId === windowId);
+    // 后一个标签，如果没有则取前一个
+    const nextTab = tabs[closedIndex + 1] || tabs[closedIndex - 1] || null;
+
+    try {
+        await window.electronAPI.closeBrowserWindow(windowId);
+    } catch (e) {
+        console.error('Failed to close browser window:', e);
+    }
+
+    // store 中的记录由 window-closed 事件异步移除，等待一个 tick 后切换
+    await nextTick();
+
+    if (nextTab && browserStore.sessionWebviews.some(t => t.windowId === nextTab.windowId)) {
+        // 还有标签，切换到后一个
+        browserStore.setActive(nextTab.windowId);
+    } else {
+        // 全部关闭，退出预览模式
+        browserStore.setActive(null);
+        closePreview();
+    }
+}
+
+/** 新建浏览器窗口：加载简约新建标签页 */
+async function createNewBrowserWindow(): Promise<void> {
+    if (!window.electronAPI || !props.sessionId) return;
+    try {
+        const result = await window.electronAPI.createBrowserWindow('about:blank', {
+            sessionId: props.sessionId,
+            createdBy: props.sessionId,
+        });
+        if (!result.success) {
+            ElMessage.warning(result.error || '创建窗口失败');
+        }
+    } catch (e) {
+        console.error('Failed to create browser window:', e);
+    }
+}
+
+// 浏览器预览激活/关闭时通知父组件调整分割比例
+watch(() => browserStore.activeWindowId, (active) => {
+    if (active) {
+        emit('preview-open');
+    } else {
+        emit('preview-close');
+    }
+});
 
 /**
  * 异步加载目录的子节点
@@ -2289,5 +2423,138 @@ onUnmounted(() => {
 
 .no-drag {
     -webkit-app-region: no-drag;
+}
+
+/* ── 顶部工具栏按钮 ── */
+.sidebar-tool-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 4px;
+    border: none;
+    border-radius: 8px;
+    background: transparent;
+    cursor: pointer;
+    color: var(--color-text-secondary, #6b7280);
+    flex-shrink: 0;
+    align-self: center;
+    transition: all 0.2s;
+}
+
+.sidebar-tool-btn:hover:not(:disabled) {
+    background: var(--color-hover-bg, #f3f4f6);
+    color: var(--color-text-primary, #1f2937);
+}
+
+.sidebar-tool-btn:disabled {
+    opacity: 0.35;
+    cursor: not-allowed;
+}
+
+/* ── 浏览器标签 ── */
+.browser-tabs-scroll {
+    scrollbar-width: none;
+    padding: 0 2px;
+}
+
+.browser-tabs-scroll::-webkit-scrollbar {
+    display: none;
+}
+
+.browser-tab {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 1px 8px;
+    height: 26px;
+    min-width: 0;
+    max-width: 190px;
+    border-radius: 6px;
+    cursor: pointer;
+    flex-shrink: 0;
+    transition: background 0.15s;
+}
+
+.browser-tab:hover {
+    background: var(--color-hover-bg, #f3f4f6);
+}
+
+.browser-tab.active {
+    background: rgba(127, 127, 127, 0.15);
+}
+
+.tab-favicon {
+    width: 14px;
+    height: 14px;
+    border-radius: 2px;
+    flex-shrink: 0;
+    object-fit: contain;
+}
+
+.tab-globe {
+    width: 14px;
+    height: 14px;
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--color-text-secondary, #9ca3af);
+}
+
+.tab-title {
+    font-size: 13px;
+    line-height: 1;
+    color: var(--color-text-secondary, #6b7280);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    min-width: 0;
+}
+
+.browser-tab.active .tab-title {
+    color: var(--color-text-primary, #1f2937);
+    font-weight: 500;
+}
+
+.tab-close {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 16px;
+    height: 16px;
+    border-radius: 4px;
+    color: var(--color-text-primary, #4b5563);
+    flex-shrink: 0;
+    opacity: 0.7;
+    transition: opacity 0.15s, background 0.15s, color 0.15s;
+}
+
+.browser-tab:hover .tab-close,
+.browser-tab.active .tab-close {
+    opacity: 1;
+}
+
+.tab-close:hover {
+    background: rgba(239, 68, 68, 0.1);
+    color: #ef4444;
+}
+
+@media (prefers-color-scheme: dark) {
+    .sidebar-tool-btn {
+        color: #8b8d95;
+    }
+    .sidebar-tool-btn:hover:not(:disabled) {
+        background: #2a2c30;
+        color: #e8e9ed;
+    }
+    .browser-tab:hover {
+        background: #2a2c30;
+    }
+    .tab-title {
+        color: #8b8d95;
+    }
+    .browser-tab.active .tab-title {
+        color: #e8e9ed;
+    }
 }
 </style>

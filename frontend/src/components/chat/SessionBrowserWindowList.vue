@@ -13,19 +13,23 @@
     </div>
 
     <!-- 窗口列表 -->
-    <div v-if="sessionWindows.length === 0" class="text-center py-6 text-gray-400 dark:text-[#6b6d73] text-xs">
+    <div v-if="store.sessionWebviews.length === 0" class="text-center py-6 text-gray-400 dark:text-[#6b6d73] text-xs">
       暂无浏览器窗口
     </div>
     <div v-else class="window-items overflow-y-auto py-2" style="max-height: 160px;">
-      <div v-for="win in sessionWindows" :key="win.windowId"
+      <div v-for="win in store.sessionWebviews" :key="win.windowId"
         class="window-item px-2 py-1.5 flex items-center gap-2 cursor-pointer transition-all duration-200" :class="{
-          'bg-blue-50 dark:bg-blue-900/20': animatedWindowId === win.windowId,
-          'hover:bg-gray-100 dark:hover:bg-[#2a2c30]': animatedWindowId !== win.windowId
+          'bg-gray-100 dark:bg-[#2a2c30]': store.activeWindowId === win.windowId,
+          'hover:bg-gray-100 dark:hover:bg-[#2a2c30]': store.activeWindowId !== win.windowId
         }" @click="activateWindow(win.windowId)">
-        <!-- 窗口状态指示器 -->
-        <span class="w-2 h-2 rounded-full shrink-0"
-          :class="win.isVisible ? 'bg-green-500' : 'bg-gray-400 dark:bg-gray-600'"
-          :title="win.isVisible ? '前台显示中' : '后台运行中'">
+        <!-- 网页 favicon -->
+        <img v-if="win.favicon" :src="win.favicon" class="w-4 h-4 rounded-sm shrink-0 object-contain" alt=""
+            @error="(e: Event) => (e.target as HTMLImageElement).style.display = 'none'" />
+        <span v-else class="w-4 h-4 shrink-0 flex items-center justify-center text-gray-400">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="12" cy="12" r="10"/>
+                <path d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>
+            </svg>
         </span>
 
         <!-- 窗口标题 -->
@@ -44,25 +48,16 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
+import { onMounted, onUnmounted, watch } from 'vue'
 import { Close, Plus } from '@element-plus/icons-vue'
-
-interface WindowInfo {
-  windowId: string
-  title: string
-  url: string
-  isActive?: boolean
-  isVisible?: boolean
-  metadata?: Record<string, any>
-}
+import { useBrowserWebviewStore } from '@/stores/browserWebview'
 
 const props = defineProps<{
   sessionId: string | null
 }>()
 
 const isElectron = typeof window !== 'undefined' && window.electronAPI !== undefined
-const sessionWindows = ref<WindowInfo[]>([])
-const animatedWindowId = ref<string | null>(null)
+const store = useBrowserWebviewStore()
 
 // 截断标题
 function truncateTitle(title: string, maxLength: number = 20): string {
@@ -70,143 +65,59 @@ function truncateTitle(title: string, maxLength: number = 20): string {
   return title.substring(0, maxLength) + '...'
 }
 
-// 加载当前会话的窗口列表
-async function loadSessionWindows() {
-  if (!window.electronAPI || !props.sessionId) return
-
-  try {
-    const result = await window.electronAPI.getBrowserWindows()
-    if (result.success && result.windows) {
-      // 只显示属于当前会话的窗口
-      sessionWindows.value = result.windows.filter(
-        (w: any) => w.metadata?.sessionId === props.sessionId
-      )
-    }
-  } catch (error) {
-    console.error('[SessionBrowserWindowList] Failed to load windows:', error)
-  }
-}
-
-// 激活/聚焦窗口
-async function activateWindow(windowId: string) {
-  if (!window.electronAPI) return
-
-  try {
-    await window.electronAPI.activateBrowserWindow(windowId)
-    await loadSessionWindows()
-  } catch (error) {
-    console.error('[SessionBrowserWindowList] Failed to activate window:', error)
+// 激活/切换窗口预览
+function activateWindow(windowId: string): void {
+  // 点击已激活的窗口 → 关闭预览；点击其他窗口 → 切换预览
+  if (store.activeWindowId === windowId) {
+    store.setActive(null)
+  } else {
+    store.setActive(windowId)
   }
 }
 
 // 关闭窗口
-async function closeWindow(windowId: string) {
+async function closeWindow(windowId: string): Promise<void> {
   if (!window.electronAPI) return
 
   try {
     await window.electronAPI.closeBrowserWindow(windowId)
-    sessionWindows.value = sessionWindows.value.filter(w => w.windowId !== windowId)
+    // store 中的数据由 window-closed 事件驱动移除
   } catch (error) {
     console.error('[SessionBrowserWindowList] Failed to close window:', error)
   }
 }
 
 // 创建新浏览器窗口
-async function createNewWindow() {
+async function createNewWindow(): Promise<void> {
   if (!window.electronAPI || !props.sessionId) return
 
   try {
-    const result = await window.electronAPI.createBrowserWindow('https://www.baidu.com', {
-      sessionId: props.sessionId
+    const result = await window.electronAPI.createBrowserWindow('about:blank', {
+      sessionId: props.sessionId,
+      createdBy: props.sessionId,
     })
-    if (result.success) {
-      await loadSessionWindows()
+    if (!result.success) {
+      alert('窗口数量已达上限（最多6个窗口）')
     }
+    // 窗口创建由 browser:create-webview + window-created 事件驱动
   } catch (error) {
     console.error('[SessionBrowserWindowList] Failed to create window:', error)
   }
 }
 
-// 处理窗口更新事件
-function handleWindowUpdated(event: any, data: any) {
-  // 只处理属于当前会话的窗口
-  if (data.metadata?.sessionId !== props.sessionId) return
-
-  const existingIndex = sessionWindows.value.findIndex(w => w.windowId === data.windowId)
-  if (existingIndex !== -1) {
-    sessionWindows.value[existingIndex].title = data.title
-    sessionWindows.value[existingIndex].url = data.url
-    sessionWindows.value[existingIndex].isActive = data.isActive
-    sessionWindows.value[existingIndex].isVisible = data.isVisible !== undefined ? data.isVisible : true
-  } else {
-    sessionWindows.value.push({
-      windowId: data.windowId,
-      title: data.title || '新窗口',
-      url: data.url || '',
-      isActive: data.isActive || false,
-      isVisible: data.isVisible !== undefined ? data.isVisible : true,
-      metadata: data.metadata,
-    })
-  }
-}
-
-// 处理窗口关闭事件
-function handleWindowClosed(event: any, data: any) {
-  sessionWindows.value = sessionWindows.value.filter(w => w.windowId !== data.windowId)
-}
-
-// 处理窗口创建事件（带动画）
-function handleWindowCreated(event: any, data: any) {
-  // 只处理属于当前会话的窗口
-  if (data.metadata?.sessionId !== props.sessionId) return
-
-  // 添加到列表
-  const existingIndex = sessionWindows.value.findIndex(w => w.windowId === data.windowId)
-  if (existingIndex === -1) {
-    sessionWindows.value.push({
-      windowId: data.windowId,
-      title: data.title || '新窗口',
-      url: data.url || '',
-      isActive: data.isActive || false,
-      isVisible: data.isVisible !== undefined ? data.isVisible : true,
-      metadata: data.metadata,
-    })
-  }
-
-  // 播放动画
-  if (data.animate) {
-    animatedWindowId.value = data.windowId
-    setTimeout(() => {
-      if (animatedWindowId.value === data.windowId) {
-        animatedWindowId.value = null
-      }
-    }, 1500)
-  }
-}
-
-// 监听会话 ID 变化，重新加载窗口列表
+// 监听会话 ID 变化
 watch(() => props.sessionId, () => {
-  sessionWindows.value = []
-  loadSessionWindows()
+  // 不清除 webview（它们在 MainLayout 层持久），仅切换当前会话
+  store.setCurrentSession(props.sessionId)
 }, { immediate: true })
 
 onMounted(() => {
-  loadSessionWindows()
-
-  // 监听窗口事件
-  if (window.electronAPI?.onBrowserWindowUpdated) {
-    window.electronAPI.onBrowserWindowUpdated(handleWindowUpdated)
-  }
-  if (window.electronAPI?.onBrowserWindowClosed) {
-    window.electronAPI.onBrowserWindowClosed(handleWindowClosed)
-  }
-  if (window.electronAPI?.onBrowserWindowCreated) {
-    window.electronAPI.onBrowserWindowCreated(handleWindowCreated)
-  }
+  store.setCurrentSession(props.sessionId)
 })
 
 onUnmounted(() => {
-  // 清理事件监听器（ipcRenderer 事件由主进程管理，此处无需手动移除）
+  // 组件卸载时清除预览坐标（会话切换时占位区域消失）
+  store.setPreviewRect(null)
 })
 </script>
 
