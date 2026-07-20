@@ -1,4 +1,5 @@
 import { Injectable, Logger } from "@nestjs/common";
+import { OnEvent } from "@nestjs/event-emitter";
 import * as http from "http";
 import * as path from "path";
 import * as fs from "fs";
@@ -46,6 +47,17 @@ export class BrowserPlugin extends PluginBase {
     }
   }
 
+  /**
+   * 监听子 Agent 关闭事件，自动清理其创建的浏览器窗口
+   */
+  @OnEvent("subagent.closed")
+  async handleSubAgentClosed(event: any): Promise<void> {
+    const subSessionId = event?.payload?.subSessionId;
+    if (!subSessionId) return;
+    this.logger.log(`子 Agent ${subSessionId} 已关闭，清理其浏览器窗口`);
+    await this.closeWindowsByCreator(subSessionId);
+  }
+
   async onLoad(api: PluginApi) {
     // 注册浏览器工具包（ToolKit 方式）
     api.registerToolKit({
@@ -83,12 +95,15 @@ export class BrowserPlugin extends PluginBase {
               ),
           }),
           execute: async (args, ctx, signal) => {
+            // session_id 解析到主会话：子代理用 parentSessionId，主代理用 sessionId
+            const ownerSessionId = ctx?.session.parentSessionId || ctx?.session.sessionId;
             return await this.executeWithContent(
               "browser_new_window",
               {
                 ...args,
                 session_path: ctx?.session.workspacePath,
-                session_id: ctx?.session.sessionId,
+                session_id: ownerSessionId,
+                created_by: ctx?.session.sessionId,
               },
               signal,
             );
@@ -110,7 +125,7 @@ export class BrowserPlugin extends PluginBase {
               ),
           }),
           execute: async (args, ctx, signal) =>
-            this.executeWithContent("browser_navigate", args, signal),
+            this.executeWithContent("browser_navigate", { ...args, created_by: ctx?.session.sessionId }, signal),
           display: { action: "访问", argsKey: "url", icon: "browser" },
         });
         toolkit.registerTool({
@@ -144,7 +159,7 @@ export class BrowserPlugin extends PluginBase {
               : code!;
             const result = await this.sendRequest(
               "browser_evaluate",
-              { code: finalCode, window_id },
+              { code: finalCode, window_id, created_by: ctx?.session.sessionId },
               signal,
             );
             return result;
@@ -165,7 +180,7 @@ export class BrowserPlugin extends PluginBase {
           execute: async (args, ctx, signal) => {
             const r = await this.sendRequest(
               "browser_page_struct",
-              args,
+              { ...args, created_by: ctx?.session.sessionId },
               signal,
             );
             return r;
@@ -182,7 +197,7 @@ export class BrowserPlugin extends PluginBase {
           execute: async (args, ctx, signal) => {
             const r = await this.sendRequest(
               "browser_page_summary",
-              args,
+              { ...args, created_by: ctx?.session.sessionId },
               signal,
             );
             return r;
@@ -206,7 +221,7 @@ export class BrowserPlugin extends PluginBase {
               ),
           }),
           execute: async (args, ctx, signal) => {
-            return this.executeWithContent("browser_history", args, signal);
+            return this.executeWithContent("browser_history", { ...args, created_by: ctx?.session.sessionId }, signal);
           },
           display: { action: "导航历史", argsKey: "action", icon: "browser" },
         });
@@ -223,7 +238,7 @@ export class BrowserPlugin extends PluginBase {
               ),
           }),
           execute: async (args, ctx, signal) =>
-            this.executeWithContent("browser_reload", args, signal),
+            this.executeWithContent("browser_reload", { ...args, created_by: ctx?.session.sessionId }, signal),
           display: { action: "刷新页面", icon: "browser" },
         });
         toolkit.registerTool({
@@ -244,7 +259,7 @@ export class BrowserPlugin extends PluginBase {
           execute: async (args, ctx, signal) => {
             const method =
               args.action === "click" ? "browser_click" : "browser_input";
-            return this.sendRequest(method, args, signal);
+            return this.sendRequest(method, { ...args, created_by: ctx?.session.sessionId }, signal);
           },
           display: { action: "交互操作", argsKey: "action", icon: "browser" },
         });
@@ -256,7 +271,7 @@ export class BrowserPlugin extends PluginBase {
             window_id: z.string().describe("Window ID to close"),
           }),
           execute: async (args, ctx, signal) =>
-            this.sendRequest("browser_close", args, signal),
+            this.sendRequest("browser_close", { ...args, created_by: ctx?.session.sessionId }, signal),
           display: { action: "关闭窗口", icon: "browser" },
         });
         toolkit.registerTool({
@@ -282,9 +297,22 @@ export class BrowserPlugin extends PluginBase {
             window_id: z.string().describe("Target window ID"),
           }),
           execute: async (args, ctx, signal) => {
-            return this.sendRequest("browser_console", args, signal);
+            return this.sendRequest("browser_console", { ...args, created_by: ctx?.session.sessionId }, signal);
           },
           display: { action: "查看控制台日志", icon: "browser" },
+        });
+
+        // 内部工具：子代理结束时自动清理其创建的窗口
+        toolkit.registerTool({
+          name: "browser_close_by_creator",
+          description: "[Internal] Close all windows created by a specific agent session.",
+          inputSchema: z.object({
+            created_by: z.string().describe("创建者会话 ID"),
+          }),
+          execute: async (args, ctx, signal) => {
+            return this.sendRequest("browser_close_by_creator", args, signal);
+          },
+          display: { action: "清理窗口", icon: "browser" },
         });
 
         // 使用说明提示词
@@ -324,6 +352,18 @@ export class BrowserPlugin extends PluginBase {
     this.pendingRequests.delete(response.id);
     if (response.error) pending.reject(new Error(response.error));
     else pending.resolve(response.result);
+  }
+
+  /**
+   * 公开方法：关闭指定创建者的所有浏览器窗口（供 SubAgentManager 调用）
+   */
+  async closeWindowsByCreator(createdBy: string): Promise<void> {
+    try {
+      await this.sendRequest("browser_close_by_creator", { created_by: createdBy });
+      this.logger.log(`已清理子 Agent ${createdBy} 的浏览器窗口`);
+    } catch (err) {
+      this.logger.warn(`清理子 Agent ${createdBy} 的浏览器窗口失败: ${err}`);
+    }
   }
 
   private async sendRequest(

@@ -7,10 +7,6 @@ import { Type } from "class-transformer";
 class MemorySettingsDto {
   @IsOptional()
   @IsNumber()
-  maxMemoryLength?: number;
-
-  @IsOptional()
-  @IsNumber()
   compressionTriggerRatio?: number;
 
   @IsOptional()

@@ -151,15 +151,6 @@
           <component :is="Settings16Filled" class="w-4 h-4" />
           <span class="text-xs">设置</span>
         </div>
-
-        <!-- 会话管理 -->
-        <div @click="goToSessionManage"
-          class="flex items-center gap-2 px-2 py-1.5 rounded-lg cursor-pointer transition-all duration-200 text-(--color-text-gray) hover:bg-(--color-sidebar-bg-hover) hover:text-(--color-sidebar-text-hover)">
-          <el-icon class="w-4 h-4">
-            <Folder20Filled />
-          </el-icon>
-          <span class="text-xs">管理</span>
-        </div>
       </div>
 
       <!-- 用户头像下拉 -->
@@ -271,7 +262,6 @@ import {
   Edit16Regular,
   Delete20Regular,
   Folder20Regular,
-  Folder20Filled,
   Archive20Regular,
   ChevronDown12Regular,
   WeatherSunny20Regular,
@@ -417,7 +407,6 @@ const currentActiveTab = computed(() => {
   }
   if (routeName === 'Characters') return 'characters'
   if (routeName === 'Bots') return 'bots'
-  if (routeName === 'AccountCenter') return 'account'
   if (routeName === 'SystemSettings') return 'setting'
   if (routeName === 'KnowledgeBase') return 'knowledge-base'
   if (routeName === 'Plugins') return 'plugins'
@@ -880,7 +869,7 @@ const confirmDeleteSession = async () => {
 // 处理用户菜单命令
 const handleUserMenuCommand = (command: string) => {
   if (command === 'profile') {
-    router.replace({ name: 'AccountCenter' })
+    router.replace({ name: 'SystemSettings', params: { tab: 'profile' } })
   } else if (command === 'logout') {
     confirm('提示', '确定要退出登录吗？', {
       type: 'warning',
@@ -1026,13 +1015,6 @@ function initSessionEventListeners() {
       sessionStore.setSidebarFlag(sessionId, 'unread', true)
     }
   })
-}
-
-/**
- * 跳转会话管理页面
- */
-const goToSessionManage = () => {
-  router.replace({ name: 'SessionsManage' })
 }
 
 /**

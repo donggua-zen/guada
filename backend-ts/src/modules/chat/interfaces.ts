@@ -25,7 +25,6 @@ export interface CompressionConfig {
 }
 
 export interface MemoryConfig {
-  maxMemoryLength?: number;
   compressionTriggerRatio?: number;
   compressionTargetRatio?: number;
   summaryMode?: 'disabled' | 'fast' | 'memory_sync'; // 摘要模式

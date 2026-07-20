@@ -21,10 +21,10 @@ import {
   startBrowserBridgeTCP,
   stopBrowserBridgeTCP,
 } from "./browser-bridge-tcp";
-import { BrowserWindowManager } from "./browser-tab-manager";
+import { BrowserWebviewManager } from "./browser-tab-manager";
 let backendProcess: ChildProcess | null = null;
 let mainWindow: BrowserWindow | null = null;
-let windowManager: BrowserWindowManager | null = null; // 窗口管理器
+let windowManager: BrowserWebviewManager | null = null; // 窗口管理器
 let isBackendStarting = false; // 防止重复启动
 let backendPort: number | null = null; // 记录后端端口
 let browserBridgeInitialized = false; // Browser Bridge 是否已初始化
@@ -1065,6 +1065,7 @@ function createWindow() {
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: true,
+      webviewTag: true, // 启用 <webview> 标签，用于浏览器自动化内嵌预览
     },
     show: false,
     backgroundColor: "#000000",
@@ -1185,8 +1186,9 @@ function createWindow() {
     mainWindow = null;
   });
 
-  // 初始化窗口管理器
-  windowManager = new BrowserWindowManager(mainWindow, 6);
+  // 初始化窗口管理器（webview 架构：绑定主窗口监听 did-attach-webview）
+  windowManager = new BrowserWebviewManager();
+  windowManager.attachMainWindow(mainWindow);
 
   // 监听窗口大小变化（独立窗口不需要）
   // mainWindow.on('resize', () => {
@@ -1448,32 +1450,18 @@ function setupIpcHandlers() {
 
       menuItems.push({ type: "separator" });
 
-      // 设为悬浮窗口
-      const browserWindow = BrowserWindow.fromWebContents(targetWin);
-      if (browserWindow) {
-        const isAlwaysOnTop = browserWindow.isAlwaysOnTop();
-        menuItems.push({
-          label: isAlwaysOnTop ? "取消悬浮" : "设为悬浮窗口",
-          type: "checkbox",
-          checked: isAlwaysOnTop,
-          click: (item) => {
-            windowManager?.setAlwaysOnTop(tabId, item.checked);
-          },
-        });
-
-        // 隐藏/显示窗口（后台/前台模式）
-        const isVisible = browserWindow.isVisible();
-        menuItems.push({
-          label: isVisible ? "隐藏窗口（后台模式）" : "显示窗口（前台模式）",
-          click: () => {
-            if (isVisible) {
-              windowManager?.hideWindow(tabId);
-            } else {
-              windowManager?.showWindow(tabId);
-            }
-          },
-        });
-      }
+      // 隐藏/显示窗口（后台/前台模式）
+      const isVisible = windowManager?.isWindowVisible(tabId) ?? false;
+      menuItems.push({
+        label: isVisible ? "隐藏窗口（后台模式）" : "显示窗口（前台模式）",
+        click: () => {
+          if (isVisible) {
+            windowManager?.hideWindow(tabId);
+          } else {
+            windowManager?.showWindow(tabId);
+          }
+        },
+      });
 
       menuItems.push({ type: "separator" });
 
@@ -1661,47 +1649,7 @@ function setupIpcHandlers() {
     }
   });
 
-  // ==================== Browser Shell IPC ====================
-
-  // 最小化窗口（从外壳标题栏）
-  ipcMain.on("shell:window-minimize", (event) => {
-    try {
-      const win = BrowserWindow.fromWebContents(event.sender);
-      if (win) win.minimize();
-    } catch (error: any) {
-      log.error("最小化窗口失败:", error.message);
-    }
-  });
-
-  // 最大化/还原窗口（从外壳标题栏）
-  ipcMain.on("shell:window-maximize", (event) => {
-    try {
-      const win = BrowserWindow.fromWebContents(event.sender);
-      if (win) {
-        if (win.isMaximized()) {
-          win.unmaximize();
-        } else {
-          win.maximize();
-        }
-      }
-    } catch (error: any) {
-      log.error("最大化窗口失败:", error.message);
-    }
-  });
-
-  // 隐藏窗口（从外壳标题栏关闭按钮，等同后台运行）
-  ipcMain.on("shell:window-hide", (event) => {
-    try {
-      const windowId = windowManager!.getWindowIdByWebContentsId(
-        event.sender.id,
-      );
-      if (windowId) {
-        windowManager!.hideWindow(windowId);
-      }
-    } catch (error: any) {
-      log.error("隐藏窗口失败:", error.message);
-    }
-  });
+  // ==================== Browser Shell IPC（已废弃 — webview 架构下无需外壳窗口）====================
 
   // ==================== 浏览器窗口文件存储 IPC ====================
 
@@ -1936,6 +1884,17 @@ function setupIpcHandlers() {
       return { success: true, isVisible };
     } catch (error: any) {
       log.error("获取窗口可见性失败:", error.message);
+      return { success: false, error: error.message };
+    }
+  });
+
+  // 清空所有浏览器自动化 session 数据（cookie、缓存、localStorage 等）
+  ipcMain.handle("browser:clear-all-data", async () => {
+    try {
+      await windowManager?.clearAllBrowserData();
+      return { success: true };
+    } catch (error: any) {
+      log.error("清除浏览器数据失败:", error.message);
       return { success: false, error: error.message };
     }
   });

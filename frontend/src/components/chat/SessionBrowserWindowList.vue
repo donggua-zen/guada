@@ -16,20 +16,21 @@
     <div v-if="store.sessionWebviews.length === 0" class="text-center py-6 text-gray-400 dark:text-[#6b6d73] text-xs">
       暂无浏览器窗口
     </div>
-    <div v-else class="window-items overflow-y-auto py-2" style="max-height: 160px;">
+    <div v-else class="overflow-y-auto py-2 px-1 space-y-0.5" style="max-height: 160px;">
       <div v-for="win in store.sessionWebviews" :key="win.windowId"
-        class="window-item px-2 py-1.5 flex items-center gap-2 cursor-pointer transition-all duration-200" :class="{
+        class="mx-1 px-2 py-1 flex items-center gap-1 cursor-pointer transition-all duration-200 rounded" :class="{
           'bg-gray-100 dark:bg-[#2a2c30]': store.activeWindowId === win.windowId,
           'hover:bg-gray-100 dark:hover:bg-[#2a2c30]': store.activeWindowId !== win.windowId
         }" @click="activateWindow(win.windowId)">
         <!-- 网页 favicon -->
         <img v-if="win.favicon" :src="win.favicon" class="w-4 h-4 rounded-sm shrink-0 object-contain" alt=""
-            @error="(e: Event) => (e.target as HTMLImageElement).style.display = 'none'" />
+          @error="(e: Event) => (e.target as HTMLImageElement).style.display = 'none'" />
         <span v-else class="w-4 h-4 shrink-0 flex items-center justify-center text-gray-400">
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <circle cx="12" cy="12" r="10"/>
-                <path d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>
-            </svg>
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="12" cy="12" r="10" />
+            <path
+              d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />
+          </svg>
         </span>
 
         <!-- 窗口标题 -->
@@ -122,28 +123,6 @@ onUnmounted(() => {
 </script>
 
 <style scoped>
-.window-items {
-  scrollbar-width: thin;
-}
-
-.window-items::-webkit-scrollbar {
-  width: 4px;
-}
-
-.window-items::-webkit-scrollbar-thumb {
-  background-color: rgba(0, 0, 0, 0.1);
-  border-radius: 4px;
-}
-
-.dark .window-items::-webkit-scrollbar-thumb {
-  background-color: rgba(255, 255, 255, 0.1);
-}
-
-.window-item {
-  border-radius: 4px;
-  margin: 0 4px;
-}
-
 .window-add-btn {
   padding: 4px;
   margin-right: 8px;

@@ -46,6 +46,10 @@ export class FileService implements OnModuleInit {
   private readonly MAX_IMAGE_SIZE = 1024 * 1024 * 1024; // 1GB
   private readonly MAX_PDF_SIZE = 1024 * 1024 * 1024; // 1GB
 
+  // 孤儿文件保留时长：成为孤儿超过此时间的文件才会被清理，
+  // 避免刚解绑消息的文件被立即删除（部分场景下仍可能被复用）
+  private readonly ORPHAN_FILE_RETENTION_MS = 2 * 60 * 60 * 1000; // 2 小时
+
   constructor(
     private uploadPathService: UploadPathService,
     private fileNamingService: FileNamingService,
@@ -549,25 +553,32 @@ export class FileService implements OnModuleInit {
 
   /**
    * 清理所有未关联消息的孤儿文件
-   * 删除所有 messageId 为 NULL 的文件（不管 sessionId 是否有值）
+   * 仅删除成为孤儿超过 2 小时的文件（updatedAt 早于截止时间），
+   * 避免刚解绑消息的文件被立即删除（部分场景下仍可能被复用）
    */
   async cleanupOrphanFiles(): Promise<void> {
     try {
-      this.logger.log("开始扫描孤儿文件（未关联消息）...");
+      const retentionHours = this.ORPHAN_FILE_RETENTION_MS / (60 * 60 * 1000);
+      this.logger.log(`开始扫描孤儿文件（未关联消息且超过 ${retentionHours} 小时）...`);
 
-      // 查找所有未关联消息的文件
+      const cutoffTime = new Date(Date.now() - this.ORPHAN_FILE_RETENTION_MS);
+
+      // 查找所有未关联消息且修改时间超过保留时长的孤儿文件
       const orphanFiles = await this.prisma.file.findMany({
         where: {
           messageId: null,
+          updatedAt: { lt: cutoffTime },
         },
       });
 
       if (orphanFiles.length === 0) {
-        this.logger.log("未发现孤儿文件");
+        this.logger.log("未发现需要清理的孤儿文件");
         return;
       }
 
-      this.logger.log(`发现 ${orphanFiles.length} 个孤儿文件，开始清理...`);
+      this.logger.log(
+        `发现 ${orphanFiles.length} 个孤儿文件（修改时间超过 ${retentionHours} 小时），开始清理...`,
+      );
 
       let cleanedCount = 0;
       let failedCount = 0;

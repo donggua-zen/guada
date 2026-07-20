@@ -14,8 +14,8 @@
     <RunModePopover v-model:visible="runModePopoverVisible" :anchor-el="runModeButtonRef?.$el"
       :current-value="currentRunMode" @select="handleRunModeChange" />
 
-    <!-- 工作目录按钮 -->
-    <el-button class="workspace-btn mr-0.5" @click.stop="openWorkspaceDialog" text>
+    <!-- 工作目录按钮（仅创建模式） -->
+    <el-button v-if="mode == 'create'" ref="workspaceButtonRef" class="workspace-btn mr-0.5" @click.stop="openWorkspaceDialog" text>
       <el-icon size="18">
         <FolderOpen24Regular />
       </el-icon>
@@ -48,9 +48,9 @@
     <slot name="actions" />
   </div>
 
-  <!-- 工作目录设置弹窗 -->
-  <WorkspaceSettingsDialog v-model:visible="workspaceDialogVisible"
-    :current-workspace-path="config?.workspacePath || null" @confirm="applyWorkspaceSettings" />
+  <!-- 工作目录选择弹窗 -->
+  <WorkspaceSelectorPopover v-model:visible="workspacePopoverVisible" :anchor-el="workspaceButtonRef?.$el"
+    :current-workspace-path="config?.workspacePath || null" @select="handleWorkspaceSelect" />
 
   <!-- 分组选择弹窗 -->
   <el-dialog v-model="groupSelectorVisible" title="请选择分组" width="360px" :close-on-click-modal="false">
@@ -74,9 +74,10 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
 import { FolderOpen24Regular, ChevronUpDown16Regular, Folder20Regular, Checkmark16Filled, DrinkCoffee16Regular, ClipboardTask24Regular } from '@vicons/fluent'
-import WorkspaceSettingsDialog from './WorkspaceSettingsDialog.vue'
+import WorkspaceSelectorPopover from './WorkspaceSelectorPopover.vue'
 import RunModePopover from './RunModePopover.vue'
 import { useSessionGroupStore, UNGROUPED_ID } from '@/stores/sessionGroup'
+import { useWorkspaceStore } from '@/stores/workspace'
 
 const props = defineProps<{
   mode: string
@@ -89,9 +90,11 @@ const emit = defineEmits<{
 }>()
 
 const sessionGroupStore = useSessionGroupStore()
+const workspaceStore = useWorkspaceStore()
 
 // 工作目录设置相关
-const workspaceDialogVisible = ref(false)
+const workspaceButtonRef = ref<any>(null)
+const workspacePopoverVisible = ref(false)
 
 // 运行模式相关
 const runModeButtonRef = ref<any>(null)
@@ -191,17 +194,18 @@ const openWorkspaceDialog = () => {
     emit('toggle-workspace-pane')
     return
   }
-  // 创建模式下打开工作目录设置弹窗
-  workspaceDialogVisible.value = true
+  // 创建模式下切换工作目录选择弹窗
+  workspacePopoverVisible.value = !workspacePopoverVisible.value
 }
 
 /**
- * 应用工作目录设置
+ * 应用工作目录选择
  */
-const applyWorkspaceSettings = (workspacePath: string | null) => {
-  console.log('Applying workspace path:', workspacePath)
+const handleWorkspaceSelect = (workspacePath: string | null) => {
+  if (workspacePath) {
+    workspaceStore.addRecent(workspacePath)
+  }
   emit('config-change', { workspacePath })
-  // ElMessage 由父组件处理
 }
 </script>
 

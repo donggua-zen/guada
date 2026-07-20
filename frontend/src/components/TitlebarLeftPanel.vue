@@ -9,11 +9,6 @@
         <Search16Regular class="w-4 h-4" />
       </button>
 
-      <!-- 浏览器管理按钮（仅 Electron） -->
-      <button v-if="isElectron" class="titlebar-menu-btn" @click="toggleWindowManager" title="浏览器管理">
-        <Window16Regular class="w-4 h-4" />
-      </button>
-
       <!-- Debug 下拉菜单（仅 Electron） -->
       <div v-if="isElectron" class="relative flex items-center h-full debug-dropdown" :class="{ 'active': showDebugMenu }">
         <button class="titlebar-menu-btn debug-button" @click="toggleDebugMenu" title="调试工具">
@@ -56,9 +51,6 @@
     </div>
   </div>
 
-  <!-- 浏览器管理面板 -->
-  <WindowManager v-if="showWindowManager" :visible="showWindowManager" @close="showWindowManager = false" />
-
   <!-- 更新弹窗 -->
   <UpdateDialog v-model:visible="showUpdateDialog" :update-info="updateInfo" :is-skipped="skipVersion === updateInfo?.version" @dont-remind="handleDontRemind" @cancel-skip="handleCancelSkip" />
 
@@ -68,8 +60,7 @@
 
 <script setup lang="ts">
 import { computed, ref, onMounted, onUnmounted } from 'vue'
-import { Window16Regular, Bug16Regular, Search16Regular } from '@vicons/fluent'
-import WindowManager from './WindowManager.vue'
+import { Bug16Regular, Search16Regular } from '@vicons/fluent'
 import UpdateDialog from './UpdateDialog.vue'
 import SessionSearchDialog from './SessionSearchDialog.vue'
 import { fixFrontendAssetUrl } from '@/utils/url'
@@ -85,16 +76,11 @@ const isMaximized = ref(false)
 const updateAvailable = ref(false)
 const updateInfo = ref<any>(null)
 const showDebugMenu = ref(false)
-const showWindowManager = ref(false)
 const showUpdateDialog = ref(false)
 const showSearchDialog = ref(false)
 const skipVersion = ref<string | null>(localStorage.getItem('update-skip-version'))
 const migrationStatus = ref<string>('')
 const isMigrating = ref(false)
-
-function toggleWindowManager() {
-  showWindowManager.value = !showWindowManager.value
-}
 
 const handleUpdateStatus = (status: any) => {
   if (status.status === 'available') {

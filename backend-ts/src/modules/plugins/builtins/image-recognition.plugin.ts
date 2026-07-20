@@ -1,6 +1,7 @@
 import { Logger, Injectable } from "@nestjs/common";
-import * as fs from "fs";
+import { promises as fs } from "fs";
 import * as path from "path";
+import sharp from "sharp";
 import { PluginBase } from "../base-plugin";
 import { PluginContext } from "../types/plugin.types";
 import { FileRepository } from "../../../common/database/file.repository";
@@ -14,14 +15,30 @@ import { resolveThinkingEffort } from "../../llm-core/utils/model-config.helper"
 import { PluginApi } from "../api/plugin-api";
 import { z } from "zod";
 
+const DEFAULT_PROMPT =
+  "Describe the content of this image in detail, including but not limited to: the main subject, people, objects, scenes, text (if any), colors, and composition.";
+
+/** Maximum total pixel count (width × height) allowed for an image sent to the vision model. */
+const MAX_TOTAL_PIXELS = 1024 * 1024; // 1,048,576 pixels
+
+const MIME_TYPES: Record<string, string> = {
+  jpg: "image/jpeg",
+  jpeg: "image/jpeg",
+  png: "image/png",
+  gif: "image/gif",
+  webp: "image/webp",
+  bmp: "image/bmp",
+  tiff: "image/tiff",
+};
+
 @Injectable()
 export class ImageRecognitionPlugin extends PluginBase {
   private readonly logger = new Logger(ImageRecognitionPlugin.name);
 
   manifest = {
     id: "image_recognition",
-    name: "图像识别",
-    description: "图片内容识别工具",
+    name: "Image Recognition",
+    description: "Image content recognition tool",
     version: "1.0.0",
     category: "core" as const,
   };
@@ -48,105 +65,146 @@ export class ImageRecognitionPlugin extends PluginBase {
         toolkit.registerTool({
           name: "image_recognize",
           description:
-            "识别图片内容并返回详细的文本描述。当用户询问关于上传图片的内容时使用此工具。",
+            "Recognize image content and return a detailed text description. Use this tool when the user asks about an uploaded image.",
           inputSchema: z.object({
             image_id: z
               .string()
               .describe("Uploaded image file ID, usually obtained from the message context"),
+            prompt: z
+              .string()
+              .optional()
+              .describe(
+                "Custom prompt to guide the image recognition, e.g. 'What text is shown in this image?' or 'Describe the layout of this UI screenshot.' If not provided, a default detailed-description prompt is used.",
+              ),
           }),
           execute: async (args, _ctx, abortSignal) => {
-            const { image_id } = args;
-            if (!image_id) throw new Error("缺少参数：image_id");
+            const { image_id, prompt } = args;
+            if (!image_id) throw new Error("Missing parameter: image_id");
             const file = await this.fileRepo.findById(image_id);
             if (!file || file.fileType !== "image")
-              throw new Error(`无效的图片 ID 或文件类型不是图片：${image_id}`);
+              throw new Error(`Invalid image ID or file type is not an image: ${image_id}`);
             const physicalPath = this.uploadPathService.toPhysicalPath(file.url);
-            if (!fs.existsSync(physicalPath))
-              throw new Error(`图片文件不存在: ${physicalPath}`);
-            return this.recognizeImage(physicalPath, abortSignal);
+            try {
+              await fs.access(physicalPath);
+            } catch {
+              throw new Error(`Image file not found: ${physicalPath}`);
+            }
+            return this.recognizeImage(physicalPath, prompt, abortSignal);
           },
-          display: { action: "识别图片", argsKey: "image_id", icon: "vision" },
+          display: { action: "Recognize image", argsKey: "image_id", icon: "vision" },
         });
 
         toolkit.registerTool({
           name: "image_recognize_by_path",
           description:
-            "根据图片文件路径识别图片内容并返回详细的文本描述。当用户提供图片的绝对路径或相对路径时使用此工具。",
+            "Recognize image content from a file path and return a detailed text description. Use this tool when the user provides an absolute or relative image path.",
           inputSchema: z.object({
             image_path: z
               .string()
               .describe("Path to the image file, can be an absolute path or a relative path relative to the working directory"),
+            prompt: z
+              .string()
+              .optional()
+              .describe(
+                "Custom prompt to guide the image recognition, e.g. 'What text is shown in this image?' or 'Describe the layout of this UI screenshot.' If not provided, a default detailed-description prompt is used.",
+              ),
           }),
           execute: async (args, ctx, abortSignal) => {
-            const { image_path } = args;
-            if (!image_path) throw new Error("图片路径不能为空");
-            let physicalPath = this.workspaceService.resolveFilePath(
+            const { image_path, prompt } = args;
+            if (!image_path) throw new Error("Image path cannot be empty");
+            const physicalPath = this.workspaceService.resolveFilePath(
               image_path,
               ctx?.session.workspacePath,
             );
-            if (!fs.existsSync(physicalPath))
-              throw new Error(`图片文件不存在：${physicalPath}`);
-            return this.recognizeImage(physicalPath, abortSignal);
+            try {
+              await fs.access(physicalPath);
+            } catch {
+              throw new Error(`Image file not found: ${physicalPath}`);
+            }
+            return this.recognizeImage(physicalPath, prompt, abortSignal);
           },
-          display: { action: "识别图片", argsKey: "image_path", icon: "vision" },
+          display: { action: "Recognize image", argsKey: "image_path", icon: "vision" },
         });
       },
     });
   }
 
+  /**
+   * If the image's total pixel count (width × height) exceeds MAX_TOTAL_PIXELS,
+   * scale it down proportionally so that the total pixel count stays within the limit.
+   *
+   * The scale factor is derived from:  scale = sqrt(MAX / (w * h))
+   * so that  newW * newH = (w * scale) * (h * scale) = scale² * w * h = MAX.
+   * Math.floor on both dimensions guarantees we never exceed the limit.
+   */
+  private async ensureWithinPixelLimit(imageBuffer: Buffer): Promise<Buffer> {
+    const metadata = await sharp(imageBuffer).metadata();
+    const width = metadata.width || 0;
+    const height = metadata.height || 0;
+    const totalPixels = width * height;
+
+    if (totalPixels === 0 || totalPixels <= MAX_TOTAL_PIXELS) {
+      return imageBuffer;
+    }
+
+    const scale = Math.sqrt(MAX_TOTAL_PIXELS / totalPixels);
+    const newWidth = Math.floor(width * scale);
+    const newHeight = Math.floor(height * scale);
+
+    this.logger.debug(
+      `Resizing image from ${width}x${height} (${totalPixels} px) to ${newWidth}x${newHeight} (${newWidth * newHeight} px)`,
+    );
+
+    return sharp(imageBuffer)
+      .resize(newWidth, newHeight, { fit: "inside", withoutEnlargement: true })
+      .toBuffer();
+  }
+
   private async recognizeImage(
     physicalPath: string,
+    prompt?: string,
     abortSignal?: AbortSignal,
   ): Promise<string> {
     try {
-      // 1. 从 settings 读取视觉模型 ID
+      // 1. Read the visual model ID from settings
       const visualModelId = await this.settingsStorage.getSettingValue(
         "models",
         SK_MOD_VISUAL,
       );
       if (!visualModelId) {
         throw new Error(
-          "请在系统设置中配置视觉辅助模型 (defaultVisualAssistantModelId)",
+          "Please configure a visual assistant model in system settings (defaultVisualAssistantModelId)",
         );
       }
 
-      // 2. 从数据库查询模型完整配置（含 provider）
+      // 2. Query the full model configuration (including provider) from the database
       const visualModelConfig = await this.prisma.model.findUnique({
         where: { id: visualModelId },
         include: { provider: true },
       });
       if (!visualModelConfig) {
         throw new Error(
-          `配置的视觉辅助模型 (ID: ${visualModelId}) 不存在，请检查系统设置`,
+          `The configured visual assistant model (ID: ${visualModelId}) does not exist, please check system settings`,
         );
       }
 
       const model = visualModelConfig.modelName;
       const thinkingEffort = resolveThinkingEffort(visualModelConfig, "off");
 
-      // 读取图片并转为 base64
-      const imageBuffer = fs.readFileSync(physicalPath);
+      // Read image, resize if total pixels exceed the limit, then convert to base64
+      let imageBuffer: Buffer = await fs.readFile(physicalPath);
+      imageBuffer = await this.ensureWithinPixelLimit(imageBuffer);
       const base64Image = imageBuffer.toString("base64");
       const ext = path.extname(physicalPath).toLowerCase().replace(".", "");
-      const mimeType =
-        ext === "jpg" || ext === "jpeg"
-          ? "image/jpeg"
-          : ext === "png"
-            ? "image/png"
-            : ext === "gif"
-              ? "image/gif"
-              : ext === "webp"
-                ? "image/webp"
-                : `image/${ext}`;
+      const mimeType = MIME_TYPES[ext] ?? `image/${ext}`;
+
+      const userPrompt = prompt?.trim() || DEFAULT_PROMPT;
 
       const messages = [
         {
           role: "user" as const,
           content: [
-            {
-              type: "text" as const,
-              text: "Please describe the content of this image in detail, including but not limited to: the main subject, people, objects, scenes, text (if any), colors, composition, etc.",
-            },
+            { type: "text" as const, text: userPrompt },
             {
               type: "image_url" as const,
               image_url: { url: `data:${mimeType};base64,${base64Image}` },
@@ -170,10 +228,10 @@ export class ImageRecognitionPlugin extends PluginBase {
           result += chunk.content;
         }
       }
-      return result || "无法识别图片内容";
+      return result || "Unable to recognize image content";
     } catch (error: any) {
-      this.logger.error(`图片识别失败: ${error.message}`);
-      throw new Error(`图片识别失败: ${error.message}`);
+      this.logger.error(`Image recognition failed: ${error.message}`);
+      throw new Error(`Image recognition failed: ${error.message}`);
     }
   }
 }
