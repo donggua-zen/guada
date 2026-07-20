@@ -23,8 +23,7 @@
           <div class="provider-models space-y-1">
             <div v-for="model in getProviderModels(provider.id)" :key="provider.id + '-' + model.id"
               class="model-item-compact p-2 rounded cursor-pointer transition-all flex items-center gap-2" :class="{
-                'bg-pink-50 dark:bg-pink-900/20': currentModelId === model.id,
-                'hover:bg-gray-50 dark:hover:bg-gray-800/50': currentModelId !== model.id
+                'model-item-active': currentModelId === model.id
               }" @click="handleSelect(model.id)">
               <!-- 模型头像 -->
               <div class="w-8 h-8 shrink-0">
@@ -258,11 +257,11 @@ watch(() => props.visible, (newVal) => {
 }
 
 .model-item-compact:hover {
-  background-color: var(--el-fill-color-light, #f5f7fa);
+  background: var(--color-sidebar-bg-hover);
 }
 
-.dark .model-item-compact:hover {
-  background-color: oklch(30% 0.03 250);
+.model-item-active {
+  background: var(--color-sidebar-bg-active);
 }
 
 /* 收藏按钮悬停效果 */
@@ -293,7 +292,6 @@ watch(() => props.visible, (newVal) => {
 }
 
 .provider-name {
-  color: var(--el-text-color-secondary);
   font-size: 0.875rem;
   margin-bottom: 0.5rem;
 }

@@ -5,7 +5,7 @@
             class="flex items-center h-11 drag-region shrink-0 border-b border-gray-100 dark:border-[#2e3035]">
             <!-- 资源管理器切换按钮（任何预览模式都显示：文件预览或 webview 预览） -->
             <el-tooltip v-if="browserStore.activeWindowId || selectedFile" content="返回工作目录" placement="bottom">
-                <div class="cursor-pointer p-1 rounded-lg text-gray-600 dark:text-[#8b8d95] transition-all duration-200 hover:bg-gray-100 dark:hover:bg-[#2a2c30] hover:text-gray-900 dark:hover:text-[#e8e9ed] no-drag ml-1 flex items-center"
+                <div class="cursor-pointer p-1 rounded-lg text-gray-600 dark:text-[#8b8d95] transition-all duration-200 hover:bg-(--color-sidebar-bg-hover) hover:text-(--color-text) no-drag ml-1 flex items-center"
                     @click="showFileTree">
                     <el-icon class="w-5 h-5">
                         <FolderOpened />
@@ -2336,7 +2336,7 @@ onUnmounted(() => {
 
 /* 工作目录工具按钮 - 纯图标无框样式 */
 .workspace-tool-btn {
-    color: #888;
+    color: var(--color-text-gray);
     cursor: pointer;
     font-size: 14px;
     height: 24px;
@@ -2347,18 +2347,15 @@ onUnmounted(() => {
     justify-content: center;
     transition: all 0.2s;
     margin: 0 2px;
+    border: none;
+    background: transparent;
+    border-radius: 6px;
+    outline: none;
 }
 
 .workspace-tool-btn:hover {
-    color: var(--color-primary, #409eff);
-}
-
-.dark .workspace-tool-btn {
-    color: #8b8d95;
-}
-
-.dark .workspace-tool-btn:hover {
-    color: var(--color-primary, #409eff);
+    background: var(--color-sidebar-bg-hover);
+    color: var(--color-text);
 }
 
 /* 预览/源码模式切换按钮 */
@@ -2372,33 +2369,19 @@ onUnmounted(() => {
     border-radius: 4px;
     cursor: pointer;
     background: transparent;
-    color: #6b7280;
+    color: var(--color-text-gray);
     transition: all 0.15s ease;
     outline: none;
 }
 
 .preview-mode-btn:hover {
-    background-color: rgba(0, 0, 0, 0.06);
-}
-
-.dark .preview-mode-btn {
-    color: #6b7280;
-}
-
-.dark .preview-mode-btn:hover {
-    background-color: rgba(255, 255, 255, 0.08);
+    background: var(--color-sidebar-bg-hover);
 }
 
 .preview-mode-btn.is-active {
-    color: #1a1a1a;
-    background-color: #fff;
+    color: var(--color-text);
+    background: var(--color-bg);
     box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06);
-}
-
-.dark .preview-mode-btn.is-active {
-    color: #fff;
-    background-color: #3a3c42;
-    box-shadow: none;
 }
 
 /* 关闭预览按钮 */
@@ -2412,19 +2395,13 @@ onUnmounted(() => {
     border-radius: 4px;
     cursor: pointer;
     background: transparent;
-    color: #1a1a1a;
+    color: var(--color-text);
     transition: all 0.15s ease;
     outline: none;
 }
 
 .preview-close-btn:hover {
-    color: #1a1a1a;
-    background-color: rgba(0, 0, 0, 0.06);
-}
-
-.dark .preview-close-btn:hover {
-    color: #fff;
-    background-color: rgba(255, 255, 255, 0.08);
+    background: var(--color-sidebar-bg-hover);
 }
 
 .drag-region {
@@ -2445,15 +2422,15 @@ onUnmounted(() => {
     border-radius: 8px;
     background: transparent;
     cursor: pointer;
-    color: var(--color-text-secondary, #6b7280);
+    color: var(--color-text-gray);
     flex-shrink: 0;
     align-self: center;
     transition: all 0.2s;
 }
 
 .sidebar-tool-btn:hover:not(:disabled) {
-    background: var(--color-hover-bg, #f3f4f6);
-    color: var(--color-text-primary, #1f2937);
+    background: var(--color-sidebar-bg-hover);
+    color: var(--color-text);
 }
 
 .sidebar-tool-btn:disabled {
@@ -2486,11 +2463,11 @@ onUnmounted(() => {
 }
 
 .browser-tab:hover {
-    background: var(--color-hover-bg, #f3f4f6);
+    background: var(--color-sidebar-bg-hover);
 }
 
 .browser-tab.active {
-    background: rgba(127, 127, 127, 0.15);
+    background: var(--color-sidebar-bg-active);
 }
 
 .tab-favicon {
@@ -2508,13 +2485,13 @@ onUnmounted(() => {
     display: flex;
     align-items: center;
     justify-content: center;
-    color: var(--color-text-secondary, #9ca3af);
+    color: var(--color-text-gray);
 }
 
 .tab-title {
     font-size: 13px;
     line-height: 1;
-    color: var(--color-text-secondary, #6b7280);
+    color: var(--color-text-gray);
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -2522,7 +2499,7 @@ onUnmounted(() => {
 }
 
 .browser-tab.active .tab-title {
-    color: var(--color-text-primary, #1f2937);
+    color: var(--color-text);
     font-weight: 500;
 }
 
@@ -2533,7 +2510,7 @@ onUnmounted(() => {
     width: 16px;
     height: 16px;
     border-radius: 4px;
-    color: var(--color-text-primary, #4b5563);
+    color: var(--color-text);
     flex-shrink: 0;
     opacity: 0.7;
     transition: opacity 0.15s, background 0.15s, color 0.15s;
@@ -2549,26 +2526,4 @@ onUnmounted(() => {
     color: #ef4444;
 }
 
-@media (prefers-color-scheme: dark) {
-    .sidebar-tool-btn {
-        color: #8b8d95;
-    }
-
-    .sidebar-tool-btn:hover:not(:disabled) {
-        background: #2a2c30;
-        color: #e8e9ed;
-    }
-
-    .browser-tab:hover {
-        background: #2a2c30;
-    }
-
-    .tab-title {
-        color: #8b8d95;
-    }
-
-    .browser-tab.active .tab-title {
-        color: #e8e9ed;
-    }
-}
 </style>

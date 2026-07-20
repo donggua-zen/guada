@@ -17,7 +17,7 @@
                     class="cursor-pointer p-1 rounded-lg text-gray-600 dark:text-[#8b8d95] transition-all duration-200 hover:bg-gray-100 dark:hover:bg-[#2a2c30] hover:text-gray-900 dark:hover:text-[#e8e9ed] flex items-center justify-center"
                     @click="layoutStore.toggleWorkspace()" :title="layoutStore.workspaceVisible ? '关闭工作目录' : '打开工作目录'">
                     <el-icon class="w-5 h-5">
-                      <FolderOpened />
+                      <TextBulletListLtr16Filled />
                     </el-icon>
                   </div>
                   <!-- 更多操作下拉菜单 -->
@@ -44,7 +44,7 @@
               <!-- 会话面板：主会话和子 Agent 共用同一个 ChatPanel，通过 session 切换 -->
               <ChatPanel ref="chatPanelRef" :session="panelSession" :readonly="activeTabId !== 'main'"
                 :hide-header="activeTabId !== 'main'"
-                @save-settings="handleSaveSessionSettings" @toggle-workspace-pane="layoutStore.toggleWorkspace"
+                @save-settings="handleSaveSessionSettings"
                 @select-character="handleSelectCharacter" />
 
               <!-- 右侧大纲导航 -->
@@ -78,7 +78,6 @@ import { ref, onMounted, onUnmounted, watch, computed, defineAsyncComponent, typ
 import { apiService } from "@/services/ApiService";
 import { useRouter, useRoute } from 'vue-router';
 import { usePopup } from "@/composables/usePopup";
-import { useStorage } from '@vueuse/core';
 import { useSessionStore } from "@/stores/session";
 import { useAuthStore } from "@/stores/auth";
 import { useLayoutStore } from "@/stores/layout";
@@ -102,14 +101,14 @@ interface AgentTab {
 
 // 引入组件
 import PageHeader from "@/components/PageHeader.vue";
-import { ElDialog, ElDropdown, ElDropdownMenu, ElDropdownItem } from "element-plus";
-import { Reading, FolderOpened } from '@element-plus/icons-vue';
+import { ElDropdown, ElDropdownMenu, ElDropdownItem } from "element-plus";
 import {
   MoreVertOutlined,
   DeleteTwotone,
   // FileDownloadOutlined,
   // FileUploadOutlined
 } from "@vicons/material";
+import { TextBulletListLtr16Filled } from "@vicons/fluent";
 
 
 const ChatOutline = defineAsyncComponent(() => import("./ChatOutline.vue"));

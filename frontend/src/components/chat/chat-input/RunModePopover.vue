@@ -8,9 +8,9 @@
         <span class="text-sm font-semibold text-gray-800 dark:text-gray-200">运行模式</span>
       </div>
     </template>
-    <div class="popover-content space-y-1">
+    <div class="popover-content space-y-0.5">
       <div v-for="opt in options" :key="opt.value"
-        class="flex items-center justify-between px-1 py-1.5 rounded cursor-pointer transition-all text-sm hover:bg-gray-100 dark:hover:bg-gray-800/50" @click="handleSelect(opt.value)">
+        class="rm-item flex items-center justify-between px-2 py-1.5 rounded cursor-pointer transition-all text-sm" @click="handleSelect(opt.value)">
         <div class="flex items-center space-x-2">
           <el-icon size="16" class="text-gray-500 dark:text-gray-400">
             <component :is="opt.icon" />
@@ -58,5 +58,9 @@ function handleSelect(mode: string) {
 <style scoped>
 .popover-content {
   padding: 4px 0;
+}
+
+.rm-item:hover {
+  background: var(--color-sidebar-bg-hover);
 }
 </style>

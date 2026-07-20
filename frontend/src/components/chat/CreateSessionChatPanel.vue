@@ -34,6 +34,7 @@
       <ChatInput v-model:value="inputMessage.content" :config="chatInputConfig" mode="create"
         @config-change="handleConfigChange" :buttons="chatInputButtons" :files="inputMessage.files" :streaming="false"
         @send="sendMessage" />
+      <ChatInputToolbar :config="chatInputConfig" @config-change="handleConfigChange" />
     </div>
     <div>
       <!-- <div class="flex items-center justify-center mt-6">
@@ -107,6 +108,7 @@ import { fixFrontendAssetUrl } from '@/utils/url'
 import { DEFAULT_SUMMARY_MODE } from '@/constants'
 // 组件导入
 import { ChatInput } from "../ui";
+import ChatInputToolbar from "./chat-input/ChatInputToolbar.vue";
 
 import { ArrowRightTwotone, CheckCircleFilled, AppsFilled, SearchFilled } from '@vicons/material'
 import { ContactCard24Regular } from '@vicons/fluent'
