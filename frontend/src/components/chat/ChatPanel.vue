@@ -72,44 +72,8 @@
   <!-- 输入区域 -->
   <div class="pb-2 w-full px-6 ">
     <div class="max-w-205 flex flex-col items-start mx-auto relative">
-      <!-- 线程列表抽屉（悬浮，不占布局空间） -->
-      <template v-if="agentTabs">
-        <div v-if="agentTabs.length > 1"
-          class="absolute bottom-full left-0 right-0 z-20 w-full flex flex-col rounded-tl-3xl rounded-tr-3xl bg-gray-200 dark:bg-[#2a2a2a] overflow-hidden transition-all duration-300 shadow-lg"
-          :class="{ 'max-h-48': isAgentDrawerExpanded, 'max-h-12': !isAgentDrawerExpanded }">
-          <!-- 头部折叠栏 -->
-          <div class="flex items-center px-4 py-2 cursor-pointer select-none" @click="toggleAgentDrawer">
-            <el-icon class="mr-2 text-gray-500 dark:text-[#8b8d95] transition-transform duration-300"
-              :class="{ 'rotate-180': isAgentDrawerExpanded }">
-              <ArrowUp />
-            </el-icon>
-            <span class="text-sm text-gray-700 dark:text-[#c5c7cc]">
-              任务列表 ({{ runningAgentCount }} 运行中)
-            </span>
-            <span class="ml-auto text-xs text-gray-400 dark:text-[#6b6d75]">
-              {{ agentTabs.length - 1 }} 个子任务
-            </span>
-          </div>
-          <!-- 展开的线程列表 -->
-          <div class="px-1.5 mb-5 space-y-0.5" style="scrollbar-gutter: stable both-edges"
-            :class="{ 'overflow-y-auto': isAgentDrawerExpanded, 'overflow-y-hidden': !isAgentDrawerExpanded }">
-            <div v-for="tab in agentTabs" :key="tab.id"
-              class="flex items-center gap-2 py-1 px-2 rounded-lg cursor-pointer transition-colors" :class="{
-                'bg-white dark:bg-[#2a2c30] text-gray-900 dark:text-[#e8e9ed]': tab.id === activeTabId,
-                'text-gray-500 dark:text-[#8b8d95] hover:bg-gray-100 dark:hover:bg-[#25262a]': tab.id !== activeTabId,
-              }" @click="emit('switch-agent', tab.id)">
-              <span class="text-sm flex-1 truncate">{{ tab.name }}</span>
-              <!-- 运行状态指示器 -->
-              <el-icon v-if="tab.status === 'running'" class="is-loading text-blue-500" size="12">
-                <Loading />
-              </el-icon>
-              <span v-else-if="tab.status === 'completed'" class="w-2 h-2 rounded-full bg-green-500" />
-              <span v-else class="w-3 h-3 rounded-full bg-red-500" />
-
-            </div>
-          </div>
-        </div>
-      </template>
+      <!-- Agent 切换栏（子代理只读模式隐藏） -->
+      <AgentSwitcherBar v-if="!readonly" :character="currentSession?.character" @select="handleSelectCharacter" />
 
       <!-- 编辑模式提示条 -->
       <div v-if="editMode"
@@ -160,6 +124,7 @@ import { useAuthStore } from "../../stores/auth"
 import { getCurrentTurns } from "@/utils/messageUtils"
 import { useStreamResponse } from "@/composables/useStreamResponse"
 import type { InputMessageState, Session } from '@/types/session';
+import type { Character } from '@/types/character';
 
 // 导入新创建的 composables
 import { useSessionChat } from '@/composables/useSessionChat'
@@ -174,8 +139,9 @@ import { ChatInput, ScrollContainer, ScrollToBottomButton } from "../ui";
 import WelcomeScreen from './WelcomeScreen.vue';
 const MemoPanel = defineAsyncComponent(() => import("./MemoPanel.vue"));
 import { LoadingOutlined } from '@vicons/antd'
-import { ArrowUp, Loading } from '@element-plus/icons-vue'
+import { Loading } from '@element-plus/icons-vue'
 import { Database24Regular } from '@vicons/fluent'
+import AgentSwitcherBar from './AgentSwitcherBar.vue';
 
 
 // 常量定义
@@ -210,8 +176,6 @@ const props = defineProps<{
   sessionId?: string;      // 外部传入的会话 ID（优先级高于 session.id）
   readonly?: boolean;      // 只读模式（子 Agent）
   hideHeader?: boolean;    // 隐藏头部（子 Agent）
-  agentTabs?: { id: string; name: string; status: 'running' | 'completed' | 'error'; loaded?: boolean }[]; // 子代理 Tab 列表
-  activeTabId?: string;    // 当前激活的 Tab ID
 }>();
 
 const emit = defineEmits<{
@@ -219,8 +183,7 @@ const emit = defineEmits<{
   openSettings: []
   'save-settings': []
   'toggle-workspace-pane': []
-  'switch-agent': [tabId: string]  // 切换子代理
-  'close-agent': [tabId: string]    // 关闭子代理
+  'select-character': [character: Character]  // 切换角色
 }>();
 
 // 计算属性 - 类型化
@@ -281,23 +244,6 @@ const {
   prepareNewMessage,
   enterEditMode
 } = useMessageOperations(sessionStore, apiService, currentSessionId)
-
-// 子代理抽屉展开状态
-const isAgentDrawerExpanded = ref(false)
-
-/**
- * 切换子代理抽屉展开/折叠
- */
-function toggleAgentDrawer() {
-  isAgentDrawerExpanded.value = !isAgentDrawerExpanded.value
-}
-
-/**
- * 运行中的子代理数量
- */
-const runningAgentCount = computed(() => {
-  return (props.agentTabs || []).filter(t => t.status === 'running').length
-})
 
 // isStreaming 需要在滚动逻辑之前定义
 const isStreaming = computed(() => {
@@ -2270,6 +2216,13 @@ async function copyMessage(message: any) {
     console.error("复制消息失败:", error);
     toast.error("复制失败");
   }
+}
+
+/**
+ * 切换角色
+ */
+function handleSelectCharacter(character: Character) {
+  emit('select-character', character);
 }
 
 /**

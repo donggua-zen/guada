@@ -43,9 +43,9 @@
 
               <!-- 会话面板：主会话和子 Agent 共用同一个 ChatPanel，通过 session 切换 -->
               <ChatPanel ref="chatPanelRef" :session="panelSession" :readonly="activeTabId !== 'main'"
-                :hide-header="activeTabId !== 'main'" :agent-tabs="agentTabs" :active-tab-id="activeTabId"
+                :hide-header="activeTabId !== 'main'"
                 @save-settings="handleSaveSessionSettings" @toggle-workspace-pane="layoutStore.toggleWorkspace"
-                @switch-agent="switchTab" @close-agent="closeSubAgentTab" />
+                @select-character="handleSelectCharacter" />
 
               <!-- 右侧大纲导航 -->
               <ChatOutline v-if="mainSession && activeTabId === 'main'" :messages="chatPanelRef?.activeMessages || []"
@@ -55,7 +55,9 @@
 
           <template #pane2>
             <WorkspaceSidebar v-if="layoutStore.workspaceVisible && mainSession" :session-id="mainSession.id"
-              @preview-open="isPreviewMode = true" @preview-close="isPreviewMode = false" />
+              :agent-tabs="agentTabs" :active-tab-id="activeTabId"
+              @preview-open="isPreviewMode = true" @preview-close="isPreviewMode = false"
+              @switch-agent="switchTab" />
           </template>
         </LiteSplitpanes>
       </div>
@@ -80,8 +82,10 @@ import { useStorage } from '@vueuse/core';
 import { useSessionStore } from "@/stores/session";
 import { useAuthStore } from "@/stores/auth";
 import { useLayoutStore } from "@/stores/layout";
+import { useBrowserWebviewStore } from "@/stores/browserWebview";
 import { useTitle } from '@/composables/useTitle';
 import type { Session } from '@/types/session';
+import type { Character } from '@/types/character';
 import { LiteSplitpanes } from "../ui";
 import ChatPanel from "./ChatPanel.vue";
 import CreateSessionChatPanel from "./CreateSessionChatPanel.vue";
@@ -113,7 +117,7 @@ const WorkspaceSidebar = defineAsyncComponent(() => import("./WorkspaceSidebar.v
 
 // 子 Agent Tab 状态
 const agentTabs = ref<AgentTab[]>([
-  { id: 'main', name: '主代理', status: 'completed', loaded: true }
+  { id: 'main', name: '主会话', status: 'completed', loaded: true }
 ]);
 const activeTabId = ref('main');
 
@@ -203,7 +207,7 @@ function handleStreamStarted(event: any) {
   if (tab) {
     tab.status = 'running';
   }
-  // 主代理流开始：同步更新 main Tab 状态
+  // 主会话流开始：同步更新 main Tab 状态
   if (sessionId === mainSession.value?.id) {
     const mainTab = agentTabs.value.find(t => t.id === 'main');
     if (mainTab) mainTab.status = 'running';
@@ -248,7 +252,7 @@ function handleStreamFinished(event: any) {
     const reason = payload?.reason;
     tab.status = reason === 'completed' ? 'completed' : 'error';
   }
-  // 主代理流结束：同步更新 main Tab 状态
+  // 主会话流结束：同步更新 main Tab 状态
   if (sessionId === mainSession.value?.id) {
     const mainTab = agentTabs.value.find(t => t.id === 'main');
     if (mainTab) {
@@ -295,6 +299,11 @@ const title = useTitle();
 // 主会话对象（侧边栏选中的根会话），包含会话的基本信息和设置
 const mainSession: Ref<Session | null> = ref(null);
 
+// 会话切换时同步浏览器 webview store（隐藏活跃预览，webview 不销毁）
+watch(() => mainSession.value?.id, (sessionId) => {
+  browserWebviewStore.setCurrentSession(sessionId || null);
+});
+
 
 // 判断是否为 Electron 环境
 const isElectron = typeof window !== 'undefined' && !!(window as any).electronAPI;
@@ -312,6 +321,8 @@ const workspaceSize = computed(() =>
 // 控制设置模态框的显示与隐藏
 // 布局状态
 const layoutStore = useLayoutStore();
+// 浏览器 webview store（会话切换时同步当前会话 ID）
+const browserWebviewStore = useBrowserWebviewStore();
 
 // 登录信息
 const authStore = useAuthStore();
@@ -340,7 +351,7 @@ const fetchSession = async (sessionId: string) => {
       // 保留 main Tab，重建子 Agent Tabs（状态以 isStreaming 为准）
       const mainTab = agentTabs.value.find(t => t.id === 'main');
       agentTabs.value = [
-        mainTab || { id: 'main', name: '主代理', status: 'completed', loaded: true },
+        mainTab || { id: 'main', name: '主会话', status: 'completed', loaded: true },
         ...subSessions.value.map((sub) => ({
           id: sub.id,
           name: sub.title || '子任务',
@@ -371,10 +382,14 @@ const goChatRoute = async (sessionId: string | null) => {
 
 
 function onPaneResize() {
-  // LiteSplitpanes 自身通过 computed 管理布局，无需外部快照
+  // 拖拽开始时屏蔽 webview 指针事件（webview 在 MainLayout 层，不在 splitpanes scoped CSS 范围内）
+  browserWebviewStore.setDragging(true);
 }
 
 function onPaneResized(size: number) {
+  // 拖拽结束，恢复 webview 指针事件
+  browserWebviewStore.setDragging(false);
+
   const el = paneContentRef.value;
   if (el) {
     el.style.width = '';
@@ -421,7 +436,7 @@ const updateSelectedSession = async (sessionId: string) => {
   if (sessionId !== mainSession.value?.id) {
     // 切换会话时重置子代理状态到主线程
     activeTabId.value = 'main';
-    agentTabs.value = [{ id: 'main', name: '主代理', status: 'completed', loaded: true }];
+    agentTabs.value = [{ id: 'main', name: '主会话', status: 'completed', loaded: true }];
     subSessions.value = [];
     await fetchSession(sessionId);
   }
@@ -462,6 +477,22 @@ const handleSaveSessionSettings = async () => {
     }
   } catch (error: any) {
     console.error('保存对话设置失败:', error);
+  }
+};
+
+/**
+ * 切换角色
+ * 更新会话的 characterId 并刷新本地角色信息
+ */
+const handleSelectCharacter = async (character: Character) => {
+  if (!mainSession.value) return;
+  try {
+    await apiService.updateSession(mainSession.value.id, { characterId: character.id });
+    mainSession.value.character = character;
+    mainSession.value.characterId = character.id;
+  } catch (error: any) {
+    console.error('切换角色失败:', error);
+    toast.error('切换角色失败');
   }
 };
 

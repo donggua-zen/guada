@@ -366,7 +366,6 @@ export class SessionService {
       const sessionMemory = filteredSettings.memory;
 
       filteredSettings.memory = {
-        maxMemoryLength: sessionMemory.maxMemoryLength ?? null,
         compressionTriggerRatio: sessionMemory.compressionTriggerRatio ?? 0.8,
         compressionTargetRatio: sessionMemory.compressionTargetRatio ?? 0.5,
         summaryMode: sessionMemory.summaryMode ?? SummaryMode.DEFAULT,
@@ -415,7 +414,7 @@ export class SessionService {
     }
 
     // 只允许更新特定字段（工作目录路径不允许通过此接口更新）
-    const allowedFields = ["modelId", "settings", "title", "groupId"];
+    const allowedFields = ["modelId", "settings", "title", "groupId", "characterId"];
     const updateData: any = {};
 
     for (const key of allowedFields) {
