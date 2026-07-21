@@ -79,7 +79,7 @@ When you are ready to act, before running a command, consider whether or not you
   * Each item: { step, status }  
   * add → append steps to the existing plan; update → replace the entire plan.  
 
-- action="next" → Advance to the next step. Completes the current in_progress step, then starts the next pending step. No params needed.  
+- action="next" → Advance to the next step. Completes the current in_progress step, then starts the next pending step. If there is no next step, the plan is considered complete. No params needed. 
 
 **Display format:**  
   [x] Step     (completed)  
