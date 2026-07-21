@@ -24,7 +24,6 @@
       </template>
 
       <!-- 自动创建 -->
-      <div class="ws-section-header">自动创建</div>
       <div class="ws-item"
         :class="{ 'ws-item-active': !currentWorkspacePath }"
         @click="handleSelect(null)">
@@ -42,13 +41,12 @@
 
       <!-- 打开文件夹（仅 Electron） -->
       <template v-if="isElectron">
-        <div class="ws-divider"></div>
         <div class="ws-item" @click="handleOpenFolder">
           <el-icon size="16" class="ws-item-icon shrink-0">
-            <FolderOpen24Regular />
+            <Desktop16Regular />
           </el-icon>
           <div class="ws-item-text">
-            <span class="ws-item-name">打开文件夹</span>
+            <span class="ws-item-name">选择本地文件夹</span>
           </div>
         </div>
       </template>
@@ -58,7 +56,7 @@
 
 <script setup lang="ts">
 import { ElIcon, ElMessage } from 'element-plus'
-import { Folder20Regular, FolderOpen24Regular, FolderAdd24Regular, Checkmark16Filled } from '@vicons/fluent'
+import { Folder20Regular, Desktop16Regular, FolderAdd24Regular, Checkmark16Filled } from '@vicons/fluent'
 import CustomPopover from '../../ui/CustomPopover.vue'
 import { useWorkspaceStore } from '@/stores/workspace'
 

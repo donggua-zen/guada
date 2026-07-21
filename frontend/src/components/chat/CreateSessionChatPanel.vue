@@ -46,15 +46,11 @@ import { ChatInput } from "../ui";
 import ChatInputToolbar from "./chat-input/ChatInputToolbar.vue";
 import AgentSwitcherBar from "./AgentSwitcherBar.vue";
 
-import { ArrowRightTwotone, CheckCircleFilled, AppsFilled, SearchFilled } from '@vicons/material'
-import { ContactCard24Regular } from '@vicons/fluent'
 
 // UI 组件导入
-import { ElButton, ElTabs, ElTabPane } from "element-plus";
 import { useBreakpoints, breakpointsTailwind } from '@vueuse/core'
 
 const breakpoints = useBreakpoints(breakpointsTailwind)
-const isMobile = breakpoints.smaller('md') // md = 768px
 
 // 弹出层工具
 const { notify } = usePopup();
@@ -521,9 +517,6 @@ const handleConfigChange = (config: any): void => {
 };
 
 // 前往角色管理页面
-const goToCharactersPage = (): void => {
-  router.replace({ name: 'Characters' });
-};
 
 onMounted(() => {
   title.value = "你今天想聊点什么";
@@ -580,20 +573,6 @@ const sendMessage = async (): Promise<void> => {
   });
 }
 
-const handleCreateSessionClick = (): void => {
-  if (!currentSession.value.characterId) {
-    notify.error("创建失败", '请先选择一个角色模板');
-    return;
-  }
-  emit("create-session" as any, {
-    characterId: currentSession.value.characterId,
-    modelId: currentModelId.value,
-    title: autoTitle(),
-    settings: currentSession.value.settings,
-    workspacePath: currentSession.value.workspacePath || null,
-    groupId: currentSession.value.groupId || null
-  })
-}
 
 // 设置操作
 
