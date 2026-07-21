@@ -281,8 +281,6 @@ export class SubAgentManager {
         systemPrompt: params.instructions,
         thinkingEffort: 'off',
         memory: { maxMemoryLength: 50, summaryMode: 'fast' },
-        modelTemperature: parentSession.settings?.modelTemperature,
-        modelTopP: parentSession.settings?.modelTopP,
       },
     }
 
@@ -373,8 +371,8 @@ export class SubAgentManager {
         model: session.model?.modelName,
         messages,
         tools,
-        temperature: session.settings?.modelTemperature,
-        topP: session.settings?.modelTopP,
+        temperature: session.model?.config?.temperature,
+        topP: session.model?.config?.topP,
         maxTokens: session.model?.config?.maxOutputTokens,
         providerConfig: session.model?.provider,
         stream: true,

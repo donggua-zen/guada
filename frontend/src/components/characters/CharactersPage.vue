@@ -3,36 +3,12 @@
     <PageHeader title="助手" />
     <div class="flex flex-1 overflow-scroll w-full">
       <div class="flex-1 flex flex-col w-full md:max-w-260 md:mx-auto">
-        <!-- Tab 头部 -->
-        <div class="border-gray-200 dark:border-gray-700 px-4 py-2">
-          <el-tabs v-model="currentTabValue" @tab-change="handleTabChange" class="characters-tabs">
-            <el-tab-pane v-for="item in tabItems" :key="item.path" :label="item.label" :name="item.path">
-              <template #label>
-                <div class="flex items-center gap-2">
-                  <component :is="item.icon" class="w-4.25 h-4.25"></component>
-                  <span class="text-[15px]">{{ item.label }}</span>
-                </div>
-              </template>
-            </el-tab-pane>
-          </el-tabs>
-        </div>
-
-        <!-- Tab 内容区 -->
         <div class="flex-1 px-4 py-2 md:py-2">
-
-          <!-- 助手列表 Tab -->
-          <template v-if="currentTabValue === 'assistants'">
-            <CharacterListTab :characters="characters" :groups="groups" :currentGroupId="currentGroupId"
-              :loading="loading" @create-character="createCharacter" @edit-character="editCharacter"
-              @delete-character="deleteCharacter" @start-new-chat="startNewChat" @select-group="selectGroup"
-              @create-group="showCreateGroupDialog" @rename-group="handleRenameGroup" @delete-group="handleDeleteGroup"
-              @open-docs="openDocs" />
-          </template>
-
-          <!-- 轻量 Agent Tab -->
-          <template v-else-if="currentTabValue === 'agents'">
-            <AgentListTab />
-          </template>
+          <CharacterListTab :characters="characters" :groups="groups" :currentGroupId="currentGroupId"
+            :loading="loading" @create-character="createCharacter" @edit-character="editCharacter"
+            @delete-character="deleteCharacter" @start-new-chat="startNewChat" @select-group="selectGroup"
+            @create-group="showCreateGroupDialog" @rename-group="handleRenameGroup" @delete-group="handleDeleteGroup"
+            @open-docs="openDocs" @imported="handleImported" />
         </div>
       </div>
     </div>
@@ -42,27 +18,12 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted, computed, watch } from 'vue'
-import { useRouter, useRoute } from 'vue-router'
-import {
-  ElIcon,
-  ElButton,
-  ElTabs,
-  ElTabPane,
-  ElMessageBox
-} from 'element-plus'
-import {
-  People
-} from '@vicons/ionicons5'
-import {
-  ContactCard24Regular,
-  Bot24Regular,
-} from '@vicons/fluent'
+import { ref, onMounted } from 'vue'
+import { useRouter } from 'vue-router'
+import { ElButton, ElMessageBox } from 'element-plus'
 
 import PageHeader from '@/components/PageHeader.vue'
-import ScrollContainer from '@/components/ui/ScrollContainer.vue'
 import CharacterListTab from './CharacterListTab.vue'
-import AgentListTab from './AgentListTab.vue'
 import CharacterModal from './CharacterModal.vue'
 import { apiService } from '../../services/ApiService'
 import { usePopup } from '../../composables/usePopup'
@@ -72,29 +33,7 @@ import { useSessionStore } from '@/stores/session'
 
 const { confirm, toast } = usePopup()
 const router = useRouter()
-const route = useRoute()
 const sessionStore = useSessionStore()
-
-// ========== Tab 系统 ==========
-const tabItems = [
-  { label: '助手', path: 'assistants', icon: ContactCard24Regular },
-  { label: '子Agent', path: 'agents', icon: Bot24Regular },
-]
-
-const getDefaultTabPath = () => tabItems[0]?.path || 'assistants'
-const currentTabValue = ref(getDefaultTabPath())
-
-const handleTabChange = (tabName: string | number) => {
-  const tabPath = typeof tabName === 'string' ? tabName : String(tabName)
-  router.replace({ name: 'Characters', params: { tab: tabPath } })
-}
-
-watch(() => route.params.tab, (newPath) => {
-  const tabPath = Array.isArray(newPath) ? newPath[0] : (newPath as string)
-  if (tabPath && tabPath !== currentTabValue.value) {
-    currentTabValue.value = tabPath
-  }
-})
 
 // ========== 助手列表逻辑 ==========
 const characters = ref<any[]>([])
@@ -228,35 +167,13 @@ const handleSaved = async (characterData: any): Promise<void> => {
   await loadCharacters(currentGroupId.value || undefined)
 }
 
+const handleImported = async (): Promise<void> => {
+  await loadCharacters(currentGroupId.value || undefined)
+}
+
 // ========== 生命周期 ==========
 onMounted(async (): Promise<void> => {
-  // 处理 Tab 路由参数
-  if (!route.params.tab) {
-    const defaultTab = getDefaultTabPath()
-    router.replace({ name: 'Characters', params: { tab: defaultTab } })
-  } else {
-    const tabParam = Array.isArray(route.params.tab) ? route.params.tab[0] : (route.params.tab as string)
-    currentTabValue.value = tabParam
-  }
-
   await loadGroups()
   loadCharacters()
 })
 </script>
-
-<style scoped>
-.characters-tabs :deep(.el-tabs__header) {
-  margin-bottom: 0;
-}
-
-.characters-tabs :deep(.el-tabs__nav-wrap::after) {
-  height: 1px;
-}
-
-.characters-tabs :deep(.el-tabs__item) {
-  padding: 0 18px;
-  height: 44px;
-  line-height: 44px;
-  font-size: 14px;
-}
-</style>

@@ -47,7 +47,7 @@ export class SubAgentPlugin extends PluginBase {
         agentId: z
           .string()
           .optional()
-          .describe("角色 ID/agent ID（可选，不传则创建通用子代理）"),
+          .describe("角色 ID（可选，不传则创建通用子代理）"),
         mode: z
           .enum(["foreground", "background"])
           .optional()

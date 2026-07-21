@@ -3,6 +3,7 @@ import * as fs from "fs";
 import * as path from "path";
 import * as crypto from "crypto";
 import sharp from "sharp";
+import * as yaml from "js-yaml";
 import { CharacterRepository } from "../../common/database/character.repository";
 import { CharacterGroupRepository } from "../../common/database/character-group.repository";
 import {
@@ -206,6 +207,58 @@ export class CharacterService {
       }
       throw new Error(`头像上传失败: ${error.message}`);
     }
+  }
+
+  /**
+   * 从 .md 文件导入角色
+   * 文件格式: YAML frontmatter (name, description) + Markdown body (systemPrompt)
+   */
+  async importCharacters(userId: string, files: { content: string; filename: string }[]) {
+    const results: { filename: string; status: "ok" | "invalid"; characterId?: string; error?: string }[] = [];
+
+    for (const file of files) {
+      try {
+        const parsed = this.parseAgentMarkdown(file.content);
+        if (!parsed.name) {
+          results.push({ filename: file.filename, status: "invalid", error: "缺少 name 字段" });
+          continue;
+        }
+
+        const character = await this.characterRepo.create({
+          userId,
+          title: parsed.name,
+          description: parsed.description || "",
+          settings: {
+            systemPrompt: parsed.body || "",
+          },
+        });
+
+        results.push({ filename: file.filename, status: "ok", characterId: character.id });
+      } catch (error: any) {
+        results.push({ filename: file.filename, status: "invalid", error: error.message });
+      }
+    }
+
+    return results;
+  }
+
+  /**
+   * 解析 Agent Markdown 文件（YAML frontmatter + Markdown body）
+   */
+  private parseAgentMarkdown(content: string): { name?: string; description?: string; body: string } {
+    const match = content.match(/^---\s*\n([\s\S]*?)\n---\s*\n([\s\S]*)$/);
+    if (!match) {
+      return { body: content.trim() };
+    }
+
+    const frontmatter = yaml.load(match[1]) as Record<string, any>;
+    const body = match[2].trim();
+
+    return {
+      name: frontmatter?.name,
+      description: frontmatter?.description,
+      body,
+    };
   }
 
 }

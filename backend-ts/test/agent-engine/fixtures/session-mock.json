@@ -16,9 +16,6 @@
   "settings": {
     "systemPrompt": "You are a helpful assistant.",
     "thinkingEffort": "medium",
-    "modelTemperature": 0.7,
-    "modelTopP": 1.0,
-    "modelFrequencyPenalty": 0.0,
     "memory": { 
       "enabled": true, 
       "maxTokensLimit": 8000 
@@ -29,9 +26,6 @@
   "character": {
     "settings": {
       "systemPrompt": "Default system prompt.",
-      "modelTemperature": 0.7,
-      "modelTopP": 1.0,
-      "modelFrequencyPenalty": 0.0,
       "memory": {
         "enabled": true,
         "maxTokensLimit": 8000

@@ -2,57 +2,6 @@
   <el-dialog :model-value="visible" @update:model-value="$emit('update:visible', $event)" title="会话配置" width="600px" max-width="80vw" append-to-body
     :close-on-click-modal="false" class="session-settings-dialog">
     <el-form label-position="left" label-width="50%" size="large">
-      <!-- 模型参数覆盖 -->
-      <el-form-item>
-        <template #label>
-          <div style="display: flex; flex-direction: column; gap: 8px;">
-            <span class="text-base text-gray-900 dark:text-gray-100 font-medium">覆盖模型参数</span>
-            <span class="text-xs text-gray-500 dark:text-gray-400 font-normal">将覆盖模型本身的默认参数。除非你明确知道自己在干什么，否则保持默认关闭</span>
-          </div>
-        </template>
-        <div class="w-full max-w-md">
-          <el-switch v-model="tempConfig.modelOverrideEnabled" inline-prompt active-text="开启" inactive-text="关闭" />
-        </div>
-      </el-form-item>
-
-      <template v-if="tempConfig.modelOverrideEnabled">
-        <!-- 温度 -->
-        <el-form-item>
-          <template #label>
-            <div class="flex flex-col gap-1">
-              <span class="text-base text-gray-900 dark:text-gray-100 font-medium">温度</span>
-              <span class="text-xs text-gray-500 dark:text-gray-400 font-normal">控制输出的随机性和创造性，值越高越富有创意</span>
-            </div>
-          </template>
-          <el-slider-optional v-model="tempConfig.modelTemperature" :min="0" :max="1.9" :step="0.1"
-            show-input optional-direction="max" optional-text="Auto" class="w-full max-w-md" />
-        </el-form-item>
-        <!-- Top P -->
-        <el-form-item>
-          <template #label>
-            <div class="flex flex-col gap-1">
-              <span class="text-base text-gray-900 dark:text-gray-100 font-medium">Top P</span>
-              <span class="text-xs text-gray-500 dark:text-gray-400 font-normal">核采样参数，控制输出词汇的多样性范围</span>
-            </div>
-          </template>
-          <el-slider-optional v-model="tempConfig.modelTopP" :min="0" :max="1" :step="0.1" show-input
-            optional-direction="max" optional-text="Auto" class="w-full max-w-md" />
-        </el-form-item>
-        <!-- 频率惩罚 -->
-        <el-form-item>
-          <template #label>
-            <div class="flex flex-col gap-1">
-              <span class="text-base text-gray-900 dark:text-gray-100 font-medium">频率惩罚</span>
-              <span class="text-xs text-gray-500 dark:text-gray-400 font-normal">降低重复内容的出现概率，正值减少重复，负值鼓励重复</span>
-            </div>
-          </template>
-          <el-slider-optional v-model="tempConfig.modelFrequencyPenalty" :min="-1.9" :max="1.9" :step="0.1"
-            show-input optional-direction="max" optional-text="Auto" class="w-full max-w-md" />
-        </el-form-item>
-      </template>
-
-      <el-divider />
-
       <!-- 自定义配置开关 -->
       <el-form-item>
         <template #label>
@@ -171,17 +120,10 @@
 import { DEFAULT_SUMMARY_MODE } from '@/constants'
 import { reactive, ref, watch } from 'vue'
 import { ElDialog, ElForm, ElFormItem, ElSwitch, ElInput, ElSlider, ElSelect, ElOption, ElAlert, ElButton, ElIcon, ElTooltip } from 'element-plus'
-import ElSliderOptional from '../../ui/ElSliderOptional.vue'
 import { CloseOutlined, HelpOutlined } from '@vicons/material'
 import { ThunderboltOutlined, SyncOutlined } from '@vicons/antd'
 
 interface MemoryConfig {
-  modelOverrideEnabled?: boolean
-  model?: {
-    temperature?: number | null
-    topP?: number | null
-    frequencyPenalty?: number | null
-  }
   useCustom?: boolean
   compressionTriggerRatio?: number
   compressionTargetRatio?: number
@@ -202,10 +144,6 @@ const emit = defineEmits<{
 
 // 临时配置（内部使用的简化版本）
 interface TempConfig {
-  modelOverrideEnabled: boolean
-  modelTemperature: number | undefined
-  modelTopP: number | undefined
-  modelFrequencyPenalty: number | undefined
   useCustom: boolean
   triggerRatio: number
   targetRatio: number
@@ -214,10 +152,6 @@ interface TempConfig {
 }
 
 const tempConfig = reactive<TempConfig>({
-  modelOverrideEnabled: false,
-  modelTemperature: undefined,
-  modelTopP: undefined,
-  modelFrequencyPenalty: undefined,
   useCustom: true,
   triggerRatio: 0.8,
   targetRatio: 0.5,
@@ -307,10 +241,6 @@ function formatSliderTooltip(val: number): string {
 function initTempConfig() {
   const settings = props.config || {}
 
-  tempConfig.modelOverrideEnabled = settings.modelOverrideEnabled ?? false
-  tempConfig.modelTemperature = settings.model?.temperature ?? undefined
-  tempConfig.modelTopP = settings.model?.topP ?? undefined
-  tempConfig.modelFrequencyPenalty = settings.model?.frequencyPenalty ?? undefined
   tempConfig.useCustom = settings.useCustom ?? true
   tempConfig.triggerRatio = settings.compressionTriggerRatio ?? 0.8
   tempConfig.targetRatio = settings.compressionTargetRatio ?? 0.5
@@ -327,18 +257,6 @@ function initTempConfig() {
 function handleConfirm() {
   const configChanges: any = {
     memoryEnabled: tempConfig.useCustom,
-  }
-
-  // 模型参数覆盖
-  configChanges.modelOverrideEnabled = tempConfig.modelOverrideEnabled
-  if (tempConfig.modelOverrideEnabled) {
-    configChanges.model = {
-      temperature: tempConfig.modelTemperature ?? null,
-      topP: tempConfig.modelTopP ?? null,
-      frequencyPenalty: tempConfig.modelFrequencyPenalty ?? null,
-    }
-  } else {
-    configChanges.model = null
   }
 
   // 只有当记忆开启自定义配置时，才保存具体的数值

@@ -32,7 +32,7 @@
                 <el-form-item prop="avatarUrl" class="!mb-0">
                   <div class="px-4 py-3.5 flex items-center justify-between gap-4 border-b border-gray-100 dark:border-[#2e3035] w-full">
                     <div class="flex flex-col gap-1 w-1/2">
-                      <span class="text-base text-gray-900 dark:text-[#e8e9ed]">角色头像</span>
+                      <span class="text-base text-gray-900 dark:text-[#e8e9ed]">角色头像 <span class="text-xs text-gray-400">(可选)</span></span>
                       <span class="text-xs text-gray-500 dark:text-[#8b8d95]">点击头像可以更换新的头像，支持上传图片文件</span>
                     </div>
                     <AvatarPreview :src="characterForm.avatarUrl" type="assistant" class="w-10"
@@ -55,7 +55,7 @@
                 <el-form-item prop="description" class="!mb-0">
                   <div class="px-4 py-3.5 flex items-center justify-between gap-4 border-b border-gray-100 dark:border-[#2e3035] w-full">
                     <div class="flex flex-col gap-1 w-1/2">
-                      <span class="text-base text-gray-900 dark:text-[#e8e9ed]">角色描述</span>
+                      <span class="text-base text-gray-900 dark:text-[#e8e9ed]">角色描述 <span class="text-xs text-gray-400">(可选)</span></span>
                       <span class="text-xs text-gray-500 dark:text-[#8b8d95]">简要描述助手的用途、特点或背景信息</span>
                     </div>
                     <div class="w-1/2">
@@ -68,7 +68,7 @@
                 <el-form-item prop="groupId" class="!mb-0">
                   <div class="px-4 py-3.5 flex items-center justify-between gap-4 w-full">
                     <div class="flex flex-col gap-1 w-1/2">
-                      <span class="text-base text-gray-900 dark:text-[#e8e9ed]">分组设置</span>
+                      <span class="text-base text-gray-900 dark:text-[#e8e9ed]">分组设置 <span class="text-xs text-gray-400">(可选)</span></span>
                       <span class="text-xs text-gray-500 dark:text-[#8b8d95]">将助手归类到不同分组，便于管理和查找</span>
                     </div>
                     <div class="w-1/2">
@@ -81,54 +81,13 @@
                   </div>
                 </el-form-item>
               </div>
-            </el-form>
-          </div>
-        </div>
 
-        <!-- 提示词 -->
-        <div v-show="tabsValue === 'prompt'" class="flex-1 overflow-hidden">
-          <div class="px-0 py-6 h-full flex flex-col flex-1">
-            <div class="px-0 flex-1 flex flex-col min-h-0">
-              <el-form ref="promptFormRef" :model="characterForm" :rules="promptRules" label-position="top"
-                label-width="80px" size="large" class="flex-1 flex flex-col min-h-0">
-                <el-form-item :show-label="false" :show-feedback="false" style="flex-shrink: 0;" class="no-border-item">
-                  <div class="flex items-center w-full justify-between">
-                    <span>系统系提示(角色设定)</span>
-                    <div class="flex items-center">
-                      <el-checkbox v-model="characterForm.useUserPrompt" class="ml-2">
-                        使用User Role
-                      </el-checkbox>
-                      <el-tooltip content="启用后，系统将使用User角色而非System发送设定提示词，以优化部分模型的表现（如DeepSeek）" placement="top">
-                        <el-icon class="cursor-help text-gray-400 hover:text-gray-600" size="16">
-                          <QuestionCircleOutlined />
-                        </el-icon>
-                      </el-tooltip>
-                    </div>
-
-                  </div>
-                </el-form-item>
-
-                <!-- 详细设定 -->
-                <el-form-item prop="systemPrompt" :show-label="false"
-                  class="flex-1 min-h-40 prompt-form-item no-border-item">
-                  <el-input v-model="characterForm.systemPrompt" type="textarea" placeholder="请输入详细设定" resize="none" />
-                </el-form-item>
-
-              </el-form>
-            </div>
-          </div>
-        </div>
-
-        <!-- 模型设置 -->
-        <div v-show="tabsValue === 'model'" class="flex-1 overflow-hidden">
-          <div class="h-full overflow-y-auto py-4">
-            <el-form ref="modelFormRef" :model="characterForm" :rules="modelRules" label-position="top">
-              <div class="rounded-xl border border-gray-200 dark:border-[#2e3035] bg-white dark:bg-[#232428] overflow-hidden">
-                <!-- 模型选择 -->
+              <!-- 模型选择 -->
+              <div class="mt-3 rounded-xl border border-gray-200 dark:border-[#2e3035] bg-white dark:bg-[#232428] overflow-hidden">
                 <el-form-item prop="modelId" class="!mb-0">
-                  <div class="px-4 py-3.5 flex items-center justify-between gap-4 border-b border-gray-100 dark:border-[#2e3035] w-full">
+                  <div class="px-4 py-3.5 flex items-center justify-between gap-4 w-full">
                     <div class="flex flex-col gap-1 w-1/2">
-                      <span class="text-base text-gray-900 dark:text-[#e8e9ed]">模型选择</span>
+                      <span class="text-base text-gray-900 dark:text-[#e8e9ed]">模型选择 <span class="text-xs text-gray-400">(可选)</span></span>
                       <span class="text-xs text-gray-500 dark:text-[#8b8d95]">为此助手指定专用的 AI 模型，留空则使用默认模型</span>
                     </div>
                     <div class="w-1/2">
@@ -137,82 +96,15 @@
                     </div>
                   </div>
                 </el-form-item>
-                <!-- 覆盖模型参数开关 -->
-                <el-form-item prop="overrideModelParams" class="!mb-0">
-                  <div class="px-4 py-3.5 flex items-center justify-between gap-4 border-b border-gray-100 dark:border-[#2e3035] w-full"
-                    :class="{ 'border-b-0': !characterForm.overrideModelParams }">
-                    <div class="flex flex-col gap-1 w-1/2">
-                      <span class="text-base text-gray-900 dark:text-[#e8e9ed]">覆盖模型参数</span>
-                      <span class="text-xs text-gray-500 dark:text-[#8b8d95]">关闭后使用模型本身的默认参数。除非你明确知道自己在干什么，否则保持默认关闭</span>
-                    </div>
-                    <el-switch v-model="characterForm.overrideModelParams" inline-prompt active-text="开启"
-                      inactive-text="关闭" />
-                  </div>
-                </el-form-item>
               </div>
 
-              <!-- 模型参数（展开时显示为独立卡片） -->
-              <template v-if="characterForm.overrideModelParams">
-                <div class="mt-3 rounded-xl border border-gray-200 dark:border-[#2e3035] bg-white dark:bg-[#232428] overflow-hidden">
-                  <!-- 温度设置 -->
-                  <el-form-item prop="modelTemperature" class="!mb-0">
-                    <div class="px-4 py-3.5 flex items-center justify-between gap-4 border-b border-gray-100 dark:border-[#2e3035] w-full">
-                      <div class="flex flex-col gap-1 w-1/2">
-                        <span class="text-base text-gray-900 dark:text-[#e8e9ed]">温度</span>
-                        <span class="text-xs text-gray-500 dark:text-[#8b8d95]">控制输出的随机性和创造性，值越高越富有创意</span>
-                      </div>
-                      <div class="w-1/2">
-                        <el-slider-optional v-model="characterForm.modelTemperature" :min="0" :max="1.9" :step="0.1"
-                          show-input optional-direction="max" optional-text="Auto" class="w-full" />
-                      </div>
-                    </div>
-                  </el-form-item>
-                  <!-- Top P -->
-                  <el-form-item prop="modelTopP" class="!mb-0">
-                    <div class="px-4 py-3.5 flex items-center justify-between gap-4 border-b border-gray-100 dark:border-[#2e3035] w-full">
-                      <div class="flex flex-col gap-1 w-1/2">
-                        <span class="text-base text-gray-900 dark:text-[#e8e9ed]">Top P</span>
-                        <span class="text-xs text-gray-500 dark:text-[#8b8d95]">核采样参数，控制输出词汇的多样性范围</span>
-                      </div>
-                      <div class="w-1/2">
-                        <el-slider-optional v-model="characterForm.modelTopP" :min="0" :max="1" :step="0.1" show-input
-                          optional-direction="max" optional-text="Auto" class="w-full" />
-                      </div>
-                    </div>
-                  </el-form-item>
-                  <!-- 频率惩罚 -->
-                  <el-form-item prop="modelFrequencyPenalty" class="!mb-0">
-                    <div class="px-4 py-3.5 flex items-center justify-between gap-4 w-full">
-                      <div class="flex flex-col gap-1 w-1/2">
-                        <span class="text-base text-gray-900 dark:text-[#e8e9ed]">频率惩罚</span>
-                        <span class="text-xs text-gray-500 dark:text-[#8b8d95]">降低重复内容的出现概率，正值减少重复，负值鼓励重复</span>
-                      </div>
-                      <div class="w-1/2">
-                        <el-slider-optional v-model="characterForm.modelFrequencyPenalty" :min="-1.9" :max="1.9" :step="0.1"
-                          show-input optional-direction="max" optional-text="Auto" class="w-full" />
-                      </div>
-                    </div>
-                  </el-form-item>
-                </div>
-              </template>
-
-              <el-alert title="提示" type="warning" :closable="false" show-icon style="margin-top: 16px;">
-                修改模型配置不会同步修改已经创建的会话。新会话将自动继承当前配置。
-              </el-alert>
-            </el-form>
-          </div>
-        </div>
-
-        <!-- 记忆与压缩 -->
-        <div v-show="tabsValue === 'memory'" class="flex-1 overflow-hidden">
-          <div class="h-full overflow-y-auto py-4">
-            <el-form ref="memoryFormRef" :model="characterForm" label-position="top">
-              <div class="rounded-xl border border-gray-200 dark:border-[#2e3035] bg-white dark:bg-[#232428] overflow-hidden">
+              <!-- 记忆与压缩 -->
+              <div class="mt-3 rounded-xl border border-gray-200 dark:border-[#2e3035] bg-white dark:bg-[#232428] overflow-hidden">
                 <!-- Token 上限 -->
                 <el-form-item prop="maxTokensLimit" class="!mb-0">
                   <div class="px-4 py-3.5 flex items-center justify-between gap-4 border-b border-gray-100 dark:border-[#2e3035] w-full">
                     <div class="flex flex-col gap-1 w-1/2">
-                      <span class="text-base text-gray-900 dark:text-[#e8e9ed]">Token 上限</span>
+                      <span class="text-base text-gray-900 dark:text-[#e8e9ed]">Token 上限 <span class="text-xs text-gray-400">(可选)</span></span>
                       <span class="text-xs text-gray-500 dark:text-[#8b8d95]">设置 Token 使用上限，与模型上下文窗口取最小值作为压缩判断基准</span>
                     </div>
                     <div class="w-1/2">
@@ -261,25 +153,25 @@
                     </div>
                     <div class="w-1/2">
                       <el-select v-model="characterForm.summaryMode" placeholder="请选择摘要模式" class="w-full">
-                      <el-option label="关闭摘要" value="disabled">
-                        <span class="flex items-center gap-2">
-                          <el-icon><CloseOutlined /></el-icon>
-                          <span>关闭摘要 - 仅裁剪工具结果，不生成语义摘要</span>
-                        </span>
-                      </el-option>
-                      <el-option label="快速摘要" value="fast">
-                        <span class="flex items-center gap-2">
-                          <el-icon><ThunderboltOutlined /></el-icon>
-                          <span>快速摘要 - 单次调用生成，速度快</span>
-                        </span>
-                      </el-option>
-                      <el-option label="记忆同步" value="memory_sync">
-                        <span class="flex items-center gap-2">
-                          <el-icon><FolderOutlined /></el-icon>
-                          <span>记忆同步 - 将历史对话压缩为结构化记忆，保持长期一致性</span>
-                        </span>
-                      </el-option>
-                    </el-select>
+                        <el-option label="关闭摘要" value="disabled">
+                          <span class="flex items-center gap-2">
+                            <el-icon><CloseOutlined /></el-icon>
+                            <span>关闭摘要 - 仅裁剪工具结果，不生成语义摘要</span>
+                          </span>
+                        </el-option>
+                        <el-option label="快速摘要" value="fast">
+                          <span class="flex items-center gap-2">
+                            <el-icon><ThunderboltOutlined /></el-icon>
+                            <span>快速摘要 - 单次调用生成，速度快</span>
+                          </span>
+                        </el-option>
+                        <el-option label="记忆同步" value="memory_sync">
+                          <span class="flex items-center gap-2">
+                            <el-icon><FolderOutlined /></el-icon>
+                            <span>记忆同步 - 将历史对话压缩为结构化记忆，保持长期一致性</span>
+                          </span>
+                        </el-option>
+                      </el-select>
                     </div>
                   </div>
                 </el-form-item>
@@ -290,7 +182,33 @@
                 <p class="text-sm">• 保留目标：控制压缩后的 Token 占用（建议 40%-60%）</p>
                 <p class="text-sm">• 记忆同步：开启后将历史对话压缩为结构化记忆，保持长期一致性；关闭后仅裁剪工具结果</p>
               </el-alert>
+              <el-alert title="提示" type="warning" :closable="false" show-icon style="margin-top: 16px;">
+                修改模型配置不会同步修改已经创建的会话。新会话将自动继承当前配置。
+              </el-alert>
             </el-form>
+          </div>
+        </div>
+
+        <!-- 提示词 -->
+        <div v-show="tabsValue === 'prompt'" class="flex-1 overflow-hidden">
+          <div class="px-0 py-6 h-full flex flex-col flex-1">
+            <div class="px-0 flex-1 flex flex-col min-h-0">
+              <el-form ref="promptFormRef" :model="characterForm" :rules="promptRules" label-position="top"
+                label-width="80px" size="large" class="flex-1 flex flex-col min-h-0">
+                <el-form-item :show-label="false" :show-feedback="false" style="flex-shrink: 0;" class="no-border-item">
+                  <div class="flex items-center w-full justify-between">
+                    <span>系统系提示(角色设定)</span>
+                  </div>
+                </el-form-item>
+
+                <!-- 详细设定 -->
+                <el-form-item prop="systemPrompt" :show-label="false"
+                  class="flex-1 min-h-40 prompt-form-item no-border-item">
+                  <el-input v-model="characterForm.systemPrompt" type="textarea" placeholder="请输入详细设定" resize="none" />
+                </el-form-item>
+
+              </el-form>
+            </div>
           </div>
         </div>
 
@@ -468,7 +386,7 @@
           </div>
         </div>
 
-        <!-- 预设 Agent -->
+        <!-- 预设助手 -->
         <div v-show="tabsValue === 'agent_presets'" class="flex-1 overflow-hidden">
           <div class="px-0 py-6 h-full overflow-y-auto">
             <div class="px-0">
@@ -479,10 +397,10 @@
                     <div class="flex items-center gap-2">
                       <el-switch :model-value="allAgentsDisabled" @update:model-value="handleAllAgentsDisabledToggle"
                         inline-prompt active-text="全部禁用" inactive-text="自定义" />
-                      <span class="text-sm text-gray-500">禁用全部预设 Agent</span>
+                      <span class="text-sm text-gray-500">禁用全部预设助手</span>
                     </div>
                     <div :class="['flex items-center gap-2', { 'opacity-50 pointer-events-none': allAgentsDisabled }]">
-                      <span class="text-sm text-gray-500">新 Agent 默认启动</span>
+                      <span class="text-sm text-gray-500">新助手默认启动</span>
                       <el-switch :model-value="!agentsAllowlistMode" @update:model-value="(v) => agentsAllowlistMode = !v"
                         :disabled="allAgentsDisabled" />
                     </div>
@@ -496,68 +414,27 @@
                   <div class="text-sm text-gray-500 mt-2">加载中...</div>
                 </div>
 
-                <div v-else-if="visibleAgents.length === 0" class="text-center text-gray-500 py-8">
+                <div v-else-if="presetCharacters.length === 0" class="text-center text-gray-500 py-8">
                   <el-icon size="48" class="mb-2">
                     <InfoCircleOutlined />
                   </el-icon>
-                  <div>暂无可用的预设 Agent</div>
-                  <div class="text-sm mt-2">在 data/agents/ 目录中放入 .md 文件即可创建</div>
+                  <div>暂无可用的预设助手</div>
+                  <div class="text-sm mt-2">请先创建其他助手</div>
                 </div>
 
-                <div v-else>
-                  <!-- 无分组的 Agent -->
-                  <div v-if="ungroupedVisibleAgents.length > 0" class="grid gap-2 mb-6"
-                    style="grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));">
-                    <div v-for="agent in ungroupedVisibleAgents" :key="agent.id"
-                      class="agent-item p-2.5 rounded-xl transition-all duration-200 hover:bg-gray-100 dark:hover:bg-[#2a2c30]"
-                      :class="{ 'opacity-50 pointer-events-none': allAgentsDisabled }">
-                      <div class="flex items-start justify-between gap-2 mb-1">
-                        <div class="font-medium text-sm flex-1 truncate text-gray-800 dark:text-gray-200">{{ agent.emoji }} {{ agent.name }}</div>
-                        <div class="flex items-center gap-1.5 shrink-0">
-                          <el-switch :model-value="getAgentEffectiveEnabled(agent)"
-                            @update:model-value="(val) => handleAgentToggle(agent.id, val)" :disabled="allAgentsDisabled"
-                            size="small" inline-prompt active-text="启用" inactive-text="禁用" />
-                        </div>
-                      </div>
-                      <p class="text-xs text-gray-500 line-clamp-2 min-h-[2rem]">{{ agent.description || '暂无描述' }}</p>
-                    </div>
-                  </div>
-
-                  <!-- 文件夹分组 -->
-                  <div v-for="group in agentsGroups" :key="group.id" class="mb-6">
-                    <div class="flex items-center gap-2 mb-3 px-1 select-none cursor-pointer"
-                      :class="{ 'opacity-60': !group.visible }"
-                      @click="toggleAgentsGroupCollapse(group.id)">
-                      <component :is="collapsedAgentsGroups.has(group.id) ? ChevronRight24Regular : ChevronDown24Regular"
-                        class="w-5 h-5 text-gray-400" />
-                      <span class="text-lg">{{ group.emoji || '📁' }}</span>
-                      <span class="text-sm font-semibold text-gray-800 dark:text-[#e8e9ed]">
-                        {{ group.name }}
-                      </span>
-                      <span class="text-xs text-gray-400">({{ group.agentCount }})</span>
-                      <div class="ml-auto flex items-center gap-2" @click.stop>
-                        <el-switch :model-value="getGroupEffectiveEnabled(group.id)"
-                          @update:model-value="(val) => handleGroupToggle(group.id, val)" :disabled="allAgentsDisabled"
+                <div v-else class="grid gap-2" style="grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));">
+                  <div v-for="char in presetCharacters" :key="char.id"
+                    class="agent-item p-2.5 rounded-xl transition-all duration-200 hover:bg-gray-100 dark:hover:bg-[#2a2c30]"
+                    :class="{ 'opacity-50 pointer-events-none': allAgentsDisabled }">
+                    <div class="flex items-start justify-between gap-2 mb-1">
+                      <div class="font-medium text-sm flex-1 truncate text-gray-800 dark:text-gray-200">{{ char.title }}</div>
+                      <div class="flex items-center gap-1.5 shrink-0">
+                        <el-switch :model-value="getAgentEffectiveEnabled(char)"
+                          @update:model-value="(val) => handleAgentToggle(char.id, val)" :disabled="allAgentsDisabled"
                           size="small" inline-prompt active-text="启用" inactive-text="禁用" />
                       </div>
                     </div>
-
-                    <div v-if="!collapsedAgentsGroups.has(group.id)" class="grid gap-2 pl-2"
-                      style="grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));">
-                      <div v-for="agent in getGroupedVisibleAgents(group.id)" :key="agent.id"
-                        class="agent-item p-2.5 rounded-xl transition-all duration-200 hover:bg-gray-100 dark:hover:bg-[#2a2c30]"
-                        :class="{ 'opacity-50 pointer-events-none': allAgentsDisabled }">
-                        <div class="flex items-start justify-between gap-2 mb-1">
-                          <div class="font-medium text-sm flex-1 truncate text-gray-800 dark:text-gray-200">{{ agent.emoji }} {{ agent.name }}</div>
-                          <div class="flex items-center gap-1.5 shrink-0">
-                            <el-switch :model-value="getAgentEffectiveEnabled(agent)"
-                              @update:model-value="(val) => handleAgentToggle(agent.id, val)" :disabled="allAgentsDisabled"
-                              size="small" inline-prompt active-text="启用" inactive-text="禁用" />
-                          </div>
-                        </div>
-                        <p class="text-xs text-gray-500 line-clamp-2 min-h-[2rem]">{{ agent.description || '暂无描述' }}</p>
-                      </div>
-                    </div>
+                    <p class="text-xs text-gray-500 line-clamp-2 min-h-[2rem]">{{ char.description || '暂无描述' }}</p>
                   </div>
                 </div>
               </el-form>
@@ -590,13 +467,10 @@ import {
   ElDialog
 } from 'element-plus'
 import {
-  QuestionCircleOutlined,
   InfoCircleOutlined,
   LoadingOutlined,
   UserOutlined,
   MessageOutlined,
-  RobotOutlined,
-  DatabaseOutlined,
   ToolOutlined,
   ApiOutlined,
   CloseOutlined,
@@ -604,14 +478,13 @@ import {
   ThunderboltOutlined
 } from '@vicons/antd'
 
-import { Code24Regular, Bot24Regular, ChevronRight24Regular, ChevronDown24Regular } from '@vicons/fluent'
+import { Code24Regular, Bot24Regular } from '@vicons/fluent'
 
 import { apiService } from '../../services/ApiService'
 
 
 import { usePopup } from '../../composables/usePopup'
 import AvatarPreview from '../ui/AvatarPreview.vue'
-import ElSliderOptional from '../ui/ElSliderOptional.vue'
 import { DEFAULT_SUMMARY_MODE } from '@/constants'
 
 const { toast, notify } = usePopup()
@@ -639,11 +512,7 @@ const props = defineProps({
         assistantIdentity: '',
         systemPrompt: '',
         modelId: '',
-        memoryType: null,
-        modelTemperature: null,
-        modelTopP: null,
-        modelFrequencyPenalty: null,
-        useUserPrompt: false
+        memoryType: null
       }
     })
   },
@@ -671,8 +540,6 @@ const providers = ref([]);
 // 表单引用
 const basicFormRef = ref(null)
 const promptFormRef = ref(null)
-const modelFormRef = ref(null)
-const memoryFormRef = ref(null)
 
 const tabsValue = ref(props.tab)
 
@@ -686,19 +553,12 @@ const sidebarGroups = [
     ]
   },
   {
-    label: '模型与记忆',
-    items: [
-      { label: '模型', path: 'model', icon: RobotOutlined },
-      { label: '记忆', path: 'memory', icon: DatabaseOutlined },
-    ]
-  },
-  {
     label: '工具与能力',
     items: [
       { label: '本地工具', path: 'local_tools', icon: ToolOutlined },
       { label: 'MCP 工具', path: 'mcp_tools', icon: ApiOutlined },
       { label: 'Skills', path: 'skills', icon: Code24Regular },
-      { label: '预设 Agent', path: 'agent_presets', icon: Bot24Regular },
+      { label: '预设助手', path: 'agent_presets', icon: Bot24Regular },
     ]
   }
 ]
@@ -716,11 +576,6 @@ const characterForm = reactive({
   systemPrompt: '',
   modelId: null,
   memoryType: '',
-  modelTemperature: null,
-  modelTopP: null,
-  modelFrequencyPenalty: null,
-  overrideModelParams: false,
-  useUserPrompt: false,
   enabledTools: [],  // 启用的本地工具
   toolsMode: 'inherit',
   enabledSkills: {},       // 按角色启用的技能 { skillId: true/false }
@@ -740,10 +595,6 @@ const basicRules = {
 }
 
 const promptRules = {}
-
-const modelRules = {
-  // 模型改为可选项，移除必填验证
-}
 
 // 选项数据
 // const modelOptions = [
@@ -837,36 +688,15 @@ const mcpAllowlistServers = ref<string[]>([]);
 const allSkillsDisabled = ref(false);
 // Skills 白名单模式（新技能默认不开启）
 const skillsAllowlistMode = ref(false);
-// 是否全部禁用预设 Agent
+// 是否全部禁用预设助手
 const allAgentsDisabled = ref(false);
-// Agent 白名单模式
-const agentsAllowlistMode = ref(false);
-// Agent 列表
-const agentsList = ref([]);
-const agentsGroups = ref<any[]>([]);
-const collapsedAgentsGroups = ref(new Set<string>());
+// 助手白名单模式（默认 true = 白名单，新助手默认关闭）
+const agentsAllowlistMode = ref(true);
+// 预设助手列表（排除当前角色）
+const presetCharacters = ref<any[]>([]);
 const loadingAgents = ref(false);
-// Agent 偏好 { agentId: true/false }
+// 助手偏好 { characterId: true/false }
 const enabledAgents = reactive<Record<string, boolean>>({});
-// 文件夹偏好 { groupId: true/false }
-const enabledGroups = reactive<Record<string, boolean>>({});
-// 面板可见的 Agent（过滤全局不可见的）
-const visibleAgents = computed(() => {
-  void agentsAllowlistMode.value;
-  return agentsList.value.filter(agent => {
-    if (!agent.visible) {
-      return false;
-    }
-    return true;
-  });
-});
-/** 无分组的 Agent */
-const ungroupedVisibleAgents = computed(() =>
-  visibleAgents.value.filter((a) => !a.folder)
-);
-/** 获取文件夹内 Agent */
-const getGroupedVisibleAgents = (groupId: string) =>
-  visibleAgents.value.filter((a) => a.folder === groupId);
 const maxTokensLimitDisplay = ref('');
 
 // 是否自动启用全部工具
@@ -938,11 +768,6 @@ watch(() => props.data, (newVal, oldVal) => {
   characterForm.assistantIdentity = newVal.settings?.assistantIdentity || '';
   characterForm.systemPrompt = newVal.settings?.systemPrompt || '';
   characterForm.memoryType = newVal.settings?.memoryType || 'sliding_window';
-  characterForm.modelTemperature = newVal.settings?.modelTemperature ?? null;
-  characterForm.modelTopP = newVal.settings?.modelTopP ?? null;
-  characterForm.modelFrequencyPenalty = newVal.settings?.modelFrequencyPenalty ?? null;
-  characterForm.overrideModelParams = newVal.settings?.overrideModelParams ?? false;
-  characterForm.useUserPrompt = newVal.settings?.useUserPrompt || false;
 
   // 从 memory 分组加载记忆与压缩配置
   const memoryConfig = newVal.settings?.memory || {};
@@ -1010,22 +835,16 @@ watch(() => props.data, (newVal, oldVal) => {
     characterForm.enabledSkills = {};
   }
 
-  // 加载预设 Agent 偏好
+  // 加载预设助手偏好
   allAgentsDisabled.value = newVal.settings?.plugins?.agent_presets?.enabled === false;
   const agentsConfig = newVal.settings?.agents;
-  agentsAllowlistMode.value = agentsConfig?.__default === false;
-  // 重建 enabledAgents / enabledGroups
+  agentsAllowlistMode.value = agentsConfig ? agentsConfig.__default === false : true;
+  // 重建 enabledAgents
   for (const key of Object.keys(enabledAgents)) delete (enabledAgents as any)[key];
-  for (const key of Object.keys(enabledGroups)) delete (enabledGroups as any)[key];
   if (typeof agentsConfig === 'object' && !Array.isArray(agentsConfig)) {
     for (const [key, val] of Object.entries(agentsConfig)) {
       if (key === '__default' || key.startsWith('__')) continue;
-      if (key.startsWith('agent-')) {
-        (enabledAgents as any)[key] = val;
-      } else {
-        // 非 agent- 开头的 key → 文件夹名
-        (enabledGroups as any)[key] = val;
-      }
+      (enabledAgents as any)[key] = val;
     }
   }
 
@@ -1068,49 +887,27 @@ const handleSkillToggle = (skillId, enabled) => {
   characterForm.enabledSkills = { ...characterForm.enabledSkills };
 };
 
-// ── 预设 Agent ──
-const getAgentEffectiveEnabled = (agent) => {
-  if (agent.id in enabledAgents) return (enabledAgents as any)[agent.id];
-  return agent.visible !== false;
+// ── 预设助手 ──
+const getAgentEffectiveEnabled = (char) => {
+  if (char.id in enabledAgents) return (enabledAgents as any)[char.id];
+  // 白名单模式默认关闭，黑名单模式默认开启
+  return !agentsAllowlistMode.value;
 };
-const handleAgentToggle = (agentId, enabled) => {
-  (enabledAgents as any)[agentId] = enabled;
-};
-const getGroupEffectiveEnabled = (groupId: string): boolean => {
-  if (groupId in enabledGroups) return (enabledGroups as any)[groupId];
-  return true; // 默认启用
-};
-const handleGroupToggle = (groupId: string, enabled: boolean) => {
-  (enabledGroups as any)[groupId] = enabled;
-};
-const toggleAgentsGroupCollapse = (groupId: string) => {
-  const s = new Set(collapsedAgentsGroups.value);
-  if (s.has(groupId)) {
-    s.delete(groupId);
-  } else {
-    s.add(groupId);
-  }
-  collapsedAgentsGroups.value = s;
+const handleAgentToggle = (charId, enabled) => {
+  (enabledAgents as any)[charId] = enabled;
 };
 const handleAllAgentsDisabledToggle = async (val) => {
   allAgentsDisabled.value = val;
 };
-const loadAgents = async () => {
+const loadPresetCharacters = async () => {
   loadingAgents.value = true;
   try {
-    const response = await apiService.fetchAgents();
-    agentsList.value = Array.isArray(response) ? response : (response.agents || []);
-    agentsGroups.value = response.groups || [];
-    // 白名单模式：未配置的 agent 初始化为关闭
-    if (agentsAllowlistMode.value) {
-      for (const agent of agentsList.value) {
-        if (!(agent.id in enabledAgents)) {
-          (enabledAgents as any)[agent.id] = false;
-        }
-      }
-    }
+    const response = await apiService.fetchCharacters();
+    const allChars = response.items || [];
+    // 排除当前正在编辑的角色
+    presetCharacters.value = allChars.filter(c => c.id !== characterForm.id);
   } catch (err) {
-    console.error('加载预设 Agent 失败:', err);
+    console.error('加载预设助手失败:', err);
   } finally {
     loadingAgents.value = false;
   }
@@ -1333,7 +1130,7 @@ onMounted(async () => {
   loadModels();
   loadMCPServers();
   loadSkills();
-  loadAgents();
+  loadPresetCharacters();
   loadCharacterGroups();  // 加载分组列表
   // query 由 watch 统一接管（immediate + isNew 判断）
 })
@@ -1369,11 +1166,6 @@ const getFormData = () => {
       'assistantIdentity': characterForm.assistantIdentity,
       'systemPrompt': characterForm.systemPrompt,
       'memoryType': characterForm.memoryType,
-      'modelTemperature': characterForm.modelTemperature,
-      'modelTopP': characterForm.modelTopP,
-      'modelFrequencyPenalty': characterForm.modelFrequencyPenalty,
-      'overrideModelParams': characterForm.overrideModelParams,
-      'useUserPrompt': characterForm.useUserPrompt,
       // 记忆与压缩配置分组
       'memory': {
         'compressionTriggerRatio': characterForm.compressionTriggerRatio,
@@ -1452,21 +1244,15 @@ const getFormData = () => {
         }
         return Object.keys(skillsOut).length > 0 ? skillsOut : undefined;
       })(),
-      // 预设 Agent 配置（按模式保存）
+      // 预设助手配置（按模式保存）
       'agents': (() => {
         const agentsOut: Record<string, any> = {};
-        for (const agent of visibleAgents.value) {
-          const effectiveEnabled = (enabledAgents as any)[agent.id] ?? agent.visible !== false;
+        for (const char of presetCharacters.value) {
+          const effectiveEnabled = (enabledAgents as any)[char.id] ?? !agentsAllowlistMode.value;
           if (agentsAllowlistMode.value) {
-            if (effectiveEnabled) agentsOut[agent.id] = true;
+            if (effectiveEnabled) agentsOut[char.id] = true;
           } else {
-            if (!effectiveEnabled) agentsOut[agent.id] = false;
-          }
-        }
-        // 文件夹配置
-        for (const group of agentsGroups.value) {
-          if (group.id in enabledGroups) {
-            agentsOut[group.id] = (enabledGroups as any)[group.id];
+            if (!effectiveEnabled) agentsOut[char.id] = false;
           }
         }
         if (agentsAllowlistMode.value) {
@@ -1485,8 +1271,6 @@ const validate = async () => {
     var formValidates = [
       basicFormRef.value?.validate(),
       promptFormRef.value?.validate(),
-      modelFormRef.value?.validate(),
-      memoryFormRef.value?.validate(),
     ]
     const validationResults = await Promise.allSettled(formValidates)
     const hasError = validationResults.some(result => result.status === 'rejected')
@@ -1494,7 +1278,7 @@ const validate = async () => {
     if (hasError) {
       const firstErrorIndex = validationResults.findIndex(result => result.status === 'rejected')
       if (firstErrorIndex !== -1) {
-        const tabNames = ['basic', 'prompt', 'model', 'memory']
+        const tabNames = ['basic', 'prompt']
         tabsValue.value = tabNames[firstErrorIndex]
       }
       return false;

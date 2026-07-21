@@ -8,7 +8,6 @@ import { CharacterRepository } from "../../common/database/character.repository"
 import { ChatRunnerService } from "../chat/chat-runner.service";
 import { StreamFinishedEvent } from "../../common/events/stream.events";
 import { EventBusService } from "../../common/events/event-bus.service";
-import { AgentScannerService } from "./agent-scanner.service";
 
 /**
  * 子 Agent 默认系统提示词
@@ -83,7 +82,6 @@ export class SubAgentManager implements OnModuleInit {
     private chatRunnerService: ChatRunnerService,
     private eventBus: EventBusService,
     private characterRepo: CharacterRepository,
-    private agentScanner: AgentScannerService,
   ) {}
 
   onModuleInit() {
@@ -265,7 +263,6 @@ export class SubAgentManager implements OnModuleInit {
       parentSessionSettings.skills ?? parentCharacterSettings.skills;
 
     // 3. 角色驱动的子 Agent 创建
-    let characterSettings: any = {};
     let finalModelId: string | null = parentSession.modelId;
     let finalCharacterId: string | null = null;
     let finalAvatarUrl: string | undefined;
@@ -280,9 +277,8 @@ export class SubAgentManager implements OnModuleInit {
     // 思考强度：无论是否有角色，都从父会话继承
     settings.thinkingEffort = parentSessionSettings.thinkingEffort;
 
-    if (params.characterId && !params.characterId?.startsWith("agent-")) {
+    if (params.characterId) {
       // ── 数据库角色模式 ──
-      // 仅设 thinkingEffort，其余由 mergeSettings 从 character.settings 自动读取
       const character = await this.characterRepo.findById(params.characterId);
       if (!character) {
         throw new Error(
@@ -296,33 +292,10 @@ export class SubAgentManager implements OnModuleInit {
         `子 Agent 将继承角色设定: ${character.title} (${params.characterId})`,
       );
     } else {
-      if (params.characterId && params.characterId?.startsWith("agent-")) {
-        // ── 轻量 Agent 模式 ──
-        const agent = await this.agentScanner.getAgent(params.characterId);
-        if (!agent) {
-          throw new Error(
-            `Agent ${params.characterId} 不存在，请检查是否输入有误，或此 Agent 已被删除`,
-          );
-        }
-        this.logger.log(
-          `子 Agent 使用轻量 Agent: ${agent.name} (${params.characterId})`,
-        );
-        settings.systemPrompt = agent.body;
-      } else {
-        settings.systemPrompt = SUB_AGENT_DEFAULT_PROMPT;
-      }
+      // ── 通用子 Agent ──
+      settings.systemPrompt = SUB_AGENT_DEFAULT_PROMPT;
       settings.plugins = inheritedPlugins;
       settings.skills = inheritedSkillsConfig;
-      if (parentSessionSettings.modelOverrideEnabled) {
-        settings.model = parentSessionSettings.model;
-      } else {
-        settings.model = {
-          temperature: parentCharacterSettings.modelTemperature,
-          topP: parentCharacterSettings.modelTopP,
-          frequencyPenalty: parentCharacterSettings.modelFrequencyPenalty,
-        };
-      }
-      settings.modelOverrideEnabled = true;
       if (parentSessionSettings.memoryEnabled) {
         settings.memory = parentSessionSettings.memory;
       } else {
