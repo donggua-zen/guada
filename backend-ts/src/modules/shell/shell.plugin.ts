@@ -2,6 +2,7 @@ import { Injectable, Logger } from "@nestjs/common";
 import { OnEvent } from "@nestjs/event-emitter";
 import { spawn } from "child_process";
 import * as path from "path";
+import * as fsSync from "fs";
 import * as fs from "fs/promises";
 import { PluginBase } from "../plugins/base-plugin";
 import { PluginApi } from "../plugins/api/plugin-api";
@@ -15,9 +16,57 @@ export class ShellPlugin extends PluginBase {
   private readonly logger = new Logger(ShellPlugin.name);
   /** 自动转入后台的阈值（1分钟） */
   private readonly BACKGROUND_THRESHOLD_MS = 60_000;
+  /** sandbox.exe 路径缓存（避免每次执行都搜索） */
+  private sandboxExePath: string | null | undefined;
 
   constructor(private readonly processManager: ProcessManagerService) {
     super();
+  }
+
+  /**
+   * 解析 sandbox.exe 路径
+   *
+   * 开发环境：项目根目录下的 sandbox/sandbox.exe
+   * 生产环境：resources/sandbox/sandbox.exe（extraResources 打包）
+   *
+   * 结果缓存：找到后缓存路径，找不到缓存 null 避免重复 IO。
+   */
+  private async resolveSandboxExe(): Promise<string | null> {
+    if (this.sandboxExePath !== undefined) return this.sandboxExePath;
+
+    const candidates: string[] = [];
+    const isElectron = process.env.ELECTRON_APP === "true";
+
+    if (isElectron && (process as any).resourcesPath) {
+      // 生产环境：resources/sandbox/sandbox.exe
+      candidates.push(path.join((process as any).resourcesPath, "sandbox", "sandbox.exe"));
+    }
+
+    // 开发环境或回退：从 cwd 向上查找 sandbox/sandbox.exe
+    // backend-ts/dist → backend-ts → project root
+    let dir = process.cwd();
+    for (let i = 0; i < 4; i++) {
+      candidates.push(path.join(dir, "sandbox", "sandbox.exe"));
+      candidates.push(path.join(dir, "build", "bin", "sandbox.exe"));
+      const parent = path.dirname(dir);
+      if (parent === dir) break;
+      dir = parent;
+    }
+
+    for (const candidate of candidates) {
+      try {
+        await fs.access(candidate, fsSync.constants.X_OK);
+        this.sandboxExePath = candidate;
+        this.logger.log(`sandbox.exe found at: ${candidate}`);
+        return candidate;
+      } catch {
+        // continue
+      }
+    }
+
+    this.logger.warn("sandbox.exe not found, sandbox mode will fall back to normal mode");
+    this.sandboxExePath = null;
+    return null;
   }
 
   manifest = {
@@ -67,19 +116,45 @@ export class ShellPlugin extends PluginBase {
         const encoding = args.encoding as string | undefined;
         const background = args.background === true;
         const isWindows = process.platform === "win32";
-        const shell = isWindows ? "cmd" : "sh";
-        const shellFlag = isWindows ? "/c" : "-c";
         const cwd = ctx?.session.workspacePath || process.cwd();
+
+        // 判断是否使用沙盒执行
+        const runMode = ctx?.session.getRunMode?.();
+        let useSandbox = false;
+        if (runMode === "sandbox" && isWindows) {
+          const sandboxExe = await this.resolveSandboxExe();
+          if (sandboxExe) {
+            useSandbox = true;
+          } else {
+            this.logger.warn(
+              "Sandbox mode requested but sandbox.exe not found, falling back to normal execution",
+            );
+          }
+        }
+
+        let spawnArgs: string[];
+        let spawnCmd: string;
+        if (useSandbox) {
+          const sandboxExe = (await this.resolveSandboxExe())!;
+          spawnCmd = sandboxExe;
+          spawnArgs = ["-c", `cmd /c ${command}`, "--workspace", cwd];
+        } else {
+          const shell = isWindows ? "cmd" : "sh";
+          const shellFlag = isWindows ? "/c" : "-c";
+          spawnCmd = shell;
+          spawnArgs = [shellFlag, command];
+        }
 
         if (abortSignal?.aborted) throw new Error("Request was aborted");
         this.logger.log(
-          `Running command: ${command}, working directory: ${cwd}, background: ${background}`,
+          `Running command: ${command}, working directory: ${cwd}, background: ${background}${useSandbox ? ", sandbox: enabled" : ""}`,
         );
 
         // 统一启动进程并转入后台管理（所有 stdout/stderr 由 ProcessManager 接管）
-        const childProcess = spawn(shell, [shellFlag, command], {
+        const childProcess = spawn(spawnCmd, spawnArgs, {
           cwd,
           env: { ...process.env, PYTHONUNBUFFERED: "1" },
+          shell: false,
         });
         const result = this.processManager.background(
           childProcess,
@@ -93,9 +168,17 @@ export class ShellPlugin extends PluginBase {
 
         // 纯后台模式：立即返回
         if (background) {
-          let out = result.output || "";
-          out += `\n[Process moved to background, processId: ${result.processId}. Use the process tool to manage.]`;
-          return out;
+          const parts: string[] = [];
+          if (runMode === "sandbox") {
+            parts.push("Sandbox mode enabled, read-only outside workspace");
+          }
+          if (result.output) {
+            parts.push(`Latest output:\n---\n${result.output}\n---`);
+          }
+          parts.push(
+            `[Process moved to background, processId: ${result.processId}. Use the process tool to manage.]`,
+          );
+          return parts.join("\n\n");
         }
 
         // 前台模式：内部 poll 等待结果，支持 abortSignal
@@ -113,17 +196,25 @@ export class ShellPlugin extends PluginBase {
             ctx?.session.sessionId,
           )!;
 
+          const parts: string[] = [];
+          if (runMode === "sandbox") {
+            parts.push("Sandbox mode enabled, read-only outside workspace");
+          }
+          if (pollResult.output) {
+            parts.push(`Latest output:\n---\n${pollResult.output}\n---`);
+          }
+
           // 进程在 1 分钟内结束了 → 返回结果
           if (pollResult.status !== "running") {
-            let out = pollResult.output || "";
-            out += `\n[exit code: ${pollResult.exitCode}]`;
-            return out;
+            parts.push(`[exit code: ${pollResult.exitCode}]`);
+            return parts.join("\n\n");
           }
 
           // 1 分钟超时，进程还在跑 → 返回 backgrounded（含已收集的输出）
-          let out = pollResult.output || "";
-          out += `\n[Command exceeded ${this.BACKGROUND_THRESHOLD_MS / 1000}s, switched to background. processId: ${result.processId}. Use the process tool to manage.]`;
-          return out;
+          parts.push(
+            `[Command exceeded ${this.BACKGROUND_THRESHOLD_MS / 1000}s, switched to background. processId: ${result.processId}. Use the process tool to manage.]`,
+          );
+          return parts.join("\n\n");
         } finally {
           abortSignal?.removeEventListener("abort", onAbort);
         }
@@ -184,13 +275,27 @@ export class ShellPlugin extends PluginBase {
             if (result === null) {
               throw new Error(`Process ${processId} does not exist`);
             }
-            let out = result.output || "";
-            if (result.status === "running") {
-              out += `\n[status: running]`;
-            } else {
-              out += `\n[status: ${result.status}, exit code: ${result.exitCode}]`;
+
+            const runMode = ctx?.session.getRunMode?.();
+            const parts: string[] = [];
+
+            if (runMode === "sandbox") {
+              parts.push("Sandbox mode enabled, read-only outside workspace");
             }
-            return out;
+
+            if (result.output) {
+              parts.push(`Latest output:\n---\n${result.output}\n---`);
+            }
+
+            if (result.status === "running") {
+              parts.push("[status: running]");
+            } else {
+              parts.push(
+                `[status: ${result.status}, exit code: ${result.exitCode}]`,
+              );
+            }
+
+            return parts.join("\n\n");
           }
 
           case "modify_progress_monitoring": {

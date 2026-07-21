@@ -53,5 +53,5 @@ export class SessionSettingsDto {
 
   @IsOptional()
   @IsString()
-  runMode?: string; // "normal" | "plan"
+  runMode?: string; // "normal" | "sandbox" | "plan"
 }
