@@ -151,10 +151,10 @@ export class PersistentSessionContext implements ISessionContext {
     );
     this.effectiveContextWindow = prep.effectiveContextWindow;
 
-    // 从持久化设置恢复运行模式（memory 模式不持久化，仅恢复 plan）
+    // 从持久化设置恢复运行模式（memory 模式不持久化，仅恢复 plan/sandbox）
     const savedRunMode = this.session.settings?.runMode;
-    if (savedRunMode === "plan") {
-      this.runMode = "plan";
+    if (savedRunMode === "plan" || savedRunMode === "sandbox") {
+      this.runMode = savedRunMode;
     }
   }
 
