@@ -46,7 +46,6 @@ declare module 'vue' {
     ChatSidebar: typeof import('./../components/chat/ChatSidebar.vue')['default']
     CommandPicker: typeof import('./../components/chat/chat-input/CommandPicker.vue')['default']
     ContextMenu: typeof import('./../components/ui/ContextMenu.vue')['default']
-    copy: typeof import('./../components/ui/ScrollContainer copy.vue')['default']
     CreateSessionChatPanel: typeof import('./../components/chat/CreateSessionChatPanel.vue')['default']
     CustomPopover: typeof import('./../components/ui/CustomPopover.vue')['default']
     CustomTitlebar: typeof import('./../components/CustomTitlebar.vue')['default']

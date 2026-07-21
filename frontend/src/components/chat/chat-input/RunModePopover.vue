@@ -1,16 +1,11 @@
 <template>
-  <CustomPopover :show="visible" @update:show="$emit('update:visible', $event)" :width="200" :anchor-el="anchorEl">
+  <CustomPopover :show="visible" @update:show="$emit('update:visible', $event)" :width="260" :anchor-el="anchorEl">
     <template #header>
-      <div class="flex items-center space-x-2">
-        <el-icon size="16" class="text-gray-600 dark:text-gray-400">
-          <ClipboardTask20Regular />
-        </el-icon>
-        <span class="text-sm font-semibold text-gray-800 dark:text-gray-200">运行模式</span>
-      </div>
     </template>
     <div class="popover-content space-y-0.5">
       <div v-for="opt in options" :key="opt.value"
-        class="rm-item flex items-center justify-between px-2 py-1.5 rounded cursor-pointer transition-all text-sm" @click="handleSelect(opt.value)">
+        class="rm-item flex items-center justify-between px-1.5 py-1.5 cursor-pointer transition-all text-sm rounded-xl"
+        @click="handleSelect(opt.value)">
         <div class="flex items-center space-x-2">
           <el-icon size="16" class="text-gray-500 dark:text-gray-400">
             <component :is="opt.icon" />
@@ -45,8 +40,8 @@ const emit = defineEmits<{
 }>()
 
 const options = [
-  { value: 'normal', label: '工作模式', desc: '所有工具可用', icon: DrinkCoffee20Regular },
-  { value: 'plan', label: '计划模式', desc: '仅允许只读工具', icon: ClipboardTask20Regular },
+  { value: 'normal', label: '工作模式', desc: '不对可用工具进行限制', icon: DrinkCoffee20Regular },
+  { value: 'plan', label: '计划模式', desc: '仅允许只读工具,适合做只读规划', icon: ClipboardTask20Regular },
 ]
 
 function handleSelect(mode: string) {

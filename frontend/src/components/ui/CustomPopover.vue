@@ -2,14 +2,15 @@
     <teleport to="body">
         <transition name="popover-fade">
             <div v-if="show" ref="popoverRef"
-                class="fixed bg-white dark:bg-(--color-surface) rounded-xl border border-gray-200 dark:border-(--color-surface-border) shadow-[0_0_16px_rgba(0,0,0,0.10)] dark:shadow-[0_0_8px_rgba(0,0,0,0.4)] overflow-hidden flex flex-col z-2000 pointer-events-auto px-1 py-2"
-                :class="popperClass" :style="popoverStyle" @click.stop>
+                class="fixed bg-white dark:bg-(--color-surface) rounded-xl border border-gray-200 dark:border-(--color-surface-border) shadow-[0_0_16px_rgba(0,0,0,0.10)] dark:shadow-[0_0_8px_rgba(0,0,0,0.4)] overflow-hidden flex flex-col z-2000 pointer-events-auto px-1 py-1"
+                :class="popperClass" :style="popoverStyle" @click.stop
+                @mouseenter="$emit('mouseenter', $event)" @mouseleave="$emit('mouseleave', $event)">
                 <!-- Header 槽位 -->
-                <div v-if="$slots.header" class="px-1">
+                <div v-if="$slots.header" class="px-0.5">
                     <slot name="header"></slot>
                 </div>
                 <!-- 默认内容 -->
-                <div class="popover-content px-1">
+                <div class="popover-content px-0.5">
                     <slot></slot>
                 </div>
             </div>
@@ -30,6 +31,8 @@ interface Props {
     maxHeight?: number | string
     popperClass?: string
     anchorEl?: HTMLElement | null
+    /** 直接指定 fixed 坐标 { left, top }，跳过自动定位 */
+    position?: { left: number; top: number } | null
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -37,11 +40,14 @@ const props = withDefaults(defineProps<Props>(), {
     width: 320,
     maxHeight: 400,
     popperClass: '',
-    anchorEl: null
+    anchorEl: null,
+    position: null,
 })
 
 const emit = defineEmits<{
     'update:show': [value: boolean]
+    mouseenter: [event: MouseEvent]
+    mouseleave: [event: MouseEvent]
 }>()
 
 const popoverRef = ref<HTMLElement | null>(null)
@@ -49,6 +55,16 @@ const positionStyle = ref<Record<string, any>>({})
 
 // 计算并更新位置
 const updatePosition = () => {
+    // 如果外部直接传入了坐标，直接使用
+    if (props.position) {
+        positionStyle.value = {
+            position: 'fixed',
+            left: `${props.position.left}px`,
+            top: `${props.position.top}px`
+        }
+        return
+    }
+
     if (!props.anchorEl || !popoverRef.value) return
 
     const rect = props.anchorEl.getBoundingClientRect()
@@ -124,6 +140,12 @@ const handleGlobalClick = (e: MouseEvent) => {
         return
     }
 
+    // 如果有 position（级联模式），检查是否在触发元素上
+    if (props.position) {
+        // 级联模式下点击外部直接关闭
+        if (popoverRef.value && popoverRef.value.contains(target)) return
+    }
+
     // 否则关闭弹窗
     emit('update:show', false)
 }
@@ -158,7 +180,7 @@ const handleWindowEvent = (e: Event) => {
 
 // 监听可见性变化，统一管理所有副作用
 watch(() => props.show, async (newVal) => {
-    if (newVal && props.anchorEl) {
+    if (newVal) {
         // DOM 更新后计算位置
         await nextTick()
         updatePosition()
