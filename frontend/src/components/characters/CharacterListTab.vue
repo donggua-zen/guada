@@ -2,12 +2,21 @@
   <div class="flex flex-col py-3 w-full">
     <!-- 新建助手与使用说明 -->
     <div class="flex items-center justify-between mb-6">
-      <el-button type="primary" @click="$emit('createCharacter')" class="flex items-center">
-        <template #icon>
-          <PlusOutlined />
-        </template>
-        新建助手
-      </el-button>
+      <div class="flex items-center gap-2">
+        <el-button type="primary" @click="$emit('createCharacter')" class="flex items-center">
+          <template #icon>
+            <PlusOutlined />
+          </template>
+          新建助手
+        </el-button>
+        <el-button @click="triggerImport" class="flex items-center">
+          <template #icon>
+            <UploadOutlined />
+          </template>
+          导入
+        </el-button>
+        <input ref="fileInputRef" type="file" accept=".md,.markdown" multiple class="hidden" @change="handleFileSelect" />
+      </div>
       <el-button link type="primary" class="text-sm" @click="$emit('openDocs')">
         <template #icon>
           <el-icon :size="16">
@@ -115,11 +124,13 @@
 </template>
 
 <script setup lang="ts">
-import { ElIcon, ElButton } from 'element-plus'
+import { ref } from 'vue'
+import { ElIcon, ElButton, ElMessage } from 'element-plus'
 import { People } from '@vicons/ionicons5'
-import { PlusOutlined, DeleteOutlineOutlined } from '@vicons/material'
+import { PlusOutlined, DeleteOutlineOutlined, UploadOutlined } from '@vicons/material'
 import { QuestionCircleOutlined } from '@vicons/antd'
 import { Avatar } from '../ui'
+import { apiService } from '../../services/ApiService'
 import type { CharacterGroup } from '@/types/character'
 
 defineProps<{
@@ -129,7 +140,7 @@ defineProps<{
   loading: boolean
 }>()
 
-defineEmits<{
+const emit = defineEmits<{
   createCharacter: []
   editCharacter: [character: any]
   deleteCharacter: [character: any]
@@ -139,7 +150,43 @@ defineEmits<{
   renameGroup: [group: CharacterGroup]
   deleteGroup: [group: CharacterGroup]
   openDocs: []
+  imported: []
 }>()
+
+const fileInputRef = ref<HTMLInputElement>()
+
+const triggerImport = () => {
+  fileInputRef.value?.click()
+}
+
+const handleFileSelect = async (event: Event) => {
+  const input = event.target as HTMLInputElement
+  if (!input.files || input.files.length === 0) return
+
+  const files: { content: string; filename: string }[] = []
+  for (const file of Array.from(input.files)) {
+    const content = await file.text()
+    files.push({ content, filename: file.name })
+  }
+
+  try {
+    const results = await apiService.importCharacters(files)
+    const okCount = results.filter(r => r.status === 'ok').length
+    const failCount = results.filter(r => r.status !== 'ok').length
+    if (okCount > 0) {
+      ElMessage.success(`成功导入 ${okCount} 个助手`)
+    }
+    if (failCount > 0) {
+      ElMessage.warning(`${failCount} 个文件导入失败`)
+    }
+    emit('imported')
+  } catch (err: any) {
+    ElMessage.error(err.message || '导入失败')
+  }
+
+  // 重置 input 以便重复选择同一文件
+  input.value = ''
+}
 </script>
 
 <style scoped>

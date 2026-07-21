@@ -1,4 +1,4 @@
-import { IsOptional, IsString, IsBoolean, IsObject, IsNumber, ValidateNested, IsArray } from "class-validator";
+import { IsOptional, IsString, IsBoolean, IsNumber, ValidateNested, IsArray } from "class-validator";
 import { Type } from "class-transformer";
 
 /**
@@ -20,23 +20,6 @@ class MemorySettingsDto {
   @IsOptional()
   @IsNumber()
   maxTokensLimit?: number;
-}
-
-/**
- * 模型参数覆盖
- */
-class ModelSettingsDto {
-  @IsOptional()
-  @IsNumber()
-  temperature?: number;
-
-  @IsOptional()
-  @IsNumber()
-  topP?: number;
-
-  @IsOptional()
-  @IsNumber()
-  frequencyPenalty?: number;
 }
 
 /**
@@ -67,15 +50,6 @@ export class SessionSettingsDto {
   @ValidateNested()
   @Type(() => MemorySettingsDto)
   memory?: MemorySettingsDto;
-
-  @IsOptional()
-  @IsBoolean()
-  modelOverrideEnabled?: boolean;
-
-  @IsOptional()
-  @ValidateNested()
-  @Type(() => ModelSettingsDto)
-  model?: ModelSettingsDto;
 
   @IsOptional()
   @IsString()

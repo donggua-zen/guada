@@ -39,14 +39,6 @@ interface MergedSettings {
   systemPrompt: string;
   thinkingEffort?: string;
   memory: any;
-  model: {
-    temperature?: number;
-    topP?: number;
-    frequencyPenalty?: number;
-  };
-  // modelTemperature?: number;
-  // modelTopP?: number;
-  // modelFrequencyPenalty?: number;
   plugins?: any;
   skills?: Record<string, boolean>; // 角色级技能偏好 { skillId: true/false }
   agents?: Record<string, boolean>; // 角色级 Agent 偏好 { agentId: true/false }
@@ -518,7 +510,7 @@ export class PersistentSessionContext implements ISessionContext {
 
   private buildModelConfig(
     model: any,
-    mergedSettings: MergedSettings,
+    _mergedSettings: MergedSettings,
   ): ModelConfig {
     if (!model) {
       throw new Error(`Session ${this.sessionId} has no resolved model`);
@@ -545,20 +537,10 @@ export class PersistentSessionContext implements ISessionContext {
         inputCapabilities: model.config?.inputCapabilities || [],
         // 模型原始配置（显式展开，避免意外覆盖下面运行时参数）
         ...(model.config || {}),
-        // 二级链：会话设置（创建时已从角色继承）> 模型默认 > undefined（API自行决策）
-        temperature:
-          mergedSettings.model.temperature ??
-          model.config?.temperature ??
-          undefined,
-        topP:
-          mergedSettings.model.topP ??
-          model.config?.modelTopP ??
-          model.config?.topP ??
-          undefined,
-        frequencyPenalty:
-          mergedSettings.model.frequencyPenalty ??
-          model.config?.frequencyPenalty ??
-          undefined,
+        // 模型参数：直接使用模型自身配置
+        temperature: model.config?.temperature ?? undefined,
+        topP: model.config?.topP ?? undefined,
+        frequencyPenalty: model.config?.frequencyPenalty ?? undefined,
       },
     };
   }
@@ -734,19 +716,10 @@ export class PersistentSessionContext implements ISessionContext {
       systemPrompt,
       thinkingEffort: undefined,
       memory: {},
-      model: {},
       plugins: mergedTools,
       skills: mergedSkills,
       agents: mergedAgents,
     };
-
-    if (sessionSettings.modelOverrideEnabled && sessionSettings.model) {
-      merged.model = {
-        temperature: sessionSettings.model?.temperature,
-        topP: sessionSettings.model?.topP,
-        frequencyPenalty: sessionSettings.model?.frequencyPenalty,
-      };
-    }
 
     // 记忆/压缩配置（独立继承）
     const memoryEnabled = sessionSettings.memoryEnabled;

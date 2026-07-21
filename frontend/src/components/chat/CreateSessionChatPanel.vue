@@ -428,10 +428,6 @@ const chatInputConfig = computed(() => ({
 
   // 分组 ID - 对应 handleConfigChange 中的 config.groupId
   groupId: currentSession.value?.groupId || null,
-
-  // 模型参数 - 对应 handleConfigChange 中的 config.model 等
-  modelOverrideEnabled: currentSession.value?.settings?.modelOverrideEnabled ?? false,
-  model: currentSession.value?.settings?.model ?? null,
 }));
 
 /**
@@ -497,22 +493,6 @@ const handleConfigChange = (config: any): void => {
   if (typeof config.groupId !== 'undefined') {
     currentSession.value.groupId = config.groupId;
     console.log('保存 groupId 到会话:', config.groupId);
-  }
-
-  // 处理模型参数
-  if (typeof config.modelOverrideEnabled !== 'undefined') {
-    currentSession.value.settings.modelOverrideEnabled = config.modelOverrideEnabled;
-  }
-  if (typeof config.model !== 'undefined') {
-    if (config.model) {
-      currentSession.value.settings.model = {
-        temperature: config.model.temperature ?? null,
-        topP: config.model.topP ?? null,
-        frequencyPenalty: config.model.frequencyPenalty ?? null,
-      };
-    } else {
-      currentSession.value.settings.model = null;
-    }
   }
 };
 

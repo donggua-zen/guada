@@ -15,13 +15,7 @@ export interface CharacterApi {
   createCharacter(characterData: any): Promise<Character>;
   updateCharacter(characterId: string, characterData: any): Promise<Character>;
   deleteCharacter(characterId: string): Promise<{ success: boolean }>;
-  fetchAgents(): Promise<{ agents: any[]; groups: any[]; agentsDir?: string }>;
-  fetchAgentDetail(id: string): Promise<any>;
-  updateAgentVisibility(id: string, visible: boolean, collapsed?: boolean): Promise<any>;
-  deleteAgent(id: string): Promise<any>;
-  createAgent(data: any): Promise<any>;
-  updateAgent(id: string, data: any): Promise<any>;
-  importAgents(data: { files: { content: string; filename: string }[]; folder?: string; overwrite?: boolean }): Promise<any>;
+  importCharacters(files: { content: string; filename: string }[]): Promise<{ filename: string; status: string; characterId?: string; error?: string }[]>;
 }
 
 export const characterApi: CharacterApi = {
@@ -75,39 +69,10 @@ export const characterApi: CharacterApi = {
     });
   },
 
-  async fetchAgents(this: ApiContext) {
-    return await this._request("/agents");
-  },
-
-  async fetchAgentDetail(this: ApiContext, id: string) {
-    return await this._request(`/agents/${encodeURIComponent(id)}`);
-  },
-
-  async updateAgentVisibility(this: ApiContext, id: string, visible: boolean, collapsed?: boolean) {
-    return await this._request(`/agents/${encodeURIComponent(id)}/visibility`, {
-      method: "PUT",
-      data: collapsed !== undefined ? { visible, collapsed } : { visible },
+  async importCharacters(this: ApiContext, files: { content: string; filename: string }[]) {
+    return await this._request("/characters/import", {
+      method: "POST",
+      data: { files },
     });
-  },
-
-  async deleteAgent(this: ApiContext, id: string) {
-    return await this._request(`/agents/${encodeURIComponent(id)}`, {
-      method: "DELETE",
-    });
-  },
-
-  async createAgent(this: ApiContext, data: any) {
-    return await this._request("/agents", { method: "POST", data });
-  },
-
-  async updateAgent(this: ApiContext, id: string, data: any) {
-    return await this._request(`/agents/${encodeURIComponent(id)}`, {
-      method: "PUT",
-      data,
-    });
-  },
-
-  async importAgents(this: ApiContext, data: { files: { content: string; filename: string }[]; folder?: string; overwrite?: boolean }) {
-    return await this._request("/agents/import", { method: "POST", data });
   },
 };

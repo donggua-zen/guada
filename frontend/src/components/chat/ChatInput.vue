@@ -468,8 +468,6 @@ const sessionMemoryConfig = computed(() => {
   if (!config) return {};
 
   return {
-    modelOverrideEnabled: config.modelOverrideEnabled ?? false,
-    model: config.model ?? null,
     useCustom: config.memoryEnabled ?? true,
     ...config.memory,
     workspacePath: config.workspacePath || null,

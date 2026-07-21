@@ -85,4 +85,9 @@ export class CharactersController {
   async uploadAvatar(@Param("id") id: string, @UploadedFile() file: any) {
     return this.characterService.uploadAvatar(id, file);
   }
+
+  @Post("characters/import")
+  async importCharacters(@Body() data: { files: { content: string; filename: string }[] }, @CurrentUser() user: any) {
+    return this.characterService.importCharacters(user.id, data.files || []);
+  }
 }

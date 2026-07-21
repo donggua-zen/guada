@@ -276,11 +276,10 @@ export class SessionService {
       throw new Error(`Character with ID ${mainCharacterId} not found`);
     }
 
-    // 处理会话设置：过滤非法字段 + 处理 memory 继承 + 继承角色模型参数
+    // 处理会话设置：过滤非法字段 + 处理 memory 继承
     const filteredSettings = this.filterAndMergeSessionSettings(
       settings,
       character.settings,
-      !!character.modelId,
     );
 
     // 确定使用的模型 ID：优先使用传入的 modelId，其次使用角色的 modelId，最后使用默认对话模型
@@ -343,7 +342,6 @@ export class SessionService {
   private filterAndMergeSessionSettings(
     sessionSettings: any,
     characterSettings: any,
-    characterHasModel: boolean = false,
   ) {
     // 如果 sessionSettings 为空，使用空对象
     if (!sessionSettings) {
@@ -370,33 +368,6 @@ export class SessionService {
         compressionTargetRatio: sessionMemory.compressionTargetRatio ?? 0.5,
         summaryMode: sessionMemory.summaryMode ?? SummaryMode.DEFAULT,
         maxTokensLimit: sessionMemory.maxTokensLimit ?? null,
-      };
-    }
-
-    // 第三步：模型参数继承（创建会话时从角色拷贝，之后除非显式修改不再跟随角色变动）
-    // 仅当角色使能了覆盖且绑定了模型时，才将角色参数作为会话初始值
-    if (filteredSettings.modelOverrideEnabled === undefined) {
-      const charOverride = characterSettings?.overrideModelParams ?? false;
-      if (charOverride && characterHasModel) {
-        filteredSettings.modelOverrideEnabled = true;
-        filteredSettings.model = {
-          temperature: characterSettings.modelTemperature ?? undefined,
-          topP: characterSettings.modelTopP ?? undefined,
-          frequencyPenalty:
-            characterSettings.modelFrequencyPenalty ?? undefined,
-        };
-      } else {
-        filteredSettings.modelOverrideEnabled = false;
-        filteredSettings.model = null;
-      }
-    } else if (filteredSettings.modelOverrideEnabled === false) {
-      filteredSettings.model = null;
-    } else if (filteredSettings.model) {
-      // 确保 model 对象结构完整
-      filteredSettings.model = {
-        temperature: filteredSettings.model.temperature ?? undefined,
-        topP: filteredSettings.model.topP ?? undefined,
-        frequencyPenalty: filteredSettings.model.frequencyPenalty ?? undefined,
       };
     }
 
