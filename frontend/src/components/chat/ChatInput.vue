@@ -89,21 +89,9 @@
           <button ref="modelButtonRef" @click.stop="openModelPanel" class="model-selector-btn">
             <span class="text-sm font-medium truncate flex-1 min-w-0"
               style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">{{
-                currentModelName }}</span>
+                currentModelNameOnly }}</span>
+            <span v-if="currentThinkingLabel" class="text-xs text-gray-400 shrink-0 ml-1">{{ currentThinkingLabel }}</span>
           </button>
-          <!-- 思考强度按钮 -->
-          <template v-if="showButtons.thinkingButton && currentModel">
-            <button ref="thinkingButtonRef" class="tool-btn" @click.stop="toggleThinkingPopover">
-              <el-icon size="16" :class="{ 'thinking-active': localThinkingEffort !== 'off' }">
-                <LightbulbFilament24Regular />
-              </el-icon>
-              <span class="text-xs font-medium" :class="{ 'thinking-active-text': localThinkingEffort !== 'off' }">{{
-                getThinkingEffortShortLabel(localThinkingEffort) }}</span>
-            </button>
-            <ThinkingEffortPopover v-model:visible="thinkingPopoverVisible" :anchor-el="thinkingButtonRef"
-              :options="thinkingEffortOptions" :current-value="localThinkingEffort"
-              @select="handleThinkingEffortChange" />
-          </template>
           <!-- 会话设置按钮 -->
           <el-tooltip v-if="!props.readonly" content="会话设置" placement="top">
             <button class="tool-btn" @click.stop="openSettingsPanel">
@@ -129,8 +117,10 @@
 
       <!-- 模型选择器弹窗 -->
       <ModelSelectorPanel v-model:visible="modelPanelVisible" :anchor-el="modelButtonRef" :models="models"
-        :providers="providers" :current-model-id="props.config?.modelId || null" @select="handleModelSelect"
-        @favorite-changed="handleFavoriteChanged" />
+        :providers="providers" :current-model-id="props.config?.modelId || null"
+        :thinking-effort-options="thinkingEffortOptions" :thinking-effort-value="localThinkingEffort"
+        @select="handleModelSelect" @favorite-changed="handleFavoriteChanged"
+        @select-thinking-effort="handleThinkingEffortChange" />
 
       <!-- 会话设置模态框 -->
       <SessionSettingsDialog v-model:visible="settingsDialogVisible" :config="sessionMemoryConfig"
@@ -154,7 +144,6 @@ import CustomPopover from '../ui/CustomPopover.vue';
 import KnowledgeBasePanel from './chat-input/KnowledgeBasePanel.vue';
 import AttachmentPopover from './chat-input/AttachmentPopover.vue';
 import SessionSettingsDialog from './chat-input/SessionSettingsDialog.vue';
-import ThinkingEffortPopover from './chat-input/ThinkingEffortPopover.vue';
 import RunModePopover from './chat-input/RunModePopover.vue';
 import ModelSelectorPanel from './chat-input/ModelSelectorPanel.vue';
 import { CommandNode } from './chat-input/commandNode';
@@ -400,8 +389,6 @@ watch(() => currentModel.value?.config, (config) => {
 
 // 思考强度相关
 const localThinkingEffort = ref<string>('off'); // 'off' | 'low' | 'medium' | 'high' | 'max' | ...
-const thinkingButtonRef = ref<any>(null);
-const thinkingPopoverVisible = ref(false);
 
 // 运行模式相关
 const runModeButtonRef = ref<any>(null);
@@ -433,11 +420,6 @@ const initThinkingEffort = () => {
   }
 };
 
-// 切换思考强度弹窗
-const toggleThinkingPopover = () => {
-  thinkingPopoverVisible.value = !thinkingPopoverVisible.value;
-};
-
 // 获取思考强度的标签（用于按钮显示）
 const getThinkingEffortShortLabel = (effort: string) => {
   return getThinkingEffortLabel(effort);
@@ -457,9 +439,21 @@ const handleThinkingEffortChange = (effort: string) => {
   emit('config-change', configChanges);
 };
 
-const currentModelName = computed(() => {
+const currentModelNameOnly = computed(() => {
   const model = currentModel.value;
   return model ? model.modelName.split("/").pop() : "请选择模型";
+});
+
+const currentThinkingLabel = computed(() => {
+  if (!showButtons.thinkingButton) return '';
+  const effort = localThinkingEffort.value;
+  return getThinkingEffortLabel(effort);
+});
+
+const currentModelName = computed(() => {
+  const name = currentModelNameOnly.value;
+  const effort = currentThinkingLabel.value;
+  return effort ? `${name} · ${effort}` : name;
 });
 
 // 当前选中的知识库列表（根据 ID 从完整列表中过滤）
@@ -606,8 +600,6 @@ const handleModelSelect = (modelId: string) => {
   };
 
   emit('config-change', configChanges);
-
-  modelPanelVisible.value = false
 };
 
 // 处理收藏状态变化（同步更新本地模型数据）

@@ -1,109 +1,151 @@
 <template>
-  <CustomPopover :show="visible" @update:show="$emit('update:visible', $event)" :width="320" :max-height="400"
+  <CustomPopover :show="visible" @update:show="onMainShowChange" :width="300" :max-height="440"
     :anchor-el="anchorEl" popper-class="model-popover compact-popover">
-    <template #header>
-      <div class="mb-3">
-        <el-input v-model="searchText" placeholder="搜索模型..." clearable size="small">
-          <template #prefix>
-            <el-icon>
-              <Search12Regular />
-            </el-icon>
-          </template>
-        </el-input>
-      </div>
-    </template>
-    <div class="min-h-0 space-y-2 ">
-      <template v-for="provider in filteredProviders" :key="provider.id">
-        <div class="provider-group">
-          <!-- 非收藏分组才显示供应商名称 -->
-          <div v-if="!provider.isFavoriteGroup"
-            class="provider-name text-xs font-medium text-gray-500 dark:text-gray-400 mb-1 px-1">
-            {{ provider.name }}
+    <div class="model-panel">
+      <!-- 已选择模型（hover 弹出全部模型） -->
+      <div v-if="currentModel" class="current-model-section">
+        <div ref="currentModelRef" class="current-model-card" @mouseenter="openCascade('browse', currentModelRef)"
+          @mouseleave="scheduleCloseCascade">
+          <div class="w-8 h-8 shrink-0">
+            <Avatar :src="getModelAvatarPath(currentModel.modelName, currentModelProviderName) || undefined"
+              :name="getModelDisplayName(currentModel.modelName)" type="assistant" :round="false"
+              class="w-full h-full" />
           </div>
-          <div class="provider-models space-y-1">
-            <div v-for="model in getProviderModels(provider.id)" :key="provider.id + '-' + model.id"
-              class="model-item-compact p-2 rounded cursor-pointer transition-all flex items-center gap-2" :class="{
-                'model-item-active': currentModelId === model.id
-              }" @click="handleSelect(model.id)">
-              <!-- 模型头像 -->
-              <div class="w-8 h-8 shrink-0">
-                <Avatar :src="getModelAvatarPath(model.modelName, provider.name) || undefined"
-                  :name="getModelDisplayName(model.modelName)" type="assistant" :round="false" class="w-full h-full" />
-              </div>
-              <div class="flex-1 min-w-0">
-                <div class="font-medium text-sm text-gray-800 dark:text-gray-200 truncate mb-1">
-                  {{ getModelDisplayName(model.modelName) }}
-                </div>
-                <!-- 特性图标组 -->
-                <div class="flex items-center gap-1.5 text-xs text-gray-500 dark:text-gray-400">
-                  <!-- 收藏分组中显示供应商名称 -->
-                  <span v-if="provider.isFavoriteGroup" class="pr-1.5 py-0.5 font-medium text-[10px]">
-                    {{ getModelProviderName(model) }}
-                  </span>
-
-                  <!-- 输入/输出能力箭头组 -->
-                  <div
-                    v-if="model.modelType === 'text' && (model.config?.inputCapabilities || model.config?.outputCapabilities)"
-                    class="flex items-center gap-0.5 px-1.5 py-0.5 rounded bg-gray-50 dark:bg-gray-800 border border-gray-100 dark:border-gray-700">
-                    <template v-for="cap in (model.config?.inputCapabilities || ['text'])" :key="'in-' + cap">
-                      <el-icon :size="13">
-                        <TextT24Regular v-if="cap === 'text'" />
-                        <Image24Regular v-else />
-                      </el-icon>
-                    </template>
-                    <el-icon :size="9" class="text-gray-300">
-                      <ArrowRightTwotone />
-                    </el-icon>
-                    <template v-for="cap in (model.config?.outputCapabilities || ['text'])" :key="'out-' + cap">
-                      <el-icon :size="13">
-                        <TextT24Regular v-if="cap === 'text'" />
-                        <Image24Regular v-else />
-                      </el-icon>
-                    </template>
-                  </div>
-
-                  <!-- 高级功能图标 -->
-                  <template v-for="feature in (model.config?.features || [])" :key="feature">
-                    <el-tooltip :content="getFeatureLabel(feature)" placement="top">
-                      <el-icon class="hover:text-primary transition-colors" :size="13">
-                        <WrenchScrewdriver24Regular v-if="feature === 'tools'" />
-                        <LightbulbFilament24Regular v-else-if="feature === 'thinking'" />
-                      </el-icon>
-                    </el-tooltip>
-                  </template>
-                </div>
-              </div>
-              <div class="flex items-center gap-1.5 shrink-0 mt-0.5">
-                <!-- 收藏按钮 -->
-                <el-icon class="favorite-icon cursor-pointer transition-all" :size="16"
-                  @click.stop="handleToggleFavorite(model.id)">
-                  <Star24Filled v-if="favoriteIds.has(model.id)" class="text-yellow-500" />
-                  <Star24Regular v-else class="text-gray-400 hover:text-yellow-500" />
+          <div class="flex-1 min-w-0">
+            <div class="font-medium text-sm text-gray-800 dark:text-gray-200 truncate">
+              {{ getModelDisplayName(currentModel.modelName) }}
+            </div>
+            <div class="text-xs text-gray-500 dark:text-gray-400 flex items-center gap-1">
+              <span class="truncate">{{ currentModelProviderName }}</span>
+              <template v-for="feature in (currentModel?.config?.features || [])" :key="feature">
+                <el-icon :size="12">
+                  <WrenchScrewdriver24Regular v-if="feature === 'tools'" />
+                  <LightbulbFilament24Regular v-else-if="feature === 'thinking'" />
                 </el-icon>
+              </template>
+            </div>
+          </div>
+          <el-icon size="14" class="text-gray-400 shrink-0">
+            <ChevronRight24Regular />
+          </el-icon>
+        </div>
+      </div>
+
+      <!-- 推理强度 - 级联 -->
+      <template v-if="thinkingEffortOptions.length > 0">
+        <div ref="thinkingRef" class="cascade-trigger" @mouseenter="openCascade('thinking', thinkingRef)"
+          @mouseleave="scheduleCloseCascade">
+
+          <span class="text-sm flex-1">推理强度</span>
+          <span class="text-xs text-gray-400">
+            {{ thinkingEffortLabel }}</span>
+          <el-icon size="14" class="text-gray-400">
+            <ChevronRight24Regular />
+          </el-icon>
+        </div>
+      </template>
+
+      <!-- 收藏模型 -->
+      <template v-if="favoriteModels.length > 0">
+        <div class="section-divider"></div>
+        <div class="section-label">收藏模型</div>
+        <div class="favorite-models-list space-y-0.5" style="max-height: 220px; overflow-y: auto;">
+          <div v-for="model in favoriteModels" :key="model.id"
+            class="model-item-compact px-1.5 py-1 rounded-xl cursor-pointer transition-all flex items-center space-x-1.5"
+            :class="{
+              'model-item-active': currentModelId === model.id
+            }" @click="handleSelect(model.id)">
+            <div class="w-8 h-8 shrink-0">
+              <Avatar :src="getModelAvatarPath(model.modelName, getModelProviderName(model)) || undefined"
+                :name="getModelDisplayName(model.modelName)" type="assistant" :round="false" class="w-full h-full" />
+            </div>
+            <div class="flex-1 min-w-0">
+              <div class="font-medium text-sm text-gray-800 dark:text-gray-200 truncate">
+                {{ getModelDisplayName(model.modelName) }}
+              </div>
+              <div class="flex items-center gap-1 text-xs text-gray-500 dark:text-gray-400">
+                <span class="truncate">{{ getModelProviderName(model) }}</span>
+                <template v-for="feature in (model.config?.features || [])" :key="feature">
+                  <el-icon :size="12">
+                    <WrenchScrewdriver24Regular v-if="feature === 'tools'" />
+                    <LightbulbFilament24Regular v-else-if="feature === 'thinking'" />
+                  </el-icon>
+                </template>
               </div>
             </div>
           </div>
         </div>
       </template>
-      <div v-if="filteredModels.length === 0" class="text-center py-6 text-gray-400">
-        <el-icon size="32" class="mb-1">
-          <Search12Regular />
-        </el-icon>
-        <p class="text-xs">未找到匹配的模型</p>
-      </div>
     </div>
+  </CustomPopover>
 
+  <!-- 级联：全部模型列表 -->
+  <CustomPopover :show="cascadeMenu.visible && cascadeMenu.type === 'browse'"
+    @update:show="onCascadeShowChange" :width="300" :max-height="400" :position="cascadePosition"
+    @mouseenter="cancelCloseCascade" @mouseleave="scheduleCloseCascade">
+    <template v-for="provider in filteredProviders" :key="provider.id">
+      <div class="provider-group">
+        <div class="provider-name text-xs font-medium text-gray-500 dark:text-gray-400 mb-1 px-1">
+          {{ provider.name }}
+        </div>
+        <div class="provider-models space-y-1">
+          <div v-for="model in getProviderModels(provider.id)" :key="provider.id + '-' + model.id"
+            class="model-item-compact p-1.5 rounded-xl cursor-pointer transition-all flex items-center space-x-1.5"
+            :class="{
+              'model-item-active': currentModelId === model.id
+            }" @click.stop="handleSelect(model.id)">
+            <div class="w-8 h-8 shrink-0">
+              <Avatar :src="getModelAvatarPath(model.modelName, provider.name) || undefined"
+                :name="getModelDisplayName(model.modelName)" type="assistant" :round="false"
+                class="w-full h-full" />
+            </div>
+            <div class="flex-1 min-w-0">
+              <div class="font-medium text-sm text-gray-800 dark:text-gray-200 truncate">
+                {{ getModelDisplayName(model.modelName) }}
+              </div>
+              <div class="flex items-center gap-1 text-xs text-gray-500 dark:text-gray-400">
+                <span class="truncate">{{ provider.name }}</span>
+                <template v-for="feature in (model.config?.features || [])" :key="feature">
+                  <el-icon :size="12">
+                    <WrenchScrewdriver24Regular v-if="feature === 'tools'" />
+                    <LightbulbFilament24Regular v-else-if="feature === 'thinking'" />
+                  </el-icon>
+                </template>
+              </div>
+            </div>
+            <el-icon class="favorite-icon cursor-pointer transition-all shrink-0" :size="16"
+              @click.stop="handleToggleFavorite(model.id)">
+              <Star24Filled v-if="favoriteIds.has(model.id)" class="text-yellow-500" />
+              <Star24Regular v-else class="text-gray-400 hover:text-yellow-500" />
+            </el-icon>
+          </div>
+        </div>
+      </div>
+    </template>
+  </CustomPopover>
+
+  <!-- 级联：推理强度列表 -->
+  <CustomPopover :show="cascadeMenu.visible && cascadeMenu.type === 'thinking'"
+    @update:show="onCascadeShowChange" :width="180" :max-height="300" :position="cascadePosition"
+    @mouseenter="cancelCloseCascade" @mouseleave="scheduleCloseCascade">
+    <div v-for="effort in thinkingEffortOptions" :key="effort"
+      class="te-item flex items-center justify-between px-2 py-1.5 rounded cursor-pointer transition-all text-sm"
+      :class="{
+        'te-item-active': thinkingEffortValue === effort
+      }" @click.stop="$emit('select-thinking-effort', effort)">
+      <span>{{ getThinkingEffortLabel(effort) }}</span>
+      <span class="text-xs text-gray-400">{{ effort }}</span>
+    </div>
   </CustomPopover>
 </template>
 
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
-import { ElInput, ElIcon, ElTooltip } from 'element-plus'
-import { Search12Regular, Star24Regular, Star24Filled, TextT24Regular, Image24Regular, WrenchScrewdriver24Regular, LightbulbFilament24Regular } from '@vicons/fluent'
-import { ArrowRightTwotone } from '@vicons/material'
+import { computed, ref, watch, reactive } from 'vue'
+import { ElIcon } from 'element-plus'
+import { WrenchScrewdriver24Regular, LightbulbFilament24Regular, ChevronRight24Regular, Star24Regular, Star24Filled } from '@vicons/fluent'
 import CustomPopover from '../../ui/CustomPopover.vue'
 import Avatar from '../../ui/Avatar.vue'
-import { getModelDisplayName, getModelAvatarPath, getModelThinkingEfforts } from '@/utils/modelUtils'
+import { getModelDisplayName, getModelAvatarPath, getThinkingEffortLabel } from '@/utils/modelUtils'
 import { apiService } from '@/services/ApiService'
 
 interface Model {
@@ -118,13 +160,13 @@ interface Model {
     features?: string[]
   }
   isFavorite?: boolean
+  thinkingEfforts?: string[]
 }
 
 interface Provider {
   id: string
   name: string
   models?: Model[]
-  isFavoriteGroup?: boolean
 }
 
 const props = defineProps<{
@@ -133,127 +175,196 @@ const props = defineProps<{
   models: Model[]
   providers: Provider[]
   currentModelId: string | null
+  thinkingEffortOptions: string[]
+  thinkingEffortValue: string
 }>()
 
 const emit = defineEmits<{
   'update:visible': [value: boolean]
-  'select': [modelId: string]  // 只传递模型 ID
+  'select': [modelId: string]
   'favorite-changed': [modelId: string, isFavorite: boolean]
+  'select-thinking-effort': [effort: string]
 }>()
 
-const searchText = ref('')
 const favoriteIds = ref<Set<string>>(new Set())
+const currentModelRef = ref<HTMLElement | null>(null)
+const thinkingRef = ref<HTMLElement | null>(null)
 
-// 过滤后的模型列表（支持搜索）
-const filteredModels = computed(() => {
-  if (!searchText.value) return props.models
-  const searchTextLower = searchText.value.toLowerCase()
-  return props.models.filter(model =>
-    model.modelName?.toLowerCase().includes(searchTextLower) ||
-    model.description?.toLowerCase().includes(searchTextLower)
-  )
+const cascadeMenu = reactive({
+  visible: false,
+  type: '' as 'browse' | 'thinking' | '',
+})
+const cascadePosition = ref<{ left: number; top: number } | null>(null)
+let closeTimer: ReturnType<typeof setTimeout> | null = null
+
+const currentModel = computed(() => {
+  if (!props.currentModelId) return null
+  return props.models.find(m => m.id === props.currentModelId) || null
 })
 
-// 按供应商分组的过滤后模型列表
+const currentModelProviderName = computed(() => {
+  if (!currentModel.value) return ''
+  return getModelProviderName(currentModel.value)
+})
+
+const favoriteModels = computed(() => {
+  return props.models.filter(m => m.isFavorite)
+})
+
+const thinkingEffortLabel = computed(() => {
+  return getThinkingEffortLabel(props.thinkingEffortValue)
+})
+
 const filteredProviders = computed(() => {
   if (!props.models.length || !props.providers.length) return []
-
-  const filtered = filteredModels.value
-
-  // 分离收藏和未收藏的模型
-  const favoritedModels = filtered.filter((model: Model) => favoriteIds.value.has(model.id))
-
-  const result: any[] = []
-
-  // 如果有收藏的模型,创建一个统一的"收藏"分组
-  if (favoritedModels.length > 0) {
-    result.push({
-      id: 'favorites',
-      name: '收藏',
-      models: favoritedModels,
-      isFavoriteGroup: true
-    })
-  }
-
-  // 所有模型都按供应商分组显示(包括收藏的)
-  const providerGroups = props.providers.map(provider => ({
+  return props.providers.map(provider => ({
     ...provider,
-    models: filtered.filter((model: Model) => model.providerId === provider.id),
-    isFavoriteGroup: false
+    models: props.models.filter((model: Model) => model.providerId === provider.id),
   })).filter((provider: any) => provider.models.length > 0)
-
-  result.push(...providerGroups)
-
-  return result
 })
 
-// 获取指定供应商的模型列表
 function getProviderModels(providerId: string): Model[] {
   const provider = filteredProviders.value.find(p => p.id === providerId)
   return provider ? provider.models : []
 }
 
-// 获取模型的供应商名称
 function getModelProviderName(model: Model): string {
   if (!model || !model.providerId) return ''
   const provider = props.providers.find(p => p.id === model.providerId)
   return provider ? provider.name : ''
 }
 
-// 获取特性标签
-function getFeatureLabel(type: string): string {
-  switch (type) {
-    case 'tools': return '工具调用'
-    case 'thinking': return '混合思考'
-    default: return type
-  }
-}
-
-// 处理选择模型
 function handleSelect(modelId: string) {
-  // 只 emit 模型 ID，不关心其他配置
   emit('select', modelId)
-  emit('update:visible', false)
 }
 
-// 处理切换收藏状态
 async function handleToggleFavorite(modelId: string) {
   try {
     await apiService.toggleModelFavorite(modelId)
-
-    // 计算新的收藏状态
     const newIsFavorite = !favoriteIds.value.has(modelId)
-
-    // 更新本地收藏状态
     if (newIsFavorite) {
       favoriteIds.value.add(modelId)
     } else {
       favoriteIds.value.delete(modelId)
     }
-
-    // 通知父组件具体哪个模型的收藏状态变了
     emit('favorite-changed', modelId, newIsFavorite)
   } catch (error) {
     console.error('切换收藏状态失败:', error)
   }
 }
 
-// 监听 visible 变化，初始化状态
+async function openCascade(type: 'browse' | 'thinking', triggerEl: HTMLElement | null) {
+  if (closeTimer) {
+    clearTimeout(closeTimer)
+    closeTimer = null
+  }
+  if (cascadeMenu.visible && cascadeMenu.type === type) return
+
+  // 先算坐标再显示，避免先出现在默认位置再跳变
+  if (triggerEl) {
+    const rect = triggerEl.getBoundingClientRect()
+    const menuWidth = type === 'browse' ? 300 : 180
+    const menuHeight = type === 'browse' ? 400 : 200
+    const gap = 10
+
+    const spaceRight = window.innerWidth - rect.right
+    const spaceLeft = rect.left
+    const showOnRight = spaceRight >= menuWidth + gap || spaceRight >= spaceLeft
+
+    let left: number
+    if (showOnRight) {
+      left = rect.right + gap
+    } else {
+      left = rect.left - menuWidth - gap
+    }
+
+    let top = rect.top
+    if (top + menuHeight > window.innerHeight - 8) {
+      top = Math.max(8, window.innerHeight - menuHeight - 8)
+    }
+
+    cascadePosition.value = {
+      left,
+      top,
+    }
+  }
+
+  cascadeMenu.type = type
+  cascadeMenu.visible = true
+}
+
+function onMainShowChange(val: boolean) {
+  // 级联菜单可见时，阻止主弹窗因外部点击关闭
+  if (!val && cascadeMenu.visible) return
+  emit('update:visible', val)
+}
+
+function onCascadeShowChange(val: boolean) {
+  if (!val) {
+    cascadeMenu.visible = false
+    cascadeMenu.type = ''
+  }
+}
+
+function scheduleCloseCascade() {
+  if (closeTimer) clearTimeout(closeTimer)
+  closeTimer = setTimeout(() => {
+    cascadeMenu.visible = false
+    cascadeMenu.type = ''
+  }, 200)
+}
+
+function cancelCloseCascade() {
+  if (closeTimer) {
+    clearTimeout(closeTimer)
+    closeTimer = null
+  }
+}
+
 watch(() => props.visible, (newVal) => {
   if (newVal) {
-    searchText.value = ''
-    // 初始化收藏状态
     favoriteIds.value = new Set(
       props.models.filter(m => m.isFavorite).map(m => m.id)
     )
+  } else {
+    cascadeMenu.visible = false
+    cascadeMenu.type = ''
   }
 })
 </script>
 
 <style scoped>
-/* 模型列表项 - 无边框紧凑样式 */
-.model-item-compact {
-  /* 移除全局过渡，避免列表重排时的抖动 */
+.model-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.section-label {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--color-text-gray);
+  padding: 4px 8px;
+}
+
+.section-divider {
+  height: 1px;
+  background: var(--color-surface-border);
+  margin: 3px 4px;
+}
+
+.current-model-card {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.current-model-card:hover {
+  background: var(--color-sidebar-bg-hover);
 }
 
 .model-item-compact:hover {
@@ -264,9 +375,16 @@ watch(() => props.visible, (newVal) => {
   background: var(--color-sidebar-bg-active);
 }
 
-/* 收藏按钮悬停效果 */
+.te-item:hover {
+  background: var(--color-sidebar-bg-hover);
+}
+
+.te-item-active {
+  background: var(--color-sidebar-bg-active);
+}
+
+/* 收藏图标 */
 .favorite-icon {
-  /* 只过渡 transform，避免颜色切换时的抖动 */
   transition: transform 0.2s ease;
 }
 
@@ -274,7 +392,6 @@ watch(() => props.visible, (newVal) => {
   transform: scale(1.1);
 }
 
-/* 收藏图标颜色强制应用 */
 .favorite-icon svg {
   fill: currentColor !important;
 }
@@ -284,24 +401,35 @@ watch(() => props.visible, (newVal) => {
 }
 
 .favorite-icon .text-gray-400 {
-  color: #9ca3af !important;
+  color: var(--color-text-gray) !important;
+}
+
+.cascade-trigger {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background 0.15s;
+  color: var(--color-text);
+}
+
+.cascade-trigger:hover {
+  background: var(--color-sidebar-bg-hover);
+}
+
+.thinking-active-icon {
+  color: #10b981;
 }
 
 .provider-group {
-  margin-bottom: 1rem;
-}
-
-.provider-name {
-  font-size: 0.875rem;
   margin-bottom: 0.5rem;
 }
 
-/* 收藏分组特殊样式 */
-.provider-group:first-child .provider-name {
-  color: #f59e0b;
-  font-weight: 600;
+.provider-name {
+  font-size: 0.75rem;
+  margin-bottom: 0.25rem;
 }
-.provider-group:last-child {
-  margin-bottom: 0;
-}
+
 </style>

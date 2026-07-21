@@ -38,7 +38,7 @@ export class PlanPlugin extends PluginBase {
     name: "Plan",
     description: "Task breakdown and plan management tool",
     version: "3.0.0",
-    category: "extended" as const,
+    category: "core" as const,
   };
 
   constructor(private readonly eventEmitter: EventEmitter2) {
