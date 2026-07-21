@@ -160,7 +160,7 @@ import { Thinking2 } from "@/components/icons";
 import {
   TextT24Regular, LightbulbFilament24Regular, LightbulbFilament24Filled, WrenchScrewdriver24Regular, Image24Regular, Attach24Regular,
   Send24Filled, Stop24Filled, Star24Regular, Star24Filled, Settings24Regular, BookSearch24Regular,
-  Apps20Regular, DrinkCoffee16Regular, ClipboardTask24Regular, Add24Regular
+  Apps20Regular, DrinkCoffee16Regular, ClipboardTask24Regular, ShieldLock24Regular, Add24Regular
 } from '@vicons/fluent'
 import {
   ThunderboltOutlined,
@@ -395,8 +395,16 @@ const runModeButtonRef = ref<any>(null);
 const runModePopoverVisible = ref(false);
 
 const currentRunMode = computed(() => props.config?.runMode || 'normal');
-const runModeLabel = computed(() => currentRunMode.value === 'plan' ? '计划模式' : '工作模式');
-const runModeIcon = computed(() => currentRunMode.value === 'plan' ? ClipboardTask24Regular : DrinkCoffee16Regular);
+const runModeLabel = computed(() => {
+  if (currentRunMode.value === 'plan') return '计划模式';
+  if (currentRunMode.value === 'sandbox') return '轻沙盒模式';
+  return '工作模式';
+});
+const runModeIcon = computed(() => {
+  if (currentRunMode.value === 'plan') return ClipboardTask24Regular;
+  if (currentRunMode.value === 'sandbox') return ShieldLock24Regular;
+  return DrinkCoffee16Regular;
+});
 
 const toggleRunModePopover = () => {
   runModePopoverVisible.value = !runModePopoverVisible.value;

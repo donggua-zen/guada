@@ -12,8 +12,6 @@ export {}
 declare module 'vue' {
   export interface GlobalComponents {
     AboutPanel: typeof import('./../components/plugins/AboutPanel.vue')['default']
-    AgentCard: typeof import('./../components/characters/AgentCard.vue')['default']
-    AgentListTab: typeof import('./../components/characters/AgentListTab.vue')['default']
     AgentSwitcherBar: typeof import('./../components/chat/AgentSwitcherBar.vue')['default']
     AgentTabBar: typeof import('./../components/chat/AgentTabBar.vue')['default']
     AppearanceSettings: typeof import('./../components/setting/AppearanceSettings.vue')['default']
@@ -132,7 +130,6 @@ declare module 'vue' {
     RunModePopover: typeof import('./../components/chat/chat-input/RunModePopover.vue')['default']
     SchedulerPage: typeof import('./../components/scheduler/SchedulerPage.vue')['default']
     ScrollContainer: typeof import('./../components/ui/ScrollContainer.vue')['default']
-    'ScrollContainer copy': typeof import('./../components/ui/ScrollContainer copy.vue')['default']
     ScrollToBottomButton: typeof import('./../components/ui/ScrollToBottomButton.vue')['default']
     SearchSettings: typeof import('./../components/setting/SearchSettings.vue')['default']
     SessionAgentList: typeof import('./../components/chat/SessionAgentList.vue')['default']
