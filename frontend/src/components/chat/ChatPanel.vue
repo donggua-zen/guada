@@ -73,7 +73,7 @@
   <div class="pb-2 w-full px-6 ">
     <div class="max-w-205 flex flex-col items-start mx-auto relative">
       <!-- Agent 切换栏（子代理只读模式隐藏） -->
-      <AgentSwitcherBar v-if="!readonly" :character="currentSession?.character" @select="handleSelectCharacter" />
+      <!-- <AgentSwitcherBar v-if="!readonly" :character="currentSession?.character" @select="handleSelectCharacter" /> -->
 
       <!-- 编辑模式提示条 -->
       <div v-if="editMode"

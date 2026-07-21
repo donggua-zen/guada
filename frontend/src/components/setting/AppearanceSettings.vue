@@ -1,6 +1,37 @@
 <template>
   <div class="flex-1 overflow-hidden">
     <div class="space-y-8">
+      <!-- 主题模式分组 -->
+      <div>
+        <h3 class="text-sm font-semibold text-gray-900 dark:text-[#e8e9ed] mb-3">主题模式</h3>
+        <div
+          class="rounded-xl border border-gray-200 dark:border-[#2e3035] bg-white dark:bg-[#232428] overflow-hidden"
+        >
+          <div class="px-4 py-3.5 flex items-center justify-between gap-4">
+            <div class="flex flex-col gap-1 min-w-0">
+              <span class="text-base text-gray-900 dark:text-[#e8e9ed]">显示模式</span>
+              <span class="text-xs text-gray-500 dark:text-[#8b8d95]">
+                选择浅色、深色或跟随系统主题
+              </span>
+            </div>
+            <div class="flex items-center gap-1 p-1 rounded-lg bg-gray-100 dark:bg-[#1a1b1e] shrink-0">
+              <button
+                v-for="option in themeOptions"
+                :key="option.value"
+                @click="setTheme(option.value)"
+                class="px-3 py-1.5 rounded-md text-sm font-medium transition-all duration-200 flex items-center gap-1.5"
+                :class="themeMode === option.value
+                  ? 'bg-white dark:bg-[#3a3b3f] text-gray-900 dark:text-[#e8e9ed] shadow-sm'
+                  : 'text-gray-500 dark:text-[#8b8d95] hover:text-gray-700 dark:hover:text-[#c0c1c5]'"
+              >
+                <component :is="option.icon" class="w-4 h-4" />
+                {{ option.label }}
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
       <!-- 壁纸设置分组 -->
       <div>
         <h3 class="text-sm font-semibold text-gray-900 dark:text-[#e8e9ed] mb-3">背景壁纸</h3>
@@ -211,14 +242,23 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, onMounted, watch } from 'vue'
+import { ref, reactive, onMounted, watch, markRaw } from 'vue'
 import { ElMessage, ElUpload, ElSlider, ElSwitch, ElButton, ElIcon } from 'element-plus'
 import { Plus, Delete } from '@element-plus/icons-vue'
+import { WeatherSunny20Regular, WeatherMoon20Filled, Desktop16Regular } from '@vicons/fluent'
 import { useDebounceFn } from '@vueuse/core'
 import { apiService } from '@/services/ApiService'
 import { useLayoutStore } from '@/stores/layout'
+import { useTheme, type ThemeMode } from '@/composables/useTheme'
 
 const layoutStore = useLayoutStore()
+const { themeMode, setTheme } = useTheme()
+
+const themeOptions = [
+  { label: '浅色', value: 'light' as ThemeMode, icon: markRaw(WeatherSunny20Regular) },
+  { label: '深色', value: 'dark' as ThemeMode, icon: markRaw(WeatherMoon20Filled) },
+  { label: '系统', value: 'system' as ThemeMode, icon: markRaw(Desktop16Regular) },
+]
 
 // 表单数据
 const settingsForm = reactive({

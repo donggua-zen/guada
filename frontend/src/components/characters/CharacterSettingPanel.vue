@@ -890,8 +890,7 @@ const handleSkillToggle = (skillId, enabled) => {
 // ── 预设助手 ──
 const getAgentEffectiveEnabled = (char) => {
   if (char.id in enabledAgents) return (enabledAgents as any)[char.id];
-  // 白名单模式默认关闭，黑名单模式默认开启
-  return !agentsAllowlistMode.value;
+  return false;
 };
 const handleAgentToggle = (charId, enabled) => {
   (enabledAgents as any)[charId] = enabled;
@@ -1248,10 +1247,12 @@ const getFormData = () => {
       'agents': (() => {
         const agentsOut: Record<string, any> = {};
         for (const char of presetCharacters.value) {
-          const effectiveEnabled = (enabledAgents as any)[char.id] ?? !agentsAllowlistMode.value;
+          const effectiveEnabled = getAgentEffectiveEnabled(char);
           if (agentsAllowlistMode.value) {
+            // 白名单：当前显示为 ON 的全部存 true
             if (effectiveEnabled) agentsOut[char.id] = true;
           } else {
+            // 黑名单：当前显示为 OFF 的全部存 false
             if (!effectiveEnabled) agentsOut[char.id] = false;
           }
         }

@@ -124,6 +124,13 @@
         "to": "backend-ts/prisma.config.js"
       },
       {
+        "from": "sandbox",
+        "to": "sandbox",
+        "filter": [
+          "sandbox.exe"
+        ]
+      },
+      {
         "from": "backend-ts/static",
         "to": "backend-ts/static",
         "filter": [

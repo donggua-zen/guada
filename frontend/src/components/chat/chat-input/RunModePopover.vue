@@ -25,7 +25,7 @@
 
 <script setup lang="ts">
 import { ElIcon } from 'element-plus'
-import { DrinkCoffee20Regular, ClipboardTask20Regular, CheckmarkCircle20Filled } from '@vicons/fluent'
+import { DrinkCoffee20Regular, ShieldLock20Regular, ClipboardTask20Regular, CheckmarkCircle20Filled } from '@vicons/fluent'
 import CustomPopover from '../../ui/CustomPopover.vue'
 
 defineProps<{
@@ -40,7 +40,8 @@ const emit = defineEmits<{
 }>()
 
 const options = [
-  { value: 'normal', label: '工作模式', desc: '不对可用工具进行限制', icon: DrinkCoffee20Regular },
+  { value: 'normal', label: '工作模式', desc: '不对工具进行限制,正常读写工作目录，命令行除外', icon: DrinkCoffee20Regular },
+  { value: 'sandbox', label: '轻沙盒模式（测试）', desc: 'Shell命令工作目录内可写，工作目录外只读，仅支持Win10/11 x64', icon: ShieldLock20Regular },
   { value: 'plan', label: '计划模式', desc: '仅允许只读工具,适合做只读规划', icon: ClipboardTask20Regular },
 ]
 
