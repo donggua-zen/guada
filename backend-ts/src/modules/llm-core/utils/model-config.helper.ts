@@ -150,13 +150,13 @@ export function createEmbeddingModel(
  * 否则返回 undefined，让 LLM 服务使用默认的 thinking 行为。
  *
  * @param modelConfig - 模型配置对象，包含 config.features 字段
- * @param effort - 期望的 thinkingEffort 值（如 'off', 'low', 'medium', 'high' 等）
+ * @param effort - 期望的 thinkingEffort 值（如 'none', 'low', 'medium', 'high' 等）
  * @returns effort 原值（如果模型支持 thinking）或 undefined（如果不支持）
  *
  * @example
  * ```typescript
  * // 禁用思考功能
- * const thinkingEffort = resolveThinkingEffort(visualModelConfig, 'off');
+ * const thinkingEffort = resolveThinkingEffort(visualModelConfig, 'none');
  *
  * // 设置低强度思考
  * const thinkingEffort = resolveThinkingEffort(modelConfig, 'low');

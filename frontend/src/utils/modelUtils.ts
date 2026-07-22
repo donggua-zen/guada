@@ -201,7 +201,7 @@ export function openExternalLink(url: string): void {
  * 获取模型的思考强度选项
  * @param model 模型对象（包含 providerId 和 features）
  * @param providers 供应商列表（从 API 获取，仅用于备用）
- * @returns 思考强度选项数组，如 ['off', 'low', 'medium', 'high'] 或 ['minimal', 'low', 'medium', 'high']
+ * @returns 思考强度选项数组，如 ['none', 'low', 'medium', 'high'] 或 ['minimal', 'low', 'medium', 'high']
  */
 export function getModelThinkingEfforts(
   model: any,
@@ -214,7 +214,7 @@ export function getModelThinkingEfforts(
   // 直接从模型自身的 thinkingEfforts 字段读取（后端完整控制选项）
   const efforts = model.thinkingEfforts || [];
 
-  // 如果后端返回了配置，直接返回（后端已决定是否包含 'off'）
+  // 如果后端返回了配置，直接返回（后端已决定是否包含 'none'）
   if (efforts.length > 0) {
     return efforts;
   }
@@ -237,7 +237,7 @@ export function isThinkingSupported(model: any, providers: any[]): boolean {
  */
 export function getThinkingEffortLabel(effort: string): string {
   const labels: Record<string, string> = {
-    off: "不思考",
+    none: "不思考",
     on: "思考模式",
     low: "低强度",
     medium: "中等强度",

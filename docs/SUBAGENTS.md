@@ -267,7 +267,7 @@ export class SubAgentManager {
       modelId: null,  // 下面按优先级解析
       settings: {
         systemPrompt: params.instructions,
-        thinkingEffort: 'off',
+        thinkingEffort: 'none',
         memory: { maxMemoryLength: 50, summaryMode: 'fast' },
       },
     })
@@ -279,7 +279,7 @@ export class SubAgentManager {
       character: parentSession.character,
       settings: {
         systemPrompt: params.instructions,
-        thinkingEffort: 'off',
+        thinkingEffort: 'none',
         memory: { maxMemoryLength: 50, summaryMode: 'fast' },
       },
     }

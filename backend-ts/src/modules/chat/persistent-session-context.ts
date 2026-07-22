@@ -145,7 +145,7 @@ export class PersistentSessionContext implements ISessionContext {
     // 一次性构建所有 DTO，避免 getter 中的延迟计算和缓存逻辑
     this.modelConfig = this.buildModelConfig(model, prep.mergedSettings);
     this.thinkingEffortValue = prep.features.includes("thinking")
-      ? prep.mergedSettings.thinkingEffort || "off"
+      ? prep.mergedSettings.thinkingEffort || "none"
       : undefined;
     this.resolvedPlugins = prep.resolvedPlugins;
     this.mergedSettings = prep.mergedSettings;
@@ -187,7 +187,7 @@ export class PersistentSessionContext implements ISessionContext {
     const modelName = modelConfig.modelName || modelConfig.name || "";
     const isDeepSeekV4 = modelName.includes("deepseek-v4");
     const shouldLoadReasoning =
-      this.thinkingEffortValue && this.thinkingEffortValue !== "off";
+      this.thinkingEffortValue && this.thinkingEffortValue !== "none";
 
     if (shouldLoadReasoning) {
       this.logger.debug(
@@ -672,7 +672,7 @@ export class PersistentSessionContext implements ISessionContext {
     );
 
     const thinkingEffort = features.includes("thinking")
-      ? merged.thinkingEffort || "off"
+      ? merged.thinkingEffort || "none"
       : undefined;
 
     return {

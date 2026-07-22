@@ -144,7 +144,7 @@ export interface IModelProvider {
    * 获取指定模型的思考强度选项
    * 必须由供应商实现，根据模型名称动态推断
    * @param modelName 模型名称
-   * @returns 思考强度选项数组，如 ['off', 'low', 'medium', 'high']
+   * @returns 思考强度选项数组，如 ['none', 'low', 'medium', 'high']
    *          空数组表示不支持思考功能
    */
   getModelThinkingEfforts(modelName: string): string[];

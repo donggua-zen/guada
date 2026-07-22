@@ -104,7 +104,7 @@ export class OpenAIProvider implements IModelProvider {
     }
     
     // o 系列和 GPT-5 支持 reasoning_effort，但无法完全禁用
-    // 只提供强度选项，不提供 'off' 或 'on'
+    // 只提供强度选项，不提供 'none' 或 'on'
     if (lowerName.startsWith('o') || lowerName.startsWith('gpt-5')) {
       return this.defaultThinkingEfforts; // ['low', 'medium', 'high']
     }

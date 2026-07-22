@@ -53,7 +53,7 @@
           class="address-input"
           type="text"
           placeholder="输入网址或搜索"
-          autocomplete="off"
+          autocomplete="none"
           spellcheck="false"
           @focus="addressFocused = true"
           @blur="addressFocused = false"

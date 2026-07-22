@@ -2,7 +2,7 @@
 
   <!-- 输入区域 -->
   <div class="px-5 pb-2.5 w-full flex-1 flex flex-col items-center justify-center mb-20">
-    <div class="w-full flex items-center justify-center mb-10">
+    <div class="w-full flex items-center justify-center mb-20">
       <div class="banner w-20 mb-4">
         <img :src="bannerPath" alt=""></img>
       </div>
@@ -81,7 +81,7 @@ const lastSelectedCharacterId = useStorage('lastSelectedCharacterId', '');
 const userSelectedModelId = useStorage<string | null>('userSelectedModelId', null);
 
 // 新增：用户上次选择的思考强度（刷新页面后从 localStorage 恢复）
-const userSelectedThinkingEffort = useStorage<string>('userSelectedThinkingEffort', 'off');
+const userSelectedThinkingEffort = useStorage<string>('userSelectedThinkingEffort', 'none');
 
 // 新增：用户选择的知识库 ID 列表（刷新页面后从 localStorage 恢复）
 const userSelectedKnowledgeBaseIds = useStorage<string[]>('userSelectedKnowledgeBaseIds', []);
@@ -378,7 +378,7 @@ const chatInputConfig = computed(() => ({
   modelId: currentModelId.value,
 
   // 思考强度
-  thinkingEffort: currentSession.value?.settings?.thinkingEffort || 'off',
+  thinkingEffort: currentSession.value?.settings?.thinkingEffort || 'none',
 
   // Token 上限（会话级别独立配置）
   maxTokensLimit: currentSession.value?.settings?.maxTokensLimit ?? null,

@@ -270,7 +270,7 @@ const props = defineProps({
     type: Object,
     default: () => ({
       modelId: null,
-      thinkingEffort: 'off',
+      thinkingEffort: 'none',
       workspacePath: null,
       maxTokensLimit: null,
       knowledgeBaseIds: [],
@@ -380,7 +380,7 @@ watch(() => currentModel.value?.config, (config) => {
 }, { immediate: true });
 
 // 思考强度相关
-const localThinkingEffort = ref<string>('off'); // 'off' | 'low' | 'medium' | 'high' | 'max' | ...
+const localThinkingEffort = ref<string>('none'); // 'none' | 'low' | 'medium' | 'high' | 'max' | ...
 
 // 运行模式相关
 const runModeButtonRef = ref<any>(null);
@@ -416,7 +416,7 @@ const initThinkingEffort = () => {
   if (props.config?.thinkingEffort) {
     localThinkingEffort.value = props.config.thinkingEffort;
   } else {
-    localThinkingEffort.value = 'off';
+    localThinkingEffort.value = 'none';
   }
 };
 
@@ -432,7 +432,7 @@ const handleThinkingEffortChange = (effort: string) => {
 
   // 构建配置变更对象
   const configChanges = {
-    thinkingEffort: effort, // 始终发送 effort 值，包括 'off'
+    thinkingEffort: effort, // 始终发送 effort 值，包括 'none'
   };
 
   console.log('Thinking effort changed:', configChanges);
@@ -647,14 +647,14 @@ const handleModelSelect = (modelId: string) => {
     newThinkingEffort = currentEffort;
   } else {
     // 规则2：当前值无效，需要重新选择
-    const nonOffOptions = options.filter(e => e !== 'off');
+    const nonOffOptions = options.filter(e => e !== 'none');
 
-    if (currentEffort === 'off') {
+    if (currentEffort === 'none') {
       // 原来是 off 但新选项不含 off → 选最小思考档
-      newThinkingEffort = nonOffOptions.length > 0 ? nonOffOptions[0] : 'off';
+      newThinkingEffort = nonOffOptions.length > 0 ? nonOffOptions[0] : 'none';
     } else {
       // 原来的非 off 值失效 → 选中间值
-      newThinkingEffort = nonOffOptions.length > 0 ? nonOffOptions[Math.floor(nonOffOptions.length / 2)] : 'off';
+      newThinkingEffort = nonOffOptions.length > 0 ? nonOffOptions[Math.floor(nonOffOptions.length / 2)] : 'none';
     }
   }
 

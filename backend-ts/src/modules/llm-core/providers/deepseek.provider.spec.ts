@@ -45,7 +45,7 @@ describe('DeepSeekProvider', () => {
     const efforts = provider.getModelThinkingEfforts('deepseek-v4-pro');
     
     // DeepSeek 支持 off, high 和 max
-    expect(efforts).toEqual(['off', 'high', 'max']);
+    expect(efforts).toEqual(['none', 'high', 'max']);
   });
 
   it('should return empty array for embedding models', () => {
@@ -58,12 +58,12 @@ describe('DeepSeekProvider', () => {
     const efforts = provider.getModelThinkingEfforts('unknown-model');
     
     // 默认返回 DeepSeek 的标准配置
-    expect(efforts).toEqual(['off', 'high', 'max']);
+    expect(efforts).toEqual(['none', 'high', 'max']);
   });
 
   it('should return off/high/max for all models', () => {
     const efforts = provider.getModelThinkingEfforts('deepseek-v4-pro');
-    expect(efforts).toEqual(['off', 'high', 'max']);
+    expect(efforts).toEqual(['none', 'high', 'max']);
   });
 
   it('should return empty array for embedding models', () => {

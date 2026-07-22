@@ -10,7 +10,7 @@ import type { Character } from './character'
  * 会话设置
  */
 export interface SessionSettings {
-    thinkingEffort?: string // 思考强度级别：'off' | 'on' | 'low' | 'medium' | 'high' | 'max' 等
+    thinkingEffort?: string // 思考强度级别：'none' | 'on' | 'low' | 'medium' | 'high' | 'max' 等
     systemPrompt?: string
     [key: string]: any
 }

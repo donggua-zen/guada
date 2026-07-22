@@ -66,14 +66,14 @@ export class LLMService {
       const validEfforts = provider.getModelThinkingEfforts(params.model);
       if (validEfforts.length > 0 && !validEfforts.includes(thinkingEffort)) {
         // 当前值不在合法选项中，需要纠正
-        const nonOffOptions = validEfforts.filter(e => e !== 'off');
+        const nonOffOptions = validEfforts.filter(e => e !== 'none');
 
-        if (thinkingEffort === 'off') {
+        if (thinkingEffort === 'none') {
           // 原来是 off 但新模型不支持 → 取最小档位
           thinkingEffort = nonOffOptions.length > 0
             ? nonOffOptions[0]
             : undefined;
-          this.logger.log(`thinkingEffort adjusted: 'off' → '${thinkingEffort}' (not supported by model)`);
+          this.logger.log(`thinkingEffort adjusted: 'none' → '${thinkingEffort}' (not supported by model)`);
         } else {
           // 原来的非 off 值失效 → 取中间值
           thinkingEffort = nonOffOptions.length > 0

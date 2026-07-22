@@ -32,7 +32,7 @@ export class BaiduQianfanProvider implements IModelProvider {
   }
   
   // 百度千帆仅支持开关模式
-  private defaultThinkingEfforts: string[] = ['off', 'on'];
+  private defaultThinkingEfforts: string[] = ['none', 'on'];
   
   private models: ModelDefinition[] = [];
   

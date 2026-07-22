@@ -44,7 +44,7 @@ export class SiliconFlowProvider implements IModelProvider {
 
   // 硅基流动默认仅支持开关模式
   private defaultThinkingEfforts: string[] = [
-    "off",
+    "none",
     "low",
     "medium",
     "high",

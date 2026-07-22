@@ -236,7 +236,7 @@ export class OpenAIResponseAdapter implements IProtocolAdapter {
     // 处理思考强度（OpenAI Responses API 使用 reasoning 对象）
     if (
       params.thinkingEffort &&
-      !["on", "off"].includes(params.thinkingEffort)
+      !["on", "none"].includes(params.thinkingEffort)
     ) {
       // OpenAI Responses API 使用 reasoning.effort 参数
       requestParams.reasoning = {

@@ -130,7 +130,7 @@ export class AnthropicAdapter implements IProtocolAdapter {
     // 官方推荐使用 thinking: {type: "adaptive"}，废弃手动 budget_tokens
     // effort 通过 output_config 透传，控制思考深度
     const effort = params.thinkingEffort;
-    if (effort && effort !== 'off') {
+    if (effort && effort !== 'none') {
       requestParams.thinking = { type: "adaptive" };
       requestParams.output_config = { effort: effort as any };
     }

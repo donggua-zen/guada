@@ -98,7 +98,7 @@ export class OpenAIResponseProvider implements IModelProvider {
     }
     
     // 所有 Responses API 模型都支持 reasoning_effort，但无法完全禁用
-    // 只提供强度选项，不提供 'off' 或 'on'
+    // 只提供强度选项，不提供 'none' 或 'on'
     return this.defaultThinkingEfforts; // ['low', 'medium', 'high']
   }
 }

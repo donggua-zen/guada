@@ -44,7 +44,7 @@ export class AliyunBailianProvider implements IModelProvider {
 
   // 阿里云仅支持开关模式（enable_thinking）
   private defaultThinkingEfforts: string[] = [
-    "off",
+    "none",
     "low",
     "medium",
     "high",

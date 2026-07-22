@@ -1,7 +1,7 @@
 /**
  * Thinking 配置生成器接口
  * 统一规范：所有配置生成器只接受 effort 级别字符串
- * - 'off' 表示禁用思考
+ * - 'none' 表示禁用思考
  * - 其他值表示开启思考并指定强度
  */
 export interface ThinkingConfigGenerator {
@@ -17,21 +17,21 @@ export interface ThinkingConfigGenerator {
 export const ENABLE_THINKING_CONFIG: ThinkingConfigGenerator = {
   thinking: {
     get: (effort: string) => {
-      // 'off' 表示禁用，其他任何值都表示开启
-      return { enable_thinking: effort !== 'off' };
+      // 'none' 表示禁用，其他任何值都表示开启
+      return { enable_thinking: effort !== 'none' };
     },
   },
 };
 
 /**
  * thinking.type + reasoning_effort 混合模式（DeepSeek、火山引擎等）
- * - 'off' → { thinking: { type: 'disabled' } }
+ * - 'none' → { thinking: { type: 'disabled' } }
  * - 其他值 → { reasoning_effort: "强度值" }
  */
 export const THINKING_WITH_EFFORT_CONFIG: ThinkingConfigGenerator = {
   thinking: {
     get: (effort: string) => {
-      if (effort === 'off') {
+      if (effort === 'none') {
         return { thinking: { type: 'disabled' } };
       }
       
@@ -49,7 +49,7 @@ export const MINIMAX_THINKING_CONFIG: ThinkingConfigGenerator = {
     get: (effort: string) => {
       return {
         thinking: {
-          enabled: effort !== 'off',
+          enabled: effort !== 'none',
         },
       };
     },
@@ -64,7 +64,7 @@ export const MINIMAX_THINKING_CONFIG: ThinkingConfigGenerator = {
 export const OPENAI_RESPONSE_REASONING_CONFIG: ThinkingConfigGenerator = {
   thinking: {
     get: (effort: string) => {
-      if (effort === 'off') {
+      if (effort === 'none') {
         return { thinking: { type: 'disabled' } };
       }
       
@@ -79,7 +79,7 @@ export const OPENAI_RESPONSE_REASONING_CONFIG: ThinkingConfigGenerator = {
 export const AZURE_REASONING_CONFIG: ThinkingConfigGenerator = {
   thinking: {
     get: (effort: string) => {
-      if (effort === 'off') {
+      if (effort === 'none') {
         return { thinking: { type: 'disabled' } };
       }
       
@@ -94,7 +94,7 @@ export const AZURE_REASONING_CONFIG: ThinkingConfigGenerator = {
 export const GROQ_REASONING_CONFIG: ThinkingConfigGenerator = {
   thinking: {
     get: (effort: string) => {
-      if (effort === 'off') {
+      if (effort === 'none') {
         return { thinking: { type: 'disabled' } };
       }
       

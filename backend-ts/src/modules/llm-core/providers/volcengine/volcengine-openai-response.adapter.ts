@@ -22,7 +22,7 @@ export class VolcEngineOpenAIResponseAdapter extends OpenAIResponseAdapter {
     if (params.thinkingEffort !== undefined) {
       const effort = params.thinkingEffort;
       
-      if (effort === 'off') {
+      if (effort === 'none') {
         // off: 禁用思考
         requestParams.thinking = { type: 'disabled' };
       } else if (effort === 'on') {

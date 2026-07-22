@@ -39,11 +39,11 @@ export class VolcEngineProvider implements IModelProvider {
 		return null;
 	}
 
-	// 豆包 Seed 系列模型支持多级强度（包含 'off'）
-	private seedThinkingEfforts: string[] = ['off', 'minimal', 'low', 'medium', 'high'];
+	// 豆包 Seed 系列模型支持多级强度（包含 'none'）
+	private seedThinkingEfforts: string[] = ['none', 'minimal', 'low', 'medium', 'high'];
 
 	// 其他豆包模型只支持开关模式
-	private simpleThinkingEfforts: string[] = ['off', 'on'];
+	private simpleThinkingEfforts: string[] = ['none', 'on'];
 
 	private models: ModelDefinition[] = [
 		createMultimodalModel(

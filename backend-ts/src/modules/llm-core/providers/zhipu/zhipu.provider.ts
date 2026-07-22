@@ -33,7 +33,7 @@ export class ZhipuProvider implements IModelProvider {
   }
   
   // 智谱 AI 仅支持开关模式
-  private defaultThinkingEfforts: string[] = ['off', 'on'];
+  private defaultThinkingEfforts: string[] = ['none', 'on'];
   
   private models: ModelDefinition[] = [
     createTextModel('GLM-5', ConfigFragments.ContextWindow._200K, ConfigFragments.MaxOutput._128K),

@@ -33,7 +33,7 @@ export class DeepSeekProvider implements IModelProvider {
   }
   
   // DeepSeek 支持 off, high 和 max 三个强度级别
-  private defaultThinkingEfforts: string[] = ['off', 'high', 'max'];
+  private defaultThinkingEfforts: string[] = ['none', 'high', 'max'];
   
   private models: ModelDefinition[] = [
     createTextModel(

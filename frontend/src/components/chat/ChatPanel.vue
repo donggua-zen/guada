@@ -431,7 +431,7 @@ const currentModelId = computed({
  */
 const chatInputConfig = computed(() => ({
   modelId: currentModelId.value,
-  thinkingEffort: currentSession.value?.settings?.thinkingEffort || 'off',
+  thinkingEffort: currentSession.value?.settings?.thinkingEffort || 'none',
   maxTokensLimit: currentSession.value?.settings?.maxTokensLimit ?? null,
   knowledgeBaseIds: inputMessage.value?.knowledgeBaseIds || currentSession.value?.settings?.referencedKbs || [],
   workspacePath: currentSession.value?.workspacePath || null,

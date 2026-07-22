@@ -153,7 +153,7 @@ export class OpenAIAdapter implements IProtocolAdapter {
     ) {
       // OpenAI 使用 reasoning_effort 参数
       requestParams.reasoning_effort = params.thinkingEffort;
-    } else if (params.thinkingEffort === "off") {
+    } else if (params.thinkingEffort === "none") {
       requestParams.reasoning_effort = undefined;
       requestParams.thinking = { type: "disabled" };
     }
