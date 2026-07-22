@@ -311,6 +311,14 @@ export class AgentEngine {
               contentId,
             );
             if (yieldEvent) {
+              // finish 事件附带当前会话上下文统计，供前端直接更新环形指示器
+              if (yieldEvent.type === "finish") {
+                yieldEvent.contextStats = {
+                  usedTokens: sessionContext.getTokenCount(),
+                  effectiveContextWindow:
+                    sessionContext.getEffectiveContextWindow(),
+                };
+              }
               yield yieldEvent;
             }
 
@@ -373,6 +381,11 @@ export class AgentEngine {
               error: streamError.message,
               usage: lastAcc?.usage,
               contentId,
+              contextStats: {
+                usedTokens: sessionContext.getTokenCount(),
+                effectiveContextWindow:
+                  sessionContext.getEffectiveContextWindow(),
+              },
             };
           }
         }
@@ -405,6 +418,11 @@ export class AgentEngine {
               maxIterations: MAX_TOOL_ITERATIONS,
             },
             usage: assistantResponse.metadata?.usage,
+            contextStats: {
+              usedTokens: sessionContext.getTokenCount(),
+              effectiveContextWindow:
+                sessionContext.getEffectiveContextWindow(),
+            },
           };
 
           // 持久化当前消息（包含断点元数据），确保刷新后仍能显示继续按钮
@@ -427,6 +445,11 @@ export class AgentEngine {
             type: "finish",
             finishReason: "approval_required",
             usage: assistantResponse.metadata?.usage,
+            contextStats: {
+              usedTokens: sessionContext.getTokenCount(),
+              effectiveContextWindow:
+                sessionContext.getEffectiveContextWindow(),
+            },
           };
           await sessionContext.appendParts(parts);
           break;

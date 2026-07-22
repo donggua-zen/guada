@@ -61,6 +61,16 @@ export interface EventChunk {
     maxIterations: number;
   };
 
+  /**
+   * 会话上下文统计（finish 事件携带）
+   * 前端用于更新上下文使用率环形指示器，避免流式结束后再发起 REST 请求重建上下文。
+   * 仅包含轻量字段；详细 breakdown 仍由 REST /token-stats 端点按需获取。
+   */
+  contextStats?: {
+    usedTokens: number;
+    effectiveContextWindow: number;
+  };
+
   // ===== 用户消息（user_message）=====
   userMessage?: any;
 }

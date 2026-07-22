@@ -1,7 +1,8 @@
 <template>
     <div class="h-full flex">
-        <!-- 设置侧边栏：与全局侧边栏统一样式 -->
-        <div class="w-[300px] shrink-0 sidebar-transparent-bg flex flex-col overflow-hidden">
+        <Teleport to="#settings-sidebar-portal">
+        <!-- 设置侧边栏：Teleport 到全局侧边栏位置以获得毛玻璃效果 -->
+        <div class="h-full sidebar-transparent-bg flex flex-col overflow-hidden">
             <!-- 返回应用 -->
             <div class="px-3 pt-3 pb-2">
                 <div @click="goBack"
@@ -32,6 +33,7 @@
                 </div>
             </ScrollContainer>
         </div>
+        </Teleport>
 
         <!-- 内容区 -->
         <div class="flex-1 min-w-0 flex flex-col overflow-hidden">
