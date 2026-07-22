@@ -223,7 +223,10 @@ export class PersistentSessionContext implements ISessionContext {
           );
           this.history = this.history.map((msg) => ({
             ...msg,
-            reasoningContent: msg.role === "assistant" ? (msg.reasoningContent ?? " ") : undefined,
+            reasoningContent:
+              msg.role === "assistant"
+                ? (msg.reasoningContent ?? " ")
+                : undefined,
           }));
         } else {
           this.logger.debug(
@@ -254,19 +257,10 @@ export class PersistentSessionContext implements ISessionContext {
     }
 
     // KIMI 特殊处理
-    const isKimi = modelName.includes("kimi");
-    if (isKimi) {
-      let replacedCount = 0;
-      for (const msg of this.history) {
-        if (msg.role === "assistant" && msg.content === "") {
-          msg.content = "\n";
-          replacedCount++;
-        }
-      }
-      if (replacedCount > 0) {
-        this.logger.debug(
-          `Kimi model: replaced empty content for ${replacedCount} assistant messages`,
-        );
+
+    for (const msg of this.history) {
+      if (msg.role === "assistant" && msg.content === "") {
+        msg.content = "\n";
       }
     }
 
@@ -736,7 +730,10 @@ export class PersistentSessionContext implements ISessionContext {
     return merged;
   }
 
-  private calcEffectiveContextWindow(model: any, maxTokensLimit?: number | null): number {
+  private calcEffectiveContextWindow(
+    model: any,
+    maxTokensLimit?: number | null,
+  ): number {
     const modelContextWindow = model?.config?.contextWindow || 128000;
     return maxTokensLimit
       ? Math.min(modelContextWindow, maxTokensLimit)
