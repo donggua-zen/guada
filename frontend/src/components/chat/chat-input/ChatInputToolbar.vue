@@ -32,28 +32,32 @@
     :current-workspace-path="config?.workspacePath || null" :public-path="publicPath" @select="handleWorkspaceSelect" />
 
   <!-- 分组选择弹窗 -->
-  <el-dialog v-model="groupSelectorVisible" title="请选择分组" width="360px" :close-on-click-modal="false">
-    <div class="space-y-1 py-2">
+  <CustomPopover :show="groupSelectorVisible" @update:show="groupSelectorVisible = $event" :width="280"
+    :anchor-el="groupButtonRef?.$el" :max-height="400">
+    <div class="flex flex-col gap-0.5">
       <div v-for="g in groupSelectorOptions" :key="g.value"
-        class="flex items-center gap-2 px-3 py-2.5 rounded-lg cursor-pointer transition-all duration-200 text-sm"
-        :class="selectedGroupId === g.value ? 'bg-(--color-sidebar-bg-active) text-(--color-sidebar-text-active)' : 'text-(--color-text-gray) hover:bg-(--color-sidebar-bg-hover) hover:text-(--color-sidebar-text-hover)'"
+        class="flex items-center gap-1.25 px-2 py-1 rounded-md cursor-pointer transition-all duration-150"
+        :class="selectedGroupId === g.value
+          ? 'bg-(--color-sidebar-bg-active) hover:bg-(--color-sidebar-bg-active)'
+          : 'hover:bg-(--color-sidebar-bg-hover)'"
         @click="selectGroup(g.value)">
-        <el-icon class="w-4 h-4">
+        <el-icon size="18" class="shrink-0 text-(--color-text-gray) dark:text-(--color-text-disabled)">
           <Folder20Regular />
         </el-icon>
-        <span class="flex-1">{{ g.label }}</span>
-        <el-icon v-if="selectedGroupId === g.value" class="w-4 h-4">
+        <span class="flex-1 text-sm font-medium text-(--color-text) dark:text-[#e5e7eb]">{{ g.label }}</span>
+        <el-icon v-if="selectedGroupId === g.value" size="14" class="shrink-0 text-(--el-color-primary)">
           <Checkmark16Filled />
         </el-icon>
       </div>
     </div>
-  </el-dialog>
+  </CustomPopover>
 </template>
 
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
 import { FolderOpen24Regular, ChevronUpDown16Regular, Folder20Regular, Checkmark16Filled } from '@vicons/fluent'
 import WorkspaceSelectorPopover from './WorkspaceSelectorPopover.vue'
+import CustomPopover from '../../ui/CustomPopover.vue'
 import { useSessionGroupStore, UNGROUPED_ID } from '@/stores/sessionGroup'
 import { useWorkspaceStore } from '@/stores/workspace'
 
@@ -121,7 +125,7 @@ const selectedGroupId = computed(() => {
 })
 
 const openGroupSelector = () => {
-  groupSelectorVisible.value = true
+  groupSelectorVisible.value = !groupSelectorVisible.value
 }
 
 const selectGroup = (groupId: string) => {

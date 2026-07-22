@@ -26,6 +26,46 @@ const loading = ref(false)
 let currentSessionId: string | null = null
 
 /**
+ * SSE 上下文统计已更新标志
+ * 当 finish 事件携带 contextStats 时置为 true，
+ * debouncedRefresh 检测到此标志后跳过 REST 刷新。
+ */
+let sseUpdated = false
+
+/**
+ * 从 SSE finish 事件注入上下文统计
+ *
+ * 后端在 finish 事件中携带轻量上下文统计（usedTokens / effectiveContextWindow），
+ * 前端直接更新环形指示器，无需流式结束后再发起 REST 请求重建上下文。
+ * 详细 breakdown 仍由弹窗按需通过 REST 获取。
+ */
+export function updateTokenStatsFromSSE(stats: {
+  usedTokens: number
+  effectiveContextWindow: number
+}) {
+  sseUpdated = true
+  const percentage = Math.min(
+    (stats.usedTokens / stats.effectiveContextWindow) * 100,
+    100,
+  )
+  tokenStats.value = {
+    usedTokens: stats.usedTokens,
+    totalTokens: stats.effectiveContextWindow,
+    remainingTokens: Math.max(0, stats.effectiveContextWindow - stats.usedTokens),
+    percentage,
+    modelName: tokenStats.value?.modelName || '',
+    messageCount: tokenStats.value?.messageCount || 0,
+    breakdown: tokenStats.value?.breakdown || {
+      systemPrompt: 0,
+      summary: 0,
+      userPrompt: 0,
+      history: 0,
+      tools: 0,
+    },
+  }
+}
+
+/**
  * 会话级 Token 统计共享状态
  *
  * 模块级 ref 确保所有调用方共享同一份数据，
@@ -53,9 +93,14 @@ export function useSessionTokenStats(sessionId: Ref<string | null>) {
 
   /**
    * 流结束后自动刷新（防抖 1s）
+   * 若 SSE finish 已携带 contextStats，则跳过 REST 刷新
    */
   const debouncedRefresh = useDebounceFn(() => {
     if (!sessionId.value) return
+    if (sseUpdated) {
+      sseUpdated = false
+      return
+    }
     fetchTokenStats()
   }, 1000)
 

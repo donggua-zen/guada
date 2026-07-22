@@ -2,7 +2,8 @@
   <SidebarLayout :sidebarVisible="effectiveSidebarVisible" @update:sidebarVisible="handleSidebarUpdate"
     :sidebarWidth="300" :showToggleButton="false" sidebarPosition="left" :z-index="20" class="flex-1">
     <template #sidebar>
-      <GlobalSidebar />
+      <GlobalSidebar v-if="!isSettingsRoute" />
+      <div v-else id="settings-sidebar-portal" class="h-full"></div>
     </template>
     <template #content>
       <div
@@ -32,7 +33,8 @@ const route = useRoute()
 const isSettingsRoute = computed(() => route.name === 'SystemSettings')
 
 const effectiveSidebarVisible = computed(() => {
-  if (isSettingsRoute.value) return false
+  // 设置路由时保持侧边栏容器可见（300px），为 Teleport 提供挂载位置
+  if (isSettingsRoute.value) return true
   return layoutStore.sidebarVisible
 })
 

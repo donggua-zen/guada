@@ -6,6 +6,7 @@
 import { reactive, shallowReactive } from "vue";
 import { useDebounceFn } from "@vueuse/core";
 import { usePopup } from "@/composables/usePopup";
+import { updateTokenStatsFromSSE } from "@/composables/useSessionTokenStats";
 
 // 类型定义
 interface StreamingState {
@@ -60,6 +61,10 @@ interface StreamResponse {
   finishReason?: string;
   error?: string;
   parentId?: string;
+  contextStats?: {
+    usedTokens: number;
+    effectiveContextWindow: number;
+  };
 }
 
 export function useStreamResponse(sessionStore: any, apiService: any) {
@@ -436,6 +441,11 @@ export function useStreamResponse(sessionStore: any, apiService: any) {
 
     // 正常结束，强制 flush 缓冲区内容并清理
     forceFlushContent(message, contentIndex);
+
+    // SSE finish 携带的上下文统计，直接更新环形指示器
+    if (response.contextStats) {
+      updateTokenStatsFromSSE(response.contextStats);
+    }
 
     // 更新状态
     content.state.isStreaming = false;
