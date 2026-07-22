@@ -13,20 +13,23 @@
               <PageHeader :title="mainSession?.title || ''" :hide-window-controls="layoutStore.workspaceVisible">
                 <template #actions>
                   <!-- 工作目录切换 -->
+                  <el-tooltip :content="layoutStore.workspaceVisible ? '关闭工作目录' : '打开工作目录'" placement="bottom">
                   <div v-if="mainSession?.id"
                     class="cursor-pointer p-1 rounded-lg text-gray-600 dark:text-[#8b8d95] transition-all duration-200 hover:bg-gray-100 dark:hover:bg-[#2a2c30] hover:text-gray-900 dark:hover:text-[#e8e9ed] flex items-center justify-center"
-                    @click="layoutStore.toggleWorkspace()" :title="layoutStore.workspaceVisible ? '关闭工作目录' : '打开工作目录'">
+                    @click="layoutStore.toggleWorkspace()" :class="{'bg-gray-100 dark:bg-[#2a2c30]': layoutStore.workspaceVisible}">
                     <el-icon class="w-5 h-5">
                       <TextBulletListLtr16Filled />
                     </el-icon>
                   </div>
+                  </el-tooltip>
                   <!-- 更多操作下拉菜单 -->
                   <el-dropdown trigger="hover" @command="handleMoreSelect" popper-class="chat-header-dropdown">
-                    <div
-                      class="cursor-pointer p-1 rounded-lg text-gray-600 dark:text-[#8b8d95] transition-all duration-200 hover:bg-gray-100 dark:hover:bg-[#2a2c30] hover:text-gray-900 dark:hover:text-[#e8e9ed] active:rotate-0 flex items-center justify-center"
-                      title="更多操作">
-                      <MoreVertOutlined class="w-5 h-5" />
-                    </div>
+                    <el-tooltip content="更多操作" placement="bottom">
+                      <div
+                        class="cursor-pointer p-1 rounded-lg text-gray-600 dark:text-[#8b8d95] transition-all duration-200 hover:bg-gray-100 dark:hover:bg-[#2a2c30] hover:text-gray-900 dark:hover:text-[#e8e9ed] active:rotate-0 flex items-center justify-center">
+                        <MoreVertOutlined class="w-5 h-5" />
+                      </div>
+                    </el-tooltip>
                     <template #dropdown>
                       <el-dropdown-menu>
                         <el-dropdown-item command="clear">

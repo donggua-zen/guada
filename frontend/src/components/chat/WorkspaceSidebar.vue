@@ -12,6 +12,12 @@
                     </el-icon>
                 </div>
             </el-tooltip>
+            <!-- 非预览模式：显示工作目录路径 -->
+            <el-tooltip v-else :content="currentWorkspacePath || ''" placement="bottom" :disabled="!currentWorkspacePath">
+                <div class="ml-1 px-2 flex items-center min-w-0 no-drag">
+                    <span class="text-xs text-gray-500 dark:text-[#8b8d95] truncate">{{ currentWorkspacePath || '' }}</span>
+                </div>
+            </el-tooltip>
 
             <!-- 标签 + 新建按钮容器（仅 webview 预览模式显示） -->
             <div v-if="browserStore.activeWindowId"
@@ -665,6 +671,18 @@ async function loadTree(force = false) {
 
         // 如果当前选中的文件还在树中，保持选中状态（由 selectedNodePath 驱动）
         selectedNodePath.value = currentSelected;
+
+        // 加载工作目录路径（用于顶部工具栏显示）
+        if (!currentWorkspacePath.value) {
+            try {
+                const pathResp = await apiService.getWorkspacePath(sessionId);
+                if (generation === treeLoadGeneration) {
+                    currentWorkspacePath.value = pathResp.workspacePath || null;
+                }
+            } catch {
+                // 忽略路径获取失败
+            }
+        }
     } catch (error: any) {
         if (generation === treeLoadGeneration && sessionId === props.sessionId) {
             console.error('Failed to load workspace tree:', error);
@@ -2288,6 +2306,7 @@ watch(() => props.sessionId, async (newSessionId, oldSessionId) => {
         watchedWorkspacePath = null;
         resetExpandedPaths();
         treeData.value = [];
+        currentWorkspacePath.value = null;
         apiService.disconnectWorkspaceWatcher();
         if (unsubscribeWatcher) {
             unsubscribeWatcher();

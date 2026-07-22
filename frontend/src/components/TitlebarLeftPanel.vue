@@ -5,15 +5,19 @@
       <span class="text-xs font-normal text-(--titlebar-text-color) opacity-80 mr-3">GuaDa AI</span>
 
       <!-- 搜索按钮 -->
-      <button v-if="authStore.isAuthenticated" class="titlebar-menu-btn" @click="showSearchDialog = true" title="搜索会话">
-        <Search16Regular class="w-4 h-4" />
-      </button>
+      <el-tooltip v-if="authStore.isAuthenticated" content="搜索会话" placement="bottom">
+        <button class="titlebar-menu-btn" @click="showSearchDialog = true">
+          <Search16Regular class="w-4 h-4" />
+        </button>
+      </el-tooltip>
 
       <!-- Debug 下拉菜单（仅 Electron） -->
       <div v-if="isElectron" class="relative flex items-center h-full debug-dropdown" :class="{ 'active': showDebugMenu }">
-        <button class="titlebar-menu-btn debug-button" @click="toggleDebugMenu" title="调试工具">
-          <Bug16Regular class="w-4 h-4" />
-        </button>
+        <el-tooltip content="调试工具" placement="bottom">
+          <button class="titlebar-menu-btn debug-button" @click="toggleDebugMenu">
+            <Bug16Regular class="w-4 h-4" />
+          </button>
+        </el-tooltip>
 
         <div v-if="showDebugMenu"
           class="absolute top-full left-0 mt-1 bg-(--color-sidebar-bg) border border-(--color-titlebar-border) rounded-md shadow-lg min-w-40 z-1000 overflow-hidden">
@@ -38,16 +42,18 @@
       </div>
 
       <!-- 更新提示 -->
-      <div v-if="updateAvailable"
-        class="titlebar-menu-btn relative flex items-center px-2 cursor-pointer"
-        @click="handleUpdateClick" title="发现新版本，点击查看">
-        <svg class="w-4 h-4" viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
-          <path d="M512 128c-211.744 0-384 172.256-384 384 0 211.744 172.256 384 384 384 211.744 0 384-172.256 384-384 0-211.744-172.256-384-384-384z m0 704c-176.448 0-320-143.552-320-320 0-176.448 143.552-320 320-320 176.448 0 320 143.552 320 320 0 176.448-143.552 320-320 320z" fill="currentColor" />
-          <path d="M512 320c-17.664 0-32 14.336-32 32v160c0 17.664 14.336 32 32 32s32-14.336 32-32v-160c0-17.664-14.336-32-32-32z" fill="currentColor" />
-          <path d="M480 608a32 32 0 1 0 64 0 32 32 0 1 0-64 0z" fill="currentColor" />
-        </svg>
-        <span class="absolute top-2 right-2 w-2 h-2 bg-red-500 rounded-full animate-pulse"></span>
-      </div>
+      <el-tooltip v-if="updateAvailable" content="发现新版本，点击查看" placement="bottom">
+        <div
+          class="titlebar-menu-btn relative flex items-center px-2 cursor-pointer"
+          @click="handleUpdateClick">
+          <svg class="w-4 h-4" viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
+            <path d="M512 128c-211.744 0-384 172.256-384 384 0 211.744 172.256 384 384 384 211.744 0 384-172.256 384-384 0-211.744-172.256-384-384-384z m0 704c-176.448 0-320-143.552-320-320 0-176.448 143.552-320 320-320 176.448 0 320 143.552 320 320 0 176.448-143.552 320-320 320z" fill="currentColor" />
+            <path d="M512 320c-17.664 0-32 14.336-32 32v160c0 17.664 14.336 32 32 32s32-14.336 32-32v-160c0-17.664-14.336-32-32-32z" fill="currentColor" />
+            <path d="M480 608a32 32 0 1 0 64 0 32 32 0 1 0-64 0z" fill="currentColor" />
+          </svg>
+          <span class="absolute top-2 right-2 w-2 h-2 bg-red-500 rounded-full animate-pulse"></span>
+        </div>
+      </el-tooltip>
     </div>
   </div>
 
