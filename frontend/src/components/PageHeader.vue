@@ -2,11 +2,13 @@
   <div class="flex items-center justify-between gap-2 h-11 drag-region">
     <!-- 左侧：侧边栏切换按钮 -->
     <div class="flex items-center justify-start no-drag ml-3">
-      <div v-if="!hideSidebarToggle"
-        class="cursor-pointer p-1 rounded-lg text-gray-600 dark:text-[#8b8d95] transition-all duration-200 hover:bg-gray-100 dark:hover:bg-[#2a2c30] hover:text-gray-900 dark:hover:text-[#e8e9ed] active:translate-x-0"
-        @click="layoutStore.toggleSidebar()" :title="layoutStore.sidebarVisible ? '收起侧边栏' : '展开侧边栏'">
-        <LeftBarIcon class="w-5 h-5" />
-      </div>
+      <el-tooltip :content="layoutStore.sidebarVisible ? '收起侧边栏' : '展开侧边栏'" placement="bottom">
+        <div v-if="!hideSidebarToggle"
+          class="cursor-pointer p-1 rounded-lg text-gray-600 dark:text-[#8b8d95] transition-all duration-200 hover:bg-gray-100 dark:hover:bg-[#2a2c30] hover:text-gray-900 dark:hover:text-[#e8e9ed] active:translate-x-0"
+          @click="layoutStore.toggleSidebar()">
+          <LeftBarIcon class="w-5 h-5" />
+        </div>
+      </el-tooltip>
     </div>
 
     <!-- 中间：标题区域 -->

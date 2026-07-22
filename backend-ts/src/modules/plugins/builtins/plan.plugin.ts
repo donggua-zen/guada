@@ -64,7 +64,11 @@ export class PlanPlugin extends PluginBase {
 
 Note that plans are not for padding out simple work with filler steps or stating the obvious. The content of your plan should not involve doing anything that you aren't capable of doing (i.e. don't try to test things that you can't test). Do not use plans for simple or single-step queries that you can just do or answer immediately.
 
-When you are ready to act, before running a command, consider whether or not you have completed the previous step, and make sure to mark it as completed (via \`action="next"\`) before moving on to the next step. It may be the case that you complete all steps in your plan after a single pass of implementation — if so, you can mark all remaining steps as completed via \`action="update"\`. Sometimes, you may need to change plans in the middle of a task: call \`action="update"\` with the updated plan and make sure to provide an explanation of the rationale when doing so.
+When you are ready to act, before running a command, consider whether or not you have completed the previous step, and make sure to mark it as completed (via \`action="next"\`) before moving on to the next step. 
+It may be the case that you complete all steps in your plan after a single pass of implementation — if so, you can mark all remaining steps as completed via \`action="update"\`. 
+Sometimes, you may need to change plans in the middle of a task: call \`action="update"\` with the updated plan and make sure to provide an explanation of the rationale when doing so.
+
+**Pro tip:** Mark the first step as \`in_progress\`, then advance step by step using \`action="next"\`.
 
 **Use a plan when:**  
 - The task is non-trivial and will require multiple actions over a long time horizon.  
